@@ -148,28 +148,44 @@ static void klva_hsite(LONG at, SIZE_T size);
    kl-merge-27 10-25: nvd3dum frees ~480 MB per sawtooth fall, devobj/cfgmgr32 churn 500-700 MB per 10 s). Every 16th process-heap
    alloc of such a row scans up to 256 stack slots for the first kl2 code address (-> that site) or other followed module (-> its row);
    none = the call came on a thread without either (the driver's own worker). A GUESS like the CRT rebill: stale stack values can be picked */
-#define KLVA_VIA 512
-static struct { volatile LONG key; LONG m, who; volatile LONG cnt; volatile LONG64 bytes; LONG64 last; LONG lastcnt; } klva_via[KLVA_VIA];
+#define KLVA_VIA 2048
+static struct { volatile LONG key; LONG m, who, via; volatile LONG cnt; volatile LONG64 bytes; LONG64 last; LONG lastcnt; } klva_via[KLVA_VIA];
 static volatile LONG klva_via_tick, klva_via_full;
 
+static int klva_isret(DWORD_PTR v)
+{   /* v is a return address: the bytes before it are a call (E8 rel32; FF /2 as reg, [reg], [reg+d8], [d32] or [reg+d32], with or without SIB) */
+    const BYTE *p = (const BYTE *)v;
+    if (p[-5] == 0xE8) return 1;
+    if (p[-2] == 0xFF && (p[-1] & 0x38) == 0x10 && (p[-1] & 0xC0) != 0x40 && (p[-1] & 0xC0) != 0x80 && (p[-1] & 7) != 4) return 1;   /* call reg / [reg] */
+    if (p[-3] == 0xFF && (p[-2] & 0x38) == 0x10 && ((p[-2] & 0xC0) == 0x40 || (p[-2] & 7) == 4)) return 1;   /* [reg+d8] or [sib] */
+    if (p[-4] == 0xFF && (p[-3] & 0x38) == 0x10 && (p[-3] & 0xC0) == 0x40 && (p[-3] & 7) == 4) return 1;   /* [sib+d8] */
+    if (p[-6] == 0xFF && (p[-5] & 0x38) == 0x10 && ((p[-5] & 0xC7) == 0x05 || (p[-5] & 0xC0) == 0x80)) return 1;   /* [d32] or [reg+d32] */
+    if (p[-7] == 0xFF && (p[-6] & 0x38) == 0x10 && (p[-6] & 0xC0) == 0x80 && (p[-6] & 7) == 4) return 1;   /* [sib+d32] */
+    return 0;
+}
+
 static void klva_vianote(void **ra, int m, LONG64 add)
-{
-    DWORD_PTR top = __readfsdword(4); LONG who = 0, key, h, i, n; int j, k;
-    for (j = 1; j < 256 && (DWORD_PTR)(ra + j + 1) <= top; j++) {
-        DWORD_PTR v = (DWORD_PTR)ra[j];
-        if (v >= 0x401000 && v < 0xa00000) { who = (LONG)v; break; }   /* kl2.exe code */
-        if (v < 0x10000000) continue;   /* below every DLL here: skip the row lookup */
-        k = klva_hmod((void *)v);
-        if (k && k != m && !klva_hm[k].crt) { who = (LONG)(0x80000000u | (DWORD)k); break; }
-    }
+{   /* crt == 3 rows (xinput*) are passed through: the pair is (module <- caller of xinput, via that xinput) */
+    DWORD_PTR top = __readfsdword(4); LONG who = 0, via = 0, key, h, i, n; int j, k;
+    __try {
+        for (j = 1; j < 256 && (DWORD_PTR)(ra + j + 1) <= top; j++) {
+            DWORD_PTR v = (DWORD_PTR)ra[j];
+            if (v >= 0x401007 && v < 0xb0fe30) { if (klva_isret(v)) { who = (LONG)v; break; } continue; }   /* kl2.exe .text */
+            if (v < 0x10000000) continue;   /* below every DLL here: skip the row lookup */
+            k = klva_hmod((void *)v);
+            if (!k || k == m || v < klva_hm[k].base + 0x1000 || !klva_isret(v)) continue;
+            if (klva_hm[k].crt == 3) { if (!via) via = k; continue; }
+            if (!klva_hm[k].crt) { who = (LONG)(0x80000000u | (DWORD)k); break; }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { who = 0; }
     if (!who) who = (LONG)0xC0000000u;
-    key = who ^ (m << 20); if (!key) key = 1;
-    h = (LONG)(((DWORD)key * 2654435761u) >> 23);
+    key = who ^ (m << 20) ^ (via << 12); if (!key) key = 1;
+    h = (LONG)(((DWORD)key * 2654435761u) >> 21);
     for (n = 0; n < 32; n++) {
         LONG cur;
         i = (h + n) & (KLVA_VIA - 1);
         cur = klva_via[i].key;
-        if (!cur && (cur = InterlockedCompareExchange(&klva_via[i].key, key, 0)) == 0) { klva_via[i].m = m; klva_via[i].who = who; cur = key; }
+        if (!cur && (cur = InterlockedCompareExchange(&klva_via[i].key, key, 0)) == 0) { klva_via[i].m = m; klva_via[i].who = who; klva_via[i].via = via; cur = key; }
         if (cur != key) continue;
         InterlockedIncrement(&klva_via[i].cnt); InterlockedExchangeAdd64(&klva_via[i].bytes, add);
         return;
@@ -263,6 +279,7 @@ static int klva_patch(BYTE *base)
         klva_hm[r].crt = !_strnicmp(klva_hm[r].name, "msvcr", 5) || !_strnicmp(klva_hm[r].name, "msvcp", 5) || !_strnicmp(klva_hm[r].name, "ucrtbase", 8);
         if (!_stricmp(klva_hm[r].name, "nvd3dum.dll") || !_stricmp(klva_hm[r].name, "d3d9.dll") || !_stricmp(klva_hm[r].name, "devobj.dll")
             || !_stricmp(klva_hm[r].name, "cfgmgr32.dll") || !_stricmp(klva_hm[r].name, "setupapi.dll")) klva_hm[r].crt = 2;   /* their callers are logged (klva_vianote) */
+        if (!_strnicmp(klva_hm[r].name, "xinput", 6)) klva_hm[r].crt = 3;   /* passed through: who polls XInput */
     }
     dd = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IAT];
     if (!dd->VirtualAddress || !dd->Size) return 0;
@@ -434,7 +451,7 @@ static void klva_vias(void)
         if (w == (LONG)0xC0000000u) snprintf(who, sizeof who, "(no kl2/module frame)");
         else if (w & 0x80000000) snprintf(who, sizeof who, "%s", klva_hm[w & 0xffff].name);
         else { klh_module((DWORD_PTR)w, who, sizeof who, &off); snprintf(who + strlen(who), sizeof who - strlen(who), "+%lx", off); }
-        k = _snprintf(line + n, sizeof line - n, " %s <- %s %.1f/%ld;", klva_hm[klva_via[e].m].name, who, d[e] / 1048576.0, dc[e]);
+        k = _snprintf(line + n, sizeof line - n, " %s <- %s%s%s %.1f/%ld;", klva_hm[klva_via[e].m].name, klva_via[e].via ? klva_hm[klva_via[e].via].name : "", klva_via[e].via ? " <- " : "", who, d[e] / 1048576.0, dc[e]);
         if (k < 0) break;
         n += k;
     }
