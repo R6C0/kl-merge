@@ -25,7 +25,10 @@
  *
  * WIRING: klhook.c  #include "klgrenade.c" below #include "klinv.c"; klgrenade_tick(game_thread) below klinv_tick;
  *   klgrenade_init() below klinv_init().
- * KEYS: [Grenade] Probe=0 (1 = log only; recommended off)  Throw=0 (1 = the G key throws; off until the owner's first run)
+ * STEP 1b ([Grenade] Probe=2, log only, any build): see klgr_deep. VERIFIED 10-25 (wvnb1pun0): nothing in kl2.exe reads bit 0x800
+ *   of [P+0x818] (Dead Men's reader 0x5f4c10 was dropped), so step 1 sets a dead bit; 0x898a50 / 0x432440 are ZFFActor methods
+ *   and must never be called on the player. Probe=2 decides whether the player's own Create(0x11)+Start can work.
+ * KEYS: [Grenade] Probe=0 (1 = log only, 2 = also the throw-action fields; recommended off)  Throw=0 (1 = the G key throws; off until the owner's first run)
  *   Key=0x47 (VK 'G'; polled, not consumed)  HoldMs=3000 (100 .. 10000)  ActBit=1 (0 = never touch [P+0x818])  Log=8 (presses logged in full)
  */
 #ifndef KLGRENADE_C
@@ -40,6 +43,8 @@ static struct {
     int samples, was, fgwarned, presses, nonade, ticks0x40, actwarned, holding, faults;
 } klgr;
 
+static void klgr_deep(DWORD p);
+
 static void klgr_dump(DWORD p, const char *why)
 {
     DWORD btn = 0, act = 0, sel = 0, inv, arr, cnt, i, obj, bind, item, kind;
@@ -52,6 +57,50 @@ static void klgr_dump(DWORD p, const char *why)
         if (klinv_entry(arr, i, &obj, &bind, &item, &kind))
             klog("grenade:   entry %lu key %lu object %08lx binding %08lx item %lu kind %lu%s", i, klh_rd32(arr + 16 * i), obj, bind, item, kind,
                  kind == 0 ? " (GRENADE)" : kind == 3 ? " (special)" : "");
+    if (klgr.probe >= 2 && strcmp(why, "held")) klgr_deep(p);                /* step 1b: press, release, 1.5 s after (not the 200 ms samples) */
+}
+
+/* STEP 1b ([Grenade] Probe=2): the fields a player ZFFActionThrow (action 0x11) would be built from. Reads only, no vt call.
+ * READ: ZFFPlayer CreateAction (vt 0xbb45f4 +0x384 = 0x839740) case 0x11 at 0x839807 builds ctor 0x6757b0 (vt 0xbb4d24) with
+ *   (0x11, P, [P+0xa1c], 0x59d550(this=P, word [P+0x239c])); its tick 0x65ce70 reads word [[action+0xc]+2], so [P+0xa1c] must
+ *   point at a descriptor. A float or 0 there = the action is dead Dead Men code and Create+Start would crash.
+ *   0x59d550 picks a random entry for that word (0xFFFF = none; it also reads [P+0x84]).
+ *   vt+0x388 = 0x76ea90 calls vt+4 of [[P+0x19c]+4]; vt+0x4c8 = 0x6a85a0 / vt+0x4cc = 0x763480 call vt+8 of the subobjects at
+ *   P+0x310 / P+0x388 (0x898a50's hand-object pair; which hand is which is a GUESS), so those are logged as raw pointers.
+ * The 0x2c-stride structs around 0xa1c (0x9c4 .. 0xa74) are logged whole; [P+0x239c..] (0x84*4+2 bytes of words) only where not 0xFFFF. */
+static void klgr_deep(DWORD p)
+{
+    DWORD vt = 0, v[6] = {0}, a1c = 0, d[11], k, n = 0, o19c = 0, o19c4 = 0, h[4] = {0};
+    WORD tab[0x109], w2 = 0; float f; char line[240]; int len, i;
+    klh_rd(p, &vt, 4);
+    if (vt) { klh_rd(vt + 0x370, &v[0], 4); klh_rd(vt + 0x384, &v[1], 4); klh_rd(vt + 0x388, &v[2], 4); klh_rd(vt + 0x4c8, &v[3], 4); klh_rd(vt + 0x4cc, &v[4], 4); }
+    klog("grenade probe2: player vt %08lx (ZFFPlayer = 00bb45f4) +370 %08lx (00542c00) +384 %08lx (00839740) +388 %08lx (0076ea90) +4c8 %08lx (006a85a0) +4cc %08lx (00763480)",
+         vt, v[0], v[1], v[2], v[3], v[4]);
+    klh_rd(p + 0xa1c, &a1c, 4); memcpy(&f, &a1c, 4);
+    if (a1c > 0x10000 && klh_rd(a1c, d, 8) && klh_rd(a1c + 2, &w2, 2))
+        klog("grenade probe2: [P+a1c] %08lx (as float %g): readable, +0 %08lx +4 %08lx, word +2 = %d (the tick's frame count)", a1c, f, d[0], d[1], (int)(short)w2);
+    else klog("grenade probe2: [P+a1c] %08lx (as float %g): NOT a readable pointer -> action 0x11 has no descriptor (dead)", a1c, f);
+    for (k = 0; k < 5; k++) {
+        DWORD o = 0x9c4 + k * 0x2c;
+        if (!klh_rd(p + o, d, sizeof d)) { klog("grenade probe2: struct +%03lx unreadable", o); continue; }
+        klog("grenade probe2: struct +%03lx: %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx", o,
+             d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9], d[10]);
+    }
+    klh_rd(p + 0x84, &v[5], 4);
+    if (!klh_rd(p + 0x239c, tab, sizeof tab)) klog("grenade probe2: [P+239c] table unreadable");
+    else {
+        len = _snprintf(line, sizeof line - 1, "grenade probe2: [P+84] %08lx; [P+239c] word0 %04x (the throw's index); not-FFFF:", v[5], tab[0]);
+        for (i = 0; i < 0x109; i++) {
+            if (tab[i] == 0xffff) continue;
+            if (++n <= 24 && len > 0 && len < (int)sizeof line - 16) len += _snprintf(line + len, sizeof line - 1 - len, " %d=%04x", i, tab[i]);
+        }
+        line[sizeof line - 1] = 0;
+        klog("%s%s (%lu in all)", line, n > 24 ? " ..." : "", n);
+    }
+    klh_rd(p + 0x19c, &o19c, 4); if (o19c > 0x10000) klh_rd(o19c + 4, &o19c4, 4);
+    klh_rd(p + 0x310, &h[0], 4); klh_rd(p + 0x314, &h[1], 4); klh_rd(p + 0x388, &h[2], 4); klh_rd(p + 0x38c, &h[3], 4);
+    klog("grenade probe2: [P+19c] %08lx -> +4 %08lx (vt+388's object); P+310: %08lx %08lx; P+388: %08lx %08lx (hand subobjects: vtable, first field)",
+         o19c, o19c4, h[0], h[1], h[2], h[3]);
 }
 
 /* the first kind-0 entry with an object -> its index, or -1 */
@@ -146,7 +195,7 @@ static void klgrenade_tick(int game_thread)
 static void klgrenade_init(void)
 {
     int v;
-    klgr.probe = GetPrivateProfileIntA("Grenade", "Probe", 0, klh_ini) != 0;
+    v = (int)GetPrivateProfileIntA("Grenade", "Probe", 0, klh_ini); klgr.probe = v < 0 ? 0 : v > 2 ? 2 : v;
     klgr.thr = GetPrivateProfileIntA("Grenade", "Throw", 0, klh_ini) != 0;
     if (!klgr.probe && !klgr.thr) return;
     v = (int)GetPrivateProfileIntA("Grenade", "Key", 0x47, klh_ini); klgr.key = v < 1 || v > 0xfe ? 0x47 : v;
@@ -167,6 +216,7 @@ static void klgrenade_init(void)
         klog("grenade throw: on; Key=0x%02x HoldMs=%lu ActBit=%d Log=%d; offline Arcade, local player, only with a grenade in the inventory. re\\grenades_1025.md step 1",
              klgr.key, klgr.hold_ms, klgr.actbit, klgr.logn);
     else klog("grenade probe: on (log only, no writes); Key=0x%02x; offline Arcade, local player. re\\grenades_1025.md step 0", klgr.key);
+    if (klgr.probe >= 2) klog("grenade probe2: on (also the throw-action fields on press / release; reads only)");
 }
 
 #endif /* KLGRENADE_C */
