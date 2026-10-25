@@ -1,3 +1,7 @@
+2026-10-25 ~19:25 - STUTTER GONE in the owner's 19:04-19:18 run (hook 2FF289F3, ini 44e51cff, Medal still loaded but restarted 18:26): 31 frames over 33 ms in 80 x 10 s
+(2.3/min vs 53-128 earlier today), 0 of 11 hitch reports in PeekMessage; Peek by result: a returned WM_MOUSEMOVE costs 0.04-0.09 ms (was ~0.4 ms a call). Owner: 250+ fps, 400 on DD10/DM07.
+Cause not pinned (the hook change was logging only): most likely the earlier Medal instance (restarted 15:15) or another app since closed. MouseMoveMs stays off. Owner: DD10 escape still not found (relayed to the DD10 lane).
+
 2026-10-25 ~17:58 - STUTTER vs LAST NIGHT + MAP SET (3f): owner sessions per minute of frames over 33 ms: 10-24 17:35 = 11, 19:21 = 6.5; today 14:56-17:39 = 53-128.
 Today 70-80% of hitch-probe reports stand in NtUserPeekMessage (win32u+0x101c; ReShade32+0x5ff67 + gameoverlayrenderer on the stack) vs 18/32 at 17:35. 10-24 17:35 had NO medal-hook32
 loaded (19:21 did); Medal + MedalEncoder were restarted 15:15 today. INSTALLED hook out_mapset_1025a SHIP 2FF289F3 (on FA8A38A5, .before-1025mapset; ini untouched, Trace=1):
