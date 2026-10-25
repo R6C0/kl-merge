@@ -1,3 +1,8 @@
+2026-10-25 ~22:30 - ROUND 2 INSTALLED (map zips only; undo C:/kl_build_1024/owner1025_build/<MAP>/stage/install.py --undo, DM07 under DM07/r2/stage):
+DD10 F07 e826b4ea -> 03db243b (.before-1025raid3): frozen bots = campaign ActorDeactivatorCivs (floor 1 + street) emptied, 55 actors, 8 x 500k, POI also sent by the van timer (untested).
+DM07 F06 6f9f8e62 -> d59d69a5 (.before-1025dig2): lane z 10400 clear, Pillar_F_08/_05 sunk 120 (HVK slab), RIM squads, 11 cases 4M. DM01 fbffea91 -> 978475ed, DM02 7ebc7e46 -> 36610fc8,
+DM03 1ebff7bb -> c9d67a1f (.before-1025lanes): cop cars off the van path / time-separated, DM02 drawers on counters, loot 4M. Entries stale 0. All unplayed. Pushed rtp-schemas to main on owner request (repo is PUBLIC).
+
 2026-10-25 ~21:26 - SYSTEM LINK + DEAD MEN MAPS: PASS (SL2, TEST out_escfar_1025a_test, script C:/kl_build_1024/online_1025/live/SL2.ini, [Lobby] MinPlayers=1 test-only).
 Installed online_1025 (SHIP 05a47b0e, ini 4b2bcf1a: [Expansion] OnlineSet=2, [HUD] TrackerEscapeFar=1; .before-1025online, undo C:/kl_build_1024/online_1025/install.py --undo).
 Route MainMenu DOWN DOWN RETURN > OnlineMenu DOWN RETURN > SystemLink DOWN DOWN RETURN (Create; SL1 pressed Join = SysUIErrorScreen) > SystemLinkCreate RETURN > FALobby;
