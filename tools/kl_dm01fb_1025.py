@@ -477,7 +477,9 @@ def ext_wall(src, dst, log=print):
         if done != 1:
             raise ValueError('%s: %d HVK instances' % (sc.names[g], done))
         n = 0
-        for k in range(g + 1, sc.end[g]):                          # every node below the group carries a world place (the group itself stays at 0)
+        for k in range(g + 1, sc.end[g]):                          # only DIRECT children of the group carry a world place; deeper nodes (the FX group's children) store LOCAL offsets and move with their parent (verified: shifting them too put the FX 4 m away)
+            if sc.parent[k] != g:
+                continue
             q = struct.unpack_from('<3f', B.ents[k - 1].trans)
             AU.place(S, k, pos=tuple(q[a] + d[a] for a in range(3)))
             n += 1
