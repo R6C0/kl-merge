@@ -73,6 +73,8 @@
  *                    It also starts the census: every 60 s a line "game threads by routine" with the deepest commit per routine
  *   GameStackKB=0    with OtherStackKB: kl2.exe's own threads reserve this many KB (2048 at least) instead of 4 MB, except
  *   GameStackKeep=   these routines (kl2.exe offsets in hex, comma-separated, from the census line) which keep 4 MB
+ *                    (recommended off: K48I_A, 2048: routine +5a7010 (x40) committed 2020 of 2048 KB - 1028 of 4096 with 4 MB, it
+ *                    grows into what it is given - and free VA still fell to 14 MB, round 1's own growth varies more than this saves)
  *   SmallRescue=1    a request under 1 MB that the heap refuses (HeapAlloc, or the sound buffers' _aligned_malloc) is logged
  *                    and answered from the reserve (recommended on; 0 = logged only, the game then faults at 0x8e5bbd or
  *                    0x6d2107 as before)

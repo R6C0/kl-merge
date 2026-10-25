@@ -74,9 +74,9 @@ C: disk was full (50 MB, install aborted cleanly; freed to ~16 GB): check free s
 entry 5: KLHook.ini +F06=DM07/+F06=The Dig/EngineMaps ,DM07 (f8de2a9d -> 5bb667be), overlay patched in place a6594c09 -> e34c69d2 (stock H05 picture).
 NOT kl_expansion install (whole tree, would reset live maps); mkoverlay regen does not reproduce the live overlay. Undo: C:/kl_build_1024/dig_build_1025b/menu/dig_menu.py --undo + UNDO bat.
 
-2026-10-25 ~08:30 - MEMORY: DM05A crashes = 32-bit ADDRESS SPACE full (free VA 1728 MB before load -> 13-17 MB in round 1; ReShade irrelevant;
-DM05A has the LEAST texture data of any map, so it is runtime growth). k48f OtherStackKB=2048 (foreign threads' stacks) kept DM05A alive 360 s,
-free VA >= 62 MB; k48g shrinks kl2's own 70 x 4 MB stacks per routine. Staged, not installed: grenade_1025a (needs hook throw), pd2gun_1025b.
+2026-10-25 ~10:30 - MEMORY: DM05A crashes = 32-bit ADDRESS SPACE full in round 1 (growth varies ~230 MB per run). OtherStackKB=2048 (foreign threads) survived
+K48F/G/H_A 360-420 s (free VA min 14..123 MB); GameStackKB REJECTED (K48I_A: +5a7010 fills any stack it gets, VA still 14 MB). Next: k48h SHIP 847C8646 over k43
++ OtherStackKB=2048 after review wr49kepkv; e8's leaner lastcall6 DM05A. Staged, not installed: grenade_1025a, pd2gun_1025b.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
