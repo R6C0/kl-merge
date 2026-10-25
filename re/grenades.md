@@ -227,3 +227,17 @@ nothing; target = mean of F06's NORMAL loot stacks; RunToCover NEXT fires the wh
 Sounds: Dead Men's fragmentation_explosion_01-03 / shot_fragmentation_01 are in the M01_FA_A bank (about offsets
 218000-224800), kl_snd.merge + graft_audio could append them, but a stock-overlay build has no path for it and no pin
 sound was found; NOT grafted, the stand-ins stay.
+
+## 13. Dead Men exe side (2026-10-25, research only, kaneandlynch.exe)
+
+PROVEN (seen in exe disassembly or level data):
+- Input: ZGameplayInput slot 12 (0x637f10) maps actions to the player; HoldGrenade sets bit 0x40 of [player+0x968] via 0x5ef8a0. The throw reads bit 6 of [player+0x7d0] (action word).
+- ZFFPlayer CreateAction (vtable slot 233, 0x5f63a0; callers use mov reg,[reg+0x3a4]; call reg): action ids 0x11 ZFFActionThrow, 0x23 ZFFActionThrowBackGrenade, 4 PickupItem. ZFFActionThrow tick at 0x5fe810.
+- Inventory/equip function 0x5f8d80. Inventory kinds: 0 grenade, 1 two-handed, 2 one-handed, 3 special (kind 0 and 3 skip the 2-gun limit in DD).
+- Pickup: 0x5ee220 (ZFFPlayer pickup try; calls 0x5e6e00 = "You picked up ..." message with count, then 0x5ea1f0 and 0x74b240) and 0x5f860f.
+- Item model in level data: ZFFItemTemplateWeapon (WT_GRENADE, eOODThrow) -> ref to ZFFItemTemplateAmmo -> Projectile ZGROUP; bound once per level by InventoryBinding (eFF2Item id, eFF2ItemType kind). Same shape as DD (sections 1-2).
+- DM has NO ZGrenadeAttackBehaviourRout and no Throwable controller (both DD-only). NPC throws in DD must use the DD route step (section 11).
+
+GUESS / NOT RESOLVED: projectile spawn and velocity in 0x5fe810 (uses constants 0x938850, 0x93c20c, call 0x484f20); where the count is decremented; exact pickup count logic in 0x5e6e00; which function starts the DM ZGrenadeAttack goal; HUD count; DM binding fields [3,10]; grenade model/texture names (Ground ZLNKOBJ, Projectile_HK69_Grenade ZSTDOBJ).
+
+Hook proposal (text only, for e8; nothing built): give the player a grenade like DM by reusing DD's grenade template + binding (kind 0, no gun slot), fill the Ammo projectile slot, equip via the kl2.exe analog of 0x5f8d80, and rely on DD's own HoldGrenade chain.
