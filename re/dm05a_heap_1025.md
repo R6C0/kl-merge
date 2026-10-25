@@ -48,3 +48,17 @@ Static disassembly of kl2.exe only, nothing run. "VERIFIED" = a second agent rep
   devobj.dll + CFGMGR32.dll churn 500-700 MB / 10 s each, alloc == free (device enumeration polled; caller unknown). Only the verifier read
   the table so far: e8 owns the authoritative reading.
 - Candidate tests: NVIDIA "Threaded optimization" OFF for kl2.exe (owner setting), Look=0 (no ReShade), Medal/overlay off, kl2 frame above nvd3dum allocs.
+
+## D3D9 resource pools (workflow wswg81sj9, investigator + adversarial verifier, 2026-10-25)
+- VERIFIED: device calls go through thiscall wrappers on 0xf144a0 (raw device at +4); code is plain (klfps.c's CEG remark is wrong here).
+  Wrappers: CreateTexture 0x6cacf0, CreateCubeTexture 0x8a6db0, CreateVertexBuffer 0x6f46d0, CreateIndexBuffer 0x65e5b0, CreateRenderTarget 0x44ade0,
+  CreateDepthStencilSurface 0x669870, CreateOffscreenPlainSurface 0x868960. No CreateVolumeTexture wrapper.
+- VERIFIED: every .TEX texture (ZTextureManagerD3D slot 7 0x68b550, handlers via ctor 0x4c8bc0) is D3DPOOL_MANAGED, usage 0 (0x819d80: usage 0x4000 DMAP, L16).
+  MANAGED = a d3d9 sysmem copy + a driver copy per texture: the d3d9 +303 MB at load.
+- VERIFIED: mip skip [0xcdadec] (TextureDetail, HKCU ...\Graphics, owner value 0) drops top mips (64 px floor, loop 0x87278b-0x8727b2). One level ~ -75% per texture.
+- VERIFIED: CreateDevice 0x5c0f38 (retry 0x5c0fe8, same flags) = HARDWARE_VP|MULTITHREADED (or SOFTWARE_VP); no PUREDEVICE.
+- VERIFIED: lost/Reset 0x84eb50 -> 0x456bf0 walks list [+0x1908] slot 3 (lost), Reset 0x622580, slot 4 (restore). VB vtable 0xb99cbc slot 3/4 release+recreate
+  EVERY vertex buffer (contents from shadow [+0x30]); textures only for pool 0.
+- VERIFIED: the five 0x6a5aa0 VBs (0x70..0x240) are already DYNAMIC|WRITEONLY DEFAULT; 0x430030 is the only constant-MANAGED VB. Lock/DISCARD sites and the
+  suspected 8 MB dynamic buffer (K49D stack value 0x800000) NOT found yet: follow-up workflow wtooejuiz.
+- Levers: (A) per-map mip skip, a hook DATA write [0xcdadec]=1 before a heavy map loads (no .text write; needs e8); (B) VB/IB MANAGED->DEFAULT, small gain.
