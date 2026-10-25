@@ -730,6 +730,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klsteam.c"
 #include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
 #include "klslot.c"
+#include "klserver.c"                                    /* klserver.c: [Server] host a Quick Match / Ranked lobby unattended (off unless Enable=1); AFTER klslot.c / klchar.c / kllobby.c */
 #include "kllocname.c"                                    /* kllocname.c: [Names] an expansion map shows its own name in the FA lobby / lists (off unless Enable=1); AFTER klslot.c / klpm.c */
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
 #include "klpm_arc.c"                                      /* klpm_arc.c: the Arcade playlist (off unless [Match] Enable + Arcade); AFTER klslot.c */
@@ -1172,6 +1173,7 @@ static void klh_tick(int game_thread)
     klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
     klq2_tick(game_thread);                           /* klqol.c: [QoL] (off unless set) */
     kqb_tick(game_thread);                            /* klqol2.c: [QoL2] (off unless set) */
+    klsv_tick(game_thread);                           /* klserver.c: [Server] (off unless Enable=1; game thread only) */
     kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
     klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
@@ -1605,6 +1607,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kad_init();
     klg_init();
     klx_init();
+    klsv_init();                                      /* klserver.c: [Server] (default off) */
     klmm_init();                                      /* klmm.c: installs nothing unless [Net] PrivateLobby or BuildKey is set */
     kls_init(inst);
     kllnm_init();                                     /* kllocname.c: after kls_init (it reads the rule table) */

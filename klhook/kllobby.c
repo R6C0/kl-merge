@@ -52,6 +52,7 @@ static void kllb_init(void)
     kllb_min = GetPrivateProfileIntA("Lobby", "MinPlayers", 0, klh_ini);
     if (kllb_min < 0 || kllb_min > 8) kllb_min = 0;
     kllb_solo = GetPrivateProfileIntA("Lobby", "Solo", 0, klh_ini) != 0;
+    if (GetPrivateProfileIntA("Server", "Enable", 0, klh_ini)) { kllb_solo = 1; kllb_min = 1; klog("lobby: [Server] Enable=1 implies Solo=1 and MinPlayers=1"); }
     if (kllb_solo && !kllb_min) { kllb_min = 1; klog("lobby: [Lobby] Solo=1 implies MinPlayers=1"); }
     if (!kllb_min && GetPrivateProfileIntA("Bots", "OnlineFill", 0, klh_ini)) { kllb_min = 1; klog("lobby: [Bots] OnlineFill=1 implies MinPlayers=1"); }
     if (kllb_min) klog("lobby: MinPlayers=%d - a hosted FA lobby starts on the host's Ready once that many are connected", kllb_min);

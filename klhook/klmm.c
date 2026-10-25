@@ -9,6 +9,9 @@
  *   PrivateLobby=0   0 = untouched. 1 = every lobby the game creates is FriendsOnly (Steam ELobbyType 1), 2 = Private /
  *                    invite-only (type 0). Replaces the type argument of CreateLobby (vtable +0x30); max members is
  *                    forwarded as it came. NB the value is NOT the Steam enum: 1 -> 1, 2 -> 0.
+ *                    1025: ALSO the key klx_set = "set<N>" (N = [Expansion] OnlineSet, 0 = stock page) is written the same way and filtered the
+ *                    same way, so a host on Retomoto page 2 and a searcher on random (9) do not meet. The game's Quick Match (Join Game), Ranked and
+ *                    Find Game all go through RequestLobbyList / CreateLobby / SetLobbyData, so they are all covered (re\online_server.md).
  *   BuildKey=0       1 = the lobby carries the id of the installed expansion map set and the search asks for it:
  *                      - SetLobbyData (+0x4c): after a forwarded call whose key is "name" (the first call of the game's
  *                        0x869430, for a create and for every later update) one more real SetLobbyData(id, "klx_build",
@@ -70,6 +73,7 @@ static void *klmm_vt[KLMM_NSLOT];
 static struct { void **vt; } klmm_proxy = { klmm_vt };
 static int klmm_private, klmm_buildkey;               /* [Net] PrivateLobby (0/1/2), BuildKey (0/1) */
 static char klmm_id[16];                              /* the build id, "" until computed */
+static char klmm_set[16];                             /* "set<N>": [Expansion] OnlineSet (0 = stock page), the second lobby key klx_set (1025: Quick Match / Ranked) */
 static CRITICAL_SECTION klmm_cs;
 static volatile LONG klmm_nlog;
 
@@ -154,6 +158,8 @@ static unsigned __int64 __fastcall klmm_RequestLobbyList(void *self, void *edx)
         const char *id = klmm_build_id();
         ((void (__fastcall *)(void *, void *, const char *, const char *, int))KLMM_REAL(5))(klmm_real, 0, "klx_build", id, 0);      /* AddRequestLobbyListStringFilter, 12 bytes */
         klmm_say("RequestLobbyList: string filter klx_build=%s (Equal) added first online=%d", id, kl_online());
+        ((void (__fastcall *)(void *, void *, const char *, const char *, int))KLMM_REAL(5))(klmm_real, 0, "klx_set", klmm_set, 0);
+        klmm_say("RequestLobbyList: string filter klx_set=%s (Equal) added second (Quick Match / Ranked / Find Game search alike) online=%d", klmm_set, kl_online());
     }
     return ((unsigned __int64 (__fastcall *)(void *, void *))KLMM_REAL(4))(klmm_real, 0);
 }
@@ -162,7 +168,7 @@ static unsigned __int64 __fastcall klmm_CreateLobby(void *self, void *edx, int t
 {   /* slot 12, 8 bytes; SteamAPICall_t */
     int t = type; (void)self; (void)edx;
     if (klmm_private) t = klmm_private == 1 ? 1 : 0;           /* 1 -> FriendsOnly (1), 2 -> Private (0) */
-    klmm_say("CreateLobby(type %d, max %d) -> type %d (PrivateLobby=%d) online=%d", type, maxmembers, t, klmm_private, kl_online());
+    klmm_say("CreateLobby(type %d%s, max %d) -> type %d (PrivateLobby=%d) online=%d", type, type == 3 ? " = Ranked" : type == 2 ? " = public (Quick Match / Player Match)" : "", maxmembers, t, klmm_private, kl_online());
     return ((unsigned __int64 (__fastcall *)(void *, void *, int, int))KLMM_REAL(12))(klmm_real, 0, t, maxmembers);
 }
 
@@ -173,7 +179,8 @@ static char __fastcall klmm_SetLobbyData(void *self, void *edx, unsigned __int64
     if (klmm_buildkey && key && !strcmp(key, "name")) {
         const char *id = klmm_build_id();
         char r2 = ((char (__fastcall *)(void *, void *, unsigned __int64, const char *, const char *))KLMM_REAL(19))(klmm_real, 0, lobby, "klx_build", id);
-        klmm_say("SetLobbyData key 'name' seen: klx_build=%s written (ok=%d) online=%d", id, r2 != 0, kl_online());
+        char r3 = ((char (__fastcall *)(void *, void *, unsigned __int64, const char *, const char *))KLMM_REAL(19))(klmm_real, 0, lobby, "klx_set", klmm_set);
+        klmm_say("SetLobbyData key 'name' seen: klx_build=%s (ok=%d) klx_set=%s (ok=%d) written online=%d", id, r2 != 0, klmm_set, r3 != 0, kl_online());
     }
     return r;
 }
@@ -220,6 +227,8 @@ static void klmm_init(void)
     klmm_buildkey = (int)GetPrivateProfileIntA("Net", "BuildKey", 0, klh_ini);
     if (klmm_private < 0 || klmm_private > 2) { klog("mm: [Net] PrivateLobby=%d is not 0, 1 or 2: ignored", klmm_private); klmm_private = 0; }
     if (klmm_buildkey != 0 && klmm_buildkey != 1) { klog("mm: [Net] BuildKey=%d is not 0 or 1: ignored", klmm_buildkey); klmm_buildkey = 0; }
+    i = (int)GetPrivateProfileIntA("Expansion", "OnlineSet", 0, klh_ini);
+    snprintf(klmm_set, sizeof klmm_set, "set%d", i < 0 || i > 9 ? 0 : i);
     if (!klmm_private && !klmm_buildkey) return;               /* default: nothing installed, v82f behaviour */
     InitializeCriticalSection(&klmm_cs);
     for (i = 0; i < KLMM_NSLOT; i++) klmm_vt[i] = 0;

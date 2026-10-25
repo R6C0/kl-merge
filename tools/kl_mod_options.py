@@ -77,6 +77,8 @@ feat('onlinerandround', G_EXP, 'Random online map: a new draw every round (only 
      "klslot.c OnlineRandomRound=1: the round number (loads more than 60 s apart, counted by each machine) joins the seed; a player who joins after a round was played counts differently and gets another map; NOT run live", [('Expansion', 'OnlineRandomRound', 1, 0, 0)])
 feat('lobbysolo', G_EXP, 'System Link / Private Match: play a round by yourself as host (no "all players left" window; for testing custom matches)', 'off', 'start',
      'kllobby.c [Lobby] Solo=1 (implies MinPlayers=1): the session error word is cleared while you host with 1 human; private vtable copy of the session manager (heap data); NOT run live', [('Lobby', 'Solo', 1, 0, 0)])
+feat('hostserver', G_EXP, 'Host server: this copy keeps hosting a Quick Match lobby by itself, restarts after each round (for a PC left running; implies lobby solo)', 'off', 'start',
+     'klserver.c [Server] Enable=1 (Mode=quick|ranked, MinPlayers, WaitSec): drives the menu to QuickJoin, lowers the lobby target after the wait; NOT run live; re/online_server.md', [('Server', 'Enable', 1, 0, 0)])
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
      'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
 feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on', 'start',
