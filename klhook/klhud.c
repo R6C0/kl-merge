@@ -109,6 +109,7 @@
  *   Stock=0           1 = also on a stock level (section 6)
  *   Log=1             0 none, 1 on / objects made / stock block hidden / faults, 2 + every text change and counters
  *   Crew=1 Money=1 Round=1     the three blocks
+ *   KilledBy=1 (recommended on)  "KILLED BY name" in the HUD style while dead (offline); ScoreboardShopLead=30  tenths of a s cut off the 10 s round-over count (shop opens at 7)
  *   HideStock=1       hide the stock top-left block while ours draws
  *   Draw=1            1 = our own Draw, 2 = through the stock clock's Render (section 2)
  *   Shadow=1          drop shadows (forced on with Draw=2)
@@ -221,7 +222,8 @@
 #define KLU_CARD_BAND   28.0f                 /* a band's height (they overlap by 6) */
 #define KLU_VDISC       (1.0f / 0.6f)         /* 2026-10-14: picture 170 / 171 (the vehicle disc) is baked with its disc at 0.6 of the picture (tools/kl_hud_marks.py VEHICLE_DISC: the world marker draws it at a fixed size); every place here that draws it grows by this, so it looks as before */
 #define KLU_CARD_STDY   5.0f                  /* the status word lower by this: live (run v45_KL, 80 s) its capitals sat 5 px above the name's (the label font's ascent is not the baked one) */
-#define KLU_T_TABST(i)  (KLU_T_ESC + 1 + (i))  /* the Tab card's status column, one a row (2026-10-13) */
+#define KLU_T_DEATH     (KLU_T_ESC + 1)               /* 2026-10-25: 'KILLED BY name' in the new look while you are dead (the stock death panel's line is an XML text in the level archive) */
+#define KLU_T_TABST(i)  (KLU_T_DEATH + 1 + (i))  /* the Tab card's status column, one a row (2026-10-13) */
 #define KLU_NTEXT       (KLU_T_TABST(KLU_ROWS))   /* LAST: every part that adds texts goes before this line (klhud_values.c / klhud_popup.c add none) */
 #define KLU_NPIC        300                   /* the queue; the rings are baked arcs + a run of dabs (klu_arc): about 230 a frame at worst; the draw list holds 280 without trouble (run S1), keep it under ~320 */
 #define KLU_TEXTLEN     64
@@ -303,7 +305,7 @@ static struct {
     int weapon;                               /* Weapon: the weapon dial (klhud_weapon.c) */
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
     int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
-    int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
+    int killed, on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
     int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash, mfill, vanicon, tablist, tabcard, hidesrc, hideonl, oprobe;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
       /* the watch look (section 14 of re\hud_hook.md): WatchStyle (1 = new, 0 = the old textures and sizes), WatchSeconds, WatchWear, WatchLast, LabelBar (0 text only, 1 painted bar, 2 plain), LabelSlash */
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
@@ -647,6 +649,7 @@ static void klu_layout(void)
     klu_r.t[KLU_T_ESC].x = klu_r.mx - 6.0f; klu_r.t[KLU_T_ESC].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_ESC].want_colour = KLU_C_CHALK;
     klu_r.t[KLU_T_KILL].x = klu_r.mx; klu_r.t[KLU_T_KILL].style = KLU_STYLE_RIGHT; klu_r.t[KLU_T_KILL].want_colour = KLU_C_GREEN;
     klu_r.t[KLU_T_KILL].y = klu_r.my + (klu.draft ? (klu.wstyle ? KLU_W_MLINE0 : KLU_D_MLINE0) + KLU_D_MLINE * 2.0f : 88.0f);      /* one line under REWARDS */
+    klu_r.t[KLU_T_DEATH].x = 640.0f; klu_r.t[KLU_T_DEATH].y = 150.0f; klu_r.t[KLU_T_DEATH].style = KLU_STYLE_CENTRE; klu_r.t[KLU_T_DEATH].fnt = KLU_FNT_NAME; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;   /* GUESS: top centre, under the watch row; position not seen live */
     klu_r.t[KLU_T_ESC].y = klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP + KLU_ESC_TOFF;      /* the van card's middle; the text is centred on it below */
     if (klu.fontset) {                                   /* TYPE: which font each text takes (see the block at KLU_NFONT) */
         for (i = 0; i < KLU_NTEXT; i++) klu_r.t[i].fnt = KLU_FNT_NAME;
@@ -1135,7 +1138,7 @@ static int klu_compose(int *state_ok)
         if (klb_hud_crew && klu.crew && s.on_n > 0) {         /* [HUD] OnlineCrew: the online crew list from the SL6 dump (humans only; no names found yet: YOU / PLAYER n) */
             int k, rows = 0, nu = 0; long tot = 0; char nm[24]; BYTE loc = 0;
             { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (BYTE)li; }
-            strcpy(klu_r.t[KLU_T_HEAD].want, "CREW"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
+            strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;   /* 2026-10-25 owner: the Arcade crew box is headed DEAD MEN, online said CREW */
             for (k = 0; k < s.on_n; k++) {
                 if (!s.on_used[k]) continue;
                 nu++; tot += s.on_money[k];
@@ -1143,7 +1146,13 @@ static int klu_compose(int *state_ok)
                 if (k == loc) strcpy(nm, "You"); else snprintf(nm, sizeof nm, "Player %d", k + 1);
                 klu_row(rows++, nm, s.on_money[k], k == loc ? KLUV_K_YOU : KLUV_K_CREW);
             }
-            snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d", nu); klu_r.t[KLU_T_COUNT].on = 1;
+            /* Arcade reads "alive / used"; online has no per-record status decoded (re/hud_online.md), so alive = used (GUESS) and the gap is logged once (TEST) */
+            snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d", nu, nu); klu_r.t[KLU_T_COUNT].on = 1;
+            { static int told; if (!told && klu.log) { told = 1; klog("hud: ONLINE parity: crew box = DEAD MEN + painted rule like Arcade; MISSING online: names (YOU / Player n), alive/dead/escaped per row, lives, round line, LOOT/REWARDS boxes, kill line (records not decoded)"); } }
+            if (klu.plates) {                                 /* the same painted rule as the Arcade box */
+                if (klu.draft) klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, klu_r.cx, klu_r.cy + KLU_D_RULE_Y, klu.crew_w, KLU_D_RULE_H, KLU_C_CHALK, klu.layer - 2);
+                else klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);
+            }
             if (klu.money) { strcpy(klu_r.t[KLU_T_MLABEL(0)].want, "TOTAL"); klu_r.t[KLU_T_MLABEL(0)].on = 1; klu_dollars(klu_r.t[KLU_T_MVALUE(0)].want, KLU_TEXTLEN, tot); klu_r.t[KLU_T_MVALUE(0)].on = 1; }
         }
         return 1;
@@ -1260,6 +1269,17 @@ static int klu_compose(int *state_ok)
             float ix = klu_r.mx - 35.0f - 66.0f, iy = klu_r.wy;
             if (klu_r.handle[KLU_DAB_PIC]) klu_dab_at(ix, iy, 46.0f, 0xc80c0c0du, klu.layer - 2);
             klu_addpic(170, ix - 15.0f * KLU_VDISC, iy - 15.0f * KLU_VDISC, 30.0f * KLU_VDISC, 30.0f * KLU_VDISC, st == KLUV_ST_ESCAPED ? KLU_C_GREENHI : KLU_C_GREEN, klu.layer);
+        }
+    }
+    if (klu.killed && human >= 0) {                           /* [HUD] KilledBy=1 (recommended on): the death line in the HUD's style: coral, capitals, the killer's character name */
+        int st = kluv_state(&s, human);
+        if (st == KLUV_ST_DEAD || st == KLUV_ST_WAITING) {
+            int k = kluv_killer(&s, human); char kn[40] = "";
+            if (k >= 0 && k < s.n && s.r[k].used) { DWORD blk, str = 0; if ((blk = klh_rd32(s.r[k].at)) != 0 && klh_rd(blk + 8, &str, 4) && str) klh_rdstr(str, kn, sizeof kn); klnm_name(s.r[k].at, kn, sizeof kn); }
+            { size_t q; for (q = 0; kn[q]; q++) if (kn[q] >= 'a' && kn[q] <= 'z') kn[q] -= 32; }
+            snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1;
+            klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
+            { static int told; if (!told && klu.log) { told = 1; klog("hud: KILLED BY drawn in the HUD style ('%s'); the stock death panel text (XML FARespawn KilledBy) is NOT hidden by the hook - see report", klu_r.t[KLU_T_DEATH].want); } }
         }
     }
     if (klu.crew) {
@@ -1699,7 +1719,7 @@ static void klu_init(void)
     klu.log = klu_inii("Log", 1, 0, 2);
     klu.stock = klu_inii("Stock", 0, 0, 1);
     klb_hud_online = klu_inii("Online", 0, 0, 1);         /* 2026-10-18: the local, cosmetic parts in a network FA round (klbot.c klb_read_hud; re/hud_online.md). Default 0: never run online */
-    klu.crew = klu_inii("Crew", 1, 0, 1); klu.money = klu_inii("Money", 1, 0, 1); klu.round = klu_inii("Round", 1, 0, 1);
+    klu.killed = klu_inii("KilledBy", 1, 0, 1); klu.crew = klu_inii("Crew", 1, 0, 1); klu.money = klu_inii("Money", 1, 0, 1); klu.round = klu_inii("Round", 1, 0, 1);
     klu.hide = klu_inii("HideStock", 1, 0, 1);
     klu.draw = klu_inii("Draw", 1, 1, 2);
     klu.shadow = klu_inii("Shadow", 1, 0, 1); if (klu.draw == 2) klu.shadow = 1;     /* the stock Render draws a pair */

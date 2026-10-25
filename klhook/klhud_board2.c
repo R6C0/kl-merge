@@ -120,7 +120,7 @@ static const BYTE klsb_code[8] = { 0x83, 0xec, 0x3c, 0x56, 0x8b, 0xf1, 0x8b, 0x0
 struct klsb_t { DWORD obj, colour, want_colour; float x, y; int on; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
 static struct {
-    int on, probe, test, fault, textonly, total, count;
+    int on, probe, test, fault, textonly, total, count, lead;
     float x, y; int alpha;
 } klsb;
 
@@ -359,6 +359,10 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
     /* the countdown */
     if (klsb.count == 1) { float tm = 0; if (klh_rd(s->rules + KLUV_R_LEFT, &tm, 4) && tm == tm && tm >= 0 && tm < 100.0f) cdv = tm; }
     else cdv = (end * 1024.0f - (float)frame) / 1024.0f;
+    /* 2026-10-25 owner: 'instead of the 10 second countdown to buy shop its 7 then it does it'. The element's deadline is engine ms + 0x2800 = 10 s, but the
+       buy-weapons page takes over after 7 s of it, so the count we show starts at 7: subtract the lead (3 s). [HUD] ScoreboardShopLead=<tenths of s>, default 30;
+       0 = the raw 10 s. Only the deadline route (ScoreboardCount=0); the state-timer route reads the game's own value. The 3 s is the owner's report, not measured. */
+    if (klsb.count == 0 && klsb.lead > 0) { cdv -= klsb.lead / 10.0f; if (cdv < 0) cdv = 0; }
     if (!(cdv >= 0)) cdv = 0;
     if (cdv > 99.0f) cdv = 99.0f;
     if (klsb_r.cd_max <= 0 || cdv > klsb_r.cd_max) klsb_r.cd_max = cdv > 0.5f ? cdv : klsb_r.cd_max;
@@ -556,7 +560,7 @@ static void klsb_init(void)
     klsb.on = klu_inii("Scoreboard", 0, 0, 1);
     if (!klsb.on) return;
     klsb.probe = klu_inii("ScoreboardProbe", 0, 0, 1); klsb.test = klu_inii("ScoreboardTest", 0, 0, 1); klsb.fault = klu_inii("ScoreboardFault", 0, 0, 1);
-    klsb.textonly = klu_inii("ScoreboardTextOnly", 0, 0, 1); klsb.total = klu_inii("ScoreboardTotal", 1, 0, 2); klsb.count = klu_inii("ScoreboardCount", 0, 0, 1);
+    klsb.textonly = klu_inii("ScoreboardTextOnly", 0, 0, 1); klsb.total = klu_inii("ScoreboardTotal", 1, 0, 2); klsb.count = klu_inii("ScoreboardCount", 0, 0, 1); klsb.lead = klu_inii("ScoreboardShopLead", 30, 0, 100);   /* tenths of a second cut off the 10 s countdown: the shop opens at 7 (owner 2026-10-25) */
     klsb.alpha = klu_inii("ScoreboardAlpha", 230, 0, 255);
     klsb.x = klu_inif("ScoreboardX", "320"); klsb.y = klu_inif("ScoreboardY", "150");
     if (!(klsb.x >= 0 && klsb.x <= 640)) klsb.x = KLSB_PX;
