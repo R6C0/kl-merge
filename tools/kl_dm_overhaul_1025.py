@@ -84,6 +84,42 @@ SPECS = {
             anm_col='Mercenary_04',
             caps=(99, 64)),           # census 21 / 18 + 6 / 3 = 27 / 21, far below the proven 99 / 55
     ),
+    # ---- DM11B Hasta la Vista (F04 slot), 2026-10-25.  Plaza (nav y ~20, collision floor 0) x 21200..32000, z 21600..30000; Capitol hall + loot wing (y 800) x 33000..43500, z 28000..33000.
+    # Escape pad (27500, 0, 22800), police spawn (27500, 200, 22800), stair foot (26667, 20, 27758).  No kick doors: door_hosts finds 0 leaves (survey 2026-10-25).
+    # Everything below was checked against the COLLISION (kl_route grid), not only the walk mesh (DM06 lesson): extinguishers where a wall >= 160 cm wide stands 30..60 cm behind the spot at
+    # 70/120/170 cm height and the body column in front is free; car lanes where a 3 m disc around every 100 cm point is free of solid 25..210 above a flat floor 0 (scan 2026-10-25).
+    'DM11B': dict(
+        slot='F04', file='F04_Main.zip', title='Hasta la Vista', tag='.before-1025overhaul3',
+        doors=[],
+        ext_spots=[(26201.0, 20.0, 27298.0, 0.0, (1.0, 0.0)), (27601.0, 20.0, 27298.0, 0.0, (1.0, 0.0)), (20980.0, 22.0, 27934.0, 0.0, (-1.0, 0.0)),
+                   (34824.0, 813.0, 29764.0, 0.0, (0.0, -1.0)), (33184.0, 800.0, 28150.0, 0.0, (0.0, -1.0))],
+        ext=[],
+        fuel=[(25000.0, 26000.0, 20.0), (23500.0, 25400.0, 20.0), (30000.0, 27500.0, 20.0), (36500.0, 30500.0, 800.0)], fuel_ground=True,
+        # cars: A and B drive east along the south road of the plaza (z 21800 / 22400), C comes down the west edge (x 21600); stops stay >= 1100 from the pad (27500, 22800).
+        # GUESS: the cars are animated bodies (no real driving); the SWAT are the map's own police actors (wave3 clone of its Plaza_Wave template, see below).
+        cars=dict(
+            paths={12579: [(22000.0, 21800.0), (25000.0, 21800.0)], 12754: [(24000.0, 22400.0), (26000.0, 22400.0)], 12929: [(21600.0, 28800.0), (21600.0, 25000.0)]},
+            cells={1: [(24600.0, 0.0, 22300.0), (24000.0, 0.0, 22200.0)], 2: [(26800.0, 0.0, 23400.0), (27200.0, 0.0, 22000.0)], 3: [(22100.0, 0.0, 26200.0), (22100.0, 0.0, 24600.0)]},
+            wave3='Gameplay!030_AfterLoot!030_FinancialAlleyExit_Left',   # the map's own 3-man Police_SWAT squad (ARRIVE_XZ of the FA layer): the clone template
+            backstop=40.0,            # GUESS: the crew needs ~30 s from the stair to the plaza; the cars arrive on the timer
+            anm_col='Army',           # GUESS: same collection token as DM01B's police actors; build fails loudly if the .ANM lacks it
+            caps=(99, 55)),           # census 43 / 24 + 6 / 3, far below the proven 99 / 55
+    ),
+    # ---- DM09 Retomoto Tower (F06 slot), 2026-10-25.  Live pin cf6b62ee (vans pass).  Tower office floors (y 19400..21050) are their own nav part (33), the street/lobby the main part (0).
+    # No kick doors: door_hosts finds 0 leaves on this map.  NO police cars / SWAT: census is 99 actors / 56 squads, already at/over the proven 99 / 55, and cars() adds 6 / 3 (refused by its own budget check).
+    # ext_spots (x, FLOOR y, z, wall length, zdir): picked 2026-10-25 by tools-free scan (s4.py in C:/kl_build_1024/overhaul_1025c/scratch): nav wall edge >= 150 long, collision floor within -110..+30 of the mesh,
+    # solid wall at 70..170 above the floor within 20..60 cm along zdir at 2-3 of 3 sample points, free body column; the most fights (Pos# nodes) within 900 cm.  Two on the street, four on the office floors.
+    'DM09': dict(
+        slot='F06', file='F06_Main.zip', title='Retomoto Tower', tag='.before-1025overhaul3',
+        doors=[],
+        ext_spots=[(4847.0, 160.0, -6967.0, 209.0, (1.0, 0.0)), (2079.0, 20.0, -4740.0, 407.0, (-0.99997, -0.0079)),
+                   (2385.0, 21000.0, -100.0, 979.0, (1.0, 0.0)), (5184.0, 20993.0, -759.0, 244.0, (1.0, 0.0)),
+                   (-1678.0, 19600.0, -446.0, 205.0, (0.0638, 0.9980)), (-160.0, 21000.0, -1450.0, 171.0, (0.3641, -0.9314))],
+        ext=[],
+        # fuel: street cans on the collision floor (fuel_ground).  GUESS: anchors near the street fights (4300,-6300) and the lobby side; snap() moves them onto the mesh.
+        fuel=[(4300.0, -6300.0, 160.0), (-1000.0, 9500.0, 0.0)], fuel_ground=True,
+        cars=None,
+    ),
 }
 
 
@@ -149,6 +185,9 @@ def ps_text(mapname):
     sp = SPECS[mapname]
     s = GS.PS1
     s = s.replace('gas.json', 'overhaul.json').replace('.before-1025dm01bgas', tag_of(mapname)).replace('gas.ps1', 'overhaul.ps1')
+    s = s.replace(GS.MAP, mapname).replace(GS.FILE, sp['file'])      # the gas installer's text names DM01B / F03_Main.zip in its comments (and in its paths: the manifest holds them)
+    # header fix 2026-10-25: the gas installer text names DM01B / F03 in its WHAT lines; name this map and its slot file instead
+    s = s.replace('Maps' + BS + 'DM01B' + BS + 'F03_Main.zip', 'Maps' + BS + mapname + BS + sp['file']).replace('F03_Main.zip.before', sp['file'] + '.before')
     first = s.index('\n')
     return ('# overhaul.ps1 - %s (%s), 2026-10-25 (tools/kl_dm_overhaul_1025.py): %s extinguishers, fuel cans%s.\n'
             '#   Chained on the live zip named in overhaul.json "old"; the install refuses any other md5, refuses while kl2.exe runs.\n') % (
