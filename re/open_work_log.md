@@ -2,6 +2,11 @@
 
 2026-10-25 ~07:10 UTC - scheduled check-in (cloud, read-only on the PC; the VS Code sessions were live: hook installed 06:07, DD10B PASS on F07): no new crash (KLHook_1-4.dmp 05:52 = the DD10A member-name crash already triaged and fixed). Offline piece: tools/kl_slotcheck.py - read-only check that every KLExpansion map archive's members, beside files and [Redirect*] entry name ITS slot (the DD10A crash class) plus the loader's by-name members; 15-check self-test; live tree 29 maps / 20 redirects = 0 FAIL (.hrd made optional by evidence: DM05A/DM06B/DM09*/DM11B lack it and play). debug/notes/2026-10-25-scheduled-triage.md. Owner: nothing new; run 'python tools/kl_slotcheck.py <stage dir>' before an INSTALL bat if you like.
 
+2026-10-25 ~06:08 - DD10 FLAT RAID RUNS LIVE (DD10B PASS): 1025e re-staged with F07 members (F07_Main.zip e826b4ea, check.py clean), INSTALLED (l05.ps1, 32 files;
+undo l05.ps1 -Undo). Run with hook k50_1025quad2 + QuadRing=128, menu page 3 entry 5: 150 s of round 1, 0 asserts / 0 faults, arena flat 94.5 MB, HUD + 'Loot area' at spawn.
+Menu lines (Redirect.3 F07=DD10, Page.3 F07=Flat Raid) are only in the test ini; live KLHook.ini is e8's. First crash (DD10A) = members still named F01, fixed in f3e0cb8e6.
+06:08-13:19 idle: the auto-mode safety check failed on every action, the turn stopped, and nothing was scheduled to resume it.
+
 2026-10-25 ~06:05 - QUADRING VERIFIED WITH RESET (K50K, hook k50_1025quad2 CC6FAB5F, QuadRing=128, alttab.py --mark 'level loaded:' --delay 40 --away 6 --back 20
 --cycles 2): 'fps: Reset ok' x2 (06:00:53, 06:01:20), quad stats 2299628 swaps / 1143 buffers made / 0 create failures / 5 ring drops / 2 Resets; free VA 554-563 MB
 (dip to 492 during the Alt+Tab), 0 refusals, 118-119 fps; hook JPG KLShot_K50K_12 after the 2nd Reset = normal picture (bloom, HUD). K50J's failed Reset was in the
