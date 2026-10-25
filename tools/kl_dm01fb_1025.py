@@ -96,6 +96,8 @@ def sound(src, dst, folder, log=print):
         b2 = S.Snd('dd', s2, ls).walk()
     nls = S.ls_bank(ls, S.u32(cur[0], 0))
     bad, n = S.verify(base, cur[0], cur[1], cur[2], nls)
+    import kl_gunsnd as KG                                      # self-check: every original record + data span untouched (2026-10-25)
+    KG.check_bank_preserved(whd, wav, cur[1], cur[2])
     bad = [x for x in bad if not x.startswith('stock bytes below')]
     if bad:
         raise ValueError('kl_snd.verify: %s' % bad[:5])

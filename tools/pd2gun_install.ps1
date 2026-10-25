@@ -11,8 +11,8 @@
 param([switch]$Undo, [switch]$DryRun, [switch]$Rehearsal, [switch]$SkipRunCheck,
       [string]$Game = 'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days')
 $ErrorActionPreference = 'Stop'
-$tag = '.before-1025pd2gun'
 $man = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'pd2gun.json') -Raw | ConvertFrom-Json
+$tag = if ($man.tag) { [string]$man.tag } else { '.before-1025pd2gun' }   # the manifest names the backup suffix
 function md5($f) { (Get-FileHash -LiteralPath $f -Algorithm MD5).Hash.ToLower() }
 
 if ($Rehearsal) {

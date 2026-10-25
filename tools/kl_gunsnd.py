@@ -270,8 +270,54 @@ def snd_sounds(snd):
     return out
 
 
-def rebuild(whd, wav, repl, snd=None, log=print):
-    """repl: {record offset: (data bytes, samples, pcm bytes, seconds)} -> new (whd, wav, snd)"""
+def check_bank_preserved(whd0, wav0, whd1, wav1, changed=(), rebased=None):
+    """SELF-CHECK of a bank edit (2026-10-25, after the kl2 0x6d2107 audit). Re-parses both banks and asserts that every ORIGINAL record
+    that is not listed in `changed` (record offsets) keeps all its fields and its data span byte for byte, except the data offset when
+    `rebased` ({record offset: new off}) names it. Also: header {size == len, 3, 4}, new records only after the old ones, every
+    in-memory ADPCM record 16-aligned, a multiple of its block, inside the WAV, no overlap. Raises AssertionError; returns a count."""
+    w0, w1 = {w.rec_off: w for w in waves(whd0)}, {w.rec_off: w for w in waves(whd1)}
+    changed = set(changed); rebased = rebased or {}
+    assert struct.unpack_from('<4I', whd1, 0)[1:] == (len(whd1), 3, 4), 'WHD header size/3/4'
+    assert struct.unpack_from('<I', wav1, 4)[0] == len(wav1), 'WAV header size field'
+    assert wav1[:4] == wav0[:4] and wav1[8:16] == wav0[8:16], 'WAV header'
+    n = 0
+    for ro, a in w0.items():
+        assert ro in w1 and w1[ro].name == a.name, 'record %#x missing or renamed' % ro
+        b = w1[ro]
+        if ro in changed:
+            continue
+        fa, fb = list(a.f), list(b.f)
+        if ro in rebased:
+            fb[F['off']] = fa[F['off']]
+        assert fa == fb, 'record %s fields changed: %s -> %s' % (a.name, fa, fb)
+        if not a.streamed and a.get('size') and not a.get('offhi'):
+            oa, ob = a.get('off'), rebased.get(ro, b.get('off'))
+            sz = a.get('size')
+            assert wav0[oa:oa + sz] == wav1[ob:ob + sz], 'record %s data differs' % a.name
+        n += 1
+    spans = []
+    for ro, b in w1.items():
+        if b.streamed or not b.get('size') or b.get('offhi') or b.codec != 0x11:
+            continue
+        o, sz = b.get('off'), b.get('size')
+        assert o % 16 == 0 and sz % b.get('block') == 0 and o + sz <= len(wav1), 'record %s geometry off %#x size %#x' % (b.name, o, sz)
+        assert b.get('pcm') == 2 * b.get('samples'), 'record %s pcm != 2*samples' % b.name
+        spans.append((o, o + sz, b.name))
+    spans.sort()
+    # the stock banks share two spans (-3072 overlaps); only NEW overlaps are errors, so compare against the original's count
+    ov = lambda sp: sum(1 for x, y in zip(sp, sp[1:]) if y[0] < x[1])
+    sp0 = sorted((w.get('off'), w.get('off') + w.get('size'), w.name) for w in w0.values()
+                 if not w.streamed and w.get('size') and not w.get('offhi') and w.codec == 0x11)
+    assert ov(spans) <= ov(sp0), 'new overlapping WAV spans: %d (was %d)' % (ov(spans), ov(sp0))
+    return n
+
+
+def rebuild(whd, wav, repl, snd=None, log=print, keep_geometry=False):
+    """repl: {record offset: (data bytes, samples, pcm bytes, seconds)} -> new (whd, wav, snd).
+    keep_geometry: a clip that fits its old span is written there, zero-padded (zero ADPCM blocks decode to silence), and the record
+    keeps its OLD size / samples / pcm and the .SND keeps its old seconds: only the audio bytes change, every other thing the engine
+    reads about the entry (buffer size, block count, duration) stays as in the stock bank. Still-in-place without it shrinks them."""
+    whd0, wav0 = bytes(whd), bytes(wav)
     whd = bytearray(whd); wav = bytearray(wav); snd = bytearray(snd) if snd is not None else None
     ws = {w.rec_off: w for w in waves(bytes(whd))}
     so = snd_wave_objects(bytes(snd)) if snd is not None else {}
@@ -282,8 +328,11 @@ def rebuild(whd, wav, repl, snd=None, log=print):
             wav[old_off:old_off + old_size] = data + bytes(old_size - len(data)); new_off = old_off; how = 'in place'
         else:
             wav += bytes(-len(wav) % 16); new_off = len(wav); wav += data; how = 'appended'
-        f = list(w.f); f[F['off']] = new_off; f[F['offhi']] = 0; f[F['size']] = len(data)
-        f[F['samples']] = samples; f[F['pcm']] = pcmb
+        f = list(w.f); f[F['off']] = new_off; f[F['offhi']] = 0
+        if keep_geometry and how == 'in place':
+            sec = w.seconds; how = 'in place, geometry kept (%d zero bytes pad)' % (old_size - len(data))
+        else:
+            f[F['size']] = len(data); f[F['samples']] = samples; f[F['pcm']] = pcmb
         struct.pack_into('<17I', whd, ro, *f)
         n = 0
         for wo, _ in so.get(ro, []):
@@ -291,6 +340,7 @@ def rebuild(whd, wav, repl, snd=None, log=print):
         log('  %-70s %6d -> %6d bytes, %.3f s, %s%s' % (w.name[-70:], old_size, len(data), sec, how,
                                                          ', %d .SND wave object(s) +0x18' % n if snd is not None else ''))
     struct.pack_into('<I', wav, 4, len(wav))
+    check_bank_preserved(whd0, wav0, bytes(whd), bytes(wav), changed=repl.keys())
     return bytes(whd), bytes(wav), (bytes(snd) if snd is not None else None)
 
 

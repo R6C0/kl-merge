@@ -304,7 +304,7 @@ def build_sound(lv, whd, wav, log=print):
         log('  %-72s <- weapon_akm %d: %.3f s, gain %+.1f dB, head %.2f dBFS (reference %.2f, %s)' % (w.name[-72:], wid, ns / 32000.0, gain, head, ref, how))
     snd = lv['.SND']
     snd2, moved = K.repoint_snd(snd, DONOR_DEF, HELI_GUN)
-    whd2, wav2, snd3 = K.rebuild(whd, wav, repl, snd2, log=lambda *_: None)
+    whd2, wav2, snd3 = K.rebuild(whd, wav, repl, snd2, log=lambda *_: None, keep_geometry=True)
     lv['.SND'] = snd3
     # the Type 81 template -> the AK47's definition
     sc, _raw = lv.scene()
@@ -382,8 +382,12 @@ def verify(outdir, log=print):
     whd0, wav0 = open(os.path.join(live, 'F01_Main.WHD'), 'rb').read(), open(os.path.join(live, 'F01_Main.WAV'), 'rb').read()
     whd1, wav1 = open(os.path.join(outdir, 'F01_Main.WHD'), 'rb').read(), open(os.path.join(outdir, 'F01_Main.WAV'), 'rb').read()
     w0, w1 = {w.rec_off: w for w in K.waves(whd0)}, {w.rec_off: w for w in K.waves(whd1)}
-    diff = [o for o in w0 if w0[o].f != w1[o].f]
-    log('  WHD records changed: %s' % [w0[o].name.rsplit('/', 1)[-1] for o in diff])
+    hl = {n.lower() for n in HELI_RECORDS}
+    diff = [o for o in w0 if w0[o].name.lower() in hl]          # the three heli records (their WHD fields are kept since keep_geometry)
+    log('  WHD records with changed fields: %s' % [w0[o].name.rsplit('/', 1)[-1] for o in w0 if w0[o].f != w1[o].f])
+    ok &= all(w0[o].f == w1[o].f for o in w0)
+    K.check_bank_preserved(whd0, wav0, whd1, wav1, changed=diff)
+    log('  check_bank_preserved: every other record identical in fields and data')
     spans = [(w0[o].get('off'), w0[o].get('off') + w0[o].get('size')) for o in diff]      # the old span: a shorter clip is zero-padded to it
     outside = [i for i in range(0, len(wav0), 4096) if wav0[i:i + 4096] != wav1[i:i + 4096] and not any(s <= i + 4095 and i < e for s, e in spans)]
     log('  WAV: size %d -> %d, bytes differing outside the three record spans: %d blocks' % (len(wav0), len(wav1), len(outside)))
@@ -394,7 +398,7 @@ def verify(outdir, log=print):
         pk = float(np.abs(x).max())
         log('    %s: %d samples (%.3f s), peak %.3f, head %.2f dBFS (reference %.2f), at the ceiling %.1f %%' % (
             w1[o].name.rsplit('/', 1)[-1], len(x), len(x) / 32000.0, pk, M.head_db(x), ref, 100.0 * float((np.abs(x) >= 0.98 * pk).mean())))
-        ok &= len(x) == w1[o].get('samples') and 0.2 < len(x) / 32000.0 < 0.5
+        ok &= len(x) == w1[o].get('samples') and 0.2 < float(np.count_nonzero(x)) / 32000.0 < 0.5
     snd = S.Snd('dd', lv['.SND'])
     sc2, _ = lv.scene()
     kt = MG.template_node(sc2, TEMPLATE)
