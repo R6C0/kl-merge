@@ -648,6 +648,9 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klmem.c"
 #include "klhigh.c"                                      /* klhigh.c: [Memory] High - the 4 GB flag made safe: the listed foreign modules' VirtualAlloc goes above 2 GB, the game stays below (off unless High=1/2); AFTER klmem.c */
 #include "klextpt.c"                                     /* klextpt.c: [KLHook] NoInject - no foreign hook DLLs in the game (stutter fix 2026-10-23); AFTER klog / klh_ini */
+#ifdef KLHOOK_TEST
+#include "klvalog.c"                                     /* klvalog.c: [Memory] VaLog - other modules' VirtualAlloc by caller (TEST only, default 0); AFTER klextpt.c (klxp_enum_fn) */
+#endif
 #include "klnudge.c"
 #include "klfix.c"
 #include "kljoin.c"
@@ -969,6 +972,9 @@ static void klh_tick(int game_thread)
     klg_tick();
     klm_tick();
     klvh_tick();                                      /* klhigh.c: the 10 s census of the listed modules' reservations (off unless [Memory] High) */
+#ifdef KLHOOK_TEST
+    klva_tick();                                      /* klvalog.c: the per-caller table every 10 s (off unless [Memory] VaLog=1) */
+#endif
     InterlockedExchange(&klh_tick_busy, 0);
 }
 
@@ -1289,6 +1295,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klfps_init();                                  /* klfps.c: LAST of the Direct3DCreate9 wrappers (outermost); [FrameLimit] */
     klm_init();
     klvh_init();                                   /* klhigh.c: AFTER klm_init (the reserve is taken first, low); wraps the listed modules' import slots, with High=2 takes the high half */
+#ifdef KLHOOK_TEST
+    klva_init();                                   /* klvalog.c: AFTER klm_init (its reserve is not counted); off unless [Memory] VaLog=1 */
+#endif
     klxp_init();                                   /* klextpt.c: extension points off (hook DLLs of other programs), watcher of foreign modules */
     kln_init();
     klf_init();
