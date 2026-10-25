@@ -671,6 +671,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kltalk.c"
 #include "klvoice.c"                                       /* klvoice.c: Dead Men voices for the eight Dead Men bodies (off unless [Voice] Enable=1); AFTER kltalk.c (klk_hash, klk_ini) */
 #include "klbot.c"
+#include "klonline.c"                                       /* klonline.c: klon_read / klon_money, the read-only online snapshot for [Music]/[Ambience]/[Stinger] Online; AFTER klbot.c */
 #include "klescort.c"
 #include "klhop.c"
 #include "klmove.c"
@@ -1586,6 +1587,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klnet_init();
     kllb_init();
     kllo_init();                                      /* kllobbyopt.c: reads [Lobby] TimeMax / TimeMin / RoundsMax */
+    klon_init();                                      /* klonline.c: [Online] Log */
     klbf_init();                                      /* klbotfill.c: reads [Bots] OnlineFill (after kllb_init: it reads the same key) */
     klq2_init();                                      /* klqol.c: [QoL] (default off) */
     kqb_init();                                       /* klqol2.c: [QoL2] (default off) */

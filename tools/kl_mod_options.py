@@ -149,6 +149,20 @@ feat('announcer', G_AV, 'Announcer first: a one-recording Dead Men line stays th
 feat('music', G_AV, 'Payday 2 music jukebox (needs Payday 2)', 'off', 'start',
      'it made the game stutter (owner 2026-10-23: gone with it off); Retomoto keeps its own music either way', [('Music', 'Enable', 1, 0, 0)])
 
+# online parity (re/arcade_online_parity.md, 2026-10-25): the same local, read-only sound parts in a Quick / Ranked / LAN / Private round
+feat('musiconline', G_AV, 'Online matches: the music jukebox too (recommended off until the SL test passes)', 'off', 'start',
+     'klonline.c [Music] Online; read-only snapshot of the online rules (CALM/ACTION by timer or money/END); needs [Music] Enable=1; NOT run live', [('Music', 'Online', 1, 0, 0)])
+feat('ambienceonline', G_AV, 'Online matches: ambience bed and one-shots too (recommended off until the SL test passes)', 'off', 'start',
+     'klonline.c [Ambience] Online; same snapshot; needs [Ambience] Enable=1; NOT run live', [('Ambience', 'Online', 1, 0, 0)])
+feat('stingeronline', G_AV, 'Online matches: event stingers too (recommended off until the SL test passes)', 'off', 'start',
+     'klonline.c [Stinger] Online; only the events the online snapshot can show (Loud by timer, Loot by money with OnlineCrew); needs [Stinger] Enable=1; NOT run live', [('Stinger', 'Online', 1, 0, 0)])
+feat('censoronline', G_CORE, 'Online matches: head shots blow the head off on this screen too (recommended off until tested)', 'off', 'start',
+     'klcensor.c [Censor] Online (key existed, row was missing); heap float per actor, local look only; peers see their own result; NOT run live', [('Censor', 'Online', 1, 0, 0)])
+feat('botfill', G_EXP, 'Online lobby: log the AI-heister plan for empty seats (recommended off)', 'off', 'start',
+     'klbotfill.c [Bots] OnlineFill; Ready may start below the lobby target (MinPlayers 1); read-only census; re/bots_online_fill.md; NOT run live', [('Bots', 'OnlineFill', 1, 0, 0)])
+feat('botfillsquads', G_EXP, 'Online lobby: keep the first N map heister squads for the empty seats (walkers only; recommended off)', 'off', 'start',
+     'klbotfill.c [Bots] OnlineFillSquads; heap byte per squad (mask 8 -> 9) before the round; needs OnlineFill=1; may be too late for the collect (probe); NOT run live', [('Bots', 'OnlineFillSquads', 1, 0, 0)])
+
 # the look choice (k30fps, owner 2026-10-24): Off / KL look / LiveLeak are three values of ONE key, so two exclusive rows: untick both = Off.
 feat('reshade', G_GFX, 'ReShade look 2: LiveLeak camcorder (sky softened by the 1024b preset)', 'on', 'start',
      'the look the owner chose (Look=2); ReShade is on the stack at some hitches, so off = full frame rate', [('Graphics', 'Look', 2, 0, 1)])

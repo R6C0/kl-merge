@@ -21,16 +21,52 @@
  *      that survived the load (count, alive, their tactic fields) - the proof of what the squad filter did.
  * KLHook.ini
  *   [Bots]
+ *   OnlineFillSquads=0  3. (needs OnlineFill=1; default off) before the round the first `fill` ZSquadScripts of mask eHeistOnly get bit 1 so the
+ *                    online collect keeps them (walkers only, see 6. of the doc); 'botfill: squad pass:' lines show what was found and set
  *   OnlineFill=0     0 = off (the game's own rule: no AI heisters online). 1 = plan + probe lines, Ready may start below the target
  */
 #ifndef KLBOTFILL_C
 #define KLBOTFILL_C
 
-static int klbf_on;
+static int klbf_on, klbf_sq;      /* klbf_sq = [Bots] OnlineFillSquads (see the header, step 3) */
+static int klbf_fill;              /* the plan's fill, for the squad pass */
+static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
+
+/* Step 3 (default off, SHIP-safe: one heap BYTE per squad). Squads are ZSquadScript entities (vtable 0xbcce3c); [squad+0x34] is the
+   EGameType mask. The online collect (slot 14, 0x7b3790, test at 0x7b37e3) drops a member when the mask lacks bit 1; the first `fill`
+   squads whose mask is exactly eHeistOnly (8) get bit 1 added (-> 9: kept online, by the unchanged game code). The order is the
+   entity-table order = the load order, the same on every peer that loaded the same level. GUESS: the entity table already holds the
+   squads when this tick runs; if the collect has run before, the write changes nothing (logged as 'late') and the census (step 2)
+   shows 0 Ally. Returns the number of squads changed (>= 0) or -1 when the table is unreadable. */
+static int klbf_squads(int fill)
+{
+    DWORD p, tab, i, blk[64 * 32]; int n = 0, sq = 0, set = 0, k8 = 0; char mk[96]; mk[0] = 0;
+    if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return -1;
+    for (i = 0; i < 0x10000 && n < 4000; i += 64) {
+        DWORD k;
+        if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
+        for (k = 0; k < 64; k++) {
+            DWORD o = blk[k * 32 + 0x60 / 4], m = 0; BYTE nm;
+            if (o < 0x10000 || klh_rd32(o) != 0x00bcce3c) continue;       /* ZSquadScript */
+            n++;
+            if (!klh_rd(o + 0x34, &m, 4)) continue;
+            sq++;
+            if (sq <= 12 && strlen(mk) < 80) { char t[12]; snprintf(t, sizeof t, " %lx", (unsigned long)m); strcat(mk, t); }
+            if ((m & 0xff) != 8) continue;
+            k8++;
+            if (k8 > fill) continue;
+            nm = (BYTE)((m & 0xff) | 1);
+            if (klh_data((void *)(DWORD_PTR)(o + 0x34), &nm, 1, "squad game-type mask (eHeistOnly -> +FA, OnlineFillSquads)")) set++;
+        }
+    }
+    klog("botfill: squad pass: %d ZSquadScript, %d with mask 8 (heister squads), %d given bit 1 for fill %d; first masks:%s", sq, k8, set, fill, mk);
+    return set;
+}
 
 static void klbf_init(void)
 {
     klbf_on = GetPrivateProfileIntA("Bots", "OnlineFill", 0, klh_ini) != 0;
+    klbf_sq = klbf_on && GetPrivateProfileIntA("Bots", "OnlineFillSquads", 0, klh_ini) != 0;      /* TEST first: the squads of the first `fill` heister slots are kept online */
     if (klbf_on) klog("botfill: OnlineFill=1 - plan and probe lines for the empty lobby seats (read-only; Ready may start below the lobby target)");
 }
 
@@ -53,6 +89,11 @@ static void klbf_tick(int game_thread)
         klog("botfill: role %lu state 0x%lx: lobby target %d (now [sm+0xb9] %u, max [sm+0xb8] %u), connected %d -> fill %d AI heister seat(s) wanted (NOT acted on: no code path adds a loot-taking heister online)",
              (unsigned long)role, (unsigned long)state, target, cur, mx, conn, target > conn ? target - conn : 0);
         told_sm = sm;
+    }
+    klbf_fill = target > conn ? target - conn : 0;
+    if (klbf_sq && klbf_fill > 0 && klbf_sq_done != sm && state < KLB_ROUND) {      /* before the round: the squads are collected at the load */
+        static DWORD sqlast; static int tries;
+        if (now - sqlast >= 1000) { sqlast = now; if (klbf_squads(klbf_fill) > 0 || ++tries >= 8) { klbf_sq_done = sm; tries = 0; } }
     }
     if (state < 0x13 || now - scan < 5000) return;
     scan = now;

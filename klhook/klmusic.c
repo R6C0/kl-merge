@@ -256,7 +256,7 @@ static DWORD WINAPI klmu_thread(void *u)
 #define KLMU_ST_ASSAULT 16
 
 static struct {
-    int on, solo_block, vol, fade, rnd, action_after, force, enabled, st_on, mood_posted, base, round, down;
+    int online, on, solo_block, vol, fade, rnd, action_after, force, enabled, st_on, mood_posted, base, round, down;
     int assault, assault_after, assault_down, assault_money; DWORD t_action; BYTE dead0[KLB_NREC];   /* sound3 */
     char folder[KLMU_PATH], folderb[KLMU_PATH], engine[200], map[40];
     struct klmu_list list[KLMU_NMOOD], stinger;            /* list[CALM..DOWN]; list[NONE] and [END] unused */
@@ -395,7 +395,7 @@ static void klmu_tick(int game_thread)
     DWORD now = GetTickCount(), money = 0; struct klb_snap s; char key[40]; int i, base, mood;
     if (!klmu.on || !game_thread || !klh_exe_ok || now - klmu.t_last < 250) return;
     klmu.t_last = now;
-    if (kl_online()) { klmu.round = 0; klmu_want(KLMU_NONE, 0); return; }
+    if (kl_online() && !klmu.online) { klmu.round = 0; klmu_want(KLMU_NONE, 0); return; }
     klmu_mapkey(key, sizeof key);
     if (strcmp(key, klmu.map)) { snprintf(klmu.map, sizeof klmu.map, "%s", key); klmu.round = 0; if (key[0]) klmu_loadmap(); else klmu_want(KLMU_NONE, 0); }
     if (!klmu.map[0]) { klmu_want(KLMU_NONE, 0); return; }
@@ -404,7 +404,7 @@ static void klmu_tick(int game_thread)
         if (!klmu.told_engine) { klmu.told_engine = 1; klog("music: %s has its own engine music - the jukebox is silent here ([Music.%s] Force=1 plays it anyway)", klmu.map, klmu.map); }
         klmu_want(KLMU_NONE, 0); return;
     }
-    if (!klb_read(&s)) {
+    if (!klon_read(&s, klmu.online)) {
         if (!klmu.t_fail) klmu.t_fail = KLB_T(now);
         if (now - klmu.t_fail > 1500 && (klmu.mood_posted != KLMU_END || now - klmu.t_end > 20000)) { klmu.round = 0; klmu_want(KLMU_NONE, 0); }
         return;
@@ -415,7 +415,7 @@ static void klmu_tick(int game_thread)
         else if (klmu.mood_posted != KLMU_END || now - klmu.t_end > 20000) klmu_want(KLMU_NONE, 0);
         return;
     }
-    for (i = 0; i < s.n; i++) if (s.r[i].used) money += s.r[i].money;
+    money = klon_money(&s);
     if (!klmu.round || s.rules != klmu.rules0) {                 /* a round began */
         klmu.round = 1; klmu.rules0 = s.rules; klmu.t_round = KLB_T(now); klmu.money0 = money; klmu.base = KLMU_CALM; klmu.down = 0;
         klmu.assault = 0; klmu.t_action = 0;
@@ -468,6 +468,7 @@ static void klmu_init(void)
 {
     char b[40];
     klmu.on = GetPrivateProfileIntA("Music", "Enable", 0, klh_ini) != 0;
+    klmu.online = GetPrivateProfileIntA("Music", "Online", 0, klh_ini) != 0;      /* klonline.c: the jukebox in a network FA round (CALM / ACTION by timer or money / END only) */
     if (!klmu.on) return;
     klmu_log = GetPrivateProfileIntA("Music", "Log", 1, klh_ini) != 0;
     if (GetPrivateProfileIntA("Solo", "Enable", 0, klh_ini) && !GetPrivateProfileIntA("Music", "SoloPlay", 0, klh_ini)) {

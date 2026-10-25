@@ -1,3 +1,7 @@
+2026-10-25 ~23:00 - ARCADE->ONLINE PARITY AUDIT (re/arcade_online_parity.md): why Arcade parts are silent online (Heist-only readers, replication, no bot seat), ranked table.
+Built out_parity_1025a SHIP a70f4122 / _test 573a99fe (not installed, not run): klonline.c klon_read/klon_money; [Music]/[Ambience]/[Stinger] Online=1 (read-only online snapshot), [Bots] OnlineFillSquads=1
+(squad mask 8 -> 9 heap byte before the round, keeps the first fill heister squads online as WALKERS; may be late for the collect: probe), option rows added. All default 0. Recipe in the doc, section 4.
+
 2026-10-25 ~22:30 - ROUND 2 INSTALLED (map zips only; undo C:/kl_build_1024/owner1025_build/<MAP>/stage/install.py --undo, DM07 under DM07/r2/stage):
 DD10 F07 e826b4ea -> 03db243b (.before-1025raid3): frozen bots = campaign ActorDeactivatorCivs (floor 1 + street) emptied, 55 actors, 8 x 500k, POI also sent by the van timer (untested).
 DM07 F06 6f9f8e62 -> d59d69a5 (.before-1025dig2): lane z 10400 clear, Pillar_F_08/_05 sunk 120 (HVK slab), RIM squads, 11 cases 4M. DM01 fbffea91 -> 978475ed, DM02 7ebc7e46 -> 36610fc8,

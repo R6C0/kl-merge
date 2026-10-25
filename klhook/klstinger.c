@@ -178,7 +178,7 @@ static const struct { const char *name; int vol, cool, max, chance, prio; } klst
 struct klst_ev { int n, vol, cool, max, chance, fired, last; DWORD t_last; char f[KLST_MAXF][KLST_PATH]; };
 
 static struct {
-    int on, vol, gap, loud_after, last_sec, loot_every, enabled, round, lastprio, loot_done, loud_done, last30_done, open_done, stopped;
+    int online, on, vol, gap, loud_after, last_sec, loot_every, enabled, round, lastprio, loot_done, loud_done, last30_done, open_done, stopped;
     char folder[KLST_PATH], map[40];
     struct klst_ev e[KLST_NE];
     int pend[KLST_NE];                    /* a one-shot event held back by the Gap: its ev value, retried next pass */
@@ -311,18 +311,18 @@ static void klst_tick(int game_thread)
     DWORD now = GetTickCount(), money = 0; struct klb_snap s; char key[40]; int i, ev[KLST_NE], g, grace, newround = 0;
     if (!klst.on || !game_thread || !klh_exe_ok || now - klst.t_last < 250) return;
     klst.t_last = now;
-    if (kl_online()) { klst_off(1); return; }
+    if (kl_online() && !klst.online) { klst_off(1); return; }
     klmu_mapkey(key, sizeof key);
     if (strcmp(key, klst.map)) { snprintf(klst.map, sizeof klst.map, "%s", key); klst_off(1); if (key[0]) klst_loadmap(); }
     if (!klst.map[0] || !klst.enabled) { klst_off(1); return; }
-    if (!klb_read(&s)) {
+    if (!klon_read(&s, klst.online)) {
         if (!klst.t_fail) klst.t_fail = KLB_T(now);
         if (now - klst.t_fail > 1500) klst_off(0);
         return;
     }
     klst.t_fail = 0;
     if (s.state != KLB_ROUND) { klst_off(0); return; }
-    for (i = 0; i < s.n; i++) if (s.r[i].used) money += s.r[i].money;
+    money = klon_money(&s);
     if (!klst.round || s.rules != klst.rules0) {                     /* a round began */
         klst.round = 1; klst.rules0 = s.rules; klst.t_round = KLB_T(now); klst.money0 = money; newround = 1;
         klst.loot_done = klst.loud_done = klst.last30_done = klst.open_done = 0; klst.t_cue = 0; klst.lastprio = 0;
@@ -382,6 +382,7 @@ static void klst_tick(int game_thread)
 static void klst_init(void)
 {
     klst.on = GetPrivateProfileIntA("Stinger", "Enable", 0, klh_ini) != 0;
+    klst.online = GetPrivateProfileIntA("Stinger", "Online", 0, klh_ini) != 0;   /* klonline.c: cues in a network FA round (Loud by timer, Loot by money with OnlineCrew; no Heist events) */
     if (!klst.on) return;
     klst_log = GetPrivateProfileIntA("Stinger", "Log", 1, klh_ini);
     if (GetPrivateProfileIntA("Solo", "Enable", 0, klh_ini) && !GetPrivateProfileIntA("Stinger", "SoloPlay", 0, klh_ini)) {

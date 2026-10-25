@@ -220,7 +220,7 @@ static const struct { const char *name; int min, max, from, after, vol; } klam_g
 struct klam_grp { int n, min, max, from, after, vol, fired; DWORD next; char f[KLAM_MAXF][KLAM_PATH]; };
 
 static struct {
-    int on, vol, bedvol, fade, action_after, enabled, round, bedforce, phase, last_phase, bed_on, shots_live;
+    int online, on, vol, bedvol, fade, action_after, enabled, round, bedforce, phase, last_phase, bed_on, shots_live;
     char folder[KLAM_PATH], skip[200], map[40], bed[KLAM_PATH];
     struct klam_grp g[KLAM_NG];
     DWORD t_round, t_last, t_fail, rules0, money0; BYTE stage0[KLB_NREC];
@@ -336,18 +336,18 @@ static void klam_tick(int game_thread)
     DWORD now = GetTickCount(), money = 0; struct klb_snap s; char key[40]; int i, ph, g;
     if (!klam.on || !game_thread || !klh_exe_ok || now - klam.t_last < 250) return;
     klam.t_last = now;
-    if (kl_online()) { klam_off(); return; }
+    if (kl_online() && !klam.online) { klam_off(); return; }
     klmu_mapkey(key, sizeof key);
     if (strcmp(key, klam.map)) { snprintf(klam.map, sizeof klam.map, "%s", key); klam_off(); if (key[0]) klam_loadmap(); }
     if (!klam.map[0] || !klam.enabled) { klam_off(); return; }
-    if (!klb_read(&s)) {
+    if (!klon_read(&s, klam.online)) {
         if (!klam.t_fail) klam.t_fail = KLB_T(now);
         if (now - klam.t_fail > 1500) klam_off();
         return;
     }
     klam.t_fail = 0;
     if (s.state != KLB_ROUND) { klam_off(); return; }
-    for (i = 0; i < s.n; i++) if (s.r[i].used) money += s.r[i].money;
+    money = klon_money(&s);
     if (!klam.round || s.rules != klam.rules0) {                 /* a round began */
         klam.round = 1; klam.rules0 = s.rules; klam.t_round = KLB_T(now); klam.money0 = money; klam.phase = KLAM_P_CALM; klam.last_phase = -1;
         for (g = 0; g < KLAM_NG; g++) { klam.g[g].fired = 0; klam.g[g].next = 0; }
@@ -393,6 +393,7 @@ static void klam_tick(int game_thread)
 static void klam_init(void)
 {
     klam.on = GetPrivateProfileIntA("Ambience", "Enable", 0, klh_ini) != 0;
+    klam.online = GetPrivateProfileIntA("Ambience", "Online", 0, klh_ini) != 0;   /* klonline.c: bed + one-shots in a network FA round */
     if (!klam.on) return;
     klam_log = GetPrivateProfileIntA("Ambience", "Log", 1, klh_ini) != 0;
     if (GetPrivateProfileIntA("Solo", "Enable", 0, klh_ini) && !GetPrivateProfileIntA("Ambience", "SoloPlay", 0, klh_ini)) {
