@@ -1,3 +1,8 @@
+2026-10-25 ~14:55 - OWNER "install all": STALE Entries= FIXED on 6 maps (C:/kl_build_1024/entries_fix_1025/install.py, backups *.before-1025entries, --undo).
+KLGuns.ini [Guns] Entries -> live .prm count on DM02 58992, DM03A 66136, DM06 47800, DM09 65499, DM11B 60328 (Dead Men gun looks were ignored since the vans/doors/overhaul
+rebuilds; kl_map_guns check 0 problems on all 30 guns); DM01 KLJoin.ini [FedBody] 50572 -> 50579 (my AKM install had turned the FBI fed outfits off; e8's find).
+2 adversarial verifiers: not refuted. tools/kl_entries_check.py (e8): stale 0. RULE: any .prm rebuild must re-run kl_entries_check before install.
+
 2026-10-25 ~14:35 - OWNER "put the akm on dm01": PD2 AKM INSTALLED on DM01 Hot Coffee (C:/kl_build_1024/pd2gun_dm01_1025c/install.py, backups *.before-1025pd2gun, --undo):
 F01_Main.zip 1bcac96b -> 8278d213 (grenade build + AKM on Rifle_Type81 item 33), WAV 7072f089 -> f6f511dd, KLGuns.ini 907ffabf -> e450d165. FOUND: DM01's KLGuns.ini said Entries=49973
 but the live .prm had 50572 (stale since the vans/fb/grenade rebuilds), so the hook ignored it and the Dead Men gun looks were off; now Entries=50579, kl_map_guns check 0 problems.
