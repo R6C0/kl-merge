@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 ~17:05 - GRENADE PROBE RESULT (owner's G presses 16:43): [P+0xa1c]=0 on every press and release, so ZFFActionThrow / action 0x11 is DEAD for the player
+(vtable 0xbb45f4 as expected, [P+0x84]=0, [P+0x239c] word0 0x179). Live ini [Grenade] Probe=0 (44e51cff, .before-1025probeoff). Remaining route: hook-side projectile spawn (e8, research).
+DOORS option A (owner): heister KickDoorBehaviourRout post-pass tools/kl_bots_kick_1025.py building in wf wpcwu2uyp -> staged C:/kl_build_1024/hkick_1025a (DM01/DM02/DM03A, DM01B maybe).
+DM01 overlaps e8's AKM sound fix: whoever installs second rebases; message before installing.
+
 2026-10-25 ~06:05 - MEMORY SHIP FIX: klquad.c [Memory] QuadRing=128 (815c55e1d, 52466f929; KLHook.ini + mod-options row): ring for the 4 post-process quad VBs,
 Lock wrapped via a vtable slot (SHIP-safe), rings dropped before every Reset (klfps keeps its Reset wrapper). K50K DM05A + 2x Alt+Tab: both Resets ok, VA flat ~555 MB,
 0 refusals, 119 fps, picture intact. SHIP B5BFCCE0 INSTALLED 13:21 with ini 57DAC49E (+QuadRing, +DD10 Flat Raid page 3 entry 5); undo k50_1025quad_ship2/install.py --undo. Not yet run live. Owner A/B ideas
@@ -75,10 +80,6 @@ Lock wrapped via a vtable slot (SHIP-safe), rings dropped before every Reset (kl
 is FIXED in test by e8's [Memory] D3dRing=128 (ring3 e4f912a8): K50F2 at 119 fps, arena flat, 0 refusals, free VA ~560 MB. Next: K50G visuals, Alt+Tab/Reset, ship decision (e8).
 DM05A live = lc7+texmip 9cdd6dee (backups .before-1025lc7tm 4bd278cf -> .before-1025texmip 701d082f; undo with each install.py --undo). DM01 grenade 1bcac96b installed,
 scripted PASS (throw untested). DD10 1025d not ready (Wall_Break seals 3 loots), round 4 wkrhxtbed.
-
-2026-10-25 ~09:30 - DIG 1025b INSTALLED (e8 window), not yet run: Maps/DM07 F06_Main.zip 3c7636d3 (dig.ps1, no PC_Def.str: C: too tight), menu = Dead Men campaign
-entry 5: KLHook.ini +F06=DM07/+F06=The Dig/EngineMaps ,DM07 (f8de2a9d -> 5bb667be), overlay patched in place a6594c09 -> e34c69d2 (stock H05 picture).
-NOT kl_expansion install (whole tree, would reset live maps); mkoverlay regen does not reproduce the live overlay. Undo: C:/kl_build_1024/dig_build_1025b/menu/dig_menu.py --undo + UNDO bat.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
