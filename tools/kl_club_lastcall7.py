@@ -2,10 +2,10 @@
 """kl_club_lastcall7.py - Last Call (DM05A) pass 1025a: fewer PARTICLE EMITTERS and campaign shard pools, on top of lc6. OFFLINE.
 
   python tools/kl_club_lastcall7.py plan  <lc6 F01_Main.zip 701d082f>
-  python tools/kl_club_lastcall7.py build <lc6 F01_Main.zip 701d082f> <out F01_Main.zip> [--force] [--keep-campaign]
+  python tools/kl_club_lastcall7.py build <lc6 F01_Main.zip 701d082f> <out F01_Main.zip> [--force] [--cut-campaign]
   python tools/kl_club_lastcall7.py check <zip> [--live <lc6 zip>]
   python tools/kl_club_lastcall7.py roots <lc6 zip> <lc7 zip> <DM05A folder holding KL{Guns,Wardrobe,Join,Talk}.ini>
-  python tools/kl_club_lastcall7.py stage <lc6 zip> <out folder> --rehearse <scratch> [--no-proc-check] [--keep-campaign]
+  python tools/kl_club_lastcall7.py stage <lc6 zip> <out folder> --rehearse <scratch> [--no-proc-check] [--cut-campaign]
 
 WHY: DM05A (32-bit kl2) still runs out of address space in round 1 after lc6 (28,550 -> 21,033 entities, 10,918 -> 6,323 emitters): of two live runs
 one survived (min free VA 202 MB), one died (14 MB). The suspect is a non-kl2 module (the D3D10 driver) growing private 16 MB / halving allocations
@@ -17,14 +17,14 @@ WHAT IT DOES (nothing with a gameplay role is touched; no actor, spawn, loot, es
     shot. They are dust, debris and smoke puffs only: the pane, its shards and the break itself stay. The (now empty) groups STAY because the
     shot triggers name them (no trigger loses its target; the Booth lamps' emitter lists are cut and may be empty). The club windows players
     shoot (FX_*_WindowA_Spec*, ZAllocMany pools) are NOT in this set. Pooled templates (ZAllocMany) are NOT touched.
- 2. CAMPAIGN-ONLY SHARD POOLS (default; --keep-campaign turns it off): the ZAllocMany templates under M05A_LOC_Inside of the daughter room
+ 2. CAMPAIGN-ONLY SHARD POOLS (OFF by default since 1025b; --cut-campaign; UNSAFE: Bottles_A is shared with the dance floor, panes keep '' pools): the ZAllocMany templates under M05A_LOC_Inside of the daughter room
     (GlassA/B/C_DaughterRoom), the wardrobe window (Win_WardrobeA), the lounge sofa table (Sofa_Lounge_TableA) and the shelf bottles (Bottles_A),
     each together with its clone group CloneGroup_Locations/... (so no clone group is orphaned; a template and its group leave as a pair). The
     references to them (the pane's ZHavokShatter[Glass] fields [0] shards / [1] particles) are CUT by trim_pass (an unresolvable path becomes '').
 Machinery: kl_club_lastcall3.trim_pass (nested node indices), then kl_fa_bank seal + reverify, exactly as lc6.
 GUESSES, said plainly: (a) the engine was NOT run on this. (b) A pane whose ZHavokShatterGlass[0]/[1] is now '' may dereference a NULL pool when
 SHOT (the same field is already '' for some stock panes? not established: the empty-field scan of the live scene found no such pane except the
-unused slots [3],[4],[6]..). If e8 sees a crash on shooting a daughter-room / wardrobe window / lounge table / bottle, rebuild with --keep-campaign.
+unused slots [3],[4],[6]..). If e8 sees a crash on shooting a daughter-room / wardrobe window / lounge table / bottle, that was the --cut-campaign variant; the default (1025b) keeps those pools.
 (c) That the 760 emitters are pure decoration: the only holders are ZSTDOBJ ZShotActivate lists (asserted), never an AI / game-flow node.
 (d) The target 'about 4,500 emitters' is NOT reached by these two rules (see the report line of build); the rest sit in shared stock pools
 (BulletImpacts 1,611, WeaponsEffects 1,347, car explosions 672) and in the roof / outside window pools: not touched here.
@@ -195,9 +195,9 @@ def check_lc7(zp, log=print, live=None):
     if c1['actors'] != c0['actors'] or c1['squads'] != c0['squads'] or c1['civilians'] != c0['civilians']:
         fails.append('actors / squads / civilians changed')
     for name in ('Spawn', 'Loot', 'Escape', 'Bound', 'START', 'Wardrobe', 'Guns', 'OldWaves!Wave_', 'Roof_R', 'merc_bot_squad', 'WindowA_Spec'):
-        n0 = sum(1 for k in range(1, len(s0.nodes)) if k not in gone_set and name.lower() in s0.names[k].lower())
+        n0 = sum(1 for k in range(1, len(s0.nodes)) if name.lower() in s0.names[k].lower())
         n1 = sum(1 for k in range(1, len(s1.nodes)) if name.lower() in s1.names[k].lower())
-        if n0 != n1:
+        if n0 != n1:    # counted over ALL lc6 nodes: a protected name among the removed ones fails too
             fails.append('nodes named *%s*: %d -> %d' % (name, n0, n1))
     # the club windows keep every emitter and pool
     ww0 = sum(1 for k in range(1, len(s0.nodes)) if 'WindowA_Spec' in s0.path[k] and s0.cls(k) == 'ZParticleEmitter')
@@ -314,7 +314,7 @@ def main():
         return 2
     _patch()
     L3.NOPROC[0] = '--no-proc-check' in a
-    KEEP[0] = '--keep-campaign' in a
+    KEEP[0] = '--cut-campaign' not in a      # 1025b: campaign pools are KEPT by default (verifiers: 21 panes would lose their pool, Bottles_A pool is shared with the dance floor)
     if a[0] == 'plan':
         sc = KB.Built(a[1]).sc
         p = plan(sc)
