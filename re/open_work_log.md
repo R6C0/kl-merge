@@ -1,3 +1,9 @@
+2026-10-25 ~19:10 - DD10 ROUND 4 (workflow wkrhxtbed, 0e5c0621a - pushed with a Sonnet trailer, can't fix without force-push): 1025e at C:/kl_build_1024/l05fa_1025e
+(F07_Main.zip 2143c207, KLJoin a117176e). Wall_Break opened statically (State_A + middle frame hidden/collision cut, State_C shown, breach frame 30781 solid: GUESS on the
+controllers), check() FAILs on blocked legs (1025d now FAIL), knee line 40 cm, ExitLootArea moved to the plaza + park z 900 -> bots/bots_dyn 0 FAIL. My re-run: check PASS
+(108 legs, 0 blockers). STAGED + rehearsed at l05fa_1025e/stage (32 new files, 396 MB), NOT installed; first live run proposed to e8 (menu lines in KLHook.ini are theirs).
+K50H (no ring) baseline piled as before: free VA 1696 -> 18 MB by ~70 s; K50I = ring + hook JPG shots.
+
 2026-10-25 ~18:40 - MEMORY RING WORKS (e8 K50F2, ring2 b256f117 / ring3 e4f912a8, [Memory] D3dRing=128): each DISCARD lock moves the object's +0x18 VB to the next
 of N hook buffers, locked NOOVERWRITE; DM05A at 119 fps: arena flat at 70-75 MB, 0 refusals, free VA steady ~560 MB (lc7 alone changed nothing, K50E). K50F's ReShade32 crash
 was fixed by creating through the real device vtable. K50G = visual check; the Alt+Tab/Reset test is next. Static (mine): the 5 DISCARD callers are lock helpers for VB0-3
