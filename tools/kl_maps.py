@@ -125,7 +125,16 @@ PASSIVE = {'PlayerCoverCollision', 'NoCoverBox', 'LevelBound', 'FFCoverList'}
 # ASSUMPTION: these are places a player can stand; nobody has stood there in Dog Days yet.
 HERO_AT = {'M09_A': {'Markup!CP_02_PosP1': 'Heroes!Hero_01', 'Markup!CP_02_PosP2': 'Heroes!Hero_02'},
            'M09_B': {'Checkpoints!CP_01_PosP1': 'Heroes!Hero_01', 'Checkpoints!CP_01_PosP2': 'Heroes!Hero_02'},
-           'M03_A': {'Special!JumpPoints!Jump#060': 'Heroes!Hero_01'}}
+           'M03_A': {'Special!JumpPoints!Jump#060': 'Heroes!Hero_01'},
+           # M07_A (Dig): Hero! is campaign scripting and is dropped, and no kept marker stands in the pit
+           # (the kept Special! nodes are CoverControl + the six LevelBound boxes). GUESS: reuse the Truckland
+           # Warn01 box (-2615,-650,-2183; a far-away pushback warning, Warn02 + Bound stay) as the carrier and
+           # move it to HERO_PLACE below; re/dig_fa_design_1025.md 12.
+           'M07_A': {'Special!Pushback_Boxes!LevelBound_Truckland!Warn01': 'Heroes!Hero_01'}}
+# where a HERO_AT carrier is moved to (world x, y, z) when the marker itself is not where the heisters should stand.
+# M07_A: a polygon of the nav mesh's main part 1 near the pit (design doc: polygon 100 at (-2300,-454,3000)); the
+# real Hero_01 (-2691,-555,2953) stands on a 2-polygon island. ASSUMPTION: 4 cm-ish rounding, y above the polygon.
+HERO_PLACE = {'M07_A': (-2300.0, -454.0, 3000.0)}
 PSEUDO = {}                             # level name -> folder with <name>_Main.zip and the files beside it
 # Dead Men maps that have run live under F07 (kl_graft's run log: B-4 / M01c, and F1 .. RN6 with a
 # whole Arcade round). What a map has beyond these the game meets for the first time: first_timers.
@@ -431,6 +440,10 @@ def one(out, s_name, m_name, keep=False, campaign=False, heroes=False, slot=SLOT
                 self.prp.nodes[t]['props'] = [p[0]] + [x for u in us for x in u] + [p[-1]]
                 self.prp.nodes[t]['ctrls'] = []
                 self.prp.names[t], self.prp.tids[t] = dst, group
+                if name in HERO_PLACE:
+                    tr = bytearray(self.ents[t - 1].trans)
+                    tr[:12] = struct.pack('<3f', *HERO_PLACE[name])        # position only; rotation stays the marker's
+                    self.ents[t - 1].trans = bytes(tr)
                 log('  kl_maps: %s stands at %s %s' % (dst, src, tuple(round(v) for v in struct.unpack('<3f', self.ents[t - 1].trans[:12]))))
             if nav_base is not None and self.scene.nav is not None:
                 # build() gives the level M's mesh ('A.nav = B.nav'): hand it both
