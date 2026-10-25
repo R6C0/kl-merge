@@ -105,6 +105,7 @@ static struct {
     long lastframe;
     double dtavg;
     float h_orig[6]; int h_ok[6], h_told;
+    long nhw, nhitch, nframes; DWORD sum_ms; float hmin, hmax;   /* 10 s DtFix summary (printed whatever Log says) */
     float R[3], Rv[3];                    /* raw pose (h, y, fov) and its velocity */
     float D[3], Dv[3];                    /* displayed pose and velocity */
     float e[3], ev[3], w[3]; int act;     /* open takeover: e = D - R, decay rate per channel (1/s) */
@@ -178,8 +179,9 @@ static void kcs_dtfix(DWORD cam, double dtavg)
         if (!kcs.h_told) { kcs.h_orig[i] = cur; kcs.h_ok[i] = klcam_fin(cur) && cur >= 0.0015f && cur <= 0.03f; }
         if (!kcs.h_ok[i]) continue;
         if (!klcam_fin(cur) || cur < 0.0015f || cur > 0.03f) continue;     /* not the substep any more: leave it alone */
-        if (!kcs.dry && (cur > hv * 1.08f || cur < hv * 0.92f)) klh_data((void *)(DWORD_PTR)at, &hv, 4, "camera chaser substep (DtFix)");
+        if (!kcs.dry && (cur > hv * 1.08f || cur < hv * 0.92f)) { klh_data((void *)(DWORD_PTR)at, &hv, 4, "camera chaser substep (DtFix)"); if (i == 0) kcs.nhw++; }
     }
+    if (hv < kcs.hmin || kcs.hmin <= 0) kcs.hmin = hv; if (hv > kcs.hmax) kcs.hmax = hv;
     if (!kcs.h_told) {
         kcs.h_told = 1;
         klog("camsm: DtFix: chaser substep h stock %.4f %.4f %.4f %.4f %.4f %.4f -> %.4f (frame time avg)%s", kcs.h_orig[0], kcs.h_orig[1], kcs.h_orig[2], kcs.h_orig[3], kcs.h_orig[4], kcs.h_orig[5], hv, kcs.dry ? " DRY" : "");
@@ -202,10 +204,20 @@ static void klcamsmooth_tick(int game_thread)
     if (!klcam_fin(rawdt) || rawdt <= 0) return;
     dt = rawdt > 0.1f ? 0.1f : rawdt;
     kcs.tnow += dt;
-    kcs.dtavg += ((rawdt > 0.05f ? 0.05f : rawdt) - kcs.dtavg) * 0.05;
-    if (cam != kcs.cam) { kcs.cam = cam; kcs.h_told = 0; kcs.strikes = 0; kcs_reset(); kcs.dtavg = rawdt < 0.05f ? rawdt : 0.016; klog("camsm: camera %08lx (PivotMs %d BlendMs %d AimOutMs %d AimInMs %d DtFix %d%s)", (unsigned long)cam, kcs.pivotms, kcs.blendms, kcs.aimoutms, kcs.aiminms, kcs.dtfix, kcs.dry ? " DRY" : ""); }
+    {   /* 2026-10-25 owner: camera "does nothing, no shake" then stutters when it comes back. One 111 ms hitch used to add ~2 ms to dtavg, so h
+           (and the chasers' speed and spring feel) jumped ~40 % for ~0.2 s after every hitch. The average now takes at most 2x itself per frame. */
+        double in = rawdt > 0.05f ? 0.05 : rawdt;
+        if (kcs.dtavg > 0 && in > kcs.dtavg * 2.0) in = kcs.dtavg * 2.0;
+        kcs.dtavg += (in - kcs.dtavg) * 0.05;
+    }
+    kcs.nframes++;
+    if (GetTickCount() - kcs.sum_ms >= 10000) {
+        if (kcs.sum_ms && kcs.dtfix) klog("camsm: 10 s: %ld frames, h %.4f (min %.4f max %.4f), %ld h rewrites, %ld hitch resets (>= 50 ms)", kcs.nframes, kcs.dtavg, kcs.hmin, kcs.hmax, kcs.nhw, kcs.nhitch);
+        kcs.sum_ms = GetTickCount(); kcs.nframes = kcs.nhw = kcs.nhitch = 0; kcs.hmin = kcs.hmax = 0;
+    }
+    if (cam != kcs.cam) { kcs.cam = cam; kcs.h_told = 0; kcs.strikes = 0; kcs_reset(); kcs.dtavg = rawdt < 0.02f ? rawdt : 0.008; klog("camsm: camera %08lx (PivotMs %d BlendMs %d AimOutMs %d AimInMs %d DtFix %d%s)", (unsigned long)cam, kcs.pivotms, kcs.blendms, kcs.aimoutms, kcs.aiminms, kcs.dtfix, kcs.dry ? " DRY" : ""); }
+    if (rawdt >= 0.05f) { kcs_reset(); kcs.nhitch++; return; }       /* a hitch / pause: no filtering across it, and h is not rewritten on it */
     kcs_dtfix(cam, kcs.dtavg);
-    if (rawdt >= 0.05f) { kcs_reset(); return; }                    /* a hitch / pause: no filtering across it */
     if (klh_rd32(gd + 0x4cd8)) { kcs_reset(); return; }             /* ASSUMPTION (klcam.c): the pause / cut flag */
     if (!klcam_v3(cam + 0x508, E) || !klcam_v3(cam + 0x398, Pv) || !klcam_v3(P + 0x460, feet)) { kcs_reset(); return; }
     nd = klh_rd32(cam + 0x24); if (nd) klh_rd(nd + 0x70, &fov, 4);
