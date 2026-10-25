@@ -1089,7 +1089,7 @@ def author_arg(a):
 
 # ------------------------------------------------------------------ the graft
 def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True, light='stock', anim=True, fa=True,
-          postfilter=True, ao=0.5, escape=True, author=False, bones=True, load=None, arms=True, arms_seed=None):
+          postfilter=True, ao=0.5, escape=True, author=False, bones=True, load=None, arms=True, arms_seed=None, prune_dangling=False):
     """Systems of S + map of M -> (path of the archive, problems found by verify()).
     sound: merge what M's map names of M's bank into S's (kl_snd.graft_audio); False = the map's
     sound references are set to 0 (the silent builds of milestones A and B). loc: also graft the
@@ -1260,6 +1260,9 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
             esc = kl_escape.repair(Jn, log)
         if sel.m_drop:                                  # a test build without some of M's subtrees (e.g. AI_Enemies!*):
             kl_fa.prune(Jn, [M.prp.names[t] for t in m_tops], log)     # what named them names nothing now
+    if prune_dangling:                                  # paths into dropped subtrees (kl_prune_dangling): cut, whole scene
+        import kl_prune_dangling
+        kl_prune_dangling.prune(Jn, log)
     if Jn.names[1:] != [e.name.decode('latin1') for e in final]:
         raise ValueError('joined .prp and joined .gms list different entities')
     at = {(id(sc), k): j for j, (sc, k) in enumerate(Jn.origin)}      # source node -> joined node
@@ -1873,8 +1876,8 @@ if __name__ == '__main__':
         ao = 0.5
         if '--ao' in a:
             i = a.index('--ao'); ao = float(a[i + 1]); del a[i:i + 2]
-        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter', '--no-escape', '--no-bones', '--no-arms')
-        g, quiet, noloc, noanm, nofa, pf, noesc, nobones, noarms = (f in a for f in flags)
+        flags = ('--geometry', '--silent', '--no-loc', '--stock-anm', '--no-fa', '--no-postfilter', '--no-escape', '--no-bones', '--no-arms', '--prune-dangling')
+        g, quiet, noloc, noanm, nofa, pf, noesc, nobones, noarms, prune_d = (f in a for f in flags)
         author = author_arg(a)                          # False, True (kl_fa_author) or a module's name
         load = None
         if '--load' in a:
@@ -1882,7 +1885,7 @@ if __name__ == '__main__':
         a = [x for x in a if x not in flags]
         sys.exit(1 if build(a[1], a[2], *a[3:4], sel=Select(g, **opt), sound=not quiet, loc=not noloc, light=light,
                             anim=not noanm, fa=not nofa, postfilter=not pf, ao=ao, escape=not noesc, author=author,
-                            bones=not nobones, load=load, arms=not noarms)[1] else 0)
+                            bones=not nobones, load=load, arms=not noarms, prune_dangling=prune_d)[1] else 0)
     elif a and a[0] == 'install':
         src = None
         if '--from' in a:

@@ -114,3 +114,49 @@ Re-run by hand on `C:\kl_build_1024\l05raid_1025a	4\...\F01_Main.zip`:
 - Reading of the decision rule: it counts dangling references to the DROPPED campaign systems subtree. After the rename that is 0 for L05 (t4). The 214 to 284 of t1/t2 are references to other groups we chose to strip, a separate cost. By the rule as written L05 does NOT need to be abandoned; L09 (63) is not better on that axis.
 
 VERDICT: GO for FA authoring on L05 using t4 as the base (offline authoring only). Prerequisites that remain before any install: holder-prune tool (section 4 job 1), squad/actor trim to 55/99, and the live behaviour of the surviving campaign scripting is unproven. Do not switch to L09 on dangling count alone.
+
+## 6. Strip to a clean FA base (2026-10-25, offline; work folder `C:\kl_build_1024\l05strip_1025a`)
+
+New: `tools/kl_prune_dangling.py` (`prune(sc)`; CLI `python tools/kl_prune_dangling.py <zip>` reports dangling by holder -> target) and
+`kl_graft.py build ... --prune-dangling` (also `build(prune_dangling=True)`): after the join, every `ROOT\` path that names no node is cut,
+looped until `kl_prpjoin.dangling` is empty; works with `--no-fa` (kl_fa.prune only runs with the FA layer and only on M's own tops).
+Rules: list entry removed and count rewritten; single path string set to ''. GUESSES (commented in the tool): parallel lists are not kept
+in step; an empty path means "no target" to the engine (stock levels hold empty strings in the same fields). Verified on t2: 214 dangling
+-> 0 in one round (196 list entries, 18 strings). Nodes are not deleted, only pointers.
+
+Steps (all `kl_graft.py build F07 L05 F01 --no-fa --prune-dangling --m-drop`, base list `AllLevels/mainsceneincludes.zip,MenuResources`; the
+counts are re-measured on the BUILT zip with kl_prpjoin.dangling, kl_club_lastcall2.census and debug/check.py; every step: verify problems 0,
+dangling 0, check.py 0 unknown / 0 not comparable):
+
+| Step | adds to --m-drop | pruned (entries/strings) | nodes | actors | squads |
+|---|---|---|---|---|---|
+| s1 | `Checkpoints!*` (45 tops) | 15 / 2 | 22,814 | 100 | 72 |
+| s2 | `Special!Cutscenes!*`, `Animation/L05/Cutscenes/*` | 23 / 7 | 22,744 | 100 | 70 |
+| s3 | `AI!Dialogue!*` | 87 / 7 | 22,646 | 100 | 70 |
+| s4 | `AI!Friendly!*` (Kane_L05_COOP, Lynch_L05, Xiu AI) | 145 / 23 | 22,425 | 98 | 69 |
+| s5 | `Coop!*`, `Special!Co-Op!*` | 165 / 18 | 22,416 | 98 | 69 |
+| s6 | `Extras!MissionRelated!*`, `POI!*` | 167 / 17 | 22,407 | 98 | 69 |
+| s7 | trim (below) | 186 / 15 | 22,269 | 78 | 55 |
+
+KEPT as asked: all other `AI!Enemies` squads, `AI!Triggers!*`, `Special!Music!*`, `L05_Audio`, ambience, doors, props, `Extras!WeaponPickups/
+AlteredVision/ActorCovers/monitors/Xiu_tracker`, `Special!EndOfLevel/KickableDoors/DeactivationAreas/Geom_Controllers/Streaming/animationTriggers/
+ScreenshotCameras`, the 31 `Animation/L05/Situations/*` zips, Jumppoints. (`Special!Co-Op` is the one dropped `Special!` family beside Cutscenes.)
+
+Trim s7 (actors 98 -> 78, squads 69 -> 55): dropped whole squads off the planned FA route (street entrance -> stairwell A6/A7/A9 -> flats B -> roof C):
+- all `AI!Civilian!*` (4 squads / 8 actors: Civ_1stFloor_KaneSide01, Civ_1stLynchFloor_01, Xiu_Yelling, Civ_Kitchen, plus their 3 timer / monitor boxes);
+- A1 street: `SQ_Piss`, `SQ_Goons_idle#01`, `SQ_Goons_idel#02` (idle guards beside the spawn side; `SQ_Goons_car` KEPT as wave 1);
+- A7: `SQ_Airlock_Mobsters_01`, `_02` (airlock side pocket);
+- C2 roof: `SQ_sniper_side`, `SQ_sniper_end`, `SQ_1Singleguy#01`, `#02`;
+- C3: `Squad_Henchmen` (3 actors; the cutscene-side squad, FusionSquad_Cutscene was already gone from the Special drop? no: it is an `AI!Enemies` top and is still in; it holds 0 actors, no squad).
+Kept squads: 55 = A1 car 1, A6 7, A7 6, A9 10, B2 4, B3 1, B5 2, B6 11, B6_part2 7, C2 6 (lastFight x2, 2backup x2, PreWave1/3).
+Result s7: chunks 27,096 reachable (gate 69,632), nodes 22,269 (519 tops), 468 MB zip (t4 484 MB, F09 baseline 370 MB), .prm 65.9 MB after the
+existing trim pass, materials 1,304, textures 2,330, sound/.ANM join as t4 (+187 clips). verify problems 0, dangling 0, check.py 0/0.
+Output: `C:\kl_build_1024\l05strip_1025a\s7\Scenes\Locations\F01\F01_Main.zip` (s1..s6 beside it; logs s1.log..s7.log).
+
+What still blocks an FA layer (UNVERIFIED, nothing was run in the game):
+1. The kept squads still hold ZSquadScript gate / counter lists whose targets were cut (186 list entries and 15 strings emptied in s7). Squads that waited on a
+   counter that no longer exists may never wake, or wake at once: behaviour unknown until a live run; the FA layer should drive them with its own wave timers (kl_old_waves).
+2. No `FASpecials!`, spawn points, loot, escape, `OnlineBounds` yet (`--no-fa`); the baseline OnlineEscVehicleMonitor double-Init issue must be avoided by authoring ONE monitor.
+3. Nav coordinates for the section 3 plan are still GUESS (no nav dump).
+4. The 20 `AI!Triggers` that counted the dropped squads / civilians, `Special!EndOfLevel` and the `B6!TB_FailMission` boxes (mission-fail on a kill of Xiu?) still exist and may end or fail the round; audit before authoring.
+5. Memory: 468 MB archive vs 370 MB for F09; load time and RAM are the risk, not chunks.
