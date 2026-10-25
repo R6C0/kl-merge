@@ -68,6 +68,8 @@
  *   MidMB=16         requests of this size or more go into it too when the largest free piece is under RoomMB
  *   RoomMB=0         0 = never (only when the heap fails). 128 needs ReserveMB=176 for Retomoto: see above
  *   StackMB=0        0 = leave the game's threads their 4 MB; 1 or 2 = reserve that much for its new threads
+ *   OtherStackKB=0   every OTHER thread asking for the default stack (driver, sound, overlays, thread pool) reserves this
+ *                    many KB instead of the exe header's 4 MB; kl2.exe's own threads keep 4 MB (0 = off; 1024 being tested)
  *   SmallRescue=1    a request under 1 MB that the heap refuses (HeapAlloc, or the sound buffers' _aligned_malloc) is logged
  *                    and answered from the reserve (recommended on; 0 = logged only, the game then faults at 0x8e5bbd or
  *                    0x6d2107 as before)
@@ -84,7 +86,8 @@ static int klm_ok;                                      /* HeapFree and HeapSize
 static int klm_aligned;                                 /* _aligned_malloc and _aligned_free are wrapped too */
 static volatile LONG klm_nulls, klm_full_told;          /* small requests the heap refused; the table-full line was written */
 static void *klm_reserve;                               /* set once in klm_init, never released */
-static volatile LONG klm_served, klm_threads;
+static volatile LONG klm_served, klm_threads, klm_kept;
+static int klm_other_kb; static SIZE_T klm_exe_reserve;   /* OtherStackKB; the header's old reserve once lowered */
 static struct { SIZE_T off, len, asked; } klm_blk[KLM_BLOCKS];   /* the blocks in the reserve, by offset; len = asked rounded up to 64 KB */
 static int klm_n;                                       /* how many */
 static SIZE_T klm_used;                                 /* their len summed */
@@ -298,16 +301,51 @@ static void __cdecl klm_aligned_free(void *p)
     if (!klm_release(p, &asked, &n, &used)) klog("memory: _aligned_free of %p, which is inside the reserve but no block of it - ignored", p);
 }
 
+static SIZE_T klm_game_stack(SIZE_T stack, DWORD *flags)
+{   /* the stack a thread of kl2.exe's own gets. StackMB: the default is shrunk (the old, WRONG set: the game's deep threads are among them).
+       OtherStackKB: the exe header's default is lowered for everyone else, so the game's own threads are given the header's old 4 MB
+       explicitly. A size passed without the flag is a commit size, reserved from the (now lower) header default: it becomes a 4 MB
+       reservation too (the commit then grows on demand, as for the default). */
+    if (klm_stack_mb > 0 && !stack) { *flags |= STACK_SIZE_PARAM_IS_A_RESERVATION; InterlockedIncrement(&klm_threads); return (SIZE_T)klm_stack_mb << 20; }
+    if (klm_exe_reserve && (!stack || (!(*flags & STACK_SIZE_PARAM_IS_A_RESERVATION) && stack < klm_exe_reserve))) {
+        *flags |= STACK_SIZE_PARAM_IS_A_RESERVATION; InterlockedIncrement(&klm_kept); return klm_exe_reserve;
+    }
+    return stack;
+}
+
 static HANDLE WINAPI klm_CreateThread(LPSECURITY_ATTRIBUTES sa, SIZE_T stack, LPTHREAD_START_ROUTINE fn, LPVOID arg, DWORD flags, LPDWORD id)
 {
-    if (klm_stack_mb > 0 && !stack) { stack = (SIZE_T)klm_stack_mb << 20; flags |= STACK_SIZE_PARAM_IS_A_RESERVATION; InterlockedIncrement(&klm_threads); }
+    stack = klm_game_stack(stack, &flags);
     return klm_real_CreateThread(sa, stack, fn, arg, flags, id);
 }
 
 static uintptr_t __cdecl klm_beginthreadex(void *sec, unsigned stack, unsigned (__stdcall *fn)(void *), void *arg, unsigned flags, unsigned *id)
 {   /* the C runtime hands stack and flags to CreateThread as they are */
-    if (klm_stack_mb > 0 && !stack) { stack = (unsigned)klm_stack_mb << 20; flags |= STACK_SIZE_PARAM_IS_A_RESERVATION; InterlockedIncrement(&klm_threads); }
-    return klm_real_beginthreadex(sec, stack, fn, arg, flags, id);
+    DWORD f = flags; stack = (unsigned)klm_game_stack(stack, &f);
+    return klm_real_beginthreadex(sec, stack, fn, arg, (unsigned)f, id);
+}
+
+static void klm_other_stacks(void)
+{   /* OtherStackKB: the in-memory PE header of kl2.exe (data, not code) is what CreateThread reads for a thread that asks for the default
+       stack: K48D_A had 65 stacks of 4 MB (260 MB of address space), 62 of them used at most 72 KB. Win10 WOW64 reads the header in memory
+       for CreateThread / _beginthreadex (probe exe, 10-25: 4096 -> 1024 KB); thread-pool workers keep the size taken at process start, and
+       threads made before this runs keep 4 MB. */
+    BYTE *b = (BYTE *)GetModuleHandleA(0); IMAGE_NT_HEADERS32 *nt; DWORD old, want;
+    if (!klm_other_kb || !b || ((IMAGE_DOS_HEADER *)b)->e_magic != IMAGE_DOS_SIGNATURE) return;
+    nt = (IMAGE_NT_HEADERS32 *)(b + ((IMAGE_DOS_HEADER *)b)->e_lfanew);
+    want = (DWORD)klm_other_kb << 10;
+    if (nt->Signature != IMAGE_NT_SIGNATURE || want >= nt->OptionalHeader.SizeOfStackReserve || want < nt->OptionalHeader.SizeOfStackCommit) {
+        klog("memory: OtherStackKB=%d not applied (the header reserves %lu KB, commits %lu KB)", klm_other_kb,
+             nt->OptionalHeader.SizeOfStackReserve >> 10, nt->OptionalHeader.SizeOfStackCommit >> 10);
+        return;
+    }
+    old = nt->OptionalHeader.SizeOfStackReserve;
+    klm_exe_reserve = old;                              /* before the write: a thread made meanwhile by the game must already get 4 MB */
+    if (!klh_poke(&nt->OptionalHeader.SizeOfStackReserve, &old, 4, &want, 4, "OtherStackKB")) {
+        klm_exe_reserve = 0; klog("memory: OtherStackKB: the exe header was not changed"); return;
+    }
+    klog("memory: OtherStackKB: a thread that asks for the default stack now reserves %d KB instead of %lu KB; kl2.exe's own threads keep %lu KB",
+         klm_other_kb, (DWORD)(klm_exe_reserve >> 10), (DWORD)(klm_exe_reserve >> 10));
 }
 
 static void klm_owners(char *out, int cap)
@@ -315,7 +353,8 @@ static void klm_owners(char *out, int cap)
        VirtualAlloc each: a heap segment, a driver buffer, a thread stack, the reserve) with their committed part. Who made one is not known
        here; the base address is for KLHook_map_*.txt and a dump. */
     MEMORY_BASIC_INFORMATION mbi; BYTE *p = (BYTE *)0x10000; void *base = 0; SIZE_T image = 0, mapped = 0, commit = 0, reserved = 0, sz = 0, cm = 0;
-    struct { void *base; SIZE_T sz, cm; } top[4] = { 0 }; int i, k, n;
+    struct { void *base; SIZE_T sz, cm; } top[4] = { 0 }; int i, k, n, g = 0, nbig = 0, nsmall = 0;
+    SIZE_T sbig = 0, ssmall = 0, deepbig = 0, deepsmall = 0;   /* thread stacks (an allocation with a guard page): 4 MB ones and smaller ones */
     for (;;) {
         int more = p < (BYTE *)0x7ffe0000 && VirtualQuery(p, &mbi, sizeof mbi);
         if (!more || mbi.State == MEM_FREE || mbi.Type != MEM_PRIVATE || mbi.AllocationBase != base) {   /* the allocation in hand ends */
@@ -324,7 +363,11 @@ static void klm_owners(char *out, int cap)
                 for (k = 3; k > i; k--) top[k] = top[k - 1];
                 top[i].base = base; top[i].sz = sz; top[i].cm = cm;
             }
-            base = 0; sz = cm = 0;
+            if (base && g) {
+                if (sz >= ((SIZE_T)4 << 20)) { nbig++; sbig += sz; if (cm > deepbig) deepbig = cm; }
+                else { nsmall++; ssmall += sz; if (cm > deepsmall) deepsmall = cm; }
+            }
+            base = 0; sz = cm = 0; g = 0;
         }
         if (!more) break;
         if (mbi.State != MEM_FREE) {
@@ -332,12 +375,15 @@ static void klm_owners(char *out, int cap)
             else {
                 if (mbi.State == MEM_COMMIT) { commit += mbi.RegionSize; cm += mbi.RegionSize; } else reserved += mbi.RegionSize;
                 base = mbi.AllocationBase; sz += mbi.RegionSize;
+                if (mbi.State == MEM_COMMIT && (mbi.Protect & PAGE_GUARD)) g = 1;
             }
         }
         p = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
     }
-    n = _snprintf(out, cap, "modules %.0f MB, mapped %.0f, private committed %.0f, private reserved only %.0f; biggest private:",
-                  image / 1048576.0, mapped / 1048576.0, commit / 1048576.0, reserved / 1048576.0);
+    n = _snprintf(out, cap, "modules %.0f MB, mapped %.0f, private committed %.0f, private reserved only %.0f; thread stacks: %d of 4 MB or more (%.0f MB, "
+                  "deepest %.0f KB), %d smaller (%.0f MB, deepest %.0f KB), %ld game thread(s) given 4 MB; biggest private:",
+                  image / 1048576.0, mapped / 1048576.0, commit / 1048576.0, reserved / 1048576.0, nbig, sbig / 1048576.0, deepbig / 1024.0,
+                  nsmall, ssmall / 1048576.0, deepsmall / 1024.0, klm_kept);
     for (i = 0; i < 4 && top[i].sz && n > 0 && n < cap; i++) {
         k = _snprintf(out + n, cap - n, " %p %.1f MB (%.1f committed)%s", top[i].base, top[i].sz / 1048576.0, top[i].cm / 1048576.0, top[i].base == klm_reserve ? " = the reserve" : "");
         if (k < 0) break;   /* truncated */
@@ -348,7 +394,7 @@ static void klm_owners(char *out, int cap)
 
 static void klm_tick(void)
 {
-    static DWORD calls, last; static LONG told; DWORD now; SIZE_T largest, total; char who[400];
+    static DWORD calls, last; static LONG told; DWORD now; SIZE_T largest, total; char who[600];
     if (!klm_on || (calls++ & 63)) return;
     if (klm_stack_mb > 0 && klm_threads != told) { told = klm_threads; if (klm_log) klog("memory: %ld game thread(s) so far started with a %d MB stack instead of 4 MB", told, klm_stack_mb); }
     now = GetTickCount();
@@ -372,6 +418,8 @@ static void klm_init(void)
     klm_mid_mb = (int)GetPrivateProfileIntA("Memory", "MidMB", 16, klh_ini); if (klm_mid_mb < 1 || klm_mid_mb > 512) klm_mid_mb = 16;
     klm_room_mb = (int)GetPrivateProfileIntA("Memory", "RoomMB", 0, klh_ini); if (klm_room_mb < 0 || klm_room_mb > 2048) klm_room_mb = 0;
     klm_small = GetPrivateProfileIntA("Memory", "SmallRescue", 1, klh_ini) != 0;
+    klm_other_kb = (int)GetPrivateProfileIntA("Memory", "OtherStackKB", 0, klh_ini); if (klm_other_kb < 0 || klm_other_kb > 4096) klm_other_kb = 0;
+    if (klm_other_kb && klm_other_kb < 256) klm_other_kb = 256;      /* a floor: the shallow threads in K48D_A used up to 72 KB */
     InitializeCriticalSection(&klm_cs);
     klm_free_space(&largest, &total);
     if (klm_reserve_mb > 0) klm_reserve = VirtualAlloc(0, (SIZE_T)klm_reserve_mb << 20, MEM_RESERVE, PAGE_NOACCESS);
@@ -387,9 +435,13 @@ static void klm_init(void)
     if (klm_real_aligned_free) n += klh_iat("MSVCR90.dll", "_aligned_malloc", (void *)klm_aligned_malloc, (void **)&klm_real_aligned_malloc);
     klm_aligned = klm_real_aligned_free && klm_real_aligned_malloc;
     n += klh_iat("KERNEL32.dll", "HeapAlloc", (void *)klm_HeapAlloc, (void **)&klm_real_HeapAlloc);
-    if (klm_stack_mb) {
-        n += klh_iat("KERNEL32.dll", "CreateThread", (void *)klm_CreateThread, (void **)&klm_real_CreateThread);
-        n += klh_iat("MSVCR90.dll", "_beginthreadex", (void *)klm_beginthreadex, (void **)&klm_real_beginthreadex);
+    if (klm_stack_mb || klm_other_kb) {
+        int a = klh_iat("KERNEL32.dll", "CreateThread", (void *)klm_CreateThread, (void **)&klm_real_CreateThread);
+        int b = klh_iat("MSVCR90.dll", "_beginthreadex", (void *)klm_beginthreadex, (void **)&klm_real_beginthreadex);
+        n += a + b;
+        /* the header is lowered only once both of the game's thread imports hand its threads the old 4 MB */
+        if (klm_other_kb && a && b) klm_other_stacks();
+        else if (klm_other_kb) klog("memory: OtherStackKB not applied: CreateThread %s, _beginthreadex %s", a ? "wrapped" : "NOT wrapped", b ? "wrapped" : "NOT wrapped");
     }
     klog("memory: at start %.0f MB of address space free, largest piece %.1f MB; reserve of %d MB %s (blocks of %d MB or more go into it, any of 1 MB or more that the heap refuses, and - RoomMB - of %d MB or more while the largest free piece is under %d MB); HeapAlloc %s, HeapFree %s; game thread stacks %s (%d import slot(s))",
          total / 1048576.0, largest / 1048576.0, klm_reserve_mb, klm_reserve ? "held for the whole run" : klm_reserve_mb ? "NOT available" : "off", klm_big_mb, klm_mid_mb, klm_room_mb,

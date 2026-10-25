@@ -365,6 +365,15 @@ static int klh_kind(const void *at, DWORD len, char name[9])
     return 'r';
 }
 
+/* the one header field a ship build may write: OptionalHeader.SizeOfStackReserve (klmem.c OtherStackKB), data CreateThread reads for
+   a default stack (checked on Win10 WOW64 with a probe exe, 10-25: 4096 -> 1024 KB; thread-pool workers keep the size from process start).
+   The header is outside every hashed range. */
+static int klh_stack_field(const void *at, DWORD len)
+{
+    BYTE *base = klh_image(); IMAGE_NT_HEADERS32 *nt = (IMAGE_NT_HEADERS32 *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    return len == 4 && at == (const void *)&nt->OptionalHeader.SizeOfStackReserve;
+}
+
 /* THE guard: may len bytes at 'at' be written under the current policy? Every write of this DLL into the game
    asks here first (klh_poke, klh_data, klh_iat). A refusal is logged and counted. */
 static int klh_may_write(const void *at, DWORD len, const char *what)
@@ -379,7 +388,7 @@ static int klh_may_write(const void *at, DWORD len, const char *what)
         return 1;
     }
     if (hashed) why = klh_exe_ok ? "inside a range kl2.exe's integrity checks hash" : "not the known kl2.exe: no range map, so only import slots and data";
-    else if (klh_policy == KLH_SHIP && kind != 'i' && kind != 'w') why = "code or constants: a ship build writes import slots and data only";
+    else if (klh_policy == KLH_SHIP && kind != 'i' && kind != 'w' && !klh_stack_field(at, len)) why = "code or constants: a ship build writes import slots and data only";
     if (!why) return 1;
     if (InterlockedIncrement(&klh_refused) <= 64)
         klog("patch REFUSED %08lx +%lu (%s, %s): %s%s", va, len, sec, what, why, klh_policy == KLH_SESSION ? " ([KLHook] SessionSafe=0 allows it for a direct-boot run)" : "");

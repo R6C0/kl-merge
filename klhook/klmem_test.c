@@ -34,6 +34,12 @@ static int klh_iat(const char *dll, const char *fn, void *mine, void **real)
     return *real != 0;
 }
 
+static int klh_poke(void *at, const void *expect, int explen, const void *bytes, int len, const char *what)
+{   /* OtherStackKB's header write: not done here (the test leaves its own exe header alone) */
+    (void)at; (void)expect; (void)explen; (void)bytes; (void)len; (void)what;
+    return 0;
+}
+
 #include "klmem.c"
 
 static int bad;
