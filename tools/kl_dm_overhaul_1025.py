@@ -108,16 +108,16 @@ SPECS = {
     # ---- DM09 Retomoto Tower (F06 slot), 2026-10-25.  Live pin cf6b62ee (vans pass).  Tower office floors (y 19400..21050) are their own nav part (33), the street/lobby the main part (0).
     # No kick doors: door_hosts finds 0 leaves on this map.  NO police cars / SWAT: census is 99 actors / 56 squads, already at/over the proven 99 / 55, and cars() adds 6 / 3 (refused by its own budget check).
     # ext_spots (x, FLOOR y, z, wall length, zdir): picked 2026-10-25 by tools-free scan (s4.py in C:/kl_build_1024/overhaul_1025c/scratch): nav wall edge >= 150 long, collision floor within -110..+30 of the mesh,
-    # solid wall at 70..170 above the floor within 20..60 cm along zdir at 2-3 of 3 sample points, free body column; the most fights (Pos# nodes) within 900 cm.  Two on the street, four on the office floors.
+    # solid wall at 70..170 above the floor within 20..60 cm along zdir at 2-3 of 3 sample points, free body column; the most fights (Pos# nodes) within 900 cm.  Three on the street (window up to +60: here the mesh sits 40 BELOW the collision floor 0), four on the office floors.
     'DM09': dict(
         slot='F06', file='F06_Main.zip', title='Retomoto Tower', tag='.before-1025overhaul3',
         doors=[],
-        ext_spots=[(4847.0, 160.0, -6967.0, 209.0, (1.0, 0.0)), (2079.0, 20.0, -4740.0, 407.0, (-0.99997, -0.0079)),
+        ext_spots=[(4847.0, 160.0, -6967.0, 209.0, (1.0, 0.0)), (-1958.0, 0.0, -1420.0, 158.0, (0.99982, -0.01886)), (-1311.0, 0.0, -5184.0, 556.0, (0.99987, 0.01617)),
                    (2385.0, 21000.0, -100.0, 979.0, (1.0, 0.0)), (5184.0, 20993.0, -759.0, 244.0, (1.0, 0.0)),
-                   (-1678.0, 19600.0, -446.0, 205.0, (0.0638, 0.9980)), (-160.0, 21000.0, -1450.0, 171.0, (0.3641, -0.9314))],
+                   (-1678.0, 19600.0, -446.0, 205.0, (0.0638, 0.9980)), (-160.0, 21000.0, -1450.0, 171.0, (0.3641, -0.9314))],   # 3 street (floor 0..160) + 4 office floors
         ext=[],
         # fuel: street cans on the collision floor (fuel_ground).  GUESS: anchors near the street fights (4300,-6300) and the lobby side; snap() moves them onto the mesh.
-        fuel=[(4300.0, -6300.0, 160.0), (-1000.0, 9500.0, 0.0)], fuel_ground=True,
+        fuel=[(4300.0, -6300.0, 160.0), (-2000.0, 6500.0, 0.0), (-1000.0, 9500.0, 0.0)], fuel_ground=True, ground_up=70.0,   # mesh -40 vs collision 0 on the lobby/street: window -110..+70
         cars=None,
     ),
 }
@@ -131,7 +131,7 @@ def md5(b):
     return hashlib.md5(b).hexdigest()
 
 
-def _ground_fuel(orig, log):
+def _ground_fuel(orig, log, up=30.0):
     """Wrap kl_dm01b_gas_1025.fuel_spots: the walk mesh floats above the collision terrain on open ground (DM06: 20..60 cm), so each can's floor y is the collision floor
     nearest below the mesh height (kl_route grid, floors within 110 under .. 30 over the mesh), else the mesh height stays."""
     def fn(B, nav):
@@ -139,7 +139,7 @@ def _ground_fuel(orig, log):
         g = RT.load(B.zp).grid('all')
         out = []
         for (x, y, z) in orig(B, nav):
-            fl = [q for q, _r in g.floors(int(x // RT.CELL), int(z // RT.CELL)) if y - 110.0 <= q <= y + 30.0]
+            fl = [q for q, _r in g.floors(int(x // RT.CELL), int(z // RT.CELL)) if y - 110.0 <= q <= y + up]
             out.append((x, float(fl[-1]) if fl else y, z))
             log('  fuel can floor: mesh %d -> collision %s at (%d, %d)' % (y, fl[-1] if fl else 'none', x, z))
         return out
@@ -163,7 +163,7 @@ def build(mapname, src, dst, log=print, keep=None):
         GS.FUEL_ANCHORS, GS.EXT_WALL = sp['fuel'], []
         GS.ext_spots_wall = lambda B, nav: []
         if sp.get('fuel_ground'):
-            GS.fuel_spots = _ground_fuel(GS.fuel_spots, log)
+            GS.fuel_spots = _ground_fuel(GS.fuel_spots, log, sp.get('ground_up', 30.0))
         GS.build(s1, s2, pin=m1, log=log)
         last = s2
         if sp.get('cars'):
