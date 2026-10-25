@@ -16,7 +16,9 @@
  *       set, or has its player's police byte [p+0x2723] / [p+0x2729] set; also true when no record is in use) then slot 193 (0x8a6140, sets
  *       [rules+0x200] while state 0x19) with 10.0: the "all heisters down/out" end, 10 s later the round is over. AI heisters are not records,
  *       so the round ends as soon as the last HUMAN is down or out, however many AI heisters still stand.
- *   The returns of these two calls are the only places this module acts: 0x80b208 (slot 42) and 0x80b1c0 (slot 193). Every other caller is passed through.
+ *   (B') 0x46c254..0x46c2ba: the same 0x86f520 test in another tick, then slot 193 with 3.0 (0xb4a174) or the 0xb4aaec value when [0x168e59c]==ebp.
+ *       This is the one that fired in the 2-human LAN bench L4 (both humans bit 4 = down after ~42 s, round over 3 s later).
+ *   The returns of these calls are the only places this module acts: 0x80b208 (slot 42), 0x80b1c0 and 0x46c2ba (slot 193). Every other caller is passed through.
  * WHAT IT DOES ([Lobby] KeepRound, default 0 "(recommended on) for a solo host with AI heisters"):
  *   The Sv rules object (vtable 0xbd2eb4) gets a PRIVATE vtable copy whose slots 42 and 193 are ours (one heap pointer write, SHIP-safe). The wrapper
  *   returns without calling the stock function when the caller is one of the two return addresses above and the toggle says so:
@@ -124,7 +126,8 @@ static void __fastcall klrk_w42(void *self, void *edx, float a)
 
 static void __fastcall klrk_w193(void *self, void *edx, float a)
 {
-    void *ra = _ReturnAddress(); const char *why = ""; int site = ra == (void *)KLH_VA(0x80b1c0), drop;
+    /* 0x46c2ba: a second 'all out' end in another tick (0x86f520 true -> slot 193 with 3.0); fired in the L4 2-human LAN bench (1025), not 0x80b1c0 */
+    void *ra = _ReturnAddress(); const char *why = ""; int site = ra == (void *)KLH_VA(0x80b1c0) || ra == (void *)KLH_VA(0x46c2ba), drop;
     drop = site && klrk_active(klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION)), &why);
 #ifdef KLHOOK_TEST
     if (InterlockedIncrement(&klrk_n) <= 80) {

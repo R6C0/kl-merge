@@ -4,6 +4,7 @@ Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md;
 
     python kl_solo_test.py --hook <TEST build folder> --tag <name> [--secs 300] [--gap 45]
                            [--base <KLHook.ini>] [--ini1 <extra.ini>] [--ini2 <extra.ini>] [--shots 30-300:30] [--force]
+                           [--n N (3+: more joiners, all with --ini2)] [--gap2 30 (between joiners)]
                            [--netstat SECS]
 
 - Puts the TEST dinput8.dll into the game folder for the run and puts the one that was there back afterwards
@@ -103,9 +104,13 @@ def write_ini(path, secs):
     open(path, 'w', encoding='latin-1').write('\n'.join(lines) + '\n')
 
 
-def solo_secs(n):
-    w, h = 960, 540
-    return [('Solo', [('Enable', '1'), ('Windowed', '1'), ('Focus', '1'), ('X', str((n - 1) * w)), ('Y', '0'), ('W', str(w)), ('H', str(h))]),
+def solo_secs(n, total=2):
+    # 2 instances: side by side 960x540; more: a grid of ceil(sqrt(total)) columns across 1920 px (9 -> 3x3 of 640x360)
+    cols = 2 if total <= 2 else int(-(-total ** 0.5 // 1))
+    w = 960 if total <= 2 else 1920 // cols
+    h = w * 9 // 16
+    x, y = ((n - 1) % cols) * w, ((n - 1) // cols) * h
+    return [('Solo', [('Enable', '1'), ('Windowed', '1'), ('Focus', '1'), ('X', str(x)), ('Y', str(y)), ('W', str(w)), ('H', str(h))]),
             ('Net', [('Log', '1')]),
             ('NetSmooth', [('Enable', '1'), ('Log', '1'), ('Probe', '1')]),
             # The game calls mouse_event(MOVE,0,0) (0x6f4220, klnudge.c) while its window is in front; each one passed on resets
@@ -117,7 +122,7 @@ def solo_secs(n):
 
 def main():
     a, opt = sys.argv[1:], {}
-    for key in ('--hook', '--tag', '--secs', '--gap', '--base', '--ini1', '--ini2', '--shots', '--n', '--netstat'):
+    for key in ('--hook', '--tag', '--secs', '--gap', '--gap2', '--base', '--ini1', '--ini2', '--shots', '--n', '--netstat'):
         if key in a:
             i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
     force = '--force' in a
@@ -146,15 +151,17 @@ def main():
         print(t, flush=True); out.append(t)
     base = read_ini(opt.get('--base', os.path.join(dd, 'KLHook.ini')))
     inst = []
-    for n in range(1, int(opt.get('--n', 2)) + 1):           # --n 1: one instance (control runs)
+    total = int(opt.get('--n', 2))
+    for n in range(1, total + 1):                             # --n 1: one instance (control runs); 3+: instances 3.. take --ini2 (more joiners)
         d = os.path.join(root, 'inst%d' % n)
         os.makedirs(d, exist_ok=True)
         for f in ('KLHook.log', 'KLHook.result'):
             if os.path.isfile(os.path.join(d, f)):
                 os.remove(os.path.join(d, f))
-        secs_n = merge(base, solo_secs(n))
-        if opt.get('--ini%d' % n):
-            secs_n = merge(secs_n, read_ini(opt['--ini%d' % n]))
+        secs_n = merge(base, solo_secs(n, total))
+        extra = opt.get('--ini%d' % min(n, 2))
+        if extra:
+            secs_n = merge(secs_n, read_ini(extra))
         write_ini(os.path.join(d, 'KLHook.ini'), secs_n)
         inst.append(d)
     was = at.snapshot(dd, say)
@@ -181,8 +188,8 @@ def main():
         say('  hook | %s (sha1 %s)%s' % (src, at.sha1(src)[:8], ' - ' + note if note else ''))
         t0 = time.time()
         for n, d in enumerate(inst, 1):
-            if n == 2:
-                while time.time() - t0 < gap:
+            if n >= 2:                                     # joiner k starts at gap + (k-2) * gap2 (--gap2, default 30 s): one at a time through the menus
+                while time.time() - t0 < gap + (n - 2) * int(opt.get('--gap2', 30)):
                     time.sleep(1)
                     netstat_tick(t0)
             env = dict(os.environ, SteamAppId='28000', SteamGameId='28000', KLHOOK_DIR=d)

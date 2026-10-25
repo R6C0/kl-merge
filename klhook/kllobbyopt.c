@@ -34,12 +34,13 @@
  *   TimeMin=0       0 = stock (3). 1..2: the host can lower the Heist time to this many minutes.
  *   RoundsMax=0     0 = stock (5). 6..20: the host can raise the number of rounds to this many.
  *   PlayersMax=0    0 = stock (8). 9..12 (engine ceiling): the host can raise 'Number of players' to this many (RIGHT clamp 0x7dcb78 / 0x7dcb7d taken over).
+ *   PlayersAuto=0   1 = the host's lobby starts at PlayersMax players without a key press (once per lobby; LEFT still lowers it).
  *                   A 9th heister has no seat in a stock level: [Lobby] ExtraSeats (TEST build) and reound_end_online.md.
  */
 #ifndef KLLOBBYOPT_C
 #define KLLOBBYOPT_C
 
-static int kllo_tmax, kllo_tmin, kllo_rmax, kllo_pmax, kllo_clockfix;
+static int kllo_tmax, kllo_tmin, kllo_rmax, kllo_pmax, kllo_pauto, kllo_clockfix;
 static void klrk_init(void);                                         /* klroundkeep.c (included later) */
 static void klrk_tick(void);
 static DWORD kllo_vt[1 + 36];                                         /* [0] = RTTI locator, [1..36] = slots 0..35 of 0xbbd364 */
@@ -59,6 +60,7 @@ static void kllo_init(void)
     kllo_rmax = GetPrivateProfileIntA("Lobby", "RoundsMax", 0, klh_ini);
     kllo_pmax = GetPrivateProfileIntA("Lobby", "PlayersMax", 0, klh_ini);
     if (kllo_pmax < 9 || kllo_pmax > 12) kllo_pmax = 0;
+    kllo_pauto = GetPrivateProfileIntA("Lobby", "PlayersAuto", 0, klh_ini) != 0;
     klrk_init();
     kllo_clockfix = GetPrivateProfileIntA("Lobby", "RoundClockFix", 0, klh_ini) != 0;
     if (kllo_clockfix) klog("lobbyopt: RoundClockFix=1 (GUESS): [rules+0x4c] is set to the lobby heist time at the round start when it holds less");
@@ -260,6 +262,31 @@ static void kllo_roundlog(void)
 #endif
 
 /* find the lobby selector by name and give it the private vtable (the old one is the .rdata original, never written) */
+/* [Lobby] PlayersAuto=1: once per lobby selector, the host's 'Number of players' is set to PlayersMax without a key press (owner 1025: 'get FA up
+   to 12'), through the setters of the RIGHT case (kllo_pset) behind the stock case's own gates (host, state 0xd, store 0xb41ea0) */
+static void kllo_players_auto(DWORD e)
+{
+    static DWORD done_e;
+    DWORD sm, mode = 0, st, sv, fn, es; int cur;
+    if (!kllo_pauto || !kllo_pmax || e == done_e) return;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd((DWORD_PTR)KLH_VA(0x168e59c), &mode, 4) || mode == 2) return;
+    if (klh_rd32(sm) != 0xbd1ebc && !KLH_SM_VT_OK(klh_rd32(sm))) return;
+    if (!(BYTE)((kllo_f0)KLH_VA(0x8df480))((void *)(DWORD_PTR)sm, 0)) return;
+    if (((kllo_f0)KLH_VA(0x8e6a20))((void *)(DWORD_PTR)sm, 0) != 0xd) return;
+    if (!(st = kllo_store()) || !(sv = klh_rd32(st)) || !(fn = klh_rd32(sv + 8))) return;
+    if (!((kllo_f2)(DWORD_PTR)fn)((void *)(DWORD_PTR)st, 0, 0xb41ea0, 0)) return;
+    es = ((kllo_f0)(DWORD_PTR)klh_rd32(klh_rd32(sm) + 0x2c))((void *)(DWORD_PTR)sm, 0);
+    if (es) es = ((kllo_f0)(DWORD_PTR)klh_rd32(klh_rd32(es) + 0x140))((void *)(DWORD_PTR)es, 0);
+    if (!es) return;
+    done_e = e;
+    cur = (signed char)((kllo_f0)KLH_VA(0x54d140))((void *)(DWORD_PTR)sm, 0);
+    if (cur >= kllo_pmax) return;
+    kllo_pset(sm, st, es, kllo_pmax);
+    { BYTE one = 1; klh_data((BYTE *)(DWORD_PTR)es + 0xa, &one, 1, "lobby options: menu block dirty flag"); }
+    ((kllo_f0)KLH_VA(0x549e80))((void *)(DWORD_PTR)sm, 0);
+    klog("lobbyopt: PlayersAuto: Number of players %d -> %d (now %d)", cur, kllo_pmax, (signed char)((kllo_f0)KLH_VA(0x54d140))((void *)(DWORD_PTR)sm, 0));
+}
+
 static void kllo_tick(void)
 {
     static DWORD last; DWORD now = GetTickCount(), gd, mgr, e, vt, nv;
@@ -281,7 +308,7 @@ static void kllo_tick(void)
         kllo_vt[1 + 10] = (DWORD)(DWORD_PTR)kllo_slot10;
     }
     nv = (DWORD)(DWORD_PTR)&kllo_vt[1];
-    if (vt == nv) return;
+    if (vt == nv) { kllo_players_auto(e); return; }
     if (vt != (DWORD)(DWORD_PTR)KLH_VA(0xbbd364)) return;
     if (klh_data((void *)(DWORD_PTR)e, &nv, 4, "lobby options: selector vtable (private copy)")) klog("lobbyopt: lobby selector %08lx wrapped (slot 10)", (unsigned long)e);
 }
