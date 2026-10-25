@@ -112,8 +112,45 @@ def heading(q):
     return 2.0 * math.atan2(q[1], q[3])
 
 
+def plan_lane(d, tracks, plan):
+    """The lane of a plan (see cars): each car's donor position keys laid by arc fraction on its own polyline [(x, z), ...] (y 0), and its rotation
+    rows turned to follow the polyline's tangent (kl_map_escape.van_prepare's rule, as kl_dm01cars_1025.cars(plan=)).  -> ({body: [(x, y, z)]}, {rotation
+    track offset: [new int16 x4 rows]}).  A row is refused when it ends more than 1 degree off its wanted heading."""
+    import kl_map_escape as ME
+    lane, rotnew = {}, {}
+    ends0 = sorted({o for e in d.ents if e.raw for _p2, oo in kl_graft.keys_tracks(e.raw) for o in oo} | {len(d.head)})
+    for k in C.BODIES:
+        K = ME.VanKeys(d.head, d.ent(k).raw, ends0, kl_graft.keys_tracks)
+        pts = tracks[k][1]
+        if K.npos != len(pts) or K.pos[0] != pts[0]:
+            raise ValueError('car %d: the key table is not the lane' % k)
+        old = ME.Poly(pts)
+        new = ME.Poly([(x, 0.0, z) for x, z in plan['paths'][k]])
+        lane[k] = [new.at(old.cum[i] / old.len * new.len) for i in range(len(pts))]
+        first = {}
+        for f in range(K.frames - 1, -1, -1):
+            first[K.f2r[f]] = f
+        rots, worst = [], 0.0
+        for r, q in enumerate(K.rot):
+            kp = K.f2p[first[r]]
+            s_old = old.cum[min(kp, len(pts) - 1)]
+            s_new = s_old / old.len * new.len
+            rel = ME._wrap(K.yaw(q) - ME._heading(old.tan(s_old, ME.AXLES)))
+            want = ME._heading(new.tan(s_new, ME.AXLES)) + rel
+            q2 = K.turned(q, want - K.yaw(q))
+            worst = max(worst, abs(ME._wrap(K.yaw(q2) - want)))
+            rots.append(q2)
+        if worst > 1.0:
+            raise ValueError('car %d: a rotation key is %.1f degrees off its heading' % (k, worst))
+        rotnew[K.offs[2]] = rots
+    return lane, rotnew
+
+
 # ------------------------------------------------------------------ step 4: the cars
-def cars(src, dst, log=print):
+def cars(src, dst, log=print, plan=None):
+    """plan=None: the DM02 lane (the donor lane turned 180 degrees and scaled about STOP). plan = dict(paths={body k: [(x, z), ...]}, cells={n: [(x, y, z), ...]},
+    backstop=seconds, anm_col=collection name, caps=(actors, squads)): each car's donor keys are laid by arc fraction on its own polyline and its rotation keys
+    follow the new tangent (kl_map_escape.van_prepare's rule; the same plan form as kl_dm01cars_1025.cars). Added 2026-10-25 for kl_dm_overhaul_1025."""
     import kl_anm, kl_anmjoin as AJ
     data = open(src, 'rb').read()
     B = KB.Built(src)
@@ -122,7 +159,12 @@ def cars(src, dst, log=print):
         log('%s already holds %s: copied unchanged' % (src, C.TOP))
         shutil.copyfile(src, dst)
         return None
-    C.CELLS, C.STOP, C.SCALE = CELLS, STOP, SCALE          # squads_nodes / lane_map read these module globals
+    cells, backstop = (CELLS, BACKSTOP_S) if plan is None else (plan['cells'], plan['backstop'])
+    cap_a, cap_s = (ENGINE_ACTORS, ENGINE_SQUADS) if plan is None else plan.get('caps', (ENGINE_ACTORS, ENGINE_SQUADS))
+    anm_col = ANM_COL if plan is None else plan.get('anm_col', ANM_COL)
+    C.CELLS, C.STOP, C.SCALE = CELLS, STOP, SCALE          # lane_map reads these module globals; squads_nodes gets the cells explicitly below
+    if plan is not None and plan.get('wave3'):
+        C.KOW_WAVE3 = plan['wave3']          # the squad/actor clone template (default OldWaves!Wave_3 of the DM01/DM02 builds)
     d = IG.Donor.get(C.DON)
     same = J.join(sc, [(sc, t) for t in sc.tops()], 'same')
     if J.fingerprints(same)[0] != J.fingerprints(sc)[0] or J.text(same, same.p.settings) != J.text(sc, sc.p.settings):
@@ -153,6 +195,9 @@ def cars(src, dst, log=print):
         if max(abs(p0[i] - struct.unpack_from('<3f', d.ent(k).trans)[i]) for i in range(3)) > 1.0:
             raise ValueError('body %d: first key %s is not its placement' % (k, p0))
     lane = {k: [mp(p) for p in tracks[k][1]] for k in C.BODIES}
+    rotnew = {}
+    if plan is not None:
+        lane, rotnew = plan_lane(d, tracks, plan)
     stops = [lane[k][-1] for k in C.BODIES]
     for st in stops:
         a = nav.at(st[0], 0.0, st[2], dy=60.0)
@@ -166,8 +211,8 @@ def cars(src, dst, log=print):
                 off.append((round(p[0]), round(p[2])))
     if off:
         raise ValueError('lane points off the open street (main part, clearance 100): %s' % off[:6])
-    for n in CELLS:
-        for c in CELLS[n]:
+    for n in cells:
+        for c in cells[n]:
             a = nav.at(c[0], c[1], c[2], dy=60.0)
             if a is None or nav.part[a[0]] != main or nav.clearance(c[0], c[1], c[2], limit=200.0) < 50.0:
                 raise ValueError('post %s is not a main-part nav cell with clearance' % (c,))
@@ -182,7 +227,8 @@ def cars(src, dst, log=print):
     byk, cut, ndrop = C.car_nodes(M, d, topg)
     for k in C.BODIES:
         C.setpos(M, byk[k], lane[k][0])
-        yaw180_node(M, byk[k])
+        if plan is None:
+            yaw180_node(M, byk[k])
     say('  car nodes: %d kept, %d dropped, %d proxy list entries cut' % (len(byk), ndrop, cut))
     pS, matS, texS = G.read(B['.prm'], 'dd'), T.read_mat(B['.MAT']), T.read_tex(B['.TEX'])
     roots = sorted({nd.model for nd in topg.walk() if nd.model and getattr(nd, 'donor', None)})
@@ -207,14 +253,14 @@ def cars(src, dst, log=print):
     lit = [e for e in B.ents if e.tid == 0x200002 and e.links]
     for nd in topg.walk():
         if nd.links is not None and getattr(nd, 'donor', None):
-            P = (STOP[0], 0.0, STOP[1])
+            P = (stops[0][0], 0.0, stops[0][2])
             best = min(lit, key=lambda e: sum((B.fr[e][1][i] - P[i]) ** 2 for i in range(3)))
             nd.links = list(best.links)
     # squads, clock
     clock = FED.clone_built(M, B, sc.resolve(R + KB.SQUAD + 'Squad#02')[0], C.CLOCK)
     clock.ctrls = []
     M.place(clock, (0.0, 0.0, 0.0))
-    cops, mcs = C.squads_nodes(M, B, d, byk, clock, None)
+    cops, mcs = C.squads_nodes(M, B, d, byk, clock, None, cells)
     act = IG.clone(M, d, 18455, 'Activator_Cars', lambda s: C.NEW_PROXY + s[len(C.OLD_PROXY):] if s.lower().startswith(C.OLD_PROXY.lower()) else s)
     M.place(act, (0.0, 0.0, 0.0))
     clock.add(act)
@@ -226,10 +272,10 @@ def cars(src, dst, log=print):
     back = clock.add(FED.clone_built(M, B, sc.resolve(KOW.TIMER_FORM)[0], 'Backstop'))
     M.place(back, (0.0, 0.0, 0.0))
     back_p = R + C.CLOCK + BS + 'Backstop'
-    M.set(back, 'TriggerDelay2', {0: float(BACKSTOP_S), 4: [arrive_p]})
+    M.set(back, 'TriggerDelay2', {0: float(backstop), 4: [arrive_p]})
     tops = [topg, clock] + cops
     fa_new = 6
-    if a0 + fa_new > ENGINE_ACTORS or s0 + 3 > ENGINE_SQUADS:
+    if a0 + fa_new > cap_a or s0 + 3 > cap_s:
         raise ValueError('budget: %d / %d' % (a0 + fa_new, s0 + 3))
     q, order = M.scene(tops)
     picks = [(sc, t) for t in sc.tops()] + [(q, t) for t in q.tops()]
@@ -249,9 +295,9 @@ def cars(src, dst, log=print):
     if back_prp.serialize() != prp or len(back_prp.nodes()) != len(Jn.nodes):
         raise ValueError('the new .prp does not round-trip')
     fa, fs = AS.census(Jn)
-    if fa != a0 + fa_new or fs != s0 + 3 or fa > ENGINE_ACTORS or fs > ENGINE_SQUADS:
+    if fa != a0 + fa_new or fs != s0 + 3 or fa > cap_a or fs > cap_s:
         raise ValueError('census %d / %d -> %d / %d' % (a0, s0, fa, fs))
-    say('  census %d / %d -> %d / %d (cap %d / %d)' % (a0, s0, fa, fs, ENGINE_ACTORS, ENGINE_SQUADS))
+    say('  census %d / %d -> %d / %d (cap %d / %d)' % (a0, s0, fa, fs, cap_a, cap_s))
     # ---- the entities
     slot0 = A.slots()
     nxt = max([A.ref_slots] + [e.ref + 1 for e in B.ents])
@@ -277,11 +323,13 @@ def cars(src, dst, log=print):
             if o == tracks[k][0]:
                 for i in range(len(tracks[k][1])):
                     x, y, z = struct.unpack_from('<3f', blob, 12 * i)
-                    struct.pack_into('<3f', blob, 12 * i, *mp((x, y, z)))
+                    struct.pack_into('<3f', blob, 12 * i, *(mp((x, y, z)) if plan is None else lane[k][i]))
                 body_new[k] = len(A.head)
-        if o in rot_o:
+        if plan is None and o in rot_o:
             blob = bytearray(quat_yaw180(bytes(blob), 'rotation track %#x' % o))
             rot_new[o] = len(A.head)
+        for i, q in enumerate(rotnew.get(o, ())):
+            struct.pack_into('<4h', blob, 8 * i, *q)
         newoff[o] = len(A.head)
         A.head += bytes(blob) + bytes(-len(blob) % 16)
     for k, r in raws.items():
@@ -301,7 +349,7 @@ def cars(src, dst, log=print):
     # heading proof: for each body, the last key's heading (donor and turned) against the last travel direction.  Same sign of the dot product
     # (heading vector (sin, cos) . travel) before and after = the turned rotation matches the turned lane; |dot| ~ 1 = it drives forward/backward.
     proof = []
-    for k in C.BODIES:
+    for k in (C.BODIES if plan is None else ()):      # plan mode: the rotation rows follow the polyline tangent (checked in plan_lane), no 180-degree proof
         o_rot = trk[k][0][1][KEYS_BODY_ROT]
         q0 = struct.unpack_from('<4h', d.head, o_rot + 8 * 40)
         q1 = struct.unpack_from('<4h', A.head, newoff[o_rot] + 8 * 40)
@@ -316,8 +364,8 @@ def cars(src, dst, log=print):
         proof.append((round(d0, 2), round(d1, 2)))
         if d0 * d1 <= 0:
             raise ValueError('car %d: heading . travel flips sign (%s -> %s): the turned quaternion does not fit the turned lane' % (k, d0, d1))
-    say('  KEYS: %d tracks of %d nodes copied to head %#x..%#x; body position tracks on the lane, rotation tracks turned 180 degrees (heading.travel before/after %s)' % (
-        len(want_o), len(raws), min(newoff.values()), len(A.head), proof))
+    say('  KEYS: %d tracks of %d nodes copied to head %#x..%#x; body position tracks on the lane, rotation tracks %s (heading.travel before/after %s)' % (
+        len(want_o), len(raws), min(newoff.values()), len(A.head), 'turned 180 degrees' if plan is None else 'follow the polyline', proof))
     faults = A.check()
     if faults:
         raise ValueError('kl_scene.check: %s' % faults[:3])
@@ -369,7 +417,7 @@ def cars(src, dst, log=print):
     if G.write(G.read(prm_bytes, 'dd')) != prm_bytes:
         raise ValueError('.prm does not round-trip')
     # ---- the ANM
-    anm_raw, nclip, c0, c1 = C.anm_pass(B['.ANM'], kl_anm.Anm(AJ.stock_anm(C.DON), 'dd'), tgt_col=ANM_COL)
+    anm_raw, nclip, c0, c1 = C.anm_pass(B['.ANM'], kl_anm.Anm(AJ.stock_anm(C.DON), 'dd'), tgt_col=anm_col)
     say('  .ANM: %d F03_Police slots merged into %s (%d -> %d clips)' % (nclip, ANM_COL, c0, c1))
     new = dict(B.files)
     new[B.ext['.prp']], new[B.ext['.gms']], new[B.ext['.buf']] = prp, kl_gms.pack(gms), buf
@@ -383,11 +431,11 @@ def cars(src, dst, log=print):
     say('  written %s: %d added, %d slot ids renumbered, members changed: %s' % (dst, len(order), moved, ' '.join(changed)))
     return dict(census=[a0, s0, fa, fs], slot_ids_moved=moved, prm_roots_repointed=repointed, members_changed=changed,
                 stops=[[round(v, 1) for v in s] for s in stops], starts=[[round(v, 1) for v in lane[k][0]] for k in C.BODIES],
-                posts={n: CELLS[n] for n in CELLS}, backstop_s=BACKSTOP_S, heading_proof=proof, lines=lines)
+                posts={n: cells[n] for n in cells}, backstop_s=backstop, heading_proof=proof, lines=lines)
 
 
 # ------------------------------------------------------------------ step 5: sound references of the graft nodes, by name
-def resound(src, dst, log=print):
+def resound(src, dst, log=print, scope=None, cars_donor=True):
     """The grafted nodes (KL_Door_*, KL_Fuel_*, KL_Cars!*) carry sound references that are byte offsets into the DONOR level's .SND (F03; the
     extinguisher groups F04).  Left as they are they name some other object of DM02's bank (or none).  Here each is mapped through its NAME to
     DM02's own bank (an object of that name, else SOUND_FALLBACK, else 0 = silent).  .SND / .WHD / .WAV are not touched (no beside files)."""
@@ -408,9 +456,11 @@ def resound(src, dst, log=print):
     # KL_Cars!: only the nodes cloned from F03 (the cars group, each squad's MiniCut and modifier); the actors, squads and timers there are
     # clones of DM02's own nodes and keep their own (DM02) references
     f3 = IG.Donor.get('F03').sc.names
-    donor_pre = [(R + C.TOP + BS + C.CARS).lower(), (R + C.CLOCK + BS + 'Activator_Cars').lower()] + [(R + C.COP % n + BS + f3[S[x]]).lower() for n in (1, 2, 3) for S in [C.SWAT[n]] for x in ('mc', 'mod')]
+    donor_pre = [] if not cars_donor else [(R + C.TOP + BS + C.CARS).lower(), (R + C.CLOCK + BS + 'Activator_Cars').lower()] + [(R + C.COP % n + BS + f3[S[x]]).lower() for n in (1, 2, 3) for S in [C.SWAT[n]] for x in ('mc', 'mod')]
     for k in range(1, len(Jn.nodes)):
         p = Jn.path[k]
+        if scope is not None and not scope(p):          # kl_dm_overhaul_1025: only the nodes this build added (an older graft keeps its references)
+            continue
         if (BS + 'KL_Door_') in p or (BS + 'KL_Fuel_') in p:
             groups['F03'].append(k)
         elif any(p.lower() == q or p.lower().startswith(q + BS) for q in donor_pre):
