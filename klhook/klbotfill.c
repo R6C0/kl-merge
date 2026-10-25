@@ -40,7 +40,7 @@ static void klbf_tick(int game_thread)
     int conn, target, n = 0, ally = 0, alive = 0, tact = 0, other = 0;
     if (!klbf_on || !game_thread || !klh_exe_ok || now - last < 500) return;
     last = now;
-    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || klh_rd32(sm) != 0xbd1ebc) return;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) return;
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4) || !klh_rd(sm + 0xb9, &cur, 1) || !klh_rd(sm + 0xb8, &mx, 1)) return;
     if ((role != 2 && role != 3) || mode != 4) { if (state < 0xd) told_sm = 0; return; }
     if (state < 0xd || state > 0x1f) { if (state < 0xd) told_sm = 0; return; }

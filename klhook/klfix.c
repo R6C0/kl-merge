@@ -33,7 +33,7 @@ static int klf_lb_on = 1, klf_lb_done;
 static void klf_lbfix(void)
 {
     DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(0x168e598)), svc, lb, first = 0, last = 0, req = 0, count = 0, zero = 0; int wrote = 0;
-    if (!sm || klh_rd32(sm) != 0xbd1ebc) return;
+    if (!sm || !KLH_SM_VT_OK(klh_rd32(sm))) return;
     svc = klh_rd32(sm + 0x17c); if (!svc) return;
     lb = klh_rd32(svc + 0x198); if (!lb || klh_rd32(lb) != 0xbd5cc4) return;
     if (!klh_rd(lb + 0x10, &first, 4) || !klh_rd(lb + 0x14, &last, 4) || !klh_rd(lb + 0x31f8, &req, 4) || !klh_rd(lb + 0x31fc, &count, 4)) return;

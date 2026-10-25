@@ -144,7 +144,7 @@ static void klq2_tick(int game_thread)
     klq2.was_front = front;
     /* b. / c. session states (reads only; the same dwords kllobby.c reads). The class is checked as kllobby.c does: fail closed. */
     sm = klh_exe_ok ? klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION)) : 0;
-    if (sm && klh_rd32(sm) == 0xbd1ebc /* ZSessionManagerMultiplayer */
+    if (sm && KLH_SM_VT_OK(klh_rd32(sm)) /* ZSessionManagerMultiplayer */
         && klh_rd(sm + 0x54, &role, 4) && klh_rd(sm + 0x5c, &mode, 4) && klh_rd(sm + 0x70, &state, 4)) {
         if (state != klq2.state_prev) {
             if (klq2.flash && !front) {

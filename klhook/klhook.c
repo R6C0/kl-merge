@@ -258,6 +258,9 @@ static int klh_rd(DWORD_PTR p, void *out, SIZE_T n)
     return p > 0xffff && ReadProcessMemory(GetCurrentProcess(), (void *)p, out, n, &got) && got == n;
 }
 static DWORD klh_rd32(DWORD_PTR p) { DWORD v = 0; klh_rd(p, &v, 4); return v; }
+/* the session manager [0x168e598] (ZSessionManagerMultiplayer) has vtable 0xbd1ebc, or - with [Lobby] Solo=1, kllobby.c - the private copy of it at klh_sm_vt2 */
+static DWORD klh_sm_vt2;
+#define KLH_SM_VT_OK(v) ((v) == 0xbd1ebc || ((v) && (v) == klh_sm_vt2))
 
 /* [Net] OnlineSafe=1 (default 1): kl_online() = 1 when this machine is in a NETWORK session, and then every part that WRITES game state
    stays out of it (re\netcode_plan.md 2.1). The test is the one the AI parts already make (klbot.c klb_read / klbalance.c klr_arcade):
