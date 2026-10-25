@@ -303,11 +303,12 @@ def build(src_zip, dst_zip, pin=SRC_MD5, log=print):
     # ---- Havok: one type-2 shape record per donor can (clone of the stock instance, new place + REF label), one .hrd record each, in
     # shape / instance order (the new shapes go behind every existing one; the .hrd gets its records in the same order)
     hvk = kl_hvk.Hvk(B['.HVK'])
-    if '.hrd' not in B.ext:
-        raise ValueError('the map has no .hrd')
-    hrd_old = B.files[B.ext['.hrd']]
     n_rigid = sum(len(s.inst) for s in hvk.shapes if s.type == kl_hvk.RIGID)
-    if len(hrd_old) != 28 * n_rigid:
+    has_hrd = '.hrd' in B.ext
+    # 1025 park2: DM06B (M06_A graft) has 6 rigid instances and NO .hrd member (live-run map); kl_interact_graft.build leaves such a map without one
+    # too, so a map without .hrd stays without (no member is invented).
+    hrd_old = B.files[B.ext['.hrd']] if has_hrd else b''
+    if has_hrd and len(hrd_old) != 28 * n_rigid:
         raise ValueError('.hrd has %d bytes, %d rigid instances need %d' % (len(hrd_old), n_rigid, 28 * n_rigid))
     hrd_new = []
     for dn, can_id, insts in ((fdon, FUEL_CAN, finsts), (edon, IG.EXT_CAN, einsts)):
@@ -333,7 +334,7 @@ def build(src_zip, dst_zip, pin=SRC_MD5, log=print):
     if kl_hvk.Hvk(hvk_bytes).serialize() != hvk_bytes:
         raise ValueError('.HVK does not round-trip')
     h2 = kl_hvk.Hvk(hvk_bytes)
-    if 28 * sum(len(s.inst) for s in h2.shapes if s.type == kl_hvk.RIGID) != len(hrd_old) + 28 * len(hrd_new):
+    if has_hrd and 28 * sum(len(s.inst) for s in h2.shapes if s.type == kl_hvk.RIGID) != len(hrd_old) + 28 * len(hrd_new):
         raise ValueError('.hrd record count does not match the rigid instances')
     hrd = hrd_old + b''.join(hrd_new)
     new = dict(B.files)
@@ -341,7 +342,8 @@ def build(src_zip, dst_zip, pin=SRC_MD5, log=print):
     new[B.ext['.oct']], new[B.ext['.rmi']], new[B.ext['.rmc']] = octj.pack(), rmin.pack(), rmcn.pack()
     new[B.ext['.prm']], new[B.ext['.MAT']], new[B.ext['.TEX']] = prm_bytes, T.write_mat(mat), T.write_tex(tex)
     new[B.ext['.HVK']] = hvk_bytes
-    new[B.ext['.hrd']] = hrd
+    if has_hrd:
+        new[B.ext['.hrd']] = hrd
     p2 = G.read(prm_bytes, 'dd')
     if G.write(p2) != prm_bytes:
         raise ValueError('.prm does not round-trip')
