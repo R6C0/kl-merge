@@ -3743,6 +3743,8 @@ def standing_command(folder):
 
 def options(a):
     opt = {}
+    if '--slot' in a:
+        i = a.index('--slot'); F.set_slot(a[i + 1]); del a[i:i + 2]      # 2026-10-25: F02 / F03 ... instead of the F01 default
     if '--tower-only' in a:
         a.remove('--tower-only'); opt['tower_only'] = True
     if '--no-tree' in a:

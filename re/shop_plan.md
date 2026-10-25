@@ -2,6 +2,14 @@
 
 Nothing here was run in the game. Step 1 (below) is built; the rest is a plan.
 
+## OWNER WISH 2026-10-24 ~14:45: hire your heister in the buy shop (NOT BUILT)
+Owner: "people can buy their heister dependent on their rank e.g. go as kane but it costs them money to 'hire' them to be that guy
+for the heist" - "character screen as in the buy shop screen". So: the between-rounds Buy Weapons page gets heister entries (Kane,
+Lynch, the Dead Men FA crew, Dog Days' heisters) priced in the round money and locked by rank like the gun rows (star / lock glyphs);
+buying one makes you that character for the next heist. Ties into the existing Heister page / wardrobe (`klhook/klchar.c`,
+`re/wardrobe.md`, `re/characters.md` 6) and 'each character usable once per match' (end goal 3). Open: free default heister, price and
+rank table, whether bots may take a hired heister, online. Queued after the 10-24 shop restyle, Hot Coffee II door, cover and car-blast fixes.
+
 ## 1. What the shop is
 
 **XML (the LEVEL archive's `Menu/online.xml`, read from the installed DM01 F01_Main.zip):**

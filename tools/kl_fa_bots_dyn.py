@@ -3193,6 +3193,8 @@ ROUTE = (('z_gate', 'M01'), ('z_final', 'M02'), ('z_final', 'M03'), ('z_final', 
 
 def options(a):
     opt = {}
+    if '--slot' in a:
+        i = a.index('--slot'); F.set_slot(a[i + 1]); del a[i:i + 2]      # 2026-10-25: F02 / F03 ... instead of the F01 default
     for flag, key, val in (('--no-random', 'random', False), ('--no-vision', 'vision', False), ('--no-rusher', 'rusher', False),
                            ('--no-stagger', 'stagger', False), ('--no-tree', 'tree', False), ('--no-detour', 'detour', False),
                            ('--no-routes', 'routes', False), ('--keep-fake-targets', 'fake', False)):

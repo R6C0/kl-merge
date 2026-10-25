@@ -158,7 +158,13 @@ import kl_octree as O
 import kl_prpjoin as J
 from kl_prp import Prp, units
 
-SLOT = 'F01'
+SLOT = os.environ.get('KL_SLOT', 'F01')     # 2026-10-25: the slot the checkers read; `--slot F02` (dyn / rt / census CLIs) or KL_SLOT sets it (set_slot)
+
+
+def set_slot(slot):
+    global SLOT
+    SLOT = slot
+
 R_ = 'ROOT\\'
 SQUAD = 'Gameplay!merc_bot_squad!'          # the prefix F01 F04 F05 F07 F08 F09 use; kl_fa.host_keep keeps Gameplay!AIMonitor
 BOTS = range(2, 9)                          # Squad#02..#08 = characters C2..C8; the human is crew record 0
@@ -331,8 +337,9 @@ def frames(scene):
     return out
 
 
-def sizes(folder, slot=SLOT):
+def sizes(folder, slot=None):
     """The four blocks a level reads in one piece: {'.prm': bytes, '.ANM', '.fxc', '.WAV'}."""
+    slot = slot or SLOT
     with zipfile.ZipFile(os.path.join(folder, slot + '_Main.zip')) as z:
         out = collections.OrderedDict((e, next(i.file_size for i in z.infolist() if i.filename.endswith('_Main' + e))) for e in BIG)
     out['.WAV'] = os.path.getsize(os.path.join(folder, slot + '_Main.WAV'))
@@ -343,7 +350,8 @@ def sizes(folder, slot=SLOT):
 class Built:
     """A build folder read whole: members, property tree (kl_prpjoin.Scene), scene (kl_scene.Scene), frames."""
 
-    def __init__(self, src, slot=SLOT):
+    def __init__(self, src, slot=None):
+        slot = slot or SLOT
         self.folder = src if os.path.isdir(src) else os.path.dirname(src)
         self.zp = os.path.join(src, slot + '_Main.zip') if os.path.isdir(src) else src
         with zipfile.ZipFile(self.zp) as z:
@@ -1203,11 +1211,12 @@ def trigger_reach(nav, o, part=None):
     return best
 
 
-def census(folder, log=print, slot=SLOT):
+def census(folder, log=print, slot=None):
     """The money of a finished bots build against its squads (re/bots_loot.md 4): every object of the rules' list
     one - what it is, whether a bot can take it from the start, after a message of the squads' relays, or not at
     all - and per squad the closest any of its places (every branch, from heist stage 1 on) comes to an object it
     cannot take at that time. -> (rows, facts of check())."""
+    slot = slot or SLOT
     _out, facts = check(folder, lambda *a: None, slot)
     B = Built(folder, slot)
     sc, nav = B.sc, Nav(B.scene.nav)
@@ -2604,7 +2613,7 @@ def hop_check(B, lane, exits, links, prev, nxt, bots, fail, note, log, facts):
             % (sec, *f, h['radius'], h['height'], h['wait'], h['stage'], len(h['to']), low, len({p for _n, p in before}), len(before), len(beyond)))
 
 
-def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
+def check(folder, log=print, slot=None, early_ok=None, links=None):
     """Every check on a finished folder -> (list of (severity, text), facts). Severities: FAIL (must be none before
     an install), NOTE (differs from stock, said aloud). early_ok: a bot that enters a level exit box before its
     loot wait is a NOTE, not a FAIL (None: what the folder's bots.json says the build was made with). links: walk the
@@ -2621,6 +2630,7 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     trigger nobody on the bots' mesh part can stand in (review D4), money the build took off civilians.
     It fails <work>/build/z_route/M02 (the clerk; the cases opened only at the door) and z_m02s1/M02 (the two
     watches)."""
+    slot = slot or SLOT
     B = Built(folder, slot)
     bj = os.path.join(B.folder, 'bots.json')
     bplan = json.load(open(bj)).get('plan', {}) if os.path.isfile(bj) else {}
@@ -3254,11 +3264,12 @@ def check(folder, log=print, slot=SLOT, early_ok=None, links=None):
     return out, facts
 
 
-def guns_entries(folder, log=print, slot=SLOT):
+def guns_entries(folder, log=print, slot=None):
     """KLGuns.ini of a build made before 2026-10-10 evening has no 'Entries=' (the chunk count of the .prm beside
     it); klgun.c refuses such a file since then and kl_map_guns.py check says so, with the line to add. The squad
     step does not change the chunk count, so the line is added to the COPY in the output folder - nothing else of
     the file changes. -> the count written, or None when there was nothing to do."""
+    slot = slot or SLOT
     ini = os.path.join(folder, 'KLGuns.ini')
     if not os.path.isfile(ini):
         return None
@@ -3507,6 +3518,8 @@ def stock(levels=SYSTEM_LEVELS, log=print):
 
 def options(a):
     opt = {}
+    if '--slot' in a:
+        i = a.index('--slot'); set_slot(a[i + 1]); del a[i:i + 2]      # 2026-10-25: F02 / F03 ... instead of the F01 default
     def take(name, conv=str):
         if name in a:
             i = a.index(name)
