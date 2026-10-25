@@ -12,6 +12,10 @@ measured on all 74,437 entries on 2026-10-10 (Steam build 25506656); re/pd2_audi
     python tools/pd2_audio.py banks                         soundbanks/music.bnk: track_NN -> stream ids
                                                             (track_streams.json) and the jukebox names from
                                                             strings/menu + hud .strings (track_names.json)
+    python tools/pd2_audio.py bank <name|file.bnk> [<outdir>]
+                                                            a soundbank's embedded clips (BKHD / DIDX / DATA): id, format, rate,
+                                                            seconds; with <outdir> each PTADPCM clip is decoded to <id>.wav.
+                                                            <name> = soundbanks/<name> read from the crates (e.g. weapon_akm)
     python tools/pd2_audio.py tracks [<name>]               the music tracks with sizes and durations (needs both)
   <stream> = a file extracted with pd2_crate.py, or a crate path such as
   soundbanks/streamed/music/121224598 (read straight from the crates).
@@ -397,6 +401,43 @@ def tracks_table(name=None):
                 print('     %10d  %2d ch %5d Hz %6.1f s %8.2f MB' % (i, r[3], r[4], dur, r[1] / 1e6))
 
 
+def bank_clips(data):
+    """{wem id: wem bytes} of the DIDX / DATA chunks of a Wwise .bnk (BKHD, DIDX = 12-byte {id, offset, size}
+    entries, DATA = the wem files at those offsets; the other chunk, HIRC, is NOT parsed here)."""
+    p, didx, blob = 0, b'', b''
+    while p + 8 <= len(data):
+        cid, sz = data[p:p + 4], struct.unpack_from('<I', data, p + 4)[0]
+        body = data[p + 8:p + 8 + sz]
+        if cid == b'DIDX':
+            didx = body
+        elif cid == b'DATA':
+            blob = body
+        p += 8 + sz
+    out = {}
+    for i in range(0, len(didx), 12):
+        wid, off, size = struct.unpack_from('<III', didx, i)
+        out[wid] = blob[off:off + size]
+    return out
+
+
+def bank(arg, outdir=None):
+    """Print (and with outdir decode) the clips of a soundbank; -> {id: Stream}."""
+    if os.path.isfile(arg):
+        data = open(arg, 'rb').read()
+    else:
+        import pd2_crate
+        ix = pd2_crate.Index(quiet=True)
+        data = ix.read(ix.get('soundbanks/' + arg.replace('\\', '/').replace('soundbanks/', ''), 'bnk'))
+    streams = {wid: Stream(w, str(wid)) for wid, w in bank_clips(data).items()}
+    print('%d clips' % len(streams))
+    for wid, s in sorted(streams.items()):
+        print('  %10d  %-14s %d ch %5d Hz %6.3f s %7d bytes' % (wid, TAG_NAMES.get(s.tag, hex(s.tag)), s.channels, s.rate, s.seconds, len(s.data)))
+        if outdir and s.tag == 0x8311:
+            os.makedirs(outdir, exist_ok=True)
+            write_wav(os.path.join(outdir, '%d.wav' % wid), s.decode(), s.rate)
+    return streams
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__)
@@ -418,6 +459,8 @@ def main(argv):
             print('%7.1f s  rms %6.0f' % (t, r))
     elif cmd == 'survey':
         survey()
+    elif cmd == 'bank':
+        bank(argv[2], argv[3] if len(argv) > 3 else None)
     elif cmd == 'banks':
         banks()
     elif cmd == 'tracks':
