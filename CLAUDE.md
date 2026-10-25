@@ -77,9 +77,6 @@ stock guns and handed one over in 45 ms, under the 250 ms pass; kspg_repark re-p
 floor/upper squads, warehouse shut by kick doors, F03 3-car SWAT arrival; undo cars then squads); DM05A lastcall4 pack_lite 858d3371
 (70 dancers, 140/96, backup .before-1025lastcall4). pack 2fbf401b (90) staged only. Caps: re/actor_caps.md (memory is the wall).
 
-2026-10-25 - k42 shop 'crash' = clean exit(0) after focus-loss ShowCursor stalls (0x41e8b0, overlay), not page II code. k43
-(PreMake at 0x16, made[] liveness guard, ExitTrace logging): k43 22E015B2 INSTALLED + CursorGuard=1 (backups .before-1025k43).
-
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
 replacement (testing in the F01 slot is temporary). In order:
