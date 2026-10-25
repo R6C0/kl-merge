@@ -31,6 +31,7 @@ import os
 import random
 import shutil
 import struct
+import zipfile
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -159,6 +160,13 @@ def looks_pass(lv, bartender, log):
     t0 = len(lv['.TEX'])
     rep = C.put(lv, picks, log=lambda *_: None)
     rep['tex_bytes'] = (t0, len(lv['.TEX']))
+    # verifier fix 2026-10-25: C.put merges build/shared/union.fxc (242 entries, 17.8 MB) into the cache; the 13 new materials need none
+    # of it (the live 130-entry, 9.2 MB cache already holds every effect they ask for). The cache is read whole into ONE heap block at
+    # load (re/open_work_log.md 'five large blocks'), so +8.5 MB there is a crash risk for nothing. slim_cache keeps exactly what the
+    # materials ask for (measured: result == the live .fxc byte for byte).
+    import kl_light
+    lv['.fxc'], frep = kl_light.slim_cache(C.T.read_mat(lv['.MAT']), lv['.fxc'], log=lambda *_: None)
+    rep['fxc'] = frep
     # Dog Days' own models/variants: ZGEOM[4] (+ .gms) and ZLNKOBJ[0]
     sc, raw = lv.scene()
     raw = bytearray(raw)
@@ -316,6 +324,13 @@ def check_lc5(zp, log=print, variant='full'):
         new = [p for p in probs(zp) if p not in base]
         log('kl_chars.check: %d new problems' % len(new))
         fails += ['kl_chars.check: ' + p for p in new]
+    if os.path.isfile(live):
+        with zipfile.ZipFile(zp) as z1, zipfile.ZipFile(live) as z0:
+            f1 = [n for n in z1.namelist() if n.lower().endswith('.fxc')][0]
+            s1, s0 = z1.getinfo(f1).file_size, z0.getinfo(f1).file_size
+        log('.fxc: %d bytes (live %d)' % (s1, s0))
+        if s1 > s0:
+            fails.append('.fxc grew %d -> %d: one heap block at load, slim it (kl_light.slim_cache)' % (s0, s1))
     for f in fails:
         log('FAIL: ' + f)
     return fails
