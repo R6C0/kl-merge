@@ -1,3 +1,9 @@
+2026-10-25 ~17:10 - GRENADE DM01 INSTALLED + PASS: KLExpansion/Maps/DM01/F01_Main.zip 4d520614 -> 1bcac96b (grenade_1025a: Grenade_Fragmentation chain + 3 pickups
+near spawn), backup .before-1025grenade, undo C:/kl_build_1024/grenade_1025a/UNDO DM01 grenade.bat. Scripted run (hook k49_1025fps2/test, ini grenade_1025a/test_scripted.ini:
+page 2 = 6 DOWNs, HeistLevel_P2 entry 0): 0 asserts, 0 faults, 30806 frames, clean exit; a pickup is visible near spawn. Grabbing/throwing NOT tested yet.
+A run with the live hook + [Expansion] Page=2 only never leaves the menu (no [Script] in the ship hook). e8 K50C: MapCap DM05A:60 works, but the pile is a ~400-460 MB
+content working set; fps only sets the overshoot (lc7's -760 glass emitters may matter more).
+
 2026-10-25 ~16:30 - e8 K49I/J END: the texmip zip loads fine, process heap P 395 MB (was 457); texmip stays installed. K49I auto = 30 fps at the 59 Hz monitor-off
 mode (preset bug 59 < 60, e8 fixed with 2 Hz slack), 0 refusals. K49J Fps=120: 119.5 fps but the nvd3dum pile sawtooths 70 -> 586 MB (~60 s), free VA 13 MB, 11 refusals
 by 200 s. DM05A is safe at 60, NOT at 120. e8 next: find what drains the pile (the sudden drop) so it can be triggered instead of capping fps.
