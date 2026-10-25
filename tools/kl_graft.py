@@ -1001,6 +1001,13 @@ def mute_speech(sc, ctrl, snd):
 ANIM_FALLBACK = {'Police': 'Swat_02', 'Army': 'Swat_02'}
 
 
+def campaign_rename(Jn):
+    """{string: string}: scene paths into a Dog Days campaign level's systems zip (AllLevels/
+    mainsceneincludes.zip) get the multiplayer zip's name, the systems S brings."""
+    old, new = 'ROOT\\AllLevels/mainsceneincludes.zip', 'ROOT\\AllLevels/mainsceneincludes_multiplayer.zip'
+    return {s: new + s[len(old):] for s in Jn.p.keys if s.lower().startswith(old.lower() + '\\')}
+
+
 def dm_rename(Jn, S, log=print, anim=True, arms=True):
     """{string: string} for a Dead Men map under Dog Days systems: scene paths into Dead Men's
     systems subtree get Dog Days' top-level name; animation sets the .ANM lacks take the stand-ins of
@@ -1226,6 +1233,14 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     try:
         label = '%s systems + %s map' % (s_name, m_name)
         Jn = J.join(S.prp, picks, label, take=take)
+        if not M.dm and m_name[:1] == 'L' and m_name[1:].isdigit():
+            # Dog Days CAMPAIGN level as the map (re/dd_campaign_fa_1025.md): its actors' weapons and its
+            # camera setup name the dropped campaign systems zip; re-point those to the multiplayer zip
+            # (all 9 weapons L05 uses exist there, MEASURED). Paths only; no animation or arms rule
+            # (same exe, same .ANM family, kl_anmjoin covers the sets). Not run for any F level.
+            rn = campaign_rename(Jn)
+            log('  campaign paths re-pointed: %d' % len(rn))
+            Jn = J.join(S.prp, picks, label, rename=lambda s: rn.get(s, s), take=take)
         if M.dm:
             rename = dm_rename(Jn, S, log, anim, arms)
             Jn = J.join(S.prp, picks, label, rename=lambda s: rename.get(s, s), take=take)
