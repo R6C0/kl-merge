@@ -6,6 +6,10 @@ Live [FrameLimit] Enable=1 Fps=0: the ring needs the Reset wrapper - check the n
 
 2026-10-25 ~07:10 UTC - scheduled check-in (cloud, read-only on the PC; the VS Code sessions were live: hook installed 06:07, DD10B PASS on F07): no new crash (KLHook_1-4.dmp 05:52 = the DD10A member-name crash already triaged and fixed). Offline piece: tools/kl_slotcheck.py - read-only check that every KLExpansion map archive's members, beside files and [Redirect*] entry name ITS slot (the DD10A crash class) plus the loader's by-name members; 15-check self-test; live tree 29 maps / 20 redirects = 0 FAIL (.hrd made optional by evidence: DM05A/DM06B/DM09*/DM11B lack it and play). debug/notes/2026-10-25-scheduled-triage.md. Owner: nothing new; run 'python tools/kl_slotcheck.py <stage dir>' before an INSTALL bat if you like.
 
+2026-10-25 ~13:45 - OWNER "install all": PD2 AKM 1025b INSTALLED on stock F01 (pd2gun_1025b/stage/pd2gun.ps1, zip + WAV, WHD stays stock; undo pd2gun.ps1 -Undo).
+Its 1025a was undone after 0x6d2107; the bank audit cleared it and 0x6d2107 also hit DM05A with no bank edit (small-heap refusal class, now under QuadRing). Already live: DD10
+Flat Raid (page 3 entry 5, e8 added the menu lines), DM01 grenade pickups (grab/throw untested), the Dig (page 3 entry 4), e8's SHIP hook B5BFCCE0 with QuadRing=128.
+
 2026-10-25 ~06:08 - DD10 FLAT RAID RUNS LIVE (DD10B PASS): 1025e re-staged with F07 members (F07_Main.zip e826b4ea, check.py clean), INSTALLED (l05.ps1, 32 files;
 undo l05.ps1 -Undo). Run with hook k50_1025quad2 + QuadRing=128, menu page 3 entry 5: 150 s of round 1, 0 asserts / 0 faults, arena flat 94.5 MB, HUD + 'Loot area' at spawn.
 Menu lines (Redirect.3 F07=DD10, Page.3 F07=Flat Raid) are only in the test ini; live KLHook.ini is e8's. First crash (DD10A) = members still named F01, fixed in f3e0cb8e6.
