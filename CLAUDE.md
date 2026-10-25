@@ -66,9 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-25 ~16:00 - MEMORY: the DM05A wall is the nvd3dum small-block pile (render thread). Fix so far is [Memory] DriverArena=1 plus a working frame cap (limiter dead
-since k36, the overlay re-entered Present; e8d4d03ff GameThread=1; MapCap DM05A:60 c774e73bd). Pile = one driver block per tiny-VB DISCARD lock (KL2+0x47bdbf, ~60/frame).
-DM05A live = lc7+texmip 9cdd6dee (backups .before-1025lc7tm 4bd278cf -> .before-1025texmip 701d082f; undo each install.py --undo). DM01 grenade 1bcac96b installed,
+2026-10-25 ~18:40 - MEMORY: the DM05A wall (nvd3dum keeping one block per tiny-VB DISCARD, ~60/frame, from post-chain screen quads of the render interpreter 0x7c1c30)
+is FIXED in test by e8's [Memory] D3dRing=128 (ring3 e4f912a8): K50F2 at 119 fps, arena flat, 0 refusals, free VA ~560 MB. Next: K50G visuals, Alt+Tab/Reset, ship decision (e8).
+DM05A live = lc7+texmip 9cdd6dee (backups .before-1025lc7tm 4bd278cf -> .before-1025texmip 701d082f; undo with each install.py --undo). DM01 grenade 1bcac96b installed,
 scripted PASS (throw untested). DD10 1025d not ready (Wall_Break seals 3 loots), round 4 wkrhxtbed.
 
 2026-10-25 ~09:30 - DIG 1025b INSTALLED (e8 window), not yet run: Maps/DM07 F06_Main.zip 3c7636d3 (dig.ps1, no PC_Def.str: C: too tight), menu = Dead Men campaign

@@ -1,3 +1,8 @@
+2026-10-25 ~18:40 - MEMORY RING WORKS (e8 K50F2, ring2 b256f117 / ring3 e4f912a8, [Memory] D3dRing=128): each DISCARD lock moves the object's +0x18 VB to the next
+of N hook buffers, locked NOOVERWRITE; DM05A at 119 fps: arena flat at 70-75 MB, 0 refusals, free VA steady ~560 MB (lc7 alone changed nothing, K50E). K50F's ReShade32 crash
+was fixed by creating through the real device vtable. K50G = visual check; the Alt+Tab/Reset test is next. Static (mine): the 5 DISCARD callers are lock helpers for VB0-3
+used by the render command interpreter 0x7c1c30 = POST-CHAIN screen quads (op 0x64 Gaussian blur pair + ops 0x11/20/35/5e/5f/61/6b/6d/72/75/79), so a ring bug would show as wrong bloom/blur.
+
 2026-10-25 ~18:10 - MEMORY K50A-D (e8): nvd3dum blocks per frame == whole-buffer VB DISCARD locks per frame (55/55, 71/71); a GPU flush every frame does not shrink
 the pile -> per-DISCARD rename records. All from KL2+0x47bdbf (inside Lock wrapper 0x87bda0) on 3-4 tiny DYNAMIC|WRITEONLY DEFAULT VBs (144/176 B), ~55-65/frame;
 10 wrapper callers, e8 finding the DISCARD one, TEST lever [Memory] D3dNoDiscard planned (my caution: NOOVERWRITE on a rewrite-from-0 buffer races the GPU -> check visuals).
