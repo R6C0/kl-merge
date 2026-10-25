@@ -706,6 +706,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klnet.c"
 #include "klnetfix.c"
 #include "kllobby.c"                                      /* kllobby.c: [Lobby] MinPlayers - a hosted FA lobby may start below 4 (off unless set) */
+#include "kllobbyopt.c"                                   /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax - more choices on the FA lobby rows (off unless set); AFTER kllobby.c */
 #include "klbotfill.c"                                    /* klbotfill.c: [Bots] OnlineFill plan + probe, read-only (off unless set); AFTER kllobby.c */
 #include "klqol.c"                                        /* klqol.c: [QoL] taskbar flash, background frame cap, mouse-clip release (off unless set); AFTER kllobby.c / klnet.c */
 #include "klinv.c"
@@ -1175,6 +1176,7 @@ static void klh_tick(int game_thread)
     kqb_tick(game_thread);                            /* klqol2.c: [QoL2] (off unless set) */
     klsv_tick(game_thread);                           /* klserver.c: [Server] (off unless Enable=1; game thread only) */
     kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
+    kllo_tick();                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
     klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
     klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
@@ -1583,6 +1585,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klvis_init();
     klnet_init();
     kllb_init();
+    kllo_init();                                      /* kllobbyopt.c: reads [Lobby] TimeMax / TimeMin / RoundsMax */
     klbf_init();                                      /* klbotfill.c: reads [Bots] OnlineFill (after kllb_init: it reads the same key) */
     klq2_init();                                      /* klqol.c: [QoL] (default off) */
     kqb_init();                                       /* klqol2.c: [QoL2] (default off) */
