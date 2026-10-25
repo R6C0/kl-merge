@@ -158,5 +158,7 @@ What still blocks an FA layer (UNVERIFIED, nothing was run in the game):
    counter that no longer exists may never wake, or wake at once: behaviour unknown until a live run; the FA layer should drive them with its own wave timers (kl_old_waves).
 2. No `FASpecials!`, spawn points, loot, escape, `OnlineBounds` yet (`--no-fa`); the baseline OnlineEscVehicleMonitor double-Init issue must be avoided by authoring ONE monitor.
 3. Nav coordinates for the section 3 plan are still GUESS (no nav dump).
-4. The `AI!Triggers` tops (138 in t4, kept), `Special!EndOfLevel` and the `AI!Enemies!B6!TB_FailMission` box still exist and may end or fail the round (not read); audit before authoring.
+4. The `AI!Triggers` tops (138 in t4, kept), `Special!EndOfLevel` and the `AI!Enemies!B-Appartments!B6!TB_FailMission` and `GeomDeact_TB_FailMission` boxes (both ZBoxPrimitive; `Special!EndOfLevel` holds one ZSTDOBJ, `SceneChangerExitPoint`) still exist and may end or fail the round (not read); audit before authoring.
 5. Memory: 468 MB archive vs 370 MB for F09; load time and RAM are the risk, not chunks.
+
+Review 2026-10-25 (independent re-check of s7): zip integrity OK; dangling 0/0; check.py 0/0; census 78 actors / 55 squads / 22,269 nodes / 519 tops / AI!Triggers 138; the 201 list entries and strings removed vs t4 (186+15) all pointed at nodes dropped from s7 (0 still resolve, 0 pointed at kept nodes; 20 sampled all in Dialogue / Friendly / Coop / Cutscenes / Checkpoints / trimmed squads). Caveat: s7 was built twice into the same folder (s7.log shows two exits); rebuild into a fresh folder before relying on byte-identity.
