@@ -1,3 +1,8 @@
+2026-10-25 ~16:00 - MEMORY: the frame limiter had been dead since k36 (the Steam overlay re-enters Present, so the recursion cut fired; e8 fix e8d4d03ff, [FrameLimit]
+GameThread=1). K49H2 (DM05A, Fps=60 + DriverArena=1): 0 refusals, free VA flat 133-145 MB. TEXMIP INSTALLED at e8's GO: KLExpansion/Maps/DM05A/F01_Main.zip
+701d082f -> 4bd278cf (texmip --min 1024, 86/1830 textures, .TEX 210.6 -> 143.8 MB), backup .before-1025texmip (renamed: the live file was hard-linked to lc6 build),
+undo C:/kl_build_1024/dm05a_texmip_1025a/install.py --undo. K49I (texmip + arena + Fps 240) and K49J (Fps=120) running. DD10 1025c still FAILS (11 blockers), round 3 = wupp9h1t5.
+
 2026-10-25 ~04:35 - MEMORY K49F/G (e8, DM05A, TEST hooks, nothing installed): K49F: the nvd3dum pile is on kl2's RENDER thread (thread start via our
 klm_thread_start DINPUT8+695a0), not a driver worker, so threaded optimization is likely not the main source. K49G = [Memory] DriverArena=1 (klarena.c, 0359a9a64,
 TEST BA361920): nvd3dum's process-heap blocks <=64 KB go to 1 MB chunks that are freed when empty; 0 bad frees, survived 200 s. The pile is LIVE, not fragmentation:

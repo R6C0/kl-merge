@@ -66,10 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-25 ~10:30 - scheduled check-in: klhook/klhigh.c WRITTEN, not built with MSVC, not run: the 4 GB flag made safe (hook reserves the upper 2 GB at DllMain,
-only listed foreign modules - nvd3dum/ReShade32/overlay, via their own import slots - get carved blocks there; the game stays below 2 GB). [Memory] High=1 measures
-(no flag), High=2 places (kl2.exe.laa-test). re/high_half_1025.md. It is the next lever after the stack shrinkers (MEMORY note below).
-Owner: build hook, run klhigh_test.exe, High=1 measure run on DM05A, then the A/B.
+2026-10-25 ~16:00 - MEMORY: the DM05A wall is the nvd3dum small-block pile (render thread). Fix so far is [Memory] DriverArena=1 plus a working frame cap (limiter dead
+since k36, the overlay re-entered Present; e8d4d03ff GameThread=1). K49H2 Fps=60: 0 refusals, free VA flat. TEXMIP INSTALLED on DM05A (4bd278cf, backup
+.before-1025texmip 701d082f, undo dm05a_texmip_1025a/install.py --undo). Waiting on K49I/J (Fps 240/120). DD10 1025c FAILS (11 blockers), round 3 wupp9h1t5.
 
 2026-10-25 ~09:30 - DIG 1025b INSTALLED (e8 window), not yet run: Maps/DM07 F06_Main.zip 3c7636d3 (dig.ps1, no PC_Def.str: C: too tight), menu = Dead Men campaign
 entry 5: KLHook.ini +F06=DM07/+F06=The Dig/EngineMaps ,DM07 (f8de2a9d -> 5bb667be), overlay patched in place a6594c09 -> e34c69d2 (stock H05 picture).
