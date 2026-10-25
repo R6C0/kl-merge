@@ -1,3 +1,8 @@
+2026-10-25 ~17:05 - GRENADE PROBE RESULT (owner's G presses 16:43): [P+0xa1c]=0 on every press and release, so ZFFActionThrow / action 0x11 is DEAD for the player
+(vtable 0xbb45f4 as expected, [P+0x84]=0, [P+0x239c] word0 0x179). Live ini [Grenade] Probe=0 (44e51cff, .before-1025probeoff). Remaining route: hook-side projectile spawn (e8, research).
+DOORS option A (owner): heister KickDoorBehaviourRout post-pass tools/kl_bots_kick_1025.py building in wf wpcwu2uyp -> staged C:/kl_build_1024/hkick_1025a (DM01/DM02/DM03A, DM01B maybe).
+DM01 overlaps e8's AKM sound fix: whoever installs second rebases; message before installing.
+
 2026-10-25 ~16:30 - HOOK READS (wf_83226a31-7ef, read-only): no code regression. The good night's 1300-1500 reads / 0.65 ms were TEST (klauto) runs without the owner modules;
 the owner SHIP run at 00:41 (DM05A) already read 2187 / 0.98 ms. reads/frame = A + B/fps, so the fps fall inflates it (reads/s ~240-360k then and now): compare per second.
 Standing cost: kladren/klbotdown/klcardown/klcdying/klshield each take a ~62-read klb_read snapshot (~310/frame, sharing one saves ~250). The fps drop 185 -> 103 is the open question;
