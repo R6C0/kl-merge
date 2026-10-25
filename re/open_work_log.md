@@ -1,3 +1,7 @@
+2026-10-25 (e8) - K44P2e PASS (590 s clean, DM05A d5f8522b): page flip + round-start re-park ok, but round 2 kept the stock gun: the rules REFUSED the buy
+(\ player, row 0 = \; BuyWeapon 0x6ddd10 writes the UI byte before commit 0x8ea990, which stores nothing when sum > [[rules+0x5f8]+0x38], a shared
+pool). k47 (e16157aba, ship 6E759091 / test 99A6BEF9, C:/kl_build_1019/k47_1025a, NOT installed): refusal detected + carry byte put back; TEST poke cmd;
+K44_PAGE2_DM05A_money.ini gives \ before the buy. Next: that run after kl-merge-27's install batch. klgrenade step 0 probe in 411ad3ed1 (Probe=0).
 2026-10-25 (fb) - DM01 owner feedback STAGED (not installed): C:/kl_build_1024/dm01fb_1025a/stage, zip 885c4a13 (old c0e7b8ee) + WHD/WAV/LS bank, tag .before-1025dm01fb. Door-kick sound (bank merge, proven offline), 5 extinguishers on the wall (KEYFRAMED holder, proven by ray), cars from road to van, 3-man kick squad (engine behaviour GUESS, KICK_AT=45). Tool: tools/kl_dm01fb_stage.py. Rehearsal ok.
 
 2026-10-25 ~01:50 (e8) - DM05A MEMORY WALL, live: K44P2b on 9638943a (lastcall4 lite + lcmusic stageA) crashed 2.4 s into the route at

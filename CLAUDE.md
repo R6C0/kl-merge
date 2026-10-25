@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 - K44P2e clean, but the round-2 gun stayed stock: the rules REFUSED the page II buy ($0 player, $2000 gun; the UI byte is written
+before the commit 0x8ea990 checks money). k47 (e16157aba; ship 6E759091, test 99A6BEF9 in C:/kl_build_1019/k47_1025a) NOT installed:
+detects the refusal, TEST `poke` funds the player (K44_PAGE2_DM05A_money.ini). Next: that run after kl-merge-27's install batch.
+
 2026-10-25 - DM01 owner feedback STAGED (not installed): C:/kl_build_1024/dm01fb_1025a/stage, zip 885c4a13 (old c0e7b8ee) + WHD/WAV/LS bank, tag .before-1025dm01fb. Door-kick sound (bank merge, proven offline), 5 extinguishers on the wall (KEYFRAMED holder, proven by ray), cars from road to van, 3-man kick squad (engine behaviour GUESS, KICK_AT=45). Tool: tools/kl_dm01fb_stage.py. Rehearsal ok.
 
 2026-10-25 - lastcall5 (full 653a4f4c 90 civs 150/111; lite 7d7f80c7 71 civs 138/95) STAGED, rehearsed, NOT installed (pinned on live 858d3371,
@@ -76,9 +80,6 @@ Files: C:/kl_build_1024/lastcall5_1025a/stage/lc5_{full,lite}/main; tool tools/k
 play (0x6d2107 null sound Lock; 0x8e5bbd large block refused, 435 MB free after load): lastcall4 UNDONE -> d5f8522b, lcmusic stageA not the
 cause (undone with it). lastcall5 (71/90 civs) must be lighter before install. k45 07011f71 staged only. Details: re/open_work_log.md.
 
-2026-10-25 - INSTALLED by e8 (owner 'install all'), not run in the game: DM01 squads 11c874cb + cars c0e7b8ee (shop hold, warehouse
-floor/upper squads, warehouse shut by kick doors, F03 3-car SWAT arrival; undo cars then squads); DM05A lastcall4 pack_lite 858d3371
-(70 dancers, 140/96, backup .before-1025lastcall4). pack 2fbf401b (90) staged only. Caps: re/actor_caps.md (memory is the wall).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
