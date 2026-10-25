@@ -56,7 +56,7 @@
 #define KLTRK_E_Y       0x100
 #define KLTRK_E_KIND    0x10c
 
-static struct { int on, declutter; float near_m, scale, band, sepw, seph; } kltrk;
+static struct { int on, declutter, escfar; float near_m, scale, band, sepw, seph; } kltrk;
 static struct { DWORD osd, elem; int told; } kltrk_r;
 static int kltrk_code_bad, kltrk_scale_ok;
 static DWORD kltrk_vt[KLTRK_NSLOT + 1];
@@ -100,7 +100,7 @@ static char __fastcall kltrk_render(void *el, void *edx, void *ctx, void *cam)
             on = path && (x < 0.5f && x > -0.5f && y < 0.5f && y > -0.5f);
             if (path != 2 && path && !(mn <= d && (mx == 0.0f || mx >= d))) path = 0;                          /* the stock's own min / max gate (0x8e2188..0x8e21b4; not for 8 / 9 / 10) */
             lim = kltrk.near_m - (kltrk_far[i] == obj ? kltrk.band : 0.0f);                                      /* hysteresis: once hidden, back only inside the band */
-            if (kltrk.near_m > 0.0f && d * 0.01f > lim) {
+            if (kltrk.near_m > 0.0f && d * 0.01f > lim && !(kltrk.escfar && path == 2)) {      /* TrackerEscapeFar: the escape vehicle (8 / 9 / 10) at any distance */
                 if (InterlockedCompareExchange((volatile LONG *)(DWORD_PTR)base, 0, (LONG)obj) == (LONG)obj) { saved[i] = obj; hid++; }
                 kltrk_far[i] = obj;
                 path = 0;
@@ -202,6 +202,8 @@ static void kltrk_init(void)
     kltrk.band = klu_inif("TrackerBand", "2"); if (!(kltrk.band >= 0 && kltrk.band <= 20)) kltrk.band = 2;
     if (kltrk.band > kltrk.near_m * 0.5f) kltrk.band = kltrk.near_m * 0.5f;
     kltrk.declutter = klu_inii("TrackerDeclutter", 1, 0, 1);
+    kltrk.escfar = klu_inii("TrackerEscapeFar", 0, 0, 1);
+    if (kltrk.escfar) klog("hud: tracker: TrackerEscapeFar=1: the escape vehicle marker (kinds 8 / 9 / 10) ignores the %.0f m limit", kltrk.near_m);
     kltrk.sepw = (float)klu_inii("TrackerSepW", 48, 8, 400); kltrk.seph = (float)klu_inii("TrackerSepH", 56, 8, 400);
     klog("hud: tracker: on; every in-world marker (ball / vehicle / pictures) shows within %.0f m only (back within %.0f m), at %.0f %% of its size; overlapping markers: %s (box %.0f x %.0f virtual px)",
          kltrk.near_m, kltrk.near_m - kltrk.band, kltrk.scale * 100.0f, kltrk.declutter ? "the nearest only" : "stock", kltrk.sepw, kltrk.seph);
