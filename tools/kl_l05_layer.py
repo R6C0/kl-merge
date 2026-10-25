@@ -261,11 +261,29 @@ CLEAR_NAMES = ['PC1201_L05_Dustbinbasket_03', 'PC1201_L05_Dustbinbasket_02', 'PC
                'PC0302_L05_BlackGarbageBag_A_02', 'SO0700_ALL_FenceBlock_A_10', 'SO0700_ALL_FenceBlock_A_11', 'PC0900_ALL_Scaffold_A_01']
 # REF ids of those objects' entities (MEASURED on the base build; one name can have several entities). The layer takes them out of the van's way:
 # collision cut (kl_escape.cut_collision) and hidden (.gms flag 0x400 + ZGEOM[3]); check() proves both.
-CLEAR_REFS = {22080, 31792, 22078, 31801, 21538, 31817, 21529, 31818, 22167, 23197, 23718, 27315, 24645, 24649, 24659,
-              26690, 26689, 22442, 22441}
-# 26690/26689 (13200,-8,880) and 22442/22441 (9600,1192,1120): the four doors of the two CoopAirlock pairs, TWO-PLAYER ONLY and shut: they gate the only
-# routes to the tower and the flats, so a lone FA player (and every bot) is walled in. Hidden + collision cut like the street props. MEASURED positions
-# (verification 2026-10-25, v5/v9/v10); the airlock controllers stay (their clips move nothing once the doors are gone). GUESS: that the controller tolerates it.
+# CLEAR_WHAT: REF -> (the last part of the object's scene path, its world position). Hidden (.gms flag 0x400 + ZGEOM[3]) and collision cut (kl_escape.cut_collision).
+# WHY a table with names: the first 15 REFs of 1025a / 1025b were stale ids of an older graft (they hid L05's windows, a building, glass emitters and shards, and left the
+# van's dustbins standing: check() passed because it only looked at the flags of whatever had those REFs). Now clear_proof() demands name AND place of every REF, in
+# finish() and in check(). MEASURED on 1025b (round 2, verifier scripts of 2026-10-25); a REF that no longer fits is a PROBLEM, not a silent miss.
+CLEAR_WHAT = collections.OrderedDict([
+    # the van's way (CLEAR_NAMES that stand inside the plan's drive x 6280 .. 11800, z 1100; the same-named props of the roofs and flats stay)
+    (31224, ('PC1201_L05_Dustbinbasket_03', (8061, 0, 1161))), (31233, ('PC1201_L05_Dustbinbasket_02', (8306, 0, 1161))),
+    (31249, ('PC1201_L05_Dustbinbasket_A_01', (8856, 0, 1160))), (31250, ('PC1201_L05_Dustbinbasket_01', (8940, 0, 1160))),
+    (26747, ('PC0302_L05_BlackGarbageBag_A_02', (10019, 0, 1115))),
+    # the four doors of the two CoopAirlock pairs (TWO-PLAYER ONLY and shut: they gate the only routes to the tower and the flats; a lone FA player and every bot
+    # would be walled in). The airlock controllers stay (their clips move nothing once the doors are gone). GUESS: that the controller tolerates it.
+    (26690, ('PC0100_L05_Coop_DoubleDoor_Slide_A_Geom_00', (13180, -8, 880))), (26689, ('Coop_DoubleDoor_Slide_A_frame_00', (13175, 124, 880))),
+    (22442, ('AirLock_HugeDoor_A_00', (9620, 1192, 1120))), (22441, ('ColiObj_Hero_Block', (9623, 1192, 998))),
+    # round 2: the street entrance. The dumpster is exact STATIC collision (a 129 x 138 x 205 box, x 13027 .. 13156) on the mesh way to the entrance; it is a prop
+    # (name, no structural role), so it goes. The pillar 26719 / doorway 26718 / hall 27151 pieces are the building's own walls (bbox 600 x 420 x 2800 and so on:
+    # LOAD-BEARING, they stay: the doorway between them is open once the airlock doors are gone, MEASURED with a 25 radius body on a 5 grid).
+    (26889, ('PC0300_ALL_Dumpster_B_03!_01_BoxMedium_00', (13091, 0, 727))),
+    # round 2: invisible CorridorBlockers (campaign script toggles: collision-only boxes the story switches on/off). All three lie ON a route of this round.
+    (27152, ('CorridorBlocker', (13350, 139, 996))),                                     # box x 13220 .. 13480, z 845 .. 1155: the whole ground-floor hall behind the entrance
+    (27014, ('SO0010_L05_CorridorBlocker_A_01', (9450, 1200, 800))),                    # a wall across the 3rd floor corridor, next to the police spawns (9450, 1200, 902)
+    (23991, ('SO0700_ALL_CorridorBlocker_4m_01', (7028, -11, 1076))),                   # x 7022 .. 7035, z 876 .. 1276: right across the street, inside the van's drive (x 6280 ..)
+])
+CLEAR_REFS = set(CLEAR_WHAT)
 COOP_BLOCKERS = 3                       # the CoopAirLock_Pathblocker_00 nodes of the campaign map (MEASURED on 1025a: eBlocking, empty list, named by no controller)
 ROAD = dict(arrive=[(5300.0, 0.0, 1100.0), (6300.0, 0.0, 1100.0), (7300.0, 0.0, 1100.0)], stop=STOP,
             leave=[(9300.0, 0.0, 1100.0), (10300.0, 0.0, 1100.0), (12400.0, 0.0, 1100.0)], at='box', heading=90.0, cam=[10450.0, 350.0, 1100.0], clear=list(CLEAR_NAMES))
@@ -616,6 +634,24 @@ def complete(sc):
 
 
 # ------------------------------------------------------------------ on the written level
+def clear_proof(sc, ents, where):
+    """Does every REF of CLEAR_WHAT name the object it was measured for (the last part of its scene path, its place within 5 units)? -> [problems]. where(i, e) = the
+    world position of entity e (index i)."""
+    bad, byref = [], {}
+    for i, e in enumerate(ents):
+        byref.setdefault(e.ref, []).append(i)
+    for ref, (name, at) in CLEAR_WHAT.items():
+        ix = byref.get(ref, [])
+        if len(ix) != 1:
+            bad.append('CLEAR_WHAT REF %d (%s): %d entities carry it, wanted 1' % (ref, name, len(ix)))
+            continue
+        i = ix[0]
+        p = tuple(where(i, ents[i]))
+        if not sc.path[i + 1].endswith(name) or math.dist(p, at) > 5.0:
+            bad.append('CLEAR_WHAT REF %d is %s at (%d, %d, %d), not %s at %s: the ids moved, re-measure the table' % (ref, sc.path[i + 1][-60:], *p, name, at))
+    return bad
+
+
 def finish(folder, log=print):
     """The written level, in place: the street props out of the van's way, the lightened level, the briefcases on the loot, the texts. -> [problems]"""
     import kl_fa_loot as L, kl_chars as C, kl_light, kl_loc, kl_texmat as T, kl_prmgraph  # noqa
@@ -624,6 +660,11 @@ def finish(folder, log=print):
     sc, bad = E.sc, []
     # the van's way: the props named in CLEAR_NAMES hidden (their collision was cut in the join: build())
     hid = []
+    bad += clear_proof(sc, E.ents, lambda i, e: E.at(i + 1))
+    if bad:
+        for b in bad:
+            log('  PROBLEM: ' + b)
+        return bad                       # nothing is hidden on the strength of ids that moved
     for i, e in enumerate(E.ents):
         if e.ref in CLEAR_REFS:
             k = i + 1
@@ -858,7 +899,11 @@ def seen_from(C, rows, p):
     return None
 
 CAST_MASK = 0x28                        # characters (0x20) or heroes only (0x8): what a player or a bot is stopped by (kl_route's reading of the sub-part flags)
-CAST_HEIGHTS = (50.0, 110.0)            # a knee and a chest line over the way's floor. GUESS: the same column as kl_route (55 .. 165), a little lower to meet low rails
+CAST_HEIGHTS = (50.0, 110.0, 170.0)     # a knee, a chest and a HEAD line over the way's floor (round 2: 170 added, so lintels, door frames and ducts are met). GUESS: the same column
+                                        # as kl_route (55 .. 165), a little lower to meet low rails; a Glacier character is about 180 tall, the 170 line leaves 10 for the skull
+STEP_UP, STEP_DOWN = 35.0, 20.0         # round 2: the floor under a piece's two ends is looked for from STEP_UP over the mesh to STEP_DOWN under it (exact cast, mask CAST_MASK) and the three
+                                        # lines are cast over THAT floor: a stair's treads or a kerb stand above or below the mesh's plane, and a line cast over the mesh plane would meet a step
+                                        # edge that a body steps over. GUESS: 35 up is what a character climbs without a stair animation (Dog Days' own stairs are 18 per tread)
 CAST_SIDE = 25.0                        # each of the three lines (centre, +side, -side) must be free: a body of 2 * CAST_SIDE = 50 fits along the way (the least width wanted)
 CAST_STEP = 100.0                       # long segments are cut into pieces this long, so a corner cut is seen where it is
 PB_BOX_DY = 100.0                       # kl_route.PB_DY: a path blocker's box counts this far above and below itself
@@ -907,11 +952,16 @@ def cast_way(C, mesh, pts):
                 if ii is None or dd > SHIFT_EDGE:
                     ok = False
         if ok:
+            # the floor under the two ends at this offset (STEP_UP / STEP_DOWN: see there); the lines run from floor to floor
+            g0, g1 = [C.ray((q[0] + px * d, q[1] + STEP_UP, q[2] + pz * d), (0.0, -(STEP_UP + STEP_DOWN), 0.0), CAST_MASK) for q in (p0, p1)]
+            n[0] += 2
+            y0 = g0['hit'][1] if g0 else p0[1]
+            y1 = g1['hit'][1] if g1 else p1[1]
             for lat in (0.0, CAST_SIDE, -CAST_SIDE):
                 for h in CAST_HEIGHTS:
-                    o = (p0[0] + px * (d + lat), p0[1] + h, p0[2] + pz * (d + lat))
+                    o = (p0[0] + px * (d + lat), y0 + h, p0[2] + pz * (d + lat))
                     n[0] += 1
-                    r = C.ray(o, (p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]), CAST_MASK)
+                    r = C.ray(o, (p1[0] - p0[0], y1 - y0, p1[2] - p0[2]), CAST_MASK)
                     if r is not None:
                         ok = False
                         objs.append((r['name'], r['ref']))
@@ -1094,6 +1144,8 @@ def check(folder, log=print, problems=None):
         return mesh.part[i] if i is not None and d <= 60.0 else None
     # ---- the street props out of the van's way
     refs = {e.ref: e for e in ents}
+    for x in clear_proof(sc, ents, lambda i, e: pos[e]):
+        fail(x)
     miss = sorted(CLEAR_REFS - set(refs))
     if miss:
         fail('the street props to clear: REF %s are not in the level' % miss)
