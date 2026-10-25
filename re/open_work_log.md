@@ -1,3 +1,8 @@
+2026-10-25 ~16:30 - HOOK READS (wf_83226a31-7ef, read-only): no code regression. The good night's 1300-1500 reads / 0.65 ms were TEST (klauto) runs without the owner modules;
+the owner SHIP run at 00:41 (DM05A) already read 2187 / 0.98 ms. reads/frame = A + B/fps, so the fps fall inflates it (reads/s ~240-360k then and now): compare per second.
+Standing cost: kladren/klbotdown/klcardown/klcdying/klshield each take a ~62-read klb_read snapshot (~310/frame, sharing one saves ~250). The fps drop 185 -> 103 is the open question;
+next live A/B: DM01 current ini vs Enable=0 for Dying/Shield/CarDown/BotDown/Adrenaline, plus the old-DM01-zip A/B.
+
 2026-10-25 ~16:15 - GRENADE: step 1 is DEAD (verified wvnb1pun0: nothing in kl2.exe reads [P+0x818] bit 0x800; DM's player throw 0x5f4c10 was dropped; 0x898a50/0x432440 are
 ZFFActor methods, never call them on the player). Step 1b [Grenade] Probe=2 (c578ad428, e8 installed SHIP 76879729) logs the player ZFFActionThrow inputs ([P+0xa1c] must be a pointer,
 word [P+0x239c]); owner to press G with a grenade on DM01. CAMERA/STUTTER (wq90ehimo): the good night (log 00:41-06:00) ran [CamSmooth] Dry=0; my Dry=1 felt worse -> Dry=0 again; real cause
