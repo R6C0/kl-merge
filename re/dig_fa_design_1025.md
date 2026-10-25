@@ -257,3 +257,36 @@ GO / NO-GO
   2. `python kl_maps.py one C:/kl_build_1024/dig_research_1025a/gate1 F07 M07_A --campaign --heroes` (write only into scratch; the CLI takes out first).
   3. `python verify_levels.py`-style check for the new level (must report `problems: 0`), `python ../debug/check.py` on the output, then the chunk-table line from `kl_impact` (expected about 50 to 54k of 69,632).
   4. Only then (owner approval, F01 test slot or the new F06 page-3 slot) `kl_autotest.py`. Nothing here installs or launches anything.
+
+## 13. Fix 1025b (2026-10-25): verifier defects, new stage C:/kl_build_1024/dig_build_1025b (1025a untouched)
+
+STAGED, rehearsed on a scratch folder, NOT installed, NOT run in the game. F06_Main.zip 3c7636d3 (1025a: b642e7c5), PC_Def.str b6346345 (unchanged).
+The checks below are now in `kl_dig_layer.check()` (bound_boxes, way_proof, seen_from) and run on every build; they FAIL the 1025a tables
+(21 police points, 2 TEAM_MERC on the island) and pass the new ones.
+
+**Box convention.** ZBoxPrimitive half extents `[8:11]` are the box's own (x, y, z); with the identity rotation of every LevelBound box they are world
+x, y, z. The verifier's "transposed" reading (x and z swapped) was NOT adopted: it would put the campaign's own trench route (x -2660) inside Warn01/Warn02.
+The new points are nevertheless clear of both readings. Built boxes (world lo..hi): Truckland Bound [-6050,-955,-3291]..[1220,-373,-2791], Warn02 [-6040,-986,-2845]..[1202,-387,-2394],
+Warn01 [-6342,-939,-2456]..[1113,-360,-1911]; EscapeArea Bound/Warn01/Warn02 at z 7222..8789 (not near any spawn). F07's 18 alley bounds are parked at y -60000.
+
+**1. Police respawn.** AFTER_DEATH / UCC_POLICE / TEAM_POLICE / BODIES were at z -3300 / -1100 and reached the start only across the Truckland Bound/Warn02 strip
+(old way passed (-3016,-664,-2668) and (-429,-664,-3158)). Now AFTER_DEATH = x -2000..-1250 (step 125), z -900; BODIES = x -2000..-1104, z -1100; both on the big
+south car-park polygon 546 (main part 1), y snapped by `snap_in`. The two SpawnCam_*_Police cameras moved to (-900,-350,-1500) looking at (-1625,-690,-1000).
+PROOF (check()): 21 police spawn points, each a Mesh.way (portals >= 100 wide) to START polygon 102, sampled every 25 with 120 y slack: none inside any Bound/Warn box; longest way 55 m.
+kl_route walk + mesh_way from all 15 AFTER_DEATH/BODIES places (all plugs shut): walk free, 39..44 m; AI way 55 m; 0 collision hits, 0 blockers, parts (1, 1).
+
+**2. Sight.** Exact hvk_ray casts (masks 0x10, 0x20, 0x28; eye = row y + 160; targets y + 120 and + 175) from all 22 START / TEAM_MERC / TRAITOR / UCC_TRAITOR rows
+(stage B/C/D rows excluded: their men wake with the stage). 1025a reproduction: RunForDumpster men seen by 8 rows at 18.3 / 21.1 m, LeftParking man 1 by 1 row at 17.3 m,
+ExitStreet_Left man 1 by 4 rows at 27.9 m. Moves (all still on nav part 1, all asleep until their wave): RunForDumpster EXTRA man 2 centre -> (-300, 5050); LeftParking -> (-3400, 4450);
+ExitStreet_Left -> centre (-4450, 4500), points (-4450, 4350)/(-4450, 4650), (-3957, 4157)/(-3996, 4511), goal (-3982, 4139). Result: 21 policemen / dogs tested, 0 in sight, 0 inside a bound box.
+
+**3. Hero island.** `snap_in(..., part=None)` called `mesh.nearest(dy=1e9)` with no part, so TEAM_MERC (-2600, 3000/3080) snapped onto island polygon 95 (part 5, 2 polygons).
+It now defaults to the main part (`MAIN_POLY = 102`) and TEAM_MERC sit in columns x -2500..-2260, z 3000/3080. check() fails any spawn point or man not on the main part: 0 found.
+
+**4. Barricade plug PRE_01 (-2660,-655,-70).** Measured, not changed: with PRE_01 and PRE_03 shut the walk from the car park to the start is free (47 m, via x -1850) and the AI way is 62..73 m
+via x -3448/-3390 with no hit or blocker; the plug's AABB is x -3292..-2093 and lies on the campaign's trench route only, not on the car-park way. It is therefore neither in the blast nor removed
+(the blast stays at the north barricade (-2660,-560,1440)). The walk and way tests above run with all plugs shut.
+
+**Post-pass (all on 1025b f1/f2).** check_passes 6 PASS; klt_audit DM07 pools 12, miss 0, nosn 0; fedbody PASS (44438 chunks, AkItem 31); bots.txt PASS (7 bots); debug/check.py 0 records with an unknown layout;
+`kl_maps.py audit` FAIL 1 finding "kl_snd.verify: stock bytes below the first type table changed" is IDENTICAL in 1025a (the gun-sound bank step), nothing new.
+Also: the DM07 spec in kl_dm_overhaul_1025.SPECS (commit 133d2e843) had been dropped by a later overhaul commit; restored. Rehearsal: dry run, install 37 files, md5, idempotent, undo, changed-file skip/keep, wrong PC_Def base refusal: ok.

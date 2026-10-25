@@ -66,14 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 ~08:30 - DIG FIX 1025b STAGED (verifier defects), NOT installed: C:/kl_build_1024/dig_build_1025b/install, F06_Main.zip 3c7636d3 (1025a b642e7c5 untouched), PC_Def.str b6346345 same.
+Police respawn moved inside the Truckland bounds (car park, polygon 546); 21 mesh ways to START proven clear of every Bound/Warn box; 4 men moved out of START sight (exact rays: 0 seen);
+TEAM_MERC off the Hero island (snap_in part); PRE_01 plug measured, left as is. check() now proves all of it. Spec: re/dig_fa_design_1025.md section 13.
+
 2026-10-25 ~02:05 - MEMORY: 0x8e5bbd / 0x6d2107 / K48C nvd3dum+0x170a69 are all the 32-bit ADDRESS SPACE running out on DM05A (free VA 1728 MB
 before load -> 17 MB, largest piece 0.1 MB, ~2 min into round 1; commit is fine). klmem SmallRescue (1e33ab285) serves kl2's small refusals but
 the driver dies anyway. k48d 8997a0ec1 logs who holds the space; A/B ReShade on/off running. Page II buy still unproven (K48C double toggle, fixed).
 Grenade step 1 staged (C:/kl_build_1024/grenade_1025a); safer F01 AKM staged (pd2gun_1025b); both NOT installed. Re-run kl_fedoutfit_stage.py after any .prm change.
-
-2026-10-25 - DIG (M07_A on F07 -> DM07, slot F06, page 3) STAGED, rehearsed on scratch, NOT installed: C:/kl_build_1024/dig_build_1025a/install (tool tools/kl_dig_stage_1025.py;
-F06_Main.zip b642e7c5, 166.9 MB; PC_Def.str 303333126c18 -> b6346345 optional). 28 actors, 17 squads, 44,438 chunks. Menu entry still needs kl_expansion install; hook EngineMaps needs a rebuild.
-Unproven: barricade break, dog/extra squads wake, van on east terrace, 6 cover boxes (not 12), no wardrobe/small talk/dump truck. Spec: re/dig_fa_design_1025.md.
 
 2026-10-25 ~02:40 - INSTALLED batch (owner grant), NOT yet proven live (e8 runs them): DM01B overhaul+vans b68d255f, DM02 dog+vans b0252fde,
 DM05A lc5 SAFE (CRASHED K47A 0x8e5bbd: private game heap full, 11 KB HeapAlloc NULL at 0x7bb336; UNDONE -> d5f8522b), stock F01 PD2 AKM (CRASHED K47B 0x6d2107 null sound Lock after the bank merge; UNDONE -> stock 644fe120), DM01 dm01fb fix2+vans 4d520614, DM06B park2+vans

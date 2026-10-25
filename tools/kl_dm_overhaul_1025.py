@@ -121,6 +121,16 @@ SPECS = {
         fuel=[(4300.0, -6300.0, 160.0), (-2000.0, 6500.0, 0.0), (-1000.0, 9500.0, 0.0)], fuel_ground=True, ground_up=70.0,   # mesh -40 vs collision 0 on the lobby/street: window -110..+70
         cars=None,
     ),
+    # ---- DM07 The Dig (F06 slot, page 3), 2026-10-25: the Gravel Pit M07_A on F07's systems (tools/kl_dig_layer.py, re/dig_fa_design_1025.md).
+    # Restored 1025b (the spec of 133d2e843 had been dropped by a later overhaul commit). An open pit: no kick doors; cans on the nav wall edges near the crew's
+    # start, the mid pit and the plateau foot (GUESS: a nav wall edge is a container / pipe / cabin wall); fuel cans in the first two fights. NO cars / SWAT.
+    'DM07': dict(
+        slot='F06', file='F06_Main.zip', title='The Dig', tag='.before-1025dig',
+        doors=[],
+        ext=[(-2300.0, 4000.0, -463.0), (-3900.0, 2600.0, -482.0), (-1000.0, 5600.0, -182.0), (-700.0, 2700.0, -482.0)],
+        fuel=[(-1300.0, 2500.0, -482.0), (-4100.0, 3300.0, -470.0)],
+        cars=None,
+    ),
 }
 
 

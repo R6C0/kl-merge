@@ -59,10 +59,16 @@ FACE_NORTH = FLAT
 WEST, SOUTH = (-1.0, 0.0), (0.0, 1.0)
 
 
-def snap_in(mesh, x, z, margin=30.0, far=300.0):
+MAIN_POLY = 102                         # a polygon of the main navigation part (the START rows' polygon; part 1, 520 polygons; the Hero island is 2 polygons)
+
+
+def snap_in(mesh, x, z, margin=30.0, far=300.0, part=None):
     """(x, y, z) ON the navigation mesh nearest to (x, z): the point itself when inside a polygon, else moved towards the nearest polygon's middle
-    until it is inside by `margin`. -> (point, how far it was moved). A move over `far` is an error (a table that missed the map)."""
-    d, i = mesh.nearest(float(x), 0.0, float(z), dy=1e9)
+    until it is inside by `margin`. -> (point, how far it was moved). A move over `far` is an error (a table that missed the map).
+    fix 1025b: ONLY polygons of the main part (`part`, default the part of MAIN_POLY) count: before, a point near the 2-polygon Hero island
+    (TEAM_MERC) was snapped onto the island, which no way leads to."""
+    part = mesh.part[MAIN_POLY] if part is None else part
+    d, i = mesh.nearest(float(x), 0.0, float(z), dy=1e9, part=part)
     if i is None:
         raise ValueError('kl_dig_layer: no navigation polygon near (%d, %d)' % (x, z))
     if mesh.inside(i, float(x), float(z)):
@@ -89,13 +95,19 @@ PIT_Y = -463.0                          # the mesh's height at the campaign's st
 START = [(float(x), PIT_Y, float(z)) for z in (2940.0, 3060.0) for x in (-2420, -2340, -2260, -2180)]
 # TRAITOR: four beside, 3 m north-west (polygon 103)
 TRAITOR = [(float(x), -435.0, 3300.0) for x in (-2900, -2820, -2740, -2660)]
-TEAM_MERC = [(float(x), PIT_Y, float(z)) for z in (3000.0, 3080.0) for x in (-2600, -2520, -2440, -2360)]
+# fix 1025b: the old x -2600 / -2520 .. were two columns west of the START rows; (-2600, 3000) and (-2600, 3080) lay on the 2-polygon Hero island
+# (part 5, x -2694 .. -2629) and snapped onto it. Now four columns on polygon 102, 80 apart, all 55 or more inside its west edge (x -2555)
+TEAM_MERC = [(float(x), PIT_Y, float(z)) for z in (3000.0, 3080.0) for x in (-2500, -2420, -2340, -2260)]
 STAGE_B = [(-2650.0 + dx, -564.0, 1100.0 + dz) for dx, dz in ((0, 0), (80, 0), (0, 80), (80, 80))]       # the trench, past the pit
 STAGE_C = [(-1000.0 + dx, -182.0, 5600.0 + dz) for dx, dz in ((0, 0), (80, 0), (0, 80), (80, 80))]       # the mid pit
 STAGE_D = [(1500.0 + dx, 50.0, 1800.0 + dz) for dx, dz in ((0, 0), (80, 0), (0, 80), (80, 80))]          # the terrace
-# the police who come back after a death: the north car park, a row 150 apart (mesh y -664). GUESS
-AFTER_DEATH = [(float(x), -664.0, -3300.0) for x in (-1500, -1350, -1200, -1050, -900, -750, -600)]
-BODIES = [(float(x), -664.0, -3420.0) for x in (-1500, -1350, -1200, -1050, -900, -750, -600, -450)]
+# the police who come back after a death. fix 1025b: they stood at z -3300 / -3420, NORTH of LevelBound_Truckland's Bound box (world z -3291 .. -2791),
+# so the only way to the crew crossed the kill box. Now the car park's south part, polygon 546 (z -1270 .. 69, y about -700), 4000 .. 4400 from the START
+# rows, south of every Truckland box (Warn01 ends at z -1911) and EAST of x -2165 (so also clear of the transposed reading of the boxes' half extents,
+# which would put a wall at x -2665 .. -2165). Two rows, 125 apart. GUESS: the place; MEASURED (check()): on part 1, a mesh way to polygon 102 that never
+# enters a Bound / Warn box, and a free walk.
+AFTER_DEATH = [(float(x), -700.0, -900.0) for x in (-2000, -1875, -1750, -1625, -1500, -1375, -1250)]
+BODIES = [(float(x), -700.0, -1100.0) for x in (-2000, -1872, -1744, -1616, -1488, -1360, -1232, -1104)]
 
 
 def _spawn():
@@ -161,10 +173,10 @@ PLACE_FIXED = {
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_020_C!CameraLookAt_020_C': ((-1000.0, -180.0, 5600.0), None, None, 'GUESS'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_030_D!Camera_030_D': ((300.0, 450.0, 3200.0), None, None, 'GUESS: over the terrace'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_030_D!CameraLookAt_030_D': ((1500.0, 50.0, 1800.0), None, None, 'GUESS'),
-    'FASpecials!SpawnPoint!TeamMode!SpawnCam_100_Police!Camera_000_Police': ((-1800.0, -300.0, -2400.0), None, None, 'GUESS: the north car park'),
-    'FASpecials!SpawnPoint!TeamMode!SpawnCam_100_Police!CameraLookAt_000_Police': ((-1200.0, -660.0, -3300.0), None, None, 'GUESS'),
-    'FASpecials!SpawnPoint!SpawnCam_000_Police_FA!Camera_000_Police_FA': ((-1800.0, -300.0, -2400.0), None, None, 'GUESS'),
-    'FASpecials!SpawnPoint!SpawnCam_000_Police_FA!CameraLookAt_000_Police_FA': ((-1200.0, -660.0, -3300.0), None, None, 'GUESS'),
+    'FASpecials!SpawnPoint!TeamMode!SpawnCam_100_Police!Camera_000_Police': ((-900.0, -350.0, -1500.0), None, None, 'GUESS: over the car park, looking at the police rows'),
+    'FASpecials!SpawnPoint!TeamMode!SpawnCam_100_Police!CameraLookAt_000_Police': ((-1625.0, -690.0, -1000.0), None, None, 'GUESS'),
+    'FASpecials!SpawnPoint!SpawnCam_000_Police_FA!Camera_000_Police_FA': ((-900.0, -350.0, -1500.0), None, None, 'GUESS'),
+    'FASpecials!SpawnPoint!SpawnCam_000_Police_FA!CameraLookAt_000_Police_FA': ((-1625.0, -690.0, -1000.0), None, None, 'GUESS'),
     # team mode: the respawn stage moves when a criminal passes these (GUESS: the trench, the mid pit, the terrace)
     'FASpecials!SpawnPoint!TeamMode!SpawnpointTrigger_010_B': (STAGE_B[0], None, (250, 150, 250), 'GUESS: the trench'),
     'FASpecials!SpawnPoint!TeamMode!SpawnpointTrigger_020_C': (STAGE_C[0], None, (300, 150, 250), 'GUESS: the mid pit'),
@@ -233,7 +245,9 @@ CIVILIANS = 0                            # none (the stock FA civilians are a po
 G30 = 'Gameplay!030_AfterLoot!'
 WAVES = collections.OrderedDict([
     (G30 + '030_FinancialAlleyExit_Left', ((-2700, 300), [(-2900, 439), (-2863, 18), (-2900, 260)], [(-2700, 1750), (-2600, 1800), (-2800, 1800)], (-2650, 1750))),
-    (G30 + '030_FinancialAlleyExitStreet_Left', ((-5000, 4150), [(-5000, 4000), (-5000, 4300)], [(-3957, 4157), (-3996, 4511)], (-3982, 4139))),
+    # fix 1025b: the men were at (-5000, 4000) / (-5000, 4300), (-5000, 4000) in sight of the START rows (28 m); now 450 / 500 further east and
+    # south in the west lane, out of sight of every START / TEAM_MERC / TRAITOR row (kl_dig_layer.sight_report: exact rays, eye 160, target 120 and 175)
+    (G30 + '030_FinancialAlleyExitStreet_Left', ((-4450, 4500), [(-4450, 4350), (-4450, 4650)], [(-3957, 4157), (-3996, 4511)], (-3982, 4139))),
     (G30 + '030_FinancialAlleyExit_Right', ((1500, 10500), [(1500, 10500), (1600, 10400), (1700, 10300)], [(200, 9800), (300, 9700), (400, 9600)], (300, 9800))),
     (G30 + '030_FinancialAlleyExitStreet_Right', ((1300, 400), [(1300, 300), (1300, 500)], [(1500, 1300), (1500, 1500)], (1450, 1400)))])
 WAVE_NAMES = tuple(WAVES)
@@ -243,8 +257,10 @@ WAVE_NAMES = tuple(WAVES)
 G20 = 'Gameplay!020_Loot!'
 EXTRA = collections.OrderedDict([
     (G20 + '020_FinancialAlley_LeftFurther', (1, (-2950, 800), 260)),         # wave 1: the trench behind the barricade, west of the dog
-    (G20 + '020_FinancialAlley_RunForDumpster', (2, (-1500, 4900), 300)),     # wave 2: the mid pit's north rim
-    (G20 + '020_FinancialAlley_LeftParking', (2, (-3600, 4050), 300)),        # wave 2: the west lane
+    # fix 1025b: RunForDumpster's men stood at (-1500, 4750 / 5050) and LeftParking's first at (-3561, 4240), 17 .. 21 m from the START rows and in their
+    # line of sight while asleep. Now the nearest centres whose men are out of sight of every START / TEAM_MERC / TRAITOR row (kl_dig_layer.sight_report)
+    (G20 + '020_FinancialAlley_RunForDumpster', (2, (-300, 5050), 300)),      # wave 2: the mid pit's east rim (behind the rim from the pit)
+    (G20 + '020_FinancialAlley_LeftParking', (2, (-3400, 4450), 300)),        # wave 2: the west lane
     (G20 + '020_FinancialAlley_RightPlatform', (3, (250, 9750), 350)),        # wave 3: the east plateau
     (G20 + '020_FinancialAlley_RightGround', (4, (1650, 700), 250))])         # wave 4: the terrace, north of the van
 EXTRA_PLACED = {}                       # name -> [(kind, [points])], filled by place_extra for the check
@@ -775,6 +791,64 @@ def van_check(folder, log=print, plan=None):
     return rep, L, rep['faults']
 
 
+def bound_boxes(sc, ents):
+    """[(name, lo, hi)] world boxes of every LevelBound controller and the boxes it names (Bound, Warn01, Warn02): half extents read as the
+    box's own x, y, z (rotated into the world by BK.world_of). Parked boxes (y under -50000, F07's alley bounds) are left out. (fix 1025b)"""
+    out = []
+    for k, _i, v in kl_fa.controllers(sc, 'LevelBound'):
+        for j in [k] + [j for lst in v[0:2] for s in lst for j in sc.resolve(s)]:
+            T, Rm = BK.world_of(ents[j - 1])
+            h = kl_fa.node_values(sc, j)[8:11]
+            ext = [sum(abs(Rm[a][b]) * hh for b, hh in enumerate(h)) for a in range(3)]
+            if T[1] < -50000.0:
+                continue
+            out.append((sc.names[j], [T[a] - ext[a] for a in range(3)], [T[a] + ext[a] for a in range(3)]))
+    return out
+
+
+def in_plan_box(p, lo, hi, slack_y=120.0):
+    return lo[0] <= p[0] <= hi[0] and lo[2] <= p[2] <= hi[2] and lo[1] - slack_y <= p[1] <= hi[1] + slack_y
+
+
+def way_proof(mesh, p, boxes, goal=None):
+    """Mesh.way (the AI's line, no shared edge under PORTAL wide) from the polygon under p to `goal` (default MAIN_POLY), sampled every 25
+    -> (ok, why, length): ok when it exists, p is on the main part, and no sample stands in a box (plan test, 120 slack in y)."""
+    goal = MAIN_POLY if goal is None else goal
+    d, i = mesh.nearest(p[0], p[1], p[2], dy=300.0, part=mesh.part[MAIN_POLY])
+    if i is None or d > 60.0:
+        return False, 'not on the main part (%s from it)' % d, 0.0
+    w = mesh.way(i, goal)
+    if w is None:
+        return False, 'no mesh way from polygon %d to %d' % (i, goal), 0.0
+    pts = [tuple(q) for q in w[0]]
+    length = 0.0
+    for a, b in zip(pts, pts[1:]):
+        n = max(1, int(math.dist(a, b) / 25.0))
+        length += math.dist(a, b)
+        for t in range(n + 1):
+            q = tuple(a[c] + (b[c] - a[c]) * t / n for c in range(3))
+            for name, lo, hi in boxes:
+                if in_plan_box(q, lo, hi):
+                    return False, 'the way passes (%d, %d, %d) inside %s' % (q[0], q[1], q[2], name), length
+    return True, '', length
+
+
+SIGHT_MASKS = (0x10, 0x20, 0x28)
+
+
+def seen_from(C, rows, p):
+    """(row, mask) of the first row (eye 160 over its feet) with a FREE exact cast (hvk_ray) to the man at p (target 120 / 175 over his feet) under any
+    of SIGHT_MASKS, else None."""
+    for s in rows:
+        e = (s[0], s[1] + 160.0, s[2])
+        for dy in (120.0, 175.0):
+            seg = (p[0] - e[0], p[1] + dy - e[1], p[2] - e[2])
+            for m in SIGHT_MASKS:
+                if C.ray(e, seg, m) is None:
+                    return s, m
+    return None
+
+
 def check(folder, log=print, problems=None):
     """Every check of this layer on a built (and finished) folder -> [what is wrong]."""
     import json, kl_route, kl_arms
@@ -865,6 +939,60 @@ def check(folder, log=print, problems=None):
                 continue
             if values(sc, kk[0], 'ZSquadScript')[SQUAD_ACTIVE] != (1 if SQUADS_AWAKE else 0):
                 fail('squad %s: field %d is %r' % (n, SQUAD_ACTIVE, values(sc, kk[0], 'ZSquadScript')[SQUAD_ACTIVE]))
+    # ---- fix 1025b: level bounds, the police's way, the Hero island, sight
+    boxes = bound_boxes(sc, ents)
+    log('  level bounds: %d boxes' % len(boxes))
+    mainp = mesh.part[MAIN_POLY]
+    def part_of(p):
+        h = mesh.on(*p)
+        if h is not None:
+            return mesh.part[h[0]]
+        d, i = mesh.nearest(*p)
+        return mesh.part[i] if i is not None and d <= 60.0 else None
+    nway, longest = 0, 0.0
+    for t in sc.tops():
+        if sc.cls(t) != 'ZSpawnPoint':
+            continue
+        kind = kl_fa.node_values(sc, t)[8]
+        p = pos[ents[t - 1]]
+        if part_of(p) != mainp:
+            fail('spawn point %s (%s) at (%d, %d, %d) is not on the main mesh part (Hero island or off the mesh)' % (sc.names[t], kind[-12:], *p))
+        for name, lo, hi in boxes:
+            if in_plan_box((p[0], p[1] + 50.0, p[2]), lo, hi, 0.0):
+                fail('spawn point %s (%s) at (%d, %d, %d) stands inside %s' % (sc.names[t], kind[-12:], *p, name))
+        if 'AFTER_DEATH' in kind or 'POLICE' in kind or 'BODIES' in kind:
+            ok, why, ln = way_proof(mesh, p, boxes)
+            nway += 1
+            longest = max(longest, ln)
+            if not ok:
+                fail('police spawn point %s (%s) at (%d, %d, %d): %s' % (sc.names[t], kind[-12:], *p, why))
+    log('  police spawn points: %d mesh ways to polygon %d, none enters a bound or warn box (longest %d)' % (nway, MAIN_POLY, longest))
+    rows = [pos[ents[t - 1]] for t in sc.tops() if sc.cls(t) == 'ZSpawnPoint' and kl_fa.node_values(sc, t)[8].endswith(('_START', 'TEAM_MERC', '_TRAITOR'))]      # the crew's first places (not stage B / C / D, whose men wake with their stage)
+    C = None
+    try:
+        sp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'third_party', 'anp', 'scripts')
+        if sp not in sys.path:
+            sys.path.insert(0, sp)
+        import hvk_ray
+        C = hvk_ray.Collision(arch)
+    except Exception as e:
+        fail('sight test: cannot load hvk_ray / collision (%s)' % e)
+    nseen = ntest = 0
+    for k in men:
+        if 'merc_bot_squad' in sc.path[k]:
+            continue
+        p = pos[ents[sc.parent[k] - 1]]
+        ntest += 1
+        for name, lo, hi in boxes:
+            if in_plan_box((p[0], p[1] + 50.0, p[2]), lo, hi, 0.0):
+                fail('man %s at (%d, %d, %d) stands inside %s' % (sc.path[k], *p, name))
+        if part_of(p) != mainp:
+            fail('man %s at (%d, %d, %d) is not on the main mesh part' % (sc.path[k], *p))
+        sn = seen_from(C, rows, p) if C else None
+        if sn:
+            nseen += 1
+            fail('man %s at (%d, %d, %d) is in sight of the spawn row (%d, %d, %d), mask %#x, %.1f m' % (sc.path[k][-40:], *p, *sn[0], sn[1], math.dist(sn[0], p) / 100))
+    log('  sight: %d policemen / dogs from %d START / TEAM_MERC / TRAITOR places, exact casts masks %s: %d in sight' % (ntest, len(rows), '/'.join('%#x' % m for m in SIGHT_MASKS), nseen))
     # ---- the exit and the van
     ex = [(k, v) for k, _i, v in kl_fa.controllers(sc, kl_fa.EXIT)]
     if len(ex) != 1 or ex[0][1][2] != van_path():
