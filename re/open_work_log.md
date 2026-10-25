@@ -1,3 +1,8 @@
+2026-10-25 ~17:58 - STUTTER vs LAST NIGHT + MAP SET (3f): owner sessions per minute of frames over 33 ms: 10-24 17:35 = 11, 19:21 = 6.5; today 14:56-17:39 = 53-128.
+Today 70-80% of hitch-probe reports stand in NtUserPeekMessage (win32u+0x101c; ReShade32+0x5ff67 + gameoverlayrenderer on the stack) vs 18/32 at 17:35. 10-24 17:35 had NO medal-hook32
+loaded (19:21 did); Medal + MedalEncoder were restarted 15:15 today. INSTALLED hook out_mapset_1025a SHIP 2FF289F3 (on FA8A38A5, .before-1025mapset; ini untouched, Trace=1):
+Peek 'by result' line, [Input] MouseMoveMs, [Expansion] OnlineSet/KeepPageOnline (d2f92b656), [Grenade] Spawn TEST-only; all default off. Next: owner round with Medal quit; then MouseMoveMs=16.
+
 2026-10-25 ~17:45 - HEISTER DOOR KICKS INSTALLED (owner option A; tools/kl_bots_kick_1025.py, wf wpcwu2uyp + my rebase/byte check): DM01 3858b441 (e8 AKM sound) -> fbffea91
 (30 kick nodes, Door_1/2, 25 NEXT redirected), DM02 b0252fde -> 7ebc7e46 (60 nodes, doors 1,2,3,5, 81 redirected). DM03A/DM01B: no heister leg crosses a doorway, unchanged.
 Members .prp .gms .buf .oct .prm (.prm only .oct record numbers at +0x1c, as kl_fa_bots.apply); bot checks identical to the input; entries stale 0. No arming needed (ctor sets state 1).
