@@ -196,16 +196,16 @@ def _spawn():
 
 # ------------------------------------------------------------------ the loot: 8 briefcases (where the case's underside lies, degrees, value, what)
 # MEASURED: the doc's places (props of the flats) lie on the main part (moved 0), y = the collision floor there (kl_map_escape.Ground.under, gen3.py).
-# GUESS: every turn and value (the tower 100,000 x 2, the 3rd floor 100,000, the flats 150,000 x 5 = 1.05 million).
+# GUESS: every turn. Values: the owner's 4,000,000 rule, 8 stacks x 500,000 (was 1.05 million).
 LOOT = [((x, y, z), yaw, value, what) for (x, y, z), yaw, value, what in [
-    ((11394.0, 402.6, 150.0), 20.0, 100000, 'tower: the old TV'),
-    ((10964.0, 1202.6, 223.0), -35.0, 100000, 'tower: the monitor'),
-    ((12295.0, 1602.6, 1566.0), 80.0, 100000, 'flats: the corridor TV'),
-    ((10938.0, 1600.8, 2410.0), 5.0, 150000, 'flats: the vase'),
-    ((10652.0, 1600.0, 2393.0), 60.0, 150000, 'flats: the shop bag'),
-    ((10863.0, 1600.0, 2322.0), -20.0, 150000, 'flats: the shelf'),
-    ((12547.0, 1600.0, 3108.0), 100.0, 150000, 'flats: the TV drawers'),
-    ((13059.0, 1600.0, 3287.0), 0.0, 150000, 'flats: the cabinet')]]
+    ((11394.0, 402.6, 150.0), 20.0, 500000, 'tower: the old TV'),
+    ((10964.0, 1202.6, 223.0), -35.0, 500000, 'tower: the monitor'),
+    ((12295.0, 1602.6, 1566.0), 80.0, 500000, 'flats: the corridor TV'),
+    ((10938.0, 1600.8, 2410.0), 5.0, 500000, 'flats: the vase'),
+    ((10652.0, 1600.0, 2393.0), 60.0, 500000, 'flats: the shop bag'),
+    ((10863.0, 1600.0, 2322.0), -20.0, 500000, 'flats: the shelf'),
+    ((12547.0, 1600.0, 3108.0), 100.0, 500000, 'flats: the TV drawers'),
+    ((13059.0, 1600.0, 3287.0), 0.0, 500000, 'flats: the cabinet')]]
 LOOT_CLEAR = 400.0                      # every case at least this far from every START point (pickup reach is LOOT_REACH + 40)
 LOOT_REACH = 125.0                      # TriggerBox2 radius
 CASE = 'dm'                             # the prop: Dead Men's Fragile Alliance briefcase (kl_fa_loot.CASES); None = F07's bags
