@@ -130,7 +130,7 @@ static void klgrenade_tick(int game_thread)
         if (klgr.thr) {
             if (down) klgr_hold(p, now, edge);
             if (edge && klgr.holding == 1 && klgr.presses <= klgr.logn) klgr.watch_until = now + 3000;   /* change lines only for logged throws */
-            else if (klgr.was && klgr.holding) {
+            else if (!down && klgr.was && klgr.holding) {                   /* the release only: while held this ran on tick 2 and ended the hold */
                 if (klgr.presses <= klgr.logn) { klgr_dump(p, "release"); klgr.after_at = now + 1500; klgr.after_p = p; }
                 klgr.holding = 0;
             }
