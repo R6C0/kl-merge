@@ -66,7 +66,12 @@ M03_OUT = 'Locations/M03_FA_A/M03FAA_Locations.zip\\Locations/M03_FA_A/M03FAA_LO
 # model is 403.5 high and stands on y 0 (.prm bounds, .HVK box 0..404); the yard's asphalt is at
 # y 200 (.HVK). Sunk by 203.5 its top is the yard's floor. GUESS: one piece is enough and this one
 # is the best (a dumpster stands behind its east third, x -1454..-1200; the other 5.5 m are free).
-OPEN = {'M03_FA_A': [(M03_OUT + 'SO0101_M03_Wall_Low_8m_05', -203.5)]}
+# 1025dig2 (The Dig, DM07): Pillar_F_08 / _05 sunk by a GUESSED 120. Round-2 MEASUREMENT (G.hits, kl_map_escape.Ground on the BUILT level): Pillar_F_08 has 8 collision
+# triangles x -4641..-4544, y 392..486, z 8386..10636, a slab across the van lane (z 10400, road y ~400); lane() faults 'only 660 of clear lane' without the sink and has none with
+# it (top 366 < road). (The bare graft shows 0 triangles: the pillar's collision only appears in the built .HVK.) An earlier note here said the sink was dead weight: wrong.
+M07_OUT = 'Locations/M07_A/M07A_Locations.zip\\Locations/M07_A/M07A_LOC_Outside.zip\\M07_A_Outside_01A\\'
+OPEN = {'M03_FA_A': [(M03_OUT + 'SO0101_M03_Wall_Low_8m_05', -203.5)],
+        'M07_A': [(M07_OUT + 'SO0100_M07_Pillar_F_08', -120.0), (M07_OUT + 'SO0100_M07_Pillar_F_05', -120.0)]}
 REACH = 125.0                   # TriggerBox2 radius of all 117 stock money containers (F01, F03, F08)
 BOARD_FAR = 1000.0              # board_box: a boarding action farther than this from its vehicle's stop is misplaced
                                 # (right ones: 288, 305, 364; M02_FA_A's: 9,534). The box is 800 x 600.

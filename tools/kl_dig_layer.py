@@ -12,11 +12,12 @@ THE ROUND
        wave 1  at the blast      from the north trench, through the broken barricade
        wave 2  crew in mid pit   from the west lane
        wave 3  crew on the south plateau (+ the alarm: the van, the action music)   from the east plateau
-       wave 4  the van's alarm + 8 s     on the terrace in front of the escape van
+       wave 4  the van's alarm + 8 s     on the plateau, north of the van's lane (1025dig2; was the east terrace)
      The campaign's own squads, vans and roads are dropped by the campaign pre-pass; no vehicle delivers a wave (DEVIATION from the design).
-  4. Loot: 11 briefcases at pipes, containers, the excavator on the pit floor, the mid pit and the south plateau (about 1.85 million).
-  5. Escape: a van on the EAST TERRACE road (x 2450, z -300 .. 6600; kl_map_escape plan with no fault). DEVIATION from the design
-     (the ramp-top escape): the plateau roads all cross collision; the terrace is the only straight 2.5 km road.
+  4. Loot: 11 briefcases at pipes, containers, the excavator on the pit floor, the mid pit and the south plateau (4,000,000 in all since 1025dig2).
+  5. Escape (1025dig2): ONE way down, ONE way out. A van on the plateau's west end, one straight road along z 10400 (x -6000 .. 2400, y from the
+     collision floor), stop (-2600, 401, 10400), boarding place 337 west of it; kl_map_escape plan with no fault (lin 3400, lout 4400). The two
+     colonnade pillars are sunk 120 (kl_escape.OPEN M07_A): MEASURED on the built level, Pillar_F_08 is a collision slab x -4641..-4544, y 392..486 across the lane (lane() faults without the sink). Was: the east terrace road (x 2450), whose y 50 lay 350 under the ground.
   6. Music: the level's own PlayMusic groups (start, then V2 with its fades at the alarm) via campaign_names; ambience bed of the level.
 Every number marked GUESS is a guess; MEASURED ones come from the real files (survey scripts, see re/open_work_log.md 2026-10-25).
 Usage (from tools/):
@@ -52,6 +53,7 @@ SQUADS = collections.OrderedDict()      # the campaign's squads: none (the pre-p
 SQUADS_AWAKE = False
 
 # the campaign pre-pass keeps M07_A's Truckland bound (the only thing that closes the pit's far end); nothing else of the level is dropped here
+# 1025dig2: nothing is dropped for the van's lane (z 10400): MEASURED round 2, lane() is clear once kl_escape.OPEN sinks Pillar_F_08/_05 by 120 (without: a slab at x -4600, y to 486, lin 660)
 M_DROP = ()
 
 FLAT = (0.0, -1.0)                      # facing: towards the blast (z falls to the north of the pit)
@@ -62,13 +64,14 @@ WEST, SOUTH = (-1.0, 0.0), (0.0, 1.0)
 MAIN_POLY = 102                         # a polygon of the main navigation part (the START rows' polygon; part 1, 520 polygons; the Hero island is 2 polygons)
 
 
-def snap_in(mesh, x, z, margin=30.0, far=300.0, part=None):
+def snap_in(mesh, x, z, margin=30.0, far=300.0, part=None, y=None):
     """(x, y, z) ON the navigation mesh nearest to (x, z): the point itself when inside a polygon, else moved towards the nearest polygon's middle
-    until it is inside by `margin`. -> (point, how far it was moved). A move over `far` is an error (a table that missed the map).
+    until it is inside by `margin`. y (round 2): only polygons whose middle is within 120 of y count (the pit is a bowl under the rim: without it a rim point
+    snaps down to the pit floor). -> (point, how far it was moved). A move over `far` is an error (a table that missed the map).
     fix 1025b: ONLY polygons of the main part (`part`, default the part of MAIN_POLY) count: before, a point near the 2-polygon Hero island
     (TEAM_MERC) was snapped onto the island, which no way leads to."""
     part = mesh.part[MAIN_POLY] if part is None else part
-    d, i = mesh.nearest(float(x), 0.0, float(z), dy=1e9, part=part)
+    d, i = mesh.nearest(float(x), 0.0 if y is None else float(y), float(z), dy=1e9 if y is None else 120.0, part=part)
     if i is None:
         raise ValueError('kl_dig_layer: no navigation polygon near (%d, %d)' % (x, z))
     if mesh.inside(i, float(x), float(z)):
@@ -100,7 +103,7 @@ TRAITOR = [(float(x), -435.0, 3300.0) for x in (-2900, -2820, -2740, -2660)]
 TEAM_MERC = [(float(x), PIT_Y, float(z)) for z in (3000.0, 3080.0) for x in (-2500, -2420, -2340, -2260)]
 STAGE_B = [(-2650.0 + dx, -564.0, 1100.0 + dz) for dx, dz in ((0, 0), (80, 0), (0, 80), (80, 80))]       # the trench, past the pit
 STAGE_C = [(-1000.0 + dx, -182.0, 5600.0 + dz) for dx, dz in ((0, 0), (80, 0), (0, 80), (80, 80))]       # the mid pit
-STAGE_D = [(1500.0 + dx, 50.0, 1800.0 + dz) for dx, dz in ((0, 0), (80, 0), (0, 80), (80, 80))]          # the terrace
+STAGE_D = [(-2300.0 + dx, 405.0, 9800.0 + dz) for dx, dz in ((0, 0), (80, 0), (0, 80), (80, 80))]          # 1025dig2: the plateau's west end, 600 south of the van's lane (was the east terrace). GUESS: the place
 # the police who come back after a death. fix 1025b: they stood at z -3300 / -3420, NORTH of LevelBound_Truckland's Bound box (world z -3291 .. -2791),
 # so the only way to the crew crossed the kill box. Now the car park's south part, polygon 546 (z -1270 .. 69, y about -700), 4000 .. 4400 from the START
 # rows, south of every Truckland box (Warn01 ends at z -1911) and EAST of x -2165 (so also clear of the transposed reading of the boxes' half extents,
@@ -130,19 +133,23 @@ def _spawn():
 
 # ------------------------------------------------------------------ the loot: 11 briefcases (where the case's underside lies, degrees, value, what)
 # MEASURED: places beside the props (survey1.txt) moved onto the mesh, y = the collision floor there (kl_map_escape.Ground.under).
-# GUESS: every turn and value (pit 100,000 x 4, mid pit 150,000 x 3, south plateau 250,000 x 4 = 1.85 million).
+# 1025dig2: THE TOTAL IS 4,000,000 (was 1.85 million: pit 4 x 250,000 = 1,000,000; mid pit 3 x 300,000 = 900,000; plateau 500,000 + 500,000 + 550,000 + 550,000
+# = 2,100,000). GUESS: every turn and value. The 2 plateau cases that lay over bare mud, far from any prop ((-1000, 10500): ON the van's lane; (300, 11000)), moved
+# to the concrete pipes on the plateau's north side: (-1500, 11450) 100 from ConcretePipe_21 and (-3500, 11100) 100 from ConcretePipe_19 (MEASURED with
+# kl_fa_loot.Floors.stand: reach 165, >= 100 to spare on the plateau flood from STAGE_D). Cases are the Dead Men briefcase (no yuan boxes in a gravel pit).
 LOOT = [((x, y, z), yaw, value, what) for (x, y, z), yaw, value, what in [
-    ((-697.0, -482.3, 2692.0), 20.0, 100000, 'pit: red pipes'),
-    ((-1430.0, -543.4, 1702.0), -35.0, 100000, 'pit: red pipe, the trench mouth'),
-    ((-3946.0, -482.3, 2643.0), 80.0, 100000, 'pit: pipe holders'),
-    ((-1503.0, -496.2, 2471.0), 5.0, 100000, 'pit: the open container'),
-    ((-1025.0, -276.3, 5984.0), 60.0, 150000, 'mid pit: red pipes'),
-    ((-1025.0, -327.9, 5079.0), -20.0, 150000, 'mid pit: red pipes south'),
-    ((-911.0, -189.6, 7355.0), 100.0, 150000, 'mid pit: the open container'),
-    ((596.0, 421.3, 8696.0), 0.0, 250000, 'plateau: the open container'),
-    ((-647.0, 404.0, 8903.0), 40.0, 250000, 'plateau: the excavator'),
-    ((-1000.0, 397.2, 10500.0), -70.0, 250000, 'plateau: the pipes'),
-    ((300.0, 418.6, 11000.0), 15.0, 250000, 'plateau: the containers')]]
+    ((-697.0, -482.3, 2692.0), 20.0, 250000, 'pit: red pipes'),
+    ((-1430.0, -543.4, 1702.0), -35.0, 250000, 'pit: red pipe, the trench mouth'),
+    ((-3946.0, -482.3, 2643.0), 80.0, 250000, 'pit: pipe holders'),
+    ((-1503.0, -496.2, 2471.0), 5.0, 250000, 'pit: the open container'),
+    ((-1025.0, -276.3, 5984.0), 60.0, 300000, 'mid pit: red pipes'),
+    ((-1025.0, -327.9, 5079.0), -20.0, 300000, 'mid pit: red pipes south'),
+    ((-911.0, -189.6, 7355.0), 100.0, 300000, 'mid pit: the open container'),
+    ((596.0, 421.3, 8696.0), 0.0, 500000, 'plateau: the open container'),
+    ((-647.0, 404.0, 8903.0), 40.0, 500000, 'plateau: the excavator'),
+    ((-1500.0, 397.5, 11450.0), -70.0, 550000, 'plateau: the concrete pipes east'),
+    ((-3500.0, 410.0, 11100.0), 15.0, 550000, 'plateau: the concrete pipes west')]]
+LOOT_TOTAL = 4000000                    # checked in prepare_host
 LOOT_CLEAR = 400.0                      # every case at least this far from every START point (pickup reach is LOOT_REACH + 40; e5's number)
 LOOT_REACH = 125.0                      # TriggerBox2 radius (kl_escape.REACH)
 CASE = 'dm'                             # the prop: Dead Men's Fragile Alliance briefcase (kl_fa_loot.CASES); None = F07's bags
@@ -154,25 +161,25 @@ PARKED = ['Specials!LevelBound!%s!%s' % (g, b) for g in ('020_LevelBound_AlleyRi
                                                          '040_LevelBound_AlleyLeft', '030_LevelBound_StreetRight', '030_LevelBound_StreetLeft')
           for b in ('Bound', 'Warn01', 'Warn02')]       # all 18: F07's alley bounds do not fit a pit (M07's own Truckland bound stays)
 ENTER_AT, ENTER_HALF = (-2000.0, -350.0, 2400.0), (2100.0, 300.0, 900.0)          # the pit: the bots' first stage (START, 4 loot places inside)
-EXIT_AT, EXIT_HALF = (1300.0, 150.0, 6500.0), (700.0, 150.0, 50.0)                 # a plane at the terrace's south end, after the last loot
+EXIT_AT, EXIT_HALF = (-1000.0, 405.0, 10400.0), (1800.0, 200.0, 700.0)            # 1025dig2: the plateau's west half, round the van's stop (was a plane at the terrace). GUESS
 WALK_BOX = ((-1020.0, -130.0, 5600.0), (700.0, 300.0, 700.0))                      # the mid pit (wave 2)
-FLOOR_BOX = ((-1000.0, 150.0, 8300.0), (900.0, 400.0, 300.0))                      # the south plateau's foot (wave 3, the alarm). GUESS
+FLOOR_BOX = ((-1000.0, 150.0, 8000.0), (1300.0, 400.0, 500.0))                     # the south plateau's foot (wave 3, the alarm); 1025dig2: wider and 300 further south, so the alarm comes earlier. GUESS
 BLAST_AT = (-2660.0, -560.0, 1440.0)                                              # MEASURED: SO0700_M07_Barikade_PRE_03 (the trench plug)
 PLACE_FIXED = {
     'FASpecials!POI!Trigger_POI_TheLootArea': (ENTER_AT, None, ENTER_HALF, 'GUESS: the pit (it starts the loot marker\'s timer)'),
     'FASpecials!POI!POI_TheLootArea': ((ENTER_AT[0], ENTER_AT[1] + 80, ENTER_AT[2]), None, None, 'over the pit'),
     'FASpecials!PIP!EnterLootArea': (ENTER_AT, None, ENTER_HALF, 'the pit: AI heisters\' first stage is inside this box'),
     'FASpecials!PIP!ExitLootArea': (EXIT_AT, None, EXIT_HALF, 'GUESS: a plane at the terrace\'s south end, after the last loot'),
-    'Specials!LevelSpeak!TriggerBox': ((1300.0, 150.0, 4000.0), None, (900.0, 200.0, 500.0), 'GUESS: the terrace (the crew comes onto it)'),
-    'Specials!LevelSpeak!OnlineSpeakTrigger_01': ((1300.0, 150.0, 4000.0), None, None, 'with its trigger box'),
+    'Specials!LevelSpeak!TriggerBox': ((-2400.0, 405.0, 10600.0), None, (900.0, 200.0, 500.0), 'GUESS (1025dig2): the plateau west end, by the van (the crew comes onto it)'),
+    'Specials!LevelSpeak!OnlineSpeakTrigger_01': ((-2400.0, 405.0, 10600.0), None, None, 'with its trigger box'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!Camera_000_A': ((-1500.0, -100.0, 3800.0), None, None, 'GUESS: over the pit'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_000_A!CameraLookAt_000_A': ((-2300.0, -450.0, 3000.0), None, None, 'the START rows'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_010_B!Camera_010_B': ((-2000.0, -300.0, 700.0), None, None, 'GUESS: the trench'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_010_B!CameraLookAt_010_B': ((-2650.0, -560.0, 1100.0), None, None, 'GUESS'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_020_C!Camera_020_C': ((-2400.0, 100.0, 6200.0), None, None, 'GUESS: the mid pit'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_020_C!CameraLookAt_020_C': ((-1000.0, -180.0, 5600.0), None, None, 'GUESS'),
-    'FASpecials!SpawnPoint!TeamMode!SpawnCam_030_D!Camera_030_D': ((300.0, 450.0, 3200.0), None, None, 'GUESS: over the terrace'),
-    'FASpecials!SpawnPoint!TeamMode!SpawnCam_030_D!CameraLookAt_030_D': ((1500.0, 50.0, 1800.0), None, None, 'GUESS'),
+    'FASpecials!SpawnPoint!TeamMode!SpawnCam_030_D!Camera_030_D': ((-1200.0, 520.0, 9300.0), None, None, 'GUESS (1025dig2): over the plateau, looking west at the van stop'),
+    'FASpecials!SpawnPoint!TeamMode!SpawnCam_030_D!CameraLookAt_030_D': ((-2600.0, 401.0, 10400.0), None, None, 'the van stop (STOP)'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_100_Police!Camera_000_Police': ((-900.0, -350.0, -1500.0), None, None, 'GUESS: over the car park, looking at the police rows'),
     'FASpecials!SpawnPoint!TeamMode!SpawnCam_100_Police!CameraLookAt_000_Police': ((-1625.0, -690.0, -1000.0), None, None, 'GUESS'),
     'FASpecials!SpawnPoint!SpawnCam_000_Police_FA!Camera_000_Police_FA': ((-900.0, -350.0, -1500.0), None, None, 'GUESS'),
@@ -180,13 +187,13 @@ PLACE_FIXED = {
     # team mode: the respawn stage moves when a criminal passes these (GUESS: the trench, the mid pit, the terrace)
     'FASpecials!SpawnPoint!TeamMode!SpawnpointTrigger_010_B': (STAGE_B[0], None, (250, 150, 250), 'GUESS: the trench'),
     'FASpecials!SpawnPoint!TeamMode!SpawnpointTrigger_020_C': (STAGE_C[0], None, (300, 150, 250), 'GUESS: the mid pit'),
-    'FASpecials!SpawnPoint!TeamMode!SpawnpointTrigger_030_D': (STAGE_D[0], None, (300, 150, 250), 'GUESS: the terrace'),
+    'FASpecials!SpawnPoint!TeamMode!SpawnpointTrigger_030_D': (STAGE_D[0], None, (300, 150, 250), 'GUESS: the plateau west end'),
     # jump points (developer aids): the round's stations
     'Specials!JumpPoints!01_Start': (START[1], FLAT, None, 'the pit'),
     'Specials!JumpPoints!02_MarketMain': (STAGE_B[0], FLAT, None, 'the trench'),
     'Specials!JumpPoints!03_MarketOrange': (STAGE_C[0], FLAT, None, 'the mid pit'),
     'Specials!JumpPoints!04_LootWarehouse': ((-1000.0, 400.0, 10500.0), FLAT, None, 'the plateau'),
-    'Specials!JumpPoints!05_MarketGreen': (STAGE_D[0], FLAT, None, 'the terrace'),
+    'Specials!JumpPoints!05_MarketGreen': (STAGE_D[0], FLAT, None, 'the plateau west end'),
 }
 FF = 'Gameplay!010_FirstFight!'
 ROLE = {'monitor': 'Gameplay!AIMonitor',
@@ -210,27 +217,36 @@ MUSIC_AMBIENT, MUSIC_ACTION = 'Special!Music!PlayMusic_start', 'Special!Music!Pl
 MUSIC_NAMES = (MUSIC_AMBIENT, MUSIC_ACTION)
 MUSIC_ALARM = (MUSIC_ACTION + '\\02_Layer2', MUSIC_AMBIENT + '\\Layer1')
 START_AT = 9.0                          # s from the round-start event: the blast, wave 1, the music. GUESS (Retomoto: 9 s)
-BACKSTOP_AT = 300.0                     # s from the round-start event: waves 2 and 3, the van, whatever the crew did. GUESS
+BACKSTOP_AT = 210.0                     # s from the round-start event: waves 2 and 3, the van, whatever the crew did. GUESS
 VAN_DELAY = 8.0                         # s from the alarm to the van's show and wave 4. GUESS
 EXIT_LINE = 'Multiplayer/F04/ExitHeist_01_R'
 LINES = {17: 'Multiplayer/F06/ReachlootArea_01_R', 18: 'Multiplayer/F09/MissionReminder_02_R', 19: 'Multiplayer/F06/MissionReminder_01_R',
          20: 'Multiplayer/F06/ReachlootArea_01_R', 127: 'Multiplayer/F06/ReachlootArea_01_R', 130: 'Multiplayer/F04/ExitLootArea_01_R',
          136: 'Multiplayer/F06/MissionReminder_01_R', 137: 'Multiplayer/F09/MissionReminder_02_R'}
 START_KEY = 'AllLevels/Interface/Online/GameStart/M07A_%s_Start'
-TEXTS = {START_KEY % 'FA': 'The barricade blows. Grab the cases in the pit and on the plateau; the police come in waves. The van waits on the east terrace.',
+TEXTS = {START_KEY % 'FA': 'The barricade blows. Grab the cases in the pit, the mid pit and on the plateau; the police come in waves. When the alarm sounds the van drives to the west end of the plateau: get in.',
          START_KEY % 'Team_B': 'Stop the heist and retrieve as many cases as possible.',
-         START_KEY % 'UCC': 'The barricade blows. Grab the cases in the pit and on the plateau; the police come in waves. The van waits on the east terrace.'}
+         START_KEY % 'UCC': 'The barricade blows. Grab the cases in the pit, the mid pit and on the plateau; the police come in waves. When the alarm sounds the van drives to the west end of the plateau: get in.'}
 START_FIELDS = {12: 'FA', 13: 'FA', 14: 'Team_B', 15: 'UCC'}
 
 # ------------------------------------------------------------------ the van on the east terrace (MEASURED plan, zero faults: kl_map_escape.van_plan_points)
 VAN = 'Animation/F07/F07_Escape_Vehicle_01.zip'
 VAN_GROUP = 'EscapeVehicle_Animation_F07'
-STOP = (2450.0, 50.0, 2300.0)
-ROAD = dict(arrive=[(2450.0, 50.0, -300.0), (2450.0, 50.0, 600.0), (2450.0, 50.0, 1500.0), (2450.0, 50.0, 2400.0)], stop=STOP,
-            leave=[(2450.0, 50.0, 2600.0), (2450.0, 50.0, 4600.0), (2450.0, 50.0, 6600.0)], at='box', heading=None, cam=None)
+# 1025dig2: the van waits at the plateau's WEST end and the road is one straight line along z 10400 (x -6000 .. 2400), the y of each way point the collision floor
+# there (MEASURED, Ground.hits; the old y 50 was 350 under the ground: ~1900 boarding refusals). at='origin': STOP is the van's origin, the rear box (boarding
+# place) 337 west of it. The plan has zero faults as the bare graft stands (round 2 MEASURED: z 10800 has 2 faults, lin 640 / lout 2150); lin 3400, lout 4400.
+STOP = (-2600.0, 401.0, 10400.0)
+ROAD = dict(arrive=[(-6000.0, 393.0, 10400.0), (-5700.0, 401.0, 10400.0), (-5400.0, 406.0, 10400.0), (-5100.0, 403.0, 10400.0), (-4800.0, 401.0, 10400.0),
+                    (-4500.0, 400.0, 10400.0), (-4200.0, 399.0, 10400.0), (-3900.0, 392.0, 10400.0), (-3600.0, 393.0, 10400.0), (-3300.0, 401.0, 10400.0),
+                    (-3000.0, 406.0, 10400.0)], stop=STOP,
+            leave=[(-2400.0, 401.0, 10400.0), (-2100.0, 400.0, 10400.0), (-1800.0, 399.0, 10400.0), (-1500.0, 392.0, 10400.0), (-1200.0, 393.0, 10400.0),
+                   (-900.0, 401.0, 10400.0), (-600.0, 406.0, 10400.0), (-300.0, 403.0, 10400.0), (0.0, 401.0, 10400.0), (300.0, 400.0, 10400.0),
+                   (600.0, 399.0, 10400.0), (900.0, 392.0, 10400.0), (1200.0, 393.0, 10400.0), (1500.0, 401.0, 10400.0), (1800.0, 406.0, 10400.0),
+                   (2100.0, 403.0, 10400.0), (2400.0, 401.0, 10400.0)], at='origin', heading=None,
+            cam=(-2200.0, 560.0, 9600.0))                           # GUESS: the escape camera's eye, over the lane's south side, looking at the stop and the way out
 PLAN = None
 NO_PLAN = 'kl_dig_layer: the van has no plan: build with \'kl_dig_layer.py test <out>\' or kl_dig_layer.build()'
-BOARD_AT = (2450.0, 50.0, 2100.0)       # the rear doors of the standing van (about; prepare_host takes PLAN['board'] once there is a plan)
+BOARD_AT = (-2937.0, 402.0, 10400.0)    # the rear doors of the standing van (MEASURED by the plan: 337 west of STOP; prepare_host takes PLAN['board'] once there is a plan)
 LANE_CLEAR = 250.0                      # no spawn point, man, cover point or the marker nearer than this to the van's drive. GUESS
 BOARD_CLEAR = 500.0                     # no cover point of the police nearer than this to the boarding place
 FED_CLEAR = 1000.0                      # no AFTER_DEATH point or police body nearer than this to the boarding place
@@ -248,8 +264,10 @@ WAVES = collections.OrderedDict([
     # fix 1025b: the men were at (-5000, 4000) / (-5000, 4300), (-5000, 4000) in sight of the START rows (28 m); now 450 / 500 further east and
     # south in the west lane, out of sight of every START / TEAM_MERC / TRAITOR row (kl_dig_layer.sight_report: exact rays, eye 160, target 120 and 175)
     (G30 + '030_FinancialAlleyExitStreet_Left', ((-4450, 4500), [(-4450, 4350), (-4450, 4650)], [(-3957, 4157), (-3996, 4511)], (-3982, 4139))),
-    (G30 + '030_FinancialAlleyExit_Right', ((1500, 10500), [(1500, 10500), (1600, 10400), (1700, 10300)], [(200, 9800), (300, 9700), (400, 9600)], (300, 9800))),
-    (G30 + '030_FinancialAlleyExitStreet_Right', ((1300, 400), [(1300, 300), (1300, 500)], [(1500, 1300), (1500, 1500)], (1450, 1400)))])
+    # 1025dig2: the van's lane runs along z 10400 now, so wave 3 stood on it: moved 800 south (men 600+ off the lane). GUESS
+    (G30 + '030_FinancialAlleyExit_Right', ((1500, 9700), [(1500, 9700), (1600, 9600), (1700, 9500)], [(200, 9800), (300, 9700), (400, 9600)], (300, 9800))),
+    # 1025dig2: wave 4 (the van's) came to the east terrace; now it comes onto the plateau, NORTH of the van's lane (men 800 off, cover 450 .. 550 off). GUESS
+    (G30 + '030_FinancialAlleyExitStreet_Right', ((-1800, 11200), [(-1800, 11200), (-1700, 11250)], [(-2200, 10900), (-2000, 10850)], (-2000, 10900)))])
 WAVE_NAMES = tuple(WAVES)
 # FIVE MORE of F07's police squads (the loot-phase ones: 2 + 2 + 2 + 3 + 1 men, each with a 10_ and a 20_RunToCover and a 40_RunToEscape post), re-placed
 # round a centre with the same rules and woken with the wave named. Their places are generated: men within RADIUS/2 of the centre, cover points on a ring of
@@ -262,7 +280,14 @@ EXTRA = collections.OrderedDict([
     (G20 + '020_FinancialAlley_RunForDumpster', (2, (-300, 5050), 300)),      # wave 2: the mid pit's east rim (behind the rim from the pit)
     (G20 + '020_FinancialAlley_LeftParking', (2, (-3400, 4450), 300)),        # wave 2: the west lane
     (G20 + '020_FinancialAlley_RightPlatform', (3, (250, 9750), 350)),        # wave 3: the east plateau
-    (G20 + '020_FinancialAlley_RightGround', (4, (1650, 700), 250))])         # wave 4: the terrace, north of the van
+    (G20 + '020_FinancialAlley_RightGround', (4, (1500, 11000), 250)),
+    # 1025dig2 round 2: the three police squads F07 has left (each with a 10_RunToCover). The design's rim posts (RIM_A (-3300, 3500), RIM_B (-700, 3900)) are
+    # MEASURED impossible: the mesh has no polygon on the west rim above the pit floor and the terrace (y 50) starts at x -400; the two terrace places below are
+    # the nearest that are out of sight of every START / TEAM_MERC / TRAITOR row (rim1.py, exact casts; every terrace place nearer the pit is in sight). They
+    # cover the mid pit's east rim (wave 2) and the climb to the plateau (wave 3). y = the terrace's mesh height (snap_in y). GUESS: every place
+    (G30 + '030_FinancialAlleyExitSkywalk', (2, (-250, 5600), 110, 50.0)),         # RIM_A: 2 men, the terrace over the mid pit
+    # EntranceLeft (1 man, plateau SW corner (-3300, 400, 8900)) was tried and FAILED the sight check: in sight of the spawn row across the pit, 60.9 m. Dropped.
+    ('Gameplay!040_Escape!040_EscapeEntranceRight', (3, (290, 6680), 110, 50.0))])                                         # RIM_B: 2 men, the terrace over the climb
 EXTRA_PLACED = {}                       # name -> [(kind, [points])], filled by place_extra for the check
 # ONE POLICE DOG: F07's own squad 'Gameplay!020_Loot!021_FinancialAlley_Dog' (ZSquadScript parked, DefendBehaviour + Pos#01, Dog group with the
 # ZFFActor 'eDog'; nodes 123..128, every child stands at a world place). Re-placed: it waits in the trench behind the barricade and runs to the crew's start
@@ -346,7 +371,7 @@ def plan_of(path):
     lack = [k for k in ('path', 'lin', 'lout', 'wait', 'stop', 'end', 'board', 'cam', 'points') if k not in P]
     if lack or P.get('faults'):
         raise ValueError('%s is no plan of the van without a fault (lacks %s; faults %s)' % (path, lack, P.get('faults')))
-    road = {k: [list(map(float, p)) for p in v] if k in ('arrive', 'leave') else list(map(float, v)) if k == 'stop' else v for k, v in ROAD.items()}
+    road = {k: [list(map(float, p)) for p in v] if k in ('arrive', 'leave') else list(map(float, v)) if k in ('stop', 'cam') else v for k, v in ROAD.items()}
     if any(P['points'].get(k) != v for k, v in road.items()):
         raise ValueError('%s is a plan of other way points than ROAD: %s' % (path, {k: P['points'].get(k) for k in road if P['points'].get(k) != road[k]}))
     return P
@@ -366,7 +391,7 @@ def place_now():
     """PLACE_FIXED + the objects that hang on the van's boarding place (the exit box, the escape-area triggers, the marker)."""
     t = collections.OrderedDict(PLACE_FIXED)
     b = PLAN['board'] if PLAN else BOARD_AT
-    mark = (b[0] - 350.0, b[1] + 188.0, b[2])                                          # west of the drive, 350 off (the terrace's inner side). GUESS
+    mark = (b[0], b[1] + 188.0, b[2] - 350.0)                                          # 1025dig2: the drive runs along x now; the marker 350 south of it (the loot side). GUESS
     box = ((b[0], b[1] + 200.0, b[2]), None, (450.0, 300.0, 450.0), 'GUESS: round the van\'s boarding place on the terrace')
     t['Gameplay!EscapeSetup!otrExitLevel'] = box
     for k in ('FASpecials!POI!Trigger_POI_TheEscapeArea', 'FASpecials!POI!Trigger_POI_TheEscapeAreaCP_OffenseOnlyRespawn',
@@ -475,6 +500,8 @@ def prepare_host(S, log=print):
         kl_fa.edit(sc, k, A.ctrl_of(sc, k, 'TriggerBox2'), lambda us: A.setv(sc, us, 2, LOOT_REACH))
         A.place(S, k, p, hidden=False)
         loot.append(name)
+    if sum(v for _p, _y, v, _w in LOOT) != LOOT_TOTAL:
+        raise ValueError('kl_dig_layer: the loot adds up to %d, not %d' % (sum(v for _p, _y, v, _w in LOOT), LOOT_TOTAL))
     by = collections.Counter(what.split(':')[0] for _p, _y, _v, what in LOOT)
     log('  kl_dig_layer: loot: %d objects, %d in all: %s' % (len(LOOT), sum(v for _p, _y, v, _w in LOOT), dict(by)))
     place_police(S, log)
@@ -543,7 +570,8 @@ def place_extra(S, mesh, log=print):
     sc, out = S.prp, []
     tr = lambda k: struct.unpack('<3f', S.ents[k - 1].trans[:12])
     up = lambda q: (q[0], q[1] + 1.0, q[2])
-    for name, (_wave, (cx, cz), rad) in extra().items():
+    for name, (_wave, (cx, cz), rad, *yy) in extra().items():
+        yh = yy[0] if yy else None
         top = A.node_of(sc, name)
         if not kl_fa.has(sc, top, 'ZSquadScript') or not sc.resolve(R + name + chr(92) + ARRIVE_START):
             raise ValueError('%s: not a squad group with a %s' % (name, ARRIVE_START))
@@ -556,14 +584,14 @@ def place_extra(S, mesh, log=print):
         by = collections.defaultdict(list)
         for k in own:
             by['men' if any(sc.cls(c) == 'ZFFActor' for c in range(k, sc.end[k])) else sc.names[sc.parent[k]]].append(k)
-        at, _ = snap_in(mesh, cx, cz)
+        at, _ = snap_in(mesh, cx, cz, y=yh)
         at = up(at)
         A.place(S, top, at)
         got = []
         for kind, ks in sorted(by.items()):
             for i, k in enumerate(ks):
                 r, a = (rad * 0.5 if kind == 'men' else rad), 2.0 * math.pi * (i + (0.5 if kind == 'men' else 0.0)) / max(1, len(ks))
-                q, _sh = snap_in(mesh, cx + r * math.cos(a), cz + r * math.sin(a)) if kind != '40_RunToEscape' else (at, 0.0)
+                q, _sh = snap_in(mesh, cx + r * math.cos(a), cz + r * math.sin(a), y=yh) if kind != '40_RunToEscape' else (at, 0.0)
                 q = up(q)
                 A.place(S, k, tuple(q[j] - at[j] for j in range(3)))
                 got.append((kind, q))
@@ -634,7 +662,7 @@ def wire(sc, log=print):
     names = list(police())
     arrive = must([R + n + '\\' + ARRIVE_START for n in names])
     more = collections.defaultdict(list)
-    for n, (w, _c, _r) in extra().items():
+    for n, (w, *_cr) in extra().items():
         more[w] += must([R + n + '\\' + ARRIVE_START])
     wave = {i + 1: arrive[i] for i in range(len(arrive))} if len(arrive) == 4 else {}
     wavex = lambda w: ([wave[w]] if wave else []) + more[w]
@@ -1003,6 +1031,40 @@ def check(folder, log=print, problems=None):
         for t in sc.tops():
             if sc.cls(t) == 'ZSpawnPoint' and 'START' in kl_fa.node_values(sc, t)[8] and math.dist(pos[ents[t - 1]], b) < 1500:
                 fail('a START spawn point is %d from the boarding place' % math.dist(pos[ents[t - 1]], b))
+        # ---- round 2 (design C1 / C2, the checks the verifier found missing): the boarding place against the stop, the ground, the boxes, the cover
+        stop, bx = PLAN['stop'], (b[0], b[1] + 200.0, b[2])
+        if math.hypot(b[0] - BOARD_AT[0], b[2] - BOARD_AT[2]) > BOARD_NEAR or abs(b[1] - BOARD_AT[1]) > 40.0:
+            fail('the plan boarding place (%d, %d, %d) is not within %d (x/z) / 40 (y) of BOARD_AT %s' % (*b, BOARD_NEAR, BOARD_AT))
+        back = math.hypot(stop[0] - b[0], stop[2] - b[2])
+        if abs(back - ESC.BOARD_BACK) > BOARD_NEAR:
+            fail('the boarding place is %d from the van origin, the rear box should be %d behind it (%d allowed)' % (back, ESC.BOARD_BACK, BOARD_NEAR))
+        try:
+            LV = ESC.Level(folder)
+            GR = ESC.Ground(LV)
+            for what, q in (('stop', stop), ('board', b)):
+                u = GR.under(q[0], q[1], q[2])
+                if u is None or abs(u[0] - q[1]) > 5.0:
+                    fail('the van %s y %.0f is %s from the collision floor (5 allowed)' % (what, q[1], 'no floor' if u is None else '%.0f' % abs(u[0] - q[1])))
+                else:
+                    log('  van: %s y %.1f, floor %.1f (%s)' % (what, q[1], u[0], LV.name(u[1])[-34:]))
+        except Exception as e:
+            fail('van floor test: cannot load the collision (%s)' % e)
+        ex_at = pos[ents[ex[0][0] - 1]] if ex else None
+        if ex_at is None or math.dist(ex_at, bx) > 100.0:
+            fail('the exit box is not on the boarding place (%s against %s)' % (ex_at, bx))
+        nb = mesh.nearest(bx[0], b[1], bx[2], dy=300.0, part=mainp)
+        if nb[1] is None or nb[0] > 100.0:
+            fail('the boarding box centre is %s from a main-part polygon (100 allowed)' % nb[0])
+        near_cov = []
+        for k in range(1, len(sc.names)):
+            pa = sc.parent[k]
+            if pa and sc.names[pa].endswith('RunToCover') and sc.path[k].startswith(R + 'Gameplay!0') and 'merc_bot' not in sc.path[k]:
+                near_cov.append((math.hypot(pos[ents[k - 1]][0] - b[0], pos[ents[k - 1]][2] - b[2]), sc.path[k][-44:]))
+        if near_cov:
+            log('  cover: %d police cover points, nearest to the boarding place %d (%s; %d wanted)' % (len(near_cov), min(near_cov)[0], min(near_cov)[1], BOARD_CLEAR))
+            for d, nm in near_cov:
+                if d < BOARD_CLEAR:
+                    fail('cover point %s is %d from the boarding place (%d wanted)' % (nm, d, BOARD_CLEAR))
     return bad
 
 
