@@ -266,6 +266,7 @@ CLEAR_REFS = {22080, 31792, 22078, 31801, 21538, 31817, 21529, 31818, 22167, 231
 # 26690/26689 (13200,-8,880) and 22442/22441 (9600,1192,1120): the four doors of the two CoopAirlock pairs, TWO-PLAYER ONLY and shut: they gate the only
 # routes to the tower and the flats, so a lone FA player (and every bot) is walled in. Hidden + collision cut like the street props. MEASURED positions
 # (verification 2026-10-25, v5/v9/v10); the airlock controllers stay (their clips move nothing once the doors are gone). GUESS: that the controller tolerates it.
+COOP_BLOCKERS = 3                       # the CoopAirLock_Pathblocker_00 nodes of the campaign map (MEASURED on 1025a: eBlocking, empty list, named by no controller)
 ROAD = dict(arrive=[(5300.0, 0.0, 1100.0), (6300.0, 0.0, 1100.0), (7300.0, 0.0, 1100.0)], stop=STOP,
             leave=[(9300.0, 0.0, 1100.0), (10300.0, 0.0, 1100.0), (12400.0, 0.0, 1100.0)], at='box', heading=90.0, cam=[10450.0, 350.0, 1100.0], clear=list(CLEAR_NAMES))
 PLAN = None
@@ -681,6 +682,17 @@ def finish(folder, log=print):
     for k, i, _v in kl_fa.controllers(sc, kl_fa.SETTINGS):
         kl_fa.edit(sc, k, i, lambda us: [us.__setitem__(f, [kl_fa._str(sc, START_KEY % w)]) for f, w in START_FIELDS.items()])
     log('  kl_l05_layer: %d text keys in %d languages; settings fields %s name the start windows' % (len(TEXTS), langs, sorted(START_FIELDS)))
+    # the CoopAirLock path blockers, BY NAME (a global strip would also take PathBlockerVan, which must stay): the airlock doors are cleared (CLEAR_REFS), so the
+    # blockers that wall the AI off the same passages go inert (eNotBlocking, the vault_noblocker precedent). Nothing names them (checked on 1025a: no controller
+    # lists one), so no reference dangles. The kick doors' blockers stay (eUnblock: opened by a kick); check() proves no proven way passes one.
+    nb = 0
+    for k, i, v in kl_fa.controllers(sc, 'PathBlocker'):
+        if 'CoopAirLock_Pathblocker' in sc.path[k] and v[1] != 'eNotBlocking':
+            kl_fa.edit(sc, k, i, lambda us: A.setv(sc, us, 1, 'eNotBlocking'))
+            nb += 1
+    if nb != COOP_BLOCKERS:
+        bad.append('%d CoopAirLock path blockers made inert, wanted %d' % (nb, COOP_BLOCKERS))
+    log('  kl_l05_layer: %d CoopAirLock path blockers eNotBlocking (PathBlockerVan untouched)' % nb)
     E.save(None, log)
     for b in bad:
         log('  PROBLEM: ' + b)
@@ -844,6 +856,189 @@ def seen_from(C, rows, p):
                 if C.ray(e, seg, m) is None:
                     return s, m
     return None
+
+CAST_MASK = 0x28                        # characters (0x20) or heroes only (0x8): what a player or a bot is stopped by (kl_route's reading of the sub-part flags)
+CAST_HEIGHTS = (50.0, 110.0)            # a knee and a chest line over the way's floor. GUESS: the same column as kl_route (55 .. 165), a little lower to meet low rails
+CAST_SIDE = 25.0                        # each of the three lines (centre, +side, -side) must be free: a body of 2 * CAST_SIDE = 50 fits along the way (the least width wanted)
+CAST_STEP = 100.0                       # long segments are cut into pieces this long, so a corner cut is seen where it is
+PB_BOX_DY = 100.0                       # kl_route.PB_DY: a path blocker's box counts this far above and below itself
+
+
+SHIFTS = tuple(range(-120, 121, 20))    # the sideways offsets (units) a body may take from the AI's centre line inside the mesh. GUESS: 1.2 m each side
+SCRIPTED_NAMES = ('WoodDoor', 'wooddoor', 'Wall_Break', 'Drawers')
+WAY_RETRIES = 12                        # see walk_proof
+SHIFT_EDGE = 60.0                       # see cast_way
+SHIFT_STEP = 40.0                       # ... and how far the offset may change from one piece of the way to the next (a body turns; 2 steps)
+
+
+def cast_way(C, mesh, pts):
+    """Is there a BODY-WIDE way along the mesh way `pts`? The way is cut into pieces of at most CAST_STEP; a piece is FREE at sideways offset d when its three
+    EXACT casts (hvk_ray: centre, +-CAST_SIDE of it, at each of CAST_HEIGHTS, mask CAST_MASK) hit nothing and its two ends and middle stand on the mesh. The
+    offset starts at 0 (the place), may change by SHIFT_STEP per piece and must end at 0. A centre line that cuts a corner of a prop is thus not a failure while a
+    50-wide way exists beside it; a door shut over the whole passage is.
+    GUESS: the offsets are chosen per piece (the small step across a join is not cast); when the centre is free the search keeps only offset 0 (never a false
+    pass, a rare false alarm). -> (n casts, [(piece, at, [(object name, REF)...])] of the pieces with no free offset)."""
+    pieces = []
+    for a, b in zip(pts, pts[1:]):
+        dx, dz = b[0] - a[0], b[2] - a[2]
+        ln = math.hypot(dx, dz)
+        if ln < 1.0:
+            continue
+        k = max(1, int(math.ceil(ln / CAST_STEP)))
+        for j in range(k):
+            t0, t1 = j / k, (j + 1) / k
+            pieces.append((tuple(a[c] + (b[c] - a[c]) * t0 for c in range(3)), tuple(a[c] + (b[c] - a[c]) * t1 for c in range(3)), -dz / ln, dx / ln))
+    n = [0]
+    memo = {}
+    def free(j, d):
+        if (j, d) in memo:
+            return memo[j, d]
+        p0, p1, px, pz = pieces[j]
+        ok, objs = True, []
+        for t in (0.0, 0.5, 1.0):
+            q = [p0[c] + (p1[c] - p0[c]) * t for c in range(3)]
+            # GUESS: the mesh's doors are often narrower than a body (kl_route: down to 16), so a way beside the centre line need not lie ON the mesh,
+            # only within SHIFT_EDGE of it (the AI steers by the mesh, the body is stopped by collision alone)
+            if d == 0:
+                if mesh.on(q[0], q[1], q[2]) is None:
+                    ok = False
+            else:
+                dd, ii = mesh.nearest(q[0] + px * d, q[1], q[2] + pz * d, SHIFT_EDGE + 10.0)
+                if ii is None or dd > SHIFT_EDGE:
+                    ok = False
+        if ok:
+            for lat in (0.0, CAST_SIDE, -CAST_SIDE):
+                for h in CAST_HEIGHTS:
+                    o = (p0[0] + px * (d + lat), p0[1] + h, p0[2] + pz * (d + lat))
+                    n[0] += 1
+                    r = C.ray(o, (p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]), CAST_MASK)
+                    if r is not None:
+                        ok = False
+                        objs.append((r['name'], r['ref']))
+                    if not ok and d != 0:
+                        break
+                if not ok and d != 0:
+                    break
+        memo[j, d] = (ok, objs)
+        return memo[j, d]
+    bad = []
+    reach = {0}
+    for j in range(len(pieces)):
+        if 0 in reach and free(j, 0)[0]:
+            reach = {0}
+            continue
+        new = {d for d in SHIFTS if any(abs(d - e) <= SHIFT_STEP for e in reach) and free(j, d)[0]}
+        if not new:
+            q = pieces[j][0]
+            bad.append((j, tuple(round(v) for v in q), sorted(set(free(j, 0)[1]))))
+            reach = {0}                         # go on from the centre: one report per blocked piece
+        else:
+            reach = new
+    return n[0], bad
+
+
+def walk_proof(folder, sc, ents, pos, mesh, C, boxes, log=print):
+    """The proven ways (every START to every loot, every loot and START to the boarding place, every police spawn to the first and last START): the AI's mesh
+    way, and on it the exact casts of cast_way (a body 2 * CAST_SIDE = 50 wide fits, nothing a character is stopped by lies in the way), and no eBlocking path
+    blocker (but the van's) holds a sample. -> ([what is wrong], number of legs). A cut corner of the mesh way is a possible false alarm: each failure names its REF."""
+    import kl_route
+    bad = []
+    def spot(p):
+        h = mesh.on(*p)
+        if h is not None:
+            return h[0]
+        d, i = mesh.nearest(p[0], p[1], p[2], 130.0)
+        return i if i is not None and d <= 120.0 else None
+    kinds = collections.defaultdict(list)
+    for t in sc.tops():
+        if sc.cls(t) == 'ZSpawnPoint':
+            kinds[kl_fa.node_values(sc, t)[8]].append(tuple(pos[ents[t - 1]]))
+    starts = [p for k, v in kinds.items() if k.endswith('_START') for p in v]
+    police = [p for k, v in kinds.items() if k.endswith(('_UCC_POLICE', '_TEAM_POLICE')) for p in v]
+    loot = [tuple(pos[ents[k - 1]]) for k, _i, v in kl_fa.controllers(sc, 'OnlineMoneyCtrl') if 'DROP' not in v[2] and sc.parent[k] == 0]
+    board = tuple(PLAN['board']) if PLAN else None
+    legs = [('START%d -> loot%d' % (i, j), a, b) for i, a in enumerate(starts) for j, b in enumerate(loot)]
+    if board:
+        legs += [('loot%d -> van' % j, b, board) for j, b in enumerate(loot)] + [('START%d -> van' % i, a, board) for i, a in enumerate(starts)]
+    if starts:
+        legs += [('police%d -> START%d' % (i, j), a, starts[j]) for i, a in enumerate(police) for j in (0, len(starts) - 1)]
+    pbs = [b for b in kl_route.load(folder).path_blockers() or () if b[5] == 'eBlocking' and 'PathBlockerVan' not in b[0]]
+    cache, ncast, blocked, pbhit, narrow = {}, 0, collections.Counter(), collections.Counter(), 1e30
+    first = {}
+    for name, a, b in legs:
+        ia, ib = spot(a), spot(b)
+        if ia is None or ib is None:
+            bad.append('%s: a place is off the mesh' % name)
+            continue
+        key = (ia, ib)
+        if key not in cache:
+            # A way is PROVEN when ANY mesh way is body-wide: where a cast says the cheapest one is blocked, the polygon under the blocked piece is banned
+            # (its portals made negative) and the next way is cast, up to WAY_RETRIES times; the failure kept is that of the last way. GUESS: banning one
+            # polygon per blocked piece finds a detour when there is one (not an exhaustive search: a rare false alarm, never a false pass).
+            banned, orig_portal, w, n_all = set(), mesh.portal, None, 0
+            def portal(i, j, _o=orig_portal, _b=banned):
+                e = _o(i, j)
+                return ((-1.0,) + tuple(e[1:])) if (i in _b or j in _b) and i != ia and j != ia and i != ib and j != ib else e
+            mesh.portal = portal
+            try:
+                for _try in range(WAY_RETRIES + 1):
+                    w2 = mesh_way(mesh, ia, ib)
+                    if w2 is None:
+                        break                   # the bans cut every way: the way kept is the last one found
+                    w = w2
+                    pts = [tuple(q) for q in w[0]]
+                    n, hits = cast_way(C, mesh, pts)
+                    n_all += n
+                    if not hits:
+                        break
+                    new_ban = set()
+                    for _j, at, _objs in hits:
+                        hh = mesh.on(*at)
+                        if hh is not None:
+                            new_ban.add(hh[0])
+                    if not (new_ban - banned):
+                        break
+                    banned |= new_ban
+            finally:
+                mesh.portal = orig_portal
+                del mesh.portal
+            if w is None:
+                cache[key] = None
+            else:
+                n = n_all
+                pb = set()
+                for q0, q1 in zip(pts, pts[1:]):
+                    ln = math.dist(q0, q1)
+                    for s in range(int(ln // 25.0) + 1):
+                        t = s * 25.0 / ln if ln else 0.0
+                        x, y, z = (q0[c] + t * (q1[c] - q0[c]) for c in range(3))
+                        for path, R, T, half, _m, _st in pbs:
+                            d = (x - T[0], y - T[1], z - T[2])
+                            loc = [sum(R[i][j] * d[i] for i in range(3)) for j in range(3)]
+                            if all(abs(loc[j]) <= half[j] + PB_BOX_DY * abs(R[1][j]) for j in range(3)):
+                                pb.add(path)
+                cache[key] = (n, hits, pb, w[1])
+        got = cache[key]
+        if got is None:
+            bad.append('%s: no mesh way' % name)
+            continue
+        ncast += got[0]
+        narrow = min(narrow, got[3])
+        for _j, at, objs in got[1]:
+            for nm, ref in objs or [('(only beside the centre line: off the mesh)', -1)]:
+                blocked[(ref, nm)] += 1
+                first.setdefault((ref, nm), (name, at, 0, 0))
+        for path in got[2]:
+            pbhit[path] += 1
+            first.setdefault(('pb', path), (name, None, None, None))
+    for (ref, nm), c in blocked.most_common():
+        nme, at, lat, h = first[(ref, nm)]
+        bad.append('no body-wide way along %s: REF %s %s stands across it near %s: %d legs' % (nme, ref, nm[-40:], at, c))
+    for path, c in pbhit.most_common():
+        bad.append('the way %s passes the eBlocking path blocker %s: %d legs' % (first[('pb', path)][0], path[-60:], c))
+    log('  casts: %d legs (%d distinct mesh ways), %d exact casts (%d heights x centre / +-%d), mask %#x: %d distinct blocking objects, %d path blockers in the way; narrowest mesh door %s' % (
+        len(legs), len(cache), ncast, len(CAST_HEIGHTS), CAST_SIDE, CAST_MASK, len(blocked), len(pbhit), 'n/a' if narrow > 1e29 else round(narrow)))
+    return bad, len(legs)
 
 
 def check(folder, log=print, problems=None):
@@ -1037,6 +1232,18 @@ def check(folder, log=print, problems=None):
         for t in sc.tops():
             if sc.cls(t) == 'ZSpawnPoint' and 'START' in kl_fa.node_values(sc, t)[8] and math.dist(pos[ents[t - 1]], b) < 1500:
                 fail('a START spawn point is %d from the boarding place' % math.dist(pos[ents[t - 1]], b))
+    # ---- the proven ways, cast against the exact collision (a body 50 wide), and the path blockers
+    if C is None:
+        fail('walk proof: no collision (hvk_ray)')
+    else:
+        wbad, _nlegs = walk_proof(folder, sc, ents, pos, mesh, C, boxes, log)
+        for x in wbad:
+            if any(k in x for k in SCRIPTED_NAMES):
+                # GUESS (by name only): a door a player opens, a wall the level breaks, a drawer chest that is keyframed (moves when pushed). The cast
+                # meets the closed/intact form; whether the player passes it is NOT proven offline -> a NOTE, not a FAIL.
+                log('  NOTE: walk proof (openable / breakable / movable by name, unproven): ' + x)
+                continue
+            fail('walk proof: ' + x)
     return bad
 
 
