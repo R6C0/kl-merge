@@ -147,7 +147,7 @@ Trim s7 (actors 98 -> 78, squads 69 -> 55): dropped whole squads off the planned
 - A1 street: `SQ_Piss`, `SQ_Goons_idle#01`, `SQ_Goons_idel#02` (idle guards beside the spawn side; `SQ_Goons_car` KEPT as wave 1);
 - A7: `SQ_Airlock_Mobsters_01`, `_02` (airlock side pocket);
 - C2 roof: `SQ_sniper_side`, `SQ_sniper_end`, `SQ_1Singleguy#01`, `#02`;
-- C3: `Squad_Henchmen` (3 actors; the cutscene-side squad, FusionSquad_Cutscene was already gone from the Special drop? no: it is an `AI!Enemies` top and is still in; it holds 0 actors, no squad).
+- C3: `Squad_Henchmen` (3 actors). `FusionSquad_Cutscene` (0 actors, no squad) is still in.
 Kept squads: 55 = A1 car 1, A6 7, A7 6, A9 10, B2 4, B3 1, B5 2, B6 11, B6_part2 7, C2 6 (lastFight x2, 2backup x2, PreWave1/3).
 Result s7: chunks 27,096 reachable (gate 69,632), nodes 22,269 (519 tops), 468 MB zip (t4 484 MB, F09 baseline 370 MB), .prm 65.9 MB after the
 existing trim pass, materials 1,304, textures 2,330, sound/.ANM join as t4 (+187 clips). verify problems 0, dangling 0, check.py 0/0.
@@ -158,5 +158,5 @@ What still blocks an FA layer (UNVERIFIED, nothing was run in the game):
    counter that no longer exists may never wake, or wake at once: behaviour unknown until a live run; the FA layer should drive them with its own wave timers (kl_old_waves).
 2. No `FASpecials!`, spawn points, loot, escape, `OnlineBounds` yet (`--no-fa`); the baseline OnlineEscVehicleMonitor double-Init issue must be avoided by authoring ONE monitor.
 3. Nav coordinates for the section 3 plan are still GUESS (no nav dump).
-4. The 20 `AI!Triggers` that counted the dropped squads / civilians, `Special!EndOfLevel` and the `B6!TB_FailMission` boxes (mission-fail on a kill of Xiu?) still exist and may end or fail the round; audit before authoring.
+4. The `AI!Triggers` tops (138 in t4, kept), `Special!EndOfLevel` and the `AI!Enemies!B6!TB_FailMission` box still exist and may end or fail the round (not read); audit before authoring.
 5. Memory: 468 MB archive vs 370 MB for F09; load time and RAM are the risk, not chunks.
