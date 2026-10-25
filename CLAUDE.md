@@ -66,19 +66,17 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-25 - K44P2e clean, but the round-2 gun stayed stock: the rules REFUSED the page II buy ($0 player, $2000 gun; the UI byte is written
-before the commit 0x8ea990 checks money). k47 (e16157aba; ship 6E759091, test 99A6BEF9 in C:/kl_build_1019/k47_1025a) NOT installed:
-detects the refusal, TEST `poke` funds the player (K44_PAGE2_DM05A_money.ini). Next: that run after kl-merge-27's install batch.
+2026-10-25 ~02:40 - INSTALLED batch (owner grant), NOT yet proven live (e8 runs them): DM01B overhaul+vans b68d255f, DM02 dog+vans b0252fde,
+DM05A lastcall5 SAFE 435599f8 (+1.3 MB prm, ~9 MB headroom), stock F01 PD2 AKM zip 26cd7ebe, DM01 dm01fb fix2+vans 4d520614, DM06B park2+vans
+7cab1235, vans on DM03/03A/09/09R*, fed KLJoin.ini on 14 maps (e8 sets [Fed] Body=1). Backups .before-1025{overhaul,dog,lc5safe,pd2gun,
+dm01fb,park2,vans,fedoutfit}; UNDO bats beside each stage. Waiting: DM05A fed graft 08b9d7cc (on 435599f8) until SAFE klmem is good.
 
-2026-10-25 - DM01 owner feedback STAGED (not installed): C:/kl_build_1024/dm01fb_1025a/stage, zip 885c4a13 (old c0e7b8ee) + WHD/WAV/LS bank, tag .before-1025dm01fb. Door-kick sound (bank merge, proven offline), 5 extinguishers on the wall (KEYFRAMED holder, proven by ray), cars from road to van, 3-man kick squad (engine behaviour GUESS, KICK_AT=45). Tool: tools/kl_dm01fb_stage.py. Rehearsal ok.
+2026-10-25 - K44P2e clean, but the round-2 gun stayed stock: the rules REFUSED the page II buy ($0 player, $2000 gun). k47 (e16157aba; ship
+6E759091, test 99A6BEF9 in C:/kl_build_1019/k47_1025a) detects the refusal, TEST `poke` funds the player. lastcall5 MID: wardrobe/gun root
+chunks changed (kl_chars.put stub bug) -> NOT READY; only SAFE installed.
 
-2026-10-25 - lastcall5 (full 653a4f4c 90 civs 150/111; lite 7d7f80c7 71 civs 138/95) STAGED, rehearsed, NOT installed (pinned on live 858d3371,
-backup .before-1025lastcall5): 14 civilian looks (DD 41803/41556 variants + M05_A 6854/7265/6993/7115 grafted), bodyguards, bartender.
-Files: C:/kl_build_1024/lastcall5_1025a/stage/lc5_{full,lite}/main; tool tools/kl_club_lastcall5.py. Women under DD Civilian clips unproven.
-
-2026-10-25 - k44 71A1E808 INSTALLED (page II re-park), not yet proven live. DM05A MEMORY WALL: lastcall4 lite (70 dancers) crashed twice in
-play (0x6d2107 null sound Lock; 0x8e5bbd large block refused, 435 MB free after load): lastcall4 UNDONE -> d5f8522b, lcmusic stageA not the
-cause (undone with it). lastcall5 (71/90 civs) must be lighter before install. k45 07011f71 staged only. Details: re/open_work_log.md.
+2026-10-25 - Next: grenades (DD 0x4aa410 HoldGrenade clears bit 0x40 of [player+0xb90]; DM sets it; FA projectile slots empty; e8 probe
+411ad3ed1), dig map M07_A -> F06 (workflow), overhaul DM06/DM11B/DM03A/DM09, L05 flat raid FA layer. Re-run kl_fedoutfit_stage.py after any .prm change.
 
 
 ## Owner's end goal (2026-10-09)
