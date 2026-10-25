@@ -15,7 +15,7 @@ then the passes: kl_fa_fedbody check, debug/check_passes.py (A / B / C1 / C2 / C
 Every step is a subprocess of an existing tool; nothing is installed, the game is never touched. --stage / --rehearse then run kl_l05_stage_1025.py.
 Needs a plan of the van: the default is the van.json of C:/kl_build_1024/l05fa_1025a/f4 (the same measured plan).
 """
-import hashlib, os, shutil, subprocess, sys, time
+import hashlib, os, shutil, subprocess, sys, time, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -71,30 +71,31 @@ def main():
         lf.write(s + '\n'); lf.flush()
     T = lambda n: os.path.join(HERE, n)
     zipname = lambda d: os.path.join(d, 'F01_Main.zip')
+    f4 = w + '/f4'
+    done = os.path.isfile(os.path.join(f4, 'KLJoin.ini'))   # a finished f4 needs none of the earlier steps (their folders may be gone)
     b3 = w + '/b3/F07+L05'
-    if not os.path.isfile(zipname(b3)):
+    if not done and not os.path.isfile(zipname(b3)):
         # --keep: test() deletes the archive when check() fails; exit 1 (check FAILs) is logged and the chain goes on so the failures are reported with the build
         run([T('kl_l05_layer.py'), 'test', w + '/b3', '--plan', plan, '--keep'], log, ok=(0, 1))
     c1 = w + '/c1'
-    if not os.path.isfile(zipname(c1)):
+    if not done and not os.path.isfile(zipname(c1)):
         run([T('kl_l05_layer.py'), 'cover', zipname(b3), c1], log)
         carry(b3, c1)
     d1 = w + '/d1'
-    if not os.path.isfile(zipname(d1)):
+    if not done and not os.path.isfile(zipname(d1)):
         run([T('kl_dmlines.py'), c1, d1, '--fed'], log)
         carry(c1, d1)
     e1 = w + '/e1'
-    if not os.path.isfile(zipname(e1)):
+    if not done and not os.path.isfile(zipname(e1)):
         os.makedirs(e1, exist_ok=True)
         run([T('kl_gunpics.py'), 'apply', zipname(d1), zipname(e1)], log)
         carry(d1, e1)
     f3 = w + '/f3'
-    if not os.path.isfile(zipname(f3)):
+    if not done and not os.path.isfile(zipname(f3)):
         os.makedirs(f3, exist_ok=True)
         run([T('kl_dm_overhaul_1025.py'), 'build', 'DD10', zipname(e1), zipname(f3)], log)
         carry(e1, f3)
-    f4 = w + '/f4'
-    if not os.path.isfile(os.path.join(f4, 'KLJoin.ini')):
+    if not done:
         run([T('kl_fa_fedbody.py'), 'apply', f3, f4, '--link'], log)
     log('zip %s md5 %s  %d bytes; KLJoin.ini md5 %s' % (zipname(f4), md5(zipname(f4)), os.path.getsize(zipname(f4)), md5(f4 + '/KLJoin.ini')))
     # ---- the install tree (what the stage tool wants): F01_* -> F07_*; the Build* files beside it as BuildInfo
@@ -107,6 +108,20 @@ def main():
             continue
         game = f.startswith('F01_Main') or f == 'KLJoin.ini' or f in ('KLTalk.ini', 'KLGuns.ini')
         d = os.path.join(maps if game else info, f.replace('F01_Main', SLOT + '_Main'))
+        if f == 'F01_Main.zip':
+            # the MEMBERS carry the slot too: renaming only the file crashed the first live load (DD10A 1025e:
+            # GetFileSize of Locations/F07/F07_Main.sup = -1, assert 0x7f5892, then c0000005 at kl2+0x1d20d2)
+            import kl_graft
+            with zipfile.ZipFile(s) as z:
+                members = [(kl_graft.member_name(n, 'F01', SLOT), z.read(n)) for n in z.namelist()]
+            if os.path.exists(d):
+                os.remove(d)
+            kl_graft.write_zip(d, members, kl_graft.load_options(''))
+            with zipfile.ZipFile(d) as z:
+                bad = [n for n in z.namelist() if '/F01/' in n or 'F01_Main' in n]
+            if bad:
+                raise SystemExit('%s still names F01: %s' % (d, bad[:5]))
+            continue
         if not os.path.exists(d):
             try:
                 os.link(s, d)

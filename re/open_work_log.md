@@ -1,3 +1,8 @@
+2026-10-25 ~20:00 - DD10 FIRST LIVE LOAD CRASHED (DD10A, k50_1025shot + D3dRing=128, menu page 3 entry 5 = F07; entry 6 is clamped: kls_menu_slot): asserts
+0x7f5892 (GetFileSize of Locations/F07/F07_Main.sup = -1), 0x4a2fe9, 0x820423, 0x5d20cb, then c0000005 kl2+0x1d20d2 reading 0. Cause: the install tree renamed only the
+FILE F01_Main.zip -> F07_Main.zip; its members still said Scenes/Locations/F01/F01_Main.*. Fix: kl_l05_build_1025.py rewrites the members (kl_graft.member_name/write_zip,
+as kl_expansion does) and fails if any F01 name is left. 1025e install undone (l05.ps1 -Undo, 32 removed); old stage kept as stage_bad_f01members; re-staging.
+
 2026-10-25 ~19:10 - DD10 ROUND 4 (workflow wkrhxtbed, 0e5c0621a - pushed with a Sonnet trailer, can't fix without force-push): 1025e at C:/kl_build_1024/l05fa_1025e
 (F07_Main.zip 2143c207, KLJoin a117176e). Wall_Break opened statically (State_A + middle frame hidden/collision cut, State_C shown, breach frame 30781 solid: GUESS on the
 controllers), check() FAILs on blocked legs (1025d now FAIL), knee line 40 cm, ExitLootArea moved to the plaza + park z 900 -> bots/bots_dyn 0 FAIL. My re-run: check PASS
