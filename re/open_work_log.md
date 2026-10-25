@@ -1,3 +1,5 @@
+2026-10-25 (fb) - DM01 owner feedback STAGED (not installed): C:/kl_build_1024/dm01fb_1025a/stage, zip 885c4a13 (old c0e7b8ee) + WHD/WAV/LS bank, tag .before-1025dm01fb. Door-kick sound (bank merge, proven offline), 5 extinguishers on the wall (KEYFRAMED holder, proven by ray), cars from road to van, 3-man kick squad (engine behaviour GUESS, KICK_AT=45). Tool: tools/kl_dm01fb_stage.py. Rehearsal ok.
+
 2026-10-25 ~01:50 (e8) - DM05A MEMORY WALL, live: K44P2b on 9638943a (lastcall4 lite + lcmusic stageA) crashed 2.4 s into the route at
 kl2 0x6d2107 (IMA ADPCM decoder 0x6d2020 writes to 0: the in-memory fill 0x7a001e Lock (vtbl+0x74) reported success with a null pointer).
 Bisect K44P2c on 858d3371 (stageA undone) crashed 7 s into play at 0x8e5bbd (large block refused). klmem after load: 435-483 MB free,

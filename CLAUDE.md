@@ -66,6 +66,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 - DM01 owner feedback STAGED (not installed): C:/kl_build_1024/dm01fb_1025a/stage, zip 885c4a13 (old c0e7b8ee) + WHD/WAV/LS bank, tag .before-1025dm01fb. Door-kick sound (bank merge, proven offline), 5 extinguishers on the wall (KEYFRAMED holder, proven by ray), cars from road to van, 3-man kick squad (engine behaviour GUESS, KICK_AT=45). Tool: tools/kl_dm01fb_stage.py. Rehearsal ok.
+
 2026-10-25 - lastcall5 (full 653a4f4c 90 civs 150/111; lite 7d7f80c7 71 civs 138/95) STAGED, rehearsed, NOT installed (pinned on live 858d3371,
 backup .before-1025lastcall5): 14 civilian looks (DD 41803/41556 variants + M05_A 6854/7265/6993/7115 grafted), bodyguards, bartender.
 Files: C:/kl_build_1024/lastcall5_1025a/stage/lc5_{full,lite}/main; tool tools/kl_club_lastcall5.py. Women under DD Civilian clips unproven.

@@ -127,7 +127,7 @@ def sget(M, tok):
 
 
 # ------------------------------------------------------------------ the squads
-def squads_nodes(M, B, d, byk, clock, go_paths):
+def squads_nodes(M, B, d, byk, clock, go_paths, CELLS=CELLS):
     sc = B.sc
     node = lambda path: sc.resolve(path)[0]
     w3 = one(sc, KOW_WAVE3)
@@ -221,7 +221,9 @@ def anm_pass(dd_raw, donor, src_col='Swat_02', tgt_col='Mercenary_04', pre='/Lev
 
 
 # ------------------------------------------------------------------ the build
-def cars(src, dst, log=print):
+def cars(src, dst, log=print, plan=None):
+    """plan=None: the stage-B lane (md5 c0e7b8ee). plan = dict(paths={body: [(x, z), ...]}, cells=CELLS-like, backstop=seconds): each car's donor keys
+    are laid by arc fraction on its own polyline and its rotation keys follow the new tangent (kl_map_escape.van_prepare's rule)."""
     import kl_anm, kl_anmjoin as AJ
     data = open(src, 'rb').read()
     if md5(data)[:8] != PIN[:8]:
@@ -262,15 +264,47 @@ def cars(src, dst, log=print):
         if max(abs(p0[i] - struct.unpack_from('<3f', d.ent(k).trans)[i]) for i in range(3)) > 1.0:
             raise ValueError('body %d: first key %s is not its placement' % (k, p0))
     lane = {k: [mp(p) for p in tracks[k][1]] for k in BODIES}
-    if (round(lane[BODIES[0]][-1][0], 3), round(lane[BODIES[0]][-1][2], 3)) != STOP:
-        raise ValueError('car 1 does not stop at %s' % (STOP,))
+    cells, backstop, rotnew = CELLS, BACKSTOP_S, {}
+    if plan is None:
+        stop1 = STOP
+        if (round(lane[BODIES[0]][-1][0], 3), round(lane[BODIES[0]][-1][2], 3)) != STOP:
+            raise ValueError('car 1 does not stop at %s' % (STOP,))
+    else:
+        import kl_map_escape as ME
+        cells, backstop = plan['cells'], plan['backstop']
+        ends0 = sorted({o for e in d.ents if e.raw for _p2, oo in kl_graft.keys_tracks(e.raw) for o in oo} | {len(d.head)})
+        for k in BODIES:
+            K = ME.VanKeys(d.head, d.ent(k).raw, ends0, kl_graft.keys_tracks)
+            pts = tracks[k][1]
+            if K.npos != len(pts) or K.pos[0] != pts[0]:
+                raise ValueError('car %d: the key table is not the lane' % k)
+            old = ME.Poly(pts)
+            new = ME.Poly([(x, 0.0, z) for x, z in plan['paths'][k]])
+            lane[k] = [new.at(old.cum[i] / old.len * new.len) for i in range(len(pts))]
+            first = {}
+            for f in range(K.frames - 1, -1, -1):
+                first[K.f2r[f]] = f
+            rots, worst = [], 0.0
+            for r, q in enumerate(K.rot):
+                kp = K.f2p[first[r]]
+                s_old = old.cum[min(kp, len(pts) - 1)]
+                s_new = s_old / old.len * new.len
+                rel = ME._wrap(K.yaw(q) - ME._heading(old.tan(s_old, ME.AXLES)))
+                want = ME._heading(new.tan(s_new, ME.AXLES)) + rel
+                q2 = K.turned(q, want - K.yaw(q))
+                worst = max(worst, abs(ME._wrap(K.yaw(q2) - want)))
+                rots.append(q2)
+            if worst > 1.0:
+                raise ValueError('car %d: a rotation key is %.1f degrees off its heading' % (k, worst))
+            rotnew[K.offs[2]] = rots
+        stop1 = (lane[BODIES[0]][-1][0], lane[BODIES[0]][-1][2])
     stops = [lane[k][-1] for k in BODIES]
     for st in stops:
         a = nav.at(st[0], 0.0, st[2], dy=60.0)
         if a is None or nav.part[a[0]] != main:
             raise ValueError('stop %s is not on the main nav part' % (st,))
-    for n in CELLS:
-        for c in CELLS[n]:
+    for n in cells:
+        for c in cells[n]:
             a = nav.at(c[0], c[1], c[2], dy=60.0)
             if a is None or nav.part[a[0]] != main or nav.clearance(c[0], c[1], c[2], limit=200.0) < 50.0:
                 raise ValueError('post %s is not a main-part nav cell with clearance' % (c,))
@@ -309,14 +343,14 @@ def cars(src, dst, log=print):
     for nd in topg.walk():
         if nd.links is not None and getattr(nd, 'donor', None):
             P = nd.pos or STOP + (0.0,)
-            P = (STOP[0], 0.0, STOP[1])
+            P = (stop1[0], 0.0, stop1[1])
             best = min(lit, key=lambda e: sum((B.fr[e][1][i] - P[i]) ** 2 for i in range(3)))
             nd.links = list(best.links)
     # squads, clock
     clock = FED.clone_built(M, B, sc.resolve(R + KB.SQUAD + 'Squad#02')[0], CLOCK)
     clock.ctrls = []
     M.place(clock, (0.0, 0.0, 0.0))
-    cops, mcs = squads_nodes(M, B, d, byk, clock, None)
+    cops, mcs = squads_nodes(M, B, d, byk, clock, None, cells)
     proxy_path = NEW_PROXY
     act = IG.clone(M, d, 18455, 'Activator_Cars', lambda s: NEW_PROXY + s[len(OLD_PROXY):] if s.lower().startswith(OLD_PROXY.lower()) else s)
     M.place(act, (0.0, 0.0, 0.0))
@@ -334,7 +368,7 @@ def cars(src, dst, log=print):
     back = clock.add(FED.clone_built(M, B, sc.resolve(KOW.TIMER_FORM)[0], 'Backstop'))
     M.place(back, (0.0, 0.0, 0.0))
     back_p = R + CLOCK + BS + 'Backstop'
-    M.set(back, 'TriggerDelay2', {0: float(BACKSTOP_S), 4: [arrive_p]})
+    M.set(back, 'TriggerDelay2', {0: float(backstop), 4: [arrive_p]})
     tops = [topg, clock] + cops
     fa_new = 6
     if a0 + fa_new > ENGINE_ACTORS or s0 + 3 > ENGINE_SQUADS:
@@ -391,8 +425,10 @@ def cars(src, dst, log=print):
                 n = len(tracks[k][1])
                 for i in range(n):
                     x, y, z = struct.unpack_from('<3f', blob, 12 * i)
-                    struct.pack_into('<3f', blob, 12 * i, *mp((x, y, z)))
+                    struct.pack_into('<3f', blob, 12 * i, *(mp((x, y, z)) if plan is None else lane[k][i]))
                 body_new[k] = len(A.head)
+        for i, q in enumerate(rotnew.get(o, ())):
+            struct.pack_into('<4h', blob, 8 * i, *q)
         newoff[o] = len(A.head)
         A.head += bytes(blob) + bytes(-len(blob) % 16)
     for k, r in raws.items():
@@ -489,7 +525,7 @@ def cars(src, dst, log=print):
     rep = collections.OrderedDict(entities_before=len(B.ents), entities=len(allents), added=len(order), census=[a0, s0, fa, fs], slot_ids_moved=moved,
                                   prm_roots_repointed=repointed, sealed=sealed, members_changed=changed, reverify=problems[:5],
                                   stops=[[round(v, 1) for v in s] for s in stops], starts=[[round(v, 1) for v in lane[k][0]] for k in BODIES],
-                                  posts={n: CELLS[n] for n in CELLS}, backstop_s=BACKSTOP_S, lines=lines)
+                                  posts={n: cells[n] for n in cells}, backstop_s=backstop, lines=lines)
     log('  written %s: %d added, %d slot ids renumbered, members changed: %s' % (dst, len(order), moved, ' '.join(changed)))
     return rep
 
