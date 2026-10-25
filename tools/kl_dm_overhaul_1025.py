@@ -131,6 +131,17 @@ SPECS = {
         fuel=[(-1300.0, 2500.0, -482.0), (-4100.0, 3300.0, -470.0)],
         cars=None,
     ),
+    # ---- DD10 The Flat Raid (L05 on F07's systems, tools/kl_l05_layer.py), 2026-10-25.  Applied to the finished build BEFORE the install (the map ships complete).
+    # The street strip is ~150 wide (measured): open lanes at y=0 z -100..200 x 9800..11000 and z 700..800 x 10400..12000; the van lane z=1100 stays free.
+    # GUESS: every ext / fuel anchor and car path below (snapped by the tools to the nearest wall edge / open floor); the SWAT are F07's own Police_SWAT-style squad clone.
+    'DD10': dict(
+        slot='F07', file='F07_Main.zip', title='The Flat Raid', tag='.before-1025l05',
+        doors=[],
+        ext=[(10500.0, 200.0, 0.0), (11400.0, 150.0, 0.0), (11000.0, 750.0, 0.0)],
+        fuel=[(10600.0, 700.0, 0.0), (11700.0, 750.0, 0.0)],
+        # NO cars / SWAT: cars() refused the street lanes ('off the open street, clearance 100': the strip is ~150 wide, measured 2026-10-25); the F07 police squads already run the map.
+        cars=None,
+    ),
 }
 
 
