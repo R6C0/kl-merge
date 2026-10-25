@@ -115,3 +115,17 @@ Same route as SL2 (System Link > Create > FALobby, `[Expansion] OnlineSet=2`), T
    groups; kl_fa_bots writes eHeistOnly at its line 2688 check - NOT changed here, the file has another agent's edits): expect
    `7 team Ally`, tactics `00000000 00000000 00000000` (CONFIRMS 2.), and watch whether they walk, fight, and whether 0 faults.
 5. Two-PC (when available): the same with a client; the client log must print the same `fill` (answers the GUESS of 3.).
+
+## SL8 result and the data-side route (2026-10-25)
+- SL8 (out_parity_1025a_test, System Link solo, DM01): round state 0x19 confirmed online. The hook byte pass (bit 1 into [squad+0x34]) found 0 ZSquadScript:
+  it ran only in the lobby (8 passes) and squads are collected at level load, when the hook tick does not run. Hook route is dead; do not retry it.
+- Census after load: 71 ZFFActor, 7 team Ally, 7 alive, 0 with tactics. 7 = the number of Squad#02..08 (Glazer_Bodyguard_0N), 0 tactics = ZSoldier ctor under
+  0x7f6850 == false (it builds ZLootTactic/ZBoardEscapeVehicleTactic/ZBecomeTraitorTactic only when true). So most likely they are the map's own bots, which the
+  filter at 0x7b37d1 reaches through member slot 21 (0x63ddf0 -> 0x6edd50, reads as a deactivate/flag set, not a delete): present but disabled. NOT proven
+  (empty-seat player pawns are not ruled out by code; the numbers say squads). Test: with the botsonline zip the 7 should start walking.
+- DATA ROUTE BUILT: tools/kl_botsonline.py <in> <out> [eAllTypes|eFragileAllianceOnly] sets ZSquadScript field 1 of the 7 squads (only the .prp changes);
+  tools/kl_fa_bots.py build ... --squad-game eAllTypes does the same at clone time (check() accepts all three values). Default eAllTypes: keeps Arcade (mask has 8).
+  Zip: C:/kl_build_1024/botsonline_1025/F01_Main.zip (md5 95eba206..., from the live DM01 978475ed), install.py / install.py --undo (backup .before-1025botsonline).
+- What the host still lacks even if they walk: 0x7f6850 is false for roles 2/3, so no ZLootTactic / board-van / traitor tactics and no crew record
+  (Sv rules have none; slot 198 is 0x832930). Expect walkers that shoot and follow their route, but they will not pick up loot or board the van until
+  a code change (answer true from 0x7f6850 for the ZSoldier ctor only, or build the tactics ourselves). Not done.

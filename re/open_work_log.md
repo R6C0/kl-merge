@@ -1,3 +1,5 @@
+2026-10-25 ~23:30 - BOTS ONLINE, DATA ROUTE (not installed, not run): tools/kl_botsonline.py + kl_fa_bots --squad-game; C:/kl_build_1024/botsonline_1025 (install.py/--undo). 7 Ally actors = most likely the map's squads (re/bots_online_fill.md).
+
 2026-10-25 ~23:55 - MAX PLAYERS + COPS AND ROBBERS (re/max_players.md, re/cops_and_robbers.md; out_netmax_1025a SHIP 75579781 / _test 6d1ead2c, not installed, not run):
 Engine cap is 12 (setters 0x739f20/0x6f7fb0, MP_NumberOfPlayers 4..12, [12] DDL arrays); FA shows 8 only at the selector RIGHT clamp 0x7dcb78/0x7dcb7d; a level has 8 type-2 seats (9th = pick -1). C&R = FA sub-mode 2 ([0x168e59c]), lobby 6..12.
 New: [Lobby] MaxPlayers (klmm.c, Steam member limit floor), [NetLoad] Probe / ScaleSend (klnetload.c), all default off.
@@ -1752,3 +1754,4 @@ Restore stock with `tools/RESTORE Dog Days originals.bat`.
 Overnight note 2026-10-08/09: from the 79 % whole-level crash to four Dead Men maps and Retomoto
 Tower loading and playing rounds, in 14 commits on rtp-schemas; every crash and its cause is in
 the commit messages and the kl_graft.py run log.
+

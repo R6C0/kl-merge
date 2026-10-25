@@ -2239,6 +2239,10 @@ def make(B, P, log=print):
         b = P['bots'][N]
         top = M.clone(Sx, sq(N))
         M.place(top, (0.0, 0.0, 0.0))
+        if opt.get('squad_game'):
+            # 2026-10-25 (option --squad-game): the clone is eHeistOnly (mask 8), which ZSquadScript slot 14 (kl2 0x7b3790)
+            # drops in an online Fragile Alliance round (re/bots_online_fill.md). eAllTypes keeps Arcade and adds online.
+            M.set(top, 'ZSquadScript', {1: opt['squad_game']})
         # ---- the actor
         grp = top.add(M.clone(Sx, sq(N, '\\' + GROUP_NAME % N)))
         M.place(grp, b['start'], rot9(*b['face']))
@@ -2685,8 +2689,8 @@ def check(folder, log=print, slot=None, early_ok=None, links=None):
         if not kl_fa.has(sc, k, 'ZSoldier'):
             fail('%s: no ZSoldier controller' % name(k))
         ss = [vv for kk, _i, vv in kl_fa.controllers(sc, 'ZSquadScript') if kk == top]
-        if not ss or ss[0][1] != 'eHeistOnly':
-            fail('%s: its squad group %s has no ZSquadScript with field 1 = eHeistOnly' % (name(k), sc.names[top]))
+        if not ss or ss[0][1] not in ('eHeistOnly', 'eAllTypes', 'eFragileAllianceOnly'):      # the last two: --squad-game (online bots)
+            fail('%s: its squad group %s has no ZSquadScript with field 1 = eHeistOnly / eAllTypes / eFragileAllianceOnly' % (name(k), sc.names[top]))
     if sorted(digits) != list(BOTS):
         (fail if len(set(digits)) != len(digits) else note)('bot digits %s (stock: 2..8, one voice each)' % sorted(digits))
     # 2. the start: AIMonitor -> timer -> the first step of every squad; every chain to its end
@@ -3540,6 +3544,11 @@ def options(a):
         v = take(name, conv)
         if v is not None:
             opt[key] = v
+    v = take('--squad-game')
+    if v is not None:
+        if v not in ('eAllTypes', 'eFragileAllianceOnly'):
+            raise SystemExit('--squad-game eAllTypes|eFragileAllianceOnly')
+        opt['squad_game'] = v
     v = take('--park')
     if v is not None:
         opt['park'] = [float(x) for x in v.split(',')]
