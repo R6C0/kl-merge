@@ -1020,6 +1020,7 @@ static void __cdecl klh_w_runcallbacks(void)
                 t0 = b; spent = 0; frames = 0; reads0 = klh_reads; hitch = 0; told = 0; dt_max = 0; tick_max = 0;
             }
         }
+        klfps_gtick(ra);                                 /* klfps.c: the frame limiter's game thread fallback (only after a Present-route cut; after the perf line, which times the hook only) */
     }
 }
 

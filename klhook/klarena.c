@@ -152,7 +152,7 @@ static LPVOID WINAPI klar_hrealloc(HANDLE h, DWORD f, LPVOID p, SIZE_T n)
     b = (DWORD *)p - 2;
     if (b[1] != KLAR_MAGIC) { InterlockedIncrement(&klar_bad); SetLastError(ERROR_INVALID_PARAMETER); return 0; }
     old = b[0];
-    if (n + 8 <= klar_size[k->cls]) {   /* fits the slot it has: in place */
+    if (n <= KLAR_MAX && n + 8 <= klar_size[k->cls]) {   /* fits the slot it has: in place (n <= KLAR_MAX first: n + 8 wraps near 4 GB) */
         if ((f & HEAP_ZERO_MEMORY) && n > old) memset((BYTE *)p + old, 0, n - old);
         b[0] = (DWORD)n; InterlockedExchangeAdd64(&klar_inuse, (LONG64)n - (LONG64)old);
         return p;
@@ -171,7 +171,7 @@ static int klar_patch(HMODULE m, int alloc)
     static const char *fn[4] = { "HeapAlloc", "HeapFree", "HeapReAlloc", "HeapSize" }, *rtl[4] = { "RtlAllocateHeap", "RtlFreeHeap", "RtlReAllocateHeap", "RtlSizeHeap" };
     void *mine[4] = { (void *)klar_halloc, (void *)klar_hfree, (void *)klar_hrealloc, (void *)klar_hsize }, *old[4][4];
     HMODULE k32 = GetModuleHandleA("kernel32.dll"), kb = GetModuleHandleA("kernelbase.dll"), nt0 = GetModuleHandleA("ntdll.dll");
-    BYTE *base = (BYTE *)m; IMAGE_NT_HEADERS *nt; IMAGE_DATA_DIRECTORY *dd; void **slot, **end; int i, j, done = 0;
+    BYTE *base = (BYTE *)m; IMAGE_NT_HEADERS *nt; IMAGE_DATA_DIRECTORY *dd; void **slot, **end; int i, j, p, done = 0;
     if (((IMAGE_DOS_HEADER *)base)->e_magic != IMAGE_DOS_SIGNATURE) return 0;
     nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
@@ -184,13 +184,17 @@ static int klar_patch(HMODULE m, int alloc)
 #ifdef KLHOOK_TEST
     old[0][3] = (void *)klva_halloc; old[1][3] = (void *)klva_hfree; old[2][3] = (void *)klva_hrealloc;   /* VaLog got there first */
 #endif
-    slot = (void **)(base + dd->VirtualAddress); end = (void **)(base + dd->VirtualAddress + dd->Size);
-    for (; slot < end; slot++) {
-        void *cur = *slot;
-        if (!cur) continue;
-        for (i = alloc ? 0 : 1; i < 4; i++) { for (j = 0; j < 4 && (!old[i][j] || cur != old[i][j]); j++) ; if (j < 4) break; }
-        if (i == 4) continue;
-        if (klh_poke(slot, &cur, sizeof cur, &mine[i], sizeof mine[i], fn[i])) done++;
+    /* two passes (review 1025): Free / ReAlloc / Size first, HeapAlloc LAST - with HeapAlloc first (the IAT is name-sorted), a driver
+       thread could take an arena block and free it through the still-real HeapFree in between (RtlFreeHeap on a foreign pointer) */
+    for (p = 0; p < 2; p++) {
+        if (p == 1 && !alloc) break;
+        for (slot = (void **)(base + dd->VirtualAddress), end = (void **)(base + dd->VirtualAddress + dd->Size); slot < end; slot++) {
+            void *cur = *slot;
+            if (!cur) continue;
+            for (i = p ? 0 : 1; i < (p ? 1 : 4); i++) { for (j = 0; j < 4 && (!old[i][j] || cur != old[i][j]); j++) ; if (j < 4) break; }
+            if (i == (p ? 1 : 4)) continue;
+            if (klh_poke(slot, &cur, sizeof cur, &mine[i], sizeof mine[i], fn[i])) done++;
+        }
     }
     return done;
 }

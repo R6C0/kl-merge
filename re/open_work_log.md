@@ -1,3 +1,9 @@
+2026-10-25 ~04:35 - MEMORY K49F/G (e8, DM05A, TEST hooks, nothing installed): K49F: the nvd3dum pile is on kl2's RENDER thread (thread start via our
+klm_thread_start DINPUT8+695a0), not a driver worker, so threaded optimization is likely not the main source. K49G = [Memory] DriverArena=1 (klarena.c, 0359a9a64,
+TEST BA361920): nvd3dum's process-heap blocks <=64 KB go to 1 MB chunks that are freed when empty; 0 bad frees, survived 200 s. The pile is LIVE, not fragmentation:
+arena in-use 70 <-> 460 MB on a ~20 s cycle, free VA 380 <-> 16 MB, 8 refused small requests. The process heap P stays at 457 MB on top of that. The game ran at
+200-470 fps with FrameLimit auto. Next: K49H = + Fps=60; K49I = + e27's texmip DM05A zip (4bd278cf, -64 MB .TEX; e27 installs after the K49H END).
+
 2026-10-25 ~14:30 - MEMORY / DD10: e8 K49D/E (DM05A, hung): the nvd3dum growth is ~132k small blocks (~2.8 KB, +366 MB/10 s, no kl2 frame, likely the driver
 worker queue); the NT process heap keeps the peak (1015 MB reserved vs 544 in use) = the wall. devobj/CFGMGR32 churn = xinput1_4 polled by gameoverlayrenderer + ReShade
 (alloc == free). nvd3dum imports KERNEL32 Heap* directly -> e8 plans a chunk arena behind nvd3dum's Heap* import slots (after K49F). Static wswg81sj9: all .TEX MANAGED,

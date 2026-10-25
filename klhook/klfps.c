@@ -268,6 +268,33 @@ static int klfps_pre(const char *route, int d, void *ret)
     return 1;
 }
 
+/* GAME THREAD FALLBACK (2026-10-25, e8). FINDING: the RECURSION CUT above fires in EVERY session on the owner's PC (KLHook.log, 27 of
+ * the live test logs): the Steam overlay's hook calls the swap chain slot 3 again from gameoverlayrenderer.dll+0x79ab4 (depth 0, 1, 2
+ * in the same millisecond) - so since k36 the limiter was dead seconds after the first Present and the game ran at the bare 200 .. 470
+ * fps. The cut stays (k34's stack overflow); once it has fired, the same deadline wait runs on the GAME thread instead, once a frame at
+ * the main loop's second SteamAPI_RunCallbacks (return 0x87aa82, the one site [Solo] FpsCap uses): the render thread draws what the game
+ * thread produced, so a paced game thread paces the presents (GUESS: the 1-frame queue between them adds no extra latency beyond one
+ * frame; not measured). Sleep(1) with a 1 ms timer while more than 2.5 ms remain, so the main thread does not spin a whole core.
+ * [FrameLimit] GameThread=1 (recommended on; 0 = a cut limiter stays dead, the k36 behaviour). Import slot (RunCallbacks) only: SHIP-safe. */
+static int klfps_gt = 1;
+static volatile LONG klfps_gt_on;
+static void klfps_gtick(DWORD_PTR ra)
+{
+    LARGE_INTEGER n;
+    if (!klfps_dead || !klfps_gt || klfps_target <= 0 || !klfps_freq) return;
+    if (ra != (DWORD_PTR)KLH_VA(0x0087aa82u)) return;               /* once a frame: the main loop's second call only */
+    if (!klfps_gt_on) {
+        typedef DWORD (WINAPI *tbp_fn)(UINT); HMODULE m = LoadLibraryA("winmm.dll"); tbp_fn tbp = m ? (tbp_fn)GetProcAddress(m, "timeBeginPeriod") : 0;
+        if (tbp && !klfps_passive) tbp(1);
+        klfps_passive = 1; klfps_deadline = 0; klfps_t0 = 0; klfps_last_present = 0;
+        InterlockedExchange(&klfps_gt_on, 1);
+        klog("fps: game thread fallback ON: %d fps paced on the main loop (Present route cut; [FrameLimit] GameThread=0 turns this off)", klfps_target);
+    }
+    klfps_wait();
+    QueryPerformanceCounter(&n);
+    klfps_stat(n.QuadPart);                                         /* the Log=1 line now counts game frames */
+}
+
 static void klfps_post(void)
 {
     LARGE_INTEGER n;
@@ -398,6 +425,7 @@ static void klfps_init(void)
     klfps_adaptive = GetPrivateProfileIntA("FrameLimit", "Adaptive", 0, klh_ini) != 0;
     klfps_use_sc    = GetPrivateProfileIntA("FrameLimit", "SwapChain", 1, klh_ini) != 0;   /* k36: 0 = do not wrap IDirect3DSwapChain9::Present */
     klfps_use_reset = GetPrivateProfileIntA("FrameLimit", "Reset", 1, klh_ini) != 0;       /* k36: 0 = do not wrap IDirect3DDevice9::Reset */
+    klfps_gt        = GetPrivateProfileIntA("FrameLimit", "GameThread", 1, klh_ini) != 0;  /* 1025: pace on the game thread after a cut */
     klfps_tls = TlsAlloc();                                         /* per-thread nesting depth (k36 recursion guard); TLS_OUT_OF_INDEXES = depth always 0 */
     QueryPerformanceFrequency(&f); klfps_freq = f.QuadPart;
     if (klfps_passive) {                                            /* Sleep(1) is only useful with a 1 ms timer */
