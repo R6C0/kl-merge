@@ -21,6 +21,8 @@ also uses are NOT touched (picture_uses check, as in kl_shop_swap.find_ids).
     python kl_shop_cards.py sheet <archive.zip> <out.png>          contact sheet of the 36 big + 36 small + star + lock tiles (read only)
     python kl_shop_cards.py restyle <archive.zip> <out.zip> [--swap=LINE] [--preview=<png>]
                                                                    rebuilt archive: only the .TEX (and, with --swap, the .LOC) members change
+    python kl_shop_cards.py restore <installed map folder> <out folder> <stock slot zip> [--rows=2,13,...]
+                                                                   PAGE 1 STOCK: swapped + look rows back to the Dog Days gun (card, icon, name, description); heavy (one zip)
 Never writes into the game folder.
 """
 import json, os, struct, sys, zipfile
@@ -858,7 +860,7 @@ def restyle_tex(tex_bytes, tiles, swaps, texobj=None, log=print, looks=None):
     return W.patch_pixels(tex_bytes, data, expect), rep
 
 
-def bake_tiles(tex_bytes, tiles, swaps, texobj=None, log=print, glyphs=True, looks=None):
+def bake_tiles(tex_bytes, tiles, swaps, texobj=None, log=print, glyphs=True, looks=None, force_rows=()):
     """-> (data {texture id: encoded pixels}, expect {id: (fourcc, w, h)}, report). The pixel work of restyle_tex, without patching anything."""
     import kl_texmat as T
     np = _np()
@@ -870,7 +872,7 @@ def bake_tiles(tex_bytes, tiles, swaps, texobj=None, log=print, glyphs=True, loo
         big, _ = decode_tile(tex, bigid)
         ma = marked_any(big)
         if STYLE == 'white':
-            if ma is not None and ma == (MARK_VERSION, item):
+            if ma is not None and ma == (MARK_VERSION, item) and r not in force_rows:
                 rep['kept'].append(r); continue
             src = white_source(tex, r, item, looks)
             if src is None:
@@ -1063,6 +1065,53 @@ def recut(mapdir, outdir, swap_text=None, source_suffix='.before-1023shop', log=
                 new_md5=W.md5(dst), old_md5=W.md5(zp), rowinfo=rep['rows'])
 
 
+def restore_map(mapdir, outdir, stock_zip, rows=None, log=print):
+    """PAGE 1 STOCK (owner 2026-10-25): an installed map folder -> outdir/<slot>_Main.zip whose shop rows `rows` (default kl_hud_shop.RESTORE_ROWS: the
+    swapped rows 13 16 32 35 and the Dead Men look rows 2 18 22 28 29 33) show the Dog Days gun again: card + icon repainted for item 0 with no
+    looks (STYLE 'white', the model PNGs of sil_dir(); no stock .TEX is needed), names = kl_hud_shop.ROWS, descriptions = the STOCK zip's
+    (stock_zip = a stock slot archive under <DD>/Scenes, e.g. F02_Main.zip; NEVER KL_PortBackup). Only the installed .TEX and .LOC members change;
+    every other member is copied raw. Reads mapdir and stock_zip, writes only outdir. A second run on the result changes nothing.
+    -> report dict. DM01's stat blocks (DMG/ROF lines) are NOT recomputed for the restored rows: they get the stock description."""
+    import kl_hud_shop as S, kl_texmat as T
+    rows = tuple(S.RESTORE_ROWS if rows is None else rows)
+    zp = next(os.path.join(mapdir, f) for f in sorted(os.listdir(mapdir)) if f.lower().endswith('_main.zip'))
+    zi, zs = zipfile.ZipFile(zp), zipfile.ZipFile(stock_zip)
+    stem = [n for n in zi.namelist() if n.endswith('.prm')][0][:-4]; texm = stem + '.TEX'
+    ti = shop_tiles(zi, stem)
+    only = dict(ti, big={r: t for r, t in ti['big'].items() if r in rows}, small={r: t for r, t in ti['small'].items() if r in rows})
+    inst_tex = zi.read(texm)
+    data, expect, rep = bake_tiles(inst_tex, only, {}, log=log, glyphs=False, looks=None, force_rows=rows)
+    assert not rep['failed'], rep['failed']
+    new = {}
+    if data:
+        new[texm] = W.patch_pixels(inst_tex, data, expect)
+    files = {i.filename: zi.read(i.filename) for i in zi.infolist() if i.filename.lower().endswith('.loc')}
+    stock = {i.filename: zs.read(i.filename) for i in zs.infolist() if i.filename.lower().endswith('.loc')}
+    for m in S.restore_level(files, stock, rows, log):
+        new[m] = files[m]
+    os.makedirs(outdir, exist_ok=True)
+    dst = os.path.join(outdir, os.path.basename(zp))
+    if os.path.exists(dst):
+        os.remove(dst)
+    if not new:
+        return dict(archive=os.path.basename(zp), unchanged=True, rows=rows)
+    W.rezip_raw_multi(zp, dst, new)
+    b = zipfile.ZipFile(dst)
+    diff = [i.filename for i in zi.infolist() if (b.getinfo(i.filename).CRC, b.getinfo(i.filename).file_size) != (i.CRC, i.file_size)]
+    assert [i.filename for i in zi.infolist()] == [i.filename for i in b.infolist()], 'member list changed'
+    assert sorted(diff) == sorted(new), 'members that differ %s != changed %s' % (diff, sorted(new))
+    assert all(d.lower().endswith(('.tex', '.loc')) for d in diff), diff
+    if texm in new:
+        texi, texn = T.read_tex(inst_tex), T.read_tex(new[texm])
+        diff_t = [tid for tid in sorted(texi.tex) if bytes(texi.tex[tid].entry) != bytes(texn.tex[tid].entry)]
+        assert set(diff_t) <= set(data), 'textures changed beyond the shop tiles: %s' % sorted(set(diff_t) - set(data))
+        assert len(new[texm]) == len(inst_tex)
+    assert S.restore_level({n: b.read(n) for n in files}, stock, rows, lambda s: None) == [], 'restore is not idempotent'
+    bad = blank_tiles(b)
+    return dict(archive=os.path.basename(zp), dst=dst, rows=rows, members_changed=diff, repainted=sorted(rep['rows']), blank_tiles=bad,
+                old_md5=W.md5(zp), new_md5=W.md5(dst), old_size=os.path.getsize(zp), new_size=os.path.getsize(dst))
+
+
 PATCH_INI = ("; KLHook.shop.patch.ini - merge into <Dog Days>\\KLHook.ini by hand (this tool never touches the game folder).\r\n"
              "; The cards and names baked by 'INSTALL shop 1023.bat' say the guns below; the hook hands them over only with these lines.\r\n"
              "; A map whose KLGuns.ini has its own [Shop] Swap line keeps that line (the bake read the same one).\r\n"
@@ -1135,6 +1184,9 @@ def main(a):
     if len(pos) == 3 and pos[0] == 'recut':
         rows = {int(x) for x in opts['rows'].split(',')} if 'rows' in opts else None
         r = recut(pos[1], pos[2], opts.get('swap'), rows=rows); print(json.dumps(r, indent=1)); return 0
+    if len(pos) == 4 and pos[0] == 'restore':             # restore <installed map folder> <out folder> <stock slot zip> [--rows=2,13,...]
+        rows = tuple(int(x) for x in opts['rows'].split(',')) if 'rows' in opts else None
+        r = restore_map(pos[1], pos[2], pos[3], rows); print(json.dumps(r, indent=1, default=str)); return 0
     if len(pos) == 2 and pos[0] == 'scripts':
         write_scripts(pos[1], json.load(open(os.path.join(pos[1], 'manifest.json')))); print('scripts rewritten'); return 0
     if len(pos) == 2 and pos[0] == 'check':

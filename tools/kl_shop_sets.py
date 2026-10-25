@@ -3,7 +3,7 @@ r"""
 kl_shop_sets.py - set B ("page II") of the Dog Days between-rounds weapon shop, for klhook\klshoppage.c. OFFLINE; never writes the game folder.
 
     python kl_shop_sets.py show [--grenades] [kl2.exe]     the pairs: row (stock gun) -> set-B gun, carrier price/rank/tier, picture row
-    python kl_shop_sets.py ini [--grenades] [out.ini]       KLShopPage.ini text (default: stdout)
+    python kl_shop_sets.py ini [--grenades] [--native] [out.ini]   KLShopPage.ini text (default: stdout); --native = page 1 stock, page II = HK69 Minimi Rem700 Type81 only
     python kl_shop_sets.py stage <out folder> [--grenades] [--dll=<dinput8.dll>] [--game=<Dog Days folder>]
                                                             out\KLShopPage.ini, optional dinput8.dll.page, INSTALL/UNDO bats + shoppage_install.ps1
 
@@ -56,6 +56,9 @@ ORDER = {
     'smg': [41, 42, 43, 44, 45, 46, 48, 40, 47],
     'rifle': [33, 35, 38, 49],
 }
+# Page 1 stock (owner 2026-10-25): page II keeps only the four guns that used to be handed over on page 1, each on its NATIVE item id,
+# on a carrier of similar weight with no DLC lock (GUESS, a balance call): row -> item
+NATIVE = {13: 52, 28: 33, 32: 49, 34: 47}
 GRENADES = [55, 56, 57, 58, 59]            # opt-in: [4, 6, 8, 10, ...] pistol rows get them (thrown items in a gun slot are untried)
 
 
@@ -70,11 +73,11 @@ def names():
     return [r[1] for r in S.ROWS]
 
 
-def pairs(grenades=False, path=EXE):
+def pairs(grenades=False, path=EXE, native=False):
     """-> {row: (item, name, desc, picrow)}"""
     tab, nm = rows(path), names()
     out = {}
-    for cat, items in ORDER.items():
+    for cat, items in ({} if native else ORDER).items():
         items = list(items)
         carriers = [r for r in CATS[cat] if tab[r][5] == -1] or list(CATS[cat])
         if len(carriers) < len(items):
@@ -89,6 +92,8 @@ def pairs(grenades=False, path=EXE):
             picks.sort()
         for it, j in zip(items, picks):
             out[carriers[j]] = it
+    if native:
+        out.update(NATIVE)
     if grenades:
         free = [r for r in CATS['pistol'] if r not in out and tab[r][5] == -1]
         for it, r in zip(GRENADES, free):
@@ -101,8 +106,8 @@ def pairs(grenades=False, path=EXE):
     return res
 
 
-def ini_text(grenades=False, path=EXE):
-    p = pairs(grenades, path)
+def ini_text(grenades=False, path=EXE, native=False):
+    p = pairs(grenades, path, native)
     L = ['; KLShopPage.ini - written by tools/kl_shop_sets.py; read by klhook/klshoppage.c (beside KLHook.ini). row|item|picture row|name', '[Pairs]', 'Count=%d' % len(p)]
     for i, (r, (it, name, desc, pic)) in enumerate(p.items()):
         L.append('P%d=%d|%d|%d|%s' % (i, r, it, pic, name))
@@ -222,13 +227,14 @@ def stage(out, grenades, dll, game):
 def main():
     a = sys.argv[1:]
     gren = '--grenades' in a
+    native = '--native' in a
     dll = next((x[6:] for x in a if x.startswith('--dll=')), None)
     game = next((x[7:] for x in a if x.startswith('--game=')), GAME)
     a = [x for x in a if not x.startswith('--')]
     if a and a[0] == 'show':
         show(gren, a[1] if len(a) > 1 else EXE); return 0
     if a and a[0] == 'ini':
-        t = ini_text(gren)
+        t = ini_text(gren, native=native)
         if len(a) > 1:
             open(a[1], 'w', newline='').write(t)
         else:

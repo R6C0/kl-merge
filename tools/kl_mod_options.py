@@ -50,8 +50,10 @@ feat('guns', G_CORE, 'Dead Men gun looks and start rifle (Mod settings rows)', '
      'works with the maps built with the guns; harmless elsewhere', [('Guns', 'Enable', 1, 0, -1)])
 feat('shop', G_CORE, 'More guns in the weapon shop', 'on', 'start',
      'run live 2026-10-20 (rows swapped for Minimi, HK69, Type 81, Rem 700)', [('Shop', 'Enable', 1, 0, 0)])
-feat('shoppage', G_CORE, 'Weapon shop page II: F6 flips the shop to a second set of guns (recommended on)', 'on', 'start',
+feat('shoppage', G_CORE, 'Weapon shop page II: a key (P) flips the shop to a second set of guns', 'on', 'start',
      'klshoppage.c + KLShopPage.ini (tools/kl_shop_sets.py stage); NOT live-tested; needs the ini beside KLHook.ini, else it logs and does nothing', [('ShopPage', 'Enable', 1, 0, 0)])
+feat('shoptabs', G_CORE, 'Weapon shop page II: own tab names (KLShopPage.ini [Tabs]) instead of "... II"', 'on', 'start',
+     'klshoppage.c TabNames: data-only text swap; an empty [Tabs] key keeps the old " II" append; needs [ShopPage] Enable=1', [('ShopPage', 'TabNames', 1, 0, 0)])
 feat('hud', G_CORE, 'Mod HUD (kill feed, scoreboard, trackers, names)', 'on', 'start',
      'the owner plays with it', [('HUD', 'Enable', 1, 0, 0)])
 feat('balance', G_CORE, 'One damage scale for you, police and crew (Dead Men maps)', 'on', 'start',

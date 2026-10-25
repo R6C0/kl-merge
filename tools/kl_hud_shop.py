@@ -237,6 +237,58 @@ def apply_level(files, log=print, guns=None, swaps=None):
     return changed
 
 
+# rows a swap (klshop.c [Shop] Swap=13:52,16:33,32:49,35:47) or a Dead Men look (items 29 30 31 27 23 8) renamed; restore_level undoes them
+RESTORE_ROWS = (2, 13, 16, 18, 22, 28, 29, 32, 33, 35)
+
+
+def restore_loc(data, stock, rows=RESTORE_ROWS, log=print, tag=''):
+    """page 1 stock (owner 2026-10-25): one .LOC member -> (bytes, leaves changed). The name of each row in `rows` becomes ROWS[row] (the HUD's
+    wording of the Dog Days gun, as apply_loc writes it) and its description the STOCK one (`stock` = the same-language .LOC bytes of a
+    stock slot zip, tidied like apply_loc). A leaf missing in either side is left alone."""
+    kids = L.parse(data); sk = L.parse(stock)
+    if kids is None or sk is None:
+        return data, 0
+    leaves, sl = dict(L.leaves(kids)), dict(L.leaves(sk))
+    n = 0
+    for r in rows:
+        k = leaves.get(KEY + str(r))
+        if k is not None and k.flags & L.TEXT and L.fields(k)[0] != ROWS[r][1].encode('latin1'):
+            _set_text(k, ROWS[r][1].encode('latin1')); n += 1
+        d, sd = leaves.get(KEY + str(r) + 'Desc'), sl.get(KEY + str(r) + 'Desc')
+        if d is not None and sd is not None and d.flags & L.TEXT:
+            t2 = _tidy(L.fields(sd)[0] or b'')
+            if L.fields(d)[0] != t2:
+                _set_text(d, t2); n += 1
+    if not n:
+        return data, 0
+    out = L.build(kids)
+    if len(out) > L.LOC_CAP and len(data) <= L.LOC_CAP:
+        log('restore %s: the .LOC would be %d bytes, over %d: left as it is' % (tag, len(out), L.LOC_CAP))
+        return data, 0
+    assert L.build(L.parse(out)) == out
+    return out, n
+
+
+def restore_level(files, stock_files, rows=RESTORE_ROWS, log=print):
+    """every .LOC member of an open level (dict name -> bytes) in place, from the stock slot's members of the same file name
+    (the language suffix; the folder may differ) -> the members changed. Needs `stock_files` of a STOCK zip (<DD>/Scenes, never KL_PortBackup)."""
+    by = {m.lower().rsplit('/', 1)[-1]: m for m in stock_files if m.lower().endswith('.loc')}
+    changed = []
+    for m in files:
+        if not m.lower().endswith('.loc'):
+            continue
+        # 'F01_english.loc' -> the language suffix after the last '_'
+        suf = m.lower().rsplit('/', 1)[-1].rsplit('_', 1)[-1]
+        src = next((v for k, v in by.items() if k.rsplit('_', 1)[-1] == suf), None)
+        if src is None:
+            log('restore: no stock %s member for %s' % (suf, m)); continue
+        new, n = restore_loc(files[m], stock_files[src], rows, log, m)
+        if n:
+            files[m] = new; changed.append(m)
+    log('shop restore: %d .LOC member(s) back to stock descriptions and HUD names on rows %s' % (len(changed), list(rows)))
+    return changed
+
+
 if __name__ == '__main__':
     if len(sys.argv) == 3 and sys.argv[1] == 'swaps':
         for r, i in sorted(parse_swap(sys.argv[2]).items()):

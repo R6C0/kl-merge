@@ -64,6 +64,7 @@ typedef void  (__fastcall *kspg_gfx_t)(void *self, void *edx);
 typedef void  (__fastcall *kspg_msg_t)(void *self, void *edx, DWORD *msg);
 
 static struct {
+    int tabNames; char tab[4][64];
     int on, grenades, trick, key, log, clips, hint, keyDown, txtSeen, togglePend, premake, preDone, preTry, sane, st;
     volatile int active, pre, shownB;                 /* active: gate open and wrappers may act; shownB: set B on screen */
     int own[2];                                  /* 0/1: the gun carried in the primary / secondary slot came from set B */
@@ -117,12 +118,16 @@ static char *kspg_text(int c, void *self, const char *key)
         memcpy(o, res, n); strcpy(o + n, add);
         return o;
     }
-    if (kspg.shownB && (strstr(key, "HeadlinePistol") || strstr(key, "HeadlineShot") ||
-                       strstr(key, "HeadlineSub") || strstr(key, "HeadlineAssaultRifle"))) {
-        size_t n = strlen(res); o = kspg_ring();
-        if (n > 500) return res;
-        memcpy(o, res, n); memcpy(o + n, " II", 4);
-        return o;
+    if (kspg.shownB) {
+        static const char *const hk[4] = { "HeadlinePistol", "HeadlineShot", "HeadlineSub", "HeadlineAssaultRifle" };
+        int t; for (t = 0; t < 4 && !strstr(key, hk[t]); t++) ;
+        if (t < 4) {
+            size_t n = strlen(res); o = kspg_ring();
+            if (kspg.tabNames && kspg.tab[t][0]) { strncpy(o, kspg.tab[t], 519); o[519] = 0; return o; }   /* [Tabs] full replacement text */
+            if (n > 500) return res;
+            memcpy(o, res, n); memcpy(o + n, " II", 4);
+            return o;
+        }
     }
     return res;
 }
@@ -518,6 +523,8 @@ static int kspg_load(void)
     s = strrchr(file, 0x5c); if (!s) s = strrchr(file, '/');
     if (!s) return 0;
     strcpy(s + 1, "KLShopPage.ini");
+    { static const char *const tk[4] = { "HeadlinePistol", "HeadlineShot", "HeadlineSub", "HeadlineAssaultRifle" }; int t;
+      for (t = 0; t < 4; t++) { GetPrivateProfileStringA("Tabs", tk[t], "", kspg.tab[t], sizeof kspg.tab[t], file); } }
     n = (int)GetPrivateProfileIntA("Pairs", "Count", 0, file);
     if (n < 0 || n > KSPG_ROWS) n = 0;
     for (i = 0; i < n; i++) {
@@ -546,6 +553,7 @@ static void kspg_init(void)
     kspg.hint = GetPrivateProfileIntA("ShopPage", "Hint", 1, klh_ini) != 0;
     kspg.clips = GetPrivateProfileIntA("ShopPage", "ReserveClips", 2, klh_ini);
     kspg.premake = GetPrivateProfileIntA("ShopPage", "PreMake", 1, klh_ini) != 0;       /* k43 (recommended on): make the page B guns in the first shop */
+    kspg.tabNames = GetPrivateProfileIntA("ShopPage", "TabNames", 1, klh_ini) != 0;       /* (recommended on): [Tabs] in KLShopPage.ini names the page II headlines; empty key = old " II" append */
     kspg.have = kspg_load();
     if (!kspg.have) { klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0; return; }
     kspg.carried[0] = kspg.carried[1] = -1;
