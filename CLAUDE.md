@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 ~20:30 - GUNS RAW LIKE THE MP45 INSTALLED (owner: 'distortion to match like the mp45'): kl_gunsnd_all build --raw (hard clip + rail-aware IMA
+encode), 42 banks, median 21.9 % flat (Deagle ~20 %), MP45 untouched; C:/kl_build_1024/gunraw_1025, *.WAV.before-1025gunraw, UNDO bat there. Not ear-tested.
+Grenade TEST ready, not run: C:/kl_build_1024/grenspawn_1025/install.py (Spawn=2; --undo after). DD10 escape: [HUD] TrackerEscapeFar (8bb053657, default 0),
+built out_escfar_1025a, not installed; unknown whether DD10 has a van tracker entry at all (kl-merge-ce checking the POI).
+
 2026-10-25 ~17:58 - STUTTER vs LAST NIGHT + MAP SET (3f): owner sessions per minute of frames over 33 ms: 10-24 17:35 = 11, 19:21 = 6.5; today 14:56-17:39 = 53-128.
 Today 70-80% of hitch-probe reports stand in NtUserPeekMessage (win32u+0x101c; ReShade32+0x5ff67 + gameoverlayrenderer on the stack) vs 18/32 at 17:35. 10-24 17:35 had NO medal-hook32
 loaded (19:21 did); Medal + MedalEncoder were restarted 15:15 today. INSTALLED hook out_mapset_1025a SHIP 2FF289F3 (on FA8A38A5, .before-1025mapset; ini untouched, Trace=1):
@@ -76,7 +81,6 @@ Peek 'by result' line, [Input] MouseMoveMs, [Expansion] OnlineSet/KeepPageOnline
 Members .prp .gms .buf .oct .prm (.prm only .oct record numbers at +0x1c, as kl_fa_bots.apply); bot checks identical to the input; entries stale 0. No arming needed (ctor sets state 1).
 Undo: C:/kl_build_1024/hkick_1025a/<MAP>/stage/install.py --undo (.before-1025hkick). Not run live. Risk: a kick order rejected before the goal runs would hold that squad (no timeout).
 
-2026-10-25 ~17:05 - GRENADE PROBE: [P+0xa1c]=0 on every G press: player action 0x11 is dead; ini [Grenade] Probe=0 (44e51cff). Next: hook-side projectile spawn (e8, research).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
