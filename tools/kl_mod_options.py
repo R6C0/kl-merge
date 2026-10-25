@@ -207,6 +207,9 @@ feat('names', G_EXP, 'Dead Men map names in the Arcade lists', 'off', 'start',
      'live-tested once (PD1); off until the owner OKs the renaming', [('Names', 'Enable', 1, 0, 0)])
 feat('inv', G_EXP, 'Gun shelf: carry more than two guns (F8)', 'off', 'start',
      'research feature, off by default', [('Inv', 'Enable', 1, 0, 0)])
+feat('grenade', G_EXP, 'Throw a carried grenade with G (Dead Men style)', 'off', 'start',
+     'klgrenade.c step 1: plays the dead HoldGrenade button; only with a grenade in the inventory (DM01 pickups); never run live',
+     [('Grenade', 'Throw', 1, 0, 0)])
 
 BY_ID = {f['id']: f for f in F}
 assert len(BY_ID) == len(F) and all(f['rec'] in ('on', 'off') for f in F)      # every row is shown with '(recommended on|off)' (rec_text)

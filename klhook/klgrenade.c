@@ -1,20 +1,32 @@
 /*
- * klgrenade.c - DEAD MEN GRENADES, STEP 0: a LOG-ONLY PROBE. re\grenades_1025.md section 5 is the plan.
+ * klgrenade.c - DEAD MEN GRENADES. re\grenades_1025.md section 5 is the plan.
+ *   STEP 0 ([Grenade] Probe=1): a LOG-ONLY probe.  STEP 1 ([Grenade] Throw=1): the G key throws a grenade you carry.
  *
- * WHAT IT ANSWERS: does a stock Fragile Alliance player hold a grenade item (inventory kind 0), and does the grenade bit
- * appear in the player's words when the throw key is held. kl2.exe's setter 0x4aa410 can only CLEAR bit 0x40 of
- * [player+0xb90] (READ); 0x544780 copies that bit into bit 0x800 of the action word [player+0x818] every frame (READ,
- * 0x5447f9 / 0x544805). So with stock code both bits are expected to stay 0; this probe shows it in the log.
+ * THE CHAIN (READ, re\grenades.md 7 and 13): HoldGrenade -> setter 0x4aa410 -> bit 0x40 of [player+0xb90] -> 0x544780 copies
+ * that bit every frame into bit 0x800 of the action word [player+0x818] (0x5447f9 / 0x544805) -> ZFFActionThrow (action 0x11)
+ * -> the projectile of the item's Ammo. kl2.exe's 0x4aa410 can only CLEAR bit 0x40 (READ), so the key is dead in Dog Days.
  *
- * WHAT IT DOES: nothing but reads. On a key press (and every 200 ms while it is held, at most 10 samples, then once on
+ * STEP 0 does nothing but reads. On a key press (and every 200 ms while it is held, at most 10 samples, then once on
  * release) it logs [P+0xb90], [P+0x818], [P+0x924] (selected item id) and every inventory entry ([P+0xcec]: +8 array of
  * 16-byte entries, +0xc count; entry +0 key, +8 object, +0xc binding; binding +4 item id (GUESS, see klinv.c), +8 kind
  * 0 grenade, 1 two-handed, 2 one-handed, 3 special). For 3 s after a press it also logs any change of bit 0x40 / 0x800.
- * No write, no call into the game. Local player only, offline Arcade only (klinv_player).
+ *
+ * STEP 1 plays the dead button: while G is held (game window in front) AND the inventory has a kind-0 entry with an
+ * object, it ORs bit 0x40 into [P+0xb90] every game tick, as a real HoldGrenade press would, for at most HoldMs (a stuck
+ * key cannot keep it on). Release = no more writes; the game's own 0x4aa410 clears the bit again. Data writes only
+ * (klh_data on the heap player object), no code patch, so it is SHIP-safe.
+ *   GUESS 1: that our tick runs between the input's clear and 0x544780's copy often enough; if 3 ticks pass with 0x40 set
+ *     and 0x800 still clear, ActBit=1 (default) also ORs 0x800 into [P+0x818] while held (logged once per press).
+ *   GUESS 2: that ZFFActionThrow takes the item, spends it and spawns the Ammo's projectile itself; this file does NOT
+ *     count grenades down. The log shows the inventory 1.5 s after each release, so a first run tells whether it did.
+ *   GUESS 3: hold-to-aim / release-to-throw as in Dead Men; a short tap may be too short for the action to start.
+ * With no kind-0 entry (every stock FA map, or before a pickup) nothing is written: one log line per press, at most 5.
+ * Local player, offline Arcade only (klinv_player: not online, a round of the Heist rules, a ZFFPlayer).
  *
  * WIRING: klhook.c  #include "klgrenade.c" below #include "klinv.c"; klgrenade_tick(game_thread) below klinv_tick;
  *   klgrenade_init() below klinv_init().
- * KEYS: [Grenade] Probe=0 (1 = on; recommended off: it only writes log lines) Key=0x47 (VK 'G'; polled, not consumed).
+ * KEYS: [Grenade] Probe=0 (1 = log only; recommended off)  Throw=0 (1 = the G key throws; off until the owner's first run)
+ *   Key=0x47 (VK 'G'; polled, not consumed)  HoldMs=3000 (100 .. 10000)  ActBit=1 (0 = never touch [P+0x818])  Log=8 (presses logged in full)
  */
 #ifndef KLGRENADE_C
 #define KLGRENADE_C
@@ -23,58 +35,124 @@
 #define KLGR_O_ACT   0x818                   /* action word; bit 0x800 = grenade (READ 0x5447f9) */
 
 static struct {
-    int on, key;
-    DWORD press_at, last_sample, watch_until, last_btn, last_act;
-    int samples, was, fgwarned;
+    int on, probe, thr, key, actbit, logn;
+    DWORD hold_ms, press_at, last_sample, watch_until, last_btn, last_act, after_at, after_p;
+    int samples, was, fgwarned, presses, nonade, ticks0x40, actwarned, holding, faults;
 } klgr;
 
 static void klgr_dump(DWORD p, const char *why)
 {
     DWORD btn = 0, act = 0, sel = 0, inv, arr, cnt, i, obj, bind, item, kind;
     klh_rd(p + KLGR_O_BTN, &btn, 4); klh_rd(p + KLGR_O_ACT, &act, 4); klh_rd(p + KLINV_O_SEL, &sel, 4);
-    klog("grenade probe (%s): player %08lx b90=%08lx (0x40 %s) 818=%08lx (0x800 %s) selected item %lu",
+    klog("grenade %s (%s): player %08lx b90=%08lx (0x40 %s) 818=%08lx (0x800 %s) selected item %lu", klgr.thr ? "throw" : "probe",
          why, p, btn, btn & 0x40 ? "SET" : "clear", act, act & 0x800 ? "SET" : "clear", sel);
     klgr.last_btn = btn; klgr.last_act = act;
-    if (!klinv_inv(p, &inv, &arr, &cnt)) { klog("grenade probe: inventory not readable"); return; }
+    if (!klinv_inv(p, &inv, &arr, &cnt)) { klog("grenade: inventory not readable"); return; }
     for (i = 0; i < cnt; i++)
         if (klinv_entry(arr, i, &obj, &bind, &item, &kind))
-            klog("grenade probe:   entry %lu key %lu object %08lx binding %08lx item %lu kind %lu%s", i, klh_rd32(arr + 16 * i), obj, bind, item, kind,
+            klog("grenade:   entry %lu key %lu object %08lx binding %08lx item %lu kind %lu%s", i, klh_rd32(arr + 16 * i), obj, bind, item, kind,
                  kind == 0 ? " (GRENADE)" : kind == 3 ? " (special)" : "");
+}
+
+/* the first kind-0 entry with an object -> its index, or -1 */
+static int klgr_find(DWORD p)
+{
+    DWORD inv, arr, cnt, i, obj, bind, item, kind;
+    if (!klinv_inv(p, &inv, &arr, &cnt)) return -1;
+    for (i = 0; i < cnt; i++)
+        if (klinv_entry(arr, i, &obj, &bind, &item, &kind) && obj && bind > 0x10000 && kind == 0) return (int)i;
+    return -1;
+}
+
+/* step 1, one game tick with the key down: set the grenade bit (and the action bit, see GUESS 1) */
+static void klgr_hold(DWORD p, DWORD now, int edge)
+{
+    DWORD btn = 0, act = 0, v; int full = klgr.presses <= klgr.logn;
+    if (edge) {
+        klgr.holding = 0; klgr.ticks0x40 = 0; klgr.actwarned = 0;
+        if (klgr_find(p) < 0) {
+            if (++klgr.nonade <= 5) klog("grenade throw: G pressed but you carry no grenade (no inventory kind-0 entry): nothing written");
+            return;
+        }
+        klgr.holding = 1; klgr.presses++; full = klgr.presses <= klgr.logn;
+        if (full) klgr_dump(p, "press");
+    }
+    if (!klgr.holding) return;
+    if (now - klgr.press_at > klgr.hold_ms) {
+        if (klgr.holding == 1 && full) klog("grenade throw: held %lu ms: stopped writing (HoldMs)", klgr.hold_ms);
+        klgr.holding = 2; return;
+    }
+    if (klgr.holding != 1) return;
+    if (!klh_rd(p + KLGR_O_BTN, &btn, 4) || !klh_rd(p + KLGR_O_ACT, &act, 4)) return;
+    if (act & 0x800) klgr.ticks0x40 = 0;                                     /* the game's copy works: no fallback */
+    if (btn & 0x40) {                                                       /* still set from the last tick: has the copy run? */
+        if (!(act & 0x800) && ++klgr.ticks0x40 >= 3 && klgr.actbit) {        /* 3 CONSECUTIVE ticks (reset below and above) */
+            if (!klgr.actwarned++ && full) klog("grenade throw: 0x40 set for 3 ticks but 0x800 of 818 clear: ORing 0x800 into 818 too (ActBit=1, GUESS 1)");
+            v = act | 0x800; klh_data((void *)(DWORD_PTR)(p + KLGR_O_ACT), &v, 4, "grenade action bit");
+        }
+    } else {
+        klgr.ticks0x40 = 0;
+        v = btn | 0x40;
+        if (!klh_data((void *)(DWORD_PTR)(p + KLGR_O_BTN), &v, 4, "grenade button bit") && ++klgr.faults <= 3) klog("grenade throw: write to b90 refused");
+    }
 }
 
 static void klgrenade_tick(int game_thread)
 {
-    DWORD now, p, pid = 0; int down;
+    DWORD now, p, pid = 0; int down, edge;
     if (!klgr.on || !klh_exe_ok || !game_thread) return;
     now = GetTickCount();
     down = (klinv_key(klgr.key) & 0x8000) != 0;
+    if (klgr.after_at && (int)(now - klgr.after_at) >= 0) {                 /* 1.5 s after a logged release: what is left */
+        klgr.after_at = 0;
+        if ((p = klinv_player()) && p == klgr.after_p) __try { klgr_dump(p, "1.5 s after release"); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
     if (!down && !klgr.was && !(klgr.watch_until && (int)(klgr.watch_until - now) > 0)) return;   /* idle: no player reads */
-    if (!(p = klinv_player())) { klgr.was = 0; return; }
-    if (klgr.watch_until && (int)(klgr.watch_until - now) > 0) {             /* bit changes after a press, every game tick */
+    if (!(p = klinv_player())) { klgr.was = down; klgr.holding = 0; return; }   /* a held key never re-edges after a player gap */
+    if (klgr.watch_until && (int)(klgr.watch_until - now) > 0 && (klgr.probe || klgr.presses <= klgr.logn)) {   /* bit changes after a press */
         DWORD btn = 0, act = 0;
         if (klh_rd(p + KLGR_O_BTN, &btn, 4) && klh_rd(p + KLGR_O_ACT, &act, 4)) {   /* a failed read is skipped, not logged as a change */
-            if ((btn ^ klgr.last_btn) & 0x40) klog("grenade probe: b90 bit 0x40 now %s (+%lu ms)", btn & 0x40 ? "SET" : "clear", now - klgr.press_at);
-            if ((act ^ klgr.last_act) & 0x800) klog("grenade probe: 818 bit 0x800 now %s (+%lu ms)", act & 0x800 ? "SET" : "clear", now - klgr.press_at);
+            if ((btn ^ klgr.last_btn) & 0x40) klog("grenade: b90 bit 0x40 now %s (+%lu ms)", btn & 0x40 ? "SET" : "clear", now - klgr.press_at);
+            if ((act ^ klgr.last_act) & 0x800) klog("grenade: 818 bit 0x800 now %s (+%lu ms)", act & 0x800 ? "SET" : "clear", now - klgr.press_at);
             klgr.last_btn = btn; klgr.last_act = act;
         }
     }
     if (down) {
         klinv_wtp(klinv_fg(), &pid);
-        if (pid != GetCurrentProcessId()) { if (!klgr.fgwarned++) klog("grenade probe: key seen but the game window is not in front: ignored"); return; }
+        if (pid != GetCurrentProcessId()) {                                 /* was = down: focus coming back with G held is no press */
+            if (!klgr.fgwarned++) klog("grenade: key seen but the game window is not in front: ignored");
+            klgr.holding = 0; klgr.was = down; return;
+        }
     }
+    edge = down && !klgr.was;
     __try {
-        if (down && !klgr.was) { klgr.press_at = klgr.last_sample = now; klgr.watch_until = now + 3000; klgr.samples = 0; klgr_dump(p, "press"); }
-        else if (down && now - klgr.last_sample >= 200 && klgr.samples < 10) { klgr.last_sample = now; klgr.samples++; klgr_dump(p, "held"); }
-        else if (!down && klgr.was) klgr_dump(p, "release");
-    } __except (EXCEPTION_EXECUTE_HANDLER) { klog("grenade probe: fault while reading: probe off"); klgr.on = 0; }
+        if (edge) { klgr.press_at = klgr.last_sample = now; klgr.samples = 0; if (klgr.probe && !klgr.thr) klgr.watch_until = now + 3000; }
+        if (klgr.thr) {
+            if (down) klgr_hold(p, now, edge);
+            if (edge && klgr.holding == 1 && klgr.presses <= klgr.logn) klgr.watch_until = now + 3000;   /* change lines only for logged throws */
+            else if (klgr.was && klgr.holding) {
+                if (klgr.presses <= klgr.logn) { klgr_dump(p, "release"); klgr.after_at = now + 1500; klgr.after_p = p; }
+                klgr.holding = 0;
+            }
+        } else {
+            if (edge) klgr_dump(p, "press");
+            else if (down && now - klgr.last_sample >= 200 && klgr.samples < 10) { klgr.last_sample = now; klgr.samples++; klgr_dump(p, "held"); }
+            else if (!down && klgr.was) klgr_dump(p, "release");
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { klog("grenade: fault while reading the player: grenades off"); klgr.on = 0; }
     klgr.was = down;
 }
 
 static void klgrenade_init(void)
 {
     int v;
-    if (!GetPrivateProfileIntA("Grenade", "Probe", 0, klh_ini)) return;
+    klgr.probe = GetPrivateProfileIntA("Grenade", "Probe", 0, klh_ini) != 0;
+    klgr.thr = GetPrivateProfileIntA("Grenade", "Throw", 0, klh_ini) != 0;
+    if (!klgr.probe && !klgr.thr) return;
     v = (int)GetPrivateProfileIntA("Grenade", "Key", 0x47, klh_ini); klgr.key = v < 1 || v > 0xfe ? 0x47 : v;
+    v = (int)GetPrivateProfileIntA("Grenade", "HoldMs", 3000, klh_ini); klgr.hold_ms = v < 100 ? 100 : v > 10000 ? 10000 : v;
+    klgr.actbit = GetPrivateProfileIntA("Grenade", "ActBit", 1, klh_ini) != 0;
+    v = (int)GetPrivateProfileIntA("Grenade", "Log", 8, klh_ini); klgr.logn = v < 0 ? 0 : v > 100 ? 100 : v;
     if (!klinv_key) {                                                        /* klinv_init fills these only when [Inv] is on */
         HMODULE u = GetModuleHandleA("user32.dll"); if (!u) u = LoadLibraryA("user32.dll");
         if (u) {
@@ -83,9 +161,12 @@ static void klgrenade_init(void)
             klinv_wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId");
         }
     }
-    if (!klinv_key || !klinv_fg || !klinv_wtp) { klog("grenade probe: user32 functions not found: OFF"); return; }
+    if (!klinv_key || !klinv_fg || !klinv_wtp) { klog("grenade: user32 functions not found: OFF"); return; }
     klgr.on = 1;
-    klog("grenade probe: on (log only, no writes); Key=0x%02x; offline Arcade, local player. re\\grenades_1025.md step 0", klgr.key);
+    if (klgr.thr)
+        klog("grenade throw: on; Key=0x%02x HoldMs=%lu ActBit=%d Log=%d; offline Arcade, local player, only with a grenade in the inventory. re\\grenades_1025.md step 1",
+             klgr.key, klgr.hold_ms, klgr.actbit, klgr.logn);
+    else klog("grenade probe: on (log only, no writes); Key=0x%02x; offline Arcade, local player. re\\grenades_1025.md step 0", klgr.key);
 }
 
 #endif /* KLGRENADE_C */
