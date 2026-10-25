@@ -685,6 +685,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kllobby.c"                                      /* kllobby.c: [Lobby] MinPlayers - a hosted FA lobby may start below 4 (off unless set) */
 #include "klqol.c"                                        /* klqol.c: [QoL] taskbar flash, background frame cap, mouse-clip release (off unless set); AFTER kllobby.c / klnet.c */
 #include "klinv.c"
+#include "klgrenade.c"                                     /* klgrenade.c: [Grenade] Probe - log-only grenade probe (off unless Probe=1) */
 #include "klrigid.c"                                       /* klrigid.c: [Rigid] heavier mouse turn + remote shaping helpers (off unless Enable=1) */
 #include "klaiturn.c"                                      /* klaiturn.c: [Rigid] AiTurnDps - one .data float caps every AI actor's body turn rate (off unless set) */
 #include "klnetsmooth.c"
@@ -932,6 +933,7 @@ static void klh_tick(int game_thread)
     kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
     klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
+    klgrenade_tick(game_thread);                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
     klmu_tick(game_thread);                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
     klam_tick(game_thread);                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
     klst_tick(game_thread);                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
@@ -1318,6 +1320,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kqb_init();                                       /* klqol2.c: [QoL2] (default off) */
     klnetfix_init();
     klinv_init();
+    klgrenade_init();                                 /* klgrenade.c: after klinv_init (shares its user32 pointers) */
     klnetsmooth_init();
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
     klam_init();                                     /* klambience.c: [Ambience] (default off) */

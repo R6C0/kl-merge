@@ -1300,7 +1300,14 @@ static int kla_msg(const char *elem, const char *msg)
     e = ((KLA_FIND)VA(0x83faf0))((void *)(DWORD_PTR)mgr, 0, elem);
     if (!e) { kla_out(1, "msg: no GUI element named '%s' in the open pages", elem); return 0; }
     vt = kla_rd32((DWORD_PTR)e); fn = kla_rd32(vt + 0x50); kla_rtti((DWORD_PTR)e, cls, sizeof cls);
-    if (fn < img_lo || fn >= img_hi) { kla_out(1, "msg: element '%s' at %p has no usable vtable (%08lx)", elem, e, vt); return 0; }
+    if (fn < img_lo || fn >= img_hi) {
+        /* a hook part may give an element a private vtable copy on the heap whose slot 20 is the hook's own wrapper (klshoppage.c
+           does it to the shop selector): a slot inside THIS dll is accepted too */
+        HMODULE of = 0, me = 0; const DWORD fl = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+        if (!GetModuleHandleExA(fl, (LPCSTR)(DWORD_PTR)fn, &of) || !GetModuleHandleExA(fl, (LPCSTR)kla_msg, &me) || of != me) {
+            kla_out(1, "msg: element '%s' at %p has no usable vtable (%08lx)", elem, e, vt); return 0;
+        }
+    }
     kla_out(1, "msg: '%s' -> %s '%s' at %p (slot 20 = %08lx)", msg, cls, elem, e, fn);
     ((KLA_SEND)(DWORD_PTR)fn)(e, 0, &msg);
     return 1;
