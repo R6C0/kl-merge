@@ -262,6 +262,9 @@ static DWORD klh_rd32(DWORD_PTR p) { DWORD v = 0; klh_rd(p, &v, 4); return v; }
 /* the session manager [0x168e598] (ZSessionManagerMultiplayer) has vtable 0xbd1ebc, or - with [Lobby] Solo=1, kllobby.c - the private copy of it at klh_sm_vt2 */
 static DWORD klh_sm_vt2;
 #define KLH_SM_VT_OK(v) ((v) == 0xbd1ebc || ((v) && (v) == klh_sm_vt2))
+/* the Sv rules object (ZGameRulesFragileAllianceSv, 0xbd2eb4) with the private vtable copy of klroundkeep.c ([Lobby] KeepRound / TEST probe) */
+static DWORD klh_rules_vt2;
+#define KLH_RULES_SV_OK(v) ((v) == 0xbd2eb4 || ((v) && (v) == klh_rules_vt2))
 
 /* [Net] OnlineSafe=1 (default 1): kl_online() = 1 when this machine is in a NETWORK session, and then every part that WRITES game state
    stays out of it (re\netcode_plan.md 2.1). The test is the one the AI parts already make (klbot.c klb_read / klbalance.c klr_arcade):
@@ -711,6 +714,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kllobby.c"                                      /* kllobby.c: [Lobby] MinPlayers - a hosted FA lobby may start below 4 (off unless set) */
 #include "kllobbyopt.c"                                   /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax - more choices on the FA lobby rows (off unless set); AFTER kllobby.c */
 #include "klbotfill.c"                                    /* klbotfill.c: [Bots] OnlineFill plan + probe, read-only (off unless set); AFTER kllobby.c */
+#include "klroundkeep.c"                                  /* klroundkeep.c: [Lobby] KeepRound + TEST round-end probe (the online rules' early cuts); AFTER klbotfill.c, kllobbyopt.c */
 #include "klqol.c"                                        /* klqol.c: [QoL] taskbar flash, background frame cap, mouse-clip release (off unless set); AFTER kllobby.c / klnet.c */
 #include "klinv.c"
 #include "klgrenade.c"                                     /* klgrenade.c: [Grenade] Probe - log-only grenade probe (off unless Probe=1) */

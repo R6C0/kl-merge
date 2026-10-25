@@ -406,7 +406,7 @@ static int klb_read_hud(struct klb_snap *s)
     sm = klh_rd32((DWORD_PTR)KLH_VA(KLB_SESSION));
     if (!klh_rd(sm + 0x70, &s->state, 4)) return 0;       /* GUESS: the multiplayer session manager keeps its state at +0x70 like the single-player one (0x6c53db pushes state 0x12 for the load) */
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLB_SETTINGS))) || !(s->rules = klh_rd32(gs + 0x54)) || !klh_rd(s->rules, &vt, 4)) { s->rules = 0; return 0; }
-    if (vt != KLB_RULES_SV && vt != KLB_RULES_CL) { s->rules = 0; return 0; }
+    if (!KLH_RULES_SV_OK(vt) && vt != KLB_RULES_CL) { s->rules = 0; return 0; }
     if (klb_hud_crew) {                                   /* [HUD] OnlineCrew: sv/cl siblings keep 0x74-byte records at [rules+8] (re/hud_online.md); only handles, no field meaning */
         DWORD n = 0;
         if (klh_rd(s->rules + 0x14, &n, 4) && n >= 1 && n <= 16) {

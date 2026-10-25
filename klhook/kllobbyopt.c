@@ -33,11 +33,15 @@
  *   TimeMax=0       0 = stock (5). 6..20: the host can raise the Heist time to this many minutes.
  *   TimeMin=0       0 = stock (3). 1..2: the host can lower the Heist time to this many minutes.
  *   RoundsMax=0     0 = stock (5). 6..20: the host can raise the number of rounds to this many.
+ *   PlayersMax=0    0 = stock (8). 9..12 (engine ceiling): the host can raise 'Number of players' to this many (RIGHT clamp 0x7dcb78 / 0x7dcb7d taken over).
+ *                   A 9th heister has no seat in a stock level: [Lobby] ExtraSeats (TEST build) and reound_end_online.md.
  */
 #ifndef KLLOBBYOPT_C
 #define KLLOBBYOPT_C
 
-static int kllo_tmax, kllo_tmin, kllo_rmax, kllo_clockfix;
+static int kllo_tmax, kllo_tmin, kllo_rmax, kllo_pmax, kllo_clockfix;
+static void klrk_init(void);                                         /* klroundkeep.c (included later) */
+static void klrk_tick(void);
 static DWORD kllo_vt[1 + 36];                                         /* [0] = RTTI locator, [1..36] = slots 0..35 of 0xbbd364 */
 static DWORD (__fastcall *kllo_real10)(void *, void *, DWORD, DWORD, DWORD);
 static LONG kllo_told, kllo_n;
@@ -53,11 +57,15 @@ static void kllo_init(void)
     kllo_tmax = GetPrivateProfileIntA("Lobby", "TimeMax", 0, klh_ini);
     kllo_tmin = GetPrivateProfileIntA("Lobby", "TimeMin", 0, klh_ini);
     kllo_rmax = GetPrivateProfileIntA("Lobby", "RoundsMax", 0, klh_ini);
+    kllo_pmax = GetPrivateProfileIntA("Lobby", "PlayersMax", 0, klh_ini);
+    if (kllo_pmax < 9 || kllo_pmax > 12) kllo_pmax = 0;
+    klrk_init();
     kllo_clockfix = GetPrivateProfileIntA("Lobby", "RoundClockFix", 0, klh_ini) != 0;
     if (kllo_clockfix) klog("lobbyopt: RoundClockFix=1 (GUESS): [rules+0x4c] is set to the lobby heist time at the round start when it holds less");
     if (kllo_tmax < 6 || kllo_tmax > 20) kllo_tmax = 0;
     if (kllo_tmin < 1 || kllo_tmin > 2) kllo_tmin = 0;
     if (kllo_rmax < 6 || kllo_rmax > 20) kllo_rmax = 0;
+    if (kllo_pmax) klog("lobbyopt: Number of players up to %d (stock 8; engine ceiling 12). A 9th heister needs a seat: see [Lobby] ExtraSeats (TEST) in klroundkeep.c", kllo_pmax);
     if (kllo_tmax || kllo_tmin || kllo_rmax)
         klog("lobbyopt: Heist time %d..%d minutes, rounds 3..%d (0 = stock 3..5)", kllo_tmin ? kllo_tmin : 3, kllo_tmax ? kllo_tmax : 5, kllo_rmax ? kllo_rmax : 5);
 }
@@ -98,6 +106,15 @@ static void kllo_rset(DWORD sm, DWORD so, DWORD st, DWORD es, int n)
     if (st) ((kllo_f3)(DWORD_PTR)klh_rd32(klh_rd32(st) + 0x14))((void *)(DWORD_PTR)st, 0, 0xb68cc8, n - 1, 0);
     if (es) ((kllo_f1)KLH_VA(0x5de930))((void *)(DWORD_PTR)es, 0, n);
 }
+/* players: the same setters the stock RIGHT case calls after its clamp (0x7dcb9e..0x7dcc02): b9 target 0x739f20, b8 max 0x6f7fb0(n, 0), 0x4b5fc0, store MP_NumberOfPlayers = n-1, 0x678d90 on the menu block */
+static void kllo_pset(DWORD sm, DWORD st, DWORD es, int n)
+{
+    ((kllo_f1)KLH_VA(0x739f20))((void *)(DWORD_PTR)sm, 0, n);
+    ((kllo_f2)KLH_VA(0x6f7fb0))((void *)(DWORD_PTR)sm, 0, n, 0);
+    ((kllo_f0)KLH_VA(0x4b5fc0))((void *)(DWORD_PTR)sm, 0);
+    if (st) ((kllo_f3)(DWORD_PTR)klh_rd32(klh_rd32(st) + 0x14))((void *)(DWORD_PTR)st, 0, 0xb56714, n - 1, 0);
+    if (es) ((kllo_f1)KLH_VA(0x678d90))((void *)(DWORD_PTR)es, 0, n);
+}
 /* every real store of time + rounds on one log line (first 120 calls) */
 static void kllo_state(const char *what, DWORD sm, DWORD so, DWORD st)
 {
@@ -108,9 +125,9 @@ static void kllo_state(const char *what, DWORD sm, DWORD so, DWORD st)
 
 static DWORD __fastcall kllo_slot10(void *self, void *edx, DWORD a, DWORD b, DWORD c)
 {
-    int focus, tmode = 0, cur = 0, want = 0, pre = 0, t0, r0; DWORD sm, st, so, mode = 0, sv, fn, es, g; float f0;
-    if ((a != 0x7d && a != 0x7e) || !(kllo_tmax || kllo_tmin || kllo_rmax)) goto stock;
-    if (!klh_rd((DWORD_PTR)self + 0x88, &focus, 4) || (focus != -2 && focus != -1)) goto stock;
+    int focus, tmode = 0, pmode = 0, cur = 0, want = 0, pre = 0, t0, r0; DWORD sm, st, so, mode = 0, sv, fn, es, g; float f0;
+    if ((a != 0x7d && a != 0x7e) || !(kllo_tmax || kllo_tmin || kllo_rmax || kllo_pmax)) goto stock;
+    if (!klh_rd((DWORD_PTR)self + 0x88, &focus, 4) || (focus != -2 && focus != -1 && !(focus == -3 && kllo_pmax))) goto stock;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd((DWORD_PTR)KLH_VA(0x168e59c), &mode, 4) || mode == 2) goto stock;
     if (klh_rd32(sm) != 0xbd1ebc && !KLH_SM_VT_OK(klh_rd32(sm))) goto stock;
     /* the stock case's own gates: 0x8df480(sm) true, 0x8e6a20(sm) == 0xd, store.Get(0xb41ea0) != 0 */
@@ -119,11 +136,14 @@ static DWORD __fastcall kllo_slot10(void *self, void *edx, DWORD a, DWORD b, DWO
     if (!(st = kllo_store()) || !(sv = klh_rd32(st)) || !(fn = klh_rd32(sv + 8))) goto stock;
     if (!((kllo_f2)(DWORD_PTR)fn)((void *)(DWORD_PTR)st, 0, 0xb41ea0, 0)) goto stock;
     if (!(so = ((kllo_f0)KLH_VA(0x7bb2a0))((void *)(DWORD_PTR)klh_rd32((DWORD_PTR)KLH_VA(0x168e9e4)), 0))) goto stock;    /* the settings' replicated object */
-    tmode = focus == -2;
+    tmode = focus == -2; pmode = focus == -3;
     /* the value of the row NOT pressed, before the press: the press must leave it alone (live SL6: time read 5 after the rounds presses) */
     t0 = kllo_tsm(sm); f0 = kllo_fget(so); r0 = kllo_rso(so);
-    cur = tmode ? t0 : r0;
-    if (a == 0x7e) {
+    cur = pmode ? (signed char)((kllo_f0)KLH_VA(0x54d140))((void *)(DWORD_PTR)sm, 0) : tmode ? t0 : r0;     /* players: [sm+0xb9] */
+    if (pmode) {
+        /* players RIGHT: stock ceiling 8 (0x7dcb78 / 0x7dcb7d). Same take-over as time / rounds: at 8 and above, cur+1 up to PlayersMax, cur at the max */
+        if (a == 0x7e && cur >= 8) { want = cur < kllo_pmax ? cur + 1 : cur; pre = 4; }
+    } else if (a == 0x7e) {
         int mx = tmode ? kllo_tmax : kllo_rmax;
         /* live SL7: at the max one more press let the stock clamp reset the value to 5. Above the stock range the press is ALWAYS taken over:
            cur+1 below the max, cur itself at the max (re-applied after the stock call) */
@@ -132,7 +152,8 @@ static DWORD __fastcall kllo_slot10(void *self, void *edx, DWORD a, DWORD b, DWO
     kllo_state("before press", sm, so, st);
     if (want) {
         /* 1. lower the stored value so the stock handler's own clamp lets the press through (it then writes cur+1 / cur-1 itself) */
-        if (tmode) ((kllo_f1)KLH_VA(0x6cff90))((void *)(DWORD_PTR)sm, 0, pre);
+        if (pmode) { ((kllo_f1)KLH_VA(0x739f20))((void *)(DWORD_PTR)sm, 0, pre); ((kllo_f2)KLH_VA(0x6f7fb0))((void *)(DWORD_PTR)sm, 0, pre, 0); }
+        else if (tmode) ((kllo_f1)KLH_VA(0x6cff90))((void *)(DWORD_PTR)sm, 0, pre);
         else ((kllo_f1)(DWORD_PTR)klh_rd32(klh_rd32(so) + 0x9c))((void *)(DWORD_PTR)so, 0, pre);
     }
     g = kllo_real10(self, edx, a, b, c);
@@ -143,12 +164,15 @@ static DWORD __fastcall kllo_slot10(void *self, void *edx, DWORD a, DWORD b, DWO
     /* 2. the wanted value, through the same setters the stock path calls */
     if (want) {
         if (!es) klog("lobbyopt: no menu data block, %s left at the stock value", tmode ? "time" : "rounds");
+        else if (pmode) kllo_pset(sm, st, es, want);
         else if (tmode) kllo_tset(sm, so, st, es, want); else kllo_rset(sm, so, st, es, want);
-        if (InterlockedIncrement(&kllo_n) <= 60) klog("lobbyopt: %s %d -> %d (the stock clamp would have kept %d)", tmode ? "Heist time" : "Number of rounds", cur, want, a == 0x7e ? 5 : 3);
+        if (InterlockedIncrement(&kllo_n) <= 60) klog("lobbyopt: %s %d -> %d (the stock clamp would have kept %d)", pmode ? "Number of players" : tmode ? "Heist time" : "Number of rounds", cur, want, pmode ? 8 : a == 0x7e ? 5 : 3);
     }
     /* 3. the row NOT pressed must still hold what it held before; if any of its stores moved, put them all back. GUESS at the live-SL6 cause:
           the stock rounds path or the replication resyncs the time from a stale copy; the line below names the store that moved. */
-    if (es && tmode) {
+    if (pmode) {
+        /* the players row leaves time and rounds alone: nothing to restore */
+    } else if (es && tmode) {
         if (kllo_rso(so) != r0 || kllo_sget(st, 0xb68cc8) + 1 != r0) {
             klog("lobbyopt: ROUNDS moved by a time press (was %d; now so=%d store=%d): restored", r0, kllo_rso(so), kllo_sget(st, 0xb68cc8) + 1);
             kllo_rset(sm, so, st, es, r0);
@@ -243,7 +267,8 @@ static void kllo_tick(void)
     kllo_roundlog();
 #endif
     kllo_clockpoll();
-    if (!(kllo_tmax || kllo_tmin || kllo_rmax) || !klh_exe_ok || now - last < 300) return;
+    klrk_tick();
+    if (!(kllo_tmax || kllo_tmin || kllo_rmax || kllo_pmax) || !klh_exe_ok || now - last < 300) return;
     last = now;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(mgr = klh_rd32(gd + 0x824)) || klh_rd32(mgr) != (DWORD)(DWORD_PTR)KLH_VA(0xbb7dc8)) return;
     if (!(e = (DWORD)(DWORD_PTR)((void *(__fastcall *)(void *, void *, const char *))KLH_VA(0x83faf0))((void *)(DWORD_PTR)mgr, 0, "MercsFASelectorFALobby"))) return;

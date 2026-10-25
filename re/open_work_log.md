@@ -1,3 +1,5 @@
+2026-10-25 ~23:30 - ROUND END ONLINE FOUND (static): 0x80ad60 tail has two cuts: (A) <2 heisters in play (human records only) -> clock 70 s, (B) all human records out -> end timer 10 s. AI have no record. [Lobby] KeepRound (vtable route, slots 42/193 at ret 0x80b208/0x80b1c0), PlayersMax 9..12, TEST ExtraSeats; out_aicrew_1025a(+_test). re/round_end_online.md. Not run live.
+
 2026-10-25 ~23:55 - HOSTOPTS 1025b (out_hostopts_1025b SHIP 2f771cba / _test 004e2409, not run): host's F7/row now sets kls_online_set (LOAD follows); TEST logs the round clock ([rules+0x4c] etc.) at state 25/31 to find why a 10 min round lasts 83 s; [Lobby] RoundClockFix=1 optional GUESS write.
 
 2026-10-25 ~23:30 - BOTS ONLINE, DATA ROUTE (not installed, not run): tools/kl_botsonline.py + kl_fa_bots --squad-game; C:/kl_build_1024/botsonline_1025 (install.py/--undo). 7 Ally actors = most likely the map's squads (re/bots_online_fill.md).
