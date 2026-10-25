@@ -146,8 +146,24 @@ def _enc_sample(st, x):
     return n
 
 
-def ima_encode(pcm, block=0x400):
-    """int16 [frames, ch] -> MS IMA ADPCM bytes, samples per block = (block - 4ch) * 2 / ch + 1"""
+RAIL = 32000
+
+
+def _enc_sample_rail(st, x):
+    """near the rails try all 16 nibbles against the decoder's clamp: a hard-clipped top then decodes FLAT at +-32767 (as the
+    stock Desert Eagle clips do) instead of wobbling under it; elsewhere the plain quantiser"""
+    if -RAIL < x < RAIL: return _enc_sample(st, x)
+    best = None
+    for n in range(16):
+        s = list(st); _nib(s, n); e = abs(s[0] - x)
+        if best is None or e < best[0]: best = (e, n)
+    _nib(st, best[1])
+    return best[1]
+
+
+def ima_encode(pcm, block=0x400, rail=False):
+    """int16 [frames, ch] -> MS IMA ADPCM bytes, samples per block = (block - 4ch) * 2 / ch + 1. rail=True: _enc_sample_rail"""
+    enc = _enc_sample_rail if rail else _enc_sample
     frames, ch = pcm.shape
     spb = (block - 4 * ch) * 2 // ch + 1
     out = bytearray(); st = [[0, 0] for _ in range(ch)]
@@ -166,7 +182,7 @@ def ima_encode(pcm, block=0x400):
         body = seg[1:] + [seg[-1]] * (groups * 8 - n)
         for g in range(groups):
             for c in range(ch):
-                nib = [_enc_sample(st[c], body[g * 8 + k][c]) for k in range(8)]
+                nib = [enc(st[c], body[g * 8 + k][c]) for k in range(8)]
                 blk += bytes(nib[2 * k] | (nib[2 * k + 1] << 4) for k in range(4))
         out += blk
     return bytes(out), spb
@@ -225,14 +241,14 @@ def decode_wave(wav, w):
     raise ValueError('%s: codec %#x bits %d not handled' % (w.name, w.codec, w.get('bits')))
 
 
-def encode_for(w, x, rate):
+def encode_for(w, x, rate, rail=False):
     """float [frames, ch] at rate -> (data bytes, samples field, pcm bytes field) in the record's own format"""
     x = resample(x, rate, w.get('rate'))
     ch = w.get('ch')
     if x.shape[1] != ch: x = np.repeat(x.mean(1, keepdims=True), ch, 1)
     pcm = to_i16(x)
     if w.codec == 0x11:
-        data, spb = ima_encode(pcm, w.get('block'))
+        data, spb = ima_encode(pcm, w.get('block'), rail)
         assert spb == w.get('spb'), (spb, w.get('spb'))
         return data, len(pcm), len(pcm) * ch * 2
     if w.codec == 1:

@@ -39,6 +39,8 @@ SIL_DROP = 3.7          # silenced + distant sit this far under the reference he
 MAXGAIN = 18.0          # dB
 KNEE = 0.8              # linear up to here, tanh beyond (asymptote 1.0)
 CEIL = 0.99
+RAW_OVER = 0.6          # dB: drive_raw may end this far above the head target before it scales the clip down
+RAW_CEIL = 1.0          # drive_raw clips at full scale (the Desert Eagle's tops decode at 32767)
 
 
 def kind(name):
@@ -85,6 +87,37 @@ def drive(x, target_db):
     y = clip(x * 10 ** (g / 20))
     n = int(0.03 * R); y[-n:] *= np.linspace(1, 0, n)          # the very end: a 30 ms fade (the lifted tail must not click)
     return y, g, head_db(y)
+
+
+def flat_pct(x, ms=250, t=0.995):
+    """% of the head window (first ms after the onset) sitting flat at the clip's own peak: the MP45's 'raw' hard-clip density"""
+    i = onset(x); s = x[i:i + int(ms / 1000 * R)]; pk = np.abs(x).max()
+    return float((np.abs(s) >= t * pk).mean() * 100)
+
+
+def drive_raw(x, target_db, target_flat):
+    """owner 10-25 "i want the distortion to match like the mp45": the knee clipper rounds the tops (0.1..11 % flat in the head
+    window, the Desert Eagle ~20 %). HARD clip instead: the drive is the larger of (flat-top share = target_flat) and (head =
+    target_db), then the whole clip is scaled down only if the head ended more than RAW_OVER above target: a scaled clip's flat
+    tops sit under full scale and the ADPCM re-encode turns them back into ripple (decoded 5 % flat instead of 20 %); at full
+    scale kl_gunsnd's rail-aware encoder keeps them flat. Match at 20 % flat costs at most +0.6 dB head (DM07 probe 10-25).
+    -> (clip, drive dB, head dB, flat %)"""
+    x = x - x.mean(); x = x / (np.abs(x).max() + 1e-9)
+    hard = lambda d: np.clip(x * 10 ** (d / 20), -1.0, 1.0) * RAW_CEIL
+
+    def solve(f, want):
+        lo, hi = 0.0, MAXGAIN
+        if f(hard(hi)) < want: return hi
+        for _ in range(40):
+            m = (lo + hi) / 2
+            if f(hard(m)) < want: lo = m
+            else: hi = m
+        return hi
+    d = max(solve(flat_pct, target_flat), solve(head_db, target_db))
+    y = hard(d); h = head_db(y)
+    if h > target_db + RAW_OVER: y = y * 10 ** ((target_db + RAW_OVER - h) / 20)
+    n = int(0.03 * R); y[-n:] *= np.linspace(1, 0, n)
+    return y, d, head_db(y), flat_pct(y)
 
 
 def bank(mid):

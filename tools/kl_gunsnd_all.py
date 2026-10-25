@@ -38,6 +38,9 @@ import kl_gunsnd_match as M
 TOL = 0.35                 # dB: a record this close to its target is left alone
 FALLBACK_REF = -3.15       # dBFS head of the stock Desert Eagle clips (used where a bank has none)
 SHORT = 0.5                # dB: a processed clip further under its target than this is reported (gain cap reached)
+FALLBACK_FLAT = 19.8       # --raw: % flat tops in the Desert Eagle head window (DM07 measured 10-25)
+FLAT_TOL = 3.0             # --raw: a 'gun' record within this many points of the reference share (and TOL in head) is left alone
+RAW = False                # --raw (owner 10-25): 'gun' records also get the MP45's hard-clip density (M.drive_raw)
 PINS = os.path.join(HERE, 'kl_gunsnd_all.pins.json')
 TAG = '1024gunsnd2'
 GROUPS = ('maps', 'stock', 'story')
@@ -74,6 +77,12 @@ def banks(groups=GROUPS):
 def ref_of(whd, wav):
     hs = [M.head_db(G.decode_wave(wav, w)[:, 0]) for w in G.waves(whd) if M.REF.search(w.name)]
     return (float(np.mean(hs)), 'bank') if len(hs) == 3 else (FALLBACK_REF, 'fallback')
+
+
+def ref_flat(whd, wav):
+    """flat-top share of the bank's Desert Eagle head window (--raw); FALLBACK_FLAT where the bank has none"""
+    fs = [M.flat_pct(G.decode_wave(wav, w)[:, 0]) for w in G.waves(whd) if M.REF.search(w.name)]
+    return float(np.mean(fs)) if len(fs) == 3 else FALLBACK_FLAT
 
 
 def shots(whd): return [w for w in G.waves(whd) if M.SEL.search(w.name) and not M.REF.search(w.name)]
@@ -132,17 +141,25 @@ def build_bank(b, out, force, log):
     if not (pin and (m5 in pin['inputs'] or m5 in pin['outputs'])) and not force:
         raise SystemExit('REFUSED %s: live .WAV md5 %s is not pinned in %s (run audit, then pin, or pass --force)' % (b.key, m5, PINS))
     ref, how, rows = rows_of(b, whd, wav)
+    # --raw: ONE flat-top target (the Dog Days Desert Eagle = what the MP45 plays). The Dead Men banks' own Deagle clips measure
+    # 0.1..0.3 % flat but are dense right under the peak (+1 dB drive = 16 % flat, +1 dB head); the MP45 is the owner's
+    # reference ("mp45 was perfect"), so it stays untouched everywhere
+    rf = FALLBACK_FLAT if RAW else None
     ws = {w.rec_off: w for w in G.waves(whd)}; repl = {}; rep = []; offs = {}; short = []
     for w, k, h, t in rows:
         assert w.codec == 0x11 and w.get('rate') == M.R and w.get('ch') == 1 and not w.streamed, w.name
         o = w.get('off'); assert o not in offs, 'two records share data %s / %s' % (offs[o], w.name); offs[o] = w.name
-        if abs(h - t) <= TOL: continue
-        x = G.decode_wave(wav, w)[:, 0]
-        y, g, ach = M.drive(x, t)
-        data, ns, pcmb = G.encode_for(w, y[:, None], M.R)
+        x = G.decode_wave(wav, w)[:, 0]; raw = RAW and k == 'gun'; fl = M.flat_pct(x)
+        if raw:
+            if fl >= rf - FLAT_TOL and t - TOL <= h <= t + M.RAW_OVER + 0.1: continue
+        elif abs(h - t) <= TOL: continue
+        if raw: y, g, ach, _ = M.drive_raw(x, t, rf)
+        else: y, g, ach = M.drive(x, t)
+        data, ns, pcmb = G.encode_for(w, y[:, None], M.R, rail=raw)
         assert ns == w.get('samples') and len(data) == w.get('size'), (w.name, ns, len(data))
         repl[w.rec_off] = (data, ns, pcmb, ns / M.R)
-        rep.append(dict(record=w.name, kind=k, before_head=round(h, 2), target_head=round(t, 2), gain_db=round(g, 2), _y=y, _w=w.rec_off))
+        rep.append(dict(record=w.name, kind=k, before_head=round(h, 2), target_head=round(t, 2), gain_db=round(g, 2), raw=raw,
+                        before_flat=round(fl, 1), target_flat=None if rf is None else round(rf, 1), _y=y, _w=w.rec_off))
         if ach < t - SHORT: short.append((w.name, round(ach, 2), round(t, 2)))
     man = dict(key=b.key, group=b.group, id=b.id, file=b.rel, ref_head=round(ref, 2), ref_from=how, clips=len(rows), changed=len(repl),
                live_md5=m5, short_of_target=short)
@@ -159,7 +176,7 @@ def build_bank(b, out, force, log):
     nws = {w.rec_off: w for w in G.waves(nwhd)}; mins = []
     for e in rep:
         d = G.decode_wave(nwav, nws[e['_w']])[:, 0]; c = float(np.corrcoef(d, e['_y'])[0, 1]); mins.append(c); assert c > 0.95, (e['record'], c)
-        e['after_head'] = round(M.head_db(d), 2); del e['_y'], e['_w']
+        e['after_head'] = round(M.head_db(d), 2); e['after_flat'] = round(M.flat_pct(d), 1); del e['_y'], e['_w']
     spans = [(a, c - a) for a, c in olds]
     d = os.path.join(out, 'Banks', b.group); os.makedirs(d, exist_ok=True)
     open(os.path.join(d, b.id + '.new'), 'wb').write(b''.join(nwav[a:a + n] for a, n in spans))
@@ -171,12 +188,14 @@ def build_bank(b, out, force, log):
 
 
 def cmd_build(a):
+    global RAW, TAG
     force = '--force' in a
     if force: a.remove('--force')
+    if '--raw' in a: a.remove('--raw'); RAW = True; TAG = '1025gunraw'
     groups = split_groups(a); out = a[0]; os.makedirs(out, exist_ok=True); res = []
     for b in banks(groups): res.append(build_bank(b, out, force, print)[0])
     changed = [m for m in res if not m.get('unchanged')]
-    json.dump(dict(tag=TAG, banks=res), open(os.path.join(out, 'report.json'), 'w'), indent=1)
+    json.dump(dict(tag=TAG, raw=RAW, banks=res), open(os.path.join(out, 'report.json'), 'w'), indent=1)
     mf = {m['key']: dict(file=m['file'], input_md5=m['live_md5'], output_md5=m['output_md5'], spans=m['spans'], group=m['group'], id=m['id']) for m in changed}
     json.dump(dict(tag=TAG, banks=mf), open(os.path.join(out, 'manifest.json'), 'w'), indent=1)
     pins = json.load(open(PINS)) if os.path.exists(PINS) else {}
@@ -185,10 +204,11 @@ def cmd_build(a):
         if m['output_md5'] not in e['outputs']: e['outputs'].append(m['output_md5'])
     json.dump(pins, open(PINS, 'w'), indent=1, sort_keys=True)
     with open(os.path.join(out, 'AB_LIST.txt'), 'w') as f:
-        f.write('%-14s %-44s %-8s %7s %7s %6s %7s\n' % ('bank', 'record', 'kind', 'before', 'target', 'gain', 'after'))
+        f.write('%-14s %-44s %-8s %7s %7s %6s %7s %6s %6s %6s\n' % ('bank', 'record', 'kind', 'before', 'target', 'gain', 'after', 'flat0', 'flatT', 'flat1'))
         for m in changed:
             for e in m['detail']:
-                f.write('%-14s %-44s %-8s %7.2f %7.2f %6.2f %7.2f\n' % (m['key'], e['record'].split('/')[-1][:44], e['kind'], e['before_head'], e['target_head'], e['gain_db'], e['after_head']))
+                f.write('%-14s %-44s %-8s %7.2f %7.2f %6.2f %7.2f %6.1f %6s %6.1f\n' % (m['key'], e['record'].split('/')[-1][:44], e['kind'], e['before_head'], e['target_head'],
+                        e['gain_db'], e['after_head'], e['before_flat'], '-' if not e['raw'] else '%.1f' % e['target_flat'], e['after_flat']))
     write_installer(out)
     print('built: %d banks checked, %d need changes, %d records, %.1f MB of new spans' % (len(res), len(changed), sum(m['changed'] for m in changed),
           sum(os.path.getsize(os.path.join(out, 'Banks', m['group'], m['id'] + '.new')) for m in changed) / 1e6))
@@ -201,7 +221,8 @@ def cmd_verify(a):
         b = [x for x in banks((m['group'],)) if x.key == m['key']][0]; whd, wav = b.load()
         assert md5(wav) == m['live_md5'], 'live bank changed since the build: ' + m['key']
         if m.get('unchanged'):
-            ref, how, rows = rows_of(b, whd, wav); assert all(abs(h - t) <= TOL for _, _, h, t in rows), m['key']; print('verify %-14s untouched, all %d clips within %.2f dB' % (m['key'], len(rows), TOL)); n += 1; continue
+            ref, how, rows = rows_of(b, whd, wav)
+            assert all(abs(h - t) <= TOL or (rep.get('raw') and k == 'gun' and t - TOL <= h <= t + M.RAW_OVER + 0.1) for _, k, h, t in rows), m['key']; print('verify %-14s untouched, all %d clips within %.2f dB' % (m['key'], len(rows), TOL)); n += 1; continue
         d = os.path.join(out, 'Banks', m['group']); new = open(os.path.join(d, m['id'] + '.new'), 'rb').read(); old = open(os.path.join(d, m['id'] + '.old'), 'rb').read()
         nv = bytearray(wav); p = 0; sp = m['spans']
         for i in range(0, len(sp), 2):
@@ -212,9 +233,10 @@ def cmd_verify(a):
         assert md5(bytes(un)) == m['live_md5'], 'undo does not restore ' + m['key']
         ref, how, rows = rows_of(b, whd, nv); names = {e['record'] for e in m['detail']}
         for w, k, h, t in rows:
-            assert abs(h - t) <= TOL + 0.2 or (m['short_of_target'] and any(s[0] == w.name for s in m['short_of_target'])) or h <= t + 0.3, (m['key'], w.name, h, t)
+            over = M.RAW_OVER + 0.15 if rep.get('raw') and M.kind(w.name) == 'gun' else 0.3      # --raw: flat tops may cost up to RAW_OVER
+            assert abs(h - t) <= TOL + 0.2 or (m['short_of_target'] and any(s[0] == w.name for s in m['short_of_target'])) or h <= t + over, (m['key'], w.name, h, t)
             worst = max(worst, abs(h - t) if w.name not in {s[0] for s in m['short_of_target']} else 0)
-        assert names <= {w.name for w, *_ in rows}
+        assert names <= {w.name for w, *_ in rows} | ({w.name for w in G.waves(whd) if M.REF.search(w.name)} if rep.get('raw') else set())
         print('verify %-14s %2d/%2d records changed, all %d clips at target, apply+undo reproduce the md5s, WHD untouched' % (m['key'], m['changed'], m['clips'], len(rows))); n += 1
     print('verify: %d banks PASS (worst residual %.2f dB, excluding clips at the gain cap)' % (n, worst)); return 0
 
@@ -271,9 +293,10 @@ foreach ($x in $todo) {
 }
 if ($Undo) { "banks restored: $($todo.Count)" } else { "banks updated: $($todo.Count). Backups: *.WAV.before-1024gunsnd2. Undo: UNDO gun sounds all maps.bat" }
 '''
+    ps = ps.replace('before-1024gunsnd2', 'before-' + TAG)        # --raw builds back up under their own tag
     open(os.path.join(out, 'install_gunsnd2.ps1'), 'w', newline='\r\n').write(ps)
     open(os.path.join(out, 'INSTALL gun sounds all maps.bat'), 'w', newline='\r\n').write(
-        '@echo off\r\nrem Every gun-shot sample at the S&W MP45 loudness: KLExpansion maps, the 9 stock FA maps, the story levels (md5-checked; copies kept as .before-1024gunsnd2).\r\n'
+        '@echo off\r\nrem Every gun-shot sample at the S&W MP45 loudness%s: KLExpansion maps, the 9 stock FA maps, the story levels (md5-checked; copies kept as .before-%s).\r\n' % (' and hard clip' if RAW else '', TAG) +
         'powershell -ExecutionPolicy Bypass -File "%~dp0install_gunsnd2.ps1"\r\npause\r\n')
     open(os.path.join(out, 'UNDO gun sounds all maps.bat'), 'w', newline='\r\n').write(
         '@echo off\r\nrem Puts the previous gun-shot samples back (md5-checked).\r\npowershell -ExecutionPolicy Bypass -File "%~dp0install_gunsnd2.ps1" -Undo\r\npause\r\n')
