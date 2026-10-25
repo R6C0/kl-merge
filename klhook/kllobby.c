@@ -27,7 +27,7 @@
  *   - WHICH caller raises it with one human is NOT established (GUESS: a 'peers left' check); the wrapper below logs the caller's return address
  *     and the word the first times (that names it). Reading everything else the same, this is the one place all callers pass.
  *   THE LEVER (SHIP-safe, data only): the session manager is a HEAP object; its vtable pointer [sm] is swapped for a private 28-slot copy
- *     (as klchar.c does for the option object; the stock .rdata vtable is never written) whose slot 3 clears the low nibble of the word when
+ *     (as klchar.c does for the option object; the stock .rdata vtable is never written) whose slot 3 DROPS the error request (SL5: clearing the nibble still closed the session, see kllb_slot3) when
  *     this machine is the HOST (role 2) of a game type 4 session with at most 1 human connected. Everything else (a real error with two or more
  *     humans, a client) passes unchanged. The wrapper runs on the game's thread, called by the game. [Lobby] Solo=1 also implies MinPlayers=1.
  *     Other KLHook modules that test the sm class use KLH_SM_VT_OK (klhook.c), which accepts the copy.
@@ -66,18 +66,24 @@ static int kllb_connected(DWORD sm)
     return (lo && hi >= lo && hi - lo <= 16) ? (int)(hi - lo) : 99;
 }
 
-/* sm vtable slot 3 (0x61a410, thiscall, one stack argument, ret 4 = __fastcall with the unused edx): the session error word */
+/* sm vtable slot 3 (0x61a410, thiscall, one stack argument, ret 4 = __fastcall with the unused edx): the session END request.
+   Read 2026-10-25 after SL5: a word with the LOW NIBBLE ZERO is NOT 'no error' - 0x61a56b..0x61a7ab sends it to SetState(0x2d) too
+   (session closing), so clearing the nibble only swapped HostDisconnect for FASessionClosingInterlude. The raiser seen live is
+   0x827F6A = the tail jump 0x80b256 of 0x80ad60 (per-frame list update): connected (0x698250) < 2, [sm+0xb8] > 1, state 0x19..0x27 -> slot 3(8).
+   So the lone host's request is DROPPED: the real function is not called at all (nothing stored, no state change). Only when this machine is the
+   host of a game type 4 session, the state is in-round (0x17..0x2a), at most 1 human is connected and the word has a nibble set (an error;
+   word 0 = a normal leave still ends the round). */
 static void __fastcall kllb_slot3(void *self, void *edx, DWORD word)
 {
     DWORD role = 0, mode = 0, state = 0; int n = 99, mask = 0;
     if ((word & 0xf) && kllb_solo) {
         if (klh_rd((DWORD_PTR)self + 0x54, &role, 4) && klh_rd((DWORD_PTR)self + 0x5c, &mode, 4) && klh_rd((DWORD_PTR)self + 0x70, &state, 4)) n = kllb_connected((DWORD)(DWORD_PTR)self);
-        mask = role == 2 && mode == 4 && n <= 1;
+        mask = role == 2 && mode == 4 && n <= 1 && state >= 0x17 && state <= 0x2a;
         if (InterlockedIncrement(&kllb_seen) <= 12)
             klog("lobby: Solo: session error word %08lx from %p (role %lu, game type %lu, state 0x%lx, %d connected): %s", (unsigned long)word,
                  (void *)((DWORD_PTR)_ReturnAddress() - (DWORD_PTR)klh_image() + KL2_BASE), (unsigned long)role, (unsigned long)mode, (unsigned long)state, n,
-                 mask ? "low nibble cleared (the round goes on)" : "passed unchanged");
-        if (mask) { InterlockedIncrement(&kllb_masked); word &= ~0xfu; }
+                 mask ? "dropped (the round goes on)" : "passed unchanged");
+        if (mask) { InterlockedIncrement(&kllb_masked); return; }
     }
     kllb_real3(self, edx, word);
 }
