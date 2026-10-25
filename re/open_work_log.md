@@ -1,3 +1,7 @@
+2026-10-25 ~16:30 - e8 K49I/J END: the texmip zip loads fine, process heap P 395 MB (was 457); texmip stays installed. K49I auto = 30 fps at the 59 Hz monitor-off
+mode (preset bug 59 < 60, e8 fixed with 2 Hz slack), 0 refusals. K49J Fps=120: 119.5 fps but the nvd3dum pile sawtooths 70 -> 586 MB (~60 s), free VA 13 MB, 11 refusals
+by 200 s. DM05A is safe at 60, NOT at 120. e8 next: find what drains the pile (the sudden drop) so it can be triggered instead of capping fps.
+
 2026-10-25 ~16:00 - MEMORY: the frame limiter had been dead since k36 (the Steam overlay re-enters Present, so the recursion cut fired; e8 fix e8d4d03ff, [FrameLimit]
 GameThread=1). K49H2 (DM05A, Fps=60 + DriverArena=1): 0 refusals, free VA flat 133-145 MB. TEXMIP INSTALLED at e8's GO: KLExpansion/Maps/DM05A/F01_Main.zip
 701d082f -> 4bd278cf (texmip --min 1024, 86/1830 textures, .TEX 210.6 -> 143.8 MB), backup .before-1025texmip (renamed: the live file was hard-linked to lc6 build),
