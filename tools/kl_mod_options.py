@@ -162,7 +162,7 @@ def screen_hz():
 # auto (Fps=0) picks, so an ini with Fps=0 shows that row ticked.
 FPS_PRESETS = (240, 120, 60, 30)
 HZ = screen_hz()
-FPS_REC = next((p for p in FPS_PRESETS if HZ >= p), 30)
+FPS_REC = next((p for p in FPS_PRESETS if HZ + 2 >= p), 30)   # 2 Hz slack like klfps_preset (59.94 Hz reads as 59)
 for _p in FPS_PRESETS:
     feat('fps%d' % _p, G_GFX, 'Frame limiter %d fps (RTSS-style, removes frame-time stutter)' % _p, 'on' if _p == FPS_REC else 'off', 'start',
          'your screen: %d Hz; one of the four presets (ticking one unticks the others, none = no limiter); timed at presentation '

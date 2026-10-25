@@ -96,12 +96,13 @@ static long klfps_pace_n, klfps_wd, klfps_resets;
 typedef HRESULT (WINAPI *klfps_reset_fn)(void *self, void *pp);
 static klfps_reset_fn klfps_real_reset;
 
-/* owner 2026-10-24: four presets 240 / 120 / 60 / 30; auto = the highest one the screen shows (144 Hz -> 120, 75 Hz -> 60) */
+/* owner 2026-10-24: four presets 240 / 120 / 60 / 30; auto = the highest one the screen shows (144 Hz -> 120, 75 Hz -> 60).
+ * 1025: 2 Hz slack - Windows reports 59.94 Hz modes as 59 (K49I, monitor-off mode, got 30 fps) and 239.76 as 239 */
 static int klfps_preset(int hz)
 {
     static const int p[] = { 240, 120, 60, 30 };
     int i;
-    for (i = 0; i < 3; i++) if (hz >= p[i]) return p[i];
+    for (i = 0; i < 3; i++) if (hz + 2 >= p[i]) return p[i];
     return 30;
 }
 
