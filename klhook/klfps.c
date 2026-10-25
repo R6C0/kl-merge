@@ -240,6 +240,14 @@ static void klfps_unwrap_all(void)
     int i;
     for (i = 0; i < klfps_nwr; i++) {
         void *cur = *klfps_wr[i].slot;
+        /* the Reset wrapper stays while a vertex-buffer ring is on: the ring's DEFAULT buffers are dropped only there, a Reset without
+           it fails (review 1025: the cut fires in every session on the owner's PC). The cut is about Present recursion; Reset was never
+           part of a cycle. */
+        if (klfps_wr[i].mine == (void *)klfps_reset && (klqr_n
+#ifdef KLHOOK_TEST
+            || kld3_rg_ok
+#endif
+            )) { klog("fps: unwrap: Reset wrapper kept (a vertex-buffer ring needs it)"); continue; }
         if (cur == klfps_wr[i].mine) klh_poke(klfps_wr[i].slot, &cur, sizeof cur, &klfps_wr[i].real, sizeof cur, "frame limiter unwrap");
     }
 }
@@ -411,6 +419,7 @@ static void klfps_read_pp(const void *pp)
 static HRESULT WINAPI klfps_reset(void *self, void *pp)
 {
     HRESULT r;
+    klquad_prereset();                                               /* klquad.c: [Memory] QuadRing's DEFAULT-pool buffers must not outlive Reset */
 #ifdef KLHOOK_TEST
     kld3_prereset();                                                 /* kld3.c: [Memory] D3dRing's DEFAULT-pool buffers must not outlive Reset */
 #endif
@@ -428,6 +437,7 @@ static HRESULT WINAPI klfps_createdev(void *self, UINT adapter, DWORD type, HWND
         klfps_read_pp(pp);
         if (klfps_use_reset) klfps_wrap_slot(*dev, 16, (void *)klfps_reset, (void **)&klfps_real_reset, "Reset");
         klfps_wrap_slot(*dev, 17, (void *)klfps_present, (void **)&klfps_real_present, "Present");
+        klquad_device(*dev, (void *)klfps_reset);                    /* klquad.c: the ring only with this Reset wrapper */
 #ifdef KLHOOK_TEST
         kld3_device(*dev);                                           /* kld3.c: [Memory] D3dCount, the other slots (after Reset / Present, which stay ours) */
         kld3_dev = *dev;

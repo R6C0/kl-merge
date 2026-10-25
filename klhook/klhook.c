@@ -655,6 +655,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #ifdef KLHOOK_TEST
 #include "kld3.c"                                       /* kld3.c: [Memory] D3dCount / D3dFlushEvery - Direct3D 9 call counts per vtable slot + a GPU flush experiment (TEST only, default 0); AFTER klarena.c, BEFORE klfps.c */
 #endif
+#include "klquad.c"                                       /* klquad.c: [Memory] QuadRing - a buffer ring for the 4 screen-quad VBs (DM05A driver pile; off unless set); BEFORE klfps.c */
 #include "klnudge.c"
 #include "klfix.c"
 #include "kljoin.c"
@@ -980,6 +981,7 @@ static void klh_tick(int game_thread)
     klva_tick();                                      /* klvalog.c: the per-caller table every 10 s (off unless [Memory] VaLog=1) */
 #endif
     klarena_tick();                                   /* klarena.c: its 10 s line (off unless [Memory] DriverArena=1) */
+    klquad_tick();                                    /* klquad.c: wraps VB Lock once the first quad buffer exists, a 60 s line (off unless [Memory] QuadRing) */
 #ifdef KLHOOK_TEST
     kld3_tick();                                      /* kld3.c: its 10 s lines (off unless [Memory] D3dCount=1) */
 #endif
@@ -1309,6 +1311,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klva_init();                                   /* klvalog.c: AFTER klm_init (its reserve is not counted); off unless [Memory] VaLog=1 */
 #endif
     klarena_init();                                /* klarena.c: AFTER klva_init; off unless [Memory] DriverArena=1 */
+    klquad_init();                                 /* klquad.c: off unless [Memory] QuadRing (TEST: off while kld3.c D3dRing is on) */
 #ifdef KLHOOK_TEST
     kld3_init();                                   /* kld3.c: AFTER klarena_init (reads its counters); off unless [Memory] D3dCount=1 */
 #endif

@@ -272,6 +272,31 @@ static void kld3_device(void *dev)
     klog("d3count: device %p vtable %p: %d of %d slots counted (Reset / Present left to klfps.c)%s", dev, (void *)vt, done, KLD3_NSLOT - 2, kld3_flush_n ? "; flush experiment on" : "");
 }
 
+/* [Memory] D3dShotEvery=S (TEST, default 0 = off): every S seconds the back buffer (before Present: the finished frame, HUD
+ * included) is saved as KLShot_<tag>_NN.jpg into [Memory] D3dShotDir (default: the game folder), at most 40 per run, with the
+ * game's own d3dx9_42 D3DXSaveSurfaceToFileA. Why: a desktop grab of the full-screen game is black, and D3dRing needs a look
+ * at the post-process passes (bloom / blur) it touches. */
+static int kld3_shot_s, kld3_shot_n; static char kld3_shot_dir[MAX_PATH], kld3_shot_tag[64];
+static void kld3_shot(void *dev)
+{
+    typedef HRESULT (WINAPI *gbb_fn)(void *, UINT, UINT, DWORD, void **);
+    typedef HRESULT (WINAPI *save_fn)(const char *, DWORD, void *, const void *, const RECT *);
+    static DWORD last; static save_fn save; static int told; char path[MAX_PATH + 96]; void *bb = 0; HRESULT hr;
+    DWORD now = GetTickCount();
+    if (kld3_shot_n >= 40 || (last && now - last < (DWORD)kld3_shot_s * 1000)) return;
+    if (!last) { last = now; return; }
+    last = now;
+    if (!save) { HMODULE m = GetModuleHandleA("d3dx9_42.dll"); save = m ? (save_fn)GetProcAddress(m, "D3DXSaveSurfaceToFileA") : 0; }
+    if (!save) { if (!told++) klog("d3count: shot: d3dx9_42 D3DXSaveSurfaceToFileA not found - no shots"); kld3_shot_n = 40; return; }
+    if (((gbb_fn)(*(void ***)dev)[18])(dev, 0, 0, 0, &bb) < 0 || !bb) { if (!told++) klog("d3count: shot: GetBackBuffer failed"); return; }
+    _snprintf(path, sizeof path, "%s%sKLShot_%s_%02d.jpg", kld3_shot_dir, kld3_shot_dir[0] ? "\\" : "", kld3_shot_tag, kld3_shot_n);
+    path[sizeof path - 1] = 0;
+    hr = save(path, 1, bb, 0, 0);                                            /* D3DXIFF_JPG = 1 */
+    ((ULONG (WINAPI *)(void *))(*(void ***)bb)[2])(bb);
+    kld3_shot_n++;
+    klog("d3count: shot %d: %s (%08lx)", kld3_shot_n, path, (unsigned long)hr);
+}
+
 /* klfps.c's Present wrappers (outermost call only): one frame; the optional flush experiment */
 static void kld3_present(void *dev)
 {
@@ -279,6 +304,7 @@ static void kld3_present(void *dev)
     LONG f; void **qvt; LARGE_INTEGER a, b; LONG64 before, after, us; HRESULT hr; BOOL data = 0; int to = 0;
     if (!kld3_on) return;
     f = InterlockedIncrement(&kld3_frames);
+    if (kld3_shot_s && dev) kld3_shot(dev);
     if (!kld3_flush_n || f % kld3_flush_n || !dev) return;
     /* a fresh query per flush, released at once: a default-pool query kept across Present would make a later Reset fail (D3DERR_INVALIDCALL),
        and a kept one dangles when the device is recreated */
@@ -372,6 +398,10 @@ static void kld3_init(void)
     kld3_on = GetPrivateProfileIntA("Memory", "D3dCount", 0, klh_ini) != 0;
     kld3_flush_n = GetPrivateProfileIntA("Memory", "D3dFlushEvery", 0, klh_ini);
     if (kld3_flush_n < 0) kld3_flush_n = 0;
+    kld3_shot_s = GetPrivateProfileIntA("Memory", "D3dShotEvery", 0, klh_ini);
+    GetPrivateProfileStringA("Memory", "D3dShotDir", "", kld3_shot_dir, sizeof kld3_shot_dir, klh_ini);
+    GetPrivateProfileStringA("Memory", "D3dShotTag", "run", kld3_shot_tag, sizeof kld3_shot_tag, klh_ini);
+    if (kld3_shot_s > 0) kld3_on = 1; else kld3_shot_s = 0;
     kld3_ring_n = GetPrivateProfileIntA("Memory", "D3dRing", 0, klh_ini);
     if (kld3_ring_n) { if (kld3_ring_n < 16) kld3_ring_n = 16; if (kld3_ring_n > 512) kld3_ring_n = 512; kld3_on = 1; InitializeCriticalSection(&kld3_rg_cs); kld3_rg_ok = 1;
                        klog("d3count: ring on (TEST): the 4 quad buffers (0xf645c0..cc) get %d buffers each, DISCARD -> NOOVERWRITE on the next one", kld3_ring_n); }
