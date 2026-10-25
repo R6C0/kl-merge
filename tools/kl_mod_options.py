@@ -164,6 +164,8 @@ feat('botfillsquads', G_EXP, 'Online lobby: keep the first N map heister squads 
      'klbotfill.c [Bots] OnlineFillSquads; heap byte per squad (mask 8 -> 9) before the round; needs OnlineFill=1; may be too late for the collect (probe); NOT run live', [('Bots', 'OnlineFillSquads', 1, 0, 0)])
 feat('hostopts', G_EXP, 'Host-controlled match options: F7 map set, F8 AI heisters; the host map set reaches clients (recommended on after the live test)', 'off', 'start',
      'klhostopt.c [HostOpts] Enable; Steam lobby key klx_opts + UDP 27413; re/host_options.md; NOT run live', [('HostOpts', 'Enable', 1, 0, 0)])
+feat('charonline', G_EXP, 'Online: every player heister / mask / outfit shows on every screen; F9 / F11 choose (recommended on after the live test)', 'off', 'start',
+     'klcharonline.c [CharOnline] Enable; entity-table index + look via Steam lobby member data klx_look and UDP 27414; re/char_online.md; NOT run live', [('CharOnline', 'Enable', 1, 0, 0)])
 feat('hostoptsmenu', G_EXP, 'Host options rows in Mod settings (needs the overlay rebuilt; recommended on after the live test)', 'off', 'start',
      'mkoverlay.py [HostOpts] Menu=1: Host map set + Host options rows, Textures/Neural merged; +4 table entries (est. 4994 of 5000)', [('HostOpts', 'Menu', 1, 0, 0)])
 
