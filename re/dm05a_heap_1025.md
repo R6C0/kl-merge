@@ -62,3 +62,12 @@ Static disassembly of kl2.exe only, nothing run. "VERIFIED" = a second agent rep
 - VERIFIED: the five 0x6a5aa0 VBs (0x70..0x240) are already DYNAMIC|WRITEONLY DEFAULT; 0x430030 is the only constant-MANAGED VB. Lock/DISCARD sites and the
   suspected 8 MB dynamic buffer (K49D stack value 0x800000) NOT found yet: follow-up workflow wtooejuiz.
 - Levers: (A) per-map mip skip, a hook DATA write [0xcdadec]=1 before a heavy map loads (no .text write; needs e8); (B) VB/IB MANAGED->DEFAULT, small gain.
+
+## Dynamic buffers and mip-skip readers (workflow wtooejuiz, 2026-10-25)
+- VERIFIED: mip-skip byte 0xcdadec = settings struct 0xcdadb8 (getter 0x70e4d0, 44 callers) field +0x34. Readers: .TEX handler prologues 0x50e1d1 0x57f5ea
+  0x724f7a 0x7256fa 0x7c8890 0x819dba 0x87277a 0x8caff4, plus 0x4c6c94, 0x88488e, texture ctor 0x4c80c2; compare 0x6803ed; sole writer 0x9048ca. Read per texture at load.
+- VERIFIED: Lock wrappers VB 0x87bda0 (buffer this+0x18), IB 0x722e80 (+0x24). Ring locks VB 0x7da800 / IB32 0x561e40 / IB16 0x7b0ac0: NOOVERWRITE, DISCARD on wrap
+  or force flag [esi+0x10] (cursor reset). Dynamic VB len = ExpandDynamicVertexBufferFactor << 19 (0x415cd0, shl 0x415e87, default 2 = 1 MB; not set in any ini seen).
+- Hook verdicts: DISCARD->NOOVERWRITE unsafe (wrap barrier); CreateVertexBuffer shrink unsafe (ring bound [esi+8] and shadow from the same factor).
+- Open: 0x415d77 (0x2000000) / 0x415db1 (0x200000) into 0x442380; force-flag frequency (0x7c1c30, unverified); map-load hook point.
+- e8 K49F: the 366 MB nvd3dum small-block pile is on kl2's RENDER thread (not the driver worker). K49G tests [Memory] DriverArena=1 (nvd3dum Heap* slots -> 1 MB chunks).
