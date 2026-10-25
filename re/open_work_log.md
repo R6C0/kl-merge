@@ -4,6 +4,11 @@ Route MainMenu DOWN DOWN RETURN > OnlineMenu DOWN RETURN > SystemLink DOWN DOWN 
 host Ready alone -> 'LOAD F01: online=1 OnlineSet=2 -> page 2, rule DM01', level loaded, 0 asserts 0 faults. Grenade GSP1: PASS but no grenade carried (needs a pickup). QoL2 WatchDry sane.
 Destruction-sound loudness (vehicle explosions, extinguishers, glass) as MP45: agent building C:/kl_build_1024/fxraw_1025 (not installed).
 
+2026-10-25 ~22:10 - SOLO ONLINE HOST WORKS + INSTALLED: SOLO2 live (System Link, host alone, out_solo_1025b_test, SL5.ini) round 1 -> FAStatus/StatusMoney -> round 2, 0 faults.
+Cause: slot 3 of the session manager vtable (0x61a410) is a session END request; 0x80ad60's tail asks for it (word 8) when < 2 humans; Solo=1 drops it for a lone FA host (kllobby.c, 70dbb3197).
+Installed SHIP 2a88a86b + [Lobby] Solo=1, MinPlayers=1 (C:/kl_build_1024/solo_1025/install.py --undo; .before-1025solo). Lobby names set2 installed (rand collage live-checked, not left in).
+Agents: Quick/Ranked BuildKey + host-server mode (out_server_1025a), Arcade HUD online + old HUD on Alt+Tab (out_hudonline_1025a), heist time to 10 min / more rounds (out_lobbyopts_1025a).
+
 2026-10-25 ~21:00 - LOOT MOVES INSTALLED (owner: 'fix where loot spawns ... period correct'), map zips only, tag .before-1025loot, undo C:/kl_build_1024/owner1025_build/<MAP>/stage/install.py --undo:
 DM09 F06 24e9c878 -> 5c31e901, DM01B F03 186cf3f8 -> fbbb7216, DM03A F07 a869705b -> 1acb434a, DM06B F02 -> 835457e1; each 4,000,000, Floors.stand checked, entries stale 0, WAVs untouched.
 Held: DM05A (needs a K50 memory run). DD10 / DM07 / LANES (DM01-03) failed adversarial verify (deactivators blanket-emptied + 57>55 actors; DM07 TEX change, node loss; DM01 fence/cars, DM02 drawers):

@@ -66,6 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-25 ~22:10 - SOLO ONLINE HOST WORKS + INSTALLED: SOLO2 live (System Link, host alone, out_solo_1025b_test, SL5.ini) round 1 -> FAStatus/StatusMoney -> round 2, 0 faults.
+Cause: slot 3 of the session manager vtable (0x61a410) is a session END request; 0x80ad60's tail asks for it (word 8) when < 2 humans; Solo=1 drops it for a lone FA host (kllobby.c, 70dbb3197).
+Installed SHIP 2a88a86b + [Lobby] Solo=1, MinPlayers=1 (C:/kl_build_1024/solo_1025/install.py --undo; .before-1025solo). Lobby names set2 installed (rand collage live-checked, not left in).
+Agents: Quick/Ranked BuildKey + host-server mode (out_server_1025a), Arcade HUD online + old HUD on Alt+Tab (out_hudonline_1025a), heist time to 10 min / more rounds (out_lobbyopts_1025a).
+
 2026-10-25 ~21:26 - SYSTEM LINK + DEAD MEN MAPS: PASS (SL2, TEST out_escfar_1025a_test, script C:/kl_build_1024/online_1025/live/SL2.ini, [Lobby] MinPlayers=1 test-only).
 Installed online_1025 (SHIP 05a47b0e, ini 4b2bcf1a: [Expansion] OnlineSet=2, [HUD] TrackerEscapeFar=1; .before-1025online, undo C:/kl_build_1024/online_1025/install.py --undo).
 Route MainMenu DOWN DOWN RETURN > OnlineMenu DOWN RETURN > SystemLink DOWN DOWN RETURN (Create; SL1 pressed Join = SysUIErrorScreen) > SystemLinkCreate RETURN > FALobby;
@@ -76,12 +81,6 @@ Destruction-sound loudness (vehicle explosions, extinguishers, glass) as MP45: a
 encode), 42 banks, median 21.9 % flat (Deagle ~20 %), MP45 untouched; C:/kl_build_1024/gunraw_1025, *.WAV.before-1025gunraw, UNDO bat there. Not ear-tested.
 Grenade TEST ready, not run: C:/kl_build_1024/grenspawn_1025/install.py (Spawn=2; --undo after). DD10 escape: [HUD] TrackerEscapeFar (8bb053657, default 0),
 built out_escfar_1025a, not installed; unknown whether DD10 has a van tracker entry at all (kl-merge-ce checking the POI).
-
-2026-10-25 ~17:58 - STUTTER vs LAST NIGHT + MAP SET (3f): owner sessions per minute of frames over 33 ms: 10-24 17:35 = 11, 19:21 = 6.5; today 14:56-17:39 = 53-128.
-Today 70-80% of hitch-probe reports stand in NtUserPeekMessage (win32u+0x101c; ReShade32+0x5ff67 + gameoverlayrenderer on the stack) vs 18/32 at 17:35. 10-24 17:35 had NO medal-hook32
-loaded (19:21 did); Medal + MedalEncoder were restarted 15:15 today. INSTALLED hook out_mapset_1025a SHIP 2FF289F3 (on FA8A38A5, .before-1025mapset; ini untouched, Trace=1):
-Peek 'by result' line, [Input] MouseMoveMs, [Expansion] OnlineSet/KeepPageOnline (d2f92b656), [Grenade] Spawn TEST-only; all default off. Next: owner round with Medal quit; then MouseMoveMs=16.
-
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
