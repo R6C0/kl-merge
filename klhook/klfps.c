@@ -106,10 +106,18 @@ static int klfps_preset(int hz)
     return 30;
 }
 
+/* 1025 MapCap (e27's proposal after K49J): [FrameLimit] MapCap=DM05A:60 (recommended on; empty = off) = a per-map CEILING, min(the
+ * user's rate, cap), only while a redirected map from that folder is loaded (klmv_pm_folder); stock maps keep the owner's rate.
+ * Why DM05A:60: nvd3dum's small-block pile grows with the frame rate (K49J 120 fps: 70 -> 586 MB, 11 refused heap requests in 200 s;
+ * K49H2 60 fps: flat, 0 refused). The game thread finds the map (klfps_mapcap_tick) and flags it; the pacing thread re-targets. */
+static char klfps_mapcap[256];
+static volatile LONG klfps_cap_now, klfps_cap_dirty;
+
 static void klfps_set_target(void)
 {
-    int fps = klfps_fps_ini;
+    int fps = klfps_fps_ini, cap = klfps_cap_now;
     if (!fps) fps = klfps_vsync ? 0 : klfps_preset(klfps_auto_hz);   /* auto: not on top of the game's own vsync */
+    if (cap > 0 && (fps <= 0 || fps > cap)) fps = cap;               /* MapCap: also on top of vsync (a 144 Hz vsync still has to come down) */
     klfps_target = fps;
     if (fps > 0 && klfps_freq) { klfps_period = klfps_freq / fps; klfps_rem = klfps_freq % fps; }
     klfps_acc = 0; klfps_deadline = 0;
@@ -159,6 +167,7 @@ static void klfps_pace_feed(LONGLONG work)
 static void klfps_wait(void)
 {
     LARGE_INTEGER n; LONGLONG t;
+    if (klfps_cap_dirty && InterlockedExchange(&klfps_cap_dirty, 0)) klfps_set_target();   /* MapCap changed on the game thread */
     if (klfps_target <= 0 || !klfps_freq) return;
     QueryPerformanceCounter(&n); t = n.QuadPart;
     if (!klfps_deadline) klfps_deadline = t;
@@ -279,6 +288,26 @@ static int klfps_pre(const char *route, int d, void *ret)
  * [FrameLimit] GameThread=1 (recommended on; 0 = a cut limiter stays dead, the k36 behaviour). Import slot (RunCallbacks) only: SHIP-safe. */
 static int klfps_gt = 1;
 static volatile LONG klfps_gt_on;
+/* game thread, once a second: the cap of the redirected map now loaded ("DM05A:60,DM09:120" -> 60 on DM05A), 0 = none */
+static void klfps_mapcap_tick(void)
+{
+    static DWORD at; DWORD now = GetTickCount(); char f[40]; const char *s; int cap = 0; size_t n;
+    if (!klfps_enable || !klfps_mapcap[0] || now - at < 1000) return;
+    at = now;
+    klmv_pm_folder(f, sizeof f);
+    n = strlen(f);
+    for (s = klfps_mapcap; n && *s; ) {
+        while (*s == ' ' || *s == ',') s++;
+        if (!_strnicmp(s, f, n) && s[n] == ':') { cap = atoi(s + n + 1); break; }
+        while (*s && *s != ',') s++;
+    }
+    if (cap && cap < 10) cap = 10;
+    if (cap == klfps_cap_now) return;
+    InterlockedExchange(&klfps_cap_now, cap); InterlockedExchange(&klfps_cap_dirty, 1);
+    if (cap) klog("fps: MapCap: map %s -> at most %d fps ([FrameLimit] MapCap=%s; empty = off)", f, cap, klfps_mapcap);
+    else klog("fps: MapCap: this map has no cap, back to the normal rate");
+}
+
 static void klfps_gtick(DWORD_PTR ra)
 {
     LARGE_INTEGER n;
@@ -427,6 +456,7 @@ static void klfps_init(void)
     klfps_use_sc    = GetPrivateProfileIntA("FrameLimit", "SwapChain", 1, klh_ini) != 0;   /* k36: 0 = do not wrap IDirect3DSwapChain9::Present */
     klfps_use_reset = GetPrivateProfileIntA("FrameLimit", "Reset", 1, klh_ini) != 0;       /* k36: 0 = do not wrap IDirect3DDevice9::Reset */
     klfps_gt        = GetPrivateProfileIntA("FrameLimit", "GameThread", 1, klh_ini) != 0;  /* 1025: pace on the game thread after a cut */
+    GetPrivateProfileStringA("FrameLimit", "MapCap", "DM05A:60", klfps_mapcap, sizeof klfps_mapcap, klh_ini);   /* 1025: per-map ceiling, see klfps_set_target */
     klfps_tls = TlsAlloc();                                         /* per-thread nesting depth (k36 recursion guard); TLS_OUT_OF_INDEXES = depth always 0 */
     QueryPerformanceFrequency(&f); klfps_freq = f.QuadPart;
     if (klfps_passive) {                                            /* Sleep(1) is only useful with a 1 ms timer */

@@ -168,6 +168,10 @@ for _p in FPS_PRESETS:
          'your screen: %d Hz; one of the four presets (ticking one unticks the others, none = no limiter); timed at presentation '
          '(klfps.c, NOT RUN IN THE GAME yet)' % HZ, [('FrameLimit', 'Fps', _p, None, 0), ('FrameLimit', 'Enable', 1, None, 1)])
     F[-1]['preset'] = _p
+feat('mapcap', G_GFX, 'Limiter: cap Last Call (DM05A) at 60 fps so it does not run out of memory (recommended on)', 'on', 'start',
+     'klfps.c MapCap: min(your rate, 60) only on DM05A; at 120 fps the graphics driver piles up to 586 MB there and the 32-bit game runs out of '
+     'address space (K49J), at 60 fps it stays flat (K49H2); other maps keep your rate', [('FrameLimit', 'MapCap', 'DM05A:60', '', 'DM05A:60')])
+F[-1]['str'] = 1
 feat('frontedge', G_GFX, 'Limiter: front edge sync (wait just before Present)', 'on', 'start',
      'the RTSS setting the owner uses; off = back edge (older picture, not recommended)', [('FrameLimit', 'FrontEdge', 1, 0, 1)])
 feat('passivewait', G_GFX, 'Limiter: passive waiting (Sleep instead of a busy loop)', 'off', 'start',
@@ -247,6 +251,11 @@ def get_int(lines, sec, key, dflt):
     return int(m.group(1)) if m else 0
 
 
+def get_str(lines, sec, key, dflt):
+    i, h, e = find_key(lines, sec, key)
+    return dflt if i is None else lines[i].split('=', 1)[1].split(';', 1)[0].strip()
+
+
 def set_key(lines, sec, key, val):
     i, h, e = find_key(lines, sec, key)
     cr = '\r' if lines and lines[0].endswith('\r') else ''
@@ -267,6 +276,8 @@ def state(lines, f):
         on = get_int(lines, 'FrameLimit', 'Enable', 1) != 0 and (fps or FPS_REC) == f['preset']
         return on, None
     sec, key, onv, offv, dflt = f['keys'][0]
+    if f.get('str'):                                        # a text key (MapCap): on = not empty
+        return get_str(lines, sec, key, dflt) != '', None
     v = get_int(lines, sec, key, dflt)
     if f.get('exact'):                                      # one value of a multi-value key (the look): on only when it IS this value
         return v == onv, None
