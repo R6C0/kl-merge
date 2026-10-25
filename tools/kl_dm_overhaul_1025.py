@@ -79,6 +79,17 @@ SPECS = {
             anm_col='Mercenary_04',
             caps=(99, 64)),           # census 21 / 18 + 6 / 3 = 27 / 21, far below the proven 99 / 55
     ),
+    # ---- DM07 The Dig (F06 slot, page 3), 2026-10-25: the Gravel Pit M07_A on F07's systems (tools/kl_dig_layer.py, re/dig_fa_design_1025.md).
+    # An open pit: door_hosts is not asked (no kick doors). Cans on the nav wall edges nearest the crew's start, the mid pit and the plateau foot (spot_near snaps
+    # to the nearest wall edge within its radius; GUESS: a nav wall edge is a container / pipe / cabin wall). The cans stand at pit floor y -463..-482, mid y -182.
+    # Fuel cans in the two fights the crew meets first. NO cars / SWAT: the layer has its own 4 waves + 5 extra squads (28 actors of the proven 99).
+    'DM07': dict(
+        slot='F06', file='F06_Main.zip', title='The Dig', tag='.before-1025dig',
+        doors=[],
+        ext=[(-2300.0, 4000.0, -463.0), (-3900.0, 2600.0, -482.0), (-1000.0, 5600.0, -182.0), (-700.0, 2700.0, -482.0)],
+        fuel=[(-1300.0, 2500.0, -482.0), (-4100.0, 3300.0, -470.0)],
+        cars=None,
+    ),
 }
 
 

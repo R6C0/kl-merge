@@ -233,6 +233,14 @@ EXTRA = [
     dict(id='DM01B', slot='F03', page=3, title='Hot Coffee II', build='prebuilt', sources=['M01_A'], picture='LevelPicture_FA01', bones_live=False,
          audit=True, gun_step=True, known=(), known_re=(),
          live='NOTHING: the map has never been loaded in the game (build/v2_1017/DM01B; the F01 test slot comes first, then page 3 entry 2)'),
+    # PAGE 3, entry 4 (2026-10-25): 'The Dig' = the campaign Gravel Pit M07_A on F07's systems (tools\kl_dig_layer.py, re/dig_fa_design_1025.md). Slot F06 (ORDER[4]):
+    # only [Redirect.3] names it, and only while page 3 is open (page 2's F06 stays Retomoto). Post-pass 2026-10-25: 6 cover boxes, KL_Interact!2 / KL_Gas!2 (kl_dm_overhaul_1025
+    # SPECS DM07), the installed gun sounds (guns_step), dmlines --fed, gunpics once, KLJoin.ini [FedBody]. The 4 music clips + the bed (kl_v2_str SETS M07_A) are in
+    # C:/kl_build/v_v2/PC_Def.str ONLY after `python tools/kl_v2_str.py` is re-run with that SETS entry: that stream file must be the INSTALLED one, else silent. NOT RUN IN THE GAME.
+    # picture: GUESS/placeholder (Dead Men's frontend has no LevelPicture_M07): the campaign chapter M08's, an owner pick.
+    dict(id='DM07', slot='F06', page=3, title='The Dig', build='prebuilt', sources=['M07_A'], picture='LevelPicture_M08', bones_live=False,
+         audit=True, gun_step=True, known=(), known_re=(),
+         live='NOTHING: the map has never been loaded in the game (C:/kl_build_1024/dig_build_1025a; the F01 test slot comes first, then page 3 entry 4)'),
 ]
 
 

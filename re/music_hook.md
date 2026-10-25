@@ -28,7 +28,7 @@ unknown, see klcensus.c); veh 3..5 as "escape coming" is read from klbot.c's not
 
 ## Maps
 Key = the redirected map's folder (`klmv_pm_folder`, e.g. DM01B) or `F01`..`F09` on a stock slot. `[Music.<key>]` overrides any key.
-`EngineMaps` (default DM09, DM06B, DM03A, DM05A = Retomoto, Park II, Vault, Last Call, which carry engine music) are silent unless that
+`EngineMaps` (default DM09, DM06B, DM03A, DM05A, DM07 = Retomoto, Park II, Vault, Last Call, The Dig, which carry engine music) are silent unless that
 map's section has `Force=1`. Hot Coffee II (DM01B) is wired too (scout 7 says no ear report); it is NOT in the default skip list.
 
 ## Keys

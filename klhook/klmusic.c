@@ -27,7 +27,7 @@
  *
  * MAPS: the map key is the redirected map's folder (klmv_pm_folder, KLJoin.ini folder, e.g. DM09) or, on a stock slot, F01..F09.
  *   [Music.<key>] overrides any key below (Enable, Volume, Fade, Calm, Action, Escape, Down, Stinger, StingerOn, Force, ActionAfter).
- *   A key in [Music] EngineMaps (default DM09,DM06B,DM03A,DM05A: Retomoto, Park II, Vault, Last Call) plays nothing unless that map
+ *   A key in [Music] EngineMaps (default DM09,DM06B,DM03A,DM05A,DM07: Retomoto, Park II, Vault, Last Call, The Dig) plays nothing unless that map
  *   has Force=1 (the engine's own music would run beside it).
  *
  * ONLINE: kl_online() ([Net] OnlineSafe) -> silent and no cue (a network round's state is another object); the part reads only.
@@ -54,7 +54,7 @@
  *   StingerOn=down,end   where the Stinger leads: any of action, escape, down, end
  *   ActionAfter=45    seconds after the round began that CALM ends by itself (0 = only loot / stage end it)
  *   Random=1          a mood's list starts at a random track (then in order)
- *   EngineMaps=DM09,DM06B,DM03A,DM05A    maps with engine music (silent unless Force=1 in their [Music.<key>])
+ *   EngineMaps=DM09,DM06B,DM03A,DM05A,DM07    maps with engine music (silent unless Force=1 in their [Music.<key>])
  *   SoloPlay=0
  *   Log=1             one log line a mood change / track start ('music: ...')
  */
@@ -337,7 +337,7 @@ static void klmu_loadmap(void)
     klmu_str("Music", "StingerOn", "down,end", b, sizeof b);
     klmu.st_on = (klmu_inlist(b, "action") ? KLMU_ST_ACTION : 0) | (klmu_inlist(b, "escape") ? KLMU_ST_ESCAPE : 0) | (klmu_inlist(b, "assault") ? KLMU_ST_ASSAULT : 0) |
                  (klmu_inlist(b, "down") ? KLMU_ST_DOWN : 0) | (klmu_inlist(b, "end") ? KLMU_ST_END : 0);
-    klmu_str("Music", "EngineMaps", "DM09,DM06B,DM03A,DM05A", klmu.engine, sizeof klmu.engine);
+    klmu_str("Music", "EngineMaps", "DM09,DM06B,DM03A,DM05A,DM07", klmu.engine, sizeof klmu.engine);
     klmu.told_engine = 0;
     klog("music: map %s: Calm %d / Action %d / Assault %d / Escape %d / Down %d tracks, stinger %d, volume %d, fade %d ms, assault after %d s / on down %d / money %d%s", klmu.map[0] ? klmu.map : "?",
          klmu.list[KLMU_CALM].n, klmu.list[KLMU_ACTION].n, klmu.list[KLMU_ASSAULT].n, klmu.list[KLMU_ESCAPE].n, klmu.list[KLMU_DOWN].n, klmu.stinger.n, klmu.vol, klmu.fade,

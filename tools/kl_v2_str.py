@@ -35,6 +35,9 @@ SETS = {
     'M06_A': tuple('Music/InHouse/M06/RetoMotoAction_Layer%s.wav' % n for n in ('1_Main_Loop', '2_Bass_Loop', '3_Intense_Loop'))
              + ('SFX/Ambiences/M07_A/Outside/Construction_Site_01.wav',),
     'M01_A': ('SFX/Ambiences/M01_A/Inside/Garage.wav', 'SFX/Ambiences/M01_A/Outside/Street_Alley_Muffled_01.wav'),
+    # DM07 'The Dig' (tools/kl_dig_layer.py): the clips the built graft lists as lost (result.json, 2026-10-25)
+    'M07_A': ('Music/InHouse/M07/M07_Gravel_Pit_START.wav', 'Music/InHouse/M07/M07_Gravel_Pit_Layer_A_V2.wav',
+              'Music/InHouse/M07/M07_Subway_Layer_1og2.wav', 'SFX/Ambiences/M07_A/Outside/Construction_Site_01.wav'),
 }
 
 # Clips that SETS puts in the stream file but that a built map does NOT have to carry a record for. Construction_Site_01 is a M07_A
