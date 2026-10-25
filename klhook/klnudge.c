@@ -77,7 +77,9 @@ static int WINAPI kln_ShowCursor(BOOL show)
     static int shadow, known, swallowed; static DWORD seq0, seqn; static int told;
     int r;
     if (!show && known && shadow <= KLN_CG_FLOOR) {
-        if (++swallowed == 1 || swallowed % 1000 == 0) klog("cursor: ShowCursor(FALSE) not passed on while the count is %d (floor %d): %d swallowed so far", shadow, KLN_CG_FLOOR, swallowed);
+        /* k45: 1, 10, 100, 1000, then every 100000 (every 1000 wrote a line about every 5 s of play: the log grew by MBs a night) */
+        ++swallowed;
+        if (swallowed == 1 || swallowed == 10 || swallowed == 100 || swallowed == 1000 || swallowed % 100000 == 0) klog("cursor: ShowCursor(FALSE) not passed on while the count is %d (floor %d): %d swallowed so far", shadow, KLN_CG_FLOOR, swallowed);
         return shadow;
     }
     r = kln_real_sc(show); shadow = r; known = 1;

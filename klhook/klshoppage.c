@@ -292,6 +292,9 @@ static int kspg_make(int row)
 /* k43 liveness guard: made[row][] is dropped (with its parked marks) when ANY of its objects is no longer an entry of the pool vector at its current
  * count. One read of the entry array per pass (kspg.sane is cleared by the tick), so the three readers below call it for free. */
 static int kspg_ours(int row, DWORD o);
+#ifdef KLHOOK_TEST
+static int kla_key_held(int dik);                                 /* klauto.c (TEST only, included later; klhud.c declares it the same way) */
+#endif
 static void kspg_sane(void)
 {
     static DWORD tab[4096 * 3]; DWORD a, n = 0, ents, i; int row, m, j;
@@ -521,6 +524,17 @@ static void klshoppage_tick(int game_thread)
     /* the key is read on every tick (a short press is missed at 4 Hz); edge detection (up -> down); only in the weapon list (mode 2) before the round */
     if (gaks && fgw && wtp) {
         int down = (gaks(kspg.key) & 0x8000) != 0;
+#ifdef KLHOOK_TEST
+        {   /* k45: a key klauto.c's script holds counts too (its tap feeds DirectInput only, so a scripted page flip needed a SendInput
+               helper); scan code = DIK code for the keys used. user32 looked up, not linked (the hook links no user32) */
+            static int dik = -1;
+            if (dik < 0) {
+                HMODULE u = GetModuleHandleA("user32.dll"); UINT (WINAPI *mvk)(UINT, UINT) = u ? (UINT (WINAPI *)(UINT, UINT))GetProcAddress(u, "MapVirtualKeyA") : 0;
+                dik = mvk ? (int)mvk((UINT)kspg.key, 0 /* MAPVK_VK_TO_VSC */) : 0;
+            }
+            if (dik > 0 && kla_key_held(dik)) down = 1;
+        }
+#endif
         if (down && !kspg.keyDown && !kspg.pre && kspg.log && now - kspg.lastKey > 150 && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) {
             DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION));   /* the weapon list is up but the gate says no shop: say so (k40 was silent here) */
             kspg.lastKey = now;
