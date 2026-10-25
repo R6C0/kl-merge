@@ -30,12 +30,21 @@ PD2_MESH = 'g_body'                # 575 vertices, 396 triangles: receiver, barr
 STOCK_MAT_NAME = 'Weapons/W_Rifle_Type81_01'
 NEW_MAT_NAME = 'Weapons/W_PD2_AKM_01'
 TAG = '1025pd2gun'
-# The PD2 -> Dog Days frame is (x, y, z)_dd = (y, z, -x)_pd2 (as for the masks, re/pd2_klside.md). The SCALE and SHIFT below
-# are FITTED BY BOUNDS to the stock Type 81 body (GUESS, never seen in the hands): the muzzle end (x max) and the stock end
-# (x min) land on the stock's 71.43 / -24.01, the magazine bottom on the stock box part's lowest y, the width centred on
-# the stock body's z centre. The grip and the hand attachers sit where the stock gun's are only to within the fit.
-SCALE = 1.077
-SHIFT = (6.24, -0.2, 1.9)
+# The PD2 -> Dog Days frame is the axis map (x, y, z)_dd = (y, z, -x)_pd2 (as for the masks, re/pd2_klside.md), THEN a turn of
+# TURN_DEG about z, a SCALE and a SHIFT. Dog Days holds every gun 10 degrees nose-down in its own space (re/map_guns.md section 8:
+# w_bone_frame rests turned 9.8 degrees, AK-74 DM -> DD = -10.00 degrees), so a model that is level in its own space points ~10
+# degrees UP out of the hands and its fore-end floats 3 - 7 cm above the left hand (the owner's 'held weirdly when aiming in',
+# 1025c: that build had no turn). 1025d: the turn is ESTABLISHED (-10); SCALE / SHIFT are FITTED with tools/pd2_gun_fit.py
+# (python pd2_gun_fit.py) against the stock Type 81 surface (area-sampled triangles, not just vertices), cost = grip gap in
+# kl_map_guns.GRIP_ZONE (both ways, worst 20 % left out) + the fore-end underside under the 'l hand attacher' (x 36..52, 2 cm
+# bins) + 0.3 x the muzzle's distance from the stock's 71.43. Result: scale 1.0 (the PD2 AKM is 88 cm in real centimetres, the
+# Type 81 95; the best fit lands on 1.0 - 1.02, 1.0 is kept = true size), shift (10.5, 2.0) -> grip gap 0.31 cm, fore-end
+# underside within 0.13 cm of the Type 81's, muzzle 71.4 (stock 71.43), butt at -17.7 (the Type 81's stock reaches -24).
+# The z shift 0.65 is the gun's axis: w_bone_frame z 0.65 and 'l hand attacher' z 0.64 (the old 1.9 was a bounds fit that the
+# charging handle's z -3.9 pulled sideways). NOT seen in the hands yet (GUESS until the owner plays it).
+TURN_DEG = -10.0
+SCALE = 1.0
+SHIFT = (10.5, 2.0, 0.65)
 
 
 # ------------------------------------------------------------------ the 40-byte rigid vertex
@@ -148,8 +157,9 @@ def pd2_dir():
     return os.path.join(kl_port_check.workdir(), 'pd2', 'guns', 'src', PD2_DIR.replace('/', os.sep))
 
 
-def pd2_plate(scale=SCALE, shift=SHIFT):
-    """The PD2 body mesh as a Plate in Dog Days model space + its DDS diffuse bytes."""
+def pd2_plate(scale=SCALE, shift=SHIFT, deg=TURN_DEG):
+    """The PD2 body mesh as a Plate in Dog Days model space + its DDS diffuse bytes. Axis map, then the turn about z (positions
+    AND normals; the same matrix as kl_map_guns.house()), then scale and shift of the positions."""
     import pd2_model
     base = pd2_dir()
     model = pd2_model.Model(os.path.join(base, 'wpn_npc_ak47.model'))
@@ -157,20 +167,53 @@ def pd2_plate(scale=SCALE, shift=SHIFT):
     if obj is None:
         raise ValueError('no mesh object %s (have %s)' % (PD2_MESH, [o.name for o in model.mesh_objects()]))
     m = model.world_mesh(obj)
-    kl = lambda v: (v[1] * scale + shift[0], v[2] * scale + shift[1], -v[0] * scale + shift[2])
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    turn = lambda v: (c * v[0] - s * v[1], s * v[0] + c * v[1], v[2])
+    kl = lambda v: tuple(a * scale + b for a, b in zip(turn((v[1], v[2], -v[0])), shift))
     pos = [kl(q) for q in m['pos']]
-    nrm = [PM._norm((n[1], n[2], -n[0])) for n in m['nrm']]
+    nrm = [PM._norm(turn((n[1], n[2], -n[0]))) for n in m['nrm']]
     uv = [(u, 1.0 + v) for u, v in m['uv']]
-    tris = [(a, c, b) for a, b, c in (tuple(t) for t in m['tris'])]      # the frame is a reflection (det -1): reverse the sense
+    tris = [(a, c_, b) for a, b, c_ in (tuple(t) for t in m['tris'])]      # the frame is a reflection (det -1): reverse the sense
     plate = PM.Plate(pos, nrm, uv, tris, 'pd2_akm')
     return plate, open(os.path.join(base, 'ak_df.texture'), 'rb').read()
 
 
+def split_magazine(plate):
+    """Plate -> (body Plate, magazine Plate). The magazine is the connected piece of the mesh (vertices welded by position, so
+    uv seams do not cut it) that holds the lowest vertex; whole triangles, so no stray ones. Each Plate keeps only its own
+    vertices (indices remapped). Refuses a magazine that is not a small curved box below the receiver."""
+    key, weld = {}, []
+    for q in plate.pos:
+        weld.append(key.setdefault(tuple(round(x, 3) for x in q), len(key)))
+    par = list(range(len(key)))
+
+    def find(a):
+        while par[a] != a:
+            par[a] = par[par[a]]; a = par[a]
+        return a
+    for a, b, c in plate.tris:
+        par[find(weld[a])] = find(weld[b]); par[find(weld[b])] = find(weld[c])
+    low = min(range(len(plate.pos)), key=lambda i: plate.pos[i][1])
+    root = find(weld[low])
+    mag = [t for t in plate.tris if find(weld[t[0]]) == root]
+    rest = [t for t in plate.tris if find(weld[t[0]]) != root]
+    if not 10 <= len(mag) <= 80 or len(rest) < 100:
+        raise ValueError('the lowest piece of the PD2 mesh has %d of %d triangles: not a magazine' % (len(mag), len(plate.tris)))
+
+    def sub(tris, name):
+        used = sorted({i for t in tris for i in t}); new = {o: n for n, o in enumerate(used)}
+        return PM.Plate([plate.pos[i] for i in used], [plate.nrm[i] for i in used], [plate.uv[i] for i in used],
+                        [tuple(new[i] for i in t) for t in tris], name)
+    return sub(rest, 'pd2_akm_body'), sub(mag, 'pd2_akm_mag')
+
+
 # ------------------------------------------------------------------ into the level
-def build_model(lv, log=print, scale=SCALE, shift=SHIFT):
-    """lv (kl_chars.Lv of the F01 slot, edited in place): the Type 81's body part becomes the PD2 AK on bone 1 with its own
-    material and three new textures; the magazine / slide / sight parts are dropped (the AK mesh has the magazine in it; the
-    stock box part, hidden, stays for the bounds). New model root, the template's Ground node(s) retargeted. -> report dict."""
+def build_model(lv, log=print, scale=SCALE, shift=SHIFT, deg=TURN_DEG, split=True):
+    """lv (kl_chars.Lv of the F01 slot, edited in place): the Type 81's body part becomes the PD2 AK body on bone 1 and its
+    magazine (split_magazine) a part of its own on bone 3 'w_bone_clip' (lod 15, a copy of the stock magazine part's object, so
+    the reload animation takes it out of the gun), both on a new material with three new textures; the slide / sight parts are
+    dropped (the bolt stays in the body: no part on bone 4); the stock box part, hidden, stays for the bounds. New model root, the
+    template's Ground node(s) retargeted. split=False = the 1025c build (one part, the magazine baked in). -> report dict."""
     import kl_chars as C, kl_guns, kl_gms, kl_octree as O
     sc, raw = lv.scene(); raw = bytearray(raw)
     p, mat, tex = G.read(lv['.prm'], 'dd'), T.read_mat(lv['.MAT']), T.read_tex(lv['.TEX'])
@@ -180,12 +223,18 @@ def build_model(lv, log=print, scale=SCALE, shift=SHIFT):
     nvs = {o: p.u32(p.u32(p.u32(o, 0x28), 0), 0) for o in objs}
     body = max(objs, key=lambda o: nvs[o])
     hidden = [o for o in objs if p.chunks[o][0x0e] == 16]      # the 52-vertex box part: lod mask 16, draw mode 0x80880, material _Basic/Colour_Black
-    if len(hidden) != 1 or p.u32(body, 0x3c) != 1 or p.chunks[body][0x0e] != 15 or var != 0:
-        raise ValueError('%s: unexpected parts (body %d bone %d, hidden %s, variant %d)' % (TEMPLATE, body, p.u32(body, 0x3c), hidden, var))
-    plate, df_dds = pd2_plate(scale, shift)
+    mags = [o for o in objs if p.u32(o, 0x3c) == 3 and p.chunks[o][0x0e] == 15]    # the stock magazine: bone 3 w_bone_clip, lod 15, 60 vertices
+    if len(hidden) != 1 or p.u32(body, 0x3c) != 1 or p.chunks[body][0x0e] != 15 or var != 0 or len(mags) != 1 or mags[0] == body:
+        raise ValueError('%s: unexpected parts (body %d bone %d, hidden %s, magazine %s, variant %d)' % (
+            TEMPLATE, body, p.u32(body, 0x3c), hidden, mags, var))
+    plate, df_dds = pd2_plate(scale, shift, deg)
     share = PM.outward_share(plate)
     if share < 0.95:
         raise ValueError('only %.1f %% of the PD2 triangles face outward' % (100 * share))
+    whole = plate
+    magp = None
+    if split:
+        plate, magp = split_magazine(whole)
     # textures: diffuse (alpha dropped), flat normal, neutral spec; the table-2 word of each is the stock Type 81 map's
     src_slot = p.u16(body, 0x12)
     stage = {s: n[3] for s, n in T.texture_stages(mat.insts[src_slot])}
@@ -202,9 +251,18 @@ def build_model(lv, log=print, scale=SCALE, shift=SHIFT):
     d = G.new_chunk(p, PM.descriptor(len(plate.pos), v, i, 0))        # dword5 = 0: GUESS (the stock parts carry 40..1541, meaning unread)
     sub = G.new_chunk(p, PM.subtab(d))
     new_body = G.new_chunk(p, rigid_object(p.chunks[body], 15, p.chunks[body][0x0f], slot, sub), p.refs[body])
+    parts = [new_body]
+    new_mag = None
+    if magp is not None:
+        mv = G.new_chunk(p, vertex_chunk(magp, flip=True))
+        mi = G.new_chunk(p, PM.index_chunk(magp.tris, flip=True))
+        md = G.new_chunk(p, PM.descriptor(len(magp.pos), mv, mi, 0))
+        msub = G.new_chunk(p, PM.subtab(md))
+        new_mag = G.new_chunk(p, rigid_object(p.chunks[mags[0]], 15, p.chunks[mags[0]][0x0f], slot, msub), p.refs[mags[0]])
+        parts.append(new_mag)
     root = C._new(p, p.chunks[old]); p.refs[root] = 1
-    C._set_objects(p, root, [new_body, hidden[0]])
-    PM.widen_root(p, root, plate.box())
+    C._set_objects(p, root, parts + [hidden[0]])
+    PM.widen_root(p, root, whole.box())                      # the union of body and magazine
     # the .oct record of the root: a copy, as kl_guns.build does (its tree must be empty)
     oct_s = O.Oct.parse(lv['.oct'])
     refs0 = oct_s.record_refs(); rec_of = {x: n for n, x in enumerate(refs0)}
@@ -226,14 +284,41 @@ def build_model(lv, log=print, scale=SCALE, shift=SHIFT):
     mat.refs = T.material_refs(prm)
     lv['.prm'], lv['.MAT'], lv['.TEX'], lv['.oct'] = prm, T.write_mat(mat), T.write_tex(tex), oct_s.pack()
     lv['.gms'], lv['.prp'] = kl_gms.pack(bytes(raw)), sc.p.serialize()
-    box = plate.box()
+    box = whole.box()
     rep = dict(template=TEMPLATE, stock_root=old, root=root, stock_parts=len(objs), kept_hidden_box=hidden[0], body_object=new_body,
-               vertices=len(plate.pos), triangles=len(plate.tris), outward_share=round(share, 4), material_slot=slot,
-               textures=dict(diffuse=df, normal=nm, specular=sp), users=len(users), scale=scale, shift=list(shift),
+               magazine_object=new_mag, stock_magazine_object=mags[0], vertices=len(whole.pos), triangles=len(whole.tris),
+               body_vertices=len(plate.pos), body_triangles=len(plate.tris),
+               magazine_vertices=len(magp.pos) if magp else 0, magazine_triangles=len(magp.tris) if magp else 0,
+               outward_share=round(share, 4), material_slot=slot,
+               textures=dict(diffuse=df, normal=nm, specular=sp), users=len(users), scale=scale, shift=list(shift), turn_deg=deg,
                box=[[round(x, 2) for x in box[0]], [round(x, 2) for x in box[1]]], prm_bytes=len(prm))
-    log('  model: root %d -> %d, body %d verts / %d tris (%.0f %% outward), material slot %d, textures %d/%d/%d, %d Ground node(s) retargeted' % (
-        old, root, len(plate.pos), len(plate.tris), 100 * share, slot, df, nm, sp, len(users)))
+    if magp:
+        mb = magp.box(); rep['magazine_box'] = [[round(x, 2) for x in mb[0]], [round(x, 2) for x in mb[1]]]
+    log('  model: root %d -> %d, body %d verts / %d tris + magazine %d verts / %d tris (%.0f %% outward), material slot %d, textures %d/%d/%d, %d Ground node(s) retargeted' % (
+        old, root, len(plate.pos), len(plate.tris), len(magp.pos) if magp else 0, len(magp.tris) if magp else 0, 100 * share, slot, df, nm, sp, len(users)))
     return rep
+
+
+# ------------------------------------------------------------------ the HUD / shop picture
+def silhouette_rgba(width_px=104, size=128, ss=4):
+    """The AKM as a HUD silhouette: (size, size, 4) uint8, RGB 255 everywhere, alpha = the side view (axis map only, no turn: the
+    pictures show a level gun), muzzle to the right, left-aligned at x 0, centred on row size/2. width_px 104 is the stock Type 81
+    picture's 103 px (bbox x 0..102): GUESS that the two guns are drawn at the same cm per pixel (the AKM is about as long)."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    plate, _df = pd2_plate(1.0, (0.0, 0.0, 0.0), 0.0)
+    pos = np.array(plate.pos)
+    x0, x1 = pos[:, 0].min(), pos[:, 0].max()
+    s = width_px * ss / (x1 - x0)
+    cy = (pos[:, 1].min() + pos[:, 1].max()) / 2
+    im = Image.new('L', (size * ss, size * ss), 0); d = ImageDraw.Draw(im)
+    px = lambda q: ((q[0] - x0) * s, size * ss / 2 - (q[1] - cy) * s)
+    for a, b, c in plate.tris:
+        d.polygon([px(pos[a]), px(pos[b]), px(pos[c])], fill=255)
+    im = im.resize((size, size), Image.BOX)
+    a = np.asarray(im, np.uint8)
+    out = np.full((size, size, 4), 255, np.uint8); out[:, :, 3] = a
+    return out
 
 
 # ------------------------------------------------------------------ the shot sound
@@ -368,7 +453,7 @@ def verify(outdir, log=print):
         c = p.chunks[o]; d = p.u32(p.u32(o, 0x28), 0); nv = p.u32(d, 0)
         v = p.chunks[p.u32(d, 4)]; ix = p.chunks[p.u32(d, 0x18)]; n = struct.unpack_from('<H', ix, 2)[0]
         ii = struct.unpack_from('<%dH' % n, ix, 4)
-        good = len(c) == 64 and c[0x0c] == 2 and len(v) == (nv * 40 + 15) // 16 * 16 and max(ii) < nv and n % 3 == 0 and p.u32(o, 0x3c) == 1
+        good = len(c) == 64 and c[0x0c] == 2 and len(v) == (nv * 40 + 15) // 16 * 16 and max(ii) < nv and n % 3 == 0 and p.u32(o, 0x3c) in (1, 3)
         m = mat.insts[p.u16(o, 0x12)]
         tx = {s: (n_[3], n_[3] in tex.tex) for s, n_ in T.texture_stages(m)}
         pts = [struct.unpack_from('<3f', v, 40 * k) for k in range(nv)]

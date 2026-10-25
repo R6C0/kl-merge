@@ -20,7 +20,7 @@ KLGuns.ini without comments, so a [Shop] line changes the build code of that map
 
     python kl_shop_swap.py parse "13:52,16:33"                     the rows, names, carrier price (reads the exe) and the pictures available
     python kl_shop_swap.py set <KLGuns.ini> "13:52,16:33"          write / replace the [Shop] Swap line (CRLF kept, nothing else touched)
-    python kl_shop_swap.py bake <map folder> <out folder> [--swap=LINE] [--preview]
+    python kl_shop_swap.py bake <map folder> <out folder> [--swap=LINE] [--preview] [--pic=ITEM:alpha.png]
                                                                    <out>/<slot>_Main.zip (+ KLGuns.ini with the line) from the installed map; every
                                                                    zip member but the .TEX and the .LOC files is copied byte for byte
     python kl_shop_swap.py stage <out folder> [--maps=DM01] [--swap=LINE] [--game=<Dog Days folder>]
@@ -36,6 +36,7 @@ GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 DEFAULT_SWAP = '13:52,16:33,32:49,35:47'
 # eFF2Item -> the HUD silhouette picture's name (UI_Weapon_01#<name>, names read in the DM01 .TEX 2026-10-20). Item 40 has none (GUESS: the
 # HUD never shows it), so its picture is left as the carrier's and the report says so.
+PIC_OVERRIDE = {}      # item -> path of a 128x128 RGBA PNG whose alpha is the silhouette (a replacement gun whose HUD picture is not the stock one's)
 PIC_OF_ITEM = {33: 'Rifle_Type81', 47: 'MG_MiniMi_SPW', 49: 'Sn_Rem700', 50: 'RPG_7V', 52: 'Launcher_HK69A1'}
 BIG_BOX = (34, 26, 411, 176)        # where the gun sits on the 445x210 shown part of the 512x256 card (cards.py of the stage-2a cards)
 
@@ -125,6 +126,11 @@ def _np():
 def _silhouette(tex, item):
     """-> alpha 0..1 float (128, 128) of the HUD picture of that item, or None."""
     import kl_gunpics as P
+    if item in PIC_OVERRIDE:
+        from PIL import Image
+        a = _np().asarray(Image.open(PIC_OVERRIDE[item]).convert('RGBA'))
+        assert a.shape == (128, 128, 4), 'override picture must be 128x128'
+        return a[:, :, 3].astype(_np().float32) / 255.0
     name = PIC_OF_ITEM.get(item)
     pics = P.pictures(tex)
     if not name or name not in pics:
@@ -514,6 +520,9 @@ def main(a):
         print('%s: [Shop] Swap=%s' % (a[1], a[2])); return 0
     opts = {k[2:].split('=')[0]: (k.split('=', 1)[1] if '=' in k else True) for k in a if k.startswith('--')}
     pos = [k for k in a if not k.startswith('--')]
+    for k in a:
+        if k.startswith('--pic='):
+            it, png = k[6:].split(':', 1); PIC_OVERRIDE[int(it)] = png
     if len(pos) == 3 and pos[0] == 'bake':
         res = bake(pos[1], pos[2], opts.get('swap', DEFAULT_SWAP) if 'swap' in opts else None, bool(opts.get('preview')))
         print(json.dumps(res, indent=1)); return 0
