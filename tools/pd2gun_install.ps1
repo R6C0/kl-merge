@@ -1,9 +1,9 @@
 # pd2gun.ps1 - Payday 2 AKM on Dog Days' Rifle_Type81 (shop item 33, page II): model, textures and shot sound (tools/pd2_gun.py, 2026-10-25).
 #   powershell -ExecutionPolicy Bypass -File pd2gun.ps1 [-Undo] [-DryRun] [-Rehearsal] [-Game <folder>]
-# WHAT: three files of Scenes\Locations\F01\ (the test slot) are replaced by the build files next to this script:
-#   F01_Main.zip (.prm .MAT .TEX .oct .gms .prp .SND change), F01_Main.WHD and F01_Main.WAV (three helicopter-gun records overwritten).
-#   Each live file is renamed <name>.before-1025pd2gun (never overwritten, never deleted).
-# TOGGLE: -Undo puts the three originals back (byte identical, read back). Nothing else is touched.
+# WHAT: the files listed in pd2gun.json (1025b: F01_Main.zip and F01_Main.WAV; the WHD stays stock) of Scenes\Locations\F01\ (the test slot) are replaced by the build files next to this script:
+#   F01_Main.zip (.prm .MAT .TEX .oct .gms .prp .SND change) and F01_Main.WAV (audio bytes of three helicopter-gun spans overwritten).
+#   Each live file is renamed <name><tag from pd2gun.json> (never overwritten, never deleted).
+# TOGGLE: -Undo puts the originals back (byte identical, read back). Nothing else is touched.
 # SAFETY: refuses while kl2.exe runs; every live file's md5 must be exactly the one this was built on (or already the new one); read-back md5
 #   after each copy; if a step fails, the files already swapped are put back. -DryRun changes nothing.
 # -Rehearsal: runs dry-run, install, install again, undo dry-run, undo, undo again on a COPY of the three live files in a fake game
