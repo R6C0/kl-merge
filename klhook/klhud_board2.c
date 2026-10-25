@@ -518,6 +518,15 @@ static void klsb_tick(int game_thread)
     klsb_cache_pics();
     if (klsb_r.state == 0x1f) klsb_cache_odesc();
     have = klb_read(&s);
+    if (!have) {   /* 2026-10-26 HUD parity: ONLINE the Arcade readers refuse (no Heist score object). Not composed here (the online outro element and its data are undecoded, re\hud_online.md): log what the online round-over looks like, once per state, so the next bench decodes it. */
+        static int told_state = -1; struct klb_snap o;
+        if (klb_read_hud(&o) && o.online && o.state != told_state && o.state >= 0x1d) {
+            DWORD el2 = klsb_r.elem ? klsb_r.elem : 0, vt2 = el2 ? klh_rd32(el2) : 0; int i;
+            told_state = o.state;
+            klog("hud: scoreboard: ONLINE state %02lx (the stock round-over panel stays; the Arcade board is not drawn online yet): outro element %08lx vtable %08lx (%s), %d crew rows, named %d", (DWORD)o.state, el2, vt2, vt2 == KLSB_VT ? "ZHeistOutroDisplay, same class as Arcade" : "other / not wrapped", o.on_n, o.on_named);
+            for (i = 0; i < o.on_n && i < 16; i++) klog("hud: scoreboard: ONLINE row %d rec %08lx '%s' flags %08lx loot %ld rewards %ld", i, o.on_rec[i], o.on_name[i], o.on_flags[i], o.on_loot[i], o.on_rew[i]);
+        }
+    }
     klsb_r.state = have ? s.state : 0;
     if (klsb.probe || (klu.log >= 2 && have && s.state >= 0x1f)) klsb_probe_line(osd, &s, have);
     if (!have) { klsb_r.valid = 0; return; }

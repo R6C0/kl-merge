@@ -335,6 +335,7 @@ struct klb_snap {
     DWORD rules, score, state, vehicle; int n, level, human; BYTE veh; float timer;
     struct klb_rec r[KLB_NREC];
     long on_money[16]; BYTE on_used[16]; int on_local;   /* OnlineCrew: SL6 dump: used = free byte 0; money = [S+0x224+4i] + [S+0x188+4i] (rules vtable slots 55 + 56 = the stock Total, checked against the vtable) */
+    DWORD on_flags[16], on_rec[16]; long on_loot[16], on_rew[16]; char on_name[16][32]; int on_named;   /* 2026-10-26 HUD parity: per-record flag dword = [S+0x98+4i] (the status the rules' slot 114 returns: 0x625be0 -> 0x571750 -> 0x4aece0 read as [[rules+0x2c]+0x58+0x40+4i]; bits as the Arcade score flags: 4 dead, 0x40 escaped, 0x20 aboard, 8 police, 0x10/0x4000 waiting), the two money arrays apart (GUESS which is loot / rewards), the record address, the name read from the client struct (GUESS +8 = a std::string like Arcade's block) */
     DWORD on_recs, on_free, on_score; int on_n;   /* OnlineCrew=1, online only: [rules+8] records (0x74 bytes), their free bytes [rules+0xc], count [rules+0x14], DDL score [rules+0x2c]; layout of the records is NOT decoded yet */
     int online;                               /* 1 = filled by klb_read_hud() from an ONLINE rules object (host/client): rules + state only, n = 0, score = 0 */
 };
@@ -397,6 +398,18 @@ static int klb_online_session(void)
     return role == 2 || role == 3;
 }
 
+/* 2026-10-26: the name of an online record. record +0 = the client struct (re/round_end_online.md); GUESS: at +8 it holds the name like Arcade's block
+   ([[at]+8] = begin pointer of a std::string, begin/end/cap). Accepted only when it reads as 1..30 printable ASCII characters; else "" (the caller says You / Player n). */
+static void klb_online_name(DWORD rec, char *out, int cap)
+{
+    DWORD cl = klh_rd32(rec), b[3] = { 0, 0, 0 }; int i, n;
+    out[0] = 0;
+    if (cl < 0x10000 || !klh_rd(cl + 8, b, sizeof b) || b[0] < 0x10000 || b[1] < b[0] || b[1] - b[0] > 30) return;
+    n = (int)(b[1] - b[0]); if (n < 1 || n >= cap || !klh_rd(b[0], out, (SIZE_T)n)) { out[0] = 0; return; }
+    out[n] = 0;
+    for (i = 0; i < n; i++) if ((BYTE)out[i] < 0x20 || (BYTE)out[i] > 0x7e) { out[0] = 0; return; }
+}
+
 static int klb_read_hud(struct klb_snap *s)
 {
     DWORD sm, gs, vt;
@@ -419,8 +432,11 @@ static int klb_read_hud(struct klb_snap *s)
                     if (!klh_rd(s->on_free + i, &el0, 1) || el0) continue;
                     s->on_used[i] = 1; klh_rd(s->on_score + 0x224 + 4 * i, &m1, 4); klh_rd(s->on_score + 0x188 + 4 * i, &m2, 4);
                     s->on_money[i] = (long)m1 + (long)m2;
+                    s->on_loot[i] = (long)m1; s->on_rew[i] = (long)m2;      /* GUESS: 0x224 = carried loot, 0x188 = rewards (Arcade keeps its rewards at +0x184); only the sum is proven */
+                    klh_rd(s->on_score + 0x98 + 4 * i, &s->on_flags[i], 4);
+                    if (s->on_recs) { s->on_rec[i] = s->on_recs + (DWORD)i * 0x74; klb_online_name(s->on_rec[i], s->on_name[i], sizeof s->on_name[i]); if (s->on_name[i][0]) s->on_named++; }
                 }
-            }
+            } else { static DWORD told; if (told != vt2) { told = vt2; klog("hud: ONLINE crew: rules vtable %08lx: free %08lx score %08lx getters 55/56 = %08lx/%08lx (not the known 0x40b7e0/0x819aa0): no crew rows", (unsigned long)vt2, (unsigned long)s->on_free, (unsigned long)s->on_score, (unsigned long)a55, (unsigned long)a56); } }
         }
     }
     s->level = 1; s->online = 1;                          /* veh 0, timer 0, n 0, score 0: the escape dial and every record reader stay silent */

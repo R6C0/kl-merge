@@ -109,6 +109,8 @@
  *   Stock=0           1 = also on a stock level (section 6)
  *   Log=1             0 none, 1 on / objects made / stock block hidden / faults, 2 + every text change and counters
  *   Crew=1 Money=1 Round=1     the three blocks
+ *   OnlineBots=1 (recommended on)  online crew box: one row per AI heister (Ally actors; GUESS none of the humans is team 2)
+ *   HideKilledBy=1 (recommended on)  blank the STOCK death panel's 'Killed by' text (kllocname.c: LOC lookups from 0x500670 and the key KilledBy answer an empty string; Arcade and online, any map), so only our KILLED BY line shows
  *   KilledBy=1 (recommended on)  "KILLED BY name" in the HUD style while dead (offline); ScoreboardShopLead=30  tenths of a s cut off the 10 s round-over count (shop opens at 7)
  *   HideStock=1       hide the stock top-left block while ours draws
  *   Draw=1            1 = our own Draw, 2 = through the stock clock's Render (section 2)
@@ -305,7 +307,7 @@ static struct {
     int weapon;                               /* Weapon: the weapon dial (klhud_weapon.c) */
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
     int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
-    int killed, on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
+    int onbots, killed, on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
     int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash, mfill, vanicon, tablist, tabcard, hidesrc, hideonl, oprobe;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
       /* the watch look (section 14 of re\hud_hook.md): WatchStyle (1 = new, 0 = the old textures and sizes), WatchSeconds, WatchWear, WatchLast, LabelBar (0 text only, 1 painted bar, 2 plain), LabelSlash */
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
@@ -1122,6 +1124,51 @@ static void klu_grid(void)
     if (klu.plates) { klu_addpic(181, 640.0f, 356.0f, 1.0f, 60.0f, KLU_C_CORAL, klu.layer); klu_addpic(181, 610.0f, 360.0f, 60.0f, 1.0f, KLU_C_CORAL, klu.layer); }   /* a cross whose arms meet at (640, 360) */
 }
 
+/* 2026-10-26 online crew rows. The flag dword of an online record is the one the rules' slot 114 returns (0x625be0 -> [[rules+0x2c]+0x98+4i]); its bits are the Arcade
+   score flags (4 dead, 0x40 escaped, 0x8 police, 0x10 / 0x4000 waiting, 0x1 traitor, 0x80 / 0x1000 under / dirty cop): the SAME decision as kluv_state (klhud_values.c). GUESS: the bit meanings carry over (4/0x10/0x40 are the ones klroundkeep.c reads). */
+static int klu_online_kind(DWORD f, int local)
+{
+    if (f & (KLUV_F_WAITING | KLUV_F_DEAD)) return KLUV_K_DEAD;
+    if (f & KLUV_F_ESCAPED) return KLUV_K_ESCAPED;
+    if (f & (KLUV_F_DIRTYCOP | KLUV_F_POLICE | KLUV_F_UNDERCOP)) return KLUV_K_FED;
+    if (f & KLUV_F_TRAITOR) return KLUV_K_TRAITOR;
+    if (f & 0x10) return KLUV_K_DEAD;
+    return local ? KLUV_K_YOU : KLUV_K_CREW;
+}
+
+/* the AI heisters online: ZFFActors of team 2 (Ally), found as klbotfill.c's census does (the entity table, ZFFActor vtable 0xbb3bac, team [[a+0x54]+4] == 2; health [[a+0x5fc]+4] float).
+   They have no crew record. Cached 3 s (the table is 8 MB to read), health read every call. -> their number (<= 8); *alive = how many have health > 0, the living first. [HUD] OnlineBots=0 -> 0.
+   GUESS: no human heister's actor is team 2 (the botfill census text treats Ally count = AI count). */
+static int klu_online_bots(int *alive)
+{
+    static DWORD last, act[8]; static int n; DWORD now = GetTickCount(); int i, a = 0;
+    *alive = 0;
+    if (!klu.onbots) return 0;
+    if (!last || now - last > 3000) {
+        DWORD p, tab, ii, blk[64 * 32];
+        last = now; if (!last) last = 1; n = 0;
+        if ((p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) && (p = klh_rd32(p + 0xc)) && (tab = klh_rd32(p + 0xc)))
+            for (ii = 0; ii < 0x10000 && n < 8; ii += 64) {
+                DWORD k;
+                if (!klh_rd(tab + ii * 0x80, blk, sizeof blk)) break;
+                for (k = 0; k < 64 && n < 8; k++) {
+                    DWORD o = blk[k * 32 + 0x60 / 4], pr, team = 99;
+                    if (o < 0x10000 || klh_rd32(o) != 0x00bb3bac) continue;
+                    if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4) || team != 2) continue;
+                    act[n++] = o;
+                }
+            }
+    }
+    for (i = 0; i < n; i++) {
+        DWORD hp; float hv[2] = { 0, 0 };
+        if (klh_rd32(act[i]) != 0x00bb3bac) continue;
+        hp = klh_rd32(act[i] + 0x5fc);
+        if (hp && klh_rd(hp + 4, hv, 8) && hv[0] > 0) a++;
+    }
+    *alive = a;
+    return n;
+}
+
 /* -> every text's wanted string and colour and the picture list; 0 = nothing to show (no Arcade round) */
 static int klu_compose(int *state_ok)
 {
@@ -1135,25 +1182,45 @@ static int klu_compose(int *state_ok)
         klu_r.npic = 0;
         klu_dials(&s);
         klwd_compose();
-        if (klb_hud_crew && klu.crew && s.on_n > 0) {         /* [HUD] OnlineCrew: the online crew list from the SL6 dump (humans only; no names found yet: YOU / PLAYER n) */
-            int k, rows = 0, nu = 0; long tot = 0; char nm[24]; BYTE loc = 0;
+        if (klb_hud_crew && klu.crew && s.on_n > 0) {         /* [HUD] OnlineCrew: the online crew list (2026-10-26: the rows, names, states, counts and money boxes as Arcade's) */
+            int k, rows = 0, nu = 0, na = 0, nb, ba = 0, bi; long tot = 0; char nm[40]; BYTE loc = 0; int locst = -1; long lloot = 0, lrew = 0;
             { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (BYTE)li; }
             strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;   /* 2026-10-25 owner: the Arcade crew box is headed DEAD MEN, online said CREW */
             for (k = 0; k < s.on_n; k++) {
+                int kind;
                 if (!s.on_used[k]) continue;
                 nu++; tot += s.on_money[k];
+                kind = klu_online_kind(s.on_flags[k], k == loc);
+                if (kind != KLUV_K_DEAD && kind != KLUV_K_ESCAPED) na++;
+                if (k == loc) { locst = kind; lloot = s.on_loot[k]; lrew = s.on_rew[k]; }
                 if (rows >= klu.rows) continue;
-                if (k == loc) strcpy(nm, "You"); else snprintf(nm, sizeof nm, "Player %d", k + 1);
-                klu_row(rows++, nm, s.on_money[k], k == loc ? KLUV_K_YOU : KLUV_K_CREW);
+                if (s.on_name[k][0]) snprintf(nm, sizeof nm, "%s", s.on_name[k]); else if (k == loc) strcpy(nm, "You"); else snprintf(nm, sizeof nm, "Player %d", k + 1);
+                klu_row(rows++, nm, s.on_money[k], kind);
             }
-            /* Arcade reads "alive / used"; online has no per-record status decoded (re/hud_online.md), so alive = used (GUESS) and the gap is logged once (TEST) */
-            snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d", nu, nu); klu_r.t[KLU_T_COUNT].on = 1;
-            { static int told; if (!told && klu.log) { told = 1; klog("hud: ONLINE parity: crew box = DEAD MEN + painted rule like Arcade; MISSING online: names (YOU / Player n), alive/dead/escaped per row, lives, round line, LOOT/REWARDS boxes, kill line (records not decoded)"); } }
+            nb = klu_online_bots(&ba);                          /* the AI heisters have no record: rows from the Ally actors, like Arcade's bot rows */
+            for (bi = 0; bi < nb; bi++) {
+                int dead = bi >= ba; nu++; if (!dead) na++;
+                if (rows >= klu.rows) continue;
+                snprintf(nm, sizeof nm, "Heister %d", bi + 1);
+                klu_row(rows++, nm, 0, dead ? KLUV_K_DEAD : KLUV_K_CREW);
+            }
+            snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d", na, nu); klu_r.t[KLU_T_COUNT].on = 1;
+            { static int told; if (!told && klu.log) { told = 1; klog("hud: ONLINE parity: crew box = DEAD MEN + rule + alive/used + per-row state from the flag dwords [S+0x98+4i]; names %s; bots %d row(s); STILL MISSING online: lives skulls, ROUND n OF m line, kill-feed line, loot bar (no data decoded; see re/hud_online.md)", s.on_named ? "read from the client structs" : "NOT readable (You / Player n)", nb); } }
             if (klu.plates) {                                 /* the same painted rule as the Arcade box */
                 if (klu.draft) klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, klu_r.cx, klu_r.cy + KLU_D_RULE_Y, klu.crew_w, KLU_D_RULE_H, KLU_C_CHALK, klu.layer - 2);
                 else klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);
             }
-            if (klu.money) { strcpy(klu_r.t[KLU_T_MLABEL(0)].want, "TOTAL"); klu_r.t[KLU_T_MLABEL(0)].on = 1; klu_dollars(klu_r.t[KLU_T_MVALUE(0)].want, KLU_TEXTLEN, tot); klu_r.t[KLU_T_MVALUE(0)].on = 1; }
+            if (klu.money) {                                  /* TOTAL / LOOT / REWARDS like Arcade (GUESS: which online array is loot and which rewards, see klbot.c) */
+                static const char *label[3] = { "TOTAL", "LOOT", "REWARDS" }; long v[3]; int q;
+                v[0] = tot; v[1] = lloot; v[2] = lrew;
+                for (q = 0; q < 3; q++) {
+                    strcpy(klu_r.t[KLU_T_MLABEL(q)].want, label[q]); klu_r.t[KLU_T_MLABEL(q)].on = 1;
+                    klu_dollars(klu_r.t[KLU_T_MVALUE(q)].want, KLU_TEXTLEN, v[q]); klu_r.t[KLU_T_MVALUE(q)].on = 1;
+                }
+            }
+            if (klu.killed && (locst == KLUV_K_DEAD)) {       /* the same KILLED BY line as offline. The killer is not decoded online: Arcade's own fallback THE POLICE (GUESS) */
+                snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
+            }
         }
         return 1;
     }
@@ -1719,7 +1786,7 @@ static void klu_init(void)
     klu.log = klu_inii("Log", 1, 0, 2);
     klu.stock = klu_inii("Stock", 0, 0, 1);
     klb_hud_online = klu_inii("Online", 0, 0, 1);         /* 2026-10-18: the local, cosmetic parts in a network FA round (klbot.c klb_read_hud; re/hud_online.md). Default 0: never run online */
-    klu.killed = klu_inii("KilledBy", 1, 0, 1); klu.crew = klu_inii("Crew", 1, 0, 1); klu.money = klu_inii("Money", 1, 0, 1); klu.round = klu_inii("Round", 1, 0, 1);
+    klu.onbots = klu_inii("OnlineBots", 1, 0, 1); klu.killed = klu_inii("KilledBy", 1, 0, 1); klu.crew = klu_inii("Crew", 1, 0, 1); klu.money = klu_inii("Money", 1, 0, 1); klu.round = klu_inii("Round", 1, 0, 1);
     klu.hide = klu_inii("HideStock", 1, 0, 1);
     klu.draw = klu_inii("Draw", 1, 1, 2);
     klu.shadow = klu_inii("Shadow", 1, 0, 1); if (klu.draw == 2) klu.shadow = 1;     /* the stock Render draws a pair */

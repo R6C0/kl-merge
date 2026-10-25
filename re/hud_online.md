@@ -36,3 +36,9 @@ ZGameRulesFragileAlliance (0xbd2b9c).
 1. Both: KLHook.ini `[HUD] Online=1` (+ the usual Enable, Dials, Weapon). Host: private game, pick the map slot, friend joins by invite.
 2. Look for `hud:` lines in KLHook.log on both machines and `net:` line (rules class Sv / Cl). Expect the watch ring + weapon dial, stock list intact.
 3. If the HUD flickers or the game faults at round start, set Online=0 and send KLHook.log.
+
+## 2026-10-26 HUD parity pass (hudpar_1026a, not run live)
+- Crew box online: per-record flags = [S+0x98+4i] (S=[rules+0x2c]); bits as Arcade's score flags (4 dead, 0x40 escaped, 0x20 aboard, 8 police). Name = GUESS std::string at record client +8. loot/rewards = [S+0x224]/[S+0x188] (which is which: GUESS). AI heisters = team-2 ZFFActor scan ([HUD] OnlineBots=1). KILLED BY line when the local row is dead (fallback THE POLICE).
+- [HUD] HideKilledBy=1 (kllocname.c): LOC lookups made from 0x500670..0x500b62 or for key *KilledBy answer "" (Arcade and online). Log: "names: HideKilledBy: blanked lookup".
+- Online end screen (state 0x1f): NOT composed; klhud_board2.c logs "scoreboard: ONLINE state ..." + per-row lines once per state to decode it.
+- Still missing online: lives, round line, kill feed, loot bar (logged once as missing).

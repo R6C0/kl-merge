@@ -89,6 +89,10 @@ feat('hidestockonl', G_CORE, 'Online matches: also hide the old (stock) list; th
      'klhud.c HideOnline; needs HideSrc=1', [('HUD', 'HideOnline', 1, 0, 1)])
 feat('onlinecrew', G_CORE, 'Online matches: new crew list with money (humans only, names not decoded yet; recommended on once proven live)', 'off', 'start',
      'klhud.c OnlineCrew; needs [HUD] Online=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
+feat('onlinebots', G_CORE, 'Online matches: AI heisters also listed in the crew box, like Arcade (recommended on)', 'on', 'start',
+     'klhud.c OnlineBots; team-2 ZFFActor scan (GUESS); needs OnlineCrew=1; NOT run live', [('HUD', 'OnlineBots', 1, 0, 1)])
+feat('hidekilledby', G_CORE, 'Hide the stock death panel own "Killed by" text so only the HUD KILLED BY line shows, Arcade and online (recommended on)', 'on', 'start',
+     'kllocname.c HideKilledBy: LOC lookups from 0x500670 and the key KilledBy answer an empty string; needs [HUD] Enable=1 and KilledBy=1; NOT run live', [('HUD', 'HideKilledBy', 1, 0, 1)])
 feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on', 'start',
      'klhud.c van card; needs [HUD] Enable=1', [('HUD', 'HideIdleEscape', 1, 0, 1)])
 feat('vanblow', G_EXP, 'Escape vehicle can blow up when nobody is aboard', 'on', 'start',

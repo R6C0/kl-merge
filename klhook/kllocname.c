@@ -53,6 +53,11 @@
 #define KLLNM_NAME    48
 
 static int kllnm_on, kllnm_log, kllnm_override;
+/* 2026-10-26 [HUD] HideKilledBy=1 (recommended on; needs [HUD] Enable=1 and KilledBy=1): the stock death panel's 'Killed by ...' text is blanked so only the HUD's own KILLED BY line shows (Arcade AND online, any map, [Names] not needed).
+   The text is built by 0x500670 (re\hud_values.md h) from LOC keys (AllLevels/Menu/Online/Respawn KilledBy, AllLevels/Interface/Online/Kill FA_DieFrom<role>); a lookup made from inside 0x500670 .. 0x500b62, or for a key
+   ending in 'KilledBy' (the XML tag), answers a static empty string. GUESS: the empty string leaves the panel's text empty (not a crash); the XML page's own label is the same key. TEST logs each hit. */
+static int kllnm_hk; static LONG kllnm_hk_n;
+static const char kllnm_empty[4] = "";
 static struct { DWORD stock; DWORD orig; int n; DWORD vt[KLLNM_MAXSLOT + 1]; } kllnm_tab[KLLNM_NVT];     /* vt[0] = RTTI locator, vt[1..] = slots */
 static int kllnm_ntab;
 static char kllnm_rname[KLS_RULES][KLLNM_NAME];   /* the display name of each klslot.c rule ("" = none) */
@@ -103,6 +108,16 @@ static const char *kllnm_name_now(int n)
 static const char *__fastcall kllnm_lookup(void *self, void *edx, const char *folder, const char *key, DWORD third)
 {
     KLLNM_LOOKUP orig = 0; DWORD vt; int i, n = 0, klen = 0; char k[96], f[96]; const char *res, *mine = 0; (void)edx;
+    if (kllnm_hk && key) {
+        DWORD ra = (DWORD)(DWORD_PTR)_ReturnAddress(); int hit = ra >= (DWORD)KLH_VA(0x500670) && ra < (DWORD)KLH_VA(0x500b62), kl;
+        char kk[96];
+        kk[0] = 0; kl = klh_rdstr((DWORD_PTR)key, kk, sizeof kk);
+        if (!hit && kl >= 8 && !strcmp(kk + kl - 8, "KilledBy") && (kl == 8 || kk[kl - 9] == '/')) hit = 2;
+        if (hit) {
+            if (InterlockedIncrement(&kllnm_hk_n) <= 8) { char ff[96]; ff[0] = 0; if (folder) klh_rdstr((DWORD_PTR)folder, ff, sizeof ff); klog("names: HideKilledBy: blanked lookup %s / %s (%s, from %08lx)", ff, kk, hit == 1 ? "inside 0x500670" : "key KilledBy", ra); }
+            return kllnm_empty;
+        }
+    }
     vt = klh_rd32((DWORD_PTR)self);
     for (i = 0; i < kllnm_ntab; i++) if (vt == (DWORD)(DWORD_PTR)&kllnm_tab[i].vt[1]) { orig = (KLLNM_LOOKUP)(DWORD_PTR)kllnm_tab[i].orig; break; }
     if (!orig) orig = (KLLNM_LOOKUP)(DWORD_PTR)kllnm_tab[0].orig;         /* cannot happen: only objects given a copy reach this function */
@@ -155,7 +170,7 @@ static void kllnm_tick(int game_thread)
 {
     static DWORD last; static LONG told_bad, told_ok;
     DWORD now = GetTickCount(), sys, db, loc, vt, s0 = 0, nv; int i, n = 0, t;
-    if (!kllnm_on || !game_thread || !klh_exe_ok || now - last < 100) return;       /* the object's first dword is written from the game's own thread only */
+    if (!(kllnm_on || kllnm_hk) || !game_thread || !klh_exe_ok || now - last < 100) return;       /* the object's first dword is written from the game's own thread only */
     last = now;
     if (!(sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) || !(db = klh_rd32(sys + 0xac)) || !(loc = klh_rd32(db + 0x94)) || !(vt = klh_rd32(loc))) return;
     for (i = 0; i < kllnm_ntab; i++) if (vt == (DWORD)(DWORD_PTR)&kllnm_tab[i].vt[1]) return;       /* already ours */
@@ -179,6 +194,8 @@ static void kllnm_tick(int game_thread)
 static void kllnm_init(void)
 {
     char val[KLLNM_NAME + 8]; int r, nn = 0;
+    kllnm_hk = GetPrivateProfileIntA("HUD", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "KilledBy", 1, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "HideKilledBy", 1, klh_ini) != 0;
+    if (kllnm_hk) klog("names: [HUD] HideKilledBy=1: the stock death panel's 'Killed by' text is blanked (LOC lookups from 0x500670 and the key KilledBy); the LOC object is wrapped by the tick");
     if (!GetPrivateProfileIntA("Names", "Enable", 0, klh_ini)) return;
     kllnm_log = GetPrivateProfileIntA("Names", "Log", 0, klh_ini) != 0;
     kllnm_override = GetPrivateProfileIntA("Names", "Override", 0, klh_ini) != 0;
