@@ -13,7 +13,7 @@ THE ROUND
   5. Escape: a van on the street (x 5300 .. 12400, z 1100), the plan of kl_map_escape.van_plan_points without a fault; the layer takes 8 street
      props out of its way (collision cut + hidden: CLEAR_REFS).
   6. The campaign's own Dead Men music groups of L05 stay (Special!Music!*): the start fires the calm one, the alarm the combat one.
-  7. Navigation: L05's mesh is in 8 parts; six bridges (NAV_PAIRS, proven by kl_route.Mesh.way) join the floors into one main part.
+  7. Navigation: L05's mesh is in 8 parts; five bridges + a two-quad lobby chain (NAV_PAIRS, EXTRA_CHAIN, proven by kl_route.Mesh.way) join the floors into one main part.
 The campaign's end-of-level scripts, the story triggers that would end the round (C2 / C3 / B2 / B4 / B6) and the roof, vans and extra squads are dropped
 (M_DROP). Every number marked GUESS is a guess; MEASURED ones come from the real files (scratch scripts of 2026-10-25, re/open_work_log.md).
 Usage (from tools/):
@@ -60,14 +60,24 @@ X = ('AI!Enemies!A-Stairways!A1!SQ_Goons_car', 'AI!Enemies!A-Stairways!A9!SQ_Mob
      'AI!Triggers!B4!*', 'AI!Triggers!B1!*', 'Special!EndOfLevel!*', 'Extras!AlteredVision!*', 'Extras!Xiu_tracker', 'Extras!GeomDeactivator_facetracker')
 M_DROP = D + T + X
 
-# ------------------------------------------------------------------ navigation: six bridges between the mesh's parts (MEASURED: kl_route.Mesh.way finds them, 2026-10-25)
+# ------------------------------------------------------------------ navigation: bridges between the mesh's parts (MEASURED: kl_route.Mesh.way finds them, 2026-10-25)
 # (polygon a, its border edge, polygon b, its border edge); the corners are the edges' own end points, so the bridge is a quad between two borders
-NAV_PAIRS = ((927, 0, 993, 2), (436, 2, 452, 2), (449, 1, 447, 3), (332, 2, 314, 1), (340, 0, 322, 1), (1204, 1, 1173, 3))
-MAIN_POLY = 927                         # a polygon of the main part (the street's; after the bridges it holds all 896 polygons of 5 floors)
+# Round 3: the first pair (927 e0 -> 993 e2, polygon 1232 of 1025a-1025c) is GONE: its quad runs diagonally through the entrance wall (z 700 .. 880), so the AI's
+# shortest way to the tower crossed REF 26719 / 27151; EXTRA_CHAIN below joins the same two polygons through the open doorway instead.
+NAV_PAIRS = ((436, 2, 452, 2), (449, 1, 447, 3), (332, 2, 314, 1), (340, 0, 322, 1), (1204, 1, 1173, 3))
+# Round 3 (DD10): the street entrance. MEASURED on 1025c with exact casts (25-wide body, 3 heights, 30 grid): the doorway between the street and the ground floor hall
+# is OPEN (x 13140 .. 13230, z 920 .. 1070) and so is the hall (x 13260 .. 13440, z 830 .. 1160), but the campaign mesh has NO polygon in the hall (the campaign's
+# CorridorBlocker region: 993 ends at z 815, 996 starts at z 1186) and the one bridge it got (polygon 1232, 927 e0 -> 993 e2) runs diagonally through the wall
+# (z 700 .. 880) -> every mesh way to the tower / flats crossed REF 26719 / 27151 (not a step, not clutter: a mesh gap). EXTRA_CHAIN fills the gap with two quads:
+# link 0 = the hall floor between 993's hall-side border (e3) and 996's (e3); link 1 = from 927's east border (e3, x 13114) to link 0's west side (x 13234), through
+# the doorway. Each entry: ((polygon, border edge) | ('new', link), (polygon, border edge)). GUESS: a quad that spans the doorway's wall flanks is fine for
+# the AI (it routes between portal middles); the walk proof (casts along the portal ways) is the check on that.
+EXTRA_CHAIN = (((993, 3), (996, 3)), ((927, 3), ('new', 0)))
+MAIN_POLY = 927                        # a polygon of the main part (the street's; after the bridges it holds all 896 polygons of 5 floors)
 WAY_LEAST = (100.0, 50.0, 0.0)          # Mesh.way's narrowest shared edge, tried in turn (kl_route's own chain; the stairs' doors are 24 wide: MEASURED)
 
 
-def bridges_of(block, log=lambda *a: None):
+def bridges_of(block, log=lambda *a: None, first_index=None):
     """kl_nav_bridge's list from NAV_PAIRS against a navigation block (kl_fa_bots.Nav's polygons: pv, en)."""
     import kl_fa_bots as F
     nav = F.Nav(block)
@@ -79,6 +89,29 @@ def bridges_of(block, log=lambda *a: None):
         a0, a1 = nav.pv[pa][ea], nav.pv[pa][(ea + 1) % len(nav.pv[pa])]
         b0, b1 = nav.pv[pb][eb], nav.pv[pb][(eb + 1) % len(nav.pv[pb])]
         out.append(dict(corners=[a1, a0, b1, b0], joins={0: ('old', pa, ea), 2: ('old', pb, eb)}))
+    # round 3 (DD10): the lobby chain (EXTRA_CHAIN). Each link is (old edge a, old edge b OR a 'new' link, ...): see EXTRA_CHAIN
+    base = len(out) if first_index is None else first_index
+    for k, (ka, kb) in enumerate(EXTRA_CHAIN):
+        def corner_pair(spec):
+            p, e = spec
+            return nav.pv[p][(e + 1) % len(nav.pv[p])], nav.pv[p][e]
+        def pair_of(spec):
+            if spec[0] == 'new':
+                # the other link's edge 1 (west side): its corners [a1,a0,b1,b0] -> edge 1 runs a0 -> b1; this link needs it reversed (b1 -> a0)
+                other = out[base + spec[1]]['corners']
+                return other[2], other[1]
+            return corner_pair(spec)
+        a1, a0 = pair_of(ka)
+        b1, b0 = pair_of(kb)
+        joins = {}
+        for edge, spec in ((0, ka), (2, kb)):
+            joins[edge] = ('old', spec[0], spec[1]) if spec[0] != 'new' else ('new', base + spec[1], 1)
+        out.append(dict(corners=[a1, a0, b1, b0], joins=joins))
+    # a 'new' join must be mirrored on the other bridge (links are stored on both sides)
+    for k, br in enumerate(out):
+        for edge, j in list(br['joins'].items()):
+            if j[0] == 'new' and out[j[1]]['joins'].get(j[2]) is None:
+                out[j[1]]['joins'][j[2]] = ('new', k, edge)
     return out
 
 
@@ -92,7 +125,7 @@ _MESH = {}
 
 
 def bridged_mesh(log=lambda *a: None):
-    """The mesh of L05 WITH the six bridges, from the level itself (the same polygons as the built folder's after nav_bridge_step)."""
+    """The mesh of L05 WITH the bridges, from the level itself (the same polygons as the built folder's after nav_bridge_step)."""
     import kl_route
     if 'm' not in _MESH:
         lv = kl_route.load(LEVEL)
@@ -282,7 +315,21 @@ CLEAR_WHAT = collections.OrderedDict([
     (27152, ('CorridorBlocker', (13350, 139, 996))),                                     # box x 13220 .. 13480, z 845 .. 1155: the whole ground-floor hall behind the entrance
     (27014, ('SO0010_L05_CorridorBlocker_A_01', (9450, 1200, 800))),                    # a wall across the 3rd floor corridor, next to the police spawns (9450, 1200, 902)
     (23991, ('SO0700_ALL_CorridorBlocker_4m_01', (7028, -11, 1076))),                   # x 7022 .. 7035, z 876 .. 1276: right across the street, inside the van's drive (x 6280 ..)
+    # round 3 (DD10): clutter props of Outside_Stairway_PartB3 (the stairway to the upstairs flats) that stand across the corridor and are taller than the 35 step
+    # of the walk proof (STATIC collision, no structural role: a stove, a washing machine and two roof ventilator boxes). Measured with exact casts on 1025c and by
+    # skipping exactly these four REFs in the full walk proof: the stove / laundry spot is the common route to the flats, which is why it showed up on "every leg".
+    (21953, ('PC0300_ALL_Stove_A_01', (10962, 1595, 1737))), (21958, ('PC1800_ALL_LaundryMachine_A_01!LaundryMachine_A_00', (10955, 1604, 1828))),
+    (21862, ('PC0200_ALL_VentilatorBox_A_NoShadow_01', (12287, 1629, 1853))), (21858, ('PC0200_ALL_VentilatorBox_A_NoShadow_05', (12278, 1629, 1878))),
+    # round 3: apartment A, the by-name scripted objects. NOTHING in the FA build opens them (no controller value names wooddoor_c_01 / Wall_State / Wall_Break:
+    # scanned), so they stay shut all round and wall in loots 0-7. The two doors (the closed one and its hidden "State_02" twin whose collision is live anyway) and
+    # the drawers are furniture: cleared. GUESS: that the campaign door / drawer controllers tolerate the missing node (nothing here references them).
+    (30989, ('SI0100_L05_Apartment_wooddoor_C_01', (13001, 1597, 2813))), (30966, ('PC0100_L05_ApartmentWoodDoor_D_State_02', (13005, 1600, 2788))),
+    (29844, ('PC0200_L05_Drawers_B_Geom_01', (13076, 1662, 2868))),
 ])
+# NOT cleared on purpose: REF 30708 SI0100_L05_Wall_Break_State1 (11800, 1600, 3600), the apartment A wall the campaign breaks open by script. It is a STRUCTURAL wall
+# (the intact state of a two-state wall: State_A visible, State_B hidden with shards / splinters emitters and a ShatterStart trigger) and it walls in loots 4-6
+# (24 legs). The alternative is to swap the states (hide State_A + cut its collision, show State_B's frame 30809), which needs the emitters of State_B left off: not done
+# without seeing it (a map defect report; check() keeps it a NOTE).
 CLEAR_REFS = set(CLEAR_WHAT)
 COOP_BLOCKERS = 3                       # the CoopAirLock_Pathblocker_00 nodes of the campaign map (MEASURED on 1025a: eBlocking, empty list, named by no controller)
 ROAD = dict(arrive=[(5300.0, 0.0, 1100.0), (6300.0, 0.0, 1100.0), (7300.0, 0.0, 1100.0)], stop=STOP,
@@ -751,7 +798,7 @@ def nav_bridge_step(folder, log=print):
         return ['nav bridges: polygon numbering differs from the proven one (%d polygons; 927 and 993 in part %d / %d)' % (len(nav.pv), nav.part[MAIN_POLY], nav.part[993])]
     new, rep = bridged_block(B.scene.nav)
     n2 = F.Nav(new)
-    ends = [p for pr in NAV_PAIRS for p in (pr[0], pr[2])]
+    ends = [p for pr in NAV_PAIRS for p in (pr[0], pr[2])] + [927, 993, 996]
     if len({n2.part[p] for p in ends}) != 1:
         return ['nav bridges: the mesh is still in islands after the bridges (parts %s)' % [n2.part[p] for p in ends]]
     sizes = sorted(collections.Counter(n2.part).values(), reverse=True)
@@ -1074,9 +1121,12 @@ def walk_proof(folder, sc, ents, pos, mesh, C, boxes, log=print):
             continue
         ncast += got[0]
         narrow = min(narrow, got[3])
+        seen_leg = set()                    # round 3: count DISTINCT legs, not hit pieces (one leg crossing a 4-piece clutter spot used to count 4)
         for _j, at, objs in got[1]:
             for nm, ref in objs or [('(only beside the centre line: off the mesh)', -1)]:
-                blocked[(ref, nm)] += 1
+                if (ref, nm) not in seen_leg:
+                    seen_leg.add((ref, nm))
+                    blocked[(ref, nm)] += 1
                 first.setdefault((ref, nm), (name, at, 0, 0))
         for path in got[2]:
             pbhit[path] += 1
@@ -1134,7 +1184,7 @@ def check(folder, log=print, problems=None):
     mesh = kl_route.Mesh(scene.nav)
     mainp = mesh.part[MAIN_POLY]
     log('  mesh: %d polygons, main part %d polygons (part %d)' % (len(mesh.pv), mesh.size[mainp] if hasattr(mesh.size, '__getitem__') else -1, mainp))
-    if any(mesh.part[p] != mainp for pr in NAV_PAIRS for p in (pr[0], pr[2])):
+    if any(mesh.part[p] != mainp for p in [p for pr in NAV_PAIRS for p in (pr[0], pr[2])] + [993, 996]):
         fail('the bridges did not join the mesh into one main part (run nav_bridge_step)')
     def part_of(p):
         h = mesh.on(*p)
