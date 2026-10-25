@@ -1132,6 +1132,20 @@ static int klu_compose(int *state_ok)
         klu_r.npic = 0;
         klu_dials(&s);
         klwd_compose();
+        if (klb_hud_crew && klu.crew && s.on_n > 0) {         /* [HUD] OnlineCrew: the online crew list from the SL6 dump (humans only; no names found yet: YOU / PLAYER n) */
+            int k, rows = 0, nu = 0; long tot = 0; char nm[24]; BYTE loc = 0;
+            { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (BYTE)li; }
+            strcpy(klu_r.t[KLU_T_HEAD].want, "CREW"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;
+            for (k = 0; k < s.on_n; k++) {
+                if (!s.on_used[k]) continue;
+                nu++; tot += s.on_money[k];
+                if (rows >= klu.rows) continue;
+                if (k == loc) strcpy(nm, "You"); else snprintf(nm, sizeof nm, "Player %d", k + 1);
+                klu_row(rows++, nm, s.on_money[k], k == loc ? KLUV_K_YOU : KLUV_K_CREW);
+            }
+            snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d", nu); klu_r.t[KLU_T_COUNT].on = 1;
+            if (klu.money) { strcpy(klu_r.t[KLU_T_MLABEL(0)].want, "TOTAL"); klu_r.t[KLU_T_MLABEL(0)].on = 1; klu_dollars(klu_r.t[KLU_T_MVALUE(0)].want, KLU_TEXTLEN, tot); klu_r.t[KLU_T_MVALUE(0)].on = 1; }
+        }
         return 1;
     }
     /* the stock player list's own window (its Tick 0x76db00). Draw=2: the stock clock Render draws nothing outside

@@ -87,6 +87,8 @@ feat('hidestock', G_CORE, 'Old (stock) HUD list never shown: skipped at its Rend
      'klhud.c HideSrc: private vtable of ZFAPlayerListDisplay, Render skipped while the mod HUD stands; needs [HUD] Enable=1', [('HUD', 'HideSrc', 1, 0, 1)])
 feat('hidestockonl', G_CORE, 'Online matches: also hide the old (stock) list; the new online crew list is not built yet, so this leaves no crew list online (recommended on, owner request)', 'on', 'start',
      'klhud.c HideOnline; needs HideSrc=1', [('HUD', 'HideOnline', 1, 0, 1)])
+feat('onlinecrew', G_CORE, 'Online matches: new crew list with money (humans only, names not decoded yet; recommended on once proven live)', 'off', 'start',
+     'klhud.c OnlineCrew; needs [HUD] Online=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
 feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on', 'start',
      'klhud.c van card; needs [HUD] Enable=1', [('HUD', 'HideIdleEscape', 1, 0, 1)])
 feat('vanblow', G_EXP, 'Escape vehicle can blow up when nobody is aboard', 'on', 'start',

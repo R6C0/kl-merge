@@ -334,6 +334,7 @@ struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; fl
 struct klb_snap {
     DWORD rules, score, state, vehicle; int n, level, human; BYTE veh; float timer;
     struct klb_rec r[KLB_NREC];
+    long on_money[16]; BYTE on_used[16]; int on_local;   /* OnlineCrew: SL6 dump: used = free byte 0; money = [S+0x224+4i] + [S+0x188+4i] (rules vtable slots 55 + 56 = the stock Total, checked against the vtable) */
     DWORD on_recs, on_free, on_score; int on_n;   /* OnlineCrew=1, online only: [rules+8] records (0x74 bytes), their free bytes [rules+0xc], count [rules+0x14], DDL score [rules+0x2c]; layout of the records is NOT decoded yet */
     int online;                               /* 1 = filled by klb_read_hud() from an ONLINE rules object (host/client): rules + state only, n = 0, score = 0 */
 };
@@ -408,7 +409,19 @@ static int klb_read_hud(struct klb_snap *s)
     if (vt != KLB_RULES_SV && vt != KLB_RULES_CL) { s->rules = 0; return 0; }
     if (klb_hud_crew) {                                   /* [HUD] OnlineCrew: sv/cl siblings keep 0x74-byte records at [rules+8] (re/hud_online.md); only handles, no field meaning */
         DWORD n = 0;
-        if (klh_rd(s->rules + 0x14, &n, 4) && n >= 1 && n <= 16) { s->on_n = (int)n; s->on_recs = klh_rd32(s->rules + 8); s->on_free = klh_rd32(s->rules + 0xc); s->on_score = klh_rd32(s->rules + 0x2c); }
+        if (klh_rd(s->rules + 0x14, &n, 4) && n >= 1 && n <= 16) {
+            DWORD vt2 = klh_rd32(s->rules), a55 = vt2 ? klh_rd32(vt2 + 4 * 55) : 0, a56 = vt2 ? klh_rd32(vt2 + 4 * 56) : 0; int i;
+            s->on_recs = klh_rd32(s->rules + 8); s->on_free = klh_rd32(s->rules + 0xc); s->on_score = klh_rd32(s->rules + 0x2c);
+            if (s->on_free && s->on_score && a55 == 0x40b7e0u && a56 == 0x819aa0u) {       /* the getters whose bodies were read (0x7ed6c0, 0x8d1ec0) */
+                BYTE el0; s->on_n = (int)n;
+                for (i = 0; i < (int)n; i++) {
+                    DWORD m1 = 0, m2 = 0;
+                    if (!klh_rd(s->on_free + i, &el0, 1) || el0) continue;
+                    s->on_used[i] = 1; klh_rd(s->on_score + 0x224 + 4 * i, &m1, 4); klh_rd(s->on_score + 0x188 + 4 * i, &m2, 4);
+                    s->on_money[i] = (long)m1 + (long)m2;
+                }
+            }
+        }
     }
     s->level = 1; s->online = 1;                          /* veh 0, timer 0, n 0, score 0: the escape dial and every record reader stay silent */
     return 1;
@@ -450,11 +463,17 @@ static void klb_online_probe(const struct klb_snap *s, DWORD osd, DWORD plist_vt
     if (freeb && klh_rd(freeb, fb, n < 16 ? n : 16)) { char t[80] = ""; for (i = 0; i < n; i++) { char u[8]; snprintf(u, sizeof u, "%u ", fb[i]); strcat(t, u); } klog("hudprobe: free bytes (0 = used?): %s", t); }
     for (i = 0; i < n; i++) { char tag[24]; snprintf(tag, sizeof tag, "rec%lu", i); klb_pdump(tag, recs + 0x74 * i, 0x74); }
     klb_pdump("score", sc, 0x100);
+    klb_pdump("scoreMoney", sc + 0x180, 0x140);              /* [S+0x188+4i] slot 56, [S+0x224+4i] slot 55 (getter bodies 0x8d1ec0 / 0x7ed6c0, with S+0x58) */
+    { DWORD po[8] = { 0x10, 0x24, 0x44, 0x54, 0x58, 0, 0, 0 }; int q; for (q = 0; q < 5; q++) { DWORD p = klh_rd32(sc + po[q]); char tg[24]; snprintf(tg, sizeof tg, "score->%02lx", po[q]); if (p > 0x10000 && p < 0x7fff0000u && !(p >= 0x400000 && p < 0xe00000)) klb_pdump(tg, p, 0x80); } }
+    { DWORD r0 = recs; if (r0) { DWORD p0 = klh_rd32(r0), p1 = klh_rd32(r0 + 0x30); if (p0 > 0x10000) klb_pdump("rec0->0", p0, 0x100); if (p1 > 0x10000) klb_pdump("rec0->30", p1, 0x80); } }
+    { int ii; for (ii = 0; ii < (int)n && ii < 12; ii++) { DWORD g1 = 0, g2 = 0, g54 = 0; klh_rd(sc + 0x224 + 4 * ii, &g1, 4); klh_rd(sc + 0x188 + 4 * ii, &g2, 4); klh_rd(recs + 0x74 * ii + 0x28, &g54, 4);
+          if (!klh_rd(freeb + ii, fb, 1) || fb[0]) continue; klog("hudprobe: getters idx %d: slot55 [S+0x224]=%ld slot56 [S+0x188]=%ld -> Total %ld; slot54 [rec+0x28]=%08lx", ii, (long)g1, (long)g2, (long)g1 + (long)g2, g54); } }
     klb_pdump("rules0", s->rules, 0x60);
     if (osd && (el = klh_rd32(osd + 0x10c4)) && klh_rd32(el) != 0) {
         DWORD loc = 0, k, shown = 0; klh_rd(el + 0xefc, &loc, 4);
         klog("hudprobe: stock list element %08lx vt %08lx (%s) local entry index [+0xefc] = %ld, [+0xed8]=%lu [+0xedc]=%08lx", el, klh_rd32(el), klh_rd32(el) == plist_vt ? "ZFAPlayerListDisplay" : "OTHER", (long)loc, klh_rd32(el + 0xed8), klh_rd32(el + 0xedc));
         klb_pdump("plist", el + 0x30, 0x40);
+        { DWORD e; for (e = 0x14; e < 0x44; e += 4) { DWORD p = klh_rd32(el + e); char tg[24]; if (p > 0x10000 && !(p >= 0x400000 && p < 0xe00000)) { snprintf(tg, sizeof tg, "plist[%02lx]", e); klb_pdump(tg, p, 0x80); } } }
         for (k = 0x30; k < 0x1100 && shown < 40; k += 4) {          /* text objects (ZCHAROBJ vt 0xbbe4xx family is unknown here: any heap object that holds a readable ascii string) */
             DWORD p = klh_rd32(el + k), q; BYTE tb[0x60]; DWORD m;
             if (p < 0x10000 || (p >= 0x400000 && p < 0xe00000) || !klh_rd(p, tb, sizeof tb)) continue;
