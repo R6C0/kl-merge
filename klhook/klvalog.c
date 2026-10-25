@@ -144,21 +144,55 @@ static int klva_hmod(void *ret)
 static LONG64 klva_rd64(volatile LONG64 *p) { return InterlockedCompareExchange64(p, 0, 0); }   /* x86: a plain read of a LONG64 can tear */
 static void klva_hsite(LONG at, SIZE_T size);
 
+/* Who calls into the driver and device-enumeration modules (rows with crt == 2: nvd3dum, d3d9, devobj, cfgmgr32, setupapi;
+   kl-merge-27 10-25: nvd3dum frees ~480 MB per sawtooth fall, devobj/cfgmgr32 churn 500-700 MB per 10 s). Every 16th process-heap
+   alloc of such a row scans up to 256 stack slots for the first kl2 code address (-> that site) or other followed module (-> its row);
+   none = the call came on a thread without either (the driver's own worker). A GUESS like the CRT rebill: stale stack values can be picked */
+#define KLVA_VIA 512
+static struct { volatile LONG key; LONG m, who; volatile LONG cnt; volatile LONG64 bytes; LONG64 last; LONG lastcnt; } klva_via[KLVA_VIA];
+static volatile LONG klva_via_tick, klva_via_full;
+
+static void klva_vianote(void **ra, int m, LONG64 add)
+{
+    DWORD_PTR top = __readfsdword(4); LONG who = 0, key, h, i, n; int j, k;
+    for (j = 1; j < 256 && (DWORD_PTR)(ra + j + 1) <= top; j++) {
+        DWORD_PTR v = (DWORD_PTR)ra[j];
+        if (v >= 0x401000 && v < 0xa00000) { who = (LONG)v; break; }   /* kl2.exe code */
+        if (v < 0x10000000) continue;   /* below every DLL here: skip the row lookup */
+        k = klva_hmod((void *)v);
+        if (k && k != m && !klva_hm[k].crt) { who = (LONG)(0x80000000u | (DWORD)k); break; }
+    }
+    if (!who) who = (LONG)0xC0000000u;
+    key = who ^ (m << 20); if (!key) key = 1;
+    h = (LONG)(((DWORD)key * 2654435761u) >> 23);
+    for (n = 0; n < 32; n++) {
+        LONG cur;
+        i = (h + n) & (KLVA_VIA - 1);
+        cur = klva_via[i].key;
+        if (!cur && (cur = InterlockedCompareExchange(&klva_via[i].key, key, 0)) == 0) { klva_via[i].m = m; klva_via[i].who = who; cur = key; }
+        if (cur != key) continue;
+        InterlockedIncrement(&klva_via[i].cnt); InterlockedExchangeAdd64(&klva_via[i].bytes, add);
+        return;
+    }
+    InterlockedIncrement(&klva_via_full);
+}
+
 static void klva_hcount(void **ra, HANDLE heap, LONG64 add, LONG64 sub)
 {   /* ra = the wrapper's return-address slot. A call from a C runtime (malloc, new) is billed to the first return address above it
        that lies in another followed module: a GUESS from a stack scan (no frame walk; a stale value can be picked) */
     int m = klva_hmod(ra[0]);
-    if (m && klva_hm[m].crt) {
+    if (m && klva_hm[m].crt == 1) {
         DWORD_PTR top = __readfsdword(4); int j, k;   /* TIB StackBase: never read past it */
         for (j = 1; j < 48 && (DWORD_PTR)(ra + j + 1) <= top; j++) {
             int kl2 = (DWORD_PTR)ra[j] >= 0x401000 && (DWORD_PTR)ra[j] < 0xa00000;   /* kl2.exe code (base 0x400000, no ASLR) */
             k = klva_hmod(ra[j]);
-            if ((!k && !kl2) || (k && klva_hm[k].crt)) continue;
+            if ((!k && !kl2) || (k && klva_hm[k].crt == 1)) continue;
             if (k) m = k;
             if (kl2 && add && heap == klva_pheap) klva_hsite((LONG)(DWORD_PTR)ra[j], (SIZE_T)add);   /* kl2 via the CRT: into the caller table too */
             break;
         }
     }
+    else if (m && klva_hm[m].crt == 2 && add && heap == klva_pheap && !(InterlockedIncrement(&klva_via_tick) & 15)) klva_vianote(ra, m, add);
     InterlockedIncrement(&klva_hm[m].calls);
     if (heap == klva_pheap) { if (add) InterlockedExchangeAdd64(&klva_hm[m].pa, add); if (sub) InterlockedExchangeAdd64(&klva_hm[m].pf, sub); }
     else if (add) InterlockedExchangeAdd64(&klva_hm[m].oa, add);
@@ -227,6 +261,8 @@ static int klva_patch(BYTE *base)
         if (GetModuleFileNameA((HMODULE)base, path, sizeof path)) { s = strrchr(path, '\\'); snprintf(klva_hm[r].name, sizeof klva_hm[r].name, "%s", s ? s + 1 : path); }
         else snprintf(klva_hm[r].name, sizeof klva_hm[r].name, "%p", (void *)base);
         klva_hm[r].crt = !_strnicmp(klva_hm[r].name, "msvcr", 5) || !_strnicmp(klva_hm[r].name, "msvcp", 5) || !_strnicmp(klva_hm[r].name, "ucrtbase", 8);
+        if (!_stricmp(klva_hm[r].name, "nvd3dum.dll") || !_stricmp(klva_hm[r].name, "d3d9.dll") || !_stricmp(klva_hm[r].name, "devobj.dll")
+            || !_stricmp(klva_hm[r].name, "cfgmgr32.dll") || !_stricmp(klva_hm[r].name, "setupapi.dll")) klva_hm[r].crt = 2;   /* their callers are logged (klva_vianote) */
     }
     dd = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IAT];
     if (!dd->VirtualAddress || !dd->Size) return 0;
@@ -380,6 +416,31 @@ static void klva_callers(void)
     line[sizeof line - 1] = 0; klog("%s", line);
 }
 
+static void klva_vias(void)
+{   /* every 10 s: the 12 biggest (module <- caller) pairs of the sampled driver / device-enumeration allocs */
+    int ord[12], no = 0, i, k, n; static LONG64 d[KLVA_VIA]; static LONG dc[KLVA_VIA]; char line[1600];
+    for (i = 0; i < KLVA_VIA; i++) {
+        LONG64 b = klva_rd64(&klva_via[i].bytes); LONG c = klva_via[i].cnt;
+        d[i] = b - klva_via[i].last; dc[i] = c - klva_via[i].lastcnt; klva_via[i].last = b; klva_via[i].lastcnt = c;
+        if (!klva_via[i].key || d[i] <= 0) continue;
+        if (no == 12 && d[ord[11]] >= d[i]) continue;
+        if (no < 12) no++;
+        for (k = no - 1; k > 0 && d[ord[k - 1]] < d[i]; k--) ord[k] = ord[k - 1];
+        ord[k] = i;
+    }
+    n = _snprintf(line, sizeof line, "va: driver/devenum process-heap allocs by caller, sampled 1 in 16 (x16 = real), last 10 s (%ld pairs not tracked); module <- caller MB/calls:", klva_via_full);
+    for (i = 0; i < no && n > 0 && n < (int)sizeof line; i++) {
+        int e = ord[i]; LONG w = klva_via[e].who; char who[64]; DWORD off;
+        if (w == (LONG)0xC0000000u) snprintf(who, sizeof who, "(no kl2/module frame)");
+        else if (w & 0x80000000) snprintf(who, sizeof who, "%s", klva_hm[w & 0xffff].name);
+        else { klh_module((DWORD_PTR)w, who, sizeof who, &off); snprintf(who + strlen(who), sizeof who - strlen(who), "+%lx", off); }
+        k = _snprintf(line + n, sizeof line - n, " %s <- %s %.1f/%ld;", klva_hm[klva_via[e].m].name, who, d[e] / 1048576.0, dc[e]);
+        if (k < 0) break;
+        n += k;
+    }
+    line[sizeof line - 1] = 0; klog("%s", line);
+}
+
 static void klva_tick(void)
 {   /* every 10 s: the modules by what they still hold */
     static DWORD last; DWORD now = GetTickCount(); char line[1600]; int i, k, n, ord[KLVA_MODS], cnt;
@@ -407,7 +468,7 @@ static void klva_tick(void)
     klog("%s", line);
     klva_heaps();
     klva_callers();
-    klva_hheaps();
+    klva_hheaps(); klva_vias();
 }
 
 static void klva_init(void)
