@@ -703,6 +703,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klnet.c"
 #include "klnetfix.c"
 #include "kllobby.c"                                      /* kllobby.c: [Lobby] MinPlayers - a hosted FA lobby may start below 4 (off unless set) */
+#include "klbotfill.c"                                    /* klbotfill.c: [Bots] OnlineFill plan + probe, read-only (off unless set); AFTER kllobby.c */
 #include "klqol.c"                                        /* klqol.c: [QoL] taskbar flash, background frame cap, mouse-clip release (off unless set); AFTER kllobby.c / klnet.c */
 #include "klinv.c"
 #include "klgrenade.c"                                     /* klgrenade.c: [Grenade] Probe - log-only grenade probe (off unless Probe=1) */
@@ -1169,6 +1170,7 @@ static void klh_tick(int game_thread)
     klq2_tick(game_thread);                           /* klqol.c: [QoL] (off unless set) */
     kqb_tick(game_thread);                            /* klqol2.c: [QoL2] (off unless set) */
     kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
+    klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
     klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
     klgrenade_tick(game_thread);                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
@@ -1576,6 +1578,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klvis_init();
     klnet_init();
     kllb_init();
+    klbf_init();                                      /* klbotfill.c: reads [Bots] OnlineFill (after kllb_init: it reads the same key) */
     klq2_init();                                      /* klqol.c: [QoL] (default off) */
     kqb_init();                                       /* klqol2.c: [QoL2] (default off) */
     klnetfix_init();

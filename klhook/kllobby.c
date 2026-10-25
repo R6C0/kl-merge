@@ -25,11 +25,13 @@
 #define KLLOBBY_C
 
 static int kllb_min;
+static BYTE kllb_orig;                                           /* the target the lobby had before the host's Ready lowered it (klbotfill.c: fill = this - connected) */
 
 static void kllb_init(void)
 {
     kllb_min = GetPrivateProfileIntA("Lobby", "MinPlayers", 0, klh_ini);
     if (kllb_min < 0 || kllb_min > 8) kllb_min = 0;
+    if (!kllb_min && GetPrivateProfileIntA("Bots", "OnlineFill", 0, klh_ini)) { kllb_min = 1; klog("lobby: [Bots] OnlineFill=1 implies MinPlayers=1"); }
     if (kllb_min) klog("lobby: MinPlayers=%d - a hosted FA lobby starts on the host's Ready once that many are connected", kllb_min);
 }
 
@@ -40,12 +42,13 @@ static void kllb_tick(void)
     last = now;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || klh_rd32(sm) != 0xbd1ebc) return;
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4) || !klh_rd(sm + 0xb9, &cur, 1)) return;
-    if (role != 2 || mode != 4 || state != 0xe) { if (state < 0xd || state > 0xf) told_sm = 0; return; }
+    if (role != 2 || mode != 4 || state != 0xe) { if (state < 0xd || state > 0xf) told_sm = 0; if (state < 0xd) kllb_orig = 0; return; }
     if (!(h = klh_rd32(sm + 4)) || !(v = klh_rd32(h + 8))) return;
     lo = klh_rd32(v + 8); hi = klh_rd32(v + 0xc);
     if (!lo || hi < lo || hi - lo > 16) return;                   /* the count 0x698250 returns, read as data */
     if ((int)(hi - lo) < kllb_min || cur <= (BYTE)(hi - lo)) return;
     want = (BYTE)(hi - lo);
+    if (!kllb_orig) kllb_orig = cur;
     if (!klh_data((void *)(DWORD_PTR)(sm + 0xb9), &want, 1, "lobby target players")) return;
     if (told_sm != sm) { klog("lobby: host Ready with %u connected: target players %u -> %u (round starts when all are Ready)", want, cur, want); told_sm = sm; }
 }
