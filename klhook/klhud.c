@@ -304,7 +304,7 @@ static struct {
     int draft;                                /* Draft: the defaults of every part of the draft are 1 */
     int lives, roundof;                       /* Lives, RoundOf (klhud_values.c) */
     int on, log, stock, crew, money, round, hide, shadow, tags, cashshort, totalfont, draw, plates, anchor, pictest, grid, probe, layer, rows, dials;
-    int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash, mfill, vanicon, tablist, tabcard;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
+    int wstyle, wini, wseconds, wwear, wlast, labelbar, labelslash, mfill, vanicon, tablist, tabcard, hidesrc, hideonl;   /* wini = [HUD] WatchStyle as set; wstyle = the look THIS level gets (klu_choose_look) */
       /* the watch look (section 14 of re\hud_hook.md): WatchStyle (1 = new, 0 = the old textures and sizes), WatchSeconds, WatchWear, WatchLast, LabelBar (0 text only, 1 painted bar, 2 plain), LabelSlash */
     float inset, crew_x, crew_y, crew_w, row, money_x, money_y, money_w, round_y;
     float yoff, blockup, blockh, padx;        /* the rows: the text's y under the head, the block's rise above it, its height, the text's side margin (the draft: 34 / 5 / 28 / 8) */
@@ -341,6 +341,11 @@ static DWORD klu_fa(DWORD c, float a) { DWORD al = (DWORD)((float)(c >> 24) * (a
 #define KLU_ESC_TOFF    (KLU_ESC_H * 0.5f)    /* ... with GetTickCount | 1 when it came; compose shows it klu_kill_ms long */
 static DWORD klu_evt[KLU_ELEM_NSLOT + 1];     /* [0] RTTI locator, [1..] the slots */
 static int klu_evt_ready;
+/* 2026-10-25 owner: 'the old HUD stuff deleted entirely from the match, I see it when I tab'. The +0x25 hide byte is the game's own and a
+   Tab / focus change / re-show may rewrite it for a tick. HideSrc=1 wraps slot 2 (Render) of ZFAPlayerListDisplay in a private heap vtable
+   (SHIP-safe, a data write): while klu_skip_list is 1 the stock Render is simply not called, whatever the byte says. */
+static DWORD klu_pvt[KLU_ELEM_NSLOT + 1]; static int klu_pvt_ready;
+static volatile LONG klu_skip_list;
 static float klu_prec[KLU_NPIC + 3][10];      /* the pictures' records (section 3): one a picture, rewritten with the same numbers every frame */
 
 typedef DWORD (__fastcall *klu_create_t)(void *, void *, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD);
@@ -508,6 +513,30 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
 }
 
 /* ---------------------------------------------------------------- the private vtable (main thread) */
+
+#define KLU_PLIST_RENDER 0x005e60f0u
+static char __fastcall klu_plist_render(void *el, void *edx, void *ctx, void *cam)
+{
+    (void)edx;
+    if (klu_skip_list) return 1;                  /* not drawn: the same as the game's hide byte, but one the game cannot rewrite */
+    return ((klu_render_t)(DWORD_PTR)KLH_VA(KLU_PLIST_RENDER))(el, 0, ctx, cam);
+}
+
+static void klu_plist_wrap(DWORD osd)
+{
+    DWORD el, cur;
+    if (!klu.hidesrc || !(el = klh_rd32(osd + KLU_O_PLIST)) || !klh_rd(el, &cur, 4)) return;
+    if (!klu_pvt_ready) {
+        if (!klh_rd((DWORD_PTR)KLH_VA(KLU_PLIST_VT - 4), klu_pvt, sizeof klu_pvt) || klu_pvt[1 + 2] != KLU_PLIST_RENDER) { klu.hidesrc = 0; klog("hud: slot 2 of ZFAPlayerListDisplay is not %08lx: HideSrc is off", KLU_PLIST_RENDER); return; }
+        klu_pvt[1 + 2] = (DWORD)(DWORD_PTR)klu_plist_render; klu_pvt_ready = 1;
+    }
+    if (cur == (DWORD)(DWORD_PTR)&klu_pvt[1]) return;
+    if (cur == KLU_PLIST_VT) {
+        DWORD vt = (DWORD)(DWORD_PTR)&klu_pvt[1];
+        if (klh_data((void *)(DWORD_PTR)el, &vt, 4, "the stock player list's vtable (private copy, Render wrapped)") && klu.log) klog("hud: the stock player list (%08lx) now renders through a private vtable: skipped while our HUD stands", el);
+    }
+}
+
 
 static int klu_vtable_tick(DWORD osd)
 {   /* -> 1 while the clock element's first dword is ours (installed here when it shows the stock one) */
@@ -1372,6 +1401,7 @@ static void klu_hide_tick(DWORD osd, int want)
 static void klu_stand_down(DWORD osd)
 {
     InterlockedExchange(&klu_draw_on, 0);
+    InterlockedExchange(&klu_skip_list, 0);
     klwd_show(0);                              /* the weapon dial: every call of the ammo panel goes to the stock Render again */
     if (osd && klu_r.hid) klu_hide_tick(osd, 0);
 }
@@ -1578,6 +1608,7 @@ static void klu_tick(int game_thread)
     /* live and drawing: the transform 0x8bf300 writes every HUD frame says 1280 x 720 (re\hud.md 4.1) */
     if (!klh_rd(osd, &vt, 4) || !klh_rd(osd + KLU_O_XFORM + 0x1c, wh, 8) || wh[0] != 1280.0f || wh[1] != 720.0f) { klu_stand_down(osd); return; }
     if (!klu_vtable_tick(osd)) { klu_r.fault = 1; klu_stand_down(osd); return; }
+    klu_plist_wrap(osd);
     if (klu.inset > 0 && !klu_r.inset_done) {
         float cur = 0;
         klu_r.inset_done = 1;
@@ -1606,6 +1637,9 @@ static void klu_tick(int game_thread)
     klwd_show(show);
     if (show && klu.hide && klu.crew && !pre.online && (!tab || klu_r.card)) klu_hide_tick(osd, 1);      /* online the stock list is the only one with data: never hidden */
     else if (tab && !klu_r.card && klu_r.hid) klu_hide_tick(osd, 0);                   /* Tab: the stock list shows (its Tick kept it current) */
+    /* the stock list's Render: skipped offline exactly when the byte is wanted (Tab card or not), and ONLINE whenever HideOnline=1 and the HUD
+       stands (the owner wants the old HUD gone from online matches too; the new online crew list is not built yet: re\hud_online.md) */
+    InterlockedExchange(&klu_skip_list, klu.hidesrc && (pre.online ? klu.hideonl : (show && klu.hide && klu.crew && (!tab || klu_r.card))));
     klht_tick(osd, have ? &pre : 0, show);                    /* klhud_tags.c: after the hide (it acts only while klu_r.hid says the stock element is hidden by us) */
     if (klu.probe && klu_probe_ready) {
         const float *a = klu_pr.stock, *b = klu_pr.ours, *p = klu_pr.pic; int same = klu_pr.nours > 0 && b[0] == a[0] && b[2] == a[2] && b[4] == a[4] && b[9] == a[9] && a[0] != 0;
@@ -1656,7 +1690,7 @@ static void klu_init(void)
     kluv_early = klu_inii("TraitorEarly", 0, 0, 1);       /* 2026-10-13: 0 = no row / fate shows a bot's planned betrayal (klhud_values.c) */
     klu.tags = klu_inii("Tags", 1, 0, 1); klu.cashshort = klu_inii("CashShort", 1, 0, 1); klu.totalfont = klu_inii("TotalFont", 0, 0, 1);
     klu.draft = klu_inii("Draft", 0, 0, 1);              /* the whole draft: the defaults of Plates, Dials, Weapon, RoundOf (and klhud_popup.c's Popups, LootRing) become 1; a key that is set still wins */
-    klu.wini = klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1); klu.mfill = klu_inii("MoneyFill", 1, 0, 1); klu.vanicon = klu_inii("VanIcon", 1, 0, 1); klu.tablist = klu_inii("TabList", 1, 0, 1); klu.tabcard = klu_inii("TabCard", 0, 0, 1);       /* 2026-10-13: slot 117 is 256 x 32 in BOTH watch bakes (the old 'frame' before 652db0c, 'mfill' after), so the hook cannot tell them apart - MoneyFill=0 keeps the old flat bar on maps baked before 652db0c (the owner's hud_tab_wm set), where 117 would draw an empty outline */       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
+    klu.wini = klu.wstyle = klu_inii("WatchStyle", 0, 0, 1);       /* review MUST 2: default 0 (old extras on the installed maps); set 1 ONLY with maps baked by kl_hud.py --watch 1 */ klu.wseconds = klu_inii("WatchSeconds", 0, 0, 1); klu.wwear = klu_inii("WatchWear", 1, 0, 1); klu.wlast = klu_inii("WatchLast", 1, 0, 1); klu.mfill = klu_inii("MoneyFill", 1, 0, 1); klu.vanicon = klu_inii("VanIcon", 1, 0, 1); klu.tablist = klu_inii("TabList", 1, 0, 1); klu.tabcard = klu_inii("TabCard", 0, 0, 1); klu.hidesrc = klu_inii("HideSrc", 1, 0, 1); klu.hideonl = klu_inii("HideOnline", 1, 0, 1);       /* 2026-10-13: slot 117 is 256 x 32 in BOTH watch bakes (the old 'frame' before 652db0c, 'mfill' after), so the hook cannot tell them apart - MoneyFill=0 keeps the old flat bar on maps baked before 652db0c (the owner's hud_tab_wm set), where 117 would draw an empty outline */       /* review SHOULD 3: blank the stock red digits in the last minute (they would sit on the hands) */
     klu.labelbar = klu_inii("LabelBar", 1, 0, 2); klu.labelslash = klu_inii("LabelSlash", 1, 0, 1);      /* the watch look (re\hud_hook.md 14): the level must be baked with kl_hud.py --watch <the same 0 / 1> */
     klu.dials = klu_inii("Dials", klu.draft, 0, 1);      /* the round watch + the escape dial (needs the level's extra pictures 113 / 114) */
     klu.weapon = klu_inii("Weapon", klu.draft, 0, 1); klwd_init();      /* the weapon dial (klhud_weapon.c; needs 113 / 114 too) */

@@ -4,6 +4,8 @@ Route MainMenu DOWN DOWN RETURN > OnlineMenu DOWN RETURN > SystemLink DOWN DOWN 
 host Ready alone -> 'LOAD F01: online=1 OnlineSet=2 -> page 2, rule DM01', level loaded, 0 asserts 0 faults. Grenade GSP1: PASS but no grenade carried (needs a pickup). QoL2 WatchDry sane.
 Destruction-sound loudness (vehicle explosions, extinguishers, glass) as MP45: agent building C:/kl_build_1024/fxraw_1025 (not installed).
 
+2026-10-25 ~22:10 - HUD ONLINE / OLD HUD (out_hudonline_1025a, not installed, not run): [HUD] HideSrc=1 wraps ZFAPlayerListDisplay Render (slot 2 0x5e60f0, private heap vtable) and skips it while our HUD stands, so Tab/Alt+Tab cannot restore the old list; HideOnline=1 skips it online too (no online crew list exists: Sv/Cl rules records not decoded, re/hud_online.md). Rows hidestock/hidestockonl.
+
 2026-10-25 ~22:10 - SOLO ONLINE HOST WORKS + INSTALLED: SOLO2 live (System Link, host alone, out_solo_1025b_test, SL5.ini) round 1 -> FAStatus/StatusMoney -> round 2, 0 faults.
 Cause: slot 3 of the session manager vtable (0x61a410) is a session END request; 0x80ad60's tail asks for it (word 8) when < 2 humans; Solo=1 drops it for a lone FA host (kllobby.c, 70dbb3197).
 Installed SHIP 2a88a86b + [Lobby] Solo=1, MinPlayers=1 (C:/kl_build_1024/solo_1025/install.py --undo; .before-1025solo). Lobby names set2 installed (rand collage live-checked, not left in).
