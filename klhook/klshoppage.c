@@ -583,7 +583,8 @@ static void klshoppage_tick(int game_thread)
             kspg.lastKey = now;
             klog("shopPage: key pressed in the weapon list, but session state 0x%lx is not a shop state: ignored", sm ? klh_rd32(sm + 0x70) : 0);
         }
-        if (down && !kspg.keyDown && kspg.pre && now - kspg.lastKey > 150) {
+        /* k48d: 500 ms, not 150: K48C (10-25 01:54:45) flipped B then A 320 ms apart on ONE SendInput press (250 ms hold) -> the buy came from set A */
+        if (down && !kspg.keyDown && kspg.pre && now - kspg.lastKey > 500) {
             DWORD pid = 0; HWND f = fgw(); if (f) wtp(f, &pid);
             if (pid == GetCurrentProcessId()) {
                 DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));

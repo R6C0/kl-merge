@@ -310,16 +310,52 @@ static uintptr_t __cdecl klm_beginthreadex(void *sec, unsigned stack, unsigned (
     return klm_real_beginthreadex(sec, stack, fn, arg, flags, id);
 }
 
+static void klm_owners(char *out, int cap)
+{   /* who holds the address space, for the 10 s line: modules / mapped / private split, and the four biggest private allocations (one
+       VirtualAlloc each: a heap segment, a driver buffer, a thread stack, the reserve) with their committed part. Who made one is not known
+       here; the base address is for KLHook_map_*.txt and a dump. */
+    MEMORY_BASIC_INFORMATION mbi; BYTE *p = (BYTE *)0x10000; void *base = 0; SIZE_T image = 0, mapped = 0, commit = 0, reserved = 0, sz = 0, cm = 0;
+    struct { void *base; SIZE_T sz, cm; } top[4] = { 0 }; int i, k, n;
+    for (;;) {
+        int more = p < (BYTE *)0x7ffe0000 && VirtualQuery(p, &mbi, sizeof mbi);
+        if (!more || mbi.State == MEM_FREE || mbi.Type != MEM_PRIVATE || mbi.AllocationBase != base) {   /* the allocation in hand ends */
+            if (base && sz > top[3].sz) {
+                for (i = 0; i < 3 && sz <= top[i].sz; i++) ;
+                for (k = 3; k > i; k--) top[k] = top[k - 1];
+                top[i].base = base; top[i].sz = sz; top[i].cm = cm;
+            }
+            base = 0; sz = cm = 0;
+        }
+        if (!more) break;
+        if (mbi.State != MEM_FREE) {
+            if (mbi.Type == MEM_IMAGE) image += mbi.RegionSize; else if (mbi.Type == MEM_MAPPED) mapped += mbi.RegionSize;
+            else {
+                if (mbi.State == MEM_COMMIT) { commit += mbi.RegionSize; cm += mbi.RegionSize; } else reserved += mbi.RegionSize;
+                base = mbi.AllocationBase; sz += mbi.RegionSize;
+            }
+        }
+        p = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+    }
+    n = _snprintf(out, cap, "modules %.0f MB, mapped %.0f, private committed %.0f, private reserved only %.0f; biggest private:",
+                  image / 1048576.0, mapped / 1048576.0, commit / 1048576.0, reserved / 1048576.0);
+    for (i = 0; i < 4 && top[i].sz && n > 0 && n < cap; i++) {
+        k = _snprintf(out + n, cap - n, " %p %.1f MB (%.1f committed)%s", top[i].base, top[i].sz / 1048576.0, top[i].cm / 1048576.0, top[i].base == klm_reserve ? " = the reserve" : "");
+        if (k < 0) break;   /* truncated */
+        n += k;
+    }
+    out[cap - 1] = 0;
+}
+
 static void klm_tick(void)
 {
-    static DWORD calls, last; static LONG told; DWORD now; SIZE_T largest, total;
+    static DWORD calls, last; static LONG told; DWORD now; SIZE_T largest, total; char who[400];
     if (!klm_on || (calls++ & 63)) return;
     if (klm_stack_mb > 0 && klm_threads != told) { told = klm_threads; if (klm_log) klog("memory: %ld game thread(s) so far started with a %d MB stack instead of 4 MB", told, klm_stack_mb); }
     now = GetTickCount();
     if (klm_log && now - last >= 10000) {             /* K48B: free space fell from 419 MB after the load to 16 MB in round 1; this shows the slope */
-        last = now; klm_free_space(&largest, &total);
-        klog("memory: every 10 s: free address space %.0f MB, largest piece %.1f MB; the reserve holds %d block(s), %.1f of %d MB; refused small requests so far %ld",
-             total / 1048576.0, largest / 1048576.0, klm_n, klm_used / 1048576.0, klm_reserve ? klm_reserve_mb : 0, klm_nulls);
+        last = now; klm_free_space(&largest, &total); klm_owners(who, sizeof who);
+        klog("memory: every 10 s: free address space %.0f MB, largest piece %.1f MB; the reserve holds %d block(s), %.1f of %d MB; refused small requests so far %ld; %s",
+             total / 1048576.0, largest / 1048576.0, klm_n, klm_used / 1048576.0, klm_reserve ? klm_reserve_mb : 0, klm_nulls, who);
     }
 }
 
