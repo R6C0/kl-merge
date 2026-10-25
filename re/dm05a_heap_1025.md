@@ -36,3 +36,15 @@ Static disassembly of kl2.exe only, nothing run. "VERIFIED" = a second agent rep
 3. ReserveMB trim: the 128 MB reserve is the SmallRescue buffer, not idle. Trimming it removes the cushion that turns refusals into survivals; do NOT.
 4. HeapCompact/decommit: no VA gain (decommit keeps reservations). An IAT redirect to a bigger-reserve heap needs GetProcessHeap
    (120 sites), HeapFree (109) and HeapValidate (0x447cc1) routing; the allocator caches the handle at construction, so the wrap must precede ZSysMem's ctor.
+
+## Sawtooth source (workflow w9o172dfz + e8 K49B/K49C, 2026-10-25)
+- K49B census: process heap reserved 245 -> 1108 MB in round 1's first minute; allocated SAWTOOTHS ~550 <-> ~1035 MB every ~20 s; kl2's HeapAlloc
+  import moves only ~53 MB / 10 s (all from 0x4aa067). The rest is NOT kl2's import.
+- VERIFIED static negatives: kl2 imports no Global/Local Alloc/ReAlloc, HeapReAlloc, HeapCreate, Rtl*Heap; GetProcAddress (10 sites) resolves no heap
+  function; msvcr90 9.0.30729.9625 malloc family uses its own HeapCreate'd _crtheap (RVA 0x63a44). MSVCR90+0x590b7 = `_stricmp`; 0x841b60 = by-name
+  scan of all type-0x17 entities (via 0x6124b0, ~30 callers; CPU only). 0x459b20 = ZRenderWintelD3D slot 41 waiting on the render thread event.
+  0x5f985d / 0x607289 = ZLoader_Sequence_Wintel_D3D per-frame update. None allocates.
+- K49C per-module P table (KLHook.log ~293058-294212, 03:54 run): nvd3dum.dll frees ~480 MB per falling window = the sawtooth (NVIDIA D3D9 UMD);
+  devobj.dll + CFGMGR32.dll churn 500-700 MB / 10 s each, alloc == free (device enumeration polled; caller unknown). Only the verifier read
+  the table so far: e8 owns the authoritative reading.
+- Candidate tests: NVIDIA "Threaded optimization" OFF for kl2.exe (owner setting), Look=0 (no ReShade), Medal/overlay off, kl2 frame above nvd3dum allocs.
