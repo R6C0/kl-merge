@@ -101,4 +101,36 @@ static float kldh_giveback(float now, float before, float max, float factor, int
     return nh > now ? nh : now;
 }
 
+/* ---- the PRE-APPLY price (OnlinePreScale), PURE: the rules' damage hook (slot 15 of the FA rules, kl2 0x425320(victim, float *delta, attacker), called by
+   0x6e3400 BEFORE the subtraction) hands over the delta by pointer; for this machine's own knocked-down body the delta is multiplied by Arcade's factor.
+   kldh_pick = which factor applies (SHARED with the give-back fallback, so both paths price a hit the same way); kldh_prescale = the delta to apply. */
+enum { KLDH_R_NONE = 0, KLDH_R_FREE, KLDH_R_COP, KLDH_R_CREW, KLDH_R_COP_FALL, KLDH_R_CREW_FALL };
+/* ds = [D+4] (1 lying, 2 falling, 3 getting up); cls = attacker class (0 = none / a human heister: unscaled as in Arcade, 1 = police / guard / human cop, 2 = AI heister);
+   hurt = the ini's Vulnerable; ofree / ofac = OnlineFreeFall / OnlineFactors. -> the factor (1 = the hit stays at the game's price); *rule = KLDH_R_* */
+static float kldh_pick(int ds, int cls, int hurt, int ofree, int ofac, float cop, float crew, int *rule)
+{
+    *rule = KLDH_R_NONE;
+    if (ds == 2 && ofree && !hurt) { *rule = KLDH_R_FREE; return 0.0f; }
+    if (ofac && cls == 1) { *rule = ds == 2 ? KLDH_R_COP_FALL : KLDH_R_COP; return cop; }
+    if (ofac && cls == 2) { *rule = ds == 2 ? KLDH_R_CREW_FALL : KLDH_R_CREW; return crew; }
+    return 1.0f;
+}
+
+/* delta = the health change the game is about to apply (negative = damage). A heal (>= 0), NaN, a factor of 1 or more, below 0 or not a number: unchanged.
+   Otherwise delta x factor (never more damage than the game priced, never a heal). */
+static float kldh_prescale(float delta, float factor)
+{
+    if (!(delta < 0.0f) || delta < -1e9f) return delta;
+    if (!(factor >= 0.0f) || factor >= 0.999f) return delta;
+    return delta * factor;
+}
+
+/* Does the after-the-hit give-back stay out of THIS health drop? Only when slot 15 priced / considered a hit of this machine's OWN downed body a moment ago
+   (t_hit = GetTickCount of that hit, 0 = none seen in this round). A slot-15 call for anybody else's body, or a round with no own-body hit yet, must NOT keep it out:
+   a hit applied by a path slot 15 never sees on this machine would then go unpriced. window_ms covers the tick lagging the hit by a frame or two. */
+static int kldh_giveback_stays_out(int pre, DWORD t_hit, DWORD now, DWORD window_ms)
+{
+    return pre && t_hit != 0 && (DWORD)(now - t_hit) <= window_ms;
+}
+
 #endif /* KLDOWN_HOLD_H */
