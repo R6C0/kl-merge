@@ -66,14 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~04:30 - CamPool LIVE PASS (peer COVER6 on 1026h: 2 direct restarts, cameras given back, no assert); 1026i adds per-tick health. SP1d PASS (cop snap 2570 -> 126).
+BotFill money from the game's registry (386babab6), BO5 queued. N9_DM01b 6/9 (menu keys lost under starvation) -> N9_*c requeued with slower menus + 900 s waitpeers.
+
 2026-10-26 ~04:15 - CamPool 1026g: every tick; a direct 0x19->0x16 restart gives the players' cameras back before the re-take (fixes the COVER6 pool-of-2 assert 0x60a5bf, not run live).
 out_all_1026g_test 07fc52ff / SHIP 091d7bca with kl-merge-ce for COVER6; BO3 PASS, BO4 next.
 
 2026-10-26 ~03:45 - COVER6 crash = camera pool leak: each MissionFailedReload restart (0x19->0x16->0x18) takes a camera without release, pool 2 on DM05A -> assert 0x60a5bf on the 2nd; fix proposed to c9.
 DM02 solo patch (re-arm/auto) install requeued after a backup-name refusal (99dc7e532); DM05A cover audit 25/93 bad -> workflow restaging all cover maps with floor+nav filters. BG1 PASS.
-
-2026-10-26 ~03:30 - BO1 PASS (7 AI heisters online, both peers); BO2 tactics gave 0 orders (scan cap, fixed 6c031b451, BO3 queued).
-BotGate (.bots.zip picked by host OnlineHost) BG1 queued; cop sync PuppetMode=2 snap (0f0560c56) SP1d queued; N9_DM01b, SV, B2-B5, N2 all maps follow.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
