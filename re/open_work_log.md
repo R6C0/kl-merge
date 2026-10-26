@@ -1,3 +1,6 @@
+2026-10-26 ~04:50 - Sync ParkSkip (372d4145a): parked cops (node bit 10) skipped, snapped on wake; SP1e queued. BO5: registry money works (orders + 1 grab), but 5/6 walks given up at 25 s -> progress-based stall (c2dedb2d7, out_all_1026k_test faa961b6 / SHIP 3cda6364), BO6 queued.
+Open: all 7 online bots dead in ~90 s, van never spawns (workflow wg4n9od9h, Arcade reference). Peer: DM02_liftE0 + MF_01_MercDead popup route (0x6d2500) under test.
+
 2026-10-26 ~04:30 - [CAMPOOL] LIVE PASS: peer COVER6 on 1026h (DM05A, 2 direct 0x19->0x16 restarts, releases 1+2, asserts 0, faults 0); 1026i (80c2c56e1) samples health per tick, logs it at the restart. TEST 55e6b71b / SHIP 4b3f2cb5.
 SP1d PASS: PuppetMode=2 snap took the worst cop 2570 -> 125.8 in ~50 s (14 snaps); leftover 78-126 off are cops whose node is off (flag bit 10), snap refuses them. BotFill money now read from the game's money registry (386babab6, BO4 saw 0 in the entity table); BO5 queued. N9_DM01b 6/9 in round, 0 faults: inst5/8/9 lost menu keys while starved (landed on ShowProfile / SystemLinkCreate / QuitGameMenu), relaunches too late, host's waitpeers gave up at 420 s. Requeued N9_DM01c/DD01c/DM09c on 1026i with maps9_1026c (joiner waits 3.5 s, menu waits 40 s, host waitpeers 900 s, gap2 45, hang 150 s).
 

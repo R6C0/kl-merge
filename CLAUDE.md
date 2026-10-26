@@ -66,14 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~04:50 - Sync ParkSkip (372d4145a): parked cops (node bit 10) skipped, snapped on wake; SP1e queued. BO5: registry money works (orders + 1 grab), but 5/6 walks given up at 25 s -> progress-based stall (c2dedb2d7, out_all_1026k_test faa961b6 / SHIP 3cda6364), BO6 queued.
+Open: all 7 online bots dead in ~90 s, van never spawns (workflow wg4n9od9h, Arcade reference). Peer: DM02_liftE0 + MF_01_MercDead popup route (0x6d2500) under test.
+
 2026-10-26 ~04:30 - CamPool LIVE PASS (peer COVER6 on 1026h: 2 direct restarts, cameras given back, no assert); 1026i adds per-tick health. SP1d PASS (cop snap 2570 -> 126).
 BotFill money from the game's registry (386babab6), BO5 queued. N9_DM01b 6/9 (menu keys lost under starvation) -> N9_*c requeued with slower menus + 900 s waitpeers.
 
 2026-10-26 ~04:15 - CamPool 1026g: every tick; a direct 0x19->0x16 restart gives the players' cameras back before the re-take (fixes the COVER6 pool-of-2 assert 0x60a5bf, not run live).
 out_all_1026g_test 07fc52ff / SHIP 091d7bca with kl-merge-ce for COVER6; BO3 PASS, BO4 next.
-
-2026-10-26 ~03:45 - COVER6 crash = camera pool leak: each MissionFailedReload restart (0x19->0x16->0x18) takes a camera without release, pool 2 on DM05A -> assert 0x60a5bf on the 2nd; fix proposed to c9.
-DM02 solo patch (re-arm/auto) install requeued after a backup-name refusal (99dc7e532); DM05A cover audit 25/93 bad -> workflow restaging all cover maps with floor+nav filters. BG1 PASS.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
