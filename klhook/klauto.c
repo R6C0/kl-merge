@@ -1170,14 +1170,46 @@ static int kla_script_active(void) { return kla_pc < kla_ncmd; }
    does its reads there too; there is no deferral to copy). The body to move is the local player's ZFFActor [[0xdd265c]+0x4cf0]
    (klcensor.c; klt_refuse() wants vtable ZFFActor, which the ZFFPlayer objects in kla_pl[] do not have), the feet logged are the
    ZFFPlayer's +0x460 as the other ops read them. Every refusal is logged and the script goes on. */
+/* 2026-10-26 (run DM02_lift: [[0xdd265c]+0x4cf0] read 0 in a solo Arcade round, pos/goto still found "me #15"). The local ZFFActor is now
+   found as pos/goto find the player: kla_local_player() -> the ZFFPlayer, its team [pl+0x54] and feet [pl+0x460]; then the entity table is
+   walked for the ZFFActor (vtable 0xbb3bac) whose own feet [actor+0x460] are within 5 units (GUESS; exactly one or refuse, see review note below). GUESS: that the
+   player's body is a separate ZFFActor standing at the player's feet (the crew code treats [rec+4] actors and players as one base class);
+   nothing in re/ says how a ZFFPlayer points at its actor. [gd+0x4cf0] stays first, as the fallback order's primary
+   when it is non-zero (it is the pointer 0x6fd7c0 compares against). How it was found goes to *how. */
+static DWORD kla_find_actor(const char **how)
+{
+    DWORD gd = kla_exe_ok ? kla_rd32((DWORD_PTR)VA(0xdd265c)) : 0, a = 0, p, tab, i, blk[64 * 32], best = 0;
+    float pf[3], win = 5.0f, win2 = 25.0f; int me, ncand = 0, stop = 0;
+    *how = "none";
+    if (gd && (a = kla_rd32(gd + 0x4cf0)) != 0) { *how = "gamedata+0x4cf0"; return a; }
+    me = kla_local_player();
+    if (me < 0 || !kla_player_pos(me, pf)) { *how = "no local ZFFPlayer"; return 0; }
+    if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) { *how = "entity table not there"; return 0; }
+    for (i = 0; i < 0x10000 && !stop; i += 64) {
+        DWORD k; int ok = klh_rd(tab + i * 0x80, blk, sizeof blk);   /* a block crossing the table's end: read the slots singly */
+        for (k = 0; k < 64; k++) {
+            DWORD o; float f[3], dx, dy, dz;
+            if (ok) o = blk[k * 32 + 0x60 / 4]; else if (!klh_rd(tab + (i + k) * 0x80 + 0x60, &o, 4)) { stop = 1; break; }
+            if (o < 0x10000 || klh_avt(o) != 0x00bb3bacu || !klh_rd(o + 0x460, f, 12)) continue;
+            dx = f[0] - pf[0]; dy = f[1] - pf[1]; dz = f[2] - pf[2];
+            if (dx * dx + dy * dy + dz * dz < win2) { ncand++; best = o; }
+        }
+    }
+    /* Review 2026-10-26: the human's body may be the ZFFPlayer itself, and a bot/cop ZFFActor can stand at a spawn clump, so a nearest-pick
+       could move the wrong body. No guess is acted on: exactly ONE ZFFActor inside the window or a refusal (count logged). */
+    if (ncand != 1) { static char msg[96]; sprintf(msg, "%d ZFFActor(s) within %.0f units of the local player (need exactly 1)", ncand, win); *how = msg; return 0; }
+    *how = "the only ZFFActor near the local ZFFPlayer's feet (GUESS: it is the player's body)";
+    return best;
+}
+
 static void kla_tele(int line, const float to[3])
 {
-    float from[3] = { 0, 0, 0 }, now[3] = { 0, 0, 0 }; DWORD gd = 0, actor = 0; const char *why = 0; int fault = 0, hn = 0, hf = 0;
+    float from[3] = { 0, 0, 0 }, now[3] = { 0, 0, 0 }; DWORD actor = 0; const char *why = 0, *how = "none"; int fault = 0, hn = 0, hf = 0;
     /* TEST only: no online/level guard - online this moves the local body unilaterally and would desync (use it solo). */
     if (!kla_exe_ok) why = "kl2.exe is not the known build";
     else if (!klb_finite(to[0]) || !klb_finite(to[1]) || !klb_finite(to[2])) why = "the target is not a finite place";
     else if (fabs(to[0]) > 1e5f || fabs(to[1]) > 1e5f || fabs(to[2]) > 1e5f) why = "the target is out of range (|coord| > 100000; GUESS of the level extent)";
-    else if (!(gd = kla_rd32((DWORD_PTR)VA(0xdd265c))) || !(actor = kla_rd32(gd + 0x4cf0))) why = "no local actor at [gamedata+0x4cf0]";
+    else if (!(actor = kla_find_actor(&how))) why = how;
     else if (!klt_tele_known()) why = "0x62a900 is not the routine this build knows (klt_tele_known)";
     else why = klt_refuse(actor);
     /* feet only for the log, read from the actor as klt_move does (ASSUMPTION +0x460); unreadable = unknown, never a refusal */
@@ -1192,8 +1224,8 @@ static void kla_tele(int line, const float to[3])
                      from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
     else if (fault) kla_out(1, "script %d: tele FAULTED in 0x62a900 (caught): from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx", line,
                             from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
-    else kla_out(1, "script %d: tele: from%s (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now-same-poll (%.0f, %.0f, %.0f; may lag one tick)%s (actor %08lx)", line,
-                 hf ? "" : "?", from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], hn ? "" : " [feet unreadable]", (unsigned long)actor);
+    else kla_out(1, "script %d: tele: from%s (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now-same-poll (%.0f, %.0f, %.0f; may lag one tick)%s (actor %08lx via %s)", line,
+                 hf ? "" : "?", from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], hn ? "" : " [feet unreadable]", (unsigned long)actor, how);
 }
 
 /* ---- script op 'ents <substring> [maxN]' (TEST only, READ ONLY). The walk of klsync.c klsy_walk / klcensus.c: [[[KLE_ENTS]+0xc]+0xc] = the
@@ -1203,15 +1235,17 @@ static void kla_tele(int line, const float to[3])
    and kle_human, 0x7263fa); printed as 'en?' = 1 when clear, with the raw dword. */
 static void kla_ents(int line, const char *sub, int maxn)
 {
-    DWORD p, tab, i, blk[64 * 32]; int shown = 0, seen = 0, scanned = 0, unread = 0;
+    DWORD p, tab, i, blk[64 * 32]; int shown = 0, seen = 0, scanned = 0, unread = 0; DWORD endslot = 0x10000;
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) { kla_out(1, "script %d: ents '%s': the entity table is not there yet", line, sub); return; }
     for (i = 0; i < 0x10000; i += 64) {
         DWORD k;
-        int blk_ok = klh_rd(tab + i * 0x80, blk, sizeof blk);   /* a block that crosses the table's end: read the slots singly */
+        int blk_ok;
+        if (unread) break;
+        blk_ok = klh_rd(tab + i * 0x80, blk, sizeof blk);   /* a block that crosses the table's end: read the slots singly */
         for (k = 0; k < 64; k++) {
             DWORD o, node, ref = 0, fl = 0; char nm[96], cls[64]; float pos[3] = { 0, 0, 0 }; int pv, rv, fv;
             if (blk_ok) o = blk[k * 32 + 0x60 / 4];
-            else if (!klh_rd(tab + (i + k) * 0x80 + 0x60, &o, 4)) { unread++; continue; }
+            else if (!klh_rd(tab + (i + k) * 0x80 + 0x60, &o, 4)) { if (!unread) endslot = i + k; unread = 1; break; }   /* the table's end: stop (the old code counted every later slot up to 0x10000 as 'unread') */
             if (o < 0x10000|| klh_rd32(o) < 0x10000) continue;
             scanned++;
             if (!(node = klh_rd32(o + 4)) || !klh_rdstr(klh_rd32(node + 0x6c), nm, sizeof nm) || !kla_contains(nm, sub)) continue;
@@ -1227,8 +1261,8 @@ static void kla_ents(int line, const char *sub, int maxn)
                     fv ? (fl >> 10 & 1 ? "0" : "1") : "?", (unsigned long)fl, pv ? "" : "none ", pos[0], pos[1], pos[2]);
         }
     }
-    kla_out(1, "script %d: ents '%s': %d matched of %d entities, %d shown (max %d)%s", line, sub, seen, scanned, shown, maxn, unread ? " [some slots unreadable - table end]" : "");
-    if (unread) kla_out(1, "script %d: ents: %d slots could not be read (past the table's end)", line, unread);
+    kla_out(1, "script %d: ents '%s': %d matched of %d entities (slots 0..%lu read), %d shown (max %d)", line, sub, seen, scanned, (unsigned long)endslot, shown, maxn);
+    if (unread) kla_out(1, "script %d: ents: memory ends at slot %lu (the table's mapped end; later slots not walked)", line, (unsigned long)endslot);
 }
 
 static int kla_key(const char *s)
