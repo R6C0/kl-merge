@@ -66,16 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~15:05 - [scheduled] UCC P2 BUILT, NOT RUN: klhook/klucc_aim.c `[Ucc] PoliceAim=1` - in UCC rounds the AI gates the UCC on rules slot 188
+(`[rules+0x284]` bUCCAIHostile: 0 nobody's target / police friend, 1 everyone's enemy), never on +0x2723; the module answers 1 to POLICE askers only (private
+rules vtable + naked thunk reading the caller's registers). klua_test 27/27. re/ucc_police_aim.md: bench 6; OWNER question 5 (stock exposes a UCC who kills a cop).
+
 2026-10-26 ~12:40 - OWNER lifted the 12:07 "stop all tests": "continue til 5PM again". Bench queue (lan_1025/queue.py) and the live rotation restarted (shared LIVE.lock). Next: BOS_DD02x2 (husk-skip exit finder + OnlineExitDy), UCC2 (3 instances), BOS_DD03..09.
 
 2026-10-26 ~10:05 - OWNER REQUEST (via cloud session kl-merge-2d): Undercover Cop + Cops and Robbers: cop SYNC there, REBALANCE both, UCC harder to spot (ideas from Among Us / Death Note: Killer Within), C&R: each human cop commands a squad of 4 AI cops. Authorised now. Brief + facts + ordered items: re/ucc_cnr_owner_request.md. Key fact: UCC/C&R are game type 4 (sub-mode [0x168e59c] 1/2), so klsync already arms there, never benched: first step is a UCC then C&R sync bench on stock DD01. 'luvsics AI' = collaborator luvsic's crew-order AI (third_party/anp/loader/squad.inc, kl2's own ZSquadControl Recruit/Follow/Attack): the base for C&R squads, see the brief.
 TO BOTH RUNNING VS CODE SESSIONS (owner is away and cannot type to you; the cloud session cannot reach your chats): read re/ucc_cnr_owner_request.md item 4, then ACK with a commit whose subject starts 'ACK ucc-cnr:' naming your session and which items you take (the cloud session watches for it).
-
-2026-10-26 ~15:15 - [cloud] OWNER answered the UCC questions (re/ucc_design.md OWNER DECISIONS). All built, default OFF, NOT run live:
-[Ucc] Hide (reveal key Insert, bounty 200k/400k), DownOnly, Pings/Accuse (F5); [Sabotage] VanHold (J); shared channel klnetchan.c
-(System Link only). Needs a 2-instance System Link UCC bench on DD01: steps in re/ucc_design.md 'P6 BUILT' and the docs it names.
-
-2026-10-26 ~12:50 - [kl-merge-ce] Cover on 8 maps: best valid runs DM07 8/8, DD10 8/8, DM03A 7/8, DM06 7/8, DM06B 6/8, DM01B 6/8, DM11B 5/6, DM09 3/8. The same boxes fail every run (DM06 M_K6_22, DM06B H_K6_47, DM01B H_K6_10/13): offline diagnosis running. DM01/02/03 cover installs + COVER16 runs queued in live_1026 (12:45).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

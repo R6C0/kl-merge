@@ -24,6 +24,12 @@ a heister who shoots him gets `FA_NoFriendlyFireUCC` and is never marked traitor
 Build: keep `+0x2723 = 0` on the UCC's actor on every peer while hidden (the fed-kit `Hunt` byte pattern), restore at
 reveal; route `FA_NoFriendlyFireUCC` to `FA_NoFriendlyFire` (.LOC, kllocname.c style). Cost M. Risk medium: he then dies to
 police like a heister (wanted). Private 6..12: yes; the host's byte alone fixes AI aim, AI runs on the host.
+CORRECTED 2026-10-26 (re/ucc_police_aim.md): in a UCC round the AI never reads `+0x2723` for him. All three soldier tests
+(target scoring 0x882470, fire-line friends 0x5706a0, fire cone 0x51d6c0) gate the `+0x2729` player on rules slot 188 =
+`[rules+0x284]` (bUCCAIHostile): 0 = nobody's target and a police friend, 1 = everyone's enemy (the crew bots too). BUILT:
+klhook/klucc_aim.c `[Ucc] PoliceAim=1` answers slot 188 = 1 to POLICE askers only, per call (private rules vtable, return
+address + caller registers), not run live. Still stock: a hidden UCC who shoots a police NPC dead is exposed by the game
+(Sv slot 128 -> 0x418b20(1,1)): owner question in that doc, section 5.
 
 ### P3 Kill cooldown, silent takedown, hidden kill feed
 Player: one kill per N s; a close-combat kill makes no pop-up; the kill line never names him while hidden. Today: S4

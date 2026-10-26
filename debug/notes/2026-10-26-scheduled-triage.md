@@ -46,3 +46,26 @@ and TEST; `klcs_test.c` builds (logic.h unchanged; not run - no Wine in this con
 Owner / local sessions: nothing new to install. When the C&R bench of re/cop_squads.md section 7 runs, read the
 `recruit ... listed %d insquad %d (members %lu)` lines and, with Log=2, the `table entry %d: policeman player ... used %d
 owner word %08lx` lines (which of the two marks the human cops carry).
+
+---
+
+# 2026-10-26 scheduled check-in, second run (cloud, 14:48-15:10 UTC): PC busy (game running), no new crash; UCC P2 built
+
+Folders connected on request (read-only use). The PC was BUSY: `KLHook.result` `state=RUNNING pid=41656 scene=F04_Main
+loads=2 asserts=0 faults=0 frames=15989` (a bench round in progress, dinput8.dll / KLHook.ini written 14:47 UTC, the log
+tail a clean HUD / stall-probe stream at 14:49). Nothing launched, installed, staged into the game or touched on screen.
+
+## Dumps
+
+Newest hook dump `KLHook_1.dmp` 08:11 UTC and game dump `kl2_490_crash_2026_10_25T19_18_39` are older than the last log
+note and already written up. Nothing to triage.
+
+## Offline piece: Undercover Cop P2 (police AI vs the hidden UCC)
+
+kl2.exe (sha1 9d99e01d...) staged read-only and read with debug/kl.py + capstone (a byte-pattern scan for displacement
+reads plus function listings). Finding and build: `re/ucc_police_aim.md`, `klhook/klucc_aim.c`, `klucc_aim_logic.h`,
+`klua_test.c` (27/27 with gcc and MinGW), `tools/run_harness_linux.sh --check-hook` 0 errors (MinGW installed here). Not
+compiled with MSVC, not run.
+
+Owner / local sessions: nothing to install. Decide re/ucc_police_aim.md section 5 (keep the stock cop-killer exposure as
+"caught in the act", or swallow it while hidden); the bench of section 6 needs two System Link instances.
