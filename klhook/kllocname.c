@@ -121,6 +121,16 @@ static const char *__fastcall kllnm_lookup(void *self, void *edx, const char *fo
     vt = klh_rd32((DWORD_PTR)self);
     for (i = 0; i < kllnm_ntab; i++) if (vt == (DWORD)(DWORD_PTR)&kllnm_tab[i].vt[1]) { orig = (KLLNM_LOOKUP)(DWORD_PTR)kllnm_tab[i].orig; break; }
     if (!orig) orig = (KLLNM_LOOKUP)(DWORD_PTR)kllnm_tab[0].orig;         /* cannot happen: only objects given a copy reach this function */
+    /* [Ucc] Feed (klucchide.c 2f): while an Undercover Cop is hidden, FA_Killed_UCC is looked up as FA_Killed_Merc and FA_NoFriendlyFireUCC as
+       FA_NoFriendlyFire (klucc_route_key). GUESS: the kill line's full-path key (0x463cd9, shown through 0x694760 / 0x468430) reaches this
+       lookup like the friendly-fire one (0x6ffed9 calls it directly); the first hits are logged to prove it */
+    if (klucc_feed_on && key && klucc_any_hidden(&klucc_st)) {
+        static LONG told; char kk[96], alt[100]; const char *to;
+        if (klh_rdstr((DWORD_PTR)key, kk, sizeof kk) >= 13 && (to = klucc_route_key(kk, alt, sizeof alt)) != 0) {
+            if (InterlockedIncrement(&told) <= 6) klog("ucchide: feed: LOC key '%s' looked up as '%s' (a UCC is hidden)", kk, to);
+            return orig(self, 0, folder, to, third);
+        }
+    }
     /* cheap reject first: the key is the game's own C string (read with the same care as klchar.c's option names) */
     if (key && kllnm_on && (klen = klh_rdstr((DWORD_PTR)key, k, sizeof k)) >= 7) {
         f[0] = 0; if (folder) klh_rdstr((DWORD_PTR)folder, f, sizeof f);
@@ -170,7 +180,7 @@ static void kllnm_tick(int game_thread)
 {
     static DWORD last; static LONG told_bad, told_ok;
     DWORD now = GetTickCount(), sys, db, loc, vt, s0 = 0, nv; int i, n = 0, t;
-    if (!(kllnm_on || kllnm_hk) || !game_thread || !klh_exe_ok || now - last < 100) return;       /* the object's first dword is written from the game's own thread only */
+    if (!(kllnm_on || kllnm_hk || klucc_feed_on) || !game_thread || !klh_exe_ok || now - last < 100) return;       /* the object's first dword is written from the game's own thread only */
     last = now;
     if (!(sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) || !(db = klh_rd32(sys + 0xac)) || !(loc = klh_rd32(db + 0x94)) || !(vt = klh_rd32(loc))) return;
     for (i = 0; i < kllnm_ntab; i++) if (vt == (DWORD)(DWORD_PTR)&kllnm_tab[i].vt[1]) return;       /* already ours */

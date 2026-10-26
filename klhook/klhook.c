@@ -695,6 +695,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klbalance.c"
 #include "klgrudge.c"
 #include "klhud_names.c"                              /* the crew list's character names + initials as tags ([HUD] Names / NameTags) */
+#include "klucchide_logic.h"                          /* klucchide_logic.h: [Ucc] Hide - the Undercover Cop's hidden state + pure rules (klucchide.c fills it); BEFORE klhud.c / kllocname.c, which read it */
 #include "klhud_values.c"                             /* the HUD's readers (reads only): BEFORE klhud.c, AFTER klbot.c */
 #include "klhud.c"                                    /* includes klhud_weapon.c inside itself */
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
@@ -762,6 +763,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klsync.c"                                    /* klsync.c: [Sync] read-only probe + host list compare of actors / world objects per peer (off unless set); AFTER klcensus.c, klcharonline.c */
 #include "klnetchan.c"                                 /* klnetchan.c: [NetChan] the hook's shared peer message channel (UDP 27416 + Steam member data; idle unless a module wants it); AFTER klmm.c, klslot.c */
 #include "klucc.c"                                     /* klucc.c: [Ucc] Undercover Cop suspicion pings / accuse key (off unless Pings=1 or Accuse=1); AFTER klnetchan.c, klcharonline.c, klhud_popup.c */
+#include "klucchide.c"                                 /* klucchide.c: [Ucc] Hide - the UCC stays hidden until his reveal key (off unless Hide=1); AFTER klucc.c, klucc_down.c, klnetchan.c, klroundkeep.c, klcharonline.c, klhud.c */
 #ifdef KLHOOK_TEST
 #include "klauto.c"
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
@@ -1223,6 +1225,7 @@ static void klh_tick(int game_thread)
     klst_tick(game_thread);                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
     klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
     klud_tick(game_thread);                           /* klucc_down.c: [Ucc] DownOnly (off unless set; game thread only) */
+    klucc_tick(game_thread);                          /* klucchide.c: [Ucc] Hide (off unless set; game thread only); AFTER klud_tick and kllo_tick (their rules vtable copies go first) */
     klrigid_tick(game_thread);                        /* klrigid.c: [Rigid] 10 s summary line (Log=1) */
     klshoppage_tick(game_thread);                     /* klshoppage.c: page II of the weapon shop (off unless [ShopPage] Enable=1) */
     klshop_tick(game_thread);                         /* klshop.c: [Shop] Swap= a shop row hands over another gun, Arcade only (off unless Enable=1) */
@@ -1664,6 +1667,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klco_init();                                      /* klcharonline.c: after klc_init (it reads the choice) */
     klsy_init();                                      /* klsync.c: reads [Sync] */
     kluc_init();                                      /* klucc.c: reads [Ucc]; asks klnetchan.c for the channel when on */
+    klucc_init();                                     /* klucchide.c: reads [Ucc] Hide; asks klnetchan.c for the channel when on */
     kllnm_init();                                     /* kllocname.c: after kls_init (it reads the rule table) */
 #ifdef KLHOOK_TEST
     kla_init(inst);

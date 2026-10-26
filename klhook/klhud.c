@@ -1192,7 +1192,7 @@ static int klu_compose(int *state_ok)
                 int kind;
                 if (!s.on_used[k]) continue;
                 nu++; tot += s.on_money[k];
-                kind = klu_online_kind(s.on_flags[k], k == loc);
+                kind = klu_online_kind(klucc_hud_flags(s.on_flags[k], (int)loc, k), k == loc);     /* [Ucc] Rows (klucchide_logic.h): a hidden UCC is crew to a heister viewer */
                 if (kind != KLUV_K_DEAD && kind != KLUV_K_ESCAPED) na++;
                 if (k == loc) { locst = kind; lloot = s.on_loot[k]; lrew = s.on_rew[k]; }
                 if (rows + (k != loc && loc_pend) >= klu.rows) continue;     /* the local player's row is reserved: a high slot (a client's own index) is never the one cut */
