@@ -15,6 +15,7 @@ FWD = re.compile(r'^#define (KL[A-Z]*_FWD)\(n\) .*$', re.M)
 THUNK = re.compile(r'^#define KVO_THUNK\(n\) .*$', re.M)          # klvoice.c: naked thunks kvo_t<n>
 ASMBLK = re.compile(r'__asm\s*\{[^}]*\}')                      # multi-line __asm { ... } block (no braces inside)
 ASM = re.compile(r'^(\s*)__asm\s+[a-z]+(?:\s+[^\n]*)?$', re.M)
+ASM_MACRO = re.compile(r'^(#define \w+\(\w*\))\s+.*__asm.*$', re.M)   # a macro whose body is a run of __asm statements (klbotdeath.c)
 TRY = re.compile(r'__try\s*\{')
 EXC = re.compile(r'__except\s*\(')
 
@@ -25,6 +26,7 @@ def prep(path):
                 % (m.group(1), {'KLX_FWD': 'klx_fwd', 'KLMM_FWD': 'klmm_fwd', 'KLBLD_FWD': 'klbld_fwd'}.get(m.group(1), m.group(1).lower())), s)
     s = THUNK.sub('#define KVO_THUNK(n) static void kvo_t##n(void) { }   /* GCC TYPE CHECK ONLY */', s)
     s = ASMBLK.sub(';', s)
+    s = ASM_MACRO.sub(lambda m: m.group(1) + ' ;   /* GCC TYPE CHECK ONLY */', s)
     s = ASM.sub(lambda m: m.group(1) + ';', s)
     s = s.replace('GetExceptionInformation()', '((EXCEPTION_POINTERS *)0)')
     s = TRY.sub('if (1) {', s)
