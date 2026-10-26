@@ -134,6 +134,25 @@ against the wall (the gate measures his node, not the keys): **the rerun with th
 | prompt | 0x58f8e0 -> bit 0x10 of [player+0x2d60] | in cover, movement kind 3, the box not high, and 0x7a8480 says yes |
 | input | 0x44f260 at 0x44fc10 | bit 0x10, the stick INTO the cover, the cover key -> `0x6fd880(side, left)` |
 
+### 1.1b Side flags and the usable test (decoded 2026-10-26, workflow wrwx4xpto; COVER12 live data)
+
+- **0x440de0, AUTO, per side and end.**
+  - **0x10:** face length under 69 (0xb6eeb0).
+  - **0x8:** set on both ends when box +0xa4 != 0; nothing else is computed then.
+  - **0x2, no floor beside the end** (0x550360): the sample is the end +-30 along the edge and 70 out (vector roles GUESS); ground at y+25 must be within 150 vertically and 50 horizontally. If both ends fail, the top gets 0x2 too.
+  - **0x1, obstruction** (0x64db40): an overlap query, mask 0x200000, group 0x1b, extent 40, height 60 (130 on a high box).
+  - **Top:** 0x1 on every high box, on a failed ray 0x57dcb0, or when the half height is above 120; 0x400 on a high box when the face is shorter than 210 (0xb49e98) and an end failed.
+  - **Modifier states** (`[mod+0xc+(side*3+part)*4]`) are ORed in after the AUTO pass. ON gives 0x40 on that part; vault states give 0x800 / 0x1000; OFF gives 0x80.
+- **0x653270, the side is usable when ANY part passes.**
+  - An end passes iff `!(f&4) && !(f&0x2200) && ((f&~0x1800)==0 || f&0x40)`.
+  - The top passes on the same test with 0x200 in place of 0x2200.
+  - So one clean end is enough. 0x1 or 0x2 at both ends (3/3/0x403) means no cover, unless 0x40 (ON) is set.
+  - 0x7dfe80 is the same test, per part, used by the scoring.
+- **Live checks.**
+  - Stock CoverBoxH_Right_01's front face reads 0/0/0x1 and gives cover.
+  - Our wall-backed K6_52's far face read 3/3/0x403 and gave no cover; its end read 3/0/0x401 and gave cover.
+  - The fix (f0db5c7ca, toggle COVERON) authors a PlayerCoverModifier ON on the built-for face's two end parts.
+
 ### 1.2 The vault test, 0x7a8480 (read; the first lines re-read here)
 
 ```
