@@ -137,7 +137,7 @@ static void klbf_init(void)
     klbf_ot_way = GetPrivateProfileIntA("BotFill", "OnlineWaypoints", 1, klh_ini) != 0;      /* (recommended on) BOS_DD02: 7 bots stalled 139-166 m short of the exit trigger; a [BotFillWay_<SLOT>] route walks them round it */
     if (klbf_ot) klog("botfill: OnlineTactics waypoints: OnlineWaypoints=%d (recommended on; needs a [BotFillWay_<SLOT>] section)", klbf_ot_way);
     klbf_ot_ramp = GetPrivateProfileIntA("BotFill", "OnlineRampFire", 1, klh_ini) != 0;      /* (recommended on) DD02: the ramp trigger never fires online because bots are not counted */
-    klbf_ot_rampdry = GetPrivateProfileIntA("BotFill", "OnlineRampDry", 1, klh_ini) != 0;      /* default 1: log only until proven live */
+    klbf_ot_rampdry = GetPrivateProfileIntA("BotFill", "OnlineRampDry", 0, klh_ini) != 0;      /* default 0 since BOS_DD08r (F08 TriggerBox_Guards fired live, 7/7 boarded); only maps with a [BotFillRamp_<SLOT>] section fire */
     if (klbf_ot) klog("botfill: ramp: OnlineRampFire=%d (recommended on), OnlineRampDry=%d (log only; needs a [BotFillRamp_<SLOT>] section)", klbf_ot_ramp, klbf_ot_rampdry);
     klbf_ot_door = GetPrivateProfileIntA("BotFill", "OnlineSkipDoorStacks", 1, klh_ini) != 0;      /* (recommended on) BOS1: DD01's 58 vault cases sit behind kick doors; ordered straight at them the bots stalled and took 0 */
     if (klbf_ot) klog("botfill: OnlineTactics BOS1: OnlineSkipDoorStacks=%d (recommended on)", klbf_ot_door);
@@ -218,7 +218,7 @@ static int klbf_way_start(const float p[3], const float exitp[3])
     return klbf_way_n;
 }
 
-/* OnlineRampFire (recommended on; OnlineRampDry=1 default = log only until proven live). 2026-10-26, stock DD02 (slot F02): TriggerBox_make_the_ramp (node 15776, one-shot, centre (3,5846,-10822),
+/* OnlineRampFire (recommended on; OnlineRampDry=0 default since BOS_DD08r proved the fire live on F08). 2026-10-26, stock DD02 (slot F02): TriggerBox_make_the_ramp (node 15776, one-shot, centre (3,5846,-10822),
    half (2400,1200,10809)) builds the ramp when a COUNTED player is inside; online bots are not counted (rule 0x7f6850 false online), so it never fires unless a human goes there. In Arcade the first
    bot above y 4646 fires it. Here the host does what Arcade's rule would: when an online bot stands inside the box, call the trigger's fire routine 0x45f5d0 (ZTriggerBox vtable 0xbc232c slot 34,
    thiscall, 0 stack args, exactly klclubholster.c) ONCE. Section [BotFillRamp_<SLOT>]: Name (substring, default make_the_ramp), Centre "x y z", Half "x y z". No section = nothing happens (logged once).
