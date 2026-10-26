@@ -189,6 +189,19 @@ static void klbf_way_load(void)
         for (i = 0; i < klbf_way_n; i++) klog("botfill: tactics: OnlineWaypoints: leg %d = (%.0f, %.0f, %.0f)", i + 1, klbf_way_p[i][0], klbf_way_p[i][1], klbf_way_p[i][2]);
     } else klog("botfill: tactics: OnlineWaypoints: no [%s] section for this level: exit walk unchanged", klbf_way_sec);
 }
+/* first leg still AHEAD of a bot at p (BOS_DD02c: after a give-up on the deck the re-order began again at leg 1 and walked the bots back down the ramp): the first point
+   that lies nearer the exit box (horizontally) than the bot does by more than KLBF_WAY_NEAR; klbf_way_n (= no legs left) when the bot is past them all.
+   GUESS: the legs run toward the exit, each nearer to it than the one before (true for the DD02 route; a winding route would need a smarter test) */
+static int klbf_way_start(const float p[3], const float exitp[3])
+{
+    float bd = (p[0] - exitp[0]) * (p[0] - exitp[0]) + (p[2] - exitp[2]) * (p[2] - exitp[2]), wd; int i;
+    bd = (float)sqrt(bd) - KLBF_WAY_NEAR;
+    for (i = 0; i < klbf_way_n; i++) {
+        wd = (float)sqrt((klbf_way_p[i][0] - exitp[0]) * (klbf_way_p[i][0] - exitp[0]) + (klbf_way_p[i][2] - exitp[2]) * (klbf_way_p[i][2] - exitp[2]));
+        if (wd < bd) return i;
+    }
+    return klbf_way_n;
+}
 
 /* OnlineRampFire (recommended on; OnlineRampDry=1 default = log only until proven live). 2026-10-26, stock DD02 (slot F02): TriggerBox_make_the_ramp (node 15776, one-shot, centre (3,5846,-10822),
    half (2400,1200,10809)) builds the ramp when a COUNTED player is inside; online bots are not counted (rule 0x7f6850 false online), so it never fires unless a human goes there. In Arcade the first
@@ -651,7 +664,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klbf_ob[s].phase == 3) continue;
         if (klbf_ot_gat && !klbf_ot_called && klbf_ob[s].phase < 2) {      /* OnlineVanGather: the carrier is at the exit, every living bot goes to the box now (a walk to a stack is dropped; the stack stays unclaimed) */
             if (!(klbf_ob[s].told & 64) && (klbf_ob[s].told |= 64)) klog("botfill: tactics: bot %d (actor %08lx): van gather: leaves phase %d (tally %d, %d grab(s)) and walks to the box", s, a, klbf_ob[s].phase, klbf_ob[s].tally, klbf_ob[s].grabs);
-            klbf_ob[s].phase = 2; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].told &= ~8; klbf_ob[s].leg = 0; klbf_ob[s].legAt = 0;
+            klbf_ob[s].phase = 2; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].told &= ~8; klbf_ob[s].leg = klbf_way_start(bots[b].pos, klbf_ot_tpos); klbf_ob[s].legAt = 0;
         }
         if (klbf_ob[s].phase == 1) {      /* walking to a stack: reached? gone? stalled? */
             DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0; DWORD ent, node; float mp[3], dh = 0;
@@ -716,7 +729,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klog("botfill: tactics: bot %d (actor %08lx soldier %08lx) -> stack %08lx (%d) at (%.0f, %.0f, %.0f), %.0f m away", s, a, bots[b].soldier, mo[best], mamt[best], tgt[0], tgt[1], tgt[2], bd / 100);
             } else if (klbf_ob[s].tally > 0 || idleVan) {      /* BO3: with nothing carried a bot waited at the van for nothing; it now waits for an armed stack */
                 if (!van && !(klbf_ot_vh && !klbf_ot_called)) { if (!(klbf_ob[s].told & 1) && (klbf_ob[s].told |= 1)) klog("botfill: tactics: bot %d (actor %08lx): wants the van but it is not here and %s", s, a, klbf_ot_called ? "it was called already" : "no exit trigger was found to call it from"); continue; }
-                klbf_ob[s].phase = 2; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].leg = 0; klbf_ob[s].legAt = 0;
+                klbf_ob[s].phase = 2; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].leg = klbf_way_start(bots[b].pos, klbf_ot_tpos); klbf_ob[s].legAt = 0;      /* OnlineWaypoints: resume at the first leg ahead, never back down */
                 if (van) klog("botfill: tactics: bot %d (actor %08lx) -> escape van %08lx at (%.0f, %.0f, %.0f) with tally %d (%d grab(s))", s, a, van, vpos[0], vpos[1], vpos[2], klbf_ob[s].tally, klbf_ob[s].grabs);
                 else klog("botfill: tactics: bot %d (actor %08lx) -> exit trigger %08lx at (%.0f, %.0f, %.0f) to call the van, with tally %d (%d grab(s))", s, a, klbf_ot_trig, klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], klbf_ob[s].tally, klbf_ob[s].grabs);
             }
