@@ -941,7 +941,7 @@ static void klr_pb_step(const DWORD *sp)
     DWORD rec = sp[5], r[7], seven = 0, sol = 0, tgt = 0, tvt = 0, info, team = 0xff, ateam = 0xff; float found, dist, want; int who, ok; LONG n; char note[80];
     memset(r, 0, sizeof r);
     ok = sp[3] == KLR_PB_FILE && klh_rd(rec, r, sizeof r) && r[0] == rec + 0x20 && klh_rd(rec + 0x48, &seven, 4) && seven == 7 &&
-         (sol = klh_rd32(rec - 0x14)) != 0 && r[3] && klh_rd32(sol + 0x40) == r[3] && (tgt = klh_rd32(sol + 0xac)) != 0 && klh_rd(tgt, &tvt, 4) && ((tvt = (klh_actor_priv && tvt == klh_actor_priv) ? KLR_ACTOR_VT : tvt), 1);
+         (sol = klh_rd32(rec - 0x14)) != 0 && r[3] && klh_rd32(sol + 0x40) == r[3] && (tgt = klh_rd32(sol + 0xac)) != 0 && klh_rd(tgt, &tvt, 4) && ((tvt = ((klh_actor_priv && tvt == klh_actor_priv) || (klh_actor_priv2 && tvt == klh_actor_priv2)) ? KLR_ACTOR_VT : tvt), 1);
     memcpy(&dist, &r[5], 4); memcpy(&found, &r[6], 4);
     if (!ok || found != KLR_PB_STOCK) {       /* said at any Log level, three times an arming: it means this file's reading of the call is wrong */
         if (InterlockedIncrement(&klr_pb.odd) <= 3)
@@ -1028,6 +1028,97 @@ static void klr_pb_tick(int act, int game_thread)      /* act: 0 off, 1 Arcade d
     } else if (klh_data((void *)(DWORD_PTR)db, &mine, 4, "database object: the hook's copy of its vtable (slot 19 wrapped)"))
         klog("balance: point-blank: the database object %08lx now has the hook's copy %08lx of its vtable %08lx (slot 19, the name look-up %08lx, wrapped): a soldier's step at arm's length - his gun's hit x 100, sent while the target is within 160 units - gets, in place of the 100: %s on you, %s on an AI heister, %s on a policeman / another NPC; the game's own vtable comes back when the session is not Arcade or the level is stock",
              db, mine, stock, (DWORD)KLR_DB_FN, klr_pb_text(0, a), klr_pb_text(1, b), klr_pb_text(2, c));
+}
+
+/* ---------------------------------------------------------------- ONLINE cop -> bot damage factor */
+/* [BotFill] OnlineCopToBot (2026-10-26, BO8c + re\online_bot_damage.md): Arcade multiplies every cop hit on an AI heister by the "police -> crew" float (0x591b60, R+0x00: 0.01 at level 1, 0.05 owner)
+   inside 0x61a980 (ZFFActor slot 423, ProjectileHit). Online 0x7f6850 is false for roles 2/3 (and the rules getter 0x508ef0 returns NULL), so a bot takes the full ~65 hp per bullet and a squad kills a
+   5600-hp bot in 3.5 s. MECHANISM (data only, SHIP-safe, the same technique as klsync.c's puppet): each listed bot (klbf_pb_is_bot, the puppeteer census) gets a PRIVATE COPY of the ZFFActor vtable
+   (the first dword of the actor) whose slot 423 is klr_cb_hit: for a hit whose attacker [hit+0xc] is a ZFFActor of a team other than 2 it writes [hit+0x18] (the scale 0x61acc6 multiplies; 1.00 on ordinary
+   hits) x K, calls the game's 0x61a980, writes the scale back. Humans (ZFFPlayer, another vtable), bot-vs-bot and Arcade are never reached; the table is taken off when the round / host state ends.
+   klh_actor_priv2 makes klh_avt() and klsync.c see through it. A hit scale > 1 is a point-blank write (OnlinePointBlank already chose it): left alone. The dispatch is virtual ([esi]+0x69c at 0x605103,
+   read 2026-10-26). GUESS: explosions / melee reach slot 423 too (if a bot dies with another caller in the bd: ring, extend). GUESS: nothing in the game keeps the hit record past the call. */
+#define KLR_CB_HIT    0x0061a980
+#define KLR_CB_SLOT   423
+#define KLR_CB_NSLOT  512
+#define KLR_CB_MAX    16
+static struct {
+    float k; int pct, ready, told;
+    DWORD blk[KLR_CB_NSLOT + 1];              /* [0] RTTI locator, then 512 slots, slot 423 ours; made once */
+    DWORD inst[KLR_CB_MAX];                   /* actors that carry the table now */
+    volatile LONG hits, scaled, pbleft, other, fail, lost_m, would_m, tot_scaled, tot_lost_m;      /* 5 s window and totals; hp in milli-hp */
+    DWORD sum_at;
+} klr_cb;
+#define klr_cb_vt (klr_cb.blk + 1)
+static int klbf_pb_is_bot(DWORD actor);
+static DWORD klbf_pb_get(int i);
+
+static float klr_cb_hp(DWORD a) { DWORD h = klh_rd32(a + 0x5fc); float v = -1; if (!h || !klh_rd(h + 4, &v, 4) || v != v) return -1; return v; }
+static int klr_cb_count(void) { int i, c = 0; for (i = 0; i < KLR_CB_MAX; i++) c += klr_cb.inst[i] != 0; return c; }
+
+static void __fastcall klr_cb_hit(void *self, void *edx, DWORD hit)      /* thiscall, one stack argument, ret 4 */
+{
+    void (__fastcall *orig)(void *, void *, DWORD) = (void (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)KLH_VA(KLR_CB_HIT);
+    DWORD a = (DWORD)(DWORD_PTR)self, att = 0, sc, team = 0; float f = 0, nf, h0, h1;
+    (void)edx;
+    if (hit && klr_cb.k > 0 && klbf_pb_is_bot(a) && klh_rd(hit + 0xc, &att, 4) && att > 0x10000 && att != a && klh_avt(att) == KLR_ACTOR_VT &&
+        (sc = klh_rd32(att + 0x54)) != 0 && klh_rd(sc + 4, &team, 4) && team != 2 && klh_rd(hit + 0x18, &f, 4) && f == f && f > 0) {
+        InterlockedIncrement(&klr_cb.hits);
+        if (f > 1.0001f && f <= klr_pbo.want + 0.001f) { InterlockedIncrement(&klr_cb.pbleft); orig(self, 0, hit); return; }      /* point-blank: OnlinePointBlank's number stands */
+        nf = f * klr_cb.k;      /* a scale above OnlinePointBlank's (stock point-blank 100: its write missed, BO8c HIT #21 dmg 21389) is scaled too, as Arcade's float scales every cop hit */
+        if (!klh_data((void *)(DWORD_PTR)(hit + 0x18), &nf, 4, "cop->bot hit scale (OnlineCopToBot)")) { InterlockedIncrement(&klr_cb.fail); orig(self, 0, hit); return; }
+        h0 = klr_cb_hp(a);
+        orig(self, 0, hit);
+        klh_data((void *)(DWORD_PTR)(hit + 0x18), &f, 4, "cop->bot hit scale back (OnlineCopToBot)");
+        h1 = klr_cb_hp(a);
+        InterlockedIncrement(&klr_cb.scaled); InterlockedIncrement(&klr_cb.tot_scaled);
+        if (h0 > h1 && h1 >= 0) {      /* would = lost / K: linear in the scale (a kill clamps at 0, so it under-reads) */
+            LONG l = (LONG)((h0 - h1) * 1000.0f);
+            InterlockedExchangeAdd(&klr_cb.lost_m, l); InterlockedExchangeAdd(&klr_cb.tot_lost_m, l); InterlockedExchangeAdd(&klr_cb.would_m, (LONG)((double)l / klr_cb.k));
+        }
+        return;
+    }
+    if (hit && klbf_pb_is_bot(a)) InterlockedIncrement(&klr_cb.other);      /* a hit on a bot from a human / bot / non-actor: untouched */
+    orig(self, 0, hit);
+}
+
+/* on = this is the online HOST with bots (klr_online_host) and OnlineCopToBot > 0. Only the game thread writes; on = 0 takes the table off the bots. */
+static void klr_cb_tick(int on, int game_thread)
+{
+    int i, q, n = 0; DWORD stock = KLR_ACTOR_VT, mine = (DWORD)(DWORD_PTR)klr_cb_vt, now = GetTickCount();
+    if (!game_thread) return;
+    if (!on) {
+        for (i = 0; i < KLR_CB_MAX; i++) if (klr_cb.inst[i]) {
+            if (klh_rd32(klr_cb.inst[i]) == mine) { klh_data((void *)(DWORD_PTR)klr_cb.inst[i], &stock, 4, "ZFFActor vtable pointer back (OnlineCopToBot)"); n++; }
+            klr_cb.inst[i] = 0;
+        }
+        if (n) klog("botfill: cop->bot factor: %d bot(s) back on the game's own ZFFActor table (round / host state ended); totals: %ld hits scaled, bot hp lost %.0f", n, klr_cb.tot_scaled, klr_cb.tot_lost_m / 1000.0);
+        return;
+    }
+    if (!klr_cb.ready) {
+        if (!klh_rd((DWORD_PTR)KLH_VA(KLR_ACTOR_VT) - 4, klr_cb.blk, sizeof klr_cb.blk) || klr_cb_vt[KLR_CB_SLOT] != (DWORD)(DWORD_PTR)KLH_VA(KLR_CB_HIT)) {
+            if (!klr_cb.told++) klog("botfill: cop->bot factor: ZFFActor slot %d is %08lx, not %08lx: this build is not the one read - OnlineCopToBot does nothing", KLR_CB_SLOT, (unsigned long)klr_cb_vt[KLR_CB_SLOT], (unsigned long)KLR_CB_HIT);
+            return;
+        }
+        klr_cb_vt[KLR_CB_SLOT] = (DWORD)(DWORD_PTR)klr_cb_hit; klr_cb.ready = 1; klh_actor_priv2 = mine;
+        klog("botfill: cop->bot factor ARMED: OnlineCopToBot=%d%% (x%.3f on every ordinary hit of a non-Ally actor on a listed bot: the Arcade police->crew float that online is skipped); private ZFFActor table %08lx, slot %d wrapped; bots only (humans, bot-vs-bot, point-blank untouched)", klr_cb.pct, klr_cb.k, mine, KLR_CB_SLOT);
+    }
+    for (q = 0; q < 16; q++) {
+        DWORD a = klbf_pb_get(q);
+        if (!a || klh_rd32(a) != stock) continue;
+        for (i = 0; i < KLR_CB_MAX && klr_cb.inst[i]; i++) ;
+        if (i == KLR_CB_MAX) break;
+        if (klh_data((void *)(DWORD_PTR)a, &mine, 4, "ZFFActor vtable pointer (OnlineCopToBot bot)")) { klr_cb.inst[i] = a; klog("botfill: cop->bot factor: bot actor %08lx now on the private table (x%.3f on cop hits, health %.0f)", a, klr_cb.k, klr_cb_hp(a)); }
+    }
+    if (now - klr_cb.sum_at >= 5000u) {
+        klr_cb.sum_at = now;
+        if (klr_cb.hits || klr_cb.other) {
+            klog("botfill: cop->bot factor 5 s: %ld cop hits on bots (%ld scaled x%.3f, %ld point-blank left alone, %ld write refused), %ld other hits on bots untouched; bot hp lost %.0f (without the factor ~%.0f); %d bots on the table",
+                 klr_cb.hits, klr_cb.scaled, klr_cb.k, klr_cb.pbleft, klr_cb.fail, klr_cb.other, klr_cb.lost_m / 1000.0, klr_cb.would_m / 1000.0, klr_cb_count());
+            InterlockedExchange(&klr_cb.hits, 0); InterlockedExchange(&klr_cb.scaled, 0); InterlockedExchange(&klr_cb.pbleft, 0); InterlockedExchange(&klr_cb.other, 0);
+            InterlockedExchange(&klr_cb.fail, 0); InterlockedExchange(&klr_cb.lost_m, 0); InterlockedExchange(&klr_cb.would_m, 0);
+        }
+    }
 }
 
 /* ---------------------------------------------------------------- the crew-hit log (section 2 a9) */
@@ -1237,20 +1328,21 @@ static void klr_ch_tick(int arcade, int game_thread)
 }
 
 /* 2 = this is the HOST (role 2) of an online FA round (game type 4, state 0x13..0x1f) and klbotfill.c's census has seen bots in the last 5 s and OnlinePointBlank > 0; else 0 */
-static int klr_pbo_host(void)
+static int klr_online_host(void)
 {
     DWORD sm, role = 0, st = 0;
-    if (!(klr_pbo.want > 0) || !(sm = klh_rd32((DWORD_PTR)KLH_VA(KLR_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x54, &role, 4) || role != 2 || !klh_rd(sm + 0x70, &st, 4) || st < 0x13 || st > 0x1f) return 0;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLR_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x54, &role, 4) || role != 2 || !klh_rd(sm + 0x70, &st, 4) || st < 0x13 || st > 0x1f) return 0;
     return klbf_pb_any() ? 2 : 0;
 }
+static int klr_pbo_host(void) { return klr_pbo.want > 0 ? klr_online_host() : 0; }
 
 static void klr_tick(int game_thread)
 {
     static DWORD last, toldrules; static char toldwhy[200];
     DWORD now = GetTickCount(), rules, state; int arcade, act = 0, level; char why[200];
-    if ((!klr.on && !(klr_pbo.want > 0)) || !klh_exe_ok || now - last < (game_thread ? 50u : 100u)) return;
+    if ((!klr.on && !(klr_pbo.want > 0) && !(klr_cb.k > 0)) || !klh_exe_ok || now - last < (game_thread ? 50u : 100u)) return;
     last = now;
-    if (!klr.on) { klr_pb_tick(klr_pbo_host(), game_thread); return; }      /* [Balance] off: only the online point-blank part runs */
+    if (!klr.on) { klr_pb_tick(klr_pbo_host(), game_thread); klr_cb_tick(klr_cb.k > 0 && klr_online_host(), game_thread); return; }      /* [Balance] off: only the online point-blank part runs */
     arcade = klr_arcade(&rules, &state, &level);
     if (arcade && (klr.any || klr_pb.any)) {
         act = klb_level(why);                 /* asked every pass: the verdict changes when the archive is opened */
@@ -1266,6 +1358,7 @@ static void klr_tick(int game_thread)
     klr_head_tick(act);                       /* HeadShot / FedHeadShot (2 a8): the two head floats; the tuning's own back otherwise */
     if (arcade && act) klr_tough_say(now);    /* the proof line: what the game made the AI heisters' health */
     klr_pb_tick(act ? 1 : klr_pbo_host(), game_thread);      /* the point-blank keys: in while the dial acts (1) or the online host has bots (2), the game's own vtable back otherwise */
+    klr_cb_tick(klr_cb.k > 0 && klr_online_host(), game_thread);      /* OnlineCopToBot: the bots' private table in while this is the online host with bots, the game's own back otherwise */
     klr_ch_tick(arcade, game_thread);        /* LogCrewHits: reads only; any Arcade round, stock level or not */
     if (arcade) klr_player_tick(act, game_thread, rules);
     else if (klr_p.have) klr_player_tick(0, game_thread, 0);      /* the session ended with the object alive: its own values go back */
@@ -1299,6 +1392,12 @@ static void klr_init(void)
         if (!klr_number(q, &e) || e < 0 || e > 100) { klog("botfill: OnlinePointBlank=%s is IGNORED: it must be one number of 0 .. 100 (bullets per cop point-blank step on a bot; 0 = off); 2 stands", q); e = 2.0; }
         klr_pbo.want = (float)e;
         klog("botfill: OnlinePointBlank=%g (recommended on: 2; 0 = off); acts only on the host of an online FA round with OnlineHost=1 and OnlineTactics=1 (the puppeteer bot list)", e);
+    }
+    {   /* [BotFill] OnlineCopToBot: percent of a cop's ordinary hit that a bot takes online (default 5 = the owner's CopToCrew 0.05 = Arcade level 2; stock Arcade level 1 = 1; 0 = off), read even with [Balance] off */
+        int pc = (int)GetPrivateProfileIntA("BotFill", "OnlineCopToBot", 5, klh_ini);
+        if (pc < 0 || pc > 100) { klog("botfill: OnlineCopToBot=%d is IGNORED: it must be 0 .. 100 (percent; 0 = off); 5 stands", pc); pc = 5; }
+        klr_cb.pct = pc; klr_cb.k = pc / 100.0f;
+        klog("botfill: OnlineCopToBot=%d (recommended on: 5; 1 = stock Arcade level 1; 0 = off); acts only on the host of an online FA round with OnlineHost=1 and OnlineTactics=1 (the puppeteer bot list); with it on, OnlineHealthMul can come down (5 with 5%% = stock-Arcade survival)", pc);
     }
     klr.on = GetPrivateProfileIntA("Balance", "Enable", 0, klh_ini) != 0;
     if (!klr.on) return;

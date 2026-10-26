@@ -102,7 +102,7 @@ static DWORD ksp_ours(void) { return ksp_ready ? (DWORD)(DWORD_PTR)ksp_vt : 0; }
 static DWORD klsy_vtof(DWORD o)
 {
     DWORD v = klh_rd32(o);
-    return (ksp_ready && v == (DWORD)(DWORD_PTR)ksp_vt) ? KSP_ACTOR_VT : v;
+    return ((ksp_ready && v == (DWORD)(DWORD_PTR)ksp_vt) || (klh_actor_priv2 && v == klh_actor_priv2)) ? KSP_ACTOR_VT : v;      /* priv2: the host's bots (klbalance.c OnlineCopToBot) */
 }
 #define KLSY_REC 20
 #define KLSY_NBAD 16
@@ -190,7 +190,7 @@ static DWORD klsy_vt[64]; static signed char klsy_vk[64]; static char klsy_vn[64
 static int klsy_class(DWORD vt, const char **nm)
 {
     int i; DWORD col, td; char b[48], l[48]; const char *s;
-    if (ksp_ready && vt == (DWORD)(DWORD_PTR)ksp_vt) vt = KSP_ACTOR_VT;                 /* a puppeted actor */
+    if ((ksp_ready && vt == (DWORD)(DWORD_PTR)ksp_vt) || (klh_actor_priv2 && vt == klh_actor_priv2)) vt = KSP_ACTOR_VT;                 /* a puppeted actor / a host bot with the OnlineCopToBot table */
     for (i = 0; i < klsy_nvt; i++) if (klsy_vt[i] == vt) { *nm = klsy_vn[i]; return klsy_vk[i]; }
     if (klsy_nvt >= 64) { *nm = "?"; return -1; }
     i = klsy_nvt++; klsy_vt[i] = vt; klsy_vk[i] = -1; strcpy(klsy_vn[i], "?");
