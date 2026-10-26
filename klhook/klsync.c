@@ -129,8 +129,10 @@ static struct {
 #define KST_N 1024
 static struct { float p0[3], v[3]; DWORD T0; unsigned short slot; BYTE ok; } ksp_trk[KST_N];
 static struct {
-    int keep, on, bound, cmpLead, bindFix, max, local, keepRot, start; DWORD ms; float tol, leadMs;
+    int keep, on, bound, cmpLead, bindFix, max, local, keepRot, start, stall, keepY; DWORD ms, stallMs; float tol, leadMs, boundDist, yTol;
     DWORD frame, sumAt, rvLogAt; BYTE ctl[KST_N], bound1[KST_N];
+    float bdBest[KST_N]; DWORD bdAt[KST_N], bdHold[KST_N], rvAt0[KST_N]; BYTE rvN[KST_N];   /* bound-follower stall detector / revert cap, per slot */
+    LONG nstall, nrevNet, nrevY;
     LONG nplace, nref, nflt, nclose, ndead, npark, nhum, nph, nbound, nrev, ntracked, nbind; double errSum; float errMax;   /* 5 s window (reset by the summary) except nrev / nbind (round) */
 } kst;
 struct ksp_rv { DWORD o, slot, at, frame; float pl[3]; BYTE stage, logged; };
@@ -595,18 +597,23 @@ static int ksp_place(struct ksp_e *e, const float g[3])
 /* the revert probe: after a placement the node is read back at the next frame and 100 ms later; moved more than 30 units = something put it back (second writer or the AI) */
 static void ksp_rv_check(struct ksp_rv *r, DWORD now, const char *when)
 {
-    float p[3], dd, w[3] = { 0, 0, 0 }; DWORD a = r->o, vt50 = 0, c50 = klh_rd32(a + 0x50c);
+    float p[3], dd, w[3] = { 0, 0, 0 }, nx = 1e30f, nz = 1e30f; DWORD a = r->o, vt50 = 0, c50 = klh_rd32(a + 0x50c); int netsnap;
     if (!kle_node(klh_rd32(a + 4), p, 0)) return;
-    dd = (float)sqrt((p[0] - r->pl[0]) * (p[0] - r->pl[0]) + (p[1] - r->pl[1]) * (p[1] - r->pl[1]) + (p[2] - r->pl[2]) * (p[2] - r->pl[2]));
+    dd = (float)sqrt((p[0] - r->pl[0]) * (p[0] - r->pl[0]) + (p[2] - r->pl[2]) * (p[2] - r->pl[2]));   /* horizontal only (SP1g: the Y pops are the ground clamp) */
     { int k = r->slot & (KST_N - 1); float sp = 0, thr; if (ksp_trk[k].ok && ksp_trk[k].slot == r->slot) sp = (float)sqrt(ksp_trk[k].v[0] * ksp_trk[k].v[0] + ksp_trk[k].v[2] * ksp_trk[k].v[2]);
       thr = 30.0f + sp * (float)(int)(now - r->at) / 1000.0f;                                 /* a running cop legitimately moves speed x dt (review) */
-      if (dd <= thr || r->logged) return; }
-    r->logged = 1; kst.nrev++;
+      if (r->logged) return;
+      if (dd <= thr) { if (fabsf(p[1] - r->pl[1]) > 30.0f) { r->logged = 1; kst.nrevY++; } return; }   /* y-only: counted apart, not a revert */
+      r->logged = 1; kst.nrev++;
+      /* revert cap: 3 reverts of one cop within 3 s hold the bound-follower skip for 3 s (the game's replication snap undoes a far placement) */
+      if (!kst.rvN[k] || now - kst.rvAt0[k] > 3000) { kst.rvN[k] = 1; kst.rvAt0[k] = now; } else if (++kst.rvN[k] >= 3) { kst.bdHold[k] = now + 3000; kst.rvN[k] = 0; } }
+    klh_rd(a + 0x90c, &nx, 4); klh_rd(a + 0x914, &nz, 4);
+    netsnap = fabsf(p[0] - nx) < 1.0f && (fabsf(p[2] - nz) < 1.0f); if (netsnap) kst.nrevNet++;   /* GUESS: A+0x90c / A+0x914 = the received x / z (static report); A+0x918 is logged too */
     if (now - kst.rvLogAt < 250) return;                                                 /* rate limit: at most 4 lines a second, all counted in the summary */
     kst.rvLogAt = now; if (c50) vt50 = klh_rd32(c50);
     klh_rd(a + 0x460, w, 12);
-    klog("sync: track: slot %lu reverted by %.0f in %lu ms (%s, %.0f u/s); node (%.1f,%.1f,%.1f) placed (%.1f,%.1f,%.1f) A+0x460 (%.1f,%.1f,%.1f) A+0x90c %08lx A+0x918 %08lx [A+0x8c]=%lu [A+0x50c] vt %08lx",
-         (unsigned long)r->slot, dd, (unsigned long)(now - r->at), when, (now - r->at) ? dd * 1000.0f / (now - r->at) : 0.0f, p[0], p[1], p[2], r->pl[0], r->pl[1], r->pl[2], w[0], w[1], w[2],
+    klog("sync: track: slot %lu reverted%s by %.0f in %lu ms (%s, %.0f u/s); node (%.1f,%.1f,%.1f) placed (%.1f,%.1f,%.1f) A+0x460 (%.1f,%.1f,%.1f) A+0x90c %08lx A+0x918 %08lx [A+0x8c]=%lu [A+0x50c] vt %08lx",
+         (unsigned long)r->slot, netsnap ? " (netsnap)" : "", dd, (unsigned long)(now - r->at), when, (now - r->at) ? dd * 1000.0f / (now - r->at) : 0.0f, p[0], p[1], p[2], r->pl[0], r->pl[1], r->pl[2], w[0], w[1], w[2],
          (unsigned long)klh_rd32(a + 0x90c), (unsigned long)klh_rd32(a + 0x918), (unsigned long)klh_rd32(a + 0x8c), (unsigned long)vt50);
 }
 /* Track, every frame on the client (mode 4, gate OPEN, fresh list; the caller checks): each hooked cop farther than TrackTol from the extrapolated host place is placed there, at most
@@ -639,6 +646,7 @@ static void ksp_track(DWORD now)
         if ((ho = klh_rd32(e->o + 0x5fc)) != 0 && klh_rd(ho + 4, &hpw, 4) && hpw <= 0) { kst.ndead++; continue; }
         if (klsy_human(e->o, pos)) { kst.nhum++; continue; }
         ksp_goal_at(hi, now, kst.leadMs, g);
+        if (kst.keepY && fabsf(g[1] - pos[1]) < kst.yTol) g[1] = pos[1];                 /* same floor: keep the cop's own y (the list age x vertical speed made a 30-110 unit pop) */
         if (klsy_human(e->o, g)) { kst.nhum++; continue; }                               /* the destination, too, is never next to a human */
         d = (float)sqrt((pos[0] - g[0]) * (pos[0] - g[0]) + (pos[1] - g[1]) * (pos[1] - g[1]) + (pos[2] - g[2]) * (pos[2] - g[2]));
         c8 = klh_rd32(e->o + 0x8e0); c5 = klh_rd32(e->o + 0x50c);
@@ -652,8 +660,18 @@ static void ksp_track(DWORD now)
                 c5 = c8;
             }
         }
-        if (d < kst.tol) { kst.nclose++; continue; }
-        if (!kst.bound && c8 && c8 == c5 && klh_rd32(c8) == 0xbb42ac && d < ksp.snapDist) { kst.nbound++; continue; }   /* a bound follower: the stock steer in the Update wrapper takes it while it is near */
+        if (d < kst.tol) { kst.nclose++; kst.bdAt[e->slot & (KST_N - 1)] = 0; continue; }   /* back in tolerance: the stall timer restarts */
+        if (!kst.bound && c8 && c8 == c5 && klh_rd32(c8) == 0xbb42ac && d < ksp.snapDist) {   /* a bound follower: the stock steer in the Update wrapper takes it while it is near */
+            int sk = (int)(now - kst.bdHold[e->slot & (KST_N - 1)]) < 0 && kst.bdHold[e->slot & (KST_N - 1)];   /* held after 3 reverts */
+            if (!sk && kst.stall) {                                                      /* SP1g slot 574: the steer is a no-op and the cop sat 230 units off for 25 s; skip only while it converges */
+                int q = e->slot & (KST_N - 1);
+                if (d < kst.boundDist) { kst.bdAt[q] = 0; sk = 1; }
+                else if (!kst.bdAt[q] || d < kst.bdBest[q] - 15.0f) { kst.bdBest[q] = d; kst.bdAt[q] = now; sk = 1; }
+                else if (now - kst.bdAt[q] < kst.stallMs) sk = 1;
+                else { kst.nstall++; kst.bdAt[q] = 0; }                                  /* stalled: fall through to a placement */
+            } else if (!sk) sk = 1;
+            if (sk) { kst.nbound++; continue; }
+        }
         e->trkAt = now;
         r = ksp_place(e, g);
         if (r <= 0) { e->trkAt = now + (r < 0 ? 5000 : 1500) - kst.ms; continue; }      /* refused / faulted: back off (not every 50 ms) */
@@ -670,8 +688,8 @@ static void ksp_track(DWORD now)
     if (now - kst.sumAt >= 5000) {
         if (kst.sumAt) {
             float dt = (now - kst.sumAt) / 1000.0f;
-            klog("sync: track: %ld hooked, %ld placements (%.1f/s), error before placement mean %.0f max %.0f, refused %ld, faults %ld (total %ld); skipped: in tolerance %ld, bound followers %ld, parked %ld, human near %ld, placeholder %ld, dead %ld; reverts this round %ld, BindFix writes %ld",
-                 (long)kst.ntracked, (long)kst.nplace, kst.nplace / dt, kst.nplace ? kst.errSum / kst.nplace : 0.0, kst.errMax, (long)kst.nref, (long)kst.nflt, (long)ksp.nflt, (long)kst.nclose, (long)kst.nbound, (long)kst.npark, (long)kst.nhum, (long)kst.nph, (long)kst.ndead, (long)kst.nrev, (long)kst.nbind);
+            klog("sync: track: %ld hooked, %ld placements (%.1f/s), error before placement mean %.0f max %.0f, refused %ld, faults %ld (total %ld); skipped: in tolerance %ld, bound followers %ld, parked %ld, human near %ld, placeholder %ld, dead %ld; reverts this round %ld (netsnap %ld, y-only %ld), bound stalls placed %ld, BindFix writes %ld",
+                 (long)kst.ntracked, (long)kst.nplace, kst.nplace / dt, kst.nplace ? kst.errSum / kst.nplace : 0.0, kst.errMax, (long)kst.nref, (long)kst.nflt, (long)ksp.nflt, (long)kst.nclose, (long)kst.nbound, (long)kst.npark, (long)kst.nhum, (long)kst.nph, (long)kst.ndead, (long)kst.nrev, (long)kst.nrevNet, (long)kst.nrevY, (long)kst.nstall, (long)kst.nbind);
         }
         kst.sumAt = now; kst.nplace = kst.nref = kst.nflt = kst.nclose = kst.ndead = kst.npark = kst.nhum = kst.nph = kst.nbound = 0; kst.errSum = 0; kst.errMax = 0;
     }
@@ -840,6 +858,12 @@ static void klsy_init(void)
     kst.tol = (float)GetPrivateProfileIntA("Sync", "TrackTol", 40, klh_ini); if (kst.tol < 5) kst.tol = 5; if (kst.tol > 1000) kst.tol = 1000;
     kst.leadMs = (float)GetPrivateProfileIntA("Sync", "TrackLeadMs", 60, klh_ini); if (kst.leadMs < 0) kst.leadMs = 0; if (kst.leadMs > 300) kst.leadMs = 300;   /* GUESS: ~ one frame of placement lateness */
     kst.bound = GetPrivateProfileIntA("Sync", "TrackBound", 0, klh_ini) != 0;
+    kst.stall = GetPrivateProfileIntA("Sync", "TrackBoundStall", 1, klh_ini) != 0;
+    kst.boundDist = (float)GetPrivateProfileIntA("Sync", "TrackBoundDist", 100, klh_ini); if (kst.boundDist < 20) kst.boundDist = 20; if (kst.boundDist > 1000) kst.boundDist = 1000;   /* GUESS */
+    kst.stallMs = (DWORD)GetPrivateProfileIntA("Sync", "TrackBoundStallMs", 1000, klh_ini); if (kst.stallMs < 250) kst.stallMs = 250; if (kst.stallMs > 10000) kst.stallMs = 10000;   /* GUESS */
+    kst.keepY = GetPrivateProfileIntA("Sync", "TrackKeepY", 1, klh_ini) != 0;
+    kst.yTol = (float)GetPrivateProfileIntA("Sync", "TrackYTol", 150, klh_ini); if (kst.yTol < 10) kst.yTol = 10; if (kst.yTol > 2000) kst.yTol = 2000;   /* GUESS: a floor is more than this apart */
+    if (ksp.pup) klog("sync: TrackBoundStall=%d (a bound follower is skipped only while it converges; recommended on) TrackBoundDist=%.0f TrackBoundStallMs=%lu TrackKeepY=%d (recommended on) TrackYTol=%.0f", kst.stall, kst.boundDist, (unsigned long)kst.stallMs, kst.keepY, kst.yTol);
     kst.cmpLead = GetPrivateProfileIntA("Sync", "CompareLead", 1, klh_ini) != 0;
     kst.bindFix = GetPrivateProfileIntA("Sync", "BindFix", 0, klh_ini) != 0;
     kst.local = GetPrivateProfileIntA("Sync", "TrackLocal", 1, klh_ini) != 0;       /* placements with the teleport's two flags 0 (no animation reset, no net send); GUESS from klcrew_rt.c's reading of 0x62a900 */

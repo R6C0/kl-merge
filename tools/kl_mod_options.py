@@ -117,6 +117,10 @@ feat('synctracklocal', G_EXP, "Online: Track placements keep the cop's animation
      "klsync.c [Sync] TrackLocal: Track calls the game's teleport 0x62a900 with both flags 0 instead of 1,1 (no animation reset, no network send); GUESS from the code reading; not live-tested", [('Sync', 'TrackLocal', 1, 0, 1)])
 feat('synctrackrot', G_EXP, "Online: Track placements keep the cop's facing (recommended on, needs Track)", 'on', 'start',
      "klsync.c [Sync] TrackKeepRot: Track passes the node's own rotation (nine floats at +0) to the teleport instead of the identity; GUESS on the layout; falls back to identity if it does not look like a rotation", [('Sync', 'TrackKeepRot', 1, 0, 1)])
+feat('synctrackstall', G_EXP, "Online: Track also places a stalled bound-follower cop (recommended on, needs Track)", 'on', 'start',
+     "klsync.c [Sync] TrackBoundStall: a cop on a bound follower controller is left to the stock steer only while it converges; a stalled one is placed (SP1g slot 574, 230 units off for 25 s); thresholds are GUESS", [('Sync', 'TrackBoundStall', 1, 0, 1)])
+feat('synctrackkeepy', G_EXP, "Online: Track placements keep the cop's own height on the same floor (recommended on, needs Track)", 'on', 'start',
+     "klsync.c [Sync] TrackKeepY: keeps the cop's y when the host's y is within TrackYTol (150, GUESS) units; removes the Y pop of each placement", [('Sync', 'TrackKeepY', 1, 0, 1)])
 feat('crewlook', G_CORE, 'Random looks for the AI heisters', 'on', 'start',
      'no body twice, never the one you wear', [('Crew', 'Random', 1, 0, 0)])
 
