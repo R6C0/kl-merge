@@ -246,6 +246,8 @@ feat('fastexit', G_STAB, 'Alt+F4 / close ends the game at once', 'on', 'start',
      'fixed the hang on close (verified live 2026-10-24, 545 ms)', [('KLHook', 'FastExit', 1, 0, 1)])
 feat('unstick', G_STAB, 'Put me back when I am stuck inside an object in cover (F7 does it at once)', 'on', 'start',
      'owner 2026-10-24: going into cover put him inside the object for the round; held still in cover with a move key down for 4 s = back to the last free place (offline only; k30cov, not run in the game)', [('Unstick', 'Enable', 1, 0, 1)])
+feat('fallrescue', G_STAB, 'Put me back on solid ground when I leave the level or fall out of it', 'on', 'start',
+     'owner 2026-10-26: walking off a map edge (DM02 shop rear, Retomoto ledge) restarted the round at full health; the last place he stood still is kept and he is put back before the out-of-world test (klfallrescue.c, not run in the game)', [('FallRescue', 'Enable', 1, 0, 1)])
 feat('continue', G_STAB, 'Keep playing after a game assert', 'on', 'start',
      'the hook logs the assert and goes on instead of ending the game', [('KLHook', 'ContinueAsserts', 1, 0, 1)])
 feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', 'start',

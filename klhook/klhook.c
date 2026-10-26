@@ -687,6 +687,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klfreeclimb.c"                                 /* klfreeclimb.c: Dead Men's free climb, luvsic's port (off unless [Climb] Enable); AFTER klclimb.c (klq_slot) */
 #include "klunstick.c"                                  /* klunstick.c: [Unstick] put a player stuck in cover back to his last free place (default on, offline); AFTER klfreeclimb.c (klfc_guard, klfc_pose) */
 #include "klrappel.c"                                    /* klrappel.c: off unless [Rappel] Enable */
+#include "klfallrescue.c"                              /* klfallrescue.c: [FallRescue] a player who leaves the level box is put back on his last safe place before the game kills him (default on); AFTER klrappel.c (klrp_r), klclimb.c (klq_r), klfreeclimb.c */
 #include "kltrait.c"                                      /* kltrait.c: [Traits] a small trait per wardrobe character (a table + getters; AFTER klcrew.c, BEFORE klbalance.c) */
 #include "klbalance.c"
 #include "klgrudge.c"
@@ -1156,6 +1157,7 @@ static void klh_tick(int game_thread)
     klt_tick(game_thread);                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
     klv_tick(game_thread);                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
     kus_tick(game_thread);                            /* klunstick.c: stuck in cover -> back to the last free place (default ON; offline only) */
+    klfr_tick(game_thread);                           /* klfallrescue.c: left the level box / fell -> back to the last safe place (default ON) */
     klfc_tick(game_thread);                           /* klfreeclimb.c: W + E at a ledge (OFF unless [Climb] Enable=1; gameplay call only) */
     klq_tick(game_thread);                            /* klclimb.c: the player at the foot of a KLJoin.ini [Climb] edge climbs it (OFF unless [EdgeClimb] Enable=1) */
     klrp_tick(game_thread);                           /* klrappel.c: the descent of the rappel cut */
@@ -1583,6 +1585,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klv_init();
     klfc_init();
     kus_init();
+    klfr_init();
     klq_init();
     klrp_init();
     klr_init();
