@@ -196,6 +196,10 @@ feat('onlinevanstate', G_EXP, 'Online AI heisters board the escape van by its st
      'klbotfill.c [BotFill] OnlineVanState; BO9: the van node stays at the origin so no bot boarded though the van cycled; 60 s wait counts from the call; NOT run live', [('BotFill', 'OnlineVanState', 1, 0, 1)])
 feat('onlinelateexit', G_EXP, 'Online AI heisters carrying money head for the van when the round clock is low instead of taking more loot (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineLateExit (seconds left, 75 GUESS, 0 = off); BO9: the only carrier left with 61 s; NOT run live', [('BotFill', 'OnlineLateExit', 75, 0, 75)])
+feat('onlinevangather', G_EXP, 'Online AI heisters all walk to the escape box first; the van is called when they are close or after a wait (recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineVanGather (+ OnlineGatherM 12 m / OnlineGatherMaxS 25 s, GUESS); BO11: the carrier called the van while the others were 28-41 m away; NOT run live', [('BotFill', 'OnlineVanGather', 1, 0, 1)])
+feat('onlinevanhold', G_EXP, 'The online escape van waits (invulnerable, timer kept up, no blow-up) while AI heisters are walking to the box, at most 15 s (recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineVanHold (+ OnlineHoldM 30 m, OnlineHoldNearM 18 m, OnlineHoldMaxS 15 s, GUESS); re/van_hold_online.md; BO11: state 3 -> 6 after 1 s, van shot empty; data writes only; NOT run live', [('BotFill', 'OnlineVanHold', 1, 0, 1)])
 feat('onlineboxwalk', G_EXP, 'Online AI heisters walk to the escape box once the van is called and count as aboard only inside it (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxWalk; BO9: the exit trigger is ~570 cm from the DM01 AllyEscapeBox; read-only scan, game inside test 0x758cb0; NOT run live', [('BotFill', 'OnlineBoxWalk', 1, 0, 1)])
 feat('onlineboard', G_EXP, 'Online AI heisters inside the escape box while the van waits are removed from the match like in Arcade (recommended off until tested)', 'off', 'start',

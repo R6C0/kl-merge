@@ -441,6 +441,7 @@ static struct {
    - half / quarter / 0 of max, slot 87 - read +0x18 and not a cached copy). Dry=1: everything is only logged ('WOULD ...').
    Stock levels: this file acts on no stock level (klb_level), so Dog Days' own FA maps keep the game's rule (nothing is shielded there). */
 static struct { DWORD rules, empty_at; int open, aboard, hp_done; } kle_vb;
+static volatile int kle_vh_hold;      /* klbotfill.c OnlineVanHold sets it while it holds the online van for walking bots: the VanBlow empty-delay clock is then not run (the van is not blown on purpose) */
 static int kle_vb_aboard(const struct klb_snap *s)
 {
     int i, n = 0;
@@ -1013,6 +1014,7 @@ static void kle_vb_pass(const struct klb_snap *s, DWORD now, int edge)
         if (kle_vb.open) { kle_vb.open = 0; if (kle.vb_log) klog("vanblow: %d aboard again (state %u): the vehicle may be shielded again", n, s->veh); }
         return;
     }
+    if (kle_vh_hold) { kle_vb.empty_at = 0; return; }      /* OnlineVanHold: AI heisters are walking to the box, the empty van is not blown meanwhile */
     if (!kle_vb.empty_at) kle_vb.empty_at = t;
     if (t - kle_vb.empty_at < kle.vb_delay) return;
     if (!kle_vb.open) {
