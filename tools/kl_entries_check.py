@@ -43,6 +43,14 @@ def check(maps):
                     bad += stale
                     out.append('%s%s=%s%s' % (f, sec, e.group(1), ' <-- STALE' if stale else ''))
         print('%-8s prm chunks %6d  %s' % (m, n, '; '.join(out) or '(no Entries)'))
+    # [BotGate] siblings (kl_botgate_stage_1026.py): a <name>.bots.zip whose base md5 no longer matches the plain zip is stale
+    import kl_botgate_stage_1026 as BG
+    for m, f, st, det in BG.drift(maps):
+        if st == 'DRIFT':
+            bad += 1
+            print('%-8s %s <-- STALE (botgate drift: %s)' % (m, f, det))
+        else:
+            print('%-8s %s botgate OK (%s)' % (m, f, det))
     print('stale: %d' % bad)
     return bad
 
