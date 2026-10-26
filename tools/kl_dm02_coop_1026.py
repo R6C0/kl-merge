@@ -19,6 +19,7 @@ GUESSES (each also in a comment): a PlayerAction may activate PathBlocker / Deac
   (no HVK, as the counters before them); shop floor = the shutter's y; a double use (solo + co-op) re-blocks the PathBlocker (eToggle).
 usage (from tools/):  python kl_dm02_coop_1026.py patch <live F02_Main.zip 1dd14609> <out folder> [--rehearse <scratch>]   (solo lift re-arm fix, 2 variants)
                       python kl_dm02_coop_1026.py patch2 <live F02_Main.zip 0426cf23> <out folder> [--rehearse <scratch>]   (solo_open / solo_lift2)
+                      python kl_dm02_coop_1026.py patch3 <live F02_Main.zip 505735d2> <out folder> [--rehearse <scratch>]   (hvk3 / hvk5: shutter planes cut)
                       python kl_dm02_coop_1026.py stage <in F02_Main.zip> <out folder> [--rehearse <scratch>]
 """
 import collections, json, math, os, shutil, struct, sys, zipfile
@@ -650,6 +651,90 @@ def stage_patch2(src, out, scratch=None, log=print):
     return reps
 
 
+LIVE_MD5_3 = '505735d2d466c5a0e025ddb1e2ef3dbf'    # live DM02 zip 2026-10-26 04:35 (solo_open variant of patch2)
+TAG_SOLO3 = '.before-1026solo3'
+SHUTTER_REFS = (24710, 24711, 24712)               # Atrium_201a RollerShutterA_03 / _02 / _01 = co-op sites 1..3 (checked against the Open targets)
+SHOP_REFS = (24709, 26082)                         # Atrium_201a _04 and Atrium_101a _03 = the OpenNow-only shop frontages
+
+
+def patch3(src, dst, refs, force=False, log=print):
+    """2026-10-26 04:35 (live run DM02_lift on 505735d2: the player walking through the opened shutter stuck at x = +-1965 at all three
+    co-op sites; the Pathblocker is a nav-only object). Only the .HVK changes: each shutter has its own 4-vertex STATIC plane over the whole
+    opening (x = +-1990, y 500..810); kl_escape.cut_collision swaps those placements for a filler (the bank-vault way), so the list codes
+    stay valid. Leaves the .prp exactly as patch2 'open' made it.
+    GUESSES: (1) the blocker is that plane and not the node flag path failing elsewhere (DeactivateGeom -> 0x6edd50 sets flag 0x400 only;
+    whether a static placement inside a shared list shape honours it is NOT proven); (2) the cut leaves the shutters passable from the
+    start, also online (solo / Arcade only, as solo_open); (3) the filler (smallest kept static) does not overlap the opening."""
+    import kl_escape, kl_hvk
+    have = S.md5(src)
+    if have != LIVE_MD5_3 and not force:
+        raise ValueError('%s: md5 %s is not the live DM02 zip (%s)' % (src, have, LIVE_MD5_3))
+    B = F.Built(src, 'F02')
+    sc = B.sc
+    opens = [k for k in range(1, len(sc.names)) if sc.names[k].startswith('KLCoop') and sc.names[k].endswith('!Open')]
+    if len(opens) != 3:
+        raise ValueError('%d Open nodes' % len(opens))
+    tg = []
+    for k in opens:
+        for nm, body in sc.nodes[k]['ctrls']:
+            if sc.p.key(nm) == 'DeactivateGeom':
+                tg += kl_fa.value(sc, kl_fa.units(body[1:-1])[1])
+    want = {B.ents[k - 1].ref for k in range(1, len(sc.names)) if sc.path[k] in tg}   # the targets are full paths
+    log('  Open targets %s -> REFs %s' % ([t.rsplit(chr(92), 1)[-1] for t in tg], sorted(want)))
+    if want != set(SHUTTER_REFS):
+        raise ValueError('Open targets REFs %s differ from %s' % (sorted(want), SHUTTER_REFS))
+    for r in refs:   # every REF must be a shutter node of the live zip
+        ks = [k for k in range(1, len(sc.names)) if B.ents[k - 1].ref == r]
+        if len(ks) != 1 or 'RollerShutterA' not in sc.names[ks[0]]:
+            raise ValueError('REF %d is not one RollerShutterA node: %s' % (r, [sc.names[k] for k in ks]))
+    with zipfile.ZipFile(src) as zf:
+        h = kl_hvk.Hvk(zf.read(B.ext['.HVK']))
+    n0 = h.static_count()
+    for r in refs:
+        if sum(1 for s in h.shapes for i in s.inst if kl_hvk.ref(i) == r and s.type == 1) != 1:
+            raise ValueError('REF %d: not exactly one STATIC placement' % r)
+    kl_escape.cut_collision(h, set(refs), log)
+    data = h.serialize()
+    if h.static_count() != n0 or any(kl_hvk.ref(i) in refs for s in h.shapes for i in s.inst):
+        raise ValueError('cut left the REFs or changed the static count')
+    new = dict(B.files)
+    new[B.ext['.HVK']] = data
+    os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+    kl_graft.write_zip(dst, [(n, new[n]) for n in B.order])
+    with zipfile.ZipFile(src) as a, zipfile.ZipFile(dst) as b:
+        diff = sorted(n for n in a.namelist() if a.read(n) != b.read(n))
+        h2 = kl_hvk.Hvk(b.read(B.ext['.HVK']))
+    if diff != [B.ext['.HVK']] or h2.static_count() != n0 or any(kl_hvk.ref(i) in refs for s in h2.shapes for i in s.inst):
+        raise ValueError('read-back: members %s' % diff)
+    rep = collections.OrderedDict(mode='patch3', source=src, md5_in=have, out=dst, out_md5=S.md5(dst), members_changed=diff,
+                                  cut_refs=sorted(refs), statics=n0, hvk_bytes=(len(zipfile.ZipFile(src).read(B.ext['.HVK'])), len(data)))
+    log('kl_dm02_coop_1026 patch3 cut %s -> %s (%s)' % (sorted(refs), dst, rep['out_md5']))
+    return rep
+
+
+def stage_patch3(src, out, scratch=None, log=print):
+    h = S.md5(src)
+    if h != LIVE_MD5_3:
+        raise SystemExit('input md5 %s is not the live %s' % (h, LIVE_MD5_3))
+    LO.MAPS['DM02'] = dict(slot='F02', zip='F02_Main.zip')
+    LO.TAG = TAG_SOLO3
+    install = LS.INSTALL_PY.replace('van-lane + loot', 'co-op shutter planes cut').replace('tools/kl_lanes_stage_1025.py', 'tools/kl_dm02_coop_1026.py').replace('2026-10-25', '2026-10-26')
+    reps = {}
+    for name, refs in (('hvk3', SHUTTER_REFS), ('hvk5', SHUTTER_REFS + SHOP_REFS)):
+        d = os.path.join(out, name)
+        LO.rmtree(d)
+        os.makedirs(d)
+        rep = patch3(src, os.path.join(d, 'F02_Main.zip'), refs, log=log)
+        with open(os.path.join(d, 'install.py'), 'w', newline='\n') as fh:
+            fh.write(install % dict(map='DM02', zip='F02_Main.zip', tag=TAG_SOLO3, game=LS.GAME, old=h, new=rep['out_md5']))
+        with open(os.path.join(d, 'build_report.json'), 'w') as fh:
+            json.dump(rep, fh, indent=1, default=str)
+        if scratch:
+            LO.rehearse(d, 'DM02', src, rep['out_md5'], h, scratch, log)
+        reps[name] = rep
+    return reps
+
+
 def stage(src, out, scratch=None, log=print):
     h = S.md5(src)
     if h != SRC_MD5:
@@ -678,6 +763,9 @@ def stage(src, out, scratch=None, log=print):
 
 def main():
     a = sys.argv[1:]
+    if len(a) >= 3 and a[0] == 'patch3':
+        stage_patch3(a[1], a[2], a[a.index('--rehearse') + 1] if '--rehearse' in a else None)
+        return 0
     if len(a) >= 3 and a[0] == 'patch2':
         stage_patch2(a[1], a[2], a[a.index('--rehearse') + 1] if '--rehearse' in a else None)
         return 0
