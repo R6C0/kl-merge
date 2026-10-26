@@ -39,7 +39,7 @@ static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [Bo
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
 static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
-static int klbf_ot_bforce = 1, klbf_ot_recall = 1;static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20; static float klbf_ot_exitdy = 800.0f;      /* [BotFill] OnlineExitDy: height window round the exit trigger's node (BOS_DD02r: the bots stood on the trigger's own nav poly 6.2 m under DD02's centre y 6620, outside the old 400) */      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
+static int klbf_ot_bforce = 1, klbf_ot_recall = 1;static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20; static float klbf_ot_exitdy = 800.0f; static float klbf_ot_bslack = 100.0f;      /* [BotFill] OnlineBoxSlack (cm): BOS_DD02x2 bot 0 stood 0.5 m outside the box frame for the whole van wait (nav snap of the box centre) */      /* [BotFill] OnlineExitDy: height window round the exit trigger's node (BOS_DD02r: the bots stood on the trigger's own nav poly 6.2 m under DD02's centre y 6620, outside the old 400) */      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
 /* Step 3 (default off, SHIP-safe: one heap BYTE per squad). Squads are ZSquadScript entities (vtable 0xbcce3c); [squad+0x34] is the
@@ -117,6 +117,9 @@ static void klbf_init(void)
     klbf_ot_firestall = GetPrivateProfileIntA("BotFill", "OnlineFireStall", 1, klh_ini) != 0;      /* (recommended on) BO12: bots pinned down by cops were counted as stalled after 12 s */
     klbf_ot_bforce = GetPrivateProfileIntA("BotFill", "OnlineBoxForce", 1, klh_ini) != 0;      /* (recommended on) BO13: the carrier stood at the exit trigger, 3 m outside the box, for the whole van wait (state 3) and never boarded */
     if (klbf_ot) klog("botfill: OnlineTactics box force: OnlineBoxForce=%d (recommended on)", klbf_ot_bforce);
+    klbf_ot_bslack = (float)GetPrivateProfileIntA("BotFill", "OnlineBoxSlack", 100, klh_ini);      /* (recommended 100) cm outside the box frame that still count as inside after 8 s of van wait; 0 = off */
+    if (klbf_ot_bslack < 0) klbf_ot_bslack = 0;
+    if (klbf_ot) klog("botfill: OnlineTactics box slack: OnlineBoxSlack=%.0f cm after 8 s of van wait (recommended 100, 0 = off)", klbf_ot_bslack);
     klbf_ot_exitdy = (float)GetPrivateProfileIntA("BotFill", "OnlineExitDy", 800, klh_ini);      /* GUESS: 800 covers a trigger centre floating ~6 m over its floor (DD02 610) without taking a bot on a floor 8 m below */
     if (klbf_ot) klog("botfill: OnlineTactics exit height window: OnlineExitDy=%.0f (recommended 800; was 400 before BOS_DD02r)", klbf_ot_exitdy);
     klbf_ot_recall = GetPrivateProfileIntA("BotFill", "OnlineVanRecall", 1, klh_ini) != 0;      /* (recommended on) BO14: a bot grabbed 800k 3 s after the call and was left behind when the van went */
@@ -160,7 +163,7 @@ static void klbf_init(void)
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 #define KLBF_OT_GUARDWAIT 30000   /* ms a bot holds while every free stack is guarded (OnlineTacticsGuard) before it takes the nearest guarded one */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt; int leg; DWORD legAt; } klbf_ob[KLBF_OT_BOTS];
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; } klbf_ob[KLBF_OT_BOTS];
 static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ], klbf_ot_badAt[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
 /* OnlineWaypoints (recommended on): [BotFillWay_<SLOT>] P1..P8 = "x y z" (floats, y = height). The phase-2 exit walk (the exit-trigger goal only, not van/box walks) goes through these in order.
@@ -759,6 +762,13 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                         if (!(klbf_ob[s].told & 256) && (klbf_ob[s].told |= 256)) klog("botfill: tactics: bot %d (actor %08lx): van waiting (state 3) and this bot is still outside the escape box (%.1f m from its centre, frame distance %.1f m, +%lu s since the call): re-ordered to the box centre (%.0f, %.0f, %.0f)%s%s (OnlineBoxForce, said once)", s, a, dd / 100, klmv_fr_dist(&bf, bots[b].pos) / 100, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0, tgt[0], tgt[1], tgt[2], why[0] ? "; order refused: " : "", why);
                     }
                 } else klbf_ob[s].outAt = 0;
+                if (!in && klbf_ot_bslack > 0 && vstate == 3 && bf.box && klmv_fr_dist(&bf, bots[b].pos) <= klbf_ot_bslack) {      /* OnlineBoxSlack (BOS_DD02x2): parked just outside the frame while the van waits; after 8 s there it counts as inside. GUESS: the game's own nav snap keeps it from the centre */
+                    if (!klbf_ob[s].nearAt) klbf_ob[s].nearAt = now;
+                    else if (now - klbf_ob[s].nearAt >= 8000) {
+                        in = 1;
+                        if (!(klbf_ob[s].told & 1024) && (klbf_ob[s].told |= 1024)) klog("botfill: tactics: bot %d (actor %08lx): %.1f m outside the escape box frame for %lu s of van wait: counts as inside (OnlineBoxSlack %.0f cm)", s, a, klmv_fr_dist(&bf, bots[b].pos) / 100, (unsigned long)((now - klbf_ob[s].nearAt) / 1000), klbf_ot_bslack);
+                    }
+                } else if (!in) klbf_ob[s].nearAt = 0;
                 if (klbf_ot_bprobe && now - klbf_ob[s].pAt >= 5000) { klbf_ob[s].pAt = now; klog("botfill: tactics: box probe: bot %d (actor %08lx) %.1f m from the box centre (frame distance %.1f m), inside %d (%s), van state %d, +%lu s since the call", s, a, dd / 100, klmv_fr_dist(&bf, bots[b].pos) / 100, in, byGame ? "game 0x758cb0" : "frame", vstate, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0); }
                 if (in && (vstate == 3 || vstate == 4 || (!klbf_ot_vstate && van))) {      /* OnlineVanState off: the old rule, the van's node known and the bot at it */
                     klbf_ob[s].phase = 3;
