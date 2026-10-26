@@ -46,8 +46,13 @@
 
 #define KLFR_SM 0x0168e598u                   /* session manager: +0x70 state (0x19 = round running) */
 
-static struct { int on, drop, safeMs, fall, look, dry, log, online; } klfr;
+static struct { int on, drop, safeMs, fall, look, dry, log, online, back; } klfr;
 static struct { float p[3], p100[3], M[9]; int have; } klfr_safe;
+/* peer DM02_fallR (05:34, LIVE PASS): the last still place was 7 units from the edge, so a player still holding a direction fell again at once.
+   A ring of safe places, one every 250 ms; a rescue goes back to the newest that is at least BackMs old (x the rescue's number in a row), else the oldest. */
+#define KLFR_RING 16
+static struct { float p[3], p100[3], M[9]; DWORD t; } klfr_ring[KLFR_RING];
+static int klfr_rn, klfr_rh;
 static DWORD klfr_P, klfr_stillT, klfr_cool, klfr_ts[3], klfr_sampT;
 static float klfr_lastY, klfr_sampY;
 static float klfr_lastP[3];
@@ -76,7 +81,7 @@ static int klfr_p100(DWORD P, float *p)
 
 static void klfr_reset(void)
 {   /* a new level / round / life: nothing of the old place may be used */
-    memset(&klfr_safe, 0, sizeof klfr_safe); klfr_haveY = 0; klfr_n = 0; klfr_cool = 0; klfr_stopped = 0; klfr_dryOut = 0; klfr_falling = 0;
+    memset(&klfr_safe, 0, sizeof klfr_safe); klfr_rn = klfr_rh = 0; klfr_haveY = 0; klfr_n = 0; klfr_cool = 0; klfr_stopped = 0; klfr_dryOut = 0; klfr_falling = 0;
     memset(klfr_ts, 0, sizeof klfr_ts);
 }
 
@@ -115,7 +120,7 @@ static int klfr_body(void *unused)
     /* teleport / scripted move: a one-tick jump of more than 3000 p100 (30 m) is no fall (GUESS: 3000; a free fall at ~2000/s moves ~35 per 60 Hz tick) -> forget the place */
     if (klfr_haveY) {
         float dx = p100[0] - klfr_lastP[0], dy = p100[1] - klfr_lastP[1], dz = p100[2] - klfr_lastP[2];
-        if (dx * dx + dy * dy + dz * dz > 3000.0f * 3000.0f) { memset(&klfr_safe, 0, sizeof klfr_safe); klfr_haveY = 0; klfr_falling = 0; }
+        if (dx * dx + dy * dy + dz * dz > 3000.0f * 3000.0f) { memset(&klfr_safe, 0, sizeof klfr_safe); klfr_rn = klfr_rh = 0; klfr_haveY = 0; klfr_falling = 0; }
     }
     memcpy(klfr_lastP, p100, 12);
     /* y bookkeeping: still in y / fall speed over >= 100 ms */
@@ -133,6 +138,11 @@ static int klfr_body(void *unused)
     if (klfr_in(W, p100) && klfr_in(W, q)) {
         if ((id == 2 || id == 3 || id == 8) && !klfc_cur_act(P) && now - klfr_stillT >= (DWORD)klfr.safeMs && klfc_pose(P, M, pf)) {
             memcpy(klfr_safe.p, pf, 12); memcpy(klfr_safe.p100, p100, 12); memcpy(klfr_safe.M, M, sizeof M); klfr_safe.have = 1;
+            const float *nw = klfr_ring[(klfr_rh + KLFR_RING - 1) % KLFR_RING].p100;   /* standing on one spot keeps its first time (no ring of copies); GUESS: 250 ms / 25 p100 */
+            if (!klfr_rn || (now - klfr_ring[(klfr_rh + KLFR_RING - 1) % KLFR_RING].t >= 250 && (nw[0] - p100[0]) * (nw[0] - p100[0]) + (nw[2] - p100[2]) * (nw[2] - p100[2]) + (nw[1] - p100[1]) * (nw[1] - p100[1]) > 25.0f * 25.0f)) {
+                memcpy(klfr_ring[klfr_rh].p, pf, 12); memcpy(klfr_ring[klfr_rh].p100, p100, 12); memcpy(klfr_ring[klfr_rh].M, M, sizeof M); klfr_ring[klfr_rh].t = now;
+                klfr_rh = (klfr_rh + 1) % KLFR_RING; if (klfr_rn < KLFR_RING) klfr_rn++;
+            }
         }
     } else out = 1;
     /* TRIGGER (not while the game runs an action / cutscene: a scripted move must not be undone) */
@@ -154,6 +164,16 @@ static int klfr_body(void *unused)
     }
     if (!klfc_pose(P, M, pf)) return 0;
     if (klfr.dry && klfr_dryOut) return 0;                              /* dry run: one line per excursion */
+    {   /* step back along the ring: the newest place at least BackMs x (rescues in a row + 1) old that is inside this box, else the oldest inside */
+        DWORD want = (DWORD)klfr.back * (DWORD)(klfr_n + 1); int j, pick = -1;
+        for (j = 1; j <= klfr_rn; j++) {
+            int r = (klfr_rh + KLFR_RING - j) % KLFR_RING;
+            if (!klfr_in(W, klfr_ring[r].p100)) continue;
+            pick = r;
+            if (now - klfr_ring[r].t >= want) break;
+        }
+        if (pick >= 0) { memcpy(klfr_safe.p, klfr_ring[pick].p, 12); memcpy(klfr_safe.p100, klfr_ring[pick].p100, 12); memcpy(klfr_safe.M, klfr_ring[pick].M, sizeof klfr_safe.M); }
+    }
     {
         float to[3];
         to[0] = klfr_safe.p[0]; to[1] = klfr_safe.p[1] + 10.0f; to[2] = klfr_safe.p[2];
@@ -191,7 +211,8 @@ static void klfr_init(void)
     klfr.look = (int)GetPrivateProfileIntA("FallRescue", "Look", 3, klh_ini); if (klfr.look < 1) klfr.look = 1; if (klfr.look > 10) klfr.look = 10;
     klfr.dry = GetPrivateProfileIntA("FallRescue", "Dry", 0, klh_ini) != 0;
     klfr.log = (int)GetPrivateProfileIntA("FallRescue", "Log", 1, klh_ini);
-    klog("fallrescue: on (recommended on); DropBelow=%d SafeMs=%d FallSpeed=%d Look=%d Dry=%d; a player who leaves the level box (or falls) is put back on the last place he stood still, at most 3 times in 30 s", klfr.drop, klfr.safeMs, klfr.fall, klfr.look, klfr.dry);
+    klfr.back = (int)GetPrivateProfileIntA("FallRescue", "BackMs", 1500, klh_ini); if (klfr.back < 0) klfr.back = 0; if (klfr.back > 10000) klfr.back = 10000;   /* GUESS: 1.5 s (peer DM02_fallR) */
+    klog("fallrescue: on (recommended on); DropBelow=%d SafeMs=%d FallSpeed=%d Look=%d BackMs=%d Dry=%d; a player who leaves the level box (or falls) is put back on a place he stood still about BackMs earlier, at most 3 times in 30 s", klfr.drop, klfr.safeMs, klfr.fall, klfr.look, klfr.back, klfr.dry);
 }
 
 #endif
