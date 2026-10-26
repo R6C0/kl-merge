@@ -657,8 +657,14 @@ def main():
         print('REFUSED: %%s exists already' %% bak); return 2
     if md5(here) != NEW:
         print('REFUSED: the staged zip next to install.py is not md5 %%s' %% NEW); return 2
+    if shutil.disk_usage(os.path.dirname(live)).free < os.path.getsize(here) + (1 << 30):
+        print('REFUSED: less than the zip + 1 GB free on the game drive'); return 2
     os.replace(live, bak)
-    shutil.copyfile(here, live)
+    try:
+        shutil.copyfile(here, live)
+    except OSError as e:  # disk full 10-26 01:24 left DM07/DM06B at 0 bytes with the original only in the backup
+        os.replace(bak, live)
+        print('copy failed (%%s), original put back' %% e); return 2
     if md5(live) != NEW:
         os.replace(bak, live)
         print('copy failed, original put back'); return 2
