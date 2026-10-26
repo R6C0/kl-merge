@@ -165,6 +165,21 @@
  *                                        the text. The ONLY focus read that exists needs Hooks=1 (ZWINDOWS is learnt
  *                                        from its SetFocus hook; with Hooks=0 the 'windows' line says 'ZWINDOWS not
  *                                        seen yet'). A System Link run uses Hooks=0, so it verifies by window instead.
+ *   28=tele 120.5 3.0 -88                TEST ONLY (2026-10-26). Teleport the LOCAL player to world (x, y, z) through the game's
+ *                                        own actor teleport 0x62a900 (klcrew_rt.c klt_teleport, the call the bot hops use), on the
+ *                                        game's thread (the script runs inside the keyboard poll). The actor is [[0xdd265c]+0x4cf0]
+ *                                        (the local player's ZFFActor, klcensor.c), NOT the ZFFPlayer object the 'pos' op reads.
+ *                                        First klt_tele_known() (is 0x62a900 the routine this build knows) and klt_refuse(actor)
+ *                                        (the guards of klcrew_rt.c); on any refusal or fault (__try/__except) it logs why and the
+ *                                        script GOES ON. Logs 'tele: from (x,y,z) to (x,y,z) now (x,y,z)' (feet = player + 0x460,
+ *                                        re-read after the call; 'now' can lag a frame if the game moves the body later).
+ *   29=ents door 20                      TEST ONLY, read only. Dump the scene entities whose NAME contains the text (case-insensitive,
+ *                                        one word) - at most <maxN> (default 20, cap 200): slot, object, name, class (RTTI), the
+ *                                        node's [+0x30] (GUESS: the REF label), 'en?' (GUESS: 1 when bit 10 of [node+0x3c] is clear,
+ *                                        the 'node is off' flag klt_refuse / kle_human test; the raw dword follows) and the place
+ *                                        (kle_node). Walk = klsync.c klsy_walk / klcensus.c: [[[0xe0ff90]+0xc]+0xc] = table of 128-byte
+ *                                        slots, object at slot+0x60, node = [object+4], name = [[object+4]+0x6c] (klauto.c
+ *                                        kla_geom_name, klprobe.c klpr_name: the same GUESS-level read). Pure reads (klh_rd).
  *   [Auto] TapPolls=2     a tap's key stays down for at least this many keyboard polls AND the hold in ms (the hold is
  *                         the longer of the two: a stall makes the polls, not the clock, the limit). The key-down event
  *                         is handed to the game inside the poll that reads it, so a stall cannot eat it by itself;
@@ -1035,7 +1050,7 @@ static int kla_install(void)
 /* ---------------------------------------------------------------- script */
 
 typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; DWORD off[6]; BYTE noff; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP, C_POKE, C_WAITPEERS };
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP, C_POKE, C_WAITPEERS, C_TELE, C_ENTS };
 static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 static DWORD kla_tap_polls = 2;                   /* [Auto] TapPolls: a tap's key stays down for at least this many polls */
@@ -1151,6 +1166,66 @@ static void kla_log_pos(const char *label)
 }
 static int kla_script_active(void) { return kla_pc < kla_ncmd; }
 
+/* ---- script op 'tele <x> <y> <z>' (TEST only, 2026-10-26). Runs inside kla_script_step = the keyboard poll = the game's thread (C_POS
+   does its reads there too; there is no deferral to copy). The body to move is the local player's ZFFActor [[0xdd265c]+0x4cf0]
+   (klcensor.c; klt_refuse() wants vtable ZFFActor, which the ZFFPlayer objects in kla_pl[] do not have), the feet logged are the
+   ZFFPlayer's +0x460 as the other ops read them. Every refusal is logged and the script goes on. */
+static void kla_tele(int line, const float to[3])
+{
+    int me; float from[3] = { 0, 0, 0 }, now[3] = { 0, 0, 0 }; DWORD gd, actor = 0; const char *why = 0; int fault = 0, hf, hn;
+    me = kla_local_player();
+    hf = me >= 0 && kla_player_pos(me, from);
+    if (!kla_exe_ok) why = "kl2.exe is not the known build";
+    else if (me < 0) why = "no local player found";
+    else if (!hf) why = "the player's feet cannot be read";
+    else if (!klb_finite(to[0]) || !klb_finite(to[1]) || !klb_finite(to[2])) why = "the target is not a finite place";
+    else if (!(gd = kla_rd32((DWORD_PTR)VA(0xdd265c))) || !(actor = kla_rd32(gd + 0x4cf0))) why = "no local actor at [gamedata+0x4cf0]";
+    else if (!klt_tele_known()) why = "0x62a900 is not the routine this build knows (klt_tele_known)";
+    else why = klt_refuse(actor);
+    if (!why) {
+        __try { klt_teleport(actor, to); } __except (EXCEPTION_EXECUTE_HANDLER) { fault = 1; }
+    }
+    hn = me >= 0 && kla_player_pos(me, now);
+    if (why) kla_out(1, "script %d: tele REFUSED (%s): from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx", line, why,
+                     from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
+    else if (fault) kla_out(1, "script %d: tele FAULTED in 0x62a900 (caught): from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx", line,
+                            from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
+    else kla_out(1, "script %d: tele: from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f)%s (actor %08lx)", line,
+                 from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], hn ? "" : " [feet unreadable]", (unsigned long)actor);
+}
+
+/* ---- script op 'ents <substring> [maxN]' (TEST only, READ ONLY). The walk of klsync.c klsy_walk / klcensus.c: [[[KLE_ENTS]+0xc]+0xc] = the
+   table, 0x80 bytes a slot, the object at slot + 0x60, the node [object + 4] (klescort.c kle_node reads its place). Name = [[object+4]+0x6c]
+   (kla_geom_name / klprobe.c klpr_name). GUESS: [node+0x30] is the REF label (re/graft_formats.md has it as FILE record +0x30; that the loader keeps
+   it at node+0x30 is NOT established - printed as 'ref?'). GUESS: bit 10 of [node+0x3c] set = disabled (the 'node is off' test of klt_refuse
+   and kle_human, 0x7263fa); printed as 'en?' = 1 when clear, with the raw dword. */
+static void kla_ents(int line, const char *sub, int maxn)
+{
+    DWORD p, tab, i, blk[64 * 32]; int shown = 0, seen = 0, scanned = 0;
+    if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) { kla_out(1, "script %d: ents '%s': the entity table is not there yet", line, sub); return; }
+    for (i = 0; i < 0x10000; i += 64) {
+        DWORD k;
+        if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
+        for (k = 0; k < 64; k++) {
+            DWORD o = blk[k * 32 + 0x60 / 4], node, ref = 0, fl = 0; char nm[96], cls[64]; float pos[3] = { 0, 0, 0 }; int pv, rv, fv;
+            if (o < 0x10000 || klh_rd32(o) < 0x10000) continue;
+            scanned++;
+            if (!(node = klh_rd32(o + 4)) || !klh_rdstr(klh_rd32(node + 0x6c), nm, sizeof nm) || !kla_contains(nm, sub)) continue;
+            seen++;
+            if (shown >= maxn) continue;
+            shown++;
+            kla_rtti(o, cls, sizeof cls);
+            if (!cls[0] && klh_avt(o) == 0x00bb3bacu) strcpy(cls, "ZFFActor");
+            rv = klh_rd(node + 0x30, &ref, 4); fv = klh_rd(node + 0x3c, &fl, 4);
+            pv = kle_node(node, pos, 0);
+            kla_out(1, "script %d: ents #%d slot %lu obj %08lx name '%s' class %s ref?(+0x30) %s%lu en?(!bit10 of +0x3c) %s (flags %08lx) pos %s(%.1f, %.1f, %.1f)", line, shown,
+                    (unsigned long)(i + k), (unsigned long)o, nm, cls[0] ? cls : "?", rv ? "" : "unreadable ", (unsigned long)ref,
+                    fv ? (fl >> 10 & 1 ? "0" : "1") : "?", (unsigned long)fl, pv ? "" : "none ", pos[0], pos[1], pos[2]);
+        }
+    }
+    kla_out(1, "script %d: ents '%s': %d matched of %d entities, %d shown (max %d)", line, sub, seen, scanned, shown, maxn);
+}
+
 static int kla_key(const char *s)
 {
     static const struct { const char *n; BYTE k; } t[] = {
@@ -1262,6 +1337,17 @@ static void kla_script_load(void)
             c->op = C_ONWIN; strcpy(c->text, a); strcpy(c->text + strlen(a) + 1, m);
         }
         else if (!_stricmp(op, "pos")) { c->op = C_POS; snprintf(c->text, sizeof c->text, "%s", rest); }
+        else if (!_stricmp(op, "tele")) {               /* tele <x> <y> <z>: the local player to a world place (TEST rig only) */
+            if (sscanf(rest, "%f %f %f", &c->f[0], &c->f[1], &c->f[2]) < 3) { kla_out(1, "script line %d: tele needs <x> <y> <z> - script not loaded", i); kla_ncmd = 0; return; }
+            c->op = C_TELE;
+        }
+        else if (!_stricmp(op, "ents")) {               /* ents <name-substring> [maxN]: read-only scene node dump (TEST rig only) */
+            if (!a[0]) { kla_out(1, "script line %d: ents needs <name-substring> - script not loaded", i); kla_ncmd = 0; return; }
+            c->op = C_ENTS; c->n = 20; snprintf(c->text, sizeof c->text, "%s", a);
+            sscanf(rest + strlen(a), "%lu", &c->n);
+            if (c->n < 1) c->n = 20;
+            if (c->n > 200) c->n = 200;
+        }
         else if (!_stricmp(op, "peek")) {
             char *plus = strchr(a, '+');                 /* <addr>[+off[+off...]]: every '+' follows one pointer, then adds */
             c->op = C_PEEK; c->n = strtoul(a, 0, 16); c->key = (BYTE)(plus != 0); c->n2 = plus ? strtoul(plus + 1, 0, 16) : 0;
@@ -1489,6 +1575,8 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             break;
         case C_MDOWN: case C_MUP: kla_m_btn[c->n] = (BYTE)(c->op == C_MDOWN ? 0x80 : 0); kla_out(1, "script %d: mouse button %lu %s", kla_pc + 1, c->n, c->op == C_MDOWN ? "down" : "up"); next = 1; break;
         case C_POS: kla_log_pos(c->text); next = 1; break;
+        case C_TELE: kla_tele(kla_pc + 1, c->f); next = 1; break;
+        case C_ENTS: kla_ents(kla_pc + 1, c->text, (int)c->n); next = 1; break;
         case C_LABEL: next = 1; break;
         case C_ONWIN: kla_trap = kla_pc; kla_out(1, "script %d: when window '%s' comes up, go to label '%s'", kla_pc + 1, c->text, c->text + strlen(c->text) + 1); next = 1; break;
         case C_GOTO: case C_FACE: {

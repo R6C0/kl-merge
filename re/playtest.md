@@ -68,7 +68,7 @@ momentum then carries him wide on the far side. **A way point close behind a tur
 Other commands a route uses: `pos <label>` (`pos label: me #k (x, y, z) heading h`), `log`, `wait`,
 `down / up / tap <KEY>`, `mdown 0 / mup 0` (the fire button through the scripted mouse), `onwin <window>
 <label>` (jump when the score page comes up), `peek`, `pass`, and with the patch `waitstate` / `waitvan`.
-`face x z` turns only while he walks. A script has at most 640 lines; a `log` / `pos` text is cut at 79
+`tele <x> <y> <z>` (TEST only, 2026-10-26: the local player's actor [[0xdd265c]+0x4cf0] through the game's teleport 0x62a900 via klcrew_rt.c klt_teleport, guarded by klt_tele_known / klt_refuse and __try; a refusal is logged and the script goes on; logs `tele: from (..) to (..) now (..)`), `ents <name-substring> [maxN=20, cap 200]` (TEST only, read only: scene entities whose name [[obj+4]+0x6c] contains the text - slot, object, class, `ref?` = [node+0x30] (GUESS: REF label), `en?` = not bit 10 of [node+0x3c] (GUESS: enabled), place). `face x z` turns only while he walks. A script has at most 640 lines; a `log` / `pos` text is cut at 79
 characters.
 
 ### 1.2 What the rig cannot do
