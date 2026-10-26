@@ -127,7 +127,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
-    for (i = 0; i < 0x10000 && n < 4000; i += 64) {
+    for (i = 0; i < 0x10000; i += 64) {      /* the whole table: BO2 (DM01) capped at 4000 objects never reached the Ally actors */
         DWORD k;
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
         for (k = 0; k < 64; k++) {
@@ -151,6 +151,10 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 bots[nb].actor = o; bots[nb].soldier = snd; memcpy(bots[nb].pos, pos, 12); nb++;
             }
         }
+    }
+    {   /* once per round, and again whenever the bot count changes: what the scan saw (BO2 gave no order and no clue why) */
+        static int seen_round, seen_nb = -1;
+        if (seen_round != klbf_ot_rounds || seen_nb != nb) { seen_round = klbf_ot_rounds; seen_nb = nb; klog("botfill: tactics: scan: %d objects, %d live Ally bot(s), %d armed stack(s), van %08lx", n, nb, nm, van); }
     }
     {   /* free the slot of a bot that is dead / gone (else its target stack stays "taken" and the 16 slots run out); boarded bots (phase 3) keep theirs for the summary */
         int q, r;
