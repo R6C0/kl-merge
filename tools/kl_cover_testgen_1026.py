@@ -176,7 +176,7 @@ BOXES19 = {
 }
 REPS = 12
 SETTLES = (1000, 2500, 4000)
-BLOCK19_MS = 5000 + 2500 + 600 + 2000 + 3000            # mean settle + the waits of one repetition
+BLOCK19_MS = 1500 + 1500 + 4000 + 2500 + 600 + 2000 + 3000     # two run-up teles, goto, mean settle, the waits of one repetition
 RUN_UP = 200    # GUESS: tele this far OUT of the face (along face_normal), then walk in; 200 is room for the heading to settle, small enough to stay on the same floor
 
 
@@ -224,18 +224,26 @@ def block(tag, t, ctl=False):
 
 
 def block19(tag, t, reps):
-    """COVER19: reps x (tele to the stand, settle 1000/2500/4000 in turn, pos, three peeks of [P+2d60] 300 ms apart plus the move-id, tap C,
+    """COVER19: reps x (tele to the run-up point twice, goto the stand, settle 1000/2500/4000 in turn, pos, three peeks of [P+2d60] 300 ms apart plus the move-id, tap C,
     wait 2000, CHECK, peek move-id, pos, tap C to leave, wait 3000). No 'face' (it does not turn a standing player, see block()). Sub-tags
     <tag>r<n> keep cover14_verdict.py's per-block parsing: each repetition is its own block."""
     sx, g, sz = t['stand']; nx, nz = t['face_normal']
     fx, fz = sx - 50 * nx, sz - 50 * nz
+    rx, rz = sx + RUN_UP * nx, sz + RUN_UP * nz
     r = lambda v: int(round(v))
     out = []
     for i in range(reps):
         st = SETTLES[i % len(SETTLES)]; k = '%sr%d' % (tag, i + 1)
+        # 10-26 15:30 (workflow woorpztbk, refuter agreed): a tele straight onto a stand point can be refused by the placement 0x82cc40 -
+        # COVER19 DM06 K6_22: the node took (4673,269,-10909), the body (+0x460) stayed at (5894,-2234,4116) for all 12 reps, and the same
+        # target MISSED in COVER14-16 too. COVER17/18 reached it by tele to the run-up point + goto: same here, then the settle.
         out += [
             'log === %s: %s %s ext %.0fx%.0f y %.1f stand (%.1f,%.1f) face (%.1f,%.1f) settle %d ===' % (k, t['name'], t['kind'], t['ext'][0], t['ext'][1], g, sx, sz, fx, fz, st),
-            'tele %d %d %d' % (r(sx), r(g + 5), r(sz)),
+            'tele %d %d %d' % (r(rx), r(g + 5), r(rz)),
+            'wait 1500',
+            'tele %d %d %d' % (r(rx), r(g + 5), r(rz)),
+            'wait 1500',
+            'goto %d %d 55 4000' % (r(fx), r(fz)),
             'wait %d' % st,
             'pos %s1-at-stand' % k,
             'peek 0xdd265c+828+2d60 %s-offer-flags-a' % k,
