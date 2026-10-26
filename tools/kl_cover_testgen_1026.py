@@ -162,6 +162,21 @@ BOXES18.update({
     'DM02':  ['CoverBoxH_K6_31'],
     'DM03':  ['CoverBoxH_K6_90'],
 })
+# COVER18 result (10-26 15:10, workflow w8j5xozdc, analyst + refuter over 238 tap rows of COVER14-18): the heading hypothesis is REFUTED. The
+# heading at box n is the post-C heading of box n-1 (a COVER snaps it to an axis), so it is a proxy. What separates the outcomes is engine state at
+# the tap: secondary move-id 18 = NO 16/16; with move-id 3, [P+0x2d60] (the action-offer flags; bit 0x10 = stock vault, klfreeclimb.c) = 1 gives
+# COVER 65/65, = 0 gives NO 14/16. Together 95/97 on valid tele rows. [P+2d60] flickers poll to poll while standing.
+# COVER19: on boxes that flip between runs (plus one always-NO box), REPS tele+tap repetitions with the flag and the move-id peeked right before
+# every C, and the settle after the tele varied (SETTLES), so the flag is 0 on some taps and 1 on others at the same stand and heading.
+# klauto has no conditional wait on a peeked value (klhook/*.c is not edited here), so the tap is not gated; the analysis splits the taps by the peek.
+BOXES19 = {
+    'DM06':  ['CoverBoxM_K6_22'],                        # N N N C C over COVER14-18
+    'DM01B': ['CoverBoxH_K6_13', 'CoverBoxH_K6_10'],     # K6_13 N N N C C; K6_10 NO 5/5
+    'DM06B': ['CoverBoxH_K6_39', 'CoverBoxH_K6_47'],     # K6_39 N C C C N; K6_47 NO 5/5
+}
+REPS = 12
+SETTLES = (1000, 2500, 4000)
+BLOCK19_MS = 5000 + 2500 + 600 + 2000 + 3000            # mean settle + the waits of one repetition
 RUN_UP = 200    # GUESS: tele this far OUT of the face (along face_normal), then walk in; 200 is room for the heading to settle, small enough to stay on the same floor
 
 
@@ -208,10 +223,42 @@ def block(tag, t, ctl=False):
     ]
 
 
+def block19(tag, t, reps):
+    """COVER19: reps x (tele to the stand, settle 1000/2500/4000 in turn, pos, three peeks of [P+2d60] 300 ms apart plus the move-id, tap C,
+    wait 2000, CHECK, peek move-id, pos, tap C to leave, wait 3000). No 'face' (it does not turn a standing player, see block()). Sub-tags
+    <tag>r<n> keep cover14_verdict.py's per-block parsing: each repetition is its own block."""
+    sx, g, sz = t['stand']; nx, nz = t['face_normal']
+    fx, fz = sx - 50 * nx, sz - 50 * nz
+    r = lambda v: int(round(v))
+    out = []
+    for i in range(reps):
+        st = SETTLES[i % len(SETTLES)]; k = '%sr%d' % (tag, i + 1)
+        out += [
+            'log === %s: %s %s ext %.0fx%.0f y %.1f stand (%.1f,%.1f) face (%.1f,%.1f) settle %d ===' % (k, t['name'], t['kind'], t['ext'][0], t['ext'][1], g, sx, sz, fx, fz, st),
+            'tele %d %d %d' % (r(sx), r(g + 5), r(sz)),
+            'wait %d' % st,
+            'pos %s1-at-stand' % k,
+            'peek 0xdd265c+828+2d60 %s-offer-flags-a' % k,
+            'wait 300',
+            'peek 0xdd265c+828+2d60 %s-offer-flags-b' % k,
+            'wait 300',
+            'peek 0xdd265c+828+2d60 %s-offer-flags-c' % k,
+            'peek 0xdd265c+828+6b4+44 %s-1-before-C-movement-id(secondary)' % k,
+            'tap C 400',
+            'wait 2000',
+            'log %s CHECK 1' % k,
+            'peek 0xdd265c+828+6b4+44 %s-1-after-C-movement-id(secondary)' % k,
+            'pos %s1-after-C' % k,
+            'tap C 400',
+            'wait 3000',
+        ]
+    return out
+
+
 def pick17(map_id, tiles):
     by = dict((t['name'], t) for t in tiles)
     out = []
-    for nm in (BOXES18 if TAG == 'COVER18' else BOXES17)[map_id]:
+    for nm in {'COVER18': BOXES18, 'COVER19': BOXES19}.get(TAG, BOXES17)[map_id]:
         ctl = nm.endswith('*'); nm = nm.rstrip('*')
         if nm not in by: raise SystemExit('%s: box %s not in the plan' % (map_id, nm))
         out.append((by[nm], ctl))
@@ -223,7 +270,7 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
     tiles = json.load(open(plan))
     sel, msg = selection_part(os.path.join(out, map_id + '.ini'))
     ctls = {}
-    if TAG in ('COVER17', 'COVER18'):
+    if TAG in ('COVER17', 'COVER18', 'COVER19'):
         pk = pick17(map_id, tiles); ch = [t for t, _ in pk]; ctls = dict((t['name'], c) for t, c in pk)
     else:
         ch = choose(tiles, n)
@@ -246,10 +293,17 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
     if ch:
         s.append('ents %s 3' % ch[0]['name'])
     s += ['log === ' + TAG + ': idle %d s at the spawn (coverdump dumps after the list is stable 2 s) ===' % (IDLE_MS // 1000), 'wait %d' % IDLE_MS, 'pos idle-end']
+    reps = min(REPS, (380000 - LEAD_WAIT - IDLE_MS) // (BLOCK19_MS * max(1, len(ch))))
     for i, t in enumerate(ch):
-        s += block('k%d' % (i + 1), t, ctls.get(t['name'], False)) if TAG in ('COVER17', 'COVER18') else block16('k%d' % (i + 1), t)
+        if TAG == 'COVER19':
+            s += block19('k%d' % (i + 1), t, reps)
+        else:
+            s += block('k%d' % (i + 1), t, ctls.get(t['name'], False)) if TAG in ('COVER17', 'COVER18') else block16('k%d' % (i + 1), t)
     s += ['log ' + TAG + '_%s DONE' % map_id, 'pass 1000']
-    total = LEAD_WAIT + IDLE_MS + (BLOCK17_MS + (3300 if TAG == 'COVER18' else 0) if TAG in ('COVER17', 'COVER18') else BLOCK_MS) * len(ch)
+    if TAG == 'COVER19':
+        total = LEAD_WAIT + IDLE_MS + BLOCK19_MS * reps * len(ch)
+    else:
+        total = LEAD_WAIT + IDLE_MS + (BLOCK17_MS + (3300 if TAG == 'COVER18' else 0) if TAG in ('COVER17', 'COVER18') else BLOCK_MS) * len(ch)
     assert total < 400000, 'run too long: %d ms after load' % total
     text = '\n'.join(hdr) + '\n[Script]\n' + '\n'.join('%d=%s' % (i + 1, t) for i, t in enumerate(s)) + '\n'
     p = os.path.join(out, TAG + '_%s.ini' % map_id)
@@ -270,7 +324,7 @@ def main(argv):
         elif argv[i] == '--plans': plans = argv[i + 1]; i += 2
         else: maps.append(argv[i]); i += 1
     if maps == ['all']:
-        maps = list(BOXES18) if TAG == 'COVER18' else list(BOXES17) if TAG == 'COVER17' else MAPS
+        maps = list({'COVER18': BOXES18, 'COVER19': BOXES19, 'COVER17': BOXES17}.get(TAG, MAPS))
     for m in maps:
         p, ch, total = build(m, n, out, plans)
         print('%s -> %s (%d blocks, ~%d s after load)' % (m, p, len(ch), total // 1000))
