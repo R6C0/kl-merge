@@ -77,6 +77,7 @@ static int klbf_squads(int fill)
    team alone cannot tell them apart; the puppeteer's list is the bots). Entries first, then the count; read on the game thread, fresh for 5 s. Needs OnlineTactics=1 (the census is its). */
 #define KLBF_OT_BOTS_MAX 16      /* = KLBF_OT_BOTS (defined below) */
 static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used by klbf_way_load below) */
+static int klbf_ot_ramp, klbf_ot_rampdry;      /* OnlineRampFire / OnlineRampDry toggles (read in the init, used by klbf_ramp_* below) */
 static DWORD klbf_pb_bots[KLBF_OT_BOTS_MAX]; static volatile LONG klbf_pb_n; static volatile DWORD klbf_pb_at;
 static int klbf_pb_any(void) { return klbf_pb_n > 0 && GetTickCount() - klbf_pb_at < 5000u; }
 static int klbf_pb_is_bot(DWORD a) { int i, n = klbf_pb_n; if (!a || !klbf_pb_any()) return 0; for (i = 0; i < n && i < KLBF_OT_BOTS_MAX; i++) if (klbf_pb_bots[i] == a) return 1; return 0; }
@@ -120,6 +121,9 @@ static void klbf_init(void)
     if (klbf_ot) klog("botfill: OnlineTactics van recall: OnlineVanRecall=%d (recommended on)", klbf_ot_recall);
     klbf_ot_way = GetPrivateProfileIntA("BotFill", "OnlineWaypoints", 1, klh_ini) != 0;      /* (recommended on) BOS_DD02: 7 bots stalled 139-166 m short of the exit trigger; a [BotFillWay_<SLOT>] route walks them round it */
     if (klbf_ot) klog("botfill: OnlineTactics waypoints: OnlineWaypoints=%d (recommended on; needs a [BotFillWay_<SLOT>] section)", klbf_ot_way);
+    klbf_ot_ramp = GetPrivateProfileIntA("BotFill", "OnlineRampFire", 1, klh_ini) != 0;      /* (recommended on) DD02: the ramp trigger never fires online because bots are not counted */
+    klbf_ot_rampdry = GetPrivateProfileIntA("BotFill", "OnlineRampDry", 1, klh_ini) != 0;      /* default 1: log only until proven live */
+    if (klbf_ot) klog("botfill: ramp: OnlineRampFire=%d (recommended on), OnlineRampDry=%d (log only; needs a [BotFillRamp_<SLOT>] section)", klbf_ot_ramp, klbf_ot_rampdry);
     klbf_ot_door = GetPrivateProfileIntA("BotFill", "OnlineSkipDoorStacks", 1, klh_ini) != 0;      /* (recommended on) BOS1: DD01's 58 vault cases sit behind kick doors; ordered straight at them the bots stalled and took 0 */
     if (klbf_ot) klog("botfill: OnlineTactics BOS1: OnlineSkipDoorStacks=%d (recommended on)", klbf_ot_door);
     if (klbf_ot) klog("botfill: OnlineTactics BO12 fixes: OnlineGiveUpRetry=%d (recommended on, %d s), OnlineIdleVan=%d (recommended on, %d s), OnlineFireStall=%d (recommended on)", klbf_ot_retry, klbf_ot_retryS, klbf_ot_idlevan, klbf_ot_idleS, klbf_ot_firestall);
@@ -184,6 +188,108 @@ static void klbf_way_load(void)
         klog("botfill: tactics: OnlineWaypoints: [%s] has %d point(s) for the exit walk (slot key '%s')", klbf_way_sec, klbf_way_n, key);
         for (i = 0; i < klbf_way_n; i++) klog("botfill: tactics: OnlineWaypoints: leg %d = (%.0f, %.0f, %.0f)", i + 1, klbf_way_p[i][0], klbf_way_p[i][1], klbf_way_p[i][2]);
     } else klog("botfill: tactics: OnlineWaypoints: no [%s] section for this level: exit walk unchanged", klbf_way_sec);
+}
+
+/* OnlineRampFire (recommended on; OnlineRampDry=1 default = log only until proven live). 2026-10-26, stock DD02 (slot F02): TriggerBox_make_the_ramp (node 15776, one-shot, centre (3,5846,-10822),
+   half (2400,1200,10809)) builds the ramp when a COUNTED player is inside; online bots are not counted (rule 0x7f6850 false online), so it never fires unless a human goes there. In Arcade the first
+   bot above y 4646 fires it. Here the host does what Arcade's rule would: when an online bot stands inside the box, call the trigger's fire routine 0x45f5d0 (ZTriggerBox vtable 0xbc232c slot 34,
+   thiscall, 0 stack args, exactly klclubholster.c) ONCE. Section [BotFillRamp_<SLOT>]: Name (substring, default make_the_ramp), Centre "x y z", Half "x y z". No section = nothing happens (logged once).
+   UNSYNCED: 0x45f5d0 runs on the host only; clients may not see the ramp build (GUESS, unproven; 0x6ae730, the sync path, is NOT used: unproven). Log lines start 'botfill: ramp:'. */
+#define KLBF_RAMP_VT   0x00bc232c
+#define KLBF_RAMP_FIRE 0x0045f5d0
+#define KLBF_RAMP_PROBEMS 5000      /* ms into the round before the one-off entity-table probe */
+#define KLBF_RAMP_CAND 4
+static struct { int loaded, have, probed, fired, ncand; DWORD t0, cand[KLBF_RAMP_CAND]; float c[3], h[3]; char name[48], sec[40]; } klbf_rp;
+static int klbf_rp_best;
+static void klbf_ramp_load(void)
+{
+    char scene[200], key[120], line[120], *c; int i; float v[3];
+    DWORD t0 = GetTickCount();
+    memset(&klbf_rp, 0, sizeof klbf_rp); klbf_rp_best = 0; klbf_rp.t0 = t0;
+    if (!klbf_ot_ramp || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
+    strcpy(klbf_rp.sec, "BotFillRamp_");
+    for (i = 0; key[i] && key[i] != 0x5c && i < 20; i++) klbf_rp.sec[12 + i] = (char)(key[i] >= 'a' && key[i] <= 'z' ? key[i] - 32 : key[i]);
+    klbf_rp.sec[12 + i] = 0;
+    GetPrivateProfileStringA(klbf_rp.sec, "Name", "make_the_ramp", klbf_rp.name, sizeof klbf_rp.name, klh_ini);
+    line[0] = 0; GetPrivateProfileStringA(klbf_rp.sec, "Centre", "", line, sizeof line, klh_ini);
+    for (c = line; *c; c++) if (*c == ',' || *c == ';' || *c == '(' || *c == ')') *c = ' ';
+    if (sscanf(line, "%f %f %f", &v[0], &v[1], &v[2]) != 3) { klog("botfill: ramp: no usable Centre in [%s] (slot key '%s'): ramp fire does nothing on this map", klbf_rp.sec, key); return; }
+    memcpy(klbf_rp.c, v, 12);
+    line[0] = 0; GetPrivateProfileStringA(klbf_rp.sec, "Half", "", line, sizeof line, klh_ini);
+    for (c = line; *c; c++) if (*c == ',' || *c == ';' || *c == '(' || *c == ')') *c = ' ';
+    if (sscanf(line, "%f %f %f", &v[0], &v[1], &v[2]) != 3 || v[0] <= 0 || v[1] <= 0 || v[2] <= 0) { klog("botfill: ramp: no usable Half in [%s]: ramp fire does nothing on this map", klbf_rp.sec); return; }
+    memcpy(klbf_rp.h, v, 12);
+    klbf_rp.have = 1;
+    klog("botfill: ramp: [%s] name '%s' centre (%.0f, %.0f, %.0f) half (%.0f, %.0f, %.0f), %s", klbf_rp.sec, klbf_rp.name, klbf_rp.c[0], klbf_rp.c[1], klbf_rp.c[2], klbf_rp.h[0], klbf_rp.h[1], klbf_rp.h[2], klbf_ot_rampdry ? "DRY (log only)" : "LIVE");
+}
+
+/* the entity name path [[obj+4]+0x6c] (a C string): klclubholster.c's GUESS, never proven for ZTriggerBox; b gets "" when unreadable */
+static void klbf_ramp_name(DWORD obj, char b[40])
+{
+    DWORD n = klh_rd32(obj + 4), s; int i;
+    b[0] = 0;
+    if (!n || !(s = klh_rd32(n + 0x6c)) || s < 0x10000) return;
+    for (i = 0; i < 39; i++) { if (!klh_rd(s + i, b + i, 1)) { b[0] = 0; return; } if (!b[i]) return; }
+    b[39] = 0;
+}
+
+/* one-off, ~5 s into the round (also when Dry): walk the entity table as klch_panic does and log the ZTriggerBox candidates */
+static void klbf_ramp_probe(void)
+{
+    DWORD p, tab, i, blk[64 * 32], total = 0, byname = 0, bycent = 0;
+    if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) { klog("botfill: ramp: probe: no entity table"); return; }
+    klbf_rp.probed = 1; klbf_rp.ncand = 0;
+    for (i = 0; i < 0x10000; i += 64) {
+        DWORD k;
+        if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
+        for (k = 0; k < 64; k++) {
+            DWORD o = blk[k * 32 + 0x60 / 4], off, cen = 0, cenoff[3]; char nm[40]; int nmatch;
+            if (o < 0x10000 || klh_rd32(o) != (DWORD)KLBF_RAMP_VT) continue;
+            total++;
+            klbf_ramp_name(o, nm);
+            nmatch = nm[0] && klbf_rp.name[0] && strstr(nm, klbf_rp.name) != 0;
+            for (off = 0; off + 12 <= 0x400; off += 4) {      /* the object's first 0x400 bytes in 0x100 chunks (a chunk that cannot be read is skipped); a float triple within 2 units of Centre */
+                float f[3]; DWORD base = off & ~0xffu;
+                if (!klh_rd(o + off, f, 12)) { off = base + 0xfc; continue; }
+                if (fabsf(f[0] - klbf_rp.c[0]) <= 2.0f && fabsf(f[1] - klbf_rp.c[1]) <= 2.0f && fabsf(f[2] - klbf_rp.c[2]) <= 2.0f) { if (cen < 3) cenoff[cen] = off; cen++; }
+            }
+            if (nmatch) byname++;
+            if (cen) bycent++;
+            if (nmatch || cen) {      /* rank: name+centre 3 > centre 2 > name 1; cand[0] is always the best seen (review: a good one after the 4th was dropped), the log is capped */
+                int sc = nmatch && cen ? 3 : cen ? 2 : 1;
+                if (!klbf_rp.ncand || sc > klbf_rp_best) { klbf_rp.cand[0] = o; klbf_rp_best = sc; }
+                if (klbf_rp.ncand < KLBF_RAMP_CAND) {
+                    DWORD d38 = klh_rd32(o + 0x38), d40 = klh_rd32(o + 0x40), d6c = klh_rd32(o + 0x6c);
+                    if (klbf_rp.ncand) klbf_rp.cand[klbf_rp.ncand] = o;
+                    klog("botfill: ramp: candidate %d: obj %08lx name '%s'%s, centre match first at +0x%lx (%lu hit(s)), [+0x38]=%08lx [+0x40]=%08lx [+0x6c]=%08lx", klbf_rp.ncand, (unsigned long)o, nm, nmatch ? " (NAME MATCH)" : "", cen ? (unsigned long)cenoff[0] : 0UL, (unsigned long)cen, (unsigned long)d38, (unsigned long)d40, (unsigned long)d6c);
+                }
+                klbf_rp.ncand++;
+            }
+        }
+    }
+    klog("botfill: ramp: probe: %lu ZTriggerBox in the table, %lu match name '%s', %lu match centre (3-float scan of the first 0x400 bytes), %d candidate(s) (best = cand[0], logged first only up to 4)%s", (unsigned long)total, (unsigned long)byname, klbf_rp.name, (unsigned long)bycent, klbf_rp.ncand, klbf_rp.ncand ? "" : " - NOTHING TO FIRE (name path / centre offset unproven)");
+}
+
+/* host, in a round (state 0x19), game thread, once a second: bp = the live Ally bots' feet (nb of them) */
+static void klbf_ramp_tick(DWORD now, float bp[][3], int nb)
+{
+    int b;
+    if (!klbf_ot_ramp || !klbf_rp.have || klbf_rp.fired) return;
+    if (!klbf_rp.probed) { if (now - klbf_rp.t0 >= KLBF_RAMP_PROBEMS) klbf_ramp_probe(); return; }
+    if (!klbf_rp.ncand) return;
+    for (b = 0; b < nb; b++) {
+        float *q = bp[b];
+        if (fabsf(q[0] - klbf_rp.c[0]) > klbf_rp.h[0] || fabsf(q[1] - klbf_rp.c[1]) > klbf_rp.h[1] || fabsf(q[2] - klbf_rp.c[2]) > klbf_rp.h[2]) continue;
+        {   DWORD o = klbf_rp.cand[0];
+            klbf_rp.fired = 1;      /* once per round, also when Dry */
+            if (klh_rd32(o) != (DWORD)KLBF_RAMP_VT) { klog("botfill: ramp: bot %d at (%.0f, %.0f, %.0f) is inside the box but candidate %08lx is no ZTriggerBox any more: nothing fired", b, q[0], q[1], q[2], (unsigned long)o); return; }
+            /* GUESS: no safe test on [obj+0x40] (meaning unknown; it is only logged); the one-shot is our own 'fired' flag */
+            if (klbf_ot_rampdry) { klog("botfill: ramp: DRY would fire 0x45f5d0 on %08lx ([+0x40]=%08lx): bot %d at (%.0f, %.0f, %.0f) is inside the box", (unsigned long)o, (unsigned long)klh_rd32(o + 0x40), b, q[0], q[1], q[2]); return; }
+            klog("botfill: ramp: FIRE 0x45f5d0 on %08lx ([+0x40]=%08lx): bot %d at (%.0f, %.0f, %.0f) is inside the box (host only: clients may not see the ramp build, GUESS)", (unsigned long)o, (unsigned long)klh_rd32(o + 0x40), b, q[0], q[1], q[2]);
+            KLFC_CALL(void (__fastcall *)(DWORD, DWORD), KLBF_RAMP_FIRE)(o, 0);
+            return;
+        }
+    }
 }
 
 /* OnlineHealthMul (2026-10-26, workflow wg4n9od9h, BO5): online the cops' damage on the Ally bots skips Arcade's damage table. 0x61a980 (ZFFActor hit)
@@ -427,7 +533,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
         klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = klbf_ot_lookAt = 0; klbf_ot_trig_looked = klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_ot_nbx = klbf_ot_bxlooks = 0; klbf_ot_bxbest = -1; klbf_ot_bxAt = 0;
         klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
-        klbf_way_load();
+        klbf_way_load(); klbf_ramp_load();
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
@@ -459,6 +565,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         }
     }
     {   int q; for (q = 0; q < nb && q < KLBF_OT_BOTS_MAX; q++) klbf_pb_bots[q] = bots[q].actor; klbf_pb_n = nb < KLBF_OT_BOTS_MAX ? nb : KLBF_OT_BOTS_MAX; klbf_pb_at = GetTickCount(); }      /* OnlinePointBlank's bot list */
+    {   float bp[KLBF_OT_BOTS][3]; int q; for (q = 0; q < nb; q++) memcpy(bp[q], bots[q].pos, 12); klbf_ramp_tick(now, bp, nb); }      /* OnlineRampFire */
     {   /* the money: BO4 (DM01) found 0 ZOnlineMoneyCtrl in the entity table - they are controllers, not table objects. Workflow wo8upp5vd
            (verified in disassembly): the ctor 0x9012a0 (0x901323..33) appends every one to the game's object registry via 0x826990: pointers
            at 0xe09e38, count 0xe0e63c (cap 0x1000). Types at +0x38: 0 normal, 1 DROP (the pool a player drops; skipped), 2 container.

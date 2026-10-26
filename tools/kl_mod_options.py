@@ -218,6 +218,8 @@ feat('onlinevanrecall', G_EXP, 'Online AI heisters still carrying money can call
      'klbotfill.c [BotFill] OnlineVanRecall; BO14: a carrier grabbed 800k right after the call and was left behind; NOT run live', [('BotFill', 'OnlineVanRecall', 1, 0, 1)])
 feat('onlinewaypoints', G_EXP, 'Online AI heisters walk a per-map route of waypoints to the exit when the ini lists one (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineWaypoints; BOS_DD02: 7 bots stalled 139-166 m short of the exit; needs a [BotFillWay_<SLOT>] section; NOT run live', [('BotFill', 'OnlineWaypoints', 1, 0, 1)])
+feat('onlinerampfire', G_EXP, 'Online AI heisters fire the DD02 ramp trigger when one stands in its box, if the ini lists the box (recommended on; log only until proven)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineRampFire/OnlineRampDry; DD02: bots are not counted online so make_the_ramp never fires; needs a [BotFillRamp_<SLOT>] section; NOT run live', [('BotFill', 'OnlineRampFire', 1, 0, 1)])
 feat('onlineskipdoor', G_EXP, 'Online AI heisters skip loot still locked behind a closed vault door (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineSkipDoorStacks; BOS1: DD01 vault cases (+0x5c behind a door) stalled every bot, 0 taken; NOT run live', [('BotFill', 'OnlineSkipDoorStacks', 1, 0, 1)])
 feat('onlineboxwalk', G_EXP, 'Online AI heisters walk to the escape box once the van is called and count as aboard only inside it (recommended on)', 'on', 'start',
