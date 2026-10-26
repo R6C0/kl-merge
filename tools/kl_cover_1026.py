@@ -8,6 +8,7 @@ OFFLINE: reads a finished map zip, writes a staging folder. Starts nothing, inst
     python kl_cover_1026.py build <zip> <out folder>    the zip with a 'KL_CoverSix!' group (boxes CoverBoxH/M_K6_nn) + cover_add.json
     options: --tiers ab (maps with NO hidden form-b box model, DM07: also clone form a = flags 0x302 boxes that have a collision record
              in the root's tree 0, like kl_dig_layer does for the Dig; default b)  --density D (target boxes per 100 m2 of mesh, default 3.5)  --max N (default 450)  --spread N (default 220)
+             --no-floornav (turn OFF the floor + nav filter, kl_cover_floornav.Ground: no collision floor / no nav mesh at the stand point, or a nav part no spawn reaches; recommended ON)
              --no-safety (turn OFF the safety rules: no tile near a spawn / spawn trigger / loot / door / stair / ramp, no floating or sunk ground; recommended ON)
 
 THE CAUSE (evidence in re/ notes and the report): a player can take cover only at a *coverbox*-named ZSTDOBJ box (CFFCoverList
@@ -53,6 +54,7 @@ STAND = (70.0, 230.0)
 STAND_NEED = 2
 MIN_RUN = 120.0
 NAME_GROUP = 'KL_CoverSix!'
+FLOORNAV = True          # (recommended on) drop a tile with no collision floor / no nav mesh at its stand point, or in a nav part nobody reaches that has no stock cover (kl_cover_floornav.Ground; tolerances are its GUESSes); --no-floornav turns it off
 SAFETY = True            # (recommended on) skip tiles near spawns / loot / doors / stairs / spawn triggers or on a floating / sunk ground (audit 2026-10-26); --no-safety turns it off
 SPAWN_PAD, SPAWN_DY = 60.0, 250.0   # footprint + 60 may not touch a ZSpawnPoint (|dy| < 250) or a spawn trigger box
 LOOT_NEAR, DOOR_NEAR = 110.0, 150.0 # distance (footprint edge) to a loot stack / to a door, stair, ramp or ladder object
@@ -154,7 +156,7 @@ def _tile_unsafe(L, SF, mid, y, n, u, eu, ev, stand):
     return None
 
 
-def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY):
+def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floornav=FLOORNAV):
     B, nav, S = L.B, L.nav, L.solid
     area = sum(_area(nav.pv[i]) for i in range(len(nav.pv)) if nav.ok[i]) / 1e4
     want = int(area * density / 100.0)
@@ -175,6 +177,10 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY):
     log('walls: %.0f m2 of mesh, target %d boxes at %.1f per 100 m2, %d have a cover box; %d places' % (area, want, density, sum(have.values()), len(picks)))
     why, cand, seen = collections.Counter(), [], set()
     SF = safety_features(L) if safety else None
+    GN = None
+    if floornav:
+        import kl_cover_floornav as FN       # (late: it imports this file's neighbours)
+        GN = FN.Ground(L, log)
     if SF:
         log('walls: safety rules on: %d spawns, %d spawn triggers, %d loot, %d stairs/ramps, %d doors' % (len(SF['spawns']), len(SF['trig']), len(SF['loot']), len(SF['near'][0][0]), len(SF['near'][1][0])))
     for p in picks:
@@ -305,6 +311,11 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY):
                 if bad:
                     why['safety: ' + bad] += 1
                     continue
+            if GN:
+                bad = GN.tile_bad((mid[0] + ev / 2 * n[0], mid[1] + ev / 2 * n[1]), n, y)
+                if bad:
+                    why['floornav: ' + bad] += 1
+                    continue
             k = S.node.get(r['ref'])
             nm = B.sc.path[k].rsplit(A.SEP, 1)[-1] if k else 'REF %d' % r['ref']
             new.append({'kind': 'high' if hi else 'low', 'origin': [round(org[0], 2), round(y - f['lo_y'], 2), round(org[1], 2)],
@@ -314,6 +325,8 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY):
                         'ground': round(y, 1), 'via': 'wall', 'name': None,
                         'face_normal': [round(n[0], 3), round(n[1], 3)], 'run': [[round(a[0]), round(a[1])], [round(b[0]), round(b[1])], round(L_run), round(t - step)], 'stand': [round(fr[0], 1), round(y, 1), round(fr[1], 1)]})
             placed[ccell] += 1
+    if GN and GN.kept:
+        log('walls: floornav kept tiles in parts no spawn reaches: %s' % dict(GN.kept))
     log('walls: added %d; not added: %s' % (sum(1 for q in new if q['via'] == 'wall'), dict(why)))
 
 
@@ -331,7 +344,7 @@ def plan(zp, opt, log=print):
     log('box models: %s' % sorted('%dx%dx%d' % tuple(f['size']) for f in fs))
     new = []
     if fs:
-        walls(L, fs, new, opt['max'], opt['density'], opt['spread'], log, opt.get('safety', SAFETY))
+        walls(L, fs, new, opt['max'], opt['density'], opt['spread'], log, opt.get('safety', SAFETY), opt.get('floornav', FLOORNAV))
     cnt = collections.Counter()
     for c in new:
         cnt[c['kind']] += 1
@@ -361,11 +374,15 @@ def build(zp, dst, opt, log=print):
 
 
 def options(a):
-    opt = {'max': MAX_NEW, 'density': DENSITY, 'spread': SPREAD, 'tiers': TIERS, 'safety': SAFETY}
+    opt = {'max': MAX_NEW, 'density': DENSITY, 'spread': SPREAD, 'tiers': TIERS, 'safety': SAFETY, 'floornav': FLOORNAV}
     a = list(a)
     while a and a[0].startswith('--'):
         if a[0] == '--no-safety':
             opt['safety'] = False
+            a.pop(0)
+            continue
+        if a[0] == '--no-floornav':
+            opt['floornav'] = False
             a.pop(0)
             continue
         k = a.pop(0)[2:]

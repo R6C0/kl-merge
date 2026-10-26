@@ -138,14 +138,63 @@ def side_test(L, NI, mid_y, sd, parts):
             'nav': None if nv is None else round(nv[1] - mid_y, 1), 'part': None if nv is None else NI.part[nv[0]], 'ok': not why, 'why': why}
 
 
+STOCK_PART_MIN = 3   # GUESS: a nav part no ZSpawnPoint stands on still counts as walked when at least this many of the map's own stock cover boxes stand in it
+
+
+class Ground:
+    """The floor + nav test of ONE planned cover tile, for the placement filter in kl_cover_1026 (same tolerances as check(): STAND_OUT / FLOOR_TOL / NAV_R / NAV_DY, all GUESSes above).
+    L = kl_cover_add.Lite of the map WITHOUT its KL_CoverSix! group. The reach rule: a tile whose nav part is in none that a spawn stands on is DROPPED,
+    unless the map's own stock boxes (tag 'stock') stand in that part too (>= STOCK_PART_MIN of them: the part is walked in the original game's cover design)."""
+
+    def __init__(self, L, log=print):
+        lk = F.Nav(L.B.scene.nav, links=True)
+        self.L, self.NI = L, NavIndex(L.nav, lk.part)
+        sp, n_sp, off = spawn_parts(L, self.NI)
+        self.reach = set(sp)
+        self.stock = collections.Counter()
+        for b in L.boxes:
+            if b.get('kind') is None or b.get('cls', 'ZSTDOBJ') != 'ZSTDOBJ' or tag_of(b['name']) != 'stock':
+                continue
+            sd = V.sides(L.B, b)
+            if sd is None:
+                continue
+            mid, ss, _size = sd
+            for s in ss:                                  # the box counts once, in the part of its first side with floor + nav (reach not asked)
+                r = side_test(L, self.NI, mid[1], s, None)
+                if r['ok']:
+                    self.stock[r['part']] += 1
+                    break
+        self.kept = collections.Counter()
+        log('floornav: %d spawns (off the mesh %d) on nav parts %s; stock boxes per part %s' % (n_sp, off, sorted(self.reach), dict(self.stock)))
+
+    def tile_bad(self, side_mid, n, y):
+        """Reason string when the stand point in front of the tile's face (side middle + STAND_OUT along n, at the ground y) has no collision floor, no nav, or
+        a nav part nobody reaches (and no stock cover in it), else None."""
+        r = side_test(self.L, self.NI, y, ('front', side_mid, n), None)
+        if r['floor'] is None:
+            return 'no collision floor at the stand point'
+        if r['nav'] is None:
+            return 'no nav mesh in front'
+        p = r['part']
+        if self.reach and p not in self.reach:
+            if self.stock[p] < STOCK_PART_MIN:
+                return 'nav part no spawn reaches (%d stock boxes there)' % self.stock[p]
+            self.kept['unreach kept: %d stock boxes in the part' % self.stock[p]] += 1
+        return None
+
+
 def load_plan(map_name, zp=None):
-    """{box name: plan entry} of the newest staged cover_plan.json for the map (cover_1026b before cover_1026); {} when none."""
+    """{box name: [plan entries]} of the staged cover_plan.json files for the map, newest root first (cover_1026b, then cover_1026); {} when none.
+    A list per name: a restaged map reuses the names K6_01.. with other middles, and the old live boxes must still find their own entry (the middle decides)."""
+    out = {}
     for root in (r'C:\kl_build_1024\cover_1026b', r'C:\kl_build_1024\cover_1026'):
         f = os.path.join(root, map_name, 'stage', 'cover_plan.json')
         if os.path.isfile(f):
             with open(f) as fh:
-                return {p['name']: p for p in json.load(fh) if p.get('name')}
-    return {}
+                for p in json.load(fh):
+                    if p.get('name'):
+                        out.setdefault(p['name'], []).append(p)
+    return out
 
 
 def tag_of(name):
@@ -153,7 +202,7 @@ def tag_of(name):
 
 
 def check(L, plan=None, log=print):
-    """plan = {box name: cover_plan.json entry} (load_plan) -> {'boxes': {node: rec}, 'spawn_parts': {...}, 'n_spawns': n}. rec: name, tag, mid, ground, ok (player side / best side), all4, sides {name: side_test}."""
+    """plan = {box name: [cover_plan.json entries]} (load_plan) -> {'boxes': {node: rec}, 'spawn_parts': {...}, 'n_spawns': n}. rec: name, tag, mid, ground, ok (player side / best side), all4, sides {name: side_test}."""
     B = L.B
     plan = plan or {}
     # reachability by the mesh's neighbours AND its drop links (Nav links=True: a one-way drop joins two parts for this labelling, like Nav.part does)
@@ -174,8 +223,8 @@ def check(L, plan=None, log=print):
         res = {s[0]: side_test(L, NI, g, s, big) for s in ss}
         tag = tag_of(b['name'])
         front = None
-        pl = plan.get(b['name'])
-        if tag == 'K6' and pl and abs(pl['mid'][0] - b['mid'][0]) < 2 and abs(pl['mid'][2] - b['mid'][2]) < 2:
+        pl = next((q for q in plan.get(b['name'], ()) if abs(q['mid'][0] - b['mid'][0]) < 2 and abs(q['mid'][2] - b['mid'][2]) < 2), None)
+        if tag == 'K6' and pl:
             n = pl['face_normal']                      # the planned free side: the side facing along the plan's face normal
             front = next((s[0] for s in ss if s[2][0] * n[0] + s[2][1] * n[1] > 0.9), None)
         if front is not None:
