@@ -17,7 +17,8 @@ WHAT THIS ADDS (one new top-level group 'KL_Coop!', clones only):
 GUESSES (each also in a comment): a PlayerAction may activate PathBlocker / DeactivateGeom nodes; the player need not face the box direction; the
   clones render and light from the root room trees; ZLIGHT[2] (baked shadow chunk) emptied on every light clone; cloned props are walk-through
   (no HVK, as the counters before them); shop floor = the shutter's y; a double use (solo + co-op) re-blocks the PathBlocker (eToggle).
-usage (from tools/):  python kl_dm02_coop_1026.py stage <in F02_Main.zip> <out folder> [--rehearse <scratch>]
+usage (from tools/):  python kl_dm02_coop_1026.py patch <live F02_Main.zip 1dd14609> <out folder> [--rehearse <scratch>]   (solo lift re-arm fix, 2 variants)
+                      python kl_dm02_coop_1026.py stage <in F02_Main.zip> <out folder> [--rehearse <scratch>]
 """
 import collections, json, math, os, shutil, struct, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -444,6 +445,85 @@ VARIANTS = collections.OrderedDict([('coop_only', dict(solo=False, drawers=True,
                                     ('dress_only', dict(solo=False, drawers=False, dress=True))])
 
 
+LIVE_MD5 = '1dd1460913ee039f6e28f7c071c04be6'      # the live DM02 zip that already holds KL_Coop! (2026-10-26 02:20); patch() works on this one
+
+
+def patch(src, dst, auto=False, force=False, log=print):
+    """2026-10-26 (solo lift did not open the shutter live; cause not provable offline): rewrite the three KLCoop<N>!SoloLift PlayerActions in a zip that
+    already holds KL_Coop!. Only the .prp changes (no node added or moved; .gms/.buf/.oct/.rmi/.rmc/.prm byte-identical).
+      field 12 = 1  re-enable after use (the donor has 0: ONE use ever, so a try that was spent on a missed press never comes back).
+      auto: field 13 = 1  fires WITHOUT the key as soon as a player stands in the box (hedge for a use-key edge the script or player misses).
+    GUESS: both fields behave as the ZPlayerAction map in re/engine_facts.md says (12 -> +0x5e copied to +0x54/+0x7c by 0x8c8b50; 13 -> +0x5f).
+    The action list [PathBlocker, shutter DeactivateGeom] is NOT touched: it is the CoopAirlock's own completion list."""
+    have = S.md5(src)
+    if have != LIVE_MD5 and not force:
+        raise ValueError('%s: md5 %s is not the live DM02 zip (%s)' % (src, have, LIVE_MD5))
+    B = F.Built(src, 'F02')
+    sc = B.sc
+    hits = [k for k in range(1, len(sc.names)) if sc.names[k].endswith('!SoloLift')]
+    if len(hits) != 3:
+        raise ValueError('%d SoloLift nodes, not 3' % len(hits))
+    for k in hits:
+        i = [j for j, (nm, _b) in enumerate(sc.nodes[k]['ctrls']) if sc.p.key(nm) == 'PlayerAction']
+        if len(i) != 1:
+            raise ValueError('%s: %d PlayerActions' % (sc.names[k], len(i)))
+        def fn(us):
+            if len(us) != 21 or us[12][0][0] != 6 or us[13][0][0] != 6 or len(us[1]) != 3:
+                raise ValueError('PlayerAction is not the clone of the L03 use box')
+            us[12] = [(6, bytes([1]))]
+            if auto:
+                us[13] = [(6, bytes([1]))]
+        kl_fa.edit(sc, k, i[0], fn)
+    data = sc.p.serialize()
+    back = F.Prp(data)
+    if back.serialize() != data or len(back.nodes()) != len(sc.p.nodes()):
+        raise ValueError('the patched .prp does not round-trip')
+    new = dict(B.files)
+    new[B.ext['.prp']] = data
+    os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+    kl_graft.write_zip(dst, [(n, new[n]) for n in B.order])
+    Bn = F.Built(dst, 'F02')
+    got = []
+    for k in hits:
+        for nm, body in Bn.sc.nodes[k]['ctrls']:
+            if Bn.sc.p.key(nm) == 'PlayerAction':
+                v = [kl_fa.value(Bn.sc, u) for u in kl_fa.units(body[1:-1])]
+                got.append((v[1], v[8], v[12], v[13]))
+                if v[12] != 1 or v[13] != int(auto) or v[8] != 1:
+                    raise ValueError('read-back %s' % (v,))
+    with zipfile.ZipFile(src) as a, zipfile.ZipFile(dst) as b:
+        diff = sorted(n for n in a.namelist() if a.read(n) != b.read(n))
+    if diff != [B.ext['.prp']]:
+        raise ValueError('members changed: %s' % diff)
+    rep = collections.OrderedDict(mode='patch', auto=auto, source=src, source_md5=have, out=dst, out_md5=S.md5(dst), members_changed=diff,
+                                  solo=[h[0] for h in got], fields_12_13=[(h[2], h[3]) for h in got], md5_in=have)
+    log('kl_dm02_coop_1026 patch auto=%s: %d SoloLift PlayerActions (field 12=1, 13=%d) -> %s (%s)' % (auto, len(hits), int(auto), dst, rep['out_md5']))
+    return rep
+
+
+def stage_patch(src, out, scratch=None, log=print):
+    h = S.md5(src)
+    if h != LIVE_MD5:
+        raise SystemExit('input md5 %s is not the live %s' % (h, LIVE_MD5))
+    LO.MAPS['DM02'] = dict(slot='F02', zip='F02_Main.zip')
+    LO.TAG = TAG
+    install = LS.INSTALL_PY.replace('van-lane + loot', 'co-op solo lift fix').replace('tools/kl_lanes_stage_1025.py', 'tools/kl_dm02_coop_1026.py').replace('2026-10-25', '2026-10-26')
+    reps = {}
+    for name, auto in (('coop_solo', False), ('coop_solo_auto', True)):
+        d = os.path.join(out, name)
+        LO.rmtree(d)
+        os.makedirs(d)
+        rep = patch(src, os.path.join(d, 'F02_Main.zip'), auto=auto, log=log)
+        with open(os.path.join(d, 'install.py'), 'w', newline='\n') as fh:
+            fh.write(install % dict(map='DM02', zip='F02_Main.zip', tag=TAG, game=LS.GAME, old=h, new=rep['out_md5']))
+        with open(os.path.join(d, 'build_report.json'), 'w') as fh:
+            json.dump(rep, fh, indent=1, default=str)
+        if scratch:
+            LO.rehearse(d, 'DM02', src, rep['out_md5'], h, scratch, log)
+        reps[name] = rep
+    return reps
+
+
 def stage(src, out, scratch=None, log=print):
     h = S.md5(src)
     if h != SRC_MD5:
@@ -472,6 +552,9 @@ def stage(src, out, scratch=None, log=print):
 
 def main():
     a = sys.argv[1:]
+    if len(a) >= 3 and a[0] == 'patch':
+        stage_patch(a[1], a[2], a[a.index('--rehearse') + 1] if '--rehearse' in a else None)
+        return 0
     if len(a) < 3 or a[0] != 'stage':
         print(__doc__)
         return 2
