@@ -210,6 +210,8 @@ feat('onlineidlevan', G_EXP, 'Online AI heisters with no loot left call the esca
      'klbotfill.c [BotFill] OnlineIdleVan (+ OnlineIdleVanS 20 s, GUESS); BO12: 0 grabs so nobody called the van; NOT run live', [('BotFill', 'OnlineIdleVan', 1, 0, 1)])
 feat('onlinefirestall', G_EXP, 'Online AI heisters under cop fire are not counted as stuck on their way to loot (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineFireStall; BO12: bots pinned down by cops gave up stacks after 12 s; 90 s cap kept; NOT run live', [('BotFill', 'OnlineFireStall', 1, 0, 1)])
+feat('onlineskipdoor', G_EXP, 'Online AI heisters skip loot still locked behind a closed vault door (recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineSkipDoorStacks; BOS1: DD01 vault cases (+0x5c behind a door) stalled every bot, 0 taken; NOT run live', [('BotFill', 'OnlineSkipDoorStacks', 1, 0, 1)])
 feat('onlineboxwalk', G_EXP, 'Online AI heisters walk to the escape box once the van is called and count as aboard only inside it (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxWalk; BO9: the exit trigger is ~570 cm from the DM01 AllyEscapeBox; read-only scan, game inside test 0x758cb0; NOT run live', [('BotFill', 'OnlineBoxWalk', 1, 0, 1)])
 feat('onlineboard', G_EXP, 'Online AI heisters inside the escape box while the van waits are removed from the match like in Arcade (recommended off until tested)', 'off', 'start',

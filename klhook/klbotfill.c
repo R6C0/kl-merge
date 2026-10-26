@@ -38,6 +38,7 @@ static int klbf_ot_vstate = 1, klbf_ot_late = 75; static DWORD klbf_ot_calledAt;
 static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [BotFill] OnlineBoxWalk, OnlineBoard, OnlineBoxProbe (the ZAllyEscapeBox block below) */
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
+static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
 static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20;      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
@@ -112,6 +113,8 @@ static void klbf_init(void)
     klbf_ot_idlevan = GetPrivateProfileIntA("BotFill", "OnlineIdleVan", 1, klh_ini) != 0;      /* (recommended on) BO12: 0 grabs = nobody ever called the van */
     klbf_ot_idleS = (int)GetPrivateProfileIntA("BotFill", "OnlineIdleVanS", 20, klh_ini); if (klbf_ot_idleS < 5) klbf_ot_idleS = 5; if (klbf_ot_idleS > 300) klbf_ot_idleS = 300;      /* GUESS 20 s with no stack left at all */
     klbf_ot_firestall = GetPrivateProfileIntA("BotFill", "OnlineFireStall", 1, klh_ini) != 0;      /* (recommended on) BO12: bots pinned down by cops were counted as stalled after 12 s */
+    klbf_ot_door = GetPrivateProfileIntA("BotFill", "OnlineSkipDoorStacks", 1, klh_ini) != 0;      /* (recommended on) BOS1: DD01's 58 vault cases sit behind kick doors; ordered straight at them the bots stalled and took 0 */
+    if (klbf_ot) klog("botfill: OnlineTactics BOS1: OnlineSkipDoorStacks=%d (recommended on)", klbf_ot_door);
     if (klbf_ot) klog("botfill: OnlineTactics BO12 fixes: OnlineGiveUpRetry=%d (recommended on, %d s), OnlineIdleVan=%d (recommended on, %d s), OnlineFireStall=%d (recommended on)", klbf_ot_retry, klbf_ot_retryS, klbf_ot_idlevan, klbf_ot_idleS, klbf_ot_firestall);
     if (klbf_ot) klog("botfill: OnlineTactics van gather/hold: OnlineVanGather=%d (recommended on; GatherM %.0f m, GatherMaxS %d s), OnlineVanHold=%d (recommended on; HoldM %.0f m shield, HoldNearM %.0f m timer, HoldMaxS %d s)", klbf_ot_vgather, klbf_ot_gm / 100, klbf_ot_gmax, klbf_ot_vhold, klbf_ot_hm / 100, klbf_ot_hnear / 100, klbf_ot_hmax);
     if (klbf_ot) klog("botfill: OnlineTactics box: OnlineBoxWalk=%d (recommended on), OnlineBoard=%d (recommended off until tested), OnlineBoxProbe=%d (log only)", klbf_ot_bwalk, klbf_ot_board, klbf_ot_bprobe);
@@ -379,7 +382,7 @@ static void klbf_ot_summary(void)
 /* host, in a round, once a second. sm_state: caller checked role 2, mode 4 */
 static void klbf_ot_run(DWORD now, DWORD sm)
 {
-    DWORD p, tab, i, blk[64 * 32], mo[KLBF_OT_OBJ], van = 0; float mpos[KLBF_OT_OBJ][3], vpos[3] = { 0, 0, 0 }; int mamt[KLBF_OT_OBJ], nm = 0, n = 0, b, nmoney = 0, nvan = 0;
+    DWORD p, tab, i, blk[64 * 32], mo[KLBF_OT_OBJ], van = 0; float mpos[KLBF_OT_OBJ][3], vpos[3] = { 0, 0, 0 }; int mamt[KLBF_OT_OBJ], nm = 0, n = 0, b, nmoney = 0, nvan = 0, ndoor = 0;
     struct { DWORD actor, soldier; float pos[3]; } bots[KLBF_OT_BOTS]; int nb = 0; char why[100];
     static float cops[256][3]; int ncop = 0, vnew; DWORD rules = 0; int vstate = -1; float left = 1e9f;
     if (now - klbf_ot_last < 1000) return;
@@ -434,6 +437,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 if (o < 0x10000 || klh_rd32(o) != KLMV_MONEY_VT) continue;
                 nmoney++;
                 if (nm >= KLBF_OT_OBJ || !klh_rd(o + 0x38, &type, 4) || type == 1 || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act) continue;      /* drop pool, taken, or not armed (+0x6c, klmove.c 2) */
+                if (klbf_ot_door) { BYTE shut = 0; if (klh_rd(o + 0x5c, &shut, 1) && shut) { ndoor++; continue; } }      /* field 11 "behind a door" (re/bots_loot.md): cleared by the door's 'DoorOpened' relay; ZLootTactic 0x451920 skips these too */
                 if (!(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, pos, 0)) continue;
                 mo[nm] = o; mamt[nm] = amt; memcpy(mpos[nm], pos, 12); nm++;
             }
@@ -470,8 +474,8 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
     if (klbf_ot_bwalk && klbf_ot_vh && !klbf_ot_nbx && klbf_ot_bxlooks < 4 && (!klbf_ot_bxAt || now - klbf_ot_bxAt >= 20000)) klbf_ot_boxscan(now);      /* once the trigger is known (a bot carries money), the boxes; a miss is retried every 20 s, 4 looks a round */
     {   /* once per round, and again whenever the bot count changes: what the scan saw (BO2 gave no order and no clue why) */
-        static int seen_round, seen_nb = -1, seen_nm = -1; static DWORD seen_van = 1;
-        if (seen_round != klbf_ot_rounds || seen_nb != nb || seen_nm != nm || seen_van != van) { seen_round = klbf_ot_rounds; seen_nb = nb; seen_nm = nm; seen_van = van; klog("botfill: tactics: scan: %d objects, %d live Ally bot(s), %d armed stack(s) of %d money object(s), van %08lx (%d vehicle(s); one at the origin = not here yet)", n, nb, nm, nmoney, van, nvan); }
+        static int seen_round, seen_nb = -1, seen_nm = -1, seen_nd = -1; static DWORD seen_van = 1;
+        if (seen_round != klbf_ot_rounds || seen_nb != nb || seen_nm != nm || seen_van != van || seen_nd != ndoor) { seen_round = klbf_ot_rounds; seen_nb = nb; seen_nm = nm; seen_van = van; seen_nd = ndoor; klog("botfill: tactics: scan: %d objects, %d live Ally bot(s), %d armed stack(s) (+%d behind a shut door) of %d money object(s), van %08lx (%d vehicle(s); one at the origin = not here yet)", n, nb, nm, ndoor, nmoney, van, nvan); }
     }
     {   /* free the slot of a bot that is dead / gone (else its target stack stays "taken" and the 16 slots run out); boarded bots (phase 3) keep theirs for the summary */
         int q, r;
@@ -538,7 +542,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 int nostack = best < 0 && !(klbf_ot_gtake && gbest >= 0);
                 if (klbf_ot_idlevan && nostack && klbf_ob[s].tally == 0) {
                     if (!klbf_ob[s].vidleAt) klbf_ob[s].vidleAt = now;
-                    if ((gbest < 0 && !nhold && now - klbf_ob[s].vidleAt >= (DWORD)klbf_ot_idleS * 1000u) || (klbf_ot_late && left <= (float)(klbf_ot_late + 20))) {
+                    if ((gbest < 0 && !nhold && !ndoor && now -klbf_ob[s].vidleAt >= (DWORD)klbf_ot_idleS * 1000u) || (klbf_ot_late && left <= (float)(klbf_ot_late + 20))) {
                         idleVan = 1; vnew = 1;
                         if (!(klbf_ob[s].told & 128) && (klbf_ob[s].told |= 128)) klog("botfill: tactics: bot %d (actor %08lx): no stack to take (%d guarded, %lu s idle, clock left %.0f s) and nothing carried: goes to the exit to call the van (OnlineIdleVan)", s, a, nguard, (unsigned long)((now - klbf_ob[s].vidleAt) / 1000), left);
                     }
