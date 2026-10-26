@@ -66,16 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~04:15 - CamPool 1026g: every tick; a direct 0x19->0x16 restart gives the players' cameras back before the re-take (fixes the COVER6 pool-of-2 assert 0x60a5bf, not run live).
+out_all_1026g_test 07fc52ff / SHIP 091d7bca with kl-merge-ce for COVER6; BO3 PASS, BO4 next.
+
 2026-10-26 ~03:45 - COVER6 crash = camera pool leak: each MissionFailedReload restart (0x19->0x16->0x18) takes a camera without release, pool 2 on DM05A -> assert 0x60a5bf on the 2nd; fix proposed to c9.
 DM02 solo patch (re-arm/auto) install requeued after a backup-name refusal (99dc7e532); DM05A cover audit 25/93 bad -> workflow restaging all cover maps with floor+nav filters. BG1 PASS.
 
 2026-10-26 ~03:30 - BO1 PASS (7 AI heisters online, both peers); BO2 tactics gave 0 orders (scan cap, fixed 6c031b451, BO3 queued).
 BotGate (.bots.zip picked by host OnlineHost) BG1 queued; cop sync PuppetMode=2 snap (0f0560c56) SP1d queued; N9_DM01b, SV, B2-B5, N2 all maps follow.
-
-2026-10-26 ~02:20 - DM02 live 1dd14609 (co-op solo -> Arcade -> cover -> loot), smokes DM01/02/03 PASS; cover safety filters on (c21ce7161);
-DM05A cover restaged with them (4a6799a1, queued in live_1026/install_queue.txt). DM02_lift test inconclusive: c9's tele refused
-(no actor at gd+0x4cf0); rerun once out_all_1026c(_test) lands.
-
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
 replacement (testing in the F01 slot is temporary). In order:
