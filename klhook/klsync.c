@@ -95,6 +95,8 @@ static struct { DWORD o, until; } ksp_cool[16]; static int ksp_coolN;           
 static struct { int pup, cops, bots, diag, nlive, gate; float tol, snap, speed, prevAvg, snapDist; int team, mode; DWORD pass, roundAt, diagAt, pupAt, snapEvery, sumAt; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv, nstep, nsn2, nph, nref, nflt; } ksp;
 /* PuppetMode 2: per-actor time of the last placement (the SnapEvery limit) and the host entries that look like placeholders (set each pass) */
 static struct { DWORD o, at; } ksp_sn[64]; static BYTE ksp_ph[KLSY_MAXP];
+/* [Sync] ParkSkip: per actor, was its node off (bit 10 of [[A+4]+0x3c]) when last seen; a 1 -> 0 change = woken, snapped at once */
+static struct { DWORD o; BYTE pk; } ksp_pk[64]; static struct { int on; LONG npark, nwake; } kspk;
 static DWORD ksp_ours(void) { return ksp_ready ? (DWORD)(DWORD_PTR)ksp_vt : 0; }
 /* the class vtable of an actor as the rest of this file means it: a puppeted actor shows our private table, which is still a ZFFActor */
 static DWORD klsy_vtof(DWORD o)
@@ -475,7 +477,7 @@ static void ksp_diag(DWORD a, DWORD slot, int team, float d)
          mv == mv2 ? "(same)" : "(DIFFERENT: steer skipped)", (unsigned long)x7c, (unsigned long)klh_rd32(a + 0x90c), (unsigned long)klh_rd32(a + 0x918), tg[0], tg[1], tg[2]);
 }
 
-struct klsy_pp { int seen, started, steering, conv, diag, full, idbad, nearN, stepN, over, ph, snp, refd; float stepSum, worst; };
+struct klsy_pp { int seen, started, steering, conv, diag, full, idbad, nearN, stepN, over, ph, snp, refd, pk; float stepSum, worst; };
 /* PuppetMode 2: the game's own teleport 0x62a900 (klt_teleport, behind klt_tele_known + klt_refuse, as klauto.c's tele) for a cop farther than SnapDist from
    the host's place, at most once per SnapEvery ms per actor. A hooked cop (e) gets the stock vtable for klt_refuse's class test and its own back after. -> 1 = a placement was
    attempted (the caller stops there), 0 = not due / not possible. Never a player (klt_refuse wants the ZFFActor vtable; humans are filtered by the caller). */
@@ -519,9 +521,29 @@ static void klsy_pupfn(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
     if (klsy_human(o, pos)) { if (e) { ksp_release(e, 0); ksp_setcool(o, now); } return; }
     if (klsy_isbad(slot)) { if (e) ksp_release(e, 0); return; }
     if (hp <= 0 || klsy.host[i].hp <= 0) { if (e) ksp_release(e, "dead"); return; }
-    c->seen++;
     dx = pos[0] - klsy.host[i].p[0]; dy = pos[1] - klsy.host[i].p[1]; dz = pos[2] - klsy.host[i].p[2];
     d = (float)sqrt(dx * dx + dy * dy + dz * dz); h = (float)sqrt(dx * dx + dz * dz);
+    if (kspk.on) {
+        /* ParkSkip (SP1d, workflow wovn0auy1): a cop whose node is off (bit 10, the bit klt_refuse refuses) is parked: invisible, no collision, so its offset
+           does not show; the no-progress snap was refused every ~4 s for slots 563/565/765/773 and the puppet hook stepped it for nothing. Skip it (and leave it
+           out of the position gate). When the bit clears (woken), snap it at once if it is farther than PuppetTol, under SnapDist too. Reads + the existing teleport.
+           GUESS: the game parks spawn-pool / reserve cops this way (the code that sets 0x400 on them was not found). */
+        DWORD nd = klh_rd32(o + 4), fl = 0; int pk = nd && klh_rd(nd + 0x3c, &fl, 4) && (fl >> 10 & 1), k, f = -1, was = 0;
+        for (k = 0; k < 64; k++) { if (ksp_pk[k].o == o) { f = k; break; } if (f < 0 && !ksp_pk[k].o) f = k; }
+        if (f < 0) f = (int)(slot & 63);
+        if (ksp_pk[f].o == o) was = ksp_pk[f].pk;
+        ksp_pk[f].o = o; ksp_pk[f].pk = (BYTE)pk;
+        if (pk) { if (e) ksp_release(e, 0); c->pk++; kspk.npark++; return; }
+        if (was && d > ksp.tol && ksp.pup && ksp.gate && !ksp_ph[i]) {
+            int s;
+            for (k = 0; k < 64; k++) if (ksp_sn[k].o == o) ksp_sn[k].at = now - ksp.snapEvery;   /* the woken snap is never held back by SnapEvery */
+            s = ksp_snap2(o, slot, nm, klsy.host[i].p, d, pos, e, now, c);
+            kspk.nwake++;
+            klog("sync: puppet: slot %lu c=%s woken (node bit 10 cleared) %.1f from the host's place: %s", (unsigned long)slot, nm, d, s ? "snapped" : "snap not possible");
+            if (s) { if (e) { e->bestAt = now; e->best = d; e->lastSnap = now; } return; }
+        }
+    }
+    c->seen++;
     if (d < ksp.snap) c->nearN++;                                                        /* the positional sanity gate (slot numbers may differ per peer; the identity check cannot tell cop from cop) */
     if (ksp.mode >= 2 && d > ksp.snapDist) {                                             /* PuppetMode 2: place it at the host's position (alive both sides, not human: checked above) */
         c->over++; if (d > c->worst) c->worst = d;
@@ -602,8 +624,8 @@ static void ksp_pass(void)
     if (c.diag) ksp.diagAt = GetTickCount();
     if (ksp.mode >= 2 && GetTickCount() - ksp.sumAt >= 5000) {
         ksp.sumAt = GetTickCount();
-        klog("sync: puppet: snap summary: %d cops checked, %d farther than %.0f (worst %.1f), %d placeholder entries skipped, %d snapped this pass; totals %ld snaps %ld placeholder-skips %ld refused %ld faults", c.seen, c.over, ksp.snapDist, c.worst, c.ph, c.snp,
-             (long)ksp.nsn2, (long)ksp.nph, (long)ksp.nref, (long)ksp.nflt);
+        klog("sync: puppet: snap summary: %d cops checked, %d farther than %.0f (worst %.1f), %d placeholder entries skipped, %d snapped this pass, %d parked (node off) skipped; totals %ld snaps %ld placeholder-skips %ld refused %ld faults %ld woken", c.seen, c.over, ksp.snapDist, c.worst, c.ph, c.snp, c.pk,
+             (long)ksp.nsn2, (long)ksp.nph, (long)ksp.nref, (long)ksp.nflt, (long)kspk.nwake);
     }
     if (ksp.mode && c.stepN) {
         float avg = c.stepSum / c.stepN;
@@ -642,7 +664,8 @@ static void klsy_init(void)
     ksp.mode = GetPrivateProfileIntA("Sync", "PuppetMode", 1, klh_ini); if (ksp.mode < 0) ksp.mode = 0; if (ksp.mode > 2) ksp.mode = 2;
     ksp.snapDist = (float)GetPrivateProfileIntA("Sync", "SnapDist", 300, klh_ini); if (ksp.snapDist < ksp.tol) ksp.snapDist = ksp.tol;
     ksp.snapEvery = (DWORD)GetPrivateProfileIntA("Sync", "SnapEvery", 2000, klh_ini); if (ksp.snapEvery < 250) ksp.snapEvery = 250;  /* 0 = old behaviour; 1 = bounded step (slot 373) for mismatched controllers + 0x70f660 with a position (static report 2026-10-26) */
-    if (ksp.pup) klog("sync: PuppetMode=%d SnapDist=%.0f SnapEvery=%lu", ksp.mode, ksp.snapDist, (unsigned long)ksp.snapEvery);
+    kspk.on = GetPrivateProfileIntA("Sync", "ParkSkip", 1, klh_ini) != 0;
+    if (ksp.pup) klog("sync: PuppetMode=%d SnapDist=%.0f SnapEvery=%lu ParkSkip=%d (parked cops skipped, snapped when woken; recommended on)", ksp.mode, ksp.snapDist, (unsigned long)ksp.snapEvery, kspk.on);
     if (ksp.bots) klog("sync: OnlineHost: bots (team 2) are mirrored by the Puppet code%s; this peer shares its list when it is the host", ksp.cops ? " together with the cops (Puppet=1)" : " (cops untouched: Puppet=0)");
     if (ksp.pup || ksp.diag) klog("sync: Puppet=%d PuppetDiag=%d PuppetTol=%.0f PuppetSnap=%.0f PuppetSpeed=%.0f PuppetTeam=%d (client only; needs the host's Share=1)%s", ksp.pup, ksp.diag, ksp.tol, ksp.snap, ksp.speed, ksp.team,
                                    (ksp.pup && klsy.apply) ? " WARNING: Apply=1 too: the two fight, use Puppet alone" : "");
@@ -674,7 +697,7 @@ static void klsy_tick(int game_thread)
         klsy.inwin = 1; klsy_drain();
         klsy.nhost = 0; klsy.applyRx = 0; klsy.rxT = 0; klsy.rxAnchored = 0; klsy.srcSet = 0; klsy.agree = 0; klsy.nbad = 0;
         klsy.applyAt = 0; klsy.cmpAt = 0; klsy.toldHum = 0; klsy.humLogs = 0; klsy.toldRefuse = 0;
-        ksp_release_all("round start"); ksp_rx = 0; ksp.pass = 0; ksp.gate = 0; ksp.pupAt = 0; ksp.diagAt = 0; ksp.roundAt = now;
+        ksp_release_all("round start"); memset(ksp_pk, 0, sizeof ksp_pk); ksp_rx = 0; ksp.pass = 0; ksp.gate = 0; ksp.pupAt = 0; ksp.diagAt = 0; ksp.roundAt = now;
     }
     if (!klsy.toldMode) { klsy.toldMode = 1; klog("sync: round: role %lu state 0x%lx (probe %d, share %d, compare %d, apply %d)", (unsigned long)role, (unsigned long)state, klsy.on, klsy.share, klsy.cmp, klsy.apply); }
     if (klsy.share && role == 2 && klsy.sock && now - klsy.shAt >= klsy.shareMs) {          /* host: its actors, binary: 'KLSY2' u32 T u16 n, n x {u16 slot, i16 hp, f32 x3, u16 cls, i16 team} */
