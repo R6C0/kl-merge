@@ -26,7 +26,7 @@ static void klcs_tick(int game_thread)
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
         for (k = 0; k < 64 && n < klcs.max; k++) {
             DWORD o = blk[k * 32 + 0x60 / 4], h; float pos[3] = { 0, 0, 0 }, hp[2] = { 0, 0 }; int hv, pv;
-            if (o < 0x10000 || klh_rd32(o) != KLCN_ACTOR_VT) continue;
+            if (o < 0x10000 || klh_avt(o) != KLCN_ACTOR_VT) continue;
             pv = kle_node(klh_rd32(o + 4), pos, 0);
             h = klh_rd32(o + 0x5fc); hv = h && klh_rd(h + 4, hp, 8);
             klog("census: #%d slot %lu actor %08lx %s(%.0f, %.0f, %.0f) health %s%.1f of %.1f", n, (unsigned long)(i + k), (unsigned long)o,

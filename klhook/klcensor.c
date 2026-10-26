@@ -67,7 +67,7 @@ static void klcn_scan(void)
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
         for (k = 0; k < 64 && n < KLCN_MAX; k++) {
             DWORD o = blk[k * 32 + 0x60 / 4];
-            if (o < 0x10000 || klh_rd32(o) != KLCN_ACTOR_VT) continue;
+            if (o < 0x10000 || klh_avt(o) != KLCN_ACTOR_VT) continue;
             memset(&keep[n], 0, sizeof keep[n]); keep[n].act = o;
             for (j = 0; j < klcn.n; j++) if (klcn.a[j].act == o) { keep[n] = klcn.a[j]; break; }     /* what we wrote last stays known */
             n++;
@@ -110,7 +110,7 @@ static void klcn_tick(int game_thread)
     for (i = 0; i < klcn.n; i++) {
         klcn_a *c = &klcn.a[i];
         DWORD a = c->act, h; float cur, mx, want, hp[2]; int dead, head;
-        if (klh_rd32(a) != KLCN_ACTOR_VT || !(h = klh_rd32(a + 0x5fc)) || !klh_rd(a + 0x600, &cur, 4) || !klh_rd(h + 4, hp, 8)) continue;
+        if (klh_avt(a) != KLCN_ACTOR_VT ||!(h = klh_rd32(a + 0x5fc)) || !klh_rd(a + 0x600, &cur, 4) || !klh_rd(h + 4, hp, 8)) continue;
         mx = hp[1];
         if (!klb_finite(cur) || !klb_finite(mx) || mx < 1.0f || mx > 100000.0f) continue;
         want = (float)((double)mx * 8.0 * KLCN_ARM);

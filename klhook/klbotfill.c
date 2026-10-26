@@ -103,7 +103,7 @@ static void klbf_tick(int game_thread)
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
         for (k = 0; k < 64; k++) {
             DWORD o = blk[k * 32 + 0x60 / 4], pr, team = 99, snd, t0 = 0, t1 = 0, t2 = 0, hp = 0; float hv[2] = { 0, 0 };
-            if (o < 0x10000 || klh_rd32(o) != 0x00bb3bac) continue;       /* ZFFActor */
+            if (o < 0x10000 || klh_avt(o) != 0x00bb3bac) continue;       /* ZFFActor */
             n++;
             if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4)) continue;
             if (team != 2) { other++; continue; }

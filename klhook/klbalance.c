@@ -520,7 +520,7 @@ static float klr_far_mult(DWORD now)
             if (klr_far.have[i] && bsum > klr_far.b[i] + 0.001f) { klr_far.tgt = i; klr_far.hit_at = now ? now : 1; }      /* the game counted a hit of yours on him */
             klr_far.have[i] = 1; klr_far.b[i] = bsum;
         }
-        if (r->status != 0 || klh_rd32(r->actor) != KLR_ACTOR_VT || !kle_node(klh_rd32(r->actor + 4), bp, 0)) { if (klr_far.tgt == i) klr_far.tgt = -1; continue; }
+        if (r->status != 0 || klh_avt(r->actor) != KLR_ACTOR_VT || !kle_node(klh_rd32(r->actor + 4), bp, 0)) { if (klr_far.tgt == i) klr_far.tgt = -1; continue; }
         d = (float)sqrt((bp[0] - feet[0]) * (bp[0] - feet[0]) + (bp[1] - feet[1]) * (bp[1] - feet[1]) + (bp[2] - feet[2]) * (bp[2] - feet[2]));
         if (!klr_finite(d)) continue;
         if (d > dfar) { dfar = d; ifar = i; }
@@ -579,7 +579,7 @@ static float klr_cop_mult(DWORD now)
         }
     }
     att = klh_rd32(pl + 0x2778);                                                   /* GUESS 1 */
-    if (!att || klh_rd32(att) != KLR_ACTOR_VT || !(sc = klh_rd32(att + 0x54)) || !klh_rd(sc + 4, &team, 4) || team == 2) return klr_cf.mult = 1.0f;    /* GUESS 2 */
+    if (!att || klh_avt(att) != KLR_ACTOR_VT || !(sc = klh_rd32(att + 0x54)) || !klh_rd(sc + 4, &team, 4) || team == 2) return klr_cf.mult = 1.0f;    /* GUESS 2 */
     if (!kle_node(klh_rd32(att + 4), bp, 0)) return klr_cf.mult = 1.0f;
     d = (float)sqrt((bp[0] - feet[0]) * (bp[0] - feet[0]) + (bp[1] - feet[1]) * (bp[1] - feet[1]) + (bp[2] - feet[2]) * (bp[2] - feet[2]));
     if (!klr_finite(d)) return klr_cf.mult = 1.0f;
@@ -765,7 +765,7 @@ static void klr_tough_say(DWORD now)
     said = 1; t[0] = 0;
     for (i = 0; i < s.n && i < KLB_NREC && n < (int)sizeof t - 24; i++) {
         const struct klb_rec *r = &s.r[i];
-        if (!r->used || !(r->flags & 1) || !r->actor || klh_rd32(r->actor) != KLR_ACTOR_VT || !(h = klh_rd32(r->actor + 0x5fc)) ||
+        if (!r->used || !(r->flags & 1) || !r->actor || klh_avt(r->actor) != KLR_ACTOR_VT || !(h =klh_rd32(r->actor + 0x5fc)) ||
             !klh_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != r->actor || !klr_finite(raw[2])) continue;
         n += snprintf(t + n, sizeof t - n, " %d: %.1f", i, raw[2]); c++;
     }
@@ -934,7 +934,7 @@ static void klr_pb_step(const DWORD *sp)
     DWORD rec = sp[5], r[7], seven = 0, sol = 0, tgt = 0, tvt = 0, info, team = 0xff, ateam = 0xff; float found, dist, want; int who, ok; LONG n; char note[80];
     memset(r, 0, sizeof r);
     ok = sp[3] == KLR_PB_FILE && klh_rd(rec, r, sizeof r) && r[0] == rec + 0x20 && klh_rd(rec + 0x48, &seven, 4) && seven == 7 &&
-         (sol = klh_rd32(rec - 0x14)) != 0 && r[3] && klh_rd32(sol + 0x40) == r[3] && (tgt = klh_rd32(sol + 0xac)) != 0 && klh_rd(tgt, &tvt, 4);
+         (sol = klh_rd32(rec - 0x14)) != 0 && r[3] && klh_rd32(sol + 0x40) == r[3] && (tgt = klh_rd32(sol + 0xac)) != 0 && klh_rd(tgt, &tvt, 4) && ((tvt = (klh_actor_priv && tvt == klh_actor_priv) ? KLR_ACTOR_VT : tvt), 1);
     memcpy(&dist, &r[5], 4); memcpy(&found, &r[6], 4);
     if (!ok || found != KLR_PB_STOCK) {       /* said at any Log level, three times an arming: it means this file's reading of the call is wrong */
         if (InterlockedIncrement(&klr_pb.odd) <= 3)
@@ -1077,7 +1077,7 @@ static void klr_ch_sold(const struct klb_snap *sn)
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
         for (k = 0; k < 64 && klr_ch.nsol < KLR_CH_SOLMAX; k++) {
             DWORD o = blk[k * 32 + 0x60 / 4], s, h, info, team = 0xff; float hp = 0;
-            if (o < 0x10000 || klh_rd32(o) != KLR_ACTOR_VT) continue;
+            if (o < 0x10000 || klh_avt(o) != KLR_ACTOR_VT) continue;
             if (!(s = klh_rd32(o + 0x77c)) || klh_rd32(s) != KLR_SOLDIER_VT || klh_rd32(s + 0x40) != o) continue;
             if (!(h = klh_rd32(o + 0x5fc)) || !klh_rd(h + 4, &hp, 4) || !klr_finite(hp) || hp <= 0.0f) continue;      /* living only */
             if (!(info = klh_rd32(o + 0x54)) || !klh_rd(info + 4, &team, 4)) continue;
@@ -1177,7 +1177,7 @@ static void klr_ch_tick(int arcade, int game_thread)
     for (i = 0; i < sn.n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &sn.r[i];
         DWORD h, s; float hp = 0, hmax = 0, pos[3] = { 0, 0, 0 }, hpos[3], p2[3], d, q, dh = -1.0f, dm = -1.0f; int have, j, mate = -1, list, fatal; BYTE dn = 0;
-        if (!r->used || !(r->flags & 1) || !r->actor || klh_rd32(r->actor) != KLR_ACTOR_VT || !(s = klh_rd32(r->actor + 0x77c)) || klh_rd32(s) != KLR_SOLDIER_VT) { klr_ch.r[i].actor = 0; continue; }
+        if (!r->used || !(r->flags & 1) || !r->actor || klh_avt(r->actor) != KLR_ACTOR_VT || !(s =klh_rd32(r->actor + 0x77c)) || klh_rd32(s) != KLR_SOLDIER_VT) { klr_ch.r[i].actor = 0; continue; }
         if (!(h = klh_rd32(r->actor + 0x5fc)) || klh_rd32(h + 0x24) != r->actor) continue;
         if (!klh_rd(h + 4, &hp, 4) || !klh_rd(h + 8, &hmax, 4) || !klr_finite(hp) || !klr_finite(hmax) || hmax < 1.0f || hmax > 100000.0f) continue;
         if (klr_ch.r[i].actor != r->actor) {      /* a new man in this record (or the first pass): the baseline, no line */

@@ -2071,7 +2071,7 @@ static void kld_rules(DWORD now)
         if (hp < kld_r.hplast - 0.05f) {
             float dl = kld_r.hplast - hp; kld_r.lost += dl; kld_r.nloss++;
             if (kld.log >= 2 || kld_r.nline < 8) {
-                DWORD att = klh_rd32(pl + 0x2778), avt = att ? klh_rd32(att) : 0, team = 99, sc; const char *who = "nobody yet / not readable";
+                DWORD att = klh_rd32(pl + 0x2778), avt = att ? klh_avt(att) : 0, team = 99, sc; const char *who = "nobody yet / not readable";
                 kld_r.nline++;
                 if (avt == KLD_ACTOR_VT) { if ((sc = klh_rd32(att + 0x54)) != 0) klh_rd(sc + 4, &team, 4); who = team == 2 ? "an AI HEISTER (team Ally: the crew -> you float, DownFromCrew)" : "POLICE / a guard (not team Ally: the police -> you float, DownFromCop)"; }
                 else if (avt == KLD_PLAYER_VT) who = "a human player (no float of the table prices him)";

@@ -1153,7 +1153,7 @@ static int klu_online_bots(int *alive)
                 if (!klh_rd(tab + ii * 0x80, blk, sizeof blk)) break;
                 for (k = 0; k < 64 && n < 8; k++) {
                     DWORD o = blk[k * 32 + 0x60 / 4], pr, team = 99;
-                    if (o < 0x10000 || klh_rd32(o) != 0x00bb3bac) continue;
+                    if (o < 0x10000 || klh_avt(o) != 0x00bb3bac) continue;
                     if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4) || team != 2) continue;
                     act[n++] = o;
                 }
@@ -1161,7 +1161,7 @@ static int klu_online_bots(int *alive)
     }
     for (i = 0; i < n; i++) {
         DWORD hp; float hv[2] = { 0, 0 };
-        if (klh_rd32(act[i]) != 0x00bb3bac) continue;
+        if (klh_avt(act[i]) != 0x00bb3bac) continue;
         hp = klh_rd32(act[i] + 0x5fc);
         if (hp && klh_rd(hp + 4, hv, 8) && hv[0] > 0) a++;
     }
