@@ -1829,4 +1829,7 @@ Restore stock with `tools/RESTORE Dog Days originals.bat`.
 Overnight note 2026-10-08/09: from the 79 % whole-level crash to four Dead Men maps and Retomoto
 Tower loading and playing rounds, in 14 commits on rtp-schemas; every crash and its cause is in
 the commit messages and the kl_graft.py run log.
+## 2026-10-26 ~06:40 [kl-merge-ce] COVER11: the K6 placement is at fault, not the model
+COVER11 (tele to exact stand points, finder move-id verdict; log cover_ab_1026/COVER10_logs/KLHook_COVER11.log): COVER on the stock control and on A/B boxes V1..V4 (V1/V3 = the same K6 model 38638 on open floor, cover on the long face and the end). NO on all 6 real K6 boxes on DM05A (45/46/47/58/43/52) on their built-for face. They sit inside or behind the wall solid (K6_45 z -2600..-2525 is behind the facade at z -2600; the stock box is in front, z -2700..-2600), so the side records flag the face as blocked (1/1/0x401 instead of 0/0/1). Workflow wudgsb5q6: fix the offset in walls(), restage DM05A into cover_fix_1026b, then COVER12. Bad stand points: k43 (tele put the player at y 100), k52 (tele MISSED).
+
 

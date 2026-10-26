@@ -68,8 +68,7 @@ Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-26 ~06:30 - BO7 confirmed that point-blank at scale 100 kills the online bots; OnlinePointBlank=2 is under test in BO8b (joiner rec block added). SP1g PASS: Track cut client cop error p50 905 -> 25. Residual fix 44139f1d6 (bound stall, KeepY); SP1h queued on 1026v. 12-row lobby seen in a back-buffer shot. Monitor off: use kld3 D3dShot* plus [FrameLimit] Enable=1 SwapChain=1.
 
-2026-10-26 ~05:55 - [kl-merge-ce] DM02 restart solved: walk-off fall past the shop floors' rear edge (x +-30 m, no collision) -> out-of-world box test 0x87fb30 -> YouDied. hvk3 shutters DO open (the "stuck" was klauto's stale pos, fixed c3c327a39). FallRescue PASS on 1026q and 1026s (step-back lands 74-190 units inside the edge).
-Queued: DM02 rear stops (F02 edddbb67, tools/kl_dm02_rearwall_1026.py) + DM02_rearW; then DM05A cover A/B (e235806c, tools/kl_cover_ab_1026.py, V1 room tree / V2 stock copy / V3 y10 / V4 stock copy in root) + COVER10 on out_cov_1026a_test (klcoverdump finder probe). Form-a restage of 11 maps held until A/B says which variant gives cover.
+2026-10-26 ~06:40 - [kl-merge-ce] DM02 is done: FallRescue PASS, rear stops F02 edddbb67 (DM02_rearW PASS), lift on all 3 sites PASS. Cover: COVER11 found that the K6 model gives cover (A/B V1..V4 PASS) but all 6 real K6 boxes do not. They sit inside the wall solid, so the face is flagged blocked. Builder offset fix + DM05A restage + COVER12 in workflow wudgsb5q6. The form-a restage of 11 maps is held until COVER12 passes.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
