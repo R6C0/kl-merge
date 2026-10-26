@@ -803,9 +803,12 @@ static void klmv_scan(DWORD rules)
  *    The exit trigger is looked for (vtable scan of the private memory, as klmv_scan) only at that moment, once a round.
  *    NOT RUN IN THE GAME. NOT KNOWN: why the forced call also failed in rounds where the human was a fed (all four rounds
  *    above): the reading says 'no vehicle known'; if the cause is another, this still calls the vehicle. */
-static DWORD klmv_exit_vehicle(DWORD *trig)
+/* BOS_DD02x (2026-10-26): the first hit was a trigger at 01b48188 whose entity node read (0, 0, 0) - a husk left from the earlier load - and the scan stopped there,
+   so the bots never got an exit all round (BOS_DD02r found the live one, 54c46290). wantpos = 1 skips hits whose entity node is not a sane non-zero place and
+   keeps the first such hit only as the fallback. */
+static DWORD klmv_exit_vehicle2(DWORD *trig, int wantpos)
 {
-    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD vt = (DWORD)(DWORD_PTR)KLH_VA(KLMV_EXIT_VT);
+    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD vt = (DWORD)(DWORD_PTR)KLH_VA(KLMV_EXIT_VT), ftrig = 0, fveh = 0;
     *trig = 0;
     while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
         if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
@@ -819,14 +822,21 @@ static DWORD klmv_exit_vehicle(DWORD *trig)
                     at = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + j);
                     if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi) continue;      /* an object of the game with an entity */
                     if (!klh_rd(at + 0x48, v, sizeof v)) continue;
-                    for (k = 0; k < 4; k++) if (v[k]) { *trig = at; return v[k]; }
+                    for (k = 0; k < 4 && !v[k]; k++) ;
+                    if (k == 4) continue;
+                    if (wantpos) {
+                        float tp[3] = {0, 0, 0}; DWORD node = klh_rd32(ent + 4);
+                        if (!node || !kle_node(node, tp, 0) || !kle_ok3(tp) || (fabsf(tp[0]) <= 1 && fabsf(tp[1]) <= 1 && fabsf(tp[2]) <= 1)) { if (!ftrig) { ftrig = at; fveh = v[k]; } continue; }
+                    }
+                    *trig = at; return v[k];
                 }
             }
         }
         a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
     }
-    return 0;
+    *trig = ftrig; return fveh;
 }
+static DWORD klmv_exit_vehicle(DWORD *trig) { return klmv_exit_vehicle2(trig, 0); }
 
 /* v82d (2026-10-17, AA step 6): what the clock showed last, so a round that ends WITHOUT the call can say why. NOT reset per round (klmv_r is wiped
    when a crew stage drops): rules says which round it belongs to. */

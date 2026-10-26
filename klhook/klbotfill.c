@@ -643,7 +643,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (q < KLBF_OT_BOTS) {
             DWORD t0 = GetTickCount(), ent, node;
             klbf_ot_lookAt = now; klbf_ot_looks++;
-            klbf_ot_vh = klmv_exit_vehicle(&klbf_ot_trig);
+            klbf_ot_vh = klmv_exit_vehicle2(&klbf_ot_trig, 1);      /* BOS_DD02x: skip husk triggers whose node reads (0, 0, 0) */
             klbf_ot_tvt = klbf_ot_trig ? klh_rd32(klbf_ot_trig) : 0;
             if (klbf_ot_vh && (!(ent = klh_rd32(klbf_ot_trig + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, klbf_ot_tpos, 0) || !kle_ok3(klbf_ot_tpos))) klbf_ot_vh = 0;
             klog("botfill: tactics: van: exit trigger %08lx, vehicle field %08lx (kind %u), its place (%.0f, %.0f, %.0f) - found in %lu ms%s", klbf_ot_trig, klbf_ot_vh, klh_rd32(rules + 0x1ec) & 0xff,
