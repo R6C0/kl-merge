@@ -1172,26 +1172,28 @@ static int kla_script_active(void) { return kla_pc < kla_ncmd; }
    ZFFPlayer's +0x460 as the other ops read them. Every refusal is logged and the script goes on. */
 static void kla_tele(int line, const float to[3])
 {
-    int me; float from[3] = { 0, 0, 0 }, now[3] = { 0, 0, 0 }; DWORD gd, actor = 0; const char *why = 0; int fault = 0, hf, hn;
-    me = kla_local_player();
-    hf = me >= 0 && kla_player_pos(me, from);
+    float from[3] = { 0, 0, 0 }, now[3] = { 0, 0, 0 }; DWORD gd = 0, actor = 0; const char *why = 0; int fault = 0, hn = 0, hf = 0;
+    /* TEST only: no online/level guard - online this moves the local body unilaterally and would desync (use it solo). */
     if (!kla_exe_ok) why = "kl2.exe is not the known build";
-    else if (me < 0) why = "no local player found";
-    else if (!hf) why = "the player's feet cannot be read";
     else if (!klb_finite(to[0]) || !klb_finite(to[1]) || !klb_finite(to[2])) why = "the target is not a finite place";
+    else if (fabs(to[0]) > 1e5f || fabs(to[1]) > 1e5f || fabs(to[2]) > 1e5f) why = "the target is out of range (|coord| > 100000; GUESS of the level extent)";
     else if (!(gd = kla_rd32((DWORD_PTR)VA(0xdd265c))) || !(actor = kla_rd32(gd + 0x4cf0))) why = "no local actor at [gamedata+0x4cf0]";
     else if (!klt_tele_known()) why = "0x62a900 is not the routine this build knows (klt_tele_known)";
     else why = klt_refuse(actor);
+    /* feet only for the log, read from the actor as klt_move does (ASSUMPTION +0x460); unreadable = unknown, never a refusal */
+    if (actor) hf = klh_rd(actor + 0x460, from, 12);
     if (!why) {
         __try { klt_teleport(actor, to); } __except (EXCEPTION_EXECUTE_HANDLER) { fault = 1; }
     }
-    hn = me >= 0 && kla_player_pos(me, now);
+    if (actor) hn = klh_rd(actor + 0x460, now, 12);
+    if (!hf) from[0] = from[1] = from[2] = 0;
+    if (!hn) now[0] = now[1] = now[2] = 0;
     if (why) kla_out(1, "script %d: tele REFUSED (%s): from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx", line, why,
                      from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
     else if (fault) kla_out(1, "script %d: tele FAULTED in 0x62a900 (caught): from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx", line,
                             from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
-    else kla_out(1, "script %d: tele: from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f)%s (actor %08lx)", line,
-                 from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], hn ? "" : " [feet unreadable]", (unsigned long)actor);
+    else kla_out(1, "script %d: tele: from%s (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now-same-poll (%.0f, %.0f, %.0f; may lag one tick)%s (actor %08lx)", line,
+                 hf ? "" : "?", from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], hn ? "" : " [feet unreadable]", (unsigned long)actor);
 }
 
 /* ---- script op 'ents <substring> [maxN]' (TEST only, READ ONLY). The walk of klsync.c klsy_walk / klcensus.c: [[[KLE_ENTS]+0xc]+0xc] = the
@@ -1201,14 +1203,16 @@ static void kla_tele(int line, const float to[3])
    and kle_human, 0x7263fa); printed as 'en?' = 1 when clear, with the raw dword. */
 static void kla_ents(int line, const char *sub, int maxn)
 {
-    DWORD p, tab, i, blk[64 * 32]; int shown = 0, seen = 0, scanned = 0;
+    DWORD p, tab, i, blk[64 * 32]; int shown = 0, seen = 0, scanned = 0, unread = 0;
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) { kla_out(1, "script %d: ents '%s': the entity table is not there yet", line, sub); return; }
     for (i = 0; i < 0x10000; i += 64) {
         DWORD k;
-        if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
+        int blk_ok = klh_rd(tab + i * 0x80, blk, sizeof blk);   /* a block that crosses the table's end: read the slots singly */
         for (k = 0; k < 64; k++) {
-            DWORD o = blk[k * 32 + 0x60 / 4], node, ref = 0, fl = 0; char nm[96], cls[64]; float pos[3] = { 0, 0, 0 }; int pv, rv, fv;
-            if (o < 0x10000 || klh_rd32(o) < 0x10000) continue;
+            DWORD o, node, ref = 0, fl = 0; char nm[96], cls[64]; float pos[3] = { 0, 0, 0 }; int pv, rv, fv;
+            if (blk_ok) o = blk[k * 32 + 0x60 / 4];
+            else if (!klh_rd(tab + (i + k) * 0x80 + 0x60, &o, 4)) { unread++; continue; }
+            if (o < 0x10000|| klh_rd32(o) < 0x10000) continue;
             scanned++;
             if (!(node = klh_rd32(o + 4)) || !klh_rdstr(klh_rd32(node + 0x6c), nm, sizeof nm) || !kla_contains(nm, sub)) continue;
             seen++;
@@ -1223,7 +1227,8 @@ static void kla_ents(int line, const char *sub, int maxn)
                     fv ? (fl >> 10 & 1 ? "0" : "1") : "?", (unsigned long)fl, pv ? "" : "none ", pos[0], pos[1], pos[2]);
         }
     }
-    kla_out(1, "script %d: ents '%s': %d matched of %d entities, %d shown (max %d)", line, sub, seen, scanned, shown, maxn);
+    kla_out(1, "script %d: ents '%s': %d matched of %d entities, %d shown (max %d)%s", line, sub, seen, scanned, shown, maxn, unread ? " [some slots unreadable - table end]" : "");
+    if (unread) kla_out(1, "script %d: ents: %d slots could not be read (past the table's end)", line, unread);
 }
 
 static int kla_key(const char *s)
@@ -1343,10 +1348,10 @@ static void kla_script_load(void)
         }
         else if (!_stricmp(op, "ents")) {               /* ents <name-substring> [maxN]: read-only scene node dump (TEST rig only) */
             if (!a[0]) { kla_out(1, "script line %d: ents needs <name-substring> - script not loaded", i); kla_ncmd = 0; return; }
-            c->op = C_ENTS; c->n = 20; snprintf(c->text, sizeof c->text, "%s", a);
-            sscanf(rest + strlen(a), "%lu", &c->n);
-            if (c->n < 1) c->n = 20;
-            if (c->n > 200) c->n = 200;
+            c->op = C_ENTS; c->n = 20;
+            if (strlen(a) >= sizeof c->text) { kla_out(1, "script line %d: ents substring too long (max %d) - script not loaded", i, (int)sizeof c->text - 1); kla_ncmd = 0; return; }
+            snprintf(c->text, sizeof c->text, "%s", a);
+            { long mx = 20; if (sscanf(rest + strlen(a), "%ld", &mx) == 1 && mx >= 1) c->n = (unsigned long)(mx > 200 ? 200 : mx); }
         }
         else if (!_stricmp(op, "peek")) {
             char *plus = strchr(a, '+');                 /* <addr>[+off[+off...]]: every '+' follows one pointer, then adds */
