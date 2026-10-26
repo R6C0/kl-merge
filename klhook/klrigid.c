@@ -77,6 +77,7 @@
    GUESS: the game reads the keyboard only through those two calls (no raw input / window messages for the Cover action). */
 static volatile LONG klkf_scan;          /* DIK scan code to hide now; 0 = off */
 static int klkf_armed;                   /* set once by kldown.c before the game creates DirectInput */
+static int klkf_wrapped;                 /* set when krg_create really wrapped the keyboard (review 2026-10-26: armed alone does not mean a proxy exists) */
 static struct kldh_kf klkf_k;            /* which press this filter dropped (so its release goes too) */
 static const GUID krg_syskbd = { 0x6f1d2b61, 0xd5a0, 0x11cf, { 0xbf, 0xc7, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00 } };
 
@@ -261,7 +262,8 @@ static HRESULT WINAPI krg_kb_getdata(krg_px *p, DWORD cb, DWORD *rg, DWORD *coun
 {
     HRESULT hr = ((HRESULT (WINAPI *)(void *, DWORD, DWORD *, DWORD *, DWORD))KRG_RV(p, 10))(p->real, cb, rg, count, flags);
     LONG sc = klkf_scan;
-    if (SUCCEEDED(hr) && klkf_armed && (sc || klkf_k.dropped_down) && cb == sizeof(struct kldh_ev) && rg && count && *count) {
+    if (!sc) klkf_k.dropped_down = 0;   /* review 2026-10-26: kldh_filter_events never matches with scan 0, so an owed release stayed set after the hold ended and ate the release of a key that was already down when the NEXT hold began (Cover left stuck down for the game); the release passes anyway with the hold off, so forget the debt */
+    if (SUCCEEDED(hr) && klkf_armed && sc && cb == sizeof(struct kldh_ev) && rg && count && *count) {
         __try {
             struct kldh_kf tmp = klkf_k;            /* DIGDD_PEEK (1) leaves the events in the device's buffer: the second, real read must see the same: do not move the state on a peek */
             *count = kldh_filter_events((flags & 1) ? &tmp : &klkf_k, (struct kldh_ev *)rg, *count, (DWORD)sc, sc != 0);
@@ -295,6 +297,7 @@ static HRESULT WINAPI krg_create(krg_px *p, const GUID *g, void **out, void *out
     else if (SUCCEEDED(hr) && out && *out && !outer && g && klkf_armed && !memcmp(g, &krg_syskbd, sizeof krg_syskbd)) {
         void *real = *out;
         *out = krg_proxy(real, krg_kb_vt);
+        if (*out != real) klkf_wrapped = 1;
         if (*out != real) klog("down: keyboard device %p: GetDeviceData / GetDeviceState wrapped for the Cover-key hold (proxy %p; passes everything through until the hold is on)", real, *out);
     }
     return hr;

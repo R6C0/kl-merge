@@ -2051,7 +2051,7 @@ static void kld_rules(DWORD now)
     /* 1. NO FIRE: the game's own two bits of a man who may not shoot (0x860f87 / 0x860f93), while he is down */
     {
         DWORD ma = 0, mv = 0, nv, bits = kld_r.nofire == 2 ? KLD_MASK_FIRE : (KLD_MASK_FIRE | KLD_MASK_AIM);
-        if (kld_r.nofire && down) {
+        if (kld_r.nofire && down && !kld_o.cur) {      /* review 2026-10-26: not online: the hold there must let fire work, and NoFire defaults to Flop's (Arcade's tuning) - the else-branch below takes bits set in an Arcade pass off */
             if (!kld_mask(pl, &ma, &mv)) { if (!kld_r.mtold) { kld_r.mtold = 1; klog("down: rules: NoFire: NO INPUT OBJECT for this player (the lookup of 0x61ef90 finds none): nothing is masked - he can fire in this down"); } }
             else {
                 if (kld_r.mbits && (kld_r.mpl != pl || kld_r.mat != ma)) { klog("down: rules: NoFire: the bits %lx this part set on player %08lx (mask %08lx) are another object's now: dropped unwritten", kld_r.mbits, kld_r.mpl, kld_r.mat); kld_r.mbits = 0; }
@@ -2338,13 +2338,13 @@ static void kld_o_hold_set(DWORD pl, DWORD now)
     int mask = kld_o.how != 2, pad_fb = 0;
     if (kld_o.how == 2) {
         LONG want = kld_o.scan, pm = kld_o.padhook && kld_o.pad ? (LONG)kld_o.padbtn : 0;
-        if (want && klkf_armed) {
+        if (want && klkf_armed && klkf_wrapped) {      /* review 2026-10-26: also needs the keyboard proxy to exist, else the Cover press reaches the game and the get-up runs at once */
             if (klkf_scan != want || kld_pad_mask != pm) {
                 int first = !kld_o.kset;
                 klkf_scan = want; kld_pad_mask = pm; kld_o.kset = 1;
                 if (first && (!kld_o.nheld++ || kld.log >= 2)) klog("down: online: HOLD on, %.2f s after he went down: the Cover key (DIK 0x%02x) is hidden from the game%s until the meter holds %.1f presses; fire, aim and grenade work while he lies", (now - kld_s.t_down) / 1000.0f, (int)want, pm ? " and the pad's Cover button too" : "", kld_o.need);
             }
-        } else mask = 1;                                        /* no filter possible (no scan code / the proxy was not armed): the old hold, which blocks fire */
+        } else { mask = 1; if (want && klkf_armed && !klkf_wrapped && !kld_o.mfall) { kld_o.mfall = 1; klog("down: online: the DirectInput keyboard was never wrapped (the game made it another way): the Cover key cannot be hidden, the bit-0x80 hold is used, which ALSO BLOCKS FIRE"); } }                                        /* no filter possible (no scan code / the proxy was not armed): the old hold, which blocks fire */
         if (kld_o.pad && !kld_o.padhook && !mask) pad_fb = kld_o.padseen && now - kld_o.padseen < 5000;
         if (pad_fb) {
             mask = 1;
