@@ -180,6 +180,7 @@ static void klhr_tick(void)
 {
     DWORD st, mode, rules = 0; int phase, hired, body;
     if (!klhr_on) return;
+    if (kl_online()) { klhr_body = 0; return; }                                   /* Arcade only: online the body stays the game's own */
     if (!klhr_state(&st, &mode) || mode != 4) return;
     if (!klhr_arcade(&rules, 0)) return;
     if (rules != klhr_rules0) { klhr_rules0 = rules; klhr_phase0 = 0; klhr_next = 0; klhr_body = 0; klhr_round = 0; }
