@@ -117,7 +117,7 @@ static void klbf_ot_summary(void)
 /* host, in a round, once a second. sm_state: caller checked role 2, mode 4 */
 static void klbf_ot_run(DWORD now, DWORD sm)
 {
-    DWORD p, tab, i, blk[64 * 32], mo[KLBF_OT_OBJ], van = 0; float mpos[KLBF_OT_OBJ][3], vpos[3] = { 0, 0, 0 }; int mamt[KLBF_OT_OBJ], nm = 0, n = 0, b;
+    DWORD p, tab, i, blk[64 * 32], mo[KLBF_OT_OBJ], van = 0; float mpos[KLBF_OT_OBJ][3], vpos[3] = { 0, 0, 0 }; int mamt[KLBF_OT_OBJ], nm = 0, n = 0, b, nmoney = 0, nvan = 0;
     struct { DWORD actor, soldier; float pos[3]; } bots[KLBF_OT_BOTS]; int nb = 0; char why[100];
     if (now - klbf_ot_last < 1000) return;
     klbf_ot_last = now;
@@ -135,13 +135,15 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (o < 0x10000 || !(vt = klh_rd32(o))) continue;
             n++;
             if (vt == KLMV_MONEY_VT) {
+                nmoney++;
                 DWORD ent, node; int amt = 0; BYTE act = 0;
                 if (nm >= KLBF_OT_OBJ || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act) continue;      /* taken, or not armed (+0x6c, klmove.c 2) */
                 if (!(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, pos, 0)) continue;
                 mo[nm] = o; mamt[nm] = amt; memcpy(mpos[nm], pos, 12); nm++;
             } else if (vt == KLE_VEH_VT) {
                 DWORD node = klh_rd32(o + 4);
-                if (!van && node && kle_node(node, vpos, 0)) van = o;      /* GUESS: the vehicle object's node is where the van stands (its boarding place is 500 along x, klescort.c kle_boarding; not used) */
+                nvan++;
+                if (!van && node && kle_node(node, vpos, 0) && (fabs(vpos[0]) > 1 || fabs(vpos[1]) > 1 || fabs(vpos[2]) > 1)) van = o;      /* BO3: the van stood at (0,0,0) at the round start = not here / not called yet; wait for a real place */      /* GUESS: the vehicle object's node is where the van stands (its boarding place is 500 along x, klescort.c kle_boarding; not used) */
             } else if (klh_avt(o) == 0x00bb3bac && nb < KLBF_OT_BOTS) {
                 DWORD pr, team = 99, hp, snd; float hv[2] = { 0, 0 };
                 if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4) || team != 2) continue;
@@ -153,8 +155,8 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         }
     }
     {   /* once per round, and again whenever the bot count changes: what the scan saw (BO2 gave no order and no clue why) */
-        static int seen_round, seen_nb = -1;
-        if (seen_round != klbf_ot_rounds || seen_nb != nb) { seen_round = klbf_ot_rounds; seen_nb = nb; klog("botfill: tactics: scan: %d objects, %d live Ally bot(s), %d armed stack(s), van %08lx", n, nb, nm, van); }
+        static int seen_round, seen_nb = -1, seen_nm = -1; static DWORD seen_van = 1;
+        if (seen_round != klbf_ot_rounds || seen_nb != nb || seen_nm != nm || seen_van != van) { seen_round = klbf_ot_rounds; seen_nb = nb; seen_nm = nm; seen_van = van; klog("botfill: tactics: scan: %d objects, %d live Ally bot(s), %d armed stack(s) of %d money object(s), van %08lx (%d vehicle(s); one at the origin = not here yet)", n, nb, nm, nmoney, van, nvan); }
     }
     {   /* free the slot of a bot that is dead / gone (else its target stack stays "taken" and the 16 slots run out); boarded bots (phase 3) keep theirs for the summary */
         int q, r;
@@ -196,7 +198,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klbf_ob[s].phase = 1; klbf_ob[s].target = mo[best]; klbf_ob[s].since = now; klbf_ob[s].ordered = 0;
                 memcpy(tgt, mpos[best], 12);
                 klog("botfill: tactics: bot %d (actor %08lx soldier %08lx) -> stack %08lx (%d) at (%.0f, %.0f, %.0f), %.0f m away", s, a, bots[b].soldier, mo[best], mamt[best], tgt[0], tgt[1], tgt[2], bd / 100);
-            } else if (klbf_ob[s].tally > 0 || best < 0) {
+            } else if (klbf_ob[s].tally > 0) {      /* BO3: with nothing carried a bot waited at the van for nothing; it now waits for an armed stack */
                 if (!van) { if (!(klbf_ob[s].told & 1) && (klbf_ob[s].told |= 1)) klog("botfill: tactics: bot %d (actor %08lx): wants the van but no ZAnimatedVehicle is in the entity table yet", s, a); continue; }
                 klbf_ob[s].phase = 2; klbf_ob[s].since = now; klbf_ob[s].ordered = 0;
                 klog("botfill: tactics: bot %d (actor %08lx) -> escape van %08lx at (%.0f, %.0f, %.0f) with tally %d (%d grab(s))", s, a, van, vpos[0], vpos[1], vpos[2], klbf_ob[s].tally, klbf_ob[s].grabs);
