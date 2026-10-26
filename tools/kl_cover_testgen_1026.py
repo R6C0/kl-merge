@@ -177,6 +177,11 @@ BOXES19 = {
 REPS = 12
 SETTLES = (1000, 2500, 4000)
 ANGLES20 = (0, 30, -30, 60, -60, 15)     # COVER20 walk-in angles off the face normal, degrees (see block19)
+# COVER21 (10-26 15:55): COVER20 DM01B: the flag predicted 22/22 (11 flag 1 = COVER, 11 flag 0 = NO), angle and heading did not; the stop
+# distance out of the face did: 34-42 cm gave the flag 11/13, nearer (10-33) or farther (66) never. COVER21 walks in straight and stops at
+# DIST21 cm out (goto radius 6), to map the band. NOT QUEUED (15:58): COVER19 DM01B already refutes distance alone - straight walk-ins
+# stopped 34-38 cm out and were NO 21/21. In COVER20 the side decides better: -30/-60 deg 7/8 COVER, +15/+30 0/6, 0 deg only on rep 1.
+DIST21 = (30, 40, 50, 60, 70, 35, 45, 25)
 BLOCK19_MS = 1500 + 1500 + 4000 + 2500 + 600 + 2000 + 3000     # two run-up teles, goto, mean settle, the waits of one repetition
 RUN_UP = 200    # GUESS: tele this far OUT of the face (along face_normal), then walk in; 200 is room for the heading to settle, small enough to stay on the same floor
 
@@ -240,6 +245,8 @@ def block19(tag, t, reps):
         a = math.radians(ANGLES20[i % len(ANGLES20)] if TAG == 'COVER20' else 0)
         ux, uz = nx * math.cos(a) - nz * math.sin(a), nx * math.sin(a) + nz * math.cos(a)
         rx, rz = fx + (50 + RUN_UP) * ux, fz + (50 + RUN_UP) * uz
+        if TAG == 'COVER21':
+            out.append('log %s stop %d cm out of the face (straight walk-in)' % (k, DIST21[i % len(DIST21)]))
         if TAG == 'COVER20':
             out.append('log %s approach %d deg off the face normal' % (k, ANGLES20[i % len(ANGLES20)]))
         # 10-26 15:30 (workflow woorpztbk, refuter agreed): a tele straight onto a stand point can be refused by the placement 0x82cc40 -
@@ -251,7 +258,8 @@ def block19(tag, t, reps):
             'wait 1500',
             'tele %d %d %d' % (r(rx), r(g + 5), r(rz)),
             'wait 1500',
-            'goto %d %d 55 4000' % (r(fx), r(fz)),
+            ('goto %d %d 6 4000' % (r(fx + DIST21[i % len(DIST21)] * nx), r(fz + DIST21[i % len(DIST21)] * nz)) if TAG == 'COVER21'
+             else 'goto %d %d 55 4000' % (r(fx), r(fz))),
             'wait %d' % st,
             'pos %s1-at-stand' % k,
             'peek 0xdd265c+828+2d60 %s-offer-flags-a' % k,
@@ -274,7 +282,7 @@ def block19(tag, t, reps):
 def pick17(map_id, tiles):
     by = dict((t['name'], t) for t in tiles)
     out = []
-    for nm in {'COVER18': BOXES18, 'COVER19': BOXES19, 'COVER20': BOXES19}.get(TAG, BOXES17)[map_id]:
+    for nm in {'COVER18': BOXES18, 'COVER19': BOXES19, 'COVER20': BOXES19, 'COVER21': BOXES19}.get(TAG, BOXES17)[map_id]:
         ctl = nm.endswith('*'); nm = nm.rstrip('*')
         if nm not in by: raise SystemExit('%s: box %s not in the plan' % (map_id, nm))
         out.append((by[nm], ctl))
@@ -286,7 +294,7 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
     tiles = json.load(open(plan))
     sel, msg = selection_part(os.path.join(out, map_id + '.ini'))
     ctls = {}
-    if TAG in ('COVER17', 'COVER18', 'COVER19', 'COVER20'):
+    if TAG in ('COVER17', 'COVER18', 'COVER19', 'COVER20', 'COVER21'):
         pk = pick17(map_id, tiles); ch = [t for t, _ in pk]; ctls = dict((t['name'], c) for t, c in pk)
     else:
         ch = choose(tiles, n)
@@ -311,12 +319,12 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
     s += ['log === ' + TAG + ': idle %d s at the spawn (coverdump dumps after the list is stable 2 s) ===' % (IDLE_MS // 1000), 'wait %d' % IDLE_MS, 'pos idle-end']
     reps = min(REPS, (380000 - LEAD_WAIT - IDLE_MS) // (BLOCK19_MS * max(1, len(ch))))
     for i, t in enumerate(ch):
-        if TAG in ('COVER19', 'COVER20'):
+        if TAG in ('COVER19', 'COVER20', 'COVER21'):
             s += block19('k%d' % (i + 1), t, reps)
         else:
             s += block('k%d' % (i + 1), t, ctls.get(t['name'], False)) if TAG in ('COVER17', 'COVER18') else block16('k%d' % (i + 1), t)
     s += ['log ' + TAG + '_%s DONE' % map_id, 'pass 1000']
-    if TAG in ('COVER19', 'COVER20'):
+    if TAG in ('COVER19', 'COVER20', 'COVER21'):
         total = LEAD_WAIT + IDLE_MS + BLOCK19_MS * reps * len(ch)
     else:
         total = LEAD_WAIT + IDLE_MS + (BLOCK17_MS + (3300 if TAG == 'COVER18' else 0) if TAG in ('COVER17', 'COVER18') else BLOCK_MS) * len(ch)
@@ -340,7 +348,7 @@ def main(argv):
         elif argv[i] == '--plans': plans = argv[i + 1]; i += 2
         else: maps.append(argv[i]); i += 1
     if maps == ['all']:
-        maps = list({'COVER18': BOXES18, 'COVER19': BOXES19, 'COVER20': BOXES19, 'COVER17': BOXES17}.get(TAG, MAPS))
+        maps = list({'COVER18': BOXES18, 'COVER19': BOXES19, 'COVER20': BOXES19, 'COVER21': BOXES19, 'COVER17': BOXES17}.get(TAG, MAPS))
     for m in maps:
         p, ch, total = build(m, n, out, plans)
         print('%s -> %s (%d blocks, ~%d s after load)' % (m, p, len(ch), total // 1000))
