@@ -1839,13 +1839,37 @@ static ULONG WINAPI kpx_release(KPX *p)
    20 GetEffectInfo 21 GetForceFeedbackState 22 SendForceFeedbackCommand 23 EnumCreatedEffectObjects
    24 Escape 25 Poll 26 SendDeviceData 27 EnumEffectsInFile 28 WriteEffectToFile 29 BuildActionMap
    30 SetActionMap 31 GetImageInfo. Every argument is a DWORD or a pointer, so only the count matters. */
-KF1(kd, 3) KF3(kd, 4) KF2(kd, 5) KF2(kd, 6) KF0(kd, 8) KF1(kd, 12) KF2(kd, 13) KF3(kd, 14) KF1(kd, 15) KF2(kd, 16)
+KF1(kd, 3) KF3(kd, 4) KF2(kd, 5) KF2(kd, 6) KF1(kd, 12) KF3(kd, 14) KF1(kd, 15) KF2(kd, 16)
 KF3(kd, 17) KF4(kd, 18) KF3(kd, 19) KF2(kd, 20) KF1(kd, 21) KF1(kd, 22) KF3(kd, 23) KF1(kd, 24) KF0(kd, 25)
 KF4(kd, 26) KF4(kd, 27) KF4(kd, 28) KF3(kd, 29) KF3(kd, 30) KF1(kd, 31)
+
+/* 'pollloss' ([Auto] PollLossMs): the last DirectInput calls the hook saw (Acquire / Unacquire / SetCooperativeLevel, every device kind, and a change of the
+   keyboard's GetDeviceData result), kept in a ring of 8 for the watchdog thread; no lock (a torn entry in a diagnostic line is acceptable) */
+static struct { DWORD t; int kind; const char *what; DWORD a; HRESULT hr; } kla_di_ring[8];
+static volatile LONG kla_di_n;
+static volatile DWORD kla_poll_t, kla_di_coop = 0xffffffffu, kla_di_coop_t, kla_di_acq_t; static volatile int kla_di_acq = -1;   /* last keyboard poll tick; last coop flags; 1 acquired / 0 unacquired / -1 never */
+static void kla_di_note(KPX *p, const char *what, DWORD a, HRESULT hr)
+{
+    LONG i = InterlockedIncrement(&kla_di_n) - 1;
+    kla_di_ring[i & 7].t = GetTickCount(); kla_di_ring[i & 7].kind = p->kind; kla_di_ring[i & 7].what = what; kla_di_ring[i & 7].a = a; kla_di_ring[i & 7].hr = hr;
+}
+static HRESULT WINAPI kd8(KPX *p)
+{
+    HRESULT hr = ((HRESULT (WINAPI *)(void *))KRV(p, 8))(p->real);
+    kla_di_note(p, "Unacquire", 0, hr); if (p->kind == 2) { kla_di_acq = 0; kla_di_acq_t = GetTickCount(); }
+    return hr;
+}
+static HRESULT WINAPI kd13(KPX *p, DWORD hwnd, DWORD flags)
+{
+    HRESULT hr = ((HRESULT (WINAPI *)(void *, DWORD, DWORD))KRV(p, 13))(p->real, hwnd, flags);
+    kla_di_note(p, "SetCooperativeLevel", flags, hr); if (p->kind == 2) { kla_di_coop = flags; kla_di_coop_t = GetTickCount(); }
+    return hr;
+}
 
 static HRESULT WINAPI kd_acquire(KPX *p)
 {
     HRESULT hr = ((HRESULT (WINAPI *)(void *))KRV(p, 7))(p->real);
+    kla_di_note(p, "Acquire", 0, hr); if (p->kind == 2) { kla_di_acq = SUCCEEDED(hr); kla_di_acq_t = GetTickCount(); }
     if (FAILED(hr) && (p->kind == 2 || p->kind == 3) && kla_unfocused && kla_script_active()) return 0;   /* the game then polls us (0x8fa0a0) */
     return hr;
 }
@@ -1887,8 +1911,10 @@ static HRESULT WINAPI kd_getdata(KPX *p, DWORD cb, DWORD *rg, DWORD *count, DWOR
 {
     DWORD cap = count ? *count : 0, n;
     HRESULT hr = ((HRESULT (WINAPI *)(void *, DWORD, DWORD *, DWORD *, DWORD))KRV(p, 10))(p->real, cb, rg, count, flags);
-    static int told;
+    static int told; static HRESULT lasthr;
     if (p->kind != 2) return hr;
+    kla_poll_t = GetTickCount() | 1;                    /* pollloss: the last keyboard poll (never 0 once polled) */
+    if (hr != lasthr) { lasthr = hr; kla_di_note(p, "GetDeviceData->", 0, hr); }
     if (!kla_hooks_on || !kla_exe_ok) {                 /* no scene-load wrapper: a load shows as a pause in the polls
                                                            (the keyboard is not read while a scene loads) and a new name */
         static DWORD last, chk; DWORD now = GetTickCount(); char sc[128];
@@ -2125,6 +2151,84 @@ static void kla_stall(const char *why, int code)
     kla_finish("FAIL", why, code);
 }
 
+/* ---------------------------------------------------------------- pollloss: why did the keyboard polling stop?
+   WHY (2026-10-26, bench N9_DM01d): polling stopped on 5 instances at ~07:38:10 and the watchdog (StallMs) ended the host at 07:43:10; the cause is unknown.
+   When no keyboard poll has come for [Auto] PollLossMs (default 5000, 0 = off; recommended on) kla_watch logs ONE 'pollloss:' line per episode (ms since the
+   last poll, the foreground window and whether it is ours, our window's iconic / visible / enabled state, the keyboard's acquire and cooperative-level
+   state as the proxies saw them, the last DirectInput calls, the main thread's EIP sampled like the hitch probe) and 'pollloss: back after N ms' when polls
+   resume. Cost: one compare per 250 ms; the sample (suspend + context + resume of the main thread) happens once per episode. user32 is looked up, not linked. */
+static DWORD kla_pl_ms;
+static HWND kla_pl_win;
+static BOOL CALLBACK kla_pl_pick(HWND h, LPARAM unused)
+{   /* the first visible window of the main thread, else the first one; EnumThreadWindows sends no message */
+    static BOOL (WINAPI *vis)(HWND);
+    (void)unused;
+    if (!vis) vis = (BOOL (WINAPI *)(HWND))GetProcAddress(GetModuleHandleA("user32.dll"), "IsWindowVisible");
+    if (!kla_pl_win) kla_pl_win = h;
+    if (vis && vis(h)) { kla_pl_win = h; return FALSE; }
+    return TRUE;
+}
+
+static void kla_pollloss(DWORD now)
+{
+    static int in_ep; static DWORD ep_last, ep_n; static int looked;
+    static HWND (WINAPI *fgw)(void); static BOOL (WINAPI *isic)(HWND), (WINAPI *isvis)(HWND), (WINAPI *isen)(HWND), (WINAPI *isw)(HWND);
+    static DWORD (WINAPI *wtp)(HWND, LPDWORD); static int (WINAPI *gwt)(HWND, LPSTR, int); static BOOL (WINAPI *etw)(DWORD, WNDENUMPROC, LPARAM);
+    DWORD poll = kla_poll_t;
+    if (!kla_pl_ms || !poll) return;                    /* off, or no keyboard poll seen yet (the stall watch covers the start) */
+    if (in_ep) {
+        if (poll != ep_last) { in_ep = 0; kla_out(1, "pollloss: back after %lu ms (gap between the last poll before and the first after; episode %lu)", poll - ep_last, ep_n); }
+        return;
+    }
+    if (now - poll < kla_pl_ms || (int)(now - poll) < 0) return;
+    in_ep = 1; ep_last = poll; ep_n++;
+    {
+        HWND f = 0; DWORD pid = 0, off = 0, k; char title[96] = "", mod[80] = "", ring[420] = ""; size_t at = 0; LONG n = kla_di_n, i;
+        int ours = 0, ic = -1, vi = -1, en = -1, hv = 0; HANDLE t; CONTEXT c;
+        if (!looked) {
+            HMODULE u = GetModuleHandleA("user32.dll"); looked = 1;
+            if (u) { fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); isic = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsIconic");
+                     isvis = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsWindowVisible"); isen = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsWindowEnabled");
+                     isw = (BOOL (WINAPI *)(HWND))GetProcAddress(u, "IsWindow");
+                     wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId"); gwt = (int (WINAPI *)(HWND, LPSTR, int))GetProcAddress(u, "GetWindowTextA");
+                     etw = (BOOL (WINAPI *)(DWORD, WNDENUMPROC, LPARAM))GetProcAddress(u, "EnumThreadWindows"); }
+        }
+        f = fgw ? fgw() : 0; if (f && wtp) wtp(f, &pid);
+        ours = pid == GetCurrentProcessId();
+        if (f && !ours && gwt) { gwt(f, title, sizeof title); title[sizeof title - 1] = 0; }   /* another process's window: read from its own record; ours is never asked (WM_GETTEXT would block if the game thread hangs) */
+        if (kla_main_tid && etw) { if (!kla_pl_win || !isw || !isw(kla_pl_win)) { kla_pl_win = 0; etw(kla_main_tid, kla_pl_pick, 0); } }
+        if (kla_pl_win && isw && isw(kla_pl_win)) { hv = 1; ic = isic ? isic(kla_pl_win) : -1; vi = isvis ? isvis(kla_pl_win) : -1; en = isen ? isen(kla_pl_win) : -1; }
+        for (k = 0, i = n > 6 ? n - 6 : 0; i < n && at < sizeof ring - 80; i++, k++) {   /* the last 6 calls, oldest first */
+            const char *w = kla_di_ring[i & 7].what; int kd = kla_di_ring[i & 7].kind;
+            at += (size_t)snprintf(ring + at, sizeof ring - at, "%s%s[%s] a=%lx hr=%08lx -%lums", k ? "; " : "", w ? w : "?", kd == 2 ? "kbd" : kd == 3 ? "mouse" : "dev", kla_di_ring[i & 7].a,
+                                   (DWORD)kla_di_ring[i & 7].hr, now - kla_di_ring[i & 7].t);
+        }
+        kla_out(1, "pollloss: no keyboard poll for %lu ms (episode %lu, StallMs %lu, frames %lu, loading=%lu, scene '%s'); foreground window %p pid %lu%s title '%s'; game window %p %s iconic=%d visible=%d enabled=%d; "
+                "keyboard %s (%lu ms ago), cooperative level %s%lx (%lu ms ago); %ld DirectInput call(s) seen, last: %s",
+                now - poll, ep_n, kla_stall_ms, kla_frames, kb.loading, kb.scene, (void *)f, pid, ours ? " (the game)" : "", title, (void *)kla_pl_win, hv ? "found" : "NOT found", ic, vi, en,
+                kla_di_acq < 0 ? "never acquired/unacquired" : kla_di_acq ? "acquired" : "UNACQUIRED", kla_di_acq_t ? now - kla_di_acq_t : 0,
+                kla_di_coop == 0xffffffffu ? "never set " : "0x", kla_di_coop == 0xffffffffu ? 0 : kla_di_coop, kla_di_coop_t ? now - kla_di_coop_t : 0, n, at ? ring : "(none)");
+        memset(&c, 0, sizeof c); c.ContextFlags = CONTEXT_CONTROL;
+        t = kla_main_tid ? OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, kla_main_tid) : 0;
+        if (t) {
+            int ok = 0; DWORD st[64], got = 0, a, m = 0; char rets[300] = ""; size_t rl = 0;
+            if (SuspendThread(t) != (DWORD)-1) { ok = GetThreadContext(t, &c); if (ok) got = klh_rd(c.Esp, st, sizeof st) ? 64 : 0; ResumeThread(t); }
+            CloseHandle(t);
+            if (ok) {
+                klh_module(c.Eip, mod, sizeof mod, &off);
+                for (a = 0; a < got && m < 4; a++) {    /* first return addresses on the stack that lie in a module (as the hitch probe does) */
+                    MEMORY_BASIC_INFORMATION mb;
+                    if (st[a] > 0x10000 && VirtualQuery((void *)(DWORD_PTR)st[a], &mb, sizeof mb) && mb.Type == MEM_IMAGE && (mb.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) {
+                        char rm[80]; DWORD ro; klh_module(st[a], rm, sizeof rm, &ro);
+                        rl += (size_t)snprintf(rets + rl, sizeof rets - rl, " %s+0x%lx", rm, ro); m++;
+                    }
+                }
+                kla_out(1, "pollloss: main thread %lu at %s+0x%lx (%08lx); stack returns:%s", kla_main_tid, mod, off, c.Eip, m ? rets : " (none)");
+            } else kla_out(1, "pollloss: main thread %lu could not be sampled", kla_main_tid);
+        } else kla_out(1, "pollloss: main thread not known or not openable");
+    }
+}
+
 static DWORD WINAPI kla_watch(LPVOID unused)
 {
     int crt = 0, rearmed = 0; char why[200];
@@ -2149,6 +2253,7 @@ static DWORD WINAPI kla_watch(LPVOID unused)
         }
         if (!crt && (kla_frames || kb.loads || kb.loading)) crt = kla_crt_hooks();
         now = GetTickCount(); idle = now - kla_beat;
+        kla_pollloss(now);
         if (kla_stall_ms && (int)idle > 0 && idle > kla_stall_ms) {
             snprintf(why, sizeof why, "stall: no hook hit and no input frame for %lu ms (%s)", idle, kb.loading ? "inside a scene load" : kla_frames ? "input polling stopped: hang, dialog or inactive window" : "before the first keyboard poll");
             kla_stall(why, KLA_STALL);
@@ -2183,6 +2288,7 @@ static void kla_init(HINSTANCE inst)
     kla_tap_polls = GetPrivateProfileIntA("Auto", "TapPolls", 2, kla_ini); if (kla_tap_polls < 1) kla_tap_polls = 1;
     kla_gate_n = GetPrivateProfileIntA("Auto", "TapSettle", 0, kla_ini); kla_gate_ms = GetPrivateProfileIntA("Auto", "TapSettleMs", 100, kla_ini);
     kla_stall_ms = GetPrivateProfileIntA("Auto", "StallMs", 60000, kla_ini);
+    kla_pl_ms = GetPrivateProfileIntA("Auto", "PollLossMs", 5000, kla_ini);   /* GUESS: 5 s is far over any frame or short load pause and well under StallMs */
     kla_maxrun_ms = GetPrivateProfileIntA("Auto", "MaxRunMs", 0, kla_ini);
     kla_loaded_ms = GetPrivateProfileIntA("Auto", "LoadedMs", 0, kla_ini);
     kla_unfocused = GetPrivateProfileIntA("Auto", "Unfocused", 1, kla_ini);

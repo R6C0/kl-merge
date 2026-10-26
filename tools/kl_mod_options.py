@@ -186,6 +186,8 @@ feat('botfillsquads', G_EXP, 'Online lobby: keep the first N map heister squads 
      'klbotfill.c [Bots] OnlineFillSquads; heap byte per squad (mask 8 -> 9) before the round; needs OnlineFill=1; may be too late for the collect (probe); NOT run live', [('Bots', 'OnlineFillSquads', 1, 0, 0)])
 feat('onlinecoptobot', G_EXP, 'Online AI heisters take cop bullets like Arcade (5 % of a hit; needs the host bot options; recommended on)', 'on', 'start',
      'klbalance.c [BotFill] OnlineCopToBot (percent, 5 = CopToCrew 0.05, 1 = stock Arcade level 1); private ZFFActor vtable per bot, slot 423 wrapped, data only; re/online_bot_damage.md; NOT run live', [('BotFill', 'OnlineCopToBot', 5, 0, 5)])
+feat('onlinepbcap', G_EXP, 'Online AI heisters cannot be melted by point-blank bursts (hp cap per second; needs the host bot options; recommended on)', 'on', 'start',
+     'klbalance.c [BotFill] OnlinePointBlankCap (hp per bot per 1 s window, 250 = GUESS, 0 = off); inside the OnlineCopToBot slot-423 wrapper; BO10; NOT run live', [('BotFill', 'OnlinePointBlankCap', 250, 0, 250)])
 feat('onlineguardtake', G_EXP, 'Online AI heisters walk into a guarded loot stack after 30 s of waiting (recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineGuardTake; BO8c: the 30 s release sent all bots into the cop squads at once; off = hold until a stack is clear; NOT run live', [('BotFill', 'OnlineGuardTake', 1, 0, 0)])
 feat('onlinevancall', G_EXP, 'Online AI heisters can call the escape van even with the round-keep rules copy (recommended on)', 'on', 'start',
