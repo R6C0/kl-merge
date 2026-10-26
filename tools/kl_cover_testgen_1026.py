@@ -1,4 +1,4 @@
-"""kl_cover_testgen_1026.py - generate a live cover test ini (COVER15_<MAP>.ini; COVER14 had no NO_DAMAGE) for one expansion map (2026-10-26). OFFLINE: reads files, writes one ini.
+"""kl_cover_testgen_1026.py - generate a live cover test ini (COVER16_<MAP>.ini; COVER14 had no NO_DAMAGE, COVER15 one attempt) for one expansion map (2026-10-26). OFFLINE: reads files, writes one ini.
 
 Usage:  python tools/kl_cover_testgen_1026.py <MAP> [--n 8] [--out C:/kl_build_1024/live_1026] [--plans C:/kl_build_1024/cover_fix_1026d]
         python tools/kl_cover_testgen_1026.py all          (every map that has a staged plan)
@@ -11,7 +11,7 @@ Per map the ini is COVER13.ini's header ([KLHook] .. [CoverDump] .. [Auto], ever
   2. load + 23 s, the COVER LIST peeks, idle 15 s (as COVER13).
   3. up to N blocks (tags k1..kN) in COVER13's per-box pattern: tele to stand (y = ground + 5), wait 1500, pos, face the face point, wait 700,
      peek movement id, tap C 400, wait 2000, log CHECK, peek, pos, tap C 400, wait 1500.
-  4. 'log COVER15_<MAP> DONE' and 'pass 1000'.
+  4. 'log COVER16_<MAP> DONE' and 'pass 1000'.
 Tiles come from <plans>/<MAP>/stage/cover_plan.json (list of dicts: name, kind, mid, ext = [along-face, depth], face_normal [x,z],
 stand [x, ground, z], ground). Face point = stand - 50 * face_normal (the face centre; the stand point is 50 OUT of the face along the normal;
 COVER13's lines agree: k46 stand z -2685, normal -1, face z -2635).
@@ -20,7 +20,7 @@ long pool (kind high, ext[0] >= LONG; relaxed to kind high, then to all, when th
 tile nearest the centroid. Ties break on name.
 Verdict: cover14_verdict.py <KLHook.log> [MAP] (in the same folder as the inis).
 """
-import json, os, re, sys
+import json, math, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = 'C:/kl_build_1024/live_1026'
@@ -30,8 +30,8 @@ LONG = 100.0
 GROUND_BAND = 800.0    # max |ground - median ground| of a chosen tile
 LEAD_WAIT = 23000       # after 'waitload', as COVER13
 IDLE_MS = 15000
-BLOCK_MS = 1500 + 700 + 400 + 2000 + 400 + 1500     # the waits of one block (the taps/peeks/face add a little)
-TAG = 'COVER15'         # COVER15 = COVER14 + no_damage_to_you(): in COVER14 police downed the test player on DM01B/DM06/DM06B and a down blocks cover
+BLOCK_MS = 2 * (4000 + 700 + 400 + 2000 + 400 + 3000)     # the waits of one block, two attempts (the taps/peeks/face add a little)
+TAG = 'COVER16'         # COVER16 = two attempts per block, longer settles (see block()); COVER15 = COVER14 + no_damage_to_you(): in COVER14 police downed the test player on DM01B/DM06/DM06B and a down blocks cover
 # [Balance] keys set in the test ini: police / point-blank / crew damage to the local player 0; Ramp=0 or CopToYou would be raised to stock
 NO_DAMAGE = [('Ramp', '0'), ('CopToYou', '0.0'), ('PointBlankToYou', '0.0'), ('CrewToYou', '0.0')]
 
@@ -112,25 +112,33 @@ def choose(tiles, n):
 
 
 def block(tag, t):
+    """COVER16 (2026-10-26 triage of the COVER14/15 NOs, workflow w5j0dddil): no box fault found; the NOs were carry-over from the block
+    before (the second C leaves cover ~0.8 s late and the next tele lands in that state) and taps ~2 s after the tele when no face steering ran.
+    So: wait 4000 after each tele, wait 3000 after the exit C, and a second attempt (b) with a fresh tele and the face aimed 30 degrees off
+    the face centre (bearing errors of 19-180 degrees all gave cover). Verdict: COVER if either attempt's after-C peek reads 8."""
     sx, g, sz = t['stand']; nx, nz = t['face_normal']
     fx, fz = sx - 50 * nx, sz - 50 * nz
+    c, sn = math.cos(math.radians(30)), math.sin(math.radians(30))
+    ox, oz = sx - 50 * (nx * c - nz * sn), sz - 50 * (nx * sn + nz * c)      # face point rotated 30 degrees about the stand
     r = lambda v: int(round(v))
-    return [
-        'log === %s: %s %s ext %.0fx%.0f y %.1f stand (%.1f,%.1f) face (%.1f,%.1f) ===' % (tag, t['name'], t['kind'], t['ext'][0], t['ext'][1], g, sx, sz, fx, fz),
-        'tele %d %d %d' % (r(sx), r(g + 5), r(sz)),
-        'wait 1500',
-        'pos %s-at-stand' % tag,
-        'face %d %d 6 4000' % (r(fx), r(fz)),
-        'wait 700',
-        'peek 0xdd265c+828+6b4+44 %s-0-before-C-movement-id(secondary)' % tag,
-        'tap C 400',
-        'wait 2000',
-        'log %s CHECK' % tag,
-        'peek 0xdd265c+828+6b4+44 %s-1-after-C-movement-id(secondary)' % tag,
-        'pos %s-after-C' % tag,
-        'tap C 400',
-        'wait 1500',
-    ]
+    out = ['log === %s: %s %s ext %.0fx%.0f y %.1f stand (%.1f,%.1f) face (%.1f,%.1f) ===' % (tag, t['name'], t['kind'], t['ext'][0], t['ext'][1], g, sx, sz, fx, fz)]
+    for att, (px, pz) in (('1', (fx, fz)), ('b', (ox, oz))):
+        out += [
+            'tele %d %d %d' % (r(sx), r(g + 5), r(sz)),
+            'wait 4000',
+            'pos %s%s-at-stand' % (tag, att),
+            'face %d %d 6 4000' % (r(px), r(pz)),
+            'wait 700',
+            'peek 0xdd265c+828+6b4+44 %s-%s-before-C-movement-id(secondary)' % (tag, att),
+            'tap C 400',
+            'wait 2000',
+            'log %s CHECK %s' % (tag, att),
+            'peek 0xdd265c+828+6b4+44 %s-%s-after-C-movement-id(secondary)' % (tag, att),
+            'pos %s%s-after-C' % (tag, att),
+            'tap C 400',
+            'wait 3000',
+        ]
+    return out
 
 
 def build(map_id, n=8, out=OUT, plans=PLANS):
