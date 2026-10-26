@@ -1,3 +1,8 @@
+2026-10-26 ~14:55 - [cloud] UCC sabotage research: re/ucc_sabotage.md (static; stock F01 .prp read from KL_PortBackup, read only).
+Built, NOT run: klsabotage.c [Sabotage] VanHold=0 (hosting UCC presses J: [rules+0x1d8] += HoldS once per van visit, cap 40 s, no
+announcement), harness klsabot_test 58/58, --check-hook clean. Found: the UCC pick is Sv slot 4 0x40f870 (exactly one; override byte
+[0xd1b3b4]); SetUndercoverCop only sets rules mode bytes +0x283/+0x284 (a 2nd call makes no 2nd UCC). DD01 early wave: tdSwats (20 s) etc.
+
 2026-10-26 ~14:50 - [P7 worktree agent] UCC 'down, not dead' while hidden: re/ucc_down_only.md + klucc_down.c ([Ucc] DownOnly=0, NOT run).
 A human's hit is applied on the VICTIM's own PC (0x891490 -> slot 423 0x458880 -> 0x6e3400); 0x6e3400 hands the rules slot 15 (0x425320) a POINTER to
 the delta before subtracting: private FA rules vtable copy (Sv shares klroundkeep's table, Cl gets klh_rules_vt3) clamps a hidden UCC's hit to leave Floor.
@@ -9,6 +14,7 @@ Accuse=0 (host's random fake pings; heister accuse key F5 = 0x74, aim cone, 20 s
 left at match start (GUESS) so internet rounds have no carrier: Steam P2P import proxy ranked next. klnc_test 151/151, --check-hook clean.
 FIX klcharonline.c: GetLobbyMemberByIndex (slot 17) was called without its hidden CSteamID pointer (wild 8-byte write + 4-byte stack
 skew whenever [CharOnline] Steam=1 ran inside a Steam lobby). Bench: re/hook_netchannel.md 5.
+
 2026-10-26 ~14:30 - BOS_DD06s (sprint+crowd build) PASS but 0/7 boarded again: all 7 sprint-tagged (style 0->2) and left for the exit 14 s into the round, yet covered ~0.45 m/s straight-line (137 m, ~60-100 m left at clock end), same as DD06 before Sprint. So the Sprint write does not change speed; something else (Defend order pacing, combat stops, path) stalls the walk. Investigating offline.
 
 2026-10-26 ~14:40 UTC - scheduled check-in (cloud, read-only on the PC; BUSY: hook files 13:53 UTC, KLHook.result BOS_DD05 PASS F03, no dump newer than the notes): nothing launched or installed. Offline piece: static review of klhook/klcopsquad.c (cd8476d, not run live) against kl2.exe - Follow(all) orders the PLAYER SQUAD [sc+0xa4] (+0xc0/+0xc4[12], test 0x6c8510: [s+0x4f4]==squad, [s+0x6a4]!=0), not the receiver list, so the module now reads the squad pointer back (insquad), checks [sc+0xa4] and the 12 cap, requires +0x6a4; a cop with no recruit on the first pass is retried for ~20 s instead of being skipped all round; the aim handle/point ([[P+0xbd4]+0x2ac] via 0x86a9c0/0x8fcb50 -> 0x6ece90 = a handle, P+0x27b0) VERIFIED (was GUESS); DD's own Recruit in 0x615c90 is game TYPE 2 + role<=1 only, and on other types team-0 soldiers are Recruited into player 0's sc at load; used byte +9 stays GUESS (table reset 0x56f360 clears it with the entry's +0 owner word: both logged at Log=2). re/cop_squads.md 8, debug/notes/2026-10-26-scheduled-triage.md. --check-hook 0 errors. Owner: nothing new; the C&R bench (cop_squads.md 7) reads 'listed/insquad' and the Log=2 table lines.

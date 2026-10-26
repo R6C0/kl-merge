@@ -44,7 +44,9 @@ per-map authoring, and a host-only action must look identical on clients. Privat
 Player: a chalk-bar line now and then names a random heister as suspicious; at 9..12 players two UCCs who do not know
 each other. Today: none. Build: ping = a hook popup (klhud_popup.c style), name chosen by the host so all see the same.
 Cost S. Two UCCs: where the rules Sv picks the one 0x80 player needs reading; a second host `SetUndercoverCop(true)` is the
-engine's own call and reward / scoring branch on the flag, so it should just work GUESS. Cost M. Risk: two in a 6 lobby is
+engine's own call and reward / scoring branch on the flag, so it should just work GUESS. CORRECTED 2026-10-26 (re/ucc_sabotage.md 5):
+the pick is Sv slot 4 0x40f870 (exactly one, stop byte); SetUndercoverCop(a, b) only sets the rules MODE bytes +0x283 / +0x284, so a
+second call does nothing for a second player; a second UCC needs the pick's per-player calls repeated from a slot-4 wrapper. Cost M. Risk: two in a 6 lobby is
 too many; floor 9. Private 6..12: UCC lobby is 4..8 today, so this is BLOCKED on lifting the player row (lobby_options:
 spawn count above 8 unknown).
 
