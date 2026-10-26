@@ -125,4 +125,12 @@ static float kldh_prescale(float delta, float factor)
     return delta * factor;
 }
 
+/* Does the after-the-hit give-back stay out of THIS health drop? Only when slot 15 priced / considered a hit of this machine's OWN downed body a moment ago
+   (t_hit = GetTickCount of that hit, 0 = none seen in this round). A slot-15 call for anybody else's body, or a round with no own-body hit yet, must NOT keep it out:
+   a hit applied by a path slot 15 never sees on this machine would then go unpriced. window_ms covers the tick lagging the hit by a frame or two. */
+static int kldh_giveback_stays_out(int pre, DWORD t_hit, DWORD now, DWORD window_ms)
+{
+    return pre && t_hit != 0 && (DWORD)(now - t_hit) <= window_ms;
+}
+
 #endif /* KLDOWN_HOLD_H */

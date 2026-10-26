@@ -263,7 +263,7 @@ static void klud_init(void)
                GetPrivateProfileIntA("Down", "OnlinePreScale", 1, klh_ini) != 0 &&
                (GetPrivateProfileIntA("Down", "OnlineFactors", 1, klh_ini) != 0 || GetPrivateProfileIntA("Down", "OnlineFreeFall", 1, klh_ini) != 0);
     klud.on = klud.mode != 0 || klud.pre;
-    if (klud.pre) klog("uccdown: [Down] OnlinePreScale=1: the rules' damage hook (slot 15) is wrapped for kldown.c's pre-apply price of a downed own body's hits (FA / UCC / C&R online)");
+    if (klud.pre) klog("uccdown: [Down] OnlinePreScale=1: the rules' damage hook (slot 15) is wrapped for kldown.c's pre-apply price of a downed own body's hits (FA online; UCC / C&R share the rules' Sv/Cl classes by the static read, NOT traced - GUESS)");
     if (!klud.mode) return;
     klud.dry = GetPrivateProfileIntA("Ucc", "Dry", 0, klh_ini) != 0;
     klud.log = GetPrivateProfileIntA("Ucc", "Log", 1, klh_ini);

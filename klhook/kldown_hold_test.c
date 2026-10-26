@@ -179,6 +179,13 @@ int main(void)
         CHECK(kldh_prescale(-1e12f, 0.15f) == -1e12f, "absurd delta untouched");
     }
 
+    {   /* the give-back gate (track damage fix pass): only a recent OWN-body slot-15 hit keeps the give-back out */
+        CHECK(!kldh_giveback_stays_out(1, 0, 5000, 500), "no own-body hit seen (slot 15 reached only for other bodies): give-back works");
+        CHECK(kldh_giveback_stays_out(1, 4800, 5000, 500), "own-body hit 200 ms ago: slot 15 priced it, give-back out");
+        CHECK(!kldh_giveback_stays_out(1, 4000, 5000, 500), "own-body hit 1 s ago: this drop is another path's, give-back works");
+        CHECK(!kldh_giveback_stays_out(0, 4900, 5000, 500), "OnlinePreScale=0: never out");
+        CHECK(kldh_giveback_stays_out(1, 0xFFFFFF00u, 100, 500), "tick wrap handled");
+    }
     printf("kldown_hold_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

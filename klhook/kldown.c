@@ -326,7 +326,8 @@ static struct {
     float gb_sum; int gb_n, gb_late;           /* give-back: health given back in this knock-down; hits seen; hits that were lethal before they could be priced */
     /* 2026-10-26 (track damage): OnlinePreScale - the hit is priced BEFORE it lands, in the rules' damage hook (klucc_down.c's slot-15 wrapper calls kld_o_prescale) */
     int pre;                                   /* OnlinePreScale (ini, default 1): price a downed own body's hits in slot 15; the give-back below is then the fallback when slot 15 was not reached this round */
-    int ps_reached;                            /* the wrapper was entered in this round (set by kld_o_prescale, cleared when the round is not running): while 1 the give-back stays out of it */
+    int ps_reached;                            /* the wrapper was entered in this round (set by kld_o_prescale, cleared when the round is not running): LOG ONLY since the fix pass, it no longer gates the give-back */
+    DWORD ps_own_tick;                         /* GetTickCount of the last slot-15 hit on THIS machine's own downed body (D state 1-3), 0 = none this round: the give-back stays out of a drop for 500 ms after it (kldh_giveback_stays_out) */
     int ps_n, ps_scaled; float ps_sum;         /* hits of this machine's own downed body seen in slot 15 (all rounds); of them scaled; health the scaling saved */
 } kld_o;
 /* klcharonline.c comes AFTER this file: its table / own-body finders are used through these (defined there, static in the same unit) */
@@ -2079,8 +2080,8 @@ static float kld_o_giveback(DWORD pl, DWORD ho, DWORD ds, float hp, float max, f
 {
     DWORD att = klh_rd32(pl + 0x2778); float f = 1.0f, give, nh; int cls = 0, rl = 0; const char *who = "nobody readable", *rule = "no factor";
     kld_o.gb_n++;
-    if (kld_o.pre && kld_o.ps_reached) {       /* OnlinePreScale: slot 15 prices the hits before they land; a second scaling here would price them twice */
-        if (kld.log >= 2 || kld_r.nline < 8 || dl > 0.5f * max) klog("down: online: price path: he lost %.1f (%.1f of %.1f, down state %lu): priced by SLOT 15 (the pre-apply scaler, OnlinePreScale) - the give-back fallback stays out of it", dl, hp, max, ds);
+    if (kldh_giveback_stays_out(kld_o.pre, kld_o.ps_own_tick, now, 500)) {       /* OnlinePreScale: slot 15 saw a hit of THIS body a moment ago and priced it (or left it at the game's price) before it landed; a second scaling here would price it twice. Track damage fix pass: gated on an own-body hit within 500 ms, NOT on "slot 15 was reached once this round" (that was set by hits on any body, and left a client's drop from a path slot 15 never sees here unpriced) */
+        if (kld.log >= 2 || kld_r.nline < 8 || dl > 0.5f * max) klog("down: online: price path: he lost %.1f (%.1f of %.1f, down state %lu): slot 15 saw a hit on his body %lu ms ago and priced it (the pre-apply scaler, OnlinePreScale) - the give-back stays out of this drop", dl, hp, max, ds, (unsigned long)(now - kld_o.ps_own_tick));
         return hp;
     }
     cls = kld_o_class(att, &who);
@@ -2100,7 +2101,7 @@ static float kld_o_giveback(DWORD pl, DWORD ho, DWORD ds, float hp, float max, f
         kld_o.gb_sum += nh - hp;
         if (kld.log >= 1 && (kld.log >= 2 || kld_r.nline < 8 || dl > 0.5f * max))
             klog("down: online: give-back [price path: GIVE-BACK, after the hit; %s] (the VICTIM-SIDE fallback, not a detour): he lost %.1f to %s %.2f s into the down (down state %lu); %s x%.2f: %.1f given back, health %.1f -> %.1f of %.1f (%.1f given back in this down so far); the hit was priced by whichever machine priced it - this machine scaled what it applied",
-                 kld_o.pre ? "OnlinePreScale=1 but slot 15 was NOT reached this round" : "OnlinePreScale=0", dl, who, (now - kld_r.t0) / 1000.0f, ds, rule, f, nh - hp, hp, nh, max, kld_o.gb_sum);
+                 kld_o.pre ? "OnlinePreScale=1 but slot 15 saw no hit on his body just before this drop" : "OnlinePreScale=0", dl, who, (now - kld_r.t0) / 1000.0f, ds, rule, f, nh - hp, hp, nh, max, kld_o.gb_sum);
         return nh;
     }
     return hp;
@@ -2395,13 +2396,16 @@ static void kld_o_prescale(DWORD victim, float *pdelta, DWORD attacker)
     if (!kld_o.pre || !kld_o.cur || !kld.on || !pdelta || !victim) return;
     if (!kld_o.ps_reached) { kld_o.ps_reached = 1; klog("down: online: PRE-APPLY: the rules' damage hook (slot 15) is reached in this round: hits of this machine's own downed body are priced BEFORE they land (OnlinePreScale=1); the after-the-hit give-back is the fallback only if this is not reached"); }
     if (!kld_o.ofree && !kld_o.ofac) return;
-    if (!(pl = kld_o_pl(GetTickCount())) || victim != pl || kld_s.dead) return;
+    /* fix pass: the CACHED body only (kld_o_pl's table scan stays in the tick; the hook never scans). The tick refreshes kld_o.pl every pass; a miss here means the give-back (not gated by this hit) prices the drop. */
+    if (!(pl = kld_o.pl) || klh_rd32(pl) != KLD_PLAYER_VT || victim != pl || kld_s.dead) return;
     if (!(D = klh_rd32(pl + 0x2948)) || klh_rd32(D) != pl || !klh_rd(D + 4, &ds, 4) || ds < 1 || ds > 3) return;      /* standing: the game's price */
+    kld_o.ps_own_tick = GetTickCount() ? GetTickCount() : 1;      /* an own-body hit on a downed man reached slot 15: the give-back stays out of this drop */
     if (!klh_rd((DWORD_PTR)pdelta, &d, 4) || !(d < 0.0f)) return;                                                      /* a heal, 0, NaN: untouched */
     n = ++kld_o.ps_n;
     cls = attacker && attacker != victim ? kld_o_class(attacker, &who) : 0;
     if (!cls) who = attacker == victim ? "himself" : attacker ? who : "no attacker (a fall, a blast, a script)";
     f = kldh_pick((int)ds, cls, kld_r.hurt, kld_o.ofree, kld_o.ofac, kld_r.cop, kld_r.crew, &rl);
+    /* GUESS (review 8, left as is): a hit with no attacker (a blast, a script) in the fall under Vulnerable=0 gets the FREE FALL factor 0 like every hit of the fall; Arcade's trigger does not swallow a blast (kind 9), so Arcade may charge it. Not changed: slot 15 gives no kind, and attacker==0 is also a plain fall - a bench must show which one Arcade charges. */
     nd = kldh_prescale(d, f);
     if ((ho = klh_rd32(pl + 0xa48)) != 0) { hp = kld_rdf(ho + 4, &ok); max = kld_rdf(ho + 8, &ok); } else ok = 0;
     if (nd == d) {
@@ -2410,7 +2414,7 @@ static void kld_o_prescale(DWORD victim, float *pdelta, DWORD attacker)
     }
     if (!kld.dry && !klh_data(pdelta, &nd, 4, "the damage delta of a hit on the local downed player (OnlinePreScale, game stack)")) return;
     kld_o.ps_scaled++;
-    if (ok) kld_o.ps_sum += (nd - d);
+    kld_o.ps_sum += (nd - d);      /* health saved: needs no health read (fix pass: was inside "if (ok)" and under-counted) */
     if (kld.log >= 2 || kld_o.ps_scaled <= 8 || -d > 0.5f * max)
         klog("down: online: PRE-APPLY [price path: SLOT 15, before the hit lands]: a hit of %.1f from %s on him (down state %lu): %s x%.2f -> %.1f%s; health %.1f of %.1f%s (%d priced here, %.1f saved so far)",
              -d, who, (unsigned long)ds, kld_o_rtxt[rl], f, -nd, kld.dry ? " (Dry=1: NOT written)" : "", ok ? hp : -1.0f, max,
@@ -2602,7 +2606,7 @@ static void kld_o_roundline(DWORD sub)
                       kld_o.hold ? "MashHold: the GET UP button is held until the meter holds the needed presses, then one stock press (the clip stays stock speed)" : "off (MashHold=0): the game's own one-press get-up",
          kld_r.nofire, kld_o.onofire, kld_o.onofire ? "follows him online" : "not online", kld_v.cam, kld_v.prompt, n ? t : " the game's own (no key set)", kld.log);
     klog("down: online: PRICE PATH (OnlinePreScale=%d): %s", kld_o.pre,
-         kld_o.pre ? "hits that COST this machine's own downed body are scaled in the rules' damage hook (slot 15, BEFORE the subtraction): a hit larger than his health is priced first, peers never see a dip. THE LINE ABOVE about 'a single hit larger than his health still kills him' / the give-back is then only the fallback, used if slot 15 is not reached this round. STILL NOT PRICED ONLINE: the flop fall's bullets under Vulnerable=1 (the game's own trigger swallows them before slot 15; Arcade charges them by writing [0xceb40c], never written online) and DownPointBlank (no position in slot 15)"
+         kld_o.pre ? "ARMED (not yet confirmed: the wrap can be skipped - klroundkeep's table, an exe check; the line 'PRE-APPLY: the rules' damage hook (slot 15) is reached' confirms it): hits that COST this machine's own downed body are then scaled in the rules' damage hook (slot 15, BEFORE the subtraction): a hit larger than his health is priced first, peers never see a dip. THE LINE ABOVE about 'a single hit larger than his health still kills him' / the give-back is then only the fallback for any drop slot 15 did not see a hit for (checked per drop, 500 ms). STILL NOT PRICED ONLINE: the flop fall's bullets under Vulnerable=1 (the game's own trigger swallows them before slot 15; Arcade charges them by writing [0xceb40c], never written online) and DownPointBlank (no position in slot 15)"
                    : "off: the after-the-hit give-back (the line above) prices hits; a hit bigger than his health still kills him");
     if (kld_o.hold) klog("down: online: MashHold=%d: meter %.1f presses (+%.2f a press, -%.2f a second, time bound %.0f s), counted from key 0x%02x%s (pad button 0x%04lx)", kld_o.hold, kld_o.need, kld_o.per, kld_o.decay, kld_o.maxlie / 1000.0f, kld_o.key, kld_o.pad ? " + the pad" : "", kld_o.padbtn);
     if (kld_o.hold) klog("down: online: MashHoldHow=%d (%s): %s", kld_o.how, kld_o.how == 2 ? "the Cover key only" : "mask bit 0x80", kld_o.how == 2 ? (kld_o.scan && klkf_armed ? "the get-up key is hidden while he lies, he can shoot; pad: see the pad line" : "NO scan code / proxy: this round holds with the bit-0x80 mask, which blocks fire") : "the old hold: every button but reload is off while he lies");
@@ -2619,7 +2623,7 @@ static void kld_o_mode(int onl, DWORD now)
         kld_s.player = 0; kld_drop(); kld_s.dstate = 0; kld_s.nwin = 0; kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
     }
     kld_o_release("the mode changes (Arcade <-> online)");
-    memset(&kld_o.h, 0, sizeof kld_o.h); kld_o.holding = 0; kld_o.told = 0; kld_o.ps_reached = 0; kld_o.nheld = 0; kld_o.mtold = 0; kld_o.pl = 0; kld_o.t_find = 0;
+    memset(&kld_o.h, 0, sizeof kld_o.h); kld_o.holding = 0; kld_o.told = 0; kld_o.ps_reached = 0; kld_o.ps_own_tick = 0; kld_o.nheld = 0; kld_o.mtold = 0; kld_o.pl = 0; kld_o.t_find = 0;
     kld.flop = !onl ? kld_o.flop0 : (kld_o.oflop && (kld_o.flop0 == 1 || kld_o.flop0 == 3)) ? kld_o.flop0 : 0;      /* OnlineFlop: the ini's Flop 1 / 3 for this machine's own body (Flop=2 and 0 stay the stock fall: only the whole-clip modes end by state 5 / FlopUp, which kld_o_gu_send covers) */
     kld_o.cur = onl;
     if (kld.log) klog("down: mode: %s (kld.flop %d)", onl ? (kld.flop ? "ONLINE: the ini's Flop on this machine's own body (OnlineFlop), the game's GettingUp sent when it rises, the victim-side give-back for the factors / free fall, no Vulnerable switch, no bots" : "ONLINE: the stock fall (OnlineFlop=0 or Flop is not 1 / 3), no Vulnerable switch, no bots") : "Arcade: the ini's Flop / mash as set", kld.flop);
@@ -2653,7 +2657,7 @@ static void kld_tick_main(int game_thread)
         pl = kld_o_pl(now);
         if (pl && !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
         if (state == KLD_ROUND && !kld_o.told) { kld_o.told = 1; kld_o_roundline(osub); }
-        if (state != KLD_ROUND) { kld_o.told = 0; kld_o.ps_reached = 0; }      /* the slot-15 scaler must be reached again in the next round (else the give-back fallback is used) */
+        if (state != KLD_ROUND) { kld_o.told = 0; kld_o.ps_reached = 0; kld_o.ps_own_tick = 0; }      /* the slot-15 scaler must be reached again in the next round (else the give-back fallback is used) */
     } else if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
         !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLD_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
     if (!pl || police) act = 0;                /* a fed is left to the game */
