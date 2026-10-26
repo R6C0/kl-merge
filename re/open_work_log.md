@@ -1,3 +1,8 @@
+2026-10-26 ~13:10 - UCC2 PASS (3 instances, Undercover Cop sub-mode 1, DD01/F01, out_exitdy2_1026_test): all 3 IN ROUND, 0 asserts, 0 faults.
+Both clients mirror the host's 13 cops. Track error before placement mean 0 max 0, and in-tolerance skips run 850-1750 per 5 s, so no placements were needed.
+vs host lead-corrected: p50 0, p90 2-10 cm, one 103 cm spike on inst2. Raw '>1.0 m' counts of 3-13 per window are the un-corrected lead, not drift.
+Item 1 (UCC/C&R cop sync) holds at 3 peers. The 6bf884664 OnlineBoxSlack fix goes in with BOS_DD03..09 and BOS_DD02s.
+
 2026-10-26 ~13:00 - BOS_DD02x2 PASS (out_exitdy2_1026_test d2d6f309): DD02 bots online BOARD, 6/7 (was 0/7).
 The exit finder now skips the (0,0,0) husk ZOnlineExitLevelTrigger, and OnlineExitDy=800 counts bots under the floating trigger.
 Van states 1->3->5->7 at 12:54:45-12:55:14; the round summary reads 14 stacks, 3.17M, 6 boarded.
