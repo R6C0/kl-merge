@@ -65,6 +65,7 @@ typedef void  (__fastcall *kspg_msg_t)(void *self, void *edx, DWORD *msg);
 
 static struct {
     int tabNames; char tab[4][64];
+    int online;                                  /* [ShopPage] OnlineLook (default 0): page II LOOK online, buying it LOCKED (2026-10-26, see below) */
     int on, grenades, trick, key, log, clips, hint, keyDown, txtSeen, togglePend, premake, preDone, preTry, sane, st;
     volatile int active, pre, shownB;                 /* active: gate open and wrappers may act; shownB: set B on screen */
     int own[2];                                  /* 0/1: the gun carried in the primary / secondary slot came from set B */
@@ -105,7 +106,12 @@ static char *kspg_text(int c, void *self, const char *key)
         if (kspg.togglePend && !kspg.txtSeen) { kspg.txtSeen = 1; if (kspg.log) klog("shopPage: first text request after the toggle: key '%s', row %d, role %d, served from set %c", key, row, role, kspg_useB(role) ? 'B' : 'A'); }
         if (!kspg_useB(role)) return res;
         if (!*p) { o = kspg_ring(); strncpy(o, kspg.p[row].name, 519); o[519] = 0; return o; }
-        if (!strcmp(p, "Desc")) { o = kspg_ring(); strncpy(o, kspg.p[row].desc, 519); o[519] = 0; return o; }
+        if (!strcmp(p, "Desc")) {
+            o = kspg_ring();
+            if (kl_online()) snprintf(o, 520, "LOCKED ONLINE: this gun is not in the shared shop table, so the host cannot hand it over. Buy it in Arcade; online the stock page I guns are for sale.\n%s", kspg.p[row].desc);   /* OnlineLook: shown, not buyable (kspg_sel swallows the buy) */
+            else { strncpy(o, kspg.p[row].desc, 519); o[519] = 0; }
+            return o;
+        }
         return res;
     }
     if (kspg.hint && strstr(key, "BuyWeapons_Title")) {   /* GUESS: BuyWeapons_Title is the shop's caption; if it is never requested the hint just does not show */
@@ -114,7 +120,7 @@ static char *kspg_text(int c, void *self, const char *key)
         if (kspg.key >= 0x70 && kspg.key <= 0x87) snprintf(kn, sizeof kn, "F%d", kspg.key - 0x6f);
         else if ((kspg.key >= '0' && kspg.key <= '9') || (kspg.key >= 'A' && kspg.key <= 'Z')) snprintf(kn, sizeof kn, "%c", kspg.key);
         else snprintf(kn, sizeof kn, "key %02X", kspg.key);
-        snprintf(add, sizeof add, kspg.shownB ? "  II  [%s] stock page" : "  [%s] page II", kn);
+        snprintf(add, sizeof add, kspg.shownB ? (kl_online() ? "  II (view only)  [%s] stock page" : "  II  [%s] stock page") : "  [%s] page II", kn);
         memcpy(o, res, n); strcpy(o + n, add);
         return o;
     }
@@ -194,7 +200,7 @@ static void kspg_note_buy(int before0, int before1)
     for (s = 0; s < 2; s++) {
         int before = s ? before1 : before0;
         if (now[s] != before || (kspg.trickOn && kspg.trickSlot == s && kspg.trickRow == now[s])) {
-            kspg.own[s] = kspg.shownB && now[s] >= 0 && now[s] < KSPG_ROWS && kspg.p[now[s]].ok;
+            kspg.own[s] = !kl_online() && kspg.shownB && now[s] >= 0 && now[s] < KSPG_ROWS && kspg.p[now[s]].ok;      /* online a page II gun is never handed over */
             if (kspg.log) klog("shopPage: slot %d now carries row %d from set %c", s, now[s], kspg.own[s] ? 'B' : 'A');
         }
         kspg.carried[s] = now[s];
@@ -207,6 +213,16 @@ static void __fastcall kspg_sel(void *self, void *edx, DWORD *msg)
     char nm[40]; DWORD w = 0; int edit, slot, other, hi; BYTE keep = 0, ff = 0xff; int b0, b1;
     (void)edx;
     if (!kspg.active || !msg || !klh_rdstr(klh_rd32((DWORD_PTR)msg), nm, sizeof nm)) { ((kspg_msg_t)(DWORD_PTR)kspg_tab[3].orig)(self, 0, msg); return; }
+    if (kl_online() && kspg.shownB && (!strcmp(nm, "BuyWeapon") || !strcmp(nm, "BuyWeaponDialogVoodoo"))) {
+        /* OnlineLook: a purchase of a page II row is swallowed. The row would send the CARRIER's item to the host (the replicated buy path knows the
+           carrier, not the page II gun), so the player would pay for the carrier and get the stock gun, and the Arcade hand-over (a local pool relabel) is
+           unproven against host validation. GUESS G17: the online selector uses this same message pair and [selector+0x90] / 0x154d80c as Arcade. */
+        int hi = (int)klh_rd32((DWORD_PTR)self + 0x90), sh = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW));
+        if ((hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok) || (sh >= 0 && sh < KSPG_ROWS && kspg.p[sh].ok)) {
+            if (kspg.log) klog("shopPage: ONLINE: buy of page II row %d swallowed (view only online: the host's table has no such gun)", hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok ? hi : sh);
+            return;
+        }
+    }
     w = klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY));
     b0 = (int)(signed char)(BYTE)w; b1 = (int)(signed char)(BYTE)(w >> 8);
     if (!strcmp(nm, "BuyWeaponDialogVoodoo")) {
@@ -380,6 +396,7 @@ static int kspg_ours(int row, DWORD o) { int m; for (m = 0; m < KSPG_PER; m++) i
 static void kspg_enforce(void)
 {   /* only before the round: every entry of a pair's carrier is parked or free as the desired set says (see the header) */
     DWORD a, n = 0, ents, i; int row;
+    if (kl_online()) return;                                           /* OnlineLook: the pool is never touched online */
     kspg_sane();
     if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
     for (row = 0; row < KSPG_ROWS; row++) {
@@ -415,6 +432,7 @@ static void kspg_enforce(void)
 static int kspg_repark(void)
 {
     static DWORD tab[4096 * 3]; DWORD a, n = 0, ents, i, carrier[KSPG_ROWS]; int row, k = 0, wantB[KSPG_ROWS], any = 0;
+    if (kl_online()) return 0;
     for (row = 0; row < KSPG_ROWS; row++) {
         wantB[row] = kspg.p[row].ok && kspg.made[row][0] && kspg_wantB(row);   /* no made[] = nothing of ours to hand over: leave the row alone */
         carrier[row] = kspg.p[row].ok && kspg.made[row][0] ? klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row) : 0;
@@ -446,13 +464,17 @@ static int kspg_gate(void)
         kspg.preDone = 0; kspg.preTry = 0;
         return 0;
     }
-    if (kl_online()) return 0;
+    if (kl_online() && !kspg.online) return 0;
     /* k43 review: no drop on the 0x23..0x25 -> 0x16 edge. The pool SURVIVES the round (klshop.c re-park, shop_more_guns.md S6): the round end only
        frees every gun again, and kspg_enforce re-parks ours in the next shop. Dropping made[] here leaked a fresh set per pair per round and left the
        old set unrecognised and free. A real rebuild (new map) is caught by kspg_sane, which checks every pointer against the pool. */
     if ((int)st != kspg.st) kspg.st = (int)st;
     gs = klh_rd32((DWORD_PTR)KLH_VA(KLS_SETTINGS)); rules = gs ? klh_rd32(gs + 0x54) : 0;
-    if (!rules || klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLS_RULES_VT)) return 0;
+    if (!rules) return 0;
+    if (kl_online()) {   /* OnlineLook: the online FA rules, host Sv 0xbd2eb4 / client Cl 0xbd31e4 (re/online_round_data.md); GUESS G18: [settings+0x54] is the rules object online too, as klonline_read.c reads it */
+        DWORD vt = klh_rd32(rules);
+        if (vt != (DWORD)(DWORD_PTR)KLH_VA(0x00bd2eb4u) && vt != (DWORD)(DWORD_PTR)KLH_VA(0x00bd31e4u)) return 0;
+    } else if (klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLS_RULES_VT)) return 0;
     /* 1 = a shop can be open, 2 = otherwise. The session runs 0x16 (first shop) -> 0x18 -> 0x19 (play) -> 0x1f (score) -> 0x20 (the shop
        between rounds) -> 0x23..0x25 -> 0x16; k40 took only st < 0x19, so the page key did nothing in the 0x20 shop (live log 10-25 20:32) */
     return (st < 0x19 || st == 0x20) ? 1 : 2;
@@ -466,7 +488,7 @@ static void kspg_check_pool(void) { kspg_sane(); }
 static void kspg_premake(void)
 {
     DWORD a, n = 0, ents, i; int row, made = 0, wait = 0;
-    if (!kspg.premake || kspg.preDone) return;
+    if (!kspg.premake || kspg.preDone || kl_online()) return;      /* online nothing is made or handed over */
     if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || n < 8 || !(ents = klh_rd32(a + 0x10))) return;
     for (row = 0; row < KSPG_ROWS; row++) {
         DWORD carrier; int built = 0;
@@ -489,6 +511,7 @@ static DWORD kspg_done[KSPG_ROWS * KSPG_PER];                 /* object whose re
 static void kspg_ammo(void)
 {
     DWORD a, n = 0, ents, i; int row, m;
+    if (kl_online()) return;
     kspg_sane();
     for (row = 0; row < KSPG_ROWS && !kspg.made[row][0]; row++) ;
     if (row == KSPG_ROWS) return;                                 /* nothing of ours made: nothing to scan */
@@ -554,6 +577,7 @@ static void kspg_init(void)
     kspg.clips = GetPrivateProfileIntA("ShopPage", "ReserveClips", 2, klh_ini);
     kspg.premake = GetPrivateProfileIntA("ShopPage", "PreMake", 1, klh_ini) != 0;       /* k43 (recommended on): make the page B guns in the first shop */
     kspg.tabNames = GetPrivateProfileIntA("ShopPage", "TabNames", 1, klh_ini) != 0;       /* (recommended on): [Tabs] in KLShopPage.ini names the page II headlines; empty key = old " II" append */
+    kspg.online = GetPrivateProfileIntA("ShopPage", "OnlineLook", 0, klh_ini) != 0;      /* 2026-10-26 (recommended off until benched): page II names / descriptions online, VIEW ONLY */
     kspg.have = kspg_load();
     if (!kspg.have) { klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0; return; }
     kspg.carried[0] = kspg.carried[1] = -1;
@@ -643,7 +667,7 @@ static void klshoppage_tick(int game_thread)
         int cur = (int)(signed char)(BYTE)(w >> (8 * s));
         if (cur == kspg.carried[s]) continue;
         if (g == 1 && kspg.listAt && now - kspg.listAt < 2000) {
-            kspg.own[s] = kspg.shownB && cur >= 0 && cur < KSPG_ROWS && kspg.p[cur].ok;
+            kspg.own[s] = !kl_online() && kspg.shownB && cur >= 0 && cur < KSPG_ROWS && kspg.p[cur].ok;
             if (kspg.log) klog("shopPage: slot %d now carries row %d from set %c (seen by polling: the buy handler is not wrapped)", s, cur, kspg.own[s] ? 'B' : 'A');
         } else { if (kspg.own[s] && kspg.log) klog("shopPage: slot %d carried row changed %d -> %d without a purchase seen: set A assumed", s, kspg.carried[s], cur); kspg.own[s] = 0; }
         kspg.carried[s] = cur;
