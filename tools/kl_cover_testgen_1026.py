@@ -152,7 +152,17 @@ BOXES17 = {
     'DM11B': ['CoverBoxH_K6_03', 'CoverBoxH_K6_13*'],
     'DM03A': ['CoverBoxH_K6_19', 'CoverBoxH_K6_113', 'CoverBoxH_K6_01*'],   # K6_19 NO in COVER14 and 16; K6_113 NO in 16 only
 }     # '*' = control (known good or untested neighbour)
-RUN_UP = 200     # GUESS: tele this far OUT of the face (along face_normal), then walk in; 200 is room for the heading to settle, small enough to stay on the same floor
+# COVER18 (10-26 14:20): COVER17 showed the heading after the walk-in decides: DM06B K6_39 heading 0 deg off the face normal = COVER,
+# K6_22 15 off and K6_47 26 off = NO (K6_22 had slid 120 cm between the teles, so the walk-in did not start on the normal line).
+# Same boxes plus every box that was NO in COVER16 on the new installs (DM01 K6_03/K6_02, DM02 K6_31, DM03 K6_90) and DM06's K6_23.
+BOXES18 = dict(BOXES17)
+BOXES18.update({
+    'DM06':  ['CoverBoxM_K6_22', 'CoverBoxM_K6_23'],
+    'DM01':  ['CoverBoxH_K6_03', 'CoverBoxH_K6_02'],
+    'DM02':  ['CoverBoxH_K6_31'],
+    'DM03':  ['CoverBoxH_K6_90'],
+})
+RUN_UP = 200    # GUESS: tele this far OUT of the face (along face_normal), then walk in; 200 is room for the heading to settle, small enough to stay on the same floor
 
 
 def block(tag, t, ctl=False):
@@ -174,6 +184,14 @@ def block(tag, t, ctl=False):
         'tele %d %d %d' % (r(rx), r(g + 5), r(rz)),
         'wait 2500',
         'pos %s1-at-runup' % tag,
+    ] + ([
+        # COVER18: walk back onto the run-up point first (the tele drift moves the start off the normal line), so the walk-in heading
+        # equals -face_normal. Heading convention checked on COVER17 DM06B k3: travel (13,-250) logged heading 177 = atan2(dx, dz).
+        'log %s ideal heading %.0f (= atan2 of -face_normal)' % (tag, math.degrees(math.atan2(-nx, -nz))),
+        'goto %d %d 10 3000' % (r(rx), r(rz)),
+        'wait 300',
+        'pos %s1-realigned' % tag,
+    ] if TAG == 'COVER18' else []) + [
         'goto %d %d 55 4000' % (r(fx), r(fz)),
         'wait 500',
         'pos %s1-at-stand' % tag,
@@ -193,7 +211,7 @@ def block(tag, t, ctl=False):
 def pick17(map_id, tiles):
     by = dict((t['name'], t) for t in tiles)
     out = []
-    for nm in BOXES17[map_id]:
+    for nm in (BOXES18 if TAG == 'COVER18' else BOXES17)[map_id]:
         ctl = nm.endswith('*'); nm = nm.rstrip('*')
         if nm not in by: raise SystemExit('%s: box %s not in the plan' % (map_id, nm))
         out.append((by[nm], ctl))
@@ -205,7 +223,7 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
     tiles = json.load(open(plan))
     sel, msg = selection_part(os.path.join(out, map_id + '.ini'))
     ctls = {}
-    if TAG == 'COVER17':
+    if TAG in ('COVER17', 'COVER18'):
         pk = pick17(map_id, tiles); ch = [t for t, _ in pk]; ctls = dict((t['name'], c) for t, c in pk)
     else:
         ch = choose(tiles, n)
@@ -229,9 +247,9 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
         s.append('ents %s 3' % ch[0]['name'])
     s += ['log === ' + TAG + ': idle %d s at the spawn (coverdump dumps after the list is stable 2 s) ===' % (IDLE_MS // 1000), 'wait %d' % IDLE_MS, 'pos idle-end']
     for i, t in enumerate(ch):
-        s += block('k%d' % (i + 1), t, ctls.get(t['name'], False)) if TAG == 'COVER17' else block16('k%d' % (i + 1), t)
+        s += block('k%d' % (i + 1), t, ctls.get(t['name'], False)) if TAG in ('COVER17', 'COVER18') else block16('k%d' % (i + 1), t)
     s += ['log ' + TAG + '_%s DONE' % map_id, 'pass 1000']
-    total = LEAD_WAIT + IDLE_MS + (BLOCK17_MS if TAG == 'COVER17' else BLOCK_MS) * len(ch)
+    total = LEAD_WAIT + IDLE_MS + (BLOCK17_MS + (3300 if TAG == 'COVER18' else 0) if TAG in ('COVER17', 'COVER18') else BLOCK_MS) * len(ch)
     assert total < 400000, 'run too long: %d ms after load' % total
     text = '\n'.join(hdr) + '\n[Script]\n' + '\n'.join('%d=%s' % (i + 1, t) for i, t in enumerate(s)) + '\n'
     p = os.path.join(out, TAG + '_%s.ini' % map_id)
@@ -252,7 +270,7 @@ def main(argv):
         elif argv[i] == '--plans': plans = argv[i + 1]; i += 2
         else: maps.append(argv[i]); i += 1
     if maps == ['all']:
-        maps = list(BOXES17) if TAG == 'COVER17' else MAPS
+        maps = list(BOXES18) if TAG == 'COVER18' else list(BOXES17) if TAG == 'COVER17' else MAPS
     for m in maps:
         p, ch, total = build(m, n, out, plans)
         print('%s -> %s (%d blocks, ~%d s after load)' % (m, p, len(ch), total // 1000))
