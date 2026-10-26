@@ -33,7 +33,14 @@
  * order channel in klcharonline.c's pattern is the next step, NOT built). Every cop's squad gets Follow(all) at recruit time and again
  * every FollowS seconds (the chain's own steps may overwrite the order). Keys (game window in front, GetAsyncKeyState, NOT consumed):
  * F (0x46) follow, G (0x47) hold where they stand (MoveTo each soldier's own place, not soft, reset), H (0x48) attack what I aim at
- * (handle [[P+0xbd4]+0x2ac], point P+0x27b0: luvsic's reading, GUESS here; handle 0 = attack the point).
+ * (handle [[P+0xbd4]+0x2ac], point P+0x27b0: VERIFIED 2026-10-26 static review, re/cop_squads.md 8: [P+0xbd4] is the player's 0x430-byte
+ * aim helper made in 0x60a520; its per-frame method 0x86a9c0 stores 0x8fcb50(3) at +0x2ac, and 0x8fcb50 returns 0x6ece90(nearest actor
+ * in the aim cone) = a HANDLE or 0; P+0x27b0 is written by the same method's caller 0x4677c0 while the aim bit 2 of [P+0x2720] is set,
+ * and by the setter 0x724a10. A stale handle resolves to 0 in 0x40a880 (generation word), so handle 0 = attack the point is the fallback).
+ * WHAT FOLLOW ORDERS (VERIFIED in 0x4c3900 / 0x848460): Follow(all) walks the PLAYER SQUAD [sc+0xa4] (members at +0xc0 count / +0xc4[12],
+ * cap 12 in 0x48c480), NOT the receiver list sc+0x1c, and takes a member only when 0x6c8510 passes: [script+0x4f4] == the player squad
+ * (0x48c480 sets it), [script+0x6a4] != 0 (commandable, 1 from the ZSoldier constructor 0x761900), [body+0x576] == 1, body vt+0x680() false.
+ * So a recruit COUNTS here only when the receiver list AND the squad pointer took it ("listed 1 insquad 1" in the log).
  * GUARDS: no __try (the hook's pattern, klescort.c): every object is read with klh_rd first, every routine's head bytes are compared
  * (klb_same_code) and the vtable slots must hold the known addresses, or nothing is called and the log says why.
  *
@@ -60,7 +67,8 @@
 #define KLCQ_PLAYER_VT  0x00bb45f4u
 #define KLCQ_SC_VT      0x00b798dcu          /* ZSquadControl (RTTI) */
 
-struct klcq_cop { DWORD P, sc; int n, local; DWORD sold[KLCQ_PER_MAX]; DWORD followAt; int staffed; };
+struct klcq_cop { DWORD P, sc; int n, local; DWORD sold[KLCQ_PER_MAX]; DWORD followAt; int staffed, tries; };
+#define KLCQ_TRIES_MAX 40                    /* recruit passes (500 ms apart) a cop with no recruit gets before the round gives up on him: ~20 s */
 static struct {
     int on, per, team, log, attackT, kF, kH, kA; unsigned long followMs; float maxd2;
     int inwin, toldGate, toldHead, nopick; DWORD passAt, roundAt; int ncop; struct klcq_cop cop[KLCQ_COPS_MAX];
@@ -102,7 +110,11 @@ static int klcq_cops(DWORD sm)
     if (cnt > 16) cnt = 16;
     for (i = 0; i < cnt && n < KLCQ_COPS_MAX; i++) {
         DWORD P = klh_rd32(e + 12 * i + 4), sc; BYTE used = 0, type = 0; int j;
-        if (!P || klh_rd32(P) != KLCQ_PLAYER_VT || !klh_rd(e + 12 * i + 9, &used, 1) || !used || !klh_rd(P + 0x273c, &type, 1) || type != 3) continue;
+        if (!P || klh_rd32(P) != KLCQ_PLAYER_VT || !klh_rd(P + 0x273c, &type, 1) || type != 3 || !klh_rd(e + 12 * i + 9, &used, 1)) continue;
+        /* GUESS (section 3 of re/cop_squads.md): used == 1 marks a human's entry. The table reset 0x56f360 clears +9 AND the entry's first
+           word (+0, an owner object it hands to 0x54c380(sm, ...)) together, so +0 != 0 is the other candidate mark: logged for the bench. */
+        if (klcq.log >= 2) klog("copsquad: table entry %d: policeman player %08lx used %d owner word %08lx", i, (unsigned long)P, used, (unsigned long)klh_rd32(e + 12 * i));
+        if (!used) continue;
         if (!(sc = klh_rd32(P + 0xcd0)) || klh_rd32(sc) != KLCQ_SC_VT || klh_rd32(sc + 4) != P) { if (klcq.log >= 2) klog("copsquad: cop entry %d: [P+0xcd0] is no ZSquadControl of this player", i); continue; }
         for (j = 0; j < klcq.ncop && klcq.cop[j].P != P; j++) ;
         if (j == klcq.ncop) { memset(&klcq.cop[j], 0, sizeof klcq.cop[j]); klcq.cop[j].P = P; klcq.cop[j].sc = sc; klcq.ncop++; }
@@ -130,7 +142,8 @@ static DWORD klcq_soldier(DWORD actor)
     if (!(node = klh_rd32(actor + 4)) || !klh_rd(node + 0x3c, &fl, 4) || (fl >> 10 & 1)) return 0;
     if (!klh_rd(actor + 0x576, &b, 1) || b != 1 || !klh_rd(actor + 0x770, &held, 4) || held) return 0;
     if (!(s = klh_rd32(actor + 0x77c)) || klh_rd32(s) != KLE_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
-    if (!klh_rd32(s + 0x63c) || !klh_rd32(s + 0x738) || !klh_rd32(s + 0x6d8)) return 0;      /* 0x908040 -> 0x4c3b10 / 0x7b3490 dereference these unchecked (luvsic's list) */
+    if (!klh_rd32(s + 0x63c) || !klh_rd32(s + 0x738) || !klh_rd32(s + 0x6d8)) return 0;      /* 0x4c3b10 (SetOwner) dereferences +0x63c / +0x738, 0x48c480 (squad add) [+0x6d8]: VERIFIED, unchecked there */
+    if (!klh_rd(s + 0x6a4, &b, 1) || !b) return 0;                                             /* commandable: Follow's member test 0x6c8510 skips a soldier with 0 here (set 0 by 0x6bf452 / 0x8fd4b8) */
     return s;
 }
 static void klcq_follow(struct klcq_cop *c, DWORD now, const char *why)
@@ -144,9 +157,11 @@ static void klcq_follow(struct klcq_cop *c, DWORD now, const char *why)
 }
 static void klcq_recruit(struct klcq_cop *c, DWORD now)
 {
-    struct klcq_cand cand[KLCQ_CAND_MAX]; DWORD out[KLCQ_PER_MAX], p, tab, i, nr0; float cf[3]; int n = 0, k, got = 0;
-    c->staffed = 1;
-    if (!klcq_feet(c->P, cf)) { klog("copsquad: cop %08lx: no feet: no recruit", (unsigned long)c->P); return; }
+    struct klcq_cand cand[KLCQ_CAND_MAX]; DWORD out[KLCQ_PER_MAX], p, tab, i, nr0, sq; float cf[3]; int n = 0, k, got = 0;
+    /* a pass that recruits nobody is retried (the police squads spawn through the round; the first pass is 10 s in) up to KLCQ_TRIES_MAX */
+    if (++c->tries >= KLCQ_TRIES_MAX) c->staffed = 1;
+    if (!(sq = klh_rd32(c->sc + 0xa4))) { c->staffed = 1; klog("copsquad: cop %08lx: squad control %08lx has no player squad (+0xa4): no recruit (0x7b3490 would read it unchecked)", (unsigned long)c->P, (unsigned long)c->sc); return; }
+    if (!klcq_feet(c->P, cf)) { if (klcq.log >= 2) klog("copsquad: cop %08lx: no feet yet: no recruit this pass", (unsigned long)c->P); return; }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
     for (i = 0; i < 0x4000u && n < KLCQ_CAND_MAX; i += 64) {                 /* the scene's entity table, 128-byte slots (klsync.c klsy_walk) */
         DWORD blk[64 * 32], j;
@@ -158,19 +173,23 @@ static void klcq_recruit(struct klcq_cop *c, DWORD now)
         }
     }
     k = klcq_pick(cand, n, klcq.per, klcq.maxd2, out);
-    if (!k) { klog("copsquad: cop %08lx: %d police soldiers seen, none free within range: no squad this round", (unsigned long)c->P, n); return; }
+    if (!k) { if (c->staffed || klcq.log >= 2) klog("copsquad: cop %08lx: %d police soldiers seen, none free within range%s", (unsigned long)c->P, n, c->staffed ? ": no squad this round" : " (pass retried)"); return; }
+    c->staffed = 1;
     for (i = 0; i < (DWORD)k; i++) {
-        DWORD s = klh_rd32(out[i] + 0x77c), nr1; int listed = 0, q;
-        nr0 = klh_rd32(c->sc + 0x18); if (nr0 >= 16) { klog("copsquad: cop %08lx: squad control full (16)", (unsigned long)c->P); break; }
+        DWORD s = klh_rd32(out[i] + 0x77c), nr1; int listed = 0, insquad, q; float d2 = -1;
+        for (q = 0; q < n; q++) if (cand[q].id == out[i]) d2 = cand[q].d2;
+        nr0 = klh_rd32(c->sc + 0x18); if (nr0 >= 16) { klog("copsquad: cop %08lx: squad control full (16 receivers)", (unsigned long)c->P); break; }
+        if (klh_rd32(sq + 0xc0) >= 12) { klog("copsquad: cop %08lx: player squad full (12 members): 0x7b3490 would drop the add", (unsigned long)c->P); break; }
         if (klcq_is_receiver(out[i])) continue;                                          /* 0x908040 has no duplicate test */
         ((void (__fastcall *)(void *, void *, void *))(DWORD_PTR)KLH_VA(KLCQ_RECRUIT))((void *)(DWORD_PTR)c->sc, 0, (void *)(DWORD_PTR)out[i]); klcq.calls++;
         nr1 = klh_rd32(c->sc + 0x18); if (nr1 > 16) nr1 = 16;
         for (q = 0; q < (int)nr1; q++) if (klh_rd32(c->sc + 0x1c + 4 * q) == s) listed = 1;
-        if (klcq.log) klog("copsquad: cop %08lx recruit actor %08lx script %08lx at %.1f m: receivers %lu -> %lu, listed %d, owner %08lx", (unsigned long)c->P, (unsigned long)out[i], (unsigned long)s, (double)sqrt((double)cand[0].d2) / 100.0, (unsigned long)nr0, (unsigned long)nr1, listed, (unsigned long)klh_rd32(s + 0x69c));
-        if (listed && c->n < KLCQ_PER_MAX) c->sold[c->n++] = out[i];
-        got += listed;
+        insquad = klh_rd32(s + 0x4f4) == sq;                                             /* 0x48c480 moved his squad pointer: what Follow(all) walks */
+        if (klcq.log) klog("copsquad: cop %08lx recruit actor %08lx script %08lx at %.1f m: receivers %lu -> %lu, listed %d, insquad %d (members %lu), owner %08lx", (unsigned long)c->P, (unsigned long)out[i], (unsigned long)s, d2 < 0 ? -1.0 : (double)sqrt((double)d2) / 100.0, (unsigned long)nr0, (unsigned long)nr1, listed, insquad, (unsigned long)klh_rd32(sq + 0xc0), (unsigned long)klh_rd32(s + 0x69c));
+        if (listed && insquad && c->n < KLCQ_PER_MAX) c->sold[c->n++] = out[i];
+        got += listed && insquad;
     }
-    klog("copsquad: cop %08lx%s: %d of %d recruited (%d candidates seen)", (unsigned long)c->P, c->local ? " (local)" : "", got, k, n);
+    klog("copsquad: cop %08lx%s: %d of %d recruited (%d candidates seen, pass %d)", (unsigned long)c->P, c->local ? " (local)" : "", got, k, n, c->tries);
     if (got) klcq_follow(c, now, "after recruit");
 }
 /* the local player's cop record, if the host itself plays a cop (gd+0x828+4*[gd+0x898], the slot method of klescort.c kle_human) */
@@ -192,7 +211,7 @@ static void klcq_order(struct klcq_cop *c, int order, DWORD now)
 {
     int i, done = 0; float aim[3]; DWORD h = 0, a;
     if (order == 1) { klcq_follow(c, now, "key"); return; }
-    if (order == 3) {                                                     /* GUESS (luvsic): aim point P+0x27b0, aim target handle [[P+0xbd4]+0x2ac] */
+    if (order == 3) {                                                     /* VERIFIED (header): aim point P+0x27b0, aimed-actor handle [[P+0xbd4]+0x2ac] (0 = none, stale = resolves to nothing) */
         if (!klh_rd(c->P + 0x27b0, aim, 12) || !klb_finite(aim[0]) || !klb_finite(aim[1]) || !klb_finite(aim[2])) { klog("copsquad: attack: no aim point"); return; }
         if ((a = klh_rd32(c->P + 0xbd4)) != 0) h = klh_rd32(a + 0x2ac);
     }
