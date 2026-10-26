@@ -66,7 +66,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-26 ~06:30 - BO7 confirmed that point-blank at scale 100 kills the online bots; OnlinePointBlank=2 is under test in BO8b (joiner rec block added). SP1h PASS on 1026v (44139f1d6): client cop error p50 1-28, p90 under 40, nothing over 150 except one 1 s wake spike (SP1g p50 ~900-1400). Bench Fps=60, never 1000 (BO8b host starved for 5 min); BO8c queued. 12-row lobby seen in a back-buffer shot. Monitor off: use kld3 D3dShot* plus [FrameLimit] Enable=1 SwapChain=1.
+2026-10-26 ~07:25 - BO9 PASS on 1026y: OnlineCopToBot=5 (private ZFFActor vtable, slot 423 scales cop hits like Arcade's police->crew float) left 5 of 7 bots alive (BO8c: 0). OnlineVanCall called the van (state 1) but only 45 s before the clock ended, and it never came. Workflow wp5a2bbtu: van arrival + earlier escape (1026z). SP1h PASS: client cop error p50 1-28. Bench Fps=60.
 
 2026-10-26 ~06:40 - [kl-merge-ce] DM02 is done: FallRescue PASS, rear stops F02 edddbb67 (DM02_rearW PASS), lift on all 3 sites PASS. Cover: COVER11 found that the K6 model gives cover (A/B V1..V4 PASS) but all 6 real K6 boxes do not. They sit inside the wall solid, so the face is flagged blocked. Builder offset fix + DM05A restage + COVER12 in workflow wudgsb5q6. The form-a restage of 11 maps is held until COVER12 passes.
 
