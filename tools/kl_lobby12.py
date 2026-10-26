@@ -18,9 +18,8 @@ TeamIndex elements, Cops and Robbers):
   * the static fake focus bars LobbyFB#01.. / LobbyTeamFB#.. are moved to the new pitch; the selector's moving bar
     gets FocusBarBaseY 289 and FocusBarDeltaY 20 (GUESS: the selector places the bar at base + index * delta).
   * rows 9..12 get no FocusGraphic (all FocusBar_Long_02 instances are in use): the mouse cannot hover them.
-  * the ready / not-ready / speaker pictures for rows 9..12 reuse FAStatus_Ready#09..#12 (and ReadyNot, Speak): the
-    instances the team lists use. GUESS: two elements naming one instance is fine because the team elements are
-    hidden whenever the plain ones are shown (kl2 0x62c36d: sub-mode word [0x168e59c] == 2 selects the team set).
+  * rows 9..12 have NO ready / not-ready / speaker pictures (reusing the team instances #09..#12 crashed, S1 10-26):
+    stock never names one #NN instance twice within a window, and FALobby already uses every FAStatus instance.
 The team lists keep their six rows per column; they are compressed to the same pitch.
 
     python tools/kl_lobby12.py [--game <DD folder>] [--base <Patch01.zip>] [--out <zip>] [--check]
@@ -88,10 +87,12 @@ def transform(win):
                 for k, idx in enumerate(EXTRA):
                     pre2 = pre
                     post2 = post
-                    g = re.search(r'Graphic="(FAStatus_(?:Ready|ReadyNot|Speak))#\d+"', pre2 + post2)
-                    if g:
-                        pre2 = re.sub(r'Graphic="[^"]*"', 'Graphic="%s#%02d"' % (g.group(1), 9 + k), pre2)
-                        post2 = re.sub(r'Graphic="[^"]*"', 'Graphic="%s#%02d"' % (g.group(1), 9 + k), post2)
+                    if re.search(r'Graphic="FAStatus_(?:Ready|ReadyNot|Speak)#\d+"', pre2 + post2):
+                        # S1 (2026-10-26) live: reusing the team lists' FAStatus_*#09..#12 in the same window
+                        # asserted at kl2 0x51f1a9 ('FAStatus_Ready#18' not found) and crashed at 0x4be312 on
+                        # SystemLinkCreate. Stock never names one instance twice within a window and FALobby
+                        # already uses every instance, so rows 9..12 get no ready / speaker icon.
+                        continue
                     post2 = re.sub(r'FadeInDelay="[\d.]+"', 'FadeInDelay="%.2f"' % (0.80 + 0.05 * k), post2)
                     pre2 = re.sub(r'FadeInDelay="[\d.]+"', 'FadeInDelay="%.2f"' % (0.80 + 0.05 * k), pre2)
                     post2 = re.sub(r'\s*FocusGraphic="[^"]*"', '', post2)
