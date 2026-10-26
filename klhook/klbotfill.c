@@ -33,6 +33,7 @@ static int klbf_on, klbf_sq;      /* klbf_sq = [Bots] OnlineFillSquads (see the 
 static int klbf_fill;              /* the plan's fill, for the squad pass */
 static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near = 150.0f;
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
+static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
@@ -89,6 +90,7 @@ static void klbf_init(void)
     klbf_ot_gtake = GetPrivateProfileIntA("BotFill", "OnlineGuardTake", 0, klh_ini) != 0;      /* BO8c: the 30 s fallback sent all 5 holding bots into the squads at once; all 7 died within 71 s */
     klbf_ot_guard = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsGuard", 25, klh_ini); if (klbf_ot_guard < 0) klbf_ot_guard = 0;
     klbf_ot_van = GetPrivateProfileIntA("BotFill", "OnlineTacticsVan", 1, klh_ini) != 0;
+    klbf_ot_vcall = GetPrivateProfileIntA("BotFill", "OnlineVanCall", 1, klh_ini) != 0;      /* (recommended on) */
     if (klbf_ot) klog("botfill: OnlineTactics extras: OnlineHealthMul=%d (recommended 5 with OnlineCopToBot 5 = stock Arcade level 1 survival; 1 = off), OnlineTacticsGuard=%.0f m (recommended 25; 0 = off), OnlineTacticsVan=%d (recommended on)",
                       klbf_ot_hmul, klbf_ot_guard / 100, klbf_ot_van);
     if (klbf_ot) klog("botfill: OnlineTactics=1 - the HOST gives the Ally bots loot/van orders itself (puppeteer, host tally only; Carry %d, Near %.0f, Take %d)", klbf_ot_carry, klbf_ot_near, klbf_ot_take);
@@ -166,7 +168,9 @@ static int klbf_ot_call_van(DWORD rules, int who)
     if (klbf_ot_called) return 0;
     if (tried && now - tried < 5000) return 0;      /* review wp16tqkg2: a refusal (vehicle under way, hold) is retried every 5 s, not spent for the round */
     tried = now;
-    if (klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLBF_SV_VT) || !klb_same_code(KLBF_SV_CALLVEH, head, sizeof head)) { klbf_ot_called = 1; klog("botfill: tactics: van: the rules object (vtable %08lx) or 0x71e180 is not the one this build knows: nothing called", klh_rd32(rules)); return 0; }
+    /* OnlineVanCall (BO8c): klroundkeep.c swaps in a private heap vtable copy (slots 42/193 only; slot 44 and 0x71e180 stay stock), so the strict 0xbd2eb4 compare failed and spent the call. Accept the copy (KLH_RULES_SV_OK); a mismatch is logged once and retried, never spent. */
+    { DWORD vt = klh_rd32(rules); int vok = klbf_ot_vcall ? KLH_RULES_SV_OK(vt) : vt == (DWORD)(DWORD_PTR)KLH_VA(KLBF_SV_VT);
+      if (!vok || !klb_same_code(KLBF_SV_CALLVEH, head, sizeof head)) { static int vtold; if (!vtold++) klog("botfill: tactics: van: the rules object (vtable %08lx, vok %d) or 0x71e180 is not the one this build knows: not called, retried every 5 s", vt, vok); return 0; } }
     /* the trigger is a private-memory scan hit: it must still be the same trigger, with its entity and node, right before its handle is used */
     if (klh_rd32(klbf_ot_trig) != klbf_ot_tvt || !(ent = klh_rd32(klbf_ot_trig + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, tp, 0) || !klbf_ot_vh) {
         klog("botfill: tactics: van: exit trigger %08lx is no longer valid (vtable %08lx, handle %08lx): looked up again", klbf_ot_trig, klh_rd32(klbf_ot_trig), klbf_ot_vh);
