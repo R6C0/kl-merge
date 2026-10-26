@@ -97,10 +97,11 @@ static void klbf_init(void)
  * ---------------------------------------------------------------------------------------------------------------------------- */
 #define KLBF_OT_BOTS   16
 #define KLBF_OT_OBJ    256
-#define KLBF_OT_STALL  25000      /* ms a bot may take for one target before it is given up (GUESS: a walk is about 3 m/s, stacks are within 80 m) */
+#define KLBF_OT_STALL  12000      /* ms without 2 m of progress toward its stack before a bot gives it up (BO5: a fixed 25 s gave up 5 of 6 walks of 90-110 m that were still closing) */
+#define KLBF_OT_STALLMAX 90000    /* ms a bot may take for one stack at most, progress or not */
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; } klbf_ob[KLBF_OT_BOTS];
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt; } klbf_ob[KLBF_OT_BOTS];
 static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
 
@@ -191,18 +192,21 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (s == KLBF_OT_BOTS) { for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor; s++) ; if (s == KLBF_OT_BOTS) continue; klbf_ob[s].actor = a; }
         if (klbf_ob[s].phase == 3) continue;
         if (klbf_ob[s].phase == 1) {      /* walking to a stack: reached? gone? stalled? */
-            DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0; DWORD ent, node; float mp[3];
+            DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0; DWORD ent, node; float mp[3], dh = 0;
             if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) {
                 klog("botfill: tactics: bot %d (actor %08lx): stack %08lx is gone before it got there (taken by someone else?)", s, a, o); klbf_ob[s].phase = 0;
-            } else if (sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2])) <= klbf_ot_near && fabs(bots[b].pos[1] - mp[1]) <= 400.0f) {
+            } else if ((dh = (float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2]))) <= klbf_ot_near && fabs(bots[b].pos[1] - mp[1]) <= 400.0f) {
                 klbf_ob[s].tally += amt; klbf_ob[s].grabs++;
                 if (klbf_ot_nclaim < KLBF_OT_OBJ) klbf_ot_claimed[klbf_ot_nclaim++] = o;
                 if (klbf_ot_take) { int z = 0; klh_data((void *)(DWORD_PTR)(o + 0x34), &z, 4, "money amount (OnlineTacticsTake, GUESS)"); }
                 klog("botfill: tactics: bot %d (actor %08lx) GRABBED stack %08lx = %d; its tally %d after %d grab(s)%s", s, a, o, amt, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_take ? " (amount zeroed on the host)" : " (host tally only)");
                 klbf_ob[s].phase = 0;
-            } else if (now - klbf_ob[s].since > KLBF_OT_STALL) {
-                if (klbf_ot_nbad < KLBF_OT_OBJ) klbf_ot_bad[klbf_ot_nbad++] = o;
-                klog("botfill: tactics: bot %d (actor %08lx) did not reach stack %08lx in %d s: given up on it", s, a, o, KLBF_OT_STALL / 1000); klbf_ob[s].phase = 0;
+            } else {
+                if (!klbf_ob[s].bestAt || dh < klbf_ob[s].best - 200.0f) { klbf_ob[s].best = dh; klbf_ob[s].bestAt = now; }      /* 2 m closer = progress */
+                if (now - klbf_ob[s].bestAt > KLBF_OT_STALL || now - klbf_ob[s].since > KLBF_OT_STALLMAX) {
+                    if (klbf_ot_nbad < KLBF_OT_OBJ) klbf_ot_bad[klbf_ot_nbad++] = o;
+                    klog("botfill: tactics: bot %d (actor %08lx) did not reach stack %08lx (%.0f m left, %lu s walking, no 2 m of progress for %lu s): given up on it", s, a, o, dh / 100, (unsigned long)((now - klbf_ob[s].since) / 1000), (unsigned long)((now - klbf_ob[s].bestAt) / 1000)); klbf_ob[s].phase = 0;
+                }
             }
         }
         if (klbf_ob[s].phase == 0) {
@@ -214,7 +218,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 if (d < bd) { bd = d; best = j; }
             }
             if (klbf_ob[s].grabs < klbf_ot_carry && best >= 0) {
-                klbf_ob[s].phase = 1; klbf_ob[s].target = mo[best]; klbf_ob[s].since = now; klbf_ob[s].ordered = 0;
+                klbf_ob[s].phase = 1; klbf_ob[s].target = mo[best]; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0;
                 memcpy(tgt, mpos[best], 12);
                 klog("botfill: tactics: bot %d (actor %08lx soldier %08lx) -> stack %08lx (%d) at (%.0f, %.0f, %.0f), %.0f m away", s, a, bots[b].soldier, mo[best], mamt[best], tgt[0], tgt[1], tgt[2], bd / 100);
             } else if (klbf_ob[s].tally > 0) {      /* BO3: with nothing carried a bot waited at the van for nothing; it now waits for an armed stack */
