@@ -39,7 +39,7 @@ static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [Bo
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
 static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
-static int klbf_ot_bforce = 1, klbf_ot_recall = 1;static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20;      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
+static int klbf_ot_bforce = 1, klbf_ot_recall = 1;static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20; static float klbf_ot_exitdy = 800.0f;      /* [BotFill] OnlineExitDy: height window round the exit trigger's node (BOS_DD02r: the bots stood on the trigger's own nav poly 6.2 m under DD02's centre y 6620, outside the old 400) */      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
 /* Step 3 (default off, SHIP-safe: one heap BYTE per squad). Squads are ZSquadScript entities (vtable 0xbcce3c); [squad+0x34] is the
@@ -117,6 +117,8 @@ static void klbf_init(void)
     klbf_ot_firestall = GetPrivateProfileIntA("BotFill", "OnlineFireStall", 1, klh_ini) != 0;      /* (recommended on) BO12: bots pinned down by cops were counted as stalled after 12 s */
     klbf_ot_bforce = GetPrivateProfileIntA("BotFill", "OnlineBoxForce", 1, klh_ini) != 0;      /* (recommended on) BO13: the carrier stood at the exit trigger, 3 m outside the box, for the whole van wait (state 3) and never boarded */
     if (klbf_ot) klog("botfill: OnlineTactics box force: OnlineBoxForce=%d (recommended on)", klbf_ot_bforce);
+    klbf_ot_exitdy = (float)GetPrivateProfileIntA("BotFill", "OnlineExitDy", 800, klh_ini);      /* GUESS: 800 covers a trigger centre floating ~6 m over its floor (DD02 610) without taking a bot on a floor 8 m below */
+    if (klbf_ot) klog("botfill: OnlineTactics exit height window: OnlineExitDy=%.0f (recommended 800; was 400 before BOS_DD02r)", klbf_ot_exitdy);
     klbf_ot_recall = GetPrivateProfileIntA("BotFill", "OnlineVanRecall", 1, klh_ini) != 0;      /* (recommended on) BO14: a bot grabbed 800k 3 s after the call and was left behind when the van went */
     if (klbf_ot) klog("botfill: OnlineTactics van recall: OnlineVanRecall=%d (recommended on)", klbf_ot_recall);
     klbf_ot_way = GetPrivateProfileIntA("BotFill", "OnlineWaypoints", 1, klh_ini) != 0;      /* (recommended on) BOS_DD02: 7 bots stalled 139-166 m short of the exit trigger; a [BotFillWay_<SLOT>] route walks them round it */
@@ -769,7 +771,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klog("botfill: tactics: bot %d (actor %08lx) BOARDED (hook tally only, nothing removed in the game): tally %d", s, a, klbf_ob[s].tally);
                 continue;
             }
-            if (!van && !bxOn && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= 400.0f) {      /* OnlineVanState: BO9's van node stayed at the origin, so the waiting state + the bot at the exit box counts as aboard */      /* GUESS: the exit trigger's box is where the van's boarding box is */
+            if (!van && !bxOn && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= klbf_ot_exitdy) {      /* OnlineVanState: BO9's van node stayed at the origin, so the waiting state + the bot at the exit box counts as aboard */      /* GUESS: the exit trigger's box is where the van's boarding box is */
                 klbf_ob[s].phase = 3;
                 klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineVanState; hook tally only, %.0f m from the exit trigger): tally %d", s, a, vstate, dd / 100, klbf_ob[s].tally);
                 continue;
@@ -785,10 +787,10 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     legsLeft = klbf_ob[s].leg < klbf_way_n;
                 }
             }
-            if (!van && !legsLeft && klbf_ot_vh && !klbf_ot_called && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= 400.0f) klbf_ot_arrive(rules, s, now);
+            if (!van && !legsLeft && klbf_ot_vh && !klbf_ot_called && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= klbf_ot_exitdy) klbf_ot_arrive(rules, s, now);
             if (!van && !legsLeft) {      /* review wp16tqkg2: phase 2 had no stall test; the trigger's node (its box centre, GUESS) may be out of the nav's reach */
                 if (!klbf_ob[s].bestAt || dd < klbf_ob[s].best - 200.0f) { klbf_ob[s].best = dd; klbf_ob[s].bestAt = now; }
-                if (klbf_ot_vh && !klbf_ot_called && now - klbf_ob[s].bestAt > KLBF_OT_STALL && dd <= 1500.0f && fabs(bots[b].pos[1] - g[1]) <= 400.0f) {
+                if (klbf_ot_vh && !klbf_ot_called && now - klbf_ob[s].bestAt > KLBF_OT_STALL && dd <= 1500.0f && fabs(bots[b].pos[1] - g[1]) <= klbf_ot_exitdy) {
                     if (!(klbf_ob[s].told & 8) && (klbf_ob[s].told |= 8)) klog("botfill: tactics: bot %d (actor %08lx) stopped %.0f m from the exit trigger's centre: calls the van from there (GUESS: the box is wider than 2*Near)", s, a, dd / 100);
                     klbf_ot_arrive(rules, s, now);
                 } else if (klbf_ot_vstate && klbf_ot_called ? (now - klbf_ot_calledAt > 60000 || vstate == 7 || (vstate == 0 && now - klbf_ot_calledAt > 5000)) : now - klbf_ob[s].since > (DWORD)(klbf_ot_called ? 60000 : KLBF_OT_STALLMAX)) {      /* OnlineVanState: the 60 s count from the CALL (BO9 counted from phase 2, 15 s earlier), and a van that left (7 / back to 0) ends the wait */
