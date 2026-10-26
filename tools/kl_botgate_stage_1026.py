@@ -108,7 +108,7 @@ def sibling_name(zn):
 
 def fnv(path):
     """The hook's botgate fingerprint (c9 fe0c72b71): FNV-1a 32 over the first 64 KB then the last 64 KB, one running hash.
-    GUESS until compared with a live 'botgate: ... [size N fnv X]' line (the overlap rule for files under 128 KB is not known)."""
+    Matches the live 'botgate: ... [size N fnv X]' lines (c9 BG1 10-26 03:3x, DM01 plain + sibling); the overlap rule for files under 128 KB is still not known."""
     n = os.path.getsize(path)
     with open(path, 'rb') as fh:
         a = fh.read(65536); fh.seek(max(0, n - 65536)); b = fh.read(65536)
