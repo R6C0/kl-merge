@@ -80,7 +80,7 @@ static DWORD ksp_orig; static int ksp_ready;
 struct ksp_e { DWORD o, slot, goalAt, since, lastLog, lastSnap, pass, tolSince, bestAt, prevAt; float goal[3], prev[3], d0, dlast, best, hspeed; volatile LONG calls, steered, mism, dead; };
 static struct ksp_e ksp_e[KSP_MAXE];
 static struct { DWORD o, until; } ksp_cool[16]; static int ksp_coolN;           /* cops released next to a human: not re-hooked for a while */
-static struct { int pup, diag, nlive, gate; float tol, snap, speed; int team; DWORD pass, roundAt, diagAt, pupAt; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv; } ksp;
+static struct { int pup, cops, bots, diag, nlive, gate; float tol, snap, speed; int team; DWORD pass, roundAt, diagAt, pupAt; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv; } ksp;
 static DWORD ksp_ours(void) { return ksp_ready ? (DWORD)(DWORD_PTR)ksp_vt : 0; }
 /* the class vtable of an actor as the rest of this file means it: a puppeted actor shows our private table, which is still a ZFFActor */
 static DWORD klsy_vtof(DWORD o)
@@ -277,7 +277,7 @@ static int klsy_human(DWORD o, const float pos[3])
     if (klsy_nhum == 0) return 1;                                                  /* fail closed: no human known = nothing is moved */
     for (i = 0; i < klsy_nhum; i++) {
         float dx = pos[0] - klsy_humpos[i][0], dy = pos[1] - klsy_humpos[i][1], dz = pos[2] - klsy_humpos[i][2];
-        if (tm && tm == klsy_humteam[i]) return 1;
+        if (tm && tm == klsy_humteam[i] && !(ksp.bots && klh_rd32(tm + 4) == 2)) return 1;      /* a team-Ally bot may share the team object with a human crew (GUESS): then only the 40-unit test below keeps the human's body out */
         if (dx * dx + dy * dy + dz * dz < 40.0f * 40.0f) return 1;                 /* GUESS: 40 units around a player's feet = his own body */
     }
     return 0;
@@ -445,7 +445,8 @@ static void klsy_pupfn(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
     e = ksp_find(o);
     if (e && e->dead) { ksp_release(e, "dead (seen by the Update wrapper)"); return; }
     if (!klsy_idok(o, team, &klsy.host[i])) { c->idbad++; return; }
-    if (!hv || team != ksp.team) return;                                                 /* only the cops' team */
+    /* only the cops' team (Puppet=1) and, with [BotFill] OnlineHost=1, the AI heisters = team Ally 2 (GUESS: the value 2 is the one klbotfill.c's census counts as 'Ally'; humans are not team 2 there) */
+    if (!hv || !((ksp.cops && team == ksp.team) || (ksp.bots && team == 2))) return;
     /* fail closed: a human's body is never touched. A hooked cop that comes next to one is released quietly and not re-hooked for 3 s
        (time hysteresis instead of the 80-unit one: no flap of vtable writes and log lines at melee range) */
     if (klsy_human(o, pos)) { if (e) { ksp_release(e, 0); ksp_setcool(o, now); } return; }
@@ -537,12 +538,16 @@ static void klsy_init(void)
     klsy.applyHp = GetPrivateProfileIntA("Sync", "ApplyHp", 0, klh_ini) != 0;
     klsy.applyMax = GetPrivateProfileIntA("Sync", "ApplyMax", 8, klh_ini); if (klsy.applyMax < 1) klsy.applyMax = 1;
     klsy.applyTol = GetPrivateProfileIntA("Sync", "ApplyTol", 150, klh_ini); if (klsy.applyTol < 1) klsy.applyTol = 1;
-    ksp.pup = GetPrivateProfileIntA("Sync", "Puppet", 0, klh_ini) != 0;
+    ksp.cops = GetPrivateProfileIntA("Sync", "Puppet", 0, klh_ini) != 0;
+    ksp.bots = klbf_oh;                                               /* [BotFill] OnlineHost (klbotfill.c is included and initialised before this file): host shares, client mirrors the Ally bots through the same Puppet code */
+    ksp.pup = ksp.cops || ksp.bots;
+    if (ksp.bots) klsy.share = 1;                                     /* the host's list is the bots' authority; a client never sends (role == 2 only) */
     ksp.diag = GetPrivateProfileIntA("Sync", "PuppetDiag", 0, klh_ini) != 0;
     ksp.tol = (float)GetPrivateProfileIntA("Sync", "PuppetTol", 60, klh_ini); if (ksp.tol < 5) ksp.tol = 5;
     ksp.snap = (float)GetPrivateProfileIntA("Sync", "PuppetSnap", 1500, klh_ini); if (ksp.snap < ksp.tol * 2) ksp.snap = ksp.tol * 2;
     ksp.speed = (float)GetPrivateProfileIntA("Sync", "PuppetSpeed", 300, klh_ini); if (ksp.speed < 1) ksp.speed = 1;
     ksp.team = GetPrivateProfileIntA("Sync", "PuppetTeam", 3, klh_ini);       /* GUESS: team value 3 = the cops (S2b measurement) */
+    if (ksp.bots) klog("sync: OnlineHost: bots (team 2) are mirrored by the Puppet code%s; this peer shares its list when it is the host", ksp.cops ? " together with the cops (Puppet=1)" : " (cops untouched: Puppet=0)");
     if (ksp.pup || ksp.diag) klog("sync: Puppet=%d PuppetDiag=%d PuppetTol=%.0f PuppetSnap=%.0f PuppetSpeed=%.0f PuppetTeam=%d (client only; needs the host's Share=1)%s", ksp.pup, ksp.diag, ksp.tol, ksp.snap, ksp.speed, ksp.team,
                                    (ksp.pup && klsy.apply) ? " WARNING: Apply=1 too: the two fight, use Puppet alone" : "");
     if (klsy.apply) klog("sync: Apply=1 ApplyHp=%d ApplyMax=%d ApplyTol=%d (client only: a non-player actor farther than ApplyTol from the host's is teleported to it)", klsy.applyHp, klsy.applyMax, klsy.applyTol);
