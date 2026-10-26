@@ -91,6 +91,8 @@ feat('hidestockonl', G_CORE, 'Online matches: also hide the old (stock) list; th
      'klhud.c HideOnline; needs HideSrc=1', [('HUD', 'HideOnline', 1, 0, 1)])
 feat('onlinecrew', G_CORE, 'Online matches: new crew list with money (humans only, names not decoded yet; recommended on once proven live)', 'off', 'start',
      'klhud.c OnlineCrew; needs [HUD] Online=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
+feat('ucchide', G_CORE, 'Undercover Cop: the crew list does not give the undercover cop away to heisters (recommended on)', 'on', 'start',
+     'klhud_values.c kluv_state UccHide; re/ucc_tell_audit.md S10; NOT run live', [('HUD', 'UccHide', 1, 0, 1)])
 feat('onlinebots', G_CORE, 'Online matches: AI heisters also listed in the crew box, like Arcade (recommended on)', 'on', 'start',
      'klhud.c OnlineBots; team-2 ZFFActor scan (GUESS); needs OnlineCrew=1; NOT run live', [('HUD', 'OnlineBots', 1, 0, 1)])
 feat('hudrows12', G_CORE, 'HUD crew list and round-end scoreboard: up to 12 players (stock-style cap was 8); the local player always has a row (recommended on)', 'on', 'start',

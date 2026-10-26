@@ -202,7 +202,7 @@
    whos going to backstab you'. A crew record's flag 2 is the BOT's own 'turned traitor' mark, set when it DECIDES (the log's 'bots: record N:
    traitor flag SET' comes seconds before the shot); the stock list never shows it. 0 (default, [HUD] TraitorEarly) = only the game's own
    traitor flag (score flag 1) makes a traitor row / fate - what the stock list shows; 1 = the old rows (the bot's mark too). */
-static int kluv_early = 0;
+static int kluv_early = 0, kluv_ucchide = 1;
 #define KLUV_F_DEAD      0x4
 #define KLUV_F_POLICE    0x8
 #define KLUV_F_ABOARD    0x20
@@ -517,6 +517,14 @@ static int kluv_state(const struct klb_snap *s, int i)
     DWORD f; const struct klb_rec *r;
     if (!kluv_ok(s) || !kluv_idx(s, i)) return KLUV_ST_CREW;
     f = kluv_flags(s, i); r = &s->r[i];
+    /* [HUD] UccHide (recommended on), re/ucc_tell_audit.md S10: our rows showed flag 0x80 as a fed to every viewer, which outs the
+       Undercover Cop. Hidden unless the viewer is that UCC (his own row, record flag 1 clear) or on the police side (0x8 / 0x1000 / 0x80).
+       GUESS: 0x40000 is not a reveal mark (meaning not read), so both 0x80 looks are hidden; police / dirty-cop flags still show as before */
+    if (kluv_ucchide && (f & KLUV_F_UNDERCOP) && (r->flags & 1)) {
+        int j, cop = 0;
+        for (j = 0; j < s->n && j < KLB_NREC; j++) if (s->r[j].used && !(s->r[j].flags & 1)) { cop = (kluv_flags(s, j) & (KLUV_F_POLICE | KLUV_F_DIRTYCOP | KLUV_F_UNDERCOP)) != 0; break; }
+        if (!cop) f &= ~(DWORD)KLUV_F_UNDERCOP;
+    }
     if ((f & KLUV_F_WAITING) || r->status == 1) return KLUV_ST_WAITING;
     if ((f & KLUV_F_DEAD) || r->status == 7) return KLUV_ST_DEAD;
     if ((f & KLUV_F_ESCAPED) || r->status == 6) return KLUV_ST_ESCAPED;
