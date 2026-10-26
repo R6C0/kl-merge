@@ -331,11 +331,68 @@ static int kls_rand_pick(int s)
     return cand[k];
 }
 
+/* BOT GATE (2026-10-26, botgate_1026a; peer: eAllTypes squads staged on every map, but an online round must stay stock unless the HOST wants Ally bots).
+ * WHY HERE: the squad filter 0x7b3790 runs at level load, when no hook tick runs (SL8: a byte pass found 0 ZSquadScript), and a SHIP build may not patch code.
+ * The only thing that decides a peer's squads before the load is WHICH level archive it opens, and this file already answers that open. So the gate picks
+ * a VARIANT of the level archive next to the file the open would get anyway (stock file or redirect target):
+ *   Fxx_Main.bots.zip     the squads keep eAllTypes (Ally bots exist online), used when the gate is ON
+ *   Fxx_Main.nobots.zip   plain mask 8 (stock behaviour online), used when the gate is OFF
+ * A missing variant means that peer uses the zip as it is (logged). Offline / Arcade: NEVER touched (kl_online() false).
+ * The gate value: HOST (role 2) = [BotFill] OnlineHost; CLIENT (role 3) = the HOST'S value, which klhostopt.c carries in klx_opts / UDP 27413 as 'b<0|1>'
+ * (needs [HostOpts] Enable=1 on both); not heard (old host, HostOpts off, too late) = the client's own [BotFill] OnlineHost, with a WARNING line.
+ * [BotGate] Enable=1 (recommended on). DATA ONLY: a path change inside the existing file wrappers, no code byte. */
+static int kls_bg_on, kls_bg_used = -1;              /* kls_bg_used: the gate value of the last online level-archive open (klhostopt.c compares it with the host's) */
+static int klho_bots_remote(void);                   /* klhostopt.c: the host's OnlineHost as this client heard it: -1 not heard */
+
+static int kls_bot_gate(int *role_out, const char **src)
+{   /* online only (caller checked): -> 1 = Ally bots wanted */
+    DWORD sm = klh_exe_ok ? klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)) : 0, role = 0; int rem;
+    if (sm) klh_rd(sm + 0x54, &role, 4);
+    *role_out = (int)role;
+    if (role == 3) {
+        if ((rem = klho_bots_remote()) >= 0) { *src = "the HOST's value (klx_opts)"; return rem; }
+        /* review fix: NOT heard = stock/OFF (the safe default), never the client's own ini: a client with OnlineHost=1 must not load bots against a stock host */
+        *src = "WARNING: the host's value NOT heard (old host / [HostOpts] Enable=0 / too early), so OFF = stock";
+        return 0;
+    }
+    if (role == 2) { *src = "this host's [BotFill] OnlineHost"; return klbf_oh; }
+    if ((rem = klho_bots_remote()) >= 0) { *src = "role not 2/3: the HOST's value (klx_opts)"; return rem; }
+    *src = "role not 2/3 and the host's value not heard, so OFF = stock";
+    return 0;
+}
+
+static int kls_bot_apply(char *path, const char *slot, const char *api)
+{   /* path = the level archive the open is going to get; -> 1 when it was replaced by the variant for the gate */
+    int role = 0, gate, n; const char *src = "", *suf; char var[MAX_PATH]; size_t l = strlen(path); static LONG nlog;
+    if (!kls_bg_on || !kl_online() || l < 5 || _stricmp(path + l - 4, ".zip")) return 0;
+    gate = kls_bot_gate(&role, &src);
+    if (!strncmp(api, "CreateFile", 10)) kls_bg_used = gate;   /* review fix: only the real open counts, not GetFileAttributes / FindFirstFile probes */
+    suf = gate ? ".bots.zip" : ".nobots.zip";
+    if (l - 4 + strlen(suf) >= MAX_PATH) return 0;
+    memcpy(var, path, l - 4); strcpy(var + l - 4, suf);
+    {   /* review fix: log a decision only when it changes for the slot (probes and repeated opens no longer eat the cap); a missing variant that leaves bots in is warned ONCE per slot, uncapped */
+        static char lastkey[64]; static int lastgate = -2, warnedmiss[64]; char key[64];
+        int have = kls_isfile(var), nomiss = 0;
+        snprintf(key, sizeof key, "%s/%d/%d/%d", slot, role, gate, have);
+        n = (strcmp(key, lastkey) || lastgate != gate) ? InterlockedIncrement(&nlog) : 1000;
+        strncpy(lastkey, key, sizeof lastkey - 1); lastgate = gate;
+        if (!have) { unsigned h = 0; const char *q; for (q = slot; *q; q++) h = h * 31 + (unsigned char)*q; h %= 64; nomiss = warnedmiss[h]; warnedmiss[h] = 1;
+            if (!nomiss) klog("botgate: WARNING slot %s: no %s next to %s - the gate cannot be honoured (an eAllTypes plain archive keeps its Ally bots even when OFF); stage both .bots.zip and .nobots.zip", slot, suf, path); }
+        if (have) {
+        if (n <= 48) klog("botgate: slot %s role %d: Ally bots %s (%s) -> %s", slot, role, gate ? "ON" : "OFF", src, var);
+        strcpy(path, var); return 1;
+        }
+    }
+    if (n <= 48) klog("botgate: slot %s role %d: Ally bots %s (%s) -> no %s next to %s: that archive is used as it is (if it was built with eAllTypes the bots %s online)",
+                      slot, role, gate ? "ON" : "OFF", src, suf, path, gate ? "exist" : "STILL EXIST");
+    return 0;
+}
+
 /* -> 1 and the new path in out[MAX_PATH] when the open must go somewhere else, 0 when it stays.
    Keeps GetLastError() as it found it when it returns 0. */
 static int kls_map(const char *in, char *out, const char *api)
 {
-    char full[MAX_PATH], low[MAX_PATH], *hit = 0; DWORD n, err; int s, r, wild;
+    char full[MAX_PATH], low[MAX_PATH], *hit = 0; DWORD n, err; int s, r, wild, isz = 0;
     if (!kls_on || !in || !in[0] || (in[0] == '\\' && in[1] == '\\')) return 0;   /* devices, pipes, UNC */
     err = GetLastError();
     n = GetFullPathNameA(in, MAX_PATH, full, 0);          /* absolute, '/' -> '\', "." and ".." resolved */
@@ -351,6 +408,7 @@ static int kls_map(const char *in, char *out, const char *api)
     for (s = 0; s < kls_nslots; s++) if ((hit = strstr(low, kls_slot[s].key)) != 0) break;
     if (s < kls_nslots) {
         const char *rest = full + (hit - low) + kls_slot[s].keylen; int page;
+        isz = !wild && !_stricmp(rest, kls_slot[s].zip);      /* the level's archive itself: the bot gate may swap it for a variant */
         if (!_stricmp(rest, kls_slot[s].zip)) {           /* the level's archive: a load of this slot begins (or the game probes for it) */
             page = kls_page_now();
             kls_rnd_txt[0] = 0;
@@ -373,6 +431,7 @@ static int kls_map(const char *in, char *out, const char *api)
             memcpy(out, kls_rule[r].to, kls_rule[r].tolen); strcpy(out + kls_rule[r].tolen, rest);
             if (wild || kls_isfile(out)) {                /* a search pattern goes to the map folder as a whole */
                 InterlockedIncrement(&kls_rule[r].hits);
+                if (isz) kls_bot_apply(out, kls_slot[s].name, api);      /* [BotGate]: Fxx_Main.bots.zip / .nobots.zip beside the redirect target, online only */
                 if (kls_log) kls_note(api, "redirect", full, out);
                 SetLastError(err); return 1;
             }
@@ -380,6 +439,10 @@ static int kls_map(const char *in, char *out, const char *api)
             if (!kls_fallback) { if (kls_log) kls_note(api, "redirect (NOT in the map folder, Fallback=0: the open will fail)", full, out); SetLastError(err); return 1; }
             if (kls_log) kls_note(api, "NOT in the map folder, stock file used", full, out);
         }
+    }
+    if (isz && kls_bg_on && kl_online()) {                /* no redirect for this page: the variant may still sit beside the stock archive */
+        strcpy(out, full);
+        if (kls_bot_apply(out, kls_slot[s].name, api)) { SetLastError(err); return 1; }
     }
     if (kls_overlay_on && !wild && !strncmp(low, kls_game_low, kls_game_len) && low[kls_game_len] == '\\' &&
         strlen(kls_overlay) + strlen(full + kls_game_len) < MAX_PATH) {
@@ -764,6 +827,9 @@ static void kls_init(HINSTANCE inst)
     kls_rnd_round_on = GetPrivateProfileIntA("Expansion", "OnlineRandomRound", 0, klh_ini) != 0;
     if (kls_online_set == KLS_RANDOM) klog("expansion: OnlineSet=9: RANDOM map per slot in a network session (stock + every page with a rule for the slot), seeded from the lobby id; page 9 itself cannot hold rules; NOT run live");
     if (kls_online_set == 1) { klog("expansion: OnlineSet=1 is the stock page: ignored"); kls_online_set = 0; }
+    kls_bg_on = GetPrivateProfileIntA("BotGate", "Enable", 1, klh_ini) != 0;       /* (recommended on) */
+    if (kls_bg_on && !GetPrivateProfileIntA("Net", "OnlineSafe", 1, klh_ini)) klog("botgate: NOTE [Net] OnlineSafe=0 makes kl_online() false: the gate never acts");
+    klog("botgate: %s - online the level archive is swapped for Fxx_Main.bots.zip (host's [BotFill] OnlineHost=1) or Fxx_Main.nobots.zip (0) when one sits beside it; offline never", kls_bg_on ? "on" : "off ([BotGate] Enable=0)");
     kls_keep_online = GetPrivateProfileIntA("Expansion", "KeepPageOnline", 0, klh_ini) != 0;
     kls_keep_clear = GetPrivateProfileIntA("Expansion", "KeepClear", 1, klh_ini) != 0;
     if (kls_online_set || kls_keep_online)

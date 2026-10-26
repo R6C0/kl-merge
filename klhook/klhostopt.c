@@ -30,6 +30,7 @@ static struct {
     int map, ai, solo, pd2;               /* the host's OWN values: map = OnlineSet value (0/2/9) */
     int minIni, squadsIni;                /* the ini's [Lobby] MinPlayers / [Bots] OnlineFillSquads, to put back */
     int rmap, rai, rsolo, rok;            /* the host's values as a client heard them */
+    int rbots;                            /* the host's [BotFill] OnlineHost as heard ('b<n>'): -1 = not sent (old host) */
     DWORD rat;
     int applied;                          /* what kls_online_set holds because of us: -1 = own */
     char last[24]; DWORD sentAt, steamAt, readAt, udpAt; unsigned __int64 lobby;
@@ -46,7 +47,10 @@ static int klho_get(int which)
     return (klho.ai ? 1 : 0) | (klho.solo ? 2 : 0) | (klho.pd2 ? 4 : 0);
 }
 
-static void klho_pack(char *o, size_t n) { snprintf(o, n, "m%da%ds%d", klho.map, klho.ai, klho.solo); }
+/* 'b<n>' = the HOST'S [BotFill] OnlineHost (botgate_1026a, klslot.c [BotGate]); an old client stops reading after s<n>, so the suffix is harmless to it */
+static void klho_pack(char *o, size_t n) { snprintf(o, n, "m%da%ds%db%d", klho.map, klho.ai, klho.solo, klbf_oh ? 1 : 0); }
+
+static int klho_bots_remote(void) { return klho.on && klho.rok ? klho.rbots : -1; }
 
 static void klho_live(void)
 {   /* the host's own values into the live variables of the parts */
@@ -112,11 +116,13 @@ static void klho_open(void)
     else klog("hostopts: UDP %d open (broadcast + listen)", KLHO_PORT);
 }
 
-static int klho_parse(const char *s, int *m, int *a, int *so)
-{   /* "m<set>a<ai>s<solo>" */
-    int p = 0;
+static int klho_parse(const char *s, int *m, int *a, int *so, int *b)
+{   /* "m<set>a<ai>s<solo>[b<bots>]" */
+    int p = 0, bb = 0;
+    *b = -1;
     if (sscanf(s, "m%da%ds%d%n", m, a, so, &p) != 3 || p < 6) return 0;
     if (*m != 0 && *m != 2 && *m != 3 && *m != 9) return 0;
+    if (sscanf(s + p, "b%d", &bb) == 1 && (bb == 0 || bb == 1)) *b = bb;
     return 1;
 }
 
@@ -150,7 +156,7 @@ static void klho_tick(int game_thread)
     }
     if (!host && !cli) {
         if (klho.lastRole) {
-            klho.lastRole = 0; klho.rok = 0; klho.lobby = 0; klho.last[0] = 0;
+            klho.lastRole = 0; klho.rok = 0; klho.rbots = -1; kls_bg_used = -1; klho.lobby = 0; klho.last[0] = 0;
             if (klho.applied >= 0) { kls_online_set = klho.map; klho.applied = -1; klog("hostopts: session over: own map set %d is back", klho.map); }
         }
         return;
@@ -181,24 +187,31 @@ static void klho_tick(int game_thread)
     }
     /* CLIENT: UDP first, then the Steam lobby */
     if (klho.udp && klho.sock) {
-        char pk[64]; klho_sin from; int fl, n, m, a, s, k;
+        char pk[64]; klho_sin from; int fl, n, m, a, s, k, bo;
         for (k = 0; k < 8; k++) {
             fl = sizeof from; n = klho_recvfrom(klho.sock, pk, sizeof pk - 1, 0, &from, &fl);
             if (n <= 0) break;
             pk[n] = 0;
-            if (!strncmp(pk, "KLHO1;", 6) && klho_parse(pk + 6, &m, &a, &s)) {
-                if (!klho.rok || m != klho.rmap) klog("hostopts: CLIENT heard the host on UDP: %s", pk + 6);
-                klho.rmap = m; klho.rai = a; klho.rsolo = s; klho.rok = 1; klho.rat = now;
+            if (!strncmp(pk, "KLHO1;", 6) && klho_parse(pk + 6, &m, &a, &s, &bo)) {
+                if (!klho.rok || m != klho.rmap || bo != klho.rbots) klog("hostopts: CLIENT heard the host on UDP: %s", pk + 6);
+                klho.rmap = m; klho.rai = a; klho.rsolo = s; klho.rbots = bo; klho.rok = 1; klho.rat = now;
             }
         }
     }
     if (klho.steam && klmm_real && klho.lobby && now - klho.readAt >= 1000) {
         const char *v = ((const char *(__fastcall *)(void *, void *, unsigned __int64, const char *))KLMM_REAL(18))(klmm_real, 0, klho.lobby, "klx_opts");
-        char b[24]; int m, a, s;
+        char b[24]; int m, a, s, bo;
         klho.readAt = now;
-        if (v && klh_rdstr((DWORD_PTR)v, b, sizeof b) && klho_parse(b, &m, &a, &s)) {
-            if (!klho.rok || m != klho.rmap) klog("hostopts: CLIENT read the host's Steam lobby klx_opts=%s", b);
-            klho.rmap = m; klho.rai = a; klho.rsolo = s; klho.rok = 1; klho.rat = now;
+        if (v && klh_rdstr((DWORD_PTR)v, b, sizeof b) && klho_parse(b, &m, &a, &s, &bo)) {
+            if (!klho.rok || m != klho.rmap || bo != klho.rbots) klog("hostopts: CLIENT read the host's Steam lobby klx_opts=%s", b);
+            klho.rmap = m; klho.rai = a; klho.rsolo = s; klho.rbots = bo; klho.rok = 1; klho.rat = now;
+        }
+    }
+    {   /* [BotGate] (klslot.c): the client's level archive was chosen with kls_bg_used; if the host's value differs (heard late) the peers disagree about the Ally squads */
+        static int warned = -2;
+        if (kls_bg_used >= 0 && klho.rok && klho.rbots >= 0 && klho.rbots != kls_bg_used && warned != klho.rbots) {
+            warned = klho.rbots;
+            klog("botgate: MISMATCH - this client loaded the level with Ally bots %s but the host says %s (heard after the load?): restart the round after both sides show 'CLIENT heard' in the lobby", kls_bg_used ? "ON" : "OFF", klho.rbots ? "ON" : "OFF");
         }
     }
     if (klho.rok && klho.applied != klho.rmap) {
@@ -210,7 +223,7 @@ static void klho_tick(int game_thread)
 static void klho_init(void)
 {
     klho.on = GetPrivateProfileIntA("HostOpts", "Enable", 0, klh_ini) != 0;
-    klho.applied = -1;
+    klho.applied = -1; klho.rbots = -1;
     if (!klho.on) return;
     klho.steam = GetPrivateProfileIntA("HostOpts", "Steam", 1, klh_ini) != 0;
     klho.udp = GetPrivateProfileIntA("HostOpts", "Udp", 1, klh_ini) != 0;
