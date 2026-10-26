@@ -176,6 +176,7 @@ BOXES19 = {
 }
 REPS = 12
 SETTLES = (1000, 2500, 4000)
+ANGLES20 = (0, 30, -30, 60, -60, 15)     # COVER20 walk-in angles off the face normal, degrees (see block19)
 BLOCK19_MS = 1500 + 1500 + 4000 + 2500 + 600 + 2000 + 3000     # two run-up teles, goto, mean settle, the waits of one repetition
 RUN_UP = 200    # GUESS: tele this far OUT of the face (along face_normal), then walk in; 200 is room for the heading to settle, small enough to stay on the same floor
 
@@ -229,11 +230,18 @@ def block19(tag, t, reps):
     <tag>r<n> keep cover14_verdict.py's per-block parsing: each repetition is its own block."""
     sx, g, sz = t['stand']; nx, nz = t['face_normal']
     fx, fz = sx - 50 * nx, sz - 50 * nz
-    rx, rz = sx + RUN_UP * nx, sz + RUN_UP * nz
     r = lambda v: int(round(v))
     out = []
     for i in range(reps):
         st = SETTLES[i % len(SETTLES)]; k = '%sr%d' % (tag, i + 1)
+        # COVER20 (10-26 15:40): COVER19 DM01B K6_13 entered cover only on rep 1 (heading -115, flag 1); reps 2-11 and all of K6_10 walked in
+        # straight along the normal (heading exactly -90 / 90), read [P+2d60]=0 on all 63 peeks and were NO. So the run-up point is turned
+        # about the face point by ANGLES20[i]: the walk-in heading is then that many degrees off the normal.
+        a = math.radians(ANGLES20[i % len(ANGLES20)] if TAG == 'COVER20' else 0)
+        ux, uz = nx * math.cos(a) - nz * math.sin(a), nx * math.sin(a) + nz * math.cos(a)
+        rx, rz = fx + (50 + RUN_UP) * ux, fz + (50 + RUN_UP) * uz
+        if TAG == 'COVER20':
+            out.append('log %s approach %d deg off the face normal' % (k, ANGLES20[i % len(ANGLES20)]))
         # 10-26 15:30 (workflow woorpztbk, refuter agreed): a tele straight onto a stand point can be refused by the placement 0x82cc40 -
         # COVER19 DM06 K6_22: the node took (4673,269,-10909), the body (+0x460) stayed at (5894,-2234,4116) for all 12 reps, and the same
         # target MISSED in COVER14-16 too. COVER17/18 reached it by tele to the run-up point + goto: same here, then the settle.
@@ -266,7 +274,7 @@ def block19(tag, t, reps):
 def pick17(map_id, tiles):
     by = dict((t['name'], t) for t in tiles)
     out = []
-    for nm in {'COVER18': BOXES18, 'COVER19': BOXES19}.get(TAG, BOXES17)[map_id]:
+    for nm in {'COVER18': BOXES18, 'COVER19': BOXES19, 'COVER20': BOXES19}.get(TAG, BOXES17)[map_id]:
         ctl = nm.endswith('*'); nm = nm.rstrip('*')
         if nm not in by: raise SystemExit('%s: box %s not in the plan' % (map_id, nm))
         out.append((by[nm], ctl))
@@ -278,7 +286,7 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
     tiles = json.load(open(plan))
     sel, msg = selection_part(os.path.join(out, map_id + '.ini'))
     ctls = {}
-    if TAG in ('COVER17', 'COVER18', 'COVER19'):
+    if TAG in ('COVER17', 'COVER18', 'COVER19', 'COVER20'):
         pk = pick17(map_id, tiles); ch = [t for t, _ in pk]; ctls = dict((t['name'], c) for t, c in pk)
     else:
         ch = choose(tiles, n)
@@ -303,12 +311,12 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
     s += ['log === ' + TAG + ': idle %d s at the spawn (coverdump dumps after the list is stable 2 s) ===' % (IDLE_MS // 1000), 'wait %d' % IDLE_MS, 'pos idle-end']
     reps = min(REPS, (380000 - LEAD_WAIT - IDLE_MS) // (BLOCK19_MS * max(1, len(ch))))
     for i, t in enumerate(ch):
-        if TAG == 'COVER19':
+        if TAG in ('COVER19', 'COVER20'):
             s += block19('k%d' % (i + 1), t, reps)
         else:
             s += block('k%d' % (i + 1), t, ctls.get(t['name'], False)) if TAG in ('COVER17', 'COVER18') else block16('k%d' % (i + 1), t)
     s += ['log ' + TAG + '_%s DONE' % map_id, 'pass 1000']
-    if TAG == 'COVER19':
+    if TAG in ('COVER19', 'COVER20'):
         total = LEAD_WAIT + IDLE_MS + BLOCK19_MS * reps * len(ch)
     else:
         total = LEAD_WAIT + IDLE_MS + (BLOCK17_MS + (3300 if TAG == 'COVER18' else 0) if TAG in ('COVER17', 'COVER18') else BLOCK_MS) * len(ch)
@@ -332,7 +340,7 @@ def main(argv):
         elif argv[i] == '--plans': plans = argv[i + 1]; i += 2
         else: maps.append(argv[i]); i += 1
     if maps == ['all']:
-        maps = list({'COVER18': BOXES18, 'COVER19': BOXES19, 'COVER17': BOXES17}.get(TAG, MAPS))
+        maps = list({'COVER18': BOXES18, 'COVER19': BOXES19, 'COVER20': BOXES19, 'COVER17': BOXES17}.get(TAG, MAPS))
     for m in maps:
         p, ch, total = build(m, n, out, plans)
         print('%s -> %s (%d blocks, ~%d s after load)' % (m, p, len(ch), total // 1000))
