@@ -72,6 +72,18 @@ Not for the next night: P4, two UCCs, the cooldown.
 5. Sabotage first: early police wave or van hold? [early wave, DD01 only]
 6. False pings on, and how often? [off until P1-P3 are proven live]
 
+## OWNER DECISIONS (Josh, 2026-10-26 14:06; these replace the defaults above)
+1. Reveal: ONLY by a key the UCC presses himself. Killing / downing does not reveal him.
+2. Police AI treat the hidden UCC like a heister (P2 aim byte: yes). NEW RULE: while hidden, the UCC's hits on
+   heisters can only DOWN them, never kill ("you can tell he's not trying to kill, just harm"). Read: does this cap
+   apply after the reveal too? Not stated; GUESS hidden only, ask at the next check-in.
+3. Reward for a criminal killing the UCC: 200,000 while hidden, 400,000 once revealed (stock 100,000 at +0x674).
+4. Two UCCs: yes, and the two KNOW each other (each sees the other as FED). Still needs lobbies above 8 (P5 blocker).
+5. Sabotage: look into ALL THREE (early police wave, van hold, door jam).
+6. Suspicion messages: ON, and heisters can also raise them themselves (an accuse key naming a player), next to the
+   host's random fake pings.
+Consequence: P6 becomes a key only; the "down not dead" cap is new work (damage path, FA downed state) = P7.
+
 ## Rebalance levers that exist today as data (item 5)
 - Round time: lobby row 3..5 min, `[Lobby] TimeMax / TimeMin` (kllobbyopt.c); replicated `m_fRoundTime`.
 - Rounds: 3..5 (C&R floor 4 step 2), `[Lobby] RoundsMax`; `m_iNumRounds`.

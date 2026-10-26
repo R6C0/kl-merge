@@ -1,3 +1,7 @@
+2026-10-26 ~14:10 - OWNER answered the six UCC questions (re/ucc_design.md "OWNER DECISIONS"): reveal by own key only;
+police shoot the hidden UCC; his hits only DOWN heisters while hidden; bounty 200k hidden / 400k revealed; two UCCs who
+know each other; research all three sabotages; suspicion pings on plus a heister accuse key. Cloud session building/researching.
+
 2026-10-26 ~14:10 - BOS_DD06 PASS but 0/7 boarded (8 stacks, 5.5M). The round is 240 s; every bot had money 14 s in, but the exit trigger is ~180 m away and the bots WALKED (~0.7 m/s, 3 x 90 s give-up/retry).
 No bot reached it, so nobody called; the van came on its own at clock 1.6 s and left after 12 s with them 60-130 m out.
 Fix: [BotFill] OnlineExitSprint=1 (recommended on): before each exit/box order the bot's defend block gets move style Sprint (+0xc = 2, +0x10 = 1, as the Defend goal writes at 0x686b96; GUESS Sprint = 2 from the kl_rtp enum), undone on back-to-idle.
