@@ -35,6 +35,7 @@ static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near =
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
 static int klbf_ot_vstate = 1, klbf_ot_late = 75; static DWORD klbf_ot_calledAt;      /* [BotFill] OnlineVanState (BO9: the van node stays at the origin, so "van here" must come from [rules+0x1dc]), OnlineLateExit (s of clock left) */
+static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [BotFill] OnlineBoxWalk, OnlineBoard, OnlineBoxProbe (the ZAllyEscapeBox block below) */
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
@@ -94,6 +95,10 @@ static void klbf_init(void)
     klbf_ot_vcall = GetPrivateProfileIntA("BotFill", "OnlineVanCall", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_vstate = GetPrivateProfileIntA("BotFill", "OnlineVanState", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_late = (int)GetPrivateProfileIntA("BotFill", "OnlineLateExit", 75, klh_ini); if (klbf_ot_late < 0) klbf_ot_late = 0; if (klbf_ot_late > 200) klbf_ot_late = 200;      /* (recommended on) GUESS 75 s: 30 s door cutoff + 25 s walk + 20 s slack */
+    klbf_ot_bwalk = GetPrivateProfileIntA("BotFill", "OnlineBoxWalk", 1, klh_ini) != 0;      /* (recommended on) */
+    klbf_ot_board = GetPrivateProfileIntA("BotFill", "OnlineBoard", 0, klh_ini) != 0;      /* (recommended off until a live run shows the bot vanishes on every screen) */
+    klbf_ot_bprobe = GetPrivateProfileIntA("BotFill", "OnlineBoxProbe", 1, klh_ini) != 0;      /* (recommended on: log only) */
+    if (klbf_ot) klog("botfill: OnlineTactics box: OnlineBoxWalk=%d (recommended on), OnlineBoard=%d (recommended off until tested), OnlineBoxProbe=%d (log only)", klbf_ot_bwalk, klbf_ot_board, klbf_ot_bprobe);
     if (klbf_ot) klog("botfill: OnlineTactics van/late: OnlineVanState=%d (recommended on), OnlineLateExit=%d s (recommended 75; 0 = off)", klbf_ot_vstate, klbf_ot_late);
     if (klbf_ot) klog("botfill: OnlineTactics extras: OnlineHealthMul=%d (recommended 5 with OnlineCopToBot 5 = stock Arcade level 1 survival; 1 = off), OnlineTacticsGuard=%.0f m (recommended 25; 0 = off), OnlineTacticsVan=%d (recommended on)",
                       klbf_ot_hmul, klbf_ot_guard / 100, klbf_ot_van);
@@ -123,7 +128,7 @@ static void klbf_init(void)
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 #define KLBF_OT_GUARDWAIT 30000   /* ms a bot holds while every free stack is guarded (OnlineTacticsGuard) before it takes the nearest guarded one */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt; } klbf_ob[KLBF_OT_BOTS];
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt; } klbf_ob[KLBF_OT_BOTS];
 static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
 
@@ -192,7 +197,85 @@ static int klbf_ot_call_van(DWORD rules, int who)
     return 1;
 }
 
+/* OnlineBoxWalk / OnlineBoard (2026-10-26, from the 1026za research, static reading of kl2.exe; NOT run live). Arcade bots board through ZAllyEscapeBox
+   (vtable 0xbc7f6c, update 0x907a50): box + crew record + rules slot 45, all gated on Arcade state (0x7f6850 false for session roles 2/3, 0x508ef0 null, Sv slot 45
+   0x6c6c10 takes players only), so no stock hop can run online. What CAN be done with game calls and data: (1) walk the bots to the BOX (not the exit trigger, which
+   lies ~570 cm from the DM01 box, BO9 vs build/r_tab/DM01/bots.txt) once the van is called; (2) decide inside = the game's own 0x758cb0(box, actor) (klmove.c KLMV_INSIDE,
+   geometry only, ret 4); (3) OnlineBoard: call 0x89c890(actor) (__thiscall, no args, plain ret) = what 0x907a50 does for a boarded bot: 0x8d2e20(squad, 0) on the bot's one-man
+   squad hides/removes it. No role gate in either (read). NOT done: [actor+0x8f0] (squad living count, fed/hunt only), crew records, money (the host tally stays the tally).
+   GUESS ~60%: 0x89c890 behaves online on the host; GUESS ~35%: the clients' puppets vanish too (KLSY2 records may keep it standing). Read-only scan of the private memory for
+   the stock vtable (nothing is wrapped: klmove.c's BoardNear is Arcade-only). */
+#define KLBF_BX_MAX 8
+#define KLBF_BX_BOARD 0x0089c890      /* void __thiscall (actor): squad removal for an escaped bot */
+#define KLBF_BX_SQUAD 0x008d2e20      /* its callee, head checked only */
+static struct { DWORD at, ent; } klbf_bx[KLBF_BX_MAX]; static int klbf_ot_nbx, klbf_ot_bxlooks, klbf_ot_bxbest = -1; static DWORD klbf_ot_bxAt;
+/* the frame of box i (re-read each time; the object is checked to still be the box we found) */
+static int klbf_ot_box_frame(int i, struct klmv_fr *f)
+{
+    if (i < 0 || i >= klbf_ot_nbx || !klbf_bx[i].at || klh_rd32(klbf_bx[i].at) != KLMV_ALLY_VT || klh_rd32(klbf_bx[i].at + 0x24) != klbf_bx[i].ent) return 0;
+    return klmv_frame(klbf_bx[i].ent, f);
+}
+static void klbf_ot_boxscan(DWORD now)
+{
+    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD t0 = GetTickCount(); int i; float bd = 1e30f;
+    klbf_ot_bxAt = now; klbf_ot_bxlooks++; klbf_ot_nbx = 0; klbf_ot_bxbest = -1;
+    while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
+        if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
+            SIZE_T o, j;
+            for (o = 0; o < mbi.RegionSize; o += sizeof buf) {
+                SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
+                if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
+                for (j = 0; j + 4 <= n; j += 4) {
+                    DWORD at, ent, evt, node; float p[3];
+                    if (*(DWORD *)(buf + j) != KLMV_ALLY_VT || klbf_ot_nbx >= KLBF_BX_MAX) continue;
+                    at = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + j);
+                    if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi || !(node = klh_rd32(ent + 4)) || !kle_node(node, p, 0)) continue;      /* as klmv_scan: a real one has its entity at +0x24 */
+                    klbf_bx[klbf_ot_nbx].at = at; klbf_bx[klbf_ot_nbx].ent = ent; klbf_ot_nbx++;
+                }
+            }
+        }
+        a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+    }
+    for (i = 0; i < klbf_ot_nbx; i++) {      /* the box the bots walk to: the one nearest the exit trigger (GUESS: the van's boarding box is beside the trigger; any box takes a bot aboard in the stock rule) */
+        struct klmv_fr f; float d;
+        if (!klbf_ot_box_frame(i, &f)) continue;
+        d = klbf_ot_vh ? kle_dist(f.T, klbf_ot_tpos) : 0;
+        klog("botfill: tactics: box %d: ZAllyEscapeBox %08lx entity %08lx centre (%.0f, %.0f, %.0f), %s half (%.0f, %.0f, %.0f), %.0f m from the exit trigger", i, klbf_bx[i].at, klbf_bx[i].ent, f.T[0], f.T[1], f.T[2], f.box ? "BOX" : "POINT (no box primitive)", f.half[0], f.half[1], f.half[2], d / 100);
+        if (d < bd) { bd = d; klbf_ot_bxbest = i; }
+    }
+    klog("botfill: tactics: box scan: %d ZAllyEscapeBox object(s) in %lu ms, bots will walk to box %d%s", klbf_ot_nbx, GetTickCount() - t0, klbf_ot_bxbest, klbf_ot_nbx ? "" : " (none: the bots stay at the exit trigger as before; retried 3 more times)");
+}
+/* is the bot inside the box: the game's own test 0x758cb0 when its head is the one read, else the frame's distance */
+static int klbf_ot_inside(int bi, const struct klmv_fr *f, DWORD actor, const float pos[3], int *byGame)
+{
+    static const BYTE head[16] = { 0x83, 0xec, 0x10, 0xd9, 0xee, 0x56, 0x57, 0xd9, 0x54, 0x24, 0x14, 0x8b, 0x7c, 0x24, 0x1c, 0xd9 };      /* 0x758cb0 */
+    if (klb_same_code(KLMV_INSIDE, head, sizeof head)) { *byGame = 1; return ((char (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)KLH_VA(KLMV_INSIDE))((void *)(DWORD_PTR)klbf_bx[bi].at, 0, actor) != 0; }
+    *byGame = 0; return f->box && klmv_fr_dist(f, pos) <= 0;
+}
+/* OnlineBoard: 0x907a50's own removal of a boarded bot, nothing else of it. 1 = called. */
+static int klbf_ot_board_call(DWORD actor)
+{
+    static const BYTE h1[16] = { 0x81, 0xec, 0x80, 0x00, 0x00, 0x00, 0x56, 0x8b, 0xf1, 0x8b, 0x86, 0x7c, 0x07, 0x00, 0x00, 0x85 };      /* 0x89c890 */
+    static const BYTE h2[16] = { 0x55, 0x8b, 0xec, 0x51, 0x53, 0x56, 0x57, 0x8b, 0xf9, 0x8b, 0x8f, 0xa4, 0x01, 0x00, 0x00, 0x85 };      /* 0x8d2e20 */
+    DWORD sol;
+    if (!klb_same_code(KLBF_BX_BOARD, h1, sizeof h1) || !klb_same_code(KLBF_BX_SQUAD, h2, sizeof h2) || klh_avt(actor) != 0x00bb3bac) return 0;
+    if (!(sol = klh_rd32(actor + 0x77c)) && !(sol = klh_rd32(actor + 0x780))) return 0;      /* 0x89c890 would int3 on both null (0x89c8b7) */
+    if (!klh_rd32(sol + 0x4f4)) return 0;      /* no squad: it does nothing */
+    ((void (__fastcall *)(void *))(DWORD_PTR)KLH_VA(KLBF_BX_BOARD))((void *)(DWORD_PTR)actor);
+    return 1;
+}
+
 static int klbf_ot_has(const DWORD *a, int n, DWORD v) { int i; for (i = 0; i < n; i++) if (a[i] == v) return 1; return 0; }
+
+/* OnlineBoxProbe (log only): where the van really is, for the next BO run. BO9: the ZAnimatedVehicle node stays at (0,0,0); GUESS: its group [rules+0x1e4] or the boarding object [rules+0x1e0] carries the place */
+static void klbf_ot_vprobe(DWORD rules, int vstate)
+{
+    DWORD g = klh_rd32(rules + 0x1e4), bo = klh_rd32(rules + 0x1e0), n; float gp[3] = { 0, 0, 0 }, bp[3] = { 0, 0, 0 }; int gv = 0, bv = 0; struct klmv_fr f; float bd = -1;
+    if (g && (n = klh_rd32(g + 4))) gv = kle_node(n, gp, 0);
+    if (bo && (n = klh_rd32(bo + 4))) bv = kle_node(n, bp, 0);
+    if (bv && klbf_ot_box_frame(klbf_ot_bxbest, &f)) bd = kle_dist(f.T, bp);
+    klog("botfill: tactics: van probe: state %d, group [+0x1e4] %08lx at %s(%.0f, %.0f, %.0f), boarding object [+0x1e0] %08lx at %s(%.0f, %.0f, %.0f), %.0f m from the chosen box centre (-1 = unknown)", vstate, g, gv ? "" : "NONE ", gp[0], gp[1], gp[2], bo, bv ? "" : "NONE ", bp[0], bp[1], bp[2], bd < 0 ? -1.0f : bd / 100);
+}
 
 static void klbf_ot_summary(void)
 {
@@ -213,7 +296,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     if (sm != (DWORD)klbf_ot_sm || !klbf_ot_in) {      /* a new session / round */
         if (klbf_ot_in) klbf_ot_summary();
         memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
-        klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = klbf_ot_lookAt = 0; klbf_ot_trig_looked = klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0;
+        klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = klbf_ot_lookAt = 0; klbf_ot_trig_looked = klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_ot_nbx = klbf_ot_bxlooks = 0; klbf_ot_bxbest = -1; klbf_ot_bxAt = 0;
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
@@ -273,7 +356,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klh_rd(rules + 0x1dc, &v, 1)) vstate = v;
         if (klh_rd(rules + 0x4c, &c, 4) && klb_finite(c) && c >= 0 && c < 100000.0f) left = c;
         if (lastr != klbf_ot_rounds) { lastr = klbf_ot_rounds; lastv = 0xff; }
-        if (vstate >= 0 && vstate != lastv) { if (lastv != 0xff) klog("botfill: tactics: van state %u -> %d (clock left %.1f s, called %d, +%lu s since the call)", lastv, vstate, left, klbf_ot_called, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0); lastv = (BYTE)vstate; }
+        if (vstate >= 0 && vstate != lastv) { if (lastv != 0xff) klog("botfill: tactics: van state %u -> %d (clock left %.1f s, called %d, +%lu s since the call)", lastv, vstate, left, klbf_ot_called, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0); lastv = (BYTE)vstate; if (klbf_ot_bprobe) klbf_ot_vprobe(rules, vstate); }
     }
     if (!van && rules) {   /* [rules+0x1e4] = the escape vehicle (0x70f0a0, PROVEN), 0 until the vehicle is called (0x71e180 -> 0x84f030 fills the list slot 89 reads) */
         struct kle_veh v; float vp[3];
@@ -292,6 +375,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (klbf_ot_vh) klbf_ot_trig_looked = 1;
         }
     }
+    if (klbf_ot_bwalk && klbf_ot_vh && !klbf_ot_nbx && klbf_ot_bxlooks < 4 && (!klbf_ot_bxAt || now - klbf_ot_bxAt >= 20000)) klbf_ot_boxscan(now);      /* once the trigger is known (a bot carries money), the boxes; a miss is retried every 20 s, 4 looks a round */
     {   /* once per round, and again whenever the bot count changes: what the scan saw (BO2 gave no order and no clue why) */
         static int seen_round, seen_nb = -1, seen_nm = -1; static DWORD seen_van = 1;
         if (seen_round != klbf_ot_rounds || seen_nb != nb || seen_nm != nm || seen_van != van) { seen_round = klbf_ot_rounds; seen_nb = nb; seen_nm = nm; seen_van = van; klog("botfill: tactics: scan: %d objects, %d live Ally bot(s), %d armed stack(s) of %d money object(s), van %08lx (%d vehicle(s); one at the origin = not here yet)", n, nb, nm, nmoney, van, nvan); }
@@ -305,7 +389,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         }
     }
     for (b = 0; b < nb; b++) {
-        int s, j, best = -1; float bd = 1e30f, tgt[3], got[3]; struct kle_e t; DWORD a = bots[b].actor;
+        int s, j, best = -1; float bd = 1e30f, tgt[3], got[3]; struct kle_e t; struct klmv_fr t_bf; DWORD a = bots[b].actor;
         for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != a; s++) ;
         if (s == KLBF_OT_BOTS) { for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor; s++) ; if (s == KLBF_OT_BOTS) continue; klbf_ob[s].actor = a; }
         if (klbf_ob[s].phase == 3) continue;
@@ -361,14 +445,26 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             }
         }
         if (klbf_ob[s].phase == 2) {
-            const float *g = van ? vpos : klbf_ot_tpos;
+            struct klmv_fr bf; int bxOn = klbf_ot_bwalk && klbf_ot_called && klbf_ot_box_frame(klbf_ot_bxbest, &bf);      /* OnlineBoxWalk: once the van is called the goal is the ZAllyEscapeBox, not the trigger */
+            const float *g = bxOn ? bf.T : van ? vpos : klbf_ot_tpos;
             float dd = (float)sqrt((bots[b].pos[0] - g[0]) * (bots[b].pos[0] - g[0]) + (bots[b].pos[2] - g[2]) * (bots[b].pos[2] - g[2]));
-            if (van && dd <= 2 * klbf_ot_near) {
+            if (bxOn && !(klbf_ob[s].told & 32)) { klbf_ob[s].told |= 32; klbf_ob[s].ordered = 0; klog("botfill: tactics: bot %d (actor %08lx): van called, walks to the escape box %d at (%.0f, %.0f, %.0f), %.0f m away", s, a, klbf_ot_bxbest, bf.T[0], bf.T[1], bf.T[2], dd / 100); }
+            if (bxOn && (!klbf_ot_vstate || vstate == 3 || vstate == 4 || klbf_ot_bprobe)) {
+                int byGame = 0, in = klbf_ot_inside(klbf_ot_bxbest, &bf, a, bots[b].pos, &byGame);
+                if (klbf_ot_bprobe && now - klbf_ob[s].pAt >= 5000) { klbf_ob[s].pAt = now; klog("botfill: tactics: box probe: bot %d (actor %08lx) %.1f m from the box centre (frame distance %.1f m), inside %d (%s), van state %d, +%lu s since the call", s, a, dd / 100, klmv_fr_dist(&bf, bots[b].pos) / 100, in, byGame ? "game 0x758cb0" : "frame", vstate, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0); }
+                if (in && (vstate == 3 || vstate == 4 || (!klbf_ot_vstate && van))) {      /* OnlineVanState off: the old rule, the van's node known and the bot at it */
+                    klbf_ob[s].phase = 3;
+                    klog("botfill: tactics: bot %d (actor %08lx) BOARDED in the escape box (van state %d, inside by %s): tally %d; OnlineBoard %s", s, a, vstate, byGame ? "0x758cb0" : "the frame", klbf_ob[s].tally,
+                         !klbf_ot_board ? "off (host tally only, bot stays)" : klbf_ot_board_call(a) ? "-> 0x89c890 called (squad removal; watch the census and the clients)" : "-> refused (code head / actor / squad check): host tally only");
+                    continue;
+                }
+            }
+            if (van && !bxOn && dd <= 2 * klbf_ot_near) {
                 klbf_ob[s].phase = 3;
                 klog("botfill: tactics: bot %d (actor %08lx) BOARDED (hook tally only, nothing removed in the game): tally %d", s, a, klbf_ob[s].tally);
                 continue;
             }
-            if (!van && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= 400.0f) {      /* OnlineVanState: BO9's van node stayed at the origin, so the waiting state + the bot at the exit box counts as aboard */      /* GUESS: the exit trigger's box is where the van's boarding box is */
+            if (!van && !bxOn && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= 400.0f) {      /* OnlineVanState: BO9's van node stayed at the origin, so the waiting state + the bot at the exit box counts as aboard */      /* GUESS: the exit trigger's box is where the van's boarding box is */
                 klbf_ob[s].phase = 3;
                 klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineVanState; hook tally only, %.0f m from the exit trigger): tally %d", s, a, vstate, dd / 100, klbf_ob[s].tally);
                 continue;
@@ -390,7 +486,8 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (klbf_ob[s].phase == 1) {
                 DWORD ent, node;
                 if (!(ent = klh_rd32(klbf_ob[s].target + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, tgt, 0)) continue;
-            } else if (van) memcpy(tgt, vpos, 12);
+            } else if (klbf_ot_bwalk && klbf_ot_called && klbf_ot_box_frame(klbf_ot_bxbest, &t_bf)) memcpy(tgt, t_bf.T, 12);      /* OnlineBoxWalk */
+            else if (van) memcpy(tgt, vpos, 12);
             else if (klbf_ot_vh) memcpy(tgt, klbf_ot_tpos, 12);      /* OnlineTacticsVan: to the exit box first, where the call is made */
             else continue;      /* never order a walk to the (0,0,0) default */
             memset(&t, 0, sizeof t); t.rec = -1; t.actor = a; t.soldier = bots[b].soldier; t.told_soft = 1;

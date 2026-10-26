@@ -269,6 +269,7 @@ static void klsy_walk(int pass, klsy_fn f, void *ctx)
 }
 
 struct klsy_pr { int n, max, lines; };
+static int klsy_vanprobe = 1;      /* [Sync] VanProbe: with Probe, the van's real state/place next to the ZAnimatedVehicle line (log only) */
 static void klsy_line(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
 {
     struct klsy_pr *c = (struct klsy_pr *)ctx; float pos[3] = { 0, 0, 0 }, hp = -1; int hv = 0, team = -1; char ps[64];
@@ -280,6 +281,17 @@ static void klsy_line(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
        other kinds: none yet (the first bench shows which kinds differ at all, then a state field is picked per kind) */
     if (kind == 0) { BYTE fl = 0; klh_rd(o + 0x5cd, &fl, 1); klog("sync: s=%lu c=%s t=%d p=%s hp=%.0f f=%02x", (unsigned long)slot, nm, team, ps, hp, fl); }
     else klog("sync: s=%lu c=%s t=- p=%s hp=- f=-", (unsigned long)slot, nm, ps);
+    if (klsy_vanprobe && kind != 0 && !strcmp(nm, "ZAnimatedVehicle")) {      /* BO9: this object's node reads (0,0,0) all round; GUESS: the group [rules+0x1e4] / boarding object [rules+0x1e0] carry the place (klescort.c kle_veh_read) */
+        DWORD s0 = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), hd, rules = 0, g, bo, nd; BYTE st = 0, b22 = 0; float gp[3] = { 0, 0, 0 }, bp[3] = { 0, 0, 0 }, h14 = -1; int gv = 0, bv = 0;
+        if (s0 && klh_rd32(s0 + 0x5c) == 4 && (hd = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4)))) rules = klh_rd32(hd + 0x54);      /* as klbotfill.c: the FA rules */
+        klh_rd(o + 0x14, &h14, 4); klh_rd(o + 0x22, &b22, 1);
+        if (rules) {
+            klh_rd(rules + 0x1dc, &st, 1); g = klh_rd32(rules + 0x1e4); bo = klh_rd32(rules + 0x1e0);
+            if (g && (nd = klh_rd32(g + 4))) gv = kle_node(nd, gp, 0);
+            if (bo && (nd = klh_rd32(bo + 4))) bv = kle_node(nd, bp, 0);
+            klog("sync: van probe: s=%lu state=%u +0x14=%.1f +0x22=%02x group %08lx %s(%.1f,%.1f,%.1f) boarding %08lx %s(%.1f,%.1f,%.1f)", (unsigned long)slot, st, h14, b22, g, gv ? "" : "NONE ", gp[0], gp[1], gp[2], bo, bv ? "" : "NONE ", bp[0], bp[1], bp[2]);
+        } else klog("sync: van probe: s=%lu no FA rules object (+0x14=%.1f +0x22=%02x)", (unsigned long)slot, h14, b22);
+    }
     c->lines++;
 }
 
@@ -828,6 +840,7 @@ static void ksp_pass(void)
 static void klsy_init(void)
 {
     klsy.on = GetPrivateProfileIntA("Sync", "Probe", 0, klh_ini);
+    klsy_vanprobe = GetPrivateProfileIntA("Sync", "VanProbe", 1, klh_ini) != 0;      /* (recommended on, log only; needs Probe) */
     klsy.share = GetPrivateProfileIntA("Sync", "Share", 0, klh_ini) != 0;
     klsy.cmp = GetPrivateProfileIntA("Sync", "Compare", 0, klh_ini) != 0;
     klsy.every = (DWORD)GetPrivateProfileIntA("Sync", "Every", 3000, klh_ini); if (klsy.every < 500) klsy.every = 500;
