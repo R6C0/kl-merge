@@ -64,6 +64,21 @@
 #define KLRIGID_C
 
 #include <math.h>
+#include "kldown_hold.h"   /* kldh_ev / kldh_kf / kldh_filter_events: the pure key filter [Down] MashHoldHow=2 uses (guarded; kldown.c includes it again) */
+
+/* ---- KEYBOARD COVER-KEY FILTER (2026-10-26, for kldown.c [Down] MashHoldHow=2; re\down_online_built.md) --------------------------------------
+   SHIP and TEST alike (klauto.c is TEST only, so the filter lives here, in the proxy this file already puts between the game and dinput8).
+   A NO-OP unless kldown.c ARMED it at start-up (klkf_armed: [Down] Enable=1 Online=1 MashHold=1 MashHoldHow=2): until then the keyboard device is
+   not even wrapped. Armed, the proxy passes everything through unless klkf_scan is non-zero; kldown.c sets it (to the DIK scan code of the Cover key)
+   only while its hold is on, and clears it on EVERY release path. While it is set the game's buffered keyboard read (GetDeviceData, which the game
+   uses: klauto.c notes ZKeyboardWintel reads GetDeviceData(dev, 0x14, buf, &count = 0x100, 0)) does not see that key's events, and GetDeviceState
+   shows it up. Nothing else about the device changes. The press the game never saw has its release dropped too (kldh_filter_events), and a key
+   that was already down when the hold began keeps its release (so the game is never left with a key it thinks is down).
+   GUESS: the game reads the keyboard only through those two calls (no raw input / window messages for the Cover action). */
+static volatile LONG klkf_scan;          /* DIK scan code to hide now; 0 = off */
+static int klkf_armed;                   /* set once by kldown.c before the game creates DirectInput */
+static struct kldh_kf klkf_k;            /* which press this filter dropped (so its release goes too) */
+static const GUID krg_syskbd = { 0x6f1d2b61, 0xd5a0, 0x11cf, { 0xbf, 0xc7, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00 } };
 
 #define KRG_PLAYER_VT 0x00bb45f4u
 #define KRG_NPL       28
@@ -234,6 +249,31 @@ static HRESULT WINAPI krg_getstate(krg_px *p, DWORD cb, BYTE *data)
     return hr;
 }
 
+static HRESULT WINAPI krg_kb_getstate(krg_px *p, DWORD cb, BYTE *data)
+{
+    HRESULT hr = ((HRESULT (WINAPI *)(void *, DWORD, BYTE *))KRG_RV(p, 9))(p->real, cb, data);
+    LONG sc = klkf_scan;
+    if (SUCCEEDED(hr) && sc && klkf_armed && data && cb == 256) data[sc & 0xff] = 0;
+    return hr;
+}
+
+static HRESULT WINAPI krg_kb_getdata(krg_px *p, DWORD cb, DWORD *rg, DWORD *count, DWORD flags)
+{
+    HRESULT hr = ((HRESULT (WINAPI *)(void *, DWORD, DWORD *, DWORD *, DWORD))KRG_RV(p, 10))(p->real, cb, rg, count, flags);
+    LONG sc = klkf_scan;
+    if (SUCCEEDED(hr) && klkf_armed && (sc || klkf_k.dropped_down) && cb == sizeof(struct kldh_ev) && rg && count && *count) {
+        __try {
+            struct kldh_kf tmp = klkf_k;            /* DIGDD_PEEK (1) leaves the events in the device's buffer: the second, real read must see the same: do not move the state on a peek */
+            *count = kldh_filter_events((flags & 1) ? &tmp : &klkf_k, (struct kldh_ev *)rg, *count, (DWORD)sc, sc != 0);
+        } __except (EXCEPTION_EXECUTE_HANDLER) { klkf_armed = 0; klkf_scan = 0; klog("down: keyboard filter: fault: filter off (the proxy now passes through)"); }
+    }
+    return hr;
+}
+
+static const void *krg_kb_vt[KRG_DEVSLOTS] = {
+    krg_qi, krg_addref, krg_release, krgd3, krgd4, krgd5, krgd6, krgd7, krgd8, krg_kb_getstate, krg_kb_getdata, krgd11, krgd12, krgd13, krgd14, krgd15,
+    krgd16, krgd17, krgd18, krgd19, krgd20, krgd21, krgd22, krgd23, krgd24, krgd25, krgd26, krgd27, krgd28, krgd29, krgd30, krgd31 };
+
 static const void *krg_dev_vt[KRG_DEVSLOTS] = {
     krg_qi, krg_addref, krg_release, krgd3, krgd4, krgd5, krgd6, krgd7, krgd8, krg_getstate, krgd10, krgd11, krgd12, krgd13, krgd14, krgd15,
     krgd16, krgd17, krgd18, krgd19, krgd20, krgd21, krgd22, krgd23, krgd24, krgd25, krgd26, krgd27, krgd28, krgd29, krgd30, krgd31 };
@@ -247,10 +287,15 @@ KRG_F4(krgi, 4) KRG_F1(krgi, 5) KRG_F2(krgi, 6) KRG_F2(krgi, 7) KRG_F3(krgi, 8) 
 static HRESULT WINAPI krg_create(krg_px *p, const GUID *g, void **out, void *outer)
 {
     HRESULT hr = ((HRESULT (WINAPI *)(void *, const GUID *, void **, void *))KRG_RV(p, 3))(p->real, g, out, outer);
-    if (SUCCEEDED(hr) && out && *out && !outer && g && !memcmp(g, &krg_sysmouse, sizeof krg_sysmouse)) {
+    if (SUCCEEDED(hr) && out && *out && !outer && g && krg.on && !memcmp(g, &krg_sysmouse, sizeof krg_sysmouse)) {
         void *real = *out;
         *out = krg_proxy(real, krg_dev_vt);
         if (*out != real) klog("rigid: mouse device %p: GetDeviceState wrapped (proxy %p)", real, *out);
+    }
+    else if (SUCCEEDED(hr) && out && *out && !outer && g && klkf_armed && !memcmp(g, &krg_syskbd, sizeof krg_syskbd)) {
+        void *real = *out;
+        *out = krg_proxy(real, krg_kb_vt);
+        if (*out != real) klog("down: keyboard device %p: GetDeviceData / GetDeviceState wrapped for the Cover-key hold (proxy %p; passes everything through until the hold is on)", real, *out);
     }
     return hr;
 }
@@ -261,7 +306,7 @@ static const void *krg_di_vt[KRG_DISLOTS] = { krg_qi, krg_addref, krg_release, k
 static void klrigid_di8(void **o)
 {
     void *real;
-    if (!krg.on || !o || !*o) return;
+    if (!(krg.on || klkf_armed) || !o || !*o) return;
     real = *o;
     *o = krg_proxy(real, krg_di_vt);
     if (*o != real) klog("rigid: IDirectInput8 %p: CreateDevice wrapped (proxy %p; the mouse device only is wrapped further)", real, *o);

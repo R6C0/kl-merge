@@ -272,6 +272,98 @@
 #define KLD_ONE        (kld.flop == 1 || kld.flop == 3)      /* one whole clip in the game's fall (kld_flop_one); 3 = the hook draws it from a list */
 #define KLD_KEEPUP     (kld.flop == 1 || (kld.flop == 3 && kld_s.idu < 0))      /* the three get-up words stay the game's */
 
+/* ---- ONLINE (2026-10-26, re\down_online_built.md): [Down] Online=1 / MashHold=1 ------------------------------------------------
+   The part also acts in an ONLINE Fragile Alliance round (FA, Undercover Cop, Cops and Robbers: session role 2 / 3, game type 4, the Sv / Cl
+   rules objects), for THIS machine's own non-police player only, on a stock level and on an expansion level alike. What changes against Arcade
+   (every line is a decision of re\down_online_read_a.md / _b.md; GUESS where it says so):
+     - The fall is the game's own: Flop is forced to 0 online (kld.flop is swapped at run time, kld_o_mode). Nothing in the Flop=3 path is a
+       message - the clip number is written into this machine's own animation pool, and whether a replica plays a clip it did not write was
+       NOT read (read A, Q3: GUESS) - so it falls back to the stock fall and says so in the round line. Never desync on purpose.
+     - The speed-the-clip mash (the channel's frames a second, the two end ticks) is a local write the other machines never see: it does NOT run
+       online. MashHold takes its place: while he falls and lies the GET UP button is kept from the game (bit 0x80 of the input mask, the same
+       dword NoFire writes; it gates every button but reload), a meter fills by the Cover key's presses read from the keyboard / pad (the game's
+       own byte is masked, so it cannot be counted), and when it is full the mask bit goes and the next real press is the STOCK one-press
+       get-up at stock speed: the game's own GettingUp (0x6cd720) goes to the others as it does in any online get-up (kldown_hold.h).
+     - Not online: Vulnerable (the process-wide 'down not dead' switch [0xceb40c] would freeze every player's down state on this machine), the
+       damage-table factors and the point-blank cap (they price hits the SHOOTER's machine makes), the AI heisters' part (Bots).
+     - Kept online: the trigger numbers (the tuning object: the victim's own machine applies them), NoFire (this machine's own input mask), the
+       camera and the tap prompt (the prompt's bar shows the hold meter).
+   The same keys apply on a stock FA map and in private match: nothing here asks which level it is. */
+#include "kldown_hold.h"
+static struct {
+    int online, hold, cur;                     /* keys: Online, MashHold; cur = this pass acts online (kld_o_mode swaps kld.flop with it) */
+    int flop0;                                 /* kld.flop as the ini set it */
+    float need, per, decay; DWORD maxlie;      /* MashNeed (presses), MashPer (meter a press adds), MashDecay (a second), MashMax (ms lying before the hold gives up; 0 = never) */
+    int key, pad; DWORD padbtn;                /* MashKey (virtual key, default 0x43 = C = the game's default TapCover), MashPad (1 = also the pad button MashPadBtn), default 0x1000 = A */
+    struct kldh h;                             /* the pure meter (kldown_hold.h) */
+    DWORD pl, t_find, t_told, rstate, gate_sub; int told, holding, nheld, tkey, tpad, mtold;  /* the local player found online; pass-level state */
+    DWORD hat, hpl; int hset;                  /* the hold bit THIS part set in the input mask: where, on which player, whether it was ours (0x80 was clear) */
+    int hlog_full;                             /* 'the meter is full' said in this down */
+    int how, scan;                             /* MashHoldHow (1 = mask bit 0x80: blocks fire too; 2 = the Cover key / pad A only, default) and the DIK scan code of the Cover key (MashScan / MashKey) */
+    int kset, padhook, padtry, mfall;          /* the Cover filter is set by this part; the pad's XInputGetState import is wrapped; retry count of that wrap; the fire-blocking mask used as the pad fallback (said once) */
+    DWORD padseen, padtick;                    /* GetTickCount of the last pass the pad showed a pressed button (0 = never): the fallback's 'a pad is the active input'; last wrap attempt */
+    float lastdt;
+} kld_o;
+/* klcharonline.c comes AFTER this file: its table / own-body finders are used through these (defined there, static in the same unit) */
+static int klco_table(DWORD sm, DWORD *ents, int *n);
+static int klco_find_own(DWORD ents, int n, DWORD now, DWORD *plOut, int *how);
+static int klco_is_master(DWORD ent);
+/* ---- MashHoldHow=2: hold ONLY the get-up (Cover) input, so a man who lies can still crawl and shoot (the owner: 'feel like arcade'). 2026-10-26.
+   KEYBOARD: klrigid.c's DirectInput proxy hides the Cover key's DIK events from the game's buffered GetDeviceData while klkf_scan is set (this part sets
+   it only while its hold is on, kld_o_release clears it on every release path). The meter never sees the hiding: it reads GetAsyncKeyState, which is
+   user32's own key table and not DirectInput's buffer, so it still counts every press the game is not shown (by API design; not seen live).
+   PAD: kl2.exe imports XINPUT1_3.dll by ORDINAL (read from its import table: ordinals 3 and 2 at 0xb10724 / 0xb10728; ordinal 2 of xinput1_3 is
+   XInputGetState, checked at run time against GetProcAddress by name before anything is written). This part points that one IAT slot at a filter that
+   clears the Cover button's bit (MashPadBtn, default A = 0x1000) from the pad state while the hold is on; triggers, sticks and the other buttons pass.
+   The meter's own pad read goes to the DLL's function directly, not through the exe's IAT, so it sees the real button.
+   GUESS: the game reads the pad ONLY through that import (no DirectInput pad device; ZXInputGameControl is its class name); that A is the Cover / get-up button
+   on a pad (not read). If the IAT slot cannot be wrapped, a pad user keeps the old bit-0x80 hold ONLY while the pad is the active input (pressed in the last
+   5 s) and the log says that this hold also blocks fire. */
+static DWORD (WINAPI *kld_real_xgs)(DWORD, void *);
+static volatile LONG kld_pad_mask;                 /* the pad button bits hidden from the game now; 0 = none (the filter passes everything) */
+static DWORD WINAPI kld_xgs(DWORD idx, void *st)
+{
+    DWORD r = kld_real_xgs ? kld_real_xgs(idx, st) : 1167;     /* 1167 = ERROR_DEVICE_NOT_CONNECTED */
+    LONG m = kld_pad_mask;
+    if (r == 0 && m && st) *(WORD *)((BYTE *)st + 4) &= (WORD)~(WORD)m;      /* XINPUT_STATE: dwPacketNumber +0, Gamepad.wButtons +4 */
+    return r;
+}
+/* Wrap the exe's XInputGetState import (ordinal 2 of xinput1_3.dll). -> 1 done / already, 0 not (yet). Nothing is written unless the ordinal is proven to be the by-name function. */
+static int kld_o_pad_iat(void)
+{
+    BYTE *base = (BYTE *)klh_image(); IMAGE_NT_HEADERS *nt; IMAGE_DATA_DIRECTORY *dd; IMAGE_IMPORT_DESCRIPTOR *d; HMODULE x; void *byname, *byord;
+    if (kld_o.padhook) return 1;
+    if (!base) return 0;
+    x = GetModuleHandleA("xinput1_3.dll");
+    if (!x) return 0;
+    byname = (void *)GetProcAddress(x, "XInputGetState"); byord = (void *)GetProcAddress(x, (LPCSTR)(DWORD_PTR)2);
+    if (!byname || byname != byord) { klog("down: online: pad: ordinal 2 of xinput1_3.dll is not XInputGetState (%p vs %p): the pad is not wrapped", byord, byname); kld_o.padtry = 99; return 0; }
+    nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    dd = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (!dd->VirtualAddress) return 0;
+    for (d = (IMAGE_IMPORT_DESCRIPTOR *)(base + dd->VirtualAddress); d->Name; d++) {
+        IMAGE_THUNK_DATA *nm, *at;
+        if (!d->OriginalFirstThunk || _stricmp((char *)base + d->Name, "xinput1_3.dll")) continue;
+        nm = (IMAGE_THUNK_DATA *)(base + d->OriginalFirstThunk); at = (IMAGE_THUNK_DATA *)(base + d->FirstThunk);
+        for (; nm->u1.AddressOfData; nm++, at++) {
+            void *cur = (void *)(DWORD_PTR)at->u1.Function; DWORD_PTR v = (DWORD_PTR)kld_xgs;
+            if (!IMAGE_SNAP_BY_ORDINAL(nm->u1.Ordinal) || IMAGE_ORDINAL(nm->u1.Ordinal) != 2) continue;
+            if (cur != byname) return 0;                       /* not resolved yet (or another hook sits there): retried, never overwritten blind */
+            kld_real_xgs = (DWORD (WINAPI *)(DWORD, void *))cur;
+            if (klh_poke(&at->u1.Function, &cur, sizeof cur, &v, sizeof v, "XInputGetState")) {
+                kld_o.padhook = 1;
+                klog("down: online: pad: the exe's XInputGetState import (%p) is wrapped: while the hold is on the pad's Cover button 0x%04lx is hidden from the game (triggers, sticks, other buttons pass)", cur, kld_o.padbtn);
+                return 1;
+            }
+            kld_real_xgs = 0;
+            return 0;
+        }
+    }
+    return 0;
+}
+
+#define KLD_MASK_HOLD 0x80                     /* the mask bit that gates every button but reload (0x5fc02c ..: read in the NoFire block's comment) */
+
 /* the trigger numbers of the tuning object: offset, the value the tuning constructor stores (0x526cfe .. 0x526f48), limits */
 static const struct { const char *key; DWORD off; float built, lo, hi; const char *what; } kld_t[KLD_NT] = {
     { "HealthPct",  0x268, 40.0f, 1.0f, 100.0f,  "health per cent at or under which he can go down" },
@@ -1657,7 +1749,10 @@ static void kld_prompt(DWORD pl, DWORD ds, DWORD now)
     int paused = 0, inround = kld_v.state == KLD_ROUND;    /* review 7, S1: a round that runs; the score page (0x1f) and every other state = no prompt */
     if (ds == 0) kld_v.refused = 0;
     if (kld_v.prompt && kld_v.act && pl && !kld_s.dead && !kld.dry && inround) {
-        if (KLD_ONE && ds == 2 && kld_s.fnow && !kld_s.fdone && kld_s.t_land && kld_s.endf > 1.0f) {      /* a knock-down this part drives, from its landing (never the stumble: no landing is set for it) */
+        if (kld_o.cur && kld_o.hold && (ds == 1 || ds == 2)) {      /* ONLINE: the hold-mash meter (kld_o_step): the bar is how full it is; a full one waits for the real press */
+            want = 1; lo = 0; hi = 1;
+            v = kld_o.h.latched ? 1.0f : kld_o.need > 0.01f ? kld_o.h.meter / kld_o.need : 0.0f;
+        } else if (KLD_ONE && ds == 2 && kld_s.fnow && !kld_s.fdone && kld_s.t_land && kld_s.endf > 1.0f) {      /* a knock-down this part drives, from its landing (never the stumble: no landing is set for it) */
             float land = kld_s.f7 >= 0 ? (float)kld_s.f7 : 0.3f * kld_s.endf;
             want = 1; lo = kld.fbase; hi = kld.ftop;
             v = kld_s.endf > land + 1.0f ? (kld_s.lastf - land) / (kld_s.endf - land) : 1.0f;
@@ -1665,7 +1760,7 @@ static void kld_prompt(DWORD pl, DWORD ds, DWORD now)
             want = 1; lo = kld_s.fup ? kld.fbase : kld.base; hi = kld_s.fup ? kld.ftop : kld.top;
             v = kld_s.lastf / kld_s.endf;
         }
-        if (want && kld_v.style == 2) v = hi > lo + 0.01f ? (kld_v.rate - lo) / (hi - lo) : 0.0f;
+        if (want && kld_v.style == 2 && !kld_o.cur) v = hi > lo + 0.01f ? (kld_v.rate - lo) / (hi - lo) : 0.0f;
     }
     if (kld_s.dead) off = "he is dead or out of play"; else if (!kld_v.act || !pl) off = "the part does not act here (a stock level, no Arcade session, a police body, no player)"; else if (!inround) off = "the round does not run any more (the session state is not 0x19: the round's end, the score page)"; else if (ds != 0) off = "the clip is through, or the game took the state over";
     /* the pause menu: the game's tick stands (ASSUMED; live check C4). Review 7, S7: the clock of the test starts
@@ -1900,7 +1995,7 @@ static void kld_rules(DWORD now)
     DWORD pl = kld_v.act ? kld_v.pl : 0, d = 0, ds = 0, ho = 0, tun, R = 0, sw = 0xffffffff, zero = 0;
     float hp = 0, max = 0, cur[2] = { 0, 0 }, want[2]; int down, hpok = 0, need, tok = 0, k, owned = kld_owned(), hurtw, held, pbok; const char *why = "";
     if (!kld.on || !klh_exe_ok) return;
-    need = kld_r.cop != 1.0f || kld_r.crew != 1.0f;
+    need = !kld_o.cur && (kld_r.cop != 1.0f || kld_r.crew != 1.0f);      /* online: the damage table prices hits the SHOOTER's machine makes - never written here (kld_o) */
     if (!kld_r.nofire && !kld_r.hurt && !need && !kld_r.mbits && !kld_r.sw && !kld_r.fon && !kld_r.w[0].at && !kld_r.w[1].at && !kld_r.was && kld_r.pb < 0 && !kld_r.pbon && !kld_r.nothrow) return;
     if (pl && (!(d = klh_rd32(pl + 0x2948)) || klh_rd32(d) != pl || !klh_rd(d + 4, &ds, 4))) pl = 0;
     down = pl && ds != 0 && !kld_s.dead && !kld.dry && kld_v.state == KLD_ROUND;
@@ -1912,9 +2007,9 @@ static void kld_rules(DWORD now)
     /* 3. VULNERABLE, the half that must never be late: the switch back to 1 before anything else of this pass */
     /* review 8, M1: the point-blank cap is wanted for the whole down (before the switch can go off below), and
        Vulnerable waits for it to STAND - a floored man without it is dead at one step of a guard beside him */
-    InterlockedExchange(&kld_r.pbon, down && kld_r.pb >= 0 ? 1 : 0);
+    InterlockedExchange(&kld_r.pbon, down && kld_r.pb >= 0 && !kld_o.cur ? 1 : 0);
     pbok = kld_r.pb < 0 || kld_pb_stands();
-    held = kld_r.hurt && down && KLD_ONE && ds == 2 && kld_s.fnow && !kld_s.fdone && !kld_s.flost && kld_r.beat && kld_r.beat == kld_r.pass;
+    held = kld_r.hurt && down && !kld_o.cur && KLD_ONE && ds == 2 && kld_s.fnow && !kld_s.fdone && !kld_s.flost && kld_r.beat && kld_r.beat == kld_r.pass;
     hurtw = held && pbok;
     if (kld_r.sw && (!hurtw || (need && !kld_r.stand)))
         kld_sw_back(now, why[0] ? why : kld_s.fdone == 1 ? "the clip is through and movement state 5 is written: the game's own frame must run to end the down state" :
@@ -2126,17 +2221,205 @@ static void kld_floor(DWORD pl, DWORD d, DWORD ds, float hp, float max, int hpok
     kld_fl.was = want; kld_fl.hp = hp; kld_fl.last = now;
 }
 
+/* ---- ONLINE: the gate, the local player, the Cover key, the hold (see the block at KLD_KEEPUP) ---------------------------------- */
+
+/* -> 1 when an online Fragile Alliance family round is up on this machine: the rules object [[0x168e9e4]+0x54] is the Sv / Cl one (or klroundkeep /
+   klucc_down's private vtable copy of it: KLH_RULES_SV_OK / KLH_RULES_CL_OK), game type [session+0x5c] is 4. *state = [session+0x70]; *sub = the
+   sub-mode [0x168e59c] (0 FA, 1 Undercover Cop, 2 Cops and Robbers: re\ucc_cnr_owner_request.md). Reads only. A stock Arcade round (the Heist rules
+   object) is klr_arcade's, never this one's. GUESS: the same objects answer on a client as on the host (kl_online() reads them for both). */
+static int kld_o_gate(DWORD *state, DWORD *sub)
+{
+    DWORD sm, gs, rules, vt, mode = 0, s = 0, sb = 0;
+    *state = 0; *sub = 0;
+    if (!kld_o.online || !(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)))) return 0;
+    if (!klh_rd(sm + 0x5c, &mode, 4) || mode != 4 || !klh_rd(sm + 0x70, &s, 4)) return 0;
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4))) || !(rules = klh_rd32(gs + 0x54)) || !(vt = klh_rd32(rules))) return 0;
+    if (!KLH_RULES_SV_OK(vt) && !KLH_RULES_CL_OK(vt)) return 0;
+    klh_rd((DWORD_PTR)KLH_VA(0x0168e59c), &sb, 4);
+    if (sb > 2) return 0;                      /* a sub-mode this part has not seen: left to the game */
+    *state = s; *sub = sb;
+    return 1;
+}
+
+/* THIS machine's own player object online. [gamedata+0x898] / +0x828 (Arcade's) gave no entity of the session table on a client (live bench L3 / L4,
+   klcharonline.c), so klcharonline's finders are used: the session table, then its own-body search (the game's master test 0x9425a0). The answer is kept
+   for 2 s and looked for again after; a failed look is repeated every 300 ms. -> 0 = none (then the part does nothing this pass) */
+static DWORD kld_o_pl(DWORD now)
+{
+    DWORD sm, ents = 0, pl = 0; int n = 0, how = 0;
+    if (kld_o.pl && now - kld_o.t_find < 2000 && klh_rd32(kld_o.pl) == KLD_PLAYER_VT) return kld_o.pl;
+    if (kld_o.t_find && now - kld_o.t_find < 300 && !kld_o.pl) return 0;
+    kld_o.t_find = now;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !klco_table(sm, &ents, &n) || klco_find_own(ents, n, now, &pl, &how) < 0 || !pl || klh_rd32(pl) != KLD_PLAYER_VT) {
+        kld_o.pl = 0;
+        return 0;
+    }
+    if (pl != kld_o.pl) klog("down: online: this machine's own player is %08lx (found by %s)", pl, how == 1 ? "the game's player slot" : "the master test 0x9425a0");
+    kld_o.pl = pl;
+    return pl;
+}
+
+/* Is the Cover key (or the pad button) down now? GetAsyncKeyState and XInput, looked up at run time, only while the game's window is in front
+   (the pattern of kladren.c / klucc.c). The game's own press byte [D+0x2b] cannot be counted: the hold keeps it at 0. GUESS: the owner has not
+   rebound Cover (MashKey says which key); the pad's A (0x1000) is the Cover button on a pad - NOT READ, MashPadBtn changes it. */
+static int kld_o_keydown(void)
+{
+    static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static SHORT (WINAPI *aks)(int); static int tried, xtried;
+    static DWORD (WINAPI *xgs)(DWORD, void *);
+    struct { DWORD pkt; WORD btn; BYTE lt, rt; SHORT lx, ly, rx, ry; } xs;
+    HWND fg; DWORD pid = 0;
+    if (!tried) {
+        HMODULE u = GetModuleHandleA("user32.dll"); tried = 1;
+        if (u) { fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId"); aks = (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState"); }
+    }
+    if (kld_o.pad && !xtried) {
+        HMODULE x = GetModuleHandleA("xinput1_4.dll"); xtried = 1;
+        if (!x) x = GetModuleHandleA("xinput1_3.dll");
+        if (!x) x = LoadLibraryA("xinput1_4.dll");
+        if (!x) x = LoadLibraryA("xinput1_3.dll");
+        if (x) xgs = (DWORD (WINAPI *)(DWORD, void *))GetProcAddress(x, "XInputGetState");
+    }
+    if (!fgw || !wtp || !aks) return -1;
+    if (!(fg = fgw())) return 0;               /* no window in front at this instant (alt-tab, a dialog): no key counts, but the functions exist - not 'no key source' */      /* -1 = no way to read a key: kld_o_step turns the hold off (a held man nobody can free) */
+    wtp(fg, &pid);
+    if (pid != GetCurrentProcessId()) return 0;
+    if (kld_o.key && (aks(kld_o.key) & 0x8000)) return 1;
+    if (kld_o.pad && xgs) { memset(&xs, 0, sizeof xs); if (xgs(0, &xs) == 0) { if (xs.btn) kld_o.padseen = GetTickCount() | 1; if (xs.btn & kld_o.padbtn) return 1; } }      /* xgs is the DLL's own function: the exe's wrapped import is not on this path */
+    return 0;
+}
+
+/* The mask bit 0x80 of THIS player: set it while the meter says hold, take it off when it does not or when the part stops. Only this part's own bit
+   is ever taken off (kld_o.hset), and only where it was set (the same object, the same mask address) - as NoFire's bits. */
+static void kld_o_release_mask(const char *why)
+{
+    DWORD ma = 0, mv = 0, nv;
+    if (!kld_o.hset) return;
+    kld_o.hset = 0;
+    if (kld_mask(kld_o.hpl, &ma, &mv) && ma == kld_o.hat && (mv & KLD_MASK_HOLD)) {
+        nv = mv & ~(DWORD)KLD_MASK_HOLD;
+        if (klh_data((void *)(DWORD_PTR)ma, &nv, 4, "the player's input object: this part's hold bit 0x80 off (MashHold: the GET UP button may reach the game)"))
+            klog("down: online: hold off (%s): the input mask %08lx: %08lx -> %08lx", why, ma, mv, nv);
+    } else klog("down: online: hold off (%s): the bit was set on player %08lx (mask %08lx), that object / mask is not there any more: dropped unwritten", why, kld_o.hpl, kld_o.hat);
+}
+
+static void kld_o_hold_mask(DWORD pl, DWORD now)
+{
+    DWORD ma = 0, mv = 0, nv;
+    if (kld_o.hset && (kld_o.hpl != pl || !kld_mask(pl, &ma, &mv) || ma != kld_o.hat)) { klog("down: online: hold bit of player %08lx (mask %08lx) is another object's now: dropped unwritten", kld_o.hpl, kld_o.hat); kld_o.hset = 0; }
+    if (!kld_mask(pl, &ma, &mv)) {
+        if (!kld_o.mtold) { kld_o.mtold = 1; klog("down: online: MashHold: NO INPUT OBJECT for this player (the lookup of 0x61ef90 finds none): nothing can be held - the get-up is the game's own"); }
+        return;
+    }
+    if (!(mv & KLD_MASK_HOLD)) {
+        nv = mv | KLD_MASK_HOLD;
+        if (klh_data((void *)(DWORD_PTR)ma, &nv, 4, "the player's input object: bit 0x80 (every button but reload is off) while he is down: the GET UP press is held until the mash meter is full (MashHold)")) {
+            kld_o.hset = 1; kld_o.hpl = pl; kld_o.hat = ma;
+            if (!kld_o.nheld++ || kld.log >= 2) klog("down: online: HOLD on, %.2f s after he went down: the input mask %08lx: %08lx -> %08lx (the GET UP press does not reach the game until the meter holds %.1f presses)", (now - kld_s.t_down) / 1000.0f, ma, mv, nv, kld_o.need);
+        }
+    }
+}
+
+/* EVERY release path (death, round end, police body, mode change, MashMax bound, unreadable D, no key source, the meter full, the get-up running) comes
+   here: the Cover key / pad filter off, and the old mask bit off where this part set it. The filter is a plain volatile of klrigid.c / this file, so the
+   fallback thread may clear it too (kld_tick, a stalled game thread). */
+static void kld_o_release(const char *why)
+{
+    if (kld_o.kset || klkf_scan || kld_pad_mask) {
+        klkf_scan = 0; kld_pad_mask = 0; kld_o.kset = 0;
+        klog("down: online: hold off (%s): the Cover key / pad filter is off - the game sees the get-up button again", why);
+    }
+    kld_o_release_mask(why);
+}
+
+/* The hold: MashHoldHow=2 sets the Cover key filter (and the pad button's); the mask bit 0x80 is used for How=1 and, as the pad's fallback, only while
+   a pad is the active input and its import could not be wrapped. */
+static void kld_o_hold_set(DWORD pl, DWORD now)
+{
+    int mask = kld_o.how != 2, pad_fb = 0;
+    if (kld_o.how == 2) {
+        LONG want = kld_o.scan, pm = kld_o.padhook && kld_o.pad ? (LONG)kld_o.padbtn : 0;
+        if (want && klkf_armed) {
+            if (klkf_scan != want || kld_pad_mask != pm) {
+                int first = !kld_o.kset;
+                klkf_scan = want; kld_pad_mask = pm; kld_o.kset = 1;
+                if (first && (!kld_o.nheld++ || kld.log >= 2)) klog("down: online: HOLD on, %.2f s after he went down: the Cover key (DIK 0x%02x) is hidden from the game%s until the meter holds %.1f presses; fire, aim and grenade work while he lies", (now - kld_s.t_down) / 1000.0f, (int)want, pm ? " and the pad's Cover button too" : "", kld_o.need);
+            }
+        } else mask = 1;                                        /* no filter possible (no scan code / the proxy was not armed): the old hold, which blocks fire */
+        if (kld_o.pad && !kld_o.padhook && !mask) pad_fb = kld_o.padseen && now - kld_o.padseen < 5000;
+        if (pad_fb) {
+            mask = 1;
+            if (!kld_o.mfall) { kld_o.mfall = 1; klog("down: online: pad: the XInputGetState import is not wrapped, and a pad is the active input: the bit-0x80 hold is used for this down, so a pad hold ALSO BLOCKS FIRE (GUESS / limit)"); }
+        }
+    }
+    if (mask) kld_o_hold_mask(pl, now);
+    else kld_o_release_mask("the pad is no longer the active input / the filter holds");
+}
+
+/* One pass of the online down for the local player: the meter (kldown_hold.h) from the key, and the mask bit by its answer. ds = [D+4]. alive = he lives
+   and the round runs. Called every pass while this part acts online, also when he is up (it resets the meter and takes our bit off). */
+static void kld_o_step(DWORD pl, DWORD ds, int alive, DWORD now, float dt)
+{
+    int key, hold, edge = 0, was_latched = kld_o.h.latched;
+    if (!kld_o.hold) { kld_o.holding = 0; return; }
+    if (kld_o.how == 2 && kld_o.pad && !kld_o.padhook && kld_o.padtry < 40 && now - kld_o.padtick >= 1000) { kld_o.padtick = now; kld_o.padtry++; kld_o_pad_iat(); }      /* the exe's import may not be resolved at start-up: retried each second, 40 times */
+    key = kld_o_keydown();
+    if (key < 0) {                               /* the key cannot be read: holding would make a man nobody can free */
+        if (!kld_o.tkey) { kld_o.tkey = 1; klog("down: online: MashHold: user32's GetForegroundWindow / GetAsyncKeyState are not there: no key can be counted, so NO HOLD - the get-up is the game's own"); }
+        kld_o_release("no key source"); kld_o.holding = 0; return;
+    }
+    hold = kldh_step(&kld_o.h, ds, key, dt, kld_o.per, kld_o.decay, kld_o.need, now, kld_o.maxlie, alive, &edge);
+    if (edge) kld_s.presses++;
+    kld_o.holding = hold && alive;
+    if (hold && alive && kld.dry) { if (!kld_o.nheld++) klog("down: online: Dry=1: the hold WOULD be on now (%.2f s after he went down; meter %.2f of %.1f): nothing is written, the game's own get-up stays open", (now - kld_s.t_down) / 1000.0f, kld_o.h.meter, kld_o.need); }
+    else if (hold && alive) kld_o_hold_set(pl, now); else kld_o_release(!alive ? "he is dead, out of play or the round is over" : ds == 3 ? "the get-up runs" : ds == 0 ? "he is up" : kld_o.h.timeout ? "the time bound" : "the meter is full");
+    if (kld_o.h.latched && !was_latched)
+        klog("down: online: %s %.2f s after he went down (%.2f s lying, %d press(es) counted, meter %.2f of %.1f): the hold is off - ONE REAL PRESS of the GET UP button now starts the game's own get-up at stock speed (and tells the other machines)",
+             kld_o.h.timeout ? "TIME BOUND (MashMax)" : "METER FULL", (now - kld_s.t_down) / 1000.0f, (now - kld_o.h.t_lie) / 1000.0f, kld_o.h.presses, kld_o.h.meter, kld_o.need);
+}
+
+/* The one log line of a round, with the numbers this machine uses online (said once per round: state 0x19 reached while this part acts online). */
+static void kld_o_roundline(DWORD sub)
+{
+    char t[220]; int k, n = 0; static const char *const subn[3] = { "Fragile Alliance", "Undercover Cop", "Cops and Robbers" };
+    t[0] = 0;
+    for (k = 0; k < KLD_NT; k++) if (kld.want[k] >= 0 && n < (int)sizeof t - 32) n += snprintf(t + n, sizeof t - n, " %s=%.1f", kld_t[k].key, kld.want[k]);
+    klog("down: online: ROUND %s (sub-mode %lu): the part acts for this machine's own non-police player. FLOP IS OFF ONLINE (ini Flop=%d): the fall is the game's own - the belly clips are a write into this machine's animation pool and no read showed a replica plays a clip it did not write, so the stock fall is kept rather than risk a desync. The speed-the-clip get-up mash does NOT run online. MashHold=%d: while he falls / lies the GET UP button is held (mask bit 0x80) until the meter holds %.1f presses (+%.2f a press, -%.2f a second, time bound %.0f s), counted from key 0x%02x%s (pad button 0x%04lx), then the stock one-press get-up runs. Trigger numbers:%s. NoFire=%d, camera=%d, prompt=%d kept; Vulnerable, DownFromCop / DownFromCrew, DownPointBlank and Bots are Arcade-only and stay off. Log=%d",
+         sub < 3 ? subn[sub] : "?", sub, kld_o.flop0, kld_o.hold, kld_o.need, kld_o.per, kld_o.decay, kld_o.maxlie / 1000.0f, kld_o.key, kld_o.pad ? " + the pad" : "", kld_o.padbtn,
+         n ? t : " the game's own (no key set)", kld_r.nofire, kld_v.cam, kld_v.prompt, kld.log);
+    klog("down: online: MashHoldHow=%d (%s): %s", kld_o.how, kld_o.how == 2 ? "the Cover key only" : "mask bit 0x80", kld_o.how == 2 ? (kld_o.scan && klkf_armed ? "the get-up key is hidden while he lies, he can shoot; pad: see the pad line" : "NO scan code / proxy: this round holds with the bit-0x80 mask, which blocks fire") : "the old hold: every button but reload is off while he lies");
+}
+
+/* Arcade <-> online: kld.flop is the ini's in Arcade and 0 online. The change is made BETWEEN passes with the old mode's teardown first (the words the
+   belly flop wrote go back while the object lives; our hold bit comes off). GUESS: a round never changes from online to Arcade with a live body in the
+   same process pass - the teardown is the one the !act path makes. */
+static void kld_o_mode(int onl, DWORD now)
+{
+    if (onl == kld_o.cur) return;
+    if (kld_s.player) {
+        if (kld.flop) kld_flop_words(kld_s.player, 0, 0);
+        kld_s.player = 0; kld_drop(); kld_s.dstate = 0; kld_s.nwin = 0; kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
+    }
+    kld_o_release("the mode changes (Arcade <-> online)");
+    memset(&kld_o.h, 0, sizeof kld_o.h); kld_o.holding = 0; kld_o.told = 0; kld_o.nheld = 0; kld_o.mtold = 0; kld_o.pl = 0; kld_o.t_find = 0;
+    kld.flop = onl ? 0 : kld_o.flop0;
+    kld_o.cur = onl;
+    if (kld.log) klog("down: mode: %s (kld.flop %d)", onl ? "ONLINE: the stock fall, the hold-mash get-up, no Vulnerable / factors / bots" : "Arcade: the ini's Flop / mash as set", kld.flop);
+    (void)now;
+}
+
 static void kld_tick_main(int game_thread)
 {
     static DWORD toldrules; static char toldwhy[200];
-    DWORD gd, pl, d, m, h, ho = 0, rules, state, now, tick = 0, clock, chans; int level, act, ok = 1, hpok, i = 0, st = -1;
+    DWORD gd, pl, d, m, h, ho = 0, rules, state, now, tick = 0, clock, chans, osub = 0; int level, act, ok = 1, hpok, i = 0, st = -1, onl = 0;
     BYTE idx = 0xff, police = 0, flag = 0, btn = 0; DWORD ds = 0, ms = 0; float hp = 0, max = 0, pos[3] = { 0, 0, 0 }, dt = 0; char why[200];
     if ((!kld.on && !kld_bk.on) || !klh_exe_ok) return;
     if (!game_thread) return;                  /* every write here is a live object of the round: only between two frames of the game.
                                                   The mash is counted by frames too: nothing of this part runs on the fallback thread */
     now = GetTickCount();
     act = klr_arcade(&rules, &state, &level);
-    if (act) {
+    if (!act && kld.on && (onl = kld_o_gate(&state, &osub)) != 0) { act = 1; level = 1; rules = 0; }      /* ONLINE (kld_o_gate): FA / UCC / C&R, a stock level or an expansion one alike */
+    kld_o_mode(onl, now);                      /* Arcade <-> online: kld.flop and the hold bit change between passes, the old mode's teardown first */
+    if (act && !onl) {
         act = klb_level(why);                  /* asked every pass: the verdict changes when the archive is opened */
         if (rules != toldrules || strcmp(why, toldwhy)) {
             toldrules = rules; strcpy(toldwhy, why);
@@ -2145,9 +2428,14 @@ static void kld_tick_main(int game_thread)
                  kld.dry ? "Dry=1 - the part only logs this round" : "the part acts on this round");
         }
     }
-    kld_bots(act, now);                        /* the AI heisters: whatever the human is (alive, dead, police) */
+    kld_bots(act && !onl, now);                /* the AI heisters: whatever the human is (alive, dead, police); never online (the host's AI is not ours to change) */
     if (!kld.on) return;
-    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
+    if (onl) {                                 /* THIS machine's own player online (klcharonline's finders: Arcade's gamedata slot gave none on a client) */
+        pl = kld_o_pl(now);
+        if (pl && !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
+        if (state == KLD_ROUND && !kld_o.told) { kld_o.told = 1; kld_o_roundline(osub); }
+        if (state != KLD_ROUND) kld_o.told = 0;
+    } else if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
         !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLD_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
     if (!pl || police) act = 0;                /* a fed is left to the game */
     kld_v.act = act; kld_v.pl = pl; kld_v.state = state;      /* track R7: for the camera / prompt pass (kld_tick) */
@@ -2157,13 +2445,14 @@ static void kld_tick_main(int game_thread)
     kld_tuning(act, ok ? max : 0.0f);
     if (!act || !pl) {
         kld_fl.armed = 0; kld_fl.pl = 0;                            /* Floor: the numbers go back in the next tuning pass */
+        if (kld_o.cur) { kld_o_release(!pl ? "no local player object this pass" : "the part does not act for this body (a police body)"); memset(&kld_o.h, 0, sizeof kld_o.h); kld_o.holding = 0; }
         if (kld_s.player) {
             if (kld.flop) kld_flop_words(kld_s.player, 0, 0);       /* the slot ids of the object we wrote go back while it still lives */
             kld_s.player = 0; kld_drop(); kld_s.dstate = 0; kld_s.nwin = 0; kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
         }
         return;
     }
-    if (!(d = klh_rd32(pl + 0x2948)) || klh_rd32(d) != pl || !klh_rd(d + 4, &ds, 4) || !klh_rd(d + 8, &flag, 1) || !klh_rd(d + 0x2b, &btn, 1)) return;
+    if (!(d = klh_rd32(pl + 0x2948)) || klh_rd32(d) != pl || !klh_rd(d + 4, &ds, 4) || !klh_rd(d + 8, &flag, 1) || !klh_rd(d + 0x2b, &btn, 1)) { if (kld_o.cur) kld_o_release("his down object is not readable this pass"); return; }      /* online: never leave our hold bit standing on a return */
     if (pl != kld_s.player) {                  /* a new round, another level, another body: nothing is carried over */
         if (kld_s.player && kld_s.up) klog("down: the player object changed %.2f s into a get-up this part drove (a death, a new round, another body): not an UP", (now - kld_s.t_up) / 1000.0f);
         if (kld.flop && kld_s.player) kld_flop_words(kld_s.player, 0, 0);
@@ -2256,6 +2545,13 @@ static void kld_tick_main(int game_thread)
     }
     if (btn && !kld_s.btn && (kld_s.up || (KLD_ONE && kld_s.fnow && kld_s.t_land && !kld_s.fdone))) { kld_s.meter += 1.0f; kld_s.presses++; }
     kld_s.btn = btn;
+    if (onl) {                                 /* ONLINE: the hold-mash meter and the mask bit, every pass (it resets and lets go when he is up); a death is seen one pass late here, the dead branch below then stops it */
+        float odt = 0; int ook = 1; DWORD ock = klh_rd32((DWORD_PTR)KLH_VA(KLD_CLOCK));
+        if (ock) odt = kld_rdf(ock + 0x50, &ook);
+        if (!ook || !kld_fin(odt) || odt < 0 || odt > 0.5f) odt = kld_o.lastdt > 0 ? kld_o.lastdt : 1.0f / 60.0f;      /* the frame's seconds; the last good one when this pass's is not */
+        kld_o.lastdt = odt;
+        kld_o_step(pl, ds, !kld_s.dead && hpok && hp > 0.01f && state == KLD_ROUND, now, odt);
+    }
     if (ds != 0 && (kld_s.dead || (i = kld_dead(hpok, hp, &st)) != 0)) {
         /* SEEN LIVE (runs D1 / D2, 2026-10-11): a death does NOT clear D - its state stays 1 / 3 to the round's end, so
            the 3 -> 0 line above never comes for a man shot while he gets up. NOTHING IS WRITTEN for a man who is dead or
@@ -2274,6 +2570,7 @@ static void kld_tick_main(int game_thread)
     }
     if (KLD_ONE && ds != 0) kld_flop_one(pl, d, ds, now, hp);
     else if (kld.flop && ds != 0) kld_flop_down(pl, d, ho, ds, now, &hp, max, hpok);
+    if (onl) { if (kld_s.up) kld_drop(); return; }      /* ONLINE: the speed-the-clip mash below is a local write the others never see: the game's get-up runs at its own speed */
     if (ds != 3) { if (kld_s.up) kld_drop(); return; }
 
     /* he gets up: the channel of the clip */
@@ -2362,6 +2659,7 @@ static void kld_tick(int game_thread)
            only when the game thread has not ticked for 500 ms. */
         if (kld_r.sw) kld_sw_back(GetTickCount(), "the game thread has made no pass for 500 ms (a stall, a load): written from the fallback thread, before the factors and the point-blank cap are dropped");
         if (kld_r.fon) { kld_r.fon = 0; kld_r.t_foff = GetTickCount(); }
+        if (klkf_scan || kld_pad_mask) { klkf_scan = 0; kld_pad_mask = 0; }      /* the game thread has made no pass for 500 ms: the get-up key goes back to the game (the next pass re-arms it if the hold is still on) */
         InterlockedExchange(&kld_r.pbon, 0);
         return;
     }
@@ -2399,6 +2697,28 @@ static void kld_init(void)
     kld.flop = GetPrivateProfileIntA("Down", "Flop", 0, klh_ini);
     if (kld.flop != 1 && kld.flop != 2 && kld.flop != 3) kld.flop = 0;
     kld.belly = GetPrivateProfileIntA("Down", "FlopBelly", 1, klh_ini) != 0;
+    /* ONLINE (the block at KLD_KEEPUP). Online=0 (default; the ini says 'recommended on') leaves Arcade exactly as it was: kld_o_gate answers 0 at once.
+       MashHold defaults to 1 and is only ever read online (Arcade keeps its speed-the-clip mash). All the Mash numbers are GUESSES for the owner's hands. */
+    klkf_scan = 0; kld_pad_mask = 0;
+    memset(&kld_o, 0, sizeof kld_o);
+    kld_o.online = GetPrivateProfileIntA("Down", "Online", 0, klh_ini) != 0;
+    kld_o.hold = GetPrivateProfileIntA("Down", "MashHold", 1, klh_ini) != 0;
+    kld_o.flop0 = kld.flop;
+    kld_o.need = kld_inif("MashNeed", "8"); kld_o.per = kld_inif("MashPer", "1.0"); kld_o.decay = kld_inif("MashDecay", "1.5");
+    if (!kld_fin(kld_o.need) || kld_o.need < 1.0f || kld_o.need > 100.0f) kld_o.need = 8.0f;
+    if (!kld_fin(kld_o.per) || kld_o.per < 0.05f || kld_o.per > 10.0f) kld_o.per = 1.0f;
+    if (!kld_fin(kld_o.decay) || kld_o.decay < 0 || kld_o.decay > 50.0f) kld_o.decay = 1.5f;
+    { float mx = kld_inif("MashMax", "25"); kld_o.maxlie = !kld_fin(mx) || mx < 0 || mx > 600.0f ? 25000 : (DWORD)(mx * 1000.0f); }      /* 25 s: a hold must never be a trap (focus lost, a rebound key); 0 = no bound */
+    { char kb[16]; GetPrivateProfileStringA("Down", "MashKey", "0x43", kb, sizeof kb, klh_ini); kld_o.key = (int)strtol(kb, 0, 0); if (kld_o.key < 0 || kld_o.key > 0xfe) kld_o.key = 0x43; }
+    kld_o.pad = GetPrivateProfileIntA("Down", "MashPad", 1, klh_ini) != 0;
+    /* MashHoldHow: 2 = hold only the Cover key / pad button (default, recommended on); 1 = the old mask bit 0x80 (blocks fire too). MashScan = the DIK scan code
+       of the Cover key the game reads (0 = derived from MashKey: MapVirtualKey to the set-1 scan code, 0x80 added for an extended key; DIK codes are those). */
+    kld_o.how = GetPrivateProfileIntA("Down", "MashHoldHow", 2, klh_ini) == 1 ? 1 : 2;
+    { char kb[16]; int sc = 0; GetPrivateProfileStringA("Down", "MashScan", "0", kb, sizeof kb, klh_ini); sc = (int)strtol(kb, 0, 0);
+      if (sc <= 0 || sc > 0xff) { UINT (WINAPI *mvk)(UINT, UINT) = 0; UINT m; { HMODULE u = GetModuleHandleA("user32.dll"); if (u) mvk = (UINT (WINAPI *)(UINT, UINT))GetProcAddress(u, "MapVirtualKeyA"); }      /* looked up at run time: the hook links no user32 import */
+        m = kld_o.key && mvk ? mvk((UINT)kld_o.key, 4 /* MAPVK_VK_TO_VSC_EX */) : 0; sc = (m & 0xff00) == 0xe000 ? (int)((m & 0xff) | 0x80) : (int)(m & 0xff); }
+      kld_o.scan = sc; }
+    { char kb[16]; GetPrivateProfileStringA("Down", "MashPadBtn", "0x1000", kb, sizeof kb, klh_ini); kld_o.padbtn = (DWORD)strtoul(kb, 0, 0); if (!kld_o.padbtn || kld_o.padbtn > 0xffff) kld_o.padbtn = 0x1000; }
     {
         const char *fall = kld.flop == 2 ? "/Damage/Death/Die_Forward" : "/Damage/Wounded/Hero_Torso_F";
         float b0 = kld.flop == 2 ? 1.5f : 0.8f, p0 = kld.flop == 2 ? 0.6f : 0.5f, t0 = kld.flop == 2 ? 5.0f : 3.5f;
@@ -2455,6 +2775,15 @@ static void kld_init(void)
     }
     if (kld.on) klog("down: on%s; the get-up is played at Base %.2f + PerPress %.2f x the mash meter (one a press of the game's own GET UP button, - Decay %.1f a second), at most Top %.2f; the trigger:%s; Log=%d. Arcade on a level that is not stock, not for a police player; data writes only (re\\player_down.md)",
                      kld.dry ? " (Dry=1: NOTHING is written, the log says what would be)" : "", kld.base, kld.per, kld.decay, kld.top, n ? t : " the game's own (no key set)", kld.log);
+    if (kld.on) klog("down: online: Online=%d (1 = the part also acts in an online FA / UCC / C&R round for this machine's own non-police player; Flop is off there, the speed-the-clip mash does not run there), MashHold=%d (1 = the get-up is held until the mash meter is full), MashNeed=%.1f presses, MashPer=%.2f, MashDecay=%.2f a second, MashMax=%.0f s, MashKey=0x%02x, MashPad=%d (button 0x%04lx)",
+                     kld_o.online, kld_o.hold, kld_o.need, kld_o.per, kld_o.decay, kld_o.maxlie / 1000.0f, kld_o.key, kld_o.pad, kld_o.padbtn);
+    /* MashHoldHow=2: arm the keyboard proxy (klrigid.c wraps the keyboard device only when this is set, before the game creates DirectInput) and try the pad import */
+    if (kld.on && kld_o.online && kld_o.hold && kld_o.how == 2) {
+        if (kld_o.scan) klkf_armed = 1;
+        if (kld_o.pad) { kld_o.padtry = 1; kld_o_pad_iat(); }
+        klog("down: online: MashHoldHow=2: Cover key hold only (DIK scan 0x%02x from %s; keyboard proxy %s; pad import %s) - he can shoot while he lies", kld_o.scan,
+             "MashScan or MashKey", klkf_armed ? "armed" : "NOT armed (no scan code: the old mask hold is used)", !kld_o.pad ? "off (MashPad=0)" : kld_o.padhook ? "wrapped" : "not wrapped yet (retried while playing)");
+    }
     /* the AI heisters (track R4): its own switch - works with Enable=0 too */
     memset(kld_b, 0, sizeof kld_b); kld_brules = 0; kld_nearput = 0;
     kld_bk.on = GetPrivateProfileIntA("Down", "Bots", 0, klh_ini) != 0;
