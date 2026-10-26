@@ -40,10 +40,10 @@ FAR = (10000.0, 0.0, 10000.0)                # where the non-spatial nodes stand
 
 # name -> slot, live zip md5 (pinned), van|chopper, START centre, loot centre, exit trigger centre (MEASURED by the 2026-10-26 audit: arcade_ref_1026/out/<map>.json)
 SPEC = collections.OrderedDict([
-    ('DM01', dict(slot='F01', pin='978475edf11f9ea46920ff5c936c2767', kind='van', start=(1632, 76, 30643), loot=(5569, 18, 21843), exit=(1196, 160, 20978))),
+    ('DM01', dict(slot='F01', pin='5770263fc6e9536b7c1634823b5a27a8', kind='van', start=(1632, 76, 30643), loot=(5569, 18, 21843), exit=(1196, 160, 20978))),
     ('DM02', dict(slot='F02', pin='36610fc840823be968d3c537249cbefe', kind='van', start=(1490, 1091, -3342), loot=(-134, 530, 1730), exit=(-38, 182, -8952))),
-    ('DM03', dict(slot='F03', pin='c9d67a1f56d8301e5d528429fd4a401f', kind='van', start=(-1808, 793, -11838), loot=(318, 500, -6838), exit=(408, 396, 460))),
-    ('DM06', dict(slot='F04', pin='a9fc32eb65c42b185b5856944d1809c6', kind='chopper', start=(5514, 379, 4549), loot=(554, 347, 1545), exit=(-1593, 206, -8050)))])
+    ('DM03', dict(slot='F03', pin='1aa8a1233b019be09ae9f23b51001c03', kind='van', start=(-1808, 793, -11838), loot=(318, 500, -6838), exit=(408, 396, 460))),
+    ('DM06', dict(slot='F04', pin='7f9b76826ce7b6893f073fefa9ed1fa5', kind='chopper', start=(5514, 379, 4549), loot=(554, 347, 1545), exit=(-1593, 206, -8050)))])
 
 # loot stacks with no mesh path from START (arcade_ref_1026 nopath check): group node -> new place.  GUESS: (-1807, 77, -3509) is on the diner counter line the lanes build
 # already uses (x -1807, z -3379 / -3639), 130 cm from each neighbour and 20+ cm of spare floor at reach 165 (sign_work/d2spot.py); the stack keeps its model and amount.
