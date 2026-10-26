@@ -241,7 +241,7 @@ static void klsy_collect(DWORD o, DWORD slot, int kind, const char *nm, void *ct
     memcpy(t->pk + 16 + t->n * KLSY_REC, &e, KLSY_REC); t->n++;
 }
 
-struct klsy_cm { int n, bad, hpbad, idbad, worst_s; float worst; float wo[3], wh[3]; int shown; };
+struct klsy_cm { int n, bad, hpbad, idbad, parked, worst_s; float worst; float wo[3], wh[3]; int shown; };
 /* identity of the own actor against the host's record: same class (vtable low 16 bits) and the same, readable team */
 static int klsy_idok(DWORD o, int team, const struct klsy_pe *h)
 {
@@ -257,6 +257,8 @@ static void klsy_cmp(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
     c->n++;
     if (!klsy_idok(o, team, &klsy.host[i])) { c->idbad++; return; }                  /* another actor in that slot: no position compare */
     if (!hv) return;
+    {   DWORD nd = 0, fl = 0;   /* parked here (node off, bit 10, see ParkSkip): its place is not shown or synced, so no distance compare (SP1e: 12 "far" = parked) */
+        if (klh_rd(o + 4, &nd, 4) && nd && klh_rd(nd + 0x3c, &fl, 4) && (fl >> 10 & 1)) { c->parked++; return; } }
     dx = pos[0] - klsy.host[i].p[0]; dy = pos[1] - klsy.host[i].p[1]; dz = pos[2] - klsy.host[i].p[2];
     d = (float)sqrt(dx * dx + dy * dy + dz * dz);
     if ((short)hp != klsy.host[i].hp) c->hpbad++;
@@ -741,8 +743,8 @@ static void klsy_tick(int game_thread)
             ag = c.n >= 1 && c.idbad * 10 <= c.n;                                              /* GUESS: at most 10% of the shared slots may differ in class / team */
             if (ag != klsy.agree) { klsy.agree = ag; klog("sync: identity agreement with the host %s (%d slots compared, %d with another class / team)", ag ? "OK" : "LOST", c.n, c.idbad); }
             if (klsy.cmp)
-                klog("sync: vs host: %d actors compared (host list %lu ms old, %d in it), %d another class/team, %d farther than %.1f, %d with another health, worst slot %d d=%.1f", c.n,
-                     (unsigned long)(now - klsy.rxAt), klsy.nhost, c.idbad, c.bad, klsy.tol10 / 10.0, c.hpbad, c.worst_s, c.worst);
+                klog("sync: vs host: %d actors compared (host list %lu ms old, %d in it), %d another class/team, %d parked here (not compared), %d farther than %.1f, %d with another health, worst slot %d d=%.1f", c.n,
+                     (unsigned long)(now - klsy.rxAt), klsy.nhost, c.idbad, c.parked, c.bad, klsy.tol10 / 10.0, c.hpbad, c.worst_s, c.worst);
         }
         /* Apply: only a System Link / online client (mode 4, even with Probe=2), a fresh list, the identity agreement, a known local player; at most 2 passes a second */
         if (klsy.apply && mode == 4 && klsy.agree && klsy.applyRx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && now - klsy.applyAt >= 500) {
