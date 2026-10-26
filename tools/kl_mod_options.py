@@ -91,6 +91,14 @@ feat('hidestockonl', G_CORE, 'Online matches: also hide the old (stock) list; th
      'klhud.c HideOnline; needs HideSrc=1', [('HUD', 'HideOnline', 1, 0, 1)])
 feat('onlinecrew', G_CORE, 'Online matches: new crew list with money (humans only, names not decoded yet; recommended on once proven live)', 'off', 'start',
      'klhud.c OnlineCrew; needs [HUD] Online=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
+feat('onlineread', G_CORE, 'Online matches: the round reader that the heister names, KILLED BY and ROUND n OF m below use (recommended off until benched)', 'off', 'start',
+     'klonline_read.c [Online] Read; read only; NOT run live', [('Online', 'Read', 1, 0, 0)])
+feat('onlinenames', G_CORE, 'Online matches: crew list shows the heister characters\' names (J.C., Tommy...) like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineNames; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineNames', 1, 0, 0)])
+feat('onlinekilled', G_CORE, 'Online matches: KILLED BY shows the killer\'s heister name instead of THE POLICE (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineKilled; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineKilled', 1, 0, 0)])
+feat('onlineround', G_CORE, 'Online matches: ROUND n OF m line under the clock like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineRound; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineRound', 1, 0, 0)])
 feat('ucchide', G_CORE, 'Undercover Cop: the crew list does not give the undercover cop away to heisters (recommended on)', 'on', 'start',
      'klhud_values.c kluv_state UccHide; re/ucc_tell_audit.md S10; NOT run live', [('HUD', 'UccHide', 1, 0, 1)])
 feat('onlinebots', G_CORE, 'Online matches: AI heisters also listed in the crew box, like Arcade (recommended on)', 'on', 'start',

@@ -1140,6 +1140,8 @@ static int klu_online_kind(DWORD f, int local)
 /* the AI heisters online: ZFFActors of team 2 (Ally), found as klbotfill.c's census does (the entity table, ZFFActor vtable 0xbb3bac, team [[a+0x54]+4] == 2; health [[a+0x5fc]+4] float).
    They have no crew record. Cached 3 s (the table is 8 MB to read), health read every call. -> their number (<= 8); *alive = how many have health > 0, the living first. [HUD] OnlineBots=0 -> 0.
    GUESS: no human heister's actor is team 2 (the botfill census text treats Ally count = AI count). */
+static const struct klor_row *klu_onrow(const struct klor_snap *o, int seat) { int i; for (i = 0; i < o->n; i++) if (o->r[i].seat == seat) return &o->r[i]; { static const struct klor_row none; return &none; } }
+static int klu_onnames, klu_onkill, klu_onround;     /* 2026-10-26 online ports on klonline_read.c ([Online] Read=1 too): [HUD] OnlineNames / OnlineKilled / OnlineRound, default 0 until benched */
 static int klu_online_bots(int *alive)
 {
     static DWORD last, act[8]; static int n; DWORD now = GetTickCount(); int i, a = 0;
@@ -1184,7 +1186,7 @@ static int klu_compose(int *state_ok)
         klu_dials(&s);
         klwd_compose();
         if (klb_hud_crew && klu.crew && s.on_n > 0) {         /* [HUD] OnlineCrew: the online crew list (2026-10-26: the rows, names, states, counts and money boxes as Arcade's) */
-            int k, rows = 0, nu = 0, na = 0, nb, ba = 0, bi; long tot = 0; char nm[40]; BYTE loc = 0; int loc_pend = 0; int locst = -1; long lloot = 0, lrew = 0;
+            int k, rows = 0, nu = 0, na = 0, nb, ba = 0, bi; long tot = 0; char nm[40]; struct klor_snap or_; int have = 0; BYTE loc = 0; int loc_pend = 0; int locst = -1; long lloot = 0, lrew = 0;
             { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (BYTE)li; }
             loc_pend = loc < s.on_n && s.on_used[loc];
             strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;   /* 2026-10-25 owner: the Arcade crew box is headed DEAD MEN, online said CREW */
@@ -1197,14 +1199,16 @@ static int klu_compose(int *state_ok)
                 if (k == loc) { locst = kind; lloot = s.on_loot[k]; lrew = s.on_rew[k]; }
                 if (rows + (k != loc && loc_pend) >= klu.rows) continue;     /* the local player's row is reserved: a high slot (a client's own index) is never the one cut */
                 if (k == loc) loc_pend = 0;
-                if (s.on_name[k][0]) snprintf(nm, sizeof nm, "%s", s.on_name[k]); else if (k == loc) strcpy(nm, "You"); else snprintf(nm, sizeof nm, "Player %d", k + 1);
+                if (have && klu_onnames && klu_onrow(&or_, k)->name[0]) snprintf(nm, sizeof nm, "%s", klu_onrow(&or_, k)->name);     /* the heister CHARACTER's name (the owner's order 16:45) */
+                else if (s.on_name[k][0]) snprintf(nm, sizeof nm, "%s", s.on_name[k]); else if (k == loc) strcpy(nm, "You"); else snprintf(nm, sizeof nm, "Player %d", k + 1);
                 klu_row(rows++, nm, s.on_money[k], kind);
             }
+            have = klor_read(&or_, (int)loc);                    /* the reader: heister character names, killer, round (off unless [Online] Read=1) */
             nb = klu_online_bots(&ba);                          /* the AI heisters have no record: rows from the Ally actors, like Arcade's bot rows */
             for (bi = 0; bi < nb; bi++) {
                 int dead = bi >= ba; nu++; if (!dead) na++;
                 if (rows >= klu.rows) continue;
-                snprintf(nm, sizeof nm, "Heister %d", bi + 1);
+                if (have && klu_onnames && bi < or_.nbots && or_.bot[bi].name[0]) snprintf(nm, sizeof nm, "%s", or_.bot[bi].name); else snprintf(nm, sizeof nm, "Heister %d", bi + 1);
                 klu_row(rows++, nm, 0, dead ? KLUV_K_DEAD : KLUV_K_CREW);
             }
             snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d", na, nu); klu_r.t[KLU_T_COUNT].on = 1;
@@ -1222,7 +1226,14 @@ static int klu_compose(int *state_ok)
                 }
             }
             if (klu.killed && (locst == KLUV_K_DEAD)) {       /* the same KILLED BY line as offline. The killer is not decoded online: Arcade's own fallback THE POLICE (GUESS) */
-                snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
+                char kn[40]; kn[0] = 0;
+                if (have && klu_onkill) { const struct klor_row *lr = klu_onrow(&or_, (int)loc), *kr = lr->killer >= 0 ? klu_onrow(&or_, lr->killer) : 0;
+                    if (kr && kr->name[0]) snprintf(kn, sizeof kn, "%s", kr->name); else if (kr && lr->killer < 16 && s.on_name[lr->killer][0]) snprintf(kn, sizeof kn, "%s", s.on_name[lr->killer]);
+                    klor_upper(kn); }
+                snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
+            }
+            if (have && klu_onround && or_.ok && or_.round > 0 && klu.round) {     /* ROUND n OF m (S+0x34c / S+0x3d0) */
+                snprintf(klu_r.t[KLU_T_ROUND].want, KLU_TEXTLEN, "ROUND %d OF %d", or_.round, or_.rounds); klu_r.t[KLU_T_ROUND].on = 1;
             }
         }
         return 1;
@@ -1791,6 +1802,7 @@ static void klu_init(void)
     klu.log = klu_inii("Log", 1, 0, 2);
     klu.stock = klu_inii("Stock", 0, 0, 1);
     klb_hud_online = klu_inii("Online", 0, 0, 1);         /* 2026-10-18: the local, cosmetic parts in a network FA round (klbot.c klb_read_hud; re/hud_online.md). Default 0: never run online */
+    klu_onnames = klu_inii("OnlineNames", 0, 0, 1); klu_onkill = klu_inii("OnlineKilled", 0, 0, 1); klu_onround = klu_inii("OnlineRound", 0, 0, 1);
     klu.onbots = klu_inii("OnlineBots", 1, 0, 1); klu.killed = klu_inii("KilledBy", 1, 0, 1); klu.crew = klu_inii("Crew", 1, 0, 1); klu.money = klu_inii("Money", 1, 0, 1); klu.round = klu_inii("Round", 1, 0, 1);
     klu.hide = klu_inii("HideStock", 1, 0, 1);
     klu.draw = klu_inii("Draw", 1, 1, 2);
