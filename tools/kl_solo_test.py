@@ -5,7 +5,8 @@ Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md;
     python kl_solo_test.py --hook <TEST build folder> --tag <name> [--secs 300] [--gap 45]
                            [--base <KLHook.ini>] [--ini1 <extra.ini>] [--ini2 <extra.ini>] [--shots 30-300:30] [--force]
                            [--n N (3+: more joiners, all with --ini2)] [--gap2 30 (between joiners)]
-                           [--netstat SECS] [--relaunch K (3: a failed joiner is started again, before the host's Ready)]
+                           [--netstat SECS] [--relaunch K (3: a failed, hung or ended joiner is started again, before the host's round starts)]
+                           [--hang-secs S (90: a joiner whose KLHook.log gains no non-watchdog line for S s is hung: its pid is killed and it is relaunched)]
 
 - Puts the TEST dinput8.dll into the game folder for the run and puts the one that was there back afterwards
   (kl_autotest.snapshot / restore_original). The game folder's KLHook.ini is not touched: each instance reads
@@ -122,7 +123,7 @@ def solo_secs(n, total=2):
 
 def main():
     a, opt = sys.argv[1:], {}
-    for key in ('--hook', '--tag', '--secs', '--gap', '--gap2', '--base', '--ini1', '--ini2', '--shots', '--n', '--netstat', '--relaunch'):
+    for key in ('--hook', '--tag', '--secs', '--gap', '--gap2', '--base', '--ini1', '--ini2', '--shots', '--n', '--netstat', '--relaunch', '--hang-secs'):
         if key in a:
             i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
     force = '--force' in a
@@ -198,40 +199,93 @@ def main():
             procs.append(p)
             say('  start | inst%d pid %d at %+.0f s (%s)' % (n, p.pid, time.time() - t0, d))
         retries = {n: int(opt.get('--relaunch', 3)) for n in range(2, len(inst) + 1)}
+        tries = {n: 1 for n in range(1, len(inst) + 1)}          # tries used per instance (1 = first start)
+        hang_secs = int(opt.get('--hang-secs', 90))
         last_start = [time.time()]
+        prog = {}                                                # n -> (signature of frames/ms/script, time it last changed)
+        skipped = set()
 
         def host_started():
             log = os.path.join(inst[0], 'KLHook.log')
             try:
-                return 'SOLO match started' in open(log, encoding='latin-1').read() or 'host Ready with' in open(log, encoding='latin-1').read()
+                txt = open(log, encoding='latin-1').read()
+                return 'SOLO match started' in txt or 'host Ready with' in txt
             except OSError:
                 return False
 
+        def read_res(d):
+            try:
+                return ' '.join(open(os.path.join(d, 'KLHook.result'), errors='replace').read().split())
+            except OSError:
+                return ''
+
+        def save_try(n, k):
+            # keep this try's log / result as KLHook.try<k>.log / .result (a copy: the live files stay for the final report)
+            d = inst[n - 1]
+            for f, g in (('KLHook.log', 'KLHook.try%d.log' % k), ('KLHook.result', 'KLHook.try%d.result' % k)):
+                if os.path.isfile(os.path.join(d, f)):
+                    shutil.copyfile(os.path.join(d, f), os.path.join(d, g))
+
+        QUIET = ('stall', 'nudge', 'poll gap')               # watchdog lines the hook writes even when the game is frozen
+
+        def hung_for(n, now):
+            # seconds the instance's KLHook.log has gained no line besides the watchdog's own (stall / nudge / poll gap).
+            # NOT KLHook.result: the hook rewrites it only at start / load / end, so a healthy joiner waiting in the lobby
+            # keeps the same frames= ms= script= for many minutes (N9_DM01 inst3 looked 'hung' that way yet reached the
+            # lobby). A log that does not exist yet counts as no progress (the hook never loaded).
+            try:
+                with open(os.path.join(inst[n - 1], 'KLHook.log'), encoding='latin-1', errors='replace') as fh:
+                    sig = sum(1 for l in fh if not any(q in l for q in QUIET))
+            except OSError:
+                sig = -1
+            if n not in prog or prog[n][0] != sig:
+                prog[n] = (sig, now); return 0
+            return now - prog[n][1]
+
         def relaunch_tick():
-            # --relaunch K (default 3): a joiner whose script FAILED or whose process ended before the host started the
-            # round is started again (its log kept as KLHook_try<k>.log), one at a time, at least 20 s apart
-            if time.time() - last_start[0] < 20 or host_started():
-                return
+            # --relaunch K (default 3): a joiner whose script FAILED, whose log shows no progress for --hang-secs, or whose
+            # process ended before the host started the round is started again (its log kept as KLHook.try<k>.log /
+            # .result), one at a time, at least 20 s apart. Once the host is in the round nobody is started again
+            # (joining a running FA round is not possible: N9_DM01 inst4 lost 4 tries on that).
+            now = time.time()
+            why = {}
+            started = host_started()
             for n in range(2, len(procs) + 1):
-                d, p = inst[n - 1], procs[n - 1]
-                res = os.path.join(d, 'KLHook.result')
-                try:
-                    failed = 'state=FAIL' in open(res, errors='replace').read()
-                except OSError:
-                    failed = False
-                if not (failed or p.poll() is not None) or retries[n] <= 0:
+                p = procs[n - 1]
+                txt = read_res(inst[n - 1])
+                hung = hung_for(n, now) if p.poll() is None and not started else 0
+                if 'state=FAIL' in txt:
+                    why[n] = 'its script failed: ' + txt[:200]
+                elif p.poll() is not None:
+                    why[n] = 'the process had ended'
+                elif hung >= hang_secs:
+                    why[n] = 'hung: frames %s unchanged %d s, no log progress' % ((re.search(r'frames=(\S+)', txt) or [0, '?'])[1], hung)
+            if not why:
+                return
+            if started:
+                for n in why:
+                    if retries[n] > 0 and n not in skipped:
+                        skipped.add(n)
+                        say('  relaunch | inst%d skipped: host already in round, joining a running FA round is not possible' % n)
+                return
+            if now - last_start[0] < 20:
+                return
+            for n, reason in why.items():
+                if retries[n] <= 0:
                     continue
+                d, p = inst[n - 1], procs[n - 1]
                 if p.poll() is None:
                     subprocess.run(['taskkill', '/F', '/PID', str(p.pid)], capture_output=True); time.sleep(2)
-                k = int(opt.get('--relaunch', 3)) - retries[n] + 1; retries[n] -= 1
-                for f, g in (('KLHook.log', 'KLHook_try%d.log' % k), ('KLHook.result', 'KLHook_try%d.result' % k)):
+                k = tries[n]; retries[n] -= 1; tries[n] += 1
+                save_try(n, k)
+                for f in ('KLHook.log', 'KLHook.result'):
                     if os.path.isfile(os.path.join(d, f)):
-                        os.replace(os.path.join(d, f), os.path.join(d, g))
+                        os.replace(os.path.join(d, f), os.path.join(d, 'KLHook_try%d%s' % (k, os.path.splitext(f)[1])))
+                prog.pop(n, None)
                 env = dict(os.environ, SteamAppId='28000', SteamGameId='28000', KLHOOK_DIR=d)
                 procs[n - 1] = subprocess.Popen([os.path.join(dd, 'kl2.exe'), '-o', 'DisableSplashScreens'], cwd=dd, env=env)
                 last_start[0] = time.time()
-                say('  relaunch | inst%d try %d pid %d at %+.0f s (%s)' % (n, k + 1, procs[n - 1].pid, time.time() - t0,
-                                                                         'its script failed' if failed else 'the process had ended'))
+                say('  relaunch | inst%d try %d pid %d at %+.0f s (%s) tries=%d' % (n, k + 1, procs[n - 1].pid, time.time() - t0, reason, tries[n]))
                 return
         while time.time() - t0 < secs:
             time.sleep(2)
@@ -260,7 +314,12 @@ def main():
         for n, d in enumerate(inst, 1):
             log = os.path.join(d, 'KLHook.log')
             lines = open(log, encoding='latin-1').read().splitlines() if os.path.isfile(log) else []
-            say('  inst%d | exit code %s, %d log lines' % (n, procs[n - 1].returncode if n <= len(procs) else '-', len(lines)))
+            say('  inst%d | exit code %s, %d log lines, tries=%d' % (n, procs[n - 1].returncode if n <= len(procs) else '-', len(lines), tries[n]))
+            if tries[n] > 1:                         # every try's reason survives: copy the last one, then list all
+                save_try(n, tries[n])
+                for k in range(1, tries[n] + 1):
+                    say('    try %d | %s' % (k, (read_res(d) if k == tries[n] else
+                        ' '.join(open(os.path.join(d, 'KLHook_try%d.result' % k), errors='replace').read().split()) if os.path.isfile(os.path.join(d, 'KLHook_try%d.result' % k)) else 'no result')[:300]))
             for l in [l for l in lines if any(k in l for k in KEEP)][-40:]:
                 say('    log | ' + l[:220])
             res = os.path.join(d, 'KLHook.result')
