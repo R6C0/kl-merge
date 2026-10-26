@@ -1,3 +1,7 @@
+2026-10-26 ~13:52 - BOS_DD05 PASS 6/7 boarded, 0 asserts/faults. The hook tally is 0 because all 6 stacks went within 46 s (the game's own loot AI or the test player)
+while the hook's bots held 30 s on cop-guarded stacks (OnlineGuardTake). Then OnlineIdleVan sent them to the exit. The 13:45:35 'no exit trigger found' was the finder's 2 s lag (found 13:45:37). No fix needed.
+Queue reordered: BOS_DD06..09, BOS_DD02s, CNR2, BOS_DD04j now run before the old backlog (SV1, B3, N9_DM09e, N2_*).
+
 2026-10-26 ~13:40 - Bots online on stock maps: BOS_DD03 PASS 7/7 boarded (9 stacks, 4.5M, van recalled 3 times). BOS_DD04 PASS but 3/7 boarded:
 4 carriers got money after the first call and logged 'wants the van but it was called already', so they stood ~100 m off for the whole visit.
 At the recall (clock 52 s, late) they were 108 m out and the van left without them. Fix: [BotFill] OnlineJoinCalled=1 (recommended on): such a carrier walks to the exit while the van comes or waits (state 1-4).
