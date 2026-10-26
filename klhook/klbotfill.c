@@ -623,8 +623,8 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     if (!(klbf_ob[s].told & 8) && (klbf_ob[s].told |= 8)) klog("botfill: tactics: bot %d (actor %08lx) stopped %.0f m from the exit trigger's centre: calls the van from there (GUESS: the box is wider than 2*Near)", s, a, dd / 100);
                     klbf_ot_arrive(rules, s, now);
                 } else if (klbf_ot_vstate && klbf_ot_called ? (now - klbf_ot_calledAt > 60000 || vstate == 7 || (vstate == 0 && now - klbf_ot_calledAt > 5000)) : now - klbf_ob[s].since > (DWORD)(klbf_ot_called ? 60000 : KLBF_OT_STALLMAX)) {      /* OnlineVanState: the 60 s count from the CALL (BO9 counted from phase 2, 15 s earlier), and a van that left (7 / back to 0) ends the wait */
-                    klog("botfill: tactics: bot %d (actor %08lx): %s after %lu s (%.0f m from the trigger): back to idle", s, a, klbf_ot_called ? "the van was called but this bot was not at the exit while it waited" : "did not reach the exit trigger", (unsigned long)((now - klbf_ob[s].since) / 1000), dd / 100);
-                    klbf_ob[s].phase = 0; klbf_ob[s].told &= ~8;
+                    klog("botfill: tactics: bot %d (actor %08lx): %s after %lu s (%.0f m from the trigger, bot at (%.0f, %.0f, %.0f)): back to idle", s, a, klbf_ot_called ? "the van was called but this bot was not at the exit while it waited" : "did not reach the exit trigger", (unsigned long)((now - klbf_ob[s].since) / 1000), dd / 100, bots[b].pos[0], bots[b].pos[1], bots[b].pos[2]);      /* BOS_DD02: the full position tells the wagon level (y ~4500) from the ramp foot (y 5150-5500) */
+                    klbf_ob[s].phase = 0; klbf_ob[s].told &= ~(8 | 512);
                     continue;
                 }
             }
@@ -639,7 +639,10 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             else continue;      /* never order a walk to the (0,0,0) default */
             memset(&t, 0, sizeof t); t.rec = -1; t.actor = a; t.soldier = bots[b].soldier; t.told_soft = 1;
             why[0] = 0;
-            if (kle_order2(&t, tgt, got, why, 0) == 1) klbf_ob[s].ordered = now;
+            if (kle_order2(&t, tgt, got, why, 0) == 1) {
+                klbf_ob[s].ordered = now;
+                if (klbf_ob[s].phase == 2 && !(klbf_ob[s].told & 512) && (klbf_ob[s].told |= 512)) klog("botfill: tactics: bot %d (actor %08lx): exit walk from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f), snapped goal (%.0f, %.0f, %.0f) (said once per trip)", s, a, bots[b].pos[0], bots[b].pos[1], bots[b].pos[2], tgt[0], tgt[1], tgt[2], got[0], got[1], got[2]);
+            }
             else if (why[0] && !(klbf_ob[s].told & 2) && (klbf_ob[s].told |= 2)) klog("botfill: tactics: bot %d (actor %08lx): order refused: %s", s, a, why);
         }
     }
