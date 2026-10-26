@@ -138,6 +138,22 @@ int main(void)
         kldh_filter_state(st, 256, 0, 1); kldh_filter_state(st, 16, 0x2e, 1); CHECK(st[0x11] == 0x80, "state filter: scan 0 / short buffer safe");
     }
 
+    /* GIVE-BACK (OnlineFactors / OnlineFreeFall): tonight's online log. One police hit of 111.9 on a man with 120: 120 -> 8.1, DownFromCop 0.15 gives 95.1 back */
+    {
+        int lt = 9; float nh, nan = 0.0f; nan = nan / nan;
+        nh = kldh_giveback(8.1f, 120.0f, 120.0f, 0.15f, &lt); CHECK(lt == 0 && fabs(nh - (8.1f + 111.9f * 0.85f)) < 0.01f && nh < 120.0f, "111.9 hit at 0.15: %.2f", nh);
+        nh = kldh_giveback(8.1f, 120.0f, 120.0f, 0.0f, &lt); CHECK(fabs(nh - 120.0f) < 0.01f, "free fall gives it all back, never above what he had: %.2f", nh);
+        nh = kldh_giveback(48.4f, 198.7f, 120.0f, 0.1f, &lt); CHECK(nh <= 120.0f && nh > 48.4f, "never above max: %.2f", nh);
+        nh = kldh_giveback(0.0f, 120.0f, 120.0f, 0.1f, &lt); CHECK(lt == 1 && nh == 0.0f, "a hit bigger than his health is LETHAL, nothing is given back");
+        nh = kldh_giveback(-5.0f, 120.0f, 120.0f, 0.1f, &lt); CHECK(lt == 1 && nh == -5.0f, "dead stays dead");
+        nh = kldh_giveback(60.0f, 120.0f, 120.0f, 1.0f, &lt); CHECK(lt == 0 && nh == 60.0f, "factor 1: the hit stays at the game's price");
+        nh = kldh_giveback(60.0f, 120.0f, 120.0f, 2.0f, &lt); CHECK(nh == 60.0f, "factor above 1: nothing back");
+        nh = kldh_giveback(60.0f, 120.0f, 120.0f, -1.0f, &lt); CHECK(nh == 60.0f, "negative factor: nothing back");
+        nh = kldh_giveback(60.0f, 120.0f, 120.0f, nan, &lt); CHECK(nh == 60.0f, "NaN factor: nothing back");
+        nh = kldh_giveback(100.0f, 90.0f, 120.0f, 0.1f, &lt); CHECK(nh == 100.0f, "no loss (healed): nothing back");
+        nh = kldh_giveback(60.0f, 120.0f, 120.0f, 0.5f, &lt); CHECK(fabs(nh - 90.0f) < 0.01f, "half price: %.2f", nh);
+    }
+
     printf("kldown_hold_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

@@ -84,4 +84,21 @@ static void kldh_filter_state(BYTE *st, DWORD cb, DWORD scan, int on)
     if (on && scan && scan < cb) st[scan] = 0;
 }
 
+/* ---- the victim-side GIVE-BACK (OnlineFreeFall / OnlineFactors), PURE: he lost (before - now) in one frame to a hit the game priced in full; the price
+   he should have paid is factor x that. Returns the health to write: now + (1 - factor) x loss, never above what he had before the hit and never above
+   max. *lethal = 1 when he is already dead (now <= 0.01): nothing is given back - a hit bigger than his health kills him before it can be priced.
+   A factor of 1 or more, below 0 or not a number gives nothing back (the hit stays at the game's price). */
+static float kldh_giveback(float now, float before, float max, float factor, int *lethal)
+{
+    float give, nh;
+    if (lethal) *lethal = 0;
+    if (now <= 0.01f) { if (lethal) *lethal = 1; return now; }
+    if (!(factor >= 0.0f) || factor >= 0.999f || !(before > now)) return now;
+    give = (before - now) * (1.0f - factor);
+    nh = now + give;
+    if (nh > before) nh = before;
+    if (max > 0 && nh > max) nh = max;
+    return nh > now ? nh : now;
+}
+
 #endif /* KLDOWN_HOLD_H */

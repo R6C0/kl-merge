@@ -288,6 +288,16 @@
        damage-table factors and the point-blank cap (they price hits the SHOOTER's machine makes), the AI heisters' part (Bots).
      - Kept online: the trigger numbers (the tuning object: the victim's own machine applies them), NoFire (this machine's own input mask), the
        camera and the tap prompt (the prompt's bar shows the hold meter).
+   SHIP 1026f (the owner: online EXACTLY like Arcade) CHANGES THE LIST ABOVE; each is an ini key, default on, and where it says 'GUESS' it is unbenched:
+     - OnlineFlop: Flop 1 / 3 plays online for this machine's own body (kld_o_mode); the other machines still see the stock fall (the clip is a local pool
+       write); the game's own GettingUp SENDER 0x6cd720 is called once per knock-down when the flop rises (kld_o_gu_send), because neither the state-5 end nor
+       FlopUp is a message. [0xceb40c] is never written online.
+     - OnlineFreeFall / OnlineFactors: NOT the table, NOT the switch: a victim-side give-back of what a hit took while he is down (kld_o_giveback). A hit
+       larger than his whole health still kills him (the apply is not detoured: no site established).
+     - OnlineMashSpeed: the speed-the-clip get-up mash runs on this machine's channel, GET UP presses go through at once (the hold meter is then off:
+       MashHold applies with OnlineMashSpeed=0); the others see the stock-speed get-up.
+     - OnlineNoFire: the ini's NoFire follows him online. The camera works on the stock fall too (kld_camera no longer needs the flop's fnow online).
+     - ReplicaProbe: log only, what a remote body's animation words are (kld_o_probe), to settle whether a replica reads what the flop wrote.
    The same keys apply on a stock FA map and in private match: nothing here asks which level it is. */
 #include "kldown_hold.h"
 static struct {
@@ -303,6 +313,15 @@ static struct {
     int kset, padhook, padtry, mfall;          /* the Cover filter is set by this part; the pad's XInputGetState import is wrapped; retry count of that wrap; the fire-blocking mask used as the pad fallback (said once) */
     DWORD padseen, padtick;                    /* GetTickCount of the last pass the pad showed a pressed button (0 = never): the fallback's 'a pad is the active input'; last wrap attempt */
     float lastdt;
+    /* 2026-10-26 (SHIP 1026f, re\down_online_built.md): the keys that bring Arcade's down online. Each is one ini key of [Down], default 1 (recommended on) */
+    int oflop;                                 /* OnlineFlop: this machine's own body plays the ini's Flop online (1 / 3), and the game's own GettingUp is SENT when the flop rises (kld_o_gu_send) */
+    int ofree, ofac;                           /* OnlineFreeFall / OnlineFactors: the victim-side give-back of what he loses on the floor (kld_o_giveback) - the fall (factor 0) / lying + get-up (DownFromCop / DownFromCrew) */
+    int omash;                                 /* OnlineMashSpeed: the get-up clip's speed-the-clip mash runs online, no meter hold (MashHold is kept for OnlineMashSpeed=0) */
+    int onofire;                               /* OnlineNoFire: the ini's NoFire follows him online */
+    int probe, probed;                         /* ReplicaProbe: log only, once per fall; probed = said in this knock-down */
+    int hold_ini;                              /* MashHold as the ini set it (kld_o.hold is 0 while OnlineMashSpeed=1) */
+    int gun; DWORD gu_t;                       /* GettingUp sends of this machine (all rounds); GetTickCount of the last */
+    float gb_sum; int gb_n, gb_late;           /* give-back: health given back in this knock-down; hits seen; hits that were lethal before they could be priced */
 } kld_o;
 /* klcharonline.c comes AFTER this file: its table / own-body finders are used through these (defined there, static in the same unit) */
 static int klco_table(DWORD sm, DWORD *ents, int *n);
@@ -403,6 +422,7 @@ static struct {
        pn: his NODE's place when he went down (klclimb.c: the floats at +0x460 stay at the navigation mesh's edge);
        fal / fap / fad: the game aligned this fall, to that place, that far from his feet (M2) */
     int fwf, fwu, pnok, fal; float pn[3], fap[3], fad;
+    int gusent;                                /* online flop: the game's GettingUp was sent for this knock-down (kld_o_gu_send; reset by kld_drop) */
 } kld_s;
 
 /* track R7 (the camera stays his; the game's own tap prompt - the block before kld_tick_main has the reading) */
@@ -585,7 +605,7 @@ static void kld_drop(void)
     kld_s.cap = 0; kld_s.capped = 0; kld_s.lastf = 0; kld_s.hp_up = 0;
     kld_s.fseen = kld_s.fnow = kld_s.fasked = kld_s.fup = 0; kld_s.t_ask = 0; kld_s.fhp = 0; kld_s.fgiven = 0; kld_s.dead = 0;
     kld_s.f7 = kld_s.f8 = -1; kld_s.fdone = kld_s.flost = 0; kld_s.fclip = kld_s.t_land = 0; kld_s.cap0 = 0; kld_s.cap0set = 0;
-    kld_s.fmi = -1; kld_s.fal = 0; kld_s.fad = -1.0f;
+    kld_s.fmi = -1; kld_s.fal = 0; kld_s.fad = -1.0f; kld_s.gusent = 0;
 }
 
 /* THE FALL'S INPUT MASK (review3 M1; READ whole: 0x61ef90, 0x6feb90, 0x787600). The down state's start (0x76a450, at
@@ -1158,6 +1178,35 @@ static void kld_flop_down(DWORD pl, DWORD d, DWORD ho, DWORD ds, DWORD now, floa
    part stops writing, the fall ends at the tick last written (2 s at most) by the game's own 2 -> 1 and its own
    lying / GET UP take over.
    Nothing here is written in a Dry run, for a dead man (the caller), or when the fall that plays is not the slot's. */
+/* ---- ONLINE FLOP (OnlineFlop=1): the game's GettingUp SENDER, once per knock-down (SHIP 1026f; re\down_online_read_a.md Q3 / Q4) ----
+   The flop ends its fall by M state 5 (kld_flop_one's end) or by FlopUp's [D+0x21] = 1; NEITHER is a message, so a replica of this body would stay lying
+   on every other machine. The game's own sender is 0x6cd720 (READ this session): a thiscall on the DDL net object R = [player+0x274c], plain ret, no
+   stack argument. It asks 0x905460 on the session ([0x168e598]) and the connected byte [+0x15d]; then the master test 0x9425a0 on R: a master builds the
+   message and calls the send stub 0x5d2c20 (RMCDownNotDead_GettingUp), a non-master only sets the replica's [D+0x21] - so it is only called after
+   klco_is_master. NOT 0x7180b0 (it also sets [D+0x21] and starts a second stock get-up). The caller's registers are the fastcall pair (ecx = R, edx unused:
+   GUESS that 0x6cd720 does not read edx - it was not seen to). The switch [0xceb40c] is not touched. Every call is logged.
+   A stock press that already took the get-up leaves [D+0x21] = 1 and has sent it itself (0x7180b0): then FlopUp's own write (flag `ours`) is the only
+   case that sends; a state-5 end with the byte already 1 is a stock press and is not sent twice (GUESS: nothing else sets that byte before the end). */
+static int kld_o_gu_call(void *arg)
+{
+    KLFC_CALL(void (__fastcall *)(DWORD, DWORD), 0x6cd720)(*(DWORD *)arg, 0);
+    return 0;
+}
+static void kld_o_gu_send(DWORD pl, DWORD d, int pre, const char *why)
+{
+    DWORD R; BYTE asked = 0; int r;
+    if (!kld_o.cur || !kld.flop || !kld_o.oflop || kld_s.gusent || kld.dry) return;
+    kld_s.gusent = 1;                          /* once per knock-down whatever happens below (a refused call is not retried in a loop) */
+    R = klh_rd32(pl + 0x274c);
+    if (!R || !klfc_ok(R, 0x560)) { klog("down: online flop: GettingUp NOT sent (%s): [player+0x274c] = %08lx is not a readable net object", why, R); return; }
+    if (!klco_is_master(pl)) { klog("down: online flop: GettingUp NOT sent (%s): the net object %08lx fails the master test 0x9425a0 - this body is not this machine's own (the send would only set a replica's byte)", why, R); return; }
+    if (pre >= 0) asked = (BYTE)pre; else klh_rd(d + 0x21, &asked, 1);      /* pre = [D+0x21] as it stood BEFORE this part wrote it (FlopUp passes it; review: a stock press that ran 0x7180b0 already sent GettingUp, a second send would reach the replica twice); -1 = read now */
+    if (asked) { klog("down: online flop: GettingUp NOT sent (%s): [D+0x21] was already 1 - a stock press took the get-up and the game sent it (0x7180b0)", why); return; }
+    r = klfc_guard("kld_o_gu_send 0x6cd720", kld_o_gu_call, &R);
+    kld_o.gun++; kld_o.gu_t = GetTickCount();
+    klog("down: online flop: GettingUp SENT by the game's own sender 0x6cd720 (R=%08lx; %s; call %d of this session; %s): the other machines' replica of this body rises now", R, why, kld_o.gun, r < 0 ? "THE CALL FAULTED (guarded, logged above)" : "returned");
+}
+
 static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
 {
     DWORD m, ms = 0, clip, h, chans, clock, tick = 0, fl, q = 0, five = 5, ma = 0, mv = 0; float frame, to, fps, dt, rate, left, land; int ok = 1, i, fr, ev, full, mk, light; char name[96]; long ne; BYTE al = 0;
@@ -1249,9 +1298,11 @@ static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
        game's state with this file's mash (FlopBase / FlopPerPress / FlopTop by the clip). Nothing more is written to the
        fall; a request the game does not take is taken back when D ends, and the fall ends by the game's own tick. */
     if (kld.flop == 3 && kld_s.idu >= 0 && kld_s.fmi >= 0 && kld_s.fmi < kld_mx.n && kld_md[kld_mx.e[kld_s.fmi].def].upcut && kld_s.f8 >= 0 && frame >= (float)kld_s.f8) {
-        BYTE one = 1;
+        BYTE one = 1, pre = 0;
+        klh_rd(d + 0x21, &pre, 1);
         if (klh_data((void *)(DWORD_PTR)(d + 0x21), &one, 1, "down-not-dead: the get-up is asked for (FlopUp)")) {
             kld_s.fasked = 1; kld_s.t_ask = now; kld_s.fdone = 3;
+            kld_o_gu_send(pl, d, pre, "FlopUp: [D+0x21] written by this part");
             klog("down: flop: FlopUp: he lies (frame %.1f of %.0f, the clip's event 8 at %d, %.2f s after he went down): the get-up %s is asked for by the game's own byte [D+0x21] - FROM HERE EVERY HIT COSTS", frame, to, kld_s.f8, (now - kld_s.t_down) / 1000.0f, kld.upslot);
         } else kld_s.fdone = 2;
         return;
@@ -1272,6 +1323,7 @@ static void kld_flop_one(DWORD pl, DWORD d, DWORD ds, DWORD now, float hp)
         }
         if (klh_data((void *)(DWORD_PTR)(m + 0x8ec), &five, 4, "the prone movement: its state, 5 = done (what its own frame writes, 0x640c60)")) {
             kld_s.fdone = 1;
+            kld_o_gu_send(pl, d, -1, "the flop clip is through: movement state 5 written");
             klh_data((void *)(DWORD_PTR)(d + 0xf0), &zero, 4, "down-not-dead: who floored him, cleared as the game does when a fall is over (0x8ee2bb)");
             klog("down: flop: the knock-down's clip is through (frame %.1f of %.0f, %.2f s after he went down): the fall's input mask %08lx: %08lx -> %08lx (%s), movement state 5 is written - the game ends the down state in its next frame", frame, to, (now - kld_s.t_down) / 1000.0f,
                  ma, mv, mk ? nv : 0, mk ? "bits 0x11 off" : "NO INPUT OBJECT: nothing to take off");
@@ -1704,7 +1756,7 @@ static void kld_camera(DWORD pl, DWORD ds, DWORD now)
         kld_v.lookn = kld_v.siden = kld_v.sidetold = kld_v.sidearm = 0;
         return;
     }
-    if (ds != 2 || !kld_s.fnow || kld_s.dead) return;      /* only a fall this part drives (never in a Dry run: fnow is 0 there), never for a dead man */
+    if (ds != 2 || kld_s.dead || kld.dry || (!kld_s.fnow && !kld_o.cur)) return;      /* only a fall this part drives (never in a Dry run: fnow is 0 there), never for a dead man. ONLINE (SHIP 1026f): also the game's own stock fall - fnow is only the flop's, so the old test left Camera=1 inert online while the round line said it was kept; what follows reads and writes only this machine's own input mask / camera side */
     /* review 7, S5: the setter's DELAYED form (0x74a15f .. 0x74a170: timer [player+0xb88], dword [player+0xb8c] = +1 /
        -1; its direct form writes that dword 0, 0x74a1a8). The down start's own direct call leaves it 0, so a value
        here was armed IN the fall by somebody else (the shoulder key? - not read): that side is theirs, this part
@@ -1760,7 +1812,7 @@ static void kld_prompt(DWORD pl, DWORD ds, DWORD now)
             want = 1; lo = kld_s.fup ? kld.fbase : kld.base; hi = kld_s.fup ? kld.ftop : kld.top;
             v = kld_s.lastf / kld_s.endf;
         }
-        if (want && kld_v.style == 2 && !kld_o.cur) v = hi > lo + 0.01f ? (kld_v.rate - lo) / (hi - lo) : 0.0f;
+        if (want && kld_v.style == 2 && (!kld_o.cur || kld_o.omash)) v = hi > lo + 0.01f ? (kld_v.rate - lo) / (hi - lo) : 0.0f;
     }
     if (kld_s.dead) off = "he is dead or out of play"; else if (!kld_v.act || !pl) off = "the part does not act here (a stock level, no Arcade session, a police body, no player)"; else if (!inround) off = "the round does not run any more (the session state is not 0x19: the round's end, the score page)"; else if (ds != 0) off = "the clip is through, or the game took the state over";
     /* the pause menu: the game's tick stands (ASSUMED; live check C4). Review 7, S7: the clock of the test starts
@@ -1989,14 +2041,61 @@ static int kld_near(float a, float b) { return KLD_ABS(a - b) <= 0.0005f * (1.0f
 
 /* One pass, after kld_tick_main (which left act / pl / state in kld_v, the level and kld_flop_one's heartbeat in
    kld_r, the dead flag and the fall's flags in kld_s). Game thread only. */
+/* ---- ONLINE: the victim-side GIVE-BACK (OnlineFreeFall / OnlineFactors; SHIP 1026f, re\down_online_built.md) ----
+   Arcade prices a hit on a downed man with the level's damage table (police -> you +8, crew -> you +0x10; DownFromCop / DownFromCrew) and, with
+   Vulnerable=0, swallows it in the fall. ONLINE neither is written: the table is process-wide and prices hits the SHOOTER's machine makes, and the 'down
+   not dead' switch [0xceb40c] has eleven readers (re\down_online_read_b.md Q4). Tonight's online log: 120 -> 8.1 in ONE police hit of 111.9 on the floor,
+   198.7 -> 48.4 in 0.6 s, two deaths. THE PREFERRED FIX (a detour of the victim-side apply, player slot 422 / the hit record's [rec+0x18]) was NOT
+   established from re\ (the ReceiveHit wrapper 0x807220 -> [this+0x2a0] slot 0x698 and the player's damage routine 0x458880 are known, the pricing machine
+   of an AI cop's hit is disputed, private_match.md:618-621 / netcode.md:227-229) and a vtable swap of the player breaks the KLD_PLAYER_VT checks, so
+   this is the FALLBACK the plan names: the loss the existing detection sees at the end of the frame is given back, (1 - factor) of it, with ONE write of
+   his own master health (stock replicates a master's health from its owner's machine: RMCUpdateHitPoints 0x8759e0). It does not matter WHICH machine
+   priced the hit - the number the victim's health fell by is what is scaled - which is also why Log=1 says per hit that THIS path fired.
+   THE WEAK POINT, said plainly: the hit has been applied when this runs, so ONE hit larger than his whole health still kills him before it can be priced
+   ('LETHAL' line); the factor-0 / 0.15 price only saves him from a hit that leaves him alive. Other machines may see his health dip and rise (GUESS:
+   the direct write is replicated by the next UpdateHitPoints; it is not sent by this part). The attacker is the last BULLET's ([player+0x2778]); no
+   readable attacker = no give-back (a flat 50 of close combat, 0x499570, is not scaled, as in Arcade). Factors: AI heister (team 2) = DownFromCrew;
+   an AI of any other team and a human POLICE body = DownFromCop (GUESS for the human cop: Arcade has none); a human heister = 1 (unscaled, as Arcade).
+   The fall (down state 2) is Arcade's: free (factor 0) when the ini's Vulnerable=0 and OnlineFreeFall=1, else the same factors (Vulnerable=1: hits cost). */
+static float kld_o_giveback(DWORD pl, DWORD ho, DWORD ds, float hp, float max, float dl, DWORD now)
+{
+    DWORD att = klh_rd32(pl + 0x2778), avt = att ? klh_avt(att) : 0, team = 99, sc; float f = 1.0f, give, nh; int cls = 0; const char *who = "nobody readable", *rule = "no factor";
+    BYTE pol = 0;
+    kld_o.gb_n++;
+    if (avt == KLD_ACTOR_VT) { if ((sc = klh_rd32(att + 0x54)) != 0) klh_rd(sc + 4, &team, 4); cls = team == 2 ? 2 : 1; who = cls == 2 ? "an AI heister" : "police / a guard (AI)"; }
+    else if (avt == KLD_PLAYER_VT) { klh_rd(att + 0x2723, &pol, 1); cls = pol ? 1 : 0; who = pol ? "a human police body" : "a human heister (no factor)"; }
+    if (ds == 2 && kld_o.ofree && !kld_r.hurt) { f = 0.0f; rule = "FREE FALL (OnlineFreeFall=1, Vulnerable=0: Arcade swallows hits in the fall)"; }
+    else if (kld_o.ofac && cls == 1) { f = kld_r.cop; rule = ds == 2 ? "DownFromCop in the fall (Vulnerable=1)" : "DownFromCop"; }
+    else if (kld_o.ofac && cls == 2) { f = kld_r.crew; rule = ds == 2 ? "DownFromCrew in the fall (Vulnerable=1)" : "DownFromCrew"; }
+    if (f >= 0.999f || !kld_fin(f) || f < 0) {
+        if (kld.log >= 2 || kld_r.nline < 8) klog("down: online: give-back: he lost %.1f (%.1f of %.1f, down state %lu) to %s: no factor applies (%s) - the hit stays at the game's price", dl, hp, max, ds, who, rule);
+        return hp;
+    }
+    give = dl * (1.0f - f);
+    nh = kldh_giveback(hp, kld_r.hplast, max, f, 0); (void)give;      /* the pure arithmetic of kldown_hold.h (tested in kldown_hold_test.c) */
+    if (hp <= 0.01f) {                         /* dead in this frame: nothing is written for him */
+        kld_o.gb_late++;
+        klog("down: online: give-back: LETHAL (rarely reached: kld_dead usually flags the death first, so this line is mostly the death line's job) %.1f hit on the floor (health %.1f of %.1f, down state %lu, %s): applied before it could be priced - ONE hit larger than his health still kills him online (%s would have left %.1f); the victim-side detour of slot 422 would be needed for that, it is not established (re\\down_online_built.md)", dl, hp, max, ds, who, rule, kld_r.hplast - dl * f);
+        return hp;
+    }
+    if (nh > hp + 0.01f && klh_data((void *)(DWORD_PTR)(ho + 4), &nh, 4, "the local player's health: the give-back of a hit while he is knocked down (OnlineFactors / OnlineFreeFall)")) {
+        kld_o.gb_sum += nh - hp;
+        if (kld.log >= 1 && (kld.log >= 2 || kld_r.nline < 8 || dl > 0.5f * max))
+            klog("down: online: give-back (the VICTIM-SIDE fallback, not a detour): he lost %.1f to %s %.2f s into the down (down state %lu); %s x%.2f: %.1f given back, health %.1f -> %.1f of %.1f (%.1f given back in this down so far); the hit was priced by whichever machine priced it - this machine scaled what it applied",
+                 dl, who, (now - kld_r.t0) / 1000.0f, ds, rule, f, nh - hp, hp, nh, max, kld_o.gb_sum);
+        return nh;
+    }
+    return hp;
+}
+
 static void kld_rules(DWORD now)
 {
     static const DWORD off[2] = { 8, 0x10 };
     DWORD pl = kld_v.act ? kld_v.pl : 0, d = 0, ds = 0, ho = 0, tun, R = 0, sw = 0xffffffff, zero = 0;
-    float hp = 0, max = 0, cur[2] = { 0, 0 }, want[2]; int down, hpok = 0, need, tok = 0, k, owned = kld_owned(), hurtw, held, pbok; const char *why = "";
+    float hp = 0, max = 0, cur[2] = { 0, 0 }, want[2]; int down, hpok = 0, need, tok = 0, k, owned = kld_owned(), hurtw, held, pbok, gb = kld_o.cur && (kld_o.ofree || kld_o.ofac); const char *why = "";
     if (!kld.on || !klh_exe_ok) return;
     need = !kld_o.cur && (kld_r.cop != 1.0f || kld_r.crew != 1.0f);      /* online: the damage table prices hits the SHOOTER's machine makes - never written here (kld_o) */
-    if (!kld_r.nofire && !kld_r.hurt && !need && !kld_r.mbits && !kld_r.sw && !kld_r.fon && !kld_r.w[0].at && !kld_r.w[1].at && !kld_r.was && kld_r.pb < 0 && !kld_r.pbon && !kld_r.nothrow) return;
+    if (!kld_r.nofire && !kld_r.hurt && !need && !kld_r.mbits && !kld_r.sw && !kld_r.fon && !kld_r.w[0].at && !kld_r.w[1].at && !kld_r.was && kld_r.pb < 0 && !kld_r.pbon && !kld_r.nothrow && !gb) return;
     if (pl && (!(d = klh_rd32(pl + 0x2948)) || klh_rd32(d) != pl || !klh_rd(d + 4, &ds, 4))) pl = 0;
     down = pl && ds != 0 && !kld_s.dead && !kld.dry && kld_v.state == KLD_ROUND;
     if (pl && (ho = klh_rd32(pl + 0xa48)) != 0) { int ok = 1; hp = kld_rdf(ho + 4, &ok); max = kld_rdf(ho + 8, &ok); hpok = ok; }
@@ -2051,7 +2150,7 @@ static void kld_rules(DWORD now)
     /* 1. NO FIRE: the game's own two bits of a man who may not shoot (0x860f87 / 0x860f93), while he is down */
     {
         DWORD ma = 0, mv = 0, nv, bits = kld_r.nofire == 2 ? KLD_MASK_FIRE : (KLD_MASK_FIRE | KLD_MASK_AIM);
-        if (kld_r.nofire && down && !kld_o.cur) {      /* review 2026-10-26: not online: the hold there must let fire work, and NoFire defaults to Flop's (Arcade's tuning) - the else-branch below takes bits set in an Arcade pass off */
+        if (kld_r.nofire && down && (!kld_o.cur || kld_o.onofire)) {      /* OnlineNoFire (SHIP 1026f, default 1): the ini's NoFire follows him online - the mask is this machine's own input object. Before: never online (the old hold took bit 0x80 and had to let fire work; MashHoldHow=2 hides only the Cover key, OnlineMashSpeed=1 holds nothing). The else-branch below takes bits set in an Arcade pass off */
             if (!kld_mask(pl, &ma, &mv)) { if (!kld_r.mtold) { kld_r.mtold = 1; klog("down: rules: NoFire: NO INPUT OBJECT for this player (the lookup of 0x61ef90 finds none): nothing is masked - he can fire in this down"); } }
             else {
                 if (kld_r.mbits && (kld_r.mpl != pl || kld_r.mat != ma)) { klog("down: rules: NoFire: the bits %lx this part set on player %08lx (mask %08lx) are another object's now: dropped unwritten", kld_r.mbits, kld_r.mpl, kld_r.mat); kld_r.mbits = 0; }
@@ -2176,6 +2275,7 @@ static void kld_rules(DWORD now)
                      kld_r.nline == 8 && kld.log < 2 ? " - further losses of this down are only counted (Log=2 lists them)" : "");
             }
         }
+        if (gb && hp < kld_r.hplast - 0.05f && ho) hp = kld_o_giveback(pl, ho, ds, hp, max, kld_r.hplast - hp, now);      /* ONLINE: OnlineFreeFall / OnlineFactors - after the log line above, which shows the loss as the game made it */
         kld_r.hplast = hp;
     }
     if (!down && kld_r.was) {
@@ -2257,6 +2357,38 @@ static DWORD kld_o_pl(DWORD now)
     if (pl != kld_o.pl) klog("down: online: this machine's own player is %08lx (found by %s)", pl, how == 1 ? "the game's player slot" : "the master test 0x9425a0");
     kld_o.pl = pl;
     return pl;
+}
+
+/* ---- ReplicaProbe (SHIP 1026f; log only, nothing is written): what a REMOTE body's animation words are, once per fall of this machine's own body ----
+   The open net question (re\down_online_read_a.md Q3): does a replica play a clip THIS machine did not write? The flop writes slot ids into THIS body's
+   animation pool [pl+0x78] / table [+0x7c] / third pointer [+0x80]; pools are per animation set. If a remote body's pool is the SAME pointer as ours (the same
+   hero model / set), what the flop wrote is read by that body's own fall on this machine too (it would then show the flop clip here, for a fall the other
+   machine plays as stock); if it is another pointer, the two never meet. One line per remote ZFFPlayer of the session table: the three words, whether
+   [+0x78] equals ours, its down object's state [D+4], the clip word of its prone movement [M+0x8cc] and the clip's name. Bounded: 8 bodies a fall, 40
+   falls a session, 2 s apart, every read through klh_rd32 (guarded). */
+static void kld_o_probe(DWORD own, DWORD now)
+{
+    static DWORD last; static int calls;
+    DWORD sm, ents = 0, e, w78, w7c, w80, d, m, clip, a4; int n = 0, i, a1, a2, a3, shown = 0; char nm[96];
+    if (!kld_o.probe || !own || calls >= 40 || (last && now - last < 2000)) return;
+    last = now; calls++;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !klco_table(sm, &ents, &n)) { klog("down: online: ReplicaProbe: no session table this fall"); return; }      /* klco_table also caches the table pointer in klco.tbl - the same value klco_tick and kld_o_find (above) write every tick, so this is idempotent (review: side effect judged harmless) */
+    w78 = klh_rd32(own + 0x78); w7c = klh_rd32(own + 0x7c); w80 = klh_rd32(own + 0x80);
+    klog("down: online: ReplicaProbe (fall %d of this body %08lx): own pool [+0x78] %08lx, table [+0x7c] %08lx, third [+0x80] %08lx; %d body(ies) in the session table", kld_s.downs, own, w78, w7c, w80, n);
+    for (i = 0; i < n && shown < 8; i++) {
+        DWORD ds = 0;
+        e = klh_rd32(ents + 12 * i + 4);
+        if (!e || e == own || klh_rd32(e) != KLD_PLAYER_VT) continue;
+        shown++;
+        d = klh_rd32(e + 0x2948); m = d && klh_rd32(d) == e ? klh_rd32(d + 0xc) : 0;
+        if (d) klh_rd(d + 4, &ds, 4);
+        clip = m && klh_rd32(m) == KLD_PRONE_VT ? klh_rd32(m + 0x8cc) : 0;
+        nm[0] = 0; a1 = a2 = a3 = 0; a4 = 0;
+        if (clip) kld_clipfacts(clip, &a1, &a2, &a4, &a3, nm, sizeof nm);
+        klog("down: online: ReplicaProbe: body %08lx %s: [+0x78] %08lx (%s ours), [+0x7c] %08lx, [+0x80] %08lx, down state %lu, prone clip word [M+0x8cc] %08lx '%s'%s",
+             e, "(master test left out: log-only, an unguarded 0x9425a0 on a half-built replica could fault)", klh_rd32(e + 0x78), klh_rd32(e + 0x78) == w78 ? "SAME as" : "not", klh_rd32(e + 0x7c), klh_rd32(e + 0x80), ds, clip, nm,
+             klh_rd32(e + 0x7c) == w7c ? " - the SAME slot table as ours: what the flop writes into it is read by this body's falls on this machine too (GUESS)" : "");
+    }
 }
 
 /* Is the Cover key (or the pad button) down now? GetAsyncKeyState and XInput, looked up at run time, only while the game's window is in front
@@ -2383,6 +2515,7 @@ static void kld_o_step(DWORD pl, DWORD ds, int alive, DWORD now, float dt)
 {
     int key, hold, edge = 0, was_latched = kld_o.h.latched;
     if (!kld_o.hold) { kld_o.holding = 0; return; }
+    if (kld.flop && kld_s.fnow && ds == 2 && !kld_s.fdone) { kld_o_release("the flop's own mash (FlopBase / FlopPerPress) is on in this fall"); kld_o.holding = 0; return; }      /* OnlineFlop with OnlineMashSpeed=0: the hold meter is for the stock fall / lying; the flop's fall counts the real presses itself */
     if (kld_o.how == 2 && kld_o.pad && !kld_o.padhook && kld_o.padtry < 40 && now - kld_o.padtick >= 1000) { kld_o.padtick = now; kld_o.padtry++; kld_o_pad_iat(); }      /* the exe's import may not be resolved at start-up: retried each second, 40 times */
     key = kld_o_keydown();
     if (key < 0) {                               /* the key cannot be read: holding would make a man nobody can free */
@@ -2405,10 +2538,13 @@ static void kld_o_roundline(DWORD sub)
     char t[220]; int k, n = 0; static const char *const subn[3] = { "Fragile Alliance", "Undercover Cop", "Cops and Robbers" };
     t[0] = 0;
     for (k = 0; k < KLD_NT; k++) if (kld.want[k] >= 0 && n < (int)sizeof t - 32) n += snprintf(t + n, sizeof t - n, " %s=%.1f", kld_t[k].key, kld.want[k]);
-    klog("down: online: ROUND %s (sub-mode %lu): the part acts for this machine's own non-police player. FLOP IS OFF ONLINE (ini Flop=%d): the fall is the game's own - the belly clips are a write into this machine's animation pool and no read showed a replica plays a clip it did not write, so the stock fall is kept rather than risk a desync. The speed-the-clip get-up mash does NOT run online. MashHold=%d: while he falls / lies the GET UP button is held (mask bit 0x80) until the meter holds %.1f presses (+%.2f a press, -%.2f a second, time bound %.0f s), counted from key 0x%02x%s (pad button 0x%04lx), then the stock one-press get-up runs. Trigger numbers:%s. NoFire=%d, camera=%d, prompt=%d kept; Vulnerable, DownFromCop / DownFromCrew, DownPointBlank and Bots are Arcade-only and stay off. Log=%d",
-         sub < 3 ? subn[sub] : "?", sub, kld_o.flop0, kld_o.hold, kld_o.need, kld_o.per, kld_o.decay, kld_o.maxlie / 1000.0f, kld_o.key, kld_o.pad ? " + the pad" : "", kld_o.padbtn,
-         n ? t : " the game's own (no key set)", kld_r.nofire, kld_v.cam, kld_v.prompt, kld.log);
-    klog("down: online: MashHoldHow=%d (%s): %s", kld_o.how, kld_o.how == 2 ? "the Cover key only" : "mask bit 0x80", kld_o.how == 2 ? (kld_o.scan && klkf_armed ? "the get-up key is hidden while he lies, he can shoot; pad: see the pad line" : "NO scan code / proxy: this round holds with the bit-0x80 mask, which blocks fire") : "the old hold: every button but reload is off while he lies");
+    klog("down: online: ROUND %s (sub-mode %lu): the part acts for this machine's own non-police player. ARCADE PARITY ONLINE (SHIP 1026f): FLOP %s (ini Flop=%d, OnlineFlop=%d): this machine's own body plays the ini's belly clips; they are a write into ITS animation pool and no message, so THE OTHER MACHINES SEE THE STOCK FALL (the clip is not mirrored); the game's own GettingUp is sent once per knock-down when the flop rises (0x6cd720), so their replica stands. FACTORS / FREE FALL (OnlineFactors=%d, OnlineFreeFall=%d): NOT the damage table (process-wide, priced by the shooter's machine) and NOT the switch [0xceb40c]: a victim-side GIVE-BACK of what a hit took while down (DownFromCop %.2f, DownFromCrew %.2f, the fall: with Vulnerable=0 free by the give-back; with Vulnerable=1 the game's own trigger [0xceb40c] is NOT written online, so IN THE FLOP FALL (Flop=1/3, up to ~2 s) every hit is swallowed by the game - the fall is FREE online where Arcade charges for it (known parity gap, Vulnerable=%d) - a single hit larger than his health still kills him (the fall-to-0 is logged by the death line, not as a give-back). GET-UP MASH (OnlineMashSpeed=%d): %s. NoFire=%d (OnlineNoFire=%d: %s), camera=%d (also on the stock fall), prompt=%d. Trigger numbers:%s. Bots, Vulnerable's switch and DownPointBlank stay off online. Log=%d",
+         sub < 3 ? subn[sub] : "?", sub, kld.flop ? "IS ON" : "IS OFF", kld_o.flop0, kld_o.oflop, kld_o.ofac, kld_o.ofree, kld_r.cop, kld_r.crew, kld_r.hurt,
+         kld_o.omash, kld_o.omash ? "Arcade's speed-the-clip get-up runs on THIS machine's channel at once (no meter hold; GET UP presses go through); the other machines' replica gets the stock-speed get-up" :
+                      kld_o.hold ? "MashHold: the GET UP button is held until the meter holds the needed presses, then one stock press (the clip stays stock speed)" : "off (MashHold=0): the game's own one-press get-up",
+         kld_r.nofire, kld_o.onofire, kld_o.onofire ? "follows him online" : "not online", kld_v.cam, kld_v.prompt, n ? t : " the game's own (no key set)", kld.log);
+    if (kld_o.hold) klog("down: online: MashHold=%d: meter %.1f presses (+%.2f a press, -%.2f a second, time bound %.0f s), counted from key 0x%02x%s (pad button 0x%04lx)", kld_o.hold, kld_o.need, kld_o.per, kld_o.decay, kld_o.maxlie / 1000.0f, kld_o.key, kld_o.pad ? " + the pad" : "", kld_o.padbtn);
+    if (kld_o.hold) klog("down: online: MashHoldHow=%d (%s): %s", kld_o.how, kld_o.how == 2 ? "the Cover key only" : "mask bit 0x80", kld_o.how == 2 ? (kld_o.scan && klkf_armed ? "the get-up key is hidden while he lies, he can shoot; pad: see the pad line" : "NO scan code / proxy: this round holds with the bit-0x80 mask, which blocks fire") : "the old hold: every button but reload is off while he lies");
 }
 
 /* Arcade <-> online: kld.flop is the ini's in Arcade and 0 online. The change is made BETWEEN passes with the old mode's teardown first (the words the
@@ -2423,9 +2559,9 @@ static void kld_o_mode(int onl, DWORD now)
     }
     kld_o_release("the mode changes (Arcade <-> online)");
     memset(&kld_o.h, 0, sizeof kld_o.h); kld_o.holding = 0; kld_o.told = 0; kld_o.nheld = 0; kld_o.mtold = 0; kld_o.pl = 0; kld_o.t_find = 0;
-    kld.flop = onl ? 0 : kld_o.flop0;
+    kld.flop = !onl ? kld_o.flop0 : (kld_o.oflop && (kld_o.flop0 == 1 || kld_o.flop0 == 3)) ? kld_o.flop0 : 0;      /* OnlineFlop: the ini's Flop 1 / 3 for this machine's own body (Flop=2 and 0 stay the stock fall: only the whole-clip modes end by state 5 / FlopUp, which kld_o_gu_send covers) */
     kld_o.cur = onl;
-    if (kld.log) klog("down: mode: %s (kld.flop %d)", onl ? "ONLINE: the stock fall, the hold-mash get-up, no Vulnerable / factors / bots" : "Arcade: the ini's Flop / mash as set", kld.flop);
+    if (kld.log) klog("down: mode: %s (kld.flop %d)", onl ? (kld.flop ? "ONLINE: the ini's Flop on this machine's own body (OnlineFlop), the game's GettingUp sent when it rises, the victim-side give-back for the factors / free fall, no Vulnerable switch, no bots" : "ONLINE: the stock fall (OnlineFlop=0 or Flop is not 1 / 3), no Vulnerable switch, no bots") : "Arcade: the ini's Flop / mash as set", kld.flop);
     (void)now;
 }
 
@@ -2503,6 +2639,7 @@ static void kld_tick_main(int game_thread)
             { float bk[3]; kld_s.pnok = kld.flop == 3 && klq_node(klh_rd32(pl + 4), kld_s.pn, bk); }      /* review6 M2: his node's place (reads) */
             klog("down: YOU ARE DOWN (%d this round object) at (%.0f, %.0f, %.0f): health %.1f of %.1f, down state %lu; the button is %s",
                  kld_s.downs, pos[0], pos[1], pos[2], hp, max, ds, btn ? "held" : "up");
+            if (onl) { kld_o.gb_sum = 0; kld_o.gb_n = 0; kld_o_probe(pl, now); }
         } else if (ds == 1 && kld_s.dstate == 2) {
             kld_s.t_lie = now;
             if (kld.log) {                                           /* track R3: WHICH clips - the lying one is the channel the movement holds now, if it holds one */
@@ -2554,7 +2691,7 @@ static void kld_tick_main(int game_thread)
             }
             if ((kld_s.fnow || kld_s.fup) && !kld_s.dead && hpok && hp > 0.01f) {      /* the flop's end, for a man who lives (never for one flagged dead in this down: review2 M1) */
                 if (kld_s.fgiven > 0.05f) klog("down: flop: %.1f health was given back while he got up (FlopTake=%.2f: that share of every loss stays)", kld_s.fgiven, kld.take);
-                if ((kld_s.up || kld_s.fdone == 1) && !kld.dry && kld.uppct > 0 && ho && hp < max * kld.uppct / 100.0f) {
+                if ((kld_s.up || kld_s.fdone == 1) && !kld.dry && !kld_o.cur && kld.uppct > 0 && ho && hp < max * kld.uppct / 100.0f) {
                     float nh = max * kld.uppct / 100.0f;
                     if (klh_data((void *)(DWORD_PTR)(ho + 4), &nh, 4, "the local player's health: what a man who got up from the flop is given"))
                         klog("down: flop: up with %.1f of %.1f health (FlopUpPct=%.0f; he had %.1f) - an NPC that gets up from its own down state is given 75 %% (0x5f4d2c)", nh, max, kld.uppct, hp);
@@ -2592,7 +2729,7 @@ static void kld_tick_main(int game_thread)
     }
     if (KLD_ONE && ds != 0) kld_flop_one(pl, d, ds, now, hp);
     else if (kld.flop && ds != 0) kld_flop_down(pl, d, ho, ds, now, &hp, max, hpok);
-    if (onl) { if (kld_s.up) kld_drop(); return; }      /* ONLINE: the speed-the-clip mash below is a local write the others never see: the game's get-up runs at its own speed */
+    if (onl && !kld_o.omash) { if (kld_s.up) kld_drop(); return; }      /* ONLINE with OnlineMashSpeed=0: the speed-the-clip mash below is a local write the others never see: the game's get-up runs at its own speed (MashHold's meter is the mash then). OnlineMashSpeed=1 (default) runs it on THIS machine's channel: the others see the stock-speed get-up */
     if (ds != 3) { if (kld_s.up) kld_drop(); return; }
 
     /* he gets up: the channel of the clip */
@@ -2641,9 +2778,10 @@ static void kld_tick_main(int game_thread)
             kld_s.cap = tick + (DWORD)(endf / (B * 25.0f) * 1024.0f + 0.5f) + 256;
             kld_s.capped = 0; kld_s.lastf = frame; kld_s.hp_up = hp;
             if (kld.log) { int a1, a2, a3; DWORD a4; char gn[96]; kld_clipfacts(clip, &a1, &a2, &a4, &a3, gn, sizeof gn); klog("down: the get-up's clip %08lx is '%s' (%d frames, %d event(s))", clip, gn, a1, a2); }
-            klog("down: GETTING UP after %.2f s on the floor: channel %d, clip %08lx of %.0f frames, the game's speed %.2f, over at frame %.1f, the stick may end it from frame %.1f; %s %s %.2f + %.2f a press (meter - %.1f a second), at most %.2f; over in %.2f s at the latest; health %.1f of %.1f",
+            klog("down: GETTING UP after %.2f s on the floor: channel %d, clip %08lx of %.0f frames, the game's speed %.2f, over at frame %.1f, the stick may end it from frame %.1f; %s %s %.2f + %.2f a press (meter - %.1f a second), at most %.2f; over in %.2f s at the latest; health %.1f of %.1f%s",
                  (now - kld_s.t_down) / 1000.0f, i, clip, to, r0, endf, evf, kld.dry ? "Dry=1, it WOULD be played at" : "it is played at", kld_s.fup ? "THE FLOP'S FlopBase" : "Base", B, P, kld.decay, T,
-                 (float)(long)(kld_s.cap - tick) / 1024.0f, hp, max);
+                 (float)(long)(kld_s.cap - tick) / 1024.0f, hp, max,
+                 kld_o.cur ? " - ONLINE (OnlineMashSpeed): the channel's speed and the two end ticks are this machine's own writes; the other machines' replica of this body gets the GettingUp message at the press and plays the STOCK-speed get-up, so it stands before this body does" : "");
         }
         kld_s.lastf = frame;
         kld_s.meter -= kld.decay * dt; if (kld_s.meter < 0) kld_s.meter = 0;
@@ -2726,6 +2864,15 @@ static void kld_init(void)
     kld_o.online = GetPrivateProfileIntA("Down", "Online", 0, klh_ini) != 0;
     kld_o.hold = GetPrivateProfileIntA("Down", "MashHold", 1, klh_ini) != 0;
     kld_o.flop0 = kld.flop;
+    /* SHIP 1026f (re\down_online_built.md): Arcade's down online. Every key is on by default ("recommended on"); they act only while Online=1 and only for this machine's own non-police body */
+    kld_o.oflop = GetPrivateProfileIntA("Down", "OnlineFlop", 1, klh_ini) != 0;       /* the ini's Flop (1 / 3) online + the game's GettingUp sent when it rises (UNBENCHED: the replica's clip is not mirrored) */
+    kld_o.ofree = GetPrivateProfileIntA("Down", "OnlineFreeFall", 1, klh_ini) != 0;   /* the fall is Arcade's: free (factor 0) with Vulnerable=0 - the victim-side give-back, no switch write */
+    kld_o.ofac = GetPrivateProfileIntA("Down", "OnlineFactors", 1, klh_ini) != 0;     /* police -> you / crew -> you while down: the victim-side give-back, no table write */
+    kld_o.omash = GetPrivateProfileIntA("Down", "OnlineMashSpeed", 1, klh_ini) != 0;  /* Arcade's get-up mash online (no meter hold); MashHold stays for OnlineMashSpeed=0 */
+    kld_o.onofire = GetPrivateProfileIntA("Down", "OnlineNoFire", 1, klh_ini) != 0;   /* the ini's NoFire follows him online */
+    kld_o.probe = GetPrivateProfileIntA("Down", "ReplicaProbe", 1, klh_ini) != 0;     /* log only: remote bodies' animation words once per fall */
+    kld_o.hold_ini = kld_o.hold;
+    if (kld_o.omash) kld_o.hold = 0;           /* GET UP presses go through at once; the hold-mash meter is the OnlineMashSpeed=0 form */
     kld_o.need = kld_inif("MashNeed", "8"); kld_o.per = kld_inif("MashPer", "1.0"); kld_o.decay = kld_inif("MashDecay", "1.5");
     if (!kld_fin(kld_o.need) || kld_o.need < 1.0f || kld_o.need > 100.0f) kld_o.need = 8.0f;
     if (!kld_fin(kld_o.per) || kld_o.per < 0.05f || kld_o.per > 10.0f) kld_o.per = 1.0f;
@@ -2800,6 +2947,8 @@ static void kld_init(void)
                      kld.dry ? " (Dry=1: NOTHING is written, the log says what would be)" : "", kld.base, kld.per, kld.decay, kld.top, n ? t : " the game's own (no key set)", kld.log);
     if (kld.on) klog("down: online: Online=%d (1 = the part also acts in an online FA / UCC / C&R round for this machine's own non-police player; Flop is off there, the speed-the-clip mash does not run there), MashHold=%d (1 = the get-up is held until the mash meter is full), MashNeed=%.1f presses, MashPer=%.2f, MashDecay=%.2f a second, MashMax=%.0f s, MashKey=0x%02x, MashPad=%d (button 0x%04lx)",
                      kld_o.online, kld_o.hold, kld_o.need, kld_o.per, kld_o.decay, kld_o.maxlie / 1000.0f, kld_o.key, kld_o.pad, kld_o.padbtn);
+    if (kld.on) klog("down: online parity: OnlineFlop=%d (ini Flop=%d: %s), OnlineFreeFall=%d, OnlineFactors=%d, OnlineMashSpeed=%d (MashHold as set: %d, in effect: %d), OnlineNoFire=%d, ReplicaProbe=%d",
+                     kld_o.oflop, kld_o.flop0, kld_o.flop0 == 1 || kld_o.flop0 == 3 ? "plays online" : "Flop 0 / 2 stay the stock fall online", kld_o.ofree, kld_o.ofac, kld_o.omash, kld_o.hold_ini, kld_o.hold, kld_o.onofire, kld_o.probe);
     /* MashHoldHow=2: arm the keyboard proxy (klrigid.c wraps the keyboard device only when this is set, before the game creates DirectInput) and try the pad import */
     if (kld.on && kld_o.online && kld_o.hold && kld_o.how == 2) {
         if (kld_o.scan) klkf_armed = 1;
