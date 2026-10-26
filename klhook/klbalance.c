@@ -1048,8 +1048,9 @@ static struct {
     DWORD inst[KLR_CB_MAX];                   /* actors that carry the table now */
     volatile LONG hits, scaled, pbleft, other, fail, lost_m, would_m, tot_scaled, tot_lost_m;      /* 5 s window and totals; hp in milli-hp */
     DWORD sum_at;
-    float pbcap, pbunit;                      /* [BotFill] OnlinePointBlankCap: hp per bot per 1 s window (0 = off); hp per unit of hit scale (measured, GUESS 75 at the start) */
+    float pbcap, pbunit, pbuhi;               /* pbuhi: high-water hp per unit (decays to pbunit), used to predict a step so the first step of a window cannot overshoot much;  [BotFill] OnlinePointBlankCap: hp per bot per 1 s window (0 = off); hp per unit of hit scale (measured, GUESS 75 at the start) */
     DWORD pbact[KLR_CB_MAX], pbt0[KLR_CB_MAX]; float pbtaken[KLR_CB_MAX];      /* per-bot window: actor, window start tick, hp taken from point-blank steps in it */
+    int pbrefund; volatile LONG pbref_m;      /* [BotFill] OnlinePointBlankRefund; milli-hp given back in 5 s */
     volatile LONG pbcapped, tot_pbcapped, pb_m;      /* 5 s: point-blank steps scaled down, hp the point-blank steps took (milli-hp) */
 } klr_cb;
 #define klr_cb_vt (klr_cb.blk + 1)
@@ -1070,21 +1071,25 @@ static void __fastcall klr_cb_hit(void *self, void *edx, DWORD hit)      /* this
         if (f > 1.0001f && f <= klr_pbo.want + 0.001f) {      /* point-blank: OnlinePointBlank's number stands, unless OnlinePointBlankCap's per-bot budget of the last 1 s is used up */
             InterlockedIncrement(&klr_cb.pbleft);
             if (klr_cb.pbcap > 0) {
-                DWORD now = GetTickCount(); int i, s = -1; float room, ns, un = klr_cb.pbunit;
+                DWORD now = GetTickCount(); int i, s = -1; float room, ns, un = klr_cb.pbunit, up = klr_cb.pbuhi > klr_cb.pbunit ? klr_cb.pbuhi : klr_cb.pbunit;
                 for (i = 0; i < KLR_CB_MAX; i++) if (klr_cb.pbact[i] == a) { s = i; break; }
                 if (s < 0) { for (i = 0; i < KLR_CB_MAX; i++) if (!klr_cb.pbact[i] || now - klr_cb.pbt0[i] >= 5000u) { s = i; break; }      /* free or stale (bots of an earlier round) */ if (s < 0) s = (int)(a >> 4) % KLR_CB_MAX; klr_cb.pbact[s] = a; klr_cb.pbt0[s] = now; klr_cb.pbtaken[s] = 0; }
                 if (now - klr_cb.pbt0[s] >= 1000u) { klr_cb.pbt0[s] = now; klr_cb.pbtaken[s] = 0; }      /* tumbling 1 s window per bot (a rolling one is not worth a ring), game thread only */
                 room = klr_cb.pbcap - klr_cb.pbtaken[s];
-                ns = room <= 0 ? 0.001f : (f * un > room ? room / un : f);      /* hp = scale x un (hp per unit of scale, measured below; GUESS 75 until the first step: BO10 ~150 hp per x2 step); a spent budget leaves a token 0.001 */
+                ns = room <= 0 ? 0.001f : (f * up > room ? room / up : f);      /* hp = scale x up (the high-water of un; BO11: one window let 869 hp through when un was 75 and the step did ~250 per unit) (hp per unit of scale, measured below; GUESS 75 until the first step: BO10 ~150 hp per x2 step); a spent budget leaves a token 0.001 */
                 if (ns < f && klh_data((void *)(DWORD_PTR)(hit + 0x18), &ns, 4, "point-blank cap hit scale (OnlinePointBlankCap)")) {
                     h0 = klr_cb_hp(a); orig(self, 0, hit); klh_data((void *)(DWORD_PTR)(hit + 0x18), &f, 4, "point-blank cap hit scale back (OnlinePointBlankCap)"); h1 = klr_cb_hp(a);
                     InterlockedIncrement(&klr_cb.pbcapped); InterlockedIncrement(&klr_cb.tot_pbcapped);
                 } else {
                     ns = f; h0 = klr_cb_hp(a); orig(self, 0, hit); h1 = klr_cb_hp(a);
                 }
+                if (klr_cb.pbrefund && h0 > h1 && h1 > 0 && h0 - h1 > (room > 0 ? room : 0) + 1.0f) {      /* OnlinePointBlankRefund: the step still overshot the window's budget and the bot lives: health back to h0 - room (never above h0; a kill is not undone; GUESS: [actor+0x5fc]+4 is the live health the game reads, as klr_cb_hp measures it) */
+                    DWORD hh = klh_rd32(a + 0x5fc); float tg = h0 - (room > 0 ? room : 0);
+                    if (hh && klh_data((void *)(DWORD_PTR)(hh + 4), &tg, 4, "point-blank cap refund (OnlinePointBlankRefund)")) { InterlockedExchangeAdd(&klr_cb.pbref_m, (LONG)((tg - h1) * 1000.0f)); if (ns >= 0.25f) { float u1 = (h0 - h1) / ns; if (u1 > klr_cb.pbuhi) klr_cb.pbuhi = u1 > 1000.0f ? 1000.0f : u1; } h1 = tg; ns = 0; }
+                }
                 if (h0 > h1 && h1 >= 0) {
                     klr_cb.pbtaken[s] += h0 - h1; InterlockedExchangeAdd(&klr_cb.pb_m, (LONG)((h0 - h1) * 1000.0f));
-                    if (ns >= 0.25f) { float nu = 0.5f * un + 0.5f * (h0 - h1) / ns; klr_cb.pbunit = nu < 5.0f ? 5.0f : (nu > 1000.0f ? 1000.0f : nu); }      /* smoothed; a kill clamps at 0 (h1 > 0 only is skipped by the test above) so it under-reads rarely */
+                    if (ns >= 0.25f) { float nu = 0.5f * un + 0.5f * (h0 - h1) / ns; klr_cb.pbunit = nu < 5.0f ? 5.0f : (nu > 1000.0f ? 1000.0f : nu); nu = (h0 - h1) / ns; klr_cb.pbuhi = nu > klr_cb.pbuhi ? (nu > 1000.0f ? 1000.0f : nu) : 0.9f * klr_cb.pbuhi + 0.1f * klr_cb.pbunit; }      /* smoothed; a kill clamps at 0 (h1 > 0 only is skipped by the test above) so it under-reads rarely */
                 }
                 return;
             }
@@ -1138,9 +1143,9 @@ static void klr_cb_tick(int on, int game_thread)
     if (now - klr_cb.sum_at >= 5000u) {
         klr_cb.sum_at = now;
         if (klr_cb.hits || klr_cb.other) {
-            klog("botfill: cop->bot factor 5 s: %ld cop hits on bots (%ld scaled x%.3f, %ld point-blank left alone, %ld point-blank capped (cap %.0f hp/s per bot; point-blank hp taken %.0f, %.1f hp per scale unit), %ld write refused), %ld other hits on bots untouched; bot hp lost %.0f (without the factor ~%.0f); %d bots on the table",
-                 klr_cb.hits, klr_cb.scaled, klr_cb.k, klr_cb.pbleft, klr_cb.pbcapped, klr_cb.pbcap, klr_cb.pb_m / 1000.0, klr_cb.pbunit, klr_cb.fail, klr_cb.other, klr_cb.lost_m / 1000.0, klr_cb.would_m / 1000.0, klr_cb_count());
-            InterlockedExchange(&klr_cb.pbcapped, 0); InterlockedExchange(&klr_cb.pb_m, 0);
+            klog("botfill: cop->bot factor 5 s: %ld cop hits on bots (%ld scaled x%.3f, %ld point-blank left alone, %ld point-blank capped (cap %.0f hp/s per bot; point-blank hp taken %.0f, %.1f hp per scale unit, high %.1f, %.0f hp refunded), %ld write refused), %ld other hits on bots untouched; bot hp lost %.0f (without the factor ~%.0f); %d bots on the table",
+                 klr_cb.hits, klr_cb.scaled, klr_cb.k, klr_cb.pbleft, klr_cb.pbcapped, klr_cb.pbcap, klr_cb.pb_m / 1000.0, klr_cb.pbunit, klr_cb.pbuhi, klr_cb.pbref_m / 1000.0, klr_cb.fail, klr_cb.other, klr_cb.lost_m / 1000.0, klr_cb.would_m / 1000.0, klr_cb_count());
+            InterlockedExchange(&klr_cb.pbcapped, 0); InterlockedExchange(&klr_cb.pb_m, 0); InterlockedExchange(&klr_cb.pbref_m, 0);
             InterlockedExchange(&klr_cb.hits, 0); InterlockedExchange(&klr_cb.scaled, 0); InterlockedExchange(&klr_cb.pbleft, 0); InterlockedExchange(&klr_cb.other, 0);
             InterlockedExchange(&klr_cb.fail, 0); InterlockedExchange(&klr_cb.lost_m, 0); InterlockedExchange(&klr_cb.would_m, 0);
         }
@@ -1426,8 +1431,10 @@ static void klr_init(void)
         {   /* [BotFill] OnlinePointBlankCap: max hp one bot loses to point-blank steps per 1 s (default 250 = GUESS: BO10 bots lost 870-1100 hp in 0.2-0.5 s of 1400; 0 = off); rides on OnlineCopToBot's slot-423 wrapper, so needs OnlineCopToBot > 0 */
             int cp = (int)GetPrivateProfileIntA("BotFill", "OnlinePointBlankCap", 250, klh_ini);
             if (cp < 0 || cp > 100000) { klog("botfill: OnlinePointBlankCap=%d is IGNORED: it must be 0 .. 100000 (hp per bot per second; 0 = off); 250 stands", cp); cp = 250; }
-            klr_cb.pbcap = (float)cp; klr_cb.pbunit = 75.0f;      /* GUESS: BO10 ~150 hp per x2 step -> 75 hp per unit of scale; re-measured at every capped-path step */
+            klr_cb.pbcap = (float)cp; klr_cb.pbunit = klr_cb.pbuhi = 75.0f;      /* GUESS: BO10 ~150 hp per x2 step -> 75 hp per unit of scale; re-measured at every capped-path step */
             klog("botfill: OnlinePointBlankCap=%d (recommended on: 250, a GUESS; 0 = off): a bot takes at most that many hp from point-blank steps per second, later steps in the window are scaled down; needs OnlineCopToBot > 0 and OnlinePointBlank > 0", cp);
+            klr_cb.pbrefund = GetPrivateProfileIntA("BotFill", "OnlinePointBlankRefund", 1, klh_ini) != 0;
+            klog("botfill: OnlinePointBlankRefund=%d (recommended on): a point-blank step that still overshoots the cap's budget while the bot lives gets the excess hp back (health data write, never above the hp before the step)", klr_cb.pbrefund);
         }
         klog("botfill: OnlineCopToBot=%d (recommended on: 5; 1 = stock Arcade level 1; 0 = off); acts only on the host of an online FA round with OnlineHost=1 and OnlineTactics=1 (the puppeteer bot list); with it on, OnlineHealthMul can come down (5 with 5%% = stock-Arcade survival)", pc);
     }
