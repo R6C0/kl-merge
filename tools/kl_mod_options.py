@@ -190,6 +190,10 @@ feat('onlineguardtake', G_EXP, 'Online AI heisters walk into a guarded loot stac
      'klbotfill.c [BotFill] OnlineGuardTake; BO8c: the 30 s release sent all bots into the cop squads at once; off = hold until a stack is clear; NOT run live', [('BotFill', 'OnlineGuardTake', 1, 0, 0)])
 feat('onlinevancall', G_EXP, 'Online AI heisters can call the escape van even with the round-keep rules copy (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineVanCall; BO8c: the strict vtable test failed on klroundkeep.c\'s private copy and spent the call; 0 = old strict compare; NOT run live', [('BotFill', 'OnlineVanCall', 1, 0, 1)])
+feat('onlinevanstate', G_EXP, 'Online AI heisters board the escape van by its state (waiting) at the exit, not by its position (recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineVanState; BO9: the van node stays at the origin so no bot boarded though the van cycled; 60 s wait counts from the call; NOT run live', [('BotFill', 'OnlineVanState', 1, 0, 1)])
+feat('onlinelateexit', G_EXP, 'Online AI heisters carrying money head for the van when the round clock is low instead of taking more loot (recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineLateExit (seconds left, 75 GUESS, 0 = off); BO9: the only carrier left with 61 s; NOT run live', [('BotFill', 'OnlineLateExit', 75, 0, 75)])
 feat('hostopts', G_EXP, 'Host-controlled match options: F7 map set, F8 AI heisters; the host map set reaches clients (recommended on after the live test)', 'off', 'start',
      'klhostopt.c [HostOpts] Enable; Steam lobby key klx_opts + UDP 27413; re/host_options.md; NOT run live', [('HostOpts', 'Enable', 1, 0, 0)])
 feat('charonline', G_EXP, 'Online: every player heister / mask / outfit shows on every screen; F9 / F11 choose (recommended on after the live test)', 'off', 'start',

@@ -34,6 +34,7 @@ static int klbf_fill;              /* the plan's fill, for the squad pass */
 static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near = 150.0f;
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
+static int klbf_ot_vstate = 1, klbf_ot_late = 75; static DWORD klbf_ot_calledAt;      /* [BotFill] OnlineVanState (BO9: the van node stays at the origin, so "van here" must come from [rules+0x1dc]), OnlineLateExit (s of clock left) */
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
@@ -91,6 +92,9 @@ static void klbf_init(void)
     klbf_ot_guard = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsGuard", 25, klh_ini); if (klbf_ot_guard < 0) klbf_ot_guard = 0;
     klbf_ot_van = GetPrivateProfileIntA("BotFill", "OnlineTacticsVan", 1, klh_ini) != 0;
     klbf_ot_vcall = GetPrivateProfileIntA("BotFill", "OnlineVanCall", 1, klh_ini) != 0;      /* (recommended on) */
+    klbf_ot_vstate = GetPrivateProfileIntA("BotFill", "OnlineVanState", 1, klh_ini) != 0;      /* (recommended on) */
+    klbf_ot_late = (int)GetPrivateProfileIntA("BotFill", "OnlineLateExit", 75, klh_ini); if (klbf_ot_late < 0) klbf_ot_late = 0; if (klbf_ot_late > 200) klbf_ot_late = 200;      /* (recommended on) GUESS 75 s: 30 s door cutoff + 25 s walk + 20 s slack */
+    if (klbf_ot) klog("botfill: OnlineTactics van/late: OnlineVanState=%d (recommended on), OnlineLateExit=%d s (recommended 75; 0 = off)", klbf_ot_vstate, klbf_ot_late);
     if (klbf_ot) klog("botfill: OnlineTactics extras: OnlineHealthMul=%d (recommended 5 with OnlineCopToBot 5 = stock Arcade level 1 survival; 1 = off), OnlineTacticsGuard=%.0f m (recommended 25; 0 = off), OnlineTacticsVan=%d (recommended on)",
                       klbf_ot_hmul, klbf_ot_guard / 100, klbf_ot_van);
     if (klbf_ot) klog("botfill: OnlineTactics=1 - the HOST gives the Ally bots loot/van orders itself (puppeteer, host tally only; Carry %d, Near %.0f, Take %d)", klbf_ot_carry, klbf_ot_near, klbf_ot_take);
@@ -180,7 +184,7 @@ static int klbf_ot_call_van(DWORD rules, int who)
     /* review wp16tqkg2: 0x71e180 with flag 0 flags the vehicle LAST when the clock [rules+0x4c] is near its end (0x71e1d0..213), which ends the round for humans not aboard: same 20 s gate as klmv_bot_van */
     if (!klh_rd(rules + 0x4c, &clk, 4) || !klb_finite(clk) || clk < 20.0f) { klbf_ot_called = 1; klog("botfill: tactics: van: bot %d is at the exit but the clock is %.1f s (< 20 s): not called, so the round's end stays the humans'", who, clk); return 0; }
     if (veh || last || hold) { if (!told++) klog("botfill: tactics: van: bot %d is at the exit, but a vehicle is under way or held (state %u, last %u, hold %u): not called yet, retried every 5 s", who, veh, last, hold); return 0; }
-    klbf_ot_called = 1; told = 0;
+    klbf_ot_called = 1; klbf_ot_calledAt = now; told = 0;
     ((void (__fastcall *)(void *, void *, DWORD, int))(DWORD_PTR)KLH_VA(KLBF_SV_CALLVEH))((void *)(DWORD_PTR)rules, 0, klbf_ot_vh, 0);
     veh = last = 0; klh_rd(rules + 0x1dc, &veh, 1); klh_rd(rules + 0x372, &last, 1);
     klog("botfill: tactics: van: bot %d is at the exit trigger %08lx with money: vehicle %08lx CALLED (0x71e180, as rules slot 44 does for a player; clock %.1f): state now %u, last %u, [rules+0x1e4] %08lx",
@@ -203,13 +207,13 @@ static void klbf_ot_run(DWORD now, DWORD sm)
 {
     DWORD p, tab, i, blk[64 * 32], mo[KLBF_OT_OBJ], van = 0; float mpos[KLBF_OT_OBJ][3], vpos[3] = { 0, 0, 0 }; int mamt[KLBF_OT_OBJ], nm = 0, n = 0, b, nmoney = 0, nvan = 0;
     struct { DWORD actor, soldier; float pos[3]; } bots[KLBF_OT_BOTS]; int nb = 0; char why[100];
-    static float cops[256][3]; int ncop = 0; DWORD rules = 0;
+    static float cops[256][3]; int ncop = 0; DWORD rules = 0; int vstate = -1; float left = 1e9f;
     if (now - klbf_ot_last < 1000) return;
     klbf_ot_last = now;
     if (sm != (DWORD)klbf_ot_sm || !klbf_ot_in) {      /* a new session / round */
         if (klbf_ot_in) klbf_ot_summary();
         memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
-        klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = klbf_ot_lookAt = 0; klbf_ot_trig_looked = klbf_ot_called = klbf_ot_looks = 0;
+        klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = klbf_ot_lookAt = 0; klbf_ot_trig_looked = klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0;
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
@@ -263,6 +267,13 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     {   /* the FA rules: [[0x168e9e4]+0x54] when the session's game type [sm+0x5c] is 4 (0x7bb2a0, PROVEN; 0x508ef0 is Arcade-only) */
         DWORD s0 = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), hd;
         if (s0 && klh_rd32(s0 + 0x5c) == 4 && (hd = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4)))) rules = klh_rd32(hd + 0x54);
+    }
+    if (rules) {      /* BO9: vstate = the escape vehicle's state [rules+0x1dc] (1/2 coming, 3/4 waiting, 5 leaving, 7 gone, 0 idle; re/retomoto_street.md 6); left = the round clock [rules+0x4c] */
+        static BYTE lastv = 0xff; static int lastr; BYTE v = 0; float c = 0;
+        if (klh_rd(rules + 0x1dc, &v, 1)) vstate = v;
+        if (klh_rd(rules + 0x4c, &c, 4) && klb_finite(c) && c >= 0 && c < 100000.0f) left = c;
+        if (lastr != klbf_ot_rounds) { lastr = klbf_ot_rounds; lastv = 0xff; }
+        if (vstate >= 0 && vstate != lastv) { if (lastv != 0xff) klog("botfill: tactics: van state %u -> %d (clock left %.1f s, called %d, +%lu s since the call)", lastv, vstate, left, klbf_ot_called, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0); lastv = (BYTE)vstate; }
     }
     if (!van && rules) {   /* [rules+0x1e4] = the escape vehicle (0x70f0a0, PROVEN), 0 until the vehicle is called (0x71e180 -> 0x84f030 fills the list slot 89 reads) */
         struct kle_veh v; float vp[3];
@@ -334,6 +345,10 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klog("botfill: tactics: bot %d (actor %08lx): every free stack has had a live cop within %.0f m for %lu s: taking the nearest guarded one", s, a, klbf_ot_guard / 100, (unsigned long)((now - klbf_ob[s].idleAt) / 1000));
             } else if (best < 0 && gbest >= 0 && klbf_ob[s].tally == 0 && !(klbf_ob[s].told & 4) && (klbf_ob[s].told |= 4))      /* a bot with money goes to the van instead */
                 klog("botfill: tactics: bot %d (actor %08lx): %d free stack(s), all with a live cop within %.0f m: it holds (%s) while they are cleared", s, a, nguard, klbf_ot_guard / 100, klbf_ot_gtake ? "up to 30 s, OnlineGuardTake=1" : "until a stack is clear, OnlineGuardTake=0");
+            if (klbf_ot_late && klbf_ob[s].tally > 0 && left <= (float)klbf_ot_late && best >= 0) {      /* OnlineLateExit (BO9 rules A/B): a carrier takes no new stack late in the round, it heads for the van */
+                if (!(klbf_ob[s].told & 16) && (klbf_ob[s].told |= 16)) klog("botfill: tactics: bot %d (actor %08lx): clock left %.0f s <= OnlineLateExit %d: no new stack, tally %d goes to the van", s, a, left, klbf_ot_late, klbf_ob[s].tally);
+                best = -1;
+            }
             if (klbf_ob[s].grabs < klbf_ot_carry && best >= 0) {
                 klbf_ob[s].phase = 1; klbf_ob[s].target = mo[best]; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].told &= ~4;
                 memcpy(tgt, mpos[best], 12);
@@ -353,14 +368,19 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klog("botfill: tactics: bot %d (actor %08lx) BOARDED (hook tally only, nothing removed in the game): tally %d", s, a, klbf_ob[s].tally);
                 continue;
             }
+            if (!van && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= 400.0f) {      /* OnlineVanState: BO9's van node stayed at the origin, so the waiting state + the bot at the exit box counts as aboard */      /* GUESS: the exit trigger's box is where the van's boarding box is */
+                klbf_ob[s].phase = 3;
+                klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineVanState; hook tally only, %.0f m from the exit trigger): tally %d", s, a, vstate, dd / 100, klbf_ob[s].tally);
+                continue;
+            }
             if (!van && klbf_ot_vh && !klbf_ot_called && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= 400.0f) klbf_ot_call_van(rules, s);
             if (!van) {      /* review wp16tqkg2: phase 2 had no stall test; the trigger's node (its box centre, GUESS) may be out of the nav's reach */
                 if (!klbf_ob[s].bestAt || dd < klbf_ob[s].best - 200.0f) { klbf_ob[s].best = dd; klbf_ob[s].bestAt = now; }
                 if (klbf_ot_vh && !klbf_ot_called && now - klbf_ob[s].bestAt > KLBF_OT_STALL && dd <= 1500.0f && fabs(bots[b].pos[1] - g[1]) <= 400.0f) {
                     if (!(klbf_ob[s].told & 8) && (klbf_ob[s].told |= 8)) klog("botfill: tactics: bot %d (actor %08lx) stopped %.0f m from the exit trigger's centre: calls the van from there (GUESS: the box is wider than 2*Near)", s, a, dd / 100);
                     klbf_ot_call_van(rules, s);
-                } else if (now - klbf_ob[s].since > (DWORD)(klbf_ot_called ? 60000 : KLBF_OT_STALLMAX)) {
-                    klog("botfill: tactics: bot %d (actor %08lx): %s after %lu s (%.0f m from the trigger): back to idle", s, a, klbf_ot_called ? "the van was called but did not come" : "did not reach the exit trigger", (unsigned long)((now - klbf_ob[s].since) / 1000), dd / 100);
+                } else if (klbf_ot_vstate && klbf_ot_called ? (now - klbf_ot_calledAt > 60000 || vstate == 7 || (vstate == 0 && now - klbf_ot_calledAt > 5000)) : now - klbf_ob[s].since > (DWORD)(klbf_ot_called ? 60000 : KLBF_OT_STALLMAX)) {      /* OnlineVanState: the 60 s count from the CALL (BO9 counted from phase 2, 15 s earlier), and a van that left (7 / back to 0) ends the wait */
+                    klog("botfill: tactics: bot %d (actor %08lx): %s after %lu s (%.0f m from the trigger): back to idle", s, a, klbf_ot_called ? "the van was called but this bot was not at the exit while it waited" : "did not reach the exit trigger", (unsigned long)((now - klbf_ob[s].since) / 1000), dd / 100);
                     klbf_ob[s].phase = 0; klbf_ob[s].told &= ~8;
                     continue;
                 }
