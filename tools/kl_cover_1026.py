@@ -67,6 +67,8 @@ FS_SHIFTS = (0, -20, 20, -40, 40, -60, 60, -80, 80)   # GUESS: slide a tile alon
 FS_OVER = 40.0           # GUESS: a slid tile may stick out past the end of its wall run by this much (COVER11 diagnosis: K6_45 needs -20)
 FS_EDGE_TOL = 0.5        # GUESS: the exact wall test's back edge sits this far inside the box back (the real face is GAP=2 behind it, measured 1.7 to 2.1)
 FS_FLOOR_TOL = 10.0      # GUESS: |collision floor - plan ground| allowed at the stand point and the far corners (was GROUND_TOL 30; K6_43 tele landed 26 off)
+COVERON = True           # (recommended on) 2026-10-26 COVER12: the engine's own side probe flags the built-for (far) long face of a wall-backed free-side K6 box 3/3/0x403 (rays hit the wall ~77 behind the front plane, nav probe 70 in front off the mesh) = NO cover.
+                         # A PlayerCoverModifier with state ON on that face's two END fields ORs 0x40 into both end flag words, which kl2 0x653270 accepts despite 0x1 / 0x2 (decoded 2026-10-26, re/climb.md 1.1). --no-coveron = no controller
 TIERS = 'b'              # box model forms a clone may take: 'b' (flags 0x200, no collision record; default, unchanged) or 'ab' (also form a)
 
 
@@ -217,6 +219,14 @@ def _free_footprint(L, mid, y, n, u, eu, ev, gap):
             if abs(lu) <= eu / 2 and 0.0 <= t <= ev + gap and t > C.CELL * 1.5:
                 return 'solid inside the footprint (railing / wall end / second wall)'
     return None
+
+
+def pcm_side(head, n):
+    """Side index (0 = +x, 1 = +z, 2 = -x, 3 = -z of the box's own axes) whose outward normal is the built-for face normal n.
+    Box axes as the builder places them (kl_fa_cover.box_corners: local x -> (head[1], -head[0]), local z -> head); checked on the live K6_52 (head (0,1), n (-1,0)): s2 = the far face."""
+    xa = (head[1], -head[0])
+    cand = [xa, tuple(head), (-xa[0], -xa[1]), (-head[0], -head[1])]
+    return max(range(4), key=lambda i: cand[i][0] * n[0] + cand[i][1] * n[1])
 
 
 def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floornav=FLOORNAV):
@@ -416,7 +426,7 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floorn
                         'ext': [round(eu, 1), round(ev, 1)], 'height': round(f['size'][1], 1), 'model': f['model'], 'form': f['path'],
                         'form_node': f['node'], 'tier': f['tier'], 'borrowed': f.get('borrowed'), 'object': nm, 'object_ref': r['ref'],
                         'ground': round(y, 1), 'via': 'wall', 'name': None,
-                        'face_normal': [round(n[0], 3), round(n[1], 3)], 'freeside': bool(FREESIDE), 'gap': FS_GAP if FREESIDE else None, 'run': [[round(a[0]), round(a[1])], [round(b[0]), round(b[1])], round(L_run), round(t - step)], 'stand': [round(fr[0], 1), round(y, 1), round(fr[1], 1)]})
+                        'face_normal': [round(n[0], 3), round(n[1], 3)], 'freeside': bool(FREESIDE), 'pcm': ({'side': pcm_side(head, n), 'state': 'ON', 'parts': (0, 1)} if COVERON and FREESIDE else None), 'gap': FS_GAP if FREESIDE else None, 'run': [[round(a[0]), round(a[1])], [round(b[0]), round(b[1])], round(L_run), round(t - step)], 'stand': [round(fr[0], 1), round(y, 1), round(fr[1], 1)]})
             placed[ccell] += 1
     if GN and GN.kept:
         log('walls: floornav kept tiles in parts no spawn reaches: %s' % dict(GN.kept))
@@ -427,6 +437,8 @@ def plan(zp, opt, log=print):
     # (normalised: kl_fa_cover.apply skips copying the source zip by comparing path strings; a '/' path would copy the original over the output)
     global FREESIDE
     FREESIDE = bool(opt.get('freeside', FREESIDE))
+    global COVERON
+    COVERON = bool(opt.get('coveron', COVERON))
     zp = os.path.normpath(os.path.abspath(zp))
     A.use_slot(zp)
     C.GROUP, C.TAG = GROUP, TAG
@@ -469,7 +481,7 @@ def build(zp, dst, opt, log=print):
 
 
 def options(a):
-    opt = {'max': MAX_NEW, 'density': DENSITY, 'spread': SPREAD, 'tiers': TIERS, 'safety': SAFETY, 'floornav': FLOORNAV, 'freeside': FREESIDE}
+    opt = {'max': MAX_NEW, 'density': DENSITY, 'spread': SPREAD, 'tiers': TIERS, 'safety': SAFETY, 'floornav': FLOORNAV, 'freeside': FREESIDE, 'coveron': COVERON}
     a = list(a)
     while a and a[0].startswith('--'):
         if a[0] == '--no-safety':
@@ -478,6 +490,10 @@ def options(a):
             continue
         if a[0] == '--no-freeside':
             opt['freeside'] = False
+            a.pop(0)
+            continue
+        if a[0] == '--no-coveron':
+            opt['coveron'] = False
             a.pop(0)
             continue
         if a[0] == '--no-floornav':

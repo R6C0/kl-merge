@@ -937,6 +937,33 @@ def _node(M, B, k, name):
     return node
 
 
+PCM_STATES = 12          # PlayerCoverModifier fields 0..11 = the states: side * 3 + part (0 left end, 1 right end, 2 top); side 0 = +x, 1 = +z, 2 = -x, 3 = -z of the box (kl2 0x440de0)
+
+
+def pcm_ctrl(M, side, parts, state):
+    """(name token, body tokens) of a PlayerCoverModifier in the maker's key table: the stock all-AUTO one (a ZSTDOBJ of F01, the one kl_arcade_fix_1026 clones)
+    with `state` ('ON') on the given parts of the given side. The enum's key name is read from a stock controller that uses it."""
+    sc, _e = M.level('F01')
+    donor = None
+    onkey = None
+    for k, i, v in kl_fa.controllers(sc, 'PlayerCoverModifier'):
+        nm, body = sc.nodes[k]['ctrls'][i]
+        if donor is None and sc.cls(k) == 'ZSTDOBJ' and all(x == 'AUTO' for x in v if isinstance(x, str)) and len(sc.nodes[k]['ctrls']) == 1:
+            donor = (nm, body)
+        if onkey is None and state in v[:PCM_STATES]:
+            onkey = sc.p.keys[struct.unpack('<I', body[1 + v.index(state)][1])[0]]
+    if donor is None or onkey is None:
+        raise ValueError('no all-AUTO PlayerCoverModifier / no %s state in F01' % state)
+    name = M.adopt([donor[0]], sc.p.keys)[0]
+    toks = M.adopt(donor[1], sc.p.keys)
+    for part in parts:
+        j = 1 + side * 3 + part                 # token 0 = the body's opener; state j is token 1 + j (decoded on the stock F01 controllers)
+        if toks[j][0] != 0x0e:
+            raise ValueError('PlayerCoverModifier state token %d is not an enum (%#x)' % (j, toks[j][0]))
+        toks[j] = (0x0e, struct.pack('<I', M.p.key_index(onkey)))
+    return name, toks
+
+
 def group_form(B):
     """The build's first plain top-level group at the origin: no controller, no list, no raw data, pool group 0."""
     sc = B.sc
@@ -967,6 +994,21 @@ def _tree(items):
     return O.build_tree(items, tuple(O._f32((lo[k] + hi[k]) / 2.0) for k in range(3)), O._f32(16000.0 / half))
 
 
+def _pcm_bad(sc, k, pl):
+    """True when node k's controllers are not exactly what the plan asks (none, or one PlayerCoverModifier: ON on the planned side's parts, AUTO elsewhere)."""
+    ct = sc.nodes[k]['ctrls']
+    want = pl.get('pcm')
+    if not want:
+        return bool(ct)
+    got = [v for kk, i, v in kl_fa.controllers(sc, 'PlayerCoverModifier') if kk == k]
+    if len(ct) != 1 or len(got) != 1:
+        return True
+    exp = ['AUTO'] * PCM_STATES
+    for part in want['parts']:
+        exp[want['side'] * 3 + part] = want['state']
+    return got[0][:PCM_STATES] != exp or any(x != 'AUTO' for x in got[0][PCM_STATES:] if isinstance(x, str))
+
+
 def apply(ctx, P, dst, log=print):
     """Write the plan's boxes into a copy of the build in folder dst -> report dict."""
     B, sc = ctx.B, ctx.B.sc
@@ -991,6 +1033,8 @@ def apply(ctx, P, dst, log=print):
     for c in P['boxes']:
         n = grp.add(_node(M, B, c['form_node'], c['name']))
         M.place(n, c['origin'], F.rot9(*c['head']))
+        if c.get('pcm'):                                # COVERON: state ON on the built-for face's ends (the engine's probe flags that face blocked; kl_cover_1026)
+            n.ctrls.append(pcm_ctrl(M, c['pcm']['side'], c['pcm']['parts'], c['pcm']['state']))
         if c.get('borrowed'):                           # the clone with another object's box primitive (forms())
             M.set(n, None, {'ZGEOM[4]': c['model']})
             n.model = c['model']
@@ -1186,7 +1230,7 @@ def check(folder, log=print):
         if src is None:
             fail('%s: model %d is no other cover box\'s' % (nm, e.model)); continue
         se = B.ents[src['node'] - 1]
-        if (e.flags, e.group, e.aux, e.raw, e.links, e.tid) != (se.flags, se.group, se.aux, se.raw, se.links, se.tid) or sc.nodes[k]['ctrls'] or sc.nodes[src['node']]['ctrls']:
+        if (e.flags, e.group, e.aux, e.raw, e.links, e.tid) != (se.flags, se.group, se.aux, se.raw, se.links, se.tid) or _pcm_bad(sc, k, pl) or sc.nodes[src['node']]['ctrls']:
             fail('%s: its record is not that of the box it is a clone of (%s)' % (nm, src['name']))
         va, vb = B.values(k), B.values(src['node'])
         skip = ('ZGEOM[1]', 'ZGEOM[2]', 'ZGEOM[4]') if lent else ('ZGEOM[1]', 'ZGEOM[2]')
