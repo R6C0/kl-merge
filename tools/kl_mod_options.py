@@ -106,7 +106,7 @@ feat('clubholster', G_EXP, 'Last Call: start with guns holstered, the crowd pani
 feat('animprobe', G_EXP, 'Animation probe: log the player Play calls around gait changes (diagnostic) (recommended off)', 'off', 'start',
      "klanimprobe.c: LOG ONLY, changes nothing; patches the top of Play 0x4da1d0, so only a TEST dll does it (a SHIP dll refuses and logs it); not live-tested", [('AnimProbe', 'Enable', 1, 0, 0)])
 feat('syncapply', G_EXP, "Online: clients follow the host's cop positions (recommended off)", 'off', 'start',
-     "klsync.c [Sync] Apply: a client teleports non-player actors farther than ApplyTol (150) from the host's list (UDP 27415, host needs Share=1) via the game's actor teleport 0x62a900; ApplyMax per list; host-dead is logged only; GUESS: node position vs feet, facing resets; not live-tested", [('Sync', 'Apply', 1, 0, 0)])
+     "klsync.c [Sync] Apply: a client teleports non-player actors farther than ApplyTol (150) from the host's list (UDP 27415, host needs Share=1) via the game's actor teleport 0x62a900; only after the class/team identity check agrees with the host (20-byte KLSY2 records), from the first packet source, worst ApplyMax per pass, 2 passes/s; skips humans and any actor sharing a human's team or within 40 units of a player (so AI heisters on the humans' team are NOT moved); host-dead is logged only; GUESS: node position vs feet, facing resets; not live-tested", [('Sync', 'Apply', 1, 0, 0)])
 feat('crewlook', G_CORE, 'Random looks for the AI heisters', 'on', 'start',
      'no body twice, never the one you wear', [('Crew', 'Random', 1, 0, 0)])
 

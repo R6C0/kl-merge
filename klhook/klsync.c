@@ -18,10 +18,16 @@
  *                    This is the live answer to 'is the same cop at the same place': no log alignment needed. The host list is up to
  *                    ShareMs + network old, a walking cop moves ~3 units a second: read d against that, not against 0.
  *   [Sync] Apply=1   (CLIENT only, default 0, needs the host's Share=1) snaps a non-player ZFFActor (cop / guard / civilian / AI heister) to the
- *                    host's place when the host record is fresh (age <= 2 * ShareMs) and the own place is farther than ApplyTol (150) away: the game's
- *                    own actor teleport (klt_teleport, klcrew_rt.c) from the game's tick. At most ApplyMax (8) per received list, each one logged
- *                    ('sync: apply: snap ...'). Never on the host, never offline / Arcade (the tick returns before unless a System Link / online
- *                    client). A human's actor is never touched (klsy_human). Host hp<=0 while the own actor lives is only logged (nothing is
+ *                    host's place when the host record is fresh (age <= 2 * ShareMs by the HOST clock) and the own place is farther than ApplyTol (150) away: the game's
+ *                    own actor teleport (klt_teleport, klcrew_rt.c) from the game's tick. Records are 20 bytes ('KLSY2': slot, hp, place, class, team):
+ *                    a slot is only snapped when class AND team match (slot ids are not assumed equal on every peer), and only after the Compare walk
+ *                    (1 Hz, run internally by Apply too) found <= 10% of the shared slots with another class / team ('identity agreement').
+ *                    Packets: only from the first source that sent a valid list this round; everything received is dropped on (re)entering a round.
+ *                    The worst ApplyMax (8) offenders per pass (farthest first), at most 2 passes a second, each snap logged ('sync: apply: snap ...');
+ *                    an actor that faults in the teleport is blacklisted for the round. Never on the host, never offline / Arcade, only mode 4
+ *                    (System Link / online). Fail closed: no local ZFFPlayer found = no pass; a human's actor is never touched (klsy_human). The
+ *                    team test also keeps AI heisters out when they share a team object with a human (so 'AI heister' may not be snapped; also a
+ *                    cop within 40 units of a player's feet is skipped). Host hp<=0 while the own actor lives is only logged (nothing is
  *                    killed: GUESS area). [Sync] ApplyHp=1 is a STUB: it only logs hp differences.
  *                    GUESSES: the teleport's position is the node position kle_node reads (the feet may differ by a constant); the identity
  *                    rotation the game's routine takes turns the snapped actor to its default facing (no yaw is sent yet); no cool-down per
@@ -38,10 +44,18 @@
 #define KLSY_MAXP 512
 
 typedef struct { short fam; unsigned short port; unsigned long addr; char zero[8]; } klsy_sin;
-struct klsy_pe { unsigned short slot; short hp; float p[3]; };
+/* 20 bytes per actor ('KLSY2'): slot, hp, place, and the IDENTITY the client checks before it moves anything: cls = low 16 bits of the actor's
+   vtable (its class), team = the team value [[o+0x54]+4] (-1 = unreadable). Slot ids are NOT assumed equal on every peer (re\graft_formats.md). */
+struct klsy_pe { unsigned short slot; short hp; float p[3]; unsigned short cls; short team; };
+typedef char klsy_pe_size_is_20[sizeof(struct klsy_pe) == 20 ? 1 : -1];
+#define KLSY_REC 20
+#define KLSY_NBAD 16
+#define KLSY_MAXOFF 128
 static struct {
-    int on, share, cmp, max, tol10, apply, applyHp, applyMax, applyTol, toldApply, applyRx;
-    DWORD every, shareMs, at, shAt, cmpAt, rxAt, rxT;
+    int on, share, cmp, max, tol10, apply, applyHp, applyMax, applyTol, toldApply, toldRefuse, toldHum, applyRx;
+    int inwin, agree, rxAnchored, srcSet, lim, nbad, humLogs;
+    unsigned long srcAddr;
+    DWORD every, shareMs, at, shAt, cmpAt, rxAt, rxT, applyAt, anchorNow, anchorT, bad[KLSY_NBAD];
     UINT_PTR sock; int sockTried, toldMode;
     struct klsy_pe host[KLSY_MAXP]; int nhost;
     int (WINAPI *WSAStartup)(WORD, void *);
@@ -129,7 +143,7 @@ static void klsy_walk(int pass, klsy_fn f, void *ctx)
 {
     DWORD p, tab, i, blk[64 * 32];
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
-    for (i = 0; i < 0x10000; i += 64) {
+    for (i = 0; i < (klsy.lim ? (DWORD)klsy.lim : 0x10000u); i += 64) {                       /* lim: Apply / Compare stop past the host's highest slot */
         DWORD k;
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
         for (k = 0; k < 64; k++) {
@@ -157,7 +171,7 @@ static void klsy_line(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
     c->lines++;
 }
 
-struct klsy_tx { char pk[16 + KLSY_MAXP * 16]; int n; };
+struct klsy_tx { char pk[16 + KLSY_MAXP * KLSY_REC]; int n; };
 static void klsy_collect(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
 {
     struct klsy_tx *t = (struct klsy_tx *)ctx; float pos[3]; int hv, team; float hp; struct klsy_pe e;
@@ -166,10 +180,16 @@ static void klsy_collect(DWORD o, DWORD slot, int kind, const char *nm, void *ct
     klsy_actor(o, pos, &hv, &hp, &team);
     if (!hv) return;
     e.slot = (unsigned short)slot; e.hp = (short)hp; memcpy(e.p, pos, 12);
-    memcpy(t->pk + 16 + t->n * 16, &e, 16); t->n++;
+    e.cls = (unsigned short)(klh_rd32(o) & 0xffff); e.team = (short)team;
+    memcpy(t->pk + 16 + t->n * KLSY_REC, &e, KLSY_REC); t->n++;
 }
 
-struct klsy_cm { int n, bad, hpbad, worst_s; float worst; float wo[3], wh[3]; int shown; };
+struct klsy_cm { int n, bad, hpbad, idbad, worst_s; float worst; float wo[3], wh[3]; int shown; };
+/* identity of the own actor against the host's record: same class (vtable low 16 bits) and the same, readable team */
+static int klsy_idok(DWORD o, int team, const struct klsy_pe *h)
+{
+    return h->cls == (unsigned short)(klh_rd32(o) & 0xffff) && team != -1 && h->team != -1 && h->team == (short)team;
+}
 static void klsy_cmp(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
 {
     struct klsy_cm *c = (struct klsy_cm *)ctx; float pos[3], dx, dy, dz, d, hp; int hv, team, i;
@@ -178,6 +198,7 @@ static void klsy_cmp(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
     if (i == klsy.nhost) return;
     klsy_actor(o, pos, &hv, &hp, &team);
     c->n++;
+    if (!klsy_idok(o, team, &klsy.host[i])) { c->idbad++; return; }                  /* another actor in that slot: no position compare */
     if (!hv) return;
     dx = pos[0] - klsy.host[i].p[0]; dy = pos[1] - klsy.host[i].p[1]; dz = pos[2] - klsy.host[i].p[2];
     d = (float)sqrt(dx * dx + dy * dy + dz * dz);
@@ -192,12 +213,14 @@ static void klsy_cmp(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
 
 /* ---- [Sync] Apply (client): see the header ---- */
 static int klsy_nhum; static DWORD klsy_humteam[28]; static float klsy_humpos[28][3];
-/* The human players of this peer: their team objects ([player+0x54]) and feet ([player+0x460]).
-   GUESS: a human's body actor shares the player's [+0x54] team object or stands on the player's feet; either test keeps it out of Apply. */
-static void klsy_humans(void)
+/* The human players this peer's player list holds: their team objects ([player+0x54]) and feet ([player+0x460]) -> how many were found.
+   GUESS: a human's body actor shares the player's [+0x54] team object or stands on the player's feet; either test keeps it out of Apply.
+   GUESS (unverified): whether the list at gd+0x828 holds the REMOTE humans' players on a client; the pass logs the count so a bench shows it.
+   The team match also keeps every actor of a heister team (AI heisters too) out of Apply when the team object is shared: intended, fail closed. */
+static int klsy_humans(void)
 {
     DWORD gd, pl; int i; klsy_nhum = 0;
-    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(0x00dd265c)))) return;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(0x00dd265c)))) return 0;
     for (i = 0; i < 28; i++) {
         float f[3];
         if (!(pl = klh_rd32(gd + 0x828 + 4 * i)) || klh_rd32(pl) != 0x00bb45f4 /* ZFFPlayer */) continue;
@@ -205,10 +228,12 @@ static void klsy_humans(void)
         if (!klh_rd(pl + 0x460, f, 12)) f[0] = f[1] = f[2] = 1e30f;
         memcpy(klsy_humpos[klsy_nhum], f, 12); klsy_nhum++;
     }
+    return klsy_nhum;
 }
 static int klsy_human(DWORD o, const float pos[3])
 {
     DWORD tm = klh_rd32(o + 0x54); int i;
+    if (klsy_nhum == 0) return 1;                                                  /* fail closed: no human known = nothing is moved */
     for (i = 0; i < klsy_nhum; i++) {
         float dx = pos[0] - klsy_humpos[i][0], dy = pos[1] - klsy_humpos[i][1], dz = pos[2] - klsy_humpos[i][2];
         if (tm && tm == klsy_humteam[i]) return 1;
@@ -216,16 +241,25 @@ static int klsy_human(DWORD o, const float pos[3])
     }
     return 0;
 }
-struct klsy_ap { int seen, snapped, skipped, deadlog, hplog, refused; };
+static int klsy_isbad(DWORD slot)
+{
+    int i; for (i = 0; i < klsy.nbad; i++) if (klsy.bad[i] == slot) return 1;
+    return 0;
+}
+struct klsy_off { DWORD o, slot; int hi, team; float d, pos[3], hp; const char *nm; };
+struct klsy_ap { int seen, snapped, skipped, deadlog, hplog, refused, idbad, nOff; struct klsy_off off[KLSY_MAXOFF]; };
+/* walk callback: only COLLECTS offenders (identity checked, not human, alive both sides, farther than ApplyTol) */
 static void klsy_applyfn(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
 {
-    struct klsy_ap *c = (struct klsy_ap *)ctx; float pos[3], dx, dy, dz, d, hp, after[3]; int hv, team, i, ok; const char *why;
+    struct klsy_ap *c = (struct klsy_ap *)ctx; float pos[3], dx, dy, dz, d, hp; int hv, team, i;
     (void)kind;
     for (i = 0; i < klsy.nhost && klsy.host[i].slot != (unsigned short)slot; i++) ;
     if (i == klsy.nhost) return;
     klsy_actor(o, pos, &hv, &hp, &team);
+    if (!klsy_idok(o, team, &klsy.host[i])) { c->idbad++; return; }               /* class / team differ: a different actor, never snapped */
     if (!hv) return;
     c->seen++;
+    if (klsy_isbad(slot)) return;                                                 /* faulted in the teleport before */
     if (klsy_human(o, pos)) return;
     if (klsy.applyHp && (short)hp != klsy.host[i].hp && c->hplog < 8) { c->hplog++; klog("sync: apply: hp stub slot %lu c=%s me %.0f host %d (logged only)", (unsigned long)slot, nm, hp, klsy.host[i].hp); }
     if (klsy.host[i].hp <= 0) {                                                    /* host says dead */
@@ -236,15 +270,33 @@ static void klsy_applyfn(DWORD o, DWORD slot, int kind, const char *nm, void *ct
     dx = pos[0] - klsy.host[i].p[0]; dy = pos[1] - klsy.host[i].p[1]; dz = pos[2] - klsy.host[i].p[2];
     d = (float)sqrt(dx * dx + dy * dy + dz * dz);
     if (d <= (float)klsy.applyTol) return;
-    if (c->snapped >= klsy.applyMax) { c->skipped++; return; }
-    if (!klt_tele_known()) { if (!klsy.toldApply) { klsy.toldApply = 1; klog("sync: apply: the game's teleport 0x62a900 is not the known routine: no snaps"); } return; }
-    if ((why = klt_refuse(o)) != 0) { c->refused++; if (klsy.toldApply < 3) { klsy.toldApply++; klog("sync: apply: slot %lu c=%s NOT snapped: %s", (unsigned long)slot, nm, why); } return; }
-    ok = 1;
-    __try { klt_teleport(o, klsy.host[i].p); } __except (1) { ok = 0; }
-    c->snapped++;
-    memset(after, 0, sizeof after); klsy_actor(o, after, &hv, &hp, &team);
-    klog("sync: apply: snap slot %lu c=%s t=%d dist %.1f (%.1f,%.1f,%.1f) -> host (%.1f,%.1f,%.1f)%s now (%.1f,%.1f,%.1f)", (unsigned long)slot, nm, team, d, pos[0], pos[1], pos[2],
-         klsy.host[i].p[0], klsy.host[i].p[1], klsy.host[i].p[2], ok ? "" : " FAULT", after[0], after[1], after[2]);
+    if (c->nOff >= KLSY_MAXOFF) { c->skipped++; return; }
+    { struct klsy_off *f = &c->off[c->nOff++]; f->o = o; f->slot = slot; f->hi = i; f->team = team; f->d = d; f->hp = hp; f->nm = nm; memcpy(f->pos, pos, 12); }
+}
+/* after the walk (same tick, same thread): the worst ApplyMax offenders, farthest first */
+static void klsy_applysnap(struct klsy_ap *c)
+{
+    int a, b, tried = 0; const char *why;
+    for (a = 1; a < c->nOff; a++) { struct klsy_off t = c->off[a]; for (b = a - 1; b >= 0 && c->off[b].d < t.d; b--) c->off[b + 1] = c->off[b]; c->off[b + 1] = t; }
+    if (c->nOff && !klt_tele_known()) { if (!klsy.toldApply) { klsy.toldApply = 1; klog("sync: apply: the game's teleport 0x62a900 is not the known routine: no snaps"); } return; }
+    for (a = 0; a < c->nOff; a++) {
+        struct klsy_off *f = &c->off[a]; float after[3], hp; int ok, hv, team;
+        if (c->snapped >= klsy.applyMax) { c->skipped += c->nOff - a; break; }
+        tried++;
+        if ((why = klt_refuse(f->o)) != 0) { c->refused++; if (klsy.toldRefuse < 3) { klsy.toldRefuse++; klog("sync: apply: slot %lu c=%s NOT snapped: %s", (unsigned long)f->slot, f->nm, why); } continue; }
+        ok = 1;
+        __try { klt_teleport(f->o, klsy.host[f->hi].p); } __except (1) { ok = 0; }
+        if (!ok) {                                                                 /* a fault may leave the actor half-moved: never touch that slot again this round */
+            c->refused++; if (klsy.nbad < KLSY_NBAD) klsy.bad[klsy.nbad++] = f->slot;
+            klog("sync: apply: slot %lu c=%s FAULT in the teleport: slot blacklisted for this round", (unsigned long)f->slot, f->nm);
+            continue;
+        }
+        c->snapped++;
+        memset(after, 0, sizeof after); klsy_actor(f->o, after, &hv, &hp, &team);
+        klog("sync: apply: snap slot %lu c=%s t=%d dist %.1f (%.1f,%.1f,%.1f) -> host (%.1f,%.1f,%.1f) now (%.1f,%.1f,%.1f)", (unsigned long)f->slot, f->nm, f->team, f->d, f->pos[0], f->pos[1], f->pos[2],
+             klsy.host[f->hi].p[0], klsy.host[f->hi].p[1], klsy.host[f->hi].p[2], after[0], after[1], after[2]);
+    }
+    (void)tried;
 }
 
 static void klsy_init(void)
@@ -265,49 +317,90 @@ static void klsy_init(void)
         klog("sync: Probe=%d Share=%d Compare=%d Every=%lu ShareMs=%lu Max=%d Tol=%.1f (Probe / Share / Compare are read-only)", klsy.on, klsy.share, klsy.cmp, (unsigned long)klsy.every, (unsigned long)klsy.shareMs, klsy.max, klsy.tol10 / 10.0);
 }
 
+/* The round was left (loading, lobby, restart) or has not begun: forget everything received. */
+static void klsy_leave(void) { klsy.inwin = 0; klsy.toldMode = 0; }
+/* Empty the socket (old rounds' / levels' lists queue there while the tick is out of the state window). */
+static void klsy_drain(void)
+{
+    static char b[16 + KLSY_MAXP * KLSY_REC]; klsy_sin from; int fl, k;
+    if (!klsy.sock) return;
+    for (k = 0; k < 1024; k++) { fl = sizeof from; if (klsy.recvfrom(klsy.sock, b, sizeof b, 0, &from, &fl) < 0) break; }
+}
+
 static void klsy_tick(int game_thread)
 {
     DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0;
     if (!(klsy.on || klsy.share || klsy.cmp || klsy.apply) || !game_thread || !klh_exe_ok) return;
-    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) return;
-    if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4)) return;
-    if (klsy.on < 2 && ((role != 2 && role != 3) || mode != 4)) { klsy.toldMode = 0; return; }
-    if (state < 0x13 || state > 0x1f) return;                                  /* in a round (botfill's window) */
-    if (!klsy.toldMode) { klsy.toldMode = 1; klog("sync: round: role %lu state 0x%lx (probe %d, share %d, compare %d)", (unsigned long)role, (unsigned long)state, klsy.on, klsy.share, klsy.cmp); }
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) { klsy_leave(); return; }
+    if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4)) { klsy_leave(); return; }
+    if (klsy.on < 2 && ((role != 2 && role != 3) || mode != 4)) { klsy_leave(); return; }
+    if (state < 0x13 || state > 0x1f) { klsy_leave(); return; }                /* in a round (botfill's window) */
     if ((klsy.share || klsy.cmp || klsy.apply) && !klsy.sock) klsy_open();
-    if (klsy.share && role == 2 && klsy.sock && now - klsy.shAt >= klsy.shareMs) {          /* host: its actors, binary: 'KLSY1' u32 T u16 n, n x {u16 slot, i16 hp, f32 x3} */
+    if (!klsy.inwin) {                                                         /* entering the window: nothing from before this moment counts */
+        klsy.inwin = 1; klsy_drain();
+        klsy.nhost = 0; klsy.applyRx = 0; klsy.rxT = 0; klsy.rxAnchored = 0; klsy.srcSet = 0; klsy.agree = 0; klsy.nbad = 0;
+        klsy.applyAt = 0; klsy.cmpAt = 0; klsy.toldHum = 0; klsy.humLogs = 0; klsy.toldRefuse = 0;
+    }
+    if (!klsy.toldMode) { klsy.toldMode = 1; klog("sync: round: role %lu state 0x%lx (probe %d, share %d, compare %d, apply %d)", (unsigned long)role, (unsigned long)state, klsy.on, klsy.share, klsy.cmp, klsy.apply); }
+    if (klsy.share && role == 2 && klsy.sock && now - klsy.shAt >= klsy.shareMs) {          /* host: its actors, binary: 'KLSY2' u32 T u16 n, n x {u16 slot, i16 hp, f32 x3, u16 cls, i16 team} */
         struct klsy_tx *t = (struct klsy_tx *)calloc(1, sizeof *t);
         klsy.shAt = now;
         if (t) {
             klsy_sin a; DWORD T = (DWORD)klsy_T(); WORD cnt; int len, r;
             klsy_walk(0, klsy_collect, t);
-            memcpy(t->pk, "KLSY1\0\0\0", 8); memcpy(t->pk + 8, &T, 4); cnt = (WORD)t->n; memcpy(t->pk + 12, &cnt, 2);
-            len = 16 + t->n * 16;
+            memcpy(t->pk, "KLSY2\0\0\0", 8); memcpy(t->pk + 8, &T, 4); cnt = (WORD)t->n; memcpy(t->pk + 12, &cnt, 2);
+            len = 16 + t->n * KLSY_REC;
             memset(&a, 0, sizeof a); a.fam = 2; a.port = (unsigned short)(((KLSY_PORT & 0xff) << 8) | (KLSY_PORT >> 8)); a.addr = 0xffffffffu;
             r = klsy.sendto(klsy.sock, t->pk, len, 0, &a, sizeof a);
             { static int told; if (!told) { told = 1; klog("sync: host list: %d actors, %d bytes on UDP %d (sendto %d)", t->n, len, KLSY_PORT, r); } }
             free(t);
         }
     }
-    if ((klsy.cmp || klsy.apply) && role == 3 && klsy.sock) {                                  /* client: take the newest host list, compare once a second */
-        static char pk[16 + KLSY_MAXP * 16]; klsy_sin from; int fl, len, k;
-        for (k = 0; k < 32; k++) {
+    if ((klsy.cmp || klsy.apply) && role == 3 && klsy.sock) {                                  /* client: take the newest FRESH host list, compare once a second */
+        static char pk[16 + KLSY_MAXP * KLSY_REC]; klsy_sin from; int fl, len, k;
+        for (k = 0; k < 256; k++) {                                                            /* drain the whole queue; the newest acceptable list wins */
+            WORD cnt; DWORD T; int age;
             fl = sizeof from; len = klsy.recvfrom(klsy.sock, pk, sizeof pk, 0, &from, &fl);
-            if (len < 16) break;
-            if (memcmp(pk, "KLSY1", 5)) continue;
-            { WORD cnt; memcpy(&cnt, pk + 12, 2); if (cnt > KLSY_MAXP || 16 + cnt * 16 > len) continue;
-              memcpy(klsy.host, pk + 16, cnt * 16); klsy.nhost = cnt; memcpy(&klsy.rxT, pk + 8, 4); klsy.rxAt = now; klsy.applyRx = 1; }
+            if (len < 0) break;
+            if (len < 16 || memcmp(pk, "KLSY2", 5)) continue;
+            memcpy(&cnt, pk + 12, 2); if (cnt > KLSY_MAXP || 16 + cnt * KLSY_REC > len) continue;
+            if (klsy.srcSet && from.addr != klsy.srcAddr) continue;                            /* only the first source that sent a valid list this round */
+            memcpy(&T, pk + 8, 4);
+            if (klsy.rxAnchored && T <= klsy.rxT) { if (klsy.rxT - T < 500000000u) continue; klsy.rxAnchored = 0; }   /* older / repeated: dropped; a huge step back = the 1e9 ms wrap */
+            if (!klsy.rxAnchored) { klsy.rxAnchored = 1; klsy.anchorNow = now; klsy.anchorT = T; }
+            age = (int)(now - klsy.anchorNow) - (int)(T - klsy.anchorT);                       /* how long this list sat on the way, by the HOST's clock (GUESS: the first list was on time) */
+            if (age > (int)(2 * klsy.shareMs)) continue;
+            if (!klsy.srcSet) { klsy.srcSet = 1; klsy.srcAddr = from.addr; klog("sync: host list source locked to %lu.%lu.%lu.%lu", from.addr & 255, from.addr >> 8 & 255, from.addr >> 16 & 255, from.addr >> 24); }
+            memcpy(klsy.host, pk + 16, cnt * KLSY_REC); klsy.nhost = cnt; klsy.rxT = T; klsy.rxAt = now; klsy.applyRx = 1;
         }
-        if (klsy.apply && klsy.applyRx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs) {     /* one pass per received list, only while it is fresh */
-            struct klsy_ap c; klsy.applyRx = 0; memset(&c, 0, sizeof c); klsy_humans();
-            klsy_walk(0, klsy_applyfn, &c);
-            if (c.snapped || c.skipped) klog("sync: apply: %d actors checked, %d snapped, %d over the ApplyMax cap, %d refused by the teleport guard", c.seen, c.snapped, c.skipped, c.refused);
-        }
-        if (klsy.cmp && klsy.nhost && now - klsy.cmpAt >= 1000) {
-            struct klsy_cm c; klsy.cmpAt = now; memset(&c, 0, sizeof c); c.worst_s = -1;
+        if ((klsy.cmp || klsy.apply) && klsy.nhost && now - klsy.cmpAt >= 1000) {            /* the Compare walk also gives Apply its trust: identity agreement */
+            struct klsy_cm c; int j, mx = 0, ag; klsy.cmpAt = now; memset(&c, 0, sizeof c); c.worst_s = -1;
+            for (j = 0; j < klsy.nhost; j++) if (klsy.host[j].slot > mx) mx = klsy.host[j].slot;
+            klsy.lim = (mx | 63) + 1;
             klsy_walk(0, klsy_cmp, &c);
-            klog("sync: vs host: %d actors compared (host list %lu ms old, %d in it), %d farther than %.1f, %d with another health, worst slot %d d=%.1f", c.n,
-                 (unsigned long)(now - klsy.rxAt), klsy.nhost, c.bad, klsy.tol10 / 10.0, c.hpbad, c.worst_s, c.worst);
+            klsy.lim = 0;
+            ag = c.n >= 1 && c.idbad * 10 <= c.n;                                              /* GUESS: at most 10% of the shared slots may differ in class / team */
+            if (ag != klsy.agree) { klsy.agree = ag; klog("sync: identity agreement with the host %s (%d slots compared, %d with another class / team)", ag ? "OK" : "LOST", c.n, c.idbad); }
+            if (klsy.cmp)
+                klog("sync: vs host: %d actors compared (host list %lu ms old, %d in it), %d another class/team, %d farther than %.1f, %d with another health, worst slot %d d=%.1f", c.n,
+                     (unsigned long)(now - klsy.rxAt), klsy.nhost, c.idbad, c.bad, klsy.tol10 / 10.0, c.hpbad, c.worst_s, c.worst);
+        }
+        /* Apply: only a System Link / online client (mode 4, even with Probe=2), a fresh list, the identity agreement, a known local player; at most 2 passes a second */
+        if (klsy.apply && mode == 4 && klsy.agree && klsy.applyRx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && now - klsy.applyAt >= 500) {
+            struct klsy_ap *c = (struct klsy_ap *)calloc(1, sizeof *c); int j, mx = 0, nh;
+            klsy.applyRx = 0; klsy.applyAt = now;
+            nh = klsy_humans();
+            if (klsy.humLogs < 3) { klsy.humLogs++; klog("sync: apply: pass: %d local ZFFPlayer(s) in the list at gd+0x828 (does it hold remote humans? compare with the number of humans in the round)", nh); }
+            if (!nh) { if (!klsy.toldHum) { klsy.toldHum = 1; klog("sync: apply: no local player found: pass skipped (fail closed)"); } }
+            else if (c) {
+                for (j = 0; j < klsy.nhost; j++) if (klsy.host[j].slot > mx) mx = klsy.host[j].slot;
+                klsy.lim = (mx | 63) + 1;
+                klsy_walk(0, klsy_applyfn, c);
+                klsy.lim = 0;
+                klsy_applysnap(c);
+                if (c->snapped || c->skipped || c->refused || c->idbad) klog("sync: apply: %d actors checked, %d snapped, %d over the ApplyMax cap, %d refused / faulted, %d another class/team", c->seen, c->snapped, c->skipped, c->refused, c->idbad);
+            }
+            free(c);
         }
     }
     if (klsy.on && now - klsy.at >= klsy.every) {
