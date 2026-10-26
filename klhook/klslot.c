@@ -336,8 +336,8 @@ static int kls_rand_pick(int s)
  * The only thing that decides a peer's squads before the load is WHICH level archive it opens, and this file already answers that open. So the gate picks
  * a VARIANT of the level archive next to the file the open would get anyway (stock file or redirect target):
  *   Fxx_Main.bots.zip     the squads keep eAllTypes (Ally bots exist online), used when the gate is ON
- *   Fxx_Main.nobots.zip   plain mask 8 (stock behaviour online), used when the gate is OFF
- * A missing variant means that peer uses the zip as it is (logged). Offline / Arcade: NEVER touched (kl_online() false).
+ *   the plain Fxx_Main.zip   mask 8 (stock behaviour online), used when the gate is OFF (peer 02:58: no .nobots.zip copies)
+ * A missing .bots.zip means that peer uses the zip as it is (WARNING once). Each decision line carries the loaded file's size + FNV of its first/last 64 KB. Offline / Arcade: NEVER touched (kl_online() false).
  * The gate value: HOST (role 2) = [BotFill] OnlineHost; CLIENT (role 3) = the HOST'S value, which klhostopt.c carries in klx_opts / UDP 27413 as 'b<0|1>'
  * (needs [HostOpts] Enable=1 on both); not heard (old host, HostOpts off, too late) = the client's own [BotFill] OnlineHost, with a WARNING line.
  * [BotGate] Enable=1 (recommended on). DATA ONLY: a path change inside the existing file wrappers, no code byte. */
@@ -361,30 +361,49 @@ static int kls_bot_gate(int *role_out, const char **src)
     return 0;
 }
 
+static void kls_fingerprint(const char *p, char *out, size_t cap)
+{   /* peer 02:58: a cheap per-file id so a host/client mismatch of the loaded archive shows in the logs:
+     * 'size N fnv XXXXXXXX' = FNV-1a 32 over the first and the last 64 KB (not an md5: hashing ~100 MB at load would stall it).
+     * Opened through THIS dll's import (not the game's wrapped one), read-only, shared. */
+    HANDLE h = CreateFileA(p, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    static unsigned char buf[65536]; LARGE_INTEGER sz, off; DWORD got, i, k; unsigned f = 2166136261u;
+    if (h == INVALID_HANDLE_VALUE) { snprintf(out, cap, "unreadable"); return; }
+    if (!GetFileSizeEx(h, &sz)) sz.QuadPart = 0;
+    for (k = 0; k < 2; k++) {
+        off.QuadPart = k ? (sz.QuadPart > 65536 ? sz.QuadPart - 65536 : 0) : 0;
+        if (!SetFilePointerEx(h, off, NULL, FILE_BEGIN) || !ReadFile(h, buf, sizeof buf, &got, NULL)) got = 0;
+        for (i = 0; i < got; i++) { f ^= buf[i]; f *= 16777619u; }
+    }
+    CloseHandle(h);
+    snprintf(out, cap, "size %I64d fnv %08x", sz.QuadPart, f);
+}
+
 static int kls_bot_apply(char *path, const char *slot, const char *api)
 {   /* path = the level archive the open is going to get; -> 1 when it was replaced by the variant for the gate */
     int role = 0, gate, n; const char *src = "", *suf; char var[MAX_PATH]; size_t l = strlen(path); static LONG nlog;
     if (!kls_bg_on || !kl_online() || l < 5 || _stricmp(path + l - 4, ".zip")) return 0;
     gate = kls_bot_gate(&role, &src);
     if (!strncmp(api, "CreateFile", 10)) kls_bg_used = gate;   /* review fix: only the real open counts, not GetFileAttributes / FindFirstFile probes */
-    suf = gate ? ".bots.zip" : ".nobots.zip";
-    if (l - 4 + strlen(suf) >= MAX_PATH) return 0;
-    memcpy(var, path, l - 4); strcpy(var + l - 4, suf);
-    {   /* review fix: log a decision only when it changes for the slot (probes and repeated opens no longer eat the cap); a missing variant that leaves bots in is warned ONCE per slot, uncapped */
-        static char lastkey[64]; static int lastgate = -2, warnedmiss[64]; char key[64];
-        int have = kls_isfile(var), nomiss = 0;
+    /* peer 02:58: the plain zip IS the stock-mask variant (no .nobots.zip copies: C: ran full tonight); only ON looks for <name>.bots.zip,
+     * which the peer's install templates rebuild from the live plain zip after every install */
+    suf = gate ? ".bots.zip" : NULL;
+    if (suf && l - 4 + strlen(suf) >= MAX_PATH) return 0;
+    if (suf) { memcpy(var, path, l - 4); strcpy(var + l - 4, suf); }
+    {   /* log a decision only when it changes for the slot (probes and repeated opens no longer eat the cap); ON with no .bots.zip is warned ONCE per slot, uncapped */
+        static char lastkey[64]; static int lastgate = -2, warnedmiss[64]; char key[64], fp[80];
+        int have = suf && kls_isfile(var), nomiss = 0;
         snprintf(key, sizeof key, "%s/%d/%d/%d", slot, role, gate, have);
         n = (strcmp(key, lastkey) || lastgate != gate) ? InterlockedIncrement(&nlog) : 1000;
         strncpy(lastkey, key, sizeof lastkey - 1); lastgate = gate;
-        if (!have) { unsigned h = 0; const char *q; for (q = slot; *q; q++) h = h * 31 + (unsigned char)*q; h %= 64; nomiss = warnedmiss[h]; warnedmiss[h] = 1;
-            if (!nomiss) klog("botgate: WARNING slot %s: no %s next to %s - the gate cannot be honoured (an eAllTypes plain archive keeps its Ally bots even when OFF); stage both .bots.zip and .nobots.zip", slot, suf, path); }
+        if (n <= 48) kls_fingerprint(have ? var : path, fp, sizeof fp);
+        if (suf && !have) { unsigned h = 0; const char *q; for (q = slot; *q; q++) h = h * 31 + (unsigned char)*q; h %= 64; nomiss = warnedmiss[h]; warnedmiss[h] = 1;
+            if (!nomiss) klog("botgate: WARNING slot %s: Ally bots ON but no .bots.zip next to %s - this peer loads the plain archive (no bots unless it was built with eAllTypes)", slot, path); }
         if (have) {
-        if (n <= 48) klog("botgate: slot %s role %d: Ally bots %s (%s) -> %s", slot, role, gate ? "ON" : "OFF", src, var);
-        strcpy(path, var); return 1;
+            if (n <= 48) klog("botgate: slot %s role %d: Ally bots ON (%s) -> %s [%s]", slot, role, src, var, fp);
+            strcpy(path, var); return 1;
         }
+        if (n <= 48) klog("botgate: slot %s role %d: Ally bots %s (%s) -> %s as it is [%s]", slot, role, gate ? "ON" : "OFF", src, path, fp);
     }
-    if (n <= 48) klog("botgate: slot %s role %d: Ally bots %s (%s) -> no %s next to %s: that archive is used as it is (if it was built with eAllTypes the bots %s online)",
-                      slot, role, gate ? "ON" : "OFF", src, suf, path, gate ? "exist" : "STILL EXIST");
     return 0;
 }
 
@@ -829,7 +848,7 @@ static void kls_init(HINSTANCE inst)
     if (kls_online_set == 1) { klog("expansion: OnlineSet=1 is the stock page: ignored"); kls_online_set = 0; }
     kls_bg_on = GetPrivateProfileIntA("BotGate", "Enable", 1, klh_ini) != 0;       /* (recommended on) */
     if (kls_bg_on && !GetPrivateProfileIntA("Net", "OnlineSafe", 1, klh_ini)) klog("botgate: NOTE [Net] OnlineSafe=0 makes kl_online() false: the gate never acts");
-    klog("botgate: %s - online the level archive is swapped for Fxx_Main.bots.zip (host's [BotFill] OnlineHost=1) or Fxx_Main.nobots.zip (0) when one sits beside it; offline never", kls_bg_on ? "on" : "off ([BotGate] Enable=0)");
+    klog("botgate: %s - online with the host's [BotFill] OnlineHost=1 the level archive is swapped for Fxx_Main.bots.zip when one sits beside it; OnlineHost=0 = the plain archive; offline never", kls_bg_on ? "on" : "off ([BotGate] Enable=0)");
     kls_keep_online = GetPrivateProfileIntA("Expansion", "KeepPageOnline", 0, klh_ini) != 0;
     kls_keep_clear = GetPrivateProfileIntA("Expansion", "KeepClear", 1, klh_ini) != 0;
     if (kls_online_set || kls_keep_online)
