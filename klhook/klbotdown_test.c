@@ -80,12 +80,12 @@ static int g_btest = 1, g_nb;
 
 enum { KLTT_REVIVE = 4, KLTT_ADREN = 5 }; static float kltt_get(int r, int k) { (void)r; (void)k; return 1.0f; }   /* kltrait.c: no traits in this harness */
 /* ONLINE harness: the host test, the census and the clock are the part's own #ifndef hooks, replaced by fakes */
-static int g_ohost = 0, g_ncen; static DWORD g_cen[KLB_NREC]; static DWORD g_now = 5000;
+static int g_ohost = 0, g_ncen; static DWORD g_ostate = 0x19;      /* g_ohost: 1 host, 0 not, -1 settings unreadable */ static DWORD g_cen[KLB_NREC]; static DWORD g_now = 5000;
 static DWORD klh_avt(DWORD a) { return klh_rd32(a); }
 static int fake_census(DWORD *out, int max) { int i; for (i = 0; i < g_ncen && i < max; i++) out[i] = g_cen[i]; return g_ncen < max ? g_ncen : max; }
-static int fake_host(DWORD *rules) { if (!g_ohost) return 0; *rules = 0x2222; return 1; }
+static int fake_host(DWORD *rules, DWORD *state) { if (g_ohost <= 0) return g_ohost; *rules = 0x2222; *state = g_ostate; return 1; }
 #define KLBD_CENSUS(out, max) fake_census(out, max)
-#define KLBD_ONLINE_HOST(r) fake_host(r)
+#define KLBD_ONLINE_HOST(r, s) fake_host(r, s)
 #define KLBD_NOW() g_now
 #include "klbotdown.c"
 
@@ -132,7 +132,7 @@ static void world(void)
     klbd.on = 1; klbd.arc = 1; klbd.log = 1; klbd.downs_max = 2; klbd.traitors = 1; klbd.down_pct = 20; klbd.floor_pct = 6; klbd.refuse = 3000; klbd.lie = 6; klbd.free_t = 0.75f;
     klbd.attr = 1.5f; klbd.watch = 8; klbd.preshield = 0; g_btest = 1; g_nb = 0;
     memset(klbd_r, 0, sizeof klbd_r); memset(&klbd_g, 0, sizeof klbd_g);
-    g_ohost = 0; g_ncen = 0; g_now = 5000; klbd_online_reset(); g_accept = 1; g_ncalls = 0; g_goal_never = 0; g_code_ok = 1; nlog = 0; logbuf[0] = 0; nwrites = 0;
+    g_ohost = 0; g_ostate = 0x19; g_ncen = 0; g_now = 5000; klbd_online_reset(); g_accept = 1; g_ncalls = 0; g_goal_never = 0; g_code_ok = 1; nlog = 0; logbuf[0] = 0; nwrites = 0;
 }
 
 static void pass(int ms) { tick += ms * 1024 / 1000; W32(CLOCK + 0x48, tick); game_frame(); klbd_tick(1); }
@@ -279,6 +279,17 @@ int main(void)
     CHECK(g_ncalls == 0 && nwrites == 0 && has("WOULD ask"), "OnlineBotDownDry: logs, writes nothing");
     world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 1; g_ohost = 1; g_ncen = 1; g_cen[0] = ACT(1); WF(HO(1) + 4, 0); run(300);
     CHECK(g_ncalls == 0, "online host: a dead bot (health 0) is left alone");
+
+    /* review fixes 1 and 2: the pass runs only in state 0x19; an unreadable settings object changes nothing. NOT covered here: the real klbd_census /
+       klbd_online_host (entity-table walk, role-2 gate, team read) - KLBD_CENSUS / KLBD_ONLINE_HOST are faked above; only a live bench reads them. */
+    world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 1; g_ohost = 1; g_ostate = 0x15; g_ncen = 1; g_cen[0] = ACT(1); WF(HO(1) + 4, 20); run(300);
+    CHECK(g_ncalls == 0 && nwrites == 0, "online host in pre-round state 0x15: no down, no write");
+    world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 1; g_ohost = 1; g_ncen = 1; g_cen[0] = ACT(1); WF(HO(1) + 4, 20); run(300);
+    CHECK(g_ncalls >= 1, "online host in state 0x19: down");
+    { int rounds = 0; const char *q = logbuf; while ((q = strstr(q, "ONLINE round runs")) != NULL) { rounds++; q++; }
+      g_ohost = -1; run(300); g_ohost = 1; run(300);
+      q = logbuf; while ((q = strstr(q, "ONLINE round runs")) != NULL) { rounds--; q++; }
+      CHECK(rounds == 0, "settings unreadable for a moment: no forget, no second round-start line"); }
 
     printf("\n%s (%d failure(s))\n", fails ? "FAILED" : "ALL PASS", fails);
     return fails ? 1 : 0;
