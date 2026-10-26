@@ -5,7 +5,7 @@ Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md;
     python kl_solo_test.py --hook <TEST build folder> --tag <name> [--secs 300] [--gap 45]
                            [--base <KLHook.ini>] [--ini1 <extra.ini>] [--ini2 <extra.ini>] [--shots 30-300:30] [--force]
                            [--n N (3+: more joiners, all with --ini2)] [--gap2 30 (between joiners)]
-                           [--netstat SECS]
+                           [--netstat SECS] [--relaunch K (3: a failed joiner is started again, before the host's Ready)]
 
 - Puts the TEST dinput8.dll into the game folder for the run and puts the one that was there back afterwards
   (kl_autotest.snapshot / restore_original). The game folder's KLHook.ini is not touched: each instance reads
@@ -122,7 +122,7 @@ def solo_secs(n, total=2):
 
 def main():
     a, opt = sys.argv[1:], {}
-    for key in ('--hook', '--tag', '--secs', '--gap', '--gap2', '--base', '--ini1', '--ini2', '--shots', '--n', '--netstat'):
+    for key in ('--hook', '--tag', '--secs', '--gap', '--gap2', '--base', '--ini1', '--ini2', '--shots', '--n', '--netstat', '--relaunch'):
         if key in a:
             i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
     force = '--force' in a
@@ -196,10 +196,47 @@ def main():
             p = subprocess.Popen([os.path.join(dd, 'kl2.exe'), '-o', 'DisableSplashScreens'], cwd=dd, env=env)
             procs.append(p)
             say('  start | inst%d pid %d at %+.0f s (%s)' % (n, p.pid, time.time() - t0, d))
+        retries = {n: int(opt.get('--relaunch', 3)) for n in range(2, len(inst) + 1)}
+        last_start = [time.time()]
+
+        def host_started():
+            log = os.path.join(inst[0], 'KLHook.log')
+            try:
+                return 'SOLO match started' in open(log, encoding='latin-1').read() or 'host Ready with' in open(log, encoding='latin-1').read()
+            except OSError:
+                return False
+
+        def relaunch_tick():
+            # --relaunch K (default 3): a joiner whose script FAILED or whose process ended before the host started the
+            # round is started again (its log kept as KLHook_try<k>.log), one at a time, at least 20 s apart
+            if time.time() - last_start[0] < 20 or host_started():
+                return
+            for n in range(2, len(procs) + 1):
+                d, p = inst[n - 1], procs[n - 1]
+                res = os.path.join(d, 'KLHook.result')
+                try:
+                    failed = 'state=FAIL' in open(res, errors='replace').read()
+                except OSError:
+                    failed = False
+                if not (failed or p.poll() is not None) or retries[n] <= 0:
+                    continue
+                if p.poll() is None:
+                    subprocess.run(['taskkill', '/F', '/PID', str(p.pid)], capture_output=True); time.sleep(2)
+                k = int(opt.get('--relaunch', 3)) - retries[n] + 1; retries[n] -= 1
+                for f, g in (('KLHook.log', 'KLHook_try%d.log' % k), ('KLHook.result', 'KLHook_try%d.result' % k)):
+                    if os.path.isfile(os.path.join(d, f)):
+                        os.replace(os.path.join(d, f), os.path.join(d, g))
+                env = dict(os.environ, SteamAppId='28000', SteamGameId='28000', KLHOOK_DIR=d)
+                procs[n - 1] = subprocess.Popen([os.path.join(dd, 'kl2.exe'), '-o', 'DisableSplashScreens'], cwd=dd, env=env)
+                last_start[0] = time.time()
+                say('  relaunch | inst%d try %d pid %d at %+.0f s (%s)' % (n, k + 1, procs[n - 1].pid, time.time() - t0,
+                                                                         'its script failed' if failed else 'the process had ended'))
+                return
         while time.time() - t0 < secs:
             time.sleep(2)
             el = time.time() - t0
             netstat_tick(t0)
+            relaunch_tick()
             if shots and el >= shots[0]:
                 s = shots.pop(0)
                 for n, p in enumerate(procs, 1):
@@ -228,7 +265,14 @@ def main():
             res = os.path.join(d, 'KLHook.result')
             if os.path.isfile(res):
                 say('    KLHook.result | ' + ' '.join(open(res, errors='replace').read().split())[:400])
-            verdict.append('inst%d %s' % (n, 'loaded' if lines else 'NO LOG'))
+            failed = os.path.isfile(res) and 'state=FAIL' in open(res, errors='replace').read()
+            if not lines:
+                v = 'NO LOG'
+            elif any('SOLO match started' in l for l in lines):
+                v = 'IN ROUND'
+            else:
+                v = 'FAILED' if failed else 'not in round'
+            verdict.append('inst%d %s' % (n, v))
         say('RESULT: ' + ', '.join(verdict))
         code = 0
     finally:
