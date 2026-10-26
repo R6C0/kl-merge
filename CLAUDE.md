@@ -66,16 +66,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~03:45 - COVER6 crash = camera pool leak: each MissionFailedReload restart (0x19->0x16->0x18) takes a camera without release, pool 2 on DM05A -> assert 0x60a5bf on the 2nd; fix proposed to c9.
+DM02 solo patch (re-arm/auto) install requeued after a backup-name refusal (99dc7e532); DM05A cover audit 25/93 bad -> workflow restaging all cover maps with floor+nav filters. BG1 PASS.
+
 2026-10-26 ~03:30 - BO1 PASS (7 AI heisters online, both peers); BO2 tactics gave 0 orders (scan cap, fixed 6c031b451, BO3 queued).
 BotGate (.bots.zip picked by host OnlineHost) BG1 queued; cop sync PuppetMode=2 snap (0f0560c56) SP1d queued; N9_DM01b, SV, B2-B5, N2 all maps follow.
 
 2026-10-26 ~02:20 - DM02 live 1dd14609 (co-op solo -> Arcade -> cover -> loot), smokes DM01/02/03 PASS; cover safety filters on (c21ce7161);
 DM05A cover restaged with them (4a6799a1, queued in live_1026/install_queue.txt). DM02_lift test inconclusive: c9's tele refused
 (no actor at gd+0x4cf0); rerun once out_all_1026c(_test) lands.
-
-2026-10-26 ~01:40 - COVER on 10 maps + ARCADE DM01/03/06 + DM02 CO-OP solo Lift Door (untested in game) installed, stale 0.
-C: filled mid-install (DM06/07/06B zips broken, restored + reinstalled); templates now guard free space (1e43fa9ad); bulk moved to D:.
-Smoke rotation live_1026/rotate.py needs --hook out_all_1026a_test (SHIP hook ignores [Script]); DM01 PASS 01:19.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

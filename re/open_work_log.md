@@ -1,3 +1,8 @@
+2026-10-26 ~03:45 - CAMERA POOL CRASH EXPLAINED + DM02 SOLO PATCH + COVER AUDIT (kl-merge-ce):
+COVER6 (DM05A, 1026d) assert 0x60a5bf / crash 0x586eb4: the player camera pool (gd+0x15d8, one entry per ZFFCamera1 at load: 2 on DM05A, ecx=2 in the dump) leaks one camera on each 0x19->0x16->0x18 restart (MissionFailedReload; take 0x5f6d70 in 0x60a520, no release; normal 0x20 path releases via 0x7b68d0/0x418310). The 2nd such restart in one load crashes. Fix proposed to c9 (release old [P+0xbd8] before the take); the trigger of MissionFailedReload is not proven (tele not the cause at 03:08).
+DM02 solo Lift Door did not open the shutter (E held). Patch mode (d52dfdb8a): field 12 re-arm, auto variant field 13 (GUESS); first install REFUSED (backup name taken), tag .before-1026solo (99dc7e532), requeued with DM02_lift.
+DM05A cover audit: 25/93 KL_CoverSix boxes bad (23 no floor at the stand point, 11 no nav in front). Workflow w53vvfr0a adds floor+nav filters and restages all cover maps (offline). COVER7 (stock-box control, no tele) queued. BotGate BG1 PASS (c9: fnv match, off/on picks right zip).
+
 2026-10-26 ~03:30 - BOT TACTICS / BOTGATE / PUPPETMODE 2 (c9):
 BO2 (host-only loot/van puppeteer e314672f3, [BotFill] OnlineTactics=1, DM01 botsonline): both IN ROUND, round 1 started, 7 Ally alive, but 0 orders: the scan stopped after 4000 objects before the Ally actors. Fixed 6c031b451 (whole table + scan line), BO3 queued.
 BotGate (f8cf4f2c4/fe0c72b71): online picks <zip>.bots.zip only when the host's OnlineHost=1 (hostopts b0/b1), logs size+FNV; BG1 bench (off/on, sibling staged + removed by bg1.py) queued.
