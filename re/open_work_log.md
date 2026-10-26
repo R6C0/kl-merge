@@ -1,3 +1,8 @@
+2026-10-26 ~14:10 - BOS_DD06 PASS but 0/7 boarded (8 stacks, 5.5M). The round is 240 s; every bot had money 14 s in, but the exit trigger is ~180 m away and the bots WALKED (~0.7 m/s, 3 x 90 s give-up/retry).
+No bot reached it, so nobody called; the van came on its own at clock 1.6 s and left after 12 s with them 60-130 m out.
+Fix: [BotFill] OnlineExitSprint=1 (recommended on): before each exit/box order the bot's defend block gets move style Sprint (+0xc = 2, +0x10 = 1, as the Defend goal writes at 0x686b96; GUESS Sprint = 2 from the kl_rtp enum), undone on back-to-idle.
+Build out_sprint_1026_test 0a19ccfe. Queue: BOS_DD07, BOS_DD06s (re-run), DD08, DD09, DD02s, CNR2, DD04j, all on it.
+
 2026-10-26 ~13:52 - BOS_DD05 PASS 6/7 boarded, 0 asserts/faults. The hook tally is 0 because all 6 stacks went within 46 s (the game's own loot AI or the test player)
 while the hook's bots held 30 s on cop-guarded stacks (OnlineGuardTake). Then OnlineIdleVan sent them to the exit. The 13:45:35 'no exit trigger found' was the finder's 2 s lag (found 13:45:37). No fix needed.
 Queue reordered: BOS_DD06..09, BOS_DD02s, CNR2, BOS_DD04j now run before the old backlog (SV1, B3, N9_DM09e, N2_*).

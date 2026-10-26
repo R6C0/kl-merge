@@ -39,7 +39,7 @@ static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [Bo
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
 static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
-static int klbf_ot_bforce = 1, klbf_ot_recall = 1;static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20; static float klbf_ot_exitdy = 800.0f; static float klbf_ot_bslack = 100.0f; static int klbf_ot_joincall = 1;      /* [BotFill] OnlineJoinCalled (BOS_DD04: 4 carriers stood 100 m off while the van came for bot 5) */      /* [BotFill] OnlineBoxSlack (cm): BOS_DD02x2 bot 0 stood 0.5 m outside the box frame for the whole van wait (nav snap of the box centre) */      /* [BotFill] OnlineExitDy: height window round the exit trigger's node (BOS_DD02r: the bots stood on the trigger's own nav poly 6.2 m under DD02's centre y 6620, outside the old 400) */      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
+static int klbf_ot_bforce = 1, klbf_ot_recall = 1;static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20; static float klbf_ot_exitdy = 800.0f; static float klbf_ot_bslack = 100.0f; static int klbf_ot_joincall = 1; static int klbf_ot_sprint = 1;      /* [BotFill] OnlineExitSprint (BOS_DD06: 7 carriers WALKED 180 m to the exit at ~0.7 m/s, 0 boarded) */      /* [BotFill] OnlineJoinCalled (BOS_DD04: 4 carriers stood 100 m off while the van came for bot 5) */      /* [BotFill] OnlineBoxSlack (cm): BOS_DD02x2 bot 0 stood 0.5 m outside the box frame for the whole van wait (nav snap of the box centre) */      /* [BotFill] OnlineExitDy: height window round the exit trigger's node (BOS_DD02r: the bots stood on the trigger's own nav poly 6.2 m under DD02's centre y 6620, outside the old 400) */      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
 /* Step 3 (default off, SHIP-safe: one heap BYTE per squad). Squads are ZSquadScript entities (vtable 0xbcce3c); [squad+0x34] is the
@@ -121,6 +121,8 @@ static void klbf_init(void)
     if (klbf_ot_bslack < 0) klbf_ot_bslack = 0;
     klbf_ot_joincall = GetPrivateProfileIntA("BotFill", "OnlineJoinCalled", 1, klh_ini) != 0;      /* (recommended on) */
     if (klbf_ot) klog("botfill: OnlineTactics join called van: OnlineJoinCalled=%d (recommended on)", klbf_ot_joincall);
+    klbf_ot_sprint = GetPrivateProfileIntA("BotFill", "OnlineExitSprint", 1, klh_ini) != 0;      /* (recommended on) */
+    if (klbf_ot) klog("botfill: OnlineTactics exit sprint: OnlineExitSprint=%d (recommended on): a bot walking to the exit / box gets the Defend move style Sprint, as stock levels give the last dash to the vehicle", klbf_ot_sprint);
     if (klbf_ot) klog("botfill: OnlineTactics box slack: OnlineBoxSlack=%.0f cm after 8 s of van wait (recommended 100, 0 = off)", klbf_ot_bslack);
     klbf_ot_exitdy = (float)GetPrivateProfileIntA("BotFill", "OnlineExitDy", 800, klh_ini);      /* GUESS: 800 covers a trigger centre floating ~6 m over its floor (DD02 610) without taking a bot on a floor 8 m below */
     if (klbf_ot) klog("botfill: OnlineTactics exit height window: OnlineExitDy=%.0f (recommended 800; was 400 before BOS_DD02r)", klbf_ot_exitdy);
@@ -808,7 +810,11 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     klbf_ot_arrive(rules, s, now);
                 } else if (klbf_ot_vstate && klbf_ot_called ? (now - klbf_ot_calledAt > 60000 || vstate == 7 || (vstate == 0 && now - klbf_ot_calledAt > 5000)) : now - klbf_ob[s].since > (DWORD)(klbf_ot_called ? 60000 : KLBF_OT_STALLMAX)) {      /* OnlineVanState: the 60 s count from the CALL (BO9 counted from phase 2, 15 s earlier), and a van that left (7 / back to 0) ends the wait */
                     klog("botfill: tactics: bot %d (actor %08lx): %s after %lu s (%.0f m from the trigger, bot at (%.0f, %.0f, %.0f)): back to idle", s, a, klbf_ot_called ? "the van was called but this bot was not at the exit while it waited" : "did not reach the exit trigger", (unsigned long)((now - klbf_ob[s].since) / 1000), dd / 100, bots[b].pos[0], bots[b].pos[1], bots[b].pos[2]);      /* BOS_DD02: the full position tells the wagon level (y ~4500) from the ramp foot (y 5150-5500) */
-                    klbf_ob[s].phase = 0; klbf_ob[s].told &= ~(8 | 512); klbf_ob[s].leg = 0; klbf_ob[s].legAt = 0;
+                    if (klbf_ob[s].told & 2048) {      /* OnlineExitSprint undone: 'style given' 0 again, so the loot / hold walks after this go at the chain's own style (GUESS: a sprinting soldier does not shoot) */
+                        DWORD blk = klh_rd32(bots[b].soldier + 0x64c); BYTE zero = 0;
+                        if (blk && klh_rd32(blk + 0x14) == bots[b].soldier) klh_data((void *)(DWORD_PTR)(blk + 0x10), &zero, 1, "defend block style given (OnlineExitSprint undone)");
+                    }
+                    klbf_ob[s].phase = 0; klbf_ob[s].told &= ~(8 | 512 | 2048); klbf_ob[s].leg = 0; klbf_ob[s].legAt = 0;
                     continue;
                 }
             }
@@ -823,6 +829,12 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             else continue;      /* never order a walk to the (0,0,0) default */
             memset(&t, 0, sizeof t); t.rec = -1; t.actor = a; t.soldier = bots[b].soldier; t.told_soft = 1;
             why[0] = 0;
+            if (klbf_ot_sprint && klbf_ob[s].phase == 2) {      /* OnlineExitSprint: what the Defend goal does before its own order (0x686b96: block +0xc = the step's move style dword, +0x10 = 1 'style given'), with eDMS_Sprint */
+                DWORD blk = klh_rd32(bots[b].soldier + 0x64c), sp = 2, cur = 0; BYTE one = 1;      /* GUESS: Sprint = 2 from the kl_rtp EDefendMoveSet enum (Run 0, Walk 1, Sprint 2), not seen in a live block yet */
+                if (blk && klh_rd32(blk + 0x14) == bots[b].soldier && klh_rd(blk + 0xc, &cur, 4) && (cur == sp || (klh_data((void *)(DWORD_PTR)(blk + 0xc), &sp, 4, "defend block move style (OnlineExitSprint)") && klh_data((void *)(DWORD_PTR)(blk + 0x10), &one, 1, "defend block style given (OnlineExitSprint)")))) {
+                    if (!(klbf_ob[s].told & 2048) && (klbf_ob[s].told |= 2048)) klog("botfill: tactics: bot %d (actor %08lx): exit walk at Sprint (defend block %08lx move style was %lu)", s, a, blk, (unsigned long)cur);
+                }
+            }
             if (kle_order2(&t, tgt, got, why, 0) == 1) {
                 klbf_ob[s].ordered = now;
                 if (klbf_ob[s].phase == 2 && !(klbf_ob[s].told & 512) && (klbf_ob[s].told |= 512)) klog("botfill: tactics: bot %d (actor %08lx): exit walk from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f), snapped goal (%.0f, %.0f, %.0f) (said once per trip)", s, a, bots[b].pos[0], bots[b].pos[1], bots[b].pos[2], tgt[0], tgt[1], tgt[2], got[0], got[1], got[2]);
