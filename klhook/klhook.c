@@ -704,6 +704,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klcam.c"                                      /* klcam.c: the camera rework ([Camera], default on; Log off) */
 #include "klcamsmooth.c"                                 /* klcamsmooth.c: [CamSmooth] pivot / aim-out / dt-correct camera smoothing; AFTER klcam.c */
 #include "klanimprobe.c"                               /* klanimprobe.c: [AnimProbe] LOG-ONLY probe of the animation Play 0x4da1d0 around the player's gait change (off unless Enable=1; TEST build only patches); AFTER klcamsmooth.c */
+#include "klmfprobe.c"                                  /* klmfprobe.c: [MFProbe] TEST-only log probe of who raises the MissionFailedReload popup; AFTER klanimprobe.c, klescort.c */
 #include "klheliprobe.c"                                  /* klheliprobe.c: read-only chopper probe ([Heli] Probe, default 0); AFTER klescort.c */
 #include "klcensor.c"                                    /* klcensor.c: [Censor] a killing head shot blows the head off (heap data only); AFTER klheliprobe.c */
 #include "klcensus.c"                                    /* klcensus.c: [Census] read-only list of every ZFFActor (place, health); AFTER klcensor.c */
@@ -1595,6 +1596,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klcam_init();
     klcamsmooth_init();                               /* klcamsmooth.c: reads [CamSmooth] */
     klap_init();                                      /* klanimprobe.c: reads [AnimProbe]; patches the top of Play only when Enable=1 and the guard allows */
+    klmf_init();                                      /* klmfprobe.c: reads [MFProbe]; TEST build detours 0x8edc40 / 0x6d2500 / 0x5f2370 (log only) */
     klhp_init();                                      /* klheliprobe.c: reads [Heli] Probe, installs nothing */
     klcn_init();                                      /* klcensor.c: reads [Censor] */
     klcs_init();                                      /* klcensus.c: reads [Census] */
