@@ -117,6 +117,11 @@ def put(src, dst):
         return '%s was locked (mapped by a lingering entry): moved to %s' % (name, os.path.join(aside, '%s.aside_%d' % (name, k)))
 
 
+def has_script(path):
+    with open(path, 'rb') as f:
+        return any(l.strip().lower() == b'[script]' for l in f)
+
+
 def snapshot(dd, say=print):
     """Keep the hook pair that is in the game folder NOW (the owner's: since 2026-10-09 17:20 the SHIP build
     and its ini, not the old direct_boot pair) as <work>/build/klhook/live/_before/<name>; -> {name: sha1}.
@@ -137,6 +142,13 @@ def snapshot(dd, say=print):
             if sha1(src) in tests:
                 was[name] = sha1(kept)
                 say('  before | %s in the game folder is a TEST build left by an interrupted run: keeping the saved %s' % (name, was[name]))
+                continue
+        # 10-26: the 12:07 stop killed COVER16_DM01 mid-run; its test ini (a [Script] section) stayed in the game folder and every
+        # later snapshot kept it as the owner's for ~3 h. The owner's ini has no [Script]: a game-folder ini with one is a test's leftover.
+        if name == 'KLHook.ini' and os.path.isfile(src) and os.path.isfile(kept) and sha1(src) != sha1(kept):
+            if has_script(src) and not has_script(kept):
+                was[name] = sha1(kept)
+                say('  before | KLHook.ini in the game folder has a [Script] section (a test ini left by an interrupted run): keeping the saved %s' % was[name])
                 continue
         if os.path.isfile(src):
             shutil.copyfile(src, os.path.join(keep, name))
