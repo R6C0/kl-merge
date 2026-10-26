@@ -16,7 +16,7 @@
  * (session table + the game data's 32 places - the local master's included): a shared pool is REFUSED (the write would change the master's own fall and
  * every other body of that set), logged once per body with the verdict. An AI heister's set (a list for /Damage/Hit/Front/Front) is refused as in kldown.c.
  *
- * FALLBACK WITHOUT MESSAGES (OnlineFlopMirror=1 and OnlineFlopMirrorAssume=1). Both sides draw the next clip from a hash of (table index of the one who
+ * FALLBACK WITHOUT MESSAGES (OnlineFlopMirror=1 and OnlineFlopMirrorAssume=1; without Assume=1 the victim's draw stays random like Arcade's). Both sides draw the next clip from a hash of (table index of the one who
  * falls, number of the fall, a constant) with the same walk as kld_mix_next (kdm_det_pick). The victim uses it (hook in kld_mix_next: kldm_det_r); a
  * replica computes the same pick with no message. ONLY valid when every machine has the same FlopMix / FlopReach / FlopCarrier / sets and the same fall
  * count - the message, when it arrives, corrects the count and names the clip.
@@ -37,11 +37,11 @@ static struct {
     int mode, speed, assume;                   /* keys: OnlineFlopMirror (0 off, 1 messages + hash pick, 2 messages only), OnlineFlopMirrorSpeed, OnlineFlopMirrorAssume */
     int chan, own;                             /* knc_want succeeded; the local body's table index (-1 = not known) */
     DWORD sig, t_fl, t_sy; int s_mode, s_sheet, s_n; float s_rate;      /* the sender's state: the table signature, last KDFL / KDSY sent, what they said */
-    int nsfl, nssy, nrfl[3], nrsy[3], nok, nmiss, nrefuse, nbadmsg;      /* counters (the live bench reads them): sent, received by carrier (0 other, 1 Steam, 2 UDP) */
+    int nsfl, nssy, nrfl[3], nrsy[3], nok, nmiss, nrefuse, nbadmsg, nspoof, nskip;      /* counters (the live bench reads them): sent, received by carrier (0 other, 1 Steam, 2 UDP) */
     DWORD t_stat;
 } kdm;
 /* what arrived, per table index of the sender (the sender's own index - klucc.c's convention) */
-static struct { int have_fl, have_sy; struct kdm_fl fl; struct kdm_sy sy; DWORD t_fl, t_sy; } kdm_m[KDM_N];
+static struct { int have_fl, have_sy; struct kdm_fl fl; struct kdm_sy sy; DWORD t_fl, t_sy; unsigned sid; DWORD t_sid; } kdm_m[KDM_N];      /* sid = the sender session id that first claimed this table index (pinned: another sender's KDFL / KDSY for it is dropped, review item 6) */
 /* what this machine has done to the replica at table index i */
 static struct kdm_rep {
     DWORD ent, pool, m;
@@ -51,9 +51,12 @@ static struct kdm_rep {
     WORD wid, forig[3];                        /* the slot id written into the three fall words + 1 (0 = none), what they held */
     DWORD bat[4], bold[4], bput[4], bcond[4]; int nb;      /* Flop=1: belly pairs */
     DWORD t_told, t_mtold;
+    DWORD t_retry, t_pchk; unsigned said; int akey, ncheck;      /* t_retry: kdm_arm runs at most every KDM_RETRY ms; t_pchk: last pool re-check while armed; said: once-per-state log bits (KDM_SAY); akey: the (mode, sheet) they belong to */
 } kdm_r[KDM_N];
 
-#define KDM_STALE 20000                        /* ms: a KDFL older than this is gone (the victim re-announces every 4 s) */
+#define KDM_RETRY 750                          /* ms between two arm attempts of one replica (each reads up to 64 bodies and several lists) */
+#define KDM_SAY(r, bit) (((r)->said & (1u << (bit))) ? 0 : (((r)->said |= 1u << (bit)), 1))      /* -> 1 the first time in this state: guards a klog that would run at frame rate */
+#define KDM_STALE 20000                       /* ms: a KDFL older than this is gone (the victim re-announces every 4 s) */
 
 /* ---- the sender ---- */
 static void kdm_send_tick(DWORD now, DWORD ents, int n)
@@ -100,11 +103,27 @@ static void kdm_send_tick(DWORD now, DWORD ents, int n)
 }
 
 /* ---- the receiver: handlers (game thread, from knc_tick) ---- */
+/* Review item 6: a table index is the only body identity in the payload and UDP broadcast is unauthenticated. The sender's session id (msg->sid, random per process)
+ * is PINNED to the index by the first message: another sid claiming the same index is dropped while the first one has been heard in the last KDM_STALE ms (and
+ * the pins go with the table signature). This stops a second tool / stray sender from re-arming a body; it does NOT prove the sid is the body's owner - that
+ * needs a sid -> body link no message carries yet (GUESS: the first sender of an index is the right one; a spoofer that is first wins). -> 1 = accept */
+static int kdm_claim(int idx, unsigned sid, DWORD now)
+{
+    if (kdm_m[idx].sid && kdm_m[idx].sid != sid && now - kdm_m[idx].t_sid < KDM_STALE) {
+        if (kdm.nspoof++ < 3) klog("down: mirror: DROPPED a message for table index %d from sender %08x: that index is held by sender %08x (heard %lu ms ago) - two senders for one body (a second tool, or the tables differ between machines)", idx, sid, kdm_m[idx].sid, now - kdm_m[idx].t_sid);
+        return 0;
+    }
+    kdm_m[idx].sid = sid; kdm_m[idx].t_sid = now;
+    return 1;
+}
 static void kdm_on_fl(const struct knc_msg *msg, int src)
 {
-    struct kdm_fl f;
+    struct kdm_fl f; DWORD now = GetTickCount();
     if (msg->ent < 0 || msg->ent >= KDM_N || !kdm_parse_fl(msg->payload, &f)) { kdm.nbadmsg++; return; }
-    kdm_m[msg->ent].fl = f; kdm_m[msg->ent].have_fl = 1; kdm_m[msg->ent].t_fl = GetTickCount();
+    if (!kdm_claim(msg->ent, msg->sid, now)) return;
+    /* a fall number BELOW the last one seen, within 1 s of it = the same announce arriving late by the other carrier (Steam / UDP): dropped. A lower number later (round restart, new body) is accepted. */
+    if (kdm_m[msg->ent].have_fl && f.n < kdm_m[msg->ent].fl.n && now - kdm_m[msg->ent].t_fl < 1000) return;
+    kdm_m[msg->ent].fl = f; kdm_m[msg->ent].have_fl = 1; kdm_m[msg->ent].t_fl = now;
     kdm.nrfl[src >= 1 && src <= 2 ? src : 0]++;
     if (kld.log && kdm.nrfl[0] + kdm.nrfl[1] + kdm.nrfl[2] <= 3) klog("down: mirror: RECEIVED an announce from table index %d by %s: mode %d sheet %d fall %d group %d", msg->ent, src == 1 ? "Steam" : src == 2 ? "UDP" : "?", f.mode, f.sheet, f.n, f.group);
 }
@@ -112,6 +131,7 @@ static void kdm_on_sy(const struct knc_msg *msg, int src)
 {
     struct kdm_sy y;
     if (msg->ent < 0 || msg->ent >= KDM_N || !kdm_parse_sy(msg->payload, &y)) { kdm.nbadmsg++; return; }
+    if (!kdm_claim(msg->ent, msg->sid, GetTickCount())) return;
     kdm_m[msg->ent].sy = y; kdm_m[msg->ent].have_sy = 1; kdm_m[msg->ent].t_sy = GetTickCount();
     kdm.nrsy[src >= 1 && src <= 2 ? src : 0]++;
 }
@@ -130,13 +150,24 @@ static int kdm_bodies(DWORD ents, int n, DWORD *bodies, unsigned *pools, int cap
         }
     return c;
 }
-/* -> number of OTHER bodies that wear ent's pool (-1 = ent not found / no pool); *master = the local master is one of them */
+/* -> number of OTHER bodies that wear ent's pool (-1 = ent not found / no pool); *master = the local master is one of them.
+ * GUESS (review item 4): the scan is NOT exhaustive - it sees the session table (cap 64) and the game data's 32 places; a body in neither list that wears the same pool is invisible to it.
+ * It is therefore repeated at every arm attempt and every KDM_RETRY ms while armed (kldm_tick), so a body that appears later (respawn, spectator, revive) disarms the replica. */
 static int kdm_pool_shared(DWORD ents, int n, DWORD ent, int *master)
 {
     DWORD b[64]; unsigned pl[64]; int c = kdm_bodies(ents, n, b, pl, 64), self = -1, i;
     for (i = 0; i < c; i++) if (b[i] == ent) self = i;
     if (master) { *master = 0; if (self >= 0) for (i = 0; i < c; i++) if (i != self && pl[i] == pl[self] && b[i] == kld_o.pl) *master = 1; }
     return kdm_pool_users(pl, c, self);
+}
+
+/* klco_is_master calls the game's 0x9425a0 on the body's net object: kldown.c:2392 keeps it out of the probe because a half-built replica could fault. Here it is called
+ * only at arm time (never per tick) and under __try: a fault counts as 'master' = refuse (review item 5). */
+static int kdm_is_master(DWORD ent)
+{
+    int r;
+    __try { r = klco_is_master(ent); } __except (EXCEPTION_EXECUTE_HANDLER) { r = 1; }
+    return r;
 }
 
 /* ReplicaProbe's extra verdict (kld_o_probe calls this for each body it prints): can the mirror write this replica's pool? */
@@ -146,8 +177,9 @@ static void kldm_probe_line(DWORD ent, DWORD now)
     (void)now;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !klco_table(sm, &ents, &n)) return;
     u = kdm_pool_shared(ents, n, ent, &mast);
+    /* review item 9: this line answers ONLY the pool question; the other refusals (AI heister's set, fall words, a list that is not one pair) are checked at arm time and logged there as 'REFUSED' / 'not armed' */
     klog("down: online: ReplicaProbe: body %08lx pool %08lx: %s%s", ent, klh_rd32(ent + 0x78),
-         u < 0 ? "not found in the session table" : u == 0 ? "EXCLUSIVE (no other body wears it): the flop mirror may write this replica's pool (OnlineFlopMirror)" : "SHARED with other bodies",
+         u < 0 ? "not found in the session table" : u == 0 ? "pool exclusive (no other body of the session table / game data wears it; this check only - the set and the fall words are checked when the mirror arms)" : "pool SHARED with other bodies",
          u > 0 ? (mast ? " - THE LOCAL MASTER WEARS IT TOO: the mirror REFUSES (a pair written here would be the master's own fall)" : " - the mirror REFUSES (other bodies of the set would fall that way too)") : "");
 }
 
@@ -178,7 +210,10 @@ static void kdm_restore(struct kdm_rep *r, const char *why)
 static int kdm_arm(struct kdm_rep *r, int idx, DWORD ents, int n, int mode, int sheet, DWORD now)
 {
     DWORD m, recs = 0, cnt = 0, at, pr[2], cp[2] = { 1, 0 }, c8[8], num = 0, rec = 0, bid; int id, k, def = -1, i, mast = 0, u, a1, a2, a3, bf; DWORD a4; WORD w[3], st; char nm[96]; const char *hash;
+    if (r->t_retry && now - r->t_retry < KDM_RETRY) return 0;               /* review item 2: a failed / refused attempt is not repeated at frame rate */
+    r->t_retry = now;
     if (!(m = kld_prone(r->ent))) return 0;                                 /* made with the player (0x5bd530): expected at once; no line a frame */
+    if (kdm_is_master(r->ent)) { if (KDM_SAY(r, 0)) klog("down: mirror: replica %08lx (table index %d) passes the game's master test = the local player's own body: nothing is written", r->ent, idx); return 0; }
     u = kdm_pool_shared(ents, n, r->ent, &mast);
     if (u != 0) {
         if (!r->refused) { r->refused = 1; kdm.nrefuse++; klog("down: mirror: REFUSED replica %08lx (table index %d): its animation pool %08lx is %s - nothing is written (a write would %s)", r->ent, idx, klh_rd32(r->ent + 0x78),
@@ -197,7 +232,7 @@ static int kdm_arm(struct kdm_rep *r, int idx, DWORD ents, int n, int mode, int 
     if (mode == 3) {
         DWORD sid_at; int sid;
         for (k = 0; k < KLD_NMIX; k++) if (kld_md[k].sheet == sheet) def = k;
-        if (def < 0) { klog("down: mirror: replica %08lx: sheet #%d is not in this build's list: not armed", r->ent, sheet); return 0; }
+        if (def < 0) { if (KDM_SAY(r, 1)) klog("down: mirror: replica %08lx: sheet #%d is not in this build's list: not armed", r->ent, sheet); return 0; }
         if (!klh_rd(at, cp, 8) || cp[0] != 0 || cp[1] >= cnt) {
             if (!r->refused) { r->refused = 1; klog("down: mirror: replica %08lx: the carrier %s is not a list of ONE pair with condition word 0: not armed", r->ent, kld.fallslot); }
             return 0;
@@ -211,8 +246,8 @@ static int kdm_arm(struct kdm_rep *r, int idx, DWORD ents, int n, int mode, int 
         }
         /* the carrier's own clip (#12) while its pair holds an earlier choice of this part: by the remembered number */
         if (!rec && sid == id && r->armed && r->mode == 3 && r->old < cnt && kld_clipfacts(recs + r->old * 0x68, &a1, &a2, &a4, &a3, nm, sizeof nm) && (hash = strrchr(nm, '#')) != 0 && !strcmp(hash + 1, kld_md[def].clip)) { rec = recs + r->old * 0x68; num = r->old; }
-        if (!rec) { klog("down: mirror: replica %08lx: sheet #%d '%s' has no pair with that clip in %s of its set: not armed", r->ent, sheet, kld_md[def].clip, kld_md[def].slot); return 0; }
-        if (!kld_clipfacts(rec, &a1, &a2, &a4, &a3, nm, sizeof nm) || !a3 || kld_badevent(rec, &bid, &bf) != 0) { klog("down: mirror: replica %08lx: sheet #%d clip %lu is not a full-body clip without an event the game acts on: not armed", r->ent, sheet, num); return 0; }
+        if (!rec) { if (KDM_SAY(r, 2)) klog("down: mirror: replica %08lx: sheet #%d '%s' has no pair with that clip in %s of its set: not armed", r->ent, sheet, kld_md[def].clip, kld_md[def].slot); return 0; }
+        if (!kld_clipfacts(rec, &a1, &a2, &a4, &a3, nm, sizeof nm) || !a3 || kld_badevent(rec, &bid, &bf) != 0) { if (KDM_SAY(r, 3)) klog("down: mirror: replica %08lx: sheet #%d clip %lu is not a full-body clip without an event the game acts on: not armed", r->ent, sheet, num); return 0; }
     }
     /* the fall words: what stands there must be the game's own ids, 0xffff or ours (kld_flop_words' rule) */
     for (k = 0; k < 3; k++) {
@@ -223,7 +258,7 @@ static int kdm_arm(struct kdm_rep *r, int idx, DWORD ents, int n, int mode, int 
             return 0;
         }
     }
-    if (kld.dry) { klog("down: mirror: Dry=1: replica %08lx WOULD be armed: %s", r->ent, mode == 3 ? kld_md[def].clip : "belly"); r->refused = 1; return 0; }
+    if (kld.dry) { if (KDM_SAY(r, 4)) klog("down: mirror: Dry=1: replica %08lx WOULD be armed: %s", r->ent, mode == 3 ? kld_md[def].clip : "belly"); r->refused = 1; return 0; }
     if (mode == 3) {
         if (num != cp[1] && !klh_data((void *)(DWORD_PTR)(at + 4), &num, 4, "the replica's animation set: the carrier pair's clip number = the clip of its next knock-down")) return 0;
         if (!r->armed || r->mode != 3) { r->old = cp[1]; r->at = at + 4; r->pool = klh_rd32(r->ent + 0x78); }
@@ -274,6 +309,9 @@ static void kdm_verify(struct kdm_rep *r, DWORD m, DWORD now)
     clip = klh_rd32(m + 0x8cc);
     if (ms != 1 || !clip) { if (!r->t_told) r->t_told = now; if (now - r->t_told < 800) return; }      /* the fall may not have begun in M yet: look again */
     r->vdone = 1; r->t_told = 0;
+    /* review item 8: D left 0 but the prone movement never entered the fall state within 0.8 s = a light stumble / other D transition, not the armed knock-down: no verdict, so MISSED
+       counts only real falls (GUESS: a stumble does not put M in state 1 with a fall clip) */
+    if (ms != 1) { kdm.nskip++; if (kld.log >= 2) klog("down: mirror: replica %08lx left D 0 without a knock-down in its prone movement (state %lu): no verdict", r->ent, ms); return; }
     if (!clip) { klog("down: mirror: replica %08lx is down (D 2) but its prone movement plays no clip within 0.8 s: nothing to compare", r->ent); return; }
     kld_clipfacts(clip, &a1, &a2, &a4, &a3, nm, sizeof nm);
     if (clip == r->rec || (r->mode == 1 && kdm_forward(clip))) { kdm.nok++; klog("down: mirror: MIRROR OK: replica %08lx plays the armed clip %08lx '%s' (%d OK, %d missed)", r->ent, clip, nm, kdm.nok, kdm.nmiss); }
@@ -319,7 +357,8 @@ static int kdm_assume_sheet(int idx, int nn, int lastgroup)
 /* kld_mix_next's hook: the victim's own r from the hash (OnlineFlopMirror=1, online, his table index known). -> -1 = keep the random draw */
 static float kldm_det_r(DWORD pl, float sum)
 {
-    if (kdm.mode != 1 || !kld_o.cur || !pl || pl != kld_o.pl || kdm.own < 0) return -1.0f;
+    /* review item 3: Arcade's falls are random; the hash makes the sequence repeat for the same seat every match. It is needed ONLY by Assume=1 (replicas guess with no message), so it applies only then */
+    if (kdm.mode != 1 || !kdm.assume || !kld_o.cur || !pl || pl != kld_o.pl || kdm.own < 0) return -1.0f;
     return kdm_hash_r(kdm_hash(kdm.own, kld_s.downs + 1, KDM_SALT), sum);
 }
 
@@ -341,7 +380,7 @@ static void kldm_tick(int game_thread)
         struct kdm_rep *r = &kdm_r[i]; DWORD ent = klco_ent(ents, n, i), d, ds = 0; int fresh, mode, sheet = 0, haveds;
         if (r->ent != ent) { if (r->armed) kdm_restore(r, "another body at this table index"); memset(r, 0, sizeof *r); r->ent = ent; }
         fresh = kdm_m[i].have_fl && now - kdm_m[i].t_fl < KDM_STALE;
-        if (!ent || ent == kld_o.pl || !klco_heister(ent) || klco_is_master(ent)) { if (r->armed) kdm_restore(r, "master / police / not a heister"); continue; }
+        if (!ent || ent == kld_o.pl || !klco_heister(ent)) {      /* review item 5: no 0x9425a0 call per tick - kdm_arm and the re-check below ask kdm_is_master (under __try) */ if (r->armed) kdm_restore(r, "master / police / not a heister"); continue; }
         if (!fresh && !kdm.assume) { if (r->armed) kdm_restore(r, "no announce for 20 s"); continue; }
         d = klh_rd32(ent + 0x2948); haveds = d && klh_rd32(d) == ent && klh_rd(d + 4, &ds, 4);
         if (!haveds) continue;
@@ -352,11 +391,20 @@ static void kldm_tick(int game_thread)
         }
         if (!kld_o.oflop) mode = 0;
         /* the replica's fall counter: the master's n names the fall the announced clip is for (we count the ones we saw begin) */
-        if (fresh && ds == 0 && kdm_m[i].fl.n - 1 > r->nfall) r->nfall = kdm_m[i].fl.n - 1;
+        /* review item 1: ASSIGN, not 'only up' - the replica counts every D 0 -> non-0 (a light stumble, a revive) and the victim's kld_s.downs does not, and it restarts at 0 on a
+           new round / body: the announce is the truth whenever it is fresh and he is up, in both directions */
+        if (fresh && ds == 0) r->nfall = kdm_m[i].fl.n > 0 ? kdm_m[i].fl.n - 1 : 0;
         if (r->lastds == 0 && ds != 0) { r->nfall++; r->vdone = 0; r->follow0 = 0; if (r->armed) r->dgroup = r->mode == 3 && r->def >= 0 ? kld_md[r->def].group : r->dgroup; }
         if (ds != 0 && r->armed && r->m) kdm_verify(r, r->m, now);
         if (ds == 2 && r->armed && r->mode != 0) kdm_follow(r, i, now);
         if (ds == 0) {
+            { int ak = mode * 1000 + (fresh ? kdm_m[i].fl.sheet : 0); if (r->akey != ak) { r->akey = ak; r->said = 0; } }      /* a new state may say its refusal once again */
+            if (r->armed && now - r->t_pchk >= KDM_RETRY) {      /* review item 4: the pool / master verdict can flip after arming (a body appeared that wears the pool, the table changed) */
+                int mast = 0;
+                r->t_pchk = now;
+                if (kdm_is_master(ent)) kdm_restore(r, "this body now passes the master test");
+                else if (kdm_pool_shared(ents, n, ent, &mast) != 0) { kdm_restore(r, mast ? "its pool is now worn by the local master" : "its pool is now worn by another body"); }
+            }
             if (mode == 0) { if (r->armed) kdm_restore(r, "he announced no flop for the next fall"); }
             else {
                 if (mode == 3) sheet = fresh ? kdm_m[i].fl.sheet : kdm_assume_sheet(i, r->nfall + 1, r->dgroup);
@@ -369,8 +417,8 @@ static void kldm_tick(int game_thread)
     }
     if (kld.log && now - kdm.t_stat >= 60000 && (kdm.nsfl || kdm.nssy || kdm.nrfl[0] + kdm.nrfl[1] + kdm.nrfl[2])) {
         kdm.t_stat = now;
-        klog("down: mirror: counters: sent %d announce(s) %d sync(s); received announces (other/Steam/UDP) %d/%d/%d, syncs %d/%d/%d, %d bad; replicas: %d MIRROR OK, %d MISSED, %d refused", kdm.nsfl, kdm.nssy,
-             kdm.nrfl[0], kdm.nrfl[1], kdm.nrfl[2], kdm.nrsy[0], kdm.nrsy[1], kdm.nrsy[2], kdm.nbadmsg, kdm.nok, kdm.nmiss, kdm.nrefuse);
+        klog("down: mirror: counters: sent %d announce(s) %d sync(s); received announces (other/Steam/UDP) %d/%d/%d, syncs %d/%d/%d, %d bad; replicas: %d MIRROR OK, %d MISSED, %d refused, %d no-fall transitions skipped, %d messages dropped (second sender for an index)", kdm.nsfl, kdm.nssy,
+             kdm.nrfl[0], kdm.nrfl[1], kdm.nrfl[2], kdm.nrsy[0], kdm.nrsy[1], kdm.nrsy[2], kdm.nbadmsg, kdm.nok, kdm.nmiss, kdm.nrefuse, kdm.nskip, kdm.nspoof);
     }
 }
 
@@ -382,6 +430,7 @@ static void kldm_init(void)
     if (kdm.mode < 0 || kdm.mode > 2) kdm.mode = 1;
     kdm.speed = GetPrivateProfileIntA("Down", "OnlineFlopMirrorSpeed", 1, klh_ini) != 0;
     kdm.assume = GetPrivateProfileIntA("Down", "OnlineFlopMirrorAssume", 0, klh_ini) != 0;
+    if (kdm.mode == 1 && !kdm.assume) kdm.mode = 2;      /* the hash pick is only for Assume=1 (review item 3): without it mode 1 IS mode 2 - messages, the draw stays random like Arcade */
     if (!kld.on || !kld_o.online || !kld_o.oflop || (kld_o.flop0 != 1 && kld_o.flop0 != 3)) { kdm.mode = 0; return; }      /* nothing to mirror: the ini's Flop is not 1 / 3 or the online flop is off */
     kdm.chan = knc_want("downmirror");
     knc_on("KDFL", kdm_on_fl); knc_on("KDSY", kdm_on_sy);
