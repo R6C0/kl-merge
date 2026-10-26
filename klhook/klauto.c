@@ -1035,7 +1035,7 @@ static int kla_install(void)
 /* ---------------------------------------------------------------- script */
 
 typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; DWORD off[6]; BYTE noff; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP, C_POKE };
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP, C_POKE, C_WAITPEERS };
 static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 static DWORD kla_tap_polls = 2;                   /* [Auto] TapPolls: a tap's key stays down for at least this many polls */
@@ -1210,6 +1210,9 @@ static void kla_script_load(void)
         else if (!_stricmp(op, "waitstate") || !_stricmp(op, "waitvan")) {      /* waitstate <state, hex or decimal> [timeout ms] / waitvan <state> [timeout ms] */
             c->op = (char)(!_stricmp(op, "waitstate") ? C_WAITSTATE : C_WAITVAN); c->n2 = strtoul(a, 0, 0); c->n = 60000; sscanf(rest + strlen(a), "%lu", &c->n);
             if (!a[0]) { kla_out(1, "script line %d: %s needs a state - script not loaded", i, op); kla_ncmd = 0; return; }
+        }
+        else if (!_stricmp(op, "waitpeers")) {          /* waitpeers <humans connected incl. this one> [timeout ms 300000] [steady ms 20000]: the count must reach n and stay unchanged that long; a timeout goes on */
+            c->op = C_WAITPEERS; c->n2 = strtoul(a, 0, 0); c->n = 300000; c->f[0] = 20000; sscanf(rest + strlen(a), "%lu %f", &c->n, &c->f[0]);
         }
         else if (!_stricmp(op, "settle")) {             /* settle [polls 10] [gap ms 100] [timeout ms 60000] */
             c->op = C_SETTLE; c->n = 10; c->n2 = 100; c->f[0] = 60000;
@@ -1446,6 +1449,14 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             if (sm) kla_rd(sm + 0x70, &st, 4);
             if (st == c->n2) { kla_out(1, "script %d: the session state is 0x%lx after %lu ms", kla_pc + 1, st, now - kla_cmd_t); next = 1; }
             else if (now - kla_cmd_t >= c->n) { char r[160]; snprintf(r, sizeof r, "script line %d: the session state did not become 0x%lx within %lu ms (it is 0x%lx)", kla_pc + 1, c->n2, c->n, st); kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); }
+            break; }
+        case C_WAITPEERS: {                             /* humans connected = the size of the handler's list [[sm+4]+8] +8 .. +0xc (kllobby.c kllb_connected, what 0x698250 returns) */
+            static DWORD last_n = 0xffffffff, since;
+            DWORD sm = kla_exe_ok ? kla_rd32((DWORD_PTR)VA(0x168e598)) : 0, h = sm ? kla_rd32(sm + 4) : 0, v = h ? kla_rd32(h + 8) : 0, lo = v ? kla_rd32(v + 8) : 0, hi = v ? kla_rd32(v + 0xc) : 0, n;
+            n = (lo && hi >= lo && hi - lo <= 16) ? hi - lo : 0;
+            if (now == kla_cmd_t || n != last_n) { if (n != last_n) kla_out(1, "script %d: %lu human(s) connected (want %lu)", kla_pc + 1, n, c->n2); last_n = n; since = now; }
+            if (n >= c->n2 && now - since >= (DWORD)c->f[0]) { kla_out(1, "script %d: %lu connected, steady %lu ms, after %lu ms", kla_pc + 1, n, now - since, now - kla_cmd_t); last_n = 0xffffffff; next = 1; }
+            else if (now - kla_cmd_t >= c->n) { kla_out(1, "script %d: waitpeers: only %lu of %lu connected after %lu ms: the script goes on", kla_pc + 1, n, c->n2, c->n); last_n = 0xffffffff; next = 1; }
             break; }
         case C_WAITVAN: {                               /* the escape vehicle's state: byte [rules+0x1dc], rules = [[0x168e9e4]+0x54] with ZGameRulesHeist's vtable (klbot.c 1) */
             DWORD gs = kla_exe_ok ? kla_rd32((DWORD_PTR)VA(0x168e9e4)) : 0, rules = gs ? kla_rd32(gs + 0x54) : 0; BYTE veh = 0xff; float left = 0;
