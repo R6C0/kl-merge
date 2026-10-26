@@ -35,6 +35,15 @@
  *   [Sync] PuppetMode=1 (default 1, 2026-10-26 b): 0 = the velocity steer above. 1 = a cop whose controller [A+0x8e0] is 0 or != [A+0x50c] (0x70f660 would be a no-op) is moved
  *                    by bounded steps (min(dist, speed*dt), dt <= 100 ms) through ZFFActor slot 373 (0x560de0) toward the host's place; a cop with a matching controller gets
  *                    0x70f660(A, hostPlace, 0) (a POSITION, not a velocity) if the controller is a 0xbb42ac follower. GUESSES: slot 373 flags (1,0), vec2 of 0x70f660.
+ *   [Sync] PuppetMode=2 (2026-10-26 c, from SP1c): mode 1's step CANNOT move a node. Slot 373 (0x560de0) only records the wanted place at [A+0x460..0x468] (+ a ground trace when
+ *                    [A+0x57c]&1) and commits it through 0x607720 only when its 3rd stack argument is nonzero AND the node has flag 0x40000 (a physics-driven node); the cops'
+ *                    nodes (flags 4b01918x) lack 0x40000 and the step passes 0, so the call returns without touching the node: 'step call did not move the node' for every slot.
+ *                    [A+0x8c] is the routine's early-out byte (nonzero = return at once); it was 0 in every line, so that is not the reason. Mode 2 therefore places a cop that is
+ *                    farther than SnapDist (300) from the host's place, alive on both sides and not a human, with the game's teleport 0x62a900 (klt_teleport behind klt_tele_known +
+ *                    klt_refuse, as klauto.c's tele), at most once per SnapEvery ms (2000) per actor; the mode-1 step is off; the 0x70f660 follower steer and the no-progress
+ *                    snap stay. Host entries that share one point (within 0.5 in x/z) or are all-zero are PLACEHOLDERS (SP1c: slots 564/565/... all at (509,-979,8648.7), probably
+ *                    the cops' spawn point) and are never a goal. GUESS: 'ragdolled' has no known field, hp > 0 on both sides is the proxy. Log: 'sync: puppet: snap slot N d=D -> (x,y,z)'
+ *                    and every 5 s 'sync: puppet: snap summary: ...'.
  *   [Sync] Puppet=1  (CLIENT only, default 0, needs the host's Share=1; use it INSTEAD of Apply) 2026-10-26, from the static report on kl2.exe 0490. The stock client
  *                    cop is a velocity-steered puppet (ZFFActor::Update slot 87 = 0x40ef60 -> 0x899c40 -> 0x8efe90 steer through 0x70f660(A, &vel, &zero) into the
  *                    movement controller [A+0x8e0], active only while [A+0x8e0] == [A+0x50c]). A cop of team PuppetTeam (3) that is farther than PuppetTol (60)
@@ -83,7 +92,9 @@ static DWORD ksp_orig; static int ksp_ready;
 struct ksp_e { DWORD o, slot, goalAt, since, lastLog, lastSnap, pass, tolSince, bestAt, prevAt, stepAt, nomove; float goal[3], prev[3], d0, dlast, best, hspeed; volatile LONG calls, steered, mism, dead, stepped; };
 static struct ksp_e ksp_e[KSP_MAXE];
 static struct { DWORD o, until; } ksp_cool[16]; static int ksp_coolN;           /* cops released next to a human: not re-hooked for a while */
-static struct { int pup, cops, bots, diag, nlive, gate; float tol, snap, speed, prevAvg; int team, mode; DWORD pass, roundAt, diagAt, pupAt; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv, nstep; } ksp;
+static struct { int pup, cops, bots, diag, nlive, gate; float tol, snap, speed, prevAvg, snapDist; int team, mode; DWORD pass, roundAt, diagAt, pupAt, snapEvery, sumAt; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv, nstep, nsn2, nph, nref, nflt; } ksp;
+/* PuppetMode 2: per-actor time of the last placement (the SnapEvery limit) and the host entries that look like placeholders (set each pass) */
+static struct { DWORD o, at; } ksp_sn[64]; static BYTE ksp_ph[KLSY_MAXP];
 static DWORD ksp_ours(void) { return ksp_ready ? (DWORD)(DWORD_PTR)ksp_vt : 0; }
 /* the class vtable of an actor as the rest of this file means it: a puppeted actor shows our private table, which is still a ZFFActor */
 static DWORD klsy_vtof(DWORD o)
@@ -383,6 +394,7 @@ static void __fastcall ksp_update(void *self, void *edx)
         if (ho && klh_rd(ho + 4, &hpw, 4) && hpw <= 0) { e->dead = 1; return; }          /* dying / dead: never push it; the next pass releases it */
         mism = (!c || c != c2);
         if (mism) e->mism++;
+        if (mism && ksp.mode != 1) return;                                              /* mode 2: the step cannot move the node (see the header), the placement is the pass's job */
         if (mism && !ksp.mode) return;                                                   /* PuppetMode 0: 0x70f660 would do nothing (cmp at 0x70f66a) */
         if (!kle_node(klh_rd32(a + 4), pos, 0)) return;
         if (mism) {                                                                      /* PuppetMode 1: bounded step by ZFFActor slot 373 (0x560de0), the call shape of the teleport at 0x62a95e */
@@ -463,7 +475,31 @@ static void ksp_diag(DWORD a, DWORD slot, int team, float d)
          mv == mv2 ? "(same)" : "(DIFFERENT: steer skipped)", (unsigned long)x7c, (unsigned long)klh_rd32(a + 0x90c), (unsigned long)klh_rd32(a + 0x918), tg[0], tg[1], tg[2]);
 }
 
-struct klsy_pp { int seen, started, steering, conv, diag, full, idbad, nearN, stepN; float stepSum; };
+struct klsy_pp { int seen, started, steering, conv, diag, full, idbad, nearN, stepN, over, ph, snp, refd; float stepSum, worst; };
+/* PuppetMode 2: the game's own teleport 0x62a900 (klt_teleport, behind klt_tele_known + klt_refuse, as klauto.c's tele) for a cop farther than SnapDist from
+   the host's place, at most once per SnapEvery ms per actor. A hooked cop (e) gets the stock vtable for klt_refuse's class test and its own back after. -> 1 = a placement was
+   attempted (the caller stops there), 0 = not due / not possible. Never a player (klt_refuse wants the ZFFActor vtable; humans are filtered by the caller). */
+static int ksp_snap2(DWORD o, DWORD slot, const char *nm, const float goal[3], float d, const float pos[3], struct ksp_e *e, DWORD now, struct klsy_pp *c)
+{
+    const char *why; int ok = 1, i, k = -1; float after[3], hp; int hv, tm;
+    for (i = 0; i < 64; i++) { if (ksp_sn[i].o == o) { k = i; break; } if (k < 0 && !ksp_sn[i].o) k = i; }
+    if (k < 0) { k = 0; for (i = 1; i < 64; i++) if ((int)(ksp_sn[k].at - ksp_sn[i].at) > 0) k = i; }
+    if (ksp_sn[k].o == o && now - ksp_sn[k].at < ksp.snapEvery) return 0;
+    if (klh_rd32(o) != (e ? ksp_ours() : KSP_ACTOR_VT)) return 0;                      /* not (any longer) a plain ZFFActor */
+    if (!klt_tele_known()) { if (!ksp.toldNoCall) { ksp.toldNoCall = 1; klog("sync: puppet: the game's teleport 0x62a900 is not the known routine: no snaps"); } return 0; }
+    ksp_sn[k].o = o; ksp_sn[k].at = now;
+    if (e) ksp_wr_vt(o, KSP_ACTOR_VT, "ZFFActor vtable pointer (puppet snap2)");
+    if ((why = klt_refuse(o)) != 0) { ksp.nref++; c->refd++; if (ksp.nref <= 6) klog("sync: puppet: slot %lu c=%s NOT snapped: %s", (unsigned long)slot, nm, why); }
+    else { __try { klt_teleport(o, goal); } __except (1) { ok = 0; } }
+    if (e) ksp_wr_vt(o, ksp_ours(), "ZFFActor vtable pointer (puppet snap2 back)");
+    if (why) return 1;
+    if (!ok) { ksp.nflt++; if (klsy.nbad < KLSY_NBAD) klsy.bad[klsy.nbad++] = (DWORD)slot; klog("sync: puppet: slot %lu c=%s FAULT in the teleport: slot blacklisted for this round", (unsigned long)slot, nm); return 1; }
+    ksp.nsn2++; c->snp++;
+    memset(after, 0, sizeof after); klsy_actor(o, after, &hv, &hp, &tm);
+    klog("sync: puppet: snap slot %lu d=%.1f -> (%.1f,%.1f,%.1f) (was (%.1f,%.1f,%.1f), now (%.1f,%.1f,%.1f))", (unsigned long)slot, d, goal[0], goal[1], goal[2], pos[0], pos[1], pos[2], after[0], after[1], after[2]);
+    return 1;
+}
+
 static int ksp_cooling(DWORD o, DWORD now) { int i; for (i = 0; i < 16; i++) if (ksp_cool[i].o == o && (int)(ksp_cool[i].until - now) > 0) return 1; return 0; }
 static void ksp_setcool(DWORD o, DWORD now) { ksp_cool[ksp_coolN++ & 15].o = o; ksp_cool[(ksp_coolN - 1) & 15].until = now + 3000; }
 static void klsy_pupfn(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
@@ -487,6 +523,11 @@ static void klsy_pupfn(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
     dx = pos[0] - klsy.host[i].p[0]; dy = pos[1] - klsy.host[i].p[1]; dz = pos[2] - klsy.host[i].p[2];
     d = (float)sqrt(dx * dx + dy * dy + dz * dz); h = (float)sqrt(dx * dx + dz * dz);
     if (d < ksp.snap) c->nearN++;                                                        /* the positional sanity gate (slot numbers may differ per peer; the identity check cannot tell cop from cop) */
+    if (ksp.mode >= 2 && d > ksp.snapDist) {                                             /* PuppetMode 2: place it at the host's position (alive both sides, not human: checked above) */
+        c->over++; if (d > c->worst) c->worst = d;
+        if (ksp_ph[i]) { c->ph++; ksp.nph++; }                                            /* a placeholder entry (several actors on one point): never a goal */
+        else if (ksp.pup && ksp.gate && ksp_snap2(o, slot, nm, klsy.host[i].p, d, pos, e, now, c)) { if (e) { e->bestAt = now; e->best = d; } return; }
+    }
     if (ksp.diag && c->diag < 8 && (ksp.pass == 1 || (d > ksp.tol && now - ksp.diagAt >= 3000))) { c->diag++; ksp_diag(o, slot, team, d); }
     if (!ksp.pup) return;
     if (d > ksp.tol || e) {
@@ -540,6 +581,14 @@ static void ksp_pass(void)
     if (!nh) { static int told; if (!told) { told = 1; klog("sync: puppet: no local player found: pass skipped (fail closed)"); } return; }
     for (j = 0; j < klsy.nhost; j++) if (klsy.host[j].slot > mx) mx = klsy.host[j].slot;
     memset(&c, 0, sizeof c); ksp.pass++;
+    if (ksp.mode >= 2) {                                                                 /* placeholders: GUESS = two or more host entries on one point (within 0.5 unit in x and z), or an all-zero place; SP1c showed 4+ slots at (509,-979,8648.7) */
+        int a, b; memset(ksp_ph, 0, sizeof ksp_ph);
+        for (a = 0; a < klsy.nhost && a < KLSY_MAXP; a++) {
+            if (fabsf(klsy.host[a].p[0]) < 0.01f && fabsf(klsy.host[a].p[1]) < 0.01f && fabsf(klsy.host[a].p[2]) < 0.01f) ksp_ph[a] = 1;
+            for (b = a + 1; b < klsy.nhost && b < KLSY_MAXP; b++)
+                if (fabsf(klsy.host[a].p[0] - klsy.host[b].p[0]) < 0.5f && fabsf(klsy.host[a].p[2] - klsy.host[b].p[2]) < 0.5f && fabsf(klsy.host[a].p[1] - klsy.host[b].p[1]) < 2.0f) ksp_ph[a] = ksp_ph[b] = 1;
+        }
+    }
     for (j = 0; j < KSP_MAXE; j++) if (ksp_e[j].o && klh_rd32(ksp_e[j].o) != ksp_ours()) { memset(&ksp_e[j], 0, sizeof ksp_e[j]); ksp.nlive--; }      /* gone (freed): nothing is written */
     klsy.lim = (mx | 63) + 1;
     klsy_walk(0, klsy_pupfn, &c);
@@ -551,6 +600,11 @@ static void ksp_pass(void)
       if (!g && ksp.nlive) ksp_release_all("slot numbers disagree with the host's list"); }
     for (j = 0; j < KSP_MAXE; j++) if (ksp_e[j].o && ksp_e[j].pass != ksp.pass) ksp_release(&ksp_e[j], "not seen this pass (dead, human, or gone from the host list)");
     if (c.diag) ksp.diagAt = GetTickCount();
+    if (ksp.mode >= 2 && GetTickCount() - ksp.sumAt >= 5000) {
+        ksp.sumAt = GetTickCount();
+        klog("sync: puppet: snap summary: %d cops checked, %d farther than %.0f (worst %.1f), %d placeholder entries skipped, %d snapped this pass; totals %ld snaps %ld placeholder-skips %ld refused %ld faults", c.seen, c.over, ksp.snapDist, c.worst, c.ph, c.snp,
+             (long)ksp.nsn2, (long)ksp.nph, (long)ksp.nref, (long)ksp.nflt);
+    }
     if (ksp.mode && c.stepN) {
         float avg = c.stepSum / c.stepN;
         if ((ksp.pass % 4) == 0) klog("sync: puppet: step path: %d mismatched-controller cops stepped (total %ld steps), mean distance %.1f (previous report %.1f: %s)", c.stepN, (long)ksp.nstep, avg, ksp.prevAvg,
@@ -585,8 +639,10 @@ static void klsy_init(void)
     ksp.snap = (float)GetPrivateProfileIntA("Sync", "PuppetSnap", 1500, klh_ini); if (ksp.snap < ksp.tol * 2) ksp.snap = ksp.tol * 2;
     ksp.speed = (float)GetPrivateProfileIntA("Sync", "PuppetSpeed", 300, klh_ini); if (ksp.speed < 1) ksp.speed = 1;
     ksp.team = GetPrivateProfileIntA("Sync", "PuppetTeam", 3, klh_ini);       /* GUESS: team value 3 = the cops (S2b measurement) */
-    ksp.mode = GetPrivateProfileIntA("Sync", "PuppetMode", 1, klh_ini) != 0;  /* 0 = old behaviour; 1 = bounded step (slot 373) for mismatched controllers + 0x70f660 with a position (static report 2026-10-26) */
-    if (ksp.pup) klog("sync: PuppetMode=%d", ksp.mode);
+    ksp.mode = GetPrivateProfileIntA("Sync", "PuppetMode", 1, klh_ini); if (ksp.mode < 0) ksp.mode = 0; if (ksp.mode > 2) ksp.mode = 2;
+    ksp.snapDist = (float)GetPrivateProfileIntA("Sync", "SnapDist", 300, klh_ini); if (ksp.snapDist < ksp.tol) ksp.snapDist = ksp.tol;
+    ksp.snapEvery = (DWORD)GetPrivateProfileIntA("Sync", "SnapEvery", 2000, klh_ini); if (ksp.snapEvery < 250) ksp.snapEvery = 250;  /* 0 = old behaviour; 1 = bounded step (slot 373) for mismatched controllers + 0x70f660 with a position (static report 2026-10-26) */
+    if (ksp.pup) klog("sync: PuppetMode=%d SnapDist=%.0f SnapEvery=%lu", ksp.mode, ksp.snapDist, (unsigned long)ksp.snapEvery);
     if (ksp.bots) klog("sync: OnlineHost: bots (team 2) are mirrored by the Puppet code%s; this peer shares its list when it is the host", ksp.cops ? " together with the cops (Puppet=1)" : " (cops untouched: Puppet=0)");
     if (ksp.pup || ksp.diag) klog("sync: Puppet=%d PuppetDiag=%d PuppetTol=%.0f PuppetSnap=%.0f PuppetSpeed=%.0f PuppetTeam=%d (client only; needs the host's Share=1)%s", ksp.pup, ksp.diag, ksp.tol, ksp.snap, ksp.speed, ksp.team,
                                    (ksp.pup && klsy.apply) ? " WARNING: Apply=1 too: the two fight, use Puppet alone" : "");
