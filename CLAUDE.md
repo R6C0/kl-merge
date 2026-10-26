@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~21:10 - Online = Arcade port merged (606e9fc2a), NOT run live: klonline_read.c + [HUD] Online* / [ShopPage] OnlineLook keys (default 0),
+build out_arcport_1026d. Live ini: 10 min / 10 rounds / 12 players / OnlineSet=9 mixed maps. Hire tab stage 1 building (branch hire-1026). Tests stopped (owner present).
+
 2026-10-26 ~15:05 - [scheduled] UCC P2 BUILT, NOT RUN: klhook/klucc_aim.c `[Ucc] PoliceAim=1` - in UCC rounds the AI gates the UCC on rules slot 188
 (`[rules+0x284]` bUCCAIHostile: 0 nobody's target / police friend, 1 everyone's enemy), never on +0x2723; the module answers 1 to POLICE askers only (private
 rules vtable + naked thunk reading the caller's registers). klua_test 27/27. re/ucc_police_aim.md: bench 6; OWNER question 5 (stock exposes a UCC who kills a cop).
