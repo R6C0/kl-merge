@@ -764,6 +764,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klcharonline.c"                               /* klcharonline.c: [CharOnline] every player's heister/mask/outfit on every peer (off unless Enable=1); AFTER klchar.c / klmm.c / klslot.c */
 #include "klsync.c"                                    /* klsync.c: [Sync] read-only probe + host list compare of actors / world objects per peer (off unless set); AFTER klcensus.c, klcharonline.c */
 #include "klnetchan.c"                                 /* klnetchan.c: [NetChan] the hook's shared peer message channel (UDP 27416 + Steam member data; idle unless a module wants it); AFTER klmm.c, klslot.c */
+#include "kldown_mirror.c"                              /* kldown_mirror.c: [Down] OnlineFlopMirror - the other players see this player's flop (messages via klnetchan.c; off unless Enable=1 online); AFTER kldown.c, klcharonline.c, klnetchan.c */
 #include "klucc.c"                                     /* klucc.c: [Ucc] Undercover Cop suspicion pings / accuse key (off unless Pings=1 or Accuse=1); AFTER klnetchan.c, klcharonline.c, klhud_popup.c */
 #include "klucchide.c"                                 /* klucchide.c: [Ucc] Hide - the UCC stays hidden until his reveal key (off unless Hide=1); AFTER klucc.c, klucc_down.c, klnetchan.c, klroundkeep.c, klcharonline.c, klhud.c */
 #include "klucc_aim.c"                                 /* klucc_aim.c: [Ucc] PoliceAim - police AI treats a hidden UCC as a target, rules slot 188 per asker (off unless PoliceAim=1); AFTER klucchide.c, klucc_down.c, klroundkeep.c */
@@ -1241,6 +1242,7 @@ static void klh_tick(int game_thread)
     kldy_tick(game_thread);                           /* klcdying.c: almost dead = the game's revivable down (you) */
     kad_tick(game_thread);                            /* kladren.c: raises the mash meter first */
     kld_tick(game_thread);                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
+    kldm_tick(game_thread);                           /* kldown_mirror.c: the online flop mirror (off unless OnlineFlopMirror and an online round) */
     klrs_tick(game_thread);                           /* klreshade.c: the numbers the shaders get (reads only; off unless [ReShade] Bridge=1) */
     kset_tick(game_thread);                           /* klset.c: the menu manager's table count, a log line (reads only; off unless [Menu] TableLog=1) */
 #ifdef KLHOOK_TEST
@@ -1658,6 +1660,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klp_init();
     klfk_init();
     kld_init();
+    kldm_init();                                      /* kldown_mirror.c: [Down] OnlineFlopMirror* (after kld_init: reads its Online* keys; asks for the message channel) */
     klbd_init();
     klcd_init();
     klsh_init();

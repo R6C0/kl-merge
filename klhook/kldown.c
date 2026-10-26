@@ -327,6 +327,9 @@ static struct {
 static int klco_table(DWORD sm, DWORD *ents, int *n);
 static int klco_find_own(DWORD ents, int n, DWORD now, DWORD *plOut, int *how);
 static int klco_is_master(DWORD ent);
+/* kldown_mirror.c (included after klnetchan.c): small hooks of the online flop mirror - the hash draw in kld_mix_next and one more ReplicaProbe line. 2026-10-26 */
+static float kldm_det_r(DWORD pl, float sum);
+static void kldm_probe_line(DWORD ent, DWORD now);
 /* ---- MashHoldHow=2: hold ONLY the get-up (Cover) input, so a man who lies can still crawl and shoot (the owner: 'feel like arcade'). 2026-10-26.
    KEYBOARD: klrigid.c's DirectInput proxy hides the Cover key's DIK events from the game's buffered GetDeviceData while klkf_scan is set (this part sets
    it only while its hold is on, kld_o_release clears it on every release path). The meter never sees the hiding: it reads GetAsyncKeyState, which is
@@ -926,6 +929,7 @@ static void kld_mix_next(DWORD pl, const char *why)
     kld_rng ^= GetTickCount() * 2654435761u; if (!kld_rng) kld_rng = 0x1234567;
     kld_rng ^= kld_rng << 13; kld_rng ^= kld_rng >> 17; kld_rng ^= kld_rng << 5;
     r = (float)(kld_rng >> 8) / 16777216.0f * sum;
+    { float dr = kldm_det_r(pl, sum); if (dr >= 0) r = dr; }      /* kldown_mirror.c, OnlineFlopMirror=1 online: r from a hash of (table index, fall number) so a replica can draw the same clip with no message */
     for (i = 0; i < kld_mx.n; i++) {
         if (others && kld_md[kld_mx.e[i].def].group == kld_mx.lastgroup) continue;
         pick = i;
@@ -2388,6 +2392,7 @@ static void kld_o_probe(DWORD own, DWORD now)
         klog("down: online: ReplicaProbe: body %08lx %s: [+0x78] %08lx (%s ours), [+0x7c] %08lx, [+0x80] %08lx, down state %lu, prone clip word [M+0x8cc] %08lx '%s'%s",
              e, "(master test left out: log-only, an unguarded 0x9425a0 on a half-built replica could fault)", klh_rd32(e + 0x78), klh_rd32(e + 0x78) == w78 ? "SAME as" : "not", klh_rd32(e + 0x7c), klh_rd32(e + 0x80), ds, clip, nm,
              klh_rd32(e + 0x7c) == w7c ? " - the SAME slot table as ours: what the flop writes into it is read by this body's falls on this machine too (GUESS)" : "");
+        kldm_probe_line(e, now);      /* kldown_mirror.c: is this replica's pool shared with another body (the mirror refuses) or exclusive */
     }
 }
 
