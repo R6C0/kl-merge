@@ -74,6 +74,9 @@
 #define KLBD_DOWNFN     0x0070e0e0
 #define KLBD_CLOCK      0x00dd2640            /* +0x48 the game's tick (1/1024 s) */
 #define KLBD_ROUND      0x19
+#ifndef KLBD_AVT                              /* the actor's vtable with the hook's private ZFFActor copies read as the stock one (klhook.c klh_avt) */
+#define KLBD_AVT(a) klh_avt(a)
+#endif
 #define KLBD_NHIT       12                    /* rows of the rules' hit-sum matrix (klgrudge.c KLY_NROW) */
 
 #define KLBD_BTEST_FN   0x0070f330            /* the b test of 0x70e0e0, thiscall on the ZDownNotDeadNPC; read whole (reots_down.md 9) */
@@ -86,6 +89,7 @@
 
 static struct {
     int on, dry, log, downs_max, nofire, traitors;
+    int arc, oon, adry, odry;       /* arc = [BotDown] Enable (Arcade), oon = [Down] OnlineBotDown, adry / odry = the Dry of each; dry = the one of the mode this pass runs in (klbd_tick) */
     float down_pct, floor_pct, lie, free_t, lie_pct, up_pct, refuse, attr, watch; int preshield;
     float lie_far, lie_far_at;      /* LieFar / LieFarAt (2026-10-15): the lie when the human is not near (nobody can help) */
     int fed_downs; float fed_free, fed_up, fed_health;      /* while the local human is police (klfed.c's fed) */
@@ -146,7 +150,7 @@ static float klbd_rdf(DWORD at, int *ok) { float f = 0; if (!klh_rd(at, &f, 4) |
 static int klbd_bot_ok(DWORD actor, DWORD *soldier)
 {
     DWORD s;
-    if (!actor || klh_rd32(actor) != KLB_ACTOR_VT) return 0;
+    if (!actor || KLBD_AVT(actor) != KLB_ACTOR_VT) return 0;      /* KLBD_AVT: also an actor on one of the hook's private ZFFActor tables (OnlineCopToBot, the puppeteer) */
     if (!(s = klh_rd32(actor + 0x77c)) || klh_rd32(s) != KLBD_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
     *soldier = s;
     return 1;
@@ -204,7 +208,7 @@ static void klbd_fed_undo(struct klbd_rec *b, int i, const char *why)
     DWORD h; int ok = 1; float hp, hmax, nh;
     if (!b->fed_done) return;
     b->fed_done = 0;
-    if (!b->actor || klh_rd32(b->actor) != KLB_ACTOR_VT || !(h = klh_rd32(b->actor + 0x5fc)) || h != b->fed_h || klh_rd32(h + 0x24) != b->actor) return;
+    if (!b->actor || KLBD_AVT(b->actor) != KLB_ACTOR_VT || !(h = klh_rd32(b->actor + 0x5fc)) || h != b->fed_h || klh_rd32(h + 0x24) != b->actor) return;
     hp = klbd_rdf(h + 4, &ok); hmax = klbd_rdf(h + 8, &ok);
     if (!ok || fabsf(hmax - b->fed_to) > 0.5f || b->fed_to < 1.0f) { if (klbd.log) klog("botdown: record %d: FedHealth not put back (%s): his maximum is %.1f, not the %.1f written", i, why, hmax, b->fed_to); return; }
     nh = hp > 0.01f ? hp * b->fed_from / b->fed_to : hp;
@@ -259,19 +263,141 @@ static void klbd_forget(void)
     memset(&klbd_g, 0, sizeof klbd_g);
 }
 
+/* ---------------------------------------------------------------- the ONLINE census (host only; [Down] OnlineBotDown)
+ *
+ * ONLINE THERE IS NO CREW RECORD (re\arcade_online_parity.md row 12: the records live in ZGameRulesHeist, the online rules classes
+ * Sv / Cl have none), so this part cannot read klb_read's table. The AI heisters of an online round (only there when the level keeps
+ * the Ally squads: [BotFill] OnlineHost, tools\kl_botsonline.py; re\bots_online_host.md) are found the way klbotfill.c's census finds
+ * them - ZFFActors of team Ally ([[actor+0x54]+4] == 2) with a ZSoldier - and each gets a PSEUDO RECORD: a slot of this part's own
+ * that stays the same while the actor lives, so everything below (the pass, the exports, the log) is the Arcade code unchanged.
+ * Human heisters are ZFFPlayer (vtable 0xbb45f4, not 0xbb3bac), police are team 1: neither is a candidate.
+ *
+ * HOST ONLY: the session role [sm+0x54] must be 2 (GUESS from re\private_match.md: 2 = server, 3 = client is FACT) and the game type 4
+ * in the in-round states 0x13 .. 0x1f (klbalance.c klr_online_host's test). On a client nothing here runs, so a replica is never
+ * written: the AI is host-owned (the squad update 0x47e440 skips on a client).
+ *
+ * WHAT MAKES THE CLIENTS FOLLOW (GUESS, bench it): an NPC has no RMCDownNotDead_SetDowned / GettingUp (those two are the PLAYER's
+ * messages, wrapper 0x846d90 / 0x6cd720, routed by the master test of a net object) - an NPC down is ZDownNotDeadNPC, a goal on the
+ * host, and the actor's pose, health and ragdoll reach the clients through DDL_ZFFActor (re\downed_online.md Way 4). So the "game's
+ * own sender" of this part is the game's own NPC down (0x70e0e0 through soldier slot 51), run on the host. NOTHING of the player
+ * senders is called here.
+ *
+ * MISSING (not built): adrenaline / revive of a downed bot by a HUMAN: kladren.c works on the Arcade records and a human's help
+ * would have to reach the host as a message (Way 3 of re\downed_online.md, not built). The bot gets up by himself after his lie.
+ */
+#ifndef KLBD_CENSUS
+/* up to `max` candidate actors; 0x10000 slots of 0x80 bytes walked 64 a read as klbotfill.c does (one pass a second, see klbd_online_fill) */
+static int klbd_census(DWORD *out, int max)
+{
+    DWORD p, tab, i, blk[64 * 32]; int n = 0;
+    if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return 0;
+    for (i = 0; i < 0x10000 && n < max; i += 64) {
+        DWORD k;
+        if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) continue;      /* one unreadable block does not end the census (review fix 7) */
+        for (k = 0; k < 64 && n < max; k++) {
+            DWORD o = blk[k * 32 + 0x60 / 4], pr, team = 99, s;
+            if (o < 0x10000 || klh_avt(o) != KLB_ACTOR_VT) continue;
+            if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4) || team != 2) continue;
+            if (!klbd_bot_ok(o, &s)) continue;
+            out[n++] = o;
+        }
+    }
+    return n;
+}
+#define KLBD_CENSUS(out, max) klbd_census(out, max)
+#endif
+#ifndef KLBD_NOW
+#define KLBD_NOW() GetTickCount()
+#endif
+#ifndef KLBD_ONLINE_HOST
+/* -> 1 when this is the online HOST in a round (*rules = the SESSION object, a stable key; *state = its real state, 0x13..0x1f), 0 = not the host /
+   not an Sv round (the slots are dropped), -1 = the settings object is unreadable right now (skip this pass, change nothing: a flip of the key made the
+   pass forget its bots mid-lie, review fix 2) */
+static int klbd_online_host(DWORD *rules, DWORD *state)
+{
+    DWORD sm, role = 0, mode = 0, st = 0, gs, r = 0;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLB_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) return 0;
+    if (!klh_rd(sm + 0x5c, &mode, 4) || mode != 4 || !klh_rd(sm + 0x54, &role, 4) || role != 2 || !klh_rd(sm + 0x70, &st, 4) || st < 0x13 || st > 0x1f) return 0;
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLB_SETTINGS))) || !(r = klh_rd32(gs + 0x54))) return -1;      /* transient: not an answer */
+    if (klh_rd32(r) != KLB_RULES_SV) return 0;      /* a host-role type 4 game that is not a Fragile Alliance Sv round (review fix 2) */
+    *rules = sm; *state = st;
+    return 1;
+}
+#define KLBD_ONLINE_HOST(rules, state) klbd_online_host(rules, state)
+#endif
+
+static struct { DWORD slot[KLB_NREC], cand[KLB_NREC], at; int ncand; } klbd_o;      /* slot[i] = the actor of pseudo record i (0 = free); cand = the last census */
+
+static void klbd_online_reset(void) { memset(&klbd_o, 0, sizeof klbd_o); }
+
+static int klbd_in(const DWORD *a, int n, DWORD v) { int i; for (i = 0; i < n; i++) if (a[i] == v) return 1; return 0; }
+
+/* the pseudo records of this pass: the census once a second, the slots kept while the actor stays in it, a new actor in the first free slot.
+   A record is 'used' with flags 1 (a bot), status 0 in play / 7 dead (health 0). -> number of records, 0 = nothing to do */
+static int klbd_online_fill(struct klb_snap *sn, DWORD now)
+{
+    int i, c, top = 0;
+    if (!klbd_o.at || now - klbd_o.at >= 1000u) { klbd_o.ncand = KLBD_CENSUS(klbd_o.cand, KLB_NREC); klbd_o.at = now ? now : 1; }
+    for (i = 0; i < KLB_NREC; i++) if (klbd_o.slot[i] && !klbd_in(klbd_o.cand, klbd_o.ncand, klbd_o.slot[i])) klbd_o.slot[i] = 0;
+    for (c = 0; c < klbd_o.ncand; c++) {
+        if (klbd_in(klbd_o.slot, KLB_NREC, klbd_o.cand[c])) continue;
+        for (i = 0; i < KLB_NREC; i++) if (!klbd_o.slot[i]) { klbd_o.slot[i] = klbd_o.cand[c]; break; }
+    }
+    for (i = 0; i < KLB_NREC; i++) {
+        struct klb_rec *r = &sn->r[i]; DWORD h; float hp = 1.0f; int ok = 1;
+        if (!klbd_o.slot[i]) continue;
+        r->used = 1; r->actor = klbd_o.slot[i]; r->flags = 1; r->stage = 0; r->status = 0;
+        if ((h = klh_rd32(r->actor + 0x5fc)) && klh_rd32(h + 0x24) == r->actor) { hp = klbd_rdf(h + 4, &ok); if (ok && hp <= 0.01f) r->status = 7; }
+        top = i + 1;
+    }
+    sn->n = top;
+    return top;
+}
+
+/* the online snapshot: -> 1 when this machine is the host of a round and [Down] OnlineBotDown is on; else the slots are dropped */
+static int klbd_online_snap(struct klb_snap *sn, char why[200])
+{
+    DWORD rules = 0, state = 0; int h;
+    if (!klbd.oon) { if (klbd_o.at) klbd_online_reset(); return 0; }
+    h = KLBD_ONLINE_HOST(&rules, &state);
+    if (h < 0) return -1;
+    if (h == 0) { if (klbd_o.at) klbd_online_reset(); return 0; }
+    if (state != KLBD_ROUND) return 0;      /* 0x13..0x1f keeps the slots; the pass itself (downs, shields, heals) runs only in the round, as Arcade does (review fix 1) */
+    memset(sn, 0, sizeof *sn); sn->human = -1; sn->rules = rules; sn->state = KLBD_ROUND; sn->level = 1; sn->online = 1;      /* veh 0: the van byte is not read (GUESS that [rules+0x1dc] is the same base-class field online) */
+    strcpy(why, klbd_online_fill(sn, KLBD_NOW()) ? "online host" : "online host, no AI heister in this peer's world");
+    return 1;
+}
+
+/* ---------------------------------------------------------------- one pass (both worlds) */
+
+static void klbd_pass(struct klb_snap *snp, const char *why, int online);
+
 static void klbd_tick(int game_thread)
 {
-    struct klb_snap sn; DWORD rules, state, clock, tick = 0; int level, i, fed, downs_max; float free_t, fed_k; char why[200];
+    struct klb_snap sn; DWORD rules, state; int level, online = 0; char why[200];
     if (!klbd.on || !game_thread || !klh_exe_ok) return;
-    if (!(klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLBD_ROUND && klb_read(&sn) && sn.state == KLBD_ROUND)) { if (klbd_g.rules) klbd_forget(); return; }
+    why[0] = 0;
+    if (klbd.arc && klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLBD_ROUND && klb_read(&sn) && sn.state == KLBD_ROUND) online = 0;
+    else if ((online = klbd_online_snap(&sn, why)) < 0) return;      /* settings unreadable this instant: change nothing */
+    else if (online) online = 1;
+    else { if (klbd_g.rules) klbd_forget(); return; }
+    klbd.dry = online ? klbd.odry : klbd.adry;      /* the Dry of the world this pass runs in */
+    klbd_pass(&sn, why, online);
+}
+
+static void klbd_pass(struct klb_snap *snp, const char *why, int online)
+{
+    struct klb_snap sn = *snp; DWORD clock, tick = 0; int i, fed, downs_max; float free_t, fed_k;
     if (sn.rules != klbd_g.rules) {
         klbd_forget(); klbd_g.rules = sn.rules;
-        klog("botdown: a round runs (Arcade, not the stock level: %s); %d crew record(s); DownPct %.0f %% FloorPct %.0f %% DownsMax %d LieSeconds %.1f FreeSeconds %.2f NoFire %d%s",
+        if (online) klog("botdown: an ONLINE round runs and this machine is the HOST (%s; role 2 = host is a GUESS): the AI heisters found by the census (ZFFActor, team Ally, with a soldier) get the Arcade down - %d now; DownPct %.0f %% FloorPct %.0f %% DownsMax %d LieSeconds %.1f FreeSeconds %.2f NoFire %d%s; the clients follow through DDL_ZFFActor (GUESS, bench it); no adrenaline / revive (needs the crew records)",
+                         why, sn.n, klbd.down_pct, klbd.floor_pct, klbd.downs_max, klbd.lie, klbd.free_t, klbd.nofire, klbd.dry ? " - Dry (OnlineBotDownDry): nothing is called, nothing is written" : "");
+        else klog("botdown: a round runs (Arcade, not the stock level: %s); %d crew record(s); DownPct %.0f %% FloorPct %.0f %% DownsMax %d LieSeconds %.1f FreeSeconds %.2f NoFire %d%s",
              why, sn.n, klbd.down_pct, klbd.floor_pct, klbd.downs_max, klbd.lie, klbd.free_t, klbd.nofire, klbd.dry ? " - Dry: nothing is called, nothing is written" : "");
     }
     if (!(clock = klh_rd32((DWORD_PTR)KLH_VA(KLBD_CLOCK))) || !klh_rd(clock + 0x48, &tick, 4)) return;
     /* the local human is police: the fed's own rules (header) */
-    fed = KLBD_FED() ? 1 : 0;
+    fed = (!online && KLBD_FED()) ? 1 : 0;      /* online: the fed's own rules are not ported (GUESS: an online police body is a dead heister's second life, not a fed round) */
     fed_k = klbd.fed_health > 0 ? klbd.fed_health / 100.0f : 1.0f / KLBD_TOUGH();
     if (fed_k < 0.05f) fed_k = 0.05f; if (fed_k > 10.0f) fed_k = 10.0f;
     if (fed != klbd_g.fed) {
@@ -353,11 +479,11 @@ static void klbd_tick(int game_thread)
                 DWORD cur = klh_rd32(dnd + 0x14);
                 if (cur != b->l0 || (long)(tick - b->tick_down) > 1024) {      /* slot 1 (0x7ea990) wrote its own tick: ours goes in, once */
                     if (klbd.lie > 0 && (long)(cur - b->tick_down) >= 1400) {      /* under 1.4 s = a helper (kladren.c) pulled it already: not put back */
-                        float lie = klbd.lie * kltt_get(i, KLTT_REVIVE), far_m = -1.0f;      /* kltrait.c ReviveTime of the character he wears */ const char *lkey = "LieSeconds"; DWORD want;
+                        float lie = klbd.lie * (online ? 1.0f : kltt_get(i, KLTT_REVIVE)), far_m = -1.0f;      /* online: the pseudo record is no wardrobe record, no trait */      /* kltrait.c ReviveTime of the character he wears */ const char *lkey = "LieSeconds"; DWORD want;
                         if (klbd.lie_far > 0 && klbd.lie_far < lie) {      /* LieFar: the human is not near him - nobody will come to help, the long lie only costs the crew time */
                             DWORD hpl = 0; float hf[3], hn[3];
-                            if (have && kle_human(&hpl, hf, hn)) far_m = sqrtf((hf[0] - pos[0]) * (hf[0] - pos[0]) + (hf[1] - pos[1]) * (hf[1] - pos[1]) + (hf[2] - pos[2]) * (hf[2] - pos[2])) / 100.0f;
-                            if (far_m < 0 || far_m > klbd.lie_far_at) { lie = klbd.lie_far; lkey = "LieFar"; }
+                            if (!online && have && kle_human(&hpl, hf, hn)) far_m = sqrtf((hf[0] - pos[0]) * (hf[0] - pos[0]) + (hf[1] - pos[1]) * (hf[1] - pos[1]) + (hf[2] - pos[2]) * (hf[2] - pos[2])) / 100.0f;
+                            if (online || far_m < 0 || far_m > klbd.lie_far_at) { if (!online) { lie = klbd.lie_far; lkey = "LieFar"; } }      /* online: kle_human knows only the LOCAL human, remote humans would count as far - no LieFar (review fix 4) */
                         }
                         want = b->tick_down + (DWORD)(lie * 1024.0f);
                         if ((long)(want - tick) > 0 && cur != want && klh_data((void *)(DWORD_PTR)(dnd + 0x14), &want, 4, "an AI heister's down-not-dead: the tick he lies until (botdown LieSeconds)")) {
@@ -450,9 +576,16 @@ static float klbd_inif(const char *key, const char *def, float lo, float hi)
 static void klbd_init(void)
 {
     memset(&klbd, 0, sizeof klbd); memset(klbd_r, 0, sizeof klbd_r); memset(&klbd_g, 0, sizeof klbd_g);
-    klbd.on = GetPrivateProfileIntA("BotDown", "Enable", 0, klh_ini) != 0;
+    klbd.arc = GetPrivateProfileIntA("BotDown", "Enable", 0, klh_ini) != 0;
+    /* [Down] OnlineBotDown (2026-10-26, track bots; BUILT, NOT RUN LIVE): the same down for the AI heisters of an online round, on the HOST only. (recommended on) - it
+       acts only where the level keeps the Ally squads online (bots_online_host.md), so a stock lobby is untouched. Tuning keys are the [BotDown] ones below.
+       OnlineBotDownDry=1: log only (nothing is called, nothing is written). */
+    klbd.oon = GetPrivateProfileIntA("Down", "OnlineBotDown", 1, klh_ini) != 0;
+    klbd.odry = GetPrivateProfileIntA("Down", "OnlineBotDownDry", 0, klh_ini) != 0;
+    klbd.on = klbd.arc || klbd.oon;
     if (!klbd.on) return;
-    klbd.dry = GetPrivateProfileIntA("BotDown", "Dry", 0, klh_ini) != 0;
+    klbd.adry = GetPrivateProfileIntA("BotDown", "Dry", 0, klh_ini) != 0;
+    klbd.dry = klbd.adry;
     klbd.log = GetPrivateProfileIntA("BotDown", "Log", 1, klh_ini);
     klbd.downs_max = GetPrivateProfileIntA("BotDown", "DownsMax", 2, klh_ini);
     if (klbd.downs_max < 1) klbd.downs_max = 1; if (klbd.downs_max > 9) klbd.downs_max = 9;
@@ -477,6 +610,8 @@ static void klbd_init(void)
     klbd.fed_up = klbd_inif("FedUpPct", "25", 0.0f, 100.0f);
     klbd.fed_health = klbd_inif("FedHealth", "0", 0.0f, 1000.0f);
     if (klbd.fed_health > 0 && klbd.fed_health < 5.0f) klbd.fed_health = 5.0f;
+    klog("botdown: worlds: Arcade %s ([BotDown] Enable%s); online HOST %s ([Down] OnlineBotDown%s; only where the level keeps the Ally squads online; never on a client, never police). The lines below are the Arcade ones; the online census uses the same numbers",
+         klbd.arc ? "ON" : "off", klbd.adry ? ", Dry=1" : "", klbd.oon ? "ON" : "off", klbd.odry ? ", OnlineBotDownDry=1: log only" : "");
     klog("botdown: on%s; an AI heister at %.0f %% of his health or less is put DOWN, NOT DEAD by the game's own routine (asked from the hook without a hit, force 1; floor %.0f %% while refused for up to %.0f ms), up to %d times a life; lies %s, FreeSeconds %.2f, LiePct %.0f, UpPct %.0f, NoFire %d, Traitors %d. Arcade, a level that is not stock; data writes and ONE game call (re\\bots_down.md)",
          klbd.dry ? " (Dry=1: nothing is called, nothing is written)" : "", klbd.down_pct, klbd.floor_pct, klbd.refuse, klbd.downs_max,
          klbd.lie > 0 ? "LieSeconds" : "as long as the game says", klbd.free_t, klbd.lie_pct, klbd.up_pct, klbd.nofire, klbd.traitors);
