@@ -41,7 +41,17 @@ Earlier the same day he asked whether the cop sync fix also covers co-op: answer
    - Reveal only by his own choice or when seen killing (Killer Within: the killer stays hidden until caught).
 4. C&R SQUADS (PROPOSAL from the owner's ask): each human cop leads 4 AI cops that follow him and take simple orders
    (follow / hold / attack), built on the online bot machinery; their count must fit the 12-seat cap and the AI budget.
-   OPEN: what the owner means by "luvsics AI" (asked; not yet answered). Do not guess it.
+   ANSWERED (owner, 2026-10-26): luvsic is a collaborator working on co-op for the Dead Men campaign and Dog Days
+   (github.com/luvsicccc/a-newer-perspective; our pass: re/luvsic_pass.md). "luvsics AI" = his crew-order AI:
+   `third_party/anp/loader/squad.inc` (READ, not run here) gives Dead Men's Follow / Fire at / Defend orders through
+   kl2's OWN ZSquadControl, no code bytes changed: 0x908040 Recruit(sc, body) puts a soldier under a player
+   (receivers sc+0x1c[], max 16, no duplicate check), 0x4c3900 Follow, ZSoldier script slot 79 0x760e50 MoveTo,
+   slot 83 0x831850 Attack(handle, pos, T), 0x6eac60 Refuse; P = ZFFPlayer, sc = *(P+0xcd0). His notes say DD calls
+   Recruit only in a HOSTED session and the Attack network path 0x6f64f9 streams the handle - so the engine already has
+   an online squad-order path (GUESS that it replicates the orders; unmeasured). This is the base for "4 AI cops per
+   human cop": recruit 4 type-3/police ZSoldiers into each human cop's ZSquadControl on the host, give his keys the
+   three orders. Open: which police soldiers (spawned per cop, from the level's police squads), and the AI budget.
+   His module is ANP-levels-only and single-player; read it, don't link it, and credit him.
 5. REBALANCE both modes: needs the owner's feel after items 1-4 (what is too easy / too hard now). Not started.
 
 Rules unchanged: stock maps + private match must work; no stock files outside the test slot; mark guesses.
