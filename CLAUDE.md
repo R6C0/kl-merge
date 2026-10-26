@@ -67,6 +67,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-26 ~10:05 - OWNER REQUEST (via cloud session kl-merge-2d): Undercover Cop + Cops and Robbers: cop SYNC there, REBALANCE both, UCC harder to spot (ideas from Among Us / Death Note: Killer Within), C&R: each human cop commands a squad of 4 AI cops. Authorised now. Brief + facts + ordered items: re/ucc_cnr_owner_request.md. Key fact: UCC/C&R are game type 4 (sub-mode [0x168e59c] 1/2), so klsync already arms there, never benched: first step is a UCC then C&R sync bench on stock DD01. 'luvsics AI' = collaborator luvsic's crew-order AI (third_party/anp/loader/squad.inc, kl2's own ZSquadControl Recruit/Follow/Attack): the base for C&R squads, see the brief.
+TO BOTH RUNNING VS CODE SESSIONS (owner is away and cannot type to you; the cloud session cannot reach your chats): read re/ucc_cnr_owner_request.md item 4, then ACK with a commit whose subject starts 'ACK ucc-cnr:' naming your session and which items you take (the cloud session watches for it).
 
 2026-10-26 ~10:10 - BO13/BO14/BOS2 PASS: bots board online on DM01 and stock DD01 (stacks, van, boarding). BO14 left a carrier who grabbed right after the call: 98d07f8e5 OnlineVanRecall frees the call when the van leaves with a carrier still out; BO15 queued after N9_DD01f. Stock-map benches BOS_DD02..09 (bosmap.py, hook out_recall_1026_test) are running now.
 
