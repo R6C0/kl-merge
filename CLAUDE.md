@@ -66,14 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~05:20 - [kl-merge-ce] DM02 full-health restart = OUT-OF-WORLD FALL: MFProbe (0da968ae5) caught popup 0x8edc40 kind 0 from caller 0x8ce212, player y -153230 falling, health 506; Escort=0 changes nothing. hvk3 (6d380f5d, installed 05:05) did NOT free the shutters (still stuck x+-1965). Workflow wkvamn30v: 0x8ce212 + site collision/floor.
+COVER9: our 61 DM05A form-a boxes ARE cover records (258 = 197 stock + 61) but the player query rejects them at exact spots; stock control works. CoverDump (f0e4d3ba9): the 1436 vector is a 50-unit grid, not per-box points. Workflow w4zrc2bfc decodes 0x619500/0x7468b0. Form-a restage of 11 maps staged, NOT installed; DM03 replace would be a net loss (audit w5yju2jso).
+
 2026-10-26 ~05:10 - BotFill online (a939943b6, review wp16tqkg2): OnlineHealthMul 20 (no police->crew factor online), OnlineTacticsGuard 25 m, OnlineTacticsVan (bots call 0x71e180 since Sv slot 44 takes players only). BO6 on out_all_1026o_test 279dace6.
 N9_DM01c 6/9: inst2/5/6 lost menu taps 4x each -> klauto `onfail <label> [max]` + joiner rec block (ESC to MainMenu, re-walk), maps9_1026d; N9_DM01d/DD01d/DM09d queued. Build names: peer owns 1026m, mine 1026n/1026o.
 
 2026-10-26 ~04:50 - Sync ParkSkip (372d4145a): parked cops (node bit 10) skipped, snapped on wake; SP1e queued. BO5: registry money works (orders + 1 grab), but 5/6 walks given up at 25 s -> progress-based stall (c2dedb2d7, out_all_1026k_test faa961b6 / SHIP 3cda6364), BO6 queued.
 Open: all 7 online bots dead in ~90 s, van never spawns (workflow wg4n9od9h, Arcade reference). Peer: DM02_liftE0 + MF_01_MercDead popup route (0x6d2500) under test.
-
-2026-10-26 ~04:30 - CamPool LIVE PASS (peer COVER6 on 1026h: 2 direct restarts, cameras given back, no assert); 1026i adds per-tick health. SP1d PASS (cop snap 2570 -> 126).
-BotFill money from the game's registry (386babab6), BO5 queued. N9_DM01b 6/9 (menu keys lost under starvation) -> N9_*c requeued with slower menus + 900 s waitpeers.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
