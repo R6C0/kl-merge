@@ -1,3 +1,8 @@
+2026-10-26 ~02:35 - AI HEISTERS ONLINE (BO1) PASS + PUPPET (SP1b) DIAGNOSED:
+BO1 (host out_botonline_1026a_test, 843963271, [BotFill] OnlineHost=1; DM01 with Squad#02..08 eAllTypes via botsonline_1025, installed and undone by lan_1025/bo1.py, DM01 back to 3f3f684a): 7 Ally bots alive on both peers online, client mirrors them via Puppet (66 t=2 START, 60 CONVERGED), 1-120 units off while moving, 0 faults. Still: 0 with tactics (no loot/board online), needs eAllTypes in each map's data.
+SP1b (Puppet on cops, stock F01): PASS 0 faults but no gain (worst 764 d=2650 vs S2b 773 d=1097): cops that drift have ctl[+8e0] != [+50c] (often 0), so the 0x70f660 steer is skipped (264 mismatches) and only snaps act; matched cops stay within ~100. Workflow wjxdjafyt researching [+8e0]/[+50c] writers and a steer for them (out_syncpuppet_1026b).
+tele/ents live fixes 6014fec30 (out_all_1026c_test 8ac6ddfc), queue.py RUN wrapper support. SP1 (first try) failed at the menu (wrong DOWN count, flake); SP1b rerun passed.
+
 2026-10-26 ~02:20 - DM02 CHAIN + SMOKES + SAFETY (kl-merge-ce): DM02 live 1dd14609 (co-op solo 64275acd -> Arcade 1a3b5dac -> cover 838ea2f5 -> loot 6M), stale 0. Smoke PASS DM01 01:38, DM02 01:51, DM03 02:03 (0 faults).
 Cover safety filters (c21ce7161, on by default, --no-safety): spawn +60, loot 110, door/stair/ramp 150, nav span >35/2 m, ground vs collision >30. DM05A restaged with them (93 boxes, 9cdd6dee -> 4a6799a1, queued in live_1026/install_queue.txt).
 DM02_lift (out_all_1026b_test tele/ents) INCONCLUSIVE: tele REFUSED (no actor at gd+0x4cf0) at all 3 sites, player never reached a shutter; ents fine but read ~1345/27522 slots. c9 fixing as out_all_1026c. botsonline DM01 rebuilt from live 3f3f684a -> 61ad6de1 (c9 BO1 benches it).
