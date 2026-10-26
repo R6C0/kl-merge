@@ -1083,10 +1083,24 @@ static DWORD kla_poslog_ms, kla_poslog_t;         /* [Auto] PosLogMs: log the mo
 static DWORD kla_go_t, kla_go_stuck_t, kla_go_side_t; static float kla_go_from[3]; static int kla_go_w, kla_go_side, kla_go_shift, kla_go_n, kla_go_fin;
 static float kla_pl_first[32][3]; static float kla_pl_path[32], kla_pl_prev[32][3];
 
+static int kla_pos_node = 1;                      /* [Auto] PosNode: 1 = the scene node's place ([pl+4] -> kle_node), +PosOff only as a fallback; 0 = +PosOff only */
+static DWORD kla_pos_diff_t;
 static int kla_player_pos(int i, float *v)
 {
-    if (i < 0 || i >= kla_npl || !kla_rd(kla_pl[i] + kla_pos_off, v, 12)) return 0;
-    return v[0] == v[0] && v[1] == v[1] && v[2] == v[2] && (v[0] != 0 || v[2] != 0);
+    /* peer kl-merge-ce, DM02 05:06-05:07: +0x460 stayed at (-1965, 500, 1344) while the node walked on to x -2106, -3609 and fell
+       (y -146254): goto never saw arrival and walked the player off the shop's rear edge. So the node's place is read first. */
+    float f[3]; DWORD nd; int hf;
+    if (i < 0 || i >= kla_npl) return 0;
+    hf = kla_rd(kla_pl[i] + kla_pos_off, f, 12) && f[0] == f[0] && f[1] == f[1] && f[2] == f[2] && (f[0] != 0 || f[2] != 0);
+    if (kla_pos_node && (nd = kla_rd32(kla_pl[i] + 4)) > 0xffff && kle_node(nd, v, 0) && v[0] == v[0] && v[1] == v[1] && v[2] == v[2] && (v[0] != 0 || v[2] != 0)) {
+        if (hf && (f[0] - v[0]) * (f[0] - v[0]) + (f[2] - v[2]) * (f[2] - v[2]) > 100.0f * 100.0f && GetTickCount() - kla_pos_diff_t > 10000) {
+            kla_pos_diff_t = GetTickCount();
+            kla_out(1, "pos: player %d node (%.0f, %.0f, %.0f) vs +%lx (%.0f, %.0f, %.0f): the node is used", i, v[0], v[1], v[2], kla_pos_off, f[0], f[1], f[2]);
+        }
+        return 1;
+    }
+    if (!hf) return 0;
+    memcpy(v, f, 12); return 1;
 }
 
 static int kla_find_players(void)
@@ -1554,7 +1568,7 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             if (kla_state == 0x19) {
                 int me = kla_local_player(); DWORD pl = me >= 0 ? kla_pl[me] : 0, ho = pl ? klh_rd32(pl + 0xa48) : 0; float hv[2] = { -1, -1 }, ft[3] = { 0, 0, 0 };
                 if (ho) klh_rd(ho + 4, hv, 8);
-                if (pl) klh_rd(pl + 0x460, ft, 12);
+                if (me >= 0) kla_player_pos(me, ft);             /* the node place (kla_player_pos), as goto reads it */
                 kla_out(1, "script: session 0x19 -> 0x%lx (round left) at line %d: local player %08lx health %.1f / %.1f (last seen while 0x19 %.1f, lowest in the last 3 s %.1f), feet (%.0f, %.0f, %.0f), top window '%s'",
                         st, kla_pc + 1, pl, hv[0], hv[1], kla_hl, kla_hmin, ft[0], ft[1], ft[2], kla_top);
             }
@@ -2177,7 +2191,8 @@ static void kla_init(HINSTANCE inst)
     { char t[32]; GetPrivateProfileStringA("Auto", "PosOff", "0x460", t, sizeof t, kla_ini); kla_pos_off = strtoul(t, 0, 16);
       GetPrivateProfileStringA("Auto", "DirOff", "0xc14", t, sizeof t, kla_ini); kla_dir_off = strtoul(t, 0, 16);
       GetPrivateProfileStringA("Auto", "TurnDeg", "0.17", t, sizeof t, kla_ini); kla_turn_deg = (float)atof(t); if (kla_turn_deg == 0) kla_turn_deg = 0.17f;
-      kla_poslog_ms = GetPrivateProfileIntA("Auto", "PosLogMs", 0, kla_ini); }
+      kla_poslog_ms = GetPrivateProfileIntA("Auto", "PosLogMs", 0, kla_ini);
+      kla_pos_node = GetPrivateProfileIntA("Auto", "PosNode", 1, kla_ini); }
     kla_t0 = kla_beat = GetTickCount();
     kla_exe_ok = img_lo == 0x400000 && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;
     kla_out(1, "klauto: enabled; exe %s; command line: %s", kla_exe_ok ? "is kl2.exe build 0490" : "is NOT the known kl2.exe - no code is patched", GetCommandLineA());
