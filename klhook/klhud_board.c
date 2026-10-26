@@ -37,6 +37,7 @@ static struct { DWORD osd, elem; int told, told_bad; } klbrd_r;
 static int klbrd_code_bad, klbrd_evt_ready;
 static DWORD klbrd_evt[KLBRD_NSLOT + 1];        /* [0] RTTI locator, [1..] the slots (the element's private vtable) */
 static volatile LONG klbrd_n_call, klbrd_n_done, klbrd_n_card;
+static void klsb_intro_draw(void *ctx, void *cam);      /* klhud_board2.c (included after this file) */
 static volatile int klbrd_told_place; static float klbrd_place[2];
 #define KLBRD_DX     0.0f                       /* the card's backing against the plate's place: GUESSES until the first picture (the stock panel: 800 wide, about 170 high) */
 #define KLBRD_DY     (-20.0f)
@@ -81,6 +82,7 @@ static char __fastcall klbrd_render(void *el, void *edx, void *ctx, void *cam)
             if (klbrd_txt_ok(title)) { t0 = klh_rd32(title + KLBRD_T_RGB); klu_set(title, KLU_VT_COLOUR, (t0 & 0xff000000u) | (KLU_C_CORAL & 0x00ffffffu)); }
             *(volatile LONG *)(DWORD_PTR)(e + 0xf4) = 0;
             r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLBRD_RENDER))(el, 0, ctx, cam);
+            klsb_intro_draw(ctx, cam);                 /* [HUD] OnlineIntro (klhud_board2.c): round n of m / players / minutes / your heister, under the card */
             InterlockedCompareExchange((volatile LONG *)(DWORD_PTR)(e + 0xf4), endb, 0);       /* back, unless the game wrote a new end meanwhile */
             if (t0 && klbrd_txt_ok(title)) klu_set(title, KLU_VT_COLOUR, (klh_rd32(title + KLBRD_T_RGB) & 0xff000000u) | (t0 & 0x00ffffffu));
             return r;

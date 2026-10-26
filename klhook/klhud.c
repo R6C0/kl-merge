@@ -1137,111 +1137,98 @@ static int klu_online_kind(DWORD f, int local)
     return local ? KLUV_K_YOU : KLUV_K_CREW;
 }
 
+/* the online reader's row of a seat (klonline_read.c). A seat with no row answers a 'none' (used 0, seat -1, killer -1): the old zeroed one said 'killed by seat 0' (review #2). */
+static const struct klor_row *klu_onrow(const struct klor_snap *o, int seat)
+{
+    static const struct klor_row none = { .seat = -1, .killer = -1 };
+    int i;
+    for (i = 0; i < o->n; i++) if (o->r[i].seat == seat) return &o->r[i];
+    return &none;
+}
+/* 2026-10-26 online ports on klonline_read.c ([Online] Read=1 too), every one its own [HUD] key, default 0 until benched */
+static int klu_onnames, klu_onkill, klu_onround;     /* OnlineNames / OnlineKilled / OnlineRound */
+static int klu_onfeed, klu_onskull, klu_onloot, klu_ontab, klu_onvan;     /* OnlineFeed / OnlineSkulls / OnlineLoot / OnlineTab / OnlineVan */
+static char klu_kf_txt[64]; static LONG klu_kf_at; static DWORD klu_kf_col;     /* the ONLINE kill-feed line (set by klu_compose under klu_cs; klu_kill_line shows the newer of this and the stock pop-up's) */
+
 /* the AI heisters online: ZFFActors of team 2 (Ally), found as klbotfill.c's census does (the entity table, ZFFActor vtable 0xbb3bac, team [[a+0x54]+4] == 2; health [[a+0x5fc]+4] float).
-   They have no crew record. Cached 3 s (the table is 8 MB to read), health read every call. -> their number (<= 8); *alive = how many have health > 0, the living first. [HUD] OnlineBots=0 -> 0.
+   They have no crew record. ONE scan and ONE order with klonline_read.c: klor_bots_sorted (cached 3 s, the living first) - so row number bi here is bot bi of the reader (review #3).
+   -> their number (<= 8); *alive = how many have health > 0. [HUD] OnlineBots=0 -> 0.
    GUESS: no human heister's actor is team 2 (the botfill census text treats Ally count = AI count). */
 static int klu_online_bots(int *alive)
 {
-    static DWORD last, act[8]; static int n; DWORD now = GetTickCount(); int i, a = 0;
+    DWORD act[KLOR_NBOT];
     *alive = 0;
     if (!klu.onbots) return 0;
-    if (!last || now - last > 3000) {
-        DWORD p, tab, ii, blk[64 * 32];
-        last = now; if (!last) last = 1; n = 0;
-        if ((p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) && (p = klh_rd32(p + 0xc)) && (tab = klh_rd32(p + 0xc)))
-            for (ii = 0; ii < 0x10000 && n < 8; ii += 64) {
-                DWORD k;
-                if (!klh_rd(tab + ii * 0x80, blk, sizeof blk)) break;
-                for (k = 0; k < 64 && n < 8; k++) {
-                    DWORD o = blk[k * 32 + 0x60 / 4], pr, team = 99;
-                    if (o < 0x10000 || klh_avt(o) != 0x00bb3bac) continue;
-                    if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4) || team != 2) continue;
-                    act[n++] = o;
-                }
-            }
-    }
-    for (i = 0; i < n; i++) {
-        DWORD hp; float hv[2] = { 0, 0 };
-        if (klh_avt(act[i]) != 0x00bb3bac) continue;
-        hp = klh_rd32(act[i] + 0x5fc);
-        if (hp && klh_rd(hp + 4, hv, 8) && hv[0] > 0) a++;
-    }
-    *alive = a;
-    return n;
+    return klor_bots_sorted(act, alive);
 }
 
-/* -> every text's wanted string and colour and the picture list; 0 = nothing to show (no Arcade round) */
-static int klu_compose(int *state_ok)
+/* the name of online seat k: the heister CHARACTER (chars=1, [HUD] OnlineNames / OnlineKilled), else the Steam name read from the client struct, else You / Player n */
+static void klu_on_name(const struct klor_snap *o, int have, const struct klb_snap *s, int k, int loc, int chars, char *nm, size_t cap)
 {
-    static float card_save[3]; static int card_tags, card_placed;
-    struct klb_snap s; int i, row = 0, human, used = 0, alive = 0; long total = 0, loot = 0, rewards = 0; DWORD cat[0x3c / 4]; char name[56]; int lives = 0, rn = 0, rm = 0;
-    *state_ok = 0;
-    if (!klb_read_hud(&s)) return 0;                          /* klbot.c 1: Arcade, ZGameRulesHeist, the records; [HUD] Online: the online rules' snapshot (no records) */
-    if (s.online) {                                           /* local, cosmetic parts only: the watch and the weapon dial. No crew list, money, rows, tags: their data is Heist's */
-        *state_ok = klu.draw == 2 ? s.state == 0x19 : s.state >= 0x17 && s.state <= 0x19;
-        for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].on = 0; klu_r.t[i].noshadow = 0; klu_r.t[i].sa = 1.0f; }
-        klu_r.npic = 0;
-        klu_dials(&s);
-        klwd_compose();
-        if (klb_hud_crew && klu.crew && s.on_n > 0) {         /* [HUD] OnlineCrew: the online crew list (2026-10-26: the rows, names, states, counts and money boxes as Arcade's) */
-            int k, rows = 0, nu = 0, na = 0, nb, ba = 0, bi; long tot = 0; char nm[40]; BYTE loc = 0; int loc_pend = 0; int locst = -1; long lloot = 0, lrew = 0;
-            { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (BYTE)li; }
-            loc_pend = loc < s.on_n && s.on_used[loc];
-            strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;   /* 2026-10-25 owner: the Arcade crew box is headed DEAD MEN, online said CREW */
-            for (k = 0; k < s.on_n; k++) {
-                int kind;
-                if (!s.on_used[k]) continue;
-                nu++; tot += s.on_money[k];
-                kind = klu_online_kind(klucc_hud_flags(s.on_flags[k], (int)loc, k), k == loc);     /* [Ucc] Rows (klucchide_logic.h): a hidden UCC is crew to a heister viewer */
-                if (kind != KLUV_K_DEAD && kind != KLUV_K_ESCAPED) na++;
-                if (k == loc) { locst = kind; lloot = s.on_loot[k]; lrew = s.on_rew[k]; }
-                if (rows + (k != loc && loc_pend) >= klu.rows) continue;     /* the local player's row is reserved: a high slot (a client's own index) is never the one cut */
-                if (k == loc) loc_pend = 0;
-                if (s.on_name[k][0]) snprintf(nm, sizeof nm, "%s", s.on_name[k]); else if (k == loc) strcpy(nm, "You"); else snprintf(nm, sizeof nm, "Player %d", k + 1);
-                klu_row(rows++, nm, s.on_money[k], kind);
-            }
-            nb = klu_online_bots(&ba);                          /* the AI heisters have no record: rows from the Ally actors, like Arcade's bot rows */
-            for (bi = 0; bi < nb; bi++) {
-                int dead = bi >= ba; nu++; if (!dead) na++;
-                if (rows >= klu.rows) continue;
-                snprintf(nm, sizeof nm, "Heister %d", bi + 1);
-                klu_row(rows++, nm, 0, dead ? KLUV_K_DEAD : KLUV_K_CREW);
-            }
-            snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, "%d / %d", na, nu); klu_r.t[KLU_T_COUNT].on = 1;
-            { static int told; if (!told && klu.log) { told = 1; klog("hud: ONLINE parity: crew box = DEAD MEN + rule + alive/used + per-row state from the flag dwords [S+0x98+4i]; names %s; bots %d row(s); STILL MISSING online: lives skulls, ROUND n OF m line, kill-feed line, loot bar (no data decoded; see re/hud_online.md)", s.on_named ? "read from the client structs" : "NOT readable (You / Player n)", nb); } }
-            if (klu.plates) {                                 /* the same painted rule as the Arcade box */
-                if (klu.draft) klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, klu_r.cx, klu_r.cy + KLU_D_RULE_Y, klu.crew_w, KLU_D_RULE_H, KLU_C_CHALK, klu.layer - 2);
-                else klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);
-            }
-            if (klu.money) {                                  /* TOTAL / LOOT / REWARDS like Arcade (GUESS: which online array is loot and which rewards, see klbot.c) */
-                static const char *label[3] = { "TOTAL", "LOOT", "REWARDS" }; long v[3]; int q;
-                v[0] = tot; v[1] = lloot; v[2] = lrew;
-                for (q = 0; q < 3; q++) {
-                    strcpy(klu_r.t[KLU_T_MLABEL(q)].want, label[q]); klu_r.t[KLU_T_MLABEL(q)].on = 1;
-                    klu_dollars(klu_r.t[KLU_T_MVALUE(q)].want, KLU_TEXTLEN, v[q]); klu_r.t[KLU_T_MVALUE(q)].on = 1;
-                }
-            }
-            if (klu.killed && (locst == KLUV_K_DEAD)) {       /* the same KILLED BY line as offline. The killer is not decoded online: Arcade's own fallback THE POLICE (GUESS) */
-                snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
-            }
-        }
-        return 1;
+    const struct klor_row *r = have ? klu_onrow(o, k) : 0;
+    if (chars && r && r->used && r->name[0]) snprintf(nm, cap, "%s", r->name);
+    else if (k >= 0 && k < 16 && s->on_name[k][0]) snprintf(nm, cap, "%s", s->on_name[k]);
+    else if (k == loc) snprintf(nm, cap, "You");
+    else snprintf(nm, cap, "Player %d", k + 1);
+}
+
+/* the own row's lives, shared by the Arcade and the online list (2026-10-26: moved out of klu_compose): glyphs appended to the name (Lives=2) or skull pictures after it */
+static void klu_own_lives(int row, char *name, size_t cap, int kind, int lives)
+{
+    if (klu.lives == 2) {                                 /* TEST: the stock list's own way, skull glyphs U+E018 appended to the name (0x6f3116) */
+        size_t l = strlen(name); int nl = lives > KLUV_LIVES_MAX ? KLUV_LIVES_MAX : lives;
+        if (nl && l + 4 * (size_t)nl < cap) kluv_skulls(name + l, (int)(cap - l), nl);
+    } else {                                              /* the draft: three skull pictures after the name (and after the tag, when the row carries one) */
+        char full[96];
+        snprintf(full, sizeof full, "%s%s", name, kind == KLUV_K_TRAITOR && klu.tags ? "  TRAITOR" : "");
+        klu_lives_row(row, full, lives, klu.plates);
     }
-    /* the stock player list's own window (its Tick 0x76db00). Draw=2: the stock clock Render draws nothing outside
-       state 0x19 (0x81e0c3), so ours is 'shown' - and the stock block hidden - only there */
-    *state_ok = klu.draw == 2 ? s.state == 0x19 : s.state >= 0x17 && s.state <= 0x19;
-    for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].on = 0; klu_r.t[i].noshadow = 0; klu_r.t[i].sa = 1.0f; }
-    klu_r.npic = 0;
-    human = s.human >= 0 ? s.human : 0;
-    lives = klu.grid == 2 ? 2 : kluv_lives(&s);               /* byte [score+0x6c]; +0x44 is the number of rounds (klhud_values.c a, c) */
-    if (klu_r.card) {                                         /* the Tab card: the list's place moves to the middle for this compose (put back after the crew part) */
-        int n_ = 0;
-        for (i = 0; i < s.n; i++) n_ += s.r[i].used != 0;
-        if (klu.grid == 2) n_ = KLU_ROWS;
+}
+
+/* the round line, shared: 'ROUND n OF m' (+ 'LIVES k' digits on request). lives < 0 = no digits (online without [HUD] OnlineSkulls) */
+static void klu_round_text(int rn, int rm, int lives)
+{
+    char of[16] = "", lv[16] = "";
+    if (klu.roundof && rm > 0) snprintf(of, sizeof of, " OF %d", rm);          /* the game's own number: 10 in Arcade */
+    if (lives >= 0 && (klu.lives == 3 || (klu.lives == 1 && !klu_r.handle[KLUV_SKULL_PIC]))) snprintf(lv, sizeof lv, "   LIVES %d", lives);   /* digits: on request, or when this level has no skull picture */
+    snprintf(klu_r.t[KLU_T_ROUND].want, KLU_TEXTLEN, "ROUND %d%s%s", rn, of, lv);
+}
+
+/* the kill / reward line under REWARDS, shared: the newer of the stock pop-up's text (klhud_kill.c) and the online feed's. on = klu.money as Arcade */
+static void klu_kill_line(int on)
+{
+    DWORD now = GetTickCount(); const char *txt = klu_kill_txt; LONG at = klu_kill_at; DWORD col = 0;
+    if (klu_kf_at && (!klu_kill_at || (LONG)((DWORD)klu_kf_at - (DWORD)klu_kill_at) > 0)) { txt = klu_kf_txt; at = klu_kf_at; col = klu_kf_col; }
+    if (at && (LONG)(now - (DWORD)at) < klu_kill_ms) {
+        const char *d = strchr(txt, '$');
+        snprintf(klu_r.t[KLU_T_KILL].want, KLU_TEXTLEN, "%s", txt);
+        klu_r.t[KLU_T_KILL].want_colour = col ? col : d && d > txt && d[-1] == '-' ? KLU_C_CORAL : KLU_C_GREEN;
+        klu_r.t[KLU_T_KILL].on = on;
+    }
+}
+
+/* the framed bar under TOTAL, shared (re\hud_layout.md): f = the filled share 0..1 */
+static void klu_loot_bar(float f)
+{
+    float x = klu_r.mx - klu.money_w, y = klu_r.my + (klu.draft ? KLU_D_BAR_Y : 26.0f), bh = klu.draft ? KLU_D_BAR_H : 8.0f;
+    if (f > 1.0f) f = 1.0f;
+    if (f * klu.money_w < 1.5f) f = 0.0f;
+    if (klu.wstyle && klu.draft && klu.mfill && klu_r.handle[KLU_MFILL_PIC]) klu_money_bar(x, klu_r.my + KLU_W_BAR_Y, klu.money_w, f, klu.layer - 2);
+    else {
+        klu_outline(x, y, klu.money_w, bh, KLU_C_CHALK, klu.layer - 2);
+        klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, bh + 4.0f, KLU_C_CHALK, klu.layer - 2);
+    }
+}
+
+/* the Tab card, shared: begin = the list's place moves to the middle for this compose (n_ = rows), put back when the card is off; end = the numbers back */
+static float klu_card_save[3]; static int klu_card_tags, klu_card_placed;
+static void klu_card_begin(int n_)
+{
+    if (klu_r.card) {
         if (n_ > klu.rows) n_ = klu.rows;
-        card_save[0] = klu_r.cx; card_save[1] = klu_r.cy; card_save[2] = klu.crew_w; card_tags = klu.tags;
+        klu_card_save[0] = klu_r.cx; klu_card_save[1] = klu_r.cy; klu_card_save[2] = klu.crew_w; klu_card_tags = klu.tags;
         klu_r.cx = 640.0f - KLU_CARD_W * 0.5f; klu_r.cy = KLU_CARD_Y; klu.crew_w = KLU_CARD_W; klu.tags = 0;
-        klu_place_crew(); card_placed = 1;
+        klu_place_crew(); klu_card_placed = 1;
         if (klu.plates) {                                     /* run v42: ONE stroke (111, 256 x 32) stretched to the card's height read as shreds - a faint solid
                                                                  ink under painted bands of row height, as the corner list's blocks */
             float top = klu_r.cy - 18.0f, h = klu.yoff + klu.row * (float)n_ + 30.0f, yb;
@@ -1249,36 +1236,17 @@ static int klu_compose(int *state_ok)
             if (klu_r.handle[111]) for (yb = top; yb < top + h - 4.0f; yb += KLU_CARD_BAND - 6.0f)
                 klu_addpic(111, klu_r.cx - 22.0f, yb, KLU_CARD_W + 44.0f, yb + KLU_CARD_BAND > top + h ? top + h - yb : KLU_CARD_BAND, KLU_CARD_INK, klu.layer - 3);
         }
-    } else if (card_placed) { klu_place_crew(); card_placed = 0; }      /* back in the corner */
-    if (klu.grid == 2) {                                    /* the draft's own eight rows: every state on one picture */
-        static const struct { const char *n; long m; int kind; } demo[KLU_ROWS] = { { "J.C.", 540000, 1 }, { "KANE", 310000, 0 }, { "LYNCH", 0, 0 }, { "PARKER", 860000, 2 },
-                                                                                    { "TOMMY", 120000, 0 }, { "RED", 400000, 4 }, { "MELDAL", 0, 3 }, { "ASHKANAN", 1250000, 3 },
-                                                                                    { "HOYT", 90000, 0 }, { "GOGGLES", 0, 0 }, { "SHEPPARD", 220000, 2 }, { "BRENNAN", 0, 3 } };
-        for (row = 0; row < klu.rows; row++) klu_row(row, demo[row].n, demo[row].m, demo[row].kind);
-        klu_lives_row(0, demo[0].n, lives, klu.plates);
-        used = 8; alive = 5;
-    } else for (i = 0; i < s.n; i++) {
-        const struct klb_rec *r = &s.r[i]; DWORD blk, str = 0; int kind;
-        if (!r->used) continue;
-        used++; if (r->status != 7 && r->status != 6) alive++;
-        if (row >= klu.rows) continue;
-        name[0] = 0;
-        if ((blk = klh_rd32(r->at)) != 0 && klh_rd(blk + 8, &str, 4) && str) klh_rdstr(str, name, sizeof name);     /* [[record]+8]: 0x841e50 */
-        klnm_name(r->at, name, sizeof name);                  /* klhud_names.c: the character this record wears (falls back to the game's name) */
-        if (!name[0]) snprintf(name, sizeof name, r->flags & 1 ? "Heister %d" : "You", i);
-        kind = kluv_kind(&s, i);                              /* klhud_values.c g: THE row decision (dead / waiting, escaped, fed before traitor, traitor, you, crew) */
-        if (i == human && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR)) {
-            if (klu.lives == 2) {                             /* TEST: the stock list's own way, skull glyphs U+E018 appended to the name (0x6f3116) */
-                size_t l = strlen(name); int nl = lives > KLUV_LIVES_MAX ? KLUV_LIVES_MAX : lives;
-                if (nl && l + 4 * (size_t)nl < sizeof name) kluv_skulls(name + l, (int)(sizeof name - l), nl);
-            } else {                                          /* the draft: three skull pictures after the name (and after the tag, when the row carries one) */
-                char full[96];
-                snprintf(full, sizeof full, "%s%s", name, kind == KLUV_K_TRAITOR && klu.tags ? "  TRAITOR" : "");
-                klu_lives_row(row, full, lives, klu.plates);
-            }
-        }
-        klu_row(row++, name, (long)r->money, kind);
-    }
+    } else if (klu_card_placed) { klu_place_crew(); klu_card_placed = 0; }      /* back in the corner */
+}
+static void klu_card_end(void)
+{
+    if (klu_r.card) { klu_r.cx = klu_card_save[0]; klu_r.cy = klu_card_save[1]; klu.crew_w = klu_card_save[2]; klu.tags = klu_card_tags; }    /* the numbers back; the texts stay at the card until the next compose */
+}
+
+/* the van card (the owner 2026-10-13 / 10-17 / 10-24; klhud_escape.c feeds the klu_esc_* mirrors from the stock panel). Moved out of klu_compose 2026-10-26 so the online branch
+   draws the SAME card ([HUD] OnlineVan). veh = the vehicle state byte (Arcade s.veh / online [rules+0x1dc]); mir_ok = 1 when the online mirrors may stand in for a silent stock panel. */
+static void klu_van_card(int veh, int mir_ok, float mir_timer)
+{
     /* 2026-10-13, the owner (a picture of the escape panel: a chalk smear left of an orange car box, the time above it, an empty frame):
        'fix the van symbol like i want it revamped too since it looks broken'. The van card, in the money box's column under the kill
        line: a dark painted stroke, the vehicle icon in chalk, the time right-aligned, a thin health bar under it (coral when low).
@@ -1302,16 +1270,20 @@ static int klu_compose(int *state_ok)
             if (tobj && klh_rd32(tobj) == KLU_TEXT_VT && (str = klh_rd32(tobj + 0xa4)) != 0) { char t2[32] = ""; klh_rdstr(str + 0xc, t2, sizeof t2); if (t2[0]) memcpy(ltt, t2, sizeof ltt); }
             /* 2026-10-24 (owner: 'get that van escape thing on the right gone if the van isnt there'): the stock panel's gates (+0x24, +0x28) stay open
                with no vehicle, so the card sat there reading 00:00 all round. [HUD] HideIdleEscape=1: a time text with no non-zero digit while the
-               vehicle state (s.veh) is not 3 / 4 / 5 = no vehicle: the card is not latched and drops at once. GUESS: the idle text reads '00:00'
+               vehicle state (veh) is not 3 / 4 / 5 = no vehicle: the card is not latched and drops at once. GUESS: the idle text reads '00:00'
                (the owner's picture); an unreadable text never counts as idle. HideIdleEscapeDry=1 only logs the verdict. */
             idle = 0;
             if (klu_hideidle && tobj && klh_rd32(tobj) == KLU_TEXT_VT && (str = klh_rd32(tobj + 0xa4)) != 0) {
                 char t3[32] = ""; int k, nz = 0, z = 0, rd = klh_rdstr(str + 0xc, t3, sizeof t3);
                 for (k = 0; t3[k] && k < 31; k++) { if (t3[k] >= '1' && t3[k] <= '9') nz = 1; if (t3[k] == '0') z = 1; }
-                if (rd > 0 && z && !nz && s.veh != 3 && s.veh != 4 && s.veh != 5) idle = 1;   /* read, and all zeros (an empty / unread text is not idle) */
+                if (rd > 0 && z && !nz && veh != 3 && veh != 4 && veh != 5) idle = 1;   /* read, and all zeros (an empty / unread text is not idle) */
             }
-            if (idle != idle_was) { idle_was = idle; if (klu.log) klog("hud: van card: %s (time text, vehicle state %d)%s", idle ? "IDLE, no vehicle" : "vehicle there", (int)s.veh, klu_hideidle_dry ? " [Dry=1: not hidden]" : ""); }
+            if (idle != idle_was) { idle_was = idle; if (klu.log) klog("hud: van card: %s (time text, vehicle state %d)%s", idle ? "IDLE, no vehicle" : "vehicle there", (int)veh, klu_hideidle_dry ? " [Dry=1: not hidden]" : ""); }
             if (idle && !klu_hideidle_dry) seen = 0;
+        }
+        if (!fresh && mir_ok && klu.money) {              /* ONLINE (2026-10-26, [HUD] OnlineVan): the stock panel is not drawing: the card from the rules' mirrors
+                                                               ([rules+0x1d8] timer, vehicle state [rules+0x1dc] in 3..5, set by the caller). GUESS: the state numbers and the mm:ss form carry over from Arcade; the icon is the car (170), the health share is kept */
+            int t = (int)mir_timer; snprintf(ltt, sizeof ltt, "%02d:%02d", t / 60, t % 60); lslot = 170; seen = now ? now : 1;
         }
         want = klu.money && seen && (DWORD)(now - seen) < KLU_ESC_HOLD;
         if (want && !on) { on = 1; if (klu.log && (LONG)(now - loglast) >= KLU_ESC_LOGGAP) { loglast = now; if (logskip) { klog("hud: van card: %d on/off lines skipped", logskip); logskip = 0; } klog("hud: van card ON at (%.0f, %.0f) %.0f wide, icon slot %d (picture %s), health share %.2f, time '%s'%s", klu_r.mx - klu.money_w, klu_r.t[KLU_T_KILL].y + 18.0f + KLU_ESC_GAP, klu.money_w, lslot, lslot > 0 && lslot < 200 && klu_r.handle[lslot] ? "loaded" : "MISSING", lfrac, ltt, ltt[0] ? "" : " (EMPTY: the placeholder shows)"); } else if (klu.log) logskip++; }
@@ -1332,6 +1304,132 @@ static int klu_compose(int *state_ok)
             if (lfrac > 0.005f) klu_addpic(181, x0, y0 + KLU_ESC_H + 3.0f, w * lfrac, 3.0f, klu_fa(lfrac < 0.3f ? KLU_C_CORAL : KLU_C_CHALK, al), klu.layer - 1);
         }
     }
+}
+
+/* -> every text's wanted string and colour and the picture list; 0 = nothing to show (no Arcade round) */
+static int klu_compose(int *state_ok)
+{
+    struct klb_snap s; int i, row = 0, human, used = 0, alive = 0; long total = 0, loot = 0, rewards = 0; DWORD cat[0x3c / 4]; char name[56]; int lives = 0, rn = 0, rm = 0;
+    *state_ok = 0;
+    if (!klb_read_hud(&s)) return 0;                          /* klbot.c 1: Arcade, ZGameRulesHeist, the records; [HUD] Online: the online rules' snapshot (no records) */
+    if (s.online) {                                           /* local, cosmetic parts only: the watch and the weapon dial. No crew list, money, rows, tags: their data is Heist's */
+        *state_ok = klu.draw == 2 ? s.state == 0x19 : s.state >= 0x17 && s.state <= 0x19;
+        for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].on = 0; klu_r.t[i].noshadow = 0; klu_r.t[i].sa = 1.0f; }
+        klu_r.npic = 0;
+        klu_dials(&s);
+        klwd_compose();
+        if (klb_hud_crew && klu.crew && s.on_n > 0) {         /* [HUD] OnlineCrew: the online crew list (2026-10-26: the rows, names, states, counts and money boxes as Arcade's) */
+            int k, rows = 0, nu = 0, na = 0, nb, ba = 0, bi, nrows = 0, olives = 0; long tot = 0; char nm[56]; struct klor_snap or_; int have; BYTE loc = 0; int loc_pend = 0; int locst = -1; long lloot = 0, lrew = 0;
+            { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (BYTE)li; }
+            loc_pend = loc < s.on_n && s.on_used[loc];
+            have = klor_read(&or_, (int)loc);                    /* the reader: heister character names, killer, round, loot, feed (off unless [Online] Read=1). BEFORE the rows loop (review #1: 'have' was tested before it was set) */
+            if (have) olives = KLUV_LIVES_MAX - or_.deaths < 0 ? 0 : KLUV_LIVES_MAX - or_.deaths;   /* GUESS: Arcade's 3 lives; online has none, so a skull is a death mark: 3 - deaths of the local seat this match */
+            nb = klu_online_bots(&ba);                          /* the AI heisters have no record: rows from the Ally actors, like Arcade's bot rows */
+            if (klu_r.card) { for (k = 0; k < s.on_n; k++) nrows += s.on_used[k] != 0; nrows += nb; }
+            klu_card_begin(nrows);                               /* the Tab card (OnlineTab; klu_r.card is only set online with it) */
+            strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;   /* 2026-10-25 owner: the Arcade crew box is headed DEAD MEN, online said CREW */
+            for (k = 0; k < s.on_n; k++) {
+                int kind;
+                if (!s.on_used[k]) continue;
+                nu++; tot += s.on_money[k];
+                kind = klu_online_kind(klucc_hud_flags(s.on_flags[k], (int)loc, k), k == loc);     /* [Ucc] Rows (klucchide_logic.h): a hidden UCC is crew to a heister viewer */
+                if (kind != KLUV_K_DEAD && kind != KLUV_K_ESCAPED) na++;
+                if (k == loc) { locst = kind; lloot = s.on_loot[k]; lrew = s.on_rew[k]; }
+                if (rows + (k != loc && loc_pend) >= klu.rows) continue;     /* the local player's row is reserved: a high slot (a client's own index) is never the one cut */
+                if (k == loc) loc_pend = 0;
+                klu_on_name(&or_, have, &s, k, (int)loc, have && klu_onnames, nm, sizeof nm);     /* the heister CHARACTER's name (the owner's order 16:45) */
+                if (klu_onskull && have && k == loc && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR)) klu_own_lives(rows, nm, sizeof nm, kind, olives);     /* [HUD] OnlineSkulls: death marks, as Arcade's lives row */
+                klu_row(rows++, nm, s.on_money[k], kind);
+            }
+            for (bi = 0; bi < nb; bi++) {
+                int dead = bi >= ba; nu++; if (!dead) na++;
+                if (rows >= klu.rows) continue;
+                if (have && klu_onnames && bi < or_.nbots && or_.bot[bi].name[0]) snprintf(nm, sizeof nm, "%s", or_.bot[bi].name); else snprintf(nm, sizeof nm, "Heister %d", bi + 1);
+                klu_row(rows++, nm, 0, dead ? KLUV_K_DEAD : KLUV_K_CREW);
+            }
+            snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, klu_r.card ? "%d / %d ALIVE" : "%d / %d", na, nu); klu_r.t[KLU_T_COUNT].on = 1;
+            if (klu_r.card) strcpy(klu_r.t[KLU_T_HEAD].want, "CREW");
+            { static int told; if (!told && klu.log) { told = 1; klog("hud: ONLINE parity: crew box = DEAD MEN + rule + alive/used + per-row state from the flag dwords [S+0x98+4i]; names %s; bots %d row(s); reader %s; ports by key: names %d killed %d round %d feed %d skulls %d loot %d tab %d van %d (re/hud_online.md)", s.on_named ? "read from the client structs" : "NOT readable (You / Player n)", nb, have ? "ON" : "off ([Online] Read=0)", klu_onnames, klu_onkill, klu_onround, klu_onfeed, klu_onskull, klu_onloot, klu_ontab, klu_onvan); } }
+            if (klu.plates) {                                 /* the same painted rule as the Arcade box */
+                if (klu.draft) klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, klu_r.cx, klu_r.cy + KLU_D_RULE_Y, klu.crew_w, KLU_D_RULE_H, KLU_C_CHALK, klu.layer - 2);
+                else klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);
+            }
+            klu_card_end();                                   /* the numbers back (the Arcade order: after the rule) */
+            if (klu.money) {                                  /* TOTAL / LOOT / REWARDS like Arcade (GUESS: which online array is loot and which rewards, see klbot.c) */
+                static const char *label[3] = { "TOTAL", "LOOT", "REWARDS" }; long v[3]; int q;
+                v[0] = tot; v[1] = lloot; v[2] = lrew;
+                for (q = 0; q < 3; q++) {
+                    strcpy(klu_r.t[KLU_T_MLABEL(q)].want, label[q]); klu_r.t[KLU_T_MLABEL(q)].on = 1;
+                    klu_dollars(klu_r.t[KLU_T_MVALUE(q)].want, KLU_TEXTLEN, v[q]); klu_r.t[KLU_T_MVALUE(q)].on = 1;
+                }
+            }
+            if (klu_onloot && klu.plates && klu.money) {      /* [HUD] OnlineLoot: the framed bar under TOTAL = the share of the map's loot taken so far (loot on the map vs the largest seen this round, klonline_read.c; 0 until read) */
+                float f = have && or_.loot_ok ? klor_loot_share(or_.loot_init, or_.loot_rem) : 0.0f;
+                klu_loot_bar(f);
+            }
+            if (klu_onvan && klu.money) klu_van_card(have ? (int)or_.esc_state : 0, have && or_.esc_state >= 3 && or_.esc_state <= 5 && or_.esc_timer > 0, have ? or_.esc_timer : 0.0f);   /* [HUD] OnlineVan: the Arcade van card, fed by the stock panel and, silent, the rules' mirrors */
+            if (klu_onfeed) {                                 /* [HUD] OnlineFeed: the kill-feed line under REWARDS. Events = a seat's status bit 4 going 0 -> 1 with its KillerIndex (klonline_read.c); the stock pop-up's own text shows too */
+                if (have) for (k = 0; k < or_.nev; k++) {
+                    char vn[40], kn[40];
+                    klu_on_name(&or_, have, &s, or_.ev[k].victim, (int)loc, 1, vn, sizeof vn);
+                    if (or_.ev[k].killer >= 0 && or_.ev[k].killer != or_.ev[k].victim && or_.ev[k].killer < KLOR_SEATS && s.on_used[or_.ev[k].killer]) {
+                        klu_on_name(&or_, have, &s, or_.ev[k].killer, (int)loc, 1, kn, sizeof kn);
+                        snprintf(klu_kf_txt, sizeof klu_kf_txt, "%s KILLED %s", kn, vn);
+                    } else snprintf(klu_kf_txt, sizeof klu_kf_txt, "%s DIED", vn);          /* no seat killed him: a bot, the police or a fall (suicide too) */
+                    klor_upper(klu_kf_txt);
+                    klu_kf_col = or_.ev[k].victim == (int)loc ? KLU_C_CORAL : or_.ev[k].killer == (int)loc ? KLU_C_GREEN : KLU_C_CHALK;
+                    klu_kf_at = (LONG)GetTickCount() | 1;
+                }
+                klu_kill_line(klu.money);
+            }
+            if (klu.killed && (locst == KLUV_K_DEAD)) {       /* the same KILLED BY line as offline: the killer's name; the police when no seat did it (Arcade's own fallback); YOURSELF for a suicide / fall onto oneself (review #2) */
+                char kn[40]; kn[0] = 0;
+                if (have && klu_onkill) { const struct klor_row *lr = klu_onrow(&or_, (int)loc);
+                    if (lr->used && lr->killer >= 0 && lr->killer < KLOR_SEATS) {
+                        if (lr->killer == (int)loc) strcpy(kn, "YOURSELF");
+                        else if (lr->killer < s.on_n && s.on_used[lr->killer]) { klu_on_name(&or_, have, &s, lr->killer, (int)loc, 1, kn, sizeof kn); klor_upper(kn); }
+                    } }
+                snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
+            }
+            if (have && klu_onround && or_.ok && or_.round > 0 && klu.round) {     /* ROUND n OF m (S+0x34c / S+0x3d0): the Arcade round text */
+                klu_round_text(or_.round, or_.rounds, klu_onskull ? olives : -1); klu_r.t[KLU_T_ROUND].on = 1;
+            }
+        }
+        return 1;
+    }
+    /* the stock player list's own window (its Tick 0x76db00). Draw=2: the stock clock Render draws nothing outside
+       state 0x19 (0x81e0c3), so ours is 'shown' - and the stock block hidden - only there */
+    *state_ok = klu.draw == 2 ? s.state == 0x19 : s.state >= 0x17 && s.state <= 0x19;
+    for (i = 0; i < KLU_NTEXT; i++) { klu_r.t[i].on = 0; klu_r.t[i].noshadow = 0; klu_r.t[i].sa = 1.0f; }
+    klu_r.npic = 0;
+    human = s.human >= 0 ? s.human : 0;
+    lives = klu.grid == 2 ? 2 : kluv_lives(&s);               /* byte [score+0x6c]; +0x44 is the number of rounds (klhud_values.c a, c) */
+    {                                                         /* the Tab card (klu_card_begin): the list's place moves to the middle for this compose (put back after the crew part) */
+        int n_ = 0;
+        if (klu_r.card) { for (i = 0; i < s.n; i++) n_ += s.r[i].used != 0; if (klu.grid == 2) n_ = KLU_ROWS; }
+        klu_card_begin(n_);
+    }
+    if (klu.grid == 2) {                                    /* the draft's own eight rows: every state on one picture */
+        static const struct { const char *n; long m; int kind; } demo[KLU_ROWS] = { { "J.C.", 540000, 1 }, { "KANE", 310000, 0 }, { "LYNCH", 0, 0 }, { "PARKER", 860000, 2 },
+                                                                                    { "TOMMY", 120000, 0 }, { "RED", 400000, 4 }, { "MELDAL", 0, 3 }, { "ASHKANAN", 1250000, 3 },
+                                                                                    { "HOYT", 90000, 0 }, { "GOGGLES", 0, 0 }, { "SHEPPARD", 220000, 2 }, { "BRENNAN", 0, 3 } };
+        for (row = 0; row < klu.rows; row++) klu_row(row, demo[row].n, demo[row].m, demo[row].kind);
+        klu_lives_row(0, demo[0].n, lives, klu.plates);
+        used = 8; alive = 5;
+    } else for (i = 0; i < s.n; i++) {
+        const struct klb_rec *r = &s.r[i]; DWORD blk, str = 0; int kind;
+        if (!r->used) continue;
+        used++; if (r->status != 7 && r->status != 6) alive++;
+        if (row >= klu.rows) continue;
+        name[0] = 0;
+        if ((blk = klh_rd32(r->at)) != 0 && klh_rd(blk + 8, &str, 4) && str) klh_rdstr(str, name, sizeof name);     /* [[record]+8]: 0x841e50 */
+        klnm_name(r->at, name, sizeof name);                  /* klhud_names.c: the character this record wears (falls back to the game's name) */
+        if (!name[0]) snprintf(name, sizeof name, r->flags & 1 ? "Heister %d" : "You", i);
+        kind = kluv_kind(&s, i);                              /* klhud_values.c g: THE row decision (dead / waiting, escaped, fed before traitor, traitor, you, crew) */
+        if (i == human && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR)) klu_own_lives(row, name, sizeof name, kind, lives);
+        klu_row(row++, name, (long)r->money, kind);
+    }
+    klu_van_card((int)s.veh, 0, 0.0f);              /* 2026-10-26: the card is klu_van_card (the online branch draws it too, [HUD] OnlineVan) */
     /* 2026-10-13, the owner: 'for when u escape / in the van should be an icon to let the person know': while YOUR record is aboard the
        vehicle or escaped, the level's own car icon (170, the escape panel's) in green on a dark dab, left of the watch. [HUD] VanIcon=0: off */
     if (klu.vanicon && human >= 0 && klu_r.handle[170]) {
@@ -1362,7 +1460,7 @@ static int klu_compose(int *state_ok)
             else klu_addpic(181, klu_r.cx, klu_r.cy + 22.0f, klu.crew_w, 3.0f, KLU_C_CHALK, klu.layer - 2);
         }
     }
-    if (klu_r.card) { klu_r.cx = card_save[0]; klu_r.cy = card_save[1]; klu.crew_w = card_save[2]; klu.tags = card_tags; }    /* the numbers back; the texts stay at the card until the next compose */
+    klu_card_end();
     /* Total as 0x807520(rules) (EXE): record 0's money when in use, + the score object's dwords +4..+0x10, +0x18..+0x24, +0x2c, + [+0x38] */
     if (klh_rd(s.score + 4, cat, sizeof cat)) {
         static const int add[10] = { 0, 1, 2, 3, 5, 6, 7, 8, 10, 13 };     /* dword indices from +4: +4 +8 +c +10 +18 +1c +20 +24 +2c +38 */
@@ -1379,31 +1477,15 @@ static int klu_compose(int *state_ok)
             strcpy(klu_r.t[KLU_T_MLABEL(i)].want, label[i]); klu_r.t[KLU_T_MLABEL(i)].on = klu.money;
             klu_dollars(klu_r.t[KLU_T_MVALUE(i)].want, KLU_TEXTLEN, v[i]); klu_r.t[KLU_T_MVALUE(i)].on = klu.money;
         }
-        if (klu_kill_at && (LONG)(GetTickCount() - (DWORD)klu_kill_at) < klu_kill_ms) {      /* klhud_kill.c: the latest kill / reward line, under REWARDS */
-            const char *d = strchr(klu_kill_txt, '$');
-            snprintf(klu_r.t[KLU_T_KILL].want, KLU_TEXTLEN, "%s", klu_kill_txt);
-            klu_r.t[KLU_T_KILL].want_colour = d && d > klu_kill_txt && d[-1] == '-' ? KLU_C_CORAL : KLU_C_GREEN;
-            klu_r.t[KLU_T_KILL].on = klu.money;
-        }
-        {
-            char of[16] = "", lv[16] = "";
-            if (klu.roundof && rm > 0) snprintf(of, sizeof of, " OF %d", rm);          /* the game's own number: 10 in Arcade */
-            if (klu.lives == 3 || (klu.lives == 1 && !klu_r.handle[KLUV_SKULL_PIC])) snprintf(lv, sizeof lv, "   LIVES %d", lives);   /* digits: on request, or when this level has no skull picture */
-            snprintf(klu_r.t[KLU_T_ROUND].want, KLU_TEXTLEN, "ROUND %d%s%s", rn, of, lv);
-        }
+        klu_kill_line(klu.money);                             /* klhud_kill.c: the latest kill / reward line, under REWARDS */
+        klu_round_text(rn, rm, lives);
         klu_r.t[KLU_T_ROUND].on = klu.round;
         if (klu.plates && klu.money) {                        /* the framed bar under TOTAL (re\hud_layout.md): what the crew holds of the level's loot ([rules+0xdd0], klhud_values.c d); a level that registered no loot: how much of your total you carry */
-            float x = klu_r.mx - klu.money_w, y = klu_r.my + (klu.draft ? KLU_D_BAR_Y : 26.0f), bh = klu.draft ? KLU_D_BAR_H : 8.0f, f = total > 0 && loot > 0 ? (float)loot / (float)total : 0.0f;
+            float f = total > 0 && loot > 0 ? (float)loot / (float)total : 0.0f;
             if (klu.grid == 2) f = 0.16f;
             else if (kluv_loot_total(&s) > 0) f = kluv_loot_share(&s);
-            if (f > 1.0f) f = 1.0f;
             if (klu.grid != 2 && total <= 0) f = 0.0f;           /* 2026-10-12 (run S1: a stub of fill at TOTAL $0): no money, no fill */
-            if (f * klu.money_w < 1.5f) f = 0.0f;
-            if (klu.wstyle && klu.draft && klu.mfill && klu_r.handle[KLU_MFILL_PIC]) klu_money_bar(x, klu_r.my + KLU_W_BAR_Y, klu.money_w, f, klu.layer - 2);
-            else {
-                klu_outline(x, y, klu.money_w, bh, KLU_C_CHALK, klu.layer - 2);
-                klu_addpic(181, x - 2.0f, y - 2.0f, klu.money_w * f, bh + 4.0f, KLU_C_CHALK, klu.layer - 2);
-            }
+            klu_loot_bar(f);
         }
     }
     if (klu.log >= 2) kluv_dump(&s, human);                   /* 'hud: values: ...': looked at once a second, said when a value other than the clock changed */
@@ -1727,7 +1809,7 @@ static void klu_tick(int game_thread)
         if (klu_make_all(osd)) { klu_r.made = 1; klu_r.rules = pre.rules; } else klu_r.fault = 1;
     }
     tab = klu_tab_held();
-    klu_r.card = tab && klu.tabcard && klu.crew && !pre.online;
+    klu_r.card = tab && klu.tabcard && klu.crew && (!pre.online || klu_ontab);     /* online only with [HUD] OnlineTab=1 */
     if (tab != klu_r.tab) { klu_r.tab = tab; if (klu.log) klog("hud: tab %s: %s", tab ? "HELD" : "released", !tab ? "the crew list is back" : klu_r.card ? "the crew list is drawn as the card in the middle (TabCard=1)" : "the crew list steps aside, the stock list is shown"); }
     crew = klu.crew; if (tab && !klu_r.card) klu.crew = 0;               /* compose / klu_row / klu_lives_row read klu.crew */
     data = klu_r.made && !klu_r.fault ? klu_compose(&state_ok) : 0;
@@ -1745,7 +1827,7 @@ static void klu_tick(int game_thread)
     /* the stock list's Render: skipped offline exactly when the byte is wanted (Tab card or not), and ONLINE whenever HideOnline=1 and the HUD
        stands (the owner wants the old HUD gone from online matches too; re\hud_online.md) - 2026-10-26: and only with [HUD] OnlineCrew=1, else
        nothing replaced the stock list online (owner's Steam private match: 'the HUD is missing') */
-    InterlockedExchange(&klu_skip_list, klu.hidesrc && (pre.online ? klu.hideonl && klb_hud_crew :(show && klu.hide && klu.crew && (!tab || klu_r.card))));
+    InterlockedExchange(&klu_skip_list, klu.hidesrc && (pre.online ? klu.hideonl && klb_hud_crew && (!klu_ontab || !tab || klu_r.card) :(show && klu.hide && klu.crew && (!tab || klu_r.card))));
 #ifdef KLHOOK_TEST
     if (klu.oprobe && have) klb_online_probe(&pre, osd, KLU_PLIST_VT);
 #endif
@@ -1791,6 +1873,8 @@ static void klu_init(void)
     klu.log = klu_inii("Log", 1, 0, 2);
     klu.stock = klu_inii("Stock", 0, 0, 1);
     klb_hud_online = klu_inii("Online", 0, 0, 1);         /* 2026-10-18: the local, cosmetic parts in a network FA round (klbot.c klb_read_hud; re/hud_online.md). Default 0: never run online */
+    klu_onnames = klu_inii("OnlineNames", 0, 0, 1); klu_onkill = klu_inii("OnlineKilled", 0, 0, 1); klu_onround = klu_inii("OnlineRound", 0, 0, 1);
+    klu_onfeed = klu_inii("OnlineFeed", 0, 0, 1); klu_onskull = klu_inii("OnlineSkulls", 0, 0, 1); klu_onloot = klu_inii("OnlineLoot", 0, 0, 1); klu_ontab = klu_inii("OnlineTab", 0, 0, 1); klu_onvan = klu_inii("OnlineVan", 0, 0, 1);
     klu.onbots = klu_inii("OnlineBots", 1, 0, 1); klu.killed = klu_inii("KilledBy", 1, 0, 1); klu.crew = klu_inii("Crew", 1, 0, 1); klu.money = klu_inii("Money", 1, 0, 1); klu.round = klu_inii("Round", 1, 0, 1);
     klu.hide = klu_inii("HideStock", 1, 0, 1);
     klu.draw = klu_inii("Draw", 1, 1, 2);

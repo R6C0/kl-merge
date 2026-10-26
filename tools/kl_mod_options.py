@@ -91,6 +91,30 @@ feat('hidestockonl', G_CORE, 'Online matches: also hide the old (stock) list; th
      'klhud.c HideOnline; needs HideSrc=1', [('HUD', 'HideOnline', 1, 0, 1)])
 feat('onlinecrew', G_CORE, 'Online matches: new crew list with money (humans only, names not decoded yet; recommended on once proven live)', 'off', 'start',
      'klhud.c OnlineCrew; needs [HUD] Online=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
+feat('onlineread', G_CORE, 'Online matches: the round reader that the heister names, KILLED BY and ROUND n OF m below use (recommended off until benched)', 'off', 'start',
+     'klonline_read.c [Online] Read; read only; NOT run live', [('Online', 'Read', 1, 0, 0)])
+feat('onlinenames', G_CORE, 'Online matches: crew list shows the heister characters\' names (J.C., Tommy...) like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineNames; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineNames', 1, 0, 0)])
+feat('onlinekilled', G_CORE, 'Online matches: KILLED BY shows the killer\'s heister name instead of THE POLICE (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineKilled; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineKilled', 1, 0, 0)])
+feat('onlineround', G_CORE, 'Online matches: ROUND n OF m line under the clock like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineRound; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineRound', 1, 0, 0)])
+feat('onlinefeed', G_CORE, 'Online matches: kill-feed line (X KILLED Y) under REWARDS like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineFeed; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineFeed', 1, 0, 0)])
+feat('onlineskulls', G_CORE, 'Online matches: death-mark skulls on your row like Arcade lives (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineSkulls; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineSkulls', 1, 0, 0)])
+feat('onlineloot', G_CORE, 'Online matches: loot bar under TOTAL like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineLoot; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineLoot', 1, 0, 0)])
+feat('onlinetab', G_CORE, 'Online matches: Tab card (full crew list) like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineTab; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineTab', 1, 0, 0)])
+feat('onlinevan', G_CORE, 'Online matches: escape / van card like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineVan; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineVan', 1, 0, 0)])
+feat('onlineboard', G_CORE, 'Online matches: round-over card like Arcade, killed by message names the killer heister (recommended off until benched)', 'off', 'start',
+     'klhud_board2.c OnlineBoard; needs [Online] Read=1 and [HUD] Scoreboard=1; NOT run live', [('HUD', 'OnlineBoard', 1, 0, 0)])
+feat('onlineintro', G_CORE, 'Online matches: round n of m, players, minutes and your heister under the pre-round card (recommended off until benched)', 'off', 'start',
+     'klhud_board2.c OnlineIntro; needs [Online] Read=1, [HUD] Scoreboard=1 and Board=1; NOT run live', [('HUD', 'OnlineIntro', 1, 0, 0)])
+feat('shoponline', G_CORE, 'Online matches: weapon shop page II shown (view only, locked) (recommended off until benched)', 'off', 'start',
+     'klshoppage.c OnlineLook; page II buys are swallowed online; needs [ShopPage] Enable=1; NOT run live', [('ShopPage', 'OnlineLook', 1, 0, 0)])
 feat('ucchide', G_CORE, 'Undercover Cop: the crew list does not give the undercover cop away to heisters (recommended on)', 'on', 'start',
      'klhud_values.c kluv_state UccHide; re/ucc_tell_audit.md S10; NOT run live', [('HUD', 'UccHide', 1, 0, 1)])
 feat('onlinebots', G_CORE, 'Online matches: AI heisters also listed in the crew box, like Arcade (recommended on)', 'on', 'start',

@@ -696,6 +696,8 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klgrudge.c"
 #include "klhud_names.c"                              /* the crew list's character names + initials as tags ([HUD] Names / NameTags) */
 #include "klucchide_logic.h"                          /* klucchide_logic.h: [Ucc] Hide - the Undercover Cop's hidden state + pure rules (klucchide.c fills it); BEFORE klhud.c / kllocname.c, which read it */
+#include "klonline_read.h"                                /* klonline_read.h/.c: the online round reader ([Online] Read, default 0); AFTER klbot.c / klcrew.c / klchar.c, BEFORE klhud.c */
+#include "klonline_read.c"
 #include "klhud_values.c"                             /* the HUD's readers (reads only): BEFORE klhud.c, AFTER klbot.c */
 #include "klhud.c"                                    /* includes klhud_weapon.c inside itself */
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
@@ -1634,6 +1636,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kllb_init();
     kllo_init();                                      /* kllobbyopt.c: reads [Lobby] TimeMax / TimeMin / RoundsMax */
     klon_init();                                      /* klonline.c: [Online] Log */
+    klor_init();                                      /* klonline_read.c: [Online] Read */
     klbf_init();                                      /* klbotfill.c: reads [Bots] OnlineFill (after kllb_init: it reads the same key) */
     klcq_init();                                      /* klcopsquad.c: reads [CopSquad] */
     klsab_init();                                     /* klsabotage.c: reads [Sabotage] */

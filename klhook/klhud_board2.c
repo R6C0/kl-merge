@@ -126,6 +126,7 @@ struct klsb_t { DWORD obj, colour, want_colour; float x, y; int on; char cur[KLU
 
 static struct {
     int on, probe, test, fault, textonly, total, count, lead, rows12;
+    int online, intro;                        /* 2026-10-26: [HUD] OnlineBoard / OnlineIntro (default 0): the end card / the intro lines in an ONLINE round, from klonline_read.c */
     float x, y; int alpha;
 } klsb;
 
@@ -475,6 +476,165 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
     return 1;
 }
 
+/* ---------------------------------------------------------------- ONLINE end card (2026-10-26, [HUD] OnlineBoard=1; needs [Online] Read=1, [HUD] Scoreboard=1)
+ * Included by klhud_board2.c, after klsb_put. The same plate, rows, summary and ring as klsb_compose, fed by the online reader (klonline_read.c)
+ * instead of the Heist records. Read-only toward the replicated state.
+ * GUESS G10: the online round-over element at osd+0x10b4 is ZHeistOutroDisplay too (state 0x1f); klsb_wrap refuses it when not, the stock panel stays.
+ * GUESS G11: the PAYOUT column is the seat's Sharable + Unsharable (klor_row.money), REWARDS = Sharable (S+0x188), as klhud.c's online TOTAL / REWARDS.
+ * GUESS G12: the fate bits are the Arcade flag bits (klu_online_kind).
+ * GUESS G13: no shop lead on the countdown (the deadline route, raw 10 s): the online between-rounds page timing is not measured.
+ * Rows: humans first, then the AI heisters (no payout: '-'), at most KLSB_NROW. */
+static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG frame)
+{
+    float px = klsb.x, py = klsb.y, cdv, cdt, pitch = KLSB_ROW, rowh = KLSB_ROWH, rowc, end; char name[KLSB_NROW][48], buf[64], num[40];
+    int i, row = 0, nused, loc = o->local, lk = KLUV_K_CREW, over, lives; const struct klor_row *me; DWORD fl = 0;
+    if (klsb.fault || !o->ok || o->n < 1) return 0;
+    me = klu_onrow(o, loc);
+    if (me->used) { fl = klucc_hud_flags(me->flags, loc, loc); lk = klu_online_kind(fl, 1); }
+    over = o->rounds > 0 && o->round >= o->rounds;
+    lives = KLUV_LIVES_MAX - o->deaths < 0 ? 0 : KLUV_LIVES_MAX - o->deaths;
+    memcpy(&end, &end_bits, 4);
+    for (i = 0; i < KLSB_NTEXT; i++) klsb_r.t[i].on = 0;
+    klsb_r.npic = 0;
+    klu_addpic_q = klsb_r.pic; klu_addpic_n = &klsb_r.npic; klu_addpic_cap = KLSB_NPIC;
+    klu_addpic(klu_r.handle[181] ? 181 : 111, px, py, KLSB_PW, KLSB_PH, ((DWORD)klsb.alpha << 24) | 0x000c0c0du, klsb_ly(4));
+    klu_outline(px, py, KLSB_PW, KLSB_PH, KLU_C_CORAL, klsb_ly(3));
+    memset(name, 0, sizeof name);
+    nused = o->n + o->nbots; if (nused > KLSB_NROW) nused = KLSB_NROW;
+    if (nused > KLSB_NROW_OLD) { pitch = 8.0f * KLSB_ROW / (float)nused; rowh = pitch - (KLSB_ROW - KLSB_ROWH); }
+    for (i = 0; i < nused; i++) {
+        if (i < o->n) {
+            const struct klor_row *r = &o->r[i];
+            if (r->name[0]) snprintf(name[i], sizeof name[i], "%s", r->name);
+            else if (r->seat == loc) snprintf(name[i], sizeof name[i], "You");
+            else snprintf(name[i], sizeof name[i], "Player %d", r->seat + 1);
+        } else {
+            const struct klor_row *r = &o->bot[i - o->n];
+            snprintf(name[i], sizeof name[i], "%s", r->name[0] ? r->name : "Heister");
+        }
+    }
+    cdv = (end * 1024.0f - (float)frame) / 1024.0f;
+    if (!(cdv >= 0)) cdv = 0;
+    if (cdv > 99.0f) cdv = 99.0f;
+    if (klsb_r.cd_max <= 0 || cdv > klsb_r.cd_max) klsb_r.cd_max = cdv > 0.5f ? cdv : klsb_r.cd_max;
+    cdt = klsb_r.cd_max > 0 ? cdv / klsb_r.cd_max : 0.0f;
+    if (cdt > 1.0f) cdt = 1.0f;
+    klsb_put(KLSB_T_TITLE, px + KLSB_COLL, klu_cen(py + KLSB_Y_TITLE + 5.0f, KLU_FNT_LABEL), over ? "GAME OVER" : "ROUND OVER", KLU_C_CORAL);
+    if (o->round > 0) snprintf(buf, sizeof buf, "ROUND %d OF %d", o->round, o->rounds); else snprintf(buf, sizeof buf, "ROUND OVER");
+    klsb_put(KLSB_T_ROUND, px + KLSB_COLL, klu_cen(py + KLSB_Y_ROUND + 7.5f, KLU_FNT_BIG), buf, KLU_C_CHALK);
+    {
+        const char *rt = ""; DWORD rc = KLU_C_ORANGE;
+        if (me->used) {
+            if (lk == KLUV_K_ESCAPED) { rt = "YOU ESCAPED"; rc = KLU_C_GREENHI; }
+            else if (lk == KLUV_K_DEAD) { rt = "YOU ARE DEAD"; rc = KLU_C_CORAL; }
+            else if (lk == KLUV_K_FED) { rt = "YOU ARE A FED"; rc = KLU_C_BLUE; }
+            else { rt = "LEFT BEHIND"; rc = KLU_C_ORANGE; }
+        }
+        klsb_put(KLSB_T_RESULT, px + KLSB_COLL, klu_cen(py + KLSB_Y_RESULT + 5.5f, KLU_FNT_NAME), rt, rc);
+        if (lk == KLUV_K_DEAD && me->used) {      /* the upgraded KILLED BY line (owner 2026-10-26): the killer's heister name, YOURSELF, or THE POLICE when no seat did it */
+            int k = me->killer; const struct klor_row *kr = k >= 0 ? klu_onrow(o, k) : 0; char kn[40];
+            if (k == loc) snprintf(kn, sizeof kn, "YOURSELF");
+            else if (kr && kr->used) { snprintf(kn, sizeof kn, "%s", kr->name[0] ? kr->name : "Player"); klor_upper(kn); }
+            else snprintf(kn, sizeof kn, "THE POLICE");
+            snprintf(buf, sizeof buf, "KILLED BY  %s", kn);
+            klsb_put(KLSB_T_KILLED, px + KLSB_X_KILLED, klu_cen(py + KLSB_Y_RESULT + 5.5f, KLU_FNT_LABEL), buf, KLU_C_CORAL);
+        }
+    }
+    if (klu_r.handle[KLUV_SKULL_PIC]) {
+        int k;
+        klsb_put(KLSB_T_LIVES, px + KLSB_COLR, klu_cen(py + KLSB_Y_LIVES + 5.0f, KLU_FNT_LABEL), "LIVES", KLU_C_CORAL);
+        for (k = 0; k < KLUV_LIVES_MAX; k++)
+            klu_addpic(KLUV_SKULL_PIC, px + KLSB_COLR - KLSB_SKULL_STEP * (KLUV_LIVES_MAX - k) + (KLSB_SKULL_STEP - KLSB_SKULL), py + KLSB_Y_SKULL, KLSB_SKULL, KLSB_SKULL, k < lives ? KLU_C_CHALK : 0x4cf3f0eau, klu.layer);
+    }
+    klsb_put(KLSB_T_HEAD(0), px + KLSB_COLL, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "DEAD MEN", KLU_C_CORAL);
+    klsb_put(KLSB_T_HEAD(1), px + KLSB_COLF, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "FATE", KLU_C_CORAL);
+    klsb_put(KLSB_T_HEAD(2), px + KLSB_COLR, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "PAYOUT", KLU_C_CORAL);
+    klu_addpic(klu_r.handle[111] ? 111 : 181, px + 20.0f, py + KLSB_Y_RULE, 600.0f, 4.0f, KLU_C_CHALK, klsb_ly(1));
+    for (i = 0; i < nused; i++) {
+        const char *fate; DWORD fc, nc, sc, f2; int dead = 0, you = 0, kind; long v = 0;
+        if (i < o->n) {
+            const struct klor_row *r = &o->r[i];
+            f2 = klucc_hud_flags(r->flags, loc, r->seat);
+            kind = klu_online_kind(f2, r->seat == loc); you = r->seat == loc; v = r->money;
+            if (kind == KLUV_K_DEAD) { dead = 1; fate = "DEAD"; fc = KLU_C_DEAD; }
+            else if (kind == KLUV_K_ESCAPED) { fate = "ESCAPED"; fc = KLU_C_GREENHI; }
+            else if (kind == KLUV_K_FED) { fate = "FED"; fc = KLU_C_BLUE; }
+            else if (kind == KLUV_K_TRAITOR) { fate = "TRAITOR"; fc = KLU_C_ORANGE; }
+            else if (f2 & KLUV_F_ABOARD) { fate = "ABOARD"; fc = KLU_C_GREEN; }
+            else { fate = "LEFT BEHIND"; fc = KLU_C_OUT; }
+            if (dead) v = 0;
+            klu_dollars(num, sizeof num, v);
+        } else {
+            const struct klor_row *r = &o->bot[i - o->n];
+            if (!r->alive) { dead = 1; fate = "DEAD"; fc = KLU_C_DEAD; } else { fate = "AI"; fc = KLU_C_CHALK; }
+            strcpy(num, "-");
+        }
+        rowc = py + KLSB_Y_ROW0 + pitch * row + rowh * 0.5f;
+        nc = dead ? KLU_C_DEAD : you ? KLU_C_INK : KLU_C_CHALK;
+        sc = dead ? KLU_C_DEADCASH : you ? KLU_C_INKCASH : KLU_C_GREENHI;
+        if (you && !dead) { fc = KLU_C_INK; klu_addpic(klu_r.handle[181] ? 181 : 111, px + 8.0f, rowc - rowh * 0.5f, KLSB_PW - 16.0f, rowh, KLU_C_CHALK, klsb_ly(2)); }
+        klsb_put(KLSB_T_ROW(row, 0), px + KLSB_COLL, klu_cen(rowc, KLU_FNT_NAME), name[i], nc);
+        klsb_put(KLSB_T_ROW(row, 1), px + KLSB_COLF, klu_cen(rowc, KLU_FNT_LABEL), fate, fc);
+        klsb_put(KLSB_T_ROW(row, 2), px + KLSB_COLR - 8.0f, klu_cen(rowc, KLU_FNT_NAME), num, sc);
+        if (dead) {
+            const unsigned char *c; float w = 0;
+            for (c = (const unsigned char *)name[i]; *c; c++) if ((*c & 0xc0) != 0x80) w += KLUV_NAME_CHARW;
+            klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, px + KLSB_COLL - 4.0f, rowc - 1.0f, w + 8.0f, 2.0f, KLU_C_DEAD, klu.layer);
+        }
+        row++;
+    }
+    klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, px + 20.0f, py + KLSB_Y_SEP, 600.0f, 3.0f, KLU_C_CHALK, klsb_ly(1));
+    snprintf(num, sizeof num, "%d", me->used ? me->kills : 0);      /* the Arcade slot labelled ROUND SCORE shows KILLS online (round score is not an online value; GUESS G16) */
+    klsb_put(KLSB_T_RSL, px + KLSB_X_S1, klu_cen(py + KLSB_Y_SLAB, KLU_FNT_LABEL), "KILLS", KLU_C_CORAL);
+    klsb_put(KLSB_T_RSV, px + KLSB_X_S1, klu_cen(py + KLSB_Y_SVAL, KLU_FNT_NAME), num, KLU_C_GREEN);
+    klsb_put(KLSB_T_RWL, px + KLSB_X_S2, klu_cen(py + KLSB_Y_SLAB, KLU_FNT_LABEL), "REWARDS", KLU_C_CORAL);
+    klu_dollars(num, sizeof num, me->used ? me->reward : 0);
+    klsb_put(KLSB_T_RWV, px + KLSB_X_S2, klu_cen(py + KLSB_Y_SVAL, KLU_FNT_NAME), num, KLU_C_GREEN);
+    klsb_put(KLSB_T_TOTL, px + KLSB_X_S3, klu_cen(py + KLSB_Y_SLAB, KLU_FNT_LABEL), "TOTAL SCORE", KLU_C_CORAL);
+    klu_dollars(num, sizeof num, me->used ? me->money : 0);
+    klsb_put(KLSB_T_TOTV, px + KLSB_X_S3, klu_cen(py + KLSB_Y_STOT, KLU_FNT_BIG), num, KLU_C_GREENHI);
+    {
+        float cx = px + KLSB_X_RING, cy = py + KLSB_Y_RING;
+        snprintf(num, sizeof num, "%d", (int)ceil(cdv - 0.001f));
+        klsb_put(KLSB_T_CONTN, cx, klu_cen(cy + 5.5f, KLU_FNT_NAME), num, KLU_C_CHALK);
+        klsb_put(KLSB_T_CONTL, cx, klu_cen(py + KLSB_Y_CONT, KLU_FNT_LABEL), "CONTINUE", KLU_C_CORAL);
+        if (klu.wstyle && klu_r.handle[KLU_DAB_PIC]) klu_dab_at(cx, cy, 48.0f, 0x9c080809u, klsb_ly(2));
+        else klu_addpic(114, cx - 24.0f, cy - 24.0f, 48.0f, 48.0f, 0x9c080809u, klsb_ly(2));
+        klu_track(NULL, NULL, cx, cy, KLSB_R_RING, KLU_TRACK_C, klsb_ly(1));
+        klu_arc(NULL, NULL, cx, cy, KLSB_R_RING, 0, 0.0f, cdt, KLU_C_CHALK, klu.layer);
+    }
+    klu_addpic_q = 0;
+    return 1;
+}
+
+/* ---------------------------------------------------------------- ONLINE intro lines ([HUD] OnlineIntro=1, needs Board=1 BoardCard=1 Scoreboard=1)
+ * Two centred lines under the pre-round card (klhud_board.c), in the CONTN (name font) and CONTL (label font) slots:
+ *   ROUND n OF m     and     <players> PLAYERS   <minutes> MIN   YOUR HEISTER <name>
+ * GUESS G14: the card's place (klbrd_place) is its centre as in Arcade; the lines sit at y0 + KLBRD_H + 34 / + 62 (not seen live).
+ * GUESS G15: the intro shows in states 0x16..0x18. LIMIT: the text pool is made in states 0x17..0x19 only, so the first intro of a match may lack the lines. */
+static void klsb_intro_compose(const struct klor_snap *o)
+{
+    float cx, y0; char a[64], b[112], nm[40]; const struct klor_row *me; int mins;
+    if (!klbrd_told_place || !o->ok) return;
+    cx = klbrd_place[0]; y0 = klbrd_place[1] + KLBRD_DY; nm[0] = 0;
+    me = klu_onrow(o, o->local);
+    if (me->used && me->name[0]) { snprintf(nm, sizeof nm, "%s", me->name); klor_upper(nm); }
+    if (o->round > 0) snprintf(a, sizeof a, "ROUND %d OF %d", o->round, o->rounds); else a[0] = 0;
+    mins = (int)(o->length / 60.0f + 0.5f);
+    if (mins > 0 && mins < 100) snprintf(b, sizeof b, "%d PLAYERS   %d MIN%s%s", o->n + o->nbots, mins, nm[0] ? "   YOUR HEISTER " : "", nm);
+    else snprintf(b, sizeof b, "%d PLAYERS%s%s", o->n + o->nbots, nm[0] ? "   YOUR HEISTER " : "", nm);
+    klsb_put(KLSB_T_CONTN, cx, klu_cen(y0 + KLBRD_H + 34.0f, KLU_FNT_NAME), a, KLU_C_CHALK);
+    klsb_put(KLSB_T_CONTL, cx, klu_cen(y0 + KLBRD_H + 62.0f, KLU_FNT_LABEL), b, KLU_C_CORAL);
+}
+
+/* called by klbrd_render (klhud_board.c) after the stock intro Render, inside the card branch */
+static void klsb_intro_draw(void *ctx, void *cam)
+{
+    if (!klsb.intro || !klsb_cs_ready || !TryEnterCriticalSection(&klsb_cs)) return;
+    if (klsb_r.made && klsb_r.state >= 0x16 && klsb_r.state <= 0x18 && klsb_alive()) { klsb_text(KLSB_T_CONTN, ctx, cam); klsb_text(KLSB_T_CONTL, ctx, cam); }
+    LeaveCriticalSection(&klsb_cs);
+}
+
 static void klsb_apply(void)
 {   /* SetText / SetColour of every text whose string or colour changed (the same discipline as klu_apply; under klsb_cs) */
     int i;
@@ -512,7 +672,7 @@ static void klsb_probe_line(DWORD osd, const struct klb_snap *s, int have)
 
 static void klsb_tick(int game_thread)
 {
-    static DWORD last, said; DWORD now = GetTickCount(), osd, el, endb = 0, sys; struct klb_snap s; int have; LONG frame = 0;
+    static DWORD last, said; DWORD now = GetTickCount(), osd, el, endb = 0, sys; struct klb_snap s; int have, hon = 0, st; struct klor_snap on; LONG frame = 0;
     if (!klsb.on || !klu.on || !klh_exe_ok || !game_thread || now - last < 100) return;
     last = now;
     osd = klu_r.osd;
@@ -534,10 +694,16 @@ static void klsb_tick(int game_thread)
             for (i = 0; i < o.on_n && i < 16; i++) klog("hud: scoreboard: ONLINE row %d rec %08lx '%s' flags %08lx loot %ld rewards %ld", i, o.on_rec[i], o.on_name[i], o.on_flags[i], o.on_loot[i], o.on_rew[i]);
         }
     }
-    klsb_r.state = have ? s.state : 0;
+    if (!have && (klsb.online || klsb.intro)) {      /* 2026-10-26: online, from the reader; the local seat as klhud.c finds it (the player list's +0xefc) */
+        DWORD pl = klh_rd32(osd + KLU_O_PLIST), li = 0; int loc = -1;
+        if (pl && klh_rd(pl + 0xefc, &li, 4) && li < 16) loc = (int)li;
+        klor_noev = 1; hon = klor_read(&on, loc) && on.ok; klor_noev = 0;      /* this reader never takes the kill-feed events */
+    }
+    st = have ? (int)s.state : hon ? (int)on.b.state : 0;
+    klsb_r.state = st;
     if (klsb.probe || (klu.log >= 2 && have && s.state >= 0x1f)) klsb_probe_line(osd, &s, have);
-    if (!have) { klsb_r.valid = 0; return; }
-    if (klsb.on && !klsb_r.made && s.state >= 0x17 && s.state <= 0x19 && klu_r.fonts[0]) {
+    if (!have && !hon) { klsb_r.valid = 0; return; }
+    if (klsb.on && !klsb_r.made && st >= 0x17 && st <= 0x19 && klu_r.fonts[0]) {
         EnterCriticalSection(&klsb_cs);
         klsb_r.made = klsb_make_pool();
         if (!klsb_r.made) klsb_r.refused = 1;
@@ -546,11 +712,13 @@ static void klsb_tick(int game_thread)
     }
     if (!klsb_r.made) { klsb_r.valid = 0; return; }
     if (klsb.probe) return;                                   /* log only: nothing is composed, the stock panel shows */
-    if (s.state != 0x1f) {
+    if (hon && klsb.intro && st >= 0x16 && st <= 0x18) { EnterCriticalSection(&klsb_cs); klsb_intro_compose(&on); klsb_apply(); LeaveCriticalSection(&klsb_cs); }
+    if (st != 0x1f) {
         if (klsb_r.valid) { EnterCriticalSection(&klsb_cs); klsb_r.valid = 0; LeaveCriticalSection(&klsb_cs); }
-        if (s.state < 0x1f) klsb_r.cd_max = 0;
+        if (st < 0x1f) klsb_r.cd_max = 0;
         return;
     }
+    if (!have && !klsb.online) { klsb_r.valid = 0; return; }
     el = klsb_r.elem; sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF));
     if (!el || !klh_rd(el + KLSB_E_DEADLINE, &endb, 4) || !sys || !klh_rd(sys + 0x48, &frame, 4)) { klsb_r.valid = 0; return; }
     if (klsb.test) {
@@ -563,7 +731,7 @@ static void klsb_tick(int game_thread)
         return;
     }
     EnterCriticalSection(&klsb_cs);
-    klsb_r.valid = klsb_compose(&s, endb, frame);
+    klsb_r.valid = have ? klsb_compose(&s, endb, frame) : klsb_compose_online(&on, endb, frame);
     if (klsb_r.valid) klsb_apply();
     LeaveCriticalSection(&klsb_cs);
     if (klsb_r.valid && !klsb_r.told_first) { klsb_r.told_first = 1; if (klu.log) klog("hud: scoreboard: the first snapshot of this round is ready (%d pictures); the next frames draw the board in place of the stock panel", klsb_r.npic); }
@@ -575,6 +743,7 @@ static void klsb_init(void)
     if (!klu.on) return;
     klsb.on = klu_inii("Scoreboard", 0, 0, 1);
     if (!klsb.on) return;
+    klsb.online = klu_inii("OnlineBoard", 0, 0, 1); klsb.intro = klu_inii("OnlineIntro", 0, 0, 1);
     klsb.probe = klu_inii("ScoreboardProbe", 0, 0, 1); klsb.test = klu_inii("ScoreboardTest", 0, 0, 1); klsb.fault = klu_inii("ScoreboardFault", 0, 0, 1);
     klsb.rows12 = klu_inii("Rows12", 1, 0, 1); klsb.textonly = klu_inii("ScoreboardTextOnly", 0, 0, 1); klsb.total = klu_inii("ScoreboardTotal", 1, 0, 2); klsb.count = klu_inii("ScoreboardCount", 0, 0, 1); klsb.lead = klu_inii("ScoreboardShopLead", 30, 0, 100);   /* tenths of a second cut off the 10 s countdown: the shop opens at 7 (owner 2026-10-25) */
     klsb.alpha = klu_inii("ScoreboardAlpha", 230, 0, 255);
