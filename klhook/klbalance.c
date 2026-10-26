@@ -917,6 +917,13 @@ static struct {
 } klr_pb;
 
 /* "left at 100" or the key's number */
+/* ONLINE point-blank (2026-10-26, BO6, [BotFill] OnlinePointBlank): online the host's Ally bots die to ONE cop step (~7560 hp: the police->crew factor 0x591b60 is skipped because
+   0x7f6850 is false for roles 2/3). Same wrapper, mode 2: on the HOST of an online FA round while BotFill's puppeteer has bots, the step on a BOT scales to want bullets. The victim test is
+   klbf_pb_is_bot (the actors klbotfill.c's census found in team 2 this second): human heisters are team 2 too and are NOT told apart by the team, so only listed bot actors are touched. */
+static struct { float want; } klr_pbo;      /* bullets per step, 0 = off */
+static int klbf_pb_is_bot(DWORD actor);
+static int klbf_pb_any(void);
+
 static const char *klr_pb_text(int who, char out[24])
 {
     if (klr_pb.want[who] < 0) strcpy(out, "left at 100"); else snprintf(out, 24, "%.2f", klr_pb.want[who]);
@@ -953,7 +960,8 @@ static void klr_pb_step(const DWORD *sp)
     InterlockedIncrement(&klr_pb.seen[who]);
     klr_pb.steptid = GetCurrentThreadId();
     want = klr_pb.want[who];
-    if (who == 0) want = kld_pb(want);         /* kldown.c: DownPointBlank while he is knocked down (review 8, M1) */
+    if (klr_pb.act == 2) want = who == 1 && klbf_pb_is_bot(tgt) ? klr_pbo.want : -1.0f;      /* online: bots only, no other key */
+    else if (who == 0) want = kld_pb(want);         /* kldown.c: DownPointBlank while he is knocked down (review 8, M1) */
     if (want >= 0 && want != found && klh_data((void *)(DWORD_PTR)(rec + 0x18), &want, 4, "point-blank hit scale")) InterlockedIncrement(&klr_pb.put[who]);
     else want = found;
     if (klr.log < 2 || (n = InterlockedIncrement(&klr_pb.lines)) > KLR_PB_LINES + 1) return;
@@ -981,12 +989,12 @@ static DWORD __fastcall klr_pb_name(void *self, void *edx, DWORD name, DWORD id,
    database object on the game's thread only; the flag and the way back work from any thread (one aligned dword each,
    and both tables stay valid for the life of the process). The game's pointer is written back only where the hook's
    own still stands. */
-static void klr_pb_tick(int act, int game_thread)
+static void klr_pb_tick(int act, int game_thread)      /* act: 0 off, 1 Arcade dial, 2 online host with bots */
 {
     DWORD sys, db, cur = 0, mine = (DWORD)(DWORD_PTR)&klr_pb.vt[1], stock = KLR_DB_VT; int k; char a[24], b[24], c[24], th[96];
-    if (!klr_pb.any) return;
+    if (act == 1 && !klr_pb.any) return;      /* Arcade with no PointBlank key: untouched; mode 0 must reach the restore branch */
     if (game_thread) klr_pb.tid = GetCurrentThreadId();
-    InterlockedExchange(&klr_pb.act, act ? 1 : 0);
+    InterlockedExchange(&klr_pb.act, act);
     if (!(sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) || !(db = klh_rd32(sys + 0xac)) || !klh_rd(db, &cur, 4)) return;
     if (!act) {
         if (cur == mine && klh_data((void *)(DWORD_PTR)db, &stock, 4, "database object: the game's own vtable back")) {
@@ -1015,7 +1023,9 @@ static void klr_pb_tick(int act, int game_thread)
     for (k = 0; k < KLR_PB_NWHO; k++) { InterlockedExchange(&klr_pb.seen[k], 0); InterlockedExchange(&klr_pb.put[k], 0); }
     InterlockedExchange(&klr_pb.other, 0); InterlockedExchange(&klr_pb.odd, 0); InterlockedExchange(&klr_pb.lines, 0); InterlockedExchange(&klr_pb.first, 0);
     klr_pb.steptid = 0;
-    if (klh_data((void *)(DWORD_PTR)db, &mine, 4, "database object: the hook's copy of its vtable (slot 19 wrapped)"))
+    if (act == 2) {
+        if (klh_data((void *)(DWORD_PTR)db, &mine, 4, "database object: the hook's copy of its vtable (online point-blank)")) klog("botfill: online point-blank step x%g bullets on (database object %08lx, copy %08lx; BOT victims only, the host's puppeteer census)", klr_pbo.want, db, mine);
+    } else if (klh_data((void *)(DWORD_PTR)db, &mine, 4, "database object: the hook's copy of its vtable (slot 19 wrapped)"))
         klog("balance: point-blank: the database object %08lx now has the hook's copy %08lx of its vtable %08lx (slot 19, the name look-up %08lx, wrapped): a soldier's step at arm's length - his gun's hit x 100, sent while the target is within 160 units - gets, in place of the 100: %s on you, %s on an AI heister, %s on a policeman / another NPC; the game's own vtable comes back when the session is not Arcade or the level is stock",
              db, mine, stock, (DWORD)KLR_DB_FN, klr_pb_text(0, a), klr_pb_text(1, b), klr_pb_text(2, c));
 }
@@ -1226,12 +1236,21 @@ static void klr_ch_tick(int arcade, int game_thread)
     }
 }
 
+/* 2 = this is the HOST (role 2) of an online FA round (game type 4, state 0x13..0x1f) and klbotfill.c's census has seen bots in the last 5 s and OnlinePointBlank > 0; else 0 */
+static int klr_pbo_host(void)
+{
+    DWORD sm, role = 0, st = 0;
+    if (!(klr_pbo.want > 0) || !(sm = klh_rd32((DWORD_PTR)KLH_VA(KLR_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x54, &role, 4) || role != 2 || !klh_rd(sm + 0x70, &st, 4) || st < 0x13 || st > 0x1f) return 0;
+    return klbf_pb_any() ? 2 : 0;
+}
+
 static void klr_tick(int game_thread)
 {
     static DWORD last, toldrules; static char toldwhy[200];
     DWORD now = GetTickCount(), rules, state; int arcade, act = 0, level; char why[200];
-    if (!klr.on || !klh_exe_ok || now - last < (game_thread ? 50u : 100u)) return;
+    if ((!klr.on && !(klr_pbo.want > 0)) || !klh_exe_ok || now - last < (game_thread ? 50u : 100u)) return;
     last = now;
+    if (!klr.on) { klr_pb_tick(klr_pbo_host(), game_thread); return; }      /* [Balance] off: only the online point-blank part runs */
     arcade = klr_arcade(&rules, &state, &level);
     if (arcade && (klr.any || klr_pb.any)) {
         act = klb_level(why);                 /* asked every pass: the verdict changes when the archive is opened */
@@ -1246,7 +1265,7 @@ static void klr_tick(int game_thread)
     klr_tough_tick(act);                      /* Tough (2 a7): 'NPC health x' of the four difficulty rows; back when the dial stops acting */
     klr_head_tick(act);                       /* HeadShot / FedHeadShot (2 a8): the two head floats; the tuning's own back otherwise */
     if (arcade && act) klr_tough_say(now);    /* the proof line: what the game made the AI heisters' health */
-    klr_pb_tick(act, game_thread);           /* the point-blank keys: in while the dial acts, the game's own vtable back otherwise */
+    klr_pb_tick(act ? 1 : klr_pbo_host(), game_thread);      /* the point-blank keys: in while the dial acts (1) or the online host has bots (2), the game's own vtable back otherwise */
     klr_ch_tick(arcade, game_thread);        /* LogCrewHits: reads only; any Arcade round, stock level or not */
     if (arcade) klr_player_tick(act, game_thread, rules);
     else if (klr_p.have) klr_player_tick(0, game_thread, 0);      /* the session ended with the object alive: its own values go back */
@@ -1274,6 +1293,13 @@ static void klr_init(void)
 {
     int k, offbad = 0, pbsaid = 0, fedbad = 0, farbad = 0, tofedbad = 0, toughbad = 0, headbad = 0; float v; char t[32], p[32], a[24], b[24], c[24], fedt[32], fart[32], cft[32]; double d; int cfbad = 0;
     char tofedt[32], tought[32], headt[2][32];
+    {   /* [BotFill] OnlinePointBlank: bullets per cop step on a bot (default 2 = GUESS: ~200-260 of 5600 hp with OnlineHealthMul 20; 0 = off), read even with [Balance] off */
+        char q[32]; double e = 2.0;
+        GetPrivateProfileStringA("BotFill", "OnlinePointBlank", "2", q, sizeof q, klh_ini);
+        if (!klr_number(q, &e) || e < 0 || e > 100) { klog("botfill: OnlinePointBlank=%s is IGNORED: it must be one number of 0 .. 100 (bullets per cop point-blank step on a bot; 0 = off); 2 stands", q); e = 2.0; }
+        klr_pbo.want = (float)e;
+        klog("botfill: OnlinePointBlank=%g (recommended on: 2; 0 = off); acts only on the host of an online FA round with OnlineHost=1 and OnlineTactics=1 (the puppeteer bot list)", e);
+    }
     klr.on = GetPrivateProfileIntA("Balance", "Enable", 0, klh_ini) != 0;
     if (!klr.on) return;
     klr.log = (int)GetPrivateProfileIntA("Balance", "Log", 1, klh_ini); if (klr.log < 0) klr.log = 0; if (klr.log > 2) klr.log = 2;

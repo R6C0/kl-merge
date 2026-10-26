@@ -67,6 +67,13 @@ static int klbf_squads(int fill)
     return set;
 }
 
+/* The bot actors for klbalance.c's online point-blank wrapper (OnlinePointBlank): the puppeteer pass publishes the live team-2 Ally actors it found (human heisters are team 2 too, so the
+   team alone cannot tell them apart; the puppeteer's list is the bots). Entries first, then the count; read on the game thread, fresh for 5 s. Needs OnlineTactics=1 (the census is its). */
+#define KLBF_OT_BOTS_MAX 16      /* = KLBF_OT_BOTS (defined below) */
+static DWORD klbf_pb_bots[KLBF_OT_BOTS_MAX]; static volatile LONG klbf_pb_n; static volatile DWORD klbf_pb_at;
+static int klbf_pb_any(void) { return klbf_pb_n > 0 && GetTickCount() - klbf_pb_at < 5000u; }
+static int klbf_pb_is_bot(DWORD a) { int i, n = klbf_pb_n; if (!a || !klbf_pb_any()) return 0; for (i = 0; i < n && i < KLBF_OT_BOTS_MAX; i++) if (klbf_pb_bots[i] == a) return 1; return 0; }
+
 static void klbf_ot_summary(void);
 static void klbf_init(void)
 {
@@ -227,6 +234,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             }
         }
     }
+    {   int q; for (q = 0; q < nb && q < KLBF_OT_BOTS_MAX; q++) klbf_pb_bots[q] = bots[q].actor; klbf_pb_n = nb < KLBF_OT_BOTS_MAX ? nb : KLBF_OT_BOTS_MAX; klbf_pb_at = GetTickCount(); }      /* OnlinePointBlank's bot list */
     {   /* the money: BO4 (DM01) found 0 ZOnlineMoneyCtrl in the entity table - they are controllers, not table objects. Workflow wo8upp5vd
            (verified in disassembly): the ctor 0x9012a0 (0x901323..33) appends every one to the game's object registry via 0x826990: pointers
            at 0xe09e38, count 0xe0e63c (cap 0x1000). Types at +0x38: 0 normal, 1 DROP (the pool a player drops; skipped), 2 container.
