@@ -1,3 +1,9 @@
+2026-10-26 ~15:15 - [cloud] UCC owner decisions all integrated (default OFF, harness only, NOTHING RUN LIVE): klucchide.c [Ucc] Hide
+(own host hidden state, reveal key Insert, client UREV over klnetchan; crew list slot 114 strip + online rows + kill feed; bounty
+200k hidden / 400k revealed), klucc_down.c DownOnly, klucc.c Pings/Accuse (F5), klsabotage.c [Sabotage] VanHold (J, host UCC).
+Found: the UCC pick also sends SetPoliceMan(1) to him (likely why AI police never shoot him: P2 not built). Bench order: re/ucc_design.md
+'P6 BUILT', re/ucc_down_only.md 7, re/hook_netchannel.md 5, re/ucc_sabotage.md. Two System Link instances on stock DD01, UCC lobby.
+
 2026-10-26 ~14:55 - [cloud] UCC sabotage research: re/ucc_sabotage.md (static; stock F01 .prp read from KL_PortBackup, read only).
 Built, NOT run: klsabotage.c [Sabotage] VanHold=0 (hosting UCC presses J: [rules+0x1d8] += HoldS once per van visit, cap 40 s, no
 announcement), harness klsabot_test 58/58, --check-hook clean. Found: the UCC pick is Sv slot 4 0x40f870 (exactly one; override byte
