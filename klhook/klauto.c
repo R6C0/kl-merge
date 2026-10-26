@@ -1202,27 +1202,65 @@ static DWORD kla_find_actor(const char **how)
     return best;
 }
 
+/* Player-specific guard for 'tele' on the local ZFFPlayer (kept apart from klt_refuse, which stays ZFFActor-only for the other callers) -> 0 = may be placed */
+static const char *kla_player_refuse(DWORD pl)
+{
+    DWORD node, fl3c = 0;
+    static const BYTE place[14] = { 0x83, 0xec, 0x0c, 0x53, 0x8a, 0x5c, 0x24, 0x20, 0x56, 0x8b, 0xf1, 0x84, 0xdb, 0x75 };      /* 0x82cc40, as klrappel.c */
+    static const BYTE mat[14]   = { 0x83, 0xec, 0x14, 0xd9, 0x42, 0x04, 0x56, 0xd9, 0x5c, 0x24, 0x04, 0x8b, 0xf1, 0xd9 };      /* 0x55f8f0 */
+    if (klh_rd32(pl) != KLA_VT_FFPLAYER) return "its player is not a ZFFPlayer (vtable 0xbb45f4)";
+    if (!(node = klh_rd32(pl + 4)) || !klh_rd(node + 0x3c, &fl3c, 4) || (fl3c >> 10 & 1)) return "the player's node is missing or off (flag bit 10)";
+    if (!klt_same_code(KLRP_PLACE, place, sizeof place) || !klt_same_code(KLRP_MATRIX, mat, sizeof mat)) return "0x82cc40 / 0x55f8f0 are not the routines this build knows";
+    return 0;
+}
+
 static void kla_tele(int line, const float to[3])
 {
-    float from[3] = { 0, 0, 0 }, now[3] = { 0, 0, 0 }; DWORD actor = 0; const char *why = 0, *how = "none"; int fault = 0, hn = 0, hf = 0;
+    float from[3] = { 0, 0, 0 }, now[3] = { 0, 0, 0 }; DWORD actor = 0, pl = 0; const char *why = 0, *how = "none"; int fault = 0, hn = 0, hf = 0;
     /* TEST only: no online/level guard - online this moves the local body unilaterally and would desync (use it solo). */
     if (!kla_exe_ok) why = "kl2.exe is not the known build";
     else if (!klb_finite(to[0]) || !klb_finite(to[1]) || !klb_finite(to[2])) why = "the target is not a finite place";
     else if (fabs(to[0]) > 1e5f || fabs(to[1]) > 1e5f || fabs(to[2]) > 1e5f) why = "the target is out of range (|coord| > 100000; GUESS of the level extent)";
-    else if (!(actor = kla_find_actor(&how))) why = how;
-    else if (!klt_tele_known()) why = "0x62a900 is not the routine this build knows (klt_tele_known)";
-    else why = klt_refuse(actor);
-    /* feet only for the log, read from the actor as klt_move does (ASSUMPTION +0x460); unreadable = unknown, never a refusal */
-    if (actor) hf = klh_rd(actor + 0x460, from, 12);
-    if (!why) {
-        __try { klt_teleport(actor, to); } __except (EXCEPTION_EXECUTE_HANDLER) { fault = 1; }
+    else {
+        /* 2026-10-26 (run DM02 tele: the player's body IS the ZFFPlayer 0xbb45f4, no ZFFActor stands at its feet). Order: (1) [gd+0x4cf0] when
+           non-zero AND a ZFFActor -> the game's actor teleport 0x62a900 as before; (2) the local ZFFPlayer (the object pos/goto call 'me #N') ->
+           the game's PLAYER placement 0x82cc40 (klrappel.c / klfreeclimb.c / klunstick.c call it live). 0x62a900 is NOT used on a player: no
+           note says ZFFPlayer derives from the class it belongs to, and klt_refuse tests actor-only fields (+0x77c, +0x7c0, +0x50c). */
+        DWORD gd = kla_rd32((DWORD_PTR)VA(0xdd265c)), a0 = gd ? kla_rd32(gd + 0x4cf0) : 0;
+        if (a0 && klh_avt(a0) == 0x00bb3bacu) { actor = a0; how = "gamedata+0x4cf0 (a ZFFActor)"; }
+        else {
+            int me = kla_local_player();
+            if (me >= 0) { pl = kla_pl[me]; how = a0 ? "the local ZFFPlayer (gamedata+0x4cf0 is no ZFFActor)" : "the local ZFFPlayer (gamedata+0x4cf0 is 0)"; }
+            else why = "no local ZFFPlayer and no ZFFActor at gamedata+0x4cf0";
+        }
     }
+    if (!why && actor) {
+        if (!klt_tele_known()) why = "0x62a900 is not the routine this build knows (klt_tele_known)";
+        else why = klt_refuse(actor);
+    } else if (!why && pl) why = kla_player_refuse(pl);
+    /* feet only for the log, read from the body as klt_move does (+0x460, also the ZFFPlayer's feet); unreadable = unknown, never a refusal */
+    if (actor || pl) hf = klh_rd((actor ? actor : pl) + 0x460, from, 12);
+    if (!why) {
+        __try {
+            if (actor) klt_teleport(actor, to);
+            else {
+                float rot[12], v3[3], p[4], bk[3];
+                memset(rot, 0, sizeof rot);
+                if (klh_rd(pl + kla_dir_off, bk, 12) && klb_finite(bk[0]) && klb_finite(bk[2]) && (bk[0] != 0 || bk[2] != 0)) { v3[0] = bk[0]; v3[1] = 0.0f; v3[2] = bk[2]; }
+                else { v3[0] = 0.0f; v3[1] = 0.0f; v3[2] = 1.0f; }
+                KLRP_MATRIX_CALL(rot, v3);                          /* keep the way he faces, as klrappel.c does */
+                p[0] = to[0]; p[1] = to[1]; p[2] = to[2]; p[3] = 0;   /* GUESS: PlaceAt's pos is in the space of +0x460 (klrappel places node positions and logs +0x460 beside them) */
+                ((char (__fastcall *)(void *, void *, const float *, const float *, char, char, char))(DWORD_PTR)KLH_VA(KLRP_PLACE))((void *)(DWORD_PTR)pl, 0, rot, p, 1, 0, 0);
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { fault = 1; }
+        actor = actor ? actor : pl;
+    } else if (!actor) actor = pl;
     if (actor) hn = klh_rd(actor + 0x460, now, 12);
     if (!hf) from[0] = from[1] = from[2] = 0;
     if (!hn) now[0] = now[1] = now[2] = 0;
     if (why) kla_out(1, "script %d: tele REFUSED (%s): from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx", line, why,
                      from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
-    else if (fault) kla_out(1, "script %d: tele FAULTED in 0x62a900 (caught): from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx", line,
+    else if (fault) kla_out(1, "script %d: tele FAULTED in the game's placement routine (0x62a900 for an actor, 0x82cc40 for the player; caught): from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx", line,
                             from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
     else kla_out(1, "script %d: tele: from%s (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now-same-poll (%.0f, %.0f, %.0f; may lag one tick)%s (actor %08lx via %s)", line,
                  hf ? "" : "?", from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], hn ? "" : " [feet unreadable]", (unsigned long)actor, how);
