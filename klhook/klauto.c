@@ -1050,7 +1050,7 @@ static int kla_install(void)
 /* ---------------------------------------------------------------- script */
 
 typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; DWORD off[6]; BYTE noff; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP, C_POKE, C_WAITPEERS, C_TELE, C_ENTS };
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP, C_POKE, C_WAITPEERS, C_TELE, C_ENTS, C_ONFAIL };
 static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 static DWORD kla_tap_polls = 2;                   /* [Auto] TapPolls: a tap's key stays down for at least this many polls */
@@ -1066,6 +1066,7 @@ static int kla_key_held(int dik) { return dik >= 0 && dik < 256 && kla_held[dik]
    lX +0, lY +4, lZ +8, buttons +12..; the game reads 0x14 bytes once a frame, kl2 0x650840) */
 static float kla_m_rate[2], kla_m_acc[2]; static BYTE kla_m_btn[8]; static DWORD kla_m_last;
 static int kla_trap = -1;                         /* line of the armed 'onwin' command */
+static int kla_onfail = -1;                       /* line of the armed 'onfail' command (its n = max recoveries, n2 = taken) */
 
 /* ---- the players, read only. A ZFFPlayer is found by its vtable (0xbb45f4, RTTI) in the heap: 16 per level
    (Heroes!Hero_01..08\Ground, Heroes!RespawnPolice#01..08\Ground), all at 16-byte aligned addresses in the
@@ -1420,6 +1421,10 @@ static void kla_script_load(void)
             if (!a[0] || !m[0] || strlen(a) + strlen(m) + 2 > sizeof c->text) { kla_out(1, "script line %d: onwin needs <window> <label> - script not loaded", i); kla_ncmd = 0; return; }
             c->op = C_ONWIN; strcpy(c->text, a); strcpy(c->text + strlen(a) + 1, m);
         }
+        else if (!_stricmp(op, "onfail")) {             /* onfail <label> [max 6]: a waitwin / tapuntil failure goes on at the label instead (N9_DM01c: lost or doubled menu taps under 9 instances) */
+            if (!a[0]) { kla_out(1, "script line %d: onfail needs <label> [max] - script not loaded", i); kla_ncmd = 0; return; }
+            c->op = C_ONFAIL; snprintf(c->text, sizeof c->text, "%s", a); c->n = 6; c->n2 = 0; sscanf(rest + strlen(a), "%lu", &c->n);
+        }
         else if (!_stricmp(op, "pos")) { c->op = C_POS; snprintf(c->text, sizeof c->text, "%s", rest); }
         else if (!_stricmp(op, "tele")) {               /* tele <x> <y> <z>: the local player to a world place (TEST rig only) */
             if (sscanf(rest, "%f %f %f", &c->f[0], &c->f[1], &c->f[2]) < 3) { kla_out(1, "script line %d: tele needs <x> <y> <z> - script not loaded", i); kla_ncmd = 0; return; }
@@ -1508,6 +1513,18 @@ static int kla_tap_ok(DWORD now)
 {   /* [Auto] TapSettle gate for tap / tapuntil / tapfocus; never waits more than 30 s for a page that does not calm down */
     if (!kla_gate_n || now - kla_cmd_t >= 30000) return 1;
     return kla_settled(kla_gate_n, kla_gate_ms);
+}
+
+static int kla_recover(const char *why, DWORD now)
+{   /* 'onfail': instead of ending the run, go on at the armed label (at most its max times); 1 = the script goes on */
+    KCMD *f; int j;
+    if (kla_onfail < 0 || kla_onfail >= kla_ncmd || (f = &kla_cmd[kla_onfail])->n2 >= f->n) return 0;
+    for (j = 0; j < kla_ncmd; j++) if (kla_cmd[j].op == C_LABEL && !_stricmp(kla_cmd[j].text, f->text)) break;
+    if (j >= kla_ncmd) return 0;
+    f->n2++;
+    kla_out(1, "script: %s: recovering at label '%s' (line %d), recovery %lu of %lu", why, f->text, j + 1, f->n2, f->n);
+    kla_pc = j; kla_cmd_t = now; kla_cmd_f = kla_frames; kla_tu_n = 0; kla_st_pc = -1; kla_sel_n = 0;
+    return 1;
 }
 
 static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
@@ -1605,7 +1622,7 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
         case C_WAITWIN:
             kla_windows(0);
             if (!_stricmp(kla_top, c->text)) { char d[400]; kla_focus_desc(d, sizeof d); kla_out(1, "script %d: window '%s' is on top; focus: %s", kla_pc + 1, kla_top, d); next = 1; }
-            else if (now - kla_cmd_t >= c->n) { char r[300]; snprintf(r, sizeof r, "script line %d: window '%s' did not come up within %lu ms (stack: %.150s)", kla_pc + 1, c->text, c->n, kla_stack); kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); }
+            else if (now - kla_cmd_t >= c->n) { char r[300]; snprintf(r, sizeof r, "script line %d: window '%s' did not come up within %lu ms (stack: %.150s)", kla_pc + 1, c->text, c->n, kla_stack); if (kla_recover(r, now)) continue; kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); }
             break;
         case C_SETTLE:
             if (kla_st_pc != kla_pc) { kla_st_pc = kla_pc; kla_thr = 0; kla_run = 0; }      /* a new settle: count from now */
@@ -1621,11 +1638,11 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             if (kla_tu_n && now - kla_tu_t < c->n) return;                  /* the last tap's try is still running */
             if (kla_tu_n && kla_top[0] && kla_tu_src[0] && _stricmp(kla_top, kla_tu_src)) {  /* neither the source nor the target page: a lost DOWN or a stray page; do not tap inside it */
                 char r[300]; snprintf(r, sizeof r, "script line %d: off route: top window is '%s', expected '%s' (tap started on '%s'); not retapping (stack: %.150s)", kla_pc + 1, kla_top, c->text, kla_tu_src, kla_stack);
-                kla_tu_n = 0; kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); return;
+                kla_tu_n = 0; if (kla_recover(r, now)) continue; kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); return;
             }
             if (kla_tu_n > (int)c->n2) {                                    /* 1 tap + <retries> more, all unanswered */
                 char r[300]; snprintf(r, sizeof r, "script line %d: window '%s' did not come up after %d tap(s) of %lu ms each (stack: %.150s)", kla_pc + 1, c->text, kla_tu_n, c->n, kla_stack);
-                kla_tu_n = 0; kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); return;
+                kla_tu_n = 0; if (kla_recover(r, now)) continue; kla_where(); kla_finish("FAIL", r, KLA_SCRIPT); return;
             }
             if (kla_tu_n && now - kla_tu_t < 3 * (DWORD)c->n && !kla_settled(kla_gate_n > 3 ? kla_gate_n : 3, kla_gate_ms)) return;   /* a retap waits for quiet polls: the window stack may not have caught up */
             if (!kla_tap_ok(now)) return;
@@ -1688,6 +1705,7 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
         case C_TELE: kla_tele(kla_pc + 1, c->f); next = 1; break;
         case C_ENTS: kla_ents(kla_pc + 1, c->text, (int)c->n); next = 1; break;
         case C_LABEL: next = 1; break;
+        case C_ONFAIL: kla_onfail = kla_pc; kla_out(1, "script %d: on a window failure, go on at label '%s' (at most %lu times)", kla_pc + 1, c->text, c->n); next = 1; break;
         case C_ONWIN: kla_trap = kla_pc; kla_out(1, "script %d: when window '%s' comes up, go to label '%s'", kla_pc + 1, c->text, c->text + strlen(c->text) + 1); next = 1; break;
         case C_GOTO: case C_FACE: {
             /* steer the moving player to (x, z): W held, the mouse turned in proportion to the bearing error.
