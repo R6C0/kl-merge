@@ -32,6 +32,19 @@
  *                    GUESSES: the teleport's position is the node position kle_node reads (the feet may differ by a constant); the identity
  *                    rotation the game's routine takes turns the snapped actor to its default facing (no yaw is sent yet); no cool-down per
  *                    actor other than the tolerance, so a cop whose route the client simulates differently may be snapped again each list.
+ *   [Sync] Puppet=1  (CLIENT only, default 0, needs the host's Share=1; use it INSTEAD of Apply) 2026-10-26, from the static report on kl2.exe 0490. The stock client
+ *                    cop is a velocity-steered puppet (ZFFActor::Update slot 87 = 0x40ef60 -> 0x899c40 -> 0x8efe90 steer through 0x70f660(A, &vel, &zero) into the
+ *                    movement controller [A+0x8e0], active only while [A+0x8e0] == [A+0x50c]). A cop of team PuppetTeam (3) that is farther than PuppetTol (60)
+ *                    from the host's place gets a PRIVATE copy of the ZFFActor vtable (as klnetsmooth.c does for players) whose slot 87 runs the stock Update and then
+ *                    calls the same 0x70f660 with a horizontal velocity of PuppetSpeed (300 units/s, slowing in the last quarter second) toward the host's place:
+ *                    the AI's own move-to path, no animation reset. Back to the stock vtable once within PuppetTol for 4 passes, when it dies, when the host list
+ *                    drops it, or the round ends. Beyond PuppetSnap (1500) the game's teleport (as Apply, 3 s cool-down per cop). Same trust as Apply: mode 4,
+ *                    fresh list, identity agreement, a known local player, never a human or an actor sharing a human's team. 3 faults in the steer = Puppet off.
+ *                    PuppetDiag=1 (works without Puppet) logs 'sync: puppet diag:' lines (DO, owner, controller pair, cover fields) for up to 8 cops in the first pass
+ *                    and for offenders every 3 s, to tell 'steer skipped' from 'cover resolved elsewhere'. Proof lines: 'sync: puppet: slot N ... START / goal ... dist D /
+ *                    CONVERGED / SNAP'. NOT RUN LIVE. A puppeted cop shows the private vtable: other modules' 'vtable == 0xbb3bac' tests skip it meanwhile.
+ *                    GUESSES: units of the velocity (units/s, world axes, Y up), the meaning of the second vector, the cop team value 3, that the game calls slot 87
+ *                    through the vtable (the log says if the wrapper never ran), that a steer toward the host's place beats the client's cover logic.
  * Class names come from the object's RTTI (vtable[-1] -> complete object locator +0xc -> type descriptor +8): CERTAIN layout for MSVC x86;
  * every read goes through klh_rd (guarded), an unreadable object is skipped.
  * GUESS: position of the non-actor kinds = kle_node([obj+4]) like the actors'; where that read fails the line says 'p=none'.
@@ -48,6 +61,27 @@ typedef struct { short fam; unsigned short port; unsigned long addr; char zero[8
    vtable (its class), team = the team value [[o+0x54]+4] (-1 = unreadable). Slot ids are NOT assumed equal on every peer (re\graft_formats.md). */
 struct klsy_pe { unsigned short slot; short hp; float p[3]; unsigned short cls; short team; };
 typedef char klsy_pe_size_is_20[sizeof(struct klsy_pe) == 20 ? 1 : -1];
+
+/* ---- [Sync] Puppet state (client): see the header. The private ZFFActor vtable and the per-actor goal table. ---- */
+#define KSP_ACTOR_VT 0x00bb3bacu
+#define KSP_SLOT 87                                    /* ZFFActor::Update = 0x40ef60 (read in the exe, checked again before the first swap) */
+#define KSP_NSLOT 512
+#define KSP_MAXE 48
+typedef void (__fastcall *ksp_fn)(void *self, void *edx);
+typedef void (__fastcall *ksp_steer_fn)(void *self, void *edx, const float *vel, const float *zero);
+static DWORD ksp_vtblk[KSP_NSLOT + 1];                 /* [0] = the stock vt[-1] (RTTI locator), then the private copy */
+#define ksp_vt (ksp_vtblk + 1)
+static DWORD ksp_orig; static int ksp_ready;
+struct ksp_e { DWORD o, slot, goalAt, since, lastLog, lastSnap, pass; int inTol; float goal[3], d0, dlast; volatile LONG calls, steered, mism; };
+static struct ksp_e ksp_e[KSP_MAXE];
+static struct { int pup, diag, nlive; float tol, snap, speed; int team; DWORD pass, roundAt, diagAt, pupAt; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv; } ksp;
+static DWORD ksp_ours(void) { return ksp_ready ? (DWORD)(DWORD_PTR)ksp_vt : 0; }
+/* the class vtable of an actor as the rest of this file means it: a puppeted actor shows our private table, which is still a ZFFActor */
+static DWORD klsy_vtof(DWORD o)
+{
+    DWORD v = klh_rd32(o);
+    return (ksp_ready && v == (DWORD)(DWORD_PTR)ksp_vt) ? KSP_ACTOR_VT : v;
+}
 #define KLSY_REC 20
 #define KLSY_NBAD 16
 #define KLSY_MAXOFF 128
@@ -79,6 +113,7 @@ static DWORD klsy_vt[64]; static signed char klsy_vk[64]; static char klsy_vn[64
 static int klsy_class(DWORD vt, const char **nm)
 {
     int i; DWORD col, td; char b[48], l[48]; const char *s;
+    if (ksp_ready && vt == (DWORD)(DWORD_PTR)ksp_vt) vt = KSP_ACTOR_VT;                 /* a puppeted actor */
     for (i = 0; i < klsy_nvt; i++) if (klsy_vt[i] == vt) { *nm = klsy_vn[i]; return klsy_vk[i]; }
     if (klsy_nvt >= 64) { *nm = "?"; return -1; }
     i = klsy_nvt++; klsy_vt[i] = vt; klsy_vk[i] = -1; strcpy(klsy_vn[i], "?");
@@ -180,7 +215,7 @@ static void klsy_collect(DWORD o, DWORD slot, int kind, const char *nm, void *ct
     klsy_actor(o, pos, &hv, &hp, &team);
     if (!hv) return;
     e.slot = (unsigned short)slot; e.hp = (short)hp; memcpy(e.p, pos, 12);
-    e.cls = (unsigned short)(klh_rd32(o) & 0xffff); e.team = (short)team;
+    e.cls = (unsigned short)(klsy_vtof(o) & 0xffff); e.team = (short)team;
     memcpy(t->pk + 16 + t->n * KLSY_REC, &e, KLSY_REC); t->n++;
 }
 
@@ -188,7 +223,7 @@ struct klsy_cm { int n, bad, hpbad, idbad, worst_s; float worst; float wo[3], wh
 /* identity of the own actor against the host's record: same class (vtable low 16 bits) and the same, readable team */
 static int klsy_idok(DWORD o, int team, const struct klsy_pe *h)
 {
-    return h->cls == (unsigned short)(klh_rd32(o) & 0xffff) && team != -1 && h->team != -1 && h->team == (short)team;
+    return h->cls == (unsigned short)(klsy_vtof(o) & 0xffff) && team != -1 && h->team != -1 && h->team == (short)team;
 }
 static void klsy_cmp(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
 {
@@ -299,6 +334,154 @@ static void klsy_applysnap(struct klsy_ap *c)
     (void)tried;
 }
 
+/* ---- [Sync] Puppet (client): the stock puppet steers a replicated cop by a velocity toward the replicated state; here the steer is re-issued each
+   frame toward the HOST's place for the cops that stand farther than PuppetTol from it. Game thread only (the tick and the Update wrapper). ---- */
+static int ksp_rx;
+
+static void ksp_wr_vt(DWORD o, DWORD vt, const char *what) { klh_data((void *)(DWORD_PTR)o, &vt, 4, what); }
+
+static struct ksp_e *ksp_find(DWORD o)
+{
+    int i; for (i = 0; i < KSP_MAXE; i++) if (ksp_e[i].o == o) return &ksp_e[i];
+    return 0;
+}
+
+/* give an actor its stock vtable back (only if it still shows ours: freed memory is never written) and free the entry */
+static void ksp_release(struct ksp_e *e, const char *why)
+{
+    if (klh_rd32(e->o) == ksp_ours()) ksp_wr_vt(e->o, KSP_ACTOR_VT, "ZFFActor vtable pointer (puppet release)");
+    if (why) klog("sync: puppet: slot %lu released (%s) after %lu ms: %ld steers in %ld Update calls, %ld controller-mismatch", (unsigned long)e->slot, why, (unsigned long)(GetTickCount() - e->since),
+                  (long)e->steered, (long)e->calls, (long)e->mism);
+    memset(e, 0, sizeof *e); ksp.nlive--;
+}
+static void ksp_release_all(const char *why)
+{
+    int i; if (!ksp.nlive) return;
+    for (i = 0; i < KSP_MAXE; i++) if (ksp_e[i].o) ksp_release(&ksp_e[i], why);
+    ksp.nlive = 0;
+}
+
+/* the wrapper of ZFFActor slot 87: the stock Update first, then (only for an actor in the table with a fresh goal) the steer */
+static void __fastcall ksp_update(void *self, void *edx)
+{
+    DWORD a = (DWORD)(DWORD_PTR)self; struct ksp_e *e;
+    ((ksp_fn)(DWORD_PTR)ksp_orig)(self, edx);
+    if (!ksp.pup || !(e = ksp_find(a))) return;
+    e->calls++;
+    if (GetTickCount() - e->goalAt > 1500) return;                                       /* no fresh host list: let the stock puppet be */
+    __try {
+        DWORD c = klh_rd32(a + 0x8e0), c2 = klh_rd32(a + 0x50c); float pos[3], v[3], z[3] = { 0, 0, 0 }, dx, dz, h, sp;
+        if (!c || c != c2) { e->mism++; return; }                                        /* 0x70f660 would do nothing (cmp at 0x70f66a) */
+        if (!kle_node(klh_rd32(a + 4), pos, 0)) return;
+        dx = e->goal[0] - pos[0]; dz = e->goal[2] - pos[2]; h = (float)sqrt(dx * dx + dz * dz);
+        if (h < ksp.tol * 0.5f) return;
+        sp = ksp.speed; if (sp > h * 4.0f) sp = h * 4.0f;                                /* slow down in the last quarter second */
+        /* GUESS: x / z are the horizontal plane (Y up, as klnetsmooth.c), the first vector is a world velocity in units/s, the second (zero) an angular /
+           secondary vector; 0x73f9f0 only stores them at controller+4..0xc and +0x10..0x18 and sets +0x1c = 1.0 */
+        v[0] = dx / h * sp; v[1] = 0; v[2] = dz / h * sp;
+        ((ksp_steer_fn)(DWORD_PTR)KLH_VA(0x70f660))(self, 0, v, z);
+        e->steered++; ksp.nsteer++;
+    } __except (1) { ksp.faults++; }
+}
+
+static int ksp_prepare(void)
+{
+    if (ksp_ready) return 1;
+    if (!klh_rd((DWORD_PTR)KLH_VA(KSP_ACTOR_VT) - 4, ksp_vtblk, sizeof ksp_vtblk) || ksp_vt[KSP_SLOT] != (DWORD)(DWORD_PTR)KLH_VA(0x40ef60)) {
+        klog("sync: puppet: ZFFActor slot %d is %08lx, not 0x40ef60: this build is not the one read - Puppet off", KSP_SLOT, (unsigned long)ksp_vt[KSP_SLOT]); ksp.pup = 0; return 0;
+    }
+    ksp_orig = ksp_vt[KSP_SLOT]; ksp_vt[KSP_SLOT] = (DWORD)(DWORD_PTR)ksp_update; ksp_ready = 1;
+    klog("sync: puppet: private ZFFActor vtable ready (slot %d -> wrapper of 0x%lx)", KSP_SLOT, (unsigned long)ksp_orig);
+    return 1;
+}
+
+/* a snap for a cop far beyond PuppetSnap: the game's teleport, with the stock vtable on for klt_refuse's class test */
+static void ksp_snap(struct ksp_e *e, const char *nm, const float pos[3])
+{
+    const char *why; int ok = 1;
+    if (!klt_tele_known()) { if (!ksp.toldNoCall) { ksp.toldNoCall = 1; klog("sync: puppet: the game's teleport 0x62a900 is not the known routine: no snaps"); } return; }
+    ksp_wr_vt(e->o, KSP_ACTOR_VT, "ZFFActor vtable pointer (puppet snap)");
+    if ((why = klt_refuse(e->o)) != 0) klog("sync: puppet: slot %lu c=%s NOT snapped: %s", (unsigned long)e->slot, nm, why);
+    else { __try { klt_teleport(e->o, e->goal); } __except (1) { ok = 0; } }
+    if (!why && !ok) klog("sync: puppet: slot %lu c=%s FAULT in the teleport", (unsigned long)e->slot, nm);
+    else if (!why) { ksp.nsnap++; klog("sync: puppet: slot %lu c=%s SNAP %.1f units to (%.1f,%.1f,%.1f) from (%.1f,%.1f,%.1f)", (unsigned long)e->slot, nm, e->dlast, e->goal[0], e->goal[1], e->goal[2], pos[0], pos[1], pos[2]); }
+    ksp_wr_vt(e->o, ksp_ours(), "ZFFActor vtable pointer (puppet snap back)");
+    e->lastSnap = GetTickCount();
+}
+
+/* Step 1 of the report, read-only: the fields that decide whether the stock steer runs (all offsets from the static reading, GUESS as to meaning) */
+static void ksp_diag(DWORD a, DWORD slot, int team, float d)
+{
+    DWORD N = klh_rd32(a + 0x8d8), act = N ? klh_rd32(N + 0x2a0) : 0, own = N ? klh_rd32(N + 0x14) : 0, mv = klh_rd32(a + 0x8e0), mv2 = klh_rd32(a + 0x50c);
+    DWORD p7 = klh_rd32(a + 0x7c0), x7c = p7 ? klh_rd32(p7 + 0x7c) : 0; float tg[3] = { 0, 0, 0 };
+    if (N) klh_rd(N + 0x2ac, tg, 12);
+    klog("sync: puppet diag: t+%lu ms slot %lu t=%d d=%.1f DO=%08lx DO.actor=%08lx%s DO.owner=%08lx ctl[+8e0]=%08lx ctl[+50c]=%08lx%s [[+7c0]+7c]=%08lx +90c=%08lx +918=%08lx DO.moveTo[+2ac]=(%g,%g,%g)",
+         (unsigned long)(GetTickCount() - ksp.roundAt), (unsigned long)slot, team, d, (unsigned long)N, (unsigned long)act, act == a ? "(=self)" : "(NOT self)", (unsigned long)own, (unsigned long)mv, (unsigned long)mv2,
+         mv == mv2 ? "(same)" : "(DIFFERENT: steer skipped)", (unsigned long)x7c, (unsigned long)klh_rd32(a + 0x90c), (unsigned long)klh_rd32(a + 0x918), tg[0], tg[1], tg[2]);
+}
+
+struct klsy_pp { int seen, started, steering, conv, diag, full, idbad; };
+static void klsy_pupfn(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
+{
+    struct klsy_pp *c = (struct klsy_pp *)ctx; float pos[3], dx, dy, dz, d, hp; int hv, team, i; struct ksp_e *e; DWORD now = GetTickCount();
+    (void)kind;
+    for (i = 0; i < klsy.nhost && klsy.host[i].slot != (unsigned short)slot; i++) ;
+    if (i == klsy.nhost) return;
+    klsy_actor(o, pos, &hv, &hp, &team);
+    if (!klsy_idok(o, team, &klsy.host[i])) { c->idbad++; return; }
+    if (!hv || team != ksp.team) return;                                                 /* only the cops' team */
+    if (klsy_human(o, pos)) return;                                                      /* fail closed: a human's body is never touched */
+    if (klsy_isbad(slot)) return;
+    e = ksp_find(o);
+    if (hp <= 0 || klsy.host[i].hp <= 0) { if (e) ksp_release(e, "dead"); return; }
+    c->seen++;
+    dx = pos[0] - klsy.host[i].p[0]; dy = pos[1] - klsy.host[i].p[1]; dz = pos[2] - klsy.host[i].p[2];
+    d = (float)sqrt(dx * dx + dy * dy + dz * dz);
+    if (ksp.diag && c->diag < 8 && (ksp.pass == 1 || (d > ksp.tol && now - ksp.diagAt >= 3000))) { c->diag++; ksp_diag(o, slot, team, d); }
+    if (!ksp.pup) return;
+    if (d > ksp.tol) {
+        if (!e) {
+            int k; for (k = 0; k < KSP_MAXE && ksp_e[k].o; k++) ;
+            if (k == KSP_MAXE || klh_rd32(o) != KSP_ACTOR_VT || !ksp_prepare()) { c->full++; return; }
+            e = &ksp_e[k]; memset(e, 0, sizeof *e); e->o = o; e->slot = slot; e->since = now; e->d0 = d; ksp.nlive++;
+            ksp_wr_vt(o, ksp_ours(), "ZFFActor vtable pointer (puppet)");
+            c->started++;
+            klog("sync: puppet: slot %lu c=%s t=%d START dist %.1f me (%.1f,%.1f,%.1f) goal (%.1f,%.1f,%.1f)", (unsigned long)slot, nm, team, d, pos[0], pos[1], pos[2], klsy.host[i].p[0], klsy.host[i].p[1], klsy.host[i].p[2]);
+        }
+        memcpy(e->goal, klsy.host[i].p, 12); e->goalAt = now; e->inTol = 0; e->dlast = d; e->pass = ksp.pass; c->steering++;
+        if (d > ksp.snap && now - e->lastSnap >= 3000) { ksp_snap(e, nm, pos); return; }
+        if (now - e->lastLog >= 2000) {
+            e->lastLog = now;
+            klog("sync: puppet: slot %lu c=%s goal (%.1f,%.1f,%.1f) dist %.1f (start %.1f, %lu ms ago): %ld steers in %ld Update calls, %ld controller-mismatch", (unsigned long)slot, nm, e->goal[0], e->goal[1], e->goal[2], d, e->d0,
+                 (unsigned long)(now - e->since), (long)e->steered, (long)e->calls, (long)e->mism);
+            if (now - e->since > 2000 && e->calls == 0 && !ksp.toldNoCall) { klog("sync: puppet: slot %lu hooked for %lu ms but the Update wrapper never ran (the game calls 0x40ef60 directly?)", (unsigned long)slot, (unsigned long)(now - e->since)); }
+        }
+    } else if (e) {
+        e->pass = ksp.pass; e->dlast = d;
+        if (++e->inTol >= 4) { ksp.nconv++; klog("sync: puppet: slot %lu c=%s CONVERGED dist %.1f (start %.1f) in %lu ms", (unsigned long)slot, nm, d, e->d0, (unsigned long)(now - e->since)); c->conv++; ksp_release(e, 0); }
+    }
+}
+
+/* one pass (same tick, same thread as the game's frame loop) */
+static void ksp_pass(void)
+{
+    struct klsy_pp c; int j, mx = 0, nh;
+    nh = klsy_humans();
+    if (!nh) { static int told; if (!told) { told = 1; klog("sync: puppet: no local player found: pass skipped (fail closed)"); } return; }
+    for (j = 0; j < klsy.nhost; j++) if (klsy.host[j].slot > mx) mx = klsy.host[j].slot;
+    memset(&c, 0, sizeof c); ksp.pass++;
+    for (j = 0; j < KSP_MAXE; j++) if (ksp_e[j].o && klh_rd32(ksp_e[j].o) != ksp_ours()) { memset(&ksp_e[j], 0, sizeof ksp_e[j]); ksp.nlive--; }      /* gone (freed): nothing is written */
+    klsy.lim = (mx | 63) + 1;
+    klsy_walk(0, klsy_pupfn, &c);
+    klsy.lim = 0;
+    for (j = 0; j < KSP_MAXE; j++) if (ksp_e[j].o && ksp_e[j].pass != ksp.pass) ksp_release(&ksp_e[j], "not seen this pass (dead, human, or gone from the host list)");
+    if (c.diag) ksp.diagAt = GetTickCount();
+    if (c.started || c.conv || c.full || (ksp.pass % 8) == 1)
+        klog("sync: puppet: pass %lu: %d cops checked, %d steering, %d started, %d converged, %d table full / not hookable, %d another class/team; live %d; totals %ld steers %ld snaps %ld converged %d faults", (unsigned long)ksp.pass,
+             c.seen, c.steering, c.started, c.conv, c.full, c.idbad, ksp.nlive, (long)ksp.nsteer, (long)ksp.nsnap, (long)ksp.nconv, ksp.faults);
+    if (ksp.faults > 3) { klog("sync: puppet: %d faults in the steer: Puppet off", ksp.faults); ksp.pup = 0; ksp_release_all("faults"); }
+}
+
 static void klsy_init(void)
 {
     klsy.on = GetPrivateProfileIntA("Sync", "Probe", 0, klh_ini);
@@ -312,13 +495,21 @@ static void klsy_init(void)
     klsy.applyHp = GetPrivateProfileIntA("Sync", "ApplyHp", 0, klh_ini) != 0;
     klsy.applyMax = GetPrivateProfileIntA("Sync", "ApplyMax", 8, klh_ini); if (klsy.applyMax < 1) klsy.applyMax = 1;
     klsy.applyTol = GetPrivateProfileIntA("Sync", "ApplyTol", 150, klh_ini); if (klsy.applyTol < 1) klsy.applyTol = 1;
+    ksp.pup = GetPrivateProfileIntA("Sync", "Puppet", 0, klh_ini) != 0;
+    ksp.diag = GetPrivateProfileIntA("Sync", "PuppetDiag", 0, klh_ini) != 0;
+    ksp.tol = (float)GetPrivateProfileIntA("Sync", "PuppetTol", 60, klh_ini); if (ksp.tol < 5) ksp.tol = 5;
+    ksp.snap = (float)GetPrivateProfileIntA("Sync", "PuppetSnap", 1500, klh_ini); if (ksp.snap < ksp.tol * 2) ksp.snap = ksp.tol * 2;
+    ksp.speed = (float)GetPrivateProfileIntA("Sync", "PuppetSpeed", 300, klh_ini); if (ksp.speed < 1) ksp.speed = 1;
+    ksp.team = GetPrivateProfileIntA("Sync", "PuppetTeam", 3, klh_ini);       /* GUESS: team value 3 = the cops (S2b measurement) */
+    if (ksp.pup || ksp.diag) klog("sync: Puppet=%d PuppetDiag=%d PuppetTol=%.0f PuppetSnap=%.0f PuppetSpeed=%.0f PuppetTeam=%d (client only; needs the host's Share=1)%s", ksp.pup, ksp.diag, ksp.tol, ksp.snap, ksp.speed, ksp.team,
+                                   (ksp.pup && klsy.apply) ? " WARNING: Apply=1 too: the two fight, use Puppet alone" : "");
     if (klsy.apply) klog("sync: Apply=1 ApplyHp=%d ApplyMax=%d ApplyTol=%d (client only: a non-player actor farther than ApplyTol from the host's is teleported to it)", klsy.applyHp, klsy.applyMax, klsy.applyTol);
     if (klsy.on || klsy.share || klsy.cmp)
         klog("sync: Probe=%d Share=%d Compare=%d Every=%lu ShareMs=%lu Max=%d Tol=%.1f (Probe / Share / Compare are read-only)", klsy.on, klsy.share, klsy.cmp, (unsigned long)klsy.every, (unsigned long)klsy.shareMs, klsy.max, klsy.tol10 / 10.0);
 }
 
 /* The round was left (loading, lobby, restart) or has not begun: forget everything received. */
-static void klsy_leave(void) { klsy.inwin = 0; klsy.toldMode = 0; }
+static void klsy_leave(void) { klsy.inwin = 0; klsy.toldMode = 0; ksp_release_all("round left"); ksp_rx = 0; }
 /* Empty the socket (old rounds' / levels' lists queue there while the tick is out of the state window). */
 static void klsy_drain(void)
 {
@@ -330,16 +521,17 @@ static void klsy_drain(void)
 static void klsy_tick(int game_thread)
 {
     DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0;
-    if (!(klsy.on || klsy.share || klsy.cmp || klsy.apply) || !game_thread || !klh_exe_ok) return;
+    if (!(klsy.on || klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag) || !game_thread || !klh_exe_ok) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) { klsy_leave(); return; }
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4)) { klsy_leave(); return; }
     if (klsy.on < 2 && ((role != 2 && role != 3) || mode != 4)) { klsy_leave(); return; }
     if (state < 0x13 || state > 0x1f) { klsy_leave(); return; }                /* in a round (botfill's window) */
-    if ((klsy.share || klsy.cmp || klsy.apply) && !klsy.sock) klsy_open();
+    if ((klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag) && !klsy.sock) klsy_open();
     if (!klsy.inwin) {                                                         /* entering the window: nothing from before this moment counts */
         klsy.inwin = 1; klsy_drain();
         klsy.nhost = 0; klsy.applyRx = 0; klsy.rxT = 0; klsy.rxAnchored = 0; klsy.srcSet = 0; klsy.agree = 0; klsy.nbad = 0;
         klsy.applyAt = 0; klsy.cmpAt = 0; klsy.toldHum = 0; klsy.humLogs = 0; klsy.toldRefuse = 0;
+        ksp_release_all("round start"); ksp_rx = 0; ksp.pass = 0; ksp.pupAt = 0; ksp.diagAt = 0; ksp.roundAt = now;
     }
     if (!klsy.toldMode) { klsy.toldMode = 1; klog("sync: round: role %lu state 0x%lx (probe %d, share %d, compare %d, apply %d)", (unsigned long)role, (unsigned long)state, klsy.on, klsy.share, klsy.cmp, klsy.apply); }
     if (klsy.share && role == 2 && klsy.sock && now - klsy.shAt >= klsy.shareMs) {          /* host: its actors, binary: 'KLSY2' u32 T u16 n, n x {u16 slot, i16 hp, f32 x3, u16 cls, i16 team} */
@@ -356,7 +548,7 @@ static void klsy_tick(int game_thread)
             free(t);
         }
     }
-    if ((klsy.cmp || klsy.apply) && role == 3 && klsy.sock) {                                  /* client: take the newest FRESH host list, compare once a second */
+    if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag) && role == 3 && klsy.sock) {                                /* client: take the newest FRESH host list, compare once a second */
         static char pk[16 + KLSY_MAXP * KLSY_REC]; klsy_sin from; int fl, len, k;
         for (k = 0; k < 256; k++) {                                                            /* drain the whole queue; the newest acceptable list wins */
             WORD cnt; DWORD T; int age;
@@ -371,9 +563,9 @@ static void klsy_tick(int game_thread)
             age = (int)(now - klsy.anchorNow) - (int)(T - klsy.anchorT);                       /* how long this list sat on the way, by the HOST's clock (GUESS: the first list was on time) */
             if (age > (int)(2 * klsy.shareMs)) continue;
             if (!klsy.srcSet) { klsy.srcSet = 1; klsy.srcAddr = from.addr; klog("sync: host list source locked to %lu.%lu.%lu.%lu", from.addr & 255, from.addr >> 8 & 255, from.addr >> 16 & 255, from.addr >> 24); }
-            memcpy(klsy.host, pk + 16, cnt * KLSY_REC); klsy.nhost = cnt; klsy.rxT = T; klsy.rxAt = now; klsy.applyRx = 1;
+            memcpy(klsy.host, pk + 16, cnt * KLSY_REC); klsy.nhost = cnt; klsy.rxT = T; klsy.rxAt = now; klsy.applyRx = 1; ksp_rx = 1;
         }
-        if ((klsy.cmp || klsy.apply) && klsy.nhost && now - klsy.cmpAt >= 1000) {            /* the Compare walk also gives Apply its trust: identity agreement */
+        if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag) && klsy.nhost && now - klsy.cmpAt >= 1000) {            /* the Compare walk also gives Apply its trust: identity agreement */
             struct klsy_cm c; int j, mx = 0, ag; klsy.cmpAt = now; memset(&c, 0, sizeof c); c.worst_s = -1;
             for (j = 0; j < klsy.nhost; j++) if (klsy.host[j].slot > mx) mx = klsy.host[j].slot;
             klsy.lim = (mx | 63) + 1;
@@ -401,6 +593,11 @@ static void klsy_tick(int game_thread)
                 if (c->snapped || c->skipped || c->refused || c->idbad) klog("sync: apply: %d actors checked, %d snapped, %d over the ApplyMax cap, %d refused / faulted, %d another class/team", c->seen, c->snapped, c->skipped, c->refused, c->idbad);
             }
             free(c);
+        }
+        /* Puppet / PuppetDiag: same trust as Apply (System Link / online client, fresh list, identity agreement), up to 4 passes a second */
+        if ((ksp.pup || ksp.diag) && mode == 4 && klsy.agree && ksp_rx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && now - ksp.pupAt >= 250) {
+            ksp_rx = 0; ksp.pupAt = now;
+            ksp_pass();
         }
     }
     if (klsy.on && now - klsy.at >= klsy.every) {
