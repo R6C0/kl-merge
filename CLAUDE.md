@@ -70,7 +70,7 @@ Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-26 ~10:10 - BO13/BO14/BOS2 PASS: bots board online on DM01 and stock DD01 (stacks, van, boarding). BO14 left a carrier who grabbed right after the call: 98d07f8e5 OnlineVanRecall frees the call when the van leaves with a carrier still out; BO15 queued after N9_DD01f. Stock-map benches BOS_DD02..09 (bosmap.py, hook out_recall_1026_test) are running now.
 
-2026-10-26 ~09:35 - BO12 PASS (7/7 alive, 0 stacks: permanent give-up blacklist; fixed 8d15db804, BO13 running). BOS1 = first bots online on a stock map (DD01): PASS, 7/7 alive, 0 of 58 taken: all are vault cases behind kick doors (+0x5c). c3ac3565e skips them ([BotFill] OnlineSkipDoorStacks); BOS2 (hook out_botdoor_1026_test) checks whether the squad script then kicks the doors, else the host must open them. Then N9_DD01f (12-row HUD), SV1, B3, N9_DM09e.
+2026-10-26 ~10:25 - [kl-merge-ce] Cover fix installed on 8 maps (08:28). COVER14: DM07 8/8, DD10 8/8, DM11B 7/8, DM03A 7/8, DM09 3/8 (drift, one death); DM01B/DM06/DM06B low because police DOWNED the test player (test fault). COVER15 (no damage to you, 26ca8d0cc) re-runs those + DM09; DM01/02/03 installs + COVER15 follow N9_DM09e.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
