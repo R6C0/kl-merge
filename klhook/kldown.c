@@ -2262,6 +2262,19 @@ static DWORD kld_o_pl(DWORD now)
 /* Is the Cover key (or the pad button) down now? GetAsyncKeyState and XInput, looked up at run time, only while the game's window is in front
    (the pattern of kladren.c / klucc.c). The game's own press byte [D+0x2b] cannot be counted: the hold keeps it at 0. GUESS: the owner has not
    rebound Cover (MashKey says which key); the pad's A (0x1000) is the Cover button on a pad - NOT READ, MashPadBtn changes it. */
+/* MashMenuGate: 1 = a menu page is open (pause, shop, respawn, status): the menu system's window stack [[[0xdd265c]+0x824]+4] count +0x328
+   (push 0x6bf368, pop 0x6bf286, close-all 0x6bf319; klslot.c / klqol2.c read the same stack). Mid-round Arcade logs show 0 windows; an online round
+   with a page kept open would switch the mash off (GUESS that it never does: not yet seen live, re/down_online_menu_gate.md). Unreadable = not open. */
+static int kld_o_mgate = 1;
+static int kld_o_menu_open(void)
+{
+    DWORD gd, mgr, w, n;
+    if (!kld_o_mgate) return 0;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(mgr = klh_rd32(gd + 0x824)) || klh_rd32(mgr) != 0x00bb7dc8u || !(w = klh_rd32(mgr + 4)) || klh_rd32(w) != 0x00baf2fcu) return 0;      /* KLS_MENUMGR_VT / KLS_WSYS_VT (klslot.c, included after this file) */
+    n = klh_rd32(w + 0x328);
+    return n > 0 && n <= 24;
+}
+
 static int kld_o_keydown(void)
 {
     static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static SHORT (WINAPI *aks)(int); static int tried, xtried;
@@ -2283,6 +2296,7 @@ static int kld_o_keydown(void)
     if (!(fg = fgw())) return 0;               /* no window in front at this instant (alt-tab, a dialog): no key counts, but the functions exist - not 'no key source' */      /* -1 = no way to read a key: kld_o_step turns the hold off (a held man nobody can free) */
     wtp(fg, &pid);
     if (pid != GetCurrentProcessId()) return 0;
+    if (kld_o_menu_open()) return 0;          /* pause / shop / menu text entry: C or pad A there is not a mash press */
     if (kld_o.key && (aks(kld_o.key) & 0x8000)) return 1;
     if (kld_o.pad && xgs) { memset(&xs, 0, sizeof xs); if (xgs(0, &xs) == 0) { if (xs.btn) kld_o.padseen = GetTickCount() | 1; if (xs.btn & kld_o.padbtn) return 1; } }      /* xgs is the DLL's own function: the exe's wrapped import is not on this path */
     return 0;
@@ -2711,6 +2725,7 @@ static void kld_init(void)
     { float mx = kld_inif("MashMax", "25"); kld_o.maxlie = !kld_fin(mx) || mx < 0 || mx > 600.0f ? 25000 : (DWORD)(mx * 1000.0f); }      /* 25 s: a hold must never be a trap (focus lost, a rebound key); 0 = no bound */
     { char kb[16]; GetPrivateProfileStringA("Down", "MashKey", "0x43", kb, sizeof kb, klh_ini); kld_o.key = (int)strtol(kb, 0, 0); if (kld_o.key < 0 || kld_o.key > 0xfe) kld_o.key = 0x43; }
     kld_o.pad = GetPrivateProfileIntA("Down", "MashPad", 1, klh_ini) != 0;
+    kld_o_mgate = GetPrivateProfileIntA("Down", "MashMenuGate", 1, klh_ini) != 0;      /* (recommended on): presses in a menu page do not fill the meter */
     /* MashHoldHow: 2 = hold only the Cover key / pad button (default, recommended on); 1 = the old mask bit 0x80 (blocks fire too). MashScan = the DIK scan code
        of the Cover key the game reads (0 = derived from MashKey: MapVirtualKey to the set-1 scan code, 0x80 added for an extended key; DIK codes are those). */
     kld_o.how = GetPrivateProfileIntA("Down", "MashHoldHow", 2, klh_ini) == 1 ? 1 : 2;
