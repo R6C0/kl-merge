@@ -204,6 +204,12 @@ feat('onlinevangather', G_EXP, 'Online AI heisters all walk to the escape box fi
      'klbotfill.c [BotFill] OnlineVanGather (+ OnlineGatherM 12 m / OnlineGatherMaxS 25 s, GUESS); BO11: the carrier called the van while the others were 28-41 m away; NOT run live', [('BotFill', 'OnlineVanGather', 1, 0, 1)])
 feat('onlinevanhold', G_EXP, 'The online escape van waits (invulnerable, timer kept up, no blow-up) while AI heisters are walking to the box, at most 15 s (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineVanHold (+ OnlineHoldM 30 m, OnlineHoldNearM 18 m, OnlineHoldMaxS 15 s, GUESS); re/van_hold_online.md; BO11: state 3 -> 6 after 1 s, van shot empty; data writes only; NOT run live', [('BotFill', 'OnlineVanHold', 1, 0, 1)])
+feat('onlinegiveupretry', G_EXP, 'Online AI heisters try a stack again 45 s after giving it up instead of never again (recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineGiveUpRetry (+ OnlineGiveUpRetryS 45 s, GUESS); BO12: 4 given-up stacks stayed blacklisted and the bots idled 3 min; NOT run live', [('BotFill', 'OnlineGiveUpRetry', 1, 0, 1)])
+feat('onlineidlevan', G_EXP, 'Online AI heisters with no loot left call the escape van instead of idling (recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineIdleVan (+ OnlineIdleVanS 20 s, GUESS); BO12: 0 grabs so nobody called the van; NOT run live', [('BotFill', 'OnlineIdleVan', 1, 0, 1)])
+feat('onlinefirestall', G_EXP, 'Online AI heisters under cop fire are not counted as stuck on their way to loot (recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineFireStall; BO12: bots pinned down by cops gave up stacks after 12 s; 90 s cap kept; NOT run live', [('BotFill', 'OnlineFireStall', 1, 0, 1)])
 feat('onlineboxwalk', G_EXP, 'Online AI heisters walk to the escape box once the van is called and count as aboard only inside it (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxWalk; BO9: the exit trigger is ~570 cm from the DM01 AllyEscapeBox; read-only scan, game inside test 0x758cb0; NOT run live', [('BotFill', 'OnlineBoxWalk', 1, 0, 1)])
 feat('onlineboard', G_EXP, 'Online AI heisters inside the escape box while the van waits are removed from the match like in Arcade (recommended off until tested)', 'off', 'start',

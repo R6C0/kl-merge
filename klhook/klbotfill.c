@@ -38,6 +38,7 @@ static int klbf_ot_vstate = 1, klbf_ot_late = 75; static DWORD klbf_ot_calledAt;
 static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [BotFill] OnlineBoxWalk, OnlineBoard, OnlineBoxProbe (the ZAllyEscapeBox block below) */
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
+static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20;      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
 /* Step 3 (default off, SHIP-safe: one heap BYTE per squad). Squads are ZSquadScript entities (vtable 0xbcce3c); [squad+0x34] is the
@@ -106,6 +107,12 @@ static void klbf_init(void)
     klbf_ot_hm = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineHoldM", 30, klh_ini); if (klbf_ot_hm < 500.0f) klbf_ot_hm = 500.0f;      /* GUESS 30 m (re/van_hold_online.md) */
     klbf_ot_hnear = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineHoldNearM", 18, klh_ini); if (klbf_ot_hnear < 500.0f) klbf_ot_hnear = 500.0f;      /* GUESS 18 m (research: 15-20 m) */
     klbf_ot_hmax = (int)GetPrivateProfileIntA("BotFill", "OnlineHoldMaxS", 15, klh_ini); if (klbf_ot_hmax < 1) klbf_ot_hmax = 1; if (klbf_ot_hmax > 30) klbf_ot_hmax = 30;      /* GUESS 15 s (research: cap 15-20 s; N1 saw a van held 15 s destroyed unshielded) */
+    klbf_ot_retry = GetPrivateProfileIntA("BotFill", "OnlineGiveUpRetry", 1, klh_ini) != 0;      /* (recommended on) BO12: 4 given-up stacks stayed blacklisted for the whole round and the bots idled for 3 min */
+    klbf_ot_retryS = (int)GetPrivateProfileIntA("BotFill", "OnlineGiveUpRetryS", 45, klh_ini); if (klbf_ot_retryS < 5) klbf_ot_retryS = 5; if (klbf_ot_retryS > 600) klbf_ot_retryS = 600;      /* GUESS 45 s */
+    klbf_ot_idlevan = GetPrivateProfileIntA("BotFill", "OnlineIdleVan", 1, klh_ini) != 0;      /* (recommended on) BO12: 0 grabs = nobody ever called the van */
+    klbf_ot_idleS = (int)GetPrivateProfileIntA("BotFill", "OnlineIdleVanS", 20, klh_ini); if (klbf_ot_idleS < 5) klbf_ot_idleS = 5; if (klbf_ot_idleS > 300) klbf_ot_idleS = 300;      /* GUESS 20 s with no stack left at all */
+    klbf_ot_firestall = GetPrivateProfileIntA("BotFill", "OnlineFireStall", 1, klh_ini) != 0;      /* (recommended on) BO12: bots pinned down by cops were counted as stalled after 12 s */
+    if (klbf_ot) klog("botfill: OnlineTactics BO12 fixes: OnlineGiveUpRetry=%d (recommended on, %d s), OnlineIdleVan=%d (recommended on, %d s), OnlineFireStall=%d (recommended on)", klbf_ot_retry, klbf_ot_retryS, klbf_ot_idlevan, klbf_ot_idleS, klbf_ot_firestall);
     if (klbf_ot) klog("botfill: OnlineTactics van gather/hold: OnlineVanGather=%d (recommended on; GatherM %.0f m, GatherMaxS %d s), OnlineVanHold=%d (recommended on; HoldM %.0f m shield, HoldNearM %.0f m timer, HoldMaxS %d s)", klbf_ot_vgather, klbf_ot_gm / 100, klbf_ot_gmax, klbf_ot_vhold, klbf_ot_hm / 100, klbf_ot_hnear / 100, klbf_ot_hmax);
     if (klbf_ot) klog("botfill: OnlineTactics box: OnlineBoxWalk=%d (recommended on), OnlineBoard=%d (recommended off until tested), OnlineBoxProbe=%d (log only)", klbf_ot_bwalk, klbf_ot_board, klbf_ot_bprobe);
     if (klbf_ot) klog("botfill: OnlineTactics van/late: OnlineVanState=%d (recommended on), OnlineLateExit=%d s (recommended 75; 0 = off)", klbf_ot_vstate, klbf_ot_late);
@@ -137,8 +144,8 @@ static void klbf_init(void)
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 #define KLBF_OT_GUARDWAIT 30000   /* ms a bot holds while every free stack is guarded (OnlineTacticsGuard) before it takes the nearest guarded one */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt; } klbf_ob[KLBF_OT_BOTS];
-static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt; } klbf_ob[KLBF_OT_BOTS];
+static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ], klbf_ot_badAt[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
 
 /* OnlineHealthMul (2026-10-26, workflow wg4n9od9h, BO5): online the cops' damage on the Ally bots skips Arcade's damage table. 0x61a980 (ZFFActor hit)
@@ -275,6 +282,8 @@ static int klbf_ot_board_call(DWORD actor)
 }
 
 static int klbf_ot_has(const DWORD *a, int n, DWORD v) { int i; for (i = 0; i < n; i++) if (a[i] == v) return 1; return 0; }
+/* a given-up stack: blacklisted for the round (OnlineGiveUpRetry off) or for OnlineGiveUpRetryS seconds from the give-up (on) */
+static int klbf_ot_isbad(DWORD v, DWORD now) { int i; for (i = 0; i < klbf_ot_nbad; i++) if (klbf_ot_bad[i] == v && (!klbf_ot_retry || now - klbf_ot_badAt[i] < (DWORD)klbf_ot_retryS * 1000u)) return 1; return 0; }
 
 /* OnlineBoxProbe (log only): where the van really is, for the next BO run. BO9: the ZAnimatedVehicle node stays at (0,0,0); GUESS: its group [rules+0x1e4] or the boarding object [rules+0x1e0] carries the place */
 static void klbf_ot_vprobe(DWORD rules, int vstate)
@@ -372,12 +381,12 @@ static void klbf_ot_run(DWORD now, DWORD sm)
 {
     DWORD p, tab, i, blk[64 * 32], mo[KLBF_OT_OBJ], van = 0; float mpos[KLBF_OT_OBJ][3], vpos[3] = { 0, 0, 0 }; int mamt[KLBF_OT_OBJ], nm = 0, n = 0, b, nmoney = 0, nvan = 0;
     struct { DWORD actor, soldier; float pos[3]; } bots[KLBF_OT_BOTS]; int nb = 0; char why[100];
-    static float cops[256][3]; int ncop = 0; DWORD rules = 0; int vstate = -1; float left = 1e9f;
+    static float cops[256][3]; int ncop = 0, vnew; DWORD rules = 0; int vstate = -1; float left = 1e9f;
     if (now - klbf_ot_last < 1000) return;
     klbf_ot_last = now;
     if (sm != (DWORD)klbf_ot_sm || !klbf_ot_in) {      /* a new session / round */
         if (klbf_ot_in) klbf_ot_summary();
-        memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
+        memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
         klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = klbf_ot_lookAt = 0; klbf_ot_trig_looked = klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_ot_nbx = klbf_ot_bxlooks = 0; klbf_ot_bxbest = -1; klbf_ot_bxAt = 0;
         klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
@@ -447,6 +456,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
     if (!van && klbf_ot_van && rules && !klbf_ot_trig_looked && klbf_ot_looks < 6 && (!klbf_ot_lookAt || now - klbf_ot_lookAt >= 20000)) {      /* the exit trigger: when the first bot carries money (a private-memory scan, klmove.c); a miss is retried every 20 s, 6 times a round */
         int q; for (q = 0; q < KLBF_OT_BOTS && !(klbf_ob[q].actor && klbf_ob[q].tally > 0); q++) ;
+        if (q == KLBF_OT_BOTS && klbf_ot_idlevan && klbf_ot_vidle) q = 0;      /* OnlineIdleVan: a bot with nothing left to do needs the trigger too */
         if (q < KLBF_OT_BOTS) {
             DWORD t0 = GetTickCount(), ent, node;
             klbf_ot_lookAt = now; klbf_ot_looks++;
@@ -471,6 +481,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (r == nb) { klog("botfill: tactics: bot %d (actor %08lx) is dead or gone: slot freed (phase %d, tally %d)", q, klbf_ob[q].actor, klbf_ob[q].phase, klbf_ob[q].tally); memset(&klbf_ob[q], 0, sizeof klbf_ob[q]); }
         }
     }
+    vnew = 0;
     for (b = 0; b < nb; b++) {
         int s, j, best = -1; float bd = 1e30f, tgt[3], got[3]; struct kle_e t; struct klmv_fr t_bf; DWORD a = bots[b].actor;
         for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != a; s++) ;
@@ -492,18 +503,25 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klbf_ob[s].phase = 0;
             } else {
                 if (!klbf_ob[s].bestAt || dh < klbf_ob[s].best - 200.0f) { klbf_ob[s].best = dh; klbf_ob[s].bestAt = now; }      /* 2 m closer = progress */
+                if (klbf_ot_firestall && klbf_ob[s].bestAt) {      /* OnlineFireStall: a bot with a live cop near is pinned down by the game's own combat, not stuck: the 12 s clock pauses (the 90 s cap still runs) */
+                    float fr = klbf_ot_guard > 0 ? klbf_ot_guard : 2500.0f; int c;
+                    for (c = 0; c < ncop; c++) if (kle_dist(cops[c], bots[b].pos) <= fr) { klbf_ob[s].bestAt = now; break; }
+                }
                 if (now - klbf_ob[s].bestAt > KLBF_OT_STALL || now - klbf_ob[s].since > KLBF_OT_STALLMAX) {
-                    if (klbf_ot_nbad < KLBF_OT_OBJ) klbf_ot_bad[klbf_ot_nbad++] = o;
+                    int copAtStack = 0;
+                    if (klbf_ot_retry && klbf_ot_guard > 0) { int c; for (c = 0; c < ncop; c++) if (kle_dist(cops[c], mp) <= klbf_ot_guard) { copAtStack = 1; break; } }      /* OnlineGiveUpRetry: a cop on the stack = the guard rule holds the bots off it, no blacklist */
+                    if (!copAtStack && klbf_ot_nbad < KLBF_OT_OBJ) { klbf_ot_badAt[klbf_ot_nbad] = now; klbf_ot_bad[klbf_ot_nbad++] = o; }
                     klog("botfill: tactics: bot %d (actor %08lx) did not reach stack %08lx (%.0f m left, %lu s walking, no 2 m of progress for %lu s): given up on it", s, a, o, dh / 100, (unsigned long)((now - klbf_ob[s].since) / 1000), (unsigned long)((now - klbf_ob[s].bestAt) / 1000)); klbf_ob[s].phase = 0;
                 }
             }
         }
         if (klbf_ob[s].phase == 0) {
-            int nguard = 0, gbest = -1; float gbd = 1e30f;
+            int nguard = 0, gbest = -1, idleVan = 0, nhold = 0; float gbd = 1e30f;
             for (j = 0; j < nm; j++) {
                 float d; int c, guarded = 0;
-                if (klbf_ot_has(klbf_ot_claimed, klbf_ot_nclaim, mo[j]) || klbf_ot_has(klbf_ot_bad, klbf_ot_nbad, mo[j])) continue;
-                { int q, taken = 0; for (q = 0; q < KLBF_OT_BOTS; q++) if (q != s && klbf_ob[q].actor && klbf_ob[q].phase == 1 && klbf_ob[q].target == mo[j]) taken = 1; if (taken) continue; }
+                if (klbf_ot_has(klbf_ot_claimed, klbf_ot_nclaim, mo[j])) continue;
+                if (klbf_ot_isbad(mo[j], now)) { nhold++; continue; }      /* review: a stack that is only blacklisted for now still counts as a stack left (OnlineIdleVan) */
+                { int q, taken = 0; for (q = 0; q < KLBF_OT_BOTS; q++) if (q != s && klbf_ob[q].actor && klbf_ob[q].phase == 1 && klbf_ob[q].target == mo[j]) taken = 1; if (taken) { nhold++; continue; } }
                 d = kle_dist(bots[b].pos, mpos[j]);
                 /* OnlineTacticsGuard: BO5's guard cops stood ON the stacks (slots 706/711/851/852 within 3 m of 4 targets) and every bot walked alone into them */
                 if (klbf_ot_guard > 0) for (c = 0; c < ncop && !guarded; c++) if (kle_dist(cops[c], mpos[j]) <= klbf_ot_guard) guarded = 1;
@@ -516,6 +534,16 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klog("botfill: tactics: bot %d (actor %08lx): every free stack has had a live cop within %.0f m for %lu s: taking the nearest guarded one", s, a, klbf_ot_guard / 100, (unsigned long)((now - klbf_ob[s].idleAt) / 1000));
             } else if (best < 0 && gbest >= 0 && klbf_ob[s].tally == 0 && !(klbf_ob[s].told & 4) && (klbf_ob[s].told |= 4))      /* a bot with money goes to the van instead */
                 klog("botfill: tactics: bot %d (actor %08lx): %d free stack(s), all with a live cop within %.0f m: it holds (%s) while they are cleared", s, a, nguard, klbf_ot_guard / 100, klbf_ot_gtake ? "up to 30 s, OnlineGuardTake=1" : "until a stack is clear, OnlineGuardTake=0");
+            {   /* OnlineIdleVan: no stack for this bot (blacklisted, taken, none armed) and nothing carried: after OnlineIdleVanS with no stack left at all, or with the clock low, it goes to the exit and the van is called (BO12: 0 grabs, nobody called it) */
+                int nostack = best < 0 && !(klbf_ot_gtake && gbest >= 0);
+                if (klbf_ot_idlevan && nostack && klbf_ob[s].tally == 0) {
+                    if (!klbf_ob[s].vidleAt) klbf_ob[s].vidleAt = now;
+                    if ((gbest < 0 && !nhold && now - klbf_ob[s].vidleAt >= (DWORD)klbf_ot_idleS * 1000u) || (klbf_ot_late && left <= (float)(klbf_ot_late + 20))) {
+                        idleVan = 1; vnew = 1;
+                        if (!(klbf_ob[s].told & 128) && (klbf_ob[s].told |= 128)) klog("botfill: tactics: bot %d (actor %08lx): no stack to take (%d guarded, %lu s idle, clock left %.0f s) and nothing carried: goes to the exit to call the van (OnlineIdleVan)", s, a, nguard, (unsigned long)((now - klbf_ob[s].vidleAt) / 1000), left);
+                    }
+                } else klbf_ob[s].vidleAt = 0;
+            }
             if (klbf_ot_late && klbf_ob[s].tally > 0 && left <= (float)klbf_ot_late && best >= 0) {      /* OnlineLateExit (BO9 rules A/B): a carrier takes no new stack late in the round, it heads for the van */
                 if (!(klbf_ob[s].told & 16) && (klbf_ob[s].told |= 16)) klog("botfill: tactics: bot %d (actor %08lx): clock left %.0f s <= OnlineLateExit %d: no new stack, tally %d goes to the van", s, a, left, klbf_ot_late, klbf_ob[s].tally);
                 best = -1;
@@ -524,7 +552,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klbf_ob[s].phase = 1; klbf_ob[s].target = mo[best]; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].told &= ~4;
                 memcpy(tgt, mpos[best], 12);
                 klog("botfill: tactics: bot %d (actor %08lx soldier %08lx) -> stack %08lx (%d) at (%.0f, %.0f, %.0f), %.0f m away", s, a, bots[b].soldier, mo[best], mamt[best], tgt[0], tgt[1], tgt[2], bd / 100);
-            } else if (klbf_ob[s].tally > 0) {      /* BO3: with nothing carried a bot waited at the van for nothing; it now waits for an armed stack */
+            } else if (klbf_ob[s].tally > 0 || idleVan) {      /* BO3: with nothing carried a bot waited at the van for nothing; it now waits for an armed stack */
                 if (!van && !(klbf_ot_vh && !klbf_ot_called)) { if (!(klbf_ob[s].told & 1) && (klbf_ob[s].told |= 1)) klog("botfill: tactics: bot %d (actor %08lx): wants the van but it is not here and %s", s, a, klbf_ot_called ? "it was called already" : "no exit trigger was found to call it from"); continue; }
                 klbf_ob[s].phase = 2; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0;
                 if (van) klog("botfill: tactics: bot %d (actor %08lx) -> escape van %08lx at (%.0f, %.0f, %.0f) with tally %d (%d grab(s))", s, a, van, vpos[0], vpos[1], vpos[2], klbf_ob[s].tally, klbf_ob[s].grabs);
@@ -583,6 +611,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             else if (why[0] && !(klbf_ob[s].told & 2) && (klbf_ob[s].told |= 2)) klog("botfill: tactics: bot %d (actor %08lx): order refused: %s", s, a, why);
         }
     }
+    klbf_ot_vidle = vnew;
     {   /* OnlineVanGather decision + OnlineVanHold pass: the walking bots' (phase 2) horizontal distance to the goal (box centre, else the exit trigger) */
         float gc[3], dmin = 1e30f, dmax = 0; int np = 0, q, r, have = klbf_ot_goal(gc);
         for (q = 0; have && q < nb; q++) {
