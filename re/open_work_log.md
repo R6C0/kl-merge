@@ -1,3 +1,6 @@
+2026-10-26 ~14:20 - BOS_DD07 PASS 4/7 boarded on out_sprint_1026_test: OnlineExitSprint works (all 7 'exit walk at Sprint', style was 0/1; the whole crew at the trigger ~50 s after the order).
+The other 3 stood 2-10 m off the trigger centre during the 19 s wait (crowding) and missed the 3 m (2*Near) test. Fix: [BotFill] OnlineExitCrowd=1200 cm (recommended), 5 s within it while the van waits (state 3/4) counts as aboard (maps with no escape box).
+Sprint = 2 checked in kl2.exe's ZEnumInfo (0xcfccb8). Build out_crowd_1026_test f2f94e37; queue: DD06s, DD07c, DD08, DD09, DD02s, CNR2, DD04j on it.
 2026-10-26 ~14:10 - OWNER answered the six UCC questions (re/ucc_design.md "OWNER DECISIONS"): reveal by own key only;
 police shoot the hidden UCC; his hits only DOWN heisters while hidden; bounty 200k hidden / 400k revealed; two UCCs who
 know each other; research all three sabotages; suspicion pings on plus a heister accuse key. Cloud session building/researching.

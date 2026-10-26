@@ -39,7 +39,7 @@ static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [Bo
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
 static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
-static int klbf_ot_bforce = 1, klbf_ot_recall = 1;static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20; static float klbf_ot_exitdy = 800.0f; static float klbf_ot_bslack = 100.0f; static int klbf_ot_joincall = 1; static int klbf_ot_sprint = 1;      /* [BotFill] OnlineExitSprint (BOS_DD06: 7 carriers WALKED 180 m to the exit at ~0.7 m/s, 0 boarded) */      /* [BotFill] OnlineJoinCalled (BOS_DD04: 4 carriers stood 100 m off while the van came for bot 5) */      /* [BotFill] OnlineBoxSlack (cm): BOS_DD02x2 bot 0 stood 0.5 m outside the box frame for the whole van wait (nav snap of the box centre) */      /* [BotFill] OnlineExitDy: height window round the exit trigger's node (BOS_DD02r: the bots stood on the trigger's own nav poly 6.2 m under DD02's centre y 6620, outside the old 400) */      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
+static int klbf_ot_bforce = 1, klbf_ot_recall = 1;static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20; static float klbf_ot_exitdy = 800.0f; static float klbf_ot_bslack = 100.0f; static int klbf_ot_joincall = 1; static int klbf_ot_sprint = 1; static float klbf_ot_crowd = 1200.0f;      /* [BotFill] OnlineExitCrowd (cm; BOS_DD07: 3 bots 2-10 m off the trigger centre during the whole wait) */      /* [BotFill] OnlineExitSprint (BOS_DD06: 7 carriers WALKED 180 m to the exit at ~0.7 m/s, 0 boarded) */      /* [BotFill] OnlineJoinCalled (BOS_DD04: 4 carriers stood 100 m off while the van came for bot 5) */      /* [BotFill] OnlineBoxSlack (cm): BOS_DD02x2 bot 0 stood 0.5 m outside the box frame for the whole van wait (nav snap of the box centre) */      /* [BotFill] OnlineExitDy: height window round the exit trigger's node (BOS_DD02r: the bots stood on the trigger's own nav poly 6.2 m under DD02's centre y 6620, outside the old 400) */      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
 /* Step 3 (default off, SHIP-safe: one heap BYTE per squad). Squads are ZSquadScript entities (vtable 0xbcce3c); [squad+0x34] is the
@@ -122,6 +122,9 @@ static void klbf_init(void)
     klbf_ot_joincall = GetPrivateProfileIntA("BotFill", "OnlineJoinCalled", 1, klh_ini) != 0;      /* (recommended on) */
     if (klbf_ot) klog("botfill: OnlineTactics join called van: OnlineJoinCalled=%d (recommended on)", klbf_ot_joincall);
     klbf_ot_sprint = GetPrivateProfileIntA("BotFill", "OnlineExitSprint", 1, klh_ini) != 0;      /* (recommended on) */
+    klbf_ot_crowd = (float)GetPrivateProfileIntA("BotFill", "OnlineExitCrowd", 1200, klh_ini);      /* (recommended 1200) cm round the exit trigger that count as aboard after 5 s of van wait; 0 = off */
+    if (klbf_ot_crowd < 0) klbf_ot_crowd = 0;
+    if (klbf_ot) klog("botfill: OnlineTactics exit crowd: OnlineExitCrowd=%.0f cm after 5 s of van wait (recommended 1200, 0 = off)", klbf_ot_crowd);
     if (klbf_ot) klog("botfill: OnlineTactics exit sprint: OnlineExitSprint=%d (recommended on): a bot walking to the exit / box gets the Defend move style Sprint, as stock levels give the last dash to the vehicle", klbf_ot_sprint);
     if (klbf_ot) klog("botfill: OnlineTactics box slack: OnlineBoxSlack=%.0f cm after 8 s of van wait (recommended 100, 0 = off)", klbf_ot_bslack);
     klbf_ot_exitdy = (float)GetPrivateProfileIntA("BotFill", "OnlineExitDy", 800, klh_ini);      /* GUESS: 800 covers a trigger centre floating ~6 m over its floor (DD02 610) without taking a bot on a floor 8 m below */
@@ -791,6 +794,14 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineVanState; hook tally only, %.0f m from the exit trigger): tally %d", s, a, vstate, dd / 100, klbf_ob[s].tally);
                 continue;
             }
+            if (!van && !bxOn && klbf_ot_crowd > 0 && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= klbf_ot_crowd && fabs(bots[b].pos[1] - g[1]) <= klbf_ot_exitdy) {      /* OnlineExitCrowd (BOS_DD07): 7 sprinting bots crowd the trigger; 3 stood 2-10 m off its centre for the whole 19 s wait and missed the 3 m (2*Near) test. GUESS: the game's van takes a crew member standing at the trigger's edge (the stall call already trusts 15 m) */
+                if (!klbf_ob[s].nearAt) klbf_ob[s].nearAt = now;
+                else if (now - klbf_ob[s].nearAt >= 5000) {
+                    klbf_ob[s].phase = 3;
+                    klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineExitCrowd %.0f cm: %.1f m from the exit trigger for %lu s of van wait; hook tally only): tally %d", s, a, vstate, klbf_ot_crowd, dd / 100, (unsigned long)((now - klbf_ob[s].nearAt) / 1000), klbf_ob[s].tally);
+                    continue;
+                }
+            } else if (!bxOn) klbf_ob[s].nearAt = 0;
             legsLeft = !van && !bxOn && klbf_ot_vh && !klbf_ot_called && klbf_way_n > 0 && klbf_ob[s].leg < klbf_way_n;
             if (legsLeft) {      /* OnlineWaypoints: reached (300 units horizontally) or 15 s on this leg -> next; the stall / give-up clocks below do not run while legs remain (the 15 s per leg is their clock) */
                 const float *wp = klbf_way_p[klbf_ob[s].leg]; float wd = (float)sqrt((bots[b].pos[0] - wp[0]) * (bots[b].pos[0] - wp[0]) + (bots[b].pos[2] - wp[2]) * (bots[b].pos[2] - wp[2]));
