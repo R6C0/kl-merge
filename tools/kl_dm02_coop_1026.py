@@ -18,6 +18,7 @@ GUESSES (each also in a comment): a PlayerAction may activate PathBlocker / Deac
   clones render and light from the root room trees; ZLIGHT[2] (baked shadow chunk) emptied on every light clone; cloned props are walk-through
   (no HVK, as the counters before them); shop floor = the shutter's y; a double use (solo + co-op) re-blocks the PathBlocker (eToggle).
 usage (from tools/):  python kl_dm02_coop_1026.py patch <live F02_Main.zip 1dd14609> <out folder> [--rehearse <scratch>]   (solo lift re-arm fix, 2 variants)
+                      python kl_dm02_coop_1026.py patch2 <live F02_Main.zip 0426cf23> <out folder> [--rehearse <scratch>]   (solo_open / solo_lift2)
                       python kl_dm02_coop_1026.py stage <in F02_Main.zip> <out folder> [--rehearse <scratch>]
 """
 import collections, json, math, os, shutil, struct, sys, zipfile
@@ -525,6 +526,130 @@ def stage_patch(src, out, scratch=None, log=print):
     return reps
 
 
+LIVE_MD5_2 = '0426cf238945a61656fdda99c3be456f'    # live DM02 zip 2026-10-26 03:50 (SoloLift fields 12 = 1, 13 = 1)
+TAG_SOLO2 = '.before-1026solo2'
+LIFT_HALF = (150.0, 200.0, 330.0)                  # new SoloLift half sizes (were 57 x 124 x 62): see patch2()
+
+
+def patch2(src, dst, mode, force=False, log=print):
+    """2026-10-26 (two live runs on 1dd14609 / 0426cf23: shutter still closed; offline analysis). Only the .prp changes.
+    mode 'open': solo / Arcade (RECOMMENDED, no button): the three co-op shutters are appended to KL_Shops_OpenNow (the DeactivateGeom the
+        round-start timer KLShops_OpenTimer -> AIMonitor field 2 already fires for the always-open frontages; that mechanism opens
+        shutters live). The SoloLift PlayerActions are disabled (field 8 = 0) so no useless prompt shows. Costs the co-op shutters online
+        (they stand open from the start): the install/undo pair is the toggle.
+    mode 'lift': keep the button but fix the likely cause: kl2 0x40ddf0 needs the player within 150 of the box (max-axis excess, 0x864280),
+        and the box was 57 x 124 x 62 half, 80 along the span: the teleport spot was 162 out, the stuck spot 155 out. Box -> half 150 x 200 x 330
+        (covers the whole opening incl. the PathBlocker at lat 161..473), field 13 back to 0 (13 = 1 hides the prompt, kl2 0x550992),
+        field 12 = 1 (harmless), field 8 = 1.
+    GUESSES: DeactivateGeom drops the shutter's Havok shape (precedent: Retomoto window, OpenNow frontages; not seen on these three);
+    the node position is the box centre; half sizes are props 8..10 (read off the live node); no kill/fail trigger exists at the
+    shutter (MissionFailedReload is the generic Arcade-solo one, DM05A shows it without any lift). PlayerAction lists never run online (0x837320
+    needs session role <= 1), so 'lift' is solo/Arcade only."""
+    have = S.md5(src)
+    if have != LIVE_MD5_2 and not force:
+        raise ValueError('%s: md5 %s is not the live DM02 zip (%s)' % (src, have, LIVE_MD5_2))
+    if mode not in ('open', 'lift'):
+        raise ValueError(mode)
+    B = F.Built(src, 'F02')
+    sc = B.sc
+    hits = [k for k in range(1, len(sc.names)) if sc.names[k].endswith('!SoloLift')]
+    opens = [k for k in range(1, len(sc.names)) if sc.names[k].startswith('KLCoop') and sc.names[k].endswith('!Open')]
+    now = [k for k in range(1, len(sc.names)) if sc.names[k] == 'KLShops_OpenNow']
+    if len(hits) != 3 or len(opens) != 3 or len(now) != 1:
+        raise ValueError('%d SoloLift, %d Open, %d OpenNow' % (len(hits), len(opens), len(now)))
+    for k in hits:
+        i = [j for j, (nm, _b) in enumerate(sc.nodes[k]['ctrls']) if sc.p.key(nm) == 'PlayerAction']
+        if len(i) != 1:
+            raise ValueError('%s: %d PlayerActions' % (sc.names[k], len(i)))
+        def fn(us):
+            if len(us) != 21 or us[12][0][0] != 6 or us[13][0][0] != 6 or us[8][0][0] != 6:
+                raise ValueError('PlayerAction is not the clone of the L03 use box')
+            us[12] = [(6, bytes([1]))]
+            us[13] = [(6, bytes([0]))]
+            us[8] = [(6, bytes([1 if mode == 'lift' else 0]))]
+        kl_fa.edit(sc, k, i[0], fn)
+        if mode == 'lift':
+            def fb(us):
+                if len(us) != 11 or any(us[j][0][0] != 0x0a for j in (8, 9, 10)):
+                    raise ValueError('box node layout is not 11 fields with floats at 8..10')   # GUESS: props 8..10 = half sizes (57, 124, 62)
+                for j, h in zip((8, 9, 10), LIFT_HALF):
+                    us[j] = [(0x0a, struct.pack('<f', h))]
+            kl_fa.edit(sc, k, None, fb)
+    tg = []
+    if mode == 'open':
+        for k in opens:
+            for nm, body in sc.nodes[k]['ctrls']:
+                if sc.p.key(nm) == 'DeactivateGeom':
+                    tg += kl_fa.value(sc, kl_fa.units(body[1:-1])[1])
+        if len(tg) != 3 or len(set(tg)) != 3:
+            raise ValueError('shutter targets: %s' % tg)
+        ci = [j for j, (nm, _b) in enumerate(sc.nodes[now[0]]['ctrls']) if sc.p.key(nm) == 'DeactivateGeom']
+        def fo(us):
+            cur = kl_fa.value(sc, us[1])
+            if any(t in cur for t in tg):
+                raise ValueError('OpenNow already names a co-op shutter')
+            us[1] = kl_fa._refs(sc, list(cur) + tg)
+        kl_fa.edit(sc, now[0], ci[0], fo)
+    data = sc.p.serialize()
+    back = F.Prp(data)
+    if back.serialize() != data or len(back.nodes()) != len(sc.p.nodes()):
+        raise ValueError('the patched .prp does not round-trip')
+    new = dict(B.files)
+    new[B.ext['.prp']] = data
+    os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+    kl_graft.write_zip(dst, [(n, new[n]) for n in B.order])
+    Bn = F.Built(dst, 'F02')
+    got = []
+    for k in hits:
+        for nm, body in Bn.sc.nodes[k]['ctrls']:
+            if Bn.sc.p.key(nm) == 'PlayerAction':
+                v = [kl_fa.value(Bn.sc, u) for u in kl_fa.units(body[1:-1])]
+                if v[8] != int(mode == 'lift') or v[12] != 1 or v[13] != 0:
+                    raise ValueError('read-back %s' % (v,))
+        nv = kl_fa.node_values(Bn.sc, k)
+        got.append(nv[8:11] if len(nv) > 10 else None)
+    if mode == 'lift' and any(g != list(LIFT_HALF) for g in got):
+        raise ValueError('box read-back %s' % got)
+    ons = []
+    if mode == 'open':
+        for nm, body in Bn.sc.nodes[now[0]]['ctrls']:
+            if Bn.sc.p.key(nm) == 'DeactivateGeom':
+                ons = kl_fa.value(Bn.sc, kl_fa.units(body[1:-1])[1])
+        if len(ons) != 5 or not all(t in ons for t in tg):
+            raise ValueError('OpenNow read-back %s' % ons)
+    with zipfile.ZipFile(src) as a, zipfile.ZipFile(dst) as b:
+        diff = sorted(n for n in a.namelist() if a.read(n) != b.read(n))
+    if diff != [B.ext['.prp']]:
+        raise ValueError('members changed: %s' % diff)
+    rep = collections.OrderedDict(mode='patch2-' + mode, source=src, md5_in=have, out=dst, out_md5=S.md5(dst), members_changed=diff,
+                                  box_half=got, opennow_targets=[t.rsplit('\\', 1)[-1] for t in ons])
+    log('kl_dm02_coop_1026 patch2 %s -> %s (%s)' % (mode, dst, rep['out_md5']))
+    return rep
+
+
+def stage_patch2(src, out, scratch=None, log=print):
+    h = S.md5(src)
+    if h != LIVE_MD5_2:
+        raise SystemExit('input md5 %s is not the live %s' % (h, LIVE_MD5_2))
+    LO.MAPS['DM02'] = dict(slot='F02', zip='F02_Main.zip')
+    LO.TAG = TAG_SOLO2
+    install = LS.INSTALL_PY.replace('van-lane + loot', 'co-op solo lift fix 2').replace('tools/kl_lanes_stage_1025.py', 'tools/kl_dm02_coop_1026.py').replace('2026-10-25', '2026-10-26')
+    reps = {}
+    for name, mode in (('solo_open', 'open'), ('solo_lift2', 'lift')):
+        d = os.path.join(out, name)
+        LO.rmtree(d)
+        os.makedirs(d)
+        rep = patch2(src, os.path.join(d, 'F02_Main.zip'), mode, log=log)
+        with open(os.path.join(d, 'install.py'), 'w', newline='\n') as fh:
+            fh.write(install % dict(map='DM02', zip='F02_Main.zip', tag=TAG_SOLO2, game=LS.GAME, old=h, new=rep['out_md5']))
+        with open(os.path.join(d, 'build_report.json'), 'w') as fh:
+            json.dump(rep, fh, indent=1, default=str)
+        if scratch:
+            LO.rehearse(d, 'DM02', src, rep['out_md5'], h, scratch, log)
+        reps[name] = rep
+    return reps
+
+
 def stage(src, out, scratch=None, log=print):
     h = S.md5(src)
     if h != SRC_MD5:
@@ -553,6 +678,9 @@ def stage(src, out, scratch=None, log=print):
 
 def main():
     a = sys.argv[1:]
+    if len(a) >= 3 and a[0] == 'patch2':
+        stage_patch2(a[1], a[2], a[a.index('--rehearse') + 1] if '--rehearse' in a else None)
+        return 0
     if len(a) >= 3 and a[0] == 'patch':
         stage_patch(a[1], a[2], a[a.index('--rehearse') + 1] if '--rehearse' in a else None)
         return 0
