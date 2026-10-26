@@ -66,7 +66,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-26 ~08:30 - N9_DM01e PASS: first 9-player round, all 9 IN ROUND, 0 asserts/faults, no relaunch (Fps=30 cap + slower joiner taps fixed N9_DM01d). BO10 pass but no boarding: carrier killed by point-blank bursts; 1026zb adds OnlinePointBlankCap=250 + TEST pollloss diag (49e707b59), BO11 next. After N9_DM09e kl-merge-ce installs cover DM01/02/03: rebuild the botsonline_1025 kit on DM01 fe9d5751.
+2026-10-26 ~09:00 - N9_DM01e PASS (first 9-player round). BO11: cap kept 6/7 bots alive, but the van was called at once and shot empty in state 3 (-> 6 after 1 s), 0 boarded. 1026zd adds OnlineVanGather/OnlineVanHold + OnlinePointBlankRefund; BO12 queued after N9_DD01e. After N9_DM09e kl-merge-ce installs cover DM01/02/03: rebuild the botsonline_1025 kit on DM01 fe9d5751.
 
 2026-10-26 ~08:50 - [kl-merge-ce] Cover fix (FREESIDE: box 2 units off the wall, + PlayerCoverModifier ON on the built-for side's ends) works: COVER13 on DM05A e9fab045 gave cover on 5 of 6 K6 boxes. Thin K6_44 (model 45196, 185x33) still fails: COVER13c retests. All 11 other maps are restaged in C:/kl_build_1024/cover_fix_1026d (review PASS). 8 are queued for install. DM01/02/03 auto-queue after c9's N9_DM09e (BO11 pins DM01). Per-map COVER14_<MAP> tests come from tools/kl_cover_testgen_1026.py; verdict via live_1026/cover14_verdict.py.
 
