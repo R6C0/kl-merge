@@ -6,7 +6,7 @@ it changes (.buf .gms .oct .prm .prp .rmc .rmi) are patched INTO THE LIVE ZIP BY
 layout untouched, kl_loot_1025.patch_zip) -> <root>/<MAP>/stage/{<zip>, install.py, build_report.json}. install.py pins the live md5
 (refuses when it moved), refuses while kl2.exe runs, moves the original to '<zip>.before-1026cover'; --undo puts it back.
 The pass is idempotent (a zip that already has the KL_CoverSix! group is left alone: 'nothing to add').
-RE-STAGE after another step changed a zip:   python kl_cover_stage_1026.py stage C:/kl_build_1024/cover_1026 [DM01 DM02 ...] [--rehearse <scratch>]
+RE-STAGE after another step changed a zip:   python kl_cover_stage_1026.py stage C:/kl_build_1024/cover_1026 [DM01 DM02 ...] [--rehearse <scratch>] [--no-safety]
 (it always starts from whatever is live at that moment, and the md5 pin of install.py is that zip).
 """
 import collections, glob, json, os, shutil, sys, zipfile
@@ -20,7 +20,7 @@ import kl_cover_add as A
 GAME = 'C:/Steam/steamapps/common/Kane & Lynch 2 - Dog Days'
 TAG = '.before-1026cover'
 MAPS = ['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM05A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B', 'DD10']
-OPT = {'max': K.MAX_NEW, 'density': K.DENSITY, 'spread': K.SPREAD}
+OPT = {'max': K.MAX_NEW, 'density': K.DENSITY, 'spread': K.SPREAD, 'safety': K.SAFETY}   # safety = kl_cover_1026 filter rules (recommended on); stage ... --no-safety turns them off
 TIERS = {'DM07': 'ab'}    # maps with no hidden form-b box model (DM07: 'box models: []'): clone form a boxes too (kl_cover_1026 --tiers ab; GUESS: a form a
                           # clone, with the collision record of its model listed in tree 0, is a harmless cover box - proven only on the Dig's pass)
 INSTALL_PY = LO.INSTALL_PY.replace('loot-placement', 'player-cover (KL_CoverSix! boxes)').replace('tools/kl_loot_1025.py', 'tools/kl_cover_stage_1026.py')
@@ -106,6 +106,8 @@ def main():
     global FROM
     scratch = a[a.index('--rehearse') + 1] if '--rehearse' in a else None
     FROM = a[a.index('--from') + 1] if '--from' in a else None
+    if '--no-safety' in a:
+        OPT['safety'] = False
     names = [x for x in a[2:] if x in MAPS] or MAPS
     res = {}
     for n in names:

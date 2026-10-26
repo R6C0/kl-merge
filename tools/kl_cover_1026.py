@@ -8,6 +8,7 @@ OFFLINE: reads a finished map zip, writes a staging folder. Starts nothing, inst
     python kl_cover_1026.py build <zip> <out folder>    the zip with a 'KL_CoverSix!' group (boxes CoverBoxH/M_K6_nn) + cover_add.json
     options: --tiers ab (maps with NO hidden form-b box model, DM07: also clone form a = flags 0x302 boxes that have a collision record
              in the root's tree 0, like kl_dig_layer does for the Dig; default b)  --density D (target boxes per 100 m2 of mesh, default 3.5)  --max N (default 450)  --spread N (default 220)
+             --no-safety (turn OFF the safety rules: no tile near a spawn / spawn trigger / loot / door / stair / ramp, no floating or sunk ground; recommended ON)
 
 THE CAUSE (evidence in re/ notes and the report): a player can take cover only at a *coverbox*-named ZSTDOBJ box (CFFCoverList
 builds the list ONCE at the load, 0x6d6a80 -> 0x603830, from the entity's own slot: matrix, box middle +0x30, half size +0x40;
@@ -31,7 +32,7 @@ GUESSes (not measured): TILE_STEP / DENSITY defaults (stock FA runs 1.4..7.9 per
 that a box in the solid behind a face (the corner form) is entered like one on a prop (the cover test reads the box only);
 that the face's winding gives the free side (kl_fa_cover.wall_runs documents the same GUESS).
 """
-import collections, json, math, os, sys
+import collections, json, math, os, struct, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -52,6 +53,11 @@ STAND = (70.0, 230.0)
 STAND_NEED = 2
 MIN_RUN = 120.0
 NAME_GROUP = 'KL_CoverSix!'
+SAFETY = True            # (recommended on) skip tiles near spawns / loot / doors / stairs / spawn triggers or on a floating / sunk ground (audit 2026-10-26); --no-safety turns it off
+SPAWN_PAD, SPAWN_DY = 60.0, 250.0   # footprint + 60 may not touch a ZSpawnPoint (|dy| < 250) or a spawn trigger box
+LOOT_NEAR, DOOR_NEAR = 110.0, 150.0 # distance (footprint edge) to a loot stack / to a door, stair, ramp or ladder object
+NEAR_DY = 300.0
+SPAN_MAX, GROUND_TOL = 35.0, 30.0   # nav height span in front over 2 m; |plan ground - collision floor at the stand point|
 TIERS = 'b'              # box model forms a clone may take: 'b' (flags 0x200, no collision record; default, unchanged) or 'ab' (also form a)
 
 
@@ -89,7 +95,66 @@ def _fronts(nav, mid, y, n, u):
     return c
 
 
-def walls(L, fs, new, max_new, density, spread, log=print):
+def safety_features(L):
+    """Places a cover box must keep away from (the 2026-10-26 audit's detection, moved here): spawn points, spawn trigger boxes, loot stacks / MoneyStack
+    props, stair / ladder / ramp / step objects, door objects. Each list holds (place, name); triggers hold (node, box size)."""
+    B, sc = L.B, L.B.sc
+    ks = range(1, len(sc.nodes))
+    low = {k: sc.names[k].lower() for k in ks}
+    spawns = [(B.at(k), sc.names[k]) for k in ks if sc.cls(k) == 'ZSpawnPoint']
+    loot = [(p, 'loot %s' % a) for _k, p, a in F.stations(B, L.nav)['loot']]
+    loot += [(B.at(k), sc.names[k].split('!')[-1]) for k in ks if sc.cls(k) == 'ZSTDOBJ' and 'moneystack' in low[k]]
+    stairs = [(B.at(k), sc.names[k]) for k in ks if sc.cls(k) == 'ZSTDOBJ' and any(w in low[k] for w in ('stair', 'ladder', 'ramp', 'step'))]
+    doors = [(B.at(k), sc.names[k]) for k in ks if (sc.cls(k) in ('ZSTDOBJ', 'ZGROUP') and 'door' in low[k] and 'lod' not in low[k][-6:-2])
+             or (sc.cls(k) == 'ZSTDOBJ' and 'door' in low[k] and low[k].endswith('lod00'))]
+    trig = []
+    for k in ks:
+        if sc.cls(k) == 'ZBoxPrimitive' and 'spawnpointtrigger' in sc.path[k].lower() and k not in L.nocover:
+            try:
+                trig.append((k, B.box(k)))
+            except Exception:
+                pass
+    return dict(spawns=spawns, loot=loot, near=[(stairs, 'stair/ladder/ramp object'), (doors, 'door object')], trig=trig)
+
+
+def _tile_unsafe(L, SF, mid, y, n, u, eu, ev, stand):
+    """Reason string when the planned tile (middle mid, free-side normal n, extents eu along u / ev deep, ground y, stand point) breaks a safety rule, else None."""
+    B, S, nav = L.B, L.solid, L.nav
+    def rect(pad):       # footprint corners + middle, grown by pad
+        return [(mid[0] + su * (eu / 2 + pad) * u[0] + sv * (ev / 2 + pad) * n[0], mid[1] + su * (eu / 2 + pad) * u[1] + sv * (ev / 2 + pad) * n[1])
+                for su in (-1, 0, 1) for sv in (-1, 0, 1)]
+    def dist(p):         # from a place to the footprint edge (oriented rectangle)
+        dx, dz = p[0] - mid[0], p[2] - mid[1]
+        a, b = abs(dx * u[0] + dz * u[1]) - eu / 2, abs(dx * n[0] + dz * n[1]) - ev / 2
+        return math.hypot(max(a, 0.0), max(b, 0.0))
+    for p, _nm in SF['spawns']:
+        if abs(p[1] - y) < SPAWN_DY and dist(p) < SPAWN_PAD:
+            return 'touches a spawn point (footprint + %d)' % SPAWN_PAD
+    pad = [(q[0], y + 50.0, q[1]) for q in rect(SPAWN_PAD)]
+    for k, sz in SF['trig']:
+        if any(B.in_box(k, q, size=sz) for q in pad):
+            return 'touches a spawn trigger box (footprint + %d)' % SPAWN_PAD
+    for p, _nm in SF['loot']:
+        if abs(p[1] - y) < NEAR_DY and dist(p) < LOOT_NEAR:
+            return 'within %d of a loot stack' % LOOT_NEAR
+    for lst, what in SF['near']:
+        for p, _nm in lst:
+            if abs(p[1] - y) < NEAR_DY and dist(p) < DOOR_NEAR:
+                return 'within %d of a %s' % (DOOR_NEAR, what)
+    hs = []
+    for dd in (0, 40, 80, 120, 160, 200):
+        i_ = nav.at(stand[0] + n[0] * dd, y, stand[2] + n[1] * dd)
+        if i_ is not None:
+            hs.append(i_[1])
+    if len(hs) >= 3 and max(hs) - min(hs) > SPAN_MAX:
+        return 'stairs / ramp in front (nav height span over %d in 2 m)' % SPAN_MAX
+    sf = S.floor(stand[0], y, stand[2], reach=60.0)
+    if sf is not None and abs(sf - y) > GROUND_TOL:
+        return 'plan ground and collision floor at the stand point differ by more than %d' % GROUND_TOL
+    return None
+
+
+def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY):
     B, nav, S = L.B, L.nav, L.solid
     area = sum(_area(nav.pv[i]) for i in range(len(nav.pv)) if nav.ok[i]) / 1e4
     want = int(area * density / 100.0)
@@ -109,6 +174,9 @@ def walls(L, fs, new, max_new, density, spread, log=print):
         picks.append(nav.mid[ps[0]])
     log('walls: %.0f m2 of mesh, target %d boxes at %.1f per 100 m2, %d have a cover box; %d places' % (area, want, density, sum(have.values()), len(picks)))
     why, cand, seen = collections.Counter(), [], set()
+    SF = safety_features(L) if safety else None
+    if SF:
+        log('walls: safety rules on: %d spawns, %d spawn triggers, %d loot, %d stairs/ramps, %d doors' % (len(SF['spawns']), len(SF['trig']), len(SF['loot']), len(SF['near'][0][0]), len(SF['near'][1][0])))
     for p in picks:
         g = S.floor(p[0], p[1], p[2])
         y = p[1] if g is None else g
@@ -232,6 +300,11 @@ def walls(L, fs, new, max_new, density, spread, log=print):
             if _fronts(nav, fr, y, n, u) < STAND_NEED:
                 why['nobody can stand in front'] += 1
                 continue
+            if SF:
+                bad = _tile_unsafe(L, SF, mid, y, n, u, eu, ev, (fr[0], y, fr[1]))
+                if bad:
+                    why['safety: ' + bad] += 1
+                    continue
             k = S.node.get(r['ref'])
             nm = B.sc.path[k].rsplit(A.SEP, 1)[-1] if k else 'REF %d' % r['ref']
             new.append({'kind': 'high' if hi else 'low', 'origin': [round(org[0], 2), round(y - f['lo_y'], 2), round(org[1], 2)],
@@ -258,7 +331,7 @@ def plan(zp, opt, log=print):
     log('box models: %s' % sorted('%dx%dx%d' % tuple(f['size']) for f in fs))
     new = []
     if fs:
-        walls(L, fs, new, opt['max'], opt['density'], opt['spread'], log)
+        walls(L, fs, new, opt['max'], opt['density'], opt['spread'], log, opt.get('safety', SAFETY))
     cnt = collections.Counter()
     for c in new:
         cnt[c['kind']] += 1
@@ -288,9 +361,13 @@ def build(zp, dst, opt, log=print):
 
 
 def options(a):
-    opt = {'max': MAX_NEW, 'density': DENSITY, 'spread': SPREAD, 'tiers': TIERS}
+    opt = {'max': MAX_NEW, 'density': DENSITY, 'spread': SPREAD, 'tiers': TIERS, 'safety': SAFETY}
     a = list(a)
     while a and a[0].startswith('--'):
+        if a[0] == '--no-safety':
+            opt['safety'] = False
+            a.pop(0)
+            continue
         k = a.pop(0)[2:]
         opt[k] = type(opt[k])(a.pop(0))
     return opt, a
