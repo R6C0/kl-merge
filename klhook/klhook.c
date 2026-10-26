@@ -722,6 +722,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kllobby.c"                                      /* kllobby.c: [Lobby] MinPlayers - a hosted FA lobby may start below 4 (off unless set) */
 #include "kllobbyopt.c"                                   /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax - more choices on the FA lobby rows (off unless set); AFTER kllobby.c */
 #include "klbotfill.c"                                    /* klbotfill.c: [Bots] OnlineFill plan + probe, read-only (off unless set); AFTER kllobby.c */
+#include "klcopsquad.c"                                   /* klcopsquad.c: [CopSquad] AI police under each human cop in Cops and Robbers (off unless Enable=1); AFTER klbotfill.c, klescort.c */
 #include "klroundkeep.c"                                  /* klroundkeep.c: [Lobby] KeepRound + TEST round-end probe (the online rules' early cuts); AFTER klbotfill.c, kllobbyopt.c */
 #include "klqol.c"                                        /* klqol.c: [QoL] taskbar flash, background frame cap, mouse-clip release (off unless set); AFTER kllobby.c / klnet.c */
 #include "klinv.c"
@@ -1202,6 +1203,7 @@ static void klh_tick(int game_thread)
     klsy_tick(game_thread);                           /* klsync.c: [Sync] probe / host list (off unless set) */
     kllo_tick();                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
     klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
+    klcq_tick(game_thread);                           /* klcopsquad.c: [CopSquad] (off unless Enable=1; host, C&R, game thread only) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
     knl_tick(game_thread);                            /* klnetload.c: [NetLoad] (off unless set) */
     klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
@@ -1617,6 +1619,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kllo_init();                                      /* kllobbyopt.c: reads [Lobby] TimeMax / TimeMin / RoundsMax */
     klon_init();                                      /* klonline.c: [Online] Log */
     klbf_init();                                      /* klbotfill.c: reads [Bots] OnlineFill (after kllb_init: it reads the same key) */
+    klcq_init();                                      /* klcopsquad.c: reads [CopSquad] */
     klq2_init();                                      /* klqol.c: [QoL] (default off) */
     kqb_init();                                       /* klqol2.c: [QoL2] (default off) */
     klnetfix_init();
