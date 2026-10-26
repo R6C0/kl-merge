@@ -66,31 +66,16 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~02:20 - DM02 live 1dd14609 (co-op solo -> Arcade -> cover -> loot), smokes DM01/02/03 PASS; cover safety filters on (c21ce7161);
+DM05A cover restaged with them (4a6799a1, queued in live_1026/install_queue.txt). DM02_lift test inconclusive: c9's tele refused
+(no actor at gd+0x4cf0); rerun once out_all_1026c(_test) lands.
+
 2026-10-26 ~01:40 - COVER on 10 maps + ARCADE DM01/03/06 + DM02 CO-OP solo Lift Door (untested in game) installed, stale 0.
 C: filled mid-install (DM06/07/06B zips broken, restored + reinstalled); templates now guard free space (1e43fa9ad); bulk moved to D:.
 Smoke rotation live_1026/rotate.py needs --hook out_all_1026a_test (SHIP hook ignores [Script]); DM01 PASS 01:19.
 
 2026-10-26 ~00:10 - 9-INSTANCE LAN: L9b put 7 humans in one FA round (0 faults); player 9 froze 30 s across the host's start and stayed in the lobby.
 Bench host now waits for all to connect (script op waitpeers, bbcf618da); L9c running. Lobby shows only 8 rows: agent building a 12-row FALobby ([Lobby] Rows12).
-
-2026-10-25 ~23:55 - HOSTOPTS 1025b (out_hostopts_1025b SHIP 2f771cba / _test 004e2409, not run): host's F7/row now sets kls_online_set (LOAD follows); TEST logs the round clock ([rules+0x4c] etc.) at state 25/31 to find why a 10 min round lasts 83 s; [Lobby] RoundClockFix=1 optional GUESS write.
-
-2026-10-25 ~23:30 - HOST OPTIONS (re/host_options.md; out_hostopts_1025a SHIP c3f32a80 / _test fc18e73a; overlay C:/kl_build_1024/hostopts_1025, none installed, none run):
-klhostopt.c [HostOpts] Enable=0: F7 map set, F8 AI heisters, rows KLSHMap/KLSHOpt (Menu=1 overlay, +4 tags), host map set -> clients via Steam klx_opts + UDP 27413 (in memory only).
-kllobbyopt.c: max/min edge fixed (SL7 time stuck at 5), NaN float read dropped, TEST logs the 25->31 round length.
-
-2026-10-25 ~22:10 - HUD ONLINE / OLD HUD (out_hudonline_1025a, not installed, not run): [HUD] HideSrc=1 wraps ZFAPlayerListDisplay Render (slot 2 0x5e60f0, private heap vtable) and skips it while our HUD stands, so Tab/Alt+Tab cannot restore the old list; HideOnline=1 skips it online too (no online crew list exists: Sv/Cl rules records not decoded, re/hud_online.md). Rows hidestock/hidestockonl.
-
-2026-10-25 ~22:10 - SOLO ONLINE HOST WORKS + INSTALLED: SOLO2 live (System Link, host alone, out_solo_1025b_test, SL5.ini) round 1 -> FAStatus/StatusMoney -> round 2, 0 faults.
-Cause: slot 3 of the session manager vtable (0x61a410) is a session END request; 0x80ad60's tail asks for it (word 8) when < 2 humans; Solo=1 drops it for a lone FA host (kllobby.c, 70dbb3197).
-Installed SHIP 2a88a86b + [Lobby] Solo=1, MinPlayers=1 (C:/kl_build_1024/solo_1025/install.py --undo; .before-1025solo). Lobby names set2 installed (rand collage live-checked, not left in).
-Agents: Quick/Ranked BuildKey + host-server mode (out_server_1025a), Arcade HUD online + old HUD on Alt+Tab (out_hudonline_1025a), heist time to 10 min / more rounds (out_lobbyopts_1025a).
-
-2026-10-25 ~21:26 - SYSTEM LINK + DEAD MEN MAPS: PASS (SL2, TEST out_escfar_1025a_test, script C:/kl_build_1024/online_1025/live/SL2.ini, [Lobby] MinPlayers=1 test-only).
-Installed online_1025 (SHIP 05a47b0e, ini 4b2bcf1a: [Expansion] OnlineSet=2, [HUD] TrackerEscapeFar=1; .before-1025online, undo C:/kl_build_1024/online_1025/install.py --undo).
-Route MainMenu DOWN DOWN RETURN > OnlineMenu DOWN RETURN > SystemLink DOWN DOWN RETURN (Create; SL1 pressed Join = SysUIErrorScreen) > SystemLinkCreate RETURN > FALobby;
-host Ready alone -> 'LOAD F01: online=1 OnlineSet=2 -> page 2, rule DM01', level loaded, 0 asserts 0 faults. Grenade GSP1: PASS but no grenade carried (needs a pickup). QoL2 WatchDry sane.
-Destruction-sound loudness (vehicle explosions, extinguishers, glass) as MP45: agent building C:/kl_build_1024/fxraw_1025 (not installed).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
