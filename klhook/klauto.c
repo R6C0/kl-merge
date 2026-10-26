@@ -1522,15 +1522,26 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
     }
     {   /* session state changes for the tele guard, and why a round restarts (COVER6 DM05A 03:20: two 0x19->0x16 restarts 10 s apart, then the
            camera pool assert 0x60a5bf). On leaving 0x19: the local player's health ([pl+0xa48] +4/+8, as kldown.c) and feet, and the top window. */
+        /* peer DM02_lift 03:50: health read at the change was 506/506, i.e. already after the restart refilled it, so the last health seen
+           WHILE 0x19 and the lowest of the last 3 s are kept too (death or not). */
+        static float kla_hl = -1, kla_hmin = -1; static DWORD kla_hmin_t;
         DWORD sm = kla_exe_ok ? kla_rd32((DWORD_PTR)VA(0x168e598)) : 0, st = sm ? kla_rd32(sm + 0x70) : 0xffffffff;
+        if (st == 0x19 && st == kla_state) {
+            int me = kla_local_player(); DWORD pl = me >= 0 ? kla_pl[me] : 0, ho = pl ? klh_rd32(pl + 0xa48) : 0; float hv[2] = { -1, -1 };
+            if (ho && klh_rd(ho + 4, hv, 8)) {
+                kla_hl = hv[0];
+                if (kla_hmin < 0 || hv[0] <= kla_hmin || now - kla_hmin_t > 3000) { kla_hmin = hv[0]; kla_hmin_t = now; }
+            }
+        }
         if (st != kla_state) {
             if (kla_state == 0x19) {
                 int me = kla_local_player(); DWORD pl = me >= 0 ? kla_pl[me] : 0, ho = pl ? klh_rd32(pl + 0xa48) : 0; float hv[2] = { -1, -1 }, ft[3] = { 0, 0, 0 };
                 if (ho) klh_rd(ho + 4, hv, 8);
                 if (pl) klh_rd(pl + 0x460, ft, 12);
-                kla_out(1, "script: session 0x19 -> 0x%lx (round left) at line %d: local player %08lx health %.1f / %.1f, feet (%.0f, %.0f, %.0f), top window '%s'",
-                        st, kla_pc + 1, pl, hv[0], hv[1], ft[0], ft[1], ft[2], kla_top);
+                kla_out(1, "script: session 0x19 -> 0x%lx (round left) at line %d: local player %08lx health %.1f / %.1f (last seen while 0x19 %.1f, lowest in the last 3 s %.1f), feet (%.0f, %.0f, %.0f), top window '%s'",
+                        st, kla_pc + 1, pl, hv[0], hv[1], kla_hl, kla_hmin, ft[0], ft[1], ft[2], kla_top);
             }
+            kla_hl = kla_hmin = -1;
             if (st == 0x16) kla_state16_t = now;
             kla_state = st;
         }
