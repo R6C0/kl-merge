@@ -248,6 +248,12 @@ def main():
             # .result), one at a time, at least 20 s apart. Once the host is in the round nobody is started again
             # (joining a running FA round is not possible: N9_DM01 inst4 lost 4 tries on that).
             now = time.time()
+            if procs[0].poll() is not None and not host_started():
+                # host (inst1) died before the round: no relaunch can join a dead session (N9_DM01d spent 3 tries per joiner after it died)
+                if not getattr(relaunch_tick, 'told', 0):
+                    relaunch_tick.told = time.time()
+                    say('  relaunch | host (inst1) has ended: no relaunch can join a dead session; run over')
+                return
             why = {}
             started = host_started()
             for n in range(2, len(procs) + 1):
@@ -292,6 +298,8 @@ def main():
             el = time.time() - t0
             netstat_tick(t0)
             relaunch_tick()
+            if getattr(relaunch_tick, 'told', 0) and time.time() - relaunch_tick.told > 30:
+                break  # host dead + 30 s grace: free the live slot for the next queue item
             if shots and el >= shots[0]:
                 s = shots.pop(0)
                 for n, p in enumerate(procs, 1):
