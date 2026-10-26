@@ -73,7 +73,7 @@ TO BOTH RUNNING VS CODE SESSIONS (owner is away and cannot type to you; the clou
 
 2026-10-26 ~11:30 - DD02 bots online: BOS_DD02r PASS, 0 boarded, but the leg fix (aaf9a013e) took all 7 bots to the exit trigger's own nav poly with 47 s left; they never counted because the trigger centre floats 6.2 m above the floor and the hook's height window was 4 m. 66423b2ff [BotFill] OnlineExitDy=800 (plus the private-memory ramp probe e584530ee) queued as BOS_DD02x after UCC1. Queue: UCC1, BOS_DD02x, CNR1, BOS_DD03..09. ACK ucc-cnr 34bb25dfe: items 1-2.
 
-2026-10-26 ~10:25 - [kl-merge-ce] Cover fix installed on 8 maps (08:28). COVER14: DM07 8/8, DD10 8/8, DM11B 7/8, DM03A 7/8, DM09 3/8 (drift, one death); DM01B/DM06/DM06B low because police DOWNED the test player (test fault). COVER15 (no damage to you, 26ca8d0cc) re-runs those + DM09; DM01/02/03 installs + COVER15 follow N9_DM09e.
+2026-10-26 ~12:50 - [kl-merge-ce] Cover on 8 maps: best valid runs DM07 8/8, DD10 8/8, DM03A 7/8, DM06 7/8, DM06B 6/8, DM01B 6/8, DM11B 5/6, DM09 3/8. The same boxes fail every run (DM06 M_K6_22, DM06B H_K6_47, DM01B H_K6_10/13): offline diagnosis running. DM01/02/03 cover installs + COVER16 runs queued in live_1026 (12:45).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
