@@ -99,6 +99,16 @@ feat('onlinekilled', G_CORE, 'Online matches: KILLED BY shows the killer\'s heis
      'klhud.c OnlineKilled; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineKilled', 1, 0, 0)])
 feat('onlineround', G_CORE, 'Online matches: ROUND n OF m line under the clock like Arcade (recommended off until benched)', 'off', 'start',
      'klhud.c OnlineRound; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineRound', 1, 0, 0)])
+feat('onlinefeed', G_CORE, 'Online matches: kill-feed line (X KILLED Y) under REWARDS like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineFeed; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineFeed', 1, 0, 0)])
+feat('onlineskulls', G_CORE, 'Online matches: death-mark skulls on your row like Arcade lives (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineSkulls; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineSkulls', 1, 0, 0)])
+feat('onlineloot', G_CORE, 'Online matches: loot bar under TOTAL like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineLoot; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineLoot', 1, 0, 0)])
+feat('onlinetab', G_CORE, 'Online matches: Tab card (full crew list) like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineTab; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineTab', 1, 0, 0)])
+feat('onlinevan', G_CORE, 'Online matches: escape / van card like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineVan; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineVan', 1, 0, 0)])
 feat('ucchide', G_CORE, 'Undercover Cop: the crew list does not give the undercover cop away to heisters (recommended on)', 'on', 'start',
      'klhud_values.c kluv_state UccHide; re/ucc_tell_audit.md S10; NOT run live', [('HUD', 'UccHide', 1, 0, 1)])
 feat('onlinebots', G_CORE, 'Online matches: AI heisters also listed in the crew box, like Arcade (recommended on)', 'on', 'start',

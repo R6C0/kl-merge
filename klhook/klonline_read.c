@@ -8,8 +8,10 @@
  *                          OnlineCrew's handles forced on for the call) PLUS, per seat, the heister CHARACTER's name, the ZFFPlayer,
  *                          money, status, kills and the killer; per AI heister (no record online) the same from the Ally actors;
  *                          and the round state: round n of m, clock, length, the escape-vehicle mirrors.
- *   klor_bots(act)         the Ally ZFFActors (<= 8), cached 3 s; klhud.c's klu_online_bots reads through it.
- *   klor_loot(&rem)        the loot still lying on the map: sum of ZOnlineMoneyCtrl +0x34 over the game's object registry (as klbotfill.c).
+ *   klor_bots(act)         the Ally ZFFActors (<= 8), cached 3 s, ONE scan. klor_bots_sorted() puts the living first (ONE order); klor_read and
+ *                          klhud.c's klu_online_bots (the crew list's bot count) both read through that, so a bot row's number is the same bot.
+ *   klor_loot(&rem)        the loot still lying on the map: sum of ZOnlineMoneyCtrl +0x34 over the game's object registry (as klbotfill.c); klor_read
+ *                          also fills held (the seats' Sharable + Unsharable), loot_init (largest remaining this round) and the kill-feed events.
  *   klor_on                [Online] Read=1 (default 0): without it klor_read answers 0 and every port behind it stays at its old behaviour.
  *
  * HOW A SEAT GETS A HEISTER NAME (the Arcade rule of klcrew.c's klw_who_now, applied to the online bodies):
@@ -24,6 +26,8 @@
  *   G1 [[rec]+0x378] is the ZFFPlayer on a client as well as on the host.   G2 [rules+0x208] is the hero table on Sv and Cl.
  *   G3 the Arcade status bits (4 dead, 0x10 / 0x4000 waiting) are the online ones.   G4 KillerIndex S+0xe0 is the killer's SEAT (a bot kill reads -1/garbage).
  *   G5 the registry's ZOnlineMoneyCtrl entries may be stale after a level change (the loot total is the largest sum seen this round).
+ *   G7 [rules+0x320] is an int (stock HUD money cache).   G8 death mark = deaths of the local seat counted from status bit 4 transitions this match (online has no lives).
+ *   G9 the kill feed waits up to 700 ms for KillerIndex to settle after bit 4 sets; a bot/police kill reads -1 or the victim (shown 'DIED'); bot deaths are not read as events.
  *   G6 S = [rules+0x2c] exists on the client from the lobby state on (its creation site is not traced).
  *
  * KLHook.ini   [Online] Read=0 (recommended off until benched)   Log=1 (shared with klonline.c)
@@ -41,7 +45,8 @@
 #define KLOR_MONEY_VT   0x00bc874cu        /* ZOnlineMoneyCtrl */
 
 static struct { int on; } klor;
-static struct { DWORD rules; char name[KLOR_MAX][32]; int latch[KLOR_MAX]; } klor_c;                 /* per-rules caches: the last name of a seat, the killer latch */
+static struct { DWORD rules; int round, lobby; char name[KLOR_MAX][32]; int latch[KLOR_MAX]; struct klor_seatev sev[KLOR_MAX]; long loot_init; } klor_c;   /* caches re-keyed on rules / round / lobby (names, latch, feed steps, loot whole) */
+static struct { DWORD rules; int deaths[KLOR_MAX]; } klor_d;                                              /* the death marks: per rules (the match), NOT cleared by a new round */
 static struct { DWORD at, rules; int ok; struct klw_src src; } klor_s;                                  /* the character list of the level, refreshed every 1 s */
 
 static void klor_init(void)
@@ -103,6 +108,23 @@ static int klor_bots(DWORD act[KLOR_NBOT])
     return n;
 }
 
+/* the Ally actors, the LIVING first (health [[a+0x5fc]+4] > 0), the rest after, each group in table order. *alive = how many live. -> n <= 8 */
+static int klor_bots_sorted(DWORD act[KLOR_NBOT], int *alive)
+{
+    DWORD raw[KLOR_NBOT]; int n = klor_bots(raw), i, a = 0, k = 0, pass;
+    for (pass = 0; pass < 2; pass++)
+        for (i = 0; i < n; i++) {
+            DWORD hp; float hv[2] = { 0, 0 }; int live;
+            if (klh_avt(raw[i]) != 0x00bb3bacu) continue;
+            hp = klh_rd32(raw[i] + 0x5fc);
+            live = hp && klh_rd(hp + 4, hv, 8) && hv[0] > 0;
+            if (live != (pass == 0)) continue;
+            act[k++] = raw[i]; if (live) a++;
+        }
+    if (alive) *alive = a;
+    return k;
+}
+
 /* the loot still on the map: the registry of the money controllers (klbotfill.c; type +0x38 == 1 is the players' drop pool: skipped). -> 1 and *rem, 0 = nothing readable */
 static int klor_loot(long *rem)
 {
@@ -133,7 +155,7 @@ static int klor_read(struct klor_snap *o, int local)
     klb_hud_online = save_o; klb_hud_crew = save_c;
     if (!r || !o->b.online || !o->b.rules) return 0;
     vt = klh_rd32(o->b.rules); o->host = vt == KLB_RULES_SV;
-    if (klor_c.rules != o->b.rules) { klor_c.rules = o->b.rules; memset(klor_c.name, 0, sizeof klor_c.name); for (i = 0; i < KLOR_MAX; i++) klor_c.latch[i] = -1; }
+    if (klor_d.rules != o->b.rules) { klor_d.rules = o->b.rules; memset(klor_d.deaths, 0, sizeof klor_d.deaths); }
     klor_source(o->b.rules);
     /* the mirrors the base tick keeps in the rules object on Sv and Cl alike (round_online_data.md: [rules+0x4c] clock, +0x1d8 / +0x1dc / +0x1e4 the escape) */
     { float c = 0, t = 0; BYTE v = 0;
@@ -150,6 +172,14 @@ static int klor_read(struct klor_snap *o, int local)
         if (klh_rd(S + 0x34c, &cur, 1) && klh_rd(S + 0x3d0, &num, 1) && klor_round_ok(cur, num)) { o->round = cur; o->rounds = num; }
         if (klh_rd(S + 0x324, &len, 4) && klb_finite(len) && len > 0 && len < 100000.0f) o->length = len;
     }
+    /* re-key the caches (review #5): a new rules object, a new round number, or the lobby (state < 0x17) <-> the round: names, killer latches, feed steps and the loot whole start over
+       (a seat can hold another heister next round; a stale name or a latched killer from the last round must not carry over). The death marks (klor_d) stay: they are the match's. */
+    { int lobby = o->b.state < 0x17;
+      if (klor_c.rules != o->b.rules || (o->round && o->round != klor_c.round) || lobby != klor_c.lobby) {
+          klor_c.rules = o->b.rules; klor_c.round = o->round; klor_c.lobby = lobby; klor_c.loot_init = 0;
+          memset(klor_c.name, 0, sizeof klor_c.name);
+          for (i = 0; i < KLOR_MAX; i++) { klor_c.latch[i] = -1; klor_c.sev[i].prev = -1; klor_c.sev[i].at = 0; }
+      } }
     /* the humans: one row per record in use (b.on_used), in seat order */
     for (k = 0; k < o->b.on_n && k < KLOR_MAX; k++) {
         struct klor_row *w; DWORD client, P, type = 0; signed char kills = 0, pk = 0, kb = -1; int dead, ch;
@@ -170,27 +200,38 @@ static int klor_read(struct klor_snap *o, int local)
         else if (k == local && klor_s.ok && klc_char >= 1 && klc_char <= klor_s.src.n) snprintf(w->name, sizeof w->name, "%s", klor_s.src.c[klc_char - 1].name);
         dead = klor_flags_dead(w->flags);
         w->alive = !(dead || (w->flags & 0x40));
-        if (o->ok) {
+        if (o->ok && k < KLOR_SEATS) {                           /* review #4: the S arrays hold 12 seats; a seat >= 12 would read the next array */
             if (klh_rd(S + 0xec + k, &kills, 1)) w->kills = kills;
             if (klh_rd(S + 0x170 + k, &pk, 1)) w->police_kills = pk;
             if (klh_rd(S + 0xe0 + k, &kb, 1)) w->killer = kb;
         }
-        w->killer = klor_killer_latch(&klor_c.latch[k], dead, w->killer, KLOR_MAX);
+        w->killer = klor_killer_latch(&klor_c.latch[k], dead, w->killer, KLOR_SEATS);
+        o->held += w->money > 0 ? w->money : 0;
+        if (o->ok && k < KLOR_SEATS && o->b.state == 0x19) {      /* the kill feed + death marks: status bit 4 (dead) going 0 -> 1 while the round runs */
+            int ek = -1, st = klor_ev_step(&klor_c.sev[k], (w->flags & 0x4u) != 0, w->killer, GetTickCount(), &ek);
+            if (st & 1) klor_d.deaths[k]++;
+            if ((st & 2) && o->nev < 4) { o->ev[o->nev].victim = k; o->ev[o->nev].killer = ek; o->nev++; }
+        } else if (o->ok && k < KLOR_SEATS) { int dummy = -1; klor_ev_step(&klor_c.sev[k], (w->flags & 0x4u) != 0, -1, GetTickCount(), &dummy); klor_c.sev[k].at = 0; }   /* not in a round: track, never emit */
+        if (k == local && k < KLOR_SEATS) o->deaths = klor_d.deaths[k];
     }
-    /* the AI heisters (no record): from the Ally actors, living first */
-    { DWORD act[KLOR_NBOT]; int nb = klor_bots(act), a;
-      for (a = 0; a < 2; a++)                                                    /* pass 0: the living, pass 1: the others */
-          for (i = 0; i < nb && o->nbots < KLOR_NBOT; i++) {
-              DWORD hp; float hv[2] = { 0, 0 }; int alive; struct klor_row *w; int ch;
-              if (klh_avt(act[i]) != 0x00bb3bacu) continue;
-              hp = klh_rd32(act[i] + 0x5fc);
-              alive = hp && klh_rd(hp + 4, hv, 8) && hv[0] > 0;
-              if (alive != (a == 0)) continue;
-              w = &o->bot[o->nbots++];
-              w->used = 1; w->seat = -1; w->bot = 1; w->actor = act[i]; w->alive = alive; w->killer = -1;
-              w->model = klor_model(act[i]); ch = klor_char(w->model);
-              if (ch >= 1) { w->ch = ch; snprintf(w->name, sizeof w->name, "%s", klor_s.src.c[ch - 1].name); o->names_ok++; }
-          } }
+    /* the loot bar's numbers: what is left on the map (cached 0.5 s, the registry scan is 0x1000 pointers) and the largest remaining seen this round */
+    if (o->b.state == 0x19) {
+        static DWORD at, rules; static long rem; static int ok; DWORD now = GetTickCount();
+        if (rules != o->b.rules || !at || now - at >= 500) { rules = o->b.rules; at = now ? now : 1; rem = 0; ok = klor_loot(&rem); }
+        if (ok) { o->loot_ok = 1; o->loot_rem = rem; o->loot_init = klor_loot_latch(&klor_c.loot_init, rem); }
+        klh_rd(o->b.rules + 0x320, &o->stock_money, 4);           /* GUESS: [rules+0x320] is an int (the stock HUD's money cache, re/online_round_data.md) */
+        { static DWORD ll; static int told; if (told < 40 && now - ll >= 10000) { ll = now ? now : 1; told++;
+            klog("online read: loot: on the map %ld (%s), largest this round %ld, crew holds %ld (S+0x188 + S+0x224 summed), stock HUD money [rules+0x320] = %ld (local seat %d)",
+                 o->loot_rem, o->loot_ok ? "read" : "NO controller read", o->loot_init, o->held, o->stock_money, o->local); } }
+    }
+    /* the AI heisters (no record): from the Ally actors, living first (the SAME scan and order as klhud.c's klu_online_bots: klor_bots_sorted) */
+    { DWORD act[KLOR_NBOT]; int na = 0, nb = klor_bots_sorted(act, &na), a;
+      for (a = 0; a < nb && o->nbots < KLOR_NBOT; a++) {
+          struct klor_row *w = &o->bot[o->nbots++]; int ch;
+          w->used = 1; w->seat = -1; w->bot = 1; w->actor = act[a]; w->alive = a < na; w->killer = -1;
+          w->model = klor_model(act[a]); ch = klor_char(w->model);
+          if (ch >= 1) { w->ch = ch; snprintf(w->name, sizeof w->name, "%s", klor_s.src.c[ch - 1].name); o->names_ok++; }
+      } }
     { static DWORD last_state = 0xffffffffu; static int last_n = -1, last_nb = -1, told;
       if ((o->b.state != last_state || o->n != last_n || o->nbots != last_nb) && told < 30) {
           told++; last_state = o->b.state; last_n = o->n; last_nb = o->nbots;

@@ -6,6 +6,7 @@
 #define KLONLINE_READ_H
 
 #define KLOR_MAX    16                 /* seats read (the online FA cap is 12; the arrays of klbot.c hold 16) */
+#define KLOR_SEATS  12                 /* every S array (flags, money, kills, killer) holds 12 entries: an S read for a seat >= 12 would run into the next array */
 #define KLOR_NBOT   8                  /* AI heisters read (klhud.c's online bot rows were capped at 8) */
 
 struct klor_row {
@@ -25,6 +26,8 @@ struct klor_row {
     int alive;                         /* bot: health > 0; human: no dead / escaped bit in flags */
 };
 
+struct klor_ev { int victim, killer; };          /* a death seen this call: the victim's seat, the killer's seat (-1 = none / the world / the police) */
+
 struct klor_snap {
     struct klb_snap b;                 /* klbot.c's online snapshot (the SAME struct Arcade uses): rules, state, on_* arrays; veh / timer / vehicle filled here from the mirrors */
     int ok;                            /* 1 = the rules object is Sv / Cl and the score object S passed its vtable test */
@@ -37,6 +40,12 @@ struct klor_snap {
     float clock, length;               /* [rules+0x4c] (the HUD clock mirror) / S+0x324 (round length) */
     float esc_timer; BYTE esc_state; DWORD vehicle;   /* [rules+0x1d8] / [rules+0x1dc] / [rules+0x1e4] mirrors */
     int names_ok;                      /* how many rows got a character name from the model */
+    int loot_ok;                       /* 1 = at least one ZOnlineMoneyCtrl was read this round (loot_rem / loot_init mean something) */
+    long loot_rem, loot_init;          /* the loot lying on the map now / the largest seen this round (the bar's whole; GUESS G5: a late first scan under-counts it) */
+    long held;                         /* the crew's Sharable + Unsharable summed over the seats in use (S+0x188 / S+0x224) */
+    long stock_money;                  /* [rules+0x320]: the stock HUD's money cache (GUESS: the local seat's Sharable + Unsharable); only for the log's cross-check */
+    int deaths;                        /* how many times the LOCAL seat died in this match (the skulls' death marks) */
+    struct klor_ev ev[4]; int nev;     /* deaths that finished resolving (killer read or 0.7 s waited) in THIS call: the kill feed's events */
 };
 
 /* a seat is 'dead' for the killed-by latch: the Arcade score flags the online word carries (4 dead, 0x10 / 0x4000 waiting; GUESS that they carry over) */
@@ -61,6 +70,22 @@ static float klor_loot_share(long initial, long remaining)
     if (remaining > initial) return 0.0f;
     return (float)(initial - remaining) / (float)initial;
 }
+
+/* the kill-feed step of one seat. q->prev -1 = not seen yet, 0 alive, 1 dead (status bit 4); q->at = when a death waits for its killer byte.
+   -> bit 0: the seat died now (the skull counter), bit 1: the death is resolved (killer read, or 700 ms passed): emit one feed event with *killer */
+struct klor_seatev { int prev; DWORD at; };
+static int klor_ev_step(struct klor_seatev *q, int dead4, int killer, DWORD now, int *emit_killer)
+{
+    int r = 0;
+    if (q->prev < 0) { q->prev = dead4 != 0; q->at = 0; return 0; }          /* the first sight of a seat: already dead is no event */
+    if (!dead4) { q->prev = 0; q->at = 0; return 0; }
+    if (!q->prev) { q->prev = 1; q->at = now ? now : 1; r |= 1; }
+    if (q->at && (killer >= 0 || (DWORD)(now - q->at) > 700)) { q->at = 0; *emit_killer = killer; r |= 2; }
+    return r;
+}
+
+/* the loot bar's whole: the largest remaining seen (0 = nothing yet) */
+static long klor_loot_latch(long *init, long rem) { if (rem > *init) *init = rem; return *init; }
 
 /* capital letters for the KILLED BY line */
 static void klor_upper(char *s) { for (; *s; s++) if (*s >= 'a' && *s <= 'z') *s = (char)(*s - 32); }
