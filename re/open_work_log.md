@@ -1,3 +1,8 @@
+2026-10-26 ~14:50 - [P7 worktree agent] UCC 'down, not dead' while hidden: re/ucc_down_only.md + klucc_down.c ([Ucc] DownOnly=0, NOT run).
+A human's hit is applied on the VICTIM's own PC (0x891490 -> slot 423 0x458880 -> 0x6e3400); 0x6e3400 hands the rules slot 15 (0x425320) a POINTER to
+the delta before subtracting: private FA rules vtable copy (Sv shares klroundkeep's table, Cl gets klh_rules_vt3) clamps a hidden UCC's hit to leave Floor.
+DownOnly=2 also asks the down trigger 0x8da3b0 (kind 9) after a would-be kill (GUESS). Harness klud_test 55/55, --check-hook clean. Side: [rules+0x283/284] = RMCUCCMissionFailed bytes.
+
 2026-10-26 ~14:45 - [cloud] UCC SUSPICION MESSAGES + SHARED NET CHANNEL (built, harness only, NOT run): klhook/klucc.c [Ucc] Pings=0 /
 Accuse=0 (host's random fake pings; heister accuse key F5 = 0x74, aim cone, 20 s per player) over klhook/klnetchan.c [NetChan] (UDP
 27416 broadcast + Steam member data klx_msg; idle unless wanted). re/hook_netchannel.md: UDP = System Link only; Steam lobby is probably

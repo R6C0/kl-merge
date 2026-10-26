@@ -265,6 +265,9 @@ static DWORD klh_sm_vt2;
 /* the Sv rules object (ZGameRulesFragileAllianceSv, 0xbd2eb4) with the private vtable copy of klroundkeep.c ([Lobby] KeepRound / TEST probe) */
 static DWORD klh_rules_vt2;
 #define KLH_RULES_SV_OK(v) ((v) == 0xbd2eb4 || ((v) && (v) == klh_rules_vt2))
+/* the Cl rules object (ZGameRulesFragileAllianceCl, 0xbd31e4) with the private vtable copy of klucc_down.c ([Ucc] DownOnly, slot 15) */
+static DWORD klh_rules_vt3;
+#define KLH_RULES_CL_OK(v) ((v) == 0xbd31e4 || ((v) && (v) == klh_rules_vt3))
 
 /* [Net] OnlineSafe=1 (default 1): kl_online() = 1 when this machine is in a NETWORK session, and then every part that WRITES game state
    stays out of it (re\netcode_plan.md 2.1). The test is the one the AI parts already make (klbot.c klb_read / klbalance.c klr_arcade):
@@ -730,6 +733,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klrigid.c"                                       /* klrigid.c: [Rigid] heavier mouse turn + remote shaping helpers (off unless Enable=1) */
 #include "klaiturn.c"                                      /* klaiturn.c: [Rigid] AiTurnDps - one .data float caps every AI actor's body turn rate (off unless set) */
 #include "klnetsmooth.c"
+#include "klucc_down.c"                                   /* klucc_down.c: [Ucc] DownOnly - a hidden UCC's hits only down a heister (off unless set); AFTER klroundkeep.c, klnetsmooth.c */
 #include "klmusic.c"                                      /* klmusic.c: [Music] a winmm MCI jukebox for the FA round (off unless Enable=1); AFTER klmove.c / klbot.c */
 #include "klambience.c"                                  /* klambience.c: [Ambience] a looping bed + timed one-shots (radio, alarm, heli, distant) over winmm MCI (off unless Enable=1); AFTER klmusic.c */
 #include "klshop.c"
@@ -1216,6 +1220,7 @@ static void klh_tick(int game_thread)
     klam_tick(game_thread);                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
     klst_tick(game_thread);                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
     klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
+    klud_tick(game_thread);                           /* klucc_down.c: [Ucc] DownOnly (off unless set; game thread only) */
     klrigid_tick(game_thread);                        /* klrigid.c: [Rigid] 10 s summary line (Log=1) */
     klshoppage_tick(game_thread);                     /* klshoppage.c: page II of the weapon shop (off unless [ShopPage] Enable=1) */
     klshop_tick(game_thread);                         /* klshop.c: [Shop] Swap= a shop row hands over another gun, Arcade only (off unless Enable=1) */
@@ -1631,6 +1636,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klinv_init();
     klgrenade_init();                                 /* klgrenade.c: after klinv_init (shares its user32 pointers) */
     klnetsmooth_init();
+    klud_init();                                      /* klucc_down.c: reads [Ucc] DownOnly */
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
     klam_init();                                     /* klambience.c: [Ambience] (default off) */
     klst_init();                                      /* klstinger.c: [Stinger] (default off) */

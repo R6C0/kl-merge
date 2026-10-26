@@ -184,6 +184,7 @@ static const char *klnet_vt_name(DWORD vt)
     case 0: return "none";
     }
     if (vt && vt == klh_rules_vt2) return "ZGameRulesFragileAllianceSv";
+    if (vt && vt == klh_rules_vt3) return "ZGameRulesFragileAllianceCl";
     return "another class";
 }
 
