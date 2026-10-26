@@ -13,9 +13,10 @@ import kl_fa, kl_gms
 import kl_fa_bots as KB
 import kl_loot_1025 as LO
 import kl_lanes_1025 as LN
+import kl_loot_scale_1026 as _LS
 
 TAG, GAME, MAPS, md5, patch_zip = LN.TAG, LN.GAME, LN.MAPS, LN.md5, LN.patch_zip
-TOTAL = 4000000
+TOTAL = 4000000                          # what this builder produces; 2026-10-26 the per-map totals (4M..8M, kl_loot_scale_1026.TARGETS) are applied AFTER it: both are accepted below
 
 # DM02 drawer groups (ZGROUP, parent KL_Shops! at the identity) -> new place of the whole group (its 7 children sit at local 0, so the loot object 23626 etc. follows).
 # Each spot is a counter / desk top of the mall, found by work/fl2*.py (HVK top of the prop - 13, like the stock tills: node 593 on a desk top 606):
@@ -119,7 +120,7 @@ def build_loot(src, slot, dst, amounts, strip, moves=None, log=print):
             bad.append('node %d amount %s != %s' % (k, after.get(k), amounts.get(k, before[k])))
     if set(after) != set(before) - set(strip):
         bad.append('loot set differs')
-    if sum(after.values()) != TOTAL:
+    if sum(after.values()) not in (TOTAL,) + tuple(t for t, _w in _LS.TARGETS.values()):     # 2026-10-26: 4M (this builder) or a map's 4M..8M target
         bad.append('total %d != %d' % (sum(after.values()), TOTAL))
     for n in A.files:
         if n not in repl and A.files[n] != B.files[n]:

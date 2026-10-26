@@ -491,7 +491,7 @@ def build(src, dst, log=print):
     A2 = KB.Built(dst, SLOT)
     bad = []
     after = LT.money(A2)
-    if sum(after.values()) != 4000000 or len(after) != 8:
+    if sum(after.values()) not in (4000000, __import__('kl_loot_scale_1026').TARGETS['DD10'][0]) or len(after) != 8:     # 2026-10-26: 4M as built, or DD10's per-map target after kl_loot_scale_1026
         bad.append('loot total %d in %d objects' % (sum(after.values()), len(after)))
     actors1 = sum(1 for k in range(1, len(A2.sc.nodes)) if A2.sc.cls(k) == 'ZFFActor')
     if actors1 != actors0 + sum(s['men'] for s in specs):
