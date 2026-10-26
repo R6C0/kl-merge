@@ -35,6 +35,7 @@ import kl_loot_1025 as LO
 SRC_MD5 = '36610fc840823be968d3c537249cbefe'      # the live DM02 zip this was built and checked on (2026-10-26)
 GROUP = 'KL_Coop!'
 TAG = '.before-1026coop'
+TAG_SOLO = '.before-1026solo'   # 03:36: the patch install refused, '.before-1026coop' was taken by the 22:18 coop install
 R_ = F.R_
 DONOR_USE = ('L03', R_ + 'Special!Coop_doors!EndAlleyHACK!Fake_EndAlley_Airlock')
 TEXT_LIFT = 'CoOpDoors/L03_CoOpDoors/L03_CoOpLift'
@@ -506,7 +507,7 @@ def stage_patch(src, out, scratch=None, log=print):
     if h != LIVE_MD5:
         raise SystemExit('input md5 %s is not the live %s' % (h, LIVE_MD5))
     LO.MAPS['DM02'] = dict(slot='F02', zip='F02_Main.zip')
-    LO.TAG = TAG
+    LO.TAG = TAG_SOLO
     install = LS.INSTALL_PY.replace('van-lane + loot', 'co-op solo lift fix').replace('tools/kl_lanes_stage_1025.py', 'tools/kl_dm02_coop_1026.py').replace('2026-10-25', '2026-10-26')
     reps = {}
     for name, auto in (('coop_solo', False), ('coop_solo_auto', True)):
@@ -515,7 +516,7 @@ def stage_patch(src, out, scratch=None, log=print):
         os.makedirs(d)
         rep = patch(src, os.path.join(d, 'F02_Main.zip'), auto=auto, log=log)
         with open(os.path.join(d, 'install.py'), 'w', newline='\n') as fh:
-            fh.write(install % dict(map='DM02', zip='F02_Main.zip', tag=TAG, game=LS.GAME, old=h, new=rep['out_md5']))
+            fh.write(install % dict(map='DM02', zip='F02_Main.zip', tag=TAG_SOLO, game=LS.GAME, old=h, new=rep['out_md5']))
         with open(os.path.join(d, 'build_report.json'), 'w') as fh:
             json.dump(rep, fh, indent=1, default=str)
         if scratch:
