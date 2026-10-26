@@ -50,7 +50,11 @@
 #define KLUD_TRIG_CALL(d, rec) ((BYTE (__fastcall *)(void *, void *, void *))(DWORD_PTR)KLH_VA(KLUD_TRIG))((void *)(DWORD_PTR)(d), 0, (void *)(rec))
 #endif
 
-static struct { int on, mode, dry, log; float floor, force_secs; } klud;
+static struct { int on, mode, dry, log, pre; float floor, force_secs; } klud;
+/* TRACK DAMAGE (2026-10-26, small separate hook): this wrapper is also the carrier of kldown.c's OnlinePreScale. kld_o_prescale(victim, &delta, attacker) (kldown.c, included AFTER this file, hence
+   the forward declaration) prices a hit on this machine's own knocked-down body BEFORE the game subtracts it - the same slot-15 call, FA / UCC / C&R alike (the rules classes are the same
+   Sv / Cl). klud.pre = [Down] Enable=1 + Online=1 + OnlinePreScale=1 (read here because klud_init runs before kld_init); klud.mode = [Ucc] DownOnly as before. Either one installs the table. */
+static void kld_o_prescale(DWORD victim, float *pdelta, DWORD attacker);
 static DWORD klud_sv[1 + KLUD_NSLOT], klud_cl[1 + KLUD_NSLOT];       /* [0] = RTTI locator, [1..] = slots */
 static DWORD klud_rules, klud_wait0;                                /* the rules object seen last, when we began waiting for klroundkeep */
 static unsigned long klud_revealed;                                 /* one bit per crew index: revealed UCCs (P6 sets it; nothing does yet) */
@@ -154,7 +158,8 @@ static DWORD __fastcall klud_w15(void *self, void *edx, DWORD victim, float *pde
 {
     static int told;
     if (!told) { told = 1; klog("uccdown: the rules' damage hook (slot 15) is reached - the wrapper works"); }
-    if (klud.on && pdelta && victim && attacker && attacker != victim) klud_filter((DWORD)(DWORD_PTR)self, victim, pdelta, attacker);
+    if (klud.pre && pdelta && victim) kld_o_prescale(victim, pdelta, attacker);      /* kldown.c: the downed own body's price, FIRST: the UCC clamp below then sees the priced delta (it only ever raises it toward 0) */
+    if (klud.mode && pdelta && victim && attacker && attacker != victim) klud_filter((DWORD)(DWORD_PTR)self, victim, pdelta, attacker);
     return ((DWORD (__fastcall *)(void *, void *, DWORD, float *, DWORD))(DWORD_PTR)KLH_VA(KLUD_SLOT_FN))(self, edx, victim, pdelta, attacker);
 }
 
@@ -254,8 +259,12 @@ static void klud_init(void)
     memset(&klud, 0, sizeof klud);
     klud.mode = GetPrivateProfileIntA("Ucc", "DownOnly", 0, klh_ini);
     if (klud.mode < 0 || klud.mode > 2) klud.mode = 0;
-    klud.on = klud.mode != 0;
-    if (!klud.on) return;
+    klud.pre = GetPrivateProfileIntA("Down", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("Down", "Online", 0, klh_ini) != 0 &&
+               GetPrivateProfileIntA("Down", "OnlinePreScale", 1, klh_ini) != 0 &&
+               (GetPrivateProfileIntA("Down", "OnlineFactors", 1, klh_ini) != 0 || GetPrivateProfileIntA("Down", "OnlineFreeFall", 1, klh_ini) != 0);
+    klud.on = klud.mode != 0 || klud.pre;
+    if (klud.pre) klog("uccdown: [Down] OnlinePreScale=1: the rules' damage hook (slot 15) is wrapped for kldown.c's pre-apply price of a downed own body's hits (FA / UCC / C&R online)");
+    if (!klud.mode) return;
     klud.dry = GetPrivateProfileIntA("Ucc", "Dry", 0, klh_ini) != 0;
     klud.log = GetPrivateProfileIntA("Ucc", "Log", 1, klh_ini);
     klud.floor = klud_inif("Floor", "1", 0.1f, 1000.0f);

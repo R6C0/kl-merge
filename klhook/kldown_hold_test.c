@@ -154,6 +154,31 @@ int main(void)
         nh = kldh_giveback(60.0f, 120.0f, 120.0f, 0.5f, &lt); CHECK(fabs(nh - 90.0f) < 0.01f, "half price: %.2f", nh);
     }
 
+    /* PRE-APPLY price (OnlinePreScale): the factor picker (shared with the give-back) and the delta scaling */
+    {
+        int rl; float f, nd, nan = 0.0f; nan = nan / nan;
+        f = kldh_pick(1, 1, 0, 1, 1, 0.15f, 1.0f, &rl); CHECK(f == 0.15f && rl == KLDH_R_COP, "lying, cop: DownFromCop");
+        f = kldh_pick(3, 2, 0, 1, 1, 0.15f, 0.8f, &rl); CHECK(f == 0.8f && rl == KLDH_R_CREW, "getting up, AI heister: DownFromCrew");
+        f = kldh_pick(1, 0, 0, 1, 1, 0.15f, 0.8f, &rl); CHECK(f == 1.0f && rl == KLDH_R_NONE, "a human heister: unscaled as Arcade");
+        f = kldh_pick(2, 1, 0, 1, 1, 0.15f, 1.0f, &rl); CHECK(f == 0.0f && rl == KLDH_R_FREE, "fall, Vulnerable=0, OnlineFreeFall: free");
+        f = kldh_pick(2, 1, 1, 1, 1, 0.15f, 1.0f, &rl); CHECK(f == 0.15f && rl == KLDH_R_COP_FALL, "fall, Vulnerable=1: the factor, not zero");
+        f = kldh_pick(2, 2, 1, 1, 1, 0.15f, 0.7f, &rl); CHECK(f == 0.7f && rl == KLDH_R_CREW_FALL, "fall, Vulnerable=1, AI heister: DownFromCrew");
+        f = kldh_pick(2, 1, 0, 0, 1, 0.15f, 1.0f, &rl); CHECK(f == 0.15f && rl == KLDH_R_COP_FALL, "OnlineFreeFall=0: the factor in the fall");
+        f = kldh_pick(1, 1, 0, 1, 0, 0.15f, 1.0f, &rl); CHECK(f == 1.0f && rl == KLDH_R_NONE, "OnlineFactors=0: no factor lying");
+        /* the owner's log: one police hit of 111.9 on a man with 120 - priced BEFORE it lands he keeps 103.2, not 8.1 */
+        nd = kldh_prescale(-111.9f, 0.15f); CHECK(fabs(nd + 16.785f) < 0.001f && 120.0f + nd > 100.0f, "111.9 at 0.15: %.3f", nd);
+        nd = kldh_prescale(-500.0f, 0.15f); CHECK(120.0f + nd > 0.0f, "a hit of 500 on 120 health at 0.15 does not kill (75): %.2f", nd);
+        nd = kldh_prescale(-50.0f, 0.0f); CHECK(nd == 0.0f || nd == -0.0f, "free fall: nothing");
+        CHECK(kldh_prescale(30.0f, 0.15f) == 30.0f, "a heal passes");
+        CHECK(kldh_prescale(0.0f, 0.15f) == 0.0f, "zero passes");
+        CHECK(kldh_prescale(-20.0f, 1.0f) == -20.0f, "factor 1: unchanged");
+        CHECK(kldh_prescale(-20.0f, 3.0f) == -20.0f, "factor above 1 never raises the price");
+        CHECK(kldh_prescale(-20.0f, -1.0f) == -20.0f, "negative factor ignored");
+        CHECK(kldh_prescale(-20.0f, nan) == -20.0f, "NaN factor ignored");
+        CHECK(kldh_prescale(nan, 0.15f) != kldh_prescale(nan, 0.15f), "NaN delta passes as NaN (not written)");
+        CHECK(kldh_prescale(-1e12f, 0.15f) == -1e12f, "absurd delta untouched");
+    }
+
     printf("kldown_hold_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

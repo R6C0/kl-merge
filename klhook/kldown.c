@@ -294,6 +294,8 @@
        FlopUp is a message. [0xceb40c] is never written online.
      - OnlineFreeFall / OnlineFactors: NOT the table, NOT the switch: a victim-side give-back of what a hit took while he is down (kld_o_giveback). A hit
        larger than his whole health still kills him (the apply is not detoured: no site established).
+     - OnlinePreScale (track damage): the SAME factors applied BEFORE the hit lands, in the FA rules' damage hook (slot 15, klucc_down.c's wrapper calls kld_o_prescale); the give-back
+       is then only the fallback when slot 15 is not reached in a round. See kld_o_prescale for what it cannot price (the flop fall's bullets under Vulnerable=1, point-blank).
      - OnlineMashSpeed: the speed-the-clip get-up mash runs on this machine's channel, GET UP presses go through at once (the hold meter is then off:
        MashHold applies with OnlineMashSpeed=0); the others see the stock-speed get-up.
      - OnlineNoFire: the ini's NoFire follows him online. The camera works on the stock fall too (kld_camera no longer needs the flop's fnow online).
@@ -322,6 +324,10 @@ static struct {
     int hold_ini;                              /* MashHold as the ini set it (kld_o.hold is 0 while OnlineMashSpeed=1) */
     int gun; DWORD gu_t;                       /* GettingUp sends of this machine (all rounds); GetTickCount of the last */
     float gb_sum; int gb_n, gb_late;           /* give-back: health given back in this knock-down; hits seen; hits that were lethal before they could be priced */
+    /* 2026-10-26 (track damage): OnlinePreScale - the hit is priced BEFORE it lands, in the rules' damage hook (klucc_down.c's slot-15 wrapper calls kld_o_prescale) */
+    int pre;                                   /* OnlinePreScale (ini, default 1): price a downed own body's hits in slot 15; the give-back below is then the fallback when slot 15 was not reached this round */
+    int ps_reached;                            /* the wrapper was entered in this round (set by kld_o_prescale, cleared when the round is not running): while 1 the give-back stays out of it */
+    int ps_n, ps_scaled; float ps_sum;         /* hits of this machine's own downed body seen in slot 15 (all rounds); of them scaled; health the scaling saved */
 } kld_o;
 /* klcharonline.c comes AFTER this file: its table / own-body finders are used through these (defined there, static in the same unit) */
 static int klco_table(DWORD sm, DWORD *ents, int *n);
@@ -2057,16 +2063,28 @@ static int kld_near(float a, float b) { return KLD_ABS(a - b) <= 0.0005f * (1.0f
    readable attacker = no give-back (a flat 50 of close combat, 0x499570, is not scaled, as in Arcade). Factors: AI heister (team 2) = DownFromCrew;
    an AI of any other team and a human POLICE body = DownFromCop (GUESS for the human cop: Arcade has none); a human heister = 1 (unscaled, as Arcade).
    The fall (down state 2) is Arcade's: free (factor 0) when the ini's Vulnerable=0 and OnlineFreeFall=1, else the same factors (Vulnerable=1: hits cost). */
+/* The attacker's class for the factors, SHARED by the give-back and the pre-apply price: 0 = none readable / a human heister (unscaled, as Arcade), 1 = police / a guard (AI) /
+   a human police body, 2 = an AI heister (team 2, Ally). *who = words for the log. */
+static int kld_o_class(DWORD att, const char **who)
+{
+    DWORD avt = att ? klh_avt(att) : 0, team = 99, sc; BYTE pol = 0; int cls = 0;
+    *who = "nobody readable";
+    if (avt == KLD_ACTOR_VT) { if ((sc = klh_rd32(att + 0x54)) != 0) klh_rd(sc + 4, &team, 4); cls = team == 2 ? 2 : 1; *who = cls == 2 ? "an AI heister" : "police / a guard (AI)"; }
+    else if (avt == KLD_PLAYER_VT) { klh_rd(att + 0x2723, &pol, 1); cls = pol ? 1 : 0; *who = pol ? "a human police body" : "a human heister (no factor)"; }
+    return cls;
+}
+static const char *const kld_o_rtxt[] = { "no factor", "FREE FALL (OnlineFreeFall=1, Vulnerable=0: Arcade swallows hits in the fall)", "DownFromCop", "DownFromCrew", "DownFromCop in the fall (Vulnerable=1)", "DownFromCrew in the fall (Vulnerable=1)" };
+
 static float kld_o_giveback(DWORD pl, DWORD ho, DWORD ds, float hp, float max, float dl, DWORD now)
 {
-    DWORD att = klh_rd32(pl + 0x2778), avt = att ? klh_avt(att) : 0, team = 99, sc; float f = 1.0f, give, nh; int cls = 0; const char *who = "nobody readable", *rule = "no factor";
-    BYTE pol = 0;
+    DWORD att = klh_rd32(pl + 0x2778); float f = 1.0f, give, nh; int cls = 0, rl = 0; const char *who = "nobody readable", *rule = "no factor";
     kld_o.gb_n++;
-    if (avt == KLD_ACTOR_VT) { if ((sc = klh_rd32(att + 0x54)) != 0) klh_rd(sc + 4, &team, 4); cls = team == 2 ? 2 : 1; who = cls == 2 ? "an AI heister" : "police / a guard (AI)"; }
-    else if (avt == KLD_PLAYER_VT) { klh_rd(att + 0x2723, &pol, 1); cls = pol ? 1 : 0; who = pol ? "a human police body" : "a human heister (no factor)"; }
-    if (ds == 2 && kld_o.ofree && !kld_r.hurt) { f = 0.0f; rule = "FREE FALL (OnlineFreeFall=1, Vulnerable=0: Arcade swallows hits in the fall)"; }
-    else if (kld_o.ofac && cls == 1) { f = kld_r.cop; rule = ds == 2 ? "DownFromCop in the fall (Vulnerable=1)" : "DownFromCop"; }
-    else if (kld_o.ofac && cls == 2) { f = kld_r.crew; rule = ds == 2 ? "DownFromCrew in the fall (Vulnerable=1)" : "DownFromCrew"; }
+    if (kld_o.pre && kld_o.ps_reached) {       /* OnlinePreScale: slot 15 prices the hits before they land; a second scaling here would price them twice */
+        if (kld.log >= 2 || kld_r.nline < 8 || dl > 0.5f * max) klog("down: online: price path: he lost %.1f (%.1f of %.1f, down state %lu): priced by SLOT 15 (the pre-apply scaler, OnlinePreScale) - the give-back fallback stays out of it", dl, hp, max, ds);
+        return hp;
+    }
+    cls = kld_o_class(att, &who);
+    f = kldh_pick((int)ds, cls, kld_r.hurt, kld_o.ofree, kld_o.ofac, kld_r.cop, kld_r.crew, &rl); rule = kld_o_rtxt[rl];
     if (f >= 0.999f || !kld_fin(f) || f < 0) {
         if (kld.log >= 2 || kld_r.nline < 8) klog("down: online: give-back: he lost %.1f (%.1f of %.1f, down state %lu) to %s: no factor applies (%s) - the hit stays at the game's price", dl, hp, max, ds, who, rule);
         return hp;
@@ -2081,8 +2099,8 @@ static float kld_o_giveback(DWORD pl, DWORD ho, DWORD ds, float hp, float max, f
     if (nh > hp + 0.01f && klh_data((void *)(DWORD_PTR)(ho + 4), &nh, 4, "the local player's health: the give-back of a hit while he is knocked down (OnlineFactors / OnlineFreeFall)")) {
         kld_o.gb_sum += nh - hp;
         if (kld.log >= 1 && (kld.log >= 2 || kld_r.nline < 8 || dl > 0.5f * max))
-            klog("down: online: give-back (the VICTIM-SIDE fallback, not a detour): he lost %.1f to %s %.2f s into the down (down state %lu); %s x%.2f: %.1f given back, health %.1f -> %.1f of %.1f (%.1f given back in this down so far); the hit was priced by whichever machine priced it - this machine scaled what it applied",
-                 dl, who, (now - kld_r.t0) / 1000.0f, ds, rule, f, nh - hp, hp, nh, max, kld_o.gb_sum);
+            klog("down: online: give-back [price path: GIVE-BACK, after the hit; %s] (the VICTIM-SIDE fallback, not a detour): he lost %.1f to %s %.2f s into the down (down state %lu); %s x%.2f: %.1f given back, health %.1f -> %.1f of %.1f (%.1f given back in this down so far); the hit was priced by whichever machine priced it - this machine scaled what it applied",
+                 kld_o.pre ? "OnlinePreScale=1 but slot 15 was NOT reached this round" : "OnlinePreScale=0", dl, who, (now - kld_r.t0) / 1000.0f, ds, rule, f, nh - hp, hp, nh, max, kld_o.gb_sum);
         return nh;
     }
     return hp;
@@ -2359,6 +2377,46 @@ static DWORD kld_o_pl(DWORD now)
     return pl;
 }
 
+/* ---- ONLINE: the PRE-APPLY price (OnlinePreScale, 2026-10-26, track damage; BUILT, NOT RUN LIVE; the disassembly facts are in this comment, re\ucc_down_only.md section 2 has the hook) ----
+   Called by klucc_down.c's wrapper of the FA rules' vtable slot 15 = 0x425320(victim, float *delta, attacker) (thiscall, ret 0xc), which the game calls from the health change
+   0x6e3400 through 0x83ad70 at 0x6e3471 BEFORE it subtracts (0x8a7c60 at 0x6e361a) - on the machine that is the VICTIM's master, i.e. this one when the victim is our own body.
+   READ in the disassembly: the delta is a float local of 0x6e3400's frame passed by pointer; negative = damage; the game later only zeroes / halves it (UCC / friendly-fire rules at
+   0x6e3486..), never raises it. Callers of 0x6e3400: the bullet routine 0x458880 (0x458ea8, for EVERY hit kind that gets past the down trigger), 0x5c7bea, 0x60d1c7 (not traced further;
+   both reach slot 15 the same way). What the wrapper sees is therefore every hit that COSTS: a hit the game swallowed itself never reaches it - 0x458880 returns at 0x45916a when the
+   down trigger 0x8da3b0 says true (its fall branch, [D+4] = 2, with the 'down not dead' switch [0xceb40c] at the image's 1; a blast, kind [rec+8] 9, is not swallowed).
+   So the price is: delta x kldh_pick(...) for the same factors as Arcade's table (DownFromCop / DownFromCrew, by the attacker's side the game hands over) while he lies (1) or gets up (3);
+   in the fall (2) only for the hits that were not swallowed. THE FLOP FALL UNDER Vulnerable=1 CANNOT BE PRICED HERE: Arcade charges it by writing the switch to 0, which is process-wide and
+   is never written online, so the game itself swallows the fall's bullets BEFORE slot 15 - they stay free online (said in the round line). DownPointBlank is not ported: the point-blank step's
+   hundred bullets are one record the shooter's machine makes, and slot 15 sees only the final number and no position (GUESS: nothing in the hook reads an actor's place without virtual calls).
+   Everything read here is this thread's own (game thread, inside 0x6e3400). Returns nothing; writes one float on the game's stack through klh_data when the price differs. */
+static void kld_o_prescale(DWORD victim, float *pdelta, DWORD attacker)
+{
+    DWORD pl, D, ds = 0, ho; float d = 0, nd, f, hp = 0, max = 0; int cls, rl = 0, ok = 1, n; const char *who = "";
+    if (!kld_o.pre || !kld_o.cur || !kld.on || !pdelta || !victim) return;
+    if (!kld_o.ps_reached) { kld_o.ps_reached = 1; klog("down: online: PRE-APPLY: the rules' damage hook (slot 15) is reached in this round: hits of this machine's own downed body are priced BEFORE they land (OnlinePreScale=1); the after-the-hit give-back is the fallback only if this is not reached"); }
+    if (!kld_o.ofree && !kld_o.ofac) return;
+    if (!(pl = kld_o_pl(GetTickCount())) || victim != pl || kld_s.dead) return;
+    if (!(D = klh_rd32(pl + 0x2948)) || klh_rd32(D) != pl || !klh_rd(D + 4, &ds, 4) || ds < 1 || ds > 3) return;      /* standing: the game's price */
+    if (!klh_rd((DWORD_PTR)pdelta, &d, 4) || !(d < 0.0f)) return;                                                      /* a heal, 0, NaN: untouched */
+    n = ++kld_o.ps_n;
+    cls = attacker && attacker != victim ? kld_o_class(attacker, &who) : 0;
+    if (!cls) who = attacker == victim ? "himself" : attacker ? who : "no attacker (a fall, a blast, a script)";
+    f = kldh_pick((int)ds, cls, kld_r.hurt, kld_o.ofree, kld_o.ofac, kld_r.cop, kld_r.crew, &rl);
+    nd = kldh_prescale(d, f);
+    if ((ho = klh_rd32(pl + 0xa48)) != 0) { hp = kld_rdf(ho + 4, &ok); max = kld_rdf(ho + 8, &ok); } else ok = 0;
+    if (nd == d) {
+        if (kld.log >= 2 || n <= 4) klog("down: online: PRE-APPLY [price path: SLOT 15]: a hit of %.1f from %s on him (down state %lu, health %.1f of %.1f): %s - the game's price stands", -d, who, (unsigned long)ds, ok ? hp : -1.0f, max, kld_o_rtxt[rl]);
+        return;
+    }
+    if (!kld.dry && !klh_data(pdelta, &nd, 4, "the damage delta of a hit on the local downed player (OnlinePreScale, game stack)")) return;
+    kld_o.ps_scaled++;
+    if (ok) kld_o.ps_sum += (nd - d);
+    if (kld.log >= 2 || kld_o.ps_scaled <= 8 || -d > 0.5f * max)
+        klog("down: online: PRE-APPLY [price path: SLOT 15, before the hit lands]: a hit of %.1f from %s on him (down state %lu): %s x%.2f -> %.1f%s; health %.1f of %.1f%s (%d priced here, %.1f saved so far)",
+             -d, who, (unsigned long)ds, kld_o_rtxt[rl], f, -nd, kld.dry ? " (Dry=1: NOT written)" : "", ok ? hp : -1.0f, max,
+             ok && hp + d <= 0.0f && hp + nd > 0.0f ? " - A HIT THAT WOULD HAVE KILLED HIM, he lives" : "", kld_o.ps_scaled, kld_o.ps_sum);
+}
+
 /* ---- ReplicaProbe (SHIP 1026f; log only, nothing is written): what a REMOTE body's animation words are, once per fall of this machine's own body ----
    The open net question (re\down_online_read_a.md Q3): does a replica play a clip THIS machine did not write? The flop writes slot ids into THIS body's
    animation pool [pl+0x78] / table [+0x7c] / third pointer [+0x80]; pools are per animation set. If a remote body's pool is the SAME pointer as ours (the same
@@ -2543,6 +2601,9 @@ static void kld_o_roundline(DWORD sub)
          kld_o.omash, kld_o.omash ? "Arcade's speed-the-clip get-up runs on THIS machine's channel at once (no meter hold; GET UP presses go through); the other machines' replica gets the stock-speed get-up" :
                       kld_o.hold ? "MashHold: the GET UP button is held until the meter holds the needed presses, then one stock press (the clip stays stock speed)" : "off (MashHold=0): the game's own one-press get-up",
          kld_r.nofire, kld_o.onofire, kld_o.onofire ? "follows him online" : "not online", kld_v.cam, kld_v.prompt, n ? t : " the game's own (no key set)", kld.log);
+    klog("down: online: PRICE PATH (OnlinePreScale=%d): %s", kld_o.pre,
+         kld_o.pre ? "hits that COST this machine's own downed body are scaled in the rules' damage hook (slot 15, BEFORE the subtraction): a hit larger than his health is priced first, peers never see a dip. THE LINE ABOVE about 'a single hit larger than his health still kills him' / the give-back is then only the fallback, used if slot 15 is not reached this round. STILL NOT PRICED ONLINE: the flop fall's bullets under Vulnerable=1 (the game's own trigger swallows them before slot 15; Arcade charges them by writing [0xceb40c], never written online) and DownPointBlank (no position in slot 15)"
+                   : "off: the after-the-hit give-back (the line above) prices hits; a hit bigger than his health still kills him");
     if (kld_o.hold) klog("down: online: MashHold=%d: meter %.1f presses (+%.2f a press, -%.2f a second, time bound %.0f s), counted from key 0x%02x%s (pad button 0x%04lx)", kld_o.hold, kld_o.need, kld_o.per, kld_o.decay, kld_o.maxlie / 1000.0f, kld_o.key, kld_o.pad ? " + the pad" : "", kld_o.padbtn);
     if (kld_o.hold) klog("down: online: MashHoldHow=%d (%s): %s", kld_o.how, kld_o.how == 2 ? "the Cover key only" : "mask bit 0x80", kld_o.how == 2 ? (kld_o.scan && klkf_armed ? "the get-up key is hidden while he lies, he can shoot; pad: see the pad line" : "NO scan code / proxy: this round holds with the bit-0x80 mask, which blocks fire") : "the old hold: every button but reload is off while he lies");
 }
@@ -2558,7 +2619,7 @@ static void kld_o_mode(int onl, DWORD now)
         kld_s.player = 0; kld_drop(); kld_s.dstate = 0; kld_s.nwin = 0; kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
     }
     kld_o_release("the mode changes (Arcade <-> online)");
-    memset(&kld_o.h, 0, sizeof kld_o.h); kld_o.holding = 0; kld_o.told = 0; kld_o.nheld = 0; kld_o.mtold = 0; kld_o.pl = 0; kld_o.t_find = 0;
+    memset(&kld_o.h, 0, sizeof kld_o.h); kld_o.holding = 0; kld_o.told = 0; kld_o.ps_reached = 0; kld_o.nheld = 0; kld_o.mtold = 0; kld_o.pl = 0; kld_o.t_find = 0;
     kld.flop = !onl ? kld_o.flop0 : (kld_o.oflop && (kld_o.flop0 == 1 || kld_o.flop0 == 3)) ? kld_o.flop0 : 0;      /* OnlineFlop: the ini's Flop 1 / 3 for this machine's own body (Flop=2 and 0 stay the stock fall: only the whole-clip modes end by state 5 / FlopUp, which kld_o_gu_send covers) */
     kld_o.cur = onl;
     if (kld.log) klog("down: mode: %s (kld.flop %d)", onl ? (kld.flop ? "ONLINE: the ini's Flop on this machine's own body (OnlineFlop), the game's GettingUp sent when it rises, the victim-side give-back for the factors / free fall, no Vulnerable switch, no bots" : "ONLINE: the stock fall (OnlineFlop=0 or Flop is not 1 / 3), no Vulnerable switch, no bots") : "Arcade: the ini's Flop / mash as set", kld.flop);
@@ -2592,7 +2653,7 @@ static void kld_tick_main(int game_thread)
         pl = kld_o_pl(now);
         if (pl && !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
         if (state == KLD_ROUND && !kld_o.told) { kld_o.told = 1; kld_o_roundline(osub); }
-        if (state != KLD_ROUND) kld_o.told = 0;
+        if (state != KLD_ROUND) { kld_o.told = 0; kld_o.ps_reached = 0; }      /* the slot-15 scaler must be reached again in the next round (else the give-back fallback is used) */
     } else if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
         !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLD_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
     if (!pl || police) act = 0;                /* a fed is left to the game */
@@ -2870,6 +2931,7 @@ static void kld_init(void)
     kld_o.ofac = GetPrivateProfileIntA("Down", "OnlineFactors", 1, klh_ini) != 0;     /* police -> you / crew -> you while down: the victim-side give-back, no table write */
     kld_o.omash = GetPrivateProfileIntA("Down", "OnlineMashSpeed", 1, klh_ini) != 0;  /* Arcade's get-up mash online (no meter hold); MashHold stays for OnlineMashSpeed=0 */
     kld_o.onofire = GetPrivateProfileIntA("Down", "OnlineNoFire", 1, klh_ini) != 0;   /* the ini's NoFire follows him online */
+    kld_o.pre = GetPrivateProfileIntA("Down", "OnlinePreScale", 1, klh_ini) != 0;     /* (recommended on) price a downed own body's hits in the rules' damage hook (slot 15) BEFORE they land; klucc_down.c installs the wrapper; the give-back above is the fallback */
     kld_o.probe = GetPrivateProfileIntA("Down", "ReplicaProbe", 1, klh_ini) != 0;     /* log only: remote bodies' animation words once per fall */
     kld_o.hold_ini = kld_o.hold;
     if (kld_o.omash) kld_o.hold = 0;           /* GET UP presses go through at once; the hold-mash meter is the OnlineMashSpeed=0 form */
@@ -2947,8 +3009,8 @@ static void kld_init(void)
                      kld.dry ? " (Dry=1: NOTHING is written, the log says what would be)" : "", kld.base, kld.per, kld.decay, kld.top, n ? t : " the game's own (no key set)", kld.log);
     if (kld.on) klog("down: online: Online=%d (1 = the part also acts in an online FA / UCC / C&R round for this machine's own non-police player; Flop is off there, the speed-the-clip mash does not run there), MashHold=%d (1 = the get-up is held until the mash meter is full), MashNeed=%.1f presses, MashPer=%.2f, MashDecay=%.2f a second, MashMax=%.0f s, MashKey=0x%02x, MashPad=%d (button 0x%04lx)",
                      kld_o.online, kld_o.hold, kld_o.need, kld_o.per, kld_o.decay, kld_o.maxlie / 1000.0f, kld_o.key, kld_o.pad, kld_o.padbtn);
-    if (kld.on) klog("down: online parity: OnlineFlop=%d (ini Flop=%d: %s), OnlineFreeFall=%d, OnlineFactors=%d, OnlineMashSpeed=%d (MashHold as set: %d, in effect: %d), OnlineNoFire=%d, ReplicaProbe=%d",
-                     kld_o.oflop, kld_o.flop0, kld_o.flop0 == 1 || kld_o.flop0 == 3 ? "plays online" : "Flop 0 / 2 stay the stock fall online", kld_o.ofree, kld_o.ofac, kld_o.omash, kld_o.hold_ini, kld_o.hold, kld_o.onofire, kld_o.probe);
+    if (kld.on) klog("down: online parity: OnlineFlop=%d (ini Flop=%d: %s), OnlineFreeFall=%d, OnlineFactors=%d, OnlineMashSpeed=%d (MashHold as set: %d, in effect: %d), OnlineNoFire=%d, ReplicaProbe=%d, OnlinePreScale=%d",
+                     kld_o.oflop, kld_o.flop0, kld_o.flop0 == 1 || kld_o.flop0 == 3 ? "plays online" : "Flop 0 / 2 stay the stock fall online", kld_o.ofree, kld_o.ofac, kld_o.omash, kld_o.hold_ini, kld_o.hold, kld_o.onofire, kld_o.probe, kld_o.pre);
     /* MashHoldHow=2: arm the keyboard proxy (klrigid.c wraps the keyboard device only when this is set, before the game creates DirectInput) and try the pad import */
     if (kld.on && kld_o.online && kld_o.hold && kld_o.how == 2) {
         if (kld_o.scan) klkf_armed = 1;
