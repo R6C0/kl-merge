@@ -210,15 +210,14 @@ static int klbf_way_start(const float p[3], const float exitp[3])
    UNSYNCED: 0x45f5d0 runs on the host only; clients may not see the ramp build (GUESS, unproven; 0x6ae730, the sync path, is NOT used: unproven). Log lines start 'botfill: ramp:'. */
 #define KLBF_RAMP_VT   0x00bc232c
 #define KLBF_RAMP_FIRE 0x0045f5d0
-#define KLBF_RAMP_PROBEMS 5000      /* ms into the round before the one-off entity-table probe */
+#define KLBF_RAMP_PROBEMS 5000      /* ms after the round's first tick before the first private-memory probe (then every 20 s, 3 a round, until a candidate) */
 #define KLBF_RAMP_CAND 4
 static struct { int loaded, have, probed, fired, ncand; DWORD t0, cand[KLBF_RAMP_CAND]; float c[3], h[3]; char name[48], sec[40]; } klbf_rp;
 static int klbf_rp_best;
 static void klbf_ramp_load(void)
 {
     char scene[200], key[120], line[120], *c; int i; float v[3];
-    DWORD t0 = GetTickCount();
-    memset(&klbf_rp, 0, sizeof klbf_rp); klbf_rp_best = 0; klbf_rp.t0 = t0;
+    memset(&klbf_rp, 0, sizeof klbf_rp); klbf_rp_best = 0;      /* t0 = 0: set by the first klbf_ramp_tick of the round */
     if (!klbf_ot_ramp || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
     strcpy(klbf_rp.sec, "BotFillRamp_");
     for (i = 0; key[i] && key[i] != 0x5c && i < 20; i++) klbf_rp.sec[12 + i] = (char)(key[i] >= 'a' && key[i] <= 'z' ? key[i] - 32 : key[i]);
@@ -246,41 +245,48 @@ static void klbf_ramp_name(DWORD obj, char b[40])
     b[39] = 0;
 }
 
-/* one-off, ~5 s into the round (also when Dry): walk the entity table as klch_panic does and log the ZTriggerBox candidates */
+/* ~5 s after the first tick of the round (also when Dry; BOS_DD02r: the entity-table walk klch_panic uses found 0 ZTriggerBox, so this is now klmove.c's PROVEN
+   exit-trigger method): scan the private RW memory for the ZTriggerBox vtable, keep objects whose +0x24 entity has a vtable in the image, and read the box place
+   from that entity's node (kle_node) as klbotfill does for the exit trigger. GUESS: ZTriggerBox keeps its entity at +0x24 like ZOnlineExitLevelTrigger (a trigger
+   subclass). A candidate = node within 50 units of Centre, or the name GUESS [[obj+4]+0x6c] contains Name. A miss is retried 20 s later, 3 probes a round. */
 static void klbf_ramp_probe(void)
 {
-    DWORD p, tab, i, blk[64 * 32], total = 0, byname = 0, bycent = 0;
-    if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) { klog("botfill: ramp: probe: no entity table"); return; }
-    klbf_rp.probed = 1; klbf_rp.ncand = 0;
-    for (i = 0; i < 0x10000; i += 64) {
-        DWORD k;
-        if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
-        for (k = 0; k < 64; k++) {
-            DWORD o = blk[k * 32 + 0x60 / 4], off, cen = 0, cenoff[3]; char nm[40]; int nmatch;
-            if (o < 0x10000 || klh_rd32(o) != (DWORD)KLBF_RAMP_VT) continue;
-            total++;
-            klbf_ramp_name(o, nm);
-            nmatch = nm[0] && klbf_rp.name[0] && strstr(nm, klbf_rp.name) != 0;
-            for (off = 0; off + 12 <= 0x400; off += 4) {      /* the object's first 0x400 bytes in 0x100 chunks (a chunk that cannot be read is skipped); a float triple within 2 units of Centre */
-                float f[3]; DWORD base = off & ~0xffu;
-                if (!klh_rd(o + off, f, 12)) { off = base + 0xfc; continue; }
-                if (fabsf(f[0] - klbf_rp.c[0]) <= 2.0f && fabsf(f[1] - klbf_rp.c[1]) <= 2.0f && fabsf(f[2] - klbf_rp.c[2]) <= 2.0f) { if (cen < 3) cenoff[cen] = off; cen++; }
-            }
-            if (nmatch) byname++;
-            if (cen) bycent++;
-            if (nmatch || cen) {      /* rank: name+centre 3 > centre 2 > name 1; cand[0] is always the best seen (review: a good one after the 4th was dropped), the log is capped */
-                int sc = nmatch && cen ? 3 : cen ? 2 : 1;
-                if (!klbf_rp.ncand || sc > klbf_rp_best) { klbf_rp.cand[0] = o; klbf_rp_best = sc; }
-                if (klbf_rp.ncand < KLBF_RAMP_CAND) {
-                    DWORD d38 = klh_rd32(o + 0x38), d40 = klh_rd32(o + 0x40), d6c = klh_rd32(o + 0x6c);
-                    if (klbf_rp.ncand) klbf_rp.cand[klbf_rp.ncand] = o;
-                    klog("botfill: ramp: candidate %d: obj %08lx name '%s'%s, centre match first at +0x%lx (%lu hit(s)), [+0x38]=%08lx [+0x40]=%08lx [+0x6c]=%08lx", klbf_rp.ncand, (unsigned long)o, nm, nmatch ? " (NAME MATCH)" : "", cen ? (unsigned long)cenoff[0] : 0UL, (unsigned long)cen, (unsigned long)d38, (unsigned long)d40, (unsigned long)d6c);
+    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD total = 0, withent = 0, byname = 0, bycent = 0, t0 = GetTickCount();
+    klbf_rp.probed++; klbf_rp.ncand = 0; klbf_rp_best = 0;
+    while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
+        if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
+            SIZE_T o, j;
+            for (o = 0; o < mbi.RegionSize; o += sizeof buf) {
+                SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
+                if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
+                for (j = 0; j + 4 <= n; j += 4) {
+                    DWORD at, ent, evt, node; float np[3] = {0, 0, 0}; char nm[40]; int nmatch, cen;
+                    if (*(DWORD *)(buf + j) != (DWORD)KLBF_RAMP_VT) continue;
+                    at = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + j); total++;
+                    if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi) continue;      /* an object of the game with an entity (klmv_exit_vehicle's test) */
+                    withent++;
+                    cen = (node = klh_rd32(ent + 4)) && kle_node(node, np, 0) && fabsf(np[0] - klbf_rp.c[0]) <= 50.0f && fabsf(np[1] - klbf_rp.c[1]) <= 50.0f && fabsf(np[2] - klbf_rp.c[2]) <= 50.0f;
+                    klbf_ramp_name(at, nm);
+                    nmatch = nm[0] && klbf_rp.name[0] && strstr(nm, klbf_rp.name) != 0;
+                    if (nmatch) byname++;
+                    if (cen) bycent++;
+                    if (nmatch || cen) {      /* rank: name+centre 3 > centre 2 > name 1; cand[0] is always the best seen, the log is capped */
+                        int sc = nmatch && cen ? 3 : cen ? 2 : 1;
+                        if (!klbf_rp.ncand || sc > klbf_rp_best) { klbf_rp.cand[0] = at; klbf_rp_best = sc; }
+                        if (klbf_rp.ncand < KLBF_RAMP_CAND) {
+                            if (klbf_rp.ncand) klbf_rp.cand[klbf_rp.ncand] = at;
+                            klog("botfill: ramp: candidate %d: obj %08lx entity %08lx node at (%.0f, %.0f, %.0f) name '%s'%s%s, [+0x38]=%08lx [+0x40]=%08lx [+0x6c]=%08lx", klbf_rp.ncand, (unsigned long)at, (unsigned long)ent, np[0], np[1], np[2], nm,
+                                 nmatch ? " (NAME MATCH)" : "", cen ? " (CENTRE MATCH)" : "", (unsigned long)klh_rd32(at + 0x38), (unsigned long)klh_rd32(at + 0x40), (unsigned long)klh_rd32(at + 0x6c));
+                        }
+                        klbf_rp.ncand++;
+                    }
                 }
-                klbf_rp.ncand++;
             }
         }
+        a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
     }
-    klog("botfill: ramp: probe: %lu ZTriggerBox in the table, %lu match name '%s', %lu match centre (3-float scan of the first 0x400 bytes), %d candidate(s) (best = cand[0], logged first only up to 4)%s", (unsigned long)total, (unsigned long)byname, klbf_rp.name, (unsigned long)bycent, klbf_rp.ncand, klbf_rp.ncand ? "" : " - NOTHING TO FIRE (name path / centre offset unproven)");
+    klog("botfill: ramp: probe %d: %lu ZTriggerBox vtable hit(s) in private memory, %lu with a game entity, %lu match name '%s', %lu match centre (node within 50 units), %d candidate(s), %lu ms%s", klbf_rp.probed,
+         (unsigned long)total, (unsigned long)withent, (unsigned long)byname, klbf_rp.name, (unsigned long)bycent, klbf_rp.ncand, GetTickCount() - t0, klbf_rp.ncand ? "" : klbf_rp.probed < 3 ? " - nothing to fire yet, probed again in 20 s" : " - NOTHING TO FIRE this round");
 }
 
 /* host, in a round (state 0x19), game thread, once a second: bp = the live Ally bots' feet (nb of them) */
@@ -288,8 +294,8 @@ static void klbf_ramp_tick(DWORD now, float bp[][3], int nb)
 {
     int b;
     if (!klbf_ot_ramp || !klbf_rp.have || klbf_rp.fired) return;
-    if (!klbf_rp.probed) { if (now - klbf_rp.t0 >= KLBF_RAMP_PROBEMS) klbf_ramp_probe(); return; }
-    if (!klbf_rp.ncand) return;
+    if (!klbf_rp.t0) klbf_rp.t0 = now;      /* BOS_DD02r: the load stamp came from the level load, so the probe ran 12 ms into the round; the clock now starts at the first tick */
+    if (!klbf_rp.ncand) { if (klbf_rp.probed < 3 && now - klbf_rp.t0 >= KLBF_RAMP_PROBEMS + (DWORD)klbf_rp.probed * 20000) klbf_ramp_probe(); return; }
     for (b = 0; b < nb; b++) {
         float *q = bp[b];
         if (fabsf(q[0] - klbf_rp.c[0]) > klbf_rp.h[0] || fabsf(q[1] - klbf_rp.c[1]) > klbf_rp.h[1] || fabsf(q[2] - klbf_rp.c[2]) > klbf_rp.h[2]) continue;
