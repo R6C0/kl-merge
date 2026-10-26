@@ -66,8 +66,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-26 ~05:50 - BO6 PASS (2/2 in round): x20 health applied (280 -> 5600), guard hold + 1 stack grabbed, van trigger found; still all 7 bots dead by 05:21 (host ~5000 -> 0 between samples). Research: cop POINT-BLANK step (0x8c62e0, scale 100 at rec+0x18) ~7560/hit online (police->crew gate 0x7f6850 false). Probe f9303217b (1026r) -> BO7 queued; fix [BotFill] OnlinePointBlank via klr_pb (wycoc9taa, 1026u).
-SP1f PASS: 34-41 parked cops excluded (cb3c4d15e); awake level-placed cops (+0x8e0=0) are never steered, only snapped every 2 s, and the snap drops the hook (bug). Track = continuous host-driven placement (w26zgn6n5, 1026t). SV2 PASS 3/3. FallRescue LIVE PASS (peer DM02_fallR); BackMs ring 5c7fdf6bd (1026s).
+2026-10-26 ~06:30 - BO7 confirmed that point-blank at scale 100 kills the online bots; OnlinePointBlank=2 is under test in BO8b (joiner rec block added). SP1g PASS: Track cut client cop error p50 905 -> 25. Residual fix 44139f1d6 (bound stall, KeepY); SP1h queued on 1026v. 12-row lobby seen in a back-buffer shot. Monitor off: use kld3 D3dShot* plus [FrameLimit] Enable=1 SwapChain=1.
 
 2026-10-26 ~05:55 - [kl-merge-ce] DM02 restart solved: walk-off fall past the shop floors' rear edge (x +-30 m, no collision) -> out-of-world box test 0x87fb30 -> YouDied. hvk3 shutters DO open (the "stuck" was klauto's stale pos, fixed c3c327a39). FallRescue PASS on 1026q and 1026s (step-back lands 74-190 units inside the edge).
 Queued: DM02 rear stops (F02 edddbb67, tools/kl_dm02_rearwall_1026.py) + DM02_rearW; then DM05A cover A/B (e235806c, tools/kl_cover_ab_1026.py, V1 room tree / V2 stock copy / V3 y10 / V4 stock copy in root) + COVER10 on out_cov_1026a_test (klcoverdump finder probe). Form-a restage of 11 maps held until A/B says which variant gives cover.
