@@ -787,6 +787,20 @@ static void kls_init(HINSTANCE inst)
         else { GetFullPathNameA(full, MAX_PATH, kls_patch_alias, 0);
                klog("expansion: MountFirst=%s: an open of Patch01.zip is answered with this file (no code patch; it must hold the stock members too)", mf); }
     }
+    /* [Lobby] Rows12=1 (default 1; "(recommended on)"): the FA lobby shows 12 player rows (re/lobby_12rows.md). Menu data only:
+       an open of Patch01.zip is answered with <Root>\Overlay\Patch01_rows12.zip, which tools/kl_lobby12.py builds from the
+       live Overlay\Patch01.zip (FALobby: rows 9..12 added, row pitch 32 -> 20). Skipped when MountFirst already names a file,
+       when the file is missing, or when it is older than Overlay\Patch01.zip (a rebuilt menu would be lost: rebuild it). */
+    if (!kls_patch_alias[0] && kls_overlay_on && GetPrivateProfileIntA("Lobby", "Rows12", 1, klh_ini)) {
+        char r12[MAX_PATH], pz[MAX_PATH]; WIN32_FILE_ATTRIBUTE_DATA d12, dpz;
+        snprintf(r12, sizeof r12, "%s\\Patch01_rows12.zip", kls_overlay);
+        snprintf(pz, sizeof pz, "%s\\Patch01.zip", kls_overlay);
+        if (!GetFileAttributesExA(r12, GetFileExInfoStandard, &d12)) klog("expansion: [Lobby] Rows12=1 but %s does not exist (run tools/kl_lobby12.py): stock lobby rows", r12);
+        else if (GetFileAttributesExA(pz, GetFileExInfoStandard, &dpz) && CompareFileTime(&dpz.ftLastWriteTime, &d12.ftLastWriteTime) > 0)
+            klog("expansion: [Lobby] Rows12=1 but %s is older than Overlay\\Patch01.zip: not used, rebuild it with tools/kl_lobby12.py", r12);
+        else { GetFullPathNameA(r12, MAX_PATH, kls_patch_alias, 0);
+               klog("expansion: [Lobby] Rows12=1: an open of Patch01.zip is answered with %s (FALobby with 12 player rows; GUESS layout, not run live)", r12); }
+    }
     for (p = 0; p < KLS_PAGES; p++) {
         char sec[16], title[64];
         kls_rules(p);
