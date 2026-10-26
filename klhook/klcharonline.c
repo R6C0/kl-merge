@@ -363,9 +363,14 @@ static void klco_tick(int game_thread)
         int cnt = ((int (__fastcall *)(void *, void *, unsigned __int64))KLMM_REAL(16))(klmm_real, 0, klco.lobby), mi; BYTE seen[KLCO_N];
         memset(seen, 0, sizeof seen); klco.steamGet = now;
         for (mi = 0; mi < cnt && mi < 16; mi++) {
-            unsigned __int64 id = ((unsigned __int64 (__fastcall *)(void *, void *, unsigned __int64, int))KLMM_REAL(17))(klmm_real, 0, klco.lobby, mi);
-            const char *v = ((const char *(__fastcall *)(void *, void *, unsigned __int64, unsigned __int64, const char *))KLMM_REAL(23))(klmm_real, 0, klco.lobby, id, "klx_look");
-            char b[40]; int a, c, m, o;
+            /* 2026-10-26 FIX: GetLobbyMemberByIndex returns CSteamID through a HIDDEN POINTER (first stack argument; the 008 adapter pops 0x10 =
+               ptr + id + index: re/private_match.md 'slots 12..35' ret list, klbuild.c:795). The old call passed (lobby, index) and read edx:eax:
+               Steam then wrote 8 bytes to the address = the lobby id's low dword and popped 4 bytes too many. Only reached with Steam=1 in a
+               Steam lobby (never in System Link, which is why B2 passed). */
+            unsigned __int64 id = 0; const char *v; char b[40]; int a, c, m, o;
+            ((void *(__fastcall *)(void *, void *, unsigned __int64 *, unsigned __int64, int))KLMM_REAL(17))(klmm_real, 0, &id, klco.lobby, mi);
+            if (!id) continue;
+            v = ((const char *(__fastcall *)(void *, void *, unsigned __int64, unsigned __int64, const char *))KLMM_REAL(23))(klmm_real, 0, klco.lobby, id, "klx_look");
             if (v && klh_rdstr((DWORD_PTR)v, b, sizeof b) && klco_parse(b, &a, &c, &m, &o)) { klco_heard(a, c, m, o, 1, now); seen[a] = 1; }
         }
         (void)seen;                                    /* a member gone from the lobby data keeps his last look for the round (his body stays) */

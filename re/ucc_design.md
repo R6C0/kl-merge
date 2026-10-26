@@ -82,6 +82,9 @@ Not for the next night: P4, two UCCs, the cooldown.
 5. Sabotage: look into ALL THREE (early police wave, van hold, door jam).
 6. Suspicion messages: ON, and heisters can also raise them themselves (an accuse key naming a player), next to the
    host's random fake pings.
+   BUILT 2026-10-26 (not run live): klhook/klucc.c `[Ucc] Pings / Accuse` (F5, aim cone, 20 s per player) over the shared channel
+   klhook/klnetchan.c (re/hook_netchannel.md: UDP = System Link proven pattern; Steam member data only while a lobby exists; internet
+   rounds have no carrier yet, the P2P proxy is ranked next). Bench: re/hook_netchannel.md 5.
 Consequence: P6 becomes a key only; the "down not dead" cap is new work (damage path, FA downed state) = P7.
 
 ## Rebalance levers that exist today as data (item 5)

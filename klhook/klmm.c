@@ -255,7 +255,8 @@ static void klmm_init(void)
     klmm_maxp = (int)GetPrivateProfileIntA("Lobby", "MaxPlayers", 0, klh_ini);
     if (klmm_maxp != 0 && (klmm_maxp < 9 || klmm_maxp > 16)) { klog("mm: [Lobby] MaxPlayers=%d is not 0 or 9..16: ignored (8 is the stock size)", klmm_maxp); klmm_maxp = 0; }
     if (!klmm_private && !klmm_buildkey && !klmm_maxp && !(GetPrivateProfileIntA("HostOpts", "Enable", 0, klh_ini) && GetPrivateProfileIntA("HostOpts", "Steam", 1, klh_ini))
-        && !(GetPrivateProfileIntA("CharOnline", "Enable", 0, klh_ini) && GetPrivateProfileIntA("CharOnline", "Steam", 1, klh_ini))) return;               /* default: nothing installed, v82f behaviour */
+        && !(GetPrivateProfileIntA("CharOnline", "Enable", 0, klh_ini) && GetPrivateProfileIntA("CharOnline", "Steam", 1, klh_ini))
+        && !((GetPrivateProfileIntA("Ucc", "Pings", 0, klh_ini) || GetPrivateProfileIntA("Ucc", "Accuse", 0, klh_ini)) && GetPrivateProfileIntA("NetChan", "Steam", 1, klh_ini))) return;   /* klnetchan.c's member data klx_msg */               /* default: nothing installed, v82f behaviour */
     InitializeCriticalSection(&klmm_cs);
     for (i = 0; i < KLMM_NSLOT; i++) klmm_vt[i] = 0;
     klmm_vt[0] = (void *)klmm_fwd0; klmm_vt[1] = (void *)klmm_fwd1; klmm_vt[2] = (void *)klmm_fwd2; klmm_vt[3] = (void *)klmm_fwd3;

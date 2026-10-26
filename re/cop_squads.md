@@ -80,7 +80,7 @@ klescort.c kle_human) and matched to its table entry: only his squad takes key o
 
 Not in this module: orders from REMOTE cops (their keys never reach the host). The next step is a UDP order channel in klcharonline.c's
 pattern ("KLCQ1;<entity idx>;<order>" from the client, the host applies it to that entity's squad) - after the bench shows the host-side
-part works. Also not done: a HUD mark of the squad, voice acks (DD's banks have no order lines), a police-only animation check.
+part works. 2026-10-26: that channel now exists as klhook/klnetchan.c (re/hook_netchannel.md; proposed type `CQORD`, `<ent>;<order>`, host applies). Also not done: a HUD mark of the squad, voice acks (DD's banks have no order lines), a police-only animation check.
 
 ## 6. Risks
 

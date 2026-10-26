@@ -1,8 +1,16 @@
+2026-10-26 ~14:45 - [cloud] UCC SUSPICION MESSAGES + SHARED NET CHANNEL (built, harness only, NOT run): klhook/klucc.c [Ucc] Pings=0 /
+Accuse=0 (host's random fake pings; heister accuse key F5 = 0x74, aim cone, 20 s per player) over klhook/klnetchan.c [NetChan] (UDP
+27416 broadcast + Steam member data klx_msg; idle unless wanted). re/hook_netchannel.md: UDP = System Link only; Steam lobby is probably
+left at match start (GUESS) so internet rounds have no carrier: Steam P2P import proxy ranked next. klnc_test 151/151, --check-hook clean.
+FIX klcharonline.c: GetLobbyMemberByIndex (slot 17) was called without its hidden CSteamID pointer (wild 8-byte write + 4-byte stack
+skew whenever [CharOnline] Steam=1 ran inside a Steam lobby). Bench: re/hook_netchannel.md 5.
+
 2026-10-26 ~14:40 UTC - scheduled check-in (cloud, read-only on the PC; BUSY: hook files 13:53 UTC, KLHook.result BOS_DD05 PASS F03, no dump newer than the notes): nothing launched or installed. Offline piece: static review of klhook/klcopsquad.c (cd8476d, not run live) against kl2.exe - Follow(all) orders the PLAYER SQUAD [sc+0xa4] (+0xc0/+0xc4[12], test 0x6c8510: [s+0x4f4]==squad, [s+0x6a4]!=0), not the receiver list, so the module now reads the squad pointer back (insquad), checks [sc+0xa4] and the 12 cap, requires +0x6a4; a cop with no recruit on the first pass is retried for ~20 s instead of being skipped all round; the aim handle/point ([[P+0xbd4]+0x2ac] via 0x86a9c0/0x8fcb50 -> 0x6ece90 = a handle, P+0x27b0) VERIFIED (was GUESS); DD's own Recruit in 0x615c90 is game TYPE 2 + role<=1 only, and on other types team-0 soldiers are Recruited into player 0's sc at load; used byte +9 stays GUESS (table reset 0x56f360 clears it with the entry's +0 owner word: both logged at Log=2). re/cop_squads.md 8, debug/notes/2026-10-26-scheduled-triage.md. --check-hook 0 errors. Owner: nothing new; the C&R bench (cop_squads.md 7) reads 'listed/insquad' and the Log=2 table lines.
 
 2026-10-26 ~14:20 - BOS_DD07 PASS 4/7 boarded on out_sprint_1026_test: OnlineExitSprint works (all 7 'exit walk at Sprint', style was 0/1; the whole crew at the trigger ~50 s after the order).
 The other 3 stood 2-10 m off the trigger centre during the 19 s wait (crowding) and missed the 3 m (2*Near) test. Fix: [BotFill] OnlineExitCrowd=1200 cm (recommended), 5 s within it while the van waits (state 3/4) counts as aboard (maps with no escape box).
 Sprint = 2 checked in kl2.exe's ZEnumInfo (0xcfccb8). Build out_crowd_1026_test f2f94e37; queue: DD06s, DD07c, DD08, DD09, DD02s, CNR2, DD04j on it.
+
 2026-10-26 ~14:10 - OWNER answered the six UCC questions (re/ucc_design.md "OWNER DECISIONS"): reveal by own key only;
 police shoot the hidden UCC; his hits only DOWN heisters while hidden; bounty 200k hidden / 400k revealed; two UCCs who
 know each other; research all three sabotages; suspicion pings on plus a heister accuse key. Cloud session building/researching.

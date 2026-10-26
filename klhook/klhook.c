@@ -755,6 +755,8 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klhostopt.c"                                    /* klhostopt.c: [HostOpts] host-controlled match options (off unless Enable=1); AFTER klslot.c / klbotfill.c / kllobby.c / klmm.c */
 #include "klcharonline.c"                               /* klcharonline.c: [CharOnline] every player's heister/mask/outfit on every peer (off unless Enable=1); AFTER klchar.c / klmm.c / klslot.c */
 #include "klsync.c"                                    /* klsync.c: [Sync] read-only probe + host list compare of actors / world objects per peer (off unless set); AFTER klcensus.c, klcharonline.c */
+#include "klnetchan.c"                                 /* klnetchan.c: [NetChan] the hook's shared peer message channel (UDP 27416 + Steam member data; idle unless a module wants it); AFTER klmm.c, klslot.c */
+#include "klucc.c"                                     /* klucc.c: [Ucc] Undercover Cop suspicion pings / accuse key (off unless Pings=1 or Accuse=1); AFTER klnetchan.c, klcharonline.c, klhud_popup.c */
 #ifdef KLHOOK_TEST
 #include "klauto.c"
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
@@ -1201,6 +1203,8 @@ static void klh_tick(int game_thread)
     klho_tick(game_thread);                           /* klhostopt.c: [HostOpts] (off unless Enable=1) */
     klco_tick(game_thread);                           /* klcharonline.c: [CharOnline] (off unless Enable=1) */
     klsy_tick(game_thread);                           /* klsync.c: [Sync] probe / host list (off unless set) */
+    knc_tick(game_thread);                            /* klnetchan.c: the shared message channel (idle unless a module wants it) */
+    kluc_tick(game_thread);                           /* klucc.c: [Ucc] suspicion messages (off unless Pings=1 or Accuse=1) */
     kllo_tick();                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
     klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
     klcq_tick(game_thread);                           /* klcopsquad.c: [CopSquad] (off unless Enable=1; host, C&R, game thread only) */
@@ -1650,6 +1654,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klho_init();                                      /* klhostopt.c: after kls_init (kls_online_set) and klbf_init / kllb_init */
     klco_init();                                      /* klcharonline.c: after klc_init (it reads the choice) */
     klsy_init();                                      /* klsync.c: reads [Sync] */
+    kluc_init();                                      /* klucc.c: reads [Ucc]; asks klnetchan.c for the channel when on */
     kllnm_init();                                     /* kllocname.c: after kls_init (it reads the rule table) */
 #ifdef KLHOOK_TEST
     kla_init(inst);
