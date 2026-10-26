@@ -150,6 +150,7 @@ BOXES17 = {
     'DM06B': ['CoverBoxH_K6_47', 'CoverBoxH_K6_22', 'CoverBoxH_K6_39*'],
     'DM01B': ['CoverBoxH_K6_10', 'CoverBoxH_K6_13', 'CoverBoxH_K6_09', 'CoverBoxH_K6_02*'],
     'DM11B': ['CoverBoxH_K6_03', 'CoverBoxH_K6_13*'],
+    'DM03A': ['CoverBoxH_K6_19', 'CoverBoxH_K6_113', 'CoverBoxH_K6_01*'],   # K6_19 NO in COVER14 and 16; K6_113 NO in 16 only
 }     # '*' = control (known good or untested neighbour)
 RUN_UP = 200     # GUESS: tele this far OUT of the face (along face_normal), then walk in; 200 is room for the heading to settle, small enough to stay on the same floor
 
