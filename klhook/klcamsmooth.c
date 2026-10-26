@@ -88,6 +88,8 @@
 static int kcs_stancefix_busy;                       /* set by klstancefix.c while it mirrors a re-toggled crouch / stand clip */
 static void klstancefix_tick(int game_thread);
 static void klstancefix_init(void);
+static void klcampool_tick(int game_thread);
+static void klcampool_init(void);
 
 static struct {
     int enable, pivotms, blendms, aimoutms, aiminms, dtfix, log, dry, stancems;
@@ -193,6 +195,7 @@ static void klcamsmooth_tick(int game_thread)
     DWORD gd, P, cam, sys; float rawdt = 0, dt, E[3], Pv[3], feet[3], o[3], fov = 0, R[3], hv, q[3], Pv2[3], E2[3], f2, qh, qy; long frame; int i, trig = 0, jumped = 0;
     DWORD nd;
     klstancefix_tick(game_thread);                                  /* k39: mirrors a re-toggled crouch clip first (own ini switch, independent of CamSmooth) */
+    klcampool_tick(game_thread);                                    /* klcampool.c: [CamPool] gives back a leaked pool camera (own ini switch) */
     if (!kcs.enable || !klh_exe_ok || !game_thread) return;
     if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KCS_RCB_RA)) return;
     if (!(P = klcam_player(&gd))) { kcs_reset(); kcs.cam = 0; return; }
@@ -454,9 +457,11 @@ static void klcamsmooth_init(void)
     kcs.dtavg = 0.016;
     kcs.trigt = -10.0;
     klstancefix_init();
+    klcampool_init();
     if (kcs.enable) klog("camsm: on: PivotMs %d BlendMs %d AimOutMs %d AimInMs %d DtFix %d JumpCm %.0f JumpFov %.3f StanceMs %d StanceCm %.1f Log %d%s", kcs.pivotms, kcs.blendms, kcs.aimoutms, kcs.aiminms, kcs.dtfix, kcs.jumpcm, kcs.jumpfov, kcs.stancems, kcs.stancecm, kcs.log, kcs.dry ? " DRY" : "");
 }
 
-#include "klstancefix.c"                                   /* k39: [StanceFix]; its tick/init are called from the functions above */
+#include "klcampool.c"                                     /* [CamPool]; its tick/init are called from the functions above */
+#include "klstancefix.c"                                 /* k39: [StanceFix]; its tick/init are called from the functions above */
 
 #endif
