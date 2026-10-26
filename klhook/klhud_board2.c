@@ -44,9 +44,10 @@
 #define KLSB_O_OUTRO     0x10b4               /* osd: the element */
 #define KLSB_E_DEADLINE  0xd8                 /* float */
 #define KLSB_NSLOT       16
-#define KLSB_NTEXT       40
+#define KLSB_NTEXT       52                   /* was 40: 4 more rows of 3 texts (2026-10-26) */
 #define KLSB_NPIC        112
-#define KLSB_NROW        8
+#define KLSB_NROW        12                   /* was 8 (online FA is up to 12). More than 8 rows: the pitch shrinks so the plate and summary stay put (klsb_compose, GUESS) */
+#define KLSB_NROW_OLD    8
 
 /* ---- the layout, virtual 1280 x 720; every number is relative to the plate's top-left (KLSB_PX, KLSB_PY); tools\kl_hud.py preview-board mirrors them ---- */
 #define KLSB_PX          320.0f
@@ -89,14 +90,14 @@
 #define KLSB_T_LIVES     4
 #define KLSB_T_HEAD(c)   (5 + (c))
 #define KLSB_T_ROW(i, c) (8 + 3 * (i) + (c))   /* c 0 name, 1 fate, 2 score */
-#define KLSB_T_RSL       32
-#define KLSB_T_RSV       33
-#define KLSB_T_RWL       34
-#define KLSB_T_RWV       35
-#define KLSB_T_TOTL      36
-#define KLSB_T_TOTV      37
-#define KLSB_T_CONTL     38
-#define KLSB_T_CONTN     39
+#define KLSB_T_RSL       44
+#define KLSB_T_RSV       45
+#define KLSB_T_RWL       46
+#define KLSB_T_RWV       47
+#define KLSB_T_TOTL      48
+#define KLSB_T_TOTV      49
+#define KLSB_T_CONTL     50
+#define KLSB_T_CONTN     51
 
 #define KLSB_ALIGN_L 0
 #define KLSB_ALIGN_R 1
@@ -104,6 +105,10 @@
 static const struct { signed char fnt, align; } klsb_role[KLSB_NTEXT] = {
     { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_BIG, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_R },
     { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_R },
+    { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
+    { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
+    { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
+    { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
     { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
     { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
     { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
@@ -120,7 +125,7 @@ static const BYTE klsb_code[8] = { 0x83, 0xec, 0x3c, 0x56, 0x8b, 0xf1, 0x8b, 0x0
 struct klsb_t { DWORD obj, colour, want_colour; float x, y; int on; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
 static struct {
-    int on, probe, test, fault, textonly, total, count, lead;
+    int on, probe, test, fault, textonly, total, count, lead, rows12;
     float x, y; int alpha;
 } klsb;
 
@@ -332,7 +337,7 @@ static const char *klsb_fate(const struct klb_snap *s, int i, int traitor, DWORD
 static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
 {   /* -> 1 = a snapshot is ready in klsb_r.t[] / klsb_r.pic[] */
     float px = klsb.x, py = klsb.y, cdv = 0, cdt; char name[KLSB_NROW][48], buf[64], num[40]; int i, human = s->human >= 0 ? s->human : 0, rn = 0, rm = 0;
-    int lives, res, lost = 0, over = 0, row = 0; struct kluv_money m; DWORD flags; float rowc; float end;
+    int lives, res, lost = 0, over = 0, row = 0, nrow_max = klsb.rows12 ? KLSB_NROW : KLSB_NROW_OLD, nused = 0; float pitch = KLSB_ROW, rowh = KLSB_ROWH; struct kluv_money m; DWORD flags; float rowc; float end;
     (void)rm; (void)lost;
     if (klsb.fault) { if (!klsb_r.told_fault++) klog("hud: scoreboard: ScoreboardFault=1: every reader fails, the stock panel shows"); return 0; }
     if (!kluv_ok(s) || !kluv_idx(s, human)) return 0;
@@ -349,7 +354,9 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
     klu_outline(px, py, KLSB_PW, KLSB_PH, KLU_C_CORAL, klsb_ly(3));
     /* names (the crew list's own way) */
     memset(name, 0, sizeof name);
-    for (i = 0; i < s->n && i < KLSB_NROW; i++) {
+    for (i = 0; i < s->n && i < nrow_max; i++) nused += s->r[i].used != 0;
+    if (nused > KLSB_NROW_OLD) { pitch = 8.0f * KLSB_ROW / (float)nused; rowh = pitch - (KLSB_ROW - KLSB_ROWH); }      /* GUESS: 9..12 rows share the height of 8 (192 px): 12 rows = 16 px pitch, 12 px blocks (cap 11 text); not seen live */
+    for (i = 0; i < s->n && i < nrow_max; i++) {
         const struct klb_rec *r = &s->r[i]; DWORD blk, str = 0;
         if (!r->used) continue;
         if ((blk = klh_rd32(r->at)) != 0 && klh_rd(blk + 8, &str, 4) && str) klh_rdstr(str, name[i], sizeof name[i]);
@@ -391,7 +398,7 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
         klsb_put(KLSB_T_RESULT, px + KLSB_COLL, klu_cen(py + KLSB_Y_RESULT + 5.5f, KLU_FNT_NAME), rt, rc);
         if (res == KLUV_RES_YOU_DEAD || res == KLUV_RES_ALL_DEAD || killed) {
             int k = kluv_killer(s, human);
-            snprintf(buf, sizeof buf, "KILLED BY  %s", k >= 0 && k < KLSB_NROW && name[k][0] ? name[k] : "THE POLICE");
+            snprintf(buf, sizeof buf, "KILLED BY  %s", k >= 0 && k < nrow_max && name[k][0] ? name[k] : "THE POLICE");
             klsb_put(KLSB_T_KILLED, px + KLSB_X_KILLED, klu_cen(py + KLSB_Y_RESULT + 5.5f, KLU_FNT_LABEL), buf, KLU_C_CORAL);
         }
     }
@@ -410,7 +417,7 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
     klsb_put(KLSB_T_HEAD(1), px + KLSB_COLF, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "FATE", KLU_C_CORAL);
     klsb_put(KLSB_T_HEAD(2), px + KLSB_COLR, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "PAYOUT", KLU_C_CORAL);      /* record+0x2c, not score+0x30 (review S4) */
     klu_addpic(klu_r.handle[111] ? 111 : 181, px + 20.0f, py + KLSB_Y_RULE, 600.0f, 4.0f, KLU_C_CHALK, klsb_ly(1));            /* the painted rule under the top rows */
-    for (i = 0; i < s->n && i < KLSB_NROW; i++) {
+    for (i = 0; i < s->n && i < nrow_max; i++) {
         const struct klb_rec *r = &s->r[i]; struct kluv_money mi; const char *fate; DWORD fc, nc, sc, bc = 0; int dead, traitor, you, rr;
         if (!r->used) continue;
         rr = row++;
@@ -418,13 +425,13 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
         traitor = ((flags & KLUV_F_TRAITOR) || (kluv_early && (r->flags & 2))) != 0;      /* the bot's own mark only with [HUD] TraitorEarly=1 (klhud_values.c) */
         you = i == human;
         fate = klsb_fate(s, i, traitor, &fc, &dead);
-        rowc = py + KLSB_Y_ROW0 + KLSB_ROW * rr + KLSB_ROWH * 0.5f;
+        rowc = py + KLSB_Y_ROW0 + pitch * rr + rowh * 0.5f;
         if (!kluv_money(s, i, &mi)) memset(&mi, 0, sizeof mi);
         { long v = mi.payout; if (!v && kluv_state(s, i) == KLUV_ST_ESCAPED) v = mi.carried; if (dead) v = 0; klu_dollars(num, sizeof num, v); }
         if (!dead && (you || traitor)) bc = traitor ? KLU_C_ORANGE : KLU_C_CHALK;
         nc = dead ? KLU_C_DEAD : bc ? KLU_C_INK : KLU_C_CHALK;
         sc = dead ? KLU_C_DEADCASH : bc ? (traitor ? KLU_C_INK : KLU_C_INKCASH) : KLU_C_GREENHI;
-        if (bc) { fc = KLU_C_INK; klu_addpic(klu_r.handle[181] ? 181 : 111, px + 8.0f, rowc - KLSB_ROWH * 0.5f, KLSB_PW - 16.0f, KLSB_ROWH, bc, klsb_ly(2));     /* flat 181: the ragged 111 broke the traitor block (review S5) */ }
+        if (bc) { fc = KLU_C_INK; klu_addpic(klu_r.handle[181] ? 181 : 111, px + 8.0f, rowc - rowh * 0.5f, KLSB_PW - 16.0f, rowh, bc, klsb_ly(2));     /* flat 181: the ragged 111 broke the traitor block (review S5) */ }
         klsb_put(KLSB_T_ROW(rr, 0), px + KLSB_COLL, klu_cen(rowc, KLU_FNT_NAME), name[i], nc);
         klsb_put(KLSB_T_ROW(rr, 1), px + KLSB_COLF, klu_cen(rowc, KLU_FNT_LABEL), fate, fc);
         klsb_put(KLSB_T_ROW(rr, 2), px + KLSB_COLR - 8.0f, klu_cen(rowc, KLU_FNT_NAME), num, sc);
@@ -569,7 +576,7 @@ static void klsb_init(void)
     klsb.on = klu_inii("Scoreboard", 0, 0, 1);
     if (!klsb.on) return;
     klsb.probe = klu_inii("ScoreboardProbe", 0, 0, 1); klsb.test = klu_inii("ScoreboardTest", 0, 0, 1); klsb.fault = klu_inii("ScoreboardFault", 0, 0, 1);
-    klsb.textonly = klu_inii("ScoreboardTextOnly", 0, 0, 1); klsb.total = klu_inii("ScoreboardTotal", 1, 0, 2); klsb.count = klu_inii("ScoreboardCount", 0, 0, 1); klsb.lead = klu_inii("ScoreboardShopLead", 30, 0, 100);   /* tenths of a second cut off the 10 s countdown: the shop opens at 7 (owner 2026-10-25) */
+    klsb.rows12 = klu_inii("Rows12", 1, 0, 1); klsb.textonly = klu_inii("ScoreboardTextOnly", 0, 0, 1); klsb.total = klu_inii("ScoreboardTotal", 1, 0, 2); klsb.count = klu_inii("ScoreboardCount", 0, 0, 1); klsb.lead = klu_inii("ScoreboardShopLead", 30, 0, 100);   /* tenths of a second cut off the 10 s countdown: the shop opens at 7 (owner 2026-10-25) */
     klsb.alpha = klu_inii("ScoreboardAlpha", 230, 0, 255);
     klsb.x = klu_inif("ScoreboardX", "320"); klsb.y = klu_inif("ScoreboardY", "150");
     if (!(klsb.x >= 0 && klsb.x <= 640)) klsb.x = KLSB_PX;

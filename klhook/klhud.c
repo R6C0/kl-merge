@@ -198,15 +198,16 @@
 #define KLU_S_FLAGS     0x1d4                 /* score: one dword a client: 1 traitor, 8 police (klfedkit.c 5) */
 /* (KLU_S_LIVES 0x44 is gone: that byte is the number of rounds, the lives are [score+0x6c] - klhud_values.c a) */
 
-#define KLU_ROWS        8
+#define KLU_ROWS        12                    /* 2026-10-26: was 8; online FA is up to 12 players. [HUD] Rows12=0 caps the list at KLU_ROWS_OLD again */
+#define KLU_ROWS_OLD    8
 #define KLU_T_HEAD      0                     /* 'DEAD MEN' */
 #define KLU_T_COUNT     1                     /* '5 / 8' */
 #define KLU_T_NAME(i)   (2 + 2 * (i))
 #define KLU_T_CASH(i)   (3 + 2 * (i))
-#define KLU_T_ROUND     18
-#define KLU_T_MLABEL(k) (19 + 2 * (k))        /* k = 0 TOTAL, 1 LOOT, 2 REWARDS */
-#define KLU_T_MVALUE(k) (20 + 2 * (k))
-#define KLU_T_GRID      25
+#define KLU_T_ROUND     (2 + 2 * KLU_ROWS)
+#define KLU_T_MLABEL(k) (KLU_T_ROUND + 1 + 2 * (k))        /* k = 0 TOTAL, 1 LOOT, 2 REWARDS */
+#define KLU_T_MVALUE(k) (KLU_T_ROUND + 2 + 2 * (k))
+#define KLU_T_GRID      (KLU_T_MVALUE(2) + 1)
 #define KLU_NSWEEP      8                     /* Grid: one label per candidate style byte */
 #define KLU_NGRID       (10 + KLU_NSWEEP)
 #define KLU_T_WEAP      (KLU_T_GRID + KLU_NGRID)      /* klhud_weapon.c: the first gun's count, the other gun's, the label */
@@ -1183,8 +1184,9 @@ static int klu_compose(int *state_ok)
         klu_dials(&s);
         klwd_compose();
         if (klb_hud_crew && klu.crew && s.on_n > 0) {         /* [HUD] OnlineCrew: the online crew list (2026-10-26: the rows, names, states, counts and money boxes as Arcade's) */
-            int k, rows = 0, nu = 0, na = 0, nb, ba = 0, bi; long tot = 0; char nm[40]; BYTE loc = 0; int locst = -1; long lloot = 0, lrew = 0;
+            int k, rows = 0, nu = 0, na = 0, nb, ba = 0, bi; long tot = 0; char nm[40]; BYTE loc = 0; int loc_pend = 0; int locst = -1; long lloot = 0, lrew = 0;
             { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (BYTE)li; }
+            loc_pend = loc < s.on_n && s.on_used[loc];
             strcpy(klu_r.t[KLU_T_HEAD].want, "DEAD MEN"); klu_r.t[KLU_T_HEAD].on = 1; klu_r.t[KLU_T_HEAD].want_colour = KLU_C_CORAL;   /* 2026-10-25 owner: the Arcade crew box is headed DEAD MEN, online said CREW */
             for (k = 0; k < s.on_n; k++) {
                 int kind;
@@ -1193,7 +1195,8 @@ static int klu_compose(int *state_ok)
                 kind = klu_online_kind(s.on_flags[k], k == loc);
                 if (kind != KLUV_K_DEAD && kind != KLUV_K_ESCAPED) na++;
                 if (k == loc) { locst = kind; lloot = s.on_loot[k]; lrew = s.on_rew[k]; }
-                if (rows >= klu.rows) continue;
+                if (rows + (k != loc && loc_pend) >= klu.rows) continue;     /* the local player's row is reserved: a high slot (a client's own index) is never the one cut */
+                if (k == loc) loc_pend = 0;
                 if (s.on_name[k][0]) snprintf(nm, sizeof nm, "%s", s.on_name[k]); else if (k == loc) strcpy(nm, "You"); else snprintf(nm, sizeof nm, "Player %d", k + 1);
                 klu_row(rows++, nm, s.on_money[k], kind);
             }
@@ -1249,7 +1252,8 @@ static int klu_compose(int *state_ok)
     } else if (card_placed) { klu_place_crew(); card_placed = 0; }      /* back in the corner */
     if (klu.grid == 2) {                                    /* the draft's own eight rows: every state on one picture */
         static const struct { const char *n; long m; int kind; } demo[KLU_ROWS] = { { "J.C.", 540000, 1 }, { "KANE", 310000, 0 }, { "LYNCH", 0, 0 }, { "PARKER", 860000, 2 },
-                                                                                    { "TOMMY", 120000, 0 }, { "RED", 400000, 4 }, { "MELDAL", 0, 3 }, { "ASHKANAN", 1250000, 3 } };
+                                                                                    { "TOMMY", 120000, 0 }, { "RED", 400000, 4 }, { "MELDAL", 0, 3 }, { "ASHKANAN", 1250000, 3 },
+                                                                                    { "HOYT", 90000, 0 }, { "GOGGLES", 0, 0 }, { "SHEPPARD", 220000, 2 }, { "BRENNAN", 0, 3 } };
         for (row = 0; row < klu.rows; row++) klu_row(row, demo[row].n, demo[row].m, demo[row].kind);
         klu_lives_row(0, demo[0].n, lives, klu.plates);
         used = 8; alive = 5;
@@ -1813,6 +1817,7 @@ static void klu_init(void)
     klu.grid = klu_inii("Grid", 0, 0, 2); klu.probe = klu_inii("Probe", 0, 0, 1);
     klu.layer = klu_inii("Layer", 0xd, 4, 15);      /* min 4 (cloud review W3): the dial case is drawn at layer - 4, and a negative layer is the byte 0xff = on top */
     klu.rows = klu_inii("Rows", KLU_ROWS, 1, KLU_ROWS);
+    if (!klu_inii("Rows12", 1, 0, 1) && klu.rows > KLU_ROWS_OLD) klu.rows = KLU_ROWS_OLD;      /* [HUD] Rows12=0 (default 1, "recommended on"): the old 8-row cap; Rows=n still lowers it. Rows shown = players present, never padded to 12 */
     klu.inset = klu_inif("Inset", "-1"); if (!(klu.inset > 0 && klu.inset < 0.25f)) klu.inset = -1;
     klu.crew_x = klu_inif("CrewX", klu.draft ? "33" : "-1"); klu.crew_y = klu_inif("CrewY", klu.draft ? "38" : "-1"); klu.crew_w = klu_inif("CrewW", "211");
     klu.money_x = klu_inif("MoneyX", klu.draft ? "1247" : "-1"); klu.money_y = klu_inif("MoneyY", "-1"); klu.money_w = klu_inif("MoneyW", "211"); klu.round_y = klu_inif("RoundY", "-1");

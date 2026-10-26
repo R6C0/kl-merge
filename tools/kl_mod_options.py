@@ -93,6 +93,8 @@ feat('onlinecrew', G_CORE, 'Online matches: new crew list with money (humans onl
      'klhud.c OnlineCrew; needs [HUD] Online=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
 feat('onlinebots', G_CORE, 'Online matches: AI heisters also listed in the crew box, like Arcade (recommended on)', 'on', 'start',
      'klhud.c OnlineBots; team-2 ZFFActor scan (GUESS); needs OnlineCrew=1; NOT run live', [('HUD', 'OnlineBots', 1, 0, 1)])
+feat('hudrows12', G_CORE, 'HUD crew list and round-end scoreboard: up to 12 players (stock-style cap was 8); the local player always has a row (recommended on)', 'on', 'start',
+     'klhud.c / klhud_board2.c [HUD] Rows12 (KLU_ROWS 12, KLSB_NROW 12; 9+ scoreboard rows use a tighter pitch, GUESS); NOT run live', [('HUD', 'Rows12', 1, 0, 1)])
 feat('hidekilledby', G_CORE, 'Hide the stock death panel own "Killed by" text so only the HUD KILLED BY line shows, Arcade and online (recommended on)', 'on', 'start',
      'kllocname.c HideKilledBy: LOC lookups from 0x500670 and the key KilledBy answer an empty string; needs [HUD] Enable=1 and KilledBy=1; NOT run live', [('HUD', 'HideKilledBy', 1, 0, 1)])
 feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on', 'start',
