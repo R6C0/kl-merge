@@ -830,7 +830,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             memset(&t, 0, sizeof t); t.rec = -1; t.actor = a; t.soldier = bots[b].soldier; t.told_soft = 1;
             why[0] = 0;
             if (klbf_ot_sprint && klbf_ob[s].phase == 2) {      /* OnlineExitSprint: what the Defend goal does before its own order (0x686b96: block +0xc = the step's move style dword, +0x10 = 1 'style given'), with eDMS_Sprint */
-                DWORD blk = klh_rd32(bots[b].soldier + 0x64c), sp = 2, cur = 0; BYTE one = 1;      /* GUESS: Sprint = 2 from the kl_rtp EDefendMoveSet enum (Run 0, Walk 1, Sprint 2), not seen in a live block yet */
+                DWORD blk = klh_rd32(bots[b].soldier + 0x64c), sp = 2, cur = 0; BYTE one = 1;      /* eDMS_Sprint = 2: kl2.exe ZEnumInfo entry 0xcfccb8 (NotSet -1, Run 0, Walk 1, Sprint 2, Sneak 3, Relaxed 5, SneakRun 11) */
                 if (blk && klh_rd32(blk + 0x14) == bots[b].soldier && klh_rd(blk + 0xc, &cur, 4) && (cur == sp || (klh_data((void *)(DWORD_PTR)(blk + 0xc), &sp, 4, "defend block move style (OnlineExitSprint)") && klh_data((void *)(DWORD_PTR)(blk + 0x10), &one, 1, "defend block style given (OnlineExitSprint)")))) {
                     if (!(klbf_ob[s].told & 2048) && (klbf_ob[s].told |= 2048)) klog("botfill: tactics: bot %d (actor %08lx): exit walk at Sprint (defend block %08lx move style was %lu)", s, a, blk, (unsigned long)cur);
                 }
