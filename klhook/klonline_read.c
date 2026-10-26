@@ -46,6 +46,8 @@
 
 static struct { int on; } klor;
 static struct { DWORD rules; int round, lobby; char name[KLOR_MAX][32]; int latch[KLOR_MAX]; struct klor_seatev sev[KLOR_MAX]; long loot_init; } klor_c;   /* caches re-keyed on rules / round / lobby (names, latch, feed steps, loot whole) */
+static struct klor_ev klor_pend[8]; static int klor_npend;           /* deaths resolved but not yet handed to the feed */
+static int klor_noev;                                                  /* set by a reader that is NOT the kill feed (klhud_board2.c's tick): it leaves the queue alone */
 static struct { DWORD rules; int deaths[KLOR_MAX]; } klor_d;                                              /* the death marks: per rules (the match), NOT cleared by a new round */
 static struct { DWORD at, rules; int ok; struct klw_src src; } klor_s;                                  /* the character list of the level, refreshed every 1 s */
 
@@ -210,10 +212,11 @@ static int klor_read(struct klor_snap *o, int local)
         if (o->ok && k < KLOR_SEATS && o->b.state == 0x19) {      /* the kill feed + death marks: status bit 4 (dead) going 0 -> 1 while the round runs */
             int ek = -1, st = klor_ev_step(&klor_c.sev[k], (w->flags & 0x4u) != 0, w->killer, GetTickCount(), &ek);
             if (st & 1) klor_d.deaths[k]++;
-            if ((st & 2) && o->nev < 4) { o->ev[o->nev].victim = k; o->ev[o->nev].killer = ek; o->nev++; }
+            if ((st & 2) && klor_npend < 8) { klor_pend[klor_npend].victim = k; klor_pend[klor_npend].killer = ek; klor_npend++; }      /* queued: a reader that is not the feed (klor_noev) must not eat the event */
         } else if (o->ok && k < KLOR_SEATS) { int dummy = -1; klor_ev_step(&klor_c.sev[k], (w->flags & 0x4u) != 0, -1, GetTickCount(), &dummy); klor_c.sev[k].at = 0; }   /* not in a round: track, never emit */
         if (k == local && k < KLOR_SEATS) o->deaths = klor_d.deaths[k];
     }
+    if (!klor_noev) { int q; for (q = 0; q < klor_npend && o->nev < 4; q++) o->ev[o->nev++] = klor_pend[q]; klor_npend = 0; }
     /* the loot bar's numbers: what is left on the map (cached 0.5 s, the registry scan is 0x1000 pointers) and the largest remaining seen this round */
     if (o->b.state == 0x19) {
         static DWORD at, rules; static long rem; static int ok; DWORD now = GetTickCount();
