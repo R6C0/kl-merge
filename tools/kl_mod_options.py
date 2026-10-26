@@ -83,6 +83,8 @@ feat('lobbyopts', G_EXP, 'Lobby (host): Heist time 2 to 10 minutes and up to 10 
      'kllobbyopt.c [Lobby] TimeMax/TimeMin/RoundsMax: private vtable copy of the lobby selector (heap data); the stock handler does the work; NOT run live; re/lobby_options.md', [('Lobby', 'TimeMax', 10, 0, 0), ('Lobby', 'TimeMin', 2, 0, 0), ('Lobby', 'RoundsMax', 10, 0, 0)])
 feat('hostserver', G_EXP, 'Host server: this copy keeps hosting a Quick Match lobby by itself, restarts after each round (for a PC left running; implies lobby solo)', 'off', 'start',
      'klserver.c [Server] Enable=1 (Mode=quick|ranked, MinPlayers, WaitSec): drives the menu to QuickJoin, lowers the lobby target after the wait; NOT run live; re/online_server.md', [('Server', 'Enable', 1, 0, 0)])
+feat('hire', G_EXP, 'Arcade shop: hire a heister for the next round (needs the Hire window baked in, tools/kl_hire_bake.py; every round otherwise a random heister) (recommended off until benched)', 'off', 'start',
+     'klhire.c [Hire] Enable=1: body = random default (never Kane / Lynch) or the one hired on the shop page, one round, rank + price; the Heister page pick is ignored; NOT run live', [('Hire', 'Enable', 1, 0, 0)])
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
      'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
 feat('hidestock', G_CORE, 'Old (stock) HUD list never shown: skipped at its Render, so Tab / Alt+Tab cannot bring it back (recommended on)', 'on', 'start',

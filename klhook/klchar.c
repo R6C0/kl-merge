@@ -113,6 +113,9 @@ static int klc_vt_ready;
 static CRITICAL_SECTION klc_cs;
 static struct { int on, version, step, masks, headbase, n; struct { DWORD root; int slot, outfits, bodies, heads, stock; char name[32]; } c[KLC_NCHAR]; char key[64], file[MAX_PATH]; } klc_w;
 
+static int klc_same_code(DWORD va, const BYTE *bytes, int n);
+#include "klhire.c"                                       /* Arcade shop: hire a heister for the next round (inert unless [Hire] Enable=1) */
+
 /* ---------------------------------------------------------------- the three options */
 
 static const char *const klc_names[3] = { "KLChar", "KLMask", "KLOutfit" };
@@ -133,6 +136,7 @@ static int __fastcall klc_get(void *self, void *edx, const char *name, int playe
 {
     int i = klc_which(name); (void)edx;
     if (i >= 0) return (int)*klc_value[i];
+    if (i < 0) { int hr = klhr_row(name); if (hr > 0) return klhr_get(hr); }        /* klhire.c: KLHire1..16 */
     if ((i = klg_which(name)) >= 0) return klg_get(i);      /* klgun.c: KLGunStart, KLGunSet */
     if ((i = kset_which(name)) >= 0) return kset_get(i);      /* klset.c: the Mod settings rows */
     if ((i = kpm_which(name)) >= 0) return kpm_get(i);        /* klpm.c: private-match options (off unless [Match] Enable) */
@@ -142,6 +146,7 @@ static int __fastcall klc_get(void *self, void *edx, const char *name, int playe
 static void __fastcall klc_set(void *self, void *edx, const char *name, int value, int player)
 {
     int i = klc_which(name); (void)edx;
+    if (i < 0) { int hr = klhr_row(name); if (hr > 0) { klhr_set(hr, value); return; } }      /* klhire.c: never through klc_set, [Character] is untouched */
     if (i >= 0) {
         char v[16];
         if (value < 0) value = 0;
@@ -161,7 +166,7 @@ static void __fastcall klc_set(void *self, void *edx, const char *name, int valu
 static int __fastcall klc_enabled(void *self, void *edx, const char *name, int player)
 {   /* the stock function returns a bool in al; the caller tests al only */
     (void)edx;
-    if (klc_which(name) >= 0 || klg_which(name) >= 0 || kset_which(name) >= 0 || kpm_which(name) >= 0) return 1;
+    if (klc_which(name) >= 0 || klhr_row(name) > 0 || klg_which(name) >= 0 || kset_which(name) >= 0 || kpm_which(name) >= 0) return 1;
     return ((int (__fastcall *)(void *, void *, const char *, int))(DWORD_PTR)KLH_VA(0x4b4560))(self, 0, name, player);
 }
 
@@ -198,6 +203,7 @@ static void klc_level_open(const char *key, const char *opened)
     char file[MAX_PATH], sec[24], *s; int i, n, ver, ok = 0;
     DWORD len;
     if (!klc_on) return;
+    klhr_level_reset();
     len = GetFullPathNameA(opened, MAX_PATH, file, 0);
     if (!len || len >= MAX_PATH || !(s = strrchr(file, 0x5c)) || (size_t)(s - file) + 16 >= sizeof file) return;
     strcpy(s + 1, "KLWardrobe.ini");
@@ -327,6 +333,8 @@ static void klc_level_tick(int game_thread)
     DWORD sm, gs, rules, gd, player, node, model, hero[8], sig, now = GetTickCount(), cur = 0, want_root = 0; BYTE b = 0xff, idx = 0, type = 0, busy = 0;
     int ch = (int)klc_char, mask = (int)klc_mask, outfit = (int)klc_outfit, i, slot = -1, wardrobe, v;
     char key[64], scene[160];
+    { static LONG gen0; LONG g = klhr_gen; if (g != gen0) { gen0 = g; tries = 0; lastv = lastbody = -1; } }     /* klhire.c: a new round drew a new body */
+    if (klhr_on) { static int toldwish; ch = (int)klhr_body; if (klc_char && !toldwish++) klog("hire: [Hire] Enable=1: the Heister page's Char=%ld is ignored (the body is the random default or the hired one)", klc_char); }
     if (!ch && !mask && !outfit) return;
     if (kl_online()) {                                                      /* local-only look: peers see the stock model; harmless, so it is NOT stopped here (re/netcode_plan.md 2.1), only said once */
         static int toldnet;
@@ -402,6 +410,7 @@ static void klc_tick(int game_thread)
 {
     if (!klc_on || !klh_exe_ok) return;
     klc_options_tick();
+    klhr_tick();
     klc_level_tick(game_thread);
 }
 
@@ -416,6 +425,7 @@ static void klc_init(void)
     klc_char = (LONG)GetPrivateProfileIntA("Character", "Char", 0, klh_ini); if (klc_char < 0 || klc_char > KLC_NCHAR) klc_char = 0;
     klc_mask = (LONG)GetPrivateProfileIntA("Character", "Mask", 0, klh_ini); if (klc_mask < 0 || klc_mask > KLC_MASKS + 1) klc_mask = 0;
     klc_outfit = (LONG)GetPrivateProfileIntA("Character", "Outfit", 0, klh_ini); if (klc_outfit < 0 || klc_outfit >= KLC_OUTFITS) klc_outfit = 0;
+    klhr_init();
     if (klc_on) klog("character: on; choice Char=%ld Mask=%ld Outfit=%ld (0 = the game's own); Settle=%d Tries=%d", klc_char, klc_mask, klc_outfit, klc_settle, klc_tries);
 }
 
