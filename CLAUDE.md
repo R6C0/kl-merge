@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~01:40 - COVER on 10 maps + ARCADE DM01/03/06 + DM02 CO-OP solo Lift Door (untested in game) installed, stale 0.
+C: filled mid-install (DM06/07/06B zips broken, restored + reinstalled); templates now guard free space (1e43fa9ad); bulk moved to D:.
+Smoke rotation live_1026/rotate.py needs --hook out_all_1026a_test (SHIP hook ignores [Script]); DM01 PASS 01:19.
+
 2026-10-26 ~00:10 - 9-INSTANCE LAN: L9b put 7 humans in one FA round (0 faults); player 9 froze 30 s across the host's start and stayed in the lobby.
 Bench host now waits for all to connect (script op waitpeers, bbcf618da); L9c running. Lobby shows only 8 rows: agent building a 12-row FALobby ([Lobby] Rows12).
 
