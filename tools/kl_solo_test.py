@@ -164,6 +164,7 @@ def main():
             secs_n = merge(secs_n, read_ini(extra))
         write_ini(os.path.join(d, 'KLHook.ini'), secs_n)
         inst.append(d)
+    say('  inis | %d written under %s' % (total, root))      # L9e stopped after the firewall line: this places the next stall
     was = at.snapshot(dd, say)
     procs, code = [], 1
     ns_secs, ns_prev, ns_t = int(opt.get('--netstat', 0)), set(), [0.0]
