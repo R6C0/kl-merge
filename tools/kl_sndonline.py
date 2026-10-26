@@ -34,7 +34,8 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = HERE
 sys.path.insert(0, TOOLS)
-if '--dd' in sys.argv:                                   # set before kl_gunsnd_all lists banks (B.DD / B.MAPS are read at call time)
+DD_GIVEN = '--dd' in sys.argv                            # a friend's folder: their md5s never go into the repo pins file
+if DD_GIVEN:                                   # set before kl_gunsnd_all lists banks (B.DD / B.MAPS are read at call time)
     _i = sys.argv.index('--dd'); _dd = sys.argv[_i + 1].replace('\\', '/'); del sys.argv[_i:_i + 2]
     import kl_dmgunsnd_build as _B
     _B.DD = _dd; _B.MAPS = _dd + '/KLExpansion/Maps'
@@ -42,11 +43,12 @@ import kl_gunsnd as G
 import kl_gunsnd_match as M
 import kl_gunsnd_all as A
 
-TAG = '1026sndon2'
+TAG = '1026sndon2'      # + 'G' / 'L' below when SNDON_GRENADE / SNDON_LONG change the record set (review 8: other content must not share a tag)
 WHAT = 'impact sounds pass 2'
 FX_GAIN = 24.0
 GRENADE = os.environ.get('SNDON_GRENADE') == '1'
 LONG = os.environ.get('SNDON_LONG') == '1'
+TAG += ('G' if GRENADE else '') + ('L' if LONG else '')
 PINS = os.path.join(HERE, 'kl_sndonline2.pins.json')
 FXPINS = os.path.join(TOOLS, 'kl_fxsnd.pins.json')   # live banks are the 1025fxraw output ...
 SNDON1_PINS = (os.path.join(HERE, 'kl_sndonline.pins_B.json'), 'C:/kl_build_1024/sndonline_1026/kl_sndonline.pins_B.json')   # ... or the 1026sndon output (tier B)
@@ -62,7 +64,7 @@ CLS_ALL = (
 ) + ((('grenade', re.compile(r'^SFX/Impacts/Grenade/', re.I)),) if GRENADE else ()) \
   + ((('long', re.compile(r'^SFX/MultiPlayer/F02/Bridge_Breakdown/(Bridge_FallApart_|Bridge_Collapse_0)', re.I)),) if LONG else ())
 PCMFX = re.compile(r'(^SFX/Explosions/|_Crash/)', re.I)          # codec 1, 2 ch only; GUESS: "_Crash/" = the vehicle crash folders (M03_GetAwayCar_Crash)
-NOT = re.compile(r'(Implosion_Revert|Elevator_Falling|Bomb_WarmUp|Loop)', re.I)
+NOT = re.compile(r'(Implosion_Revert|Elevator_Falling|Bomb_WarmUp|Loop(_|\d|\.|$))', re.I)     # Loop anchored (review 4): not 'Loophole'
 OLD_FX = re.compile(r'(^SFX/Explosions/|^LevelSetup/All/Explosions/|/Capatulio_Explodes/|^SFX/Impacts/GlassBreak/|^SFX/Impacts/Shatter/Glass/|^SFX/Impacts/Bullet/Glass/Bottles/|^SFX/Environment/Fire/Cannisters/)', re.I)
 
 
@@ -219,11 +221,13 @@ def cmd_build(a):
     mf = {m['key']: dict(file=m['file'], input_md5=m['live_md5'], output_md5=m['output_md5'], spans=m['spans'], group=m['group'], id=m['id']) for m in changed}
     json.dump(dict(tag=TAG, banks=mf), open(os.path.join(out, 'manifest.json'), 'w'), indent=1)
     pins = json.load(open(PINS)) if os.path.exists(PINS) else {}
+    pins_out = os.path.join(out, 'kl_sndonline2.pins.json') if (force or DD_GIVEN) else PINS     # review 1: only the owner's default run updates the repo copy
     for m in res:
         e = pins.setdefault(m['key'], dict(inputs=[], outputs=[]))
         if m['live_md5'] not in e['inputs'] and m['live_md5'] not in e['outputs']: e['inputs'].append(m['live_md5'])
         if not m.get('unchanged') and m['output_md5'] not in e['outputs']: e['outputs'].append(m['output_md5'])
-    json.dump(pins, open(PINS, 'w'), indent=1, sort_keys=True)
+    json.dump(pins, open(pins_out, 'w'), indent=1, sort_keys=True)
+    if pins_out != PINS: print('pins written to %s (not the repo copy: --force / --dd)' % pins_out)
     with open(os.path.join(out, 'AB_LIST.txt'), 'w') as f:
         f.write('%-12s %-9s %-52s %6s %7s %7s %6s %7s %6s %6s\n' % ('bank', 'class', 'record', 'rate', 'before', 'target', 'gain', 'after', 'flat0', 'flat1'))
         for m in changed:
@@ -231,6 +235,13 @@ def cmd_build(a):
                 f.write('%-12s %-9s %-52s %6d %7.2f %7.2f %6.2f %7.2f %6.1f %6.1f\n' % (m['key'], e['kind'], e['record'].split('SFX/')[-1][-52:], e['rate'], e['before_head'],
                         e['target_head'], e['gain_db'], e['after_head'], e['before_flat'], e['after_flat']))
     A.write_installer(out, TAG, WHAT, 'Glass-hit / shatter / metal+concrete break / canister impact sounds' + ' (stereo PCM explosions / crashes, wood, and the story levels 1026sndon never did) at the S&W MP45 loudness, hard clip (on top of 1025fxraw + 1026sndon)')
+    ip = os.path.join(out, 'install_gunsnd2.ps1')      # review 7: the shared writer's header is the 10-24 gun pass; replace its first lines
+    t = open(ip, newline='').read().split('\r\n')
+    t[0] = '# Impact sounds pass 2 (tools/kl_sndonline.py, tag %s, staged 2026-10-26): stereo PCM explosions / crashes, wood / plastic breaks, story banks. ALSO changes Dog Days stock banks (Arcade too).' % TAG
+    t[1:6] = ['# Records listed in manifest.json are re-driven to the S&W MP45 loudness; only their data spans inside each .WAV change. UNDO writes Banks\\<group>\\<id>.old back.',
+              '# Before the first patch a bank .WAV is copied to <name>.WAV.before-%s (never overwritten). Do NOT prune that file: it is the undo chain (see re/sound_online_1026b.md).' % TAG,
+              '# md5-chained: ALL banks must be exactly the build input (or already the output) or nothing is written. Refuses while kl2.exe runs.', '#', '#', '#']
+    open(ip, 'w', newline='').write('\r\n'.join(t))
     allr = [e for m in changed for e in m['detail']]
     print('built: %d banks with fx records, %d need changes, %d records changed (%d distinct names), %.1f MB of new spans' % (
         len(res), len(changed), len(allr), len({e['record'] for e in allr}), sum(os.path.getsize(os.path.join(out, 'Banks', m['group'], m['id'] + '.new')) for m in changed) / 1e6))

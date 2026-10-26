@@ -28,13 +28,24 @@ Owner rule: all sounds at MP45 loudness, glass destruction and any other kind. T
    (--force accepts banks whose md5 is in no pin file), after the earlier passes in order: gunraw, fxraw, sndon (tier B), sndon2.
    Undo in reverse order (sndon2 UNDO before tier B's UNDO).
 
+## Scope and housekeeping (fix pass)
+- GLOBAL, not online-only: the pass also changes Dog Days' stock banks and the stock maps' banks, so Arcade gets the louder explosions,
+  wood and plastic breaks too. Intended ("all sounds at MP45"). The way back is the UNDO bat.
+- BACKUP CHAIN: each bank keeps `*.WAV.before-1024gunsnd2/-1025fxraw/-1026sndon/-1026sndon2` (4 files). The "keep 3 newest" prune sweep
+  MUST exempt `*.WAV.before-*` of these banks (or keep a pristine copy elsewhere): pruning the oldest breaks the reverse undo.
+- Friends' builds (`--force` or `--dd`) write the pins file into the --out folder, never into the repo copy `tools/kl_sndonline2.pins.json`.
+- SNDON_GRENADE / SNDON_LONG add `G` / `L` to the tag (backup name `before-1026sndon2GL`), so a different record set never shares a tag.
+- Review 5: audit once and read the pcmfx list (`_Crash/` could match non-vehicle crash folders; only stereo codec-1 records qualify).
+- Review 6 (per-channel clip share limit) rejected: judged on the mono mix is documented, bench by ear; an extra assert would reject
+  legitimately loud explosions that the hard clip already shapes.
+
 ## GUESSes
 - `PCMFX` regex `_Crash/` = vehicle crash folders (matched GetawayCar_Crash).
 - Head/flat of a stereo clip are judged on (L+R)/2.
 - pcmfx "already at target" uses head >= target - 0.6 dB (hard clip + fade lands up to ~0.5 dB under).
-- Installer header text still says "staged 2026-10-24 / kl_fxsnd.py" (cosmetic, from the shared writer).
 
 ## Live bench must check
+Arcade on a STOCK map still sounds right (stock banks changed too).
 Subway/any FA map online: vault explosion and car crash not quieter than a gunshot; wood/plastic breaks; a story-bank level
 (campaign) glass hit and bullet impacts level with the guns; no clipping crackle on explosions; Retomoto window blast acceptable
 at -1.7 dB; nothing else got quieter. Undo returns the previous sound.
