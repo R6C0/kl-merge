@@ -42,7 +42,7 @@ static float RF(DWORD a) { float f = 0; klh_rd(a, &f, 4); return f; }
 static WORD R16(DWORD a) { WORD w = 0; klh_rd(a, &w, 2); return w; }
 
 struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; float hit; };
-struct klb_snap { DWORD rules, score, state, vehicle; int n, level, human; BYTE veh; float timer; struct klb_rec r[KLB_NREC]; };
+struct klb_snap { DWORD rules, score, state, vehicle; int n, level, human; BYTE veh; float timer; struct klb_rec r[KLB_NREC]; int online; };
 static struct klb_snap g_snap;
 static int g_code_ok = 1;
 static int klb_read(struct klb_snap *s) { *s = g_snap; return 1; }
@@ -79,6 +79,14 @@ static int g_btest = 1, g_nb;
 #define KLBD_BTEST(dnd) (g_nb++, g_btest)
 
 enum { KLTT_REVIVE = 4, KLTT_ADREN = 5 }; static float kltt_get(int r, int k) { (void)r; (void)k; return 1.0f; }   /* kltrait.c: no traits in this harness */
+/* ONLINE harness: the host test, the census and the clock are the part's own #ifndef hooks, replaced by fakes */
+static int g_ohost = 0, g_ncen; static DWORD g_cen[KLB_NREC]; static DWORD g_now = 5000;
+static DWORD klh_avt(DWORD a) { return klh_rd32(a); }
+static int fake_census(DWORD *out, int max) { int i; for (i = 0; i < g_ncen && i < max; i++) out[i] = g_cen[i]; return g_ncen < max ? g_ncen : max; }
+static int fake_host(DWORD *rules) { if (!g_ohost) return 0; *rules = 0x2222; return 1; }
+#define KLBD_CENSUS(out, max) fake_census(out, max)
+#define KLBD_ONLINE_HOST(r) fake_host(r)
+#define KLBD_NOW() g_now
 #include "klbotdown.c"
 
 /* the fake game's own part of a down: slot 1 raises the health to 25 % and writes a lie of 1.5 s (2 s here); the script
@@ -121,10 +129,10 @@ static void world(void)
     }
     tick = 100000; W32(CLOCK + 0x48, tick);
     memset(&klbd, 0, sizeof klbd);
-    klbd.on = 1; klbd.log = 1; klbd.downs_max = 2; klbd.traitors = 1; klbd.down_pct = 20; klbd.floor_pct = 6; klbd.refuse = 3000; klbd.lie = 6; klbd.free_t = 0.75f;
+    klbd.on = 1; klbd.arc = 1; klbd.log = 1; klbd.downs_max = 2; klbd.traitors = 1; klbd.down_pct = 20; klbd.floor_pct = 6; klbd.refuse = 3000; klbd.lie = 6; klbd.free_t = 0.75f;
     klbd.attr = 1.5f; klbd.watch = 8; klbd.preshield = 0; g_btest = 1; g_nb = 0;
     memset(klbd_r, 0, sizeof klbd_r); memset(&klbd_g, 0, sizeof klbd_g);
-    g_accept = 1; g_ncalls = 0; g_goal_never = 0; g_code_ok = 1; nlog = 0; logbuf[0] = 0; nwrites = 0;
+    g_ohost = 0; g_ncen = 0; g_now = 5000; klbd_online_reset(); g_accept = 1; g_ncalls = 0; g_goal_never = 0; g_code_ok = 1; nlog = 0; logbuf[0] = 0; nwrites = 0;
 }
 
 static void pass(int ms) { tick += ms * 1024 / 1000; W32(CLOCK + 0x48, tick); game_frame(); klbd_tick(1); }
@@ -196,7 +204,7 @@ int main(void)
     CHECK(g_ncalls > 0 && has("record 1 is at 10.0"), "healed over the threshold: a new episode (asked again)");
 
     /* ---- 4: Dry */
-    printf("--- scenario 4: Dry\n"); world(); klbd.dry = 1;
+    printf("--- scenario 4: Dry\n"); world(); klbd.adry = 1;
     WF(HO(1) + 4, 20); run(300);
     CHECK(g_ncalls == 0 && nwrites == 0, "Dry: no call, not one write");
     CHECK(has("Dry - record 1 is at 20.0") && has("WOULD ask"), "Dry: the WOULD line");
@@ -253,6 +261,24 @@ int main(void)
     CHECK(g_ncalls == 0 && nwrites == 0, "no round: nothing");
     world(); g_snap.r[1].status = 7; WF(HO(1) + 4, 20); run(100);
     CHECK(g_ncalls == 0, "a dead record: nothing");
+
+    /* ---- 11: ONLINE host: pseudo records from the census, the Arcade down on them; client / off / dry write nothing */
+    printf("--- scenario 11: online host\n");
+    world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 1; g_ohost = 1; g_ncen = 2; g_cen[0] = ACT(1); g_cen[1] = ACT(2);
+    WF(HO(1) + 4, 20); run(300);
+    CHECK(g_ncalls >= 1 && g_last_soldier == SOL(1), "online host: the census bot under the threshold is asked down");
+    CHECK(has("ONLINE round") && has("IS DOWN"), "online host: the round-start line and the IS DOWN line");
+    run(7000);
+    CHECK(R32(ACT(1) + 0x64c) == 0 && has("IS UP"), "online host: he gets up after his lie");
+    CHECK(R32(ACT(3) + 0x64c) == 0, "online host: an actor outside the census is not touched");
+    world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 1; g_ohost = 0; g_ncen = 1; g_cen[0] = ACT(1); WF(HO(1) + 4, 20); run(300);
+    CHECK(g_ncalls == 0 && nwrites == 0, "online CLIENT (not host): nothing is asked, nothing written");
+    world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 0; g_ohost = 1; g_ncen = 1; g_cen[0] = ACT(1); WF(HO(1) + 4, 20); run(300);
+    CHECK(g_ncalls == 0 && nwrites == 0, "OnlineBotDown=0: nothing");
+    world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 1; klbd.odry = 1; g_ohost = 1; g_ncen = 1; g_cen[0] = ACT(1); WF(HO(1) + 4, 20); run(300);
+    CHECK(g_ncalls == 0 && nwrites == 0 && has("WOULD ask"), "OnlineBotDownDry: logs, writes nothing");
+    world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 1; g_ohost = 1; g_ncen = 1; g_cen[0] = ACT(1); WF(HO(1) + 4, 0); run(300);
+    CHECK(g_ncalls == 0, "online host: a dead bot (health 0) is left alone");
 
     printf("\n%s (%d failure(s))\n", fails ? "FAILED" : "ALL PASS", fails);
     return fails ? 1 : 0;
