@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~00:10 - 9-INSTANCE LAN: L9b put 7 humans in one FA round (0 faults); player 9 froze 30 s across the host's start and stayed in the lobby.
+Bench host now waits for all to connect (script op waitpeers, bbcf618da); L9c running. Lobby shows only 8 rows: agent building a 12-row FALobby ([Lobby] Rows12).
+
 2026-10-25 ~23:55 - HOSTOPTS 1025b (out_hostopts_1025b SHIP 2f771cba / _test 004e2409, not run): host's F7/row now sets kls_online_set (LOAD follows); TEST logs the round clock ([rules+0x4c] etc.) at state 25/31 to find why a 10 min round lasts 83 s; [Lobby] RoundClockFix=1 optional GUESS write.
 
 2026-10-25 ~23:30 - HOST OPTIONS (re/host_options.md; out_hostopts_1025a SHIP c3f32a80 / _test fc18e73a; overlay C:/kl_build_1024/hostopts_1025, none installed, none run):
@@ -84,11 +87,6 @@ Installed online_1025 (SHIP 05a47b0e, ini 4b2bcf1a: [Expansion] OnlineSet=2, [HU
 Route MainMenu DOWN DOWN RETURN > OnlineMenu DOWN RETURN > SystemLink DOWN DOWN RETURN (Create; SL1 pressed Join = SysUIErrorScreen) > SystemLinkCreate RETURN > FALobby;
 host Ready alone -> 'LOAD F01: online=1 OnlineSet=2 -> page 2, rule DM01', level loaded, 0 asserts 0 faults. Grenade GSP1: PASS but no grenade carried (needs a pickup). QoL2 WatchDry sane.
 Destruction-sound loudness (vehicle explosions, extinguishers, glass) as MP45: agent building C:/kl_build_1024/fxraw_1025 (not installed).
-
-2026-10-25 ~20:30 - GUNS RAW LIKE THE MP45 INSTALLED (owner: 'distortion to match like the mp45'): kl_gunsnd_all build --raw (hard clip + rail-aware IMA
-encode), 42 banks, median 21.9 % flat (Deagle ~20 %), MP45 untouched; C:/kl_build_1024/gunraw_1025, *.WAV.before-1025gunraw, UNDO bat there. Not ear-tested.
-Grenade TEST ready, not run: C:/kl_build_1024/grenspawn_1025/install.py (Spawn=2; --undo after). DD10 escape: [HUD] TrackerEscapeFar (8bb053657, default 0),
-built out_escfar_1025a, not installed; unknown whether DD10 has a van tracker entry at all (kl-merge-ce checking the POI).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
