@@ -2264,15 +2264,23 @@ static DWORD kld_o_pl(DWORD now)
    rebound Cover (MashKey says which key); the pad's A (0x1000) is the Cover button on a pad - NOT READ, MashPadBtn changes it. */
 /* MashMenuGate: 1 = a menu page is open (pause, shop, respawn, status): the menu system's window stack [[[0xdd265c]+0x824]+4] count +0x328
    (push 0x6bf368, pop 0x6bf286, close-all 0x6bf319; klslot.c / klqol2.c read the same stack). Mid-round Arcade logs show 0 windows; an online round
-   with a page kept open would switch the mash off (GUESS that it never does: not yet seen live, re/down_online_menu_gate.md). Unreadable = not open. */
+   with a page kept open would switch the mash off - VERIFIED it does not in System Link FA (10-25 SL2 log, 3 online rounds: 0 windows at every
+   mid-round sample, FAWaitForPlayers only ~0.5 s at the round start, FAStatus > StatusMoney only between rounds; re/down_online_menu_gate.md
+   'Verified'). Not measured: 2+ humans, pause / respawn pages online (same push path). Unreadable = not open. */
 static int kld_o_mgate = 1;
+static int kls_win_name(DWORD win, char *out, int cap);      /* klslot.c (included after this file): a window's name without a game call */
 static int kld_o_menu_open(void)
 {
-    DWORD gd, mgr, w, n;
+    static LONG told; DWORD gd, mgr, w, n; char nm[64];
     if (!kld_o_mgate) return 0;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(mgr = klh_rd32(gd + 0x824)) || klh_rd32(mgr) != 0x00bb7dc8u || !(w = klh_rd32(mgr + 4)) || klh_rd32(w) != 0x00baf2fcu) return 0;      /* KLS_MENUMGR_VT / KLS_WSYS_VT (klslot.c, included after this file) */
     n = klh_rd32(w + 0x328);
-    return n > 0 && n <= 24;
+    if (n == 0 || n > 24) return 0;
+    if (!InterlockedExchange(&told, 1)) {      /* once a process: which page gated the mash (a page the player opened is right; a HUD element here = the gate is wrong, MashMenuGate=0) */
+        if (!kls_win_name(klh_rd32(w + 0x32c + 4 * n), nm, sizeof nm)) strcpy(nm, "?");
+        klog("down: online: mash presses ignored while the menu page '%s' is open (%lu on the stack; [Down] MashMenuGate=0 turns the gate off)", nm, n);
+    }
+    return 1;
 }
 
 static int kld_o_keydown(void)

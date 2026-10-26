@@ -87,7 +87,33 @@ other keydown reads. Optional: `[Down] MashMenuGate=1` (recommended on) per the 
 One more point for the owner's pause-menu case: if the game thread is where kld_o_keydown runs, the stack is consistent; if
 it runs on the fallback thread, a torn read gives n at worst one step stale, which is harmless.
 
-## Verify in the next live run (not done)
+## Verified from an existing ONLINE log (scheduled check-in, 2026-10-26 ~19:00 UTC; nothing run)
 
-Log `windows:` by hand (klauto script op 13 `windows`) with the pause menu and the shop open in an ONLINE FA round and confirm
-count >= 1 there and 0 in play; watch for a permanent non-zero count in online play.
+The risk above ("an online round may keep a page on the stack the whole time") is answered by the owner's game-folder
+`KLHook.old.log` (10-25, the SL2 run of the 21:26 note: System Link, host alone with `[Lobby] MinPlayers=1`, DM01 in F01,
+TEST build with klauto's `windows:` line, logged on every stack change and at script lines). Three online rounds, read-only:
+
+    22:02:38.187  session: state 0x18 -> 0x19          (round 1 up)
+    22:02:38.503  windows: 1 [FAWaitForPlayers]        (the online wait page, pushed at 0x17)
+    22:02:38.680  windows: 0 []  x3                    (popped 0.5 s into the round)
+    22:03:21.423  session: state 0x19 -> 0x1f          (round over)
+    22:03:29.434  windows: 2 [FAStatus > StatusMoney]  (state 0x20 = the 30 s between-rounds status page)
+    22:03:59.464  session: state 0x18 -> 0x19          (round 2)
+    22:04:21.775  windows: 0 []  x4                    (script samples mid-round)
+    22:05:30.361  windows: 2 [FAStatus > StatusMoney]  (state 0x20 again)
+    22:06:00.405  session: state 0x18 -> 0x19          (round 3)
+    22:06:00.883  windows: 0 []  x3
+
+So in an online FA round the count is 0 while the round runs (every mid-round sample, three rounds, and no stack change was
+logged inside a round), the pages the gate must see are on the stack when they are up (`FAStatus > StatusMoney` between
+rounds; `FAWaitForPlayers > FAStatus_HostDisconnect` in the 21:25-21:50 host-alone runs that ended in 0x29), and the only
+window that overlaps state 0x19 is `FAWaitForPlayers` for ~0.5 s at the round's start, before anyone can be down. The
+"permanent non-zero count online" risk does not happen in System Link FA; the kill-switch `[Down] MashMenuGate=0` stays for
+the unmeasured cases. Still not seen on the stack in any log: `IngamePauseFA` (nobody paused in a bench) and `FARespawn`;
+their push goes through the same 0x6bee50 path, so they count the same way. Not measured: a round with 2+ humans (the wait
+page stays up until every peer has loaded, still before any down) and the Steam / overlay cases of the Chat section.
+
+0f8a924 left out the once-only log the mitigation above asked for; added by this check-in: the first time the gate stops a key read
+in a hold, `down: online: mash presses ignored while the menu page '<top window>' is open (N on the stack; ...)` (kls_win_name of
+`[ws + 0x32c + 4 * count]`, as klauto's `windows:` line; call-free). A page the player opened there is right; a HUD-like name would
+mean the gate is wrong on that build. GCC type check 0 errors; not MSVC-built, not run.
