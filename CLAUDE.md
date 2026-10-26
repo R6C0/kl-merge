@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~03:30 - BO1 PASS (7 AI heisters online, both peers); BO2 tactics gave 0 orders (scan cap, fixed 6c031b451, BO3 queued).
+BotGate (.bots.zip picked by host OnlineHost) BG1 queued; cop sync PuppetMode=2 snap (0f0560c56) SP1d queued; N9_DM01b, SV, B2-B5, N2 all maps follow.
+
 2026-10-26 ~02:20 - DM02 live 1dd14609 (co-op solo -> Arcade -> cover -> loot), smokes DM01/02/03 PASS; cover safety filters on (c21ce7161);
 DM05A cover restaged with them (4a6799a1, queued in live_1026/install_queue.txt). DM02_lift test inconclusive: c9's tele refused
 (no actor at gd+0x4cf0); rerun once out_all_1026c(_test) lands.
@@ -73,9 +76,6 @@ DM05A cover restaged with them (4a6799a1, queued in live_1026/install_queue.txt)
 2026-10-26 ~01:40 - COVER on 10 maps + ARCADE DM01/03/06 + DM02 CO-OP solo Lift Door (untested in game) installed, stale 0.
 C: filled mid-install (DM06/07/06B zips broken, restored + reinstalled); templates now guard free space (1e43fa9ad); bulk moved to D:.
 Smoke rotation live_1026/rotate.py needs --hook out_all_1026a_test (SHIP hook ignores [Script]); DM01 PASS 01:19.
-
-2026-10-26 ~00:10 - 9-INSTANCE LAN: L9b put 7 humans in one FA round (0 faults); player 9 froze 30 s across the host's start and stayed in the lobby.
-Bench host now waits for all to connect (script op waitpeers, bbcf618da); L9c running. Lobby shows only 8 rows: agent building a 12-row FALobby ([Lobby] Rows12).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

@@ -1,3 +1,8 @@
+2026-10-26 ~03:30 - BOT TACTICS / BOTGATE / PUPPETMODE 2 (c9):
+BO2 (host-only loot/van puppeteer e314672f3, [BotFill] OnlineTactics=1, DM01 botsonline): both IN ROUND, round 1 started, 7 Ally alive, but 0 orders: the scan stopped after 4000 objects before the Ally actors. Fixed 6c031b451 (whole table + scan line), BO3 queued.
+BotGate (f8cf4f2c4/fe0c72b71): online picks <zip>.bots.zip only when the host's OnlineHost=1 (hostopts b0/b1), logs size+FNV; BG1 bench (off/on, sibling staged + removed by bg1.py) queued.
+SP1c: PuppetMode=1 never moved cops (slot 373 commits only for 0x40000 nodes); PuppetMode=2 snaps via 0x62a900 when d>300 (0f0560c56), SP1d queued. tele PASS (peer DM02_lift). N9 benches now waitpeers 420 s in 1300 s.
+
 2026-10-26 ~02:35 - AI HEISTERS ONLINE (BO1) PASS + PUPPET (SP1b) DIAGNOSED:
 BO1 (host out_botonline_1026a_test, 843963271, [BotFill] OnlineHost=1; DM01 with Squad#02..08 eAllTypes via botsonline_1025, installed and undone by lan_1025/bo1.py, DM01 back to 3f3f684a): 7 Ally bots alive on both peers online, client mirrors them via Puppet (66 t=2 START, 60 CONVERGED), 1-120 units off while moving, 0 faults. Still: 0 with tactics (no loot/board online), needs eAllTypes in each map's data.
 SP1b (Puppet on cops, stock F01): PASS 0 faults but no gain (worst 764 d=2650 vs S2b 773 d=1097): cops that drift have ctl[+8e0] != [+50c] (often 0), so the 0x70f660 steer is skipped (264 mismatches) and only snaps act; matched cops stay within ~100. Workflow wjxdjafyt researching [+8e0]/[+50c] writers and a steer for them (out_syncpuppet_1026b).
