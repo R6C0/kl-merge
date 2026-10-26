@@ -238,7 +238,7 @@ static void klc_level_open(const char *key, const char *opened)
         klc_v.lynch = GetPrivateProfileIntA("Wardrobe", "VoiceLynch", 0, file);
         klc_v.material = GetPrivateProfileIntA("Wardrobe", "Material", 0, file);
         if (klc_w.on && klcv_enabled(&klc_v)) klog("character: level %s: Kane's / Lynch's own voice offsets %lu / %lu (material %lu): follows KLChar 9 / 10 (NOT RUN IN THE GAME)", klc_w.key, klc_v.kane, klc_v.lynch, klc_v.material);
-        else klog("character: %s is not usable (entry %d, Masks=%d, OutfitStep=%d, HeadBase=%d): this level has the stock looks only", file, i + 1, klc_w.masks, klc_w.step, klc_w.headbase);
+        else if (!klc_w.on) klog("character: %s is not usable (entry %d, Masks=%d, OutfitStep=%d, HeadBase=%d): this level has the stock looks only", file, i + 1, klc_w.masks, klc_w.step, klc_w.headbase);
     } else if (ver) klog("character: %s has Version=%d, this hook reads 1 and 2: this level has the stock looks only", file, ver);
     LeaveCriticalSection(&klc_cs);
     if (klc_log) {
