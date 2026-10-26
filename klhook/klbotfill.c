@@ -39,7 +39,7 @@ static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [Bo
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
 static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
-static int klbf_ot_bforce = 1; static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20;      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
+static int klbf_ot_bforce = 1, klbf_ot_recall = 1;static int klbf_ot_retry = 1, klbf_ot_idlevan = 1, klbf_ot_firestall = 1, klbf_ot_vidle; static int klbf_ot_retryS = 45, klbf_ot_idleS = 20;      /* [BotFill] OnlineGiveUpRetry / OnlineGiveUpRetryS, OnlineIdleVan / OnlineIdleVanS, OnlineFireStall (BO12); klbf_ot_vidle = a bot had nothing left to do last tick */
 static DWORD klbf_sq_done;         /* the session object the squad pass finished for */
 
 /* Step 3 (default off, SHIP-safe: one heap BYTE per squad). Squads are ZSquadScript entities (vtable 0xbcce3c); [squad+0x34] is the
@@ -115,6 +115,8 @@ static void klbf_init(void)
     klbf_ot_firestall = GetPrivateProfileIntA("BotFill", "OnlineFireStall", 1, klh_ini) != 0;      /* (recommended on) BO12: bots pinned down by cops were counted as stalled after 12 s */
     klbf_ot_bforce = GetPrivateProfileIntA("BotFill", "OnlineBoxForce", 1, klh_ini) != 0;      /* (recommended on) BO13: the carrier stood at the exit trigger, 3 m outside the box, for the whole van wait (state 3) and never boarded */
     if (klbf_ot) klog("botfill: OnlineTactics box force: OnlineBoxForce=%d (recommended on)", klbf_ot_bforce);
+    klbf_ot_recall = GetPrivateProfileIntA("BotFill", "OnlineVanRecall", 1, klh_ini) != 0;      /* (recommended on) BO14: a bot grabbed 800k 3 s after the call and was left behind when the van went */
+    if (klbf_ot) klog("botfill: OnlineTactics van recall: OnlineVanRecall=%d (recommended on)", klbf_ot_recall);
     klbf_ot_door = GetPrivateProfileIntA("BotFill", "OnlineSkipDoorStacks", 1, klh_ini) != 0;      /* (recommended on) BOS1: DD01's 58 vault cases sit behind kick doors; ordered straight at them the bots stalled and took 0 */
     if (klbf_ot) klog("botfill: OnlineTactics BOS1: OnlineSkipDoorStacks=%d (recommended on)", klbf_ot_door);
     if (klbf_ot) klog("botfill: OnlineTactics BO12 fixes: OnlineGiveUpRetry=%d (recommended on, %d s), OnlineIdleVan=%d (recommended on, %d s), OnlineFireStall=%d (recommended on)", klbf_ot_retry, klbf_ot_retryS, klbf_ot_idlevan, klbf_ot_idleS, klbf_ot_firestall);
@@ -454,7 +456,22 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klh_rd(rules + 0x1dc, &v, 1)) vstate = v;
         if (klh_rd(rules + 0x4c, &c, 4) && klb_finite(c) && c >= 0 && c < 100000.0f) left = c;
         if (lastr != klbf_ot_rounds) { lastr = klbf_ot_rounds; lastv = 0xff; }
-        if (vstate >= 0 && vstate != lastv) { if (lastv != 0xff) klog("botfill: tactics: van state %u -> %d (clock left %.1f s, called %d, +%lu s since the call)", lastv, vstate, left, klbf_ot_called, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0); lastv = (BYTE)vstate; if (klbf_ot_bprobe) klbf_ot_vprobe(rules, vstate); }
+        if (vstate >= 0 && vstate != lastv) {
+            static int nrecall, rcr;
+            if (rcr != klbf_ot_rounds) { rcr = klbf_ot_rounds; nrecall = 0; }
+            if (lastv != 0xff) klog("botfill: tactics: van state %u -> %d (clock left %.1f s, called %d, +%lu s since the call)", lastv, vstate, left, klbf_ot_called, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0);
+            /* OnlineVanRecall (BO14): the van left (7 -> 0) with a live bot still out carrying money (it grabbed 800k 3 s after the call): the call is freed so that bot calls it again. Max 2 per round; the < 20 s clock gate in klbf_ot_call_van still holds. GUESS: a second 0x71e180 call behaves like the first once the state is back to 0 */
+            if (klbf_ot_recall && lastv == 7 && vstate == 0 && klbf_ot_called && nrecall < 2 && left >= 40.0f) {
+                int q, nout = 0;
+                for (q = 0; q < KLBF_OT_BOTS; q++) if (klbf_ob[q].actor && klbf_ob[q].phase != 3 && klbf_ob[q].tally > 0) nout++;
+                if (nout) {
+                    nrecall++; klbf_ot_called = 0; klbf_ot_calledAt = 0; klbf_ot_gat = 0;
+                    for (q = 0; q < KLBF_OT_BOTS; q++) if (klbf_ob[q].actor && klbf_ob[q].phase != 3) { klbf_ob[q].told &= ~(1 | 32 | 256); klbf_ob[q].ordered = 0; klbf_ob[q].outAt = 0; }
+                    klog("botfill: tactics: van: back to idle with %d bot(s) still out carrying money (clock left %.0f s): the call is free again, recall %d of 2 (OnlineVanRecall)", nout, left, nrecall);
+                }
+            }
+            lastv = (BYTE)vstate; if (klbf_ot_bprobe) klbf_ot_vprobe(rules, vstate);
+        }
     }
     if (!van && rules) {   /* [rules+0x1e4] = the escape vehicle (0x70f0a0, PROVEN), 0 until the vehicle is called (0x71e180 -> 0x84f030 fills the list slot 89 reads) */
         struct kle_veh v; float vp[3];
