@@ -1,6 +1,7 @@
 """kl_cover_testgen_1026.py - generate a live cover test ini (COVER16_<MAP>.ini; COVER14 had no NO_DAMAGE, COVER15 one attempt) for one expansion map (2026-10-26). OFFLINE: reads files, writes one ini.
 
-Usage:  python tools/kl_cover_testgen_1026.py <MAP> [--n 8] [--out C:/kl_build_1024/live_1026] [--plans C:/kl_build_1024/cover_fix_1026d]
+Usage:  python tools/kl_cover_testgen_1026.py --tag COVER17 all     (COVER17: BOXES17 only, one attempt per box; default tag COVER16 unchanged)
+        python tools/kl_cover_testgen_1026.py <MAP> [--n 8] [--out C:/kl_build_1024/live_1026] [--plans C:/kl_build_1024/cover_fix_1026d]
         python tools/kl_cover_testgen_1026.py all          (every map that has a staged plan)
 
 Per map the ini is COVER13.ini's header ([KLHook] .. [CoverDump] .. [Auto], everything before [Script]) plus a [Script] made of
@@ -30,8 +31,10 @@ LONG = 100.0
 GROUND_BAND = 800.0    # max |ground - median ground| of a chosen tile
 LEAD_WAIT = 23000       # after 'waitload', as COVER13
 IDLE_MS = 15000
-BLOCK_MS = 2 * (4000 + 700 + 400 + 2000 + 400 + 3000)     # the waits of one block, two attempts (the taps/peeks/face add a little)
-TAG = 'COVER16'         # COVER16 = two attempts per block, longer settles (see block()); COVER15 = COVER14 + no_damage_to_you(): in COVER14 police downed the test player on DM01B/DM06/DM06B and a down blocks cover
+BLOCK_MS = 2 * (4000 + 700 + 400 + 2000 + 400 + 3000)     # COVER16 value; COVER17 uses BLOCK17_MS
+BLOCK17_MS = 1500 + 2500 + 4000 + 500 + 2000 + 700 + 400 + 2000 + 400 + 3000     # the waits of one COVER17 block, ONE attempt (the taps/peeks/goto add a little)
+TAG = 'COVER16'  # --tag COVER17 switches mode (BOXES17, one attempt, see block())
+# COVER16 = two attempts per block, longer settles (see block()); COVER15 = COVER14 + no_damage_to_you(): in COVER14 police downed the test player on DM01B/DM06/DM06B and a down blocks cover
 # [Balance] keys set in the test ini: police / point-blank / crew damage to the local player 0; Ramp=0 or CopToYou would be raised to stock
 NO_DAMAGE = [('Ramp', '0'), ('CopToYou', '0.0'), ('PointBlankToYou', '0.0'), ('CrewToYou', '0.0')]
 
@@ -111,7 +114,7 @@ def choose(tiles, n):
     return chosen
 
 
-def block(tag, t):
+def block16(tag, t):
     """COVER16 (2026-10-26 triage of the COVER14/15 NOs, workflow w5j0dddil): no box fault found; the NOs were carry-over from the block
     before (the second C leaves cover ~0.8 s late and the next tele lands in that state) and taps ~2 s after the tele when no face steering ran.
     So: wait 4000 after each tele, wait 3000 after the exit C, and a second attempt (b) with a fresh tele and the face aimed 30 degrees off
@@ -141,11 +144,70 @@ def block(tag, t):
     return out
 
 
+# COVER17 (2026-10-26): only the boxes that failed in COVER14-16 plus one control per map. Order matters (DM01B: the failing boxes go FIRST after load).
+BOXES17 = {
+    'DM06':  ['CoverBoxM_K6_22', 'CoverBoxM_K6_23*'],
+    'DM06B': ['CoverBoxH_K6_47', 'CoverBoxH_K6_22', 'CoverBoxH_K6_39*'],
+    'DM01B': ['CoverBoxH_K6_10', 'CoverBoxH_K6_13', 'CoverBoxH_K6_09', 'CoverBoxH_K6_02*'],
+    'DM11B': ['CoverBoxH_K6_03', 'CoverBoxH_K6_13*'],
+}     # '*' = control (known good or untested neighbour)
+RUN_UP = 200     # GUESS: tele this far OUT of the face (along face_normal), then walk in; 200 is room for the heading to settle, small enough to stay on the same floor
+
+
+def block(tag, t, ctl=False):
+    """COVER17: ONE attempt per box (COVER16's attempt b failed on every box, also the good ones: a second tele + C right after the first).
+    Facing: klauto's 'face' only turns the mouse and its heading ([player+0xc14]) does not follow the camera of a STANDING player
+    (klauto.c header), hence 'face ... NOT reached: heading 170, bearing error -43' and 'reached in 0 ms'. 'goto' makes the heading equal the
+    direction of travel (klauto.c kla_player_dir: within 1 degree). So: tele RUN_UP out of the face, 'goto' the face point with radius 55 (stops
+    about at the stand point, 50 out), heading = bearing to the face centre; then a short 'face' as a check/trim. A poke of the heading was not
+    chosen: poke writes ONE dword and the player object has no fixed address (GUESS-level pointer path), the 3-float vector would need two pokes.
+    Drift: tele, wait 1500, tele again (the second tele zeroes what the first left running), then wait 2500 before the walk-in."""
+    sx, g, sz = t['stand']; nx, nz = t['face_normal']
+    fx, fz = sx - 50 * nx, sz - 50 * nz
+    rx, rz = sx + RUN_UP * nx, sz + RUN_UP * nz
+    r = lambda v: int(round(v))
+    return [
+        'log === %s: %s %s%s ext %.0fx%.0f y %.1f stand (%.1f,%.1f) face (%.1f,%.1f) ===' % (tag, t['name'], t['kind'], ' CONTROL' if ctl else '', t['ext'][0], t['ext'][1], g, sx, sz, fx, fz),
+        'tele %d %d %d' % (r(rx), r(g + 5), r(rz)),
+        'wait 1500',
+        'tele %d %d %d' % (r(rx), r(g + 5), r(rz)),
+        'wait 2500',
+        'pos %s1-at-runup' % tag,
+        'goto %d %d 55 4000' % (r(fx), r(fz)),
+        'wait 500',
+        'pos %s1-at-stand' % tag,
+        'face %d %d 6 2000' % (r(fx), r(fz)),
+        'wait 700',
+        'peek 0xdd265c+828+6b4+44 %s-1-before-C-movement-id(secondary)' % tag,
+        'tap C 400',
+        'wait 2000',
+        'log %s CHECK 1' % tag,
+        'peek 0xdd265c+828+6b4+44 %s-1-after-C-movement-id(secondary)' % tag,
+        'pos %s1-after-C' % tag,
+        'tap C 400',
+        'wait 3000',
+    ]
+
+
+def pick17(map_id, tiles):
+    by = dict((t['name'], t) for t in tiles)
+    out = []
+    for nm in BOXES17[map_id]:
+        ctl = nm.endswith('*'); nm = nm.rstrip('*')
+        if nm not in by: raise SystemExit('%s: box %s not in the plan' % (map_id, nm))
+        out.append((by[nm], ctl))
+    return out
+
+
 def build(map_id, n=8, out=OUT, plans=PLANS):
     plan = os.path.join(plans, map_id, 'stage', 'cover_plan.json')
     tiles = json.load(open(plan))
     sel, msg = selection_part(os.path.join(out, map_id + '.ini'))
-    ch = choose(tiles, n)
+    ctls = {}
+    if TAG == 'COVER17':
+        pk = pick17(map_id, tiles); ch = [t for t, _ in pk]; ctls = dict((t['name'], c) for t, c in pk)
+    else:
+        ch = choose(tiles, n)
     hdr, _ = split_ini(read_lines(os.path.join(out, 'COVER13.ini')))
     hdr = no_damage_to_you(hdr)
     hdr[0] = ('; ' + TAG + ' %s (2026-10-26): generated by tools/kl_cover_testgen_1026.py from COVER13.ini (header) and %s.ini (map selection). %d K6 tiles '
@@ -166,9 +228,9 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
         s.append('ents %s 3' % ch[0]['name'])
     s += ['log === ' + TAG + ': idle %d s at the spawn (coverdump dumps after the list is stable 2 s) ===' % (IDLE_MS // 1000), 'wait %d' % IDLE_MS, 'pos idle-end']
     for i, t in enumerate(ch):
-        s += block('k%d' % (i + 1), t)
+        s += block('k%d' % (i + 1), t, ctls.get(t['name'], False)) if TAG == 'COVER17' else block16('k%d' % (i + 1), t)
     s += ['log ' + TAG + '_%s DONE' % map_id, 'pass 1000']
-    total = LEAD_WAIT + IDLE_MS + BLOCK_MS * len(ch)
+    total = LEAD_WAIT + IDLE_MS + (BLOCK17_MS if TAG == 'COVER17' else BLOCK_MS) * len(ch)
     assert total < 400000, 'run too long: %d ms after load' % total
     text = '\n'.join(hdr) + '\n[Script]\n' + '\n'.join('%d=%s' % (i + 1, t) for i, t in enumerate(s)) + '\n'
     p = os.path.join(out, TAG + '_%s.ini' % map_id)
@@ -179,15 +241,17 @@ def build(map_id, n=8, out=OUT, plans=PLANS):
 def main(argv):
     if not argv or argv[0] in ('-h', '--help'):
         print(__doc__); return 2
+    global TAG
     n, out, plans, maps = 8, OUT, PLANS, []
     i = 0
     while i < len(argv):
         if argv[i] == '--n': n = int(argv[i + 1]); i += 2
         elif argv[i] == '--out': out = argv[i + 1]; i += 2
+        elif argv[i] == '--tag': TAG = argv[i + 1]; i += 2
         elif argv[i] == '--plans': plans = argv[i + 1]; i += 2
         else: maps.append(argv[i]); i += 1
     if maps == ['all']:
-        maps = MAPS
+        maps = list(BOXES17) if TAG == 'COVER17' else MAPS
     for m in maps:
         p, ch, total = build(m, n, out, plans)
         print('%s -> %s (%d blocks, ~%d s after load)' % (m, p, len(ch), total // 1000))
