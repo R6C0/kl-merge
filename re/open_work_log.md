@@ -1,3 +1,9 @@
+2026-10-26 ~13:40 - Bots online on stock maps: BOS_DD03 PASS 7/7 boarded (9 stacks, 4.5M, van recalled 3 times). BOS_DD04 PASS but 3/7 boarded:
+4 carriers got money after the first call and logged 'wants the van but it was called already', so they stood ~100 m off for the whole visit.
+At the recall (clock 52 s, late) they were 108 m out and the van left without them. Fix: [BotFill] OnlineJoinCalled=1 (recommended on): such a carrier walks to the exit while the van comes or waits (state 1-4).
+Build out_joincall_1026_test ce4c9aa0 (also has OnlineBoxSlack). Queue: BOS_DD05..09, BOS_DD02s, CNR2 on it, then BOS_DD04j.
+SHIP build out_ship_1026a e4f9686b (b99a0c187, no JoinCalled yet) is built but not installed.
+
 2026-10-26 ~13:10 - UCC2 PASS (3 instances, Undercover Cop sub-mode 1, DD01/F01, out_exitdy2_1026_test): all 3 IN ROUND, 0 asserts, 0 faults.
 Both clients mirror the host's 13 cops. Track error before placement mean 0 max 0, and in-tolerance skips run 850-1750 per 5 s, so no placements were needed.
 vs host lead-corrected: p50 0, p90 2-10 cm, one 103 cm spike on inst2. Raw '>1.0 m' counts of 3-13 per window are the un-corrected lead, not drift.
