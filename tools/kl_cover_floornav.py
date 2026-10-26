@@ -187,7 +187,7 @@ def load_plan(map_name, zp=None):
     """{box name: [plan entries]} of the staged cover_plan.json files for the map, newest root first (cover_1026b, then cover_1026); {} when none.
     A list per name: a restaged map reuses the names K6_01.. with other middles, and the old live boxes must still find their own entry (the middle decides)."""
     out = {}
-    for root in (r'C:\kl_build_1024\cover_1026b', r'C:\kl_build_1024\cover_1026'):
+    for root in (r'C:\kl_build_1024\cover_fix_1026b', r'C:\kl_build_1024\cover_1026b', r'C:\kl_build_1024\cover_1026'):
         f = os.path.join(root, map_name, 'stage', 'cover_plan.json')
         if os.path.isfile(f):
             with open(f) as fh:

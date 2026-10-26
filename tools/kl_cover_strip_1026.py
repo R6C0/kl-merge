@@ -81,7 +81,8 @@ def strip(src, log=print):
     ids = {slot0[e] + 2: slot1[e] + 2 for e in slot0 if e in slot1}
     ids[1] = 1
     octn, rmin, rmcn = O.remap_ids(octx, ids, gids), O.remap_ids(rmi, ids, gids), O.remap_ids(rmc, ids, gids)
-    left = sum(1 for room in octn.rooms for t in room if t is not None for it in t.items if it[0] in gids)
+    # (2026-10-26: counted, not compared by id - survivors renumbered into a removed id when another group (KL_CoverAB) sits after this one)
+    left = sum(1 for room in octn.rooms for t in room if t is not None for it in t.items) - sum(1 for room in octx.rooms for t in room if t is not None for it in t.items if it[0] not in gids)
     if left:
         raise ValueError('%d room-tree items still name a removed entity' % left)
     moved = sum(1 for a, b in ids.items() if a != b)

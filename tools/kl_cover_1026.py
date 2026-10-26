@@ -60,6 +60,13 @@ SPAWN_PAD, SPAWN_DY = 60.0, 250.0   # footprint + 60 may not touch a ZSpawnPoint
 LOOT_NEAR, DOOR_NEAR = 110.0, 150.0 # distance (footprint edge) to a loot stack / to a door, stair, ramp or ladder object
 NEAR_DY = 300.0
 SPAN_MAX, GROUND_TOL = 35.0, 30.0   # nav height span in front over 2 m; |plan ground - collision floor at the stand point|
+FREESIDE = True          # (recommended on) 2026-10-26 COVER11: boxes stand fully on the FREE side of the wall (back GAP off the face, built-for face = the far face), not buried in the solid:
+                         # the six real K6 boxes buried behind the face had their built-for face flagged blocked by the engine's side probe (no cover); boxes on open floor / in front of a wall worked. --no-freeside = the old buried form
+FS_GAP = 2.0             # GUESS: gap between the wall face and the box back (units); the stock control box Right_01 is flush (0)
+FS_SHIFTS = (0, -20, 20, -40, 40, -60, 60, -80, 80)   # GUESS: slide a tile along its wall (units) when its footprint hits a railing / wall end (from the COVER11 diagnosis)
+FS_OVER = 40.0           # GUESS: a slid tile may stick out past the end of its wall run by this much (COVER11 diagnosis: K6_45 needs -20)
+FS_EDGE_TOL = 0.5        # GUESS: the exact wall test's back edge sits this far inside the box back (the real face is GAP=2 behind it, measured 1.7 to 2.1)
+FS_FLOOR_TOL = 10.0      # GUESS: |collision floor - plan ground| allowed at the stand point and the far corners (was GROUND_TOL 30; K6_43 tele landed 26 off)
 TIERS = 'b'              # box model forms a clone may take: 'b' (flags 0x200, no collision record; default, unchanged) or 'ab' (also form a)
 
 
@@ -151,8 +158,64 @@ def _tile_unsafe(L, SF, mid, y, n, u, eu, ev, stand):
     if len(hs) >= 3 and max(hs) - min(hs) > SPAN_MAX:
         return 'stairs / ramp in front (nav height span over %d in 2 m)' % SPAN_MAX
     sf = S.floor(stand[0], y, stand[2], reach=60.0)
-    if sf is not None and abs(sf - y) > GROUND_TOL:
+    if sf is not None and abs(sf - y) > (FS_FLOOR_TOL if FREESIDE else GROUND_TOL):
         return 'plan ground and collision floor at the stand point differ by more than %d' % GROUND_TOL
+    return None
+
+
+def _seg_in_rect(sg, c, u, n, hu, n0, n1):
+    """True when the segment (x0, z0, x1, z1) touches the rectangle |lu| <= hu, n0 <= ln <= n1 (frame: centre c, axes u and n); Liang-Barsky."""
+    pts = []
+    for x, z in ((sg[0], sg[1]), (sg[2], sg[3])):
+        dx, dz = x - c[0], z - c[1]
+        pts.append((dx * u[0] + dz * u[1], dx * n[0] + dz * n[1]))
+    (a, b), (d, e) = pts
+    t0, t1 = 0.0, 1.0
+    for p, q, lo, hi in ((a, d, -hu, hu), (b, e, n0, n1)):
+        dp = q - p
+        if abs(dp) < 1e-9:
+            if p < lo or p > hi:
+                return False
+            continue
+        ta, tb = (lo - p) / dp, (hi - p) / dp
+        if ta > tb:
+            ta, tb = tb, ta
+        t0, t1 = max(t0, ta), min(t1, tb)
+        if t0 > t1:
+            return False
+    return True
+
+
+def _free_footprint(L, mid, y, n, u, eu, ev, gap):
+    """Free-side tile test (FREESIDE): reason string when the footprint (middle mid, eu along u, ev along n, back GAP off the wall face) is not clear floor, else None.
+    - both far corners and the middle stand on a collision floor within FS_FLOOR_TOL of y (no floor found there: the nav mesh must be there);
+    - no static collision (BASE plane cells, see Solid.scan) inside the footprint beyond the wall's own face band (CELL), i.e. a railing, a pilaster end or a second wall."""
+    S, nav = L.solid, L.nav
+    for su, sv in ((-1, 1), (1, 1), (0, 0)):
+        q = (mid[0] + su * eu / 2 * u[0] + sv * ev / 2 * n[0], mid[1] + su * eu / 2 * u[1] + sv * ev / 2 * n[1])
+        f = S.floor(q[0], y, q[1], reach=60.0)
+        if f is None:
+            # (the mesh is carved ~75 off a wall, so a far corner at the carve edge may miss it: accept mesh up to 50 further out; GUESS)
+            if all(nav.at(q[0] + d * n[0], y, q[1] + d * n[1], dy=70.0) is None for d in (0.0, 25.0, 50.0)):
+                return 'no floor or mesh under the far corner'
+        elif abs(f - y) > FS_FLOOR_TOL:
+            return 'floor under the footprint differs from the ground by more than %d' % FS_FLOOR_TOL
+    occ, segs = S.scan(mid[0], y, mid[1], 500.0)
+    # exact test (2026-10-26 review): the raster test below ignores the first 1.5 cells (15) off the face, so a pilaster / wall end / diagonal 20 proud of the face
+    # slipped through (K6_33 sat 18 in a wall step, K6_28 and K6_43 were crossed by other walls). No BASE outline segment may cross the footprint rectangle
+    # (back edge FS_EDGE_TOL inside the box back; the wall's own face lies GAP behind it).
+    for _r, ss in segs.items():
+        for sg in ss:
+            if _seg_in_rect(sg, mid, u, n, eu / 2, -ev / 2 + FS_EDGE_TOL, ev / 2):
+                return 'wall outline crosses the footprint (pilaster / wall end / second wall)'
+    back = (mid[0] - (ev / 2 + gap) * n[0], mid[1] - (ev / 2 + gap) * n[1])      # the wall face line, on the middle's axis
+    for _r, cells in occ[C.BASE].items():
+        for c2 in cells:
+            dx, dz = (c2[0] + 0.5) * C.CELL - mid[0], (c2[1] + 0.5) * C.CELL - mid[1]
+            lu, ln = dx * u[0] + dz * u[1], dx * n[0] + dz * n[1]
+            t = (ln + ev / 2) + gap                  # distance from the face along n
+            if abs(lu) <= eu / 2 and 0.0 <= t <= ev + gap and t > C.CELL * 1.5:
+                return 'solid inside the footprint (railing / wall end / second wall)'
     return None
 
 
@@ -199,7 +262,8 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floorn
     # longest runs first; tiles are then picked cell by cell up to the cap
     cand.sort(key=lambda t: -t[0]['len'])
     placed = collections.Counter()
-    for r, y in cand:
+    for r, y0 in cand:
+        y = y0
         if len(new) >= max_new:
             why['cap'] += 1
             break
@@ -208,6 +272,7 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floorn
         t = 0.0
         L_run = r['len']
         while t < L_run - 50.0 and len(new) < max_new:
+            y = y0                          # (FREESIDE re-grounds a tile on the floor at its stand point; the next tile starts from the run's own ground)
             p0 = (a[0] + t * u[0], a[1] + t * u[1])
             left = L_run - t
             # which height: solid at 175 along this stretch (HIGH) or at 45 and 75 only (LOW)
@@ -228,11 +293,19 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floorn
             ky = C.HIGH_Y if hi else C.LOW_Y
             # the solid behind the face: up to the first mesh behind it (a thin shell), at most MODEL_MAX
             depth = C.MODEL_MAX
-            for sdep in range(20, int(C.MODEL_MAX) + 1, 20):
-                q = (p0[0] + 30.0 * u[0] - sdep * n[0], p0[1] + 30.0 * u[1] - sdep * n[1])
-                if nav.at(q[0], y, q[1], dy=70.0) is not None:
-                    depth = sdep - 10.0
-                    break
+            if FREESIDE:
+                # the free-side form: the room in FRONT of the face up to the first mesh (the mesh is carved off the wall, ~75 wide on DM05A)
+                for sdep in range(10, int(C.MODEL_MAX) + 1, 10):
+                    q = (p0[0] + 30.0 * u[0] + sdep * n[0], p0[1] + 30.0 * u[1] + sdep * n[1])
+                    if nav.at(q[0], y, q[1], dy=70.0) is not None:
+                        depth = sdep - FS_GAP
+                        break
+            else:
+                for sdep in range(20, int(C.MODEL_MAX) + 1, 20):
+                    q = (p0[0] + 30.0 * u[0] - sdep * n[0], p0[1] + 30.0 * u[1] - sdep * n[1])
+                    if nav.at(q[0], y, q[1], dy=70.0) is not None:
+                        depth = sdep - 10.0
+                        break
             best = None
             for f in fs:
                 if not ky[0] <= f['size'][1] < ky[1]:
@@ -249,7 +322,27 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floorn
                 t += 60.0
                 continue
             _k, f, along_u, eu, ev = best
-            mid = (p0[0] + eu / 2 * u[0] - ev / 2 * n[0], p0[1] + eu / 2 * u[1] - ev / 2 * n[1])
+            if FREESIDE:
+                # box on the free side: back FS_GAP off the face, built-for face (= face_normal side) = the far face. Slide along the wall until the footprint is clean.
+                y_run, fs_why, mid = y, None, None
+                for sh in FS_SHIFTS:
+                    if t + sh < -FS_OVER or t + sh + eu > L_run + FS_OVER:      # (a tile may overhang the run's ends by FS_OVER)
+                        continue
+                    m_ = (p0[0] + (eu / 2 + sh) * u[0] + (ev / 2 + FS_GAP) * n[0], p0[1] + (eu / 2 + sh) * u[1] + (ev / 2 + FS_GAP) * n[1])
+                    sf = S.floor(m_[0] + (ev / 2 + 50.0) * n[0], y_run, m_[1] + (ev / 2 + 50.0) * n[1], reach=80.0)   # ground = the floor at the stand point, not the mesh pick's height
+                    yt = y_run if sf is None or abs(sf - y_run) > 60.0 else sf
+                    fs_why = _free_footprint(L, m_, yt, n, u, eu, ev, FS_GAP)
+                    if fs_why is None:
+                        mid, y = m_, yt
+                        break
+                if mid is None:
+                    why['free side: ' + (fs_why or 'no shift fits the run')] += 1
+                    t += 60.0
+                    continue
+                if sh:
+                    why['(shifted along the wall)'] += 1
+            else:
+                mid = (p0[0] + eu / 2 * u[0] - ev / 2 * n[0], p0[1] + eu / 2 * u[1] - ev / 2 * n[1])
             step = eu + TILE_STEP
             ccell = (int(mid[0] // CELLBIG), int(mid[1] // CELLBIG))
             if have[ccell] + placed[ccell] >= capcell:
@@ -286,11 +379,11 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floorn
                 why['escape road'] += 1
                 continue
             # nobody may stand IN the box: the mesh is carved round props, so a footprint corner on the mesh means a thin wall
-            if sum(1 for q in foot[:4] if nav.at(q[0], y, q[2], dy=70.0) is not None) >= 2:
+            if not FREESIDE and sum(1 for q in foot[:4] if nav.at(q[0], y, q[2], dy=70.0) is not None) >= 2:
                 why['box reaches the other side (thin wall)'] += 1
                 continue
             # kl_fa_cover.check's own 'thin air' rule: >= 4 raster cells of static collision in the footprint (+ CELL) at BASE
-            occ2, _s2 = S.scan(mid[0], y, mid[1], 500.0)
+            occ2, _s2 = S.scan(mid[0], y, mid[1], 500.0) if not FREESIDE else ({C.BASE: {}}, None)
             hx, hz = head
             inside = 0
             for _r2, cells2 in occ2[C.BASE].items():
@@ -299,10 +392,10 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floorn
                     lz, lx = dx * hx + dz * hz, dx * hz - dz * hx
                     if abs(lx) <= ev_ / 2 + C.CELL and abs(lz) <= eu_ / 2 + C.CELL:
                         inside += 1
-            if inside < 4:
+            if inside < 4 and not FREESIDE:
                 why['no collision in the footprint (thin air)'] += 1
                 continue
-            fr = (mid[0] + (ev / 2 + 1) * n[0], mid[1] + (ev / 2 + 1) * n[1])
+            fr = (mid[0] + (ev / 2 + (50.0 if FREESIDE else 1)) * n[0], mid[1] + (ev / 2 + (50.0 if FREESIDE else 1)) * n[1])      # FREESIDE: the live test's stand point, 50 off the far face
             if _fronts(nav, fr, y, n, u) < STAND_NEED:
                 why['nobody can stand in front'] += 1
                 continue
@@ -323,7 +416,7 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floorn
                         'ext': [round(eu, 1), round(ev, 1)], 'height': round(f['size'][1], 1), 'model': f['model'], 'form': f['path'],
                         'form_node': f['node'], 'tier': f['tier'], 'borrowed': f.get('borrowed'), 'object': nm, 'object_ref': r['ref'],
                         'ground': round(y, 1), 'via': 'wall', 'name': None,
-                        'face_normal': [round(n[0], 3), round(n[1], 3)], 'run': [[round(a[0]), round(a[1])], [round(b[0]), round(b[1])], round(L_run), round(t - step)], 'stand': [round(fr[0], 1), round(y, 1), round(fr[1], 1)]})
+                        'face_normal': [round(n[0], 3), round(n[1], 3)], 'freeside': bool(FREESIDE), 'gap': FS_GAP if FREESIDE else None, 'run': [[round(a[0]), round(a[1])], [round(b[0]), round(b[1])], round(L_run), round(t - step)], 'stand': [round(fr[0], 1), round(y, 1), round(fr[1], 1)]})
             placed[ccell] += 1
     if GN and GN.kept:
         log('walls: floornav kept tiles in parts no spawn reaches: %s' % dict(GN.kept))
@@ -332,6 +425,8 @@ def walls(L, fs, new, max_new, density, spread, log=print, safety=SAFETY, floorn
 
 def plan(zp, opt, log=print):
     # (normalised: kl_fa_cover.apply skips copying the source zip by comparing path strings; a '/' path would copy the original over the output)
+    global FREESIDE
+    FREESIDE = bool(opt.get('freeside', FREESIDE))
     zp = os.path.normpath(os.path.abspath(zp))
     A.use_slot(zp)
     C.GROUP, C.TAG = GROUP, TAG
@@ -374,11 +469,15 @@ def build(zp, dst, opt, log=print):
 
 
 def options(a):
-    opt = {'max': MAX_NEW, 'density': DENSITY, 'spread': SPREAD, 'tiers': TIERS, 'safety': SAFETY, 'floornav': FLOORNAV}
+    opt = {'max': MAX_NEW, 'density': DENSITY, 'spread': SPREAD, 'tiers': TIERS, 'safety': SAFETY, 'floornav': FLOORNAV, 'freeside': FREESIDE}
     a = list(a)
     while a and a[0].startswith('--'):
         if a[0] == '--no-safety':
             opt['safety'] = False
+            a.pop(0)
+            continue
+        if a[0] == '--no-freeside':
+            opt['freeside'] = False
             a.pop(0)
             continue
         if a[0] == '--no-floornav':

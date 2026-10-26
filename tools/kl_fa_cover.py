@@ -1241,7 +1241,7 @@ def check(folder, log=print):
                 lz, lx = dx * hx + dz * hz, dx * hz - dz * hx
                 if abs(lx) <= (bb[3] - bb[0]) / 2 + CELL and abs(lz) <= (bb[5] - bb[2]) / 2 + CELL:
                     inside += 1
-        if inside < 4:
+        if inside < 4 and not (planned.get(nm) or {}).get('freeside'):      # (a free-side tile, kl_cover_1026 FREESIDE 2026-10-26, stands on clear floor in front of its wall on purpose)
             fail('%s: no static collision in its footprint %d over its foot (thin air)' % (nm, BASE))
     if plan_ is not None and len(planned) != len(mine):
         fail('%d boxes in the build, %d in cover.json' % (len(mine), len(planned)))
