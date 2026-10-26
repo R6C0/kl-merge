@@ -35,3 +35,6 @@ Not written: `bos1.py`, `BOS1_host.ini`, `BOS1_join.ini`, because without the `.
 - DD01 has 11 eHeistOnly squads: merc_bot_squad Squad#02..08 (the bots) and SwatExit#03..06_HEIST (SWAT, not heisters). Built with `--only merc_bot_squad`: 7 changed.
 - Source `KLExpansion/Maps/DD01/F01_Main.zip` 27680110 (the page-0 F01=DD01 redirect target); output `C:/kl_build_1024/botsstock_1026/DD01/F01_Main.bots.zip` c7a110ef. BotGate (klslot.c 391, 449-453) opens `KLExpansion/Maps/DD01/F01_Main.bots.zip` online with the host's OnlineHost=1.
 - Bench: `C:/kl_build_1024/lan_1025/bos1.py` (install.py places one file, always undoes), BOS1_host/join.ini (M2_DD01 lobby + BO11 bot keys), hook 1026zd. Review READY (wqi2u6ver). Not run live yet.
+
+## 2026-10-26 ~09:30 staged DD02-DD09
+`kl_botsonline.py --stock ... eAllTypes --only merc_bot_squad`: 7 merc_bot_squad squads each (eHeistOnly -> eAllTypes), md5s in C:/kl_build_1024/botsstock_1026/MD5.txt. BotGate is per slot, so each goes beside its redirect target as Fxx_Main.bots.zip. Not installed: waiting on BOS1 (DD01) first. DD10 (F07 slot) not staged.
