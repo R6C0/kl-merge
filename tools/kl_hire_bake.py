@@ -210,7 +210,7 @@ def write_bats(out, maps):
                           ('UNDO hire window.bat', 'undo', 'Puts the *%s backups back.' % BAK)):
         with open(os.path.join(out, nm), 'w', newline='\r\n') as f:
             f.write('@echo off\nrem %s\nrem Close Kane & Lynch 2 first. Needs python on the PATH. Re-bakes from the live zips, so other map edits are kept.\n' % txt)
-            f.write('python "%s" %s --maps %s\npause\n' % (py, mode, ml))
+            f.write('python "%%~dp0kl_hire_bake.py" %s --maps %s\npause\n' % (mode, ml))
 
 
 if __name__ == '__main__':
