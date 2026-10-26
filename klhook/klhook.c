@@ -706,6 +706,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klcamsmooth.c"                                 /* klcamsmooth.c: [CamSmooth] pivot / aim-out / dt-correct camera smoothing; AFTER klcam.c */
 #include "klanimprobe.c"                               /* klanimprobe.c: [AnimProbe] LOG-ONLY probe of the animation Play 0x4da1d0 around the player's gait change (off unless Enable=1; TEST build only patches); AFTER klcamsmooth.c */
 #include "klmfprobe.c"                                  /* klmfprobe.c: [MFProbe] TEST-only log probe of who raises the MissionFailedReload popup; AFTER klanimprobe.c, klescort.c */
+#include "klbotdeath.c"                              /* klbotdeath.c: [BotDeathProbe] TEST-only log probe of what kills a team-2 bot online (health writes, hits, death routine); AFTER klmfprobe.c */
 #include "klcoverdump.c"                              /* klcoverdump.c: [CoverDump] TEST-only read-only dump of the cover list; AFTER klmfprobe.c */
 #include "klheliprobe.c"                                  /* klheliprobe.c: read-only chopper probe ([Heli] Probe, default 0); AFTER klescort.c */
 #include "klcensor.c"                                    /* klcensor.c: [Censor] a killing head shot blows the head off (heap data only); AFTER klheliprobe.c */
@@ -1186,6 +1187,7 @@ static void klh_tick(int game_thread)
     klhp_tick(game_thread);                           /* klheliprobe.c: read-only chopper probe (returns at once unless [Heli] Probe) */
     klcn_tick(game_thread);                           /* klcensor.c: pre-arm the head-hit sum so a killing head shot censors */
     klcs_tick(game_thread);                           /* klcensus.c: read-only actor list (returns at once unless [Census] Enable) */
+    klbdp_tick(game_thread);                           /* klbotdeath.c: [BotDeathProbe] 250 ms bot health samples (returns at once unless Enable) */
     kcvd_tick(game_thread);                           /* klcoverdump.c: [CoverDump] cover list dump (returns at once unless Enable) */
     klcc_tick(game_thread);                           /* klclubcalm.c: read-only hand / shot log (returns at once unless [ClubCalm] Enable) */
     klch_tick(game_thread);                           /* klclubholster.c: holster at the Last Call start, unlock at the loot, panic on the draw */
@@ -1605,6 +1607,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klhp_init();                                      /* klheliprobe.c: reads [Heli] Probe, installs nothing */
     klcn_init();                                      /* klcensor.c: reads [Censor] */
     klcs_init();                                      /* klcensus.c: reads [Census] */
+    klbdp_init();                                      /* klbotdeath.c: reads [BotDeathProbe]; TEST build detours 0x61efd0 / 0x61a980 / 0x4bd540 / 0x688190 / 0x8edaf0 (log only) */
     kcvd_init();                                      /* klcoverdump.c: reads [CoverDump] */
     klcc_init();                                      /* klclubcalm.c: reads [ClubCalm] */
     klch_init();                                      /* klclubholster.c: reads [ClubHolster] */
