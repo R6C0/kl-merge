@@ -1214,11 +1214,15 @@ static const char *kla_player_refuse(DWORD pl)
     return 0;
 }
 
+static DWORD kla_state = 0xffffffff, kla_state16_t;      /* session state as kla_script_step last saw it, and when it last became 0x16 */
+
 static void kla_tele(int line, const float to[3])
 {
     float from[3] = { 0, 0, 0 }, now[3] = { 0, 0, 0 }; DWORD actor = 0, pl = 0; const char *why = 0, *how = "none"; int fault = 0, hn = 0, hf = 0;
     /* TEST only: no online/level guard - online this moves the local body unilaterally and would desync (use it solo). */
     if (!kla_exe_ok) why = "kl2.exe is not the known build";
+    else if (kla_state != 0x19) why = "the round is not running (session state is not 0x19)";
+    else if (kla_state16_t && GetTickCount() - kla_state16_t < 15000) why = "a round restart (session 0x16) was less than 15 s ago (COVER6 camera pool assert 0x60a5bf)";
     else if (!klb_finite(to[0]) || !klb_finite(to[1]) || !klb_finite(to[2])) why = "the target is not a finite place";
     else if (fabs(to[0]) > 1e5f || fabs(to[1]) > 1e5f || fabs(to[2]) > 1e5f) why = "the target is out of range (|coord| > 100000; GUESS of the level extent)";
     else {
@@ -1262,6 +1266,9 @@ static void kla_tele(int line, const float to[3])
                      from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
     else if (fault) kla_out(1, "script %d: tele FAULTED in the game's placement routine (0x62a900 for an actor, 0x82cc40 for the player; caught): from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx", line,
                             from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor);
+    else if (hn && (fabs(now[0] - to[0]) > 500 || fabs(now[2] - to[2]) > 500 || fabs(now[1] - to[1]) > 500))
+        kla_out(1, "script %d: tele MISSED: placed, but the body is more than 500 off the target: from (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now (%.0f, %.0f, %.0f), actor %08lx via %s (the stand may be off the floor / navmesh)", line,
+                from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], (unsigned long)actor, how);
     else kla_out(1, "script %d: tele: from%s (%.0f, %.0f, %.0f) to (%.0f, %.0f, %.0f) now-same-poll (%.0f, %.0f, %.0f; may lag one tick)%s (actor %08lx via %s)", line,
                  hf ? "" : "?", from[0], from[1], from[2], to[0], to[1], to[2], now[0], now[1], now[2], hn ? "" : " [feet unreadable]", (unsigned long)actor, how);
 }
@@ -1512,6 +1519,21 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
         kla_step_prev = now; kla_run = gap <= kla_thr ? kla_run + 1 : 0;
         if (gap > 1000) kla_out(1, "script: poll gap %lu ms (line %d)", gap, kla_pc + 1);
         if (gap > 1000 && kla_tu_n) kla_tu_t = now;     /* a stalled try did not really run: the tapuntil timeout counts from the poll after the stall */
+    }
+    {   /* session state changes for the tele guard, and why a round restarts (COVER6 DM05A 03:20: two 0x19->0x16 restarts 10 s apart, then the
+           camera pool assert 0x60a5bf). On leaving 0x19: the local player's health ([pl+0xa48] +4/+8, as kldown.c) and feet, and the top window. */
+        DWORD sm = kla_exe_ok ? kla_rd32((DWORD_PTR)VA(0x168e598)) : 0, st = sm ? kla_rd32(sm + 0x70) : 0xffffffff;
+        if (st != kla_state) {
+            if (kla_state == 0x19) {
+                int me = kla_local_player(); DWORD pl = me >= 0 ? kla_pl[me] : 0, ho = pl ? klh_rd32(pl + 0xa48) : 0; float hv[2] = { -1, -1 }, ft[3] = { 0, 0, 0 };
+                if (ho) klh_rd(ho + 4, hv, 8);
+                if (pl) klh_rd(pl + 0x460, ft, 12);
+                kla_out(1, "script: session 0x19 -> 0x%lx (round left) at line %d: local player %08lx health %.1f / %.1f, feet (%.0f, %.0f, %.0f), top window '%s'",
+                        st, kla_pc + 1, pl, hv[0], hv[1], ft[0], ft[1], ft[2], kla_top);
+            }
+            if (st == 0x16) kla_state16_t = now;
+            kla_state = st;
+        }
     }
     for (k = 0; kla_taps && k < 256; k++)
         if (kla_rel_f[k] && (int)(now - kla_rel_t[k]) >= 0 && (int)(kla_frames - kla_rel_f[k]) >= 0) { kla_event(rg, count, cap, k, 0); kla_rel_f[k] = 0; kla_taps--; return; }
