@@ -1743,8 +1743,9 @@ static void klu_tick(int game_thread)
     if (show && klu.hide && klu.crew && !pre.online && (!tab || klu_r.card)) klu_hide_tick(osd, 1);      /* online the stock list is the only one with data: never hidden */
     else if (tab && !klu_r.card && klu_r.hid) klu_hide_tick(osd, 0);                   /* Tab: the stock list shows (its Tick kept it current) */
     /* the stock list's Render: skipped offline exactly when the byte is wanted (Tab card or not), and ONLINE whenever HideOnline=1 and the HUD
-       stands (the owner wants the old HUD gone from online matches too; the new online crew list is not built yet: re\hud_online.md) */
-    InterlockedExchange(&klu_skip_list, klu.hidesrc && (pre.online ? klu.hideonl : (show && klu.hide && klu.crew && (!tab || klu_r.card))));
+       stands (the owner wants the old HUD gone from online matches too; re\hud_online.md) - 2026-10-26: and only with [HUD] OnlineCrew=1, else
+       nothing replaced the stock list online (owner's Steam private match: 'the HUD is missing') */
+    InterlockedExchange(&klu_skip_list, klu.hidesrc && (pre.online ? klu.hideonl && klb_hud_crew :(show && klu.hide && klu.crew && (!tab || klu_r.card))));
 #ifdef KLHOOK_TEST
     if (klu.oprobe && have) klb_online_probe(&pre, osd, KLU_PLIST_VT);
 #endif
