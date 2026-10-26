@@ -3,6 +3,7 @@
 200k hidden / 400k revealed), klucc_down.c DownOnly, klucc.c Pings/Accuse (F5), klsabotage.c [Sabotage] VanHold (J, host UCC).
 Found: the UCC pick also sends SetPoliceMan(1) to him (likely why AI police never shoot him: P2 not built). Bench order: re/ucc_design.md
 'P6 BUILT', re/ucc_down_only.md 7, re/hook_netchannel.md 5, re/ucc_sabotage.md. Two System Link instances on stock DD01, UCC lobby.
+2026-10-26 ~14:37 - BOS_DD07c (sprint+crowd) PASS 7/7 boarded (DD07 was 4/7): 4 by the 3 m test, 3 by OnlineExitCrowd at 3.4-5 m after 5 s of van wait. Open: 0 stacks taken in both DD07 runs (5 free stacks all cop-guarded, hold then straight to the exit with tally 0). DD06 stall diagnosis (workflow, 3 readers): bots run ~5.9 m/s but stand ~70% of the walk; Run and Sprint share one speed path (0x46ce40), so Sprint is cosmetic. Suspect: the 6 s soft-0 repeat order re-pushes the running Defend goal (0x760f25 -> 0x7bbf70). decddc352 OnlineExitKeepGoal + OnlineExitTrace; BOS_DD06k (trace on) next, then DD08/09/02s/CNR2/DD04j on out_keepgo_1026_test.
 
 2026-10-26 ~14:55 - [cloud] UCC sabotage research: re/ucc_sabotage.md (static; stock F01 .prp read from KL_PortBackup, read only).
 Built, NOT run: klsabotage.c [Sabotage] VanHold=0 (hosting UCC presses J: [rules+0x1d8] += HoldS once per van visit, cap 40 s, no
