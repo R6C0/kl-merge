@@ -87,7 +87,7 @@ static void klbf_init(void)
  * Online the game builds no ZLootTactic / ZBoardEscapeVehicleTactic / ZBecomeTraitorTactic for the Ally bots (0x7f6850 is false for roles
  * 2/3) and has no ZGameRulesHeist, so no crew record. This module gives them orders instead, with the soldier's own order routine
  * 0x760e50 (klescort.c's kle_order2; a temporary entry with rec -1, so the OrderGap debounce never applies), and keeps its OWN tally:
- *   phase 0 pick the nearest unclaimed ZOnlineMoneyCtrl (vtable 0xbc874c, found in the entity table: online there is no rules list) -> phase 1
+ *   phase 0 pick the nearest unclaimed ZOnlineMoneyCtrl (vtable 0xbc874c, from the game's object registry 0xe09e38: online there is no rules list, and BO4 found none in the entity table) -> phase 1
  *   phase 1 walk there; within Near (horizontal; |dy| <= 400) = grabbed: tally += [obj+0x34]; the object is claimed (no other bot picks it)
  *   after Carry grabs, or when no stack is left, -> phase 2: walk to the escape van (ZAnimatedVehicle 0xbcc0b4, its node's place)
  *   phase 3 within 2*Near of the van = 'boarded' (log only; NOTHING is removed or credited in the game)
@@ -134,13 +134,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             DWORD o = blk[k * 32 + 0x60 / 4], vt; float pos[3];
             if (o < 0x10000 || !(vt = klh_rd32(o))) continue;
             n++;
-            if (vt == KLMV_MONEY_VT) {
-                nmoney++;
-                DWORD ent, node; int amt = 0; BYTE act = 0;
-                if (nm >= KLBF_OT_OBJ || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act) continue;      /* taken, or not armed (+0x6c, klmove.c 2) */
-                if (!(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, pos, 0)) continue;
-                mo[nm] = o; mamt[nm] = amt; memcpy(mpos[nm], pos, 12); nm++;
-            } else if (vt == KLE_VEH_VT) {
+            if (vt == KLE_VEH_VT) {
                 DWORD node = klh_rd32(o + 4);
                 nvan++;
                 if (!van && node && kle_node(node, vpos, 0) && (fabs(vpos[0]) > 1 || fabs(vpos[1]) > 1 || fabs(vpos[2]) > 1)) van = o;      /* BO3: the van stood at (0,0,0) at the round start = not here / not called yet; wait for a real place */      /* GUESS: the vehicle object's node is where the van stands (its boarding place is 500 along x, klescort.c kle_boarding; not used) */
@@ -153,6 +147,31 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 bots[nb].actor = o; bots[nb].soldier = snd; memcpy(bots[nb].pos, pos, 12); nb++;
             }
         }
+    }
+    {   /* the money: BO4 (DM01) found 0 ZOnlineMoneyCtrl in the entity table - they are controllers, not table objects. Workflow wo8upp5vd
+           (verified in disassembly): the ctor 0x9012a0 (0x901323..33) appends every one to the game's object registry via 0x826990: pointers
+           at 0xe09e38, count 0xe0e63c (cap 0x1000). Types at +0x38: 0 normal, 1 DROP (the pool a player drops; skipped), 2 container.
+           GUESS: no unregister path was found, so an entry may be stale - each is re-checked by vtable and read safely. */
+        DWORD rn = klh_rd32((DWORD_PTR)KLH_VA(0x00e0e63c)), reg[0x400], q, j;
+        if (rn > 0x1000) rn = 0x1000;
+        for (q = 0; q < rn; q += 0x400) {
+            DWORD m = rn - q < 0x400 ? rn - q : 0x400;
+            if (!klh_rd((DWORD_PTR)KLH_VA(0x00e09e38) + 4 * q, reg, 4 * m)) break;
+            for (j = 0; j < m; j++) {
+                DWORD o = reg[j], ent, node, type = 0; int amt = 0; BYTE act = 0; float pos[3];
+                if (o < 0x10000 || klh_rd32(o) != KLMV_MONEY_VT) continue;
+                nmoney++;
+                if (nm >= KLBF_OT_OBJ || !klh_rd(o + 0x38, &type, 4) || type == 1 || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act) continue;      /* drop pool, taken, or not armed (+0x6c, klmove.c 2) */
+                if (!(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, pos, 0)) continue;
+                mo[nm] = o; mamt[nm] = amt; memcpy(mpos[nm], pos, 12); nm++;
+            }
+        }
+    }
+    if (!van) {   /* the van the FA rules name: rules = [[0x168e9e4]+0x54] when the session's game type [sm+0x5c] is 4 (0x7bb2a0, PROVEN; 0x508ef0 is
+                     Arcade-only); [rules+0x1e4] = the escape vehicle (0x70f0a0, PROVEN), 0 until the game sets it up (GUESS: at the call) */
+        DWORD s0 = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), hd, rules; struct kle_veh v; float vp[3];
+        if (s0 && klh_rd32(s0 + 0x5c) == 4 && (hd = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4))) && (rules = klh_rd32(hd + 0x54))
+            && kle_veh_read(rules, &v) == 1 && kle_node(klh_rd32(v.obj + 4), vp, 0) && (fabs(vp[0]) > 1 || fabs(vp[1]) > 1 || fabs(vp[2]) > 1)) { van = v.obj; memcpy(vpos, vp, 12); }
     }
     {   /* once per round, and again whenever the bot count changes: what the scan saw (BO2 gave no order and no clue why) */
         static int seen_round, seen_nb = -1, seen_nm = -1; static DWORD seen_van = 1;
