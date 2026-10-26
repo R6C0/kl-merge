@@ -745,6 +745,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klqol2.c"                                        /* klqol2.c: [QoL2] stuck-AI watchdog, Heister page key, mute when unfocused (off unless set); AFTER klslot.c / klpm_arc.c */
 #include "klhostopt.c"                                    /* klhostopt.c: [HostOpts] host-controlled match options (off unless Enable=1); AFTER klslot.c / klbotfill.c / kllobby.c / klmm.c */
 #include "klcharonline.c"                               /* klcharonline.c: [CharOnline] every player's heister/mask/outfit on every peer (off unless Enable=1); AFTER klchar.c / klmm.c / klslot.c */
+#include "klsync.c"                                    /* klsync.c: [Sync] read-only probe + host list compare of actors / world objects per peer (off unless set); AFTER klcensus.c, klcharonline.c */
 #ifdef KLHOOK_TEST
 #include "klauto.c"
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
@@ -1187,6 +1188,7 @@ static void klh_tick(int game_thread)
     kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
     klho_tick(game_thread);                           /* klhostopt.c: [HostOpts] (off unless Enable=1) */
     klco_tick(game_thread);                           /* klcharonline.c: [CharOnline] (off unless Enable=1) */
+    klsy_tick(game_thread);                           /* klsync.c: [Sync] probe / host list (off unless set) */
     kllo_tick();                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
     klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
     klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
@@ -1629,6 +1631,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kls_init(inst);
     klho_init();                                      /* klhostopt.c: after kls_init (kls_online_set) and klbf_init / kllb_init */
     klco_init();                                      /* klcharonline.c: after klc_init (it reads the choice) */
+    klsy_init();                                      /* klsync.c: reads [Sync] */
     kllnm_init();                                     /* kllocname.c: after kls_init (it reads the rule table) */
 #ifdef KLHOOK_TEST
     kla_init(inst);
