@@ -209,13 +209,14 @@ static int klt_tele_known(void)
 
 /* THE call: the game's own actor teleport with the identity matrix and the two flags 0x8f4128 passes. Game thread
    only, and only for an actor klt_refuse() let through while klt_tele_known() holds. */
-static void klt_teleport(DWORD actor, const float pos[3])
+static void klt_teleport_ex(DWORD actor, const float pos[3], const float *rotp, int a, int b)
 {
     static const float rot[12] = { 1, 0, 0,  0, 1, 0,  0, 0, 1,  0, 0, 0 };      /* nine are read (0x7f07a0); three spare */
     float p[4];
     p[0] = pos[0]; p[1] = pos[1]; p[2] = pos[2]; p[3] = 0;
-    ((void (__fastcall *)(void *, void *, const float *, const float *, int, int))(DWORD_PTR)KLH_VA(KLT_TELEPORT))((void *)(DWORD_PTR)actor, 0, rot, p, 1, 1);
+    ((void (__fastcall *)(void *, void *, const float *, const float *, int, int))(DWORD_PTR)KLH_VA(KLT_TELEPORT))((void *)(DWORD_PTR)actor, 0, rotp ? rotp : rot, p, a, b);
 }
+static void klt_teleport(DWORD actor, const float pos[3]) { klt_teleport_ex(actor, pos, 0, 1, 1); }
 
 /* Game thread only. Every AI crew record in play to its place -> how many were moved. */
 static int klt_move(DWORD rules)

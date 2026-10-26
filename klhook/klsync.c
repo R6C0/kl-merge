@@ -81,7 +81,7 @@ typedef char klsy_pe_size_is_20[sizeof(struct klsy_pe) == 20 ? 1 : -1];
 #define KSP_ACTOR_VT 0x00bb3bacu
 #define KSP_SLOT 87                                    /* ZFFActor::Update = 0x40ef60 (read in the exe, checked again before the first swap) */
 #define KSP_NSLOT 512
-#define KSP_MAXE 48
+#define KSP_MAXE 128                                   /* Track keeps a cop hooked until it dies / is parked / leaves the list: room for every live cop (review 2026-10-26) */
 typedef void (__fastcall *ksp_fn)(void *self, void *edx);
 typedef void (__fastcall *ksp_steer_fn)(void *self, void *edx, const float *vel, const float *zero);
 static DWORD ksp_vtblk[KSP_NSLOT + 1];                 /* [0] = the stock vt[-1] (RTTI locator), then the private copy */
@@ -89,7 +89,7 @@ static DWORD ksp_vtblk[KSP_NSLOT + 1];                 /* [0] = the stock vt[-1]
 static DWORD ksp_orig; static int ksp_ready;
 /* tolSince = since when the cop stays within PuppetTol (0 = not); best / bestAt = the smallest distance seen and when (the no-progress snap); prev* / hspeed = the host cop's own
    horizontal speed from consecutive host lists (scales the steer); dead = the Update wrapper saw health <= 0 (the next pass releases) */
-struct ksp_e { DWORD o, slot, goalAt, since, lastLog, lastSnap, pass, tolSince, bestAt, prevAt, stepAt, nomove; float goal[3], prev[3], d0, dlast, best, hspeed; volatile LONG calls, steered, mism, dead, stepped; };
+struct ksp_e { DWORD o, slot, goalAt, since, lastLog, lastSnap, pass, tolSince, bestAt, prevAt, stepAt, nomove, trkAt; float goal[3], prev[3], d0, dlast, best, hspeed; volatile LONG calls, steered, mism, dead, stepped; };
 static struct ksp_e ksp_e[KSP_MAXE];
 static struct { DWORD o, until; } ksp_cool[16]; static int ksp_coolN;           /* cops released next to a human: not re-hooked for a while */
 static struct { int pup, cops, bots, diag, nlive, gate; float tol, snap, speed, prevAvg, snapDist; int team, mode; DWORD pass, roundAt, diagAt, pupAt, snapEvery, sumAt; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv, nstep, nsn2, nph, nref, nflt; } ksp;
@@ -109,7 +109,7 @@ static DWORD klsy_vtof(DWORD o)
 #define KLSY_MAXOFF 128
 static struct {
     int on, share, cmp, max, tol10, apply, applyHp, applyMax, applyTol, toldApply, toldRefuse, toldHum, applyRx;
-    int inwin, agree, rxAnchored, srcSet, lim, nbad, humLogs;
+    int inwin, agree, rxAnchored, srcSet, lim, nbad, humLogs, rxAge;
     unsigned long srcAddr;
     DWORD every, shareMs, at, shAt, cmpAt, rxAt, rxT, applyAt, anchorNow, anchorT, bad[KLSY_NBAD];
     UINT_PTR sock; int sockTried, toldMode;
@@ -122,6 +122,59 @@ static struct {
     int (WINAPI *recvfrom)(UINT_PTR, char *, int, int, void *, int *);
     int (WINAPI *ioctl)(UINT_PTR, long, unsigned long *);
 } klsy;
+
+/* ---- [Sync] Track (2026-10-26, workflow wf_fa7929ae-a10 design): the 2 s snap leaves a snapped cop frozen while the host cop runs on (median snap distance ~900 = host speed x 2 s), and SP1f showed
+   a just-snapped cop released again in the same millisecond (the snap returns skipped e->pass). Track places every hooked cop continuously at the host's place EXTRAPOLATED by the list age:
+   per host entry a velocity from consecutive lists, goal = p + v * min(0.6 s, listAge + TrackLeadMs). Game calls only (klt_teleport behind klt_tele_known + klt_refuse) and data writes. ---- */
+#define KST_N 1024
+static struct { float p0[3], v[3]; DWORD T0; unsigned short slot; BYTE ok; } ksp_trk[KST_N];
+static struct {
+    int keep, on, bound, cmpLead, bindFix, max, local, keepRot, start; DWORD ms; float tol, leadMs;
+    DWORD frame, sumAt, rvLogAt; BYTE ctl[KST_N], bound1[KST_N];
+    LONG nplace, nref, nflt, nclose, ndead, npark, nhum, nph, nbound, nrev, ntracked, nbind; double errSum; float errMax;   /* 5 s window (reset by the summary) except nrev / nbind (round) */
+} kst;
+struct ksp_rv { DWORD o, slot, at, frame; float pl[3]; BYTE stage, logged; };
+static struct ksp_rv ksp_rv[16];
+/* the host's place of entry i at 'now', moved on by v x min(0.6 s, time since the list was sent + leadMs) */
+static void ksp_goal_at(int i, DWORD now, float leadMs, float out[3])
+{
+    float t = ((float)(int)(now - klsy.rxAt) + (float)klsy.rxAge + leadMs) / 1000.0f; int k = klsy.host[i].slot & (KST_N - 1);
+    memcpy(out, klsy.host[i].p, 12);
+    if (!ksp_trk[k].ok || ksp_trk[k].slot != klsy.host[i].slot) return;
+    if (t < 0) t = 0; if (t > 0.6f) t = 0.6f;
+    out[0] += ksp_trk[k].v[0] * t; out[2] += ksp_trk[k].v[2] * t;                    /* vy stays 0: the floor is the host's */
+}
+/* placeholders: GUESS = two or more host entries on one point (within 0.5 unit in x and z), or an all-zero place; SP1c showed 4+ slots at (509,-979,8648.7). Built where a list is accepted (review 2026-10-26: the flags must belong to klsy.host as it is now) and in each pass */
+static void ksp_mkph(void)
+{
+    int a, b; memset(ksp_ph, 0, sizeof ksp_ph);
+    for (a = 0; a < klsy.nhost && a < KLSY_MAXP; a++) {
+        if (fabsf(klsy.host[a].p[0]) < 0.01f && fabsf(klsy.host[a].p[1]) < 0.01f && fabsf(klsy.host[a].p[2]) < 0.01f) ksp_ph[a] = 1;
+        for (b = a + 1; b < klsy.nhost && b < KLSY_MAXP; b++)
+            if (fabsf(klsy.host[a].p[0] - klsy.host[b].p[0]) < 0.5f && fabsf(klsy.host[a].p[2] - klsy.host[b].p[2]) < 0.5f && fabsf(klsy.host[a].p[1] - klsy.host[b].p[1]) < 2.0f) ksp_ph[a] = ksp_ph[b] = 1;
+    }
+}
+/* a new host list was accepted (host clock T, ms mod 1e9): update every entry's velocity. Horizontal speed clamped to 900 u/s (GUESS: faster than a sprinting cop = a wake / teleport); a step over
+   1500 units or a gap over 1000 ms (or a clock wrap) resets it to 0. Entries less than 40 ms apart keep the old state (a noisy quotient). */
+static void ksp_trk_feed(DWORD T)
+{
+    int j;
+    for (j = 0; j < klsy.nhost; j++) {
+        struct klsy_pe *h = &klsy.host[j]; int k = h->slot & (KST_N - 1); int dt = 0; float dx, dy, dz, hs;
+        if (ksp_trk[k].ok && ksp_trk[k].slot == h->slot) {
+            dt = (int)(T - ksp_trk[k].T0);
+            if (dt >= 0 && dt < 40) continue;
+            dx = h->p[0] - ksp_trk[k].p0[0]; dy = h->p[1] - ksp_trk[k].p0[1]; dz = h->p[2] - ksp_trk[k].p0[2];
+            if (dt <= 0 || dt > 1000 || sqrt(dx * dx + dy * dy + dz * dz) > 1500.0) ksp_trk[k].v[0] = ksp_trk[k].v[1] = ksp_trk[k].v[2] = 0;
+            else {
+                ksp_trk[k].v[0] = dx * 1000.0f / dt; ksp_trk[k].v[1] = 0; ksp_trk[k].v[2] = dz * 1000.0f / dt;
+                hs = (float)sqrt(ksp_trk[k].v[0] * ksp_trk[k].v[0] + ksp_trk[k].v[2] * ksp_trk[k].v[2]);
+                if (hs > 900.0f) { ksp_trk[k].v[0] *= 900.0f / hs; ksp_trk[k].v[2] *= 900.0f / hs; }
+            }
+        } else ksp_trk[k].v[0] = ksp_trk[k].v[1] = ksp_trk[k].v[2] = 0;
+        memcpy(ksp_trk[k].p0, h->p, 12); ksp_trk[k].T0 = T; ksp_trk[k].slot = h->slot; ksp_trk[k].ok = 1;
+    }
+}
 
 /* object kinds listed after the actors (substring of the RTTI class name, case-folded; the exclusions drop scripts, which are not objects
    with a place). Doors, glass, money, vehicles, helicopters, loose physics bodies, thrown / picked-up things: what the owner called
@@ -241,7 +294,7 @@ static void klsy_collect(DWORD o, DWORD slot, int kind, const char *nm, void *ct
     memcpy(t->pk + 16 + t->n * KLSY_REC, &e, KLSY_REC); t->n++;
 }
 
-struct klsy_cm { int n, bad, hpbad, idbad, parked, worst_s; float worst; float wo[3], wh[3]; int shown; };
+struct klsy_cm { int n, bad, hpbad, idbad, parked, worst_s; float worst; float wo[3], wh[3]; int shown; int awake, o150, o60, ndl, dlworst_s; float dlworst, dls[128]; };   /* dl* = CompareLead */
 /* identity of the own actor against the host's record: same class (vtable low 16 bits) and the same, readable team */
 static int klsy_idok(DWORD o, int team, const struct klsy_pe *h)
 {
@@ -262,6 +315,13 @@ static void klsy_cmp(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
     dx = pos[0] - klsy.host[i].p[0]; dy = pos[1] - klsy.host[i].p[1]; dz = pos[2] - klsy.host[i].p[2];
     d = (float)sqrt(dx * dx + dy * dy + dz * dz);
     if ((short)hp != klsy.host[i].hp) c->hpbad++;
+    if (kst.cmpLead) {   /* the host's place moved on by the list age (no TrackLead): the stale compare shows 50..150 units for a perfect client (a cop runs 450..630 u/s, the list is 93..250 ms old) */
+        float g[3], ex, ey, ez, dl; ksp_goal_at(i, GetTickCount(), 0, g);
+        ex = pos[0] - g[0]; ey = pos[1] - g[1]; ez = pos[2] - g[2]; dl = (float)sqrt(ex * ex + ey * ey + ez * ez);
+        c->awake++; if (dl > 150.0f) c->o150++; if (dl > 60.0f) c->o60++;
+        if (c->ndl < 128) c->dls[c->ndl++] = dl;
+        if (dl > c->dlworst) { c->dlworst = dl; c->dlworst_s = (int)slot; }
+    }
     if (d > c->worst) { c->worst = d; c->worst_s = (int)slot; memcpy(c->wo, pos, 12); memcpy(c->wh, klsy.host[i].p, 12); }
     if (d * 10.0f > (float)klsy.tol10) {
         c->bad++;
@@ -464,7 +524,7 @@ static void ksp_snap(struct ksp_e *e, const char *nm, const float pos[3])
     else { __try { klt_teleport(e->o, e->goal); } __except (1) { ok = 0; } }
     if (!why && !ok) klog("sync: puppet: slot %lu c=%s FAULT in the teleport", (unsigned long)e->slot, nm);
     else if (!why) { ksp.nsnap++; klog("sync: puppet: slot %lu c=%s SNAP %.1f units to (%.1f,%.1f,%.1f) from (%.1f,%.1f,%.1f)", (unsigned long)e->slot, nm, e->dlast, e->goal[0], e->goal[1], e->goal[2], pos[0], pos[1], pos[2]); }
-    ksp_wr_vt(e->o, ksp_ours(), "ZFFActor vtable pointer (puppet snap back)");
+    if (klh_rd32(e->o) == KSP_ACTOR_VT) ksp_wr_vt(e->o, ksp_ours(), "ZFFActor vtable pointer (puppet snap back)");
     e->lastSnap = GetTickCount();
 }
 
@@ -495,17 +555,128 @@ static int ksp_snap2(DWORD o, DWORD slot, const char *nm, const float goal[3], f
     if (e) ksp_wr_vt(o, KSP_ACTOR_VT, "ZFFActor vtable pointer (puppet snap2)");
     if ((why = klt_refuse(o)) != 0) { ksp.nref++; c->refd++; if (ksp.nref <= 6) klog("sync: puppet: slot %lu c=%s NOT snapped: %s", (unsigned long)slot, nm, why); }
     else { __try { klt_teleport(o, goal); } __except (1) { ok = 0; } }
-    if (e) ksp_wr_vt(o, ksp_ours(), "ZFFActor vtable pointer (puppet snap2 back)");
+    if (e && klh_rd32(o) == KSP_ACTOR_VT) ksp_wr_vt(o, ksp_ours(), "ZFFActor vtable pointer (puppet snap2 back)");
     if (why) return 1;
     if (!ok) { ksp.nflt++; if (klsy.nbad < KLSY_NBAD) klsy.bad[klsy.nbad++] = (DWORD)slot; klog("sync: puppet: slot %lu c=%s FAULT in the teleport: slot blacklisted for this round", (unsigned long)slot, nm); return 1; }
     ksp.nsn2++; c->snp++;
     memset(after, 0, sizeof after); klsy_actor(o, after, &hv, &hp, &tm);
     klog("sync: puppet: snap slot %lu d=%.1f -> (%.1f,%.1f,%.1f) (was (%.1f,%.1f,%.1f), now (%.1f,%.1f,%.1f))", (unsigned long)slot, d, goal[0], goal[1], goal[2], pos[0], pos[1], pos[2], after[0], after[1], after[2]);
-    return 1;
+    return 2;                                                                            /* 2 = really placed, 1 = refused / faulted (Track must not hook it on that) */
 }
 
 static int ksp_cooling(DWORD o, DWORD now) { int i; for (i = 0; i < 16; i++) if (ksp_cool[i].o == o && (int)(ksp_cool[i].until - now) > 0) return 1; return 0; }
 static void ksp_setcool(DWORD o, DWORD now) { ksp_cool[ksp_coolN++ & 15].o = o; ksp_cool[(ksp_coolN - 1) & 15].until = now + 3000; }
+/* SnapKeepHook: a snap of a HOOKED cop must keep the bookkeeping the pass would have done (SP1f: slot 565 snapped and released in the same millisecond, then a fresh START reset since / best / hspeed) */
+static void ksp_keep(struct ksp_e *e, const float goal[3], float d, DWORD now)
+{
+    e->pass = ksp.pass; e->goalAt = now; e->lastSnap = now; memcpy(e->goal, goal, 12); e->dlast = d;
+}
+
+/* ---- Track: one placement of a hooked cop at 'g' (stock vtable on for klt_refuse's class test, ours back after) -> 1 placed, 0 refused / not possible, -1 fault ---- */
+static int ksp_place(struct ksp_e *e, const float g[3])
+{
+    const char *why; int ok = 1;
+    if (!klt_tele_known()) { if (!ksp.toldNoCall) { ksp.toldNoCall = 1; klog("sync: track: the game's teleport 0x62a900 is not the known routine: no placements"); } return 0; }
+    ksp_wr_vt(e->o, KSP_ACTOR_VT, "ZFFActor vtable pointer (track)");
+    if ((why = klt_refuse(e->o)) != 0) { kst.nref++; ok = 0; if (kst.nref <= 3) klog("sync: track: slot %lu NOT placed: %s", (unsigned long)e->slot, why); }
+    else {
+        float rot[12], *rp = 0; DWORD nd = klh_rd32(e->o + 4);
+        if (kst.keepRot && nd && klh_rd(nd, rot, 36)) {                              /* GUESS: the node's own nine floats (+0) are the matrix the teleport reads; used only when they look like a rotation (unit rows) */
+            float l0 = rot[0] * rot[0] + rot[1] * rot[1] + rot[2] * rot[2], l1 = rot[3] * rot[3] + rot[4] * rot[4] + rot[5] * rot[5], l2 = rot[6] * rot[6] + rot[7] * rot[7] + rot[8] * rot[8];
+            rot[9] = rot[10] = rot[11] = 0;
+            if (l0 > 0.9f && l0 < 1.1f && l1 > 0.9f && l1 < 1.1f && l2 > 0.9f && l2 < 1.1f) rp = rot;
+        }
+        __try { if (kst.local) klt_teleport_ex(e->o, g, rp, 0, 0); else klt_teleport_ex(e->o, g, rp, 1, 1); } __except (1) { ok = -1; }
+    }
+    if (klh_rd32(e->o) == KSP_ACTOR_VT) ksp_wr_vt(e->o, ksp_ours(), "ZFFActor vtable pointer (track back)");   /* else the class changed / freed mid-call: write nothing, ksp_pass drops the entry */
+    if (ok == -1) { kst.nflt++; ksp.nflt++; if (klsy.nbad < KLSY_NBAD) klsy.bad[klsy.nbad++] = e->slot; klog("sync: track: slot %lu FAULT in the teleport: slot blacklisted for this round", (unsigned long)e->slot); return -1; }
+    return ok;
+}
+/* the revert probe: after a placement the node is read back at the next frame and 100 ms later; moved more than 30 units = something put it back (second writer or the AI) */
+static void ksp_rv_check(struct ksp_rv *r, DWORD now, const char *when)
+{
+    float p[3], dd, w[3] = { 0, 0, 0 }; DWORD a = r->o, vt50 = 0, c50 = klh_rd32(a + 0x50c);
+    if (!kle_node(klh_rd32(a + 4), p, 0)) return;
+    dd = (float)sqrt((p[0] - r->pl[0]) * (p[0] - r->pl[0]) + (p[1] - r->pl[1]) * (p[1] - r->pl[1]) + (p[2] - r->pl[2]) * (p[2] - r->pl[2]));
+    { int k = r->slot & (KST_N - 1); float sp = 0, thr; if (ksp_trk[k].ok && ksp_trk[k].slot == r->slot) sp = (float)sqrt(ksp_trk[k].v[0] * ksp_trk[k].v[0] + ksp_trk[k].v[2] * ksp_trk[k].v[2]);
+      thr = 30.0f + sp * (float)(int)(now - r->at) / 1000.0f;                                 /* a running cop legitimately moves speed x dt (review) */
+      if (dd <= thr || r->logged) return; }
+    r->logged = 1; kst.nrev++;
+    if (now - kst.rvLogAt < 250) return;                                                 /* rate limit: at most 4 lines a second, all counted in the summary */
+    kst.rvLogAt = now; if (c50) vt50 = klh_rd32(c50);
+    klh_rd(a + 0x460, w, 12);
+    klog("sync: track: slot %lu reverted by %.0f in %lu ms (%s, %.0f u/s); node (%.1f,%.1f,%.1f) placed (%.1f,%.1f,%.1f) A+0x460 (%.1f,%.1f,%.1f) A+0x90c %08lx A+0x918 %08lx [A+0x8c]=%lu [A+0x50c] vt %08lx",
+         (unsigned long)r->slot, dd, (unsigned long)(now - r->at), when, (now - r->at) ? dd * 1000.0f / (now - r->at) : 0.0f, p[0], p[1], p[2], r->pl[0], r->pl[1], r->pl[2], w[0], w[1], w[2],
+         (unsigned long)klh_rd32(a + 0x90c), (unsigned long)klh_rd32(a + 0x918), (unsigned long)klh_rd32(a + 0x8c), (unsigned long)vt50);
+}
+/* Track, every frame on the client (mode 4, gate OPEN, fresh list; the caller checks): each hooked cop farther than TrackTol from the extrapolated host place is placed there, at most
+   TrackMax per frame and once per TrackMs per cop. Game thread. */
+static void ksp_track(DWORD now)
+{
+    int j, jj, placed = 0, k; DWORD fr = ++kst.frame;
+    for (k = 0; k < 16; k++) {
+        struct ksp_rv *r = &ksp_rv[k];
+        if (!r->o) continue;
+        if (now - r->at > 600) { r->o = 0; continue; }
+        if (r->stage == 0 && fr != r->frame) { ksp_rv_check(r, now, "next frame"); r->stage = 1; }
+        if (r->stage == 1 && now - r->at >= 100) { ksp_rv_check(r, now, "+100 ms"); r->o = 0; }
+    }
+    if (!klsy_humans()) return;                                                          /* fail closed */
+    for (jj = 0; jj < KSP_MAXE; jj++) {
+        struct ksp_e *e; float pos[3], g[3], d, hpw = 1; DWORD nd, fl = 0, ho, c8, c5; int hi, r;
+        if (placed >= kst.max) break;
+        j = (kst.start + jj) % KSP_MAXE; e = &ksp_e[j];                                  /* round-robin start: no cop starves behind low indices */
+        if (!e->o || klh_rd32(e->o) != ksp_ours()) continue;
+        if (e->dead) { kst.ndead++; continue; }
+        if (e->trkAt && (int)(now - e->trkAt) < (int)kst.ms) continue;                 /* signed: a back-off puts trkAt in the future */
+        for (hi = 0; hi < klsy.nhost && klsy.host[hi].slot != (unsigned short)e->slot; hi++) ;
+        if (hi == klsy.nhost) continue;
+        if (ksp_ph[hi]) { kst.nph++; continue; }                                         /* a placeholder entry (several actors on one point) is never a goal */
+        if (klsy_isbad(e->slot) || klsy.host[hi].hp <= 0) continue;
+        nd = klh_rd32(e->o + 4);
+        if (nd && klh_rd(nd + 0x3c, &fl, 4) && (fl >> 10 & 1)) { kst.npark++; continue; }   /* parked (node off): ParkSkip's job */
+        if (!kle_node(nd, pos, 0)) continue;
+        if ((ho = klh_rd32(e->o + 0x5fc)) != 0 && klh_rd(ho + 4, &hpw, 4) && hpw <= 0) { kst.ndead++; continue; }
+        if (klsy_human(e->o, pos)) { kst.nhum++; continue; }
+        ksp_goal_at(hi, now, kst.leadMs, g);
+        if (klsy_human(e->o, g)) { kst.nhum++; continue; }                               /* the destination, too, is never next to a human */
+        d = (float)sqrt((pos[0] - g[0]) * (pos[0] - g[0]) + (pos[1] - g[1]) * (pos[1] - g[1]) + (pos[2] - g[2]) * (pos[2] - g[2]));
+        c8 = klh_rd32(e->o + 0x8e0); c5 = klh_rd32(e->o + 0x50c);
+        if (!kst.ctl[e->slot & (KST_N - 1)]) { kst.ctl[e->slot & (KST_N - 1)] = 1;      /* controller class once per slot (B's pool-controller finding) */
+            klog("sync: track: slot %lu controller [A+0x8e0]=%08lx (vt %08lx) [A+0x50c]=%08lx (vt %08lx)%s", (unsigned long)e->slot, (unsigned long)c8, (unsigned long)(c8 ? klh_rd32(c8) : 0), (unsigned long)c5, (unsigned long)(c5 ? klh_rd32(c5) : 0),
+                 (c8 && c8 == c5) ? " bound" : " NOT bound (the stock steer is a no-op)"); }
+        if (kst.bindFix && c8 && c8 != c5) {                                             /* BindFix (TEST, default off): make the gate [A+0x8e0]==[A+0x50c] hold */
+            if (klh_data((void *)(DWORD_PTR)(e->o + 0x50c), &c8, 4, "actor: [A+0x50c] := [A+0x8e0] (BindFix)")) {
+                kst.nbind++;
+                if (!kst.bound1[e->slot & (KST_N - 1)]) { kst.bound1[e->slot & (KST_N - 1)] = 1; klog("sync: track: BindFix slot %lu [A+0x50c] %08lx -> %08lx", (unsigned long)e->slot, (unsigned long)c5, (unsigned long)c8); }
+                c5 = c8;
+            }
+        }
+        if (d < kst.tol) { kst.nclose++; continue; }
+        if (!kst.bound && c8 && c8 == c5 && klh_rd32(c8) == 0xbb42ac && d < ksp.snapDist) { kst.nbound++; continue; }   /* a bound follower: the stock steer in the Update wrapper takes it while it is near */
+        e->trkAt = now;
+        r = ksp_place(e, g);
+        if (r <= 0) { e->trkAt = now + (r < 0 ? 5000 : 1500) - kst.ms; continue; }      /* refused / faulted: back off (not every 50 ms) */
+        kst.start = j + 1;
+        placed++; kst.nplace++; kst.errSum += d; if (d > kst.errMax) kst.errMax = d; e->lastSnap = now; e->dlast = d; memcpy(e->goal, g, 12); e->goalAt = now;                  /* the placed place, so the Update wrapper does not pull it back to the stale one */
+        {   struct ksp_rv *rv = 0; int q;
+            for (q = 0; q < 16; q++) if (!ksp_rv[q].o || ksp_rv[q].o == e->o) { rv = &ksp_rv[q]; break; }
+            if (!rv) { rv = &ksp_rv[0]; for (q = 1; q < 16; q++) if ((int)(rv->at - ksp_rv[q].at) > 0) rv = &ksp_rv[q]; }
+            rv->o = e->o; rv->slot = e->slot; rv->at = now; rv->frame = fr; rv->stage = 0; rv->logged = 0;
+            if (!kle_node(klh_rd32(e->o + 4), rv->pl, 0)) memcpy(rv->pl, g, 12);
+        }
+    }
+    kst.ntracked = ksp.nlive;
+    if (now - kst.sumAt >= 5000) {
+        if (kst.sumAt) {
+            float dt = (now - kst.sumAt) / 1000.0f;
+            klog("sync: track: %ld hooked, %ld placements (%.1f/s), error before placement mean %.0f max %.0f, refused %ld, faults %ld (total %ld); skipped: in tolerance %ld, bound followers %ld, parked %ld, human near %ld, placeholder %ld, dead %ld; reverts this round %ld, BindFix writes %ld",
+                 (long)kst.ntracked, (long)kst.nplace, kst.nplace / dt, kst.nplace ? kst.errSum / kst.nplace : 0.0, kst.errMax, (long)kst.nref, (long)kst.nflt, (long)ksp.nflt, (long)kst.nclose, (long)kst.nbound, (long)kst.npark, (long)kst.nhum, (long)kst.nph, (long)kst.ndead, (long)kst.nrev, (long)kst.nbind);
+        }
+        kst.sumAt = now; kst.nplace = kst.nref = kst.nflt = kst.nclose = kst.ndead = kst.npark = kst.nhum = kst.nph = kst.nbound = 0; kst.errSum = 0; kst.errMax = 0;
+    }
+}
+
 static void klsy_pupfn(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
 {
     struct klsy_pp *c = (struct klsy_pp *)ctx; float pos[3], dx, dy, dz, d, h, hp; int hv, team, i; struct ksp_e *e; DWORD now = GetTickCount();
@@ -542,15 +713,15 @@ static void klsy_pupfn(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
             s = ksp_snap2(o, slot, nm, klsy.host[i].p, d, pos, e, now, c);
             kspk.nwake++;
             klog("sync: puppet: slot %lu c=%s woken (node bit 10 cleared) %.1f from the host's place: %s", (unsigned long)slot, nm, d, s ? "snapped" : "snap not possible");
-            if (s) { if (e) { e->bestAt = now; e->best = d; e->lastSnap = now; } return; }
+            if (s) { if (e) { e->bestAt = now; e->best = d; e->lastSnap = now; if (kst.keep) ksp_keep(e, klsy.host[i].p, d, now); } if (e || !kst.on || s == 1) return; }   /* Track: an unhooked woken cop falls through to the hook creation below */
         }
     }
     c->seen++;
     if (d < ksp.snap) c->nearN++;                                                        /* the positional sanity gate (slot numbers may differ per peer; the identity check cannot tell cop from cop) */
-    if (ksp.mode >= 2 && d > ksp.snapDist) {                                             /* PuppetMode 2: place it at the host's position (alive both sides, not human: checked above) */
+    if (ksp.mode >= 2 && d > ksp.snapDist) { int s2 = 0;                                           /* PuppetMode 2: place it at the host's position (alive both sides, not human: checked above) */
         c->over++; if (d > c->worst) c->worst = d;
         if (ksp_ph[i]) { c->ph++; ksp.nph++; }                                            /* a placeholder entry (several actors on one point): never a goal */
-        else if (ksp.pup && ksp.gate && ksp_snap2(o, slot, nm, klsy.host[i].p, d, pos, e, now, c)) { if (e) { e->bestAt = now; e->best = d; } return; }
+        else if (ksp.pup && ksp.gate && (s2 = ksp_snap2(o, slot, nm, klsy.host[i].p, d, pos, e, now, c)) != 0) { if (e) { e->bestAt = now; e->best = d; if (kst.keep) ksp_keep(e, klsy.host[i].p, d, now); } if (e || !kst.on || s2 == 1) return; }   /* Track: the first placement of an unhooked far cop; it is hooked below and tracked */
     }
     if (ksp.diag && c->diag < 8 && (ksp.pass == 1 || (d > ksp.tol && now - ksp.diagAt >= 3000))) { c->diag++; ksp_diag(o, slot, team, d); }
     if (!ksp.pup) return;
@@ -570,8 +741,10 @@ static void klsy_pupfn(DWORD o, DWORD slot, int kind, const char *nm, void *ctx)
             float sx = klsy.host[i].p[0] - e->prev[0], sz = klsy.host[i].p[2] - e->prev[2], sp = (float)sqrt(sx * sx + sz * sz) / ((now - e->prevAt) / 1000.0f);
             e->hspeed = e->hspeed == 0 ? sp : 0.5f * e->hspeed + 0.5f * sp; memcpy(e->prev, klsy.host[i].p, 12); e->prevAt = now;
         } else if (!e->prevAt) { memcpy(e->prev, klsy.host[i].p, 12); e->prevAt = now; }
-        memcpy(e->goal, klsy.host[i].p, 12); e->goalAt = now; e->dlast = d; e->pass = ksp.pass; c->steering++;
+        if (kst.on) ksp_goal_at(i, now, kst.leadMs, e->goal); else memcpy(e->goal, klsy.host[i].p, 12);   /* Track: the extrapolated place, as ksp_track places it */
+        e->goalAt = now; e->dlast = d; e->pass = ksp.pass; c->steering++;
         if (ksp.mode && e->stepped) { c->stepN++; c->stepSum += d; }                    /* actors the mismatch step path moved: count and distance trend */
+        if (kst.on) return;                                                              /* Track: ksp_track() places the hooked cop every frame; no CONVERGED release, no steer-first / no-progress snap (it stays hooked until dead / human / parked / gone from the list) */
         if (d > ksp.tol) {
             DWORD stuckMs;
             e->tolSince = 0;
@@ -605,14 +778,7 @@ static void ksp_pass(void)
     if (!nh) { static int told; if (!told) { told = 1; klog("sync: puppet: no local player found: pass skipped (fail closed)"); } return; }
     for (j = 0; j < klsy.nhost; j++) if (klsy.host[j].slot > mx) mx = klsy.host[j].slot;
     memset(&c, 0, sizeof c); ksp.pass++;
-    if (ksp.mode >= 2) {                                                                 /* placeholders: GUESS = two or more host entries on one point (within 0.5 unit in x and z), or an all-zero place; SP1c showed 4+ slots at (509,-979,8648.7) */
-        int a, b; memset(ksp_ph, 0, sizeof ksp_ph);
-        for (a = 0; a < klsy.nhost && a < KLSY_MAXP; a++) {
-            if (fabsf(klsy.host[a].p[0]) < 0.01f && fabsf(klsy.host[a].p[1]) < 0.01f && fabsf(klsy.host[a].p[2]) < 0.01f) ksp_ph[a] = 1;
-            for (b = a + 1; b < klsy.nhost && b < KLSY_MAXP; b++)
-                if (fabsf(klsy.host[a].p[0] - klsy.host[b].p[0]) < 0.5f && fabsf(klsy.host[a].p[2] - klsy.host[b].p[2]) < 0.5f && fabsf(klsy.host[a].p[1] - klsy.host[b].p[1]) < 2.0f) ksp_ph[a] = ksp_ph[b] = 1;
-        }
-    }
+    if (ksp.mode >= 2 || kst.on) ksp_mkph();
     for (j = 0; j < KSP_MAXE; j++) if (ksp_e[j].o && klh_rd32(ksp_e[j].o) != ksp_ours()) { memset(&ksp_e[j], 0, sizeof ksp_e[j]); ksp.nlive--; }      /* gone (freed): nothing is written */
     klsy.lim = (mx | 63) + 1;
     klsy_walk(0, klsy_pupfn, &c);
@@ -667,6 +833,20 @@ static void klsy_init(void)
     ksp.snapDist = (float)GetPrivateProfileIntA("Sync", "SnapDist", 300, klh_ini); if (ksp.snapDist < ksp.tol) ksp.snapDist = ksp.tol;
     ksp.snapEvery = (DWORD)GetPrivateProfileIntA("Sync", "SnapEvery", 2000, klh_ini); if (ksp.snapEvery < 250) ksp.snapEvery = 250;  /* 0 = old behaviour; 1 = bounded step (slot 373) for mismatched controllers + 0x70f660 with a position (static report 2026-10-26) */
     kspk.on = GetPrivateProfileIntA("Sync", "ParkSkip", 1, klh_ini) != 0;
+    kst.keep = GetPrivateProfileIntA("Sync", "SnapKeepHook", 1, klh_ini) != 0;
+    kst.on = GetPrivateProfileIntA("Sync", "Track", 1, klh_ini) != 0;
+    kst.ms = (DWORD)GetPrivateProfileIntA("Sync", "TrackMs", 50, klh_ini); if (kst.ms < 16) kst.ms = 16; if (kst.ms > 1000) kst.ms = 1000;
+    kst.max = GetPrivateProfileIntA("Sync", "TrackMax", 8, klh_ini); if (kst.max < 1) kst.max = 1; if (kst.max > 32) kst.max = 32;
+    kst.tol = (float)GetPrivateProfileIntA("Sync", "TrackTol", 40, klh_ini); if (kst.tol < 5) kst.tol = 5; if (kst.tol > 1000) kst.tol = 1000;
+    kst.leadMs = (float)GetPrivateProfileIntA("Sync", "TrackLeadMs", 60, klh_ini); if (kst.leadMs < 0) kst.leadMs = 0; if (kst.leadMs > 300) kst.leadMs = 300;   /* GUESS: ~ one frame of placement lateness */
+    kst.bound = GetPrivateProfileIntA("Sync", "TrackBound", 0, klh_ini) != 0;
+    kst.cmpLead = GetPrivateProfileIntA("Sync", "CompareLead", 1, klh_ini) != 0;
+    kst.bindFix = GetPrivateProfileIntA("Sync", "BindFix", 0, klh_ini) != 0;
+    kst.local = GetPrivateProfileIntA("Sync", "TrackLocal", 1, klh_ini) != 0;       /* placements with the teleport's two flags 0 (no animation reset, no net send); GUESS from klcrew_rt.c's reading of 0x62a900 */
+    kst.keepRot = GetPrivateProfileIntA("Sync", "TrackKeepRot", 1, klh_ini) != 0;   /* GUESS: the actor node's nine floats at +0 have the layout the teleport reads */
+    if (ksp.pup) klog("sync: SnapKeepHook=%d (a snapped hooked cop keeps its hook; recommended on) Track=%d (continuous placement at the extrapolated host place; recommended on) TrackMs=%lu TrackMax=%d TrackTol=%.0f TrackLeadMs=%.0f TrackBound=%d (recommended off) BindFix=%d (recommended off until measured) TrackLocal=%d (recommended on) TrackKeepRot=%d (recommended on)",
+                      kst.keep, kst.on, (unsigned long)kst.ms, kst.max, kst.tol, kst.leadMs, kst.bound, kst.bindFix, kst.local, kst.keepRot);
+    if (klsy.cmp || klsy.apply) klog("sync: CompareLead=%d (the 'vs host' line adds the lead-corrected distance; recommended on)", kst.cmpLead);
     if (ksp.pup) klog("sync: PuppetMode=%d SnapDist=%.0f SnapEvery=%lu ParkSkip=%d (parked cops skipped, snapped when woken; recommended on)", ksp.mode, ksp.snapDist, (unsigned long)ksp.snapEvery, kspk.on);
     if (ksp.bots) klog("sync: OnlineHost: bots (team 2) are mirrored by the Puppet code%s; this peer shares its list when it is the host", ksp.cops ? " together with the cops (Puppet=1)" : " (cops untouched: Puppet=0)");
     if (ksp.pup || ksp.diag) klog("sync: Puppet=%d PuppetDiag=%d PuppetTol=%.0f PuppetSnap=%.0f PuppetSpeed=%.0f PuppetTeam=%d (client only; needs the host's Share=1)%s", ksp.pup, ksp.diag, ksp.tol, ksp.snap, ksp.speed, ksp.team,
@@ -699,7 +879,7 @@ static void klsy_tick(int game_thread)
         klsy.inwin = 1; klsy_drain();
         klsy.nhost = 0; klsy.applyRx = 0; klsy.rxT = 0; klsy.rxAnchored = 0; klsy.srcSet = 0; klsy.agree = 0; klsy.nbad = 0;
         klsy.applyAt = 0; klsy.cmpAt = 0; klsy.toldHum = 0; klsy.humLogs = 0; klsy.toldRefuse = 0;
-        ksp_release_all("round start"); memset(ksp_pk, 0, sizeof ksp_pk); ksp_rx = 0; ksp.pass = 0; ksp.gate = 0; ksp.pupAt = 0; ksp.diagAt = 0; ksp.roundAt = now;
+        ksp_release_all("round start"); memset(ksp_trk, 0, sizeof ksp_trk); memset(ksp_rv, 0, sizeof ksp_rv); memset(kst.ctl, 0, sizeof kst.ctl); memset(kst.bound1, 0, sizeof kst.bound1); kst.nrev = kst.nbind = 0; kst.sumAt = 0; memset(ksp_pk, 0, sizeof ksp_pk); ksp_rx = 0; ksp.pass = 0; ksp.gate = 0; ksp.pupAt = 0; ksp.diagAt = 0; ksp.roundAt = now;
     }
     if (!klsy.toldMode) { klsy.toldMode = 1; klog("sync: round: role %lu state 0x%lx (probe %d, share %d, compare %d, apply %d)", (unsigned long)role, (unsigned long)state, klsy.on, klsy.share, klsy.cmp, klsy.apply); }
     if (klsy.share && role == 2 && klsy.sock && now - klsy.shAt >= klsy.shareMs) {          /* host: its actors, binary: 'KLSY2' u32 T u16 n, n x {u16 slot, i16 hp, f32 x3, u16 cls, i16 team} */
@@ -731,7 +911,9 @@ static void klsy_tick(int game_thread)
             age = (int)(now - klsy.anchorNow) - (int)(T - klsy.anchorT);                       /* how long this list sat on the way, by the HOST's clock (GUESS: the first list was on time) */
             if (age > (int)(2 * klsy.shareMs)) continue;
             if (!klsy.srcSet) { klsy.srcSet = 1; klsy.srcAddr = from.addr; klog("sync: host list source locked to %lu.%lu.%lu.%lu", from.addr & 255, from.addr >> 8 & 255, from.addr >> 16 & 255, from.addr >> 24); }
-            memcpy(klsy.host, pk + 16, cnt * KLSY_REC); klsy.nhost = cnt; klsy.rxT = T; klsy.rxAt = now; klsy.applyRx = 1; ksp_rx = 1;
+            memcpy(klsy.host, pk + 16, cnt * KLSY_REC); klsy.nhost = cnt; klsy.rxT = T; klsy.rxAt = now; klsy.applyRx = 1; ksp_rx = 1; klsy.rxAge = age < 0 ? 0 : age;
+            if (ksp.mode >= 2 || kst.on) ksp_mkph();
+            if (kst.on || kst.cmpLead) ksp_trk_feed(T);
         }
         if (ksp.nlive && now - klsy.rxAt > 3000) ksp_release_all("host list stale");                 /* the host's packets stopped: give every vtable back */
         if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag) && klsy.nhost && now - klsy.cmpAt >= 1000) {            /* the Compare walk also gives Apply its trust: identity agreement */
@@ -743,8 +925,13 @@ static void klsy_tick(int game_thread)
             ag = c.n >= 1 && c.idbad * 10 <= c.n;                                              /* GUESS: at most 10% of the shared slots may differ in class / team */
             if (ag != klsy.agree) { klsy.agree = ag; klog("sync: identity agreement with the host %s (%d slots compared, %d with another class / team)", ag ? "OK" : "LOST", c.n, c.idbad); }
             if (klsy.cmp)
-                klog("sync: vs host: %d actors compared (host list %lu ms old, %d in it), %d another class/team, %d parked here (not compared), %d farther than %.1f, %d with another health, worst slot %d d=%.1f", c.n,
-                     (unsigned long)(now - klsy.rxAt), klsy.nhost, c.idbad, c.parked, c.bad, klsy.tol10 / 10.0, c.hpbad, c.worst_s, c.worst);
+            {   char ld[200]; ld[0] = 0;
+                if (kst.cmpLead) {                                                             /* CompareLead: the lead-corrected distance (the host place extrapolated by the list age) of the awake cops */
+                    int a, b; for (a = 1; a < c.ndl; a++) { float t = c.dls[a]; for (b = a - 1; b >= 0 && c.dls[b] > t; b--) c.dls[b + 1] = c.dls[b]; c.dls[b + 1] = t; }
+                    snprintf(ld, sizeof ld, " | lead-corrected: awake %d, >150: %d, >60: %d, p50 %.0f p90 %.0f worst %.0f (slot %d)", c.awake, c.o150, c.o60, c.ndl ? c.dls[c.ndl / 2] : 0.0f, c.ndl ? c.dls[(c.ndl * 9) / 10 < c.ndl ? (c.ndl * 9) / 10 : c.ndl - 1] : 0.0f, c.dlworst, c.dlworst_s);
+                }
+                klog("sync: vs host: %d actors compared (host list %lu ms old, %d in it), %d another class/team, %d parked here (not compared), %d farther than %.1f, %d with another health, worst slot %d d=%.1f%s", c.n,
+                     (unsigned long)(now - klsy.rxAt), klsy.nhost, c.idbad, c.parked, c.bad, klsy.tol10 / 10.0, c.hpbad, c.worst_s, c.worst, ld); }
         }
         /* Apply: only a System Link / online client (mode 4, even with Probe=2), a fresh list, the identity agreement, a known local player; at most 2 passes a second */
         if (klsy.apply && mode == 4 && klsy.agree && klsy.applyRx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && now - klsy.applyAt >= 500) {
@@ -768,6 +955,8 @@ static void klsy_tick(int game_thread)
             ksp_rx = 0; ksp.pupAt = now;
             ksp_pass();
         }
+        /* Track: every frame, same trust as the Puppet pass plus the open position gate and a fresh list */
+        if (kst.on && ksp.pup && mode == 4 && klsy.agree && ksp.gate && ksp.nlive && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs) ksp_track(now);
     }
     if (klsy.on && now - klsy.at >= klsy.every) {
         struct klsy_pr c; klsy.at = now; c.n = 0; c.max = klsy.max; c.lines = 0;

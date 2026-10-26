@@ -111,6 +111,12 @@ feat('syncpuppet', G_EXP, "Online: clients' cops follow the host instead of thin
      "klsync.c [Sync] Puppet: a client re-issues the game's own velocity steer 0x70f660 each frame (private ZFFActor vtable, slot 87 wrapper) for cops (team 3) farther than PuppetTol (60) from the host's place, no animation reset; beyond PuppetSnap (1500) the actor teleport; host needs Share=1; use instead of Apply; GUESS: velocity units, cop team value; not live-tested", [('Sync', 'Puppet', 1, 0, 0)])
 feat('syncpuppetdiag', G_EXP, "Online: log why a client's cops do or do not follow the host (recommended off)", 'off', 'start',
      "klsync.c [Sync] PuppetDiag: read-only 'sync: puppet diag:' log lines (controller pair, cover fields) for up to 8 cops per pass; works without Puppet; log only", [('Sync', 'PuppetDiag', 1, 0, 0)])
+feat('synctrack', G_EXP, "Online: clients' cops are kept at the host's place every frame (recommended on, needs Puppet)", 'on', 'start',
+     "klsync.c [Sync] Track: a hooked cop farther than TrackTol (40) from the host's place moved on by the list age is placed there with the game's actor teleport 0x62a900 every frame (TrackMax 8 per frame, once per TrackMs 50 per cop) instead of the 2 s snap; logs 'sync: track:' (5 s summary, revert probe); GUESS: lead 60 ms, speed clamp 900; not live-tested", [('Sync', 'Track', 1, 0, 1)])
+feat('synctracklocal', G_EXP, "Online: Track placements keep the cop's animation and send nothing to the peers (recommended on, needs Track)", 'on', 'start',
+     "klsync.c [Sync] TrackLocal: Track calls the game's teleport 0x62a900 with both flags 0 instead of 1,1 (no animation reset, no network send); GUESS from the code reading; not live-tested", [('Sync', 'TrackLocal', 1, 0, 1)])
+feat('synctrackrot', G_EXP, "Online: Track placements keep the cop's facing (recommended on, needs Track)", 'on', 'start',
+     "klsync.c [Sync] TrackKeepRot: Track passes the node's own rotation (nine floats at +0) to the teleport instead of the identity; GUESS on the layout; falls back to identity if it does not look like a rotation", [('Sync', 'TrackKeepRot', 1, 0, 1)])
 feat('crewlook', G_CORE, 'Random looks for the AI heisters', 'on', 'start',
      'no body twice, never the one you wear', [('Crew', 'Random', 1, 0, 0)])
 
