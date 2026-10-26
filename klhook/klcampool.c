@@ -44,7 +44,19 @@ static void klcampool_tick(int game_thread)
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLCP_SM)))) return;
     st = klh_rd32(sm + 0x70);
     if (st != kcp.state) { drop = kcp.state == 0x19 && st == 0x16; kcp.state = st; }      /* the direct restart: the stock end 0x1f..0x27 (which releases) was skipped */
-    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(h = klh_rd32(gd + 0x15d8))) return;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA)))) return;
+    {   /* the local player's health every tick while 0x19 (peer COVER6 04:11: klauto samples only at keyboard polls, which stopped 11.4 s before
+           the restart, and the 2nd round had no poll at 0x19 at all): logged at a direct restart = was it a death? Reads only. */
+        static float hl = -1, hmin = -1; static DWORD hmin_t, hl_t; DWORD now = GetTickCount(), pl, ho; BYTE sel = 0xff; float hv[2];
+        if (st == 0x19 && !drop && klh_rd(gd + 0x898, &sel, 1) && sel < 28 && (pl = klh_rd32(gd + 0x828 + 4 * sel)) && klh_rd32(pl) == KLCAM_PL_VT
+            && (ho = klh_rd32(pl + 0xa48)) && klh_rd(ho + 4, hv, 8) && klb_finite(hv[0])) {
+            hl = hv[0]; hl_t = now;
+            if (hmin < 0 || hv[0] <= hmin || now - hmin_t > 3000) { hmin = hv[0]; hmin_t = now; }
+        }
+        if (drop && kcp.log) klog("campool: direct restart 0x19 -> 0x16: local player health just before %.1f (%lu ms ago), lowest in the last 3 s %.1f (-1 = not read while 0x19)", hl, hl_t ? now - hl_t : 0, hmin);
+        if (st != 0x19) hl = hmin = -1, hl_t = 0;
+    }
+    if (!(h = klh_rd32(gd + 0x15d8))) return;
     if (!(b = klh_rd32(h + 4)) || !(e = klh_rd32(h + 8)) || e <= b || (n = (e - b) / 8) > 16) return;
     if (!klh_rd(b, ent, n * 8)) return;
     for (i = 0; i < n; i++) if (ent[2 * i + 1] & 0xff) nfree++;
