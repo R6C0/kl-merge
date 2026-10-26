@@ -68,7 +68,7 @@ Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-26 ~08:20 - BO10 PASS but no boarding: the money carrier died walking to the exit trigger (point-blank bursts: 28 steps on bots in 2 min, 3 bots dead in 45 s; ordinary cop hits are fine at OnlineCopToBot=5). BO11 = OnlinePointBlank 0.5, after N9_DM01e (9 players, Fps 30, 1026za). Harness: run ends 30 s after a pre-round host death (478a4dcf3).
 
-2026-10-26 ~06:40 - [kl-merge-ce] DM02 is done: FallRescue PASS, rear stops F02 edddbb67 (DM02_rearW PASS), lift on all 3 sites PASS. Cover: COVER11 found that the K6 model gives cover (A/B V1..V4 PASS) but all 6 real K6 boxes do not. They sit inside the wall solid, so the face is flagged blocked. Builder offset fix + DM05A restage + COVER12 in workflow wudgsb5q6. The form-a restage of 11 maps is held until COVER12 passes.
+2026-10-26 ~08:50 - [kl-merge-ce] Cover fix (FREESIDE: box 2 units off the wall, + PlayerCoverModifier ON on the built-for side's ends) works: COVER13 on DM05A e9fab045 gave cover on 5 of 6 K6 boxes. Thin K6_44 (model 45196, 185x33) still fails: COVER13c retests. All 11 other maps are restaged in C:/kl_build_1024/cover_fix_1026d (review PASS). 8 are queued for install. DM01/02/03 auto-queue after c9's N9_DM09e (BO11 pins DM01). Per-map COVER14_<MAP> tests come from tools/kl_cover_testgen_1026.py; verdict via live_1026/cover14_verdict.py.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
