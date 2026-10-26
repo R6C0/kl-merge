@@ -333,6 +333,16 @@ static struct { float stock[14], ours[14], pic[14]; LONG nstock, nours, npic; } 
 static CRITICAL_SECTION klu_cs;
 static char klu_kill_txt[64];                 /* klhud_kill.c hands the points pop-up's line here (under klu_cs) ... */
 static LONG klu_kill_at, klu_kill_ms = 3500;
+/* 2026-10-26 (the online port's open items 'stock kill popup still swallowed online' / 'stock van panel still blanked'): a stock element
+   is taken off the screen ONLY while this compose draws its replacement. klu_compose publishes, once per compose (no 0 window between
+   a reset and a set: the render thread reads these), KLU_KEEP_KILL when the kill line under REWARDS is live (klu_kill_line with on) and
+   KLU_KEEP_VAN when the van card is live (klu_van_card with [HUD] Money). klhud_kill.c swallows the points pop-up only with the first;
+   klhud_escape.c (EscapeCard=1) hides the stock panel's time / icon / bar only with the second. Online with [HUD] OnlineFeed=0 /
+   OnlineVan=0 (the defaults) or without OnlineCrew, and in Arcade with Money=0, both are 0 and the stock elements draw as the game's own. */
+#define KLU_KEEP_KILL   1
+#define KLU_KEEP_VAN    2
+static volatile LONG klu_keep;                  /* the published bits */
+static int klu_keep_now;                        /* the bits this compose gathers (game thread only) */
 static int klu_hideidle = 1, klu_hideidle_dry;   /* [HUD] HideIdleEscape / HideIdleEscapeDry (2026-10-24) */
 static volatile LONG klu_esc_rst;   /* 2026-10-17 review: set by klu_reset (scene change): the van card block drops its latched state, no ghost card in the next level */
 static volatile LONG klu_esc_at, klu_esc_frac, klu_esc_slot, klu_esc_time;     /* klhud_escape.c (EscapeCard): a frame the stock panel would draw, its health share (float bits), the icon slot, its time text object */
@@ -1198,6 +1208,7 @@ static void klu_round_text(int rn, int rm, int lives)
 static void klu_kill_line(int on)
 {
     DWORD now = GetTickCount(); const char *txt = klu_kill_txt; LONG at = klu_kill_at; DWORD col = 0;
+    if (on) klu_keep_now |= KLU_KEEP_KILL;                      /* the pop-up's text has a place on the screen this compose: klhud_kill.c may keep the stock line */
     if (klu_kf_at && (!klu_kill_at || (LONG)((DWORD)klu_kf_at - (DWORD)klu_kill_at) > 0)) { txt = klu_kf_txt; at = klu_kf_at; col = klu_kf_col; }
     if (at && (LONG)(now - (DWORD)at) < klu_kill_ms) {
         const char *d = strchr(txt, '$');
@@ -1261,6 +1272,7 @@ static void klu_van_card(int veh, int mir_ok, float mir_timer)
         DWORD now = GetTickCount(), at = (DWORD)klu_esc_at;
         int fresh; float al, dt; int want;
         if (InterlockedExchange(&klu_esc_rst, 0)) { idle = idle_was = 0; seen = 0; alpha = 0.0f; on = 0; last = 0; ltt[0] = 0; at = 0; }
+        if (klu.money) klu_keep_now |= KLU_KEEP_VAN;           /* the card is live this compose: klhud_escape.c may hide the stock panel's time / icon / bar */
         fresh = at && (DWORD)(now - at) < 250 && klu.money;    /* unsigned: a signed compare turned true again after 24.9 days */
         dt = last ? (float)(LONG)(now - last) : 0.0f; if (dt < 0.0f || dt > 200.0f) { if (dt > 200.0f && !fresh) alpha = 0.0f; dt = 200.0f; } last = now;   /* compose paused (menu, pause): no stale half-faded card on return */
         if (fresh) {
@@ -1307,7 +1319,17 @@ static void klu_van_card(int veh, int mir_ok, float mir_timer)
 }
 
 /* -> every text's wanted string and colour and the picture list; 0 = nothing to show (no Arcade round) */
+static int klu_compose_in(int *state_ok);
 static int klu_compose(int *state_ok)
+{   /* the texts and pictures of this tick, then the sink bits in ONE write (see klu_keep): what the render-thread wrappers may keep off the screen */
+    int r;
+    klu_keep_now = 0;
+    r = klu_compose_in(state_ok);
+    InterlockedExchange(&klu_keep, (LONG)(r ? klu_keep_now : 0));
+    return r;
+}
+
+static int klu_compose_in(int *state_ok)
 {
     struct klb_snap s; int i, row = 0, human, used = 0, alive = 0; long total = 0, loot = 0, rewards = 0; DWORD cat[0x3c / 4]; char name[56]; int lives = 0, rn = 0, rm = 0;
     *state_ok = 0;
@@ -1668,6 +1690,7 @@ static void klu_reset(const char *why, DWORD osd)
     klht_reset();                                              /* M1 of the tags review: klht_r holds pointers into the scene that just ended */
     memset(&klu_r, 0, sizeof klu_r);
     InterlockedExchange(&klu_esc_at, 0); InterlockedExchange(&klu_esc_rst, 1);
+    InterlockedExchange(&klu_keep, 0);                        /* no replacement is drawn now: the stock pop-up and panel are the game's own again */
     klu_r.osd = osd;
     LeaveCriticalSection(&klu_cs);
 }

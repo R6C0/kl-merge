@@ -69,3 +69,37 @@ compiled with MSVC, not run.
 
 Owner / local sessions: nothing to install. Decide re/ucc_police_aim.md section 5 (keep the stock cop-killer exposure as
 "caught in the act", or swallow it while hidden); the bench of section 6 needs two System Link instances.
+
+# 2026-10-26 scheduled check-in (cloud, 22:48-23:20 UTC): PC idle, no new crash; online HUD gaps closed (not run live)
+
+Folders were connected on request again (read-only use). PC IDLE: newest game-folder writes KLHook.ini 19:54 UTC
+(the [CharOnline] turn-on), dinput8.dll 19:28 (hook 1026f), KLHook.log 19:04 (the owner's Steam private FA session,
+ended by Alt+F4 at 19:04:57, asserts 0 faults 0), `<work>\build\hire_1026` 20:07, last commit 20:26. KLHook.result is
+still the 16:14 F04 bench PASS. Nothing launched, installed or touched on screen.
+
+## Dumps
+
+KLHook_1/2/3.dmp (08:11 / 03:20 UTC) and the newest .mdmp (10-25 19:18) are all older than the 21:40 log note and were
+triaged in the 08:50 / 03:45 notes. Nothing to triage.
+
+## The owner's 18:58-19:04 online session (log read)
+
+Two loads in one process (DM09 in F06, then DM02 in F02, OnlineSet=2). On the SECOND load the heap's largest free piece
+was 28.4 MB and klmem answered 5 refused requests from the 128 MB reserve: 32.0 + 16.0 + 16.9 + 21.2 + 23.1 = 109 MB
+(KLHook_map_refused_0/1.txt written 19:01/19:02). The reserve frees each block with the level, so a 10-round mixed-map
+match (live ini: RoundsMax=10, OnlineSet=9) rests on that per-level free; `[Memory] RoomMB=128 ReserveMB=176` (klmem.c
+'THE NEXT STEP') is still NOT RUN IN THE GAME. Worth a look after the owner's first long online match: how many
+'memory: HeapAlloc ... FAILED' lines per load, and whether any says the reserve had no gap.
+Also seen: 'scoreboard: the wrap failed 30 tick(s) ... the stock panel stays' at the online round end (expected: the
+online outro is log-only until [HUD] OnlineBoard is on), and the KLWardrobe 'not usable (entry 17...)' lines (the
+voice-offset else-branch, misleading, see the 20:45 note).
+
+## Offline piece: the online port's two open HUD items (klhook, --check-hook SHIP/TEST 0 errors, warnings unchanged)
+
+'stock kill popup still swallowed online' and 'stock van panel still blanked': klhud.c now publishes `klu_keep` once per
+compose (KLU_KEEP_KILL = klu_kill_line ran with [HUD] Money; KLU_KEEP_VAN = klu_van_card ran with Money), one
+InterlockedExchange after klu_compose_in, cleared in klu_reset. klhud_kill.c keeps the points pop-up off the screen
+only with the KILL bit; klhud_escape.c runs the EscapeCard=1 restyle (time / icon / bar hidden for the card) only with
+the VAN bit, else the stock panel is left whole. Effect: online with the default OnlineFeed=0 / OnlineVan=0, or without
+OnlineCrew, and in Arcade with Money=0, the stock pop-up and the stock van panel draw as the game's own; with the port's
+keys on, nothing changes. Not MSVC-built, not run live.

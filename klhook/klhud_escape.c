@@ -57,6 +57,9 @@
  *   EscapePrompts=1          0 = leave the two prompt lines stock
  *   EscapeCentre=1           1 = the prompts centred at the time's centre (style 0x14), 0 = their stock place and style
  *   EscapeDX=0 EscapeDY=0    moves the whole picture set (not the texts) for the E1 pictures
+ *   EscapeCard=1             the time / icon / bar go to klhud.c's van card in the money column; 2026-10-26: only while that card is
+ *                            live (klhud.c klu_keep bit KLU_KEEP_VAN, set by klu_van_card with [HUD] Money) - otherwise the stock panel
+ *                            is not touched at all (online it used to be blanked with no card in its place). Not run live.
  */
 #ifndef KLHUD_ESCAPE_C
 #define KLHUD_ESCAPE_C
@@ -338,7 +341,8 @@ static char __fastcall klesc_render(void *el, void *edx, void *ctx, void *cam)
 {
     DWORD e = (DWORD)(DWORD_PTR)el; int act = 0; char r; (void)edx;
     InterlockedIncrement(&klesc_n_call);
-    if (klesc.on && e == klesc_r.elem && ctx && *(const DWORD *)ctx == KLU_CTX_VT && klu_draw_on && klesc_clock()) act = klesc_prep(e);
+    if (klesc.on && e == klesc_r.elem && ctx && *(const DWORD *)ctx == KLU_CTX_VT && klu_draw_on && klesc_clock() &&
+        (!klesc.card || (klu_keep & KLU_KEEP_VAN))) act = klesc_prep(e);        /* 2026-10-26: EscapeCard=1 hides the stock time / icon / bar for klhud.c's van card; when no compose draws that card (online without [HUD] OnlineCrew + OnlineVan, or Money=0) the stock panel is left whole instead of blank (the port's open item 'stock van panel still blanked') */
     if (!act && (klesc_dirty_e == (LONG)e || klesc_r.plate)) { klesc_restore_texts(); klesc_plate_back(); }       /* the put-back does not depend on this part's level state */
     if (act) InterlockedExchange(&klesc_in_call, 1);
     r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLESC_RENDER))(el, 0, ctx, cam);

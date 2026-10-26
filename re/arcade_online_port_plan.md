@@ -47,11 +47,13 @@ They exist: klhook/kllobbyopt.c ([Lobby] TimeMax, TimeMin, RoundsMax, PlayersMax
 
 8. Remaining mod HUD parts
 - Kill feed: klhud_kill.c:klkf_render swallows the stock popup (:54-60) whenever klkf.on && klu_r.made, with no online test, hands text to klu_kill_txt which the online compose never reads, so the popup vanishes online. Class C. Step: add an online test; either do not swallow online, or set KLU_T_KILL in klu_compose online branch from a kill-event source.
+  DONE 2026-10-26 (scheduled check-in, not run live): klhud.c publishes `klu_keep` once per compose (bit KLU_KEEP_KILL = klu_kill_line ran with [HUD] Money, bit KLU_KEEP_VAN = klu_van_card ran with Money); klkf_render swallows the pop-up only with the KILL bit, so online without OnlineCrew+OnlineFeed (and in Arcade with Money=0) the stock line draws as the game's own.
 - Skulls/lives and ROUND line: klhud.c:1236-1400 (kluv_lives, kluv_round, KLU_T_KILL 1384-1386, ROUND text 1392). Class C. Step: online equivalents of kluv_* reading S (lives +? / round +? undecoded).
 - Loot bar: klhud.c:1398; needs sum of ZOnlineMoneyCtrl +0x34 over the entity table (c9 item e). Class C.
 - Names/tags: klhud_tags.c (depends on records); which ZFAPlayerListDisplay text object holds the name is unknown (re/hud_tags.md:49). Class L.
 - Tab card: off online (`klu_r.card = ... && !pre.online`). Class L; enable after item 1.
 - Escape dial/card: klhud_escape.c:klesc_prep blanks stock van timer/icon/bar online but our card is not drawn. Class C. Step: draw the card from the van state online or stop blanking.
+  DONE 2026-10-26 (same change): klesc_render runs klesc_prep with EscapeCard=1 only while the VAN bit is set; otherwise the stock panel is left whole (the put-back path restores texts and plate). Online with OnlineVan=1 the card draws as before.
 - Stock list: klu_skip_list :1748 skips only with klu.hidesrc && pre.online ? klu.hideonl && klb_hud_crew; names/round/skulls dropped. Step: do not skip until the replacement is drawn.
 - Popups/values/qol: klhud_popup.c:531, klhud_board2.c:527, klqol2.c:235 use klb_read, inert online. Class L/C; port by klb_read_hud snapshot (klb.c:413), add on_score decode, bot list, killer byte, lives/round.
 

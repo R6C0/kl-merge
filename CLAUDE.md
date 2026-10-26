@@ -66,17 +66,17 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-26 ~23:15 - [scheduled] ONLINE HUD GAPS CLOSED, NOT RUN: klhud.c klu_keep (per-compose bits: kill line live / van card live); klhud_kill.c and
+klhud_escape.c (EscapeCard) take the stock pop-up / van panel off the screen ONLY with the bit, so online with the default OnlineFeed=0 / OnlineVan=0
+the stock ones show instead of nothing. --check-hook clean. PC idle since 19:54; owner's 18:58 online session: 2nd load put 109 of 128 MB into klmem's
+reserve (debug/notes/2026-10-26-scheduled-triage.md) - watch the first 10-round mixed match for 'HeapAlloc ... FAILED' lines.
+
 2026-10-26 ~21:10 - Online = Arcade port merged (606e9fc2a), NOT run live: klonline_read.c + [HUD] Online* / [ShopPage] OnlineLook keys (default 0),
 build out_arcport_1026d. Live ini: 10 min / 10 rounds / 12 players / OnlineSet=9 mixed maps. Hire tab stage 1 building (branch hire-1026). Tests stopped (owner present).
 
 2026-10-26 ~15:05 - [scheduled] UCC P2 BUILT, NOT RUN: klhook/klucc_aim.c `[Ucc] PoliceAim=1` - in UCC rounds the AI gates the UCC on rules slot 188
 (`[rules+0x284]` bUCCAIHostile: 0 nobody's target / police friend, 1 everyone's enemy), never on +0x2723; the module answers 1 to POLICE askers only (private
 rules vtable + naked thunk reading the caller's registers). klua_test 27/27. re/ucc_police_aim.md: bench 6; OWNER question 5 (stock exposes a UCC who kills a cop).
-
-2026-10-26 ~12:40 - OWNER lifted the 12:07 "stop all tests": "continue til 5PM again". Bench queue (lan_1025/queue.py) and the live rotation restarted (shared LIVE.lock). Next: BOS_DD02x2 (husk-skip exit finder + OnlineExitDy), UCC2 (3 instances), BOS_DD03..09.
-
-2026-10-26 ~10:05 - OWNER REQUEST (via cloud session kl-merge-2d): Undercover Cop + Cops and Robbers: cop SYNC there, REBALANCE both, UCC harder to spot (ideas from Among Us / Death Note: Killer Within), C&R: each human cop commands a squad of 4 AI cops. Authorised now. Brief + facts + ordered items: re/ucc_cnr_owner_request.md. Key fact: UCC/C&R are game type 4 (sub-mode [0x168e59c] 1/2), so klsync already arms there, never benched: first step is a UCC then C&R sync bench on stock DD01. 'luvsics AI' = collaborator luvsic's crew-order AI (third_party/anp/loader/squad.inc, kl2's own ZSquadControl Recruit/Follow/Attack): the base for C&R squads, see the brief.
-TO BOTH RUNNING VS CODE SESSIONS (owner is away and cannot type to you; the cloud session cannot reach your chats): read re/ucc_cnr_owner_request.md item 4, then ACK with a commit whose subject starts 'ACK ucc-cnr:' naming your session and which items you take (the cloud session watches for it).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

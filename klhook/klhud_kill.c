@@ -17,6 +17,9 @@
  * (a new message: Update / the setter writes the start there) is read once - the text's string ([text+0xa4]+0xc, ZCHAROBJ, as
  * klhud_popup.c) - and handed to klhud.c (klu_kill_txt / klu_kill_at), whose compose puts it under REWARDS (KLU_T_KILL). In any other
  * state the stock Render runs: the line is never lost while our HUD is down.
+ * 2026-10-26: the same when the compose has NO place for the line (klhud.c klu_keep, bit KLU_KEEP_KILL): online the money column and
+ * the kill line exist only with [HUD] OnlineCrew=1 + OnlineFeed=1, and the port's open item was 'stock kill popup still swallowed online'
+ * (the wrapper kept the line and nothing showed it). Now it is swallowed only in a compose that draws it. Not run live.
  * NOT RUN IN THE GAME (2026-10-13). The string's own glyphs: bytes >= 0x80 (the skull, U+E0xx in the font) are dropped.
  */
 #ifndef KLHUD_KILL_C
@@ -39,7 +42,7 @@ static char __fastcall klkf_render(void *el, void *edx, void *ctx, void *cam)
 {
     DWORD e = (DWORD)(DWORD_PTR)el, text, str; LONG st; char s[96], o[64]; int n, i, k = 0; (void)edx;
     InterlockedIncrement(&klkf_n_call);
-    if (klkf.on && e == klkf_r.el && klu_r.made && !klu_r.fault) {
+    if (klkf.on && e == klkf_r.el && klu_r.made && !klu_r.fault && (klu_keep & KLU_KEEP_KILL)) {     /* 2026-10-26: only while klhud.c's compose gives the line a place (klu_keep): online with [HUD] OnlineFeed=0 or no crew box, and with Money=0, the stock pop-up draws as the game's own instead of vanishing */
         st = *(const LONG *)(DWORD_PTR)(e + KLKF_E_START);
         if (st && st != klkf_seen && TryEnterCriticalSection(&klu_cs)) {      /* the render thread never WAITS on a lock: busy = the next frame */
             klkf_seen = st;
