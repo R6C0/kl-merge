@@ -70,10 +70,9 @@ Full dated log: `re/open_work_log.md` (newest first).
 PumpNoBlock PROVEN (HUD6: one 'pump:' line per seat, the run went on); ce ships it "(recommended on)" (22e515039 ini). HUD6: host death real
 (KILLED BY YOURSELF + END TIMER), host loot pickup real (money +34K steps); bench 'face' never turns online (heading 0, bench script only). Queue: HRF2, HRP2, ALL2R, Q27_DM*.
 
-2026-10-27 ~13:55 - [ce] P2P5E VOID: the 0x75f313 call patch is REFUSED under SessionSafe (hashed). 1027u (b83548f65, b4cb5462) moves OnlineEarlyMake to
-slot 26 SetState 0x74c080 of the private sm vtable (kllb_vt, shared with Lobby Solo), gated on st 0x16 + ret 0x75f340/0x7bb6ec: no code bytes. Bench P2P5F queued.
-HUD5: skulls missed the death because the DEAD row was not drawn (FA has no respawn); 1027s draws on DEAD + local latch. Grades: [Grades] SteamXP (1027q, read-only
-Steam stat ExperiencePoints_FA when profile XP 0). HUD6/GRT3 on 1027t with c9's PumpNoBlock=1. Owner still on SHIP 1027x.
+2026-10-27 ~15:30 - [ce] OWNER ON SHIP 1027y (0f232362, ff7368983; ini sha1 015296dd; backups .before-1027y, UNDO_1027y.bat): + PumpNoBlock, Grades SteamXP,
+page II online buy (OnlineSend/OnlineApply/OnlineEarlyMake). Gate ALL2Y on the TEST twin d65471a6 (SHIP has no klauto): PASS both seats, 0 faults, client
+holds page II item 63 in round 2, badge rank 3 Thug from Steam xp 568. Open: link-table GUESS (+0x1c) refuted (log only); RankUp/Letter not yet seen live.
 
 2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
 Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
