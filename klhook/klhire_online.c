@@ -193,8 +193,12 @@ static void klhro_on_answer(const struct knc_msg *m, int src)
     if (klhro.pend != row && !(ok && !klhr_next)) return;         /* a late 'ok' (after the 6 s timeout) is still taken: the host has charged this seat, so the body must be worn (the host judged it, seat checked above) */
     klhro.pend = 0; klhro.tbJud = ok ? 0 : why;
     if (ok) { klhr_next = row; if (klhro.log) klog("hire-online: the host accepted: %s hired for the next round", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?"); }
-    else klog("hire-online: the host refused %s: %s", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?", klhro_why(why));
+    else { klog("hire-online: the host refused %s: %s", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?", klhro_why(why)); if (row >= 1 && row <= KLHR_N) klhr_notef(row, "the host refused: %s", klhro_why(why)); }
 }
+
+/* accessors for the Hire PAGE (klshoppage.c is included before this file): the row waiting for the host's answer (0 = none), and whether online hire is on */
+static int klhro_waiting(void) { return klhro.on && klhro.pend && GetTickCount() - klhro.pendAt < KLHRO_ASKMS ? klhro.pend : 0; }
+static int klhro_enabled(void) { return klhro.on; }
 
 /* from klhr_set when kl_online(): the player pressed KLHire<row>. Returns 1 when this file handled it (even a refusal). */
 /* ONE channel type 'HIRE' (payload 'Q...' = ask, 'A...' = answer): klnetchan.c holds only KNC_HANDLERS = 8 types and kldown_mirror (2) + klucc (3) + klucchide (2) already take 7;
@@ -207,25 +211,25 @@ static void klhro_on_msg(const struct knc_msg *m, int src)
 static int klhro_set(int row)
 {
     DWORD rules = 0; int seat, rank = -1, why;
-    if (!klhro.on) { static int told; if (!told++) klog("hire: refused: a network session and [Hire] Online=0 (online hire is off)"); return 1; }
+    if (!klhro.on) { static int told; if (!told++) klog("hire: refused: a network session and [Hire] Online=0 (online hire is off)"); klhr_notef(row, "online hire is off ([Hire] Online=0)"); return 1; }
     if (klhr_next == row) return 1;
-    if (klhr_next) { klog("hire-online: %s refused: %s is already hired for the next round", klhr_name[row], klhr_name[klhr_next]); return 1; }
-    if (klhro_phase() == 1) { klog("hire-online: %s refused: a round is running; hire on the shop page between rounds", klhr_name[row]); return 1; }
-    if (!klhro_rules(&rules, 0) || (seat = klhro_myseat(rules)) < 0) { klog("hire-online: %s refused: not in an online FA round / own seat unknown", klhr_name[row]); return 1; }
-    if (!klhr_avail(row)) { klog("hire-online: %s refused: this level has no body for him (no wardrobe); nothing charged", klhr_name[row]); return 1; }
+    if (klhr_next) { klog("hire-online: %s refused: %s is already hired for the next round", klhr_name[row], klhr_name[klhr_next]); klhr_notef(row, "%s is already hired for the next round", klhr_name[klhr_next]); return 1; }
+    if (klhro_phase() == 1) { klog("hire-online: %s refused: a round is running; hire on the shop page between rounds", klhr_name[row]); klhr_notef(row, "a round is running"); return 1; }
+    if (!klhro_rules(&rules, 0) || (seat = klhro_myseat(rules)) < 0) { klog("hire-online: %s refused: not in an online FA round / own seat unknown", klhr_name[row]); klhr_notef(row, "your seat is not known yet"); return 1; }
+    if (!klhr_avail(row)) { klog("hire-online: %s refused: this level has no body for him (no wardrobe); nothing charged", klhr_name[row]); klhr_notef(row, "not on this map"); return 1; }
     if (klhr_rankgate && !klhr_rank(&rank)) rank = -1;
     if (klhro_host()) {
         why = klhro_decide(seat, row, rank, 0); klhro.tbJud = why;
-        if (why) klog("hire-online: %s refused: %s", klhr_name[row], klhro_why(why));
-        else { klhr_next = row; klhro.paid[seat] = row; }
+        if (why) { klog("hire-online: %s refused: %s", klhr_name[row], klhro_why(why)); klhr_notef(row, "%s", klhro_why(why)); }
+        else { klhr_next = row; klhro.paid[seat] = row; klhr_notef(row, "hired"); }
         return 1;
     }
     {
         char pay[48]; unsigned q;
-        if (klhro.pend && GetTickCount() - klhro.pendAt < KLHRO_ASKMS) { klog("hire-online: %s: still waiting for the host's answer about %s", klhr_name[row], klhr_name[klhro.pend]); return 1; }
+        if (klhro.pend && GetTickCount() - klhro.pendAt < KLHRO_ASKMS) { klog("hire-online: %s: still waiting for the host's answer about %s", klhr_name[row], klhr_name[klhro.pend]); klhr_notef(row, "still waiting for the host's answer about %s", klhr_name[klhro.pend]); return 1; }
         snprintf(pay, sizeof pay, "Qs%dr%dk%d", seat, row, rank);
         q = knc_send("HIRE", pay, -1);
-        if (!q) { klog("hire-online: %s: the message channel is not open (no session / [NetChan] off), nothing sent", klhr_name[row]); return 1; }
+        if (!q) { klog("hire-online: %s: the message channel is not open (no session / [NetChan] off), nothing sent", klhr_name[row]); klhr_notef(row, "the message channel to the host is not open"); return 1; }
         klhro.pend = row; klhro.pendAt = GetTickCount();
         if (klhro.log) klog("hire-online: asked the host for %s (seat %d, rank %d)", klhr_name[row], seat, rank);
     }
@@ -268,7 +272,7 @@ static void klhro_tick(void)
 {
     int ph;
     if (!klhro.on) return;
-    if (klhro.pend && GetTickCount() - klhro.pendAt >= KLHRO_ASKMS) { klog("hire-online: no answer from the host about %s (%d ms): nothing charged on this side", klhr_name[klhro.pend], KLHRO_ASKMS); klhro.pend = 0; }
+    if (klhro.pend && GetTickCount() - klhro.pendAt >= KLHRO_ASKMS) { klog("hire-online: no answer from the host about %s (%d ms): nothing charged on this side", klhr_name[klhro.pend], KLHRO_ASKMS); klhr_notef(klhro.pend, "no answer from the host (is hire on for the host?)"); klhro.pend = 0; }
     ph = klhro_phase();
     {   /* stale state (audit 1027): no session (left / level change) or a NEW rules object (new level or lobby) forgets paid[] / act / pending, so 'already hired' cannot outlive the match. GUESS: a new level / lobby allocates a NEW rules object and one match keeps the same one through shop and round; if the object were rebuilt between a shop hire and the round start, paid[] would be forgotten early and a seat could be charged twice (bench it) */
         DWORD r = 0; static DWORD lastr; int j;

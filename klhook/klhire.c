@@ -75,6 +75,16 @@ static int klhr_phase0;                        /* last phase seen: 0 none, 1 rou
 static int klhr_round;
 static DWORD klhr_seed = 0x2545f491u;
 
+/* the last refusal / outcome of a hire press, for the Hire PAGE of the shop (klshoppage.c, [Hire] Page): row 1..16, text, tick. A pure record: nothing reads it unless the page is on. */
+static int klhr_lastrow; static DWORD klhr_lastat; static char klhr_lastmsg[96];
+static void klhr_notef(int row, const char *fmt, ...)
+{
+    va_list ap; va_start(ap, fmt);
+    _vsnprintf(klhr_lastmsg, sizeof klhr_lastmsg - 1, fmt, ap); klhr_lastmsg[sizeof klhr_lastmsg - 1] = 0;
+    va_end(ap);
+    klhr_lastrow = row; klhr_lastat = GetTickCount() | 1;
+}
+
 static int klhro_set(int row);                 /* klhire_online.c (included later by klhook.c) */
 static void klhro_tick(void);
 
@@ -154,25 +164,25 @@ static void klhr_set(int row, int value)
 {
     DWORD rules = 0, score = 0, total = 0, st = 0, mode = 0; int rank = 0, have, price, phase; LONG next;
     if (!value) return;
-    if (!klhr_on) { static int told; if (!told++) klog("hire: refused: [Hire] Enable=0 (the Hire window is baked into this level but the hook feature is off)"); return; }
+    if (!klhr_on) { static int told; if (!told++) klog("hire: refused: [Hire] Enable=0 (the Hire window is baked into this level but the hook feature is off)"); klhr_notef(row, "hire is off"); return; }
     next = klhr_next;
     if (next == row) return;                                                         /* already paid: nothing to do */
     if (kl_online()) { klhro_set(row); return; }                                    /* klhire_online.c: client asks the host, the host judges (off unless [Hire] Online=1) */
-    if (!klhr_arcade(&rules, &score) || !score) { klog("hire: %s refused: not an Arcade heist round (no rules / score object)", klhr_name[row]); return; }
+    if (!klhr_arcade(&rules, &score) || !score) { klog("hire: %s refused: not an Arcade heist round (no rules / score object)", klhr_name[row]); klhr_notef(row, "not an Arcade round"); return; }
     klhr_state(&st, &mode); phase = klhr_phase_of(st);
-    if (phase == 1) { klog("hire: %s refused: a round is running (state 0x%lx); hire on the shop page between rounds", klhr_name[row], st); return; }
-    if (next) { klog("hire: %s refused: %s is already hired for the next round (stage 1 has no refund / change)", klhr_name[row], klhr_name[next]); return; }
-    if (!klhr_avail(row)) { klog("hire: %s refused: this level has no body for him (no wardrobe); nothing charged", klhr_name[row]); return; }
+    if (phase == 1) { klog("hire: %s refused: a round is running (state 0x%lx); hire on the shop page between rounds", klhr_name[row], st); klhr_notef(row, "a round is running"); return; }
+    if (next) { klog("hire: %s refused: %s is already hired for the next round (stage 1 has no refund / change)", klhr_name[row], klhr_name[next]); klhr_notef(row, "%s is already hired for the next round", klhr_name[next]); return; }
+    if (!klhr_avail(row)) { klog("hire: %s refused: this level has no body for him (no wardrobe); nothing charged", klhr_name[row]); klhr_notef(row, "not on this map"); return; }
     price = klhr_price[row];
     have = klhr_rankgate ? klhr_rank(&rank) : 0;
     if (klhr_rankgate && !have) { static int told; if (!told++) klog("hire: rank read failed (code or pointers differ): price only, no rank gate"); }
-    if (have && rank < klhr_need[row]) { klog("hire: %s refused: rank %d needed, you are rank %d", klhr_name[row], klhr_need[row], rank); return; }
-    if (!klh_rd(score + KLHR_S_TOTAL, &total, 4)) { klog("hire: %s refused: the banked total is unreadable (score %08lx)", klhr_name[row], score); return; }
-    if ((int)total < price) { klog("hire: %s refused: costs %d, banked total %d", klhr_name[row], price, (int)total); return; }
+    if (have && rank < klhr_need[row]) { klog("hire: %s refused: rank %d needed, you are rank %d", klhr_name[row], klhr_need[row], rank); klhr_notef(row, "rank %d needed, you are rank %d", klhr_need[row], rank); return; }
+    if (!klh_rd(score + KLHR_S_TOTAL, &total, 4)) { klog("hire: %s refused: the banked total is unreadable (score %08lx)", klhr_name[row], score); klhr_notef(row, "your money could not be read"); return; }
+    if ((int)total < price) { klog("hire: %s refused: costs %d, banked total %d", klhr_name[row], price, (int)total); klhr_notef(row, "not enough money: $%d needed, you have $%d", price, (int)total); return; }
     {
         DWORD nt = total - (DWORD)price;
-        if (!klh_data((void *)(DWORD_PTR)(score + KLHR_S_TOTAL), &nt, 4, "Arcade score: the total (hire)")) { klog("hire: %s refused: the banked total could not be written", klhr_name[row]); return; }
-        klhr_next = row;
+        if (!klh_data((void *)(DWORD_PTR)(score + KLHR_S_TOTAL), &nt, 4, "Arcade score: the total (hire)")) { klog("hire: %s refused: the banked total could not be written", klhr_name[row]); klhr_notef(row, "your money could not be charged"); return; }
+        klhr_next = row; klhr_notef(row, "hired");
         char rk[12]; if (have) snprintf(rk, sizeof rk, "%d", rank); else strcpy(rk, "unread");
         klog("hire: %s $%d total %d -> %d rank %s (state 0x%lx; takes effect at the next round's start)", klhr_name[row], price, (int)total, (int)nt, rk, st);
     }
