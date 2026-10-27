@@ -70,10 +70,10 @@ Full dated log: `re/open_work_log.md` (newest first).
 waits forever. Fix: klhook.c [Input] PumpNoBlock (289ce45c9, default 0, recommended on), TEST out_c9_1027f_test 17a87c7f, bench C27_PNB1.
 ce's 1027t (f60f532b) has it; HUD6 (+ host loot pickup) and GRT3 run on 1027t with PumpNoBlock=1. Queue: P2P5E -> PNB1, MPX2, HUD6, GRT3, HRF2, HRP2, ALL2R.
 
-2026-10-27 ~13:15 - [ce] Page II online buy: P2P4H crash (host, 0x9425a4) = online hand-over 0x538ec0 net branch reads gun+0x13c (DDL_ZFFItemWeapon X);
-our kspg_make guns miss the one stock X pass 0x8d6890. 1027m kspg_netok -> stock gun fallback: P2P4I + P2P4D PASS 0 faults (client ask -> host ok -> paid 60000).
-Real fix [ShopPage] OnlineEarlyMake (ab549870f, 1027o, off): make page II guns right after pool build 0x75f313/0x7bb6c3; bench P2P5E queued.
-Logs: HUD skulls/loot draw (1027n, HUD5 running), map-pool overlay HIDDEN + lobby label (1027p, MPX2 queued: MPX 3 s = ini, not code).
+2026-10-27 ~13:55 - [ce] P2P5E VOID: the 0x75f313 call patch is REFUSED under SessionSafe (hashed). 1027u (b83548f65, b4cb5462) moves OnlineEarlyMake to
+slot 26 SetState 0x74c080 of the private sm vtable (kllb_vt, shared with Lobby Solo), gated on st 0x16 + ret 0x75f340/0x7bb6ec: no code bytes. Bench P2P5F queued.
+HUD5: skulls missed the death because the DEAD row was not drawn (FA has no respawn); 1027s draws on DEAD + local latch. Grades: [Grades] SteamXP (1027q, read-only
+Steam stat ExperiencePoints_FA when profile XP 0). HUD6/GRT3 on 1027t with c9's PumpNoBlock=1. Owner still on SHIP 1027x.
 
 2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
 Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
