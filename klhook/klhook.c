@@ -749,6 +749,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klhud_tags.c"                              /* AFTER klhud_escape.c: the tags over the heisters' heads (uses klu / klu_r / klu_cs / klnm_tag_ini) */
 #include "klhud_board.c"                             /* AFTER klhud_tags.c: the pre-round panel in the new look ([HUD] Board, default 0) */
 #include "klhud_board2.c"                            /* AFTER klhud_board.c: the round-over scoreboard ([HUD] Scoreboard, default 0) */
+#include "klhud_shopnames.c"                        /* klhud_shopnames.c: [HUD] OnlineShopNames - heister names in the online round-over roster (off unless set); AFTER klhud_board2.c, klonline_read.c */
 #include "klshoulder.c"
 #include "klcam.c"                                      /* klcam.c: the camera rework ([Camera], default on; Log off) */
 #include "klcamsmooth.c"                                 /* klcamsmooth.c: [CamSmooth] pivot / aim-out / dt-correct camera smoothing; AFTER klcam.c */
@@ -1239,6 +1240,7 @@ static void klh_tick(int game_thread)
     kltrk_tick(game_thread);                          /* klhud_tracker.c: the vehicle marker */
     klbrd_tick(game_thread);                          /* klhud_board.c: the pre-round panel (off unless [HUD] Board=1) */
     klsb_tick(game_thread);                           /* klhud_board2.c: the round-over scoreboard (off unless [HUD] Scoreboard=1) */
+    klsn_tick(game_thread);                           /* klhud_shopnames.c: [HUD] OnlineShopNames (returns at once unless set) */
     klkf_tick(game_thread);                           /* klhud_kill.c: the kill / reward line under REWARDS (off unless [HUD] KillLine / Draft) */
     klpu_tick(game_thread);                           /* klhud_popup.c: centre pop-ups + loot ring (after klu_tick; off unless [HUD] Popups / LootRing / Draft) */
     klo_tick(game_thread);                            /* klshoulder.c: log only */
@@ -1688,6 +1690,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klon_init();                                      /* klonline.c: [Online] Log */
     klor_init();                                      /* klonline_read.c: [Online] Read */
     klep_init();                                      /* klescprobe.c: [Online] EscProbe */
+    klsn_init();                                      /* klhud_shopnames.c: [HUD] OnlineShopNames (after klor_init) */
     klbf_init();                                      /* klbotfill.c: reads [Bots] OnlineFill (after kllb_init: it reads the same key) */
     klcq_init();                                      /* klcopsquad.c: reads [CopSquad] */
     klsab_init();                                     /* klsabotage.c: reads [Sabotage] */

@@ -560,6 +560,7 @@ static void klx_tick(void)
 static void klx_exit_line(void)
 {
     static LONG once;
+    klsn_restore("exit", 1);                         /* klhud_shopnames.c: [HUD] OnlineShopNames - the stock name pointers back before the game tears down (no game call) */
     if (klx_on && (klx_nblocked[0] + klx_nblocked[1] + klx_nblocked[2] + klx_npassed[0] + klx_npassed[1]) && !InterlockedExchange(&once, 1))
         klog("steam: at exit: %ld leaderboard upload(s) and %ld stat / achievement write(s) blocked; %ld and %ld passed on%s", klx_nblocked[0], klx_nblocked[1], klx_npassed[0], klx_npassed[1],
              klx_nblocked[2] ? "; FindOrCreateLeaderboard failed too (StockRows=0)" : "");
