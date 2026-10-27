@@ -50,10 +50,10 @@
 struct klht_slot {
     int ok, id, show, made;
     DWORD ini, inis, mon, mons, actor, out[4];
-    char ini_cur[32], mon_cur[24]; DWORD ini_col, want_col; float dist;
+    char ini_cur[64], mon_cur[24]; DWORD ini_col, want_col; float dist;
 };
 
-static struct { int mode, online, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy, maxdist, fade; } klht;
+static struct { int mode, online, ostyle, ohold, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy, maxdist, fade; } klht;
 static volatile LONG klht_n_far, klht_n_faded;
 
 #include "klhud_tags_dist.h"                          /* HeadMaxDist arithmetic (shared with the harness klht_test.c) */
@@ -84,7 +84,7 @@ static int klht_make(struct klht_slot *q)
         }
     }
     else if (klht.shadow && !(q->inis = klu_make_obj(klu_r.tmpl, fi, KLU_STYLE_CENTRE, KLU_SHADOW_SMALL, KLHT_LAYER - 1, why))) goto bad;
-    if (klht.mode == 2) {
+    if (klht.mode == 2 || (klht.online && klht.ostyle == 2)) {
         if (!(q->mon = klu_make_obj(klu_r.tmpl, fm, KLU_STYLE_CENTRE, KLU_C_GREEN, KLHT_LAYER, why))) goto bad;
         if (klht.shadow && !(q->mons = klu_make_obj(klu_r.tmpl, fm, KLU_STYLE_CENTRE, KLU_SHADOW_SMALL, KLHT_LAYER - 1, why))) goto bad;
     }
@@ -118,12 +118,25 @@ static void klht_reset(void)
    of entry 0's (GUESS: entry 0 exists online, the element is made at the scene; byte +0x40 forced to 1 in the copy). Only while klu_skip_list says the
    stock list is not drawn (else the stock would draw a second set). Game thread, inside klu_cs. */
 static BYTE klht_tpl[KLHT_TAGSIZE + 4];
+/* [HUD] OnlineTagHold / OnlineTagStyle>0 (default off): a seat's tag is not drawn until its row name has been the same for 2 consecutive reads (the client showed a
+   placeholder name for one frame before the snapshot arrived). Keyed by the actor address; entries not seen this tick are dropped. */
+static struct { DWORD actor; char nm[32]; int n, used; } klht_hold[2 * KLHT_NSLOT];
+static int klht_held(DWORD actor, const char *nm)
+{
+    int i, f = -1;
+    for (i = 0; i < 2 * KLHT_NSLOT; i++) { if (klht_hold[i].actor == actor) { f = i; break; } if (f < 0 && !klht_hold[i].actor) f = i; }
+    if (f < 0) return 1;                                              /* table full: hold the tag back */
+    if (klht_hold[f].actor != actor || strcmp(klht_hold[f].nm, nm)) { klht_hold[f].actor = actor; snprintf(klht_hold[f].nm, sizeof klht_hold[f].nm, "%s", nm); klht_hold[f].n = 1; }
+    else if (klht_hold[f].n < 1000) klht_hold[f].n++;
+    klht_hold[f].used = 1;
+    return klht_hold[f].n < 2;
+}
 
 static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
 {
-    DWORD pl, cnt = 0; BYTE locb = 0xff; int i, n = 0, nr, why = 1, z = -1; struct klor_snap o; const struct klor_row *rw[KLHT_NSLOT]; (void)s;
+    DWORD pl, cnt = 0; BYTE locb = 0xff; int i, n = 0, nr, why = 1, z = -1; char ini[KLHT_NSLOT][KLNM_MAXINI]; struct klor_snap o; const struct klor_row *rw[KLHT_NSLOT]; (void)s;
     EnterCriticalSection(&klu_cs);
-    if (klht_r.tmpl != klu_r.tmpl) { memset(&klht_r, 0, sizeof klht_r); klht_r.tmpl = klu_r.tmpl; }
+    if (klht_r.tmpl != klu_r.tmpl) { memset(&klht_r, 0, sizeof klht_r); klht_r.tmpl = klu_r.tmpl; memset(klht_hold, 0, sizeof klht_hold); }
     klht_r.active = 0; klht_r.ol = 0;
     if (!klu_r.made || klu_r.fault || klht_r.fault || !show || !klu_skip_list) goto out;
     why = 2; pl = klh_rd32(osd + KLU_O_PLIST);
@@ -140,8 +153,11 @@ static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
     for (i = 0; i < o.n && n < KLHT_NSLOT; i++) if (o.r[i].used && o.r[i].actor && o.r[i].alive && o.r[i].seat != o.local && o.r[i].name[0]) rw[n++] = &o.r[i];
     for (i = 0; i < o.nbots && n < KLHT_NSLOT; i++) if (o.bot[i].used && o.bot[i].actor && o.bot[i].alive && o.bot[i].name[0]) rw[n++] = &o.bot[i];
     for (i = 0; i < KLHT_NSLOT; i++) klht_r.s[i].ok = 0;
+    for (i = 0; i < 2 * KLHT_NSLOT; i++) klht_hold[i].used = 0;
+    if (klht.ostyle >= 1) { const char *nms[KLHT_NSLOT]; for (i = 0; i < n; i++) nms[i] = rw[i]->name; klnm_unique(nms, n, ini); }
+    if (klgrd_otags_on()) klgrd_note_online(&o);       /* the seats' raw Experience / Rating (also fed by the HUD's own reads) */
     for (i = 0; i < n; i++) {
-        struct klht_slot *q = &klht_r.s[i]; const struct klor_row *r = rw[i];
+        struct klht_slot *q = &klht_r.s[i]; const struct klor_row *r = rw[i]; char txt[64], mb[24];
         q->show = 1; q->dist = -1.0f;
         if (!q->made && !klht_make(q)) { klht_r.fault = 1; goto out; }
         if (klht.maxdist > 0.0f) {
@@ -151,15 +167,23 @@ static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
             if (alpha == 0) q->show = 0; else if (alpha < 255) col = klht_with_alpha(col, alpha);
             if (col != q->ini_col) { klu_set(q->ini, KLU_VT_COLOUR, col); q->ini_col = col; }
         }
-        if (strcmp(r->name, q->ini_cur)) {
+        if (klht.ostyle > 0 || klht.ohold) { if (klht_held(r->actor, r->name)) q->show = 0; }      /* OnlineTagHold: this name is not yet stable */
+        snprintf(txt, sizeof txt, "%s", klht.ostyle >= 1 && ini[i][0] ? ini[i] : r->name);      /* OnlineTagStyle 1 / 2: Arcade's initials (klnm_unique: no two alike) */
+        if (klgrd_otags_on()) klgrd_decorate_tag(txt, sizeof txt, r->bot ? klgrd_bot_rank() : klgrd_rank(1, r->seat, r->seat == o.local));      /* [Grades] OnlineTags; others' rank = GUESS (S+0xc8) */
+        if (klht.ostyle == 2 && q->mon) {      /* the money line (Arcade HeadTags=2): the seat's Sharable + Unsharable (klor_row.money); AI heisters have no row, no line */
+            if (r->bot) mb[0] = 0; else klu_cash(mb, sizeof mb, (long)r->money);
+            if (strcmp(mb, q->mon_cur)) { klu_set(q->mon, KLU_VT_TEXT, (DWORD)(DWORD_PTR)mb); if (q->mons) klu_set(q->mons, KLU_VT_TEXT, (DWORD)(DWORD_PTR)mb); snprintf(q->mon_cur, sizeof q->mon_cur, "%s", mb); }
+        }
+        if (strcmp(txt, q->ini_cur)) {
             int k;
-            klu_set(q->ini, KLU_VT_TEXT, (DWORD)(DWORD_PTR)r->name); if (q->inis) klu_set(q->inis, KLU_VT_TEXT, (DWORD)(DWORD_PTR)r->name);
-            for (k = 0; k < 4; k++) if (q->out[k]) klu_set(q->out[k], KLU_VT_TEXT, (DWORD)(DWORD_PTR)r->name);
-            if (klu.log >= 2) klog("tags: online: slot %d (%s %d, actor %08lx): '%s' -> '%s'", i, r->bot ? "bot" : "seat", r->bot ? i : r->seat, r->actor, q->ini_cur, r->name);
-            snprintf(q->ini_cur, sizeof q->ini_cur, "%s", r->name);
+            klu_set(q->ini, KLU_VT_TEXT, (DWORD)(DWORD_PTR)txt); if (q->inis) klu_set(q->inis, KLU_VT_TEXT, (DWORD)(DWORD_PTR)txt);
+            for (k = 0; k < 4; k++) if (q->out[k]) klu_set(q->out[k], KLU_VT_TEXT, (DWORD)(DWORD_PTR)txt);
+            if (klu.log >= 2) klog("tags: online: slot %d (%s %d, actor %08lx): '%s' -> '%s'", i, r->bot ? "bot" : "seat", r->bot ? i : r->seat, r->actor, q->ini_cur, txt);
+            snprintf(q->ini_cur, sizeof q->ini_cur, "%s", txt);
         }
         q->id = r->bot ? 0xfe : (int)r->seat; q->actor = r->actor; q->ok = 1;
     }
+    for (i = 0; i < 2 * KLHT_NSLOT; i++) if (!klht_hold[i].used) memset(&klht_hold[i], 0, sizeof klht_hold[i]);
     why = 0; klht_r.pl = pl; klht_r.n = n; klht_r.active = 1; klht_r.ol = 1;
     if (!klht_r.told) { klht_r.told = 1; klog("tags: online: on (OnlineTags=1): the stock list is skipped; the hook draws %d heister name tags with the game's drawer 0x7b8150 (node = the row's actor, GUESS); NOT RUN IN THE GAME", n); }
     if (klu.log >= 2) {
@@ -187,6 +211,7 @@ static void klht_orender(void *ctx, void *cam)
             for (k = 0; k < 4; k++) if (q->out[k]) o[n++] = q->out[k];
             if (q->inis) o[n++] = q->inis;
             o[n++] = q->ini;
+            if (klht.ostyle == 2 && q->mon_cur[0]) { if (q->mons) o[n++] = q->mons; if (q->mon) o[n++] = q->mon; }
             for (k = 0; k < n; k++) {
                 if (klh_rd32(o[k]) != KLU_TEXT_VT) continue;
                 memcpy(tag, klht_tpl, sizeof tag); *(DWORD *)tag = o[k];
@@ -332,6 +357,8 @@ static void klht_init(void)
 {
     klht.mode = klu_inii("HeadTags", klu.draft, 0, 2);
     klht.online = klu_inii("OnlineTags", 0, 0, 1);                 /* 2026-10-27: heister character names over the heads in online matches (needs [Online] Read=1, OnlineCrew=1, HideOnline=1) */
+    klht.ostyle = klu_inii("OnlineTagStyle", 0, 0, 2);             /* 2026-10-27: 0 full name (as OnlineTags always did), 1 initials, 2 initials + money line; default 0, NOT RUN LIVE */
+    klht.ohold = klu_inii("OnlineTagHold", 0, 0, 1);               /* 2026-10-27: no tag until the row name was the same for 2 reads in a row (client placeholder name 'Bud'); default 0 */
     klht.shadow = klu_inii("HeadShadow", 1, 0, 1);
     klht.outline = klu_inii("HeadOutline", 1, 0, 1);               /* v22 (audit T1): four dark copies round the initials; replaces the single shadow of the initials */
     klht.font = klu_inii("HeadFont", 1, 0, 3);                     /* v22: 0 the names' face (cap 11), 1 the big face (cap 15, the draft's total) - 'a step larger' */
@@ -341,6 +368,7 @@ static void klht_init(void)
     klht.maxdist = klu_inif("HeadMaxDist", "0"); if (!(klht.maxdist >= 0.0f && klht.maxdist <= 500.0f)) klht.maxdist = 0.0f;      /* metres; 0 = off (option D, re\hud_tags_sight.md) */
     klht.fade = klu_inif("HeadFade", "5"); if (!(klht.fade >= 0.0f && klht.fade <= klht.maxdist)) klht.fade = klht.maxdist > 0.0f ? (klht.maxdist < 5.0f ? klht.maxdist : 5.0f) : 0.0f;
     if (klht.online) klog("tags: OnlineTags=1 (character names over the other heisters' heads online; needs [Online] Read=1 + [HUD] OnlineCrew=1 + HideOnline=1 so the stock list is skipped); NOT RUN IN THE GAME");
+    if (klht.online && (klht.ostyle || klht.ohold)) klog("tags: online: OnlineTagStyle=%d (0 full name, 1 initials, 2 initials + money) OnlineTagHold=%d; NOT RUN IN THE GAME", klht.ostyle, klht.ohold);
     if (klht.mode) klog("tags: HeadTags=%d (1 initials, 2 initials + money) HeadShadow=%d HeadLine=%.0f HeadMaxDist=%.0f m (0 = off) HeadFade=%.0f m; needs [HUD] HideStock=1 (the stock tags go with the hidden element); NOT RUN IN THE GAME", klht.mode, klht.shadow, klht.line, klht.maxdist, klht.fade);
 }
 

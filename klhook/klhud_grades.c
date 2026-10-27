@@ -37,7 +37,7 @@
 #define KLGRD_MAXI       32
 
 static struct {
-    int on, badge, rankup, letter, style, set, source, botrank, probe;
+    int on, badge, rankup, letter, style, set, source, botrank, probe, otags;
     struct klgrd_cfg c;
     int local_xp, local_ok, local_told, local_bad; DWORD local_at;
     int oxp[KLGRD_MAXI], orate[KLGRD_MAXI], o_ok[KLGRD_MAXI]; int o_live;           /* online S values per seat; o_live: a nonzero experience was seen */
@@ -61,7 +61,7 @@ static void klgrd_init(void)
     if (!klgrd.on) return;
     klgrd.badge = klgrd_ini("Badge", 0, 0, 1); klgrd.rankup = klgrd_ini("RankUp", 0, 0, 1); klgrd.letter = klgrd_ini("Letter", 0, 0, 1);
     klgrd.style = klgrd_ini("BadgeStyle", 0, 0, 1); klgrd.set = klgrd_ini("NameSet", 0, 0, 1); klgrd.source = klgrd_ini("Source", 0, 0, 1);
-    klgrd.botrank = klgrd_ini("BotRank", -1, -1, 7); klgrd.probe = klgrd_ini("Probe", 0, 0, 1);
+    klgrd.botrank = klgrd_ini("BotRank", -1, -1, 7); klgrd.probe = klgrd_ini("Probe", 0, 0, 1); klgrd.otags = klgrd_ini("OnlineTags", 0, 0, 1);
     for (i = 0; i < 7; i++) klgrd.c.thr[i] = klgrd_ini(thr[i], klgrd.c.thr[i], 0, 30000);
     for (i = 1; i < 7; i++) if (klgrd.c.thr[i] < klgrd.c.thr[i - 1]) { klog("grades: Thr%d < Thr%d: the table is not rising, the defaults are used", i + 1, i); klgrd_defaults(&klgrd.c); break; }
     klgrd.c.w_kill = klgrd_ini("KillPts", klgrd.c.w_kill, -50, 50); klgrd.c.w_police = klgrd_ini("PolicePts", klgrd.c.w_police, -50, 50);
@@ -162,6 +162,18 @@ static void klgrd_decorate(char *name, int cap, int online, int idx, int is_loca
 {
     if (!klgrd.on || !klgrd.badge) return;
     klgrd_decorate_rank(name, cap, klgrd_rank(online, idx, is_local));
+}
+
+/* [Grades] OnlineTags=1: the badge before an online head tag (needs Enable=1; independent of Badge). rank -1 = none. Others' rank is a GUESS (S+0xc8, see klgrd_rank). */
+static int klgrd_otags_on(void) { return klgrd.on && klgrd.otags; }
+static void klgrd_decorate_tag(char *name, int cap, int rank)
+{
+    char b[24], t[96];
+    if (!klgrd.on || !klgrd.otags || rank < 0 || cap < 8) return;
+    klgrd_badge_text(b, sizeof b, klgrd.set, klgrd.style, rank);
+    if (!b[0]) return;
+    _snprintf(t, sizeof t, "%s %s", b, name); t[sizeof t - 1] = 0;
+    _snprintf(name, cap, "%s", t); name[cap - 1] = 0;
 }
 
 /* the round's rank bookkeeping, one call per row per tick of the card. st = the session state. */
