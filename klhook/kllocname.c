@@ -90,6 +90,9 @@ static KLLNM_LOOKUP kllnm_orig_of(void *self)
     return 0;
 }
 
+/* the stock slot 0 of a LOC object that wears our private vtable (kllnm_tick), else 0 (the caller reads the exe's vtable itself) */
+static DWORD kllnm_orig_slot0(void *loc) { return (DWORD)(DWORD_PTR)kllnm_orig_of(loc); }
+
 static void kllnm_say(const char *folder, const char *key, const char *via, const char *res)
 {   /* one line per distinct (folder, key, result), 64 lines at most; a log call is a few microseconds, only for Scenarios/Title keys */
     DWORD h = 2166136261u; const char *p; LONG i, n;
@@ -132,6 +135,19 @@ static const char *kllnm_name_now(int n)
     page = kls_page_now();
     if (!kl_online()) { int o = kpm_override(kls_slot[s].name); if (o >= 0) page = o; }   /* the Arcade playlist's choice, as kls_map does */
     else if (kllnm_pool) { int o = kmp_peek(s); if (o >= 0) page = o; }                  /* [MapPool] LobbyName: the page the pool's NEXT load of this slot will take (read-only peek) */
+    r = kls_find_rule(s, page); if (r < 0 && page) r = kls_find_rule(s, 0);
+    return r >= 0 && kllnm_rname[r][0] ? kllnm_rname[r] : 0;
+}
+
+/* 2026-10-27 [HUD] OnlineIntroMapName: the name of the map the slot F0<n> LOADED LAST (kls_slot[s].page, set at the load by klslot.c incl. the OnlineSet=9 random pick and the pool), not the
+   page a load would take now (kllnm_name_now). 0 = a stock level or no name: the stock LOC text is right then. Read-only. */
+static const char *kllnm_name_cur(int n)
+{
+    int s, r, page; char slot[4];
+    snprintf(slot, sizeof slot, "F%02d", n);
+    for (s = 0; s < kls_nslots && _stricmp(kls_slot[s].name, slot); s++) ;
+    if (s == kls_nslots) return 0;
+    page = kls_slot[s].page < 0 ? kls_page_now() : (int)kls_slot[s].page;
     r = kls_find_rule(s, page); if (r < 0 && page) r = kls_find_rule(s, 0);
     return r >= 0 && kllnm_rname[r][0] ? kllnm_rname[r] : 0;
 }
@@ -243,15 +259,17 @@ static void kllnm_tick(int game_thread)
 
 static void kllnm_init(void)
 {
-    char val[KLLNM_NAME + 8]; int r, nn = 0;
+    char val[KLLNM_NAME + 8]; int r, nn = 0, en, fb;
     kllnm_hk = GetPrivateProfileIntA("HUD", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "KilledBy", 1, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "HideKilledBy", 1, klh_ini) != 0;
     kllnm_hk_on = GetPrivateProfileIntA("HUD", "Online", 0, klh_ini) != 0;
     kllnm_kb_cap = kllnm_hk && GetPrivateProfileIntA("HUD", "OnlineKilled", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "OnlineKilledStock", 0, klh_ini) != 0;
     if (kllnm_hk) klog("names: [HUD] HideKilledBy=1: the stock death panel's 'Killed by' text is blanked (LOC lookups from 0x500670 and the key KilledBy); the LOC object is wrapped by the tick");
-    if (!GetPrivateProfileIntA("Names", "Enable", 0, klh_ini)) return;
-    kllnm_log = GetPrivateProfileIntA("Names", "Log", 0, klh_ini) != 0;
-    kllnm_override = GetPrivateProfileIntA("Names", "Override", 0, klh_ini) != 0;
-    if (!kls_on) { klog("names: Enable=1 but [Expansion] is off: there is no slot to rename, nothing is wrapped"); return; }
+    en = GetPrivateProfileIntA("Names", "Enable", 0, klh_ini) != 0;
+    fb = GetPrivateProfileIntA("HUD", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "OnlineIntroMapName", 1, klh_ini) != 0;      /* [HUD] OnlineIntroMapName (recommended on): the names are read for the online intro card even with [Names] off; nothing is wrapped then */
+    if (!en && !fb) return;
+    kllnm_log = en && GetPrivateProfileIntA("Names", "Log", 0, klh_ini) != 0;
+    kllnm_override = en && GetPrivateProfileIntA("Names", "Override", 0, klh_ini) != 0;
+    if (!kls_on) { if (en) klog("names: Enable=1 but [Expansion] is off: there is no slot to rename, nothing is wrapped"); return; }
     for (r = 0; r < kls_nrules; r++) {
         char sec[16], key[8];
         kllnm_rname[r][0] = 0;
@@ -271,6 +289,7 @@ static void kllnm_init(void)
     }
     kllnm_pool = GetPrivateProfileIntA("MapPool", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("MapPool", "LobbyName", 0, klh_ini) != 0;       /* kmp is declared later; kmp_peek checks kmp.on itself */
     if (kllnm_pool) klog("names: [MapPool] LobbyName=1 (NOT run live): the lobby label of slot Fnn follows the pool's next map for that slot (needs Override=%d, names above)", kllnm_override);
+    if (!en) { klog("names: [Names] off: %d name(s) for %d rule(s) read for the online intro card only (OnlineIntroMapName); the LOC lookup is not overridden", nn, kls_nrules); return; }
     kllnm_on = 1;
     klog("names: enabled; %d name(s) for %d rule(s); Override=%d Log=%d (the LOC object is wrapped by the tick; no code of kl2.exe is changed)", nn, kls_nrules, kllnm_override, kllnm_log);
 }

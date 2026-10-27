@@ -54,11 +54,12 @@ struct klht_slot {
 };
 
 #define KLHT_C_PROBE     0x01f3f0eau           /* the cull probe's colour: alpha 1 (GUESS: the draw still emits the glyph run; invisible) */
-static struct { int mode, online, ostyle, ohold, cull, probe, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy, maxdist, fade; } klht;
+static struct { int hidedead, mode, online, ostyle, ohold, cull, probe, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy, maxdist, fade; } klht;
 static volatile LONG klht_n_far, klht_n_faded, klht_n_cull, klht_n_nopos;
 
 #include "klhud_tags_dist.h"                          /* HeadMaxDist arithmetic (shared with the harness klht_test.c) */
-static struct { int active, ol, fault, told, shown; DWORD tmpl, pl, recs; int n; struct klht_slot s[KLHT_NSLOT]; } klht_r;
+static volatile LONG klht_n_garb, klht_n_ovl, klht_n_dead;      /* 5 s summary: places not finite / |x|,|y| > 5000; text boxes overlapping an earlier tag; draws skipped while the local seat is dead */
+static struct { int active, ol, fault, told, shown, hide; DWORD tmpl, pl, recs; int n; struct klht_slot s[KLHT_NSLOT]; } klht_r;
 static volatile LONG klht_n_draw, klht_n_nonode, klht_n_cond, klht_n_flag, klht_n_peak;
 
 static const BYTE klht_code[10] = { 0x83, 0xec, 0x68, 0x53, 0x8b, 0xd9, 0x80, 0x7b, 0x40, 0x00 };      /* 0x7b8150 sub esp,0x68 ; push ebx ; mov ebx,ecx ; cmp byte [ebx+0x40],0 */
@@ -71,6 +72,14 @@ static void klht_offset(DWORD obj, float x, float y)
     float v[2]; v[0] = x; v[1] = y;
     if (klh_rd32((DWORD_PTR)KLH_VA(KLU_TEXT_VT + 0x21c)) != KLHT_SETOFS) return;
     ((void (__fastcall *)(void *, void *, float *, DWORD))(DWORD_PTR)KLH_VA(KLHT_SETOFS))((void *)(DWORD_PTR)obj, 0, v, 0);
+}
+
+/* online tag text box (virtual px): width = characters x cap x 0.72 (GUESS: the same per-character width as the HeadTab reading below), height = one line (cap);
+   the drawer's stored place is the centre x and the capitals' top y (klht_tab's reading). Two boxes overlap when both axes overlap. */
+static int klht_box_overlap(const float a[2], size_t na, const float b[2], size_t nb, float cap)
+{
+    float wa = (float)na * cap * 0.72f, wb = (float)nb * cap * 0.72f;
+    return fabsf(a[0] - b[0]) < (wa + wb) * 0.5f && fabsf(a[1] - b[1]) < cap;
 }
 
 static int klht_make(struct klht_slot *q)
@@ -147,7 +156,7 @@ static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
     DWORD pl, cnt = 0; BYTE locb = 0xff; int i, n = 0, nr, why = 1, z = -1; char ini[KLHT_NSLOT][KLNM_MAXINI]; int slot_of[KLHT_NSLOT], taken[KLHT_NSLOT], top = 0; struct klor_snap o; const struct klor_row *rw[KLHT_NSLOT]; (void)s;
     EnterCriticalSection(&klu_cs);
     if (klht_r.tmpl != klu_r.tmpl) { memset(&klht_r, 0, sizeof klht_r); klht_r.tmpl = klu_r.tmpl; memset(klht_hold, 0, sizeof klht_hold); }
-    klht_r.active = 0; klht_r.ol = 0;
+    klht_r.active = 0; klht_r.ol = 0; klht_r.hide = 0;
     if (!klu_r.made || klu_r.fault || klht_r.fault || !show || !klu_skip_list) goto out;
     why = 2; pl = klh_rd32(osd + KLU_O_PLIST);
     if (!pl || !klu_is_plist(pl) || !klh_rd(pl + KLHT_O_COUNT, &cnt, 4)) goto out;
@@ -160,6 +169,9 @@ static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
     klor_noev = 1; nr = klor_read(&o, locb == 0xff ? -1 : (int)locb) && o.ok; klor_noev = 0;
     why = 5; if (!nr) goto out;
     why = 6;
+    if (klht.hidedead) {      /* [HUD] OnlineTagHideDead: the local seat is dead (death camera): no tags. GUESS that Arcade shows none (not established, re\hud_tags.md); 'not yet a cop' is not readable, so this ends when the row is alive again */
+        for (i = 0; i < o.n; i++) if (o.r[i].used && o.r[i].seat == o.local && !o.r[i].alive) klht_r.hide = 1;
+    }
     for (i = 0; i < o.n && n < KLHT_NSLOT; i++) if (o.r[i].used && o.r[i].actor && o.r[i].alive && o.r[i].seat != o.local && o.r[i].name[0]) rw[n++] = &o.r[i];
     for (i = 0; i < o.nbots && n < KLHT_NSLOT; i++) if (o.bot[i].used && o.bot[i].actor && o.bot[i].alive && o.bot[i].name[0]) rw[n++] = &o.bot[i];
     for (i = 0; i < KLHT_NSLOT; i++) klht_r.s[i].ok = 0;
@@ -205,7 +217,7 @@ static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
     if (!klht_r.told) { klht_r.told = 1; klog("tags: online: on (OnlineTags=1): the stock list is skipped; the hook draws %d heister name tags with the game's drawer 0x7b8150 (node = the row's actor, GUESS); NOT RUN IN THE GAME", n); }
     if (klu.log >= 2) {
         static DWORD said; DWORD now = GetTickCount();
-        if (now - said >= 5000) { said = now; klog("tags: online: %d rows, %ld tag draws, %ld without a node, %ld with the drawer's flag clear, %ld culled off screen, %ld probes with no stored place (drawn)", n, InterlockedExchange(&klht_n_draw, 0), InterlockedExchange(&klht_n_nonode, 0), InterlockedExchange(&klht_n_flag, 0), InterlockedExchange(&klht_n_cull, 0), InterlockedExchange(&klht_n_nopos, 0)); }
+        if (now - said >= 5000) { said = now; klog("tags: online: %d rows, %ld tag draws, %ld without a node, %ld with the drawer's flag clear, %ld culled off screen, %ld probes with no stored place (drawn); %ld garbage places (not finite / beyond 5000), %ld text boxes overlapping an earlier tag, %ld tags skipped while the local seat is dead (hide %d)", n, InterlockedExchange(&klht_n_draw, 0), InterlockedExchange(&klht_n_nonode, 0), InterlockedExchange(&klht_n_flag, 0), InterlockedExchange(&klht_n_cull, 0), InterlockedExchange(&klht_n_nopos, 0), InterlockedExchange(&klht_n_garb, 0), InterlockedExchange(&klht_n_ovl, 0), InterlockedExchange(&klht_n_dead, 0), klht_r.hide); }
     }
 out:
     if (why && klu.log >= 2) {      /* 10-27 bench DD01ce: no 'tags: online' line at all - say which gate holds (1 HUD made/show/skip list, 2 player list, 3 drawer code, 4 count / entry 0 empty, 5 klor_read, 6 slot make) */
@@ -218,7 +230,8 @@ out:
 /* the online half of klht_render (called with klu_cs held): the same draw call as the Arcade loop, on a copy of the template tag struct */
 static void klht_orender(void *ctx, void *cam)
 {
-    DWORD pl = klht_r.pl; int i; float seen[KLHT_NSLOT][2]; int nseen = 0;
+    DWORD pl = klht_r.pl; int i; float seen[KLHT_NSLOT][2]; size_t seenn[KLHT_NSLOT]; int nseen = 0; float cap = klu_cap_of(klht.font);
+    if (klht_r.hide) { for (i = 0; i < klht_r.n && i < KLHT_NSLOT; i++) if (klht_r.s[i].ok && klht_r.s[i].show) InterlockedIncrement(&klht_n_dead); return; }
     if (klu_is_plist(pl)) {
         DWORD a1 = klh_rd32(pl + 0x10), a5 = klh_rd32(pl + 0xc); BYTE tag[KLHT_TAGSIZE + 4];
         for (i = 0; i < klht_r.n && i < KLHT_NSLOT; i++) {
@@ -239,9 +252,11 @@ static void klht_orender(void *ctx, void *cam)
                 }
                 if (klh_rd(q->prb + 0x3c, pp, 8)) {
                     if (pp[0] == 0.0f && pp[1] == 0.0f) InterlockedIncrement(&klht_n_nopos);
+                    else if (!(fabsf(pp[0]) <= 5000.0f && fabsf(pp[1]) <= 5000.0f)) { InterlockedIncrement(&klht_n_garb); InterlockedIncrement(&klht_n_cull); continue; }      /* BENCH CE27_ALL2F: places like (-240046528, -31542218): not finite (NaN fails the test) or far outside the screen = a head behind the camera / unclamped projection */
                     else if (!(pp[0] > -40.0f && pp[0] < 1320.0f && pp[1] > -40.0f && pp[1] < 760.0f)) { InterlockedIncrement(&klht_n_cull); continue; }      /* also false for NaN */
-                    else { int j, dup = 0; for (j = 0; j < nseen; j++) if (fabsf(seen[j][0] - pp[0]) < 6.0f && fabsf(seen[j][1] - pp[1]) < 6.0f) dup = 1;      /* STACK CHECK (2026-10-27, review of bug 3): a tag whose place is within 6 px of one already drawn this frame is skipped (slots run in list order: the earlier one stays); overprinted names = heads projected to one spot (behind the camera mirrors on screen), GUESS */
-                        if (dup) { InterlockedIncrement(&klht_n_cull); continue; } if (nseen < KLHT_NSLOT) { seen[nseen][0] = pp[0]; seen[nseen][1] = pp[1]; nseen++; } }
+                    else { int j, dup = 0; size_t tn = strlen(q->ini_cur);
+                        for (j = 0; j < nseen; j++) if (klht_box_overlap(seen[j], seenn[j], pp, tn, cap)) dup = 1;      /* STACK CHECK v2 (BENCH CE27_ALL2F join_08: five names on one line, x spread ~100 px, which the old 6 px test missed): the text boxes (klht_box_overlap) must not overlap one already drawn this frame; slots run in list order, the earlier one stays */
+                        if (dup) { InterlockedIncrement(&klht_n_ovl); InterlockedIncrement(&klht_n_cull); continue; } if (nseen < KLHT_NSLOT) { seen[nseen][0] = pp[0]; seen[nseen][1] = pp[1]; seenn[nseen] = tn; nseen++; } }
                 }
             }
             for (k = 0; k < 4; k++) if (q->out[k]) o[n++] = q->out[k];
@@ -396,6 +411,7 @@ static void klht_init(void)
     klht.ostyle = klu_inii("OnlineTagStyle", 0, 0, 2);             /* 2026-10-27: 0 full name (as OnlineTags always did), 1 initials, 2 initials + money line; default 0, NOT RUN LIVE */
     klht.cull = klu_inii("OnlineTagCull", 1, 0, 1);                /* 2026-10-27 (recommended on): online tags whose head projects off screen are not drawn (a probe reads the drawer's stored place); fail-open */
     klht.probe = klu_inii("OnlineTagProbe", 1, 0, 1);              /* 2026-10-27 (recommended on): the cull probe is a '.' at alpha 1 instead of ' ' (a blank text never stores its place: 0x8f7420 tests [this+0x30] first) */
+    klht.hidedead = klu_inii("OnlineTagHideDead", 1, 0, 1);        /* 2026-10-27 (recommended on, GUESS that Arcade shows no head tags on the death camera): no online tags while the local seat is dead */
     klht.ohold = klu_inii("OnlineTagHold", 0, 0, 1);               /* 2026-10-27: no tag until the row name was the same for 2 reads in a row (client placeholder name 'Bud'); default 0 */
     klht.shadow = klu_inii("HeadShadow", 1, 0, 1);
     klht.outline = klu_inii("HeadOutline", 1, 0, 1);               /* v22 (audit T1): four dark copies round the initials; replaces the single shadow of the initials */
