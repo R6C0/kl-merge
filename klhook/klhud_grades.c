@@ -1,5 +1,5 @@
 /*
- * klhud_grades.c - [Grades] RANK badges, RANK UP line and end-of-round letter GRADE (2026-10-27, track GRADES). NOT RUN IN THE GAME.
+ * klhud_grades.c - [Grades] RANK badges, RANK UP line and end-of-round letter GRADE (2026-10-27, track GRADES). Badge proven online on bench GRT3 10-27 (Steam XP 568 -> rank 3 Thug, both seats); RankUp / Letter not yet seen live.
  * Research, formula, ranks and names: re\grades.md; the pure rules are klgrades.h (off-game test klgrades_test.c).
  *
  *   [Grades] Enable=0      master switch (default 0 until benched)
@@ -83,7 +83,7 @@ static void klgrd_init(void)
         klgrd.c.cut[0] = 14; klgrd.c.cut[1] = 10; klgrd.c.cut[2] = 6; klgrd.c.cut[3] = 3;
     }
     for (i = 0; i < KLGRD_MAXI; i++) klgrd.base[i] = klgrd.cur[i] = -1;
-    klog("grades: on (Badge=%d RankUp=%d Letter=%d style %d names %s source %s BotRank=%d Probe=%d; thresholds %d %d %d %d %d %d %d; letter cuts S%d A%d B%d C%d); NOT RUN IN THE GAME",
+    klog("grades: on (Badge=%d RankUp=%d Letter=%d style %d names %s source %s BotRank=%d Probe=%d; thresholds %d %d %d %d %d %d %d; letter cuts S%d A%d B%d C%d); badge benched GRT3 10-27",
          klgrd.badge, klgrd.rankup, klgrd.letter, klgrd.style, klgrd.set ? "Dead Men" : "Dog Days", klgrd.source ? "Rating" : "Experience", klgrd.botrank, klgrd.probe,
          klgrd.c.thr[0], klgrd.c.thr[1], klgrd.c.thr[2], klgrd.c.thr[3], klgrd.c.thr[4], klgrd.c.thr[5], klgrd.c.thr[6], klgrd.c.cut[0], klgrd.c.cut[1], klgrd.c.cut[2], klgrd.c.cut[3]);
 }
