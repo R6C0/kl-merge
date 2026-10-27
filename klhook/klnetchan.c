@@ -19,7 +19,7 @@
  *
  * API (game thread only):
  *   knc_want(who)              a module asks for the channel (from its init); nothing opens and nothing is sent unless one module did
- *   knc_on(type, fn)           fn(msg, src) for every NEW message of that type from ANOTHER peer (src 1 Steam, 2 UDP); up to 8 handlers
+ *   knc_on(type, fn)           fn(msg, src) for every NEW message of that type from ANOTHER peer (src 1 Steam, 2 UDP); up to 16 handlers (a full table logs a line)
  *   knc_send(type, payload, ent)  -> seq (0 = not sent: no session / not wanted / bad type). The sender does NOT get its own message back:
  *                              show it locally yourself. Log: the first send of each type per session, every send at Log=2
  *   knc_role()                 the session role at the last tick (2 host, 3 client, 0 none)
@@ -31,7 +31,7 @@
 #define KLNETCHAN_C
 #include "klnetchan_logic.h"
 
-#define KNC_HANDLERS 8
+#define KNC_HANDLERS 16   /* 8 was exactly full after the 1027 audit (KDFL KDSY UPING UACC HELLO UHID UREV HIRE) */
 #define KNC_OUTQ     8
 typedef void (*knc_fn)(const struct knc_msg *m, int src);
 typedef struct { short fam; unsigned short port; unsigned long addr; char zero[8]; } knc_sin;
@@ -76,7 +76,8 @@ static int knc_want(const char *who)
 
 static int knc_on(const char *type, knc_fn fn)
 {
-    if (knc.nh >= KNC_HANDLERS || !knc_type_ok(type) || !fn) return 0;
+    if (knc.nh >= KNC_HANDLERS) { klog("netchan: handler table full (%d): type '%s' NOT registered - raise KNC_HANDLERS", KNC_HANDLERS, type ? type : "?"); return 0; }
+    if (!knc_type_ok(type) || !fn) return 0;
     strcpy(knc.h[knc.nh].type, type); knc.h[knc.nh].fn = fn; knc.nh++;
     return 1;
 }
