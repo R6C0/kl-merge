@@ -137,6 +137,8 @@ feat('gradesletter', G_CORE, 'Grades: an S / A / B / C / D grade per player on t
      'klhud_grades.c + klgrades.h [Grades] Enable+Letter; table in [Grades]; needs [HUD] Scoreboard=1; NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'Letter', 1, 0, 0)])
 feat('shoponline', G_CORE, 'Online matches: weapon shop page II shown (view only, locked) (recommended off until benched)', 'off', 'start',
      'klshoppage.c OnlineLook; page II buys are swallowed online; needs [ShopPage] Enable=1; NOT run live', [('ShopPage', 'OnlineLook', 1, 0, 0)])
+feat('shoponline2', G_CORE, 'Online matches: weapon shop page II rows can be bought, giving the stock carrier gun at its price (recommended off until benched)', 'off', 'start',
+     'klshoppage.c OnlinePage2; implies OnlineLook; the buy goes the stock host-validated way, no local hand-over; needs [ShopPage] Enable=1; NOT run live', [('ShopPage', 'OnlinePage2', 1, 0, 0)])
 feat('ucchide', G_CORE, 'Undercover Cop: the crew list does not give the undercover cop away to heisters (recommended on)', 'on', 'start',
      'klhud_values.c kluv_state UccHide; re/ucc_tell_audit.md S10; NOT run live', [('HUD', 'UccHide', 1, 0, 1)])
 feat('onlinebots', G_CORE, 'Online matches: AI heisters also listed in the crew box, like Arcade (recommended on)', 'on', 'start',
