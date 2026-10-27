@@ -426,16 +426,28 @@ static void klfps_read_pp(const void *pp)
  * d3d9 (+0x5feeb / +0x4b31f, a stale opcode 0x26 SetRenderTarget and a dead stream-0 VB in the dumps).
  * The drain does what the game's own flush 0x696100 does (0x696157..0x696195): for both lists L = [d+0xa868c], [d+0xa8690]
  * of d = [win+0xfc] set count [L+8] = 0 and end [L+0xc] = begin [L+0x14].
- * GUESS: the render thread is parked while the device is lost ([win+0x11a8] set at 0x456bfc), so no lock is needed; we only
- * drain on the game thread ([win+0x11dc]) and skip otherwise. 0x696100 also tail-calls 0x709c80, which is NOT repeated here. */
+ * Idle proof (workflow resetdrain-refute, dasm): the render thread proc 0x561330 waits on [11d4], replays 0x7c1c30, then sets
+ * DrawEnd [11c4] (0x5613a8); 0x7c1c30 returns at once while the lost flag [win+0x11a8] is set (0x7c1c42). On the lost path the
+ * game waited on DrawEnd at 0x459b1a before Reset and the flag stays set until OnRestore (0x456d72), so the drain is race-free
+ * there. Reset has 3 other callers (0x6805eb, 0x7ec986, 0x8bbb5d: mode changes) that neither set the flag nor wait: there we
+ * drain only when the thread is provably idle (no render thread [11b5]==0, no submit in flight [11b4]/[11b6]) or DrawEnd is
+ * signalled within 100 ms; else the lists are left alone and logged. Only 0x7c1610 records into the lists (clears and rewrites
+ * one every frame), so the cost is one blank frame. 0x696100's tail call 0x709c80 is a full teardown (pass table d+0x3f9d4,
+ * objects d+0x5f9ec) and must NOT be called here. GUESS: the device wrapper [0xf144a0] keeps no cached stream/texture state
+ * that outlives Reset (not examined). */
 static int klfps_resetdrain = 1;
 static void klfps_drain_lists(void)
 {
-    char *eng, *win, *d; int k;
+    char *eng, *win, *d; int k; const char *why;
     if (!klfps_resetdrain) return;
     eng = *(char **)0xdd2640; if (!eng) return;
     win = *(char **)(eng + 0x970); if (!win || IsBadReadPtr(win, 0x11e0)) return;
     if (GetCurrentThreadId() != *(DWORD *)(win + 0x11dc)) { klog("fps: ResetDrain: Reset on thread %lu, not the game thread: lists left alone", (unsigned long)GetCurrentThreadId()); return; }
+    if (win[0x11a8]) why = "lost flag set";
+    else if (!win[0x11b5]) why = "no render thread";
+    else if (win[0x11b4] || win[0x11b6]) why = "no submit in flight";
+    else if (WaitForSingleObject(*(HANDLE *)(win + 0x11c4), 100) == WAIT_OBJECT_0) why = "DrawEnd signalled";
+    else { klog("fps: ResetDrain: Reset off the lost path with the render thread busy: lists left alone"); return; }
     d = *(char **)(win + 0xfc); if (!d || IsBadReadPtr(d + 0xa868c, 8)) return;
     for (k = 0; k < 2; k++) {
         char *L = *(char **)(d + 0xa868c + 4 * k);
@@ -443,7 +455,7 @@ static void klfps_drain_lists(void)
         *(DWORD *)(L + 8) = 0;
         *(DWORD *)(L + 0xc) = *(DWORD *)(L + 0x14);
     }
-    klog("fps: ResetDrain: command lists emptied after Reset (lost flag %s)", win[0x11a8] ? "set" : "clear");
+    klog("fps: ResetDrain: command lists emptied after Reset (%s)", why);
 }
 
 /* IDirect3DDevice9::Reset (slot 16): the options menu / alt-tab rebuilds the device, maybe at another refresh rate or vsync setting.
