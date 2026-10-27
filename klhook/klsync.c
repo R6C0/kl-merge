@@ -879,7 +879,10 @@ static void kpl_rx(const char *pk, int len, DWORD now)
     memcpy(&cnt, pk + 12, 2); if (cnt > KPL_N || 16 + cnt * 16 > len) return;
     memcpy(&T, pk + 8, 4);
     if (kpl.anch && T <= kpl.rxT && kpl.rxT - T < 500000000u) return;                       /* older / repeated (a huge step back = the 1e9 ms wrap) */
-    if (!kpl.anch || T <= kpl.rxT) { kpl.anch = 1; kpl.anchNow = now; kpl.anchT = T; }       /* GUESS as Compare: the first list was on time */
+    if (!kpl.anch || T <= kpl.rxT || (int)(now - kpl.anchNow) - (int)(T - kpl.anchT) < 0) { kpl.anch = 1; kpl.anchNow = now; kpl.anchT = T; }
+    /* anchor = the FASTEST list so far (GUESS: that one was on time). Q27_DD01m: anchoring on the first list (late, sent while loading) made every
+       later list look early, the age stayed clamped at 0 and the lead correction did nothing. A client clock running faster than the host's is
+       not caught (the age creeps up by ppm), which is fine for a 5 s probe. */
     if (kpl.n) { memcpy(kpl.pv, kpl.h, sizeof kpl.h); kpl.pn = kpl.n; kpl.pT = kpl.rxT; }
     memcpy(kpl.h, pk + 16, cnt * 16); kpl.n = cnt; kpl.rxT = T; kpl.rxAt = now;
 }
@@ -907,7 +910,7 @@ static void kpl_compare(DWORD sm, DWORD now)
         dx = pos[0] - h->p[0]; dy = pos[1] - h->p[1]; dz = pos[2] - h->p[2]; d = (float)sqrt(dx * dx + dy * dy + dz * dz);
         dx = pos[0] - g[0]; dy = pos[1] - g[1]; dz = pos[2] - g[2]; dl = (float)sqrt(dx * dx + dy * dy + dz * dz);
         if (kpl.nraw < KPL_S) { kpl.raw[kpl.nraw] = d; kpl.lead[kpl.nraw] = dl; kpl.nraw++; }
-        if (h->idx < KPL_N) kpl.last[h->idx] = dl;
+        if (h->idx < KPL_N && dl > kpl.last[h->idx]) kpl.last[h->idx] = dl;              /* per body: the worst lead-corrected gap of this 5 s window */
     }
     if (now - kpl.sumAt >= 5000 && kpl.nraw) {
         char per[160]; int m = kpl.nraw, o = 0;
@@ -916,10 +919,10 @@ static void kpl_compare(DWORD sm, DWORD now)
         per[0] = 0;
         for (j = 0; j < kpl.n && j < 8 && o < (int)sizeof per - 20; j++) if ((int)kpl.h[j].idx != klco.ownIdx && kpl.h[j].idx < KPL_N)
             o += snprintf(per + o, sizeof per - o, " i%u=%.0f", kpl.h[j].idx, kpl.last[kpl.h[j].idx]);
-        klog("sync: players vs host: %d samples (own body i%d left out %d x), list %d ms old: raw p50 %.0f p90 %.0f worst %.0f | lead-corrected p50 %.0f p90 %.0f worst %.0f | last:%s",
+        klog("sync: players vs host: %d samples (own body i%d left out %d x), list %d ms old: raw p50 %.0f p90 %.0f worst %.0f | lead-corrected p50 %.0f p90 %.0f worst %.0f | worst per body:%s",
              m, klco.ownIdx, kpl.nown, age, kpl.raw[m / 2], kpl.raw[(m * 9) / 10 < m ? (m * 9) / 10 : m - 1], kpl.raw[m - 1],
              kpl.lead[m / 2], kpl.lead[(m * 9) / 10 < m ? (m * 9) / 10 : m - 1], kpl.lead[m - 1], per);
-        kpl.nraw = 0; kpl.nown = 0;
+        kpl.nraw = 0; kpl.nown = 0; memset(kpl.last, 0, sizeof kpl.last);
     }
 }
 
@@ -1035,7 +1038,8 @@ static void klsy_tick(int game_thread)
             memcpy(&T, pk + 8, 4);
             if (klsy.rxAnchored && T <= klsy.rxT) { if (klsy.rxT - T < 500000000u) continue; klsy.rxAnchored = 0; }   /* older / repeated: dropped; a huge step back = the 1e9 ms wrap */
             if (!klsy.rxAnchored) { klsy.rxAnchored = 1; klsy.anchorNow = now; klsy.anchorT = T; }
-            age = (int)(now - klsy.anchorNow) - (int)(T - klsy.anchorT);                       /* how long this list sat on the way, by the HOST's clock (GUESS: the first list was on time) */
+            age = (int)(now - klsy.anchorNow) - (int)(T - klsy.anchorT);                       /* how long this list sat on the way, by the HOST's clock (GUESS: the fastest list was on time) */
+            if (age < 0) { klsy.anchorNow = now; klsy.anchorT = T; age = 0; }                  /* faster than the anchor: re-anchor (a late first list made every later one look early: age 0, no lead; PlayerProbe Q27_DD01m) */
             if (age > (int)(2 * klsy.shareMs)) continue;
             if (!klsy.srcSet) { klsy.srcSet = 1; klsy.srcAddr = from.addr; klog("sync: host list source locked to %lu.%lu.%lu.%lu", from.addr & 255, from.addr >> 8 & 255, from.addr >> 16 & 255, from.addr >> 24); }
             memcpy(klsy.host, pk + 16, cnt * KLSY_REC); klsy.nhost = cnt; klsy.rxT = T; klsy.rxAt = now; klsy.applyRx = 1; ksp_rx = 1; klsy.rxAge = age < 0 ? 0 : age;
