@@ -119,6 +119,8 @@ feat('onlinevan', G_CORE, 'Online matches: escape / van card like Arcade (recomm
      'klhud.c OnlineVan; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineVan', 1, 0, 0)])
 feat('onlineboard', G_CORE, 'Online matches: round-over card like Arcade, killed by message names the killer heister (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineBoard; needs [Online] Read=1 and [HUD] Scoreboard=1; NOT run live', [('HUD', 'OnlineBoard', 1, 0, 0)])
+feat('onlineboardstate', G_CORE, 'Online matches: round-over card also when the game never builds its outro element (shown from the round-end state, recommended off until benched)', 'off', 'start',
+     'klhud_board2.c OnlineBoardState; needs OnlineBoard=1; composes in state 0x1f without the element at osd+0x10b4 and draws on the clock element render (GUESS G14-G16); NOT run live', [('HUD', 'OnlineBoardState', 1, 0, 0)])
 feat('onlineintro', G_CORE, 'Online matches: round n of m, players, minutes and your heister under the pre-round card (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineIntro; needs [Online] Read=1, [HUD] Scoreboard=1 and Board=1; NOT run live', [('HUD', 'OnlineIntro', 1, 0, 0)])
 feat('gradesbadge', G_CORE, 'Grades: a rank badge before every crew name, Arcade and online (recommended off until benched)', 'off', 'start',
