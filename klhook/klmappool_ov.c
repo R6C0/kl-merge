@@ -298,7 +298,7 @@ static void kmpo_draw(void *dev, const struct kmpo_snap *s)
     if (((kmpo_pbb)KMPO_VT(dev, 18))(dev, 0, 0, 0, &bb) >= 0 && bb) {                                         /* GetBackBuffer(0, 0, MONO, &bb) */
         ((kmpo_pp)KMPO_VT(bb, 12))(bb, desc);                                                                  /* IDirect3DSurface9::GetDesc: Width = dword 6, Height = dword 7 */
         W = (float)desc[6]; H = (float)desc[7];
-        ((kmpo_pdp)KMPO_VT(dev, 37))(dev, 0, bb);                                                             /* SetRenderTarget(0, bb) */
+        if (rt) ((kmpo_pdp)KMPO_VT(dev, 37))(dev, 0, bb);                                                     /* SetRenderTarget(0, bb): only when the old target can be put back */
     }
     if (W >= 320 && H >= 240 && W <= 8192 && H <= 8192 && ((kmpo_pu)KMPO_VT(dev, 41))(dev) >= 0) {           /* BeginScene (fails while the game's scene is open: nothing is drawn) */
         vp.x = 0; vp.y = 0; vp.w = desc[6]; vp.h = desc[7]; vp.n = 0.0f; vp.f = 1.0f;
