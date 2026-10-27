@@ -78,6 +78,8 @@ static struct {
     DWORD parked[KSPG_PARK]; int nparked;
     int told, wait, trickOn, trickRow, trickSlot;
     DWORD lastScan, lastN, lastKey, toggleAt, listAt;
+    DWORD selobj;                                /* a live SelectorWeapons element seen by the last scan (OnlineTestBuy) */
+    int tbn, tbDone, tbRow[4], tbPage[4]; DWORD tbAt, tbLast;   /* [ShopPage] OnlineTestBuy (bench only): rows, pressed this stay, page (0 stock / 1 page II), stay entry, last press */
     char ring[8][520]; volatile LONG ri;
 } kspg;
 
@@ -303,6 +305,7 @@ static void kspg_scan(void)
     n = klh_rd32(mgr + 0x9f48);
     if (n > 0x13e8 || !klh_rd(mgr + 8, tab, 8 * (SIZE_T)n)) return;
     kspg.lastN = n;
+    kspg.selobj = 0;
     kspg_nrole = 0;                                           /* rebuilt on every scan: roles of elements the game dropped do not pile up */
     for (k = 0; k < n; k++) {
         DWORD vt, nv; char tag[40]; int role = KR_NONE;
@@ -318,6 +321,7 @@ static void kspg_scan(void)
             if (c == 2 && role == KR_NONE) continue;              /* other graphics: not wrapped */
         }
         kspg_setrole(tab[k].obj, role);
+        if (c == 3) kspg.selobj = tab[k].obj;
         nv = (DWORD)(DWORD_PTR)&kspg_tab[c].vt[1];
         if (vt == nv) continue;                                   /* already ours: role kept, nothing to write */
         if (klh_data((void *)(DWORD_PTR)tab[k].obj, &nv, 4, "KLShopPage: element vtable (private copy)") && kspg.log) klog("shopPage: element %08lx (class %d, role %d) wrapped", tab[k].obj, c, role);
@@ -584,6 +588,18 @@ static void kspg_init(void)
     kspg.on = GetPrivateProfileIntA("ShopPage", "Enable", 0, klh_ini) != 0;
     kspg.probe = GetPrivateProfileIntA("ShopPage", "OnlineProbe", 0, klh_ini) != 0;      /* (recommended off until benched) read even with Enable=0: the pool poll needs no pairs */
     if (kspg.probe) klog("shopProbe: [ShopPage] OnlineProbe=1 (log only, writes nothing; at most %d lines)", KSPP_MAXLOG);
+    {   /* OnlineTestBuy=<row>[,<row>..] (bench only, recommended off): 'b' before a row = page II (b3), plain = stock page; up to 4 */
+        char v[64], *t; GetPrivateProfileStringA("ShopPage", "OnlineTestBuy", "", v, sizeof v, klh_ini);
+        for (t = v; *t && kspg.tbn < 4; ) {
+            int page = 0, row = 0, any = 0;
+            while (*t == ' ' || *t == ',') t++;
+            if (*t == 'b' || *t == 'B') { page = 1; t++; }
+            while (*t >= '0' && *t <= '9') { row = row * 10 + (*t - '0'); t++; any = 1; }
+            if (!any) break;
+            kspg.tbRow[kspg.tbn] = row; kspg.tbPage[kspg.tbn] = page; kspg.tbn++;
+        }
+        if (kspg.tbn) klog("shoptest: [ShopPage] OnlineTestBuy='%s' (bench only, recommended off): %d row(s), each pressed once per shop stay online through kspg_sel; needs Enable=1", v, kspg.tbn);
+    }
     kspo_init();                                                                          /* OnlineSend (recommended off until benched): registers the SHOPG handler only when 1 */
     if (!kspg.on) return;
     kspg.key = (int)GetPrivateProfileIntA("ShopPage", "Key", 0x75, klh_ini);
@@ -603,6 +619,40 @@ static void kspg_init(void)
     if (!kspg.have) { klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0; return; }
     kspg.carried[0] = kspg.carried[1] = -1;
     klog("shopPage: on; %d pairs from KLShopPage.ini; key 0x%02x flips the shop between set A and set B (Arcade offline only)", kspg.have, kspg.key);
+}
+
+/* [ShopPage] OnlineTestBuy (bench only): the unattended benches cannot click a shop row. Once per shop stay online (gate 1 = session state < 0x19 or 0x20), 3 s after the stay
+   began and with a live selector element seen, each listed row is pressed ONCE (1.5 s apart) by calling kspg_sel(selector, "BuyWeapon") = the handler the game's own buy press
+   reaches (the vtable slot we wrap), with [selector+0x90] = the row (what 0x6ddd10 / 0x7f73d0 read). Page 'b' sets shownB for the call, so the swallow / 'page2buy SWALLOWED' /
+   kspo_press path runs (OnlineLook=1 needed; with OnlinePage2=1 it goes stock); a stock row goes through the stock buy (probe 'stockbuy' line with OnlineProbe=1).
+   GUESS: the message block is {name ptr, 0...}; the stock handler is assumed to read only msg[0] and [selector+0x90]. Nothing faked, not even money. Never offline. */
+static void kspg_testbuy(void)
+{
+    DWORD now = GetTickCount(), so = kspg.selobj, w, w2, mode; int i, row, page, sh0, hi0, ph;
+    static char nm[] = "BuyWeapon"; DWORD msg[8]; DWORD vt;
+    if (!kspg.tbn || !kl_online() || kspg.tbDone >= kspg.tbn || !kspg.active) return;
+    if (!kspg.tbAt) kspg.tbAt = now ? now : 1;
+    if (now - kspg.tbAt < 3000 || (kspg.tbLast && now - kspg.tbLast < 1500) || !so) return;
+    vt = klh_rd32(so);
+    if (vt != kspg_cvt[3] && vt != (DWORD)(DWORD_PTR)&kspg_tab[3].vt[1]) return;                    /* the element is gone: wait for the next scan */
+    if (!kspg_tab[3].orig) { if (!kspg.tbDone) klog("shoptest: selector not wrapped (no original handler pinned): not pressed"); kspg.tbDone = kspg.tbn; return; }
+    i = kspg.tbDone++; row = kspg.tbRow[i]; page = kspg.tbPage[i]; kspg.tbLast = now ? now : 1;
+    ph = kspg.st;
+    mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
+    klog("shoptest: pressing row %d (page %d) phase 0x%x (shop mode %lu, selector %08lx)", row, page + 1, ph, (unsigned long)mode, (unsigned long)so);
+    if (row < 0 || row >= KSPG_ROWS || (page && !kspg.p[row].ok)) { klog("shoptest: row %d page %d: no such row (page II needs a KLShopPage.ini pair that is ok): not pressed", row, page + 1); return; }
+    w = klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY));
+    hi0 = (int)klh_rd32(so + 0x90); sh0 = kspg.shownB;
+    memset(msg, 0, sizeof msg); msg[0] = (DWORD)(DWORD_PTR)nm;
+    if (!klh_data((void *)(DWORD_PTR)(so + 0x90), &row, 4, "KLShopPage: OnlineTestBuy row")) { klog("shoptest: row %d: the selector row could not be written: not pressed", row); return; }
+    kspg.shownB = page;
+    __try { kspg_sel((void *)(DWORD_PTR)so, 0, msg); }
+    __except (1) { klog("shoptest: row %d page %d: the press faulted (caught)", row, page + 1); }
+    kspg.shownB = sh0;
+    klh_data((void *)(DWORD_PTR)(so + 0x90), &hi0, 4, "KLShopPage: OnlineTestBuy row restored");
+    w2 = klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY));
+    klog("shoptest: row %d page %d pressed: carried rows %d,%d -> %d,%d (page II %s; 'page2buy SWALLOWED' / 'stockbuy' lines come from [ShopPage] OnlineProbe=1, 'shopg:' lines from OnlineSend=1)",
+         row, page + 1, (int)(signed char)(BYTE)w, (int)(signed char)(BYTE)(w >> 8), (int)(signed char)(BYTE)w2, (int)(signed char)(BYTE)(w2 >> 8), page ? (kspg.online2 ? "goes the stock way" : "swallowed") : "stock");
 }
 
 static void klshoppage_tick(int game_thread)
@@ -676,6 +726,7 @@ static void klshoppage_tick(int game_thread)
     kspg.lastScan = now; kspg.sane = 0;
     g = kspg_gate();
     kspg.pre = (g == 1);
+    if (g != 1) { kspg.tbAt = 0; kspg.tbLast = 0; kspg.tbDone = 0; }                      /* OnlineTestBuy: a new shop stay presses again */
     if (!g) { kspg.active = 0; kspg.shownB = 0; return; }
     if (g == 2 && kspg.shownB) { kspg.shownB = 0; if (kspg.log) klog("shopPage: the round runs: page back to set A"); }
     for (i = 0; i < KSPG_ROWS; i++) if (kspg.p[i].cfg && !kspg.p[i].ok && kspg.p[i].retry && now > kspg.p[i].retry) { kspg.p[i].retry = 0; kspg.p[i].ok = 1; }
@@ -699,6 +750,7 @@ static void klshoppage_tick(int game_thread)
     if (now - lastfull > 1500) { lastfull = now; kspg_scan(); }
     if (g == 1) { kspg_check_pool(); if (kspg.st < 0x19) kspg_premake(); kspg_enforce(); }
     kspg_ammo();
+    if (kspg.tbn && g == 1) kspg_testbuy();
 }
 
 #endif /* KLSHOPPAGE_C */
