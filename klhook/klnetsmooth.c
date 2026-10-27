@@ -82,12 +82,19 @@ static void kns_cy_clear(int i) { kns_st[i].cy_have = 0; kns_st[i].cy_pend = 0; 
 
 static DWORD kns_ours(void) { return (DWORD)(DWORD_PTR)kns_vt; }
 
+static DWORD kns_mc_t, kns_mc_pl, kns_mc_me;              /* kns_local's cache of klh_slot_player_mine (below) */
 static int kns_local(DWORD *me)
 {   /* the game's own local player: [gd + 0x828 + 4 * (char)[gd + 0x898]] */
-    DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c)); BYTE sel = 0xff;
+    DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c)), pl, now; BYTE sel = 0xff;
     *me = 0;
     if (!gd || !klh_rd(gd + 0x898, &sel, 1) || sel >= KNS_NPL) return 0;
-    *me = klh_rd32(gd + 0x828 + 4 * sel);
+    pl = klh_rd32(gd + 0x828 + 4 * sel);
+    /* 2026-10-27 (bench BOSE5c): online, after my van escape / death the slot holds the PEER the spectator camera follows; read raw, that peer
+       counted as 'me' and was no longer smoothed while I watched it. klh_slot_player_mine keeps my own body (offline it is the slot itself).
+       It calls the game's 0x9425a0, so it is cached: asked again only when the slot changes or 250 ms passed (kns_smooth runs per remote per update). */
+    now = GetTickCount();
+    if (pl != kns_mc_pl || now - kns_mc_t >= 250) { kns_mc_pl = pl; kns_mc_t = now; kns_mc_me = klh_slot_player_mine(); }
+    *me = kns_mc_me;
     return 1;
 }
 

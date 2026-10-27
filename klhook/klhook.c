@@ -677,7 +677,7 @@ static DWORD klh_avt(DWORD o) { DWORD v = klh_rd32(o); return ((klh_actor_priv &
    [gd+0x898] -> [gd+0x828+4*sel] points at the PEER's body. klh_slot_player_mine() is that slot read for code that means 'MY body' (not the camera's):
    offline / Arcade (kl_online() == 0) it returns the slot exactly as before. Online it remembers the body the slot held while it was a master on this
    machine (the game's own 'is mine' test 0x9425a0 on the DDL object [ent+0x274c], whose +0x540 points back) and keeps returning it while it is still a
-   ZFFPlayer, still master and still points back; else the slot as before. Camera code (klcam.c, klcampool.c) and klnetsmooth.c (its swap gate, c9) keep the raw slot.
+   ZFFPlayer, still master and still points back; else the slot as before. Camera code (klcam.c, klcampool.c) keeps the raw slot; klnetsmooth.c's kns_local uses this (cached 250 ms) so the followed peer stays smoothed.
    GUESS (same as klcharonline.c klco_is_master): the offsets hold for the player entities on a client too. */
 static int klh_ent_master(DWORD ent)
 {
