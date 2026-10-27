@@ -185,7 +185,7 @@ static void kspg_refused(int before0, int before1, DWORD m0, DWORD m1)
 {
     DWORD w = klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)); int s, cost = 0, now[2];
     now[0] = (int)(signed char)(BYTE)w; now[1] = (int)(signed char)(BYTE)(w >> 8);
-    if (m0 == 0xffffffffu || m1 != m0) return;                                /* money moved (or unknown): the commit went through */
+    if (kl_online() || m0 == 0xffffffffu || m1 != m0) return;                                /* money moved (or unknown): the commit went through */
     for (s = 0; s < 2; s++) if (now[s] != (s ? before1 : before0)) cost += kspg_price(now[s]);
     if (cost <= 0 || (DWORD)cost <= m0) return;                               /* free or affordable: stored without a charge */
     for (s = 0; s < 2; s++) {
@@ -233,7 +233,7 @@ static void __fastcall kspg_sel(void *self, void *edx, DWORD *msg)
         edit = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_EDIT)); slot = (edit == -6) ? 1 : 0; other = 1 - slot;
         hi = (int)klh_rd32((DWORD_PTR)self + 0x90);
         kspg.trickOn = 0;
-        if (kspg.trick && hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok && (slot ? b1 : b0) == hi && (kspg.own[slot] != 0) != (kspg.shownB != 0)) {
+        if (!kl_online() && kspg.trick && hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok && (slot ? b1 : b0) == hi && (kspg.own[slot] != 0) != (kspg.shownB != 0)) {
             if ((other ? b1 : b0) == hi) {      /* same row already in the OTHER slot: the stock refusal stands, and we say so */
                 if (kspg.log) klog("shopPage: row %d is carried in both slots: the other set's gun of it is not offered (refused as stock)", hi);
             } else {
