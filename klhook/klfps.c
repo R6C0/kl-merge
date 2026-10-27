@@ -221,6 +221,7 @@ static int klfps_use_sc = 1, klfps_use_reset = 1;
 static struct { void **slot; void *mine, *real; } klfps_wr[8];
 static int klfps_nwr;
 static HRESULT WINAPI klfps_reset(void *self, void *pp);
+static int klfps_resetdrain = 1;                 /* [Graphics] ResetDrain, see klfps_drain_lists */
 static HRESULT WINAPI klfps_createdev(void *self, UINT adapter, DWORD type, HWND focus, DWORD flags, void *pp, void **dev);
 
 static const char *klfps_mod(const void *p, char *buf, size_t n)
@@ -242,8 +243,9 @@ static void klfps_unwrap_all(void)
         void *cur = *klfps_wr[i].slot;
         /* the Reset wrapper stays while a vertex-buffer ring is on: the ring's DEFAULT buffers are dropped only there, a Reset without
            it fails (review 1025: the cut fires in every session on the owner's PC). The cut is about Present recursion; Reset was never
-           part of a cycle. */
-        if (klfps_wr[i].mine == (void *)klfps_reset && (klqr_n
+           part of a cycle. 1027: also kept for [Graphics] ResetDrain - C27_RDR1 never drained because the Steam overlay cut
+           (GameOverlayRenderer+0x79ab4, ~1 s after start, every bench) had unwrapped it. */
+        if (klfps_wr[i].mine == (void *)klfps_reset && (klqr_n || klfps_resetdrain
 #ifdef KLHOOK_TEST
             || kld3_rg_ok
 #endif
@@ -435,7 +437,6 @@ static void klfps_read_pp(const void *pp)
  * one every frame), so the cost is one blank frame. 0x696100's tail call 0x709c80 is a full teardown (pass table d+0x3f9d4,
  * objects d+0x5f9ec) and must NOT be called here. GUESS: the device wrapper [0xf144a0] keeps no cached stream/texture state
  * that outlives Reset (not examined). */
-static int klfps_resetdrain = 1;
 static void klfps_drain_lists(void)
 {
     char *eng, *win, *d; int k; const char *why;
