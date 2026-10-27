@@ -66,10 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-27 ~02:40 - [ce] ONLINE TAGS PROVEN LIVE (bench DD01ce4, 1027m): HideSrc swapped the player list vtable, klu_is_plist() accepts both.
-NOT run live yet (all default 0): OnlineIntroState, [Voice] OnlineTraits/OnlineCrew, [ShopPage] OnlinePage2 (stock carrier gun only),
-OnlineBoardTake/IntroCount/VanIcon, OnlineTagStyle/TagHold, [Grades] OnlineTags. TEST out_all_1027o_test / SHIP out_ship_1027o; owner still on 1027i.
-Gap list (verified): re/open_work_log.md 10-27 02:40. Waiting on owner: random default heister online (overrides own pick).
+2026-10-27 ~05:50 - [ce] OWNER ON SHIP 1027u (f1c02dc7, rtp 070fe3e10). Proven live (BOSE5c..g): +0xefc seat byte, ABOARD 0x20/ESCAPED 0x40 + van icon,
+my body kept when the camera follows a peer (klh_slot_player_mine), [HUD] OnlineBoardCarrier end card on ZFAOutroDisplay osd+0x10b0.
+NOT run: OnlinePage2/bot-down rules-copy gates, Hire online guards (308844132). c9 queue: CE27 grades + map-pool overlay (bench_ce_1027).
 
 2026-10-27 ~03:55 - [ce] Round number online FIXED live (fields are objects, value byte +4 XOR 0xac; ce6: round 1 of 3). Rating = low nibble.
 Online rules are small (Sv 0x3a8, Cl 0x334): Arcade offsets +0x33e/+0x348/+0x5f8 now skipped online; online talk needs [Voice] OnlineTalkNoScore=1.
