@@ -66,14 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~13:45 - [c9] Client hang (HUD5/P2P4C inst2, watchdog 300 s) = kl2 pump 0x82dfb0 peeks a WM_MOUSEMOVE, then ReShade's GetMessageA
+waits forever. Fix: klhook.c [Input] PumpNoBlock (289ce45c9, default 0, recommended on), TEST out_c9_1027f_test 17a87c7f, bench C27_PNB1.
+ce's 1027t (f60f532b) has it; HUD6 (+ host loot pickup) and GRT3 run on 1027t with PumpNoBlock=1. Queue: P2P5E -> PNB1, MPX2, HUD6, GRT3, HRF2, HRP2, ALL2R.
+
 2026-10-27 ~13:15 - [ce] Page II online buy: P2P4H crash (host, 0x9425a4) = online hand-over 0x538ec0 net branch reads gun+0x13c (DDL_ZFFItemWeapon X);
 our kspg_make guns miss the one stock X pass 0x8d6890. 1027m kspg_netok -> stock gun fallback: P2P4I + P2P4D PASS 0 faults (client ask -> host ok -> paid 60000).
 Real fix [ShopPage] OnlineEarlyMake (ab549870f, 1027o, off): make page II guns right after pool build 0x75f313/0x7bb6c3; bench P2P5E queued.
 Logs: HUD skulls/loot draw (1027n, HUD5 running), map-pool overlay HIDDEN + lobby label (1027p, MPX2 queued: MPX 3 s = ini, not code).
-
-2026-10-27 ~11:35 - [c9] Reset crash FIXED + PROVEN: C27_RDR2 PASS (4 forced Resets per seat, each drained, 0 faults).
-klfps.c [Graphics] ResetDrain=1 (75de30aa2, 3ba6da74f, b701ce6de: wrapper kept through the Steam overlay recursion cut).
-TEST out_c9_1027e_test 30646034, not installed; ce takes it into the next SHIP. Queue: RDQ1 -> P2P4C/H, HUD4 -> RSTN, MPX2, HRF2, HRP2, ALL2R.
 
 2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
 Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
