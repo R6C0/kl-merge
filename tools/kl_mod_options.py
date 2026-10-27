@@ -353,7 +353,13 @@ feat('steamblock', G_STAB, 'Block Steam stats / leaderboards on modded rounds', 
 feat('match', G_EXP, 'Private-match options (gun, vote, playlist)', 'off', 'start',
      'built, never run live', [('Match', 'Enable', 1, 0, 0)])
 feat('netsmooth', G_EXP, 'Smooth remote players\' turning (online)', 'off', 'start',
-     'offline-proven only, no online run yet', [('NetSmooth', 'Enable', 1, 0, 0)])
+     'offline-proven only, no online run yet; also eases the remote camera / aim yaw (upper-body spin, re/netsmooth_camyaw.md)',
+     [('NetSmooth', 'Enable', 1, 0, 0), ('NetSmooth', 'CamYaw', 1, 0, 0)])
+feat('nettune', G_EXP, 'Send player moves more often online (3x stock; every player needs it)', 'off', 'start',
+     'klnet.c [Net] Tune: 33 ms / 250 ms refresh / 5 units / 10 instead of stock 100 / 2000 / 20 / 30 (re/netcode_players_1027.md D2); '
+     'only the SENDER\'s numbers count; more upload; refused on ranked joins and stock maps; not benched yet',
+     [('Net', 'Tune', 1, 0, 0), ('Net', 'TuneClient', 1, 0, 0), ('Net', 'PlayerMs', 33, None, -1),
+      ('Net', 'RefreshMs', 250, None, -1), ('Net', 'PosTol', 5, None, -1), ('Net', 'AngTol', 10, None, -1)])
 feat('watchdog', G_EXP, 'Watchdog for a stuck AI heister', 'off', 'start',
      'not run in the game', [('QoL2', 'Watchdog', 1, 0, 0)])
 feat('names', G_EXP, 'Dead Men map names in the Arcade lists', 'off', 'start',
