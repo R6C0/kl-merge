@@ -64,7 +64,7 @@ static int kvo_online_who(struct klw_who *w, char *name)
                     lround_rules = o.b.rules; lround = o.round; lhash = hsh;
                     if (kvo_diag) {                                                    /* read-only: does rules+0x33e (the Arcade voice table) hold anything on these rules? settles GUESS V1 */
                         BYTE vt[8]; memset(vt, 0xee, sizeof vt);
-                        if (klh_rd(o.b.rules + 0x33e, vt, 8)) klog("voice: diag: rules %08lx +0x33e = %02x %02x %02x %02x %02x %02x %02x %02x (Arcade: voice number per record; GUESS V1 says online voice = seat, compare with the seat table below)", o.b.rules, vt[0], vt[1], vt[2], vt[3], vt[4], vt[5], vt[6], vt[7]);
+                        if (!KLH_RULES_CL_OK(klh_rd32(o.b.rules)) && klh_rd(o.b.rules + 0x33e, vt, 8)) klog("voice: diag: rules %08lx +0x33e = %02x %02x %02x %02x %02x %02x %02x %02x (Arcade: voice number per record; GUESS V1 says online voice = seat, compare with the seat table below)", o.b.rules, vt[0], vt[1], vt[2], vt[3], vt[4], vt[5], vt[6], vt[7]);      /* OOB: Cl rules are 0x334 bytes, +0x33e is past the end (Sv 0x3a8: in bounds, still no voice table) */
                         else klog("voice: diag: rules %08lx +0x33e is not readable", o.b.rules);
                     }
                     klog("voice: online: local seat %d plays '%s' (character %d of %d), round %d of %d; its lines use voice number %d (GUESS V1: the seat number)", (int)li, lname, last.m[0].ch, last.nchar, o.round, o.rounds, (int)li);

@@ -239,7 +239,7 @@ static void klht_tick(DWORD osd, const struct klb_snap *s, int show)
     pl = klh_rd32(osd + KLU_O_PLIST);
     if (!pl || !klu_is_plist(pl) || !klh_rd(pl + KLHT_O_COUNT, &cnt, 4) || cnt > KLHT_NSLOT) goto out;
     if (!klh_rd(pl + KLHT_O_LOCAL, &local, 1)) goto out;
-    if (!(recs = klh_rd32(s->rules + 0x348))) goto out;
+    if (KLH_RULES_CL_OK(klh_rd32(s->rules)) || !(recs = klh_rd32(s->rules + 0x348))) goto out;      /* OOB: ...Cl rules are 0x334 bytes (Sv 0x3a8), +0x348 (Arcade crew records) is past the end; online has no such table */
     if (!klu_same_code(KLHT_DRAWTAG, klht_code, sizeof klht_code)) {
         klht_r.fault = 1; klog("tags: 0x7b8150 is not the tag drawer this build knows: no tags are drawn"); goto out;
     }

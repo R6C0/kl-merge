@@ -449,6 +449,11 @@ static void *klk_entry(const char *key, DWORD rules, const char *scene)
 }
 
 /* Say one key. -> 1 said (or, LogOnly, would have been), 0 not. Game thread only; what = the log's description. */
+/* OOB guard (round-xor-1027): ONLINE rules objects are small heap blocks - ZGameRulesFragileAllianceSv (0xbd2eb4) is 0x3a8 bytes, ...Cl (0xbd31e4) is 0x334 (alloc 0x725e6c..0x725eb1).
+   The Arcade ZGameRulesHeist (0xbd3514) is larger (+0x33e voice table, +0x5f8 ZHeistScore), so those offsets are heap neighbours online: never read them there. */
+static int klk_rules_onl(DWORD rules) { DWORD v = klh_rd32(rules); return KLH_RULES_SV_OK(v) || KLH_RULES_CL_OK(v); }
+/* [Voice] OnlineTalkNoScore=1 (default 0, recommended off until benched): online, speech is allowed when S=[rules+0x2c] is non-null instead of the Arcade-only [rules+0x5f8] */
+static int klk_onl_noscore(void) { static int v = -1; if (v < 0) v = GetPrivateProfileIntA("Voice", "OnlineTalkNoScore", 0, klh_ini) != 0; return v; }
 static int klk_say(const char *key, int rec, float rt, const char *what, DWORD rules, const char *scene)
 {
     static const BYTE lookup_code[16] = { 0x56, 0x8b, 0x74, 0x24, 0x08, 0x8b, 0xc6, 0x57, 0x8b, 0xf9, 0x8d, 0x50, 0x01, 0x8d, 0x49, 0x00 };    /* 0x828fa0 */
@@ -465,7 +470,8 @@ static int klk_say(const char *key, int rec, float rt, const char *what, DWORD r
         if (!toldmgr++) klog("talk: the speech manager [0x168e958] or its queue cannot be read (manager %08lx): nothing is said", mgr);
         return 0;
     }
-    if (!klh_rd32(rules + 0x5f8)) { static int told58; if (!told58++) klog("talk: [rules+0x5f8] is null: nothing is said (0x771a10 would read through it)"); return 0; }   /* review */
+    if (klk_rules_onl(rules)) { if (!klk_onl_noscore() || !klh_rd32(rules + 0x2c)) return 0; }      /* online: +0x5f8 is past the object (Sv 0x3a8 / Cl 0x334 bytes): garbage decided this; now off unless OnlineTalkNoScore, then S=[rules+0x2c] must be non-null */
+    else if (!klh_rd32(rules + 0x5f8)) { static int told58; if (!told58++) klog("talk: [rules+0x5f8] is null: nothing is said (0x771a10 would read through it)"); return 0; }   /* review */
     /* NOT DONE ON PURPOSE: setting [session+0x15d] before GO so that lines can be said in the pre-round. Tried live 2026-10-10
        (run T4): the two early countdown lines were said, and 8 s after GO the round stood still with a grey screen (no
        frame from the main loop, bots frozen; ended by the run's time limit). The game's speech is off before GO: start
@@ -583,9 +589,9 @@ static int klk_pool_key(const struct klw_who *w, int i, int on, DWORD rules, cha
 {
     /* V2: pools that name the member's own character (Who=Ashkanan / Char11) come first, keys as written; only when
        none of them has a key left does the class of his body (Kane / Lynch / Any / Squad) decide, as before. */
-    int cls = klk_pool_class(w, i), ch = w->m[i].ch, named, p, k, n = 0, pick; BYTE voice = 0xff; char cand[KLK_KEYLEN];
+    int cls = klk_pool_class(w, i), ch = w->m[i].ch, named, p, k, n = 0, pick; BYTE voice = (BYTE)(klk_rules_onl(rules) ? w->m[i].rec : 0xff); char cand[KLK_KEYLEN];
     for (named = ch > 0; named >= 0; named--) {
-        if (!named && cls == KLK_ANY && (w->m[i].rec > 7 || !klh_rd(rules + 0x33e + w->m[i].rec, &voice, 1) || voice > 7)) return 0;      /* the table has eight entries, the voices are 0..7 */
+        if (!named && cls == KLK_ANY && (w->m[i].rec > 7 || (!klk_rules_onl(rules) && (!klh_rd(rules + 0x33e + w->m[i].rec, &voice, 1) || voice > 7)))) return 0;      /* OOB: online rules are 0x3a8 (Sv) / 0x334 (Cl) bytes, so +0x33e is no voice table there (Cl: past the end); online the voice = seat number (GUESS V1, klvoice_online.c) */      /* the table has eight entries, the voices are 0..7 */
         for (pick = -1, n = 0; ; pick = (int)klk_rnd((DWORD)n), n = 0) {          /* pass 1 counts, pass 2 takes number `pick` */
             for (p = 0; p < klk_lv.npool; p++) {
                 if (klk_lv.pool[p].on != on) continue;
@@ -831,7 +837,7 @@ static void klk_tick(int game_thread)
         if (ri >= 0 && w.m[ri].status == 0 && !busy) klk_chatter_say(&w, ri, klk_r.reply.key, "pair, the reply", rt, w.rules, scene, 1);
         return;
     }
-    score = klh_rd32(w.rules + 0x5f8);
+    score = klk_rules_onl(w.rules) ? 0 : klh_rd32(w.rules + 0x5f8);      /* online: +0x5f8 is past the object (Sv 0x3a8 / Cl 0x334 bytes), no money events there */
     for (i = 0; i < w.n; i++) {                                              /* what changed since the last tick -> at most one event line */
         int rec = w.m[i].rec, ev = 0, self = 1, dead_ev = 0; DWORD money = 0; BYTE st = 0, fl = 0;
         if (rec < 0 || rec >= KLW_NREC) continue;

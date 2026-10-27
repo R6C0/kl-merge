@@ -170,7 +170,7 @@ static DWORD kspg_money(void)
 {
     DWORD gs, rules, w;
     if (klh_rd32((DWORD_PTR)klh_rd32((DWORD_PTR)KLH_VA(0x0168e598u)) + 0x5c) != 4) return 0xffffffffu;   /* 0x7bb2a0's own test: no FA session, no rules */
-    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4u))) || !(rules = klh_rd32(gs + 0x54)) || !(w = klh_rd32(rules + 0x5f8))) return 0xffffffffu;
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4u))) || !(rules = klh_rd32(gs + 0x54)) || KLH_RULES_SV_OK(klh_rd32(rules)) || KLH_RULES_CL_OK(klh_rd32(rules)) || !(w = klh_rd32(rules + 0x5f8))) return 0xffffffffu;      /* OOB: online rules are 0x3a8 (Sv) / 0x334 (Cl) bytes, +0x5f8 (Arcade ZHeistScore) is a heap neighbour there */
     return klh_rd32(w + 0x38);
 }
 
