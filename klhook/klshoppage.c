@@ -785,7 +785,7 @@ static void klshoppage_tick(int game_thread)
     kspg.lastScan = now; kspg.sane = 0;
     g = kspg_gate();
     kspg.pre = (g == 1);
-    if (g != 1) { kspg.tbAt = 0; kspg.tbLast = 0; kspg.tbDone = 0; kspg.selobj = 0; kspo.bmDone = 0; kspo.bmAt = 0; }                      /* OnlineTestBuy: a new shop stay presses again */
+    if (g != 1) { kspg.tbAt = 0; kspg.tbLast = 0; kspg.tbDone = 0; kspg.selobj = 0; kspo.bmDone = 0; kspo.bmAt = 0; kspo.bmSeats = 0; }                      /* OnlineTestBuy: a new shop stay presses again */
     if (!g) { kspg.active = 0; kspg.shownB = 0; return; }
     if (g == 2 && kspg.shownB) { kspg.shownB = 0; if (kspg.log) klog("shopPage: the round runs: page back to set A"); }
     for (i = 0; i < KSPG_ROWS; i++) if (kspg.p[i].cfg && !kspg.p[i].ok && kspg.p[i].retry && now > kspg.p[i].retry) { kspg.p[i].retry = 0; kspg.p[i].ok = 1; }

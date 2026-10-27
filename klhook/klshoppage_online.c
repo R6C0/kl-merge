@@ -76,7 +76,7 @@ static struct {
        bk[seat] = page II row + 1 (0 none). bkSeen: the stock buy of the carrier showed in the rules' carried rows (the getters the stock commit 0x55d3e0 uses). */
     int bk[KSPO_SEATS], bkSeen[KSPO_SEATS]; DWORD bkAt[KSPO_SEATS], bkTick;
     int okRow; DWORD okAt;                        /* row + 1 whose stock buy may pass kspg_sel's gate (approved; consumed by the BuyWeapon) */
-    DWORD bmN, bmAt; int bmDone;                  /* [Bench] ShopMoney: target, stay entry, done this stay */
+    DWORD bmN, bmAt, bmSeats; int bmDone;         /* [Bench] ShopMoney: target, stay entry, seats topped up this stay (bit each), code guard failed this stay */
     int doRow; DWORD doAt;                        /* client: row + 1 approved by the host, the stock buy is fired from the tick */
 } kspo;
 
@@ -187,7 +187,7 @@ static int kspo_addcode_ok(void)
 
 static void kspo_benchmoney(void)
 {
-    DWORD rules = 0, sc = 0, n = 0, fr; int seat, wrote = 0, st = kspo_state();
+    DWORD rules = 0, sc = 0, n = 0, fr; int seat, st = kspo_state();
     if (!kspo.bmN || kspo.bmDone || st == 0 || st == 0x19 || !kspo_score(&rules, &sc) || !KLH_RULES_SV_OK(klh_rd32(rules))) return;    /* host only, shop phase */
     if (!kspo.bmAt) kspo.bmAt = GetTickCount() ? GetTickCount() : 1;
     if (GetTickCount() - kspo.bmAt < 3000) return;                      /* let the shop come up first (as OnlineTestBuy's 3 s) */
@@ -195,15 +195,15 @@ static void kspo_benchmoney(void)
     fr = klh_rd32(rules + 0xc);
     for (seat = 0; seat < KSPO_MONEYSEATS && (DWORD)seat < n; seat++) {
         DWORD m1 = 0, m2 = 0, m3 = 0, m4 = 0; BYTE b = 1;
+        if (kspo.bmSeats & (1u << seat)) continue;                     /* topped up once this stay (a buy may spend it); a stay-wide flag missed seats that join later */
         if (!fr || !klh_rd(fr + seat, &b, 1) || b) continue;            /* seat not in use */
         if (!kspo_shopmoney(seat, &m1, &m2)) continue;
-        if ((unsigned __int64)m1 + m2 >= (unsigned __int64)kspo.bmN) continue;
+        if ((unsigned __int64)m1 + m2 >= (unsigned __int64)kspo.bmN) { kspo.bmSeats |= 1u << seat; continue; }
         __try { ((void (__fastcall *)(void *, void *, int, DWORD))(DWORD_PTR)KLH_VA(0x6cfdb0))((void *)(DWORD_PTR)sc, 0, seat, kspo.bmN - (m1 + m2)); } __except (1) { klog("bench: ShopMoney seat %d: the add faulted", seat); continue; }
         kspo_shopmoney(seat, &m3, &m4);
         klog("bench: ShopMoney seat %d %lu -> %lu", seat, (unsigned long)(m1 + m2), (unsigned long)(m3 + m4));
-        wrote++;
+        kspo.bmSeats |= 1u << seat;
     }
-    if (wrote) kspo.bmDone = 1;                                          /* once per stay, but retry until at least one seat was written */
 }
 
 /* the host's verdict on (seat, row, item, round). remote = the request came over the wire. Returns a KSPO_ reason. NO game write. */
