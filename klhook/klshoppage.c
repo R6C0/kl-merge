@@ -66,6 +66,7 @@ typedef void  (__fastcall *kspg_msg_t)(void *self, void *edx, DWORD *msg);
 static struct {
     int tabNames; char tab[4][64];
     int online2;                                 /* [ShopPage] OnlinePage2 (default 0): online a page II row buys its CARRIER's stock gun through the stock host-validated path */
+    int early, earlyTried, earlyOk, earlyPend, earlyHost, earlyTold; DWORD earlyAt;   /* [ShopPage] OnlineEarlyMake (default 0, recommended off until benched): see kspg_early_make */
     int apply;                                   /* [ShopPage] OnlineApply (default 0, recommended off until benched): step 4, an approved page II buy is really applied online (klshoppage_online.c) */
     int probe;                                   /* [ShopPage] OnlineProbe (default 0, recommended off until benched): klshoppage_probe.c, LOG ONLY */
     int online;                                  /* [ShopPage] OnlineLook (default 0): page II LOOK online, buying it LOCKED (2026-10-26, see below) */
@@ -447,6 +448,99 @@ static void kspg_netlog(int row, DWORD carrier, DWORD ents, DWORD n)
     if (sg) klog("apply: row %d fallback: stock gun %08lX +0x13c=%08lX", row, (unsigned long)sg, (unsigned long)klh_rd32((DWORD_PTR)sg + 0x13c));
 }
 
+/* ONLINE EARLY MAKE ([ShopPage] OnlineEarlyMake=1, recommended off until benched; NOT RUN IN THE GAME).
+ * Why: online the hand-over 0x538ec0 calls 0x66be20 / 0x6ca110 on gun+0x13c (DDL_ZFFItemWeapon X, a Quazal DO) with no null test. X is made for EVERY pool entry by
+ * the session-state pass 0x8d6890 (host: inside 0x75f310 after the pool build 0x5230a0, state 0x14/0x15 -> 0x16; client twin 0x7bb6c0 + sweep 0x7282f0) and ids come
+ * from 0x6ece90 (entity-table order), so every peer must make the same guns in the same order. Our objects were made later (premake / enforce), after that one
+ * pass, hence +0x13c = 0 (kspg_netok keeps the stock gun then; this gate stays as the safety net).
+ * How: the two `call 0x5230a0` sites (host 0x75f313, client 0x7bb6c3; both E8 rel32, followed by `mov ecx,[0x168e598]`) are retargeted to kspg_early_h / _c:
+ * call the original, then make every page II row (row ascending, kspg.p[row].ok, not a [Shop] Swap row) through kspg_make, independent of any buy. The pool is built
+ * and X is not yet made (state test follows), so the pass creates X for ours too. A code patch: refused in a SHIP build and inside hashed ranges (klh_poke guard),
+ * then the toggle stays off (logged). GUESS: the pool (kls_vec) and the UI object (+0x15b0, kspg_make's template lookup) are ready right after 0x5230a0; if not,
+ * kspg_make fails, the log says so, and the old paths (enforce fallback) stay as they were. */
+typedef void (*kspg_orig_t)(void);
+static void kspg_early_body(int host)
+{
+    int row, rows = 0, made = 0, had = 0, st;
+    DWORD sm, pa = 0, pn = 0;
+    if (!kspg.earlyOk || !kspg.on || !kspg.have || !klh_exe_ok) return;
+    if (!kl_online()) { static BYTE t0; if (!t0) { t0 = 1; klog("shopPage: early make skipped: not online at the pool build"); } return; }
+    if (!kls_code_ok()) { static BYTE t1; if (!t1) { t1 = 1; klog("shopPage: early make skipped: kls_code_ok() is false at the pool build"); } return; }
+    sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)); st = sm ? (int)klh_rd32(sm + 0x70) : -1;
+    /* gate: the builder 0x78a8d0 works only in FA (session+0x5c == 4) and 0x8d6890 makes X only in state 0x14/0x15 */
+    if (!sm || klh_rd32(sm + 0x5c) != 4 || (st != 0x14 && st != 0x15)) {
+        static BYTE t2; if (!t2) { t2 = 1; klog("shopPage: early make skipped: session mode %d, state 0x%x (needs FA mode 4, state 0x14/0x15)", sm ? (int)klh_rd32(sm + 0x5c) : -1, st); }
+        return;
+    }
+    if (!kls_vec(&pa) || !klh_rd(pa + 4, &pn, 4) || !pn || pn > 4096) { klog("shopPage: early make skipped: the pool is empty or unreadable right after the builder (state 0x%x)", st); return; }
+    kspg.sane = 0; kspg_sane();                                            /* a rebuilt pool: dead pointers out first, so the same rows are made again */
+    for (row = 0; row < KSPG_ROWS; row++) {
+        int s, swapped = 0;
+        if (!kspg.p[row].ok) continue;
+        if (kls.on) for (s = 0; s < kls.n; s++) if (kls.row[s] == row) swapped = 1;
+        if (swapped) continue;
+        rows++;
+        if (kspg.made[row][0]) { had++; continue; }                           /* still in the pool from the last round: no second set */
+        if (kspg_make(row)) made++;
+        else klog("shopPage: early make row %d FAILED (%s, state 0x%x): ids may not line up with the other peers", row, host ? "host" : "client", st);
+    }
+    kspg.earlyHost = host; kspg.earlyPend = 1; kspg.earlyAt = GetTickCount() | 1;
+    klog("shopPage: early make (%s site, state 0x%x): %d page II row(s), %d made now, %d already made, pool %lu, KSPG_PER %d (compare rows/made/guns across peers)", host ? "host 0x75f313" : "client 0x7bb6c3", st, rows, made, had, (unsigned long)pn, KSPG_PER);
+}
+static void kspg_early_make(int host)
+{
+    __try { kspg_early_body(host); }
+    __except (1) { kspg.earlyOk = 0; klog("shopPage: early make FAULTED (%s site): OnlineEarlyMake switched off, the stock gun stays (kspg_netok)", host ? "host" : "client"); }
+}
+static void kspg_early_h(void) { ((kspg_orig_t)(DWORD_PTR)KLH_VA(0x5230a0))(); kspg_early_make(1); }
+static void kspg_early_c(void) { ((kspg_orig_t)(DWORD_PTR)KLH_VA(0x5230a0))(); kspg_early_make(0); }
+
+/* once per round, from the tick, after the stock pass would have run (state >= 0x16, or 5 s): per row what the pass did to our objects */
+static void kspg_early_report(void)
+{
+    DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)), now = GetTickCount(); int st = sm ? (int)klh_rd32(sm + 0x70) : -1, row, m;
+    if (!kspg.earlyPend) return;
+    if (st < 0x16 && now - kspg.earlyAt < 5000) return;
+    kspg.earlyPend = 0;
+    for (row = 0; row < KSPG_ROWS; row++) {
+        int k = 0, linked = 0; DWORD g0, id = 0;
+        if (!kspg.made[row][0]) continue;
+        for (m = 0; m < KSPG_PER && kspg.made[row][m]; m++) { k++; if (klh_rd32((DWORD_PTR)kspg.made[row][m] + 0x13c)) linked++; }
+        g0 = klh_rd32((DWORD_PTR)kspg.made[row][0] + 0x13c);
+        __try { id = ((DWORD (__fastcall *)(DWORD))(DWORD_PTR)KLH_VA(0x6ece90))(kspg.made[row][0]); } __except (1) { id = 0xdead; }
+        klog("shopPage: early make row %d: %d objects, first gun+0x13c=%08lX, id 0x6ece90=%lu (%d of %d with +0x13c set; %s, state 0x%x)", row, k, (unsigned long)g0, (unsigned long)id, linked, k, kspg.earlyHost ? "host" : "client", st);
+    }
+}
+
+/* patch both call sites, once (needs a tick: the exe is verified by then); the bytes are checked first, a half patch is rolled back */
+static void kspg_early_patch(void)
+{
+    static const DWORD site[2] = { 0x75f313, 0x7bb6c3 };
+    static const BYTE next[6] = { 0x8b, 0x0d, 0x98, 0xe5, 0x68, 0x01 };            /* mov ecx,[0x168e598] right after each call */
+    void (*mine[2])(void) = { kspg_early_h, kspg_early_c };
+    BYTE expect[2][5], put[2][5], b[6]; int i, done = 0, r1, r2;
+    kspg.earlyTried = 1;
+    memset(b, 0, sizeof b);
+    for (i = 0; i < 2; i++) {
+        DWORD rel = (DWORD)(DWORD_PTR)(KLH_VA(0x5230a0) - (KLH_VA(site[i]) + 5)), nrel = (DWORD)((BYTE *)(DWORD_PTR)mine[i] - (KLH_VA(site[i]) + 5));
+        expect[i][0] = put[i][0] = 0xE8; memcpy(expect[i] + 1, &rel, 4); memcpy(put[i] + 1, &nrel, 4);
+        {
+            BYTE c[6]; memset(c, 0, sizeof c);
+            r1 = klh_rd((DWORD_PTR)KLH_VA(site[i]), b, 5) && !memcmp(b, expect[i], 5);
+            r2 = klh_rd((DWORD_PTR)KLH_VA(site[i] + 5), c, 6) && !memcmp(c, next, 6);
+            if (!r1 || !r2) {
+                klog("shopPage: OnlineEarlyMake: %s at %08lx (call bytes %02x %02x %02x %02x %02x, next bytes %02x %02x %02x %02x %02x %02x): not `call 0x5230a0` + `mov ecx,[0x168e598]`, the toggle stays OFF",
+                     !r1 ? "the call check failed" : "the next-instruction check failed", (unsigned long)site[i], b[0], b[1], b[2], b[3], b[4], c[0], c[1], c[2], c[3], c[4], c[5]);
+                return;
+            }
+        }
+    }
+    for (i = 0; i < 2; i++) { if (klh_poke(KLH_VA(site[i]), expect[i], 5, put[i], 5, "pool build call (OnlineEarlyMake)")) done++; else break; }
+    if (done == 2) { kspg.earlyOk = 1; klog("shopPage: OnlineEarlyMake: ON (call sites 0x75f313 / 0x7bb6c3 retargeted; page II objects are made right after the pool build, online only)"); return; }
+    if (done == 1) klh_poke(KLH_VA(site[0]), put[0], 5, expect[0], 5, "pool build call (OnlineEarlyMake rollback)");
+    klog("shopPage: OnlineEarlyMake: the patch was REFUSED (SHIP build, SessionSafe=1 over a hashed range, or other bytes): the toggle stays OFF");
+}
+
 static void kspg_enforce(void)
 {   /* only before the round: every entry of a pair's carrier is parked or free as the desired set says (see the header) */
     DWORD a, n = 0, ents, i; int row;
@@ -677,6 +771,7 @@ static void kspg_init(void)
     kspg.apply = GetPrivateProfileIntA("ShopPage", "OnlineApply", 0, klh_ini) != 0;
     if (kspg.apply && !kspo.on) { klog("shopg: [ShopPage] OnlineApply=1 needs OnlineSend=1 (the host's judgement): apply stays OFF"); kspg.apply = 0; }
     if (kspg.apply) { kspg.online = 1; klog("shopg: apply: on ([ShopPage] OnlineApply=1, recommended off until benched): an approved page II buy is the stock buy of its carrier + the pool relabel on every peer"); }
+    kspg.early = GetPrivateProfileIntA("ShopPage", "OnlineEarlyMake", 0, klh_ini) != 0;   /* (recommended off until benched) online: make the page II guns right after the pool build so the stock pass gives them gun+0x13c */
     kspg.have = kspg_load();
     if (!kspg.have) { klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0; return; }
     kspg.carried[0] = kspg.carried[1] = -1;
@@ -753,6 +848,8 @@ static void klshoppage_tick(int game_thread)
     if (kspo.on && game_thread && klh_exe_ok) kspo_tick();
     if (!kspg.on || !game_thread || !klh_exe_ok) return;
     now = GetTickCount();
+    if (kspg.early && !kspg.earlyTried) kspg_early_patch();
+    if (kspg.earlyPend) kspg_early_report();
     if (!looked) {
         HMODULE u = GetModuleHandleA("user32.dll"); looked = 1;
         if (u) { gaks = (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState"); fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId"); }
