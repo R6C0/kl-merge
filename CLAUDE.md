@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~21:15 - [rtlift] Retomoto lift (owner: police stuck): STAGED, not installed, untested: [Join] FedRide=2 (kljoin.c) + door box f10 -1 -> 10
+(tools/kl_lift_rearm.py). Install/undo bats in C:\kl_build_1024\rtlift_1027; details in re/open_work_log.md.
+
 2026-10-27 ~20:10 - [c9] Q27 at the grant end: 14 PASS since the park fix; Q27_DM11B FAIL kl2+0x1e4a22 = node |pos| > 1e6 (body fell forever).
 The local player's node sat ~65.5k below its spawn x 34077 (GUESS 16-bit x wrap in online placement; only DM11B spawns at x > 32767), bots fine. Not live-
 tested; next steps in re/open_work_log.md. Queue stopped at 20:00 (DM06R/DD09R commented out).

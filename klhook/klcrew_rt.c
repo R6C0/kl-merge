@@ -250,6 +250,24 @@ static int klt_local_police(DWORD gd)
     return pol != 0;
 }
 
+/* 2026-10-27 (kljoin.c FedRide): how many AI heisters in play (records as klt_move reads them) have their feet above height y. 0 = none, or
+   the rules object / records could not be read (then a fed is never held back). Reads only; any thread. */
+static int klt_crew_above(float y)
+{
+    DWORD gs, rules, recs, inuse; int cap, i, n = 0;
+    if (!klh_exe_ok || !(gs = klh_rd32((DWORD_PTR)KLH_VA(KLT_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || klh_rd32(rules) != KLT_RULES_VT) return 0;
+    recs = klh_rd32(rules + 0x348); inuse = klh_rd32(rules + 0x34c); cap = (int)klh_rd32(rules + 0x354);
+    if (cap < 1 || !recs || !inuse) return 0;
+    if (cap > KLT_NREC) cap = KLT_NREC;
+    for (i = 0; i < cap; i++) {
+        DWORD at = recs + (DWORD)i * 0x7c, actor; BYTE u = 1, fl = 0, status = 0xff; float feet[3];
+        if (!klh_rd(inuse + i, &u, 1) || u || !klh_rd(at + 0x79, &fl, 1) || !(fl & 1) || !(actor = klh_rd32(at + 4))) continue;
+        if (!klh_rd(at + 0x10, &status, 1) || status) continue;
+        if (klh_rd(actor + 0x460, feet, 12) && feet[1] > y) n++;      /* ASSUMPTION as klt_move: the feet at actor + 0x460, y up */
+    }
+    return n;
+}
+
 static void klt_tick(int game_thread)
 {
     static const BYTE trig_code[14] = { 0x51, 0x53, 0x8b, 0xd9, 0x83, 0x7b, 0x34, 0x00, 0x74, 0x5d, 0x8b, 0x4b, 0x34, 0x8b };          /* 0x72e0f0 */

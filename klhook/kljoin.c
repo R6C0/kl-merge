@@ -68,6 +68,9 @@
  *   CarMin=2802 19560 789   optional second box (kl_fa_author.JOIN_BOX_CAR): with Delay the jump waits for the feet INSIDE it;
  *   CarMax=3142 19860 1029  CarWait=6 = seconds after Delay before the ride stops waiting for the car box; CarFallback=1 (default) = it then
  *                      jumps from where he stands, 0 = it is cancelled (he must leave and re-enter the box).
+ *   FedRide=2              (2026-10-27) a human FED (police) in the box: 1 = rides like a heister (default), 0 = never rides, 2 = rides only
+ *                      when no in-play AI heister is above FedCrewY=10000 (GUESS: street < 10000 < tower floors), and then without the
+ *                      car-box wait. 2 is recommended on for Retomoto (the fed was thrown to the street while the crew was upstairs).
  *   Scene=F01              KLHook.ini only
  *   klhook\KLJoin.retomoto.ini is the file for Retomoto Tower (box = kl_fa_author.JOIN_BOX).
  *
@@ -94,12 +97,16 @@
 #define KLJ_NBOX     16                       /* 0..7 from KLHook.ini, 8..15 from the level's KLJoin.ini */
 #define KLJ_MAXLIST  256
 
+/* 2026-10-27 FedRide (klcrew_rt.c is included AFTER this file): AI heisters in play above height y (0 when none / rules not found). */
+static int klt_crew_above(float y);
+
 static struct {
     int on, entry, has_target, said, wasactive;
     float lo[3], hi[3], target[3], tol;
     int delay_ms, has_car, carwait_ms, carfall, carstall_ms; float carnear, slack, clo[3], chi[3];       /* Delay= / Slack= / CarMin= CarMax= CarWait= (the ride, see klj_ride_step) */
     char name[48], scene[48];
-    char inside[2];
+    char inside[2], fedsaid[2];
+    int fedride; float fedy;                 /* FedRide= / FedCrewY= (2026-10-27, see klj_read) */
 } klj_box[KLJ_NBOX];
 static int klj_any, klj_tick_on = 1;
 static char klj_map_key[64], klj_map_file[MAX_PATH]; static FILETIME klj_map_ft;
@@ -145,6 +152,13 @@ static int klj_read(const char *file, int base, int from_map)
            have stood still (CarStall s, default 1.5, 0 = off) within CarNear units (default 400) of the car box after Delay. */
         GetPrivateProfileStringA(sec, "CarStall", "1.5", t, sizeof t, file); { double d = atof(t); klj_box[base + i].carstall_ms = d >= 0 && d <= 30 ? (int)(d * 1000.0 + 0.5) : 1500; }
         GetPrivateProfileStringA(sec, "CarNear", "400", t, sizeof t, file); { double d = atof(t); klj_box[base + i].carnear = d >= 0 && d <= 5000 ? (float)d : 400.0f; }
+        /* 2026-10-27 FedRide (owner, Retomoto: 'police still gets stuck in the lift'; log 20:50: a human FED spawned at the box edge, the ride
+           started, the shut car doors kept him out of the car box and CarFallback jumped him to the street 8.5 s later while all 7 AI heisters were
+           still upstairs at y ~20990). 1 (default here) = a fed rides like anybody (old behaviour). 0 = a police local player never starts a ride.
+           2 (recommended on) = a fed starts no ride while any in-play AI heister is above FedCrewY (default 10000 = GUESS: the tower floors are
+           y 19600..21000, the street is below 10000), and a fed's ride never waits for the car box (the escape car cannot open for him). */
+        { int fr = (int)GetPrivateProfileIntA(sec, "FedRide", 1, file); klj_box[base + i].fedride = fr < 0 || fr > 2 ? 1 : fr; }
+        GetPrivateProfileStringA(sec, "FedCrewY", "10000", t, sizeof t, file); { double d = atof(t); klj_box[base + i].fedy = d > -100000 && d < 100000 ? (float)d : 10000.0f; }
         klj_box[base + i].carfall = GetPrivateProfileIntA(sec, "CarFallback", 1, file) != 0;      /* 1 (default): after CarWait the jump comes anyway, so a shut door cannot strand the player */
         { float ca[3], cb[3];
           if (klj_vec(sec, "CarMin", file, ca) && klj_vec(sec, "CarMax", file, cb)) {
@@ -156,6 +170,7 @@ static int klj_read(const char *file, int base, int from_map)
         klj_box[base + i].on = 1; n++;
         if (klj_box[base + i].delay_ms) klog("join: box %d rides: jump %d ms after the feet enter%s (slack %g)", base + i + 1, klj_box[base + i].delay_ms,
                                              klj_box[base + i].has_car ? ", with the feet inside its CarMin/CarMax box" : "", klj_box[base + i].slack);
+        if (klj_box[base + i].fedride != 1) klog("join: box %d FedRide=%d (FedCrewY %g)", base + i + 1, klj_box[base + i].fedride, klj_box[base + i].fedy);
         klog("join: box %d: (%g, %g, %g) - (%g, %g, %g) -> entry %d, name '%s', target %s(%g, %g, %g)%s%s", base + i + 1,
              klj_box[base + i].lo[0], klj_box[base + i].lo[1], klj_box[base + i].lo[2], klj_box[base + i].hi[0], klj_box[base + i].hi[1], klj_box[base + i].hi[2],
              klj_box[base + i].entry, klj_box[base + i].name, klj_box[base + i].has_target ? "" : "none ", klj_box[base + i].target[0], klj_box[base + i].target[1], klj_box[base + i].target[2],
@@ -243,6 +258,13 @@ static int klj_fire(int i, int b, int e, const char *name, const float feet[3], 
     return 0;
 }
 
+/* Is this player object police (a human fed)? Same bytes as klt_local_police (klcrew_rt.c): vtable ZFFPlayer, player + 0x2723. */
+static int klj_is_fed(DWORD pl)
+{
+    BYTE pol = 0;
+    return pl && klh_pvt(pl) == 0x00bb45f4 && klh_rd(pl + 0x2723, &pol, 1) && pol != 0;
+}
+
 static void klj_ride_end(const char *why, int fired)
 {
     klog("join: ride of player %d in box %d %s after %lu ms%s%s", klj_ride.player, klj_ride.box + 1, fired ? "ended with the jump" : "CANCELLED",
@@ -280,7 +302,10 @@ static void klj_ride_step(DWORD gd, DWORD lo, int count, const BYTE sel[2], DWOR
     if (!klj_in_box(feet, klj_box[b].lo, klj_box[b].hi, klj_box[b].slack) && !(klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, klj_box[b].slack))) {
         klj_ride_end("the player left the box (more than Slack outside)", 0); return; }
     if (el < (DWORD)klj_box[b].delay_ms) return;
-    if (klj_box[b].has_car && !klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, 0)) {
+    if (klj_box[b].fedride == 2 && klj_is_fed(pl) && (d = (DWORD)klt_crew_above(klj_box[b].fedy)) != 0) {
+        klog("join: ride of player %d in box %d: FED and %lu AI heister(s) are still above y %g", i, b + 1, (unsigned long)d, klj_box[b].fedy);
+        klj_ride_end("FedRide: the crew is still above", 0); return; }
+    if (klj_box[b].has_car && !(klj_box[b].fedride != 1 && klj_is_fed(pl)) && !klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, 0)) {
         int stalled = 0;
         if (klj_box[b].carstall_ms > 0 && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, klj_box[b].carnear)) {      /* 2026-10-24: see CarStall in klj_read */
             if (!klj_ride.sset || fabs(feet[0] - klj_ride.sx) > 60.0f || fabs(feet[2] - klj_ride.sz) > 60.0f) { klj_ride.sset = 1; klj_ride.sx = feet[0]; klj_ride.sz = feet[2]; klj_ride.sat = now; }
@@ -361,7 +386,18 @@ static void klj_tick(void)
             if (!klj_box[b].wasactive) continue;
             for (k = 0; k < 3 && feet[k] >= klj_box[b].lo[k] && feet[k] <= klj_box[b].hi[k]; k++) ;      /* a NaN is outside */
             in = k == 3;
+            if (!in) klj_box[b].fedsaid[i] = 0;
             if (!in || klj_box[b].inside[i]) { klj_box[b].inside[i] = (char)in; continue; }
+            if (klj_box[b].fedride != 1 && klj_is_fed(pl)) {      /* 2026-10-27 FedRide: see klj_read. inside[] stays 0, so he is judged again every tick */
+                int above = klj_box[b].fedride == 0 ? -1 : klt_crew_above(klj_box[b].fedy);
+                if (above != 0) {
+                    if (!klj_box[b].fedsaid[i]) { klj_box[b].fedsaid[i] = 1;
+                        if (above < 0) klog("join: player %d (FED) in box %d: no ride (FedRide=0)", i, b + 1);
+                        else klog("join: player %d (FED) in box %d: no ride (FedRide=2, %d AI heister(s) still above y %g)", i, b + 1, above, klj_box[b].fedy); }
+                    continue;
+                }
+                klog("join: player %d (FED) in box %d: the crew is down (none above y %g): the ride starts, without the car-box wait", i, b + 1, klj_box[b].fedy);
+            }
             if (klj_box[b].delay_ms && klj_ride.retry_at && (int)(now - klj_ride.retry_at) < 0) continue;      /* just cancelled: wait before the retry */
             if (!klh_rd((DWORD_PTR)KLH_VA(KLJ_REQUEST), &req, 4) || !klh_rd(gd + 0x8d4, &pend, 4) || req || pend != -1) continue;    /* a request is pending: next tick */
             klj_box[b].inside[i] = 1;
