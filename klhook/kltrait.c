@@ -41,6 +41,12 @@
  * KEYS ([Trait.<Name>], <Name> = the wardrobe name, e.g. [Trait.Kane]; absent key = 1.0):
  *   Health= DamageOut= DamageIn= Regen= ReviveTime= Adrenaline= AimSpread=
  *
+ * ONLINE ([Voice] OnlineTraits=1, needs [Voice] Online=1 and [Online] Read=1; default 0, recommended off until benched): kltt_tick also
+ * follows the LOCAL online player (klvoice_online.c's kvo_online_who: seat + character from klonline_read.c) so his trait is known and logged
+ * for kltalk.c. EVERY factor answers 1.0 online (kltt_g.online): Health/DamageIn and Regen change a health or a timer the net peers also hold,
+ * ReviveTime/Adrenaline change get-up and helper numbers that are replicated, DamageOut/AimSpread are AI-only (no AI heister is a wardrobe
+ * record online). Nothing is written. GUESS T1: the online seat number can be used as the record index (< KLW_NREC); only the local seat is known.
+ *
  * LOG: 'trait: record N = <name> (human|AI heister) Health x1.05 ...' once per record and body.
  */
 #ifndef KLTRAIT_C
@@ -53,7 +59,7 @@ static const char *const kltt_key[KLTT_N] = { "Health", "DamageOut", "DamageIn",
 
 static struct { int on, dry, log; float delta; int nset; struct { char name[32]; int has; float v[KLTT_N]; } set[KLTT_NSET]; } ktrait;
 static struct {
-    DWORD rules, last; int human, n;
+    DWORD rules, last; int human, n, online;
     struct { int ch; DWORD actor; int told; char name[32]; int set; } r[KLW_NREC];     /* set = index in ktrait.set, -1 = no trait */
 } kltt_g;
 
@@ -94,7 +100,7 @@ static float kltt_get(int rec, int knob)
     int s;
     if (!ktrait.on || ktrait.dry || knob < 0 || knob >= KLTT_N) return 1.0f;
     if (rec < 0) rec = kltt_g.human;
-    if (rec < 0 || rec >= KLW_NREC) return 1.0f;
+    if (rec < 0 || rec >= KLW_NREC || kltt_g.online) return 1.0f;           /* online: log only, no gameplay factor (see ONLINE above) */
     s = kltt_g.r[rec].set;
     if (!kltt_g.r[rec].ch || s < 0 || s >= ktrait.nset) return 1.0f;
     return ktrait.set[s].v[knob];
@@ -113,19 +119,24 @@ static float kltt_aim(int rec, float base)
     return a < 0 ? 0 : a > 100.0f ? 100.0f : a;
 }
 
+static int kvo_online_src(struct klw_src *s);                       /* klvoice_online.c, defined later */
+
 static void kltt_tick(int game_thread)
 {
-    struct klw_who w; struct klw_src src; DWORD hero[8]; int i;
+    struct klw_who w; struct klw_src src; DWORD hero[8]; int i, onl = 0;
     DWORD now = GetTickCount();
     if (!ktrait.on || !game_thread || now - kltt_g.last < 500) return;
     kltt_g.last = now;
-    if (!klw_who_now(&w) || w.n <= 0) {
+    if (!klk_who_any(&w, &onl) || w.n <= 0) {
         if (kltt_g.n || kltt_g.rules) { memset(&kltt_g, 0, sizeof kltt_g); kltt_g.human = -1; kltt_g.last = now; }
         return;
     }
-    if (w.rules != kltt_g.rules) { memset(&kltt_g, 0, sizeof kltt_g); kltt_g.rules = w.rules; kltt_g.last = now; }
-    if (!klh_rd(w.rules + 0x208, hero, sizeof hero)) return;
-    klw_source(&src, hero, w.key);
+    if (w.rules != kltt_g.rules || kltt_g.online != onl) { memset(&kltt_g, 0, sizeof kltt_g); kltt_g.rules = w.rules; kltt_g.online = onl; kltt_g.last = now; }
+    if (onl) { if (!kvo_online_src(&src)) return; }                    /* the online round's own character list (klonline_read.c) */
+    else {
+        if (!klh_rd(w.rules + 0x208, hero, sizeof hero)) return;
+        klw_source(&src, hero, w.key);
+    }
     kltt_g.human = w.human >= 0 && w.human < w.n ? w.m[w.human].rec : -1;
     kltt_g.n = w.n;
     for (i = 0; i < w.n; i++) {
@@ -141,7 +152,7 @@ static void kltt_tick(int game_thread)
             const float *v = ktrait.set[kltt_g.r[rec].set].v; int human = rec == kltt_g.human;
             klog("trait: record %d = %s (%s) Health x%.2f DamageOut x%.2f DamageIn x%.2f Regen x%.2f ReviveTime x%.2f Adrenaline x%.2f AimSpread x%.2f%s%s",
                  rec, kltt_g.r[rec].name, human ? "human" : "AI heister", v[0], v[1], v[2], v[3], v[4], v[5], v[6],
-                 human ? " - DamageOut and AimSpread are NOT applied to the human" : " - Regen is NOT applied to an AI heister",
+                 onl ? " - ONLINE (OnlineTraits=1): the local player; NO factor is applied online, the line is for kltalk.c" : human ? " - DamageOut and AimSpread are NOT applied to the human" : " - Regen is NOT applied to an AI heister",
                  ktrait.dry ? " - Dry=1: nothing is applied" : "");
         }
     }

@@ -686,13 +686,32 @@ static void klk_new_round(DWORD rules)
     klk_r.fed_ev[0] = klk_r.fed_ev[1] = -1; klk_r.fed_last[0] = klk_r.fed_last[1] = -1000; klk_r.fed_kn = klkf_n_total; klk_r.fed_was = 0;
 }
 
+/* [Voice] OnlineTraits=1 (needs [Voice] Online=1, [Online] Read=1): kltalk.c / kltrait.c also run for the LOCAL online player, who comes from
+   klvoice_online.c (defined later). Default 0 (recommended off until benched). Read-only on the replicated state. */
+static int kvo_online_who(struct klw_who *w, char *name);
+static int klk_onl_traits(void)
+{
+    static int v = -1;
+    if (v < 0) v = GetPrivateProfileIntA("Voice", "Online", 0, klh_ini) != 0 && GetPrivateProfileIntA("Voice", "OnlineTraits", 0, klh_ini) != 0;
+    return v;
+}
+/* Arcade's who, else (OnlineTraits=1) the one-member online who. *onl = 1 for the online one. */
+static int klk_who_any(struct klw_who *w, int *onl)
+{
+    char nm[32];
+    *onl = 0;
+    if (klw_who_now(w)) return 1;
+    if (!klk_onl_traits() || !kvo_online_who(w, nm)) return 0;
+    *onl = 1; return 1;
+}
+
 static void klk_tick(int game_thread)
 {
     static int rounds, toldthread; static char toldscene[160];
     struct klw_who w; struct klk_here h; char scene[160], key[64], why[200], who[96], what[200], ckey[KLK_KEYLEN]; const char *pool = "";
-    DWORD now, score; float rt, feet[3] = { 0, 0, 0 }; int i, j, v, hstage = 0, have_feet = 0, busy = 0, due_group[KLK_NSCENE];
+    DWORD now, score; float rt, feet[3] = { 0, 0, 0 }; int onl = 0, i, j, v, hstage = 0, have_feet = 0, busy = 0, due_group[KLK_NSCENE];
     if (!klk.on || !klh_exe_ok) return;
-    if (!klw_who_now(&w)) return;                                            /* not Arcade, no ZGameRulesHeist object, no level, no crew records */
+    if (!klk_who_any(&w, &onl)) return;                                      /* not Arcade (nor, OnlineTraits=1, an online round with a known local seat), no ZGameRulesHeist object, no level, no crew records */
     if (!klx_on || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
     v = klx_level_verdict(scene, why);
     /* [Talk] StockLevels=1 (default 0, owner 2026-10-23 'even in dog days'): a level the verdict calls STOCK is let through; it
@@ -731,7 +750,7 @@ static void klk_tick(int game_thread)
     if (!klk_r.running) {
         klk_r.running = 1; klk_r.t0 = (klk_lv.start16 > 0 && klk_r.t16) ? klk_r.t16 + (DWORD)(klk_lv.start16 * 1000) : now; klk_r.rounds = ++rounds; klk_r.join_seen = klj_after.at;
         klk_r.next_idle = klk_lv.gap_lo + (float)klk_rnd((DWORD)((klk_lv.gap_hi - klk_lv.gap_lo) * 10) + 1) / 10;
-        klog("talk: round %d: clock starts in session state 0x%x, Start16=%.1f (rules %08lx): %s%s", rounds, w.state, klk_lv.start16, w.rules, klk_who_text(&w, &h, who), w.wardrobe ? "" : " - NO wardrobe");
+        klog("talk: round %d: clock starts in session state 0x%x, Start16=%.1f (rules %08lx): %s%s%s", rounds, w.state, klk_lv.start16, w.rules, klk_who_text(&w, &h, who), w.wardrobe ? "" : " - NO wardrobe", onl ? " - ONLINE: the local player only, remote players stay stock (OnlineTraits=1, GUESS T1 below)" : "");
     }
     rt = (float)(now - klk_r.t0) / 1000.0f;
     klk_r.rt_now = rt;
