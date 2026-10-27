@@ -264,10 +264,20 @@ static DWORD klh_sm_vt2;
 #define KLH_SM_VT_OK(v) ((v) == 0xbd1ebc || ((v) && (v) == klh_sm_vt2))
 /* the Sv rules object (ZGameRulesFragileAllianceSv, 0xbd2eb4) with the private vtable copy of klroundkeep.c ([Lobby] KeepRound / TEST probe) */
 static DWORD klh_rules_vt2;
-#define KLH_RULES_SV_OK(v) ((v) == 0xbd2eb4 || ((v) && (v) == klh_rules_vt2))
 /* the Cl rules object (ZGameRulesFragileAllianceCl, 0xbd31e4) with the private vtable copy of klucc_down.c ([Ucc] DownOnly, slot 15) */
 static DWORD klh_rules_vt3;
-#define KLH_RULES_CL_OK(v) ((v) == 0xbd31e4 || ((v) && (v) == klh_rules_vt3))
+/* 10-27 (bench Q27_DD01ce6): online the rules vtable is a copy most of the round (525444c4, later 525444dc: this DLL's own tables),
+   and several patchers set and clear klh_rules_vt2/vt3 in turn. So a vtable outside the exe image also counts when its slot 0 is
+   the class's own (kl2.exe: Sv 0x765790, Cl 0x8b3db0, Heist 0x4b6c90 - all different). */
+static int klh_rules_vt_is(DWORD v, DWORD orig, DWORD reg)
+{
+    if (!v) return 0;
+    if (v == orig || v == reg) return 1;
+    if (v >= 0x400000 && v < 0x1800000) return 0;
+    return klh_rd32(v) == klh_rd32(orig);
+}
+#define KLH_RULES_SV_OK(v) klh_rules_vt_is((v), 0xbd2eb4, klh_rules_vt2)
+#define KLH_RULES_CL_OK(v) klh_rules_vt_is((v), 0xbd31e4, klh_rules_vt3)
 
 /* [Net] OnlineSafe=1 (default 1): kl_online() = 1 when this machine is in a NETWORK session, and then every part that WRITES game state
    stays out of it (re\netcode_plan.md 2.1). The test is the one the AI parts already make (klbot.c klb_read / klbalance.c klr_arcade):
@@ -284,7 +294,7 @@ static int kl_online(void)
     if (klh_rd(sm + 0x54, &role, 4) && (role == 2 || role == 3)) return 1;
     if (!klh_rd(sm + 0x5c, &mode, 4) || mode != 4) return 0;
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4))) || !(rules = klh_rd32(gs + 0x54))) return 0;
-    return klh_rd32(rules) != 0x00bd3514;
+    return !klh_rules_vt_is(klh_rd32(rules), 0x00bd3514, 0);      /* a copy of the Heist vtable (slot 0 0x4b6c90) is still Arcade */
 }
 
 static int klh_rdstr(DWORD_PTR p, char *out, int cap)
