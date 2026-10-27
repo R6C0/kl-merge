@@ -4,6 +4,7 @@ Map-pool ICONS for the online lobby (mappool_1027a, track "random maps with the 
 
     python kl_mappool.py build [<out folder>]     default <DM>\KL_PortTools\build\mappool_1027
     python kl_mappool.py check <out folder>       re-reads every built archive
+    python kl_mappool.py thumbs [<out folder>]    only the hook overlay's thumbnails (klmappool_ov.c): <out>/overlay/<map>.kmi, 128 x 72, + overlay_ini.txt (build does this too)
 
 WHAT IT BUILDS (one folder per pool: dm = Full Dead Men, dd = Full Dog Days, mix = Mix; sibling of kl_lobbynames.py, which it reuses)
   <out>\<pool>\Overlay\Scenes\kaneandlynch.zip   the menu scene + ONE new picture entity LobbyPool_<pool> (325 x 183): a grid of the thumbnail of
@@ -103,15 +104,8 @@ DIGITS = {   # 5 x 7 digits for the cards ("DM07"): kl_lobbynames' font has lett
 L.FONT.update(DIGITS)
 
 
-def build(out=OUT, log=print):
-    import zipfile as zf
-    live_s, live_p = L.BASE_SCENE, L.BASE_PATCH
-    bs, bp = base_file(live_s), base_file(live_p)
-    L.BASE_SCENE, L.BASE_PATCH = bs, bp                      # kl_lobbynames reads these module globals
-    os.makedirs(out, exist_ok=True)
-    z, zp = zf.ZipFile(bs), zf.ZipFile(bp)
-    rules = read_rules()
-    ent = pool_entries(rules)
+def make_pic_fn(z):
+    """-> (pic(label, slot, folder), mappic, fake): the 325 x 183 picture of a map (cached in mappic by folder / 'stock'+slot)."""
     stockpic = {s: L.stock_picture(z, 'LevelPicture_' + s) for s in L.SLOTS}
     mappic, fake = {}, []
 
@@ -130,7 +124,54 @@ def build(out=OUT, log=print):
                 px = (L.LW, L.LH, L.card(L.LW, L.LH, [words], 8)); fake.append(folder)
         mappic[key] = px
         return px
+    return pic, mappic, fake
 
+
+THUMB_W, THUMB_H = 128, 72
+
+
+def kmi_bytes(w, h, rgba):
+    """The hook's image file (klmappool_ov.c): 'KMI1', u32 w, u32 h, then w*h*4 bytes B,G,R,A (D3DFMT_A8R8G8B8 little endian)."""
+    import struct
+    bgra = bytearray(len(rgba))
+    bgra[0::4], bgra[1::4], bgra[2::4], bgra[3::4] = rgba[2::4], rgba[1::4], rgba[0::4], bytes([255]) * (w * h)
+    return b'KMI1' + struct.pack('<II', w, h) + bytes(bgra)
+
+
+def kmi_name(label):
+    """Same rule as kmpo_file in klmappool_ov.h: the pool entry's name, every other character an underscore ('stock F03' -> 'stock_F03.kmi')."""
+    return re.sub(r'[^A-Za-z0-9_.-]', '_', label) + '.kmi'
+
+
+def write_thumbs(out, ent, pic, log=print):
+    """One small picture per map of every pool -> <out>/overlay/<name>.kmi (+ overlay_ini.txt: the [MapPool] lines to paste). Same pictures as the lobby grid."""
+    d = os.path.join(out, 'overlay'); os.makedirs(d, exist_ok=True)
+    done = {}
+    for pool in POOLS:
+        for lab, s, f, _p in ent[pool]:
+            n = kmi_name(lab)
+            if n in done:
+                continue
+            w, h, px = pic(lab, s, f)
+            small = L.resize(px, w, h, THUMB_W, THUMB_H)
+            open(os.path.join(d, n), 'wb').write(kmi_bytes(THUMB_W, THUMB_H, small)); done[n] = lab
+    open(os.path.join(d, 'overlay_ini.txt'), 'w').write('[MapPool]\nOverlay=1\nOverlayDir=%s\n' % d)
+    log('overlay thumbnails: %d files in %s' % (len(done), d))
+    return sorted(done)
+
+
+def build(out=OUT, log=print):
+    import zipfile as zf
+    live_s, live_p = L.BASE_SCENE, L.BASE_PATCH
+    bs, bp = base_file(live_s), base_file(live_p)
+    L.BASE_SCENE, L.BASE_PATCH = bs, bp                      # kl_lobbynames reads these module globals
+    os.makedirs(out, exist_ok=True)
+    z, zp = zf.ZipFile(bs), zf.ZipFile(bp)
+    rules = read_rules()
+    ent = pool_entries(rules)
+    pic, mappic, fake = make_pic_fn(z)
+
+    write_thumbs(out, ent, pic, log)
     pics, pool_cells = [], {}
     for pool in POOLS:
         cells = [pic(lab, s, f) for lab, s, f, _p in ent[pool]]
@@ -289,6 +330,10 @@ if __name__ == '__main__':
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
     if a and a[0] == 'build':
         build(a[1] if len(a) > 1 else OUT)
+    elif a and a[0] == 'thumbs':
+        o = a[1] if len(a) > 1 else OUT
+        os.makedirs(o, exist_ok=True)
+        write_thumbs(o, pool_entries(read_rules()), make_pic_fn(zipfile.ZipFile(base_file(L.BASE_SCENE)))[0])
     elif a and a[0] == 'check':
         for b in check(a[1] if len(a) > 1 else OUT):
             print('  ' + b)

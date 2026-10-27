@@ -343,6 +343,9 @@ static void klfps_post(void)
     QueryPerformanceCounter(&n); klfps_ret = n.QuadPart;
 }
 
+static void klmpo_present(void *dev);                           /* klmappool_ov.c: the lobby map-pool overlay, drawn right before the real Present (depth 0 only) */
+static void *klmpo_dev;                                          /* the device klfps_createdev saw (klmappool_ov.c draws with it; the swap chain route has no device argument) */
+
 static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty)
 {
     HRESULT r; void *ret = _ReturnAddress(); int d = klfps_depth(), t;
@@ -353,6 +356,7 @@ static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst
     t = klfps_pre("device (slot 17)", d, ret);
     if (t < 0) return 0;
     klfps_depth_set(d + 1);
+    if (!d) klmpo_present(self);
     r = klfps_real_present(self, src, dst, wnd, dirty);
     klfps_depth_set(d);
     if (t) klfps_post();
@@ -372,6 +376,7 @@ static HRESULT WINAPI klfps_present_sc(void *self, const RECT *src, const RECT *
     t = klfps_pre("swap chain (slot 3)", d, ret);
     if (t < 0) return 0;
     klfps_depth_set(d + 1);
+    if (!d) klmpo_present(klmpo_dev);
     r = klfps_real_present_sc(self, src, dst, wnd, dirty, flags);
     klfps_depth_set(d);
     if (t) klfps_post();
@@ -438,6 +443,7 @@ static HRESULT WINAPI klfps_createdev(void *self, UINT adapter, DWORD type, HWND
     HRESULT r = klfps_real_createdev(self, adapter, type, focus, flags, pp, dev);
     if (r >= 0 && dev && *dev) {
         klfps_read_pp(pp);
+        klmpo_dev = *dev;
         if (klfps_use_reset) klfps_wrap_slot(*dev, 16, (void *)klfps_reset, (void **)&klfps_real_reset, "Reset");
         klfps_wrap_slot(*dev, 17, (void *)klfps_present, (void **)&klfps_real_present, "Present");
         klquad_device(*dev, (void *)klfps_reset);                    /* klquad.c: the ring only with this Reset wrapper */
