@@ -66,23 +66,16 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~02:40 - [ce] ONLINE TAGS PROVEN LIVE (bench DD01ce4, 1027m): HideSrc swapped the player list vtable, klu_is_plist() accepts both.
+NOT run live yet (all default 0): OnlineIntroState, [Voice] OnlineTraits/OnlineCrew, [ShopPage] OnlinePage2 (stock carrier gun only),
+OnlineBoardTake/IntroCount/VanIcon, OnlineTagStyle/TagHold, [Grades] OnlineTags. TEST out_all_1027o_test / SHIP out_ship_1027o; owner still on 1027i.
+Gap list (verified): re/open_work_log.md 10-27 02:40. Waiting on owner: random default heister online (overrides own pick).
+
 2026-10-27 ~01:00 - Netcode D1-D4 committed (c9), NOT run live: D1 klh_pvt (NetSmooth hid remote players from 46 vtable tests), D2 NetSmooth/nettune
 options rows, D3 [Sync] PlayerProbe, D4 per-round no-wardrobe note. TEST out_test_1027d / SHIP out_ship_1027d. Bench queue lan_1025/queue_1027.txt on 1027d.
 
 2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
 Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
-
-2026-10-26 ~23:15 - [scheduled] ONLINE HUD GAPS CLOSED, NOT RUN: klhud.c klu_keep (per-compose bits: kill line live / van card live); klhud_kill.c and
-klhud_escape.c (EscapeCard) take the stock pop-up / van panel off the screen ONLY with the bit, so online with the default OnlineFeed=0 / OnlineVan=0
-the stock ones show instead of nothing. --check-hook clean. PC idle since 19:54; owner's 18:58 online session: 2nd load put 109 of 128 MB into klmem's
-reserve (debug/notes/2026-10-26-scheduled-triage.md) - watch the first 10-round mixed match for 'HeapAlloc ... FAILED' lines.
-
-2026-10-26 ~21:10 - Online = Arcade port merged (606e9fc2a), NOT run live: klonline_read.c + [HUD] Online* / [ShopPage] OnlineLook keys (default 0),
-build out_arcport_1026d. Live ini: 10 min / 10 rounds / 12 players / OnlineSet=9 mixed maps. Hire tab stage 1 building (branch hire-1026). Tests stopped (owner present).
-
-2026-10-26 ~15:05 - [scheduled] UCC P2 BUILT, NOT RUN: klhook/klucc_aim.c `[Ucc] PoliceAim=1` - in UCC rounds the AI gates the UCC on rules slot 188
-(`[rules+0x284]` bUCCAIHostile: 0 nobody's target / police friend, 1 everyone's enemy), never on +0x2723; the module answers 1 to POLICE askers only (private
-rules vtable + naked thunk reading the caller's registers). klua_test 27/27. re/ucc_police_aim.md: bench 6; OWNER question 5 (stock exposes a UCC who kills a cop).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
