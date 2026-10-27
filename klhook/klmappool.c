@@ -90,7 +90,7 @@ static void kmp_perm(void)
 static void kmp_ready(void)
 {   /* (re)build when the pool or seed changed: a new pool starts a fresh no-repeat cycle */
     if (!kmp.built) kmp_build();
-    if (kmp.builtPool != kmp.pool || kmp.builtSeed != kmp.seed || !kmp.norder) {
+    if (kmp.builtPool != kmp.pool || kmp.builtSeed != kmp.seed) {
         if (kmp.builtPool != kmp.pool || kmp.builtSeed != kmp.seed) { memset(kmp.used, 0, sizeof kmp.used); kmp.cycle = 0; kmp.loads = 0; kmp.curAt = 0; }
         kmp_perm();
         if (kmp.log) {
