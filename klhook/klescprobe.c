@@ -70,7 +70,7 @@ static void klep_tick(int game_thread)
     if (klu_r.osd) { DWORD pl = klh_rd32(klu_r.osd + KLU_O_PLIST), li = 0; if (pl && klh_rd(pl + 0xefc, &li, 4) && li < 16) loc = (int)li; }
     klor_noev = 1; i = klor_read(&o, loc); klor_noev = 0;
     if (!i || o.b.state != 0x19) return;
-    if (klep_c.rules != o.b.rules || klep_c.round != o.round) { memset(&klep_c, 0, sizeof klep_c); klep_c.rules = o.b.rules; klep_c.round = o.round; klep_c.van = -1; klog("escprobe: new round %d (rules %08lx), local seat %d", o.round, (unsigned long)o.b.rules, loc); }
+    if (klep_c.rules != o.b.rules || (o.round && klep_c.round != o.round)) { memset(&klep_c, 0, sizeof klep_c); klep_c.rules = o.b.rules; klep_c.round = o.round; klep_c.van = -1; klog("escprobe: new round %d (rules %08lx), local seat %d", o.round, (unsigned long)o.b.rules, loc); }
     /* the van */
     if (!klep_c.vanset || (int)o.esc_state != klep_c.van || o.vehicle != klep_c.vehicle) {
         if (klep_c.vanset && klep_line()) klog("escprobe: t=%lu van state %d->%d vehicle %08lx->%08lx timer %.1f clock %.1f", (unsigned long)now, klep_c.van, (int)o.esc_state, (unsigned long)klep_c.vehicle, (unsigned long)o.vehicle, o.esc_timer, o.clock);
