@@ -70,6 +70,8 @@ static struct { int walks, lines, swapped, restored, missing, told_layout, told_
 
 static int kvo_onl; static char kvo_onl_name[32];      /* [Voice] Online: this tick's who is the LOCAL online player (klvoice_online.c, defined later) */
 static int kvo_online_who(struct klw_who *w, char *name);
+static char kvo_onl_seatname[8][32]; static int kvo_crew_on(void);       /* klvoice_online.c: [Voice] OnlineCrew per-seat names */
+#define kvo_onl_crew kvo_crew_on()
 
 static int kvo_name_of(const char *n)
 {
@@ -512,7 +514,7 @@ static void kvo_tick(int game_thread)
         const char *nm = ""; int idx;
         if (w.m[i].rec < 0 || w.m[i].rec > 7) continue;
         idx = tab[w.m[i].rec]; if (idx > 7) continue;
-        if (kvo_onl) { if (kvo_name_of(kvo_onl_name)) nm = kvo_names[kvo_name_of(kvo_onl_name) - 1]; }
+        if (kvo_onl) { const char *on = kvo_onl_crew ? kvo_onl_seatname[w.m[i].rec] : kvo_onl_name; if (kvo_name_of(on)) nm = kvo_names[kvo_name_of(on) - 1]; }
         else if (w.m[i].ch > 0) {
             EnterCriticalSection(&klc_cs);
             if (klc_w.on && !_stricmp(w.key, klc_w.key) && w.m[i].ch <= klc_w.n && kvo_name_of(klc_w.c[w.m[i].ch - 1].name)) nm = kvo_names[kvo_name_of(klc_w.c[w.m[i].ch - 1].name) - 1];

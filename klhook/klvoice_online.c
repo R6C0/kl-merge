@@ -20,9 +20,18 @@ static int kvo_online_src(struct klw_src *s)
     *s = klor_s.src; return 1;
 }
 
+/* [Voice] OnlineCrew=1 (needs Online=1): every human row of klor_read speaks its DM voice on THIS client (default 0, recommended off until benched) */
+static int kvo_crew_on(void)
+{
+    static int v = -1;
+    if (v < 0) v = GetPrivateProfileIntA("Voice", "Online", 0, klh_ini) != 0 && GetPrivateProfileIntA("Voice", "OnlineCrew", 0, klh_ini) != 0;
+    return v;
+}
+/* kvo_onl_seatname[8][32] (declared in klvoice.c): per seat: the heister name of that seat's member in the last who ("" = not in it) */
+
 static int kvo_online_who(struct klw_who *w, char *name)
 {
-    static struct klw_who last; static char lname[32]; static DWORD lat, ltry, lround_rules; static int lround = -1, lok;
+    static struct klw_who last; static char lname[32], lsn[8][32]; static DWORD lat, ltry, lround_rules; static int lround = -1, lok;
     DWORD now = GetTickCount(), pl, li = 0; struct klor_snap o; char scene[160];
     name[0] = 0;
     if (lok && (DWORD)(now - ltry) < 400) { *w = last; snprintf(name, 32, "%s", lname); return 1; }   /* cached: klor_read is a scan */
@@ -40,13 +49,27 @@ static int kvo_online_who(struct klw_who *w, char *name)
                 if (!klh_level_key(scene, last.key, sizeof last.key)) lok = 0;
                 last.m[0].rec = (int)li; last.m[0].ch = o.r[f].ch; last.m[0].model = o.r[f].model; last.m[0].actor = o.r[f].actor;
                 snprintf(lname, sizeof lname, "%s", o.r[f].name);
+                memset(lsn, 0, sizeof lsn); snprintf(lsn[li], sizeof lsn[li], "%s", o.r[f].name);
+                if (kvo_crew_on()) {                                                   /* the other human rows, seats < 8 only (the voice table has 8 entries) */
+                    for (k = 0; k < o.n && last.n < KLW_NREC; k++) {
+                        if (k == f || o.r[k].seat < 0 || o.r[k].seat > 7 || !o.r[k].name[0]) continue;
+                        last.m[last.n].rec = o.r[k].seat; last.m[last.n].ch = o.r[k].ch; last.m[last.n].model = o.r[k].model; last.m[last.n].actor = o.r[k].actor;
+                        snprintf(lsn[o.r[k].seat], sizeof lsn[0], "%s", o.r[k].name); last.n++;
+                    }
+                }
                 if (lok && (lround_rules != o.b.rules || lround != o.round)) {       /* once per round */
                     lround_rules = o.b.rules; lround = o.round;
                     klog("voice: online: local seat %d plays '%s' (character %d of %d), round %d of %d; its lines use voice number %d (GUESS V1: the seat number)", (int)li, lname, last.m[0].ch, last.nchar, o.round, o.rounds, (int)li);
+                    if (kvo.log >= 1 && last.n > 1) {
+                        char mp[256]; int q, ml = 0; mp[0] = 0;
+                        for (q = 0; q < last.n && ml < 200; q++) ml += snprintf(mp + ml, sizeof mp - ml, "%sseat %d=voice %d '%s'", q ? ", " : "", last.m[q].rec, last.m[q].rec, lsn[last.m[q].rec]);
+                        klog("voice: online crew (OnlineCrew=1): %d humans: %s (GUESS V1: voice number = seat; seats above 7 skipped)", last.n, mp);
+                    }
                 }
             }
         }
     } else lok = 0;
+    memcpy(kvo_onl_seatname, lsn, sizeof lsn);
     if (lok) { lat = now ? now : 1; *w = last; snprintf(name, 32, "%s", lname); return 1; }
     if (lat && (DWORD)(now - lat) < 3000) { *w = last; snprintf(name, 32, "%s", lname); return 1; }    /* a short read failure does not flap the swaps */
     return 0;

@@ -689,6 +689,7 @@ static void klk_new_round(DWORD rules)
 /* [Voice] OnlineTraits=1 (needs [Voice] Online=1, [Online] Read=1): kltalk.c / kltrait.c also run for the LOCAL online player, who comes from
    klvoice_online.c (defined later). Default 0 (recommended off until benched). Read-only on the replicated state. */
 static int kvo_online_who(struct klw_who *w, char *name);
+static int kvo_crew_on(void);
 static int klk_onl_traits(void)
 {
     static int v = -1;
@@ -701,7 +702,7 @@ static int klk_who_any(struct klw_who *w, int *onl)
     char nm[32];
     *onl = 0;
     if (klw_who_now(w)) return 1;
-    if (!klk_onl_traits() || !kvo_online_who(w, nm)) return 0;
+    if (!(klk_onl_traits() || kvo_crew_on()) || !kvo_online_who(w, nm)) return 0;   /* OnlineCrew=1: banter over every human row */
     *onl = 1; return 1;
 }
 
