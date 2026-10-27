@@ -51,6 +51,7 @@
 
 struct klco_peer { int used, src; int c, m, o; DWORD at; };
 static struct {
+    int ignoreChar;                            /* [Hire] OnlineIgnoreChar and [Hire] Enable=1: the Heister page Char= is not the online body (Arcade ignores it too) */
     int on, steam, udp, keys, log, settle, tries, keyChar, keyMask, unique, forgetMs, ownDiag;
     int testPeer, testChar, testMask, testOutfit;
     struct klco_peer p[KLCO_N];
@@ -295,6 +296,7 @@ static void klco_keys(DWORD now)
         if (which >= 0) {
             int span = which == 0 ? KLC_NCHAR + 1 : which == 1 ? KLC_MASKS + 2 : KLC_OUTFITS;
             int v = (int)*klc_value[which] + step; char s[16];
+            if (which == 0 && klco.ignoreChar) { static int told; if (!told++ || klco.log) klog("charonline: hire on: F9 (heister) ignored, as in Arcade; the body is the game's own or the hired one (F11 mask / Ctrl+F11 outfit still work)"); dC = c; dM = m; return; }
             v = ((v % span) + span) % span;
             InterlockedExchange(klc_value[which], v);
             snprintf(s, sizeof s, "%d", v); WritePrivateProfileStringA("Character", klc_keys[which], s, klh_ini);
@@ -429,6 +431,11 @@ static void klco_init(void)
     klco.ownDiag = GetPrivateProfileIntA("CharOnline", "OwnDiag", 1, klh_ini) != 0;
     klco.settle = GetPrivateProfileIntA("CharOnline", "Settle", 1500, klh_ini);
     klco.tries = GetPrivateProfileIntA("CharOnline", "Tries", 3, klh_ini);
+    /* [Hire] OnlineIgnoreChar (default 1, recommended on): with [Hire] Enable=1 Arcade ignores the Heister page Char (klchar.c: ch = klhr_body).
+       Online used to apply the saved Char anyway (owner log 10-27: Standen by F9 with hire on). Zero the IN-MEMORY choice only (the ini is not
+       touched); klhire_online.c then saves 0 and gives 0 back after a hired round, so HRF2/HRP2 (hired body worn in round 2) are unchanged. Off = old behaviour. */
+    klco.ignoreChar = klhr_on && GetPrivateProfileIntA("Hire", "OnlineIgnoreChar", 1, klh_ini) != 0;
+    if (klco.ignoreChar && klc_char) { klog("charonline: hire on: the saved Char=%ld is ignored online, as in Arcade ([Hire] OnlineIgnoreChar=0 restores it)", (long)klc_char); klc_char = 0; }
     klco.keyChar = (int)GetPrivateProfileIntA("CharOnline", "KeyChar", 0x78, klh_ini) & 0xff;
     klco.keyMask = (int)GetPrivateProfileIntA("CharOnline", "KeyMask", 0x7a, klh_ini) & 0xff;
     if (klco.settle < 0 || klco.settle > 20000) klco.settle = 1500;

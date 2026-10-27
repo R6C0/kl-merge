@@ -95,6 +95,8 @@ feat('hire', G_EXP, 'Arcade shop: hire a heister for the next round (needs the H
      'klhire.c [Hire] Enable=1: body = random default (never Kane / Lynch) or the one hired on the shop page, one round, rank + price; the Heister page pick is ignored; NOT run live', [('Hire', 'Enable', 1, 0, 0)])
 feat('hireonline', G_EXP, 'Online shop (private match / Steam FA): hire a heister for the next round, host charges (needs Hire on, CharOnline on, Character on and the Hire window baked in) (recommended off until benched)', 'off', 'start',
      'klhire_online.c [Hire] Online=1: client asks (HIRE, payload Q...), host judges + spends with 0x6b1910 / 0x7f6950, body via klcharonline; NOT run live; re/shop_hire.md section 8', [('Hire', 'Online', 1, 0, 0)])
+feat('hireignorechar', G_EXP, 'Online with Hire on: the Heister page / F9 character is ignored, as in Arcade (needs Hire on) (recommended on)', 'on', 'start',
+     'klcharonline.c [Hire] OnlineIgnoreChar (default 1): zeroes the in-memory Char online while [Hire] Enable=1, F9 does nothing; NOT run live', [('Hire', 'OnlineIgnoreChar', 1, 0, 1)])
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
      'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
 feat('hudonline', G_CORE, 'Online matches (master): the HUD draws in a private match / online FA round at all: round watch + weapon dial, and the base every Online* row below needs (recommended on)', 'on', 'start',
