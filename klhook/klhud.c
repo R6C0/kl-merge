@@ -1167,7 +1167,7 @@ static const struct klor_row *klu_onrow(const struct klor_snap *o, int seat)
 /* 2026-10-26 online ports on klonline_read.c ([Online] Read=1 too), every one its own [HUD] key, default 0 until benched */
 static int klu_onkillai;     /* OnlineKilledAI */
 static int klu_onnames, klu_onkill, klu_onround;     /* OnlineNames / OnlineKilled / OnlineRound */
-static int klu_onvanicon;                                                    /* [HUD] OnlineVanIcon (default 0): the ESCAPED van icon online */
+static int klu_onvanicon;                                                    /* [HUD] OnlineVanIcon (default 0): the ABOARD / ESCAPED van icon online */
 static int klu_onfeed, klu_onskull, klu_onloot, klu_ontab, klu_onvan;     /* OnlineFeed / OnlineSkulls / OnlineLoot / OnlineTab / OnlineVan */
 static char klu_kf_txt[64]; static LONG klu_kf_at; static DWORD klu_kf_col;     /* the ONLINE kill-feed line (set by klu_compose under klu_cs; klu_kill_line shows the newer of this and the stock pop-up's) */
 
@@ -1433,14 +1433,14 @@ static int klu_compose_in(int *state_ok)
                 klu_round_text(or_.round, or_.rounds, klu_onskull ? olives : -1); klu_r.t[KLU_T_ROUND].on = 1;
             }
         }
-        if (klu_onvanicon && s.on_n > 0 && klu_r.handle[170]) {   /* [HUD] OnlineVanIcon (default 0): Arcade's VanIcon block (below) is skipped online; ESCAPED only (no ABOARD online: the aboard bit 0x20 is a guess here). Local drawing, read-only */
+        if (klu_onvanicon && s.on_n > 0 && klu_r.handle[170]) {   /* [HUD] OnlineVanIcon (default 0): Arcade's VanIcon block (below) is skipped online; like Arcade: ABOARD green, ESCAPED bright green. Local drawing, read-only */
             DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST), li = 0; int lc = -1;
             if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) lc = (int)li;
-            /* GUESS: the local seat's score status word s.on_flags[lc] carries Arcade's ESCAPED bit 0x40 (the same bit klroundkeep.c / klu_online_kind read) */
-            if (lc >= 0 && lc < s.on_n && s.on_used[lc] && (s.on_flags[lc] & KLUV_F_ESCAPED)) {
+            /* PROVEN live 10-27 (bench BOSE4, c9): the local seat's score status word s.on_flags[lc] goes 0 -> 0x20 (ABOARD, after E at the van) -> 0x40 (ESCAPED), on host and client */
+            if (lc >= 0 && lc < s.on_n && s.on_used[lc] && (s.on_flags[lc] & (KLUV_F_ABOARD | KLUV_F_ESCAPED))) {
                 float ix = klu_r.mx - 35.0f - 66.0f, iy = klu_r.wy;     /* the same place as the Arcade icon: left of the watch */
                 if (klu_r.handle[KLU_DAB_PIC]) klu_dab_at(ix, iy, 46.0f, 0xc80c0c0du, klu.layer - 2);
-                klu_addpic(170, ix - 15.0f * KLU_VDISC, iy - 15.0f * KLU_VDISC, 30.0f * KLU_VDISC, 30.0f * KLU_VDISC, KLU_C_GREENHI, klu.layer);
+                klu_addpic(170, ix - 15.0f * KLU_VDISC, iy - 15.0f * KLU_VDISC, 30.0f * KLU_VDISC, 30.0f * KLU_VDISC, (s.on_flags[lc] & KLUV_F_ESCAPED) ? KLU_C_GREENHI : KLU_C_GREEN, klu.layer);
             }
         }
         return 1;
