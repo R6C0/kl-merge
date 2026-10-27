@@ -53,7 +53,7 @@ feat('shop', G_CORE, 'More guns in the weapon shop', 'on', 'start',
 feat('shoppage', G_CORE, 'Weapon shop page II: a key (P) flips the shop to a second set of guns', 'on', 'start',
      'klshoppage.c + KLShopPage.ini (tools/kl_shop_sets.py stage); NOT live-tested; needs the ini beside KLHook.ini, else it logs and does nothing', [('ShopPage', 'Enable', 1, 0, 0)])
 feat('shoptabs', G_CORE, 'Weapon shop page II: own tab names (KLShopPage.ini [Tabs]) instead of "... II"', 'on', 'start',
-     'klshoppage.c TabNames: data-only text swap; an empty [Tabs] key keeps the old " II" append; needs [ShopPage] Enable=1', [('ShopPage', 'TabNames', 1, 0, 0)])
+     'klshoppage.c TabNames: data-only text swap; an empty [Tabs] key keeps the old " II" append; needs [ShopPage] Enable=1', [('ShopPage', 'TabNames', 1, 0, 1)])
 feat('hud', G_CORE, 'Mod HUD (kill feed, scoreboard, trackers, names)', 'on', 'start',
      'the owner plays with it', [('HUD', 'Enable', 1, 0, 0)])
 feat('balance', G_CORE, 'One damage scale for you, police and crew (Dead Men maps)', 'on', 'start',
@@ -382,7 +382,8 @@ feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', '
      'avoids the 2 GB heap NULL crash on large .prm files', [('Memory', 'Enable', 1, 0, 1)])
 feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call runs out of memory without it)', 'on', 'start',
      'klquad.c: the 4 post-process quad buffers get 128 buffers each; the NVIDIA driver no longer piles a block per frame pass (K50H: 1696 -> 18 MB '
-     'in 70 s; K50F2/I: flat at 120 fps, same picture); needs the frame limiter (its Reset wrapper)', [('Memory', 'QuadRing', 128, 0, 128)])
+     'in 70 s; K50F2/I: flat at 120 fps, same picture); needs the frame limiter (its Reset wrapper); the DLL default is 0 = off, the live ini carries 128',
+     [('Memory', 'QuadRing', 128, 0, 0)])
 feat('steamblock', G_STAB, 'Block Steam stats / leaderboards on modded rounds', 'on', 'start',
      'keeps modded rounds out of your Steam stats and achievements', [('Steam', 'Block', 1, 0, 1)])
 
@@ -601,15 +602,51 @@ def listing(lines):
 
 
 def check_defaults(srcdir):
-    """Compare each row's dflt with the GetPrivateProfileInt call in klhook\\*.c. -> list of differences."""
+    """Compare each row's dflt with the GetPrivateProfileInt call in klhook\\*.c. -> list of differences.
+    Two shapes are read: the direct call GetPrivateProfileInt("Sec", "Key", dflt, ...) and the per-module helpers
+    (klu_inii, klgrd_ini, klb_pos, klnet_key, ...): a function whose first parameter is const char *key and whose body
+    calls GetPrivateProfileInt("Sec", key, X, ...) with X either its second parameter (the default is forwarded from each
+    call site, e.g. klu_inii("Rows12", 1, 0, 1)) or a literal (every call site gets that default, e.g. klb_pct -> 0).
+    A helper name defined with two different sections is not used (ambiguous)."""
     import glob
     seen = {}
+    texts = {}
     for p in glob.glob(os.path.join(srcdir, '*.c')):
         if '_test' in p:
             continue
-        t = open(p, encoding='latin1').read()
+        texts[p] = t = open(p, encoding='latin1').read()
         for m in re.finditer(r'GetPrivateProfileInt[AW]?\(\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*(-?\d+)\s*,', t):
             seen.setdefault((m.group(1), m.group(2)), set()).add(int(m.group(3)))
+    # the helpers: name -> (section, 'param' | literal default)
+    helpers = {}
+    hdef = re.compile(r'\b(\w+)\s*\(\s*const\s+char\s*\*\s*(?:const\s+)?(\w+)\s*(?:,\s*(?:int|LONG|long|DWORD|unsigned)\s+(\w+))?[^;{)]*\)\s*\{'
+                      r'[^}]*?GetPrivateProfileInt[AW]?\(\s*"([^"]*)"\s*,\s*(\w+)\s*,\s*(-?\d+|\w+)\s*,')
+    for t in texts.values():
+        for m in hdef.finditer(t):
+            name, keyp, defp, sec, keyarg, defarg = m.groups()
+            if keyarg != keyp:
+                continue
+            how = 'param' if (defp and defarg == defp) else (int(defarg) if re.match(r'-?\d+$', defarg) else None)
+            if how is None:
+                continue
+            if name in helpers and helpers[name] != (sec, how):
+                helpers[name] = None                                    # two definitions that disagree: ambiguous
+            elif name not in helpers:
+                helpers[name] = (sec, how)
+    for name, h in helpers.items():
+        if h is None:
+            continue
+        sec, how = h
+        call = re.compile(r'\b' + re.escape(name) + r'\(\s*"([^"]*)"\s*(?:,\s*(-?\d+))?')
+        for t in texts.values():
+            for m in call.finditer(t):
+                key, lit = m.groups()
+                if how == 'param':
+                    if lit is None:
+                        continue
+                    seen.setdefault((sec, key), set()).add(int(lit))
+                else:
+                    seen.setdefault((sec, key), set()).add(how)
     bad = []
     for f in F:
         for sec, key, onv, offv, dflt in f['keys']:
