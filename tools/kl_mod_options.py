@@ -115,6 +115,8 @@ feat('onlineloot', G_CORE, 'Online matches: loot bar under TOTAL like Arcade (re
      'klhud.c OnlineLoot; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineLoot', 1, 0, 0)])
 feat('onlinetags', G_CORE, 'Online matches: heister character names over the other heisters\' heads like Arcade tags (recommended off until benched)', 'off', 'start',
      'klhud_tags.c OnlineTags; needs [Online] Read=1, [HUD] OnlineCrew=1 and HideOnline=1 (the stock list skipped); drawer 0x7b8150 on a player actor is a GUESS; NOT run live', [('HUD', 'OnlineTags', 1, 0, 0)])
+feat('onlinepopups', G_CORE, 'Online matches: loot carry ring and traitor pop-up fall-back like Arcade (recommended off until benched)', 'off', 'start',
+     'klhud_popup.c OnlinePopups; needs [Online] Read=1, [HUD] Online=1, OnlineCrew=1 and LootRing=1; the online record offsets +0x15/+0x18/+0x1c are a GUESS (probe line in the log); NOT run live', [('HUD', 'OnlinePopups', 1, 0, 0)])
 feat('onlinetab', G_CORE, 'Online matches: Tab card (full crew list) like Arcade (recommended off until benched)', 'off', 'start',
      'klhud.c OnlineTab; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineTab', 1, 0, 0)])
 feat('onlinevan', G_CORE, 'Online matches: escape / van card like Arcade (recommended off until benched)', 'off', 'start',

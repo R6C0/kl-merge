@@ -449,12 +449,29 @@ static void klpu_forget(void)
     memset(&klpu_r, 0, sizeof klpu_r);
 }
 
-static void klpu_ring_tick(DWORD osd, const struct klb_snap *s, int have, DWORD now)
+/* [HUD] OnlinePopups (2026-10-27, default 0, NOT RUN LIVE): online there is no klb_read snapshot, so the ring and the traitor fall-back read the local seat from
+   klor_read (klonline_read.c: the online record [rules+8]+0x74*seat, the S flags). GUESS: the online 0x74-byte record keeps Arcade's crew-record fields at the same
+   offsets (+0x15 loot state, +0x18 part clock, +0x1c money object): the money object is checked by its vtable and the state byte by value, so a wrong guess shows
+   nothing; klpu_online_probe logs the raw bytes once per 5 s while the round runs so a bench can confirm or correct the offsets. */
+static int klpu_online_on;
+static void klpu_online_probe(DWORD at, DWORD state, int seat, DWORD flags)
 {
-    DWORD at, obj = 0, uel; BYTE st = 0; long left = 0; float part = 0, frac = 0, pos[2] = { 0, 0 }, cx, cy; int looting = 0;
+    static DWORD last; DWORD now = GetTickCount(), w[8]; BYTE b[0x20]; float part = 0;
+    if (state != 0x19 || !at || now - last < 5000) return;
+    last = now ? now : 1;
+    if (!klh_rd(at, w, sizeof w) || !klh_rd(at + 0x10, b, sizeof b)) return;
+    klh_rd(at + KLPU_R_PART, &part, 4);
+    klog("hud: popup: ONLINE ring probe (GUESS offsets): seat %d record %08lx flags %08lx loot state [+0x15]=%u part [+0x18]=%.2f money obj [+0x1c]=%08lx (vtable %08lx, want %08lx); record dwords %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx",
+         seat, (unsigned long)at, (unsigned long)flags, (unsigned)b[5], part, (unsigned long)klh_rd32(at + KLPU_R_OBJ), (unsigned long)klh_rd32(klh_rd32(at + KLPU_R_OBJ)), (unsigned long)KLPU_MONEY_VT,
+         (unsigned long)w[0], (unsigned long)w[1], (unsigned long)w[2], (unsigned long)w[3], (unsigned long)w[4], (unsigned long)w[5], (unsigned long)w[6], (unsigned long)w[7]);
+}
+
+static void klpu_ring_tick(DWORD osd, DWORD state, DWORD at, DWORD now)
+{   /* at = the local seat's crew record: Arcade's (klb_read) or, with [HUD] OnlinePopups, the online 0x74-byte record (klpu_online) */
+    DWORD obj = 0, uel; BYTE st = 0; long left = 0; float part = 0, frac = 0, pos[2] = { 0, 0 }, cx, cy; int looting = 0;
     if (klpu.test) {                                                 /* TEST: the ring at 60 % in the third 4 s of every 12 (klpu_test_tick shows the two messages before it) */
         if ((now % 12000) >= 8000) { frac = 0.6f; looting = 1; }
-    } else if (have && s->state == 0x19 && s->human >= 0 && (at = s->r[s->human].at) != 0 && klh_rd(at + KLPU_R_LOOT, &st, 1) && (st == 1 || st == 2) &&
+    } else if (state == 0x19 && at && klh_rd(at + KLPU_R_LOOT, &st, 1) && (st == 1 || st == 2) &&
                klh_rd(at + KLPU_R_OBJ, &obj, 4) && obj && klh_rd32(obj) == KLPU_MONEY_VT && klh_rd(obj + KLPU_M_LEFT, &left, 4) && klh_rd(at + KLPU_R_PART, &part, 4)) {
         looting = 1;
         if (obj != klpu_r.loot_obj || left > klpu_r.loot_start) {    /* another stack, or this one was filled again */
@@ -465,8 +482,8 @@ static void klpu_ring_tick(DWORD osd, const struct klb_snap *s, int have, DWORD 
         klpu_r.part_last = part;
         if (klpu.ringmode == 2) frac = klpu_r.part_max > 0.01f ? 1.0f - part / klpu_r.part_max : 0;
         else frac = klpu_r.loot_start > 0 ? (float)(klpu_r.loot_start - left) / (float)klpu_r.loot_start : 0;
-    } else if (have && s->state == 0x19 && s->human >= 0 && (at = s->r[s->human].at) != 0 && klh_rd(at + KLPU_R_LOOT, &st, 1) && st == KLPU_LOOT_PERSON &&
-               klh_rd(at + KLPU_R_PART, &part, 4)) {
+    } else if (state == 0x19 && at && klh_rd(at + KLPU_R_LOOT, &st, 1) && st == KLPU_LOOT_PERSON &&
+               klh_rd(at + KLPU_R_PART, &part, 4) && klb_finite(part) && part >= 0 && part < 1000.0f) {   /* sane clock: no vtable guards this state, and online the offsets are a GUESS */
         /* section 3, state 3: money off a person - the step clock, whatever RingMode says */
         looting = 1;
         if (klpu_r.loot_obj != 1) {
@@ -511,7 +528,7 @@ static void klpu_test_tick(DWORD now)
 
 static void klpu_tick(int game_thread)
 {
-    static DWORD last, said; DWORD now = GetTickCount(), osd; struct klb_snap s; int have, human_traitor = 0;
+    static DWORD last, said; DWORD now = GetTickCount(), osd; struct klb_snap s; int have, human_traitor = 0; DWORD state = 0, rec = 0;
     if ((!klpu.popups && !klpu.ring) || !klu.on || !klh_exe_ok || !game_thread || now - last < 50) return;
     last = now;
     /* this part lives on klhud.c's level state: its OSD, made texts, no fault (klu_tick runs just before this) */
@@ -529,6 +546,18 @@ static void klpu_tick(int game_thread)
     }
     if (klpu.popups && !klpu_r.loc_done) klpu_loc();
     have = klb_read(&s);
+    if (have) { state = s.state; if (s.human >= 0) rec = s.r[s.human].at; }
+    else if (klpu_online_on) {                                       /* [HUD] OnlinePopups: the online snapshot of the local seat */
+        struct klor_snap o; DWORD el = klh_rd32(osd + KLU_O_PLIST), li = 0; int loc = -1, k;
+        if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (int)li;
+        klor_noev = 1; k = klor_read(&o, loc); klor_noev = 0;
+        if (k && loc >= 0) for (k = 0; k < o.n; k++) if (o.r[k].used && o.r[k].seat == loc) {
+            state = o.b.state; rec = o.r[k].rec;
+            human_traitor = (o.r[k].flags & 1) != 0;                 /* GUESS: the online flag word (S+0x98) carries Arcade's score-flag bit 1 = traitor, as bit 8 = police does */
+            klpu_online_probe(rec, state, loc, o.r[k].flags);
+            break;
+        }
+    }
     if (have && s.human >= 0) {                                      /* the fall-back's clock: when the human's traitor flag rose */
         DWORD fl = 0;
         klh_rd(s.score + KLU_S_FLAGS + 4 * s.human, &fl, 4);         /* indexed by the crew record: EXE 0x8e878e */
@@ -537,7 +566,7 @@ static void klpu_tick(int game_thread)
     if (human_traitor && !klpu_r.was_traitor) InterlockedExchange(&klpu_traitor_at, (LONG)(now | 1));
     if (!human_traitor) InterlockedExchange(&klpu_traitor_at, 0);
     klpu_r.was_traitor = human_traitor;
-    if (klpu.ring) klpu_ring_tick(osd, &s, have, now);
+    if (klpu.ring) klpu_ring_tick(osd, state, rec, now);
     if (klpu.test && klpu.popups) klpu_test_tick(now);
     if (klpu_msg_new) {
         if (klu.log) klog("hud: popup: '%s' (%d line(s)) -> %s; the text object says %.0f x %.0f (%s), the string's length %.0f x %.0f; text at (%.0f, %.0f)%s, bar %.0f x %.0f, layer %d",
@@ -562,6 +591,7 @@ static void klpu_tick(int game_thread)
 static void klpu_init(void)
 {   /* after klu_init (klhud.c): its ini helpers and its Enable */
     if (!klu.on) return;
+    klpu_online_on = klu_inii("OnlinePopups", 0, 0, 1);              /* needs [Online] Read=1 and [HUD] Online=1 */
     klpu.popups = klu_inii("Popups", klu.draft, 0, 1); klpu.ring = klu_inii("LootRing", klu.draft, 0, 1);      /* [HUD] Draft=1 turns both on by default (klhud.c) */
     if (!klpu.popups && !klpu.ring) return;
     klpu.frame = klu_inii("PopupFrame", 0, 0, 1); klpu.measure = klu_inii("PopupMeasure", 1, 0, 1);
@@ -574,6 +604,7 @@ static void klpu_init(void)
     if (!(klpu.dy >= -200 && klpu.dy <= 200)) klpu.dy = 0;
     if (!(klpu.y >= 40 && klpu.y <= 680)) klpu.y = -1;
     if (!(klpu.ringx <= 1280)) klpu.ringx = -1; if (!(klpu.ringy <= 720)) klpu.ringy = -1;
+    klog("hud: popup: OnlinePopups=%d (online ring + traitor flag from the online record; GUESS offsets)", klpu_online_on);
     klog("hud: popup: on; Popups=%d LootRing=%d PopupFrame=%d PopupMeasure=%d PopupPadX=%.0f PopupPadY=%.0f PopupDY=%.0f PopupY=%.0f PopupLayer=%d PopupTraitor=%d PopupTest=%d RingMode=%d RingX=%.0f RingY=%.0f; only while the HUD of klhud.c draws; NOT RUN IN THE GAME",
          klpu.popups, klpu.ring, klpu.frame, klpu.measure, klpu.padx, klpu.pady, klpu.dy, klpu.y, klpu.layer, klpu.traitor, klpu.test, klpu.ringmode, klpu.ringx, klpu.ringy);
 }
