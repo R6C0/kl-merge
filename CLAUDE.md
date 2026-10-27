@@ -66,16 +66,16 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~23:10 - [a1] Arcade-1:1 SHIP dll (1827767d8) is LIVE; the two-seat hire bench A1HIRE did NOT run (owner input 0 s ago, bench refused).
+Staged to rerun when idle 5 min: kl_solo_test --hook <scratch>/hook --tag A1HIRE --secs 640 --gap 45 (inis a1hire_1/2); PASS = both seats wear hired
+bodies in round 2 + log 'charonline: hire on: the saved Char=... is ignored online', 0 faults. G1/G4/G8 code done but unbenched: re/online_arcade_gaps_1027.md.
+
 2026-10-27 ~22:30 - [a1] Arcade-1:1 merge (NOT installed/run): [Hire] OnlineIgnoreChar, [Int16Guard] (DM11B kept out online), [Camera] UnstickOnline (off).
 Ship dll with rtlift FedRide + INSTALL/UNDO_arcade1to1_1027.bat in C:\kl_build_1024rcade1to1_1027 (supersedes the rtlift dll; its zips still from the rtlift bat).
 Gaps and what is still not 1:1: re/online_arcade_gaps_1027.md.
 
 2026-10-27 ~21:15 - [rtlift] Retomoto lift (owner: police stuck): STAGED, not installed, untested: [Join] FedRide=2 (kljoin.c) + door box f10 -1 -> 10
 (tools/kl_lift_rearm.py). Install/undo bats in C:\kl_build_1024\rtlift_1027; details in re/open_work_log.md.
-
-2026-10-27 ~20:10 - [c9] Q27 at the grant end: 14 PASS since the park fix; Q27_DM11B FAIL kl2+0x1e4a22 = node |pos| > 1e6 (body fell forever).
-The local player's node sat ~65.5k below its spawn x 34077 (GUESS 16-bit x wrap in online placement; only DM11B spawns at x > 32767), bots fine. Not live-
-tested; next steps in re/open_work_log.md. Queue stopped at 20:00 (DM06R/DD09R commented out).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

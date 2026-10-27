@@ -51,7 +51,12 @@ Hire online (HRF2/HRP2), page II online buy, HUD online ports (ALL2D..G, BOSE5),
 
 ## Recommended order
 G1 (code, small), then bench G2 ini keys one at a time, then G3 tune keys, then G4 camera and FallRescue, then G5/G6 verification, G8 map fix.
-Owner is playing: none of this has been run.
+Status 2026-10-27 23:10 (per gap):
+- G1 CLOSED in code (OnlineIgnoreChar=1 live in SHIP 1827767d8); live proof pending: A1HIRE bench not run (owner at PC), staged.
+- G2 OPEN (ini keys unbenched). G3 OPEN. G5 OPEN (edges, 9-player bench first). G6 OPEN (RankUp/Letter unseen live).
+- G4 PARTLY: camera UnstickOnline coded, default off (not run); page I buy needs no port; grenades/free climb/guns shelf research only.
+- G7 STAGED/live: FedRide=2 + door re-arm in SHIP; untested in play.
+- G8 MITIGATED: [Int16Guard] Enable=1 OnlineSkip=DM11B keeps DM11B out online; Plan B codec bias not clean (6a739230c); unbenched.
 
 ## G4 next (2026-10-27 late, branch a1-g4-1027; static reading only, no live run)
 
