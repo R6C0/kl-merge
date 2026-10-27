@@ -115,6 +115,12 @@ feat('onlineboard', G_CORE, 'Online matches: round-over card like Arcade, killed
      'klhud_board2.c OnlineBoard; needs [Online] Read=1 and [HUD] Scoreboard=1; NOT run live', [('HUD', 'OnlineBoard', 1, 0, 0)])
 feat('onlineintro', G_CORE, 'Online matches: round n of m, players, minutes and your heister under the pre-round card (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineIntro; needs [Online] Read=1, [HUD] Scoreboard=1 and Board=1; NOT run live', [('HUD', 'OnlineIntro', 1, 0, 0)])
+feat('gradesbadge', G_CORE, 'Grades: a rank badge before every crew name, Arcade and online (recommended off until benched)', 'off', 'start',
+     'klhud_grades.c [Grades] Enable+Badge; your rank from the profile experience, others online from S+0xc8 (GUESS); NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'Badge', 1, 0, 0)])
+feat('gradesrankup', G_CORE, 'Grades: a RANK UP line on the round-over card when your rank rose (recommended off until benched)', 'off', 'start',
+     'klhud_grades.c [Grades] Enable+RankUp; needs [HUD] Scoreboard=1; NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'RankUp', 1, 0, 0)])
+feat('gradesletter', G_CORE, 'Grades: an S / A / B / C / D grade per player on the round-over card (recommended off until benched)', 'off', 'start',
+     'klhud_grades.c + klgrades.h [Grades] Enable+Letter; table in [Grades]; needs [HUD] Scoreboard=1; NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'Letter', 1, 0, 0)])
 feat('shoponline', G_CORE, 'Online matches: weapon shop page II shown (view only, locked) (recommended off until benched)', 'off', 'start',
      'klshoppage.c OnlineLook; page II buys are swallowed online; needs [ShopPage] Enable=1; NOT run live', [('ShopPage', 'OnlineLook', 1, 0, 0)])
 feat('ucchide', G_CORE, 'Undercover Cop: the crew list does not give the undercover cop away to heisters (recommended on)', 'on', 'start',

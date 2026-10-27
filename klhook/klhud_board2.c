@@ -44,7 +44,7 @@
 #define KLSB_O_OUTRO     0x10b4               /* osd: the element */
 #define KLSB_E_DEADLINE  0xd8                 /* float */
 #define KLSB_NSLOT       16
-#define KLSB_NTEXT       52                   /* was 40: 4 more rows of 3 texts (2026-10-26) */
+#define KLSB_NTEXT       66                   /* was 40: 4 more rows of 3 texts (2026-10-26); 52 -> 66: [Grades] GRADE head, RANK UP line, 12 letters (2026-10-27) */
 #define KLSB_NPIC        112
 #define KLSB_NROW        12                   /* was 8 (online FA is up to 12). More than 8 rows: the pitch shrinks so the plate and summary stay put (klsb_compose, GUESS) */
 #define KLSB_NROW_OLD    8
@@ -98,6 +98,10 @@
 #define KLSB_T_TOTV      49
 #define KLSB_T_CONTL     50
 #define KLSB_T_CONTN     51
+#define KLSB_T_GHEAD     52                   /* [Grades] Letter: the GRADE column head */
+#define KLSB_T_RANKUP    53                   /* [Grades] RankUp: the 'RANK UP: <rank>' line */
+#define KLSB_T_GRADE(i)  (54 + (i))           /* [Grades] Letter: the row's letter, 12 rows */
+#define KLSB_COLG        400.0f               /* [Grades] the GRADE column: plate x + 400 (between FATE and PAYOUT; GUESS: free at every row count) */
 
 #define KLSB_ALIGN_L 0
 #define KLSB_ALIGN_R 1
@@ -118,7 +122,10 @@ static const struct { signed char fnt, align; } klsb_role[KLSB_NTEXT] = {
     { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
     { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
     { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L },
-    { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_BIG, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_C }, { KLU_FNT_NAME, KLSB_ALIGN_C } };
+    { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_BIG, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_C }, { KLU_FNT_NAME, KLSB_ALIGN_C },
+    { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
+    { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L },
+    { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L } };
 
 static const BYTE klsb_code[8] = { 0x83, 0xec, 0x3c, 0x56, 0x8b, 0xf1, 0x8b, 0x0d };     /* 0x577e70 sub esp,0x3c; push esi; mov esi,ecx; mov ecx,[..] */
 
@@ -335,6 +342,24 @@ static const char *klsb_fate(const struct klb_snap *s, int i, int traitor, DWORD
     }
 }
 
+/* [Grades] the letter's colour, and the RANK UP line (right-aligned on the title row, left of the LIVES label's skulls) */
+static DWORD klsb_grade_colour(char L) { return L == 'S' ? KLU_C_GREENHI : L == 'A' ? KLU_C_GREEN : L == 'B' ? KLU_C_CHALK : L == 'C' ? KLU_C_ORANGE : KLU_C_CORAL; }
+static void klsb_grade_put(int row, float px, float rowc, const struct klgrd_in *in)
+{
+    char L = klgrd_letter(in, 0), t[2];
+    if (!L || row < 0 || row >= KLSB_NROW) return;
+    t[0] = L; t[1] = 0;
+    klsb_put(KLSB_T_GRADE(row), px + KLSB_COLG, klu_cen(rowc, KLU_FNT_NAME), t, klsb_grade_colour(L));
+}
+static void klsb_rankup_put(float px, float py, int idx)
+{
+    int b = -1, a = -1; char t[64];
+    if (!klgrd_up(idx, &b, &a)) return;
+    snprintf(t, sizeof t, "RANK UP  %s", klgrd_name_of(klgrd_nameset(), a));
+    for (b = 0; t[b]; b++) if (t[b] >= 'a' && t[b] <= 'z') t[b] = (char)(t[b] - 32);
+    klsb_put(KLSB_T_RANKUP, px + KLSB_X_KILLED + 200.0f, klu_cen(py + KLSB_Y_TITLE + 5.0f, KLU_FNT_NAME), t, KLU_C_GREENHI);
+}
+
 static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
 {   /* -> 1 = a snapshot is ready in klsb_r.t[] / klsb_r.pic[] */
     float px = klsb.x, py = klsb.y, cdv = 0, cdt; char name[KLSB_NROW][48], buf[64], num[40]; int i, human = s->human >= 0 ? s->human : 0, rn = 0, rm = 0;
@@ -363,6 +388,7 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
         if ((blk = klh_rd32(r->at)) != 0 && klh_rd(blk + 8, &str, 4) && str) klh_rdstr(str, name[i], sizeof name[i]);
         klnm_name(r->at, name[i], sizeof name[i]);
         if (!name[i][0]) snprintf(name[i], sizeof name[i], r->flags & 1 ? "Heister %d" : "You", i);
+        if (i == human) klgrd_decorate(name[i], sizeof name[i], 0, i, 1); else klgrd_decorate_rank(name[i], sizeof name[i], klgrd_bot_rank());     /* [Grades] Badge */
     }
     /* the countdown */
     if (klsb.count == 1) { float tm = 0; if (klh_rd(s->rules + KLUV_R_LEFT, &tm, 4) && tm == tm && tm >= 0 && tm < 100.0f) cdv = tm; }
@@ -417,6 +443,8 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
     klsb_put(KLSB_T_HEAD(0), px + KLSB_COLL, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "DEAD MEN", KLU_C_CORAL);
     klsb_put(KLSB_T_HEAD(1), px + KLSB_COLF, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "FATE", KLU_C_CORAL);
     klsb_put(KLSB_T_HEAD(2), px + KLSB_COLR, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "PAYOUT", KLU_C_CORAL);      /* record+0x2c, not score+0x30 (review S4) */
+    if (klgrd_letter_on()) klsb_put(KLSB_T_GHEAD, px + KLSB_COLG, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "GRADE", KLU_C_CORAL);
+    klsb_rankup_put(px, py, human);
     klu_addpic(klu_r.handle[111] ? 111 : 181, px + 20.0f, py + KLSB_Y_RULE, 600.0f, 4.0f, KLU_C_CHALK, klsb_ly(1));            /* the painted rule under the top rows */
     for (i = 0; i < s->n && i < nrow_max; i++) {
         const struct klb_rec *r = &s->r[i]; struct kluv_money mi; const char *fate; DWORD fc, nc, sc, bc = 0; int dead, traitor, you, rr;
@@ -436,6 +464,12 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
         klsb_put(KLSB_T_ROW(rr, 0), px + KLSB_COLL, klu_cen(rowc, KLU_FNT_NAME), name[i], nc);
         klsb_put(KLSB_T_ROW(rr, 1), px + KLSB_COLF, klu_cen(rowc, KLU_FNT_LABEL), fate, fc);
         klsb_put(KLSB_T_ROW(rr, 2), px + KLSB_COLR - 8.0f, klu_cen(rowc, KLU_FNT_NAME), num, sc);
+        if (klgrd_letter_on()) {   /* [Grades] Letter: Arcade has no per-record kills, so the grade rests on the payout, the rewards (yours) and the fate */
+            struct klgrd_in gi; memset(&gi, 0, sizeof gi);
+            gi.loot = mi.payout ? mi.payout : mi.carried; gi.rewards = you ? m.rewards : 0; gi.escaped = kluv_state(s, i) == KLUV_ST_ESCAPED; gi.dead = dead; gi.traitor = traitor;
+            gi.fed = !strcmp(fate, "FED");
+            klsb_grade_put(rr, px, rowc, &gi);
+        }
         if (dead) {
             const unsigned char *c; float w = 0;
             for (c = (const unsigned char *)name[i]; *c; c++) if ((*c & 0xc0) != 0x80) w += KLUV_NAME_CHARW;
@@ -511,7 +545,9 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
         } else {
             const struct klor_row *r = &o->bot[i - o->n];
             snprintf(name[i], sizeof name[i], "%s", r->name[0] ? r->name : "Heister");
+            klgrd_decorate_rank(name[i], sizeof name[i], klgrd_bot_rank());
         }
+        if (i < o->n) klgrd_decorate(name[i], sizeof name[i], 1, o->r[i].seat, o->r[i].seat == loc);     /* [Grades] Badge */
     }
     cdv = (end * 1024.0f - (float)frame) / 1024.0f;
     if (!(cdv >= 0)) cdv = 0;
@@ -549,6 +585,8 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
     klsb_put(KLSB_T_HEAD(0), px + KLSB_COLL, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "DEAD MEN", KLU_C_CORAL);
     klsb_put(KLSB_T_HEAD(1), px + KLSB_COLF, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "FATE", KLU_C_CORAL);
     klsb_put(KLSB_T_HEAD(2), px + KLSB_COLR, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "PAYOUT", KLU_C_CORAL);
+    if (klgrd_letter_on()) klsb_put(KLSB_T_GHEAD, px + KLSB_COLG, klu_cen(py + KLSB_Y_HEAD + 5.0f, KLU_FNT_LABEL), "GRADE", KLU_C_CORAL);
+    klsb_rankup_put(px, py, loc);
     klu_addpic(klu_r.handle[111] ? 111 : 181, px + 20.0f, py + KLSB_Y_RULE, 600.0f, 4.0f, KLU_C_CHALK, klsb_ly(1));
     for (i = 0; i < nused; i++) {
         const char *fate; DWORD fc, nc, sc, f2; int dead = 0, you = 0, kind; long v = 0;
@@ -576,6 +614,12 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
         klsb_put(KLSB_T_ROW(row, 0), px + KLSB_COLL, klu_cen(rowc, KLU_FNT_NAME), name[i], nc);
         klsb_put(KLSB_T_ROW(row, 1), px + KLSB_COLF, klu_cen(rowc, KLU_FNT_LABEL), fate, fc);
         klsb_put(KLSB_T_ROW(row, 2), px + KLSB_COLR - 8.0f, klu_cen(rowc, KLU_FNT_NAME), num, sc);
+        if (klgrd_letter_on() && i < o->n) {   /* [Grades] Letter: humans only (bots have no record) */
+            const struct klor_row *r = &o->r[i]; struct klgrd_in gi; memset(&gi, 0, sizeof gi);
+            gi.kills = r->kills; gi.police = r->police_kills; gi.loot = r->loot; gi.rewards = r->reward;
+            gi.escaped = kind == KLUV_K_ESCAPED; gi.dead = dead; gi.traitor = kind == KLUV_K_TRAITOR; gi.fed = kind == KLUV_K_FED;
+            klsb_grade_put(row, px, rowc, &gi);
+        }
         if (dead) {
             const unsigned char *c; float w = 0;
             for (c = (const unsigned char *)name[i]; *c; c++) if ((*c & 0xc0) != 0x80) w += KLUV_NAME_CHARW;
@@ -703,6 +747,9 @@ static void klsb_tick(int game_thread)
     klsb_r.state = st;
     if (klsb.probe || (klu.log >= 2 && have && s.state >= 0x1f)) klsb_probe_line(osd, &s, have);
     if (!have && !hon) { klsb_r.valid = 0; return; }
+    klgrd_round_reset(st);      /* [Grades] RankUp: latch the ranks in the round (states 0x16..0x19), compare in 0x1f */
+    if (have) klgrd_track(0, s.human >= 0 ? s.human : 0, 1, st);
+    else { int q; klgrd_note_online(&on); for (q = 0; q < on.n; q++) klgrd_track(1, on.r[q].seat, on.r[q].seat == on.local, st); }
     if (klsb.on && !klsb_r.made && st >= 0x17 && st <= 0x19 && klu_r.fonts[0]) {
         EnterCriticalSection(&klsb_cs);
         klsb_r.made = klsb_make_pool();

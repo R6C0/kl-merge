@@ -21,6 +21,7 @@ struct klor_row {
     char name[32];                     /* the heister CHARACTER's name ("J.C.", "Tommy", ...); "" = unknown (caller falls back) */
     DWORD flags;                       /* human: S+0x98 custom flags; bot: 0 */
     long money, loot, reward;          /* human: Sharable + Unsharable, Unsharable, Sharable (S+0x188 / S+0x224); bot: 0 */
+    int xp, rating;                    /* human: S+0xc8 (i16, 2*seat) / S+0x17c (i8): both GUESS (name only, re/online_round_data.md), -1 = unread; the grades badge (klhud_grades.c) */
     int kills, police_kills;           /* human: S+0xec / S+0x170 (i8); bot: 0 */
     int killer;                        /* human: KillerIndex S+0xe0 (i8) = the seat that killed him, -1 none; LATCHED while he is dead */
     int alive;                         /* bot: health > 0; human: no dead / escaped bit in flags */

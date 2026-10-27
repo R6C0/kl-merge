@@ -187,6 +187,7 @@ static int klor_read(struct klor_snap *o, int local)
         struct klor_row *w; DWORD client, P, type = 0; signed char kills = 0, pk = 0, kb = -1; int dead, ch;
         if (!o->b.on_used[k] || o->n >= KLOR_MAX) continue;
         w = &o->r[o->n++];
+        w->xp = w->rating = -1;
         w->used = 1; w->seat = k; w->rec = o->b.on_rec[k]; w->flags = o->b.on_flags[k];
         w->money = o->b.on_money[k]; w->loot = o->b.on_loot[k]; w->reward = o->b.on_rew[k];
         w->killer = -1;
@@ -203,6 +204,9 @@ static int klor_read(struct klor_snap *o, int local)
         dead = klor_flags_dead(w->flags);
         w->alive = !(dead || (w->flags & 0x40));
         if (o->ok && k < KLOR_SEATS) {                           /* review #4: the S arrays hold 12 seats; a seat >= 12 would read the next array */
+            { WORD xw = 0; signed char rt = -1; w->xp = w->rating = -1;      /* GUESS: Experience i16 at S+0xc8+2*seat, Rating i8 at S+0x17c+seat (field names only) */
+              if (klh_rd(S + 0xc8 + 2 * k, &xw, 2)) w->xp = (int)xw;
+              if (klh_rd(S + 0x17c + k, &rt, 1)) w->rating = (int)rt; }
             if (klh_rd(S + 0xec + k, &kills, 1)) w->kills = kills;
             if (klh_rd(S + 0x170 + k, &pk, 1)) w->police_kills = pk;
             if (klh_rd(S + 0xe0 + k, &kb, 1)) w->killer = kb;

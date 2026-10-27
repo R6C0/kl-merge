@@ -1345,6 +1345,7 @@ static int klu_compose_in(int *state_ok)
             { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (BYTE)li; }
             loc_pend = loc < s.on_n && s.on_used[loc];
             have = klor_read(&or_, (int)loc);                    /* the reader: heister character names, killer, round, loot, feed (off unless [Online] Read=1). BEFORE the rows loop (review #1: 'have' was tested before it was set) */
+            if (have) klgrd_note_online(&or_);                     /* klhud_grades.c: [Grades] the seats' experience / rating */
             if (have) olives = KLUV_LIVES_MAX - or_.deaths < 0 ? 0 : KLUV_LIVES_MAX - or_.deaths;   /* GUESS: Arcade's 3 lives; online has none, so a skull is a death mark: 3 - deaths of the local seat this match */
             nb = klu_online_bots(&ba);                          /* the AI heisters have no record: rows from the Ally actors, like Arcade's bot rows */
             if (klu_r.card) { for (k = 0; k < s.on_n; k++) nrows += s.on_used[k] != 0; nrows += nb; }
@@ -1360,6 +1361,7 @@ static int klu_compose_in(int *state_ok)
                 if (rows + (k != loc && loc_pend) >= klu.rows) continue;     /* the local player's row is reserved: a high slot (a client's own index) is never the one cut */
                 if (k == loc) loc_pend = 0;
                 klu_on_name(&or_, have, &s, k, (int)loc, have && klu_onnames, nm, sizeof nm);     /* the heister CHARACTER's name (the owner's order 16:45) */
+                klgrd_decorate(nm, sizeof nm, 1, k, k == loc);     /* klhud_grades.c: [Grades] Badge */
                 if (klu_onskull && have && k == loc && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR)) klu_own_lives(rows, nm, sizeof nm, kind, olives);     /* [HUD] OnlineSkulls: death marks, as Arcade's lives row */
                 klu_row(rows++, nm, s.on_money[k], kind);
             }
@@ -1367,6 +1369,7 @@ static int klu_compose_in(int *state_ok)
                 int dead = bi >= ba; nu++; if (!dead) na++;
                 if (rows >= klu.rows) continue;
                 if (have && klu_onnames && bi < or_.nbots && or_.bot[bi].name[0]) snprintf(nm, sizeof nm, "%s", or_.bot[bi].name); else snprintf(nm, sizeof nm, "Heister %d", bi + 1);
+                klgrd_decorate_rank(nm, sizeof nm, klgrd_bot_rank());
                 klu_row(rows++, nm, 0, dead ? KLUV_K_DEAD : KLUV_K_CREW);
             }
             snprintf(klu_r.t[KLU_T_COUNT].want, KLU_TEXTLEN, klu_r.card ? "%d / %d ALIVE" : "%d / %d", na, nu); klu_r.t[KLU_T_COUNT].on = 1;
@@ -1448,6 +1451,7 @@ static int klu_compose_in(int *state_ok)
         klnm_name(r->at, name, sizeof name);                  /* klhud_names.c: the character this record wears (falls back to the game's name) */
         if (!name[0]) snprintf(name, sizeof name, r->flags & 1 ? "Heister %d" : "You", i);
         kind = kluv_kind(&s, i);                              /* klhud_values.c g: THE row decision (dead / waiting, escaped, fed before traitor, traitor, you, crew) */
+        if (i == human) klgrd_decorate(name, sizeof name, 0, i, 1); else klgrd_decorate_rank(name, sizeof name, klgrd_bot_rank());     /* klhud_grades.c: [Grades] Badge (off unless on) */
         if (i == human && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR)) klu_own_lives(row, name, sizeof name, kind, lives);
         klu_row(row++, name, (long)r->money, kind);
     }
