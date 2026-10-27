@@ -214,6 +214,8 @@ feat('stinger', G_AV, 'Event stingers (cues when the heist goes loud, a betrayal
      'short one-shots; the Payday 2 clips are out of the live lists', [('Stinger', 'Enable', 1, 0, 0)])
 feat('voice', G_AV, 'Dead Men voice lines for the Dead Men heisters', 'on', 'start',
      'owner 2026-10-23; PlainData live-tested 2026-10-24', [('Voice', 'Enable', 1, 0, 0)])
+feat('voiceonline', G_AV, 'Online matches: your own Dead Men heister lines play for you (others stay stock; needs Voice on, Online read on) (recommended off until benched)', 'off', 'start',
+     'klvoice_online.c [Voice] Online=1: local seat found via klonline_read, voice number = seat (GUESS); local speech manager only, nothing replicated; NOT run live', [('Voice', 'Online', 1, 0, 0)])
 feat('announcer', G_AV, 'Announcer first: a one-recording Dead Men line stays the stock announcer', 'on', 'start',
      'owner 2026-10-24 (my character lines play first, needs to be the announcer first); the live ini has 0 at the moment', [('Voice', 'Announcer', 1, 0, 1)])
 feat('music', G_AV, 'Payday 2 music jukebox (needs Payday 2)', 'off', 'start',

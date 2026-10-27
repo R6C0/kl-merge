@@ -32,6 +32,7 @@
  *                          [queue+0xd8] change. CODE PATCH: TEST build with [KLHook] SessionSafe=0 only; see VOICEPLAIN below)
  *               Plain=0 (1: the flag-0 lines (FA_YouEscaped*_R, police events) speak the body's KLVoice leaf too; needs the call-site patch)
  *               PlainData=0 (1: SHIPPABLE data-only fix: each flag-0 line is turned into a per-character line in memory, see PLAINDATA; Log=2 'voice: plaindata:' lines)
+ *               Online=0 (1: online FA rounds - the LOCAL player's own lines, klvoice_online.c; needs [Online] Read=1)
  *               Enable=0   StockLevels=0 (1 = also on a level the verdict calls stock; the DD01..DD09 copies carry the leaves)
  *               Log=1 (0 none, 1 the summary lines, 2 every swap)   Period=1500 (ms between two walks)
  */
@@ -46,7 +47,7 @@
 
 static const char *const kvo_names[8] = { "Kane", "Lynch", "Ashkanan", "Meldal", "Red", "Parker", "Standen", "Hutchison" };
 
-static struct { int on, stock, log, period, radiofb, played, playlog, plain, plaindata, announcer, then_ms; } kvo;
+static struct { int on, stock, log, period, radiofb, played, playlog, plain, plaindata, announcer, then_ms, online; } kvo;
 /* Announcer (owner 2026-10-24 'my character lines play first, needs to be the announcer first'): a per-character line whose
  * stock entries all lead to ONE node is one recording copied into every voice (Dead Men's briefer: FA_1time_MissionBriefing<Map>,
  * FA_MissionBriefing<Map>_0N, FA_MissionReminder<Map>_0N - the .LOC of DM01 gives the nine _C<n> keys one sound id; read by the
@@ -66,6 +67,9 @@ static struct { DWORD addr, orig, ours; int active; } kvo_rec[KVO_NREC];
 static short kvo_ix[KVO_HASH];                   /* hash of addr -> record index + 1 */
 static int kvo_nrec;
 static struct { int walks, lines, swapped, restored, missing, told_layout, told_none; DWORD sig, next; char had; } kvo_s;
+
+static int kvo_onl; static char kvo_onl_name[32];      /* [Voice] Online: this tick's who is the LOCAL online player (klvoice_online.c, defined later) */
+static int kvo_online_who(struct klw_who *w, char *name);
 
 static int kvo_name_of(const char *n)
 {
@@ -482,7 +486,8 @@ static void kvo_tick(int game_thread)
     now = GetTickCount();
     if (!kvo_patched && (kvo.playlog || kvo.plain)) kvo_patch();           /* once; the guard refuses it in SHIP / SessionSafe=1 */
     kvo_p.valid = 0;                                                       /* set again below once this tick knows who wears which voice */
-    if (!klw_who_now(&w)) { if (kvo_nrec) kvo_restore_all("no Arcade round"); if (kvo_ncv || kvo_cv_ntried) kvo_cv_restore("no Arcade round"); kvo_s.had = 0; return; }
+    kvo_onl = 0;
+    if (!klw_who_now(&w) && !(kvo.online && kvo_online_who(&w, kvo_onl_name) && (kvo_onl = 1))) { if (kvo_nrec) kvo_restore_all("no Arcade round"); if (kvo_ncv || kvo_cv_ntried) kvo_cv_restore("no Arcade round"); kvo_s.had = 0; return; }
     if (!klx_on || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
     v = klx_level_verdict(scene, why);
     if (v == 1 && kvo.stock) v = 2;
@@ -498,7 +503,8 @@ static void kvo_tick(int game_thread)
           kvo_nan = 0; memset(&kvo_fw, 0, sizeof kvo_fw);   /* announcer lines are found again on the new level */
           memset(&kvo_gen, 0, sizeof kvo_gen); kvo_gen.rules = w.rules; kvo_gen.mgr = mgr; kvo_gen.lm = lm; snprintf(kvo_gen.scene, sizeof kvo_gen.scene, "%s", scene); memset(&kvo_s, 0, sizeof kvo_s); } }
     kvo_played(mgr, now);
-    if (!klh_rd(w.rules + 0x33e, tab, sizeof tab)) return;
+    if (kvo_onl) { for (i = 0; i < 8; i++) tab[i] = (BYTE)i; }                  /* online: no known table, the local seat's voice number is the seat (GUESS V1) */
+    else if (!klh_rd(w.rules + 0x33e, tab, sizeof tab)) return;
 
     /* who speaks with which entry number: want[idx] = the Dead Men name, "" = a body that is not one of the eight (leaves the entry alone) */
     memset(who, 0, sizeof who); memset(names, 0, sizeof names);
@@ -506,7 +512,8 @@ static void kvo_tick(int game_thread)
         const char *nm = ""; int idx;
         if (w.m[i].rec < 0 || w.m[i].rec > 7) continue;
         idx = tab[w.m[i].rec]; if (idx > 7) continue;
-        if (w.m[i].ch > 0) {
+        if (kvo_onl) { if (kvo_name_of(kvo_onl_name)) nm = kvo_names[kvo_name_of(kvo_onl_name) - 1]; }
+        else if (w.m[i].ch > 0) {
             EnterCriticalSection(&klc_cs);
             if (klc_w.on && !_stricmp(w.key, klc_w.key) && w.m[i].ch <= klc_w.n && kvo_name_of(klc_w.c[w.m[i].ch - 1].name)) nm = kvo_names[kvo_name_of(klc_w.c[w.m[i].ch - 1].name) - 1];
             LeaveCriticalSection(&klc_cs);
@@ -648,6 +655,7 @@ static void klvo_init(void)
 {
     memset(&kvo, 0, sizeof kvo); memset(&kvo_gen, 0, sizeof kvo_gen); memset(&kvo_s, 0, sizeof kvo_s);
     kvo.on = GetPrivateProfileIntA("Voice", "Enable", 0, klh_ini) != 0;
+    kvo.online = GetPrivateProfileIntA("Voice", "Online", 0, klh_ini) != 0;       /* default 0: the local player's own lines in an online round (klvoice_online.c; NOT run live) */
     kvo.stock = GetPrivateProfileIntA("Voice", "StockLevels", 0, klh_ini) != 0;
     kvo.log = (int)GetPrivateProfileIntA("Voice", "Log", 1, klh_ini);
     kvo.period = (int)GetPrivateProfileIntA("Voice", "Period", 1500, klh_ini);
@@ -676,7 +684,7 @@ static void klvo_init(void)
       } }
     memset(&kvo_p, 0, sizeof kvo_p); kvo_nan = 0; memset(&kvo_fw, 0, sizeof kvo_fw);
     if (kvo.period < 200 || kvo.period > 60000) kvo.period = 1500;
-    if (kvo.on) klog("voice: on; the Dead Men bodies' event lines come from KLVoice/<Name>/<Event> of the level's .LOC (StockLevels=%d Log=%d Period=%d ms RadioFallback=%d PlayedLog=%d PlayLog=%d Plain=%d PlainData=%d Announcer=%d KeepStock=%d prefixes ThenMs=%d); needs [Wardrobe] DMVoice=1 / [Crew] Voice=1 so each body has its own voice number", kvo.stock, kvo.log, kvo.period, kvo.radiofb, kvo.played, kvo.playlog, kvo.plain, kvo.plaindata, kvo.announcer, kvo_nkeep, kvo.then_ms);
+    if (kvo.on) klog("voice: on; the Dead Men bodies' event lines come from KLVoice/<Name>/<Event> of the level's .LOC (StockLevels=%d Log=%d Period=%d ms RadioFallback=%d PlayedLog=%d PlayLog=%d Plain=%d PlainData=%d Announcer=%d KeepStock=%d prefixes ThenMs=%d Online=%d); needs [Wardrobe] DMVoice=1 / [Crew] Voice=1 so each body has its own voice number", kvo.stock, kvo.log, kvo.period, kvo.radiofb, kvo.played, kvo.playlog, kvo.plain, kvo.plaindata, kvo.announcer, kvo_nkeep, kvo.then_ms, kvo.online);
 }
 
 #endif /* KLVOICE_C */
