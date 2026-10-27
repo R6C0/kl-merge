@@ -50,14 +50,14 @@
 struct klht_slot {
     int ok, id, show, made;
     DWORD ini, inis, mon, mons, actor, out[4];
-    char ini_cur[16], mon_cur[24]; DWORD ini_col, want_col; float dist;
+    char ini_cur[32], mon_cur[24]; DWORD ini_col, want_col; float dist;
 };
 
-static struct { int mode, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy, maxdist, fade; } klht;
+static struct { int mode, online, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy, maxdist, fade; } klht;
 static volatile LONG klht_n_far, klht_n_faded;
 
 #include "klhud_tags_dist.h"                          /* HeadMaxDist arithmetic (shared with the harness klht_test.c) */
-static struct { int active, fault, told, shown; DWORD tmpl, pl, recs; int n; struct klht_slot s[KLHT_NSLOT]; } klht_r;
+static struct { int active, ol, fault, told, shown; DWORD tmpl, pl, recs; int n; struct klht_slot s[KLHT_NSLOT]; } klht_r;
 static volatile LONG klht_n_draw, klht_n_nonode, klht_n_cond, klht_n_flag, klht_n_peak;
 
 static const BYTE klht_code[10] = { 0x83, 0xec, 0x68, 0x53, 0x8b, 0xd9, 0x80, 0x7b, 0x40, 0x00 };      /* 0x7b8150 sub esp,0x68 ; push ebx ; mov ebx,ecx ; cmp byte [ebx+0x40],0 */
@@ -111,10 +111,91 @@ static void klht_reset(void)
     klht_r.told = t;
 }
 
+/* ONLINE (2026-10-27, [HUD] OnlineTags, default 0, NOT RUN LIVE): online the stock Render is skipped (klu_skip_list) and its entries/records are the Heist ones
+   (re\hud_online.md), so the tags are built from the online reader's rows instead: every other heister (humans with a body + AI heisters), the
+   word = the heister CHARACTER's name (klor_row.name, klonline_read.c). The game's own drawer 0x7b8150 projects the head: node = the row's actor
+   (GUESS: the drawer accepts a ZFFPlayer as it does a bot's ZFFActor; the node is the same object the Arcade record+4 holds), the tag struct = a copy
+   of entry 0's (GUESS: entry 0 exists online, the element is made at the scene; byte +0x40 forced to 1 in the copy). Only while klu_skip_list says the
+   stock list is not drawn (else the stock would draw a second set). Game thread, inside klu_cs. */
+static BYTE klht_tpl[KLHT_TAGSIZE + 4];
+
+static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
+{
+    DWORD pl, cnt = 0; BYTE locb = 0xff; int i, n = 0, nr; struct klor_snap o; const struct klor_row *rw[KLHT_NSLOT]; (void)s;
+    EnterCriticalSection(&klu_cs);
+    if (klht_r.tmpl != klu_r.tmpl) { memset(&klht_r, 0, sizeof klht_r); klht_r.tmpl = klu_r.tmpl; }
+    klht_r.active = 0; klht_r.ol = 0;
+    if (!klu_r.made || klu_r.fault || klht_r.fault || !show || !klu_skip_list) goto out;
+    pl = klh_rd32(osd + KLU_O_PLIST);
+    if (!pl || klh_rd32(pl) != KLU_PLIST_VT || !klh_rd(pl + KLHT_O_COUNT, &cnt, 4)) goto out;
+    klh_rd(pl + KLHT_O_LOCAL, &locb, 1);
+    if (!klu_same_code(KLHT_DRAWTAG, klht_code, sizeof klht_code)) { klht_r.fault = 1; klog("tags: online: 0x7b8150 is not the tag drawer this build knows: no tags are drawn"); goto out; }
+    if (!klh_rd(pl + KLHT_E0 + KLHT_TAGOFF, klht_tpl, KLHT_TAGSIZE)) goto out;             /* GUESS: entry 0's tag struct, a ZCHAROBJ + style (see the note above) */
+    klht_tpl[0x40] = 1;
+    klor_noev = 1; nr = klor_read(&o, locb == 0xff ? -1 : (int)locb) && o.ok; klor_noev = 0;
+    if (!nr) goto out;
+    for (i = 0; i < o.n && n < KLHT_NSLOT; i++) if (o.r[i].used && o.r[i].actor && o.r[i].alive && o.r[i].seat != o.local && o.r[i].name[0]) rw[n++] = &o.r[i];
+    for (i = 0; i < o.nbots && n < KLHT_NSLOT; i++) if (o.bot[i].used && o.bot[i].actor && o.bot[i].alive && o.bot[i].name[0]) rw[n++] = &o.bot[i];
+    for (i = 0; i < KLHT_NSLOT; i++) klht_r.s[i].ok = 0;
+    for (i = 0; i < n; i++) {
+        struct klht_slot *q = &klht_r.s[i]; const struct klor_row *r = rw[i];
+        q->show = 1; q->dist = -1.0f;
+        if (!q->made && !klht_make(q)) { klht_r.fault = 1; goto out; }
+        if (klht.maxdist > 0.0f) {
+            float hp[3], hn[3], bp[3]; DWORD human, bnode; int alpha = 255; DWORD col = KLU_C_CHALK;
+            if (kle_human(&human, hp, hn) && (bnode = klh_rd32(r->actor + 4)) != 0 && kle_node(bnode, bp, 0)) q->dist = kle_dist(hp, bp);
+            alpha = klht_alpha_at(q->dist, klht.maxdist, klht.fade);
+            if (alpha == 0) q->show = 0; else if (alpha < 255) col = klht_with_alpha(col, alpha);
+            if (col != q->ini_col) { klu_set(q->ini, KLU_VT_COLOUR, col); q->ini_col = col; }
+        }
+        if (strcmp(r->name, q->ini_cur)) {
+            int k;
+            klu_set(q->ini, KLU_VT_TEXT, (DWORD)(DWORD_PTR)r->name); if (q->inis) klu_set(q->inis, KLU_VT_TEXT, (DWORD)(DWORD_PTR)r->name);
+            for (k = 0; k < 4; k++) if (q->out[k]) klu_set(q->out[k], KLU_VT_TEXT, (DWORD)(DWORD_PTR)r->name);
+            if (klu.log >= 2) klog("tags: online: slot %d (%s %d, actor %08lx): '%s' -> '%s'", i, r->bot ? "bot" : "seat", r->bot ? i : r->seat, r->actor, q->ini_cur, r->name);
+            snprintf(q->ini_cur, sizeof q->ini_cur, "%s", r->name);
+        }
+        q->id = r->bot ? 0xfe : (int)r->seat; q->actor = r->actor; q->ok = 1;
+    }
+    klht_r.pl = pl; klht_r.n = n; klht_r.active = 1; klht_r.ol = 1;
+    if (!klht_r.told) { klht_r.told = 1; klog("tags: online: on (OnlineTags=1): the stock list is skipped; the hook draws %d heister name tags with the game's drawer 0x7b8150 (node = the row's actor, GUESS); NOT RUN IN THE GAME", n); }
+    if (klu.log >= 2) {
+        static DWORD said; DWORD now = GetTickCount();
+        if (now - said >= 5000) { said = now; klog("tags: online: %d rows, %ld tag draws, %ld without a node, %ld with the drawer's flag clear", n, InterlockedExchange(&klht_n_draw, 0), InterlockedExchange(&klht_n_nonode, 0), InterlockedExchange(&klht_n_flag, 0)); }
+    }
+out:
+    LeaveCriticalSection(&klu_cs);
+}
+
+/* the online half of klht_render (called with klu_cs held): the same draw call as the Arcade loop, on a copy of the template tag struct */
+static void klht_orender(void *ctx, void *cam)
+{
+    DWORD pl = klht_r.pl; int i;
+    if (klh_rd32(pl) == KLU_PLIST_VT) {
+        DWORD a1 = klh_rd32(pl + 0x10), a5 = klh_rd32(pl + 0xc); BYTE tag[KLHT_TAGSIZE + 4];
+        for (i = 0; i < klht_r.n && i < KLHT_NSLOT; i++) {
+            const struct klht_slot *q = &klht_r.s[i]; DWORD o[8]; int k, n = 0;
+            if (!q->ok || !q->show) continue;
+            if (!klh_rd32(q->actor) || !klh_rd32(q->actor + 4)) { InterlockedIncrement(&klht_n_nonode); continue; }
+            for (k = 0; k < 4; k++) if (q->out[k]) o[n++] = q->out[k];
+            if (q->inis) o[n++] = q->inis;
+            o[n++] = q->ini;
+            for (k = 0; k < n; k++) {
+                if (klh_rd32(o[k]) != KLU_TEXT_VT) continue;
+                memcpy(tag, klht_tpl, sizeof tag); *(DWORD *)tag = o[k];
+                if (!tag[0x40]) { InterlockedIncrement(&klht_n_flag); continue; }
+                ((klht_drawtag_t)(DWORD_PTR)KLH_VA(KLHT_DRAWTAG))(tag, 0, a1, q->actor, ctx, cam, a5);
+                if (o[k] == q->ini) InterlockedIncrement(&klht_n_draw);
+            }
+        }
+    }
+}
+
 /* THE TICK (game thread; the HUD's own 100 ms): the table of what to draw for each entry. Called after klu_hide_tick. */
 static void klht_tick(DWORD osd, const struct klb_snap *s, int show)
 {
     DWORD pl, cnt = 0, recs; int i; BYTE local = 0xff; char buf[16], mb[24];
+    if (klht.online && s && s->online) { klht_otick(osd, s, show); return; }      /* [HUD] OnlineTags: the online route above */
     if (!klht.mode) return;
     EnterCriticalSection(&klu_cs);
     if (klht_r.tmpl != klu_r.tmpl) { memset(&klht_r, 0, sizeof klht_r); klht_r.tmpl = klu_r.tmpl; }      /* a new level: its objects went with the old scene */
@@ -191,6 +272,12 @@ static void klht_tab(void *el, void *ctx, const struct klht_slot *q)
 static void klht_render(void *el, void *ctx, void *cam)
 {
     DWORD pl, recs; int i; BYTE tag[KLHT_TAGSIZE + 4];
+    if (klht_r.ol) {      /* [HUD] OnlineTags: no hidden stock element needed, the stock list is skipped (klu_skip_list) */
+        if (!klht_r.active || !klu_draw_on || !ctx || (DWORD)(DWORD_PTR)el != klu_r.elem || !TryEnterCriticalSection(&klu_cs)) return;
+        if (klht_r.ol && klht_r.active) klht_orender(ctx, cam);
+        LeaveCriticalSection(&klu_cs);
+        return;
+    }
     if (!klht.mode || !klht_r.active || !klu_draw_on || !klu_r.hid || !ctx || (DWORD)(DWORD_PTR)el != klu_r.elem) return;
     if (!TryEnterCriticalSection(&klu_cs)) return;
     pl = klht_r.pl; recs = klht_r.recs;
@@ -235,6 +322,7 @@ static void klht_render(void *el, void *ctx, void *cam)
 static void klht_init(void)
 {
     klht.mode = klu_inii("HeadTags", klu.draft, 0, 2);
+    klht.online = klu_inii("OnlineTags", 0, 0, 1);                 /* 2026-10-27: heister character names over the heads in online matches (needs [Online] Read=1, OnlineCrew=1, HideOnline=1) */
     klht.shadow = klu_inii("HeadShadow", 1, 0, 1);
     klht.outline = klu_inii("HeadOutline", 1, 0, 1);               /* v22 (audit T1): four dark copies round the initials; replaces the single shadow of the initials */
     klht.font = klu_inii("HeadFont", 1, 0, 3);                     /* v22: 0 the names' face (cap 11), 1 the big face (cap 15, the draft's total) - 'a step larger' */
@@ -243,6 +331,7 @@ static void klht_init(void)
     klht.line = klu_inif("HeadLine", "-1"); if (!(klht.line >= 4 && klht.line <= 60)) klht.line = klu_cap_of(klht.font) + 5.0f;
     klht.maxdist = klu_inif("HeadMaxDist", "0"); if (!(klht.maxdist >= 0.0f && klht.maxdist <= 500.0f)) klht.maxdist = 0.0f;      /* metres; 0 = off (option D, re\hud_tags_sight.md) */
     klht.fade = klu_inif("HeadFade", "5"); if (!(klht.fade >= 0.0f && klht.fade <= klht.maxdist)) klht.fade = klht.maxdist > 0.0f ? (klht.maxdist < 5.0f ? klht.maxdist : 5.0f) : 0.0f;
+    if (klht.online) klog("tags: OnlineTags=1 (character names over the other heisters' heads online; needs [Online] Read=1 + [HUD] OnlineCrew=1 + HideOnline=1 so the stock list is skipped); NOT RUN IN THE GAME");
     if (klht.mode) klog("tags: HeadTags=%d (1 initials, 2 initials + money) HeadShadow=%d HeadLine=%.0f HeadMaxDist=%.0f m (0 = off) HeadFade=%.0f m; needs [HUD] HideStock=1 (the stock tags go with the hidden element); NOT RUN IN THE GAME", klht.mode, klht.shadow, klht.line, klht.maxdist, klht.fade);
 }
 
