@@ -886,6 +886,10 @@ static volatile struct { UINT msg; WPARAM w; LPARAM l; double t0; LONG sent; } k
 static volatile double klh_st_peek_t0; static volatile LONG klh_st_peek_n;                       /* a Peek is running since (ms); nesting count */
 static BOOL (WINAPI *klh_real_pka)(LPMSG, HWND, UINT, UINT, UINT);
 static BOOL (WINAPI *klh_real_pkw)(LPMSG, HWND, UINT, UINT, UINT);
+/* [Input] PumpNoBlock (2026-10-27, c9; default 0 = off): see klh_w_gma. */
+static int klh_pn_on;
+static volatile LONG klh_pn_empty, klh_pn_n;
+static BOOL (WINAPI *klh_real_gma)(LPMSG, HWND, UINT, UINT);
 
 static double klh_st_now(void)
 {   /* ms from QueryPerformanceCounter (the frequency is read on first use) */
@@ -958,6 +962,8 @@ static LRESULT klh_st_pass(HWND h, UINT m, WPARAM w, LPARAM l)
 static BOOL klh_st_real(int which, LPMSG msg, HWND h, UINT a, UINT b, UINT f, int *thr)
 {
     BOOL (WINAPI *real)(LPMSG, HWND, UINT, UINT, UINT) = which ? klh_real_pkw : klh_real_pka; BOOL r;
+    /* PumpNoBlock: the pump's next "any message, keep" Peek after a GetMessageA that found nothing says "empty", which ends the pump's loop */
+    if (klh_pn_on && !which && klh_pn_empty && a == 0 && b == 0 && !(f & 1)) { klh_pn_empty = 0; return FALSE; }
     if (klh_mm_ms > 0 && a == 0 && b == 0 && (f & 1 /* PM_REMOVE */)) {
         double now = klh_st_now();
         if (now - klh_mm_last < (double)klh_mm_ms) {
@@ -990,6 +996,22 @@ static BOOL klh_st_peek(int which, LPMSG msg, HWND h, UINT a, UINT b, UINT f)
 static BOOL WINAPI klh_w_pka(LPMSG msg, HWND h, UINT a, UINT b, UINT f) { return klh_st_peek(0, msg, h, a, b, f); }
 static BOOL WINAPI klh_w_pkw(LPMSG msg, HWND h, UINT a, UINT b, UINT f) { return klh_st_peek(1, msg, h, a, b, f); }
 
+/* PumpNoBlock=1: the game's GetMessageA (pump 0x82dfb0: Peek NOREMOVE -> GetMessageA 0x82e00a -> Translate/Dispatch -> Peek again) never waits.
+   WHY (CE27_HUD5 + CE27_P2P4C client dumps, solo\<TAG>\inst2\KLHook_freeze.dmp): the client froze for minutes inside GetMessageA (return 0x82e010)
+   -> ReShade32+0x5fdb2 (Peek REMOVE, then MsgWaitForMultipleObjects INFINITE). The NOREMOVE Peek had reported a WM_MOUSEMOVE (at the 960,270 /
+   1440,270 window seam) that the REMOVE Peek could not take, and a background window gets no new message to wake it. GUESS: why the two Peeks
+   disagree (ReShade/overlay input blocking with InputProcessing=2, or Windows' synthesised mouse move); the wait itself is proven by both dumps.
+   Here: Peek REMOVE; a message -> hand it out as GetMessageA would; none -> WM_NULL (Dispatch of hwnd 0 does nothing) and the next keep-Peek says empty. */
+static BOOL WINAPI klh_w_gma(LPMSG msg, HWND h, UINT a, UINT b)
+{
+    if (!klh_pn_on || !klh_real_pka) return klh_real_gma(msg, h, a, b);
+    if (klh_real_pka(msg, h, a, b, 1 /* PM_REMOVE */)) { klh_pn_empty = 0; return msg->message != 0x0012 /* WM_QUIT */; }
+    memset(msg, 0, sizeof *msg); klh_pn_empty = 1;
+    if (++klh_pn_n == 1 || klh_pn_n == 10 || klh_pn_n == 100 || klh_pn_n % 10000 == 0)
+        klog("pump: GetMessageA would have blocked (Peek saw a message, REMOVE found none): %ld so far, answered WM_NULL (PumpNoBlock=1, recommended on)", (long)klh_pn_n);
+    return TRUE;
+}
+
 static void klh_st_init(void)
 {   /* DllMain: read the switch, wrap the game's Peek imports */
     klh_st_on = GetPrivateProfileIntA("Stall", "Trace", 1, klh_ini) != 0;
@@ -998,10 +1020,16 @@ static void klh_st_init(void)
     klh_mm_ms = GetPrivateProfileIntA("Input", "MouseMoveMs", 0, klh_ini);
     if (klh_mm_ms < 0) klh_mm_ms = 0; if (klh_mm_ms > 100) klh_mm_ms = 100;
     if (!klh_st_on) klog("stall: trace off ([Stall] Trace=0)");
-    if (!klh_st_on && !klh_mm_ms) return;
+    klh_pn_on = GetPrivateProfileIntA("Input", "PumpNoBlock", 0, klh_ini) != 0;
+    if (!klh_st_on && !klh_mm_ms && !klh_pn_on) return;
     {
         int a = klh_iat("USER32.dll", "PeekMessageA", (void *)klh_w_pka, (void **)&klh_real_pka);
         int w = klh_iat("USER32.dll", "PeekMessageW", (void *)klh_w_pkw, (void **)&klh_real_pkw);
+        if (klh_pn_on) {
+            if (a && klh_iat("USER32.dll", "GetMessageA", (void *)klh_w_gma, (void **)&klh_real_gma))
+                klog("input: PumpNoBlock=1 (recommended on): the game's GetMessageA never waits; a Peek-saw/REMOVE-missed message is answered WM_NULL");
+            else { klh_pn_on = 0; klog("input: PumpNoBlock=1 but GetMessageA/PeekMessageA NOT wrapped: off"); }
+        }
         if (klh_mm_ms) klog("input: MouseMoveMs=%d: the game's pump gets WM_MOUSEMOVE at most once every %d ms (PeekMessageA %s, W %s wrapped); 0 = off", klh_mm_ms, klh_mm_ms, a ? "yes" : "no", w ? "yes" : "no");
         if (!klh_st_on) return;
         HMODULE u = GetModuleHandleA("user32.dll");
