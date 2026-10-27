@@ -281,6 +281,18 @@ static int kls_find_rule(int slot, int page)
     return -1;
 }
 
+/* [Int16Guard] (2026-10-27, G8). Online position packets are int16 world units with no scale (re/netcode.md 8, re/engine_facts.md 0x5e4a22): DM11B spawns at
+ * x 33700-34030 and keeps its loot and level bound at x 39k-44k, so every placement/teleport RMC wraps by 65536. A spawn shift cannot fix it (the whole east
+ * wing is out of range). Until the map itself is shifted (GUESS: x -12000 on every entity, not done), online selection refuses the listed maps. Offline untouched. */
+static int  kls_i16_on = 1;
+static char kls_i16_list[160] = "DM11B";
+static int kls_i16_listed(const char *map)
+{
+    char buf[160], *t, *ctx = 0; snprintf(buf, sizeof buf, "%s", kls_i16_list);
+    for (t = strtok_s(buf, ", ;", &ctx); t; t = strtok_s(0, ", ;", &ctx)) if (!_stricmp(t, map)) return 1;
+    return 0;
+}
+
 /* RANDOM ONLINE MAP (2026-10-25, onlrand_1025a; owner: 'an option for it to play randomised maps too'). [Expansion] OnlineSet=9.
  * The host picks the SLOT (stock map) in the lobby and the game syncs that; this picks WHICH map of that slot loads, from every page that has
  * a rule for the slot, plus the stock map as one choice. Every peer must pick the same one with NO message between them, so the choice is a pure
@@ -434,6 +446,13 @@ static int kls_map(const char *in, char *out, const char *api)
             kls_rnd_txt[0] = 0;
             if (page == KLS_RANDOM) page = kls_rand_pick(s);      /* OnlineSet=9 */
             if (kl_online() && (r = kmp_pick(s)) >= 0) page = r;      /* klmappool.c: [MapPool] the pool's no-repeat draw for this slot (online only) */
+            if (kl_online() && page && kls_i16_on) {      /* [Int16Guard] (2026-10-27 G8): online positions travel as int16 (0x5a0ff0, 0x404e60, 0x8413b0), a map with gameplay at |x| or |z| > 32767 wraps */
+                int g = kls_find_rule(s, page);
+                if (g >= 0 && kls_i16_listed(kls_rule[g].map)) {
+                    klog("int16guard: online load of %s page %d (%s) refused: its coordinates exceed the int16 netcode range (a remote body wraps by 65536 and falls forever, kl2+0x1e4a22) -> stock level", kls_slot[s].name, page, kls_rule[g].map);
+                    page = 0;
+                }
+            }
             { static LONG nd; if (InterlockedIncrement(&nd) <= 96) {      /* DIAGNOSTIC: which page decided this load, and why */
                 int on = kl_online(); r = kls_find_rule(s, page); if (r < 0 && page) r = kls_find_rule(s, 0);
                 klog("expansion: LOAD %s: latch=%ld force=%d online=%d OnlineSet=%d keep=%d -> page %d, rule %s; stack [%s]%s%s%s", kls_slot[s].name, (long)kls_menu_page, kls_page_force,
@@ -846,6 +865,9 @@ static void kls_init(HINSTANCE inst)
     kls_online_set = (int)GetPrivateProfileIntA("Expansion", "OnlineSet", 0, klh_ini);
     if (kls_online_set < 0 || kls_online_set >= KLS_PAGES) { klog("expansion: OnlineSet=%d is not a page (0, 2..8, 9 = random): ignored", kls_online_set); kls_online_set = 0; }
     kls_rnd_round_on = GetPrivateProfileIntA("Expansion", "OnlineRandomRound", 0, klh_ini) != 0;
+    kls_i16_on = GetPrivateProfileIntA("Int16Guard", "Enable", 1, klh_ini) != 0;       /* (recommended on) */
+    GetPrivateProfileStringA("Int16Guard", "OnlineSkip", "DM11B", kls_i16_list, sizeof kls_i16_list, klh_ini);
+    klog("int16guard: %s - online loads of [%s] fall back to the stock level (int16 position netcode; offline never)", kls_i16_on ? "on" : "off ([Int16Guard] Enable=0)", kls_i16_list);
     if (kls_online_set == KLS_RANDOM) klog("expansion: OnlineSet=9: RANDOM map per slot in a network session (stock + every page with a rule for the slot), seeded from the lobby id; page 9 itself cannot hold rules; NOT run live");
     if (kls_online_set == 1) { klog("expansion: OnlineSet=1 is the stock page: ignored"); kls_online_set = 0; }
     kls_bg_on = GetPrivateProfileIntA("BotGate", "Enable", 1, klh_ini) != 0;       /* (recommended on) */
