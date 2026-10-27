@@ -1049,7 +1049,7 @@ static void klsb_tick(int game_thread)
                      klsb.icarrier, st, ie, iv, !ie ? "absent" : iv == (DWORD)(DWORD_PTR)&klsb_ivt[1] ? "OUR private copy" : iv == (DWORD)(DWORD_PTR)&klbrd_evt[1] ? (klsb_ichained ? "Board=1's copy, CHAINED" : "Board=1's copy, not chained") : iv == KLBRD_VT ? "stock, not wrapped" : "UNKNOWN", klsb_n_icall, klsb_n_ist[0], klsb_n_ist[1], klsb_n_ist[2], klsb_n_ist[3], klsb_n_ist[4], klsb_n_ist[5], klsb_n_ist[6], klsb_n_ist[7],
                      klsb_n_iours, klsb_n_istock, klsb_n_irender, klsb_n_idrawn, !ie ? " (no element: the clock path is all there is)" : klsb_n_icall ? (klsb.icarrier == 2 ? " (probe: nothing drawn on it)" : klsb_n_iours ? " (shown)" : " (renders but the card was not drawn: pictures / lock / canary / transform)") : " (the intro element does not render in this state)"); }
             if (ipath)
-            klog("hud: scoreboard: OnlineIntroState: 2 s in: clock element renders +%ld, card drawn +%ld%s", klsb_n_irender, klsb_n_idrawn, klsb_n_irender ? (klsb_n_idrawn ? " (shown)" : " (composed but not drawn: pictures / lock / canary / pool)") : " (the clock element does not render in this state: G15 is wrong, nothing is shown)");
+            klog("hud: scoreboard: OnlineIntroState: 2 s in: snapshot now %d humans, %d bots (recomposed every tick); clock element renders +%ld, card drawn +%ld%s", on.n, on.nbots, klsb_n_irender, klsb_n_idrawn, klsb_n_irender ? (klsb_n_idrawn ? " (shown)" : " (composed but not drawn: pictures / lock / canary / pool)") : " (the clock element does not render in this state: G15 is wrong, nothing is shown)");
         }
     }
     klsb_r.ipath = ipath;
