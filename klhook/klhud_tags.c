@@ -127,7 +127,7 @@ static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
     klht_r.active = 0; klht_r.ol = 0;
     if (!klu_r.made || klu_r.fault || klht_r.fault || !show || !klu_skip_list) goto out;
     why = 2; pl = klh_rd32(osd + KLU_O_PLIST);
-    if (!pl || klh_rd32(pl) != KLU_PLIST_VT || !klh_rd(pl + KLHT_O_COUNT, &cnt, 4)) goto out;
+    if (!pl || !klu_is_plist(pl) || !klh_rd(pl + KLHT_O_COUNT, &cnt, 4)) goto out;
     klh_rd(pl + KLHT_O_LOCAL, &locb, 1);
     why = 3;
     if (!klu_same_code(KLHT_DRAWTAG, klht_code, sizeof klht_code)) { klht_r.fault = 1; klog("tags: online: 0x7b8150 is not the tag drawer this build knows: no tags are drawn"); goto out; }
@@ -178,7 +178,7 @@ out:
 static void klht_orender(void *ctx, void *cam)
 {
     DWORD pl = klht_r.pl; int i;
-    if (klh_rd32(pl) == KLU_PLIST_VT) {
+    if (klu_is_plist(pl)) {
         DWORD a1 = klh_rd32(pl + 0x10), a5 = klh_rd32(pl + 0xc); BYTE tag[KLHT_TAGSIZE + 4];
         for (i = 0; i < klht_r.n && i < KLHT_NSLOT; i++) {
             const struct klht_slot *q = &klht_r.s[i]; DWORD o[8]; int k, n = 0;
@@ -212,7 +212,7 @@ static void klht_tick(DWORD osd, const struct klb_snap *s, int show)
     /* only while the stock element is hidden BY US (klu_r.hid) in the state the stock draws tags in (0x5e6120: state 0x19) */
     if (!klu_r.made || klu_r.fault || klht_r.fault || !show || !klu_r.hid || !s || s->state != 0x19 || !s->rules) goto out;
     pl = klh_rd32(osd + KLU_O_PLIST);
-    if (!pl || klh_rd32(pl) != KLU_PLIST_VT || !klh_rd(pl + KLHT_O_COUNT, &cnt, 4) || cnt > KLHT_NSLOT) goto out;
+    if (!pl || !klu_is_plist(pl) || !klh_rd(pl + KLHT_O_COUNT, &cnt, 4) || cnt > KLHT_NSLOT) goto out;
     if (!klh_rd(pl + KLHT_O_LOCAL, &local, 1)) goto out;
     if (!(recs = klh_rd32(s->rules + 0x348))) goto out;
     if (!klu_same_code(KLHT_DRAWTAG, klht_code, sizeof klht_code)) {
@@ -290,7 +290,7 @@ static void klht_render(void *el, void *ctx, void *cam)
     if (!klht.mode || !klht_r.active || !klu_draw_on || !klu_r.hid || !ctx || (DWORD)(DWORD_PTR)el != klu_r.elem) return;
     if (!TryEnterCriticalSection(&klu_cs)) return;
     pl = klht_r.pl; recs = klht_r.recs;
-    if (klht_r.active && klh_rd32(pl) == KLU_PLIST_VT) {
+    if (klht_r.active && klu_is_plist(pl)) {
         DWORD a1 = klh_rd32(pl + 0x10), a5 = klh_rd32(pl + 0xc); BYTE old = 0; DWORD cnt = 0;
         if (klh_rd(pl + KLHT_O_OLD, &old, 1) && klh_rd(pl + KLHT_O_COUNT, &cnt, 4) && cnt <= KLHT_NSLOT) {
             for (i = 0; i < (int)cnt && i < klht_r.n; i++) {

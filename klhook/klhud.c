@@ -555,6 +555,13 @@ static void klu_plist_wrap(DWORD osd)
 }
 
 
+static int klu_is_plist(DWORD el)
+{   /* the FA player list element: the stock vtable, or our private copy once klu_plist_wrap ([HUD] HideSrc) swapped it in
+       (10-27 bench Q27_DD01ce3: the online tags waited at gate 2 for the whole round because only the stock one passed) */
+    DWORD vt = klh_rd32(el);
+    return el && (vt == KLU_PLIST_VT || (klu_pvt_ready && vt == (DWORD)(DWORD_PTR)&klu_pvt[1]));
+}
+
 static int klu_vtable_tick(DWORD osd)
 {   /* -> 1 while the clock element's first dword is ours (installed here when it shows the stock one) */
     static LONG told; DWORD el, vt, cur;
