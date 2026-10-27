@@ -56,7 +56,7 @@ static int kllnm_on, kllnm_log, kllnm_override;
 /* 2026-10-26 [HUD] HideKilledBy=1 (recommended on; needs [HUD] Enable=1 and KilledBy=1): the stock death panel's 'Killed by ...' text is blanked so only the HUD's own KILLED BY line shows (Arcade AND online, any map, [Names] not needed).
    The text is built by 0x500670 (re\hud_values.md h) from LOC keys (AllLevels/Menu/Online/Respawn KilledBy, AllLevels/Interface/Online/Kill FA_DieFrom<role>); a lookup made from inside 0x500670 .. 0x500b62, or for a key
    ending in 'KilledBy' (the XML tag), answers a static empty string. GUESS: the empty string leaves the panel's text empty (not a crash); the XML page's own label is the same key. TEST logs each hit. */
-static int kllnm_hk; static LONG kllnm_hk_n;
+static int kllnm_hk, kllnm_hk_on; static LONG kllnm_hk_n;   /* kllnm_hk_on: [HUD] Online=1, so online the HUD draws its own KILLED BY line */
 static const char kllnm_empty[4] = "";
 static struct { DWORD stock; DWORD orig; int n; DWORD vt[KLLNM_MAXSLOT + 1]; } kllnm_tab[KLLNM_NVT];     /* vt[0] = RTTI locator, vt[1..] = slots */
 static int kllnm_ntab;
@@ -108,7 +108,7 @@ static const char *kllnm_name_now(int n)
 static const char *__fastcall kllnm_lookup(void *self, void *edx, const char *folder, const char *key, DWORD third)
 {
     KLLNM_LOOKUP orig = 0; DWORD vt; int i, n = 0, klen = 0; char k[96], f[96]; const char *res, *mine = 0; (void)edx;
-    if (kllnm_hk && key) {
+    if (kllnm_hk && key && (kllnm_hk_on || !kl_online())) {   /* 2026-10-27: online without [HUD] Online the HUD draws no KILLED BY, so the stock text stays (c9 Q27_DM03: blanked, nothing in its place) */
         DWORD ra = (DWORD)(DWORD_PTR)_ReturnAddress(); int hit = ra >= (DWORD)KLH_VA(0x500670) && ra < (DWORD)KLH_VA(0x500b62), kl;
         char kk[96];
         kk[0] = 0; kl = klh_rdstr((DWORD_PTR)key, kk, sizeof kk);
@@ -205,6 +205,7 @@ static void kllnm_init(void)
 {
     char val[KLLNM_NAME + 8]; int r, nn = 0;
     kllnm_hk = GetPrivateProfileIntA("HUD", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "KilledBy", 1, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "HideKilledBy", 1, klh_ini) != 0;
+    kllnm_hk_on = GetPrivateProfileIntA("HUD", "Online", 0, klh_ini) != 0;
     if (kllnm_hk) klog("names: [HUD] HideKilledBy=1: the stock death panel's 'Killed by' text is blanked (LOC lookups from 0x500670 and the key KilledBy); the LOC object is wrapped by the tick");
     if (!GetPrivateProfileIntA("Names", "Enable", 0, klh_ini)) return;
     kllnm_log = GetPrivateProfileIntA("Names", "Log", 0, klh_ini) != 0;

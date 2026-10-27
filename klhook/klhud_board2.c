@@ -726,7 +726,8 @@ static void klsb_tick(int game_thread)
     if (osd != klsb_r.osd) { klsb_forget(); klsb_r.osd = osd; }
     if (klsb_r.refused || klsb_code_bad) return;
     if (!klu_r.pic_done) klu_pic_prep(klu_r.elem);
-    if (!klsb_wrap(osd)) { if (!klsb_code_bad && ++klsb_r.wrapfail < 30) return; klsb_r.refused = 1; if (klu.log) klog("hud: scoreboard: the wrap failed %d tick(s) (%s): the stock panel stays for this OSD", klsb_r.wrapfail, klsb_code_bad ? "code / vtable mismatch" : "element not readable or not ZHeistOutroDisplay"); return; }
+    /* 2026-10-27: online the outro element at osd+0x10b4 is still 0 for minutes (Q27_DM03 refused after 3 s and never drew the online card): an absent element is waited for, only a present one that will not wrap counts */
+    if (!klsb_wrap(osd)) { if (!klsb_code_bad && (!klh_rd32(osd + KLSB_O_OUTRO) || ++klsb_r.wrapfail < 30)) return; klsb_r.refused = 1; if (klu.log) klog("hud: scoreboard: the wrap failed %d tick(s) (%s): the stock panel stays for this OSD", klsb_r.wrapfail, klsb_code_bad ? "code / vtable mismatch" : "element not readable or not ZHeistOutroDisplay"); return; }
     klsb_r.wrapfail = 0;
     klsb_cache_pics();
     if (klsb_r.state == 0x1f) klsb_cache_odesc();
