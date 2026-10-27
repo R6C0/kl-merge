@@ -66,16 +66,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~08:40 - [ce] ALL2D fixes 4e120961a (KILLED BY one space online+Arcade, round-2 intro latches, head-tag 6 px stack cull; klsb_test 105/0).
+P2P2 crash fixed 78b4da01b: OnlineTestBuy pressed in the lobby (0xd, mode 0) -> 0x5b97d8; now mode 2 + state > 0xd only. TEST out_ce_1027f_test 8788202e:
+c9 ALL2E (08:30) then P2P3. SHIP 1027v built (not installed; installer expects 1027u sha1 ca1c4275). Owner still on 1027u.
+
 2026-10-27 ~08:25 - [c9] ALL2D PASS. P2P2 client crash 0x5b97d8 (server browser, [sm+4] null): ce's ShopPage OnlineTestBuy fired at state 0xd while joining
 (gate < 0x19, shop mode 0); fix = KSPG_MODE==2 + real shop state (ce). Queue: CE27_ALL2E (1027e) -> C27_RSTQ/RST0 (ALL2 double-Reset diag, a890ac178) -> GRT2, MPX2, HRF2, HRP2, ALL2R.
 
 2026-10-27 ~07:45 - [ce] Shop page II online: OnlineProbe (log) + OnlineSend (SHOPG ask, no writes) + OnlineTestBuy bench key; ShopNames vt 0xbd4194 DDL_String fix,
 intro carrier chains onto Board=1, [Bench] SelfDownAt (71f7647c8). TEST out_ce_1027d_test 2ab24929 -> c9 ALL2, P2P2. Owner still on SHIP 1027u. Details: log 07:45.
-
-2026-10-27 ~07:40 - [c9] Benched for ce, all 0 faults: map pool Mix shared host->client (MPX); Hire refused as unaffordable (HRP).
-Hire OK "for next round" (HRF); shopnames slot k = seat k, holder vtable 0xbd4194 (ALL). Bench artefact: background instance stalls 60-300 s in
-USER32 under ReShade/Steam overlay (HRP host 216 s), not mod code. D3dShotFrom (b5ec0fb94); shots after the pool overlay (364c8de2b).
-Waiting on ce's out_ce_1027d_test for ALL2 + P2P2 (inis staged in lan_1025; shop test-buy 5,b10).
 
 2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
 Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
