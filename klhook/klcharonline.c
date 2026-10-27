@@ -60,7 +60,19 @@ static struct {
     unsigned __int64 lobby;
     UINT_PTR sock; int sockTried, toldOwn, toldNoWar, toldCode, toldOnline;
     DWORD triedAt[KLCO_N]; int tried[KLCO_N]; LONG lastv[KLCO_N]; DWORD lastmodel[KLCO_N];
+    DWORD whyAt[KLCO_N];
 } klco;
+
+/* 10-27 bench Q27_DM03: the HOST heard the joiner (entity 1, Kane) and in 2.5 min never applied it, with no log line. Every silent
+   'nothing done' for a heard peer now says why, at most once per 8 s per entity (Log=1). */
+static void klco_why(int idx, DWORD now, const char *fmt, ...)
+{
+    char b[200]; va_list ap;
+    if (!klco.log || idx < 0 || idx >= KLCO_N || now - klco.whyAt[idx] < 8000) return;
+    klco.whyAt[idx] = now;
+    va_start(ap, fmt); vsnprintf(b, sizeof b, fmt, ap); va_end(ap);
+    klog("charonline: entity %d not changed: %s", idx, b);
+}
 
 static const char *const klco_names[17] = { "stock", "J.C.", "Tommy", "Pierre", "Liam", "Jean", "Elwood", "Bud", "Mitchel", "Kane", "Lynch", "Ashkanan", "Meldal", "Red", "Parker", "Standen", "Hutchison" };
 
@@ -221,8 +233,8 @@ static void klco_look(DWORD ent, int idx, int ch, int mask, int outfit, int gt, 
     static const BYTE variant_code[10] = { 0x8b, 0x44, 0x24, 0x04, 0x56, 0x8b, 0xf1, 0x89, 0x46, 0x50 };
     DWORD node, model, cur = 0, want_root = 0; char key[64], scene[160]; int wardrobe, i, v;
     if (!ch && !mask && !outfit) return;
-    if (!(node = klh_rd32(ent + 4)) || !(model = klh_rd32(node + 0x68))) return;
-    if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
+    if (!(node = klh_rd32(ent + 4)) || !(model = klh_rd32(node + 0x68))) { klco_why(idx, now, "%s: no node / model (node %08lx)", who, node); return; }
+    if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) { klco_why(idx, now, "%s: level key not readable", who); return; }
     wardrobe = klc_w.on && !_stricmp(key, klc_w.key);
     if (!klc_same_code(0x783fb0, model_code, sizeof model_code) || !klc_same_code(KLC_SETVARIANT, variant_code, sizeof variant_code)) {
         if (!klco.toldCode++) klog("charonline: the two game routines are not the ones this build knows: nothing is changed");
@@ -235,6 +247,7 @@ static void klco_look(DWORD ent, int idx, int ch, int mask, int outfit, int gt, 
     if (want_root && model != want_root) {
         if (now - klco.triedAt[idx] > 10000) { klco.triedAt[idx] = now; klco.tried[idx] = 0; }
         if (!gt) return;
+        if (klco.tried[idx] >= klco.tries) klco_why(idx, now, "%s: model %lu still not %lu after %d tries in 10 s", who, model, want_root, klco.tried[idx]);
         if (klco.tried[idx] < klco.tries) {
             klco.tried[idx]++;
             ((void (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)KLH_VA(0x783fb0))((void *)(DWORD_PTR)ent, 0, want_root);
@@ -247,7 +260,7 @@ static void klco_look(DWORD ent, int idx, int ch, int mask, int outfit, int gt, 
     if (!wardrobe) { if (!mask) return; v = mask == 1 ? 1 : 2; }
     else {
         for (i = 0; i < klc_w.n && klc_w.c[i].root != model; i++) ;
-        if (i == klc_w.n) return;
+        if (i == klc_w.n) { klco_why(idx, now, "%s: model %lu is not in the wardrobe of %s (char %d wants root %lu)", who, model, key, ch, want_root); return; }
         if (!klh_rd(ent + 0x50, &cur, 4)) return;
         if (mask >= 2 && mask - 1 > klc_w.masks) mask = 1;
         v = klc_variant(klc_w.version, klc_w.step, klc_w.headbase, klc_w.c[i].bodies, klc_w.c[i].heads, outfit, mask, cur);
@@ -385,7 +398,12 @@ static void klco_tick(int game_thread)
     for (i = 0; i < n; i++) if (klco.p[i].used && i != klco.ownIdx) {
         DWORD ent = klco_ent(ents, n, i);
         if (klco_heister(ent)) klco_look(ent, i, klco_effective(i, klco.p[i].c), klco.p[i].m, klco.p[i].o, game_thread, "peer", now);
+        else {
+            BYTE type = 0, pol = 0; if (ent) { klh_rd(ent + 0x273c, &type, 1); klh_rd(ent + 0x2723, &pol, 1); }
+            klco_why(i, now, "peer: not a heister body here (ent %08lx of %d, type %u, police byte %u, node %08lx)", ent, n, type, pol, ent ? klh_rd32(ent + 4) : 0);
+        }
     }
+    for (i = n; i < KLCO_N; i++) if (klco.p[i].used && i != klco.ownIdx) klco_why(i, now, "peer: entity index beyond this machine's table (%d entries)", n);
 }
 
 static void klco_init(void)
