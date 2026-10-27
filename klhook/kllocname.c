@@ -136,6 +136,14 @@ static const char *kllnm_name_now(int n)
     if (!kl_online()) { int o = kpm_override(kls_slot[s].name); if (o >= 0) page = o; }   /* the Arcade playlist's choice, as kls_map does */
     else if (kllnm_pool) { int o = kmp_peek(s); if (o >= 0) page = o; }                  /* [MapPool] LobbyName: the page the pool's NEXT load of this slot will take (read-only peek) */
     r = kls_find_rule(s, page); if (r < 0 && page) r = kls_find_rule(s, 0);
+    if (kllnm_pool && kl_online()) {      /* ONE line per distinct answer (a bench greps 'names: LOBBY'): proves what the lobby's Location label was given on this peer */
+        static int lastPage[10] = {-9,-9,-9,-9,-9,-9,-9,-9,-9,-9}, lastR[10] = {-9,-9,-9,-9,-9,-9,-9,-9,-9,-9}, told;       /* last answer PER slot */
+        if (s >= 0 && s < 10 && (page != lastPage[s] || r != lastR[s]) && told < 16) {
+            lastPage[s] = page; lastR[s] = r; told++;
+            if (r >= 0 && kllnm_rname[r][0]) klog("names: LOBBY label of %s set to '%s' (page %d, pool peek %d, Override=%d)", slot, kllnm_rname[r], page, kmp_peek(s), kllnm_override);
+            else klog("names: LOBBY label of %s stays STOCK: no [Names] entry for page %d (pool peek %d: %s)", slot, page, kmp_peek(s), kmp_peek(s) < 0 ? "pool order not ready / no pooled map for this slot" : "pooled map has no name");
+        }
+    }
     return r >= 0 && kllnm_rname[r][0] ? kllnm_rname[r] : 0;
 }
 
@@ -288,7 +296,7 @@ static void kllnm_init(void)
         if (kllnm_rname[r][0]) klog("names: slot %s page %d -> %s is called '%s'", kls_slot[kls_rule[r].slot].name, kls_rule[r].page, kls_rule[r].map, kllnm_rname[r]);
     }
     kllnm_pool = GetPrivateProfileIntA("MapPool", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("MapPool", "LobbyName", 0, klh_ini) != 0;       /* kmp is declared later; kmp_peek checks kmp.on itself */
-    if (kllnm_pool) klog("names: [MapPool] LobbyName=1 (NOT run live): the lobby label of slot Fnn follows the pool's next map for that slot (needs Override=%d, names above)", kllnm_override);
+    if (kllnm_pool) klog("names: [MapPool] LobbyName=1 (NOT run live; a 'names: LOBBY label' line per answer): the lobby label of slot Fnn follows the pool's next map for that slot (needs Override=%d, names above)", kllnm_override);
     if (!en) { klog("names: [Names] off: %d name(s) for %d rule(s) read for the online intro card only (OnlineIntroMapName); the LOC lookup is not overridden", nn, kls_nrules); return; }
     kllnm_on = 1;
     klog("names: enabled; %d name(s) for %d rule(s); Override=%d Log=%d (the LOC object is wrapped by the tick; no code of kl2.exe is changed)", nn, kls_nrules, kllnm_override, kllnm_log);

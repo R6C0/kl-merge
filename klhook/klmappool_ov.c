@@ -54,7 +54,7 @@ struct kmpo_snap { DWORD at; int valid, pool, n, next, played, state; int st[KMP
 static struct {
     int on, log, x, y, scale, cols, names, dead; unsigned mask; char dir[MAX_PATH];
     struct kmpo_snap s[2]; volatile int cur; DWORD snapAt; int lastState, nstate, drawn, shownLogged;
-    int minMs; unsigned holdEnd; struct kmpo_snap hold; int holdOk, holdLogged, holdPool; DWORD holdSince, holdSeed;     /* OverlayMinMs: the last shown snapshot, kept drawing after the hide state */
+    int hideLog, hidLogged, nhid; DWORD shownAt; int minMs; unsigned holdEnd; struct kmpo_snap hold; int holdOk, holdLogged, holdPool; DWORD holdSince, holdSeed;     /* OverlayMinMs: the last shown snapshot, kept drawing after the hide state */
     void *texdev, *white;
     struct { char name[48]; void *tex; int w, h, tried; } th[KMPO_NTH]; int nth;
     struct { char key[80]; void *tex; int w, h; } tx[KMPO_NTXT]; int ntx;
@@ -64,6 +64,14 @@ static struct {
 /* ------------------------------------------------------------------ game thread: the snapshot */
 static void kmpo_publish(struct kmpo_snap *s) { kmpo.cur = (int)(s - kmpo.s); }
 
+/* [MapPool] OverlayHideLog (recommended on): ONE line when the overlay stops drawing for good, with the reason and how long it was up (a bench greps 'overlay HIDDEN') */
+static void kmpo_hidden(DWORD now, DWORD state, const char *why)
+{
+    if (!kmpo.hideLog || kmpo.hidLogged || !kmpo.shownAt || kmpo.nhid >= 8) return;
+    kmpo.hidLogged = 1; kmpo.nhid++;
+    klog("mappool: overlay HIDDEN: state %lu, reason: %s; up %lu ms since the first drawn snapshot (hold %s)", (unsigned long)state, why, (unsigned long)(now - kmpo.shownAt), kmpo.minMs > 0 ? "on" : "off (OverlayMinMs=0)"); kmpo.shownAt = 0;
+}
+
 static void kmpo_snap(int game_thread)
 {
     DWORD now = GetTickCount(), sm, state = 0xffff; struct kmpo_snap *s; int i;
@@ -72,7 +80,7 @@ static void kmpo_snap(int game_thread)
     kmpo.snapAt = now;
     s = &kmpo.s[1 - kmpo.cur];
     s->valid = 0; s->at = now;
-    if (!kmp.on || kmp.pool < 1 || kmp.pool > 3 || !kmp.seed) { kmpo.holdOk = 0; kmpo_publish(s); return; }
+    if (!kmp.on || kmp.pool < 1 || kmp.pool > 3 || !kmp.seed) { kmpo.holdOk = 0; kmpo_hidden(now, 0xffff, "no pool / seed (pool off or not heard yet)"); kmpo_publish(s); return; }
     sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION));
     if (!sm || !klh_rd(sm + 0x70, &state, 4)) state = 0xffff;
     if ((int)state != kmpo.lastState) {
@@ -92,11 +100,16 @@ static void kmpo_snap(int game_thread)
                 kmpo_publish(s); return;
             }
             kmpo.holdOk = 0;
-            if (kmpo.log) klog("mappool: overlay: HOLD ended after %lu ms (state %lu, %s)", (unsigned long)(now - kmpo.holdSince), (unsigned long)state, (state >= 32 || ((kmpo.holdEnd >> state) & 1u)) ? "round / loading state or no session" : "time up");
+            {   const char *hr = (state >= 32 || ((kmpo.holdEnd >> state) & 1u)) ? "round / loading state or no session"
+                    : ((1u << state) < (kmpo.mask & (~kmpo.mask + 1u))) ? "state below the shown range" : "OverlayMinMs time up";
+                static char hw[80]; snprintf(hw, sizeof hw, "hold ended: %s", hr);
+                kmpo_hidden(now, state, hw);
+                if (kmpo.log) klog("mappool: overlay: HOLD ended after %lu ms (state %lu, %s)", (unsigned long)(now - kmpo.holdSince), (unsigned long)state, hr); }
         }
+        kmpo_hidden(now, state, kmpo.minMs > 0 ? "state not shown and no snapshot to hold" : "state not in OverlayStates, OverlayMinMs=0");
         kmpo_publish(s); return;
     }
-    kmpo.holdSince = 0; kmpo.holdLogged = 0;
+    kmpo.holdSince = 0; kmpo.holdLogged = 0; kmpo.hidLogged = 0;
     kmp_ready();                                       /* the same call the load path and the host tick make, on this (game) thread */
     s->pool = kmp.pool; s->state = (int)state;
     s->n = kmp.norder < KMP_MAX ? kmp.norder : KMP_MAX;
@@ -104,6 +117,7 @@ static void kmpo_snap(int game_thread)
     s->played = kmpo_played(s->st, s->n);
     for (i = 0; i < s->n; i++) { strncpy(s->name[i], kmp.name[kmp.order[i]], 47); s->name[i][47] = 0; }
     s->valid = s->n > 0;
+    if (s->valid && !kmpo.shownAt) kmpo.shownAt = now ? now : 1;     /* 'up' counts from the first DRAWN snapshot */
     if (kmpo.minMs > 0 && s->valid) { kmpo.hold = *s; kmpo.holdOk = 1; kmpo.holdPool = kmp.pool; kmpo.holdSeed = (DWORD)kmp.seed; }
     kmpo_publish(s);
 }
@@ -376,6 +390,7 @@ static void kmpo_init(void)
     kmpo.minMs = GetPrivateProfileIntA("MapPool", "OverlayMinMs", 0, klh_ini); if (kmpo.minMs < 0 || kmpo.minMs > 600000) kmpo.minMs = 0;
     GetPrivateProfileStringA("MapPool", "OverlayHoldEnd", "0xfe000000", b, sizeof b, klh_ini);
     kmpo.holdEnd = (unsigned)strtoul(b, 0, 0);
+    kmpo.hideLog = GetPrivateProfileIntA("MapPool", "OverlayHideLog", 1, klh_ini) != 0;
     kmpo.lastState = -2;
     if (kmpo.minMs) klog("mappool: overlay MinMs %d (NOT run live): keeps drawing after the shown state, ends at states in mask %08x", kmpo.minMs, kmpo.holdEnd);
     klog("mappool: overlay ON (NOT run live): dir '%s' at %d%%/%d%% scale %d%% cols %d states mask %08x; needs [FrameLimit] Enable=1 (the Present wrapper) and a pool", kmpo.dir, kmpo.x, kmpo.y, kmpo.scale, kmpo.cols, kmpo.mask);
