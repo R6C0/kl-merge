@@ -285,7 +285,8 @@ static void kspo_book_tick(void)
         has = (c0 == row || c1 == row);
         if (has && !kspo.bkSeen[s]) {
             kspo.bkSeen[s] = 1; kspo.got[s] = kspo_round() + 1;
-            klog("shopg: apply: seat %d now carries row %d (rows %d,%d): page II gun item %d is lined up for the next hand-over", s, row, c0, c1, kspg.p[row].item);
+            if (kspg_netok(row)) klog("shopg: apply: seat %d now carries row %d (rows %d,%d): page II gun item %d is lined up for the next hand-over", s, row, c0, c1, kspg.p[row].item);
+            else klog("shopg: apply: seat %d now carries row %d (rows %d,%d): fallback, the stock carrier gun is handed over (page II item %d has no gun+0x13c)", s, row, c0, c1, kspg.p[row].item);
         } else if (!has && kspo.bkSeen[s]) {
             klog("shopg: apply: seat %d no longer carries row %d (rows %d,%d): the page II gun is let go", s, row, c0, c1);
             kspo.bk[s] = 0; kspo.bkSeen[s] = 0;

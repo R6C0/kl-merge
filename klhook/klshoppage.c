@@ -89,6 +89,7 @@ static struct { DWORD obj; int role; } kspg_role[KSPG_ROLES]; static int kspg_nr
 enum { KR_NONE = 0, KR_OLDPRI = 1, KR_OLDSEC = 2, KR_BIG = 11, KR_PRI = 12, KR_SEC = 13 };
 
 #include "klshoppage_probe.c"                              /* [ShopPage] OnlineProbe: pool / hand-out / buy log lines, no writes */
+static int kspg_netok(int row);                                  /* defined below; used by the book tick */
 #include "klshoppage_online.c"                             /* [ShopPage] OnlineSend: page II press sent to the host (SHOPG), host judges + logs, no writes */
 
 static int kspg_role_of(void *self)
@@ -383,7 +384,7 @@ static int kspg_make(int row)
     }
     if (!j) { if (kspg.p[row].fails++ < 3) klog("shopPage: object maker returned nothing for item %d: row %d left as it is (tried again in 20 s)", kspg.p[row].item, row); kspg.p[row].ok = 0; kspg.p[row].retry = GetTickCount() + 20000; return 0; }
     klh_data((void *)(DWORD_PTR)(a + 4), &n, 4, "KLShopPage: pool count");
-    klog("shopPage: row %d: %d objects of item %d added to the pool (parked until bought)", row, j, kspg.p[row].item);
+    klog("shopPage: row %d: %d objects of item %d added to the pool (parked until bought); first gun+0x13c = %08lX", row, j, kspg.p[row].item, (unsigned long)klh_rd32((DWORD_PTR)kspg.made[row][0] + 0x13c));
     return 1;
 }
 
@@ -427,6 +428,25 @@ static void kspg_sane(void)
 
 static int kspg_ours(int row, DWORD o) { int m; for (m = 0; m < KSPG_PER; m++) if (kspg.made[row][m] == o) return 1; return 0; }
 
+/* ONLINE NET-SUB-OBJECT GATE (bench CE27_P2P4H crash 0x9425a4): online the hand-over (0x538ec0 -> 0x538fa5 branch) reads gun+0x13c and calls 0x66be20 on it; a
+ * gun made by kspg_make has +0x13c = 0 (ctor 0x68f67b zeroes it; GUESS: the stock pool builder sets it in a later pass that does not cover our objects), so it
+ * crashed with this = NULL. A row is handed over online only while EVERY object of ours of that row has +0x13c != 0; otherwise the buyer keeps the stock gun. */
+static int kspg_netok(int row)
+{
+    int m, any = 0;
+    for (m = 0; m < KSPG_PER && kspg.made[row][m]; m++) { any = 1; if (!klh_rd32((DWORD_PTR)kspg.made[row][m] + 0x13c)) return 0; }
+    return any;
+}
+
+/* evidence for the netok diagnosis: +0x13c of every object of ours and of one stock gun of the same carrier, logged once when the fallback fires */
+static void kspg_netlog(int row, DWORD carrier, DWORD ents, DWORD n)
+{
+    int m; DWORD i, sg = 0;
+    for (m = 0; m < KSPG_PER && kspg.made[row][m]; m++) klog("apply: row %d fallback: made[%d]=%08lX +0x13c=%08lX", row, m, (unsigned long)kspg.made[row][m], (unsigned long)klh_rd32((DWORD_PTR)kspg.made[row][m] + 0x13c));
+    for (i = 0; i < n && !sg; i++) { DWORD e[3]; if (klh_rd(ents + 12 * i, e, 12) && e[1] == carrier && e[0] && !kspg_ours(row, e[0])) sg = e[0]; }
+    if (sg) klog("apply: row %d fallback: stock gun %08lX +0x13c=%08lX", row, (unsigned long)sg, (unsigned long)klh_rd32((DWORD_PTR)sg + 0x13c));
+}
+
 static void kspg_enforce(void)
 {   /* only before the round: every entry of a pair's carrier is parked or free as the desired set says (see the header) */
     DWORD a, n = 0, ents, i; int row;
@@ -449,6 +469,11 @@ static void kspg_enforce(void)
             static BYTE told[KSPG_ROWS]; int have = 0;
             for (i = 0; i < n && !have; i++) { DWORD e[3]; have = klh_rd(ents + 12 * i, e, 12) && e[1] == carrier && e[0] && kspg_ours(row, e[0]); }
             if (!have) { if (kspg.log && !told[row]) { told[row] = 1; klog("shopPage: ONLINE row %d: none of our objects is in the pool: the stock guns of its carrier are left free (empty-pool guard)", row); } continue; }
+            if (!kspg_netok(row)) {                                                  /* falls through with wantB = 0: stock free, ours parked */
+                static BYTE told2[KSPG_ROWS];
+                if (!told2[row]) { told2[row] = 1; klog("apply: row %d fallback: our page II objects have no gun+0x13c (net sub-object): the buyer keeps the stock carrier gun", row); kspg_netlog(row, carrier, ents, n); }
+                wantB = 0;
+            }
         }
         for (i = 0; i < n; i++) {
             DWORD e[3]; int ours, park, pi; BYTE v;
@@ -484,6 +509,11 @@ static int kspg_repark(void)
             int have = 0; if (!wantB[row]) continue;
             for (i = 0; i < n && !have; i++) have = tab[3 * i + 1] == carrier[row] && tab[3 * i] && kspg_ours(row, tab[3 * i]);
             if (!have) wantB[row] = 0;
+            if (wantB[row] && !kspg_netok(row)) {
+                static BYTE told2[KSPG_ROWS];
+                if (!told2[row]) { told2[row] = 1; klog("apply: row %d fallback: our page II objects have no gun+0x13c (net sub-object): the buyer keeps the stock carrier gun", row); kspg_netlog(row, carrier[row], ents, n); }
+                wantB[row] = 0;
+            }
         }
     for (i = 0; i < n; i++) {
         DWORD *e = tab + 3 * i; BYTE v = 0;
