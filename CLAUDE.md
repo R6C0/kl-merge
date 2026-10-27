@@ -71,8 +71,10 @@ NOT run live yet (all default 0): OnlineIntroState, [Voice] OnlineTraits/OnlineC
 OnlineBoardTake/IntroCount/VanIcon, OnlineTagStyle/TagHold, [Grades] OnlineTags. TEST out_all_1027o_test / SHIP out_ship_1027o; owner still on 1027i.
 Gap list (verified): re/open_work_log.md 10-27 02:40. Waiting on owner: random default heister online (overrides own pick).
 
-2026-10-27 ~01:00 - Netcode D1-D4 committed (c9), NOT run live: D1 klh_pvt (NetSmooth hid remote players from 46 vtable tests), D2 NetSmooth/nettune
-options rows, D3 [Sync] PlayerProbe, D4 per-round no-wardrobe note. TEST out_test_1027d / SHIP out_ship_1027d. Bench queue lan_1025/queue_1027.txt on 1027d.
+2026-10-27 ~03:55 - [ce] Round number online FIXED live (fields are objects, value byte +4 XOR 0xac; ce6: round 1 of 3). Rating = low nibble.
+Online rules are small (Sv 0x3a8, Cl 0x334): Arcade offsets +0x33e/+0x348/+0x5f8 now skipped online; online talk needs [Voice] OnlineTalkNoScore=1.
+Rules vtable is a copy mid-round: gates match slot 0 (fe2871534). TEST out_vt_test (DM02 clean), SHIP out_ship_1027r; owner on 1027p.
+ABOARD still unknown: BOSE4 (c9) boards with E at the parked box (8449,-867,26205).
 
 2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
 Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
