@@ -66,6 +66,7 @@ typedef void  (__fastcall *kspg_msg_t)(void *self, void *edx, DWORD *msg);
 static struct {
     int tabNames; char tab[4][64];
     int online2;                                 /* [ShopPage] OnlinePage2 (default 0): online a page II row buys its CARRIER's stock gun through the stock host-validated path */
+    int probe;                                   /* [ShopPage] OnlineProbe (default 0, recommended off until benched): klshoppage_probe.c, LOG ONLY */
     int online;                                  /* [ShopPage] OnlineLook (default 0): page II LOOK online, buying it LOCKED (2026-10-26, see below) */
     int on, grenades, trick, key, log, clips, hint, keyDown, txtSeen, togglePend, premake, preDone, preTry, sane, st;
     volatile int active, pre, shownB;                 /* active: gate open and wrappers may act; shownB: set B on screen */
@@ -83,6 +84,8 @@ static struct {
 static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
 static struct { DWORD obj; int role; } kspg_role[KSPG_ROLES]; static int kspg_nrole;
 enum { KR_NONE = 0, KR_OLDPRI = 1, KR_OLDSEC = 2, KR_BIG = 11, KR_PRI = 12, KR_SEC = 13 };
+
+#include "klshoppage_probe.c"                              /* [ShopPage] OnlineProbe: pool / hand-out / buy log lines, no writes */
 
 static int kspg_role_of(void *self)
 {
@@ -221,6 +224,7 @@ static void __fastcall kspg_sel(void *self, void *edx, DWORD *msg)
            unproven against host validation. GUESS G17: the online selector uses this same message pair and [selector+0x90] / 0x154d80c as Arcade. */
         int hi = (int)klh_rd32((DWORD_PTR)self + 0x90), sh = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW));
         if ((hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok) || (sh >= 0 && sh < KSPG_ROWS && kspg.p[sh].ok)) {
+            if (kspg.probe) kspp_log("shopProbe: page2buy SWALLOWED row=%d carrier item=%lu message '%s' (would send the carrier's row to the host)", hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok ? hi : sh, (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * (DWORD)(hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok ? hi : sh)), nm);
             if (kspg.log) klog("shopPage: ONLINE: buy of page II row %d swallowed (view only online: the host's table has no such gun)", hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok ? hi : sh);
             return;
         }
@@ -250,7 +254,13 @@ static void __fastcall kspg_sel(void *self, void *edx, DWORD *msg)
     }
     if (!strcmp(nm, "BuyWeapon")) {
         DWORD m0 = kspg_money(), m1;
+        if (kspg.probe && kl_online()) {
+            int hr = (int)klh_rd32((DWORD_PTR)self + 0x90);
+            if (kspg.shownB && hr >= 0 && hr < KSPG_ROWS && kspg.p[hr].ok) kspp_log("shopProbe: page2buy PASSED ON row=%d carrier item=%lu (stock path sends the carrier row)", hr, (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * (DWORD)hr));
+            kspp_buy_before(hr);
+        }
         ((kspg_msg_t)(DWORD_PTR)kspg_tab[3].orig)(self, 0, msg);
+        if (kspg.probe && kl_online()) kspp_buy_after();
         m1 = kspg_money();
         kspg_refused(b0, b1, m0, m1);
         kspg_note_buy(b0, b1);
@@ -570,6 +580,8 @@ static int kspg_load(void)
 static void kspg_init(void)
 {
     kspg.on = GetPrivateProfileIntA("ShopPage", "Enable", 0, klh_ini) != 0;
+    kspg.probe = GetPrivateProfileIntA("ShopPage", "OnlineProbe", 0, klh_ini) != 0;      /* (recommended off until benched) read even with Enable=0: the pool poll needs no pairs */
+    if (kspg.probe) klog("shopProbe: [ShopPage] OnlineProbe=1 (log only, writes nothing; at most %d lines)", KSPP_MAXLOG);
     if (!kspg.on) return;
     kspg.key = (int)GetPrivateProfileIntA("ShopPage", "Key", 0x75, klh_ini);
     if (kspg.key < 1 || kspg.key > 0xfe) kspg.key = 0x75;
@@ -595,6 +607,7 @@ static void klshoppage_tick(int game_thread)
     DWORD now, w; int g, s, i;
     static SHORT (WINAPI *gaks)(int); static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static int looked;
     static DWORD lastfull;
+    if (kspg.probe && game_thread && klh_exe_ok) kspp_tick();
     if (!kspg.on || !game_thread || !klh_exe_ok) return;
     now = GetTickCount();
     if (!looked) {
