@@ -10,6 +10,19 @@ are the three `[FrameLimit]` rows: the installed DLL (k29b, md5 aa912e09d2d5d6ca
 
 2026-10-24 review: the three FrameLimit rows are now `when=start` (the k29c DLL has klfps.c; staged in `buildk29c_1024`, install script `tools/k29c_install.ps1`). New rows: `announcer` ([Voice] Announcer, recommended on; live ini has 0), and the `cardown` row also writes [CarDown] Enable=1 when turned on. The tool refuses to edit a UTF-16 ini.
 
+2026-10-27 review (scheduled check-in): the rows had fallen behind the hook's own ini. `klhook\KLHook.ini` (the documented defaults the local
+sessions keep) marks 19 keys `(recommended on) proven live: <bench>` (CE27_ALL2D..H, BOSE5c..g, DD01ce4/ce6, MPX, the Grades Arcade rotation)
+whose rows still said `recommended off until benched`, so the Recommended button would have switched the owner's proven online HUD, Grades,
+HostOpts and CharOnline OFF. Those 19 rows now say on with the bench in `why`; five proven keys got rows (`onlineboardcarrier`,
+`onlineintrocarrier`, `onlineshopnames`, `onlinetaghidedead`, `onlinetagprobe`). New check `--check-rec klhook\KLHook.ini`: every row's
+recommendation against the marker on its OWN key (the first key no other row writes), plus the proven recommended-on keys that have no row;
+it must print "every row agrees". Table-shape fix: the tag and Grades rows had the shared prerequisite (`[HUD] OnlineTags`, `[Grades] Enable`)
+as their FIRST key, so their state was read from the prerequisite (onlinetagstyle showed on while OnlineTagStyle=0) and turning
+`gradesonlinetags` off wrote `OnlineTags=0` + `Grades Enable=0` (every tag and Grades row off). The own key is first now and the prerequisite
+follows with off value None (written when turning on, left alone when turning off). `tools/kl_mod_options_test.py` (32 checks) covers all of it.
+Rule for new rows: when the local sessions move a key to `(recommended on) proven live` in klhook\KLHook.ini, flip its row too (`--check-rec`
+fails until it is done).
+
 Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the ini notes 188 fps off against 106..178 on), CarDown Dry to off, and Music/Rigid are already off.
 
 ## Inventory

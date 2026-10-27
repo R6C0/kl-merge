@@ -10,6 +10,9 @@ full at 9 rows (re\mod_options.md section 3). This tool needs no game code and c
   python tools\kl_mod_options.py --recommended      show what 'Recommended' would change (add --apply to write it)
   python tools\kl_mod_options.py --set bots=off music=on --apply
   --ini PATH   use another KLHook.ini (tests); --game DIR   another Dog Days folder; --force   skip the 'game is running' refusal (tests)
+  python tools\kl_mod_options.py --check-defaults klhook   rows' DLL defaults vs the GetPrivateProfileInt calls
+  python tools\kl_mod_options.py --check-rec klhook\KLHook.ini   rows' recommendations vs the '(recommended on|off)' markers of the
+               repo ini (the local sessions mark a key 'proven live: <bench>' there; a row still saying off would make Recommended undo it)
 
 Rules: refuses to write while kl2.exe runs (the hook reads the ini at start, a running game would also overwrite nothing but the player
 would think the change was live); keeps ONE backup, KLHook.ini.before-modoptions (made before the first write, never replaced); writes
@@ -26,6 +29,9 @@ DD = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 BACKUP_SUFFIX = '.before-modoptions'
 
 # key = (section, key, on_value, off_value, dflt). off_value None = leave the key alone when turning off (a helper key).
+#   The FIRST key is the row's own switch (its state is read from it); a prerequisite another row owns (OnlineTags for the tag
+#   rows, [Grades] Enable for the Grades rows) comes AFTER it with off_value None, so turning this row off never turns that row off
+#   (2026-10-27: gradesonlinetags off used to write [HUD] OnlineTags=0 and [Grades] Enable=0; kl_mod_options_test.py checks this).
 # Feature = (id, group, label, recommended 'on'|'off', when, reason, [keys], pending)
 #   when: 'start' = read by the DLL at start (restart the game), 'round' = read when a round starts (a new round is enough; GUESS for none
 #   of the rows yet: every row is 'start' because every GetPrivateProfileInt of these keys sits in an init function), 'dll' = the key is read only by a
@@ -89,40 +95,40 @@ feat('hireonline', G_EXP, 'Online shop (private match / Steam FA): hire a heiste
      'klhire_online.c [Hire] Online=1: client asks (HIRE, payload Q...), host judges + spends with 0x6b1910 / 0x7f6950, body via klcharonline; NOT run live; re/shop_hire.md section 8', [('Hire', 'Online', 1, 0, 0)])
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
      'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
-feat('hudonline', G_CORE, 'Online matches (master): the HUD draws in a private match / online FA round at all: round watch + weapon dial, and the base every Online* row below needs (recommended off until benched)', 'off', 'start',
-     'klhud.c [HUD] Online (klbot.c klb_read_hud); local cosmetic drawing only, no writes to replicated objects; re/hud_online.md; NOT run live', [('HUD', 'Online', 1, 0, 0)])
+feat('hudonline', G_CORE, 'Online matches (master): the HUD draws in a private match / online FA round at all: round watch + weapon dial, and the base every Online* row below needs (recommended on)', 'on', 'start',
+     'klhud.c [HUD] Online (klbot.c klb_read_hud); local cosmetic drawing only, no writes to replicated objects; re/hud_online.md; proven live 10-27 with the Online* keys (ce/c9 benches, 0 faults)', [('HUD', 'Online', 1, 0, 0)])
 feat('hidestock', G_CORE, 'Old (stock) HUD list never shown: skipped at its Render, so Tab / Alt+Tab cannot bring it back (recommended on)', 'on', 'start',
      'klhud.c HideSrc: private vtable of ZFAPlayerListDisplay, Render skipped while the mod HUD stands; needs [HUD] Enable=1', [('HUD', 'HideSrc', 1, 0, 1)])
 feat('hidestockonl', G_CORE, 'Online matches: also hide the old (stock) list, but only while the new online crew list stands (needs Online HUD on and Online crew list on, else the stock list stays; recommended on, owner request)', 'on', 'start',
      'klhud.c HideOnline; needs HideSrc=1, [HUD] Online=1 and OnlineCrew=1 (without OnlineCrew the stock list is never skipped online)', [('HUD', 'HideOnline', 1, 0, 1)])
-feat('onlinecrew', G_CORE, 'Online matches: new crew list with money, same layout as Arcade (needs Online HUD on and Online read on; character names are the next row; recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineCrew; needs [HUD] Online=1 and [Online] Read=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
-feat('onlineread', G_CORE, 'Online matches: the read-only round reader (master for every Online* row, Grades online, Online board; needs nothing; recommended off until benched)', 'off', 'start',
-     'klonline_read.c [Online] Read; read only; log line "online read: klonline_read.c ON"; NOT run live', [('Online', 'Read', 1, 0, 0)])
+feat('onlinecrew', G_CORE, 'Online matches: new crew list with money, same layout as Arcade (needs Online HUD on and Online read on; character names are the next row; recommended on)', 'on', 'start',
+     'klhud.c OnlineCrew; needs [HUD] Online=1 and [Online] Read=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; proven live: DD01ce4 on 1027m, BOSE5c..g', [('HUD', 'OnlineCrew', 1, 0, 0)])
+feat('onlineread', G_CORE, 'Online matches: the read-only round reader (master for every Online* row, Grades online, Online board; needs nothing; recommended on)', 'on', 'start',
+     'klonline_read.c [Online] Read; read only; log line "online read: klonline_read.c ON"; proven live 10-27 (log 04:10..07:45)', [('Online', 'Read', 1, 0, 0)])
 feat('escprobe', G_CORE, 'Online matches: escape probe, logs the van / escaped / aboard bits and AI heister records to KLHook.log (debug; recommended off)', 'off', 'start',
      'klescprobe.c [Online] EscProbe; read only, one escprobe: line per change, 400 per round; needs [Online] Read=1; NOT run live', [('Online', 'EscProbe', 1, 0, 0)])
-feat('onlinenames', G_CORE, 'Online matches: crew list shows the heister characters\' names (J.C., Tommy...) like Arcade (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineNames; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineNames', 1, 0, 0)])
-feat('onlinekilled', G_CORE, 'Online matches: KILLED BY shows the killer\'s heister name instead of THE POLICE (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineKilled; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineKilled', 1, 0, 0)])
-feat('onlinekilledai', G_CORE, 'Online matches: KILLED BY names the AI heister who killed you instead of THE POLICE (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineKilledAI, klonline_read.c; needs [Online] Read=1 and [HUD] OnlineKilled=1; NOT run live', [('HUD', 'OnlineKilledAI', 1, 0, 0)])
-feat('onlineround', G_CORE, 'Online matches: ROUND n OF m line under the clock like Arcade (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineRound; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineRound', 1, 0, 0)])
-feat('onlinefeed', G_CORE, 'Online matches: kill-feed line (X KILLED Y) under REWARDS like Arcade (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineFeed; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineFeed', 1, 0, 0)])
+feat('onlinenames', G_CORE, 'Online matches: crew list shows the heister characters\' names (J.C., Tommy...) like Arcade (recommended on)', 'on', 'start',
+     'klhud.c OnlineNames; needs [Online] Read=1 and [HUD] OnlineCrew=1; proven live: CE27_ALL2D..G (0 faults both seats)', [('HUD', 'OnlineNames', 1, 0, 0)])
+feat('onlinekilled', G_CORE, 'Online matches: KILLED BY shows the killer\'s heister name instead of THE POLICE (recommended on)', 'on', 'start',
+     'klhud.c OnlineKilled; needs [Online] Read=1; proven live: CE27_ALL2D..G', [('HUD', 'OnlineKilled', 1, 0, 0)])
+feat('onlinekilledai', G_CORE, 'Online matches: KILLED BY names the AI heister who killed you instead of THE POLICE (recommended on)', 'on', 'start',
+     'klhud.c OnlineKilledAI, klonline_read.c; needs [Online] Read=1 and [HUD] OnlineKilled=1; proven live: CE27_ALL2D..G', [('HUD', 'OnlineKilledAI', 1, 0, 0)])
+feat('onlineround', G_CORE, 'Online matches: ROUND n OF m line under the clock like Arcade (recommended on)', 'on', 'start',
+     'klhud.c OnlineRound; needs [Online] Read=1; proven live: Q27_DD01ce6, round 1 of 3 online', [('HUD', 'OnlineRound', 1, 0, 0)])
+feat('onlinefeed', G_CORE, 'Online matches: kill-feed line (X KILLED Y) under REWARDS like Arcade (recommended on)', 'on', 'start',
+     'klhud.c OnlineFeed; needs [Online] Read=1 and [HUD] OnlineCrew=1; proven live: CE27_ALL2D..G', [('HUD', 'OnlineFeed', 1, 0, 0)])
 feat('onlineskulls', G_CORE, 'Online matches: death-mark skulls on your row like Arcade lives (recommended off until benched)', 'off', 'start',
      'klhud.c OnlineSkulls; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineSkulls', 1, 0, 0)])
 feat('onlineloot', G_CORE, 'Online matches: loot bar under TOTAL like Arcade (recommended off until benched)', 'off', 'start',
      'klhud.c OnlineLoot; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineLoot', 1, 0, 0)])
-feat('onlinetags', G_CORE, 'Online matches: heister character names over the other heisters\' heads like Arcade tags (recommended off until benched)', 'off', 'start',
-     'klhud_tags.c OnlineTags; needs [Online] Read=1, [HUD] OnlineCrew=1 and HideOnline=1 (the stock list skipped); drawer 0x7b8150 on a player actor is a GUESS; NOT run live', [('HUD', 'OnlineTags', 1, 0, 0)])
+feat('onlinetags', G_CORE, 'Online matches: heister character names over the other heisters\' heads like Arcade tags (recommended on)', 'on', 'start',
+     'klhud_tags.c OnlineTags; needs [Online] Read=1, [HUD] OnlineCrew=1 and HideOnline=1 (the stock list skipped); drawer 0x7b8150 on a player actor is a GUESS; proven live: DD01ce4 on 1027m', [('HUD', 'OnlineTags', 1, 0, 0)])
 feat('onlinetagstyle', G_CORE, 'Online head tags: initials + money line like Arcade HeadTags=2 (recommended off until benched)', 'off', 'start',
-     'klhud_tags.c OnlineTagStyle 0 name / 1 initials / 2 initials + money (klor_row.money); needs [HUD] OnlineTags=1; NOT run live', [('HUD', 'OnlineTags', 1, 0, 0), ('HUD', 'OnlineTagStyle', 2, 0, 0)])
-feat('onlinetaghold', G_CORE, 'Online head tags: wait until a name is stable for 2 reads before drawing it (recommended off until benched)', 'off', 'start',
-     'klhud_tags.c OnlineTagHold; needs [HUD] OnlineTags=1; hides the one-frame placeholder name on a client; NOT run live', [('HUD', 'OnlineTags', 1, 0, 0), ('HUD', 'OnlineTagHold', 1, 0, 0)])
+     'klhud_tags.c OnlineTagStyle 0 name / 1 initials / 2 initials + money (klor_row.money); needs [HUD] OnlineTags=1; NOT run live', [('HUD', 'OnlineTagStyle', 2, 0, 0), ('HUD', 'OnlineTags', 1, None, 0)])
+feat('onlinetaghold', G_CORE, 'Online head tags: wait until a name is stable for 2 reads before drawing it (recommended on)', 'on', 'start',
+     'klhud_tags.c OnlineTagHold; needs [HUD] OnlineTags=1; hides the one-frame placeholder name on a client; benched CE27_ALL2G (0 faults)', [('HUD', 'OnlineTagHold', 1, 0, 0), ('HUD', 'OnlineTags', 1, None, 0)])
 feat('gradesonlinetags', G_CORE, 'Grades: a rank badge before online head tags (recommended off until benched)', 'off', 'start',
-     'klhud_grades.c [Grades] Enable+OnlineTags; needs [HUD] OnlineTags=1; others\' rank from S+0xc8 is a GUESS; NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'OnlineTags', 1, 0, 0), ('HUD', 'OnlineTags', 1, 0, 0)])
+     'klhud_grades.c [Grades] Enable+OnlineTags; needs [HUD] OnlineTags=1; others\' rank from S+0xc8 is a GUESS; NOT run live', [('Grades', 'OnlineTags', 1, 0, 0), ('Grades', 'Enable', 1, None, 0), ('HUD', 'OnlineTags', 1, None, 0)])
 feat('onlinepopups', G_CORE, 'Online matches: loot carry ring and traitor pop-up fall-back like Arcade (recommended off until benched)', 'off', 'start',
      'klhud_popup.c OnlinePopups; needs [Online] Read=1, [HUD] Online=1, OnlineCrew=1 and LootRing=1; the online record offsets +0x15/+0x18/+0x1c are a GUESS (probe line in the log); NOT run live', [('HUD', 'OnlinePopups', 1, 0, 0)])
 feat('onlinetab', G_CORE, 'Online matches: Tab card (full crew list) like Arcade (recommended off until benched)', 'off', 'start',
@@ -133,22 +139,32 @@ feat('onlineboardtake', G_CORE, 'Online matches: round-over card shows the money
      'klhud_board2.c OnlineBoardTake; needs OnlineBoard=1; take = money minus money at the first state-0x1f tick; bot money/ESCAPED are guesses (bots have no score row); NOT run live', [('HUD', 'OnlineBoardTake', 1, 0, 0)])
 feat('onlineintrocount', G_CORE, 'Online matches: HEIST STARTS IN n SEC on the pre-round card (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineIntroCount; needs OnlineIntroState=1; reads the state timer [rules+0x4c] (GUESS); NOT run live', [('HUD', 'OnlineIntroCount', 1, 0, 0)])
-feat('onlinevanicon', G_CORE, 'Online matches: green ESCAPED van icon beside the watch (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineVanIcon; needs [Online] Read=1 and OnlineCrew=1; local seat status bit 0x40 (GUESS: same bit as Arcade); ESCAPED only; NOT run live', [('HUD', 'OnlineVanIcon', 1, 0, 0)])
-feat('onlineboard', G_CORE, 'Online matches: round-over card like Arcade, killed by message names the killer heister (recommended off until benched)', 'off', 'start',
-     'klhud_board2.c OnlineBoard; needs [Online] Read=1 and [HUD] Scoreboard=1; NOT run live', [('HUD', 'OnlineBoard', 1, 0, 0)])
-feat('onlineboardstate', G_CORE, 'Online matches: round-over card also when the game never builds its outro element (shown from the round-end state, recommended off until benched)', 'off', 'start',
-     'klhud_board2.c OnlineBoardState; needs OnlineBoard=1; composes in state 0x1f without the element at osd+0x10b4 and draws on the clock element render (GUESS G14-G16); NOT run live', [('HUD', 'OnlineBoardState', 1, 0, 0)])
+feat('onlinevanicon', G_CORE, 'Online matches: green ESCAPED van icon beside the watch (recommended on)', 'on', 'start',
+     'klhud.c OnlineVanIcon; needs [Online] Read=1 and OnlineCrew=1; local seat status bit 0x40 (GUESS: same bit as Arcade); ESCAPED only; proven live: BOSE5c, ABOARD and ESCAPED icon', [('HUD', 'OnlineVanIcon', 1, 0, 0)])
+feat('onlineboard', G_CORE, 'Online matches: round-over card like Arcade, killed by message names the killer heister (recommended on)', 'on', 'start',
+     'klhud_board2.c OnlineBoard; needs [Online] Read=1 and [HUD] Scoreboard=1; proven live: BOSE5g, 184 draws on both peers', [('HUD', 'OnlineBoard', 1, 0, 0)])
+feat('onlineboardcarrier', G_CORE, 'Online matches: the round-over card is drawn on the game\'s own outro element instead of the clock (needs Online board on; recommended on)', 'on', 'start',
+     'klhud_board2.c OnlineBoardCarrier: ZFAOutroDisplay osd+0x10b0 (vt 0xbbddc8, Render 0x903830) carries the composed card; needs OnlineBoardState=1; proven live: BOSE5g (end card on ZFAOutroDisplay, 184 draws / 0 stock both peers)', [('HUD', 'OnlineBoardCarrier', 1, 0, 0)])
+feat('onlineboardstate', G_CORE, 'Online matches: round-over card also when the game never builds its outro element (shown from the round-end state, recommended on) (recommended on)', 'on', 'start',
+     'klhud_board2.c OnlineBoardState; needs OnlineBoard=1; composes in state 0x1f without the element at osd+0x10b4 and draws on the clock element render (GUESS G14-G16); proven live: BOSE5g', [('HUD', 'OnlineBoardState', 1, 0, 0)])
 feat('onlineintro', G_CORE, 'Online matches: round n of m, players, minutes and your heister under the pre-round card (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineIntro; needs [Online] Read=1, [HUD] Scoreboard=1 and Board=1; NOT run live', [('HUD', 'OnlineIntro', 1, 0, 0)])
-feat('onlineintrostate', G_CORE, 'Online matches: pre-round card (title, round, map, players, crew with heister names) also when the game never builds its intro element (recommended off until benched)', 'off', 'start',
-     'klhud_board2.c OnlineIntroState; needs OnlineIntro=1; composes in states 0x16..0x18 without the element at osd+0x10ac and draws on the clock element render (GUESS G15/G17, layout 220,120 840x300 a GUESS); NOT run live', [('HUD', 'OnlineIntroState', 1, 0, 0)])
-feat('gradesbadge', G_CORE, 'Grades: a rank badge before every crew name, Arcade and online (recommended off until benched)', 'off', 'start',
-     'klhud_grades.c [Grades] Enable+Badge; your rank from the profile experience, others online from S+0xc8 (GUESS); NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'Badge', 1, 0, 0)])
-feat('gradesrankup', G_CORE, 'Grades: a RANK UP line on the round-over card when your rank rose (recommended off until benched)', 'off', 'start',
-     'klhud_grades.c [Grades] Enable+RankUp; needs [HUD] Scoreboard=1; NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'RankUp', 1, 0, 0)])
-feat('gradesletter', G_CORE, 'Grades: an S / A / B / C / D grade per player on the round-over card (recommended off until benched)', 'off', 'start',
-     'klhud_grades.c + klgrades.h [Grades] Enable+Letter; table in [Grades]; needs [HUD] Scoreboard=1; NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'Letter', 1, 0, 0)])
+feat('onlineintrostate', G_CORE, 'Online matches: pre-round card (title, round, map, players, crew with heister names) also when the game never builds its intro element (recommended on)', 'on', 'start',
+     'klhud_board2.c OnlineIntroState; needs OnlineIntro=1; composes in states 0x16..0x18 without the element at osd+0x10ac and draws on the clock element render (GUESS G15/G17, layout 220,120 840x300 a GUESS); proven live: CE27_ALL2D..G', [('HUD', 'OnlineIntroState', 1, 0, 0)])
+feat('onlineintrocarrier', G_CORE, 'Online matches: the pre-round card is drawn on the game\'s own intro element instead of the clock (needs the pre-round card row; recommended on)', 'on', 'start',
+     'klhud_board2.c OnlineIntroCarrier: ZFAIntroDisplay osd+0x10ac (Render 0x768c40) carries the composed intro card (the clock element may not render in states 0x16..0x18); 2 = probe only; needs OnlineIntroState=1; proven live: CE27_ALL2D..G', [('HUD', 'OnlineIntroCarrier', 1, 0, 0)])
+feat('onlineshopnames', G_CORE, 'Online matches: the round-over / shop roster shows the heister names (Kane, Parker...) instead of Steam names, like Arcade (recommended on)', 'on', 'start',
+     'klhud_shopnames.c [HUD] OnlineShopNames: while the session state is 0x1f..0x20 each session slot\'s name pointer [client+0x35c] points at a hook-owned text and is put back after; 2 = log only; chat and lobby keep Steam names; GUESS: session slot k = seat k; needs [Online] Read=1; proven live: CE27_ALL2D..G', [('HUD', 'OnlineShopNames', 1, 0, 0)])
+feat('onlinetaghidedead', G_CORE, 'Online head tags: none while you are dead (death camera; the names stacked on one line there) (recommended on)', 'on', 'start',
+     'klhud_tags.c OnlineTagHideDead; needs [HUD] OnlineTags=1; GUESS that Arcade shows no tags on the death camera; benched CE27_ALL2G (0 tag draws while dead) vs ALL2H with 0 (one tag + 2 stray probe dots, cosmetic)', [('HUD', 'OnlineTagHideDead', 1, 0, 1), ('HUD', 'OnlineTags', 1, None, 0)])
+feat('onlinetagprobe', G_CORE, 'Online head tags: off-screen and stacked tags are culled (the cull reads each tag\'s screen place from an invisible probe) (recommended on)', 'on', 'start',
+     'klhud_tags.c OnlineTagProbe: a \'.\' at alpha 1 stores its place, the old blank \' \' never did (CE27_ALL2E: no tag was ever culled); needs [HUD] OnlineTags=1; benched CE27_ALL2F/G (~75% culled alive)', [('HUD', 'OnlineTagProbe', 1, 0, 1), ('HUD', 'OnlineTags', 1, None, 0)])
+feat('gradesbadge', G_CORE, 'Grades: a rank badge before every crew name, Arcade and online (recommended on)', 'on', 'start',
+     'klhud_grades.c [Grades] Enable+Badge; your rank from the profile experience, others online from S+0xc8 (GUESS); Arcade rotation clean since 10-27 01:45 (1027i)', [('Grades', 'Badge', 1, 0, 0), ('Grades', 'Enable', 1, None, 0)])
+feat('gradesrankup', G_CORE, 'Grades: a RANK UP line on the round-over card when your rank rose (recommended on)', 'on', 'start',
+     'klhud_grades.c [Grades] Enable+RankUp; needs [HUD] Scoreboard=1; Arcade rotation clean since 10-27 01:45 (1027i)', [('Grades', 'RankUp', 1, 0, 0), ('Grades', 'Enable', 1, None, 0)])
+feat('gradesletter', G_CORE, 'Grades: an S / A / B / C / D grade per player on the round-over card (recommended on)', 'on', 'start',
+     'klhud_grades.c + klgrades.h [Grades] Enable+Letter; table in [Grades]; needs [HUD] Scoreboard=1; Arcade rotation clean since 10-27 01:45 (1027i); own-row letter ink fix dde7bc587', [('Grades', 'Letter', 1, 0, 0), ('Grades', 'Enable', 1, None, 0)])
 feat('shoponline', G_CORE, 'Online matches: weapon shop page II shown (view only, locked) (recommended off until benched)', 'off', 'start',
      'klshoppage.c OnlineLook; page II buys are swallowed online; needs [ShopPage] Enable=1; NOT run live', [('ShopPage', 'OnlineLook', 1, 0, 0)])
 feat('shoponline2', G_CORE, 'Online matches: weapon shop page II rows can be bought, giving the stock carrier gun at its price (recommended off until benched)', 'off', 'start',
@@ -302,14 +318,14 @@ feat('onlineboxprobe', G_EXP, 'Online AI heister boarding and van position writt
      'klbotfill.c [BotFill] OnlineBoxProbe; log only: box probe / van probe lines; NOT run live', [('BotFill', 'OnlineBoxProbe', 1, 0, 1)])
 feat('syncvanprobe', G_EXP, 'Sync bench log: the escape van real state and place next to its list line (recommended on)', 'on', 'start',
      'klsync.c [Sync] VanProbe; log only, needs Probe=1; BO9: the ZAnimatedVehicle node reads 0,0,0; NOT run live', [('Sync', 'VanProbe', 1, 0, 1)])
-feat('hostopts', G_EXP, 'Host-controlled match options: F7 map set, F8 AI heisters; the host map set reaches clients (recommended on after the live test)', 'off', 'start',
-     'klhostopt.c [HostOpts] Enable; Steam lobby key klx_opts + UDP 27413; re/host_options.md; NOT run live', [('HostOpts', 'Enable', 1, 0, 0)])
+feat('hostopts', G_EXP, 'Host-controlled match options: F7 map set, F8 AI heisters; the host map set reaches clients (recommended on)', 'on', 'start',
+     'klhostopt.c [HostOpts] Enable; Steam lobby key klx_opts + UDP 27413; re/host_options.md; proven live: MPX bench (pool + seed shared host to client); the owner\'s live ini has had Enable=1 since 10-26 19:35', [('HostOpts', 'Enable', 1, 0, 0)])
 feat('mappool', G_EXP, 'Online: random map pool for each round, no repeats (host Delete cycles Full Dead Men / Full Dog Days / Mix; needs Host-controlled match options; recommended off until benched)', 'off', 'start',
      'klmappool.c [MapPool] Enable; pool + seed reach clients in klx_opts (p<pool>q<seed>); [MapPool] Apply=1 lets the host move the lobby slot (GUESS); icons by tools/kl_mappool.py; re/map_pool.md; NOT run live', [('MapPool', 'Enable', 1, 0, 0)])
 feat('mappoolov', G_EXP, 'Online: lobby overlay of the map pool: label (Full Dead Men / Full Dog Days / Mix) + thumbnails, NEXT highlighted, played dimmed (needs the map pool; recommended off until benched)', 'off', 'start',
      'klmappool_ov.c [MapPool] Overlay; thumbnails by tools/kl_mappool.py (thumbs) -> OverlayDir; draws via klfps.c Present wrapper; re/map_pool.md; NOT run live', [('MapPool', 'Overlay', 1, 0, 0)])
-feat('charonline', G_EXP, 'Online: every player heister / mask / outfit shows on every screen; F9 / F11 choose (recommended on after the live test)', 'off', 'start',
-     'klcharonline.c [CharOnline] Enable; entity-table index + look via Steam lobby member data klx_look and UDP 27414; re/char_online.md; NOT run live', [('CharOnline', 'Enable', 1, 0, 0)])
+feat('charonline', G_EXP, 'Online: every player heister / mask / outfit shows on every screen; F9 / F11 choose (recommended on)', 'on', 'start',
+     'klcharonline.c [CharOnline] Enable; entity-table index + look via Steam lobby member data klx_look and UDP 27414; re/char_online.md; proven live (Hire body, charonline bench); the owner turned it on 10-26 20:45 (no skins online without it)', [('CharOnline', 'Enable', 1, 0, 0)])
 feat('hostoptsmenu', G_EXP, 'Host options rows in Mod settings (needs the overlay rebuilt; recommended on after the live test)', 'off', 'start',
      'mkoverlay.py [HostOpts] Menu=1: Host map set + Host options rows, Textures/Neural merged; +4 table entries (est. 4994 of 5000)', [('HostOpts', 'Menu', 1, 0, 0)])
 
@@ -605,6 +621,80 @@ def listing(lines):
     return '\n'.join(out)
 
 
+_REC = re.compile(r'\brecommended\s+(on|off)\b\s*(until|after)?', re.I)        # '(recommended on)', '; recommended off until benched)'
+_PROVEN = re.compile(r'proven live|run live|benched\s+[A-Z0-9]|\bBENCH\s+[A-Z0-9]')   # a proof names a bench: 'benched CE27_ALL2G'
+
+
+def own_key(f):
+    """The key that tells this row from every other: its first key no other row also writes (else its master key).
+    gradesbadge writes [Grades] Enable + Badge, and Enable is shared by every Grades row, so Badge is the own key."""
+    counts = {}
+    for g in F:
+        for k in {(s, kk) for s, kk, *_ in g['keys']}:
+            counts[k] = counts.get(k, 0) + 1
+    for sec, key, *_ in f['keys']:
+        if counts[(sec, key)] == 1:
+            return sec, key
+    return f['keys'][0][:2]
+
+
+def ini_rec(lines, sec, key):
+    """The '(recommended on|off)' marker the repo ini (klhook\\KLHook.ini, the hook's own documented defaults) puts on a key:
+    on its line, or in the comment lines right above it that name the key. -> ('on'|'off'|None, the line it came from).
+    '(recommended off until benched)' and '(recommended on after the live test)' both mean off for now."""
+    i, h, e = find_key(lines, sec, key)
+    if i is None:
+        return None, None
+    def mark(s):
+        m = _REC.search(s)
+        if not m:
+            return None
+        return 'off' if m.group(2) else m.group(1).lower()
+    r = mark(lines[i].split('=', 1)[1])
+    if r:
+        return r, lines[i].strip()
+    j = i - 1
+    while j > h and j > i - 12:
+        s = lines[j].strip()
+        if not s or s[0] not in ';#':
+            break
+        if re.search(r'(^|[;\s(])' + re.escape(key) + r'\s*(=|\(|\b)', s, re.I):
+            r = mark(s)
+            if r:
+                return r, s
+        j -= 1
+    return None, lines[i].strip()
+
+
+def check_rec(inipath):
+    """Compare each row's recommendation with the marker on its own key in the repo ini (the local sessions move a key to
+    '(recommended on) proven live: <bench>' once a bench proved it; the Recommended button must not undo that), and list the
+    keys the ini marks recommended-on with a proof but no row offers. -> (mismatches, proven keys without a row, unchecked rows)"""
+    lines = split_lines(open(inipath, encoding='latin1').read())
+    bad, nocheck = [], []
+    for f in F:
+        sec, key = own_key(f)
+        r, src = ini_rec(lines, sec, key)
+        if r is None:
+            nocheck.append('%s: [%s] %s has no (recommended ...) marker in the ini' % (f['id'], sec, key))
+        elif r != f['rec']:
+            bad.append('%s: row says %s, the ini says %s: [%s] %s | %s' % (f['id'], f['rec'], r, sec, key, (src or '')[:110]))
+    rowkeys = {(s.lower(), k.lower()) for f in F for s, k, *_ in f['keys']}
+    norow, sec = [], None
+    for ln in lines:
+        m = _SEC.match(ln)
+        if m:
+            sec = m.group(1).strip(); continue
+        s = ln.strip()
+        if not s or s[0] in ';#' or '=' not in s or sec is None:
+            continue
+        key = s.split('=', 1)[0].strip()
+        r, src = ini_rec(lines, sec, key)
+        if r == 'on' and (sec.lower(), key.lower()) not in rowkeys and _PROVEN.search(src or ''):
+            norow.append('[%s] %s | %s' % (sec, key, src[:110]))
+    return bad, norow, nocheck
+
+
 def check_defaults(srcdir):
     """Compare each row's dflt with the GetPrivateProfileInt call in klhook\\*.c. -> list of differences.
     Two shapes are read: the direct call GetPrivateProfileInt("Sec", "Key", dflt, ...) and the per-module helpers
@@ -761,7 +851,15 @@ def main():
     ap.add_argument('--force', action='store_true')
     ap.add_argument('--restore', action='store_true')
     ap.add_argument('--check-defaults', metavar='KLHOOK_DIR')
+    ap.add_argument('--check-rec', metavar='REPO_INI', help='compare each row\'s recommendation with the (recommended ...) marker in klhook\\KLHook.ini')
     a = ap.parse_args()
+    if a.check_rec:
+        bad, norow, nocheck = check_rec(a.check_rec)
+        print('\n'.join(bad) if bad else 'every row agrees with the ini markers')
+        if norow:
+            print('recommended on + proven in the ini, no row:\n  ' + '\n  '.join(norow))
+        print('%d row(s) without a marker on their own key (not checked)' % len(nocheck))
+        return 1 if bad else 0
     if a.check_defaults:
         bad = check_defaults(a.check_defaults)
         print('\n'.join(bad) if bad else 'all defaults agree with the sources')
