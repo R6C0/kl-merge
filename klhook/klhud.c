@@ -1372,16 +1372,23 @@ static int klu_compose_in(int *state_ok)
                 kind = klu_online_kind(klucc_hud_flags(s.on_flags[k], (int)loc, k), k == loc);     /* [Ucc] Rows (klucchide_logic.h): a hidden UCC is crew to a heister viewer */
                 if (kind != KLUV_K_DEAD && kind != KLUV_K_ESCAPED) na++;
                 if (k == loc) { locst = kind; lloot = s.on_loot[k]; lrew = s.on_rew[k]; }
+                if (k == loc && have) {                          /* the local seat's own death latch: the HUD sees the row go DEAD even when no klor_read caller caught the flag edge (suicide / accident / bench kill alike); lives = 3 - max(reader count, this count), match-wide, cleared with the rules object */
+                    static DWORD lt_rules = 0; static int lt_prev = -1, lt_n = 0;
+                    if (lt_rules != or_.b.rules) { lt_rules = or_.b.rules; lt_prev = -1; lt_n = 0; }
+                    if (s.state != 0x19) lt_prev = -1;           /* lobby / between rounds: no edge, and the next round starts from a fresh look */
+                    else { if (lt_prev >= 0 && lt_prev != KLUV_K_DEAD && kind == KLUV_K_DEAD) lt_n++; lt_prev = kind; }
+                    if (lt_n > (int)or_.deaths) olives = KLUV_LIVES_MAX - lt_n < 0 ? 0 : KLUV_LIVES_MAX - lt_n;
+                }
                 if (rows + (k != loc && loc_pend) >= klu.rows) continue;     /* the local player's row is reserved: a high slot (a client's own index) is never the one cut */
                 if (k == loc) loc_pend = 0;
                 klu_on_name(&or_, have, &s, k, (int)loc, have && klu_onnames, nm, sizeof nm);     /* the heister CHARACTER's name (the owner's order 16:45) */
                 klgrd_decorate(nm, sizeof nm, 1, k, k == loc);     /* klhud_grades.c: [Grades] Badge */
                 if (klu_onskull && klu.log && k == loc) {     /* bench proof (HUD5 1027n: one line only, nothing changed): the local seat's deaths / state as read, drawn or not, one line per change */
-                    static int told_d = -2, told_k = -2;
+                    static int told_d = -2, told_k = -2, told_ol = -2;
                     int dd = have ? (int)or_.deaths : -1;
-                    if (dd != told_d || kind != told_k) { told_d = dd; told_k = kind; klog("hud: ONLINE skulls state: row %d '%s' kind %d deaths %d -> lives %d (%s)", rows, nm, kind, dd, olives, kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR ? "drawn" : "not drawn in this state"); }
+                    if (dd != told_d || kind != told_k || olives != told_ol) { told_d = dd; told_k = kind; told_ol = olives; klog("hud: ONLINE skulls state: row %d '%s' kind %d deaths %d -> lives %d (%s)", rows, nm, kind, dd, olives, kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR || kind == KLUV_K_DEAD ? "drawn" : "not drawn in this state"); }
                 }
-                if (klu_onskull && have && k == loc && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR)) {     /* [HUD] OnlineSkulls: death marks, as Arcade's lives row */
+                if (klu_onskull && have && k == loc && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR || kind == KLUV_K_DEAD)) {     /* [HUD] OnlineSkulls: death marks, as Arcade's lives row; also on the dead row (FA has no respawn: the local seat stays DEAD to round end, the skull he just lost must show) */
                     static int told_l = -2;                   /* bench proof: one line per lives value drawn (the screenshots are black on DX10) */
                     if (klu.log && olives != told_l) { told_l = olives; klog("hud: ONLINE skulls drawn: row %d '%s' lives %d (Lives=%d)", rows, nm, olives, klu.lives); }
                     klu_own_lives(rows, nm, sizeof nm, kind, olives);
