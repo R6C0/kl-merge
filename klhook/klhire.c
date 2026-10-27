@@ -75,6 +75,9 @@ static int klhr_phase0;                        /* last phase seen: 0 none, 1 rou
 static int klhr_round;
 static DWORD klhr_seed = 0x2545f491u;
 
+static int klhro_set(int row);                 /* klhire_online.c (included later by klhook.c) */
+static void klhro_tick(void);
+
 static int klhr_state(DWORD *st, DWORD *mode)
 {
     DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLC_SESSION)); *st = 0; *mode = 0;
@@ -154,7 +157,7 @@ static void klhr_set(int row, int value)
     if (!klhr_on) { static int told; if (!told++) klog("hire: refused: [Hire] Enable=0 (the Hire window is baked into this level but the hook feature is off)"); return; }
     next = klhr_next;
     if (next == row) return;                                                         /* already paid: nothing to do */
-    if (kl_online()) { static int told; if (!told++) klog("hire: refused: a network session (stage 1 is Arcade only)"); return; }
+    if (kl_online()) { klhro_set(row); return; }                                    /* klhire_online.c: client asks the host, the host judges (off unless [Hire] Online=1) */
     if (!klhr_arcade(&rules, &score) || !score) { klog("hire: %s refused: not an Arcade heist round (no rules / score object)", klhr_name[row]); return; }
     klhr_state(&st, &mode); phase = klhr_phase_of(st);
     if (phase == 1) { klog("hire: %s refused: a round is running (state 0x%lx); hire on the shop page between rounds", klhr_name[row], st); return; }
@@ -180,7 +183,7 @@ static void klhr_tick(void)
 {
     DWORD st, mode, rules = 0; int phase, hired, body;
     if (!klhr_on) return;
-    if (kl_online()) { klhr_body = 0; return; }                                   /* Arcade only: online the body stays the game's own */
+    if (kl_online()) { klhr_body = 0; klhro_tick(); return; }                     /* online: klhire_online.c (the body stays the game's own unless a hire was paid) */
     if (!klhr_state(&st, &mode) || mode != 4) return;
     if (!klhr_arcade(&rules, 0)) return;
     if (rules != klhr_rules0) { klhr_rules0 = rules; klhr_phase0 = 0; klhr_next = 0; klhr_body = 0; klhr_round = 0; }

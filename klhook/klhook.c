@@ -768,6 +768,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klucc.c"                                     /* klucc.c: [Ucc] Undercover Cop suspicion pings / accuse key (off unless Pings=1 or Accuse=1); AFTER klnetchan.c, klcharonline.c, klhud_popup.c */
 #include "klucchide.c"                                 /* klucchide.c: [Ucc] Hide - the UCC stays hidden until his reveal key (off unless Hide=1); AFTER klucc.c, klucc_down.c, klnetchan.c, klroundkeep.c, klcharonline.c, klhud.c */
 #include "klucc_aim.c"                                 /* klucc_aim.c: [Ucc] PoliceAim - police AI treats a hidden UCC as a target, rules slot 188 per asker (off unless PoliceAim=1); AFTER klucchide.c, klucc_down.c, klroundkeep.c */
+#include "klhire_online.c"                            /* klhire_online.c: [Hire] Online - hire a heister in the online shop (client asks, host spends; off unless Online=1); AFTER klucchide.c, klnetchan.c, klcharonline.c */
 #ifdef KLHOOK_TEST
 #include "klauto.c"
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
@@ -1677,6 +1678,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kluc_init();                                      /* klucc.c: reads [Ucc]; asks klnetchan.c for the channel when on */
     klucc_init();                                     /* klucchide.c: reads [Ucc] Hide; asks klnetchan.c for the channel when on */
     klua_init();                                      /* klucc_aim.c: reads [Ucc] PoliceAim */
+    klhro_init();                                     /* klhire_online.c: reads [Hire] Online; asks klnetchan.c for the channel when on */
     kllnm_init();                                     /* kllocname.c: after kls_init (it reads the rule table) */
 #ifdef KLHOOK_TEST
     kla_init(inst);

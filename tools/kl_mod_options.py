@@ -85,6 +85,8 @@ feat('hostserver', G_EXP, 'Host server: this copy keeps hosting a Quick Match lo
      'klserver.c [Server] Enable=1 (Mode=quick|ranked, MinPlayers, WaitSec): drives the menu to QuickJoin, lowers the lobby target after the wait; NOT run live; re/online_server.md', [('Server', 'Enable', 1, 0, 0)])
 feat('hire', G_EXP, 'Arcade shop: hire a heister for the next round (needs the Hire window baked in, tools/kl_hire_bake.py; every round otherwise a random heister) (recommended off until benched)', 'off', 'start',
      'klhire.c [Hire] Enable=1: body = random default (never Kane / Lynch) or the one hired on the shop page, one round, rank + price; the Heister page pick is ignored; NOT run live', [('Hire', 'Enable', 1, 0, 0)])
+feat('hireonline', G_EXP, 'Online shop (private match / Steam FA): hire a heister for the next round, host charges (needs Hire on, CharOnline on, Character on and the Hire window baked in) (recommended off until benched)', 'off', 'start',
+     'klhire_online.c [Hire] Online=1: client asks (HIREQ), host judges + spends with 0x6b1910 / 0x7f6950, body via klcharonline; NOT run live; re/shop_hire.md section 8', [('Hire', 'Online', 1, 0, 0)])
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
      'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
 feat('hidestock', G_CORE, 'Old (stock) HUD list never shown: skipped at its Render, so Tab / Alt+Tab cannot bring it back (recommended on)', 'on', 'start',
