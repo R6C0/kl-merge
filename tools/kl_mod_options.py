@@ -404,6 +404,10 @@ feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call 
      'klquad.c: the 4 post-process quad buffers get 128 buffers each; the NVIDIA driver no longer piles a block per frame pass (K50H: 1696 -> 18 MB '
      'in 70 s; K50F2/I: flat at 120 fps, same picture); needs the frame limiter (its Reset wrapper); the DLL default is 0 = off, the live ini carries 128',
      [('Memory', 'QuadRing', 128, 0, 0)])
+feat('resetdrain', G_STAB, 'Do not crash when the screen is rebuilt (monitor off/on, resolution, alt-tab)', 'on', 'start',
+     'klfps.c ResetDrain: after a successful Reset the 2 render command lists recorded before it are emptied (what the game flush 0x696100 '
+     'does); C27_RSTQ/RST0 + CE27_ALL2 crashed in d3d9 11-15 ms after one S_OK Reset on the stale list; needs the frame limiter (its Reset wrapper)',
+     [('Graphics', 'ResetDrain', 1, 0, 1)])
 feat('steamblock', G_STAB, 'Block Steam stats / leaderboards on modded rounds', 'on', 'start',
      'keeps modded rounds out of your Steam stats and achievements', [('Steam', 'Block', 1, 0, 1)])
 

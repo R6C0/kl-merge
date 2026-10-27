@@ -419,6 +419,33 @@ static void klfps_read_pp(const void *pp)
     klfps_pace = 0; klfps_ret = 0; klfps_last_present = 0;
 }
 
+/* [Graphics] ResetDrain (recommended on): empty the game's two render command lists after a successful Reset.
+ * Why (C27_RSTQ/RST0 + the CE27_ALL2 crash, 10-27): the lost path (0x84ed10 -> 0x456bf0 OnLost, Reset 0x622580, OnRestore) runs
+ * inside the end-of-frame 0x459ac0, and right after it the submit 0x66e530 hands the render thread 0x7c1c30 the list recorded
+ * BEFORE the Reset. That list still points at freed surfaces / VBs: both seats crashed 11-15 ms after one S_OK Reset in
+ * d3d9 (+0x5feeb / +0x4b31f, a stale opcode 0x26 SetRenderTarget and a dead stream-0 VB in the dumps).
+ * The drain does what the game's own flush 0x696100 does (0x696157..0x696195): for both lists L = [d+0xa868c], [d+0xa8690]
+ * of d = [win+0xfc] set count [L+8] = 0 and end [L+0xc] = begin [L+0x14].
+ * GUESS: the render thread is parked while the device is lost ([win+0x11a8] set at 0x456bfc), so no lock is needed; we only
+ * drain on the game thread ([win+0x11dc]) and skip otherwise. 0x696100 also tail-calls 0x709c80, which is NOT repeated here. */
+static int klfps_resetdrain = 1;
+static void klfps_drain_lists(void)
+{
+    char *eng, *win, *d; int k;
+    if (!klfps_resetdrain) return;
+    eng = *(char **)0xdd2640; if (!eng) return;
+    win = *(char **)(eng + 0x970); if (!win || IsBadReadPtr(win, 0x11e0)) return;
+    if (GetCurrentThreadId() != *(DWORD *)(win + 0x11dc)) { klog("fps: ResetDrain: Reset on thread %lu, not the game thread: lists left alone", (unsigned long)GetCurrentThreadId()); return; }
+    d = *(char **)(win + 0xfc); if (!d || IsBadReadPtr(d + 0xa868c, 8)) return;
+    for (k = 0; k < 2; k++) {
+        char *L = *(char **)(d + 0xa868c + 4 * k);
+        if (!L || IsBadReadPtr(L, 0x18) || IsBadWritePtr(L + 8, 8)) continue;
+        *(DWORD *)(L + 8) = 0;
+        *(DWORD *)(L + 0xc) = *(DWORD *)(L + 0x14);
+    }
+    klog("fps: ResetDrain: command lists emptied after Reset (lost flag %s)", win[0x11a8] ? "set" : "clear");
+}
+
 /* IDirect3DDevice9::Reset (slot 16): the options menu / alt-tab rebuilds the device, maybe at another refresh rate or vsync setting.
  * The target is re-read from the new parameters and the pacing restarts (the deadline would be stale). The real Reset runs first. */
 static HRESULT WINAPI klfps_reset(void *self, void *pp)
@@ -431,6 +458,7 @@ static HRESULT WINAPI klfps_reset(void *self, void *pp)
     r = klfps_real_reset(self, pp);
     klfps_resets++;
     klquad_postreset((long)r);                                       /* klquad.c: 1027 diagnostics, +0x18 values after the real Reset */
+    if (r >= 0) klfps_drain_lists();                                 /* before OnRestore and the submit 0x66e530 replay a stale list */
     if (r >= 0) { klfps_read_pp(pp); klog("fps: Reset ok: refresh %d Hz, game vsync %s, target %d fps", klfps_auto_hz, klfps_vsync ? "ON" : "off", klfps_target); }
     else {   /* D3DERR_DEVICELOST 88760868 = still lost, the game retries; D3DERR_INVALIDCALL 8876086c = a DEFAULT-pool resource still alive */
         if (klfps_resets <= 20) klog("fps: Reset FAILED %08lx (call %ld)", (unsigned long)r, klfps_resets);
@@ -545,6 +573,7 @@ static void klfps_init(void)
     klfps_use_sc    = GetPrivateProfileIntA("FrameLimit", "SwapChain", 1, klh_ini) != 0;   /* k36: 0 = do not wrap IDirect3DSwapChain9::Present */
     klfps_use_reset = GetPrivateProfileIntA("FrameLimit", "Reset", 1, klh_ini) != 0;       /* k36: 0 = do not wrap IDirect3DDevice9::Reset */
     klfps_gt        = GetPrivateProfileIntA("FrameLimit", "GameThread", 1, klh_ini) != 0;  /* 1025: pace on the game thread after a cut */
+    klfps_resetdrain = GetPrivateProfileIntA("Graphics", "ResetDrain", 1, klh_ini) != 0;   /* 1027: empty the stale command lists after Reset */
     GetPrivateProfileStringA("FrameLimit", "MapCap", "DM05A:60", klfps_mapcap, sizeof klfps_mapcap, klh_ini);   /* 1025: per-map ceiling, see klfps_set_target */
 #ifdef KLHOOK_TEST
     klfps_lost_init();
