@@ -160,6 +160,7 @@ static struct {
     struct klu_picq pic[KLSB_NPIC]; int npic;
     DWORD state;                              /* the session state of the last tick */
     float cd_max;                             /* the countdown's first value this round */
+    int in_intro; /* 2026-10-27: 1 from the first tick of states 0x16..0x18 until the round-end state, so the per-intro log latches / counters restart in EVERY intro */
     int ipath, ivalid, told_i, told_ic, map_tried; DWORD i_tick0; char map[48];   /* OnlineIntroState: no intro element, the card is composed / valid, log latches (1 = state path told, 2 = element path told), tick time of the first compose, the map's name */
     long take0[KLOR_MAX]; BYTE take_have[KLOR_MAX]; int take_set;   /* OnlineBoardTake: each seat's money at the first state-0x1f tick */
     DWORD felem, f_stamp; int f_told_bad, f_told_tx;   /* OnlineBoardCarrier: the wrapped ZFAOutroDisplay of this OSD, tick time of its last card, log latches */
@@ -527,7 +528,7 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
         klsb_put(KLSB_T_RESULT, px + KLSB_COLL, klu_cen(py + KLSB_Y_RESULT + 5.5f, KLU_FNT_NAME), rt, rc);
         if (res == KLUV_RES_YOU_DEAD || res == KLUV_RES_ALL_DEAD || killed) {
             int k = kluv_killer(s, human);
-            snprintf(buf, sizeof buf, "KILLED BY  %s", k >= 0 && k < nrow_max && name[k][0] ? name[k] : "THE POLICE");
+            snprintf(buf, sizeof buf, "KILLED BY %s", k >= 0 && k < nrow_max && name[k][0] ? name[k] : "THE POLICE");
             klsb_put(KLSB_T_KILLED, px + KLSB_X_KILLED, klu_cen(py + KLSB_Y_RESULT + 5.5f, KLU_FNT_LABEL), buf, KLU_C_CORAL);
         }
     }
@@ -675,7 +676,7 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
             else if (kr && kr->used) { snprintf(kn, sizeof kn, "%s", kr->name[0] ? kr->name : "Player"); klor_upper(kn); }
             else if (klu_onkillai && me->ai_killer[0]) { snprintf(kn, sizeof kn, "%s", me->ai_killer); klor_upper(kn); }   /* [HUD] OnlineKilledAI */
             else { kn[0] = 0; if (klu_onkillstock) kllnm_killtext(kn, sizeof kn); if (!kn[0]) snprintf(kn, sizeof kn, "THE POLICE"); }      /* [HUD] OnlineKilledStock: the stock panel's own text (the van) before THE POLICE */
-            snprintf(buf, sizeof buf, "KILLED BY  %s", kn);
+            snprintf(buf, sizeof buf, "KILLED BY %s", kn);      /* ONE space (2026-10-27; the online card line had two) */
             klsb_put(KLSB_T_KILLED, px + KLSB_X_KILLED, klu_cen(py + KLSB_Y_RESULT + 5.5f, KLU_FNT_LABEL), buf, KLU_C_CORAL);
         }
     }
@@ -997,7 +998,7 @@ static void klsb_tick(int game_thread)
     have = klb_read(&s);
     if (!have) {   /* 2026-10-26 HUD parity: ONLINE the Arcade readers refuse (no Heist score object). Not composed here (the online outro element and its data are undecoded, re\hud_online.md): log what the online round-over looks like, once per state, so the next bench decodes it. */
         static int told_state = -1; struct klb_snap o;
-        if (klb_read_hud(&o) && o.online && o.state != told_state && o.state >= 0x1d) {
+        if (klb_read_hud(&o) && o.online && (int)o.state != told_state && o.state >= 0x1d) {
             DWORD el2 = klsb_r.elem ? klsb_r.elem : 0, vt2 = el2 ? klh_rd32(el2) : 0; int i;
             told_state = o.state;
             klog("hud: scoreboard: ONLINE state %02lx (the stock round-over panel stays; the Arcade board is not drawn online yet): outro element %08lx vtable %08lx (%s), %d rules records (NOT seats), %d names from the GUESSED std::string at client+8 (0 is expected: klor_read's own names_ok, from the body's model, is the real count - see the 'online read:' line)", (DWORD)o.state, el2, vt2, vt2 == KLSB_VT ? "ZHeistOutroDisplay, same class as Arcade" : "other / not wrapped", o.on_n, o.on_named);
@@ -1012,6 +1013,10 @@ static void klsb_tick(int game_thread)
     if (klsb.icarrier && hon) klsb_iwrap(osd);      /* OnlineIntroCarrier: the pre-round panel's element, wrapped as soon as it exists; ONLINE only (hon = the online reader answered), so Arcade / private stay inert */
     st = have ? (int)s.state : hon ? (int)on.b.state : 0;
     klsb_r.state = st;
+    if (hon && klsb.istate && klsb.intro) {      /* 2026-10-27 BENCH CE27_ALL2D: the latches (told_i / told_ic / told_i19) and the counters were set up once per MATCH, so the round-2 line ('2 s in state 17 ... +0 drawn') was only the first tick of that intro, printed late because i_tick0 was from round 1: restart them per intro (log fix; drawing is unchanged) */
+        if (st >= 0x16 && st <= 0x18 && !klsb_r.in_intro) { klsb_r.in_intro = 1; klsb_r.told_i = 0; klsb_r.told_ic = 0; klsb_r.told_i19 = 0; }
+        else if (st > 0x18 || st < 0x16) klsb_r.in_intro = 0;      /* any state outside the intro clears it (a round may not pass 0x1e before the next intro) */
+    }
     if (hon && klsb.istate && klsb.intro && st >= 0x16 && st <= 0x18) {      /* OnlineIntroState: which path ran, logged once per path */
         DWORD ie = klh_rd32(osd + KLBRD_O_INTRO); int want;
         ipath = ie == 0 || (klsb.icarrier == 1 && !klsb_r.ifail && !klsb_icode_bad && klsb_r.ielem);      /* OnlineIntroCarrier=1: the card is composed although the element exists (it draws it); a foreign vtable on it keeps the element path */

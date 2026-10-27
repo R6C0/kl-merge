@@ -1431,7 +1431,7 @@ static int klu_compose_in(int *state_ok)
                     else if (klu_onkillai && lr->used && lr->ai_killer[0]) { snprintf(kn, sizeof kn, "%s", lr->ai_killer); klor_upper(kn); }   /* [HUD] OnlineKilledAI: an AI heister's bullet; the police stay THE POLICE */
                     if (!kn[0] && lr->used && klu_onkillstock) kllnm_killtext(kn, sizeof kn);   /* [HUD] OnlineKilledStock: no seat, no AI: the stock panel's own text (the escape van: KillBox key FA_KilledByEscapeVehicle) before THE POLICE */
                 }
-                snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
+                snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;      /* 2026-10-27: ONE space (the online line had two; bench CE27_ALL2D 58 -> KILLED BY  YOURSELF) */
             } else if (klu_onkillstock) kllnm_killclear();      /* alive again: the next death starts with no latched text */
             if (have && klu_onround && or_.ok && or_.round > 0 && klu.round) {     /* ROUND n OF m (bytes S+0x350 / S+0x3d4, ^0xac): the Arcade round text */
                 klu_round_text(or_.round, or_.rounds, klu_onskull ? olives : -1); klu_r.t[KLU_T_ROUND].on = 1;
@@ -1499,7 +1499,7 @@ static int klu_compose_in(int *state_ok)
             int k = kluv_killer(&s, human); char kn[40] = "";
             if (k >= 0 && k < s.n && s.r[k].used) { DWORD blk, str = 0; if ((blk = klh_rd32(s.r[k].at)) != 0 && klh_rd(blk + 8, &str, 4) && str) klh_rdstr(str, kn, sizeof kn); klnm_name(s.r[k].at, kn, sizeof kn); }
             { size_t q; for (q = 0; kn[q]; q++) if (kn[q] >= 'a' && kn[q] <= 'z') kn[q] -= 32; }
-            snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1;
+            snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1;
             klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
             { static int told; if (!told && klu.log) { told = 1; klog("hud: KILLED BY drawn in the HUD style ('%s'); the stock death panel text (XML FARespawn KilledBy) is blanked by kllocname.c HideKilledBy (default 1; the names: HideKilledBy log line says when it did)", klu_r.t[KLU_T_DEATH].want); } }
         }

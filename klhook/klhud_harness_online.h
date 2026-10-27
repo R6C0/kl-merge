@@ -52,6 +52,9 @@ static int klc_same_code(DWORD va, const BYTE *bytes, int n) { (void)va; (void)b
 #define KLBRD_DY          (-20.0f)
 static volatile int klbrd_told_place; static float klbrd_place[2];
 static char __fastcall klbrd_render(void *el, void *edx, void *ctx, void *cam) { (void)el; (void)edx; (void)ctx; (void)cam; return 0; }
+static int klbrd_code_bad, klbrd_evt_ready; static DWORD klbrd_evt[4];   /* 2026-10-27: klhud_board2.c chains onto Board=1's private table (never ready here) */
+static int kllnm_killtext(char *out, int cap) { if (cap > 0) out[0] = 0; return 0; }   /* kllocname.c stub: no stock death text here */
+static void kllnm_killclear(void) { }
 #ifndef KLSB_HARNESS_HAS_BOARD2                        /* klwatch_test.c does not include klhud_board2.c: its state-render slot ([HUD] OnlineBoardState) is a no-op there */
 static void klsb_state_render(void *el, void *ctx, void *cam) { (void)el; (void)ctx; (void)cam; }
 #endif

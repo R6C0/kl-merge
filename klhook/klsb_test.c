@@ -162,10 +162,10 @@ int main(int argc, char **argv)
     klsb.fault = 1; setup_round(&s, 4); set_flags(0, KLUV_F_ESCAPED); CHECK(klsb_compose(&s, endb, 0) == 0); klsb.fault = 0;      /* ScoreboardFault */
 
     /* the pool */
-    CHECK(klsb_make_pool() == 1 && pool_n == KLSB_NTEXT);
-    for (i = 0; i < KLSB_NTEXT; i++) CHECK(klsb_r.t[i].obj != 0);
+    CHECK(klsb_make_pool() == 1 && pool_n == KLSB_NT());
+    for (i = 0; i < KLSB_NT(); i++) CHECK(klsb_r.t[i].obj != 0);
     CHECK(klsb_r.t[KLSB_T_ROUND].obj && pool_objs[1].font == klu_r.fonts[KLU_FNT_BIG] && pool_objs[0].font == klu_r.fonts[KLU_FNT_LABEL] && pool_objs[2].font == klu_r.fonts[KLU_FNT_NAME]);
-    CHECK(pool_objs[4].style == (DWORD)KLU_STYLE_RIGHT && pool_objs[39].style == (DWORD)KLU_STYLE_CENTRE && pool_objs[0].style == (DWORD)klu.left);
+    CHECK(pool_objs[4].style == (DWORD)KLU_STYLE_RIGHT && pool_objs[KLSB_T_CONTN].style == (DWORD)KLU_STYLE_CENTRE && pool_objs[0].style == (DWORD)klu.left);
     klsb_r.made = 1;
 
     /* pictures: cache by hand (the clock element's description) */
@@ -234,7 +234,7 @@ int main(int argc, char **argv)
     SC[0x6c] = 1; SC[0x10c] = 2; SC[0x45] = 3; w32(SC + 0x30, 250000); w32(SC + 0x38, 650000); w32(SC + 0x184 + 4, (DWORD)-25000);
     w32(recs_mem + 0x7c + 0x2c, 90000); w32(recs_mem + 5 * 0x7c + 0x2c, 160000);
     CHECK(klsb_compose(&s, endb, 1000) == 1);
-    CHECK(!strcmp(tx(KLSB_T_RESULT)->want, "YOU ARE DEAD") && tx(KLSB_T_RESULT)->want_colour == KLU_C_CORAL && !strcmp(tx(KLSB_T_KILLED)->want, "KILLED BY  PIERRE"));
+    CHECK(!strcmp(tx(KLSB_T_RESULT)->want, "YOU ARE DEAD") && tx(KLSB_T_RESULT)->want_colour == KLU_C_CORAL && !strcmp(tx(KLSB_T_KILLED)->want, "KILLED BY PIERRE"));
     CHECK(!strcmp(tx(KLSB_T_ROW(0, 1))->want, "DEAD") && tx(KLSB_T_ROW(0, 0))->want_colour == KLU_C_DEAD && !strcmp(tx(KLSB_T_ROW(0, 2))->want, "$0"));
     CHECK(!strcmp(tx(KLSB_T_ROW(2, 1))->want, "TRAITOR") && tx(KLSB_T_ROW(2, 0))->want_colour == KLU_C_INK);       /* alive traitor: orange block, ink */
     CHECK(!strcmp(tx(KLSB_T_ROW(4, 1))->want, "LEFT BEHIND") && !strcmp(tx(KLSB_T_ROW(5, 2))->want, "$160,000"));
