@@ -25,6 +25,7 @@ struct klor_row {
     int kills, police_kills;           /* human: S+0xec / S+0x170 (i8); bot: 0 */
     int killer;                        /* human: KillerIndex S+0xe0 (i8) = the seat that killed him, -1 none; LATCHED while he is dead */
     int alive;                         /* bot: health > 0; human: no dead / escaped bit in flags */
+    char ai_killer[32];                /* human, dead, no seat killed him ([HUD] OnlineKilledAI=1): the AI heister whose bullet was the last to hit him (name, "A HEISTER" if unnamed); "" = none / police */
 };
 
 struct klor_ev { int victim, killer; };          /* a death seen this call: the victim's seat, the killer's seat (-1 = none / the world / the police) */

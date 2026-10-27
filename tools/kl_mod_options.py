@@ -101,6 +101,8 @@ feat('onlinenames', G_CORE, 'Online matches: crew list shows the heister charact
      'klhud.c OnlineNames; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineNames', 1, 0, 0)])
 feat('onlinekilled', G_CORE, 'Online matches: KILLED BY shows the killer\'s heister name instead of THE POLICE (recommended off until benched)', 'off', 'start',
      'klhud.c OnlineKilled; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineKilled', 1, 0, 0)])
+feat('onlinekilledai', G_CORE, 'Online matches: KILLED BY names the AI heister who killed you instead of THE POLICE (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineKilledAI, klonline_read.c; needs [Online] Read=1 and [HUD] OnlineKilled=1; NOT run live', [('HUD', 'OnlineKilledAI', 1, 0, 0)])
 feat('onlineround', G_CORE, 'Online matches: ROUND n OF m line under the clock like Arcade (recommended off until benched)', 'off', 'start',
      'klhud.c OnlineRound; needs [Online] Read=1; NOT run live', [('HUD', 'OnlineRound', 1, 0, 0)])
 feat('onlinefeed', G_CORE, 'Online matches: kill-feed line (X KILLED Y) under REWARDS like Arcade (recommended off until benched)', 'off', 'start',
