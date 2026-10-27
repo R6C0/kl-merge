@@ -166,7 +166,7 @@ static int klucc_find_me(DWORD rules, int n, int *how)
         if (klco_is_master(p)) { *how = 1; return i; }
     }
     if (klud_local(&me) && klud_is_player(me) && (i = klud_idx(me)) >= 0 && i < n) { *how = 2; return i; }
-    if (klu_r.osd) { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST), li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < (DWORD)n) { *how = 3; return (int)li; } }
+    if (klu_r.osd) { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST), li = 0; if (el && klh_rd(el + 0xefc, &li, 1) && li < (DWORD)n) { *how = 3; return (int)li; } }
     return -1;
 }
 

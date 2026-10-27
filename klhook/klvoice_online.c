@@ -40,7 +40,7 @@ static int kvo_online_who(struct klw_who *w, char *name)
     if (lok && (DWORD)(now - ltry) < 400) { *w = last; snprintf(name, 32, "%s", lname); return 1; }   /* cached: klor_read is a scan */
     ltry = now ? now : 1;
     pl = klu_r.osd ? klh_rd32(klu_r.osd + KLU_O_PLIST) : 0;
-    if (!pl) why = 1; else if (!klu_is_plist(pl)) why = 2; else if (!klh_rd(pl + 0xefc, &li, 4) || li >= 8) why = 3;
+    if (!pl) why = 1; else if (!klu_is_plist(pl)) why = 2; else if (!klh_rd(pl + 0xefc, &li, 1) || li >= 8) why = 3;
     if (!why) {
         int rd; klor_noev = 1; rd = klor_read(&o, (int)li); lok = rd && o.ok; klor_noev = 0;      /* this reader never takes the kill-feed events */
         if (!lok) why = rd ? 5 : 4;

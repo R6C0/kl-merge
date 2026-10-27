@@ -486,7 +486,7 @@ static void klb_online_probe(const struct klb_snap *s, DWORD osd, DWORD plist_vt
           if (!klh_rd(freeb + ii, fb, 1) || fb[0]) continue; klog("hudprobe: getters idx %d: slot55 [S+0x224]=%ld slot56 [S+0x188]=%ld -> Total %ld; slot54 [rec+0x28]=%08lx", ii, (long)g1, (long)g2, (long)g1 + (long)g2, g54); } }
     klb_pdump("rules0", s->rules, 0x60);
     if (osd && (el = klh_rd32(osd + 0x10c4)) && klh_rd32(el) != 0) {
-        DWORD loc = 0, k, shown = 0; klh_rd(el + 0xefc, &loc, 4);
+        DWORD loc = 0, k, shown = 0; klh_rd(el + 0xefc, &loc, 1);
         klog("hudprobe: stock list element %08lx vt %08lx (%s) local entry index [+0xefc] = %ld, [+0xed8]=%lu [+0xedc]=%08lx", el, klh_rd32(el), klh_rd32(el) == plist_vt ? "ZFAPlayerListDisplay" : "OTHER", (long)loc, klh_rd32(el + 0xed8), klh_rd32(el + 0xedc));
         klb_pdump("plist", el + 0x30, 0x40);
         { DWORD e; for (e = 0x14; e < 0x44; e += 4) { DWORD p = klh_rd32(el + e); char tg[24]; if (p > 0x10000 && !(p >= 0x400000 && p < 0xe00000)) { snprintf(tg, sizeof tg, "plist[%02lx]", e); klb_pdump(tg, p, 0x80); } } }

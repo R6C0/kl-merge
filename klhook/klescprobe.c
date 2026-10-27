@@ -67,7 +67,7 @@ static void klep_tick(int game_thread)
     static DWORD last; DWORD now = GetTickCount(); struct klor_snap o; int i, loc = -1;
     if (!klep.on || !game_thread || !klh_exe_ok || now - last < 250) return;
     last = now ? now : 1;
-    if (klu_r.osd) { DWORD pl = klh_rd32(klu_r.osd + KLU_O_PLIST), li = 0; if (pl && klh_rd(pl + 0xefc, &li, 4) && li < 16) loc = (int)li; }
+    if (klu_r.osd) { DWORD pl = klh_rd32(klu_r.osd + KLU_O_PLIST), li = 0; if (pl && klh_rd(pl + 0xefc, &li, 1) && li < 16) loc = (int)li; }
     klor_noev = 1; i = klor_read(&o, loc); klor_noev = 0;
     if (!i || o.b.state != 0x19) return;
     if (klep_c.rules != o.b.rules || (o.round && klep_c.round != o.round)) { memset(&klep_c, 0, sizeof klep_c); klep_c.rules = o.b.rules; klep_c.round = o.round; klep_c.van = -1; klog("escprobe: new round %d (rules %08lx), local seat %d", o.round, (unsigned long)o.b.rules, loc); }

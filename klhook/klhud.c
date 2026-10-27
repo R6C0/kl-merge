@@ -1353,7 +1353,7 @@ static int klu_compose_in(int *state_ok)
         klwd_compose();
         if (klb_hud_crew && klu.crew && s.on_n > 0) {         /* [HUD] OnlineCrew: the online crew list (2026-10-26: the rows, names, states, counts and money boxes as Arcade's) */
             int k, rows = 0, nu = 0, na = 0, nb, ba = 0, bi, nrows = 0, olives = 0; long tot = 0; char nm[56]; struct klor_snap or_; int have; BYTE loc = 0; int loc_pend = 0; int locst = -1; long lloot = 0, lrew = 0;
-            { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (BYTE)li; }
+            { DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST); DWORD li = 0; if (el && klh_rd(el + 0xefc, &li, 1) && li < 16) loc = (BYTE)li; }
             loc_pend = loc < s.on_n && s.on_used[loc];
             have = klor_read(&or_, (int)loc);                    /* the reader: heister character names, killer, round, loot, feed (off unless [Online] Read=1). BEFORE the rows loop (review #1: 'have' was tested before it was set) */
             if (have) klgrd_note_online(&or_);                     /* klhud_grades.c: [Grades] the seats' experience / rating */
@@ -1435,7 +1435,7 @@ static int klu_compose_in(int *state_ok)
         }
         if (klu_onvanicon && s.on_n > 0 && klu_r.handle[170]) {   /* [HUD] OnlineVanIcon (default 0): Arcade's VanIcon block (below) is skipped online; like Arcade: ABOARD green, ESCAPED bright green. Local drawing, read-only */
             DWORD el = klh_rd32(klu_r.osd + KLU_O_PLIST), li = 0; int lc = -1;
-            if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) lc = (int)li;
+            if (el && klh_rd(el + 0xefc, &li, 1) && li < 16) lc = (int)li;
             /* PROVEN live 10-27 (bench BOSE4, c9): the local seat's score status word s.on_flags[lc] goes 0 -> 0x20 (ABOARD, after E at the van) -> 0x40 (ESCAPED), on host and client */
             if (lc >= 0 && lc < s.on_n && s.on_used[lc] && (s.on_flags[lc] & (KLUV_F_ABOARD | KLUV_F_ESCAPED))) {
                 float ix = klu_r.mx - 35.0f - 66.0f, iy = klu_r.wy;     /* the same place as the Arcade icon: left of the watch */

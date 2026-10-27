@@ -869,7 +869,7 @@ static void klsb_tick(int game_thread)
     }
     if (!have && (klsb.online || klsb.intro)) {      /* 2026-10-26: online, from the reader; the local seat as klhud.c finds it (the player list's +0xefc) */
         DWORD pl = klh_rd32(osd + KLU_O_PLIST), li = 0; int loc = -1;
-        if (pl && klh_rd(pl + 0xefc, &li, 4) && li < 16) loc = (int)li;
+        if (pl && klh_rd(pl + 0xefc, &li, 1) && li < 16) loc = (int)li;
         klor_noev = 1; hon = klor_read(&on, loc) && on.ok; klor_noev = 0;      /* this reader never takes the kill-feed events */
     }
     st = have ? (int)s.state : hon ? (int)on.b.state : 0;

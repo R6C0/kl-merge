@@ -549,7 +549,7 @@ static void klpu_tick(int game_thread)
     if (have) { state = s.state; if (s.human >= 0) rec = s.r[s.human].at; }
     else if (klpu_online_on) {                                       /* [HUD] OnlinePopups: the online snapshot of the local seat */
         struct klor_snap o; DWORD el = klh_rd32(osd + KLU_O_PLIST), li = 0; int loc = -1, k;
-        if (el && klh_rd(el + 0xefc, &li, 4) && li < 16) loc = (int)li;
+        if (el && klh_rd(el + 0xefc, &li, 1) && li < 16) loc = (int)li;
         klor_noev = 1; k = klor_read(&o, loc); klor_noev = 0;
         if (k && loc >= 0) for (k = 0; k < o.n; k++) if (o.r[k].used && o.r[k].seat == loc) {
             state = o.b.state; rec = o.r[k].rec;
