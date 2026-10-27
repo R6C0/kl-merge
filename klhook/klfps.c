@@ -430,6 +430,7 @@ static HRESULT WINAPI klfps_reset(void *self, void *pp)
 #endif
     r = klfps_real_reset(self, pp);
     klfps_resets++;
+    klquad_postreset((long)r);                                       /* klquad.c: 1027 diagnostics, +0x18 values after the real Reset */
     if (r >= 0) { klfps_read_pp(pp); klog("fps: Reset ok: refresh %d Hz, game vsync %s, target %d fps", klfps_auto_hz, klfps_vsync ? "ON" : "off", klfps_target); }
     else {   /* D3DERR_DEVICELOST 88760868 = still lost, the game retries; D3DERR_INVALIDCALL 8876086c = a DEFAULT-pool resource still alive */
         if (klfps_resets <= 20) klog("fps: Reset FAILED %08lx (call %ld)", (unsigned long)r, klfps_resets);
@@ -437,6 +438,52 @@ static HRESULT WINAPI klfps_reset(void *self, void *pp)
     }
     return r;
 }
+
+#ifdef KLHOOK_TEST
+/* [Bench] LostAt=<sec>[,<sec>...] (TEST/bench only, default off): at each listed time the game's own device-lost path is run once.
+ * Clock: seconds since klfps_init (process start, includes the loading), GetTickCount.
+ * Mechanism, VERIFIED by reading kl2.exe (debug/dasm.py): the per-frame window update 0x84eb50 (state [win+0x1188] != 4, device
+ * [0xf144a0] set, [win+0x1184] == 0) calls 0x6535e0 = `mov eax,[ecx+4]; call [[eax]+0xc]` = IDirect3DDevice9::TestCooperativeLevel (slot 3),
+ * whose return address is 0x6535eb. Result 0x88760869 (D3DERR_DEVICENOTRESET) -> 0x456bf0: [win+0x11a8]=1, slot 3 of every object in the
+ * list [win+0x1908] (VBs release), Release of the swap chain / depth surfaces [win+0x179c / 0x17a0 / 0x1798], Reset 0x622580,
+ * on success re-create 0x7d64b0 / 0x5cbd90 / 0x5c5c00 and slot 4 of the list (restore), [win+0x11a8]=0. DEVICELOST 0x88760868 only sets
+ * the flag [win+0x11a8], it does not Reset. So faking NOTRESET once makes the game do OnLost -> Reset -> OnRestore itself.
+ * The fake is given ONLY to that call site (return address 0x6535eb) and ONLY after the real call returned 0 (device really OK): other
+ * callers (klmappool_ov.c) see the real result. GUESS: the game object's device [ecx+4] is the one whose vtable klfps wrapped at CreateDevice
+ * (true for Reset / Present, the same object). */
+typedef HRESULT (WINAPI *klfps_tcl_fn)(void *);
+static klfps_tcl_fn klfps_real_tcl;
+static DWORD klfps_lost_t[16], klfps_lost_t0; static int klfps_lost_n, klfps_lost_i;
+static volatile LONG klfps_lost_other;
+static HRESULT WINAPI klfps_tcl(void *self)
+{
+    HRESULT r = klfps_real_tcl(self);
+    if (r == 0 && klfps_lost_i < klfps_lost_n && GetTickCount() - klfps_lost_t0 >= klfps_lost_t[klfps_lost_i] * 1000u) {
+        void *ra = _ReturnAddress();
+        if (ra == (void *)0x6535eb) {
+            klog("bench: LostAt #%d (%lu s): TestCooperativeLevel -> D3DERR_DEVICENOTRESET for the game's lost path 0x456bf0 (Reset #%ld follows)",
+                 klfps_lost_i + 1, (unsigned long)klfps_lost_t[klfps_lost_i], klfps_resets + 1);
+            klfps_lost_i++;
+            return (HRESULT)0x88760869;
+        }
+        if (InterlockedIncrement(&klfps_lost_other) <= 3) klog("bench: LostAt due but TestCooperativeLevel called from %p, not the game's 0x6535eb: passed through", ra);
+    }
+    return r;
+}
+
+static void klfps_lost_init(void)
+{
+    char b[128], *p; 
+    klfps_lost_n = 0; klfps_lost_i = 0; klfps_lost_t0 = GetTickCount();
+    GetPrivateProfileStringA("Bench", "LostAt", "", b, sizeof b, klh_ini);
+    for (p = b; *p && klfps_lost_n < 16; ) {
+        while (*p == ' ' || *p == ',') p++;
+        if (*p < '0' || *p > '9') break;
+        klfps_lost_t[klfps_lost_n++] = (DWORD)strtoul(p, &p, 10);
+    }
+    if (klfps_lost_n) klog("bench: [Bench] LostAt: %d fake DEVICENOTRESET(s), first after %lu s since process start (TEST only)", klfps_lost_n, (unsigned long)klfps_lost_t[0]);
+}
+#endif
 
 static HRESULT WINAPI klfps_createdev(void *self, UINT adapter, DWORD type, HWND focus, DWORD flags, void *pp, void **dev)
 {
@@ -446,6 +493,9 @@ static HRESULT WINAPI klfps_createdev(void *self, UINT adapter, DWORD type, HWND
         klmpo_dev = *dev;
         if (klfps_use_reset) klfps_wrap_slot(*dev, 16, (void *)klfps_reset, (void **)&klfps_real_reset, "Reset");
         klfps_wrap_slot(*dev, 17, (void *)klfps_present, (void **)&klfps_real_present, "Present");
+#ifdef KLHOOK_TEST
+        if (klfps_lost_n) klfps_wrap_slot(*dev, 3, (void *)klfps_tcl, (void **)&klfps_real_tcl, "TestCooperativeLevel (bench LostAt)");
+#endif
         klquad_device(*dev, (void *)klfps_reset);                    /* klquad.c: the ring only with this Reset wrapper */
 #ifdef KLHOOK_TEST
         kld3_device(*dev);                                           /* kld3.c: [Memory] D3dCount, the other slots (after Reset / Present, which stay ours) */
@@ -496,6 +546,9 @@ static void klfps_init(void)
     klfps_use_reset = GetPrivateProfileIntA("FrameLimit", "Reset", 1, klh_ini) != 0;       /* k36: 0 = do not wrap IDirect3DDevice9::Reset */
     klfps_gt        = GetPrivateProfileIntA("FrameLimit", "GameThread", 1, klh_ini) != 0;  /* 1025: pace on the game thread after a cut */
     GetPrivateProfileStringA("FrameLimit", "MapCap", "DM05A:60", klfps_mapcap, sizeof klfps_mapcap, klh_ini);   /* 1025: per-map ceiling, see klfps_set_target */
+#ifdef KLHOOK_TEST
+    klfps_lost_init();
+#endif
     klfps_tls = TlsAlloc();                                         /* per-thread nesting depth (k36 recursion guard); TLS_OUT_OF_INDEXES = depth always 0 */
     QueryPerformanceFrequency(&f); klfps_freq = f.QuadPart;
     if (klfps_passive) {                                            /* Sleep(1) is only useful with a 1 ms timer */

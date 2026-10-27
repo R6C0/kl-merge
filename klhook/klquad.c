@@ -40,11 +40,40 @@ static void **klqr_vt; static klqr_lock_fn klqr_real;
 static struct { void *obj; void **buf; int cur; } klqr_rg[KLQR_NOBJ];
 static CRITICAL_SECTION klqr_cs;
 static volatile LONG klqr_swaps, klqr_made, klqr_fail, klqr_drops, klqr_resets;
+/* 1027 diagnostics (CE27_ALL2: a second Reset 4 s after the first, then a ReShade QueryInterface on a dead VB in the first quad draw):
+   the +0x18 values seen at the last prereset (their Release counts are logged), and "first DISCARD lock after Reset" per object */
+static void *klqr_c18[KLQR_NOBJ]; static int klqr_first[KLQR_NOBJ];
+
+static void *klqr_p18(int g)
+{   /* the game object g and the D3D buffer at its +0x18 (0 when unreadable) */
+    void *o = 0, *b = 0;
+    __try { o = *(void **)(DWORD_PTR)(KLQR_OBJS + 4 * g); b = o ? *(void **)((BYTE *)o + 0x18) : 0; } __except (1) { b = 0; }
+    return b;
+}
+static void *klqr_pobj(int g)
+{
+    void *o = 0;
+    __try { o = *(void **)(DWORD_PTR)(KLQR_OBJS + 4 * g); } __except (1) { o = 0; }
+    return o;
+}
+static void klqr_log18(const char *when, long hr, int showhr)
+{
+    char h[24] = "";
+    if (showhr) _snprintf(h, sizeof h, " hr=%08lx", hr);
+    klog("quad: %s%s: +0x18 = %p %p %p %p (objs %p %p %p %p)", when, h, klqr_p18(0), klqr_p18(1), klqr_p18(2), klqr_p18(3),
+         klqr_pobj(0), klqr_pobj(1), klqr_pobj(2), klqr_pobj(3));
+}
 
 static void klqr_drop(int g)
 {   /* our references on ring g (the game keeps its own on +0x18) */
     int i;
-    if (klqr_rg[g].buf) { for (i = 0; i < klqr_n; i++) if (klqr_rg[g].buf[i]) KLQR_RELEASE(klqr_rg[g].buf[i]); free(klqr_rg[g].buf); InterlockedIncrement(&klqr_drops); }
+    if (klqr_rg[g].buf) {
+        for (i = 0; i < klqr_n; i++) if (klqr_rg[g].buf[i]) {
+            ULONG rc = KLQR_RELEASE(klqr_rg[g].buf[i]); int k;
+            for (k = 0; k < KLQR_NOBJ; k++)          /* the buffer the game still names at +0x18: its count after our Release (the game's own ref(s) remain) */
+                if (klqr_rg[g].buf[i] == klqr_c18[k]) klog("quad: prereset: ring %d buf[%d] = %p is the current +0x18 of obj %d: Release -> %lu", g, i, klqr_rg[g].buf[i], k, (unsigned long)rc);
+        }
+        free(klqr_rg[g].buf); InterlockedIncrement(&klqr_drops); }
     klqr_rg[g].buf = 0; klqr_rg[g].obj = 0; klqr_rg[g].cur = 0;
 }
 
@@ -54,9 +83,21 @@ static void klquad_prereset(void)
     int g;
     if (!klqr_on) return;
     EnterCriticalSection(&klqr_cs);
+    klqr_log18("prereset", 0, 0);
+    for (g = 0; g < KLQR_NOBJ; g++) {
+        klqr_c18[g] = klqr_p18(g); klqr_first[g] = 1;
+        klog("quad: prereset: ring %d obj %p cur %d buf[cur] %p (%s)", g, klqr_rg[g].obj, klqr_rg[g].cur, klqr_rg[g].buf ? klqr_rg[g].buf[klqr_rg[g].cur] : 0, klqr_rg[g].buf ? "ring built" : "no ring");
+    }
     for (g = 0; g < KLQR_NOBJ; g++) klqr_drop(g);
     LeaveCriticalSection(&klqr_cs);
     InterlockedIncrement(&klqr_resets);
+}
+
+/* klfps.c's Reset wrapper, after the real Reset (hr = its result) */
+static void klquad_postreset(long hr)
+{
+    if (!klqr_on) return;
+    klqr_log18("postreset", hr, 1);
 }
 
 /* the DISCARD lock of one of the 4 quad buffers: swap +0x18 to the next ring buffer and lock that NOOVERWRITE; 0 = not ours */
@@ -70,6 +111,10 @@ static int klqr_lock(void *self, UINT off, UINT size, void **pp, DWORD flags, HR
     if (g == KLQR_NOBJ) return 0;
     slot = (void **)((BYTE *)obj + 0x18);
     EnterCriticalSection(&klqr_cs);
+    if (klqr_first[g]) {                                                      /* first DISCARD lock of this object since the last Reset */
+        klqr_first[g] = 0;
+        klog("quad: first DISCARD lock after Reset: obj %d = %p, self %p, ring %s", g, obj, self, klqr_rg[g].buf ? "kept" : "to be rebuilt");
+    }
     if (klqr_rg[g].buf && (klqr_rg[g].obj != obj || klqr_rg[g].buf[klqr_rg[g].cur] != self)) klqr_drop(g);   /* recreated */
     if (!klqr_rg[g].buf) {
         if (((klqr_desc_fn)(*(void ***)self)[13])(self, desc) < 0 || desc[4] > 1024 || desc[2] != 0x208) { LeaveCriticalSection(&klqr_cs); return 0; }
