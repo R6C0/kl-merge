@@ -483,7 +483,7 @@ static void klpu_ring_tick(DWORD osd, DWORD state, DWORD at, DWORD now)
         if (klpu.ringmode == 2) frac = klpu_r.part_max > 0.01f ? 1.0f - part / klpu_r.part_max : 0;
         else frac = klpu_r.loot_start > 0 ? (float)(klpu_r.loot_start - left) / (float)klpu_r.loot_start : 0;
     } else if (state == 0x19 && at && klh_rd(at + KLPU_R_LOOT, &st, 1) && st == KLPU_LOOT_PERSON &&
-               klh_rd(at + KLPU_R_PART, &part, 4)) {
+               klh_rd(at + KLPU_R_PART, &part, 4) && klb_finite(part) && part >= 0 && part < 1000.0f) {   /* sane clock: no vtable guards this state, and online the offsets are a GUESS */
         /* section 3, state 3: money off a person - the step clock, whatever RingMode says */
         looting = 1;
         if (klpu_r.loot_obj != 1) {
