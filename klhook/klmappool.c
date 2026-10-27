@@ -114,6 +114,16 @@ static int kmp_next_entry(int slotFilter)
     return -1;
 }
 
+/* READ-ONLY peek (kllocname.c, [MapPool] LobbyName): the page the next load of slot s will take; -1 = not known / not decided. Changes nothing (no used mark, no reshuffle, no log). */
+static int kmp_peek(int s)
+{
+    int i;
+    if (!kmp.on || !kmp.pool || !kmp.seed || !kmp.built || kmp.builtPool != kmp.pool || kmp.builtSeed != kmp.seed) return -1;
+    /* no curAt branch: kmp_pick marks the entry used at the load, so the first unused entry IS the next map (the 60 s probe window would show the map just loaded) */
+    for (i = 0; i < kmp.norder; i++) if (!kmp.used[kmp.order[i]] && kmp.slot[kmp.order[i]] == s) return kmp.page[kmp.order[i]];
+    return -1;
+}
+
 /* from klslot.c kls_map, online only: -> the page for slot index s, or -1 = the pool does not decide (stock rules apply). */
 static int kmp_pick(int s)
 {

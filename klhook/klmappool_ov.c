@@ -54,6 +54,7 @@ struct kmpo_snap { DWORD at; int valid, pool, n, next, played, state; int st[KMP
 static struct {
     int on, log, x, y, scale, cols, names, dead; unsigned mask; char dir[MAX_PATH];
     struct kmpo_snap s[2]; volatile int cur; DWORD snapAt; int lastState, nstate, drawn, shownLogged;
+    int minMs; unsigned holdEnd; struct kmpo_snap hold; int holdOk, holdLogged, holdPool; DWORD holdSince, holdSeed;     /* OverlayMinMs: the last shown snapshot, kept drawing after the hide state */
     void *texdev, *white;
     struct { char name[48]; void *tex; int w, h, tried; } th[KMPO_NTH]; int nth;
     struct { char key[80]; void *tex; int w, h; } tx[KMPO_NTXT]; int ntx;
@@ -71,14 +72,31 @@ static void kmpo_snap(int game_thread)
     kmpo.snapAt = now;
     s = &kmpo.s[1 - kmpo.cur];
     s->valid = 0; s->at = now;
-    if (!kmp.on || kmp.pool < 1 || kmp.pool > 3 || !kmp.seed) { kmpo_publish(s); return; }
+    if (!kmp.on || kmp.pool < 1 || kmp.pool > 3 || !kmp.seed) { kmpo.holdOk = 0; kmpo_publish(s); return; }
     sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION));
     if (!sm || !klh_rd(sm + 0x70, &state, 4)) state = 0xffff;
     if ((int)state != kmpo.lastState) {
         kmpo.lastState = (int)state;
         if (kmpo.log && kmpo.nstate++ < 40) klog("mappool: overlay: session state %lu (%s; shown states mask %08x)", (unsigned long)state, kmpo_state_shown(kmpo.mask, state) ? "SHOWN" : "hidden", kmpo.mask);
     }
-    if (!kmpo_state_shown(kmpo.mask, state)) { kmpo_publish(s); return; }
+    if (!kmpo_state_shown(kmpo.mask, state)) {
+        /* [MapPool] OverlayMinMs (2026-10-27, mpo2): after the shown state(s) ended keep drawing the LAST shown snapshot for up to MinMs ms, unless the
+           session state is in OverlayHoldEnd (default 0xfe000000 = states 0x19..0x1f: the round / HUD states, GUESS from klhud*.c 'from state 0x19 on') or
+           left the 0..31 range (0xffff = no session). A late joiner (bench CE27_MPX: SHOWN 3 s, host started at once) then still sees the pool. */
+        if (kmpo.minMs > 0 && kmpo.holdOk && (kmpo.holdPool != kmp.pool || kmpo.holdSeed != (DWORD)kmp.seed)) kmpo.holdOk = 0;     /* pool or seed changed: the snapshot is stale */
+        if (kmpo.minMs > 0 && kmpo.holdOk) {
+            if (!kmpo.holdSince) kmpo.holdSince = now ? now : 1;
+            if (now - kmpo.holdSince < (DWORD)kmpo.minMs && state < 32 && (1u << state) >= (kmpo.mask & (~kmpo.mask + 1u)) && !((kmpo.holdEnd >> state) & 1u)) {
+                *s = kmpo.hold; s->at = now; s->valid = 1;
+                if (kmpo.log && !kmpo.holdLogged) { kmpo.holdLogged = 1; klog("mappool: overlay: HOLD after the lobby: state %lu, keeps drawing up to %d ms", (unsigned long)state, kmpo.minMs); }
+                kmpo_publish(s); return;
+            }
+            kmpo.holdOk = 0;
+            if (kmpo.log) klog("mappool: overlay: HOLD ended after %lu ms (state %lu, %s)", (unsigned long)(now - kmpo.holdSince), (unsigned long)state, (state >= 32 || ((kmpo.holdEnd >> state) & 1u)) ? "round / loading state or no session" : "time up");
+        }
+        kmpo_publish(s); return;
+    }
+    kmpo.holdSince = 0; kmpo.holdLogged = 0;
     kmp_ready();                                       /* the same call the load path and the host tick make, on this (game) thread */
     s->pool = kmp.pool; s->state = (int)state;
     s->n = kmp.norder < KMP_MAX ? kmp.norder : KMP_MAX;
@@ -86,6 +104,7 @@ static void kmpo_snap(int game_thread)
     s->played = kmpo_played(s->st, s->n);
     for (i = 0; i < s->n; i++) { strncpy(s->name[i], kmp.name[kmp.order[i]], 47); s->name[i][47] = 0; }
     s->valid = s->n > 0;
+    if (kmpo.minMs > 0 && s->valid) { kmpo.hold = *s; kmpo.holdOk = 1; kmpo.holdPool = kmp.pool; kmpo.holdSeed = (DWORD)kmp.seed; }
     kmpo_publish(s);
 }
 
@@ -354,7 +373,11 @@ static void kmpo_init(void)
     kmpo.names = GetPrivateProfileIntA("MapPool", "OverlayNames", 1, klh_ini) != 0;
     GetPrivateProfileStringA("MapPool", "OverlayStates", "0x2000", b, sizeof b, klh_ini);
     kmpo.mask = (unsigned)strtoul(b, 0, 0); if (!kmpo.mask) kmpo.mask = 0x2000u;
+    kmpo.minMs = GetPrivateProfileIntA("MapPool", "OverlayMinMs", 0, klh_ini); if (kmpo.minMs < 0 || kmpo.minMs > 600000) kmpo.minMs = 0;
+    GetPrivateProfileStringA("MapPool", "OverlayHoldEnd", "0xfe000000", b, sizeof b, klh_ini);
+    kmpo.holdEnd = (unsigned)strtoul(b, 0, 0);
     kmpo.lastState = -2;
+    if (kmpo.minMs) klog("mappool: overlay MinMs %d (NOT run live): keeps drawing after the shown state, ends at states in mask %08x", kmpo.minMs, kmpo.holdEnd);
     klog("mappool: overlay ON (NOT run live): dir '%s' at %d%%/%d%% scale %d%% cols %d states mask %08x; needs [FrameLimit] Enable=1 (the Present wrapper) and a pool", kmpo.dir, kmpo.x, kmpo.y, kmpo.scale, kmpo.cols, kmpo.mask);
 }
 
