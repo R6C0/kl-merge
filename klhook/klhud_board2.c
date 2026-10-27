@@ -46,6 +46,10 @@
 #define KLSB_FVT         0x00bbddc8u          /* ZFAOutroDisplay (research 2026-10-27, static reading: the FA twin of ZHeistOutroDisplay, draws the stock ONLINE round-over panel) */
 #define KLSB_FRENDER     0x00903830u          /* its slot 2: same prologue as 0x577e70, gate 0x863a60 || 0x7f6850 (modes 2 and 3 = online) */
 #define KLSB_FTICKFN     0x004a18e0u          /* its slot 5 */
+#ifndef KLBRD_VT
+#define KLBRD_VT         0x00bbdd98u          /* ZFAIntroDisplay (klhud_board.c; re\hud.md 154: osd+0x10ac, size 0xf8, hud.md ids 8) */
+#define KLBRD_RENDER     0x00768c40u          /* its slot 2 (rtti.py 10-27: ZFAIntroDisplay slot 2); gate 0x863a60 || 0x7f6850 (modes 0..3 = online AND Arcade), the same gate as ZFAOutroDisplay's */
+#endif
 #define KLSB_O_FOUTRO    0x10b0               /* osd: the element (re\hud.md line 155, size 0xdc) */
 #define KLSB_NTEXT_BASE  52                   /* the pool before [Grades]: with Grades off (or Letter and RankUp off) no more text objects are made than before (inert when off) */
 #define KLSB_NT()        (klgrd_pool_extra() ? KLSB_NTEXT : KLSB_NTEXT_BASE)
@@ -142,6 +146,7 @@ static struct {
     int ostate;                               /* 2026-10-27: [HUD] OnlineBoardState (default 0): online, compose the end card from the round-end state and draw it on the clock element's render when the outro element at osd+0x10b4 stays 0 */
     int take, icount;                         /* 2026-10-27: [HUD] OnlineBoardTake (default 0; needs OnlineBoard): the online ROUND SCORE slot shows the money taken since the first state-0x1f tick, bot rows show money / fate; [HUD] OnlineIntroCount (default 0; needs OnlineIntroState): HEIST STARTS IN n SEC */
     int istate;                               /* 2026-10-27: [HUD] OnlineIntroState (default 0; needs OnlineIntro): online, when the intro element at osd+0x10ac is absent, compose the whole intro card from the online snapshot and draw it on the clock element's render (states 0x16..0x18) */
+    int icarrier;                             /* 2026-10-27: [HUD] OnlineIntroCarrier (default 0; needs OnlineIntroState): 1 = wrap ZFAIntroDisplay at osd+0x10ac and draw the composed intro card THERE instead of on the clock element (states 0x16..0x18); 2 = PROBE only: the same wrap counts which states its Render is called in (per state, logged), nothing is drawn on it */
     int carrier;                              /* 2026-10-27: [HUD] OnlineBoardCarrier (default 0; needs OnlineBoardState): wrap ZFAOutroDisplay at osd+0x10b0 and draw the online card there INSTEAD of the stock online panel (GUESS G18) */
     int online, intro;                        /* 2026-10-26: [HUD] OnlineBoard / OnlineIntro (default 0): the end card / the intro lines in an ONLINE round, from klonline_read.c */
     float x, y; int alpha;
@@ -158,11 +163,14 @@ static struct {
     int ipath, ivalid, told_i, told_ic, map_tried; DWORD i_tick0; char map[48];   /* OnlineIntroState: no intro element, the card is composed / valid, log latches (1 = state path told, 2 = element path told), tick time of the first compose, the map's name */
     long take0[KLOR_MAX]; BYTE take_have[KLOR_MAX]; int take_set;   /* OnlineBoardTake: each seat's money at the first state-0x1f tick */
     DWORD felem, f_stamp; int f_told_bad, f_told_tx;   /* OnlineBoardCarrier: the wrapped ZFAOutroDisplay of this OSD, tick time of its last card, log latches */
+    DWORD ielem, i_stamp; int i_told_bad, i_told_tx, ifail, told_i19;   /* OnlineIntroCarrier: the wrapped ZFAIntroDisplay of this OSD, tick time of its last card, log latches, ifail = the element holds a vtable that is not the stock one (Board=1's private copy?): the element path stays */
     LONG sframe; int sset, spath, told_s, told_n; DWORD s_tick0;   /* OnlineBoardState: engine frame at the first state-0x1f tick, the path is live, log latches, tick time of the first compose */
 } klsb_r;
 static DWORD klsb_evt[KLSB_NSLOT + 1], klsb_fvt[KLSB_NSLOT + 1];
 static int klsb_evt_ready, klsb_code_bad, klsb_fvt_ready, klsb_fcode_bad;
 static volatile LONG klsb_n_fcall, klsb_n_fours, klsb_n_fstock;
+static DWORD klsb_ivt[KLSB_NSLOT + 1]; static int klsb_ivt_ready, klsb_icode_bad;      /* OnlineIntroCarrier: the private copy of ZFAIntroDisplay's vtable */
+static volatile LONG klsb_n_icall, klsb_n_iours, klsb_n_istock, klsb_n_ist[8];        /* wrapper calls / card drawn on it / stock; calls per session state 0x14..0x1b (index state-0x14) */
 static CRITICAL_SECTION klsb_cs; static int klsb_cs_ready;
 static volatile LONG klsb_n_call, klsb_n_ours, klsb_n_stock, klsb_n_busy, klsb_n_refused, klsb_n_srender, klsb_n_sdrawn, klsb_n_irender, klsb_n_idrawn;
 
@@ -666,7 +674,7 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
             if (k == loc) snprintf(kn, sizeof kn, "YOURSELF");
             else if (kr && kr->used) { snprintf(kn, sizeof kn, "%s", kr->name[0] ? kr->name : "Player"); klor_upper(kn); }
             else if (klu_onkillai && me->ai_killer[0]) { snprintf(kn, sizeof kn, "%s", me->ai_killer); klor_upper(kn); }   /* [HUD] OnlineKilledAI */
-            else snprintf(kn, sizeof kn, "THE POLICE");
+            else { kn[0] = 0; if (klu_onkillstock) kllnm_killtext(kn, sizeof kn); if (!kn[0]) snprintf(kn, sizeof kn, "THE POLICE"); }      /* [HUD] OnlineKilledStock: the stock panel's own text (the van) before THE POLICE */
             snprintf(buf, sizeof buf, "KILLED BY  %s", kn);
             klsb_put(KLSB_T_KILLED, px + KLSB_X_KILLED, klu_cen(py + KLSB_Y_RESULT + 5.5f, KLU_FNT_LABEL), buf, KLU_C_CORAL);
         }
@@ -848,12 +856,10 @@ static void klsb_istate_compose(const struct klor_snap *o)
     klu_addpic_q = 0;
 }
 
-static void klsb_istate_render(void *el, void *ctx, void *cam)
-{   /* on the clock element's render (klsb_state_render calls it): the composed card, states 0x16..0x18, only while the intro element is absent */
-    int i;
-    if (!klsb.on || !klsb.istate || klsb.probe || klsb.test || !klsb_r.ipath || !ctx || (DWORD)(DWORD_PTR)el != klu_r.elem || *(const DWORD *)ctx != KLU_CTX_VT) return;
-    InterlockedIncrement(&klsb_n_irender);
-    if (!TryEnterCriticalSection(&klsb_cs)) { InterlockedIncrement(&klsb_n_busy); return; }
+static int klsb_ipaint(void *el, void *ctx, void *cam)
+{   /* the composed intro card on ANY element whose transform / table match the clock's (clock element: klsb_istate_render; ZFAIntroDisplay: klsb_irender). -> 1 = drawn */
+    int i, ok = 0;
+    if (!TryEnterCriticalSection(&klsb_cs)) { InterlockedIncrement(&klsb_n_busy); return 0; }
     if (klsb_r.ivalid && klsb_r.made && klsb_r.state >= 0x16 && klsb_r.state <= 0x18 && klsb_alive() && klsb_r.pics_cached &&
         *(const DWORD *)(DWORD_PTR)((DWORD)(DWORD_PTR)el + 0xc) == klsb_r.T && *(const DWORD *)(DWORD_PTR)((DWORD)(DWORD_PTR)el + 8) == klsb_r.tbl && (klu_r.handle[111] || klu_r.handle[181])) {
         for (i = 0; i < klsb_r.npic; i++) {
@@ -861,9 +867,67 @@ static void klsb_istate_render(void *el, void *ctx, void *cam)
             klsb_pic2(ctx, p->n, p->x, p->y, p->w, p->h, p->argb, p->layer);
         }
         for (i = 0; i < KLSB_NT(); i++) klsb_text(i, ctx, cam);
-        InterlockedIncrement(&klsb_n_idrawn);
+        ok = 1;
     }
     LeaveCriticalSection(&klsb_cs);
+    return ok;
+}
+
+static void klsb_istate_render(void *el, void *ctx, void *cam)
+{   /* on the clock element's render (klsb_state_render calls it): the composed card, states 0x16..0x18, only while the intro element is absent (or OnlineIntroCarrier=1 has not drawn it this frame) */
+    if (!klsb.on || !klsb.istate || klsb.probe || klsb.test || !klsb_r.ipath || !ctx || (DWORD)(DWORD_PTR)el != klu_r.elem || *(const DWORD *)ctx != KLU_CTX_VT) return;
+    InterlockedIncrement(&klsb_n_irender);
+    if (klsb_r.ielem && GetTickCount() - klsb_r.i_stamp < 500) return;      /* OnlineIntroCarrier already drew this frame's card on ZFAIntroDisplay: never twice */
+    if (klsb_ipaint(el, ctx, cam)) InterlockedIncrement(&klsb_n_idrawn);
+}
+
+/* OnlineIntroCarrier (2026-10-27, [HUD] OnlineIntroCarrier=1|2, needs OnlineIntroState=1; NOT run live): BENCH BOSE5e proved the clock element does not render in state 0x1f; the intro states 0x16..0x18
+   may be the same. The display that draws the pre-round panel is ZFAIntroDisplay at osd+0x10ac (re\hud.md 154; constructor 0x482560 sets vtable 0xbbdd98 and +0xf4; rtti.py: Render slot 2 = 0x768c40; the Render
+   gate is 0x863a60 || 0x7f6850 = online OR Arcade, so it is NOT the Arcade-only ZHeistOutroDisplay at +0x10b4; it is created with the OSD like every FA display). Same private-vtable pattern as klsb_fwrap.
+   1 = the composed card is drawn through ITS Render INSTEAD of the stock panel while it can be drawn (else the stock Render runs, so a failure = the stock panel). 2 = probe: wrapped, every call counted per
+   session state (logged 2 s into the intro and when the state leaves it), nothing drawn. GUESSES: the element's Render is called in states 0x16..0x18 (the stock text 'Heist starts in n sec' is set by 0x6d7de0
+   only while the state is 0x19, so it may only draw there: the probe answers); its +0xc / +8 equal the clock element's (refused and logged once otherwise). The element path of Board=1 (klbrd_wrap) wraps the SAME
+   element: if its vtable is not the stock one, this refuses (ifail) and the element path stays. */
+static const BYTE klsb_icode[8] = { 0x83, 0xec, 0x58, 0x56, 0x8b, 0xf1, 0x8b, 0x0d };     /* 0x768c40 sub esp,0x58; push esi; mov esi,ecx; mov ecx,[..] */
+static char __fastcall klsb_irender(void *el, void *edx, void *ctx, void *cam)
+{
+    DWORD e = (DWORD)(DWORD_PTR)el; int ix = (int)klsb_r.state - 0x14; (void)edx;
+    InterlockedIncrement(&klsb_n_icall);
+    if (ix >= 0 && ix < 8) InterlockedIncrement(&klsb_n_ist[ix]);
+    if (klsb.on && klsb.icarrier == 1 && !klsb.probe && !klsb.test && klsb_r.ipath && e == klsb_r.ielem && ctx && *(const DWORD *)ctx == KLU_CTX_VT) {
+        if (klsb_ipaint(el, ctx, cam)) { klsb_r.i_stamp = GetTickCount(); InterlockedIncrement(&klsb_n_iours); return 1; }
+        if (klsb_r.pics_cached && klsb_r.ivalid && !klsb_r.i_told_tx && (*(const DWORD *)(DWORD_PTR)(e + 0xc) != klsb_r.T || *(const DWORD *)(DWORD_PTR)(e + 8) != klsb_r.tbl)) {
+            klsb_r.i_told_tx = 1; klog("hud: scoreboard: OnlineIntroCarrier: ZFAIntroDisplay %08lx has transform %08lx / table %08lx, the clock element's are %08lx / %08lx: the stock panel stays (clock path is the fallback)", e, *(const DWORD *)(DWORD_PTR)(e + 0xc), *(const DWORD *)(DWORD_PTR)(e + 8), klsb_r.T, klsb_r.tbl);
+        }
+    }
+    InterlockedIncrement(&klsb_n_istock);
+    return ((klu_render_t)(DWORD_PTR)KLH_VA(KLBRD_RENDER))(el, 0, ctx, cam);
+}
+
+static int klsb_iwrap(DWORD osd)
+{   /* -> 1 while the ZFAIntroDisplay at osd+0x10ac holds our private vtable. Refuses (logs once) unless vtable, slot 2 and the first code bytes of 0x768c40 are what 0490 has; a foreign vtable (Board=1's copy) sets ifail */
+    DWORD el, cur = 0, vt;
+    if (klsb_icode_bad || klsb_r.ifail || !(el = klh_rd32(osd + KLBRD_O_INTRO)) || !klh_rd(el, &cur, 4)) return 0;
+    if (!klsb_ivt_ready) {
+        if (!klu_same_code(KLBRD_RENDER, klsb_icode, sizeof klsb_icode) || !klh_rd((DWORD_PTR)KLH_VA(KLBRD_VT - 4), klsb_ivt, sizeof klsb_ivt) || klsb_ivt[1 + 2] != KLBRD_RENDER) {
+            klog("hud: scoreboard: OnlineIntroCarrier: ZFAIntroDisplay's vtable / Render is not what this build knows (slot 2 = %08lx; code 0x768c40): refused, the clock element path is the fallback", klh_rd32((DWORD)(DWORD_PTR)KLH_VA(KLBRD_VT) + 8));
+            klsb_icode_bad = 1;
+            return 0;
+        }
+        klsb_ivt[1 + 2] = (DWORD)(DWORD_PTR)klsb_irender;
+        klsb_ivt_ready = 1;
+    }
+    vt = (DWORD)(DWORD_PTR)&klsb_ivt[1];
+    if (cur == vt) { klsb_r.ielem = el; return 1; }
+    if (cur != KLBRD_VT) {
+        klsb_r.ifail = 1;
+        if (!klsb_r.i_told_bad) { klsb_r.i_told_bad = 1; klog("hud: scoreboard: OnlineIntroCarrier: the element at osd+0x10ac = %08lx has vtable %08lx, not the stock ZFAIntroDisplay's (%08lx; Board=1 wraps it too): refused, the element path stays", el, cur, (DWORD)KLBRD_VT); }
+        return 0;
+    }
+    if (!klh_data((void *)(DWORD_PTR)el, &vt, 4, "the intro element's vtable (carrier copy, slot 2 wrapped)")) return 0;
+    klsb_r.ielem = el;
+    klog("hud: scoreboard: OnlineIntroCarrier=%d: element %08lx (ZFAIntroDisplay, the pre-round panel) now renders through the private vtable (slot 2 -> klsb_irender, else the stock 0x768c40)", klsb.icarrier, el);
+    return 1;
 }
 
 static void klsb_apply(void)
@@ -933,21 +997,30 @@ static void klsb_tick(int game_thread)
         if (pl && klh_rd(pl + 0xefc, &li, 1) && li < 16) loc = (int)li;
         klor_noev = 1; hon = klor_read(&on, loc) && on.ok; klor_noev = 0;      /* this reader never takes the kill-feed events */
     }
+    if (klsb.icarrier && hon) klsb_iwrap(osd);      /* OnlineIntroCarrier: the pre-round panel's element, wrapped as soon as it exists; ONLINE only (hon = the online reader answered), so Arcade / private stay inert */
     st = have ? (int)s.state : hon ? (int)on.b.state : 0;
     klsb_r.state = st;
     if (hon && klsb.istate && klsb.intro && st >= 0x16 && st <= 0x18) {      /* OnlineIntroState: which path ran, logged once per path */
-        DWORD ie = klh_rd32(osd + KLBRD_O_INTRO); int want = ie ? 2 : 1;
-        ipath = ie == 0;
+        DWORD ie = klh_rd32(osd + KLBRD_O_INTRO); int want;
+        ipath = ie == 0 || (klsb.icarrier == 1 && !klsb_r.ifail && !klsb_icode_bad && klsb_r.ielem);      /* OnlineIntroCarrier=1: the card is composed although the element exists (it draws it); a foreign vtable on it keeps the element path */
+        want = ipath ? 1 : 2;
         if (klsb_r.told_i != want) {
-            klsb_r.told_i = want; klsb_r.told_ic = 0; klsb_r.i_tick0 = now; InterlockedExchange(&klsb_n_irender, 0); InterlockedExchange(&klsb_n_idrawn, 0);
+            klsb_r.told_i = want; klsb_r.told_ic = 0; klsb_r.i_tick0 = now; { int k; InterlockedExchange(&klsb_n_irender, 0); InterlockedExchange(&klsb_n_idrawn, 0); InterlockedExchange(&klsb_n_icall, 0); InterlockedExchange(&klsb_n_istock, 0); InterlockedExchange(&klsb_n_iours, 0); for (k = 0; k < 8; k++) InterlockedExchange(&klsb_n_ist[k], 0); }
             if (ipath) klog("hud: scoreboard: OnlineIntroState: state %02x with NO intro element at osd+0x10ac: the intro card is composed from the online snapshot (%d humans, %d bots, round %d of %d) and drawn on the clock element's render; NOT RUN IN THE GAME", st, on.n, on.nbots, on.round, on.rounds);
             else klog("hud: scoreboard: OnlineIntroState: state %02x, intro element %08lx exists: the element path (OnlineIntro lines under the Board card, needs Board=1 BoardCard=1) runs; NOT RUN IN THE GAME", st, ie);
-        } else if (ipath && !klsb_r.told_ic && now - klsb_r.i_tick0 >= 2000) {
+        } else if ((ipath || klsb.icarrier) && !klsb_r.told_ic && now - klsb_r.i_tick0 >= 2000) {
             klsb_r.told_ic = 1;
+            if (klsb.icarrier) { DWORD iv = ie ? klh_rd32(ie) : 0;
+                klog("hud: scoreboard: OnlineIntroCarrier=%d: 2 s in state %02x: ZFAIntroDisplay at osd+0x10ac = %08lx vtable %08lx (%s), its Render was called +%ld times (per state 14..1b: %ld %ld %ld %ld %ld %ld %ld %ld), card drawn on it +%ld, stock +%ld, clock element renders +%ld drawn +%ld%s",
+                     klsb.icarrier, st, ie, iv, !ie ? "absent" : iv == (DWORD)(DWORD_PTR)&klsb_ivt[1] ? "OUR private copy" : iv == KLBRD_VT ? "stock, not wrapped" : "UNKNOWN", klsb_n_icall, klsb_n_ist[0], klsb_n_ist[1], klsb_n_ist[2], klsb_n_ist[3], klsb_n_ist[4], klsb_n_ist[5], klsb_n_ist[6], klsb_n_ist[7],
+                     klsb_n_iours, klsb_n_istock, klsb_n_irender, klsb_n_idrawn, !ie ? " (no element: the clock path is all there is)" : klsb_n_icall ? (klsb.icarrier == 2 ? " (probe: nothing drawn on it)" : klsb_n_iours ? " (shown)" : " (renders but the card was not drawn: pictures / lock / canary / transform)") : " (the intro element does not render in this state)"); }
+            if (ipath)
             klog("hud: scoreboard: OnlineIntroState: 2 s in: clock element renders +%ld, card drawn +%ld%s", klsb_n_irender, klsb_n_idrawn, klsb_n_irender ? (klsb_n_idrawn ? " (shown)" : " (composed but not drawn: pictures / lock / canary / pool)") : " (the clock element does not render in this state: G15 is wrong, nothing is shown)");
         }
     }
     klsb_r.ipath = ipath;
+    if (hon && klsb.icarrier && st == 0x19 && !klsb_r.told_i19 && klsb_r.told_i) { klsb_r.told_i19 = 1;      /* the countdown state: how many calls the intro element saw per state (probe answer for 0x19) */
+        klog("hud: scoreboard: OnlineIntroCarrier=%d: state 19 reached: ZFAIntroDisplay Render calls per state 14..1b: %ld %ld %ld %ld %ld %ld %ld %ld (card drawn on it +%ld, stock +%ld)", klsb.icarrier, klsb_n_ist[0], klsb_n_ist[1], klsb_n_ist[2], klsb_n_ist[3], klsb_n_ist[4], klsb_n_ist[5], klsb_n_ist[6], klsb_n_ist[7], klsb_n_iours, klsb_n_istock); }
     if (klsb.probe || (klu.log >= 2 && have && s.state >= 0x1f)) klsb_probe_line(osd, &s, have);
     if (!have && !hon) { klsb_r.valid = 0; return; }
     klgrd_round_reset(st);      /* [Grades] RankUp: latch the ranks in the round (states 0x16..0x19), compare in 0x1f */
@@ -1024,6 +1097,7 @@ static void klsb_init(void)
     if (!klsb.on) return;
     klsb.online = klu_inii("OnlineBoard", 0, 0, 1); klsb.ostate = klsb.online && klu_inii("OnlineBoardState", 0, 0, 1); klsb.intro = klu_inii("OnlineIntro", 0, 0, 1); klsb.istate = klsb.intro && klu_inii("OnlineIntroState", 0, 0, 1);
     klsb.carrier = klsb.ostate && klu_inii("OnlineBoardCarrier", 0, 0, 1);
+    klsb.icarrier = klsb.istate ? klu_inii("OnlineIntroCarrier", 0, 0, 2) : 0;
     klsb.take = klsb.online && klu_inii("OnlineBoardTake", 0, 0, 1); klsb.icount = klsb.istate && klu_inii("OnlineIntroCount", 0, 0, 1);
     klsb.probe = klu_inii("ScoreboardProbe", 0, 0, 1); klsb.test = klu_inii("ScoreboardTest", 0, 0, 1); klsb.fault = klu_inii("ScoreboardFault", 0, 0, 1);
     klsb.rows12 = klu_inii("Rows12", 1, 0, 1); klsb.textonly = klu_inii("ScoreboardTextOnly", 0, 0, 1); klsb.total = klu_inii("ScoreboardTotal", 1, 0, 2); klsb.count = klu_inii("ScoreboardCount", 0, 0, 1); klsb.lead = klu_inii("ScoreboardShopLead", 30, 0, 100);   /* tenths of a second cut off the 10 s countdown: the shop opens at 7 (owner 2026-10-25) */

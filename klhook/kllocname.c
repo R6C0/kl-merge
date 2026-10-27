@@ -65,6 +65,30 @@ static volatile LONG kllnm_hits;
 static DWORD kllnm_seen[96]; static LONG kllnm_nseen, kllnm_nlog;
 
 typedef const char *(__fastcall *KLLNM_LOOKUP)(void *self, void *edx, const char *folder, const char *key, DWORD third);
+/* 2026-10-27 [HUD] OnlineKilledStock=1 (default 0, NOT RUN; needs OnlineKilled=1 and HideKilledBy): before a lookup made inside 0x500670 is blanked, the REAL lookup is made once more and its text latched, so the HUD's KILLED BY line can
+   name a killer that is neither a seat nor an AI heister. 0x500670 (dasm 10-27) builds the panel text from a KillBox's own key (string 'KillBox' at 0x50086d / 0x500ad8; the map's KillBox 'FA_KilledByEscapeVehicle' is the escape van's,
+   re/fa_gamemode.md 232; 'FA_DieFromSelf' is the others') or 'FA_DieFrom%s' in AllLevels/Interface/Online/Kill. GUESS: the van's text comes through this folder; GUESS: the text may or may not start with 'Killed by' (stripped when it does);
+   if the key names the escape vehicle and the LOC answers nothing, the text is THE VAN. The latch is cleared by the HUD when the seat is alive again. Log: 'names: KilledStock'. */
+static int kllnm_kb_cap; static char kllnm_kb_txt[64], kllnm_kb_key[64]; static volatile DWORD kllnm_kb_at; static LONG kllnm_kb_n;
+static int kllnm_killtext(char *out, int cap)
+{   /* -> 1 and the latched text (upper case, no 'KILLED BY') when the stock panel looked one up since the last clear */
+    int i, n; char t[64];
+    if (!kllnm_kb_cap || !kllnm_kb_at || !out || cap < 2) return 0;
+    snprintf(t, sizeof t, "%s", kllnm_kb_txt); for (i = 0; t[i]; i++) if (t[i] >= 'a' && t[i] <= 'z') t[i] -= 32;
+    if (!strncmp(t, "KILLED BY", 9)) { i = 9; while (t[i] == ' ' || t[i] == ':') i++; memmove(t, t + i, strlen(t + i) + 1); }
+    if (!_stricmp(t, kllnm_kb_key) || !strncmp(t, "FA_", 3)) t[0] = 0;      /* a missing LOC entry may answer the key itself ('FA_KILLEDBYESCAPEVEHICLE'): that is no text */
+    if (!t[0] && strstr(kllnm_kb_key, "EscapeVehicle")) snprintf(t, sizeof t, "THE VAN");
+    n = (int)strlen(t); if (n < 2) return 0;
+    snprintf(out, (size_t)cap, "%s", t); return 1;
+}
+static void kllnm_killclear(void) { DWORD at = kllnm_kb_at; if (at && GetTickCount() - (at & ~1u) < 3000) return;      /* the HUD can still see the seat alive when the stock panel's one lookup fires: a latch younger than 3 s survives the alive-branch clear */
+    kllnm_kb_at = 0; kllnm_kb_txt[0] = 0; kllnm_kb_key[0] = 0; }
+static KLLNM_LOOKUP kllnm_orig_of(void *self)
+{   /* the stock slot 0 of the LOC object's vtable (our private copy's saved original); 0 = unknown */
+    DWORD vt = klh_rd32((DWORD_PTR)self); int i;
+    for (i = 0; i < kllnm_ntab; i++) if (vt == (DWORD)(DWORD_PTR)&kllnm_tab[i].vt[1]) return (KLLNM_LOOKUP)(DWORD_PTR)kllnm_tab[i].orig;
+    return 0;
+}
 
 static void kllnm_say(const char *folder, const char *key, const char *via, const char *res)
 {   /* one line per distinct (folder, key, result), 64 lines at most; a log call is a few microseconds, only for Scenarios/Title keys */
@@ -122,6 +146,15 @@ static const char *__fastcall kllnm_lookup(void *self, void *edx, const char *fo
         if (!hit && kl >= 8 && !strcmp(kk + kl - 8, "KilledBy") && (kl == 8 || kk[kl - 9] == '/')) hit = 2;
         if (hit) {
             if (InterlockedIncrement(&kllnm_hk_n) <= 8) { char ff[96]; ff[0] = 0; if (folder) klh_rdstr((DWORD_PTR)folder, ff, sizeof ff); klog("names: HideKilledBy: blanked lookup %s / %s (%s, from %08lx)", ff, kk, hit == 1 ? "inside 0x500670" : "key KilledBy", ra); }
+            if (kllnm_kb_cap && hit == 1 && folder) {      /* OnlineKilledStock: the real answer, once, before the blank */
+                char ff[96]; KLLNM_LOOKUP o2 = kllnm_orig_of(self); ff[0] = 0; klh_rdstr((DWORD_PTR)folder, ff, sizeof ff);
+                if (o2 && strstr(ff, "Online/Kill") && strcmp(kk, "Disconnected")) {
+                    const char *r2 = o2(self, 0, folder, key, third); char tx[64]; tx[0] = 0;
+                    if (r2) klh_rdstr((DWORD_PTR)r2, tx, sizeof tx);
+                    snprintf(kllnm_kb_key, sizeof kllnm_kb_key, "%s", kk); snprintf(kllnm_kb_txt, sizeof kllnm_kb_txt, "%s", tx); kllnm_kb_at = GetTickCount() | 1;
+                    if (InterlockedIncrement(&kllnm_kb_n) <= 8) klog("names: KilledStock: stock panel lookup %s / %s = '%s' (latched for the KILLED BY line)", ff, kk, tx);
+                }
+            }
             return kllnm_empty;
         }
     }
@@ -213,6 +246,7 @@ static void kllnm_init(void)
     char val[KLLNM_NAME + 8]; int r, nn = 0;
     kllnm_hk = GetPrivateProfileIntA("HUD", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "KilledBy", 1, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "HideKilledBy", 1, klh_ini) != 0;
     kllnm_hk_on = GetPrivateProfileIntA("HUD", "Online", 0, klh_ini) != 0;
+    kllnm_kb_cap = kllnm_hk && GetPrivateProfileIntA("HUD", "OnlineKilled", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "OnlineKilledStock", 0, klh_ini) != 0;
     if (kllnm_hk) klog("names: [HUD] HideKilledBy=1: the stock death panel's 'Killed by' text is blanked (LOC lookups from 0x500670 and the key KilledBy); the LOC object is wrapped by the tick");
     if (!GetPrivateProfileIntA("Names", "Enable", 0, klh_ini)) return;
     kllnm_log = GetPrivateProfileIntA("Names", "Log", 0, klh_ini) != 0;

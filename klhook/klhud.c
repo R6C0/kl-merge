@@ -1166,6 +1166,9 @@ static const struct klor_row *klu_onrow(const struct klor_snap *o, int seat)
 }
 /* 2026-10-26 online ports on klonline_read.c ([Online] Read=1 too), every one its own [HUD] key, default 0 until benched */
 static int klu_onkillai;     /* OnlineKilledAI */
+static int klu_onkillstock;  /* OnlineKilledStock: the stock panel's own killer text (kllocname.c latch), for a death no seat / AI heister caused (the escape van, a KillBox, the police) */
+static int kllnm_killtext(char *out, int cap);   /* kllocname.c (included after this file) */
+static void kllnm_killclear(void);
 static int klu_onnames, klu_onkill, klu_onround;     /* OnlineNames / OnlineKilled / OnlineRound */
 static int klu_onvanicon;                                                    /* [HUD] OnlineVanIcon (default 0): the ABOARD / ESCAPED van icon online */
 static int klu_onfeed, klu_onskull, klu_onloot, klu_ontab, klu_onvan;     /* OnlineFeed / OnlineSkulls / OnlineLoot / OnlineTab / OnlineVan */
@@ -1426,9 +1429,10 @@ static int klu_compose_in(int *state_ok)
                         else if (lr->killer < s.on_n && s.on_used[lr->killer]) { klu_on_name(&or_, have, &s, lr->killer, (int)loc, 1, kn, sizeof kn); klor_upper(kn); }
                     }
                     else if (klu_onkillai && lr->used && lr->ai_killer[0]) { snprintf(kn, sizeof kn, "%s", lr->ai_killer); klor_upper(kn); }   /* [HUD] OnlineKilledAI: an AI heister's bullet; the police stay THE POLICE */
+                    if (!kn[0] && lr->used && klu_onkillstock) kllnm_killtext(kn, sizeof kn);   /* [HUD] OnlineKilledStock: no seat, no AI: the stock panel's own text (the escape van: KillBox key FA_KilledByEscapeVehicle) before THE POLICE */
                 }
                 snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
-            }
+            } else if (klu_onkillstock) kllnm_killclear();      /* alive again: the next death starts with no latched text */
             if (have && klu_onround && or_.ok && or_.round > 0 && klu.round) {     /* ROUND n OF m (bytes S+0x350 / S+0x3d4, ^0xac): the Arcade round text */
                 klu_round_text(or_.round, or_.rounds, klu_onskull ? olives : -1); klu_r.t[KLU_T_ROUND].on = 1;
             }
@@ -1497,7 +1501,7 @@ static int klu_compose_in(int *state_ok)
             { size_t q; for (q = 0; kn[q]; q++) if (kn[q] >= 'a' && kn[q] <= 'z') kn[q] -= 32; }
             snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1;
             klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
-            { static int told; if (!told && klu.log) { told = 1; klog("hud: KILLED BY drawn in the HUD style ('%s'); the stock death panel text (XML FARespawn KilledBy) is NOT hidden by the hook - see report", klu_r.t[KLU_T_DEATH].want); } }
+            { static int told; if (!told && klu.log) { told = 1; klog("hud: KILLED BY drawn in the HUD style ('%s'); the stock death panel text (XML FARespawn KilledBy) is blanked by kllocname.c HideKilledBy (default 1; the names: HideKilledBy log line says when it did)", klu_r.t[KLU_T_DEATH].want); } }
         }
     }
     if (klu.crew) {
@@ -1925,6 +1929,7 @@ static void klu_init(void)
     klb_hud_online = klu_inii("Online", 0, 0, 1);         /* 2026-10-18: the local, cosmetic parts in a network FA round (klbot.c klb_read_hud; re/hud_online.md). Default 0: never run online */
     klu_onnames = klu_inii("OnlineNames", 0, 0, 1); klu_onkill = klu_inii("OnlineKilled", 0, 0, 1); klu_onround = klu_inii("OnlineRound", 0, 0, 1);
     klu_onkillai = klu_inii("OnlineKilledAI", 0, 0, 1); klor_aikill = klu_onkillai;
+    klu_onkillstock = klu_onkill && klu_inii("OnlineKilledStock", 0, 0, 1);
     klu_onfeed = klu_inii("OnlineFeed", 0, 0, 1); klu_onskull = klu_inii("OnlineSkulls", 0, 0, 1); klu_onloot = klu_inii("OnlineLoot", 0, 0, 1); klu_ontab = klu_inii("OnlineTab", 0, 0, 1); klu_onvan = klu_inii("OnlineVan", 0, 0, 1); klu_onvanicon = klu_inii("OnlineVanIcon", 0, 0, 1);
     klu.onbots = klu_inii("OnlineBots", 1, 0, 1); klu.killed = klu_inii("KilledBy", 1, 0, 1); klu.crew = klu_inii("Crew", 1, 0, 1); klu.money = klu_inii("Money", 1, 0, 1); klu.round = klu_inii("Round", 1, 0, 1);
     klu.hide = klu_inii("HideStock", 1, 0, 1);
