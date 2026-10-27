@@ -349,14 +349,14 @@ static void *klmpo_dev;                                          /* the device k
 static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty)
 {
     HRESULT r; void *ret = _ReturnAddress(); int d = klfps_depth(), t;
-#ifdef KLHOOK_TEST
-    if (!d) kld3_present(self);                                      /* kld3.c: frame count, flush experiment */
-#endif
     klfps_first_calls("device (slot 17)", d, ret);
     t = klfps_pre("device (slot 17)", d, ret);
     if (t < 0) return 0;
     klfps_depth_set(d + 1);
     if (!d) klmpo_present(self);
+#ifdef KLHOOK_TEST
+    if (!d) kld3_present(self);                                      /* kld3.c: frame count, flush experiment; after the map-pool overlay so a D3dShot holds it (CE27_MPX: the lobby shots missed the panel) */
+#endif
     r = klfps_real_present(self, src, dst, wnd, dirty);
     klfps_depth_set(d);
     if (t) klfps_post();
@@ -369,14 +369,14 @@ static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst
 static HRESULT WINAPI klfps_present_sc(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty, DWORD flags)
 {
     HRESULT r; void *ret = _ReturnAddress(); int d = klfps_depth(), t;
-#ifdef KLHOOK_TEST
-    if (!d) kld3_present(kld3_dev);                                  /* kld3.c: frame count, flush experiment (the swap chain route needs the device) */
-#endif
     klfps_first_calls("swap chain (slot 3)", d, ret);
     t = klfps_pre("swap chain (slot 3)", d, ret);
     if (t < 0) return 0;
     klfps_depth_set(d + 1);
     if (!d) klmpo_present(klmpo_dev);
+#ifdef KLHOOK_TEST
+    if (!d) kld3_present(kld3_dev);                                  /* kld3.c: frame count, flush experiment (the swap chain route needs the device); after the overlay, as above */
+#endif
     r = klfps_real_present_sc(self, src, dst, wnd, dirty, flags);
     klfps_depth_set(d);
     if (t) klfps_post();
