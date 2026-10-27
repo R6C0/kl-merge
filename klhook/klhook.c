@@ -709,6 +709,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
 #include "klhud_kill.c"                              /* AFTER klhud_popup.c: the kill / reward line under REWARDS (uses klpu_str) */
 #include "klhud_escape.c"                             /* AFTER klhud_popup.c: the escape-vehicle panel in the new look (uses klu / klu_r / klu_pic) */
+#include "klescprobe.c"                               /* klescprobe.c: [Online] EscProbe - read-only log of the online escape/aboard bits (off unless set); AFTER klonline_read.c, klhud.c */
 #include "klhud_tracker.c"                           /* AFTER klhud_escape.c: the vehicle marker in the world - smaller, only near ([HUD] Tracker) */
 #include "klvoice_online.c"                          /* klvoice_online.c: [Voice] Online - the local online player's own lines (uses klor_read, klu_r); AFTER klhud.c */
 #include "klhud_tags.c"                              /* AFTER klhud_escape.c: the tags over the heisters' heads (uses klu / klu_r / klu_cs / klnm_tag_ini) */
@@ -1200,6 +1201,7 @@ static void klh_tick(int game_thread)
     klgrd_tick(game_thread);                            /* klhud_grades.c: the local profile experience, once a second (game thread) */
     klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
     klesc_tick(game_thread);                          /* klhud_escape.c: the escape-vehicle panel (off unless [HUD] Escape / Draft) */
+    klep_tick(game_thread);                           /* klescprobe.c: [Online] EscProbe (returns at once unless set) */
     kltrk_tick(game_thread);                          /* klhud_tracker.c: the vehicle marker */
     klbrd_tick(game_thread);                          /* klhud_board.c: the pre-round panel (off unless [HUD] Board=1) */
     klsb_tick(game_thread);                           /* klhud_board2.c: the round-over scoreboard (off unless [HUD] Scoreboard=1) */
@@ -1651,6 +1653,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kllo_init();                                      /* kllobbyopt.c: reads [Lobby] TimeMax / TimeMin / RoundsMax */
     klon_init();                                      /* klonline.c: [Online] Log */
     klor_init();                                      /* klonline_read.c: [Online] Read */
+    klep_init();                                      /* klescprobe.c: [Online] EscProbe */
     klbf_init();                                      /* klbotfill.c: reads [Bots] OnlineFill (after kllb_init: it reads the same key) */
     klcq_init();                                      /* klcopsquad.c: reads [CopSquad] */
     klsab_init();                                     /* klsabotage.c: reads [Sabotage] */

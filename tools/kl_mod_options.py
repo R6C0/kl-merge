@@ -99,6 +99,8 @@ feat('onlinecrew', G_CORE, 'Online matches: new crew list with money, same layou
      'klhud.c OnlineCrew; needs [HUD] Online=1 and [Online] Read=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
 feat('onlineread', G_CORE, 'Online matches: the read-only round reader (master for every Online* row, Grades online, Online board; needs nothing; recommended off until benched)', 'off', 'start',
      'klonline_read.c [Online] Read; read only; log line "online read: klonline_read.c ON"; NOT run live', [('Online', 'Read', 1, 0, 0)])
+feat('escprobe', G_CORE, 'Online matches: escape probe, logs the van / escaped / aboard bits and AI heister records to KLHook.log (debug; recommended off)', 'off', 'start',
+     'klescprobe.c [Online] EscProbe; read only, one escprobe: line per change, 400 per round; needs [Online] Read=1; NOT run live', [('Online', 'EscProbe', 1, 0, 0)])
 feat('onlinenames', G_CORE, 'Online matches: crew list shows the heister characters\' names (J.C., Tommy...) like Arcade (recommended off until benched)', 'off', 'start',
      'klhud.c OnlineNames; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineNames', 1, 0, 0)])
 feat('onlinekilled', G_CORE, 'Online matches: KILLED BY shows the killer\'s heister name instead of THE POLICE (recommended off until benched)', 'off', 'start',
