@@ -121,20 +121,22 @@ static BYTE klht_tpl[KLHT_TAGSIZE + 4];
 
 static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
 {
-    DWORD pl, cnt = 0; BYTE locb = 0xff; int i, n = 0, nr; struct klor_snap o; const struct klor_row *rw[KLHT_NSLOT]; (void)s;
+    DWORD pl, cnt = 0; BYTE locb = 0xff; int i, n = 0, nr, why = 1, z = -1; struct klor_snap o; const struct klor_row *rw[KLHT_NSLOT]; (void)s;
     EnterCriticalSection(&klu_cs);
     if (klht_r.tmpl != klu_r.tmpl) { memset(&klht_r, 0, sizeof klht_r); klht_r.tmpl = klu_r.tmpl; }
     klht_r.active = 0; klht_r.ol = 0;
     if (!klu_r.made || klu_r.fault || klht_r.fault || !show || !klu_skip_list) goto out;
-    pl = klh_rd32(osd + KLU_O_PLIST);
+    why = 2; pl = klh_rd32(osd + KLU_O_PLIST);
     if (!pl || klh_rd32(pl) != KLU_PLIST_VT || !klh_rd(pl + KLHT_O_COUNT, &cnt, 4)) goto out;
     klh_rd(pl + KLHT_O_LOCAL, &locb, 1);
+    why = 3;
     if (!klu_same_code(KLHT_DRAWTAG, klht_code, sizeof klht_code)) { klht_r.fault = 1; klog("tags: online: 0x7b8150 is not the tag drawer this build knows: no tags are drawn"); goto out; }
     if (!klh_rd(pl + KLHT_E0 + KLHT_TAGOFF, klht_tpl, KLHT_TAGSIZE)) goto out;             /* GUESS: entry 0's tag struct, a ZCHAROBJ + style (see the note above) */
-    { int z = 1, q; for (q = 4; q < KLHT_TAGSIZE; q++) if (klht_tpl[q]) { z = 0; break; } if (!cnt || z) goto out; }      /* review: entry 0 not set up online (count 0 / tag struct all zero): the drawer would read null style pointers, no SEH round it */
+    why = 4; { int q; z = 1; for (q = 4; q < KLHT_TAGSIZE; q++) if (klht_tpl[q]) { z = 0; break; } if (!cnt || z) goto out; }      /* review: entry 0 not set up online (count 0 / tag struct all zero): the drawer would read null style pointers, no SEH round it */
     klht_tpl[0x40] = 1;
     klor_noev = 1; nr = klor_read(&o, locb == 0xff ? -1 : (int)locb) && o.ok; klor_noev = 0;
-    if (!nr) goto out;
+    why = 5; if (!nr) goto out;
+    why = 6;
     for (i = 0; i < o.n && n < KLHT_NSLOT; i++) if (o.r[i].used && o.r[i].actor && o.r[i].alive && o.r[i].seat != o.local && o.r[i].name[0]) rw[n++] = &o.r[i];
     for (i = 0; i < o.nbots && n < KLHT_NSLOT; i++) if (o.bot[i].used && o.bot[i].actor && o.bot[i].alive && o.bot[i].name[0]) rw[n++] = &o.bot[i];
     for (i = 0; i < KLHT_NSLOT; i++) klht_r.s[i].ok = 0;
@@ -158,13 +160,17 @@ static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
         }
         q->id = r->bot ? 0xfe : (int)r->seat; q->actor = r->actor; q->ok = 1;
     }
-    klht_r.pl = pl; klht_r.n = n; klht_r.active = 1; klht_r.ol = 1;
+    why = 0; klht_r.pl = pl; klht_r.n = n; klht_r.active = 1; klht_r.ol = 1;
     if (!klht_r.told) { klht_r.told = 1; klog("tags: online: on (OnlineTags=1): the stock list is skipped; the hook draws %d heister name tags with the game's drawer 0x7b8150 (node = the row's actor, GUESS); NOT RUN IN THE GAME", n); }
     if (klu.log >= 2) {
         static DWORD said; DWORD now = GetTickCount();
         if (now - said >= 5000) { said = now; klog("tags: online: %d rows, %ld tag draws, %ld without a node, %ld with the drawer's flag clear", n, InterlockedExchange(&klht_n_draw, 0), InterlockedExchange(&klht_n_nonode, 0), InterlockedExchange(&klht_n_flag, 0)); }
     }
 out:
+    if (why && klu.log >= 2) {      /* 10-27 bench DD01ce: no 'tags: online' line at all - say which gate holds (1 HUD made/show/skip list, 2 player list, 3 drawer code, 4 count / entry 0 empty, 5 klor_read, 6 slot make) */
+        static DWORD wsaid; DWORD now = GetTickCount();
+        if (now - wsaid >= 5000) { wsaid = now; klog("tags: online: waiting at gate %d (made %d fault %d/%d show %d skip %ld; list %08lx count %lu; entry 0 empty %d)", why, klu_r.made, klu_r.fault, klht_r.fault, show, klu_skip_list, why >= 2 ? pl : 0, cnt, z); }
+    }
     LeaveCriticalSection(&klu_cs);
 }
 
@@ -197,6 +203,7 @@ static void klht_tick(DWORD osd, const struct klb_snap *s, int show)
 {
     DWORD pl, cnt = 0, recs; int i; BYTE local = 0xff; char buf[16], mb[24];
     if (klht.online && s && s->online) { klht_otick(osd, s, show); return; }      /* [HUD] OnlineTags: the online route above */
+    if (klht.online && klu.log >= 2) { static DWORD osaid; DWORD now = GetTickCount(); if (now - osaid >= 5000) { osaid = now; if (kl_online()) klog("tags: online: not taken: snapshot %s, online flag %d", s ? "read" : "none", s ? s->online : -1); } }
     klht_r.ol = 0;      /* review: a stale online flag would make klht_render draw the Arcade slots through the online path */
     if (!klht.mode) return;
     EnterCriticalSection(&klu_cs);
