@@ -710,6 +710,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klhud_kill.c"                              /* AFTER klhud_popup.c: the kill / reward line under REWARDS (uses klpu_str) */
 #include "klhud_escape.c"                             /* AFTER klhud_popup.c: the escape-vehicle panel in the new look (uses klu / klu_r / klu_pic) */
 #include "klhud_tracker.c"                           /* AFTER klhud_escape.c: the vehicle marker in the world - smaller, only near ([HUD] Tracker) */
+#include "klvoice_online.c"                          /* klvoice_online.c: [Voice] Online - the local online player's own lines (uses klor_read, klu_r); AFTER klhud.c */
 #include "klhud_tags.c"                              /* AFTER klhud_escape.c: the tags over the heisters' heads (uses klu / klu_r / klu_cs / klnm_tag_ini) */
 #include "klhud_board.c"                             /* AFTER klhud_tags.c: the pre-round panel in the new look ([HUD] Board, default 0) */
 #include "klhud_board2.c"                            /* AFTER klhud_board.c: the round-over scoreboard ([HUD] Scoreboard, default 0) */
