@@ -114,3 +114,49 @@ the hook's ini carries all four keys, so the scan had missed them). 46 checks PA
 
 Owner: nothing to install in the game; the installed copy of the table (`<DD>\KLModOptions\`, put there by `INSTALL KL Mod Options.bat`) only
 learns the new rows when that bat is run again from an updated KL_PortTools.
+
+# 2026-10-27 scheduled check-in (cloud, 22:47-23:30 UTC): PC busy, no new crash; PF4 navmesh floats decoded for the int16 map shift
+
+Folders attached after one access request (read-only use). BUSY: `KLHook.ini` written 22:35:46 UTC, `dinput8.dll` 21:51:19, `KLHook.log`
+20:50:42 (its tail: an Alt+F4 close of a DM09 round at 255 fps), `KLHook.result` 20:00:28 (`state=PASS` F04, 0 asserts 0 faults, 128814 frames,
+299 s); head at 6a73923 (G8b Plan B static check). Nothing launched, installed, staged into the game or touched on screen; the only write on
+the PC is `<DM>\KL_PortTools\sched_1027_gms\` (the stock levels' `*_Main.gms` members and the DM11B build's, unzipped for this analysis;
+safe to delete).
+
+## Dumps
+
+Newest hook dump `KLHook_1.dmp` 10-26 08:11, newest game dump `kl2_490_crash_2026_10_25T19_18_39`: both older than the last log note and
+already written up. Nothing to triage.
+
+## Offline piece: the PF4 navigation mesh under a world translation (re/map_shift_int16_1027.md listed it as "NOT fully decoded")
+
+Read in kl2.exe (capstone on the staged exe):
+
+- `0x55e6e0` locate(point): for each area (0x48 bytes, `[ZData+4]`, count `[+0x48]`) whose box holds the point's x (`+0x30 <= x <= +0x3c`)
+  and z (`+0x38 <= z <= +0x44`; `+0x34`/`+0x40` are the y bounds, untested here) it calls `0x80d600(area, x, z)` and keeps the polygon whose
+  height (`0x55f5a0`) is nearest the point's y (start 100000).
+- `0x80d600`: walks array 0 (`[ZData+0x18]`, 20-byte nodes) from `area[9]` (`[area+0x24]`, -1 = none): `next = (a*x + b*z >= c) ? child1 :
+  child0` with a = +8, b = +0xc, c = +0x10 (the "three floats"); a negative child is a leaf, polygon = -2 - child.
+- `0x55f5a0(ZData, polygon, x, z)`: walks array 1 (`[ZData+0x1c]`) from the polygon's `+0x18` node; the children are RELATIVE to that start
+  node (`add edx, edi` at 0x55f5c7); leaf = -1 - child = an array-2 record (`[ZData+0x20]`, 12 bytes) P, Q, R: height = P*x + Q*z + R.
+- The parser `0x63e750` fixes the ZData layout: +0x4 areas, +0x8 waypoints, +0xc vertices, +0x10 links, +0x14 polygons, +0x18/+0x1c trees,
+  +0x20 planes, +0x24.. arrays 8-12, counts at +0x38..+0x68.
+
+Checked on the 20 stock Dog Days meshes and the DM11B build (`tools/kl_pf4_translate_test.py`): the centroid of 27786 of 27800 polygons
+descends tree 0 to its own polygon (the 13 others are slivers / none); 27288 of 27799 centroid heights are within 1 unit of the mean vertex
+height (the rest non-planar polygons); the vertex "normal" (array 6 +0xc) is the unit sum of the inward normals of the wall edges (neighbour
+-1) meeting at the vertex, exact on 66592 of 67499 used vertices (zero on the 464 unused ones), so it carries no distance term; waypoints are
+(x, z, h) like vertices; 121711 of 121713 vertices lie inside their area's box in all three axes.
+
+So a world translation t only changes: node c += a*tx + b*tz, plane R += ty - P*tx - Q*tz, vertices / waypoints / boxes += t. Implemented as
+`kl_pf4.translate(block, t)` (plus `locate` / `height` helpers that follow the two functions above). The test moves every mesh by the DM11B
+T = (-12288, 0, -16384) and by (4096, 100, -8192): `check()` passes before and after, every position moved by exactly t, every centroid
+locates the SAME polygon, the height is the original + ty (two centroids per T sit within float32 rounding of a tree-1 split line of a
+non-planar polygon and get the neighbouring sub-plane: 0.4-0.7 units, accepted when the original mesh gives that height within 0.01 units of
+the point), and the round trip returns within float32 rounding. Exactness caveat for the study: the split constants c are ~1e7 (a, b are not
+unit), ulp 1, so moving them is NOT bit-exact (worst drift 0.0035 units across the line); the stock meshes already carry that precision.
+
+What this changes for G8b: PF4 is no longer a reason not to build the shift; `.buf` head / `.sgp` floats still are, and the bots' behaviour on a
+shifted mesh is only testable live. Nothing built or staged for the game.
+
+Owner / local sessions: nothing to install. `<DM>\KL_PortTools\sched_1027_gms\` can be deleted.

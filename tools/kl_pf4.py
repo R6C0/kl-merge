@@ -58,8 +58,30 @@ fields are paired this way (check() tests every one of them), and would not hold
   9   polygon edge: neighbour polygon (-1 none, < -1: -2 - x) M+0 D+0, vertex (array 6) M+2
       D+4, a link slot both parsers overwrite M+4 D+8.                         code + structure
   10  a permutation of the waypoint numbers, u16 -> u32.                      structure
-NOT established: the meaning of the floats in arrays 0 and 1, of area fields [1] / [6], of the
-link byte M+7; none is reinterpreted, they are carried over.
+NOT established: the meaning of area fields [1] / [6] and of the link byte M+7; none is
+reinterpreted, they are carried over.
+
+THE FLOATS (2026-10-27, read in kl2.exe, then checked on the 20 stock Dog Days meshes and the
+DM11B build with tools/kl_pf4_translate_test.py). Mesh coordinates are world (x, z) with the
+height h = world y; a vertex or waypoint record is (x, z, h).
+  tree node (arrays 0 and 1, both games' record)   child0, child1, a, b, c:
+      next = child1 if a * x + b * z >= c else child0  (a, b are NOT unit: any scale)
+      tree 0 (locate, kl2 0x80d600): start at area field [9], children are absolute indices,
+          a negative child is a leaf: polygon = -2 - child (child -1 = no polygon). The
+          polygon centroid of 27786 of 27800 polygons descends to its own polygon.
+      tree 1 (height, kl2 0x55f5a0): start at polygon D+0x18, children are RELATIVE to that
+          start node (next = start + child), a negative child is a leaf: array-2 record
+          = -1 - child (negative = none, height 0).
+  array 2   P, Q, R: the polygon's height plane, h = P * x + Q * z + R (27288 of 27799
+      centroids within 1 unit; the rest are non-planar polygons).
+  array 6   x, z, h, nx, nz: (nx, nz) is the unit sum of the inward normals of the WALL edges
+      (neighbour -1) that meet at the vertex (66592 of 67499 used vertices exact; zero on the
+      464 unused vertices); it has no distance term.
+  area box  D+0x30 min x, +0x34 min y, +0x38 min z, +0x3c max x, +0x40 max y, +0x44 max z
+      (locate tests x and z only; 121711 of 121713 vertices inside their area's box).
+A world translation t therefore only touches: node c += a * tx + b * tz; plane R += ty - P * tx
+- Q * tz; vertices, waypoints and boxes += t (translate() below). Costs, kinds, headings,
+normals and every index stay.
 """
 import struct
 
@@ -231,3 +253,75 @@ def check(block, link_kinds=None):
     if n[10] != n[5] or sorted(struct.unpack('<%dI' % n[10], b''.join(A[10]))) != list(range(n[5])):
         bad('array 10 is not a permutation of the waypoints')
     return n
+
+
+# ---------------------------------------------------------------- world translation
+def translate(block, t):
+    """A Dog Days mesh block moved by the world vector t = (tx, ty, tz): the mesh of the same
+    level built t further along. Only the absolute floats change (docstring: THE FLOATS); every
+    index, count, cost and normal is copied. Values are computed in double and rounded once to
+    float32, so a moved mesh is exact to half a float32 ulp of each result (about 0.001 units at
+    |x| < 16384): translate(translate(b, t), -t) is NOT bit-identical to b, see check_translate."""
+    tx, ty, tz = (float(v) for v in t)
+    n, A = split(block, True)
+    out = list(A)
+    def node(r):
+        c0, c1, a, b, c = struct.unpack('<ii3f', r)
+        return struct.pack('<ii3f', c0, c1, a, b, c + a * tx + b * tz)
+    out[0] = [node(r) for r in A[0]]
+    out[1] = [node(r) for r in A[1]]
+    out[2] = [struct.pack('<3f', p, q, s + ty - p * tx - q * tz) for p, q, s in (struct.unpack('<3f', r) for r in A[2])]
+    out[4] = [r[:48] + struct.pack('<6f', *[v + d for v, d in zip(struct.unpack_from('<6f', r, 48), (tx, ty, tz) * 2)]) for r in A[4]]
+    out[5] = [struct.pack('<3f', x + tx, z + tz, h + ty) + r[12:] for r in A[5] for x, z, h in (struct.unpack_from('<3f', r),)]
+    out[6] = [struct.pack('<5f', x + tx, z + tz, h + ty, nx, nz) for r in A[6] for x, z, h, nx, nz in (struct.unpack('<5f', r),)]
+    return join(out)
+
+
+def locate(mesh, x, z):
+    """(polygon, height) of the world point (x, z) the way kl2 0x55e6e0 starts: the first area
+    whose box holds (x, z) and whose tree 0 names a polygon, then that polygon's height plane;
+    (-1, None) when no area does. mesh = split(block, True). The game then prefers, over all
+    areas, the polygon nearest in height to the point's y; this helper stops at the first hit
+    (enough for a same-mesh comparison)."""
+    n, A = mesh
+    for r in A[4]:
+        f = struct.unpack('<12I6f', r)
+        if not (f[12] <= x <= f[15] and f[14] <= z <= f[17]) or f[9] == 0xffffffff:
+            continue
+        leaf = _descend(A[0], f[9], x, z, 0)
+        if leaf is None:
+            continue
+        p = -2 - leaf
+        if 0 <= p < n[3]:
+            return p, height(mesh, p, x, z)
+    return -1, None
+
+
+def height(mesh, poly, x, z):
+    """Height of the mesh under (x, z) on polygon poly (kl2 0x55f5a0): tree 1 from the
+    polygon's node, children relative to it, the leaf's plane. 0.0 with no plane."""
+    n, A = mesh
+    start = struct.unpack_from('<I', A[3][poly], 0x18)[0]
+    if start >= n[1]:
+        return 0.0
+    leaf = _descend(A[1], start, x, z, start)
+    if leaf is None or leaf >= 0:
+        return 0.0
+    leaf = -1 - leaf
+    if leaf >= n[2]:
+        return 0.0
+    p, q, r = struct.unpack('<3f', A[2][leaf])
+    return p * x + q * z + r
+
+
+def _descend(nodes, node, x, z, rel):
+    """Walk a tree from node: the negative child the point ends at, None on a cycle."""
+    for _ in range(len(nodes) + 1):
+        c0, c1, a, b, c = struct.unpack('<ii3f', nodes[node])
+        nxt = c1 if a * x + b * z >= c else c0
+        if nxt < 0:
+            return nxt
+        node = nxt + rel
+        if node >= len(nodes):
+            return None
+    return None

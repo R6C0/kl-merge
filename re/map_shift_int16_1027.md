@@ -27,16 +27,24 @@ ABSOLUTE, each needs its own pass:
 - .oct: every ZOctreeCompiled tree has an origin (+0x04 / record +0x08); items are quantised relative to it, so origin += T and nothing else
   (the quantised boxes are identical). Same format in .rmi/.rmc plus the room box records (centre +0x28, second point +0x34; half extents and
   matrix unchanged). 5 trees per room, copies of the origin in each slot.
-- PF4 navmesh (.gms +0x34, tools/kl_pf4.py): waypoints, polygon / edge vertices, kd-tree floats, area bounding boxes. NOT fully decoded
-  (tree node "three floats", array 6 "edge vertex and 2-D normal" - a plane distance would need recomputing). Highest risk: bots path on it.
+- PF4 navmesh (.gms +0x34, tools/kl_pf4.py): DECODED 2026-10-27 (scheduled check-in, kl2.exe 0x55e6e0 locate / 0x80d600 tree 0 /
+  0x55f5a0 height, verified on the 20 stock Dog Days meshes + the DM11B build): tree nodes are split lines `a x + b z >= c` (c += a tx + b tz),
+  array 2 is the height plane `h = P x + Q z + R` (R += ty - P tx - Q tz), vertices / waypoints are (x, z, h) += t, area boxes (min xyz, max
+  xyz) += t, the vertex "normal" is a unit sum of wall-edge normals (no distance term: unchanged). `kl_pf4.translate(block, t)` does it;
+  `tools/kl_pf4_translate_test.py` proves on every mesh: same polygon for every centroid after the move, height + ty within 0.05, round trip
+  within float32 rounding (worst split-line drift 0.0035 units, the stock meshes carry c ~ 1e7 at ulp 1 already). Risk left: none known in
+  the mesh itself; the bots' use of it after a shift is only testable live.
 - .sgp (room sound graph) 135 x/z pairs, .sgd 1, .buf head 1942 pairs (KEYS tracks, room gates/lists, GUESS: some are positions), light
   records, SND/ZLNK emitter data: NOT identified one by one.
 Rooms: .rmi/.rmc lookups use the point, so a missed box = "no room" = silent/lit wrongly, not a crash.
 
 ## Verdict
-Feasible in principle (every part is a translation, exactness is free with T above), but NOT built: it needs a decoded PF4 and .buf/.sgp
-translation (undecoded float meanings), cannot be validated offline, and a half-shifted map is worse than the stopgap. Staged: nothing.
-Build order if done: (1) roots + gms/prp, (2) HVK, (3) oct/rmi/rmc, (4) sgp/.buf/PF4 after decoding, (5) verify with a new check: every
+Feasible in principle (every part is a translation; exactness: NOT free, see below), but NOT built: it still needs the .buf/.sgp translation
+(undecoded float meanings), cannot be validated offline, and a half-shifted map is worse than the stopgap. Staged: nothing. PF4 is no longer a
+blocker (translate() above). Exactness note (measured 2026-10-27): a power-of-two T keeps the INTEGER part exact, not every float32: a vertex
+like 1950.369384765625 (needs 2^-12) moved to 14238.37 (ulp 2^-10) is rounded by up to 0.0005 units; the mesh's split-line constants c ~ 1e7
+are rounded by up to 1 (= 0.004 units across the line). Harmless, but a bit-exact round trip is not available; compare with tolerances.
+Build order if done: (1) roots + gms/prp, (2) HVK, (3) oct/rmi/rmc, (4) PF4 (kl_pf4.translate, done offline) and sgp/.buf after decoding, (5) verify with a new check: every
 absolute float of the map minus T equals the original (round-trip), kl_int16_range_check reports 0, then ship as its own folder (e.g. DM11S) so
 [Int16Guard] OnlineSkip=DM11B does not apply (no key change), and test: load, 'pos: player' near the spawn, bots walk, shoot/loot/grenade,
 escape, glass/doors, ambience (rooms), and compare nav (bots reach loot) with the unshifted map.
