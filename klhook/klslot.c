@@ -407,6 +407,7 @@ static int kls_bot_apply(char *path, const char *slot, const char *api)
     return 0;
 }
 
+static int kmp_pick(int s);                          /* klmappool.c (included after this file) */
 /* -> 1 and the new path in out[MAX_PATH] when the open must go somewhere else, 0 when it stays.
    Keeps GetLastError() as it found it when it returns 0. */
 static int kls_map(const char *in, char *out, const char *api)
@@ -432,6 +433,7 @@ static int kls_map(const char *in, char *out, const char *api)
             page = kls_page_now();
             kls_rnd_txt[0] = 0;
             if (page == KLS_RANDOM) page = kls_rand_pick(s);      /* OnlineSet=9 */
+            if (kl_online() && (r = kmp_pick(s)) >= 0) page = r;      /* klmappool.c: [MapPool] the pool's no-repeat draw for this slot (online only) */
             { static LONG nd; if (InterlockedIncrement(&nd) <= 96) {      /* DIAGNOSTIC: which page decided this load, and why */
                 int on = kl_online(); r = kls_find_rule(s, page); if (r < 0 && page) r = kls_find_rule(s, 0);
                 klog("expansion: LOAD %s: latch=%ld force=%d online=%d OnlineSet=%d keep=%d -> page %d, rule %s; stack [%s]%s%s%s", kls_slot[s].name, (long)kls_menu_page, kls_page_force,
