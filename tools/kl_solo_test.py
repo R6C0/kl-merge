@@ -215,9 +215,11 @@ def main():
                 pt = (ctypes.c_long * 2)()
                 ctypes.windll.user32.GetCursorPos(pt)
                 sw, sh = ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)
-                reset = {(0, 0), (320, 240), (sw // 2, sh // 2), (480, 270), (1440, 270)}
+                reset = {(0, 0), (320, 240), (sw // 2, sh // 2), (480, 270), (1440, 270), (960, 0)}
                 btn = any(ctypes.windll.user32.GetAsyncKeyState(v) & 0x8000 for v in (1, 2, 4))
-                if k > 1 and (btn or (pt[0], pt[1]) not in reset):   # k == 1: where it rested before the bench, not new input
+                # Q27_DD09 17:33: the game put the cursor at 960,0 (inst2's window corner) with idle 72 s - a false abort.
+                # Game-made moves do not reset idle; a hand does. Off a reset point counts only with input in the last 3 s.
+                if k > 1 and (btn or ((pt[0], pt[1]) not in reset and idle_s() < 3)):   # k == 1: where it rested before the bench
                     owner[0] = 'cursor at %d,%d%s (idle %d s)' % (pt[0], pt[1], ', mouse button down' if btn else '', idle_s())
                     say('  park | +%.1f s owner input: %s - bench ended, nothing parked' % (time.time() - t0, owner[0]))
                     return
