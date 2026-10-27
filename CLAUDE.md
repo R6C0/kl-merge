@@ -74,8 +74,9 @@ button, or a cursor off the known reset points with input < 3 s ago, = owner: be
 page II online buy (OnlineSend/OnlineApply/OnlineEarlyMake). Gate ALL2Y on the TEST twin d65471a6 (SHIP has no klauto): PASS both seats, 0 faults, client
 holds page II item 63 in round 2, badge rank 3 Thug from Steam xp 568. Open: link-table GUESS (+0x1c) refuted (log only); RankUp/Letter not yet seen live.
 
-2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
-Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
+2026-10-27 ~19:40 - [ce] Grant (00:40-20:00) ends. Smoke rotation clean all afternoon (DM/DD, 0 crashes). HIRE ONLINE PROVEN: HRF2 (host hires Tommy, worn
+round 2) + HRP2 (client asks Jean, host accepts, worn round 2, host sees him), 0 faults (ede090f53). [Hire] Enable stays 0 (recommended off until the owner tries it;
+needs the baked Hire window) - owner's call. ALL2R on 1027y twin PASS. Open: RankUp/Letter not seen live; intro '1 humans' on host = first-tick log (c3608f1b0 logs 2 s later).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
