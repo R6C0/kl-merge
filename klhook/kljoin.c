@@ -303,7 +303,7 @@ static void klj_ride_step(DWORD gd, DWORD lo, int count, const BYTE sel[2], DWOR
         klj_ride_end("the player left the box (more than Slack outside)", 0); return; }
     if (el < (DWORD)klj_box[b].delay_ms) return;
     if (klj_box[b].fedride == 2 && klj_is_fed(pl) && (d = (DWORD)klt_crew_above(klj_box[b].fedy)) != 0) {
-        klog("join: ride of player %d in box %d: FED and %lu AI heister(s) are still above y %g", i, b + 1, (unsigned long)d, klj_box[b].fedy);
+        klog("join: ride of player %d in box %d: FED and %d AI heister(s) are still above y %g (-1 = none in play yet)", i, b + 1, (int)d, klj_box[b].fedy);
         klj_ride_end("FedRide: the crew is still above", 0); return; }
     if (klj_box[b].has_car && !(klj_box[b].fedride != 1 && klj_is_fed(pl)) && !klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, 0)) {
         int stalled = 0;
@@ -389,10 +389,11 @@ static void klj_tick(void)
             if (!in) klj_box[b].fedsaid[i] = 0;
             if (!in || klj_box[b].inside[i]) { klj_box[b].inside[i] = (char)in; continue; }
             if (klj_box[b].fedride != 1 && klj_is_fed(pl)) {      /* 2026-10-27 FedRide: see klj_read. inside[] stays 0, so he is judged again every tick */
-                int above = klj_box[b].fedride == 0 ? -1 : klt_crew_above(klj_box[b].fedy);
+                int above = klj_box[b].fedride == 0 ? 1 : klt_crew_above(klj_box[b].fedy);
                 if (above != 0) {
                     if (!klj_box[b].fedsaid[i]) { klj_box[b].fedsaid[i] = 1;
-                        if (above < 0) klog("join: player %d (FED) in box %d: no ride (FedRide=0)", i, b + 1);
+                        if (klj_box[b].fedride == 0) klog("join: player %d (FED) in box %d: no ride (FedRide=0)", i, b + 1);
+                        else if (above < 0) klog("join: player %d (FED) in box %d: no ride (FedRide=2, no AI heister in play yet)", i, b + 1);
                         else klog("join: player %d (FED) in box %d: no ride (FedRide=2, %d AI heister(s) still above y %g)", i, b + 1, above, klj_box[b].fedy); }
                     continue;
                 }

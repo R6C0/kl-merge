@@ -250,11 +250,11 @@ static int klt_local_police(DWORD gd)
     return pol != 0;
 }
 
-/* 2026-10-27 (kljoin.c FedRide): how many AI heisters in play (records as klt_move reads them) have their feet above height y. 0 = none, or
+/* 2026-10-27 (kljoin.c FedRide): how many AI heisters in play (records as klt_move reads them) have their feet above height y. 0 = none above, -1 = none in play at all, or
    the rules object / records could not be read (then a fed is never held back). Reads only; any thread. */
 static int klt_crew_above(float y)
 {
-    DWORD gs, rules, recs, inuse; int cap, i, n = 0;
+    DWORD gs, rules, recs, inuse; int cap, i, n = 0, play = 0;
     if (!klh_exe_ok || !(gs = klh_rd32((DWORD_PTR)KLH_VA(KLT_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || klh_rd32(rules) != KLT_RULES_VT) return 0;
     recs = klh_rd32(rules + 0x348); inuse = klh_rd32(rules + 0x34c); cap = (int)klh_rd32(rules + 0x354);
     if (cap < 1 || !recs || !inuse) return 0;
@@ -263,9 +263,10 @@ static int klt_crew_above(float y)
         DWORD at = recs + (DWORD)i * 0x7c, actor; BYTE u = 1, fl = 0, status = 0xff; float feet[3];
         if (!klh_rd(inuse + i, &u, 1) || u || !klh_rd(at + 0x79, &fl, 1) || !(fl & 1) || !(actor = klh_rd32(at + 4))) continue;
         if (!klh_rd(at + 0x10, &status, 1) || status) continue;
+        play++;
         if (klh_rd(actor + 0x460, feet, 12) && feet[1] > y) n++;      /* ASSUMPTION as klt_move: the feet at actor + 0x460, y up */
     }
-    return n;
+    return n ? n : (play ? 0 : -1);      /* review 10-27: -1 = records readable but NO AI heister in play yet (round start: a fed would be 'crew down' and thrown to the street at once) */
 }
 
 static void klt_tick(int game_thread)
