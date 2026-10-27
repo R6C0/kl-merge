@@ -486,6 +486,7 @@ static void klu_draw_ours(void *el, void *ctx, void *cam, DWORD n_before, DWORD 
 
 /* klhud_tags.c (included after klhud_escape.c): the head tags; its render step runs after ours, its tick after the hide tick, its init at the end of klu_init */
 static void klht_render(void *el, void *ctx, void *cam);
+static void klsb_state_render(void *el, void *ctx, void *cam);      /* klhud_board2.c: [HUD] OnlineBoardState */
 static void klht_tick(DWORD osd, const struct klb_snap *s, int show);
 static void klht_init(void);
 static void klht_reset(void);
@@ -523,6 +524,7 @@ static char __fastcall klu_render_elem(void *el, void *edx, void *ctx, void *cam
         r = ((klu_render_t)(DWORD_PTR)KLH_VA(KLU_TIME_RENDER))(el, 0, ctx, cam);
     n1 = ctx ? ((const DWORD *)ctx)[1] : 0;
     klu_draw_ours(el, ctx, cam, n0, n1);
+    klsb_state_render(el, ctx, cam);                /* klhud_board2.c: the online end card when the outro element is absent ([HUD] OnlineBoardState) */
     klht_render(el, ctx, cam);                      /* klhud_tags.c: the tags over the heisters' heads (the stock element's first loop, run by the hook) */
     return r;
 }
