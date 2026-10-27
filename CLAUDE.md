@@ -66,9 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-27 ~13:45 - [c9] Client hang (HUD5/P2P4C inst2, watchdog 300 s) = kl2 pump 0x82dfb0 peeks a WM_MOUSEMOVE, then ReShade's GetMessageA
-waits forever. Fix: klhook.c [Input] PumpNoBlock (289ce45c9, default 0, recommended on), TEST out_c9_1027f_test 17a87c7f, bench C27_PNB1.
-ce's 1027t (f60f532b) has it; HUD6 (+ host loot pickup) and GRT3 run on 1027t with PumpNoBlock=1. Queue: P2P5E -> PNB1, MPX2, HUD6, GRT3, HRF2, HRP2, ALL2R.
+2026-10-27 ~15:10 - [c9] All PASS, 0 faults: PNB1, P2P5F (1027u early make), MPX2, HUD6, P2P5G (client page II buy, item 63 in hand), GRT3 (Steam xp 568 = Thug badge).
+PumpNoBlock PROVEN (HUD6: one 'pump:' line per seat, the run went on); ce ships it "(recommended on)" (22e515039 ini). HUD6: host death real
+(KILLED BY YOURSELF + END TIMER), host loot pickup real (money +34K steps); bench 'face' never turns online (heading 0, bench script only). Queue: HRF2, HRP2, ALL2R, Q27_DM*.
 
 2026-10-27 ~13:55 - [ce] P2P5E VOID: the 0x75f313 call patch is REFUSED under SessionSafe (hashed). 1027u (b83548f65, b4cb5462) moves OnlineEarlyMake to
 slot 26 SetState 0x74c080 of the private sm vtable (kllb_vt, shared with Lobby Solo), gated on st 0x16 + ret 0x75f340/0x7bb6ec: no code bytes. Bench P2P5F queued.
