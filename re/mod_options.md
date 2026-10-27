@@ -35,6 +35,16 @@ marker now, was 113; every checked row agrees. The other direction
 (an ini key no source reads) was tried and dropped: names come from tables, sprintf (P%d, Thr%d) and per-map sections, every try listed
 live keys as stale. `kl_mod_options_test.py` 44 checks.
 
+2026-10-27 19:00 UTC (scheduled check-in): after ce's page II online proof (ALL2Y / P2P5G, SHIP 1027y installed 15:30) the ini marked
+`[ShopPage] OnlineLook / OnlineSend / OnlineApply / OnlineEarlyMake` `(recommended on; benched ...)` (2fe8304) but the `shoponline` row still
+said off (`--check-rec` and the self-test FAILED at head), and the three buy keys had no row because `check_rec`'s row-less scan read only
+ACTIVE `Key=` lines: those keys are carried only as `;Key=0` in the hook's ini. Now: `shoponline` on (OnlineLook), new rows `shoponlinebuy`
+(OnlineApply, writes OnlineSend too since apply stays OFF without it) and `shoponlineearly` (OnlineEarlyMake), `shoponline2` (OnlinePage2)
+stays off (older step, OnlineApply wins). The row-less scan reads `;Key=` lines too, each key once. `kl_mod_options_test.py` 46 checks.
+Left alone: `hire` / `hireonline` still say off: the ini's `[Hire] Online` note says `(recommended on with Enable=1)` (HRF2 / HRP2 online,
+both seats) but `[Hire] Enable` itself carries no marker and needs the Hire window baked into the level (tools/kl_hire_bake.py), so a
+Recommended click must not turn it on until ce marks Enable; `ini_rec` does not see that marker (the comment line naming the key has none).
+
 Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the ini notes 188 fps off against 106..178 on), CarDown Dry to off, and Music/Rigid are already off.
 
 ## Inventory

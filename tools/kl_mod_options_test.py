@@ -89,6 +89,13 @@ def main():
         open(p, 'w').write(INI.replace('Rows12=1', 'Rows12=1\nOnlineNewThing=1   ; (recommended on) not yet benched'))
         bad, norow, nocheck = M.check_rec(p)
         check(not any('OnlineNewThing' in x for x in norow), 'a recommended-on key without a proof word is not listed')
+        # a proven key the ini only carries commented out (the page II online keys of 10-27 were ';OnlineSend=0 ; (recommended on; benched ...)')
+        open(p, 'w').write(INI.replace('Rows12=1', 'Rows12=1\n;OnlineNewThing=0   ; (recommended on; benched X27_ABC 10-27) 1 = ...\n;OnlineNewThing=0   ; a repeat'))
+        bad, norow, nocheck = M.check_rec(p)
+        check(sum('OnlineNewThing' in x for x in norow) == 1, 'a commented-out proven key without a row is listed once: %s' % norow)
+        open(p, 'w').write(INI.replace('Rows12=1', 'Rows12=1\n; a comment that says OnlineNewThing=1 is (recommended on) proven live: X1, not a key line'))
+        bad, norow, nocheck = M.check_rec(p)
+        check(not any('OnlineNewThing' in x for x in norow), 'a comment sentence naming Key=value is not a commented-out key')
 
     # table shape: a prerequisite another row owns is never written off by this row (it comes after the own key, off value None)
     masters = {}
@@ -147,7 +154,7 @@ def main():
         check(not norow, 'repo klhook/KLHook.ini: every proven recommended-on key has a row (%s)' % norow)
         rowless, un = M.check_ini(os.path.dirname(repo), repo)
         check(not rowless, 'repo klhook/KLHook.ini mentions every row key (%s)' % rowless)
-    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 41 + 3 * os.path.isfile(repo), len(FAILS)))
+    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 43 + 3 * os.path.isfile(repo), len(FAILS)))
     return 1 if FAILS else 0
 
 

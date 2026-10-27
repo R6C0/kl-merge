@@ -92,3 +92,25 @@ Not run: the Tk window and the Windows profile-API read-back (no Windows here); 
 
 Owner / local sessions: nothing to install (the next SHIP with klhook.c's wrap gets PumpNoBlock=1 from the ini). New keys: a line in the repo ini (commented at the default is
 enough) keeps `--check-ini` green and gives the owner a place to see them.
+
+# 2026-10-27 scheduled check-in (cloud, 18:48-19:05 UTC): PC busy, no new crash; page II online rows caught up
+
+The folders were again not attached; one access request was granted. BUSY: head 3dc716a 17:56 (c9), `dinput8.dll` written 18:45:15,
+`KLHook.ini` 18:44:57, `KLHook.log` / `KLHook.result` 18:44:54 (`exit=0 scene F03 level_loaded=1 asserts=0 faults=0 frames=100970
+script=62 ms=300000`, a 300 s bench round in the F03 slot). Nothing launched, installed, staged into the game or touched on screen.
+
+## Dumps
+
+Newest hook dump `KLHook_1.dmp` 10-26 08:11, newest game dump `kl2_490_crash_2026_10_25T19_18_39`: both older than the last log note and
+already written up. Nothing to triage.
+
+## Head health
+
+`tools/kl_mod_options.py --check-rec klhook/KLHook.ini` FAILED at head and `kl_mod_options_test.py` with it (1 of 44): ce's 2fe8304 marked
+`[ShopPage] OnlineLook` `(recommended on; implied by OnlineApply)` after ALL2Y, the `shoponline` row still said off. `--check-defaults` and
+`--check-ini` clean. Fix in this commit (see re/mod_options.md 19:00 entry): row flipped, rows `shoponlinebuy` / `shoponlineearly` added for the
+proven OnlineApply (+OnlineSend) / OnlineEarlyMake keys, and the row-less scan of `check_rec` now reads commented `;Key=` lines (that is how
+the hook's ini carries all four keys, so the scan had missed them). 46 checks PASS, `--check-rec` "every row agrees".
+
+Owner: nothing to install in the game; the installed copy of the table (`<DD>\KLModOptions\`, put there by `INSTALL KL Mod Options.bat`) only
+learns the new rows when that bat is run again from an updated KL_PortTools.

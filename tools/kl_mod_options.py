@@ -167,10 +167,14 @@ feat('gradesrankup', G_CORE, 'Grades: a RANK UP line on the round-over card when
      'klhud_grades.c [Grades] Enable+RankUp; needs [HUD] Scoreboard=1; Arcade rotation clean since 10-27 01:45 (1027i)', [('Grades', 'RankUp', 1, 0, 0), ('Grades', 'Enable', 1, None, 0)])
 feat('gradesletter', G_CORE, 'Grades: an S / A / B / C / D grade per player on the round-over card (recommended on)', 'on', 'start',
      'klhud_grades.c + klgrades.h [Grades] Enable+Letter; table in [Grades]; needs [HUD] Scoreboard=1; Arcade rotation clean since 10-27 01:45 (1027i); own-row letter ink fix dde7bc587', [('Grades', 'Letter', 1, 0, 0), ('Grades', 'Enable', 1, None, 0)])
-feat('shoponline', G_CORE, 'Online matches: weapon shop page II shown (view only, locked) (recommended off until benched)', 'off', 'start',
-     'klshoppage.c OnlineLook; page II buys are swallowed online; needs [ShopPage] Enable=1; NOT run live', [('ShopPage', 'OnlineLook', 1, 0, 0)])
-feat('shoponline2', G_CORE, 'Online matches: weapon shop page II rows can be bought, giving the stock carrier gun at its price (recommended off until benched)', 'off', 'start',
-     'klshoppage.c OnlinePage2; implies OnlineLook; the buy goes the stock host-validated way, no local hand-over; needs [ShopPage] Enable=1; NOT run live', [('ShopPage', 'OnlinePage2', 1, 0, 0)])
+feat('shoponline', G_CORE, 'Online matches: weapon shop page II shown (names, descriptions; a buy needs the row below) (recommended on)', 'on', 'start',
+     'klshoppage.c OnlineLook; without OnlineApply a page II buy is swallowed (LOCKED ONLINE text); needs [ShopPage] Enable=1; implied by OnlineApply; benched CE27_P2P5G / ALL2Y 10-27 (0 faults both seats)', [('ShopPage', 'OnlineLook', 1, 0, 0)])
+feat('shoponlinebuy', G_CORE, 'Online matches: weapon shop page II rows can be bought; the host judges and charges the carrier price, the page II gun is in hand next round (recommended on)', 'on', 'start',
+     'klshoppage.c OnlineApply + klshoppage_online.c OnlineSend (the client\'s press goes to the host, type SHOPG; apply stays OFF without it, so the row writes both); needs [ShopPage] Enable=1, [NetChan] and [Online] Read=1 on the host; a refusal changes nothing; takes precedence over OnlinePage2; benched CE27_P2P5G / ALL2Y 10-27: client holds page II item 63 in round 2, 0 faults both seats', [('ShopPage', 'OnlineApply', 1, 0, 0), ('ShopPage', 'OnlineSend', 1, None, 0)])
+feat('shoponlineearly', G_CORE, 'Online matches: page II guns made right after the pool build, so their net ids line up on every peer (recommended on with the buy row)', 'on', 'start',
+     'klshoppage.c OnlineEarlyMake: sm vtable slot 26 wrapped through the private vtable (no code patch, SHIP-legal), host 0x75f310 / client 0x7bb6c0 passes; needs [ShopPage] Enable=1; the kspg_netok gate stays as the safety net; benched CE27_P2P5F / P2P5G 10-27 (host 8 of 8 X, ids 18604..18844 match, 0 faults)', [('ShopPage', 'OnlineEarlyMake', 1, 0, 0)])
+feat('shoponline2', G_CORE, 'Online matches: a page II buy goes the stock way and gives the carrier gun at its price (older step; the buy row above wins when both are on) (recommended off until benched)', 'off', 'start',
+     'klshoppage.c OnlinePage2; implies OnlineLook; the buy goes the stock host-validated way, no local hand-over; needs [ShopPage] Enable=1; NOT run live; OnlineApply takes precedence', [('ShopPage', 'OnlinePage2', 1, 0, 0)])
 feat('ucchide', G_CORE, 'Undercover Cop: the crew list does not give the undercover cop away to heisters (recommended on)', 'on', 'start',
      'klhud_values.c kluv_state UccHide; re/ucc_tell_audit.md S10; NOT run live', [('HUD', 'UccHide', 1, 0, 1)])
 feat('onlinebots', G_CORE, 'Online matches: AI heisters also listed in the crew box, like Arcade (recommended on)', 'on', 'start',
@@ -708,15 +712,24 @@ def check_rec(inipath):
         elif r != f['rec']:
             bad.append('%s: row says %s, the ini says %s: [%s] %s | %s' % (f['id'], f['rec'], r, sec, key, (src or '')[:110]))
     rowkeys = {(s.lower(), k.lower()) for f in F for s, k, *_ in f['keys']}
-    norow, sec = [], None
+    norow, sec, seen = [], None, set()
     for ln in lines:
         m = _SEC.match(ln)
         if m:
             sec = m.group(1).strip(); continue
         s = ln.strip()
-        if not s or s[0] in ';#' or '=' not in s or sec is None:
+        if not s or '=' not in s or sec is None:
             continue
-        key = s.split('=', 1)[0].strip()
+        if s[0] in ';#':                                    # a documented-but-unset key (';OnlineSend=0 ; (recommended on; benched ...)') counts too:
+            m = re.match(r'[;#]\s*([A-Za-z_][A-Za-z0-9_.]*)\s*=', s)   # the proven page II online keys were only carried that way (2026-10-27)
+            if not m:
+                continue
+            key = m.group(1)
+        else:
+            key = s.split('=', 1)[0].strip()
+        if (sec.lower(), key.lower()) in seen:
+            continue                                        # ini_rec reads the first occurrence; report a key once
+        seen.add((sec.lower(), key.lower()))
         r, src = ini_rec(lines, sec, key)
         if r == 'on' and (sec.lower(), key.lower()) not in rowkeys and _PROVEN.search(src or ''):
             norow.append('[%s] %s | %s' % (sec, key, src[:110]))
