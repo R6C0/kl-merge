@@ -191,6 +191,7 @@ def main():
         say('  hook | %s (sha1 %s)%s' % (src, at.sha1(src)[:8], ' - ' + note if note else ''))
         t0 = time.time()
         park_on = opt.get('--park', '1') != '0'
+        owner = ['']                                         # set by park_loop when the owner's mouse is seen: the run ends
 
         def park_loop():
             # 10-27 Q27_DM01/DD04: the Windows cursor resting at 320,240 hovered a MainMenu row, so 'tap DOWN' x2 landed on
@@ -208,9 +209,18 @@ def main():
                         pass
                 # 17:25 Q27_DM06 failed the same way with an 'idle >= 30' gate: the cursor was back at 320,240 (640x480
                 # screen centre: a display-mode change re-centres it) and idle had been reset (17:24:56, cause unknown), so
-                # the park stood down. The queue runs with --force anyway: park unconditionally, log every move-back.
+                # the park stood down. Now a cursor at a RESET point (re-centred by a display-mode change or by the game:
+                # screen centres, the bench windows' centres) is parked again; anywhere else, or a mouse button down, is
+                # the owner's hand (ce 17:30): stop parking and end the bench so the queue frees the lock.
                 pt = (ctypes.c_long * 2)()
                 ctypes.windll.user32.GetCursorPos(pt)
+                sw, sh = ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)
+                reset = {(0, 0), (320, 240), (sw // 2, sh // 2), (480, 270), (1440, 270)}
+                btn = any(ctypes.windll.user32.GetAsyncKeyState(v) & 0x8000 for v in (1, 2, 4))
+                if k > 1 and (btn or (pt[0], pt[1]) not in reset):   # k == 1: where it rested before the bench, not new input
+                    owner[0] = 'cursor at %d,%d%s (idle %d s)' % (pt[0], pt[1], ', mouse button down' if btn else '', idle_s())
+                    say('  park | +%.1f s owner input: %s - bench ended, nothing parked' % (time.time() - t0, owner[0]))
+                    return
                 if (pt[0], pt[1]) != (0, 0):
                     if moved[0] < 20:
                         say('  park | +%.1f s cursor was at %d,%d (idle %d s): moved back to 0,0' % (time.time() - t0, pt[0], pt[1], idle_s()))
@@ -223,9 +233,11 @@ def main():
             say('  park | cursor held at 0,0 until the host round starts (--park 0: off)')
         for n, d in enumerate(inst, 1):
             if n >= 2:                                     # joiner k starts at gap + (k-2) * gap2 (--gap2, default 30 s): one at a time through the menus
-                while time.time() - t0 < gap + (n - 2) * int(opt.get('--gap2', 30)):
+                while time.time() - t0 < gap + (n - 2) * int(opt.get('--gap2', 30)) and not owner[0]:
                     time.sleep(1)
                     netstat_tick(t0)
+            if owner[0]:
+                break
             env = dict(os.environ, SteamAppId='28000', SteamGameId='28000', KLHOOK_DIR=d)
             p = subprocess.Popen([os.path.join(dd, 'kl2.exe'), '-o', 'DisableSplashScreens'], cwd=dd, env=env)
             procs.append(p)
@@ -332,6 +344,8 @@ def main():
             relaunch_tick()
             if getattr(relaunch_tick, 'told', 0) and time.time() - relaunch_tick.told > 30:
                 break  # host dead + 30 s grace: free the live slot for the next queue item
+            if owner[0]:
+                break  # the owner moved the mouse during the menus: end now, the queue frees the lock
             if shots and el >= shots[0]:
                 s = shots.pop(0)
                 for n, p in enumerate(procs, 1):
@@ -373,7 +387,7 @@ def main():
             else:
                 v = 'FAILED' if failed else 'not in round'
             verdict.append('inst%d %s' % (n, v))
-        say('RESULT: ' + ', '.join(verdict))
+        say('RESULT: ' + ', '.join(verdict) + (' (ABORTED: owner input during the menus, %s - rerun it)' % owner[0] if owner[0] else ''))
         code = 0
     finally:
         for p in procs:
