@@ -127,6 +127,8 @@ feat('onlineboardstate', G_CORE, 'Online matches: round-over card also when the 
      'klhud_board2.c OnlineBoardState; needs OnlineBoard=1; composes in state 0x1f without the element at osd+0x10b4 and draws on the clock element render (GUESS G14-G16); NOT run live', [('HUD', 'OnlineBoardState', 1, 0, 0)])
 feat('onlineintro', G_CORE, 'Online matches: round n of m, players, minutes and your heister under the pre-round card (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineIntro; needs [Online] Read=1, [HUD] Scoreboard=1 and Board=1; NOT run live', [('HUD', 'OnlineIntro', 1, 0, 0)])
+feat('onlineintrostate', G_CORE, 'Online matches: pre-round card (title, round, map, players, crew with heister names) also when the game never builds its intro element (recommended off until benched)', 'off', 'start',
+     'klhud_board2.c OnlineIntroState; needs OnlineIntro=1; composes in states 0x16..0x18 without the element at osd+0x10ac and draws on the clock element render (GUESS G15/G17, layout 220,120 840x300 a GUESS); NOT run live', [('HUD', 'OnlineIntroState', 1, 0, 0)])
 feat('gradesbadge', G_CORE, 'Grades: a rank badge before every crew name, Arcade and online (recommended off until benched)', 'off', 'start',
      'klhud_grades.c [Grades] Enable+Badge; your rank from the profile experience, others online from S+0xc8 (GUESS); NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'Badge', 1, 0, 0)])
 feat('gradesrankup', G_CORE, 'Grades: a RANK UP line on the round-over card when your rank rose (recommended off until benched)', 'off', 'start',

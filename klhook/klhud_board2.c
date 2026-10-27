@@ -136,6 +136,7 @@ struct klsb_t { DWORD obj, colour, want_colour; float x, y; int on; char cur[KLU
 static struct {
     int on, probe, test, fault, textonly, total, count, lead, rows12;
     int ostate;                               /* 2026-10-27: [HUD] OnlineBoardState (default 0): online, compose the end card from the round-end state and draw it on the clock element's render when the outro element at osd+0x10b4 stays 0 */
+    int istate;                               /* 2026-10-27: [HUD] OnlineIntroState (default 0; needs OnlineIntro): online, when the intro element at osd+0x10ac is absent, compose the whole intro card from the online snapshot and draw it on the clock element's render (states 0x16..0x18) */
     int online, intro;                        /* 2026-10-26: [HUD] OnlineBoard / OnlineIntro (default 0): the end card / the intro lines in an ONLINE round, from klonline_read.c */
     float x, y; int alpha;
 } klsb;
@@ -148,12 +149,13 @@ static struct {
     struct klu_picq pic[KLSB_NPIC]; int npic;
     DWORD state;                              /* the session state of the last tick */
     float cd_max;                             /* the countdown's first value this round */
+    int ipath, ivalid, told_i, told_ic, map_tried; DWORD i_tick0; char map[48];   /* OnlineIntroState: no intro element, the card is composed / valid, log latches (1 = state path told, 2 = element path told), tick time of the first compose, the map's name */
     LONG sframe; int sset, spath, told_s, told_n; DWORD s_tick0;   /* OnlineBoardState: engine frame at the first state-0x1f tick, the path is live, log latches, tick time of the first compose */
 } klsb_r;
 static DWORD klsb_evt[KLSB_NSLOT + 1];
 static int klsb_evt_ready, klsb_code_bad;
 static CRITICAL_SECTION klsb_cs; static int klsb_cs_ready;
-static volatile LONG klsb_n_call, klsb_n_ours, klsb_n_stock, klsb_n_busy, klsb_n_refused, klsb_n_srender, klsb_n_sdrawn;
+static volatile LONG klsb_n_call, klsb_n_ours, klsb_n_stock, klsb_n_busy, klsb_n_refused, klsb_n_srender, klsb_n_sdrawn, klsb_n_irender, klsb_n_idrawn;
 
 /* ---------------------------------------------------------------- pictures: klu_pic with a CACHED description */
 
@@ -247,9 +249,11 @@ static int klsb_ours(DWORD e, void *ctx, void *cam)
    nothing to wrap. The tick then composes the card from the round-end state (GUESS G14: session state 0x1f, as the element path) and this draws it on the CLOCK element's render
    (klhud.c klu_render_elem calls it after the stock render; GUESS G15: that element still renders in state 0x1f; the tick logs when it does not). The countdown runs
    10 s from the tick that first saw 0x1f (GUESS G13/G16, no deadline to read). Read-only toward the replicated state. Not used once the element is wrapped. */
+static void klsb_istate_render(void *el, void *ctx, void *cam);      /* below: OnlineIntroState */
 static void klsb_state_render(void *el, void *ctx, void *cam)
 {
     int i; DWORD sys; LONG frame = 0, end;
+    klsb_istate_render(el, ctx, cam);               /* the intro card has its own gate (states 0x16..0x18, no intro element) */
     if (!klsb.on || !klsb.ostate || klsb.probe || klsb.test || !klsb_r.spath || klsb_r.elem || !ctx || (DWORD)(DWORD_PTR)el != klu_r.elem || *(const DWORD *)ctx != KLU_CTX_VT) return;
     InterlockedIncrement(&klsb_n_srender);
     if (!TryEnterCriticalSection(&klsb_cs)) { InterlockedIncrement(&klsb_n_busy); return; }
@@ -708,6 +712,81 @@ static void klsb_intro_draw(void *ctx, void *cam)
     LeaveCriticalSection(&klsb_cs);
 }
 
+/* OnlineIntroState (2026-10-27, [HUD] OnlineIntroState=1, needs OnlineIntro=1; NOT run live): the same answer as OnlineBoardState for the PRE-ROUND card. Whether ZFAIntroDisplay (osd+0x10ac,
+   klhud_board.c) exists online is unproven (G17); when it is absent the card is composed from the online snapshot in states 0x16..0x18 and drawn on the CLOCK element's render
+   (GUESS G15 as the end card: that element renders in those states; the tick logs when it does not). Backing, title, round, map name, one line of players / minutes and the crew
+   list (heister character names, YOU marks the local seat, AI the bots) in two columns of six. Position (220,120) 840 x 300 is a GUESS (the Arcade card's backing is 840 wide). When
+   the element exists the OnlineIntro lines under it (klsb_intro_draw) are used instead. Read-only toward the game; local drawing only. */
+#define KLSB_IX          220.0f
+#define KLSB_IY          120.0f
+#define KLSB_IW          840.0f
+#define KLSB_IH          300.0f
+#define KLSB_IROWS       6
+
+static int klsb_map_name(char *out, int cap)
+{   /* the engine's scene 'SCENES\Locations\F0k\F0k_Main.gms' -> the game's own LOC text AllLevels / Menu/Online/Scenarios/Title0k (the lobby's key, 0x47d8c0; kllocname.c's wrapper answers an expansion map's name through the same call). 0 = none */
+    char sc[160], key[40], sec[9], t[48]; int i, n = 0; DWORD sys, db, loc, vt, fn; const char *p;
+    out[0] = 0;
+    if (!klh_scene(sc, sizeof sc)) return 0;
+    for (i = 0; sc[i] && sc[i + 1] && sc[i + 2] && sc[i + 3]; i++)
+        if ((sc[i] == 0x5c || sc[i] == '/') && (sc[i + 1] == 'F' || sc[i + 1] == 'f') && sc[i + 2] >= '0' && sc[i + 2] <= '9' && sc[i + 3] >= '0' && sc[i + 3] <= '9') { n = (sc[i + 2] - '0') * 10 + (sc[i + 3] - '0'); break; }
+    if (n < 1 || n > 9) return 0;
+    if (!(sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) || !(db = klh_rd32(sys + 0xac)) || !(loc = klh_rd32(db + 0x94)) || !(vt = klh_rd32(loc)) ||
+        !klu_rdata_ptr(vt) || !(fn = klh_rd32(vt)) || klh_kind((const void *)(DWORD_PTR)KLH_VA(fn), 4, sec) != 'x') return 0;
+    snprintf(key, sizeof key, "Menu/Online/Scenarios/Title%02d", n);
+    p = ((const char *(__fastcall *)(void *, void *, const char *, const char *, DWORD))(DWORD_PTR)fn)((void *)(DWORD_PTR)loc, 0, "AllLevels", key, 0);
+    if (!p || klh_rdstr((DWORD_PTR)p, t, sizeof t) < 2 || strstr(t, "Title0")) return 0;      /* a missing key may come back as the key itself (not established) */
+    snprintf(out, (size_t)cap, "%s", t); klor_upper(out);
+    return 1;
+}
+
+static void klsb_istate_compose(const struct klor_snap *o)
+{   /* under klsb_cs, main thread: texts into the pool, pictures into klsb_r.pic */
+    float x0 = KLSB_IX, y0 = KLSB_IY; char a[64], b[96], nm[40]; int i, row = 0, total, mins;
+    for (i = 0; i < KLSB_NTEXT; i++) klsb_r.t[i].on = 0;
+    klsb_r.npic = 0;
+    klu_addpic_q = klsb_r.pic; klu_addpic_n = &klsb_r.npic; klu_addpic_cap = KLSB_NPIC;      /* as klsb_compose: every klu_addpic / klu_outline below goes to OUR queue (cleared again before this returns) */
+    klu_addpic(klu_r.handle[181] ? 181 : 111, x0, y0, KLSB_IW, KLSB_IH, ((DWORD)klsb.alpha << 24) | 0x000c0c0du, klsb_ly(4));
+    klu_outline(x0, y0, KLSB_IW, KLSB_IH, KLU_C_CORAL, klsb_ly(3));
+    klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, x0 + 40.0f, y0 + 88.0f, KLSB_IW - 80.0f, 3.0f, KLU_C_CHALK, klsb_ly(1));
+    klsb_put(KLSB_T_TITLE, x0 + 40.0f, klu_cen(y0 + 34.0f, KLU_FNT_LABEL), "FRAGILE ALLIANCE", KLU_C_CORAL);
+    if (o->round > 0) snprintf(a, sizeof a, "ROUND %d OF %d", o->round, o->rounds); else snprintf(a, sizeof a, "NEXT ROUND");
+    klsb_put(KLSB_T_ROUND, x0 + 40.0f, klu_cen(y0 + 62.0f, KLU_FNT_BIG), a, KLU_C_CHALK);
+    klsb_put(KLSB_T_LIVES, x0 + KLSB_IW - 40.0f, klu_cen(y0 + 34.0f, KLU_FNT_LABEL), klsb_r.map, KLU_C_CORAL);      /* right-aligned slot; empty = no line */
+    total = o->n + o->nbots; mins = (int)(o->length / 60.0f + 0.5f);
+    if (mins > 0 && mins < 100) snprintf(b, sizeof b, "%d PLAYERS   %d MIN", total, mins); else snprintf(b, sizeof b, "%d PLAYERS", total);
+    klsb_put(KLSB_T_RESULT, x0 + 40.0f, klu_cen(y0 + 110.0f, KLU_FNT_NAME), b, KLU_C_CHALK);
+    for (i = 0; i < total && row < KLSB_NROW; i++) {
+        const struct klor_row *r = i < o->n ? &o->r[i] : &o->bot[i - o->n]; int you; float cx, rc;
+        if (!r->used) continue;
+        you = i < o->n && !r->bot && r->seat == o->local;
+        snprintf(nm, sizeof nm, "%s", r->name[0] ? r->name : "HEISTER"); klor_upper(nm);
+        cx = x0 + 40.0f + (float)(row / KLSB_IROWS) * 400.0f; rc = y0 + 158.0f + (float)(row % KLSB_IROWS) * 24.0f;
+        klsb_put(KLSB_T_ROW(row, 0), cx, klu_cen(rc, KLU_FNT_NAME), nm, you ? KLU_C_GREENHI : KLU_C_CHALK);
+        klsb_put(KLSB_T_ROW(row, 1), cx + 220.0f, klu_cen(rc, KLU_FNT_LABEL), you ? "YOU" : r->bot ? "AI" : "", KLU_C_CORAL);
+        row++;
+    }
+    klu_addpic_q = 0;
+}
+
+static void klsb_istate_render(void *el, void *ctx, void *cam)
+{   /* on the clock element's render (klsb_state_render calls it): the composed card, states 0x16..0x18, only while the intro element is absent */
+    int i;
+    if (!klsb.on || !klsb.istate || klsb.probe || klsb.test || !klsb_r.ipath || !ctx || (DWORD)(DWORD_PTR)el != klu_r.elem || *(const DWORD *)ctx != KLU_CTX_VT) return;
+    InterlockedIncrement(&klsb_n_irender);
+    if (!TryEnterCriticalSection(&klsb_cs)) { InterlockedIncrement(&klsb_n_busy); return; }
+    if (klsb_r.ivalid && klsb_r.made && klsb_r.state >= 0x16 && klsb_r.state <= 0x18 && klsb_alive() && klsb_r.pics_cached &&
+        *(const DWORD *)(DWORD_PTR)((DWORD)(DWORD_PTR)el + 0xc) == klsb_r.T && *(const DWORD *)(DWORD_PTR)((DWORD)(DWORD_PTR)el + 8) == klsb_r.tbl && (klu_r.handle[111] || klu_r.handle[181])) {
+        for (i = 0; i < klsb_r.npic; i++) {
+            const struct klu_picq *p = &klsb_r.pic[i];
+            klsb_pic2(ctx, p->n, p->x, p->y, p->w, p->h, p->argb, p->layer);
+        }
+        for (i = 0; i < KLSB_NT(); i++) klsb_text(i, ctx, cam);
+        InterlockedIncrement(&klsb_n_idrawn);
+    }
+    LeaveCriticalSection(&klsb_cs);
+}
+
 static void klsb_apply(void)
 {   /* SetText / SetColour of every text whose string or colour changed (the same discipline as klu_apply; under klsb_cs) */
     int i;
@@ -745,7 +824,7 @@ static void klsb_probe_line(DWORD osd, const struct klb_snap *s, int have)
 
 static void klsb_tick(int game_thread)
 {
-    static DWORD last, said; DWORD now = GetTickCount(), osd, el, endb = 0, sys; struct klb_snap s; int have, hon = 0, st, nowrap = 0; struct klor_snap on; LONG frame = 0;
+    static DWORD last, said; DWORD now = GetTickCount(), osd, el, endb = 0, sys; struct klb_snap s; int have, hon = 0, st, nowrap = 0, ipath = 0; struct klor_snap on; LONG frame = 0;
     if (!klsb.on || !klu.on || !klh_exe_ok || !game_thread || now - last < 100) return;
     last = now;
     osd = klu_r.osd;
@@ -754,7 +833,8 @@ static void klsb_tick(int game_thread)
     if (klsb_r.refused || klsb_code_bad) return;
     if (!klu_r.pic_done) klu_pic_prep(klu_r.elem);
     /* 2026-10-27: online the outro element at osd+0x10b4 is still 0 for minutes (Q27_DM03 refused after 3 s and never drew the online card): an absent element is waited for, only a present one that will not wrap counts */
-    if (!klsb_wrap(osd)) { if (klsb.ostate && klsb.online && !klsb_code_bad && !klh_rd32(osd + KLSB_O_OUTRO)) nowrap = 1; else { if (!klsb_code_bad && (!klh_rd32(osd + KLSB_O_OUTRO) || ++klsb_r.wrapfail < 30)) return; klsb_r.refused = 1; if (klu.log) klog("hud: scoreboard: the wrap failed %d tick(s) (%s): the stock panel stays for this OSD", klsb_r.wrapfail, klsb_code_bad ? "code / vtable mismatch" : "element not readable or not ZHeistOutroDisplay"); return; } }
+    if (!klsb_wrap(osd)) { int none = !klsb_code_bad && !klh_rd32(osd + KLSB_O_OUTRO);      /* OnlineIntroState: an absent outro element must not stop the tick before the intro states */
+        if (none && klsb.ostate && klsb.online) nowrap = 1; else if (!(none && klsb.istate)) { if (!klsb_code_bad && (!klh_rd32(osd + KLSB_O_OUTRO) || ++klsb_r.wrapfail < 30)) return; klsb_r.refused = 1; if (klu.log) klog("hud: scoreboard: the wrap failed %d tick(s) (%s): the stock panel stays for this OSD", klsb_r.wrapfail, klsb_code_bad ? "code / vtable mismatch" : "element not readable or not ZHeistOutroDisplay"); return; } }
     if (!nowrap) { klsb_r.wrapfail = 0; klsb_r.spath = 0; }
     klsb_cache_pics();
     if (klsb_r.state == 0x1f && !nowrap) klsb_cache_odesc();
@@ -775,12 +855,25 @@ static void klsb_tick(int game_thread)
     }
     st = have ? (int)s.state : hon ? (int)on.b.state : 0;
     klsb_r.state = st;
+    if (hon && klsb.istate && klsb.intro && st >= 0x16 && st <= 0x18) {      /* OnlineIntroState: which path ran, logged once per path */
+        DWORD ie = klh_rd32(osd + KLBRD_O_INTRO); int want = ie ? 2 : 1;
+        ipath = ie == 0;
+        if (klsb_r.told_i != want) {
+            klsb_r.told_i = want; klsb_r.told_ic = 0; klsb_r.i_tick0 = now; InterlockedExchange(&klsb_n_irender, 0); InterlockedExchange(&klsb_n_idrawn, 0);
+            if (ipath) klog("hud: scoreboard: OnlineIntroState: state %02x with NO intro element at osd+0x10ac: the intro card is composed from the online snapshot (%d humans, %d bots, round %d of %d) and drawn on the clock element's render; NOT RUN IN THE GAME", st, on.n, on.nbots, on.round, on.rounds);
+            else klog("hud: scoreboard: OnlineIntroState: state %02x, intro element %08lx exists: the element path (OnlineIntro lines under the Board card, needs Board=1 BoardCard=1) runs; NOT RUN IN THE GAME", st, ie);
+        } else if (ipath && !klsb_r.told_ic && now - klsb_r.i_tick0 >= 2000) {
+            klsb_r.told_ic = 1;
+            klog("hud: scoreboard: OnlineIntroState: 2 s in: clock element renders +%ld, card drawn +%ld%s", klsb_n_irender, klsb_n_idrawn, klsb_n_irender ? (klsb_n_idrawn ? " (shown)" : " (composed but not drawn: pictures / lock / canary / pool)") : " (the clock element does not render in this state: G15 is wrong, nothing is shown)");
+        }
+    }
+    klsb_r.ipath = ipath;
     if (klsb.probe || (klu.log >= 2 && have && s.state >= 0x1f)) klsb_probe_line(osd, &s, have);
     if (!have && !hon) { klsb_r.valid = 0; return; }
     klgrd_round_reset(st);      /* [Grades] RankUp: latch the ranks in the round (states 0x16..0x19), compare in 0x1f */
     if (have) klgrd_track(0, s.human >= 0 ? s.human : 0, 1, st);
     else { int q; klgrd_note_online(&on); for (q = 0; q < on.n; q++) klgrd_track(1, on.r[q].seat, on.r[q].seat == on.local, st); }
-    if (klsb.on && !klsb_r.made && ((st >= 0x17 && st <= 0x19) || (nowrap && st == 0x1f)) && klu_r.fonts[0]) {
+    if (klsb.on && !klsb_r.made && ((st >= 0x17 && st <= 0x19) || (nowrap && st == 0x1f) || ipath) && klu_r.fonts[0]) {
         EnterCriticalSection(&klsb_cs);
         klsb_r.made = klsb_make_pool();
         if (!klsb_r.made) klsb_r.refused = 1;
@@ -789,7 +882,11 @@ static void klsb_tick(int game_thread)
     }
     if (!klsb_r.made) { klsb_r.valid = 0; return; }
     if (klsb.probe) return;                                   /* log only: nothing is composed, the stock panel shows */
-    if (hon && klsb.intro && st >= 0x16 && st <= 0x18) { EnterCriticalSection(&klsb_cs); klsb_intro_compose(&on); klsb_apply(); LeaveCriticalSection(&klsb_cs); }
+    if (ipath) {      /* OnlineIntroState: the map's name once per OSD (the game's LOC, game thread), then the whole card */
+        if (!klsb_r.map_tried) { klsb_r.map_tried = 1; klsb_map_name(klsb_r.map, sizeof klsb_r.map); if (klu.log) klog("hud: scoreboard: OnlineIntroState: map name '%s'", klsb_r.map); }
+        EnterCriticalSection(&klsb_cs); klsb_istate_compose(&on); klsb_apply(); klsb_r.ivalid = 1; LeaveCriticalSection(&klsb_cs);
+    } else if (klsb_r.ivalid) { EnterCriticalSection(&klsb_cs); klsb_r.ivalid = 0; LeaveCriticalSection(&klsb_cs); }
+    if (hon && klsb.intro && !ipath && st >= 0x16 && st <= 0x18) { EnterCriticalSection(&klsb_cs); klsb_intro_compose(&on); klsb_apply(); LeaveCriticalSection(&klsb_cs); }
     if (st != 0x1f) {
         if (klsb_r.valid) { EnterCriticalSection(&klsb_cs); klsb_r.valid = 0; LeaveCriticalSection(&klsb_cs); }
         if (st < 0x1f) { klsb_r.cd_max = 0; klsb_r.sset = 0; klsb_r.told_s = 0; }
@@ -838,7 +935,7 @@ static void klsb_init(void)
     if (!klu.on) return;
     klsb.on = klu_inii("Scoreboard", 0, 0, 1);
     if (!klsb.on) return;
-    klsb.online = klu_inii("OnlineBoard", 0, 0, 1); klsb.ostate = klsb.online && klu_inii("OnlineBoardState", 0, 0, 1); klsb.intro = klu_inii("OnlineIntro", 0, 0, 1);
+    klsb.online = klu_inii("OnlineBoard", 0, 0, 1); klsb.ostate = klsb.online && klu_inii("OnlineBoardState", 0, 0, 1); klsb.intro = klu_inii("OnlineIntro", 0, 0, 1); klsb.istate = klsb.intro && klu_inii("OnlineIntroState", 0, 0, 1);
     klsb.probe = klu_inii("ScoreboardProbe", 0, 0, 1); klsb.test = klu_inii("ScoreboardTest", 0, 0, 1); klsb.fault = klu_inii("ScoreboardFault", 0, 0, 1);
     klsb.rows12 = klu_inii("Rows12", 1, 0, 1); klsb.textonly = klu_inii("ScoreboardTextOnly", 0, 0, 1); klsb.total = klu_inii("ScoreboardTotal", 1, 0, 2); klsb.count = klu_inii("ScoreboardCount", 0, 0, 1); klsb.lead = klu_inii("ScoreboardShopLead", 30, 0, 100);   /* tenths of a second cut off the 10 s countdown: the shop opens at 7 (owner 2026-10-25) */
     klsb.alpha = klu_inii("ScoreboardAlpha", 230, 0, 255);
@@ -847,8 +944,8 @@ static void klsb_init(void)
     if (!(klsb.y >= 0 && klsb.y <= 320)) klsb.y = KLSB_PY;
     if (!klu.fontset) { klog("hud: scoreboard: needs the level's baked fonts ([HUD] Fonts=1 or Draft=1): off"); klsb.on = 0; return; }
     InitializeCriticalSection(&klsb_cs); klsb_cs_ready = 1;
-    klog("hud: scoreboard: on (Scoreboard=1 Probe=%d Test=%d Fault=%d TextOnly=%d Total=%d Count=%d Alpha=%d at %.0f,%.0f); ZHeistOutroDisplay [osd+0x10b4] (OnlineBoardState=%d: without it, from the state), state 0x1f only, every failure = the stock panel; NOT RUN IN THE GAME",
-         klsb.probe, klsb.test, klsb.fault, klsb.textonly, klsb.total, klsb.count, klsb.alpha, klsb.x, klsb.y, klsb.ostate);
+    klog("hud: scoreboard: on (Scoreboard=1 Probe=%d Test=%d Fault=%d TextOnly=%d Total=%d Count=%d Alpha=%d at %.0f,%.0f); ZHeistOutroDisplay [osd+0x10b4] (OnlineBoardState=%d: without it, from the state), state 0x1f only, every failure = the stock panel (OnlineIntroState=%d); NOT RUN IN THE GAME",
+         klsb.probe, klsb.test, klsb.fault, klsb.textonly, klsb.total, klsb.count, klsb.alpha, klsb.x, klsb.y, klsb.ostate, klsb.istate);
 }
 
 #endif /* KLHUD_BOARD2_C */
