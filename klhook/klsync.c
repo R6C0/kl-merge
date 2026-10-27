@@ -837,8 +837,95 @@ static void ksp_pass(void)
     if (ksp.faults > 3) { klog("sync: puppet: %d faults in the steer: Puppet off", ksp.faults); ksp.pup = 0; ksp_release_all("faults"); }
 }
 
+/* ---- [Sync] PlayerProbe (2026-10-27, re\netcode_players_1027.md D3): the HUMAN bodies' place error. READ-ONLY. The actor walk above never sees them (a ZFFPlayer is
+   not class 0), so nobody had a number for 'are the players where the host has them'. The host (PlayerProbe=1) broadcasts every ShareMs the session's player table
+   ('KLSYP' u32 T u16 n u16 0, n x {u16 table index, u16 0, f32 x3}) on the same UDP port; the client (PlayerProbe=1) compares every REMOTE body of the same table index
+   (its own, klcharonline's 'my body', is left out: its place is the client's own word) and logs every 5 s 'sync: players vs host: ...' with p50 / p90 / worst of the raw
+   distance and of the lead-corrected one (the host place moved on by the list age at the speed of the last two lists). Table order = same index on every peer: the
+   assumption klcharonline's looks rely on (proven on a client 10-26/27). GUESS: kle_node([ent+4]) is the body's place on every peer (the actors' reading). ---- */
+#define KPL_N 16
+#define KPL_S 512
+struct kpl_rec { unsigned short idx, pad; float p[3]; };
+typedef char kpl_rec_size_is_16[sizeof(struct kpl_rec) == 16 ? 1 : -1];
+static struct {
+    int on, n, pn, anch, nraw, nown, toldOwn, toldTbl, nl;
+    DWORD shAt, rxAt, rxT, pT, cmpAt, sumAt, anchNow, anchT;
+    struct kpl_rec h[KPL_N], pv[KPL_N];
+    float raw[KPL_S], lead[KPL_S], last[KPL_N];
+} kpl;
+static void kpl_reset(void) { int on = kpl.on; memset(&kpl, 0, sizeof kpl); kpl.on = on; }
+static void kpl_send(DWORD sm, DWORD now)
+{
+    char pk[16 + KPL_N * 16]; struct kpl_rec r; klsy_sin a; DWORD T = (DWORD)klsy_T(), ents = 0; WORD cnt = 0; int i, n = 0, hv, team; float hp;
+    kpl.shAt = now;
+    if (!klco_table(sm, &ents, &n)) n = 0;                                                 /* klcharonline.c's reader of the session's player table */
+    for (i = 0; i < n && i < KPL_N; i++) {
+        DWORD pl = klh_rd32(ents + 12 * i + 4);
+        if (!pl) continue;
+        memset(&r, 0, sizeof r); r.idx = (unsigned short)i;
+        klsy_actor(pl, r.p, &hv, &hp, &team);
+        if (!hv) continue;
+        memcpy(pk + 16 + cnt * 16, &r, 16); cnt++;
+    }
+    memcpy(pk, "KLSYP\0\0\0", 8); memcpy(pk + 8, &T, 4); memcpy(pk + 12, &cnt, 2); pk[14] = pk[15] = 0;
+    memset(&a, 0, sizeof a); a.fam = 2; a.port = (unsigned short)(((KLSY_PORT & 0xff) << 8) | (KLSY_PORT >> 8)); a.addr = 0xffffffffu;
+    i = klsy.sendto(klsy.sock, pk, 16 + cnt * 16, 0, &a, sizeof a);
+    if (!kpl.toldTbl) { kpl.toldTbl = 1; klog("sync: players: host list %d of %d table bodies (sendto %d)", cnt, n, i); }
+}
+/* client: one 'KLSYP' packet (already checked for the source lock) */
+static void kpl_rx(const char *pk, int len, DWORD now)
+{
+    WORD cnt; DWORD T;
+    memcpy(&cnt, pk + 12, 2); if (cnt > KPL_N || 16 + cnt * 16 > len) return;
+    memcpy(&T, pk + 8, 4);
+    if (kpl.anch && T <= kpl.rxT && kpl.rxT - T < 500000000u) return;                       /* older / repeated (a huge step back = the 1e9 ms wrap) */
+    if (!kpl.anch || T <= kpl.rxT) { kpl.anch = 1; kpl.anchNow = now; kpl.anchT = T; }       /* GUESS as Compare: the first list was on time */
+    if (kpl.n) { memcpy(kpl.pv, kpl.h, sizeof kpl.h); kpl.pn = kpl.n; kpl.pT = kpl.rxT; }
+    memcpy(kpl.h, pk + 16, cnt * 16); kpl.n = cnt; kpl.rxT = T; kpl.rxAt = now;
+}
+static int kpl_fcmp(const void *a, const void *b) { float x = *(const float *)a, y = *(const float *)b; return x < y ? -1 : x > y; }
+static void kpl_compare(DWORD sm, DWORD now)
+{
+    int j, n = 0, k; int age; DWORD dT, ents = 0;
+    kpl.cmpAt = now;
+    if (!kpl.n || now - kpl.rxAt > 1000 || !klco_table(sm, &ents, &n)) return;             /* no fresh host list / no player table here */
+    age = (int)(now - kpl.anchNow) - (int)(kpl.rxT - kpl.anchT); if (age < 0) age = 0; if (age > 600) age = 600;
+    dT = kpl.rxT - kpl.pT;
+    if (klco.ownIdx < 0 && !kpl.toldOwn) { kpl.toldOwn = 1; klog("sync: players: my body is not known yet (klcharonline): every table body is compared, my own too"); }
+    for (j = 0; j < kpl.n; j++) {
+        const struct kpl_rec *h = &kpl.h[j]; DWORD pl; float pos[3], g[3], hp, dx, dy, dz, d, dl; int hv, team;
+        if ((int)h->idx == klco.ownIdx) { kpl.nown++; continue; }
+        if (h->idx >= n || !(pl = klh_rd32(ents + 12 * h->idx + 4))) continue;
+        klsy_actor(pl, pos, &hv, &hp, &team);
+        if (!hv) continue;
+        memcpy(g, h->p, 12);
+        if (kpl.pn && dT >= 50 && dT <= 1000)                                              /* lead: the host body's speed from the last two lists */
+            for (k = 0; k < kpl.pn; k++) if (kpl.pv[k].idx == h->idx) {
+                int a; for (a = 0; a < 3; a++) g[a] += (h->p[a] - kpl.pv[k].p[a]) * (float)age / (float)dT;
+                break;
+            }
+        dx = pos[0] - h->p[0]; dy = pos[1] - h->p[1]; dz = pos[2] - h->p[2]; d = (float)sqrt(dx * dx + dy * dy + dz * dz);
+        dx = pos[0] - g[0]; dy = pos[1] - g[1]; dz = pos[2] - g[2]; dl = (float)sqrt(dx * dx + dy * dy + dz * dz);
+        if (kpl.nraw < KPL_S) { kpl.raw[kpl.nraw] = d; kpl.lead[kpl.nraw] = dl; kpl.nraw++; }
+        if (h->idx < KPL_N) kpl.last[h->idx] = dl;
+    }
+    if (now - kpl.sumAt >= 5000 && kpl.nraw) {
+        char per[160]; int m = kpl.nraw, o = 0;
+        kpl.sumAt = now;
+        qsort(kpl.raw, m, sizeof(float), kpl_fcmp); qsort(kpl.lead, m, sizeof(float), kpl_fcmp);
+        per[0] = 0;
+        for (j = 0; j < kpl.n && j < 8 && o < (int)sizeof per - 20; j++) if ((int)kpl.h[j].idx != klco.ownIdx && kpl.h[j].idx < KPL_N)
+            o += snprintf(per + o, sizeof per - o, " i%u=%.0f", kpl.h[j].idx, kpl.last[kpl.h[j].idx]);
+        klog("sync: players vs host: %d samples (own body i%d left out %d x), list %d ms old: raw p50 %.0f p90 %.0f worst %.0f | lead-corrected p50 %.0f p90 %.0f worst %.0f | last:%s",
+             m, klco.ownIdx, kpl.nown, age, kpl.raw[m / 2], kpl.raw[(m * 9) / 10 < m ? (m * 9) / 10 : m - 1], kpl.raw[m - 1],
+             kpl.lead[m / 2], kpl.lead[(m * 9) / 10 < m ? (m * 9) / 10 : m - 1], kpl.lead[m - 1], per);
+        kpl.nraw = 0; kpl.nown = 0;
+    }
+}
+
 static void klsy_init(void)
 {
+    kpl.on = GetPrivateProfileIntA("Sync", "PlayerProbe", 0, klh_ini) != 0;               /* (recommended off: a measurement for benches, log only) */
     klsy.on = GetPrivateProfileIntA("Sync", "Probe", 0, klh_ini);
     klsy_vanprobe = GetPrivateProfileIntA("Sync", "VanProbe", 1, klh_ini) != 0;      /* (recommended on, log only; needs Probe) */
     klsy.share = GetPrivateProfileIntA("Sync", "Share", 0, klh_ini) != 0;
@@ -889,12 +976,13 @@ static void klsy_init(void)
     if (ksp.pup || ksp.diag) klog("sync: Puppet=%d PuppetDiag=%d PuppetTol=%.0f PuppetSnap=%.0f PuppetSpeed=%.0f PuppetTeam=%d (client only; needs the host's Share=1)%s", ksp.pup, ksp.diag, ksp.tol, ksp.snap, ksp.speed, ksp.team,
                                    (ksp.pup && klsy.apply) ? " WARNING: Apply=1 too: the two fight, use Puppet alone" : "");
     if (klsy.apply) klog("sync: Apply=1 ApplyHp=%d ApplyMax=%d ApplyTol=%d (client only: a non-player actor farther than ApplyTol from the host's is teleported to it)", klsy.applyHp, klsy.applyMax, klsy.applyTol);
+    if (kpl.on) klog("sync: PlayerProbe=1 (read-only): the host sends its player table places, a client logs 'sync: players vs host' every 5 s");
     if (klsy.on || klsy.share || klsy.cmp)
         klog("sync: Probe=%d Share=%d Compare=%d Every=%lu ShareMs=%lu Max=%d Tol=%.1f (Probe / Share / Compare are read-only)", klsy.on, klsy.share, klsy.cmp, (unsigned long)klsy.every, (unsigned long)klsy.shareMs, klsy.max, klsy.tol10 / 10.0);
 }
 
 /* The round was left (loading, lobby, restart) or has not begun: forget everything received. */
-static void klsy_leave(void) { klsy.inwin = 0; klsy.toldMode = 0; ksp_release_all("round left"); ksp_rx = 0; }
+static void klsy_leave(void) { klsy.inwin = 0; klsy.toldMode = 0; ksp_release_all("round left"); ksp_rx = 0; if (kpl.n || kpl.anch) kpl_reset(); }
 /* Empty the socket (old rounds' / levels' lists queue there while the tick is out of the state window). */
 static void klsy_drain(void)
 {
@@ -906,16 +994,16 @@ static void klsy_drain(void)
 static void klsy_tick(int game_thread)
 {
     DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0;
-    if (!(klsy.on || klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag) || !game_thread || !klh_exe_ok) return;
+    if (!(klsy.on || klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on) || !game_thread || !klh_exe_ok) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) { klsy_leave(); return; }
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4)) { klsy_leave(); return; }
     if (klsy.on < 2 && ((role != 2 && role != 3) || mode != 4)) { klsy_leave(); return; }
     if (state < 0x13 || state > 0x1f) { klsy_leave(); return; }                /* in a round (botfill's window) */
-    if ((klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag) && !klsy.sock) klsy_open();
+    if ((klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on) && !klsy.sock) klsy_open();
     if (!klsy.inwin) {                                                         /* entering the window: nothing from before this moment counts */
         klsy.inwin = 1; klsy_drain();
         klsy.nhost = 0; klsy.applyRx = 0; klsy.rxT = 0; klsy.rxAnchored = 0; klsy.srcSet = 0; klsy.agree = 0; klsy.nbad = 0;
-        klsy.applyAt = 0; klsy.cmpAt = 0; klsy.toldHum = 0; klsy.humLogs = 0; klsy.toldRefuse = 0;
+        klsy.applyAt = 0; klsy.cmpAt = 0; klsy.toldHum = 0; klsy.humLogs = 0; klsy.toldRefuse = 0; kpl_reset();
         ksp_release_all("round start"); memset(ksp_trk, 0, sizeof ksp_trk); memset(ksp_rv, 0, sizeof ksp_rv); memset(kst.ctl, 0, sizeof kst.ctl); memset(kst.bound1, 0, sizeof kst.bound1); kst.nrev = kst.nbind = 0; kst.sumAt = 0; memset(ksp_pk, 0, sizeof ksp_pk); ksp_rx = 0; ksp.pass = 0; ksp.gate = 0; ksp.pupAt = 0; ksp.diagAt = 0; ksp.roundAt = now;
     }
     if (!klsy.toldMode) { klsy.toldMode = 1; klog("sync: round: role %lu state 0x%lx (probe %d, share %d, compare %d, apply %d)", (unsigned long)role, (unsigned long)state, klsy.on, klsy.share, klsy.cmp, klsy.apply); }
@@ -933,12 +1021,14 @@ static void klsy_tick(int game_thread)
             free(t);
         }
     }
-    if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag) && role == 3 && klsy.sock) {                                /* client: take the newest FRESH host list, compare once a second */
+    if (kpl.on && role == 2 && klsy.sock && now - kpl.shAt >= klsy.shareMs) kpl_send(sm, now);         /* PlayerProbe: the host's player table places */
+    if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on) && role == 3 && klsy.sock) {                                /* client: take the newest FRESH host list, compare once a second */
         static char pk[16 + KLSY_MAXP * KLSY_REC]; klsy_sin from; int fl, len, k;
         for (k = 0; k < 256; k++) {                                                            /* drain the whole queue; the newest acceptable list wins */
             WORD cnt; DWORD T; int age;
             fl = sizeof from; len = klsy.recvfrom(klsy.sock, pk, sizeof pk, 0, &from, &fl);
             if (len < 0) break;
+            if (len >= 16 && !memcmp(pk, "KLSYP", 5)) { if (kpl.on && (!klsy.srcSet || from.addr == klsy.srcAddr)) kpl_rx(pk, len, now); continue; }   /* PlayerProbe list */
             if (len < 16 || memcmp(pk, "KLSY2", 5)) continue;
             memcpy(&cnt, pk + 12, 2); if (cnt > KLSY_MAXP || 16 + cnt * KLSY_REC > len) continue;
             if (klsy.srcSet && from.addr != klsy.srcAddr) continue;                            /* only the first source that sent a valid list this round */
@@ -953,6 +1043,7 @@ static void klsy_tick(int game_thread)
             if (kst.on || kst.cmpLead) ksp_trk_feed(T);
         }
         if (ksp.nlive && now - klsy.rxAt > 3000) ksp_release_all("host list stale");                 /* the host's packets stopped: give every vtable back */
+        if (kpl.on && now - kpl.cmpAt >= 1000) kpl_compare(sm, now);                            /* PlayerProbe: remote bodies vs the host's places, once a second */
         if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag) && klsy.nhost && now - klsy.cmpAt >= 1000) {            /* the Compare walk also gives Apply its trust: identity agreement */
             struct klsy_cm c; int j, mx = 0, ag; klsy.cmpAt = now; memset(&c, 0, sizeof c); c.worst_s = -1;
             for (j = 0; j < klsy.nhost; j++) if (klsy.host[j].slot > mx) mx = klsy.host[j].slot;
