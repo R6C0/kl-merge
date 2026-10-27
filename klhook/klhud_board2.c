@@ -438,12 +438,12 @@ static const char *klsb_fate(const struct klb_snap *s, int i, int traitor, DWORD
 
 /* [Grades] the letter's colour, and the RANK UP line (right-aligned on the title row, left of the LIVES label's skulls) */
 static DWORD klsb_grade_colour(char L) { return L == 'S' ? KLU_C_GREENHI : L == 'A' ? KLU_C_GREEN : L == 'B' ? KLU_C_CHALK : L == 'C' ? KLU_C_ORANGE : KLU_C_CORAL; }
-static void klsb_grade_put(int row, float px, float rowc, const struct klgrd_in *in)
+static void klsb_grade_put(int row, float px, float rowc, const struct klgrd_in *in, int hl)
 {
     char L = klgrd_letter(in, 0), t[2];
     if (!L || row < 0 || row >= KLSB_NROW) return;
     t[0] = L; t[1] = 0;
-    klsb_put(KLSB_T_GRADE(row), px + KLSB_COLG, klu_cen(rowc, KLU_FNT_NAME), t, klsb_grade_colour(L));
+    klsb_put(KLSB_T_GRADE(row), px + KLSB_COLG, klu_cen(rowc, KLU_FNT_NAME), t, hl && klsb_grade_colour(L) == KLU_C_CHALK ? KLU_C_INK : klsb_grade_colour(L));   /* hl: your row sits on a CHALK bar, so a chalk B vanished there (BOSE5g host shot: own ESCAPED row blank) */
 }
 static void klsb_rankup_put(float px, float py, int idx)
 {
@@ -562,7 +562,7 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
             struct klgrd_in gi; memset(&gi, 0, sizeof gi);
             gi.loot = mi.payout ? mi.payout : mi.carried; gi.rewards = you ? m.rewards : 0; gi.escaped = kluv_state(s, i) == KLUV_ST_ESCAPED; gi.dead = dead; gi.traitor = traitor;
             gi.fed = !strcmp(fate, "FED");
-            klsb_grade_put(rr, px, rowc, &gi);
+            klsb_grade_put(rr, px, rowc, &gi, you && !dead);
         }
         if (dead) {
             const unsigned char *c; float w = 0;
@@ -720,7 +720,7 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
             const struct klor_row *r = &o->r[i]; struct klgrd_in gi; memset(&gi, 0, sizeof gi);
             gi.kills = r->kills; gi.police = r->police_kills; gi.loot = r->loot; gi.rewards = r->reward;
             gi.escaped = kind == KLUV_K_ESCAPED; gi.dead = dead; gi.traitor = kind == KLUV_K_TRAITOR; gi.fed = kind == KLUV_K_FED;
-            klsb_grade_put(row, px, rowc, &gi);
+            klsb_grade_put(row, px, rowc, &gi, you && !dead);
         }
         if (dead) {
             const unsigned char *c; float w = 0;
