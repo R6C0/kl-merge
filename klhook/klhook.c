@@ -673,6 +673,30 @@ static DWORD klh_actor_priv, klh_actor_priv2;      /* priv2: klbalance.c [BotFil
 static DWORD klh_player_priv;
 static DWORD klh_pvt(DWORD o) { DWORD v = klh_rd32(o); return (klh_player_priv && v == klh_player_priv) ? 0x00bb45f4u : v; }
 static DWORD klh_avt(DWORD o) { DWORD v = klh_rd32(o); return ((klh_actor_priv && v == klh_actor_priv) || (klh_actor_priv2 && v == klh_actor_priv2)) ? 0x00bb3bacu : (klh_player_priv && v == klh_player_priv) ? 0x00bb45f4u : v; }
+/* 2026-10-27 (bench BOSE5c): ONLINE, after my van escape / death the spectator camera follows a peer and the gamedata local-player slot
+   [gd+0x898] -> [gd+0x828+4*sel] points at the PEER's body. klh_slot_player_mine() is that slot read for code that means 'MY body' (not the camera's):
+   offline / Arcade (kl_online() == 0) it returns the slot exactly as before. Online it remembers the body the slot held while it was a master on this
+   machine (the game's own 'is mine' test 0x9425a0 on the DDL object [ent+0x274c], whose +0x540 points back) and keeps returning it while it is still a
+   ZFFPlayer, still master and still points back; else the slot as before. Camera code (klcam.c, klcampool.c) and klnetsmooth.c (its swap gate, c9) keep the raw slot.
+   GUESS (same as klcharonline.c klco_is_master): the offsets hold for the player entities on a client too. */
+static int klh_ent_master(DWORD ent)
+{
+    DWORD r = klh_rd32(ent + 0x274c);
+    if (!r || klh_rd32(r + 0x540) != ent) return 0;
+    /* __try: a half-built replica / just-freed net object could fault in 0x9425a0 (kldown_mirror.c guards the same call); a fault = not mine */
+    __try { return (((unsigned (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(0x9425a0))((void *)(DWORD_PTR)r, 0) & 0xff) != 0; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+static DWORD klh_mine_body;                           /* the body the slot held while it was mine (online only) */
+static DWORD klh_slot_player_mine(void)
+{
+    DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA)), pl = 0; BYTE sel = 0xff;
+    if (gd && klh_rd(gd + 0x898, &sel, 1) && sel < 28) pl = klh_rd32(gd + 0x828 + 4 * sel);
+    if (!kl_online()) { klh_mine_body = 0; return pl; }
+    if (pl && klh_pvt(pl) == 0x00bb45f4u && klh_ent_master(pl)) { klh_mine_body = pl; return pl; }
+    if (klh_mine_body && klh_mine_body != pl && klh_pvt(klh_mine_body) == 0x00bb45f4u && klh_ent_master(klh_mine_body)) return klh_mine_body;
+    return pl;
+}
 static DWORD_PTR klh_rcb_ra;                          /* the return address of the SteamAPI_RunCallbacks call that runs this tick (klfreeclimb.c acts only at the gameplay one) */
 #include "klmem.c"
 #include "klhigh.c"                                      /* klhigh.c: [Memory] High - the 4 GB flag made safe: the listed foreign modules' VirtualAlloc goes above 2 GB, the game stays below (off unless High=1/2); AFTER klmem.c */

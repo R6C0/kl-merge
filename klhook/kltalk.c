@@ -631,7 +631,8 @@ static int klk_fed_now(const struct klw_who *w)
     DWORD gd, pl; BYTE sel = 0xff, type = 0, pol = 0;
     if (w->human < 0 || w->m[w->human].status != 0) return 0;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel >= 28) return 0;
-    if (!(pl = klh_rd32(gd + 0x828 + 4 * sel)) || klh_pvt(pl) != KLK_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || !klh_rd(pl + 0x2723, &pol, 1)) return 0;
+    pl = klh_slot_player_mine();      /* 2026-10-27 (bench BOSE5c): online not the peer the spectator camera follows (offline = the slot as before) */
+    if (!pl || klh_pvt(pl) != KLK_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || !klh_rd(pl + 0x2723, &pol, 1)) return 0;
     return type == 3 && pol == 1;
 }
 

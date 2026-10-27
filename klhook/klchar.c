@@ -347,7 +347,8 @@ static void klc_level_tick(int game_thread)
         return;
     }
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &b, 1) || b == 0xff || (signed char)b < 0 || b > 3) return;
-    if (!(player = klh_rd32(gd + 0x828 + 4 * b)) || !(node = klh_rd32(player + 4))) return;
+    /* 2026-10-27 (bench BOSE5c): online the slot may hold the followed peer after my escape: klh_slot_player_mine keeps my body (offline = the slot) */
+    if (!(player = klh_slot_player_mine()) || !(node = klh_rd32(player + 4))) return;
     if (!klh_rd(player + 0x273c, &type, 1) || type != 2 || !klh_rd(player + 0x2723, &busy, 1) || busy) return;     /* a heister, and slot 137 would act on him */
     if (!klh_rd(rules + 0x208, hero, sizeof hero) || !klh_rd(node + 0x68, &model, 4) || !model) return;
     for (i = 0; i < 8; i++) if (!hero[i]) return;                                                           /* the eight are not all registered yet */

@@ -221,8 +221,9 @@ static int klp_read(struct klp_snap *s)
     if ((s->handler = klh_rd32(s->sm + 4)) != 0 && klh_rd32(s->handler) == KLP_HANDLER_VT) s->table = klh_rd32(s->handler + 8);
     else s->handler = 0;
     /* the local player (0x660b00): [gamedata + 0x828 + 4 * (char)[gamedata + 0x898]] */
+    /* 2026-10-27 (bench BOSE5c): klh_slot_player_mine = the same slot, but online it keeps my body when the spectator camera follows a peer (offline/Arcade: identical; this reader is Arcade-gated above, so it is belt and braces) */
     if ((gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) != 0 && klh_rd(gd + 0x898, &s->sel, 1) && s->sel < 28 &&
-        (s->player = klh_rd32(gd + 0x828 + 4 * s->sel)) != 0 && klh_pvt(s->player) == KLP_PLAYER_VT &&
+        (s->player = klh_slot_player_mine()) != 0 && klh_pvt(s->player) == KLP_PLAYER_VT &&
         klh_rd(s->player + 0x273c, &s->ptype, 1) && klh_rd(s->player + 0x2723, &s->ppolice, 1)) {
         if (!klh_rd(s->player + 0x460, s->feet, 12)) memset(s->feet, 0, sizeof s->feet);
     } else s->player = 0;
