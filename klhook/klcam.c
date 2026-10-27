@@ -129,6 +129,7 @@
 struct klcam_cfg {
     int enable, log, loghz, blend, unstick, recover, shouldercover, scoronline, leanfollow, cine, cineaim;
     int leangate, ufilter, ugate, utarget, logkeys, nandump, nanrepair;
+    int uonline;      /* [Camera] UnstickOnline (default 0): the Unstick remedies write in a network session too (camera object only, see klcam_cw) */
     float blendscale, recoverspeed, fliptime, fliptimespecial, shakescale, fovstep;
     BYTE shakekeep[41];
 };
@@ -204,6 +205,10 @@ static float klcam_ini_f(const char *key, float def, float lo, float hi)
     return v;
 }
 static int klcam_ini_i(const char *key, int def) { return (int)GetPrivateProfileIntA("Camera", key, def, klh_ini); }
+/* Camera-object writes (Unstick steps, chaser filter, gate / target remedies) are allowed offline, and online only with [Camera] UnstickOnline=1 (recommended off until benched).
+   GUESS: the ZFFCamera1 object (cam+0x394 / 0x5a0 / 0xb40 / 0x540 / the chaser floats) is local, never replicated; the player struct P is only READ by these remedies. Anything that writes
+   P (ShoulderCover [P+0xb84], LeanFollow [P+0xb90], the cover side 0x2954 negated by the replicated update 0x4520d0) stays gated by kl_online() as before. */
+static int klcam_cw(void) { return !kl_online() || kc.c.uonline; }
 
 /* a profile write that remembers the float it replaced. Profiles are .data and are put back only by restarting the game */
 static int klcam_putf(DWORD at, float orig, float v, const char *what)
@@ -566,7 +571,7 @@ static void klcam_recover(DWORD P, DWORD cam, float dt, const float *E, const fl
 
 static void klcam_unstick(DWORD P, DWORD cam, float dt, int stuck, BYTE blocked, float cd)
 {
-    BYTE side = 0, camside = 0; float z = 0, tmr = 0; BYTE zb = 0; int on = !kl_online();
+    BYTE side = 0, camside = 0; float z = 0, tmr = 0; BYTE zb = 0; int on = klcam_cw();
     if (kc.quietS > 0) { kc.quietS -= dt; return; }
     if (blocked == 1 && klcam_near(cd, kc.lastcd, 0.01f)) kc.blockS += dt; else kc.blockS = 0;
     kc.lastcd = cd;
@@ -629,7 +634,7 @@ static void klcam_filter_off(DWORD cam)
 static void klcam_filter(DWORD cam, float rawdt)
 {
     int i, want, nok = 0; float hv, cur; double a = kc.dtavg; DWORD gt = GetTickCount();
-    if (!kc.c.unstick || !kc.c.ufilter || kl_online()) return;
+    if (!kc.c.unstick || !kc.c.ufilter || !klcam_cw()) return;
     /* a refusal is per camera and not permanent (review): the probe may have read a camera still under construction. The same camera is probed
        again every 3 s (at most 5 times, the log line only the first 2 times); a different camera is probed at once. */
     if (kc.h_refused) {
@@ -681,7 +686,7 @@ static void klcam_gates(DWORD P, DWORD cam, float dt, int frozen)
              kc.ug_s, g30, c54, klh_rd32(cam + 0x504), own, P, (unsigned)sysb, (g30b == 0 || (int)c54 <= 0) ? " ABNORMAL" : "");
         /* READ 0x65016e..0x65017f: the camera tick returns early (0x650389) when byte [cam+0x30] == 0 OR dword [cam+0xc54] <= 0 (jle). 0x6501a8 counts the
            counter down while the system byte is set; 0x6500d9 sets it to 4. So the remedy is byte 1 and counter 4 (round 1's ladder step 1), never 0. */
-        if ((g30b == 0 || (int)c54 <= 0) && kc.c.ugate && !kl_online()) {
+        if ((g30b == 0 || (int)c54 <= 0) && kc.c.ugate && klcam_cw()) {
             BYTE one = 1; DWORD four = 4;
             if (g30b == 0) klh_data((void *)(DWORD_PTR)(cam + 0x30), &one, 1, "camera tick gate byte [cam+0x30]");
             if ((int)c54 <= 0) klh_data((void *)(DWORD_PTR)(cam + 0xc54), &four, 4, "camera tick counter [cam+0xc54]");
@@ -691,8 +696,8 @@ static void klcam_gates(DWORD P, DWORD cam, float dt, int frozen)
     if (own != P) kc.tg_s += dt; else { kc.tg_s = 0; kc.tg_ep = 0; }
     if (kc.tg_s > 0.5 && !kc.tg_ep) {
         kc.tg_ep = 1;
-        klog("camev: TARGET [cam+0x540] = %08lx is not the local player %08lx for %.1f s%s", own, P, kc.tg_s, kc.c.utarget && !kl_online() ? " - rewritten" : " (log only)");
-        if (kc.c.utarget && !kl_online()) klh_data((void *)(DWORD_PTR)(cam + 0x540), &P, 4, "camera owner pointer");
+        klog("camev: TARGET [cam+0x540] = %08lx is not the local player %08lx for %.1f s%s", own, P, kc.tg_s, kc.c.utarget && klcam_cw() ? " - rewritten" : " (log only)");
+        if (kc.c.utarget && klcam_cw()) klh_data((void *)(DWORD_PTR)(cam + 0x540), &P, 4, "camera owner pointer");
     }
 }
 
@@ -1216,6 +1221,7 @@ static void klcam_init(void)
     c->ufilter = klcam_ini_i("UnstickFilter", 1) != 0;
     c->ugate = klcam_ini_i("UnstickGate", 0) != 0;
     c->utarget = klcam_ini_i("UnstickTarget", 0) != 0;
+    c->uonline = klcam_ini_i("UnstickOnline", 0) != 0;      /* (recommended off until benched) */
     c->recover = klcam_ini_i("Recover", 0) != 0;
     c->nandump = klcam_ini_i("NanDump", 0) != 0;
     c->nanrepair = klcam_ini_i("NanRepair", 0) != 0;
@@ -1235,9 +1241,9 @@ static void klcam_init(void)
         GetPrivateProfileStringA("Camera", "ShakeKeep", "", t, sizeof t, klh_ini);
         for (p = t; *p; ) { while (*p == ' ' || *p == ',') p++; if (!*p) break; v = atoi(p); if (v >= 0 && v < 41) c->shakekeep[v] = 1; while (*p && *p != ',') p++; }
     }
-    klog("cam: on: Blend %d (x%.2f) Unstick %d (filter %d gate %d target %d) Recover %d (%.0f cm/s) ShoulderCover %d LeanFollow %d (gate %d) Cine %d CineAim %d FlipTime %.2f (special %.2f) ShakeScale %.2f FovStep x%.2f Log %d (%d Hz, keys %d) NanDump %d NanRepair %d. "
+    klog("cam: on: Blend %d (x%.2f) Unstick %d (filter %d gate %d target %d) Recover %d (%.0f cm/s) UnstickOnline %d ShoulderCover %d LeanFollow %d (gate %d) Cine %d CineAim %d FlipTime %.2f (special %.2f) ShakeScale %.2f FovStep x%.2f Log %d (%d Hz, keys %d) NanDump %d NanRepair %d. "
          "No data route (no effect): look smoothing, pitch limits",
-         c->blend, c->blendscale, c->unstick, c->ufilter, c->ugate, c->utarget, c->recover, c->recoverspeed, c->shouldercover, c->leanfollow, c->leangate, c->cine, c->cineaim, c->fliptime, c->fliptimespecial, c->shakescale, c->fovstep,
+         c->blend, c->blendscale, c->unstick, c->ufilter, c->ugate, c->utarget, c->recover, c->recoverspeed, c->uonline, c->shouldercover, c->leanfollow, c->leangate, c->cine, c->cineaim, c->fliptime, c->fliptimespecial, c->shakescale, c->fovstep,
          c->log, c->loghz, c->logkeys, c->nandump, c->nanrepair);
 }
 
