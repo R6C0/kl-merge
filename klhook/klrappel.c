@@ -206,7 +206,7 @@ static DWORD klrp_chan(DWORD pl, int frames, DWORD want_clip)
 static void klrp_run(DWORD now)
 {
     DWORD pl = klrp_r.player, c = 0; float t = -1.0f, nd[3], bk[3], s, sh, at[3], lastf; int i;
-    if (klh_rd32(pl) != KLRP_PLAYER_VT) { klrp_end(now, "OVER: the player object is gone"); return; }
+    if (klh_pvt(pl) != KLRP_PLAYER_VT) { klrp_end(now, "OVER: the player object is gone"); return; }
     if (now - klrp_r.began > (DWORD)(klrp_lv.frames / 25.0 * 2000.0 + 2000.0)) { klrp_end(now, "GAVE UP: longer than twice the clip"); return; }
     if (klrp_chan(pl, klrp_lv.frames, klrp_r.clip) != klrp_r.chan || !klh_rd(klrp_r.chan + 4, &t, 4) || !klb_finite(t)) {
         klrp_end(now, klrp_r.t_last >= (float)(klrp_lv.frames - 1) - klrp.last - 3.0f ? "OVER: the clip ended" : "STOPPED: his rappel channel is gone before its last frames");
@@ -256,7 +256,7 @@ static void klrp_tick(int game_thread)
     if (now - scene_at < 50) return;                                         /* looking for a start: twenty times a second is plenty */
     scene_at = now;
     if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key) || strcmp(key, klrp_lv.key)) return;
-    if (!kle_human(&pl, ft, nd) || klh_rd32(pl) != KLRP_PLAYER_VT) return;
+    if (!kle_human(&pl, ft, nd) || klh_pvt(pl) != KLRP_PLAYER_VT) return;
     chan = klrp_chan(pl, klrp_lv.frames, 0);
     if (!chan) { if (!klrp_w.armed && now - klrp_w.gone_at > 2000) klrp_w.armed = 1; return; }      /* armed again 2 s after no such channel plays */
     if (!klrp_w.armed) return;                                                /* the same descent's channel is still there (the cut holds the last frame) */

@@ -482,7 +482,7 @@ static int klr_local_police(void)
 {
     DWORD gd, pl; BYTE idx = 0xff, police = 0;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLR_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
-        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLR_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) return 0;
+        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_pvt(pl) != KLR_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) return 0;
     return police != 0;
 }
 
@@ -509,7 +509,7 @@ static float klr_far_mult(DWORD now)
         klr_far.rules = s.rules; klr_far.tgt = klr_far.said_tgt = -1; klr_far.mult = klr_far.said_mult = 1.0f;
     }
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLR_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel > 3 || !(pl = klh_rd32(gd + 0x828 + 4 * sel)) ||
-        klh_rd32(pl) != KLR_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || type != 2 || !klh_rd(pl + 0x2723, &police, 1) || !klh_rd(pl + 0x2726, &traitor, 1) ||
+        klh_pvt(pl) != KLR_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || type != 2 || !klh_rd(pl + 0x2723, &police, 1) || !klh_rd(pl + 0x2726, &traitor, 1) ||
         !klh_rd(pl + 0x460, feet, 12) || !klr_finite(feet[0]) || !klr_finite(feet[1]) || !klr_finite(feet[2])) return klr_far.mult = 1.0f;
     klh_rd(s.score + 0x1d4, &fl, 4);          /* your dword of the score table: bit 1 = you are the traitor (slot 114 = 0x771a10) */
     for (i = 0; i < s.n && i < 12; i++) {     /* the sums are rows of 12 */
@@ -564,7 +564,7 @@ static float klr_cop_mult(DWORD now)
     if (!klb_read(&s) || s.state != KLB_ROUND || s.human != 0) { klr_cf.rules = 0; return klr_cf.mult = 1.0f; }
     if (s.rules != klr_cf.rules) { klr_cf.rules = s.rules; klr_cf.att = klr_cf.cur = 0; klr_cf.mult = 1.0f; klr_cf.said = 0; klr_cf.said_at = 0; klr_cf.hp = 0; klr_cf.t_hit = klr_cf.t_chg = 0; }      /* a new round: as klr_far (review 6) */
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLR_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel > 3 || !(pl = klh_rd32(gd + 0x828 + 4 * sel)) ||
-        klh_rd32(pl) != KLR_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || type != 2 || !klh_rd(pl + 0x2723, &police, 1) || !klh_rd(pl + 0x2726, &traitor, 1) ||
+        klh_pvt(pl) != KLR_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || type != 2 || !klh_rd(pl + 0x2723, &police, 1) || !klh_rd(pl + 0x2726, &traitor, 1) ||
         !klh_rd(pl + 0x460, feet, 12) || !klr_finite(feet[0]) || !klr_finite(feet[1]) || !klr_finite(feet[2])) return klr_cf.mult = 1.0f;
     klh_rd(s.score + 0x1d4, &fl, 4);
     if (police || traitor || (fl & 1) || s.r[0].status != 0) return klr_cf.mult = 1.0f;
@@ -830,7 +830,7 @@ static void klr_player_tick(int act, int game_thread, DWORD rules)
     DWORD gd, pl, h; BYTE idx = 0xff, police = 0; float raw[0x28 / 4]; int fresh, n = 0, i; struct klr_pl *p = 0;
     float cur, max, delay, full, max0, delay0, full0, wmax, wdelay, wfull, over = 0, to; int wasfull, samemax;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLR_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || idx == 0xff || (signed char)idx < 0 || idx > 31 ||
-        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLR_PLAYER_VT || !(h = klh_rd32(pl + 0xa48)) ||
+        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_pvt(pl) != KLR_PLAYER_VT || !(h = klh_rd32(pl + 0xa48)) ||
         !klh_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != pl || !klh_rd(pl + 0x2723, &police, 1)) { return; }      /* review D1: a failed read must not make the next pass 'fresh' (it would take our own value as the game's) */
     cur = raw[1]; max = raw[2]; delay = raw[5]; full = raw[6];
     if (!klr_finite(cur) || !klr_finite(max) || !klr_finite(delay) || !klr_finite(full) || max < 1 || max > 100000 ||
@@ -941,7 +941,7 @@ static void klr_pb_step(const DWORD *sp)
     DWORD rec = sp[5], r[7], seven = 0, sol = 0, tgt = 0, tvt = 0, info, team = 0xff, ateam = 0xff; float found, dist, want; int who, ok; LONG n; char note[80];
     memset(r, 0, sizeof r);
     ok = sp[3] == KLR_PB_FILE && klh_rd(rec, r, sizeof r) && r[0] == rec + 0x20 && klh_rd(rec + 0x48, &seven, 4) && seven == 7 &&
-         (sol = klh_rd32(rec - 0x14)) != 0 && r[3] && klh_rd32(sol + 0x40) == r[3] && (tgt = klh_rd32(sol + 0xac)) != 0 && klh_rd(tgt, &tvt, 4) && ((tvt = ((klh_actor_priv && tvt == klh_actor_priv) || (klh_actor_priv2 && tvt == klh_actor_priv2)) ? KLR_ACTOR_VT : tvt), 1);
+         (sol = klh_rd32(rec - 0x14)) != 0 && r[3] && klh_rd32(sol + 0x40) == r[3] && (tgt = klh_rd32(sol + 0xac)) != 0 && klh_rd(tgt, &tvt, 4) && ((tvt = ((klh_actor_priv && tvt == klh_actor_priv) || (klh_actor_priv2 && tvt == klh_actor_priv2)) ? KLR_ACTOR_VT : (klh_player_priv && tvt == klh_player_priv) ? KLR_PLAYER_VT : tvt), 1);
     memcpy(&dist, &r[5], 4); memcpy(&found, &r[6], 4);
     if (!ok || found != KLR_PB_STOCK) {       /* said at any Log level, three times an arming: it means this file's reading of the call is wrong */
         if (InterlockedIncrement(&klr_pb.odd) <= 3)

@@ -63,7 +63,7 @@ static void kdm_send_tick(DWORD now, DWORD ents, int n)
 {
     DWORD pl = kld_o.pl, d, ds = 0, m, h, chans; int i, mode = 0, sheet = 0, group = 0, nn; unsigned mask = 0; char pk[96];
     kdm.own = -1;
-    if (!pl || klh_rd32(pl) != KLD_PLAYER_VT) return;
+    if (!pl || klh_pvt(pl) != KLD_PLAYER_VT) return;
     for (i = 0; i < n; i++) if (klco_ent(ents, n, i) == pl) kdm.own = i;      /* GUESS: the same index on every machine (klucc.c's convention) */
     if (kdm.own < 0 || !kdm.chan || (kld.flop != 1 && kld.flop != 3)) return;
     d = klh_rd32(pl + 0x2948);
@@ -141,10 +141,10 @@ static void kdm_on_sy(const struct knc_msg *msg, int src)
 static int kdm_bodies(DWORD ents, int n, DWORD *bodies, unsigned *pools, int cap)
 {
     DWORD gd, p; int i, k, c = 0;
-    for (i = 0; i < n && c < cap; i++) if ((p = klco_ent(ents, n, i)) != 0 && klh_rd32(p) == KLD_PLAYER_VT) { bodies[c] = p; pools[c] = klh_rd32(p + 0x78); c++; }
+    for (i = 0; i < n && c < cap; i++) if ((p = klco_ent(ents, n, i)) != 0 && klh_pvt(p) == KLD_PLAYER_VT) { bodies[c] = p; pools[c] = klh_rd32(p + 0x78); c++; }
     if ((gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) != 0)
         for (i = 0; i < 32 && c < cap; i++) {
-            if (!(p = klh_rd32(gd + 0x828 + 4 * i)) || klh_rd32(p) != KLD_PLAYER_VT) continue;
+            if (!(p = klh_rd32(gd + 0x828 + 4 * i)) || klh_pvt(p) != KLD_PLAYER_VT) continue;
             for (k = 0; k < c; k++) if (bodies[k] == p) break;
             if (k == c) { bodies[c] = p; pools[c] = klh_rd32(p + 0x78); c++; }
         }
@@ -188,7 +188,7 @@ static void kdm_restore(struct kdm_rep *r, const char *why)
 {
     int k, nw = 0; DWORD pr[2] = { 1, 0 }; WORD w;
     if (!r->armed) return;
-    if (r->wid && r->m && klh_rd32(r->ent) == KLD_PLAYER_VT && klh_rd32(r->m) == KLD_PRONE_VT && klh_rd32(r->m + 0x8d4) == r->ent)
+    if (r->wid && r->m && klh_pvt(r->ent) == KLD_PLAYER_VT && klh_rd32(r->m) == KLD_PRONE_VT && klh_rd32(r->m + 0x8d4) == r->ent)
         for (k = 0; k < 3; k++) {
             DWORD at = r->m + KLD_M_FALL + 2 * k;
             if (klh_rd(at, &w, 2) && w == (WORD)(r->wid - 1) && w != r->forig[k] && klh_data((void *)(DWORD_PTR)at, &r->forig[k], 2, "the replica's prone movement: a fall slot id, back as the game had it")) nw++;

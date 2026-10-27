@@ -103,7 +103,7 @@ static int klo_read(struct klo_snap *s)
     DWORD gd, pl, node, tun, d, x; BYTE idx = 0xff, b; WORD w;
     memset(s, 0, sizeof *s);
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLO_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || idx == 0xff || (signed char)idx < 0 || idx > 31) return 0;
-    if (!(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLO_PLAYER_VT) return 0;
+    if (!(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_pvt(pl) != KLO_PLAYER_VT) return 0;
     if (!klh_rd(pl + 0x818, &s->f818, 4) || !klh_rd(pl + 0x29a0, &x, 4)) return 0;
     s->player = pl;
     s->v[KLO_WANT] = (long)x;

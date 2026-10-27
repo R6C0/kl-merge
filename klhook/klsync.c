@@ -356,7 +356,7 @@ static int klsy_humans(void)
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(0x00dd265c)))) return 0;
     for (i = 0; i < 28; i++) {
         float f[3];
-        if (!(pl = klh_rd32(gd + 0x828 + 4 * i)) || klh_rd32(pl) != 0x00bb45f4 /* ZFFPlayer */) continue;
+        if (!(pl = klh_rd32(gd + 0x828 + 4 * i)) || klh_pvt(pl) != 0x00bb45f4 /* ZFFPlayer */) continue;
         klsy_humteam[klsy_nhum] = klh_rd32(pl + 0x54);
         if (!klh_rd(pl + 0x460, f, 12)) f[0] = f[1] = f[2] = 1e30f;
         memcpy(klsy_humpos[klsy_nhum], f, 12); klsy_nhum++;

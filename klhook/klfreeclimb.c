@@ -561,7 +561,7 @@ static int klfc_tick_body(void *unused)
     (void)unused;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(sys = klfc_sys())) return 0;
     if (!klh_rd(gd + 0x898, &pi, 1) || pi < 0 || pi > 7) return 0;
-    if (!(P = klh_rd32(gd + 0x828 + 4 * pi)) || klh_rd32(P) != KLFC_PLAYER_VT || !klfc_ok(P, 0x2e00)) return 0;
+    if (!(P = klh_rd32(gd + 0x828 + 4 * pi)) || klh_pvt(P) != KLFC_PLAYER_VT || !klfc_ok(P, 0x2e00)) return 0;
     T = (int)klh_rd32(sys + 0x48);
     if (T == klfc_lastT) return 0;                                  /* paused */
     klfc_lastT = T;
@@ -635,7 +635,7 @@ static int klfc_tick_body(void *unused)
 static int klfc_cleanup_body(void *unused)
 {   /* after a fault of the tick: abort our action (its End, ours, gives the collision back) */
     DWORD P = klfc_c.P; (void)unused;
-    if (P && klh_rd32(P) == KLFC_PLAYER_VT && klfc_cur_act(P) == klfc_c.act) {
+    if (P && klh_pvt(P) == KLFC_PLAYER_VT && klfc_cur_act(P) == klfc_c.act) {
         KLFC_PTR(void (__fastcall *)(DWORD, DWORD), klfc_vf(P, 0x374))(P, 0);
         klog("fclimb: cleanup: action aborted");
     }

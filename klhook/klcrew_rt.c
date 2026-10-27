@@ -246,7 +246,7 @@ static int klt_move(DWORD rules)
 static int klt_local_police(DWORD gd)
 {
     BYTE sel = 0xff, pol = 0; DWORD pl;
-    if (!klh_rd(gd + 0x898, &sel, 1) || sel >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel)) || klh_rd32(pl) != 0x00bb45f4 /* KLP_PLAYER_VT, as klfed.c: a stale slot is not read */ || !klh_rd(pl + 0x2723, &pol, 1)) return 0;
+    if (!klh_rd(gd + 0x898, &sel, 1) || sel >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel)) || klh_pvt(pl) != 0x00bb45f4 /* KLP_PLAYER_VT, as klfed.c: a stale slot is not read */ || !klh_rd(pl + 0x2723, &pol, 1)) return 0;
     return pol != 0;
 }
 

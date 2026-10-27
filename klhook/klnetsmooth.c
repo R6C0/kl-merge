@@ -357,6 +357,7 @@ static void klnetsmooth_tick(int game_thread)
             kns.on = 0; return;
         }
         kns_orig = kns_vt[KNS_SLOT]; kns_vt[KNS_SLOT] = (DWORD)(DWORD_PTR)kns_update;
+        klh_player_priv = kns_ours();                            /* the other modules' ZFFPlayer tests (klh_pvt / klh_avt) now see through it */
     }
     if (!kns_local(&me) || !me) return;                          /* local player unknown: swap nothing (it must never be swapped) */
     for (i = 0; i < KNS_NPL; i++) {                              /* drop what is gone */

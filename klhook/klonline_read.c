@@ -193,7 +193,7 @@ static int klor_read(struct klor_snap *o, int local)
         w->killer = -1;
         client = w->rec ? klh_rd32(w->rec) : 0;
         P = client >= 0x10000 ? klh_rd32(client + 0x378) : 0;
-        if (P >= 0x10000 && klh_rd32(P) == KLOR_PLAYER_VT) {
+        if (P >= 0x10000 && klh_pvt(P) == KLOR_PLAYER_VT) {
             w->player = P;
             if (klh_rd(P + 0x273c, &type, 1) && (type & 0xff) == 2) { w->actor = P; w->model = klor_model(P); }
         }

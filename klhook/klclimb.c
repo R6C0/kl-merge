@@ -820,7 +820,7 @@ static int klq_registered(DWORD pl)
 static const char *klq_carry_refuse(DWORD pl)
 {
     DWORD node, p, ph, w, sh, sys, a, wd, idx = 0, cnt = 0, e, body; BYTE filt = 0; float nd[3], bk[3], tol[2];
-    if (klh_rd32(pl) != KLQ_PLAYER_VT || !klq_registered(pl)) return "the object is not one of the game's players any more";
+    if (klh_pvt(pl) != KLQ_PLAYER_VT || !klq_registered(pl)) return "the object is not one of the game's players any more";
     /* 0x4af5b0: the node chain to the root (0x7b3020); if [player+0x7d0]: its two floats at +0x58 are read (0xa768b0), its +0x30
        = the proxy's phantom, whose place at +0xa0 is written, whose world [+8] is asked for [+0x6c] and whose shape [+0x10]
        is called through vtable +0x18 (0x9fc110) */
@@ -843,7 +843,7 @@ static const char *klq_refuse(DWORD pl, DWORD *disp_)
 {
     DWORD node, fl = 0, disp, act = 1, mv, kind = 0, f438 = 0, f818 = 0x80, down, st = 1, d44 = 1, cnt = 1, p, q, r, par, own, onode, ofl = 0x800, d50 = 1;
     BYTE on = 0, cov = 1, anim = 1, live = 0;
-    if (klh_rd32(pl) != KLQ_PLAYER_VT) return "the local player is not a ZFFPlayer";
+    if (klh_pvt(pl) != KLQ_PLAYER_VT) return "the local player is not a ZFFPlayer";
     if (!(node = klh_rd32(pl + 4)) || !klh_rd(node + 0x3c, &fl, 4) || (fl >> 10 & 1)) return "his node is off (flag bit 10)";
     if (!klh_rd(pl + 0x7a4, &anim, 1) || anim || !klh_rd(pl + 0x430, &live, 1) || !live) return "his frame is not the ordinary one ([player+0x7a4] is set or [player+0x430] is clear: 0x74efc0 then makes no Move)";
     /* the frame's two other gates (second review N1). 0x74efe6: bit 0x800 of the flags of the node [[[node+0x50]+0x60]+4] (0x598460: the owner of what his node
@@ -939,7 +939,7 @@ static void klq_after(DWORD now)
     static const DWORD due[3] = { 500, 1000, 2000 };
     DWORD pl = klq_a.player; float nd[3], bk[3], ft[3] = { 0, 0, 0 }, pr[3], d, up, y; const struct klq_edge *e = &klq_a.e; int hp;
     if (now - klq_a.at < due[klq_a.step]) return;
-    if (klh_rd32(pl) != KLQ_PLAYER_VT || !klq_registered(pl) || !klq_node(klh_rd32(pl + 4), nd, bk)) {
+    if (klh_pvt(pl) != KLQ_PLAYER_VT || !klq_registered(pl) || !klq_node(klh_rd32(pl + 4), nd, bk)) {
         klog("climb: edge %d: no RESULT: the player object %08lx is gone or his node cannot be read %lu ms after the end", klq_a.edge + 1, pl, now - klq_a.at);
         memset(&klq_a, 0, sizeof klq_a); return;
     }
@@ -988,7 +988,7 @@ static void klq_done(DWORD now, const char *end, DWORD act, int ours)
 static void klq_follow(DWORD now)
 {
     DWORD pl = klq_r.player, disp, act = 0, c = 0, gone; float t = -1.0f, margin, last; const char *end = 0, *no = 0, *off = 0; int ours, have_t = 0;
-    if (klh_rd32(pl) != KLQ_PLAYER_VT || !klq_registered(pl)) {
+    if (klh_pvt(pl) != KLQ_PLAYER_VT || !klq_registered(pl)) {
         klog("climb: the player object %08lx is gone%s: forgotten, nothing is called", pl, klq_r.owed ? " while its collision was switched off by this file (the object went with its level)" : "");
         memset(&klq_r, 0, sizeof klq_r); return;
     }

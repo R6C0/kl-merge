@@ -84,7 +84,7 @@ static int kus_tick_body(void *unused)
     (void)unused;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(sys = klfc_sys())) return 0;
     if (!klh_rd(gd + 0x898, &pi, 1) || pi < 0 || pi > 7) return 0;
-    if (!(P = klh_rd32(gd + 0x828 + 4 * pi)) || klh_rd32(P) != KLFC_PLAYER_VT || !klfc_ok(P, 0x2e00)) return 0;
+    if (!(P = klh_rd32(gd + 0x828 + 4 * pi)) || klh_pvt(P) != KLFC_PLAYER_VT || !klfc_ok(P, 0x2e00)) return 0;
     T = (int)klh_rd32(sys + 0x48);
     if (T == kus_lastT) return 0;                                       /* paused */
     kus_lastT = T;

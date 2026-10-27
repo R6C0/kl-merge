@@ -612,7 +612,7 @@ static void klrs_tick(int game_thread)
     hurt = klrs_val[KLRS_U_HURT] - dt / klrs.hurt_s; if (hurt < 0) hurt = 0;
     speed = klrs_val[KLRS_U_SPEED];
     if ((gd = klh_rd32((DWORD_PTR)KLH_VA(KLR_GAMEDATA))) != 0 && klh_rd(gd + 0x898, &idx, 1) && (signed char)idx >= 0 && idx <= 31 &&
-        (pl = klh_rd32(gd + 0x828 + 4 * idx)) != 0 && klh_rd32(pl) != KLR_PLAYER_VT) pl = 0;
+        (pl = klh_rd32(gd + 0x828 + 4 * idx)) != 0 && klh_pvt(pl) != KLR_PLAYER_VT) pl = 0;
     if (pl != lastpl) { lastpl = pl; hp0 = mx0 = -1; rounds0 = -1; havepos = 0; lastw = lasth = 0; clear = 1; }
     if (!pl) {
         clear = 1;

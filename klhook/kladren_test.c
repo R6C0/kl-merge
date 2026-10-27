@@ -28,6 +28,7 @@ static void klog(const char *fmt, ...)
 }
 static int klh_rd(DWORD_PTR p, void *out, SIZE_T n) { if (p < 0x1000 || p + n > sizeof mem) return 0; memcpy(out, mem + p, n); return 1; }
 static DWORD klh_rd32(DWORD_PTR p) { DWORD v = 0; klh_rd(p, &v, 4); return v; }
+static DWORD klh_pvt(DWORD o) { return klh_rd32(o); }      /* klhook.c: maps NetSmooth's private ZFFPlayer vtable; none here */
 static int nwrites; static char lastwrite[200];
 static int klh_data(void *at, const void *bytes, int len, const char *what)
 {

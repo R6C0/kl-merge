@@ -141,7 +141,7 @@ static DWORD krg_player(DWORD *camout)
 {   /* the local ZFFPlayer P = [gd + 0x828 + 4 * byte [gd + 0x898]] (klcam.c) -> 0 when none, or when the pause / cut flag is set */
     DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0x00dd265cu)), pl; BYTE idx = 0xff;
     if (!gd || !klh_rd(gd + 0x898, &idx, 1) || idx >= KRG_NPL) return 0;
-    if (!(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != (DWORD)(DWORD_PTR)KLH_VA(KRG_PLAYER_VT)) return 0;
+    if (!(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_pvt(pl) != (DWORD)(DWORD_PTR)KLH_VA(KRG_PLAYER_VT)) return 0;
     if (klh_rd32(gd + 0x4cd8) & 0xff) return 0;                  /* the pause / cut flag (ASSUMPTION, as klcam.c) */
     *camout = klh_rd32(pl + 0xbd8);
     return pl;

@@ -23,7 +23,7 @@ static void klcc_tick(int game_thread)
     if (klcc.at && now - klcc.at < klcc.every) return;
     klcc.at = now;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLO_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || idx > 31) return;
-    if (!(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLO_PLAYER_VT) return;
+    if (!(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_pvt(pl) != KLO_PLAYER_VT) return;
     hand = klh_rd32(pl + 0x920); sel = klh_rd32(pl + 0x924);
     if (!klcc.seen || hand != klcc.hand || sel != klcc.sel) {
         klog("clubcalm: hand item %lu (was %lu), selected %lu (was %lu)%s", (unsigned long)hand, (unsigned long)klcc.hand, (unsigned long)sel,

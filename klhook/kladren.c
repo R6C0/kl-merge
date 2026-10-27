@@ -632,7 +632,7 @@ static int kad_an_go_body(void *arg)
 static void kad_an_try(int i, struct kad_rec *k, DWORD pl, const float to[3], DWORD dnd, DWORD soldier)
 {
     struct kad_an_go g; int r; DWORD now = GetTickCount();
-    if (!kad_ao.on || kad.dry || kad_an.dead || kad_an.active || !pl || klh_rd32(pl) != KAD_PLAYER_VT) return;
+    if (!kad_ao.on || kad.dry || kad_an.dead || kad_an.active || !pl || klh_pvt(pl) != KAD_PLAYER_VT) return;
     if (k->an_n && !kad_ao.repeat) return;
     if (k->an_n && now - kad_an.ended_at < 300) return;
     if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) return;      /* only the main loop's gameplay call (luvsic's filter, klfreeclimb.c) */
@@ -1086,7 +1086,7 @@ static void kad_tick(int game_thread)
     }
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KAD_GAMEDATA))) || !(clock = klh_rd32((DWORD_PTR)KLH_VA(KLD_CLOCK))) || !klh_rd(clock + 0x48, &tick, 4)) return;
     /* the local human's knock-down state (D), if he is a criminal in play */
-    if (klh_rd(gd + 0x898, &idx, 1) && idx < 4 && (pl = klh_rd32(gd + 0x828 + 4 * idx)) != 0 && klh_rd32(pl) == KAD_PLAYER_VT && klh_rd(pl + 0x2723, &police, 1) && !police &&
+    if (klh_rd(gd + 0x898, &idx, 1) && idx < 4 && (pl = klh_rd32(gd + 0x828 + 4 * idx)) != 0 && klh_pvt(pl) == KAD_PLAYER_VT && klh_rd(pl + 0x2723, &police, 1) && !police &&
         (D = klh_rd32(pl + 0x2948)) != 0 && klh_rd32(D) == pl && klh_rd(D + 4, &ds, 4)) hs = sn.human; else { pl = 0; D = 0; ds = 0; }
     /* each record: down? place? */
     for (i = 0; i < sn.n; i++) {

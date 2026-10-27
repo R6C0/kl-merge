@@ -68,7 +68,7 @@ static int klsab_local(int *ucc, int *police)
 {
     DWORD gd, pl; BYTE sel = 0xff, a = 0, b = 0;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel > 3 || !(pl = klh_rd32(gd + 0x828 + 4 * sel))) return 0;
-    if (klh_rd32(pl) != KLSAB_PLAYER_VT || !klh_rd(pl + 0x2729, &a, 1) || !klh_rd(pl + 0x2723, &b, 1)) return 0;
+    if (klh_pvt(pl) != KLSAB_PLAYER_VT || !klh_rd(pl + 0x2729, &a, 1) || !klh_rd(pl + 0x2723, &b, 1)) return 0;
     *ucc = a; *police = b;
     return 1;
 }

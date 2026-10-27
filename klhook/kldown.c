@@ -763,10 +763,10 @@ static int kld_pool_live(DWORD pl, DWORD pool)
 {
     DWORD gd, p; int i;
     if (!pool) return 0;
-    if (pl && klh_rd32(pl) == KLD_PLAYER_VT && klh_rd32(pl + 0x78) == pool) return 1;
+    if (pl && klh_pvt(pl) == KLD_PLAYER_VT && klh_rd32(pl + 0x78) == pool) return 1;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA)))) return 0;
     for (i = 0; i < 32; i++)
-        if ((p = klh_rd32(gd + 0x828 + 4 * i)) != 0 && klh_rd32(p) == KLD_PLAYER_VT && klh_rd32(p + 0x78) == pool) return 1;
+        if ((p = klh_rd32(gd + 0x828 + 4 * i)) != 0 && klh_pvt(p) == KLD_PLAYER_VT && klh_rd32(p + 0x78) == pool) return 1;
     return 0;
 }
 
@@ -1055,7 +1055,7 @@ static void kld_flop_words(DWORD pl, DWORD ds, int act)
         kld_flop_belly(pl, 0); kld_mix_back(pl);
         if (!kld_s.fhave || !kld_s.fput) return;
         m = kld_s.fm;
-        if (klh_rd32(pl) != KLD_PLAYER_VT || klh_rd32(m) != KLD_PRONE_VT || klh_rd32(m + 0x8d4) != pl) { kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0; return; }      /* the object is gone: nothing of ours is anywhere */
+        if (klh_pvt(pl) != KLD_PLAYER_VT || klh_rd32(m) != KLD_PRONE_VT || klh_rd32(m + 0x8d4) != pl) { kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0; return; }      /* the object is gone: nothing of ours is anywhere */
         for (k = 0; k < 6; k++) {
             DWORD at = m + (k < 3 ? KLD_M_FALL + 2 * k : KLD_M_UP + 2 * (k - 3));
             want = (WORD)(k < 3 ? kld_s.idf : kld_s.idu);
@@ -2370,10 +2370,10 @@ static int kld_o_gate(DWORD *state, DWORD *sub)
 static DWORD kld_o_pl(DWORD now)
 {
     DWORD sm, ents = 0, pl = 0; int n = 0, how = 0;
-    if (kld_o.pl && now - kld_o.t_find < 2000 && klh_rd32(kld_o.pl) == KLD_PLAYER_VT) return kld_o.pl;
+    if (kld_o.pl && now - kld_o.t_find < 2000 && klh_pvt(kld_o.pl) == KLD_PLAYER_VT) return kld_o.pl;
     if (kld_o.t_find && now - kld_o.t_find < 300 && !kld_o.pl) return 0;
     kld_o.t_find = now;
-    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !klco_table(sm, &ents, &n) || klco_find_own(ents, n, now, &pl, &how) < 0 || !pl || klh_rd32(pl) != KLD_PLAYER_VT) {
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !klco_table(sm, &ents, &n) || klco_find_own(ents, n, now, &pl, &how) < 0 || !pl || klh_pvt(pl) != KLD_PLAYER_VT) {
         kld_o.pl = 0;
         return 0;
     }
@@ -2401,7 +2401,7 @@ static void kld_o_prescale(DWORD victim, float *pdelta, DWORD attacker)
     if (!kld_o.ps_reached) { kld_o.ps_reached = 1; klog("down: online: PRE-APPLY: the rules' damage hook (slot 15) is reached in this round: hits of this machine's own downed body are priced BEFORE they land (OnlinePreScale=1); the after-the-hit give-back is the fallback only if this is not reached"); }
     if (!kld_o.ofree && !kld_o.ofac) return;
     /* fix pass: the CACHED body only (kld_o_pl's table scan stays in the tick; the hook never scans). The tick refreshes kld_o.pl every pass; a miss here means the give-back (not gated by this hit) prices the drop. */
-    if (!(pl = kld_o.pl) || klh_rd32(pl) != KLD_PLAYER_VT || victim != pl || kld_s.dead) return;
+    if (!(pl = kld_o.pl) || klh_pvt(pl) != KLD_PLAYER_VT || victim != pl || kld_s.dead) return;
     if (!(D = klh_rd32(pl + 0x2948)) || klh_rd32(D) != pl || !klh_rd(D + 4, &ds, 4) || ds < 1 || ds > 3) return;      /* standing: the game's price */
     kld_o.ps_own_tick = GetTickCount() ? GetTickCount() : 1;      /* an own-body hit on a downed man reached slot 15: the give-back stays out of this drop */
     if (!klh_rd((DWORD_PTR)pdelta, &d, 4) || !(d < 0.0f)) return;                                                      /* a heal, 0, NaN: untouched */
@@ -2444,7 +2444,7 @@ static void kld_o_probe(DWORD own, DWORD now)
     for (i = 0; i < n && shown < 8; i++) {
         DWORD ds = 0;
         e = klh_rd32(ents + 12 * i + 4);
-        if (!e || e == own || klh_rd32(e) != KLD_PLAYER_VT) continue;
+        if (!e || e == own || klh_pvt(e) != KLD_PLAYER_VT) continue;
         shown++;
         d = klh_rd32(e + 0x2948); m = d && klh_rd32(d) == e ? klh_rd32(d + 0xc) : 0;
         if (d) klh_rd(d + 4, &ds, 4);
@@ -2664,7 +2664,7 @@ static void kld_tick_main(int game_thread)
         if (state == KLD_ROUND && !kld_o.told) { kld_o.told = 1; kld_o_roundline(osub); }
         if (state != KLD_ROUND) { kld_o.told = 0; kld_o.ps_reached = 0; kld_o.ps_own_tick = 0; }      /* the slot-15 scaler must be reached again in the next round (else the give-back fallback is used) */
     } else if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
-        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLD_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
+        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_pvt(pl) != KLD_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1)) pl = 0;
     if (!pl || police) act = 0;                /* a fed is left to the game */
     kld_v.act = act; kld_v.pl = pl; kld_v.state = state;      /* track R7: for the camera / prompt pass (kld_tick) */
     kld_r.level = level;                       /* track R8: the level's record of the damage table (kld_rules) */

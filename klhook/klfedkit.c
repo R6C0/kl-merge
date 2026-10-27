@@ -882,7 +882,7 @@ static void klfk_pass(int game_thread)
         !(gs = klh_rd32((DWORD_PTR)KLH_VA(KLFK_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || klh_rd32(rules) != KLFK_RULES_VT) { klfk_r.player = 0; klfk_cov.have = 0; return; }
     if (klfk_cov.have && klfk_cov.rules != rules) klfk_cov.have = 0;      /* that rules object is gone: nothing to put back */
     if (!klh_rd(sm + 0x70, &state, 4) || state != KLFK_ROUND) return;
-    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel >= 28 || !(player = klh_rd32(gd + 0x828 + 4 * sel)) || klh_rd32(player) != KLFK_PLAYER_VT ||
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel >= 28 || !(player = klh_rd32(gd + 0x828 + 4 * sel)) || klh_pvt(player) != KLFK_PLAYER_VT ||
         !klh_rd(player + 0x273c, &type, 1) || !klh_rd(player + 0x2723, &pol, 1)) return;
     if (type != 3 || !pol) {
         /* a heister is in play: the next round. The 'under cover' byte goes back to what the game had there, when it

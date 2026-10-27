@@ -70,7 +70,7 @@ static DWORD klinv_player(void)
     if (!klh_rd(sm + 0x54, &role, 4) || role == 2 || role == 3) return 0;
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLINV_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || klh_rd32(rules) != KLINV_RULES_VT) return 0;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel >= 28) return 0;
-    if (!(p = klh_rd32(gd + 0x828 + 4 * sel)) || klh_rd32(p) != KLINV_PLAYER_VT) return 0;
+    if (!(p = klh_rd32(gd + 0x828 + 4 * sel)) || klh_pvt(p) != KLINV_PLAYER_VT) return 0;
     return p;
 }
 

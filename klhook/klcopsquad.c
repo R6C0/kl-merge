@@ -110,7 +110,7 @@ static int klcq_cops(DWORD sm)
     if (cnt > 16) cnt = 16;
     for (i = 0; i < cnt && n < KLCQ_COPS_MAX; i++) {
         DWORD P = klh_rd32(e + 12 * i + 4), sc; BYTE used = 0, type = 0; int j;
-        if (!P || klh_rd32(P) != KLCQ_PLAYER_VT || !klh_rd(P + 0x273c, &type, 1) || type != 3 || !klh_rd(e + 12 * i + 9, &used, 1)) continue;
+        if (!P || klh_pvt(P) != KLCQ_PLAYER_VT || !klh_rd(P + 0x273c, &type, 1) || type != 3 || !klh_rd(e + 12 * i + 9, &used, 1)) continue;
         /* GUESS (section 3 of re/cop_squads.md): used == 1 marks a human's entry. The table reset 0x56f360 clears +9 AND the entry's first
            word (+0, an owner object it hands to 0x54c380(sm, ...)) together, so +0 != 0 is the other candidate mark: logged for the bench. */
         if (klcq.log >= 2) klog("copsquad: table entry %d: policeman player %08lx used %d owner word %08lx", i, (unsigned long)P, used, (unsigned long)klh_rd32(e + 12 * i));

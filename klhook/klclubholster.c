@@ -96,7 +96,7 @@ static void klch_tick(int game_thread)
     klch.at = now;
     if (!klb_read(&s) || s.state != 0x19) { if (klch.sawround) { klog("clubholster: round over (state %lu)", (unsigned long)s.state); } klch.sawround = 0; klch.state = 0; klch.pl0 = 0; return; }
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLO_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || idx > 31) return;
-    if (!(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLO_PLAYER_VT || !klch_feet(pl, feet)) return;
+    if (!(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_pvt(pl) != KLO_PLAYER_VT || !klch_feet(pl, feet)) return;
     if (klch.state == 1 && pl == klch.pl0) return;                      /* judged: not this map */
     if (klch.state == 0 || pl != klch.pl0) {                            /* a new round (or a new player object) */
         klch.pl0 = pl; klch.sawround = 1; klch.holsters = 0;

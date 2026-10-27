@@ -403,7 +403,7 @@ static int kly_human(const struct klb_snap *s, int *why)
     *why = 2;
     if (s->human != 0) return 0;              /* the game's sums are wired for attacker 0 (0x4d17f0: push 0 throughout): another index is not ours */
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel > 31 || !(pl = klh_rd32(gd + 0x828 + 4 * sel)) ||
-        klh_rd32(pl) != KLY_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1) || !klh_rd(pl + 0x2726, &traitor, 1)) return 0;
+        klh_pvt(pl) != KLY_PLAYER_VT || !klh_rd(pl + 0x2723, &police, 1) || !klh_rd(pl + 0x2726, &traitor, 1)) return 0;
     if (klh_rd(s->score + KLY_FLAGS + 4 * s->human, &fl, 4) && (!kly_r.hhave || fl != kly_r.hflags || traitor != kly_r.htraitor)) {
         if (kly.log && (kly_r.hhave || fl || traitor))
             klog("grudge: you: crew flags %08lx -> %08lx, traitor byte %u -> %u%s%s%s", kly_r.hhave ? kly_r.hflags : 0, fl, kly_r.hhave ? kly_r.htraitor : 0, traitor,

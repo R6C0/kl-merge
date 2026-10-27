@@ -138,7 +138,7 @@ static int klco_table(DWORD sm, DWORD *ents, int *n)
     if (!sm || !klh_rd32(sm + 4)) return 0;
     tbl = ((DWORD (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLCO_GETHERO_TABLE))((void *)(DWORD_PTR)sm, 0);      /* the game's own accessor (0x74ee24) */
     if (!tbl || !(e = klh_rd32(tbl))) return 0;
-    for (i = 0; i < 16; i++) { DWORD pl = klh_rd32(e + 12 * i + 4); if (!pl || klh_rd32(pl) != 0x00bb45f4) break; cnt++; }
+    for (i = 0; i < 16; i++) { DWORD pl = klh_rd32(e + 12 * i + 4); if (!pl || klh_pvt(pl) != 0x00bb45f4) break; cnt++; }
     if (!cnt) return 0;
     *ents = e; *n = cnt; klco.tbl = tbl;
     return 1;

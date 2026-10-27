@@ -657,7 +657,12 @@ static void klh_tick(int game_thread);
 /* the vtable of a ZFFActor as the class tests mean it: klsync.c [Sync] Puppet gives a puppeted cop a private copy of the table (klh_actor_priv, 0 = none);
    every 'vtable == 0xbb3bac' test reads through this so a puppeted cop is still a ZFFActor for them */
 static DWORD klh_actor_priv, klh_actor_priv2;      /* priv2: klbalance.c [BotFill] OnlineCopToBot gives the host's bots a private table too (slot 423 wrapped) */
-static DWORD klh_avt(DWORD o) { DWORD v = klh_rd32(o); return ((klh_actor_priv && v == klh_actor_priv) || (klh_actor_priv2 && v == klh_actor_priv2)) ? 0x00bb3bacu : v; }
+/* the same for ZFFPlayer (0xbb45f4): klnetsmooth.c [NetSmooth] gives every REMOTE player a private copy (klh_player_priv, 0 = none). 2026-10-27 D1
+   (re/netcode_players_1027.md, bench Q27_DM03): the raw tests made the host's player table stop at the first remote body, so peers' looks, the flop
+   mirror and the online crew rows were blind with NetSmooth on. Every 'vtable == ZFFPlayer' test reads through klh_pvt (klh_avt maps both). */
+static DWORD klh_player_priv;
+static DWORD klh_pvt(DWORD o) { DWORD v = klh_rd32(o); return (klh_player_priv && v == klh_player_priv) ? 0x00bb45f4u : v; }
+static DWORD klh_avt(DWORD o) { DWORD v = klh_rd32(o); return ((klh_actor_priv && v == klh_actor_priv) || (klh_actor_priv2 && v == klh_actor_priv2)) ? 0x00bb3bacu : (klh_player_priv && v == klh_player_priv) ? 0x00bb45f4u : v; }
 static DWORD_PTR klh_rcb_ra;                          /* the return address of the SteamAPI_RunCallbacks call that runs this tick (klfreeclimb.c acts only at the gameplay one) */
 #include "klmem.c"
 #include "klhigh.c"                                      /* klhigh.c: [Memory] High - the 4 GB flag made safe: the listed foreign modules' VirtualAlloc goes above 2 GB, the game stays below (off unless High=1/2); AFTER klmem.c */

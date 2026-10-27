@@ -294,7 +294,7 @@ static int klst_human_down(void)
 {   /* the local player's down state [player+0x2948][+4] != 0 (falling 2, lying 1, getting up 3): read the way kldown.c reads it */
     DWORD gd, pl, d, ds = 0; BYTE idx = 0xff;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KLD_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
-        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLD_PLAYER_VT || !(d = klh_rd32(pl + 0x2948)) || klh_rd32(d) != pl ||
+        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_pvt(pl) != KLD_PLAYER_VT || !(d = klh_rd32(pl + 0x2948)) || klh_rd32(d) != pl ||
         !klh_rd(d + 4, &ds, 4)) return 0;
     return ds != 0 && ds < 8;
 }

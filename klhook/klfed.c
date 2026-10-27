@@ -222,7 +222,7 @@ static int klp_read(struct klp_snap *s)
     else s->handler = 0;
     /* the local player (0x660b00): [gamedata + 0x828 + 4 * (char)[gamedata + 0x898]] */
     if ((gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) != 0 && klh_rd(gd + 0x898, &s->sel, 1) && s->sel < 28 &&
-        (s->player = klh_rd32(gd + 0x828 + 4 * s->sel)) != 0 && klh_rd32(s->player) == KLP_PLAYER_VT &&
+        (s->player = klh_rd32(gd + 0x828 + 4 * s->sel)) != 0 && klh_pvt(s->player) == KLP_PLAYER_VT &&
         klh_rd(s->player + 0x273c, &s->ptype, 1) && klh_rd(s->player + 0x2723, &s->ppolice, 1)) {
         if (!klh_rd(s->player + 0x460, s->feet, 12)) memset(s->feet, 0, sizeof s->feet);
     } else s->player = 0;
@@ -257,7 +257,7 @@ static int klp_count(const struct klp_snap *s, struct klp_bodies *o, char *line)
         if (!klh_rd(slots + i, &slot, 1) || !klh_rd(ents + 12 * i, e, 12)) return 0;
         if (slot) continue;                                   /* the slot is not in use */
         pl = *(DWORD *)(e + 4);
-        if (!pl || klh_rd32(pl) != KLP_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || !klh_rd(pl + 0x2723, &pol, 1)) {
+        if (!pl || klh_pvt(pl) != KLP_PLAYER_VT || !klh_rd(pl + 0x273c, &type, 1) || !klh_rd(pl + 0x2723, &pol, 1)) {
             if (line && k < 820) k += snprintf(line + k, 900 - k, "%s%lu NOT a ZFFPlayer (%08lx)", k ? " | " : "", i, pl);
             continue;
         }
