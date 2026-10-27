@@ -66,9 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-27 ~10:35 - [c9] ALL2H PASS (HideDead=0: one tag + 2 stray probe dots while dead, cosmetic). P2P3D PASS: page II b10 pressed, SWALLOWED,
-SHOPG asked the host, host judged 'refused not enough money' in 16 ms (round trip proven). ce installed SHIP 1027w 6feb9af1 at 10:31.
-Queue: C27_RSTQ/RST0 (double-Reset diag, a890ac178) -> GRT2, MPX2, HRF2, HRP2, ALL2R. Details: log 10:35.
+2026-10-27 ~11:10 - [c9] Reset crash (ALL2 real Resets, RSTQ/RST0 forced): the game replays the command list recorded before the Reset.
+Fix 75de30aa2 klfps.c [Graphics] ResetDrain=1 empties both lists after an S_OK Reset (as flush 0x696100); TEST out_c9_1027c_test, not installed.
+Queue: GRT2 -> C27_RDR1/RDQ1 (fix A/B) -> RSTN -> MPX2, HRF2, HRP2, ALL2R; P2P4C/H staged (ShopMoney 100000) for ce's 1027j. Details: log 11:10.
 
 2026-10-27 ~10:32 - [ce] OWNER ON SHIP 1027w (6feb9af1, ff11724f5; backup .before-1027w): online names, killed-by, feed, intro card + map name, shop names,
 head tags (probe/overlap/hide while dead) proven by c9 ALL2D..H, 0 faults. Shop page II SHOPG ask -> host verdict proven (P2P3D, refused at $0).
