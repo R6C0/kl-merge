@@ -136,6 +136,7 @@ struct klsb_t { DWORD obj, colour, want_colour; float x, y; int on; char cur[KLU
 static struct {
     int on, probe, test, fault, textonly, total, count, lead, rows12;
     int ostate;                               /* 2026-10-27: [HUD] OnlineBoardState (default 0): online, compose the end card from the round-end state and draw it on the clock element's render when the outro element at osd+0x10b4 stays 0 */
+    int take, icount;                         /* 2026-10-27: [HUD] OnlineBoardTake (default 0; needs OnlineBoard): the online ROUND SCORE slot shows the money taken since the first state-0x1f tick, bot rows show money / fate; [HUD] OnlineIntroCount (default 0; needs OnlineIntroState): HEIST STARTS IN n SEC */
     int istate;                               /* 2026-10-27: [HUD] OnlineIntroState (default 0; needs OnlineIntro): online, when the intro element at osd+0x10ac is absent, compose the whole intro card from the online snapshot and draw it on the clock element's render (states 0x16..0x18) */
     int online, intro;                        /* 2026-10-26: [HUD] OnlineBoard / OnlineIntro (default 0): the end card / the intro lines in an ONLINE round, from klonline_read.c */
     float x, y; int alpha;
@@ -150,6 +151,7 @@ static struct {
     DWORD state;                              /* the session state of the last tick */
     float cd_max;                             /* the countdown's first value this round */
     int ipath, ivalid, told_i, told_ic, map_tried; DWORD i_tick0; char map[48];   /* OnlineIntroState: no intro element, the card is composed / valid, log latches (1 = state path told, 2 = element path told), tick time of the first compose, the map's name */
+    long take0[KLOR_MAX]; BYTE take_have[KLOR_MAX]; int take_set;   /* OnlineBoardTake: each seat's money at the first state-0x1f tick */
     LONG sframe; int sset, spath, told_s, told_n; DWORD s_tick0;   /* OnlineBoardState: engine frame at the first state-0x1f tick, the path is live, log latches, tick time of the first compose */
 } klsb_r;
 static DWORD klsb_evt[KLSB_NSLOT + 1];
@@ -637,8 +639,15 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
             klu_dollars(num, sizeof num, v);
         } else {
             const struct klor_row *r = &o->bot[i - o->n];
-            if (!r->alive) { dead = 1; fate = "DEAD"; fc = KLU_C_DEAD; } else { fate = "AI"; fc = KLU_C_CHALK; }
-            strcpy(num, "-");
+            if (klsb.take) {      /* [HUD] OnlineBoardTake: GUESS: a bot has no score row (flags and money read 0 for it), so ESCAPED (bit 0x40) never shows today; a living bot at the end is LEFT BEHIND, a dead one DEAD */
+                if (r->flags & KLUV_F_ESCAPED) { fate = "ESCAPED"; fc = KLU_C_GREENHI; }
+                else if (!r->alive) { dead = 1; fate = "DEAD"; fc = KLU_C_DEAD; }
+                else { fate = "LEFT BEHIND"; fc = KLU_C_OUT; }
+                if (r->money > 0 && !dead) klu_dollars(num, sizeof num, r->money); else strcpy(num, "-");
+            } else {
+                if (!r->alive) { dead = 1; fate = "DEAD"; fc = KLU_C_DEAD; } else { fate = "AI"; fc = KLU_C_CHALK; }
+                strcpy(num, "-");
+            }
         }
         rowc = py + KLSB_Y_ROW0 + pitch * row + rowh * 0.5f;
         nc = dead ? KLU_C_DEAD : you ? KLU_C_INK : KLU_C_CHALK;
@@ -661,8 +670,14 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
         row++;
     }
     klu_addpic(klu_r.handle[KLU_DRY()] ? KLU_DRY() : 181, px + 20.0f, py + KLSB_Y_SEP, 600.0f, 3.0f, KLU_C_CHALK, klsb_ly(1));
-    snprintf(num, sizeof num, "%d", me->used ? me->kills : 0);      /* the Arcade slot labelled ROUND SCORE shows KILLS online (round score is not an online value; GUESS G16) */
-    klsb_put(KLSB_T_RSL, px + KLSB_X_S1, klu_cen(py + KLSB_Y_SLAB, KLU_FNT_LABEL), "KILLS", KLU_C_CORAL);
+    if (klsb.take && klsb_r.take_set && me->used && me->seat >= 0 && me->seat < KLOR_MAX && klsb_r.take_have[me->seat]) {      /* [HUD] OnlineBoardTake: the round take = money now minus money at the first state-0x1f tick (never below 0) */
+        long d = me->money - klsb_r.take0[me->seat]; if (d < 0) d = 0;
+        klu_dollars(num, sizeof num, d);
+        klsb_put(KLSB_T_RSL, px + KLSB_X_S1, klu_cen(py + KLSB_Y_SLAB, KLU_FNT_LABEL), "ROUND SCORE", KLU_C_CORAL);
+    } else {
+        snprintf(num, sizeof num, "%d", me->used ? me->kills : 0);      /* the Arcade slot labelled ROUND SCORE shows KILLS online (round score is not an online value; GUESS G16) */
+        klsb_put(KLSB_T_RSL, px + KLSB_X_S1, klu_cen(py + KLSB_Y_SLAB, KLU_FNT_LABEL), "KILLS", KLU_C_CORAL);
+    }
     klsb_put(KLSB_T_RSV, px + KLSB_X_S1, klu_cen(py + KLSB_Y_SVAL, KLU_FNT_NAME), num, KLU_C_GREEN);
     klsb_put(KLSB_T_RWL, px + KLSB_X_S2, klu_cen(py + KLSB_Y_SLAB, KLU_FNT_LABEL), "REWARDS", KLU_C_CORAL);
     klu_dollars(num, sizeof num, me->used ? me->reward : 0);
@@ -756,6 +771,10 @@ static void klsb_istate_compose(const struct klor_snap *o)
     total = o->n + o->nbots; mins = (int)(o->length / 60.0f + 0.5f);
     if (mins > 0 && mins < 100) snprintf(b, sizeof b, "%d PLAYERS   %d MIN", total, mins); else snprintf(b, sizeof b, "%d PLAYERS", total);
     klsb_put(KLSB_T_RESULT, x0 + 40.0f, klu_cen(y0 + 110.0f, KLU_FNT_NAME), b, KLU_C_CHALK);
+    if (klsb.icount) {      /* [HUD] OnlineIntroCount: GUESS: the state timer [rules+0x4c] (the board's ScoreboardCount=1 source) counts down to the heist start in states 0x16..0x18; shown only when it reads 0 < t < 100 */
+        float tm = 0;
+        if (o->b.rules && klh_rd(o->b.rules + KLUV_R_LEFT, &tm, 4) && tm == tm && tm > 0 && tm < 100.0f) { snprintf(a, sizeof a, "HEIST STARTS IN %d SEC", (int)ceil(tm - 0.001f)); klsb_put(KLSB_T_CONTN, x0 + KLSB_IW * 0.5f, klu_cen(y0 + 62.0f, KLU_FNT_NAME), a, KLU_C_CORAL); }
+    }
     for (i = 0; i < total && row < KLSB_NROW; i++) {
         const struct klor_row *r = i < o->n ? &o->r[i] : &o->bot[i - o->n]; int you; float cx, rc;
         if (!r->used) continue;
@@ -889,11 +908,16 @@ static void klsb_tick(int game_thread)
     if (hon && klsb.intro && !ipath && st >= 0x16 && st <= 0x18) { EnterCriticalSection(&klsb_cs); klsb_intro_compose(&on); klsb_apply(); LeaveCriticalSection(&klsb_cs); }
     if (st != 0x1f) {
         if (klsb_r.valid) { EnterCriticalSection(&klsb_cs); klsb_r.valid = 0; LeaveCriticalSection(&klsb_cs); }
-        if (st < 0x1f) { klsb_r.cd_max = 0; klsb_r.sset = 0; klsb_r.told_s = 0; }
+        if (st < 0x1f) { klsb_r.cd_max = 0; klsb_r.sset = 0; klsb_r.told_s = 0; klsb_r.take_set = 0; }
         klsb_r.spath = 0;
         return;
     }
     if (!have && !klsb.online) { klsb_r.valid = 0; return; }
+    if (klsb.take && hon && !have && !klsb_r.take_set) {      /* OnlineBoardTake: the first state-0x1f tick with a readable snapshot: every seat's money now (the round take is money later minus this; GUESS: payouts land after this tick) */
+        int q; memset(klsb_r.take_have, 0, sizeof klsb_r.take_have);
+        for (q = 0; q < on.n; q++) if (on.r[q].seat >= 0 && on.r[q].seat < KLOR_MAX) { klsb_r.take0[on.r[q].seat] = on.r[q].money; klsb_r.take_have[on.r[q].seat] = 1; }
+        klsb_r.take_set = 1;
+    }
     el = klsb_r.elem; sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF));
     if (nowrap) {      /* OnlineBoardState: no outro element: the countdown starts at the first state-0x1f tick (GUESS G16), drawn by klsb_state_render on the clock element */
         float endf;
@@ -936,6 +960,7 @@ static void klsb_init(void)
     klsb.on = klu_inii("Scoreboard", 0, 0, 1);
     if (!klsb.on) return;
     klsb.online = klu_inii("OnlineBoard", 0, 0, 1); klsb.ostate = klsb.online && klu_inii("OnlineBoardState", 0, 0, 1); klsb.intro = klu_inii("OnlineIntro", 0, 0, 1); klsb.istate = klsb.intro && klu_inii("OnlineIntroState", 0, 0, 1);
+    klsb.take = klsb.online && klu_inii("OnlineBoardTake", 0, 0, 1); klsb.icount = klsb.istate && klu_inii("OnlineIntroCount", 0, 0, 1);
     klsb.probe = klu_inii("ScoreboardProbe", 0, 0, 1); klsb.test = klu_inii("ScoreboardTest", 0, 0, 1); klsb.fault = klu_inii("ScoreboardFault", 0, 0, 1);
     klsb.rows12 = klu_inii("Rows12", 1, 0, 1); klsb.textonly = klu_inii("ScoreboardTextOnly", 0, 0, 1); klsb.total = klu_inii("ScoreboardTotal", 1, 0, 2); klsb.count = klu_inii("ScoreboardCount", 0, 0, 1); klsb.lead = klu_inii("ScoreboardShopLead", 30, 0, 100);   /* tenths of a second cut off the 10 s countdown: the shop opens at 7 (owner 2026-10-25) */
     klsb.alpha = klu_inii("ScoreboardAlpha", 230, 0, 255);

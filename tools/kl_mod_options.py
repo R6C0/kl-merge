@@ -121,6 +121,12 @@ feat('onlinetab', G_CORE, 'Online matches: Tab card (full crew list) like Arcade
      'klhud.c OnlineTab; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineTab', 1, 0, 0)])
 feat('onlinevan', G_CORE, 'Online matches: escape / van card like Arcade (recommended off until benched)', 'off', 'start',
      'klhud.c OnlineVan; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineVan', 1, 0, 0)])
+feat('onlineboardtake', G_CORE, 'Online matches: round-over card shows the money taken this round and money and fate of the AI heisters (recommended off until benched)', 'off', 'start',
+     'klhud_board2.c OnlineBoardTake; needs OnlineBoard=1; take = money minus money at the first state-0x1f tick; bot money/ESCAPED are guesses (bots have no score row); NOT run live', [('HUD', 'OnlineBoardTake', 1, 0, 0)])
+feat('onlineintrocount', G_CORE, 'Online matches: HEIST STARTS IN n SEC on the pre-round card (recommended off until benched)', 'off', 'start',
+     'klhud_board2.c OnlineIntroCount; needs OnlineIntroState=1; reads the state timer [rules+0x4c] (GUESS); NOT run live', [('HUD', 'OnlineIntroCount', 1, 0, 0)])
+feat('onlinevanicon', G_CORE, 'Online matches: green ESCAPED van icon beside the watch (recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineVanIcon; needs [Online] Read=1 and OnlineCrew=1; local seat status bit 0x40 (GUESS: same bit as Arcade); ESCAPED only; NOT run live', [('HUD', 'OnlineVanIcon', 1, 0, 0)])
 feat('onlineboard', G_CORE, 'Online matches: round-over card like Arcade, killed by message names the killer heister (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineBoard; needs [Online] Read=1 and [HUD] Scoreboard=1; NOT run live', [('HUD', 'OnlineBoard', 1, 0, 0)])
 feat('onlineboardstate', G_CORE, 'Online matches: round-over card also when the game never builds its outro element (shown from the round-end state, recommended off until benched)', 'off', 'start',
