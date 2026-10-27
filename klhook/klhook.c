@@ -767,6 +767,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klpm_arc.c"                                      /* klpm_arc.c: the Arcade playlist (off unless [Match] Enable + Arcade); AFTER klslot.c */
 #include "klqol2.c"                                        /* klqol2.c: [QoL2] stuck-AI watchdog, Heister page key, mute when unfocused (off unless set); AFTER klslot.c / klpm_arc.c */
 #include "klmappool.c"                                   /* klmappool.c: [MapPool] random map pools Dead Men / Dog Days / Mix, no repeats (off unless Enable=1); AFTER klslot.c / kllobbyopt.c, BEFORE klhostopt.c */
+#include "klmappool_ov.c"                                /* klmappool_ov.c: [MapPool] Overlay - the live pool (label + thumbnails, NEXT / played) drawn over the lobby by klfps.c's Present wrapper (off unless Overlay=1); AFTER klmappool.c, BEFORE klhostopt.c */
 #include "klhostopt.c"                                    /* klhostopt.c: [HostOpts] host-controlled match options (off unless Enable=1); AFTER klslot.c / klbotfill.c / kllobby.c / klmm.c */
 #include "klcharonline.c"                               /* klcharonline.c: [CharOnline] every player's heister/mask/outfit on every peer (off unless Enable=1); AFTER klchar.c / klmm.c / klslot.c */
 #include "klsync.c"                                    /* klsync.c: [Sync] read-only probe + host list compare of actors / world objects per peer (off unless set); AFTER klcensus.c, klcharonline.c */

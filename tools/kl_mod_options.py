@@ -268,6 +268,8 @@ feat('hostopts', G_EXP, 'Host-controlled match options: F7 map set, F8 AI heiste
      'klhostopt.c [HostOpts] Enable; Steam lobby key klx_opts + UDP 27413; re/host_options.md; NOT run live', [('HostOpts', 'Enable', 1, 0, 0)])
 feat('mappool', G_EXP, 'Online: random map pool for each round, no repeats (host Delete cycles Full Dead Men / Full Dog Days / Mix; needs Host-controlled match options; recommended off until benched)', 'off', 'start',
      'klmappool.c [MapPool] Enable; pool + seed reach clients in klx_opts (p<pool>q<seed>); [MapPool] Apply=1 lets the host move the lobby slot (GUESS); icons by tools/kl_mappool.py; re/map_pool.md; NOT run live', [('MapPool', 'Enable', 1, 0, 0)])
+feat('mappoolov', G_EXP, 'Online: lobby overlay of the map pool: label (Full Dead Men / Full Dog Days / Mix) + thumbnails, NEXT highlighted, played dimmed (needs the map pool; recommended off until benched)', 'off', 'start',
+     'klmappool_ov.c [MapPool] Overlay; thumbnails by tools/kl_mappool.py (thumbs) -> OverlayDir; draws via klfps.c Present wrapper; re/map_pool.md; NOT run live', [('MapPool', 'Overlay', 1, 0, 0)])
 feat('charonline', G_EXP, 'Online: every player heister / mask / outfit shows on every screen; F9 / F11 choose (recommended on after the live test)', 'off', 'start',
      'klcharonline.c [CharOnline] Enable; entity-table index + look via Steam lobby member data klx_look and UDP 27414; re/char_online.md; NOT run live', [('CharOnline', 'Enable', 1, 0, 0)])
 feat('hostoptsmenu', G_EXP, 'Host options rows in Mod settings (needs the overlay rebuilt; recommended on after the live test)', 'off', 'start',

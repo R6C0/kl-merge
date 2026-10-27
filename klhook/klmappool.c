@@ -161,6 +161,8 @@ static void kmp_tick(int game_thread, int host)
     klog("mappool: HOST set the lobby slot %lu -> F%02d for the next map %s (pool %s, GUESS sequence, store %s)", (unsigned long)(cur & 0xff), slot + 1, kmp.name[e], kmp_pool_name(kmp.pool), st ? "set" : "NOT found");
 }
 
+static void kmpo_init(void);                  /* klmappool_ov.c: [MapPool] Overlay (the live pool drawn over the lobby) */
+
 static void kmp_init(void)
 {
     kmp.on = GetPrivateProfileIntA("MapPool", "Enable", 0, klh_ini) != 0;
@@ -173,6 +175,7 @@ static void kmp_init(void)
     kmp.seedIni = (int)GetPrivateProfileIntA("MapPool", "Seed", 0, klh_ini);
     kmp.pool = 0; kmp.seed = 0;                 /* the effective values are set by klhostopt.c while a session runs: nothing outside one */
     klog("mappool: on; Pool=%d (%s) Apply=%d Seed=%08lx Log=%d; NOT run live. The pool and seed come from the host (klhostopt.c 'p<pool>q<seed>')", kmp.pool, kmp_pool_name(kmp.pool), kmp.apply, (unsigned long)kmp.seed, kmp.log);
+    kmpo_init();
 }
 
 #endif

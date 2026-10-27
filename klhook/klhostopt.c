@@ -187,6 +187,7 @@ static void klho_tick(int game_thread)
             kmp.pool = klho.pool;
             if (!kmp.seed) { unsigned __int64 z = kmp_mix((unsigned __int64)now ^ klho.lobby); kmp.seed = kmp.seedIni ? (DWORD)kmp.seedIni : ((DWORD)z | 1); klog("mappool: HOST seed %08lx (pool %d)", (unsigned long)kmp.seed, kmp.pool); }
             kmp_tick(game_thread, 1);
+            kmpo_snap(game_thread);                                    /* klmappool_ov.c: the lobby overlay's snapshot (off unless [MapPool] Overlay=1) */
         }
         klho_pack(cur, sizeof cur);
         if (klho.udp && klho.sock && now - klho.sentAt >= 2000) {
@@ -238,6 +239,7 @@ static void klho_tick(int game_thread)
         int want = klho.rpool > 0 ? klho.rpool : 0; DWORD sd = klho.rseed ? klho.rseed : (DWORD)(klho.lobby ^ (klho.lobby >> 32));
         if (kmp.pool != want || (want && kmp.seed != sd)) { kmp.pool = want; kmp.seed = want ? (sd ? sd : 1) : 0; klog("mappool: CLIENT uses the host's pool %d (%s) seed %08lx%s", want, kmp_pool_name(want), (unsigned long)kmp.seed, klho.rseed ? "" : " (folded lobby id: the host sent none)"); }
     }
+    if (kmp.on && klho.rok) kmpo_snap(game_thread);                /* klmappool_ov.c: the client's lobby overlay snapshot (off unless [MapPool] Overlay=1) */
     if (klho.rok && klho.applied != klho.rmap) {
         klog("hostopts: CLIENT applies the host's map set %d (own %d), in memory only; kls_online_set %d -> %d", klho.rmap, klho.map, kls_online_set, klho.rmap);
         kls_online_set = klho.rmap; klho.applied = klho.rmap;
