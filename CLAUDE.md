@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
+Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
+
 2026-10-26 ~23:15 - [scheduled] ONLINE HUD GAPS CLOSED, NOT RUN: klhud.c klu_keep (per-compose bits: kill line live / van card live); klhud_kill.c and
 klhud_escape.c (EscapeCard) take the stock pop-up / van panel off the screen ONLY with the bit, so online with the default OnlineFeed=0 / OnlineVan=0
 the stock ones show instead of nothing. --check-hook clean. PC idle since 19:54; owner's 18:58 online session: 2nd load put 109 of 128 MB into klmem's
