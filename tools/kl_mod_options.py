@@ -238,6 +238,8 @@ feat('voiceonlinecrew', G_AV, 'Online matches: every human heister speaks his De
      'klvoice_online.c [Voice] OnlineCrew=1: all klor_read human rows, seats < 8, local speech manager only; GUESS V1 voice number = seat; NOT run live', [('Voice', 'OnlineCrew', 1, 0, 0)])
 feat('voiceonlinetraits', G_AV, 'Online matches: your own heister talks (scenes, banter) and his trait is read, as in Arcade; no gameplay factor online (needs Voice online on) (recommended off until benched)', 'off', 'start',
      'kltalk.c / kltrait.c via klvoice_online.c [Voice] OnlineTraits=1: local player only, local speech manager; every trait factor stays 1.0 online; NOT run live', [('Voice', 'OnlineTraits', 1, 0, 0)])
+feat('voiceonlinediag', G_AV, 'Online matches: extra voice log lines (who is wanted, name changes, the voice table); logging only (recommended off)', 'off', 'start',
+     'klvoice_online.c [Voice] OnlineDiag=1: re-logs on a seat-name change, logs rules+0x33e, lists wanted voice numbers; no behaviour change; NOT run live', [('Voice', 'OnlineDiag', 1, 0, 0)])
 feat('announcer', G_AV, 'Announcer first: a one-recording Dead Men line stays the stock announcer', 'on', 'start',
      'owner 2026-10-24 (my character lines play first, needs to be the announcer first); the live ini has 0 at the moment', [('Voice', 'Announcer', 1, 0, 1)])
 feat('music', G_AV, 'Payday 2 music jukebox (needs Payday 2)', 'off', 'start',
