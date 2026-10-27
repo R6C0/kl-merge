@@ -26,14 +26,15 @@
 #define KLHOSTOPT_C
 
 static struct {
-    int on, steam, udp, keys, keyMap, keyAI;
+    int on, steam, udp, keys, keyMap, keyAI, keyPool;
     int map, ai, solo, pd2;               /* the host's OWN values: map = OnlineSet value (0/2/9) */
     int minIni, squadsIni;                /* the ini's [Lobby] MinPlayers / [Bots] OnlineFillSquads, to put back */
     int rmap, rai, rsolo, rok;            /* the host's values as a client heard them */
     int rbots;                            /* the host's [BotFill] OnlineHost as heard ('b<n>'): -1 = not sent (old host) */
+    int pool, rpool; DWORD rseed;         /* [MapPool] (klmappool.c): the host's own pool 0..3; the pool + seed a client heard ('p<n>q<hex>'; rpool -1 = not sent) */
     DWORD rat;
     int applied;                          /* what kls_online_set holds because of us: -1 = own */
-    char last[24]; DWORD sentAt, steamAt, readAt, udpAt; unsigned __int64 lobby;
+    char last[48]; DWORD sentAt, steamAt, readAt, udpAt; unsigned __int64 lobby;
     UINT_PTR sock; int sockTried;
     int lastRole;
 } klho;
@@ -41,14 +42,18 @@ static struct {
 static const int klho_maps[3] = { 0, 2, 9 };
 
 static int klho_get(int which)
-{   /* which 0 = map row (index 0..2), 1 = options row (bit 0 AI, bit 1 Solo, bit 2 PD2) */
+{   /* which 0 = map row (index 0..2), 1 = options row (bit 0 AI, bit 1 Solo, bit 2 PD2), 2 = map pool (0 off, 1 Full Dead Men, 2 Full Dog Days, 3 Mix) */
     int i;
+    if (which == 2) return klho.pool;
     if (which == 0) { for (i = 0; i < 3; i++) if (klho_maps[i] == klho.map) return i; return klho.map ? 1 : 0; }
     return (klho.ai ? 1 : 0) | (klho.solo ? 2 : 0) | (klho.pd2 ? 4 : 0);
 }
 
 /* 'b<n>' = the HOST'S [BotFill] OnlineHost (botgate_1026a, klslot.c [BotGate]); an old client stops reading after s<n>, so the suffix is harmless to it */
-static void klho_pack(char *o, size_t n) { snprintf(o, n, "m%da%ds%db%d", klho.map, klho.ai, klho.solo, klbf_oh ? 1 : 0); }
+static void klho_pack(char *o, size_t n)
+{   /* + 'p<pool>q<seed>' (mappool_1027a, klmappool.c): an old client stops reading after b<n>, so the suffix is harmless to it */
+    snprintf(o, n, "m%da%ds%db%dp%dq%08lx", klho.map, klho.ai, klho.solo, klbf_oh ? 1 : 0, kmp.on ? klho.pool : 0, (unsigned long)(kmp.on ? kmp.seed : 0));
+}
 
 static int klho_bots_remote(void) { return klho.on && klho.rok ? klho.rbots : -1; }
 
@@ -66,7 +71,12 @@ static void klho_live(void)
 static void klho_put(int which, int value)
 {
     char v[16];
-    if (which == 0) {
+    if (which == 2) {
+        if (value < 0 || value > 3 || value == klho.pool) return;
+        klho.pool = value; snprintf(v, sizeof v, "%d", value);
+        WritePrivateProfileStringA("MapPool", "Pool", v, klh_ini);
+        klog("hostopts: set map pool = %d (%s) - [MapPool] Pool=%d%s", value, kmp_pool_name(value), value, kmp.on ? "" : " (but [MapPool] Enable=0: nothing happens)");
+    } else if (which == 0) {
         int m = klho_maps[value < 0 ? 0 : value > 2 ? 2 : value];
         if (m == klho.map) return;
         klho.map = m; kls_online_set = m; klho.applied = -1; snprintf(v, sizeof v, "%d", m); WritePrivateProfileStringA("Expansion", "OnlineSet", v, klh_ini);
@@ -116,21 +126,25 @@ static void klho_open(void)
     else klog("hostopts: UDP %d open (broadcast + listen)", KLHO_PORT);
 }
 
+static int klho_pp = -1; static unsigned klho_pq;
 static int klho_parse(const char *s, int *m, int *a, int *so, int *b)
-{   /* "m<set>a<ai>s<solo>[b<bots>]" */
-    int p = 0, bb = 0;
-    *b = -1;
+{   /* "m<set>a<ai>s<solo>[b<bots>[p<pool>q<seed hex>]]" */
+    int p = 0, bb = 0, pl = 0, n2 = 0; unsigned sd = 0;
+    *b = -1; klho_pp = -1; klho_pq = 0;
     if (sscanf(s, "m%da%ds%d%n", m, a, so, &p) != 3 || p < 6) return 0;
     if (*m != 0 && *m != 2 && *m != 3 && *m != 9) return 0;
-    if (sscanf(s + p, "b%d", &bb) == 1 && (bb == 0 || bb == 1)) *b = bb;
+    if (sscanf(s + p, "b%d%n", &bb, &n2) >= 1 && (bb == 0 || bb == 1)) {
+        *b = bb;
+        if (sscanf(s + p + n2, "p%dq%x", &pl, &sd) == 2 && pl >= 0 && pl <= 3) { klho_pp = pl; klho_pq = sd; }
+    }
     return 1;
 }
 
 static void klho_tick(int game_thread)
 {
-    static DWORD keyAt; static int dMap, dAI;
+    static DWORD keyAt; static int dMap, dAI, dPool;
     DWORD now = GetTickCount(), sm = 0, role = 0; int online, host, cli;
-    char cur[24];
+    char cur[48];
     if (!klho.on || !game_thread || !klh_exe_ok) return;
     sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION));
     online = kls_online_cached();
@@ -145,18 +159,19 @@ static void klho_tick(int game_thread)
             if (k) bp = (BOOL (WINAPI *)(DWORD, DWORD))GetProcAddress(k, "Beep");
         }
         if (gaks && fgw && wtp && !cli) {
-            DWORD pid = 0; HWND f = fgw(); int m = (gaks(klho.keyMap) & 0x8000) != 0, a = (gaks(klho.keyAI) & 0x8000) != 0;
+            DWORD pid = 0; HWND f = fgw(); int m = (gaks(klho.keyMap) & 0x8000) != 0, a = (gaks(klho.keyAI) & 0x8000) != 0, pl = kmp.on && (gaks(klho.keyPool) & 0x8000) != 0;
             if (f) wtp(f, &pid);
             if (pid == GetCurrentProcessId()) {
                 if (m && !dMap) { klho_put(0, (klho_get(0) + 1) % 3); if (bp) bp(660 + 220 * klho_get(0), 40); }
                 if (a && !dAI) { klho_put(1, klho_get(1) ^ 1); if (bp) bp(klho.ai ? 880 : 440, 40); }
+                if (pl && !dPool) { klho_put(2, (klho.pool + 1) % 4); if (bp) bp(500 + 150 * klho.pool, 40); }
             }
-            dMap = m; dAI = a;
+            dMap = m; dAI = a; dPool = pl;
         }
     }
     if (!host && !cli) {
         if (klho.lastRole) {
-            klho.lastRole = 0; klho.rok = 0; klho.rbots = -1; kls_bg_used = -1; klho.lobby = 0; klho.last[0] = 0;
+            klho.lastRole = 0; klho.rok = 0; klho.rbots = -1; klho.rpool = -1; klho.rseed = 0; kmp.pool = 0; kmp.seed = 0; kls_bg_used = -1; klho.lobby = 0; klho.last[0] = 0;
             if (klho.applied >= 0) { kls_online_set = klho.map; klho.applied = -1; klog("hostopts: session over: own map set %d is back", klho.map); }
         }
         return;
@@ -168,6 +183,11 @@ static void klho_tick(int game_thread)
     }
     if (klho.udp) klho_open();
     if (host) {
+        if (kmp.on) {      /* [MapPool]: the host's own pool; the seed is made ONCE per session (fixed with [MapPool] Seed) and sent with it */
+            kmp.pool = klho.pool;
+            if (!kmp.seed) { unsigned __int64 z = kmp_mix((unsigned __int64)now ^ klho.lobby); kmp.seed = kmp.seedIni ? (DWORD)kmp.seedIni : ((DWORD)z | 1); klog("mappool: HOST seed %08lx (pool %d)", (unsigned long)kmp.seed, kmp.pool); }
+            kmp_tick(game_thread, 1);
+        }
         klho_pack(cur, sizeof cur);
         if (klho.udp && klho.sock && now - klho.sentAt >= 2000) {
             char pk[40]; klho_sin a; int n = snprintf(pk, sizeof pk, "KLHO1;%s", cur);
@@ -194,7 +214,7 @@ static void klho_tick(int game_thread)
             pk[n] = 0;
             if (!strncmp(pk, "KLHO1;", 6) && klho_parse(pk + 6, &m, &a, &s, &bo)) {
                 if (!klho.rok || m != klho.rmap || bo != klho.rbots) klog("hostopts: CLIENT heard the host on UDP: %s", pk + 6);
-                klho.rmap = m; klho.rai = a; klho.rsolo = s; klho.rbots = bo; klho.rok = 1; klho.rat = now;
+                klho.rmap = m; klho.rai = a; klho.rsolo = s; klho.rbots = bo; klho.rpool = klho_pp; klho.rseed = klho_pq; klho.rok = 1; klho.rat = now;
             }
         }
     }
@@ -204,7 +224,7 @@ static void klho_tick(int game_thread)
         klho.readAt = now;
         if (v && klh_rdstr((DWORD_PTR)v, b, sizeof b) && klho_parse(b, &m, &a, &s, &bo)) {
             if (!klho.rok || m != klho.rmap || bo != klho.rbots) klog("hostopts: CLIENT read the host's Steam lobby klx_opts=%s", b);
-            klho.rmap = m; klho.rai = a; klho.rsolo = s; klho.rbots = bo; klho.rok = 1; klho.rat = now;
+            klho.rmap = m; klho.rai = a; klho.rsolo = s; klho.rbots = bo; klho.rpool = klho_pp; klho.rseed = klho_pq; klho.rok = 1; klho.rat = now;
         }
     }
     {   /* [BotGate] (klslot.c): the client's level archive was chosen with kls_bg_used; if the host's value differs (heard late) the peers disagree about the Ally squads */
@@ -213,6 +233,10 @@ static void klho_tick(int game_thread)
             warned = klho.rbots;
             klog("botgate: MISMATCH - this client loaded the level with Ally bots %s but the host says %s (heard after the load?): restart the round after both sides show 'CLIENT heard' in the lobby", kls_bg_used ? "ON" : "OFF", klho.rbots ? "ON" : "OFF");
         }
+    }
+    if (kmp.on && klho.rok) {      /* [MapPool]: the host's pool + seed (an old host sends none: the pool stays off). Without a seed but with a lobby id: the id folded */
+        int want = klho.rpool > 0 ? klho.rpool : 0; DWORD sd = klho.rseed ? klho.rseed : (DWORD)(klho.lobby ^ (klho.lobby >> 32));
+        if (kmp.pool != want || (want && kmp.seed != sd)) { kmp.pool = want; kmp.seed = want ? (sd ? sd : 1) : 0; klog("mappool: CLIENT uses the host's pool %d (%s) seed %08lx%s", want, kmp_pool_name(want), (unsigned long)kmp.seed, klho.rseed ? "" : " (folded lobby id: the host sent none)"); }
     }
     if (klho.rok && klho.applied != klho.rmap) {
         klog("hostopts: CLIENT applies the host's map set %d (own %d), in memory only; kls_online_set %d -> %d", klho.rmap, klho.map, kls_online_set, klho.rmap);
@@ -223,13 +247,15 @@ static void klho_tick(int game_thread)
 static void klho_init(void)
 {
     klho.on = GetPrivateProfileIntA("HostOpts", "Enable", 0, klh_ini) != 0;
-    klho.applied = -1; klho.rbots = -1;
+    klho.applied = -1; klho.rbots = -1; klho.rpool = -1;
     if (!klho.on) return;
     klho.steam = GetPrivateProfileIntA("HostOpts", "Steam", 1, klh_ini) != 0;
     klho.udp = GetPrivateProfileIntA("HostOpts", "Udp", 1, klh_ini) != 0;
     klho.keys = GetPrivateProfileIntA("HostOpts", "Keys", 1, klh_ini) != 0;
     klho.keyMap = (int)GetPrivateProfileIntA("HostOpts", "KeyMap", 0x76, klh_ini);
     klho.keyAI = (int)GetPrivateProfileIntA("HostOpts", "KeyAI", 0x77, klh_ini);
+    klho.keyPool = (int)GetPrivateProfileIntA("HostOpts", "KeyPool", 0x2D, klh_ini);      /* Insert (every F5..F11 key is taken by another module): cycles the map pool (needs [MapPool] Enable=1) */
+    klho.pool = kmp.ini_pool; klho.rpool = -1;
     klho.map = kls_online_set; if (klho.map != 0 && klho.map != 2 && klho.map != 9) klho.map = klho.map == 3 ? 3 : 0;
     klho.ai = GetPrivateProfileIntA("Bots", "OnlineFill", 0, klh_ini) != 0;
     klho.solo = GetPrivateProfileIntA("Lobby", "Solo", 0, klh_ini) != 0;

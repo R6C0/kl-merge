@@ -760,6 +760,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
 #include "klpm_arc.c"                                      /* klpm_arc.c: the Arcade playlist (off unless [Match] Enable + Arcade); AFTER klslot.c */
 #include "klqol2.c"                                        /* klqol2.c: [QoL2] stuck-AI watchdog, Heister page key, mute when unfocused (off unless set); AFTER klslot.c / klpm_arc.c */
+#include "klmappool.c"                                   /* klmappool.c: [MapPool] random map pools Dead Men / Dog Days / Mix, no repeats (off unless Enable=1); AFTER klslot.c / kllobbyopt.c, BEFORE klhostopt.c */
 #include "klhostopt.c"                                    /* klhostopt.c: [HostOpts] host-controlled match options (off unless Enable=1); AFTER klslot.c / klbotfill.c / kllobby.c / klmm.c */
 #include "klcharonline.c"                               /* klcharonline.c: [CharOnline] every player's heister/mask/outfit on every peer (off unless Enable=1); AFTER klchar.c / klmm.c / klslot.c */
 #include "klsync.c"                                    /* klsync.c: [Sync] read-only probe + host list compare of actors / world objects per peer (off unless set); AFTER klcensus.c, klcharonline.c */
@@ -1671,6 +1672,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klsv_init();                                      /* klserver.c: [Server] (default off) */
     klmm_init();                                      /* klmm.c: installs nothing unless [Net] PrivateLobby or BuildKey is set */
     kls_init(inst);
+    kmp_init();                                       /* klmappool.c: [MapPool] (off unless Enable=1); before klho_init, which carries the host's pool to the clients */
     klho_init();                                      /* klhostopt.c: after kls_init (kls_online_set) and klbf_init / kllb_init */
     klco_init();                                      /* klcharonline.c: after klc_init (it reads the choice) */
     klsy_init();                                      /* klsync.c: reads [Sync] */
