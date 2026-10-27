@@ -70,10 +70,10 @@ Full dated log: `re/open_work_log.md` (newest first).
 my body kept when the camera follows a peer (klh_slot_player_mine), [HUD] OnlineBoardCarrier end card on ZFAOutroDisplay osd+0x10b0.
 NOT run: OnlinePage2/bot-down rules-copy gates, Hire online guards (308844132). c9 queue: CE27 grades + map-pool overlay (bench_ce_1027).
 
-2026-10-27 ~03:55 - [ce] Round number online FIXED live (fields are objects, value byte +4 XOR 0xac; ce6: round 1 of 3). Rating = low nibble.
-Online rules are small (Sv 0x3a8, Cl 0x334): Arcade offsets +0x33e/+0x348/+0x5f8 now skipped online; online talk needs [Voice] OnlineTalkNoScore=1.
-Rules vtable is a copy mid-round: gates match slot 0 (fe2871534). TEST out_vt_test (DM02 clean), SHIP out_ship_1027r; owner on 1027p.
-ABOARD still unknown: BOSE4 (c9) boards with E at the parked box (8449,-867,26205).
+2026-10-27 ~07:40 - [c9] Benched for ce, all 0 faults: map pool Mix shared host->client (MPX); Hire refused as unaffordable (HRP).
+Hire OK "for next round" (HRF); shopnames slot k = seat k, holder vtable 0xbd4194 (ALL). Bench artefact: background instance stalls 60-300 s in
+USER32 under ReShade/Steam overlay (HRP host 216 s), not mod code. D3dShotFrom (b5ec0fb94); shots after the pool overlay (364c8de2b).
+Waiting on ce's out_ce_1027d_test for ALL2 + P2P2 (inis staged in lan_1025; shop test-buy 5,b10).
 
 2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
 Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
