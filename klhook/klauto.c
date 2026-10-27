@@ -1532,7 +1532,9 @@ static int kla_tap_ok(DWORD now)
 static int kla_recover(const char *why, DWORD now)
 {   /* 'onfail': instead of ending the run, go on at the armed label (at most its max times); 1 = the script goes on */
     KCMD *f; int j;
-    if (kla_onfail < 0 || kla_onfail >= kla_ncmd || (f = &kla_cmd[kla_onfail])->n2 >= f->n) return 0;
+    if (kla_onfail < 0 || kla_onfail >= kla_ncmd) return 0;
+    f = &kla_cmd[kla_onfail];
+    if (f->n2 >= f->n) return 0;                       /* was one expression with f assigned and read across '>=': no sequence point there (GCC -Wsequence-point) */
     for (j = 0; j < kla_ncmd; j++) if (kla_cmd[j].op == C_LABEL && !_stricmp(kla_cmd[j].text, f->text)) break;
     if (j >= kla_ncmd) return 0;
     f->n2++;

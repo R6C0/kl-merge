@@ -1,7 +1,8 @@
 /* klsb_test.c - OFF-GAME check of klhud_board2.c (the round-over scoreboard). Proves the file's own logic and guards on made-up memory; nothing about the game.
  *   cl /nologo /W4 /D_CRT_SECURE_NO_WARNINGS klsb_test.c            (32-bit: vcvarsall x86; run it from the klhook folder)
  *   klsb_test.exe [dump folder]     writes <folder>\board_<case>.txt for tools\kl_hud.py preview-board (the layout the C code composed: one line a text, one a picture)
- * It includes the REAL klhud_values.c, klhud.c (and so klhud_weapon.c) and klhud_board2.c; the game's routines are stubs that record their arguments.
+ * It includes the REAL klhud_values.c, klhud.c (and so klhud_weapon.c), klhud_grades.c and klhud_board2.c; the game's routines are stubs that record their arguments.
+ * The online side (klbot.c's struct klb_snap with its on_* arrays, klonline_read.h, the klor_* readers answering 'no online round', klhud_board.c's constants) is klhud_harness_online.h, shared with klwatch_test.c.
  * Cases: (1) zeroed / garbage memory: compose and the render slot take the stock branch; (2) every guard of the render slot one by one; (3) three made-up rounds
  * (escaped / dead with 'killed by' / traitor) composed and drawn: counts, strings, colours and places. */
 #include <windows.h>
@@ -36,15 +37,6 @@ static int klx_level_verdict(const char *scene, char *why) { (void)scene; why[0]
 #define KL2_SYSIF    0xdd2640u
 static int klnm_name(DWORD at, char *out, int cap) { (void)at; (void)out; (void)cap; return 0; }
 
-#define KLB_NREC 32
-#define KLB_NLEVEL 11
-struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; float hit; };
-struct klb_snap { DWORD rules, score, state, vehicle; int n, level, human; BYTE veh; float timer; struct klb_rec r[KLB_NREC]; int online; };   /* = klbot.c's (online: 2026-10-18 [HUD] Online) */
-static int klb_read(struct klb_snap *s) { memset(s, 0, sizeof *s); s->human = -1; return 0; }
-static int klb_hud_online;                             /* klbot.c: set by klhud.c from [HUD] Online */
-static int klb_online_session(void) { return 0; }    /* klbot.c: net role host / client with game type 4 - never in the harness */
-static int klb_read_hud(struct klb_snap *s)            /* klbot.c's: klb_read, else an online snapshot - the harness has no online session, so 'nothing' as klbot.c answers then */
-{ if (klb_read(s)) return 1; memset(s, 0, sizeof *s); s->human = -1; return 0; }
 static int klg_lknames;                                /* klgun.c: set by klhud_weapon.c from [HUD] LookNames */
 static const char *klg_look_name(int item) { (void)item; return 0; }   /* klgun.c: no KLGuns.ini here = no look name (klwd_name is used) */
 
@@ -96,6 +88,8 @@ static void klht_tick(DWORD osd, const struct klb_snap *s, int show) { (void)osd
 static void klht_init(void) {}
 static void klht_reset(void) {}
 
+#define KLSB_HARNESS_HAS_BOARD2
+#include "klhud_harness_online.h"             /* klbot.c's struct klb_snap (Arcade + online fields) and the klor_* stubs; the layout lives there */
 #include "klhud_values.c"
 #include "klhud.c"
 #include "klhud_board2.c"

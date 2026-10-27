@@ -24,6 +24,7 @@ static void klog(const char *fmt, ...)
 }
 static int klh_rd(DWORD_PTR p, void *out, SIZE_T n) { if (p < 0x100 || p + n > sizeof mem) return 0; memcpy(out, mem + p, n); return 1; }
 static DWORD klh_rd32(DWORD_PTR p) { DWORD v = 0; klh_rd(p, &v, 4); return v; }
+static DWORD klh_pvt(DWORD o) { return klh_rd32(o); }      /* klhook.c: maps NetSmooth's private ZFFPlayer vtable (D1, 2026-10-27); none here */
 static int klb_finite(float f) { return f == f && f > -1e9f && f < 1e9f; }
 static int klt_same_code(DWORD va, const BYTE *b, int n) { (void)va; (void)b; (void)n; return 1; }
 static CRITICAL_SECTION klj_cs; static char klj_map_key[64], klj_map_file[MAX_PATH]; static FILETIME klj_map_ft;
