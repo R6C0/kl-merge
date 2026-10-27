@@ -787,6 +787,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klshoppage.c"                           /* AFTER klshop.c: [ShopPage] page II of the weapon shop (key flips set A / B) */
 #include "klfed.c"
 #include "klfedkit.c"
+#include "klbench_down.c"                                 /* klbench_down.c: [Bench] SelfDownAt - the local body takes one hit through the game's slot 422 (bench only, off unless set); AFTER klucc_down.c, klhook.c's klh_slot_player_mine */
 #include "kldown.c"
 #include "klbotdown.c"                                    /* klbotdown.c: AI heisters down, not dead (off unless [BotDown] Enable) */
 #include "klcardown.c"                                   /* klcardown.c: a car blast floors the AI and you, revivable ([CarDown], on in Arcade on non-stock levels) */
@@ -1277,6 +1278,7 @@ static void klh_tick(int game_thread)
     klam_tick(game_thread);                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
     klst_tick(game_thread);                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
     klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
+    klbk_tick(game_thread);                           /* klbench_down.c: [Bench] SelfDownAt (bench only, off unless set) */
     klud_tick(game_thread);                           /* klucc_down.c: [Ucc] DownOnly (off unless set; game thread only) */
     klucc_tick(game_thread);                          /* klucchide.c: [Ucc] Hide (off unless set; game thread only); AFTER klud_tick and kllo_tick (their rules vtable copies go first) */
     klua_tick(game_thread);                           /* klucc_aim.c: [Ucc] PoliceAim (off unless set; game thread only); AFTER klucc_tick (patches slot 188 into whichever private rules vtable exists) */
@@ -1701,6 +1703,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klinv_init();
     klgrenade_init();                                 /* klgrenade.c: after klinv_init (shares its user32 pointers) */
     klnetsmooth_init();
+    klbk_init();                                      /* klbench_down.c: reads [Bench] SelfDownAt */
     klud_init();                                      /* klucc_down.c: reads [Ucc] DownOnly */
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
     klam_init();                                     /* klambience.c: [Ambience] (default off) */

@@ -3,14 +3,17 @@
  * Part of KLHook (klhook.c includes it after klhud_board2.c, SHIP and TEST alike). 2026-10-27, NOT RUN LIVE.
  *
  * Why: the stock online roster (Menu/online.xml MercsShowInfoFA rows, StatusPlayerName handler 0x5bb7df) shows STEAM names. The name comes from
- * 0x67f300(sessionmgr, idx): slot = [[sm+4]->vtbl+0x38](idx) (what 0x8fdf90 does), client = [slot], name char* = [client+0x35c] (0x833cc0: add ecx,0x358; jmp 0x962850).
+ * 0x67f300(sessionmgr, idx): slot = [[sm+4]->vtbl+0x38](idx) (what 0x8d1c60 does: the slot getter, bench-confirmed), client = [slot], name char* = [client+0x35c] (0x833cc0: add ecx,0x358; jmp 0x962850).
  * The owner wants Kane, Parker, ... there, as Arcade.
  *
- * WHAT IS AT client+0x358 (disassembled 2026-10-27, debug/dasm.py): vtable 0xbda3ec = a Quazal "PseudoGlobalVariable"-style holder (RTTI at 0xbda3e8 says
- *   PseudoGlobalVariable<MulticastInterface*>: GUESS that the name is shared by folded code, the layout is what counts). Slots: 0 0x962860 = dtor (frees [+8] ONLY, the
- *   array 0x9627d0 made), 3 0x94c310 (array[i] = [+0x10]), 4 0x962850 = GETTER (return [+4]), 5 0x950580 = SETTER (mov [ecx+4],arg: a PLAIN POINTER STORE, no copy, no free).
- *   So [client+0x35c] is a bare pointer: the holder neither owns nor frees the text it points at (GUESS: the Steam name string belongs to the session player), and a
- *   pointer swap cannot double-free. NOT a small-string / pointer+size+capacity layout, so nothing is copied in place.
+ * LIVE BENCH (CE27_ALL, host, OnlineShopNames=2): session getter fn 0x8d1c60 (not 0x8fdf90, which only wraps it); slot k = seat k PROVEN on host (slot 0 = Parker host, slot 1 = Kane);
+ *   the LIVE holder vtable at client+0x358 is 0xbd4194 = DDL_String (ctor 0x6552d0; dtor 0x4422c0; slot 4 0x4967a0 = base-class dtor 0xbd41a4), NOT 0xbda3ec. 0xbda3ec was a wrong pick: its RTTI
+ *   is folded-code noise. Both have a char* at +4 and the name getter 0x833cc0 -> 0x962850 is NON-virtual (mov eax,[ecx+4]) so the read side is identical: accepted (KLSN_VT, KLSN_VT2).
+ *   BUT OWNERSHIP IS DIFFERENT: the +4 member of a DDL_String is a Quazal::String (dtor 0x80bac0 -> 0x66b570 frees; assign 0x93f8e0 frees old ptr-4 and 0x93f7e0 allocates strlen+5 with a
+ *   4-byte length header BEFORE the text, char* = alloc+4). So the old "plain pointer, nothing frees it" note below is WRONG for the live class: if the game assigns or destroys the string
+ *   WHILE swapped, it frees our pointer-4. Mitigations: the swap buffer is laid out like a Quazal string (length header at ptr-4, in our static storage), the window is only state 1f..20,
+ *   restore is guarded and runs on every change. Residual risk: client destroyed / name re-assigned (Steam rename, leave) inside the window. Mode 1 stays default off, bench only.
+ *   (An older note claimed a plain pointer store that nothing frees: DISPROVEN for the live class, do not rely on it. Vtable 0xbda3ec was a wrong pick.)
  * Design (no .text detour, data only):
  *   2 = LOG ONLY, writes nothing.
  *   1 = while online and the session state [sm+0x70] is 0x1f..0x20 (KLSN_ST_SWAP: the score / roster page), for each session slot k whose client has the 0xbda3ec holder
@@ -32,7 +35,9 @@
 
 #define KLSN_NSLOT    12                /* session slots tried (0..11): the online FA cap is 12 players */
 #define KLSN_CAP      200               /* log lines per session */
-#define KLSN_VT       0xbda3ec          /* the holder at client+0x358 */
+#define KLSN_VT       0xbd4194          /* the holder at client+0x358 seen LIVE: DDL_String */
+#define KLSN_VT2      0xbda3ec          /* the earlier (static) guess, same +4 char* getter: still accepted */
+#define KLSN_VT_OK(v) ((v) == KLSN_VT || (v) == KLSN_VT2)
 #define KLSN_O_HOLD   0x358
 #define KLSN_O_PTR    0x35c
 #define KLSN_ST_LO    0x1f              /* log window: the round-over score page .. the shop (0x1f..0x28) */
@@ -46,7 +51,7 @@ static struct {
     DWORD rules; int round, lines, told_fn, standdown_told;
     WORD told[KLSN_ST_HI - KLSN_ST_LO + 1];                   /* per state: bit k = slot k logged */
     DWORD client[KLSN_NSLOT], saved[KLSN_NSLOT], sm;          /* the swap: client 0 = none; saved = the stock char* */
-    char buf[KLSN_NSLOT][40];                                 /* OUR texts the swapped pointers point at (static: never freed) */
+    char buf[KLSN_NSLOT][44];                                 /* OUR texts: [0..3] = Quazal string length header (strlen+1), the text at +4 (static: never freed) */
     int nsw;
     volatile LONG down;                                       /* set by the exit restore: the tick stands down for good (any-thread ExitProcess vs the game-thread tick) */
 } klsn_c;
@@ -70,16 +75,23 @@ static DWORD klsn_client(DWORD sm, int k, DWORD *fn_out, DWORD *slot_out)
 /* is p inside one of OUR text buffers (never to be saved as a "stock" pointer) */
 static int klsn_ours(DWORD p) { DWORD b = (DWORD)(DWORD_PTR)klsn_c.buf; return p >= b && p < b + (DWORD)sizeof klsn_c.buf; }
 
+/* write name into slot k's buffer, Quazal-string style: length header (strlen+1) at [0..3], text at +4 */
+static void klsn_settext(int k, const char *nm)
+{
+    char *b = klsn_c.buf[k]; DWORD n;
+    snprintf(b + 4, sizeof klsn_c.buf[k] - 4, "%s", nm); n = (DWORD)strlen(b + 4) + 1; memcpy(b, &n, 4);
+}
+
 /* undo slot k: write the stock char* back when the client is readable, still holds the holder vtable and its pointer is still OURS. NO game call (no getter): works even when the slot no longer answers
  * this client, the session is gone, or on the exit thread. A refused write KEEPS client/saved so the next tick retries. returns 1 restored, 0 nothing of ours left, -1 refused (kept). */
 static int klsn_undo(int k)
 {
     DWORD c = klsn_c.client[k], cur = 0, vt = 0; int r = 0;
     if (!c) return 0;
-    if (klh_rd(c + KLSN_O_HOLD, &vt, 4) && vt == KLSN_VT && klh_rd(c + KLSN_O_PTR, &cur, 4) && klsn_ours(cur)) {
+    if (klh_rd(c + KLSN_O_HOLD, &vt, 4) && KLSN_VT_OK(vt) && klh_rd(c + KLSN_O_PTR, &cur, 4) && klsn_ours(cur)) {
         DWORD sv = klsn_c.saved[k];
         if (klsn_ours(sv)) sv = 0;     /* never write our own buffer back as "stock" (cannot happen after the save guard; belt and braces) */
-        if (sv < 0x10000 || !klh_data((void *)(DWORD_PTR)(c + KLSN_O_PTR), &sv, 4, "shopnames restore")) return -1;
+        if (sv < 0x10000 || !klh_data((void *)(DWORD_PTR)(c + KLSN_O_PTR), &sv, 4, "shopnames restore")) { klog("shopnames: RESTORE FAILED slot %d client %08lx (kept for retry; if the game frees this pointer meanwhile the heap is hit)", k, (unsigned long)c); return -1; }
         r = 1;
     }       /* else the client is gone / the game stored a new pointer: nothing of ours to undo */
     klsn_c.client[k] = 0; klsn_c.saved[k] = 0; if (klsn_c.nsw > 0) klsn_c.nsw--;
@@ -107,8 +119,8 @@ static void klsn_init(void)
     klsn.mode = (int)GetPrivateProfileIntA("HUD", "OnlineShopNames", 0, klh_ini);
     if (klsn.mode < 0 || klsn.mode > 2) klsn.mode = 0;
     if (klsn.mode && !klor.on) { klog("shopnames: [HUD] OnlineShopNames=%d needs [Online] Read=1: off", klsn.mode); klsn.mode = 0; }
-    if (klsn.mode) klog("shopnames: on (mode=%d: %s; states %02x..%02x%s; client+0x35c char*, holder vtable %08x; NOT RUN IN THE GAME)", klsn.mode,
-                        klsn.mode == 1 ? "swaps the name pointer in the roster states" : "LOG ONLY, writes nothing", KLSN_ST_LO, KLSN_ST_HI, klsn.mode == 1 ? " (swap 1f..20)" : "", KLSN_VT);
+    if (klsn.mode) klog("shopnames: on (mode=%d: %s; states %02x..%02x%s; client+0x35c char*, holder vtable %08x / %08x; NOT RUN IN THE GAME)", klsn.mode,
+                        klsn.mode == 1 ? "swaps the name pointer in the roster states" : "LOG ONLY, writes nothing", KLSN_ST_LO, KLSN_ST_HI, klsn.mode == 1 ? " (swap 1f..20)" : "", KLSN_VT, KLSN_VT2);
 }
 
 static void klsn_tick(int game_thread)
@@ -147,13 +159,13 @@ static void klsn_tick(int game_thread)
         for (i = 0; i < o.n; i++) if (o.r[i].seat == k) { row = &o.r[i]; break; }
         if (row) nm = row->name[0] ? row->name : (k < KLOR_MAX ? klor_c.name[k] : "");      /* klor_c.name: the cache for a seat whose body is gone */
         stock_ok = 1;
-        if (klsn_ours(ptr)) { snprintf(stock, sizeof stock, "(ours) %s", (const char *)(DWORD_PTR)ptr); stock_ok = klsn_c.client[k] == c && ptr == (DWORD)(DWORD_PTR)klsn_c.buf[k]; }
+        if (klsn_ours(ptr)) { snprintf(stock, sizeof stock, "(ours) %s", (const char *)(DWORD_PTR)ptr); stock_ok = klsn_c.client[k] == c && ptr == (DWORD)(DWORD_PTR)(klsn_c.buf[k] + 4); }
         else if (!klh_rdstr(ptr, stock, sizeof stock) || !stock[0]) { snprintf(stock, sizeof stock, "?"); stock_ok = 0; }
         why[0] = 0;
         if (klsn.mode == 1) {
             if (!row) snprintf(why, sizeof why, "no row for seat %d: stock", k);
             else if (!klsn_name_ok(nm)) snprintf(why, sizeof why, "row has no usable name: stock");
-            else if (vt != KLSN_VT) snprintf(why, sizeof why, "STOOD DOWN: holder vtable %08lx is not %08x", (unsigned long)vt, KLSN_VT);
+            else if (!KLSN_VT_OK(vt)) snprintf(why, sizeof why, "STOOD DOWN: holder vtable %08lx is not %08x / %08x", (unsigned long)vt, KLSN_VT, KLSN_VT2);
             else if (dup) snprintf(why, sizeof why, "STOOD DOWN: client already seen under another slot");
             else if (ptr < 0x10000 && !klsn_ours(ptr)) snprintf(why, sizeof why, "STOOD DOWN: name pointer %08lx unusable", (unsigned long)ptr);
             else if (!stock_ok) snprintf(why, sizeof why, "STOOD DOWN: stock text unreadable or pointer is still ours from an earlier swap");     /* evidence gate: a readable stock Steam name must be there; GUESS G1 (seat==slot) has no name to compare against in klor */
@@ -164,11 +176,11 @@ static void klsn_tick(int game_thread)
             if (klsn_c.client[k] && klsn_c.client[k] != c) { DWORD oc = klsn_c.client[k]; int r = klsn_undo(k); if (klsn_line()) klog("shopnames: slot %d client changed %08lx -> %08lx: the old swap is undone (%d)", k, (unsigned long)oc, (unsigned long)c, r); if (r < 0) { snprintf(why, sizeof why, "STOOD DOWN: old swap not yet undone"); } }
             if (why[0]) { /* old swap kept for retry */ }
             else if (!klsn_c.client[k]) {
-                DWORD nb = (DWORD)(DWORD_PTR)klsn_c.buf[k];
-                snprintf(klsn_c.buf[k], sizeof klsn_c.buf[k], "%s", nm);
+                DWORD nb = (DWORD)(DWORD_PTR)(klsn_c.buf[k] + 4);
+                klsn_settext(k, nm);
                 if (klh_data((void *)(DWORD_PTR)(c + KLSN_O_PTR), &nb, 4, "shopnames swap")) { klsn_c.client[k] = c; klsn_c.saved[k] = ptr; klsn_c.nsw++; snprintf(why, sizeof why, "SWAPPED"); }
                 else snprintf(why, sizeof why, "STOOD DOWN: write refused");
-            } else if (strcmp(klsn_c.buf[k], nm)) { snprintf(klsn_c.buf[k], sizeof klsn_c.buf[k], "%s", nm); snprintf(why, sizeof why, "SWAPPED (text updated)"); }
+            } else if (strcmp(klsn_c.buf[k] + 4, nm)) { klsn_settext(k, nm); snprintf(why, sizeof why, "SWAPPED (text updated)"); }
             else snprintf(why, sizeof why, "SWAPPED");
         }
         if (st - KLSN_ST_LO < (DWORD)(sizeof klsn_c.told / sizeof klsn_c.told[0]) && !(klsn_c.told[st - KLSN_ST_LO] & (1u << k))) {

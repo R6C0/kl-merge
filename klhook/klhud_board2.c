@@ -169,7 +169,7 @@ static struct {
 static DWORD klsb_evt[KLSB_NSLOT + 1], klsb_fvt[KLSB_NSLOT + 1];
 static int klsb_evt_ready, klsb_code_bad, klsb_fvt_ready, klsb_fcode_bad;
 static volatile LONG klsb_n_fcall, klsb_n_fours, klsb_n_fstock;
-static DWORD klsb_ivt[KLSB_NSLOT + 1]; static int klsb_ivt_ready, klsb_icode_bad;      /* OnlineIntroCarrier: the private copy of ZFAIntroDisplay's vtable */
+static DWORD klsb_ivt[KLSB_NSLOT + 1]; static int klsb_ivt_ready, klsb_icode_bad, klsb_ichained;      /* OnlineIntroCarrier: the private copy of ZFAIntroDisplay's vtable; klsb_ichained: the element holds Board=1's private copy (klbrd_evt) and slot 2 of THAT table now points at klsb_irender (2026-10-27) */
 static volatile LONG klsb_n_icall, klsb_n_iours, klsb_n_istock, klsb_n_ist[8];        /* wrapper calls / card drawn on it / stock; calls per session state 0x14..0x1b (index state-0x14) */
 static CRITICAL_SECTION klsb_cs; static int klsb_cs_ready;
 static volatile LONG klsb_n_call, klsb_n_ours, klsb_n_stock, klsb_n_busy, klsb_n_refused, klsb_n_srender, klsb_n_sdrawn, klsb_n_irender, klsb_n_idrawn;
@@ -901,6 +901,7 @@ static char __fastcall klsb_irender(void *el, void *edx, void *ctx, void *cam)
         }
     }
     InterlockedIncrement(&klsb_n_istock);
+    if (klsb_ichained) return klbrd_render(el, 0, ctx, cam);      /* chained behind Board=1's wrapper: it restyles and then runs the stock 0x768c40 itself */
     return ((klu_render_t)(DWORD_PTR)KLH_VA(KLBRD_RENDER))(el, 0, ctx, cam);
 }
 
@@ -919,6 +920,17 @@ static int klsb_iwrap(DWORD osd)
     }
     vt = (DWORD)(DWORD_PTR)&klsb_ivt[1];
     if (cur == vt) { klsb_r.ielem = el; return 1; }
+    if (cur == (DWORD)(DWORD_PTR)&klbrd_evt[1] && klbrd_evt_ready && !klbrd_code_bad && klbrd_evt[1 + 2] == (DWORD)(DWORD_PTR)klbrd_render) {
+        /* 2026-10-27 CLIENT bench: the element held 5246c33c = klbrd_evt (klhud_board.c Board=1's private copy, inside dinput8.dll) and the carrier refused. It is OUR table: chain by pointing its slot 2 at
+           klsb_irender; klsb_irender falls back to klbrd_render (then the stock Render), so Board=1 keeps working whenever no online card is drawn. Private tables are never un-wrapped (static, the element keeps them
+           until it dies), so there is no unwrap order to keep. Only an element whose vtable is neither stock nor this table is refused below. */
+        klsb_ichained = 1;
+        klbrd_evt[1 + 2] = (DWORD)(DWORD_PTR)klsb_irender;
+        klsb_r.ielem = el;
+        klog("hud: scoreboard: OnlineIntroCarrier=%d: element %08lx holds Board=1's private vtable %08lx: CHAINED (its slot 2 -> klsb_irender, fallback klbrd_render -> stock 0x768c40)", klsb.icarrier, el, cur);
+        return 1;
+    }
+    if (cur == (DWORD)(DWORD_PTR)&klbrd_evt[1] && klsb_ichained && klbrd_evt[1 + 2] == (DWORD)(DWORD_PTR)klsb_irender) { klsb_r.ielem = el; return 1; }
     if (cur != KLBRD_VT) {
         klsb_r.ifail = 1;
         if (!klsb_r.i_told_bad) { klsb_r.i_told_bad = 1; klog("hud: scoreboard: OnlineIntroCarrier: the element at osd+0x10ac = %08lx has vtable %08lx, not the stock ZFAIntroDisplay's (%08lx; Board=1 wraps it too): refused, the element path stays", el, cur, (DWORD)KLBRD_VT); }
@@ -1012,7 +1024,7 @@ static void klsb_tick(int game_thread)
             klsb_r.told_ic = 1;
             if (klsb.icarrier) { DWORD iv = ie ? klh_rd32(ie) : 0;
                 klog("hud: scoreboard: OnlineIntroCarrier=%d: 2 s in state %02x: ZFAIntroDisplay at osd+0x10ac = %08lx vtable %08lx (%s), its Render was called +%ld times (per state 14..1b: %ld %ld %ld %ld %ld %ld %ld %ld), card drawn on it +%ld, stock +%ld, clock element renders +%ld drawn +%ld%s",
-                     klsb.icarrier, st, ie, iv, !ie ? "absent" : iv == (DWORD)(DWORD_PTR)&klsb_ivt[1] ? "OUR private copy" : iv == KLBRD_VT ? "stock, not wrapped" : "UNKNOWN", klsb_n_icall, klsb_n_ist[0], klsb_n_ist[1], klsb_n_ist[2], klsb_n_ist[3], klsb_n_ist[4], klsb_n_ist[5], klsb_n_ist[6], klsb_n_ist[7],
+                     klsb.icarrier, st, ie, iv, !ie ? "absent" : iv == (DWORD)(DWORD_PTR)&klsb_ivt[1] ? "OUR private copy" : iv == (DWORD)(DWORD_PTR)&klbrd_evt[1] ? (klsb_ichained ? "Board=1's copy, CHAINED" : "Board=1's copy, not chained") : iv == KLBRD_VT ? "stock, not wrapped" : "UNKNOWN", klsb_n_icall, klsb_n_ist[0], klsb_n_ist[1], klsb_n_ist[2], klsb_n_ist[3], klsb_n_ist[4], klsb_n_ist[5], klsb_n_ist[6], klsb_n_ist[7],
                      klsb_n_iours, klsb_n_istock, klsb_n_irender, klsb_n_idrawn, !ie ? " (no element: the clock path is all there is)" : klsb_n_icall ? (klsb.icarrier == 2 ? " (probe: nothing drawn on it)" : klsb_n_iours ? " (shown)" : " (renders but the card was not drawn: pictures / lock / canary / transform)") : " (the intro element does not render in this state)"); }
             if (ipath)
             klog("hud: scoreboard: OnlineIntroState: 2 s in: clock element renders +%ld, card drawn +%ld%s", klsb_n_irender, klsb_n_idrawn, klsb_n_irender ? (klsb_n_idrawn ? " (shown)" : " (composed but not drawn: pictures / lock / canary / pool)") : " (the clock element does not render in this state: G15 is wrong, nothing is shown)");
