@@ -698,6 +698,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klucchide_logic.h"                          /* klucchide_logic.h: [Ucc] Hide - the Undercover Cop's hidden state + pure rules (klucchide.c fills it); BEFORE klhud.c / kllocname.c, which read it */
 #include "klonline_read.h"                                /* klonline_read.h/.c: the online round reader ([Online] Read, default 0); AFTER klbot.c / klcrew.c / klchar.c, BEFORE klhud.c */
 #include "klonline_read.c"
+#include "klhud_grades.c"                            /* klhud_grades.c: [Grades] rank badges, RANK UP line, end-card letter GRADE (off unless Enable=1); AFTER klonline_read.c, BEFORE klhud.c / klhud_board2.c */
 #include "klhud_values.c"                             /* the HUD's readers (reads only): BEFORE klhud.c, AFTER klbot.c */
 #include "klhud.c"                                    /* includes klhud_weapon.c inside itself */
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
@@ -1187,6 +1188,7 @@ static void klh_tick(int game_thread)
     klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
     klnm_tick(game_thread);
     kly_tick(game_thread);                            /* klgrudge.c: the crew answers your bullets (off unless [Bots] Grudge) */
+    klgrd_tick(game_thread);                            /* klhud_grades.c: the local profile experience, once a second (game thread) */
     klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
     klesc_tick(game_thread);                          /* klhud_escape.c: the escape-vehicle panel (off unless [HUD] Escape / Draft) */
     kltrk_tick(game_thread);                          /* klhud_tracker.c: the vehicle marker */
@@ -1618,6 +1620,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klesc_init();                                     /* klhud_escape.c: after klu_init */
     kltrk_init();                                     /* klhud_tracker.c: after klu_init */
     klbrd_init();                                     /* klhud_board.c: after klu_init */
+    klgrd_init();                                       /* klhud_grades.c: [Grades] (before klsb_init) */
     klsb_init();                                      /* klhud_board2.c: after klu_init */
     klkf_init();                                      /* klhud_kill.c: after klu_init */
     klpu_init();                                      /* klhud_popup.c: after klu_init, it reads [HUD] with klhud.c's helpers */

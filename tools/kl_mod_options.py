@@ -115,6 +115,12 @@ feat('onlineboard', G_CORE, 'Online matches: round-over card like Arcade, killed
      'klhud_board2.c OnlineBoard; needs [Online] Read=1 and [HUD] Scoreboard=1; NOT run live', [('HUD', 'OnlineBoard', 1, 0, 0)])
 feat('onlineintro', G_CORE, 'Online matches: round n of m, players, minutes and your heister under the pre-round card (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineIntro; needs [Online] Read=1, [HUD] Scoreboard=1 and Board=1; NOT run live', [('HUD', 'OnlineIntro', 1, 0, 0)])
+feat('gradesbadge', G_CORE, 'Grades: a rank badge before every crew name, Arcade and online (recommended off until benched)', 'off', 'start',
+     'klhud_grades.c [Grades] Enable+Badge; your rank from the profile experience, others online from S+0xc8 (GUESS); NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'Badge', 1, 0, 0)])
+feat('gradesrankup', G_CORE, 'Grades: a RANK UP line on the round-over card when your rank rose (recommended off until benched)', 'off', 'start',
+     'klhud_grades.c [Grades] Enable+RankUp; needs [HUD] Scoreboard=1; NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'RankUp', 1, 0, 0)])
+feat('gradesletter', G_CORE, 'Grades: an S / A / B / C / D grade per player on the round-over card (recommended off until benched)', 'off', 'start',
+     'klhud_grades.c + klgrades.h [Grades] Enable+Letter; table in [Grades]; needs [HUD] Scoreboard=1; NOT run live', [('Grades', 'Enable', 1, 0, 0), ('Grades', 'Letter', 1, 0, 0)])
 feat('shoponline', G_CORE, 'Online matches: weapon shop page II shown (view only, locked) (recommended off until benched)', 'off', 'start',
      'klshoppage.c OnlineLook; page II buys are swallowed online; needs [ShopPage] Enable=1; NOT run live', [('ShopPage', 'OnlineLook', 1, 0, 0)])
 feat('ucchide', G_CORE, 'Undercover Cop: the crew list does not give the undercover cop away to heisters (recommended on)', 'on', 'start',
@@ -250,7 +256,7 @@ feat('onlineskipdoor', G_EXP, 'Online AI heisters skip loot still locked behind 
      'klbotfill.c [BotFill] OnlineSkipDoorStacks; BOS1: DD01 vault cases (+0x5c behind a door) stalled every bot, 0 taken; NOT run live', [('BotFill', 'OnlineSkipDoorStacks', 1, 0, 1)])
 feat('onlineboxwalk', G_EXP, 'Online AI heisters walk to the escape box once the van is called and count as aboard only inside it (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxWalk; BO9: the exit trigger is ~570 cm from the DM01 AllyEscapeBox; read-only scan, game inside test 0x758cb0; NOT run live', [('BotFill', 'OnlineBoxWalk', 1, 0, 1)])
-feat('onlineboard', G_EXP, 'Online AI heisters inside the escape box while the van waits are removed from the match like in Arcade (recommended off until tested)', 'off', 'start',
+feat('onlinevanbots', G_EXP, 'Online AI heisters inside the escape box while the van waits are removed from the match like in Arcade (recommended off until tested)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineBoard; calls 0x89c890(actor) (0x907a50\'s own removal); GUESS 60% host-safe, 35% clients see it; needs OnlineBoxWalk; NOT run live', [('BotFill', 'OnlineBoard', 1, 0, 0)])
 feat('onlineboxprobe', G_EXP, 'Online AI heister boarding and van position written to the log for the next bench (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxProbe; log only: box probe / van probe lines; NOT run live', [('BotFill', 'OnlineBoxProbe', 1, 0, 1)])
