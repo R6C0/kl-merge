@@ -4,6 +4,10 @@
     python tools/kl_hire_bake.py check   [--maps ..]                          only the element-table headroom, writes nothing
     python tools/kl_hire_bake.py install [--maps ..]                          re-bakes each LIVE zip, backup <zip>.before-1026hire
     python tools/kl_hire_bake.py undo    [--maps ..]                          puts the .before-1026hire files back
+    ... --stock   the Dog Days STOCK maps F01..F09 (<DD>/Scenes/Locations/Fxx/Fxx_Main.zip, 2026-10-27): the window has the 8 Dog Days
+                  rows only (no wardrobe on a stock map, so no Dead Men body), backups <zip>.before-1027hire, install refuses while
+                  kl2.exe runs and never overwrites a backup; stage writes only the baked online.xml per map (+ report), the INSTALL bat
+                  re-bakes from the LIVE zip (the 250 MB zips are not copied).
 
 What it changes in Menu/online.xml of a map zip (KLExpansion\\Maps\\<name>\\F0x_Main.zip, the Dead Men maps by default):
   1. a <ColorSet Name="KLHireCS"> (white, red with focus: the stock focus colours are black, made for text on a focus bar),
@@ -28,6 +32,9 @@ DD = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 MAPS = os.path.join(DD, 'KLExpansion', 'Maps')
 DM_DEFAULT = ['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM05A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B']
 BAK = '.before-1026hire'
+BAK_STOCK = '.before-1027hire'
+STOCK_MAPS = ['F01', 'F02', 'F03', 'F04', 'F05', 'F06', 'F07', 'F08', 'F09']
+STOCK_ROWS = 8                                  # J.C. .. Mitchel: the stock heisters need no wardrobe (klhr_avail)
 MEMBER = 'Menu/online.xml'
 
 NAMES = ['J.C.', 'Tommy', 'Pierre', 'Liam', 'Jean', 'Elwood', 'Bud', 'Mitchel', 'Kane', 'Lynch', 'Ashkanan', 'Meldal', 'Red', 'Parker', 'Standen', 'Hutchison']
@@ -58,7 +65,7 @@ def read_ini(path):
     return price, rank
 
 
-def window_xml(nl, price, rank):
+def window_xml(nl, price, rank, nrows=16):
     L = ['  <!-- KLExpansion: the Hire window (tools/kl_hire_bake.py; options KLHire1..16 by klhook/klhire.c) -->',
          '  <Window Name="FAHire" LocaleBasePath="AllLevels/Menu/Online/WeaponShop" Template="IngameWindowDefault">',
          '    <GuiElement Template="BackgroundTemplateNoFade"/>',
@@ -67,10 +74,10 @@ def window_xml(nl, price, rank):
          '      <GuiElement Template="LongLineBottom" />',
          '      <GuiElement Type="TextBlock" Template="HeadlinePos" Text="%Hire a heister for the next round" TextWidth="900" />',
          '      <GuiElement Template="FATotal"/>']
-    for i in range(16):
+    for i in range(nrows):
         y = FIRST_Y + STEP_Y * i
         L += ['      <GuiElement Type="TextBlock" Text="" Name="KLHr_Data%d" AlignH="Center" X="190" Y="%d" Font="Text" />' % (i + 1, y)]
-    for i in range(16):
+    for i in range(nrows):
         y = FIRST_Y + STEP_Y * i
         label = '%s   $%s   rank %d' % (NAMES[i], format(price[i], ','), rank[i])
         L += ['      <GuiElement Type="ToggleText" Text="%%%s" Name="KLHr_Row%d" Option="KLHire%d" AlignH="Center" X="-190" Y="%d" Font="Text" ColorSet="KLHireCS"' % (esc(label), i + 1, i + 1, y),
@@ -92,7 +99,7 @@ def window_xml(nl, price, rank):
     return nl.join(L) + nl
 
 
-def bake(xml, price, rank):
+def bake(xml, price, rank, nrows=16):
     """bytes -> bytes (or raises ValueError with the reason)."""
     if b'Name="FAHire"' in xml:
         return xml
@@ -110,7 +117,7 @@ def bake(xml, price, rank):
            'HelpText=" " />' + nl)
     cs = '  <ColorSet Name="KLHireCS" NormalColor="0xFFffffff" FocusColor="0xffd7373a" DisableColor="0xff888888" />' + nl
     s_end = m.start() + sec.end()
-    out = t[:m.start()] + cs + t[m.start():s_end] + btn + t[s_end:e] + nl + window_xml(nl, price, rank) + t[e:]
+    out = t[:m.start()] + cs + t[m.start():s_end] + btn + t[s_end:e] + nl + window_xml(nl, price, rank, nrows) + t[e:]
     return out.encode('latin-1')
 
 
@@ -143,8 +150,16 @@ def rewrite(src, dst, member, newdata):
     os.replace(tmp, dst)
 
 
-def zpath_of(name):
-    d = os.path.join(MAPS, name)
+def kl2_running():
+    import subprocess
+    try:
+        return b'kl2.exe' in subprocess.run(['tasklist', '/fi', 'imagename eq kl2.exe'], capture_output=True).stdout.lower()
+    except OSError:
+        return False
+
+
+def zpath_of(name, stock=False):
+    d = os.path.join(DD, 'Scenes', 'Locations', name) if stock else os.path.join(MAPS, name)
     for f in sorted(os.listdir(d)):
         if f.lower().endswith('_main.zip'):
             return os.path.join(d, f)
@@ -154,32 +169,39 @@ def zpath_of(name):
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('mode', nargs='?', default='stage', choices=['stage', 'check', 'install', 'undo'])
-    ap.add_argument('--maps', nargs='+', default=DM_DEFAULT)
+    ap.add_argument('--maps', nargs='+', default=None)
+    ap.add_argument('--stock', action='store_true', help='the Dog Days stock maps F01..F09, 8 rows, backup .before-1027hire')
     ap.add_argument('--out', default=None)
     ap.add_argument('--ini', default=os.path.join(HERE, '..', 'klhook', 'KLHook.ini'), help='KLHook.ini whose [Hire] Price/Rank the rows show')
     a = ap.parse_args(argv)
     price, rank = read_ini(a.ini if os.path.exists(a.ini) else None)
+    stock = a.stock
+    maps = a.maps or (STOCK_MAPS if stock else DM_DEFAULT)
+    nrows = STOCK_ROWS if stock else 16
+    bak = BAK_STOCK if stock else BAK
     out = a.out
+    if a.mode in ('install', 'undo') and kl2_running():
+        print('kl2.exe is running: close the game first (nothing changed)'); return 2
     if a.mode == 'stage' and not out:
         import kl_port_check
-        out = os.path.join(kl_port_check.workdir(), 'build', 'hire_1026')
+        out = os.path.join(kl_port_check.workdir(), 'build', 'hire_1027' if stock else 'hire_1026')
     bad = 0
-    for name in a.maps:
+    for name in maps:
         try:
-            zp = zpath_of(name)
+            zp = zpath_of(name, stock)
         except (OSError, FileNotFoundError) as e:
             print('%-6s SKIP %s' % (name, e)); continue
         if a.mode == 'undo':
-            if os.path.exists(zp + BAK):
-                os.replace(zp + BAK, zp); print('%-6s restored %s' % (name, zp))
+            if os.path.exists(zp + bak):
+                os.replace(zp + bak, zp); print('%-6s restored %s' % (name, zp))
             else:
-                print('%-6s no backup %s' % (name, zp + BAK))
+                print('%-6s no backup %s' % (name, zp + bak))
             continue
         member, on, ig = read_members(zp)
         if b'Name="FAHire"' in on:
             print('%-6s already baked' % name); continue
         try:
-            new = bake(on, price, rank)
+            new = bake(on, price, rank, nrows)
         except ValueError as e:
             print('%-6s FAIL %s' % (name, e)); bad += 1; continue
         b0, b1 = count(ig, on), count(ig, new)
@@ -190,27 +212,35 @@ def main(argv):
             continue
         if a.mode == 'stage':
             os.makedirs(os.path.join(out, name), exist_ok=True)
-            dst = os.path.join(out, name, os.path.basename(zp))
-            rewrite(zp, dst, member, new); print('       staged %s' % dst)
+            if stock:                                  # the zips are 250 MB: stage only the edited member, the INSTALL bat re-bakes the live zip
+                dst = os.path.join(out, name, 'online.xml')
+                open(dst, 'wb').write(new); print('       staged %s' % dst)
+            else:
+                dst = os.path.join(out, name, os.path.basename(zp))
+                rewrite(zp, dst, member, new); print('       staged %s' % dst)
         else:                                          # install: re-bake from the LIVE zip (other work edits these zips concurrently)
-            if not os.path.exists(zp + BAK):
-                shutil.copy2(zp, zp + BAK)
+            if not os.path.exists(zp + bak):
+                shutil.copy2(zp, zp + bak + '.tmp'); os.replace(zp + bak + '.tmp', zp + bak)    # atomic: a half-copied backup is never taken for the original
             tmpz = zp + '.hire.tmp'
-            rewrite(zp, tmpz, member, new); os.replace(tmpz, zp); print('       installed %s (backup %s)' % (zp, os.path.basename(zp + BAK)))
+            rewrite(zp, tmpz, member, new); os.replace(tmpz, zp); print('       installed %s (backup %s)' % (zp, os.path.basename(zp + bak)))
     if a.mode == 'stage' and out:
-        write_bats(out, a.maps)
+        write_bats(out, maps, stock)
     return 1 if bad else 0
 
 
-def write_bats(out, maps):
+def write_bats(out, maps, stock=False):
     for f in ('kl_hire_bake.py', 'kl_menu_count.py'):              # the bats run their own copies, so they outlive this checkout
         shutil.copy2(os.path.join(HERE, f), os.path.join(out, f))
     ml = ' '.join(maps)
-    for nm, mode, txt in (('INSTALL hire window.bat', 'install', 'Bakes the Hire window into the LIVE Dead Men map zips (backups *%s next to each zip).' % BAK),
-                          ('UNDO hire window.bat', 'undo', 'Puts the *%s backups back.' % BAK)):
+    bk = BAK_STOCK if stock else BAK
+    what = 'Dog Days STOCK map' if stock else 'Dead Men map'
+    sfx = ' stock' if stock else ''
+    for nm, mode, txt in (('INSTALL hire window%s.bat' % sfx, 'install', 'Bakes the Hire window into the LIVE %s zips (backups *%s next to each zip, an existing backup is never overwritten).' % (what, bk)),
+                          ('UNDO hire window%s.bat' % sfx, 'undo', 'Puts the *%s backups back.' % bk)):
         with open(os.path.join(out, nm), 'w', newline='\r\n') as f:
-            f.write('@echo off\nrem %s\nrem Close Kane & Lynch 2 first. Needs python on the PATH. Re-bakes from the live zips, so other map edits are kept.\n' % txt)
-            f.write('python "%%~dp0kl_hire_bake.py" %s --maps %s\npause\n' % (mode, ml))
+            f.write('@echo off\nrem %s\nrem Needs python on the PATH. Re-bakes from the live zips, so other map edits are kept.\n' % txt)
+            f.write('tasklist /fi "imagename eq kl2.exe" 2>nul | find /i "kl2.exe" >nul && (echo Kane and Lynch 2 is running: close it first. Nothing changed. & pause & exit /b 1)\n')
+            f.write('python "%%~dp0kl_hire_bake.py" %s%s --maps %s\npause\n' % (mode, ' --stock' if stock else '', ml))
 
 
 if __name__ == '__main__':
