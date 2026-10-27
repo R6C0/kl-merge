@@ -23,6 +23,10 @@ Moved verbatim out of CLAUDE.md on 2026-10-23 to keep the always-loaded brief sm
 ## Known kl2.exe sites
 - 0x64a856 prp reader token-type assert (expected vs read opcode) — reader object in esi,
   stream at reader+0xb4: [vtbl][?][?][pos][size] + 16 KB inline buffer (`debug/buf.py`).
+- 0x5e4a22 (kl2+0x1e4a22) bare int3 in 0x5e4930, the per-frame node position check (tail-jump from 0x41feb0 when
+  [this+0x3c] & 0x4000): world position (local +0x30 via 0x7b3020 when parent +0x50) length > 1,000,000.0 (double at
+  0xb49b40) -> assert. In practice: a body falling forever (Q27_DM11B 10-27: the local player's node at x -31.4k, ~65.5k
+  below its +0x460 x 34077, fell from load end; 200 repeats -> fatal 80000003).
 - 0x8424a0 fixed array length assert (expected count pushed by caller, e.g. 0xc8).
 - 0x7f779e duplicate slot registration (InventoryBinding by item enum value).
 - 0x8ad7c0 entity loader: 128-byte slots from pool[category + 8*prio] of the parent group's block.
