@@ -53,7 +53,8 @@ struct klht_slot {
     char ini_cur[64], mon_cur[24]; DWORD ini_col, want_col; float dist;
 };
 
-static struct { int mode, online, ostyle, ohold, cull, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy, maxdist, fade; } klht;
+#define KLHT_C_PROBE     0x01f3f0eau           /* the cull probe's colour: alpha 1 (GUESS: the draw still emits the glyph run; invisible) */
+static struct { int mode, online, ostyle, ohold, cull, probe, shadow, outline, font, tab, tabdone; float line, tabpadx, tabpady, tabdy, maxdist, fade; } klht;
 static volatile LONG klht_n_far, klht_n_faded, klht_n_cull, klht_n_nopos;
 
 #include "klhud_tags_dist.h"                          /* HeadMaxDist arithmetic (shared with the harness klht_test.c) */
@@ -85,7 +86,14 @@ static int klht_make(struct klht_slot *q)
     }
     else if (klht.shadow && !(q->inis = klu_make_obj(klu_r.tmpl, fi, KLU_STYLE_CENTRE, KLU_SHADOW_SMALL, KLHT_LAYER - 1, why))) goto bad;
     if (klht.online && klht.cull && !(q->prb = klu_make_obj(klu_r.tmpl, fi, KLU_STYLE_CENTRE, KLU_C_CHALK, KLHT_LAYER, why))) goto bad;      /* [HUD] OnlineTagCull: the probe text */
-    if (q->prb) klu_set(q->prb, KLU_VT_TEXT, (DWORD)(DWORD_PTR)" ");      /* ' ' draws nothing visible (proven blank text elsewhere in the HUD) */
+    if (q->prb) {
+        /* BENCH CE27_ALL2E: with ' ' EVERY probe read back place 0,0 (2272 draws = 2272 'no stored place' per 5 s, both instances, alive too). Cause read in kl2.exe
+           0x8f7420 (ZCHAROBJ draw): `cmp [this+0x30],0 / je 0x8f77b8` is the FIRST test, and the place store (+0x3c..+0x44, 0x8f75be) comes after it;
+           [this+0x30] is the glyph descriptor list (re\open_work_log.md H1h), which a blank ' ' text has no entry in (GUESS: the space makes no glyph run).
+           [HUD] OnlineTagProbe=1: the probe is a '.' at alpha 1 (a glyph run exists, nothing visible). */
+        klu_set(q->prb, KLU_VT_TEXT, (DWORD)(DWORD_PTR)(klht.probe ? "." : " "));
+        if (klht.probe) klu_set(q->prb, KLU_VT_COLOUR, KLHT_C_PROBE);
+    }
     if (klht.mode == 2 || (klht.online && klht.ostyle == 2)) {
         if (!(q->mon = klu_make_obj(klu_r.tmpl, fm, KLU_STYLE_CENTRE, KLU_C_GREEN, KLHT_LAYER, why))) goto bad;
         if (klht.shadow && !(q->mons = klu_make_obj(klu_r.tmpl, fm, KLU_STYLE_CENTRE, KLU_SHADOW_SMALL, KLHT_LAYER - 1, why))) goto bad;
@@ -221,6 +229,14 @@ static void klht_orender(void *ctx, void *cam)
                 float pp[2] = { 0, 0 }; memset((void *)(DWORD_PTR)(q->prb + 0x3c), 0, 8);
                 memcpy(tag, klht_tpl, sizeof tag); *(DWORD *)tag = q->prb;
                 ((klht_drawtag_t)(DWORD_PTR)KLH_VA(KLHT_DRAWTAG))(tag, 0, a1, q->actor, ctx, cam, a5);
+                if (klu.log >= 2) {      /* proof for the next bench: the first 8 probes (and the first 4 with no place) say what the object holds after the drawer ran */
+                    static LONG pn, pz; WORD cnt = 0; DWORD ch = 0, ds = 0; BYTE dirty = 0; float p3[2] = { 0, 0 };
+                    klh_rd(q->prb + 0x3c, p3, 8);
+                    if ((InterlockedIncrement(&pn) <= 8) || ((p3[0] == 0.0f && p3[1] == 0.0f) && InterlockedIncrement(&pz) <= 4)) {
+                        klh_rd(q->prb + 0x2a, &cnt, 2); klh_rd(q->prb + 0x2c, &ch, 4); klh_rd(q->prb + 0x30, &ds, 4); klh_rd(q->prb + 0x88, &dirty, 1);
+                        klog("tags: online: probe slot %d (%s): place (%.1f, %.1f) runs %u chunks %08lx descs %08lx flag88 %02x", i, klht.probe ? "'.' alpha 1" : "' '", p3[0], p3[1], (unsigned)cnt, ch, ds, dirty);
+                    }
+                }
                 if (klh_rd(q->prb + 0x3c, pp, 8)) {
                     if (pp[0] == 0.0f && pp[1] == 0.0f) InterlockedIncrement(&klht_n_nopos);
                     else if (!(pp[0] > -40.0f && pp[0] < 1320.0f && pp[1] > -40.0f && pp[1] < 760.0f)) { InterlockedIncrement(&klht_n_cull); continue; }      /* also false for NaN */
@@ -379,6 +395,7 @@ static void klht_init(void)
     klht.online = klu_inii("OnlineTags", 0, 0, 1);                 /* 2026-10-27: heister character names over the heads in online matches (needs [Online] Read=1, OnlineCrew=1, HideOnline=1) */
     klht.ostyle = klu_inii("OnlineTagStyle", 0, 0, 2);             /* 2026-10-27: 0 full name (as OnlineTags always did), 1 initials, 2 initials + money line; default 0, NOT RUN LIVE */
     klht.cull = klu_inii("OnlineTagCull", 1, 0, 1);                /* 2026-10-27 (recommended on): online tags whose head projects off screen are not drawn (a probe reads the drawer's stored place); fail-open */
+    klht.probe = klu_inii("OnlineTagProbe", 1, 0, 1);              /* 2026-10-27 (recommended on): the cull probe is a '.' at alpha 1 instead of ' ' (a blank text never stores its place: 0x8f7420 tests [this+0x30] first) */
     klht.ohold = klu_inii("OnlineTagHold", 0, 0, 1);               /* 2026-10-27: no tag until the row name was the same for 2 reads in a row (client placeholder name 'Bud'); default 0 */
     klht.shadow = klu_inii("HeadShadow", 1, 0, 1);
     klht.outline = klu_inii("HeadOutline", 1, 0, 1);               /* v22 (audit T1): four dark copies round the initials; replaces the single shadow of the initials */

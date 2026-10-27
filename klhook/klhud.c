@@ -1929,6 +1929,7 @@ static void klu_init(void)
     klb_hud_online = klu_inii("Online", 0, 0, 1);         /* 2026-10-18: the local, cosmetic parts in a network FA round (klbot.c klb_read_hud; re/hud_online.md). Default 0: never run online */
     klu_onnames = klu_inii("OnlineNames", 0, 0, 1); klu_onkill = klu_inii("OnlineKilled", 0, 0, 1); klu_onround = klu_inii("OnlineRound", 0, 0, 1);
     klu_onkillai = klu_inii("OnlineKilledAI", 0, 0, 1); klor_aikill = klu_onkillai;
+    klor_settle = klu_inii("OnlineNameSettle", 800, 0, 5000);      /* (recommended on) a new body's model must hold this many ms before it renames a seat; 0 = off */
     klu_onkillstock = klu_onkill && klu_inii("OnlineKilledStock", 0, 0, 1);
     klu_onfeed = klu_inii("OnlineFeed", 0, 0, 1); klu_onskull = klu_inii("OnlineSkulls", 0, 0, 1); klu_onloot = klu_inii("OnlineLoot", 0, 0, 1); klu_ontab = klu_inii("OnlineTab", 0, 0, 1); klu_onvan = klu_inii("OnlineVan", 0, 0, 1); klu_onvanicon = klu_inii("OnlineVanIcon", 0, 0, 1);
     klu.onbots = klu_inii("OnlineBots", 1, 0, 1); klu.killed = klu_inii("KilledBy", 1, 0, 1); klu.crew = klu_inii("Crew", 1, 0, 1); klu.money = klu_inii("Money", 1, 0, 1); klu.round = klu_inii("Round", 1, 0, 1);

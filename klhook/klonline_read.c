@@ -46,6 +46,8 @@
 
 static struct { int on; } klor;
 static int klor_aikill;   /* [HUD] OnlineKilledAI (set by klhud.c's init): resolve a death by an AI heister */
+static int klor_settle = 800;   /* [HUD] OnlineNameSettle ms (0 = off): a body's model must hold 'settle' ms before it renames a seat; the local seat uses his own choice (klc_char) */
+static struct { int ch; DWORD since; } klor_deb[KLOR_MAX];   /* per seat: the character the body model last showed, and since when */
 static DWORD klor_att[KLOR_MAX];   /* the last [player+0x2778] seen while the seat lived; re-keyed with klor_c */
 static struct { DWORD rules; int round, lobby; char name[KLOR_MAX][32]; int latch[KLOR_MAX]; struct klor_seatev sev[KLOR_MAX]; long loot_init; } klor_c;   /* caches re-keyed on rules / round / lobby (names, latch, feed steps, loot whole) */
 static struct klor_ev klor_pend[8]; static int klor_npend;           /* deaths resolved but not yet handed to the feed */
@@ -189,8 +191,10 @@ static int klor_read(struct klor_snap *o, int local)
        (a seat can hold another heister next round; a stale name or a latched killer from the last round must not carry over). The death marks (klor_d) stay: they are the match's. */
     { int lobby = o->b.state < 0x17;
       if (klor_c.rules != o->b.rules || (o->round && o->round != klor_c.round) || lobby != klor_c.lobby) {
-          klor_c.rules = o->b.rules; klor_c.round = o->round; klor_c.lobby = lobby; klor_c.loot_init = 0;
-          memset(klor_c.name, 0, sizeof klor_c.name); memset(klor_att, 0, sizeof klor_att);
+          { int keep = klor_settle > 0 && klor_c.rules == o->b.rules && lobby == klor_c.lobby;      /* review: a round-only change keeps the cached names (the settle rule renames a seat 800 ms later if his body shows another hero), else every round starts with 'Player n' for 800 ms */
+            klor_c.rules = o->b.rules; klor_c.round = o->round; klor_c.lobby = lobby; klor_c.loot_init = 0;
+            if (!keep) memset(klor_c.name, 0, sizeof klor_c.name); }
+          memset(klor_att, 0, sizeof klor_att); memset(klor_deb, 0, sizeof klor_deb);
           for (i = 0; i < KLOR_MAX; i++) { klor_c.latch[i] = -1; klor_c.sev[i].prev = -1; klor_c.sev[i].at = 0; }
       } }
     /* the humans: one row per record in use (b.on_used), in seat order */
@@ -209,6 +213,14 @@ static int klor_read(struct klor_snap *o, int local)
             if (klh_rd(P + 0x273c, &type, 1) && (type & 0xff) == 2) { w->actor = P; w->model = klor_model(P); }
         }
         ch = klor_char(w->model);
+        if (ch >= 1 && klor_settle > 0 && k < KLOR_MAX) {
+            /* BENCH CE27_ALL2E: a freshly spawned body shows another hero's model for 0.2-0.8 s ('R8 Kane' -> 'R8 Mitchel' -> 'R8 Kane' in the round-2 intro; 'Mitchel' for the first 0.8 s of round 1).
+               The local seat takes his own choice (klc_char, as the fallback below does); any other seat keeps its cached name until the model has held for klor_settle ms. */
+            DWORD now = GetTickCount();
+            if (klor_deb[k].ch != ch) { klor_deb[k].ch = ch; klor_deb[k].since = now; }
+            if (k == local && klor_s.ok && klc_char >= 1 && klc_char <= klor_s.src.n) ch = klc_char;
+            else if (now - klor_deb[k].since < (DWORD)klor_settle) ch = 0;
+        }
         if (ch >= 1) { w->ch = ch; snprintf(w->name, sizeof w->name, "%s", klor_s.src.c[ch - 1].name); snprintf(klor_c.name[k], sizeof klor_c.name[k], "%s", w->name); o->names_ok++; }
         else if (klor_c.name[k][0]) snprintf(w->name, sizeof w->name, "%s", klor_c.name[k]);
         else if (k == local && klor_s.ok && klc_char >= 1 && klc_char <= klor_s.src.n) snprintf(w->name, sizeof w->name, "%s", klor_s.src.c[klc_char - 1].name);

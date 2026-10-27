@@ -37,6 +37,7 @@ static int klb_read_hud(struct klb_snap *s)            /* klbot.c's: klb_read, e
 static int klor_on;                                   /* klonline_read.c: [Online] Read (default 0) */
 static int klor_noev;                                 /* klonline_read.c: a reader that is not the kill feed leaves the event queue alone */
 static int klor_aikill;                               /* klonline_read.c: [HUD] OnlineKilledAI */
+static int klor_settle;                               /* klonline_read.c: [HUD] OnlineNameSettle */
 static int klor_read(struct klor_snap *o, int local)  /* klonline_read.c: no online round in the harness -> 0, snapshot cleared (as with Read=0) */
 { memset(o, 0, sizeof *o); o->b.human = -1; o->local = local; return 0; }
 static int klor_bots_sorted(DWORD act[KLOR_NBOT], int *alive) { (void)act; if (alive) *alive = 0; return 0; }
@@ -55,6 +56,7 @@ static char __fastcall klbrd_render(void *el, void *edx, void *ctx, void *cam) {
 static int klbrd_code_bad, klbrd_evt_ready; static DWORD klbrd_evt[4];   /* 2026-10-27: klhud_board2.c chains onto Board=1's private table (never ready here) */
 static int kllnm_killtext(char *out, int cap) { if (cap > 0) out[0] = 0; return 0; }   /* kllocname.c stub: no stock death text here */
 static void kllnm_killclear(void) { }
+static const char *kllnm_name_now(int n) { (void)n; return 0; }   /* kllocname.c stub: no expansion names here */
 #ifndef KLSB_HARNESS_HAS_BOARD2                        /* klwatch_test.c does not include klhud_board2.c: its state-render slot ([HUD] OnlineBoardState) is a no-op there */
 static void klsb_state_render(void *el, void *ctx, void *cam) { (void)el; (void)ctx; (void)cam; }
 #endif

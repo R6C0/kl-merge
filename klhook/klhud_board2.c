@@ -161,7 +161,7 @@ static struct {
     DWORD state;                              /* the session state of the last tick */
     float cd_max;                             /* the countdown's first value this round */
     int in_intro; /* 2026-10-27: 1 from the first tick of states 0x16..0x18 until the round-end state, so the per-intro log latches / counters restart in EVERY intro */
-    int ipath, ivalid, told_i, told_ic, map_tried; DWORD i_tick0; char map[48];   /* OnlineIntroState: no intro element, the card is composed / valid, log latches (1 = state path told, 2 = element path told), tick time of the first compose, the map's name */
+    int ipath, ivalid, told_i, told_ic, map_tried; DWORD map_at, i_tick0; char map[48];   /* OnlineIntroState: no intro element, the card is composed / valid, log latches (1 = state path told, 2 = element path told), tick time of the first compose, the map's name */
     long take0[KLOR_MAX]; BYTE take_have[KLOR_MAX]; int take_set;   /* OnlineBoardTake: each seat's money at the first state-0x1f tick */
     DWORD felem, f_stamp; int f_told_bad, f_told_tx;   /* OnlineBoardCarrier: the wrapped ZFAOutroDisplay of this OSD, tick time of its last card, log latches */
     DWORD ielem, i_stamp; int i_told_bad, i_told_tx, ifail, told_i19;   /* OnlineIntroCarrier: the wrapped ZFAIntroDisplay of this OSD, tick time of its last card, log latches, ifail = the element holds a vtable that is not the stock one (Board=1's private copy?): the element path stays */
@@ -807,20 +807,29 @@ static void klsb_intro_draw(void *ctx, void *cam)
 #define KLSB_IH          300.0f
 #define KLSB_IROWS       6
 
+static const char *kllnm_name_now(int n);      /* kllocname.c (included after this file; a stub in klhud_harness_online.h): the expansion map's own name for slot F0<n>, or 0 */
+static int klsb_mapfb;                         /* [HUD] OnlineIntroMapName */
+static int klsb_map_why;                      /* why klsb_map_name gave nothing (logged by the caller): 1 no scene, 2 no F0k in the scene, 3 LOC object / vtable, 4 the lookup gave nothing or the key back */
+
 static int klsb_map_name(char *out, int cap)
 {   /* the engine's scene 'SCENES\Locations\F0k\F0k_Main.gms' -> the game's own LOC text AllLevels / Menu/Online/Scenarios/Title0k (the lobby's key, 0x47d8c0; kllocname.c's wrapper answers an expansion map's name through the same call). 0 = none */
     char sc[160], key[40], sec[9], t[48]; int i, n = 0; DWORD sys, db, loc, vt, fn; const char *p;
-    out[0] = 0;
+    out[0] = 0; klsb_map_why = 1;
     if (!klh_scene(sc, sizeof sc)) return 0;
+    klsb_map_why = 2;
     for (i = 0; sc[i] && sc[i + 1] && sc[i + 2] && sc[i + 3]; i++)
         if ((sc[i] == 0x5c || sc[i] == '/') && (sc[i + 1] == 'F' || sc[i + 1] == 'f') && sc[i + 2] >= '0' && sc[i + 2] <= '9' && sc[i + 3] >= '0' && sc[i + 3] <= '9') { n = (sc[i + 2] - '0') * 10 + (sc[i + 3] - '0'); break; }
     if (n < 1 || n > 9) return 0;
-    if (!(sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) || !(db = klh_rd32(sys + 0xac)) || !(loc = klh_rd32(db + 0x94)) || !(vt = klh_rd32(loc)) ||
+    klsb_map_why = 3;
+    if (klsb_mapfb) { const char *nm = kllnm_name_now(n); if (nm && nm[0]) { snprintf(out, (size_t)cap, "%s", nm); klor_upper(out); klsb_map_why = 0; return 1; } }      /* [HUD] OnlineIntroMapName: an expansion map in the slot answers by its own name first (the level's .LOC may not hold the lobby's Scenarios keys: GUESS, see the why code in the log) */
+    if (!(sys =klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) || !(db = klh_rd32(sys + 0xac)) || !(loc = klh_rd32(db + 0x94)) || !(vt = klh_rd32(loc)) ||
         !klu_rdata_ptr(vt) || !(fn = klh_rd32(vt)) || klh_kind((const void *)(DWORD_PTR)KLH_VA(fn), 4, sec) != 'x') return 0;
     snprintf(key, sizeof key, "Menu/Online/Scenarios/Title%02d", n);
     p = ((const char *(__fastcall *)(void *, void *, const char *, const char *, DWORD))(DWORD_PTR)fn)((void *)(DWORD_PTR)loc, 0, "AllLevels", key, 0);
+    klsb_map_why = 4;
     if (!p || klh_rdstr((DWORD_PTR)p, t, sizeof t) < 2 || strstr(t, "Title0")) return 0;      /* a missing key may come back as the key itself (not established) */
     snprintf(out, (size_t)cap, "%s", t); klor_upper(out);
+    klsb_map_why = 0;
     return 1;
 }
 
@@ -1053,7 +1062,12 @@ static void klsb_tick(int game_thread)
     if (!klsb_r.made) { klsb_r.valid = 0; return; }
     if (klsb.probe) return;                                   /* log only: nothing is composed, the stock panel shows */
     if (ipath) {      /* OnlineIntroState: the map's name once per OSD (the game's LOC, game thread), then the whole card */
-        if (!klsb_r.map_tried) { klsb_r.map_tried = 1; klsb_map_name(klsb_r.map, sizeof klsb_r.map); if (klu.log) klog("hud: scoreboard: OnlineIntroState: map name '%s'", klsb_r.map); }
+        /* BENCH CE27_ALL2E: 'map name ""' on both machines, tried once per OSD and never again. Now retried (each state-17 intro tick, at most 8 tries 1 s apart) until a name comes back; why-code logged */
+        if (!klsb_r.map[0] && klsb_r.map_tried < 8 && (!klsb_r.map_tried || GetTickCount() - klsb_r.map_at >= 1000)) {
+            klsb_r.map_tried++; klsb_r.map_at = GetTickCount();
+            klsb_map_name(klsb_r.map, sizeof klsb_r.map);
+            if (klu.log) klog("hud: scoreboard: OnlineIntroState: map name '%s' (try %d, why %d: 0 ok, 1 no scene, 2 no F0k in it, 3 no LOC object, 4 lookup empty / key back)", klsb_r.map, klsb_r.map_tried, klsb_map_why);
+        }
         EnterCriticalSection(&klsb_cs); klsb_istate_compose(&on); klsb_apply(); klsb_r.ivalid = 1; LeaveCriticalSection(&klsb_cs);
     } else if (klsb_r.ivalid) { EnterCriticalSection(&klsb_cs); klsb_r.ivalid = 0; LeaveCriticalSection(&klsb_cs); }
     if (hon && klsb.intro && !ipath && st >= 0x16 && st <= 0x18) { EnterCriticalSection(&klsb_cs); klsb_intro_compose(&on); klsb_apply(); LeaveCriticalSection(&klsb_cs); }
@@ -1113,6 +1127,7 @@ static void klsb_init(void)
     klsb.on = klu_inii("Scoreboard", 0, 0, 1);
     if (!klsb.on) return;
     klsb.online = klu_inii("OnlineBoard", 0, 0, 1); klsb.ostate = klsb.online && klu_inii("OnlineBoardState", 0, 0, 1); klsb.intro = klu_inii("OnlineIntro", 0, 0, 1); klsb.istate = klsb.intro && klu_inii("OnlineIntroState", 0, 0, 1);
+    klsb_mapfb = klu_inii("OnlineIntroMapName", 1, 0, 1);      /* (recommended on) the intro card's map name: an expansion map's own name ([Names]) before the stock LOC lookup */
     klsb.carrier = klsb.ostate && klu_inii("OnlineBoardCarrier", 0, 0, 1);
     klsb.icarrier = klsb.istate ? klu_inii("OnlineIntroCarrier", 0, 0, 2) : 0;
     klsb.take = klsb.online && klu_inii("OnlineBoardTake", 0, 0, 1); klsb.icount = klsb.istate && klu_inii("OnlineIntroCount", 0, 0, 1);
