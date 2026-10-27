@@ -639,7 +639,7 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
             klu_dollars(num, sizeof num, v);
         } else {
             const struct klor_row *r = &o->bot[i - o->n];
-            if (klsb.take) {      /* [HUD] OnlineBoardTake: GUESS: a bot has no score row (flags and money read 0 for it), so ESCAPED (bit 0x40) never shows today; a living bot at the end is LEFT BEHIND, a dead one DEAD */
+            if (klsb.take) {      /* [HUD] OnlineBoardTake: GUESS: a bot has no score row (flags and money read 0 for it), so ESCAPED (bit 0x40) never shows today; a living bot at the end is LEFT BEHIND, a dead one DEAD. Human rows: 0x20 ABOARD / 0x40 ESCAPED PROVEN live 10-27 (BOSE4) */
                 if (r->flags & KLUV_F_ESCAPED) { fate = "ESCAPED"; fc = KLU_C_GREENHI; }
                 else if (!r->alive) { dead = 1; fate = "DEAD"; fc = KLU_C_DEAD; }
                 else { fate = "LEFT BEHIND"; fc = KLU_C_OUT; }
