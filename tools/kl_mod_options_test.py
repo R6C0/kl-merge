@@ -2,7 +2,8 @@
 kl_mod_options_test.py - self-test of kl_mod_options.py's two consistency checks on a SYNTHETIC ini (no game files):
 own_key (the key that tells a row from the others), ini_rec (the '(recommended on|off)' marker on a key's line or in the
 comment lines above it that name the key; 'until' / 'after' forms count as off for now) and check_rec (rows vs markers,
-proven keys without a row). Then the real repo ini: every row must agree with klhook\\KLHook.ini.
+proven keys without a row), scan_keys / ini_mentions / check_ini (the keys the sources read vs the keys the ini names).
+Then the real repo ini: every row must agree with klhook\\KLHook.ini, and every row key must be mentioned there.
 
     python tools/kl_mod_options_test.py          -> RESULT: PASS / FAIL
 """
@@ -106,13 +107,47 @@ def main():
     w = M.plan(lines, {'onlinetagstyle': False, 'onlinetags': True})
     check(w == [], 'onlinetagstyle is read from OnlineTagStyle (0 = already off), not from OnlineTags: %s' % w)
 
+    # a key the ini only carries commented out still gives its marker (2026-10-27: ';PumpNoBlock=0 ... (recommended off until benched)')
+    lines3 = M.split_lines(INI + '\n[Input]\n; the pump\n;MouseMoveMs=0\n;PumpNoBlock=0   ; never waits (recommended off until benched: C27_PNB1)\n')
+    check(M.find_commented_key(lines3, 'Input', 'PumpNoBlock') is not None, 'find_commented_key finds ;PumpNoBlock=0')
+    check(M.ini_rec(lines3, 'Input', 'PumpNoBlock')[0] == 'off', 'marker on a commented key line: off until benched')
+    check(M.ini_rec(lines3, 'Input', 'MouseMoveMs')[0] is None, 'commented key without a marker -> None')
+    check(M.ini_mentions(lines3, 'Input', 'PumpNoBlock') and M.ini_mentions(lines3, 'Input', 'MouseMoveMs'), 'ini_mentions: commented keys count')
+    check(M.ini_mentions(lines3, 'HUD', 'OnlineTagStyle') and M.ini_mentions(lines3, 'HUD', 'Online'), 'ini_mentions: active keys count')
+    check(not M.ini_mentions(lines3, 'HUD', 'Nowhere') and not M.ini_mentions(lines3, 'Nope', 'Online'), 'ini_mentions: absent key / section -> False')
+
+    # scan_keys + check_ini on a synthetic source folder: direct Int / String calls, an Int helper, a String helper, other ini files
+    src = tempfile.mkdtemp()
+    with open(os.path.join(src, 'klx.c'), 'w') as fh:
+        fh.write('static int klx_inii(const char *key, int def) { return GetPrivateProfileIntA("X", key, def, klh_ini); }\n'
+                 'static float klx_inif(const char *key, const char *def) { char t[32]; GetPrivateProfileStringA("X", key, def, t, sizeof t, klh_ini); return (float)atof(t); }\n'
+                 'void klx_init(void) { int a = GetPrivateProfileIntA("Input", "PumpNoBlock", 0, klh_ini) != 0; char b[8];\n'
+                 '  GetPrivateProfileStringA("Expansion", "MountFirst", "", b, sizeof b, klh_ini); int c = GetPrivateProfileIntA("Auto", "Hooks", 1, kla_ini);\n'
+                 '  int d = klx_inii("Rows", 3); float e = klx_inif("Near", "30"); }\n')
+    seen, where = M.scan_keys(src)
+    check(seen.get(('Input', 'PumpNoBlock')) == {0} and seen.get(('X', 'Rows')) == {3}, 'scan_keys: direct and helper Int defaults: %s' % seen)
+    check(('X', 'Near') in where and ('Expansion', 'MountFirst') in where, 'scan_keys: String helper and direct String keys are read: %s' % sorted(where))
+    check(('Auto', 'Hooks') not in where, 'scan_keys: a key read from another ini (kla_ini) is not a KLHook.ini key')
+    ini3 = os.path.join(src, 'k.ini')
+    with open(ini3, 'w') as fh:
+        fh.write('[Input]\n;PumpNoBlock=0\n[X]\n; Rows=3 = the rows\n')
+    rowless, un = M.check_ini(src, ini3)
+    check(rowless == [], 'check_ini: the pumpnoblock row key is mentioned: %s' % rowless)
+    check(sorted(un) == ['[Expansion] MountFirst (klx.c)', '[X] Near (klx.c)'], 'check_ini: unmentioned = the two keys no line names: %s' % un)
+    with open(ini3, 'w') as fh:
+        fh.write('[Input]\n; nothing here\n')
+    rowless, un = M.check_ini(src, ini3)
+    check(rowless == ['pumpnoblock: [Input] PumpNoBlock (klx.c)'], 'check_ini: a row key the ini leaves out is reported: %s' % rowless)
+
     # the repo ini itself
     repo = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'klhook', 'KLHook.ini')
     if os.path.isfile(repo):
         bad, norow, nocheck = M.check_rec(repo)
         check(not bad, 'repo klhook/KLHook.ini: every row agrees with its marker (%s)' % bad)
         check(not norow, 'repo klhook/KLHook.ini: every proven recommended-on key has a row (%s)' % norow)
-    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 30 + 2 * os.path.isfile(repo), len(FAILS)))
+        rowless, un = M.check_ini(os.path.dirname(repo), repo)
+        check(not rowless, 'repo klhook/KLHook.ini mentions every row key (%s)' % rowless)
+    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 41 + 3 * os.path.isfile(repo), len(FAILS)))
     return 1 if FAILS else 0
 
 

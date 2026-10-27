@@ -23,6 +23,18 @@ follows with off value None (written when turning on, left alone when turning of
 Rule for new rows: when the local sessions move a key to `(recommended on) proven live` in klhook\KLHook.ini, flip its row too (`--check-rec`
 fails until it is done).
 
+2026-10-27 14:50 UTC (scheduled check-in): the repo ini had no line for 37 row keys (17 modules without a section: [Shop], [Adrenaline],
+[BotDown], [Shield], [Voice] Enable, ...; the owner's live ini carries most of them), so nothing in the hook's own documented defaults said
+those keys existed; and c9's [Input] PumpNoBlock / MouseMoveMs and [Stall] Trace / StallMsgMs were read by klhook.c but documented nowhere.
+Now: `[Stall]` and `[Input]` sections (PumpNoBlock marked `recommended off until benched: C27_PNB1`, c9 recommends on), one commented
+`;Key=<DLL default>   ; KL Mod Options row '<id>': <label> (recommended ...)` line per rowless key in its section (new sections sit before
+[Online]), the `pumpnoblock` row (G_STAB, off until the bench), and `--check-ini klhook klhook\KLHook.ini` (exit 1 while a row key is
+unmentioned; `--verbose` lists the 487 other keys the hook reads that the ini leaves out: probes, logs, per-map tuning). `ini_rec` now
+reads a marker on a commented `;Key=` line too (16 more rows checked) and the new lines carry markers (31 more): 66 rows without a
+marker now, was 113; every checked row agrees. The other direction
+(an ini key no source reads) was tried and dropped: names come from tables, sprintf (P%d, Thr%d) and per-map sections, every try listed
+live keys as stale. `kl_mod_options_test.py` 44 checks.
+
 Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the ini notes 188 fps off against 106..178 on), CarDown Dry to off, and Music/Rigid are already off.
 
 ## Inventory
@@ -94,6 +106,7 @@ Note: the Recommended button would flip the owner's live Neural from 1 to 0 (the
 | continue | Keep playing after a game assert | [KLHook] ContinueAsserts=1/0 | on (ContinueAsserts=1) | on | next start | the hook logs the assert and goes on instead of ending the game |
 | memory | Room for the big Dead Men maps (address space) | [Memory] Enable=1/0 | on (Enable=1) | on | next start | avoids the 2 GB heap NULL crash on large .prm files |
 | steamblock | Block Steam stats / leaderboards on modded rounds | [Steam] Block=1/0 | on (Block=1) | on | next start | keeps modded rounds out of your Steam stats and achievements |
+| pumpnoblock | Never wait for a window message the game cannot take (background window freeze) | [Input] PumpNoBlock=1/0 | off (key absent, DLL default 0; not in SHIP 1027x) | off until C27_PNB1 | next start | c9 2026-10-27: the pump's keep-Peek sees a WM_MOUSEMOVE the remove-Peek cannot take, GetMessageA / ReShade then wait for forever (CE27_HUD5, P2P4C client freeze dumps); c9 recommends on, the row flips when the bench passes |
 | | **Experimental / not tried in play** | | | | | |
 | match | Private-match options (gun, vote, playlist) | [Match] Enable=1/0 | off (Enable=0, absent = DLL default) | off | next start | built, never run live |
 | netsmooth | Smooth remote players' turning (online) | [NetSmooth] Enable=1/0 | off (Enable=0, absent = DLL default) | off | next start | offline-proven only, no online run yet |

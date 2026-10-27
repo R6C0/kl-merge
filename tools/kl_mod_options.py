@@ -13,6 +13,8 @@ full at 9 rows (re\mod_options.md section 3). This tool needs no game code and c
   python tools\kl_mod_options.py --check-defaults klhook   rows' DLL defaults vs the GetPrivateProfileInt calls
   python tools\kl_mod_options.py --check-rec klhook\KLHook.ini   rows' recommendations vs the '(recommended on|off)' markers of the
                repo ini (the local sessions mark a key 'proven live: <bench>' there; a row still saying off would make Recommended undo it)
+  python tools\kl_mod_options.py --check-ini klhook klhook\KLHook.ini   row keys the repo ini never mentions (document them there), and
+               how many keys the hook reads that it leaves out (--verbose lists them; most are probes / logs)
 
 Rules: refuses to write while kl2.exe runs (the hook reads the ini at start, a running game would also overwrite nothing but the player
 would think the change was live); keeps ONE backup, KLHook.ini.before-modoptions (made before the first write, never replaced); writes
@@ -408,6 +410,11 @@ feat('resetdrain', G_STAB, 'Do not crash when the screen is rebuilt (monitor off
      'klfps.c ResetDrain: after a successful Reset the 2 render command lists recorded before it are emptied (what the game flush 0x696100 '
      'does); C27_RSTQ/RST0 + CE27_ALL2 crashed in d3d9 11-15 ms after one S_OK Reset on the stale list; needs the frame limiter (its Reset wrapper)',
      [('Graphics', 'ResetDrain', 1, 0, 1)])
+feat('pumpnoblock', G_STAB, 'Never wait for a window message the game cannot take (background window freeze)', 'off', 'start',
+     'klhook.c [Input] PumpNoBlock (c9, 2026-10-27): the game pump peeks a message (a WM_MOUSEMOVE at the window seam) that its GetMessageA / ReShade '
+     'then cannot remove and waits for forever; a background window never gets another one (CE27_HUD5 / P2P4C client freeze dumps). With it the '
+     'wrapped GetMessageA never waits (WM_NULL instead). Recommended on by c9, off here until bench C27_PNB1 passes; a DLL without it ignores the key',
+     [('Input', 'PumpNoBlock', 1, 0, 0)])
 feat('steamblock', G_STAB, 'Block Steam stats / leaderboards on modded rounds', 'on', 'start',
      'keeps modded rounds out of your Steam stats and achievements', [('Steam', 'Block', 1, 0, 1)])
 
@@ -642,11 +649,28 @@ def own_key(f):
     return f['keys'][0][:2]
 
 
+def find_commented_key(lines, sec, key):
+    """-> index of the first ';Key=' / '#Key=' line of [sec] (a documented key that is not set), or None."""
+    _, head, _ = find_key(lines, sec, key)
+    if head is None:
+        return None
+    for i in range(head + 1, len(lines)):
+        if _SEC.match(lines[i]):
+            break
+        m = re.match(r'\s*[;#]\s*([A-Za-z_][A-Za-z0-9_.]*)\s*=', lines[i])
+        if m and m.group(1).lower() == key.lower():
+            return i
+    return None
+
+
 def ini_rec(lines, sec, key):
     """The '(recommended on|off)' marker the repo ini (klhook\\KLHook.ini, the hook's own documented defaults) puts on a key:
     on its line, or in the comment lines right above it that name the key. -> ('on'|'off'|None, the line it came from).
-    '(recommended off until benched)' and '(recommended on after the live test)' both mean off for now."""
+    '(recommended off until benched)' and '(recommended on after the live test)' both mean off for now.
+    A key the ini only carries commented out (';PumpNoBlock=0 ; ... (recommended off until benched)') is read the same way."""
     i, h, e = find_key(lines, sec, key)
+    if i is None:
+        i = find_commented_key(lines, sec, key)
     if i is None:
         return None, None
     def mark(s):
@@ -699,30 +723,40 @@ def check_rec(inipath):
     return bad, norow, nocheck
 
 
-def check_defaults(srcdir):
-    """Compare each row's dflt with the GetPrivateProfileInt call in klhook\\*.c. -> list of differences.
+def scan_keys(srcdir):
+    """Every KLHook.ini key klhook\\*.c reads. -> ({(sec, key): set of literal defaults}, {(sec, key): set of source file names}).
     Two shapes are read: the direct call GetPrivateProfileInt("Sec", "Key", dflt, ...) and the per-module helpers
     (klu_inii, klgrd_ini, klb_pos, klnet_key, ...): a function whose first parameter is const char *key and whose body
     calls GetPrivateProfileInt("Sec", key, X, ...) with X either its second parameter (the default is forwarded from each
     call site, e.g. klu_inii("Rows12", 1, 0, 1)) or a literal (every call site gets that default, e.g. klb_pct -> 0).
-    A helper name defined with two different sections is not used (ambiguous)."""
+    A helper name defined with two different sections is not used (ambiguous).
+    Only calls that read KLHook.ini count (last argument klh_ini, or a helper whose own call passes klh_ini): klauto.c reads
+    kla_ini (its own file) and kljoin.c a KLJoin.*.ini handed in as 'file'; those keys are not KLHook.ini keys.
+    GetPrivateProfileString keys count for the second map (where they are read), never for the defaults."""
     import glob
-    seen = {}
+    seen, where = {}, {}
     texts = {}
+    direct = re.compile(r'GetPrivateProfile(Int|String)[AW]?\(\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*([^,;]*?)\s*,([^;]*?)\)')
     for p in glob.glob(os.path.join(srcdir, '*.c')):
         if '_test' in p:
             continue
         texts[p] = t = open(p, encoding='latin1').read()
-        for m in re.finditer(r'GetPrivateProfileInt[AW]?\(\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*(-?\d+)\s*,', t):
-            seen.setdefault((m.group(1), m.group(2)), set()).add(int(m.group(3)))
+        base = os.path.basename(p)
+        for m in direct.finditer(t):
+            kind, sec, key, dflt, rest = m.groups()
+            if not re.search(r'\bklh_ini\s*$', rest.split(',')[-1]):
+                continue
+            where.setdefault((sec, key), set()).add(base)
+            if kind == 'Int' and re.match(r'-?\d+$', dflt):
+                seen.setdefault((sec, key), set()).add(int(dflt))
     # the helpers: name -> (section, 'param' | literal default)
     helpers = {}
     hdef = re.compile(r'\b(\w+)\s*\(\s*const\s+char\s*\*\s*(?:const\s+)?(\w+)\s*(?:,\s*(?:int|LONG|long|DWORD|unsigned)\s+(\w+))?[^;{)]*\)\s*\{'
-                      r'[^}]*?GetPrivateProfileInt[AW]?\(\s*"([^"]*)"\s*,\s*(\w+)\s*,\s*(-?\d+|\w+)\s*,')
+                      r'[^}]*?GetPrivateProfileInt[AW]?\(\s*"([^"]*)"\s*,\s*(\w+)\s*,\s*(-?\d+|\w+)\s*,\s*(\w+)\s*\)')
     for t in texts.values():
         for m in hdef.finditer(t):
-            name, keyp, defp, sec, keyarg, defarg = m.groups()
-            if keyarg != keyp:
+            name, keyp, defp, sec, keyarg, defarg, ini = m.groups()
+            if keyarg != keyp or ini != 'klh_ini':
                 continue
             how = 'param' if (defp and defarg == defp) else (int(defarg) if re.match(r'-?\d+$', defarg) else None)
             if how is None:
@@ -731,20 +765,77 @@ def check_defaults(srcdir):
                 helpers[name] = None                                    # two definitions that disagree: ambiguous
             elif name not in helpers:
                 helpers[name] = (sec, how)
+    # the string helpers (klu_inif, klb_inif, klud_inif, ...: const char *key first, GetPrivateProfileString("Sec", key, ..., klh_ini) in the
+    # body): their keys count as read (second map only; a float / text default is not compared)
+    sdef = re.compile(r'\b(\w+)\s*\(\s*const\s+char\s*\*\s*(?:const\s+)?(\w+)\s*[^;{)]*\)\s*\{'
+                      r'[^}]*?(?:GetPrivateProfileString[AW]?|klmv_pgs)\(\s*"([^"]*)"\s*,\s*(\w+)\s*,[^;]*?\bklh_ini\s*\)')
+    for t in texts.values():
+        for m in sdef.finditer(t):
+            name, keyp, sec, keyarg = m.groups()
+            if keyarg != keyp or name in helpers:
+                continue
+            helpers[name] = (sec, None)
     for name, h in helpers.items():
         if h is None:
             continue
         sec, how = h
         call = re.compile(r'\b' + re.escape(name) + r'\(\s*"([^"]*)"\s*(?:,\s*(-?\d+))?')
-        for t in texts.values():
+        for p, t in texts.items():
             for m in call.finditer(t):
                 key, lit = m.groups()
+                where.setdefault((sec, key), set()).add(os.path.basename(p))
+                if how is None:
+                    continue
                 if how == 'param':
                     if lit is None:
                         continue
                     seen.setdefault((sec, key), set()).add(int(lit))
                 else:
                     seen.setdefault((sec, key), set()).add(how)
+    return seen, where
+
+
+def ini_mentions(lines, sec, key):
+    """True when the repo ini documents [sec] key: an active line 'Key=', a commented one ';Key=' or a comment naming 'Key=' / 'Key:'
+    inside that section (the ini's own ways of describing a key, e.g. ';CameraFX=1' or '; TableLog=1: one log line')."""
+    _, head, end = find_key(lines, sec, key)
+    if head is None:
+        return False
+    i = head + 1
+    pat = re.compile(r'(^|[;\s,(])' + re.escape(key) + r'\s*[=:]', re.I)
+    while i < len(lines) and not _SEC.match(lines[i]):
+        if pat.search(lines[i]):
+            return True
+        i += 1
+    return False
+
+
+def check_ini(srcdir, inipath):
+    """The ini against the keys the sources read. -> (rowless, unmentioned):
+    rowless: keys of the rows of this table the ini never mentions (an active 'Key=', a commented ';Key=' or a comment naming 'Key=' / 'Key:'
+      in the key's section): the Recommended button would write a key the hook's own ini does not document. Non-empty = exit 1.
+    unmentioned: every other key the hook reads from KLHook.ini that the ini never mentions, '[sec] key (file, ...)': informational;
+      most are probes and logs the local sessions keep out of the owner's ini on purpose.
+    The other direction (an ini key no source reads) is not checked: keys are read through tables of names, sprintf'd names
+    (P%d, Thr%d, F%02d) and per-map sections (Ambience.DM01), so every try at it listed live keys as stale."""
+    seen, where = scan_keys(srcdir)
+    lines = split_lines(open(inipath, encoding='latin1').read())
+    rowkeys = {(s, k): f['id'] for f in F for s, k, *_ in f['keys']}
+    rowless, unmentioned = [], []
+    for (sec, key), files in sorted(where.items(), key=lambda kv: (kv[0][0].lower(), kv[0][1].lower())):
+        if ini_mentions(lines, sec, key):
+            continue
+        line = '[%s] %s (%s)' % (sec, key, ', '.join(sorted(files)))
+        if (sec, key) in rowkeys:
+            rowless.append('%s: %s' % (rowkeys[(sec, key)], line))
+        else:
+            unmentioned.append(line)
+    return rowless, unmentioned
+
+
+def check_defaults(srcdir):
+    """Compare each row's dflt with the GetPrivateProfileInt call in klhook\\*.c. -> list of differences (see scan_keys)."""
+    seen, _ = scan_keys(srcdir)
     bad = []
     for f in F:
         for sec, key, onv, offv, dflt in f['keys']:
@@ -855,6 +946,9 @@ def main():
     ap.add_argument('--force', action='store_true')
     ap.add_argument('--restore', action='store_true')
     ap.add_argument('--check-defaults', metavar='KLHOOK_DIR')
+    ap.add_argument('--check-ini', nargs=2, metavar=('KLHOOK_DIR', 'INI'), help='row keys the ini never mentions (exit 1) and how many '
+                    'keys the hook reads that it leaves out (--verbose lists them)')
+    ap.add_argument('--verbose', action='store_true')
     ap.add_argument('--check-rec', metavar='REPO_INI', help='compare each row\'s recommendation with the (recommended ...) marker in klhook\\KLHook.ini')
     a = ap.parse_args()
     if a.check_rec:
@@ -864,6 +958,13 @@ def main():
             print('recommended on + proven in the ini, no row:\n  ' + '\n  '.join(norow))
         print('%d row(s) without a marker on their own key (not checked)' % len(nocheck))
         return 1 if bad else 0
+    if a.check_ini:
+        rowless, unmentioned = check_ini(a.check_ini[0], a.check_ini[1])
+        print('row keys the ini never mentions: %d\n  ' % len(rowless) + '\n  '.join(rowless) if rowless else 'every row key is mentioned in the ini')
+        print('other keys the hook reads that the ini never mentions: %d (probes / logs mostly; --verbose lists them)' % len(unmentioned))
+        if a.verbose:
+            print('  ' + '\n  '.join(unmentioned))
+        return 1 if rowless else 0
     if a.check_defaults:
         bad = check_defaults(a.check_defaults)
         print('\n'.join(bad) if bad else 'all defaults agree with the sources')
