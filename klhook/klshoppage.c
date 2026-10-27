@@ -67,6 +67,7 @@ static struct {
     int tabNames; char tab[4][64];
     int online2;                                 /* [ShopPage] OnlinePage2 (default 0): online a page II row buys its CARRIER's stock gun through the stock host-validated path */
     int early, earlyTried, earlyOk, earlyPend, earlyHost, earlyTold; DWORD earlyAt;   /* [ShopPage] OnlineEarlyMake (default 0, recommended off until benched): see kspg_early_make */
+    int linkArm, linkDone; DWORD link16;         /* LOG-ONLY link check after an early make (kspg_link_check): moments done (bit mask), tick of the first state 0x16 */
     int apply;                                   /* [ShopPage] OnlineApply (default 0, recommended off until benched): step 4, an approved page II buy is really applied online (klshoppage_online.c) */
     int probe;                                   /* [ShopPage] OnlineProbe (default 0, recommended off until benched): klshoppage_probe.c, LOG ONLY */
     int online;                                  /* [ShopPage] OnlineLook (default 0): page II LOOK online, buying it LOCKED (2026-10-26, see below) */
@@ -91,6 +92,7 @@ enum { KR_NONE = 0, KR_OLDPRI = 1, KR_OLDSEC = 2, KR_BIG = 11, KR_PRI = 12, KR_S
 
 #include "klshoppage_probe.c"                              /* [ShopPage] OnlineProbe: pool / hand-out / buy log lines, no writes */
 static int kspg_netok(int row);                                  /* defined below; used by the book tick */
+static void kspg_link_check(const char *when);                   /* log-only link proof, defined below */
 #include "klshoppage_online.c"                             /* [ShopPage] OnlineSend: page II press sent to the host (SHOPG), host judges + logs, no writes */
 
 static int kspg_role_of(void *self)
@@ -486,11 +488,59 @@ static void kspg_early_body(int host)
     }
     kspg.earlyHost = host; kspg.earlyPend = 1; kspg.earlyAt = GetTickCount() | 1;
     klog("shopPage: early make (%s site, state 0x%x): %d page II row(s), %d made now, %d already made, pool %lu, KSPG_PER %d (compare rows/made/guns across peers)", host ? "host 0x75f313" : "client 0x7bb6c3", st, rows, made, had, (unsigned long)pn, KSPG_PER);
+    kspg.linkArm = 1; kspg.linkDone = 1; kspg.link16 = 0;                  /* log-only link check: moment 1 now, the rest from the tick */
+    kspg_link_check("right after early make");
 }
 static void kspg_early_make(int host)
 {
     __try { kspg_early_body(host); }
     __except (1) { kspg.earlyOk = 0; klog("shopPage: early make FAULTED (%s site): OnlineEarlyMake switched off, the stock gun stays (kspg_netok)", host ? "host" : "client"); }
+}
+
+/* LOG-ONLY proof (no behaviour change): is the first gun of every made page II row LINKED to its Quazal DO X in the handler's link table?
+ * Table: the weapon manager 'this' of the handlers 0x75f310 / 0x7bb6c0 (esi) = the session handler [[0x168e598]+4] (vtable 0xbd27bc Server / 0xbd262c Client; those
+ * handlers are slot 6 of those vtables, so 'this' IS that object: klnet.c:26 / klfed.c:220 read the same pointer; GUESS that the table lives at this+0x1c of exactly
+ * this object, checked below by the vtable and by a plausible vector). Vector at this+0x1c = begin, +0x20 = end; rows of 12 bytes {X, gun, BYTE state at +8}:
+ * 2 gun waits for X, 3 X waits for gun, 4 both known not linked, 5 linked (gun+0x13c = X). The link 0x767010 acts only in session state 0x16/0x17. */
+static void kspg_link_check(const char *when)
+{
+    static BYTE tab[4096 * 12];
+    DWORD sm, h, b, e, n, vt; int row, rows = 0, linked = 0, norow = 0, s2 = 0, s3 = 0, s4 = 0, other = 0, ok;
+    if (!kspg.log) return;
+    sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)); h = sm ? klh_rd32(sm + 4) : 0; vt = h ? klh_rd32(h) : 0;
+    b = h ? klh_rd32(h + 0x1c) : 0; e = h ? klh_rd32(h + 0x20) : 0;
+    n = (b && e >= b) ? (e - b) / 12 : 0;
+    if (n > 4096) n = 4096;                                              /* capped walk */
+    ok = (h && (vt == 0xbd27bc || vt == 0xbd262c) && b && n && klh_rd(b, tab, 12 * (SIZE_T)n));
+    if (!ok) klog("shopPage: link check (%s): link table unreadable (handler %08lX vtable %08lX, vector %08lX..%08lX): GUESS this+0x1c is wrong or not built yet", when, (unsigned long)h, (unsigned long)vt, (unsigned long)b, (unsigned long)e);
+    for (row = 0; ok && row < KSPG_ROWS; row++) {
+        DWORD g, x13c, i, tx = 0; int ts = -1;
+        if (!kspg.made[row][0]) continue;
+        g = (DWORD)(DWORD_PTR)kspg.made[row][0]; rows++;
+        x13c = klh_rd32((DWORD_PTR)g + 0x13c);
+        if (ok) for (i = 0; i < n; i++) {
+            DWORD *r = (DWORD *)(tab + 12 * i);
+            if (r[1] == g) { tx = r[0]; ts = (int)(tab[12 * i + 8]); break; }
+        }
+        if (ts < 0) { norow++; klog("shopPage: link check (%s): row %d gun 0x%08lX +0x13c 0x%08lX table row: no row", when, row, (unsigned long)g, (unsigned long)x13c); }
+        else {
+            if (ts == 5) linked++; else if (ts == 2) s2++; else if (ts == 3) s3++; else if (ts == 4) s4++; else other++;
+            klog("shopPage: link check (%s): row %d gun 0x%08lX +0x13c 0x%08lX table row state %d X 0x%08lX", when, row, (unsigned long)g, (unsigned long)x13c, ts, (unsigned long)tx);
+        }
+    }
+    klog("shopPage: link check (%s): %d of %d rows linked, %d no row, %d stuck at state 2/3/4 (2:%d 3:%d 4:%d), %d other state; table %lu rows", when, linked, rows, norow, s2 + s3 + s4, s2, s3, s4, other, (unsigned long)n);
+}
+
+/* tick: moments 2..4 (first tick in state 0x17, 3 s and 10 s after state 0x16 was first seen); moment 1 is called from kspg_early_body */
+static void kspg_link_tick(void)
+{
+    DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)), now = GetTickCount(); int st = sm ? (int)klh_rd32(sm + 0x70) : -1;
+    if (!kspg.linkArm) return;
+    if (st == 0x16 && !kspg.link16) kspg.link16 = now | 1;
+    if (st == 0x17 && !(kspg.linkDone & 2)) { kspg.linkDone |= 2; __try { kspg_link_check("state 0x17"); } __except (1) { klog("shopPage: link check FAULTED"); } }
+    if (kspg.link16 && now - kspg.link16 >= 3000 && !(kspg.linkDone & 4)) { kspg.linkDone |= 4; __try { kspg_link_check("3 s after state 0x16"); } __except (1) { klog("shopPage: link check FAULTED"); } }
+    if (kspg.link16 && now - kspg.link16 >= 10000 && !(kspg.linkDone & 8)) { kspg.linkDone |= 8; __try { kspg_link_check("10 s after state 0x16"); } __except (1) { klog("shopPage: link check FAULTED"); } }
+    if (kspg.linkDone == 15 || (st >= 0 && st < 0x12)) kspg.linkArm = 0;   /* done, or the session went back to the lobby */
 }
 
 /* once per round, from the tick, after the stock pass would have run (state >= 0x16, or 5 s): per row what the pass did to our objects */
@@ -845,6 +895,7 @@ static void klshoppage_tick(int game_thread)
     if (kspg.early && !kspg.earlyTried) kspg_early_patch();
     if (kspg.earlyOk) kllb_early_tick();                              /* private sm vtable on every new session object (kllobby.c) */
     if (kspg.earlyPend) kspg_early_report();
+    if (kspg.linkArm) kspg_link_tick();
     if (!looked) {
         HMODULE u = GetModuleHandleA("user32.dll"); looked = 1;
         if (u) { gaks = (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState"); fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId"); }
