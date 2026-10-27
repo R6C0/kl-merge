@@ -475,7 +475,7 @@ static int kspg_gate(void)
     if (!rules) return 0;
     if (kl_online()) {   /* OnlineLook: the online FA rules, host Sv 0xbd2eb4 / client Cl 0xbd31e4 (re/online_round_data.md); GUESS G18: [settings+0x54] is the rules object online too, as klonline_read.c reads it */
         DWORD vt = klh_rd32(rules);
-        if (vt != (DWORD)(DWORD_PTR)KLH_VA(0x00bd2eb4u) && vt != (DWORD)(DWORD_PTR)KLH_VA(0x00bd31e4u)) return 0;
+        if (!KLH_RULES_SV_OK(vt) && !KLH_RULES_CL_OK(vt)) return 0;      /* mid-round the rules wear a private heap vtable copy (klroundkeep / klucc_down): the exact compare never matched (audit 1027) */
     } else if (klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLS_RULES_VT)) return 0;
     /* 1 = a shop can be open, 2 = otherwise. The session runs 0x16 (first shop) -> 0x18 -> 0x19 (play) -> 0x1f (score) -> 0x20 (the shop
        between rounds) -> 0x23..0x25 -> 0x16; k40 took only st < 0x19, so the page key did nothing in the 0x20 shop (live log 10-25 20:32) */

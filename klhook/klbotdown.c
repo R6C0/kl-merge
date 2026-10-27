@@ -319,7 +319,7 @@ static int klbd_online_host(DWORD *rules, DWORD *state)
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLB_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) return 0;
     if (!klh_rd(sm + 0x5c, &mode, 4) || mode != 4 || !klh_rd(sm + 0x54, &role, 4) || role != 2 || !klh_rd(sm + 0x70, &st, 4) || st < 0x13 || st > 0x1f) return 0;
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLB_SETTINGS))) || !(r = klh_rd32(gs + 0x54))) return -1;      /* transient: not an answer */
-    if (klh_rd32(r) != KLB_RULES_SV) return 0;      /* a host-role type 4 game that is not a Fragile Alliance Sv round (review fix 2) */
+    if (!KLH_RULES_SV_OK(klh_rd32(r))) return 0;      /* (audit 1027: the exact compare missed the private heap vtable copy of klroundkeep.c / klucc_down.c mid-round) a host-role type 4 game that is not a Fragile Alliance Sv round (review fix 2) */
     *rules = sm; *state = st;
     return 1;
 }

@@ -101,10 +101,23 @@ static int klhro_seat_used(DWORD rules, int seat)
 }
 
 /* the shop money of a seat: first + second store, the game's own getters (G4) */
+/* first-bytes guard (audit 1027): the four game routines are called blind; a different kl2.exe build would run foreign code. Bytes read from the Steam kl2.exe 2026-10-27:
+   getters = add ecx,0x58 / jmp rel32; spenders = sub esp,8 / push ebx / mov ebx,[esp+0x10] / push esi / push edi / mov edi,ecx (0x6b1910 and 0x7f6950 start alike, 8 bytes compared). Refuse + log once on mismatch. */
+static int klhro_code_ok(void)
+{
+    static const BYTE g1[] = { 0x83, 0xc1, 0x58, 0xe9 }, sp[] = { 0x83, 0xec, 0x08, 0x53, 0x8b, 0x5c, 0x24, 0x10 };
+    static int ok = -1;
+    if (ok < 0) {
+        ok = klc_same_code(0x622e10, g1, sizeof g1) && klc_same_code(0x639c10, g1, sizeof g1) && klc_same_code(0x6b1910, sp, sizeof sp) && klc_same_code(0x7f6950, sp, sizeof sp);
+        if (!ok) klog("hire-online: refused: the money routines 0x622e10 / 0x639c10 / 0x6b1910 / 0x7f6950 are not the ones this build knows (other kl2.exe?); nothing is read or charged");
+    }
+    return ok;
+}
+
 static int klhro_money(DWORD S, int seat, DWORD *first, DWORD *second)
 {
     DWORD a, b;
-    if (!S || seat < 0 || seat >= KLHRO_SEATS) return 0;
+    if (!S || seat < 0 || seat >= KLHRO_SEATS || !klhro_code_ok()) return 0;
     a = ((DWORD (__fastcall *)(void *, void *, int))(DWORD_PTR)KLH_VA(0x622e10))((void *)(DWORD_PTR)S, 0, seat);
     b = ((DWORD (__fastcall *)(void *, void *, int))(DWORD_PTR)KLH_VA(0x639c10))((void *)(DWORD_PTR)S, 0, seat);
     *first = a; *second = b;
@@ -116,6 +129,7 @@ static void klhro_spend(DWORD S, int seat, DWORD price, DWORD first)
 {
     typedef void (__fastcall *spend_t)(void *, void *, int, DWORD);
     spend_t sp1 = (spend_t)(DWORD_PTR)KLH_VA(0x6b1910), sp2 = (spend_t)(DWORD_PTR)KLH_VA(0x7f6950);
+    if (!klhro_code_ok()) return;
     if (price < first) { sp1((void *)(DWORD_PTR)S, 0, seat, price); return; }
     sp1((void *)(DWORD_PTR)S, 0, seat, first);
     sp2((void *)(DWORD_PTR)S, 0, seat, price - first);
@@ -223,6 +237,16 @@ static void klhro_tick(void)
     if (!klhro.on) return;
     if (klhro.pend && GetTickCount() - klhro.pendAt >= KLHRO_ASKMS) { klog("hire-online: no answer from the host about %s (%d ms): nothing charged on this side", klhr_name[klhro.pend], KLHRO_ASKMS); klhro.pend = 0; }
     ph = klhro_phase();
+    {   /* stale state (audit 1027): no session (left / level change) or a NEW rules object (new level or lobby) forgets paid[] / act / pending, so 'already hired' cannot outlive the match. GUESS: a new level / lobby allocates a NEW rules object and one match keeps the same one through shop and round; if the object were rebuilt between a shop hire and the round start, paid[] would be forgotten early and a seat could be charged twice (bench it) */
+        DWORD r = 0; static DWORD lastr; int j;
+        if (!ph || (klhro_rules(&r, 0) && lastr && r != lastr)) {
+            for (j = 0; j < KLHRO_SEATS; j++) klhro.paid[j] = 0;
+            klhro.pend = 0; klhro.phase0 = 0; if (!ph) klhr_next = 0;
+            if (klhro.act) { if ((int)klc_char == klhro.act) klc_char = klhro.save; klhro.act = 0; }
+            lastr = 0;
+        }
+        if (ph && r) lastr = r;
+    }
     if (!ph) return;
     if (ph == 1 && klhro.phase0 != 1) {
         int j;
