@@ -2,7 +2,7 @@
  * klhire_online.c - HIRE a heister in the ONLINE Fragile Alliance shop (private match / Steam FA). re\shop_hire.md section 8.
  * Part of KLHook, included by klhook.c AFTER klucchide.c (klucc_find_me), klnetchan.c (knc_*) and klcharonline.c (klco, klc_char publishing).
  * Heap data writes and calls of two game routines (the shop's own money spenders) from the game's thread; no code byte of kl2.exe changes
- * (SHIP-safe). NOT RUN IN THE GAME (written 2026-10-27).
+ * (SHIP-safe). Written 2026-10-27; benched HRF2 (host hire, client refused) and HRP2 (client hire Jean, worn in round 2) the same day, 0 faults.
  *
  * WHY THIS DESIGN (read from kl2.exe, 2026-10-27, see the doc):
  *   The stock shop buys on the HOST: the client sends a buy message, the host's handler 0x55d3e0 adds up the price, compares it with
@@ -308,7 +308,7 @@ static void klhro_init(void)
     if (klhro.tb) klog("hire-online: [Hire] OnlineTestBuy=%d (bench only, recommended off): each peer presses KLHire%d once per round in the shop phase", klhro.tb, klhro.tb);
     knc_want("hire-online");
     knc_on("HIRE", klhro_on_msg);
-    klog("hire-online: on (client asks, host judges and spends with the game's own routines, the body travels by klcharonline's look channel). Needs [NetChan], [CharOnline] Enable=1, [Character] Enable=1. NOT RUN IN THE GAME");
+    klog("hire-online: on (client asks, host judges and spends with the game's own routines, the body travels by klcharonline's look channel). Needs [NetChan], [CharOnline] Enable=1, [Character] Enable=1. Benched HRF2/HRP2 10-27");
 }
 
 #endif /* KLHIRE_ONLINE_C */
