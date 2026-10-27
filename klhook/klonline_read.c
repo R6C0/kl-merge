@@ -216,9 +216,9 @@ static int klor_read(struct klor_snap *o, int local)
         w->alive = !(dead || (w->flags & 0x40));
         if (klor_aikill && k < KLOR_MAX && w->player && !dead) { klor_att[k] = klh_rd32(w->player + 0x2778); }   /* unconditional: a cleared field must clear the saved attacker, else an old AI hit would be blamed for a later police kill */   /* GUESS: [player+0x2778] = attacker of the last bullet that hit him (klbalance.c / kldown.c read it the same way); kept while he lives, because it may clear at death */
         if (o->ok && k < KLOR_SEATS) {                           /* review #4: the S arrays hold 12 seats; a seat >= 12 would read the next array */
-            { WORD xw = 0; signed char rt = -1; w->xp = w->rating = -1;      /* GUESS: Experience i16 at S+0xc8+2*seat, Rating i8 at S+0x17c+seat (field names only) */
+            { WORD xw = 0; signed char rt = -1; w->xp = w->rating = -1;      /* Experience u16 at S+0xc8+2*seat (getter 0x7d9b30), Rating low nibble of S+0x17c+seat (getter 0x40d4a0 masks 0xf; 0x10 is a separate flag) */
               if (klh_rd(S + 0xc8 + 2 * k, &xw, 2)) w->xp = (int)xw;
-              if (klh_rd(S + 0x17c + k, &rt, 1)) w->rating = (int)rt; }
+              if (klh_rd(S + 0x17c + k, &rt, 1)) w->rating = (int)(rt & 0xf); }
             if (klh_rd(S + 0xec + k, &kills, 1)) w->kills = kills;
             if (klh_rd(S + 0x170 + k, &pk, 1)) w->police_kills = pk;
             if (klh_rd(S + 0xe0 + k, &kb, 1)) w->killer = kb;
