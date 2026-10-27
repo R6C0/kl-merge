@@ -43,6 +43,8 @@
 #define KLSB_TICKFN      0x005528c0u          /* its slot 5 */
 #define KLSB_O_OUTRO     0x10b4               /* osd: the element */
 #define KLSB_E_DEADLINE  0xd8                 /* float */
+#define KLSB_NTEXT_BASE  52                   /* the pool before [Grades]: with Grades off (or Letter and RankUp off) no more text objects are made than before (inert when off) */
+#define KLSB_NT()        (klgrd_pool_extra() ? KLSB_NTEXT : KLSB_NTEXT_BASE)
 #define KLSB_NSLOT       16
 #define KLSB_NTEXT       66                   /* was 40: 4 more rows of 3 texts (2026-10-26); 52 -> 66: [Grades] GRADE head, RANK UP line, 12 letters (2026-10-27) */
 #define KLSB_NPIC        112
@@ -230,7 +232,7 @@ static int klsb_ours(DWORD e, void *ctx, void *cam)
                     const struct klu_picq *p = &klsb_r.pic[i];
                     klsb_pic2(ctx, p->n, p->x, p->y, p->w, p->h, p->argb, p->layer);
                 }
-                for (i = 0; i < KLSB_NTEXT; i++) klsb_text(i, ctx, cam);
+                for (i = 0; i < KLSB_NT(); i++) klsb_text(i, ctx, cam);
                 ok = 1;
             } else InterlockedIncrement(&klsb_n_refused);
         }
@@ -311,13 +313,13 @@ static int klsb_make_pool(void)
 {
     int i; char why[160];
     if (!klu_r.tmpl || !klu_r.parent) return 0;
-    for (i = 0; i < KLSB_NTEXT; i++) {
+    for (i = 0; i < KLSB_NT(); i++) {
         int f = klsb_role[i].fnt, st = klsb_role[i].align == KLSB_ALIGN_R ? KLU_STYLE_RIGHT : klsb_role[i].align == KLSB_ALIGN_C ? KLU_STYLE_CENTRE : KLU_STYLE_LEFT;
         DWORD o = klu_make_obj(klu_r.tmpl, klu_r.fonts[f], st, KLU_C_CHALK, klu.layer, why);
         if (!o) { klog("hud: scoreboard: text %d: %s; no board this level", i, why); return 0; }
         klsb_r.t[i].obj = o; klsb_r.t[i].colour = klsb_r.t[i].want_colour = KLU_C_CHALK;
     }
-    if (klu.log) klog("hud: scoreboard: %d texts made (template %08lx, parent %08lx; fonts names %08lx big %08lx labels %08lx small %08lx)", KLSB_NTEXT, klu_r.tmpl, klu_r.parent, klu_r.fonts[0], klu_r.fonts[1], klu_r.fonts[2], klu_r.fonts[3]);
+    if (klu.log) klog("hud: scoreboard: %d texts made (template %08lx, parent %08lx; fonts names %08lx big %08lx labels %08lx small %08lx)", KLSB_NT(), klu_r.tmpl, klu_r.parent, klu_r.fonts[0], klu_r.fonts[1], klu_r.fonts[2], klu_r.fonts[3]);
     return 1;
 }
 
@@ -682,7 +684,7 @@ static void klsb_intro_draw(void *ctx, void *cam)
 static void klsb_apply(void)
 {   /* SetText / SetColour of every text whose string or colour changed (the same discipline as klu_apply; under klsb_cs) */
     int i;
-    for (i = 0; i < KLSB_NTEXT; i++) {
+    for (i = 0; i < KLSB_NT(); i++) {
         struct klsb_t *t = &klsb_r.t[i]; DWORD vt;
         if (!t->obj) continue;
         if (!klh_rd(t->obj, &vt, 4) || vt != KLU_TEXT_VT) { klsb_r.valid = 0; klsb_r.made = 0; klog("hud: scoreboard: text %d (%08lx) no longer has ZCHAROBJ's vtable: no board this level", i, t->obj); return; }

@@ -101,8 +101,8 @@ static int klgrd_read_local_xp(int *xp)
 static void klgrd_tick(int game_thread)
 {   /* once a second, on the game thread: the local experience */
     DWORD now = GetTickCount(); int xp = 0, ok;
-    if (!klgrd.on || !(klgrd.badge || klgrd.rankup) || !game_thread || klgrd.local_bad >= 5) return;
-    if (klgrd.local_at && now - klgrd.local_at < 1000) return;
+    if (!klgrd.on || !(klgrd.badge || klgrd.rankup) || !game_thread) return;
+    if (klgrd.local_at && now - klgrd.local_at < (klgrd.local_bad >= 5 ? 10000u : 1000u)) return;      /* review: was 'give up after 5 failures' = for good, though the profile manager is not up for the first seconds; now it retries every 10 s */
     klgrd.local_at = now ? now : 1;
     ok = klgrd_read_local_xp(&xp);
     if (!ok) { if (!klgrd.local_ok && ++klgrd.local_bad == 5) klog("grades: the local profile experience is not readable (code or pointers differ): no badge for you"); return; }
@@ -141,6 +141,7 @@ static int klgrd_rank(int online, int idx, int is_local)
     return -1;
 }
 
+static int klgrd_pool_extra(void) { return klgrd.on && (klgrd.letter || klgrd.rankup); }     /* klhud_board2.c: the 14 extra scoreboard texts are made only then */
 static int klgrd_letter_on(void) { return klgrd.on && klgrd.letter; }
 static int klgrd_nameset(void) { return klgrd.set; }
 

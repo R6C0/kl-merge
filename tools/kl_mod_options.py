@@ -256,7 +256,7 @@ feat('onlineskipdoor', G_EXP, 'Online AI heisters skip loot still locked behind 
      'klbotfill.c [BotFill] OnlineSkipDoorStacks; BOS1: DD01 vault cases (+0x5c behind a door) stalled every bot, 0 taken; NOT run live', [('BotFill', 'OnlineSkipDoorStacks', 1, 0, 1)])
 feat('onlineboxwalk', G_EXP, 'Online AI heisters walk to the escape box once the van is called and count as aboard only inside it (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxWalk; BO9: the exit trigger is ~570 cm from the DM01 AllyEscapeBox; read-only scan, game inside test 0x758cb0; NOT run live', [('BotFill', 'OnlineBoxWalk', 1, 0, 1)])
-feat('onlineboard', G_EXP, 'Online AI heisters inside the escape box while the van waits are removed from the match like in Arcade (recommended off until tested)', 'off', 'start',
+feat('onlinevanbots', G_EXP, 'Online AI heisters inside the escape box while the van waits are removed from the match like in Arcade (recommended off until tested)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineBoard; calls 0x89c890(actor) (0x907a50\'s own removal); GUESS 60% host-safe, 35% clients see it; needs OnlineBoxWalk; NOT run live', [('BotFill', 'OnlineBoard', 1, 0, 0)])
 feat('onlineboxprobe', G_EXP, 'Online AI heister boarding and van position written to the log for the next bench (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxProbe; log only: box probe / van probe lines; NOT run live', [('BotFill', 'OnlineBoxProbe', 1, 0, 1)])
