@@ -86,7 +86,7 @@ feat('hostserver', G_EXP, 'Host server: this copy keeps hosting a Quick Match lo
 feat('hire', G_EXP, 'Arcade shop: hire a heister for the next round (needs the Hire window baked in, tools/kl_hire_bake.py; every round otherwise a random heister) (recommended off until benched)', 'off', 'start',
      'klhire.c [Hire] Enable=1: body = random default (never Kane / Lynch) or the one hired on the shop page, one round, rank + price; the Heister page pick is ignored; NOT run live', [('Hire', 'Enable', 1, 0, 0)])
 feat('hireonline', G_EXP, 'Online shop (private match / Steam FA): hire a heister for the next round, host charges (needs Hire on, CharOnline on, Character on and the Hire window baked in) (recommended off until benched)', 'off', 'start',
-     'klhire_online.c [Hire] Online=1: client asks (HIREQ), host judges + spends with 0x6b1910 / 0x7f6950, body via klcharonline; NOT run live; re/shop_hire.md section 8', [('Hire', 'Online', 1, 0, 0)])
+     'klhire_online.c [Hire] Online=1: client asks (HIRE, payload Q...), host judges + spends with 0x6b1910 / 0x7f6950, body via klcharonline; NOT run live; re/shop_hire.md section 8', [('Hire', 'Online', 1, 0, 0)])
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
      'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
 feat('hidestock', G_CORE, 'Old (stock) HUD list never shown: skipped at its Render, so Tab / Alt+Tab cannot bring it back (recommended on)', 'on', 'start',
@@ -266,7 +266,7 @@ feat('syncvanprobe', G_EXP, 'Sync bench log: the escape van real state and place
      'klsync.c [Sync] VanProbe; log only, needs Probe=1; BO9: the ZAnimatedVehicle node reads 0,0,0; NOT run live', [('Sync', 'VanProbe', 1, 0, 1)])
 feat('hostopts', G_EXP, 'Host-controlled match options: F7 map set, F8 AI heisters; the host map set reaches clients (recommended on after the live test)', 'off', 'start',
      'klhostopt.c [HostOpts] Enable; Steam lobby key klx_opts + UDP 27413; re/host_options.md; NOT run live', [('HostOpts', 'Enable', 1, 0, 0)])
-feat('mappool', G_EXP, 'Online: random map pool for each round, no repeats (host Insert cycles Full Dead Men / Full Dog Days / Mix; needs Host-controlled match options; recommended off until benched)', 'off', 'start',
+feat('mappool', G_EXP, 'Online: random map pool for each round, no repeats (host Delete cycles Full Dead Men / Full Dog Days / Mix; needs Host-controlled match options; recommended off until benched)', 'off', 'start',
      'klmappool.c [MapPool] Enable; pool + seed reach clients in klx_opts (p<pool>q<seed>); [MapPool] Apply=1 lets the host move the lobby slot (GUESS); icons by tools/kl_mappool.py; re/map_pool.md; NOT run live', [('MapPool', 'Enable', 1, 0, 0)])
 feat('charonline', G_EXP, 'Online: every player heister / mask / outfit shows on every screen; F9 / F11 choose (recommended on after the live test)', 'off', 'start',
      'klcharonline.c [CharOnline] Enable; entity-table index + look via Steam lobby member data klx_look and UDP 27414; re/char_online.md; NOT run live', [('CharOnline', 'Enable', 1, 0, 0)])

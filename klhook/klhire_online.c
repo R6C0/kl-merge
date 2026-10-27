@@ -10,9 +10,9 @@
  *   when it is too dear, else spends with 0x6b1910(S, seat, n) (the first store) and 0x7f6950(S, seat, rest) (the second), which mark
  *   the dirty mask so the score object REPLICATES to every client. A client cannot be trusted to write its own money, and a write on a
  *   client would be overwritten by the next replication. So:
- *     client  : presses the KLHire<n> row -> sends HIREQ (seat, row, rank) to the host through klnetchan.c; nothing is charged locally
+ *     client  : presses the KLHire<n> row -> sends HIRE/Q (seat, row, rank) to the host through klnetchan.c; nothing is charged locally
  *     host    : checks (not in a round, body exists, nobody wears / has hired it, rank, money) -> spends with the game's own two routines
- *               -> answers HIREA (seat, row, ok, reason)
+ *               -> answers HIRE/A (seat, row, ok, reason)
  *     client  : on ok it shows the row HIRED (klhr_next); at the next round's start klc_char = the hired body for ONE round, then back
  *     body    : klcharonline.c publishes klc_char as klx_look / UDP 27414 to every peer, which apply it by entity (its Unique rule then
  *               also keeps two peers off one character). No change of klcharonline.c is needed.
@@ -23,8 +23,8 @@
  *
  * GUESS list (every one is also marked at its line):
  *   G1 the shop is open whenever the session state is not 0x19 (round); the same 'phase' idea as klhire.c, online state numbers unproven
- *   G2 a client's seat number in HIREQ is trusted (private match / friends); the host only checks it is a seat in use and not its own
- *   G3 the client's rank in HIREQ is trusted (the host cannot read another player's profile)
+ *   G2 a client's seat number in HIRE/Q is trusted (private match / friends); the host only checks it is a seat in use and not its own
+ *   G3 the client's rank in HIRE/Q is trusted (the host cannot read another player's profile)
  *   G4 both getters / spenders take the seat as the first stack argument and S as ecx (fastcall(S, 0, seat[, amount]) matches ret 4 / ret 8)
  *   G5 the replicated score object updates the client's shop money text on its own (stock does it after its own buys)
  *
@@ -43,7 +43,7 @@
 static struct {
     int on, log;
     int paid[KLHRO_SEATS];                     /* host: the row each seat has paid for the next round (0 none) */
-    int pend; DWORD pendAt;                    /* client: the row asked, waiting for HIREA */
+    int pend; DWORD pendAt;                    /* client: the row asked, waiting for HIRE/A */
     int phase0, act, save;                     /* last phase (0 none, 1 round, 2 shop), the hired body worn now, klc_char before it */
     int told;
 } klhro;
@@ -155,24 +155,24 @@ static int klhro_decide(int seat, int row, int rank, int *newtotal)
 
 /* ---- messages ---- */
 static void klhro_on_ask(const struct knc_msg *m, int src)
-{   /* HOST: HIREQ s<seat>r<row>k<rank> */
+{   /* HOST: HIRE Q s<seat>r<row>k<rank> */
     int seat = -1, row = 0, rank = -1, why, nt = 0; char pay[48]; DWORD rules = 0;
     (void)src;
     if (!klhro.on || !klhro_host() || m->role != 3) return;
-    if (sscanf(m->payload, "s%dr%dk%d", &seat, &row, &rank) < 2) return;
+    if (m->payload[0] != 'Q' || sscanf(m->payload + 1, "s%dr%dk%d", &seat, &row, &rank) < 2) return;
     if (klhro_rules(&rules, 0) && seat == klhro_myseat(rules)) { if (klhro.log) klog("hire-online: ignored a request for the host's own seat %d", seat); return; }   /* G2 */
     why = klhro_decide(seat, row, rank, &nt);
     if (klhro.log && why) klog("hire-online: seat %d asked for %s: refused, %s", seat, row >= 1 && row <= KLHR_N ? klhr_name[row] : "?", klhro_why(why));
-    snprintf(pay, sizeof pay, "s%dr%do%dm%d", seat, row, why == KLHRO_OK, why);
-    knc_send("HIREA", pay, -1);
+    snprintf(pay, sizeof pay, "As%dr%do%dm%d", seat, row, why == KLHRO_OK, why);
+    knc_send("HIRE", pay, -1);
 }
 
 static void klhro_on_answer(const struct knc_msg *m, int src)
-{   /* CLIENT: HIREA s<seat>r<row>o<ok>m<reason> */
+{   /* CLIENT: HIRE A s<seat>r<row>o<ok>m<reason> */
     int seat = -1, row = 0, ok = 0, why = 0; DWORD rules = 0;
     (void)src;
     if (!klhro.on || klhro_host() || m->role != 2) return;
-    if (sscanf(m->payload, "s%dr%do%dm%d", &seat, &row, &ok, &why) < 3) return;
+    if (m->payload[0] != 'A' || sscanf(m->payload + 1, "s%dr%do%dm%d", &seat, &row, &ok, &why) < 3) return;
     if (!klhro_rules(&rules, 0) || seat != klhro_myseat(rules)) return;
     if (klhro.pend != row && !(ok && !klhr_next)) return;         /* a late 'ok' (after the 6 s timeout) is still taken: the host has charged this seat, so the body must be worn (the host judged it, seat checked above) */
     klhro.pend = 0;
@@ -181,6 +181,13 @@ static void klhro_on_answer(const struct knc_msg *m, int src)
 }
 
 /* from klhr_set when kl_online(): the player pressed KLHire<row>. Returns 1 when this file handled it (even a refusal). */
+/* ONE channel type 'HIRE' (payload 'Q...' = ask, 'A...' = answer): klnetchan.c holds only KNC_HANDLERS = 8 types and kldown_mirror (2) + klucc (3) + klucchide (2) already take 7;
+   two types here made 9 and the 9th (HIREA) was silently dropped, so a client never heard the host's answer when all of them were on (audit 2026-10-27). */
+static void klhro_on_msg(const struct knc_msg *m, int src)
+{
+    if (m->payload[0] == 'Q') klhro_on_ask(m, src); else if (m->payload[0] == 'A') klhro_on_answer(m, src);
+}
+
 static int klhro_set(int row)
 {
     DWORD rules = 0; int seat, rank = -1, why;
@@ -200,8 +207,8 @@ static int klhro_set(int row)
     {
         char pay[48]; unsigned q;
         if (klhro.pend && GetTickCount() - klhro.pendAt < KLHRO_ASKMS) { klog("hire-online: %s: still waiting for the host's answer about %s", klhr_name[row], klhr_name[klhro.pend]); return 1; }
-        snprintf(pay, sizeof pay, "s%dr%dk%d", seat, row, rank);
-        q = knc_send("HIREQ", pay, -1);
+        snprintf(pay, sizeof pay, "Qs%dr%dk%d", seat, row, rank);
+        q = knc_send("HIRE", pay, -1);
         if (!q) { klog("hire-online: %s: the message channel is not open (no session / [NetChan] off), nothing sent", klhr_name[row]); return 1; }
         klhro.pend = row; klhro.pendAt = GetTickCount();
         if (klhro.log) klog("hire-online: asked the host for %s (seat %d, rank %d)", klhr_name[row], seat, rank);
@@ -240,8 +247,7 @@ static void klhro_init(void)
     klhro.log = GetPrivateProfileIntA("Hire", "OnlineLog", 1, klh_ini);
     if (!klhro.on) return;
     knc_want("hire-online");
-    knc_on("HIREQ", klhro_on_ask);
-    knc_on("HIREA", klhro_on_answer);
+    knc_on("HIRE", klhro_on_msg);
     klog("hire-online: on (client asks, host judges and spends with the game's own routines, the body travels by klcharonline's look channel). Needs [NetChan], [CharOnline] Enable=1, [Character] Enable=1. NOT RUN IN THE GAME");
 }
 
