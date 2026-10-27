@@ -33,6 +33,7 @@
  *   Enable=1           the Arcade hire switch (also needed here: it makes the KLHire<n> rows answer)
  *   Online=0           1 = hire online as described above (needs [NetChan] reachable, [CharOnline] Enable=1, [Character] Enable=1)
  *   OnlineLog=1
+ *   OnlineTestBuy=0    (bench only, recommended off) character index 1..16: once per round per peer in the shop phase press KLHire<n> through klhr_set (the real row path); logs 'hire-online: TEST ...'. Money is never faked: a seat that cannot pay is a valid result.
  */
 #ifndef KLHIRE_ONLINE_C
 #define KLHIRE_ONLINE_C
@@ -46,6 +47,7 @@ static struct {
     int pend; DWORD pendAt;                    /* client: the row asked, waiting for HIRE/A */
     int phase0, act, save;                     /* last phase (0 none, 1 round, 2 shop), the hired body worn now, klc_char before it */
     int told;
+    int tb, tbDone, tbState, tbJud, tbSeat; DWORD tbAt, tbT, tbRes, tbBefore;   /* OnlineTestBuy bench: row, fired this round, 0 idle / 1 asked, judgement (-1 none), seat, phase-2 entry, ask time, answer seen, money before */
 } klhro;
 
 /* ---- the pure decisions (no game reads): kept in one place so the reasons are the same on the host and in the log ---- */
@@ -189,7 +191,7 @@ static void klhro_on_answer(const struct knc_msg *m, int src)
     if (m->payload[0] != 'A' || sscanf(m->payload + 1, "s%dr%do%dm%d", &seat, &row, &ok, &why) < 3) return;
     if (!klhro_rules(&rules, 0) || seat != klhro_myseat(rules)) return;
     if (klhro.pend != row && !(ok && !klhr_next)) return;         /* a late 'ok' (after the 6 s timeout) is still taken: the host has charged this seat, so the body must be worn (the host judged it, seat checked above) */
-    klhro.pend = 0;
+    klhro.pend = 0; klhro.tbJud = ok ? 0 : why;
     if (ok) { klhr_next = row; if (klhro.log) klog("hire-online: the host accepted: %s hired for the next round", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?"); }
     else klog("hire-online: the host refused %s: %s", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?", klhro_why(why));
 }
@@ -213,7 +215,7 @@ static int klhro_set(int row)
     if (!klhr_avail(row)) { klog("hire-online: %s refused: this level has no body for him (no wardrobe); nothing charged", klhr_name[row]); return 1; }
     if (klhr_rankgate && !klhr_rank(&rank)) rank = -1;
     if (klhro_host()) {
-        why = klhro_decide(seat, row, rank, 0);
+        why = klhro_decide(seat, row, rank, 0); klhro.tbJud = why;
         if (why) klog("hire-online: %s refused: %s", klhr_name[row], klhro_why(why));
         else { klhr_next = row; klhro.paid[seat] = row; }
         return 1;
@@ -228,6 +230,37 @@ static int klhro_set(int row)
         if (klhro.log) klog("hire-online: asked the host for %s (seat %d, rank %d)", klhr_name[row], seat, rank);
     }
     return 1;
+}
+
+/* OnlineTestBuy (bench only): the unattended benches cannot click a KLHire row, so once per round per peer, a few seconds into the shop phase, call klhr_set(row, 1) = exactly what a row press calls
+   (-> klhro_set: same phase / seat / avail / rank checks, client asks the host, host klhro_decide + game spenders). Nothing is faked, not even money. Never in Arcade (kl_online() only). */
+static void klhro_testbuy(int ph)
+{
+    DWORD rules = 0, S = 0, a = 0, b = 0, now = GetTickCount(); int row = klhro.tb, seat;
+    if (row < 1 || row > KLHR_N || !kl_online()) return;
+    if (ph == 1) {
+        if (klhro.phase0 != 1 && klhro.tbState) klog("hire-online: TEST body applied: asked %s, round starts with klc_char=%d, hired body worn %d (%s)", klhr_name[row], (int)klc_char, klhro.act, klhro.act == row ? "APPLIED" : "NOT applied (refused, unaffordable, or no answer)");
+        if (klhro.phase0 != 1) { klhro.tbDone = 0; klhro.tbState = 0; }
+        klhro.tbAt = 0; return;
+    }
+    if (ph != 2) { klhro.tbAt = 0; return; }
+    if (!klhro.tbAt) klhro.tbAt = now ? now : 1;
+    if (klhro.tbState == 1) {                                                              /* follow-up: judgement + money after, 1.5 s after the answer (replication, G5) */
+        if (klhro.pend) return;
+        if (!klhro.tbRes) { klhro.tbRes = now ? now : 1; return; }
+        if (now - klhro.tbRes < 1500) return;
+        a = b = 0;
+        if (klhro_rules(&rules, &S) && klhro_money(S, klhro.tbSeat, &a, &b))
+            klog("hire-online: TEST result: judgement=%s, hired for next round=%s, money before %lu after %lu", klhro.tbJud < 0 ? "none (refused before judging, or no answer; see the lines above)" : klhro_why(klhro.tbJud), klhr_next == row ? "yes" : "no", (unsigned long)klhro.tbBefore, (unsigned long)(a + b));
+        else klog("hire-online: TEST result: judgement=%s, hired for next round=%s, money after unreadable", klhro.tbJud < 0 ? "none" : klhro_why(klhro.tbJud), klhr_next == row ? "yes" : "no");
+        klhro.tbState = 2; return;
+    }
+    if (klhro.tbDone || now - klhro.tbAt < 3000) return;
+    if (!klhro_rules(&rules, &S) || (seat = klhro_myseat(rules)) < 0 || !klhro_money(S, seat, &a, &b)) return;   /* wait until the seat and the money are readable */
+    klhro.tbDone = 1; klhro.tbState = 1; klhro.tbSeat = seat; klhro.tbJud = -1; klhro.tbRes = 0; klhro.tbT = now; klhro.tbBefore = a + b;
+    klog("hire-online: TEST buy of character %d requested (%s, %s, seat %d, price $%d, money %lu = %lu + %lu: %s)", row, klhr_name[row], klhro_host() ? "host" : "client", seat, klhr_price[row], (unsigned long)(a + b), (unsigned long)a, (unsigned long)b,
+         (unsigned __int64)a + b >= (unsigned)klhr_price[row] ? "can afford" : "CANNOT afford, a refusal is the valid result");
+    klhr_set(row, 1);
 }
 
 /* from klhr_tick, every frame: the round clock. Applies the hired body at the round's start and takes it back at its end. */
@@ -262,6 +295,7 @@ static void klhro_tick(void)
         klog("hire-online: round over: the hired body is given back, Heister page choice %d", klhro.save);
         klhro.act = 0;
     }
+    klhro_testbuy(ph);
     klhro.phase0 = ph;
 }
 
@@ -269,7 +303,9 @@ static void klhro_init(void)
 {
     klhro.on = klhr_on && GetPrivateProfileIntA("Hire", "Online", 0, klh_ini) != 0;
     klhro.log = GetPrivateProfileIntA("Hire", "OnlineLog", 1, klh_ini);
+    klhro.tb = GetPrivateProfileIntA("Hire", "OnlineTestBuy", 0, klh_ini);
     if (!klhro.on) return;
+    if (klhro.tb) klog("hire-online: [Hire] OnlineTestBuy=%d (bench only, recommended off): each peer presses KLHire%d once per round in the shop phase", klhro.tb, klhro.tb);
     knc_want("hire-online");
     knc_on("HIRE", klhro_on_msg);
     klog("hire-online: on (client asks, host judges and spends with the game's own routines, the body travels by klcharonline's look channel). Needs [NetChan], [CharOnline] Enable=1, [Character] Enable=1. NOT RUN IN THE GAME");
