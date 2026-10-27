@@ -34,21 +34,25 @@ static int kvo_crew_on(void)
 static int kvo_online_who(struct klw_who *w, char *name)
 {
     static struct klw_who last; static char lname[32], lsn[8][32]; static DWORD lat, ltry, lround_rules, lhash; static int lround = -1, lok;
-    DWORD now = GetTickCount(), pl, li = 0, hsh = 0; struct klor_snap o; char scene[160];
+    DWORD now = GetTickCount(), pl, li = 0, hsh = 0; struct klor_snap o; char scene[160]; int why = 0, wf = -1, wn = 0;   /* why: the refusal, for the 10-27 'who refused' line */
+    static int toldwhy = -1, nwhy;
     name[0] = 0;
     if (lok && (DWORD)(now - ltry) < 400) { *w = last; snprintf(name, 32, "%s", lname); return 1; }   /* cached: klor_read is a scan */
     ltry = now ? now : 1;
     pl = klu_r.osd ? klh_rd32(klu_r.osd + KLU_O_PLIST) : 0;
-    if (pl && klu_is_plist(pl) && klh_rd(pl + 0xefc, &li, 4) && li < 8) {
-        klor_noev = 1; lok = klor_read(&o, (int)li) && o.ok; klor_noev = 0;      /* this reader never takes the kill-feed events */
+    if (!pl) why = 1; else if (!klu_is_plist(pl)) why = 2; else if (!klh_rd(pl + 0xefc, &li, 4) || li >= 8) why = 3;
+    if (!why) {
+        int rd; klor_noev = 1; rd = klor_read(&o, (int)li); lok = rd && o.ok; klor_noev = 0;      /* this reader never takes the kill-feed events */
+        if (!lok) why = rd ? 5 : 4;
         if (lok) {
             int k, f = -1;
             for (k = 0; k < o.n; k++) if (o.r[k].seat == (int)li) f = k;
-            if (f < 0 || !o.r[f].name[0] || !klh_scene(scene, sizeof scene)) lok = 0;
+            wf = f; wn = o.n;
+            if (f < 0 || !o.r[f].name[0] || !klh_scene(scene, sizeof scene)) { lok = 0; why = f < 0 ? 6 : !o.r[f].name[0] ? 7 : 8; }
             else {
                 memset(&last, 0, sizeof last); last.human = 0; last.rules = o.b.rules; last.state = o.b.state; last.n = 1;
                 last.nchar = klor_s.src.n; last.wardrobe = klor_s.src.wardrobe;
-                if (!klh_level_key(scene, last.key, sizeof last.key)) lok = 0;
+                if (!klh_level_key(scene, last.key, sizeof last.key)) { lok = 0; why = 9; }
                 last.m[0].rec = (int)li; last.m[0].ch = o.r[f].ch; last.m[0].model = o.r[f].model; last.m[0].actor = o.r[f].actor;
                 snprintf(lname, sizeof lname, "%s", o.r[f].name);
                 memset(lsn, 0, sizeof lsn); snprintf(lsn[li], sizeof lsn[li], "%s", o.r[f].name);
@@ -77,6 +81,11 @@ static int kvo_online_who(struct klw_who *w, char *name)
             }
         }
     } else lok = 0;
+    if (why != toldwhy && nwhy < 40) {                                                      /* 10-27 (bench Q27_DD01oob: the client never got a local seat): one line per change of the reason */
+        static const char *const wtxt[] = { "none (ok)", "no player list (osd)", "not the FA player list", "local index unreadable or >= 8", "klor_read failed", "klor_read not ok", "no row with the local seat", "the local row has no name", "no scene", "no level key" };
+        toldwhy = why; nwhy++;
+        klog("voice: online who: %s (osd %08lx list %08lx local %lu, rows %d, local row %d)", wtxt[why], (unsigned long)klu_r.osd, (unsigned long)pl, (unsigned long)li, wn, wf);
+    }
     memcpy(kvo_onl_seatname, lsn, sizeof lsn);
     if (lok) { lat = now ? now : 1; *w = last; snprintf(name, 32, "%s", lname); return 1; }
     if (lat && (DWORD)(now - lat) < 3000) { *w = last; snprintf(name, 32, "%s", lname); return 1; }    /* a short read failure does not flap the swaps */
