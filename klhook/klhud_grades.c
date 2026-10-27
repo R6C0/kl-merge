@@ -35,11 +35,16 @@
 #define KLGRD_VT_PROFILE 0x140                  /* vtable slot: the profile data, no arguments */
 #define KLGRD_PROF_XP    (0x15b8 + 0x90)        /* profile + 0x15b8 + player 0 * 0xc8, word +0x90 = FA experience */
 #define KLGRD_MAXI       32
+/* the stat name the game passes to ISteamUserStats::GetStat / SetStat for the FA experience: 'ExperiencePoints_FA' is in the SetStat lines of
+   a live session end (re\fa_round.md:636, re\leaderboard.md 78) - the game's own profile field name; not re-read from the exe's string table here */
+#define KLGRD_STEAM_STAT "ExperiencePoints_FA"
+static int klx_get_stat_int(const char *name, int *v);      /* klsteam.c (included later): the REAL GetStat through the proxy's saved interface, read only */
 
 static struct {
     int on, badge, rankup, letter, style, set, source, botrank, probe, otags;
     struct klgrd_cfg c;
     int local_xp, local_ok, local_told, local_bad; DWORD local_at;
+    int steamxp, local_src, steam_xp, steam_ok, steam_told, steam_failtold; DWORD steam_at;     /* [Grades] SteamXP: the local seat's xp from the Steam stat when the profile reads 0 (read only) */
     int oxp[KLGRD_MAXI], orate[KLGRD_MAXI], o_ok[KLGRD_MAXI]; int o_live;           /* online S values per seat; o_live: a nonzero experience was seen */
     int base[KLGRD_MAXI], base_ok[KLGRD_MAXI], cur[KLGRD_MAXI], cur_loc[KLGRD_MAXI];
     int told_up;
@@ -61,6 +66,7 @@ static void klgrd_init(void)
     if (!klgrd.on) return;
     klgrd.badge = klgrd_ini("Badge", 0, 0, 1); klgrd.rankup = klgrd_ini("RankUp", 0, 0, 1); klgrd.letter = klgrd_ini("Letter", 0, 0, 1);
     klgrd.style = klgrd_ini("BadgeStyle", 0, 0, 1); klgrd.set = klgrd_ini("NameSet", 0, 0, 1); klgrd.source = klgrd_ini("Source", 0, 0, 1);
+    klgrd.steamxp = klgrd_ini("SteamXP", 0, 0, 1);
     klgrd.botrank = klgrd_ini("BotRank", -1, -1, 7); klgrd.probe = klgrd_ini("Probe", 0, 0, 1); klgrd.otags = klgrd_ini("OnlineTags", 0, 0, 1);
     for (i = 0; i < 7; i++) klgrd.c.thr[i] = klgrd_ini(thr[i], klgrd.c.thr[i], 0, 30000);
     for (i = 1; i < 7; i++) if (klgrd.c.thr[i] < klgrd.c.thr[i - 1]) { klog("grades: Thr%d < Thr%d: the table is not rising, the defaults are used", i + 1, i); klgrd_defaults(&klgrd.c); break; }
@@ -105,9 +111,25 @@ static void klgrd_tick(int game_thread)
     if (klgrd.local_at && now - klgrd.local_at < (klgrd.local_bad >= 5 ? 10000u : 1000u)) return;      /* review: was 'give up after 5 failures' = for good, though the profile manager is not up for the first seconds; now it retries every 10 s */
     klgrd.local_at = now ? now : 1;
     ok = klgrd_read_local_xp(&xp);
+    klgrd.local_src = 0;
+    if (klgrd.steamxp && (!ok || xp == 0)) {                 /* [Grades] SteamXP: a bench skips ZPressStart, the profile reads 0 (or is not built): ask Steam, read only, cached */
+        int sx = 0;
+        if (klgrd.steam_at && now - klgrd.steam_at < 5000u) { if (klgrd.steam_ok) { sx = klgrd.steam_xp; ok = 1; xp = sx; klgrd.local_src = 1; } }
+        else {
+            klgrd.steam_at = now ? now : 1;
+            if (klx_get_stat_int(KLGRD_STEAM_STAT, &sx)) {
+                klgrd.steam_ok = 1; klgrd.steam_xp = sx;
+                if (!klgrd.steam_told) { klgrd.steam_told = 1; klog("grades: local xp %d from Steam stat '%s' (profile read %d)", sx, KLGRD_STEAM_STAT, ok ? xp : 0); }
+                ok = 1; xp = sx; klgrd.local_src = 1;
+            } else {
+                klgrd.steam_ok = 0;
+                if (!klgrd.steam_failtold) { klgrd.steam_failtold = 1; klog("grades: Steam GetStat('%s') failed (no Steam, unguarded interface, or stats not received yet); retried every 5 s, no more lines", KLGRD_STEAM_STAT); }
+            }
+        }
+    }
     if (!ok) { if (!klgrd.local_ok && ++klgrd.local_bad == 5) klog("grades: the local profile experience is not readable (code or pointers differ): no badge for you"); return; }
     klgrd.local_bad = 0;
-    if (!klgrd.local_told || klgrd.local_xp != xp) { klgrd.local_told = 1; klog("grades: your profile experience %d = rank %d (%s)", xp, klgrd_rank_of_xp(&klgrd.c, xp), klgrd_name_of(klgrd.set, klgrd_rank_of_xp(&klgrd.c, xp))); }
+    if (!klgrd.local_told || klgrd.local_xp != xp) { klgrd.local_told = 1; klog("grades: your %s experience %d = rank %d (%s)", klgrd.local_src ? "Steam" : "profile", xp, klgrd_rank_of_xp(&klgrd.c, xp), klgrd_name_of(klgrd.set, klgrd_rank_of_xp(&klgrd.c, xp))); }
     klgrd.local_xp = xp; klgrd.local_ok = 1;
 }
 
@@ -132,7 +154,11 @@ static void klgrd_note_online(const struct klor_snap *o)
 static int klgrd_rank(int online, int idx, int is_local)
 {
     if (!klgrd.on || idx < 0 || idx >= KLGRD_MAXI) return -1;
-    if (is_local && klgrd.local_ok) return klgrd_rank_of_xp(&klgrd.c, klgrd.local_xp);
+    if (is_local && klgrd.local_ok) {
+        static int told_rank = -1; int rk = klgrd_rank_of_xp(&klgrd.c, klgrd.local_xp);
+        if (rk != told_rank) { told_rank = rk; klog("grades: own badge drawn: rank %d '%s' xp %d (source %s)", rk, klgrd_name_of(klgrd.set, rk), klgrd.local_xp, klgrd.local_src ? "steam" : "profile"); }
+        return rk;
+    }
     if (is_local) return -1;
     if (online && klgrd.o_ok[idx]) {
         if (klgrd.source == 1) return klgrd.orate[idx] >= 0 && klgrd.orate[idx] < KLGRD_NRANK ? klgrd.orate[idx] : -1;

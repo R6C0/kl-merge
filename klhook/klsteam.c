@@ -502,6 +502,19 @@ static unsigned __int64 __fastcall klx_FindOrCreateLeaderboard(void *self, void 
     return ((unsigned __int64 (__fastcall *)(void *, void *, const char *, int, int))KLX_REAL(20))(klx_real, 0, name, sort, display);
 }
 
+/* [Grades] SteamXP (klhud_grades.c): ONE read of an int stat through the REAL interface's slot 2 GetStat(name, int *), never a write. The proxy
+   keeps no cached stats; the interface is the same one the game gets (klx_SteamUserStats validates the 007 table). -> 1 = *v valid (Steam has
+   the stats: RequestCurrentStats completed, else GetStat returns false), 0 = no Steam / interface not guarded / stats not received. Game thread. */
+static void *__cdecl klx_SteamUserStats(void);
+static int klx_get_stat_int(const char *name, int *v)
+{
+    int x = 0;
+    if (!klx_on || !klx_real_accessor || klx_SteamUserStats() != (void *)&klx_proxy || !klx_real) return 0;
+    if (!((char (__fastcall *)(void *, void *, const char *, int *))KLX_REAL(2))(klx_real, 0, name, &x)) return 0;
+    *v = x;
+    return 1;
+}
+
 static const struct { int slot; void *fn; } klx_writes[9] = {
     { 3, (void *)klx_SetStatF }, { 4, (void *)klx_SetStatI }, { 5, (void *)klx_UpdateAvgRateStat }, { 7, (void *)klx_SetAchievement }, { 8, (void *)klx_ClearAchievement },
     { 10, (void *)klx_StoreStats }, { 13, (void *)klx_IndicateAchievementProgress }, { 19, (void *)klx_ResetAllStats }, { 28, (void *)klx_UploadLeaderboardScore } };

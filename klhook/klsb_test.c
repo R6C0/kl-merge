@@ -33,6 +33,7 @@ static int klh_kind(const void *p, int n, char *sec) { (void)p; (void)n; strcpy(
 static int klh_scene(char *out, int cap) { (void)cap; out[0] = 0; return 0; }
 static int klx_on;
 static int klx_level_verdict(const char *scene, char *why) { (void)scene; why[0] = 0; return 2; }
+static int klx_get_stat_int(const char *name, int *v) { (void)name; (void)v; return 0; }      /* klsteam.c stub: SteamXP bench off-game */
 #define KL2_GAMEDATA 0xdd265cu
 #define KL2_SYSIF    0xdd2640u
 static int klnm_name(DWORD at, char *out, int cap) { (void)at; (void)out; (void)cap; return 0; }
