@@ -453,10 +453,10 @@ static void kspg_netlog(int row, DWORD carrier, DWORD ents, DWORD n)
  * the session-state pass 0x8d6890 (host: inside 0x75f310 after the pool build 0x5230a0, state 0x14/0x15 -> 0x16; client twin 0x7bb6c0 + sweep 0x7282f0) and ids come
  * from 0x6ece90 (entity-table order), so every peer must make the same guns in the same order. Our objects were made later (premake / enforce), after that one
  * pass, hence +0x13c = 0 (kspg_netok keeps the stock gun then; this gate stays as the safety net).
- * How: the two `call 0x5230a0` sites (host 0x75f313, client 0x7bb6c3; both E8 rel32, followed by `mov ecx,[0x168e598]`) are retargeted to kspg_early_h / _c:
- * call the original, then make every page II row (row ascending, kspg.p[row].ok, not a [Shop] Swap row) through kspg_make, independent of any buy. The pool is built
- * and X is not yet made (state test follows), so the pass creates X for ours too. A code patch: refused in a SHIP build and inside hashed ranges (klh_poke guard),
- * then the toggle stays off (logged). GUESS: the pool (kls_vec) and the UI object (+0x15b0, kspg_make's template lookup) are ready right after 0x5230a0; if not,
+ * How: kspg_early_make is called from kllobby.c's slot-26 wrapper (session manager SetState 0x74c080, private vtable copy, no code patch) when the handler asks
+ * for state 0x16 from return address 0x75f340 (host) / 0x7bb6ec (client), i.e. right after the pool build 0x5230a0 and before the DO pass, same frame:
+ * make every page II row (row ascending, kspg.p[row].ok, not a [Shop] Swap row) through kspg_make, independent of any buy. The pool is built
+ * and X is not yet made (state test follows), so the pass creates X for ours too. SessionSafe-legal (data write only). GUESS: the pool (kls_vec) and the UI object (+0x15b0, kspg_make's template lookup) are ready right after 0x5230a0; if not,
  * kspg_make fails, the log says so, and the old paths (enforce fallback) stay as they were. */
 typedef void (*kspg_orig_t)(void);
 static void kspg_early_body(int host)
@@ -492,8 +492,6 @@ static void kspg_early_make(int host)
     __try { kspg_early_body(host); }
     __except (1) { kspg.earlyOk = 0; klog("shopPage: early make FAULTED (%s site): OnlineEarlyMake switched off, the stock gun stays (kspg_netok)", host ? "host" : "client"); }
 }
-static void kspg_early_h(void) { ((kspg_orig_t)(DWORD_PTR)KLH_VA(0x5230a0))(); kspg_early_make(1); }
-static void kspg_early_c(void) { ((kspg_orig_t)(DWORD_PTR)KLH_VA(0x5230a0))(); kspg_early_make(0); }
 
 /* once per round, from the tick, after the stock pass would have run (state >= 0x16, or 5 s): per row what the pass did to our objects */
 static void kspg_early_report(void)
@@ -512,33 +510,29 @@ static void kspg_early_report(void)
     }
 }
 
-/* patch both call sites, once (needs a tick: the exe is verified by then); the bytes are checked first, a half patch is rolled back */
+/* Hook the session manager's SetState (vtable slot 26, 0x74c080) through kllobby.c's private vtable copy (kllb_slot26): no code byte is written, so this is
+ * legal under SessionSafe=1 and in a SHIP build (the old call-site retarget of 0x75f313 / 0x7bb6c3 was a hashed .text write, REFUSED there; it is gone).
+ * Once (needs a tick: the exe is verified by then). Read-only byte checks first: the pool-build call at both sites and the `mov edx,[eax+0x68] / push 0x16 /
+ * call edx` that is slot 26's caller (return addresses 0x75f340 / 0x7bb6ec, the gate in kllb_slot26). Nothing is written here, so there is nothing to roll back;
+ * the vptr swap itself happens per session object in kllb_early_tick. GUESS (not run in the game): the swap lands before the session reaches state 0x14. */
 static void kspg_early_patch(void)
 {
-    static const DWORD site[2] = { 0x75f313, 0x7bb6c3 };
-    static const BYTE next[6] = { 0x8b, 0x0d, 0x98, 0xe5, 0x68, 0x01 };            /* mov ecx,[0x168e598] right after each call */
-    void (*mine[2])(void) = { kspg_early_h, kspg_early_c };
-    BYTE expect[2][5], put[2][5], b[6]; int i, done = 0, r1, r2;
+    static const DWORD call_at[2] = { 0x75f313, 0x7bb6c3 };
+    static const DWORD set_at[2]  = { 0x75f339, 0x7bb6e5 };
+    static const BYTE setb[7] = { 0x8b, 0x50, 0x68, 0x6a, 0x16, 0xff, 0xd2 };        /* mov edx,[eax+0x68] / push 0x16 / call edx */
+    int i;
     kspg.earlyTried = 1;
-    memset(b, 0, sizeof b);
     for (i = 0; i < 2; i++) {
-        DWORD rel = (DWORD)(DWORD_PTR)(KLH_VA(0x5230a0) - (KLH_VA(site[i]) + 5)), nrel = (DWORD)((BYTE *)(DWORD_PTR)mine[i] - (KLH_VA(site[i]) + 5));
-        expect[i][0] = put[i][0] = 0xE8; memcpy(expect[i] + 1, &rel, 4); memcpy(put[i] + 1, &nrel, 4);
-        {
-            BYTE c[6]; memset(c, 0, sizeof c);
-            r1 = klh_rd((DWORD_PTR)KLH_VA(site[i]), b, 5) && !memcmp(b, expect[i], 5);
-            r2 = klh_rd((DWORD_PTR)KLH_VA(site[i] + 5), c, 6) && !memcmp(c, next, 6);
-            if (!r1 || !r2) {
-                klog("shopPage: OnlineEarlyMake: %s at %08lx (call bytes %02x %02x %02x %02x %02x, next bytes %02x %02x %02x %02x %02x %02x): not `call 0x5230a0` + `mov ecx,[0x168e598]`, the toggle stays OFF",
-                     !r1 ? "the call check failed" : "the next-instruction check failed", (unsigned long)site[i], b[0], b[1], b[2], b[3], b[4], c[0], c[1], c[2], c[3], c[4], c[5]);
-                return;
-            }
+        BYTE b[5], s[7]; DWORD rel = (DWORD)(DWORD_PTR)(KLH_VA(0x5230a0) - (KLH_VA(call_at[i]) + 5));
+        memset(b, 0, sizeof b); memset(s, 0, sizeof s);
+        if (!klh_rd((DWORD_PTR)KLH_VA(call_at[i]), b, 5) || b[0] != 0xE8 || memcmp(b + 1, &rel, 4) || !klh_rd((DWORD_PTR)KLH_VA(set_at[i]), s, 7) || memcmp(s, setb, 7)) {
+            klog("shopPage: OnlineEarlyMake: REFUSED, the SetState site bytes differ at %08lx / %08lx (call %02x %02x %02x %02x %02x, setstate %02x %02x %02x %02x %02x %02x %02x): not `call 0x5230a0` + `push 0x16 / call [vtable+0x68]`, the toggle stays OFF",
+                 (unsigned long)call_at[i], (unsigned long)set_at[i], b[0], b[1], b[2], b[3], b[4], s[0], s[1], s[2], s[3], s[4], s[5], s[6]);
+            return;
         }
     }
-    for (i = 0; i < 2; i++) { if (klh_poke(KLH_VA(site[i]), expect[i], 5, put[i], 5, "pool build call (OnlineEarlyMake)")) done++; else break; }
-    if (done == 2) { kspg.earlyOk = 1; klog("shopPage: OnlineEarlyMake: ON (call sites 0x75f313 / 0x7bb6c3 retargeted; page II objects are made right after the pool build, online only)"); return; }
-    if (done == 1) klh_poke(KLH_VA(site[0]), put[0], 5, expect[0], 5, "pool build call (OnlineEarlyMake rollback)");
-    klog("shopPage: OnlineEarlyMake: the patch was REFUSED (SHIP build, SessionSafe=1 over a hashed range, or other bytes): the toggle stays OFF");
+    kllb_early_cb = kspg_early_make; kspg.earlyOk = 1;
+    klog("shopPage: OnlineEarlyMake: ON (sm vtable slot 26 SetState 0x74c080 wrapped through the private vtable, gated on return address 0x75f340 host / 0x7bb6ec client; page II objects are made between the pool build and the Quazal-DO pass, online only; no code patch)");
 }
 
 static void kspg_enforce(void)
@@ -849,6 +843,7 @@ static void klshoppage_tick(int game_thread)
     if (!kspg.on || !game_thread || !klh_exe_ok) return;
     now = GetTickCount();
     if (kspg.early && !kspg.earlyTried) kspg_early_patch();
+    if (kspg.earlyOk) kllb_early_tick();                              /* private sm vtable on every new session object (kllobby.c) */
     if (kspg.earlyPend) kspg_early_report();
     if (!looked) {
         HMODULE u = GetModuleHandleA("user32.dll"); looked = 1;

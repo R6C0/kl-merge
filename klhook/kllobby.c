@@ -89,6 +89,25 @@ static void __fastcall kllb_slot3(void *self, void *edx, DWORD word)
     kllb_real3(self, edx, word);
 }
 
+/* sm vtable slot 26 (0x74c080, thiscall, one stack argument, ret 4): ZSessionManagerMultiplayer::SetState(newState).
+   [ShopPage] OnlineEarlyMake (klshoppage.c) sets kllb_early_cb. The host handler 0x75f310 and the client twin 0x7bb6c0 both do
+   `call 0x5230a0` (pool build), the state test, then `push 0x16 / call [vtable+0x68]` (return addresses 0x75f340 / 0x7bb6ec) and right after it the
+   Quazal-DO pass (0x8d6890 / sweep 0x7282f0). So this call is exactly between the pool build and the DO pass, in the same frame, and needs no code patch
+   (the stock .rdata vtable is never written; only the heap object's vptr, like slot 3). The return-address gate keeps every other 0x16 request out.
+   The callback runs BEFORE the real SetState, so the state is still 0x14 / 0x15. */
+static void (*kllb_early_cb)(int host);
+static int kllb_early_ok;                                        /* 1 once the table is built with the known slots */
+static void (__fastcall *kllb_real26)(void *, void *, DWORD);
+static void __fastcall kllb_slot26(void *self, void *edx, DWORD st)
+{
+    if (st == 0x16 && kllb_early_cb) {
+        DWORD_PTR ra = (DWORD_PTR)_ReturnAddress();
+        if (ra == (DWORD_PTR)KLH_VA(0x75f340)) kllb_early_cb(1);
+        else if (ra == (DWORD_PTR)KLH_VA(0x7bb6ec)) kllb_early_cb(0);
+    }
+    kllb_real26(self, edx, st);
+}
+
 /* give the session manager the private vtable (once), whenever it shows the stock one */
 static void kllb_install(DWORD sm)
 {
@@ -96,16 +115,28 @@ static void kllb_install(DWORD sm)
     if (!kllb_vt[0]) {
         if (!klh_rd((DWORD_PTR)KLH_VA(0xbd1ebc - 4), kllb_vt, sizeof kllb_vt)) return;
         if (kllb_vt[1 + 3] != (DWORD)KLH_VA(0x61a410) || kllb_vt[1 + 26] != (DWORD)KLH_VA(0x74c080) || kllb_vt[1 + 27] != (DWORD)KLH_VA(0x6c49a0)) {
-            if (!InterlockedExchange(&told, 1)) klog("lobby: Solo: sm vtable slots 3 / 26 / 27 are %08lx / %08lx / %08lx, not the known ones: Solo is off", kllb_vt[1 + 3], kllb_vt[1 + 26], kllb_vt[1 + 27]);
-            kllb_solo = 0; return;
+            if (!InterlockedExchange(&told, 1)) klog("lobby: sm vtable slots 3 / 26 / 27 are %08lx / %08lx / %08lx, not the known ones: Solo and OnlineEarlyMake (private sm vtable) are off", kllb_vt[1 + 3], kllb_vt[1 + 26], kllb_vt[1 + 27]);
+            kllb_solo = 0; kllb_early_cb = 0; kllb_early_ok = 0; kllb_vt[0] = 0; return;   /* kllb_vt[0] cleared: stays a no-op, the table was never published */
         }
         kllb_real3 = (void (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)kllb_vt[1 + 3];
-        kllb_vt[1 + 3] = (DWORD)(DWORD_PTR)kllb_slot3;
+        kllb_vt[1 + 3] = (DWORD)(DWORD_PTR)kllb_slot3;                 /* passes through unless kllb_solo */
+        kllb_real26 = (void (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)kllb_vt[1 + 26];
+        kllb_vt[1 + 26] = (DWORD)(DWORD_PTR)kllb_slot26;               /* passes through unless kllb_early_cb */
         klh_sm_vt2 = (DWORD)(DWORD_PTR)&kllb_vt[1];
+        kllb_early_ok = 1;
     }
     vt = klh_sm_vt2;
     if (klh_data((void *)(DWORD_PTR)sm, &vt, 4, "session manager vtable") && !InterlockedExchange(&told, 1))
         klog("lobby: Solo: session manager %08lx now has the private vtable %08lx (slot 3 = the error word filter)", (unsigned long)sm, (unsigned long)vt);
+}
+
+/* OnlineEarlyMake: re-swap the vptr for every new session object (0x90ab00 creates it, 0x6c9710 deletes it); called from klshoppage_tick on the game thread */
+static void kllb_early_tick(void)
+{
+    DWORD sm;
+    if (!kllb_early_cb || !klh_exe_ok) return;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION)))) return;
+    if (klh_rd32(sm) == 0xbd1ebc) kllb_install(sm);
 }
 
 static void kllb_tick(void)
@@ -114,7 +145,7 @@ static void kllb_tick(void)
     if (!kllb_min || !klh_exe_ok || now - last < 200) return;
     last = now;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION)))) return;
-    if (kllb_solo && klh_rd32(sm) == 0xbd1ebc) kllb_install(sm);
+    if ((kllb_solo || kllb_early_cb) && klh_rd32(sm) == 0xbd1ebc) kllb_install(sm);
     if (!KLH_SM_VT_OK(klh_rd32(sm))) return;
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4) || !klh_rd(sm + 0xb9, &cur, 1)) return;
     if (role != 2 || mode != 4 || state != 0xe) { if (state < 0xd || state > 0xf) told_sm = 0; if (state < 0xd) kllb_orig = 0; return; }
