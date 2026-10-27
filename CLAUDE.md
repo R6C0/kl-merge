@@ -66,24 +66,16 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~22:30 - [a1] Arcade-1:1 merge (NOT installed/run): [Hire] OnlineIgnoreChar, [Int16Guard] (DM11B kept out online), [Camera] UnstickOnline (off).
+Ship dll with rtlift FedRide + INSTALL/UNDO_arcade1to1_1027.bat in C:\kl_build_1024rcade1to1_1027 (supersedes the rtlift dll; its zips still from the rtlift bat).
+Gaps and what is still not 1:1: re/online_arcade_gaps_1027.md.
+
 2026-10-27 ~21:15 - [rtlift] Retomoto lift (owner: police stuck): STAGED, not installed, untested: [Join] FedRide=2 (kljoin.c) + door box f10 -1 -> 10
 (tools/kl_lift_rearm.py). Install/undo bats in C:\kl_build_1024\rtlift_1027; details in re/open_work_log.md.
 
 2026-10-27 ~20:10 - [c9] Q27 at the grant end: 14 PASS since the park fix; Q27_DM11B FAIL kl2+0x1e4a22 = node |pos| > 1e6 (body fell forever).
 The local player's node sat ~65.5k below its spawn x 34077 (GUESS 16-bit x wrap in online placement; only DM11B spawns at x > 32767), bots fine. Not live-
 tested; next steps in re/open_work_log.md. Queue stopped at 20:00 (DM06R/DD09R commented out).
-
-2026-10-27 ~19:40 - [ce] Grant (00:40-20:00) ends. Smoke rotation clean all afternoon (DM/DD, 0 crashes). HIRE ONLINE PROVEN: HRF2 (host hires Tommy, worn
-round 2) + HRP2 (client asks Jean, host accepts, worn round 2, host sees him), 0 faults (ede090f53). [Hire] Enable stays 0 (recommended off until the owner tries it;
-needs the baked Hire window) - owner's call. ALL2R on 1027y twin PASS. Open: RankUp/Letter not seen live; intro '1 humans' on host = first-tick log (c3608f1b0 logs 2 s later).
-
-2026-10-27 ~17:55 - [c9] Q27 'landed on ShowAchievements' = MOUSE HOVER over a MainMenu row (not fps/PumpNoBlock). kl_solo_test --park (default on,
-22316075d) holds the cursor at 0,0 until the host round starts; the launch mode change re-centres it AND resets idle, so the park is unconditional; a mouse
-button, or a cursor off the known reset points with input < 3 s ago, = owner: bench aborts (RESULT says rerun). Since: DM09/DD07/DM02/DD02 PASS; reruns queued.
-
-2026-10-27 ~15:30 - [ce] OWNER ON SHIP 1027y (0f232362, ff7368983; ini sha1 015296dd; backups .before-1027y, UNDO_1027y.bat): + PumpNoBlock, Grades SteamXP,
-page II online buy (OnlineSend/OnlineApply/OnlineEarlyMake). Gate ALL2Y on the TEST twin d65471a6 (SHIP has no klauto): PASS both seats, 0 faults, client
-holds page II item 63 in round 2, badge rank 3 Thug from Steam xp 568. Open: link-table GUESS (+0x1c) refuted (log only); RankUp/Letter not yet seen live.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
