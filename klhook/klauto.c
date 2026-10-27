@@ -1688,7 +1688,8 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
         case C_WAITVAN: {                               /* the escape vehicle's state: byte [rules+0x1dc], rules = [[0x168e9e4]+0x54] with ZGameRulesHeist's vtable (klbot.c 1) */
             DWORD gs = kla_exe_ok ? kla_rd32((DWORD_PTR)VA(0x168e9e4)) : 0, rules = gs ? kla_rd32(gs + 0x54) : 0; BYTE veh = 0xff; float left = 0;
             DWORD vt = rules ? kla_rd32(rules) : 0;   /* Arcade's Heist rules, or online FA Sv 0xbd2eb4 / Cl 0xbd31e4: escprobe reads +0x1dc there too (BOSE1/BOSE2 live) */
-            if (vt == 0xbd3514 || vt == 0xbd2eb4 || vt == 0xbd31e4) { kla_rd(rules + 0x1dc, &veh, 1); kla_rd(rules + 0x1d8, &left, 4); }
+            DWORD s0 = vt ? kla_rd32(vt) : 0;           /* online the rules soon wear a PRIVATE heap copy of the vtable (klucchide.c / klucc_down.c / klroundkeep.c; ce6 log: 525444c4): match it by its slot 0 */
+            if (vt == 0xbd3514 || vt == 0xbd2eb4 || vt == 0xbd31e4 || (s0 && (s0 == kla_rd32(0xbd2eb4) || s0 == kla_rd32(0xbd31e4)))) { kla_rd(rules + 0x1dc, &veh, 1); kla_rd(rules + 0x1d8, &left, 4); }
             if (veh == c->n2 || (c->n2 == 3 && veh == 4) || (c->n2 == 1 && veh == 2)) {
                 kla_out(1, "script %d: the vehicle's state is %u (its timer %.1f s) after %lu ms", kla_pc + 1, veh, left, now - kla_cmd_t); next = 1; }
             else if (now - kla_cmd_t >= c->n) {
