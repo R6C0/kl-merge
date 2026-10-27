@@ -58,7 +58,7 @@ static struct {
     int ownIdx, pubIdx, pubC, pubM, pubO, pubWas;
     char pubStr[40];
     unsigned __int64 lobby;
-    UINT_PTR sock; int sockTried, toldOwn, toldNoWar, toldCode, toldOnline;
+    UINT_PTR sock; int sockTried, toldOwn, toldNoWar, toldCode, toldOnline, toldFollow;
     DWORD triedAt[KLCO_N]; int tried[KLCO_N]; LONG lastv[KLCO_N]; DWORD lastmodel[KLCO_N];
     DWORD whyAt[KLCO_N];
 } klco;
@@ -332,9 +332,18 @@ static void klco_tick(int game_thread)
         for (i = 0; i < n; i++) sig = sig * 31 + klco_ent(ents, n, i);
         if (sig != klco.entSig) {                                  /* a new level / round built new player objects: what peers said before is about other bodies */
             if (klco.entSig) { memset(klco.p, 0, sizeof klco.p); klog("charonline: the player table changed (new round): peer looks forgotten, they re-announce every 2 s"); }
-            klco.entSig = sig; klco.since = now; klco.pubStr[0] = 0; klco.diagAt = 0; klco.toldNoWar = 0;     /* D4 (re/netcode_players_1027.md): the stock-map 'no such model' note once per ROUND, not once per session */
+            klco.entSig = sig; klco.since = now; klco.pubStr[0] = 0; klco.diagAt = 0; klco.toldNoWar = 0; klco.toldFollow = 0;     /* D4 (re/netcode_players_1027.md): the stock-map 'no such model' note once per ROUND, not once per session */
         }
         idx = klco_find_own(ents, n, now, &pl, &how);
+        /* 10-27 (bench BOSE5c): after the van escape the spectator camera follows a peer and the gamedata slot points at HIS body; the host then
+           dressed the followed client as his own pick and announced it for entity 1. Keep my body while it is still in this round's table and the
+           new entity is one a peer has claimed (a peer's announced body is never mine) or is not a master on this machine (review: a peer that has
+           not announced yet; the master test 0x9425a0 is the same one the fallback below uses). */
+        if (idx >= 0 && idx < KLCO_N && klco.ownIdx >= 0 && klco.ownIdx < n && idx != klco.ownIdx && klco_ent(ents, n, klco.ownIdx) == klco.ownEnt
+            && (klco.p[idx].used || !klco_is_master(pl))) {
+            if (!klco.toldFollow) { klco.toldFollow = 1; klog("charonline: the player slot moved to peer entity %d (spectating?): my body stays entity %d", idx, klco.ownIdx); }
+            idx = klco.ownIdx; pl = klco.ownEnt;
+        }
         if (idx != klco.ownIdx || (idx >= 0 && pl != klco.ownEnt)) {
             BYTE type = 0; if (pl) klh_rd(pl + 0x273c, &type, 1);
             klog("charonline: my body: entity %d of %d (%08lx, type %u) found by %s%s", idx, n, pl, type, how == 1 ? "gamedata slot (Arcade's way)" : how == 2 ? "master scan 0x9425a0" : "nothing", idx < 0 ? " - NOT in the player table: nothing is sent or applied for me" : "");
