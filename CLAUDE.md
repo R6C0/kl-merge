@@ -66,13 +66,13 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~10:35 - [c9] ALL2H PASS (HideDead=0: one tag + 2 stray probe dots while dead, cosmetic). P2P3D PASS: page II b10 pressed, SWALLOWED,
+SHOPG asked the host, host judged 'refused not enough money' in 16 ms (round trip proven). ce installed SHIP 1027w 6feb9af1 at 10:31.
+Queue: C27_RSTQ/RST0 (double-Reset diag, a890ac178) -> GRT2, MPX2, HRF2, HRP2, ALL2R. Details: log 10:35.
+
 2026-10-27 ~10:32 - [ce] OWNER ON SHIP 1027w (6feb9af1, ff11724f5; backup .before-1027w): online names, killed-by, feed, intro card + map name, shop names,
 head tags (probe/overlap/hide while dead) proven by c9 ALL2D..H, 0 faults. Shop page II SHOPG ask -> host verdict proven (P2P3D, refused at $0).
 Next: page II buy writes (step 4, empty-pool guard int3 0x538f02), OnlineKilledStock bench, grades pass 2 (blocked on XP>0).
-
-2026-10-27 ~10:05 - [c9] ALL2G PASS on ce's out_ce_1027h_test: tags hidden while dead (0 draws), no stacked names, intro map name 'SUBWAY' both seats.
-P2P3C: shop test press gate fixed (phase 0x20, mode 2, no 0x5b97d8), but the stock press closes the weapon list so page II b10 was never pressed -> P2P3D reopens it.
-Queue: ALL2H -> P2P3D -> C27_RSTQ/RST0 (double-Reset diag) -> GRT2, MPX2, HRF2, HRP2, ALL2R. Details: log 10:05.
 
 2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
 Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
