@@ -1376,6 +1376,11 @@ static int klu_compose_in(int *state_ok)
                 if (k == loc) loc_pend = 0;
                 klu_on_name(&or_, have, &s, k, (int)loc, have && klu_onnames, nm, sizeof nm);     /* the heister CHARACTER's name (the owner's order 16:45) */
                 klgrd_decorate(nm, sizeof nm, 1, k, k == loc);     /* klhud_grades.c: [Grades] Badge */
+                if (klu_onskull && klu.log && k == loc) {     /* bench proof (HUD5 1027n: one line only, nothing changed): the local seat's deaths / state as read, drawn or not, one line per change */
+                    static int told_d = -2, told_k = -2;
+                    int dd = have ? (int)or_.deaths : -1;
+                    if (dd != told_d || kind != told_k) { told_d = dd; told_k = kind; klog("hud: ONLINE skulls state: row %d '%s' kind %d deaths %d -> lives %d (%s)", rows, nm, kind, dd, olives, kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR ? "drawn" : "not drawn in this state"); }
+                }
                 if (klu_onskull && have && k == loc && (kind == KLUV_K_YOU || kind == KLUV_K_TRAITOR)) {     /* [HUD] OnlineSkulls: death marks, as Arcade's lives row */
                     static int told_l = -2;                   /* bench proof: one line per lives value drawn (the screenshots are black on DX10) */
                     if (klu.log && olives != told_l) { told_l = olives; klog("hud: ONLINE skulls drawn: row %d '%s' lives %d (Lives=%d)", rows, nm, olives, klu.lives); }
@@ -1409,7 +1414,9 @@ static int klu_compose_in(int *state_ok)
             if (klu_onloot && klu.plates && klu.money) {      /* [HUD] OnlineLoot: the framed bar under TOTAL = the share of the map's loot taken so far (loot on the map vs the largest seen this round, klonline_read.c; 0 until read) */
                 float f = have && or_.loot_ok ? klor_loot_share(or_.loot_init, or_.loot_rem) : 0.0f;
                 static int told_f = -1; int pc = (int)(f * 100.0f);     /* bench proof: one line per whole percent drawn (the screenshots are black on DX10) */
-                if (klu.log && pc != told_f) { told_f = pc; klog("hud: ONLINE loot bar drawn: %d%% (read %s, init %ld, left %ld)", pc, have && or_.loot_ok ? "ok" : "not yet", have && or_.loot_ok ? (long)or_.loot_init : 0L, have && or_.loot_ok ? (long)or_.loot_rem : 0L); }
+                static int told_ok = -1; static long told_rem = -1; static DWORD told_t = 0;     /* HUD5 1027n: also on a read-state change, and on a loot-left change at most every 3 s (pc rounds 6.5M bars to 0% for small takes) */
+                int okn = have && or_.loot_ok; long remn = okn ? (long)or_.loot_rem : -1;
+                if (klu.log && (pc != told_f || okn != told_ok || (remn != told_rem && GetTickCount() - told_t >= 3000))) { told_f = pc; told_ok = okn; told_rem = remn; told_t = GetTickCount(); klog("hud: ONLINE loot bar drawn: %d%% (read %s, init %ld, left %ld)", pc, have && or_.loot_ok ? "ok" : "not yet", have && or_.loot_ok ? (long)or_.loot_init : 0L, have && or_.loot_ok ? (long)or_.loot_rem : 0L); }
                 klu_loot_bar(f);
             }
             if (klu_onvan && klu.money) klu_van_card(have ? (int)or_.esc_state : 0, have && or_.esc_state >= 3 && or_.esc_state <= 5 && or_.esc_timer > 0, have ? or_.esc_timer : 0.0f);   /* [HUD] OnlineVan: the Arcade van card, fed by the stock panel and, silent, the rules' mirrors */
