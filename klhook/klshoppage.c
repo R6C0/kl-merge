@@ -86,6 +86,7 @@ static struct { DWORD obj; int role; } kspg_role[KSPG_ROLES]; static int kspg_nr
 enum { KR_NONE = 0, KR_OLDPRI = 1, KR_OLDSEC = 2, KR_BIG = 11, KR_PRI = 12, KR_SEC = 13 };
 
 #include "klshoppage_probe.c"                              /* [ShopPage] OnlineProbe: pool / hand-out / buy log lines, no writes */
+#include "klshoppage_online.c"                             /* [ShopPage] OnlineSend: page II press sent to the host (SHOPG), host judges + logs, no writes */
 
 static int kspg_role_of(void *self)
 {
@@ -225,6 +226,7 @@ static void __fastcall kspg_sel(void *self, void *edx, DWORD *msg)
         int hi = (int)klh_rd32((DWORD_PTR)self + 0x90), sh = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW));
         if ((hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok) || (sh >= 0 && sh < KSPG_ROWS && kspg.p[sh].ok)) {
             if (kspg.probe) kspp_log("shopProbe: page2buy SWALLOWED row=%d carrier item=%lu message '%s' (would send the carrier's row to the host)", hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok ? hi : sh, (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * (DWORD)(hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok ? hi : sh)), nm);
+            kspo_press(hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok ? hi : sh);
             if (kspg.log) klog("shopPage: ONLINE: buy of page II row %d swallowed (view only online: the host's table has no such gun)", hi >= 0 && hi < KSPG_ROWS && kspg.p[hi].ok ? hi : sh);
             return;
         }
@@ -582,6 +584,7 @@ static void kspg_init(void)
     kspg.on = GetPrivateProfileIntA("ShopPage", "Enable", 0, klh_ini) != 0;
     kspg.probe = GetPrivateProfileIntA("ShopPage", "OnlineProbe", 0, klh_ini) != 0;      /* (recommended off until benched) read even with Enable=0: the pool poll needs no pairs */
     if (kspg.probe) klog("shopProbe: [ShopPage] OnlineProbe=1 (log only, writes nothing; at most %d lines)", KSPP_MAXLOG);
+    kspo_init();                                                                          /* OnlineSend (recommended off until benched): registers the SHOPG handler only when 1 */
     if (!kspg.on) return;
     kspg.key = (int)GetPrivateProfileIntA("ShopPage", "Key", 0x75, klh_ini);
     if (kspg.key < 1 || kspg.key > 0xfe) kspg.key = 0x75;
@@ -608,6 +611,7 @@ static void klshoppage_tick(int game_thread)
     static SHORT (WINAPI *gaks)(int); static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static int looked;
     static DWORD lastfull;
     if (kspg.probe && game_thread && klh_exe_ok) kspp_tick();
+    if (kspo.on && game_thread && klh_exe_ok) kspo_tick();
     if (!kspg.on || !game_thread || !klh_exe_ok) return;
     now = GetTickCount();
     if (!looked) {
