@@ -573,6 +573,7 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
             int k = me->killer; const struct klor_row *kr = k >= 0 ? klu_onrow(o, k) : 0; char kn[40];
             if (k == loc) snprintf(kn, sizeof kn, "YOURSELF");
             else if (kr && kr->used) { snprintf(kn, sizeof kn, "%s", kr->name[0] ? kr->name : "Player"); klor_upper(kn); }
+            else if (klu_onkillai && me->ai_killer[0]) { snprintf(kn, sizeof kn, "%s", me->ai_killer); klor_upper(kn); }   /* [HUD] OnlineKilledAI */
             else snprintf(kn, sizeof kn, "THE POLICE");
             snprintf(buf, sizeof buf, "KILLED BY  %s", kn);
             klsb_put(KLSB_T_KILLED, px + KLSB_X_KILLED, klu_cen(py + KLSB_Y_RESULT + 5.5f, KLU_FNT_LABEL), buf, KLU_C_CORAL);

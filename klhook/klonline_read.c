@@ -45,6 +45,8 @@
 #define KLOR_MONEY_VT   0x00bc874cu        /* ZOnlineMoneyCtrl */
 
 static struct { int on; } klor;
+static int klor_aikill;   /* [HUD] OnlineKilledAI (set by klhud.c's init): resolve a death by an AI heister */
+static DWORD klor_att[KLOR_MAX];   /* the last [player+0x2778] seen while the seat lived; re-keyed with klor_c */
 static struct { DWORD rules; int round, lobby; char name[KLOR_MAX][32]; int latch[KLOR_MAX]; struct klor_seatev sev[KLOR_MAX]; long loot_init; } klor_c;   /* caches re-keyed on rules / round / lobby (names, latch, feed steps, loot whole) */
 static struct klor_ev klor_pend[8]; static int klor_npend;           /* deaths resolved but not yet handed to the feed */
 static int klor_noev;                                                  /* set by a reader that is NOT the kill feed (klhud_board2.c's tick): it leaves the queue alone */
@@ -179,7 +181,7 @@ static int klor_read(struct klor_snap *o, int local)
     { int lobby = o->b.state < 0x17;
       if (klor_c.rules != o->b.rules || (o->round && o->round != klor_c.round) || lobby != klor_c.lobby) {
           klor_c.rules = o->b.rules; klor_c.round = o->round; klor_c.lobby = lobby; klor_c.loot_init = 0;
-          memset(klor_c.name, 0, sizeof klor_c.name);
+          memset(klor_c.name, 0, sizeof klor_c.name); memset(klor_att, 0, sizeof klor_att);
           for (i = 0; i < KLOR_MAX; i++) { klor_c.latch[i] = -1; klor_c.sev[i].prev = -1; klor_c.sev[i].at = 0; }
       } }
     /* the humans: one row per record in use (b.on_used), in seat order */
@@ -203,6 +205,7 @@ static int klor_read(struct klor_snap *o, int local)
         else if (k == local && klor_s.ok && klc_char >= 1 && klc_char <= klor_s.src.n) snprintf(w->name, sizeof w->name, "%s", klor_s.src.c[klc_char - 1].name);
         dead = klor_flags_dead(w->flags);
         w->alive = !(dead || (w->flags & 0x40));
+        if (klor_aikill && k < KLOR_MAX && w->player && !dead) { klor_att[k] = klh_rd32(w->player + 0x2778); }   /* unconditional: a cleared field must clear the saved attacker, else an old AI hit would be blamed for a later police kill */   /* GUESS: [player+0x2778] = attacker of the last bullet that hit him (klbalance.c / kldown.c read it the same way); kept while he lives, because it may clear at death */
         if (o->ok && k < KLOR_SEATS) {                           /* review #4: the S arrays hold 12 seats; a seat >= 12 would read the next array */
             { WORD xw = 0; signed char rt = -1; w->xp = w->rating = -1;      /* GUESS: Experience i16 at S+0xc8+2*seat, Rating i8 at S+0x17c+seat (field names only) */
               if (klh_rd(S + 0xc8 + 2 * k, &xw, 2)) w->xp = (int)xw;
@@ -239,6 +242,20 @@ static int klor_read(struct klor_snap *o, int local)
           w->model = klor_model(act[a]); ch = klor_char(w->model);
           if (ch >= 1) { w->ch = ch; snprintf(w->name, sizeof w->name, "%s", klor_s.src.c[ch - 1].name); o->names_ok++; }
       } }
+    if (klor_aikill) {                                           /* [HUD] OnlineKilledAI: a dead human no seat killed -> the AI heister behind the last bullet (a bot actor in o->bot); police stay blank */
+        int i2, b2;
+        for (i2 = 0; i2 < o->n; i2++) {
+            struct klor_row *w = &o->r[i2]; DWORD att;
+            w->ai_killer[0] = 0;
+            if (w->alive || w->killer >= 0 || w->seat < 0 || w->seat >= KLOR_MAX) continue;
+            att = klor_att[w->seat];
+            if (!att) continue;
+            for (b2 = 0; b2 < o->nbots; b2++) if (o->bot[b2].actor == att) {
+                snprintf(w->ai_killer, sizeof w->ai_killer, "%s", o->bot[b2].name[0] ? o->bot[b2].name : "A HEISTER");
+                { static int told; if (told < 12) { told++; klog("online read: seat %d was put down by an AI heister: attacker %08lx = bot %d '%s' (OnlineKilledAI)", w->seat, (unsigned long)att, b2, w->ai_killer); } }
+                break; }
+        }
+    }
     { static DWORD last_state = 0xffffffffu; static int last_n = -1, last_nb = -1, told;
       if ((o->b.state != last_state || o->n != last_n || o->nbots != last_nb) && told < 30) {
           told++; last_state = o->b.state; last_n = o->n; last_nb = o->nbots;
