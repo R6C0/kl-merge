@@ -72,10 +72,12 @@ ini: 1036 keys read, 37 of them the keys of KL Mod Options rows with no line at 
 [HUD] HideIdleEscape / OnlinePopups, [FrameLimit] Adaptive / MapCap, [ReShade] ReloadFx, [ShopPage] TabNames).
 
 1. `klhook/KLHook.ini`: new `[Stall]` and `[Input]` sections after [FrameLimit] (Trace=1 / StallMsgMs=20 / MouseMoveMs=0 / PumpNoBlock=0
-   commented at the DLL defaults, c9's WHY in short, PumpNoBlock `(recommended off until benched: C27_PNB1)` with "recommended on by c9");
+   commented at the DLL defaults, c9's WHY in short; PumpNoBlock=1 `(recommended on) proven live: C27_PNB1 / HUD6` - c9 committed a second
+   `[Input] PumpNoBlock=1` section at 14:54 while this ran (22e5150, 'PNB1/HUD6 proven, both seats, 0 faults'); the rebase kept both, the
+   profile API reads only the first [Input], so the two were folded into one right after the push);
    one commented `;Key=<DLL default>   ; KL Mod Options row '<id>': <label> (recommended on|off)` line per rowless key at the end of its
    section, 17 new sections before [Online]. 95 lines added, nothing changed or moved.
-2. `tools/kl_mod_options.py`: row `pumpnoblock` (G_STAB, recommended off until C27_PNB1; a DLL without the wrap ignores the key, the
+2. `tools/kl_mod_options.py`: row `pumpnoblock` (G_STAB, recommended on, benched PNB1/HUD6; a DLL without the wrap ignores the key, the
    owner's SHIP 1027x is one); `scan_keys()` (the key scan check_defaults had, now also string helpers, and only calls that read klh_ini:
    klauto.c's kla_ini and kljoin.c's `file` keys are not KLHook.ini keys); `--check-ini KLHOOK_DIR INI` = row keys the ini never mentions
    (exit 1) + the count of other read keys it leaves out (`--verbose` lists them: 487, probes / logs / per-map tuning, left as they are);
@@ -88,6 +90,5 @@ ini: 1036 keys read, 37 of them the keys of KL Mod Options rows with no line at 
 Not run: the Tk window and the Windows profile-API read-back (no Windows here); `--set pumpnoblock=on --apply` on a temp copy inserts
 `PumpNoBlock=1` under the new `[Input]` header (the commented documentation line stays).
 
-Owner / local sessions: nothing to install. The `pumpnoblock` row stays "recommended off" until C27_PNB1 passes: then move the ini marker
-to `(recommended on) proven live: C27_PNB1`, flip the row, run `--check-rec`. New keys: a line in the repo ini (commented at the default is
+Owner / local sessions: nothing to install (the next SHIP with klhook.c's wrap gets PumpNoBlock=1 from the ini). New keys: a line in the repo ini (commented at the default is
 enough) keeps `--check-ini` green and gives the owner a place to see them.

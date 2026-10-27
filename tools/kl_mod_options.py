@@ -410,10 +410,10 @@ feat('resetdrain', G_STAB, 'Do not crash when the screen is rebuilt (monitor off
      'klfps.c ResetDrain: after a successful Reset the 2 render command lists recorded before it are emptied (what the game flush 0x696100 '
      'does); C27_RSTQ/RST0 + CE27_ALL2 crashed in d3d9 11-15 ms after one S_OK Reset on the stale list; needs the frame limiter (its Reset wrapper)',
      [('Graphics', 'ResetDrain', 1, 0, 1)])
-feat('pumpnoblock', G_STAB, 'Never wait for a window message the game cannot take (background window freeze)', 'off', 'start',
+feat('pumpnoblock', G_STAB, 'Never wait for a window message the game cannot take (background window freeze)', 'on', 'start',
      'klhook.c [Input] PumpNoBlock (c9, 2026-10-27): the game pump peeks a message (a WM_MOUSEMOVE at the window seam) that its GetMessageA / ReShade '
      'then cannot remove and waits for forever; a background window never gets another one (CE27_HUD5 / P2P4C client freeze dumps). With it the '
-     'wrapped GetMessageA never waits (WM_NULL instead). Recommended on by c9, off here until bench C27_PNB1 passes; a DLL without it ignores the key',
+     'wrapped GetMessageA never waits (WM_NULL instead). Benched C27_PNB1 / HUD6 10-27, both seats, 0 faults; a DLL without it (SHIP 1027x) ignores the key',
      [('Input', 'PumpNoBlock', 1, 0, 0)])
 feat('steamblock', G_STAB, 'Block Steam stats / leaderboards on modded rounds', 'on', 'start',
      'keeps modded rounds out of your Steam stats and achievements', [('Steam', 'Block', 1, 0, 1)])
