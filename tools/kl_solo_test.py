@@ -195,8 +195,8 @@ def main():
         def park_loop():
             # 10-27 Q27_DM01/DD04: the Windows cursor resting at 320,240 hovered a MainMenu row, so 'tap DOWN' x2 landed on
             # ShowAchievements; DM01H (uncapped, cursor held at 0,0) reached OnlineMenu. Hold it in the windows' top-left
-            # corner while the menus are driven (until the host's round starts), never while the owner gives input.
-            k = 0
+            # corner while the menus are driven (until the host's round starts).
+            k, moved = 0, [0]
             while time.time() - t0 < secs:
                 k += 1
                 if k % 10 == 0:                                  # every 5 s: has the host's round started? (host_started is defined below)
@@ -206,7 +206,15 @@ def main():
                             return
                     except OSError:
                         pass
-                if idle_s() >= 30:
+                # 17:25 Q27_DM06 failed the same way with an 'idle >= 30' gate: the cursor was back at 320,240 (640x480
+                # screen centre: a display-mode change re-centres it) and idle had been reset (17:24:56, cause unknown), so
+                # the park stood down. The queue runs with --force anyway: park unconditionally, log every move-back.
+                pt = (ctypes.c_long * 2)()
+                ctypes.windll.user32.GetCursorPos(pt)
+                if (pt[0], pt[1]) != (0, 0):
+                    if moved[0] < 20:
+                        say('  park | +%.1f s cursor was at %d,%d (idle %d s): moved back to 0,0' % (time.time() - t0, pt[0], pt[1], idle_s()))
+                    moved[0] += 1
                     ctypes.windll.user32.SetCursorPos(0, 0)
                 time.sleep(0.5)
         if park_on:
