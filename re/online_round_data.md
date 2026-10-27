@@ -56,10 +56,10 @@ Down / betrayer / dirty-cop bit values: NOT decoded (GUESS: in the 0x200/0x100/0
 
 ## Round state (S members, {value,..., notify at +8}, 0x28 apart)
 | Field | S+ | Notes | Mark |
-| m_iCurrentRound | 0x34c | i8, init 1, getter 0x57e490 | CERTAIN |
-| m_iNumRounds | 0x3d0 | i8, init 3, getter 0x7f42e0, slot 40 returns it, slot 39 sets (also [rules+0x5c]) | CERTAIN |
+| m_iCurrentRound | 0x34c (field obj; value byte +4 = 0x350, stored ^ 0xac via 0x5b1400) | i8, init 1, getter 0x57e490 | CERTAIN (10-27 fix: old read took +0) |
+| m_iNumRounds | 0x3d0 (field obj; value byte 0x3d4, ^ 0xac) | i8, init 3, getter 0x7f42e0, slot 40 returns it, slot 39 sets (also [rules+0x5c]) | CERTAIN |
 | remaining round time | 0x2ac | float, getter 0x556ce0; slot 85 mirrors to [rules+0x4c] = the HUD clock | CERTAIN |
-| m_fRoundTime (length) | 0x324 | float, getter 0x59bf80, slot 43 returns it, set with 0x2ac by 0x7f4e30 | CERTAIN |
+| m_fRoundTime (length) | 0x324 (field obj; plain float at 0x328 via 0x8465d0) | float, getter 0x59bf80, slot 43 returns it, set with 0x2ac by 0x7f4e30 | CERTAIN |
 | m_fEscapeSeqTimer | 0x25c | float, getter 0x727890, slot 87 -> [rules+0x1d8] (Arcade timer) | CERTAIN |
 | EscapeSeqState | 0x38c | i8, setter 0x4b8960 (slot 194), mirrors [rules+0x1dc] (Arcade veh byte) | CERTAIN |
 | EscapeSeqTransportRef | 0x3ac | u32, getter 0x786420, slot 89 -> [rules+0x1e4] (Arcade vehicle) | CERTAIN |

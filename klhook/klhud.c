@@ -1429,7 +1429,7 @@ static int klu_compose_in(int *state_ok)
                 }
                 snprintf(klu_r.t[KLU_T_DEATH].want, KLU_TEXTLEN, "KILLED BY  %s", kn[0] ? kn : "THE POLICE"); klu_r.t[KLU_T_DEATH].on = 1; klu_r.t[KLU_T_DEATH].want_colour = KLU_C_CORAL;
             }
-            if (have && klu_onround && or_.ok && or_.round > 0 && klu.round) {     /* ROUND n OF m (S+0x34c / S+0x3d0): the Arcade round text */
+            if (have && klu_onround && or_.ok && or_.round > 0 && klu.round) {     /* ROUND n OF m (bytes S+0x350 / S+0x3d4, ^0xac): the Arcade round text */
                 klu_round_text(or_.round, or_.rounds, klu_onskull ? olives : -1); klu_r.t[KLU_T_ROUND].on = 1;
             }
         }

@@ -173,8 +173,17 @@ static int klor_read(struct klor_snap *o, int local)
     if (!o->ok) { static DWORD told; if (told != S) { told = S; klog("online read: score object [rules+0x2c] = %08lx has vtable %08lx (not 0xbd5184, G6): no kills / round / killer", (unsigned long)S, (unsigned long)(S ? klh_rd32(S) : 0)); } }
     if (o->ok) {
         signed char cur = 0, num = 0; float len = 0;
-        if (klh_rd(S + 0x34c, &cur, 1) && klh_rd(S + 0x3d0, &num, 1) && klor_round_ok(cur, num)) { o->round = cur; o->rounds = num; }
-        if (klh_rd(S + 0x324, &len, 4) && klb_finite(len) && len > 0 && len < 100000.0f) o->length = len;
+        BYTE rc = 0, rn = 0;
+        /* 10-27: S+0x34c / S+0x3d0 / S+0x324 are field OBJECTS, not the values. Getters m_iCurrentRound 0x57e490 (add ecx,0x34c), m_iNumRounds 0x7f42e0
+           (add ecx,0x3d0) both jmp 0x5b1400 = movsx eax,byte [ecx+4]; xor eax,0xac. m_fRoundTime 0x59bf80 (add ecx,0x324) jmps 0x8465d0 = fld [ecx+4].
+           The old reads took the header byte (+0): 'ROUND 4 OF 4' in every state, the lobby too (bench DD01ce4/ce5). */
+        if (klh_rd(S + 0x350, &rc, 1) && klh_rd(S + 0x3d4, &rn, 1)) {
+            static BYTE said_c = 0xff, said_n = 0xff;
+            cur = (signed char)(rc ^ 0xac); num = (signed char)(rn ^ 0xac);
+            if (rc != said_c || rn != said_n) { said_c = rc; said_n = rn; klog("online read: round byte %02x -> %d, rounds byte %02x -> %d (stored ^ 0xac)", rc, cur, rn, num); }
+            if (klor_round_ok(cur, num)) { o->round = cur; o->rounds = num; }
+        }
+        if (klh_rd(S + 0x328, &len, 4) && klb_finite(len) && len > 0 && len < 100000.0f) o->length = len;
     }
     /* re-key the caches (review #5): a new rules object, a new round number, or the lobby (state < 0x17) <-> the round: names, killer latches, feed steps and the loot whole start over
        (a seat can hold another heister next round; a stale name or a latched killer from the last round must not carry over). The death marks (klor_d) stay: they are the match's. */
