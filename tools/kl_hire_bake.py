@@ -180,7 +180,7 @@ def main(argv):
     nrows = STOCK_ROWS if stock else 16
     bak = BAK_STOCK if stock else BAK
     out = a.out
-    if a.mode == 'install' and kl2_running():
+    if a.mode in ('install', 'undo') and kl2_running():
         print('kl2.exe is running: close the game first (nothing changed)'); return 2
     if a.mode == 'stage' and not out:
         import kl_port_check
@@ -220,7 +220,7 @@ def main(argv):
                 rewrite(zp, dst, member, new); print('       staged %s' % dst)
         else:                                          # install: re-bake from the LIVE zip (other work edits these zips concurrently)
             if not os.path.exists(zp + bak):
-                shutil.copy2(zp, zp + bak)
+                shutil.copy2(zp, zp + bak + '.tmp'); os.replace(zp + bak + '.tmp', zp + bak)    # atomic: a half-copied backup is never taken for the original
             tmpz = zp + '.hire.tmp'
             rewrite(zp, tmpz, member, new); os.replace(tmpz, zp); print('       installed %s (backup %s)' % (zp, os.path.basename(zp + bak)))
     if a.mode == 'stage' and out:

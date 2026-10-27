@@ -174,7 +174,7 @@ static void klhro_on_answer(const struct knc_msg *m, int src)
     if (!klhro.on || klhro_host() || m->role != 2) return;
     if (sscanf(m->payload, "s%dr%do%dm%d", &seat, &row, &ok, &why) < 3) return;
     if (!klhro_rules(&rules, 0) || seat != klhro_myseat(rules)) return;
-    if (klhro.pend != row) return;
+    if (klhro.pend != row && !(ok && !klhr_next)) return;         /* a late 'ok' (after the 6 s timeout) is still taken: the host has charged this seat, so the body must be worn (the host judged it, seat checked above) */
     klhro.pend = 0;
     if (ok) { klhr_next = row; if (klhro.log) klog("hire-online: the host accepted: %s hired for the next round", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?"); }
     else klog("hire-online: the host refused %s: %s", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?", klhro_why(why));
