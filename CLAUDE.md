@@ -66,9 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-27 ~15:10 - [c9] All PASS, 0 faults: PNB1, P2P5F (1027u early make), MPX2, HUD6, P2P5G (client page II buy, item 63 in hand), GRT3 (Steam xp 568 = Thug badge).
-PumpNoBlock PROVEN (HUD6: one 'pump:' line per seat, the run went on); ce ships it "(recommended on)" (22e515039 ini). HUD6: host death real
-(KILLED BY YOURSELF + END TIMER), host loot pickup real (money +34K steps); bench 'face' never turns online (heading 0, bench script only). Queue: HRF2, HRP2, ALL2R, Q27_DM*.
+2026-10-27 ~16:10 - [c9] HIRE ONLINE PROVEN both ways: HRF2 (host hired Tommy, worn round 2) + HRP2 (client asked Jean (5, Price5=0),
+host 'seat 1 hired Jean', client wears Jean round 2 APPLIED, host sees the peer model -> Jean); both PASS 0 faults. Earlier: PNB1/P2P5F/MPX2/HUD6/P2P5G/GRT3/ALL2Y PASS.
+Snapshot stall (~7 min in HRF2) fixed in 72ce03d90 (only same-size TEST dlls hashed). ALL2R + 19 Q27 DM/DD benches now on out_ce_1027y_test + 1027y owner ini.
 
 2026-10-27 ~15:30 - [ce] OWNER ON SHIP 1027y (0f232362, ff7368983; ini sha1 015296dd; backups .before-1027y, UNDO_1027y.bat): + PumpNoBlock, Grades SteamXP,
 page II online buy (OnlineSend/OnlineApply/OnlineEarlyMake). Gate ALL2Y on the TEST twin d65471a6 (SHIP has no klauto): PASS both seats, 0 faults, client
