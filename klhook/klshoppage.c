@@ -633,6 +633,8 @@ static void kspg_testbuy(void)
     if (!kspg.tbn || !kl_online() || kspg.tbDone >= kspg.tbn || !kspg.active) return;
     if (!kspg.tbAt) kspg.tbAt = now ? now : 1;
     if (now - kspg.tbAt < 3000 || (kspg.tbLast && now - kspg.tbLast < 1500) || !so) return;
+    mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
+    if (mode != 2 || kspg.st <= 0xd || !kspg.listAt || now - kspg.listAt > 300) { kspg.tbAt = now ? now : 1; return; }   /* 2026-10-27 c9 P2P2: pressed in the lobby (state 0xd, mode 0) on a stale menu selector -> 0x5b97d8 null net object; press only with the weapon list up past the lobby, list seen this tick, 3 s after it came up */
     vt = klh_rd32(so);
     if (vt != kspg_cvt[3] && vt != (DWORD)(DWORD_PTR)&kspg_tab[3].vt[1]) return;                    /* the element is gone: wait for the next scan */
     if (!kspg_tab[3].orig) { if (!kspg.tbDone) klog("shoptest: selector not wrapped (no original handler pinned): not pressed"); kspg.tbDone = kspg.tbn; return; }
@@ -726,7 +728,7 @@ static void klshoppage_tick(int game_thread)
     kspg.lastScan = now; kspg.sane = 0;
     g = kspg_gate();
     kspg.pre = (g == 1);
-    if (g != 1) { kspg.tbAt = 0; kspg.tbLast = 0; kspg.tbDone = 0; }                      /* OnlineTestBuy: a new shop stay presses again */
+    if (g != 1) { kspg.tbAt = 0; kspg.tbLast = 0; kspg.tbDone = 0; kspg.selobj = 0; }                      /* OnlineTestBuy: a new shop stay presses again */
     if (!g) { kspg.active = 0; kspg.shownB = 0; return; }
     if (g == 2 && kspg.shownB) { kspg.shownB = 0; if (kspg.log) klog("shopPage: the round runs: page back to set A"); }
     for (i = 0; i < KSPG_ROWS; i++) if (kspg.p[i].cfg && !kspg.p[i].ok && kspg.p[i].retry && now > kspg.p[i].retry) { kspg.p[i].retry = 0; kspg.p[i].ok = 1; }
