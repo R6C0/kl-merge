@@ -66,9 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-27 ~11:55 - [ce] OWNER ON SHIP 1027x (84718002, backup .before-1027x): 1027w + c9's ResetDrain (b701ce6de, [Graphics] ResetDrain=1,
-RDR2 + RDQ1 pass, 0 faults: the post-Reset d3d9 crash on monitor off/on). Page II judge now reads the stock shop money 0x622e10 + 0x639c10 (9bf6ba8fc);
-OnlineApply stays 0 until c9's P2P4C/H (bench-only [Bench] ShopMoney=100000) pass. HUD4 queued: skulls/loot/Tab/van/KilledStock/BoardTake + [Grades] Probe.
+2026-10-27 ~13:15 - [ce] Page II online buy: P2P4H crash (host, 0x9425a4) = online hand-over 0x538ec0 net branch reads gun+0x13c (DDL_ZFFItemWeapon X);
+our kspg_make guns miss the one stock X pass 0x8d6890. 1027m kspg_netok -> stock gun fallback: P2P4I + P2P4D PASS 0 faults (client ask -> host ok -> paid 60000).
+Real fix [ShopPage] OnlineEarlyMake (ab549870f, 1027o, off): make page II guns right after pool build 0x75f313/0x7bb6c3; bench P2P5E queued.
+Logs: HUD skulls/loot draw (1027n, HUD5 running), map-pool overlay HIDDEN + lobby label (1027p, MPX2 queued: MPX 3 s = ini, not code).
 
 2026-10-27 ~11:35 - [c9] Reset crash FIXED + PROVEN: C27_RDR2 PASS (4 forced Resets per seat, each drained, 0 faults).
 klfps.c [Graphics] ResetDrain=1 (75de30aa2, 3ba6da74f, b701ce6de: wrapper kept through the Steam overlay recursion cut).
