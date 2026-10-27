@@ -89,14 +89,16 @@ feat('hireonline', G_EXP, 'Online shop (private match / Steam FA): hire a heiste
      'klhire_online.c [Hire] Online=1: client asks (HIRE, payload Q...), host judges + spends with 0x6b1910 / 0x7f6950, body via klcharonline; NOT run live; re/shop_hire.md section 8', [('Hire', 'Online', 1, 0, 0)])
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
      'klslot.c KeepPageOnline; NOT run live; ignored while OnlineSet is set', [('Expansion', 'KeepPageOnline', 1, 0, 0)])
+feat('hudonline', G_CORE, 'Online matches (master): the HUD draws in a private match / online FA round at all: round watch + weapon dial, and the base every Online* row below needs (recommended off until benched)', 'off', 'start',
+     'klhud.c [HUD] Online (klbot.c klb_read_hud); local cosmetic drawing only, no writes to replicated objects; re/hud_online.md; NOT run live', [('HUD', 'Online', 1, 0, 0)])
 feat('hidestock', G_CORE, 'Old (stock) HUD list never shown: skipped at its Render, so Tab / Alt+Tab cannot bring it back (recommended on)', 'on', 'start',
      'klhud.c HideSrc: private vtable of ZFAPlayerListDisplay, Render skipped while the mod HUD stands; needs [HUD] Enable=1', [('HUD', 'HideSrc', 1, 0, 1)])
-feat('hidestockonl', G_CORE, 'Online matches: also hide the old (stock) list; the new online crew list is not built yet, so this leaves no crew list online (recommended on, owner request)', 'on', 'start',
-     'klhud.c HideOnline; needs HideSrc=1', [('HUD', 'HideOnline', 1, 0, 1)])
-feat('onlinecrew', G_CORE, 'Online matches: new crew list with money (humans only, names not decoded yet; recommended on once proven live)', 'off', 'start',
-     'klhud.c OnlineCrew; needs [HUD] Online=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
-feat('onlineread', G_CORE, 'Online matches: the round reader that the heister names, KILLED BY and ROUND n OF m below use (recommended off until benched)', 'off', 'start',
-     'klonline_read.c [Online] Read; read only; NOT run live', [('Online', 'Read', 1, 0, 0)])
+feat('hidestockonl', G_CORE, 'Online matches: also hide the old (stock) list, but only while the new online crew list stands (needs Online HUD on and Online crew list on, else the stock list stays; recommended on, owner request)', 'on', 'start',
+     'klhud.c HideOnline; needs HideSrc=1, [HUD] Online=1 and OnlineCrew=1 (without OnlineCrew the stock list is never skipped online)', [('HUD', 'HideOnline', 1, 0, 1)])
+feat('onlinecrew', G_CORE, 'Online matches: new crew list with money, same layout as Arcade (needs Online HUD on and Online read on; character names are the next row; recommended off until benched)', 'off', 'start',
+     'klhud.c OnlineCrew; needs [HUD] Online=1 and [Online] Read=1; SL6 layout: free byte 0 = used, money [S+0x224+4i]+[S+0x188+4i]; NOT run live', [('HUD', 'OnlineCrew', 1, 0, 0)])
+feat('onlineread', G_CORE, 'Online matches: the read-only round reader (master for every Online* row, Grades online, Online board; needs nothing; recommended off until benched)', 'off', 'start',
+     'klonline_read.c [Online] Read; read only; log line "online read: klonline_read.c ON"; NOT run live', [('Online', 'Read', 1, 0, 0)])
 feat('onlinenames', G_CORE, 'Online matches: crew list shows the heister characters\' names (J.C., Tommy...) like Arcade (recommended off until benched)', 'off', 'start',
      'klhud.c OnlineNames; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineNames', 1, 0, 0)])
 feat('onlinekilled', G_CORE, 'Online matches: KILLED BY shows the killer\'s heister name instead of THE POLICE (recommended off until benched)', 'off', 'start',
