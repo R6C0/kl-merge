@@ -7,6 +7,7 @@ Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md;
                            [--n N (3+: more joiners, all with --ini2)] [--gap2 30 (between joiners)]
                            [--netstat SECS] [--relaunch K (3: a failed, hung or ended joiner is started again, before the host's round starts)]
                            [--hang-secs S (90: a joiner whose KLHook.log gains no non-watchdog line for S s is hung: its pid is killed and it is relaunched)]
+                           [--park 1 (hold the Windows cursor at 0,0 until the host's round starts: a hovered menu row moves the selection)]
 
 - Puts the TEST dinput8.dll into the game folder for the run and puts the one that was there back afterwards
   (kl_autotest.snapshot / restore_original). The game folder's KLHook.ini is not touched: each instance reads
@@ -123,7 +124,7 @@ def solo_secs(n, total=2):
 
 def main():
     a, opt = sys.argv[1:], {}
-    for key in ('--hook', '--tag', '--secs', '--gap', '--gap2', '--base', '--ini1', '--ini2', '--shots', '--n', '--netstat', '--relaunch', '--hang-secs'):
+    for key in ('--hook', '--tag', '--secs', '--gap', '--gap2', '--base', '--ini1', '--ini2', '--shots', '--n', '--netstat', '--relaunch', '--hang-secs', '--park'):
         if key in a:
             i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
     force = '--force' in a
@@ -189,6 +190,29 @@ def main():
         note = at.put(src, os.path.join(dd, 'dinput8.dll'))
         say('  hook | %s (sha1 %s)%s' % (src, at.sha1(src)[:8], ' - ' + note if note else ''))
         t0 = time.time()
+        park_on = opt.get('--park', '1') != '0'
+
+        def park_loop():
+            # 10-27 Q27_DM01/DD04: the Windows cursor resting at 320,240 hovered a MainMenu row, so 'tap DOWN' x2 landed on
+            # ShowAchievements; DM01H (uncapped, cursor held at 0,0) reached OnlineMenu. Hold it in the windows' top-left
+            # corner while the menus are driven (until the host's round starts), never while the owner gives input.
+            k = 0
+            while time.time() - t0 < secs:
+                k += 1
+                if k % 10 == 0:                                  # every 5 s: has the host's round started? (host_started is defined below)
+                    try:
+                        txt = open(os.path.join(inst[0], 'KLHook.log'), encoding='latin-1').read()
+                        if 'SOLO match started' in txt or 'host Ready with' in txt:
+                            return
+                    except OSError:
+                        pass
+                if idle_s() >= 30:
+                    ctypes.windll.user32.SetCursorPos(0, 0)
+                time.sleep(0.5)
+        if park_on:
+            import threading
+            threading.Thread(target=park_loop, daemon=True).start()
+            say('  park | cursor held at 0,0 until the host round starts (--park 0: off)')
         for n, d in enumerate(inst, 1):
             if n >= 2:                                     # joiner k starts at gap + (k-2) * gap2 (--gap2, default 30 s): one at a time through the menus
                 while time.time() - t0 < gap + (n - 2) * int(opt.get('--gap2', 30)):
