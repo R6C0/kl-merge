@@ -66,9 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-27 ~17:00 - [c9] Q27 DM01/DD04 'landed on ShowAchievements' = MOUSE HOVER (cursor at 320,240 over a MainMenu row), not fps or PumpNoBlock:
-DM01R (60 fps) and DM01H (uncapped, cursor held at 0,0) both IN ROUND. Fix cf72c649b: kl_solo_test --park (default on) holds the cursor at 0,0 until
-the host round starts, never within 30 s of owner input. Q27 resumed uncapped (+DD04R). Hire online proven both ways 16:10 (HRF2 Tommy, HRP2 Jean).
+2026-10-27 ~17:55 - [c9] Q27 'landed on ShowAchievements' = MOUSE HOVER over a MainMenu row (not fps/PumpNoBlock). kl_solo_test --park (default on,
+22316075d) holds the cursor at 0,0 until the host round starts; the launch mode change re-centres it AND resets idle, so the park is unconditional; a mouse
+button, or a cursor off the known reset points with input < 3 s ago, = owner: bench aborts (RESULT says rerun). Since: DM09/DD07/DM02/DD02 PASS; reruns queued.
 
 2026-10-27 ~15:30 - [ce] OWNER ON SHIP 1027y (0f232362, ff7368983; ini sha1 015296dd; backups .before-1027y, UNDO_1027y.bat): + PumpNoBlock, Grades SteamXP,
 page II online buy (OnlineSend/OnlineApply/OnlineEarlyMake). Gate ALL2Y on the TEST twin d65471a6 (SHIP has no klauto): PASS both seats, 0 faults, client
