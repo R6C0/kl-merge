@@ -65,6 +65,7 @@ typedef void  (__fastcall *kspg_msg_t)(void *self, void *edx, DWORD *msg);
 
 static struct {
     int tabNames; char tab[4][64];
+    int online2;                                 /* [ShopPage] OnlinePage2 (default 0): online a page II row buys its CARRIER's stock gun through the stock host-validated path */
     int online;                                  /* [ShopPage] OnlineLook (default 0): page II LOOK online, buying it LOCKED (2026-10-26, see below) */
     int on, grenades, trick, key, log, clips, hint, keyDown, txtSeen, togglePend, premake, preDone, preTry, sane, st;
     volatile int active, pre, shownB;                 /* active: gate open and wrappers may act; shownB: set B on screen */
@@ -108,7 +109,8 @@ static char *kspg_text(int c, void *self, const char *key)
         if (!*p) { o = kspg_ring(); strncpy(o, kspg.p[row].name, 519); o[519] = 0; return o; }
         if (!strcmp(p, "Desc")) {
             o = kspg_ring();
-            if (kl_online()) snprintf(o, 520, "LOCKED ONLINE: this gun is not in the shared shop table, so the host cannot hand it over. Buy it in Arcade; online the stock page I guns are for sale.\n%s", kspg.p[row].desc);   /* OnlineLook: shown, not buyable (kspg_sel swallows the buy) */
+            if (kl_online() && kspg.online2) snprintf(o, 520, "ONLINE: the host's shop has no such gun. Buying this row buys the stock gun of this row (its price, its rank), the same as page I.\n%s", res);   /* OnlinePage2: res = the stock (carrier) description */
+            else if (kl_online()) snprintf(o, 520, "LOCKED ONLINE: this gun is not in the shared shop table, so the host cannot hand it over. Buy it in Arcade; online the stock page I guns are for sale.\n%s", kspg.p[row].desc);   /* OnlineLook: shown, not buyable (kspg_sel swallows the buy) */
             else { strncpy(o, kspg.p[row].desc, 519); o[519] = 0; }
             return o;
         }
@@ -120,7 +122,7 @@ static char *kspg_text(int c, void *self, const char *key)
         if (kspg.key >= 0x70 && kspg.key <= 0x87) snprintf(kn, sizeof kn, "F%d", kspg.key - 0x6f);
         else if ((kspg.key >= '0' && kspg.key <= '9') || (kspg.key >= 'A' && kspg.key <= 'Z')) snprintf(kn, sizeof kn, "%c", kspg.key);
         else snprintf(kn, sizeof kn, "key %02X", kspg.key);
-        snprintf(add, sizeof add, kspg.shownB ? (kl_online() ? "  II (view only)  [%s] stock page" : "  II  [%s] stock page") : "  [%s] page II", kn);
+        snprintf(add, sizeof add, kspg.shownB ? (kl_online() ? (kspg.online2 ? "  II (stock gun online)  [%s] stock page" : "  II (view only)  [%s] stock page") : "  II  [%s] stock page") : "  [%s] page II", kn);
         memcpy(o, res, n); strcpy(o + n, add);
         return o;
     }
@@ -213,7 +215,7 @@ static void __fastcall kspg_sel(void *self, void *edx, DWORD *msg)
     char nm[40]; DWORD w = 0; int edit, slot, other, hi; BYTE keep = 0, ff = 0xff; int b0, b1;
     (void)edx;
     if (!kspg.active || !msg || !klh_rdstr(klh_rd32((DWORD_PTR)msg), nm, sizeof nm)) { ((kspg_msg_t)(DWORD_PTR)kspg_tab[3].orig)(self, 0, msg); return; }
-    if (kl_online() && kspg.shownB && (!strcmp(nm, "BuyWeapon") || !strcmp(nm, "BuyWeaponDialogVoodoo"))) {
+    if (kl_online() && !kspg.online2 && kspg.shownB && (!strcmp(nm, "BuyWeapon") || !strcmp(nm, "BuyWeaponDialogVoodoo"))) {
         /* OnlineLook: a purchase of a page II row is swallowed. The row would send the CARRIER's item to the host (the replicated buy path knows the
            carrier, not the page II gun), so the player would pay for the carrier and get the stock gun, and the Arcade hand-over (a local pool relabel) is
            unproven against host validation. GUESS G17: the online selector uses this same message pair and [selector+0x90] / 0x154d80c as Arcade. */
@@ -578,6 +580,10 @@ static void kspg_init(void)
     kspg.premake = GetPrivateProfileIntA("ShopPage", "PreMake", 1, klh_ini) != 0;       /* k43 (recommended on): make the page B guns in the first shop */
     kspg.tabNames = GetPrivateProfileIntA("ShopPage", "TabNames", 1, klh_ini) != 0;       /* (recommended on): [Tabs] in KLShopPage.ini names the page II headlines; empty key = old " II" append */
     kspg.online = GetPrivateProfileIntA("ShopPage", "OnlineLook", 0, klh_ini) != 0;      /* 2026-10-26 (recommended off until benched): page II names / descriptions online, VIEW ONLY */
+    /* OnlinePage2 (recommended off until benched): implies the online look; the buy is NOT swallowed but goes the stock way (the host sees the carrier row it
+       knows and charges the carrier price); no pool relabel online (own[] stays 0, every maker path is kl_online()-gated), so only the stock gun is handed over */
+    kspg.online2 = GetPrivateProfileIntA("ShopPage", "OnlinePage2", 0, klh_ini) != 0;
+    if (kspg.online2) kspg.online = 1;
     kspg.have = kspg_load();
     if (!kspg.have) { klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0; return; }
     kspg.carried[0] = kspg.carried[1] = -1;
