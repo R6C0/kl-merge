@@ -66,13 +66,13 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~11:55 - [ce] OWNER ON SHIP 1027x (84718002, backup .before-1027x): 1027w + c9's ResetDrain (b701ce6de, [Graphics] ResetDrain=1,
+RDR2 + RDQ1 pass, 0 faults: the post-Reset d3d9 crash on monitor off/on). Page II judge now reads the stock shop money 0x622e10 + 0x639c10 (9bf6ba8fc);
+OnlineApply stays 0 until c9's P2P4C/H (bench-only [Bench] ShopMoney=100000) pass. HUD4 queued: skulls/loot/Tab/van/KilledStock/BoardTake + [Grades] Probe.
+
 2026-10-27 ~11:35 - [c9] Reset crash FIXED + PROVEN: C27_RDR2 PASS (4 forced Resets per seat, each drained, 0 faults).
 klfps.c [Graphics] ResetDrain=1 (75de30aa2, 3ba6da74f, b701ce6de: wrapper kept through the Steam overlay recursion cut).
 TEST out_c9_1027e_test 30646034, not installed; ce takes it into the next SHIP. Queue: RDQ1 -> P2P4C/H, HUD4 -> RSTN, MPX2, HRF2, HRP2, ALL2R.
-
-2026-10-27 ~10:32 - [ce] OWNER ON SHIP 1027w (6feb9af1, ff11724f5; backup .before-1027w): online names, killed-by, feed, intro card + map name, shop names,
-head tags (probe/overlap/hide while dead) proven by c9 ALL2D..H, 0 faults. Shop page II SHOPG ask -> host verdict proven (P2P3D, refused at $0).
-Next: page II buy writes (step 4, empty-pool guard int3 0x538f02), OnlineKilledStock bench, grades pass 2 (blocked on XP>0).
 
 2026-10-27 ~00:40 - OWNER GRANT until 20:00: tests every 5 min; online = Arcade; player netcode, buy characters, grades, map-pool icons, full HUD.
 Split: kl-merge-ce = Hire online, grades, pool icons, HUD; kl-merge-27 = player netcode, downs/bots, bench queue lan_1025/queue_1027.txt (check27.py).
