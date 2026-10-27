@@ -4,7 +4,7 @@ Code: klhook/klmappool.c (included after klslot.c, before klhostopt.c), hooks in
 Icons: tools/kl_mappool.py (build), staged in `<DM>\KL_PortTools\build\mappool_1027\` with INSTALL_dm/dd/mix.bat and UNDO.bat.
 
 ## Keys
-`[MapPool] Enable=0 / Pool=0 (0 off, 1 Full Dead Men, 2 Full Dog Days, 3 Mix) / Apply=0 / Seed=0 / Log=1`; `[HostOpts] KeyPool=0x2D` (Insert cycles the pool, host only).
+`[MapPool] Enable=0 / Pool=0 (0 off, 1 Full Dead Men, 2 Full Dog Days, 3 Mix) / Apply=0 / Seed=0 / Log=1`; `[HostOpts] KeyPool=0x2E` (Delete cycles the pool, host only).
 Needs `[HostOpts] Enable=1` (it carries the pool). Mod-settings row: tools/kl_mod_options.py `mappool` ("recommended off until benched").
 
 ## How it works

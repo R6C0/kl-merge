@@ -220,7 +220,7 @@ static void klho_tick(int game_thread)
     }
     if (klho.steam && klmm_real && klho.lobby && now - klho.readAt >= 1000) {
         const char *v = ((const char *(__fastcall *)(void *, void *, unsigned __int64, const char *))KLMM_REAL(18))(klmm_real, 0, klho.lobby, "klx_opts");
-        char b[24]; int m, a, s, bo;
+        char b[48]; int m, a, s, bo;      /* was 24: the value is 19 chars with the pool suffix, 4 to spare; 48 keeps the next suffix from truncating it silently (audit 1027) */
         klho.readAt = now;
         if (v && klh_rdstr((DWORD_PTR)v, b, sizeof b) && klho_parse(b, &m, &a, &s, &bo)) {
             if (!klho.rok || m != klho.rmap || bo != klho.rbots) klog("hostopts: CLIENT read the host's Steam lobby klx_opts=%s", b);
@@ -254,7 +254,7 @@ static void klho_init(void)
     klho.keys = GetPrivateProfileIntA("HostOpts", "Keys", 1, klh_ini) != 0;
     klho.keyMap = (int)GetPrivateProfileIntA("HostOpts", "KeyMap", 0x76, klh_ini);
     klho.keyAI = (int)GetPrivateProfileIntA("HostOpts", "KeyAI", 0x77, klh_ini);
-    klho.keyPool = (int)GetPrivateProfileIntA("HostOpts", "KeyPool", 0x2D, klh_ini);      /* Insert (every F5..F11 key is taken by another module): cycles the map pool (needs [MapPool] Enable=1) */
+    klho.keyPool = (int)GetPrivateProfileIntA("HostOpts", "KeyPool", 0x2E, klh_ini);      /* Delete (0x2E; Insert 0x2D is the UCC RevealKey in klucchide.c, every F5..F11 key is taken too): cycles the map pool (needs [MapPool] Enable=1) */
     klho.pool = kmp.ini_pool; klho.rpool = -1;
     klho.map = kls_online_set; if (klho.map != 0 && klho.map != 2 && klho.map != 9) klho.map = klho.map == 3 ? 3 : 0;
     klho.ai = GetPrivateProfileIntA("Bots", "OnlineFill", 0, klh_ini) != 0;

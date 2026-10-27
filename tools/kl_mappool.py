@@ -15,7 +15,7 @@ WHAT IT BUILDS (one folder per pool: dm = Full Dead Men, dd = Full Dog Days, mix
   <out>\manifest.json, <out>\install.py          md5 of the base and the variants; the installer the INSTALL bats call
   <out>\INSTALL_dm.bat INSTALL_dd.bat INSTALL_mix.bat UNDO.bat
 WHY STATIC: the lobby picture is a toggler over the 9 slot pictures, its index is the replicated slot, and no safe live swap from the hook was found
-(re\lobby_map_names.md). So the pool's picture is the same for every slot and is chosen at INSTALL time; klmappool.c's pool (host F-key Insert / ini)
+(re\lobby_map_names.md). So the pool's picture is the same for every slot and is chosen at INSTALL time; klmappool.c's pool (host key Delete / ini)
 must be the same one, otherwise the picture lies. The pool is the one klmappool.c builds: DM* folders = Dead Men, DD* folders and the stock levels
 = Dog Days, read from KLHook.ini [Redirect] / [Redirect.N].
 Base files: the pristine overlay (<file>.before-1025lobbynames if kl_lobbynames_install.py put a set over it, else the live file), read only.
@@ -174,7 +174,7 @@ INSTALL_PY = r'''r"""Map-pool icons for the online lobby (kl_mappool.py output; 
 usage: python install.py --pool dm|dd|mix [--dry]    puts <pool>\Overlay\Scenes\kaneandlynch.zip + Patch01.zip over the LIVE overlay copies in <DD>\KLExpansion\Overlay
        python install.py --undo                      puts the first backup back (what was there before the first pool install)
 Backups: <file>.before-1027mappool, made ONCE (an existing backup is never overwritten, never deleted except by UNDO moving it back).
-Refuses while kl2.exe runs. Never touches KL_PortBackup. The pool shown must be the pool klmappool.c plays ([MapPool] Pool / host key Insert)."""
+Refuses while kl2.exe runs. Never touches KL_PortBackup. The pool shown must be the pool klmappool.c plays ([MapPool] Pool / host key Delete)."""
 import hashlib, json, os, shutil, subprocess, sys
 D = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 OV = os.path.join(D, 'KLExpansion', 'Overlay')
