@@ -131,6 +131,7 @@ static void klht_otick(DWORD osd, const struct klb_snap *s, int show)
     klh_rd(pl + KLHT_O_LOCAL, &locb, 1);
     if (!klu_same_code(KLHT_DRAWTAG, klht_code, sizeof klht_code)) { klht_r.fault = 1; klog("tags: online: 0x7b8150 is not the tag drawer this build knows: no tags are drawn"); goto out; }
     if (!klh_rd(pl + KLHT_E0 + KLHT_TAGOFF, klht_tpl, KLHT_TAGSIZE)) goto out;             /* GUESS: entry 0's tag struct, a ZCHAROBJ + style (see the note above) */
+    { int z = 1, q; for (q = 4; q < KLHT_TAGSIZE; q++) if (klht_tpl[q]) { z = 0; break; } if (!cnt || z) goto out; }      /* review: entry 0 not set up online (count 0 / tag struct all zero): the drawer would read null style pointers, no SEH round it */
     klht_tpl[0x40] = 1;
     klor_noev = 1; nr = klor_read(&o, locb == 0xff ? -1 : (int)locb) && o.ok; klor_noev = 0;
     if (!nr) goto out;
@@ -196,6 +197,7 @@ static void klht_tick(DWORD osd, const struct klb_snap *s, int show)
 {
     DWORD pl, cnt = 0, recs; int i; BYTE local = 0xff; char buf[16], mb[24];
     if (klht.online && s && s->online) { klht_otick(osd, s, show); return; }      /* [HUD] OnlineTags: the online route above */
+    klht_r.ol = 0;      /* review: a stale online flag would make klht_render draw the Arcade slots through the online path */
     if (!klht.mode) return;
     EnterCriticalSection(&klu_cs);
     if (klht_r.tmpl != klu_r.tmpl) { memset(&klht_r, 0, sizeof klht_r); klht_r.tmpl = klu_r.tmpl; }      /* a new level: its objects went with the old scene */
