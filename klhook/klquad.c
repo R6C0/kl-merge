@@ -89,6 +89,7 @@ static void klquad_prereset(void)
         klog("quad: prereset: ring %d obj %p cur %d buf[cur] %p (%s)", g, klqr_rg[g].obj, klqr_rg[g].cur, klqr_rg[g].buf ? klqr_rg[g].buf[klqr_rg[g].cur] : 0, klqr_rg[g].buf ? "ring built" : "no ring");
     }
     for (g = 0; g < KLQR_NOBJ; g++) klqr_drop(g);
+    for (g = 0; g < KLQR_NOBJ; g++) klqr_c18[g] = 0;     /* diagnostics only: a later "recreated" drop in klqr_lock must not log these stale pointers as "prereset" */
     LeaveCriticalSection(&klqr_cs);
     InterlockedIncrement(&klqr_resets);
 }
