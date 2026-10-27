@@ -17,8 +17,10 @@
  *   m3 bad row          row outside the loaded pairs (kspg.p[row].ok == 0)
  *   m4 item differs     the client's carrier item is not the host's carrier item of that row (the tables differ)
  *   m5 one per round    this seat already had a page II gun accepted in this round (bookkeeping only; kept per round number)
- *   m6 money            the seat's money (klor_read on_money, needs [Online] Read=1) is below the row's price (kspg_price; 0 = unknown = not checked)
- *   (m7 reserved: money unreadable shows as m8 host not ready, klor_read needs [Online] Read=1)
+ *   m6 money            the seat's SHOP money (the stock getters 0x622e10 TotalLootMoney + 0x639c10 TotalRewardMoney on S = [rules+0x2c], re/shop_hire.md 8.2; NOT klor's
+ *                       on_money, which is the in-round carried money) is below the row's price (kspg_price; 0 = unknown = not checked)
+ *   m7 money unreadable the getters cannot be read (rules / score object not as known, or the code bytes of the getters differ: kspo_shopmoney)
+ *                       (the seat list above still comes from klor_read, so [Online] Read=1 stays needed on the host for the judge as a whole, not for the money)
  *   m0 ok
  *
  * LOG LINES (klog; 'shopg:'):
@@ -60,6 +62,7 @@ static int kspg_price(int row);                                /* klshoppage.c, 
 
 #define KSPO_ASKMS 6000
 #define KSPO_SEATS 16
+#define KSPO_MONEYSEATS 12                          /* the shop money getters cover seats 0..11 only */
 
 enum { KSPO_OK = 0, KSPO_PHASE = 1, KSPO_SEAT = 2, KSPO_ROW = 3, KSPO_ITEM = 4, KSPO_ONCE = 5, KSPO_MONEY = 6, KSPO_MONEYX = 7, KSPO_NOTREADY = 8, KSPO_CARRIED = 9 };
 
@@ -73,6 +76,7 @@ static struct {
        bk[seat] = page II row + 1 (0 none). bkSeen: the stock buy of the carrier showed in the rules' carried rows (the getters the stock commit 0x55d3e0 uses). */
     int bk[KSPO_SEATS], bkSeen[KSPO_SEATS]; DWORD bkAt[KSPO_SEATS], bkTick;
     int okRow; DWORD okAt;                        /* row + 1 whose stock buy may pass kspg_sel's gate (approved; consumed by the BuyWeapon) */
+    DWORD bmN, bmAt; int bmDone;                  /* [Bench] ShopMoney: target, stay entry, done this stay */
     int doRow; DWORD doAt;                        /* client: row + 1 approved by the host, the stock buy is fired from the tick */
 } kspo;
 
@@ -83,7 +87,7 @@ static const char *kspo_why(int c)
     switch (c) {
     case KSPO_OK: return "ok"; case KSPO_PHASE: return "not the shop phase"; case KSPO_SEAT: return "no such seat (or the host's own in a remote request)";
     case KSPO_ROW: return "no such page II row"; case KSPO_ITEM: return "carrier item differs (tables differ)"; case KSPO_ONCE: return "one page II gun per seat per round";
-    case KSPO_MONEY: return "not enough money"; case KSPO_MONEYX: return "money unreadable ([Online] Read=1 needed on the host)"; case KSPO_NOTREADY: return "host not ready";
+    case KSPO_MONEY: return "not enough money"; case KSPO_MONEYX: return "money unreadable (shop money getters / score object not as known)"; case KSPO_NOTREADY: return "host not ready";
     case KSPO_CARRIED: return "the seat already carries that row (or has a page II buy still pending)"; }
     return "?";
 }
@@ -127,6 +131,81 @@ static int kspo_carried(int seat, int *r0, int *r1)
     return ok;
 }
 
+/* SHOP MONEY (re/shop_hire.md 8.2 + 8.5, read from kl2.exe 2026-10-27). S = [rules+0x2c] (vtable 0xbd5184), 12 seats. Money of a seat = first store (S+0x1b8 + 4*seat, TotalLootMoney,
+   getter 0x622e10 -> 0x5f3b70) + second store (S+0x1e8 + 4*seat, TotalRewardMoney, getter 0x639c10 -> 0x411fe0), both thiscall(S, seat) ret 4. Same getters and guard idea as klhire_online.c
+   (klhro_money; that file is included AFTER this one, so this is a small local copy). Returns 0 = unreadable / code differs. Reads only. */
+static int kspo_score(DWORD *rules, DWORD *score)
+{
+    DWORD gs = klh_rd32((DWORD_PTR)KLH_VA(KLS_SETTINGS)), r, sc, vt;
+    if (!gs || !(r = klh_rd32(gs + 0x54)) || !(vt = klh_rd32(r)) || !(KLH_RULES_SV_OK(vt) || KLH_RULES_CL_OK(vt))) return 0;
+    if (!(sc = klh_rd32(r + 0x2c)) || klh_rd32(sc) != 0xbd5184) return 0;
+    if (rules) *rules = r;
+    if (score) *score = sc;
+    return 1;
+}
+
+static int kspo_money_code_ok(void)
+{
+    static const BYTE g1[] = { 0x83, 0xc1, 0x58, 0xe9 };
+    static int ok = -1;
+    if (ok < 0) {
+        ok = klc_same_code(0x622e10, g1, sizeof g1) && klc_same_code(0x639c10, g1, sizeof g1);
+        if (!ok) klog("shopg: the money getters 0x622e10 / 0x639c10 are not the ones this build knows (other kl2.exe?): the page II judge reports 'money unreadable'");
+    }
+    return ok;
+}
+
+static int kspo_shopmoney(int seat, DWORD *first, DWORD *second)
+{
+    DWORD sc = 0;
+    if (seat < 0 || seat >= 12 || !kspo_score(0, &sc) || !kspo_money_code_ok()) return 0;
+    __try {
+        *first = ((DWORD (__fastcall *)(void *, void *, int))(DWORD_PTR)KLH_VA(0x622e10))((void *)(DWORD_PTR)sc, 0, seat);
+        *second = ((DWORD (__fastcall *)(void *, void *, int))(DWORD_PTR)KLH_VA(0x639c10))((void *)(DWORD_PTR)sc, 0, seat);
+    } __except (1) { return 0; }
+    return 1;
+}
+
+/* [Bench] ShopMoney=<n> (BENCH ONLY, default 0 = off, "(bench only, recommended off)"; written 2026-10-27, NOT RUN IN THE GAME). HOST only (Sv rules), once per shop stay
+   (kspo_benchmoney, called from klshoppage_tick while the shop gate is 1): every seat in use whose shop money (getter sum) is below n is raised to n.
+   HOW TO ADD, from the disassembly of kl2.exe (re/shop_hire.md 8.5): the SPENDERS cannot add. 0x6b1910 (first store) and 0x7f6950 (second) call 0x8bb7b0 / 0x6406f0, which do
+   'cmp esi,eax ; jbe sub ; mov [edx],0' = an UNSIGNED compare, an amount above the store (a negative one included) CLAMPS the store to 0. So the add is the game's own pair
+   0x6cfdb0 (AddLootMoney, first store) / 0x497ce0 (AddRewardMoney, second): same wrapper as the spenders (sub esp,8 / set seat byte via 0x7dea30 / the array op / 0x942b20 notify
+   with the dirty mask / 0x57aca0), whose array op is 0x688160 'add [ecx+eax*4+0x160],edx ; or word [ecx+0x1fe],0x80' (0x453cd0 adds to +0x190 with mask 1). thiscall(S, seat, amount) ret 8,
+   so the new money replicates exactly like a spend. Only 0x6cfdb0 is used (the first store is the one the getters sum first). The guard compares the wrapper's first 8 bytes and the
+   'call 0x688160' at 0x6cfdcf. n is capped at 99,999,999. */
+static int kspo_addcode_ok(void)
+{
+    static const BYTE a1[] = { 0x83, 0xec, 0x08, 0x53, 0x8b, 0x5c, 0x24, 0x10 }, a2[] = { 0xe8, 0x8c, 0x83, 0xfb, 0xff };
+    static int ok = -1;
+    if (ok < 0) {
+        ok = klc_same_code(0x6cfdb0, a1, sizeof a1) && klc_same_code(0x6cfdcf, a2, sizeof a2);
+        if (!ok) klog("bench: ShopMoney refused: 0x6cfdb0 (AddLootMoney) is not the routine this build knows (other kl2.exe?); nothing written");
+    }
+    return ok;
+}
+
+static void kspo_benchmoney(void)
+{
+    DWORD rules = 0, sc = 0, n = 0, fr; int seat, wrote = 0, st = kspo_state();
+    if (!kspo.bmN || kspo.bmDone || st == 0 || st == 0x19 || !kspo_score(&rules, &sc) || !KLH_RULES_SV_OK(klh_rd32(rules))) return;    /* host only, shop phase */
+    if (!kspo.bmAt) kspo.bmAt = GetTickCount() ? GetTickCount() : 1;
+    if (GetTickCount() - kspo.bmAt < 3000) return;                      /* let the shop come up first (as OnlineTestBuy's 3 s) */
+    if (!klh_rd(rules + 0x14, &n, 4) || n == 0 || n > 16 || !kspo_money_code_ok() || !kspo_addcode_ok()) { kspo.bmDone = 1; return; }
+    fr = klh_rd32(rules + 0xc);
+    for (seat = 0; seat < KSPO_MONEYSEATS && (DWORD)seat < n; seat++) {
+        DWORD m1 = 0, m2 = 0, m3 = 0, m4 = 0; BYTE b = 1;
+        if (!fr || !klh_rd(fr + seat, &b, 1) || b) continue;            /* seat not in use */
+        if (!kspo_shopmoney(seat, &m1, &m2)) continue;
+        if ((unsigned __int64)m1 + m2 >= (unsigned __int64)kspo.bmN) continue;
+        __try { ((void (__fastcall *)(void *, void *, int, DWORD))(DWORD_PTR)KLH_VA(0x6cfdb0))((void *)(DWORD_PTR)sc, 0, seat, kspo.bmN - (m1 + m2)); } __except (1) { klog("bench: ShopMoney seat %d: the add faulted", seat); continue; }
+        kspo_shopmoney(seat, &m3, &m4);
+        klog("bench: ShopMoney seat %d %lu -> %lu", seat, (unsigned long)(m1 + m2), (unsigned long)(m3 + m4));
+        wrote++;
+    }
+    if (wrote) kspo.bmDone = 1;                                          /* once per stay, but retry until at least one seat was written */
+}
+
 /* the host's verdict on (seat, row, item, round). remote = the request came over the wire. Returns a KSPO_ reason. NO game write. */
 static int kspo_judge(int seat, int row, int item, int round, int remote, int record)
 {
@@ -148,8 +227,11 @@ static int kspo_judge(int seat, int row, int item, int round, int remote, int re
             if (kspo_carried(seat, &c0, &c1) && (c0 == row || c1 == row)) { c = KSPO_CARRIED; goto done; }
         } else if (kspo.got[seat] == round + 1) { c = KSPO_ONCE; goto done; }
         price = (DWORD)kspg_price(row);
-        if (price) {
-            if ((unsigned long)sn.b.on_money[seat] < (unsigned long)price) { c = KSPO_MONEY; goto done; }
+        {
+            DWORD m1 = 0, m2 = 0;                                   /* the shop money: stock getters' sum, like the stock handler 0x55d3e0 compares (8.2) */
+            if (!price) { c = KSPO_MONEYX; goto done; }             /* unknown price: the stock handler may refuse silently, so do not approve */
+            if (!kspo_shopmoney(seat, &m1, &m2)) { c = KSPO_MONEYX; goto done; }
+            if ((unsigned __int64)m1 + (unsigned __int64)m2 < (unsigned __int64)price) { c = KSPO_MONEY; goto done; }
         }
         c = KSPO_OK;
         if (record) kspo.got[seat] = round + 1;
@@ -322,6 +404,8 @@ static void kspo_tick(void)
 static void kspo_init(void)
 {
     kspo.on = GetPrivateProfileIntA("ShopPage", "OnlineSend", 0, klh_ini) != 0;
+    { int v = (int)GetPrivateProfileIntA("Bench", "ShopMoney", 0, klh_ini); kspo.bmN = v < 0 ? 0 : v > 99999999 ? 99999999 : (DWORD)v;
+      if (kspo.bmN) klog("bench: [Bench] ShopMoney=%lu (bench only, recommended off): once per shop stay the HOST raises every seat's shop money to that, through the game's AddLootMoney 0x6cfdb0", (unsigned long)kspo.bmN); }
     if (!kspo.on) return;
     knc_want("shopg");
     knc_on("SHOPG", kspo_on_msg);

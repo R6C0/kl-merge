@@ -15,7 +15,7 @@
  *   shopProbe: page2buy ...      a page II row buy: swallowed (OnlineLook) or passed on (OnlinePage2), row, carrier item, the message name
  *   shopProbe: stockbuy row=%d crew[seat]=+3:%d->%d +4:%d->%d zc+1dc=%d +29c=%d money=%lu->%lu    1.5 s after a stock BuyWeapon (replication time);
  *                                                                          crew[seat] = [rules+8] + 0x74 * seat, zc+1dc / +29c = rules+0x1dc (byte) / rules+0x29c (dword) (read as asked, meaning unknown);
- *                                                                          money = klor_read's on_money[seat] (needs [Online] Read=1, else 'n/a')
+ *                                                                          money = the SHOP money of the seat, stock getters 0x622e10 + 0x639c10 (seat from klor_read, needs [Online] Read=1, else 'n/a')
  * The stock buy line is only reached when klshoppage's wrappers are live online ([ShopPage] Enable=1 + OnlineLook=1, the gate of kspg_gate).
  */
 #ifndef KLSHOPPAGE_PROBE_C
@@ -31,6 +31,7 @@ static struct {
 } kspp;
 
 static struct klor_snap kspp_snap;
+static int kspo_shopmoney(int seat, DWORD *first, DWORD *second);   /* klshoppage_online.c, defined after this include */
 
 /* the local seat as klescprobe.c reads it (osd player list element +0xefc); -1 unknown */
 static int kspp_loc(void)
@@ -106,10 +107,10 @@ static void kspp_tick(void)
         if (rules && (KLH_RULES_SV_OK(klh_rd32(rules)) || KLH_RULES_CL_OK(klh_rd32(rules)))) {
             klh_rd(rules + 0x1dc, &v1dc, 1); klh_rd(rules + 0x29c, &vz, 4);
             if (kspp.pbSeat >= 0 && kspp.pbSeat < 16 && (rec = klh_rd32(rules + 8))) { klh_rd(rec + 0x74 * (DWORD)kspp.pbSeat + 3, &b3, 1); klh_rd(rec + 0x74 * (DWORD)kspp.pbSeat + 4, &b4, 1); }
-            klor_noev = 1; if (klor_read(&kspp_snap, kspp_loc()) && kspp.pbSeat >= 0 && kspp.pbSeat < 16) { m1 = (unsigned long)kspp_snap.b.on_money[kspp.pbSeat]; mok = 1; } klor_noev = 0;
+            { DWORD q1 = 0, q2 = 0; if (kspp.pbSeat >= 0 && kspp.pbSeat < 16 && kspo_shopmoney(kspp.pbSeat, &q1, &q2)) { m1 = (unsigned long)(q1 + q2); mok = 1; } }   /* shop money = the stock getters' sum (re/shop_hire.md 8.2), not klor's in-round on_money */
         }
         if (mok && kspp.pbMoneyOk) kspp_log("shopProbe: stockbuy row=%d crew[%d]=+3:%d->%d +4:%d->%d zc+1dc=%d +29c=%lu money=%lu->%lu", kspp.pbRow, kspp.pbSeat, kspp.pbB3, (int)b3, kspp.pbB4, (int)b4, (int)v1dc, (unsigned long)vz, (unsigned long)kspp.pbMoney, m1);
-        else kspp_log("shopProbe: stockbuy row=%d crew[%d]=+3:%d->%d +4:%d->%d zc+1dc=%d +29c=%lu money=n/a (seat or [Online] Read=1 missing)", kspp.pbRow, kspp.pbSeat, kspp.pbB3, (int)b3, kspp.pbB4, (int)b4, (int)v1dc, (unsigned long)vz);
+        else kspp_log("shopProbe: stockbuy row=%d crew[%d]=+3:%d->%d +4:%d->%d zc+1dc=%d +29c=%lu money=n/a (seat unknown or the money getters unreadable)", kspp.pbRow, kspp.pbSeat, kspp.pbB3, (int)b3, kspp.pbB4, (int)b4, (int)v1dc, (unsigned long)vz);
     }
     inr = st >= 0x16 && st <= 0x19;
     if (!inr) { kspp.lastSt = (int)st; kspp.inRange = 0; kspp.pn = 0; kspp.poolSaid = 0; return; }
@@ -144,7 +145,7 @@ static void kspp_buy_before(int row)
     kspp.pbMoneyOk = 0;
     if (!rules || !(KLH_RULES_SV_OK(klh_rd32(rules)) || KLH_RULES_CL_OK(klh_rd32(rules)))) return;
     klor_noev = 1;
-    if (klor_read(&kspp_snap, kspp_loc())) { seat = kspp_snap.local; if (seat >= 0 && seat < 16) { kspp.pbMoney = (DWORD)kspp_snap.b.on_money[seat]; kspp.pbMoneyOk = 1; } }
+    if (klor_read(&kspp_snap, kspp_loc())) { seat = kspp_snap.local; if (seat >= 0 && seat < 16) { DWORD q1 = 0, q2 = 0; if (kspo_shopmoney(seat, &q1, &q2)) { kspp.pbMoney = q1 + q2; kspp.pbMoneyOk = 1; } }   /* shop money = getter sum (8.2) */ }
     klor_noev = 0;
     if (seat >= 0 && seat < 16 && (rec = klh_rd32(rules + 8))) { klh_rd(rec + 0x74 * (DWORD)seat + 3, &b3, 1); klh_rd(rec + 0x74 * (DWORD)seat + 4, &b4, 1); }
     kspp.pbRow = row; kspp.pbSeat = seat; kspp.pbB3 = (int)b3; kspp.pbB4 = (int)b4;
