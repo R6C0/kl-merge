@@ -66,6 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~07:45 - [ce] Shop page II online: OnlineProbe (log) + OnlineSend (SHOPG ask, no writes) + OnlineTestBuy bench key; ShopNames vt 0xbd4194 DDL_String fix,
+intro carrier chains onto Board=1, [Bench] SelfDownAt (71f7647c8). TEST out_ce_1027d_test 2ab24929 -> c9 ALL2, P2P2. Owner still on SHIP 1027u. Details: log 07:45.
+
 2026-10-27 ~05:50 - [ce] OWNER ON SHIP 1027u (f1c02dc7, rtp 070fe3e10). Proven live (BOSE5c..g): +0xefc seat byte, ABOARD 0x20/ESCAPED 0x40 + van icon,
 my body kept when the camera follows a peer (klh_slot_player_mine), [HUD] OnlineBoardCarrier end card on ZFAOutroDisplay osd+0x10b0.
 NOT run: OnlinePage2/bot-down rules-copy gates, Hire online guards (308844132). c9 queue: CE27 grades + map-pool overlay (bench_ce_1027).
