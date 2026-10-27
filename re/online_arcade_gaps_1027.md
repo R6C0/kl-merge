@@ -51,6 +51,7 @@ Hire online (HRF2/HRP2), page II online buy, HUD online ports (ALL2D..G, BOSE5),
 
 ## Recommended order
 G1 (code, small), then bench G2 ini keys one at a time, then G3 tune keys, then G4 camera and FallRescue, then G5/G6 verification, G8 map fix.
+Status 2026-10-28 00:10: unchanged since 23:10 except A1HIRE (G1 live proof) was aborted at 23:03 by owner input and is staged for rerun; game is free.
 Status 2026-10-27 23:10 (per gap):
 - G1 CLOSED in code (OnlineIgnoreChar=1 live in SHIP 1827767d8); live proof pending: A1HIRE bench not run (owner at PC), staged.
 - G2 OPEN (ini keys unbenched). G3 OPEN. G5 OPEN (edges, 9-player bench first). G6 OPEN (RankUp/Letter unseen live).
