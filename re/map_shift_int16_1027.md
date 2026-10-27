@@ -45,3 +45,48 @@ escape, glass/doors, ambience (rooms), and compare nav (bots reach loot) with th
 A codec bias in the hook: subtract/add a constant (Bx, Bz) in the three int16 pack/unpack helpers (0x5a0ff0 player+actor positions, 0x404e60 /
 0x8413b0 the RMC vec3 args). One symmetric patch on both peers covers grenades, drops, barrels, actors with no map change. Risk: if the
 helpers are also used for non-position int16 (velocity, direction) they would be biased too - read the callers first.
+
+## Plan B static check (2026-10-27, offline, kl2.exe disassembly) - VERDICT: NOT CLEAN, not built
+Tools: capstone on kl2.exe (debug/kl.py Exe), scans: direct callers of the helpers, every `call _ftol2 0xa8d330` triple, every `movsx word / fild` unpack.
+
+### The three "helpers" are not the codec
+- 0x5a0ff0 = `SetPosition(vec3*)` of a dataset object: ftol(y)->[ecx+0xa], ftol(z)->[ecx+0xc], ftol(x)->[ecx+8] (int16, truncation toward zero, no scale).
+  It is a method of several dataset classes (this = obj+0x110 / +0x170 / +0x350), called from 14 sites (table below).
+- 0x404e60 / 0x8413b0 = ONE of many identical "pack xyz as 3 x int16, call RMC stub" wrappers (404e60 -> 0x4f9570, 8413b0 -> 0x4c9230).
+  The same inline pack (fld [esi+8]; _ftol2; movzx; fld [esi+4]; _ftol2; ...) exists in at least 17 more functions that do NOT use the three
+  helpers: 0x47d840 0x491900 0x4a5a70 0x5205e0 0x541780 0x55b530 0x623930 0x69d080 0x70aa70 0x71d600 0x7235b0 0x756bb0 0x75fb40 0x796320 0x832930 0x84d900 0x8d7e20
+  (+ 0x82cc40 pushes the three ftol results itself and calls 0x404e60). So hooking the 3 helpers covers only part of the sends.
+- There is NO unpack helper. Unpack is inline `movsx r, word [..]; fild` in each RMC receiver (0x4f9570, 0x4c9230, 0x4e7680, 0x68b070, 0x6e5580,
+  0x4d13f0, 0x4ba7d0, 0x4e2c70, 0x60c610, 0x771d90, 0x78a580, 0x795b40, 0x79ab20, 0x5076e0, 0x539cc0, 0x595ea0, 0x55cbd0, 0x4f7b00 ...) and in the
+  dataset readers (word [obj+0x118/0x11a/0x11c], [+0x178..], [+0x358..0x35c]: 0x41f6b0 0x557db0 0x569eb0 0x5c9110 0x8efe90 0x5f21c0 0x600c80 0x63a9f0 0x4ca1a0 ...).
+  "Subtract T before pack, add T after unpack" therefore means patching ~20 packers and ~30 unpackers, each classified by hand; a missed one
+  = a body at the wrong place by 12288/16384 units, i.e. worse than the stopgap. Receivers also re-pack what they unpack (0x4f9570 -> 5a0ff0 at 4f964b),
+  so a half-patched chain double-shifts.
+
+### 0x5a0ff0 call sites (14) - classification
+| call | in function | this | value | class |
+|---|---|---|---|---|
+| 454b01 | 454ad0 | +0x350 | arg | absolute position (actor/player teleport/set) |
+| 4c9380 | 4c9230 | +0x350 | unpacked RMC args (movsx/fild) | absolute position (receiver of 8413b0) |
+| 4f964b | 4f9570 | +0x350 | unpacked RMC args | absolute position (receiver of 404e60) |
+| 4e7804 | 4e7680 | +0x110 | unpacked RMC args (+ extra int16 x angle) | absolute position, other dataset |
+| 68b15a, 6e56df | 68b070, 6e5580 | +0x110/edi | unpacked RMC args | absolute position (RMC receivers) |
+| 630... 6301e1 | 630010 | +0x350 | vec from 0x51f910 with angle in the same fn | position-like, GUESS |
+| 81b267 | 81b210 | +0x350 | local vec | position-like, GUESS |
+| 71bc65, 71bcb2 | 71ba00 | +0x110 | local vec | position-like, GUESS |
+| 7a8fb5 | 7a8d10 | +0x110 | cached floats at +0x2ac | position-like, GUESS |
+| 8f98e3 | 8f9810 | +0x350 | arg | position-like, GUESS |
+| 4b483f | 4b46a0 | +0x170 | vec (0, const[0xb724cc], const[0xb7ee44]) | NOT a world position (constant offset), a shift would corrupt it |
+| 86fdb8 | 86fbc0 | +0x350 | three constants (0xb7f594, 0xb1b944, 0xb32f0c) | sentinel/reset vector, NOT a map position |
+So even inside 0x5a0ff0 there are non-position uses; a blanket subtract in the helper is wrong.
+
+### Other answers
+- Exactness: the pack is truncation toward zero of the float, no scale, so an integer T is exact for the integer part; error stays < 1 unit as stock
+  (float32 near 44k has 1/256 resolution, sums stay exact for T = multiples of 4096). Not a blocker.
+- Same code on host and client: GUESS yes (one kl2.exe, symmetric RMC stubs); not the problem.
+- Bypass of the helpers: yes, see the 17 inline packers above, plus all receivers. Not yet examined one by one: full-float spawn RMC, projectiles,
+  drops, loot (some of the 17 inline packers are probably those).
+- Verdict: Plan B is feasible only as a full audit (about 50 sites, each proven absolute-vs-relative, receivers and senders paired per RMC) or
+  as the map shift. Neither is a quick hook. Nothing implemented in klhook; [Int16Guard] OnlineSkip=DM11B stays.
+- If someone does it: pair each packer with its receiver through the RMC stub (vtable index), patch sender+receiver of the same RMC together,
+  and verify with a round-trip test in the offline harness before any live run.
