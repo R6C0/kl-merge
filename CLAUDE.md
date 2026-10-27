@@ -66,12 +66,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-27 ~08:25 - [c9] ALL2D PASS. P2P2 client crash 0x5b97d8 (server browser, [sm+4] null): ce's ShopPage OnlineTestBuy fired at state 0xd while joining
+(gate < 0x19, shop mode 0); fix = KSPG_MODE==2 + real shop state (ce). Queue: CE27_ALL2E (1027e) -> C27_RSTQ/RST0 (ALL2 double-Reset diag, a890ac178) -> GRT2, MPX2, HRF2, HRP2, ALL2R.
+
 2026-10-27 ~07:45 - [ce] Shop page II online: OnlineProbe (log) + OnlineSend (SHOPG ask, no writes) + OnlineTestBuy bench key; ShopNames vt 0xbd4194 DDL_String fix,
 intro carrier chains onto Board=1, [Bench] SelfDownAt (71f7647c8). TEST out_ce_1027d_test 2ab24929 -> c9 ALL2, P2P2. Owner still on SHIP 1027u. Details: log 07:45.
-
-2026-10-27 ~05:50 - [ce] OWNER ON SHIP 1027u (f1c02dc7, rtp 070fe3e10). Proven live (BOSE5c..g): +0xefc seat byte, ABOARD 0x20/ESCAPED 0x40 + van icon,
-my body kept when the camera follows a peer (klh_slot_player_mine), [HUD] OnlineBoardCarrier end card on ZFAOutroDisplay osd+0x10b0.
-NOT run: OnlinePage2/bot-down rules-copy gates, Hire online guards (308844132). c9 queue: CE27 grades + map-pool overlay (bench_ce_1027).
 
 2026-10-27 ~07:40 - [c9] Benched for ce, all 0 faults: map pool Mix shared host->client (MPX); Hire refused as unaffordable (HRP).
 Hire OK "for next round" (HRF); shopnames slot k = seat k, holder vtable 0xbd4194 (ALL). Bench artefact: background instance stalls 60-300 s in
