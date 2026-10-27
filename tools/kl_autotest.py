@@ -138,7 +138,10 @@ def snapshot(dd, say=print):
         kept = os.path.join(keep, name)
         if name.lower().endswith('.dll') and os.path.isfile(src) and os.path.isfile(kept) and sha1(src) != sha1(kept):
             if tests is None:
-                tests = {sha1(p) for p in glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'klhook', 'out_*_test', name))}
+                # 10-27: hashing every out_*_test dll (hundreds) stalled HRF2's snapshot ~7 min; only a same-size dll can match
+                n = os.path.getsize(src)
+                tests = {sha1(p) for p in glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'klhook', 'out_*_test', name))
+                         if os.path.getsize(p) == n}
             if sha1(src) in tests:
                 was[name] = sha1(kept)
                 say('  before | %s in the game folder is a TEST build left by an interrupted run: keeping the saved %s' % (name, was[name]))
