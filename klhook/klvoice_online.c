@@ -7,10 +7,18 @@
  * GUESS V1: the voice number the local player's lines use online is his seat number (Arcade: data[rules+0x33e+record]; the online rules have no
  *   such table known). If the swapped entry is not the one the game says, the line stays stock (nothing breaks); the walk log says what it replaced.
  * GUESS V2: the local seat found as klhud.c does ([osd+0x10c4] player list, +0xefc). Seats above 7 are not handled (the voice table has 8 entries).
+ * [Voice] OnlineTraits=0 (recommended off until benched; needs Online=1): kltalk.c's klk_tick and kltrait.c's kltt_tick take this who too (see kltrait.c ONLINE).
  * KLHook.ini [Voice] Online=0 (recommended off until benched); needs Enable=1, [Online] Read=1 and the Dead Men leaves in the level's .LOC.
  */
 #ifndef KLVOICE_ONLINE_C
 #define KLVOICE_ONLINE_C
+
+/* the online round's character list as a klw_src, for kltrait.c ([Voice] OnlineTraits=1); 0 if klor_read has not read one yet */
+static int kvo_online_src(struct klw_src *s)
+{
+    if (!klor_s.src.n) return 0;
+    *s = klor_s.src; return 1;
+}
 
 static int kvo_online_who(struct klw_who *w, char *name)
 {
