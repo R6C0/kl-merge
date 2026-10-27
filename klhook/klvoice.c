@@ -70,6 +70,7 @@ static struct { int walks, lines, swapped, restored, missing, told_layout, told_
 
 static int kvo_onl; static char kvo_onl_name[32];      /* [Voice] Online: this tick's who is the LOCAL online player (klvoice_online.c, defined later) */
 static int kvo_online_who(struct klw_who *w, char *name);
+static int kvo_diag;                                                           /* [Voice] OnlineDiag=1 (diagnostic log lines only, recommended off) */
 static char kvo_onl_seatname[8][32]; static int kvo_crew_on(void);       /* klvoice_online.c: [Voice] OnlineCrew per-seat names */
 #define kvo_onl_crew kvo_crew_on()
 
@@ -646,8 +647,10 @@ static void kvo_tick(int game_thread)
         if (kvo.plaindata) kvo_cv_sigdone = sig;
         kvo_s.lines = nl; kvo_s.swapped += nsw; kvo_s.restored += nrs; kvo_s.missing += nmiss;
         if (kvo.log && (nsw || nrs || nmiss || !kvo_s.told_layout || (!nl && !kvo_s.told_none))) {
-            klog("voice: walk %d (rules %08lx): %d per-character lines, %d entries replaced, %d put back, %d without a leaf; wanted voice numbers: %d%s",
-                 kvo_s.walks, w.rules, nl, nsw, nrs, nmiss, nwant, nl ? "" : " - NO per-character line found (the layout guess is wrong, or the lines are not made yet)");
+            char wl[160]; int wk, wn = 0; wl[0] = 0;                                      /* [Voice] OnlineDiag=1: say WHICH voice numbers were wanted (2026-10-27 bench ce5: the bare count misled) */
+            if (kvo_diag) for (wk = 0; wk < 8 && wn < 120; wk++) if (who[wk][0]) wn += snprintf(wl + wn, sizeof wl - wn, " [%d=%s]", wk, who[wk]);
+            klog("voice: walk %d (rules %08lx): %d per-character lines, %d entries replaced, %d put back, %d without a leaf; wanted voice numbers: %d%s%s",
+                 kvo_s.walks, w.rules, nl, nsw, nrs, nmiss, nwant, wl, nl ? "" : " - NO per-character line found (the layout guess is wrong, or the lines are not made yet)");
             kvo_s.told_layout = 1; if (!nl) kvo_s.told_none = 1;
         }
     }
@@ -660,6 +663,7 @@ static void klvo_init(void)
     kvo.online = GetPrivateProfileIntA("Voice", "Online", 0, klh_ini) != 0;       /* default 0: the local player's own lines in an online round (klvoice_online.c; NOT run live) */
     kvo.stock = GetPrivateProfileIntA("Voice", "StockLevels", 0, klh_ini) != 0;
     kvo.log = (int)GetPrivateProfileIntA("Voice", "Log", 1, klh_ini);
+    kvo_diag = GetPrivateProfileIntA("Voice", "OnlineDiag", 0, klh_ini) != 0;
     kvo.period = (int)GetPrivateProfileIntA("Voice", "Period", 1500, klh_ini);
     kvo.radiofb = GetPrivateProfileIntA("Voice", "RadioFallback", 0, klh_ini) != 0;     /* default 0 = the old behaviour */
     kvo.played = GetPrivateProfileIntA("Voice", "PlayedLog", 1, klh_ini) != 0;      /* only logs, and only with Log=2 */

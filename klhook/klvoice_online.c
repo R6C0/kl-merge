@@ -7,6 +7,8 @@
  * GUESS V1: the voice number the local player's lines use online is his seat number (Arcade: data[rules+0x33e+record]; the online rules have no
  *   such table known). If the swapped entry is not the one the game says, the line stays stock (nothing breaks); the walk log says what it replaced.
  * GUESS V2: the local seat found as klhud.c does ([osd+0x10c4] player list, +0xefc). Seats above 7 are not handled (the voice table has 8 entries).
+ * [Voice] OnlineDiag=0 (recommended off; log lines only): re-logs 'local seat' / 'online crew' when a seat's name changes (the stock hero is read for
+ *   ~0.5 s at round start, then the chosen look), logs rules+0x33e once per such log, and klvoice.c's walk line lists the wanted voice numbers.
  * [Voice] OnlineTraits=0 (recommended off until benched; needs Online=1): kltalk.c's klk_tick and kltrait.c's kltt_tick take this who too (see kltrait.c ONLINE).
  * KLHook.ini [Voice] Online=0 (recommended off until benched); needs Enable=1, [Online] Read=1 and the Dead Men leaves in the level's .LOC.
  */
@@ -31,8 +33,8 @@ static int kvo_crew_on(void)
 
 static int kvo_online_who(struct klw_who *w, char *name)
 {
-    static struct klw_who last; static char lname[32], lsn[8][32]; static DWORD lat, ltry, lround_rules; static int lround = -1, lok;
-    DWORD now = GetTickCount(), pl, li = 0; struct klor_snap o; char scene[160];
+    static struct klw_who last; static char lname[32], lsn[8][32]; static DWORD lat, ltry, lround_rules, lhash; static int lround = -1, lok;
+    DWORD now = GetTickCount(), pl, li = 0, hsh = 0; struct klor_snap o; char scene[160];
     name[0] = 0;
     if (lok && (DWORD)(now - ltry) < 400) { *w = last; snprintf(name, 32, "%s", lname); return 1; }   /* cached: klor_read is a scan */
     ltry = now ? now : 1;
@@ -57,8 +59,14 @@ static int kvo_online_who(struct klw_who *w, char *name)
                         snprintf(lsn[o.r[k].seat], sizeof lsn[0], "%s", o.r[k].name); last.n++;
                     }
                 }
-                if (lok && (lround_rules != o.b.rules || lround != o.round)) {       /* once per round */
-                    lround_rules = o.b.rules; lround = o.round;
+                if (kvo_diag) { int a, b; for (a = 0; a < 8; a++) for (b = 0; lsn[a][b]; b++) hsh = hsh * 31 + (BYTE)lsn[a][b] + (DWORD)a * 7; }   /* OnlineDiag: the (seat, name) set */
+                if (lok && (lround_rules != o.b.rules || lround != o.round || (kvo_diag && lhash != hsh))) {       /* once per round (OnlineDiag=1: and again whenever a seat's name changes or a human joins; bench ce5 froze the first stale snapshot) */
+                    lround_rules = o.b.rules; lround = o.round; lhash = hsh;
+                    if (kvo_diag) {                                                    /* read-only: does rules+0x33e (the Arcade voice table) hold anything on these rules? settles GUESS V1 */
+                        BYTE vt[8]; memset(vt, 0xee, sizeof vt);
+                        if (klh_rd(o.b.rules + 0x33e, vt, 8)) klog("voice: diag: rules %08lx +0x33e = %02x %02x %02x %02x %02x %02x %02x %02x (Arcade: voice number per record; GUESS V1 says online voice = seat, compare with the seat table below)", o.b.rules, vt[0], vt[1], vt[2], vt[3], vt[4], vt[5], vt[6], vt[7]);
+                        else klog("voice: diag: rules %08lx +0x33e is not readable", o.b.rules);
+                    }
                     klog("voice: online: local seat %d plays '%s' (character %d of %d), round %d of %d; its lines use voice number %d (GUESS V1: the seat number)", (int)li, lname, last.m[0].ch, last.nchar, o.round, o.rounds, (int)li);
                     if (kvo.log >= 1 && last.n > 1) {
                         char mp[256]; int q, ml = 0; mp[0] = 0;
