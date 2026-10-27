@@ -332,7 +332,7 @@ static void klco_tick(int game_thread)
         for (i = 0; i < n; i++) sig = sig * 31 + klco_ent(ents, n, i);
         if (sig != klco.entSig) {                                  /* a new level / round built new player objects: what peers said before is about other bodies */
             if (klco.entSig) { memset(klco.p, 0, sizeof klco.p); klog("charonline: the player table changed (new round): peer looks forgotten, they re-announce every 2 s"); }
-            klco.entSig = sig; klco.since = now; klco.pubStr[0] = 0; klco.diagAt = 0;
+            klco.entSig = sig; klco.since = now; klco.pubStr[0] = 0; klco.diagAt = 0; klco.toldNoWar = 0;     /* D4 (re/netcode_players_1027.md): the stock-map 'no such model' note once per ROUND, not once per session */
         }
         idx = klco_find_own(ents, n, now, &pl, &how);
         if (idx != klco.ownIdx || (idx >= 0 && pl != klco.ownEnt)) {
