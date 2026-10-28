@@ -527,13 +527,16 @@ def main(argv):
     global SHIFT_MAG
     SHIFT_MAG = max(abs(v) for v in t)
     src = a[0] if a else os.path.join(DD11B, 'F04_Main.zip')
+    if not a and os.path.exists(os.path.join(DD11B, 'Int16Ok.txt')) and os.path.exists(src + '.before-dm11s'):
+        src += '.before-dm11s'      # SHIP_DM11S.bat (10-28) installed DM11S there; the real DM11B is kept beside it
     dst = a[1] if len(a) > 1 else os.path.join(DM, 'F04_Main_DM11S.zip')
     stats = {}
     test_source_guard(stats)
     # a bench (stage_a1shift.ps1 install) puts DM11S itself into the DM11B folder; shifting that again pushes the M11 section pivots to
     # (-24576,0,-32768) and every check fails (seen 10-28 during A1SHIFT5b). The real DM11B has 1821 entities beyond int16.
     check(a or RC.audit(src), 'source %s is already in int16 range: DM11S is installed (a bench running?), not the real DM11B' % src)
-    rep = MS.shift(src, dst, t, log=lambda m: None, expect_prp_size=MS.DM11B_PRP_SIZE if not a else None)
+    rep = MS.shift(src, dst, t, log=lambda m: None, expect_prp_size=MS.DM11B_PRP_SIZE if not a else None,
+                   whd=None if a else os.path.join(DD11B, 'F04_Main.WHD'))      # the .before-dm11s name hides the sidecar from check_sound
     tmp = tempfile.mkdtemp(prefix='kl_map_shift_test_')
     back = os.path.join(tmp, 'back.zip')
     MS.shift(dst, back, tuple(-v for v in t), log=lambda m: None, whd=False)
@@ -581,7 +584,17 @@ def main(argv):
         rc, last = run_py([os.path.join(HERE, 'kl_pf4_translate_test.py')], 'pf4')
         print('(d) kl_pf4_translate_test.py: exit %d: %s' % (rc, last))
         check(rc == 0, 'kl_pf4_translate_test failed')
-        rc, last = run_py([os.path.join(HERE, 'kl_sgp_sgd_translate_test.py'), src], 'sgp/sgd on the source')
+        zsrc = src
+        if not src.lower().endswith('.zip'):      # F04_Main.zip.before-dm11s: that tool goes by the extension; a hard link in tmp, no copy
+            zsrc = os.path.join(tmp, 'source.zip')
+            try:
+                os.link(src, zsrc)
+            except OSError:
+                import shutil
+                shutil.copyfile(src, zsrc)
+        rc, last = run_py([os.path.join(HERE, 'kl_sgp_sgd_translate_test.py'), zsrc], 'sgp/sgd on the source')
+        if zsrc != src:
+            os.remove(zsrc)
         print('(d) kl_sgp_sgd_translate_test.py <source zip>: exit %d: %s' % (rc, last))
         check(rc == 0, 'kl_sgp_sgd_translate_test failed on the source zip')
         rc, last = run_py([os.path.join(HERE, 'kl_sgp_sgd_translate_test.py')], 'sgp/sgd default sweep')
