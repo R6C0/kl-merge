@@ -66,9 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-28 ~14:00 - [c9] A1TALK DM01+DD04 PASS: crew banter online both seats (OnlineTalk=1, a27db09ca). DM11B shift (DM11S): load crash fixed
-(.prm type-7 repoint 723e78443), now c0000094 div-by-zero at kl2+0x4668b in round, both seats -> workflow wkthgj0ax (C:\kl_wt\div0). DM11B
-stock + ship dll f520f5d1 restored; game handed to ce. Hire3 gaps workflow wrekij1hv (C:\kl_wt\hire3). Status page Pp48g1cQgREDE3AsHPqxTa (c9).
+2026-10-28 ~15:12 - [c9] DM11B moved into int16 range: A1SHIFT4 PASS online both seats (DM11S built from the REAL DM11B, 984463891; runs 1-3
+had shifted the stock F04 -> sound div0). Hire online complete (A1HIRE3: rules+0x208 confirmed, money read back). Banter online PASS (A1TALK).
+Next: DM11S ship prep + full-round/offline checks; A1NET2 (both seats walk) after ce. Status page Pp48g1cQgREDE3AsHPqxTa (c9).
 
 2026-10-28 ~14:50 - [ce] 5 benches on out_week_1028i_test, 0 faults every seat: WKBC F06 7/7 bots aboard, ledger $1.9M, bank CREDIT not exercised
 (host tele 2 s too late); BP_DD08 6/7 (was 4/7); BP_DD04 4/7: gather cut by the clock clause -> new [BotFill] OnlineGatherLateS (17092f8b7 cherry-picked);
