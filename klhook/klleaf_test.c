@@ -22,14 +22,12 @@ int main(void)
     CHECK(klleaf_due(5, 0xfffffff0ul, 0) == 1);               /* tick wrap: 21 ms after the accept */
     CHECK(klleaf_due(0x10, 0xfffffff0ul, 1) == 0);
     /* stall gate */
-    CHECK(!klleaf_stall_gated(2000, 1000, 0, 0));             /* AfterDoorMs 0 = old behaviour */
-    CHECK(klleaf_stall_gated(2000, 1000, 0, 5000));           /* probe off: box-enter time, 1 s in */
-    CHECK(!klleaf_stall_gated(6000, 1000, 0, 5000));          /* 5 s after the box-enter */
-    CHECK(klleaf_stall_gated(6000, 1000, 3000, 5000));        /* proxy accepted at 3000: gated until 8000 */
-    CHECK(!klleaf_stall_gated(8000, 1000, 3000, 5000));
-    CHECK(klleaf_stall_gated(2000, 1000, 500, 5000));         /* an older accept (a bot opened it before): the ride start counts */
-    CHECK(!klleaf_stall_gated(7000, 1000, 500, 5000));
-    CHECK(klleaf_stall_gated(5, 0xfffffff0ul, 0, 5000));      /* wrap */
+    CHECK(!klleaf_stall_gated(2000, 0, 5000));                /* no accept seen (SHIP / probe off): never gated, CarStall as before */
+    CHECK(!klleaf_stall_gated(4000, 3000, 0));                /* AfterDoorMs 0 = old behaviour */
+    CHECK(klleaf_stall_gated(6000, 3000, 5000));              /* proxy accepted at 3000: gated until 8000 */
+    CHECK(!klleaf_stall_gated(8000, 3000, 5000));
+    CHECK(!klleaf_stall_gated(70000, 3000, 5000));            /* a stale accept (an earlier fire) does not gate */
+    CHECK(klleaf_stall_gated(5, 0xfffffff0ul, 5000));         /* wrap */
     printf("klleaf_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

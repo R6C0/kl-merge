@@ -21,13 +21,12 @@ static int klleaf_due(unsigned long now, unsigned long acc, int last)
 }
 
 /* CarStall gate. 1 = the stall timer must NOT count now. after_ms 0 = old behaviour (never gated).
-   Reference = the later of the last lift-proxy accept (door_at, 0 = never seen, e.g. [Probe] DoorProxy off) and the ride start
-   (ride_at, the feet entering the box that fires the doors). So with the probe off the guard uses the box-enter time. */
-static int klleaf_stall_gated(unsigned long now, unsigned long ride_at, unsigned long door_at, int after_ms)
+   Reference = the last lift-proxy accept only (door_at, 0 = never seen: the SHIP build or [Probe] DoorProxy off -> never gated, CarStall
+   as before). Not the ride start: the ride box (KLJoin box 9) is entered AFTER the doors' own trigger box, so gating on it would only push
+   every SHIP jump past CarWait (c9 review 10-28). A stale accept (an earlier fire) is simply older than after_ms. */
+static int klleaf_stall_gated(unsigned long now, unsigned long door_at, int after_ms)
 {
-    unsigned long ref;
-    if (after_ms <= 0) return 0;
-    ref = door_at && (long)(door_at - ride_at) > 0 ? door_at : ride_at;
-    return now - ref < (unsigned long)after_ms;
+    if (after_ms <= 0 || !door_at) return 0;
+    return now - door_at < (unsigned long)after_ms;
 }
 #endif
