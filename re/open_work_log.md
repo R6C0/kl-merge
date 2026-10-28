@@ -1,8 +1,3 @@
-2026-10-28 ~19:55 - [c9] A1LIFT3d PASS: the Retomoto lift box RE-ARMS live (rtlift_1027, installed). [Probe] DoorProxy=1 (needs [KLHook] SessionSafe=0)
-logged three rounds of both elevator door proxies accepting msg 0032 (own id 0032) at log-clock 17:51:20.4, 17:51:30.4 (+10 s), 17:51:45.8; the stock box is one-shot.
-3/3b/3c failed to show it: the player was shot down within 9 s of GO and walked the route as a fed (the box is MERCONLY), only a bot's single fire was seen.
-3d used [Balance] PlayerHealth=10. PASS, faults 0, asserts 0, dll f520f5d1 / ini de91b2a5 restored. Screenshots are black all week (display off), so the
-door visual stays unchecked; the player was still downed twice near the lift (at 40 % health, cause unknown). Inputs C:\kl_build_1024\c9_1028\a1lift3.
 2026-10-28 ~20:30 - [ce] LPB1/LPB2/GUN2 (inputs C:\kl_build_1024\week_1028\*.ini; all 0 faults).
 wk-lpbal-1028 = OnlineLootParts ([BotFill] OnlineLootParts=0|1|2: a bot takes a stack in timed parts like a player, stack +0x34 amount,
 +0x40 part 20000, +0x44 0.40 s/part, read live) + [Balance] Online=0|1|2 / OnlineYouToCrew. LPB1 (parts=2 dry) PASS, fields plausible.
@@ -11,6 +6,11 @@ GUN2 (wk-gunui2 e6e3db7db, shop text in element slot 24): swap OURS both seats, 
 already right). Host script failed: the between-round shop closes after ~28 s and the script browsed tabs 1-3 first -> GUN3 buys row 32 directly.
 wk-voice-1028 (OnlineVoice: KLSYV packet, bots speak loot/boarded lines online; keys GUESS) built, bench VOX1 queued after LPB3.
 
+2026-10-28 ~19:55 - [c9] A1LIFT3d PASS: the Retomoto lift box RE-ARMS live (rtlift_1027, installed). [Probe] DoorProxy=1 (needs [KLHook] SessionSafe=0)
+logged three rounds of both elevator door proxies accepting msg 0032 (own id 0032) at log-clock 17:51:20.4, 17:51:30.4 (+10 s), 17:51:45.8; the stock box is one-shot.
+3/3b/3c failed to show it: the player was shot down within 9 s of GO and walked the route as a fed (the box is MERCONLY), only a bot's single fire was seen.
+3d used [Balance] PlayerHealth=10. PASS, faults 0, asserts 0, dll f520f5d1 / ini de91b2a5 restored. Screenshots are black all week (display off), so the
+door visual stays unchecked; the player was still downed twice near the lift (at 40 % health, cause unknown). Inputs C:\kl_build_1024\c9_1028\a1lift3.
 2026-10-28 ~19:30 - [ce] MV1 + WKBC7 (out_move_1028b_test; inputs C:\kl_build_1024\week_1028\MV1_*.ini, WKBC7_*.ini; both RESULT PASS, faults 0).
 MV1 DD04: 'guard walk' sent bots 4-6 toward a guarded stack, 'escort: online: bot N follows seat 0' every few s, lootsync sent/shown $430k ... $4.56M,
 the client's 'sync: loot' matched every step and the banked total after the van. Not exercised: round summary FINAL (script passed before the summary)
