@@ -307,7 +307,8 @@ static void klw_say(const struct klw_src *s, const struct klw_bot *b, int rec, c
 }
 
 /* the round's draw for the AI records seen[0..n) */
-static void klw_draw(const struct klw_src *s, const struct klw_seen *seen, int n, int player_ch, DWORD state, DWORD rules)
+/* extra_taken: NULL (Arcade) or one byte per character 1..KLC_NCHAR that is not to be drawn either (klcrewlook.c: every human's body online) */
+static void klw_draw(const struct klw_src *s, const struct klw_seen *seen, int n, int player_ch, DWORD state, DWORD rules, const char *extra_taken)
 {
     char taken[KLC_NCHAR + 1]; int pick[KLW_NREC], np = 0, i, j, k, m = n, choice = klc_on ? (int)klc_char : 0;
     memset(taken, 0, sizeof taken); memset(klw_r.b, 0, sizeof klw_r.b);
@@ -317,6 +318,7 @@ static void klw_draw(const struct klw_src *s, const struct klw_seen *seen, int n
     for (i = 0; i < 4; i++) klw_rnd(1);
     if (player_ch) taken[player_ch] = 1;
     if (choice >= 1 && choice <= s->n) taken[choice] = 1;                 /* the body the player CHOSE, worn already or not */
+    if (extra_taken) for (i = 1; i <= s->n && i <= KLC_NCHAR; i++) if (extra_taken[i]) taken[i] = 1;
     for (i = 0; i < klw.ninclude && np < n; i++) {
         int c = klw.include[i];
         if (c >= 1 && c <= s->n && !taken[c]) { pick[np++] = c; taken[c] = 1; }
@@ -379,17 +381,76 @@ static void klw_rename(struct klw_bot *b, const struct klw_seen *sn, const char 
     if (klw.log) klog("crew: bot %d is now called '%s' (was '%s')", sn->rec, want, cur);
 }
 
-static void klw_level_tick(int game_thread)
+/* The game routines this file calls are the ones it knows (first bytes), and slot 119 of ZFFActor's vtable is 0x417a60. Said once. */
+static int klw_code_ok(void)
 {
     static const BYTE model_code[14] = { 0x8b, 0x44, 0x24, 0x04, 0x56, 0x8b, 0xf1, 0x57, 0x8b, 0x7e, 0x04, 0x50, 0x8b, 0xcf };          /* 0x783fb0 .. push eax ; mov ecx, edi */
     static const BYTE node_code[12] = { 0x8b, 0x44, 0x24, 0x04, 0x56, 0x8b, 0xf1, 0x57, 0x8b, 0x7e, 0x68, 0x89 };                      /* 0x792290 .. mov edi,[esi+0x68] ; mov [esi+0x68],eax */
     static const BYTE variant_code[10] = { 0x8b, 0x44, 0x24, 0x04, 0x56, 0x8b, 0xf1, 0x89, 0x46, 0x50 };                               /* 0x88c810 .. mov [esi+0x50],eax */
+    static int toldcode;
+    if (!klc_same_code(KLW_SETMODEL, model_code, sizeof model_code) || !klc_same_code(KLW_NODEMODEL, node_code, sizeof node_code) ||
+        !klc_same_code(KLW_SETVARIANT, variant_code, sizeof variant_code) || klh_rd32((DWORD_PTR)KLH_VA(KLW_ACTOR_VT + 4 * 119)) != KLW_REBUILD) {
+        if (!toldcode++) klog("crew: the game routines are not the ones this build knows: nothing is changed");
+        return 0;
+    }
+    return 1;
+}
+
+/* Hold the draw: for every bot of seen[0..n) with a character in klw_r.b[rec] (not aboard / dead) bring the model and the variant to the drawn ones.
+   Game thread only for the calls. allow_redraw=0 (klcrewlook.c, online): a bot whose body a human now wears is left alone instead of drawn again here. */
+static void klw_hold(const struct klw_src *src, struct klw_seen *seen, int n, DWORD pmodel, int game_thread, int names_ok, int allow_redraw)
+{
+    static int toldthread;
+    int i, j, redraw;
+    for (i = 0; i < n; i++) {
+        struct klw_seen *q = &seen[i]; struct klw_bot *bt = &klw_r.b[q->rec]; DWORD root, cur = 0; int v;
+        if (!bt->ch || q->status) continue;                                                  /* kept his body / aboard, dead: not touched */
+        root = src->c[bt->ch - 1].root;
+        redraw = root == pmodel;
+        if (redraw && !allow_redraw) continue;
+        if (redraw) {                                                                        /* the player has taken this body since the draw */
+            char taken[KLC_NCHAR + 1]; int c, choice = klc_on ? (int)klc_char : 0;
+            memset(taken, 0, sizeof taken);
+            if (klw_r.player_ch) taken[klw_r.player_ch] = 1;
+            if (choice >= 1 && choice <= src->n) taken[choice] = 1;
+            for (j = 0; j < KLW_NREC; j++) if (klw_r.b[j].used && klw_r.b[j].ch) taken[klw_r.b[j].ch] = 1;
+            c = klw_pick(src, taken);
+            if (klw.log) klog("crew: bot %d wore the body the player now has (model %lu): drawn again", q->rec, root);
+            bt->ch = c;
+            if (!c) { if (klw.log) klog("crew: bot %d keeps model %lu: no character is left for him", q->rec, q->model); continue; }
+            klw_dress(src, bt);
+            if (klw.log) klw_say(src, bt, q->rec, "");
+            root = src->c[bt->ch - 1].root;
+        }
+        if (q->model != root) {
+            if (!game_thread) { if (!toldthread++) klog("crew: the tick is not on the game's thread ([KLHook] Tick=0?): the bodies cannot be changed"); continue; }
+            if (bt->tries >= klw.tries) continue;
+            bt->tries++;
+            ((void (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)KLH_VA(KLW_SETMODEL))((void *)(DWORD_PTR)q->actor, 0, root);
+            klh_rd(q->node + 0x68, &cur, 4);
+            klog("crew: bot %d (actor %08lx): model %lu -> %lu through the game's own routine (try %d): it now has %lu%s", q->rec, q->actor, q->model, root, bt->tries, cur, cur == root ? "" : " - NOT taken");
+            if (cur != root) continue;
+            q->model = cur; klh_rd(q->actor + 0x50, &q->variant, 4);
+        } else if (bt->lastm != root) { bt->lastm = root; if (klw.log > 1) klog("crew: bot %d wears model %lu", q->rec, root); }
+        v = klw_variant_of(src, bt, q->variant);
+        if (q->variant != (DWORD)v && game_thread && bt->looks < KLW_LOOKCALLS) {
+            bt->looks++;
+            ((void (__fastcall *)(void *, void *, int))(DWORD_PTR)KLH_VA(KLW_SETVARIANT))((void *)(DWORD_PTR)q->actor, 0, v);
+            if ((InterlockedExchange(&bt->lastv, v) != v || bt->looks == KLW_LOOKCALLS) && klw.log)
+                klog("crew: bot %d look: variant %lu -> %d%s", q->rec, q->variant, v, bt->looks == KLW_LOOKCALLS ? " - the game has set it back 64 times: left alone for this round" : "");
+        }
+        if (names_ok && game_thread) klw_rename(bt, q, src->c[bt->ch - 1].name);
+    }
+}
+
+static void klw_level_tick(int game_thread)
+{
     static const BYTE string_code[15] = { 0x56, 0x8b, 0xf1, 0x8b, 0x4c, 0x24, 0x08, 0x8d, 0x44, 0x24, 0x08, 0x50, 0x51, 0x8b, 0xce };    /* 0x83e2e0 */
     static const BYTE rename_code[12] = { 0x6a, 0xff, 0x68, 0x98, 0xbe, 0xad, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00 };                    /* 0x469250 */
-    static int toldmode, toldcode, toldthread, toldactor, toldnames; static char toldscene[160];
+    static int toldmode, toldactor, toldnames; static char toldscene[160];
     struct klw_seen seen[KLW_NREC]; struct klw_src src; int want[KLW_NREC];
     DWORD sm, gs, rules, state, gd, player, pnode, pmodel = 0, hero[8], recs, inuse, sig, now = GetTickCount(); BYTE b = 0xff, type = 0, tab[8];
-    int n = 0, cap, i, j, names_ok, redraw;
+    int n = 0, cap, i, names_ok;
     char key[64], scene[160], why[200];
 
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLW_SESSION))) || klh_rd32(sm + 0x5c) != 4) return;                      /* Arcade only */
@@ -451,55 +512,14 @@ static void klw_level_tick(int game_thread)
     klw_r.player_ch = klw_char_of(&src, pmodel);
     for (i = 0; i < n && !klw_r.fresh; i++)                                                  /* a member the draw does not know: draw again */
         if (!klw_r.b[seen[i].rec].used || klw_r.b[seen[i].rec].actor != seen[i].actor) klw_r.fresh = 1;
-    if (klw_r.fresh) { klw_r.fresh = 0; klw_draw(&src, seen, n, klw_r.player_ch, state, rules); }
+    if (klw_r.fresh) { klw_r.fresh = 0; klw_draw(&src, seen, n, klw_r.player_ch, state, rules, NULL); }
 
-    if (!klc_same_code(KLW_SETMODEL, model_code, sizeof model_code) || !klc_same_code(KLW_NODEMODEL, node_code, sizeof node_code) ||
-        !klc_same_code(KLW_SETVARIANT, variant_code, sizeof variant_code) || klh_rd32((DWORD_PTR)KLH_VA(KLW_ACTOR_VT + 4 * 119)) != KLW_REBUILD) {
-        if (!toldcode++) klog("crew: the game routines are not the ones this build knows: nothing is changed");
-        return;
-    }
+    if (!klw_code_ok()) return;
     names_ok = klw.names && klc_same_code(KLW_STRING, string_code, sizeof string_code) && klc_same_code(KLW_RENAME, rename_code, sizeof rename_code);
     if (klw.names && !names_ok && !toldnames++) klog("crew: the two name routines are not the ones this build knows: the bots keep their names");
 
     /* ---- hold the draw */
-    for (i = 0; i < n; i++) {
-        struct klw_seen *q = &seen[i]; struct klw_bot *bt = &klw_r.b[q->rec]; DWORD root, cur = 0; int v;
-        if (!bt->ch || q->status) continue;                                                  /* kept his body / aboard, dead: not touched */
-        root = src.c[bt->ch - 1].root;
-        redraw = root == pmodel;
-        if (redraw) {                                                                        /* the player has taken this body since the draw */
-            char taken[KLC_NCHAR + 1]; int c, choice = klc_on ? (int)klc_char : 0;
-            memset(taken, 0, sizeof taken);
-            if (klw_r.player_ch) taken[klw_r.player_ch] = 1;
-            if (choice >= 1 && choice <= src.n) taken[choice] = 1;
-            for (j = 0; j < KLW_NREC; j++) if (klw_r.b[j].used && klw_r.b[j].ch) taken[klw_r.b[j].ch] = 1;
-            c = klw_pick(&src, taken);
-            if (klw.log) klog("crew: bot %d wore the body the player now has (model %lu): drawn again", q->rec, root);
-            bt->ch = c;
-            if (!c) { if (klw.log) klog("crew: bot %d keeps model %lu: no character is left for him", q->rec, q->model); continue; }
-            klw_dress(&src, bt);
-            if (klw.log) klw_say(&src, bt, q->rec, "");
-            root = src.c[bt->ch - 1].root;
-        }
-        if (q->model != root) {
-            if (!game_thread) { if (!toldthread++) klog("crew: the tick is not on the game's thread ([KLHook] Tick=0?): the bodies cannot be changed"); continue; }
-            if (bt->tries >= klw.tries) continue;
-            bt->tries++;
-            ((void (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)KLH_VA(KLW_SETMODEL))((void *)(DWORD_PTR)q->actor, 0, root);
-            klh_rd(q->node + 0x68, &cur, 4);
-            klog("crew: bot %d (actor %08lx): model %lu -> %lu through the game's own routine (try %d): it now has %lu%s", q->rec, q->actor, q->model, root, bt->tries, cur, cur == root ? "" : " - NOT taken");
-            if (cur != root) continue;
-            q->model = cur; klh_rd(q->actor + 0x50, &q->variant, 4);
-        } else if (bt->lastm != root) { bt->lastm = root; if (klw.log > 1) klog("crew: bot %d wears model %lu", q->rec, root); }
-        v = klw_variant_of(&src, bt, q->variant);
-        if (q->variant != (DWORD)v && game_thread && bt->looks < KLW_LOOKCALLS) {
-            bt->looks++;
-            ((void (__fastcall *)(void *, void *, int))(DWORD_PTR)KLH_VA(KLW_SETVARIANT))((void *)(DWORD_PTR)q->actor, 0, v);
-            if ((InterlockedExchange(&bt->lastv, v) != v || bt->looks == KLW_LOOKCALLS) && klw.log)
-                klog("crew: bot %d look: variant %lu -> %d%s", q->rec, q->variant, v, bt->looks == KLW_LOOKCALLS ? " - the game has set it back 64 times: left alone for this round" : "");
-        }
-        if (names_ok && game_thread) klw_rename(bt, q, src.c[bt->ch - 1].name);
-    }
+    klw_hold(&src, seen, n, pmodel, game_thread, names_ok, 1);
     if (klw.voice && klh_rd(rules + 0x33e, tab, sizeof tab)) {
         klw_voices(&src, seen, n, tab, want);
         for (i = 0; i < n; i++) {
