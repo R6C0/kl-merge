@@ -368,6 +368,8 @@ static char *kspg_text_swt(void *self, const char *key, char *res)
     ck = row == 13 ? "TOQ" : row == 16 ? "Buqiang 300" : row == 32 ? "Buqiang 800" : "Buqiang 900";
     rt[0] = 0; klh_rdstr((DWORD_PTR)res, rt, sizeof rt); rt[sizeof rt - 1] = 0;
     for (i = 0; rt[i]; i++) if (!_strnicmp(rt + i, ck, strlen(ck))) { stockText = 1; break; }
+    { static BYTE seen[KSPG_ROWS][2];   /* shoptext diagnosis (GUN5 saw no line at all): once per row and kind, why it would or would not answer */
+      if (row < KSPG_ROWS && !seen[row][desc ? 1 : 0]) { seen[row][desc ? 1 : 0] = 1; klog("shoptext: row %d%s seen: pool state %d (item %d), stock text %d, text now '%.40s' (mode %d, online %d)", row, desc ? " Desc" : "", rs, item, stockText, rt, kspg_swt, kl_online()); } }
     if (!desc && row < KSPG_ROWS) unbaked[row] = (BYTE)stockText;                                  /* the unbaked flag, for every OnlineSwapText mode (1 used to skip it) */
     if (!kspg_swt) return 0;                                                                        /* OnlineSwapPic alone: only the flag is kept */
     if (kspg_swt == 1) { if (!desc && kl_online() && rs != 2) to = nm; }                       /* names only; ours handed over means the baked name is right */
@@ -514,6 +516,7 @@ static void __fastcall kspg_gfx(void *self, void *edx)
         if (rr >= 0 && rr < KSPG_ROWS) {
             st = kls_row_state(rr, &it);
             P = ksp_pic_row(1, kl_online(), rr, st, it, unbaked[rr]);
+            if (P < 0 && (rr == 13 || rr == 16 || rr == 32 || rr == 35)) { static BYTE told[KSPG_ROWS]; if (!told[rr]) { told[rr] = 1; klog("shoppic: row %d not swapped: pool state %d (item %d), unbaked flag %d (a name that is not the carrier's means a baked or already renamed card), role %d", rr, st, it, (int)unbaked[rr], pr); } }
             if (P >= 0) {
                 idx = klh_rd32((DWORD_PTR)self + 0xc4); nidx = (DWORD)ksp_new_index((int)idx, rr, P);
                 if (InterlockedIncrement(&kspg_pic_seen) == 1) klog("shoppic: element %08lx role %d row %d -> pic row %d (item %d, mode %lu, unbaked %d, online %d, index %lu)", (unsigned long)(DWORD_PTR)self, pr, rr, P, it, (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), (int)unbaked[rr], kl_online(), (unsigned long)idx);
