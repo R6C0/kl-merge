@@ -1103,7 +1103,7 @@ static void kspg_hire_tick(void)
         else if (!kspg.hRankAt || now - kspg.hRankAt > 2000) { kspg.hRankAt = now | 1; kspg.hRankOk = klhr_rankgate ? klhr_rank(&kspg.hRank) : 0; }
     }
     if (gaks && fgw && wtp) {
-        int down = (gaks(kspg.hireKey) & 0x8000) != 0;
+        int down = (gaks(kspg.hireKey) & 0x8000) != 0, scripted = 0;
 #ifdef KLHOOK_TEST
         {   /* bench: a key klauto.c's script holds counts too (as the page II key) */
             static int dik = -1;
@@ -1111,12 +1111,12 @@ static void kspg_hire_tick(void)
                 HMODULE u = GetModuleHandleA("user32.dll"); UINT (WINAPI *mvk)(UINT, UINT) = u ? (UINT (WINAPI *)(UINT, UINT))GetProcAddress(u, "MapVirtualKeyA") : 0;
                 dik = mvk ? (int)mvk((UINT)kspg.hireKey, 0 /* MAPVK_VK_TO_VSC */) : 0;
             }
-            if (dik > 0 && kla_key_held(dik)) down = 1;
+            if (dik > 0 && kla_key_held(dik)) down = scripted = 1;
         }
 #endif
         if (down && !kspg.hireKeyDown && kspg.hpre && now - kspg.hLastKey > 500) {
             DWORD pid = 0; HWND f = fgw(); if (f) wtp(f, &pid);
-            if (pid == GetCurrentProcessId()) {
+            if (scripted || pid == GetCurrentProcessId()) {     /* a two-seat bench has one window in front: klauto's own key is this process's */
                 DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
                 kspg.hLastKey = now;
                 if (mode == 2 && !kspg.hire && !kspg_h_selok()) {
