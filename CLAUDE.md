@@ -77,9 +77,10 @@ the GDI grab is black with the monitor off). LIFT WORKS (22:00): doors open (A1L
 leaf probe); [player+0x460] lagged at the doorway, fixed by [KLHook] JoinFeetNode=1; A1LIFT4e ride from inside the car PASS (merged f82314fa5; SHIPPED 22:30 as ship1028 dll dc0836b8 after SHIPCHK2 + A1LIFT5 PASS; doors never close in data: opt-in DoorCloseMs, A1LIFT6 queued). (The 40 % downs: Ramp=1 kept the bench's
 CopToYou at stock; a lone player factor needs [Balance] Ramp=0; Ramp now logs it, 403967a5a.)
 
-2026-10-28 ~21:50 - [ce] Merged (default off): [BotFill] OnlineBalance (c40e46315; BAL2 DD04 online PASS, 0 faults: 193/193 bot->cop hits x0.5),
-earlier OnlineLootParts (LPB3), OnlineVoice (VOX2), OnlineSwapText (GUN3), OnlineGetUp. GU3: the host never sees a joiner's down (replica mirror
-refuses) -> wk-getup2 OnlineGetUpBeacon (UDP KLSYD) built, bench GU4 staged. Running: wk-trait (gap #6, bot traits online). Next: unbaked-map GUN test.
+2026-10-28 ~23:10 - [ce] Merged (default off): [BotFill] OnlineBotTraits (deb65d2bf; TRT1 DD04 online PASS, 0 faults, 1462 bot hits scaled; no bot
+went down, LieSeconds x ReviveTime unseen live), OnlineBalance (BAL2), OnlineLootParts, OnlineVoice, OnlineSwapText, OnlineGetUp. wk-getup2: the host now
+sees a joiner's down (GU5, beacon KLSYD); no bot was sent because all were 60-80 m off -> GU6 staged (range 80 m, down at 60 s). Side channels
+(KLSYD/L/B/V) are LAN-only. Running: wk-botpar (loot finish, escort by node, smart van gather).
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.

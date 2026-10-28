@@ -1,3 +1,9 @@
+2026-10-28 ~23:10 - [ce] TRT1 (wk-trait OnlineBotTraits, DD04 online, Random crew + frail/tough [Trait.X]) PASS both seats, 0 faults: 7 bots
+resolved their drawn character (Jean/Mitchel/Elwood/J.C./Tommy frail x3.0 hit scale, Meldal/Kane tough x0.333), 1462 of 1484 bot hits scaled,
+write refused 0. No bot went down in the round, so LieSeconds x ReviveTime is unproven live. Merged deb65d2bf (default off). wk-getup2 GU5:
+the host saw seat 1 DOWN (replica D state 2) for 16 s but every bot was 60-80 m away (range 25 m) and the van gather began 3 s later;
+ebf572cdb logs 'no free bot within OnlineGetUpRange' once per down. GU6 staged (range 8000, SelfDownAt=60, out_getup2_d_test).
+
 2026-10-28 ~22:30 - [c9] SHIPPED ship1028: SHIP build of rtp-schemas 978d9fd95 (dinput8.dll sha1 dc0836b8, 2,006,528 bytes; KLHook.ini
 unchanged de91b2a5; old dll kept as dinput8.dll.before-ship1028; INSTALL/UNDO_ship1028.bat in C:\kl_build_1024\c9_1028\ship1028).
 Checked first with its TEST twin 6bc410a5 over the installed ini: SHIPCHK2 PASS (DM11S online, both seats in round, 0 faults), A1LIFT5
