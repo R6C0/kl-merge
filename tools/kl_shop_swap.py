@@ -23,8 +23,11 @@ KLGuns.ini without comments, so a [Shop] line changes the build code of that map
     python kl_shop_swap.py bake <map folder> <out folder> [--swap=LINE] [--preview] [--pic=ITEM:alpha.png]
                                                                    <out>/<slot>_Main.zip (+ KLGuns.ini with the line) from the installed map; every
                                                                    zip member but the .TEX and the .LOC files is copied byte for byte
-    python kl_shop_swap.py stage <out folder> [--maps=DM01] [--swap=LINE] [--game=<Dog Days folder>]
+    python kl_shop_swap.py stage <out folder> [--maps=DM01] [--swap=LINE] [--game=<Dog Days folder>] [--no-ini]
                                                                    bake each map into <out>\<map>\ + manifest.json + shopswap.ps1 + INSTALL/UNDO .bat
+--no-ini (2026-10-28, gunui): leave KLGuns.ini alone (no [Shop] line is added, the map follows KLHook.ini's default like DD01-09 do; the build code of the map
+stays what it was). Used for DM07 / DD10, whose shop text was never baked at all (every row stock 'TOQ Model 18' etc.), so Arcade handed over a Minimi
+under the name 'Buqiang 900 Scoped'.
 Never writes into the game folder. The stage command only READS the installed maps.
 """
 import hashlib, json, os, random, struct, sys, zipfile, zlib
@@ -336,7 +339,7 @@ def rezip_raw_multi(src, dst, new):
 
 
 # ---------------------------------------------------------------- bake
-def bake(mapdir, outdir, swap_text=None, preview=False, log=print):
+def bake(mapdir, outdir, swap_text=None, preview=False, log=print, write_ini=True):
     """installed map folder -> outdir/<slot>_Main.zip (+ KLGuns.ini with [Shop] Swap when the map had none). -> report dict"""
     import kl_texmat as T, kl_gunpics as P
     zp = next(os.path.join(mapdir, f) for f in sorted(os.listdir(mapdir)) if f.lower().endswith('_main.zip'))
@@ -400,7 +403,7 @@ def bake(mapdir, outdir, swap_text=None, preview=False, log=print):
     assert S.apply_level(again, lambda s: None, guns=ini_in if os.path.isfile(ini_in) else None, swaps=swaps) == [], 'second name pass not idempotent'
     res = dict(archive=os.path.basename(zp), swaps={str(r): i for r, i in sorted(swaps.items())}, swap_source=src, changed=sorted(new),
                old_md5=md5(zp), new_md5=md5(dst), old_size=os.path.getsize(zp), new_size=os.path.getsize(dst), cards=rep)
-    if src == 'default' and os.path.isfile(ini_in):
+    if write_ini and src == 'default' and os.path.isfile(ini_in):
         txt = open(ini_in, encoding='latin1', newline='').read()
         line = ','.join('%d:%d' % x for x in sorted(swaps.items()))
         outini = os.path.join(outdir, 'KLGuns.ini')
@@ -474,7 +477,7 @@ if ($bad) { "done with $bad problem(s), see above."; exit 4 }
 BAT = '@echo off\r\nrem {what} - see shopswap.ps1 (stages from tools\\kl_shop_swap.py). Close the game first.\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0shopswap.ps1" {arg}\r\npause\r\n'
 
 
-def stage(out, maps=('DM01',), swap_text=DEFAULT_SWAP, game=GAME, log=print):
+def stage(out, maps=('DM01',), swap_text=DEFAULT_SWAP, game=GAME, log=print, write_ini=True):
     import datetime
     os.makedirs(out, exist_ok=True)
     manifest = dict(swap=swap_text, game=game, maps=[])
@@ -483,7 +486,7 @@ def stage(out, maps=('DM01',), swap_text=DEFAULT_SWAP, game=GAME, log=print):
         mapdir = os.path.join(game, 'KLExpansion', 'Maps', m)
         od = os.path.join(out, m)
         log('== %s' % m)
-        res = bake(mapdir, od, swap_text, True, log)
+        res = bake(mapdir, od, swap_text, True, log, write_ini)
         res['map'] = m
         manifest['maps'].append(res)
         rows.append("  @{ m = '%s'; f = '%s'; old = '%s'; new = '%s' }" % (m, res['archive'], res['old_md5'], res['new_md5']))
@@ -527,7 +530,7 @@ def main(a):
         res = bake(pos[1], pos[2], opts.get('swap', DEFAULT_SWAP) if 'swap' in opts else None, bool(opts.get('preview')))
         print(json.dumps(res, indent=1)); return 0
     if len(pos) == 2 and pos[0] == 'stage':
-        m = stage(pos[1], tuple(str(opts.get('maps', 'DM01')).split(',')), opts.get('swap', DEFAULT_SWAP), opts.get('game', GAME))
+        m = stage(pos[1], tuple(str(opts.get('maps', 'DM01')).split(',')), opts.get('swap', DEFAULT_SWAP), opts.get('game', GAME), write_ini=not opts.get('no-ini'))
         for r in m['maps']:
             print(r['map'], r['archive'], r['old_md5'], '->', r['new_md5'], 'changed:', len(r['changed']), 'members')
         return 0
