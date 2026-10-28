@@ -34,6 +34,7 @@ Owner: ce.
 - 10-28 20:25 c9: bench screenshots fixed (--d3shots, in-game back buffer, JPG). A1LIFT3e PASS: the player's own two lift crossings fire the doors 29 s apart. Door-open picture still inconclusive.
 - 10-28 20:50 c9: A1LIFT3f PASS: the player walks through the re-fired lift doors into join box 9 and (3d) rides up to z 879. Retomoto lift T2 item done; open: player downed at 40 % health in the lift.
 - 10-28 21:05 c9: lift downs explained: Ramp=1 kept CopToYou/CrewToYou at stock, the game's own 40 % down did the rest (not a bug in the map or hook). Ramp now logs it (403967a5a).
+- 10-28 22:00 c9: Retomoto LIFT WORKS: doors open (A1LIFT4c probe), ride jump from inside the car after 2.7 s with [KLHook] JoinFeetNode=1 (A1LIFT4e PASS 0 faults). Merged f82314fa5; ship install pending.
 - 10-28 21:35 c9: A1LIFT4 PASS, 0 faults, but no answer yet: the leaf-probe offsets are wrong (pos 0) and the route stuck short of the car; box 9's ride slack 1500 jumped the player anyway. Next: leaf controller offline.
 - 10-28 21:10 c9: A1LIFT3g PASS, no down with Ramp=0. CORRECTION: the player never enters the car (y is height); the CarStall fallback jumps them from outside shut doors. T2 lift REOPENED: why the doors stay shut (workflow retomoto-liftdoor-shut).
 - 10-28 14:55 c9: A1HIRE3 PASS (ce ran it): stock-map hire body via rules+0x208 CONFIRMED online, money 100000 -> 90000 read back on host and client. A1SHIFT4 running 14:52, A1NET2 next.

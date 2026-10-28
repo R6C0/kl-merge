@@ -1,3 +1,10 @@
+2026-10-28 ~22:00 - [c9] RETOMOTO LIFT WORKS (T2). A1LIFT4c (leaf probe fixed by an offline agent: leaves are an INLINE ZMatPosAnim array at
+proxy+0x34, count +0x30, frame [ctl+0x4c]): both proxies open all leaves, DrExt_A z 909->819, B 909->999 in 3 s, held at frame 15
+(lobby lift too). A1LIFT4d: the player walks into the car (node x 2950) but [player+0x460] froze at the doorway (2727), so CarStall
+jumped him as 'shut doors'. Fix [KLHook] JoinFeetNode=1 (node first, +0x460 fallback, like klauto PosNode). A1LIFT4e PASS 0 faults:
+the ride sees the feet in the car at x 2802 and jumps after 2.7 s, no CarStall. Merged c9-leafprobe-1028 (f82314fa5); NOT yet in the
+installed SHIP dll (f520f5d1). Open: do the doors close again after frame 15; owner's 10-24 'doors shut' was the +0x460 lag.
+
 2026-10-28 ~21:50 - [ce] BAL2 PASS (wk-bal2 b23c41140, TEST out_bal2_b_test; DD04 online, OnlineBalance=1 OnlineBalanceCops=1 OnlineCopToBot=5,
 [Balance] Risk=2 Ramp=0 YouToCrew/CrewToCop/YouToCrewFar 0.5 Tough 1.5): both seats PASS, faults 0, asserts 0; restore f520f5d1/de91b2a5 checked.
 Host: OnlineBalance ARMED, 50 cops on the private table, CrewToCop 193 bot->cop hits all scaled x0.5 (cop hp lost halved), corpse slots freed
