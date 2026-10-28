@@ -480,7 +480,8 @@ BAT = '@echo off\r\nrem {what} - see shopswap.ps1 (stages from tools\\kl_shop_sw
 def stage(out, maps=('DM01',), swap_text=DEFAULT_SWAP, game=GAME, log=print, write_ini=True):
     import datetime
     os.makedirs(out, exist_ok=True)
-    manifest = dict(swap=swap_text, game=game, maps=[])
+    manifest = dict(swap=swap_text, game=game, maps=[], ini_written=bool(write_ini))
+    if not write_ini: log('NOTE: --no-ini: KLHook.ini [Shop] Swap must stay at the default (%s) for these maps, or the baked names will not match the swapped guns' % swap_text)
     rows, table = [], []
     for m in maps:
         mapdir = os.path.join(game, 'KLExpansion', 'Maps', m)

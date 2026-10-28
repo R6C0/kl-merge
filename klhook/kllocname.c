@@ -199,10 +199,11 @@ static const char *__fastcall kllnm_lookup(void *self, void *edx, const char *fo
     /* 2026-10-28 [Shop] OnlineSwapText=0 (recommended on once benched): online the pool swap (klshop.c) is off, so rows 13/16/32/35 hand over the STOCK carrier gun
        while the baked LOC (kl_shop_swap.py) names HK69 / TYPE 81 / REM 700 / MINIMI. Answer the NAME key with the stock name (from the audit of an unbaked map).
        GUESS: the shop text reaches this slot-0 lookup with a key ending 'WeaponShop/Weapon<row>' (klshoppage.c reads the same key at 0x490730); the Desc line is left
-       as baked (its stock text is not known here). Offline and DM/DD unbaked maps are untouched: the stock text is returned only when kl_online(). */
+       as baked (its stock text is not known here): HALF FIX, an online row can show the stock name over the baked description until the Desc key is answered too. Offline and DM/DD unbaked maps are untouched: the stock text is returned only when kl_online(). */
     if (kllnm_swt && key && kl_online()) {
-        char kk[96]; int kl = klh_rdstr((DWORD_PTR)key, kk, sizeof kk); const char *p = kl >= 17 ? strstr(kk, "WeaponShop/Weapon") : 0;
-        if (p && p[17] && !p[19]) {
+        char kk[96]; int kl, ok = 0; const char *p; const char *q; kk[0] = 0; kl = klh_rdstr((DWORD_PTR)key, kk, sizeof kk); kk[sizeof kk - 1] = 0; p = kl >= 18 ? strstr(kk, "WeaponShop/Weapon") : 0;
+        if (p) { for (q = p + 17; *q >= '0' && *q <= '9'; q++) ok++; ok = ok && !*q; }   /* digits then the end of the key: 'Weapon13', not 'Weapon13Desc' */
+        if (ok) {
             int row = atoi(p + 17); const char *nm = row == 13 ? "TOQ Model 18" : row == 16 ? "Buqiang 300BP" : row == 32 ? "Buqiang 800 Scoped" : row == 35 ? "Buqiang 900 Scoped" : 0;
             if (nm) { static LONG told; if (InterlockedIncrement(&told) <= 4) klog("names: OnlineSwapText: shop row %d answered '%s' (stock gun is handed over online)", row, nm); return nm; }
         }
