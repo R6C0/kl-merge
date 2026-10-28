@@ -34,12 +34,16 @@ static int kvo_crew_on(void)
 static int kvo_online_who_wide(struct klw_who *w, char *name, int wide)
 {
     /* wide = 1 (kltalk.c [Voice] OnlineTalk=1): also the other human rows, as OnlineCrew=1 does; own cache [1] so klvoice.c's narrow who is not changed by it */
-    static struct klw_who lastc[2]; static char lnamec[2][32], lsn[8][32]; static DWORD latc[2], ltryc[2], lround_rules, lhash; static int lround = -1, lokc[2];
+    static struct klw_who lastc[2]; static char lnamec[2][32], lsnc[2][8][32]; static DWORD latc[2], ltryc[2], lround_rulesc[2], lhashc[2]; static int lroundc[2] = { -1, -1 }, lokc[2];
 #define last lastc[wide != 0]
 #define lname lnamec[wide != 0]
 #define lat latc[wide != 0]
 #define ltry ltryc[wide != 0]
 #define lok lokc[wide != 0]
+#define lsn lsnc[wide != 0]
+#define lround_rules lround_rulesc[wide != 0]
+#define lhash lhashc[wide != 0]
+#define lround lroundc[wide != 0]
     DWORD now = GetTickCount(), pl, li = 0, hsh = 0; struct klor_snap o; char scene[160]; int why = 0, wf = -1, wn = 0;   /* why: the refusal, for the 10-27 'who refused' line */
     static int toldwhy = -1, nwhy;
     name[0] = 0;
@@ -65,7 +69,7 @@ static int kvo_online_who_wide(struct klw_who *w, char *name, int wide)
                 if (kvo_crew_on() || wide) {                                           /* the other human rows, seats < 8 only (the voice table has 8 entries) */
                     for (k = 0; k < o.n && last.n < KLW_NREC; k++) {
                         if (k == f || o.r[k].seat < 0 || o.r[k].seat > 7 || !o.r[k].name[0]) continue;
-                        last.m[last.n].rec = o.r[k].seat; last.m[last.n].ch = o.r[k].ch; last.m[last.n].model = o.r[k].model; last.m[last.n].actor = o.r[k].actor;
+                        last.m[last.n].rec = o.r[k].seat; last.m[last.n].ch = o.r[k].ch; last.m[last.n].model = o.r[k].model; last.m[last.n].actor = o.r[k].actor; last.m[last.n].status = o.r[k].alive ? 0 : 7;   /* dead/escaped: not in play (7 = down, as klk_may_chatter reads it) */
                         snprintf(lsn[o.r[k].seat], sizeof lsn[0], "%s", o.r[k].name); last.n++;
                     }
                 }
@@ -92,7 +96,7 @@ static int kvo_online_who_wide(struct klw_who *w, char *name, int wide)
         toldwhy = why; nwhy++;
         klog("voice: online who: %s (osd %08lx list %08lx local %lu, rows %d, local row %d)", wtxt[why], (unsigned long)klu_r.osd, (unsigned long)pl, (unsigned long)li, wn, wf);
     }
-    if (!wide) memcpy(kvo_onl_seatname, lsn, sizeof lsn);
+    if (!wide) memcpy(kvo_onl_seatname, lsnc[0], sizeof lsnc[0]);
     if (lok) { lat = now ? now : 1; *w = last; snprintf(name, 32, "%s", lname); return 1; }
     if (lat && (DWORD)(now - lat) < 3000) { *w = last; snprintf(name, 32, "%s", lname); return 1; }    /* a short read failure does not flap the swaps */
     return 0;
@@ -101,6 +105,10 @@ static int kvo_online_who_wide(struct klw_who *w, char *name, int wide)
 #undef lat
 #undef ltry
 #undef lok
+#undef lsn
+#undef lround_rules
+#undef lhash
+#undef lround
 }
 
 static int kvo_online_who(struct klw_who *w, char *name) { return kvo_online_who_wide(w, name, 0); }
