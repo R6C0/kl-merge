@@ -19,7 +19,7 @@ Owner wants every mod feature reachable on a sensible key and shown on screen (s
 - [x] Inventory of every mod key and feature -> re/keybinds_ui_1028.md, with clashes.
 - [x] One coherent key map, [Keys] Map=1 (WK2 live 10-28: 9 keyed features, 0 clashes incl. ReShade.ini).
 - [x] In-game "MOD CONTROLS" page in the shop + hint (WK2 live: "MOD CONTROLS page on"; F2 cycles stock -> page II -> hire -> controls). Owner still to look at it.
-- [ ] Toggles visible in Mod Options.
+- [x] Toggles visible in Mod Options (tools/kl_mod_options.py, 10-28 13:55 ce 6bc15209f: 14 week rows added, OnlineTriggers/Keys Map/Hints "(recommended on)", rest off).
 Owner: ce.
 
 ### T2 Maps work on both sides (host and client), all maps
