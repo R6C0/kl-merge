@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-28 ~15:30 - [ce] WEEK BUILD on rtp-schemas (05cf39e22), all keys default 0, NOT RUN: bots fire cop-wave trigger boxes online, take/bank/board-all, bot loot
+credited to the real online score; keys map + MOD CONTROLS page; full online gun swap. Bench dll C:\kl-merge\wt\wk-merge\klhook\out_week_1028c_test;
+WK1 (dry) + WK2 (live) staged in C:\kl_build_1024\week_1028\RUN_week_1028.txt, queued after c9's benches. Plan: re/week_plan_1028.md.
+
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. c9 runs: workflow DM11B int16 shift
 (worktree C:\kl_wt\shift, branch c9-shift-1028) + T2 benches with --owner-away (A1I16, Q28_DM06R, Q28_DD09R, A1LIFT, A1SND, A1NET). Q27: 19 maps PASS both seats.
@@ -76,11 +80,6 @@ Octree FRAME RULE recovered (36/36 trees): centre = MIN corner, scale = 32000 / 
 (repair limit 2000 units, Animation/ skipped), kl_sgd_audit --fix, kl_graft refreshes the joined .sgd (DM03A 82, DM11B 1, DM05A 1, DD10 4
 leaves back on their entity), debug/check.py prints the count. Cloud-tested on members only, not through a PC build yet. Owner: nothing to
 install; next graft build carries it; SHIP out_hirepage_1028 bat still waits. debug/notes/2026-10-28-scheduled-triage.md (2nd section).
-
-2026-10-28 ~01:00 - [ce] A1HIRE PASS (TEST cedc7511, 2 seats online, F06, 0 faults): F12 opened HIRE A HEISTER on both seats, host hired J.C., client asked ->
-"host accepted" Tommy, round 2 "I wear J.C./Tommy", saved Char ignored, no gun bought. GAP: F06 has no wardrobe model -> "stock body stays" (hire is
-bookkeeping only there); price showed $0. Next: hired body on stock maps without the wardrobe, real hire price. Owner bat C:\kl_build_1024\hirepage_1027 (SHIP 2e2db7c3).
-
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
