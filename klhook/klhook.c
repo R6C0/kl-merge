@@ -1250,6 +1250,9 @@ static void klh_tick(int game_thread)
     kpm_arc_tick();                                   /* klpm_arc.c: next Arcade map after a match (off unless [Match] Enable=1) */
     klx_tick();
     klj_tick();
+#ifdef KLHOOK_TEST
+    klpr_tick();                                      /* klprobe.c: [Probe] DoorLeaves samples (reads only; idle unless a door proxy was accepted) */
+#endif
     klt_tick(game_thread);                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
     klv_tick(game_thread);                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
     kus_tick(game_thread);                            /* klunstick.c: stuck in cover -> back to the last free place (default ON; offline only) */

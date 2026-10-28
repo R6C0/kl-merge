@@ -106,14 +106,20 @@ static struct {
     int delay_ms, has_car, carwait_ms, carfall, carstall_ms; float carnear, slack, clo[3], chi[3];       /* Delay= / Slack= / CarMin= CarMax= CarWait= (the ride, see klj_ride_step) */
     char name[48], scene[48];
     char inside[2], fedsaid[2];
+    int carstall_after_ms;                   /* CarStallAfterDoorMs= (2026-10-28, see klj_ride_step)  */
     int fedride; float fedy;                 /* FedRide= / FedCrewY= (2026-10-27, see klj_read) */
 } klj_box[KLJ_NBOX];
 static int klj_any, klj_tick_on = 1;
+/* 2026-10-28 door-aware CarStall (klleaf_logic.h): tick of the last accepted lift-door proxy, written by klprobe.c (TEST build, [Probe] DoorProxy=1);
+   0 = never seen, which is the case in the SHIP build and with DoorProxy off. */
+static volatile DWORD klj_door_at;
 static char klj_map_key[64], klj_map_file[MAX_PATH]; static FILETIME klj_map_ft;
 static CRITICAL_SECTION klj_cs;
 static struct { DWORD at; int player, armed; } klj_after;
 static struct { int on, player, box, entry, told, sset; float sx, sz; DWORD at, retry_at, sat; } klj_ride;      /* retry_at: a cancelled ride may restart from inside the box after 2 s */      /* the one ride in progress (Delay > 0): see klj_ride_step */
 static int klj_settle_ms = 1500;              /* the jump list is filled entry by entry while the level loads: it is judged once its length has stood still this long */
+
+#include "klleaf_logic.h"
 
 static int klj_vec(const char *sec, const char *key, const char *file, float v[3])
 {
@@ -157,6 +163,11 @@ static int klj_read(const char *file, int base, int from_map)
            still upstairs at y ~20990). 1 (default here) = a fed rides like anybody (old behaviour). 0 = a police local player never starts a ride.
            2 (recommended on) = a fed starts no ride while any in-play AI heister is above FedCrewY (default 10000 = GUESS: the tower floors are
            y 19600..21000, the street is below 10000), and a fed's ride never waits for the car box (the escape car cannot open for him). */
+        /* 2026-10-28 CarStallAfterDoorMs (default 5000, recommended on; 0 = old behaviour). A1LIFT3g: the player stood at the shut leaves, CarStall jumped him
+           1.5 s later (from OUTSIDE the doors) although they were still opening: the stall timer does not count until this many ms after the later of (the
+           last lift-proxy accept, if klprobe.c saw one - TEST build with [Probe] DoorProxy=1) and (the ride start = the feet entering the box that fires the
+           doors). With the probe off (the SHIP build) the box-enter time is all there is: simplest safe design, the doors fire when that box is crossed. */
+        { int ad = (int)GetPrivateProfileIntA(sec, "CarStallAfterDoorMs", 5000, file); klj_box[base + i].carstall_after_ms = ad < 0 || ad > 60000 ? 5000 : ad; }
         { int fr = (int)GetPrivateProfileIntA(sec, "FedRide", 1, file); klj_box[base + i].fedride = fr < 0 || fr > 2 ? 1 : fr; }
         GetPrivateProfileStringA(sec, "FedCrewY", "10000", t, sizeof t, file); { double d = atof(t); klj_box[base + i].fedy = d > -100000 && d < 100000 ? (float)d : 10000.0f; }
         klj_box[base + i].carfall = GetPrivateProfileIntA(sec, "CarFallback", 1, file) != 0;      /* 1 (default): after CarWait the jump comes anyway, so a shut door cannot strand the player */
@@ -308,7 +319,8 @@ static void klj_ride_step(DWORD gd, DWORD lo, int count, const BYTE sel[2], DWOR
     if (klj_box[b].has_car && !(klj_box[b].fedride != 1 && klj_is_fed(pl)) && !klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, 0)) {
         int stalled = 0;
         if (klj_box[b].carstall_ms > 0 && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, klj_box[b].carnear)) {      /* 2026-10-24: see CarStall in klj_read */
-            if (!klj_ride.sset || fabs(feet[0] - klj_ride.sx) > 60.0f || fabs(feet[2] - klj_ride.sz) > 60.0f) { klj_ride.sset = 1; klj_ride.sx = feet[0]; klj_ride.sz = feet[2]; klj_ride.sat = now; }
+            if (klleaf_stall_gated(now, klj_ride.at, klj_door_at, klj_box[b].carstall_after_ms)) klj_ride.sset = 0;      /* doors still opening: the timer starts after the gate */
+            else if (!klj_ride.sset || fabs(feet[0] - klj_ride.sx) > 60.0f || fabs(feet[2] - klj_ride.sz) > 60.0f) { klj_ride.sset = 1; klj_ride.sx = feet[0]; klj_ride.sz = feet[2]; klj_ride.sat = now; }
             else if (now - klj_ride.sat >= (DWORD)klj_box[b].carstall_ms) stalled = 1;
         } else klj_ride.sset = 0;
         if (stalled) klog("join: ride of player %d in box %d: he has stood %d ms at (%.0f, %.0f, %.0f), within %g units of the car box and not in it (shut doors?): jumping (CarStall)", i, b + 1, klj_box[b].carstall_ms, feet[0], feet[1], feet[2], klj_box[b].carnear);
