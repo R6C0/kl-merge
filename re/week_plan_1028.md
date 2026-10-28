@@ -14,6 +14,7 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
+- 10-28 12:00 ce: research re/keybinds_ui_1028.md (F7/F8/F10 clash with ReShade, CopSquad F/G vs melee/grenade); build wf_ce299754 in wt/wk-keys.
 Owner wants every mod feature reachable on a sensible key and shown on screen (shop pages, hint lines, a controls page).
 - [ ] Inventory of every mod key and feature (klhook/*.c VK_/DIK reads, ini keys) -> re/keybinds.md, with clashes.
 - [ ] One coherent key map (no clashes with stock DD binds), configurable in KLHook.ini [Keys].
@@ -27,15 +28,18 @@ Owner: ce.
 Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 10-28 12:00 ce: research re/bots_online_arcade_1028.md (0x7f6850 'Arcade?' false online -> no tactics/records, trigger boxes ignore bots, Take is a raw +0x34 write); build OnlineTriggers + OnlineTacticsTake=2 in wt/wk-bots.
 - [ ] Diff Arcade vs online bot code paths (BotFill, klcrew, klgrudge, klhop, klcardown, klcdying, klshield: 0 online refs).
 - [ ] Online bots loot, carry, bank and escape like Arcade.
 Owner: ce (10-28 11:40; 3f is another project).
 
 ### T4 AI heisters trigger cops / enemy spawns (not only the player)
+- 10-28 12:00 ce: research re/bots_trigger_cops_1028.md (ZTriggerBox 0x42afd0/ZTriggerBox2 0x626f92 count team-2 only when 0x7f6850); same build as T3.
 - [ ] Find what starts cop waves and spawn triggers (player-only checks), make bot actions count, Arcade and online.
 Owner: ce (10-28 11:40).
 
 ### T5 Gun UI + sounds Arcade -> multiplayer (MP45 first)
+- 10-28 12:00 ce: research re/gun_ui_sounds_1028.md (MP45 = item 1 row 7, banks/volumes same online; rows 13/16/32/35 baked names but Swap inert online; DM07/DD10 unbaked); build OnlineSwap + text fallback in wt/wk-gunui.
 - [ ] Find why the MP45 (and other guns) show different icon/name/sound online vs Arcade; make online match Arcade on every map.
 Owner: ce.
 
