@@ -72,9 +72,9 @@ Full dated log: `re/open_work_log.md` (newest first).
 A1SHIFT5b offline Arcade full round (7 bots, 1 boarded $1.36M), faults 0. A1NET2 both seats walk PASS. kl_map_shift_test fixed (adce57ce4; never
 run it while an A1SHIFT bench has DM11S installed). Next: SHIP_DM11S.bat /oldhook (C:\kl_build_1024\c9_1028\dm11s_ship) after ce's WKBC4.
 
-2026-10-28 ~16:45 - [ce] BP_DD04c 7/7 BOARDED (client PASS, new join script) -> defaults OnlineExitCrowd 1600 + OnlineGatherLateS 45 (b0bd5343c).
-WKBC3 F06 7/7 aboard, but bank credit STILL unpaid even with the host on the van object (no seat flag 0x40): escape-flag research + OnlineLooks=1
-(host->client bot looks, keyed by the shared group digit: looks probe SAME ORDER on F06 and DD04) in workflow w91thgo9w. 0 faults every seat.
+2026-10-28 ~18:00 - [ce] BANK CREDIT ONLINE PAYS: WKBC5 F06 host held E at the van's boarding object [rules+0x1e0] (-2933 524 10402, NOT -6209)
+-> seat flag 0x20, popup 'You escaped the heist', credit +550k/+300k/+150k to the Sharable cap 1,000,000 (bot 3's 250k dropped: cap). 0 faults both
+seats (ce408cef4 counts flag 0x20). BP_DD04c 7/7 -> defaults 1600/45 (b0bd5343c). Next: LOOKS1 (OnlineLooks=1, wk-looks 3d207fbb5), cap overflow.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.

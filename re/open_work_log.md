@@ -1,3 +1,9 @@
+2026-10-28 ~18:00 - [ce] WKBC5 F06 (out_week_1028k_test): BANK CREDIT ONLINE PAYS. The van's boarding object [rules+0x1e0] sits at
+(-2933 524 10402) (van probe), not -6209; the host teleported there and held E (DIK 0x12, 2.5 s) -> boarded, seat flag 0x20 (rules slot 45 0x6c6c10;
+0x40 only at departure 0x776ef0), popup 'You escaped the heist'. OnlineBankCredit (ce408cef4, counts 0x20) paid seat 0: +550000, +300000, +150000
+-> Sharable 1,000,000 = the cap [0xd1b3d0]; bot 3's +250000 was dropped by the cap (open: Arcade parity of the overflow). Host RESULT PASS, client
+IN ROUND (still waiting for the between-rounds shop at 120 s), faults 0 / asserts 0 both seats. Next: LOOKS1 (OnlineLooks=1, wk-looks 3d207fbb5).
+
 2026-10-28 ~17:40 - [c9] A1SHIFT5b PASS: offline Arcade full round on DM11S (guard2 TEST dll): level loaded, 7 AI heisters in play, bot 5 (TRAITOR)
 BOARDED with $1.36M, round ran to the clock (state 0x19 -> 0x1f), faults 0, asserts 0; folder restored (222101847, f520f5d1/c3f119f4). The bench's
 'inst1 not in round' only means the round had ended. kl_map_shift_test fixed (adce57ce4): ce's failure + mine came from running it while a bench had
