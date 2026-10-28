@@ -118,6 +118,7 @@ static volatile DWORD klj_door_at;
    ride never saw the feet in the car box. klauto.c's goto had the same lag on DM02 (kla_player_pos), so the scene node's place is read
    first, +0x460 only as a fallback. */
 static int klj_feet_node = 1;
+static int klj_join_online;         /* [KLHook] JoinOnline (default 0): lift rides/jumps also in a network session, LOCAL players only (each seat moves its own) */
 static int kle_node(DWORD node, float pos[3], float dir[3]);          /* klescort.c: a node's world place */
 static int klj_feet(DWORD pl, float feet[3])
 {
@@ -398,7 +399,7 @@ static void klj_tick(void)
         if (sel[klj_after.player] != 0xff && sel[klj_after.player] < 28 && (pl = klh_rd32(gd + 0x828 + 4 * sel[klj_after.player])) != 0 && klj_feet(pl, feet))
             klog("join: player %d is at (%.0f, %.0f, %.0f) 500 ms after the request", klj_after.player, feet[0], feet[1], feet[2]);
     }
-    if (act && count && kl_online()) {                        /* [Net] OnlineSafe: the jump request would desync a network session (re/netcode_plan.md 2.1) */
+    if (act && count && kl_online() && !klj_join_online) {                        /* [Net] OnlineSafe: the jump request would desync a network session (re/netcode_plan.md 2.1) */
         static int toldnet;
         if (!toldnet++) klog("join: a network session: no jump request is written ([Net] OnlineSafe=1)");
         act = 0;
@@ -446,6 +447,8 @@ static void klj_init(void)
     InitializeCriticalSection(&klj_cs);
     klj_tick_on = GetPrivateProfileIntA("KLHook", "Join", 1, klh_ini);
     klj_feet_node = GetPrivateProfileIntA("KLHook", "JoinFeetNode", 1, klh_ini) != 0;
+    klj_join_online = GetPrivateProfileIntA("KLHook", "JoinOnline", 0, klh_ini) != 0;
+    klog("join: [KLHook] JoinOnline=%d: %s", klj_join_online, klj_join_online ? "boxes also fire in a network session, for the LOCAL players only (never writes a remote player)" : "no ride or jump request in a network session ([Net] OnlineSafe)");
     klog("join: [KLHook] JoinFeetNode=%d: %s", klj_feet_node, klj_feet_node ? "the player's place is the scene node's, +0x460 only as a fallback" : "the player's place is +0x460 (old)");
     n = klj_read(klh_ini, 0, 0); klj_count();
     if (n) klog("join: %d box(es) from KLHook.ini%s", n, klj_tick_on ? "" : " - but [KLHook] Join=0: nothing fires");

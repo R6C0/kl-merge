@@ -37,6 +37,14 @@ int main(void)
     CHECK(kldc_step(99999, 1000, 0, 0) == 0);                 /* DoorCloseMs 0 = off */
     CHECK(kldc_step(5, 0xfffffff0ul, 12000, 0) == 0);         /* wrap: 21 ms after the open */
     CHECK(kldc_step(12000 - 16 + 5, 0xfffffff0ul, 12000, 0) == 1);
+    /* remote slots: only online, only with the key, never the local selectors, only 0..27 */
+    CHECK(kldc_remote_slot(3, 0, 1, 1, 1));
+    CHECK(!kldc_remote_slot(0, 0, 1, 1, 1));
+    CHECK(!kldc_remote_slot(1, 0, 1, 1, 1));
+    CHECK(!kldc_remote_slot(3, 0, 1, 0, 1));                  /* offline: never */
+    CHECK(!kldc_remote_slot(3, 0, 1, 1, 0));                  /* key off: never */
+    CHECK(!kldc_remote_slot(28, 0, 1, 1, 1) && !kldc_remote_slot(-1, 0, 1, 1, 1));
+    CHECK(kldc_remote_slot(2, 0xff, 0xff, 1, 1));             /* no local player: all slots */
     /* slots: per proxy, an existing one is found again, finished ones are reused, a full table says -1 */
     CHECK(kldc_slot(t, 4, 0x100) == 0);                  /* empty table: first free */
     t[0].me = 0x100; t[0].done = 0;

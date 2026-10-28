@@ -35,7 +35,7 @@
 #define KLDC_SCAN_MS   15000
 
 static struct kldc_p kldc_t[KLDC_N];
-static int kldc_ms, kldc_nscan; static DWORD kldc_find_at, kldc_scan_at;
+static int kldc_ms, kldc_nscan, kldc_remote;     /* kldc_remote: [KLHook] DoorCloseRemote (default 0) */ static DWORD kldc_find_at, kldc_scan_at;
 #ifdef KLHOOK_TEST
 static void klpr_leaf_start(DWORD me, DWORD at);       /* klprobe.c (DoorLeaves): sample the closing too */
 #endif
@@ -115,6 +115,16 @@ static int kldc_busy(void)
     for (i = 0; i < 2; i++) {
         if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klj_feet(pl, feet)) continue;
         for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].on && klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, KLDC_PAD)) return 1;
+    }
+    /* [KLHook] DoorCloseRemote=1, network session only: any other listed actor (remote human, AI heister, cop) whose feet are at a car holds the
+       doors too, so the host does not shut them on a joiner who is still riding. GUESS: the list [gd+0x828+4*i] holds remote players' actors. */
+    for (i = 0; i < 28; i++) {
+        if (!kldc_remote_slot(i, sel[0], sel[1], kl_online(), kldc_remote)) continue;
+        if (!(pl = klh_rd32(gd + 0x828 + 4 * i)) || !klj_feet(pl, feet)) continue;
+        for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].on && klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, KLDC_PAD)) {
+            static int told; if (!told++) klog("doorclose: slot %d (not a local player) is at car %d: doors held", i, b + 1);
+            return 1;
+        }
     }
     return 0;
 }
@@ -210,5 +220,7 @@ static void kldc_init(void)
 {
     kldc_ms = GetPrivateProfileIntA("KLHook", "DoorCloseMs", 0, klh_ini);
     if (kldc_ms < 0 || kldc_ms > 120000) kldc_ms = 0;
+    kldc_remote = GetPrivateProfileIntA("KLHook", "DoorCloseRemote", 0, klh_ini) != 0;
+    klog("doorclose: [KLHook] DoorCloseRemote=%d (online: other actors at the car hold the doors)", kldc_remote);
     klog("doorclose: [KLHook] DoorCloseMs=%d (%s)", kldc_ms, kldc_ms ? "doors are closed again that many ms after they opened, never while a player is at the car" : "off");
 }
