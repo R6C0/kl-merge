@@ -53,6 +53,7 @@
 #define KLLNM_NAME    48
 
 static int kllnm_on, kllnm_log, kllnm_override;
+static int kllnm_swt;   /* [Shop] OnlineSwapText: online, the four baked shop rows say the stock gun that is really handed over */
 /* 2026-10-26 [HUD] HideKilledBy=1 (recommended on; needs [HUD] Enable=1 and KilledBy=1): the stock death panel's 'Killed by ...' text is blanked so only the HUD's own KILLED BY line shows (Arcade AND online, any map, [Names] not needed).
    The text is built by 0x500670 (re\hud_values.md h) from LOC keys (AllLevels/Menu/Online/Respawn KilledBy, AllLevels/Interface/Online/Kill FA_DieFrom<role>); a lookup made from inside 0x500670 .. 0x500b62, or for a key
    ending in 'KilledBy' (the XML tag), answers a static empty string. GUESS: the empty string leaves the panel's text empty (not a crash); the XML page's own label is the same key. TEST logs each hit. */
@@ -195,6 +196,18 @@ static const char *__fastcall kllnm_lookup(void *self, void *edx, const char *fo
             return orig(self, 0, folder, to, third);
         }
     }
+    /* 2026-10-28 [Shop] OnlineSwapText=0 (recommended on once benched): online the pool swap (klshop.c) is off, so rows 13/16/32/35 hand over the STOCK carrier gun
+       while the baked LOC (kl_shop_swap.py) names HK69 / TYPE 81 / REM 700 / MINIMI. Answer the NAME key with the stock name (from the audit of an unbaked map).
+       GUESS: the shop text reaches this slot-0 lookup with a key ending 'WeaponShop/Weapon<row>' (klshoppage.c reads the same key at 0x490730); the Desc line is left
+       as baked (its stock text is not known here): HALF FIX, an online row can show the stock name over the baked description until the Desc key is answered too. Offline and DM/DD unbaked maps are untouched: the stock text is returned only when kl_online(). */
+    if (kllnm_swt && key && kl_online()) {
+        char kk[96]; int kl, ok = 0; const char *p; const char *q; kk[0] = 0; kl = klh_rdstr((DWORD_PTR)key, kk, sizeof kk); kk[sizeof kk - 1] = 0; p = kl >= 18 ? strstr(kk, "WeaponShop/Weapon") : 0;
+        if (p) { for (q = p + 17; *q >= '0' && *q <= '9'; q++) ok++; ok = ok && !*q; }   /* digits then the end of the key: 'Weapon13', not 'Weapon13Desc' */
+        if (ok) {
+            int row = atoi(p + 17); const char *nm = row == 13 ? "TOQ Model 18" : row == 16 ? "Buqiang 300BP" : row == 32 ? "Buqiang 800 Scoped" : row == 35 ? "Buqiang 900 Scoped" : 0;
+            if (nm) { static LONG told; if (InterlockedIncrement(&told) <= 4) klog("names: OnlineSwapText: shop row %d answered '%s' (stock gun is handed over online)", row, nm); return nm; }
+        }
+    }
     /* cheap reject first: the key is the game's own C string (read with the same care as klchar.c's option names) */
     if (key && kllnm_on && (klen = klh_rdstr((DWORD_PTR)key, k, sizeof k)) >= 7) {
         f[0] = 0; if (folder) klh_rdstr((DWORD_PTR)folder, f, sizeof f);
@@ -244,7 +257,7 @@ static void kllnm_tick(int game_thread)
 {
     static DWORD last; static LONG told_bad, told_ok;
     DWORD now = GetTickCount(), sys, db, loc, vt, s0 = 0, nv; int i, n = 0, t;
-    if (!(kllnm_on || kllnm_hk || klucc_feed_on) || !game_thread || !klh_exe_ok || now - last < 100) return;       /* the object's first dword is written from the game's own thread only */
+    if (!(kllnm_on || kllnm_hk || klucc_feed_on || kllnm_swt) || !game_thread || !klh_exe_ok || now - last < 100) return;       /* the object's first dword is written from the game's own thread only */
     last = now;
     if (!(sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) || !(db = klh_rd32(sys + 0xac)) || !(loc = klh_rd32(db + 0x94)) || !(vt = klh_rd32(loc))) return;
     for (i = 0; i < kllnm_ntab; i++) if (vt == (DWORD)(DWORD_PTR)&kllnm_tab[i].vt[1]) return;       /* already ours */
@@ -272,6 +285,8 @@ static void kllnm_init(void)
     kllnm_hk_on = GetPrivateProfileIntA("HUD", "Online", 0, klh_ini) != 0;
     kllnm_kb_cap = kllnm_hk && GetPrivateProfileIntA("HUD", "OnlineKilled", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "OnlineKilledStock", 0, klh_ini) != 0;
     if (kllnm_hk) klog("names: [HUD] HideKilledBy=1: the stock death panel's 'Killed by' text is blanked (LOC lookups from 0x500670 and the key KilledBy); the LOC object is wrapped by the tick");
+    kllnm_swt = GetPrivateProfileIntA("Shop", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("Shop", "OnlineSwapText", 0, klh_ini) != 0;
+    if (kllnm_swt) klog("names: [Shop] OnlineSwapText=1 (NOT run live): online, shop rows 13/16/32/35 are named after the stock gun that is handed over");
     en = GetPrivateProfileIntA("Names", "Enable", 0, klh_ini) != 0;
     fb = GetPrivateProfileIntA("HUD", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "OnlineIntroMapName", 1, klh_ini) != 0;      /* [HUD] OnlineIntroMapName (recommended on): the names are read for the online intro card even with [Names] off; nothing is wrapped then */
     if (!en && !fb) return;

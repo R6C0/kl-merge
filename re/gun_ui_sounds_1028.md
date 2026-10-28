@@ -1,59 +1,24 @@
-# T5: gun UI and sounds, Arcade vs online (static research, 2026-10-28)
+# Gun shelf UI + remote shot loudness (T5, 2026-10-28, static, nothing run live)
 
-Static only: no launch, no bench. CERTAIN = seen in code, log or file contents. GUESS = inferred, needs a bench.
+## 1. Online gun shelf (rows 13/16/32/35)
+Problem: baked maps name HK69 / TYPE 81 / REM 700 / MINIMI on rows 13/16/32/35; online klshop_tick returns at `kl_online()`, so the stock carrier gun
+(TOQ Model 18 / Buqiang 300BP / Buqiang 800 Scoped / Buqiang 900 Scoped) is handed over: text/gun mismatch.
+DONE: `[Shop] OnlineSwapText=0|1` (kllocname.c): online, the NAME key of those four rows answers the stock gun name. GUESS: the shop name reaches the LOC
+slot-0 lookup with a key ending `WeaponShop/Weapon<row>` (klshoppage.c reads the same key at 0x490730). The Desc line and the picture stay baked (not changed).
+NOT DONE: `[Shop] OnlineSwap` (the real pool swap online). Needs: objects made at the same point on every peer in row order (chain onto kllb_early_cb, which
+kspg_early_patch owns as a single pointer; klshoppage.c is not editable here), gun+0x13c != 0 guard (kspg_netok), a host/client pair-list exchange over SHOPG.
+kspg_early_body also skips rows [Shop] Swap occupies, so page II does not make them. Unbenchable offline; a design for a later step, not coded.
+Bench for OnlineSwapText: 2 seats online on a baked map, open the Buy Weapons list: rows 13/16/32/35 say the stock names, buying hands the same gun; Arcade unchanged.
 
-## 1. What MP45 is
-CERTAIN. The S&W MP45 pistol (HG_SW_MP45, item 1, shop row 7, HUD name "SW MP45", stock shop text "SM45"). It plays the
-HG_DesertEagle_Shot_01..03 records and is the loudness reference (head RMS about -2.8 dBFS). Sources: re/gun_sounds.md.
+## 2. Unbaked maps DM07 / DD10
+Tool: tools/kl_shop_swap.py (bake/stage). New `--no-ini` / `write_ini=False` bakes TEX+LOC only and leaves KLGuns.ini alone (the default Swap in KLHook.ini is used).
+Staged: C:\kl_build_1024\gunui_1028\ (INSTALL_gunui_1028.bat, UNDO_gunui_1028.bat, -DryRun both run; the live file is renamed `.before-shopswap` in place,
+never KL_PortBackup). DM07 F06_Main.zip bdb7728d..., DD10 F07_Main.zip 74c3d9dc...; 9 members each (TEX + 8 LOC). Install refuses while kl2.exe runs.
 
-## 2. Sound chain (same online and in Arcade)
-- CERTAIN: `<gun>#def` has 13 slots. Slot 1 = shot_npc#set (group volume 0.35, "heard from others"), slot 4 = shot_player#set
-  (0.70), slot 0 dry fire, 5 shell drop, 7 pick up ammo, 8 weapon change. Both sets point at the same three #sound objects.
-- CERTAIN (re/sound_online_1026b.md): online loads the same banks as Arcade, so group volumes are equal. The loudness passes
-  (kl_gunsnd_match 1024c, kl_gunsnd_all 1024n, gunraw/fxraw 1025, kl_sndonline sndon/sndon2 1026) are global, per level zip.
-- Each peer plays from its own local files. CERTAIN by design.
-- GUESS: a remote human's shot uses the npc set (0.35), so it is quieter than your own (0.70) online. In Arcade the AI heisters
-  and cops are the only "others". Which set a remote human's shot uses was not traced.
-- GUESS: friends' PCs without the patched banks sound stock, so "online sounds differ" is partly an install problem.
-- sndon2 1026b is staged at C:\kl_build_1024\sndonline_1026b, not installed.
-
-## 3. Differences found
-| # | Area | Arcade | Online | Cause | Cert |
-|---|------|--------|--------|-------|------|
-| 1 | Shop rows 13,16,32,35 (HK69, TYPE 81, REM 700, MINIMI) text and picture | Swap relabels the hand-over to the baked gun | klshop_tick returns at `if (kl_online()) return;` (klhook/klshop.c ~180), stock carrier gun is handed over, but the baked name/picture still shows | Names and pictures are baked into .LOC/.TEX on every DD01-09 and DM map except DM07 and DD10 | CERTAIN |
-| 2 | DM07 and DD10 | default Swap runs, text unbaked, mismatch also in Arcade | same | never baked | CERTAIN |
-| 3 | Gun looks (Dead Men model on DD gun) | baked Shown=1 for 29,30,31,27,23,8 (checked DD01, DD09, DM01, DM07, DM09) | same baked look | klg_tick switching (Guns page) is Arcade-only (klgun.c ~408-409: mode != 4 return, kl_online() return) | CERTAIN |
-| 4 | HUD dial name | klg_look_name from klg_lk, filled by klg_publish at level open (baked names) | klg_publish runs in klg_level_open path, the dial names the baked look | same; the dial uses klwd_names (47 entries, pictures 58..104) | CERTAIN for the publish path, GUESS that the dial draws identically online (not traced) |
-| 5 | Remote shot loudness | n/a | npc set 0.35 | see section 2 | GUESS |
-| 6 | Friends' installs | n/a | stock banks | no sound passes | GUESS |
-
-## 4. Fixes (every one an ini toggle, "(recommended on/off)")
-1. Online Swap (value 1). New key in KLHook.ini [Shop] `OnlineSwap=0|1` ("Online gun shelf matches Arcade (recommended on
-   once benched)"). Port klshop Swap to online through the page II relabel machinery (klshoppage_online.c: OnlineApply,
-   OnlineEarlyMake, the pool relabel at [0x168e96c], 12-byte entries). The four requirements are in
-   re/online_arcade_gaps_1027.md. Medium risk (pool relabel on a client).
-   Cheap fallback `OnlineSwapText=1`: kllocname.c runtime override shows the stock text online for the rows that are not
-   handed over. Low risk, honest, but hides the baked picture only if the .TEX is also swapped (GUESS).
-2. DM07, DD10: bake the shop text with kl_hud_shop.py / kl_shop_swap.py, or give their KLGuns.ini an empty `Swap=` so Arcade
-   and online agree on stock. Low risk, file-only. Map toggle: none, per-map ini line.
-3. Sound: trace which set a remote human's shot uses (GUESS today). If npc, add `[Sound] RemoteShotVolume=0|1`
-   (recommended on) using vtable 0xb9a3ec slot 35 at 0x402000 (re/gun_sounds.md section 4, GUESS). Medium risk.
-4. Document that every peer must run the sound passes (Nexus pack: build on the player's PC).
-
-Mod Options rows: add "Online gun shelf (recommended on)" and "Remote shots as loud as yours (recommended on)" beside the
-existing [Shop] and [HUD] LookNames rows in tools/mod_options.md.
-
-## 5. Bench recipe (two seats, kl_solo_test, --owner-away if owner away)
-Stage KLShopPage.ini into solo/<TAG>/inst1+2 (kl_solo_test does not copy it). The ini [Script] replaces the bench script,
-edit the wait line in place.
-1. Host DM01 and DD01 online, 2 seats, Arcade run first as reference.
-2. Both modes: open the Buy Weapons list, screenshot rows 7, 13, 16, 32, 35: text, picture, price.
-3. Buy each, check the gun held, the HUD dial name, and `klog` lines "guns: names for the HUD dial".
-4. Fire MP45 on seat 1; record seat 2's audio (loopback) and compare RMS to seat 1's own shot. Expected equal-ish.
-5. Repeat on DM07 and DD10. PASS = online equals Arcade for every item, 0 faults.
-
-## 6. Open questions
-- Which sound set does a remote human's shot use (needs a trace or the bench audio compare)?
-- Should the online Swap be the full relabel, or only the text fallback until the relabel is benched?
-- DM07 and DD10: bake or empty Swap?
-- Does the dial (klhud_weapon.c) draw online identically? Not traced.
+## 3. Remote shot loudness: NOT CERTAIN, nothing implemented
+Known: the `.SND` groups are shot_npc 0.35 / shot_player 0.70, identical offline and online; the weapon `#def` has slot 1 (shot_npc, "heard from others") and
+slot 4 (shot_player); which slot plays when was never traced in the exe (re/map_guns.md section 9). No runtime volume code exists; whether the engine copies the
+group volume into its mixer at load is unverified (re/gun_sounds.md section 4). So both "a remote human uses the npc set" and "a hook can change it" are unproven.
+Bench to decide (one 2-seat online round, a gun with distinct sets): log which #def slot index the sound system is asked for (hook the play call from the
+weapon fire routine) for the local shot and for the remote seat's shot; then write the group volume (+0x24/+0x30 per gun_sounds.md) after slot 35 0x402000
+and compare by ear. Only if the remote seat asks slot 1 would `[Sound] RemoteShotVolume` be added (Arcade untouched).
