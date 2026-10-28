@@ -3,7 +3,7 @@
 Test of tools/kl_map_shift.py (2026-10-28, offline).
 
 usage: python tools/kl_map_shift_test.py [src.zip [dst.zip]] [--t tx ty tz] [--quick]
-  src defaults to <DM>\\KL_PortTools\\shift_1028\\F04_Main_src.zip (a copy of the live DM11B build in the Dog Days F04 slot),
+  src defaults to <DD>/KLExpansion/Maps/DM11B/F04_Main.zip (the real DM11B build; NOT SCENES/Locations/F04, the stock DD04 map: A1SHIFT3 crashed on that),
   dst to F04_Main_DM11S.zip beside it (built here with kl_map_shift.shift). --quick skips (d).
 
  (a) round trip: shift(dst, -T) gives the source back within tolerance (0.001 on positions, 0.01 on sound / octree centres,
@@ -37,6 +37,8 @@ import kl_pf4
 import kl_prp
 import kl_scene
 
+DD11B = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days\KLExpansion\Maps\DM11B'
+DDSTOCK = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days\SCENES\Locations\F04\F04_Main.zip'
 DM = r'G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\KL_PortTools\shift_1028'
 f32 = MS.f32
 TOL_POS, TOL_CENTRE = 1e-3, 1e-2
@@ -102,8 +104,9 @@ def test_head_audit(ha, stats):
     hatchback of the vans (small values in the VAN's frame) = tracks are in the entity's own parent-local frame; the ZHavokShatter[10] blocks are shared by entities far apart = no per-entity world data. If a new map breaks this the
     test fails and the head needs real decoding instead of a guess."""
     found = [n for n, o in ha['matpos_found']]
-    check(found.count('V_Van_00') == 3, 'the three escape vans do not all start a head track at their own local translation: %r' % ha['matpos_found'])
-    check(any(n.startswith('AI_SpawnRoom_Door') for n in found), 'no spawn-room door track start found in the head')
+    # (was: three V_Van_00 + AI_SpawnRoom_Door*, true of the STOCK DD04 map the first run used by mistake; DM11B has FireAtPos_* and V_Santana_CopCar*)
+    check(ha['matpos_entities'] > 0 and not ha['matpos_missing'] and ha['matpos_start_in_head'] == ha['matpos_entities'],
+          'moved MatPosAnim entities whose track start (own local translation) is not in the head: %r' % ha['matpos_missing'])
     check(ha['child_entities'] > 0 and ha['child_start_in_head'] == ha['child_entities'],
           'van children whose track start (van-local) is not in the head: %d of %d' % (ha['child_entities'] - ha['child_start_in_head'], ha['child_entities']))
     for off, (n, dx, dz) in ha['shatter'].items():
@@ -119,7 +122,7 @@ def test_scene(s, t, back, stats):
     a, b, c = scene_of(d0), scene_of(d1), scene_of(d2)
     e0, e1, e2 = list(a.entities()), list(b.entities()), list(c.entities())
     check(len(e0) == len(e1) == len(e2), 'entity count changed')
-    moved = {id(e) for r in a.roots if not MS.is_system(r.name) for e in r.walk()}
+    moved = {id(e) for r in a.roots if not MS.is_sys_root(a, r) for e in r.walk()}
     roots0 = {id(r) for r in a.roots}
     nroot = nsys = 0
     worst = 0.0
@@ -212,7 +215,7 @@ def test_hvk(s, a_scene, t, stats):
     check(h0.serialize() == s[0]['.HVK'], '.HVK source does not round-trip through kl_hvk')
     check(len(h0.shapes) == len(h1.shapes) == len(h2.shapes), 'shape count')
     ents = list(a_scene.entities())
-    moved = {id(e) for r in a_scene.roots if not MS.is_system(r.name) for e in r.walk()}
+    moved = {id(e) for r in a_scene.roots if not MS.is_sys_root(a_scene, r) for e in r.walk()}
     byref = {}
     for e in ents:
         byref.setdefault(e.ref, []).append(e)
@@ -288,7 +291,7 @@ def test_oct(s, a_scene, t, stats):
     check(o0.header == o1.header and o0.tail == o1.tail and len(o0.records) == len(o1.records), '.oct header / tail / record count changed')
     check(all(r0.pack() == r1.pack() for r0, r1 in zip(o0.records, o1.records)), '.oct records (per-model trees) changed')
     slots = a_scene.slots()
-    stay = {slots[e] for r in a_scene.roots if MS.is_system(r.name) for e in r.walk()}
+    stay = {slots[e] for r in a_scene.roots if MS.is_sys_root(a_scene, r) for e in r.walk()}
     trees = rebuilt = sys_items = 0
     grow = 0
     for ra, rb, rc in zip(o0.rooms, o1.rooms, o2.rooms):
@@ -447,7 +450,7 @@ def test_bots(src, dst, t, stats, bots_out):
         inbot = inbot or b'merc_bot_squad' in e0.name
         if inbot:
             n[0] += 1
-            moved = not MS.is_system(root.name)
+            moved = not MS.is_sys_root(a, root)
             if moved:
                 if e0 is root:
                     check(moved_f(fl(e0.trans, 0), fl(e1.trans, 0), t), 'bot root %r not float32(old + T)' % e0.name)
@@ -480,6 +483,26 @@ def run_py(args, what):
     return r.returncode, out[-1] if out else ''
 
 
+def test_source_guard(stats):
+    # A1SHIFT3: the stock DD F04 zip shifted and run with DM11B's .WHD -> junk .WHD record -> div by zero kl2+0x4668b. shift() must refuse it.
+    whd = os.path.join(DD11B, 'F04_Main.WHD')
+    if not (os.path.isfile(DDSTOCK) and os.path.isfile(whd)):
+        stats['source guard'] = 'SKIPPED (stock zip or DM11B .WHD missing)'
+        return
+    out = os.path.join(tempfile.mkdtemp(prefix='kl_map_shift_guard_'), 'x.zip')
+    try:
+        MS.shift(DDSTOCK, out, MS.DEFAULT_T, log=lambda m: None, whd=whd)
+        check(False, 'shift() accepted the stock Dog Days F04 zip with the DM11B .WHD')
+    except MS.WrongSource as e:
+        stats['source guard, stock zip + DM11B .WHD'] = 'refused: %s' % str(e)[:60]
+    check(not os.path.exists(out), 'refused shift left an output zip')
+    try:
+        MS.shift(DDSTOCK, out, MS.DEFAULT_T, log=lambda m: None, whd=False, expect_prp_size=MS.DM11B_PRP_SIZE)
+        check(False, 'shift() accepted a .prp of the wrong size')
+    except MS.WrongSource as e:
+        stats['source guard, .prp size'] = 'refused: %s' % str(e)[:60]
+
+
 def main(argv):
     a = list(argv)
     quick = '--quick' in a
@@ -489,13 +512,14 @@ def main(argv):
         i = a.index('--t')
         t = tuple(float(v) for v in a[i + 1:i + 4])
         del a[i:i + 4]
-    src = a[0] if a else os.path.join(DM, 'F04_Main_src.zip')
+    src = a[0] if a else os.path.join(DD11B, 'F04_Main.zip')
     dst = a[1] if len(a) > 1 else os.path.join(DM, 'F04_Main_DM11S.zip')
     stats = {}
-    rep = MS.shift(src, dst, t, log=lambda m: None)
+    test_source_guard(stats)
+    rep = MS.shift(src, dst, t, log=lambda m: None, expect_prp_size=MS.DM11B_PRP_SIZE if not a else None)
     tmp = tempfile.mkdtemp(prefix='kl_map_shift_test_')
     back = os.path.join(tmp, 'back.zip')
-    MS.shift(dst, back, tuple(-v for v in t), log=lambda m: None)
+    MS.shift(dst, back, tuple(-v for v in t), log=lambda m: None, whd=False)
     s = tuple(load(p) for p in (src, dst, back))
     test_head_audit(rep['head_audit'], stats)
     test_zip(src, dst, set(rep['changed']), stats)

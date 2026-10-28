@@ -72,6 +72,24 @@ def is_system(name):
     return n.startswith(SYSTEM_PREFIXES) or n.split('!')[0] in SYSTEM_FIRST
 
 
+HEROES_MAP_FRAME = 8192.0       # stock Dog Days: Heroes! at ~(843, 6070) = engine placeholders, kept. DM11B graft: at (33900, 29950) = the map's own spawn, must move
+
+
+def heroes_move(sc):
+    """2026-10-28: the real DM11B build authors its Heroes!/Henchmen spawn roots in the MAP frame (x 27700..34000, z 26300..30850; the
+    stock map keeps them near 843, 6070). Left unmoved they sit beyond int16 and 12288 / 16384 units from the shifted spawn area, so
+    Heroes move iff any of them is farther than HEROES_MAP_FRAME from the origin (decided per scene, so shift(-T) undoes it)."""
+    return any(max(abs(v) for v in struct.unpack_from('<3f', r.trans, 0)[::2]) > HEROES_MAP_FRAME
+               for r in sc.roots if r.name.decode('latin1').split('!')[0] in SYSTEM_FIRST)
+
+
+def is_sys_root(sc, root):
+    """is_system(root.name), except Heroes of a map that authors them in the map frame (heroes_move)."""
+    if root.name.decode('latin1').split('!')[0] in SYSTEM_FIRST:
+        return not heroes_move(sc)
+    return is_system(root.name)
+
+
 def add3(raw, off, d, fmt='<3f'):
     """3 floats of a bytearray at off, plus d (computed in double, rounded once to float32)."""
     v = struct.unpack_from(fmt, raw, off)
@@ -93,7 +111,7 @@ def shift_scene(sc, prp_bytes, T, log):
     for r in sc.roots:
         for e in r.walk():
             top[id(e)] = r
-    moved_roots = [r for r in sc.roots if not is_system(r.name)]
+    moved_roots = [r for r in sc.roots if not is_sys_root(sc, r)]
     moved = {id(e) for r in moved_roots for e in r.walk()}
     info = {'roots': len(sc.roots), 'moved_roots': len(moved_roots), 'zero_trans': 0, 'entities': len(ents), 'moved_entities': len(moved)}
     # .prp: ZGEOM[2] (unit 2 of the node's own property object) of the moved roots
@@ -390,11 +408,57 @@ def write_zip(src_path, dst_path, new):
                 _copy_raw(out, src, info)
 
 
+# ------------------------------------------------------------------ source guard
+DM11B_PRP_SIZE = 4021760        # the .prp of the real DM11B build (KLExpansion\Maps\DM11B\F04_Main.zip); stock Dog Days F04 has 3,711,080
+
+
+class WrongSource(ValueError):
+    pass
+
+
+def check_sound(zf, stem, whd=None):
+    """2026-10-28 (A1SHIFT3: both seats died, divide by zero at kl2+0x4668b). The first clip played read a junk .WHD record because the shift
+    had been run on the STOCK Dog Days F04 zip (copied from the F04 slot; the DM11B redirect only happens at run time) and installed beside
+    DM11B's .WHD. Every .SND wave must point at a record of the .WHD that goes with the map. whd = path or bytes; default: the sidecar
+    <src dir>/<stem>.WHD (zf.filename). Raises WrongSource. -> (waves, misses)."""
+    import kl_snd
+    import kl_whd
+    snd = next((n for n in zf.namelist() if n.lower() == (stem + '.snd').lower()), None)
+    if snd is None:
+        return 0, 0
+    if whd is None:
+        base = os.path.splitext(zf.filename)[0]
+        for cand in (base + '.WHD', os.path.join(os.path.dirname(zf.filename), stem + '.WHD')):
+            if os.path.isfile(cand):
+                whd = cand
+                break
+        else:
+            raise WrongSource('no %s.WHD beside %s: cannot prove the .SND matches this map (pass whd=, or whd=False to skip)' % (stem, zf.filename))
+    if isinstance(whd, str):
+        with open(whd, 'rb') as f:
+            whd = f.read()
+    recs = kl_whd.records('dd', whd)
+    waves = [r for _o, _i, r in kl_snd.Snd('dd', zf.read(snd)).walk().waves()]
+    miss = sum(1 for r in waves if r not in recs)
+    if miss:
+        raise WrongSource('%s: %d of %d .SND waves reference no record of the .WHD: wrong source zip for this .WHD (stock Dog Days F04 instead of the '
+                          'DM11B build?)' % (zf.filename, miss, len(waves)))
+    return len(waves), miss
+
+
 # ------------------------------------------------------------------ main
-def shift(src_zip, dst_zip, T=DEFAULT_T, log=print):
+def shift(src_zip, dst_zip, T=DEFAULT_T, log=print, whd=None, expect_prp_size=None):
+    """whd: the map's .WHD (path / bytes; default the sidecar beside src_zip; False = skip the .SND/.WHD guard).
+    expect_prp_size: refuse a source whose .prp has another size (the CLI passes DM11B_PRP_SIZE)."""
     T = tuple(float(v) for v in T)
     with zipfile.ZipFile(src_zip) as zf:
         stem = stem_of(zf)
+        if expect_prp_size is not None:
+            n = next((i for i in zf.infolist() if i.filename.lower() == (stem + '.prp').lower()), None)
+            if n is None or n.file_size != expect_prp_size:
+                raise WrongSource('%s: .prp is %s bytes, expected %d (not the DM11B build)' % (src_zip, n and n.file_size, expect_prp_size))
+        if whd is not False:
+            log('sound guard: %d waves, %d misses' % check_sound(zf, stem, whd))
         names = {n.lower(): n for n in zf.namelist()}
         mem = lambda ext: names.get((stem + ext).lower())
         data = {e: zf.read(mem(e)) for e in ('.gms', '.buf', '.prp', '.HVK', '.oct', '.rmi', '.rmc', '.sgp', '.sgd', '.hrd') if mem(e)}
@@ -465,4 +529,4 @@ if __name__ == '__main__':
         sys.exit(0)
     if len(sys.argv) < 3:
         sys.exit('usage: kl_map_shift.py <src.zip> <dst.zip> [tx ty tz]  |  kl_map_shift.py --bots <shifted.zip> [<out.bots.zip>] [slot]')
-    shift(sys.argv[1], sys.argv[2], tuple(float(v) for v in sys.argv[3:6]) if len(sys.argv) >= 6 else DEFAULT_T)
+    shift(sys.argv[1], sys.argv[2], tuple(float(v) for v in sys.argv[3:6]) if len(sys.argv) >= 6 else DEFAULT_T, expect_prp_size=DM11B_PRP_SIZE)
