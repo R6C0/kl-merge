@@ -241,7 +241,7 @@ static void kls_osw_early(int host)
         for (j = 0; j < KLS_PER; j++) {
             DWORD obj = (DWORD)(DWORD_PTR)((kls_maker_t)KLH_VA(KLS_MAKER))(self, 0, 0, tmpl), ent[3];
             if (!obj) break;
-            ent[0] = obj; ent[1] = carrier; ent[2] = 1;                  /* free, carrier's label; stock entries are NOT parked here (kls_osw_tick does it once gun+0x13c is known) */
+            ent[0] = obj; ent[1] = carrier; ent[2] = 0;                  /* PARKED, carrier's label: the stock gun is the default until kls_osw_tick sees gun+0x13c on all of ours (a missed tick or a fault leaves stock) */
             klh_data((void *)(DWORD_PTR)(ents + 12 * n), ent, 12, "KLShop: online pool entry"); n++;
             kls.made[k][j] = obj; kls.fixed[k][j] = 0;
         }
@@ -252,7 +252,10 @@ static void kls_osw_early(int host)
     klog("osw: early make done: %d pair(s) in the set, %d made now, %d already there, pool %lu", rows, made, had, (unsigned long)n);
 }
 
-/* game thread, online, state 0x16..0x18 (before the round runs): per pair decide stock-or-ours from gun+0x13c; idempotent, logged once per round */
+/* game thread, online, state 0x16..0x18 (before the round runs): per pair decide stock-or-ours from gun+0x13c, logged once per round.
+ * kls.applied[k]: 0 = undecided (ours parked from kls_osw_early, stock free), 1 = ours (flipped ONCE when every one of ours has +0x13c: unpark ours, then keep
+ * the free stock entries of the carrier parked). Never flips back: ours were parked until then, so no player can hold one and an unpark cannot free a taken gun.
+ * Review 10-28: the first version parked whichever side was unwanted on every tick and never unparked, so a not-linked -> linked flip parked BOTH sides. */
 static void kls_osw_tick(DWORD st)
 {
     DWORD a, n = 0, ents, i; int k, m;
@@ -269,14 +272,15 @@ static void kls_osw_tick(DWORD st)
             __try { id = ((DWORD (__fastcall *)(DWORD))(DWORD_PTR)KLH_VA(0x6ece90))(kls.made[k][0]); } __except (1) { id = 0xdead; }
             klog("osw: row %d: %d object(s), %d with gun+0x13c set, id 0x6ece90 of the first = %lu (state 0x%lx): %s", kls.row[k], cnt, linked, (unsigned long)id, (unsigned long)st, want ? "ours are handed over" : "STOCK gun stays (net sub-object missing)");
         }
+        if (!kls.applied[k] && !want) continue;                          /* undecided: ours stay parked, stock stays free */
         for (i = 0; i < n; i++) {
-            DWORD e[3]; BYTE zero = 0; int ours = 0;
-            if (!klh_rd(ents + 12 * i, e, 12) || e[1] != carrier || !e[0] || !(e[2] & 0xff)) continue;   /* taken or parked already */
+            DWORD e[3]; BYTE zero = 0, one = 1; int ours = 0;
+            if (!klh_rd(ents + 12 * i, e, 12) || e[1] != carrier || !e[0]) continue;
             for (m = 0; m < KLS_PER; m++) if (e[0] == kls.made[k][m]) ours = 1;
-            if (ours == want) continue;                                  /* wanted free */
-            klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &zero, 1, ours ? "KLShop: online park (no net sub-object)" : "KLShop: online park stock gun");
+            if (ours) { if (!kls.applied[k] && !(e[2] & 0xff)) klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &one, 1, "KLShop: online unpark ours (net sub-object linked)"); }
+            else if (e[2] & 0xff) klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &zero, 1, "KLShop: online park stock gun");
         }
-        kls.applied[k] = want;
+        kls.applied[k] = 1;
     }
     kls.oswrep = 0;
 }

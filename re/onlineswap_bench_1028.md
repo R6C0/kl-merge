@@ -32,3 +32,8 @@ make is not at the right moment (read the `shopPage: link check` lines too).
 FAULT: `shop: OnlineSwap early make FAULTED` -> switched itself off, stock guns stay.
 
 Also check: Arcade (offline) and a stock FA map with OnlineSwap=1 behave as before (the key only acts online; offline [Shop] Swap path untouched).
+
+## Review fixes 10-28
+- Ours enter the pool PARKED; kls_osw_tick unparks them once (all +0x13c set) and then keeps stock parked; a missed tick or an early-make fault leaves the stock gun (safe).
+- Known limit: with OnlineEarlyMake=1 too, a fault in page II's early make clears kspg.earlyOk, which also stops OnlineSwap's hook for later rounds (stock guns come out). Bench OnlineSwap with OnlineEarlyMake=0 first.
+- Extra pass line: 'online unpark ours' in the klh_data trace / 'ours are handed over' per row.
