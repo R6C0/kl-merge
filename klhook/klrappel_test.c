@@ -3,13 +3,23 @@
    (0x82cc40: writes the node's position) and of the rotation builder, and a real KLJoin.ini [Rappel] section written to a
    temp file. Replays: a normal descent; the game moving him too; the channel vanishing; a node far from Start; a dry run;
    a refused section. NOT THE GAME: it proves the logic and the order of the writes, not that the game agrees.
-   Build (x86, VS prompt):  cl /nologo /W3 klrappel_test.c /Fe:klrappel_test.exe      Run: klrappel_test.exe */
+   Build (x86, VS prompt):  cl /nologo /W3 klrappel_test.c /Fe:klrappel_test.exe      Run: klrappel_test.exe
+   Clock (2026-10-28, scheduled check-in): klrappel.c reads GetTickCount() and looks for a start at most once per 50 ms
+   (scene_at); the harness used to pass_ms(60) past that gate, which was FLAKY: GetTickCount steps in ~15.6 ms units, so a
+   60 ms sleep can show as 46 ms by the clock and the tick was skipped (then the descent began mid-loop or not at all,
+   "frame 52" / "DRY RUN" / "STOPPED" failed). The harness now owns the clock: GetTickCount() is g_now, pass_ms() advances it,
+   a frame is 40 ms; case 8 pins the 50 ms gate itself. No wall-clock sleep anywhere. */
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
 #include <stdarg.h>
+
+static DWORD g_now = 100000;                                /* the fake clock klrappel.c sees; see the header */
+static DWORD fake_tick(void) { return g_now; }
+static void pass_ms(DWORD ms) { g_now += ms; }
+#define GetTickCount() fake_tick()
 
 #define KLH_VA(x) (x)
 #define KL2_SYSIF 0x6000
@@ -78,7 +88,7 @@ static void ini(const char *extra, const char *prof)
 static int fails;
 #define CHECK(c, msg) do { if (!(c)) { fails++; printf("FAIL %s\n", msg); } else printf("ok   %s\n", msg); } while (0)
 static const char *PROF = "0 20 80 190 330 500 670 810 920 980 1000";
-static void frame(float t) { DWORD c = klh_rd32(0x7048); set32(0x7048, c + 40); setf(ANM + 0x1c + 4, t); }
+static void frame(float t) { DWORD c = klh_rd32(0x7048); set32(0x7048, c + 40); setf(ANM + 0x1c + 4, t); pass_ms(40); }   /* 25 fps: a frame is 40 ms */
 
 int main(void)
 {
@@ -104,31 +114,31 @@ int main(void)
     CHECK(g_placed >= 100, "about a placement a frame");
     CHECK(strstr(logbuf, "LANDED") != 0, "LANDED said");
     /* the profile: at frame 52 (s = 0.5) the share is the middle value 500 */
-    world(); klrp_init(); ini("", PROF); g_placed = 0; Sleep(60); klrp_tick(1); frame(52.0f); klrp_tick(1);
+    world(); klrp_init(); ini("", PROF); g_placed = 0; pass_ms(60); klrp_tick(1); frame(52.0f); klrp_tick(1);
     memcpy(&y, mem + NODE + 40, 4);
     CHECK(fabs(y - (22767.0f + (21011.0f - 22767.0f) * 0.5f)) < 2.0f, "frame 52 of 104 is half the drop (profile 500)");
 
     /* 2: the game moves him as well */
-    world(); klrp_init(); ini("", PROF); nlog = 0; g_placed = 0; g_nudge = 1; Sleep(60);
+    world(); klrp_init(); ini("", PROF); nlog = 0; g_placed = 0; g_nudge = 1; pass_ms(60);
     klrp_tick(1); for (t = 0; t <= 30; t++) { frame((float)t); klrp_tick(1); }
     CHECK(strstr(logbuf, "THE GAME MOVES HIM TOO") != 0, "a node moved by someone else is detected");
     CHECK(g_placed <= 4, "...and nothing is placed on after it");
     g_nudge = 0;
 
     /* 3: the channel disappears at frame 40 */
-    world(); klrp_init(); ini("", PROF); nlog = 0; g_placed = 0; Sleep(60);
+    world(); klrp_init(); ini("", PROF); nlog = 0; g_placed = 0; pass_ms(60);
     klrp_tick(1); for (t = 0; t <= 40; t++) { frame((float)t); klrp_tick(1); }
     set32(ANM + 0x30, 4);
     klrp_tick(1);
     CHECK(strstr(logbuf, "STOPPED") != 0 && !klrp_r.player, "a vanished channel stops it without a landing");
 
     /* 4: his node is far from Start */
-    world(); klrp_init(); ini("", PROF); nlog = 0; setf(NODE + 36, 3000); Sleep(60); klrp_tick(1);
+    world(); klrp_init(); ini("", PROF); nlog = 0; setf(NODE + 36, 3000); pass_ms(60); klrp_tick(1);
     CHECK(!klrp_r.player && strstr(logbuf, "not the descent") != 0, "a node far from Start does not begin it");
 
     /* 5: dry run */
     world(); GetTempPathA(sizeof tmp, tmp); { FILE *h = fopen(klh_ini_buf, "w"); fprintf(h, "[Rappel]\nEnable=1\nDry=1\n"); fclose(h); }
-    klrp_init(); ini("", PROF); g_placed = 0; Sleep(60); klrp_tick(1); for (t = 0; t <= 104; t++) { frame((float)t); klrp_tick(1); }
+    klrp_init(); ini("", PROF); g_placed = 0; pass_ms(60); klrp_tick(1); for (t = 0; t <= 104; t++) { frame((float)t); klrp_tick(1); }
     CHECK(g_placed == 0 && strstr(logbuf, "DRY RUN") != 0, "Dry=1 places nothing");
     { FILE *h = fopen(klh_ini_buf, "w"); fprintf(h, "[Rappel]\nEnable=1\nLog=1\n"); fclose(h); }
 
@@ -137,9 +147,24 @@ int main(void)
     CHECK(!klrp_lv.ok && !klrp_r.player, "a profile that goes back is refused");
 
     /* 7: armed again only after the channel has been gone for 2 s */
-    world(); klrp_init(); ini("", PROF); Sleep(60); klrp_tick(1); for (t = 0; t <= 104; t++) { frame((float)t); klrp_tick(1); }
-    frame(104.0f); setf(NODE + 36, 5998); setf(NODE + 40, 22767); setf(NODE + 44, -160); Sleep(60); klrp_tick(1);
+    world(); klrp_init(); ini("", PROF); pass_ms(60); klrp_tick(1); for (t = 0; t <= 104; t++) { frame((float)t); klrp_tick(1); }
+    frame(104.0f); setf(NODE + 36, 5998); setf(NODE + 40, 22767); setf(NODE + 44, -160); pass_ms(60); klrp_tick(1);
     CHECK(!klrp_r.player, "the held last frame of the same cut does not begin a second descent");
+    /* 7b: the channel goes away; within 2 s of it a new such clip is still not a start, after 2 s it is */
+    set32(ANM + 0x30, 4); pass_ms(60); klrp_tick(1);                                       /* seen gone ~200 ms after LANDED */
+    set32(ANM + 0x30, 0x8001); setf(ANM + 0x1c + 4, 0.0f); pass_ms(60); klrp_tick(1);
+    CHECK(!klrp_r.player, "a new clip within 2 s of the channel going is not a second descent");
+    set32(ANM + 0x30, 4); pass_ms(2000); klrp_tick(1);                                     /* gone for > 2 s: armed again */
+    set32(ANM + 0x30, 0x8001); setf(ANM + 0x1c + 4, 0.0f); pass_ms(60); klrp_tick(1);
+    CHECK(klrp_r.player == PL, "a new clip 2 s after the channel was gone begins a descent");
+
+    /* 8: a start is looked for at most once per 50 ms by the clock (the gate the old Sleep(60) raced), across a tick wrap */
+    world(); klrp_init(); ini("", PROF); nlog = 0; g_placed = 0;
+    set32(ANM + 0x30, 4); g_now = 0xFFFFFFE0; klrp_tick(1);                                /* a look that finds no channel: scene_at = now */
+    set32(ANM + 0x30, 0x8001); pass_ms(49); klrp_tick(1);                                  /* 49 ms later (clock wrapped to 0x11): gated */
+    CHECK(!klrp_r.player, "49 ms after the last look nothing is looked at (the 50 ms gate), clock wrap included");
+    pass_ms(1); klrp_tick(1);
+    CHECK(klrp_r.player == PL, "50 ms after the last look the descent begins");
     printf("%s (%d failed)\n", fails ? "FAIL" : "ALL PASS", fails);
     if (fails) printf("%s\n", logbuf);
     return fails != 0;

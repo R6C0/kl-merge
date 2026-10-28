@@ -144,3 +144,35 @@ a centre-of-box / 0xe000 frame before; it now builds the stock frame.
   play: a grenade beside a vault pillar / camera / neon lamp in DM03A shatters it; the escape chopper's shatter body in DM11B /
   DM05A reacts where the chopper is. Not run in the game.
 - `KL_PortTools\_sched_1028_sgp\` (38 MB) can be deleted. The task still starts without its folders.
+
+---
+
+# 2026-10-28 scheduled check-in, evening (cloud, 18:48-19:05 UTC): PC BUSY (c9 + ce, commits every few minutes), no PC read; klrappel_test de-flaked
+
+No folder was attached to this session again (connectedFolders empty) and no access request was sent: `origin/rtp-schemas` had
+commits at 18:44, 18:44, 18:38, 18:27 UTC (c9 A1LIFT3f / Ramp log, ce LPB3 merge), so the VS Code sessions hold the PC and
+the game. Nothing launched, installed, staged or touched on screen; no dump read (the live sessions triage their own runs).
+
+## Self-tests on the day's branch head (3a9e0b8)
+
+`python tools/kl_tests.py` in the cloud after `apt-get install gcc-multilib`: 5 py + 15 C logic tests PASS, 0 fail
+(klshot_test / kllootsync_test from today included), 13 SDK-only skips. Nothing committed today broke an off-game test.
+
+## Offline piece: klrappel_test "flaky (timing)" (c9's 20:25 note) - cause found and removed
+
+`klrp_tick` looks for a start at most once per 50 ms of `GetTickCount()` (`static DWORD scene_at`, klrappel.c:256). The harness
+got past that gate with `Sleep(60)` before cases 1b-5 and 7. GetTickCount steps in ~15.6 ms units, so a 60 ms sleep can read as
+46.9 ms by the clock (3 steps) and the tick is skipped; the descent then begins at some later tick inside the frame loop, or not
+at all. Reproduced here: the HEAD harness built against a stub whose clock steps 15.625 ms fails "frame 52 of 104 is half the
+drop" at 2 of 8 clock phases (the other cases got a second look inside their loops and passed), exactly the intermittent
+picture. Fix in `klrappel_test.c` only (klrappel.c untouched): the harness owns the clock (`#define GetTickCount() fake_tick()`,
+`pass_ms()`, a frame advances 40 ms), every `Sleep` is gone, and two new cases pin the behaviour the sleeps hid: 7b (a new
+clip within 2 s of the channel going is not a second descent; after 2 s it is) and 8 (49 ms after the last look nothing is
+looked at, 50 ms later it begins, across a GetTickCount wrap 0xFFFFFFE0 -> 0x11). 18 checks, 8/8 phases ALL PASS with the
+stepped-clock stub; MinGW i686 build -Wall -Wextra clean. The stub lives only in this session's scratch (the repo's
+test_shim stays types-only by design). NOT RUN with cl on the PC: `cl /nologo /W3 klrappel_test.c` next local session.
+
+## Owner
+
+- Nothing to install. If a scheduled cloud check-in should ever read the PC again, attach DD + DM to its task (both were missing
+  again); with the live sessions working all week that is optional.
