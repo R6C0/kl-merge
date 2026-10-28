@@ -24,7 +24,7 @@
  *   (klleaf_logic.h) one line per collected controller:
  *     probe: leaf t=<ms since accept> n=<sample> prox=<proxy> i=<index>/<count> ctl=<ctrl> st21=<byte [ctrl+0x21]> name=<ctrl name or ?> node=<node or 0>
  *            pos=(x, y, z)|pos=? raw=<8 dwords ctrl+0x20..0x3c, hex>
- *   GUESS (not proven): the controller list = [proxy+0x34], an array of [proxy+0x30] controller pointers; the target node = [e+4] with e =
+ *   READ (kl2.exe 0x7ed520, see klpr_leaf_line): the controller list is INLINE at proxy+0x34, [proxy+0x30] ZMatPosAnim pointers (the old line read [proxy+0x34] as a pointer to the list = WRONG); the lines below that still say GUESS are superseded by klpr_leaf_line's comment. the target node = [e+4] with e =
  *   [[ctrl+0x24]+0x60] (the owner-slot path klpr_name uses), else [ctrl+4]; the position = kle_node (klescort.c: the node's own matrix chain,
  *   scene units - NOT x100); st21 is the byte the RE notes call the controller state (answers GetMatPosAnim in 1..5); raw = ctrl+0x20..0x3c dumped
  *   as is because NO frame / time offset is proven: whichever dword changes between samples is the clip clock. The proxy accept time is also
@@ -99,24 +99,28 @@ static void klpr_accepted(DWORD me)
     klpr.pr[k].me = me; klpr.pr[k].last = 0; klpr.pr[k].at = klj_door_at;
 }
 
-/* one controller of a proxy: one compact line (formats in the header comment) */
+/* one controller of a proxy: one compact line (formats in the header comment).
+   LAYOUT (READ from kl2.exe 2026-10-28, "ZMatPosAnim" vtable 0xba8f3c, size 0xe0): handler 0x7ed520 loops edi over the INLINE array
+   [proxy+0x34+4*i], i < [proxy+0x30], writes first/last ints to [ctl+0xd0]/[ctl+0xd4] (and into the clip state via 0x78f190/0x505550),
+   then 0x59dce0(ctl): [ctl+0x99]=1, [ctl+0x34]=game ms [[0xdd2640]+0x48] (clip start). Clip state at ctl+0x34 (evaluator 0x422c50, caller 0x7b9590
+   from vtable slot 25 0x51a120): +0 start ms, +4 rate, +8 flag, +0xc keys, +0x10 first, +0x14 last (floats), +0x18 = current frame
+   (cached; 0x51a120 reads it at ctl+0x4c). Moved geom = [ctl+0x24] (0x7b9633 calls its vtable+0x8c); node = [geom+4] (GUESS: same node kle_node
+   walks for actors; 0x7b9670 reads [[geom+4]+0x30..0x38] as a second position triple). */
 static void klpr_leaf_line(DWORD me, DWORD at, int n, int i, DWORD cnt, DWORD ctl)
 {
-    char b[64]; const char *nm; BYTE st = 0xff; DWORD raw[8], e, slot, node = 0; float pos[3]; int pv = 0, k;
-    memset(raw, 0, sizeof raw);
-    klh_rd(ctl + 0x21, &st, 1);
-    klh_rd(ctl + 0x20, raw, sizeof raw);                                                  /* GUESS range, see the header */
-    nm = klpr_name(ctl, b, sizeof b);
-    if ((slot = klh_rd32(ctl + 0x24)) != 0 && (e = klh_rd32(slot + 0x60)) != 0) node = klh_rd32(e + 4);       /* GUESS: owner node */
-    if (node) pv = kle_node(node, pos, 0);
-    if (!pv && (node = klh_rd32(ctl + 4)) != 0) pv = kle_node(node, pos, 0);                                   /* GUESS: fallback */
-    if (pv) klog("probe: leaf t=%lu n=%d prox=%08lx i=%d/%lu ctl=%08lx st21=%02x name=%s node=%08lx pos=(%.1f, %.1f, %.1f) raw=%08lx,%08lx,%08lx,%08lx,%08lx,%08lx,%08lx,%08lx",
-                 (unsigned long)(GetTickCount() - at), n, (unsigned long)me, i, (unsigned long)cnt, (unsigned long)ctl, (unsigned)st, nm ? nm : "?", (unsigned long)node, pos[0], pos[1], pos[2],
-                 (unsigned long)raw[0], (unsigned long)raw[1], (unsigned long)raw[2], (unsigned long)raw[3], (unsigned long)raw[4], (unsigned long)raw[5], (unsigned long)raw[6], (unsigned long)raw[7]);
-    else klog("probe: leaf t=%lu n=%d prox=%08lx i=%d/%lu ctl=%08lx st21=%02x name=%s node=%08lx pos=? raw=%08lx,%08lx,%08lx,%08lx,%08lx,%08lx,%08lx,%08lx",
-                 (unsigned long)(GetTickCount() - at), n, (unsigned long)me, i, (unsigned long)cnt, (unsigned long)ctl, (unsigned)st, nm ? nm : "?", (unsigned long)node,
-                 (unsigned long)raw[0], (unsigned long)raw[1], (unsigned long)raw[2], (unsigned long)raw[3], (unsigned long)raw[4], (unsigned long)raw[5], (unsigned long)raw[6], (unsigned long)raw[7]);
-    (void)k;
+    char b[64]; const char *nm; BYTE act = 0xff; DWORD vt, geom, node = 0, gt, fi = 0, la = 0; float pos[3], fr = 0, rate = 0, f0 = 0, f1 = 0; DWORD st = 0; int pv = 0;
+    vt = klh_rd32(ctl);
+    klh_rd(ctl + 0x99, &act, 1);
+    klh_rd(ctl + 0x34, &st, 4); klh_rd(ctl + 0x38, &rate, 4); klh_rd(ctl + 0x44, &f0, 4); klh_rd(ctl + 0x48, &f1, 4); klh_rd(ctl + 0x4c, &fr, 4);
+    klh_rd(ctl + 0xd0, &fi, 4); klh_rd(ctl + 0xd4, &la, 4);
+    gt = klh_rd32(klh_rd32((DWORD_PTR)KLH_VA(0x00dd2640)) + 0x48);                       /* game ms, the clock the clip start is taken from */
+    geom = klh_rd32(ctl + 0x24);
+    nm = klpr_name(geom, b, sizeof b);
+    if (geom && (node = klh_rd32(geom + 4)) != 0) pv = kle_node(node, pos, 0);
+    klog("probe: leaf t=%lu n=%d prox=%08lx i=%d/%lu ctl=%08lx vt=%08lx%s act99=%u frame4c=%.2f start=%lu gms=%lu age=%ld rate=%g clip=%g..%g ints=%ld..%ld geom=%08lx name=%s node=%08lx %s",
+         (unsigned long)(GetTickCount() - at), n, (unsigned long)me, i, (unsigned long)cnt, (unsigned long)ctl, (unsigned long)vt, vt == (DWORD)KLH_VA(0x00ba8f3c) ? "(ZMatPosAnim)" : "(NOT ZMatPosAnim)",
+         (unsigned)act, fr, (unsigned long)st, (unsigned long)gt, (long)(gt - st), rate, f0, f1, (long)fi, (long)la, (unsigned long)geom, nm ? nm : "?", (unsigned long)node, "pos:");
+    if (pv) klog("probe: leaf   pos=(%.1f, %.1f, %.1f)", pos[0], pos[1], pos[2]); else klog("probe: leaf   pos=?");
 }
 
 /* called every tick by klhook.c after klj_tick; reads only; costs one compare when no series runs */
@@ -130,11 +134,10 @@ static void klpr_tick(void)
         klpr.pr[k].last = n;
         if (klpr.nleaf > 1000) continue;                                                   /* log cap: about 40 series */
         klpr.nleaf++;
-        cnt = klh_rd32(klpr.pr[k].me + 0x30); list = klh_rd32(klpr.pr[k].me + 0x34);
+        cnt = klh_rd32(klpr.pr[k].me + 0x30); list = klpr.pr[k].me + 0x34;                 /* READ 0x7ed5d2: the array is INLINE at proxy+0x34 */
         if (cnt > 8) cnt = 8;                                                              /* LIFT9: 5 each */
-        if (!list) { klog("probe: leaf t=%lu n=%d prox=%08lx list[+34]=0 count=%lu", (unsigned long)(now - klpr.pr[k].at), n, (unsigned long)klpr.pr[k].me, (unsigned long)cnt); continue; }
         for (i = 0; i < (int)cnt; i++) {
-            ctl = klh_rd32(list + 4 * i);                                                  /* GUESS: array of controller pointers */
+            ctl = klh_rd32(list + 4 * i);
             if (ctl < 0x10000) { klog("probe: leaf t=%lu n=%d prox=%08lx i=%d/%lu ctl=%08lx unreadable", (unsigned long)(now - klpr.pr[k].at), n, (unsigned long)klpr.pr[k].me, i, (unsigned long)cnt, (unsigned long)ctl); continue; }
             klpr_leaf_line(klpr.pr[k].me, klpr.pr[k].at, n, i, cnt, ctl);
         }
