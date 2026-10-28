@@ -1,3 +1,9 @@
+2026-10-28 ~17:05 - [c9] A1SHIFT6 PASS: DM11S (shifted DM11B) online with the int16 guard ON and the Int16Ok.txt marker (guard2 TEST dll
+E815E20C, df9680596): both seats IN ROUND, faults 0, asserts 0, no "int16guard ... refused" line although OnlineSkip lists DM11B, botgate
+loaded the DM11S bots.zip (222102326, fnv 696cda52) on host and client, positions in the shifted frame, census 7 Ally alive. Folder restored
+(DM11B 222101847, marker removed, f520f5d1/c3f119f4). A1SHIFT5 run 1: menu recipe typo (waitwin HeistPlayMenu2, the page is 3), fixed; rerun
+A1SHIFT5b running. A1NET2 note: the host stopped walking because a Volume Control window took the foreground (DirectInput unacquired).
+
 2026-10-28 ~16:45 - [ce] WKBC3 + BP_DD04c (out_looks_1028a_test, OnlineLooks=2), 0 faults / 0 asserts every seat. BP_DD04c F04: 7/7 BOARDED
 (ExitCrowd 1600, GatherLateS 45: the wait ran its 40 s); client PASS with the fixed join script (waitstate 0x19, onwin FABuyWeaponsNew, waitstate 0x29).
 Defaults now OnlineExitCrowd=1600, OnlineGatherLateS=45 (b0bd5343c). WKBC3 F06: 7/7 aboard (6 BOARDED + bot 0 boardall), ledger $1.65M; host
