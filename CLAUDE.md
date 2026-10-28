@@ -73,8 +73,8 @@ A1SHIFT5b offline Arcade full round (7 bots, 1 boarded $1.36M), faults 0. A1NET2
 run it while an A1SHIFT bench has DM11S installed). SHIPPED 18:20 (/oldhook: OnlineSkip emptied, ini baseline de91b2a5; undo UNDO_DM11S.bat in C:\kl_build_1024\c9_1028\dm11s_ship);
 SHIPCHK 18:45 PASS online with the installed dll/ini. A1LIFT3d: Retomoto lift box re-arms live (3 door fires 10-15 s apart).
 Bench shots fixed: kl_solo_test --d3shots (in-game back buffer;
-the GDI grab is black with the monitor off). A1LIFT3g (21:10) CORRECTS 3d/3f: the player
-stands at shut lift doors and kljoin's CarStall jumps them; why the doors stay shut is open (wf retomoto-liftdoor-shut). (The 40 % downs: Ramp=1 kept the bench's
+the GDI grab is black with the monitor off). A1LIFT3g/4 (21:35) CORRECT 3d/3f: the player
+never reaches the car; kljoin jumps them from outside. Whether the doors open is UNKNOWN (leaf probe offsets wrong; RE offline). (The 40 % downs: Ramp=1 kept the bench's
 CopToYou at stock; a lone player factor needs [Balance] Ramp=0; Ramp now logs it, 403967a5a.)
 
 2026-10-28 ~21:15 - [ce] Merged (default off): OnlineLootParts+hold (LPB3 PASS), OnlineVoice (VOX2 PASS: bots' loot lines heard by the joiner),

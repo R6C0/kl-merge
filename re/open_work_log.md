@@ -1,3 +1,10 @@
+2026-10-28 ~21:35 - [c9] A1LIFT4 PASS (TEST leafprobe 05e5e76e, faults 0, 82 JPG shots; restore f520f5d1/de91b2a5 checked). Both lift proxies
+(59fc2ce0, 59fc07b0) accepted at the box crossing. The [Probe] DoorLeaves offsets are WRONG: [proxy+0x30]=5 is no controller count,
+slots 3-4 hold junk and every node pos reads 0, so leaf movement is still UNKNOWN. The [Join] CarStall/CarFallback keys in the bench
+KLHook.ini were refused (they belong in the level KLJoin.ini), so nothing was switched off. The route stuck at (2550,19605,130) short of
+the car; box 9's ride still jumped the player after 8.5 s because its CarMin/CarMax slack is 1500. Next: find the leaf controller
+offline (no bench). Branch c9-leafprobe-1028 stays unmerged.
+
 2026-10-28 ~21:10 - [c9] A1LIFT3g PASS (TEST ramplog_out 3af90acb, Ramp=0 Log=2, faults 0, 44 JPG shots): no down (health 6191 of 6253 at the
 ride). CORRECTION of 3d/3f: the player does NOT ride the car. y is the height and stays 19601; z 873 is the doorway side. The player stands
 at (2594,19601,873), outside the car box (x 2802+), and kljoin's CarStall fallback jumps them to 06_Exit (6272,563,-6305) after 1.5 s; shot 31
