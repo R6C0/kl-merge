@@ -66,9 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-28 ~00:10 - [a1] GAME FREE. A1HIRE (hire page + online hire, 2 seats) still NOT RUN: aborted 23:03 on owner mouse input; nothing in the game folder changed.
-Rerun when idle 5 min: kl_solo_test --hook C:/kl-merge/wt/round-1027/klhook/out_hirepage_1027_test --n 2 --secs 700 --gap 45 --relaunch 2 --tag A1HIRE
-(inis C:\kl_build_1024\a1hire_1027\A1HIRE_host/join.ini; uses the between-rounds shop, worn in round 2). Live keys: F12 hire page after the owner installs the hirepage bat.
+2026-10-28 ~00:50 - [ce] A1HIRE ran 00:23 (owner idle) but reached NO round: its inis lacked [Auto] Enable=1 (klauto never started; Q27 inis carry it). Fixed in the
+staged inis + review (wf_8dcf5187): F12 press before the selector is wrapped was dropped -> kept 3 s now; scripted F12 skips the foreground check (TEST).
+SHIP out_hirepage_1028 2e2db7c3 (now in the owner bat folder), TEST out_hirepage_1028_test cedc7511 (bcf998ae0). Rerun queued, idle-gated (--ini1/--ini2
+C:\kl_build_1024\a1hire_1027\A1HIRE_host/join.ini). Scripted F9 does NOT reach klco_keys: judge the online Char ignore from the worn body, not F9.
 
 2026-10-27 ~23:40 - [ce] HIRE PAGE (owner: "make a damn shop page for the hiring its just a button"; his try 20:27 online host DM07 found no hire: no zip has FAHire).
 [Hire] Page=1: F12 in the Buy Weapons list = HIRE A HEISTER page (Pistols tab = Dog Days 8, SMGs tab = Dead Men 8; BUY twice hires; online via klhro_set), 9fa98ea91,
