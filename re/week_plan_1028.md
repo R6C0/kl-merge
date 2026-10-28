@@ -48,6 +48,7 @@ Owner: ce (10-28 11:40; 3f is another project).
 Owner: ce (10-28 11:40).
 
 ### T5 Gun UI + sounds Arcade -> multiplayer (MP45 first)
+- 10-28 13:10 ce: RemoteShot2D reworked as a SHIP-safe sound-system vtable route ([Sound] RemoteShot2D=1, RemoteShot2DRoute 0 auto/1 code/2 vtable; private copy of vtable 0xb9ae14, slot 74 wrapped), review fix 756fde98a (re-point a sound system rebuilt at the same address). In out_week_1028h(_test). Bench SHOT2D queued (F06, both seats, NOT RUN).
 - 10-28 12:00 ce: research re/gun_ui_sounds_1028.md (MP45 = item 1 row 7, banks/volumes same online; rows 13/16/32/35 baked names but Swap inert online; DM07/DD10 unbaked); build OnlineSwap + text fallback in wt/wk-gunui.
 - 10-28 12:45 ce CLAIMS remote shot loudness (section 3 of re/gun_ui_sounds_1028.md): static slot trace + [Sound] toggle in wt/wk-sound (branch wk-sound-1028).
 - [ ] Find why the MP45 (and other guns) show different icon/name/sound online vs Arcade; make online match Arcade on every map.
