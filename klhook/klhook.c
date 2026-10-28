@@ -821,6 +821,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klucchide.c"                                 /* klucchide.c: [Ucc] Hide - the UCC stays hidden until his reveal key (off unless Hide=1); AFTER klucc.c, klucc_down.c, klnetchan.c, klroundkeep.c, klcharonline.c, klhud.c */
 #include "klucc_aim.c"                                 /* klucc_aim.c: [Ucc] PoliceAim - police AI treats a hidden UCC as a target, rules slot 188 per asker (off unless PoliceAim=1); AFTER klucchide.c, klucc_down.c, klroundkeep.c */
 #include "klhire_online.c"                            /* klhire_online.c: [Hire] Online - hire a heister in the online shop (client asks, host spends; off unless Online=1); AFTER klucchide.c, klnetchan.c, klcharonline.c */
+#include "kldoorclose.c"                              /* kldoorclose.c: [KLHook] DoorCloseMs - the Retomoto lift doors shut again (polls the door proxies; data writes + one game call; off unless set); AFTER kljoin.c, klescort.c */
 #ifdef KLHOOK_TEST
 #include "klauto.c"
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
@@ -1250,6 +1251,7 @@ static void klh_tick(int game_thread)
     kpm_arc_tick();                                   /* klpm_arc.c: next Arcade map after a match (off unless [Match] Enable=1) */
     klx_tick();
     klj_tick();
+    kldc_tick(game_thread);                           /* kldoorclose.c: [KLHook] DoorCloseMs (idle when 0) */
 #ifdef KLHOOK_TEST
     klpr_tick();                                      /* klprobe.c: [Probe] DoorLeaves samples (reads only; idle unless a door proxy was accepted) */
 #endif
@@ -1687,6 +1689,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kln_init();
     klf_init();
     klj_init();
+    kldc_init();                                      /* kldoorclose.c: reads [KLHook] DoorCloseMs */
     klt_init();
     klc_init();
     kpm_init();                                       /* klpm.c: [Match] (default off) */
