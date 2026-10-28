@@ -66,14 +66,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-28 ~14:00 - [c9] A1TALK DM01+DD04 PASS: crew banter online both seats (OnlineTalk=1, a27db09ca). DM11B shift (DM11S): load crash fixed
+(.prm type-7 repoint 723e78443), now c0000094 div-by-zero at kl2+0x4668b in round, both seats -> workflow wkthgj0ax (C:\kl_wt\div0). DM11B
+stock + ship dll f520f5d1 restored; game handed to ce. Hire3 gaps workflow wrekij1hv (C:\kl_wt\hire3). Status page Pp48g1cQgREDE3AsHPqxTa (c9).
+
 2026-10-28 ~13:10 - [ce] WEEK BUILD (keys default 0): WK1 dry + WK2 live (F06, 2 seats) PASS, faults 0: bot cop-wave triggers, take/bank, keys map +
 MOD CONTROLS page, online gun swap. SHIP refuses EVERY .text patch -> shipped features must be data/vtable/tick only (bankcredit rewritten so).
 Botpath fixes merged; RemoteShot2D (MP45 remote shots 2D like Arcade) as a vtable route. Dlls C:\kl-merge\wt\wk-merge\klhook\out_week_1028h(_test).
 Next: WKBC, BP_DD08/DD04, SHOT2D benches after c9 (RUN_week_1028.txt). Plan: re/week_plan_1028.md.
-
-2026-10-28 ~14:00 - [c9] A1TALK DM01+DD04 PASS: crew banter online both seats (OnlineTalk=1, a27db09ca). DM11B shift (DM11S): load crash fixed
-(.prm type-7 repoint 723e78443), now c0000094 div-by-zero at kl2+0x4668b in round, both seats -> workflow wkthgj0ax (C:\kl_wt\div0). DM11B
-stock + ship dll f520f5d1 restored; game handed to ce. Hire3 gaps workflow wrekij1hv (C:\kl_wt\hire3). Status page Pp48g1cQgREDE3AsHPqxTa (c9).
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.
