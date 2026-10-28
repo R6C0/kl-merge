@@ -835,7 +835,9 @@ static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], i
    array it reads is the Sharable one, as the doc says). Cap [0xd1b3d0] (doc: 1,000,000; GUESS that it is the right limit). NOTE: with [0x168e59c] != 1 the first loop of 0x5e2230 (dead/police lose money) is skipped (0x5e223e jne 0x5e232a),
    so in FA only the police loop at 0x5e2332.. runs. Replicated by the stock 0x942b20 commit inside 0x5a18c0 (GUESS: reliable delta, doc section 1). Host only (session role 2) and FA sub-mode 0 (GUESS from the doc).
    Credited before the settlement, the money still goes through 0x6f4960's equal split among the escapees. A bot that banks after the last human escaped and the round ended is lost (said in the round summary).
-   GUESS: a human's 0x40 (escaped) flag is set while the round state is still KLB_ROUND; if it only appears at 0x1f, nothing is ever credited (the log says "no escaped human seat" every round). */
+   Seat bits (re/human_escape_online_1028.md, static): holding E (EnterVehicle) on the van's BoardingTrigger runs rules slot 45 0x6c6c10, which sets record state 4 + flag 0x20 (boarded,
+   0x6c6e22..0x6c6e30); only when the van departs does 0x776ef0 (from the rules tick, 0x727794) turn state 4 into 5 + flag 0x40 (escaped, 0x777026..0x777030). So 0x40 alone came too late
+   or never (WKBC2/WKBC3 10-28 only teleported the host, nobody pressed E: "no escaped human seat yet" all round). A seat with 0x20 OR 0x40 now counts; 0x0d meanings stay GUESS. */
 typedef int (__fastcall *klbf_bc_add_t)(void *S, int edx_unused, int seat, int amount);      /* C has no __thiscall: __fastcall passes ecx then edx (ignored by the callee) and pops the same stack args */
 typedef int (__fastcall *klbf_bc_get_t)(void *S, int edx_unused, int seat);
 static void klbf_bc_log_skip(const char *why) { if (!(klbf_bc_told & 2) && (klbf_bc_told |= 2)) klog("botfill: bankcredit: skipped: %s (ledger $%ld; said once per round)", why, klbf_bank_total); }
@@ -853,9 +855,9 @@ static void klbf_bc_credit(DWORD rules)      /* game thread, host tick, round ru
         BYTE used = 0xff; DWORD fl;
         if (!klh_rd(tabp + seat, &used, 1) || used != 0) continue;      /* 0x5e226b: record in use when the byte is 0 */
         if (!klh_rd(S + 0x58 + 0x40 + 4 * seat, &fl, 4)) continue;      /* = 0x571750(S, seat) */
-        if ((fl & 0x40) && !(fl & 0x0d)) { pick = seat; break; }
+        if ((fl & 0x60) && !(fl & 0x0d)) { pick = seat; break; }      /* 0x20 boarded / 0x40 escaped */
     }
-    if (pick < 0) { if (!(klbf_bc_told & 1) && (klbf_bc_told |= 1)) klog("botfill: bankcredit: no escaped human seat yet (flags 0x40 set, 0x0d clear): ledger $%ld waits (said once per round)", credit); return; }
+    if (pick < 0) { if (!(klbf_bc_told & 1) && (klbf_bc_told |= 1)) klog("botfill: bankcredit: no boarded or escaped human seat yet (flag 0x20/0x40 set, 0x0d clear): ledger $%ld waits (said once per round)", credit); return; }
     __try {
         int have = ((klbf_bc_get_t)KLH_VA(0x699030))((void *)S, 0, pick), room = (int)cap - have;
         if (cap < 100000 || cap > 100000000) room = 1000000 - have;      /* GUESS: an unreadable/odd cap falls back to the doc's 1,000,000 */
