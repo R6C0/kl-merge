@@ -72,9 +72,9 @@ Full dated log: `re/open_work_log.md` (newest first).
 had shifted the stock F04 -> sound div0). Hire online complete (A1HIRE3: rules+0x208 confirmed, money read back). Banter online PASS (A1TALK).
 Next: DM11S ship prep + full-round/offline checks; A1NET2 (both seats walk) after ce. Status page Pp48g1cQgREDE3AsHPqxTa (c9).
 
-2026-10-28 ~15:40 - [ce] WKBC2 F06 7/7 BOARDED, BP_DD04b 5/7 (was 4/7), 0 faults; bank credit unpaid because the host was teleported to the bots'
-box, not the van's boarding object (-6209 521 10395). Crew-online design re/crew_online_1028.md + log-only probe [BotFill] OnlineLooks=2 (206b860fc,
-dll C:\kl-merge\wt\wk-looks\klhook\out_looks_1028a_test). SHIP refuses EVERY .text patch. Next: WKBC3 + BP_DD04c (RUN_week_1028.txt) after c9's A1NET2.
+2026-10-28 ~16:45 - [ce] BP_DD04c 7/7 BOARDED (client PASS, new join script) -> defaults OnlineExitCrowd 1600 + OnlineGatherLateS 45 (b0bd5343c).
+WKBC3 F06 7/7 aboard, but bank credit STILL unpaid even with the host on the van object (no seat flag 0x40): escape-flag research + OnlineLooks=1
+(host->client bot looks, keyed by the shared group digit: looks probe SAME ORDER on F06 and DD04) in workflow w91thgo9w. 0 faults every seat.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.
