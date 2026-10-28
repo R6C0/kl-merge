@@ -23,6 +23,7 @@ Owner wants every mod feature reachable on a sensible key and shown on screen (s
 Owner: ce.
 
 ### T2 Maps work on both sides (host and client), all maps
+- 10-28 12:45 c9 A1SND PARTIAL PASS: music/ambience/stinger Loud/voice lines run online on DM01 + DD04 (0 faults); crew banter (kltalk) still silent online. See open_work_log.
 - [ ] 2-seat bench per map (DD 9 stock FA + every DM/graft map), host and client both reach round 2, 0 faults.
 - [ ] Fix per-map failures (DM11B int16, Retomoto lift, missing wardrobe models -> hired body stays stock).
 Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
