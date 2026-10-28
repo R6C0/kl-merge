@@ -44,7 +44,7 @@ static void klsab_init(void)
 {
     HMODULE u;
     klsab.on = GetPrivateProfileIntA("Sabotage", "VanHold", 0, klh_ini) != 0;
-    klsab.key = GetPrivateProfileIntA("Sabotage", "Key", 0x4a, klh_ini);
+    klsab.key = klkeys_vk(KK_SAB);
     klsab.holdS = klsab_clamp_hold(GetPrivateProfileIntA("Sabotage", "HoldS", 8, klh_ini));
     klsab.anyMode = GetPrivateProfileIntA("Sabotage", "AnyMode", 0, klh_ini) != 0;
     klsab.anyPlayer = GetPrivateProfileIntA("Sabotage", "AnyPlayer", 0, klh_ini) != 0;

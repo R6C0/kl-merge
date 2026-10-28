@@ -78,6 +78,9 @@ static struct { DWORD osd; int fault; } klu_r;
 static DWORD klpu_evt[40];
 static volatile LONG kset_v[4] = { 0, 1, 1, 0 };           /* klset.c: Look, Textures, Prompt, NeedUse - the harness helps without E (its human helper scenarios predate the E key) */
 static int klu_same_code(DWORD va, const BYTE *bytes, int n) { (void)va; (void)bytes; (void)n; return 0; }
+enum { KLAN_UCC, KLAN_ADREN, KLAN_HINT };
+static int klan_ready(int slot) { (void)slot; return 0; }                          /* klannounce.c: no announcement routine in this harness: no prompt is said */
+static int klan_say_el(DWORD el, const char *t, float s, int slot) { (void)el; (void)t; (void)s; (void)slot; return 0; }
 
 #define KAD_TEST_NOANIM                 /* the Anim part (klfreeclimb.c's engine calls) is not in this harness */
 enum { KLTT_REVIVE = 4, KLTT_ADREN = 5 }; static float kltt_get(int r, int k) { (void)r; (void)k; return 1.0f; }   /* kltrait.c: no traits in this harness */

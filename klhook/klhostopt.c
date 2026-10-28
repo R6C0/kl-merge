@@ -26,7 +26,7 @@
 #define KLHOSTOPT_C
 
 static struct {
-    int on, steam, udp, keys, keyMap, keyAI, keyPool;
+    int on, steam, udp, keys, keyMap, keyAI, keyPool, ctlMap, ctlAI, ctlPool;   /* ctl*: Ctrl must be held ([Keys] Map=1: no lobby-state read exists, so the host keys are Ctrl+key) */
     int map, ai, solo, pd2;               /* the host's OWN values: map = OnlineSet value (0/2/9) */
     int minIni, squadsIni;                /* the ini's [Lobby] MinPlayers / [Bots] OnlineFillSquads, to put back */
     int rmap, rai, rsolo, rok;            /* the host's values as a client heard them */
@@ -159,7 +159,7 @@ static void klho_tick(int game_thread)
             if (k) bp = (BOOL (WINAPI *)(DWORD, DWORD))GetProcAddress(k, "Beep");
         }
         if (gaks && fgw && wtp && !cli) {
-            DWORD pid = 0; HWND f = fgw(); int m = (gaks(klho.keyMap) & 0x8000) != 0, a = (gaks(klho.keyAI) & 0x8000) != 0, pl = kmp.on && (gaks(klho.keyPool) & 0x8000) != 0;
+            DWORD pid = 0; HWND f = fgw(); int ctl = (gaks(0x11) & 0x8000) != 0, m = (gaks(klho.keyMap) & 0x8000) != 0 && (!klho.ctlMap || ctl), a = (gaks(klho.keyAI) & 0x8000) != 0 && (!klho.ctlAI || ctl), pl = kmp.on && (gaks(klho.keyPool) & 0x8000) != 0 && (!klho.ctlPool || ctl);
             if (f) wtp(f, &pid);
             if (pid == GetCurrentProcessId()) {
                 if (m && !dMap) { klho_put(0, (klho_get(0) + 1) % 3); if (bp) bp(660 + 220 * klho_get(0), 40); }
@@ -254,9 +254,9 @@ static void klho_init(void)
     klho.steam = GetPrivateProfileIntA("HostOpts", "Steam", 1, klh_ini) != 0;
     klho.udp = GetPrivateProfileIntA("HostOpts", "Udp", 1, klh_ini) != 0;
     klho.keys = GetPrivateProfileIntA("HostOpts", "Keys", 1, klh_ini) != 0;
-    klho.keyMap = (int)GetPrivateProfileIntA("HostOpts", "KeyMap", 0x76, klh_ini);
-    klho.keyAI = (int)GetPrivateProfileIntA("HostOpts", "KeyAI", 0x77, klh_ini);
-    klho.keyPool = (int)GetPrivateProfileIntA("HostOpts", "KeyPool", 0x2E, klh_ini);      /* Delete (0x2E; Insert 0x2D is the UCC RevealKey in klucchide.c, every F5..F11 key is taken too): cycles the map pool (needs [MapPool] Enable=1) */
+    klho.keyMap = klkeys_vk(KK_HMAP); klho.ctlMap = klkeys_ctl(KK_HMAP);        /* klkeys.c: F7 (Ctrl+F3 with [Keys] Map=1) */
+    klho.keyAI = klkeys_vk(KK_HAI); klho.ctlAI = klkeys_ctl(KK_HAI);
+    klho.keyPool = klkeys_vk(KK_HPOOL); klho.ctlPool = klkeys_ctl(KK_HPOOL);      /* Delete (0x2E; Insert 0x2D is the UCC RevealKey in klucchide.c, every F5..F11 key is taken too): cycles the map pool (needs [MapPool] Enable=1) */
     klho.pool = kmp.ini_pool; klho.rpool = -1;
     klho.map = kls_online_set; if (klho.map != 0 && klho.map != 2 && klho.map != 9) klho.map = klho.map == 3 ? 3 : 0;
     klho.ai = GetPrivateProfileIntA("Bots", "OnlineFill", 0, klh_ini) != 0;

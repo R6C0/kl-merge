@@ -319,7 +319,7 @@ static void klucc_init(void)
     klucc_st.me = -1;
     klucc.on = GetPrivateProfileIntA("Ucc", "Hide", 0, klh_ini) != 0;
     if (!klucc.on) return;
-    klucc.key = (int)GetPrivateProfileIntA("Ucc", "RevealKey", 0x2d, klh_ini) & 0xff;
+    klucc.key = klkeys_vk(KK_REVEAL) & 0xff;
     klucc.strip = GetPrivateProfileIntA("Ucc", "Strip", 1, klh_ini) != 0;
     klucc.feed = GetPrivateProfileIntA("Ucc", "Feed", 1, klh_ini) != 0;
     klucc.rows = GetPrivateProfileIntA("Ucc", "Rows", 1, klh_ini) != 0;

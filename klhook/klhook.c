@@ -699,6 +699,7 @@ static DWORD klh_slot_player_mine(void)
 }
 static DWORD_PTR klh_rcb_ra;                          /* the return address of the SteamAPI_RunCallbacks call that runs this tick (klfreeclimb.c acts only at the gameplay one) */
 #include "klmem.c"
+#include "klkeys.c"                                      /* klkeys.c: [Keys] one table for every mod key (clash-free map, MOD CONTROLS page data, boot clash check); AFTER klmem.c, BEFORE every module that reads a key */
 #include "klhigh.c"                                      /* klhigh.c: [Memory] High - the 4 GB flag made safe: the listed foreign modules' VirtualAlloc goes above 2 GB, the game stays below (off unless High=1/2); AFTER klmem.c */
 #include "klextpt.c"                                     /* klextpt.c: [KLHook] NoInject - no foreign hook DLLs in the game (stutter fix 2026-10-23); AFTER klog / klh_ini */
 #ifdef KLHOOK_TEST
@@ -741,6 +742,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klhud_values.c"                             /* the HUD's readers (reads only): BEFORE klhud.c, AFTER klbot.c */
 #include "klhud.c"                                    /* includes klhud_weapon.c inside itself */
 #include "klhud_popup.c"                              /* AFTER klhud.c: pop-ups + loot ring (uses its klu / klu_r / klu_pic) */
+#include "klannounce.c"                                  /* klannounce.c: the announcement element + the 0x468430 call, shared by klucc.c / kladren.c / klshoppage.c; AFTER klhud_popup.c (klpu_evt) */
 #include "klhud_kill.c"                              /* AFTER klhud_popup.c: the kill / reward line under REWARDS (uses klpu_str) */
 #include "klhud_escape.c"                             /* AFTER klhud_popup.c: the escape-vehicle panel in the new look (uses klu / klu_r / klu_pic) */
 #include "klescprobe.c"                               /* klescprobe.c: [Online] EscProbe - read-only log of the online escape/aboard bits (off unless set); AFTER klonline_read.c, klhud.c */
@@ -1724,6 +1726,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klbf_init();                                      /* klbotfill.c: reads [Bots] OnlineFill (after kllb_init: it reads the same key) */
     klcq_init();                                      /* klcopsquad.c: reads [CopSquad] */
     klsab_init();                                     /* klsabotage.c: reads [Sabotage] */
+    klkeys_check();                                   /* klkeys.c: [Keys] ClashLog - one WARN per key clash (after every module read its key) */
     klq2_init();                                      /* klqol.c: [QoL] (default off) */
     kqb_init();                                       /* klqol2.c: [QoL2] (default off) */
     klnetfix_init();
