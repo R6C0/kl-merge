@@ -308,6 +308,8 @@ feat('onlinepbrefund', G_EXP, 'Online AI heisters get back point-blank hp that w
      'klbalance.c [BotFill] OnlinePointBlankRefund; health data write after the step, never above the hp before it; BO11 869 hp window; NOT run live', [('BotFill', 'OnlinePointBlankRefund', 1, 0, 1)])
 feat('onlineguardtake', G_EXP, 'Online AI heisters walk into a guarded loot stack after 30 s of waiting (recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineGuardTake; BO8c: the 30 s release sent all bots into the cop squads at once; off = hold until a stack is clear; NOT run live', [('BotFill', 'OnlineGuardTake', 1, 0, 0)])
+feat('onlineguardmode', G_EXP, 'Online AI heisters look at cops on the stack floor only and take the least guarded stack when all are guarded (recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineGuardMode (+ FloorCm, BypassMin, BypassGapS), klguard_logic.h; BP5 DD08: 47 of 47 stacks guarded, bots left empty; NOT run live', [('BotFill', 'OnlineGuardMode', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinevancall', G_EXP, 'Online AI heisters can call the escape van even with the round-keep rules copy (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineVanCall; BO8c: the strict vtable test failed on klroundkeep.c\'s private copy and spent the call; 0 = old strict compare; NOT run live', [('BotFill', 'OnlineVanCall', 1, 0, 1)])
 feat('onlinevanstate', G_EXP, 'Online AI heisters board the escape van by its state (waiting) at the exit, not by its position (recommended on)', 'on', 'start',

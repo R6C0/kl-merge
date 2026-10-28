@@ -39,6 +39,7 @@ static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppete
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
 static int klbf_ot_vstate = 1, klbf_ot_late = 75; static DWORD klbf_ot_calledAt;      /* [BotFill] OnlineVanState (BO9: the van node stays at the origin, so "van here" must come from [rules+0x1dc]), OnlineLateExit (s of clock left) */
 static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [BotFill] OnlineBoxWalk, OnlineBoard, OnlineBoxProbe (the ZAllyEscapeBox block below) */
+static int klbf_gm = 0, klbf_gm_min = 8, klbf_gm_logged = 0; static unsigned int klbf_gm_last = 0, klbf_gm_gap = 15000; static float klbf_gm_floor = 400.0f;      /* OnlineGuardMode, BypassMin, ... */
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_lk = 0; static DWORD klbf_lk_sm, klbf_lk_sig;      /* [BotFill] OnlineLooks (re/crew_online_1028.md): 2 = LOG ONLY probe, one line per Ally bot per round and whenever the census changes; no game-state write. 1 = klcrewlook.c: the host sends each bot's Arcade look, every seat applies it (klcl_on). Any other value = off */
 static int klcl_on;      /* OnlineLooks=1 (klcrewlook.c; set in klbf_init) */
@@ -58,6 +59,7 @@ static DWORD klbf_sq_done;         /* the session object the squad pass finished
    [BotFill] OnlineWalkReach: van waiting (state 3), the bot has walked > 15 s and stands within OnlineExitCrowd of the escape box centre (right height) for 5 s -> counts as inside (the box frame test missed it).
    [Bots] OnlineEscort 0 off / 1 follow the host seat / 2 follow the nearest human; OnlineEscortFar / OnlineEscortSide (cm, Arcade klescort.c defaults 800 / 300): host only, idle bots (no stack, not guard-walking) stay near the human. */
 static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_esc_side = 300.0f;
+#include "klguard_logic.h"      /* wk-botpar OnlineGuardMode: floor gate + bypass decisions (klguard_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
 static int klbf_gu, klbf_gu_sprint, klbf_gu_reordS, klbf_gu_keep; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
 #include "klgetupbeacon.h"      /* wk-getup2-1028: [BotFill] OnlineGetUpBeacon, the pure part (klgetupbeacon_test.c); sockets in klgetupbeacon.c (AFTER klsync.c) */
@@ -150,6 +152,10 @@ static void klbf_init(void)
     if (klbf_lf || klbf_esn || klbf_vgs) klog("botfill: wk-botpar: OnlineLootFinish=%d (stay %.0f, cap %d s, cop radius %.0f cm), OnlineEscortNode=%d, OnlineVanGatherSmart=%d (margin %d s)", klbf_lf, klbf_lf_stay, klbf_lf_cap, klbf_lf_copm, klbf_esn, klbf_vgs, klbf_vgs_margin);
     klbf_ot_hmul = (int)GetPrivateProfileIntA("BotFill", "OnlineHealthMul", 5, klh_ini); if (klbf_ot_hmul < 1) klbf_ot_hmul = 1; if (klbf_ot_hmul > 20) klbf_ot_hmul = 20;
     klbf_ot_gtake = GetPrivateProfileIntA("BotFill", "OnlineGuardTake", 0, klh_ini) != 0;      /* BO8c: the 30 s fallback sent all 5 holding bots into the squads at once; all 7 died within 71 s */
+    klbf_gm = GetPrivateProfileIntA("BotFill", "OnlineGuardMode", 0, klh_ini) != 0;      /* (recommended off) wk-botpar BP5: not run live */
+    klbf_gm_floor = (float)GetPrivateProfileIntA("BotFill", "OnlineGuardFloorCm", 400, klh_ini); klbf_gm_min = GetPrivateProfileIntA("BotFill", "OnlineGuardBypassMin", 8, klh_ini);
+    klbf_gm_gap = 1000u * (unsigned)GetPrivateProfileIntA("BotFill", "OnlineGuardBypassGapS", 15, klh_ini);
+    if (klbf_gm) klog("botfill: wk-botpar: OnlineGuardMode=1 (floor gate %.0f cm, bypass when >= %d free stacks are all guarded, one release per %u s)", klbf_gm_floor, klbf_gm_min, klbf_gm_gap / 1000u);
     klbf_ot_guard = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsGuard", 25, klh_ini); if (klbf_ot_guard < 0) klbf_ot_guard = 0;
     klbf_ot_van = GetPrivateProfileIntA("BotFill", "OnlineTacticsVan", 1, klh_ini) != 0;
     klbf_ot_vcall = GetPrivateProfileIntA("BotFill", "OnlineVanCall", 1, klh_ini) != 0;      /* (recommended on) */
@@ -1257,7 +1263,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klbf_lp && klbf_lp_nok + klbf_lp_nbad) klog("botfill: lootparts: last round: %d stack reads plausible, %d implausible (lump fallback)", klbf_lp_nok, klbf_lp_nbad); klbf_lp_nok = klbf_lp_nbad = klbf_lp_nw = 0; memset(klbf_lp_warned, 0, sizeof klbf_lp_warned);
         memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
         klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = klbf_ot_lookAt = 0; klbf_ot_trig_looked = klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_ot_nbx = klbf_ot_bxlooks = 0; klbf_ot_bxbest = -1; klbf_ot_bxAt = 0;
-        klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
+        klbf_gm_logged = 0; klbf_gm_last = 0; klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
         klbf_way_load(); klbf_ramp_load(); klbf_trig_load();
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
@@ -1469,7 +1475,9 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (stop) { klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; %s)", s, (unsigned long)o, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally, why); klbf_ob[s].phase = 0; if (klbf_ot_nbad < KLBF_OT_OBJ) { klbf_ot_badAt[klbf_ot_nbad] = now; klbf_ot_badLong[klbf_ot_nbad] = 1; klbf_ot_bad[klbf_ot_nbad++] = o; } }      /* review: a partial stop blacklists the stack like a give-up, else the nearest-stack pick re-targets it and loops */
         }
         if (klbf_ob[s].phase == 0) {
-            int nguard = 0, gbest = -1, idleVan = 0, nhold = 0; float gbd = 1e30f;
+            int nguard = 0, gbest = -1, idleVan = 0, nhold = 0, nfreeG = 0; float gbd = 1e30f;
+            static int gcn[KLBF_OT_OBJ]; static float gcd[KLBF_OT_OBJ], gnear[KLBF_OT_OBJ];      /* OnlineGuardMode: per stack cops in range, bot distance, nearest cop */
+            if (klbf_gm) { int q; for (q = 0; q < nm; q++) { gcn[q] = -1; gcd[q] = 1e30f; gnear[q] = 1e30f; } }
             for (j = 0; j < nm; j++) {
                 float d; int c, guarded = 0;
                 if (klbf_ot_has(klbf_ot_claimed, klbf_ot_nclaim, mo[j])) continue;
@@ -1477,9 +1485,23 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 { int q, taken = 0; for (q = 0; q < KLBF_OT_BOTS; q++) if (q != s && klbf_ob[q].actor && (klbf_ob[q].phase == 1 || klbf_ob[q].phase == 4) && klbf_ob[q].target == mo[j]) taken = 1; if (taken) { nhold++; continue; } }
                 d = kle_dist(bots[b].pos, mpos[j]);
                 /* OnlineTacticsGuard: BO5's guard cops stood ON the stacks (slots 706/711/851/852 within 3 m of 4 targets) and every bot walked alone into them */
+                if (klbf_gm && klbf_ot_guard > 0) {      /* OnlineGuardMode: count every cop in range, same floor only (GUESS: BP5 stacks were all inside 25 m 3D of some cop) */
+                    int cn = 0; float nd = 1e30f;
+                    for (c = 0; c < ncop; c++) { float dc = kle_dist(cops[c], mpos[j]); if (dc < nd) nd = dc; if (kgg_guards(cops[c], mpos[j], klbf_ot_guard, klbf_gm_floor)) cn++; }
+                    guarded = cn > 0; gcn[j] = guarded ? cn : -1; gcd[j] = d; gnear[j] = nd;
+                } else
                 if (klbf_ot_guard > 0) for (c = 0; c < ncop && !guarded; c++) if (kle_dist(cops[c], mpos[j]) <= klbf_ot_guard) guarded = 1;
+                nfreeG++;
                 if (guarded) { nguard++; if (d < gbd) { gbd = d; gbest = j; } continue; }
                 if (d < bd) { bd = d; best = j; }
+            }
+            if (klbf_gm && !klbf_gm_logged && nm > 0) { int q, ng = 0; klbf_gm_logged = 1; for (q = 0; q < nm; q++) if (gcn[q] >= 0) ng++; klog("botfill: guardmode: round scan: %d cop(s) read live, %d money stack(s), %d free stack(s) of which %d guarded (radius %.0f m, floor gate %.0f cm; bot %d sees nguard %d), once per round", ncop, nm, nfreeG, ng, klbf_ot_guard / 100, klbf_gm_floor, s, nguard); }
+            if (klbf_gm && best < 0 && gbest >= 0 && klbf_ob[s].tally == 0 && klbf_ob[s].grabs < klbf_ot_carry && kgg_bypass_ok(nguard, nfreeG, klbf_gm_min, now, klbf_gm_last, klbf_gm_gap)) {      /* OnlineGuardMode bypass: the guard test cannot tell the stacks apart (BP5: 47 of 47) */
+                int pk = kgg_pick(gcn, gcd, nm);
+                if (pk >= 0) {
+                    best = pk; bd = gcd[pk]; klbf_gm_last = now;
+                    klog("botfill: guardmode: bot %d (actor %08lx): all %d free stacks guarded: takes stack %08lx with the fewest cops (%d within %.0f m, nearest cop %.1f m, stack %.0f m from the bot); next release not before %u s (OnlineGuardMode)", s, a, nguard, mo[pk], gcn[pk], klbf_ot_guard / 100, gnear[pk] / 100, bd / 100, klbf_gm_gap / 1000u);
+                }
             }
             if (best < 0 && gbest >= 0) { if (!klbf_ob[s].idleAt) klbf_ob[s].idleAt = now; } else klbf_ob[s].idleAt = 0;      /* review: idleAt = since when only guarded stacks are left */
             if (klbf_ot_gtake && best < 0 && gbest >= 0 && now - klbf_ob[s].idleAt >= KLBF_OT_GUARDWAIT) {      /* nothing unguarded for 30 s: take the nearest guarded one (Arcade bots fight for loot too) */
