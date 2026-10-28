@@ -4,7 +4,7 @@
  * KLSYB (little endian, UDP 27415 broadcast from the host, the same socket as KLSY2 / KLSYL; an old receiver skips any magic it does not know)
  *    0   8   "KLSYB\0\0\0"
  *    8   u32 T       the host's klsy_T() (ms modulo 1e9)
- *   12   u16 n       records, 0..8
+ *   12   u16 n       records, 0..16
  *   14   u8  ver = 1
  *   15   u8  flags   bit0 = the round's FINAL list (sent at the round summary)
  *   16   u32 round   the host's round counter (klbf_ot_rounds), 1..999999
@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define KLLS_MAXN    8
+#define KLLS_MAXN    16      /* = KLBF_OT_BOTS: dead bots stay in the list, a refilled slot is a new entry */
 #define KLLS_HDR     28
 #define KLLS_REC     8
 #define KLLS_MAXAMT  100000000
@@ -53,7 +53,7 @@ static int klls_encode(unsigned char *out, int cap, const struct klls_pk *k)
 /* 1 = a whole, plausible packet. Every field is range-checked; a short / long / foreign / out-of-range packet gives 0 and *k is left half-written (do not use it). */
 static int klls_decode(const unsigned char *pk, int len, struct klls_pk *k)
 {
-    int i, n; long sum = 0;
+    int i, n;
     if (!pk || !k || len < KLLS_HDR || memcmp(pk, "KLSYB\0\0\0", 8)) return 0;
     n = pk[12] | pk[13] << 8;
     if (pk[14] != 1 || n > KLLS_MAXN || len < KLLS_HDR + n * KLLS_REC || (pk[15] & ~1)) return 0;
@@ -66,18 +66,19 @@ static int klls_decode(const unsigned char *pk, int len, struct klls_pk *k)
         const unsigned char *q = pk + KLLS_HDR + i * KLLS_REC;
         k->r[i].digit = q[0]; k->r[i].slot = q[1]; k->r[i].state = q[2]; k->r[i].amt = (int)klls_get32(q + 4);
         if (k->r[i].digit > 9 || k->r[i].slot > 63 || k->r[i].state > KLLS_ST_DEAD || q[3] || k->r[i].amt < 0 || k->r[i].amt > KLLS_MAXAMT) return 0;
-        sum += k->r[i].amt;
     }
-    (void)sum;
     return 1;
 }
 
-/* 1 = (round, T) is newer than what is held (round 0 = nothing held). Same round: T forward by 1 .. 5e8-1 ms modulo 1e9 (the clock wraps), anything else is an old packet that came late. A final list (flags bit0) of the held T is also newer once. */
-static int klls_newer(unsigned round, unsigned T, unsigned held_round, unsigned held_T)
+/* 1 = (round, T) is newer than what is held (round 0 = nothing held). Same round: T forward by 1 .. 5e8-1 ms modulo 1e9 (the clock wraps), anything else is an old packet that came late.
+ * A FINAL list (flags bit0) is newer than a held non-final one of the same round whatever its T (it can share the last periodic packet's millisecond); a non-final list never replaces a held FINAL one. */
+static int klls_newer(unsigned round, unsigned T, int flags, unsigned held_round, unsigned held_T, int held_flags)
 {
     unsigned fwd;
     if (!held_round || round > held_round) return 1;
     if (round < held_round) return 0;
+    if ((held_flags & 1) && !(flags & 1)) return 0;
+    if ((flags & 1) && !(held_flags & 1)) return 1;
     fwd = (T + 1000000000u - held_T % 1000000000u) % 1000000000u;
     return fwd != 0 && fwd < 500000000u;
 }
@@ -90,22 +91,25 @@ static void klls_money(char *out, int cap, int v)
     else snprintf(out, (size_t)cap, "$%d", v);
 }
 
-/* the one HUD line: "BOTS carry $350,000 | banked $0 | 2:$100,000 3:$250,000 (aboard) 4:$0 (down)"; bots with nothing and nothing to say are left out. Returns the length. */
+/* the one HUD line: "BOTS carry $350,000 | banked $0 | 2:$100,000 3:$250,000 aboard 4:$0 down"; bots with nothing and nothing to say are left out; at most KLLS_LINEMAX records, then " +N more" (the line stays on screen width). Returns the length. */
+#define KLLS_LINEMAX 4
 static int klls_text(char *out, int cap, const struct klls_pk *k)
 {
-    char a[24], b[24], m[24]; int i, w;
+    char a[24], b[24], m[24]; int i, w, shown = 0, more = 0;
     klls_money(a, sizeof a, k->carried); klls_money(b, sizeof b, k->banked);
     w = snprintf(out, (size_t)cap, "BOTS carry %s | banked %s |", a, b);
     if (w < 0 || w >= cap) { if (cap > 0) out[cap - 1] = 0; return cap > 0 ? (int)strlen(out) : 0; }
     for (i = 0; i < k->n; i++) {
         const struct klls_rec *r = &k->r[i]; int got;
         if (!r->amt && r->state == KLLS_ST_CARRY) continue;
+        if (shown >= KLLS_LINEMAX) { more++; continue; }
         klls_money(m, sizeof m, r->amt);
         if (r->digit) got = snprintf(out + w, (size_t)(cap - w), " %d:%s%s", r->digit, m, r->state == KLLS_ST_BOARD ? " aboard" : r->state == KLLS_ST_DEAD ? " down" : "");
         else got = snprintf(out + w, (size_t)(cap - w), " #%d:%s%s", r->slot, m, r->state == KLLS_ST_BOARD ? " aboard" : r->state == KLLS_ST_DEAD ? " down" : "");
         if (got < 0 || got >= cap - w) { out[w] = 0; break; }      /* no room: the whole record is dropped, never cut in the middle */
-        w += got;
+        w += got; shown++;
     }
+    if (more && w < cap) { int got = snprintf(out + w, (size_t)(cap - w), " +%d more", more); if (got < 0 || got >= cap - w) out[w] = 0; }
     return (int)strlen(out);
 }
 

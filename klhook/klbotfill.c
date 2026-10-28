@@ -40,7 +40,8 @@ static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float kl
 static int klbf_lk = 0; static DWORD klbf_lk_sm, klbf_lk_sig;      /* [BotFill] OnlineLooks (re/crew_online_1028.md): 2 = LOG ONLY probe, one line per Ally bot per round and whenever the census changes; no game-state write. 1 = klcrewlook.c: the host sends each bot's Arcade look, every seat applies it (klcl_on). Any other value = off */
 static int klcl_on;      /* OnlineLooks=1 (klcrewlook.c; set in klbf_init) */
 static int klls_on;       /* OnlineLootSync=1 (kllootsync.c; set in klbf_init) */
-static void klls_summary(void);      /* kllootsync.c: the host's final loot list at the round summary */
+static void klls_summary(void);
+static void klls_precollect(void);      /* kllootsync.c: a bot slot is about to be freed */      /* kllootsync.c: the host's final loot list at the round summary */
 static int klbf_ot_glate = 0;      /* [BotFill] OnlineGatherLateS (wk-dd04-1028): 0 = the gather's clock clause fires at OnlineLateExit + 20 s left (old); >0 = at that many s left */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
 static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
@@ -1087,7 +1088,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         for (q = 0; q < KLBF_OT_BOTS; q++) {
             if (!klbf_ob[q].actor || klbf_ob[q].phase == 3) continue;
             for (r = 0; r < nb && bots[r].actor != klbf_ob[q].actor; r++) ;
-            if (r == nb) { klog("botfill: tactics: bot %d (actor %08lx) is dead or gone: slot freed (phase %d, tally %d)", q, klbf_ob[q].actor, klbf_ob[q].phase, klbf_ob[q].tally); memset(&klbf_ob[q], 0, sizeof klbf_ob[q]); }
+            if (r == nb) { klls_precollect(); klog("botfill: tactics: bot %d (actor %08lx) is dead or gone: slot freed (phase %d, tally %d)", q, klbf_ob[q].actor, klbf_ob[q].phase, klbf_ob[q].tally); memset(&klbf_ob[q], 0, sizeof klbf_ob[q]); }
         }
     }
     vnew = 0;
