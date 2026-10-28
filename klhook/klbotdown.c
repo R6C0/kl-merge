@@ -326,7 +326,8 @@ static int klbd_online_host(DWORD *rules, DWORD *state)
 #define KLBD_ONLINE_HOST(rules, state) klbd_online_host(rules, state)
 #endif
 
-static struct { DWORD slot[KLB_NREC], cand[KLB_NREC], at; int ncand; } klbd_o;      /* slot[i] = the actor of pseudo record i (0 = free); cand = the last census */
+struct klbd_ov { DWORD slot[KLB_NREC], cand[KLB_NREC], at; int ncand; };
+static struct klbd_ov klbd_o;      /* slot[i] = the actor of pseudo record i (0 = free); cand = the last census */
 
 static void klbd_online_reset(void) { memset(&klbd_o, 0, sizeof klbd_o); }
 
@@ -334,25 +335,26 @@ static int klbd_in(const DWORD *a, int n, DWORD v) { int i; for (i = 0; i < n; i
 
 /* the pseudo records of this pass: the census once a second, the slots kept while the actor stays in it, a new actor in the first free slot.
    A record is 'used' with flags 1 (a bot), status 0 in play / 7 dead (health 0). -> number of records, 0 = nothing to do */
-static int klbd_online_fill(struct klb_snap *sn, DWORD now)
+static int klbd_ov_fill(struct klbd_ov *o, struct klb_snap *sn, DWORD now)
 {
     int i, c, top = 0;
-    if (!klbd_o.at || now - klbd_o.at >= 1000u) { klbd_o.ncand = KLBD_CENSUS(klbd_o.cand, KLB_NREC); klbd_o.at = now ? now : 1; }
-    for (i = 0; i < KLB_NREC; i++) if (klbd_o.slot[i] && !klbd_in(klbd_o.cand, klbd_o.ncand, klbd_o.slot[i])) klbd_o.slot[i] = 0;
-    for (c = 0; c < klbd_o.ncand; c++) {
-        if (klbd_in(klbd_o.slot, KLB_NREC, klbd_o.cand[c])) continue;
-        for (i = 0; i < KLB_NREC; i++) if (!klbd_o.slot[i]) { klbd_o.slot[i] = klbd_o.cand[c]; break; }
+    if (!o->at || now - o->at >= 1000u) { o->ncand = KLBD_CENSUS(o->cand, KLB_NREC); o->at = now ? now : 1; }
+    for (i = 0; i < KLB_NREC; i++) if (o->slot[i] && !klbd_in(o->cand, o->ncand, o->slot[i])) o->slot[i] = 0;
+    for (c = 0; c < o->ncand; c++) {
+        if (klbd_in(o->slot, KLB_NREC, o->cand[c])) continue;
+        for (i = 0; i < KLB_NREC; i++) if (!o->slot[i]) { o->slot[i] = o->cand[c]; break; }
     }
     for (i = 0; i < KLB_NREC; i++) {
         struct klb_rec *r = &sn->r[i]; DWORD h; float hp = 1.0f; int ok = 1;
-        if (!klbd_o.slot[i]) continue;
-        r->used = 1; r->actor = klbd_o.slot[i]; r->flags = 1; r->stage = 0; r->status = 0;
+        if (!o->slot[i]) continue;
+        r->used = 1; r->actor = o->slot[i]; r->flags = 1; r->stage = 0; r->status = 0;
         if ((h = klh_rd32(r->actor + 0x5fc)) && klh_rd32(h + 0x24) == r->actor) { hp = klbd_rdf(h + 4, &ok); if (ok && hp <= 0.01f) r->status = 7; }
         top = i + 1;
     }
     sn->n = top;
     return top;
 }
+static int klbd_online_fill(struct klb_snap *sn, DWORD now) { return klbd_ov_fill(&klbd_o, sn, now); }
 
 /* the online snapshot: -> 1 when this machine is the host of a round and [Down] OnlineBotDown is on; else the slots are dropped */
 static int klbd_online_snap(struct klb_snap *sn, char why[200])
@@ -365,6 +367,21 @@ static int klbd_online_snap(struct klb_snap *sn, char why[200])
     if (state != KLBD_ROUND) return 0;      /* 0x13..0x1f keeps the slots; the pass itself (downs, shields, heals) runs only in the round, as Arcade does (review fix 1) */
     memset(sn, 0, sizeof *sn); sn->human = -1; sn->rules = rules; sn->state = KLBD_ROUND; sn->level = 1; sn->online = 1;      /* veh 0: the van byte is not read (GUESS that [rules+0x1dc] is the same base-class field online) */
     strcpy(why, klbd_online_fill(sn, KLBD_NOW()) ? "online host" : "online host, no AI heister in this peer's world");
+    return 1;
+}
+
+/* wk-arcmods-1028: the same pseudo-record view for OTHER hook parts (klhop.c who 0, klcardown.c who 1), with a slot table of their own so
+   [Down] OnlineBotDown being off (which drops klbd_o) cannot move their record numbers. -> 1 host in a round with *sn filled (sn->n may be 0), 0 not
+   the host / not a round / unreadable (the caller does nothing, changes nothing). Read-only: the census once a second. Host only: a client never runs it. */
+static struct klbd_ov klbd_ovs[3];
+static int klbd_online_view(int who, struct klb_snap *sn, char why[200])
+{
+    DWORD rules = 0, state = 0; int h;
+    if (who < 0 || who > 2) return 0;
+    h = KLBD_ONLINE_HOST(&rules, &state);
+    if (h <= 0 || state != KLBD_ROUND) { if (klbd_ovs[who].at) memset(&klbd_ovs[who], 0, sizeof klbd_ovs[who]); return 0; }
+    memset(sn, 0, sizeof *sn); sn->human = -1; sn->rules = rules; sn->state = KLBD_ROUND; sn->level = 1; sn->online = 1;
+    strcpy(why, klbd_ov_fill(&klbd_ovs[who], sn, KLBD_NOW()) ? "online host" : "online host, no AI heister in this peer's world");
     return 1;
 }
 

@@ -116,7 +116,10 @@
 #define KLV_FAST   400.0f                     /* v78: within the first 3 s after a hop: this far above / below the landing = not landed */
 #define KLV_WATCH  3000                       /* v78: ms of the fast landing watch */
 
-static struct { int on, dry, reorder, log, orderto, recheck, walkx; } klv;
+static struct { int on, dry, reorder, log, orderto, recheck, walkx; int arc, online, dry_cfg, ostage; } klv;      /* wk-arcmods-1028: arc = [CrewHop] Enable (Arcade); online = [CrewHop] Online 0 off / 1 on / 2 dry (host only); dry_cfg = Dry; ostage = OnlineStage */
+/* wk-arcmods-1028: both are defined later (klbotdown.c, klbotfill.c); same translation unit */
+static int klbd_online_view(int who, struct klb_snap *sn, char why[200]);
+static int klbf_ob_stage(DWORD actor, int dflt);
 struct klv_hop { int on, nto, stage, player, nohuman, walk; DWORD wait, again, giveup; float from[3], radius, height, to[KLV_NTO][3], walkto[3]; };
 static struct { int n; char key[64], file[MAX_PATH]; FILETIME ft; struct klv_hop h[KLV_NHOP]; } klv_lv;
 struct klv_after { int rec, hop, step, to, tries; DWORD actor, at, watch; };      /* watch = the fast landing watch runs until this tick (v78) */
@@ -385,11 +388,18 @@ static void klv_follow(const struct klb_snap *s, DWORD now)
 
 static void klv_tick(int game_thread)
 {
-    static DWORD last; struct klb_snap s; DWORD now = GetTickCount(), pl; char scene[160], key[64], why[200]; float hf[3], hn[3]; int i, hi, stages = 0, human, say;
+    static DWORD last, told_round; struct klb_snap s; DWORD now = GetTickCount(), pl; char scene[160], key[64], why[200]; float hf[3], hn[3]; int i, hi, stages = 0, human, say, online = 0;
     if (!klv.on || !klh_exe_ok || now - last < 100) return;
     last = now;
-    if (!klb_read(&s)) { klv_r.rules = 0; return; }                          /* Arcade with a ZGameRulesHeist object, or nothing */
-    for (i = 0; i < s.n; i++) if (s.r[i].used) stages += s.r[i].stage;
+    klv.dry = klv.dry_cfg;
+    if (klv.arc && klb_read(&s)) { }                                         /* Arcade with a ZGameRulesHeist object */
+    else if (klv.online && game_thread && klbd_online_view(0, &s, why) > 0) {   /* wk-arcmods-1028: the ONLINE HOST, bots by pseudo record (klbotdown.c); never a client */
+        online = 1; klv.dry = klv.online == 2;
+        for (i = 0; i < s.n; i++) if (s.r[i].used) s.r[i].stage = (BYTE)klbf_ob_stage(s.r[i].actor, klv.ostage);
+        if (told_round != s.rules) { told_round = s.rules; klog("hop: ONLINE host round (session %08lx): %d AI heister(s) in this world; Online=%d (%s); heist stage from the botfill tactics when known, else OnlineStage=%d", (unsigned long)s.rules, s.n, klv.online, klv.online == 2 ? "dry log, nothing is called" : "carries", klv.ostage); }
+    }
+    else { klv_r.rules = 0; return; }                                        /* nothing: not Arcade, not the online host */
+    if (!online) for (i = 0; i < s.n; i++) if (s.r[i].used) stages += s.r[i].stage;      /* online: a stage may fall, so it is no round detector */
     if (s.rules != klv_r.rules || (s.state == KLB_ROUND && klv_r.state != KLB_ROUND) || stages < klv_r.stages) {      /* a new round: as klbot.c's klb_act */
         memset(&klv_r, 0, sizeof klv_r); klv_r.rules = s.rules;
     }
@@ -398,7 +408,7 @@ static void klv_tick(int game_thread)
     if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
     klv_source();
     if (!klv_lv.n || strcmp(key, klv_lv.key)) return;                        /* no hop, or not the level the file belongs to */
-    if (!klb_level(why)) {                                                   /* klbot.c section 0: not on a stock level, an unknown one, or without the Steam guard */
+    if (!online && !klb_level(why)) {                                        /* (online: no level gate, a stock map has no KLJoin.ini so nothing is hopped) klbot.c section 0: not on a stock level, an unknown one, or without the Steam guard */
         if (!klv_r.told_gate++) klog("hop: %s: nobody is carried here (it acts only on a level that is not stock)", why);
         return;
     }
@@ -499,9 +509,14 @@ static void klv_tick(int game_thread)
 static void klv_init(void)
 {
     memset(&klv, 0, sizeof klv); memset(&klv_lv, 0, sizeof klv_lv); memset(&klv_r, 0, sizeof klv_r);
-    klv.on = GetPrivateProfileIntA("CrewHop", "Enable", 0, klh_ini) != 0;
+    klv.arc = GetPrivateProfileIntA("CrewHop", "Enable", 0, klh_ini) != 0;
+    klv.online = (int)GetPrivateProfileIntA("CrewHop", "Online", 0, klh_ini); if (klv.online < 0 || klv.online > 2) klv.online = 0;
+    klv.ostage = (int)GetPrivateProfileIntA("CrewHop", "OnlineStage", 2, klh_ini); if (klv.ostage < 0 || klv.ostage > 3) klv.ostage = 2;
+    klv.on = klv.arc || klv.online;
     if (!klv.on) return;
-    klv.dry = GetPrivateProfileIntA("CrewHop", "Dry", 0, klh_ini) != 0;
+    klv.dry_cfg = GetPrivateProfileIntA("CrewHop", "Dry", 0, klh_ini) != 0;
+    klv.dry = klv.dry_cfg;
+    if (klv.online) klog("hop: ONLINE=%d (%s): on the online HOST the AI heisters found by the census are carried over the level's [CrewHop] places (host only, the game's own teleport; heist stage from [BotFill] OnlineTactics, else OnlineStage=%d)", klv.online, klv.online == 2 ? "dry log" : "live", klv.ostage);
     klv.reorder = GetPrivateProfileIntA("CrewHop", "Reorder", 0, klh_ini) != 0;
     klv.orderto = GetPrivateProfileIntA("CrewHop", "OrderTo", 1, klh_ini) != 0;       /* 1 = at the hop the soldier's order becomes the landing place */
     klv.log = (int)GetPrivateProfileIntA("CrewHop", "Log", 1, klh_ini);

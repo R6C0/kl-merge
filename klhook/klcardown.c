@@ -54,7 +54,9 @@
 
 static struct {
     int on, dry, log, human, bots, cops, counttrig; float damage, inner, secs, radius;
+    int arc, online, dry_cfg, human_cfg;      /* wk-arcmods-1028: arc = [CarDown] Enable (Arcade); online = [CarDown] Online 0 off / 1 on / 2 dry (host only); dry/human are set per tick from these */
 } klcd;
+static int klbd_online_view(int who, struct klb_snap *sn, char why[200]);
 
 struct klcd_car { DWORD fx; float hp; DWORD cnt; float pos[3]; int havepos, tuned, how; };
 static struct klcd_car klcd_c[KLCD_MAXCAR];
@@ -232,12 +234,17 @@ static void klcd_forget(void) { memset(klcd_c, 0, sizeof klcd_c); memset(&klcd_e
 
 static void klcd_tick(int game_thread)
 {
-    struct klb_snap sn; DWORD rules, state, clock, tick = 0, now; int level, i; char why[200];
+    struct klb_snap sn; DWORD rules, state, clock, tick = 0, now; int level, i, online = 0; char why[200];
     if (!klcd.on || !game_thread || !klh_exe_ok) return;
-    if (!(klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLB_ROUND && klb_read(&sn) && sn.state == KLB_ROUND)) { if (klcd_g.rules) klcd_forget(); return; }
+    klcd.dry = klcd.dry_cfg; klcd.human = klcd.human_cfg;
+    if (klcd.arc && klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLB_ROUND && klb_read(&sn) && sn.state == KLB_ROUND) { }
+    else if (klcd.online && klbd_online_view(1, &sn, why) > 0) { online = 1; klcd.dry = klcd.online == 2; klcd.human = 0; }   /* wk-arcmods-1028: the ONLINE HOST only; no human part (a client's player is not ours to floor) */
+    else { if (klcd_g.rules) klcd_forget(); return; }
     if (sn.rules != klcd_g.rules) {
         klcd_forget(); klcd_g.rules = sn.rules;
-        klog("cardown: a round runs (Arcade, not the stock level: %s); a car blast floors the AI and you (Damage cap %.0f, Inner %.0f, Bots %d Cops %d Human %d)%s",
+        if (online) klog("cardown: ONLINE host round (%s): a car blast floors the AI heisters and cops into the game's revivable down (Damage cap %.0f, Inner %.0f, Bots %d Cops %d; no human part online)%s",
+             why, klcd.damage, klcd.inner, klcd.bots, klcd.cops, klcd.dry ? " - Dry: nothing is called, nothing is written" : "");
+        else klog("cardown: a round runs (Arcade, not the stock level: %s); a car blast floors the AI and you (Damage cap %.0f, Inner %.0f, Bots %d Cops %d Human %d)%s",
              why, klcd.damage, klcd.inner, klcd.bots, klcd.cops, klcd.human, klcd.dry ? " - Dry: nothing is called, nothing is written" : "");
     }
     if (!(clock = klh_rd32((DWORD_PTR)KLH_VA(KLBD_CLOCK))) || !klh_rd(clock + 0x48, &tick, 4)) return;
@@ -287,11 +294,14 @@ static float klcd_inif(const char *key, const char *def, float lo, float hi)
 static void klcd_init(void)
 {
     memset(&klcd, 0, sizeof klcd); memset(klcd_c, 0, sizeof klcd_c); memset(&klcd_e, 0, sizeof klcd_e); memset(&klcd_g, 0, sizeof klcd_g);
-    klcd.on = GetPrivateProfileIntA("CarDown", "Enable", 1, klh_ini) != 0;
+    klcd.arc = GetPrivateProfileIntA("CarDown", "Enable", 1, klh_ini) != 0;
+    klcd.online = (int)GetPrivateProfileIntA("CarDown", "Online", 0, klh_ini); if (klcd.online < 0 || klcd.online > 2) klcd.online = 0;
+    klcd.on = klcd.arc || klcd.online;
     if (!klcd.on) return;
-    klcd.dry = GetPrivateProfileIntA("CarDown", "Dry", 0, klh_ini) != 0;
+    klcd.dry_cfg = GetPrivateProfileIntA("CarDown", "Dry", 0, klh_ini) != 0; klcd.dry = klcd.dry_cfg;
     klcd.log = GetPrivateProfileIntA("CarDown", "Log", 1, klh_ini);
-    klcd.human = GetPrivateProfileIntA("CarDown", "Human", 1, klh_ini) != 0;
+    klcd.human_cfg = GetPrivateProfileIntA("CarDown", "Human", 1, klh_ini) != 0; klcd.human = klcd.human_cfg;
+    if (klcd.online) klog("cardown: ONLINE=%d (%s): on the online HOST a car blast floors the AI heisters and cops (host only; Bots %d Cops %d; the human part stays off online)", klcd.online, klcd.online == 2 ? "dry log" : "live", GetPrivateProfileIntA("CarDown", "Bots", 1, klh_ini) != 0, GetPrivateProfileIntA("CarDown", "Cops", 1, klh_ini) != 0);
     klcd.counttrig = GetPrivateProfileIntA("CarDown", "CountTrigger", 0, klh_ini) != 0;
     klcd.bots = GetPrivateProfileIntA("CarDown", "Bots", 1, klh_ini) != 0;
     klcd.cops = GetPrivateProfileIntA("CarDown", "Cops", 1, klh_ini) != 0;
