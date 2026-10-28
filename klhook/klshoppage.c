@@ -88,6 +88,7 @@ static struct {
     int hireOn, hireKey, hireConfirm, hireLog, hireKeyDown; DWORD hLogT, hLogN, hLogD, hLastKey;   /* config (Enable=1 and Page=1), key + edge, 'served' log mask, last key tick */
     volatile int hact, hire;                     /* hact: the shop gate is open for the hire page (wrappers may act); hire: the hire page is on screen */
     int hpre;                                    /* hire gate == 1: a shop can be open (the key is read) */
+    DWORD hPendAt;                               /* a key press that came before the selector was wrapped: the page opens once it is (within 3 s) */
     int hArm; DWORD hArmAt, hPressAt; int hPressRow;   /* the two-press arm (klchar number armed, tick), the last press (dedupe of the Voodoo + BuyWeapon of one click) */
     int hRank, hRankOk; DWORD hRankAt;           /* my FA rank (klhr_rank), cached 2 s */
 } kspg;
@@ -1098,6 +1099,15 @@ static void kspg_hire_tick(void)
             if (!kspg.active && now - lastScan > 1500) { lastScan = now; kspg_scan(); }     /* page II's own tick scans when it is active */
         }
     }
+    if (kspg.hPendAt) {                          /* A1HIRE review 10-28: an early press used to be dropped (the scan wraps the selector every 1.5 s) */
+        if (!kspg.hpre || now - kspg.hPendAt > 3000 || klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) != 2) {
+            kspg.hPendAt = 0; if (kspg.hireLog) klog("hirepage: the early key press lapsed (the selector was not wrapped within 3 s): press the key again");
+        } else if (kspg_h_selok()) {
+            kspg.hPendAt = 0; kspg.hire = 1; kspg.hArm = 0; kspg.shownB = 0;
+            if (kspg.hireLog) klog("hirepage: page SHOWN (%s, after the early key press; highlighted row %d, category %d)", kl_online() ? "online" : "offline",
+                                   (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), (int)klh_rd32((DWORD_PTR)KLH_VA(0x00ced640)));
+        }
+    }
     if (kspg.hire) {
         if (!kspg_h_selok()) { kspg.hire = 0; kspg.hArm = 0; if (kspg.hireLog) klog("hirepage: page hidden (the selector is not wrapped any more)"); }
         else if (!kspg.hRankAt || now - kspg.hRankAt > 2000) { kspg.hRankAt = now | 1; kspg.hRankOk = klhr_rankgate ? klhr_rank(&kspg.hRank) : 0; }
@@ -1120,8 +1130,13 @@ static void kspg_hire_tick(void)
                 DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
                 kspg.hLastKey = now;
                 if (mode == 2 && !kspg.hire && !kspg_h_selok()) {
-                    /* REVIEW 1027: the stock buy would buy a gun if the selector were not wrapped (its BuyWeapon message is what the page swallows): no page then */
-                    if (kspg.hireLog) klog("hirepage: key pressed, but the shop's selector is not wrapped (yet): the hire page stays off so a press cannot buy a gun");
+                    /* REVIEW 1027: the stock buy would buy a gun if the selector were not wrapped (its BuyWeapon message is what the page swallows): no page then.
+                       10-28: the press is kept for 3 s and the page opens as soon as the scan has wrapped the selector */
+                    if (!kspg.hPendAt) { kspg.hPendAt = now | 1; if (kspg.hireLog) klog("hirepage: key pressed before the shop's selector is wrapped: the page opens once it is (up to 3 s)"); }
+                    if (!kspg.active) kspg_scan();
+                } else if (mode == 2 && kspg.hPendAt) {
+                    kspg.hPendAt = 0;                                     /* a second press while one is pending cancels it */
+                    if (kspg.hireLog) klog("hirepage: the pending key press was cancelled by a second press");
                 } else if (mode == 2) {
                     kspg.hire = !kspg.hire; kspg.hArm = 0;
                     if (kspg.hire) kspg.shownB = 0;                       /* the hire page replaces whichever page was up; page II (if on) is back on its own key */
