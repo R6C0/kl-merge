@@ -99,6 +99,10 @@ feat('hireonline', G_EXP, 'Online shop (private match / Steam FA): hire a heiste
      'klhire_online.c [Hire] Online=1: client asks (HIRE, payload Q...), host judges + spends with 0x6b1910 / 0x7f6950, body via klcharonline; NOT run live; re/shop_hire.md section 8', [('Hire', 'Online', 1, 0, 0)])
 feat('hirepage', G_EXP, 'Buy Weapons shop: a HIRE A HEISTER page on the F12 key (BUY hires, never buys a gun; works offline and, with Online hire on, in a match) (needs Hire on) (recommended off until benched)', 'off', 'start',
      'klshoppage.c [Hire] Page=1 (PageKey 123 = F12, PageConfirm=1: two presses); the press is klhr_set / klhro_set; works with [ShopPage] Enable=0; NOT run live; re/shop_hire.md section 9', [('Hire', 'Page', 1, 0, 0)])
+feat('hirepageprice', G_EXP, 'Hire page: the hire price is shown on the heister name line and the stock gun price is blanked (needs Hire page on) (recommended on)', 'on', 'start',
+     'klshoppage.c [Hire] PagePrice (default 1): MercsShowInfoFAWeapons slot 8 wrapped for the PackagePrice element (shown row 99 for one call), name text + $price; NOT run live', [('Hire', 'PagePrice', 1, 0, 1)])
+feat('stockhero', G_EXP, 'Online: a Dog Days heister (hire or Heister page, 1..8) gets his stock body on a map without the wardrobe, e.g. the nine stock FA maps (needs Character online on) (recommended on)', 'on', 'start',
+     'klcharonline.c [CharOnline] StockHero (default 1): root from the rules hero table rules+0x208 (entry n-1), validated against the body worn now; NOT run live', [('CharOnline', 'StockHero', 1, 0, 1)])
 feat('hireignorechar', G_EXP, 'Online with Hire on: the Heister page / F9 character is ignored, as in Arcade (needs Hire on) (recommended on)', 'on', 'start',
      'klcharonline.c [Hire] OnlineIgnoreChar (default 1): zeroes the in-memory Char online while [Hire] Enable=1, F9 does nothing; NOT run live', [('Hire', 'OnlineIgnoreChar', 1, 0, 1)])
 feat('keeppage', G_EXP, 'Private match / System Link: keep the last Arcade expansion page for the next online session', 'off', 'start',
