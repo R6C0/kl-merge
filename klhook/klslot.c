@@ -286,6 +286,30 @@ static int kls_find_rule(int slot, int page)
  * wing is out of range). Until the map itself is shifted (GUESS: x -12000 on every entity, not done), online selection refuses the listed maps. Offline untouched. */
 static int  kls_i16_on = 1;
 static char kls_i16_list[160] = "DM11B";
+/* [Int16Guard] Marker=1 (2026-10-28, c9-guard2): a map folder that holds Int16Ok.txt is a SHIFTED build (tools/kl_map_shift.py moved it into int16 range,
+ * bench A1SHIFT4) and is NOT refused although its folder name is listed. The marker is "zip=<bytes>" (+ optional "bots=<bytes>"): it only counts while
+ * <slot>_Main.zip (and <slot>_Main.bots.zip, when present) in that folder have exactly those sizes, so restoring the unshifted zip makes the guard bite again
+ * even if the marker is left behind. Size, not md5: hashing 222 MB at every archive probe is too slow. */
+static int  kls_i16_marker_on = 1;
+static int kls_i16_marked(const char *folder, const char *slotname)
+{
+    char p[MAX_PATH + 40], line[128]; FILE *f; int ok, have = 0; WIN32_FILE_ATTRIBUTE_DATA d;
+    if (!kls_i16_marker_on) return 0;
+    snprintf(p, sizeof p, "%sInt16Ok.txt", folder);
+    if (!(f = fopen(p, "r"))) return 0;
+    ok = 1;
+    while (ok && fgets(line, sizeof line, f)) {
+        unsigned __int64 want = 0; char nm[64]; int bots = 0;
+        if (!strncmp(line, "zip=", 4)) { snprintf(nm, sizeof nm, "%s_Main.zip", slotname); want = _strtoui64(line + 4, 0, 10); have = 1; }
+        else if (!strncmp(line, "bots=", 5)) { snprintf(nm, sizeof nm, "%s_Main.bots.zip", slotname); want = _strtoui64(line + 5, 0, 10); bots = 1; }
+        else continue;
+        snprintf(p, sizeof p, "%s%s", folder, nm);
+        if (!GetFileAttributesExA(p, GetFileExInfoStandard, &d)) { if (!bots) ok = 0; continue; }      /* a missing bots zip is fine, a missing level zip is not */
+        if ((((unsigned __int64)d.nFileSizeHigh << 32) | d.nFileSizeLow) != want) ok = 0;
+    }
+    fclose(f);
+    return ok && have;      /* a marker without a zip= line proves nothing */
+}
 static int kls_i16_listed(const char *map)
 {
     char buf[160], *t, *ctx = 0; snprintf(buf, sizeof buf, "%s", kls_i16_list);
@@ -448,7 +472,7 @@ static int kls_map(const char *in, char *out, const char *api)
             if (kl_online() && (r = kmp_pick(s)) >= 0) page = r;      /* klmappool.c: [MapPool] the pool's no-repeat draw for this slot (online only) */
             if (kl_online() && page && kls_i16_on) {      /* [Int16Guard] (2026-10-27 G8): online positions travel as int16 (0x5a0ff0, 0x404e60, 0x8413b0), a map with gameplay at |x| or |z| > 32767 wraps */
                 int g = kls_find_rule(s, page);
-                if (g >= 0 && kls_i16_listed(kls_rule[g].map)) {
+                if (g >= 0 && kls_i16_listed(kls_rule[g].map) && !kls_i16_marked(kls_rule[g].to, kls_slot[s].name)) {
                     klog("int16guard: online load of %s page %d (%s) refused: its coordinates exceed the int16 netcode range (a remote body wraps by 65536 and falls forever, kl2+0x1e4a22) -> stock level", kls_slot[s].name, page, kls_rule[g].map);
                     page = 0;
                 }
@@ -866,7 +890,9 @@ static void kls_init(HINSTANCE inst)
     if (kls_online_set < 0 || kls_online_set >= KLS_PAGES) { klog("expansion: OnlineSet=%d is not a page (0, 2..8, 9 = random): ignored", kls_online_set); kls_online_set = 0; }
     kls_rnd_round_on = GetPrivateProfileIntA("Expansion", "OnlineRandomRound", 0, klh_ini) != 0;
     kls_i16_on = GetPrivateProfileIntA("Int16Guard", "Enable", 1, klh_ini) != 0;       /* (recommended on) */
+    kls_i16_marker_on = GetPrivateProfileIntA("Int16Guard", "Marker", 1, klh_ini) != 0;     /* (recommended on) */
     GetPrivateProfileStringA("Int16Guard", "OnlineSkip", "DM11B", kls_i16_list, sizeof kls_i16_list, klh_ini);
+    klog("int16guard: Marker=%d - a listed map folder holding a matching Int16Ok.txt (zip=<bytes>) is a shifted build and loads online", kls_i16_marker_on);
     klog("int16guard: %s - online loads of [%s] fall back to the stock level (int16 position netcode; offline never)", kls_i16_on ? "on" : "off ([Int16Guard] Enable=0)", kls_i16_list);
     if (kls_online_set == KLS_RANDOM) klog("expansion: OnlineSet=9: RANDOM map per slot in a network session (stock + every page with a rule for the slot), seeded from the lobby id; page 9 itself cannot hold rules; NOT run live");
     if (kls_online_set == 1) { klog("expansion: OnlineSet=1 is the stock page: ignored"); kls_online_set = 0; }
