@@ -66,6 +66,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-28 ~07:20 UTC - scheduled check-in (PC idle, no new dump, nothing installed). G8b shift: .sgp + .sgd DECODED from kl2 (ZSoundGraph 0x5866a0/0x8d6ef0:
+portal = openness, rooms, centre, normal, 4 corners; octree centre stored (z,y,x)) -> kl_members Sgp.translate / sgd_translate + kl_sgp_sgd_translate_test.py
+(all 30 maps exact). Only the .buf head stays undecoded. FINDING kl_sgd_audit.py: grafts carry STALE octree leaves (DM03A 82 vault pillars/plates 8-20k off,
+DM11B/DM05A EscapeChopper ShatterGeom 43k/31k) -> grenades miss them; fix = rebuild both trees from the final scene at the end of kl_graft (not done).
+Owner: SHIP out_hirepage_1028 bat still waits; give the scheduled task its folders. debug/notes/2026-10-28-scheduled-triage.md.
+
 2026-10-28 ~01:00 - [ce] A1HIRE PASS (TEST cedc7511, 2 seats online, F06, 0 faults): F12 opened HIRE A HEISTER on both seats, host hired J.C., client asked ->
 "host accepted" Tommy, round 2 "I wear J.C./Tommy", saved Char ignored, no gun bought. GAP: F06 has no wardrobe model -> "stock body stays" (hire is
 bookkeeping only there); price showed $0. Next: hired body on stock maps without the wardrobe, real hire price. Owner bat C:\kl_build_1024\hirepage_1027 (SHIP 2e2db7c3).
@@ -74,10 +80,6 @@ bookkeeping only there); price showed $0. Next: hired body on stock maps without
 staged inis + review (wf_8dcf5187): F12 press before the selector is wrapped was dropped -> kept 3 s now; scripted F12 skips the foreground check (TEST).
 SHIP out_hirepage_1028 2e2db7c3 (now in the owner bat folder), TEST out_hirepage_1028_test cedc7511 (bcf998ae0). Rerun queued, idle-gated (--ini1/--ini2
 C:\kl_build_1024\a1hire_1027\A1HIRE_host/join.ini). Scripted F9 does NOT reach klco_keys: judge the online Char ignore from the worn body, not F9.
-
-2026-10-27 ~23:40 - [ce] HIRE PAGE (owner: "make a damn shop page for the hiring its just a button"; his try 20:27 online host DM07 found no hire: no zip has FAHire).
-[Hire] Page=1: F12 in the Buy Weapons list = HIRE A HEISTER page (Pistols tab = Dog Days 8, SMGs tab = Dead Men 8; BUY twice hires; online via klhro_set), 9fa98ea91,
-SHIP 4b3a4905 / TEST f7635046, NOT RUN. Owner bat C:\kl_build_1024\hirepage_1027\INSTALL_hirepage_1027.bat (dry-run: additions only). Carrier price/lock still stock (desc says real price).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

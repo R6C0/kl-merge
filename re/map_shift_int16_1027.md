@@ -34,17 +34,25 @@ ABSOLUTE, each needs its own pass:
   `tools/kl_pf4_translate_test.py` proves on every mesh: same polygon for every centroid after the move, height + ty within 0.05, round trip
   within float32 rounding (worst split-line drift 0.0035 units, the stock meshes carry c ~ 1e7 at ulp 1 already). Risk left: none known in
   the mesh itself; the bots' use of it after a shift is only testable live.
-- .sgp (room sound graph) 135 x/z pairs, .sgd 1, .buf head 1942 pairs (KEYS tracks, room gates/lists, GUESS: some are positions), light
-  records, SND/ZLNK emitter data: NOT identified one by one.
+- .sgp (room sound graph): DECODED 2026-10-28 (scheduled check-in, kl2.exe ZSoundGraph 0x5866a0 / 0x8d6ef0 / 0x4da770 read,
+  30 files measured; kl_members docstring): a portal (0x5c) = openness, 0, 0, room a, room b, centre, unit normal, 4 corners;
+  the edge distance is |centre a - centre b|. Centre + corners += t, nothing else: `kl_members.Sgp.translate(t)`.
+- .sgd: the two point octrees store their centre as (z, y, x) (FACT: every stock HavokShatter leaf is on its entity's origin that
+  way, worst 0.6); centre += (tz, ty, tx), the quantised leaves stay: `Octree.translate` / `sgd_translate` (SecurityZones centre
+  moved in natural order = GUESS; DM11B has none). `tools/kl_sgp_sgd_translate_test.py` proves both on every stock and graft
+  member (exact move, back within 0.01, no other byte changed). NOTE the grafts carry stale leaves already (DM11B's EscapeChopper
+  ShatterGeom 43.6k off, DM03A 82 vault leaves 8..20k off): `tools/kl_sgd_audit.py`, debug/notes/2026-10-28-scheduled-triage.md.
+- .buf head 1942 pairs (KEYS tracks, room gates/lists, GUESS: some are positions), light records, SND/ZLNK emitter data: NOT
+  identified one by one.
 Rooms: .rmi/.rmc lookups use the point, so a missed box = "no room" = silent/lit wrongly, not a crash.
 
 ## Verdict
-Feasible in principle (every part is a translation; exactness: NOT free, see below), but NOT built: it still needs the .buf/.sgp translation
-(undecoded float meanings), cannot be validated offline, and a half-shifted map is worse than the stopgap. Staged: nothing. PF4 is no longer a
-blocker (translate() above). Exactness note (measured 2026-10-27): a power-of-two T keeps the INTEGER part exact, not every float32: a vertex
+Feasible in principle (every part is a translation; exactness: NOT free, see below), but NOT built: it still needs the .buf head translation
+(undecoded float meanings), cannot be validated offline, and a half-shifted map is worse than the stopgap. Staged: nothing. PF4, .sgp and
+.sgd are no longer blockers (translate() of each, above); .HVK / .oct / .rmi / .rmc are understood but not written as code. Exactness note (measured 2026-10-27): a power-of-two T keeps the INTEGER part exact, not every float32: a vertex
 like 1950.369384765625 (needs 2^-12) moved to 14238.37 (ulp 2^-10) is rounded by up to 0.0005 units; the mesh's split-line constants c ~ 1e7
 are rounded by up to 1 (= 0.004 units across the line). Harmless, but a bit-exact round trip is not available; compare with tolerances.
-Build order if done: (1) roots + gms/prp, (2) HVK, (3) oct/rmi/rmc, (4) PF4 (kl_pf4.translate, done offline) and sgp/.buf after decoding, (5) verify with a new check: every
+Build order if done: (1) roots + gms/prp, (2) HVK, (3) oct/rmi/rmc, (4) PF4 (kl_pf4.translate), .sgp (Sgp.translate), .sgd (sgd_translate), .buf after decoding, (5) verify with a new check: every
 absolute float of the map minus T equals the original (round-trip), kl_int16_range_check reports 0, then ship as its own folder (e.g. DM11S) so
 [Int16Guard] OnlineSkip=DM11B does not apply (no key change), and test: load, 'pos: player' near the spawn, bots walk, shoot/loot/grenade,
 escape, glass/doors, ambience (rooms), and compare nav (bots reach loot) with the unshifted map.

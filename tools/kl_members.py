@@ -28,7 +28,17 @@ ids, .SND offsets.
     byte for byte. Leaf owners: 20,257 under the map's `Locations/...`, 763 under cut-scene,
     AI-vehicle and escape subtrees, none under `AllLevels/...` or a CloneGroup. 72 % of the leaves
     decode to within one quantum of the entity's origin (parent transforms composed naively,
-    axes in reverse order); the other 28 % were not explained.
+    axes in reverse order); the other 28 % were not explained. MEASURED 2026-10-28 (scheduled
+    check-in, kl_sgd_audit.py on the nine stock Dog Days FA levels): every HavokShatterOctree
+    leaf lies on its entity's composed origin (worst 0.6 units, so the stored order (z, y, x)
+    is a FACT), the unexplained ones are ExplodableOctree leaves of windows, lights and sirens
+    that sit 55..525 units from the origin (GUESS: the explodable's own centre, not the
+    entity's). The grafts carry STALE leaves: entities moved after the tree was built or
+    carried from the other source keep the old point (DM11B 'ShatterGeom' of EscapeSetup 43.6k
+    units off, 'Lights_Front_On'/'Lights_Back_On' of Animation/F07 5k..66k off in 8 DM maps,
+    DM03A 30 shatter leaves 16k..18k off) - see kl_sgd_audit.py. World translation: the
+    centre moves by (tz, ty, tx) (`Octree.translate`, `sgd_translate`); the quantised leaves
+    stay.
   - "SecurityZones" (0x448530; L00, M03A, M05A, M09B): 0x40-byte boxes {3x3 f32, centre, half
     extents, u32}. No references.
   - "HavokShatterGlassConnectivity" (0x8aba40, only if the glass manager [0x153ab14] exists;
@@ -39,9 +49,19 @@ ids, .SND offsets.
     (CLAUDE.md asks for the strip).
 
 .sgp   Sound propagation graph, handed to ZDllSoundWintel (kl2 0x718180 -> 0x70d330, which only
-  stores pointer + size; the code that walks it was NOT located). Parsed to the last byte in 41/41:
+  stores pointer + size). The code that walks it is ZSoundGraph (vtable 0xb9a614; re/campaign_fa_prison.md
+  section 4): slot 1 = 0x75ee20 loads the five arrays into this+0x1270 portals / +0x1274 edges /
+  +0x1278 rooms / +0x127c routes / +0x1280 portal list (READ 2026-10-28, scheduled check-in). Readers
+  of a portal record: the route finder 0x5866a0 (from slot 3 = 0x576b10) takes the squared distance
+  listener -> portal +0x14 (0x530e00) and multiplies the two portals' +0x00 (0 = closed: 0x4563dd
+  and slot 5 = 0x4da770 test +0x00 against 0); 0x43c030 matches +0x0c / +0x10 against a room; slot 4
+  = 0x67c4d0 -> 0x8d6ef0 copies +0x14 centre, +0x20 normal and the four corners +0x2c +0x38 +0x44
+  +0x50 (forward or reversed by its side flag) into the caller's vectors. Nothing reads +0x04 / +0x08
+  (0 in all 1053 stock + graft portals; +0x00 is 1.0 in all). Edge distance = |centre a - centre b|
+  (6218 edges, within 0.003). So a world translation of the level moves centre + corners only:
+  `Sgp.translate`. Parsed to the last byte in 41/41:
       5 x u32: portals, edges, rooms, routes, portal-list entries
-      portal 0x5c: f32 1.0, u32 0, u32 0, u32 room a, u32 room b, centre, normal, 4 corners
+      portal 0x5c: f32 openness 1.0, f32 0, f32 0, u32 room a, u32 room b, centre xyz, unit normal xyz, 4 corners xyz
       edge   {u32 portal, u32 portal, f32 distance}
       room   {u32 first portal-list entry, u32 route count, u32 first route}
       route  {u16 index, u16 destination room | flag}: flag 0 = index is a portal (each portal
@@ -145,7 +165,21 @@ class Octree:
                 self.leaves.append((v[0], v[1:4], v[4:7]))
 
     def position(self, leaf):
+        """The leaf's point in the STORED axis order: (z, y, x) of the world (docstring, MEASURED)."""
         return tuple(c + (q - 0x8000) / self.scale for c, q in zip(self.centre, leaf[1]))
+
+    def world(self, leaf):
+        """The leaf's point as world (x, y, z)."""
+        return self.position(leaf)[::-1]
+
+    def translate(self, t):
+        """The same tree for the level moved by the world vector t = (tx, ty, tz): only the centre
+        moves (stored order, so by (tz, ty, tx)); scale, nodes and the quantised leaves stay.
+        Returns a new Octree; the result is exact to one float32 rounding of each centre component."""
+        out = Octree()
+        out.centre = tuple(struct.unpack('<f', struct.pack('<f', c + d))[0] for c, d in zip(self.centre, (t[2], t[1], t[0])))
+        out.scale, out.leaves = self.scale, list(self.leaves)
+        return out
 
     def serialize(self):
         """The section payload; None without leaves (leave the section out: the reader skips it)."""
@@ -224,6 +258,34 @@ def glass_write(items):
     return struct.pack('<I', len(items)) + b''.join(struct.pack('<II', len(r), ref) + b''.join(r) for ref, r in items)
 
 
+def sgd_translate(data, t, zones=True):
+    """The .sgd of the level moved by the world vector t: both octrees get `Octree.translate`.
+    SecurityZones boxes (centre at +0x24, GUESS: stored as world x y z - only L00, M03A, M05A,
+    M09B carry the section and none was checked against the scene) move their centre when
+    zones=True, else the call raises. HavokShatterGlassConnectivity is refused (its 40-byte
+    records are not decoded; no Dog Days level and no DM graft of the FA set carries it)."""
+    out = []
+    for name, payload in sgd_read(data):
+        if name in ('HavokShatterOctree', 'ExplodableOctree'):
+            body = Octree(payload).translate(t).serialize()
+            if body is None:
+                raise ValueError('sgd: %s has no leaves' % name)
+            out.append((name, body))
+        elif name == 'SecurityZones':
+            if not zones:
+                raise ValueError('sgd: SecurityZones present (centre axis order is a GUESS)')
+            boxes = bytearray(payload)
+            for o in range(0, len(boxes), 0x40):
+                c = struct.unpack_from('<3f', boxes, o + 0x24)
+                struct.pack_into('<3f', boxes, o + 0x24, *[a + b for a, b in zip(c, t)])
+            out.append((name, bytes(boxes)))
+        elif name == 'HavokShatterGlassConnectivity':
+            raise ValueError('sgd: HavokShatterGlassConnectivity is not decoded, cannot translate')
+        else:
+            raise ValueError('sgd: unknown section %r' % name)
+    return sgd_write(out)
+
+
 def sgd_join(parts, glass=False):
     """parts = [(sgd bytes, {old REF: new REF})], one per source level; a REF missing from the map
     means the entity is not in the joined level. Also the Dead Men -> Dog Days conversion (one
@@ -289,6 +351,29 @@ class Sgp:
             er += len(rt)
         out += b''.join(struct.pack('<HH', *x) for x in routes) + struct.pack('<%dI' % len(plist), *plist)
         return out + b''.join(r[0].encode('latin1') + b'\0' + struct.pack('<I', i) for i, r in enumerate(self.rooms))
+
+    CENTRE, NORMAL, CORNERS = 0x14, 0x20, (0x2c, 0x38, 0x44, 0x50)
+
+    def points(self, k):
+        """Portal k's absolute points: [centre, corner, corner, corner, corner] as (x, y, z)."""
+        p = self.portals[k]
+        return [struct.unpack_from('<3f', p, o) for o in (self.CENTRE,) + self.CORNERS]
+
+    def translate(self, t):
+        """The graph of the level moved by the world vector t = (tx, ty, tz): every portal's
+        centre and four corners move by t; openness, rooms, normal, edges (distance between the
+        centres: unchanged by a translation), rooms, routes and the portal list are copied.
+        Returns a new Sgp. Each moved float is rounded once to float32 (exact for the integer
+        part when t is a multiple of 4096 and |x| < 2^22; translate back is not bit-identical)."""
+        out = Sgp()
+        for p in self.portals:
+            q = bytearray(p)
+            for o in (self.CENTRE,) + self.CORNERS:
+                struct.pack_into('<3f', q, o, *[v + d for v, d in zip(struct.unpack_from('<3f', q, o), t)])
+            out.portals.append(q)
+        out.edges = list(self.edges)
+        out.rooms = [[name, list(pl), list(rt)] for name, pl, rt in self.rooms]
+        return out
 
     @classmethod
     def join(cls, parts, rooms=None):
