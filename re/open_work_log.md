@@ -1,3 +1,9 @@
+2026-10-28 ~22:30 - [c9] SHIPPED ship1028: SHIP build of rtp-schemas 978d9fd95 (dinput8.dll sha1 dc0836b8, 2,006,528 bytes; KLHook.ini
+unchanged de91b2a5; old dll kept as dinput8.dll.before-ship1028; INSTALL/UNDO_ship1028.bat in C:\kl_build_1024\c9_1028\ship1028).
+Checked first with its TEST twin 6bc410a5 over the installed ini: SHIPCHK2 PASS (DM11S online, both seats in round, 0 faults), A1LIFT5
+PASS (lift ride from inside the car after 2.6 s, no CarStall, 0 faults). Lift doors never close in the data (re/retomoto_lift_doors.md):
+opt-in [KLHook] DoorCloseMs on branch c9-doorclose-1028 (8da7e8a75, TEST only), bench A1LIFT6 queued after ce's GU5/TRT1.
+
 2026-10-28 ~22:00 - [c9] RETOMOTO LIFT WORKS (T2). A1LIFT4c (leaf probe fixed by an offline agent: leaves are an INLINE ZMatPosAnim array at
 proxy+0x34, count +0x30, frame [ctl+0x4c]): both proxies open all leaves, DrExt_A z 909->819, B 909->999 in 3 s, held at frame 15
 (lobby lift too). A1LIFT4d: the player walks into the car (node x 2950) but [player+0x460] froze at the doorway (2727), so CarStall
