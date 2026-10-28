@@ -66,9 +66,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-28 ~12:40 - [ce] WEEK BUILD on rtp-schemas (05cf39e22), all keys default 0, NOT RUN: bots fire cop-wave trigger boxes online, take/bank/board-all, bot loot
-credited to the real online score; keys map + MOD CONTROLS page; full online gun swap. Bench dll C:\kl-merge\wt\wk-merge\klhook\out_week_1028c_test;
-WK1 (dry) + WK2 (live) staged in C:\kl_build_1024\week_1028\RUN_week_1028.txt, queued after c9's benches. Plan: re/week_plan_1028.md.
+2026-10-28 ~13:10 - [ce] WEEK BUILD (keys default 0): WK1 dry + WK2 live (F06, 2 seats) PASS, faults 0: bot cop-wave triggers, take/bank, keys map +
+MOD CONTROLS page, online gun swap. SHIP refuses EVERY .text patch -> shipped features must be data/vtable/tick only (bankcredit rewritten so).
+Botpath fixes merged. Dlls C:\kl-merge\wt\wk-merge\klhook\out_week_1028f(_test). Next: WKBC + BP_DD08 benches after c9. Plan: re/week_plan_1028.md.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. c9 runs: workflow DM11B int16 shift

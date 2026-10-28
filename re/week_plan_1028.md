@@ -53,6 +53,8 @@ Owner: ce (10-28 11:40).
 - [ ] Find why the MP45 (and other guns) show different icon/name/sound online vs Arcade; make online match Arcade on every map.
 Owner: ce.
 
+- 10-28 ~13:10 ce: WK1 (dry) + WK2 (live, F06, 2 seats, out_week_1028c_test) PASS: in round, faults 0 both seats; proof lines shopPage, OnlineEarlyMake, keys (9 features, 0 clashes, MOD CONTROLS page), osw early make 4 pairs, trig, bank. The bankcredit code patch at 0x681103 was refused (integrity range), so it was REWRITTEN data-only: credit from the tick via 0x5a18c0 once a human seat has escaped. RULE: SHIP refuses every .text patch, so shipped features must be data/vtable/tick only. Botpath merged (c972d762c). New dlls out_week_1028g (SHIP 18adbf1b / TEST 44fb347f; 1028f + OnlineBoardTeleport under __try after the review workflow). Queued after c9 (~1.5 h): WKBC bankcredit bench, BP_DD08/DD04/DD05 botpath benches; shot2d agent reworking RemoteShot2D as a sound-dll vtable wrapper.
+
 - 10-28 ~13:30 ce: WEEK MERGE built (wk-bots + wk-keys + wk-gunui on c9 e54ef0b47): SHIP klhook\out_week_1028 (4253cea2), TEST out_week_1028_test (d7aacdbd), mod options test PASS. All new keys default 0, NOT RUN live. Bench order: BOTS (OnlineTriggers=2 dry, then 1 + Take=2), KEYS, GUNUI.
 
 - 10-28 ~12:40 ce: merged + pushed 05cf39e22: [Shop] OnlineSwap (full online swap, reviewed: ours parked until linked), [BotFill] OnlineBank/OnlineBoardAll/OnlineBankCredit (bot loot into the REAL online score via 0x5a18c0 at the round-end call 0x681103, reviewed), OnlineTriggersExtra (stock cop waves use ZTriggerBox = already covered). Bench dll out_week_1028c_test (08c00611); WK1 (all dry) + WK2 (live) staged in C:\kl_build_1024\week_1028 (RUN_week_1028.txt), after c9's queue. All default 0, NOT RUN.

@@ -1096,7 +1096,11 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                         klbf_ob[s].told |= 16384;
                         if (tw) klog("botfill: tactics: bot %d (actor %08lx): OnlineBoardTeleport refused: %s", s, a, tw);
                         else if (klbf_bt_mode == 2) klog("botfill: tactics: bot %d (actor %08lx): OnlineBoardTeleport DRY would move it from (%.0f, %.0f, %.0f), %.1f m from the box, to (%.0f, %.0f, %.0f) after %lu s of van wait (NOT Arcade)", s, a, bots[b].pos[0], bots[b].pos[1], bots[b].pos[2], dd / 100, to[0], to[1], to[2], (unsigned long)((now - klbf_ob[s].tpAt) / 1000));
-                        else { klt_teleport(a, to); klog("botfill: tactics: bot %d (actor %08lx): OnlineBoardTeleport (NOT Arcade, last resort) moved it from (%.0f, %.0f, %.0f), %.1f m from the box, to (%.0f, %.0f, %.0f) after %lu s of van wait", s, a, bots[b].pos[0], bots[b].pos[1], bots[b].pos[2], dd / 100, to[0], to[1], to[2], (unsigned long)((now - klbf_ob[s].tpAt) / 1000)); }
+                        else {
+                            int tf = 0;
+                            __try { klt_teleport(a, to); } __except (EXCEPTION_EXECUTE_HANDLER) { tf = 1; }      /* as klauto.c: a bot freed mid-tick must not take the game down */
+                            if (tf) klog("botfill: tactics: bot %d (actor %08lx): OnlineBoardTeleport FAULT in 0x62a900; not retried", s, a);
+                            else klog("botfill: tactics: bot %d (actor %08lx): OnlineBoardTeleport (NOT Arcade, last resort) moved it from (%.0f, %.0f, %.0f), %.1f m from the box, to (%.0f, %.0f, %.0f) after %lu s of van wait", s, a, bots[b].pos[0], bots[b].pos[1], bots[b].pos[2], dd / 100, to[0], to[1], to[2], (unsigned long)((now - klbf_ob[s].tpAt) / 1000)); }
                     }
                 } else if (in || vstate != 3) klbf_ob[s].tpAt = 0;
                 if (klbf_ot_bprobe && now - klbf_ob[s].pAt >= 5000) { klbf_ob[s].pAt = now; klog("botfill: tactics: box probe: bot %d (actor %08lx) %.1f m from the box centre (frame distance %.1f m), inside %d (%s), van state %d, +%lu s since the call", s, a, dd / 100, klmv_fr_dist(&bf, bots[b].pos) / 100, in, byGame ? "game 0x758cb0" : "frame", vstate, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0); }
