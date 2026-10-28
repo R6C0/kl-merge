@@ -53,6 +53,23 @@ static int kgu_keep(float prevD, float curD, float movedCm, DWORD stallMs)
     return stallMs >= KGU_STALL_MS ? 2 : 0;
 }
 
+/* wk-botpar OnlineGetUpDetour (BP8/BP9 root cause): kgu_keep reads the STRAIGHT-LINE distance, but a bot sent round a wall or railing runs a route whose
+   straight-line distance first grows (BP8 3.3 -> 12.8 m at 4.8 m/s, BP9 24.6 -> 15.9 -> 23.7 m), and one that arrived (by seat, the caller `continue`s before
+   the keep test) may drift off again while the stall clock kept running through the time it stood there. So:
+   walkedCm = how far the bot itself moved since the last tick it counted as progress (>= KGU_WALK_CM = running, a detour, not stalled), but only while the order
+   is younger than KGU_DETOUR_MS (a route that long is no route); arrivedLeft = the bot stood by him since this order and is now KGU_LEFT_CM out again: order it back at once. */
+#define KGU_WALK_CM     300.0f
+#define KGU_DETOUR_MS   20000u
+#define KGU_LEFT_CM     500.0f
+static int kgu_keep_d(float prevD, float curD, float movedCm, DWORD stallMs, float walkedCm, DWORD ordAgeMs, int arrived)
+{
+    if (movedCm >= KGU_MOVED_CM) return 1;
+    if (arrived && curD >= KGU_LEFT_CM) return 2;
+    if (prevD >= 0 && prevD - curD >= KGU_PROGRESS_CM) return 0;
+    if (walkedCm >= KGU_WALK_CM && ordAgeMs < KGU_DETOUR_MS) return 0;
+    return stallMs >= KGU_STALL_MS ? 2 : 0;
+}
+
 /* a helper counts when within `range` (cm) horizontally and `dy` (cm) in height */
 static int kgu_helper_ok(float dist, float dy, float range, float dymax)
 {
