@@ -93,7 +93,7 @@ static void klbf_init(void)
     klbf_ot = klbf_oh && GetPrivateProfileIntA("BotFill", "OnlineTactics", 0, klh_ini) != 0;      /* (recommended off) */
     klbf_ot_carry = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsCarry", 2, klh_ini); if (klbf_ot_carry < 1) klbf_ot_carry = 1;
     klbf_ot_near = (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsNear", 150, klh_ini); if (klbf_ot_near < 20) klbf_ot_near = 20;
-    klbf_ot_take = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsTake", 0, klh_ini); if (klbf_ot_take < 0 || klbf_ot_take > 2) klbf_ot_take = 1;      /* 0 off, 1 raw write of +0x34 (old), 2 the game's own 0x4e3f40 (recommended on once benched) */
+    klbf_ot_take = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsTake", 0, klh_ini); if (klbf_ot_take < 0 || klbf_ot_take > 2) klbf_ot_take = 0;      /* 0 off (also any out-of-range value), 1 raw write of +0x34 (old), 2 the game's own 0x4e3f40 (recommended on once benched) */
     klbf_ot_hmul = (int)GetPrivateProfileIntA("BotFill", "OnlineHealthMul", 5, klh_ini); if (klbf_ot_hmul < 1) klbf_ot_hmul = 1; if (klbf_ot_hmul > 20) klbf_ot_hmul = 20;
     klbf_ot_gtake = GetPrivateProfileIntA("BotFill", "OnlineGuardTake", 0, klh_ini) != 0;      /* BO8c: the 30 s fallback sent all 5 holding bots into the squads at once; all 7 died within 71 s */
     klbf_ot_guard = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsGuard", 25, klh_ini); if (klbf_ot_guard < 0) klbf_ot_guard = 0;
@@ -335,16 +335,19 @@ static void klbf_ramp_tick(DWORD now, float bp[][3], int nb)
    vtable (klbf_ramp_probe's method), and once a second for every box that is enabled (+0x40), has the player-enter bool (+0x41), is not in tracked-object mode (+0x58 == 0), has +0x34 == 0, local-only
    (+0x64) 0, ECPS (+0x60) 0 or 4 (the values the Arcade rule counts), passes the EFAMPS gate (+0x68, the sub-mode table of 0x42b0aa..0x42b105), whose re-arm time +0x74 is over and whose own
    player flag +0x78 is clear: ask the game's inside test 0x8c16c0 (thiscall(box, object) ret 4, the update's own call at 0x42b1cd) for every live Ally bot. Enough bots inside (+0x44) and a
-   fresh entry = the update's 0x42b381 path: [box+0x78] = 1, then the fire 0x6ae730 (online sync [+0x6c] first, then slot 34 = 0x45f5d0, which also applies the re-arm field +0x50: -1 clears +0x40).
+   fresh entry (our own edge, t->in) = the update's 0x42b381 path WITHOUT its flag write: the fire 0x6ae730 (online sync [+0x6c] first, then slot 34 = 0x45f5d0, which also applies the re-arm field +0x50: -1 clears +0x40).
+   Review fix 2026-10-28: [box+0x78] is NOT written. The update (0x42b375..0x42b37a) recomputes it every frame from its own count (0 online: bots are not counted), so a written 1 is seen as a 'leave' one frame later and
+   fires the box's on-leave action (+0x48): boxes with +0x48 != 0 are skipped and logged, and a re-armable box needs the bots to leave (inside < need) before the next fire, our own edge flag being the only latch.
    One-shot boxes (+0x50 == -1) latch for the round; the others need the bots to leave before the next fire (+0x50 n > 0: after the game's re-arm time) and fire at most KLBF_TRIG_CAP times a round.
-   Excluded: money / exit controllers (other classes, never in the scan) and the ramp box (OnlineRampFire's [BotFillRamp_<SLOT>] centre / Name). Humans keep firing boxes the normal way (+0x78 stays set
-   while a bot stands inside, so a human entering in the meantime sees no new edge: the same as Arcade, where the bot already counted).
-   GUESSES: bots[].actor is a valid 'object' argument of 0x8c16c0 (it reads [obj+4] node +0x30..+0x38, as the tracker's objects have); the update's extra skips (node flag bit 10, 0x806cc0) are not mirrored.
+   Excluded: money / exit controllers (other classes, never in the scan) and the ramp box (OnlineRampFire's [BotFillRamp_<SLOT>] centre / Name). Humans keep firing boxes the normal way (a human entering while our bots stand inside
+   still gets the game's own edge: not the same as Arcade, where the bot already counted; accepted).
+   GUESSES: bots[].actor is a valid 'object' argument of 0x8c16c0 (it reads [obj+4] node +0x30..+0x38, as the tracker's objects have); the update's extra skips (0x4ea3b0(actor) at 0x42b1f7, node flag +0x3c bit 10, 0x806cc0) are not mirrored (only the census' live status guards; GUESS that this is enough).
    TODO: ZTriggerBox2 / ZOnlineTriggerBox (other vtables, layout NOT verified in the disassembly: not scanned). Host only, fire is host-side + the box's own sync object. Log prefix 'botfill: trig:'. */
 #define KLBF_TRIG_CAP 3          /* fires of one box a round (re-armable boxes) */
 #define KLBF_TRIG_MAX 256
 #define KLBF_TRIG_SCAN1 7000      /* ms after the round's first tick */
 #define KLBF_TRIG_SCAN2 30000
+static DWORD klbf_ot_trig;      /* tentative: defined with the tactics state below (the exit trigger, never fired from here) */
 static struct klbf_tb { DWORD obj; BYTE in, dead, nfire; } klbf_tbs[KLBF_TRIG_MAX];
 static struct { int n, scans, started; DWORD t0, fired, skipped; } klbf_tr;
 static void klbf_trig_load(void) { memset(klbf_tbs, 0, sizeof klbf_tbs); memset(&klbf_tr, 0, sizeof klbf_tr); }
@@ -395,6 +398,8 @@ static void klbf_trig_tick(DWORD now, const DWORD *act, int nb)
         if (klbf_rp.ncand && o == klbf_rp.cand[0]) continue;
         if (!klh_rd(o + 0x34, &f34, 1) || !klh_rd(o + 0x40, &en, 1) || !klh_rd(o + 0x41, &ent41, 1) || !klh_rd(o + 0x64, &loc, 1) || !klh_rd(o + 0x78, &pf, 1)) continue;
         if (f34 || !en || !ent41 || loc) continue;
+        if (o == klbf_ot_trig) { t->dead = 1; continue; }      /* the exit trigger: a bot must never fire the escape */
+        if (klh_rd32(o + 0x48)) { t->dead = 1; klog("botfill: trig: box %08lx has an on-leave action (+0x48 = %08lx): skipped (a fire would be followed by a spurious leave)", (unsigned long)o, (unsigned long)klh_rd32(o + 0x48)); continue; }
         tracked = klh_rd32(o + 0x58); need = klh_rd32(o + 0x44); rearm = (int)klh_rd32(o + 0x50); ecps = (int)klh_rd32(o + 0x60); gate = klh_rd32(o + 0x68);
         if (tracked || (ecps != 0 && ecps != 4) || (int)need > 8 || (int)need < 1) continue;      /* an unreasonable count (stock 1) = a layout this code does not know */
         if (klh_rd32(sm + 0x5c) == 4 && gate != 7) {      /* 0x42b0aa: EFAMPS gate in a Fragile Alliance session; Arcade's rule is false online, so the sub-mode [0x168e59c] picks the set */
@@ -402,18 +407,18 @@ static void klbf_trig_tick(DWORD now, const DWORD *act, int nb)
             if (gate == 0 || !((sub == 0 && (gate == 1 || gate == 3 || gate == 5)) || (sub == 1 && (gate == 2 || gate == 3 || gate == 6)) || (sub == 2 && (gate == 4 || gate == 5 || gate == 6)))) continue;
         }
         if ((int)gt < (int)klh_rd32(o + 0x74)) continue;      /* the game's re-arm clock (1/1024 s) */
-        if (pf) { t->in = 0; continue; }      /* a counted player (or our earlier fire) already set the flag: no entry edge */
+        if (pf) continue;      /* a counted player already set the flag: the game has its own edge */
         for (b = 0; b < nb; b++) if (KLFC_CALL(BYTE (__fastcall *)(DWORD, DWORD, DWORD), 0x008c16c0)(o, 0, act[b]) & 0xff) inside++;
         if (inside < (int)need) { t->in = 0; continue; }
-        if (t->in && !(rearm > 0 && t->nfire < KLBF_TRIG_CAP)) continue;      /* still inside: no new edge (a re-armable box fires again after its own clock, 0x45f5d0 field +0x50 n) */
+        if (t->in) continue;      /* still inside since our last edge: the bots must leave first (inside < need resets it) */
         t->in = 1;
         if (t->nfire >= KLBF_TRIG_CAP || (t->nfire && rearm == -1)) { klbf_tr.skipped++; continue; }      /* one-shot spent / cap */
+        if (klbf_trig == 2) { klog("botfill: trig: DRY would fire box %08lx (%d bot(s) inside, need %lu, re-arm %d, ecps %d, efamps %lu, entry edge, +0x74 %lu)", (unsigned long)o, inside, (unsigned long)need, rearm, ecps, (unsigned long)gate, (unsigned long)klh_rd32(o + 0x74)); continue; }      /* dry: no counters touched */
         t->nfire++; fired++; klbf_tr.fired++;
-        if (klbf_trig == 2) { klog("botfill: trig: DRY would fire box %08lx (%d bot(s) inside, need %lu, re-arm %d, ecps %d, efamps %lu, fire #%d)", (unsigned long)o, inside, (unsigned long)need, rearm, ecps, (unsigned long)gate, (int)t->nfire); continue; }
-        {   BYTE one = 1; DWORD sync = klh_rd32(o + 0x6c);
-            klh_data((void *)(DWORD_PTR)(o + 0x78), &one, 1, "trigger box player flag (OnlineTriggers: the update's 0x42b37a)");
+        {   DWORD sync = klh_rd32(o + 0x6c);
             klog("botfill: trig: FIRE box %08lx via %s (%d bot(s) inside, need %lu, re-arm %d, ecps %d, efamps %lu, fire #%d)", (unsigned long)o, sync ? "0x6ae730" : "0x45f5d0", inside, (unsigned long)need, rearm, ecps, (unsigned long)gate, (int)t->nfire);
             KLFC_CALL(void (__fastcall *)(DWORD, DWORD), sync ? 0x006ae730 : KLBF_RAMP_FIRE)(o, 0);
+            klog("botfill: trig: box %08lx after the fire: +0x40 %d, +0x74 %lu (game time %lu)", (unsigned long)o, (int)(klh_rd32(o + 0x40) & 0xff), (unsigned long)klh_rd32(o + 0x74), (unsigned long)gt);
             if (rearm == -1) t->dead = 1;      /* spent (the game cleared +0x40 as well) */
         }
     }
@@ -787,13 +792,12 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) {
                 klog("botfill: tactics: bot %d (actor %08lx): stack %08lx is gone before it got there (taken by someone else?)", s, a, o); klbf_ob[s].phase = 0;
             } else if ((dh = (float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2]))) <= klbf_ot_near && fabs(bots[b].pos[1] - mp[1]) <= 400.0f) {
+                if (klbf_ot_take == 2) { BYTE st0 = 0; if (klh_rd(o + 0x64, &st0, 1) && st0 >= 2 && st0 <= 3) { klog("botfill: tactics: take: stack %08lx is in state %d: 0x4e3f40 refuses it, left alone and not counted", (unsigned long)o, (int)st0); klbf_ob[s].phase = 0; continue; } }      /* review: no tally / claim for a refused stack */
                 klbf_ob[s].tally += amt; klbf_ob[s].grabs++;
                 if (klbf_ot_nclaim < KLBF_OT_OBJ) klbf_ot_claimed[klbf_ot_nclaim++] = o;
                 if (klbf_ot_take == 1) { int z = 0; klh_data((void *)(DWORD_PTR)(o + 0x34), &z, 4, "money amount (OnlineTacticsTake, GUESS)"); }
                 else if (klbf_ot_take == 2) {      /* the game's own depletion 0x4e3f40 (thiscall(stack, remaining), ret 4): subtracts, clamps at 0, and on empty runs the pool / sync tail 0x7f3110. It does nothing while [+0x64] (the stack state) is 2 or 3 */
-                    BYTE st = 0;
-                    if (klh_rd(o + 0x64, &st, 1) && st >= 2 && st <= 3) klog("botfill: tactics: take: stack %08lx is in state %d: 0x4e3f40 refuses it, left alone", (unsigned long)o, (int)st);
-                    else if (klh_rd32(o) == KLMV_MONEY_VT) KLFC_CALL(void (__fastcall *)(DWORD, DWORD, int), 0x004e3f40)(o, 0, amt);
+                    if (klh_rd32(o) == KLMV_MONEY_VT) KLFC_CALL(void (__fastcall *)(DWORD, DWORD, int), 0x004e3f40)(o, 0, amt);
                 }
                 klog("botfill: tactics: bot %d (actor %08lx) GRABBED stack %08lx = %d; its tally %d after %d grab(s)%s", s, a, o, amt, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_take == 2 ? " (taken through the game's 0x4e3f40 on the host)" : klbf_ot_take ? " (amount zeroed on the host)" : " (host tally only)");
                 klbf_ob[s].phase = 0;
