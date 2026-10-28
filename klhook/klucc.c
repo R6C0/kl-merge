@@ -65,10 +65,10 @@ static int kluc_busy(DWORD el) { return klan_busy(el); }
 static int kluc_show_now(const char *text, int force)
 {
     DWORD el;
-    if (!klan_ready()) return 1;                                  /* nothing can be shown: drop (logged once) */
+    if (!klan_ready(KLAN_UCC)) return 1;                                  /* nothing can be shown: drop (logged once) */
     if (!(el = kluc_element())) { if (!kluc.toldNoEl++) klog("ucc: no FA announcement element yet ([[gamedata+0x15dc]]+0x10a8): line waits"); return 0; }
     if (!force && kluc_busy(el)) return 0;
-    klan_say_el(el, text, (float)kluc.showMs / 1000.0f);
+    klan_say_el(el, text, (float)kluc.showMs / 1000.0f, KLAN_UCC);
     if (kluc.log) klog("ucc: shown '%s'%s", text, force ? " (over a stock message after 6 s)" : "");
     return 1;
 }

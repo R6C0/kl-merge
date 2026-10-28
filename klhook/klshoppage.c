@@ -601,7 +601,7 @@ static void kspg_scan(void)
         if (c == 2 || c == 0) {                                   /* tags: Graphic at [obj+0xb8], ShowInfo at [obj+0xc4] (char*) */
             klh_rdstr(klh_rd32(tab[k].obj + (c == 2 ? 0xb8 : 0xc4)), tag, sizeof tag);
             if (c == 2) role = !strcmp(tag, "WeaponBig") ? KR_BIG : !strcmp(tag, "PrimaryWeapon") ? KR_PRI : !strcmp(tag, "SecondaryWeapon") ? KR_SEC
-                             : (kspg.hireOn && !strcmp(tag, "WeaponShopStar")) ? KR_STAR /* read 2026-10-27 review: 0x58c6cf compares the tag with "WeaponShopStar" (0xb206f0) */ : KR_NONE;
+                             : ((kspg.hireOn || kspg.ctlOn) && !strcmp(tag, "WeaponShopStar")) ? KR_STAR /* read 2026-10-27 review: 0x58c6cf compares the tag with "WeaponShopStar" (0xb206f0) */ : KR_NONE;
             else role = !strcmp(tag, "OldPrimaryWeapon") ? KR_OLDPRI : !strcmp(tag, "OldSecondaryWeapon") ? KR_OLDSEC : KR_NONE;
             if (c == 2 && role == KR_NONE) continue;              /* other graphics: not wrapped */
         }
@@ -1269,7 +1269,7 @@ static void kspg_hire_tick(void)
         else if (!kspg.hRankAt || now - kspg.hRankAt > 2000) { kspg.hRankAt = now | 1; kspg.hRankOk = klhr_rankgate ? klhr_rank(&kspg.hRank) : 0; }
     }
     if (gaks && fgw && wtp) {
-        int down = kspg.hireOn && klhr_on && (!kl_online() || klhro_enabled()) && (gaks(kspg.hireKey) & 0x8000) != 0, scripted = 0;   /* 10-28: a hire page that cannot hire (online without [Hire] Online) is not opened by its key */
+        int down = kspg.hireOn && (gaks(kspg.hireKey) & 0x8000) != 0, scripted = 0;   /* as before the [Keys] work (review 10-28: the extra klhr_on / Online gate was not behind a toggle; kspg_gate_x already holds the online gate) */
 #ifdef KLHOOK_TEST
         if (kspg.hireOn) {   /* bench: a key klauto.c's script holds counts too (as the page II key) */
             static int dik = -1;

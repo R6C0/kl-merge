@@ -151,10 +151,10 @@ static void kad_say(int key, DWORD gap, const char *msg, float secs)
     DWORD now = GetTickCount(), osd, el, vt = 0;                /* the routine check + the call itself: klannounce.c (2026-10-28, shared) */
     if (!kad.prompt || !kset_v[2] || kad.dry) return;           /* kset_v[2]: the menu's row, at once */
     if (key == kad_g.said_key && now - kad_g.said_at < gap) return;
-    if (!klan_ready() || !klu.on || !(osd = klu_r.osd) || klu_r.fault || klh_rd32(osd) != KLU_OSD_VT) return;
+    if (!klan_ready(KLAN_ADREN) || !klu.on || !(osd = klu_r.osd) || klu_r.fault || klh_rd32(osd) != KLU_OSD_VT) return;
     if (!(el = klh_rd32(osd + KAD_O_ANN)) || !klh_rd(el, &vt, 4)) return;
     if (vt != KAD_ANN_VT && vt != (DWORD)(DWORD_PTR)&klpu_evt[1]) return;
-    if (!klan_say_el(el, msg, secs)) return;
+    if (!klan_say_el(el, msg, secs, KLAN_ADREN)) return;
     kad_g.said_key = key; kad_g.said_at = now;
     if (kad.log >= 2) klog("adren: prompt '%s'", msg);
 }

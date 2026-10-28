@@ -18,6 +18,8 @@
  *   J sabotage, G grenade (the Dead Men grenade key IS the stock grenade key: Dog Days leaves the button dead, klgrenade.c wakes it).
  *   Host keys with Ctrl: there is no reliable 'lobby / before the round' read for the three host keys (klhostopt.c polls them in a round too), so they need Ctrl held: a key pressed
  *   while playing never changes the match by accident. (GUESS: Dog Days binds no F-key; the game's stock binds are only the ones in klkeys_stock below.)
+ * Map=1 puts CopSquad on the NUMPAD keys: NumLock must be ON (with it off the keys send End / Down / PageDown and the squad commands do nothing; End is Unstick's key then).
+ * Only the three host keys take Ctrl (klhostopt.c); a "Ctrl+" on any other key is ignored with a log line. A module line in KLHook.ini beats [Keys]: the sample ini has them commented.
  * [Keys] ControlsPage=1 turns the shop's MOD CONTROLS page + the page-cycle key on, Hints=1 the on-screen hints, ClashLog=1 the boot check. All default 0 (recommended on once benched).
  *
  * WIRING: klhook.c #include "klkeys.c" right after klmem.c (before every module that reads a key); klkeys_check() in the init block after the module inits.
@@ -134,6 +136,9 @@ static void klkeys_init(void)
         else if (klkeys_ini_key("Keys", d->name, &vk, &ctl)) klkeys.src[i] = 2;
         else if (klkeys.map) { vk = d->newVk; ctl = d->newCtl; }
         else { vk = d->oldVk; ctl = 0; }
+        if (ctl && i != KK_HMAP && i != KK_HAI && i != KK_HPOOL) {     /* review 10-28: only klhostopt.c tests Ctrl; the other modules read the bare key, so a Ctrl+ here would be shown and not honoured */
+            klog("keys: Ctrl+ ignored for %s (only the three host keys take Ctrl): the bare key is used", d->label); ctl = 0;
+        }
         klkeys.vk[i] = vk; klkeys.ctl[i] = ctl;
     }
 }
@@ -177,14 +182,14 @@ static const struct { int vk; const char *what; } klkeys_stock[] = {
     { 'F', "melee" }, { 'G', "grenade" }, { 'E', "use / climb" }, { 'R', "reload" }, { 'Q', "cover swap" }, { 'C', "crouch / cover" }, { 'V', "voice" }, { 0x09, "scoreboard" }, { 0x20, "jump / vault" },
 };
 
-static void klkeys_check(void)
+static void klkeys_check_now(void)
 {
     int i, j, nc = 0, nr = 0, nfeat = 0; char a[24], b[24], nm[64];
     struct { int vk, ctl; char what[48]; } rs[48]; int nrs = 0;
     klkeys_init();
     if (!klkeys.clash) return;
     {   /* ReShade.ini (read only): every line whose name holds 'Key' is a shortcut: vk[,ctrl,shift,alt] (PresetShortcutKeys: groups of four) */
-        char path[MAX_PATH], secs[2048], *s;
+        static char secs[16384]; char path[MAX_PATH], *s;
         snprintf(path, sizeof path, "%s\\ReShade.ini", dir);
         if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) {
             GetPrivateProfileSectionNamesA(secs, sizeof secs, path);
@@ -199,6 +204,7 @@ static void klkeys_check(void)
                     while (*p && nv < 16) { v[nv++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; }
                     step = strstr(line, "ShortcutKeys") ? 4 : nv >= 4 ? 4 : 1;
                     for (i = 0; i < nv && nrs < 44; i += step) {
+                        if (step == 4 && i + 3 < nv && (v[i + 2] || v[i + 3])) continue;      /* a Shift / Alt shortcut is another key from ours (the mod keys use neither) */
                         if (v[i] > 0 && v[i] < 0xff) { rs[nrs].vk = v[i]; rs[nrs].ctl = step == 4 && i + 1 < nv ? v[i + 1] != 0 : 0; snprintf(rs[nrs].what, sizeof rs[nrs].what, "ReShade.ini [%s] %s", s, line); nrs++; }
                     }
                 }
@@ -223,6 +229,14 @@ static void klkeys_check(void)
     }
     snprintf(nm, sizeof nm, "%s", klkeys.map ? "Map=1 (clash-free keys)" : "Map=0 (old keys)");
     klog("keys: %s, %d enabled keyed feature(s), %d clash(es) (%d with ReShade.ini)%s", nm, nfeat, nc, nr, klkeys.page ? ", MOD CONTROLS page on" : "");
+}
+
+/* the check reads ReShade.ini (file I/O): never under DllMain's loader lock. A thread started there waits for the lock, then sleeps until the modules have read their keys. */
+static DWORD WINAPI klkeys_check_thread(LPVOID p) { (void)p; Sleep(8000); klkeys_check_now(); return 0; }
+static void klkeys_check(void)
+{
+    klkeys_init();
+    if (klkeys.clash) { HANDLE h = CreateThread(0, 0, klkeys_check_thread, 0, 0, 0); if (h) CloseHandle(h); }
 }
 
 #endif /* KLKEYS_C */
