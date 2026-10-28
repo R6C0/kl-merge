@@ -29,11 +29,11 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 ### T3 AI heisters online = Arcade (behaviour + looting)
 - [ ] Diff Arcade vs online bot code paths (BotFill, klcrew, klgrudge, klhop, klcardown, klcdying, klshield: 0 online refs).
 - [ ] Online bots loot, carry, bank and escape like Arcade.
-Owner: unclaimed.
+Owner: ce (10-28 11:40; 3f is another project).
 
 ### T4 AI heisters trigger cops / enemy spawns (not only the player)
 - [ ] Find what starts cop waves and spawn triggers (player-only checks), make bot actions count, Arcade and online.
-Owner: unclaimed.
+Owner: ce (10-28 11:40).
 
 ### T5 Gun UI + sounds Arcade -> multiplayer (MP45 first)
 - [ ] Find why the MP45 (and other guns) show different icon/name/sound online vs Arcade; make online match Arcade on every map.
@@ -42,7 +42,9 @@ Owner: ce.
 ### T6 Ops
 - [x] Scheduled resume: Windows task "KLMerge Resume" every 2 h until 2026-11-04 runs tools/kl_week_resume.ps1 (skips while
   any session transcript is fresh; log in <work>\week_resume\).
-- [ ] AnyDesk + "leave Claude running" guide for the owner's Thursday setup: re/anydesk_setup.md.
+- [ ] AnyDesk + "leave Claude running" guide for the owner's Thursday setup + owner status page (Artifact): c9.
+- Other resumes: c9's routines trig_01FKzQdeNSSCT8qt7ipe9xbf (Desktop, 4 h at :47) and trig_014C2cUETw7NLC5BQhgf3KGV (cloud, 6 h, repo-only).
+- Headless check 10-28 11:35: `claude -p --permission-mode auto` answers on this PC (effort capped to medium).
 
 ## Rules for every session (short)
 Never KL_PortBackup, never push main or force-push, commit + push rtp-schemas with what crashed and why, backups (keep 3),
