@@ -1,3 +1,12 @@
+2026-10-28 ~14:50 - [ce] Benches on out_week_1028i_test (SHIP e0473a26 / TEST 19516622), 0 faults on every seat. WKBC (F06, bank credit): 7/7 bots aboard
+(6 BOARDED by the box + bot 2 by boardall at van state 5), ledger $1.9M; the host's tele into the box landed 2 s before the van left (state 3 only ~18 s),
+so no human seat escaped and OnlineBankCredit never paid -> WKBC2 tele every 3 s from +50 s. BP_DD08 6/7 boarded (baseline 4/7). BP_DD04 4/7 (baseline
+6/7, 1 dead): DD04 has 0 ZAllyEscapeBox, the gather (MaxS 40) was cut 18 s in by the clock clause (OnlineLateExit + 20 = 95 s left) with walkers 59 m
+out; the 9 s van wait was missed; OnlineBoardTeleport cannot act without a box (and S 10 > the wait). Fix: [BotFill] OnlineGatherLateS (default 0,
+17092f8b7) + clearer 'stopped' line; bench BP_DD04b (GatherLateS 45, HoldM 60, HoldMaxS 45). SHOT2D: RemoteShot2D vtable route installed on both
+seats; FAIL = shop timer ran out after a lost Enter (script). AM_DM09 PASS both: hop + cardown ONLINE host-round lines (no carry, cardown Dry).
+A1HIRE3 (c9's) PASS both seats, 0 faults. OnlineBoardAll now recommended on. Dlls out_week_1028j (5a7aefd0) / _test (a6ba1515).
+
 2026-10-28 ~14:20 - [c9] DM11S div-by-zero (kl2+0x4668b, ZSoundBufferOpenAL rate 0) ROOT CAUSE: every A1SHIFT run shifted the STOCK DD F04 zip
 (F04_Main_src.zip was copied from SCENES\Locations\F04, not KLExpansion\Maps\DM11B) and ran it beside DM11B's .WHD: 24,025 of 29,181 .SND waves hit
 no record -> junk record, max rate 0. Fix 984463891: kl_map_shift refuses a .SND/.WHD mismatch (WrongSource) + DM11B .prp size; rebuilt from the

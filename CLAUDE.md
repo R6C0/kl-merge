@@ -70,10 +70,10 @@ Full dated log: `re/open_work_log.md` (newest first).
 (.prm type-7 repoint 723e78443), now c0000094 div-by-zero at kl2+0x4668b in round, both seats -> workflow wkthgj0ax (C:\kl_wt\div0). DM11B
 stock + ship dll f520f5d1 restored; game handed to ce. Hire3 gaps workflow wrekij1hv (C:\kl_wt\hire3). Status page Pp48g1cQgREDE3AsHPqxTa (c9).
 
-2026-10-28 ~13:10 - [ce] WEEK BUILD (keys default 0): WK1 dry + WK2 live (F06, 2 seats) PASS, faults 0: bot cop-wave triggers, take/bank, keys map +
-MOD CONTROLS page, online gun swap. SHIP refuses EVERY .text patch -> shipped features must be data/vtable/tick only (bankcredit rewritten so).
-Botpath fixes merged; RemoteShot2D (MP45 remote shots 2D like Arcade) as a vtable route. Dlls C:\kl-merge\wt\wk-merge\klhook\out_week_1028h(_test).
-Next: WKBC, BP_DD08/DD04, SHOT2D benches after c9 (RUN_week_1028.txt). Plan: re/week_plan_1028.md.
+2026-10-28 ~14:50 - [ce] 5 benches on out_week_1028i_test, 0 faults every seat: WKBC F06 7/7 bots aboard, ledger $1.9M, bank CREDIT not exercised
+(host tele 2 s too late); BP_DD08 6/7 (was 4/7); BP_DD04 4/7: gather cut by the clock clause -> new [BotFill] OnlineGatherLateS (17092f8b7 cherry-picked);
+SHOT2D vtable route live both seats; AM_DM09 hop/cardown online paths entered. SHIP refuses EVERY .text patch. Dlls out_week_1028j(_test) (5a7aefd0/a6ba1515).
+Next: WKBC2 + BP_DD04b (RUN_week_1028.txt) once c9 frees the game. Plan: re/week_plan_1028.md.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.
