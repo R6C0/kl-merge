@@ -313,7 +313,32 @@ def shift_oct(data, stay_slots, T):
             if t is not None:
                 room[i] = shift_tree(t, T, stay_slots, info)
                 info['trees'] += 1
-    return o.pack(), info
+    old_refs = O.Oct.parse(data).record_refs()
+    packed = o.pack()
+    return packed, info, old_refs, O.Oct.parse(packed).record_refs()
+
+
+def repoint_prm(prm, old_refs, new_refs):
+    """The .prm type-7 chunks (64 bytes, 00 01 07 00) hold their ZOctreeCompiled record's .oct offset, (offset+4)|1, at +0x1c. Rebuilding room
+    trees changes the .oct size, so every record moves and these must follow (A1SHIFT2 crashed at kl2+0x1c6901 reading a vtable out of tree node
+    data, 2026-10-28). -> (prm, number repointed)."""
+    move = {a: b for a, b in zip(old_refs, new_refs) if a != b}
+    if not move:
+        return prm, 0
+    prm = bytearray(prm)
+    old = set(old_refs)
+    tt, nn = struct.unpack_from('<II', prm, 0)
+    n = 0
+    for i in range(1, nn):
+        off, size = struct.unpack_from('<II', prm, tt + 16 * i)
+        if size == 64 and prm[off:off + 4] == b'\0\1\7\0':
+            v = struct.unpack_from('<I', prm, off + 0x1c)[0]
+            if v in move:
+                struct.pack_into('<I', prm, off + 0x1c, move[v])
+                n += 1
+            elif v and v not in old:
+                raise ValueError('.prm chunk %d names an .oct record that is not there (%#x)' % (i, v))
+    return bytes(prm), n
 
 
 def shift_room_index(data, T):
@@ -391,7 +416,12 @@ def shift(src_zip, dst_zip, T=DEFAULT_T, log=print):
         log('hvk: %s' % hi)
     stay = {slots[e] for e in ents if id(e) not in moved}
     if '.oct' in data:
-        new[mem('.oct')], oi = shift_oct(data['.oct'], stay, T)
+        new[mem('.oct')], oi, old_refs, new_refs = shift_oct(data['.oct'], stay, T)
+        if old_refs != new_refs and mem('.prm'):
+            with zipfile.ZipFile(src_zip) as zf:
+                prm, oi['prm_chunks_repointed'] = repoint_prm(zf.read(mem('.prm')), old_refs, new_refs)
+            if oi['prm_chunks_repointed']:
+                new[mem('.prm')] = prm
         rep['oct'] = oi
         log('oct: %s' % oi)
     for ext in ('.rmi', '.rmc'):

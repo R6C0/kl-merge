@@ -377,6 +377,37 @@ def test_sound(s, t, stats):
 
 
 # ---------------------------------------------------------------- zip level
+def prm_oct_refs(zpath):
+    """-> (sorted set of non-zero type-7 +0x1c values of the .prm, record_refs() of the .oct) of a map zip."""
+    with zipfile.ZipFile(zpath) as zf:
+        stem = MS.stem_of(zf)
+        names = {n.lower(): n for n in zf.namelist()}
+        prm = zf.read(names[(stem + '.prm').lower()])
+        refs = O.Oct.parse(zf.read(names[(stem + '.oct').lower()])).record_refs()
+    tt, nn = struct.unpack_from('<II', prm, 0)
+    vals = []
+    for i in range(1, nn):
+        off, size = struct.unpack_from('<II', prm, tt + 16 * i)
+        if size == 64 and prm[off:off + 4] == b'\0\1\7\0':
+            v = struct.unpack_from('<I', prm, off + 0x1c)[0]
+            if v:
+                vals.append(v)
+    return vals, refs
+
+
+def test_prm_refs(src, dst, stats):
+    """Regression (A1SHIFT2 crash): every .prm type-7 reference must name a record of the .oct IN THE SAME ZIP, and the multiset must be the
+    source's mapped record for record (rebuilt room trees move the records)."""
+    v0, r0 = prm_oct_refs(src)
+    v1, r1 = prm_oct_refs(dst)
+    check(len(r0) == len(r1), '.oct record count changed')
+    check(set(v0) <= set(r0), 'source .prm names a record not in its .oct (test premise)')
+    check(set(v1) <= set(r1), '.prm type-7 refs of the shifted zip do not name its .oct records (stale after tree rebuild)')
+    m = dict(zip(r0, r1))
+    check(sorted(m[v] for v in v0) == sorted(v1), '.prm type-7 refs are not the source refs mapped to the new record positions')
+    stats['.prm type-7 refs valid in shifted .oct'] = '%d (records moved %d)' % (len(v1), sum(1 for a, b in zip(r0, r1) if a != b))
+
+
 def test_zip(src, dst, changed, stats):
     with zipfile.ZipFile(src) as a, zipfile.ZipFile(dst) as b:
         check([i.filename for i in a.infolist()] == [i.filename for i in b.infolist()], 'member list / order changed')
@@ -472,6 +503,8 @@ def main(argv):
     test_prp(s, None, t, stats)
     test_hvk(s, a_scene, t, stats)
     test_oct(s, a_scene, t, stats)
+    test_prm_refs(src, dst, stats)
+    test_prm_refs(src, back, stats)
     test_sound(s, t, stats)
     # (b) kl_int16_range_check on the result; "gameplay" = not scenery (a light named lights!*, or anything under a *Background* group:
     # the distant sky lights and the background-buildings bound are never a place a player, actor, grenade or drop can be)
