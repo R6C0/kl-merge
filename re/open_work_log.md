@@ -1,3 +1,8 @@
+2026-10-28 ~14:55 - [c9] A1HIRE3 PASS (ce ran it, F06, 2 seats online, faults 0, TEST out_c9hire3_1028_test): StockHero CONFIRMED - with
+IgnoreWardrobe=1 the host logged 'stock hero table TAKEN ... 35282 35384 35480 35571 35661 35753 35847 35938' (rules+0x208 holds the 8 stock
+heisters online too) and J.C./Tommy bodies applied; money proven: host 'banked 100000 -> 90000 (expect 90000)' per seat, client reads 90000 at
+the next round start. Hire online is complete. A1SHIFT4 (DM11S from the real DM11B) running 14:52, A1NET2 next.
+
 2026-10-28 ~14:50 - [ce] Benches on out_week_1028i_test (SHIP e0473a26 / TEST 19516622), 0 faults on every seat. WKBC (F06, bank credit): 7/7 bots aboard
 (6 BOARDED by the box + bot 2 by boardall at van state 5), ledger $1.9M; the host's tele into the box landed 2 s before the van left (state 3 only ~18 s),
 so no human seat escaped and OnlineBankCredit never paid -> WKBC2 tele every 3 s from +50 s. BP_DD08 6/7 boarded (baseline 4/7). BP_DD04 4/7 (baseline

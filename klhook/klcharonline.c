@@ -230,7 +230,8 @@ static int klco_effective(int idx, int raw)
 /* The stock Dog Days heister n (1..8) on a level with NO wardrobe (every stock FA map): the eight models are the same objects in all nine stock levels
  * and the rules object's hero table (rules+0x208, 8 dwords, entry n-1 = heister n: the table klchar.c's offline path already uses as `hero[slot]`)
  * holds their roots. 2026-10-28 (bench A1HIRE on F06: 'no such model (wardrobe missing): the stock body stays', a hire changed nothing).
- * GUESS: the online Sv / Cl rules keep the same table at the same offset (they derive from ZGameRulesHeist, whose GetHero(2,n) slot 0x220 reads it);
+ * CONFIRMED 10-28 (bench A1HIRE3, F06 online host, IgnoreWardrobe=1): the online rules keep the same table at the same offset
+ * ('stock hero table TAKEN ... table 35282 35384 35480 35571 35661 35753 35847 35938', J.C. 35282 = the wardrobe's own root);
  * checked before use: all eight entries non-zero and distinct, and the body the entity wears now is one of them (stock slot 137 gave it GetHero(2,seat)).
  * Off with [CharOnline] StockHero=0. Returns the root or 0. */
 static DWORD klco_stock_root(int ch, DWORD model, const char *who)

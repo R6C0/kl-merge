@@ -23,6 +23,7 @@ Owner wants every mod feature reachable on a sensible key and shown on screen (s
 Owner: ce.
 
 ### T2 Maps work on both sides (host and client), all maps
+- 10-28 14:55 c9: A1HIRE3 PASS (ce ran it): stock-map hire body via rules+0x208 CONFIRMED online, money 100000 -> 90000 read back on host and client. A1SHIFT4 running 14:52, A1NET2 next.
 - 10-28 14:35 c9: A1NET2 staged (ini-only: both seats walk W/A/D + yaw ~170 s; A1NET1 had no client movement). c9 game queue after ce's 5 benches + A1HIRE3 (ce runs it): A1SHIFT4, A1NET2 (queue.txt sections 4, 5).
 - 10-28 14:20 c9: A1SHIFT3 div0 root cause = the shift used the STOCK F04 zip, not DM11B (sound records mismatched). Fixed + rebuilt from the real DM11B (984463891, Heroes moved too). A1SHIFT4 staged after ce's queue + A1HIRE3.
 - 10-28 14:00 c9: A1TALK_DM01 + A1TALK_DD04 PASS (crew banter plays online on both seats, host 4 lines / client 3, 0 faults; TEST out_c9talk_1028_test 89117d7e). A1SHIFT run 1 invalid (botgate loaded the unshifted bots.zip -> DM11S bots companion 6c3f59315). A1SHIFT2 FAIL load crash kl2+0x1c6901 = stale .prm type-7 octree refs after the .oct shrank (fixed 723e78443). A1SHIFT3 FAIL: both seats in round, then c0000094 divide by zero at kl2+0x4668b (host 143 s, client 99 s); triage workflow wkthgj0ax (worktree C:\kl_wt\div0). DM11B + ship dll f520f5d1 restored; game handed to ce.
