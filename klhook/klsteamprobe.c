@@ -1,5 +1,5 @@
 /* klsteamprobe.c: [Net] SteamProbe=1 - a LOG-ONLY probe for a future real two-PC internet session (re/side_channel_steam.md). Sends NOTHING,
-   calls no method on any returned interface. Once per online session, on the game thread, in a round (the klsy_tick gate: session manager
+   calls no method on any returned interface (the GetISteamNetworking call itself is real work on Steam's side, from the game thread; a null result is the expected "not served" answer). Once per online session, on the game thread, in a round (the klsy_tick gate: session manager
    with a good vtable, state 0x13..0x1f) and with the peer table singleton [0x168f960] non-null and a non-empty table:
      1. steam_api.dll exports SteamClient / SteamAPI_GetHSteamUser / SteamAPI_GetHSteamPipe (logged)
      2. ISteamClient vtable +0x44 (index 17, READ in SteamAPI_Init: args user, pipe, version string) for "SteamNetworking005", then "004"
@@ -48,7 +48,7 @@ static void klsp_tick(int game_thread)
     if (!klsp_on || klsp_done || klsp_dead || !game_thread || !klh_exe_ok) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) return;
     if (!klh_rd(sm + 0x70, &state, 4) || state < 0x13 || state > 0x1f) return;           /* the klsy_tick round window */
-    if (!(s = klh_rd32((DWORD_PTR)KLH_VA(0x0168f960)))) return;                           /* the peer table singleton (not on System Link) */
+    if (!(s = klh_rd32((DWORD_PTR)KLH_VA(0x0168f960)))) return;                           /* GUESS: [0x168f960] holds a POINTER to the singleton (re/netcode.md only says "global"); if it is the object itself the probe stays silent. Not on System Link */
     if (!klh_rd(s + 0x28, &tab, 4) || !klh_rd(s + 0x2c, &cnt, 4) || !tab || !cnt || cnt > 4096) return;
     klsp_done = 1;
     klog("steamprobe: round state 0x%lx, peer table %08lx count %lu", (unsigned long)state, (unsigned long)tab, (unsigned long)cnt);
