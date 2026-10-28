@@ -26,6 +26,7 @@ Owner: ce.
 - [ ] 2-seat bench per map (DD 9 stock FA + every DM/graft map), host and client both reach round 2, 0 faults.
 - [ ] Fix per-map failures (DM11B int16, Retomoto lift, missing wardrobe models -> hired body stays stock).
 Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
+- 10-28 12:50 c9: hire gaps coded (814c17c60, NOT RUN): [CharOnline] StockHero=1 (hired DD heister body on stock maps from rules+0x208, GUESS online), [Hire] PagePrice=1 (price on name line). TEST dll C:\kl_wt\wardrobe\klhook\out_c9wardrobe_1028_test (301371ea). Bench A1HIRE2 after the A1 queue: recipe re/shop_hire.md section 10.
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
