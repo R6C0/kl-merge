@@ -1,3 +1,10 @@
+2026-10-29 ~00:00 - [ce] merged wk-botpar-1028 ad6fab873, all default off, kl_tests 34/8/1. BP7 (DD04, out_botpar_g_test, joiner down at 30 s)
+PASS 0 faults: OnlineGetUpKeepGoal kept the goal, bot 3 sent from 72.9 m closed at 2.6-5.5 m/s and stood by seat 1 after 16 s (no stop-and-go);
+bots 0/1 finished 22/22. BP8 (DD08, OnlineGuardMode) PASS 0 faults: every bot took the stack with the fewest cops, 5 finished 10/10 (BP5: 0 loot);
+getup on DD08 still re-ordered 4x (KeepGoal 'stalled'). Cause of '38 of 40 cops within 25 m': the 47 stacks form one ~12x5.5 m cluster ->
+OnlineGuardLiveOnly (8 m radius, 2e49fea59) + 'guardmode: spread' log; bench BP9 queued. GUN5 (F02, out_swappic_test) PASS 0 faults, the script showed
+rows 13/16/32/35 and bought 32, but no 'shoppic: element' line: OnlineSwapPic never ran ('KLShopPage.ini has no pairs'); agent diagnosing.
+
 2026-10-29 ~00:40 - [c9] Retomoto LIFT ONLINE WORKS (test build): A1LIFTNET2F PASS both seats, 0 faults (JoinOnline=1, DoorCloseRemote=1,
 joiner KeepAlive=1). Joiner: box 9 ride started, jump to entry 5 '06_Exit' after 3656 ms, at (6353, 563, -6216) 500 ms later (lobby car);
 doors opened on both seats and closed after ~8 s. No 'doors held' line, so the DoorCloseRemote GUESS is still unproven. Merged 154f03c94,

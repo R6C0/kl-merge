@@ -77,10 +77,10 @@ the GDI grab is black with the monitor off). LIFT WORKS (22:00): doors open (A1L
 leaf probe); [player+0x460] lagged at the doorway, fixed by [KLHook] JoinFeetNode=1; A1LIFT4e ride from inside the car PASS (merged f82314fa5; SHIPPED 22:30 as ship1028 dll dc0836b8 after SHIPCHK2 + A1LIFT5 PASS; doors never close in data: [KLHook] DoorCloseMs=8000 closes them, SHIP-safe kldoorclose.c; SHIPPED 23:20 as ship1029 dll 897decf7 + ini ad00a047 after SHIPCHK3 + A1LIFT8 PASS). LIFT ONLINE (00:40): kljoin gated rides online; [KLHook] JoinOnline=1 (merged 154f03c94, default off), A1LIFTNET2F PASS both seats. (The 40 % downs: Ramp=1 kept the bench's
 CopToYou at stock; a lone player factor needs [Balance] Ramp=0; Ramp now logs it, 403967a5a.)
 
-2026-10-29 ~00:30 - [ce] Merged ed364abf6 (all default off): OnlineLootFinishPause (BP4 DD04 online, 0 faults: 2 bots finished 22/22 stacks after
-2-3 pauses, 0 left early), OnlineGetUpReorderS, and the getup now fires off the beacon alone (the replica hp +0x5fc->+4 reads -0/garbage on the host;
-BP4: bot sent from 79 m 8 s after the down). Earlier b20d4f392: escort reads 8 humans by node. Open: the rush is too slow to arrive (stop-and-go
-re-orders; Sprint is cosmetic), all bot keys on a 2nd map. Side channels KLSYD/L/B/V are LAN-only (re/side_channel_steam.md).
+2026-10-29 ~00:00 - [ce] Merged ad6fab873 (all default off): OnlineGetUpKeepGoal (BP7 DD04: rescue bot ran 73 m in 16 s, no stop-and-go),
+OnlineGuardMode (BP8 DD08: 5 bots finished stacks, was 0 loot: all 47 stacks counted as guarded), OnlineGuardLiveOnly (8 m; DD08's stacks are one
+12 m cluster, BP9 queued). Earlier ed364abf6: loot pause/finish, getup off the beacon. Open: GUN5 OnlineSwapPic never fired (KLShopPage.ini staging?),
+DD08 getup still re-orders, all bot keys on a 2nd map.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.

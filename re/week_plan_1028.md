@@ -61,6 +61,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 10-29 ~00:00 ce: merged ad6fab873 (all default off). BP7 DD04 PASS: OnlineGetUpKeepGoal, rescue bot ran 73 m in 16 s (~4.5 m/s), no re-orders (rush-speed item closed). BP8 DD08 PASS: OnlineGuardMode, 5 bots finished stacks (BP5 looted 0: all 47 stacks 'guarded'). 47 DD08 stacks sit in a 12x5.5 m cluster, so 25 m holds ~38 cops; OnlineGuardLiveOnly uses 8 m (bench BP9 queued). GUN5 (T5) PASS but OnlineSwapPic never fired (KLShopPage.ini not staged?).
 - 10-28 ~22:00 ce: BP2-BP4 (DD04 online, 0 faults) merged ed364abf6, all default off: escort reads the humans by node (was "all dead"), OnlineLootFinish+Pause (BP4: 2/2 stacks 22/22, pause/resume, 0 left early), getup rush fires off the beacon (79 m). Open: rush is too slow to arrive (stop-and-go re-order; Sprint is cosmetic), all bot keys on a 2nd map.
 - 10-28 19:30 ce: MV1 PASS (DD04 both seats, 0 faults): guard walk + escort online, OnlineLootSync shows the bots' loot on every seat ($4.56M banked) -> merged 35929bfc3. WKBC7 PASS: cap overflow stays in the ledger. Left: FINAL summary + WalkReach not exercised; a run with all wk-move keys on a second map.
 - 10-28 18:00 ce: WKBC5 bank credit online PAYS (host E at the boarding object -2933 524 10402 -> flag 0x20 -> +$1M to the Sharable cap; overflow dropped). 0 faults.
