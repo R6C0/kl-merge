@@ -48,8 +48,8 @@ static int kldc_step(unsigned long now, unsigned long at, int ms, int busy)
     if (el > (unsigned long)ms + KLDC_STALE_MS) return 2;
     return busy ? 3 : 1;
 }
-/* Online (DoorCloseRemote=1): slot i of the 28-entry player list [gd+0x828+4*i] counts as "someone at the car" when it is not one of the two LOCAL
-   selectors (those are always checked) and a network session runs. 1 = also check this slot. */
+/* Online (DoorCloseRemote=1) gate: 1 = check entry i too (on, a network session, and i is not one of the two LOCAL selectors, which are always
+   checked). kldc_busy calls it once with i=0, sel=-1 before walking the session hero table (10-29). */
 static int kldc_remote_slot(int i, int sel0, int sel1, int online, int remote_on)
 {
     return remote_on && online && i >= 0 && i < 28 && i != sel0 && i != sel1;

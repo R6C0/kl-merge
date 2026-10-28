@@ -116,14 +116,20 @@ static int kldc_busy(void)
         if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klj_feet(pl, feet)) continue;
         for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].on && klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, KLDC_PAD)) return 1;
     }
-    /* [KLHook] DoorCloseRemote=1, network session only: any other listed actor (remote human, AI heister, cop) whose feet are at a car holds the
-       doors too, so the host does not shut them on a joiner who is still riding. GUESS: the list [gd+0x828+4*i] holds remote players' actors. */
-    for (i = 0; i < 28; i++) {
-        if (!kldc_remote_slot(i, sel[0], sel[1], kl_online(), kldc_remote)) continue;
-        if (!(pl = klh_rd32(gd + 0x828 + 4 * i)) || !klj_feet(pl, feet)) continue;
-        for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].on && klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, KLDC_PAD)) {
-            static int told; if (!told++) klog("doorclose: slot %d (not a local player) is at car %d: doors held", i, b + 1);
-            return 1;
+    /* [KLHook] DoorCloseRemote=1, network session only: any other player of the session's hero table (remote human, AI heister) whose feet are at a
+       car holds the doors too, so the host does not shut them on a joiner who is still riding. The table (klco_table, 0x74ee24) is the one the online
+       escort and get-up code read live (BP2: 8 humans); [gd+0x828] is the LOCAL slot list only (every reader indexes it by +0x898; research 10-29).
+       Entries this machine is master of (klco_is_master) are skipped: they are the local players already checked above. Game thread only (kldc_tick). */
+    if (kldc_remote_slot(0, -1, -1, kl_online(), kldc_remote)) {
+        DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), ents = 0, P; int n = 0; static int toldTbl, toldNone;
+        if (!sm || !klco_table(sm, &ents, &n)) { if (!toldNone++) klog("doorclose: DoorCloseRemote: the session player table is not readable yet (said once)"); return 0; }
+        if (!toldTbl++) klog("doorclose: DoorCloseRemote: the session player table holds %d player(s)", n);
+        for (i = 0; i < n && i < 16; i++) {
+            if (!(P = klco_ent(ents, n, i)) || klco_is_master(P) || !klj_feet(P, feet)) continue;
+            for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].on && klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, KLDC_PAD)) {
+                static int told; if (!told++) klog("doorclose: table player %d (not ours) is at car %d: doors held", i, b + 1);
+                return 1;
+            }
         }
     }
     return 0;
