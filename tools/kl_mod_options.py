@@ -478,6 +478,8 @@ feat('onlinebank', G_EXP, 'Online host: loot carried by AI heisters is counted i
      'klbotfill.c [BotFill] OnlineBank (the ledger) + OnlineBankCredit (AddSharable 0x5a18c0 before settlement); OnlineBankCredit needs OnlineBank=1 and OnlineTacticsTake 1 or 2; NOT run live', [('BotFill', 'OnlineBank', 1, 0, 0), ('BotFill', 'OnlineBankCredit', 1, 0, 0), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlineboardall', G_EXP, 'Online host: when the van waits, every AI heister that is still alive is sent aboard, as Arcade does (needs the AI heister rows above; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoardAll (1 = on, 2 = log only), OnlineBoardAllM distance; run live 10-28 (WKBC bench, F06); the ini default stays 0', [('BotFill', 'OnlineBoardAll', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinelooks', G_EXP, 'Online AI heisters: log the model and group of each bot on this seat, nothing is changed (needs the host row above; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineLooks (2 = log only; re/crew_online_1028.md step 1); NOT run live', [('BotFill', 'OnlineLooks', 2, 0, 0)])
 feat('onlineboardteleport', G_EXP, 'Online host: last resort, an AI heister stuck outside the escape box while the van waits is moved into it (not what Arcade does; recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineBoardTeleport (+ S / M); 2 = log only; NOT run live', [('BotFill', 'OnlineBoardTeleport', 1, 0, 0)])
 feat('onlinelegscale', G_EXP, 'Online AI heisters: the time allowed for a long walk grows with its length (recommended off)', 'off', 'start',

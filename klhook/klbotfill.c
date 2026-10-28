@@ -37,6 +37,7 @@ static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
 static int klbf_ot_vstate = 1, klbf_ot_late = 75; static DWORD klbf_ot_calledAt;      /* [BotFill] OnlineVanState (BO9: the van node stays at the origin, so "van here" must come from [rules+0x1dc]), OnlineLateExit (s of clock left) */
 static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [BotFill] OnlineBoxWalk, OnlineBoard, OnlineBoxProbe (the ZAllyEscapeBox block below) */
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
+static int klbf_lk = 0; static DWORD klbf_lk_sm, klbf_lk_sig;      /* [BotFill] OnlineLooks (re/crew_online_1028.md step 1): 2 = LOG ONLY, one line per Ally bot per round and whenever the census changes; no game-state write; any other value = off */
 static int klbf_ot_glate = 0;      /* [BotFill] OnlineGatherLateS (wk-dd04-1028): 0 = the gather's clock clause fires at OnlineLateExit + 20 s left (old); >0 = at that many s left */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
 static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
@@ -120,6 +121,8 @@ static void klbf_init(void)
     klbf_ot_vgather = GetPrivateProfileIntA("BotFill", "OnlineVanGather", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_gm = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineGatherM", 12, klh_ini); if (klbf_ot_gm < 200.0f) klbf_ot_gm = 200.0f;      /* GUESS 12 m */
     klbf_ot_gmax = (int)GetPrivateProfileIntA("BotFill", "OnlineGatherMaxS", 25, klh_ini); if (klbf_ot_gmax < 1) klbf_ot_gmax = 1; if (klbf_ot_gmax > 120) klbf_ot_gmax = 120;      /* GUESS 25 s */
+    klbf_lk = (int)GetPrivateProfileIntA("BotFill", "OnlineLooks", 0, klh_ini); if (klbf_lk != 2) klbf_lk = 0;      /* (recommended off) only 2 (log only) exists in this step */
+    if (klbf_lk) klog("botfill: OnlineLooks=2: log-only probe of the Ally bots' model / group (no write)");
     klbf_ot_glate = (int)GetPrivateProfileIntA("BotFill", "OnlineGatherLateS", 0, klh_ini); if (klbf_ot_glate < 0) klbf_ot_glate = 0; if (klbf_ot_glate > 200) klbf_ot_glate = 200;      /* (recommended off) BP_DD04 1028: the clock clause (95 s left) called the van 18 s into a 40 s gather with walkers 59 m out; GUESS 45 = van call to departure ~28 s + slack */
     klbf_ot_vhold = GetPrivateProfileIntA("BotFill", "OnlineVanHold", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_hm = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineHoldM", 30, klh_ini); if (klbf_ot_hm < 500.0f) klbf_ot_hm = 500.0f;      /* GUESS 30 m (re/van_hold_online.md) */
@@ -1247,14 +1250,45 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
 }
 
+/* OnlineLooks=2 probe (log only; re/crew_online_1028.md section 5/6). Reads only, through klh_rd (ReadProcessMemory: a bad pointer fails, never faults).
+   model root = [[actor+4]+0x68] (klcrew.c: the node's model chunk index; read the same way there). Group name: bots_voice.md 1.3 says 0x598460(actor node) = [[node+0x50]+0x60]
+   is the parent group x and the name sits at [[x+4]+0x6c] with the digit at index 0x12 (Glazer_Bodyguard_0N). GUESS: whether [x'+0x6c] is a char* or an inline buffer is not
+   established, so both are tried (pointer first, accepted only when the bytes there read as printable ASCII); an unreadable name logs group="?" digit=?. */
+struct klbf_lkrec { DWORD slot, actor, vt, team, model; char name[28]; char digit; };
+static void klbf_lk_name(DWORD actor, char name[28], char *digit)
+{
+    DWORD node, p, grp, gnode, s, k; char b[28]; int pass;
+    strcpy(name, "?"); *digit = '?';
+    if (!(node = klh_rd32(actor + 4)) || !(p = klh_rd32(node + 0x50)) || !(grp = klh_rd32(p + 0x60)) || !(gnode = klh_rd32(grp + 4))) return;
+    for (pass = 0; pass < 2; pass++) {
+        s = pass == 0 ? klh_rd32(gnode + 0x6c) : gnode + 0x6c;      /* pass 0: char* at +0x6c; pass 1: inline buffer (GUESS) */
+        if (!s || !klh_rd(s, b, 24)) continue;
+        for (k = 0; k < 24 && b[k] >= 32 && b[k] < 127; k++) ;
+        if (k < 4) continue;      /* too short to be a name: not this layout */
+        memcpy(name, b, k); name[k] = 0;
+        if (k > 0x12 && name[0x12] >= '1' && name[0x12] <= '9') *digit = name[0x12];
+        return;
+    }
+}
+static void klbf_lk_log(const struct klbf_lkrec *r, int n, DWORD role, DWORD sm, DWORD sig)
+{
+    int i; const char *who = role == 2 ? "HOST" : "CLIENT";
+    klog("botfill: looks: %s seat, %d Ally bot(s), %s (sig %08lx)", who, n, klbf_lk_sm != sm ? "new round / session" : "census changed", (unsigned long)sig);
+    for (i = 0; i < n; i++)
+        klog("botfill: looks: %s bot %d slot=%lu actor=%08lx cls=%08lx team=%lu group=\"%s\" digit=%c model=%08lx", who, i, (unsigned long)r[i].slot, (unsigned long)r[i].actor, (unsigned long)r[i].vt, (unsigned long)r[i].team, r[i].name, r[i].digit, (unsigned long)r[i].model);
+    klbf_lk_sm = sm; klbf_lk_sig = sig;
+}
+
 static void klbf_tick(int game_thread)
 {
     static DWORD last, scan, told_sm; DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0, h, v, lo, hi, p, tab, i, blk[64 * 32]; BYTE cur = 0, mx = 0;
     int conn, target, n = 0, ally = 0, alive = 0, tact = 0, other = 0;
-    if (!(klbf_on || klbf_oh || klbf_ot) || !game_thread || !klh_exe_ok || now - last < 500) return;      /* OnlineHost alone only runs the census below (no lobby change: kllobby.c reads OnlineFill itself) */
+    static struct klbf_lkrec lk[64]; int lkn = 0;
+    if (!(klbf_on || klbf_oh || klbf_ot || klbf_lk) || !game_thread || !klh_exe_ok || now - last < 500) return;      /* OnlineHost alone only runs the census below (no lobby change: kllobby.c reads OnlineFill itself) */
     last = now;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) return;
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4) || !klh_rd(sm + 0xb9, &cur, 1) || !klh_rd(sm + 0xb8, &mx, 1)) return;
+    if (state < 0xd) klbf_lk_sm = 0;      /* OnlineLooks: the next round logs again */
     if ((role != 2 && role != 3) || mode != 4) { if (state < 0xd) told_sm = 0; if (klbf_ot_in) klbf_ot_summary(); return; }
     if (state < 0xd || state > 0x1f) { if (state < 0xd) told_sm = 0; if (klbf_ot_in) klbf_ot_summary(); return; }
     if (klbf_ot && role == 2) {      /* HOST only */
@@ -1289,6 +1323,12 @@ static void klbf_tick(int game_thread)
             if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4)) continue;
             if (team != 2) { other++; continue; }
             ally++;
+            if (klbf_lk && lkn < 64) {      /* OnlineLooks=2: read only */
+                struct klbf_lkrec *r = &lk[lkn++]; DWORD nd, md = 0;
+                r->slot = i + k; r->actor = o; r->vt = klh_avt(o); r->team = team;
+                if ((nd = klh_rd32(o + 4)) != 0) klh_rd(nd + 0x68, &md, 4);
+                r->model = md; klbf_lk_name(o, r->name, &r->digit);
+            }
             hp = klh_rd32(o + 0x5fc);
             if (hp && klh_rd(hp + 4, hv, 8) && hv[0] > 0) alive++;
             snd = klh_rd32(o + 0x77c);
@@ -1296,6 +1336,11 @@ static void klbf_tick(int game_thread)
             if (t0 || t1 || t2) tact++;
             if (ally <= 8) klog("botfill: Ally actor %08lx soldier %08lx tactics %08lx %08lx %08lx health %.1f", (unsigned long)o, (unsigned long)snd, (unsigned long)t0, (unsigned long)t1, (unsigned long)t2, hv[0]);
         }
+    }
+    if (klbf_lk) {      /* once per session object, and again whenever (slot, actor, model, digit) of any bot changes */
+        DWORD sig = 2166136261u; int q;
+        for (q = 0; q < lkn; q++) { sig = (sig ^ lk[q].slot) * 16777619u; sig = (sig ^ lk[q].actor) * 16777619u; sig = (sig ^ lk[q].model) * 16777619u; sig = (sig ^ (DWORD)(BYTE)lk[q].digit) * 16777619u; }
+        if (klbf_lk_sm != sm || klbf_lk_sig != sig) klbf_lk_log(lk, lkn, role, sm, sig);
     }
     klog("botfill: round census: %d ZFFActor, %d team Ally (%d alive, %d with tactics), %d other teams", n, ally, alive, tact, other);
     if (klbf_oh) klog("botfill: OnlineHost %s: %d Ally bot(s) in this peer's world, %d alive; %s", role == 2 ? "HOST (authority, shares their places)" : "CLIENT (mirror only, steered toward the host's places)", ally, alive,
