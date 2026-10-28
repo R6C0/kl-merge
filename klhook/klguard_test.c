@@ -30,6 +30,11 @@ int main(void)
     CHECK(kgg_radius(2500, 0, 1) == 2500, "tight 0: wide");
     CHECK(kgg_radius(500, 800, 1) == 500, "tight wider than wide: wide");
     CHECK(kgg_radius(0, 800, 1) == 800, "wide 0 (guard off) with live-only: tight");
+    { float z0[3] = { 0, 0, 0 }, zn[3] = { 0.5f, -0.5f, 1 }, st[3] = { -112, 79, 549 }, y2[3] = { 0, 2, 0 };
+      CHECK(kgg_origin(z0), "origin: (0,0,0) skipped");
+      CHECK(kgg_origin(zn), "origin: within 1 cm skipped");
+      CHECK(!kgg_origin(st), "origin: a DD08 stack position kept");
+      CHECK(!kgg_origin(y2), "origin: 2 cm up kept"); }
     printf("klguard_test: %d checks, %d fail\n", checks, fails);
     return fails != 0;
 }

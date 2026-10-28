@@ -42,4 +42,10 @@ static float kgg_radius(float wide, float tight, int live_only)
     if (live_only && tight > 0 && (wide <= 0 || tight < wide)) return tight;
     return wide;
 }
+
+/* OnlineGuardLiveOnly: BP9 (DD08) logged the first cops at exactly (0,0,0) at the round start (GUESS: not placed yet). Same 1 cm test as klbotfill.c's feet reads. */
+static int kgg_origin(const float *p)
+{
+    return fabsf(p[0]) <= 1 && fabsf(p[1]) <= 1 && fabsf(p[2]) <= 1;
+}
 #endif
