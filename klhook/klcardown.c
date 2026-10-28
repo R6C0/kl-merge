@@ -238,7 +238,8 @@ static void klcd_tick(int game_thread)
     if (!klcd.on || !game_thread || !klh_exe_ok) return;
     klcd.dry = klcd.dry_cfg; klcd.human = klcd.human_cfg;
     if (klcd.arc && klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLB_ROUND && klb_read(&sn) && sn.state == KLB_ROUND) { }
-    else if (klcd.online && klbd_online_view(1, &sn, why) > 0) { online = 1; klcd.dry = klcd.online == 2; klcd.human = 0; }   /* wk-arcmods-1028: the ONLINE HOST only; no human part (a client's player is not ours to floor) */
+    else if (klcd.online && (online = klbd_online_view(1, &sn, why)) < 0) return;      /* review 10-28: transient, change nothing */
+    else if (online > 0) { online = 1; klcd.dry = klcd.dry_cfg || klcd.online == 2; klcd.human = 0; }      /* Dry=1 stays dry online too */   /* wk-arcmods-1028: the ONLINE HOST only; no human part (a client's player is not ours to floor) */
     else { if (klcd_g.rules) klcd_forget(); return; }
     if (sn.rules != klcd_g.rules) {
         klcd_forget(); klcd_g.rules = sn.rules;

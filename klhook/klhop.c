@@ -393,8 +393,10 @@ static void klv_tick(int game_thread)
     last = now;
     klv.dry = klv.dry_cfg;
     if (klv.arc && klb_read(&s)) { }                                         /* Arcade with a ZGameRulesHeist object */
-    else if (klv.online && game_thread && klbd_online_view(0, &s, why) > 0) {   /* wk-arcmods-1028: the ONLINE HOST, bots by pseudo record (klbotdown.c); never a client */
-        online = 1; klv.dry = klv.online == 2;
+    else if (klv.online && !game_thread) return;                             /* review 10-28: the fallback tick (klh_tick(0)) must not drop the online round state */
+    else if (klv.online && (online = klbd_online_view(0, &s, why)) < 0) return;      /* transient: change nothing */
+    else if (online > 0) {                                                   /* wk-arcmods-1028: the ONLINE HOST, bots by pseudo record (klbotdown.c); never a client */
+        online = 1; klv.dry = klv.dry_cfg || klv.online == 2;                /* Dry=1 stays dry online too */
         for (i = 0; i < s.n; i++) if (s.r[i].used) s.r[i].stage = (BYTE)klbf_ob_stage(s.r[i].actor, klv.ostage);
         if (told_round != s.rules) { told_round = s.rules; klog("hop: ONLINE host round (session %08lx): %d AI heister(s) in this world; Online=%d (%s); heist stage from the botfill tactics when known, else OnlineStage=%d", (unsigned long)s.rules, s.n, klv.online, klv.online == 2 ? "dry log, nothing is called" : "carries", klv.ostage); }
     }
@@ -434,6 +436,9 @@ static void klv_tick(int game_thread)
         }
         for (i = 0; i < s.n; i++) {
             const struct klb_rec *r = &s.r[i]; float nd[3], ft[3], is_n[3], is_f[3], blk[3] = { 0, 0, 0 }; const char *no; DWORD held = 1, soldier; int got, in, p, have_blk = 0;
+            if (online && r->used && r->actor && klv_r.actor[hi][i] && klv_r.actor[hi][i] != r->actor) {     /* review 10-28: an online pseudo-record slot was handed to another bot: its hop state is not the new bot's */
+                klv_r.done[hi][i] = 0; klv_r.doneat[hi][i] = 0; klv_r.since[hi][i] = 0; klv_r.told[hi][i] = 0; klv_r.actor[hi][i] = r->actor;
+            }
             if (klv_r.done[hi][i] && h->again && klv_r.doneat[hi][i] && now - klv_r.doneat[hi][i] >= h->again) { klv_r.done[hi][i] = 0; klv_r.told[hi][i] = 0; }   /* Again=: it may be carried once more */
             if (!r->used || !(r->flags & 1) || !r->actor || r->status || klv_r.done[hi][i]) { klv_r.since[hi][i] = 0; continue; }
             if (h->walk && ((r->flags & 2) || (klv_r.walking[i].hop && klv_r.walking[i].actor == r->actor))) { klv_r.since[hi][i] = 0; continue; }      /* v78: walking already; a traitor is not walked */
