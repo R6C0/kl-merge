@@ -146,10 +146,10 @@ static void klbf_init(void)
     klbf_lk = (int)GetPrivateProfileIntA("BotFill", "OnlineLooks", 0, klh_ini); if (klbf_lk != 1 && klbf_lk != 2) klbf_lk = 0;      /* (recommended off) 2 = log only, 1 = send / apply (klcrewlook.c) */
     klcl_on = klbf_lk == 1;
     klbv_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineVoice", 0, klh_ini); if (klbv_mode != 1 && klbv_mode != 2) klbv_mode = 0;      /* (recommended off) 2 = log only, 1 = the host sends KLSYV, every seat plays the bot's line (klbotvoice.c) */
-    GetPrivateProfileStringA("BotFill", "OnlineVoiceKeyLoot", "Multiplayer/%L/ReachlootArea_01_C%D", klbv_tl[0], sizeof klbv_tl[0], klh_ini);      /* GUESS: the stock per-character leaf K_C<n>; %L = level key, %D = digit */
-    GetPrivateProfileStringA("BotFill", "OnlineVoiceKeyEscape", "Multiplayer/%L/FA_YouEscaped01_C%D", klbv_tl[1], sizeof klbv_tl[1], klh_ini);      /* GUESS: spelling unconfirmed */
-    if (!klbv_tl[0][0]) strcpy(klbv_tl[0], "Multiplayer/%L/ReachlootArea_01_C%D");      /* an empty template would reach klk_say("") */
-    if (!klbv_tl[1][0]) strcpy(klbv_tl[1], "Multiplayer/%L/FA_YouEscaped01_C%D");
+    GetPrivateProfileStringA("BotFill", "OnlineVoiceKeyLoot", "Multiplayer/JackPot/JackPot_01_C%D", klbv_tl[0], sizeof klbv_tl[0], klh_ini);      /* in every stock .LOC checked (F01/F04/F06, 10-28); %L = slot (F06), %D = digit */
+    GetPrivateProfileStringA("BotFill", "OnlineVoiceKeyEscape", "Multiplayer/You_Esc/YouEsc_01_C%D", klbv_tl[1], sizeof klbv_tl[1], klh_ini);      /* same check */
+    if (!klbv_tl[0][0]) strcpy(klbv_tl[0], "Multiplayer/JackPot/JackPot_01_C%D");      /* an empty template would reach klk_say("") */
+    if (!klbv_tl[1][0]) strcpy(klbv_tl[1], "Multiplayer/You_Esc/YouEsc_01_C%D");
     if (klbv_mode) klog("botfill: OnlineVoice=%d: the host's AI heister events (loot grab, boarded) %s (KLSYV on UDP %d, klbotvoice.c); keys '%s' / '%s' (GUESS); needs [Voice] Enable / Online / OnlineTalk / OnlineTalkNoScore and OnlineLooks=1%s", klbv_mode, klbv_mode == 2 ? "are only LOGGED" : "are sent and played on every seat", 27415, klbv_tl[0], klbv_tl[1], klbf_lk == 1 ? "" : " (OnlineLooks is not 1: only the digit range is checked)");
     klls_on = GetPrivateProfileIntA("BotFill", "OnlineLootSync", 0, klh_ini) != 0;      /* (recommended off) kllootsync.c: the host sends what the bots carry / banked (KLSYB, UDP 27415), every seat shows one HUD line */
     if (klls_on) klog("botfill: OnlineLootSync=1: the host sends the bots' loot (KLSYB on UDP %d), every seat shows it on the announcement line (kllootsync.c); needs OnlineTactics=1 on the host%s", 27415, klbf_ot ? "" : " (it is 0: nothing to send)");

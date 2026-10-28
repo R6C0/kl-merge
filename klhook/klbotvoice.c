@@ -10,9 +10,9 @@
  * validates the digit against; with OnlineLooks off only the range 2..8 is checked). No .text patch, no game state written. Game routines are called from the game's thread only.
  *
  * v1 EVENTS: 1 = loot grab (host site: klbotfill.c, the GRABBED line), 2 = boarded / escaped (host site: the phase-3 loop before the bank book-keeping). Down / death / spotted-cops: none exist in FA.
- * KEYS (GUESS, every one): the stock per-character leaf is K_C<n> with n = digit (spec: table byte = digit - 1, leaf K_C(byte + 1)), K being the group's key. The templates below use %L (level key,
- * e.g. F06) and %D (digit). The spellings are NOT confirmed (re/bots_voice.md quotes Multiplayer/F06/ReachlootArea_01_R; the jackpot / escaped spellings were never seen): override them in the
- * ini ([BotFill] OnlineVoiceKeyLoot / OnlineVoiceKeyEscape) once the first live log shows which key the game's .LOC knows (klk_entry logs "key ... is not in this level's .LOC").
+ * KEYS: the defaults are Multiplayer/JackPot/JackPot_01_C%D (loot) and Multiplayer/You_Esc/YouEsc_01_C%D (boarded), %D = digit 2..8: all 14 are in
+ * the English .LOC of F01, F04 and F06 (tools/kl_loc.py keys, 10-28; group keys, no level part). That klk_say plays them for a bot's digit is NOT seen live yet.
+ * %L (slot, e.g. F06; klbv_slot) is still expanded for ini overrides ([BotFill] OnlineVoiceKeyLoot / OnlineVoiceKeyEscape), e.g. Multiplayer/%L/ReachlootArea_01_R_C%D.
  * Dead Men bodies (KLVoice/<Name>/<event>) are not handled in v1.
  * SEND SCHEDULE: each event is sent 3 times, 100 ms apart (UDP); the client drops repeats by seq. Gaps: 15 s per bot and event, 2 s between any two lines, queue count > 8: no line.
  *
@@ -78,11 +78,21 @@ static int klbv_digit_ok(int digit)
     return 1;
 }
 
+/* %L = the slot as the .LOC spells it: klh_level_key's 'f04\f04_main' -> 'F04' (VOX1 10-28 logged the raw form in the key) */
+static int klbv_slot(char *lk, int cap)
+{
+    char scene[160]; int i;
+    if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, lk, cap)) return 0;
+    for (i = 0; lk[i] && lk[i] != 0x5c; i++) if (lk[i] >= 'a' && lk[i] <= 'z') lk[i] -= 32;      /* 0x5c = backslash */
+    lk[i] = 0;
+    return lk[0] != 0;
+}
+
 /* the key of (ev, digit) for this level; 0 = not readable */
 static int klbv_make_key(int ev, int digit, char *key, int cap)
 {
-    char scene[160], lk[64];
-    if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, lk, sizeof lk)) return 0;
+    char lk[64];
+    if (!klbv_slot(lk, sizeof lk)) return 0;
     return klbv_key(key, cap, klbv_tl[ev == KLBV_EV_LOOT ? 0 : 1], lk, digit);
 }
 
@@ -91,7 +101,7 @@ static int klbv_play(const char *seat, int ev, int digit, unsigned now, int chec
 {
     char scene[160], lk[64], key[200]; DWORD gs, rules; int r;
     if (!klbv_digit_ok(digit)) { if (klbv_note(0)) klog("botvoice: %s event %d digit %d: not played (digit not in the OnlineLooks table / range)", seat, ev, digit); return 0; }
-    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLW_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, lk, sizeof lk)) {
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLW_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || !klh_scene(scene, sizeof scene) || !klbv_slot(lk, sizeof lk)) {
         if (klbv_note(1)) klog("botvoice: %s event %d digit %d: not played (rules object / scene not readable)", seat, ev, digit);
         return 0;
     }
