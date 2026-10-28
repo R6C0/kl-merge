@@ -124,7 +124,7 @@ static int klpr_dc_busy(void)
 
 static void klpr_dc_tick(void)
 {
-    int k, i, n = 0; DWORD now, cnt, ctl, first = 75, last = 160;
+    int k, i, n = 0; DWORD now, cnt, ctl, first = 75, last = 160; float f_first = 75.0f, f_last = 160.0f;
     if (klpr_dc_ms <= 0 || !klh_exe_ok) return;
     now = GetTickCount();
     for (k = 0; k < 4; k++) {
@@ -139,6 +139,10 @@ static void klpr_dc_tick(void)
             ctl = klh_rd32(klpr_dc[k].me + 0x34 + 4 * i);
             if (ctl < 0x10000 || klh_rd32(ctl) != (DWORD)(DWORD_PTR)KLH_VA(KLPR_VT_LEAF)) continue;
             if (!klh_data((void *)(DWORD_PTR)(ctl + 0xd0), &first, 4, "doorclose first") || !klh_data((void *)(DWORD_PTR)(ctl + 0xd4), &last, 4, "doorclose last")) continue;
+            /* A1LIFT6b: the ints alone are not enough - the clip state floats (clip state ctl+0x34: +0x10 first, +0x14 last, READ, see
+               klpr_leaf_line) stayed 0..75 and the restart replayed the OPENING (doors snapped shut and slid open again). The handler copies the
+               ints there via 0x78f190/0x505550 before 0x59dce0; we write the floats ourselves. */
+            if (!klh_data((void *)(DWORD_PTR)(ctl + 0x44), &f_first, 4, "doorclose clip first") || !klh_data((void *)(DWORD_PTR)(ctl + 0x48), &f_last, 4, "doorclose clip last")) continue;
             ((void (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLPR_CLOSE_FN))((void *)(DWORD_PTR)ctl, 0);
             n++;
         }
