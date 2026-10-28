@@ -23,6 +23,7 @@ Owner wants every mod feature reachable on a sensible key and shown on screen (s
 Owner: ce.
 
 ### T2 Maps work on both sides (host and client), all maps
+- 10-28 13:35 c9 benches (--owner-away, 0 faults each): A1NET PARTIAL (A1NET1/A1NET0 both seats in round, clean; netsmooth/tune criteria not met: only the host walks, needs a client input script). A1HIRE2 PARTIAL (out_week_1028f_test, DD06: paid hire works online, price on the name line, round-2 bodies J.C./Tommy worn; NOT proven: money after the hire read back, and no "charonline: stock hero" line, so StockHero=1 unconfirmed). A1SHIFT running 13:36 (ce paused its queue), A1TALK next.
 - 10-28 12:45 c9 A1SND PARTIAL PASS: music/ambience/stinger Loud/voice lines run online on DM01 + DD04 (0 faults); crew banter (kltalk) still silent online. See open_work_log.
 - [ ] 2-seat bench per map (DD 9 stock FA + every DM/graft map), host and client both reach round 2, 0 faults.
 - [ ] Fix per-map failures (DM11B int16, Retomoto lift, missing wardrobe models -> hired body stays stock).
