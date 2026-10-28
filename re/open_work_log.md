@@ -1,3 +1,8 @@
+2026-10-28 ~18:45 - [c9] SHIPCHK PASS: shipped DM11S online with the INSTALLED setup (ship dll f520f5d1 via its test twin
+C:\kl_build_1024\arcade1to1_1027\test_dinput8.dll f8ae48a1, game ini de91b2a5 with OnlineSkip empty): both seats IN ROUND, faults 0,
+no int16guard refusal, DM11S zip 222102260 + bots 222102326 loaded on both, spawn (21712,830,13866) in range, client sync tracked 7 bots.
+kl_map_shift_test now reads F04_Main.zip.before-dm11s after the ship (a15bead89). Inputs C:\kl_build_1024\c9_1028\shipchk. Game to ce (MV1).
+
 2026-10-28 ~18:45 - [ce] LOOKS2 (out_looks_1028e_test, F06 host + join): OnlineLooks=1 PASS. Host RESULT PASS, 0 faults / 0 asserts both seats; the client
 got 7 KLSYL records and applied the same looks as the host; the humans' characters (J.C., Tommy) stayed out of the draw (the LOOKS1 duplicate Elwood is
 fixed: a CharOnline peer announcing 'stock' now counts by its body's model, entity+4 -> node+0x68 -> klw_char_of). Digit 3 kept his body (no character
