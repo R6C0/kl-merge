@@ -42,8 +42,9 @@ Owner: ce.
 ### T6 Ops
 - [x] Scheduled resume: Windows task "KLMerge Resume" every 2 h until 2026-11-04 runs tools/kl_week_resume.ps1 (skips while
   any session transcript is fresh; log in <work>\week_resume\).
-- [ ] AnyDesk + "leave Claude running" guide for the owner's Thursday setup + owner status page (Artifact): c9.
-- Other resumes: c9's routines trig_01FKzQdeNSSCT8qt7ipe9xbf (Desktop, 4 h at :47) and trig_014C2cUETw7NLC5BQhgf3KGV (cloud, 6 h, repo-only).
+- [x] AnyDesk + "leave Claude running" guide for the owner's Thursday setup: re/anydesk_setup.md (c9 10-28 11:50; sleep already Never, AnyDesk not installed: owner sets the password).
+- [x] Owner status page (private): https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa - c9 republishes; send c9 a line per track.
+- [x] Routines trig_01FKzQ (Desktop, 4 h) and trig_014C2 (cloud, 6 h) point at this file (c9).
 - Headless check 10-28 11:35: `claude -p --permission-mode auto` answers on this PC (effort capped to medium).
 
 ## Rules for every session (short)
