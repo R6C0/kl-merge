@@ -368,10 +368,10 @@ static char *kspg_text_swt(void *self, const char *key, char *res)
     ck = row == 13 ? "TOQ" : row == 16 ? "Buqiang 300" : row == 32 ? "Buqiang 800" : "Buqiang 900";
     rt[0] = 0; klh_rdstr((DWORD_PTR)res, rt, sizeof rt); rt[sizeof rt - 1] = 0;
     for (i = 0; rt[i]; i++) if (!_strnicmp(rt + i, ck, strlen(ck))) { stockText = 1; break; }
-    if (!kspg_swt) { if (!desc && row < KSPG_ROWS) unbaked[row] = (BYTE)stockText; return 0; }          /* OnlineSwapPic alone: only the unbaked flag is kept */
+    if (!desc && row < KSPG_ROWS) unbaked[row] = (BYTE)stockText;                                  /* the unbaked flag, for every OnlineSwapText mode (1 used to skip it) */
+    if (!kspg_swt) return 0;                                                                        /* OnlineSwapPic alone: only the flag is kept */
     if (kspg_swt == 1) { if (!desc && kl_online() && rs != 2) to = nm; }                       /* names only; ours handed over means the baked name is right */
     else {
-        if (!desc && row < KSPG_ROWS) unbaked[row] = (BYTE)stockText;
         if (desc) { if (rs == 2 && sd && (stockText || (row < KSPG_ROWS && unbaked[row]))) to = sd; }
         else if (rs == 2 && sw) { if (stockText) to = sw; }
         else if ((rs == 3 || rs == 0) && kl_online() && !stockText && rt[0]) to = nm;
