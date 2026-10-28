@@ -484,7 +484,13 @@ feat('onlineboardteleport', G_EXP, 'Online host: last resort, an AI heister stuc
      'klbotfill.c [BotFill] OnlineBoardTeleport (+ S / M); 2 = log only; NOT run live', [('BotFill', 'OnlineBoardTeleport', 1, 0, 0)])
 feat('onlinelegscale', G_EXP, 'Online AI heisters: the time allowed for a long walk grows with its length (recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineLegScale (+ OnlineLegSpeed, OnlineLegMaxS): DD08 legs of 40-60 m timed out at the flat 15 s; NOT run live', [('BotFill', 'OnlineLegScale', 1, 0, 0)])
-feat('onlineboxspread', G_EXP, 'Online AI heisters: each one walks to its own spot inside the escape box instead of the centre (recommended off)', 'off', 'start',
+feat('onlineguardwalk', G_EXP, 'Online AI heisters: when every loot stack is guarded by cops they walk up to the guards instead of standing still (recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineGuardWalk (wk-move-1028, plan 1); needs the host bot options; NOT run live', [('BotFill', 'OnlineGuardWalk', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinewalkreach', G_EXP, 'Online AI heisters: one that walked long and stands near the escape box while the van waits counts as aboard (recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineWalkReach (wk-move-1028, plan 1 van reach; uses OnlineExitCrowd); NOT run live', [('BotFill', 'OnlineWalkReach', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlineescort', G_EXP, 'Online AI heisters with nothing to loot stay near you, as in Arcade (host only; recommended off)', 'off', 'start',
+     'klbotfill.c [Bots] OnlineEscort (1 = host seat, 2 = nearest human; + OnlineEscortFar 800 / OnlineEscortSide 300 cm; wk-move-1028, plan 2); NOT run live', [('Bots', 'OnlineEscort', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlineboxspread',G_EXP, 'Online AI heisters: each one walks to its own spot inside the escape box instead of the centre (recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineBoxSpread: DD08 had 7 bots on one point pushing each other out; NOT run live', [('BotFill', 'OnlineBoxSpread', 1, 0, 0)])
 feat('onlineboxlatch', G_EXP, 'Online AI heisters: one that stood inside the escape box and is still close counts as aboard (recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineBoxLatch (+ OnlineBoxLatchM 1500 cm); NOT run live', [('BotFill', 'OnlineBoxLatch', 1, 0, 0)])
