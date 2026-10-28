@@ -243,7 +243,7 @@ static void klbf_init(void)
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 #define KLBF_OT_GUARDWAIT 30000   /* ms a bot holds while every free stack is guarded (OnlineTacticsGuard) before it takes the nearest guarded one */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; DWORD lootAt, lootTick; int lootPaid, lootPart, lootLeft, lootGot; float lootSec; DWORD gwAt, gwOrd, reachAt, esAt, esLog; float esAnc[3]; int esN; } klbf_ob[KLBF_OT_BOTS];      /* wk-move: gwAt = last tick the bot guard-walked / held at the edge (OnlineGuardWalk), gwOrd its order clock, reachAt OnlineWalkReach clock, esAt/esLog/esAnc/esN the OnlineEscort order clock, log clock, the human's place at the order, orders since the log */      /* wk-arcmods-1028: see klbf_ob_stage below. legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; DWORD lootAt, lootTick; int lootPaid, lootPart, lootLeft, lootGot; float lootSec; DWORD gwAt, gwOrd, reachAt, esAt, esLog; float esAnc[3]; int esN; float holdAt[3]; DWORD holdOrd; int holdN; } klbf_ob[KLBF_OT_BOTS];      /* wk-lpbal: phase-4 hold: where the bot stood when the grab began, its order clock, orders given */      /* wk-move: gwAt = last tick the bot guard-walked / held at the edge (OnlineGuardWalk), gwOrd its order clock, reachAt OnlineWalkReach clock, esAt/esLog/esAnc/esN the OnlineEscort order clock, log clock, the human's place at the order, orders since the log */      /* wk-arcmods-1028: see klbf_ob_stage below. legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
 static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ], klbf_ot_badAt[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
 /* wk-arcmods-1028: heist stage (klbot.c 0..3: 1 entered the bank, 2 left it with loot, 3 at the vehicle) of an online bot, for klhop's ONLINE path.
@@ -1122,7 +1122,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     else {
                         int nparts = (amt + part - 1) / part; float ssec = sec * klbf_lp_scale;
                         klog("botfill: lootparts: bot %d %sstarts stack %08lx (amt %d, part %d, %.2f s/part, ~%.1f s total)", s, klbf_lp == 2 ? "DRY " : "", (unsigned long)o, amt, part, (double)ssec, (double)(nparts * ssec));
-                        if (klbf_lp == 1) { klbf_ob[s].phase = 4; klbf_ob[s].lootAt = klbf_ob[s].lootTick = now; klbf_ob[s].lootPaid = 0; klbf_ob[s].lootGot = 0; klbf_ob[s].lootPart = part; klbf_ob[s].lootLeft = nparts; klbf_ob[s].lootSec = ssec; continue; }
+                        if (klbf_lp == 1) { klbf_ob[s].phase = 4; klbf_ob[s].lootAt = klbf_ob[s].lootTick = now; klbf_ob[s].lootPaid = 0; klbf_ob[s].lootGot = 0; klbf_ob[s].lootPart = part; klbf_ob[s].lootLeft = nparts; klbf_ob[s].lootSec = ssec; memcpy(klbf_ob[s].holdAt, bots[b].pos, 12); klbf_ob[s].holdOrd = 0; klbf_ob[s].holdN = 0; continue; }
                     }
                 }
                 klbf_ob[s].tally += amt; klbf_ob[s].grabs++;
@@ -1151,9 +1151,18 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0, st = 0; DWORD ent, node; float mp[3]; int stop = 0; const char *why = "";
             if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) { why = "stack gone or hidden (taken by someone else?)"; stop = 1; }
             else if (klh_rd(o + 0x64, &st, 1) && st >= 2 && st <= 3) { why = "stack changed state"; stop = 1; }      /* same 2/3 refusal as the lump */
-            else if ((float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2])) > klbf_lp_stay || fabs(bots[b].pos[1] - mp[1]) > 400.0f) { why = "bot moved away"; stop = 1; }
+            else if ((float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2])) > klbf_lp_stay || fabs(bots[b].pos[1] - mp[1]) > 400.0f
+                     || (float)sqrt((bots[b].pos[0] - klbf_ob[s].holdAt[0]) * (bots[b].pos[0] - klbf_ob[s].holdAt[0]) + (bots[b].pos[2] - klbf_ob[s].holdAt[2]) * (bots[b].pos[2] - klbf_ob[s].holdAt[2])) > klbf_lp_stay) { why = "bot moved away"; stop = 1; }      /* wk-lpbal: stay measured from the stack AND from where the bot stood when the grab began (it was within OnlineTacticsNear of the stack, so the anchor is the truer 'standing at it'; the stack centre may sit inside geometry; both limits are OnlineLootStayM) */
             else if (now - klbf_ob[s].lootTick > 60000) { why = "60 s cap"; stop = 1; }
             else {
+                if (!klbf_ob[s].holdOrd || now - klbf_ob[s].holdOrd >= KLBF_OT_REORD) {      /* wk-lpbal: hold = an order to the bot's own standing place (the same 0x760e50 call every walk uses; the game's chain may overwrite it, so it is repeated). Nothing else orders a phase-4 bot: the guard walk / van idle run in phase 0 only, the escort pass skips every phase but 0, the phase 1/2 walk orders and legs skip phase 4; OnlineVanGather deliberately ends the grab */
+                    struct kle_e ho; float hg[3]; char hw[100];
+                    memset(&ho, 0, sizeof ho); ho.rec = -1; ho.actor = a; ho.soldier = bots[b].soldier; ho.told_soft = 1; hw[0] = 0;
+                    if (kle_order2(&ho, klbf_ob[s].holdAt, hg, hw, 0) == 1) {
+                        if (!klbf_ob[s].holdN++) klog("botfill: lootparts: bot %d holds at stack %08lx at (%.0f, %.0f, %.0f), %.1f m from it (order %d, snapped to (%.0f, %.0f, %.0f); repeated every %d s while it takes)", s, (unsigned long)o, klbf_ob[s].holdAt[0], klbf_ob[s].holdAt[1], klbf_ob[s].holdAt[2], kle_dist(klbf_ob[s].holdAt, mp) / 100, klbf_ob[s].holdN, hg[0], hg[1], hg[2], KLBF_OT_REORD / 1000);
+                    } else if (!klbf_ob[s].holdN++) klog("botfill: lootparts: bot %d holds at stack %08lx: hold order refused (%s); the stay check still runs", s, (unsigned long)o, hw[0] ? hw : "no reason");
+                    klbf_ob[s].holdOrd = now;
+                }
                 int due = (int)((now - klbf_ob[s].lootAt) / (klbf_ob[s].lootSec * 1000.0f)) - klbf_ob[s].lootPaid;      /* catch-up: the tick is ~1 s, a part ~0.7 s */
                 while (due-- > 0 && amt > 0) {
                     int give = amt < klbf_ob[s].lootPart ? amt : klbf_ob[s].lootPart, left = 0;
