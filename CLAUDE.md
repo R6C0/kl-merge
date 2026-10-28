@@ -77,9 +77,9 @@ the GDI grab is black with the monitor off). A1LIFT3g/4 (21:35) CORRECT 3d/3f: t
 never reaches the car; kljoin jumps them from outside. Whether the doors open is UNKNOWN (leaf probe offsets wrong; RE offline). (The 40 % downs: Ramp=1 kept the bench's
 CopToYou at stock; a lone player factor needs [Balance] Ramp=0; Ramp now logs it, 403967a5a.)
 
-2026-10-28 ~21:15 - [ce] Merged (default off): OnlineLootParts+hold (LPB3 PASS), OnlineVoice (VOX2 PASS: bots' loot lines heard by the joiner),
-OnlineSwapText (GUN3: 4 rows OURS both seats), OnlineGetUp (GU1 0 faults, not yet exercised: needs a bench with a down next to a bot).
-Next: getup bench with a forced down, unbaked-map GUN test, OnlineTriggers on a 2nd map, traits gap #5.
+2026-10-28 ~21:50 - [ce] Merged (default off): [BotFill] OnlineBalance (c40e46315; BAL2 DD04 online PASS, 0 faults: 193/193 bot->cop hits x0.5),
+earlier OnlineLootParts (LPB3), OnlineVoice (VOX2), OnlineSwapText (GUN3), OnlineGetUp. GU3: the host never sees a joiner's down (replica mirror
+refuses) -> wk-getup2 OnlineGetUpBeacon (UDP KLSYD) built, bench GU4 staged. Running: wk-trait (gap #6, bot traits online). Next: unbaked-map GUN test.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.

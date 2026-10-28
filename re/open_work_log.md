@@ -1,3 +1,9 @@
+2026-10-28 ~21:50 - [ce] BAL2 PASS (wk-bal2 b23c41140, TEST out_bal2_b_test; DD04 online, OnlineBalance=1 OnlineBalanceCops=1 OnlineCopToBot=5,
+[Balance] Risk=2 Ramp=0 YouToCrew/CrewToCop/YouToCrewFar 0.5 Tough 1.5): both seats PASS, faults 0, asserts 0; restore f520f5d1/de91b2a5 checked.
+Host: OnlineBalance ARMED, 50 cops on the private table, CrewToCop 193 bot->cop hits all scaled x0.5 (cop hp lost halved), corpse slots freed
+(42 by the end), cop->bot 0.007 path 1253 hits. YouToCrew not exercised (no human shot a bot). Merged c40e46315. GU3 (4 x 130 kind 9) downed the
+joiner but the host replica never showed it -> wk-getup2 OnlineGetUpBeacon (7f1706b1d + review 637651fa2), GU4 staged in RUN_week_1028.txt.
+
 2026-10-28 ~21:35 - [c9] A1LIFT4 PASS (TEST leafprobe 05e5e76e, faults 0, 82 JPG shots; restore f520f5d1/de91b2a5 checked). Both lift proxies
 (59fc2ce0, 59fc07b0) accepted at the box crossing. The [Probe] DoorLeaves offsets are WRONG: [proxy+0x30]=5 is no controller count,
 slots 3-4 hold junk and every node pos reads 0, so leaf movement is still UNKNOWN. The [Join] CarStall/CarFallback keys in the bench
