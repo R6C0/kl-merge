@@ -30,6 +30,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - 10-28 13:30 c9: DM11B int16 shift merged (9ad0aa579, test ALL OK, NOT RUN): <work>\shift_1028\F04_Main_DM11S.zip (T=-12288,0,-16384; gameplay z min -32725). Bench A1SHIFT after A1HIRE2: install into F04 test slot with the int16 guard off for it; watch vans, spawn doors, shatter, bots, no falls online.
 - Q28_DM06R done 10-28 ~12:00 (c9): PASS, DM06 online both seats IN ROUND on F04, 0 faults (Q27_DM06 failure did not repeat).
 - Q28_DD09R done 10-28 ~12:05 (c9): PASS, DD09 (F09) online both seats IN ROUND, 0 faults, alive +302 s.
+- A1LIFT done 10-28 12:20 (c9): PASS, FedRide=2 proven live (fed no ride while 7 bots above y 10000, rides once crew is down), 0 faults; door box re-arm not verified. Inis C:\kl_build_10241lift_1028.
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
