@@ -1,3 +1,8 @@
+2026-10-29 ~01:40 - [c9] Q28 batch 1 (ship1030 TEST twin 62fb6b35, online, both seats, --owner-away): DD05, DD08, DD09, DM09 PASS, 0 faults,
+restore ok. Checked the map really loaded despite [Expansion] OnlineSet=9 (random per slot online): every online LOAD line picked the bench's
+page and rule (DM09: force=2 page 2 rule DM09, redirect to KLExpansion\Maps\DM09\F06_Main.bots.zip, KLJoin.ini read; DDxx: page 0 own rule).
+Kit: C:\kl_build_1024\c9_1028\q28 (21 maps, run_q28.sh MAP..., summarize_q28.py). Next batches between ce's benches.
+
 2026-10-29 ~01:10 - [c9] SHIPPED ship1030: SHIP dll 9e485dcf (rtp-schemas 17734226d) + ini b599def6 (= ad00a047 + [KLHook] JoinOnline=1
 DoorCloseRemote=1); undo UNDO_ship1030.bat in C:\kl_build_1024\c9_1028\ship1030. Checked first on TEST twin 62fb6b35: SHIPCHK4 (DM11B online,
 installed ini + the two keys) PASS both seats, 0 faults; A1LIFTNET3 PASS 0 faults, joiner rode box 9 to 06_Exit again (6326, 565, -6202).
