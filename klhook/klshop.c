@@ -169,7 +169,7 @@ static void kls_ammo(void)
 }
 
 /* what the pool hands over for shop row `row`: 0 = no pair / not on, 1 = a pair but NOT decided yet (online: before the flip in kls_osw_tick), 2 = ours (*item = the item),
- * 3 = decided STOCK (no template / carrier absent / gun+0x13c missing at state 0x18). Read by kllocname.c ([Shop] OnlineSwapText=2). Any thread, plain reads.
+ * 3 = decided STOCK (no template / carrier absent / gun+0x13c missing at state 0x18). Read by klshoppage.c ([Shop] OnlineSwapText=2). Any thread, plain reads.
  * Review 10-28: one 0 for 'stock' and 'undecided' made mode 2 name the carrier over a correct baked name before the flip. */
 static int kls_row_state(int row, int *item)
 {

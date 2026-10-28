@@ -343,10 +343,11 @@ static void kspg_hire_press(void *self, const char *nm)
  * The picture stays the carrier's on an unbaked map (the hook does not touch it); MP45 / row 7 is not covered. GUESS: the keys are the ones page II reads (same strstr). */
 static int kspg_swt;                                       /* 0 off, 1, 2 (set in kspg_init) */
 static volatile int kspg_swtact;                           /* the shop gate is open (kspg_swt_tick) */
+static BYTE unbaked[KSPG_ROWS];                           /* per row: the name lookup saw the stock text (an unbaked map); cleared when the shop gate closes */
 static LONG kspg_swt_wrapped;                              /* once per shop stay: the first text key that reached the wrapper */
 static char *kspg_text_swt(void *self, const char *key, char *res)
 {
-    const char *p, *q; int row, desc = 0, nd = 0, role, item = 0, rs; const char *nm, *sw, *sd, *ck, *to = 0; char rt[96], *o; static BYTE unbaked[KSPG_ROWS]; int stockText = 0, i;
+    const char *p, *q; int row, desc = 0, nd = 0, role, item = 0, rs; const char *nm, *sw, *sd, *ck, *to = 0; char rt[96], *o; int stockText = 0, i;
     if (!kspg_swt || !kspg_swtact || !key || !res || kspg.hire || kspg.ctl || kspg.shownB) return 0;
     if ((p = strstr(key, "WeaponShop/Weapon")) == 0) return 0;
     for (q = p + 17; *q >= '0' && *q <= '9'; q++) nd++;
@@ -550,15 +551,17 @@ static void kspg_refused(int before0, int before1, DWORD m0, DWORD m1)
 
 static void kspg_note_buy(int before0, int before1)
 {
-    int now[2], s; now[0] = (int)(signed char)(BYTE)klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)); now[1] = (int)(signed char)(BYTE)(klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)) >> 8);
+    int now[2], s, chg = 0; now[0] = (int)(signed char)(BYTE)klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)); now[1] = (int)(signed char)(BYTE)(klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)) >> 8);
     for (s = 0; s < 2; s++) {
         int before = s ? before1 : before0;
         if (now[s] != before || (kspg.trickOn && kspg.trickSlot == s && kspg.trickRow == now[s])) {
             kspg.own[s] = (!kl_online() || kspg.apply) && kspg.shownB && now[s] >= 0 && now[s] < KSPG_ROWS && kspg.p[now[s]].ok;      /* online a page II gun is handed over only with OnlineApply (picture of the carried card; the hand-over itself follows the book, kspo_wantB) */
+            chg = 1;
             if (kspg.log) klog("shopPage: slot %d now carries row %d from set %c", s, now[s], kspg.own[s] ? 'B' : 'A');
         }
         kspg.carried[s] = now[s];
     }
+    if (!chg && kspg.log) klog("shopPage: the buy left both slots unchanged (slot 0 row %d, slot 1 row %d; refused for money or a rank lock, or a confirm dialog still open; kspg_refused logs only offline)", now[0], now[1]);
     kspg.trickOn = 0;
 }
 
@@ -1174,6 +1177,7 @@ static void kspg_init(void)
        swap alone (page II stays off). The page II code returns early on kspg.have == 0 (kspg_early_body). */
     if (kls.on && kls.osw && GetPrivateProfileIntA("Shop", "OnlineSwapArm", 0, klh_ini) != 0) { kspg.swapArm = 1; klog("shop: OnlineSwapArm=1 (NOT run in the game): the early-make hook is armed for [Shop] OnlineSwap=%d even without [ShopPage] pairs", kls.osw); }
     else if (kls.on && kls.osw && !kspg.on) klog("osw: OnlineSwap=%d but the early-make hook is NOT armed ([ShopPage] Enable=0 and [Shop] OnlineSwapArm=0): online the swap does nothing", kls.osw);
+    /* ORDER MATTERS: this init must stay BEFORE the 'if (!kspg.on) return;' below, or OnlineSwapText silently stops working with [ShopPage] Enable=0. */
     kspg_swt = kls.on ? GetPrivateProfileIntA("Shop", "OnlineSwapText", 0, klh_ini) : 0;
     if (kspg_swt < 0 || kspg_swt > 2) kspg_swt = 0;
     if (kspg_swt) klog("shoptext: [Shop] OnlineSwapText=%d (recommended off; GUN1 10-28 found the old kllocname.c path never ran): the shop rows 13/16/32/35 text is answered in the elements' slot 24 on the stock page; the element scan runs without [ShopPage] Enable", kspg_swt);
@@ -1331,7 +1335,7 @@ static void kspg_swt_tick(void)
     static DWORD lastGate, lastScan; DWORD now = GetTickCount();
     if (now - lastGate > 250) {
         int g = kspg_gate_x(2); lastGate = now;
-        if (g != 1) { if (kspg_swtact) InterlockedExchange(&kspg_swt_wrapped, 0); kspg_swtact = 0; return; }
+        if (g != 1) { if (kspg_swtact) { InterlockedExchange(&kspg_swt_wrapped, 0); memset(unbaked, 0, sizeof unbaked); } kspg_swtact = 0; return; }
         kspg_swtact = 1;
     }
     if (kspg_swtact && !kspg.active && !kspg.hact && now - lastScan > 1500) { lastScan = now; kspg_scan(); }   /* the other two ticks scan when they are active */
