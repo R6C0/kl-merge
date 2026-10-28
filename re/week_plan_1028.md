@@ -1,0 +1,50 @@
+# Week plan 2026-10-28 .. ~11-04 (owner away, full access, never ask)
+
+Owner's words (10-28 ~11:30): "implement those features of the gamemodes into reasonable keybinds and also shops / UIs so people
+can see what they can do so it isnt just a secret feature, make sure the maps all work on both sides and the ai heisters work on
+the respected maps and also make them the same as they are in arcade with behaviour and looting since they dont do much in online
+and also trigger the cops or enemies to also get spawned or whatever from the ai heisters as well instead of just the player and
+sort the maps gun ui, sounds to match mp45 from arcade to multiplayer overhaul everything i better see big progress".
+The owner reads the VS Code chat and their Claude app chats only. Every feature stays an ini toggle "(recommended on/off)".
+
+This file is the shared queue for every session: the live chats (kl-merge-ce, kl-merge-c9, henri-3f) and the scheduled
+headless resumes (`tools/kl_week_resume.ps1`, Windows task "KLMerge Resume"). Claim a track by writing your name and the time
+next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest status first inside each track.
+
+## Tracks
+
+### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
+Owner wants every mod feature reachable on a sensible key and shown on screen (shop pages, hint lines, a controls page).
+- [ ] Inventory of every mod key and feature (klhook/*.c VK_/DIK reads, ini keys) -> re/keybinds.md, with clashes.
+- [ ] One coherent key map (no clashes with stock DD binds), configurable in KLHook.ini [Keys].
+- [ ] In-game "MOD CONTROLS" page in the shop (same carrier trick as the hire page) + a one-line hint in the buy menu caption.
+- [ ] Toggles visible in Mod Options.
+Owner: ce.
+
+### T2 Maps work on both sides (host and client), all maps
+- [ ] 2-seat bench per map (DD 9 stock FA + every DM/graft map), host and client both reach round 2, 0 faults.
+- [ ] Fix per-map failures (DM11B int16, Retomoto lift, missing wardrobe models -> hired body stays stock).
+Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
+
+### T3 AI heisters online = Arcade (behaviour + looting)
+- [ ] Diff Arcade vs online bot code paths (BotFill, klcrew, klgrudge, klhop, klcardown, klcdying, klshield: 0 online refs).
+- [ ] Online bots loot, carry, bank and escape like Arcade.
+Owner: unclaimed.
+
+### T4 AI heisters trigger cops / enemy spawns (not only the player)
+- [ ] Find what starts cop waves and spawn triggers (player-only checks), make bot actions count, Arcade and online.
+Owner: unclaimed.
+
+### T5 Gun UI + sounds Arcade -> multiplayer (MP45 first)
+- [ ] Find why the MP45 (and other guns) show different icon/name/sound online vs Arcade; make online match Arcade on every map.
+Owner: ce.
+
+### T6 Ops
+- [x] Scheduled resume: Windows task "KLMerge Resume" every 2 h until 2026-11-04 runs tools/kl_week_resume.ps1 (skips while
+  any session transcript is fresh; log in <work>\week_resume\).
+- [ ] AnyDesk + "leave Claude running" guide for the owner's Thursday setup: re/anydesk_setup.md.
+
+## Rules for every session (short)
+Never KL_PortBackup, never push main or force-push, commit + push rtp-schemas with what crashed and why, backups (keep 3),
+live runs only when the owner is idle 5 min, a game-folder write that is refused -> leave a bat. Notes: CLAUDE.md Open work +
+re/open_work_log.md (newest first).
