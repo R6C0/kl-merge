@@ -3,7 +3,7 @@
 #ifndef KLDOORCLOSE_LOGIC_H
 #define KLDOORCLOSE_LOGIC_H
 
-#define KLDC_N          4                      /* proxies followed at once (Retomoto has 2 lifts) */
+#define KLDC_N          8                      /* proxies followed at once (Retomoto has 2 lifts; M09_B lobby banks may add more) */
 #define KLDC_STALE_MS   120000                 /* a close this long overdue is given up (level left): nothing is touched */
 
 struct kldc_p { unsigned long me, at, seen; int done; };   /* proxy object, tick of its open, leaf-0 start ms last seen, closed/given up */
@@ -13,6 +13,15 @@ static int kldc_slot(const struct kldc_p *t, int n, unsigned long me)
 {
     int k, f = -1;
     for (k = 0; k < n; k++) { if (t[k].me == me) return k; if (f < 0 && (!t[k].me || t[k].done)) f = k; }
+    return f;
+}
+
+/* slot for a NEWLY FOUND proxy: its own, else an empty one, else -1. Never evicts a followed (done) slot: that thrashed the table and re-logged
+   'following' every walk when more proxies than slots qualified. */
+static int kldc_slot_free(const struct kldc_p *t, int n, unsigned long me)
+{
+    int k, f = -1;
+    for (k = 0; k < n; k++) { if (t[k].me == me) return k; if (f < 0 && !t[k].me) f = k; }
     return f;
 }
 
@@ -27,7 +36,7 @@ static int kldc_is_open(unsigned long seen, unsigned long st, int act99, unsigne
 /* tick of the open, from the game-ms clock: the start was (gms - st) ms ago */
 static unsigned long kldc_open_at(unsigned long now, unsigned long gms, unsigned long st)
 {
-    unsigned long at = now - (gms - st);
+    unsigned long at = (!gms || gms < st) ? now : now - (gms - st);   /* unreadable / odd clock: treat as just now, never wrap */
     return at ? at : 1;
 }
 

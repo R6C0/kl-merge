@@ -35,7 +35,7 @@
 #define KLDC_SCAN_MS   15000
 
 static struct kldc_p kldc_t[KLDC_N];
-static int kldc_ms, kldc_nscan; static DWORD kldc_find_at, kldc_scan_at, kldc_scan_win;
+static int kldc_ms, kldc_nscan; static DWORD kldc_find_at, kldc_scan_at;
 #ifdef KLHOOK_TEST
 static void klpr_leaf_start(DWORD me, DWORD at);       /* klprobe.c (DoorLeaves): sample the closing too */
 #endif
@@ -44,7 +44,9 @@ static int kldc_name_ok(DWORD obj)
 {
     char b[96]; DWORD n = klh_rd32(obj + 4);
     if (n && klh_rdstr(klh_rd32(n + 0x6c), b, sizeof b)) return strstr(b, "Elevator") || strstr(b, "Escape") || strstr(b, "VideoProxy") || strstr(b, "Exit");
-    return 1;                                          /* unreadable: allowed, as the probe did */
+    /* unreadable name: allowed only if the proxy has the lift door's own frames (first 0, last 75; GUESS from the Retomoto data), so a generic
+       anim proxy is never closed with the lift's 75..160 */
+    return klh_rd32(obj + 0x23c) == 0 && klh_rd32(obj + 0x240) == 75;
 }
 
 /* a proxy that looks sane: vtable, 1..8 leaves, leaf 0 a ZMatPosAnim */
@@ -60,9 +62,11 @@ static int kldc_sane(DWORD me)
 
 static void kldc_add(DWORD me)
 {
-    int f = kldc_slot(kldc_t, KLDC_N, me);
+    int f = kldc_slot_free(kldc_t, KLDC_N, me); DWORD l0;
     if (f < 0 || kldc_t[f].me == me || !kldc_sane(me) || !kldc_name_ok(me)) return;
-    kldc_t[f].me = me; kldc_t[f].at = 0; kldc_t[f].seen = 0; kldc_t[f].done = 1;       /* followed; nothing to close until an open is seen */
+    l0 = klh_rd32(me + 0x34);
+    /* baseline the leaf's current start: a door that never opened must not look like an open because its init state already matches */
+    kldc_t[f].me = me; kldc_t[f].at = 0; kldc_t[f].seen = klh_rd32(l0 + 0x34); kldc_t[f].done = 1;       /* followed; nothing to close until an open is seen */
     klog("doorclose: following lift-door proxy %08lx (%lu leaf(s))", (unsigned long)me, (unsigned long)klh_rd32(me + 0x30));
 }
 
@@ -160,7 +164,11 @@ static void kldc_close(int k, DWORD now)
 static void kldc_tick(int game_thread)
 {
     int k; DWORD now;
-    if (kldc_ms <= 0 || !klh_exe_ok || !kldc_lift_map()) return;
+    if (kldc_ms <= 0 || !klh_exe_ok) return;
+    if (!kldc_lift_map()) {                                    /* not a lift map (or level left): forget proxies and the scan budget */
+        memset(kldc_t, 0, sizeof kldc_t); kldc_nscan = 0; kldc_find_at = 0; kldc_scan_at = 0;
+        return;
+    }
     now = GetTickCount();
     if (now - kldc_find_at >= KLDC_FIND_MS) {                  /* look for proxies (also re-found after a level load) */
         int found, any = 0;
@@ -168,10 +176,10 @@ static void kldc_tick(int game_thread)
         found = kldc_walk();
         for (k = 0; k < KLDC_N; k++) if (kldc_t[k].me && kldc_sane(kldc_t[k].me)) any = 1;
         if (!found && !any) {
-            if (now - kldc_scan_win >= 120000) { kldc_scan_win = now; kldc_nscan = 0; }
+            /* at most 3 scans per lift-map visit (no refilling window): the proxies may simply not be where we look */
             if (kldc_nscan < 3 && now - kldc_scan_at >= KLDC_SCAN_MS) {
                 kldc_scan_at = now; kldc_nscan++;
-                klog("doorclose: the entity walk found no door proxy: memory scan %d of 3 found %d", kldc_nscan, kldc_scan());
+                { int sn = kldc_scan(); klog("doorclose: the entity walk found no door proxy: memory scan %d of 3 found %d", kldc_nscan, sn); }
             }
         }
     }
@@ -184,6 +192,7 @@ static void kldc_tick(int game_thread)
         klh_rd(l0 + 0x99, &act, 1); klh_rd(l0 + 0xd0, &i0, 4); klh_rd(l0 + 0xd4, &i1, 4); klh_rd(me + 0x23c, &p0, 4); klh_rd(me + 0x240, &p1, 4);
         if (kldc_is_open(kldc_t[k].seen, st, act, i0, i1, p0, p1)) {
             gms = klh_rd32(klh_rd32((DWORD_PTR)KLH_VA(KLDC_GAMECLK)) + 0x48);
+            if (!gms || gms < st) klog("doorclose: game clock %lu unusable against leaf start %lu: open taken as now", (unsigned long)gms, (unsigned long)st);
             kldc_t[k].at = kldc_open_at(now, gms, st); kldc_t[k].seen = st; kldc_t[k].done = 0;
             klj_door_at = kldc_t[k].at;
             klog("doorclose: proxy %08lx opened %lu ms ago (leaf start %lu, game ms %lu): close due in %d ms", (unsigned long)me, (unsigned long)(now - kldc_t[k].at), (unsigned long)st, (unsigned long)gms, kldc_ms);

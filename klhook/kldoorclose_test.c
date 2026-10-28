@@ -38,16 +38,25 @@ int main(void)
     CHECK(kldc_step(5, 0xfffffff0ul, 12000, 0) == 0);         /* wrap: 21 ms after the open */
     CHECK(kldc_step(12000 - 16 + 5, 0xfffffff0ul, 12000, 0) == 1);
     /* slots: per proxy, an existing one is found again, finished ones are reused, a full table says -1 */
-    CHECK(kldc_slot(t, KLDC_N, 0x100) == 0);                  /* empty table: first free */
+    CHECK(kldc_slot(t, 4, 0x100) == 0);                  /* empty table: first free */
     t[0].me = 0x100; t[0].done = 0;
-    CHECK(kldc_slot(t, KLDC_N, 0x100) == 0);
-    CHECK(kldc_slot(t, KLDC_N, 0x200) == 1);
+    CHECK(kldc_slot(t, 4, 0x100) == 0);
+    CHECK(kldc_slot(t, 4, 0x200) == 1);
     t[1].me = 0x200; t[2].me = 0x300; t[3].me = 0x400;
-    CHECK(kldc_slot(t, KLDC_N, 0x500) == -1);                 /* all four open, none done */
+    CHECK(kldc_slot(t, 4, 0x500) == -1);                 /* all four open, none done */
     t[2].done = 1;
-    CHECK(kldc_slot(t, KLDC_N, 0x500) == 2);                  /* a finished slot is reused */
-    CHECK(kldc_slot(t, KLDC_N, 0x400) == 3);                  /* but an existing proxy keeps its own slot */
-    CHECK(kldc_slot(t, KLDC_N, 0x300) == 2);
+    CHECK(kldc_slot(t, 4, 0x500) == 2);                  /* a finished slot is reused */
+    CHECK(kldc_slot(t, 4, 0x400) == 3);                  /* but an existing proxy keeps its own slot */
+    CHECK(kldc_slot(t, 4, 0x300) == 2);
+    /* newly found proxies never evict a followed (done) slot */
+    t[3].done = 1;
+    CHECK(kldc_slot_free(t, 4, 0x600) == -1);
+    CHECK(kldc_slot_free(t, 4, 0x400) == 3);
+    t[1].me = 0;
+    CHECK(kldc_slot_free(t, 4, 0x600) == 1);
+    /* unusable clock: open taken as now */
+    CHECK(kldc_open_at(20000, 0, 4000) == 20000);
+    CHECK(kldc_open_at(20000, 3000, 4000) == 20000);
     /* two proxies close independently: one close each (done is per slot) */
     memset(t, 0, sizeof t);
     t[0].me = 0x100; t[0].at = 1000; t[1].me = 0x200; t[1].at = 1500;
