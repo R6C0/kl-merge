@@ -71,3 +71,25 @@ Balance vs "the AI is too OP": mean effective health 0.998, mean AimSpread 0.996
    `grudge: record N (...): health ... x<f>` matching Health / DamageIn of that name, accuracy lines for AI with a changed AimSpread,
    `balance: your health set ... maximum` scaled by the human's trait, no faults, clean exit.
 3. Dry=1 first: only the `trait:` lines, no change in the other lines.
+
+## ONLINE (wk-trait, 2026-10-28; NOT RUN IN THE GAME)
+
+Two separate things, both off by default:
+
+1. `[Voice] OnlineTraits=1`: the LOCAL online human's trait is only known and logged (for kltalk.c). `kltt_get()` still answers 1.0 for every online record: a human's health and timers are per peer, nothing is written.
+2. `[BotFill] OnlineBotTraits=1` (this section): the AI heisters (bots) of an online FA round, on the HOST only. Needs `[Traits] Enable=1`, `[BotFill] OnlineHost=1`, `OnlineTactics=1` and `OnlineLooks=1`.
+
+Who is the bot: an online bot has no crew record, so the identity is the character the host DREW for him in klcrewlook.c (OnlineLooks=1, `klcl_t.e[digit-1].ch`, an index into the wardrobe list of the host's level). `klcl_bot_look()` answers it only for a bot whose look is APPLIED (klcl_note code 1 or 4); a kept body, a skipped or still pending look is no trait. The name comes from the host's wardrobe (`klcl_bot_name`), the factors from `[Trait.<Name>]` (`kltt_set_of`, clamped by MaxDelta). Pure logic: `klbottrait.h` (`klbottrait_test.c`).
+
+| Knob | Online bot (host) | Where |
+|---|---|---|
+| Health, DamageIn | APPLIED: every hit on that bot is multiplied by DamageIn / Health (same as a maximum health of Health / DamageIn for equal hit counts). Independent of, and multiplied with, OnlineBalance's Tough (1 / Tough). Point-blank steps and non-positive scales are left alone, as Tough does | `klbalance.c` `klr_cb_hit` (outer) -> `klr_cb_hit_in` -> `klr_tr_orig` (the shim every `orig` call of the existing slot-423 paths goes through) |
+| ReviveTime | APPLIED: `[BotDown] LieSeconds` x it (needs `[Down] OnlineBotDown=1`, LieSeconds > 0) | `klbotdown.c` |
+| DamageOut, AimSpread | NOT applied: no online accuracy write for bots exists (`klgrudge.c kly_aim` runs on Arcade crew records only) | - |
+| Regen | NOT applied: the hook writes no regeneration for a bot | - |
+| Adrenaline | NOT applied: online has no bot helper path (`kladren.c` needs the crew records) | - |
+
+Design choice: the slot-423 hit wrapper is armed whenever OnlineCopToBot, `[Balance] Online`, OnlineBalance OR OnlineBotTraits is on (`klr_tick`). The old paths are untouched: the outer wrapper only decides a multiplier (`klr_tr_mult`) and the shim applies it around the real routine, restoring the scale after, as those paths do. With the key off the multiplier is always 1.0 and the shim is a pass-through. Human seats keep 1.0.
+Caveats: the lost-hp counters of OnlineBalance / OnlineCopToBot include the trait while their "without the factor" numbers do not. A bot whose look is not applied yet (first seconds of the round) has no trait. `Dry=1` resolves and logs, applies nothing.
+
+Log (grep `trait:`): `trait: OnlineBotTraits=1 ...` once; `trait: online bot <actor> wears <name>: Health x.. DamageIn x.. ReviveTime x.. APPLIED (hit scale x.., LieSeconds x..); DamageOut x.. AimSpread x.. Regen x.. Adrenaline x.. NOT applied online` once per bot and look (or `... no [Trait.<name>] block, no trait`); `trait: online bot <actor> hit: scale a -> b (DamageIn / Health x..) #n` for the first 3 hits; `trait: online bots 30 s: ...` counters (hits seen, scaled with mean multiplier, refused writes, lie applied).
