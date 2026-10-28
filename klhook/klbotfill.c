@@ -1082,7 +1082,13 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
                 bs[nn] = b; d[nn] = fabsf(pos[b][1] - hp[1]) > 400.0f ? -1.0f : (float)sqrt(dx * dx + dz * dz); nn++;      /* another floor: no candidate (Arcade 2 m of height; 4 m here, stairs) */
             }
             pick = kgu_pick(d, nn, klbf_gu_range);
-            if (pick < 0) continue;
+            if (pick < 0) {      /* GU5 10-28: seat 1 lay 16 s with every bot 60-80 m off and nothing said why: once per down */
+                static int noTold[16]; static DWORD noAt[16]; int q; float best = -1;
+                if (noAt[i] != hAt[i]) { noAt[i] = hAt[i]; noTold[i] = 0; }
+                for (q = 0; q < nn; q++) if (d[q] >= 0 && (best < 0 || d[q] < best)) best = d[q];
+                if (!noTold[i]++) klog("botfill: getup: seat %d is down but no free bot is within OnlineGetUpRange %.0f cm (%d free bot(s), nearest on this floor %s%.0f cm)", i, klbf_gu_range, nn, best < 0 ? "none, " : "", best < 0 ? 0.0f : best);
+                continue;
+            }
             rb = bs[pick];
         }
         for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != act[rb]; s++) ;
