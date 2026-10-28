@@ -1,3 +1,9 @@
+2026-10-29 ~01:10 - [c9] SHIPPED ship1030: SHIP dll 9e485dcf (rtp-schemas 17734226d) + ini b599def6 (= ad00a047 + [KLHook] JoinOnline=1
+DoorCloseRemote=1); undo UNDO_ship1030.bat in C:\kl_build_1024\c9_1028\ship1030. Checked first on TEST twin 62fb6b35: SHIPCHK4 (DM11B online,
+installed ini + the two keys) PASS both seats, 0 faults; A1LIFTNET3 PASS 0 faults, joiner rode box 9 to 06_Exit again (6326, 565, -6202).
+17734226d: DoorCloseRemote now walks the session hero table (klco_table, skip klco_is_master); research: [gd+0x828] is the LOCAL slot list only.
+Live: table holds 16 players; no 'doors held' yet (the joiner's jump came 0.4 s before the host's close), so the hold itself is still unexercised.
+
 2026-10-29 ~00:00 - [ce] merged wk-botpar-1028 ad6fab873, all default off, kl_tests 34/8/1. BP7 (DD04, out_botpar_g_test, joiner down at 30 s)
 PASS 0 faults: OnlineGetUpKeepGoal kept the goal, bot 3 sent from 72.9 m closed at 2.6-5.5 m/s and stood by seat 1 after 16 s (no stop-and-go);
 bots 0/1 finished 22/22. BP8 (DD08, OnlineGuardMode) PASS 0 faults: every bot took the stack with the fewest cops, 5 finished 10/10 (BP5: 0 loot);
