@@ -77,10 +77,10 @@ the GDI grab is black with the monitor off). LIFT WORKS (22:00): doors open (A1L
 leaf probe); [player+0x460] lagged at the doorway, fixed by [KLHook] JoinFeetNode=1; A1LIFT4e ride from inside the car PASS (merged f82314fa5; SHIPPED 22:30 as ship1028 dll dc0836b8 after SHIPCHK2 + A1LIFT5 PASS; doors never close in data: [KLHook] DoorCloseMs=8000 closes them, SHIP-safe kldoorclose.c; SHIPPED 23:20 as ship1029 dll 897decf7 + ini ad00a047 after SHIPCHK3 + A1LIFT8 PASS). (The 40 % downs: Ramp=1 kept the bench's
 CopToYou at stock; a lone player factor needs [Balance] Ramp=0; Ramp now logs it, 403967a5a.)
 
-2026-10-28 ~23:10 - [ce] Merged (default off): [BotFill] OnlineBotTraits (deb65d2bf; TRT1 DD04 online PASS, 0 faults, 1462 bot hits scaled; no bot
-went down, LieSeconds x ReviveTime unseen live), OnlineBalance (BAL2), OnlineLootParts, OnlineVoice, OnlineSwapText, OnlineGetUp. wk-getup2: the host now
-sees a joiner's down (GU5, beacon KLSYD); no bot was sent because all were 60-80 m off -> GU6 staged (range 80 m, down at 60 s). Side channels
-(KLSYD/L/B/V) are LAN-only. Running: wk-botpar (loot finish, escort by node, smart van gather).
+2026-10-28 ~23:40 - [ce] Merged (all default off): OnlineBotTraits (TRT1), OnlineGetUpBeacon (GU6: host sees the joiner's down, bot sent from 72 m), [Net] SteamProbe
+(log only), wk-botpar b20d4f392: OnlineLootFinish(+CopM), OnlineEscortNode, OnlineVanGatherSmart, OnlineGetUpSprint. BP2 online both seats PASS, 0 faults:
+escort now reads 8 humans (BP1 read all dead). Still wrong: loot bots leave at the 5 m drift / cop tick; Sprint did not speed the rush (2.2 m/s).
+Running: botpar round 3 (pause-not-leave, rush speed). Side channels KLSYD/L/B/V are LAN-only (re/side_channel_steam.md).
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.

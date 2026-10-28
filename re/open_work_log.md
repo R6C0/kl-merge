@@ -1,3 +1,10 @@
+2026-10-28 ~23:40 - [ce] BP2 (wk-botpar round 2, DD04 online, out_botpar_c_test; BP1 keys + CopM 8 + OnlineGetUp/Beacon/Range 8000/Sprint, joiner
+self-down at 60 s) PASS both seats, 0 faults; restore = ship1029 (897decf7 / ad00a047). Escort FIXED: "feet source this round: 8 human(s) read, host seat
+by the scene node", bots 0/3/4/5/6 follow seat 0. Getup: beacon down seen, bot 4 sent from 71.7 m with "rush at Sprint", closed to 39 m in 15 s
+(2.2 m/s = no faster than GU6's walk), joiner mashed up at 18.2 s, "Sprint style undone" at release. Loot finish NOT fixed: bot 1 left on the very
+tick of the CopM line (5 of 22), bot 2 3 s after it at 1.1 m (7 of 22), bot 0 drifted to 5.0 m in 3 s with no cop (10 of 22). Van gather ran: called at
+the 40 s wait-out with 64 s left, bot 1 boarded. Merged b20d4f392 (kl_tests 33/8/1). Round 3 running: OnlineLootFinishPause, rush speed cause.
+
 2026-10-28 ~23:20 - [c9] SHIPPED ship1029: dll 897decf7 (rtp-schemas bf3c00be0) + KLHook.ini ad00a047 (de91b2a5 + [KLHook] DoorCloseMs=8000).
 Door close is now SHIP-safe (kldoorclose.c polls the lift proxies: entity walk, else a budgeted memory scan; writes only leaf ints/floats + thiscall
 0x59dce0; no code/vtable writes; workflow port + 2 reviews + fix). A1LIFT7 + A1LIFT8 PASS (found by scan, both lifts closed 8 s after open), SHIPCHK3
