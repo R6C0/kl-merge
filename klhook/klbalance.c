@@ -442,10 +442,13 @@ static int klr_table(DWORD tun, struct klr_row out[KLR_NLEVEL + 1])
 
 static float klr_want(int k, float stock)
 {
+    static int told;                          /* one line per key a run: Ramp's clamp was silent and hid A1LIFT3's CopToYou=0.001 (10-28) */
     float v = klr.f[k];
     if (v < 0) return stock;
-    if (klr.ramp && klr_kind[k] > 0 && stock > v) return stock;
-    if (klr.ramp && klr_kind[k] < 0 && stock < v) return stock;
+    if (klr.ramp && ((klr_kind[k] > 0 && stock > v) || (klr_kind[k] < 0 && stock < v))) {
+        if (!(told & (1 << k))) { told |= 1 << k; klog("balance: %s=%.3f held at stock %.2f by Ramp=1 (add [Balance] Ramp=0 to write it as given)", klr_key[k], v, stock); }
+        return stock;
+    }
     return v;
 }
 
