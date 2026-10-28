@@ -1,3 +1,5 @@
+2026-10-28 ~19:05 UTC - scheduled check-in (cloud, repo-only: no PC folder attached and the PC is BUSY, c9/ce commits at 18:27-18:44 UTC; nothing launched/installed/read). kl_tests on 3a9e0b8 in the cloud (gcc-multilib): 20 pass 0 fail 13 SDK skips. klrappel_test 'flaky (timing)' FIXED (99f9d30): Sleep(60) raced the 50 ms start gate (GetTickCount steps 15.6 ms, 60 ms can read 46 ms); the harness now owns the clock, +cases 7b (re-arm 2 s) and 8 (gate + tick wrap), 18 checks pass with a stepped-clock stub, MinGW clean, cl NOT RUN. Details debug/notes/2026-10-28-scheduled-triage.md. Owner: nothing to install.
+
 2026-10-28 ~21:05 - [c9] Lift-run downs explained (workflow lift-down-cause, verified): not the hook. [Balance] CopToYou/CrewToYou=0.001 were
 held at stock 0.10 by the default Ramp=1 (klr_want, klbalance.c; the 'balance: on' line printed the asked 0.00), so plain fire wore the x10
 health down to the game's own 40 % down (trigger 0x8da3b0: <= 40 %, 120 damage in 1 s; re/player_down.md); 3e's down waited out the
