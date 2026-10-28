@@ -42,6 +42,12 @@ ABSOLUTE, each needs its own pass:
   moved in natural order = GUESS; DM11B has none). `tools/kl_sgp_sgd_translate_test.py` proves both on every stock and graft
   member (exact move, back within 0.01, no other byte changed). NOTE the grafts carry stale leaves already (DM11B's EscapeChopper
   ShatterGeom 43.6k off, DM03A 82 vault leaves 8..20k off): `tools/kl_sgd_audit.py`, debug/notes/2026-10-28-scheduled-triage.md.
+  2026-10-28 second check-in: the DM03A vault leaves are stale in Dead Men's OWN M03A_Main.sgd (same 83 REFs and distances, x/z
+  swapped while the .HVK placement agrees with the .gms): source data, not the graft. Frame rule recovered (36 stock + DM
+  trees exact): stored centre = MIN corner of the leaf points, scale = 32000 / largest span, quantiser truncates in float32.
+  `Octree.build` / `Octree.replace` / `sgd_refresh` (kl_members), `kl_sgd_audit.refresh` + `--fix out.zip`; kl_graft calls the
+  refresh on the joined .sgd (leaves over 2000 units from their entity go back on it, Animation/ subtrees excepted); debug/check.py
+  prints the count. Not yet run through a real build on the PC.
 - .buf head 1942 pairs (KEYS tracks, room gates/lists, GUESS: some are positions), light records, SND/ZLNK emitter data: NOT
   identified one by one.
 Rooms: .rmi/.rmc lookups use the point, so a missed box = "no room" = silent/lit wrongly, not a crash.

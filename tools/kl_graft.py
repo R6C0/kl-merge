@@ -1491,6 +1491,15 @@ def build(s_name, m_name, slot='F01', log=print, sel=None, sound=True, loc=True,
     hvk = kl_hvk.join([(kl_hvk.Hvk(M['.HVK']), refs_m)], (kl_hvk.Hvk(S['.HVK']), refs_s))
     hvk = (kl_escape.cut_collision(hvk, cut, log) if cut else hvk).serialize()           # ... and its collision gone
     sgd = MB.sgd_join([(M['.sgd'], refs_m), (S['.sgd'], refs_s)])
+    # stale octree leaves (2026-10-28 scheduled check-in): a leaf farther than kl_members.STALE from its
+    # entity's final origin goes back onto it (Dead Men's own M03A ships 83 vault leaves with x/z swapped;
+    # the escape authoring moves the chopper and its ShatterGeom leaf stayed), Animation/ subtrees excepted
+    import kl_sgd_audit
+    sgd, stale = kl_sgd_audit.refresh(gms, buf, sgd, packed=False)
+    if stale:
+        per = collections.Counter(n for n, _r, _d in stale)
+        log('  .sgd: %d stale octree leaves put back on their entity (%s; farthest %.0f units)' % (
+            len(stale), ', '.join('%s %d' % (k, v) for k, v in sorted(per.items())), max(d for _n, _r, d in stale)))
     s_names = {S.prp.names[t] for t in s_tops}
     m_names = {M.prp.names[t] for t in m_tops}
     room_paths = [Jn.path[k][5:] for k in range(1, len(Jn.nodes)) if is_room(Jn.tids[k])]

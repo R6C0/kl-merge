@@ -38,7 +38,18 @@ ids, .SND offsets.
     units off, 'Lights_Front_On'/'Lights_Back_On' of Animation/F07 5k..66k off in 8 DM maps,
     DM03A 30 shatter leaves 16k..18k off) - see kl_sgd_audit.py. World translation: the
     centre moves by (tz, ty, tx) (`Octree.translate`, `sgd_translate`); the quantised leaves
-    stay.
+    stay. FRAME RULE (MEASURED 2026-10-28 second check-in, 36 stock trees of DD F01..F09 and
+    DM M01FAA M02FAA M03A M03FAA M05A M06A M06FAA M09A M09B M11B, all exact): the stored
+    "centre" is the MINIMUM corner of the leaf points (the smallest point quantises to exactly
+    0x8000 on every axis) and scale = 32000 / the largest axis span; the stock quantiser
+    truncates in float32, so the largest point lands on 0xfd00 or, half the time, 0xfcff.
+    `Octree.build` applies the rule with round-to-nearest in double: it re-quantises every one
+    of the 13,227 stock + graft leaves to its stored value (0 mismatches, so a rebuild is
+    byte-stable) and reproduces 20 of the 37 stock / Dead Men trees byte for byte; the 17 whose
+    far point truncated to 0xfcff get a scale 1/32000 larger and leaves within one quantum.
+    The DM03A vault leaves are stale IN DEAD MEN'S OWN M03A_Main.sgd (same 83 REFs, same
+    distances, x and z swapped against the .HVK placement, which agrees with the .gms): a
+    shipped data bug, not the graft's. `sgd_refresh` puts stale leaves back on their entity.
   - "SecurityZones" (0x448530; L00, M03A, M05A, M09B): 0x40-byte boxes {3x3 f32, centre, half
     extents, u32}. No references.
   - "HavokShatterGlassConnectivity" (0x8aba40, only if the glass manager [0x153ab14] exists;
@@ -217,28 +228,62 @@ class Octree:
         out = struct.pack('<I4f', 0x14 + len(body), *self.centre, self.scale) + body
         return out + b''.join(struct.pack('<I6H', r, *a, *b) for r, a, b in leaves)
 
+    SPAN_Q = 32000                                        # 0xfd00 - 0x8000: the largest span's quantum count
+
+    def quantise(self, p):
+        """A stored-order point -> (REF-less) (min q, max q) in this tree's frame."""
+        q = tuple(int(round(0x8000 + (v - c) * self.scale)) for v, c in zip(p, self.centre))
+        return q, tuple(v + 1 for v in q)
+
+    @classmethod
+    def build(cls, points):
+        """points = [(REF, stored-order point)] -> a tree in the STOCK frame (docstring, FACT):
+        centre = the minimum of the points on each axis, scale = 32000 / the largest axis span
+        (1.0 for a single point), both as float32; every point then lies in 0x8000..0xfd01."""
+        out = cls()
+        if not points:
+            return out
+        f32 = lambda v: struct.unpack('<f', struct.pack('<f', v))[0]
+        lo = [min(p[a] for _, p in points) for a in range(3)]
+        span = max(max(p[a] for _, p in points) - lo[a] for a in range(3))
+        out.centre = tuple(f32(v) for v in lo)
+        out.scale = f32(cls.SPAN_Q / span) if span > 0 else 1.0
+        for ref, p in points:
+            out.leaves.append((ref,) + out.quantise(p))
+        return out
+
+    def replace(self, points):
+        """The same tree with the leaves of `points` {REF: stored-order point} moved there (other
+        leaves and the order stay). When every new point fits the frame (0x8000..0xfd01 on each
+        axis) only those leaves are re-quantised; otherwise the whole tree is rebuilt in the
+        stock frame (`build`: byte-stable for the leaves that did not move). Returns a new Octree."""
+        out = Octree()
+        out.centre, out.scale = self.centre, self.scale
+        have = {l[0] for l in self.leaves}
+        points = {r: p for r, p in points.items() if r in have}
+        fits = True
+        for ref, p in points.items():
+            q, _ = self.quantise(p)
+            fits = fits and all(0x8000 <= v <= 0xfd01 for v in q)
+        if not fits:
+            return Octree.build([(l[0], points.get(l[0], self.position(l))) for l in self.leaves])
+        out.leaves = [(l[0],) + self.quantise(points[l[0]]) if l[0] in points else l for l in self.leaves]
+        return out
+
     @classmethod
     def join(cls, parts):
         """parts = [(Octree, {old REF: new REF})]. Leaves whose entity is not carried are dropped.
         With one contributing tree its frame and quantised points stay as they are; otherwise the
-        points are re-quantised into a common cube (the stock rule for choosing centre and scale
-        was not recovered: centre = middle of the points, scale = the smallest of the sources',
-        lowered until everything fits in 0x1000..0xefff)."""
+        points are re-quantised into one tree in the stock frame (`build`; before 2026-10-28 the
+        frame was centre = middle of the points, scale = the smallest of the sources' lowered to
+        fit 0x1000..0xefff: a valid tree, just not what the stock compiler writes)."""
         kept = [(t, [(m[l[0]], l[1], l[2]) for l in t.leaves if l[0] in m]) for t, m in parts if t]
         kept = [(t, ls) for t, ls in kept if ls]
         out = cls()
         if len(kept) == 1:
             out.centre, out.scale, out.leaves = kept[0][0].centre, kept[0][0].scale, kept[0][1]
         elif kept:
-            pts = [(l[0], t.position(l)) for t, ls in kept for l in ls]
-            lo = [min(p[a] for _, p in pts) for a in range(3)]
-            hi = [max(p[a] for _, p in pts) for a in range(3)]
-            out.centre = tuple((a + b) / 2 for a, b in zip(lo, hi))
-            span = max(b - a for a, b in zip(lo, hi)) or 1.0
-            out.scale = struct.unpack('<f', struct.pack('<f', min(min(t.scale for t, _ in kept), 0xe000 / span)))[0]
-            for ref, p in pts:
-                q = tuple(int(round(0x8000 + (v - c) * out.scale)) for v, c in zip(p, out.centre))
-                out.leaves.append((ref, q, tuple(v + 1 for v in q)))
+            out = cls.build([(l[0], t.position(l)) for t, ls in kept for l in ls])
         return out
 
 
@@ -284,6 +329,39 @@ def sgd_translate(data, t, zones=True):
         else:
             raise ValueError('sgd: unknown section %r' % name)
     return sgd_write(out)
+
+
+STALE = {'HavokShatterOctree': 2000.0, 'ExplodableOctree': 2000.0}   # repair limit, units from the entity origin: the
+# shipped data keeps smaller offsets on purpose or by convention (DM03FAA glass panes 85, helicopter ShatterGeom 245, M06A
+# While_window 127..726, stock F06 Lights_Back_Off 1169 - all in the SOURCE levels), the broken ones are 7.7k and more
+
+
+def sgd_refresh(data, world, limit=STALE, skip=None):
+    """The .sgd with every STALE octree leaf put back on its entity: world = {REF: world (x, y, z)
+    of the entity's composed origin}; a leaf farther than limit[tree] from it moves onto the origin
+    (shatter leaves sit there in stock, exact; explodable leaves sit 55..525 units off in stock,
+    GUESS what that offset is, so the origin is the best known place). skip(REF) -> True leaves a
+    leaf alone whatever its distance (the graft passes the Animation/ subtrees: stock trees keep
+    those leaves off the rest position too). Leaves whose REF is not in `world` stay. Returns
+    (bytes, [(tree, REF, old distance)]); the bytes are the input's when nothing moved."""
+    import math
+    out, moved = [], []
+    for name, payload in sgd_read(data):
+        if name in ('HavokShatterOctree', 'ExplodableOctree'):
+            t = Octree(payload)
+            new = {}
+            for leaf in t.leaves:
+                ref = leaf[0]
+                if ref not in world or (skip and skip(ref)):
+                    continue
+                d = math.dist(t.world(leaf), world[ref])
+                if d > limit[name]:
+                    new[ref] = tuple(world[ref])[::-1]
+                    moved.append((name, ref, d))
+            if new:
+                payload = t.replace(new).serialize()
+        out.append((name, payload))
+    return (sgd_write(out) if moved else data), moved
 
 
 def sgd_join(parts, glass=False):

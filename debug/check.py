@@ -29,9 +29,24 @@ def loc_sizes(src):
             if n.upper().endswith('.LOC'):          # every language: the player's selected one is the one copied
                 s=z.getinfo(n).file_size
                 print('%s: %d bytes%s'%(n,s,' - OVER the %d-byte cap: the level will crash in that language'%LOC_MAX if s>LOC_MAX else ''))
+def sgd_stale(src):
+    """Octree leaves of the .sgd that are not where their entity is (kl_sgd_audit; the graft repairs the ones beyond
+    kl_members.STALE, so a build fresh from kl_graft prints 0 here; a later layout tool that moved entities shows up)."""
+    if not src.lower().endswith('.zip'): return
+    try:
+        import kl_sgd_audit as SA, kl_members as MB
+        for label,gms,buf,sgd in SA.sets(src):
+            bad,anim=SA.stale(SA.audit(gms,buf,sgd,MB.STALE))
+            print('%s: %d octree leaves over %d units from their entity (grenades miss them; kl_sgd_audit.py --fix)%s'%(
+                os.path.basename(label),len(bad),int(MB.STALE['HavokShatterOctree']),' - %d under Animation/ (expected)'%len(anim) if anim else ''))
+            for name,ref,d,ename,top in sorted(bad,key=lambda b:-(b[2] or 1e9))[:5]:
+                print('   %-18s REF %-6d %8s  %s  (%s)'%(name,ref,'no REF' if d is None else '%.0f'%d,ename[:40],top[:30]))
+    except Exception as e:
+        print('sgd audit skipped: %r'%e)
 if __name__=='__main__':
     src=sys.argv[1] if len(sys.argv)>1 else os.path.join(kl.DD,'Scenes','Locations','F01','F01_Main.zip')
     loc_sizes(src)
+    sgd_stale(src)
     for label,rd in locate.sources(src):
         if not rd('gms'): sys.exit(label+': no .gms beside it - the classes come from there')
         bad,n=problems(rd); rows=sorted(bad.items(),key=lambda x:x[1][1])

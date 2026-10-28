@@ -66,11 +66,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-28 ~07:20 UTC - scheduled check-in (PC idle, no new dump, nothing installed). G8b shift: .sgp + .sgd DECODED from kl2 (ZSoundGraph 0x5866a0/0x8d6ef0:
-portal = openness, rooms, centre, normal, 4 corners; octree centre stored (z,y,x)) -> kl_members Sgp.translate / sgd_translate + kl_sgp_sgd_translate_test.py
-(all 30 maps exact). Only the .buf head stays undecoded. FINDING kl_sgd_audit.py: grafts carry STALE octree leaves (DM03A 82 vault pillars/plates 8-20k off,
-DM11B/DM05A EscapeChopper ShatterGeom 43k/31k) -> grenades miss them; fix = rebuild both trees from the final scene at the end of kl_graft (not done).
-Owner: SHIP out_hirepage_1028 bat still waits; give the scheduled task its folders. debug/notes/2026-10-28-scheduled-triage.md.
+2026-10-28 ~11:20 UTC - scheduled check-in (PC idle, no new dump, nothing installed). Stale .sgd octree leaves: the DM03A vault ones are
+stale in Dead Men's OWN M03A_Main.sgd (x/z swapped; .HVK agrees with the .gms) - source bug; DM11B/DM05A chopper + DD10 wall are ours.
+Octree FRAME RULE recovered (36/36 trees): centre = MIN corner, scale = 32000 / largest span. kl_members Octree.build/replace + sgd_refresh
+(repair limit 2000 units, Animation/ skipped), kl_sgd_audit --fix, kl_graft refreshes the joined .sgd (DM03A 82, DM11B 1, DM05A 1, DD10 4
+leaves back on their entity), debug/check.py prints the count. Cloud-tested on members only, not through a PC build yet. Owner: nothing to
+install; next graft build carries it; SHIP out_hirepage_1028 bat still waits. debug/notes/2026-10-28-scheduled-triage.md (2nd section).
 
 2026-10-28 ~01:00 - [ce] A1HIRE PASS (TEST cedc7511, 2 seats online, F06, 0 faults): F12 opened HIRE A HEISTER on both seats, host hired J.C., client asked ->
 "host accepted" Tommy, round 2 "I wear J.C./Tommy", saved Char ignored, no gun bought. GAP: F06 has no wardrobe model -> "stock body stays" (hire is
