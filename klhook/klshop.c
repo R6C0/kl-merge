@@ -60,7 +60,8 @@ typedef void *(__fastcall *kls_maker_t)(void *self, void *edx, int zero, void *t
 typedef void *(__fastcall *kls_tmpl_t)(void *self, void *edx, int item);
 typedef void *(__cdecl *kls_realloc_t)(void *, size_t);
 
-static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; BYTE fixed[KLS_MAX][KLS_PER]; int applied[KLS_MAX], told; int wait; LONG gen; int clips; int osw, oswrep; } kls;
+static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; BYTE fixed[KLS_MAX][KLS_PER]; int applied[KLS_MAX], decided[KLS_MAX], told; int wait; LONG gen; int clips; int osw, oswrep, oswlog; } kls;
+static char kls_oswmap[32];                                              /* the map key of the last klshop_level_open (any thread, plain bytes; [Shop] OnlineSwapLog only) */
 #define KLS_AMMO_KEY 0xbeebbeeb                                        /* ZFFItemWeapon keeps rounds [obj+0xdc] and reserve [obj+0xe0] XORed with it */
 /* the swap set to use, filled by klshop_init (KLHook.ini = default) and klshop_level_open (the map's KLGuns.ini [Shop] Swap, any thread);
    the game thread copies it into kls when kls_sgen changed. kls_slock is a tiny spin lock (no init needed). */
@@ -167,6 +168,21 @@ static void kls_ammo(void)
     }
 }
 
+/* what the pool hands over for shop row `row`: 0 = no pair / not on, 1 = a pair but NOT decided yet (online: before the flip in kls_osw_tick), 2 = ours (*item = the item),
+ * 3 = decided STOCK (no template / carrier absent / gun+0x13c missing at state 0x18). Read by klshoppage.c ([Shop] OnlineSwapText=2). Any thread, plain reads.
+ * Review 10-28: one 0 for 'stock' and 'undecided' made mode 2 name the carrier over a correct baked name before the flip. */
+static int kls_row_state(int row, int *item)
+{
+    int k;
+    if (item) *item = 0;
+    if (!kls.on) return 0;
+    for (k = 0; k < kls.n && k < KLS_MAX; k++) if (kls.row[k] == row) {
+        if (kls.applied[k] == 1) { if (item) *item = kls.item[k]; return 2; }
+        return kls.decided[k] ? 3 : 1;
+    }
+    return 0;
+}
+
 /* ==== [Shop] OnlineSwap=0|1|2 (2026-10-28, NOT RUN IN THE GAME; 0 = off, default; 1 = on; 2 = log only: nothing made, nothing parked) ====
  * What it is for: on a baked map the shop rows 13/16/32/35 are NAMED and PICTURED as HK69 / TYPE 81 / REM 700 / MINIMI. Arcade's [Shop] Swap hands those guns over;
  * online the swap is off (the gate in klshop_tick), so the stock carrier gun came out. This makes the same swap online, with the same pool recipe as offline.
@@ -201,7 +217,7 @@ static void kls_adopt(void)
 {
     if (kls.gen == kls_sgen) return;
     kls_lock(); kls.gen = kls_sgen; kls.n = kls_stg.n; memcpy(kls.row, kls_stg.row, sizeof kls.row); memcpy(kls.item, kls_stg.item, sizeof kls.item); kls_unlock();
-    memset(kls.made, 0, sizeof kls.made); memset(kls.fixed, 0, sizeof kls.fixed); memset(kls.applied, 0, sizeof kls.applied); kls.told = 0; kls.wait = 0;
+    memset(kls.made, 0, sizeof kls.made); memset(kls.fixed, 0, sizeof kls.fixed); memset(kls.applied, 0, sizeof kls.applied); memset(kls.decided, 0, sizeof kls.decided); kls.told = 0; kls.wait = 0;
 }
 
 /* called from klshoppage.c's kspg_early_make (game thread, online, session state still 0x14 / 0x15, right after the pool build) */
@@ -223,13 +239,13 @@ static void kls_osw_early(int host)
         if (kls.row[k] != row) continue;
         rows++;
         if (kls.made[k][0] && kls_in_pool(ents, n, kls.made[k][0])) { had++; continue; }   /* survived from the last round: no second set */
-        memset(kls.made[k], 0, sizeof kls.made[k]); memset(kls.fixed[k], 0, sizeof kls.fixed[k]); kls.applied[k] = 0;
+        memset(kls.made[k], 0, sizeof kls.made[k]); memset(kls.fixed[k], 0, sizeof kls.fixed[k]); kls.applied[k] = 0; kls.decided[k] = 0;
         if (!(carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row))) continue;
         for (i = 0; i < n; i++) { DWORD e[3]; if (klh_rd(ents + 12 * i, e, 12) && e[1] == carrier && e[0]) parked++; }
         tmpl = ((kls_tmpl_t)KLH_VA(KLS_TEMPLATE))(self, 0, kls.item[k]);
-        if (!tmpl) { klog("osw: row %d item %d has no template: row stays stock", row, kls.item[k]); continue; }
-        if (!parked) { klog("osw: row %d carrier %lu has no stock object in the pool: row stays stock", row, (unsigned long)carrier); continue; }
-        if (kls.osw == 2) { klog("osw: LOG ONLY row %d (carrier item %lu, %d stock object(s)) would get %d object(s) of item %d", row, (unsigned long)carrier, parked, KLS_PER, kls.item[k]); continue; }
+        if (!tmpl) { kls.decided[k] = 1; klog("osw: row %d item %d has no template: row stays stock", row, kls.item[k]); if (kls.oswlog) klog("oswlog: map %s row %d item %d: STOCK handed over (no template)", kls_oswmap[0] ? kls_oswmap : "?", row, kls.item[k]); continue; }
+        if (!parked) { kls.decided[k] = 1; klog("osw: row %d carrier %lu has no stock object in the pool: row stays stock", row, (unsigned long)carrier); if (kls.oswlog) klog("oswlog: map %s row %d item %d: STOCK handed over (carrier absent from the pool)", kls_oswmap[0] ? kls_oswmap : "?", row, kls.item[k]); continue; }
+        if (kls.osw == 2) { klog("osw: LOG ONLY row %d (carrier item %lu, %d stock object(s)) would get %d object(s) of item %d", row, (unsigned long)carrier, parked, KLS_PER, kls.item[k]); if (kls.oswlog) klog("oswlog: map %s row %d carrier %lu item %d: OURS would be handed over (OnlineSwap=2, log only)", kls_oswmap[0] ? kls_oswmap : "?", row, (unsigned long)carrier, kls.item[k]); continue; }
         if (cap < n + KLS_PER + 1) {                                    /* same growth as kls_apply */
             DWORD ncap = n + KLS_PER + 8; void *p;
             if (grow > 64) continue;
@@ -263,7 +279,7 @@ static void kls_osw_tick(DWORD st)
     for (k = 0; k < kls.n; k++) {
         DWORD carrier; int linked = 0, cnt = 0, want;
         if (kls.row[k] < 0 || !kls.made[k][0]) continue;
-        if (!kls_in_pool(ents, n, kls.made[k][0])) { memset(kls.made[k], 0, sizeof kls.made[k]); kls.applied[k] = 0; continue; }
+        if (!kls_in_pool(ents, n, kls.made[k][0])) { memset(kls.made[k], 0, sizeof kls.made[k]); kls.applied[k] = 0; kls.decided[k] = 0; continue; }
         if (!(carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * kls.row[k]))) continue;
         for (m = 0; m < KLS_PER && kls.made[k][m]; m++) { cnt++; if (klh_rd32((DWORD_PTR)kls.made[k][m] + 0x13c)) linked++; }
         want = cnt && linked == cnt;
@@ -271,8 +287,9 @@ static void kls_osw_tick(DWORD st)
             DWORD id = 0;
             __try { id = ((DWORD (__fastcall *)(DWORD))(DWORD_PTR)KLH_VA(0x6ece90))(kls.made[k][0]); } __except (1) { id = 0xdead; }
             klog("osw: row %d: %d object(s), %d with gun+0x13c set, id 0x6ece90 of the first = %lu (state 0x%lx): %s", kls.row[k], cnt, linked, (unsigned long)id, (unsigned long)st, want ? "ours are handed over" : "STOCK gun stays (net sub-object missing)");
+            if (kls.oswlog) klog("oswlog: map %s row %d carrier %lu item %d: %s", kls_oswmap[0] ? kls_oswmap : "?", kls.row[k], (unsigned long)carrier, kls.item[k], want ? "OURS handed over" : "STOCK handed over");
         }
-        if (!kls.applied[k] && !want) continue;                          /* undecided: ours stay parked, stock stays free */
+        if (!kls.applied[k] && !want) { if (st >= 0x18) kls.decided[k] = 1; continue; }   /* undecided: ours stay parked, stock stays free */
         for (i = 0; i < n; i++) {
             DWORD e[3]; BYTE zero = 0, one = 1; int ours = 0;
             if (!klh_rd(ents + 12 * i, e, 12) || e[1] != carrier || !e[0]) continue;
@@ -280,7 +297,8 @@ static void kls_osw_tick(DWORD st)
             if (ours) { if (!kls.applied[k] && !(e[2] & 0xff)) klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &one, 1, "KLShop: online unpark ours (net sub-object linked)"); }
             else if (e[2] & 0xff) klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &zero, 1, "KLShop: online park stock gun");
         }
-        kls.applied[k] = 1;
+        if (!kls.applied[k] && kls.oswlog && !kls.oswrep) klog("oswlog: map %s row %d carrier %lu item %d: OURS (flipped after the first report, state 0x%lx)", kls_oswmap[0] ? kls_oswmap : "?", kls.row[k], (unsigned long)carrier, kls.item[k], (unsigned long)st);
+        kls.applied[k] = 1; kls.decided[k] = 0;
     }
     kls.oswrep = 0;
 }
@@ -291,7 +309,7 @@ static void klshop_tick(int game_thread)
     if (!kls.on || !game_thread || !klh_exe_ok) return;
     if (kls.gen != kls_sgen) {                                           /* a map announced its set (or the default came back): adopt it, forget the old state */
         kls_lock(); kls.gen = kls_sgen; kls.n = kls_stg.n; memcpy(kls.row, kls_stg.row, sizeof kls.row); memcpy(kls.item, kls_stg.item, sizeof kls.item); kls_unlock();
-        memset(kls.made, 0, sizeof kls.made); memset(kls.fixed, 0, sizeof kls.fixed); memset(kls.applied, 0, sizeof kls.applied); kls.told = 0; kls.wait = 0;
+        memset(kls.made, 0, sizeof kls.made); memset(kls.fixed, 0, sizeof kls.fixed); memset(kls.applied, 0, sizeof kls.applied); memset(kls.decided, 0, sizeof kls.decided); kls.told = 0; kls.wait = 0;
     }
     if (!kls.n) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) return;
@@ -323,7 +341,7 @@ static void klshop_tick(int game_thread)
                 if (re) klog("shop: row %d: %d stock object(s) were free again (round reset): parked again", kls.row[k], re);
                 any = 1; continue;
             }
-            memset(kls.made[k], 0, sizeof kls.made[k]); memset(kls.fixed[k], 0, sizeof kls.fixed[k]); kls.applied[k] = 0;
+            memset(kls.made[k], 0, sizeof kls.made[k]); memset(kls.fixed[k], 0, sizeof kls.fixed[k]); kls.applied[k] = 0; kls.decided[k] = 0;
         }
         if (kls_apply(k) == -1) kls.row[k] = -1;
         else any = 1;
@@ -338,6 +356,7 @@ static void klshop_level_open(const char *key, const char *opened)
 {
     char file[MAX_PATH], buf[200], *s; DWORD len; int n, row[KLS_MAX], item[KLS_MAX], same;
     if (!kls.on) return;
+    if (key) { strncpy(kls_oswmap, key, sizeof kls_oswmap - 1); kls_oswmap[sizeof kls_oswmap - 1] = 0; }
     len = GetFullPathNameA(opened, MAX_PATH, file, 0);
     if (!len || len >= MAX_PATH || !(s = strrchr(file, 0x5c)) || (size_t)(s - file) + 12 >= sizeof file) return;
     strcpy(s + 1, "KLGuns.ini");
@@ -361,6 +380,8 @@ static void klshop_init(void)
     kls_stg = kls_def; kls_sgen = 1; kls.gen = 0;                        /* the tick adopts it */
     kls.osw = GetPrivateProfileIntA("Shop", "OnlineSwap", 0, klh_ini); if (kls.osw < 0 || kls.osw > 2) kls.osw = 0;   /* 0 off, 1 on, 2 log only; online the swap rides the early-make hook of klshoppage.c (needs [ShopPage] Enable=1) */
     if (kls.osw) klog("shop: OnlineSwap=%d (NOT run in the game): online the baked rows hand over the swapped gun like Arcade; no network message changes; see klshop.c OnlineSwap", kls.osw);
+    kls.oswlog = kls.osw && GetPrivateProfileIntA("Shop", "OnlineSwapLog", 0, klh_ini) != 0;   /* (recommended off) bench only: one 'oswlog:' line per row and round, with the map */
+    if (kls.oswlog) klog("shop: OnlineSwapLog=1 (bench only): 'oswlog: map .. row .. item ..: OURS|STOCK handed over' per row and round");
     kls.clips = GetPrivateProfileIntA("Shop", "ReserveClips", 2, klh_ini); /* reserve of an extra gun the row's ammo leaves empty, in clips (0 = leave it) */
     klog("shop: on; %d default swap(s); a map's KLGuns.ini [Shop] Swap overrides; Arcade only, before the round; replaces what a bought row hands over (never adds a row); proven live S7-S11", kls_def.n);
 }
