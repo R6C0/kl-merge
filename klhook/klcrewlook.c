@@ -143,6 +143,7 @@ static int klcl_bots(const struct klbf_lkrec *lk, int nlk, struct klw_seen *seen
         seen[n].rec = d - 1; seen[n].actor = lk[i].actor; seen[n].node = klh_rd32(lk[i].actor + 4); seen[n].model = lk[i].model;
         klh_rd(lk[i].actor + 0x50, &seen[n].variant, 4);
         hp[n] = lk[i].hp;
+        seen[n].status = (BYTE)(seen[n].node && hp[n] > 0 ? 0 : 1);      /* as Arcade's status byte: a dead bot is not in the draw (it gets ch 0); GUESS: aboard is not readable online, so only dead counts */
         n++;
     }
     if (bs != klcl_t.badSig && bs != 2166136261u) {
@@ -205,7 +206,7 @@ static void klcl_rx(const char *pk, int len, DWORD now, unsigned long from)
     if (len < 24 || memcmp(pk, "KLSYL", 5)) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd(sm + 0x70, &state, 4) || state < 0x13 || state > 0x19) return;
     memcpy(&n, pk + 12, 2); memcpy(&T, pk + 8, 4); memcpy(&epoch, pk + 16, 4); memcpy(&wsig, pk + 20, 4);
-    if (pk[14] != 1 || n > 16 || 24 + n * 12 > len || !epoch) return;
+    if (pk[14] != 1 || n > 16 || 24 + n * 12 > len || !epoch || T >= 1000000000u) return;      /* klsy_T() never reaches 1e9: a bigger T is garbage */
     if (klsy.srcSet && from != klsy.srcAddr) return;      /* the host that sent the round's first valid list */
     klcl_sync_sm(sm);
     if (klcl_t.host) return;      /* this seat drew the table itself */
@@ -357,7 +358,7 @@ static void klcl_tick(int game_thread)
         if (need) { if (n && heister) klcl_host_draw(&src, seen, n, pmodel, state, rules, now); }
         else if (heister) klcl_host_redraw(&src, pmodel, now);
     }
-    if (!klcl_t.epoch || !n) return;      /* (500 ms cadence until a draw exists) */
+    if (!klcl_t.epoch || !n) { if (!n || (role == 2 && !klcl_heister())) klcl_t.cenGap = 2000; return; }      /* no bot, or a host that cannot draw now: the slow cadence; 500 ms only while a draw can still come */
     done = klcl_apply(&src, seen, hp, n, pmodel);
     if (done) klcl_t.cenGap = 2000;
 }
