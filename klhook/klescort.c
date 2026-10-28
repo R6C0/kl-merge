@@ -539,7 +539,7 @@ static int kle_bot(const struct klb_snap *s, int i, DWORD *actor_, DWORD *soldie
     if (!(r->flags & 1)) { strcpy(why, "its record is not an AI member's"); return 0; }
     if (r->flags & 2) { strcpy(why, "it is a traitor"); return 0; }
     if (r->status) { snprintf(why, 100, "its record says %s", r->status == 4 ? "aboard" : r->status == 7 ? "dead" : r->status == 6 ? "escaped" : "not in play"); return 0; }
-    if (!actor || klh_rd32(actor) != KLB_ACTOR_VT) { strcpy(why, "its actor is not a ZFFActor"); return 0; }
+    if (!actor || klh_avt(actor) != KLB_ACTOR_VT) { strcpy(why, "its actor is not a ZFFActor"); return 0; }
     if (klh_rd32((DWORD_PTR)KLH_VA(KLB_ACTOR_VT + 0x620)) != KLE_HELD_VT) { strcpy(why, "ZFFActor's 'held' test is not the one this build knows"); return 0; }
     if (!(node = klh_rd32(actor + 4)) || !klh_rd(node + 0x3c, &fl, 4) || (fl >> 10 & 1)) { strcpy(why, "its node is off (flag bit 10)"); return 0; }
     if (!klh_rd(actor + 0x576, &b576, 1) || b576 != 1) { strcpy(why, "its actor takes no orders now ([actor+0x576] is not 1)"); return 0; }

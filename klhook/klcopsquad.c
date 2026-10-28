@@ -136,7 +136,7 @@ static int klcq_is_receiver(DWORD actor)                      /* of ANY cop's sq
 static DWORD klcq_soldier(DWORD actor)
 {
     DWORD node, s, fl = 0, h, held = 1; BYTE b = 0; float hv[2] = { 0, 0 }; int team = -1;
-    if (klh_rd32(actor) != KLB_ACTOR_VT) return 0;
+    if (klh_avt(actor) != KLB_ACTOR_VT) return 0;
     if (!(h = klh_rd32(actor + 0x54)) || !klh_rd(h + 4, &team, 4) || team != klcq.team) return 0;
     if (!(h = klh_rd32(actor + 0x5fc)) || !klh_rd(h + 4, hv, 8) || hv[0] <= 0) return 0;
     if (!(node = klh_rd32(actor + 4)) || !klh_rd(node + 0x3c, &fl, 4) || (fl >> 10 & 1)) return 0;
