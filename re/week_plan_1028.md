@@ -34,6 +34,7 @@ Owner: ce.
 - 10-28 20:25 c9: bench screenshots fixed (--d3shots, in-game back buffer, JPG). A1LIFT3e PASS: the player's own two lift crossings fire the doors 29 s apart. Door-open picture still inconclusive.
 - 10-28 20:50 c9: A1LIFT3f PASS: the player walks through the re-fired lift doors into join box 9 and (3d) rides up to z 879. Retomoto lift T2 item done; open: player downed at 40 % health in the lift.
 - 10-28 21:05 c9: lift downs explained: Ramp=1 kept CopToYou/CrewToYou at stock, the game's own 40 % down did the rest (not a bug in the map or hook). Ramp now logs it (403967a5a).
+- 10-29 00:40 c9: lift ONLINE PASS (A1LIFTNET2F both seats, 0 faults; joiner rode box 9 to the lobby car). Merged 154f03c94 (default off). Next: SHIP check + ship JoinOnline=1.
 - 10-28 23:50 c9: lift ONLINE was gated off (kljoin.c, any network session). Fix c9-liftnet (JoinOnline/DoorCloseRemote, default off); A1LIFTNET1F joiner downed by cops before the lift (bench issue) -> TEST KeepAlive, A1LIFTNET2F next.
 - 10-28 23:20 c9: SHIPPED ship1029 (dll 897decf7 + ini ad00a047 with DoorCloseMs=8000): the Retomoto lift doors now close in the owner's game. SHIPCHK3 + A1LIFT7/8 PASS 0 faults. T2 lift item DONE.
 - 10-28 22:45 c9: lift doors close: [KLHook] DoorCloseMs (default off) A1LIFT6c PASS 0 faults (both lifts shut in 3.5 s); merged 47ac20c54, not shipped.

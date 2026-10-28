@@ -1,3 +1,8 @@
+2026-10-29 ~00:40 - [c9] Retomoto LIFT ONLINE WORKS (test build): A1LIFTNET2F PASS both seats, 0 faults (JoinOnline=1, DoorCloseRemote=1,
+joiner KeepAlive=1). Joiner: box 9 ride started, jump to entry 5 '06_Exit' after 3656 ms, at (6353, 563, -6216) 500 ms later (lobby car);
+doors opened on both seats and closed after ~8 s. No 'doors held' line, so the DoorCloseRemote GUESS is still unproven. Merged 154f03c94,
+kl_tests 33/8/1. Next: SHIP build + SHIPCHK online + A1LIFTNET SHIP check, then ship JoinOnline=1.
+
 2026-10-29 ~00:30 - [ce] wk-botpar round 3 merged ed364abf6 (all default off). BP3 (DD04 online, BP2 + OnlineLootFinishPause=1,
 OnlineGetUpReorderS=8) PASS 0 faults: bot 0 22/22 in 9.4 s, bot 1 22/22 after 2 pauses, bot 3 paused and never came back (left at the cap, intended);
 getup never fired: the host's heister replica health [P+0x5fc]->+4 read -0 for every seat (BP2: garbage) -> a08da868e drops the hv test, the beacon
