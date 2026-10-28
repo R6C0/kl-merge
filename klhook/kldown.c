@@ -2690,6 +2690,7 @@ static void kld_tick_main(int game_thread)
         kld_s.fchk = kld_s.fok = kld_s.fhave = kld_s.fput = 0; kld_s.fwf = kld_s.fwu = 0;
     }
     kld_floor(pl, d, ds, hp, max, hpok, now);
+    if (onl && klgb_on) klgb_own(pl, ds, !ok || hp > 0.01f, now);      /* [BotFill] OnlineGetUpBeacon: tell the host this body is down / up (klgetupbeacon.c; default off; wk-getup2-1028) */
     if (kld.flop) {                            /* the belly flop: his prone movement's slot ids, while he is up */
         /* review2 S3: klchar.c's body swap keeps the player object and gives it another set - the verdict (full-body, the
            events) is of the set it was made on. Looked at again while he is up when one of the three pointers changed */
