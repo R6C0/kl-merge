@@ -1,3 +1,8 @@
+2026-10-28 ~21:15 - [ce] GUN3/GU1/VOX2 (C:/kl_build_1024/week_1028; all 0 faults both seats). VOX2 PASS: OnlineVoice=1 host bot loot lines
+(Multiplayer/JackPot/JackPot_01_C<n>) sent on UDP and played on the joiner (klk_say 1 both seats). GUN3: rows 13/16/32/35 OURS on both seats,
+slot-24 text wrapper reached, buy flow tab 4 row 32 inside the ~28 s shop (FAIL only = script waited for the shop after the round began).
+GU1: OnlineGetUp=1 on, no down near a bot, so the getup path is NOT exercised live yet. Merged wk-gunui2 / wk-voice / wk-getup (all default off).
+
 2026-10-28 ~19:05 UTC - scheduled check-in (cloud, repo-only: no PC folder attached and the PC is BUSY, c9/ce commits at 18:27-18:44 UTC; nothing launched/installed/read). kl_tests on 3a9e0b8 in the cloud (gcc-multilib): 20 pass 0 fail 13 SDK skips. klrappel_test 'flaky (timing)' FIXED (99f9d30): Sleep(60) raced the 50 ms start gate (GetTickCount steps 15.6 ms, 60 ms can read 46 ms); the harness now owns the clock, +cases 7b (re-arm 2 s) and 8 (gate + tick wrap), 18 checks pass with a stepped-clock stub, MinGW clean, cl NOT RUN. Details debug/notes/2026-10-28-scheduled-triage.md. Owner: nothing to install.
 
 2026-10-28 ~21:05 - [c9] Lift-run downs explained (workflow lift-down-cause, verified): not the hook. [Balance] CopToYou/CrewToYou=0.001 were

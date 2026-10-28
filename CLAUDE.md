@@ -77,9 +77,9 @@ the GDI grab is black with the monitor off). A1LIFT3f: the player walks through
 the re-fired doors and rides the lift: T2 lift done. (The 40 % downs: Ramp=1 kept the bench's
 CopToYou at stock; a lone player factor needs [Balance] Ramp=0; Ramp now logs it, 403967a5a.)
 
-2026-10-28 ~20:30 - [ce] MV1 + WKBC7 PASS (wk-move + lootsync merged 35929bfc3). LPB2 0 faults: bots take loot in timed parts online, but walk off
-the stack (hold fix built, LPB3 next). GUN2: shop text swap reached online; script ran out of the ~28 s between-round shop (GUN3 fixed).
-Queued: LPB3, VOX1 (bots' voice lines online, wk-voice-1028), GUN3; then merge wk-lpbal / wk-voice / wk-gunui2.
+2026-10-28 ~21:15 - [ce] Merged (default off): OnlineLootParts+hold (LPB3 PASS), OnlineVoice (VOX2 PASS: bots' loot lines heard by the joiner),
+OnlineSwapText (GUN3: 4 rows OURS both seats), OnlineGetUp (GU1 0 faults, not yet exercised: needs a bench with a down next to a bot).
+Next: getup bench with a forced down, unbaked-map GUN test, OnlineTriggers on a 2nd map, traits gap #5.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.
