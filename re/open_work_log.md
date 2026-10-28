@@ -1,3 +1,8 @@
+2026-10-28 ~20:25 - [c9] A1LIFT3e PASS + bench shots fixed. --d3shots (merged 259c89c32, kld3 back-buffer shots; the GDI grab was all-zero
+with the monitor off) took 8 real 640x480 shots live. The PLAYER's own two crossings of the Retomoto lift box each made both door proxies accept
+0032 (log-clock 18:18:44.8 and 18:19:13.9, 29 s apart): re-arm proven by the player, not just by bots. Shot 02 shows both lift doors shut just
+before; the shots after are not conclusive on the open door (player downed, camera turned). PNG saves alpha 0 (viewers show white): --d3shots now
+uses JPG. kl_tests: klrappel_test is flaky (timing), 8 other failures predate this. Inputs C:\kl_build_1024\c9_1028\a1lift3.
 2026-10-28 ~20:30 - [ce] LPB1/LPB2/GUN2 (inputs C:\kl_build_1024\week_1028\*.ini; all 0 faults).
 wk-lpbal-1028 = OnlineLootParts ([BotFill] OnlineLootParts=0|1|2: a bot takes a stack in timed parts like a player, stack +0x34 amount,
 +0x40 part 20000, +0x44 0.40 s/part, read live) + [Balance] Online=0|1|2 / OnlineYouToCrew. LPB1 (parts=2 dry) PASS, fields plausible.

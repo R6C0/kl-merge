@@ -130,7 +130,7 @@ def main():
             i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
     force = '--force' in a
     # 10-28: the GDI desktop grab (at.shot) returned all-zero PNGs all week (monitor off / session locked). --d3shots takes the shots
-    # inside the game instead: the hook's kld3 back-buffer shot ([Memory] D3dShot*), KLShot_inst<N>_NN.png in the run folder.
+    # inside the game instead: the hook's kld3 back-buffer shot ([Memory] D3dShot*), KLShot_inst<N>_NN.jpg in the run folder.
     d3shots = '--d3shots' in a
     # 10-28: the owner said 'i didnt use the pc at all' about A1HIRE's 23:03 abort (cursor 1493,445, idle 0 s). With their
     # word that they are away, --owner-away skips the idle gate and the park loop's owner abort (it still parks the cursor).
@@ -173,8 +173,9 @@ def main():
             # kld3 arms at the first call after From and shoots one interval later, so From = first shot - step (GUESS: Present runs every frame)
             step = (shots[1] - shots[0]) if len(shots) > 1 else 30
             # the shots run inside klfps's Present wrappers: they need [FrameLimit] Enable=1 SwapChain=1 (re/open_work_log.md, 10-26)
+            # JPG (Fmt 0), not PNG: the X8R8G8B8 back buffer saves as PNG with alpha 0, which viewers show as a white page (A1LIFT3e 10-28)
             secs_n = merge(secs_n, [('Memory', [('D3dShotEvery', str(max(1, step))), ('D3dShotFrom', str(max(0, shots[0] - step))),
-                                                 ('D3dShotMax', str(len(shots))), ('D3dShotFmt', '1'), ('D3dShotDir', root), ('D3dShotTag', 'inst%d' % n)]),
+                                                 ('D3dShotMax', str(len(shots))), ('D3dShotFmt', '0'), ('D3dShotDir', root), ('D3dShotTag', 'inst%d' % n)]),
                                     ('FrameLimit', [('Enable', '1'), ('SwapChain', '1')])])
         extra = opt.get('--ini%d' % min(n, 2))
         if extra:

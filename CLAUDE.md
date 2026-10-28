@@ -72,7 +72,8 @@ Full dated log: `re/open_work_log.md` (newest first).
 A1SHIFT5b offline Arcade full round (7 bots, 1 boarded $1.36M), faults 0. A1NET2 both seats walk PASS. kl_map_shift_test fixed (adce57ce4; never
 run it while an A1SHIFT bench has DM11S installed). SHIPPED 18:20 (/oldhook: OnlineSkip emptied, ini baseline de91b2a5; undo UNDO_DM11S.bat in C:\kl_build_1024\c9_1028\dm11s_ship);
 SHIPCHK 18:45 PASS online with the installed dll/ini. A1LIFT3d: Retomoto lift box re-arms live (3 door fires 10-15 s apart).
-T2 left: a door visual once screenshots work (black all week).
+Bench shots fixed: kl_solo_test --d3shots (in-game back buffer;
+the GDI grab is black with the monitor off). T2 left: a clear door-open picture.
 
 2026-10-28 ~20:30 - [ce] MV1 + WKBC7 PASS (wk-move + lootsync merged 35929bfc3). LPB2 0 faults: bots take loot in timed parts online, but walk off
 the stack (hold fix built, LPB3 next). GUN2: shop text swap reached online; script ran out of the ~28 s between-round shop (GUN3 fixed).
