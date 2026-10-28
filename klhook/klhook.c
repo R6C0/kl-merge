@@ -814,6 +814,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klsync.c"                                    /* klsync.c: [Sync] read-only probe + host list compare of actors / world objects per peer (off unless set); AFTER klcensus.c, klcharonline.c */
 #include "kllootsync.c"                              /* kllootsync.c: [BotFill] OnlineLootSync=1 - the host sends the AI heisters' loot (KLSYB), every seat shows it on the announcement line (off unless set); AFTER klsync.c, klbotfill.c, klannounce.c */
 #include "klcrewlook.c"                              /* klcrewlook.c: [BotFill] OnlineLooks=1 - the host draws each Ally bot's Arcade look, KLSYL carries it, every seat applies it (off unless OnlineLooks=1); AFTER klsync.c, klbotfill.c, klcrew.c, klcharonline.c */
+#include "klbotvoice.c"                              /* klbotvoice.c: [BotFill] OnlineVoice - the host sends the AI heisters' event lines (KLSYV), every seat plays them (off unless 1 / 2); AFTER klsync.c, klbotfill.c, kltalk.c, klcrewlook.c */
 #include "klnetchan.c"                                 /* klnetchan.c: [NetChan] the hook's shared peer message channel (UDP 27416 + Steam member data; idle unless a module wants it); AFTER klmm.c, klslot.c */
 #include "kldown_mirror.c"                              /* kldown_mirror.c: [Down] OnlineFlopMirror - the other players see this player's flop (messages via klnetchan.c; off unless Enable=1 online); AFTER kldown.c, klcharonline.c, klnetchan.c */
 #include "klucc.c"                                     /* klucc.c: [Ucc] Undercover Cop suspicion pings / accuse key (off unless Pings=1 or Accuse=1); AFTER klnetchan.c, klcharonline.c, klhud_popup.c */
@@ -1302,6 +1303,7 @@ static void klh_tick(int game_thread)
     kllo_tick();                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
     klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
     klls_tick(game_thread);                            /* kllootsync.c: [BotFill] OnlineLootSync=1 collect / show (off unless set) */
+    klbv_tick(game_thread);                           /* klbotvoice.c: [BotFill] OnlineVoice send (off unless 1 / 2) */
     klcl_tick(game_thread);                           /* klcrewlook.c: [BotFill] OnlineLooks=1 draw / apply (off unless set) */
     klcq_tick(game_thread);                           /* klcopsquad.c: [CopSquad] (off unless Enable=1; host, C&R, game thread only) */
     klsab_tick(game_thread);                          /* klsabotage.c: [Sabotage] VanHold (off unless VanHold=1; host, UCC rounds, game thread only) */

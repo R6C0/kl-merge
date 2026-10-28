@@ -40,6 +40,9 @@ static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [Bo
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_lk = 0; static DWORD klbf_lk_sm, klbf_lk_sig;      /* [BotFill] OnlineLooks (re/crew_online_1028.md): 2 = LOG ONLY probe, one line per Ally bot per round and whenever the census changes; no game-state write. 1 = klcrewlook.c: the host sends each bot's Arcade look, every seat applies it (klcl_on). Any other value = off */
 static int klcl_on;      /* OnlineLooks=1 (klcrewlook.c; set in klbf_init) */
+static int klbv_mode;      /* OnlineVoice (klbotvoice.c): 0 off, 1 send + play, 2 log only (set in klbf_init) */
+static char klbv_tl[2][160];      /* its key templates: [0] loot grab, [1] boarded / escaped (GUESS spellings, ini overrides) */
+static void klbv_event(int slot, int ev);      /* klbotvoice.c: the host's bot did an event (1 loot grab, 2 boarded) */
 static int klls_on;       /* OnlineLootSync=1 (kllootsync.c; set in klbf_init) */
 static void klls_summary(void);
 static void klls_precollect(void);      /* kllootsync.c: a bot slot is about to be freed */      /* kllootsync.c: the host's final loot list at the round summary */
@@ -142,6 +145,10 @@ static void klbf_init(void)
     klbf_ot_gmax = (int)GetPrivateProfileIntA("BotFill", "OnlineGatherMaxS", 25, klh_ini); if (klbf_ot_gmax < 1) klbf_ot_gmax = 1; if (klbf_ot_gmax > 120) klbf_ot_gmax = 120;      /* GUESS 25 s */
     klbf_lk = (int)GetPrivateProfileIntA("BotFill", "OnlineLooks", 0, klh_ini); if (klbf_lk != 1 && klbf_lk != 2) klbf_lk = 0;      /* (recommended off) 2 = log only, 1 = send / apply (klcrewlook.c) */
     klcl_on = klbf_lk == 1;
+    klbv_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineVoice", 0, klh_ini); if (klbv_mode != 1 && klbv_mode != 2) klbv_mode = 0;      /* (recommended off) 2 = log only, 1 = the host sends KLSYV, every seat plays the bot's line (klbotvoice.c) */
+    GetPrivateProfileStringA("BotFill", "OnlineVoiceKeyLoot", "Multiplayer/%L/ReachlootArea_01_C%D", klbv_tl[0], sizeof klbv_tl[0], klh_ini);      /* GUESS: the stock per-character leaf K_C<n>; %L = level key, %D = digit */
+    GetPrivateProfileStringA("BotFill", "OnlineVoiceKeyEscape", "Multiplayer/%L/FA_YouEscaped01_C%D", klbv_tl[1], sizeof klbv_tl[1], klh_ini);      /* GUESS: spelling unconfirmed */
+    if (klbv_mode) klog("botfill: OnlineVoice=%d: the host's AI heister events (loot grab, boarded) %s (KLSYV on UDP %d, klbotvoice.c); keys '%s' / '%s' (GUESS); needs [Voice] Enable / Online / OnlineTalk / OnlineTalkNoScore and OnlineLooks=1%s", klbv_mode, klbv_mode == 2 ? "are only LOGGED" : "are sent and played on every seat", 27415, klbv_tl[0], klbv_tl[1], klbf_lk == 1 ? "" : " (OnlineLooks is not 1: only the digit range is checked)");
     klls_on = GetPrivateProfileIntA("BotFill", "OnlineLootSync", 0, klh_ini) != 0;      /* (recommended off) kllootsync.c: the host sends what the bots carry / banked (KLSYB, UDP 27415), every seat shows one HUD line */
     if (klls_on) klog("botfill: OnlineLootSync=1: the host sends the bots' loot (KLSYB on UDP %d), every seat shows it on the announcement line (kllootsync.c); needs OnlineTactics=1 on the host%s", 27415, klbf_ot ? "" : " (it is 0: nothing to send)");
     if (klbf_lk == 2) klog("botfill: OnlineLooks=2: log-only probe of the Ally bots' model / group (no write)");
@@ -860,6 +867,7 @@ static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], i
             if (klbf_ba_mode == 1) { if (klbf_ob[i].phase == 4) klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; boardall)", i, (unsigned long)klbf_ob[i].target, klbf_ob[i].lootPaid, klbf_ob[i].lootLeft, klbf_ob[i].tally); klbf_ob[i].phase = 3; if (klbf_ot_board) klbf_ot_board_call(act[q]); }
         }
     }
+    if (klbv_mode) for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor && klbf_ob[i].phase == 3) klbv_event(i, 2);      /* OnlineVoice: boarded (once per actor and round, klbotvoice.c) */
     if (klbf_bank_mode) for (i = 0; i < KLBF_OT_BOTS; i++) {
         if (!klbf_ob[i].actor || klbf_ob[i].banked) continue;
         if (klbf_ob[i].phase != 3) continue;
@@ -1146,6 +1154,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     if (klh_rd32(o) == KLMV_MONEY_VT) KLFC_CALL(void (__fastcall *)(DWORD, DWORD, int), 0x004e3f40)(o, 0, amt);
                 }
                 klog("botfill: tactics: bot %d (actor %08lx) GRABBED stack %08lx = %d; its tally %d after %d grab(s)%s", s, a, o, amt, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_take == 2 ? " (taken through the game's 0x4e3f40 on the host)" : klbf_ot_take ? " (amount zeroed on the host)" : " (host tally only)");
+                klbv_event(s, 1);      /* OnlineVoice: the host's bot grabbed loot (klbotvoice.c) */
                 klbf_ob[s].phase = 0;
             } else {
                 if (!klbf_ob[s].bestAt || dh < klbf_ob[s].best - 200.0f) { klbf_ob[s].best = dh; klbf_ob[s].bestAt = now; }      /* 2 m closer = progress */
