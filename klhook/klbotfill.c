@@ -123,7 +123,7 @@ static void klbf_init(void)
     klbf_ot_gmax = (int)GetPrivateProfileIntA("BotFill", "OnlineGatherMaxS", 25, klh_ini); if (klbf_ot_gmax < 1) klbf_ot_gmax = 1; if (klbf_ot_gmax > 120) klbf_ot_gmax = 120;      /* GUESS 25 s */
     klbf_lk = (int)GetPrivateProfileIntA("BotFill", "OnlineLooks", 0, klh_ini); if (klbf_lk != 2) klbf_lk = 0;      /* (recommended off) only 2 (log only) exists in this step */
     if (klbf_lk) klog("botfill: OnlineLooks=2: log-only probe of the Ally bots' model / group (no write)");
-    klbf_ot_glate = (int)GetPrivateProfileIntA("BotFill", "OnlineGatherLateS", 0, klh_ini); if (klbf_ot_glate < 0) klbf_ot_glate = 0; if (klbf_ot_glate > 200) klbf_ot_glate = 200;      /* (recommended off) BP_DD04 1028: the clock clause (95 s left) called the van 18 s into a 40 s gather with walkers 59 m out; GUESS 45 = van call to departure ~28 s + slack */
+    klbf_ot_glate = (int)GetPrivateProfileIntA("BotFill", "OnlineGatherLateS", 45, klh_ini); if (klbf_ot_glate < 0) klbf_ot_glate = 0; if (klbf_ot_glate > 200) klbf_ot_glate = 200;      /* (recommended 45) BP_DD04b/c 1028: 45 let the gather run its full 40 s, 5/7 then 7/7 aboard; BP_DD04 1028: the clock clause (95 s left) called the van 18 s into a 40 s gather with walkers 59 m out; GUESS 45 = van call to departure ~28 s + slack */
     klbf_ot_vhold = GetPrivateProfileIntA("BotFill", "OnlineVanHold", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_hm = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineHoldM", 30, klh_ini); if (klbf_ot_hm < 500.0f) klbf_ot_hm = 500.0f;      /* GUESS 30 m (re/van_hold_online.md) */
     klbf_ot_hnear = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineHoldNearM", 18, klh_ini); if (klbf_ot_hnear < 500.0f) klbf_ot_hnear = 500.0f;      /* GUESS 18 m (research: 15-20 m) */
@@ -140,7 +140,7 @@ static void klbf_init(void)
     klbf_ot_joincall = GetPrivateProfileIntA("BotFill", "OnlineJoinCalled", 1, klh_ini) != 0;      /* (recommended on) */
     if (klbf_ot) klog("botfill: OnlineTactics join called van: OnlineJoinCalled=%d (recommended on)", klbf_ot_joincall);
     klbf_ot_sprint = GetPrivateProfileIntA("BotFill", "OnlineExitSprint", 1, klh_ini) != 0;      /* (recommended on) */
-    klbf_ot_crowd = (float)GetPrivateProfileIntA("BotFill", "OnlineExitCrowd", 1200, klh_ini);      /* (recommended 1200) cm round the exit trigger that count as aboard after 5 s of van wait; 0 = off */
+    klbf_ot_crowd = (float)GetPrivateProfileIntA("BotFill", "OnlineExitCrowd", 1600, klh_ini);      /* (recommended 1600; BP_DD04b 1028: a bot stopped 12 m out missed 1200, BP_DD04c 1600 = 7/7) cm round the exit trigger that count as aboard after 5 s of van wait; 0 = off */
     if (klbf_ot_crowd < 0) klbf_ot_crowd = 0;
     klbf_ot_keepgo = GetPrivateProfileIntA("BotFill", "OnlineExitKeepGoal", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_etrace = GetPrivateProfileIntA("BotFill", "OnlineExitTrace", 0, klh_ini) != 0;      /* (recommended off) */
