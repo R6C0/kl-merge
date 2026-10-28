@@ -272,6 +272,8 @@ feat('voiceonlinetraits', G_AV, 'Online matches: your own heister talks (scenes,
      'kltalk.c / kltrait.c via klvoice_online.c [Voice] OnlineTraits=1: local player only, local speech manager; every trait factor stays 1.0 online; NOT run live', [('Voice', 'OnlineTraits', 1, 0, 0)])
 feat('voiceonlinetalknoscore', G_AV, 'Online matches: let the online talk code speak without the Arcade score object (needs Voice online traits or crew on) (recommended off until benched)', 'off', 'start',
      'kltalk.c [Voice] OnlineTalkNoScore=1: online the +0x5f8 null guard (past the Sv 0x3a8 / Cl 0x334 byte rules objects) is replaced by [rules+0x2c] non-null; 0 = no online talk; NOT run live', [('Voice', 'OnlineTalkNoScore', 1, 0, 0)])
+feat('voiceonlinetalk', G_AV, 'Online matches: the crew banter (idle chatter, scenes, pairs) also runs online, each seat hears its own lines (needs Voice online on) (recommended off until benched)', 'off', 'start',
+     'kltalk.c [Voice] OnlineTalk=1: klk_who_any takes klvoice_online.c wide who (local seat + other human rows, own cache); implies OnlineTalkNoScore; gate lines "talk: gate N held"; NOT run live', [('Voice', 'OnlineTalk', 1, 0, 0)])
 feat('voiceonlinediag', G_AV, 'Online matches: extra voice log lines (who is wanted, name changes, the voice table); logging only (recommended off)', 'off', 'start',
      'klvoice_online.c [Voice] OnlineDiag=1: re-logs on a seat-name change, logs rules+0x33e, lists wanted voice numbers; no behaviour change; NOT run live', [('Voice', 'OnlineDiag', 1, 0, 0)])
 feat('announcer', G_AV, 'Announcer first: a one-recording Dead Men line stays the stock announcer', 'on', 'start',
