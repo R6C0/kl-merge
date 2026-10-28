@@ -106,6 +106,7 @@ static int klhro_enabled(void);
 #include "klshoppage_probe.c"                              /* [ShopPage] OnlineProbe: pool / hand-out / buy log lines, no writes */
 static int kspg_netok(int row);                                  /* defined below; used by the book tick */
 static void kspg_link_check(const char *when);                   /* log-only link proof, defined below */
+#include "klswappic.h"                                  /* [Shop] OnlineSwapPic: pure decision (look-alike rows) */
 #include "klshoppage_online.c"                             /* [ShopPage] OnlineSend: page II press sent to the host (SHOPG), host judges + logs, no writes */
 
 static int kspg_role_of(void *self)
@@ -344,11 +345,13 @@ static void kspg_hire_press(void *self, const char *nm)
 static int kspg_swt;                                       /* 0 off, 1, 2 (set in kspg_init) */
 static volatile int kspg_swtact;                           /* the shop gate is open (kspg_swt_tick) */
 static BYTE unbaked[KSPG_ROWS];                           /* per row: the name lookup saw the stock text (an unbaked map); cleared when the shop gate closes */
+static int kspg_swtpic;                                    /* [Shop] OnlineSwapPic 0/1 (set in kspg_init) */
+static LONG kspg_pic_swaps, kspg_pic_restores, kspg_pic_fail, kspg_pic_seen;   /* shoppic: counters (reset when the shop gate closes) */
 static LONG kspg_swt_wrapped;                              /* once per shop stay: the first text key that reached the wrapper */
 static char *kspg_text_swt(void *self, const char *key, char *res)
 {
     const char *p, *q; int row, desc = 0, nd = 0, role, item = 0, rs; const char *nm, *sw, *sd, *ck, *to = 0; char rt[96], *o; int stockText = 0, i;
-    if (!kspg_swt || !kspg_swtact || !key || !res || kspg.hire || kspg.ctl || kspg.shownB) return 0;
+    if ((!kspg_swt && !kspg_swtpic) || !kspg_swtact || !key || !res || kspg.hire || kspg.ctl || kspg.shownB) return 0;
     if ((p = strstr(key, "WeaponShop/Weapon")) == 0) return 0;
     for (q = p + 17; *q >= '0' && *q <= '9'; q++) nd++;
     if (!nd) return 0;
@@ -365,6 +368,7 @@ static char *kspg_text_swt(void *self, const char *key, char *res)
     ck = row == 13 ? "TOQ" : row == 16 ? "Buqiang 300" : row == 32 ? "Buqiang 800" : "Buqiang 900";
     rt[0] = 0; klh_rdstr((DWORD_PTR)res, rt, sizeof rt); rt[sizeof rt - 1] = 0;
     for (i = 0; rt[i]; i++) if (!_strnicmp(rt + i, ck, strlen(ck))) { stockText = 1; break; }
+    if (!kspg_swt) { if (!desc && row < KSPG_ROWS) unbaked[row] = (BYTE)stockText; return 0; }          /* OnlineSwapPic alone: only the unbaked flag is kept */
     if (kspg_swt == 1) { if (!desc && kl_online() && rs != 2) to = nm; }                       /* names only; ours handed over means the baked name is right */
     else {
         if (!desc && row < KSPG_ROWS) unbaked[row] = (BYTE)stockText;
@@ -441,7 +445,7 @@ static char *kspg_text(int c, void *self, const char *key)
         return r ? r : res;
     }
     r = kspg_text_p2(c, self, key, res);
-    if (r == res && kspg_swt) { char *sx = kspg_text_swt(self, key, res); if (sx) r = sx; }   /* [Shop] OnlineSwapText, stock page only */
+    if (r == res && (kspg_swt || kspg_swtpic)) { char *sx = kspg_text_swt(self, key, res); if (sx) r = sx; }   /* [Shop] OnlineSwapText, stock page only */
     if (kspg.hact && kspg.hireOn && r && strstr(key, "BuyWeapons_Title")) {          /* GUESS: BuyWeapons_Title is the shop's caption (as page II's hint) */
         size_t n = strlen(r); char kn[16], *o;
         if (n <= 440) {
@@ -497,6 +501,33 @@ static void __fastcall kspg_gfx(void *self, void *edx)
                 ((kspg_gfx_t)(DWORD_PTR)kspg_tab[2].orig)(self, 0);
                 klh_data((void *)((DWORD_PTR)self + 0xc4), &idx, 4, "KLShopPage: hire page picture index restored");
                 return;
+            }
+        }
+    }
+    if (kspg_swtpic && kspg_swtact && !kspg.active && !kspg.shownB && !kspg.hire && !kspg.ctl) {
+        /* [Shop] OnlineSwapPic: the stock page, an unbaked card over a pool-handed gun: show a look-alike stock card for one update (same swap-and-restore as page II). Data only.
+           GUESS: the look-alike rows (klswappic.h); GUESS: the carried rows are the bytes at 0xced638/9 (header of this file). Fails open: a failed write leaves the stock index. */
+        int pr = kspg_role_of(self), rr = -99, st, it = 0, P; BYTE cb = 0;
+        if (pr == KR_BIG && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) rr = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW));
+        else if (pr == KR_PRI && klh_rd((DWORD_PTR)KLH_VA(KSPG_CARRY), &cb, 1)) rr = (int)cb;
+        else if (pr == KR_SEC && klh_rd((DWORD_PTR)KLH_VA(KSPG_CARRY + 1), &cb, 1)) rr = (int)cb;
+        if (rr >= 0 && rr < KSPG_ROWS) {
+            st = kls_row_state(rr, &it);
+            P = ksp_pic_row(1, kl_online(), rr, st, it, unbaked[rr]);
+            if (P >= 0) {
+                idx = klh_rd32((DWORD_PTR)self + 0xc4); nidx = (DWORD)ksp_new_index((int)idx, rr, P);
+                if (InterlockedIncrement(&kspg_pic_seen) == 1) klog("shoppic: element %08lx role %d row %d -> pic row %d (item %d, mode %lu, unbaked %d, online %d, index %lu)", (unsigned long)(DWORD_PTR)self, pr, rr, P, it, (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), (int)unbaked[rr], kl_online(), (unsigned long)idx);
+                if (nidx != idx) {
+                    if (klh_data((void *)((DWORD_PTR)self + 0xc4), &nidx, 4, "KLShopPage: OnlineSwapPic index (swapped for one update)")) {
+                        LONG n = InterlockedIncrement(&kspg_pic_swaps);
+                        ((kspg_gfx_t)(DWORD_PTR)kspg_tab[2].orig)(self, 0);
+                        if (klh_data((void *)((DWORD_PTR)self + 0xc4), &idx, 4, "KLShopPage: OnlineSwapPic index restored")) InterlockedIncrement(&kspg_pic_restores);
+                        else klog("shoppic: RESTORE of element %08lx index failed (wanted %lu)", (unsigned long)(DWORD_PTR)self, (unsigned long)idx);
+                        if (n <= 4 || (n & 1023) == 0) klog("shoppic: swaps %ld, restores %ld, write failures %ld", n, (long)kspg_pic_restores, (long)kspg_pic_fail);
+                        return;
+                    }
+                    if (InterlockedIncrement(&kspg_pic_fail) <= 3) klog("shoppic: index write failed on element %08lx: stock picture", (unsigned long)(DWORD_PTR)self);
+                }
             }
         }
     }
@@ -1180,6 +1211,8 @@ static void kspg_init(void)
     /* ORDER MATTERS: this init must stay BEFORE the 'if (!kspg.on) return;' below, or OnlineSwapText silently stops working with [ShopPage] Enable=0. */
     kspg_swt = kls.on ? GetPrivateProfileIntA("Shop", "OnlineSwapText", 0, klh_ini) : 0;
     if (kspg_swt < 0 || kspg_swt > 2) kspg_swt = 0;
+    kspg_swtpic = kls.on ? GetPrivateProfileIntA("Shop", "OnlineSwapPic", 0, klh_ini) != 0 : 0;
+    if (kspg_swtpic) klog("shoppic: [Shop] OnlineSwapPic=1 (recommended off): on an unbaked map the shop rows 13/16/32/35 show a LOOK-ALIKE stock card (HK69 -> row 14, Type 81 -> 30, Rem 700/Minimi -> 32) when the pool hands over ours; not the true picture; needs OnlineSwap and the name path (it keeps its own unbaked flag); GUESS: never run live");
     if (kspg_swt) klog("shoptext: [Shop] OnlineSwapText=%d (recommended off; GUN1 10-28 found the old kllocname.c path never ran): the shop rows 13/16/32/35 text is answered in the elements' slot 24 on the stock page; the element scan runs without [ShopPage] Enable", kspg_swt);
     if (!kspg.on) return;
     kspg.key = klkeys_vk(KK_PAGE2) & 0xff;
@@ -1335,7 +1368,7 @@ static void kspg_swt_tick(void)
     static DWORD lastGate, lastScan; DWORD now = GetTickCount();
     if (now - lastGate > 250) {
         int g = kspg_gate_x(2); lastGate = now;
-        if (g != 1) { if (kspg_swtact) { InterlockedExchange(&kspg_swt_wrapped, 0); memset(unbaked, 0, sizeof unbaked); } kspg_swtact = 0; return; }
+        if (g != 1) { if (kspg_swtact) { if (kspg_swtpic && kspg_pic_seen) klog("shoppic: shop closed: swaps %ld, restores %ld, write failures %ld", (long)kspg_pic_swaps, (long)kspg_pic_restores, (long)kspg_pic_fail); kspg_pic_seen = 0; InterlockedExchange(&kspg_swt_wrapped, 0); memset(unbaked, 0, sizeof unbaked); } kspg_swtact = 0; return; }
         kspg_swtact = 1;
     }
     if (kspg_swtact && !kspg.active && !kspg.hact && now - lastScan > 1500) { lastScan = now; kspg_scan(); }   /* the other two ticks scan when they are active */
@@ -1427,7 +1460,7 @@ static void klshoppage_tick(int game_thread)
     if ((kspg.hireOn || kspg.ctlOn) && game_thread && klh_exe_ok) kspg_hire_tick();
     if (kspg.probe && game_thread && klh_exe_ok) kspp_tick();
     if (kspo.on && game_thread && klh_exe_ok) kspo_tick();
-    if (kspg_swt && game_thread && klh_exe_ok) kspg_swt_tick();
+    if ((kspg_swt || kspg_swtpic) && game_thread && klh_exe_ok) kspg_swt_tick();
     if (kspg.swapArm && !kspg.on && game_thread && klh_exe_ok) {          /* [Shop] OnlineSwapArm: only the early-make hook, for the swap (page II is off) */
         if (!kspg.earlyTried) kspg_early_patch();
         if (kspg.earlyOk) kllb_early_tick();

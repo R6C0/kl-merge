@@ -61,6 +61,7 @@ C_TESTS = {
     'klgrades_test.c': 'logic',        # klgrades.h (uses _snprintf: -D_snprintf=snprintf)
     'kllootsync_test.c': 'logic',      # kllootsync_logic.h
     'klbalonline_test.c': 'logic',     # klbalonline.h
+    'klswappic_test.c': 'logic',       # klswappic.h ([Shop] OnlineSwapPic decision)
     'klbottrait_test.c': 'logic',      # klbottrait.h
     'klshot_test.c': 'logic',          # klshot_logic.h (uses _snprintf: shim may need -D_snprintf=snprintf)
     'klleaf_test.c': 'logic',          # klleaf_logic.h (leaf probe schedule + CarStall door gate)
