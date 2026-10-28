@@ -124,6 +124,29 @@ static void klcl_humans(const struct klw_src *src, char ex[KLC_NCHAR + 1])
     }
 }
 
+/* kltrait.c [BotFill] OnlineBotTraits (2026-10-28, wk-trait): which character the HOST drew for an Ally bot. Only the host that drew (role 2) and only a bot whose look is
+   APPLIED (klcl_note codes 1 = applied, 4 = model taken, variant fought) counts as wearing it: a kept body, a skipped or pending look is no trait. Game thread. */
+static DWORD klcl_bot_actor(int idx) { return (idx >= 0 && idx < 8 && klcl_on && klcl_t.role == 2 && klcl_t.host && klcl_t.epoch && klcl_t.a[idx].epoch == klcl_t.epoch) ? klcl_t.a[idx].actor : 0; }
+static int klcl_bot_look(DWORD actor, int *ch, DWORD *epoch)
+{
+    int i;
+    if (!actor || !klcl_on || klcl_t.role != 2 || !klcl_t.host || !klcl_t.epoch) return 0;
+    for (i = 0; i < 8; i++) {
+        if (klcl_t.a[i].actor != actor || klcl_t.a[i].epoch != klcl_t.epoch) continue;
+        if (!klcl_t.e[i].have || !klcl_t.e[i].ch || (klcl_t.a[i].last != 1 && klcl_t.a[i].last != 4)) return 0;
+        *ch = klcl_t.e[i].ch; *epoch = klcl_t.epoch; return 1;
+    }
+    return 0;
+}
+/* the wardrobe name of the 1-based index ch (this seat's wardrobe, klcl_src); 0 = not readable now */
+static int klcl_bot_name(int ch, char *name, int size)
+{
+    struct klw_src src; DWORD rules; int i;
+    if (!klcl_src(&src, &rules) || (i = kbt_index(ch, src.n)) < 0) return 0;
+    snprintf(name, size, "%s", src.c[i].name);
+    return 1;
+}
+
 /* one line per bot and outcome, not again until the outcome or the epoch changes */
 static void klcl_note(int idx, DWORD actor, int code, const char *what)
 {

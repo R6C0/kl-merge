@@ -239,6 +239,8 @@ feat('crewjoin', G_CREW, 'AI heisters follow the tower-to-lobby jump (Retomoto)'
      'two navmeshes joined only by kljoin.c', [('CrewJoin', 'Enable', 1, 0, 0)])
 feat('traits', G_CREW, 'A small trait per Dead Men character', 'on', 'start',
      'enabled in the live ini; the effect is small and logged', [('Traits', 'Enable', 1, 0, 0)])
+feat('onlinebottraits', G_CREW, 'Online AI heisters carry the traits of the character they wear: tougher or frailer hits, longer or shorter lie when downed; host only (needs Traits on and the host bot options with Online looks; recommended off)', 'off', 'start',
+     'kltrait.c [BotFill] OnlineBotTraits; Health/DamageIn scale the hit on the bot in the slot-423 wrapper (klbalance.c klr_tr_orig), ReviveTime scales klbotdown.c LieSeconds; DamageOut/AimSpread/Regen/Adrenaline not applied online; re/traits.md ONLINE; NOT run live', [('BotFill', 'OnlineBotTraits', 1, 0, 0), ('Traits', 'Enable', 1, None, 0), ('BotFill', 'OnlineLooks', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0)])
 feat('talk', G_CREW, 'Kane and Lynch dialogue and chatter', 'on', 'start',
      'Retomoto countdown and the idle chatter', [('Talk', 'Enable', 1, 0, 0)])
 

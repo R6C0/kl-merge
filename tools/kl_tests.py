@@ -60,6 +60,7 @@ C_TESTS = {
     'klgrades_test.c': 'logic',        # klgrades.h (uses _snprintf: -D_snprintf=snprintf)
     'kllootsync_test.c': 'logic',      # kllootsync_logic.h
     'klbalonline_test.c': 'logic',     # klbalonline.h
+    'klbottrait_test.c': 'logic',      # klbottrait.h
     'klshot_test.c': 'logic',          # klshot_logic.h (uses _snprintf: shim may need -D_snprintf=snprintf)
     'klbotvoice_test.c': 'logic',      # klbotvoice_logic.h
     'klht_test.c': 'logic',            # klhud_tags_dist.h
