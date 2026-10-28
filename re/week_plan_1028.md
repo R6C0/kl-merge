@@ -23,6 +23,7 @@ Owner wants every mod feature reachable on a sensible key and shown on screen (s
 Owner: ce.
 
 ### T2 Maps work on both sides (host and client), all maps
+- 10-28 15:12 c9: A1SHIFT4 PASS (DM11S from the real DM11B: both seats in round, faults 0, DM11S bots.zip, 7 Ally alive). Next: DM11S ship prep (workflow), then full-round + offline checks. A1NET2 after ce's WKBC2/BP_DD04b.
 - 10-28 14:55 c9: A1HIRE3 PASS (ce ran it): stock-map hire body via rules+0x208 CONFIRMED online, money 100000 -> 90000 read back on host and client. A1SHIFT4 running 14:52, A1NET2 next.
 - 10-28 14:35 c9: A1NET2 staged (ini-only: both seats walk W/A/D + yaw ~170 s; A1NET1 had no client movement). c9 game queue after ce's 5 benches + A1HIRE3 (ce runs it): A1SHIFT4, A1NET2 (queue.txt sections 4, 5).
 - 10-28 14:20 c9: A1SHIFT3 div0 root cause = the shift used the STOCK F04 zip, not DM11B (sound records mismatched). Fixed + rebuilt from the real DM11B (984463891, Heroes moved too). A1SHIFT4 staged after ce's queue + A1HIRE3.

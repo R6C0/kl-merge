@@ -1,3 +1,8 @@
+2026-10-28 ~15:12 - [c9] A1SHIFT4 PASS: DM11S (int16 shift of the REAL DM11B, 984463891) online, both seats IN ROUND (host 14:49-14:55, client
+14:49-14:53 to script pass), faults 0, asserts 0, botgate loaded the DM11S bots.zip (222102326), census 49 ZFFActor / 7 Ally alive. Screenshots
+black (monitor off), so no visual check. DM11B + ship dll f520f5d1 restored, game to ce (WKBC2, BP_DD04b), A1NET2 after. Next: ship prep for DM11S
+(install script + int16guard entry) and a full-round + offline Arcade check before it replaces DM11B.
+
 2026-10-28 ~14:55 - [c9] A1HIRE3 PASS (ce ran it, F06, 2 seats online, faults 0, TEST out_c9hire3_1028_test): StockHero CONFIRMED - with
 IgnoreWardrobe=1 the host logged 'stock hero table TAKEN ... 35282 35384 35480 35571 35661 35753 35847 35938' (rules+0x208 holds the 8 stock
 heisters online too) and J.C./Tommy bodies applied; money proven: host 'banked 100000 -> 90000 (expect 90000)' per seat, client reads 90000 at
