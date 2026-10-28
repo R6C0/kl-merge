@@ -1,3 +1,9 @@
+2026-10-28 ~20:50 - [c9] Retomoto lift DONE as far as a bench can show (A1LIFT3f PASS, faults 0, 56 JPG shots): after the player's second crossing
+(doors fire at log-clock 18:36:57.3) the player is IN join box 9 0.8 s later at (2365,19604,103) = through the lift doors; in A1LIFT3d the same
+walk went box9-in (2382,19603,75) then down at (2565,19602,879): the car carried the player up. Shot 37/38 show the door frame, not a clean open
+door (red low-health screen, player downed by the lift ride ~1 s in). 'face' cannot turn the player in place (bearing error -157, 4 s timeout).
+Open: why the player is downed in/near the lift at 40 % health (both runs). Inputs C:\kl_build_1024\c9_1028\a1lift3.
+
 2026-10-28 ~20:25 - [c9] A1LIFT3e PASS + bench shots fixed. --d3shots (merged 259c89c32, kld3 back-buffer shots; the GDI grab was all-zero
 with the monitor off) took 8 real 640x480 shots live. The PLAYER's own two crossings of the Retomoto lift box each made both door proxies accept
 0032 (log-clock 18:18:44.8 and 18:19:13.9, 29 s apart): re-arm proven by the player, not just by bots. Shot 02 shows both lift doors shut just
