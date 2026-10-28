@@ -32,7 +32,7 @@ static int klbf_oh;                /* [BotFill] OnlineHost (klsync.c reads it: b
 static int klbf_on, klbf_sq;      /* klbf_sq = [Bots] OnlineFillSquads (see the header, step 3) */
 static int klbf_fill;              /* the plan's fill, for the squad pass */
 static int klbf_lp; static float klbf_lp_scale = 1.0f, klbf_lp_stay = 250.0f; static DWORD klbf_lp_warned[16]; static int klbf_lp_nw, klbf_lp_nok, klbf_lp_nbad;      /* gap2: OnlineLootParts (timed parts) */
-static int klbf_lf, klbf_lf_cap = 25, klbf_lf_start, klbf_lf_fin, klbf_lf_left, klbf_lf_hold, klbf_lf_cops; static float klbf_lf_stay = 500.0f;      /* wk-botpar: [BotFill] OnlineLootFinish / OnlineLootFinishStayM (game units) / OnlineLootFinishCapS; per-round finished / left-early counts */
+static float klbf_lf_copm = 800.0f; static int klbf_lf, klbf_lf_cap = 25, klbf_lf_start, klbf_lf_fin, klbf_lf_left, klbf_lf_hold, klbf_lf_cops; static float klbf_lf_stay = 500.0f;      /* wk-botpar: [BotFill] OnlineLootFinish / OnlineLootFinishStayM (game units) / OnlineLootFinishCapS; per-round finished / left-early counts */
 static int klbf_esn, klbf_vgs, klbf_vgs_margin = 60, klbf_vgs_defer; static DWORD klbf_vgs_since;      /* wk-botpar: [BotFill] OnlineEscortNode , OnlineVanGatherSmart / OnlineVanGatherMarginS */
 static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near = 150.0f;
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
@@ -59,7 +59,7 @@ static DWORD klbf_sq_done;         /* the session object the squad pass finished
    [Bots] OnlineEscort 0 off / 1 follow the host seat / 2 follow the nearest human; OnlineEscortFar / OnlineEscortSide (cm, Arcade klescort.c defaults 800 / 300): host only, idle bots (no stack, not guard-walking) stay near the human. */
 static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_esc_side = 300.0f;
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
-static int klbf_gu; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
+static int klbf_gu, klbf_gu_sprint; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
 #include "klgetupbeacon.h"      /* wk-getup2-1028: [BotFill] OnlineGetUpBeacon, the pure part (klgetupbeacon_test.c); sockets in klgetupbeacon.c (AFTER klsync.c) */
 static int klgb_on; static struct klgb_seat klgb_seats[KLGB_MAX_SEATS];      /* [BotFill] OnlineGetUpBeacon (0/1; only with OnlineGetUp): the downed machine tells the host (klgetupbeacon.c); the host's per-seat book */
 static void klgb_own(DWORD pl, DWORD ds, int alive, DWORD now);      /* klgetupbeacon.c (client side; kldown.c calls it) */
@@ -139,13 +139,14 @@ static void klbf_init(void)
     if (klbf_lp) klog("botfill: lootparts: OnlineLootParts=%d scale %.2f stay %.0f", klbf_lp, klbf_lp_scale, klbf_lp_stay);
     klbf_lf = klbf_lp == 1 && GetPrivateProfileIntA("BotFill", "OnlineLootFinish", 0, klh_ini) != 0;      /* (recommended on) wk-botpar: needs OnlineLootParts=1 */
     klbf_lf_stay = (float)GetPrivateProfileIntA("BotFill", "OnlineLootFinishStayM", 500, klh_ini); if (klbf_lf_stay < klbf_lp_stay) klbf_lf_stay = klbf_lp_stay; if (klbf_lf_stay > 1000) klbf_lf_stay = 1000;
+    klbf_lf_copm = (float)GetPrivateProfileIntA("BotFill", "OnlineLootFinishCopM", 8, klh_ini) * 100.0f; if (klbf_lf_copm < 0) klbf_lf_copm = 0; if (klbf_lf_copm > 5000) klbf_lf_copm = 5000;      /* (recommended on at 8) wk-botpar: metres, horizontal (+ 4 m vertical); 0 = cops never end the finish protection */
     klbf_lf_cap = (int)GetPrivateProfileIntA("BotFill", "OnlineLootFinishCapS", 25, klh_ini); if (klbf_lf_cap < 5) klbf_lf_cap = 5; if (klbf_lf_cap > 55) klbf_lf_cap = 55;
     klbf_esn = GetPrivateProfileIntA("BotFill", "OnlineEscortNode", 0, klh_ini) != 0;      /* (recommended on) wk-botpar: human seats' feet from the scene node first */
     klbf_vgs = GetPrivateProfileIntA("BotFill", "OnlineVanGatherSmart", 0, klh_ini) != 0;      /* (recommended on) wk-botpar */
     klbf_vgs_margin = (int)GetPrivateProfileIntA("BotFill", "OnlineVanGatherMarginS", 60, klh_ini); if (klbf_vgs_margin < 45) klbf_vgs_margin = 45; if (klbf_vgs_margin > 300) klbf_vgs_margin = 300;
     if (GetPrivateProfileIntA("BotFill", "OnlineLootFinish", 0, klh_ini) && !klbf_lf) klog("botfill: lootparts: OnlineLootFinish needs OnlineLootParts=1: off");
     if (klbf_lf && !klbf_vgs) klog("botfill: wk-botpar: OnlineLootFinish without OnlineVanGatherSmart: the van gather still pulls a taking bot off its stack (hold / drift limits only)");
-    if (klbf_lf || klbf_esn || klbf_vgs) klog("botfill: wk-botpar: OnlineLootFinish=%d (stay %.0f, cap %d s), OnlineEscortNode=%d, OnlineVanGatherSmart=%d (margin %d s)", klbf_lf, klbf_lf_stay, klbf_lf_cap, klbf_esn, klbf_vgs, klbf_vgs_margin);
+    if (klbf_lf || klbf_esn || klbf_vgs) klog("botfill: wk-botpar: OnlineLootFinish=%d (stay %.0f, cap %d s, cop radius %.0f cm), OnlineEscortNode=%d, OnlineVanGatherSmart=%d (margin %d s)", klbf_lf, klbf_lf_stay, klbf_lf_cap, klbf_lf_copm, klbf_esn, klbf_vgs, klbf_vgs_margin);
     klbf_ot_hmul = (int)GetPrivateProfileIntA("BotFill", "OnlineHealthMul", 5, klh_ini); if (klbf_ot_hmul < 1) klbf_ot_hmul = 1; if (klbf_ot_hmul > 20) klbf_ot_hmul = 20;
     klbf_ot_gtake = GetPrivateProfileIntA("BotFill", "OnlineGuardTake", 0, klh_ini) != 0;      /* BO8c: the 30 s fallback sent all 5 holding bots into the squads at once; all 7 died within 71 s */
     klbf_ot_guard = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsGuard", 25, klh_ini); if (klbf_ot_guard < 0) klbf_ot_guard = 0;
@@ -225,8 +226,10 @@ static void klbf_init(void)
     klbf_gu_range = (float)GetPrivateProfileIntA("BotFill", "OnlineGetUpRange", 2500, klh_ini); if (klbf_gu_range < 500.0f) klbf_gu_range = 500.0f; if (klbf_gu_range > 8000.0f) klbf_gu_range = 8000.0f;      /* cm, Arcade RushRange 25 m */
     { char rb[32]; GetPrivateProfileStringA("BotFill", "OnlineGetUpRate", "3.0", rb, sizeof rb, klh_ini); klbf_gu_rate = (float)atof(rb); if (!(klbf_gu_rate >= 0.5f)) klbf_gu_rate = 0.5f; if (klbf_gu_rate > 20.0f) klbf_gu_rate = 20.0f; }      /* meter a second a helper adds (Arcade [Adrenaline] Meter 3.0 is the clip-speed floor) */
     klbf_gu_near = (float)GetPrivateProfileIntA("BotFill", "OnlineGetUpNear", 400, klh_ini); if (klbf_gu_near < 150.0f) klbf_gu_near = 150.0f; if (klbf_gu_near > 1000.0f) klbf_gu_near = 1000.0f;      /* cm, Arcade BotRange 4 m */
+    klbf_gu_sprint = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpSprint", 0, klh_ini) != 0;      /* (recommended on) wk-botpar: GU6 bot 5 walked 80 -> 38 m in 18 s; the rush order gets the Defend move style Sprint as OnlineExitSprint gives it; needs OnlineGetUp 1 */
     klgb_on = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpBeacon", 0, klh_ini) != 0;      /* (recommended off) wk-getup2-1028: not run live; needs OnlineGetUp 1 (2 = host logs only) on both machines */
     if (klgb_on) klog("botfill: getup: OnlineGetUpBeacon=1: a downed machine sends 'KLSYD' (UDP %d) to the host once a second while down and 3x on getting up; the host counts a fresh beacon (< %d ms) as 'seat is down' (klgetupbeacon.c)", 27415, KLGB_FRESH_MS);
+    if (klbf_gu) klog("botfill: getup: OnlineGetUpSprint=%d (recommended on): the rush order is followed by the Defend move style Sprint (undone when the bot is released)", klbf_gu_sprint);
     if (klbf_gu) klog("botfill: getup: OnlineGetUp=%d (%s): host rush range %.0f cm, helper by the downed body within %.0f cm adds %.1f a second to the mash meter - default 0 = off", klbf_gu, klbf_gu == 2 ? "DRY, log only" : "on", klbf_gu_range, klbf_gu_near, klbf_gu_rate);
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
     klbf_trig_x = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggersExtra", 0, klh_ini); if (klbf_trig_x < 0 || klbf_trig_x > 2) klbf_trig_x = 0;      /* ZTriggerBox2 / ZOnlineTriggerBox: no stock cop wave uses them (money-stack pick-ups, location trackers), so off by default */
@@ -275,7 +278,7 @@ static void klbf_init(void)
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 #define KLBF_OT_GUARDWAIT 30000   /* ms a bot holds while every free stack is guarded (OnlineTacticsGuard) before it takes the nearest guarded one */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; DWORD lootAt, lootTick; int lootPaid, lootPart, lootLeft, lootGot; float lootSec; DWORD gwAt, gwOrd, reachAt, esAt, esLog; float esAnc[3]; int esN; float holdAt[3]; DWORD holdOrd; int holdN, holdChk; DWORD guAt, guOrd, guLog; int guHum; } klbf_ob[KLBF_OT_BOTS];      /* wk-lpbal: phase-4 hold: where the bot stood when the grab began, its order clock, orders given */      /* wk-move: gwAt = last tick the bot guard-walked / held at the edge (OnlineGuardWalk), gwOrd its order clock, reachAt OnlineWalkReach clock, esAt/esLog/esAnc/esN the OnlineEscort order clock, log clock, the human's place at the order, orders since the log */      /* wk-arcmods-1028: see klbf_ob_stage below. legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; DWORD lootAt, lootTick; int lootPaid, lootPart, lootLeft, lootGot; float lootSec; DWORD gwAt, gwOrd, reachAt, esAt, esLog; float esAnc[3]; int esN; float holdAt[3]; DWORD holdOrd; int holdN, holdChk; DWORD guAt, guOrd, guLog; int guHum, guSp; } klbf_ob[KLBF_OT_BOTS];      /* wk-lpbal: phase-4 hold: where the bot stood when the grab began, its order clock, orders given */      /* wk-move: gwAt = last tick the bot guard-walked / held at the edge (OnlineGuardWalk), gwOrd its order clock, reachAt OnlineWalkReach clock, esAt/esLog/esAnc/esN the OnlineEscort order clock, log clock, the human's place at the order, orders since the log */      /* wk-arcmods-1028: see klbf_ob_stage below. legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
 static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ], klbf_ot_badAt[KLBF_OT_OBJ]; static BYTE klbf_ot_badLong[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
 /* wk-arcmods-1028: heist stage (klbot.c 0..3: 1 entered the bank, 2 left it with loot, 3 at the vehicle) of an online bot, for klhop's ONLINE path.
@@ -793,8 +796,8 @@ static int klbf_lf_busy(int s, DWORD now, const float *bpos, const float (*cp)[3
 {
     int c; float r;
     if (!klbf_lf || klbf_ob[s].phase != 4 || now - klbf_ob[s].lootAt >= (DWORD)klbf_lf_cap * 1000u) return 0;
-    r = klbf_ot_guard > 0 ? klbf_ot_guard : 2500.0f;
-    for (c = 0; c < ncp; c++) if (sqrt((cp[c][0] - bpos[0]) * (cp[c][0] - bpos[0]) + (cp[c][2] - bpos[2]) * (cp[c][2] - bpos[2])) <= r && fabs(cp[c][1] - bpos[1]) <= 400.0f) { if (!(klbf_ob[s].told & 262144) && (klbf_ob[s].told |= 262144)) { klbf_lf_cops++; klog("botfill: lootparts: bot %d: a live cop is within %.0f m: the stack finish protection ends, the normal stay / gather rules apply (OnlineLootFinish)", s, r / 100); } return 0; }
+    r = klbf_lf_copm;      /* OnlineLootFinishCopM (BP1: the 25 m guard ended the protection 1 s after the start in a firefight; 0 = a cop never ends it) */
+    if (r > 0) for (c = 0; c < ncp; c++) if (sqrt((cp[c][0] - bpos[0]) * (cp[c][0] - bpos[0]) + (cp[c][2] - bpos[2]) * (cp[c][2] - bpos[2])) <= r && fabs(cp[c][1] - bpos[1]) <= 400.0f) { if (!(klbf_ob[s].told & 262144) && (klbf_ob[s].told |= 262144)) { klbf_lf_cops++; klog("botfill: lootparts: bot %d: a live cop is within %.0f m (OnlineLootFinishCopM): the stack finish protection ends, the normal stay / gather rules apply (OnlineLootFinish)", s, r / 100); } return 0; }
     return 1;
 }
 
@@ -1003,7 +1006,7 @@ static int klbf_feet(DWORD P, float f[3], int *src)
    The Arcade klescort path (klb_read crew records) is untouched. */
 static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sold, const float (*pos)[3], int nb, int vstate)
 {
-    DWORD ents = 0, own = 0; int n = 0, how = 0, oi, i, b, nh = 0, ownH = -1, hseat[16], nTab = 0, nHeist = 0, nDead = 0, nNoFeet = 0, srcNow[16]; float hp[16][3]; static int toldNone, toldRound, toldSrc;
+    DWORD ents = 0, own = 0; int n = 0, how = 0, oi, i, b, nh = 0, ownH = -1, hseat[16], nTab = 0, nHeist = 0, nDead = 0, nNoFeet = 0, srcNow[16]; float hp[16][3]; static int toldNone, toldRound, toldSrc; static DWORD toldAt;
     if (!klbf_esc || nb <= 0) return;
     if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; toldSrc = 0; }
     if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: escort: online: the session player table is not readable: no escort this round yet (said once)"); return; }
@@ -1013,15 +1016,16 @@ static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *so
         if (P) nTab++;
         if (!P || !klco_heister(P)) continue;
         nHeist++;
-        if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0) { nDead++; continue; }      /* dead / down (GUESS as klucc.c kluc_alive_heister: unreadable = alive) */
+        if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0 && klh_rd32(h + 0x24) == P) { nDead++; continue; }      /* dead / down (GUESS as klucc.c kluc_alive_heister: unreadable = alive). wk-botpar BP1 20:52:28 (round start, state 0x19): all 8 heisters read 0 and counted dead, and no human was ever read that round. GUESS: before the spawn is finished the health object is a blank one whose back-pointer [h+0x24] is not the entity (as klbotdown.c / klbalance.c check for NPCs), so only a health object that points back at this entity counts as 'dead' */
         if (!klbf_feet(P, f, &sr)) { nNoFeet++; continue; }      /* OnlineEscortNode: node first, +0x460 fallback; off = +0x460 only (the old test) */
         memcpy(hp[nh], f, 12); hseat[nh] = i; srcNow[nh] = sr; if (i == oi) ownH = nh; nh++;
     }
-    if (klbf_esn && !toldSrc && nh) { toldSrc = 1; klog("botfill: escort: feet source this round (OnlineEscortNode): %d human(s) read, host seat %s; seat sources:%s%s%s%s", nh, ownH >= 0 ? (srcNow[ownH] == 1 ? "by the scene node" : "by +0x460 (node unusable)") : "not read", srcNow[0] == 1 ? " node" : " +0x460", nh > 1 ? (srcNow[1] == 1 ? " node" : " +0x460") : "", nh > 2 ? (srcNow[2] == 1 ? " node" : " +0x460") : "", nh > 3 ? " ..." : ""); }
+    if (!toldSrc && nh) { toldSrc = 1; klog("botfill: escort: feet source this round (OnlineEscortNode=%d): %d human(s) read, host seat %s; seat sources:%s%s%s%s", klbf_esn, nh, ownH >= 0 ? (srcNow[ownH] == 1 ? "by the scene node" : "by +0x460 (node unusable)") : "not read", srcNow[0] == 1 ? " node" : " +0x460", nh > 1 ? (srcNow[1] == 1 ? " node" : " +0x460") : "", nh > 2 ? (srcNow[2] == 1 ? " node" : " +0x460") : "", nh > 3 ? " ..." : ""); }
     if (!nh || (klbf_esc == 1 && ownH < 0)) {
-        if (!toldNone++) {
-            klog("botfill: escort: online: %s (%d living human(s) read, host seat index %d): no escort (said once per round)", klbf_esc == 1 ? "the host seat's place is not readable" : "no human's place is readable", nh, oi);
-            if (klbf_esn) klog("botfill: escort: why no human was read: %d table entr%s, %d heister(s), %d dead / down, %d with no readable feet (node and +0x460 both refused), own-seat find via %d", nTab, nTab == 1 ? "y" : "ies", nHeist, nDead, nNoFeet, how);
+        if (!toldNone++ || now - toldAt >= 20000u) {      /* wk-botpar: the pass retries every second; the line is said once per round, then again every 20 s while still nobody is read (counts included) */
+            toldAt = now;
+            klog("botfill: escort: online: %s (%d living human(s) read, host seat index %d): no escort yet (retried every pass; said again every 20 s)", klbf_esc == 1 ? "the host seat's place is not readable" : "no human's place is readable", nh, oi);
+            klog("botfill: escort: why no human was read: %d table entr%s, %d heister(s), %d dead / down, %d with no readable feet (node and +0x460 both refused), own-seat find via %d", nTab, nTab == 1 ? "y" : "ies", nHeist, nDead, nNoFeet, how);
         }
         return;
     }
@@ -1065,6 +1069,17 @@ static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *so
     }
 }
 
+/* wk-botpar OnlineGetUpSprint: the OnlineExitSprint mechanism (klbf_ot_run, phase 1) for the get-up rush: after a successful order the Defend block ([soldier+0x64c], +0x14 = soldier) gets move style
+   +0xc = eDMS_Sprint (2) and 'style given' +0x10 = 1; on = 1 sets it, on = 0 puts 'style given' back to 0 (as the exit walk's undo). Returns 1 when the block was (or already is) at Sprint / undone. */
+static int klbf_gu_style(DWORD soldier, int on)
+{
+    DWORD blk = klh_rd32(soldier + 0x64c), sp = 2, cur = 0; BYTE one = 1, zero = 0;
+    if (!blk || klh_rd32(blk + 0x14) != soldier) return 0;
+    if (!on) return klh_data((void *)(DWORD_PTR)(blk + 0x10), &zero, 1, "defend block style given (OnlineGetUpSprint undone)") ? 1 : 0;
+    if (klh_rd(blk + 0xc, &cur, 4) && cur == sp) return 1;
+    return klh_data((void *)(DWORD_PTR)(blk + 0xc), &sp, 4, "defend block move style (OnlineGetUpSprint)") && klh_data((void *)(DWORD_PTR)(blk + 0x10), &one, 1, "defend block style given (OnlineGetUpSprint)") ? 1 : 0;
+}
+
 /* [BotFill] OnlineGetUp (wk-getup-1028, re/bot_getup_online.md; static, NOT RUN live). Arcade's get-up help is the mod's own (kladren.c: Rush + the meter pull), never stock (the stock healer ZHealTactic
    needs a player state 5 that exists only in session mode 2). Online it has two halves, neither needing a message:
    HOST (klbf_gu_pass, from klbf_ot_run once a second, after the escort pass): a human whose body is down (D = [P+0x2948], [D+4] 1 / 2; a replica's D is run by the same 0x76a450 the owner's is, GUESS)
@@ -1078,6 +1093,11 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
     if (!klbf_gu || nb <= 0) return;
     if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; memset(hdown, 0, sizeof hdown); memset(hAt, 0, sizeof hAt); memset(klgb_seats, 0, sizeof klgb_seats); memset(toldMap, 0, sizeof toldMap); }
     if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: getup: the session player table is not readable: no get-up help this round yet (said once)"); return; }
+    for (s = 0; s < KLBF_OT_BOTS; s++) if (klbf_ob[s].guSp && (!klbf_ob[s].guHum || now - klbf_ob[s].guAt >= 3500)) {      /* OnlineGetUpSprint undone with the release */
+        for (b = 0; b < nb && act[b] != klbf_ob[s].actor; b++) ;
+        if (b < nb) klbf_gu_style(sold[b], 0);
+        klbf_ob[s].guSp = 0; klog("botfill: getup: bot %d: Sprint style undone (OnlineGetUpSprint)", s);
+    }
     for (s = 0; s < KLBF_OT_BOTS; s++) if (klbf_ob[s].guHum && now - klbf_ob[s].guAt >= 3500) { klog("botfill: getup: bot %d released (seat %d: not down any more or the rush lapsed)", s, klbf_ob[s].guHum - 1); klbf_ob[s].guHum = 0; klbf_ob[s].guAt = 0; klbf_ob[s].guOrd = 0; }
     memset(rok, 0, sizeof rok); memset(bsd, 0, sizeof bsd);
     if (klgb_on) {      /* the beacons (klgetupbeacon.c): read each heister replica's place, check the beacon's table index against it, else the nearest replica (GUESS: the index is equal on both peers) */
@@ -1159,6 +1179,7 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
             if (klbf_gu == 2) { klog("botfill: getup: DRY - bot %d (%.0f cm away) WOULD be sent to seat %d's side (%.0f, %.0f, %.0f)", s, bdst, i, want[0], want[1], want[2]); continue; }
             memset(&e, 0, sizeof e); e.rec = -1; e.actor = act[rb]; e.soldier = sold[rb]; e.told_soft = 1; why[0] = 0;
             r = kle_order2(&e, want, got, why, 0);
+            if (r == 1 && klbf_gu_sprint && klbf_gu_style(sold[rb], 1) && !klbf_ob[s].guSp) { klbf_ob[s].guSp = 1; klog("botfill: getup: bot %d: rush at Sprint (OnlineGetUpSprint; defend block move style set after the order)", s); }
             if (r == 1) { klbf_ob[s].ordered = now; klog("botfill: getup: bot %d (%.0f cm away, phase %d) sent to seat %d at (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f)", s, bdst, klbf_ob[s].phase, i, want[0], want[1], want[2], got[0], got[1], got[2]); }
             else if (why[0] && (!klbf_ob[s].guLog || now - klbf_ob[s].guLog >= 5000)) { klbf_ob[s].guLog = now; klog("botfill: getup: bot %d NOT sent to seat %d: %s", s, i, why); }
         }
@@ -1380,7 +1401,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             }
         }
         if (klbf_ob[s].phase == 4) {      /* OnlineLootParts: the bot stands at the stack and is paid a part every lootSec; same 0x4e3f40 call as the lump */
-            DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0, st = 0; DWORD ent, node; float mp[3]; int stop = 0; const char *why = ""; float stayL = (busy || (klbf_lf && !(klbf_ob[s].told & 262144))) ? klbf_lf_stay : klbf_lp_stay;      /* OnlineLootFinish: a wider drift tolerance while the bot finishes (the vertical 400 limit and the stack / anchor geometry checks stay) */
+            DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0, st = 0; DWORD ent, node; float mp[3]; int stop = 0; const char *why = ""; float stayL = (busy || (klbf_lf && now - klbf_ob[s].lootAt < (DWORD)klbf_lf_cap * 1000u)) ? klbf_lf_stay : klbf_lp_stay;      /* wk-botpar BP1 20:53:27: bot 1 'moved away' 3.5 m from its stack 1 s after a cop ended the protection (the strict OnlineLootStayM then applied): the wide limit now holds for the whole cap, the cop only releases the van gather */      /* OnlineLootFinish: a wider drift tolerance while the bot finishes (the vertical 400 limit and the stack / anchor geometry checks stay) */
             if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) { why = "stack gone or hidden (taken by someone else?)"; stop = 1; }
             else if (klh_rd(o + 0x64, &st, 1) && st >= 2 && st <= 3) { why = "stack changed state"; stop = 1; }      /* same 2/3 refusal as the lump */
             else if ((float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2])) > stayL || fabs(bots[b].pos[1] - mp[1]) > 400.0f
@@ -1389,7 +1410,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             else {
                 if (busy && !(klbf_ob[s].told & 1048576)) { float d1 = (float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2])), d2 = (float)sqrt((bots[b].pos[0] - klbf_ob[s].holdAt[0]) * (bots[b].pos[0] - klbf_ob[s].holdAt[0]) + (bots[b].pos[2] - klbf_ob[s].holdAt[2]) * (bots[b].pos[2] - klbf_ob[s].holdAt[2]));
                     if (d1 > klbf_lp_stay || d2 > klbf_lp_stay) { klbf_ob[s].told |= 1048576; klog("botfill: lootparts: bot %d drifted %.1f m from the stack, %.1f m from its anchor (OnlineLootStayM %.1f m): finishing anyway, limit %.1f m (OnlineLootFinishStayM; the order is repeated every 1.5 s)", s, d1 / 100, d2 / 100, klbf_lp_stay / 100, klbf_lf_stay / 100); } }
-                if (now - klbf_ob[s].holdOrd >= (busy ? 1500u : KLBF_OT_REORD)) { klbf_lp_hold(s, a, bots[b].soldier, o, mp, now); if (busy) klbf_lf_hold++; }      /* OnlineLootFinish: re-issue the hold every 1.5 s (was 6 s) while the bot is protected */
+                if (now - klbf_ob[s].holdOrd >= ((busy || (klbf_lf && now - klbf_ob[s].lootAt < (DWORD)klbf_lf_cap * 1000u)) ? 1500u : KLBF_OT_REORD)) { klbf_lp_hold(s, a, bots[b].soldier, o, mp, now); if (busy) klbf_lf_hold++; }      /* OnlineLootFinish: re-issue the hold every 1.5 s (was 6 s) while the bot is protected */
                 /* wk-lpbal: nothing else orders a phase-4 bot (guard walk / van idle: phase 0 only; escort pass skips all but 0; phase 1/2 walk orders and legs skip 4; OnlineVanGather ends the grab on purpose) */
                 if (klbf_ob[s].holdOrd && !klbf_ob[s].holdChk && now - klbf_ob[s].holdOrd >= 900) { DWORD f4 = 0; klbf_ob[s].holdChk = 1; klh_rd(bots[b].soldier + 0x4fc, &f4, 4); klog("botfill: lootparts: bot %d hold check %lu ms after the order: %.1f m from the stack, %.1f m from the anchor, [soldier+0x4fc]=%08lx", s, (unsigned long)(now - klbf_ob[s].holdOrd), kle_dist(bots[b].pos, mp) / 100, kle_dist(bots[b].pos, klbf_ob[s].holdAt) / 100, (unsigned long)f4); }
                 int due = (int)((now - klbf_ob[s].lootAt) / (klbf_ob[s].lootSec * 1000.0f)) - klbf_ob[s].lootPaid;      /* catch-up: the tick is ~1 s, a part ~0.7 s */
