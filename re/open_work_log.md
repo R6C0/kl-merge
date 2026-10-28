@@ -1,3 +1,8 @@
+2026-10-28 ~15:45 - [c9] DM11S ship prep (workflow, reviewed): [Int16Guard] Marker=1 - a listed folder with Int16Ok.txt whose zip=/bots= sizes
+match is a shifted build and loads online; unshifted DM11B (222101847) still falls back even with a stale marker (df9680596, merged). Dlls
+C:\kl_wt\guard2\klhook\out_c9guard2_1028(_test) (2097F6F0 / E815E20C), not installed. SHIP_DM11S.bat / UNDO_DM11S.bat (backups .before-dm11s,
+md5-checked, rollback) in C:\kl_build_1024\c9_1028\dm11s_ship, not run. Next: A1NET2, A1SHIFT5 (offline), A1SHIFT6 (online guard ON), then ship.
+
 2026-10-28 ~15:12 - [c9] A1SHIFT4 PASS: DM11S (int16 shift of the REAL DM11B, 984463891) online, both seats IN ROUND (host 14:49-14:55, client
 14:49-14:53 to script pass), faults 0, asserts 0, botgate loaded the DM11S bots.zip (222102326), census 49 ZFFActor / 7 Ally alive. Screenshots
 black (monitor off), so no visual check. DM11B + ship dll f520f5d1 restored, game to ce (WKBC2, BP_DD04b), A1NET2 after. Next: ship prep for DM11S
