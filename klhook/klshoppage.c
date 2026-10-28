@@ -772,7 +772,7 @@ static void kspg_early_body(int host)
 {
     int row, rows = 0, made = 0, had = 0, st;
     DWORD sm, pa = 0, pn = 0;
-    if (!kspg.earlyOk || !kspg.on || !kspg.have || !klh_exe_ok) return;
+    if (!kspg.early || !kspg.earlyOk || !kspg.on || !kspg.have || !klh_exe_ok) return;   /* kspg.early: with only [Shop] OnlineSwap the hook runs for the swap, not for page II */
     if (!kl_online()) { static BYTE t0; if (!t0) { t0 = 1; klog("shopPage: early make skipped: not online at the pool build"); } return; }
     if (!kls_code_ok()) { static BYTE t1; if (!t1) { t1 = 1; klog("shopPage: early make skipped: kls_code_ok() is false at the pool build"); } return; }
     sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)); st = sm ? (int)klh_rd32(sm + 0x70) : -1;
@@ -800,6 +800,8 @@ static void kspg_early_body(int host)
 }
 static void kspg_early_make(int host)
 {
+    __try { kls_osw_early(host); }                                       /* [Shop] OnlineSwap (klshop.c): the swap pairs first, rows ascending */
+    __except (1) { kls.osw = 0; klog("shop: OnlineSwap early make FAULTED (%s site): OnlineSwap switched off, the stock guns stay", host ? "host" : "client"); }
     __try { kspg_early_body(host); }
     __except (1) { kspg.earlyOk = 0; klog("shopPage: early make FAULTED (%s site): OnlineEarlyMake switched off, the stock gun stays (kspg_netok)", host ? "host" : "client"); }
 }
@@ -1355,7 +1357,7 @@ static void klshoppage_tick(int game_thread)
     if (kspo.on && game_thread && klh_exe_ok) kspo_tick();
     if (!kspg.on || !game_thread || !klh_exe_ok) return;
     now = GetTickCount();
-    if (kspg.early && !kspg.earlyTried) kspg_early_patch();
+    if ((kspg.early || kls.osw) && !kspg.earlyTried) kspg_early_patch();   /* [Shop] OnlineSwap arms the same hook (klshop.c kls_osw_early) */
     if (kspg.earlyOk) kllb_early_tick();                              /* private sm vtable on every new session object (kllobby.c) */
     if (kspg.earlyPend) kspg_early_report();
     if (kspg.linkArm) kspg_link_tick();

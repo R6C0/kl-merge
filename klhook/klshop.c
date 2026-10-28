@@ -60,7 +60,7 @@ typedef void *(__fastcall *kls_maker_t)(void *self, void *edx, int zero, void *t
 typedef void *(__fastcall *kls_tmpl_t)(void *self, void *edx, int item);
 typedef void *(__cdecl *kls_realloc_t)(void *, size_t);
 
-static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; BYTE fixed[KLS_MAX][KLS_PER]; int applied[KLS_MAX], told; int wait; LONG gen; int clips; } kls;
+static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; BYTE fixed[KLS_MAX][KLS_PER]; int applied[KLS_MAX], told; int wait; LONG gen; int clips; int osw, oswrep; } kls;
 #define KLS_AMMO_KEY 0xbeebbeeb                                        /* ZFFItemWeapon keeps rounds [obj+0xdc] and reserve [obj+0xe0] XORed with it */
 /* the swap set to use, filled by klshop_init (KLHook.ini = default) and klshop_level_open (the map's KLGuns.ini [Shop] Swap, any thread);
    the game thread copies it into kls when kls_sgen changed. kls_slock is a tiny spin lock (no init needed). */
@@ -167,6 +167,120 @@ static void kls_ammo(void)
     }
 }
 
+/* ==== [Shop] OnlineSwap=0|1|2 (2026-10-28, NOT RUN IN THE GAME; 0 = off, default; 1 = on; 2 = log only: nothing made, nothing parked) ====
+ * What it is for: on a baked map the shop rows 13/16/32/35 are NAMED and PICTURED as HK69 / TYPE 81 / REM 700 / MINIMI. Arcade's [Shop] Swap hands those guns over;
+ * online the swap is off (the gate in klshop_tick), so the stock carrier gun came out. This makes the same swap online, with the same pool recipe as offline.
+ * THE ID QUESTION: no item id travels in the buy. It sends ROWS (RMCBuyWeaponPack(primaryRow, secondaryRow), see the header, read in kl2.exe); every peer resolves
+ *   row -> carrier item through the SAME hashed table at 0xbd1f68 and then picks a free pool entry LABELLED with that carrier (0x55bee0). Our objects carry the
+ *   carrier's label, so host and client both take "the extra gun of row R" from their own pool: the same id is computed from the same row on both sides, and
+ *   no network message is changed. What a row cannot carry is the OBJECT identity: each gun has a Quazal DO (gun+0x13c) whose id comes from the entity order
+ *   (0x6ece90), so every peer must make the same objects in the same order. In code that is: rows ascending (not list order), KLS_PER objects per row, made at the
+ *   hook point of [ShopPage] OnlineEarlyMake (between the pool build 0x5230a0 and the DO pass), the same swap set on every peer (the map's KLGuns.ini [Shop] Swap,
+ *   else KLHook.ini; the log line 'osw: set' prints a hash to compare across peers).
+ *   GUESS: the DO pass links objects made here exactly as it does for page II's early make (that path is itself unbenched), and the net spawn bookkeeping after
+ *   each item in the builder (0x753150, see the header) is not needed for them.
+ * Safety: stock entries of the carrier are parked ONLY when every object of ours of that row has gun+0x13c != 0 (the CE27_P2P4H crash 0x9425a4 came from a gun with
+ *   +0x13c = 0 handed over online); otherwise ours are parked and the stock gun is handed over, as before this key existed. Needs [ShopPage] Enable=1 (the hook
+ *   point, kllobby.c's slot-26 wrapper, is armed from klshoppage.c).
+ */
+static DWORD kls_osw_hash(void)
+{
+    DWORD h = 2166136261u; int k, row;
+    for (row = 0; row < 36; row++) for (k = 0; k < kls.n; k++) if (kls.row[k] == row) { h = (h ^ (DWORD)row) * 16777619u; h = (h ^ (DWORD)kls.item[k]) * 16777619u; }
+    return h;
+}
+
+static int kls_in_pool(DWORD ents, DWORD n, DWORD obj)
+{
+    DWORD i;
+    for (i = 0; i < n; i++) if (klh_rd32(ents + 12 * i) == obj) return 1;
+    return 0;
+}
+
+static void kls_adopt(void)
+{
+    if (kls.gen == kls_sgen) return;
+    kls_lock(); kls.gen = kls_sgen; kls.n = kls_stg.n; memcpy(kls.row, kls_stg.row, sizeof kls.row); memcpy(kls.item, kls_stg.item, sizeof kls.item); kls_unlock();
+    memset(kls.made, 0, sizeof kls.made); memset(kls.fixed, 0, sizeof kls.fixed); memset(kls.applied, 0, sizeof kls.applied); kls.told = 0; kls.wait = 0;
+}
+
+/* called from klshoppage.c's kspg_early_make (game thread, online, session state still 0x14 / 0x15, right after the pool build) */
+static void kls_osw_early(int host)
+{
+    DWORD sm, st, a, n = 0, cap = 0, grow = 0, ents, i, carrier; int k, row, rows = 0, made = 0, had = 0; void *self;
+    if (!kls.on || !kls.osw || !klh_exe_ok || !kl_online()) return;
+    kls_adopt();
+    if (!kls.n) return;
+    if (!kls_code_ok()) { static BYTE t0; if (!t0) { t0 = 1; klog("osw: code of the object maker / template lookup is not as read: nothing done"); } return; }
+    sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)); st = sm ? klh_rd32(sm + 0x70) : 0xffff;
+    if (!sm || klh_rd32(sm + 0x5c) != 4 || (st != 0x14 && st != 0x15)) { static BYTE t1; if (!t1) { t1 = 1; klog("osw: early make skipped: mode %d state 0x%lx", sm ? (int)klh_rd32(sm + 0x5c) : -1, (unsigned long)st); } return; }
+    if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || !klh_rd(a + 8, &cap, 4) || !klh_rd(a + 0xc, &grow, 4) || !n || n > 4096 || !(ents = klh_rd32(a + 0x10))) { klog("osw: early make skipped: pool empty or unreadable"); return; }
+    if (!(self = (void *)(DWORD_PTR)klh_rd32(klh_rd32((DWORD_PTR)KLH_VA(KLS_UI)) + 0x15b0))) { klog("osw: early make skipped: UI object (template lookup) not ready"); return; }
+    kls.oswrep = 1;
+    klog("osw: set %d pair(s), hash %08lx (compare on every peer), mode %d (%s site, state 0x%lx)", kls.n, (unsigned long)kls_osw_hash(), kls.osw, host ? "host" : "client", (unsigned long)st);
+    for (row = 0; row < 36; row++) for (k = 0; k < kls.n; k++) {
+        void *tmpl; int j, parked = 0;
+        if (kls.row[k] != row) continue;
+        rows++;
+        if (kls.made[k][0] && kls_in_pool(ents, n, kls.made[k][0])) { had++; continue; }   /* survived from the last round: no second set */
+        memset(kls.made[k], 0, sizeof kls.made[k]); memset(kls.fixed[k], 0, sizeof kls.fixed[k]); kls.applied[k] = 0;
+        if (!(carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row))) continue;
+        for (i = 0; i < n; i++) { DWORD e[3]; if (klh_rd(ents + 12 * i, e, 12) && e[1] == carrier && e[0]) parked++; }
+        tmpl = ((kls_tmpl_t)KLH_VA(KLS_TEMPLATE))(self, 0, kls.item[k]);
+        if (!tmpl) { klog("osw: row %d item %d has no template: row stays stock", row, kls.item[k]); continue; }
+        if (!parked) { klog("osw: row %d carrier %lu has no stock object in the pool: row stays stock", row, (unsigned long)carrier); continue; }
+        if (kls.osw == 2) { klog("osw: LOG ONLY row %d (carrier item %lu, %d stock object(s)) would get %d object(s) of item %d", row, (unsigned long)carrier, parked, KLS_PER, kls.item[k]); continue; }
+        if (cap < n + KLS_PER + 1) {                                    /* same growth as kls_apply */
+            DWORD ncap = n + KLS_PER + 8; void *p;
+            if (grow > 64) continue;
+            p = ((kls_realloc_t)(DWORD_PTR)klh_rd32((DWORD_PTR)KLH_VA(KLS_REALLOC)))((void *)(DWORD_PTR)ents, ncap * 12);
+            if (!p) continue;
+            ents = (DWORD)(DWORD_PTR)p; cap = ncap;
+            klh_data((void *)(DWORD_PTR)(a + 8), &cap, 4, "KLShop: online pool capacity"); klh_data((void *)(DWORD_PTR)(a + 0x10), &ents, 4, "KLShop: online pool array");
+        }
+        for (j = 0; j < KLS_PER; j++) {
+            DWORD obj = (DWORD)(DWORD_PTR)((kls_maker_t)KLH_VA(KLS_MAKER))(self, 0, 0, tmpl), ent[3];
+            if (!obj) break;
+            ent[0] = obj; ent[1] = carrier; ent[2] = 1;                  /* free, carrier's label; stock entries are NOT parked here (kls_osw_tick does it once gun+0x13c is known) */
+            klh_data((void *)(DWORD_PTR)(ents + 12 * n), ent, 12, "KLShop: online pool entry"); n++;
+            kls.made[k][j] = obj; kls.fixed[k][j] = 0;
+        }
+        klh_data((void *)(DWORD_PTR)(a + 4), &n, 4, "KLShop: online pool count");
+        if (j) made++;
+        klog("osw: row %d (carrier item %lu): %d object(s) of item %d made (%s)", row, (unsigned long)carrier, j, kls.item[k], host ? "host" : "client");
+    }
+    klog("osw: early make done: %d pair(s) in the set, %d made now, %d already there, pool %lu", rows, made, had, (unsigned long)n);
+}
+
+/* game thread, online, state 0x16..0x18 (before the round runs): per pair decide stock-or-ours from gun+0x13c; idempotent, logged once per round */
+static void kls_osw_tick(DWORD st)
+{
+    DWORD a, n = 0, ents, i; int k, m;
+    if (!kls.osw || kls.osw == 2 || st < 0x16 || st >= 0x19 || !kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
+    for (k = 0; k < kls.n; k++) {
+        DWORD carrier; int linked = 0, cnt = 0, want;
+        if (kls.row[k] < 0 || !kls.made[k][0]) continue;
+        if (!kls_in_pool(ents, n, kls.made[k][0])) { memset(kls.made[k], 0, sizeof kls.made[k]); kls.applied[k] = 0; continue; }
+        if (!(carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * kls.row[k]))) continue;
+        for (m = 0; m < KLS_PER && kls.made[k][m]; m++) { cnt++; if (klh_rd32((DWORD_PTR)kls.made[k][m] + 0x13c)) linked++; }
+        want = cnt && linked == cnt;
+        if (kls.oswrep) {
+            DWORD id = 0;
+            __try { id = ((DWORD (__fastcall *)(DWORD))(DWORD_PTR)KLH_VA(0x6ece90))(kls.made[k][0]); } __except (1) { id = 0xdead; }
+            klog("osw: row %d: %d object(s), %d with gun+0x13c set, id 0x6ece90 of the first = %lu (state 0x%lx): %s", kls.row[k], cnt, linked, (unsigned long)id, (unsigned long)st, want ? "ours are handed over" : "STOCK gun stays (net sub-object missing)");
+        }
+        for (i = 0; i < n; i++) {
+            DWORD e[3]; BYTE zero = 0; int ours = 0;
+            if (!klh_rd(ents + 12 * i, e, 12) || e[1] != carrier || !e[0] || !(e[2] & 0xff)) continue;   /* taken or parked already */
+            for (m = 0; m < KLS_PER; m++) if (e[0] == kls.made[k][m]) ours = 1;
+            if (ours == want) continue;                                  /* wanted free */
+            klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &zero, 1, ours ? "KLShop: online park (no net sub-object)" : "KLShop: online park stock gun");
+        }
+        kls.applied[k] = want;
+    }
+    kls.oswrep = 0;
+}
+
 static void klshop_tick(int game_thread)
 {
     DWORD sm, st = 0; int k, any = 0;
@@ -177,7 +291,10 @@ static void klshop_tick(int game_thread)
     }
     if (!kls.n) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4)) return;
-    if (kl_online()) return;
+    if (kl_online()) {                                                   /* online: only [Shop] OnlineSwap (1; 2 logs in kls_osw_early), the rules vtable differs online so it is not tested */
+        if (kls.osw == 1) { kls_ammo(); kls_osw_tick(st); }
+        return;
+    }
     { DWORD gs = klh_rd32((DWORD_PTR)KLH_VA(KLS_SETTINGS)), rules = gs ? klh_rd32(gs + 0x54) : 0;
       if (!rules || klh_rd32(rules) != (DWORD)(DWORD_PTR)KLH_VA(KLS_RULES_VT)) return; }
     kls_ammo();                                                          /* also while the round runs: the loadout hands over as it starts */
@@ -238,6 +355,8 @@ static void klshop_init(void)
     GetPrivateProfileStringA("Shop", "Swap", "", buf, sizeof buf, klh_ini);
     kls_parse(buf, &kls_def.n, kls_def.row, kls_def.item, "KLHook.ini");
     kls_stg = kls_def; kls_sgen = 1; kls.gen = 0;                        /* the tick adopts it */
+    kls.osw = GetPrivateProfileIntA("Shop", "OnlineSwap", 0, klh_ini); if (kls.osw < 0 || kls.osw > 2) kls.osw = 0;   /* 0 off, 1 on, 2 log only; online the swap rides the early-make hook of klshoppage.c (needs [ShopPage] Enable=1) */
+    if (kls.osw) klog("shop: OnlineSwap=%d (NOT run in the game): online the baked rows hand over the swapped gun like Arcade; no network message changes; see klshop.c OnlineSwap", kls.osw);
     kls.clips = GetPrivateProfileIntA("Shop", "ReserveClips", 2, klh_ini); /* reserve of an extra gun the row's ammo leaves empty, in clips (0 = leave it) */
     klog("shop: on; %d default swap(s); a map's KLGuns.ini [Shop] Swap overrides; Arcade only, before the round; replaces what a bought row hands over (never adds a row); proven live S7-S11", kls_def.n);
 }
