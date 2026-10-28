@@ -1,3 +1,7 @@
+2026-10-28 ~18:20 - [c9] DM11S SHIPPED: SHIP_DM11S.bat /oldhook ran (md5 checked): KLExpansion\Maps\DM11B now holds the shifted zip 222102260 +
+bots 222102326 + Int16Ok.txt; originals *.before-dm11s in the same folder; KLHook.ini [Int16Guard] OnlineSkip emptied (backup KLHook.ini.before-dm11s),
+new ini baseline sha1 de91b2a5, dinput8 unchanged f520f5d1. Undo: C:\kl_build_1024\c9_1028\dm11s_ship\UNDO_DM11S.bat. Game to ce (LOOKS2).
+
 2026-10-28 ~18:00 - [ce] WKBC5 F06 (out_week_1028k_test): BANK CREDIT ONLINE PAYS. The van's boarding object [rules+0x1e0] sits at
 (-2933 524 10402) (van probe), not -6209; the host teleported there and held E (DIK 0x12, 2.5 s) -> boarded, seat flag 0x20 (rules slot 45 0x6c6c10;
 0x40 only at departure 0x776ef0), popup 'You escaped the heist'. OnlineBankCredit (ce408cef4, counts 0x20) paid seat 0: +550000, +300000, +150000

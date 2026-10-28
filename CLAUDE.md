@@ -70,7 +70,7 @@ Full dated log: `re/open_work_log.md` (newest first).
 
 2026-10-28 ~17:40 - [c9] DM11S (DM11B moved into int16 range) passes everywhere: A1SHIFT6 online with Int16Guard marker (merged 5f5d32a0c),
 A1SHIFT5b offline Arcade full round (7 bots, 1 boarded $1.36M), faults 0. A1NET2 both seats walk PASS. kl_map_shift_test fixed (adce57ce4; never
-run it while an A1SHIFT bench has DM11S installed). Next: SHIP_DM11S.bat /oldhook (C:\kl_build_1024\c9_1028\dm11s_ship) after ce's WKBC4.
+run it while an A1SHIFT bench has DM11S installed). SHIPPED 18:20 (/oldhook: OnlineSkip emptied, ini baseline de91b2a5; undo UNDO_DM11S.bat in C:\kl_build_1024\c9_1028\dm11s_ship).
 
 2026-10-28 ~18:00 - [ce] BANK CREDIT ONLINE PAYS: WKBC5 F06 host held E at the van's boarding object [rules+0x1e0] (-2933 524 10402, NOT -6209)
 -> seat flag 0x20, popup 'You escaped the heist', credit +550k/+300k/+150k to the Sharable cap 1,000,000 (bot 3's 250k dropped: cap). 0 faults both
