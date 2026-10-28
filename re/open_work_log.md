@@ -1,3 +1,8 @@
+2026-10-28 ~19:10 - [c9] A1LIFT3g PASS (TEST ramplog_out 3af90acb, Ramp=0 Log=2, faults 0, 44 JPG shots): no down (health 6191 of 6253 at the
+ride). CORRECTION of 3d/3f: the player does NOT ride the car. y is the height and stays 19601; z 873 is the doorway side. The player stands
+at (2594,19601,873), outside the car box (x 2802+), and kljoin's CarStall fallback jumps them to 06_Exit (6272,563,-6305) after 1.5 s; shot 31
+shows a CLOSED lift door next to the player 5 s after both proxies accepted. So the owner's 10-24 'doors stay shut' is still open; only CarStall
+makes the lift usable. Offline workflow retomoto-liftdoor-shut (wf_9f041e3c-ab7) is looking for the cause.
 2026-10-28 ~21:15 - [ce] GUN3/GU1/VOX2 (C:/kl_build_1024/week_1028; all 0 faults both seats). VOX2 PASS: OnlineVoice=1 host bot loot lines
 (Multiplayer/JackPot/JackPot_01_C<n>) sent on UDP and played on the joiner (klk_say 1 both seats). GUN3: rows 13/16/32/35 OURS on both seats,
 slot-24 text wrapper reached, buy flow tab 4 row 32 inside the ~28 s shop (FAIL only = script waited for the shop after the round began).
