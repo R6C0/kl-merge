@@ -1,4 +1,4 @@
-2026-10-28 ~19:10 - [c9] A1LIFT3g PASS (TEST ramplog_out 3af90acb, Ramp=0 Log=2, faults 0, 44 JPG shots): no down (health 6191 of 6253 at the
+2026-10-28 ~21:10 - [c9] A1LIFT3g PASS (TEST ramplog_out 3af90acb, Ramp=0 Log=2, faults 0, 44 JPG shots): no down (health 6191 of 6253 at the
 ride). CORRECTION of 3d/3f: the player does NOT ride the car. y is the height and stays 19601; z 873 is the doorway side. The player stands
 at (2594,19601,873), outside the car box (x 2802+), and kljoin's CarStall fallback jumps them to 06_Exit (6272,563,-6305) after 1.5 s; shot 31
 shows a CLOSED lift door next to the player 5 s after both proxies accepted. So the owner's 10-24 'doors stay shut' is still open; only CarStall
