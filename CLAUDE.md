@@ -74,9 +74,9 @@ run it while an A1SHIFT bench has DM11S installed). SHIPPED 18:20 (/oldhook: Onl
 SHIPCHK 18:45 PASS online with the installed dll/ini. A1LIFT3d: Retomoto lift box re-arms live (3 door fires 10-15 s apart).
 T2 left: a door visual once screenshots work (black all week).
 
-2026-10-28 ~19:30 - [ce] MV1 PASS (DD04, both seats, 0 faults): bots guard-walk + escort online, OnlineLootSync (KLSYB) mirrored the bots' loot to the
-joiner up to $4.56M banked -> merged 35929bfc3 (all default off). WKBC7 PASS: bank credit fills a boarded seat to the 1M cap, $50k stays in the ledger.
-LOOKS2 PASS earlier (OnlineLooks=1, c42e9f4ec). Running GUN1 (wk-gunui2: [Shop] OnlineSwapText=2 / OnlineSwapArm / OnlineSwapLog, [Sound] RemoteShot2DLogAny).
+2026-10-28 ~20:30 - [ce] MV1 + WKBC7 PASS (wk-move + lootsync merged 35929bfc3). LPB2 0 faults: bots take loot in timed parts online, but walk off
+the stack (hold fix built, LPB3 next). GUN2: shop text swap reached online; script ran out of the ~28 s between-round shop (GUN3 fixed).
+Queued: LPB3, VOX1 (bots' voice lines online, wk-voice-1028), GUN3; then merge wk-lpbal / wk-voice / wk-gunui2.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.
