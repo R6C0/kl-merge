@@ -1,3 +1,11 @@
+2026-10-28 ~19:30 - [ce] MV1 + WKBC7 (out_move_1028b_test; inputs C:\kl_build_1024\week_1028\MV1_*.ini, WKBC7_*.ini; both RESULT PASS, faults 0).
+MV1 DD04: 'guard walk' sent bots 4-6 toward a guarded stack, 'escort: online: bot N follows seat 0' every few s, lootsync sent/shown $430k ... $4.56M,
+the client's 'sync: loot' matched every step and the banked total after the van. Not exercised: round summary FINAL (script passed before the summary)
+and OnlineWalkReach (every bot boarded from inside the box). Merged wk-move + lootsync as 35929bfc3 (kl_tests: the known 8 fail). WKBC7 F06: the host
+boarded at the first E (later teles refused: already aboard); bankcredit seat 0 +500k +300k +200k = cap 1,000,000, '$50000 waits in the ledger'.
+The joiner stayed running after the host quit (exit None, 0 faults), as in earlier benches. Gun UI (wk-gunui2-1028, rebased 126d1b138, builds
+out_gu_1028a / _test) reviewed: OnlineSwapText=2 tri-state, oswlog, RemoteShot2DLogAny; bench GUN1 (GUN1_*.ini, DD04, browses 6 shop categories).
+
 2026-10-28 ~18:45 - [c9] SHIPCHK PASS: shipped DM11S online with the INSTALLED setup (ship dll f520f5d1 via its test twin
 C:\kl_build_1024\arcade1to1_1027\test_dinput8.dll f8ae48a1, game ini de91b2a5 with OnlineSkip empty): both seats IN ROUND, faults 0,
 no int16guard refusal, DM11S zip 222102260 + bots 222102326 loaded on both, spawn (21712,830,13866) in range, client sync tracked 7 bots.

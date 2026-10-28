@@ -49,6 +49,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 10-28 19:30 ce: MV1 PASS (DD04 both seats, 0 faults): guard walk + escort online, OnlineLootSync shows the bots' loot on every seat ($4.56M banked) -> merged 35929bfc3. WKBC7 PASS: cap overflow stays in the ledger. Left: FINAL summary + WalkReach not exercised; a run with all wk-move keys on a second map.
 - 10-28 18:00 ce: WKBC5 bank credit online PAYS (host E at the boarding object -2933 524 10402 -> flag 0x20 -> +$1M to the Sharable cap; overflow dropped). 0 faults.
 - 10-28 16:45 ce: BP_DD04c 7/7 BOARDED + client PASS -> defaults ExitCrowd 1600 / GatherLateS 45 (b0bd5343c). WKBC3 7/7 aboard, bank credit unpaid even with the host on the van object (flag 0x40 never set; research w91thgo9w). Looks probe SAME ORDER both maps -> OnlineLooks=1 in build.
 - 10-28 15:40 ce benches (out_week_1028j_test, 0 faults / 0 asserts every seat): WKBC2 F06 7/7 BOARDED, ledger $1.9M, bank credit still unpaid: the host was teleported to the bots' ZAllyEscapeBox (-2937 600 9965), but a human boards at the van's object (-6209 521 10395), 33 m away, so no seat got flag 0x40 -> WKBC3. BP_DD04b 5/7 (was 4/7): OnlineGatherLateS=45 kept the clock from cutting the gather (it ran its full 40 s); missed: 1 dead, 1 stopped 12 m out (crowd 1200) -> BP_DD04c with OnlineExitCrowd=1600. Both reruns carry OnlineLooks=2 (crew-online step 1, 206b860fc) on out_looks_1028a_test.
@@ -64,6 +65,7 @@ Owner: ce (10-28 11:40; 3f is another project).
 Owner: ce (10-28 11:40).
 
 ### T5 Gun UI + sounds Arcade -> multiplayer (MP45 first)
+- 10-28 19:30 ce: research re/gun_ui_parity_1028.md: the MP45 (item 1, row 7) is the SAME online as in Arcade except remote shots are 3D (RemoteShot2D covers it). The real gaps are swap rows 13/16/32/35 on UNBAKED maps (stock F01-F09, DM07, DD10: carrier's name + picture); full fix = bake (C:\kl_build_1024\gunui_1028\INSTALL_gunui_1028.bat). Built wk-gunui2-1028 ([Shop] OnlineSwapText=2 name follows the pool, OnlineSwapArm, OnlineSwapLog; [Sound] RemoteShot2DLogAny; all off); bench GUN1 running.
 - 10-28 14:40 ce SHOT2D (F06, 2 seats, 0 faults, both IN ROUND): the RemoteShot2D vtable route installed live on both seats ("sound system now on the private vtable (slot 74)"); script FAIL = shop timer ran out after a lost Enter tap (not a game fault). Loudness by ear still open (owner).
 - 10-28 13:10 ce: RemoteShot2D reworked as a SHIP-safe sound-system vtable route ([Sound] RemoteShot2D=1, RemoteShot2DRoute 0 auto/1 code/2 vtable; private copy of vtable 0xb9ae14, slot 74 wrapped), review fix 756fde98a (re-point a sound system rebuilt at the same address). In out_week_1028h(_test). Bench SHOT2D queued (F06, both seats, NOT RUN).
 - 10-28 12:00 ce: research re/gun_ui_sounds_1028.md (MP45 = item 1 row 7, banks/volumes same online; rows 13/16/32/35 baked names but Swap inert online; DM07/DD10 unbaked); build OnlineSwap + text fallback in wt/wk-gunui.

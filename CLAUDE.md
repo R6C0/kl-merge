@@ -73,9 +73,9 @@ A1SHIFT5b offline Arcade full round (7 bots, 1 boarded $1.36M), faults 0. A1NET2
 run it while an A1SHIFT bench has DM11S installed). SHIPPED 18:20 (/oldhook: OnlineSkip emptied, ini baseline de91b2a5; undo UNDO_DM11S.bat in C:\kl_build_1024\c9_1028\dm11s_ship);
 SHIPCHK 18:45 PASS online with the installed dll/ini. T2 left: Retomoto lift door look.
 
-2026-10-28 ~18:45 - [ce] LOOKS2 PASS: OnlineLooks=1 merged (c42e9f4ec): the host draws each AI heister's Arcade look, KLSYL on UDP 27415, both seats
-show the same looks, humans' bodies excluded (a peer on its stock body counts by model), 0 faults/asserts. Bank credit online PAYS (WKBC5); the overflow
-past the 1M Sharable cap now fills the next boarded seat (2e3e0f38e, NOT run live: WKBC6 next). Then wk-move (OnlineGuardWalk/Escort, workflow wurlx7g2k).
+2026-10-28 ~19:30 - [ce] MV1 PASS (DD04, both seats, 0 faults): bots guard-walk + escort online, OnlineLootSync (KLSYB) mirrored the bots' loot to the
+joiner up to $4.56M banked -> merged 35929bfc3 (all default off). WKBC7 PASS: bank credit fills a boarded seat to the 1M cap, $50k stays in the ledger.
+LOOKS2 PASS earlier (OnlineLooks=1, c42e9f4ec). Running GUN1 (wk-gunui2: [Shop] OnlineSwapText=2 / OnlineSwapArm / OnlineSwapLog, [Sound] RemoteShot2DLogAny).
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.
