@@ -27,7 +27,7 @@
 #define KLBK_C
 #define KLBK_SESSION   0x0168e598u       /* session manager pointer; [+0x70] = state (klauto.c: 0x19 = the round runs) */
 
-static struct { int at, round, kind, dry, n19, done, inited; float dmg; DWORD t0, last_st, lastlog; } klbk;
+static struct { int at, round, kind, dry, n19, done, inited, rep, gap, shots; float dmg; DWORD t0, last_st, lastlog, lastshot; } klbk;
 
 static void klbk_init(void)
 {
@@ -39,6 +39,12 @@ static void klbk_init(void)
     klbk.dry = GetPrivateProfileIntA("Bench", "SelfDownDry", 0, klh_ini) != 0;
     GetPrivateProfileStringA("Bench", "SelfDownDamage", "10000", t, sizeof t, klh_ini);
     klbk.dmg = (float)atof(t);
+    /* SelfDownRepeat=<shots, default 1>, SelfDownGap=<ms between shots, default 1500>: the down trigger needs health <= 40 % BEFORE the hit
+     * (GU2 10-28: one 70 hit took 550 -> 480 and nothing more), so a bench gives a first hit that leaves < 40 % and a second that floors */
+    klbk.rep = GetPrivateProfileIntA("Bench", "SelfDownRepeat", 1, klh_ini);
+    klbk.gap = GetPrivateProfileIntA("Bench", "SelfDownGap", 1500, klh_ini);
+    if (klbk.rep < 1 || klbk.rep > 20) klbk.rep = 1;
+    if (klbk.gap < 100 || klbk.gap > 60000) klbk.gap = 1500;
     if (klbk.at < 0 || klbk.at > 36000) klbk.at = 0;
     if (klbk.round < 1 || klbk.round > 99) klbk.round = 1;
     if (klbk.kind < 0 || klbk.kind > 20) klbk.kind = 1;
@@ -57,11 +63,12 @@ static void klbk_tick(int game_thread)
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLBK_SESSION)))) return;
     if (!klh_rd(sm + 0x70, &st, 4)) return;
     if (st != klbk.last_st) {                         /* a state change: entering 0x19 starts the clock of a round */
-        if (st == 0x19) { klbk.n19++; klbk.t0 = now; klbk.done = 0; klog("benchdown: session state 0x19 entered (the %d. time)", klbk.n19); }
+        if (st == 0x19) { klbk.n19++; klbk.t0 = now; klbk.done = 0; klbk.shots = 0; klog("benchdown: session state 0x19 entered (the %d. time)", klbk.n19); }
         klbk.last_st = st;
     }
     if (st != 0x19 || klbk.done || klbk.n19 != klbk.round) return;
     if (now - klbk.t0 < (DWORD)klbk.at * 1000u) return;
+    if (klbk.shots && now - klbk.lastshot < (DWORD)klbk.gap) return;
     if (!(pl = klh_slot_player_mine()) || klh_pvt(pl) != 0x00bb45f4u) {
         if (now - klbk.lastlog >= 5000) { klbk.lastlog = now; klog("benchdown: waiting, no local ZFFPlayer body yet (slot %08lx)", pl); }
         return;
@@ -71,7 +78,8 @@ static void klbk_tick(int game_thread)
     memset(rec, 0, sizeof rec);
     *(DWORD *)(rec + 0x08) = (DWORD)klbk.kind;
     *(float *)(rec + 0x28) = klbk.dmg;
-    klbk.done = 1;                                    /* once per round, even when the call faults */
+    klbk.lastshot = now;
+    if (++klbk.shots >= klbk.rep) klbk.done = 1;      /* SelfDownRepeat shots per round */
     {
         float h0 = 0, h1 = 0; DWORD ho = klh_rd32(pl + 0xa48), hv = 0;
         if (ho) { hv = klh_rd32(ho + 4); h0 = *(float *)&hv; }
@@ -79,8 +87,8 @@ static void klbk_tick(int game_thread)
              klbk.dry ? "DRY" : "CALL", klbk.at, klbk.round, pl, fn, (DWORD)(DWORD_PTR)KLH_VA(0x7e1700), klbk.kind, klbk.dmg, h0);
         if (klbk.dry) return;
         __try { ((void (__fastcall *)(void *, void *, void *))(DWORD_PTR)fn)((void *)(DWORD_PTR)pl, 0, rec); }
-        __except (EXCEPTION_EXECUTE_HANDLER) { klog("benchdown: the call FAULTED (caught); nothing more is done"); return; }
+        __except (EXCEPTION_EXECUTE_HANDLER) { klbk.done = 1; klog("benchdown: the call FAULTED (caught); nothing more is done"); return; }
         if (ho) { hv = klh_rd32(ho + 4); h1 = *(float *)&hv; }
-        klog("benchdown: returned, health %.1f after (<= 0 = dead; the stock text / feed / 'names: KilledStock:' lines follow)", h1);
+        klog("benchdown: shot %d of %d returned, health %.1f after (<= 0 = dead; the stock text / feed / 'names: KilledStock:' lines follow)", klbk.shots, klbk.rep, h1);
     }
 }
