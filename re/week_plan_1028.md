@@ -38,7 +38,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
 - 10-28 12:00 ce: research re/bots_online_arcade_1028.md (0x7f6850 'Arcade?' false online -> no tactics/records, trigger boxes ignore bots, Take is a raw +0x34 write); build OnlineTriggers + OnlineTacticsTake=2 in wt/wk-bots.
-- [ ] Diff Arcade vs online bot code paths (BotFill, klcrew, klgrudge, klhop, klcardown, klcdying, klshield: 0 online refs).
+- [x] Diff Arcade vs online bot code paths -> re/arcade_mods_online_1028.md (10-28 ce): klhop + klcardown got host-only online paths (review-fixed, merged 88706e681, NOT RUN; bench AM_DM09); klcrew/klgrudge/klshield/klescort/klcopsquad/klfedkit need crew records or a client carrier (open).
 - [ ] Online bots loot, carry, bank and escape like Arcade. WK2 live 10-28 F06: 7 bots GRABBED via the game's 0x4e3f40, van called, 5/7 BOARDED, $1.35M on the bank ledger; paying the ledger to the score (OnlineBankCredit, data-only) = bench WKBC; 2 bots strayed (BP benches).
 Owner: ce (10-28 11:40; 3f is another project).
 
