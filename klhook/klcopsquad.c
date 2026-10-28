@@ -85,7 +85,7 @@ static void klcq_init(void)
     klcq.followMs = klcq_clamp_follow_ms(GetPrivateProfileIntA("CopSquad", "FollowS", 8, klh_ini));
     klcq.maxd2 = klcq_maxd2(GetPrivateProfileIntA("CopSquad", "MaxM", 40, klh_ini));
     klcq.attackT = GetPrivateProfileIntA("CopSquad", "AttackT", 5, klh_ini); if (klcq.attackT < 1) klcq.attackT = 1; if (klcq.attackT > 60) klcq.attackT = 60;
-    klcq.kF = GetPrivateProfileIntA("CopSquad", "KeyFollow", 0x46, klh_ini); klcq.kH = GetPrivateProfileIntA("CopSquad", "KeyHold", 0x47, klh_ini); klcq.kA = GetPrivateProfileIntA("CopSquad", "KeyAttack", 0x48, klh_ini);
+    klcq.kF = klkeys_vk(KK_COPF); klcq.kH = klkeys_vk(KK_COPH); klcq.kA = klkeys_vk(KK_COPA);        /* klkeys.c: F / G / H are the game's melee / grenade keys; [Keys] Map=1 = Num1 / Num2 / Num3 */
     klcq.log = GetPrivateProfileIntA("CopSquad", "Log", 1, klh_ini);
     if (!klcq.on) return;
     if ((u = GetModuleHandleA("user32.dll")) != 0) { klcq.aks = (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState"); klcq.fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); klcq.wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId"); }

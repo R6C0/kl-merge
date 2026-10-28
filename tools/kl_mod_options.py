@@ -449,6 +449,14 @@ feat('inv', G_EXP, 'Gun shelf: carry more than two guns (F8)', 'off', 'start',
 feat('grenade', G_EXP, 'Throw a carried grenade with G (Dead Men style)', 'off', 'start',
      'klgrenade.c step 1: plays the dead HoldGrenade button; only with a grenade in the inventory (DM01 pickups); never run live',
      [('Grenade', 'Throw', 1, 0, 0)])
+feat('keysmap', G_EXP, 'New key defaults (End, PageUp, Num1-3, Ctrl+F3/F4/Delete)', 'off', 'start',
+     'moves features off keys that clash with ReShade, the stock melee/grenade keys and each other; not benched', [('Keys', 'Map', 1, 0, 0)])
+feat('controlspage', G_EXP, 'MOD CONTROLS page in the Buy Weapons shop (F2 cycles pages)', 'off', 'start',
+     'lists every feature, its key, ON/OFF and where it works; BUY does nothing there; not run in the game', [('Keys', 'ControlsPage', 1, 0, 0)])
+feat('keyhints', G_EXP, 'One-time shop hint about the extra pages', 'off', 'start',
+     'one HUD line the first time a shop opens; not run in the game', [('Keys', 'Hints', 1, 0, 0)])
+feat('clashlog', G_EXP, 'Log key clashes at boot', 'off', 'start',
+     'one WARN per clash in KLHook.log (also reads ReShade.ini); harmless', [('Keys', 'ClashLog', 1, 0, 0)])
 
 BY_ID = {f['id']: f for f in F}
 assert len(BY_ID) == len(F) and all(f['rec'] in ('on', 'off') for f in F)      # every row is shown with '(recommended on|off)' (rec_text)

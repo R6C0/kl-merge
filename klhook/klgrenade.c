@@ -275,7 +275,7 @@ static void klgrenade_init(void)
     v = (int)GetPrivateProfileIntA("Grenade", "Spawn", 0, klh_ini); klgr.spawn = v < 0 ? 0 : v > 2 ? 2 : v;
 #endif
     if (!klgr.probe && !klgr.thr && !klgr.spawn) return;
-    v = (int)GetPrivateProfileIntA("Grenade", "Key", 0x47, klh_ini); klgr.key = v < 1 || v > 0xfe ? 0x47 : v;
+    v = klkeys_vk(KK_GREN); klgr.key = v < 1 || v > 0xfe ? 0x47 : v;
     v = (int)GetPrivateProfileIntA("Grenade", "HoldMs", 3000, klh_ini); klgr.hold_ms = v < 100 ? 100 : v > 10000 ? 10000 : v;
     klgr.actbit = GetPrivateProfileIntA("Grenade", "ActBit", 1, klh_ini) != 0;
     v = (int)GetPrivateProfileIntA("Grenade", "Log", 8, klh_ini); klgr.logn = v < 0 ? 0 : v > 100 ? 100 : v;

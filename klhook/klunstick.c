@@ -140,7 +140,7 @@ static void kus_init(void)
     kus.plain = GetPrivateProfileIntA("Unstick", "Plain", 0, klh_ini) != 0;
     kus.coverMs = (int)GetPrivateProfileIntA("Unstick", "CoverMs", 4000, klh_ini); if (kus.coverMs < 1500) kus.coverMs = 1500; if (kus.coverMs > 30000) kus.coverMs = 30000;
     kus.plainMs = (int)GetPrivateProfileIntA("Unstick", "PlainMs", 6000, klh_ini); if (kus.plainMs < 3000) kus.plainMs = 3000; if (kus.plainMs > 60000) kus.plainMs = 60000;
-    kus.key = (int)GetPrivateProfileIntA("Unstick", "Key", 0x76, klh_ini) & 0xff;
+    kus.key = klkeys_vk(KK_UNSTICK) & 0xff;                          /* klkeys.c: [Unstick] Key= > [Keys] Unstick= > F7 (End with [Keys] Map=1) */
     kus.dry = GetPrivateProfileIntA("Unstick", "Dry", 0, klh_ini) != 0;
     kus.log = (int)GetPrivateProfileIntA("Unstick", "Log", 1, klh_ini);
     u = GetModuleHandleA("user32.dll"); if (!u) u = LoadLibraryA("user32.dll");

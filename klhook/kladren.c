@@ -148,19 +148,15 @@ static void kad_name(int i, char *out, int cap)
 /* one message, at most one every `gap` ms unless the key changes; the element must be the stock class (or klhud_popup.c's copy) */
 static void kad_say(int key, DWORD gap, const char *msg, float secs)
 {
-    static int code = -1; static char buf[160];
-    static const BYTE say_code[8] = { 0x56, 0x57, 0x8b, 0x7c, 0x24, 0x0c, 0x8b, 0xc7 };          /* 0x468430 */
-    DWORD now = GetTickCount(), osd, el, vt = 0;
+    DWORD now = GetTickCount(), osd, el, vt = 0;                /* the routine check + the call itself: klannounce.c (2026-10-28, shared) */
     if (!kad.prompt || !kset_v[2] || kad.dry) return;           /* kset_v[2]: the menu's row, at once */
     if (key == kad_g.said_key && now - kad_g.said_at < gap) return;
-    if (code < 0) { code = klu_same_code(KAD_ANNOUNCE, say_code, sizeof say_code); if (!code) klog("adren: prompt: 0x468430 is not the announcement routine this build knows: no prompts"); }
-    if (!code || !klu.on || !(osd = klu_r.osd) || klu_r.fault || klh_rd32(osd) != KLU_OSD_VT) return;
+    if (!klan_ready() || !klu.on || !(osd = klu_r.osd) || klu_r.fault || klh_rd32(osd) != KLU_OSD_VT) return;
     if (!(el = klh_rd32(osd + KAD_O_ANN)) || !klh_rd(el, &vt, 4)) return;
     if (vt != KAD_ANN_VT && vt != (DWORD)(DWORD_PTR)&klpu_evt[1]) return;
-    snprintf(buf, sizeof buf, "%s", msg);                       /* the element may keep the pointer: a static buffer */
-    ((void (__fastcall *)(void *, void *, const char *, float))(DWORD_PTR)KLH_VA(KAD_ANNOUNCE))((void *)(DWORD_PTR)el, 0, buf, secs);
+    if (!klan_say_el(el, msg, secs)) return;
     kad_g.said_key = key; kad_g.said_at = now;
-    if (kad.log >= 2) klog("adren: prompt '%s'", buf);
+    if (kad.log >= 2) klog("adren: prompt '%s'", msg);
 }
 
 /* ---------------------------------------------------------------- pure arithmetic (tested off the game)  */

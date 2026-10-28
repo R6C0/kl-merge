@@ -436,8 +436,8 @@ static void klco_init(void)
        touched); klhire_online.c then saves 0 and gives 0 back after a hired round, so HRF2/HRP2 (hired body worn in round 2) are unchanged. Off = old behaviour. */
     klco.ignoreChar = klhr_on && GetPrivateProfileIntA("Hire", "OnlineIgnoreChar", 1, klh_ini) != 0;
     if (klco.ignoreChar && klc_char) { klog("charonline: hire on: the saved Char=%ld is ignored online, as in Arcade ([Hire] OnlineIgnoreChar=0 restores it)", (long)klc_char); klc_char = 0; }
-    klco.keyChar = (int)GetPrivateProfileIntA("CharOnline", "KeyChar", 0x78, klh_ini) & 0xff;
-    klco.keyMask = (int)GetPrivateProfileIntA("CharOnline", "KeyMask", 0x7a, klh_ini) & 0xff;
+    klco.keyChar = klkeys_vk(KK_CHAR) & 0xff;
+    klco.keyMask = klkeys_vk(KK_MASK) & 0xff;
     if (klco.settle < 0 || klco.settle > 20000) klco.settle = 1500;
     if (klco.tries < 1 || klco.tries > 10) klco.tries = 3;
 #ifdef KLHOOK_TEST

@@ -45,11 +45,6 @@
 #include "klucc_logic.h"
 
 #define KLUC_SUBMODE   0x0168e59cu
-#define KLUC_ANNOUNCE  0x00468430u
-#define KLUC_ANN_VT    0x00bbdd34u
-#define KLUC_OSD_VT    0x00bbe504u
-#define KLUC_O_ANN     0x10a8
-#define KLUC_OSDHOLD   0x15dc
 #define KLUC_PEND      4
 
 static struct {
@@ -64,31 +59,17 @@ static struct {
 } kluc;
 
 /* ---- the announcement element and the show queue ---- */
-static DWORD kluc_element(void)
-{
-    DWORD gd, hold, osd, el, vt = 0; BYTE none = 0xff;
-    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(hold = klh_rd32(gd + KLUC_OSDHOLD)) || !klh_rd(hold + 4, &none, 1) || none == 0xff) return 0;
-    if (!(osd = klh_rd32(hold)) || klh_rd32(osd) != KLUC_OSD_VT || !(el = klh_rd32(osd + KLUC_O_ANN)) || !klh_rd(el, &vt, 4)) return 0;
-    if (vt != KLUC_ANN_VT && vt != (DWORD)(DWORD_PTR)&klpu_evt[1]) return 0;
-    return el;
-}
-static int kluc_busy(DWORD el)
-{   /* a stock message still on screen: [el+0x30] end (clock / 1024), the clock [[0xdd2640]+0x48] (klhud_popup.c's reading) */
-    float end = -1.0f; LONG frame = 0; DWORD sys;
-    return klh_rd(el + 0x30, &end, 4) && end > 0 && (sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) != 0 && klh_rd(sys + 0x48, &frame, 4) && frame < (LONG)(end * 1024.0f);
-}
+/* the element, the busy test and the call itself live in klannounce.c (2026-10-28: shared with kladren.c's prompts and the shop hints); this file keeps its own queue */
+static DWORD kluc_element(void) { return klan_element(); }
+static int kluc_busy(DWORD el) { return klan_busy(el); }
 static int kluc_show_now(const char *text, int force)
 {
-    static char buf[KLUC_TEXT];                                   /* the element may keep the pointer: a static buffer */
-    static const BYTE say_code[8] = { 0x56, 0x57, 0x8b, 0x7c, 0x24, 0x0c, 0x8b, 0xc7 };   /* 0x468430 */
     DWORD el;
-    if (kluc.code < 0) { kluc.code = klu_same_code(KLUC_ANNOUNCE, say_code, sizeof say_code); if (!kluc.code) klog("ucc: 0x468430 is not the announcement routine this build knows: lines go to the log only"); }
-    if (!kluc.code) return 1;                                     /* nothing can be shown: drop (logged once) */
+    if (!klan_ready()) return 1;                                  /* nothing can be shown: drop (logged once) */
     if (!(el = kluc_element())) { if (!kluc.toldNoEl++) klog("ucc: no FA announcement element yet ([[gamedata+0x15dc]]+0x10a8): line waits"); return 0; }
     if (!force && kluc_busy(el)) return 0;
-    snprintf(buf, sizeof buf, "%s", text);
-    ((void (__fastcall *)(void *, void *, const char *, float))(DWORD_PTR)KLH_VA(KLUC_ANNOUNCE))((void *)(DWORD_PTR)el, 0, buf, (float)kluc.showMs / 1000.0f);
-    if (kluc.log) klog("ucc: shown '%s'%s", buf, force ? " (over a stock message after 6 s)" : "");
+    klan_say_el(el, text, (float)kluc.showMs / 1000.0f);
+    if (kluc.log) klog("ucc: shown '%s'%s", text, force ? " (over a stock message after 6 s)" : "");
     return 1;
 }
 static void kluc_show(const char *text)
@@ -179,7 +160,7 @@ static void kluc_init(void)
     kluc.own = -1; kluc.code = -1;
     if (!kluc.pings && !kluc.accuse) return;
     kluc_ping_range((int)GetPrivateProfileIntA("Ucc", "PingMinS", 60, klh_ini), (int)GetPrivateProfileIntA("Ucc", "PingMaxS", 120, klh_ini), &kluc.lo, &kluc.hi);
-    kluc.key = (int)GetPrivateProfileIntA("Ucc", "Key", 0x74, klh_ini) & 0xff;
+    kluc.key = klkeys_vk(KK_UPING) & 0xff;
     kluc.cooldownMs = (unsigned long)GetPrivateProfileIntA("Ucc", "CooldownS", 20, klh_ini); if (kluc.cooldownMs < 5) kluc.cooldownMs = 5; if (kluc.cooldownMs > 300) kluc.cooldownMs = 300; kluc.cooldownMs *= 1000;
     cone = (int)GetPrivateProfileIntA("Ucc", "ConeDeg", 15, klh_ini); if (cone < 2) cone = 2; if (cone > 60) cone = 60;
     range = (int)GetPrivateProfileIntA("Ucc", "RangeM", 40, klh_ini); if (range < 3) range = 3; if (range > 200) range = 200;

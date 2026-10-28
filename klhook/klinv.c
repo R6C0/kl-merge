@@ -183,7 +183,7 @@ static void klinv_init(void)
 {
     HMODULE u; int v;
     if (!GetPrivateProfileIntA("Inv", "Enable", 0, klh_ini)) return;
-    v = (int)GetPrivateProfileIntA("Inv", "Key", 0x77, klh_ini); klinv.key = v < 1 || v > 0xfe ? 0x77 : v;
+    v = klkeys_vk(KK_INV); klinv.key = v < 1 || v > 0xfe ? 0x77 : v;         /* klkeys.c: F8 (PageUp with [Keys] Map=1) */
     v = (int)GetPrivateProfileIntA("Inv", "Log", 1, klh_ini); klinv.log = v < 0 ? 0 : v > 2 ? 2 : v;
     u = GetModuleHandleA("user32.dll"); if (!u) u = LoadLibraryA("user32.dll");
     if (u) {
