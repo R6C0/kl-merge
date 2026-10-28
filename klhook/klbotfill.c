@@ -39,6 +39,8 @@ static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [Bo
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_lk = 0; static DWORD klbf_lk_sm, klbf_lk_sig;      /* [BotFill] OnlineLooks (re/crew_online_1028.md): 2 = LOG ONLY probe, one line per Ally bot per round and whenever the census changes; no game-state write. 1 = klcrewlook.c: the host sends each bot's Arcade look, every seat applies it (klcl_on). Any other value = off */
 static int klcl_on;      /* OnlineLooks=1 (klcrewlook.c; set in klbf_init) */
+static int klls_on;       /* OnlineLootSync=1 (kllootsync.c; set in klbf_init) */
+static void klls_summary(void);      /* kllootsync.c: the host's final loot list at the round summary */
 static int klbf_ot_glate = 0;      /* [BotFill] OnlineGatherLateS (wk-dd04-1028): 0 = the gather's clock clause fires at OnlineLateExit + 20 s left (old); >0 = at that many s left */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
 static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
@@ -133,6 +135,8 @@ static void klbf_init(void)
     klbf_ot_gmax = (int)GetPrivateProfileIntA("BotFill", "OnlineGatherMaxS", 25, klh_ini); if (klbf_ot_gmax < 1) klbf_ot_gmax = 1; if (klbf_ot_gmax > 120) klbf_ot_gmax = 120;      /* GUESS 25 s */
     klbf_lk = (int)GetPrivateProfileIntA("BotFill", "OnlineLooks", 0, klh_ini); if (klbf_lk != 1 && klbf_lk != 2) klbf_lk = 0;      /* (recommended off) 2 = log only, 1 = send / apply (klcrewlook.c) */
     klcl_on = klbf_lk == 1;
+    klls_on = GetPrivateProfileIntA("BotFill", "OnlineLootSync", 0, klh_ini) != 0;      /* (recommended off) kllootsync.c: the host sends what the bots carry / banked (KLSYB, UDP 27415), every seat shows one HUD line */
+    if (klls_on) klog("botfill: OnlineLootSync=1: the host sends the bots' loot (KLSYB on UDP %d), every seat shows it on the announcement line (kllootsync.c); needs OnlineTactics=1 on the host%s", 27415, klbf_ot ? "" : " (it is 0: nothing to send)");
     if (klbf_lk == 2) klog("botfill: OnlineLooks=2: log-only probe of the Ally bots' model / group (no write)");
     if (klcl_on) klog("botfill: OnlineLooks=1: the host draws each Ally bot's Arcade look and sends it (KLSYL on UDP %d); every seat applies it through the game's own routines (klcrewlook.c)", 27415);
     klbf_ot_glate = (int)GetPrivateProfileIntA("BotFill", "OnlineGatherLateS", 45, klh_ini); if (klbf_ot_glate < 0) klbf_ot_glate = 0; if (klbf_ot_glate > 200) klbf_ot_glate = 200;      /* (recommended 45) BP_DD04b/c 1028: 45 let the gather run its full 40 s, 5/7 then 7/7 aboard; BP_DD04 1028: the clock clause (95 s left) called the van 18 s into a 40 s gather with walkers 59 m out; GUESS 45 = van call to departure ~28 s + slack */
@@ -806,6 +810,7 @@ static void klbf_ot_summary(void)
 {
     int i, bots = 0, tot = 0, boarded = 0;
     klbf_vh_off("round summary", GetTickCount());
+    klls_summary();      /* OnlineLootSync: final list + its total in the log, before anything is cleared */
     for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor) { bots++; tot += klbf_ob[i].tally; if (klbf_ob[i].phase == 3) boarded++; }
     if (klbf_bank_mode) klog("botfill: bank: round ledger%s: %d bot(s) banked $%ld of %d carried (hook ledger; the game's seat table has no bot rows)", klbf_bank_mode == 2 ? " (DRY)" : "", klbf_bank_n, klbf_bank_total, tot);
     if (klbf_bc_mode == 1 && klbf_bank_total > 0) klog("botfill: bankcredit: $%ld NOT credited this round (no escaped human seat before the round ended)", klbf_bank_total);
