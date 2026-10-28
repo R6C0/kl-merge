@@ -796,6 +796,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klshield.c"                                    /* klshield.c: the human shield covers you and floors the hostage ([Shield], on in Arcade rounds) */
 #include "klcdying.c"                                   /* klcdying.c: almost dead = the revivable floor for you; heisters hold fire ([Dying]); AFTER klcardown.c */
 #include "kladren.c"                                      /* kladren.c: adrenaline (off unless [Adrenaline] Enable); its tick runs BEFORE kld_tick */
+#include "klshot2d.c"                                   /* klshot2d.c: [Sound] RemoteShot2D - a near remote shooter's gunshot plays 2D online (off unless set; ONLINE only); AFTER klescort.c (kle_node), kl_online */
 #include "klstinger.c"                                  /* klstinger.c: [Stinger] event-driven one-shot cues over winmm MCI (off unless Enable=1); AFTER kladren.c / klbotdown.c / kldown.c */
 #include "klreshade.c"                                    /* klreshade.c: the ReShade bridge - live looks from the menu, KL_* uniforms (off unless [ReShade] Bridge=1) */
 #include "klsteam.c"
@@ -1306,6 +1307,7 @@ static void klh_tick(int game_thread)
     klgrenade_tick(game_thread);                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
     klmu_tick(game_thread);                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
     klam_tick(game_thread);                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
+    klss_tick(game_thread);                           /* klshot2d.c: re-points the sound system at the private vtable (VTABLE route only) */
     klst_tick(game_thread);                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
     klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
     klbk_tick(game_thread);                           /* klbench_down.c: [Bench] SelfDownAt (bench only, off unless set) */
@@ -1738,6 +1740,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klud_init();                                      /* klucc_down.c: reads [Ucc] DownOnly */
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
     klam_init();                                     /* klambience.c: [Ambience] (default off) */
+    klss_init();                                      /* klshot2d.c: [Sound] RemoteShot2D (default off) */
     klst_init();                                      /* klstinger.c: [Stinger] (default off) */
     klrigid_init();
     klaiturn_init();                                  /* klaiturn.c: after klrigid_init; one guarded data write at start-up */
