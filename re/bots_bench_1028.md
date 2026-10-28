@@ -63,3 +63,12 @@ PASS: host log `botfill: bankcredit: settlement call 0x681103 -> 0x5e2230 retarg
 (X = Y unless clamped, B = A + X); mode 2 shows `DRY would credit`; the client HUD / end-of-round score of the escaped humans includes X split by the escaped count; 0 faults; the round ends normally (state 0x1f).
 FAIL signs: `REFUSED` at patch time, `FAULT` line, no bankcredit line although the ledger had money, a client score that does not move (replication GUESS wrong), a crash in 0x5a18c0 / 0x942b20
 (Quazal exception 0xe0030000 = not the master), money credited twice (Take=0 must log `skipped`), the seat credited was dead or police.
+
+## wk-bots2 (2026-10-28): OnlineTriggersExtra (ZTriggerBox2 / ZOnlineTriggerBox, host only, default 0, not run live)
+Hook `C:/kl-merge/wt/wk-bots2/klhook/out_bots4_1028_test`, tag BOTS4. Ini: `[BotFill] OnlineTriggers=1 OnlineTriggersExtra=2` first, then 1 (OnlineTriggers=2 makes everything dry).
+Stock maps hold no ZOnlineTriggerBox and no cop-wave ZTriggerBox2, so the bench is a graft map (Dead Men map with TriggerBox2 / OnlineTriggerBox nodes) or a stock map to prove the scan and the skip of the loot-stack boxes.
+PASS lines (host KLHook.log): `botfill: trig: OnlineTriggers=1 ... OnlineTriggersExtra=2`; `botfill: trig: scan N: ... tracked (ZTriggerBox a, ZTriggerBox2 b, ZOnlineTriggerBox c)` with the loot-stack boxes counted in "ramp box(es) left" and NOT in b;
+dry: `botfill: trig: DRY would fire ZTriggerBox2 xxxxxxxx (k bot(s) inside, delay d, one-shot o, entry edge)` or `... ZOnlineTriggerBox ...` when a bot enters a players-only box;
+live: `botfill: trig: FIRE ZTriggerBox2 ...` or `FIRE ZOnlineTriggerBox ... starting the update's own delay`, then the box's effect (list targets react / the net event reaches the client), no repeat spam, 0 faults.
+FAIL signs: a FIRE for a loot-stack box, a box fired with 0 bots inside, the same box more than 3 times, a fault after a FIRE line, a ZTriggerBox2 skip line `not in the update list` on a box that should be live (the `+0x18` bit GUESS is wrong).
+Build checks run here: build.bat and build_auto.bat compile clean, `python tools/kl_mod_options_test.py` PASS (46 checks).

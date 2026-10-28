@@ -80,6 +80,7 @@ static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used b
 static int klbf_bank_mode, klbf_ba_mode; static float klbf_ba_m = 6000.0f; static long klbf_bank_total; static int klbf_bank_n;      /* [BotFill] OnlineBank (0 off, 1 ledger, 2 dry), OnlineBoardAll (0 off, 1 board, 2 dry), OnlineBoardAllM (cm) */
 static int klbf_bc_mode, klbf_bc_patched;      /* [BotFill] OnlineBankCredit (0 off, 1 credit, 2 dry); klbf_bc_patched: 1 call site retargeted, -1 refused */
 static int klbf_trig;      /* [BotFill] OnlineTriggers: 0 off, 1 fire, 2 dry (klbf_trig_* below) */
+static int klbf_trig_x;    /* [BotFill] OnlineTriggersExtra: ZTriggerBox2 / ZOnlineTriggerBox too, 0 off, 1 fire, 2 dry */
 static int klbf_ot_ramp, klbf_ot_rampdry;      /* OnlineRampFire / OnlineRampDry toggles (read in the init, used by klbf_ramp_* below) */
 static DWORD klbf_pb_bots[KLBF_OT_BOTS_MAX]; static volatile LONG klbf_pb_n; static volatile DWORD klbf_pb_at;
 static int klbf_pb_any(void) { return klbf_pb_n > 0 && GetTickCount() - klbf_pb_at < 5000u; }
@@ -140,6 +141,7 @@ static void klbf_init(void)
     klbf_ot_way = GetPrivateProfileIntA("BotFill", "OnlineWaypoints", 1, klh_ini) != 0;      /* (recommended on) BOS_DD02: 7 bots stalled 139-166 m short of the exit trigger; a [BotFillWay_<SLOT>] route walks them round it */
     if (klbf_ot) klog("botfill: OnlineTactics waypoints: OnlineWaypoints=%d (recommended on; needs a [BotFillWay_<SLOT>] section)", klbf_ot_way);
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
+    klbf_trig_x = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggersExtra", 0, klh_ini); if (klbf_trig_x < 0 || klbf_trig_x > 2) klbf_trig_x = 0;      /* ZTriggerBox2 / ZOnlineTriggerBox: no stock cop wave uses them (money-stack pick-ups, location trackers), so off by default */
     klbf_bank_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBank", 0, klh_ini); if (klbf_bank_mode < 0 || klbf_bank_mode > 2) klbf_bank_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     klbf_bc_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBankCredit", 0, klh_ini); if (klbf_bc_mode < 0 || klbf_bc_mode > 2) klbf_bc_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     if (klbf_bc_mode && !klbf_bank_mode) { klog("botfill: bankcredit: OnlineBankCredit=%d needs OnlineBank=1 or 2 (the ledger); nothing is done", klbf_bc_mode); klbf_bc_mode = 0; }
@@ -149,7 +151,7 @@ static void klbf_init(void)
     if (klbf_ot) klog("botfill: bank: OnlineBank=%d, OnlineBoardAll=%d, OnlineBoardAllM=%.0f cm (0 off, 1 on, 2 dry; recommended on once tried)", klbf_bank_mode, klbf_ba_mode, klbf_ba_m);
     klbf_ot_ramp = GetPrivateProfileIntA("BotFill", "OnlineRampFire", 1, klh_ini) != 0;      /* (recommended on) DD02: the ramp trigger never fires online because bots are not counted */
     klbf_ot_rampdry = GetPrivateProfileIntA("BotFill", "OnlineRampDry", 0, klh_ini) != 0;      /* default 0 since BOS_DD08r (F08 TriggerBox_Guards fired live, 7/7 boarded); only maps with a [BotFillRamp_<SLOT>] section fire */
-    if (klbf_ot) klog("botfill: trig: OnlineTriggers=%d (0 off, 1 fire, 2 dry; recommended on once benched), OnlineTacticsTake=%d (2 = the game's 0x4e3f40, recommended on once benched)", klbf_trig, klbf_ot_take);
+    if (klbf_ot) klog("botfill: trig: OnlineTriggers=%d (0 off, 1 fire, 2 dry), OnlineTriggersExtra=%d, OnlineTacticsTake=%d (2 = the game's 0x4e3f40, recommended on once benched)", klbf_trig, klbf_trig_x, klbf_ot_take);
     if (klbf_ot) klog("botfill: ramp: OnlineRampFire=%d (recommended on), OnlineRampDry=%d (log only; needs a [BotFillRamp_<SLOT>] section)", klbf_ot_ramp, klbf_ot_rampdry);
     klbf_ot_door = GetPrivateProfileIntA("BotFill", "OnlineSkipDoorStacks", 1, klh_ini) != 0;      /* (recommended on) BOS1: DD01's 58 vault cases sit behind kick doors; ordered straight at them the bots stalled and took 0 */
     if (klbf_ot) klog("botfill: OnlineTactics BOS1: OnlineSkipDoorStacks=%d (recommended on)", klbf_ot_door);
@@ -351,19 +353,21 @@ static void klbf_ramp_tick(DWORD now, float bp[][3], int nb)
    Excluded: money / exit controllers (other classes, never in the scan) and the ramp box (OnlineRampFire's [BotFillRamp_<SLOT>] centre / Name). Humans keep firing boxes the normal way (a human entering while our bots stand inside
    still gets the game's own edge: not the same as Arcade, where the bot already counted; accepted).
    GUESSES: bots[].actor is a valid 'object' argument of 0x8c16c0 (it reads [obj+4] node +0x30..+0x38, as the tracker's objects have); the update's extra skips (0x4ea3b0(actor) at 0x42b1f7, node flag +0x3c bit 10, 0x806cc0) are not mirrored (only the census' live status guards; GUESS that this is enough).
-   TODO: ZTriggerBox2 / ZOnlineTriggerBox (other vtables, layout NOT verified in the disassembly: not scanned). Host only, fire is host-side + the box's own sync object. Log prefix 'botfill: trig:'. */
+   ZTriggerBox2 / ZOnlineTriggerBox: scanned too, see klbf_trig_other below (layouts read from kl2.exe 2026-10-28). Host only, fire is host-side + the box's own sync object. Log prefix 'botfill: trig:'. */
 #define KLBF_TRIG_CAP 3          /* fires of one box a round (re-armable boxes) */
 #define KLBF_TRIG_MAX 256
 #define KLBF_TRIG_SCAN1 7000      /* ms after the round's first tick */
 #define KLBF_TRIG_SCAN2 30000
 static DWORD klbf_ot_trig;      /* tentative: defined with the tactics state below (the exit trigger, never fired from here) */
-static struct klbf_tb { DWORD obj; BYTE in, dead, nfire; } klbf_tbs[KLBF_TRIG_MAX];
-static struct { int n, scans, started; DWORD t0, fired, skipped; } klbf_tr;
+#define KLBF_TB2_VT 0x00bc953c   /* ZTriggerBox2 (update 0x626ec0, fire = slot 34 0x557820). ZOnlineSpeakTrigger shares the update but has its own vtable: not scanned */
+#define KLBF_OTB_VT 0x00bc95cc   /* ZOnlineTriggerBox (update 0x49ab90, host/Arcade only) */
+static struct klbf_tb { DWORD obj; BYTE in, dead, nfire, kind, logged; } klbf_tbs[KLBF_TRIG_MAX];      /* kind 0 ZTriggerBox, 1 ZTriggerBox2, 2 ZOnlineTriggerBox */
+static struct { int n, scans, started; DWORD t0, fired, skipped; int kn[3]; } klbf_tr;
 static void klbf_trig_load(void) { memset(klbf_tbs, 0, sizeof klbf_tbs); memset(&klbf_tr, 0, sizeof klbf_tr); }
 static int klbf_trig_known(DWORD at) { int i; for (i = 0; i < klbf_tr.n; i++) if (klbf_tbs[i].obj == at) return 1; return 0; }
 static void klbf_trig_scan(void)
 {
-    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD hits = 0, added = 0, ramp = 0, t0 = GetTickCount();
+    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD hits = 0, added = 0, ramp = 0, t0 = GetTickCount(); int kind;
     klbf_tr.scans++;
     while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
         if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
@@ -372,22 +376,91 @@ static void klbf_trig_scan(void)
                 SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
                 if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
                 for (j = 0; j + 4 <= n; j += 4) {
-                    DWORD at, ent, evt, node; float np[3] = { 0, 0, 0 }; char nm[40];
-                    if (*(DWORD *)(buf + j) != (DWORD)KLBF_RAMP_VT) continue;
+                    DWORD at, ent, evt, node, vv = *(DWORD *)(buf + j); float np[3] = { 0, 0, 0 }; char nm[40];
+                    kind = vv == (DWORD)KLBF_RAMP_VT ? 0 : vv == KLBF_TB2_VT ? 1 : vv == KLBF_OTB_VT ? 2 : -1;
+                    if (kind < 0 || (kind && !klbf_trig_x)) continue;
                     at = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + j); hits++;
                     if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi || !(node = klh_rd32(ent + 4)) || klbf_trig_known(at)) continue;
-                    if (klbf_rp.have) {      /* the ramp box is OnlineRampFire's: same name / centre test as klbf_ramp_probe */
+                    if (kind == 0 && klbf_rp.have) {      /* the ramp box is OnlineRampFire's: same name / centre test as klbf_ramp_probe */
                         klbf_ramp_name(at, nm);
                         if ((nm[0] && klbf_rp.name[0] && strstr(nm, klbf_rp.name)) || (kle_node(node, np, 0) && fabsf(np[0] - klbf_rp.c[0]) <= 50.0f && fabsf(np[1] - klbf_rp.c[1]) <= 50.0f && fabsf(np[2] - klbf_rp.c[2]) <= 50.0f)) { ramp++; continue; }
                     }
-                    if (klbf_tr.n < KLBF_TRIG_MAX) { klbf_tbs[klbf_tr.n].obj = at; klbf_tr.n++; added++; }
+                    if (kind == 1) { klbf_ramp_name(at, nm); if (strstr(nm, "MoneyStack") || strstr(nm, "DropMoney")) { ramp++; continue; } }      /* the loot stacks' own pick-up boxes: the tactics module takes the stack, a second fire could double it (counted with the ramp skips) */
+                    if (klbf_tr.n < KLBF_TRIG_MAX) { klbf_tbs[klbf_tr.n].obj = at; klbf_tbs[klbf_tr.n].kind = (BYTE)kind; klbf_tr.kn[kind]++; klbf_tr.n++; added++; }
                 }
             }
         }
         a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
     }
     if (!klbf_tr.started) { klbf_tr.started = 1; klog("botfill: trig: on (host, %d boxes)%s", klbf_tr.n, klbf_trig == 2 ? ", DRY (log only)" : ""); }
-    klog("botfill: trig: scan %d: %lu ZTriggerBox vtable hit(s), %lu new, %lu ramp box(es) left to OnlineRampFire, %d tracked, %lu ms", klbf_tr.scans, (unsigned long)hits, (unsigned long)added, (unsigned long)ramp, klbf_tr.n, (unsigned long)(GetTickCount() - t0));
+    klog("botfill: trig: scan %d: %lu trigger-box vtable hit(s), %lu new, %lu ramp box(es) left to OnlineRampFire, %d tracked (ZTriggerBox %d, ZTriggerBox2 %d, ZOnlineTriggerBox %d), %lu ms", klbf_tr.scans, (unsigned long)hits, (unsigned long)added, (unsigned long)ramp, klbf_tr.n, klbf_tr.kn[0], klbf_tr.kn[1], klbf_tr.kn[2], (unsigned long)(GetTickCount() - t0));
+}
+
+/* OnlineTriggers, the other two box classes (2026-10-28, wk-bots2, read from kl2.exe; re/bots_trigger_cops_1028.md section 7). Both keep the rules above: no write to a field the update recomputes,
+   skipped when the box has an on-leave action, one fire per entry (the bots must leave before the next), CAP fires a round, never the exit trigger, host only (the tick is), 2 = dry.
+   ZTriggerBox2 (vtable 0xbc953c, update 0x626ec0): +0x44 = 'players only' (bool). With it set the census counts a human (class mask 0x1548c7c) or, under 0x7f6850, a team-2 actor, so online a bot never
+   counts; with it clear every object counts, bots included, and the box is left to the game. +0x45 one-shot (the fire calls 0x66beb0: leaves the update list, bit 0x10 of [+0x18]), +0x48 delay (int),
+   +0x64 'delay running' (set by the update itself with +0x68 = the object and +0x60 = float(+0x48); the update then fires slot 34 = [vt+0x88](object) when it runs out). Inside test 0x68d030(box, object) ret 4.
+   Fire: slot 34 0x557820 (posts 'AITrigger' to the list at +0x38 for the object). With a delay we do what the update's own edge does (0x626ff3: +0x68, +0x64, +0x60), which are state fields only the edge writes.
+   ZOnlineTriggerBox (vtable 0xbc95cc, update 0x49ab90): the update is gated by 0x8df480 (true for roles 0/1 in an FA session and for the host, role 2). +0x38 = 'players only' (same census as above), +0x39 = also
+   require the object's class mask 0x168cddc, inside test 0x758cb0(box, object) ret 4. On a fresh entry the update does NOT fire at once: it starts a delay (0x49ad0f: +0x54 = float(+0x40), +0x59 = 1) and when
+   that runs out calls 0x6557b0(box, 0, 1), which sends the network event 0x642f20([box+0x30], 0, 1). We write exactly the delay start (+0x54 / +0x59: state fields; +0x58, the 'was inside' byte, is recomputed and is NOT touched).
+   GUESSES: that the in-update-list bit is 0x10 of [+0x18] (0x66beb0, re/triggerbox.md) - if it is wrong a ZTriggerBox2 box is skipped, logged once; that a bot actor is a valid object for 0x68d030 / 0x758cb0 (as 0x8c16c0);
+   that the update's extra skips (node flag bit 10, 0x806cc0 for ZTriggerBox; none in these two) matter little; what the ZOnlineTriggerBox event does on the target (0x642f20 posts a net message: the map decides). */
+static int klbf_trig_other(struct klbf_tb *t, DWORD now, DWORD gt, const DWORD *act, int nb)
+{
+    DWORD o = t->obj, ent, evt, node, vt = t->kind == 1 ? KLBF_TB2_VT : KLBF_OTB_VT; int b, inside = 0, first = -1, cd; BYTE only = 0, once = 0, busy = 0, mask = 0; float f; BYTE one = 1;
+    (void)now; (void)gt;
+    if (klh_rd32(o) != vt || !(ent = klh_rd32(o + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi || !(node = klh_rd32(ent + 4))) { t->dead = 1; return 0; }      /* freed / reused */
+    if (o == klbf_ot_trig) { t->dead = 1; return 0; }
+    if (t->kind == 1) {
+        if (!klh_rd(o + 0x44, &only, 1) || !klh_rd(o + 0x45, &once, 1) || !klh_rd(o + 0x64, &busy, 1)) return 0;
+        cd = (int)klh_rd32(o + 0x48);
+        if (!only) { t->dead = 1; return 0; }      /* every object counts (bots too): the game fires it itself */
+        if (!(klh_rd32(o + 0x18) & 0x10)) { if (!t->logged) { t->logged = 1; klog("botfill: trig: ZTriggerBox2 %08lx is not in the update list ([+0x18] = %08lx, bit 0x10 clear): left alone (GUESS: spent one-shot / disabled)", (unsigned long)o, (unsigned long)klh_rd32(o + 0x18)); } t->in = 0; return 0; }
+        if (cd < 0 || cd > 600000) { t->dead = 1; return 0; }      /* a delay that is not a plausible int: a layout this code does not know */
+        if (busy) return 0;      /* the update's delay is running (it fires by itself) */
+        for (b = 0; b < nb; b++) if (KLFC_CALL(BYTE (__fastcall *)(DWORD, DWORD, DWORD), 0x0068d030)(o, 0, act[b]) & 0xff) { inside++; if (first < 0) first = b; }
+    } else {
+        BYTE hum = 0;
+        if (!klh_rd(o + 0x38, &hum, 1) || !klh_rd(o + 0x39, &mask, 1) || !klh_rd(o + 0x59, &busy, 1)) return 0;
+        cd = (int)klh_rd32(o + 0x40);
+        if (!hum) { t->dead = 1; return 0; }      /* every object counts (bots too, subject to the class mask): the game does it */
+        if (cd < 0 || cd > 600000) { t->dead = 1; return 0; }
+        if (busy) return 0;      /* the delay of a fire is running */
+        for (b = 0; b < nb; b++) {
+            if (mask) {      /* the update's second filter: the object's class mask against 0x168cddc / 0x168cde0 */
+                DWORD avt = klh_rd32(act[b]), fn = avt ? klh_rd32(avt + 0x30) : 0;
+                if (!fn || fn < img_lo || fn >= img_hi || (((DWORD (__fastcall *)(DWORD, DWORD))fn)(act[b], 0) & klh_rd32((DWORD_PTR)KLH_VA(0x0168cde0))) != klh_rd32((DWORD_PTR)KLH_VA(0x0168cddc))) continue;
+            }
+            if (KLFC_CALL(BYTE (__fastcall *)(DWORD, DWORD, DWORD), 0x00758cb0)(o, 0, act[b]) & 0xff) { inside++; if (first < 0) first = b; }
+        }
+    }
+    if (!inside) { t->in = 0; return 0; }
+    if (t->in) return 0;      /* still inside since our last edge: the bots must leave first */
+    t->in = 1;
+    if (t->nfire >= KLBF_TRIG_CAP || (t->nfire && t->kind == 1 && once)) { klbf_tr.skipped++; return 0; }
+    if (klbf_trig == 2 || klbf_trig_x == 2) { klog("botfill: trig: DRY would fire %s %08lx (%d bot(s) inside, delay %d, one-shot %d, entry edge)", t->kind == 1 ? "ZTriggerBox2" : "ZOnlineTriggerBox", (unsigned long)o, inside, cd, (int)once); return 0; }
+    t->nfire++; klbf_tr.fired++;
+    f = (float)cd;
+    if (t->kind == 1) {
+        klog("botfill: trig: FIRE ZTriggerBox2 %08lx via %s (%d bot(s) inside, delay %d, one-shot %d, fire #%d)", (unsigned long)o, cd ? "the update's delay (+0x68/+0x64/+0x60)" : "slot 34 0x557820", inside, cd, (int)once, (int)t->nfire);
+        if (cd) {
+            klh_data((void *)(DWORD_PTR)(o + 0x68), &act[first], 4, "ZTriggerBox2 delay object (OnlineTriggers)");
+            klh_data((void *)(DWORD_PTR)(o + 0x60), &f, 4, "ZTriggerBox2 delay time (OnlineTriggers)");
+            klh_data((void *)(DWORD_PTR)(o + 0x64), &one, 1, "ZTriggerBox2 delay running (OnlineTriggers)");
+        } else {
+            DWORD fn = klh_rd32(klh_rd32(o) + 0x88);
+            if (fn < img_lo || fn >= img_hi) { t->dead = 1; return 0; }
+            ((void (__fastcall *)(DWORD, DWORD, DWORD))fn)(o, 0, act[first]);
+        }
+        if (once) t->dead = 1;
+    } else {
+        klog("botfill: trig: FIRE ZOnlineTriggerBox %08lx by starting the update's own delay (%d bot(s) inside, delay %d, fire #%d; the update then calls 0x6557b0)", (unsigned long)o, inside, cd, (int)t->nfire);
+        klh_data((void *)(DWORD_PTR)(o + 0x54), &f, 4, "ZOnlineTriggerBox delay time (OnlineTriggers)");
+        klh_data((void *)(DWORD_PTR)(o + 0x59), &one, 1, "ZOnlineTriggerBox delay running (OnlineTriggers)");
+    }
+    return 1;
 }
 
 /* host, in a round (state 0x19), game thread, once a second: act = the live Ally bots' actors (nb of them) */
@@ -403,6 +476,7 @@ static void klbf_trig_tick(DWORD now, const DWORD *act, int nb)
     for (i = 0; i < klbf_tr.n && fired < 8; i++) {
         struct klbf_tb *t = &klbf_tbs[i]; DWORD o = t->obj, ent, evt, node, tracked, need, gate, sub; int rearm, ecps, inside = 0; BYTE f34 = 0, en = 0, ent41 = 0, loc = 0, pf = 0;
         if (t->dead) continue;
+        if (t->kind) { fired += klbf_trig_other(t, now, gt, act, nb); continue; }      /* ZTriggerBox2 / ZOnlineTriggerBox */
         if (klh_rd32(o) != (DWORD)KLBF_RAMP_VT || !(ent = klh_rd32(o + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi || !(node = klh_rd32(ent + 4))) { t->dead = 1; continue; }      /* freed / reused */
         if (klbf_rp.ncand && o == klbf_rp.cand[0]) continue;
         if (!klh_rd(o + 0x34, &f34, 1) || !klh_rd(o + 0x40, &en, 1) || !klh_rd(o + 0x41, &ent41, 1) || !klh_rd(o + 0x64, &loc, 1) || !klh_rd(o + 0x78, &pf, 1)) continue;
