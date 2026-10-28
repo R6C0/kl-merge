@@ -186,6 +186,7 @@
  *                         what swallows a tap is a page that is not yet taking input (see settle / tapuntil).
  *   [Auto] TapSettle=N    every tap / tapuntil / tapfocus first waits for N quiet polls (as 'settle'), at most 30 s;
  *      TapSettleMs=100    0 = off (default). The gap that counts as not quiet.
+ *   [Auto] KeepAlive=1    (default 0) every keyboard poll refills the LOCAL player's current health to its maximum. TEST rig only.
  *   [Auto] PosLogMs=2000 logs 'pos tick' that often once a level runs; PosOff / DirOff / TurnDeg override the
  *   offsets and the mouse gain below. A script may have 640 lines.
  *
@@ -1083,6 +1084,22 @@ static DWORD kla_poslog_ms, kla_poslog_t;         /* [Auto] PosLogMs: log the mo
 static DWORD kla_go_t, kla_go_stuck_t, kla_go_side_t; static float kla_go_from[3]; static int kla_go_w, kla_go_side, kla_go_shift, kla_go_n, kla_go_fin;
 static float kla_pl_first[32][3]; static float kla_pl_path[32], kla_pl_prev[32][3];
 
+static int kla_keepalive;                          /* [Auto] KeepAlive=1 (default 0, TEST rig only): the local player's health is refilled to its maximum every keyboard poll */
+static void kla_keep_alive(void)
+{   /* Scripted ONLINE benches: klbalance.c applies its player factors in Arcade only, so a joiner is shot down by host-AI cops (A1LIFTNET1F 10-28).
+       Same local-player lookup as klbalance.c klr_player_tick (rules 0xdd265c: +0x898 local index byte, +0x828 + 4 * i the players) and the
+       health object [player+0xa48] (kldown.c): current float at +4, maximum at +8, owner at +0x24. Writes ONLY the current-health float of the
+       local player's own object (klh_data guard); never a remote player. Not a code write. */
+    DWORD gd, pl, h; BYTE idx = 0xff; float raw[0x28 / 4]; static DWORD n, last_t;
+    if (!(gd = kla_rd32((DWORD_PTR)KLH_VA(0x00dd265c))) || !kla_rd(gd + 0x898, &idx, 1) || idx > 31 ||
+        !(pl = kla_rd32(gd + 0x828 + 4 * idx)) || kla_rd32(pl) != KLA_VT_FFPLAYER || !(h = kla_rd32(pl + 0xa48)) ||
+        !kla_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != pl) return;
+    if (!(raw[2] >= 1 && raw[2] < 100000 && raw[1] > 0 && raw[1] < raw[2] - 0.5f)) return;      /* not alive (0) or already whole: leave it */
+    if (klh_data((void *)(DWORD_PTR)(h + 4), &raw[2], 4, "KeepAlive: the local player's health, refilled (TEST rig)")) {
+        n++;
+        if (n == 1 || GetTickCount() - last_t > 10000) { last_t = GetTickCount(); kla_out(1, "keepalive: health %.1f -> %.1f (refill %lu)", raw[1], raw[2], n); }
+    }
+}
 static int kla_pos_node = 1;                      /* [Auto] PosNode: 1 = the scene node's place ([pl+4] -> kle_node), +PosOff only as a fallback; 0 = +PosOff only */
 static DWORD kla_pos_diff_t;
 static int kla_player_pos(int i, float *v)
@@ -1943,6 +1960,7 @@ static HRESULT WINAPI kd_getdata(KPX *p, DWORD cb, DWORD *rg, DWORD *count, DWOR
     if (kla_exe_ok && !kb.loading) kla_windows(0);
     klh_tick(1);                                        /* klfix.c / klslot.c: also driven from here, in case the SteamAPI_RunCallbacks slot is silent */
     if (kla_poslog_ms && kb.level_tick && !kb.loading && GetTickCount() - kla_poslog_t >= kla_poslog_ms && GetTickCount() - kb.level_tick > 8000) { kla_poslog_t = GetTickCount(); kla_log_pos("tick"); }
+    if (kla_keepalive && kb.level_tick && !kb.loading) kla_keep_alive();
     if (!kla_script_active() || !rg || !count || cb != 20 || (flags & 1)) return hr;      /* 1 = DIGDD_PEEK */
     n = *count;
     if (FAILED(hr)) { if (!kla_unfocused) return hr; n = 0; }
@@ -2302,6 +2320,7 @@ static void kla_init(HINSTANCE inst)
       GetPrivateProfileStringA("Auto", "DirOff", "0xc14", t, sizeof t, kla_ini); kla_dir_off = strtoul(t, 0, 16);
       GetPrivateProfileStringA("Auto", "TurnDeg", "0.17", t, sizeof t, kla_ini); kla_turn_deg = (float)atof(t); if (kla_turn_deg == 0) kla_turn_deg = 0.17f;
       kla_poslog_ms = GetPrivateProfileIntA("Auto", "PosLogMs", 0, kla_ini);
+      kla_keepalive = GetPrivateProfileIntA("Auto", "KeepAlive", 0, kla_ini);
       kla_pos_node = GetPrivateProfileIntA("Auto", "PosNode", 1, kla_ini); }
     kla_t0 = kla_beat = GetTickCount();
     kla_exe_ok = img_lo == 0x400000 && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;
