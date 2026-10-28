@@ -31,7 +31,7 @@
 static int klbf_oh;                /* [BotFill] OnlineHost (klsync.c reads it: bots are mirrored there) */
 static int klbf_on, klbf_sq;      /* klbf_sq = [Bots] OnlineFillSquads (see the header, step 3) */
 static int klbf_fill;              /* the plan's fill, for the squad pass */
-static int klbf_lp; static float klbf_lp_scale = 1.0f, klbf_lp_stay = 250.0f; static DWORD klbf_lp_warned[16]; static int klbf_lp_nw;      /* gap2: OnlineLootParts (timed parts) */
+static int klbf_lp; static float klbf_lp_scale = 1.0f, klbf_lp_stay = 250.0f; static DWORD klbf_lp_warned[16]; static int klbf_lp_nw, klbf_lp_nok, klbf_lp_nbad;      /* gap2: OnlineLootParts (timed parts) */
 static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near = 150.0f;
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
@@ -843,7 +843,7 @@ static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], i
             d = (float)sqrt((pos[q][0] - g[0]) * (pos[q][0] - g[0]) + (pos[q][2] - g[2]) * (pos[q][2] - g[2]));
             if (d > klbf_ba_m) continue;
             klog("botfill: boardall: bot %d (actor %08lx) tally %d, %.0f m from the escape point, van state %d: %s", i, act[q], klbf_ob[i].tally, d / 100, vstate, klbf_ba_mode == 2 ? "DRY would board" : "counted aboard");
-            if (klbf_ba_mode == 1) { klbf_ob[i].phase = 3; if (klbf_ot_board) klbf_ot_board_call(act[q]); }
+            if (klbf_ba_mode == 1) { if (klbf_ob[i].phase == 4) klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; boardall)", i, (unsigned long)klbf_ob[i].target, klbf_ob[i].lootPaid, klbf_ob[i].lootLeft, klbf_ob[i].tally); klbf_ob[i].phase = 3; if (klbf_ot_board) klbf_ot_board_call(act[q]); }
         }
     }
     if (klbf_bank_mode) for (i = 0; i < KLBF_OT_BOTS; i++) {
@@ -982,6 +982,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     klbf_ot_last = now;
     if (sm != (DWORD)klbf_ot_sm || !klbf_ot_in) {      /* a new session / round */
         if (klbf_ot_in) klbf_ot_summary();
+        if (klbf_lp && klbf_lp_nok + klbf_lp_nbad) klog("botfill: lootparts: last round: %d stack reads plausible, %d implausible (lump fallback)", klbf_lp_nok, klbf_lp_nbad); klbf_lp_nok = klbf_lp_nbad = klbf_lp_nw = 0; memset(klbf_lp_warned, 0, sizeof klbf_lp_warned);
         memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
         klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = klbf_ot_lookAt = 0; klbf_ot_trig_looked = klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_ot_nbx = klbf_ot_bxlooks = 0; klbf_ot_bxbest = -1; klbf_ot_bxAt = 0;
         klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
@@ -1115,7 +1116,8 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             } else if ((dh = (float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2]))) <= klbf_ot_near && fabs(bots[b].pos[1] - mp[1]) <= 400.0f) {
                 if (klbf_ot_take == 2) { BYTE st0 = 0; if (klh_rd(o + 0x64, &st0, 1) && st0 >= 2 && st0 <= 3) { klog("botfill: tactics: take: stack %08lx is in state %d: 0x4e3f40 refuses it, left alone and not counted", (unsigned long)o, (int)st0); klbf_ob[s].phase = 0; continue; } }      /* review: no tally / claim for a refused stack */
                 if (klbf_lp) {      /* OnlineLootParts: GUESS the stack's +0x40 = int part size (field 4), +0x44 = float seconds per part (field 5), re/bots_loot.md:70,88 */
-                    int part = 0; float sec = 0; int ok = klh_rd(o + 0x40, &part, 4) && klh_rd(o + 0x44, &sec, 4) && part >= 1 && part <= amt && sec >= 0.05f && sec <= 10.0f;
+                    int part = 0; float sec = 0; int ok = klh_rd(o + 0x40, &part, 4) && klh_rd(o + 0x44, &sec, 4) && part >= 1 && sec >= 0.05f && sec <= 10.0f;
+                    if (ok) klbf_lp_nok++; else klbf_lp_nbad++;      /* per-round counters, logged at the next round reset */
                     if (!ok) { int w; for (w = 0; w < klbf_lp_nw && klbf_lp_warned[w] != o; w++) ; if (w == klbf_lp_nw && klbf_lp_nw < 16) { klbf_lp_warned[klbf_lp_nw++] = o; klog("botfill: lootparts: stack %08lx fields implausible (part %d sec %f): lump grab", (unsigned long)o, part, (double)sec); } }
                     else {
                         int nparts = (amt + part - 1) / part; float ssec = sec * klbf_lp_scale;
@@ -1167,7 +1169,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     klbf_ob[s].phase = 0;
                 }
             }
-            if (stop) { klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; %s)", s, (unsigned long)o, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally, why); klbf_ob[s].phase = 0; }
+            if (stop) { klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; %s)", s, (unsigned long)o, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally, why); klbf_ob[s].phase = 0; if (klbf_ot_nbad < KLBF_OT_OBJ) { klbf_ot_badAt[klbf_ot_nbad] = now; klbf_ot_bad[klbf_ot_nbad++] = o; } }      /* review: a partial stop blacklists the stack like a give-up, else the nearest-stack pick re-targets it and loops */
         }
         if (klbf_ob[s].phase == 0) {
             int nguard = 0, gbest = -1, idleVan = 0, nhold = 0; float gbd = 1e30f;
