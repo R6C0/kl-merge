@@ -43,3 +43,14 @@ Use the SHIP dll `out_bots_1028` for the final proof.
 - Live run: `botfill: trig: FIRE box XXXXXXXX via 0x6ae730 (...)` followed by the map's reaction (cops / door / spawn appear; cross-check with squad logs); no repeat spam (max 3 per box, one for re-arm -1).
 - `botfill: tactics: bot N ... GRABBED stack ... (taken through the game's 0x4e3f40 on the host)` and the stack really disappears / lowers on the host; no `0x4e3f40 refuses` line for fresh stacks.
 - FAIL signs: any fault / `kl2_*_crash` dump after a FIRE line, a box fired with 0 bots inside, an exit or ramp box in the FIRE lines, the same box firing more than 3 times, the round not reaching state 0x19 / 0x20 cleanly.
+
+## wk-bots2 (2026-10-28): OnlineBank + OnlineBoardAll (host only, default 0, not run live)
+Gates read in kl2.exe: the online grab (ZOnlineMoneyCtrl 0x6cdb40, call 0x6cdb9c to 0x7f6850, branch 0x6cdbd0 to 0x7aace0) ends in the Sv rules
+slot 46 = 0x8234d0 (vtable 0xbd2eb4), which needs a ZFFPlayer with a seat (`[player+0x2748]`, 12-seat table). A bot has no seat, so the game
+cannot bank for it online (Arcade: slot 201 0x56f6e0 -> 0x8e8750, crew record). So OnlineBank is a host ledger (log + round summary), not a score change.
+- `OnlineBank=1|2`: books a bot's carried money once when it is counted aboard. Lines: `botfill: bank: bot N ... banked $X aboard; ledger now $Y` and
+  in the round summary `bank: round ledger: N bot(s) banked $Y of Z carried`. 2 tags lines DRY (same ledger).
+- `OnlineBoardAll=1|2` (+ `OnlineBoardAllM`, cm): van state 4 or 5 (GUESS: 4 = last call, 5 = leaving) and a carrier within M of the escape box is counted aboard:
+  `botfill: boardall: bot N ... counted aboard` (2 = `DRY would board`). Removal from the world still needs OnlineBoard=1.
+Run as the BOTS1028 recipe above, hook `C:/kl-merge/wt/wk-bots2/klhook/out_bots2_1028_test`, tag BOTS2, first with both keys 2, then 1.
+PASS: bank lines match the `GRABBED` tallies of the bots that boarded; boardall lines only in state 4/5; 0 faults. FAIL: bank for a bot that never boarded, boardall at state 3.

@@ -77,6 +77,7 @@ static int klbf_squads(int fill)
    team alone cannot tell them apart; the puppeteer's list is the bots). Entries first, then the count; read on the game thread, fresh for 5 s. Needs OnlineTactics=1 (the census is its). */
 #define KLBF_OT_BOTS_MAX 16      /* = KLBF_OT_BOTS (defined below) */
 static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used by klbf_way_load below) */
+static int klbf_bank_mode, klbf_ba_mode; static float klbf_ba_m = 6000.0f; static long klbf_bank_total; static int klbf_bank_n;      /* [BotFill] OnlineBank (0 off, 1 ledger, 2 dry), OnlineBoardAll (0 off, 1 board, 2 dry), OnlineBoardAllM (cm) */
 static int klbf_trig;      /* [BotFill] OnlineTriggers: 0 off, 1 fire, 2 dry (klbf_trig_* below) */
 static int klbf_ot_ramp, klbf_ot_rampdry;      /* OnlineRampFire / OnlineRampDry toggles (read in the init, used by klbf_ramp_* below) */
 static DWORD klbf_pb_bots[KLBF_OT_BOTS_MAX]; static volatile LONG klbf_pb_n; static volatile DWORD klbf_pb_at;
@@ -138,6 +139,10 @@ static void klbf_init(void)
     klbf_ot_way = GetPrivateProfileIntA("BotFill", "OnlineWaypoints", 1, klh_ini) != 0;      /* (recommended on) BOS_DD02: 7 bots stalled 139-166 m short of the exit trigger; a [BotFillWay_<SLOT>] route walks them round it */
     if (klbf_ot) klog("botfill: OnlineTactics waypoints: OnlineWaypoints=%d (recommended on; needs a [BotFillWay_<SLOT>] section)", klbf_ot_way);
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
+    klbf_bank_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBank", 0, klh_ini); if (klbf_bank_mode < 0 || klbf_bank_mode > 2) klbf_bank_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
+    klbf_ba_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBoardAll", 0, klh_ini); if (klbf_ba_mode < 0 || klbf_ba_mode > 2) klbf_ba_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
+    klbf_ba_m = (float)GetPrivateProfileIntA("BotFill", "OnlineBoardAllM", 6000, klh_ini); if (klbf_ba_m < 500) klbf_ba_m = 500;
+    if (klbf_ot) klog("botfill: bank: OnlineBank=%d, OnlineBoardAll=%d, OnlineBoardAllM=%.0f cm (0 off, 1 on, 2 dry; recommended on once tried)", klbf_bank_mode, klbf_ba_mode, klbf_ba_m);
     klbf_ot_ramp = GetPrivateProfileIntA("BotFill", "OnlineRampFire", 1, klh_ini) != 0;      /* (recommended on) DD02: the ramp trigger never fires online because bots are not counted */
     klbf_ot_rampdry = GetPrivateProfileIntA("BotFill", "OnlineRampDry", 0, klh_ini) != 0;      /* default 0 since BOS_DD08r (F08 TriggerBox_Guards fired live, 7/7 boarded); only maps with a [BotFillRamp_<SLOT>] section fire */
     if (klbf_ot) klog("botfill: trig: OnlineTriggers=%d (0 off, 1 fire, 2 dry; recommended on once benched), OnlineTacticsTake=%d (2 = the game's 0x4e3f40, recommended on once benched)", klbf_trig, klbf_ot_take);
@@ -176,7 +181,7 @@ static void klbf_init(void)
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 #define KLBF_OT_GUARDWAIT 30000   /* ms a bot holds while every free stack is guarded (OnlineTacticsGuard) before it takes the nearest guarded one */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; } klbf_ob[KLBF_OT_BOTS];
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; } klbf_ob[KLBF_OT_BOTS];
 static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ], klbf_ot_badAt[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
 /* OnlineWaypoints (recommended on): [BotFillWay_<SLOT>] P1..P8 = "x y z" (floats, y = height). The phase-2 exit walk (the exit-trigger goal only, not van/box walks) goes through these in order.
@@ -648,8 +653,40 @@ static void klbf_ot_summary(void)
     int i, bots = 0, tot = 0, boarded = 0;
     klbf_vh_off("round summary", GetTickCount());
     for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor) { bots++; tot += klbf_ob[i].tally; if (klbf_ob[i].phase == 3) boarded++; }
+    if (klbf_bank_mode) klog("botfill: bank: round ledger%s: %d bot(s) banked $%ld of %d carried (hook ledger; the game's seat table has no bot rows)", klbf_bank_mode == 2 ? " (DRY)" : "", klbf_bank_n, klbf_bank_total, tot);
+    klbf_bank_total = 0; klbf_bank_n = 0;
     klog("botfill: tactics: round summary: %d bot(s) given orders, %d stack(s) taken, %d total (hook tally, not the game's), %d boarded, %d stack(s) given up", bots, klbf_ot_nclaim, tot, boarded, klbf_ot_nbad);
     klbf_ot_in = 0;
+}
+
+/* OnlineBank / OnlineBoardAll (2026-10-28, wk-bots2; static reading of kl2.exe, NOT run live). Arcade banks a bot's loot through rules slot 201 (0x56f6e0 -> 0x8e8750, crew record) and boards it through slot 45 (0x6840a0).
+   Online the Sv rules (vtable 0xbd2eb4) slot 46 (0x8234d0, called from ZOnlineMoneyCtrl 0x6cdbf9) needs a ZFFPlayer with a seat ([player+0x2748], 12-seat table): a bot has none, so the game cannot bank for it.
+   OnlineBank is therefore a HOST LEDGER: when a bot's phase turns 3 (aboard) its tally is booked once (log + klbf_bank_total, listed in the round summary). OnlineBoardAll: once the van is leaving-or-last-call
+   (state 4 or 5, GUESS: 4 = last call) a bot that still carries money, is not aboard and stands within OnlineBoardAllM of the escape box centre (else the exit trigger) is counted aboard (and removed by OnlineBoard when that is on). */
+static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], int nb, int vstate)
+{
+    int i, q; (void)now;
+    if (klbf_ba_mode && klbf_ot_called && (vstate == 4 || vstate == 5)) {
+        struct klmv_fr bf; float g[3]; int have = 0;
+        if (klbf_ot_box_frame(klbf_ot_bxbest, &bf)) { memcpy(g, bf.T, 12); have = 1; } else if (klbf_ot_trig) { memcpy(g, klbf_ot_tpos, 12); have = 1; }
+        for (q = 0; have && q < nb; q++) {
+            float d;
+            for (i = 0; i < KLBF_OT_BOTS && klbf_ob[i].actor != act[q]; i++) ;
+            if (i == KLBF_OT_BOTS || klbf_ob[i].phase == 3 || klbf_ob[i].tally <= 0) continue;
+            d = (float)sqrt((pos[q][0] - g[0]) * (pos[q][0] - g[0]) + (pos[q][2] - g[2]) * (pos[q][2] - g[2]));
+            if (d > klbf_ba_m) continue;
+            klog("botfill: boardall: bot %d (actor %08lx) tally %d, %.0f m from the escape point, van state %d: %s", i, act[q], klbf_ob[i].tally, d / 100, vstate, klbf_ba_mode == 2 ? "DRY would board" : "counted aboard");
+            if (klbf_ba_mode == 1) { klbf_ob[i].phase = 3; if (klbf_ot_board) klbf_ot_board_call(act[q]); }
+        }
+    }
+    if (klbf_bank_mode) for (i = 0; i < KLBF_OT_BOTS; i++) {
+        if (!klbf_ob[i].actor || klbf_ob[i].banked) continue;
+        if (klbf_ob[i].phase != 3) continue;
+        klbf_ob[i].banked = 1;
+        if (klbf_ob[i].tally <= 0) continue;
+        klbf_bank_total += klbf_ob[i].tally; klbf_bank_n++;      /* mode 2 books the same ledger, log only: nothing in the game changes in either mode */
+        klog("botfill: bank: bot %d (actor %08lx) banked $%d aboard%s; ledger now $%ld (%d bot(s))", i, klbf_ob[i].actor, klbf_ob[i].tally, klbf_bank_mode == 2 ? " (DRY, same ledger, log only)" : "", klbf_bank_total, klbf_bank_n);
+    }
 }
 
 /* host, in a round, once a second. sm_state: caller checked role 2, mode 4 */
@@ -991,6 +1028,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             }
         }
         if (rules) klbf_vh_pass(rules, vstate, left, np ? dmin : 1e30f, now);
+        if (klbf_bank_mode || klbf_ba_mode) { DWORD ba[KLBF_OT_BOTS]; float bpp[KLBF_OT_BOTS][3]; int q; for (q = 0; q < nb; q++) { ba[q] = bots[q].actor; memcpy(bpp[q], bots[q].pos, 12); } klbf_bank_pass(now, ba, (const float (*)[3])bpp, nb, vstate); }      /* OnlineBank / OnlineBoardAll */
     }
 }
 
