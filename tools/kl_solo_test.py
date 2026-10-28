@@ -7,6 +7,7 @@ Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md;
                            [--n N (3+: more joiners, all with --ini2)] [--gap2 30 (between joiners)]
                            [--netstat SECS] [--relaunch K (3: a failed, hung or ended joiner is started again, before the host's round starts)]
                            [--hang-secs S (90: a joiner whose KLHook.log gains no non-watchdog line for S s is hung: its pid is killed and it is relaunched)]
+                           [--owner-away (owner said they are away: no idle gate, no owner abort; the park stays)]
                            [--park 1 (hold the Windows cursor at 0,0 until the host's round starts: a hovered menu row moves the selection)]
 
 - Puts the TEST dinput8.dll into the game folder for the run and puts the one that was there back afterwards
@@ -128,6 +129,10 @@ def main():
         if key in a:
             i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
     force = '--force' in a
+    # 10-28: the owner said 'i didnt use the pc at all' about A1HIRE's 23:03 abort (cursor 1493,445, idle 0 s). With their
+    # word that they are away, --owner-away skips the idle gate and the park loop's owner abort (it still parks the cursor).
+    away = '--owner-away' in a
+    force = force or away
     tag, secs, gap = opt.get('--tag', time.strftime('solo_%H%M%S')), int(opt.get('--secs', 300)), int(opt.get('--gap', 45))
     shots = []
     for x in opt.get('--shots', '30-%d:30' % secs).split(','):
@@ -219,7 +224,7 @@ def main():
                 btn = any(ctypes.windll.user32.GetAsyncKeyState(v) & 0x8000 for v in (1, 2, 4))
                 # Q27_DD09 17:33: the game put the cursor at 960,0 (inst2's window corner) with idle 72 s - a false abort.
                 # Game-made moves do not reset idle; a hand does. Off a reset point counts only with input in the last 3 s.
-                if k > 1 and (btn or ((pt[0], pt[1]) not in reset and idle_s() < 3)):   # k == 1: where it rested before the bench
+                if not away and k > 1 and (btn or ((pt[0], pt[1]) not in reset and idle_s() < 3)):   # k == 1: where it rested before the bench
                     owner[0] = 'cursor at %d,%d%s (idle %d s)' % (pt[0], pt[1], ', mouse button down' if btn else '', idle_s())
                     say('  park | +%.1f s owner input: %s - bench ended, nothing parked' % (time.time() - t0, owner[0]))
                     return
