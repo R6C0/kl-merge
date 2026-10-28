@@ -407,7 +407,32 @@ def shift(src_zip, dst_zip, T=DEFAULT_T, log=print):
     return rep
 
 
+def bots_companion(shifted_zip, dst=None, slot='F04', log=print):
+    """The [BotGate] companion (<name>.bots.zip) of a SHIFTED map zip. 2026-10-28.
+    The companion is the plain zip with ONE change, the .prp: every eHeistOnly ZSquadScript becomes eAllTypes (kl_botsonline.convert; every other
+    member byte for byte). The bots' places (squad members, spawn points, waypoints, the PF4 navmesh they walk) are ordinary entities / nav data of
+    the level, so shift() has already moved them with everything else; no separate coordinate pass exists or is needed. Hence the companion MUST be built
+    from the shifted zip (the DM11B one built from the unshifted level puts the bots 12288 / 16384 units away from the shifted map).
+    Writes <dst> (default <shifted stem>.bots.zip) and <dst stem>.base.md5 = md5 of the shifted zip, the file the hook's drift check compares
+    with the plain zip it sits beside (kl_botgate_stage_1026.drift). -> (dst, base md5)."""
+    import hashlib
+    import kl_botsonline
+    dst = dst or shifted_zip[:-4] + '.bots.zip'
+    kl_botsonline.convert(shifted_zip, dst, 'eAllTypes', slot, log)
+    h = hashlib.md5()
+    with open(shifted_zip, 'rb') as f:
+        for b in iter(lambda: f.read(1 << 20), b''):
+            h.update(b)
+    with open(dst[:-4] + '.base.md5', 'w', newline='\n') as fh:
+        fh.write(h.hexdigest() + '\n')
+    return dst, h.hexdigest()
+
+
 if __name__ == '__main__':
+    if len(sys.argv) >= 3 and sys.argv[1] == '--bots':
+        # kl_map_shift.py --bots <shifted.zip> [<out.bots.zip>] [slot]
+        print(bots_companion(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None, sys.argv[4] if len(sys.argv) > 4 else 'F04'))
+        sys.exit(0)
     if len(sys.argv) < 3:
-        sys.exit('usage: kl_map_shift.py <src.zip> <dst.zip> [tx ty tz]')
+        sys.exit('usage: kl_map_shift.py <src.zip> <dst.zip> [tx ty tz]  |  kl_map_shift.py --bots <shifted.zip> [<out.bots.zip>] [slot]')
     shift(sys.argv[1], sys.argv[2], tuple(float(v) for v in sys.argv[3:6]) if len(sys.argv) >= 6 else DEFAULT_T)

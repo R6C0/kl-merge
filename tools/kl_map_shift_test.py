@@ -390,6 +390,59 @@ def test_zip(src, dst, changed, stats):
     stats['zip members untouched (same CRC and sizes)'], stats['zip members changed'] = same, len(changed)
 
 
+def test_bots(src, dst, t, stats, bots_out):
+    """(e) the [BotGate] companion of the shifted zip (kl_map_shift.bots_companion): built from dst, differs from dst ONLY in the .prp (squad
+    field), so every bot entity / the navmesh / all other members are the shifted ones; and every bot coordinate = the source's + T and fits int16.
+    "Bot coordinates" = the world place of every entity in a *merc_bot_squad* subtree (squads, members, their spawn / waypoint children) plus the
+    local translation of each (a moved root's own, exactly float32(old + T); a child's, unchanged). GUESS: all bot paths are entities under that
+    group or the PF4 navmesh (both covered); the squads hold no coordinates of their own (ZSquadScript fields are enums / ids)."""
+    out, base = MS.bots_companion(dst, bots_out, 'F04', log=lambda m: None)
+    with zipfile.ZipFile(dst) as a, zipfile.ZipFile(out) as b:
+        ia, ib = a.infolist(), b.infolist()
+        check([i.filename for i in ia] == [i.filename for i in ib], 'bots zip: member list / order differs from the shifted zip')
+        diff = [i.filename for i, j in zip(ia, ib) if (i.CRC, i.file_size) != (j.CRC, j.file_size)]
+        check(len(diff) == 1 and diff[0].lower().endswith('.prp'), 'bots zip differs from the shifted zip in %r (want only the .prp)' % diff)
+        check(b.testzip() is None, 'bots zip fails its CRC test')
+    check(open(out[:-4] + '.base.md5').read().strip() == base, 'base.md5 file content')
+    d0, d1 = load(src), load(out)
+    a, b = scene_of(d0), scene_of(d1)
+    ident = ((1, 0, 0, 0, 1, 0, 0, 0, 1), (0.0, 0.0, 0.0))
+    n = [0, 0]
+    worst = [0.0]
+
+    def walk(e0, e1, par0, par1, inbot, root):
+        w0 = RC.mul(par0, (struct.unpack('<12f', e0.rot)[:12], fl(e0.trans, 0)))
+        w1 = RC.mul(par1, (struct.unpack('<12f', e1.rot)[:12], fl(e1.trans, 0)))
+        inbot = inbot or b'merc_bot_squad' in e0.name
+        if inbot:
+            n[0] += 1
+            moved = not MS.is_system(root.name)
+            if moved:
+                if e0 is root:
+                    check(moved_f(fl(e0.trans, 0), fl(e1.trans, 0), t), 'bot root %r not float32(old + T)' % e0.name)
+                else:
+                    check(e0.trans == e1.trans, 'bot child %r local translation changed' % e0.name)
+                want = [w0[1][k] + t[k] for k in range(3)]
+            else:
+                want = list(w0[1])
+            err = max(abs(w1[1][k] - want[k]) for k in range(3))
+            worst[0] = max(worst[0], err)
+            check(err <= 0.01, 'bot %r world place %r != source %r + T' % (e0.name, w1[1], w0[1]))
+            if moved:
+                n[1] += 1
+                check(max(abs(w1[1][0]), abs(w1[1][2])) <= RC.LIM, 'bot %r at %r beyond int16' % (e0.name, w1[1]))
+        check(len(e0.kids) == len(e1.kids), 'bot tree changed')
+        for k0, k1 in zip(e0.kids, e1.kids):
+            walk(k0, k1, w0, w1, inbot, root)
+    check(len(a.roots) == len(b.roots), 'bots zip root count')
+    for r0, r1 in zip(a.roots, b.roots):
+        walk(r0, r1, ident, ident, False, r0)
+    check(n[0] > 0, 'no merc_bot_squad entities found')
+    check(d1['.gms'] == load(dst)['.gms'] and d1['.buf'] == load(dst)['.buf'], 'bots zip .gms / .buf differ from the shifted ones (navmesh included)')
+    stats['(e) bots companion'] = '%s, %d bytes, base md5 %s' % (os.path.basename(out), os.path.getsize(out), base)
+    stats['    bot entities checked (all = source + T, worst error %.4g), moved / int16-fit' % worst[0]] = '%d / %d' % tuple(n)
+
+
 def run_py(args, what):
     r = subprocess.run([sys.executable] + args, capture_output=True, text=True)
     out = (r.stdout + r.stderr).strip().splitlines()
@@ -445,7 +498,8 @@ def main(argv):
     stats['  beyond after, GAMEPLAY'] = len(bad)
     stats['gameplay extent after (x, z)'] = '%d..%d, %d..%d' % (min(xs), max(xs), min(zs), max(zs))
     check(not bad, 'gameplay entities beyond +-32767 after the shift: %r' % bad[:5])
-    print('(a) round trip, (b) int16 range, (c) untouched bytes: all checks passed')
+    test_bots(src, dst, t, stats, dst[:-4] + '.bots.zip')
+    print('(a) round trip, (b) int16 range, (c) untouched bytes, (e) bots companion: all checks passed')
     for k, v in stats.items():
         print('   %-48s %s' % (k, v))
     # (d)
