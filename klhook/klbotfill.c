@@ -143,6 +143,7 @@ static void klbf_init(void)
     klbf_bank_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBank", 0, klh_ini); if (klbf_bank_mode < 0 || klbf_bank_mode > 2) klbf_bank_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     klbf_bc_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBankCredit", 0, klh_ini); if (klbf_bc_mode < 0 || klbf_bc_mode > 2) klbf_bc_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     if (klbf_bc_mode && !klbf_bank_mode) { klog("botfill: bankcredit: OnlineBankCredit=%d needs OnlineBank=1 or 2 (the ledger); nothing is done", klbf_bc_mode); klbf_bc_mode = 0; }
+    else if (klbf_bc_mode == 1 && klbf_bank_mode == 2) { klog("botfill: bankcredit: OnlineBank=2 is a dry ledger, so OnlineBankCredit=1 is forced to 2 (dry, log only); set OnlineBank=1 to credit"); klbf_bc_mode = 2; }
     klbf_ba_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBoardAll", 0, klh_ini); if (klbf_ba_mode < 0 || klbf_ba_mode > 2) klbf_ba_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     klbf_ba_m = (float)GetPrivateProfileIntA("BotFill", "OnlineBoardAllM", 6000, klh_ini); if (klbf_ba_m < 500) klbf_ba_m = 500;
     if (klbf_ot) klog("botfill: bank: OnlineBank=%d, OnlineBoardAll=%d, OnlineBoardAllM=%.0f cm (0 off, 1 on, 2 dry; recommended on once tried)", klbf_bank_mode, klbf_ba_mode, klbf_ba_m);
