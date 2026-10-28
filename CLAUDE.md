@@ -72,9 +72,9 @@ Full dated log: `re/open_work_log.md` (newest first).
 A1SHIFT5b offline Arcade full round (7 bots, 1 boarded $1.36M), faults 0. A1NET2 both seats walk PASS. kl_map_shift_test fixed (adce57ce4; never
 run it while an A1SHIFT bench has DM11S installed). SHIPPED 18:20 (/oldhook: OnlineSkip emptied, ini baseline de91b2a5; undo UNDO_DM11S.bat in C:\kl_build_1024\c9_1028\dm11s_ship).
 
-2026-10-28 ~18:00 - [ce] BANK CREDIT ONLINE PAYS: WKBC5 F06 host held E at the van's boarding object [rules+0x1e0] (-2933 524 10402, NOT -6209)
--> seat flag 0x20, popup 'You escaped the heist', credit +550k/+300k/+150k to the Sharable cap 1,000,000 (bot 3's 250k dropped: cap). 0 faults both
-seats (ce408cef4 counts flag 0x20). BP_DD04c 7/7 -> defaults 1600/45 (b0bd5343c). Next: LOOKS1 (OnlineLooks=1, wk-looks 3d207fbb5), cap overflow.
+2026-10-28 ~18:45 - [ce] LOOKS2 PASS: OnlineLooks=1 merged (c42e9f4ec): the host draws each AI heister's Arcade look, KLSYL on UDP 27415, both seats
+show the same looks, humans' bodies excluded (a peer on its stock body counts by model), 0 faults/asserts. Bank credit online PAYS (WKBC5); the overflow
+past the 1M Sharable cap now fills the next boarded seat (2e3e0f38e, NOT run live: WKBC6 next). Then wk-move (OnlineGuardWalk/Escort, workflow wurlx7g2k).
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.

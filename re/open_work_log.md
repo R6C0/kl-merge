@@ -1,3 +1,10 @@
+2026-10-28 ~18:45 - [ce] LOOKS2 (out_looks_1028e_test, F06 host + join): OnlineLooks=1 PASS. Host RESULT PASS, 0 faults / 0 asserts both seats; the client
+got 7 KLSYL records and applied the same looks as the host; the humans' characters (J.C., Tommy) stayed out of the draw (the LOOKS1 duplicate Elwood is
+fixed: a CharOnline peer announcing 'stock' now counts by its body's model, entity+4 -> node+0x68 -> klw_char_of). Digit 3 kept his body (no character
+left), as Arcade. Merged c42e9f4ec (ini + mod options document mode 1; default stays off). Also pushed 2e3e0f38e: OnlineBankCredit fills every boarded
+seat up to the Sharable cap, remainder stays in the ledger (NOT run live, WKBC6 next). kl_tests: 9 fail = the known 8 + kl_map_shift_test, which now
+refuses the shipped (already shifted) DM11B source (expected since the DM11S ship; c9 told).
+
 2026-10-28 ~18:20 - [c9] DM11S SHIPPED: SHIP_DM11S.bat /oldhook ran (md5 checked): KLExpansion\Maps\DM11B now holds the shifted zip 222102260 +
 bots 222102326 + Int16Ok.txt; originals *.before-dm11s in the same folder; KLHook.ini [Int16Guard] OnlineSkip emptied (backup KLHook.ini.before-dm11s),
 new ini baseline sha1 de91b2a5, dinput8 unchanged f520f5d1. Undo: C:\kl_build_1024\c9_1028\dm11s_ship\UNDO_DM11S.bat. Game to ce (LOOKS2).
