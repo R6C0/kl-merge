@@ -843,7 +843,7 @@ typedef int (__fastcall *klbf_bc_get_t)(void *S, int edx_unused, int seat);
 static void klbf_bc_log_skip(const char *why) { if (!(klbf_bc_told & 2) && (klbf_bc_told |= 2)) klog("botfill: bankcredit: skipped: %s (ledger $%ld; said once per round)", why, klbf_bank_total); }
 static void klbf_bc_credit(DWORD rules)      /* game thread, host tick, round running */
 {
-    DWORD sm = 0, role = 0, S, nrec, tabp, cap; int seat, pick = -1; long credit = klbf_bank_total;
+    DWORD sm = 0, role = 0, S, nrec, tabp, cap; int seat, pick = -1, picks[12], np = 0, k; long credit = klbf_bank_total, paid = 0;
     if (!klbf_bc_mode || credit <= 0 || !rules) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd(sm + 0x54, &role, 4) || role != 2) return;      /* host only: 0x942b20 raises a Quazal exception on a non-master */
     if (klh_rd32((DWORD_PTR)KLH_VA(0x168e59c)) != 0) return;      /* FA sub-mode only */
@@ -855,18 +855,29 @@ static void klbf_bc_credit(DWORD rules)      /* game thread, host tick, round ru
         BYTE used = 0xff; DWORD fl;
         if (!klh_rd(tabp + seat, &used, 1) || used != 0) continue;      /* 0x5e226b: record in use when the byte is 0 */
         if (!klh_rd(S + 0x58 + 0x40 + 4 * seat, &fl, 4)) continue;      /* = 0x571750(S, seat) */
-        if ((fl & 0x60) && !(fl & 0x0d)) { pick = seat; break; }      /* 0x20 boarded / 0x40 escaped */
+        if ((fl & 0x60) && !(fl & 0x0d)) picks[np++] = seat;      /* 0x20 boarded / 0x40 escaped */
     }
+    if (np) pick = picks[0];
     if (pick < 0) { if (!(klbf_bc_told & 1) && (klbf_bc_told |= 1)) klog("botfill: bankcredit: no boarded or escaped human seat yet (flag 0x20/0x40 set, 0x0d clear): ledger $%ld waits (said once per round)", credit); return; }
+    /* WKBC5 (10-28): one seat at the Sharable cap 1,000,000 swallowed bot 3's $250k (+$0, ledger zeroed). Now every boarded seat is filled in seat order and what fits
+       nowhere STAYS in the ledger for a seat that boards later (logged once); the stock 0x6f4960 split still evens it out among the escapees. */
     __try {
-        int have = ((klbf_bc_get_t)KLH_VA(0x699030))((void *)S, 0, pick), room = (int)cap - have;
-        if (cap < 100000 || cap > 100000000) room = 1000000 - have;      /* GUESS: an unreadable/odd cap falls back to the doc's 1,000,000 */
-        if (room < 0) room = 0;
-        if (credit > room) credit = room;
-        if (klbf_bc_mode == 2) { klbf_bc_dry = klbf_bank_total; klog("botfill: bankcredit: DRY would credit seat %d +$%ld (ledger $%ld, Sharable now %d, cap %lu)", pick, credit, klbf_bank_total, have, (unsigned long)cap); return; }
-        if (credit > 0) ((klbf_bc_add_t)KLH_VA(0x5a18c0))((void *)S, 0, pick, (int)credit);
-        klog("botfill: bankcredit: seat %d +$%ld (ledger $%ld) Sharable %d -> %d", pick, credit, klbf_bank_total, have, ((klbf_bc_get_t)KLH_VA(0x699030))((void *)S, 0, pick));
-        klbf_bank_total = 0; klbf_bank_n = 0;      /* once per round */
+        for (k = 0; k < np && paid < credit; k++) {
+            long part = credit - paid;
+            int have = ((klbf_bc_get_t)KLH_VA(0x699030))((void *)S, 0, picks[k]), room = (int)cap - have;
+            if (cap < 100000 || cap > 100000000) room = 1000000 - have;      /* GUESS: an unreadable/odd cap falls back to the doc's 1,000,000 */
+            if (room < 0) room = 0;
+            if (part > room) part = room;
+            if (part <= 0) continue;
+            if (klbf_bc_mode == 2) { klog("botfill: bankcredit: DRY would credit seat %d +$%ld (ledger $%ld, Sharable now %d, cap %lu)", picks[k], part, klbf_bank_total, have, (unsigned long)cap); paid += part; continue; }
+            ((klbf_bc_add_t)KLH_VA(0x5a18c0))((void *)S, 0, picks[k], (int)part);
+            paid += part;
+            klog("botfill: bankcredit: seat %d +$%ld (ledger $%ld) Sharable %d -> %d", picks[k], part, klbf_bank_total, have, ((klbf_bc_get_t)KLH_VA(0x699030))((void *)S, 0, picks[k]));
+        }
+        if (klbf_bc_mode == 2) { klbf_bc_dry = klbf_bank_total; return; }
+        klbf_bank_total -= paid;
+        if (klbf_bank_total <= 0) { klbf_bank_total = 0; klbf_bank_n = 0; }
+        else if (!(klbf_bc_told & 4) && (klbf_bc_told |= 4)) klog("botfill: bankcredit: every boarded seat is at the cap: $%ld waits in the ledger for another seat (said once per round)", klbf_bank_total);
     } __except (EXCEPTION_EXECUTE_HANDLER) { klog("botfill: bankcredit: FAULT %08lx crediting seat %d; the original settlement still runs", (unsigned long)GetExceptionCode(), pick); klbf_bank_total = 0; klbf_bank_n = 0; }
 }
 
