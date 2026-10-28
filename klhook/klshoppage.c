@@ -334,6 +334,48 @@ static void kspg_hire_press(void *self, const char *nm)
     if (kspg.hireLog) klog("hirepage: press on row %d = %s (%s, message '%s'): hire $%d rank %d -> %s", row, klhr_name[ch], path, nm, klhr_price[ch], klhr_need[ch], res);
 }
 
+/* ==== [Shop] OnlineSwapText=1|2 (2026-10-28; moved here from kllocname.c after GUN1: the shop rows are asked through each ELEMENT's slot 24, never through the LOC object's slot 0) ====
+ * Set A / the stock page only (page II, the hire page and the controls page have their own text; the OldPrimary / OldSecondary cards keep the real loadout's text).
+ *  1 = ONLINE the shop rows 13/16/32/35 are named after the stock carrier gun when the pool does NOT hand over ours (a baked name over a stock gun); the Desc stays as asked.
+ *  2 = the name follows kls_row_state (klshop.c): ours handed over -> HK69 / Type 81 / Rem 700 / Minimi (a baked text passes through, the carrier's text is replaced; Desc gets a
+ *      one-line description on an unbaked map), decided STOCK online -> the carrier's name when the text names another gun, undecided / no pair -> as asked. Offline too.
+ * Armed by kspg_swt_tick (below) even with [ShopPage] Enable=0: it only runs the element scan; the wrappers pass every call through while kspg.active and kspg.hact are 0.
+ * The picture stays the carrier's on an unbaked map (the hook does not touch it); MP45 / row 7 is not covered. GUESS: the keys are the ones page II reads (same strstr). */
+static int kspg_swt;                                       /* 0 off, 1, 2 (set in kspg_init) */
+static volatile int kspg_swtact;                           /* the shop gate is open (kspg_swt_tick) */
+static LONG kspg_swt_wrapped;                              /* once per shop stay: the first text key that reached the wrapper */
+static char *kspg_text_swt(void *self, const char *key, char *res)
+{
+    const char *p, *q; int row, desc = 0, nd = 0, role, item = 0, rs; const char *nm, *sw, *sd, *ck, *to = 0; char rt[96], *o; static BYTE unbaked[KSPG_ROWS]; int stockText = 0, i;
+    if (!kspg_swt || !kspg_swtact || !key || !res || kspg.hire || kspg.ctl || kspg.shownB) return 0;
+    if ((p = strstr(key, "WeaponShop/Weapon")) == 0) return 0;
+    for (q = p + 17; *q >= '0' && *q <= '9'; q++) nd++;
+    if (!nd) return 0;
+    desc = !strcmp(q, "Desc"); if (*q && !desc) return 0;
+    row = atoi(p + 17);
+    role = kspg_role_of(self);
+    if (role == KR_OLDPRI || role == KR_OLDSEC) return 0;
+    if (InterlockedExchange(&kspg_swt_wrapped, 1) == 0) klog("shoptext: element slot 24 wrapped and reached (OnlineSwapText=%d, first key '%.60s', row %d, role %d, online %d)", kspg_swt, key, row, role, kl_online());
+    nm = row == 13 ? "TOQ Model 18" : row == 16 ? "Buqiang 300BP" : row == 32 ? "Buqiang 800 Scoped" : row == 35 ? "Buqiang 900 Scoped" : 0;
+    if (!nm) return 0;
+    rs = kls_row_state(row, &item);
+    sw = item == 52 ? "HK69" : item == 33 ? "Type 81" : item == 49 ? "Rem 700" : item == 47 ? "Minimi" : 0;
+    sd = item == 52 ? "Grenade launcher." : item == 33 ? "Assault rifle." : item == 49 ? "Bolt-action sniper rifle." : item == 47 ? "Light machine gun." : 0;
+    ck = row == 13 ? "TOQ" : row == 16 ? "Buqiang 300" : row == 32 ? "Buqiang 800" : "Buqiang 900";
+    rt[0] = 0; klh_rdstr((DWORD_PTR)res, rt, sizeof rt); rt[sizeof rt - 1] = 0;
+    for (i = 0; rt[i]; i++) if (!_strnicmp(rt + i, ck, strlen(ck))) { stockText = 1; break; }
+    if (kspg_swt == 1) { if (!desc && kl_online() && rs != 2) to = nm; }                       /* names only; ours handed over means the baked name is right */
+    else {
+        if (!desc && row < KSPG_ROWS) unbaked[row] = (BYTE)stockText;
+        if (desc) { if (rs == 2 && sd && (stockText || (row < KSPG_ROWS && unbaked[row]))) to = sd; }
+        else if (rs == 2 && sw) { if (stockText) to = sw; }
+        else if ((rs == 3 || rs == 0) && kl_online() && !stockText && rt[0]) to = nm;
+    }
+    if (!to) return 0;
+    { static LONG told; if (InterlockedIncrement(&told) <= 6) klog("shoptext: row %d%s answered '%s' (mode %d, pool state %d%s, original '%.40s')", row, desc ? " Desc" : "", to, kspg_swt, rs, rs == 2 ? " ours" : "", rt); }
+    o = kspg_ring(); strncpy(o, to, 519); o[519] = 0; return o;
+}
+
 static char *kspg_text(int c, void *self, const char *key);
 /* page II text (unchanged logic; the original text `res` is fetched by kspg_text) */
 static char *kspg_text_p2(int c, void *self, const char *key, char *res)
@@ -387,7 +429,7 @@ static char *kspg_text_p2(int c, void *self, const char *key, char *res)
 static char *kspg_text(int c, void *self, const char *key)
 {
     char *res = ((kspg_txt_t)(DWORD_PTR)kspg_tab[c].orig)(self, 0, key), *r;
-    if (!key || !res || (!kspg.active && !kspg.hact)) return res;
+    if (!key || !res || (!kspg.active && !kspg.hact && !kspg_swtact)) return res;
     if (kspg.hact && kspg.ctl && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) {
         r = kspg_text_ctl(self, key, res);
         return r ? r : res;
@@ -398,6 +440,7 @@ static char *kspg_text(int c, void *self, const char *key)
         return r ? r : res;
     }
     r = kspg_text_p2(c, self, key, res);
+    if (r == res && kspg_swt) { char *sx = kspg_text_swt(self, key, res); if (sx) r = sx; }   /* [Shop] OnlineSwapText, stock page only */
     if (kspg.hact && kspg.hireOn && r && strstr(key, "BuyWeapons_Title")) {          /* GUESS: BuyWeapons_Title is the shop's caption (as page II's hint) */
         size_t n = strlen(r); char kn[16], *o;
         if (n <= 440) {
@@ -1131,6 +1174,9 @@ static void kspg_init(void)
        swap alone (page II stays off). The page II code returns early on kspg.have == 0 (kspg_early_body). */
     if (kls.on && kls.osw && GetPrivateProfileIntA("Shop", "OnlineSwapArm", 0, klh_ini) != 0) { kspg.swapArm = 1; klog("shop: OnlineSwapArm=1 (NOT run in the game): the early-make hook is armed for [Shop] OnlineSwap=%d even without [ShopPage] pairs", kls.osw); }
     else if (kls.on && kls.osw && !kspg.on) klog("osw: OnlineSwap=%d but the early-make hook is NOT armed ([ShopPage] Enable=0 and [Shop] OnlineSwapArm=0): online the swap does nothing", kls.osw);
+    kspg_swt = kls.on ? GetPrivateProfileIntA("Shop", "OnlineSwapText", 0, klh_ini) : 0;
+    if (kspg_swt < 0 || kspg_swt > 2) kspg_swt = 0;
+    if (kspg_swt) klog("shoptext: [Shop] OnlineSwapText=%d (recommended off; GUN1 10-28 found the old kllocname.c path never ran): the shop rows 13/16/32/35 text is answered in the elements' slot 24 on the stock page; the element scan runs without [ShopPage] Enable", kspg_swt);
     if (!kspg.on) return;
     kspg.key = klkeys_vk(KK_PAGE2) & 0xff;
     if (kspg.key < 1 || kspg.key > 0xfe) kspg.key = 0x75;
@@ -1278,6 +1324,19 @@ static void kspg_cycle_key(SHORT (WINAPI *gaks)(int), HWND (WINAPI *fgw)(void), 
     kspg.ctlKeyDown = down;
 }
 
+/* [Shop] OnlineSwapText tick (game thread, runs whatever [ShopPage] Enable says): the shop gate (the hire / controls gate, which is open online too), and the element scan
+ * that gives each shop element its private vtable (slot 24 = kspg_text0/1). The wrappers change nothing unless kspg.active / kspg.hact / kspg_swtact say so. */
+static void kspg_swt_tick(void)
+{
+    static DWORD lastGate, lastScan; DWORD now = GetTickCount();
+    if (now - lastGate > 250) {
+        int g = kspg_gate_x(2); lastGate = now;
+        if (g != 1) { if (kspg_swtact) InterlockedExchange(&kspg_swt_wrapped, 0); kspg_swtact = 0; return; }
+        kspg_swtact = 1;
+    }
+    if (kspg_swtact && !kspg.active && !kspg.hact && now - lastScan > 1500) { lastScan = now; kspg_scan(); }   /* the other two ticks scan when they are active */
+}
+
 /* HIRE PAGE tick (game thread; runs whatever [ShopPage] Enable says): the shop gate, the page key (edge), the scan that wraps the shop's elements. */
 static void kspg_hire_tick(void)
 {
@@ -1364,6 +1423,7 @@ static void klshoppage_tick(int game_thread)
     if ((kspg.hireOn || kspg.ctlOn) && game_thread && klh_exe_ok) kspg_hire_tick();
     if (kspg.probe && game_thread && klh_exe_ok) kspp_tick();
     if (kspo.on && game_thread && klh_exe_ok) kspo_tick();
+    if (kspg_swt && game_thread && klh_exe_ok) kspg_swt_tick();
     if (kspg.swapArm && !kspg.on && game_thread && klh_exe_ok) {          /* [Shop] OnlineSwapArm: only the early-make hook, for the swap (page II is off) */
         if (!kspg.earlyTried) kspg_early_patch();
         if (kspg.earlyOk) kllb_early_tick();
