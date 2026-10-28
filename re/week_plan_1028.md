@@ -16,9 +16,9 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
 - 10-28 12:00 ce: research re/keybinds_ui_1028.md (F7/F8/F10 clash with ReShade, CopSquad F/G vs melee/grenade); build wf_ce299754 in wt/wk-keys.
 Owner wants every mod feature reachable on a sensible key and shown on screen (shop pages, hint lines, a controls page).
-- [ ] Inventory of every mod key and feature (klhook/*.c VK_/DIK reads, ini keys) -> re/keybinds.md, with clashes.
-- [ ] One coherent key map (no clashes with stock DD binds), configurable in KLHook.ini [Keys].
-- [ ] In-game "MOD CONTROLS" page in the shop (same carrier trick as the hire page) + a one-line hint in the buy menu caption.
+- [x] Inventory of every mod key and feature -> re/keybinds_ui_1028.md, with clashes.
+- [x] One coherent key map, [Keys] Map=1 (WK2 live 10-28: 9 keyed features, 0 clashes incl. ReShade.ini).
+- [x] In-game "MOD CONTROLS" page in the shop + hint (WK2 live: "MOD CONTROLS page on"; F2 cycles stock -> page II -> hire -> controls). Owner still to look at it.
 - [ ] Toggles visible in Mod Options.
 Owner: ce.
 
@@ -39,12 +39,12 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 ### T3 AI heisters online = Arcade (behaviour + looting)
 - 10-28 12:00 ce: research re/bots_online_arcade_1028.md (0x7f6850 'Arcade?' false online -> no tactics/records, trigger boxes ignore bots, Take is a raw +0x34 write); build OnlineTriggers + OnlineTacticsTake=2 in wt/wk-bots.
 - [ ] Diff Arcade vs online bot code paths (BotFill, klcrew, klgrudge, klhop, klcardown, klcdying, klshield: 0 online refs).
-- [ ] Online bots loot, carry, bank and escape like Arcade.
+- [ ] Online bots loot, carry, bank and escape like Arcade. WK2 live 10-28 F06: 7 bots GRABBED via the game's 0x4e3f40, van called, 5/7 BOARDED, $1.35M on the bank ledger; paying the ledger to the score (OnlineBankCredit, data-only) = bench WKBC; 2 bots strayed (BP benches).
 Owner: ce (10-28 11:40; 3f is another project).
 
 ### T4 AI heisters trigger cops / enemy spawns (not only the player)
 - 10-28 12:00 ce: research re/bots_trigger_cops_1028.md (ZTriggerBox 0x42afd0/ZTriggerBox2 0x626f92 count team-2 only when 0x7f6850); same build as T3.
-- [ ] Find what starts cop waves and spawn triggers (player-only checks), make bot actions count, Arcade and online.
+- [x] Find what starts cop waves and spawn triggers, make bot actions count online: [BotFill] OnlineTriggers=1 PROVEN live WK2 10-28 (F06: 3 ZTriggerBox FIREs via 0x6ae730 from bots, 0 faults). Arcade already counts team 2.
 Owner: ce (10-28 11:40).
 
 ### T5 Gun UI + sounds Arcade -> multiplayer (MP45 first)
