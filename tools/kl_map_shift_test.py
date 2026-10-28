@@ -70,8 +70,18 @@ def moved_f(a, b, t, tol=0.0):
     return all(abs(f32(x + d) - y) <= tol for x, y, d in zip(a, b, t))
 
 
+SHIFT_MAG = 0.0      # max |T|, set by main
+
+
 def same_f(a, b, tol):
-    return all(abs(x - y) <= tol for x, y in zip(a, b))
+    """|a - b| <= tol, or one float32 step of the shifted value (|a| + max |T|): -17440.9 + (-16384) lands where a float32 step is 0.0039,
+    so a shift and its inverse can miss the source by 0.00195 (DM11B TM_MoneyStack_001 ref 1103, kl_tests 10-28). Round trips only."""
+    return all(abs(x - y) <= max(tol, ulp32(abs(x) + SHIFT_MAG)) for x, y in zip(a, b))
+
+
+def ulp32(v):
+    """the float32 step at magnitude v"""
+    return 2.0 ** (math.frexp(v)[1] - 24) if v else 0.0
 
 
 # ---------------------------------------------------------------- scene
@@ -152,7 +162,8 @@ def test_scene(s, t, back, stats):
     diff2 = [i for i in range(len(a.head)) if a.head[i] != c.head[i]]
     for lo, hi in allowed:
         for o in range(lo, hi, 4):
-            check(abs(fl(a.head, o, 1)[0] - fl(c.head, o, 1)[0]) <= TOL_POS, 'gate float at %#x round trip' % o)
+            g0 = fl(a.head, o, 1)[0]
+            check(abs(g0 - fl(c.head, o, 1)[0]) <= max(TOL_POS, ulp32(abs(g0) + max(abs(v) for v in t))), 'gate float at %#x round trip' % o)
     check(len(diff2) <= len(diff), 'round trip changed more head bytes')
     # nav
     if a.nav is not None:
@@ -201,7 +212,8 @@ def test_prp(s, moved_roots_names, t, stats):
             a0 = struct.unpack('<f', x['props'][i][1])[0]
             a2 = struct.unpack('<f', z['props'][i][1])[0]
             worst = max(worst, abs(a0 - a2))
-            check(abs(a0 - a2) <= TOL_POS, 'prp node %d round trip' % k)
+            tol = max(TOL_POS, ulp32(abs(a0) + max(abs(c) for c in t)))      # one float32 step of the shifted value (see same_f)
+            check(abs(a0 - a2) <= tol, 'prp node %d round trip %r vs %r' % (k, a2, a0))
         old = [struct.unpack('<f', x['props'][i][1])[0] for i in range(min(d), min(d) + 1)]
     stats['prp nodes with a changed ZGEOM[2]'] = changed
     stats['prp worst round trip'] = worst
@@ -453,7 +465,7 @@ def test_bots(src, dst, t, stats, bots_out):
             moved = not MS.is_sys_root(a, root)
             if moved:
                 if e0 is root:
-                    check(moved_f(fl(e0.trans, 0), fl(e1.trans, 0), t), 'bot root %r not float32(old + T)' % e0.name)
+                    check(moved_f(fl(e0.trans, 0), fl(e1.trans, 0), t), 'bot root %r not float32(old + T): %r -> %r' % (e0.name, fl(e0.trans, 0), fl(e1.trans, 0)))
                 else:
                     check(e0.trans == e1.trans, 'bot child %r local translation changed' % e0.name)
                 want = [w0[1][k] + t[k] for k in range(3)]
@@ -512,10 +524,15 @@ def main(argv):
         i = a.index('--t')
         t = tuple(float(v) for v in a[i + 1:i + 4])
         del a[i:i + 4]
+    global SHIFT_MAG
+    SHIFT_MAG = max(abs(v) for v in t)
     src = a[0] if a else os.path.join(DD11B, 'F04_Main.zip')
     dst = a[1] if len(a) > 1 else os.path.join(DM, 'F04_Main_DM11S.zip')
     stats = {}
     test_source_guard(stats)
+    # a bench (stage_a1shift.ps1 install) puts DM11S itself into the DM11B folder; shifting that again pushes the M11 section pivots to
+    # (-24576,0,-32768) and every check fails (seen 10-28 during A1SHIFT5b). The real DM11B has 1821 entities beyond int16.
+    check(a or RC.audit(src), 'source %s is already in int16 range: DM11S is installed (a bench running?), not the real DM11B' % src)
     rep = MS.shift(src, dst, t, log=lambda m: None, expect_prp_size=MS.DM11B_PRP_SIZE if not a else None)
     tmp = tempfile.mkdtemp(prefix='kl_map_shift_test_')
     back = os.path.join(tmp, 'back.zip')
@@ -541,7 +558,7 @@ def main(argv):
     def go(e, par, scen):
         w = RC.mul(par, (struct.unpack('<12f', e.rot)[:12], fl(e.trans, 0)))
         nm = e.name.decode('latin1')
-        scen = scen or nm.startswith('lights!') or 'Background' in nm
+        scen = scen or nm.startswith('lights!') or 'Background' in nm or 'Backdrop' in nm      # M11_Backdrop_A: the distant skyline, like *Background*
         if max(abs(w[1][0]), abs(w[1][2])) > RC.LIM:
             (scenery if scen else bad).append((nm, tuple(round(v) for v in w[1])))
         elif not scen:
@@ -551,7 +568,7 @@ def main(argv):
     for r in sc.roots:
         go(r, ident, False)
     stats['range check, all entities, before / after'] = '%d / %d beyond +-32767' % (len(before), len(out))
-    stats['  beyond after, scenery (not gameplay)'] = scenery
+    stats['  beyond after, scenery (not gameplay)'] = len(scenery)
     stats['  beyond after, GAMEPLAY'] = len(bad)
     stats['gameplay extent after (x, z)'] = '%d..%d, %d..%d' % (min(xs), max(xs), min(zs), max(zs))
     check(not bad, 'gameplay entities beyond +-32767 after the shift: %r' % bad[:5])
