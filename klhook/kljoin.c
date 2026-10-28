@@ -113,6 +113,19 @@ static int klj_any, klj_tick_on = 1;
 /* 2026-10-28 door-aware CarStall (klleaf_logic.h): tick of the last accepted lift-door proxy, written by klprobe.c (TEST build, [Probe] DoorProxy=1);
    0 = never seen, which is the case in the SHIP build and with DoorProxy off. */
 static volatile DWORD klj_door_at;
+/* [KLHook] JoinFeetNode (2026-10-28, recommended on; 0 = old behaviour, +0x460 only). A1LIFT4d: the player walked into the Retomoto lift car
+   (node x 2950, car box x 2802+) while [player+0x460] stayed at the doorway (2727): CarStall saw "stood 1500 ms, not in the car" and the
+   ride never saw the feet in the car box. klauto.c's goto had the same lag on DM02 (kla_player_pos), so the scene node's place is read
+   first, +0x460 only as a fallback. */
+static int klj_feet_node = 1;
+static int kle_node(DWORD node, float pos[3], float dir[3]);          /* klescort.c: a node's world place */
+static int klj_feet(DWORD pl, float feet[3])
+{
+    DWORD nd;
+    if (klj_feet_node && (nd = klh_rd32(pl + 4)) > 0xffff && kle_node(nd, feet, 0) && feet[0] == feet[0] && feet[1] == feet[1] && feet[2] == feet[2]
+        && (feet[0] != 0 || feet[2] != 0)) return 1;
+    return klh_rd(pl + 0x460, feet, 12);
+}
 static char klj_map_key[64], klj_map_file[MAX_PATH]; static FILETIME klj_map_ft;
 static CRITICAL_SECTION klj_cs;
 static struct { DWORD at; int player, armed; } klj_after;
@@ -297,7 +310,7 @@ static void klj_ride_step(DWORD gd, DWORD lo, int count, const BYTE sel[2], DWOR
     float feet[3], pos[3], hp = 1.0f; char why[160], name[64];
     if (!klj_ride.on) return;
     if (!klj_box[b].wasactive) { klj_ride_end("the box is not active any more", 0); return; }
-    if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klh_rd(pl + 0x460, feet, 12)) { klj_ride_end("the player is gone", 0); return; }
+    if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klj_feet(pl, feet)) { klj_ride_end("the player is gone", 0); return; }
     if (!klj_ride.told) {                              /* the liveness reads are unproven on a live player: log them once per ride */
         DWORD d0 = klh_rd32(pl + 0x2948), n0 = klh_rd32(pl + 4), ds0 = 0, fl0 = 0, at0 = 0; float hp0 = -1.0f; klj_ride.told = 1;
         if ((ho = klh_rd32(pl + 0xa48)) != 0) klh_rd(ho + 4, &hp0, 4);
@@ -382,7 +395,7 @@ static void klj_tick(void)
     }
     if (klj_after.armed && now - klj_after.at >= 500) {       /* (was `at = tick | 1` and `tick - at >= 500`: true at once on an even tick - run J1b) */
         klj_after.armed = 0;
-        if (sel[klj_after.player] != 0xff && sel[klj_after.player] < 28 && (pl = klh_rd32(gd + 0x828 + 4 * sel[klj_after.player])) != 0 && klh_rd(pl + 0x460, feet, 12))
+        if (sel[klj_after.player] != 0xff && sel[klj_after.player] < 28 && (pl = klh_rd32(gd + 0x828 + 4 * sel[klj_after.player])) != 0 && klj_feet(pl, feet))
             klog("join: player %d is at (%.0f, %.0f, %.0f) 500 ms after the request", klj_after.player, feet[0], feet[1], feet[2]);
     }
     if (act && count && kl_online()) {                        /* [Net] OnlineSafe: the jump request would desync a network session (re/netcode_plan.md 2.1) */
@@ -392,7 +405,7 @@ static void klj_tick(void)
     }
     if (klj_ride.on) { if (act && count) klj_ride_step(gd, lo, count, sel, now); else { klj_ride.on = 0; klog("join: ride CANCELLED: no active box or jump list (or a network session)"); } }
     for (i = 0; act && count && i < 2; i++) {
-        if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klh_rd(pl + 0x460, feet, 12)) { for (b = 0; b < KLJ_NBOX; b++) klj_box[b].inside[i] = 0; continue; }
+        if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klj_feet(pl, feet)) { for (b = 0; b < KLJ_NBOX; b++) klj_box[b].inside[i] = 0; continue; }
         for (b = 0; b < KLJ_NBOX; b++) {
             int in;
             if (!klj_box[b].wasactive) continue;
@@ -432,6 +445,8 @@ static void klj_init(void)
     int n;
     InitializeCriticalSection(&klj_cs);
     klj_tick_on = GetPrivateProfileIntA("KLHook", "Join", 1, klh_ini);
+    klj_feet_node = GetPrivateProfileIntA("KLHook", "JoinFeetNode", 1, klh_ini) != 0;
+    klog("join: [KLHook] JoinFeetNode=%d: %s", klj_feet_node, klj_feet_node ? "the player's place is the scene node's, +0x460 only as a fallback" : "the player's place is +0x460 (old)");
     n = klj_read(klh_ini, 0, 0); klj_count();
     if (n) klog("join: %d box(es) from KLHook.ini%s", n, klj_tick_on ? "" : " - but [KLHook] Join=0: nothing fires");
 }
