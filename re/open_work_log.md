@@ -1,3 +1,8 @@
+2026-10-28 ~16:25 - [c9] A1NET2 PASS (F01 online, both seats walk W/A/D + yaw, ship-ini settings, test dll): both seats IN ROUND, faults 0, asserts 0.
+Client pos walk z 12955 -> 14756; host netsmooth updates 4935 / placed 3040, camyaw 4233/4233 seen; client sync vs host p50 1, p90 2 (one
+sample 11, worst 377 on slot 742). Open: host "pos walk" frozen at (2620,-2611,22118) from walk2 on and its index went #0 -> #15 (stuck on
+geometry or a respawn; not checked). Folder restored f520f5d1/c3f119f4. Game to ce for WKBC3 + BP_DD04c, then A1SHIFT5/6.
+
 2026-10-28 ~15:40 - [ce] WKBC2 + BP_DD04b (out_week_1028j_test), 0 faults / 0 asserts every seat. WKBC2 F06: 7/7 bots BOARDED, ledger $1.9M; bank
 credit still unpaid: the script teleported the host into the bots' ZAllyEscapeBox, but humans board at the van object (-6209 521 10395, 33 m away),
 so no seat got flag 0x40. BP_DD04b F04: 5/7 (was 4/7); OnlineGatherLateS=45 let the gather run its full 40 s; missed: 1 dead, 1 stopped 12 m from the
