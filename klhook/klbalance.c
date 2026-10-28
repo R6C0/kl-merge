@@ -1117,12 +1117,14 @@ static int klr_bo_hit(void *self, DWORD hit, DWORD a, void (__fastcall *orig)(vo
     if (fid == KBO_F_FED2CREW) m = klr_bo.eff[KBO_F_FED2CREW] >= 0 ? klr_bo.eff[KBO_F_FED2CREW] : klr_bo.eff[KBO_F_YOU2CREW];
     else m = klr_bo.eff[fid];
     if (slot == 0 && klr_bo.far_ > 0 && ak == KBO_A_HUMAN) {      /* review 1028: not for a police human (FedToCrew / YouToCop is his number alone, as Arcade klr_far_mult) */      /* YouToCrewFar: priced per hit by the real distance (Arcade approximates it by data: klr_far_mult) */
-        float pa[3], pb[3], d = -1;
-        if (klh_pvt(att) == KLR_PLAYER_VT && klh_rd(att + 0x460, pa, 12) && kle_node(klh_rd32(a + 4), pb, 0) && klr_finite(pa[0]) && klr_finite(pa[1]) && klr_finite(pa[2]))
+        float pa[3] = { 0, 0, 0 }, pb[3], d = -1; DWORD an;
+        /* the shooter's place: his scene node first, +0x460 as the fallback (c9 A1LIFT4d 10-28: +0x460 of a moving player froze at a doorway while the node moved on; kljoin JoinFeetNode) */
+        int pok = klh_pvt(att) == KLR_PLAYER_VT && (((an = klh_rd32(att + 4)) > 0xffff && kle_node(an, pa, 0) && klr_finite(pa[0]) && klr_finite(pa[1]) && klr_finite(pa[2]) && (pa[0] != 0 || pa[2] != 0)) || klh_rd(att + 0x460, pa, 12));
+        if (pok && kle_node(klh_rd32(a + 4), pb, 0) && klr_finite(pa[0]) && klr_finite(pa[1]) && klr_finite(pa[2]))
             d = (float)sqrt((pa[0] - pb[0]) * (pa[0] - pb[0]) + (pa[1] - pb[1]) * (pa[1] - pb[1]) + (pa[2] - pb[2]) * (pa[2] - pb[2]));
         if (pa[0] == 0.0f && pa[1] == 0.0f && pa[2] == 0.0f) d = -1;      /* review 1028: an all-zero position is a unset one, not the origin */
         if (d > 100000.0f) d = -1;      /* more than 1 km: a stale / bogus read, no sponge */
-        if (d >= 0 && klr_finite(d)) rng = kbo_range(d, klr_bo.far_, klr_bo.near_at, klr_bo.far_at); else InterlockedIncrement(&klr_bo.nopos);      /* GUESS: +0x460 is the feet of a remote ZFFPlayer too */
+        if (d >= 0 && klr_finite(d)) rng = kbo_range(d, klr_bo.far_, klr_bo.near_at, klr_bo.far_at); else InterlockedIncrement(&klr_bo.nopos);      /* GUESS: the scene node (else +0x460) is the place of a remote ZFFPlayer too */
         InterlockedExchangeAdd(&klr_bo.rng_m, (LONG)(rng * 1000.0f));
     }
     nf = kbo_scale(m, rng, kbo_tough(vk, klr_bo.tough));
