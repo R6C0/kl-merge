@@ -138,6 +138,15 @@ static int klcl_bot_look(DWORD actor, int *ch, DWORD *epoch)
     }
     return 0;
 }
+/* the bot's slot still belongs to this actor and epoch (last != 0: not reset by klcl_apply), whatever the look outcome is NOW (dead, pending, re-read): for the latched trait set */
+static int klcl_bot_known(DWORD actor, DWORD *epoch)
+{
+    int i;
+    if (!actor || !klcl_on || klcl_t.role != 2 || !klcl_t.host || !klcl_t.epoch) return 0;
+    for (i = 0; i < 8; i++)
+        if (klcl_t.a[i].actor == actor && klcl_t.a[i].epoch == klcl_t.epoch && klcl_t.a[i].last != 0) { *epoch = klcl_t.epoch; return 1; }
+    return 0;
+}
 /* the wardrobe name of the 1-based index ch (this seat's wardrobe, klcl_src); 0 = not readable now */
 static int klcl_bot_name(int ch, char *name, int size)
 {

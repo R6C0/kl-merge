@@ -123,7 +123,8 @@ static float kltt_hp(int rec) { return kltt_get(rec, KLTT_HEALTH) / kltt_get(rec
 #include "klbottrait.h"
 static int klcl_bot_look(DWORD actor, int *ch, DWORD *epoch);       /* klcrewlook.c, defined later: the host's applied look of that actor */
 static DWORD klcl_bot_actor(int idx);                               /* klcrewlook.c: the actor of bot slot idx (digit - 1), 0 = none */
-static int klcl_bot_name(int ch, char *name, int size);            /* klcrewlook.c: the wardrobe name of a 1-based index */
+static int klcl_bot_name(int ch, char *name, int size);
+static int klcl_bot_known(DWORD actor, DWORD *epoch);              /* klcrewlook.c: the actor still has its slot this epoch (latch) */            /* klcrewlook.c: the wardrobe name of a 1-based index */
 static struct {
     int on, nres; DWORD last30;
     struct { DWORD actor, epoch; int ch, set; } c[16];
@@ -135,8 +136,11 @@ static struct {
 static int kltt_bot_set(DWORD actor)
 {
     int ch = 0, i, s, slot = -1; DWORD ep = 0; char name[32];
-    if (!ktrait.on || !kltb.on || !actor || !klcl_bot_look(actor, &ch, &ep) || ch < 1) return -1;
+    if (!ktrait.on || !kltb.on || !actor) return -1;
     for (i = 0; i < 16; i++) { if (kltb.c[i].actor == actor) { slot = i; break; } }
+    /* LATCH (review): once resolved, the set stays while the actor keeps its slot this epoch - a dead / downed / re-read / pending look (klcl_note code 13, 3, 16) must not blink the trait off */
+    if (slot >= 0 && klcl_bot_known(actor, &ep) && kltb.c[slot].epoch == ep) return kltb.c[slot].set;
+    if (!klcl_bot_look(actor, &ch, &ep) || ch < 1) return -1;
     if (slot >= 0 && kltb.c[slot].epoch == ep && kltb.c[slot].ch == ch) return kltb.c[slot].set;
     if (!klcl_bot_name(ch, name, sizeof name)) { InterlockedIncrement(&kltb.wardrobe_miss); return -1; }      /* wardrobe not readable this instant: asked again */
     if (slot < 0) { for (i = 0; i < 16 && kltb.c[i].actor; i++) ; slot = i < 16 ? i : (int)(kltb.nres % 16); }
@@ -167,8 +171,8 @@ static float kltt_bot(DWORD actor, int knob)
 /* the multiplier on a hit on that online bot (DamageIn / Health); 1.0 = nothing */
 static float kltt_bot_hit(DWORD actor) { return kltb.on ? kbt_hit_mult(kltt_bot(actor, KLTT_HEALTH), kltt_bot(actor, KLTT_DMGIN)) : 1.0f; }
 
-/* 1 when the online-bot half is wanted at all: klbalance.c arms its slot-423 wrapper for it (also in Dry, which only logs) */
-static int kltt_bot_on(void) { return ktrait.on && kltb.on; }
+/* 1 when the online-bot half is wanted at all: klbalance.c arms its slot-423 wrapper for it (not in Dry, which only logs) */
+static int kltt_bot_on(void) { return ktrait.on && kltb.on && !ktrait.dry; }
 
 /* the accuracy % an AI heister of that record is wanted at, from what he has (base); base itself when there is no trait */
 static float kltt_aim(int rec, float base)
