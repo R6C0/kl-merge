@@ -1,3 +1,7 @@
+2026-10-28 ~21:00 - [wk-getup-1028] gap #3 (bots help a downed human up online): re/bot_getup_online.md. Arcade help = kladren.c Rush + meter pull (not stock; stock heal needs coop state 5).
+Online port default off: [BotFill] OnlineGetUp=0|1|2 (+Range/Rate/Near): host rushes the nearest free bot with kle_order2; downed machine adds meter/s when a bot is within 4 m. Static, NOT run live;
+klgetup_test.c passes, SHIP dll compiles. Guesses (replica D state readable, bot stays put) listed in the doc with a bench.
+
 2026-10-28 ~20:25 - [c9] A1LIFT3e PASS + bench shots fixed. --d3shots (merged 259c89c32, kld3 back-buffer shots; the GDI grab was all-zero
 with the monitor off) took 8 real 640x480 shots live. The PLAYER's own two crossings of the Retomoto lift box each made both door proxies accept
 0032 (log-clock 18:18:44.8 and 18:19:13.9, 29 s apart): re-arm proven by the player, not just by bots. Shot 02 shows both lift doors shut just

@@ -2589,6 +2589,7 @@ static void kld_o_step(DWORD pl, DWORD ds, int alive, DWORD now, float dt)
         if (!kld_o.tkey) { kld_o.tkey = 1; klog("down: online: MashHold: user32's GetForegroundWindow / GetAsyncKeyState are not there: no key can be counted, so NO HOLD - the get-up is the game's own"); }
         kld_o_release("no key source"); kld_o.holding = 0; return;
     }
+    if (ds == 1 && alive && klbf_gu == 1 && !kld_o.h.latched) kld_o.h.meter = kgu_boost(kld_o.h.meter, dt, klbf_gu_rate_now(pl, now), kld_o.need);      /* [BotFill] OnlineGetUp: a bot by his body adds to the meter (klbotfill.c; default off; wk-getup-1028) */
     hold = kldh_step(&kld_o.h, ds, key, dt, kld_o.per, kld_o.decay, kld_o.need, now, kld_o.maxlie, alive, &edge);
     if (edge) kld_s.presses++;
     kld_o.holding = hold && alive;
