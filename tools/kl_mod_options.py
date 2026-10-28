@@ -455,14 +455,45 @@ feat('inv', G_EXP, 'Gun shelf: carry more than two guns (F8)', 'off', 'start',
 feat('grenade', G_EXP, 'Throw a carried grenade with G (Dead Men style)', 'off', 'start',
      'klgrenade.c step 1: plays the dead HoldGrenade button; only with a grenade in the inventory (DM01 pickups); never run live',
      [('Grenade', 'Throw', 1, 0, 0)])
-feat('keysmap', G_EXP, 'New key defaults (End, PageUp, Num1-3, Ctrl+F3/F4/Delete)', 'off', 'start',
-     'moves features off keys that clash with ReShade, the stock melee/grenade keys and each other; not benched', [('Keys', 'Map', 1, 0, 0)])
+feat('keysmap', G_EXP, 'New key defaults (End, PageUp, Num1-3, Ctrl+F3/F4/Delete)', 'on', 'start',
+     'moves features off keys that clash with ReShade, the stock melee/grenade keys and each other; run live 10-28 (WK2); the ini default stays 0', [('Keys', 'Map', 1, 0, 0)])
 feat('controlspage', G_EXP, 'MOD CONTROLS page in the Buy Weapons shop (F2 cycles pages)', 'off', 'start',
      'lists every feature, its key, ON/OFF and where it works; BUY does nothing there; not run in the game', [('Keys', 'ControlsPage', 1, 0, 0)])
 feat('keyhints', G_EXP, 'One-time shop hint about the extra pages', 'off', 'start',
      'one HUD line the first time a shop opens; not run in the game', [('Keys', 'Hints', 1, 0, 0)])
 feat('clashlog', G_EXP, 'Log key clashes at boot', 'off', 'start',
      'one WARN per clash in KLHook.log (also reads ReShade.ini); harmless', [('Keys', 'ClashLog', 1, 0, 0)])
+
+
+# ---- 2026-10-28 week features: online AI-heister (bot) host paths, shop swap, remote shot sound, car-blast / hop online. All default 0 in the ini.
+feat('onlinebothost', G_EXP, 'Online host: the host runs the AI heisters and shares their places with the others (the base of the online bot rows below; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineHost; the level must keep the heister squads online (tools/kl_botsonline.py zip); re/bots_online_host.md; NOT run live', [('BotFill', 'OnlineHost', 1, 0, 0)])
+feat('onlinetactics', G_EXP, 'Online host: AI heisters go for the loot and then the van, like in Arcade (needs the row above; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineTactics: hook puppeteer, host only, needs OnlineHost=1; NOT run live', [('BotFill', 'OnlineTactics', 1, 0, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinetacticstake', G_EXP, 'Online host: loot the AI heisters grab is taken out of the stack (needs the row above; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineTacticsTake 2 = the game\'s own depletion routine on the host (1 = a guessed plain write); NOT run live', [('BotFill', 'OnlineTacticsTake', 2, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinetriggers', G_EXP, 'Online host: AI heisters set off the police-wave and door trigger boxes like in Arcade (needs the AI heister rows above; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineTriggers (1 = fire, 2 = log only): a bot is never a "player" to a ZTriggerBox online; run live 10-28 (WK2 bench); the ini default stays 0', [('BotFill', 'OnlineTriggers', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinebank', G_EXP, 'Online host: loot carried by AI heisters is counted in a bank and credited to the team score when a human escapes (needs the loot-taking row above; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineBank (the ledger) + OnlineBankCredit (AddSharable 0x5a18c0 before settlement); OnlineBankCredit needs OnlineBank=1 and OnlineTacticsTake 1 or 2; NOT run live', [('BotFill', 'OnlineBank', 1, 0, 0), ('BotFill', 'OnlineBankCredit', 1, 0, 0), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlineboardall', G_EXP, 'Online host: when the van waits, every AI heister that is still alive is sent aboard, as Arcade does (needs the AI heister rows above; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineBoardAll (1 = on, 2 = log only), OnlineBoardAllM distance; NOT run live', [('BotFill', 'OnlineBoardAll', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlineboardteleport', G_EXP, 'Online host: last resort, an AI heister stuck outside the escape box while the van waits is moved into it (not what Arcade does; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineBoardTeleport (+ S / M); 2 = log only; NOT run live', [('BotFill', 'OnlineBoardTeleport', 1, 0, 0)])
+feat('onlinelegscale', G_EXP, 'Online AI heisters: the time allowed for a long walk grows with its length (recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineLegScale (+ OnlineLegSpeed, OnlineLegMaxS): DD08 legs of 40-60 m timed out at the flat 15 s; NOT run live', [('BotFill', 'OnlineLegScale', 1, 0, 0)])
+feat('onlineboxspread', G_EXP, 'Online AI heisters: each one walks to its own spot inside the escape box instead of the centre (recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineBoxSpread: DD08 had 7 bots on one point pushing each other out; NOT run live', [('BotFill', 'OnlineBoxSpread', 1, 0, 0)])
+feat('onlineboxlatch', G_EXP, 'Online AI heisters: one that stood inside the escape box and is still close counts as aboard (recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineBoxLatch (+ OnlineBoxLatchM 1500 cm); NOT run live', [('BotFill', 'OnlineBoxLatch', 1, 0, 0)])
+feat('shoponlineswap', G_EXP, 'Online shop: the Dead Men gun rows hand over the stock gun like in Arcade (recommended off)', 'off', 'start',
+     'klshop.c [Shop] OnlineSwap (0 off, 1 on, 2 log only): rows 13/16/32/35 (HK69, Type 81, Rem 700, Minimi); the swap rides klshoppage.c early-make hook; NOT run live', [('Shop', 'OnlineSwap', 1, 0, 0)])
+feat('remoteshot2d', G_AV, 'Online: other players\' gunshots close to you play flat (2D) like your own, not 3D (recommended off)', 'off', 'start',
+     'klshot2d.c [Sound] RemoteShot2D (+ RemoteShot2DDist 1500, RemoteShot2DRoute); online only, Arcade untouched; 2 = log only; NOT run live', [('Sound', 'RemoteShot2D', 1, 0, 0)])
+feat('crewhoponline', G_CREW, 'Online host: AI heisters cross places the navmesh cannot, as in Arcade (needs the AI heister rows above; recommended off)', 'off', 'start',
+     'klhop.c [CrewHop] Online (1 on, 2 log only), OnlineStage; host only; NOT run live', [('CrewHop', 'Online', 1, 0, 0)])
+feat('cardownonline', G_DOWN, 'Online host: a car blast floors AI heisters and police (revivable) instead of killing them (recommended off)', 'off', 'start',
+     'klcardown.c [CarDown] Online (1 on, 2 log only); host only, no human part; NOT run live', [('CarDown', 'Online', 1, 0, 0)])
 
 BY_ID = {f['id']: f for f in F}
 assert len(BY_ID) == len(F) and all(f['rec'] in ('on', 'off') for f in F)      # every row is shown with '(recommended on|off)' (rec_text)
