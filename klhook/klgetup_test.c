@@ -41,6 +41,15 @@ int main(void)
     CHECK(kgu_due(5000 + KGU_REORDER_MS, 5000), "at 2.5 s");
     CHECK(!kgu_due(100, 4294967000UL) && kgu_due(3000, 4294967000UL), "tick wrap (396 ms after the last order across the wrap: not due; 3296 ms: due)");
 
+    /* OnlineGetUpKeepGoal: keep while closing, re-order when the target moved or the bot stalled for 3 s */
+    CHECK(kgu_keep(5000, 4800, 0, 0) == 0, "closing 2 m: keep");
+    CHECK(kgu_keep(5000, 4960, 0, 1000) == 0, "40 cm in a check, 1 s without progress: keep");
+    CHECK(kgu_keep(5000, 4960, 0, 2999) == 0 && kgu_keep(5000, 4990, 0, 3000) == 2, "stalled exactly at 3 s: re-order");
+    CHECK(kgu_keep(5000, 4950, 0, 9000) == 0, "50 cm shrink counts as progress even when the stall clock is old");
+    CHECK(kgu_keep(5000, 4000, 199, 0) == 0 && kgu_keep(5000, 4000, 200, 0) == 1, "target moved 2 m: re-order though closing");
+    CHECK(kgu_keep(-1, 4000, 0, 0) == 0 && kgu_keep(-1, 4000, 0, 3500) == 2, "no earlier check: only the stall clock decides");
+    CHECK(kgu_keep(4000, 4300, 0, 3000) == 2, "moving away: stalled");
+
     /* the helper test: 4 m, same floor (2 m) */
     CHECK(kgu_helper_ok(300, 10, 400, 200) && !kgu_helper_ok(401, 0, 400, 200) && !kgu_helper_ok(100, 250, 400, 200) && !kgu_helper_ok(-1, 0, 400, 200), "helper_ok");
 
