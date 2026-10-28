@@ -1,3 +1,8 @@
+2026-10-28 ~21:05 - [c9] Lift-run downs explained (workflow lift-down-cause, verified): not the hook. [Balance] CopToYou/CrewToYou=0.001 were
+held at stock 0.10 by the default Ramp=1 (klr_want, klbalance.c; the 'balance: on' line printed the asked 0.00), so plain fire wore the x10
+health down to the game's own 40 % down (trigger 0x8da3b0: <= 40 %, 120 damage in 1 s; re/player_down.md); 3e's down waited out the
+[D+0x38] cooldown. Fix 403967a5a: one log line per key when Ramp holds it at stock. Bench rule: a lone player factor needs [Balance] Ramp=0.
+
 2026-10-28 ~20:50 - [c9] Retomoto lift DONE as far as a bench can show (A1LIFT3f PASS, faults 0, 56 JPG shots): after the player's second crossing
 (doors fire at log-clock 18:36:57.3) the player is IN join box 9 0.8 s later at (2365,19604,103) = through the lift doors; in A1LIFT3d the same
 walk went box9-in (2382,19603,75) then down at (2565,19602,879): the car carried the player up. Shot 37/38 show the door frame, not a clean open

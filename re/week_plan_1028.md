@@ -33,6 +33,7 @@ Owner: ce.
 - 10-28 19:55 c9: A1LIFT3d PASS: Retomoto lift box re-arms live (door proxies accept 0032 three times, 10 s and 15 s apart; PlayerHealth=10 kept the player a heister). Door visual still unchecked (black shots).
 - 10-28 20:25 c9: bench screenshots fixed (--d3shots, in-game back buffer, JPG). A1LIFT3e PASS: the player's own two lift crossings fire the doors 29 s apart. Door-open picture still inconclusive.
 - 10-28 20:50 c9: A1LIFT3f PASS: the player walks through the re-fired lift doors into join box 9 and (3d) rides up to z 879. Retomoto lift T2 item done; open: player downed at 40 % health in the lift.
+- 10-28 21:05 c9: lift downs explained: Ramp=1 kept CopToYou/CrewToYou at stock, the game's own 40 % down did the rest (not a bug in the map or hook). Ramp now logs it (403967a5a).
 - 10-28 14:55 c9: A1HIRE3 PASS (ce ran it): stock-map hire body via rules+0x208 CONFIRMED online, money 100000 -> 90000 read back on host and client. A1SHIFT4 running 14:52, A1NET2 next.
 - 10-28 14:35 c9: A1NET2 staged (ini-only: both seats walk W/A/D + yaw ~170 s; A1NET1 had no client movement). c9 game queue after ce's 5 benches + A1HIRE3 (ce runs it): A1SHIFT4, A1NET2 (queue.txt sections 4, 5).
 - 10-28 14:20 c9: A1SHIFT3 div0 root cause = the shift used the STOCK F04 zip, not DM11B (sound records mismatched). Fixed + rebuilt from the real DM11B (984463891, Heroes moved too). A1SHIFT4 staged after ce's queue + A1HIRE3.

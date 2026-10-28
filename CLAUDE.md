@@ -74,7 +74,8 @@ run it while an A1SHIFT bench has DM11S installed). SHIPPED 18:20 (/oldhook: Onl
 SHIPCHK 18:45 PASS online with the installed dll/ini. A1LIFT3d: Retomoto lift box re-arms live (3 door fires 10-15 s apart).
 Bench shots fixed: kl_solo_test --d3shots (in-game back buffer;
 the GDI grab is black with the monitor off). A1LIFT3f: the player walks through
-the re-fired doors and rides the lift: T2 lift done (open: downed at 40 % health in the lift).
+the re-fired doors and rides the lift: T2 lift done. (The 40 % downs: Ramp=1 kept the bench's
+CopToYou at stock; a lone player factor needs [Balance] Ramp=0; Ramp now logs it, 403967a5a.)
 
 2026-10-28 ~20:30 - [ce] MV1 + WKBC7 PASS (wk-move + lootsync merged 35929bfc3). LPB2 0 faults: bots take loot in timed parts online, but walk off
 the stack (hold fix built, LPB3 next). GUN2: shop text swap reached online; script ran out of the ~28 s between-round shop (GUN3 fixed).
