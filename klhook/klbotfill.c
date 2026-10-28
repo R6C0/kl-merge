@@ -1038,6 +1038,22 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
             if (bsd[to]) continue;
             bsd[to] = 1; memcpy(bsp[to], klgb_seats[i].pos, 12);
         }
+        {   /* GU4 10-28: the host took seat 1's down beacons yet logged neither 'IS DOWN' nor a mapping line: once a second while a seat is fresh, every check (diagnostics, at most 40 a round) */
+            static DWORD dAt; static int dN, dRound; char t[600]; int k = 0, any = 0;
+            if (dRound != klbf_ot_rounds) { dRound = klbf_ot_rounds; dN = 0; }
+            for (i = 0; i < KLGB_MAX_SEATS; i++) if (klgb_seats[i].have && klgb_seats[i].down) any = 1;
+            if (any && dN < 40 && now - dAt >= 1000) {
+                dAt = now; dN++;
+                for (i = 0; i < KLGB_MAX_SEATS && k < 200; i++) if (klgb_seats[i].have) { int w = _snprintf(t + k, sizeof t - k, "seat %d %s age %lu ms fresh %d; ", i, klgb_seats[i].down ? "down" : "up", (unsigned long)(now - klgb_seats[i].rxAt), klgb_fresh_down(&klgb_seats[i], now)); if (w > 0) k += w; }
+                for (i = 0; i < n && i < 16 && k < 470; i++) {
+                    DWORD P = klco_ent(ents, n, i), h; BYTE ty = 0, pol = 0; float hv = -1; int w;
+                    if (P) { klh_rd(P + 0x273c, &ty, 1); klh_rd(P + 0x2723, &pol, 1); if ((h = klh_rd32(P + 0x5fc)) != 0) klh_rd(h + 4, &hv, 4); }
+                    w = _snprintf(t + k, sizeof t - k, "[%d %08lx vt %08lx type %u police %u heister %d hp %.0f rok %d bsd %d%s]", i, (unsigned long)P, (unsigned long)(P ? klh_pvt(P) : 0), ty, pol, P ? klco_heister(P) : 0, hv, rok[i], bsd[i], i == ownIdx ? " own" : ""); if (w > 0) k += w;
+                }
+                t[sizeof t - 1] = 0;
+                klog("botfill: getup: diag: n %d own %d | %s", n, ownIdx, t);
+            }
+        }
     }
     for (i = 0; i < n && i < 16; i++) {
         DWORD P = klco_ent(ents, n, i), D = 0, ds = 0, h; float hv = 1.0f, hp[3] = { 0, 0, 0 }, d[16]; int rb = -1, pick, nn = 0, bs[16], down = 0, viaB = 0;
