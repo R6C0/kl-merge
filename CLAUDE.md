@@ -68,9 +68,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-28 ~15:12 - [c9] DM11B moved into int16 range: A1SHIFT4 PASS online both seats (DM11S built from the REAL DM11B, 984463891; runs 1-3
-had shifted the stock F04 -> sound div0). Hire online complete (A1HIRE3: rules+0x208 confirmed, money read back). Banter online PASS (A1TALK).
-Next: DM11S ship prep + full-round/offline checks; A1NET2 (both seats walk) after ce. Status page Pp48g1cQgREDE3AsHPqxTa (c9).
+2026-10-28 ~17:40 - [c9] DM11S (DM11B moved into int16 range) passes everywhere: A1SHIFT6 online with Int16Guard marker (merged 5f5d32a0c),
+A1SHIFT5b offline Arcade full round (7 bots, 1 boarded $1.36M), faults 0. A1NET2 both seats walk PASS. kl_map_shift_test fixed (adce57ce4; never
+run it while an A1SHIFT bench has DM11S installed). Next: SHIP_DM11S.bat /oldhook (C:\kl_build_1024\c9_1028\dm11s_ship) after ce's WKBC4.
 
 2026-10-28 ~16:45 - [ce] BP_DD04c 7/7 BOARDED (client PASS, new join script) -> defaults OnlineExitCrowd 1600 + OnlineGatherLateS 45 (b0bd5343c).
 WKBC3 F06 7/7 aboard, but bank credit STILL unpaid even with the host on the van object (no seat flag 0x40): escape-flag research + OnlineLooks=1

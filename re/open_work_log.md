@@ -1,3 +1,9 @@
+2026-10-28 ~17:40 - [c9] A1SHIFT5b PASS: offline Arcade full round on DM11S (guard2 TEST dll): level loaded, 7 AI heisters in play, bot 5 (TRAITOR)
+BOARDED with $1.36M, round ran to the clock (state 0x19 -> 0x1f), faults 0, asserts 0; folder restored (222101847, f520f5d1/c3f119f4). The bench's
+'inst1 not in round' only means the round had ended. kl_map_shift_test fixed (adce57ce4): ce's failure + mine came from running it while a bench had
+DM11S installed in the DM11B folder (double shift); it now refuses an in-range source, allows one float32 step on round trips; real DM11B ALL OK
+(1821 -> 0 beyond int16, 1004/1004 bots). Next: SHIP_DM11S.bat /oldhook after ce's WKBC4 (game-folder write, full access).
+
 2026-10-28 ~17:05 - [c9] A1SHIFT6 PASS: DM11S (shifted DM11B) online with the int16 guard ON and the Int16Ok.txt marker (guard2 TEST dll
 E815E20C, df9680596): both seats IN ROUND, faults 0, asserts 0, no "int16guard ... refused" line although OnlineSkip lists DM11B, botgate
 loaded the DM11S bots.zip (222102326, fnv 696cda52) on host and client, positions in the shifted frame, census 7 Ally alive. Folder restored
