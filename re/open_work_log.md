@@ -1,3 +1,8 @@
+2026-10-28 ~23:50 - [c9] Retomoto lift ONLINE: kljoin.c gated every ride in a network session (kl_online() -> act = 0), so the lift was dead
+for host and joiner. c9-liftnet 3aadb4350: [KLHook] JoinOnline=1 (local players only) + DoorCloseRemote=1 (host's door-close busy check counts other
+actors at the car; GUESS gd+0x828 holds remote actors), both default off. A1LIFTNET1F: 0 faults, but the joiner was downed by host cops at the doorway
+([Balance] player factors are Arcade only) -> 4f022d3f5 TEST-only [Auto] KeepAlive=1 (local health refill). A1LIFTNET2F next. kl_tests 33/8/1.
+
 2026-10-28 ~23:40 - [ce] BP2 (wk-botpar round 2, DD04 online, out_botpar_c_test; BP1 keys + CopM 8 + OnlineGetUp/Beacon/Range 8000/Sprint, joiner
 self-down at 60 s) PASS both seats, 0 faults; restore = ship1029 (897decf7 / ad00a047). Escort FIXED: "feet source this round: 8 human(s) read, host seat
 by the scene node", bots 0/3/4/5/6 follow seat 0. Getup: beacon down seen, bot 4 sent from 71.7 m with "rush at Sprint", closed to 39 m in 15 s
