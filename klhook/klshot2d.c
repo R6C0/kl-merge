@@ -234,16 +234,19 @@ static __declspec(naked) void klss_vt_stub(void)
 /* point the current sound system object at the private table (every 500 ms from the game thread; the object is rebuilt per session) */
 static void klss_tick(int game_thread)
 {
-    DWORD gd, obj, vp; static DWORD t_last; DWORD now = GetTickCount();
+    DWORD gd, obj, vp; static DWORD t_last, klss_bad, klss_n; DWORD now = GetTickCount();
     if (!klss_route_vt || !game_thread || now - t_last < 500) return;
     t_last = now;
-    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd2640))) || !(obj = klh_rd32(gd + 0xb00)) || obj == klss_obj) return;
+    /* the vptr is read every tick, not only when the object address changes: a rebuilt sound system can land on the
+       same heap address with the stock vptr again (review 10-28); klss_obj / klss_bad only rate-limit the log lines */
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd2640))) || !(obj = klh_rd32(gd + 0xb00))) return;
     vp = klh_rd32(obj);
     if (vp == (DWORD)(DWORD_PTR)klss_vt) { klss_obj = obj; return; }
-    if (vp != (DWORD)(DWORD_PTR)KLH_VA(KLSS_SND_VT)) { klss_obj = obj; klog("shot2d: vtable route: sound system %08lx has vtable %08lx, not 0x%x: not hooked", (unsigned long)obj, (unsigned long)vp, KLSS_SND_VT); return; }
+    if (vp != (DWORD)(DWORD_PTR)KLH_VA(KLSS_SND_VT)) { if (klss_bad != obj) { klss_bad = obj; klog("shot2d: vtable route: sound system %08lx has vtable %08lx, not 0x%x: not hooked", (unsigned long)obj, (unsigned long)vp, KLSS_SND_VT); } return; }
+    if (klss_bad == obj) return;      /* the vptr write was refused for this object: do not retry every tick */
     {   DWORD nv = (DWORD)(DWORD_PTR)klss_vt;
-        if (klh_data((void *)(DWORD_PTR)obj, &nv, 4, "shot2d sound system vtable pointer")) { klss_obj = obj; klog("shot2d: vtable route: sound system %08lx now on the private vtable (slot 74 -> wrapper of 0x%lx)", (unsigned long)obj, (unsigned long)klss_vt_orig); }
-        else klog("shot2d: vtable route: the write of the vptr at %08lx was REFUSED", (unsigned long)obj);
+        if (klh_data((void *)(DWORD_PTR)obj, &nv, 4, "shot2d sound system vtable pointer")) { if (++klss_n <= 20) klog("shot2d: vtable route: sound system %08lx now on the private vtable (slot 74 -> wrapper of 0x%lx)%s", (unsigned long)obj, (unsigned long)klss_vt_orig, obj == klss_obj ? " (rebuilt at the same address)" : ""); klss_obj = obj; }
+        else { klss_bad = obj; klog("shot2d: vtable route: the write of the vptr at %08lx was REFUSED", (unsigned long)obj); }
     }
 }
 static int klss_vt_prepare(void)
