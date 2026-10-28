@@ -59,7 +59,7 @@ feat('guns', G_CORE, 'Dead Men gun looks and start rifle (Mod settings rows)', '
 feat('shop', G_CORE, 'More guns in the weapon shop', 'on', 'start',
      'run live 2026-10-20 (rows swapped for Minimi, HK69, Type 81, Rem 700)', [('Shop', 'Enable', 1, 0, 0)])
 feat('int16guard', G_STAB, 'Keep maps beyond the online position range (DM11B) out of online play', 'on', 'start',
-     'klslot.c [Int16Guard]: online positions are int16 (+-32767); DM11B spawns at x 34k and a remote body wraps and falls forever (kl2+0x1e4a22). Online falls back to the stock level; offline unchanged. NOT run live', [('Int16Guard', 'Enable', 1, 0, 0)])
+     'klslot.c [Int16Guard]: online positions are int16 (+-32767); DM11B spawns at x 34k and a remote body wraps and falls forever (kl2+0x1e4a22). Online falls back to the stock level; offline unchanged. NOT run live', [('Int16Guard', 'Enable', 1, 0, 1)])
 feat('shoppage', G_CORE, 'Weapon shop page II: a key (P) flips the shop to a second set of guns', 'on', 'start',
      'klshoppage.c + KLShopPage.ini (tools/kl_shop_sets.py stage); NOT live-tested; needs the ini beside KLHook.ini, else it logs and does nothing', [('ShopPage', 'Enable', 1, 0, 0)])
 feat('shoptabs', G_CORE, 'Weapon shop page II: own tab names (KLShopPage.ini [Tabs]) instead of "... II"', 'on', 'start',
