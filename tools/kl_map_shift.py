@@ -23,10 +23,22 @@ WHAT IS TRANSLATED (everything below is a pure translation; scale / rotation / i
   .sgp   Sgp.translate     .sgd   sgd_translate (point octree centres)
 Systems subtrees stay where they are: AllLevels/mainsceneincludes_multiplayer, CloneGroup_*, Heroes (and their HVK placements).
 
-NOT TRANSLATED, GUESS (listed again in the report): the rest of the .buf head - packed KEYS tracks (55,120..186,352, semantics unknown,
-probably not absolute positions), ZHavokShatter[10] blocks (186,352..241,120: records (z, 0, x) of absolute look; shard positions of
-glass / extinguishers; NOT moved because the exact meaning is not decoded), ZLNKOBJ / ZLNKWHANDS, ZParticleEmitter blocks, FDX bone
-dynamics, light / SND emitter data. The .ANM files (assumed parent-local), .prm bounds of ordinary models (local) and .SND stay.
+NOT TRANSLATED, on purpose (2026-10-28 review; the claims below are measured by audit_head() and checked by the test, not decoded):
+  .buf head 0..55,120: three long (x, 0, z) polylines at 7,936 / 23,600 / 36,476 (~600 points each). Each starts within 0.05 of the entity-local
+    translation of V_Van_00 under F04_Escape_Vehicle_01 / _02 / _03 (ZGROUP + MatPosAnim). So they are the ZMatPosAnim tracks of the escape
+    vans, written in the same frame as the entity's own .gms translation = PARENT-LOCAL. The Escape_Vehicle roots (zero translation) get T, the
+    vans ride along; shifting the tracks too would move them twice. (The prp holds no pointer to them; the start-equals-translation match
+    is the evidence. GUESS: MatPosAnim writes the local matrix. Only a live run shows the van drive-in.) The rest of the floats over 3000 in
+    magnitude in 0..55,120 are misaligned bytes of packed data (garbage values 1e20+ beside them).
+  .buf head 186,352..241,120 (the ZHavokShatter[10] offsets point to its start, 186,352 and 212,768, from 31 entities spread over 10,000 x
+    10,000 units): the same kind of data. The first record (186,368) is (-4750, 0, 22010) = the local translation of AI_SpawnRoom_Door_02, the
+    one at 187,872 is AI_SpawnRoom_Door_01's (-5095, 0, 18240), and the van parts (Shadow_Plane, Door_Hatchback, wheels) start there too. So
+    it is MatPosAnim track data, entity-local, shared as one pool; ZHavokShatter[10] merely names an offset in it (GUESS: a default / unused
+    pointer for entities without a track). One block serving extinguishers in 10 different rooms cannot be per-entity world data. NOT moved.
+    The .sgd shatter octrees ARE moved (their centre follows the entity, kl_members).
+  Other .buf head data (packed KEYS tracks 55,120..186,352, ZLNKOBJ / ZLNKWHANDS, ZParticleEmitter blocks, FDX bone dynamics, light / SND emitter
+  data) is not decoded and is not moved; no prp pointer of those classes was found to hold an absolute position (GUESS).
+  The .ANM files (assumed parent-local, as the van tracks are), .prm bounds of ordinary models (local) and .SND stay.
 Unchanged zip members are copied compressed (no recompression), so every untouched byte is identical.
 """
 import os
@@ -137,9 +149,63 @@ def shift_scene(sc, prp_bytes, T, log):
                 add3(head, o + 12 * c, T)
             add3(head, o + 14 * 4, T)                # centre: floats 14..16 (GUESS for the 12/13 floats: left, they are 0 in the stock gates)
             ngates += 1
+    info['head_audit'] = audit_head(sc, S, ents, moved)       # before sc.head is replaced (the audit only reads the untouched regions)
     sc.head = bytes(head)
     info['gates'] = ngates
     return P.serialize(), moved, top, info
+
+
+def audit_head(sc, S, ents, moved):
+    """Evidence for what the shift does NOT touch in the .buf head (see the module docstring). -> info dict.
+    matpos: moved ZMatPosAnim entities at |x| or |z| >= 1000 and how many have their own local (x, y, z) as a float triple in the head
+    (= the track starts in the entity's own frame); child_*: the same for children of such a vehicle (wheels, hatchback: small local values,
+    parent far from the origin) - their tracks are in the VAN's frame, which proves the frame rule for the van itself.
+    shatter: ZHavokShatter[10] head offset -> (entities using it, widest spread of their summed-translation x / z); a block shared by entities
+    far apart cannot hold per-entity world positions. World position here = sum of the translations up the parents (rotation ignored: the
+    parents of these entities are zero-translation groups)."""
+    head = sc.head
+    info = {'matpos_entities': 0, 'matpos_start_in_head': 0, 'matpos_found': [], 'matpos_missing': [],
+            'child_entities': 0, 'child_start_in_head': 0, 'shatter': {}}
+    fl = [v for (v,) in struct.iter_unpack('<f', head[:len(head) // 4 * 4])]
+    byint = {}
+    for i, v in enumerate(fl):
+        if v == v and abs(v) < 1e6:
+            byint.setdefault(int(v // 2), []).append(i)          # 2-unit buckets: a lookup for "float within 1.0"
+
+    def start_in_head(e, tol):
+        x, y, z = struct.unpack_from('<3f', e.trans)
+        return [i * 4 for b in (int(x // 2) - 1, int(x // 2), int(x // 2) + 1) for i in byint.get(b, ())
+                if abs(fl[i] - x) < tol and i + 2 < len(fl) and abs(fl[i + 1] - y) < max(tol, 5.0) and abs(fl[i + 2] - z) < tol]
+
+    pos, mp = {}, {}
+    for k in range(1, len(S.nodes)):
+        e = ents[k - 1]
+        labs = {lab: u for h, lab, u in J.fields(S, k) if lab in ('ZMatPosAnim[0]', 'ZHavokShatter[10]')}
+        if 'ZMatPosAnim[0]' in labs:
+            mp[id(e)] = e
+        if 'ZMatPosAnim[0]' in labs and id(e) in moved:
+            x, _, z = struct.unpack_from('<3f', e.trans)
+            if max(abs(x), abs(z)) >= 1000:                      # world-like local value (escape vans, doors, ...)
+                info['matpos_entities'] += 1
+                hit = start_in_head(e, 1.0)
+                if hit:                                          # (x, y, z) of the entity's own local translation inside the head
+                    info['matpos_start_in_head'] += 1
+                    info['matpos_found'].append((e.name.decode('latin1'), min(hit)))
+                else:
+                    info['matpos_missing'].append(e.name.decode('latin1'))     # tracks elsewhere (.ANM?), or relative: not established
+            elif max(abs(x), abs(z)) >= 50 and e.parent is not None and id(e.parent) in mp and max(abs(v) for v in struct.unpack_from('<2f', e.parent.trans)) >= 1000:
+                info['child_entities'] += 1                      # a van's wheel / hatchback: its parent has a world-like position, its own value is small
+                info['child_start_in_head'] += bool(start_in_head(e, 0.5))
+        if 'ZHavokShatter[10]' in labs:
+            w, p = [0.0, 0.0], e
+            while p is not None:
+                v = struct.unpack_from('<3f', p.trans)
+                w[0] += v[0]; w[1] += v[2]
+                p = p.parent
+            pos.setdefault(struct.unpack('<I', labs['ZHavokShatter[10]'][0][1])[0], []).append(w)
+    for off, ws in pos.items():
+        info['shatter'][off] = (len(ws), round(max(w[0] for w in ws) - min(w[0] for w in ws)), round(max(w[1] for w in ws) - min(w[1] for w in ws)))
+    return info
 
 
 # ------------------------------------------------------------------ .HVK / .hrd
@@ -185,6 +251,9 @@ def shift_hvk(data, hrd, ents, moved, T, log):
         if s.type == kl_hvk.RIGID:
             rigid_moved += flags
         s.inst = new
+    # ASSUMPTION (holds on DM11B, verified there): one list code per 510 static placements in shape order; a chunk must not mix moved and kept
+    if len(h.lists) != -(-len(static_moved) // kl_hvk.CHUNK):
+        raise ValueError('%d list codes for %d static placements: the 510-chunk rule does not hold' % (len(h.lists), len(static_moved)))
     for c in range(len(h.lists)):                              # one list code per 510 static placements
         ch = static_moved[c * kl_hvk.CHUNK:(c + 1) * kl_hvk.CHUNK]
         if len(set(ch)) > 1:
@@ -251,7 +320,6 @@ def shift_room_index(data, T):
     ri = O.RoomIndex.parse(data)
     ri.tree = O.Tree(tuple(f32(ri.tree.origin[a] + T[a]) for a in range(3)), ri.tree.scale, ri.tree.nodes, ri.tree.items, ri.tree.fill)
     for b in ri.boxes:
-        c = struct.unpack_from('<3f', b.raw, 0x28)
         p2 = struct.unpack_from('<3f', b.raw, 0x34)
         add3(b.raw, 0x28, T)
         if any(p2):                                   # GUESS: the second point is a position when set (.rmi: equals the centre), 0 in the .rmc
@@ -311,6 +379,7 @@ def shift(src_zip, dst_zip, T=DEFAULT_T, log=print):
     prp, moved, top, rep = shift_scene(sc, data['.prp'], T, log)
     log('scene: %(moved_roots)d of %(roots)d roots move (%(zero_trans)d with zero translation), %(moved_entities)d of %(entities)d entities, '
         '%(gates)d room gates, prp/gms place mismatches %(prp_gms_place_mismatch)d' % rep)
+    log('head not moved: %s' % rep['head_audit'])
     gms_u, buf = sc.write()
     new = {mem('.gms'): kl_gms.pack(gms_u), mem('.buf'): buf, mem('.prp'): prp}
     if '.HVK' in data:

@@ -11,7 +11,7 @@ usage: python tools/kl_map_shift_test.py [src.zip [dst.zip]] [--t tx ty tz] [--q
  (b) kl_int16_range_check.audit(dst) reports 0 entities beyond +-32767 in x and z (and the placed gameplay entities' extent is printed)
  (c) every member byte outside the touched fields is unchanged: untouched zip members have the same CRC and sizes (and the whole
      zip passes testzip); .gms/.buf entity by entity (only the translation of moved roots, exactly float32(old + T)); .buf head
-     only inside the room gates; .prp token by token (only ZGEOM[2] of moved roots); .HVK / .hrd / .oct / .rmi / .rmc / .sgp /
+     only inside the room gates (and (c2) why the rest of the head stays: parent-local tracks, shared shatter blocks); .prp token by token (only ZGEOM[2] of moved roots); .HVK / .hrd / .oct / .rmi / .rmc / .sgp /
      .sgd field by field; the systems subtrees (Heroes, CloneGroup_*, AllLevels/mainsceneincludes_multiplayer) do not move
  (d) kl_pf4_translate_test.py and kl_sgp_sgd_translate_test.py (the latter also run on the source zip, because its stock sweep
      stops at a pre-existing L07 portal-plane failure that also fails in the main checkout)
@@ -94,6 +94,24 @@ def gate_ranges(sc, prp_bytes):
             o = go + 0x74 * g
             out += [(o, o + 48), (o + 56, o + 68)]
     return out
+
+
+def test_head_audit(ha, stats):
+    """(c2) why the rest of the .buf head is NOT shifted (kl_map_shift.audit_head): every moved MatPosAnim entity with a world-like local
+    translation (the three escape vans, the spawn-room doors) has that translation as the start of a head track, and so do the wheels /
+    hatchback of the vans (small values in the VAN's frame) = tracks are in the entity's own parent-local frame; the ZHavokShatter[10] blocks are shared by entities far apart = no per-entity world data. If a new map breaks this the
+    test fails and the head needs real decoding instead of a guess."""
+    found = [n for n, o in ha['matpos_found']]
+    check(found.count('V_Van_00') == 3, 'the three escape vans do not all start a head track at their own local translation: %r' % ha['matpos_found'])
+    check(any(n.startswith('AI_SpawnRoom_Door') for n in found), 'no spawn-room door track start found in the head')
+    check(ha['child_entities'] > 0 and ha['child_start_in_head'] == ha['child_entities'],
+          'van children whose track start (van-local) is not in the head: %d of %d' % (ha['child_entities'] - ha['child_start_in_head'], ha['child_entities']))
+    for off, (n, dx, dz) in ha['shatter'].items():
+        check(n < 2 or max(dx, dz) > 1000, 'ZHavokShatter[10] block %d is shared by %d entities within %d x %d units: may be world data' % (off, n, dx, dz))
+    stats['head tracks: world-like MatPosAnim entities with their start in the head'] = '%d of %d (parent-local, not shifted)' % (ha['matpos_start_in_head'], ha['matpos_entities'])
+    stats['  van children (van-local frame proven)'] = '%d of %d' % (ha['child_start_in_head'], ha['child_entities'])
+    stats['  GUESS: world-like MatPosAnim entities with no track in the head'] = ha['matpos_missing']
+    stats['ZHavokShatter[10] blocks (offset: users, spread x, spread z)'] = ha['shatter']
 
 
 def test_scene(s, t, back, stats):
@@ -395,6 +413,7 @@ def main(argv):
     back = os.path.join(tmp, 'back.zip')
     MS.shift(dst, back, tuple(-v for v in t), log=lambda m: None)
     s = tuple(load(p) for p in (src, dst, back))
+    test_head_audit(rep['head_audit'], stats)
     test_zip(src, dst, set(rep['changed']), stats)
     a_scene = test_scene(s, t, back, stats)
     test_prp(s, None, t, stats)
