@@ -209,9 +209,22 @@ static void klbf_init(void)
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 #define KLBF_OT_GUARDWAIT 30000   /* ms a bot holds while every free stack is guarded (OnlineTacticsGuard) before it takes the nearest guarded one */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; } klbf_ob[KLBF_OT_BOTS];      /* legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; } klbf_ob[KLBF_OT_BOTS];      /* wk-arcmods-1028: see klbf_ob_stage below. legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
 static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ], klbf_ot_badAt[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
+/* wk-arcmods-1028: heist stage (klbot.c 0..3: 1 entered the bank, 2 left it with loot, 3 at the vehicle) of an online bot, for klhop's ONLINE path.
+   GUESS mapping from the puppeteer's own state: phase 3 (aboard / in the box) = 3; a tally > 0 (carries loot) = 2; tracked but empty-handed = min(dflt, 1);
+   not tracked by the puppeteer (OnlineTactics off) = dflt ([CrewHop] OnlineStage). */
+static int klbf_ob_stage(DWORD actor, int dflt)
+{
+    int i; if (!actor) return dflt;
+    for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) {
+        if (klbf_ob[i].phase == 3) return 3;
+        if (klbf_ob[i].tally > 0) return 2;
+        return dflt < 1 ? dflt : 1;
+    }
+    return dflt;
+}
 /* OnlineWaypoints (recommended on): [BotFillWay_<SLOT>] P1..P8 = "x y z" (floats, y = height). The phase-2 exit walk (the exit-trigger goal only, not van/box walks) goes through these in order.
    <SLOT> = the slot name from the engine's scene path (klh_scene -> klh_level_key: 'f02\f02_main' -> F02). That is what the hook reliably knows: a stock map installed through KLExpansion
    plays as its slot (DD02 as F02), so the key is the slot, not the map's own name. GUESS: two expansion maps sharing a slot share a section; the section is only used for the one that needs it. */
