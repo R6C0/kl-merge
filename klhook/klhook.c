@@ -1307,6 +1307,7 @@ static void klh_tick(int game_thread)
     klgrenade_tick(game_thread);                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
     klmu_tick(game_thread);                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
     klam_tick(game_thread);                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
+    klss_tick(game_thread);                           /* klshot2d.c: re-points the sound system at the private vtable (VTABLE route only) */
     klst_tick(game_thread);                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
     klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
     klbk_tick(game_thread);                           /* klbench_down.c: [Bench] SelfDownAt (bench only, off unless set) */

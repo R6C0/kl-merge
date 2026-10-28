@@ -19,8 +19,26 @@
  * excluded (GUESS: states 4..6 are not shots; if one of them reaches slot 4 through site A it is simply not touched).
  * Register handling: both stubs save EFLAGS and every general register around the C decision (pushad / pushfd ... popfd / popad), re-run the displaced instruction(s) themselves and jump
  * back. The decision runs under __try; any fault = the original behaviour. A refused patch (SHIP build / SessionSafe / other bytes) is logged and nothing changes. */
+/* SHIP-compatible route (2026-10-28, same keys + the same klss_decide; kl2.exe read statically, NOT run live): the SHIP policy (klhook.c KLH_SHIP) refuses every code patch above, so the
+ * decision is also reachable DATA-ONLY. The sound system is NOT in a DLL: it is a heap object of the exe's own class, [[0xdd2640]+0xb00], size 0xb124, built by 0x762f70 -> ctor 0x4ff8c0, vtable
+ * 0xb9ae14 (kl2.exe .rdata, read-only, hashed). Both 0x9025b0 branches end in ITS slot 74 (+0x128 = 0x592950, `ret 0x10`, a thin wrapper that calls slot 73 +0x124 with the same four args):
+ *   2D (0x90268b, returns 0x90268d):  +0x128(a1 = head ctx from slot 52 +0xd0 (0x571300 = mov eax,[ecx+0x6760]), a2 = ebp (sound handle), a3 = &local 36-byte block filled by 0x7f07a0, a4 = &(0, 0, [0xb5c050]))
+ *   3D (0x467eb6, returns 0x467eb8; inside 0x467e00 called from 0x90272f): +0x128(a1 = emitter ctx (0x4a30e0 / 0x598460), a2 = the same ebp, a3 = a transformed block (0x569950), a4 = the position)
+ * (the brief said +0x12c for 3D: 0x467e00 calls +0x128 too; +0x12c = 0x589670 is not on either path.) 2D afterwards runs 0x659370(handle): [h+0x84] &= ~4, byte [h+0x145] = 1 (0x9026a4..0x9026b4).
+ * Route: a PRIVATE COPY of the vtable (klsync.c ksp_vt technique: vt[-1] RTTI + the slots, slot 74 -> klss_vt_stub), and the heap object's vptr [obj] pointed at it (klh_data, kind 0 = heap, allowed in SHIP).
+ * The object is rebuilt per session, so klss_tick re-points it whenever [[0xdd2640]+0xb00] changes (and only if [obj] is the stock 0xb9ae14; anything else = refused, logged). No code byte is written.
+ * A shot is recognised by walking the stack at the wrapper's entry (sp = esp on entry, byte offsets): sp[0] == 0x467eb8 (3D play), sp[0x2c] == 0x902734 (inside 0x467e00 called by 0x9025b0's 3D branch at
+ * 0x90272f), sp[0x88] == 0x503772 (0x9025b0 called by 0x503650 at 0x50376d: the ZFFPlayer path; the npc slot-1 path returns to 0x50378a and is excluded), sp[0x8c] == 4 (#def slot 4 shot_player), low byte of
+ * sp[0x90] == 0 (3D flag), sp[0xa0] == 0x4cca6d (0x503650 called from the fire path), shooter = sp[0x94] (503650's saved ebp, cross-checked with 9025b0's saved ebp sp[0x50]), weapon = sp[0x98] (= sp[0x54]).
+ * The layout is derived from the pushes of 0x9025b0 / 0x467e00 / 0x503650 (GUESS: no stack walk was seen live); any mismatch = no action, counted and logged (first 5). klss_decide then decides exactly as for the
+ * code route; when it says yes the wrapper rewrites a1, a3, a4 IN PLACE to the 2D branch's values (static blocks are fine: the callee does not keep the pointers, as the 2D branch passes stack locals),
+ * calls the original slot 74 and replays the 2D branch's post step on the returned handle (GUESS that the 3D branch's own later step, 0x867da0 with [obj+0x18], does not undo 2D-ness). */
 #ifndef KLSHOT2D_C
 #define KLSHOT2D_C
+
+#define KLSS_3D_RET   0x00467eb8u              /* return of the slot-74 call inside 0x467e00 */
+#define KLSS_3D_OUTER 0x00902734u              /* return of `call 0x467e00` at 0x90272f */
+#define KLSS_9025_FROM503 0x00503772u          /* return of `call 0x9025b0` at 0x50376d */
 
 #define KLSS_SITE_A   0x00503764u
 #define KLSS_SITE_B   0x0050375bu
@@ -39,7 +57,7 @@ static void klss_log(const char *fmt, DWORD shooter, int site, float d)
     DWORD now = GetTickCount();
     if (klss_logn >= 300 || now - klss_logt < 1000) return;      /* at most one line a second, 300 a run */
     klss_logt = now; klss_logn++;
-    klog(fmt, shooter, site == 0 ? 'A' : 'B', d, klss_dist, (long)klss_n_fire, (long)klss_n_remote, (long)klss_n_force, (long)klss_n_far);
+    klog(fmt, shooter, site == 0 ? 'A' : site == 1 ? 'B' : 'V', d, klss_dist, (long)klss_n_fire, (long)klss_n_remote, (long)klss_n_force, (long)klss_n_far);
 }
 
 /* 1 = play this shot 2D. Called from both stubs (cdecl; the stubs preserve every register around it). */
@@ -122,6 +140,123 @@ static __declspec(naked) void klss_stub_b(void)
     }
 }
 
+/* ---- SHIP route: private vtable of the sound system ---- */
+#define KLSS_SND_VT   0x00b9ae14u
+#define KLSS_VT_N     160                       /* the stock table has 144 slots; room to spare, copied from the exe (the tail is never called) */
+#define KLSS_VT_SLOT  74                        /* +0x128 */
+#define KLSS_VT_HEAD  52                        /* +0xd0 */
+static DWORD klss_vtblk[KLSS_VT_N + 1];         /* [0] = vt[-1] (RTTI locator) */
+#define klss_vt (klss_vtblk + 1)
+static DWORD klss_vt_orig, klss_vt_ready, klss_obj, klss_vt_force;
+static int klss_route_vt, klss_route_cfg;
+static BYTE klss_blk[48];                       /* the 2D branch's 36-byte a3 block, built by the game's own 0x7f07a0 */
+static float klss_zpos[3];
+static LONG klss_n_vt, klss_n_stack_bad;
+
+typedef void (__fastcall *klss_fill_t)(void *blk, void *edx);
+typedef DWORD (__fastcall *klss_head_t)(void *obj, void *edx);
+typedef DWORD (__fastcall *klss_find_t)(void *sys, void *edx, DWORD handle);
+
+/* 1 = a1 / a3 / a4 at sp[1], sp[3], sp[4] were rewritten to the 2D branch's values */
+static int __cdecl klss_vt_pre(DWORD *sp, DWORD self)
+{
+    int r = 0;
+    __try {
+        DWORD shooter, weapon; float k = 0;
+        if (!klss_mode || sp[0] != KLSS_3D_RET || sp[0x2c / 4] != KLSS_3D_OUTER) return 0;      /* not the 3D branch of 0x9025b0 */
+        if (sp[0x88 / 4] != KLSS_9025_FROM503) return 0;                                      /* 0x9025b0 from the npc path or another caller */
+        shooter = sp[0x94 / 4]; weapon = sp[0x98 / 4];
+        if (sp[0x8c / 4] != 4 || (sp[0x90 / 4] & 0xff) != 0 || sp[0xa0 / 4] != klss_fire_ret || sp[0x50 / 4] != shooter || sp[0x54 / 4] != weapon || !shooter) {
+            if (sp[0x8c / 4] == 4 && sp[0xa0 / 4] == klss_fire_ret && InterlockedIncrement(&klss_n_stack_bad) <= 5)
+                klog("shot2d: vtable route: slot-4 3D play from the fire path but the stack does not match (slot %lu flag %lu shooter %08lx/%08lx weapon %08lx/%08lx); not touched", (unsigned long)sp[0x8c / 4], (unsigned long)sp[0x90 / 4], (unsigned long)shooter, (unsigned long)sp[0x50 / 4], (unsigned long)weapon, (unsigned long)sp[0x54 / 4]);
+            return 0;
+        }
+        if (!klss_decide(shooter, sp[0xa0 / 4], 2)) return 0;
+        {   /* the 2D branch's own arguments: head ctx = slot 52 on the object, the block from 0x7f07a0, (0, 0, [0xb5c050]) */
+            DWORD head = klss_vt[KLSS_VT_HEAD] ? ((klss_head_t)(DWORD_PTR)klss_vt[KLSS_VT_HEAD])((void *)(DWORD_PTR)self, 0) : 0;
+            if (!head) return 0;
+            ((klss_fill_t)(DWORD_PTR)KLH_VA(0x7f07a0))(klss_blk, 0);
+            if (!klh_rd((DWORD_PTR)KLH_VA(0xb5c050), &k, 4)) return 0;
+            klss_zpos[0] = 0; klss_zpos[1] = 0; klss_zpos[2] = k;
+            sp[1] = head; sp[3] = (DWORD)(DWORD_PTR)klss_blk; sp[4] = (DWORD)(DWORD_PTR)klss_zpos;
+            InterlockedIncrement(&klss_n_vt); r = 1;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        r = 0;
+        if (InterlockedIncrement(&klss_n_fault) <= 5) klog("shot2d: FAULT %08lx in the vtable route; the original call goes through", (unsigned long)GetExceptionCode());
+    }
+    return r;
+}
+/* the 2D branch's step after the play (0x9026a4..0x9026b4) */
+static void __cdecl klss_vt_post(DWORD handle)
+{
+    __try {
+        DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd2640)), sys = gd ? klh_rd32(gd + 0xb00) : 0, p;
+        if (!handle || !sys) return;
+        p = ((klss_find_t)(DWORD_PTR)KLH_VA(0x659370))((void *)(DWORD_PTR)sys, 0, handle);
+        if (p) { *(DWORD *)(DWORD_PTR)(p + 0x84) &= 0xfffffffbu; *(BYTE *)(DWORD_PTR)(p + 0x145) = 1; }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { if (InterlockedIncrement(&klss_n_fault) <= 5) klog("shot2d: FAULT %08lx in the vtable route's post step", (unsigned long)GetExceptionCode()); }
+}
+/* slot 74 of the private table: thiscall (ecx = sound system), four stack args, ret 0x10. Stack-transparent when nothing is rewritten (jmp to the original). */
+static __declspec(naked) void klss_vt_stub(void)
+{
+    __asm {
+        pushad
+        pushfd
+        push ecx                          ; self
+        lea eax, [esp + 0x28]             ; esp on entry = esp + 4 (self) + 0x24 (flags, regs)
+        push eax
+        call klss_vt_pre
+        add esp, 8
+        mov klss_vt_force, eax
+        popfd
+        popad
+        cmp klss_vt_force, 0
+        jne conv
+        jmp dword ptr [klss_vt_orig]
+    conv:
+        push ecx                          ; keep self; the args now sit at +8 .. +0x14
+        push dword ptr [esp + 0x14]       ; a4
+        push dword ptr [esp + 0x14]       ; a3
+        push dword ptr [esp + 0x14]       ; a2
+        push dword ptr [esp + 0x14]       ; a1
+        mov ecx, [esp + 0x10]
+        call dword ptr [klss_vt_orig]     ; the callee pops its 4 args
+        push eax
+        push eax
+        call klss_vt_post
+        add esp, 4
+        pop eax
+        add esp, 4                        ; drop self
+        ret 0x10
+    }
+}
+/* point the current sound system object at the private table (every 500 ms from the game thread; the object is rebuilt per session) */
+static void klss_tick(int game_thread)
+{
+    DWORD gd, obj, vp; static DWORD t_last; DWORD now = GetTickCount();
+    if (!klss_route_vt || !game_thread || now - t_last < 500) return;
+    t_last = now;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd2640))) || !(obj = klh_rd32(gd + 0xb00)) || obj == klss_obj) return;
+    vp = klh_rd32(obj);
+    if (vp == (DWORD)(DWORD_PTR)klss_vt) { klss_obj = obj; return; }
+    if (vp != (DWORD)(DWORD_PTR)KLH_VA(KLSS_SND_VT)) { klss_obj = obj; klog("shot2d: vtable route: sound system %08lx has vtable %08lx, not 0x%x: not hooked", (unsigned long)obj, (unsigned long)vp, KLSS_SND_VT); return; }
+    {   DWORD nv = (DWORD)(DWORD_PTR)klss_vt;
+        if (klh_data((void *)(DWORD_PTR)obj, &nv, 4, "shot2d sound system vtable pointer")) { klss_obj = obj; klog("shot2d: vtable route: sound system %08lx now on the private vtable (slot 74 -> wrapper of 0x%lx)", (unsigned long)obj, (unsigned long)klss_vt_orig); }
+        else klog("shot2d: vtable route: the write of the vptr at %08lx was REFUSED", (unsigned long)obj);
+    }
+}
+static int klss_vt_prepare(void)
+{
+    if (klss_vt_ready) return 1;
+    if (!klh_rd((DWORD_PTR)KLH_VA(KLSS_SND_VT) - 4, klss_vtblk, sizeof klss_vtblk) || klss_vt[KLSS_VT_SLOT] != (DWORD)(DWORD_PTR)KLH_VA(0x592950) || klss_vt[KLSS_VT_HEAD] != (DWORD)(DWORD_PTR)KLH_VA(0x571300)) {
+        klog("shot2d: vtable route: slots 74 / 52 of 0xb9ae14 are %08lx / %08lx, not 0x592950 / 0x571300: this is not the exe read; route off", (unsigned long)klss_vt[KLSS_VT_SLOT], (unsigned long)klss_vt[KLSS_VT_HEAD]);
+        return 0;
+    }
+    klss_vt_orig = klss_vt[KLSS_VT_SLOT]; klss_vt[KLSS_VT_SLOT] = (DWORD)(DWORD_PTR)klss_vt_stub; klss_vt_ready = 1;
+    return 1;
+}
+
 static void klss_init(void)
 {
     static const BYTE ea[5] = { 0x8b, 0x4c, 0x24, 0x10, 0x51 }, eb[5] = { 0xb8, 0x04, 0x00, 0x00, 0x00 };
@@ -136,13 +271,23 @@ static void klss_init(void)
         BYTE c[5]; DWORD want = 0x503650u - (0x4cca68u + 5);
         if (!klh_rd((DWORD_PTR)KLH_VA(0x4cca68), c, 5) || c[0] != 0xE8 || memcmp(c + 1, &want, 4)) { klog("shot2d: the call at 0x4cca68 is not `call 0x503650`; nothing is patched"); return; }
     }
-    put[0] = 0xE9; rel = (DWORD)(DWORD_PTR)klss_stub_a - (DWORD)(DWORD_PTR)KLH_VA(KLSS_SITE_A + 5); memcpy(put + 1, &rel, 4);
-    okA = klh_poke(KLH_VA(KLSS_SITE_A), ea, 5, put, 5, "shot2d site A");
-    rel = (DWORD)(DWORD_PTR)klss_stub_b - (DWORD)(DWORD_PTR)KLH_VA(KLSS_SITE_B + 5); memcpy(put + 1, &rel, 4);
-    okB = klh_poke(KLH_VA(KLSS_SITE_B), eb, 5, put, 5, "shot2d site B");
+    /* [Sound] RemoteShot2DRoute (diagnostic): 0 = auto (the code patch; when both sites are refused, as in a SHIP build, the sound-system vtable route), 1 = code patch only, 2 = vtable route only */
+    klss_route_cfg = (int)GetPrivateProfileIntA("Sound", "RemoteShot2DRoute", 0, klh_ini); if (klss_route_cfg < 0 || klss_route_cfg > 2) klss_route_cfg = 0;
+    okA = okB = 0;
+    if (klss_route_cfg != 2) {
+        put[0] = 0xE9; rel = (DWORD)(DWORD_PTR)klss_stub_a - (DWORD)(DWORD_PTR)KLH_VA(KLSS_SITE_A + 5); memcpy(put + 1, &rel, 4);
+        okA = klh_poke(KLH_VA(KLSS_SITE_A), ea, 5, put, 5, "shot2d site A");
+        rel = (DWORD)(DWORD_PTR)klss_stub_b - (DWORD)(DWORD_PTR)KLH_VA(KLSS_SITE_B + 5); memcpy(put + 1, &rel, 4);
+        okB = klh_poke(KLH_VA(KLSS_SITE_B), eb, 5, put, 5, "shot2d site B");
+        klog("shot2d: RemoteShot2D=%d (2 = dry) dist %d cm: CODE route: site A 0x503764 %s, site B 0x50375b %s", klss_mode, klss_dist, okA ? "patched" : "REFUSED (other bytes, SHIP build or SessionSafe)",
+             okB ? "patched" : "REFUSED (other bytes, SHIP build or SessionSafe)");
+    }
     klss_patched = okA + okB;
-    klog("shot2d: RemoteShot2D=%d (2 = dry) dist %d cm: site A 0x503764 %s, site B 0x50375b %s%s", klss_mode, klss_dist, okA ? "patched" : "REFUSED (other bytes, SHIP build or SessionSafe)",
-         okB ? "patched" : "REFUSED (other bytes, SHIP build or SessionSafe)", klss_patched == 0 ? "; nothing changes" : "");
+    if (klss_patched == 0 && klss_route_cfg != 1) {
+        klss_route_vt = klss_vt_prepare();
+        klog("shot2d: RemoteShot2D=%d (2 = dry) dist %d cm: VTABLE route %s (sound system [[0xdd2640]+0xb00], slot 74 = 0x592950; the object is re-pointed from the tick)", klss_mode, klss_dist, klss_route_vt ? "ready" : "NOT available");
+    }
+    if (klss_patched == 0 && !klss_route_vt) klog("shot2d: no route is active; nothing changes");
 }
 
 #endif /* KLSHOT2D_C */
