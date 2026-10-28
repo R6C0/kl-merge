@@ -3,7 +3,7 @@
 Two kl2.exe on one PC: the solo bench for the online code (re/netsmooth_solo.md; hook part klhook/klsolo.c).
 
     python kl_solo_test.py --hook <TEST build folder> --tag <name> [--secs 300] [--gap 45]
-                           [--base <KLHook.ini>] [--ini1 <extra.ini>] [--ini2 <extra.ini>] [--shots 30-300:30] [--force]
+                           [--base <KLHook.ini>] [--ini1 <extra.ini>] [--ini2 <extra.ini>] [--shots 30-300:30] [--force] [--d3shots]
                            [--n N (3+: more joiners, all with --ini2)] [--gap2 30 (between joiners)]
                            [--netstat SECS] [--relaunch K (3: a failed, hung or ended joiner is started again, before the host's round starts)]
                            [--hang-secs S (90: a joiner whose KLHook.log gains no non-watchdog line for S s is hung: its pid is killed and it is relaunched)]
@@ -129,6 +129,9 @@ def main():
         if key in a:
             i = a.index(key); opt[key] = a[i + 1]; del a[i:i + 2]
     force = '--force' in a
+    # 10-28: the GDI desktop grab (at.shot) returned all-zero PNGs all week (monitor off / session locked). --d3shots takes the shots
+    # inside the game instead: the hook's kld3 back-buffer shot ([Memory] D3dShot*), KLShot_inst<N>_NN.png in the run folder.
+    d3shots = '--d3shots' in a
     # 10-28: the owner said 'i didnt use the pc at all' about A1HIRE's 23:03 abort (cursor 1493,445, idle 0 s). With their
     # word that they are away, --owner-away skips the idle gate and the park loop's owner abort (it still parks the cursor).
     away = '--owner-away' in a
@@ -166,6 +169,13 @@ def main():
             if os.path.isfile(os.path.join(d, f)):
                 os.remove(os.path.join(d, f))
         secs_n = merge(base, solo_secs(n, total))
+        if d3shots and shots:
+            # kld3 arms at the first call after From and shoots one interval later, so From = first shot - step (GUESS: Present runs every frame)
+            step = (shots[1] - shots[0]) if len(shots) > 1 else 30
+            # the shots run inside klfps's Present wrappers: they need [FrameLimit] Enable=1 SwapChain=1 (re/open_work_log.md, 10-26)
+            secs_n = merge(secs_n, [('Memory', [('D3dShotEvery', str(max(1, step))), ('D3dShotFrom', str(max(0, shots[0] - step))),
+                                                 ('D3dShotMax', str(len(shots))), ('D3dShotFmt', '1'), ('D3dShotDir', root), ('D3dShotTag', 'inst%d' % n)]),
+                                    ('FrameLimit', [('Enable', '1'), ('SwapChain', '1')])])
         extra = opt.get('--ini%d' % min(n, 2))
         if extra:
             secs_n = merge(secs_n, read_ini(extra))
@@ -353,13 +363,15 @@ def main():
                 break  # host dead + 30 s grace: free the live slot for the next queue item
             if owner[0]:
                 break  # the owner moved the mouse during the menus: end now, the queue frees the lock
-            if shots and el >= shots[0]:
+            if shots and el >= shots[0] and d3shots:
+                shots.pop(0)                         # the hook takes it (KLShot_*), nothing to do here
+            elif shots and el >= shots[0]:
                 s = shots.pop(0)
                 for n, p in enumerate(procs, 1):
                     if p.poll() is None:
                         path = os.path.join(root, 'shot_inst%d_%03ds.png' % (n, s))
                         r = at.shot([p.pid], path)
-                        say('  shot | inst%d %ds %s' % (n, s, path if r else 'no window'))
+                        say('  shot | inst%d %ds %s' % (n, s, (path if r != 'black' else 'ALL BLACK (monitor off? use --d3shots): ' + path) if r else 'no window'))
             alive = at.running()
             if procs and not alive and el > gap + 20:
                 break
@@ -383,6 +395,11 @@ def main():
                         ' '.join(open(os.path.join(d, 'KLHook_try%d.result' % k), errors='replace').read().split()) if os.path.isfile(os.path.join(d, 'KLHook_try%d.result' % k)) else 'no result')[:300]))
             for l in [l for l in lines if any(k in l for k in KEEP)][-40:]:
                 say('    log | ' + l[:220])
+            if d3shots:
+                got = sorted(f for f in os.listdir(root) if f.startswith('KLShot_inst%d_' % n))
+                bad = [f for f in got if os.path.getsize(os.path.join(root, f)) < 2000]
+                say('    d3shots | inst%d %d KLShot files%s%s' % (n, len(got), (', %d under 2 KB (blank?): %s' % (len(bad), bad[:3])) if bad else '',
+                    '' if got else ' - NONE: is [FrameLimit] SwapChain on and the TEST dll the one loaded? see the d3count: lines in KLHook.log'))
             res = os.path.join(d, 'KLHook.result')
             if os.path.isfile(res):
                 say('    KLHook.result | ' + ' '.join(open(res, errors='replace').read().split())[:400])

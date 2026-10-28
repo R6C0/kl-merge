@@ -64,6 +64,7 @@ static void kld3_lockcount(int kind, DWORD flags, DWORD size)
  * frame (K50B) did not shrink the pile, so the ~2.8 KB blocks look like per-DISCARD rename records the driver keeps. WHO discards:
  * per 10 s window, the two return addresses above Lock (the game's wrapper and its caller) of every DISCARD VB lock, with the
  * buffer's size / usage / pool (IDirect3DVertexBuffer9::GetDesc, slot 13) and the number of distinct buffers discarded. */
+#include "klshot_logic.h"
 #include <intrin.h>                                       /* _ReturnAddress */
 typedef struct { void *ra[2]; LONG n; DWORD size, usage, pool; } kld3_dc_t;
 static kld3_dc_t kld3_dc[128]; static LONG kld3_dc_lost;
@@ -273,26 +274,28 @@ static void kld3_device(void *dev)
 }
 
 /* [Memory] D3dShotEvery=S (TEST, default 0 = off): every S seconds the back buffer (before Present: the finished frame, HUD
- * included) is saved as KLShot_<tag>_NN.jpg into [Memory] D3dShotDir (default: the game folder), at most 40 per run, with the
- * game's own d3dx9_42 D3DXSaveSurfaceToFileA. Why: a desktop grab of the full-screen game is black, and D3dRing needs a look
- * at the post-process passes (bloom / blur) it touches. */
-static int kld3_shot_s, kld3_shot_n, kld3_shot_from; static DWORD kld3_shot_t0; static char kld3_shot_dir[MAX_PATH], kld3_shot_tag[64];
+ * included) is saved as KLShot_<tag>_NN.<ext> into [Memory] D3dShotDir (default: the game folder), at most D3dShotMax per run
+ * (default 40, up to 400), with the game's own d3dx9_42 D3DXSaveSurfaceToFileA. D3dShotFmt=0 JPG (default), 1 PNG, 2 BMP.
+ * Why: a desktop grab of the full-screen game is black, and D3dRing needs a look at the post-process passes (bloom / blur) it touches.
+ * 10-28: the bench's GDI grabs were all-zero all week (monitor off); kl_solo_test --d3shots feeds these keys instead. Timing / names:
+ * klshot_logic.h (klshot_test.c). */
+static int kld3_shot_s, kld3_shot_n, kld3_shot_from, kld3_shot_max = 40, kld3_shot_fmt; static DWORD kld3_shot_t0; static char kld3_shot_dir[MAX_PATH], kld3_shot_tag[64];
 static void kld3_shot(void *dev)
 {
     typedef HRESULT (WINAPI *gbb_fn)(void *, UINT, UINT, DWORD, void **);
     typedef HRESULT (WINAPI *save_fn)(const char *, DWORD, void *, const void *, const RECT *);
-    static DWORD last; static save_fn save; static int told; char path[MAX_PATH + 96]; void *bb = 0; HRESULT hr;
+    static DWORD last; static save_fn save; static int told; char path[MAX_PATH + 96]; void *bb = 0; HRESULT hr; int due;
     DWORD now = GetTickCount();
-    if (kld3_shot_from && now - kld3_shot_t0 < (DWORD)kld3_shot_from * 1000) return;   /* D3dShotFrom: the 40 shots start that late */
-    if (kld3_shot_n >= 40 || (last && now - last < (DWORD)kld3_shot_s * 1000)) return;
-    if (!last) { last = now; return; }
+    due = klshot_due(now, last, kld3_shot_t0, kld3_shot_from, kld3_shot_s, kld3_shot_n, kld3_shot_max);
+    if (!due) return;
     last = now;
+    if (due == 1) return;                                                    /* armed: the first shot is one interval after D3dShotFrom */
     if (!save) { HMODULE m = GetModuleHandleA("d3dx9_42.dll"); save = m ? (save_fn)GetProcAddress(m, "D3DXSaveSurfaceToFileA") : 0; }
-    if (!save) { if (!told++) klog("d3count: shot: d3dx9_42 D3DXSaveSurfaceToFileA not found - no shots"); kld3_shot_n = 40; return; }
+    if (!save) { if (!told++) klog("d3count: shot: d3dx9_42 D3DXSaveSurfaceToFileA not found - no shots"); kld3_shot_n = kld3_shot_max; return; }
     if (((gbb_fn)(*(void ***)dev)[18])(dev, 0, 0, 0, &bb) < 0 || !bb) { if (!told++) klog("d3count: shot: GetBackBuffer failed"); return; }
-    _snprintf(path, sizeof path, "%s%sKLShot_%s_%02d.jpg", kld3_shot_dir, kld3_shot_dir[0] ? "\\" : "", kld3_shot_tag, kld3_shot_n);
-    path[sizeof path - 1] = 0;
-    hr = save(path, 1, bb, 0, 0);                                            /* D3DXIFF_JPG = 1 */
+    klshot_path(path, sizeof path, kld3_shot_dir, kld3_shot_tag, kld3_shot_n, kld3_shot_fmt);
+    hr = save(path, (DWORD)klshot_d3dx_fmt(kld3_shot_fmt), bb, 0, 0);
+    /* GUESS: a multisampled or non-lockable back buffer would make D3DX fail (hr < 0); not seen with the JPG route in the 10-26 shots */
     ((ULONG (WINAPI *)(void *))(*(void ***)bb)[2])(bb);
     kld3_shot_n++;
     klog("d3count: shot %d: %s (%08lx)", kld3_shot_n, path, (unsigned long)hr);
@@ -402,6 +405,8 @@ static void kld3_init(void)
     kld3_shot_s = GetPrivateProfileIntA("Memory", "D3dShotEvery", 0, klh_ini);
     GetPrivateProfileStringA("Memory", "D3dShotDir", "", kld3_shot_dir, sizeof kld3_shot_dir, klh_ini);
     GetPrivateProfileStringA("Memory", "D3dShotTag", "run", kld3_shot_tag, sizeof kld3_shot_tag, klh_ini);
+    kld3_shot_max = klshot_max(GetPrivateProfileIntA("Memory", "D3dShotMax", 40, klh_ini));
+    kld3_shot_fmt = klshot_fmt(GetPrivateProfileIntA("Memory", "D3dShotFmt", 0, klh_ini));
     kld3_shot_from = GetPrivateProfileIntA("Memory", "D3dShotFrom", 0, klh_ini);   /* seconds after the hook loads before the first shot (bench: a late round end within the 40-shot cap); 0 = at once */
     if (kld3_shot_from < 0) kld3_shot_from = 0;
     kld3_shot_t0 = GetTickCount();

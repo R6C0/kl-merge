@@ -58,6 +58,7 @@ C_TESTS = {
     'kldown_mirror_test.c': 'logic',   # kldown_mirror_logic.h (no windows.h at all)
     'klgrades_test.c': 'logic',        # klgrades.h (uses _snprintf: -D_snprintf=snprintf)
     'kllootsync_test.c': 'logic',      # kllootsync_logic.h
+    'klshot_test.c': 'logic',          # klshot_logic.h (uses _snprintf: shim may need -D_snprintf=snprintf)
     'klht_test.c': 'logic',            # klhud_tags_dist.h
     'klmappool_ov_test.c': 'logic',    # no windows.h
     'klnc_test.c': 'logic',            # klnetchan_logic.h + klucc_logic.h
