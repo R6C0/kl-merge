@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-28 ~01:00 - [ce] A1HIRE PASS (TEST cedc7511, 2 seats online, F06, 0 faults): F12 opened HIRE A HEISTER on both seats, host hired J.C., client asked ->
+"host accepted" Tommy, round 2 "I wear J.C./Tommy", saved Char ignored, no gun bought. GAP: F06 has no wardrobe model -> "stock body stays" (hire is
+bookkeeping only there); price showed $0. Next: hired body on stock maps without the wardrobe, real hire price. Owner bat C:\kl_build_1024\hirepage_1027 (SHIP 2e2db7c3).
+
 2026-10-28 ~00:50 - [ce] A1HIRE ran 00:23 (owner idle) but reached NO round: its inis lacked [Auto] Enable=1 (klauto never started; Q27 inis carry it). Fixed in the
 staged inis + review (wf_8dcf5187): F12 press before the selector is wrapped was dropped -> kept 3 s now; scripted F12 skips the foreground check (TEST).
 SHIP out_hirepage_1028 2e2db7c3 (now in the owner bat folder), TEST out_hirepage_1028_test cedc7511 (bcf998ae0). Rerun queued, idle-gated (--ini1/--ini2
@@ -74,10 +78,6 @@ C:\kl_build_1024\a1hire_1027\A1HIRE_host/join.ini). Scripted F9 does NOT reach k
 2026-10-27 ~23:40 - [ce] HIRE PAGE (owner: "make a damn shop page for the hiring its just a button"; his try 20:27 online host DM07 found no hire: no zip has FAHire).
 [Hire] Page=1: F12 in the Buy Weapons list = HIRE A HEISTER page (Pistols tab = Dog Days 8, SMGs tab = Dead Men 8; BUY twice hires; online via klhro_set), 9fa98ea91,
 SHIP 4b3a4905 / TEST f7635046, NOT RUN. Owner bat C:\kl_build_1024\hirepage_1027\INSTALL_hirepage_1027.bat (dry-run: additions only). Carrier price/lock still stock (desc says real price).
-
-2026-10-27 ~23:10 - [a1] Arcade-1:1 SHIP dll (1827767d8) is LIVE; the two-seat hire bench A1HIRE did NOT run (owner input 0 s ago, bench refused).
-Staged to rerun when idle 5 min: kl_solo_test --hook <scratch>/hook --tag A1HIRE --secs 640 --gap 45 (inis a1hire_1/2); PASS = both seats wear hired
-bodies in round 2 + log 'charonline: hire on: the saved Char=... is ignored online', 0 faults. G1/G4/G8 code done but unbenched: re/online_arcade_gaps_1027.md.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
