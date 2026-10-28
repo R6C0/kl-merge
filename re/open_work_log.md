@@ -1,3 +1,9 @@
+2026-10-28 ~15:40 - [ce] WKBC2 + BP_DD04b (out_week_1028j_test), 0 faults / 0 asserts every seat. WKBC2 F06: 7/7 bots BOARDED, ledger $1.9M; bank
+credit still unpaid: the script teleported the host into the bots' ZAllyEscapeBox, but humans board at the van object (-6209 521 10395, 33 m away),
+so no seat got flag 0x40. BP_DD04b F04: 5/7 (was 4/7); OnlineGatherLateS=45 let the gather run its full 40 s; missed: 1 dead, 1 stopped 12 m from the
+trigger (ExitCrowd 1200). Crew-online doc (0a7fd9f88) + OnlineLooks=2 log-only probe (206b860fc). Next: WKBC3 (tele to the van) and BP_DD04c
+(ExitCrowd 1600), both with OnlineLooks=2, after c9's A1NET2 (RUN_week_1028.txt).
+
 2026-10-28 ~15:45 - [c9] DM11S ship prep (workflow, reviewed): [Int16Guard] Marker=1 - a listed folder with Int16Ok.txt whose zip=/bots= sizes
 match is a shifted build and loads online; unshifted DM11B (222101847) still falls back even with a stale marker (df9680596, merged). Dlls
 C:\kl_wt\guard2\klhook\out_c9guard2_1028(_test) (2097F6F0 / E815E20C), not installed. SHIP_DM11S.bat / UNDO_DM11S.bat (backups .before-dm11s,
