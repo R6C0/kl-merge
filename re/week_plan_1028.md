@@ -60,6 +60,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 10-28 ~22:00 ce: BP2-BP4 (DD04 online, 0 faults) merged ed364abf6, all default off: escort reads the humans by node (was "all dead"), OnlineLootFinish+Pause (BP4: 2/2 stacks 22/22, pause/resume, 0 left early), getup rush fires off the beacon (79 m). Open: rush is too slow to arrive (stop-and-go re-order; Sprint is cosmetic), all bot keys on a 2nd map.
 - 10-28 19:30 ce: MV1 PASS (DD04 both seats, 0 faults): guard walk + escort online, OnlineLootSync shows the bots' loot on every seat ($4.56M banked) -> merged 35929bfc3. WKBC7 PASS: cap overflow stays in the ledger. Left: FINAL summary + WalkReach not exercised; a run with all wk-move keys on a second map.
 - 10-28 18:00 ce: WKBC5 bank credit online PAYS (host E at the boarding object -2933 524 10402 -> flag 0x20 -> +$1M to the Sharable cap; overflow dropped). 0 faults.
 - 10-28 16:45 ce: BP_DD04c 7/7 BOARDED + client PASS -> defaults ExitCrowd 1600 / GatherLateS 45 (b0bd5343c). WKBC3 7/7 aboard, bank credit unpaid even with the host on the van object (flag 0x40 never set; research w91thgo9w). Looks probe SAME ORDER both maps -> OnlineLooks=1 in build.

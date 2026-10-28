@@ -1,3 +1,10 @@
+2026-10-29 ~00:30 - [ce] wk-botpar round 3 merged ed364abf6 (all default off). BP3 (DD04 online, BP2 + OnlineLootFinishPause=1,
+OnlineGetUpReorderS=8) PASS 0 faults: bot 0 22/22 in 9.4 s, bot 1 22/22 after 2 pauses, bot 3 paused and never came back (left at the cap, intended);
+getup never fired: the host's heister replica health [P+0x5fc]->+4 read -0 for every seat (BP2: garbage) -> a08da868e drops the hv test, the beacon
+alone (sent only while the downed machine lives, klgetupbeacon.c:32) arms the rush. BP4 (same keys, out_botpar_e_test) PASS 0 faults: bots 0/1 finished
+22/22 in 16.1/20.1 s after 2/3 pauses, 0 left early; 'seat 1 IS DOWN', bot 6 sent from 78.8 m 8 s later, joiner mashed up at 12 s before it arrived.
+Open: rush speed (each re-order restarts the goal = stop-and-go, GUESS), every bot key on a 2nd map. kl_tests 33/8/1.
+
 2026-10-28 ~23:50 - [c9] Retomoto lift ONLINE: kljoin.c gated every ride in a network session (kl_online() -> act = 0), so the lift was dead
 for host and joiner. c9-liftnet 3aadb4350: [KLHook] JoinOnline=1 (local players only) + DoorCloseRemote=1 (host's door-close busy check counts other
 actors at the car; GUESS gd+0x828 holds remote actors), both default off. A1LIFTNET1F: 0 faults, but the joiner was downed by host cops at the doorway
