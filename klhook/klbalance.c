@@ -319,7 +319,9 @@
 #ifndef KLBALANCE_C
 #define KLBALANCE_C
 
-#define KLR_SESSION   0x0168e598              /* +0x54, +0x5c = mode (4 = Arcade), +0x70 = state */
+#include "klbalonline.h"                      /* [BotFill] OnlineBalance: the factor selection (pure logic, klbalonline_test.c) */
+
+#define KLR_SESSION  0x0168e598              /* +0x54, +0x5c = mode (4 = Arcade), +0x70 = state */
 #define KLR_SETTINGS  0x0168e9e4              /* +0x54 = the rules object */
 #define KLR_TUNING    0x0168d7c0              /* the tuning object (heap, no vtable) */
 #define KLR_GAMEDATA  0x00dd265c              /* +0x828 + 4 * i players, +0x898 the local player's index */
@@ -1066,11 +1068,88 @@ static DWORD klbf_pb_get(int i);
 static float klr_cb_hp(DWORD a) { DWORD h = klh_rd32(a + 0x5fc); float v = -1; if (!h || !klh_rd(h + 4, &v, 4) || v != v) return -1; return v; }
 static int klr_cb_count(void) { int i, c = 0; for (i = 0; i < KLR_CB_MAX; i++) c += klr_cb.inst[i] != 0; return c; }
 
+/* ---------------------------------------------------------------- [BotFill] OnlineBalance (2026-10-28, wk-bal2; re\online_balance_1028.md)
+   The Arcade [Balance] factors that name an AI heister, on the online HOST, in the same slot-423 wrapper (klr_cb_hit) as OnlineCopToBot - no second detour.
+   The factor choice is klbalonline.h (tested off-game). WHAT RUNS HERE (hit record as klr_cb_hit reads it: [hit+0xc] attacker, [hit+0x18] scale float):
+     human -> bot   YouToCrew (a police human: FedToCrew / YouToCrew, see the header) x YouToCrewFar by the real distance, / Tough
+     bot -> cop     CrewToCop (victim = a non-Ally ZFFActor put on the same private table by klr_bo_scan; needs OnlineBalanceCops=1)
+     cop -> bot     CopToCrew (+ Tough): the existing OnlineCopToBot path with its k set from [Balance] (klr_bo_init)
+   NOT done, and why: CopToYou / CrewToYou / CrewToFed (the victim is a human ZFFPlayer: another vtable, never reaches this wrapper); YouToCop on a cop
+   (human -> cop is no bot factor); CrewOffStage (online has no heist stages); CopToYouFar; HeadShot; Tough on cops and on blasts (absolute); bot -> bot.
+   GUESS: a remote human's shot reaches the host's wrapper with a ZFFPlayer attacker whose position is at +0x460 like the local one (counters you_nopos / att_other say). */
+#define KLR_BO_COPMAX 128      /* review 1028: was 64; Hasta rounds hold ~100 ZFFActors, corpses are released below */
+static struct {
+    int on, cops, level, ramp, mirror;
+    float eff[KBO_NF];                        /* the effective number per factor id, -1 = not set (hit left alone) */
+    float far_, near_at, far_at, tough, cop_k;
+    DWORD cop[KLR_BO_COPMAX], scan_at, sum_at, att_vt; int told, att_told, cops_n, stock_on; volatile LONG cop_full, cop_freed;
+    volatile LONG hit[2], scaled[2], refused[2], noop[2], nopos, att_other, lost_m[2], would_m[2], rng_m;      /* [0] human -> bot, [1] bot -> cop; rng_m = sum of range factors x 1000 (YouToCrewFar) */
+    LONG cb_prev, tot[2];
+} klr_bo;
+
+/* 1 when a is a cop this wrapper put on the private table */
+static int klr_bo_is_cop(DWORD a) { int i; if (!a) return 0; for (i = 0; i < KLR_BO_COPMAX; i++) if (klr_bo.cop[i] == a) return 1; return 0; }
+
+/* -> 1 when it passed the hit on itself (the caller returns), 0 = the caller carries on with OnlineCopToBot / Online's paths */
+static int klr_bo_hit(void *self, DWORD hit, DWORD a, void (__fastcall *orig)(void *, void *, DWORD))
+{
+    DWORD att = 0, sc, team = 0; float f = 0, nf, m, rng = 1.0f, h0, h1; int ak = KBO_A_NONE, vk, fid, slot;
+    if (!klr_bo.on || !hit) return 0;
+    vk = klbf_pb_is_bot(a) ? KBO_V_BOT : klr_bo_is_cop(a) ? KBO_V_NPC : KBO_V_NONE;
+    if (vk == KBO_V_NONE) return 0;
+    if (!klh_rd(hit + 0xc, &att, 4) || att <= 0x10000 || att == a || !klh_rd(hit + 0x18, &f, 4) || f != f || f <= 0) return 0;
+    if (f > 1.0001f && f <= klr_pbo.want + 0.001f) return 0;      /* a point-blank step: OnlinePointBlank's number stands (Arcade's factors do not touch the 100 either, they multiply it: cop path only) */
+    if (klh_pvt(att) == KLR_PLAYER_VT) { BYTE pol = 0; ak = (klh_rd(att + 0x2723, &pol, 1) && pol) ? KBO_A_HUMANCOP : KBO_A_HUMAN; }      /* the police byte as the sites of klbalance.c above read it */
+    else if (klh_avt(att) == KLR_ACTOR_VT && (sc = klh_rd32(att + 0x54)) != 0 && klh_rd(sc + 4, &team, 4)) {
+        if (team != 2) ak = KBO_A_NPC;
+        else if (klbf_pb_is_bot(att)) ak = KBO_A_BOT;
+    }
+    if (ak == KBO_A_NONE) {      /* a team-Ally actor that is not a listed bot (a remote human's body?), or a non-actor: untouched, counted, the vtable logged once per new value */
+        DWORD vt = klh_rd32(att);
+        InterlockedIncrement(&klr_bo.att_other);
+        if (vt != klr_bo.att_vt && klr_bo.att_told < 6) { klr_bo.att_vt = vt; klr_bo.att_told++; klog("balance: OnlineBalance: hit on %s %08lx from attacker %08lx (vtable %08lx, team %lu) that is no listed bot, no cop and no ZFFPlayer: untouched (logged per new vtable, at most 6)", vk == KBO_V_BOT ? "bot" : "cop", (unsigned long)a, (unsigned long)att, (unsigned long)vt, (unsigned long)team); }
+        return 0;
+    }
+    fid = kbo_factor(ak, vk, klr_bo.mirror);
+    if (fid == KBO_F_NONE || fid == KBO_F_COP2CREW) return 0;      /* cop -> bot: klr_cb_hit's own path below (k = CopToCrew / Tough, set at start-up) */
+    slot = vk == KBO_V_BOT ? 0 : 1;
+    InterlockedIncrement(&klr_bo.hit[slot]); klr_bo.tot[slot]++;
+    if (fid == KBO_F_FED2CREW) m = klr_bo.eff[KBO_F_FED2CREW] >= 0 ? klr_bo.eff[KBO_F_FED2CREW] : klr_bo.eff[KBO_F_YOU2CREW];
+    else m = klr_bo.eff[fid];
+    if (slot == 0 && klr_bo.far_ > 0 && ak == KBO_A_HUMAN) {      /* review 1028: not for a police human (FedToCrew / YouToCop is his number alone, as Arcade klr_far_mult) */      /* YouToCrewFar: priced per hit by the real distance (Arcade approximates it by data: klr_far_mult) */
+        float pa[3], pb[3], d = -1;
+        if (klh_pvt(att) == KLR_PLAYER_VT && klh_rd(att + 0x460, pa, 12) && kle_node(klh_rd32(a + 4), pb, 0) && klr_finite(pa[0]) && klr_finite(pa[1]) && klr_finite(pa[2]))
+            d = (float)sqrt((pa[0] - pb[0]) * (pa[0] - pb[0]) + (pa[1] - pb[1]) * (pa[1] - pb[1]) + (pa[2] - pb[2]) * (pa[2] - pb[2]));
+        if (pa[0] == 0.0f && pa[1] == 0.0f && pa[2] == 0.0f) d = -1;      /* review 1028: an all-zero position is a unset one, not the origin */
+        if (d > 100000.0f) d = -1;      /* more than 1 km: a stale / bogus read, no sponge */
+        if (d >= 0 && klr_finite(d)) rng = kbo_range(d, klr_bo.far_, klr_bo.near_at, klr_bo.far_at); else InterlockedIncrement(&klr_bo.nopos);      /* GUESS: +0x460 is the feet of a remote ZFFPlayer too */
+        InterlockedExchangeAdd(&klr_bo.rng_m, (LONG)(rng * 1000.0f));
+    }
+    nf = kbo_scale(m, rng, kbo_tough(vk, klr_bo.tough));
+    if (nf > 0.99999f && nf < 1.00001f) {
+        InterlockedIncrement(&klr_bo.noop[slot]);
+        if (m >= 0 && slot == 0) { orig(self, 0, hit); return 1; }      /* review 1028: an explicit 1.0 means unchanged: consumed here, [Balance] Online's paths do not scale it again (a factor that is NOT set still falls through) */
+        if (slot == 1) { orig(self, 0, hit); return 1; }
+        return 0;
+    }
+    nf *= f;
+    if (!klh_data((void *)(DWORD_PTR)(hit + 0x18), &nf, 4, slot ? "bot->cop hit scale (OnlineBalance CrewToCop)" : "human->bot hit scale (OnlineBalance YouToCrew)")) {
+        InterlockedIncrement(&klr_bo.refused[slot]); orig(self, 0, hit); return 1;
+    }
+    h0 = klr_cb_hp(a); orig(self, 0, hit); klh_data((void *)(DWORD_PTR)(hit + 0x18), &f, 4, "OnlineBalance hit scale back"); h1 = klr_cb_hp(a);
+    InterlockedIncrement(&klr_bo.scaled[slot]);
+    if (h0 > h1 && h1 >= 0) { LONG l = (LONG)((h0 - h1) * 1000.0f); InterlockedExchangeAdd(&klr_bo.lost_m[slot], l); InterlockedExchangeAdd(&klr_bo.would_m[slot], (LONG)((double)l * f / nf)); }      /* would = lost / (nf / f): linear in the scale; a kill clamps at 0 so it under-reads */
+    if (klr_bo.tot[slot] <= 3) klog("balance: OnlineBalance %s APPLIED #%ld: attacker %08lx (%s) hit %s %08lx, hit scale %.3f -> %.3f (factor %.3f, range x%.2f, tough /%.2f), hp %.1f -> %.1f",
+        slot ? "CrewToCop" : "YouToCrew", klr_bo.tot[slot], (unsigned long)att, ak == KBO_A_HUMANCOP ? "human police" : ak == KBO_A_HUMAN ? "human" : "bot", slot ? "cop" : "bot", (unsigned long)a, f, nf, m, rng, kbo_tough(vk, klr_bo.tough), h0, h1);
+    return 1;
+}
+
 static void __fastcall klr_cb_hit(void *self, void *edx, DWORD hit)      /* thiscall, one stack argument, ret 4 */
 {
     void (__fastcall *orig)(void *, void *, DWORD) = (void (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)KLH_VA(KLR_CB_HIT);
     DWORD a = (DWORD)(DWORD_PTR)self, att = 0, sc, team = 0; float f = 0, nf, h0, h1;
     (void)edx;
+    if (klr_bo.on && klr_bo_hit(self, hit, a, orig)) return;      /* [BotFill] OnlineBalance: human -> bot, bot -> cop; everything else falls through to the paths below */
     if (hit && klr_cb.k > 0 && klbf_pb_is_bot(a) && klh_rd(hit + 0xc, &att, 4) && att > 0x10000 && att != a && klh_avt(att) == KLR_ACTOR_VT &&
         (sc = klh_rd32(att + 0x54)) != 0 && klh_rd(sc + 4, &team, 4) && team != 2 && klh_rd(hit + 0x18, &f, 4) && f == f && f > 0) {
         InterlockedIncrement(&klr_cb.hits);
@@ -1148,12 +1227,65 @@ static void __fastcall klr_cb_hit(void *self, void *edx, DWORD hit)      /* this
     orig(self, 0, hit);
 }
 
+/* OnlineBalance, once per pass on the game thread while the table is ready: the arming lines, the cops onto the private table, the 30 s counter line */
+static void klr_bo_tick(DWORD mine, DWORD stock, DWORD now)
+{
+    int i, k, nc = 0;
+    if (!klr_bo.told) {
+        klr_bo.told = 1; klr_bo.cb_prev = klr_cb.tot_scaled; klr_bo.sum_at = now;
+        klog("balance: OnlineBalance ARMED (host, bots in play): level %d Ramp=%d FedMirror=%d Tough %.2f | CopToCrew %s (cop->bot path k x%.3f = that / Tough, OnlinePointBlank steps left alone) | CrewToCop %s (%s) | YouToCrew %s, FedToCrew %s, range %s",
+             klr_bo.level, klr_bo.ramp, klr_bo.mirror, klr_bo.tough > 0 ? klr_bo.tough : 1.0f, klr_bo.eff[0] >= 0 ? "set" : "not set", klr_cb.k,
+             klr_bo.eff[1] >= 0 ? "set" : "not set", klr_bo.cops ? "cops go onto the private table" : "OnlineBalanceCops=0: not applied", klr_bo.eff[5] >= 0 ? "set" : "not set", klr_bo.eff[6] >= 0 ? "set" : "not set", klr_bo.far_ > 0 ? "on" : "off");
+        if (klr_bo.eff[0] >= 0) klog("balance: OnlineBalance factor ARMED CopToCrew x%.3f (police -> bot, via OnlineCopToBot's path; per-30 s line 'cop->bot scaled')", klr_bo.eff[0]);
+        if (klr_bo.eff[1] >= 0) klog("balance: OnlineBalance factor %s CrewToCop x%.3f (bot -> police / guard / civilian)", klr_bo.cops && klr_bo.eff[1] != 1.0f ? "ARMED" : "NOT ARMED:", klr_bo.eff[1]);
+        if (klr_bo.eff[5] >= 0 || klr_bo.eff[6] >= 0 || klr_bo.far_ > 0) klog("balance: OnlineBalance factor ARMED YouToCrew x%.3f (human -> bot), FedToCrew x%.3f (human police -> bot), YouToCrewFar x%.2f from %.0f m to %.0f m (per hit)", klr_bo.eff[5] >= 0 ? klr_bo.eff[5] : 1.0f, klr_bo.eff[6] >= 0 ? klr_bo.eff[6] : klr_bo.eff[5] >= 0 ? klr_bo.eff[5] : 1.0f, klr_bo.far_ > 0 ? klr_bo.far_ : 1.0f, klr_bo.near_at / 100, klr_bo.far_at / 100);
+        if (klr_bo.tough > 1.0001f || (klr_bo.tough > 0 && klr_bo.tough < 0.9999f)) klog("balance: OnlineBalance factor ARMED Tough x%.2f (every hit on a bot / %.2f: the cop path and the human path; blasts and point-blank steps are not scaled)", klr_bo.tough, klr_bo.tough);
+    }
+    if (klr_bo.cops && klr_bo.eff[1] >= 0 && klr_bo.eff[1] != 1.0f && now - klr_bo.scan_at >= 250u) {      /* cops onto the table: only when CrewToCop needs them */
+        DWORD p, tab, j, blk[64 * 32]; int full = 0;
+        klr_bo.scan_at = now;
+        for (i = 0; i < KLR_BO_COPMAX; i++) if (klr_bo.cop[i]) {
+            if (klh_rd32(klr_bo.cop[i]) != mine) klr_bo.cop[i] = 0;      /* gone, reused or taken off by someone: dropped, not written */
+            else if (!(klr_cb_hp(klr_bo.cop[i]) > 0) && klh_data((void *)(DWORD_PTR)klr_bo.cop[i], &stock, 4, "ZFFActor vtable pointer back (OnlineBalance dead cop)")) { klr_bo.cop[i] = 0; InterlockedIncrement(&klr_bo.cop_freed); }      /* review 1028: a corpse gives its slot back (the game's own table again) */
+        }
+        if ((p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) && (p = klh_rd32(p + 0xc)) && (tab = klh_rd32(p + 0xc)))      /* the census walk of klcensus.c: 0x80-byte slots, the object at +0x60 */
+            for (j = 0; j < 0x10000 && !full; j += 64) {
+                if (!klh_rd(tab + j * 0x80, blk, sizeof blk)) break;
+                for (k = 0; k < 64 && !full; k++) {
+                    DWORD o = blk[k * 32 + 0x60 / 4], sc, team = 0, h; int s;
+                    if (o < 0x10000 || klh_rd32(o) != stock || klbf_pb_is_bot(o)) continue;      /* the game's own ZFFActor table only: not a bot or puppet on a private one, not a ZFFPlayer */
+                    if (!(sc = klh_rd32(o + 0x54)) || !klh_rd(sc + 4, &team, 4) || team == 2) continue;
+                    if (!(h = klh_rd32(o + 0x5fc)) || klh_rd32(h + 0x24) != o || !(klr_cb_hp(o) > 0)) continue;      /* a live actor with its health object (klr_tough_say's test) */
+                    for (s = 0; s < KLR_BO_COPMAX && klr_bo.cop[s]; s++) ;
+                    if (s == KLR_BO_COPMAX) { full = 1; InterlockedIncrement(&klr_bo.cop_full); break; }
+                    if (klh_data((void *)(DWORD_PTR)o, &mine, 4, "ZFFActor vtable pointer (OnlineBalance cop)")) { klr_bo.cop[s] = o; nc++; }
+                }
+            }
+        if (nc) { int all = 0; for (i = 0; i < KLR_BO_COPMAX; i++) all += klr_bo.cop[i] != 0; klr_bo.cops_n = all; klog("balance: OnlineBalance: %d cop(s) / NPC(s) now on the private table (CrewToCop x%.3f), %d on it in all", nc, klr_bo.eff[1], all); }
+    }
+    if (now - klr_bo.sum_at >= 30000u) {      /* the counter line a bench greps: hits seen and scaled per factor in the last 30 s */
+        LONG cbs = klr_cb.tot_scaled;
+        klr_bo.sum_at = now;
+        klog("balance: OnlineBalance 30 s: CopToCrew cop->bot scaled %ld (x%.3f) | YouToCrew human->bot %ld hit(s), %ld scaled, %ld unchanged (factor 1), %ld write(s) refused, %ld without a position, mean range x%.2f, bot hp lost %.0f (without the factor ~%.0f) | CrewToCop bot->cop %ld hit(s), %ld scaled, %ld unchanged, %ld refused, cop hp lost %.0f (without ~%.0f), %d cop(s) on the table (%ld never placed: table full, %ld corpse slot(s) freed) | %ld hit(s) by an attacker that is neither bot, cop nor player",
+             cbs - klr_bo.cb_prev, klr_cb.k, klr_bo.hit[0], klr_bo.scaled[0], klr_bo.noop[0], klr_bo.refused[0], klr_bo.nopos, (klr_bo.far_ > 0 && klr_bo.hit[0]) ? klr_bo.rng_m / 1000.0 / klr_bo.hit[0] : 1.0, klr_bo.lost_m[0] / 1000.0, klr_bo.would_m[0] / 1000.0,
+             klr_bo.hit[1], klr_bo.scaled[1], klr_bo.noop[1], klr_bo.refused[1], klr_bo.lost_m[1] / 1000.0, klr_bo.would_m[1] / 1000.0, klr_bo.cops_n, klr_bo.cop_full, klr_bo.cop_freed, klr_bo.att_other);
+        klr_bo.cb_prev = cbs;
+        for (i = 0; i < 2; i++) { InterlockedExchange(&klr_bo.hit[i], 0); InterlockedExchange(&klr_bo.scaled[i], 0); InterlockedExchange(&klr_bo.refused[i], 0); InterlockedExchange(&klr_bo.noop[i], 0); InterlockedExchange(&klr_bo.lost_m[i], 0); InterlockedExchange(&klr_bo.would_m[i], 0); }
+        InterlockedExchange(&klr_bo.nopos, 0); InterlockedExchange(&klr_bo.att_other, 0); InterlockedExchange(&klr_bo.rng_m, 0);
+    }
+}
+
 /* on = this is the online HOST with bots (klr_online_host) and OnlineCopToBot > 0. Only the game thread writes; on = 0 takes the table off the bots. */
 static void klr_cb_tick(int on, int game_thread)
 {
     int i, q, n = 0; DWORD stock = KLR_ACTOR_VT, mine = (DWORD)(DWORD_PTR)klr_cb_vt, now = GetTickCount();
     if (!game_thread) return;
     if (!on) {
+        for (i = 0; i < KLR_BO_COPMAX; i++) if (klr_bo.cop[i]) {      /* OnlineBalance's cops: the game's own table back (only where it still is ours: a freed actor's memory is not touched) */
+            if (klh_rd32(klr_bo.cop[i]) == mine) { klh_data((void *)(DWORD_PTR)klr_bo.cop[i], &stock, 4, "ZFFActor vtable pointer back (OnlineBalance cop)"); n++; }
+            klr_bo.cop[i] = 0;
+        }
+        if (klr_bo.on && klr_bo.told) { klr_bo.told = 0; klog("balance: OnlineBalance: round / host state ended: totals human->bot %ld hit(s), bot->cop %ld hit(s); cops back on the game's own table", klr_bo.tot[0], klr_bo.tot[1]); }
         for (i = 0; i < KLR_CB_MAX; i++) if (klr_cb.inst[i]) {
             if (klh_rd32(klr_cb.inst[i]) == mine) { klh_data((void *)(DWORD_PTR)klr_cb.inst[i], &stock, 4, "ZFFActor vtable pointer back (OnlineCopToBot)"); n++; }
             klr_cb.inst[i] = 0;
@@ -1169,6 +1301,7 @@ static void klr_cb_tick(int on, int game_thread)
         klr_cb_vt[KLR_CB_SLOT] = (DWORD)(DWORD_PTR)klr_cb_hit; klr_cb.ready = 1; klh_actor_priv2 = mine;
         klog("botfill: cop->bot factor ARMED: OnlineCopToBot=%d%% (x%.3f on every ordinary hit of a non-Ally actor on a listed bot: the Arcade police->crew float that online is skipped); private ZFFActor table %08lx, slot %d wrapped; bots only (humans, bot-vs-bot, point-blank untouched)", klr_cb.pct, klr_cb.k, mine, KLR_CB_SLOT);
     }
+    if (klr_bo.on) klr_bo_tick(mine, stock, now);
     for (q = 0; q < 16; q++) {
         DWORD a = klbf_pb_get(q);
         if (!a || klh_rd32(a) != stock) continue;
@@ -1412,9 +1545,9 @@ static void klr_tick(int game_thread)
 {
     static DWORD last, toldrules; static char toldwhy[200];
     DWORD now = GetTickCount(), rules, state; int arcade, act = 0, level; char why[200];
-    if ((!klr.on && !(klr_pbo.want > 0) && !(klr_cb.k > 0) && !klr_cb.on) || !klh_exe_ok || now - last < (game_thread ? 50u : 100u)) return;
+    if ((!klr.on && !(klr_pbo.want > 0) && !(klr_cb.k > 0) && !klr_cb.on && !klr_bo.on) || !klh_exe_ok || now - last < (game_thread ? 50u : 100u)) return;
     last = now;
-    if (!klr.on) { klr_pb_tick(klr_pbo_host(), game_thread); klr_cb_tick((klr_cb.k > 0 || klr_cb.on) && klr_online_host(), game_thread); return; }      /* [Balance] off: only the online point-blank part runs */
+    if (!klr.on) { klr_pb_tick(klr_pbo_host(), game_thread); klr_cb_tick((klr_cb.k > 0 || klr_cb.on || klr_bo.on) && klr_online_host(), game_thread); return; }      /* [Balance] off: only the online point-blank part runs */
     arcade = klr_arcade(&rules, &state, &level);
     if (arcade && (klr.any || klr_pb.any)) {
         act = klb_level(why);                 /* asked every pass: the verdict changes when the archive is opened */
@@ -1430,7 +1563,7 @@ static void klr_tick(int game_thread)
     klr_head_tick(act);                       /* HeadShot / FedHeadShot (2 a8): the two head floats; the tuning's own back otherwise */
     if (arcade && act) klr_tough_say(now);    /* the proof line: what the game made the AI heisters' health */
     klr_pb_tick(act ? 1 : klr_pbo_host(), game_thread);      /* the point-blank keys: in while the dial acts (1) or the online host has bots (2), the game's own vtable back otherwise */
-    klr_cb_tick((klr_cb.k > 0 || klr_cb.on) && klr_online_host(), game_thread);      /* OnlineCopToBot: the bots' private table in while this is the online host with bots, the game's own back otherwise */
+    klr_cb_tick((klr_cb.k > 0 || klr_cb.on || klr_bo.on) && klr_online_host(), game_thread);      /* OnlineCopToBot: the bots' private table in while this is the online host with bots, the game's own back otherwise */
     klr_ch_tick(arcade, game_thread);        /* LogCrewHits: reads only; any Arcade round, stock level or not */
     if (arcade) klr_player_tick(act, game_thread, rules);
     else if (klr_p.have) klr_player_tick(0, game_thread, 0);      /* the session ended with the object alive: its own values go back */
@@ -1452,6 +1585,70 @@ static int klr_number(const char *t, double *d)
     if (e == t || *d != *d) return 0;
     while (*e == ' ' || *e == '\t') e++;
     return *e == 0 || *e == ';';
+}
+
+/* [BotFill] OnlineBalance=0|1 (default 0): reads the [Balance] values the ini already holds, as klr_init does for Arcade (Risk row, then the keys; Ramp; FedMirror; FedToCrew;
+   YouToCrewFar + NearAt / FarAt; Tough), even with [Balance] Enable=0. Ramp's stock level is [BotFill] OnlineBalanceLevel (1..11, default 1; GUESS: online has no Arcade level,
+   so which row of the stock ramp Ramp=1 holds the numbers against is the user's choice; level 1 = the softest stock row, where Ramp holds almost nothing). */
+static void klr_bo_init(void)
+{
+    char q[32]; double d; int k, risk, lvl; float v, dial[KLR_NF], fed = -1.0f;
+    memset(&klr_bo, 0, sizeof klr_bo);
+    klr_bo.on = GetPrivateProfileIntA("BotFill", "OnlineBalance", 0, klh_ini) != 0;
+    if (!klr_bo.on) return;
+    klr_bo.cops = GetPrivateProfileIntA("BotFill", "OnlineBalanceCops", 1, klh_ini) != 0;
+    lvl = (int)GetPrivateProfileIntA("BotFill", "OnlineBalanceLevel", 1, klh_ini);
+    if (lvl < 1 || lvl > KLR_NLEVEL) { klog("botfill: OnlineBalanceLevel=%d is IGNORED: it must be 1 .. %d; 1 stands", lvl, KLR_NLEVEL); lvl = 1; }
+    klr_bo.level = lvl;
+    risk = (int)GetPrivateProfileIntA("Balance", "Risk", 0, klh_ini); if (risk < 0) risk = 0; if (risk > 3) risk = 3;
+    klr_bo.ramp = GetPrivateProfileIntA("Balance", "Ramp", 1, klh_ini) != 0;
+    klr_bo.mirror = GetPrivateProfileIntA("Balance", "FedMirror", 1, klh_ini) != 0;
+    for (k = 0; k < KLR_NF; k++) {
+        dial[k] = klr_dial[risk].f[k];
+        v = klr_inif(klr_key[k], "-1"); if (klr_finite(v) && v >= 0 && v <= 20) dial[k] = v;
+    }
+    GetPrivateProfileStringA("Balance", "FedToCrew", "", q, sizeof q, klh_ini);
+    if (q[0]) { if (klr_number(q, &d) && d >= 0 && d <= 20) fed = (float)d; else klog("balance: OnlineBalance: FedToCrew=%s is IGNORED (one number of 0 .. 20): YouToCrew's number stands for a police human", q); }
+    for (k = 0; k < KBO_NF; k++) klr_bo.eff[k] = -1.0f;
+    klr_bo.eff[KBO_F_COP2CREW] = kbo_want(KBO_F_COP2CREW, dial[0], klr_bo.ramp, klr_code[lvl][0]);
+    klr_bo.eff[KBO_F_CREW2COP] = kbo_want(KBO_F_CREW2COP, dial[1], klr_bo.ramp, klr_code[lvl][1]);
+    klr_bo.eff[KBO_F_YOU2COP] = kbo_want(KBO_F_YOU2COP, dial[3], klr_bo.ramp, klr_code[lvl][3]);
+    klr_bo.eff[KBO_F_YOU2CREW] = kbo_want(KBO_F_YOU2CREW, dial[5], klr_bo.ramp, klr_code[lvl][5]);
+    klr_bo.eff[KBO_F_FED2CREW] = fed;
+    klr_bo.stock_on = GetPrivateProfileIntA("BotFill", "OnlineBalanceStock", 0, klh_ini) != 0;
+    if (klr_bo.stock_on) {      /* review 1028: Arcade prices an UNSET key with the level's stock float; online the game's routines are skipped, so those numbers are taken here (CrewToCop, YouToCrew; CopToCrew stays OnlineCopToBot's) */
+        if (klr_bo.eff[KBO_F_CREW2COP] < 0) klr_bo.eff[KBO_F_CREW2COP] = klr_code[lvl][1];
+        if (klr_bo.eff[KBO_F_YOU2CREW] < 0) klr_bo.eff[KBO_F_YOU2CREW] = klr_code[lvl][5];
+        klog("botfill: OnlineBalanceStock=1: unset CrewToCop / YouToCrew take level %d's stock floats (CrewToCop x%.3f, YouToCrew x%.3f), as Arcade's klr_want does", lvl, klr_bo.eff[KBO_F_CREW2COP], klr_bo.eff[KBO_F_YOU2CREW]);
+    }
+    if (klr_bo.ramp) for (k = 0; k < KBO_NF; k++) if ((k == 0 || k == 1 || k == 3) && dial[k] >= 0 && klr_bo.eff[k] != dial[k])
+        klog("botfill: OnlineBalance: %s=%.3f held at stock %.2f of level %d by Ramp=1 (add [Balance] Ramp=0, or OnlineBalanceLevel=1, to use it as given)", klr_key[k], dial[k], klr_bo.eff[k], lvl);
+    klr_bo.far_ = 0; klr_bo.near_at = 800; klr_bo.far_at = 3500;
+    GetPrivateProfileStringA("Balance", "YouToCrewFar", "", q, sizeof q, klh_ini);
+    if (q[0]) {
+        double na = 8, fa = 35; char u[32];
+        if (!klr_number(q, &d) || d < 0.05 || d > 1) klog("botfill: OnlineBalance: YouToCrewFar=%s is IGNORED (one number of 0.05 .. 1)", q);
+        else if (d < 1) {
+            klr_bo.far_ = (float)d;
+            GetPrivateProfileStringA("Balance", "YouToCrewNearAt", "8", u, sizeof u, klh_ini); if (!klr_number(u, &na) || na < 0 || na > 500) na = 8;
+            GetPrivateProfileStringA("Balance", "YouToCrewFarAt", "35", u, sizeof u, klh_ini); if (!klr_number(u, &fa) || fa < 1 || fa > 1000) fa = 35;
+            if (fa < na + 1) { na = 8; fa = 35; }
+            klr_bo.near_at = (float)(na * 100); klr_bo.far_at = (float)(fa * 100);
+        }
+    }
+    klr_bo.tough = 0;
+    GetPrivateProfileStringA("Balance", "Tough", "", q, sizeof q, klh_ini);
+    if (q[0]) { if (!klr_number(q, &d) || d < 0.25 || d > 10) klog("botfill: OnlineBalance: Tough=%s is IGNORED (one number of 0.25 .. 10)", q); else if (d != 1.0) klr_bo.tough = (float)d; }
+    /* the cop -> bot path is OnlineCopToBot's: its k becomes CopToCrew / Tough (CopToCrew not set: OnlineCopToBot's k, or 1.0 when only Tough is set) */
+    {
+        float nk = kbo_cop_k(klr_bo.eff[KBO_F_COP2CREW], klr_cb.k, klr_bo.tough);
+        if (nk > 0 && klr_cb.k > 0) { klr_cb.k = nk; klr_cb.pct = (int)(nk * 100.0f + 0.5f); }      /* review 1028: OnlineCopToBot=0 keeps the cop path off, as [Balance] Online does */
+        else if (nk > 0) klog("botfill: OnlineBalance: CopToCrew / Tough would switch the cop->bot path on, but OnlineCopToBot=0 keeps it off (set OnlineCopToBot to a percent to use them)");
+    }
+    klog("botfill: OnlineBalance=1 (recommended off until a bench; HOST of an online FA round with bots only, needs OnlineHost=1 and OnlineTactics=1): Risk=%d Ramp=%d (stock level %d) FedMirror=%d | CopToCrew %s%.3f (cop->bot k now x%.4f), CrewToCop %s%.3f%s, YouToCrew %s%.3f, FedToCrew %s%.3f, YouToCrewFar %.2f (%.0f..%.0f m), Tough %.2f | OnlineBalanceCops=%d (cops are put on a private ZFFActor vtable only when CrewToCop is set and not 1.0; 0 = never) | [Balance] Online=%d%s",
+         risk, klr_bo.ramp, lvl, klr_bo.mirror, klr_bo.eff[0] >= 0 ? "" : "unset ", klr_bo.eff[0], klr_cb.k, klr_bo.eff[1] >= 0 ? "" : "unset ", klr_bo.eff[1], klr_bo.cops ? "" : " (not applied: cops off)",
+         klr_bo.eff[5] >= 0 ? "" : "unset ", klr_bo.eff[5], klr_bo.eff[6] >= 0 ? "" : "unset ", klr_bo.eff[6], klr_bo.far_, klr_bo.near_at / 100, klr_bo.far_at / 100, klr_bo.tough > 0 ? klr_bo.tough : 1.0f,
+         klr_bo.cops, klr_cb.on, klr_cb.on ? " (its human->bot path only gets the hits OnlineBalance leaves: a factor that is not set)" : "");
 }
 
 static void klr_init(void)
@@ -1493,6 +1690,7 @@ static void klr_init(void)
                  klr_cb.cfg_cop == 2 ? " ([Balance] CopToCrew is set but IGNORED: OnlineCopToBot=0 keeps the cop path off)" : klr_cb.cfg_cop ? (on == 1 ? " (from [Balance] CopToCrew, over OnlineCopToBot)" : " ([Balance] CopToCrew is set but Online=2 does not apply it)") : " (OnlineCopToBot's)", on == 2 ? "DRY RUN: counts and logs what it would change, writes no hit scale (but the bots still move to the private ZFFActor vtable, as OnlineCopToBot does: that pointer write is real)" : "writes the hit scale in the slot-423 wrapper");
         }
     }
+    klr_bo_init();
     klr.on = GetPrivateProfileIntA("Balance", "Enable", 0, klh_ini) != 0;
     if (!klr.on) return;
     klr.log = (int)GetPrivateProfileIntA("Balance", "Log", 1, klh_ini); if (klr.log < 0) klr.log = 0; if (klr.log > 2) klr.log = 2;

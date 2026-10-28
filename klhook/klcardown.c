@@ -133,7 +133,7 @@ static int klcd_scan_actors(DWORD *act, DWORD *sol, int max)
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
         for (k = 0; k < 64 && n < max; k++) {
             DWORD o = blk[k * 32 + 0x60 / 4], s = 0;
-            if (o >= 0x10000 && klh_rd32(o) == KLB_ACTOR_VT && klbd_bot_ok(o, &s)) { act[n] = o; sol[n] = s; n++; }
+            if (o >= 0x10000 && klh_avt(o) == KLB_ACTOR_VT && klbd_bot_ok(o, &s)) { act[n] = o; sol[n] = s; n++; }
         }
     }
     return n;
