@@ -66,6 +66,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
+2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
+page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. c9 runs: workflow DM11B int16 shift
+(worktree C:\kl_wt\shift, branch c9-shift-1028) + T2 benches with --owner-away (A1I16, Q28_DM06R, Q28_DD09R, A1LIFT, A1SND, A1NET). Q27: 19 maps PASS both seats.
+
 2026-10-28 ~11:20 UTC - scheduled check-in (PC idle, no new dump, nothing installed). Stale .sgd octree leaves: the DM03A vault ones are
 stale in Dead Men's OWN M03A_Main.sgd (x/z swapped; .HVK agrees with the .gms) - source bug; DM11B/DM05A chopper + DD10 wall are ours.
 Octree FRAME RULE recovered (36/36 trees): centre = MIN corner, scale = 32000 / largest span. kl_members Octree.build/replace + sgd_refresh
@@ -77,10 +81,6 @@ install; next graft build carries it; SHIP out_hirepage_1028 bat still waits. de
 "host accepted" Tommy, round 2 "I wear J.C./Tommy", saved Char ignored, no gun bought. GAP: F06 has no wardrobe model -> "stock body stays" (hire is
 bookkeeping only there); price showed $0. Next: hired body on stock maps without the wardrobe, real hire price. Owner bat C:\kl_build_1024\hirepage_1027 (SHIP 2e2db7c3).
 
-2026-10-28 ~00:50 - [ce] A1HIRE ran 00:23 (owner idle) but reached NO round: its inis lacked [Auto] Enable=1 (klauto never started; Q27 inis carry it). Fixed in the
-staged inis + review (wf_8dcf5187): F12 press before the selector is wrapped was dropped -> kept 3 s now; scripted F12 skips the foreground check (TEST).
-SHIP out_hirepage_1028 2e2db7c3 (now in the owner bat folder), TEST out_hirepage_1028_test cedc7511 (bcf998ae0). Rerun queued, idle-gated (--ini1/--ini2
-C:\kl_build_1024\a1hire_1027\A1HIRE_host/join.ini). Scripted F9 does NOT reach klco_keys: judge the online Char ignore from the worn body, not F9.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
