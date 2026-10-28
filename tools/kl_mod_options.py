@@ -488,10 +488,10 @@ feat('onlineboxspread', G_EXP, 'Online AI heisters: each one walks to its own sp
      'klbotfill.c [BotFill] OnlineBoxSpread: DD08 had 7 bots on one point pushing each other out; NOT run live', [('BotFill', 'OnlineBoxSpread', 1, 0, 0)])
 feat('onlineboxlatch', G_EXP, 'Online AI heisters: one that stood inside the escape box and is still close counts as aboard (recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineBoxLatch (+ OnlineBoxLatchM 1500 cm); NOT run live', [('BotFill', 'OnlineBoxLatch', 1, 0, 0)])
-feat('shoponlineswap', G_EXP, 'Online shop: the Dead Men gun rows hand over the stock gun like in Arcade (recommended off)', 'off', 'start',
+feat('shoponlineswap', G_EXP, 'Online shop: the Dead Men gun rows hand over the Dead Men gun (needs the Shop on and the page II file or the Arm row; recommended off)', 'off', 'start',
      'klshop.c [Shop] OnlineSwap (0 off, 1 on, 2 log only): rows 13/16/32/35 (HK69, Type 81, Rem 700, Minimi); the swap rides klshoppage.c early-make hook; NOT run live', [('Shop', 'OnlineSwap', 1, 0, 0)])
-feat('shoponlineswaptext', G_EXP, 'Shop: the Dead Men gun rows say the gun that is really handed over (Arcade, online, unbaked maps; recommended off)', 'off', 'start',
-     'kllocname.c [Shop] OnlineSwapText (0 off, 1 online: the stock name, 2 = follows the pool, Arcade too); the picture stays the carrier picture stays on an unbaked map; NOT run live', [('Shop', 'OnlineSwapText', 2, 0, 0)])
+feat('shoponlineswaptext', G_EXP, 'Shop: the Dead Men gun rows say the gun that is really handed over (baked maps; recommended off)', 'off', 'start',
+     'kllocname.c [Shop] OnlineSwapText (0 off, 1 online: the stock name, 2 = follows the pool, Arcade too); the picture stays the carrier picture on an unbaked map (DM07, DD10, F01-F09: use on baked maps only; MP45 is not covered); needs [Shop] Enable=1 and [Names] Enable or [HUD] OnlineIntroMapName; NOT run live', [('Shop', 'OnlineSwapText', 2, 0, 0)])
 feat('shoponlineswaparm', G_EXP, 'Online shop gun swap also works without the weapon shop page II file (recommended off)', 'off', 'start',
      'klshoppage.c [Shop] OnlineSwapArm: arms the early-make hook for OnlineSwap when [ShopPage] is off or KLShopPage.ini has no pairs; NOT run live', [('Shop', 'OnlineSwapArm', 1, 0, 0)])
 feat('shoponlineswaplog', G_EXP, 'Online shop gun swap: log the map and the gun handed over per row (bench; recommended off)', 'off', 'start',

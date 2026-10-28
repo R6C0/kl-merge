@@ -210,16 +210,20 @@ static const char *__fastcall kllnm_lookup(void *self, void *edx, const char *fo
                 /* 2026-10-28 [Shop] OnlineSwapText=2 ("name follows the pool", default 0, recommended off until benched; NOT RUN IN THE GAME): the text says the gun the POOL hands over for that row
                    (klshop.c kls_row_ours: ours made and decided, offline too), else the carrier's. The original text is asked first: a baked map already says the swapped name (passed through);
                    an unbaked map (DM07, DD10, F01-F09) says the carrier's, which is replaced. The Desc key is answered only on an unbaked map (the carrier's name in the stock text), a baked
-                   stat block is left alone. GUESS: same key shape as above, never seen live. The picture stays the carrier's on an unbaked map (the hook cannot change it). */
-                int item = kls_row_ours(row); const char *sw = item == 52 ? "HK69" : item == 33 ? "Type 81" : item == 49 ? "Rem 700" : item == 47 ? "Minimi" : 0;
+                   stat block is left alone. GUESS: same key shape as above, never seen live. The picture stays the carrier's on an unbaked map (the hook cannot change it): use mode 2 on baked maps only, MP45 (item 1, row 7) is NOT covered. */
+                int item = 0, rs = kls_row_state(row, &item); const char *sw = item == 52 ? "HK69" : item == 33 ? "Type 81" : item == 49 ? "Rem 700" : item == 47 ? "Minimi" : 0;
                 const char *sd = item == 52 ? "Grenade launcher." : item == 33 ? "Assault rifle." : item == 49 ? "Bolt-action sniper rifle." : item == 47 ? "Light machine gun." : 0;
                 const char *carrier_key = row == 13 ? "TOQ" : row == 16 ? "Buqiang 300" : row == 32 ? "Buqiang 800" : "Buqiang 900";
-                const char *to = 0, *res = orig(self, 0, folder, key, third); char rt[96]; int stockText;
-                rt[0] = 0; if (res) klh_rdstr((DWORD_PTR)res, rt, sizeof rt); rt[sizeof rt - 1] = 0; stockText = strstr(rt, carrier_key) != 0;
-                if (desc) { if (sw && sd && stockText) to = sd; }                     /* unbaked map, ours handed over: one line instead of the carrier's text */
-                else if (sw) { if (stockText) to = sw; }                              /* ours: baked text passes through, the carrier's name is replaced */
-                else if (!item && kl_online() && !stockText) to = nm;                          /* online, the pool hands over the stock gun but the text names another (a baked map): the carrier's name (as =1) */
-                if (to) { static LONG told2; if (InterlockedIncrement(&told2) <= 6) klog("names: OnlineSwapText=2: shop row %d%s answered '%s' (%s; original '%s')", row, desc ? " Desc" : "", to, sw ? "pool hands over ours" : "pool hands over the stock gun", rt); return to; }
+                static BYTE unbaked[36];                                              /* per row: the NAME lookup saw the carrier's name (an unbaked map); the Desc answer follows it (review 10-28: the Desc text rarely holds the gun's name) */
+                const char *to = 0, *res = orig(self, 0, folder, key, third); char rt[96]; int stockText = 0, i;
+                rt[0] = 0; if (res) klh_rdstr((DWORD_PTR)res, rt, sizeof rt); rt[sizeof rt - 1] = 0;
+                for (i = 0; rt[i]; i++) if (!_strnicmp(rt + i, carrier_key, strlen(carrier_key))) { stockText = 1; break; }   /* case-insensitive */
+                if (!res) return res;                                                 /* nothing to replace */
+                if (!desc && row < 36) unbaked[row] = (BYTE)stockText;
+                if (desc) { if (rs == 2 && sd && (stockText || (row < 36 && unbaked[row]))) to = sd; }   /* unbaked map, ours handed over: one line instead of the carrier's text */
+                else if (rs == 2 && sw) { if (stockText) to = sw; }                   /* ours: baked text passes through, the carrier's name is replaced */
+                else if ((rs == 3 || rs == 0) && kl_online() && !stockText && rt[0]) to = nm;   /* decided STOCK (or no pair) online but the text names another gun (a baked map): the carrier's name (as =1); undecided (rs 1) passes through */
+                if (to) { static LONG told2; if (InterlockedIncrement(&told2) <= 6) klog("names: OnlineSwapText=2: shop row %d%s answered '%s' (%s; state %d; original '%s')", row, desc ? " Desc" : "", to, sw ? "pool hands over ours" : "pool hands over the stock gun", rs, rt); return to; }
                 return res;
             }
         }
@@ -307,7 +311,7 @@ static void kllnm_init(void)
     if (kllnm_swt == 2) klog("names: [Shop] OnlineSwapText=2 (NOT run live): shop rows 13/16/32/35 are named after the gun the pool hands over (offline too); an unbaked map's carrier name is replaced");
     en = GetPrivateProfileIntA("Names", "Enable", 0, klh_ini) != 0;
     fb = GetPrivateProfileIntA("HUD", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "OnlineIntroMapName", 1, klh_ini) != 0;      /* [HUD] OnlineIntroMapName (recommended on): the names are read for the online intro card even with [Names] off; nothing is wrapped then */
-    if (!en && !fb) return;
+    if (!en && !fb) { if (kllnm_swt) klog("names: [Shop] OnlineSwapText=%d but neither [Names] Enable nor [HUD] OnlineIntroMapName is on: the lookup is not wrapped, nothing is renamed", kllnm_swt); return; }
     kllnm_log = en && GetPrivateProfileIntA("Names", "Log", 0, klh_ini) != 0;
     kllnm_override = en && GetPrivateProfileIntA("Names", "Override", 0, klh_ini) != 0;
     if (!kls_on) { if (en) klog("names: Enable=1 but [Expansion] is off: there is no slot to rename, nothing is wrapped"); return; }

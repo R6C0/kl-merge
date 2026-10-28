@@ -164,13 +164,13 @@ static int __cdecl klss_vt_pre(DWORD *sp, DWORD self)
     __try {
         DWORD shooter, weapon; float k = 0;
         if (!klss_mode || sp[0] != KLSS_3D_RET || sp[0x2c / 4] != KLSS_3D_OUTER) return 0;      /* not the 3D branch of 0x9025b0 */
+        if (klss_logany && sp[0x8c / 4] == 4 && (sp[0xa0 / 4] != klss_fire_ret || sp[0x88 / 4] != KLSS_9025_FROM503)) {   /* [Sound] RemoteShot2DLogAny (log only): a slot-4 3D shot the gate does not accept (other caller word OR other 0x9025b0 caller); first 8 distinct (caller, from) pairs. Before the FROM503 return: review 10-28 */
+            static DWORD seen[8][2]; static int ns; int i, dup = 0;
+            for (i = 0; i < ns; i++) if (seen[i][0] == sp[0xa0 / 4] && seen[i][1] == sp[0x88 / 4]) dup = 1;
+            if (!dup && ns < 8) { seen[ns][0] = sp[0xa0 / 4]; seen[ns][1] = sp[0x88 / 4]; ns++; klog("shot2d: LogAny: slot-4 3D play from caller %08lx, 0x9025b0 called from %08lx (the gate wants %08lx / %08lx) shooter %08lx weapon %08lx flag %lu: if this is a remote player's shot the gate misses it (GUESS: caller word at sp[0xa0])", (unsigned long)sp[0xa0 / 4], (unsigned long)sp[0x88 / 4], (unsigned long)klss_fire_ret, (unsigned long)KLSS_9025_FROM503, (unsigned long)sp[0x94 / 4], (unsigned long)sp[0x98 / 4], (unsigned long)(sp[0x90 / 4] & 0xff)); }
+        }
         if (sp[0x88 / 4] != KLSS_9025_FROM503) return 0;                                      /* 0x9025b0 from the npc path or another caller */
         shooter = sp[0x94 / 4]; weapon = sp[0x98 / 4];
-        if (klss_logany && sp[0x8c / 4] == 4 && sp[0xa0 / 4] != klss_fire_ret) {   /* [Sound] RemoteShot2DLogAny (log only): a slot-4 3D shot whose caller is NOT the fire path the gate accepts; first 8 distinct callers */
-            static DWORD seen[8]; static int ns; int i, dup = 0;
-            for (i = 0; i < ns; i++) if (seen[i] == sp[0xa0 / 4]) dup = 1;
-            if (!dup && ns < 8) { seen[ns++] = sp[0xa0 / 4]; klog("shot2d: LogAny: slot-4 3D play from caller %08lx (the gate wants %08lx) shooter %08lx weapon %08lx flag %lu: if this is a remote player's shot the gate misses it (GUESS: caller word at sp[0xa0])", (unsigned long)sp[0xa0 / 4], (unsigned long)klss_fire_ret, (unsigned long)shooter, (unsigned long)weapon, (unsigned long)(sp[0x90 / 4] & 0xff)); }
-        }
         if (sp[0x8c / 4] != 4 || (sp[0x90 / 4] & 0xff) != 0 || sp[0xa0 / 4] != klss_fire_ret || sp[0x50 / 4] != shooter || sp[0x54 / 4] != weapon || !shooter) {
             if (sp[0x8c / 4] == 4 && sp[0xa0 / 4] == klss_fire_ret && InterlockedIncrement(&klss_n_stack_bad) <= 5)
                 klog("shot2d: vtable route: slot-4 3D play from the fire path but the stack does not match (slot %lu flag %lu shooter %08lx/%08lx weapon %08lx/%08lx); not touched", (unsigned long)sp[0x8c / 4], (unsigned long)sp[0x90 / 4], (unsigned long)shooter, (unsigned long)sp[0x50 / 4], (unsigned long)weapon, (unsigned long)sp[0x54 / 4]);
