@@ -1006,19 +1006,24 @@ static int klbf_feet(DWORD P, float f[3], int *src)
    The Arcade klescort path (klb_read crew records) is untouched. */
 static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sold, const float (*pos)[3], int nb, int vstate)
 {
-    DWORD ents = 0, own = 0; int n = 0, how = 0, oi, i, b, nh = 0, ownH = -1, hseat[16], nTab = 0, nHeist = 0, nDead = 0, nNoFeet = 0, srcNow[16]; float hp[16][3]; static int toldNone, toldRound, toldSrc; static DWORD toldAt;
+    DWORD ents = 0, own = 0; int n = 0, how = 0, oi, i, b, nh = 0, ownH = -1, hseat[16], nTab = 0, nHeist = 0, nDead = 0, nNoFeet = 0, srcNow[16], allDeadRetry; float hp[16][3]; static int toldNone, toldRound, toldSrc, toldAllDead; static DWORD toldAt;
     if (!klbf_esc || nb <= 0) return;
     if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; toldSrc = 0; }
     if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: escort: online: the session player table is not readable: no escort this round yet (said once)"); return; }
     oi = klco_find_own(ents, n, now, &own, &how);
+    for (allDeadRetry = 0; allDeadRetry < 2; allDeadRetry++) {      /* wk-botpar: BP1 read 8 of 8 heisters dead all round while bots fought; when every heister reads dead the health read is not trusted and the pass goes again on the feet alone */
+    nh = 0; nTab = 0; nHeist = 0; nDead = 0; nNoFeet = 0; ownH = -1;
     for (i = 0; i < n && nh < 16; i++) {
         DWORD P = klco_ent(ents, n, i), h; float f[3], hv = 1.0f; int sr = 0;
         if (P) nTab++;
         if (!P || !klco_heister(P)) continue;
         nHeist++;
-        if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0 && klh_rd32(h + 0x24) == P) { nDead++; continue; }      /* dead / down (GUESS as klucc.c kluc_alive_heister: unreadable = alive). wk-botpar BP1 20:52:28 (round start, state 0x19): all 8 heisters read 0 and counted dead, and no human was ever read that round. GUESS: before the spawn is finished the health object is a blank one whose back-pointer [h+0x24] is not the entity (as klbotdown.c / klbalance.c check for NPCs), so only a health object that points back at this entity counts as 'dead' */
+        if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0 && !allDeadRetry) { nDead++; continue; }      /* dead / down (GUESS as klucc.c kluc_alive_heister: unreadable = alive). wk-botpar BP1 20:52:28 (round start, state 0x19): all 8 heisters read 0 and counted dead, and no human was ever read that round. GUESS: before the spawn is finished the health object is a blank one whose back-pointer [h+0x24] is not the entity (as klbotdown.c / klbalance.c check for NPCs), so only a health object that points back at this entity counts as 'dead' */
         if (!klbf_feet(P, f, &sr)) { nNoFeet++; continue; }      /* OnlineEscortNode: node first, +0x460 fallback; off = +0x460 only (the old test) */
         memcpy(hp[nh], f, 12); hseat[nh] = i; srcNow[nh] = sr; if (i == oi) ownH = nh; nh++;
+    }
+    if (!(nHeist > 0 && nDead == nHeist)) break;
+    if (!allDeadRetry && !toldAllDead++) klog("botfill: escort: all %d heister(s) read dead / down: the health read is not trusted, trying the feet alone (said once)", nHeist);
     }
     if (!toldSrc && nh) { toldSrc = 1; klog("botfill: escort: feet source this round (OnlineEscortNode=%d): %d human(s) read, host seat %s; seat sources:%s%s%s%s", klbf_esn, nh, ownH >= 0 ? (srcNow[ownH] == 1 ? "by the scene node" : "by +0x460 (node unusable)") : "not read", srcNow[0] == 1 ? " node" : " +0x460", nh > 1 ? (srcNow[1] == 1 ? " node" : " +0x460") : "", nh > 2 ? (srcNow[2] == 1 ? " node" : " +0x460") : "", nh > 3 ? " ..." : ""); }
     if (!nh || (klbf_esc == 1 && ownH < 0)) {
@@ -1076,8 +1081,8 @@ static int klbf_gu_style(DWORD soldier, int on)
     DWORD blk = klh_rd32(soldier + 0x64c), sp = 2, cur = 0; BYTE one = 1, zero = 0;
     if (!blk || klh_rd32(blk + 0x14) != soldier) return 0;
     if (!on) return klh_data((void *)(DWORD_PTR)(blk + 0x10), &zero, 1, "defend block style given (OnlineGetUpSprint undone)") ? 1 : 0;
-    if (klh_rd(blk + 0xc, &cur, 4) && cur == sp) return 1;
-    return klh_data((void *)(DWORD_PTR)(blk + 0xc), &sp, 4, "defend block move style (OnlineGetUpSprint)") && klh_data((void *)(DWORD_PTR)(blk + 0x10), &one, 1, "defend block style given (OnlineGetUpSprint)") ? 1 : 0;
+    if (!(klh_rd(blk + 0xc, &cur, 4) && cur == sp) && !klh_data((void *)(DWORD_PTR)(blk + 0xc), &sp, 4, "defend block move style (OnlineGetUpSprint)")) return 0;      /* wk-botpar: +0x10 is written every time (the undo clears it, +0xc stays at 2) */
+    return klh_data((void *)(DWORD_PTR)(blk + 0x10), &one, 1, "defend block style given (OnlineGetUpSprint)") ? 1 : 0;
 }
 
 /* [BotFill] OnlineGetUp (wk-getup-1028, re/bot_getup_online.md; static, NOT RUN live). Arcade's get-up help is the mod's own (kladren.c: Rush + the meter pull), never stock (the stock healer ZHealTactic
@@ -1092,12 +1097,12 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
     float rep[16][3]; int rok[16], bsd[16], ownIdx = -1; float bsp[16][3];      /* wk-getup2-1028: replica places, and the beacon verdicts mapped to table indexes */
     if (!klbf_gu || nb <= 0) return;
     if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; memset(hdown, 0, sizeof hdown); memset(hAt, 0, sizeof hAt); memset(klgb_seats, 0, sizeof klgb_seats); memset(toldMap, 0, sizeof toldMap); }
-    if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: getup: the session player table is not readable: no get-up help this round yet (said once)"); return; }
     for (s = 0; s < KLBF_OT_BOTS; s++) if (klbf_ob[s].guSp && (!klbf_ob[s].guHum || now - klbf_ob[s].guAt >= 3500)) {      /* OnlineGetUpSprint undone with the release */
         for (b = 0; b < nb && act[b] != klbf_ob[s].actor; b++) ;
         if (b < nb) klbf_gu_style(sold[b], 0);
         klbf_ob[s].guSp = 0; klog("botfill: getup: bot %d: Sprint style undone (OnlineGetUpSprint)", s);
     }
+    if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: getup: the session player table is not readable: no get-up help this round yet (said once)"); return; }
     for (s = 0; s < KLBF_OT_BOTS; s++) if (klbf_ob[s].guHum && now - klbf_ob[s].guAt >= 3500) { klog("botfill: getup: bot %d released (seat %d: not down any more or the rush lapsed)", s, klbf_ob[s].guHum - 1); klbf_ob[s].guHum = 0; klbf_ob[s].guAt = 0; klbf_ob[s].guOrd = 0; }
     memset(rok, 0, sizeof rok); memset(bsd, 0, sizeof bsd);
     if (klgb_on) {      /* the beacons (klgetupbeacon.c): read each heister replica's place, check the beacon's table index against it, else the nearest replica (GUESS: the index is equal on both peers) */
