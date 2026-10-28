@@ -66,7 +66,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first).
 
-2026-10-28 ~15:30 - [ce] WEEK BUILD on rtp-schemas (05cf39e22), all keys default 0, NOT RUN: bots fire cop-wave trigger boxes online, take/bank/board-all, bot loot
+2026-10-28 ~12:40 - [ce] WEEK BUILD on rtp-schemas (05cf39e22), all keys default 0, NOT RUN: bots fire cop-wave trigger boxes online, take/bank/board-all, bot loot
 credited to the real online score; keys map + MOD CONTROLS page; full online gun swap. Bench dll C:\kl-merge\wt\wk-merge\klhook\out_week_1028c_test;
 WK1 (dry) + WK2 (live) staged in C:\kl_build_1024\week_1028\RUN_week_1028.txt, queued after c9's benches. Plan: re/week_plan_1028.md.
 
