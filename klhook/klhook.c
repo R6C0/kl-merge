@@ -813,6 +813,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klcharonline.c"                               /* klcharonline.c: [CharOnline] every player's heister/mask/outfit on every peer (off unless Enable=1); AFTER klchar.c / klmm.c / klslot.c */
 #include "klsync.c"                                    /* klsync.c: [Sync] read-only probe + host list compare of actors / world objects per peer (off unless set); AFTER klcensus.c, klcharonline.c */
 #include "kllootsync.c"                              /* kllootsync.c: [BotFill] OnlineLootSync=1 - the host sends the AI heisters' loot (KLSYB), every seat shows it on the announcement line (off unless set); AFTER klsync.c, klbotfill.c, klannounce.c */
+#include "klsteamprobe.c"                           /* klsteamprobe.c: [Net] SteamProbe=1 - log-only look at the Steam networking interface and the peer table (off unless set); AFTER klsync.c */
 #include "klcrewlook.c"                              /* klcrewlook.c: [BotFill] OnlineLooks=1 - the host draws each Ally bot's Arcade look, KLSYL carries it, every seat applies it (off unless OnlineLooks=1); AFTER klsync.c, klbotfill.c, klcrew.c, klcharonline.c */
 #include "klbotvoice.c"                              /* klbotvoice.c: [BotFill] OnlineVoice - the host sends the AI heisters' event lines (KLSYV), every seat plays them (off unless 1 / 2); AFTER klsync.c, klbotfill.c, kltalk.c, klcrewlook.c */
 #include "klgetupbeacon.c"                              /* klgetupbeacon.c: [BotFill] OnlineGetUpBeacon - a downed machine tells the host (KLSYD) so the bots can come (off unless 1); AFTER klsync.c, klbotfill.c, klcharonline.c, klbotvoice.c */
@@ -1301,6 +1302,7 @@ static void klh_tick(int game_thread)
     kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
     klho_tick(game_thread);                           /* klhostopt.c: [HostOpts] (off unless Enable=1) */
     klco_tick(game_thread);                           /* klcharonline.c: [CharOnline] (off unless Enable=1) */
+    klsp_tick(game_thread);                           /* klsteamprobe.c: [Net] SteamProbe (log only) */
     klsy_tick(game_thread);                           /* klsync.c: [Sync] probe / host list (off unless set) */
     knc_tick(game_thread);                            /* klnetchan.c: the shared message channel (idle unless a module wants it) */
     kluc_tick(game_thread);                           /* klucc.c: [Ucc] suspicion messages (off unless Pings=1 or Accuse=1) */
@@ -1773,6 +1775,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kmp_init();                                       /* klmappool.c: [MapPool] (off unless Enable=1); before klho_init, which carries the host's pool to the clients */
     klho_init();                                      /* klhostopt.c: after kls_init (kls_online_set) and klbf_init / kllb_init */
     klco_init();                                      /* klcharonline.c: after klc_init (it reads the choice) */
+    klsp_init();                                      /* klsteamprobe.c: reads [Net] SteamProbe */
     klsy_init();                                      /* klsync.c: reads [Sync] */
     kluc_init();                                      /* klucc.c: reads [Ucc]; asks klnetchan.c for the channel when on */
     klucc_init();                                     /* klucchide.c: reads [Ucc] Hide; asks klnetchan.c for the channel when on */

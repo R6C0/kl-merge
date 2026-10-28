@@ -452,6 +452,9 @@ feat('nettune', G_EXP, 'Send player moves more often online (3x stock; every pla
      'only the SENDER\'s numbers count; more upload; refused on ranked joins and stock maps; not benched yet',
      [('Net', 'Tune', 1, 0, 0), ('Net', 'TuneClient', 1, 0, 0), ('Net', 'PlayerMs', 33, None, -1),
       ('Net', 'RefreshMs', 250, None, -1), ('Net', 'PosTol', 5, None, -1), ('Net', 'AngTol', 10, None, -1)])
+feat('steamprobe', G_EXP, 'Log what Steam networking offers online (log only, sends nothing; recommended off)', 'off', 'start',
+     'klsteamprobe.c [Net] SteamProbe: once per game start logs the steam_api exports, the SteamNetworking005/004 pointers and the peer table ids (steamprobe: lines in KLHook.log); for a two-PC internet test, re/side_channel_steam.md; not run live',
+     [('Net', 'SteamProbe', 1, 0, 0)])
 feat('watchdog', G_EXP, 'Watchdog for a stuck AI heister', 'off', 'start',
      'not run in the game', [('QoL2', 'Watchdog', 1, 0, 0)])
 feat('names', G_EXP, 'Dead Men map names in the Arcade lists', 'off', 'start',
