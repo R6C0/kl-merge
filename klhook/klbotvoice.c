@@ -29,11 +29,17 @@
 #include "klbotvoice_logic.h"
 
 static struct {
-    DWORD sm; int round, seq, rxN, toldHold;
+    DWORD sm; int round, rxN, toldHold;
     struct { struct klbv_pk pk; int left; DWORD at; } pend[4];
     struct klbv_seqs sq; struct klbv_gaps gaps;
-    DWORD escActor[16]; int role, srcSet; unsigned long srcAddr;
+    DWORD escActor[16]; int role, srcSet; unsigned long srcAddr; DWORD srcOkAt; unsigned lastT; int haveT;
 } klbv_t;
+
+/* HOST seq: kept across rounds (monotonic per session, so a client that never left the state window still takes round 2's packets); zeroed only when the session object changes */
+static int klbv_seq; static DWORD klbv_seqSm;
+/* log throttle per reason class (0 digit, 1 rules, 2 template, 3 gap, 4 queue, 5 host hold, 6 key read, 7 host gap, 8 pin): the first 10, then every 20th, so a flood of packets does not flood the log; not cleared by klbv_reset */
+static unsigned klbv_logN[16];
+static int klbv_note(int cls) { unsigned n = klbv_logN[cls & 15]++; return n < 10 || n % 20 == 0; }
 
 /* klbv_mode and klbv_tl (the key templates) are klbotfill.c's, read in klbf_init */
 
@@ -41,17 +47,17 @@ static const char *klbv_ev_name(int ev) { return ev == KLBV_EV_LOOT ? "loot" : e
 
 static void klbv_reset(void)
 {
-    if (!klbv_t.sm && !klbv_t.seq && !klbv_t.sq.have && !klbv_t.rxN) return;
+    if (!klbv_t.sm && !klbv_t.sq.have && !klbv_t.rxN && !klbv_t.pend[0].left && !klbv_t.escActor[0]) return;
     memset(&klbv_t, 0, sizeof klbv_t);
 }
 
-/* the session: role 2 host / 3 client, mode 4, state 0x13..0x19 (a round is on). 0 = not now. */
+/* the session: role 2 host / 3 client, mode 4, state 0x13..0x1f (a round is on; the window matches klsy_tick's, so a final event at settlement is not lost). 0 = not now. */
 static int klbv_round(DWORD *smOut, DWORD *roleOut)
 {
     DWORD sm, role = 0, mode = 0, state = 0;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) return 0;
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4)) return 0;
-    if ((role != 2 && role != 3) || mode != 4 || state < 0x13 || state > 0x19) return 0;
+    if ((role != 2 && role != 3) || mode != 4 || state < 0x13 || state > 0x1f) return 0;
     *smOut = sm; *roleOut = role;
     return 1;
 }
@@ -84,13 +90,14 @@ static int klbv_make_key(int ev, int digit, char *key, int cap)
 static int klbv_play(const char *seat, int ev, int digit, unsigned now, int check_gap)
 {
     char scene[160], lk[64], key[200]; DWORD gs, rules; int r;
-    if (!klbv_digit_ok(digit)) { klog("botvoice: %s event %d digit %d: not played (digit not in the OnlineLooks table / range)", seat, ev, digit); return 0; }
+    if (!klbv_digit_ok(digit)) { if (klbv_note(0)) klog("botvoice: %s event %d digit %d: not played (digit not in the OnlineLooks table / range)", seat, ev, digit); return 0; }
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLW_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, lk, sizeof lk)) {
-        klog("botvoice: %s event %d digit %d: not played (rules object / scene not readable)", seat, ev, digit); return 0;
+        if (klbv_note(1)) klog("botvoice: %s event %d digit %d: not played (rules object / scene not readable)", seat, ev, digit);
+        return 0;
     }
-    if (!klbv_key(key, sizeof key, klbv_tl[ev == KLBV_EV_LOOT ? 0 : 1], lk, digit)) { klog("botvoice: %s event %d: key template too long", seat, ev); return 0; }
-    if (check_gap && !klbv_gap_ok(&klbv_t.gaps, digit, ev, now)) { klog("botvoice: %s event %d digit %d key %s: held back (gap: 15 s per bot and event, 2 s between lines)", seat, ev, digit, key); return 0; }
-    if (klbv_queue_full()) { klog("botvoice: %s event %d digit %d key %s: held back (speech queue > 8 or unreadable)", seat, ev, digit, key); return 0; }
+    if (!klbv_key(key, sizeof key, klbv_tl[ev == KLBV_EV_LOOT ? 0 : 1], lk, digit)) { if (klbv_note(2)) klog("botvoice: %s event %d: key template too long", seat, ev); return 0; }
+    if (check_gap && !klbv_gap_ok(&klbv_t.gaps, digit, ev, now)) { if (klbv_note(3)) klog("botvoice: %s event %d digit %d key %s: held back (gap: 15 s per bot and event, 2 s between lines)", seat, ev, digit, key); return 0; }
+    if (klbv_queue_full()) { if (klbv_note(4)) klog("botvoice: %s event %d digit %d key %s: held back (speech queue > 8 or unreadable)", seat, ev, digit, key); return 0; }
     r = klk_say(key, -6, 0.0f, "bot voice (OnlineVoice)", rules, scene);      /* -6 = the crew speaker object [this+0xe0] of 0x7d0e80: GUESS, unconfirmed on a client with no record */
     klog("botvoice: %s say event %d (%s) digit %d key %s -> klk_say %d", seat, ev, klbv_ev_name(ev), digit, key, r);
     return r;
@@ -99,30 +106,33 @@ static int klbv_play(const char *seat, int ev, int digit, unsigned now, int chec
 /* HOST: a bot of slot s (klbf_ob) did event ev. Called from klbotfill.c on the game thread. */
 static void klbv_event(int slot, int ev)
 {
-    char nm[28], dg = 0, key[200]; DWORD sm, role, a, now = GetTickCount(); int digit, i;
+    char nm[28], dg = 0, key[200]; DWORD sm, role, a, now = GetTickCount(); int digit, i, esc;
     if (!klbv_mode || slot < 0 || slot >= KLBF_OT_BOTS || ev < 1 || ev >= KLBV_NEV) return;
     if (!klbv_round(&sm, &role) || role != 2) return;
+    if (klbv_seqSm != sm) { klbv_seq = 0; klbv_seqSm = sm; }      /* seq stays monotonic across rounds of one session */
     if (klbv_t.sm != sm || klbv_t.round != (int)klbf_ot_rounds) { klbv_reset(); klbv_t.sm = sm; klbv_t.round = (int)klbf_ot_rounds; }
     klbv_t.role = 2;
     a = klbf_ob[slot].actor;
     if (!a) return;
     klbf_lk_name(a, nm, &dg); digit = dg >= '0' && dg <= '9' ? dg - '0' : 0;
-    if (!klbv_digit_ok(digit)) { if (klbv_t.toldHold++ < 10) klog("botvoice: HOST event %d slot %d: held back (group digit %d is not 2..8, or not in the OnlineLooks table)", ev, slot, digit); return; }
-    if (ev == KLBV_EV_ESCAPE) {      /* boarded: once per actor and round */
+    if (!klbv_digit_ok(digit)) { if (klbv_note(5)) klog("botvoice: HOST event %d slot %d: held back (group digit %d is not 2..8, or not in the OnlineLooks table)", ev, slot, digit); return; }
+    esc = -1;
+    if (ev == KLBV_EV_ESCAPE) {      /* boarded: once per actor and round; the actor is recorded only once the event is sent / logged (below), so a held-back bot retries on the next tick */
         for (i = 0; i < 16 && klbv_t.escActor[i] && klbv_t.escActor[i] != a; i++) ;
         if (i >= 16 || klbv_t.escActor[i] == a) return;
-        klbv_t.escActor[i] = a;
+        esc = i;
     }
-    if (!klbv_make_key(ev, digit, key, sizeof key)) { klog("botvoice: HOST event %d digit %d: held back (scene / level key not readable)", ev, digit); return; }
-    if (!klbv_gap_ok(&klbv_t.gaps, digit, ev, now)) { klog("botvoice: HOST event %d digit %d key %s: held back (gap)", ev, digit, key); return; }
+    if (!klbv_make_key(ev, digit, key, sizeof key)) { if (klbv_note(6)) klog("botvoice: HOST event %d digit %d: held back (scene / level key not readable), retried", ev, digit); return; }
+    if (!klbv_gap_ok(&klbv_t.gaps, digit, ev, now)) { if (klbv_note(7)) klog("botvoice: HOST event %d digit %d key %s: held back (gap), retried on a later tick", ev, digit, key); return; }
+    if (esc >= 0) klbv_t.escActor[esc] = a;
     if (klbv_mode == 2) { klog("botvoice: DRY would send event %d (%s) digit %d key %s (no packet, nothing played)", ev, klbv_ev_name(ev), digit, key); return; }
     for (i = 0; i < 4 && klbv_t.pend[i].left; i++) ;
     if (i < 4) {
         struct klbv_pk *p = &klbv_t.pend[i].pk;
-        klbv_t.seq = klbv_next_seq(klbv_t.seq);
-        p->T = (DWORD)klsy_T(); p->seq = klbv_t.seq; p->ev = ev; p->digit = digit; p->var = 1;
+        klbv_seq = klbv_next_seq(klbv_seq);
+        p->T = (DWORD)klsy_T(); p->seq = klbv_seq; p->ev = ev; p->digit = digit; p->var = 1;
         klbv_t.pend[i].left = 3; klbv_t.pend[i].at = now;
-        klog("botvoice: HOST event %d (%s) digit %d seq %d: queued, key %s", ev, klbv_ev_name(ev), digit, klbv_t.seq, key);
+        klog("botvoice: HOST event %d (%s) digit %d seq %d: queued, key %s", ev, klbv_ev_name(ev), digit, klbv_seq, key);
     } else klog("botvoice: HOST event %d digit %d: send queue full, not sent to the clients", ev, digit);
     klbv_play("HOST", ev, digit, now, 0);
 }
@@ -152,9 +162,23 @@ static void klbv_rx(const char *pk, int len, DWORD now, unsigned long from)
     if (!klbv_round(&sm, &role) || role != 3) return;
     if (klbv_t.sm != sm) { klbv_reset(); klbv_t.sm = sm; }
     klbv_t.role = 3;
-    if (klbv_t.srcSet && from != klbv_t.srcAddr) return;      /* the host that sent the first valid packet of the round */
+    /* the source pin: the sender of the first valid packet. The session host's address is not readable here (GUESS: no known field), so a mismatch is logged and the pin moves to the new sender after 10 s without a packet from the pinned one */
+    if (klbv_t.srcSet && from != klbv_t.srcAddr) {
+        if ((DWORD)(now - klbv_t.srcOkAt) < 10000) { if (klbv_note(8)) klog("botvoice: CLIENT packet from %lu.%lu.%lu.%lu ignored: the pinned source is %lu.%lu.%lu.%lu", from & 255, from >> 8 & 255, from >> 16 & 255, from >> 24, klbv_t.srcAddr & 255, klbv_t.srcAddr >> 8 & 255, klbv_t.srcAddr >> 16 & 255, klbv_t.srcAddr >> 24); return; }
+        klog("botvoice: CLIENT source re-pinned to %lu.%lu.%lu.%lu (nothing from %lu.%lu.%lu.%lu for 10 s)", from & 255, from >> 8 & 255, from >> 16 & 255, from >> 24, klbv_t.srcAddr & 255, klbv_t.srcAddr >> 8 & 255, klbv_t.srcAddr >> 16 & 255, klbv_t.srcAddr >> 24);
+        klbv_t.srcSet = 0; memset(&klbv_t.sq, 0, sizeof klbv_t.sq); klbv_t.haveT = 0;
+    }
     if (!klbv_t.srcSet) { klbv_t.srcSet = 1; klbv_t.srcAddr = from; }
+    klbv_t.srcOkAt = now;
+    /* a digit not (yet) in the OnlineLooks table (its KLSYL record can arrive after this packet): do not spend the seq; the repeats 100 / 200 ms later retry */
+    if (!klbv_digit_ok(k.digit)) { if (klbv_note(0)) klog("botvoice: CLIENT seq %d digit %d: not in the OnlineLooks table / range yet, not taken (a repeat retries)", k.seq, k.digit); return; }
     take = klbv_seq_take(&klbv_t.sq, k.seq);
+    /* T far behind the last taken T on a packet the book calls repeat / stale = a restarted host (new seq run): reset the book (T is ms modulo 1e9; GUESS thresholds 30 s .. 500e6 ms) */
+    if (!take && klbv_t.haveT && klbv_t.lastT - k.T > 30000u && klbv_t.lastT - k.T < 500000000u) {
+        klog("botvoice: CLIENT seq %d T=%lu is far behind the last T=%u: the host restarted, seq book reset", k.seq, (unsigned long)k.T, klbv_t.lastT);
+        memset(&klbv_t.sq, 0, sizeof klbv_t.sq); memset(&klbv_t.gaps, 0, sizeof klbv_t.gaps); take = klbv_seq_take(&klbv_t.sq, k.seq);
+    }
+    if (take) { klbv_t.lastT = k.T; klbv_t.haveT = 1; }
     if (klbv_t.rxN < 10 || klbv_t.rxN % 20 == 0)
         klog("botvoice: CLIENT rx #%d seq %d event %d digit %d T=%lu from %lu.%lu.%lu.%lu: %s (taken %u, repeats %u, stale %u, lost %u)", klbv_t.rxN, k.seq, k.ev, k.digit, (unsigned long)k.T, from & 255, from >> 8 & 255, from >> 16 & 255, from >> 24,
              take ? "taken" : "dropped", klbv_t.sq.taken, klbv_t.sq.repeats, klbv_t.sq.stale, klbv_t.sq.lost);
