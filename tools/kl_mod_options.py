@@ -298,6 +298,8 @@ feat('onlinecoptobot', G_EXP, 'Online AI heisters take cop bullets like Arcade (
      'klbalance.c [BotFill] OnlineCopToBot (percent, 5 = CopToCrew 0.05, 1 = stock Arcade level 1); private ZFFActor vtable per bot, slot 423 wrapped, data only; re/online_bot_damage.md; NOT run live', [('BotFill', 'OnlineCopToBot', 5, 0, 5)])
 feat('onlinepbcap', G_EXP, 'Online AI heisters cannot be melted by point-blank bursts (hp cap per second; needs the host bot options; recommended on)', 'on', 'start',
      'klbalance.c [BotFill] OnlinePointBlankCap (hp per bot per 1 s window, 250 = GUESS, 0 = off); inside the OnlineCopToBot slot-423 wrapper; BO10; NOT run live', [('BotFill', 'OnlinePointBlankCap', 250, 0, 250)])
+feat('onlinebalance', G_EXP, 'Online AI heisters take a human bullets with the Arcade factor, host only (recommended off; needs the host bot options; 2 = dry run)', 'off', 'start',
+     'klbalance.c [Balance] Online=0|1|2 (+ OnlineYouToCrew, CopToCrew); needs [BotFill] OnlineHost=1 and OnlineTactics=1; slot-423 wrapper, data only; whether a client human shot reaches the host is unknown (bench BAL1); NOT run live', [('Balance', 'Online', 1, 0, 0)])
 feat('onlinepbrefund', G_EXP, 'Online AI heisters get back point-blank hp that went past the cap (recommended on)', 'on', 'start',
      'klbalance.c [BotFill] OnlinePointBlankRefund; health data write after the step, never above the hp before it; BO11 869 hp window; NOT run live', [('BotFill', 'OnlinePointBlankRefund', 1, 0, 1)])
 feat('onlineguardtake', G_EXP, 'Online AI heisters walk into a guarded loot stack after 30 s of waiting (recommended off)', 'off', 'start',
@@ -472,6 +474,8 @@ feat('onlinetactics', G_EXP, 'Online host: AI heisters go for the loot and then 
      'klbotfill.c [BotFill] OnlineTactics: hook puppeteer, host only, needs OnlineHost=1; NOT run live', [('BotFill', 'OnlineTactics', 1, 0, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinetacticstake', G_EXP, 'Online host: loot the AI heisters grab is taken out of the stack (needs the row above; recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineTacticsTake 2 = the game\'s own depletion routine on the host (1 = a guessed plain write); NOT run live', [('BotFill', 'OnlineTacticsTake', 2, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinelootparts', G_EXP, 'AI heisters loot in timed parts like Arcade (needs the two rows above; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineLootParts (1 on, 2 log only): timed parts while the bot stands at the stack; NOT run live; stack fields +0x40/+0x44 are a GUESS', [('BotFill', 'OnlineLootParts', 1, 0, 0), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinetriggers', G_EXP, 'Online host: AI heisters set off the police-wave and door trigger boxes like in Arcade (needs the AI heister rows above; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineTriggers (1 = fire, 2 = log only): a bot is never a "player" to a ZTriggerBox online; run live 10-28 (WK2 bench); the ini default stays 0', [('BotFill', 'OnlineTriggers', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinebank', G_EXP, 'Online host: loot carried by AI heisters is counted in a bank and credited to the team score when a human escapes (needs the loot-taking row above; recommended off)', 'off', 'start',
