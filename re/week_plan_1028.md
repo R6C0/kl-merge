@@ -23,6 +23,7 @@ Owner wants every mod feature reachable on a sensible key and shown on screen (s
 Owner: ce.
 
 ### T2 Maps work on both sides (host and client), all maps
+- 10-28 14:00 c9: A1TALK_DM01 + A1TALK_DD04 PASS (crew banter plays online on both seats, host 4 lines / client 3, 0 faults; TEST out_c9talk_1028_test 89117d7e). A1SHIFT run 1 invalid (botgate loaded the unshifted bots.zip -> DM11S bots companion 6c3f59315). A1SHIFT2 FAIL load crash kl2+0x1c6901 = stale .prm type-7 octree refs after the .oct shrank (fixed 723e78443). A1SHIFT3 FAIL: both seats in round, then c0000094 divide by zero at kl2+0x4668b (host 143 s, client 99 s); triage workflow wkthgj0ax (worktree C:\kl_wt\div0). DM11B + ship dll f520f5d1 restored; game handed to ce.
 - 10-28 13:35 c9 benches (--owner-away, 0 faults each): A1NET PARTIAL (A1NET1/A1NET0 both seats in round, clean; netsmooth/tune criteria not met: only the host walks, needs a client input script). A1HIRE2 PARTIAL (out_week_1028f_test, DD06: paid hire works online, price on the name line, round-2 bodies J.C./Tommy worn; NOT proven: money after the hire read back, and no "charonline: stock hero" line, so StockHero=1 unconfirmed). A1SHIFT running 13:36 (ce paused its queue), A1TALK next.
 - 10-28 12:45 c9 A1SND PARTIAL PASS: music/ambience/stinger Loud/voice lines run online on DM01 + DD04 (0 faults); crew banter (kltalk) still silent online. See open_work_log.
 - [ ] 2-seat bench per map (DD 9 stock FA + every DM/graft map), host and client both reach round 2, 0 faults.
