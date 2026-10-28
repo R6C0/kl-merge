@@ -1054,7 +1054,7 @@ static struct {
     volatile LONG pbcapped, tot_pbcapped, pb_m;      /* 5 s: point-blank steps scaled down, hp the point-blank steps took (milli-hp) */
     /* [Balance] Online=0|1|2 (2026-10-28, wk-bal): the Arcade [Balance] factors that can act on the HOST for a bot victim. on 1 = apply, 2 = count and log only. you = [Balance] OnlineYouToCrew (human -> bot) */
     int on; float you; int cfg_cop;      /* cfg_cop: [Balance] CopToCrew was set (Online=1 then replaces OnlineCopToBot's k) */
-    volatile LONG you_hits, you_scaled, you_other, you_lost_m, you_would_m, you_tot; DWORD you_vt, you_vtn, you_told;      /* you_vt: the last attacker vtable that was neither ZFFActor nor ZFFPlayer (a client's shot?), you_vtn how many */
+    volatile LONG you_fail, you_cop, you_hits, you_scaled, you_other, you_lost_m, you_would_m, you_tot; DWORD you_vt, you_vtn, you_told;      /* you_vt: the last attacker vtable that was neither ZFFActor nor ZFFPlayer (a client's shot?), you_vtn how many */
 } klr_cb;
 #define klr_cb_vt (klr_cb.blk + 1)
 static int klbf_pb_is_bot(DWORD actor);
@@ -1116,16 +1116,25 @@ static void __fastcall klr_cb_hit(void *self, void *edx, DWORD hit)      /* this
         /* GUESS: a remote human's bullet reaches this host-side slot with a ZFFPlayer attacker, or with a puppet / other class (then it counts in you_other and the vtable is logged once); the bench (Online=2) tells */
         if (klh_pvt(att) == KLR_PLAYER_VT && klh_rd(hit + 0x18, &f, 4) && f == f && f > 0) {
             InterlockedIncrement(&klr_cb.you_hits); InterlockedIncrement(&klr_cb.you_tot);
-            if (klr_cb.on == 1 && klr_cb.you > 0 && klr_cb.you != 1.0f) {
-                nf = f * klr_cb.you;
+            {   /* review 3: a human COP (ZFFPlayer with [pl+0x2723] set) gets the cop->bot factor k (CopToCrew), a human heister YouToCrew; GUESS: the byte is the same police flag read at the player-state sites above */
+                BYTE pol = 0; float fac = klr_cb.you; int copk = klh_rd(att + 0x2723, &pol, 1) && pol && klr_cb.k > 0;
+                if (copk) { fac = klr_cb.k; InterlockedIncrement(&klr_cb.you_cop); }
+                if (klr_cb.on == 1 && fac >= 0 && fac != 1.0f) {
+                nf = f * fac;
+                if (nf <= 0) nf = 0.0001f;      /* review 2: a factor of 0 = no damage in Arcade; a literal 0.0 scale might be handled oddly by the game (GUESS), so a token 0.0001 */
                 if (klh_data((void *)(DWORD_PTR)(hit + 0x18), &nf, 4, "human->bot hit scale (Balance Online YouToCrew)")) {
                     h0 = klr_cb_hp(a); orig(self, 0, hit); klh_data((void *)(DWORD_PTR)(hit + 0x18), &f, 4, "human->bot hit scale back (Balance Online YouToCrew)"); h1 = klr_cb_hp(a);
                     InterlockedIncrement(&klr_cb.you_scaled);
-                    if (h0 > h1 && h1 >= 0) { LONG l = (LONG)((h0 - h1) * 1000.0f); InterlockedExchangeAdd(&klr_cb.you_lost_m, l); InterlockedExchangeAdd(&klr_cb.you_would_m, (LONG)((double)l / klr_cb.you)); }
+                    if (h0 > h1 && h1 >= 0) { LONG l = (LONG)((h0 - h1) * 1000.0f); InterlockedExchangeAdd(&klr_cb.you_lost_m, l); InterlockedExchangeAdd(&klr_cb.you_would_m, (LONG)((double)l / (fac > 0 ? fac : 0.0001f))); }
                     if (klr_cb.you_tot <= 5) klog("balance: Online YouToCrew APPLIED #%ld: human %08lx hit bot %08lx, hit scale %.3f -> %.3f, bot hp %.1f -> %.1f", klr_cb.you_tot, (unsigned long)att, (unsigned long)a, f, nf, h0, h1);
                     return;
                 }
-            } else if (klr_cb.you_tot <= 5) klog("balance: Online=2 (dry) YouToCrew WOULD scale: human %08lx hit bot %08lx, hit scale %.3f -> %.3f (written: nothing)", (unsigned long)att, (unsigned long)a, f, f * klr_cb.you);
+                /* review 6: the write was refused, the hit goes through unscaled and is counted as a failure (the game thread is the only caller of this slot, so the plain counters are single-writer) */
+                InterlockedIncrement(&klr_cb.you_fail); if (klr_cb.you_fail <= 5) klog("balance: Online YouToCrew: write of the hit scale at %08lx refused, hit left unscaled", (unsigned long)(hit + 0x18));
+                orig(self, 0, hit); return;
+                } else if (klr_cb.on == 2) { if (klr_cb.you_tot <= 5) klog("balance: Online=2 (dry) %s WOULD scale: human %08lx hit bot %08lx, hit scale %.3f -> %.3f (written: nothing)", copk ? "CopToCrew (human cop)" : "YouToCrew", (unsigned long)att, (unsigned long)a, f, f * fac); }
+                else if (klr_cb.you_tot <= 5) klog("balance: Online=1 YouToCrew no-op: factor 1.0 (human %08lx hit bot %08lx, hit scale %.3f untouched)", (unsigned long)att, (unsigned long)a, f);
+            }
         } else if (vt != KLR_ACTOR_VT) {      /* neither a ZFFActor nor a ZFFPlayer: the diagnostic for a client human's shot */
             InterlockedIncrement(&klr_cb.you_other);
             klr_cb.you_vtn++;
@@ -1167,9 +1176,9 @@ static void klr_cb_tick(int on, int game_thread)
     if (now - klr_cb.sum_at >= 5000u) {
         klr_cb.sum_at = now;
         if (klr_cb.on && (klr_cb.you_hits || klr_cb.you_other)) {
-            klog("balance: Online=%d 5 s: %ld human hits on bots (%ld scaled x%.3f, written: %s), %ld hits from attackers that are neither ZFFActor nor ZFFPlayer (last vtable %08lx, %lu in all); bot hp lost to scaled human hits %.0f (without the factor ~%.0f)",
-                 klr_cb.on, klr_cb.you_hits, klr_cb.you_scaled, klr_cb.you, klr_cb.on == 1 ? "yes" : "nothing (dry run)", klr_cb.you_other, (unsigned long)klr_cb.you_vt, (unsigned long)klr_cb.you_vtn, klr_cb.you_lost_m / 1000.0, klr_cb.you_would_m / 1000.0);
-            InterlockedExchange(&klr_cb.you_hits, 0); InterlockedExchange(&klr_cb.you_scaled, 0); InterlockedExchange(&klr_cb.you_other, 0); InterlockedExchange(&klr_cb.you_lost_m, 0); InterlockedExchange(&klr_cb.you_would_m, 0);
+            klog("balance: Online=%d 5 s: %ld human hits on bots (%ld scaled x%.3f, written: %s, %ld write(s) refused, %ld by a human cop), %ld hits from attackers that are neither ZFFActor nor ZFFPlayer (last vtable %08lx, %lu in all); bot hp lost to scaled human hits %.0f (without the factor ~%.0f)",
+                 klr_cb.on, klr_cb.you_hits, klr_cb.you_scaled, klr_cb.you, klr_cb.on == 1 ? "yes" : "nothing (dry run)", klr_cb.you_fail, klr_cb.you_cop, klr_cb.you_other, (unsigned long)klr_cb.you_vt, (unsigned long)klr_cb.you_vtn, klr_cb.you_lost_m / 1000.0, klr_cb.you_would_m / 1000.0);
+            InterlockedExchange(&klr_cb.you_hits, 0); InterlockedExchange(&klr_cb.you_scaled, 0); InterlockedExchange(&klr_cb.you_other, 0); InterlockedExchange(&klr_cb.you_fail, 0); InterlockedExchange(&klr_cb.you_cop, 0); InterlockedExchange(&klr_cb.you_lost_m, 0); InterlockedExchange(&klr_cb.you_would_m, 0);
         }
         if (klr_cb.hits || klr_cb.other) {
             klog("botfill: cop->bot factor 5 s: %ld cop hits on bots (%ld scaled x%.3f, %ld point-blank left alone, %ld point-blank capped (cap %.0f hp/s per bot; point-blank hp taken %.0f, %.1f hp per scale unit, high %.1f, %.0f hp refunded), %ld write refused), %ld other hits on bots untouched; bot hp lost %.0f (without the factor ~%.0f); %d bots on the table",
@@ -1476,9 +1485,9 @@ static void klr_init(void)
             GetPrivateProfileStringA("Balance", "OnlineYouToCrew", "1.0", q, sizeof q, klh_ini);
             if (klr_number(q, &d1) && d1 >= 0 && d1 <= 20) klr_cb.you = (float)d1; else klog("balance: OnlineYouToCrew=%s is IGNORED: one number of 0 .. 20 with a decimal point; 1.0 stands", q);
             GetPrivateProfileStringA("Balance", "CopToCrew", "", q, sizeof q, klh_ini);
-            if (q[0] && klr_number(q, &d1) && d1 >= 0 && d1 <= 20) { klr_cb.cfg_cop = 1; if (on == 1) { klr_cb.k = (float)d1; klr_cb.pct = (int)(d1 * 100.0 + 0.5); } }
+            if (q[0] && klr_number(q, &d1) && d1 >= 0 && d1 <= 20) { klr_cb.cfg_cop = (klr_cb.k > 0) ? 1 : 2; if (on == 1 && klr_cb.k > 0) { klr_cb.k = (float)d1; klr_cb.pct = (int)(d1 * 100.0 + 0.5); } }
             klog("balance: Online=%d (recommended off; HOST of an online FA round with bots only): human->bot factor OnlineYouToCrew=%.3f, cop->bot factor %.3f%s; %s", on, klr_cb.you, klr_cb.k,
-                 klr_cb.cfg_cop ? (on == 1 ? " (from [Balance] CopToCrew, over OnlineCopToBot)" : " ([Balance] CopToCrew is set but Online=2 writes nothing new)") : " (OnlineCopToBot's)", on == 2 ? "DRY RUN: counts and logs what it would change, writes nothing" : "writes the hit scale in the slot-423 wrapper");
+                 klr_cb.cfg_cop == 2 ? " ([Balance] CopToCrew is set but IGNORED: OnlineCopToBot=0 keeps the cop path off)" : klr_cb.cfg_cop ? (on == 1 ? " (from [Balance] CopToCrew, over OnlineCopToBot)" : " ([Balance] CopToCrew is set but Online=2 does not apply it)") : " (OnlineCopToBot's)", on == 2 ? "DRY RUN: counts and logs what it would change, writes no hit scale (but the bots still move to the private ZFFActor vtable, as OnlineCopToBot does: that pointer write is real)" : "writes the hit scale in the slot-423 wrapper");
         }
     }
     klr.on = GetPrivateProfileIntA("Balance", "Enable", 0, klh_ini) != 0;
