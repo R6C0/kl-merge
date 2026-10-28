@@ -186,3 +186,15 @@ Required real test before flipping the recommendation: host on one PC, joiner on
 5. **Testing:** a loopback shim for framing and fragment logic only. Real validation is host plus a joiner on another account and network, as the design says, with `steam_rx > 0` and `lan_rx == 0` for L, B, V and D.
 
 Files and addresses read: `steam_api.dll` and `kl2.exe` in the DD folder (disassembly only), `C:/kl-merge/wt/wk-merge/re/hook_netchannel.md`, `netcode.md`, `fa_private_match_blueprint.md`, `C:/kl-merge/kl-merge/re/netsmooth_solo.md`, `C:/kl-merge/wt/wk-merge/klhook/klsync.c`, `C:/kl-merge/wt/wk-getup2/klhook/klgetupbeacon.c`.
+
+---
+
+# How to run the SteamProbe on two PCs (klsteamprobe.c, added 2026-10-28)
+
+`[Net] SteamProbe=1` in KLHook.ini (default 0, recommended off) logs and sends nothing. Steps: (1) both PCs get the same hook build (dinput8.dll + ini) with SteamProbe=1,
+each signed into its OWN Steam account (a second kl2.exe on one account cannot be a P2P peer). (2) Host a Fragile Alliance match online (not System Link: the peer
+table at 0x168f960 does not exist there, the probe then stays silent by design); the other PC joins over the internet (a different network, e.g. a phone hotspot, to
+exercise NAT). (3) Play until the round runs (session state 0x13..0x1f) and the peer table has an entry. (4) Read `KLHook.log` on both PCs for lines starting
+`steamprobe:`. Expected: both `GetISteamNetworking("SteamNetworking005")` and `("SteamNetworking004")` lines; a non-null pointer with a readable vtable means that
+version is served (then slots 0..2 should be code addresses inside steamclient.dll), a null pointer means not served. Send those lines back; the probe fires once per
+game start (restart the game to repeat it). A `FAULT` line means the vtable +0x44 ABI guess is wrong; the probe disables itself and the game goes on.
