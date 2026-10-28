@@ -78,6 +78,7 @@ static int klbf_squads(int fill)
 #define KLBF_OT_BOTS_MAX 16      /* = KLBF_OT_BOTS (defined below) */
 static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used by klbf_way_load below) */
 static int klbf_bank_mode, klbf_ba_mode; static float klbf_ba_m = 6000.0f; static long klbf_bank_total; static int klbf_bank_n;      /* [BotFill] OnlineBank (0 off, 1 ledger, 2 dry), OnlineBoardAll (0 off, 1 board, 2 dry), OnlineBoardAllM (cm) */
+static int klbf_bc_mode, klbf_bc_patched;      /* [BotFill] OnlineBankCredit (0 off, 1 credit, 2 dry); klbf_bc_patched: 1 call site retargeted, -1 refused */
 static int klbf_trig;      /* [BotFill] OnlineTriggers: 0 off, 1 fire, 2 dry (klbf_trig_* below) */
 static int klbf_ot_ramp, klbf_ot_rampdry;      /* OnlineRampFire / OnlineRampDry toggles (read in the init, used by klbf_ramp_* below) */
 static DWORD klbf_pb_bots[KLBF_OT_BOTS_MAX]; static volatile LONG klbf_pb_n; static volatile DWORD klbf_pb_at;
@@ -140,6 +141,8 @@ static void klbf_init(void)
     if (klbf_ot) klog("botfill: OnlineTactics waypoints: OnlineWaypoints=%d (recommended on; needs a [BotFillWay_<SLOT>] section)", klbf_ot_way);
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
     klbf_bank_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBank", 0, klh_ini); if (klbf_bank_mode < 0 || klbf_bank_mode > 2) klbf_bank_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
+    klbf_bc_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBankCredit", 0, klh_ini); if (klbf_bc_mode < 0 || klbf_bc_mode > 2) klbf_bc_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
+    if (klbf_bc_mode && !klbf_bank_mode) { klog("botfill: bankcredit: OnlineBankCredit=%d needs OnlineBank=1 or 2 (the ledger); nothing is done", klbf_bc_mode); klbf_bc_mode = 0; }
     klbf_ba_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBoardAll", 0, klh_ini); if (klbf_ba_mode < 0 || klbf_ba_mode > 2) klbf_ba_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     klbf_ba_m = (float)GetPrivateProfileIntA("BotFill", "OnlineBoardAllM", 6000, klh_ini); if (klbf_ba_m < 500) klbf_ba_m = 500;
     if (klbf_ot) klog("botfill: bank: OnlineBank=%d, OnlineBoardAll=%d, OnlineBoardAllM=%.0f cm (0 off, 1 on, 2 dry; recommended on once tried)", klbf_bank_mode, klbf_ba_mode, klbf_ba_m);
@@ -689,6 +692,66 @@ static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], i
     }
 }
 
+/* OnlineBankCredit (2026-10-28, wk-bots2; route (a) of re/bots_bank_online_1028.md; kl2.exe read statically, NOT run live). The round-end settlement is the single call `call 0x5e2230` at 0x681103 inside
+   Sv slot 192 (0x680f90), thiscall ecx = rules (0x681101 `mov ecx,esi`; 0x5e223c `mov esi,ecx`; VERIFIED in the disassembly). We retarget that call to a stub: BEFORE the original runs, the host adds the bank ledger to one
+   escaped human seat with 0x5a18c0 (AddSharable, thiscall ecx = S = [rules+0x2c], stack: seat, amount, ret 8; VERIFIED prologue, reads seat at [esp+0x10]/amount at [esp+0x1c] after 3 pushes), and 0x5e2230 then
+   tail-calls 0x6f4960, which pools the escapees' Sharable and splits it equally. Seat test as in 0x5e2257..0x5e226f: seat < [rules+0x14] and [[rules+0xc]+seat] == 0 (VERIFIED). Flags: 0x571750(S, seat) = [S+0x58+0x40+4*seat]
+   (VERIFIED: add ecx,0x58 ; movsx byte [esp+4] ; mov eax,[ecx+eax*4+0x40]); the 0x40 / 0x0d bit meanings come from the doc (GUESS, not seen live). Sharable getter 0x699030 (add ecx,0x58 ; jmp 0x8d1ec0, VERIFIED shape; GUESS the
+   array it reads is the Sharable one, as the doc says). Cap [0xd1b3d0] (doc: 1,000,000; GUESS that it is the right limit). NOTE: with [0x168e59c] != 1 the first loop of 0x5e2230 (dead/police lose money) is skipped (0x5e223e jne 0x5e232a),
+   so in FA only the police loop at 0x5e2332.. runs. Replicated by the stock 0x942b20 commit inside 0x5a18c0 (GUESS: reliable delta, doc section 1). Host only (session role 2) and FA sub-mode 0 (GUESS from the doc). */
+typedef int (__fastcall *klbf_bc_add_t)(void *S, int edx_unused, int seat, int amount);      /* C has no __thiscall: __fastcall passes ecx then edx (ignored by the callee) and pops the same stack args */
+typedef int (__fastcall *klbf_bc_get_t)(void *S, int edx_unused, int seat);
+static DWORD klbf_bc_real;
+static void klbf_bc_log_skip(const char *why) { klog("botfill: bankcredit: skipped: %s (ledger $%ld)", why, klbf_bank_total); }
+static void __cdecl klbf_bc_hook(DWORD rules)
+{
+    DWORD sm = 0, role = 0, S, nrec, tabp, cap; int seat, pick = -1; long credit = klbf_bank_total;
+    if (!klbf_bc_mode || credit <= 0) return;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd(sm + 0x54, &role, 4) || role != 2) return;      /* host only: 0x942b20 raises a Quazal exception on a non-master */
+    if (klh_rd32((DWORD_PTR)KLH_VA(0x168e59c)) != 0) return;      /* FA sub-mode only */
+    if (klbf_ot_take != 1 && klbf_ot_take != 2) { klbf_bc_log_skip("OnlineTacticsTake=0 would double count (the stack stays for a human)"); return; }
+    S = klh_rd32(rules + 0x2c); nrec = klh_rd32(rules + 0x14); tabp = klh_rd32(rules + 0xc); cap = klh_rd32((DWORD_PTR)KLH_VA(0xd1b3d0));
+    if (!S || !tabp || nrec > 12) { klbf_bc_log_skip("rules/score object not readable"); return; }
+    for (seat = 0; seat < (int)nrec; seat++) {
+        BYTE used = 0xff; DWORD fl;
+        if (!klh_rd(tabp + seat, &used, 1) || used != 0) continue;      /* 0x5e226b: record in use when the byte is 0 */
+        if (!klh_rd(S + 0x58 + 0x40 + 4 * seat, &fl, 4)) continue;      /* = 0x571750(S, seat) */
+        if ((fl & 0x40) && !(fl & 0x0d)) { pick = seat; break; }
+    }
+    if (pick < 0) { klog("botfill: bankcredit: no escaped human seat (flags 0x40 set, 0x0d clear): ledger $%ld dropped", credit); if (klbf_bc_mode == 1) { klbf_bank_total = 0; klbf_bank_n = 0; } return; }
+    __try {
+        int have = ((klbf_bc_get_t)KLH_VA(0x699030))((void *)S, 0, pick), room = (int)cap - have;
+        if (cap < 100000 || cap > 100000000) room = 1000000 - have;      /* GUESS: an unreadable/odd cap falls back to the doc's 1,000,000 */
+        if (room < 0) room = 0;
+        if (credit > room) credit = room;
+        if (klbf_bc_mode == 2) { klog("botfill: bankcredit: DRY would credit seat %d +$%ld (ledger $%ld, Sharable now %d, cap %lu)", pick, credit, klbf_bank_total, have, (unsigned long)cap); return; }
+        if (credit > 0) ((klbf_bc_add_t)KLH_VA(0x5a18c0))((void *)S, 0, pick, (int)credit);
+        klog("botfill: bankcredit: seat %d +$%ld (ledger $%ld) Sharable %d -> %d", pick, credit, klbf_bank_total, have, ((klbf_bc_get_t)KLH_VA(0x699030))((void *)S, 0, pick));
+        klbf_bank_total = 0; klbf_bank_n = 0;      /* once per round */
+    } __except (EXCEPTION_EXECUTE_HANDLER) { klog("botfill: bankcredit: FAULT %08lx crediting seat %d; the original settlement still runs", (unsigned long)GetExceptionCode(), pick); klbf_bank_total = 0; klbf_bank_n = 0; }
+}
+/* ecx = rules on entry from the patched `call`; stack-transparent: ends in a jump to 0x5e2230 (plain ret, no stack args) */
+static __declspec(naked) void klbf_bc_stub(void)
+{
+    __asm {
+        push ecx
+        push ecx
+        call klbf_bc_hook
+        add esp, 4
+        pop ecx
+        jmp dword ptr [klbf_bc_real]
+    }
+}
+static void klbf_bc_patch(void)
+{
+    BYTE expect[5], put[5]; DWORD rel = 0x5e2230u - (0x681103u + 5), nrel;
+    klbf_bc_real = (DWORD)(DWORD_PTR)KLH_VA(0x5e2230);
+    nrel = (DWORD)(DWORD_PTR)klbf_bc_stub - (DWORD)(DWORD_PTR)KLH_VA(0x681103 + 5);
+    expect[0] = put[0] = 0xE8; memcpy(expect + 1, &rel, 4); memcpy(put + 1, &nrel, 4);      /* refused (and logged) unless the E8 there targets 0x5e2230 */
+    klbf_bc_patched = klh_poke(KLH_VA(0x681103), expect, 5, put, 5, "bankcredit settlement call") ? 1 : -1;
+    klog("botfill: bankcredit: settlement call 0x681103 -> 0x5e2230 %s (OnlineBankCredit=%d, 2 = dry)", klbf_bc_patched == 1 ? "retargeted" : "REFUSED (other bytes, SHIP build or SessionSafe); nothing is credited", klbf_bc_mode);
+}
+
 /* host, in a round, once a second. sm_state: caller checked role 2, mode 4 */
 static void klbf_ot_run(DWORD now, DWORD sm)
 {
@@ -1038,6 +1101,7 @@ static void klbf_tick(int game_thread)
     int conn, target, n = 0, ally = 0, alive = 0, tact = 0, other = 0;
     if (!(klbf_on || klbf_oh || klbf_ot) || !game_thread || !klh_exe_ok || now - last < 500) return;      /* OnlineHost alone only runs the census below (no lobby change: kllobby.c reads OnlineFill itself) */
     last = now;
+    if (klbf_bc_mode && !klbf_bc_patched) klbf_bc_patch();      /* once */
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) return;
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4) || !klh_rd(sm + 0xb9, &cur, 1) || !klh_rd(sm + 0xb8, &mx, 1)) return;
     if ((role != 2 && role != 3) || mode != 4) { if (state < 0xd) told_sm = 0; if (klbf_ot_in) klbf_ot_summary(); return; }

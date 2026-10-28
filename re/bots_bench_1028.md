@@ -54,3 +54,12 @@ cannot bank for it online (Arcade: slot 201 0x56f6e0 -> 0x8e8750, crew record). 
   `botfill: boardall: bot N ... counted aboard` (2 = `DRY would board`). Removal from the world still needs OnlineBoard=1.
 Run as the BOTS1028 recipe above, hook `C:/kl-merge/wt/wk-bots2/klhook/out_bots2_1028_test`, tag BOTS2, first with both keys 2, then 1.
 PASS: bank lines match the `GRABBED` tallies of the bots that boarded; boardall lines only in state 4/5; 0 faults. FAIL: bank for a bot that never boarded, boardall at state 3.
+
+## wk-bots2 (2026-10-28): OnlineBankCredit (host only, default 0, not run live)
+Route (a) of re/bots_bank_online_1028.md: the call at 0x681103 (settlement 0x5e2230, ecx = rules) is retargeted; before it runs the host adds the OnlineBank ledger to the first
+escaped human seat with 0x5a18c0, so 0x6f4960 pools it into the team money. Needs `OnlineBank=1|2`, `OnlineTacticsTake=1|2`, `OnlineTactics=1`. `OnlineBankCredit=2` = log only.
+Run as the BOTS2 recipe, hook `C:/kl-merge/wt/wk-bots2/klhook/out_bots3_1028_test`, tag BOTS3, first `OnlineBankCredit=2`, then 1; one bot must board with loot and one human must escape.
+PASS: host log `botfill: bankcredit: settlement call 0x681103 -> 0x5e2230 retargeted` at start; at round end `botfill: bankcredit: seat N +$X (ledger $Y) Sharable A -> B`
+(X = Y unless clamped, B = A + X); mode 2 shows `DRY would credit`; the client HUD / end-of-round score of the escaped humans includes X split by the escaped count; 0 faults; the round ends normally (state 0x1f).
+FAIL signs: `REFUSED` at patch time, `FAULT` line, no bankcredit line although the ledger had money, a client score that does not move (replication GUESS wrong), a crash in 0x5a18c0 / 0x942b20
+(Quazal exception 0xe0030000 = not the master), money credited twice (Take=0 must log `skipped`), the seat credited was dead or police.
