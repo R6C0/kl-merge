@@ -110,12 +110,16 @@ static int klcl_heister(void)
 /* the characters the OTHER humans wear / chose (klcharonline.c's peer table, effective = after its uniqueness rule); ex[c] = 1 */
 static void klcl_humans(const struct klw_src *src, char ex[KLC_NCHAR + 1])
 {
-    int j;
+    int j, n = 0; DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION)), ents = 0;
     memset(ex, 0, KLC_NCHAR + 1);
+    if (sm && !klco_table(sm, &ents, &n)) n = 0;
     for (j = 0; j < KLCO_N; j++) {
-        int c;
+        int c; DWORD e, node, m = 0;
         if (!klco.p[j].used || j == klco.ownIdx) continue;
         c = klco_effective(j, klco.p[j].c);
+        /* LOOKS1 (10-28): the joiner announced 'stock' (char 0) and wore Elwood's stock body (root 1246); the host still gave bot digit 3 Elwood and the client skipped
+           it ('the local player wears this body'). A peer on its stock body: the character of the model its table entity wears (same player+4 -> node+0x68 read as klcl_pmodel) */
+        if (c == 0 && (e = klco_ent(ents, n, j)) && (node = klh_rd32(e + 4)) && klh_rd(node + 0x68, &m, 4) && m) c = klw_char_of(src, m);
         if (c >= 1 && c <= src->n && c <= KLC_NCHAR) ex[c] = 1;
     }
 }
