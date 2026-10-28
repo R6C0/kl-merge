@@ -32,8 +32,8 @@ static int klbf_oh;                /* [BotFill] OnlineHost (klsync.c reads it: b
 static int klbf_on, klbf_sq;      /* klbf_sq = [Bots] OnlineFillSquads (see the header, step 3) */
 static int klbf_fill;              /* the plan's fill, for the squad pass */
 static int klbf_lp; static float klbf_lp_scale = 1.0f, klbf_lp_stay = 250.0f; static DWORD klbf_lp_warned[16]; static int klbf_lp_nw, klbf_lp_nok, klbf_lp_nbad;      /* gap2: OnlineLootParts (timed parts) */
-static int klbf_lf, klbf_lf_cap = 25, klbf_lf_fin, klbf_lf_left, klbf_lf_hold, klbf_lf_cops; static float klbf_lf_stay = 500.0f;      /* wk-botpar: [BotFill] OnlineLootFinish / OnlineLootFinishStayM (game units) / OnlineLootFinishCapS; per-round finished / left-early counts */
-static int klbf_esn, klbf_esn_node, klbf_esn_pl, klbf_vgs, klbf_vgs_margin = 40, klbf_vgs_defer; static DWORD klbf_vgs_since;      /* wk-botpar: [BotFill] OnlineEscortNode (per-round source counts), OnlineVanGatherSmart / OnlineVanGatherMarginS */
+static int klbf_lf, klbf_lf_cap = 25, klbf_lf_start, klbf_lf_fin, klbf_lf_left, klbf_lf_hold, klbf_lf_cops; static float klbf_lf_stay = 500.0f;      /* wk-botpar: [BotFill] OnlineLootFinish / OnlineLootFinishStayM (game units) / OnlineLootFinishCapS; per-round finished / left-early counts */
+static int klbf_esn, klbf_vgs, klbf_vgs_margin = 60, klbf_vgs_defer; static DWORD klbf_vgs_since;      /* wk-botpar: [BotFill] OnlineEscortNode , OnlineVanGatherSmart / OnlineVanGatherMarginS */
 static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near = 150.0f;
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
@@ -139,8 +139,9 @@ static void klbf_init(void)
     klbf_lf_cap = (int)GetPrivateProfileIntA("BotFill", "OnlineLootFinishCapS", 25, klh_ini); if (klbf_lf_cap < 5) klbf_lf_cap = 5; if (klbf_lf_cap > 55) klbf_lf_cap = 55;
     klbf_esn = GetPrivateProfileIntA("BotFill", "OnlineEscortNode", 0, klh_ini) != 0;      /* (recommended on) wk-botpar: human seats' feet from the scene node first */
     klbf_vgs = GetPrivateProfileIntA("BotFill", "OnlineVanGatherSmart", 0, klh_ini) != 0;      /* (recommended on) wk-botpar */
-    klbf_vgs_margin = (int)GetPrivateProfileIntA("BotFill", "OnlineVanGatherMarginS", 40, klh_ini); if (klbf_vgs_margin < 20) klbf_vgs_margin = 20; if (klbf_vgs_margin > 300) klbf_vgs_margin = 300;
+    klbf_vgs_margin = (int)GetPrivateProfileIntA("BotFill", "OnlineVanGatherMarginS", 60, klh_ini); if (klbf_vgs_margin < 45) klbf_vgs_margin = 45; if (klbf_vgs_margin > 300) klbf_vgs_margin = 300;
     if (GetPrivateProfileIntA("BotFill", "OnlineLootFinish", 0, klh_ini) && !klbf_lf) klog("botfill: lootparts: OnlineLootFinish needs OnlineLootParts=1: off");
+    if (klbf_lf && !klbf_vgs) klog("botfill: wk-botpar: OnlineLootFinish without OnlineVanGatherSmart: the van gather still pulls a taking bot off its stack (hold / drift limits only)");
     if (klbf_lf || klbf_esn || klbf_vgs) klog("botfill: wk-botpar: OnlineLootFinish=%d (stay %.0f, cap %d s), OnlineEscortNode=%d, OnlineVanGatherSmart=%d (margin %d s)", klbf_lf, klbf_lf_stay, klbf_lf_cap, klbf_esn, klbf_vgs, klbf_vgs_margin);
     klbf_ot_hmul = (int)GetPrivateProfileIntA("BotFill", "OnlineHealthMul", 5, klh_ini); if (klbf_ot_hmul < 1) klbf_ot_hmul = 1; if (klbf_ot_hmul > 20) klbf_ot_hmul = 20;
     klbf_ot_gtake = GetPrivateProfileIntA("BotFill", "OnlineGuardTake", 0, klh_ini) != 0;      /* BO8c: the 30 s fallback sent all 5 holding bots into the squads at once; all 7 died within 71 s */
@@ -771,15 +772,24 @@ static void klbf_lp_hold(int s, DWORD a, DWORD soldier, DWORD o, const float *mp
     klbf_ob[s].holdN++; klbf_ob[s].holdOrd = now;
 }
 
+/* wk-botpar OnlineVanGatherSmart: 1 while the van call (and the gather's pull of walkers to a stack) may still be held: the clock is above OnlineVanGatherMarginS AND above the late rules
+   (OnlineGatherLateS, or OnlineLateExit + 20) AND the total hold has not used its 60 s (klbf_vgs_since is set at the first deferral). Off = 0. */
+static int klbf_vgs_hold(DWORD now, float left)
+{
+    if (!klbf_vgs || left <= (float)klbf_vgs_margin) return 0;
+    if (klbf_ot_glate ? left <= (float)klbf_ot_glate : (klbf_ot_late && left <= (float)(klbf_ot_late + 20))) return 0;
+    return !klbf_vgs_since || now - klbf_vgs_since < 60000u;
+}
+
 /* wk-botpar OnlineLootFinish: 1 while bot slot s is taking parts (phase 4) and may not be pulled off the stack: inside OnlineLootFinishCapS of the grab's start and no live cop within
-   OnlineTacticsGuard of the bot (the guard radius; 2500 cm if that is 0). Used by the van gather (the walk to the box waits for the parts) and the stay limit (widened to OnlineLootFinishStayM).
-   Off (OnlineLootFinish=0): always 0, so every old path runs unchanged. A cop in range ends the protection and says so once per stack (told bit 2048). */
+   OnlineTacticsGuard (horizontal; a cop more than 4 m above / below does not count) of the bot (the guard radius; 2500 cm if that is 0). Used by the van gather (the walk to the box waits for the parts) and the stay limit (widened to OnlineLootFinishStayM).
+   Off (OnlineLootFinish=0): always 0, so every old path runs unchanged. A cop in range ends the protection and says so once per stack (told bit 262144). */
 static int klbf_lf_busy(int s, DWORD now, const float *bpos, const float (*cp)[3], int ncp)
 {
     int c; float r;
     if (!klbf_lf || klbf_ob[s].phase != 4 || now - klbf_ob[s].lootAt >= (DWORD)klbf_lf_cap * 1000u) return 0;
     r = klbf_ot_guard > 0 ? klbf_ot_guard : 2500.0f;
-    for (c = 0; c < ncp; c++) if (kle_dist(cp[c], bpos) <= r) { if (!(klbf_ob[s].told & 2048) && (klbf_ob[s].told |= 2048)) { klbf_lf_cops++; klog("botfill: lootparts: bot %d: a live cop is within %.0f m: the stack finish protection ends, the normal stay / gather rules apply (OnlineLootFinish)", s, r / 100); } return 0; }
+    for (c = 0; c < ncp; c++) if (sqrt((cp[c][0] - bpos[0]) * (cp[c][0] - bpos[0]) + (cp[c][2] - bpos[2]) * (cp[c][2] - bpos[2])) <= r && fabs(cp[c][1] - bpos[1]) <= 400.0f) { if (!(klbf_ob[s].told & 262144) && (klbf_ob[s].told |= 262144)) { klbf_lf_cops++; klog("botfill: lootparts: bot %d: a live cop is within %.0f m: the stack finish protection ends, the normal stay / gather rules apply (OnlineLootFinish)", s, r / 100); } return 0; }
     return 1;
 }
 
@@ -877,8 +887,8 @@ static void klbf_ot_summary(void)
     if (klbf_vgs) { int wl = 0, w0 = 0, tl = 0; for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor && klbf_ob[i].phase == 3) { if (klbf_ob[i].tally > 0) wl++; else w0++; if (klbf_ob[i].tally > 0) tl += klbf_ob[i].tally; }
         klog("botfill: tactics: round summary (OnlineVanGatherSmart): %d bot(s) BOARDED with loot ($%d), %d BOARDED with tally 0 (not counted as loot), %d van-call deferral line(s)", wl, tl, w0, klbf_vgs_defer); }
     klog("botfill: tactics: round summary: %d bot(s) given orders, %d stack(s) taken, %d total (hook tally, not the game's), %d boarded, %d stack(s) given up", bots, klbf_ot_nclaim, tot, boarded, klbf_ot_nbad);
-    if (klbf_lf) klog("botfill: lootparts: round finish summary (OnlineLootFinish): %d stack(s) finished, %d left early (moved away / gather / died / boardall not counted), %d protection(s) ended by a cop, %d hold re-order(s) at 1.5 s", klbf_lf_fin, klbf_lf_left, klbf_lf_cops, klbf_lf_hold);
-    klbf_lf_fin = klbf_lf_left = klbf_lf_cops = klbf_lf_hold = 0;
+    if (klbf_lf) klog("botfill: lootparts: round finish summary (OnlineLootFinish): %d stack(s) started, %d finished, %d left early (moved away / gather / died / boardall not counted), %d protection(s) ended by a cop, %d hold re-order(s) at 1.5 s", klbf_lf_start, klbf_lf_fin, klbf_lf_left, klbf_lf_cops, klbf_lf_hold);
+    klbf_lf_start = klbf_lf_fin = klbf_lf_left = klbf_lf_cops = klbf_lf_hold = 0;
     klbf_ot_in = 0;
 }
 
@@ -969,12 +979,13 @@ static void klbf_bc_credit(DWORD rules)      /* game thread, host tick, round ru
 }
 
 /* wk-botpar OnlineEscortNode: a human seat's feet. c9 found [player+0x460] lags / freezes on the host (A1LIFT4d), so with OnlineEscortNode the scene node's place is read first (as kljoin.c klj_feet,
-   klbalance.c YouToCrewFar), +0x460 as the fallback; both must be finite and not (0,0,0). Off = +0x460 only, as before. *src = 1 node, 2 +0x460. Counts per round for the 'escort: feet' line. */
+   klbalance.c YouToCrewFar), +0x460 as the fallback; both must be finite and not (0,0,0). Off = +0x460 only, as before. *src = 1 node, 2 +0x460.
+   GUESS: [P+4] is the scene node for a REMOTE seat's replica entity too (kljoin.c klj_feet reads its own player that way); the +0x460 fallback covers a node that reads as zero / garbage. */
 static int klbf_feet(DWORD P, float f[3], int *src)
 {
     DWORD nd; float g[3];
-    if (klbf_esn && (nd = klh_rd32(P + 4)) > 0xffff && kle_node(nd, g, 0) && kle_ok3(g) && !(fabsf(g[0]) <= 1 && fabsf(g[1]) <= 1 && fabsf(g[2]) <= 1)) { memcpy(f, g, 12); *src = 1; klbf_esn_node++; return 1; }
-    if (klh_rd(P + 0x460, g, 12) && kle_ok3(g) && !(fabsf(g[0]) <= 1 && fabsf(g[1]) <= 1 && fabsf(g[2]) <= 1)) { memcpy(f, g, 12); *src = 2; klbf_esn_pl++; return 1; }
+    if (klbf_esn && (nd = klh_rd32(P + 4)) > 0xffff && kle_node(nd, g, 0) && kle_ok3(g) && !(fabsf(g[0]) <= 1 && fabsf(g[1]) <= 1 && fabsf(g[2]) <= 1)) { memcpy(f, g, 12); *src = 1; return 1; }
+    if (klh_rd(P + 0x460, g, 12) && kle_ok3(g) && !(fabsf(g[0]) <= 1 && fabsf(g[1]) <= 1 && fabsf(g[2]) <= 1)) { memcpy(f, g, 12); *src = 2; return 1; }
     return 0;
 }
 
@@ -989,7 +1000,7 @@ static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *so
 {
     DWORD ents = 0, own = 0; int n = 0, how = 0, oi, i, b, nh = 0, ownH = -1, hseat[16], nTab = 0, nHeist = 0, nDead = 0, nNoFeet = 0, srcNow[16]; float hp[16][3]; static int toldNone, toldRound, toldSrc;
     if (!klbf_esc || nb <= 0) return;
-    if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; toldSrc = 0; klbf_esn_node = klbf_esn_pl = 0; }
+    if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; toldSrc = 0; }
     if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: escort: online: the session player table is not readable: no escort this round yet (said once)"); return; }
     oi = klco_find_own(ents, n, now, &own, &how);
     for (i = 0; i < n && nh < 16; i++) {
@@ -1265,7 +1276,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
     vnew = 0;
     for (b = 0; b < nb; b++) {
-        int s, j, best = -1; float bd = 1e30f, tgt[3], got[3]; struct kle_e t; struct klmv_fr t_bf; DWORD a = bots[b].actor; int busy;
+        int s, j, best = -1; float bd = 1e30f, tgt[3], got[3]; struct kle_e t; struct klmv_fr t_bf; DWORD a = bots[b].actor; int busy, gbusy;
         for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != a; s++) ;
         if (s == KLBF_OT_BOTS) { for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor; s++) ; if (s == KLBF_OT_BOTS) continue; klbf_ob[s].actor = a; }
         if (klbf_ob[s].phase == 3) continue;
@@ -1273,9 +1284,9 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (klbf_ob[s].phase == 1) { klbf_ob[s].phase = 0; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].since = now; }      /* review: a held walk to a stack is dropped (stack stays unclaimed), else its 12 s / 90 s stall clocks blacklist a reachable stack */
             continue;
         }
-        busy = klbf_lf_busy(s, now, bots[b].pos, (const float (*)[3])cops, ncop);      /* OnlineLootFinish: a bot taking parts is not pulled off its stack */
-        if (busy && klbf_ot_gat && !klbf_ot_called && !(klbf_ob[s].told & 4096) && (klbf_ob[s].told |= 4096)) klog("botfill: lootparts: bot %d keeps taking stack %08lx (%d of %d parts, %lu s in) while the van gather runs: it joins after the stack or after %d s (OnlineLootFinish)", s, (unsigned long)klbf_ob[s].target, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, (unsigned long)((now - klbf_ob[s].lootAt) / 1000), klbf_lf_cap);
-        if (klbf_ot_gat && !klbf_ot_called && ((klbf_ob[s].phase < 2 && !(klbf_vgs && klbf_ob[s].phase == 1 && left > (float)klbf_vgs_margin)) || (klbf_ob[s].phase == 4 && !busy))) {      /* OnlineVanGather: the carrier is at the exit, every living bot goes to the box now (a walk to a stack is dropped; the stack stays unclaimed) */
+        busy = klbf_lf_busy(s, now, bots[b].pos, (const float (*)[3])cops, ncop); gbusy = busy && klbf_vgs;      /* OnlineLootFinish: a bot taking parts is not pulled off its stack */
+        if (gbusy && klbf_ot_gat && !klbf_ot_called && !(klbf_ob[s].told & 524288) && (klbf_ob[s].told |= 524288)) klog("botfill: lootparts: bot %d keeps taking stack %08lx (%d of %d parts, %lu s in) while the van gather runs: it joins after the stack or after %d s (OnlineLootFinish)", s, (unsigned long)klbf_ob[s].target, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, (unsigned long)((now - klbf_ob[s].lootAt) / 1000), klbf_lf_cap);
+        if (klbf_ot_gat && !klbf_ot_called && ((klbf_ob[s].phase < 2 && !(klbf_vgs && klbf_ob[s].phase == 1 && klbf_vgs_hold(now, left))) || (klbf_ob[s].phase == 4 && !gbusy))) {      /* OnlineVanGather: the carrier is at the exit, every living bot goes to the box now (a walk to a stack is dropped; the stack stays unclaimed) */
             if (!(klbf_ob[s].told & 64) && (klbf_ob[s].told |= 64)) klog("botfill: tactics: bot %d (actor %08lx): van gather: leaves phase %d (tally %d, %d grab(s)) and walks to the box", s, a, klbf_ob[s].phase, klbf_ob[s].tally, klbf_ob[s].grabs);
             if (klbf_ob[s].phase == 4 && klbf_lf) klbf_lf_left++;
             if (klbf_ob[s].phase == 4) klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; van gather)", s, (unsigned long)klbf_ob[s].target, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally);
@@ -1294,7 +1305,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     else {
                         int nparts = (amt + part - 1) / part; float ssec = sec * klbf_lp_scale;
                         klog("botfill: lootparts: bot %d %sstarts stack %08lx (amt %d, part %d, %.2f s/part, ~%.1f s total)", s, klbf_lp == 2 ? "DRY " : "", (unsigned long)o, amt, part, (double)ssec, (double)(nparts * ssec));
-                        if (klbf_lp == 1) { klbf_ob[s].phase = 4; klbf_ob[s].lootAt = klbf_ob[s].lootTick = now; klbf_ob[s].lootPaid = 0; klbf_ob[s].lootGot = 0; klbf_ob[s].lootPart = part; klbf_ob[s].lootLeft = nparts; klbf_ob[s].lootSec = ssec; memcpy(klbf_ob[s].holdAt, bots[b].pos, 12); klbf_ob[s].holdOrd = 0; klbf_ob[s].holdN = 0; klbf_ob[s].holdChk = 0; klbf_ob[s].told &= ~(1024 | 2048 | 4096); klbf_lp_hold(s, a, bots[b].soldier, o, mp, now); continue; }
+                        if (klbf_lp == 1) { klbf_ob[s].phase = 4; klbf_ob[s].lootAt = klbf_ob[s].lootTick = now; klbf_ob[s].lootPaid = 0; klbf_ob[s].lootGot = 0; klbf_ob[s].lootPart = part; klbf_ob[s].lootLeft = nparts; klbf_ob[s].lootSec = ssec; memcpy(klbf_ob[s].holdAt, bots[b].pos, 12); klbf_ob[s].holdOrd = 0; klbf_ob[s].holdN = 0; klbf_ob[s].holdChk = 0; if (klbf_lf) { klbf_lf_start++; klbf_ob[s].told &= ~(262144 | 524288 | 1048576); } klbf_lp_hold(s, a, bots[b].soldier, o, mp, now); continue; }
                     }
                 }
                 klbf_ob[s].tally += amt; klbf_ob[s].grabs++;
@@ -1321,15 +1332,15 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             }
         }
         if (klbf_ob[s].phase == 4) {      /* OnlineLootParts: the bot stands at the stack and is paid a part every lootSec; same 0x4e3f40 call as the lump */
-            DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0, st = 0; DWORD ent, node; float mp[3]; int stop = 0; const char *why = ""; float stayL = busy ? klbf_lf_stay : klbf_lp_stay;      /* OnlineLootFinish: a wider drift tolerance while the bot finishes (the vertical 400 limit and the stack / anchor geometry checks stay) */
+            DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0, st = 0; DWORD ent, node; float mp[3]; int stop = 0; const char *why = ""; float stayL = (busy || (klbf_lf && !(klbf_ob[s].told & 262144))) ? klbf_lf_stay : klbf_lp_stay;      /* OnlineLootFinish: a wider drift tolerance while the bot finishes (the vertical 400 limit and the stack / anchor geometry checks stay) */
             if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) { why = "stack gone or hidden (taken by someone else?)"; stop = 1; }
             else if (klh_rd(o + 0x64, &st, 1) && st >= 2 && st <= 3) { why = "stack changed state"; stop = 1; }      /* same 2/3 refusal as the lump */
             else if ((float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2])) > stayL || fabs(bots[b].pos[1] - mp[1]) > 400.0f
                      || (now - klbf_ob[s].lootAt >= 3000 && (float)sqrt((bots[b].pos[0] - klbf_ob[s].holdAt[0]) * (bots[b].pos[0] - klbf_ob[s].holdAt[0]) + (bots[b].pos[2] - klbf_ob[s].holdAt[2]) * (bots[b].pos[2] - klbf_ob[s].holdAt[2])) > stayL)) { why = "bot moved away"; stop = 1; }      /* wk-lpbal: stay measured from the stack AND from where the bot stood when the grab began (it was within OnlineTacticsNear of the stack, so the anchor is the truer 'standing at it'; the stack centre may sit inside geometry; both limits are OnlineLootStayM) */
             else if (now - klbf_ob[s].lootTick > 60000) { why = "60 s cap"; stop = 1; }
             else {
-                if (busy && !(klbf_ob[s].told & 1024)) { float d1 = (float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2])), d2 = (float)sqrt((bots[b].pos[0] - klbf_ob[s].holdAt[0]) * (bots[b].pos[0] - klbf_ob[s].holdAt[0]) + (bots[b].pos[2] - klbf_ob[s].holdAt[2]) * (bots[b].pos[2] - klbf_ob[s].holdAt[2]));
-                    if (d1 > klbf_lp_stay || d2 > klbf_lp_stay) { klbf_ob[s].told |= 1024; klog("botfill: lootparts: bot %d drifted %.1f m from the stack, %.1f m from its anchor (OnlineLootStayM %.1f m): finishing anyway, limit %.1f m (OnlineLootFinishStayM; the order is repeated every 1.5 s)", s, d1 / 100, d2 / 100, klbf_lp_stay / 100, klbf_lf_stay / 100); } }
+                if (busy && !(klbf_ob[s].told & 1048576)) { float d1 = (float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2])), d2 = (float)sqrt((bots[b].pos[0] - klbf_ob[s].holdAt[0]) * (bots[b].pos[0] - klbf_ob[s].holdAt[0]) + (bots[b].pos[2] - klbf_ob[s].holdAt[2]) * (bots[b].pos[2] - klbf_ob[s].holdAt[2]));
+                    if (d1 > klbf_lp_stay || d2 > klbf_lp_stay) { klbf_ob[s].told |= 1048576; klog("botfill: lootparts: bot %d drifted %.1f m from the stack, %.1f m from its anchor (OnlineLootStayM %.1f m): finishing anyway, limit %.1f m (OnlineLootFinishStayM; the order is repeated every 1.5 s)", s, d1 / 100, d2 / 100, klbf_lp_stay / 100, klbf_lf_stay / 100); } }
                 if (now - klbf_ob[s].holdOrd >= (busy ? 1500u : KLBF_OT_REORD)) { klbf_lp_hold(s, a, bots[b].soldier, o, mp, now); if (busy) klbf_lf_hold++; }      /* OnlineLootFinish: re-issue the hold every 1.5 s (was 6 s) while the bot is protected */
                 /* wk-lpbal: nothing else orders a phase-4 bot (guard walk / van idle: phase 0 only; escort pass skips all but 0; phase 1/2 walk orders and legs skip 4; OnlineVanGather ends the grab on purpose) */
                 if (klbf_ob[s].holdOrd && !klbf_ob[s].holdChk && now - klbf_ob[s].holdOrd >= 900) { DWORD f4 = 0; klbf_ob[s].holdChk = 1; klh_rd(bots[b].soldier + 0x4fc, &f4, 4); klog("botfill: lootparts: bot %d hold check %lu ms after the order: %.1f m from the stack, %.1f m from the anchor, [soldier+0x4fc]=%08lx", s, (unsigned long)(now - klbf_ob[s].holdOrd), kle_dist(bots[b].pos, mp) / 100, kle_dist(bots[b].pos, klbf_ob[s].holdAt) / 100, (unsigned long)f4); }
@@ -1526,7 +1537,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                         DWORD blk = klh_rd32(bots[b].soldier + 0x64c); BYTE zero = 0;
                         if (blk && klh_rd32(blk + 0x14) == bots[b].soldier) klh_data((void *)(DWORD_PTR)(blk + 0x10), &zero, 1, "defend block style given (OnlineExitSprint undone)");
                     }
-                    klbf_ob[s].phase = 0; klbf_ob[s].told &= ~(8 | 512 | 2048 | 4096 | 8192 | 32768 | 65536); klbf_ob[s].reachAt = 0; klbf_ob[s].gwAt = 0; klbf_ob[s].esAt = 0; klbf_ob[s].esN = 0; klbf_ob[s].tpAt = 0; klbf_ob[s].leg = 0; klbf_ob[s].legAt = 0;
+                    klbf_ob[s].phase = 0; klbf_ob[s].told &= ~(8 | 512 | 2048 | 4096 | 8192 | 32768 | 65536 | 262144 | 524288 | 1048576); klbf_ob[s].reachAt = 0; klbf_ob[s].gwAt = 0; klbf_ob[s].esAt = 0; klbf_ob[s].esN = 0; klbf_ob[s].tpAt = 0; klbf_ob[s].leg = 0; klbf_ob[s].legAt = 0;
                     continue;
                 }
             }
@@ -1593,12 +1604,11 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (rs && klbf_vgs && !strstr(rs, "clock is low")) {      /* OnlineVanGatherSmart: the 'clock is low' reasons are never deferred */
                 int q2, nt = 0, nw = 0;
                 for (q2 = 0; q2 < KLBF_OT_BOTS; q2++) if (klbf_ob[q2].actor) { if (klbf_ob[q2].phase == 4) nt++; else if (klbf_ob[q2].phase == 1) nw++; }
-                if (!klbf_vgs_since) klbf_vgs_since = now;
-                if ((nt || nw) && left > (float)klbf_vgs_margin && now - klbf_vgs_since < 60000u) {      /* GUESS: 60 s is the most the call is held in total (the phase clocks end a stuck take / walk sooner) */
-                    static DWORD vgsLog;
+                if ((nt || nw) && klbf_vgs_hold(now, left)) {      /* GUESS: 60 s is the most the call is held in total (the phase clocks end a stuck take / walk sooner) */
+                    static DWORD vgsLog; if (!klbf_vgs_since) klbf_vgs_since = now;
                     if (!vgsLog || now - vgsLog >= 10000u) { vgsLog = now; klbf_vgs_defer++; klog("botfill: tactics: van: gather: call deferred (%s; OnlineVanGatherSmart): %d bot(s) taking a stack, %d walking to one, clock left %.0f s > margin %d s, +%lu s deferred", rs, nt, nw, left, klbf_vgs_margin, (unsigned long)((now - klbf_vgs_since) / 1000)); }
                     rs = 0;
-                } else if (klbf_vgs_since && now - klbf_vgs_since >= 2000u) klog("botfill: tactics: van: gather: OnlineVanGatherSmart ends the wait after %lu s (%d taking, %d walking, clock left %.0f s, margin %d s)", (unsigned long)((now - klbf_vgs_since) / 1000), nt, nw, left, klbf_vgs_margin);
+                } else if ((nt || nw) && klbf_vgs_since && now - klbf_vgs_since >= 2000u) klog("botfill: tactics: van: gather: OnlineVanGatherSmart ends the wait after %lu s (%d taking, %d walking, clock left %.0f s, margin %d s)", (unsigned long)((now - klbf_vgs_since) / 1000), nt, nw, left, klbf_vgs_margin);
             }
             if (rs) {
                 if (!klbf_ot_gtold++) klog("botfill: tactics: van: gather: calling the van (%s): %d bot(s) walking, the farthest %.0f m from the box (limit %.0f m), +%lu s since the first bot reached the exit, clock left %.0f s", rs, np, dmax / 100, klbf_ot_gm / 100, (unsigned long)((now - klbf_ot_gatAt) / 1000), left);
