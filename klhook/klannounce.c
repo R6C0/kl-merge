@@ -37,8 +37,8 @@ static int klan_busy(DWORD el)
     float end = -1.0f; LONG frame = 0; DWORD sys;
     return klh_rd(el + 0x30, &end, 4) && end > 0 && (sys = klh_rd32((DWORD_PTR)KLH_VA(KL2_SYSIF))) != 0 && klh_rd(sys + 0x48, &frame, 4) && frame < (LONG)(end * 1024.0f);
 }
-enum { KLAN_UCC, KLAN_ADREN, KLAN_HINT, KLAN_NSLOT };                 /* one text buffer per caller: a line that stays up is never overwritten by another caller's */
-static const char *const klan_pre[KLAN_NSLOT] = { "ucc", "adren", "announce" };
+enum { KLAN_UCC, KLAN_ADREN, KLAN_HINT, KLAN_LOOT, KLAN_NSLOT };                 /* one text buffer per caller: a line that stays up is never overwritten by another caller's */
+static const char *const klan_pre[KLAN_NSLOT] = { "ucc", "adren", "announce", "lootsync" };
 static int klan_ready(int slot)
 {   /* 1 = 0x468430 is the routine this build knows (compared once); the log line keeps the caller's old prefix ('ucc:' / 'adren:') */
     static const BYTE say_code[8] = { 0x56, 0x57, 0x8b, 0x7c, 0x24, 0x0c, 0x8b, 0xc7 };   /* 0x468430 */
