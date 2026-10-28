@@ -232,7 +232,7 @@ static void klcl_rx(const char *pk, int len, DWORD now, unsigned long from);
 static void klcl_send(DWORD sm, DWORD now);
 /* kllootsync.c: OnlineLootSync=1, the host's bot loot list 'KLSYB' (klls_on is klbotfill.c's) */
 static void klls_rx(const char *pk, int len, DWORD now, unsigned long from);
-static void klls_send(DWORD now, int force);
+static int klls_send(DWORD now, int force);
 
 static void klsy_open(void)
 {
