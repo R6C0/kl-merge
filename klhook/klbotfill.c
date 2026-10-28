@@ -900,7 +900,7 @@ static void klbf_bc_credit(DWORD rules)      /* game thread, host tick, round ru
 }
 
 /* [Bots] OnlineEscort (wk-move-1028, re/bot_parity_plan_1028.md plan 2; static, NOT RUN live): the online counterpart of klescort.c's Arcade escort, host only, from klbf_ot_run (once a second).
-   A bot with no goal (phase 0: no stack to take / holding / waiting for the van; or phase 3 boarded while the van is not coming / waiting / leaving: states 1-5 skip it) and not guard-walking (OnlineGuardWalk wins)
+   A bot with no goal (phase 0, nothing carried; never a boarded bot; nobody while the van is called / waits / leaves: states 1-5) and not guard-walking (OnlineGuardWalk wins)
    is ordered with kle_order2 (0x760e50, rec -1: the OrderGap debounce never applies, as the puppeteer's own orders) to a place OnlineEscortSide from the human toward the bot (the second bot of a pair 70 degrees
    round, as kle_place) when it is more than OnlineEscortFar from him; mode 1 = the host's own seat, 2 = the nearest living human of the session player table (a bot's own pick each pass).
    Re-order rules as kle_hold: every 3 s at most; while the human stands within 3 m of where the last order was placed the bot is on its way (no repeat) for 12 s, then one order to his feet.
