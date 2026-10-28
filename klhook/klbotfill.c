@@ -1252,8 +1252,9 @@ static void klbf_ot_run(DWORD now, DWORD sm)
 
 /* OnlineLooks=2 probe (log only; re/crew_online_1028.md section 5/6). Reads only, through klh_rd (ReadProcessMemory: a bad pointer fails, never faults).
    model root = [[actor+4]+0x68] (klcrew.c: the node's model chunk index; read the same way there). Group name: bots_voice.md 1.3 says 0x598460(actor node) = [[node+0x50]+0x60]
-   is the parent group x and the name sits at [[x+4]+0x6c] with the digit at index 0x12 (Glazer_Bodyguard_0N). GUESS: whether [x'+0x6c] is a char* or an inline buffer is not
-   established, so both are tried (pointer first, accepted only when the bytes there read as printable ASCII); an unreadable name logs group="?" digit=?. */
+   is the parent group x and the name sits at [[x+4]+0x6c] with the digit at index 0x12 (Glazer_Bodyguard_0N). CONFIRMED statically (re/crew_group_name_1028.md): 0x588980 reads
+   [[[0x598460(node)]+4]+0x6c] as a char* (null -> "<NONAME>" at 0xb31570) and byte 0x12 - '1' -> rules+0x33e; pass 1 (inline buffer) is a leftover fallback that the
+   pointer pass makes unreachable for a readable name; an unreadable name logs group="?" digit=?. */
 struct klbf_lkrec { DWORD slot, actor, vt, team, model; char name[28]; char digit; };
 static void klbf_lk_name(DWORD actor, char name[28], char *digit)
 {
