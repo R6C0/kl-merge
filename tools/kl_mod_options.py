@@ -490,8 +490,16 @@ feat('onlineboxlatch', G_EXP, 'Online AI heisters: one that stood inside the esc
      'klbotfill.c [BotFill] OnlineBoxLatch (+ OnlineBoxLatchM 1500 cm); NOT run live', [('BotFill', 'OnlineBoxLatch', 1, 0, 0)])
 feat('shoponlineswap', G_EXP, 'Online shop: the Dead Men gun rows hand over the stock gun like in Arcade (recommended off)', 'off', 'start',
      'klshop.c [Shop] OnlineSwap (0 off, 1 on, 2 log only): rows 13/16/32/35 (HK69, Type 81, Rem 700, Minimi); the swap rides klshoppage.c early-make hook; NOT run live', [('Shop', 'OnlineSwap', 1, 0, 0)])
+feat('shoponlineswaptext', G_EXP, 'Shop: the Dead Men gun rows say the gun that is really handed over (Arcade, online, unbaked maps; recommended off)', 'off', 'start',
+     'kllocname.c [Shop] OnlineSwapText (0 off, 1 online: the stock name, 2 = follows the pool, Arcade too); the picture stays the carrier picture stays on an unbaked map; NOT run live', [('Shop', 'OnlineSwapText', 2, 0, 0)])
+feat('shoponlineswaparm', G_EXP, 'Online shop gun swap also works without the weapon shop page II file (recommended off)', 'off', 'start',
+     'klshoppage.c [Shop] OnlineSwapArm: arms the early-make hook for OnlineSwap when [ShopPage] is off or KLShopPage.ini has no pairs; NOT run live', [('Shop', 'OnlineSwapArm', 1, 0, 0)])
+feat('shoponlineswaplog', G_EXP, 'Online shop gun swap: log the map and the gun handed over per row (bench; recommended off)', 'off', 'start',
+     'klshop.c [Shop] OnlineSwapLog: one oswlog line per row and round; log only; NOT run live', [('Shop', 'OnlineSwapLog', 1, 0, 0)])
 feat('remoteshot2d', G_AV, 'Online: other players\' gunshots close to you play flat (2D) like your own, not 3D (recommended off)', 'off', 'start',
      'klshot2d.c [Sound] RemoteShot2D (+ RemoteShot2DDist 1500, RemoteShot2DRoute); online only, Arcade untouched; 2 = log only; NOT run live', [('Sound', 'RemoteShot2D', 1, 0, 0)])
+feat('remoteshot2dlogany', G_AV, 'Online remote gunshots: log shots the 2D gate does not catch (bench; recommended off)', 'off', 'start',
+     'klshot2d.c [Sound] RemoteShot2DLogAny: log only, needs RemoteShot2D; NOT run live', [('Sound', 'RemoteShot2DLogAny', 1, 0, 0)])
 feat('crewhoponline', G_CREW, 'Online host: AI heisters cross places the navmesh cannot, as in Arcade (needs the AI heister rows above; recommended off)', 'off', 'start',
      'klhop.c [CrewHop] Online (1 on, 2 log only), OnlineStage; host only; NOT run live', [('CrewHop', 'Online', 1, 0, 0)])
 feat('cardownonline', G_DOWN, 'Online host: a car blast floors AI heisters and police (revivable) instead of killing them (recommended off)', 'off', 'start',

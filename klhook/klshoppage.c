@@ -66,7 +66,7 @@ typedef void  (__fastcall *kspg_msg_t)(void *self, void *edx, DWORD *msg);
 static struct {
     int tabNames; char tab[4][64];
     int online2;                                 /* [ShopPage] OnlinePage2 (default 0): online a page II row buys its CARRIER's stock gun through the stock host-validated path */
-    int early, earlyTried, earlyOk, earlyPend, earlyHost, earlyTold; DWORD earlyAt;   /* [ShopPage] OnlineEarlyMake (default 0, recommended off until benched): see kspg_early_make */
+    int swapArm, early, earlyTried, earlyOk, earlyPend, earlyHost, earlyTold; DWORD earlyAt;   /* [ShopPage] OnlineEarlyMake (default 0, recommended off until benched): see kspg_early_make */
     int linkArm, linkDone; DWORD link16;         /* LOG-ONLY link check after an early make (kspg_link_check): moments done (bit mask), tick of the first state 0x16 */
     int apply;                                   /* [ShopPage] OnlineApply (default 0, recommended off until benched): step 4, an approved page II buy is really applied online (klshoppage_online.c) */
     int probe;                                   /* [ShopPage] OnlineProbe (default 0, recommended off until benched): klshoppage_probe.c, LOG ONLY */
@@ -1126,6 +1126,11 @@ static void kspg_init(void)
         else if ((kspg.hireOn && kspg.ctlKey == kspg.hireKey) || (kspg.on && kspg.ctlKey == (klkeys_vk(KK_PAGE2) & 0xff))) klog("controls: the page-cycle key 0x%02x is the hire / page II key: the controls page stays OFF", kspg.ctlKey);
         else { kspg.ctlOn = 1; klog("controls: on ([Keys] ControlsPage=1): key 0x%02x cycles the Buy Weapons pages (NOT RUN IN THE GAME)", kspg.ctlKey); }
     }
+    /* [Shop] OnlineSwapArm (2026-10-28, default 0, recommended off until benched; NOT RUN IN THE GAME): [Shop] OnlineSwap rides this file's early-make hook, which was armed only
+       with [ShopPage] Enable=1 AND pairs in KLShopPage.ini; without them OnlineSwap=1 did nothing (SHOT2D logs: OnlineSwap=1, 'no pairs', no 'osw:' line). =1: the hook is armed for the
+       swap alone (page II stays off). The page II code returns early on kspg.have == 0 (kspg_early_body). */
+    if (kls.on && kls.osw && GetPrivateProfileIntA("Shop", "OnlineSwapArm", 0, klh_ini) != 0) { kspg.swapArm = 1; klog("shop: OnlineSwapArm=1 (NOT run in the game): the early-make hook is armed for [Shop] OnlineSwap=%d even without [ShopPage] pairs", kls.osw); }
+    else if (kls.on && kls.osw && !kspg.on) klog("osw: OnlineSwap=%d but the early-make hook is NOT armed ([ShopPage] Enable=0 and [Shop] OnlineSwapArm=0): online the swap does nothing", kls.osw);
     if (!kspg.on) return;
     kspg.key = klkeys_vk(KK_PAGE2) & 0xff;
     if (kspg.key < 1 || kspg.key > 0xfe) kspg.key = 0x75;
@@ -1147,7 +1152,11 @@ static void kspg_init(void)
     if (kspg.apply) { kspg.online = 1; klog("shopg: apply: on ([ShopPage] OnlineApply=1, recommended off until benched): an approved page II buy is the stock buy of its carrier + the pool relabel on every peer"); }
     kspg.early = GetPrivateProfileIntA("ShopPage", "OnlineEarlyMake", 0, klh_ini) != 0;   /* (recommended off until benched) online: make the page II guns right after the pool build so the stock pass gives them gun+0x13c */
     kspg.have = kspg_load();
-    if (!kspg.have) { klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0; return; }
+    if (!kspg.have) {
+        klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0;
+        if (kls.on && kls.osw && !kspg.swapArm) klog("osw: OnlineSwap=%d but KLShopPage.ini has no pairs, so the early-make hook is NOT armed: online the swap does nothing (set [Shop] OnlineSwapArm=1)", kls.osw);
+        return;
+    }
     kspg.carried[0] = kspg.carried[1] = -1;
     klog("shopPage: on; %d pairs from KLShopPage.ini; key 0x%02x flips the shop between set A and set B (Arcade offline only)", kspg.have, kspg.key);
 }
@@ -1355,6 +1364,10 @@ static void klshoppage_tick(int game_thread)
     if ((kspg.hireOn || kspg.ctlOn) && game_thread && klh_exe_ok) kspg_hire_tick();
     if (kspg.probe && game_thread && klh_exe_ok) kspp_tick();
     if (kspo.on && game_thread && klh_exe_ok) kspo_tick();
+    if (kspg.swapArm && !kspg.on && game_thread && klh_exe_ok) {          /* [Shop] OnlineSwapArm: only the early-make hook, for the swap (page II is off) */
+        if (!kspg.earlyTried) kspg_early_patch();
+        if (kspg.earlyOk) kllb_early_tick();
+    }
     if (!kspg.on || !game_thread || !klh_exe_ok) return;
     now = GetTickCount();
     if ((kspg.early || kls.osw) && !kspg.earlyTried) kspg_early_patch();   /* [Shop] OnlineSwap arms the same hook (klshop.c kls_osw_early) */

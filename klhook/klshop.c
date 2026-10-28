@@ -60,7 +60,8 @@ typedef void *(__fastcall *kls_maker_t)(void *self, void *edx, int zero, void *t
 typedef void *(__fastcall *kls_tmpl_t)(void *self, void *edx, int item);
 typedef void *(__cdecl *kls_realloc_t)(void *, size_t);
 
-static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; BYTE fixed[KLS_MAX][KLS_PER]; int applied[KLS_MAX], told; int wait; LONG gen; int clips; int osw, oswrep; } kls;
+static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; BYTE fixed[KLS_MAX][KLS_PER]; int applied[KLS_MAX], told; int wait; LONG gen; int clips; int osw, oswrep, oswlog; } kls;
+static char kls_oswmap[32];                                              /* the map key of the last klshop_level_open (any thread, plain bytes; [Shop] OnlineSwapLog only) */
 #define KLS_AMMO_KEY 0xbeebbeeb                                        /* ZFFItemWeapon keeps rounds [obj+0xdc] and reserve [obj+0xe0] XORed with it */
 /* the swap set to use, filled by klshop_init (KLHook.ini = default) and klshop_level_open (the map's KLGuns.ini [Shop] Swap, any thread);
    the game thread copies it into kls when kls_sgen changed. kls_slock is a tiny spin lock (no init needed). */
@@ -167,6 +168,15 @@ static void kls_ammo(void)
     }
 }
 
+/* the item the pool hands over for shop row `row` (ours made and decided: offline kls_apply, online kls_osw_tick), 0 = the stock gun / no pair. Read by kllocname.c ([Shop] OnlineSwapText=2). Any thread, plain reads. */
+static int kls_row_ours(int row)
+{
+    int k;
+    if (!kls.on) return 0;
+    for (k = 0; k < kls.n && k < KLS_MAX; k++) if (kls.row[k] == row && kls.applied[k] == 1) return kls.item[k];
+    return 0;
+}
+
 /* ==== [Shop] OnlineSwap=0|1|2 (2026-10-28, NOT RUN IN THE GAME; 0 = off, default; 1 = on; 2 = log only: nothing made, nothing parked) ====
  * What it is for: on a baked map the shop rows 13/16/32/35 are NAMED and PICTURED as HK69 / TYPE 81 / REM 700 / MINIMI. Arcade's [Shop] Swap hands those guns over;
  * online the swap is off (the gate in klshop_tick), so the stock carrier gun came out. This makes the same swap online, with the same pool recipe as offline.
@@ -227,8 +237,8 @@ static void kls_osw_early(int host)
         if (!(carrier = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * row))) continue;
         for (i = 0; i < n; i++) { DWORD e[3]; if (klh_rd(ents + 12 * i, e, 12) && e[1] == carrier && e[0]) parked++; }
         tmpl = ((kls_tmpl_t)KLH_VA(KLS_TEMPLATE))(self, 0, kls.item[k]);
-        if (!tmpl) { klog("osw: row %d item %d has no template: row stays stock", row, kls.item[k]); continue; }
-        if (!parked) { klog("osw: row %d carrier %lu has no stock object in the pool: row stays stock", row, (unsigned long)carrier); continue; }
+        if (!tmpl) { klog("osw: row %d item %d has no template: row stays stock", row, kls.item[k]); if (kls.oswlog) klog("oswlog: map %s row %d item %d: STOCK handed over (no template)", kls_oswmap[0] ? kls_oswmap : "?", row, kls.item[k]); continue; }
+        if (!parked) { klog("osw: row %d carrier %lu has no stock object in the pool: row stays stock", row, (unsigned long)carrier); if (kls.oswlog) klog("oswlog: map %s row %d item %d: STOCK handed over (carrier absent from the pool)", kls_oswmap[0] ? kls_oswmap : "?", row, kls.item[k]); continue; }
         if (kls.osw == 2) { klog("osw: LOG ONLY row %d (carrier item %lu, %d stock object(s)) would get %d object(s) of item %d", row, (unsigned long)carrier, parked, KLS_PER, kls.item[k]); continue; }
         if (cap < n + KLS_PER + 1) {                                    /* same growth as kls_apply */
             DWORD ncap = n + KLS_PER + 8; void *p;
@@ -271,6 +281,7 @@ static void kls_osw_tick(DWORD st)
             DWORD id = 0;
             __try { id = ((DWORD (__fastcall *)(DWORD))(DWORD_PTR)KLH_VA(0x6ece90))(kls.made[k][0]); } __except (1) { id = 0xdead; }
             klog("osw: row %d: %d object(s), %d with gun+0x13c set, id 0x6ece90 of the first = %lu (state 0x%lx): %s", kls.row[k], cnt, linked, (unsigned long)id, (unsigned long)st, want ? "ours are handed over" : "STOCK gun stays (net sub-object missing)");
+            if (kls.oswlog) klog("oswlog: map %s row %d carrier %lu item %d: %s", kls_oswmap[0] ? kls_oswmap : "?", kls.row[k], (unsigned long)carrier, kls.item[k], want ? "OURS handed over" : "STOCK handed over");
         }
         if (!kls.applied[k] && !want) continue;                          /* undecided: ours stay parked, stock stays free */
         for (i = 0; i < n; i++) {
@@ -338,6 +349,7 @@ static void klshop_level_open(const char *key, const char *opened)
 {
     char file[MAX_PATH], buf[200], *s; DWORD len; int n, row[KLS_MAX], item[KLS_MAX], same;
     if (!kls.on) return;
+    if (key) { strncpy(kls_oswmap, key, sizeof kls_oswmap - 1); kls_oswmap[sizeof kls_oswmap - 1] = 0; }
     len = GetFullPathNameA(opened, MAX_PATH, file, 0);
     if (!len || len >= MAX_PATH || !(s = strrchr(file, 0x5c)) || (size_t)(s - file) + 12 >= sizeof file) return;
     strcpy(s + 1, "KLGuns.ini");
@@ -361,6 +373,8 @@ static void klshop_init(void)
     kls_stg = kls_def; kls_sgen = 1; kls.gen = 0;                        /* the tick adopts it */
     kls.osw = GetPrivateProfileIntA("Shop", "OnlineSwap", 0, klh_ini); if (kls.osw < 0 || kls.osw > 2) kls.osw = 0;   /* 0 off, 1 on, 2 log only; online the swap rides the early-make hook of klshoppage.c (needs [ShopPage] Enable=1) */
     if (kls.osw) klog("shop: OnlineSwap=%d (NOT run in the game): online the baked rows hand over the swapped gun like Arcade; no network message changes; see klshop.c OnlineSwap", kls.osw);
+    kls.oswlog = kls.osw && GetPrivateProfileIntA("Shop", "OnlineSwapLog", 0, klh_ini) != 0;   /* (recommended off) bench only: one 'oswlog:' line per row and round, with the map */
+    if (kls.oswlog) klog("shop: OnlineSwapLog=1 (bench only): 'oswlog: map .. row .. item ..: OURS|STOCK handed over' per row and round");
     kls.clips = GetPrivateProfileIntA("Shop", "ReserveClips", 2, klh_ini); /* reserve of an extra gun the row's ammo leaves empty, in clips (0 = leave it) */
     klog("shop: on; %d default swap(s); a map's KLGuns.ini [Shop] Swap overrides; Arcade only, before the round; replaces what a bought row hands over (never adds a row); proven live S7-S11", kls_def.n);
 }
