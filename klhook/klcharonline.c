@@ -38,7 +38,7 @@
  *
  * KLHook.ini
  *   [CharOnline]
- *   Enable=0   (recommended on after the live test)   Unique=1 (recommended on: a character is worn once, lower entity wins)   ForgetMs=0 (0 = keep a peer's last look)   OwnDiag=1   Steam=1   Udp=1   Keys=1   KeyChar=0x78 (F9)   KeyMask=0x7A (F11, Ctrl = outfit)
+ *   Enable=0   (recommended on after the live test)   Unique=1 (recommended on: a character is worn once, lower entity wins)   StockHero=1 (recommended on: Dog Days heisters 1..8 get their stock body from the rules hero table on a level without a wardrobe)   ForgetMs=0 (0 = keep a peer's last look)   OwnDiag=1   Steam=1   Udp=1   Keys=1   KeyChar=0x78 (F9)   KeyMask=0x7A (F11, Ctrl = outfit)
  *   Settle=1500  ms the table must have stood still before a body is changed        Tries=3  calls per entity per 10 s     Log=1
  *   TEST build only: TestPeer=<idx>  TestChar=<c> TestMask=<m> TestOutfit=<o>   pretends peer <idx> announced that (proves the apply on another body)
  */
@@ -59,7 +59,7 @@ static struct {
     int ownIdx, pubIdx, pubC, pubM, pubO, pubWas;
     char pubStr[40];
     unsigned __int64 lobby;
-    UINT_PTR sock; int sockTried, toldOwn, toldNoWar, toldCode, toldOnline, toldFollow;
+    UINT_PTR sock; int stockHero, sockTried, toldOwn, toldNoWar, toldCode, toldOnline, toldFollow;
     DWORD triedAt[KLCO_N]; int tried[KLCO_N]; LONG lastv[KLCO_N]; DWORD lastmodel[KLCO_N];
     DWORD whyAt[KLCO_N];
 } klco;
@@ -227,6 +227,27 @@ static int klco_effective(int idx, int raw)
     return raw;
 }
 
+/* The stock Dog Days heister n (1..8) on a level with NO wardrobe (every stock FA map): the eight models are the same objects in all nine stock levels
+ * and the rules object's hero table (rules+0x208, 8 dwords, entry n-1 = heister n: the table klchar.c's offline path already uses as `hero[slot]`)
+ * holds their roots. 2026-10-28 (bench A1HIRE on F06: 'no such model (wardrobe missing): the stock body stays', a hire changed nothing).
+ * GUESS: the online Sv / Cl rules keep the same table at the same offset (they derive from ZGameRulesHeist, whose GetHero(2,n) slot 0x220 reads it);
+ * checked before use: all eight entries non-zero and distinct, and the body the entity wears now is one of them (stock slot 137 gave it GetHero(2,seat)).
+ * Off with [CharOnline] StockHero=0. Returns the root or 0. */
+static DWORD klco_stock_root(int ch, DWORD model, const char *who)
+{
+    DWORD gs, rules, hero[8]; int i, j, found = 0; static LONG told;
+    if (!klco.stockHero || ch < 1 || ch > 8) return 0;
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLC_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || !klh_rd(rules + 0x208, hero, sizeof hero)) return 0;
+    for (i = 0; i < 8; i++) {
+        if (!hero[i]) return 0;
+        for (j = 0; j < i; j++) if (hero[j] == hero[i]) return 0;
+        if (hero[i] == model) found = 1;
+    }
+    if (!found) { if (!InterlockedExchange(&told, 1)) klog("charonline: stock hero table at rules+0x208 does not hold the body %s wears (%lu): not used", who, model); return 0; }
+    if (InterlockedExchange(&told, 2) != 2) klog("charonline: stock hero table: %lu %lu %lu %lu %lu %lu %lu %lu (a level without a wardrobe: heister n = entry n-1)", hero[0], hero[1], hero[2], hero[3], hero[4], hero[5], hero[6], hero[7]);
+    return hero[ch - 1];
+}
+
 /* ---- one body: model, then variant (klchar.c's formula) ---- */
 static void klco_look(DWORD ent, int idx, int ch, int mask, int outfit, int gt, const char *who, DWORD now)
 {
@@ -243,6 +264,7 @@ static void klco_look(DWORD ent, int idx, int ch, int mask, int outfit, int gt, 
     }
     if (ch >= 1) {
         if (wardrobe && ch <= klc_w.n && klc_w.c[ch - 1].root && (ch <= 8 || !klc_w.c[ch - 1].stock)) want_root = klc_w.c[ch - 1].root;
+        else if (!wardrobe && (want_root = klco_stock_root(ch, model, who)) != 0) { /* stock body of a Dog Days heister from the rules' hero table */ }
         else if (!klco.toldNoWar++) klog("charonline: %s wants %s (char %d) and level %s has no such model (wardrobe %s): the stock body stays", who, klco_nm(ch), ch, key, wardrobe ? "has no entry" : "missing");
     }
     if (want_root && model != want_root) {
@@ -427,6 +449,7 @@ static void klco_init(void)
     klco.keys = GetPrivateProfileIntA("CharOnline", "Keys", 1, klh_ini) != 0;
     klco.log = GetPrivateProfileIntA("CharOnline", "Log", 1, klh_ini) != 0;
     klco.unique = GetPrivateProfileIntA("CharOnline", "Unique", 1, klh_ini) != 0;
+    klco.stockHero = GetPrivateProfileIntA("CharOnline", "StockHero", 1, klh_ini) != 0;       /* (recommended on) a Dog Days heister's stock body on a level without a wardrobe */
     klco.forgetMs = (int)GetPrivateProfileIntA("CharOnline", "ForgetMs", 0, klh_ini);
     klco.ownDiag = GetPrivateProfileIntA("CharOnline", "OwnDiag", 1, klh_ini) != 0;
     klco.settle = GetPrivateProfileIntA("CharOnline", "Settle", 1500, klh_ini);
