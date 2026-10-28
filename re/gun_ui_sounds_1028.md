@@ -15,7 +15,7 @@ Tool: tools/kl_shop_swap.py (bake/stage). New `--no-ini` / `write_ini=False` bak
 Staged: C:\kl_build_1024\gunui_1028\ (INSTALL_gunui_1028.bat, UNDO_gunui_1028.bat, -DryRun both run; the live file is renamed `.before-shopswap` in place,
 never KL_PortBackup). DM07 F06_Main.zip bdb7728d..., DD10 F07_Main.zip 74c3d9dc...; 9 members each (TEX + 8 LOC). Install refuses while kl2.exe runs.
 
-## 3. Remote shot loudness: traced statically 2026-10-28, NOTHING implemented (slot and volume are the same online and in Arcade)
+## 3. Remote shot loudness: traced statically 2026-10-28; IMPLEMENTED as [Sound] RemoteShot2D (default off, not yet run live)
 Static trace of kl2.exe (no game run). The weapon-event sound routine is 0x503650 (this = weapon item, arg1 = shooter/owner, arg2 = a flag; called from the
 fire path 0x4cca68 and the weapon-state code 0x8c567b / 0x8c56ea / 0x8c5837; NOT in any vtable, so the data-only hook has no seat on it). It plays through
 0x9025b0 (arg1 = #def slot, arg2 = "2D"), which reads the template's #def ref at `[weapon+0xc4]+0x7c` (0x9025e1, helper 0x430540).
@@ -43,3 +43,12 @@ writes data only). A future option if the owner wants remote shots as loud as hi
 (klsync.c `ksp_vt` technique), filter on the return address inside 0x9025b0 (0x90268b 2D, 0x90272f 3D) and call the 2D form; GUESS, needs the dll's argument layout.
 Bench to decide (live, 2 seats, MP45 on both): hook-free listen test first: stand 3 m from the remote shooter, then have him stand 20 m away, and compare with
 the local shot; if 3 m sounds as loud as local, falloff is the cause and the 2D wrapper above is the fix. Ini: nothing new to set.
+
+### Implemented 2026-10-28 (wk-shot2d, klhook/klshot2d.c; static, NOT run live)
+Keys: `[Sound] RemoteShot2D` 0 off (default) / 1 on / 2 dry (log only); `RemoteShot2DDist` cm (default 1500). ONLINE only: gated on `kl_online()` (klhook.c: role 2/3, or game type 4 with a non-Heist rules vtable; 0 in Arcade/story).
+Correction to the trace: 0x503650's arg2 is NOT the 2D flag. The 2D byte is computed inside (0x5036d4..0x503708) and written over the callee's own arg1 slot ([esp+0x10]), then pushed to 0x9025b0, so an E8 detour on the callers cannot ask for 2D. Patched instead, inside 0x503650 (both only reached for a ZFFPlayer shooter), with E9 rel32 to naked stubs:
+- site A 0x503764 `8b 4c 24 10 51` (mov ecx,[esp+0x10]; push ecx; then `push 4` = slot 4): stub re-runs the pair, sets cl=1 when forced.
+- site B 0x50375b `b8 04 00 00 00` (mov eax,4; then push ebx(0); push eax): stub pushes 1 instead of ebx when forced.
+Fire-path gate: the stub acts only when 0x503650's return address is 0x4cca6d (call at 0x4cca68, `e8 e3 6b 03 00`, re-verified at init). 0x8c567b / 0x8c56ea / 0x8c5837 follow `[owner+0xd70] = 5/4/6` stores (slots 0/9/3 via 0x5039a4), not shots: excluded (GUESS).
+Decision: remote (shooter != [gd+0x828+4*(char)[gd+0x898]]) and 3D distance (scene node of [pl+4], fallback [pl+0x460]) to the local pawn <= Dist; under __try, any fault keeps the original flag; the local pawn is never changed.
+Bench recipe (2 seats, MP45 on both; host KLHook.ini and join KLHook.ini, same lines): `[Sound]` `RemoteShot2D=1` `RemoteShot2DDist=1500` (first pass `RemoteShot2D=2` for a dry log). Proving log line (client or host, in KLHook.log): `shot2d: remote shooter xxxxxxxx site A at NNN cm: played 2D (dist 1500; ...)` (dry: `DRY ... would play 2D`); init line `shot2d: RemoteShot2D=1 ... site A 0x503764 patched, site B 0x50375b patched` (REFUSED = SHIP build or SessionSafe: use the TEST build). Listen: the remote shooter at 3 m should now be as loud as your own shot (2D, no panning); at 20 m (beyond 1500 cm) it must stay 3D, quieter and directional; compare with 0 on the same spots. If site A and B never log, the shot goes through a path not covered (then 3D falloff may not be the cause: see candidates 1..4 above).
