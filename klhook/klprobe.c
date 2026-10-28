@@ -98,6 +98,8 @@ static DWORD __fastcall klpr_init(void *self, void *edx)
 #define KLPR_DC_PAD    60.0f
 static struct { DWORD me, at; int done; } klpr_dc[4]; static int klpr_dc_ms;
 
+static void klpr_leaf_start(DWORD me, DWORD at);
+
 static void klpr_dc_note(DWORD me)
 {
     int k, f = -1;
@@ -132,6 +134,7 @@ static void klpr_dc_tick(void)
         cnt = klh_rd32(klpr_dc[k].me + 0x30);
         if (cnt < 1 || cnt > 8) { klpr_dc[k].done = 1; continue; }
         if (klpr_dc_busy()) continue;                                                                      /* postponed, asked again next tick */
+        n = 0;                                                                                             /* per proxy (A1LIFT6 logged "10 of 5") */
         for (i = 0; i < (int)cnt; i++) {
             ctl = klh_rd32(klpr_dc[k].me + 0x34 + 4 * i);
             if (ctl < 0x10000 || klh_rd32(ctl) != (DWORD)(DWORD_PTR)KLH_VA(KLPR_VT_LEAF)) continue;
@@ -141,15 +144,23 @@ static void klpr_dc_tick(void)
         }
         klpr_dc[k].done = 1;
         klog("doorclose: proxy %08lx: %d of %lu leaf(s) set to frames 75..160 and restarted %lu ms after the doors opened (DoorCloseMs=%d)", (unsigned long)klpr_dc[k].me, n, (unsigned long)cnt, (unsigned long)(now - klpr_dc[k].at), klpr_dc_ms);
+        klpr_leaf_start(klpr_dc[k].me, now);                                                               /* DoorLeaves: sample the closing too */
     }
 }
 
 /* an accepted door proxy: stamp for kljoin.c and (DoorLeaves) start a 6 s sample series for this proxy (4 proxies at most; a re-accept restarts it) */
 static void klpr_accepted(DWORD me)
 {
-    DWORD now = GetTickCount(); int k;
+    DWORD now = GetTickCount();
     klj_door_at = now ? now : 1;
     klpr_dc_note(me);
+    klpr_leaf_start(me, klj_door_at);
+}
+
+/* DoorLeaves: (re)start a 6 s sample series for this proxy from 'at' (the open accept, or a DoorCloseMs close) */
+static void klpr_leaf_start(DWORD me, DWORD at)
+{
+    DWORD now = GetTickCount(); int k;
     if (!klpr.leaves) return;
     for (k = 0; k < klpr.npr && klpr.pr[k].me != me; k++) ;
     if (k == klpr.npr) {                               /* a new proxy: reuse a finished slot first (rounds / levels re-create proxies at new addresses) */
@@ -158,7 +169,7 @@ static void klpr_accepted(DWORD me)
         if (f < klpr.npr) k = f; else if (klpr.npr < 4) klpr.npr++; else return;
     }
     klpr.pr[k].at = 0;                                 /* klpr_tick may run on another thread: park the slot while it is rewritten */
-    klpr.pr[k].me = me; klpr.pr[k].last = 0; klpr.pr[k].at = klj_door_at;
+    klpr.pr[k].me = me; klpr.pr[k].last = 0; klpr.pr[k].at = at ? at : 1;
 }
 
 /* one controller of a proxy: one compact line (formats in the header comment).
@@ -251,7 +262,7 @@ static void klpr_init_all(void)
     if (!klh_exe_ok) { klog("probe: DoorProxy: not the known kl2.exe - off"); klpr.on = 0; return; }
     klpr_dc_ms = GetPrivateProfileIntA("Join", "DoorCloseMs", GetPrivateProfileIntA("KLHook", "DoorCloseMs", 0, klh_ini), klh_ini);
     if (klpr_dc_ms < 0 || klpr_dc_ms > 120000) klpr_dc_ms = 0;
-    klog("doorclose: [Join] DoorCloseMs=%d (%s)", klpr_dc_ms, klpr_dc_ms ? "doors are closed again that many ms after they opened, never while a player is at the car" : "off");
+    klog("doorclose: [KLHook] DoorCloseMs=%d (%s)", klpr_dc_ms, klpr_dc_ms ? "doors are closed again that many ms after they opened, never while a player is at the car" : "off");
     klog("probe: DoorProxy on (%s), DoorLeaves %s", klpr.all ? "all names" : "names with Elevator/Escape/VideoProxy/Exit, or unreadable", klpr.leaves ? "on" : "off");
     klpr_wrap(KLPR_VT_PROXY, 14, KLPR_INIT_VA, (void *)klpr_init, (void **)&klpr.real_init, "ZMatPosAnimProxy init");
     klpr_wrap(KLPR_VT_PROXY, 26, KLPR_HAND_VA, (void *)klpr_hand, (void **)&klpr.real_hand, "ZMatPosAnimProxy handler");
