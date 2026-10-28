@@ -74,7 +74,7 @@ run it while an A1SHIFT bench has DM11S installed). SHIPPED 18:20 (/oldhook: Onl
 SHIPCHK 18:45 PASS online with the installed dll/ini. A1LIFT3d: Retomoto lift box re-arms live (3 door fires 10-15 s apart).
 Bench shots fixed: kl_solo_test --d3shots (in-game back buffer;
 the GDI grab is black with the monitor off). LIFT WORKS (22:00): doors open (A1LIFT4c
-leaf probe); [player+0x460] lagged at the doorway, fixed by [KLHook] JoinFeetNode=1; A1LIFT4e ride from inside the car PASS (merged f82314fa5; SHIPPED 22:30 as ship1028 dll dc0836b8 after SHIPCHK2 + A1LIFT5 PASS; doors never close in data: opt-in [KLHook] DoorCloseMs makes them close, A1LIFT6c PASS 0 faults, merged 47ac20c54, not shipped). (The 40 % downs: Ramp=1 kept the bench's
+leaf probe); [player+0x460] lagged at the doorway, fixed by [KLHook] JoinFeetNode=1; A1LIFT4e ride from inside the car PASS (merged f82314fa5; SHIPPED 22:30 as ship1028 dll dc0836b8 after SHIPCHK2 + A1LIFT5 PASS; doors never close in data: [KLHook] DoorCloseMs=8000 closes them, SHIP-safe kldoorclose.c; SHIPPED 23:20 as ship1029 dll 897decf7 + ini ad00a047 after SHIPCHK3 + A1LIFT8 PASS). (The 40 % downs: Ramp=1 kept the bench's
 CopToYou at stock; a lone player factor needs [Balance] Ramp=0; Ramp now logs it, 403967a5a.)
 
 2026-10-28 ~23:10 - [ce] Merged (default off): [BotFill] OnlineBotTraits (deb65d2bf; TRT1 DD04 online PASS, 0 faults, 1462 bot hits scaled; no bot

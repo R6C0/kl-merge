@@ -1,3 +1,9 @@
+2026-10-28 ~23:20 - [c9] SHIPPED ship1029: dll 897decf7 (rtp-schemas bf3c00be0) + KLHook.ini ad00a047 (de91b2a5 + [KLHook] DoorCloseMs=8000).
+Door close is now SHIP-safe (kldoorclose.c polls the lift proxies: entity walk, else a budgeted memory scan; writes only leaf ints/floats + thiscall
+0x59dce0; no code/vtable writes; workflow port + 2 reviews + fix). A1LIFT7 + A1LIFT8 PASS (found by scan, both lifts closed 8 s after open), SHIPCHK3
+online both IN ROUND, 0 faults. Undo C:/kl_build_1024/c9_1028/ship1029/UNDO_ship1029.bat. Bats now call System32/find.exe (Git's find under bash
+made the 'game running' check a no-op). kl_tests 33/8/1 (baseline).
+
 2026-10-28 ~22:45 - [c9] Retomoto lift doors CLOSE (opt-in [KLHook] DoorCloseMs, default off; merged 47ac20c54). A1LIFT6: close fired on both
 proxies but replayed the OPENING (only the ints [ctl+0xd0/+0xd4] were set; the clip state floats ctl+0x44/+0x48 stayed 0..75). A1LIFT6c with the floats
 written too: both lifts slide shut 819->909 in 3.5 s (frame 15->32), 0 faults. kl_tests 31/8/1 (baseline). Not shipped yet (needs a SHIP build + SHIPCHK).
