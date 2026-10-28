@@ -1,3 +1,9 @@
+2026-10-28 ~14:20 - [c9] DM11S div-by-zero (kl2+0x4668b, ZSoundBufferOpenAL rate 0) ROOT CAUSE: every A1SHIFT run shifted the STOCK DD F04 zip
+(F04_Main_src.zip was copied from SCENES\Locations\F04, not KLExpansion\Maps\DM11B) and ran it beside DM11B's .WHD: 24,025 of 29,181 .SND waves hit
+no record -> junk record, max rate 0. Fix 984463891: kl_map_shift refuses a .SND/.WHD mismatch (WrongSource) + DM11B .prp size; rebuilt from the
+real DM11B (int16: 0 gameplay beyond after T); Heroes!/Henchmen roots now move when authored >8192 from origin (DM11B Hero at 33900,29950). New
+zip md5 e831d020. A1SHIFT4 staged (queue.txt 4) after ce + A1HIRE3. A1SHIFT/A1SHIFT2 results were on the wrong map too (.prm repoint still valid).
+
 2026-10-28 ~14:00 - [c9] A1TALK_DM01 + A1TALK_DD04 PASS: crew banter plays online on both seats ([Voice] OnlineTalk=1, a27db09ca; host 4 lines,
 client 3, 0 faults, TEST out_c9talk_1028_test 89117d7e). DM11B int16 shift (DM11S): run 1 invalid (unshifted bots.zip -> bots companion 6c3f59315);
 A1SHIFT2 load crash kl2+0x1c6901 = .prm type-7 chunks still pointed at old .oct record offsets after the .oct shrank 1,888 bytes (repoint_prm,
