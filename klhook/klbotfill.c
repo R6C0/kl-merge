@@ -1214,7 +1214,10 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != a; s++) ;
         if (s == KLBF_OT_BOTS) { for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor; s++) ; if (s == KLBF_OT_BOTS) continue; klbf_ob[s].actor = a; }
         if (klbf_ob[s].phase == 3) continue;
-        if (klbf_gu == 1 && klbf_ob[s].guHum && now - klbf_ob[s].guAt < 3500) continue;      /* OnlineGetUp: this bot runs to / stands by a downed human; its stack order must not undo the rush */
+        if (klbf_gu == 1 && klbf_ob[s].guHum && now - klbf_ob[s].guAt < 3500) {      /* OnlineGetUp: this bot runs to / stands by a downed human; its stack order must not undo the rush */
+            if (klbf_ob[s].phase == 1) { klbf_ob[s].phase = 0; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].since = now; }      /* review: a held walk to a stack is dropped (stack stays unclaimed), else its 12 s / 90 s stall clocks blacklist a reachable stack */
+            continue;
+        }
         if (klbf_ot_gat && !klbf_ot_called && (klbf_ob[s].phase < 2 || klbf_ob[s].phase == 4)) {      /* OnlineVanGather: the carrier is at the exit, every living bot goes to the box now (a walk to a stack is dropped; the stack stays unclaimed) */
             if (!(klbf_ob[s].told & 64) && (klbf_ob[s].told |= 64)) klog("botfill: tactics: bot %d (actor %08lx): van gather: leaves phase %d (tally %d, %d grab(s)) and walks to the box", s, a, klbf_ob[s].phase, klbf_ob[s].tally, klbf_ob[s].grabs);
             if (klbf_ob[s].phase == 4) klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; van gather)", s, (unsigned long)klbf_ob[s].target, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally);
