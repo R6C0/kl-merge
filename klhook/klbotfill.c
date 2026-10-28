@@ -182,7 +182,7 @@ static void klbf_init(void)
     klbf_gw = GetPrivateProfileIntA("BotFill", "OnlineGuardWalk", 0, klh_ini) != 0;      /* (recommended off) wk-move: not run live */
     klbf_wr = GetPrivateProfileIntA("BotFill", "OnlineWalkReach", 0, klh_ini) != 0;      /* (recommended off) wk-move: not run live */
     klbf_esc = (int)GetPrivateProfileIntA("Bots", "OnlineEscort", 0, klh_ini); if (klbf_esc < 0 || klbf_esc > 2) klbf_esc = 0;      /* (recommended off) wk-move: not run live */
-    klbf_esc_far = (float)GetPrivateProfileIntA("Bots", "OnlineEscortFar", 800, klh_ini); if (klbf_esc_far < 200.0f) klbf_esc_far = 200.0f;      /* cm, as klescort.c EscortFar */
+    klbf_esc_far = (float)GetPrivateProfileIntA("Bots", "OnlineEscortFar", 800, klh_ini); if (klbf_esc_far < 400.0f) klbf_esc_far = 400.0f;      /* cm, as klescort.c EscortFar */
     klbf_esc_side = (float)GetPrivateProfileIntA("Bots", "OnlineEscortSide", 300, klh_ini); if (klbf_esc_side < 0) klbf_esc_side = 0;      /* cm, as klescort.c EscortSide */
     if (klbf_ot) klog("botfill: wk-move: OnlineGuardWalk=%d, OnlineWalkReach=%d, OnlineEscort=%d (Far %.0f cm, Side %.0f cm) - all default 0 = off", klbf_gw, klbf_wr, klbf_esc, klbf_esc_far, klbf_esc_side);
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
@@ -925,7 +925,8 @@ static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *so
         int s, t = -1, k; float d, bd = 1e30f, dx, dz, l, cs = 1.0f, sn = 0.0f, x, want[3], got[3]; struct kle_e e; char why[100]; int direct = 0;
         for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != act[b]; s++) ;
         if (s == KLBF_OT_BOTS) continue;
-        if (klbf_ob[s].phase == 3) { if (vstate >= 1 && vstate <= 5) continue; } else if (klbf_ob[s].phase != 0) continue;      /* a boarded bot stays at the van while it comes / waits / leaves */
+        if (klbf_ob[s].phase != 0 || klbf_ob[s].tally > 0) continue;      /* review: only a bot with nothing to loot and nothing carried; a boarded or carrying bot is never walked off (Arcade never orders a bot that is aboard) */
+        if (vstate >= 1 && vstate <= 5) continue;      /* review: the escort ends once the van is called / waits (Arcade EscortUntil=3) */
         if (klbf_ob[s].gwAt && now - klbf_ob[s].gwAt < 3000) continue;      /* OnlineGuardWalk has it */
         if (klbf_esc == 1) t = ownH;
         else for (k = 0; k < nh; k++) if ((d = kle_dist(pos[b], hp[k])) < bd) { bd = d; t = k; }
@@ -933,8 +934,8 @@ static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *so
         d = kle_dist(pos[b], hp[t]);
         if (!(d > klbf_esc_far)) { klbf_ob[s].esAt = 0; continue; }      /* near enough (a NaN is not far) */
         if (klbf_ob[s].esAt) {
-            if (now - klbf_ob[s].esAt < 3000) continue;
-            if (kle_dist(hp[t], klbf_ob[s].esAnc) <= 300.0f) { if (now - klbf_ob[s].esAt < 12000) continue; direct = 1; }      /* he has not moved since: on its way; 12 s later one order to his feet */
+            if (now - klbf_ob[s].esAt < 2000) continue;      /* Arcade EscortEvery 2 s */
+            if (kle_dist(hp[t], klbf_ob[s].esAnc) <= 500.0f)      /* Arcade EscortRetarget 500 */ { if (now - klbf_ob[s].esAt < 12000) continue; direct = 1; }      /* he has not moved since: on its way; 12 s later one order to his feet */
         }
         dx = pos[b][0] - hp[t][0]; dz = pos[b][2] - hp[t][2]; l = (float)sqrt(dx * dx + dz * dz);
         memcpy(want, hp[t], 12);
@@ -1143,7 +1144,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klog("botfill: tactics: bot %d (actor %08lx): %d free stack(s), all with a live cop within %.0f m: it holds (%s) while they are cleared", s, a, nguard, klbf_ot_guard / 100, klbf_ot_gtake ? "up to 30 s, OnlineGuardTake=1" : "until a stack is clear, OnlineGuardTake=0");
             if (klbf_gw && best < 0 && gbest >= 0 && klbf_ob[s].tally == 0) {      /* OnlineGuardWalk (wk-move, NOT run live): stand at the guard radius edge of the nearest guarded stack, not where the round began; the guard cops then fight the bot through the game's own AI */
                 float edge = (klbf_ot_guard > 0 ? klbf_ot_guard : 2500.0f) * 1.1f, dx = bots[b].pos[0] - mpos[gbest][0], dz = bots[b].pos[2] - mpos[gbest][2], dl = (float)sqrt(dx * dx + dz * dz);
-                klbf_ob[s].gwAt = now;
+                if (dl > edge) klbf_ob[s].gwAt = now;      /* review: only while it is actually walking; a bot already at the edge is free for the escort */
                 if (dl > edge + 200.0f && (!klbf_ob[s].gwOrd || now - klbf_ob[s].gwOrd >= KLBF_OT_REORD)) {
                     float gt[3], gg[3]; struct kle_e ge;
                     gt[0] = mpos[gbest][0] + dx / dl * edge; gt[1] = mpos[gbest][1]; gt[2] = mpos[gbest][2] + dz / dl * edge;      /* GUESS: the stack's height is the bot's floor; the order snaps to the nav */
@@ -1151,7 +1152,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     if (kle_order2(&ge, gt, gg, why, 0) == 1) {
                         klbf_ob[s].gwOrd = now;
                         if (!(klbf_ob[s].told & 32768) && (klbf_ob[s].told |= 32768)) klog("botfill: tactics: bot %d (actor %08lx): guard walk: %d free stack(s), all guarded; walks toward stack %08lx (%.0f m away) and stops %.0f m from it, at (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f) (OnlineGuardWalk, said once)", s, a, nguard, mo[gbest], dl / 100, edge / 100, gt[0], gt[1], gt[2], gg[0], gg[1], gg[2]);
-                    } else if (why[0] && !(klbf_ob[s].told & 2) && (klbf_ob[s].told |= 2)) klog("botfill: tactics: bot %d (actor %08lx): order refused: %s", s, a, why);
+                    } else if (why[0] && !(klbf_ob[s].told & 131072) && (klbf_ob[s].told |= 131072)) klog("botfill: tactics: bot %d (actor %08lx): guard walk order refused: %s", s, a, why);
                 }
             }
             {   /* OnlineIdleVan: no stack for this bot (blacklisted, taken, none armed) and nothing carried: after OnlineIdleVanS with no stack left at all, or with the clock low, it goes to the exit and the van is called (BO12: 0 grabs, nobody called it) */
@@ -1296,7 +1297,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                         DWORD blk = klh_rd32(bots[b].soldier + 0x64c); BYTE zero = 0;
                         if (blk && klh_rd32(blk + 0x14) == bots[b].soldier) klh_data((void *)(DWORD_PTR)(blk + 0x10), &zero, 1, "defend block style given (OnlineExitSprint undone)");
                     }
-                    klbf_ob[s].phase = 0; klbf_ob[s].told &= ~(8 | 512 | 2048 | 4096 | 8192); klbf_ob[s].tpAt = 0; klbf_ob[s].leg = 0; klbf_ob[s].legAt = 0;
+                    klbf_ob[s].phase = 0; klbf_ob[s].told &= ~(8 | 512 | 2048 | 4096 | 8192 | 32768 | 65536); klbf_ob[s].reachAt = 0; klbf_ob[s].gwAt = 0; klbf_ob[s].esAt = 0; klbf_ob[s].esN = 0; klbf_ob[s].tpAt = 0; klbf_ob[s].leg = 0; klbf_ob[s].legAt = 0;
                     continue;
                 }
             }
