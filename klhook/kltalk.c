@@ -453,7 +453,21 @@ static void *klk_entry(const char *key, DWORD rules, const char *scene)
    The Arcade ZGameRulesHeist (0xbd3514) is larger (+0x33e voice table, +0x5f8 ZHeistScore), so those offsets are heap neighbours online: never read them there. */
 static int klk_rules_onl(DWORD rules) { DWORD v = klh_rd32(rules); return KLH_RULES_SV_OK(v) || KLH_RULES_CL_OK(v); }
 /* [Voice] OnlineTalkNoScore=1 (default 0, recommended off until benched): online, speech is allowed when S=[rules+0x2c] is non-null instead of the Arcade-only [rules+0x5f8] */
-static int klk_onl_noscore(void) { static int v = -1; if (v < 0) v = GetPrivateProfileIntA("Voice", "OnlineTalkNoScore", 0, klh_ini) != 0; return v; }
+/* [Voice] OnlineTalk=1 (needs [Voice] Online=1 and [Online] Read=1; recommended on once benched): the crew banter runs in an online FA round. ROOT CAUSE of the silent 10-28 bench A1SND:
+   klk_who_any (below) refused every online round unless OnlineTraits=1 or OnlineCrew=1, and the bench had neither, so klk_tick returned before its first log line. OnlineTalk=1
+   is the one switch for the banter: it feeds klk_tick the local seat AND the other human rows (wide who) and implies OnlineTalkNoScore. */
+static int klk_onl_talk(void) { static int v = -1; if (v < 0) v = GetPrivateProfileIntA("Voice", "Online", 0, klh_ini) != 0 && GetPrivateProfileIntA("Voice", "OnlineTalk", 0, klh_ini) != 0; return v; }
+static int klk_onl_noscore(void) { static int v = -1; if (v < 0) v = GetPrivateProfileIntA("Voice", "OnlineTalkNoScore", 0, klh_ini) != 0; return v || klk_onl_talk(); }
+/* a gate that stopped a line, said once per id (ids 0..31): the next bench log shows why talk is silent online. Only when an online talk key is on. */
+static int klk_gate_wanted(void) { return klk_onl_talk() || klk_onl_noscore(); }
+static void klk_gate(int id, const char *fmt, ...)
+{
+    static DWORD told; char b[240]; va_list ap;
+    if (id < 0 || id > 31 || (told & (1u << id)) || !klk_gate_wanted()) return;
+    told |= 1u << id;
+    va_start(ap, fmt); vsnprintf(b, sizeof b, fmt, ap); va_end(ap);
+    klog("talk: gate %d held: %s", id, b);
+}
 static int klk_say(const char *key, int rec, float rt, const char *what, DWORD rules, const char *scene)
 {
     static const BYTE lookup_code[16] = { 0x56, 0x8b, 0x74, 0x24, 0x08, 0x8b, 0xc6, 0x57, 0x8b, 0xf9, 0x8d, 0x50, 0x01, 0x8d, 0x49, 0x00 };    /* 0x828fa0 */
@@ -470,7 +484,7 @@ static int klk_say(const char *key, int rec, float rt, const char *what, DWORD r
         if (!toldmgr++) klog("talk: the speech manager [0x168e958] or its queue cannot be read (manager %08lx): nothing is said", mgr);
         return 0;
     }
-    if (klk_rules_onl(rules)) { if (!klk_onl_noscore() || !klh_rd32(rules + 0x2c)) return 0; }      /* online: +0x5f8 is past the object (Sv 0x3a8 / Cl 0x334 bytes): garbage decided this; now off unless OnlineTalkNoScore, then S=[rules+0x2c] must be non-null */
+    if (klk_rules_onl(rules)) { if (!klk_onl_noscore() || !klh_rd32(rules + 0x2c)) { klk_gate(1, "say %s: online rules %08lx, OnlineTalk/OnlineTalkNoScore %d, [rules+0x2c] = %08lx: nothing said", key, (unsigned long)rules, klk_onl_noscore(), (unsigned long)klh_rd32(rules + 0x2c)); return 0; } }      /* online: +0x5f8 is past the object (Sv 0x3a8 / Cl 0x334 bytes): garbage decided this; now off unless OnlineTalkNoScore, then S=[rules+0x2c] must be non-null */
     else if (!klh_rd32(rules + 0x5f8)) { static int told58; if (!told58++) klog("talk: [rules+0x5f8] is null: nothing is said (0x771a10 would read through it)"); return 0; }   /* review */
     /* NOT DONE ON PURPOSE: setting [session+0x15d] before GO so that lines can be said in the pre-round. Tried live 2026-10-10
        (run T4): the two early countdown lines were said, and 8 s after GO the round stood still with a grey screen (no
@@ -696,6 +710,7 @@ static void klk_new_round(DWORD rules)
 /* [Voice] OnlineTraits=1 (needs [Voice] Online=1, [Online] Read=1): kltalk.c / kltrait.c also run for the LOCAL online player, who comes from
    klvoice_online.c (defined later). Default 0 (recommended off until benched). Read-only on the replicated state. */
 static int kvo_online_who(struct klw_who *w, char *name);
+static int kvo_online_who_wide(struct klw_who *w, char *name, int wide);      /* wide = 1: also the other human rows (kltalk.c OnlineTalk), own cache */
 static int kvo_crew_on(void);
 static int klk_onl_traits(void)
 {
@@ -709,18 +724,19 @@ static int klk_who_any(struct klw_who *w, int *onl)
     char nm[32];
     *onl = 0;
     if (klw_who_now(w)) return 1;
-    if (!(klk_onl_traits() || kvo_crew_on()) || !kvo_online_who(w, nm)) return 0;   /* OnlineCrew=1: banter over every human row */
+    if (!(klk_onl_traits() || kvo_crew_on() || klk_onl_talk())) { klk_gate(2, "online banter is off: set [Voice] OnlineTalk=1 (or OnlineTraits / OnlineCrew); Arcade's crew list is not there"); return 0; }   /* OnlineCrew=1: banter over every human row */
+    if (!kvo_online_who_wide(w, nm, klk_onl_talk())) { klk_gate(3, "no online who yet (normal in the menus; in a round the klvoice_online.c 'voice: online who:' line says why: needs [Online] Read=1, the FA player list, a named local row)"); return 0; }
     *onl = 1; return 1;
 }
 
 static void klk_tick(int game_thread)
 {
-    static int rounds, toldthread; static char toldscene[160];
+    static int rounds, toldthread, last_state_told = -1, ntold_state; static char toldscene[160];
     struct klw_who w; struct klk_here h; char scene[160], key[64], why[200], who[96], what[200], ckey[KLK_KEYLEN]; const char *pool = "";
     DWORD now, score; float rt, feet[3] = { 0, 0, 0 }; int onl = 0, i, j, v, hstage = 0, have_feet = 0, busy = 0, due_group[KLK_NSCENE];
     if (!klk.on || !klh_exe_ok) return;
     if (!klk_who_any(&w, &onl)) return;                                      /* not Arcade (nor, OnlineTraits=1, an online round with a known local seat), no ZGameRulesHeist object, no level, no crew records */
-    if (!klx_on || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
+    if (!klx_on || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) { klk_gate(4, "no expansion (klx_on %d) or no scene / level key", klx_on); return; }
     v = klx_level_verdict(scene, why);
     /* [Talk] StockLevels=1 (default 0, owner 2026-10-23 'even in dog days'): a level the verdict calls STOCK is let through; it
        talks only if a KLTalk.ini sits beside its archive (klk_source below finds none otherwise), which only
@@ -728,13 +744,14 @@ static void klk_tick(int game_thread)
     if (v == 1 && klk.stock) v = 2;
     if (v != 2) {                                                            /* only a level that is not the stock one of its slot */
         static int toldverdict;
+        if (!v) klk_gate(5, "level verdict 0 for '%s' (%.100s)", scene, why);
         if (v && (strcmp(scene, toldscene) || v != toldverdict)) { snprintf(toldscene, sizeof toldscene, "%s", scene); toldverdict = v; klog("talk: level '%s' %s (%.150s): nothing is said", scene, v == 1 ? "is the STOCK one of its slot" : "is not known", why); }
         return;
     }
     toldscene[0] = 0;
-    if (!game_thread) { if (w.state == KLK_ROUND && !toldthread++) klog("talk: the tick is not on the game's thread ([KLHook] Tick=0?): nothing can be said"); return; }
+    if (!game_thread) { klk_gate(6, "the tick is not on the game's thread"); if (w.state == KLK_ROUND && !toldthread++) klog("talk: the tick is not on the game's thread ([KLHook] Tick=0?): nothing can be said"); return; }
     klk_source(key);
-    if (!klk_lv.have) return;
+    if (!klk_lv.have) { klk_gate(7, "no usable KLTalk.ini for level %s (the 'talk: level ...' line above says why)", key); return; }
 
     /* ---- the round: runs while the session state is 0x19 (klbot.c 1); a state >= 0x1f and back = the next round */
     if (w.rules != klk_r.rules || !klk_r.init) { klk_new_round(w.rules); klk_r.init = 1; }
@@ -751,7 +768,7 @@ static void klk_tick(int game_thread)
     if (w.state != KLK_ROUND) {
         int pre = klk_lv.start16 > 0 && klk_r.t16 && (w.state == 0x16 || w.state == 0x18) && !klk_r.left && now - klk_r.t16 >= (DWORD)(klk_lv.start16 * 1000);
         if (w.state >= 0x1f && klk_r.running) klk_r.left = 1;
-        if (!pre) return;
+        if (!pre) { if (w.state != last_state_told && ntold_state < 8) { last_state_told = w.state; ntold_state++; klk_gate(8 + ntold_state - 1 + (onl ? 0 : 0), "waiting: session/round state 0x%x, banter runs in 0x19 (online who=%d)", w.state, onl); } return; }
     }
     if (klk_r.left) { klk_new_round(w.rules); klk_r.init = 1; }
     klk_present(&w, &h);
@@ -896,6 +913,7 @@ static void klk_tick(int game_thread)
             klk_chatter_say(&w, c, ckey, pool, rt, w.rules, scene, 0);
             return;
         }
+        { int mc = 0; for (k = 0; k < w.n; k++) mc += klk_may_chatter(&w, k, rt); klk_gate(20 + (onl ? 0 : 1), "idle turn at %.1f s said nothing: %d members, %d may chatter (Speakers=%d: the human's own character is skipped when 0; ch=0 members never), pools %d", rt, w.n, mc, klk_lv.speakers, klk_lv.npool); }
     }
 }
 
@@ -916,6 +934,8 @@ static void klk_init(void)
     klk_rng = klk.seed;
     klog("talk: on; Kane / Lynch scenes and chatter on a level with a KLTalk.ini beside its archive: Chatter=%d StartOffset=%.2f LogOnly=%d Seed=%lu%s Log=%d; Arcade only, %s",
          klk.chatter, klk.start_offset, klk.logonly, klk.seed, fresh ? " (taken new)" : "", klk.log, klk.stock ? "a stock level too if a KLTalk.ini sits beside it (StockLevels=1)" : "never on a stock level");
+    if (GetPrivateProfileIntA("Voice", "Online", 0, klh_ini) && !klk_onl_talk() && !klk_onl_traits() && !kvo_crew_on()) klog("talk: online banter is OFF ([Voice] OnlineTalk=0, OnlineTraits=0, OnlineCrew=0): set [Voice] OnlineTalk=1 to hear it in an online round");
+    else if (klk_onl_talk()) klog("talk: OnlineTalk=1: online FA rounds get the banter (local seat + other human rows; each seat plays its own local lines, nothing is sent)");
     if (!klc_on) klog("talk: [Character] Enable=0, so no KLWardrobe.ini is read and nobody can be told to wear Kane or Lynch: nothing will be said");
 }
 
