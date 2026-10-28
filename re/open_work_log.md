@@ -1,3 +1,8 @@
+2026-10-28 ~19:55 - [c9] A1LIFT3d PASS: the Retomoto lift box RE-ARMS live (rtlift_1027, installed). [Probe] DoorProxy=1 (needs [KLHook] SessionSafe=0)
+logged three rounds of both elevator door proxies accepting msg 0032 (own id 0032) at log-clock 17:51:20.4, 17:51:30.4 (+10 s), 17:51:45.8; the stock box is one-shot.
+3/3b/3c failed to show it: the player was shot down within 9 s of GO and walked the route as a fed (the box is MERCONLY), only a bot's single fire was seen.
+3d used [Balance] PlayerHealth=10. PASS, faults 0, asserts 0, dll f520f5d1 / ini de91b2a5 restored. Screenshots are black all week (display off), so the
+door visual stays unchecked; the player was still downed twice near the lift (at 40 % health, cause unknown). Inputs C:\kl_build_1024\c9_1028\a1lift3.
 2026-10-28 ~19:30 - [ce] MV1 + WKBC7 (out_move_1028b_test; inputs C:\kl_build_1024\week_1028\MV1_*.ini, WKBC7_*.ini; both RESULT PASS, faults 0).
 MV1 DD04: 'guard walk' sent bots 4-6 toward a guarded stack, 'escort: online: bot N follows seat 0' every few s, lootsync sent/shown $430k ... $4.56M,
 the client's 'sync: loot' matched every step and the banked total after the van. Not exercised: round summary FINAL (script passed before the summary)

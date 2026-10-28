@@ -71,7 +71,8 @@ Full dated log: `re/open_work_log.md` (newest first).
 2026-10-28 ~17:40 - [c9] DM11S (DM11B moved into int16 range) passes everywhere: A1SHIFT6 online with Int16Guard marker (merged 5f5d32a0c),
 A1SHIFT5b offline Arcade full round (7 bots, 1 boarded $1.36M), faults 0. A1NET2 both seats walk PASS. kl_map_shift_test fixed (adce57ce4; never
 run it while an A1SHIFT bench has DM11S installed). SHIPPED 18:20 (/oldhook: OnlineSkip emptied, ini baseline de91b2a5; undo UNDO_DM11S.bat in C:\kl_build_1024\c9_1028\dm11s_ship);
-SHIPCHK 18:45 PASS online with the installed dll/ini. T2 left: Retomoto lift door look.
+SHIPCHK 18:45 PASS online with the installed dll/ini. A1LIFT3d: Retomoto lift box re-arms live (3 door fires 10-15 s apart).
+T2 left: a door visual once screenshots work (black all week).
 
 2026-10-28 ~19:30 - [ce] MV1 PASS (DD04, both seats, 0 faults): bots guard-walk + escort online, OnlineLootSync (KLSYB) mirrored the bots' loot to the
 joiner up to $4.56M banked -> merged 35929bfc3 (all default off). WKBC7 PASS: bank credit fills a boarded seat to the 1M cap, $50k stays in the ledger.
