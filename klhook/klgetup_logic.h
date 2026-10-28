@@ -39,6 +39,20 @@ static int kgu_due(DWORD now, DWORD last)
     return !last || now - last >= KGU_REORDER_MS;
 }
 
+/* wk-botpar OnlineGetUpKeepGoal: after the first order, is a repeat order needed? Called once a pass (1 s).
+   prevD / curD = the bot's distance (cm) to the downed man at the last check and now (prevD < 0 = no earlier check), movedCm = how far the target
+   stands from where the standing order sent the bot, stallMs = time since the distance last shrank by KGU_PROGRESS_CM between two checks.
+   0 = keep going (do not re-order), 1 = target moved, 2 = stalled. */
+#define KGU_PROGRESS_CM 50.0f
+#define KGU_MOVED_CM    200.0f
+#define KGU_STALL_MS    3000u
+static int kgu_keep(float prevD, float curD, float movedCm, DWORD stallMs)
+{
+    if (movedCm >= KGU_MOVED_CM) return 1;
+    if (prevD >= 0 && prevD - curD >= KGU_PROGRESS_CM) return 0;
+    return stallMs >= KGU_STALL_MS ? 2 : 0;
+}
+
 /* a helper counts when within `range` (cm) horizontally and `dy` (cm) in height */
 static int kgu_helper_ok(float dist, float dy, float range, float dymax)
 {
