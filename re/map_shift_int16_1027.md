@@ -112,3 +112,49 @@ So even inside 0x5a0ff0 there are non-position uses; a blanket subtract in the h
   as the map shift. Neither is a quick hook. Nothing implemented in klhook; [Int16Guard] OnlineSkip=DM11B stays.
 - If someone does it: pair each packer with its receiver through the RMC stub (vtable index), patch sender+receiver of the same RMC together,
   and verify with a round-trip test in the offline harness before any live run.
+
+## Built 2026-10-28: tools/kl_map_shift.py (map shift, DM11B in the F04 slot)
+
+`shift(src_zip, dst_zip, T)`, default T = (-12288, 0, -16384). Output (outside the repo):
+`<DM>\KL_PortTools\shift_1028\F04_Main_DM11S.zip`. Not installed, not played. Tests: `python tools/kl_map_shift_test.py` (9 s, ALL OK).
+
+### What is translated
+- Scene roots (not systems: `AllLevels/mainsceneincludes_multiplayer`, `CloneGroup_*`, `Heroes`): trans += T (zero-translation baked roots get trans = T)
+  and prp ZGEOM[2] likewise. Children are parent-local, untouched. 337 of 478 roots move, 141 system roots kept.
+- PF4 navmesh (`kl_pf4.translate`), 74 room gates in the .buf head (corners and centre).
+- HVK: placements (m), MOPP offsets, list offsets, box grown to old+new union; `.hrd` positions. 2695 placements moved / 61 kept, 2488 static codes, 5 lists, 19 hrd.
+  Raises on a REF or 510-chunk that mixes moved and kept entities.
+- `.oct`: 59 room trees (origin += T); 4 trees hold system items (SLOT ids) re-quantised outward (1207 items, worst box growth 18.95 units), rebuilt via build_tree if check fails.
+- `.rmi`/`.rmc`: tree origin and box centre += T; second point only when non-zero (.rmi 71 of 78, .rmc 0 of 24).
+- `.sgp` (36 portals), `.sgd` (2 octrees).
+
+### Test numbers
+- (a) round trip by -T: worst root 0.00098, prp 0.00098, hvk 7.6e-6 m, nav 1.0 on split constants ~3e6 (relative tolerance 5e-7).
+- (b) range check: whole map 2 -> 3 entities beyond +-32767; gameplay entities 0. Extent after: x -25704..16973, z -32725..10881.
+  The 3 are scenery: `lights!Spot_Sky_DIRECT_#03/#04` (2 were already out before) and `InsideBound_01` under `F04_Outside_BuildingsBackground_01`
+  (z -48541 after, was -32157). The test treats `lights!*` and anything under a `*Background*` name as non-gameplay (GUESS: never net-synced).
+- (c) 21 zip members byte-identical (CRC), 10 changed, buf head only 2622 bytes changed (all in gates).
+- (c2) why the rest of the head stays (review 2026-10-28, `audit_head`): a scan found 4,638 floats of 3000..100000 outside the gates; they are
+  NOT absolute positions to move. Offsets 7,936 / 23,600 / 36,476 are the escape vans' MatPosAnim tracks (~600 (x,0,z) points each): each
+  starts within 0.05 of the van's own local .gms translation, and the tracks of the van's children (wheels, hatchback, shadow: values like
+  (-70, 37, 137), parent at x -12k) are in the VAN's frame, so a track is in the frame of the entity's own translation = parent-local; the
+  Escape_Vehicle parents get T and carry the vans. 186,352..241,120 holds more such tracks (spawn-room doors at 186,368 / 187,872, van parts); the
+  ZHavokShatter[10] offsets just point into it, shared by 31 entities spread over 10,000 units, so it is not per-entity world data. Three
+  world-like MatPosAnim entities (co-op airlock doors, waving-cat arm) have no track in the head (the .ANM has no matching absolute floats
+  either): where their motion lives is not established. The test fails if the vans / doors / van children stop matching.
+- (d) kl_pf4_translate_test OK; kl_sgp_sgd_translate_test OK on the source zip. Its default stock sweep fails on L07 (portal 5 off the plane),
+  the same in the main checkout: pre-existing, not this change.
+
+### Still GUESS
+- Head tracks are parent-local (evidence in (c2); GUESS: MatPosAnim writes the local matrix, so the vans/doors ride along their moved parent).
+  Only a live run shows the escape vans drive in, the spawn-room doors slide and the shatter triggers break at the right place.
+- Rest of the .buf head untouched: packed KEYS tracks (55,120..186,352), ZLNK, particle emitters, FDX, light/SND data. If any hold absolute
+  positions they stay at the old place (no prp pointer found that does).
+- Co-op airlock doors / waving cat arm: animation source not located (not in the head, not in the .ANM as absolute floats).
+- HVK list codes: one per 510 static placements in shape order, a chunk never mixes moved and kept (verified on DM11B, raises otherwise; the
+  list-count check was added 2026-10-28).
+- HVK header box meaning (grown to the union to be safe); .rmi/.rmc second point rule; SecurityZones.
+- 24 prp/gms place mismatches are preserved as they were, not reconciled.
+- .ANM assumed local; prm bounds and SND untouched.
+- Sky lights and InsideBound_01 (a ZBOUND under F04_Outside_BuildingsBackground_01, z -48541 after, was -32157) stay out of int16 range. If
+  InsideBound_* turn out to be net-synced this needs a local-translation clamp of that one child; gameplay extent z -32725 leaves 43 units.
