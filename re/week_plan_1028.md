@@ -41,6 +41,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 10-28 14:40 ce benches (out_week_1028i_test, 0 faults every seat): WKBC F06 7/7 aboard (6 BOARDED + 1 boardall), ledger $1.9M, but the host's box tele came 2 s before the van left -> no human escape -> OnlineBankCredit NOT exercised; rerun WKBC2 (tele every 3 s from +50 s, C:\kl_build_1024\week_1028\WKBC2_*.ini). BP_DD08 6/7 boarded (baseline 4/7). BP_DD04 4/7 (baseline 6/7; 1 died): bot 4 logged "stopped 5 m from the exit" while ~60 m away, van called late -> agent fixing in wt/wk-dd04. AM_DM09 PASS both seats: hop + cardown online host-round paths entered (no carry seen; cardown Dry). BP joins FAIL = script only (host quits before 0x20).
 - 10-28 12:00 ce: research re/bots_online_arcade_1028.md (0x7f6850 'Arcade?' false online -> no tactics/records, trigger boxes ignore bots, Take is a raw +0x34 write); build OnlineTriggers + OnlineTacticsTake=2 in wt/wk-bots.
 - [x] Diff Arcade vs online bot code paths -> re/arcade_mods_online_1028.md (10-28 ce): klhop + klcardown got host-only online paths (review-fixed, merged 88706e681, NOT RUN; bench AM_DM09); klcrew/klgrudge/klshield/klescort/klcopsquad/klfedkit need crew records or a client carrier (open).
 - [ ] Online bots loot, carry, bank and escape like Arcade. WK2 live 10-28 F06: 7 bots GRABBED via the game's 0x4e3f40, van called, 5/7 BOARDED, $1.35M on the bank ledger; paying the ledger to the score (OnlineBankCredit, data-only) = bench WKBC; 2 bots strayed (BP benches).
@@ -52,6 +53,7 @@ Owner: ce (10-28 11:40; 3f is another project).
 Owner: ce (10-28 11:40).
 
 ### T5 Gun UI + sounds Arcade -> multiplayer (MP45 first)
+- 10-28 14:40 ce SHOT2D (F06, 2 seats, 0 faults, both IN ROUND): the RemoteShot2D vtable route installed live on both seats ("sound system now on the private vtable (slot 74)"); script FAIL = shop timer ran out after a lost Enter tap (not a game fault). Loudness by ear still open (owner).
 - 10-28 13:10 ce: RemoteShot2D reworked as a SHIP-safe sound-system vtable route ([Sound] RemoteShot2D=1, RemoteShot2DRoute 0 auto/1 code/2 vtable; private copy of vtable 0xb9ae14, slot 74 wrapped), review fix 756fde98a (re-point a sound system rebuilt at the same address). In out_week_1028h(_test). Bench SHOT2D queued (F06, both seats, NOT RUN).
 - 10-28 12:00 ce: research re/gun_ui_sounds_1028.md (MP45 = item 1 row 7, banks/volumes same online; rows 13/16/32/35 baked names but Swap inert online; DM07/DD10 unbaked); build OnlineSwap + text fallback in wt/wk-gunui.
 - 10-28 12:45 ce CLAIMS remote shot loudness (section 3 of re/gun_ui_sounds_1028.md): static slot trace + [Sound] toggle in wt/wk-sound (branch wk-sound-1028).
