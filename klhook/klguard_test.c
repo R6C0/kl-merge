@@ -25,6 +25,11 @@ int main(void)
     CHECK(kgg_pick(cnt, d, 4) == 1, "fewest cops then nearest, got %d", kgg_pick(cnt, d, 4));
     cnt[1] = cnt[2] = -1; CHECK(kgg_pick(cnt, d, 4) == 0, "only candidate");
     cnt[0] = -1; CHECK(kgg_pick(cnt, d, 4) == -1, "none");
+    CHECK(kgg_radius(2500, 800, 1) == 800, "live-only: tight radius");
+    CHECK(kgg_radius(2500, 800, 0) == 2500, "off: wide radius");
+    CHECK(kgg_radius(2500, 0, 1) == 2500, "tight 0: wide");
+    CHECK(kgg_radius(500, 800, 1) == 500, "tight wider than wide: wide");
+    CHECK(kgg_radius(0, 800, 1) == 800, "wide 0 (guard off) with live-only: tight");
     printf("klguard_test: %d checks, %d fail\n", checks, fails);
     return fails != 0;
 }

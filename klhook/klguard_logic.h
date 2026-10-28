@@ -34,4 +34,12 @@ static int kgg_pick(const int *cnt, const float *dist, int n)
     }
     return best;
 }
+
+/* OnlineGuardLiveOnly: radius that counts a cop as guarding a stack. BP8 (DD08): the 47 stacks sit in one cluster ~12 m x 5.5 m, so a 25 m sphere around ANY stack
+   holds the same ~38 cops (nothing to tell stacks apart). tight > 0 and < wide (e.g. OnlineLootFinishCopM 8 m) narrows it; otherwise the wide radius. */
+static float kgg_radius(float wide, float tight, int live_only)
+{
+    if (live_only && tight > 0 && (wide <= 0 || tight < wide)) return tight;
+    return wide;
+}
 #endif
