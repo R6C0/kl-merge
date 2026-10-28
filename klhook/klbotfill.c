@@ -1144,7 +1144,7 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
         if (!P || !klco_heister(P)) continue;
         if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0) hv = 0;
         if (hv > 0 && (D = klh_rd32(P + 0x2948)) != 0 && klh_rd32(D) == P && klh_rd(D + 4, &ds, 4) && kgu_downed(ds) && klbf_feet(P, hp, &fs)) down = 1;      /* wk-botpar: OnlineEscortNode reads the scene node first; off = +0x460 only, as before */
-        if (!down && hv > 0 && bsd[i]) {      /* the replica says nothing (GU3: its D never lies); a fresh beacon does. Place: the replica's if readable, else the beacon's */
+        if (!down && bsd[i]) {      /* the replica says nothing (GU3: its D never lies); a fresh beacon does. Place: the replica's if readable, else the beacon's. No hv test: BP3 read hp -0 for every heister replica (BP2 garbage), so +0x5fc->+4 is not a replica's health; the downed machine only beacons 'down' while it lives */
             down = 1; viaB = 1;
             if (!(rok[i])) memcpy(hp, bsp[i], 12); else memcpy(hp, rep[i], 12);
         }
