@@ -66,6 +66,7 @@ int main(void)
         CHECK(klgb_map_ok(bp, rep[1], 1) && !klgb_map_ok(bp, rep[0], 1) && klgb_map_ok(bp, rep[0], 0), "map ok: near yes, far no, unreadable trusted");
         CHECK(klgb_nearest(bp, (const float (*)[3])rep, rok, 4, 0) == 1, "nearest replica is 1");
         CHECK(klgb_nearest(bp, (const float (*)[3])rep, rok, 4, 1) == 3, "skipping 1: 3 (300 cm)");
+        { float nb[3] = { 1000, 0, 1000 }, nr[3] = { 1000, 0, 1900 }, hi[3] = { 1000, 800, 1000 }; CHECK(!klgb_map_ok(nb, nr, 1), "a neighbour 9 m away does not pass (review: was 15 m)"); CHECK(!klgb_map_ok(nb, hi, 1), "another floor does not pass"); }
         rok[1] = rok[3] = 0; CHECK(klgb_nearest(bp, (const float (*)[3])rep, rok, 4, -1) == -1, "none within 600 cm");
     }
 

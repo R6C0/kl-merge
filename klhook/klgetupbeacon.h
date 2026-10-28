@@ -25,8 +25,9 @@
 #define KLGB_UP_SENDS   3         /* the up beacon: sent 3 times ... */
 #define KLGB_UP_GAP_MS  100       /* ... 100 ms apart */
 #define KLGB_FRESH_MS   3000      /* the host trusts a down beacon this long after it arrived */
-#define KLGB_MAP_TOL_CM 1500.0f   /* beacon vs the replica of the same table index: farther than this = the index does not name that body (GUESS threshold) */
-#define KLGB_NEAR_CM    600.0f    /* the nearest-replica fallback accepts a replica this close to the beacon's place (GUESS) */
+#define KLGB_MAP_TOL_CM 350.0f    /* beacon vs the replica of the same table index: farther than this (2D) = the index does not name that body; was 1500, which let a neighbour pass (review) (GUESS threshold: movement latency only) */
+#define KLGB_MAP_TOL_Y  400.0f    /* ... and a different floor (|dy| above this) does not name it either (the same 4 m the get-up pass uses for the floor check) */
+#define KLGB_NEAR_CM    400.0f    /* the nearest-replica fallback accepts a replica this close to the beacon's place (GUESS) */
 
 struct klgb_pk { unsigned char ver, seat, flags; unsigned seq, tag, T; float pos[3]; };
 
@@ -92,19 +93,22 @@ static int klgb_fresh_down(const struct klgb_seat *s, unsigned now)
     return s->have && s->down && (unsigned)(now - s->rxAt) < KLGB_FRESH_MS;
 }
 
+#ifndef fabsf
+#define fabsf(x) ((float)fabs((double)(x)))
+#endif
 static float klgb_dist2d(const float *a, const float *b) { float dx = a[0] - b[0], dz = a[2] - b[2]; return (float)sqrt(dx * dx + dz * dz); }
 
 /* Does table index `seat` name the body that sent the beacon? rok = the replica's place was read. Unreadable replica: trusted (nothing to compare). */
 static int klgb_map_ok(const float *beacon, const float *replica, int rok)
 {
-    return !rok || klgb_dist2d(beacon, replica) <= KLGB_MAP_TOL_CM;
+    return !rok || (klgb_dist2d(beacon, replica) <= KLGB_MAP_TOL_CM && fabsf(beacon[1] - replica[1]) <= KLGB_MAP_TOL_Y);
 }
 
 /* The fallback when the index does not fit: the replica nearest to the beacon's place within KLGB_NEAR_CM (skipping `skip`); -1 = none. rep[i] valid where rok[i]. */
 static int klgb_nearest(const float *beacon, const float (*rep)[3], const int *rok, int n, int skip)
 {
     int i, best = -1; float bd = 1e30f;
-    for (i = 0; i < n; i++) if (i != skip && rok[i]) { float d = klgb_dist2d(beacon, rep[i]); if (d <= KLGB_NEAR_CM && d < bd) { bd = d; best = i; } }
+    for (i = 0; i < n; i++) if (i != skip && rok[i]) { float d = klgb_dist2d(beacon, rep[i]); if (d <= KLGB_NEAR_CM && fabsf(beacon[1] - rep[i][1]) <= KLGB_MAP_TOL_Y && d < bd) { bd = d; best = i; } }
     return best;
 }
 

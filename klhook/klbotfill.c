@@ -1018,22 +1018,22 @@ static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *so
 static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sold, const float (*pos)[3], int nb, int vstate)
 {
     DWORD ents = 0; int n = 0, i, b, s; static int toldNone, toldRound, hdown[16], toldMap[16]; static DWORD hAt[16];
-    float rep[16][3]; int rok[16], bsd[16], bviaMap[16]; float bsp[16][3];      /* wk-getup2-1028: replica places, and the beacon verdicts mapped to table indexes */
+    float rep[16][3]; int rok[16], bsd[16], ownIdx = -1; float bsp[16][3];      /* wk-getup2-1028: replica places, and the beacon verdicts mapped to table indexes */
     if (!klbf_gu || nb <= 0) return;
     if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; memset(hdown, 0, sizeof hdown); memset(hAt, 0, sizeof hAt); memset(klgb_seats, 0, sizeof klgb_seats); memset(toldMap, 0, sizeof toldMap); }
     if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: getup: the session player table is not readable: no get-up help this round yet (said once)"); return; }
     for (s = 0; s < KLBF_OT_BOTS; s++) if (klbf_ob[s].guHum && now - klbf_ob[s].guAt >= 3500) { klog("botfill: getup: bot %d released (seat %d: not down any more or the rush lapsed)", s, klbf_ob[s].guHum - 1); klbf_ob[s].guHum = 0; klbf_ob[s].guAt = 0; klbf_ob[s].guOrd = 0; }
-    memset(rok, 0, sizeof rok); memset(bsd, 0, sizeof bsd); memset(bviaMap, 0, sizeof bviaMap);
+    memset(rok, 0, sizeof rok); memset(bsd, 0, sizeof bsd);
     if (klgb_on) {      /* the beacons (klgetupbeacon.c): read each heister replica's place, check the beacon's table index against it, else the nearest replica (GUESS: the index is equal on both peers) */
         for (i = 0; i < n && i < 16; i++) { DWORD P = klco_ent(ents, n, i); if (P && klco_heister(P) && klh_rd(P + 0x460, rep[i], 12) && kle_ok3(rep[i]) && !(fabsf(rep[i][0]) <= 1 && fabsf(rep[i][1]) <= 1 && fabsf(rep[i][2]) <= 1)) rok[i] = 1; }
+        { DWORD e2 = 0; int how = 0; ownIdx = klco_find_own(ents, n, now, &e2, &how); }      /* the host's own body: the fallback never names it (review) */
         for (i = 0; i < KLGB_MAX_SEATS; i++) {
             int to = i;
             if (!klgb_fresh_down(&klgb_seats[i], now)) continue;
             if (i >= n || !klgb_map_ok(klgb_seats[i].pos, rep[i], i < 16 && rok[i])) {
-                to = klgb_nearest(klgb_seats[i].pos, (const float (*)[3])rep, rok, n < 16 ? n : 16, -1);
+                to = klgb_nearest(klgb_seats[i].pos, (const float (*)[3])rep, rok, n < 16 ? n : 16, ownIdx);
                 if (!toldMap[i]++) klog("botfill: getup: beacon says seat %d but that replica is %s from the beacon's place: %s (GUESS: nearest replica within %.0f cm)", i, i < n && rok[i] ? "far" : "unreadable / absent", to >= 0 ? "using the nearest replica" : "no replica near, beacon ignored", KLGB_NEAR_CM);
                 if (to < 0) continue;
-                bviaMap[to] = 1;
             }
             if (bsd[to]) continue;
             bsd[to] = 1; memcpy(bsp[to], klgb_seats[i].pos, 12);

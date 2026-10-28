@@ -1039,7 +1039,7 @@ static void klsy_tick(int game_thread)
     if (klls_on && role == 2 && klsy.sock) klls_send(now, 0);                                           /* OnlineLootSync=1: the host's bot loot list (kllootsync.c; its own schedule) */
     if (klgb_on && role == 2 && klsy.sock) klgb_host_rx(now);                                          /* OnlineGetUpBeacon=1: the downed machines' 'KLSYD' (klgetupbeacon.c) */
     if (klcl_on && role == 2 && klsy.sock) klcl_send(sm, now);                                        /* OnlineLooks=1: the host's look list (its own schedule) */
-    if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on || klcl_on || klls_on || klbv_mode) && role == 3 && klsy.sock) {                                /* client: take the newest FRESH host list, compare once a second */
+    if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on || klcl_on || klls_on || klbv_mode || klgb_on) && role == 3 && klsy.sock) {                                /* client: take the newest FRESH host list, compare once a second */
         static char pk[16 + KLSY_MAXP * KLSY_REC]; klsy_sin from; int fl, len, k;
         for (k = 0; k < 256; k++) {                                                            /* drain the whole queue; the newest acceptable list wins */
             WORD cnt; DWORD T; int age;

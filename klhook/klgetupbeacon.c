@@ -6,7 +6,7 @@
  * UDP 27415, broadcast, klsy.sock) once a second while down and 3x (one seq, 100 ms apart) on getting up. The HOST drains them (klgb_host_rx, from klsy_tick), keeps one record per table index
  * (klgb_seats, klbotfill.c) and klbf_gu_pass counts a seat as down when EITHER its replica says so OR a fresh (< 3 s) down beacon does; the place is the replica's when readable, else the beacon's.
  * Identity: the sender's index in the session player table (klco_table; the same convention klcharonline.c announces looks with, down_mirror.md item 3). The host CHECKS it against the replica of
- * that index (beacon place within 1500 cm of the replica's feet) and falls back to the nearest replica within 600 cm (GUESS thresholds, logged once per seat).
+ * that index (beacon place within 350 cm and 400 cm of height of the replica's feet) and falls back to the nearest replica within 400 cm, never the host's own body (GUESS thresholds, logged once per seat).
  * The downed-machine half (a bot by the body adds to the mash meter) is unchanged (klbotfill.c klbf_gu_rate_now); the host's rush (kle_order2) now gets its trigger online.
  * No game memory is written; one UDP send per second per downed machine. Game thread only (kldown.c's pass; klsy_tick).
  *
@@ -26,6 +26,7 @@ static void klgb_own(DWORD pl, DWORD ds, int alive, DWORD now)
     static struct klgb_tx tx; static DWORD lastPl, loggedSeq; static unsigned toldNoIdx;
     DWORD sm = 0, role = 0, ents = 0; int n = 0, idx = -1, i, d = 0, down; unsigned seq = 0; struct klgb_tx keep; struct klgb_pk k; unsigned char b[KLGB_LEN]; klsy_sin a; char scene[160]; float pos[3];
     if (!klgb_on || !pl || !klsy.sock || !klh_exe_ok) return;
+    if (!tx.seq) { FILETIME ft; ULONGLONG u; GetSystemTimeAsFileTime(&ft); u = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime; tx.seq = (unsigned)(u / 10000000ULL); }      /* seconds clock seed: a restarted client's seq stays ahead of the host's book (review) */
     if (!klbv_round(&sm, &role) || role != 3) return;      /* a client in a round only (the host reads its own body directly) */
     if (pl != lastPl) { lastPl = pl; tx.down = 0; tx.burst = 0; }      /* another body: the seq keeps counting (the host's book drops only an older seq) */
     down = alive && kgu_downed(ds);
