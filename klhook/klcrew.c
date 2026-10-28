@@ -534,9 +534,14 @@ static void klw_level_tick(int game_thread)
     }
 }
 
+static int klcl_on;      /* OnlineLooks=1 (klbotfill.c / klcrewlook.c; a second tentative definition there is the same object) */
 static void klw_tick(int game_thread)
 {
     if (!klw.random || !klh_exe_ok) return;
+    if (klcl_on) {      /* online (session role 2 host / 3 client) klcrewlook.c owns klw_r.b[]: Arcade's crew tick stands aside so the two never fight over it */
+        DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLW_SESSION)), role = 0;
+        if (sm && klh_rd(sm + 0x54, &role, 4) && (role == 2 || role == 3)) return;
+    }
     klw_level_tick(game_thread);
 }
 

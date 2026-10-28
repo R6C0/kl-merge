@@ -98,6 +98,15 @@ static DWORD klcl_pmodel(void)
     return m;
 }
 
+/* Arcade's klw_level_tick returns unless player+0x273c == 2 ("a policeman after his death: leave the crew as it is"): the host draws / redraws only while it is a heister */
+static int klcl_heister(void)
+{
+    DWORD gd, player; BYTE b = 0xff, type = 0;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &b, 1) || b > 3) return 0;
+    if (!(player = klh_rd32(gd + 0x828 + 4 * b)) || !klh_rd(player + 0x273c, &type, 1)) return 0;
+    return type == 2;
+}
+
 /* the characters the OTHER humans wear / chose (klcharonline.c's peer table, effective = after its uniqueness rule); ex[c] = 1 */
 static void klcl_humans(const struct klw_src *src, char ex[KLC_NCHAR + 1])
 {
@@ -144,6 +153,11 @@ static int klcl_bots(const struct klbf_lkrec *lk, int nlk, struct klw_seen *seen
                 klog("botfill: looks: %s seat actor=%08lx slot=%lu group=\"%s\" digit=%c model=%08lx: skipped: %s", klcl_seat(), (unsigned long)lk[i].actor, (unsigned long)lk[i].slot, lk[i].name, lk[i].digit, (unsigned long)lk[i].model,
                      d >= 2 && d <= 8 && cnt[d] > 1 ? "another actor has the same digit" : !lk[i].model ? "no readable model" : "no usable group digit (2..8)");
         }
+    }
+    for (i = 1; i < n; i++) {      /* Arcade walks the crew records in order (rec = digit - 1): the same [Crew] Seed then gives the same bot -> character mapping */
+        struct klw_seen t = seen[i]; float th = hp[i]; int j = i - 1;
+        while (j >= 0 && seen[j].rec > t.rec) { seen[j + 1] = seen[j]; hp[j + 1] = hp[j]; j--; }
+        seen[j + 1] = t; hp[j + 1] = th;
     }
     *sig = h;
     return n;
@@ -198,7 +212,8 @@ static void klcl_rx(const char *pk, int len, DWORD now, unsigned long from)
     if (klcl_t.srcSet && from != klcl_t.srcAddr) return;
     if (klcl_t.epoch) {
         if (epoch == klcl_t.epoch) return;      /* a repeat: nothing changes */
-        if ((int)(T - klcl_t.T) <= 0) return;      /* an older epoch that came late */
+        /* klsy_T() is the clock in ms modulo 1e9, not 2^32: the forward distance (mod 1e9) of 1 .. 5e8-1 is newer, anything else (0 or more than half the modulus) is an older epoch that came late */
+        { DWORD fwd = (T + 1000000000u - klcl_t.T % 1000000000u) % 1000000000u; if (fwd == 0 || fwd >= 500000000u) return; }
     }
     if (!klcl_src(&src, &rules)) return;      /* not readable yet: the host resends */
     if (klcl_wsig(&src) != wsig) {
@@ -211,6 +226,9 @@ static void klcl_rx(const char *pk, int len, DWORD now, unsigned long from)
         const BYTE *q = (const BYTE *)pk + 24 + i * 12; DWORD root; WORD var; int d = q[0];
         memcpy(&root, q + 4, 4); memcpy(&var, q + 8, 2);
         if (d < 2 || d > 8 || q[1] > src.n || q[1] > KLC_NCHAR || q[3] < 1) { klog("botfill: looks: CLIENT rx record %d refused: digit %d ch %d mask %d", i, d, q[1], q[3]); continue; }
+        if (q[3] > KLC_MASKS + 1 || q[3] > 1 + (src.wardrobe ? src.masks : 1) || (q[1] && (q[2] >= KLC_OUTFITS || q[2] >= src.c[q[1] - 1].bodies * src.c[q[1] - 1].heads) && q[2] != 0)) {
+            klog("botfill: looks: CLIENT rx record %d refused: outfit %d / mask %d out of this wardrobe's range (ch %d, %d masks)", i, q[2], q[3], q[1], src.wardrobe ? src.masks : 1); continue;
+        }
         if (q[1] && root != src.c[q[1] - 1].root) { klog("botfill: looks: CLIENT digit %d: skipped: root %lu sent, %lu here for ch %d", d, (unsigned long)root, (unsigned long)src.c[q[1] - 1].root, q[1]); continue; }
         klcl_t.e[d - 1].have = 1; klcl_t.e[d - 1].ch = q[1]; klcl_t.e[d - 1].outfit = q[2]; klcl_t.e[d - 1].mask = q[3]; klcl_t.e[d - 1].root = root; klcl_t.e[d - 1].variant = var;
         taken++;
@@ -224,6 +242,7 @@ static void klcl_host_draw(const struct klw_src *src, const struct klw_seen *see
 {
     char ex[KLC_NCHAR + 1]; int i;
     klcl_humans(src, ex);
+    if (!klco.on) { static int told; if (!told++) klog("botfill: looks: HOST: [CharOnline] is off, so the other players' bodies are not known: only the host's own body is kept out of the bots' draw"); }
     klw_draw(src, seen, n, klw_char_of(src, pmodel), state, rules, ex);
     memset(klcl_t.e, 0, sizeof klcl_t.e); klcl_t.n = 0;
     for (i = 0; i < n; i++) {
@@ -279,7 +298,7 @@ static int klcl_apply(const struct klw_src *src, struct klw_seen *seen, const fl
         if (e->ch > src->n) { klcl_note(idx, q->actor, 11, "skipped: character outside this wardrobe"); continue; }
         c = &src->c[e->ch - 1];
         if (e->root != c->root) { klcl_note(idx, q->actor, 12, "skipped: root differs from this wardrobe's"); continue; }
-        if (!q->node || hp[i] <= 0) { klcl_note(idx, q->actor, 13, "skipped: dead or downed (no scene node / health <= 0)"); done = 0; continue; }
+        if (!q->node || hp[i] <= 0) { klcl_note(idx, q->actor, 13, "skipped: dead or downed (no scene node / health <= 0)"); continue; }      /* dead counts as done (Arcade skips a dead bot by its status); the 2 s cadence still re-reads every bot */
         if (c->root == pmodel) { klcl_note(idx, q->actor, 14, "skipped: the local player wears this body"); continue; }
         vt = klh_rd32(q->actor);      /* the REAL vtable (a puppet's private copy too): slot 119 must be the rebuild routine the model call ends in */
         if (!vt || klh_rd32(vt + 4 * 119) != KLW_REBUILD) { snprintf(what, sizeof what, "skipped: vtable %08lx slot 119 is not the rebuild routine", (unsigned long)vt); klcl_note(idx, q->actor, 15, what); continue; }
@@ -333,12 +352,12 @@ static void klcl_tick(int game_thread)
     if (sig != klcl_t.sig) { klcl_t.sig = sig; klcl_t.since = now; return; }      /* everything must stand still: klchar.c's swap of the player goes first */
     if ((LONG)(now - klcl_t.since) < klw.settle) return;
     if (role == 2) {
-        int need = !klcl_t.host;
+        int need = !klcl_t.host, heister = klcl_heister();      /* a cop / dead / spectating host: no new draw, no redraw; the looks already sent keep being sent and applied */
         for (i = 0; i < n && !need; i++) if (!klcl_t.e[seen[i].rec].have) need = 1;      /* a bot the draw does not know */
-        if (need) { if (!n) return; klcl_host_draw(&src, seen, n, pmodel, state, rules, now); }
-        else klcl_host_redraw(&src, pmodel, now);
+        if (need) { if (n && heister) klcl_host_draw(&src, seen, n, pmodel, state, rules, now); }
+        else if (heister) klcl_host_redraw(&src, pmodel, now);
     }
-    if (!klcl_t.epoch || !n) return;
+    if (!klcl_t.epoch || !n) return;      /* (500 ms cadence until a draw exists) */
     done = klcl_apply(&src, seen, hp, n, pmodel);
     if (done) klcl_t.cenGap = 2000;
 }
