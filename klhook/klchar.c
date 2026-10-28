@@ -212,6 +212,8 @@ static void klc_level_open(const char *key, const char *opened)
     snprintf(klc_w.key, sizeof klc_w.key, "%s", key); if ((s = strrchr(klc_w.key, '.')) != 0) *s = 0;
     n = (int)GetPrivateProfileIntA("Wardrobe", "Characters", 0, file);
     ver = (int)GetPrivateProfileIntA("Wardrobe", "Version", 0, file);
+    /* c9hire3 1028: BENCH ONLY (recommended off): [Character] IgnoreWardrobe=1 treats every level as having no KLWardrobe.ini, so the stock-map paths (StockHero, rules+0x208) can be benched without moving files in the game folder */
+    if (GetPrivateProfileIntA("Character", "IgnoreWardrobe", 0, klh_ini)) { ver = 0; klog("character: [Character] IgnoreWardrobe=1 (bench only): %s is ignored", file); }
     if ((ver == 1 || ver == 2) && n > 0 && n <= KLC_NCHAR) {
         klc_w.version = ver;
         klc_w.step = (int)GetPrivateProfileIntA("Wardrobe", "OutfitStep", 10, file);

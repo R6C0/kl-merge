@@ -59,7 +59,7 @@ static struct {
     int ownIdx, pubIdx, pubC, pubM, pubO, pubWas;
     char pubStr[40];
     unsigned __int64 lobby;
-    UINT_PTR sock; int stockHero, sockTried, toldOwn, toldNoWar, toldCode, toldOnline, toldFollow;
+    UINT_PTR sock; int stockHero, sockTried, toldOwn, toldNoWar, toldStock, toldSrc, toldCode, toldOnline, toldFollow;
     DWORD triedAt[KLCO_N]; int tried[KLCO_N]; LONG lastv[KLCO_N]; DWORD lastmodel[KLCO_N];
     DWORD whyAt[KLCO_N];
 } klco;
@@ -235,16 +235,25 @@ static int klco_effective(int idx, int raw)
  * Off with [CharOnline] StockHero=0. Returns the root or 0. */
 static DWORD klco_stock_root(int ch, DWORD model, const char *who)
 {
-    DWORD gs, rules, hero[8]; int i, j, found = 0; static LONG told;
-    if (!klco.stockHero || ch < 1 || ch > 8) return 0;
-    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLC_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || !klh_rd(rules + 0x208, hero, sizeof hero)) return 0;
-    for (i = 0; i < 8; i++) {
-        if (!hero[i]) return 0;
-        for (j = 0; j < i; j++) if (hero[j] == hero[i]) return 0;
-        if (hero[i] == model) found = 1;
+    DWORD gs = 0, rules = 0, hero[8]; int i, j, found = 0; const char *why = 0;
+    /* c9hire3 1028: every refusal says why, once per ROUND (klco.toldStock), so a bench log shows whether the table was consulted and what it held */
+    if (!klco.stockHero) why = "[CharOnline] StockHero=0";
+    else if (ch < 1 || ch > 8) why = "char is not one of the eight stock heisters";
+    else if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLC_SETTINGS))) || !(rules = klh_rd32(gs + 0x54))) why = "no game settings / rules object yet";
+    else if (!klh_rd(rules + 0x208, hero, sizeof hero)) why = "rules+0x208 not readable (GUESS offset)";
+    if (!why) {
+        for (i = 0; i < 8 && !why; i++) {
+            if (!hero[i]) why = "a table entry is 0 (rules+0x208 is not the hero table here: GUESS offset wrong, or not filled yet)";
+            for (j = 0; j < i && !why; j++) if (hero[j] == hero[i]) why = "table entries are not distinct (not the hero table: GUESS offset wrong)";
+            if (hero[i] == model) found = 1;
+        }
+        if (!why && !found) why = "the body this entity wears is not in the table";
     }
-    if (!found) { if (!InterlockedExchange(&told, 1)) klog("charonline: stock hero table at rules+0x208 does not hold the body %s wears (%lu): not used", who, model); return 0; }
-    if (InterlockedExchange(&told, 2) != 2) klog("charonline: stock hero table: %lu %lu %lu %lu %lu %lu %lu %lu (a level without a wardrobe: heister n = entry n-1)", hero[0], hero[1], hero[2], hero[3], hero[4], hero[5], hero[6], hero[7]);
+    if (why) {
+        if (!klco.toldStock++) klog("charonline: stock hero table REFUSED for %s (char %d, model %lu, rules %08lx): %s", who, ch, model, rules, why);
+        return 0;
+    }
+    if (!klco.toldStock++) klog("charonline: stock hero table TAKEN for %s (char %d): model %lu -> %lu; table %lu %lu %lu %lu %lu %lu %lu %lu (rules+0x208, heister n = entry n-1)", who, ch, model, hero[ch - 1], hero[0], hero[1], hero[2], hero[3], hero[4], hero[5], hero[6], hero[7]);
     return hero[ch - 1];
 }
 
@@ -263,6 +272,8 @@ static void klco_look(DWORD ent, int idx, int ch, int mask, int outfit, int gt, 
         return;
     }
     if (ch >= 1) {
+        if (!klco.toldSrc++) klog("charonline: body source for %s (char %d) on level %s: wardrobe loaded %d (key %s), wardrobe applies %d, entry root %lu, [CharOnline] StockHero=%d -> %s", who, ch, key, klc_w.on, klc_w.key, wardrobe, wardrobe && ch <= klc_w.n ? klc_w.c[ch - 1].root : 0, klco.stockHero,
+            wardrobe && ch <= klc_w.n && klc_w.c[ch - 1].root && (ch <= 8 || !klc_w.c[ch - 1].stock) ? "WARDROBE (the stock table is not consulted)" : !wardrobe ? "stock table (decision logged next)" : "none (wardrobe has no usable entry)");
         if (wardrobe && ch <= klc_w.n && klc_w.c[ch - 1].root && (ch <= 8 || !klc_w.c[ch - 1].stock)) want_root = klc_w.c[ch - 1].root;
         else if (!wardrobe && (want_root = klco_stock_root(ch, model, who)) != 0) { /* stock body of a Dog Days heister from the rules' hero table */ }
         else if (!klco.toldNoWar++) klog("charonline: %s wants %s (char %d) and level %s has no such model (wardrobe %s): the stock body stays", who, klco_nm(ch), ch, key, wardrobe ? "has no entry" : "missing");
@@ -356,7 +367,7 @@ static void klco_tick(int game_thread)
         for (i = 0; i < n; i++) sig = sig * 31 + klco_ent(ents, n, i);
         if (sig != klco.entSig) {                                  /* a new level / round built new player objects: what peers said before is about other bodies */
             if (klco.entSig) { memset(klco.p, 0, sizeof klco.p); klog("charonline: the player table changed (new round): peer looks forgotten, they re-announce every 2 s"); }
-            klco.entSig = sig; klco.since = now; klco.pubStr[0] = 0; klco.diagAt = 0; klco.toldNoWar = 0; klco.toldFollow = 0;     /* D4 (re/netcode_players_1027.md): the stock-map 'no such model' note once per ROUND, not once per session */
+            klco.entSig = sig; klco.since = now; klco.pubStr[0] = 0; klco.diagAt = 0; klco.toldNoWar = 0; klco.toldStock = 0; klco.toldSrc = 0; klco.toldFollow = 0;     /* D4 (re/netcode_players_1027.md): the stock-map 'no such model' note once per ROUND, not once per session */
         }
         idx = klco_find_own(ents, n, now, &pl, &how);
         /* 10-27 (bench BOSE5c): after the van escape the spectator camera follows a peer and the gamedata slot points at HIS body; the host then

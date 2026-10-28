@@ -164,12 +164,26 @@ static int klhro_decide(int seat, int row, int rank, int *newtotal)
     if ((unsigned __int64)a + b < price) return KLHRO_MONEY;
     klhro_spend(S, seat, price, a);
     klhro.paid[seat] = row;
-    if (newtotal) { DWORD a2 = 0, b2 = 0; klhro_money(S, seat, &a2, &b2); *newtotal = (int)(a2 + b2); }
-    if (klhro.log) klog("hire-online: seat %d hired %s for $%lu (money %lu -> after the spend, replicated by the score object); takes effect at the next round's start", seat, klhr_name[row], (unsigned long)price, (unsigned long)(a + b));
+    {   /* c9hire3 1028: banked before / after the spend (read straight back; the score object may replicate later, see the round-start line), expect = before - price */
+        DWORD a2 = 0, b2 = 0; unsigned long before = (unsigned long)(a + b), expect = before - (unsigned long)price;
+        int ok2 = klhro_money(S, seat, &a2, &b2);
+        if (newtotal && ok2) *newtotal = (int)(a2 + b2);
+        if (klhro.log) klog("hire-online: seat %d hired %s for $%lu: banked %lu -> %s%lu (expect %lu)%s; takes effect at the next round's start", seat, klhr_name[row], (unsigned long)price, before, ok2 ? "" : "unreadable ", ok2 ? (unsigned long)(a2 + b2) : 0ul, expect,
+            ok2 && (unsigned long)(a2 + b2) != expect ? " WARNING: not what the spend should leave (the spenders 0x6b1910 / 0x7f6950 or the readers 0x622e10 / 0x639c10 differ from what this assumes)" : "");
+    }
     return KLHRO_OK;
 }
 
 /* ---- messages ---- */
+/* c9hire3 1028: own seat's banked money (0x622e10 + 0x639c10), logged with a tag; proves the spend reached this machine's score object (host and client) */
+static void klhro_log_money(const char *tag)
+{
+    DWORD rules = 0, S = 0, a = 0, b = 0; int seat;
+    if (!klhro.log) return;
+    if (!klhro_rules(&rules, &S) || (seat = klhro_myseat(rules)) < 0 || !klhro_money(S, seat, &a, &b)) { klog("hire-online: money readback (%s): own seat or money not readable", tag); return; }
+    klog("hire-online: money readback (%s, %s, seat %d): banked %lu = %lu + %lu", tag, klhro_host() ? "host" : "client", seat, (unsigned long)(a + b), (unsigned long)a, (unsigned long)b);
+}
+
 static void klhro_on_ask(const struct knc_msg *m, int src)
 {   /* HOST: HIRE Q s<seat>r<row>k<rank> */
     int seat = -1, row = 0, rank = -1, why, nt = 0; char pay[48]; DWORD rules = 0;
@@ -192,7 +206,7 @@ static void klhro_on_answer(const struct knc_msg *m, int src)
     if (!klhro_rules(&rules, 0) || seat != klhro_myseat(rules)) return;
     if (klhro.pend != row && !(ok && !klhr_next)) return;         /* a late 'ok' (after the 6 s timeout) is still taken: the host has charged this seat, so the body must be worn (the host judged it, seat checked above) */
     klhro.pend = 0; klhro.tbJud = ok ? 0 : why;
-    if (ok) { klhr_next = row; if (klhro.log) klog("hire-online: the host accepted: %s hired for the next round", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?"); }
+    if (ok) { klhr_next = row; if (klhro.log) klog("hire-online: the host accepted: %s hired for the next round", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?");  klhro_log_money("client, at the host's answer"); }
     else { klog("hire-online: the host refused %s: %s", row >= 1 && row <= KLHR_N ? klhr_name[row] : "?", klhro_why(why)); if (row >= 1 && row <= KLHR_N) klhr_notef(row, "the host refused: %s", klhro_why(why)); }
 }
 
@@ -291,6 +305,7 @@ static void klhro_tick(void)
             klhro.save = (int)klc_char; klhro.act = (int)klhr_next; klc_char = klhro.act;
             klog("hire-online: round starts: I wear %s (hired; the Heister page choice %d returns after the round)", klhr_name[klhro.act], klhro.save);
         }
+        klhro_log_money(klhro.act ? "round start, hire taken" : "round start");
         klhr_next = 0;
         if (klhro_host()) for (j = 0; j < KLHRO_SEATS; j++) klhro.paid[j] = 0;      /* the hires of the shop page are spent */
     }
