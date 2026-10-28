@@ -1117,12 +1117,14 @@ static int klr_bo_hit(void *self, DWORD hit, DWORD a, void (__fastcall *orig)(vo
     if (fid == KBO_F_FED2CREW) m = klr_bo.eff[KBO_F_FED2CREW] >= 0 ? klr_bo.eff[KBO_F_FED2CREW] : klr_bo.eff[KBO_F_YOU2CREW];
     else m = klr_bo.eff[fid];
     if (slot == 0 && klr_bo.far_ > 0 && ak == KBO_A_HUMAN) {      /* review 1028: not for a police human (FedToCrew / YouToCop is his number alone, as Arcade klr_far_mult) */      /* YouToCrewFar: priced per hit by the real distance (Arcade approximates it by data: klr_far_mult) */
-        float pa[3], pb[3], d = -1;
-        if (klh_pvt(att) == KLR_PLAYER_VT && klh_rd(att + 0x460, pa, 12) && kle_node(klh_rd32(a + 4), pb, 0) && klr_finite(pa[0]) && klr_finite(pa[1]) && klr_finite(pa[2]))
+        float pa[3] = { 0, 0, 0 }, pb[3], d = -1; DWORD an;
+        /* the shooter's place: his scene node first, +0x460 as the fallback (c9 A1LIFT4d 10-28: +0x460 of a moving player froze at a doorway while the node moved on; kljoin JoinFeetNode) */
+        int pok = klh_pvt(att) == KLR_PLAYER_VT && (((an = klh_rd32(att + 4)) > 0xffff && kle_node(an, pa, 0) && klr_finite(pa[0]) && klr_finite(pa[1]) && klr_finite(pa[2]) && (pa[0] != 0 || pa[2] != 0)) || klh_rd(att + 0x460, pa, 12));
+        if (pok && kle_node(klh_rd32(a + 4), pb, 0) && klr_finite(pa[0]) && klr_finite(pa[1]) && klr_finite(pa[2]))
             d = (float)sqrt((pa[0] - pb[0]) * (pa[0] - pb[0]) + (pa[1] - pb[1]) * (pa[1] - pb[1]) + (pa[2] - pb[2]) * (pa[2] - pb[2]));
         if (pa[0] == 0.0f && pa[1] == 0.0f && pa[2] == 0.0f) d = -1;      /* review 1028: an all-zero position is a unset one, not the origin */
         if (d > 100000.0f) d = -1;      /* more than 1 km: a stale / bogus read, no sponge */
-        if (d >= 0 && klr_finite(d)) rng = kbo_range(d, klr_bo.far_, klr_bo.near_at, klr_bo.far_at); else InterlockedIncrement(&klr_bo.nopos);      /* GUESS: +0x460 is the feet of a remote ZFFPlayer too */
+        if (d >= 0 && klr_finite(d)) rng = kbo_range(d, klr_bo.far_, klr_bo.near_at, klr_bo.far_at); else InterlockedIncrement(&klr_bo.nopos);      /* GUESS: the scene node (else +0x460) is the place of a remote ZFFPlayer too */
         InterlockedExchangeAdd(&klr_bo.rng_m, (LONG)(rng * 1000.0f));
     }
     nf = kbo_scale(m, rng, kbo_tough(vk, klr_bo.tough));
@@ -1144,9 +1146,33 @@ static int klr_bo_hit(void *self, DWORD hit, DWORD a, void (__fastcall *orig)(vo
     return 1;
 }
 
-static void __fastcall klr_cb_hit(void *self, void *edx, DWORD hit)      /* thiscall, one stack argument, ret 4 */
+/* [BotFill] OnlineBotTraits (2026-10-28, wk-trait; NOT RUN IN THE GAME). Every `orig` call of klr_cb_hit_in below is this shim: when klr_cb_hit (the outer wrapper) decided a trait
+   multiplier for this hit (klr_tr_mult = DamageIn / Health of the character the host drew for the victim, kltrait.c), the scale the inner path has just written ([hit+0x18]; OnlineBalance's
+   or OnlineCopToBot's, or the game's own) is multiplied once more around the real routine and put back, exactly as those paths do. mult 1 = a plain pass-through. It composes with Tough
+   (which already divides in klr_bo_hit) because the two are independent factors. Game thread only (the slot is only ever called there), so plain statics. The lost-hp counters of the
+   paths above then include the trait (their 'would be' numbers do not). */
+static float klr_tr_mult = 1.0f;
+static void __fastcall klr_tr_orig(void *self, void *edx, DWORD hit)
 {
     void (__fastcall *orig)(void *, void *, DWORD) = (void (__fastcall *)(void *, void *, DWORD))(DWORD_PTR)KLH_VA(KLR_CB_HIT);
+    float m = klr_tr_mult, f = 0, nf;
+    if (m != 1.0f && hit && klh_rd(hit + 0x18, &f, 4) && f == f && f > 0) {
+        nf = f * m; if (nf <= 0) nf = KBO_TOKEN;
+        if (klh_data((void *)(DWORD_PTR)(hit + 0x18), &nf, 4, "bot hit scale (OnlineBotTraits DamageIn / Health)")) {
+            orig(self, edx, hit);
+            klh_data((void *)(DWORD_PTR)(hit + 0x18), &f, 4, "bot hit scale back (OnlineBotTraits)");
+            InterlockedIncrement(&kltb.hit_scaled); kltb.mult_sum += m;
+            if (kltb.hit_scaled <= 3) klog("trait: online bot %08lx hit: scale %.3f -> %.3f (DamageIn / Health x%.3f) #%ld", (unsigned long)(DWORD_PTR)self, f, nf, m, (long)kltb.hit_scaled);
+            return;
+        }
+        InterlockedIncrement(&kltb.hit_refused);
+    }
+    orig(self, edx, hit);
+}
+
+static void __fastcall klr_cb_hit_in(void *self, void *edx, DWORD hit)      /* thiscall, one stack argument, ret 4 */
+{
+    void (__fastcall *orig)(void *, void *, DWORD) = klr_tr_orig;      /* was the game's routine itself; the shim passes through unless the outer wrapper set a trait multiplier */
     DWORD a = (DWORD)(DWORD_PTR)self, att = 0, sc, team = 0; float f = 0, nf, h0, h1;
     (void)edx;
     if (klr_bo.on && klr_bo_hit(self, hit, a, orig)) return;      /* [BotFill] OnlineBalance: human -> bot, bot -> cop; everything else falls through to the paths below */
@@ -1225,6 +1251,20 @@ static void __fastcall klr_cb_hit(void *self, void *edx, DWORD hit)      /* this
     }
     if (hit && klbf_pb_is_bot(a)) InterlockedIncrement(&klr_cb.other);      /* a hit on a bot from a human / bot / non-actor: untouched */
     orig(self, 0, hit);
+}
+
+/* the slot-423 wrapper itself: decides the trait multiplier of a hit on an online bot (kltrait.c kltt_bot_hit: DamageIn / Health of the character the host drew for him), skipping the
+   hits the other paths leave alone (point-blank steps, a non-positive scale), runs the inner paths (klr_cb_hit_in) with it set, then clears it. 1.0 = the old behaviour exactly. */
+static void __fastcall klr_cb_hit(void *self, void *edx, DWORD hit)
+{
+    float save = klr_tr_mult, f = 0;
+    klr_tr_mult = 1.0f;
+    if (hit && kltt_bot_on() && klbf_pb_is_bot((DWORD)(DWORD_PTR)self)) {
+        InterlockedIncrement(&kltb.hits);
+        if (klh_rd(hit + 0x18, &f, 4) && !kbt_skip_hit(f, klr_pbo.want)) klr_tr_mult = kltt_bot_hit((DWORD)(DWORD_PTR)self);
+    }
+    klr_cb_hit_in(self, edx, hit);
+    klr_tr_mult = save;
 }
 
 /* OnlineBalance, once per pass on the game thread while the table is ready: the arming lines, the cops onto the private table, the 30 s counter line */
@@ -1545,9 +1585,9 @@ static void klr_tick(int game_thread)
 {
     static DWORD last, toldrules; static char toldwhy[200];
     DWORD now = GetTickCount(), rules, state; int arcade, act = 0, level; char why[200];
-    if ((!klr.on && !(klr_pbo.want > 0) && !(klr_cb.k > 0) && !klr_cb.on && !klr_bo.on) || !klh_exe_ok || now - last < (game_thread ? 50u : 100u)) return;
+    if ((!klr.on && !(klr_pbo.want > 0) && !(klr_cb.k > 0) && !klr_cb.on && !klr_bo.on && !kltt_bot_on()) || !klh_exe_ok || now - last < (game_thread ? 50u : 100u)) return;
     last = now;
-    if (!klr.on) { klr_pb_tick(klr_pbo_host(), game_thread); klr_cb_tick((klr_cb.k > 0 || klr_cb.on || klr_bo.on) && klr_online_host(), game_thread); return; }      /* [Balance] off: only the online point-blank part runs */
+    if (!klr.on) { klr_pb_tick(klr_pbo_host(), game_thread); klr_cb_tick((klr_cb.k > 0 || klr_cb.on || klr_bo.on || kltt_bot_on()) && klr_online_host(), game_thread); return; }      /* [Balance] off: only the online point-blank part runs */
     arcade = klr_arcade(&rules, &state, &level);
     if (arcade && (klr.any || klr_pb.any)) {
         act = klb_level(why);                 /* asked every pass: the verdict changes when the archive is opened */
@@ -1563,7 +1603,7 @@ static void klr_tick(int game_thread)
     klr_head_tick(act);                       /* HeadShot / FedHeadShot (2 a8): the two head floats; the tuning's own back otherwise */
     if (arcade && act) klr_tough_say(now);    /* the proof line: what the game made the AI heisters' health */
     klr_pb_tick(act ? 1 : klr_pbo_host(), game_thread);      /* the point-blank keys: in while the dial acts (1) or the online host has bots (2), the game's own vtable back otherwise */
-    klr_cb_tick((klr_cb.k > 0 || klr_cb.on || klr_bo.on) && klr_online_host(), game_thread);      /* OnlineCopToBot: the bots' private table in while this is the online host with bots, the game's own back otherwise */
+    klr_cb_tick((klr_cb.k > 0 || klr_cb.on || klr_bo.on || kltt_bot_on()) && klr_online_host(), game_thread);      /* OnlineCopToBot: the bots' private table in while this is the online host with bots, the game's own back otherwise */
     klr_ch_tick(arcade, game_thread);        /* LogCrewHits: reads only; any Arcade round, stock level or not */
     if (arcade) klr_player_tick(act, game_thread, rules);
     else if (klr_p.have) klr_player_tick(0, game_thread, 0);      /* the session ended with the object alive: its own values go back */

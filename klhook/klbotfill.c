@@ -60,6 +60,9 @@ static DWORD klbf_sq_done;         /* the session object the squad pass finished
 static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_esc_side = 300.0f;
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
 static int klbf_gu; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
+#include "klgetupbeacon.h"      /* wk-getup2-1028: [BotFill] OnlineGetUpBeacon, the pure part (klgetupbeacon_test.c); sockets in klgetupbeacon.c (AFTER klsync.c) */
+static int klgb_on; static struct klgb_seat klgb_seats[KLGB_MAX_SEATS];      /* [BotFill] OnlineGetUpBeacon (0/1; only with OnlineGetUp): the downed machine tells the host (klgetupbeacon.c); the host's per-seat book */
+static void klgb_own(DWORD pl, DWORD ds, int alive, DWORD now);      /* klgetupbeacon.c (client side; kldown.c calls it) */
 static int klco_table(DWORD sm, DWORD *ents, int *n);      /* klcharonline.c comes AFTER this file: forward declarations (klco_* are static there, the same signatures) */
 static DWORD klco_ent(DWORD ents, int n, int i);
 static int klco_find_own(DWORD ents, int n, DWORD now, DWORD *plOut, int *how);
@@ -222,6 +225,8 @@ static void klbf_init(void)
     klbf_gu_range = (float)GetPrivateProfileIntA("BotFill", "OnlineGetUpRange", 2500, klh_ini); if (klbf_gu_range < 500.0f) klbf_gu_range = 500.0f; if (klbf_gu_range > 8000.0f) klbf_gu_range = 8000.0f;      /* cm, Arcade RushRange 25 m */
     { char rb[32]; GetPrivateProfileStringA("BotFill", "OnlineGetUpRate", "3.0", rb, sizeof rb, klh_ini); klbf_gu_rate = (float)atof(rb); if (!(klbf_gu_rate >= 0.5f)) klbf_gu_rate = 0.5f; if (klbf_gu_rate > 20.0f) klbf_gu_rate = 20.0f; }      /* meter a second a helper adds (Arcade [Adrenaline] Meter 3.0 is the clip-speed floor) */
     klbf_gu_near = (float)GetPrivateProfileIntA("BotFill", "OnlineGetUpNear", 400, klh_ini); if (klbf_gu_near < 150.0f) klbf_gu_near = 150.0f; if (klbf_gu_near > 1000.0f) klbf_gu_near = 1000.0f;      /* cm, Arcade BotRange 4 m */
+    klgb_on = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpBeacon", 0, klh_ini) != 0;      /* (recommended off) wk-getup2-1028: not run live; needs OnlineGetUp 1 (2 = host logs only) on both machines */
+    if (klgb_on) klog("botfill: getup: OnlineGetUpBeacon=1: a downed machine sends 'KLSYD' (UDP %d) to the host once a second while down and 3x on getting up; the host counts a fresh beacon (< %d ms) as 'seat is down' (klgetupbeacon.c)", 27415, KLGB_FRESH_MS);
     if (klbf_gu) klog("botfill: getup: OnlineGetUp=%d (%s): host rush range %.0f cm, helper by the downed body within %.0f cm adds %.1f a second to the mash meter - default 0 = off", klbf_gu, klbf_gu == 2 ? "DRY, log only" : "on", klbf_gu_range, klbf_gu_near, klbf_gu_rate);
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
     klbf_trig_x = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggersExtra", 0, klh_ini); if (klbf_trig_x < 0 || klbf_trig_x > 2) klbf_trig_x = 0;      /* ZTriggerBox2 / ZOnlineTriggerBox: no stock cop wave uses them (money-stack pick-ups, location trackers), so off by default */
@@ -1068,17 +1073,54 @@ static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *so
    DOWNED MACHINE (klbf_gu_rate_now, called from kldown.c's online pass): a living Ally bot within OnlineGetUpNear of this machine's own body, same floor, adds OnlineGetUpRate a second to the mash meter. */
 static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sold, const float (*pos)[3], int nb, int vstate)
 {
-    DWORD ents = 0; int n = 0, i, b, s; static int toldNone, toldRound, hdown[16]; static DWORD hAt[16];
+    DWORD ents = 0; int n = 0, i, b, s; static int toldNone, toldRound, hdown[16], toldMap[16]; static DWORD hAt[16];
+    float rep[16][3]; int rok[16], bsd[16], ownIdx = -1; float bsp[16][3];      /* wk-getup2-1028: replica places, and the beacon verdicts mapped to table indexes */
     if (!klbf_gu || nb <= 0) return;
-    if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; memset(hdown, 0, sizeof hdown); memset(hAt, 0, sizeof hAt); }
+    if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; memset(hdown, 0, sizeof hdown); memset(hAt, 0, sizeof hAt); memset(klgb_seats, 0, sizeof klgb_seats); memset(toldMap, 0, sizeof toldMap); }
     if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: getup: the session player table is not readable: no get-up help this round yet (said once)"); return; }
     for (s = 0; s < KLBF_OT_BOTS; s++) if (klbf_ob[s].guHum && now - klbf_ob[s].guAt >= 3500) { klog("botfill: getup: bot %d released (seat %d: not down any more or the rush lapsed)", s, klbf_ob[s].guHum - 1); klbf_ob[s].guHum = 0; klbf_ob[s].guAt = 0; klbf_ob[s].guOrd = 0; }
+    memset(rok, 0, sizeof rok); memset(bsd, 0, sizeof bsd);
+    if (klgb_on) {      /* the beacons (klgetupbeacon.c): read each heister replica's place, check the beacon's table index against it, else the nearest replica (GUESS: the index is equal on both peers) */
+        for (i = 0; i < n && i < 16; i++) { DWORD P = klco_ent(ents, n, i); if (P && klco_heister(P) && klh_rd(P + 0x460, rep[i], 12) && kle_ok3(rep[i]) && !(fabsf(rep[i][0]) <= 1 && fabsf(rep[i][1]) <= 1 && fabsf(rep[i][2]) <= 1)) rok[i] = 1; }
+        { DWORD e2 = 0; int how = 0; ownIdx = klco_find_own(ents, n, now, &e2, &how); }      /* the host's own body: the fallback never names it (review) */
+        for (i = 0; i < KLGB_MAX_SEATS; i++) {
+            int to = i;
+            if (!klgb_fresh_down(&klgb_seats[i], now)) continue;
+            if (i >= n || !klgb_map_ok(klgb_seats[i].pos, rep[i], i < 16 && rok[i])) {
+                to = klgb_nearest(klgb_seats[i].pos, (const float (*)[3])rep, rok, n < 16 ? n : 16, ownIdx);
+                if (!toldMap[i]++) klog("botfill: getup: beacon says seat %d but that replica is %s from the beacon's place: %s (GUESS: nearest replica within %.0f cm)", i, i < n && rok[i] ? "far" : "unreadable / absent", to >= 0 ? "using the nearest replica" : "no replica near, beacon ignored", KLGB_NEAR_CM);
+                if (to < 0) continue;
+            }
+            if (bsd[to]) continue;
+            bsd[to] = 1; memcpy(bsp[to], klgb_seats[i].pos, 12);
+        }
+        {   /* GU4 10-28: the host took seat 1's down beacons yet logged neither 'IS DOWN' nor a mapping line: once a second while a seat is fresh, every check (diagnostics, at most 40 a round) */
+            static DWORD dAt; static int dN, dRound; char t[600]; int k = 0, any = 0;
+            if (dRound != klbf_ot_rounds) { dRound = klbf_ot_rounds; dN = 0; }
+            for (i = 0; i < KLGB_MAX_SEATS; i++) if (klgb_seats[i].have && klgb_seats[i].down) any = 1;
+            if (any && dN < 40 && now - dAt >= 1000) {
+                dAt = now; dN++;
+                for (i = 0; i < KLGB_MAX_SEATS && k < 200; i++) if (klgb_seats[i].have) { int w = _snprintf(t + k, sizeof t - k, "seat %d %s age %lu ms fresh %d; ", i, klgb_seats[i].down ? "down" : "up", (unsigned long)(now - klgb_seats[i].rxAt), klgb_fresh_down(&klgb_seats[i], now)); if (w > 0) k += w; }
+                for (i = 0; i < n && i < 16 && k < 470; i++) {
+                    DWORD P = klco_ent(ents, n, i), h; BYTE ty = 0, pol = 0; float hv = -1; int w;
+                    if (P) { klh_rd(P + 0x273c, &ty, 1); klh_rd(P + 0x2723, &pol, 1); if ((h = klh_rd32(P + 0x5fc)) != 0) klh_rd(h + 4, &hv, 4); }
+                    w = _snprintf(t + k, sizeof t - k, "[%d %08lx vt %08lx type %u police %u heister %d hp %.0f rok %d bsd %d%s]", i, (unsigned long)P, (unsigned long)(P ? klh_pvt(P) : 0), ty, pol, P ? klco_heister(P) : 0, hv, rok[i], bsd[i], i == ownIdx ? " own" : ""); if (w > 0) k += w;
+                }
+                t[sizeof t - 1] = 0;
+                klog("botfill: getup: diag: n %d own %d | %s", n, ownIdx, t);
+            }
+        }
+    }
     for (i = 0; i < n && i < 16; i++) {
-        DWORD P = klco_ent(ents, n, i), D = 0, ds = 0, h; float hv = 1.0f, hp[3] = { 0, 0, 0 }, d[16]; int rb = -1, pick, nn = 0, bs[16], down = 0, fs = 0;
+        DWORD P = klco_ent(ents, n, i), D = 0, ds = 0, h; float hv = 1.0f, hp[3] = { 0, 0, 0 }, d[16]; int rb = -1, pick, nn = 0, bs[16], down = 0, viaB = 0, fs = 0;
         if (!P || !klco_heister(P)) continue;
         if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0) hv = 0;
         if (hv > 0 && (D = klh_rd32(P + 0x2948)) != 0 && klh_rd32(D) == P && klh_rd(D + 4, &ds, 4) && kgu_downed(ds) && klbf_feet(P, hp, &fs)) down = 1;      /* wk-botpar: OnlineEscortNode reads the scene node first; off = +0x460 only, as before */
-        if (down && !hdown[i]) { hdown[i] = 1; hAt[i] = now; klog("botfill: getup: seat %d IS DOWN (D %08lx state %lu) at (%.0f, %.0f, %.0f)%s", i, (unsigned long)D, (unsigned long)ds, hp[0], hp[1], hp[2], klbf_gu == 2 ? " - DRY" : ""); }
+        if (!down && hv > 0 && bsd[i]) {      /* the replica says nothing (GU3: its D never lies); a fresh beacon does. Place: the replica's if readable, else the beacon's */
+            down = 1; viaB = 1;
+            if (!(rok[i])) memcpy(hp, bsp[i], 12); else memcpy(hp, rep[i], 12);
+        }
+        if (down && !hdown[i]) { hdown[i] = 1; hAt[i] = now; klog("botfill: getup: seat %d IS DOWN (D %08lx state %lu) at (%.0f, %.0f, %.0f)%s%s", i, (unsigned long)D, (unsigned long)ds, hp[0], hp[1], hp[2], viaB ? " (beacon)" : "", klbf_gu == 2 ? " - DRY" : ""); }
         if (!down) { if (hdown[i]) { hdown[i] = 0; klog("botfill: getup: seat %d is up / out of play after %.1f s", i, (now - hAt[i]) / 1000.0f); } continue; }
         if (vstate >= 1 && vstate <= 5) continue;      /* the van is called / waits / leaves: the crew's own orders win (Arcade RushVan) */
         for (b = 0; b < nb; b++) {      /* the bot already sent to this seat, else the nearest free one */
@@ -1096,7 +1138,13 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
                 bs[nn] = b; d[nn] = fabsf(pos[b][1] - hp[1]) > 400.0f ? -1.0f : (float)sqrt(dx * dx + dz * dz); nn++;      /* another floor: no candidate (Arcade 2 m of height; 4 m here, stairs) */
             }
             pick = kgu_pick(d, nn, klbf_gu_range);
-            if (pick < 0) continue;
+            if (pick < 0) {      /* GU5 10-28: seat 1 lay 16 s with every bot 60-80 m off and nothing said why: once per down */
+                static int noTold[16]; static DWORD noAt[16]; int q; float best = -1;
+                if (noAt[i] != hAt[i]) { noAt[i] = hAt[i]; noTold[i] = 0; }
+                for (q = 0; q < nn; q++) if (d[q] >= 0 && (best < 0 || d[q] < best)) best = d[q];
+                if (!noTold[i]++) klog("botfill: getup: seat %d is down but no free bot is within OnlineGetUpRange %.0f cm (%d free bot(s), nearest on this floor %s%.0f cm)", i, klbf_gu_range, nn, best < 0 ? "none, " : "", best < 0 ? 0.0f : best);
+                continue;
+            }
             rb = bs[pick];
         }
         for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != act[rb]; s++) ;

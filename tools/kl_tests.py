@@ -56,10 +56,12 @@ C_TESTS = {
     'klcv_test.c': 'logic',            # klchar_voice.h
     'kldown_hold_test.c': 'logic',     # kldown_hold.h
     'klgetup_test.c': 'logic',         # klgetup_logic.h (+ kldown_hold.h)
+    'klgetupbeacon_test.c': 'logic',   # klgetupbeacon.h (OnlineGetUpBeacon pure part)
     'kldown_mirror_test.c': 'logic',   # kldown_mirror_logic.h (no windows.h at all)
     'klgrades_test.c': 'logic',        # klgrades.h (uses _snprintf: -D_snprintf=snprintf)
     'kllootsync_test.c': 'logic',      # kllootsync_logic.h
     'klbalonline_test.c': 'logic',     # klbalonline.h
+    'klbottrait_test.c': 'logic',      # klbottrait.h
     'klshot_test.c': 'logic',          # klshot_logic.h (uses _snprintf: shim may need -D_snprintf=snprintf)
     'klleaf_test.c': 'logic',          # klleaf_logic.h (leaf probe schedule + CarStall door gate)
     'klbotvoice_test.c': 'logic',      # klbotvoice_logic.h

@@ -78,7 +78,7 @@ static int fake_call(DWORD soldier, DWORD hit, int force)
 static int g_btest = 1, g_nb;
 #define KLBD_BTEST(dnd) (g_nb++, g_btest)
 
-enum { KLTT_REVIVE = 4, KLTT_ADREN = 5 }; static float kltt_get(int r, int k) { (void)r; (void)k; return 1.0f; }   /* kltrait.c: no traits in this harness */
+enum { KLTT_REVIVE = 4, KLTT_ADREN = 5 }; static float kltt_get(int r, int k) { (void)r; (void)k; return 1.0f; } static float kltt_bot(DWORD a, int k) { (void)a; (void)k; return 1.0f; }   /* kltrait.c: no traits in this harness */
 /* ONLINE harness: the host test, the census and the clock are the part's own #ifndef hooks, replaced by fakes */
 static int g_ohost = 0, g_ncen; static DWORD g_ostate = 0x19;      /* g_ohost: 1 host, 0 not, -1 settings unreadable */ static DWORD g_cen[KLB_NREC]; static DWORD g_now = 5000;
 static DWORD klh_avt(DWORD a) { return klh_rd32(a); }

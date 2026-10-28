@@ -29,6 +29,7 @@
  *   scene units - NOT x100); st21 is the byte the RE notes call the controller state (answers GetMatPosAnim in 1..5); raw = ctrl+0x20..0x3c dumped
  *   as is because NO frame / time offset is proven: whichever dword changes between samples is the clip clock. The proxy accept time is also
  *   handed to kljoin.c (klj_door_at, [Join] CarStallAfterDoorMs). With [Probe] DoorAll=0 only Elevator/Escape/VideoProxy/Exit/unreadable proxies count.
+ * [Join] DoorCloseMs=0 (klpr_dc_*): closes the lift doors again, see the block above klpr_dc_note.
  * KEYS ([Probe]): DoorProxy=0  DoorAll=0  DoorLeaves=0
  */
 #include "klleaf_logic.h"
@@ -83,11 +84,87 @@ static DWORD __fastcall klpr_init(void *self, void *edx)
     return r;
 }
 
+/* ---- [Join] DoorCloseMs (2026-10-28, TEST build only, default 0 = off, recommended off until benched) ----
+   Basis: re/retomoto_lift_doors.md section 5 B, "cheaper variant". The door clip is 160 frames (open 0..75, close ~80..160); the proxy only ever plays 0..75.
+   DoorCloseMs ms after an accepted lift-door proxy (vtable 0xbc36bc) opened, each of its leaves (vtable 0xba8f3c, array INLINE at proxy+0x34, count [proxy+0x30]) gets
+   [leaf+0xd0]=75 (first) and [leaf+0xd4]=160 (last) - the leaf tick copies them into the play head via 0x78f190 / 0x505550 (READ, doc section 1) - and then
+   0x59dce0(leaf) restarts the clock and sets [leaf+0x99]=1. 0x59dce0 calling convention READ from kl2.exe: thiscall, ecx=leaf, no stack args, plain `ret`
+   (one path ends `jmp [vtable+0x64]` of the leaf: its argument count is GUESS = none, the game's own handler 0x7ed520 reaches it the same way).
+   Seamless at the pose (frame 75 = held pose) is GUESS per the doc. Runs in klpr_tick = klh_tick = the game thread (same thread as klj_tick). Never closes while a LOCAL
+   player's feet are within the car box (+KLPR_DC_PAD units, GUESS) or a ride is in progress: postponed, re-checked every tick. Needs [Probe] DoorProxy=1 (that is how a
+   TEST build sees the proxy); the SHIP build never sees one, so the key does nothing there. Key read from [Join] (fallback [KLHook]). */
+#define KLPR_VT_LEAF   0x00ba8f3c
+#define KLPR_CLOSE_FN  0x0059dce0
+#define KLPR_DC_PAD    60.0f
+static struct { DWORD me, at; int done; } klpr_dc[4]; static int klpr_dc_ms;
+
+static void klpr_leaf_start(DWORD me, DWORD at);
+
+static void klpr_dc_note(DWORD me)
+{
+    int k, f = -1;
+    if (klpr_dc_ms <= 0) return;
+    for (k = 0; k < 4; k++) { if (klpr_dc[k].me == me) { f = k; break; } if (f < 0 && (!klpr_dc[k].me || klpr_dc[k].done)) f = k; }
+    if (f < 0) return;
+    klpr_dc[f].me = me; klpr_dc[f].at = klj_door_at; klpr_dc[f].done = 0;
+}
+
+/* a local player (or a ride in progress) is at a lift car: do not shut the doors */
+static int klpr_dc_busy(void)
+{
+    DWORD gd, pl; BYTE sel[2]; int i, b; float feet[3];
+    if (klj_ride.on) return 1;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, sel, 2)) return 1;
+    for (i = 0; i < 2; i++) {
+        if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klj_feet(pl, feet)) continue;
+        for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].on && klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, KLPR_DC_PAD)) return 1;
+    }
+    return 0;
+}
+
+static void klpr_dc_tick(void)
+{
+    int k, i, n = 0; DWORD now, cnt, ctl, first = 75, last = 160; float f_first = 75.0f, f_last = 160.0f;
+    if (klpr_dc_ms <= 0 || !klh_exe_ok) return;
+    now = GetTickCount();
+    for (k = 0; k < 4; k++) {
+        if (!klpr_dc[k].me || klpr_dc[k].done || now - klpr_dc[k].at < (DWORD)klpr_dc_ms) continue;
+        if (now - klpr_dc[k].at > (DWORD)klpr_dc_ms + 120000) { klpr_dc[k].done = 1; continue; }          /* stale (level left): give up, touch nothing */
+        if (klh_rd32(klpr_dc[k].me) != (DWORD)(DWORD_PTR)KLH_VA(KLPR_VT_PROXY)) { klpr_dc[k].done = 1; continue; }
+        cnt = klh_rd32(klpr_dc[k].me + 0x30);
+        if (cnt < 1 || cnt > 8) { klpr_dc[k].done = 1; continue; }
+        if (klpr_dc_busy()) continue;                                                                      /* postponed, asked again next tick */
+        n = 0;                                                                                             /* per proxy (A1LIFT6 logged "10 of 5") */
+        for (i = 0; i < (int)cnt; i++) {
+            ctl = klh_rd32(klpr_dc[k].me + 0x34 + 4 * i);
+            if (ctl < 0x10000 || klh_rd32(ctl) != (DWORD)(DWORD_PTR)KLH_VA(KLPR_VT_LEAF)) continue;
+            if (!klh_data((void *)(DWORD_PTR)(ctl + 0xd0), &first, 4, "doorclose first") || !klh_data((void *)(DWORD_PTR)(ctl + 0xd4), &last, 4, "doorclose last")) continue;
+            /* A1LIFT6b: the ints alone are not enough - the clip state floats (clip state ctl+0x34: +0x10 first, +0x14 last, READ, see
+               klpr_leaf_line) stayed 0..75 and the restart replayed the OPENING (doors snapped shut and slid open again). The handler copies the
+               ints there via 0x78f190/0x505550 before 0x59dce0; we write the floats ourselves. */
+            if (!klh_data((void *)(DWORD_PTR)(ctl + 0x44), &f_first, 4, "doorclose clip first") || !klh_data((void *)(DWORD_PTR)(ctl + 0x48), &f_last, 4, "doorclose clip last")) continue;
+            ((void (__fastcall *)(void *, void *))(DWORD_PTR)KLH_VA(KLPR_CLOSE_FN))((void *)(DWORD_PTR)ctl, 0);
+            n++;
+        }
+        klpr_dc[k].done = 1;
+        klog("doorclose: proxy %08lx: %d of %lu leaf(s) set to frames 75..160 and restarted %lu ms after the doors opened (DoorCloseMs=%d)", (unsigned long)klpr_dc[k].me, n, (unsigned long)cnt, (unsigned long)(now - klpr_dc[k].at), klpr_dc_ms);
+        klpr_leaf_start(klpr_dc[k].me, now);                                                               /* DoorLeaves: sample the closing too */
+    }
+}
+
 /* an accepted door proxy: stamp for kljoin.c and (DoorLeaves) start a 6 s sample series for this proxy (4 proxies at most; a re-accept restarts it) */
 static void klpr_accepted(DWORD me)
 {
-    DWORD now = GetTickCount(); int k;
+    DWORD now = GetTickCount();
     klj_door_at = now ? now : 1;
+    klpr_dc_note(me);
+    klpr_leaf_start(me, klj_door_at);
+}
+
+/* DoorLeaves: (re)start a 6 s sample series for this proxy from 'at' (the open accept, or a DoorCloseMs close) */
+static void klpr_leaf_start(DWORD me, DWORD at)
+{
+    DWORD now = GetTickCount(); int k;
     if (!klpr.leaves) return;
     for (k = 0; k < klpr.npr && klpr.pr[k].me != me; k++) ;
     if (k == klpr.npr) {                               /* a new proxy: reuse a finished slot first (rounds / levels re-create proxies at new addresses) */
@@ -96,7 +173,7 @@ static void klpr_accepted(DWORD me)
         if (f < klpr.npr) k = f; else if (klpr.npr < 4) klpr.npr++; else return;
     }
     klpr.pr[k].at = 0;                                 /* klpr_tick may run on another thread: park the slot while it is rewritten */
-    klpr.pr[k].me = me; klpr.pr[k].last = 0; klpr.pr[k].at = klj_door_at;
+    klpr.pr[k].me = me; klpr.pr[k].last = 0; klpr.pr[k].at = at ? at : 1;
 }
 
 /* one controller of a proxy: one compact line (formats in the header comment).
@@ -127,6 +204,7 @@ static void klpr_leaf_line(DWORD me, DWORD at, int n, int i, DWORD cnt, DWORD ct
 static void klpr_tick(void)
 {
     int k, i, n; DWORD now, cnt, list, ctl;
+    klpr_dc_tick();                                    /* [Join] DoorCloseMs: idle (one compare) when 0 */
     if (!klpr.leaves || !klpr.npr) return;
     now = GetTickCount();
     for (k = 0; k < klpr.npr; k++) {
@@ -186,6 +264,9 @@ static void klpr_init_all(void)
     klpr.all = GetPrivateProfileIntA("Probe", "DoorAll", 0, klh_ini) != 0;
     klpr.leaves = GetPrivateProfileIntA("Probe", "DoorLeaves", 0, klh_ini) != 0;       /* TEST diagnostics: position / state samples of the proxy's controllers */
     if (!klh_exe_ok) { klog("probe: DoorProxy: not the known kl2.exe - off"); klpr.on = 0; return; }
+    klpr_dc_ms = GetPrivateProfileIntA("Join", "DoorCloseMs", GetPrivateProfileIntA("KLHook", "DoorCloseMs", 0, klh_ini), klh_ini);
+    if (klpr_dc_ms < 0 || klpr_dc_ms > 120000) klpr_dc_ms = 0;
+    klog("doorclose: [KLHook] DoorCloseMs=%d (%s)", klpr_dc_ms, klpr_dc_ms ? "doors are closed again that many ms after they opened, never while a player is at the car" : "off");
     klog("probe: DoorProxy on (%s), DoorLeaves %s", klpr.all ? "all names" : "names with Elevator/Escape/VideoProxy/Exit, or unreadable", klpr.leaves ? "on" : "off");
     klpr_wrap(KLPR_VT_PROXY, 14, KLPR_INIT_VA, (void *)klpr_init, (void **)&klpr.real_init, "ZMatPosAnimProxy init");
     klpr_wrap(KLPR_VT_PROXY, 26, KLPR_HAND_VA, (void *)klpr_hand, (void **)&klpr.real_hand, "ZMatPosAnimProxy handler");

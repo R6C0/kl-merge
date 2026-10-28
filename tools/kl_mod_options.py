@@ -239,6 +239,8 @@ feat('crewjoin', G_CREW, 'AI heisters follow the tower-to-lobby jump (Retomoto)'
      'two navmeshes joined only by kljoin.c', [('CrewJoin', 'Enable', 1, 0, 0)])
 feat('traits', G_CREW, 'A small trait per Dead Men character', 'on', 'start',
      'enabled in the live ini; the effect is small and logged', [('Traits', 'Enable', 1, 0, 0)])
+feat('onlinebottraits', G_CREW, 'Online AI heisters carry the traits of the character they wear: tougher or frailer hits, longer or shorter lie when downed; host only (needs Traits on and the host bot options with Online looks; recommended off)', 'off', 'start',
+     'kltrait.c [BotFill] OnlineBotTraits; Health/DamageIn scale the hit on the bot in the slot-423 wrapper (klbalance.c klr_tr_orig), ReviveTime scales klbotdown.c LieSeconds; DamageOut/AimSpread/Regen/Adrenaline not applied online; re/traits.md ONLINE; NOT run live', [('BotFill', 'OnlineBotTraits', 1, 0, 0), ('Traits', 'Enable', 1, None, 0), ('BotFill', 'OnlineLooks', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0)])
 feat('talk', G_CREW, 'Kane and Lynch dialogue and chatter', 'on', 'start',
      'Retomoto countdown and the idle chatter', [('Talk', 'Enable', 1, 0, 0)])
 
@@ -450,6 +452,9 @@ feat('nettune', G_EXP, 'Send player moves more often online (3x stock; every pla
      'only the SENDER\'s numbers count; more upload; refused on ranked joins and stock maps; not benched yet',
      [('Net', 'Tune', 1, 0, 0), ('Net', 'TuneClient', 1, 0, 0), ('Net', 'PlayerMs', 33, None, -1),
       ('Net', 'RefreshMs', 250, None, -1), ('Net', 'PosTol', 5, None, -1), ('Net', 'AngTol', 10, None, -1)])
+feat('steamprobe', G_EXP, 'Log what Steam networking offers online (log only, sends nothing; recommended off)', 'off', 'start',
+     'klsteamprobe.c [Net] SteamProbe: once per game start logs the steam_api exports, the SteamNetworking005/004 pointers and the peer table ids (steamprobe: lines in KLHook.log); for a two-PC internet test, re/side_channel_steam.md; not run live',
+     [('Net', 'SteamProbe', 1, 0, 0)])
 feat('watchdog', G_EXP, 'Watchdog for a stuck AI heister', 'off', 'start',
      'not run in the game', [('QoL2', 'Watchdog', 1, 0, 0)])
 feat('names', G_EXP, 'Dead Men map names in the Arcade lists', 'off', 'start',
@@ -506,6 +511,8 @@ feat('onlinewalkreach', G_EXP, 'Online AI heisters: one that walked long and sta
      'klbotfill.c [BotFill] OnlineWalkReach (wk-move-1028, plan 1 van reach; uses OnlineExitCrowd); NOT run live', [('BotFill', 'OnlineWalkReach', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinegetup', G_EXP, 'Online AI heisters help a downed human get up, as in Arcade (nearest free bot runs to him; a bot by him speeds the mash meter; recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineGetUp (1 on, 2 dry; + OnlineGetUpRange 2500 / Rate 3.0 / Near 400; wk-getup-1028, re/bot_getup_online.md); needs [Down] MashHold; NOT run live', [('BotFill', 'OnlineGetUp', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinegetupbeacon', G_EXP, 'Online get-up help: the downed machine tells the host it is down so the bots come to a joiner too (needs Online AI heisters help a downed human; recommended off)', 'off', 'start',
+     'klgetupbeacon.c [BotFill] OnlineGetUpBeacon (UDP 27415 KLSYD; wk-getup2-1028, re/bot_getup_online.md section 7); set on every machine; NOT run live', [('BotFill', 'OnlineGetUpBeacon', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlineescort', G_EXP, 'Online AI heisters with nothing to loot stay near you, as in Arcade (host only; recommended off)', 'off', 'start',
      'klbotfill.c [Bots] OnlineEscort (1 = host seat, 2 = nearest human; + OnlineEscortFar 800 / OnlineEscortSide 300 cm; wk-move-1028, plan 2); NOT run live', [('Bots', 'OnlineEscort', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlineboxspread',G_EXP, 'Online AI heisters: each one walks to its own spot inside the escape box instead of the centre (recommended off)', 'off', 'start',
