@@ -1,3 +1,11 @@
+2026-10-28 ~16:45 - [ce] WKBC3 + BP_DD04c (out_looks_1028a_test, OnlineLooks=2), 0 faults / 0 asserts every seat. BP_DD04c F04: 7/7 BOARDED
+(ExitCrowd 1600, GatherLateS 45: the wait ran its 40 s); client PASS with the fixed join script (waitstate 0x19, onwin FABuyWeaponsNew, waitstate 0x29).
+Defaults now OnlineExitCrowd=1600, OnlineGatherLateS=45 (b0bd5343c). WKBC3 F06: 7/7 aboard (6 BOARDED + bot 0 boardall), ledger $1.65M; host
+teleported onto the van object (-6209 400 10395) in van state 3, bank credit STILL unpaid ('no escaped human seat yet'): standing at the van does not
+set seat flag 0x40, the real escape path is under research (w91thgo9w -> re/human_escape_online_1028.md). Looks probe: host and client list the 7
+Ally bots in the SAME slot order with the same groups Glazer_Bodyguard_02..08 on F06 and DD04 (tools/kl_looks_diff.py) -> OnlineLooks=1 keyed by
+the group digit over KLSY2 is being built in C:\kl-merge\wt\wk-looks (out_looks_1028b).
+
 2026-10-28 ~16:25 - [c9] A1NET2 PASS (F01 online, both seats walk W/A/D + yaw, ship-ini settings, test dll): both seats IN ROUND, faults 0, asserts 0.
 Client pos walk z 12955 -> 14756; host netsmooth updates 4935 / placed 3040, camyaw 4233/4233 seen; client sync vs host p50 1, p90 2 (one
 sample 11, worst 377 on slot 742). Open: host "pos walk" frozen at (2620,-2611,22118) from walk2 on and its index went #0 -> #15 (stuck on
