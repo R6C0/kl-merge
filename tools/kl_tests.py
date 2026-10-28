@@ -55,6 +55,7 @@ C_TESTS = {
     'klcs_test.c': 'logic',            # klcopsquad_logic.h
     'klcv_test.c': 'logic',            # klchar_voice.h
     'kldown_hold_test.c': 'logic',     # kldown_hold.h
+    'klgetup_test.c': 'logic',         # klgetup_logic.h (+ kldown_hold.h)
     'kldown_mirror_test.c': 'logic',   # kldown_mirror_logic.h (no windows.h at all)
     'klgrades_test.c': 'logic',        # klgrades.h (uses _snprintf: -D_snprintf=snprintf)
     'kllootsync_test.c': 'logic',      # kllootsync_logic.h

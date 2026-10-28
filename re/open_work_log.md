@@ -10,6 +10,9 @@ health down to the game's own 40 % down (trigger 0x8da3b0: <= 40 %, 120 damage i
 walk went box9-in (2382,19603,75) then down at (2565,19602,879): the car carried the player up. Shot 37/38 show the door frame, not a clean open
 door (red low-health screen, player downed by the lift ride ~1 s in). 'face' cannot turn the player in place (bearing error -157, 4 s timeout).
 Open: why the player is downed in/near the lift at 40 % health (both runs). Inputs C:\kl_build_1024\c9_1028\a1lift3.
+2026-10-28 ~21:00 - [wk-getup-1028] gap #3 (bots help a downed human up online): re/bot_getup_online.md. Arcade help = kladren.c Rush + meter pull (not stock; stock heal needs coop state 5).
+Online port default off: [BotFill] OnlineGetUp=0|1|2 (+Range/Rate/Near): host rushes the nearest free bot with kle_order2; downed machine adds meter/s when a bot is within 4 m. Static, NOT run live;
+klgetup_test.c passes, SHIP dll compiles. Guesses (replica D state readable, bot stays put) listed in the doc with a bench.
 
 2026-10-28 ~20:25 - [c9] A1LIFT3e PASS + bench shots fixed. --d3shots (merged 259c89c32, kld3 back-buffer shots; the GDI grab was all-zero
 with the monitor off) took 8 real 640x480 shots live. The PLAYER's own two crossings of the Retomoto lift box each made both door proxies accept
