@@ -1,3 +1,7 @@
+2026-10-28 ~22:45 - [c9] Retomoto lift doors CLOSE (opt-in [KLHook] DoorCloseMs, default off; merged 47ac20c54). A1LIFT6: close fired on both
+proxies but replayed the OPENING (only the ints [ctl+0xd0/+0xd4] were set; the clip state floats ctl+0x44/+0x48 stayed 0..75). A1LIFT6c with the floats
+written too: both lifts slide shut 819->909 in 3.5 s (frame 15->32), 0 faults. kl_tests 31/8/1 (baseline). Not shipped yet (needs a SHIP build + SHIPCHK).
+
 2026-10-28 ~23:10 - [ce] TRT1 (wk-trait OnlineBotTraits, DD04 online, Random crew + frail/tough [Trait.X]) PASS both seats, 0 faults: 7 bots
 resolved their drawn character (Jean/Mitchel/Elwood/J.C./Tommy frail x3.0 hit scale, Meldal/Kane tough x0.333), 1462 of 1484 bot hits scaled,
 write refused 0. No bot went down in the round, so LieSeconds x ReviveTime is unproven live. Merged deb65d2bf (default off). wk-getup2 GU5:
