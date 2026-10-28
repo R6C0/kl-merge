@@ -75,6 +75,8 @@ Owner: ce.
 - [x] Owner status page (private): https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa - c9 republishes; send c9 a line per track.
 - [x] Routines trig_01FKzQ (Desktop, 4 h) and trig_014C2 (cloud, 6 h) point at this file (c9).
 - Headless check 10-28 11:35: `claude -p --permission-mode auto` answers on this PC (effort capped to medium).
+- 10-28 15:05 scheduled check-in: `python tools/kl_tests.py` runs every self-test (6 py + 26 C) with one RESULT line; the 13 pure-logic
+  C tests build on Linux too (klhook/test_shim, gcc -m32). Cloud: 18 pass, 0 fail, 15 skip (13 SDK-only + 2 need game files). Windows cl path NOT RUN yet.
 
 ## Rules for every session (short)
 Never KL_PortBackup, never push main or force-push, commit + push rtp-schemas with what crashed and why, backups (keep 3),

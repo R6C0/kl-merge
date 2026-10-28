@@ -47,6 +47,8 @@ Dog Days' Steam launch options are `-dx10 -o DefaultScene=Locations/F01/F01_Main
 a launch goes straight into the F01 slot and quits after 120 s.
 - Test without a human: `python tools/kl_autotest.py` -> one `RESULT:` line (crash address, assert,
   clean exit, or hung). Triage a crash with `python debug/triage.py --keep`; pre-flight a build with `python debug/check.py`.
+- Every off-game self-test in one go (tools/*_test.py + klhook/*_test.c, cl on Windows, gcc -m32 + klhook/test_shim elsewhere):
+  `python tools/kl_tests.py` -> one `RESULT:` line, exit 1 on a FAIL. Run it before a build and before a push of klhook/ or tools/.
 - Loop: integrate finished agent work (check it yourself first) -> build -> verify -> install into
   F01 -> autotest -> triage -> fix -> commit with what crashed and why -> push `rtp-schemas`.
 - Keep background agents supplied with the next useful job; do not end a turn with nothing running

@@ -2,6 +2,15 @@
 14:49-14:53 to script pass), faults 0, asserts 0, botgate loaded the DM11S bots.zip (222102326), census 49 ZFFActor / 7 Ally alive. Screenshots
 black (monitor off), so no visual check. DM11B + ship dll f520f5d1 restored, game to ce (WKBC2, BP_DD04b), A1NET2 after. Next: ship prep for DM11S
 (install script + int16guard entry) and a full-round + offline Arcade check before it replaces DM11B.
+2026-10-28 ~15:05 UTC - scheduled check-in (cloud, repo-only: the task's session had NO folders connected; the PC was BUSY anyway - commits
+at 14:47, c9 'A1SHIFT4 running 14:52', so no access request either (its dialog could take the focus from the scripted game), nothing
+launched, installed or staged, no dump read). TEST RUNNER: tools/kl_tests.py runs every off-game self-test with one RESULT line (6 tools/*_test.py,
+26 klhook/*_test.c; kl_solo_test.py is a bench driver -> SKIP; kl_map_shift_test.py SKIPs without the DM11B zip). 13 pure-logic C tests
+(klcs/klcv/kldown_hold/kldown_mirror/klgrades/klht/klmappool_ov/klnc/klonline_read/klsabot/klua/klucchide/klud) now build on Linux through
+klhook/test_shim/windows.h with gcc -m32: -m32 is REQUIRED, the LP64 build fails klcs line 55 + klnc line 129 (tick-wrap: unsigned long
+is 64 bits there, 32 in the x86 game/MSVC build) - a false alarm anyone running them with plain gcc would chase. Cloud result: 18 pass,
+0 fail, 15 skip (13 whole-module tests need the SDK, 2 need game files or the game; cl path written from the tests' own build lines, NOT RUN). CLAUDE.md pipeline + week plan T6 note.
+Owner: nothing to install; give the scheduled task its folders (DD + DM) or the check-ins stay repo-only; `python tools\kl_tests.py` on the PC is the first Windows run.
 
 2026-10-28 ~14:55 - [c9] A1HIRE3 PASS (ce ran it, F06, 2 seats online, faults 0, TEST out_c9hire3_1028_test): StockHero CONFIRMED - with
 IgnoreWardrobe=1 the host logged 'stock hero table TAKEN ... 35282 35384 35480 35571 35661 35753 35847 35938' (rules+0x208 holds the 8 stock
