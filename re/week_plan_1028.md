@@ -27,6 +27,7 @@ Owner: ce.
 - [ ] 2-seat bench per map (DD 9 stock FA + every DM/graft map), host and client both reach round 2, 0 faults.
 - [ ] Fix per-map failures (DM11B int16, Retomoto lift, missing wardrobe models -> hired body stays stock).
 Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
+- 10-28 12:45 c9 bench results (TEST arcade1to1_1027 f8ae48a1, --owner-away): A1I16 PASS (DM11B online falls back via int16guard, both seats in round; DD01 control ok), Q28_DM06R PASS, Q28_DD09R PASS (both seats to +302 s), A1LIFT PASS (Retomoto Arcade, 7 bots, 0 faults; lift box re-arm not visually checked), A1SND PARTIAL (DM01 + DD04 both seats in round, 0 faults). A1NET held (game handed to ce WK1/WK2 at 12:42). After ce: A1NET, A1HIRE2, A1SHIFT.
 - 10-28 12:50 c9: hire gaps coded (814c17c60, NOT RUN): [CharOnline] StockHero=1 (hired DD heister body on stock maps from rules+0x208, GUESS online), [Hire] PagePrice=1 (price on name line). TEST dll C:\kl-merge\wt\wk-merge\klhook\out_week_1028c_test (08c00611, ce; holds e54ef0b47). Bench A1HIRE2 after the A1 queue: recipe re/shop_hire.md section 10.
 - 10-28 13:30 c9: DM11B int16 shift merged (9ad0aa579, test ALL OK, NOT RUN): <work>\shift_1028\F04_Main_DM11S.zip (T=-12288,0,-16384; gameplay z min -32725). Bench A1SHIFT after A1HIRE2: install into F04 test slot with the int16 guard off for it; watch vans, spawn doors, shatter, bots, no falls online.
 - Q28_DM06R done 10-28 ~12:00 (c9): PASS, DM06 online both seats IN ROUND on F04, 0 faults (Q27_DM06 failure did not repeat).
