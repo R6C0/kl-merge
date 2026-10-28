@@ -64,6 +64,7 @@ C_TESTS = {
     'klbottrait_test.c': 'logic',      # klbottrait.h
     'klshot_test.c': 'logic',          # klshot_logic.h (uses _snprintf: shim may need -D_snprintf=snprintf)
     'klleaf_test.c': 'logic',          # klleaf_logic.h (leaf probe schedule + CarStall door gate)
+    'kldoorclose_test.c': 'logic',     # kldoorclose_logic.h (DoorCloseMs open detection, timer, busy postpone, stale give-up, slots)
     'klbotvoice_test.c': 'logic',      # klbotvoice_logic.h
     'klht_test.c': 'logic',            # klhud_tags_dist.h
     'klmappool_ov_test.c': 'logic',    # no windows.h
