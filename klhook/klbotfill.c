@@ -61,6 +61,7 @@ static DWORD klbf_sq_done;         /* the session object the squad pass finished
 static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_esc_side = 300.0f;
 #include "klguard_logic.h"      /* wk-botpar OnlineGuardMode: floor gate + bypass decisions (klguard_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
+static int klbf_gu_freefirst; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13) */
 static int klbf_gu, klbf_gu_sprint, klbf_gu_reordS, klbf_gu_keep, klbf_gu_det, klbf_gu_busy, klbf_gu_anyhp; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f, klbf_gu_flopm;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
 #include "klgetupbeacon.h"      /* wk-getup2-1028: [BotFill] OnlineGetUpBeacon, the pure part (klgetupbeacon_test.c); sockets in klgetupbeacon.c (AFTER klsync.c) */
 static int klgb_on; static struct klgb_seat klgb_seats[KLGB_MAX_SEATS];      /* [BotFill] OnlineGetUpBeacon (0/1; only with OnlineGetUp): the downed machine tells the host (klgetupbeacon.c); the host's per-seat book */
@@ -238,6 +239,9 @@ static void klbf_init(void)
     klbf_gu_reordS = klbf_gu ? GetPrivateProfileIntA("BotFill", "OnlineGetUpReorderS", 0, klh_ini) : 0; if (klbf_gu_reordS < 0) klbf_gu_reordS = 0; if (klbf_gu_reordS > 30) klbf_gu_reordS = 30;      /* (recommended on at 8) wk-botpar BP2: bot 4 was re-ordered every 3 s and ran stop-and-go (1.4 .. 3.2 m/s per leg, 2.2 avg); a downed man does not move, so each repeat only restarts the running Defend goal (GUESS, no A/B run live) */
     klbf_gu_keep = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpKeepGoal", 0, klh_ini) != 0;      /* (recommended off) wk-botpar: no repeat order while the bot is closing; GUESS: each repeat restarts the running goal */
     klbf_gu_busy = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpBusy", 0, klh_ini) != 0;      /* (recommended on) wk-botpar BP11: every bot carried or walked out, so '0 free bot(s)' and nobody came */
+    klbf_gu_freefirst = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpFreeFirst", 0, klh_ini) != 0;      /* (recommended on) wk-botpar BP13: a free bot (idle / walking to a stack, nothing carried) within range is picked before any walker-out / carrier */
+    klbf_gu_busyrange = klbf_gu ? (float)GetPrivateProfileIntA("BotFill", "OnlineGetUpBusyRange", 0, klh_ini) : 0; if (klbf_gu_busyrange < 0) klbf_gu_busyrange = 0; if (klbf_gu_busyrange > 20000.0f) klbf_gu_busyrange = 20000.0f;      /* cm (recommended on at 1500; 0 = off) wk-botpar BP13: a walker-out / carrier farther than this is not sent (27 m: it swung -2.8..+4.3 m/s, nearest 14.4 m, the joiner rose alone) */
+    if (klbf_gu) klog("botfill: getup: OnlineGetUpFreeFirst=%d (recommended on): a free bot in range is sent before any walker-out or carrier; OnlineGetUpBusyRange=%.0f cm (recommended on at 1500; 0 = off): a walker-out or carrier farther than that is not sent (needs OnlineGetUpBusy=1 to matter)", klbf_gu_freefirst, klbf_gu_busyrange);
     { char fb[32]; GetPrivateProfileStringA("BotFill", "OnlineGetUpFlopMeter", "0", fb, sizeof fb, klh_ini); klbf_gu_flopm = klbf_gu == 1 ? (float)atof(fb) : 0; if (!(klbf_gu_flopm > 0)) klbf_gu_flopm = 0; if (klbf_gu_flopm > 20.0f) klbf_gu_flopm = 20.0f; }      /* (recommended on at 3.0 = Arcade [Adrenaline] Meter) wk-botpar BP12: with Flop on the knock-down is all fall (D 2), so the MashHold boost never ran; up after 19 s, 0 presses, a bot by */
     klbf_gu_anyhp = klbf_gu == 1 && GetPrivateProfileIntA("BotFill", "OnlineGetUpAnyHp", 0, klh_ini) != 0;      /* (recommended off) wk-botpar: the downed machine's helper scan skips the health test; GUESS from BP3: a replica bot's [o+0x5fc]+4 reads -0 / garbage on a joiner */
     klbf_gu_det = klbf_gu_keep &&GetPrivateProfileIntA("BotFill", "OnlineGetUpDetour", 0, klh_ini) != 0;      /* (recommended on) wk-botpar: with KeepGoal, a bot that runs a route (walked >= 3 m) is not stalled; one that arrived and left is re-ordered at once */
@@ -1157,7 +1161,7 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
         }
     }
     for (i = 0; i < n && i < 16; i++) {
-        DWORD P = klco_ent(ents, n, i), D = 0, ds = 0, h; float hv = 1.0f, hp[3] = { 0, 0, 0 }, d[16]; int rb = -1, pick, nn = 0, bs[16], down = 0, viaB = 0, fs = 0;
+        DWORD P = klco_ent(ents, n, i), D = 0, ds = 0, h; float hv = 1.0f, hp[3] = { 0, 0, 0 }, d[16]; int rb = -1, pick, nn = 0, bs[16], down = 0, bz[16], viaB = 0, fs = 0;
         if (!P || !klco_heister(P)) continue;
         if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0) hv = 0;
         if (hv > 0 && (D = klh_rd32(P + 0x2948)) != 0 && klh_rd32(D) == P && klh_rd(D + 4, &ds, 4) && kgu_downed(ds) && klbf_feet(P, hp, &fs)) down = 1;      /* wk-botpar: OnlineEscortNode reads the scene node first; off = +0x460 only, as before */
@@ -1180,9 +1184,10 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
                 if (s == KLBF_OT_BOTS || klbf_ob[s].guHum || !kgu_free(klbf_ob[s].phase, klbf_ob[s].tally, klbf_gu_busy)) continue;
                 if (klbf_ob[s].gwAt && now - klbf_ob[s].gwAt < 3000) continue;      /* OnlineGuardWalk has it */
                 dx = pos[b][0] - hp[0]; dz = pos[b][2] - hp[2];
+                bz[nn] = klbf_ob[s].phase == 2 || klbf_ob[s].tally > 0;
                 bs[nn] = b; d[nn] = fabsf(pos[b][1] - hp[1]) > 400.0f ? -1.0f : (float)sqrt(dx * dx + dz * dz); nn++;      /* another floor: no candidate (Arcade 2 m of height; 4 m here, stairs) */
             }
-            pick = kgu_pick(d, nn, klbf_gu_range);
+            pick = (klbf_gu_freefirst || klbf_gu_busyrange > 0) ? kgu_pick_b(d, bz, nn, klbf_gu_range, klbf_gu_busyrange, klbf_gu_freefirst) : kgu_pick(d, nn, klbf_gu_range);      /* wk-botpar BP13: both keys off = the old pick */
             if (pick < 0) {      /* GU5 10-28: seat 1 lay 16 s with every bot 60-80 m off and nothing said why: once per down */
                 static int noTold[16]; static DWORD noAt[16]; int q; float best = -1;
                 if (noAt[i] != hAt[i]) { noAt[i] = hAt[i]; noTold[i] = 0; }

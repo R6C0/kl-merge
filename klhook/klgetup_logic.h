@@ -22,6 +22,20 @@ static int kgu_pick(const float *d, int n, float range)
     return best;
 }
 
+/* wk-botpar BP13 (OnlineGetUpFreeFirst / OnlineGetUpBusyRange): kgu_pick with the busy bots (walking out / carrying money) held back. busy[i] != 0 = a walker-out or carrier.
+   busyRange > 0: a busy bot farther than that is no candidate (BP13: a walker-out sent from 27 m swung -2.8 .. +4.3 m/s and never got nearer than 14.4 m);
+   freeFirst: a free bot within `range` wins over every busy one, however near the busy one is (BP12: the free bot 0 sprinted straight to him). Both 0 = kgu_pick. */
+static int kgu_pick_b(const float *d, const int *busy, int n, float range, float busyRange, int freeFirst)
+{
+    int i, best = -1, bestFree = -1; float bd = 1e30f, bf = 1e30f;
+    for (i = 0; i < n; i++) {
+        if (!(d[i] >= 0 && d[i] <= range)) continue;
+        if (busy[i]) { if (busyRange > 0 && d[i] > busyRange) continue; if (d[i] < bd) { bd = d[i]; best = i; } }
+        else { if (d[i] < bf) { bf = d[i]; bestFree = i; } if (d[i] < bd) { bd = d[i]; best = i; } }
+    }
+    return freeFirst && bestFree >= 0 ? bestFree : best;
+}
+
 /* the place a rusher is sent to: `stop` cm from the human toward the bot (the bot's own side), on the human's height; a bot already within `stop`
    is sent to the human's feet. */
 static void kgu_place(const float bot[3], const float hum[3], float stop, float out[3])

@@ -26,6 +26,15 @@ int main(void)
     d[2] = (float)sqrt(-1.0);
     CHECK(kgu_pick(d, 4, 2500) == 1, "NaN skipped, got %d", kgu_pick(d, 4, 2500));
     CHECK(kgu_pick(d, 0, 2500) == -1, "empty");
+    {   /* BP13: busy = walker-out / carrier */
+        float e[3] = { 2700, 4000, 6000 }; int bz[3] = { 1, 0, 0 };
+        CHECK(kgu_pick_b(e, bz, 3, 8000, 0, 0) == 0 && kgu_pick(e, 3, 8000) == 0, "both off: the nearest, as kgu_pick");
+        CHECK(kgu_pick_b(e, bz, 3, 8000, 1500, 0) == 1, "busy cap 15 m: the busy 27 m bot is out, the nearest free one is");
+        CHECK(kgu_pick_b(e, bz, 3, 8000, 0, 1) == 1, "free first: a farther free bot beats a nearer busy one");
+        e[1] = 9000; e[2] = 9000;
+        CHECK(kgu_pick_b(e, bz, 3, 8000, 0, 1) == 0 && kgu_pick_b(e, bz, 3, 8000, 1500, 1) == -1, "no free bot in range: the busy one unless capped");
+        e[0] = 1200; CHECK(kgu_pick_b(e, bz, 3, 8000, 1500, 1) == 0, "busy within its cap still answers");
+    }
 
     /* the place: 200 cm from him toward the bot, his height; a bot already inside goes to his feet */
     kgu_place(bot, hum, KGU_STOP_CM, out);
