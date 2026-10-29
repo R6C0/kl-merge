@@ -77,10 +77,10 @@ the GDI grab is black with the monitor off). LIFT WORKS (22:00): doors open (A1L
 leaf probe); [player+0x460] lagged at the doorway, fixed by [KLHook] JoinFeetNode=1; A1LIFT4e ride from inside the car PASS (merged f82314fa5; SHIPPED 22:30 as ship1028 dll dc0836b8 after SHIPCHK2 + A1LIFT5 PASS; doors never close in data: [KLHook] DoorCloseMs=8000 closes them, SHIP-safe kldoorclose.c; SHIPPED 23:20 as ship1029 dll 897decf7 + ini ad00a047 after SHIPCHK3 + A1LIFT8 PASS). LIFT ONLINE (00:40): kljoin gated rides online; [KLHook] JoinOnline=1 (merged 154f03c94, default off), A1LIFTNET2F PASS both seats. SHIPPED ship1030 01:10 (dll 9e485dcf + ini b599def6: JoinOnline=1, DoorCloseRemote=1 via the session hero table) after SHIPCHK4 + A1LIFTNET3 PASS. (The 40 % downs: Ramp=1 kept the bench's
 CopToYou at stock; a lone player factor needs [Balance] Ramp=0; Ramp now logs it, 403967a5a.)
 
-2026-10-29 ~01:20 - [ce] BP12 (DD08, OnlineGetUpBusy) + GUN7 (DM07) PASS both seats, 0 faults. Found: with [Down] Flop on, the bot's help never reached
-the meter (all fall, D 2) -> wk-botpar fb4bf743f OnlineGetUpFlopMeter=3 + AnyHp + helper census; bot re-ordered while on its set goal -> 31137198b. GUN7: shoptext
-swaps DM07's 4 rows; shoppic never ran ([ShopPage] Enable=1 kept it off) -> wk-swappic 5fc6bae05. Both unmerged, benches BP13 / GUN8 queued after c9's
-batch 3. Open: all bot keys on a 2nd map, side channel 2-PC test (AnyDesk).
+2026-10-29 ~04:10 - [ce] Merged 7a92613fe (wk-botpar FlopMeter/AnyHp/census/Detour + wk-swappic gate fix + picture probe, all default off). BP13 (DD08)
+PASS 0 faults, but the only bot came from 27 m on its walk-out and never got within 14 m: the joiner rose alone at 19.4 s, FlopMeter not exercised (BP14 needs a
+near bot). GUN8/GUN9 (DM07) PASS: guns flip to OURS on both seats; WeaponBig updates 50k times, 0 decided -> probe out_swappic5_test (GUN10 queued).
+Staged NOT installed: C:\kl_build_1024\gunui_1029 (baked gun UI for DM07/DD10, review READY; branch wk-gunbake-1029). Open: bot keys 2nd map, 2-PC side channel.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
 page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.

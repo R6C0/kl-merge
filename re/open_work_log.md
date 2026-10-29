@@ -1,3 +1,12 @@
+2026-10-29 ~04:10 - [ce] Merged wk-botpar-1028 + wk-swappic-1028 onto 12df5078f -> 7a92613fe (kl_tests: the known 8 fails only). BP13 (DD08 online,
+out_botpar_l_test, FlopMeter=3): PASS both seats, 0 faults, restore ok; the hold never ran: bot 5 (phase 2, walking out) was ordered from 27 m, its closing speed
+swung -2.8..+4.3 m/s with a re-order at 27.4 m, nearest 14.4 m; seat 1 rose alone after 19.4 s. Joiner census: 51 actors, team 44, too far 7. Open: why the bot
+drifts off (route). GUN8 (out_swappic3_test) + GUN9 (out_swappic4_test, DM07 online): PASS 0 faults; osw OURS on all 4 rows both seats; slot 8 IS called on the
+host (970788 updates, WeaponBig 50076 while the script browsed rows 32/35 and bought 32) but decided 0 and no 'row not swapped' line, so the WeaponBig branch
+never sees mode 2 + a row in range; the joiner opened no shop (script drives inst1 only). wk-swappic 4f4c7ee77 logs each (mode, shown row, index) change of
+WeaponBig -> GUN10 queued. Staged, NOT installed: C:\kl_build_1024\gunui_1029 (INSTALL/UNDO bats, shopswap.ps1; DM07 F06 f0cb0652, DD10 F07 46c12de2;
+tool on wk-gunbake-1029 9d91c0634); needs a slot c9's Q28 page 3 is not using.
+
 2026-10-29 ~03:35 - [c9] Q28 batch 3 online (ship1030 TEST twin): DD06 DD07 DM01 DM02 PASS both seats, 0 faults, restore ok; online LOADs picked
 the bench page + rule (DM01/DM02: force=2 page 2). 12 of 21 done; left DM03 DM06 DM03A + page 3 (DM05A DM06B DM01B DM11B DM07 DD10).
 
