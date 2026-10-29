@@ -109,6 +109,9 @@ int main(void)
     CHECK(kgu_recede(800, 3410, 1467, 5000) == 1 && kgu_recede(3410, 3000, 1467, 5000) == 1, "recede: BP14 34 m from a 14.7 m order, even while it closes a little");
     CHECK(kgu_recede(100, 100, 0, 5000) == 0 && kgu_recede(-1, 5000, 0, 5000) == 0 && kgu_recede(100, -1, 1000, 5000) == 0, "recede: unknown order distance / bad input: no verdict");
     CHECK(kgu_recede(800, 3410, 1467, 2999) == 0 && kgu_recede(800, 3410, 1467, 3000) == 1, "recede: rate limit, no verdict before the order is 3 s old");
+    CHECK(kgu_hold_near(360) && kgu_hold_near(400) && !kgu_hold_near(401) && !kgu_hold_near(-1), "hold: within 4 m (BP15 3.6 m)");
+    CHECK(kgu_hold_due(5000, 0) && !kgu_hold_due(5899, 5000) && kgu_hold_due(5900, 5000) && kgu_hold_due(100, 4294967000UL) == 0, "hold: due at once, then every 900 ms");
+    { float b2[3] = { 1000, 50, 2800 }; kgu_place(b2, hum, KGU_HOLD_STOP_CM, out); CHECK(fabs(out[2] - 2100) < 0.01, "hold place 1 m from him"); }
     printf("klgetup_test: %d check(s), %d failure(s)\n", checks, fails);
     printf(fails ? "FAIL\n" : "ALL PASS\n");
     return fails ? 1 : 0;

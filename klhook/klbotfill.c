@@ -61,7 +61,7 @@ static DWORD klbf_sq_done;         /* the session object the squad pass finished
 static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_esc_side = 300.0f;
 #include "klguard_logic.h"      /* wk-botpar OnlineGuardMode: floor gate + bypass decisions (klguard_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
-static int klbf_gu_freefirst, klbf_gu_recede; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13) */
+static int klbf_gu_freefirst, klbf_gu_recede, klbf_gu_hold; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13) */
 static int klbf_gu, klbf_gu_sprint, klbf_gu_reordS, klbf_gu_keep, klbf_gu_det, klbf_gu_busy, klbf_gu_anyhp; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f, klbf_gu_flopm;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
 #include "klgetupbeacon.h"      /* wk-getup2-1028: [BotFill] OnlineGetUpBeacon, the pure part (klgetupbeacon_test.c); sockets in klgetupbeacon.c (AFTER klsync.c) */
 static int klgb_on; static struct klgb_seat klgb_seats[KLGB_MAX_SEATS];      /* [BotFill] OnlineGetUpBeacon (0/1; only with OnlineGetUp): the downed machine tells the host (klgetupbeacon.c); the host's per-seat book */
@@ -246,6 +246,8 @@ static void klbf_init(void)
     klbf_gu_anyhp = klbf_gu == 1 && GetPrivateProfileIntA("BotFill", "OnlineGetUpAnyHp", 0, klh_ini) != 0;      /* (recommended off) wk-botpar: the downed machine's helper scan skips the health test; GUESS from BP3: a replica bot's [o+0x5fc]+4 reads -0 / garbage on a joiner */
     klbf_gu_det = klbf_gu_keep &&GetPrivateProfileIntA("BotFill", "OnlineGetUpDetour", 0, klh_ini) != 0;      /* (recommended on) wk-botpar: with KeepGoal, a bot that runs a route (walked >= 3 m) is not stalled; one that arrived and left is re-ordered at once */
     klbf_gu_recede = klbf_gu_keep && GetPrivateProfileIntA("BotFill", "OnlineGetUpRecede", 0, klh_ini) != 0;      /* (recommended on) wk-botpar BP14: with KeepGoal, a rushing bot that gets >= 2 m farther between two checks, or ends > 2 m beyond its order distance, is re-ordered at once, whatever Detour says */
+    klbf_gu_hold = klbf_gu == 1 && GetPrivateProfileIntA("BotFill", "OnlineGetUpHold", 0, klh_ini) != 0;      /* (recommended on) wk-botpar BP15: an arrived rusher is held by the body (a short order to a spot 1 m from him every pass) and the order place is taken from the downed machine's beacon place */
+    if (klbf_gu) klog("botfill: getup: OnlineGetUpHold=%d (recommended on): a rusher within %.1f m of him is re-ordered to a spot %.1f m from him at most every %u ms until the seat is up (GUESS: the game pops back to the bot's earlier goal when the rush goal completes); his place is the beacon's when one is fresh (the host's replica of a diving body sits 1.6 - 1.9 m off)", klbf_gu_hold, KGU_HOLD_NEAR_CM / 100, KGU_HOLD_STOP_CM / 100, (unsigned)KGU_HOLD_GAP_MS);
     if (klbf_gu) klog("botfill: getup: OnlineGetUpRecede=%d (recommended on): needs KeepGoal; a rushing bot whose distance to him grows >= %.1f m between checks, or exceeds its order distance by > %.1f m, is re-ordered at once (Detour no longer excuses it)", klbf_gu_recede, KGU_RECEDE_STEP_CM / 100, KGU_RECEDE_ORD_CM / 100);
     klbf_gu_sprint = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpSprint", 0, klh_ini) != 0;      /* (recommended on) wk-botpar: GU6 bot 5 walked 80 -> 38 m in 18 s; the rush order gets the Defend move style Sprint as OnlineExitSprint gives it; needs OnlineGetUp 1 */
     klgb_on = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpBeacon", 0, klh_ini) != 0;      /* (recommended off) wk-getup2-1028: not run live; needs OnlineGetUp 1 (2 = host logs only) on both machines */
@@ -304,7 +306,7 @@ static void klbf_init(void)
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 #define KLBF_OT_GUARDWAIT 30000   /* ms a bot holds while every free stack is guarded (OnlineTacticsGuard) before it takes the nearest guarded one */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; DWORD lootAt, lootTick, lootT0, lpLast; int lpPaused, lpN; int lootPaid, lootPart, lootLeft, lootGot; float lootSec; DWORD gwAt, gwOrd, reachAt, esAt, esLog; float esAnc[3]; int esN; float holdAt[3]; DWORD holdOrd; int holdN, holdChk; DWORD guAt, guOrd, guLog; int guHum, guSp, guKn, guKq; float guKd, guTp[3], guWd, guWp[3], guGs[3], guOd; int guArr, guGk; DWORD guProg, guWt; } klbf_ob[KLBF_OT_BOTS];      /* wk-botpar OnlineGetUpKeepGoal: re-order count, keep told, last check dist, order target, speed window dist, last progress tick, window start */      /* wk-lpbal: phase-4 hold: where the bot stood when the grab began, its order clock, orders given */      /* wk-move: gwAt = last tick the bot guard-walked / held at the edge (OnlineGuardWalk), gwOrd its order clock, reachAt OnlineWalkReach clock, esAt/esLog/esAnc/esN the OnlineEscort order clock, log clock, the human's place at the order, orders since the log */      /* wk-arcmods-1028: see klbf_ob_stage below. legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; DWORD lootAt, lootTick, lootT0, lpLast; int lpPaused, lpN; int lootPaid, lootPart, lootLeft, lootGot; float lootSec; DWORD gwAt, gwOrd, reachAt, esAt, esLog; float esAnc[3]; int esN; float holdAt[3]; DWORD holdOrd; int holdN, holdChk; DWORD guAt, guOrd, guLog; int guHum, guSp, guKn, guKq; float guKd, guTp[3], guWd, guWp[3], guGs[3], guOd; int guArr, guGk, guHn; DWORD guHo, guProg, guWt; } klbf_ob[KLBF_OT_BOTS];      /* wk-botpar OnlineGetUpKeepGoal: re-order count, keep told, last check dist, order target, speed window dist, last progress tick, window start */      /* wk-lpbal: phase-4 hold: where the bot stood when the grab began, its order clock, orders given */      /* wk-move: gwAt = last tick the bot guard-walked / held at the edge (OnlineGuardWalk), gwOrd its order clock, reachAt OnlineWalkReach clock, esAt/esLog/esAnc/esN the OnlineEscort order clock, log clock, the human's place at the order, orders since the log */      /* wk-arcmods-1028: see klbf_ob_stage below. legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
 static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ], klbf_ot_badAt[KLBF_OT_OBJ]; static BYTE klbf_ot_badLong[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
 /* wk-arcmods-1028: heist stage (klbot.c 0..3: 1 entered the bank, 2 left it with loot, 3 at the vehicle) of an online bot, for klhop's ONLINE path.
@@ -1129,7 +1131,7 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
         klbf_ob[s].guSp = 0; klog("botfill: getup: bot %d: Sprint style undone (OnlineGetUpSprint)", s);
     }
     if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: getup: the session player table is not readable: no get-up help this round yet (said once)"); return; }
-    for (s = 0; s < KLBF_OT_BOTS; s++) if (klbf_ob[s].guHum && now - klbf_ob[s].guAt >= 3500) { klog("botfill: getup: bot %d released (seat %d: not down any more or the rush lapsed)", s, klbf_ob[s].guHum - 1); klbf_ob[s].guHum = 0; klbf_ob[s].guAt = 0; klbf_ob[s].guOrd = 0; klbf_ob[s].guWt = 0; klbf_ob[s].guGk = 0; klbf_ob[s].guProg = 0; klbf_ob[s].guKq = 0; klbf_ob[s].guKn = 0; }
+    for (s = 0; s < KLBF_OT_BOTS; s++) if (klbf_ob[s].guHum && now - klbf_ob[s].guAt >= 3500) { klog("botfill: getup: bot %d released (seat %d: not down any more or the rush lapsed)", s, klbf_ob[s].guHum - 1); klbf_ob[s].guHum = 0; klbf_ob[s].guAt = 0; klbf_ob[s].guOrd = 0; klbf_ob[s].guWt = 0; klbf_ob[s].guGk = 0; klbf_ob[s].guProg = 0; klbf_ob[s].guKq = 0; klbf_ob[s].guKn = 0; klbf_ob[s].guHo = 0; klbf_ob[s].guHn = 0; }
     memset(rok, 0, sizeof rok); memset(bsd, 0, sizeof bsd);
     if (klgb_on) {      /* the beacons (klgetupbeacon.c): read each heister replica's place, check the beacon's table index against it, else the nearest replica (GUESS: the index is equal on both peers) */
         for (i = 0; i < n && i < 16; i++) { DWORD P = klco_ent(ents, n, i); if (P && klco_heister(P) && klh_rd(P + 0x460, rep[i], 12) && kle_ok3(rep[i]) && !(fabsf(rep[i][0]) <= 1 && fabsf(rep[i][1]) <= 1 && fabsf(rep[i][2]) <= 1)) rok[i] = 1; }
@@ -1171,6 +1173,7 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
             down = 1; viaB = 1;
             if (!(rok[i])) memcpy(hp, bsp[i], 12); else memcpy(hp, rep[i], 12);
         }
+        if (down && klbf_gu_hold && bsd[i]) memcpy(hp, bsp[i], 12);      /* OnlineGetUpHold: the downed machine's own place beats the host's replica of the diving body (BP15: replica at x -592..-690, body at -782) */
         if (down && !hdown[i]) { hdown[i] = 1; hAt[i] = now; klog("botfill: getup: seat %d IS DOWN (D %08lx state %lu) at (%.0f, %.0f, %.0f)%s%s", i, (unsigned long)D, (unsigned long)ds, hp[0], hp[1], hp[2], viaB ? " (beacon)" : "", klbf_gu == 2 ? " - DRY" : ""); }
         if (!down) { if (hdown[i]) { hdown[i] = 0; klog("botfill: getup: seat %d is up / out of play after %.1f s", i, (now - hAt[i]) / 1000.0f); } continue; }
         if (vstate >= 1 && vstate <= 5) continue;      /* the van is called / waits / leaves: the crew's own orders win (Arcade RushVan) */
@@ -1205,6 +1208,20 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
             float dx = pos[rb][0] - hp[0], dz = pos[rb][2] - hp[2], bdst = (float)sqrt(dx * dx + dz * dz), want[3], got[3]; struct kle_e e; char why[100]; int r;
             if (klbf_gu == 1 && !klbf_ob[s].guHum && (klbf_ob[s].phase == 2 || klbf_ob[s].tally > 0)) { klbf_ob[s].ordered = 0; klog("botfill: getup: bot %d leaves its %s (tally %d) for seat %d (OnlineGetUpBusy)", s, klbf_ob[s].phase == 2 ? "walk out" : "stack hunt", klbf_ob[s].tally, i); }      /* the walk out is re-ordered at once on release */
             if (klbf_gu == 1) { klbf_ob[s].guHum = i + 1; klbf_ob[s].guAt = now; }      /* holds the puppeteer off this bot for 3.5 s, refreshed each pass while he lies */
+            if (klbf_gu_hold && kgu_hold_near(bdst)) {      /* OnlineGetUpHold: arrived (or passing by): keep it standing by the body with a short order to a spot 1 m from him, every KGU_HOLD_GAP_MS */
+                if (kgu_hold_due(now, klbf_ob[s].guHo)) {
+                    struct kle_e he; float hw3[3], hg3[3]; char hwy[100];
+                    kgu_place(pos[rb], hp, KGU_HOLD_STOP_CM, hw3);
+                    memset(&he, 0, sizeof he); he.rec = -1; he.actor = act[rb]; he.soldier = sold[rb]; he.told_soft = 1; hwy[0] = 0;
+                    klbf_ob[s].guHo = now ? now : 1;
+                    if (kle_order2(&he, hw3, hg3, hwy, 0) == 1) {
+                        memcpy(klbf_ob[s].guGs, hg3, 12); klbf_ob[s].guGk = 1; klbf_ob[s].ordered = now;
+                        if (klbf_ob[s].guHn < 12 || klbf_ob[s].guHn % 20 == 0) klog("botfill: getup: bot %d HOLD #%d at %.0f cm from seat %d: ordered to (%.0f, %.0f, %.0f), the game set (%.0f, %.0f, %.0f) (OnlineGetUpHold)", s, klbf_ob[s].guHn, bdst, i, hw3[0], hw3[1], hw3[2], hg3[0], hg3[1], hg3[2]);
+                        klbf_ob[s].guHn++;
+                    } else if (hwy[0] && (!klbf_ob[s].guLog || now - klbf_ob[s].guLog >= 5000)) { klbf_ob[s].guLog = now; klog("botfill: getup: bot %d hold order refused: %s (OnlineGetUpHold)", s, hwy); }
+                }
+                klbf_ob[s].guArr = 1; klbf_ob[s].guKd = bdst; continue;
+            }
             if (bdst <= KGU_STOP_CM + 100.0f || (klbf_gu_det && klbf_ob[s].guGk && kgu_at_goal(bdst, (float)sqrt((pos[rb][0] - klbf_ob[s].guGs[0]) * (pos[rb][0] - klbf_ob[s].guGs[0]) + (pos[rb][2] - klbf_ob[s].guGs[2]) * (pos[rb][2] - klbf_ob[s].guGs[2])), klbf_gu_near))) { if (!klbf_ob[s].guLog || now - klbf_ob[s].guLog >= 5000) { klbf_ob[s].guLog = now; klog("botfill: getup: bot %d is by seat %d (%.0f cm): stands there while he lies%s", s, i, bdst, klbf_gu == 2 ? " (DRY)" : ""); } klbf_ob[s].guArr = 1; continue; }
             if (klbf_ob[s].guOrd && !klbf_ob[s].guWt) { klbf_ob[s].guWt = now; klbf_ob[s].guWd = bdst; }
             else if (klbf_ob[s].guWt && now - klbf_ob[s].guWt >= 2000) {      /* closing speed over each 2 s window (cm -> m/s), logged in both modes so the bench can compare with the 2.2 m/s of BP2 */
@@ -1228,7 +1245,7 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
                 klbf_ob[s].guKq = 0;
             }
             else if (!kgu_due(now, klbf_ob[s].guOrd) || (klbf_gu_reordS && klbf_ob[s].guOrd && now - klbf_ob[s].guOrd < (DWORD)klbf_gu_reordS * 1000u)) continue;      /* OnlineGetUpReorderS: a longer gap between the repeat orders */
-            kgu_place(pos[rb], hp, KGU_STOP_CM, want);
+            kgu_place(pos[rb], hp, klbf_gu_hold ? KGU_HOLD_STOP_CM : KGU_STOP_CM, want);      /* OnlineGetUpHold: the order place 1 m from him, so the joiner's replica (4 m helper limit) sees the bot even when the place is a little off */
             klbf_ob[s].guOrd = now ? now : 1; klbf_ob[s].guKd = bdst; klbf_ob[s].guOd = bdst; memcpy(klbf_ob[s].guTp, hp, 12); klbf_ob[s].guProg = now; klbf_ob[s].guArr = 0; memcpy(klbf_ob[s].guWp, pos[rb], 12);      /* a fresh order restarts the stall clock */
             if (klbf_gu == 2) { klog("botfill: getup: DRY - bot %d (%.0f cm away) WOULD be sent to seat %d's side (%.0f, %.0f, %.0f)", s, bdst, i, want[0], want[1], want[2]); continue; }
             memset(&e, 0, sizeof e); e.rec = -1; e.actor = act[rb]; e.soldier = sold[rb]; e.told_soft = 1; why[0] = 0;

@@ -143,4 +143,13 @@ static int kgu_at_goal(float bodyD, float goalD, float nearCm)
     return goalD >= 0 && goalD <= KGU_GOAL_CM && bodyD >= 0 && bodyD <= nearCm;
 }
 
+/* wk-botpar BP15 (OnlineGetUpHold): bot 5 closed to 3.6 m, then walked off 8.2 m and again 9.1 m (the rush goal completed on arrival and the game resumed its stack walk),
+   so the joiner's helper scan (limit 4 m) saw 334 cm once and 466 cm later. A rusher within KGU_HOLD_NEAR_CM of him is ordered to a spot KGU_HOLD_STOP_CM from him
+   every KGU_HOLD_GAP_MS. GUESS: 4 m = the helper limit (OnlineGetUpNear), 1 m place, 900 ms (the pass runs once a second, so about every pass). */
+#define KGU_HOLD_NEAR_CM 400.0f
+#define KGU_HOLD_STOP_CM 100.0f
+#define KGU_HOLD_GAP_MS  900u
+static int kgu_hold_near(float bdst) { return bdst >= 0 && bdst <= KGU_HOLD_NEAR_CM; }
+static int kgu_hold_due(DWORD now, DWORD last) { return !last || now - last >= KGU_HOLD_GAP_MS; }
+
 #endif
