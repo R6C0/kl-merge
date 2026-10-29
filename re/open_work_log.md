@@ -1,3 +1,8 @@
+2026-10-29 ~06:00 - [c9] C: hit 0 MB free (~05:30): tools/kl_map_shift_test.py left a 212 MB mkdtemp dir per run, 214 in %TEMP% (40 GB).
+Removed them (38 GB free) and fixed the tool (e0c73451b: atexit rmtree; --quick ALL OK, no dir left). Door-hold ghost fix on c9-doorhold-1029
+(5201ebc77 + b743640eb after review: all table entries walked, fresh stay after a walk gap or level change; kldoorclose_test 57/57), dlls in
+C:\kl_build_1024\c9_1028\doorhold (SHIP 57d56e09, TEST 807e4498). A1HOLD2 (run_hold2.sh) queued behind ce's GUN12 + BP16.
+
 2026-10-29 ~05:55 - [c9] A1HOLD1 (DM09 online, ship1030 TEST twin; joiner ini JoinOnline=0 so it stays in the car ~27 s) PASS both seats, 0 faults,
 restore ok. Host: doors opened 03:40:30, close due +8 s -> 'table player 1 (not ours) is at car 9: doors held': the DoorCloseRemote hold works.
 Open (minor): after the joiner quit (~03:41:08) the host never closed them before its run ended (03:44); likely the departed peer's table entry
