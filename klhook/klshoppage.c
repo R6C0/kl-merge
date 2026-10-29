@@ -492,6 +492,11 @@ static void __fastcall kspg_gfx(void *self, void *edx)
     (void)edx;
     if (kspg_swtpic && kspg_swtact) {   /* GUN8 (10-29): no shoppic line at all with the gate fixed: prove whether slot 8 (the picture update) is called; log only */
         int pr0 = kspg_role_of(self); InterlockedIncrement(&kspg_pic_calls); if (pr0 == KR_BIG) InterlockedIncrement(&kspg_pic_big);
+        if (pr0 == KR_BIG) {   /* GUN9 (10-29): WeaponBig updated 50076 times, decided 0: log each change of (list mode, shown row, element index) to see which the path never matches */
+            static DWORD lm = 0xffffffff, ls = 0xffffffff, li = 0xffffffff; static LONG nb;
+            DWORD m = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), s = klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), ix = klh_rd32((DWORD_PTR)self + 0xc4);
+            if ((m != lm || s != ls || ix != li) && InterlockedIncrement(&nb) <= 40) { lm = m; ls = s; li = ix; klog("shoppic: WeaponBig %08lx: list mode %lu, shown row %ld, index %ld, carried %d/%d", (unsigned long)(DWORD_PTR)self, (unsigned long)m, (long)s, (long)ix, (int)(BYTE)klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY)), (int)(BYTE)klh_rd32((DWORD_PTR)KLH_VA(KSPG_CARRY + 1))); }
+        }
         if (InterlockedIncrement(&kspg_pic_told) <= 4) klog("shoppic: picture update reached: element %08lx role %d, list mode %lu, shown row %lu, shownB %d hire %d ctl %d", (unsigned long)(DWORD_PTR)self, pr0,
             (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), kspg.shownB, kspg.hire, kspg.ctl);
     }
