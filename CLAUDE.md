@@ -83,7 +83,7 @@ near bot). GUN8/GUN9 (DM07) PASS: guns flip to OURS on both seats; WeaponBig upd
 Staged NOT installed: C:\kl_build_1024\gunui_1029 (baked gun UI for DM07/DD10, review READY; branch wk-gunbake-1029). Open: bot keys 2nd map, 2-PC side channel.
 
 2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
-page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q27: 19 maps PASS both seats.
+page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q28 (10-29 05:25): all 21 maps PASS online both seats with ship1030, 0 faults (kit C:\kl_build_1024\c9_1028\q28).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

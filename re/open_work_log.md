@@ -1,3 +1,7 @@
+2026-10-29 ~05:25 - [c9] Q28 COMPLETE: all 21 maps PASS online, both seats IN ROUND, 0 faults, restore ok (ship1030 TEST twin 62fb6b35 with the
+installed ini + bench keys). Batch 5: DM06B DM01B DM11B DM07 DD10 (page 3, force=3). Every online LOAD picked the bench's page + rule on both seats
+(OnlineSet=9 does not override a menu pick). Kit + table: C:\kl_build_1024\c9_1028\q28 (summarize_q28.py). Supersedes Q27 (19 maps).
+
 2026-10-29 ~02:55 UTC - scheduled check-in (cloud, repo-only: the task's session had NO folders connected and the PC is BUSY anyway, c9/ce commits until 02:27 UTC; nothing launched, installed, staged or read on the PC; no dump/log check possible). kl_tests on 99e8a1a in the cloud (gcc-multilib installed): 30 pass 0 fail 15 skip (the 25 logic C tests incl. the new klgetup/klswappic/kldoorclose ones build and pass on Linux). Mod Options --check-defaults: the onlinevangathersmart row's helper key [BotFill] OnlineVanGather said dflt 0 while klbotfill.c reads 1 (fixed, row only, no ini change); scan_keys now also takes a whole-number GetPrivateProfileString default ("0"), so OnlineGetUpFlopMeter's row is checked instead of 'not checked' (kl_mod_options_test +1 check, 46 pass). --check-rec and --check-ini clean. Owner: nothing needed; GUN10 / BP14 / Q28 page-3 benches stay with ce/c9.
 
 2026-10-29 ~04:30 - [c9] Q28 batch 4 online (ship1030 TEST twin): DM03 DM06 DM03A DM05A PASS both seats, 0 faults, restore ok; online LOADs picked
