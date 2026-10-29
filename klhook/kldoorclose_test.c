@@ -82,9 +82,10 @@ int main(void)
       CHECK(kldc_rhold(&r, 1000, f, 1, 6000, 30000));              /* first look in the box: fresh */
       CHECK(kldc_rhold(&r, 6999, f, 1, 6000, 30000));              /* 5999 ms still: holds */
       CHECK(!kldc_rhold(&r, 7000, f, 1, 6000, 30000));             /* 6000 ms still: released (quit peer) */
-      CHECK(!kldc_rhold(&r, 90000, f, 1, 6000, 30000));            /* stays released */
-      f[0] += 40; CHECK(kldc_rhold(&r, 91000, f, 1, 6000, 30000)); /* he moves: holds again */
-      f[0] += 0.2f; CHECK(kldc_rhold(&r, 99000, f, 1, 6000, 30000) == 0);   /* sub-epsilon jitter is not movement */
+      CHECK(!kldc_rhold(&r, 20000, f, 1, 6000, 30000));            /* stays released */
+      f[0] += 40; CHECK(kldc_rhold(&r, 21000, f, 1, 6000, 30000)); /* he moves (stay still under max_ms): holds again */
+      f[0] += 0.2f; CHECK(kldc_rhold(&r, 27500, f, 1, 6000, 30000) == 0);   /* sub-epsilon jitter is not movement */
+      f[0] += 40; CHECK(!kldc_rhold(&r, 31000, f, 1, 6000, 30000)); /* moving, but 30000 ms in one stay: released until he leaves the box */
       CHECK(!kldc_rhold(&r, 99100, f, 0, 6000, 30000));            /* left the box: no hold, since reset */
       memset(&r, 0, sizeof r); ok = 1;
       for (now = 1000; now < 100000; now += 100) { f[1] += 5; held = kldc_rhold(&r, now, f, 1, 6000, 30000); if (now < 31000 && !held) ok = 0; if (now >= 31000 && held) ok = 0; }

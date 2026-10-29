@@ -123,22 +123,29 @@ static int kldc_busy(void)
        escort and get-up code read live (BP2: 8 humans); [gd+0x828] is the LOCAL slot list only (every reader indexes it by +0x898; research 10-29).
        Entries this machine is master of (klco_is_master) are skipped: they are the local players already checked above. Game thread only (kldc_tick). */
     if (kldc_remote_slot(0, -1, -1, kl_online(), kldc_remote)) {
-        DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), ents = 0, P; int n = 0; static int toldTbl, toldNone;
+        DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), ents = 0, P, tick; int n = 0, held = 0; static int toldTbl, toldNone; static DWORD lastWalk;
         if (!sm || !klco_table(sm, &ents, &n)) { if (!toldNone++) klog("doorclose: DoorCloseRemote: the session player table is not readable yet (said once)"); return 0; }
         if (!toldTbl++) klog("doorclose: DoorCloseRemote: the session player table holds %d player(s)", n);
+        /* kldc_busy runs only while a close is due (and not at all while a local player is at the car): a gap since the last walk means a new
+           open, so every entry starts a fresh stay and a live rider is not denied the hold by an earlier open's still/max times.
+           GUESS: 2000 ms; the walk runs every game tick while a close is due. */
+        tick = GetTickCount();
+        if (!lastWalk || tick - lastWalk > 2000) { memset(kldc_r, 0, sizeof kldc_r); memset(kldc_rgave, 0, sizeof kldc_rgave); }
+        lastWalk = tick;
         for (i = 0; i < n && i < 16; i++) {
             int inb = 0;
             if (!(P = klco_ent(ents, n, i)) || klco_is_master(P) || !klj_feet(P, feet)) { kldc_r[i].since = 0; continue; }
             for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].on && klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, KLDC_PAD)) { inb = b + 1; break; }
             /* A1HOLD1: a departed peer's entry keeps its last feet: it holds only while its feet still move (DoorRemoteStillMs) and for at most
                DoorRemoteMaxMs in one stay (kldc_rhold, kldoorclose_logic.h) */
-            if (kldc_rhold(&kldc_r[i], GetTickCount(), feet, inb != 0, kldc_still, kldc_rmax)) {
+            if (kldc_rhold(&kldc_r[i], tick, feet, inb != 0, kldc_still, kldc_rmax)) {
                 static int told; if (!told++) klog("doorclose: table player %d (not ours) is at car %d: doors held", i, inb);
-                return 1;
+                held = 1; continue;                             /* every entry is evaluated each walk, so none goes stale */
             }
             if (inb && !kldc_rgave[i]++) klog("doorclose: table player %d at car %d no longer holds the doors (feet still %d ms or held over %d ms): remote hold ignored", i, inb, kldc_still, kldc_rmax);
             if (!inb) kldc_rgave[i] = 0;
         }
+        return held;
     }
     return 0;
 }
@@ -191,6 +198,7 @@ static void kldc_tick(int game_thread)
     if (kldc_ms <= 0 || !klh_exe_ok) return;
     if (!kldc_lift_map()) {                                    /* not a lift map (or level left): forget proxies and the scan budget */
         memset(kldc_t, 0, sizeof kldc_t); kldc_nscan = 0; kldc_find_at = 0; kldc_scan_at = 0;
+        memset(kldc_r, 0, sizeof kldc_r); memset(kldc_rgave, 0, sizeof kldc_rgave);
         return;
     }
     now = GetTickCount();
