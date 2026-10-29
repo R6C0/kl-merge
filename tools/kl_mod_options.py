@@ -459,6 +459,9 @@ feat('nettune', G_EXP, 'Send player moves more often online (3x stock; every pla
 feat('steamprobe', G_EXP, 'Log what Steam networking offers online (log only, sends nothing; recommended off)', 'off', 'start',
      'klsteamprobe.c [Net] SteamProbe: once per game start logs the steam_api exports, the SteamNetworking005/004 pointers and the peer table ids (steamprobe: lines in KLHook.log); for a two-PC internet test, re/side_channel_steam.md; not run live',
      [('Net', 'SteamProbe', 1, 0, 0)])
+feat('sidechsteam', G_EXP, 'Log the Steam peer table every minute online (log only, sends nothing; recommended off)', 'off', 'start',
+     'klsteamprobe.c [Net] SideChannelSteam: step 1 of the KLSY side channels over Steam P2P (re/side_channel_steam.md): the SteamProbe lines plus the peer table once a minute, 20 lines a session; two-PC internet test only; not run live',
+     [('Net', 'SideChannelSteam', 1, 0, 0)])
 feat('watchdog', G_EXP, 'Watchdog for a stuck AI heister', 'off', 'start',
      'not run in the game', [('QoL2', 'Watchdog', 1, 0, 0)])
 feat('names', G_EXP, 'Dead Men map names in the Arcade lists', 'off', 'start',

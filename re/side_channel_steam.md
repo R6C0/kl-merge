@@ -1,3 +1,20 @@
+2026-10-29 BUILT (probe), branch wk-steamside-1029: `[Net] SideChannelSteam=1` (default 0, recommended off) = step 1 only, LOG ONLY. It extends klsteamprobe.c (the
+SteamProbe module already existed): same one-shot GetISteamNetworking("SteamNetworking005" then "004") look, plus the peer table (global 0x168f960, [s+0x28]/[s+0x2c], 16-byte
+entries, id u64 at +1, byte +9) logged at most once a minute and 20 lines a session, guarded reads (klh_rd), SEH around the Steam calls (FAULT line + probe off). Pure logic in
+klhook/klsteamside.h, checked by klhook/klsteamside_test.c (in kl_tests.py). Sends nothing, reads no packet. Hook point: klsp_tick (game thread, round state 0x13..0x1f, peer
+table non-empty), so the Steam call only happens long after the game initialised Steam.
+CONFIRMED OFFLINE (steam_api.dll in the DD folder, capstone): SteamAPI_Init calls `mov edx,[eax+0x44]; push "SteamNetworking003"; push esi; push edi; call edx` with ecx = client
+(two copies, 0x3b403663..0x3b40366d and 0x3b40472e..0x3b40473e). esi = [0x3b417e8c] = what SteamAPI_GetHSteamPipe returns, edi = [0x3b417e90] = SteamAPI_GetHSteamUser's
+(both exports are `mov eax,[global]; ret`). So vtable +0x44 = index 17, thiscall, args (hUser, hPipe, version), as the review said. NOT readable offline: whether 005/004 are served (the log answers).
+Bench, ONE PC (System Link / solo bench): set `SideChannelSteam=1` in the instance's KLHook.ini; expect NO `steamprobe:` line at all (no peer table on System Link: the probe is silent by
+design) and no change in play; a `steamprobe:` FAULT line is a bug to report. In a Steam-lobby online match on one PC (same account, not a real P2P peer) expect at most:
+`steamprobe: first look: round state 0x.. peer table .. count N`, `peer K id .. flag9 ..`, `exports SteamClient ..`, `SteamClient() .. hUser .. hPipe ..`, `ISteamClient vtable .. [+0x44] ..`,
+two `GetISteamNetworking("SteamNetworking005"/"004") -> ptr vtable .. slots 0..2 ..` lines, `done (nothing was sent)`; then one `steamprobe: peers:` block per minute, 20 lines total, then
+`peer-table log budget spent`.
+Bench, TWO PCs (AnyDesk, two accounts, different networks, re/anydesk_setup.md): same hook dll + ini with SideChannelSteam=1 on both, host a Fragile Alliance online match, join, play into the
+round, read KLHook.log on both: the 005/004 lines tell which version is served (non-null ptr with vtable slots 0..2 inside steamclient.dll = served; null = not), the `peers:` blocks list the
+other player's Steam ID (id_hi reads 0110000x) and flag9 (1 once the game has sent to it). Send the lines back; then step 2 (framing + loopback shim) can be planned.
+
 # KLSY* side channels over the internet (Steam P2P): design + review, 2026-10-28 [ce]
 
 STATUS: offline design only, NOTHING BUILT. The review below CORRECTS the design (ISteamClient::GetISteamNetworking is vtable +0x44 = index 17, args user then pipe;
