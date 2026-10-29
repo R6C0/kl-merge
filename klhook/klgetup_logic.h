@@ -76,6 +76,15 @@ static int kgu_helper_ok(float dist, float dy, float range, float dymax)
     return dist >= 0 && dist <= range && dy >= -dymax && dy <= dymax;
 }
 
+/* may a bot in this phase / tally answer a downed human? phase 0 idle, 1 walks to a stack, 2 walks out (to the van), 3 aboard, 4 takes a stack.
+   busy 0 (the old rule): phase 0 / 1 with nothing carried. busy 1 (OnlineGetUpBusy, Arcade's Rush: any bot not down, not rushing, not escorting):
+   carriers and exit walkers too; a bot taking a stack (4, a few seconds) or aboard (3) never. */
+static int kgu_free(int phase, int tally, int busy)
+{
+    if (phase == 0 || phase == 1) return busy || tally <= 0;
+    return busy && phase == 2;
+}
+
 /* the mash meter with a helper by: + per_s x dt (dt clamped to 0.25 s, as kldh_step), raised at most up to `cap` (a meter already above it is left
    alone, never lowered). A NaN or non-positive input changes nothing. */
 static float kgu_boost(float meter, float dt, float per_s, float cap)

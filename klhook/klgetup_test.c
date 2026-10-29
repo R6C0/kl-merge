@@ -56,6 +56,10 @@ int main(void)
     CHECK(kgu_keep_d(300, 400, 0, 0, 0, 9000, 1) == 0 && kgu_keep_d(300, 500, 0, 0, 0, 9000, 1) == 2, "arrived then 5 m out: re-order at once");
     CHECK(kgu_keep_d(5000, 4000, 200, 0, 900, 1000, 0) == 1, "detour never hides a moved target");
     CHECK(kgu_keep_d(5000, 4400, 0, 9000, 0, 9000, 0) == 0 && kgu_keep_d(5000, 5000, 0, 3000, 0, 9000, 0) == 2, "no walk: as kgu_keep");
+    CHECK(kgu_free(0, 0, 0) && kgu_free(1, 0, 0), "busy off: idle / stack walk with nothing carried are free");
+    CHECK(!kgu_free(0, 150000, 0) && !kgu_free(2, 300000, 0), "busy off: a carrier or exit walker is not (BP11: 0 free bots)");
+    CHECK(kgu_free(0, 150000, 1) && kgu_free(2, 300000, 1), "busy on: carriers and exit walkers answer (Arcade Rush)");
+    CHECK(!kgu_free(3, 300000, 1) && !kgu_free(4, 0, 1), "busy on: aboard / taking a stack never");
 
     /* the helper test: 4 m, same floor (2 m) */
     CHECK(kgu_helper_ok(300, 10, 400, 200) && !kgu_helper_ok(401, 0, 400, 200) && !kgu_helper_ok(100, 250, 400, 200) && !kgu_helper_ok(-1, 0, 400, 200), "helper_ok");
