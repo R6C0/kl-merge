@@ -49,7 +49,8 @@
 #define KSPG_PER 8
 #define KSPG_MAXSLOT 96
 #define KSPG_NCLS 4
-#define KSPG_ROLES 192
+#define KSPG_ROLES 2048        /* hash table size (power of two). Was a 192-entry list: GUN11 (10-29) showed the weapon window's elements (the last of the menu table) never got a role */
+#define KSPG_ROLES_OLD 192     /* the old capacity: a role stored past it is a "late" element (only reachable since the table was raised), counted separately by the shoppic probe */
 #define KSPG_PARK 2048
 #define KSPG_SHOWN_ROW 0x0154d80c
 #define KSPG_MODE 0x0154d810
@@ -97,7 +98,7 @@ static struct {
 } kspg;
 
 static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
-static struct { DWORD obj; int role; } kspg_role[KSPG_ROLES]; static int kspg_nrole;
+static struct { DWORD obj; int role, late; } kspg_role[KSPG_ROLES]; static int kspg_nrole, kspg_role_lost;   /* open-addressing hash by object address (obj == 0: empty) */
 enum { KR_NONE = 0, KR_OLDPRI = 1, KR_OLDSEC = 2, KR_BIG = 11, KR_PRI = 12, KR_SEC = 13, KR_STAR = 14, KR_PRICE = 15 };
 static DWORD kspg_info_upd_orig;                                   /* MercsShowInfoFAWeapons slot 8 (0x50c630), saved when the private vtable of class 0 is made */
 static int klhro_waiting(void);                                  /* klhire_online.c (included later): the row the client waits on */
@@ -109,10 +110,23 @@ static void kspg_link_check(const char *when);                   /* log-only lin
 #include "klswappic.h"                                  /* [Shop] OnlineSwapPic: pure decision (look-alike rows) */
 #include "klshoppage_online.c"                             /* [ShopPage] OnlineSend: page II press sent to the host (SHOPG), host judges + logs, no writes */
 
+static int kspg_role_slot(DWORD obj)
+{   /* index of obj's entry, or of the empty entry where it would go; -1 when the table is full */
+    int i = (int)((obj >> 4) & (KSPG_ROLES - 1)), n;
+    for (n = 0; n < KSPG_ROLES; n++, i = (i + 1) & (KSPG_ROLES - 1)) if (kspg_role[i].obj == obj || !kspg_role[i].obj) return i;
+    return -1;
+}
+
 static int kspg_role_of(void *self)
 {
-    int i; for (i = 0; i < kspg_nrole; i++) if (kspg_role[i].obj == (DWORD)(DWORD_PTR)self) return kspg_role[i].role;
-    return KR_NONE;
+    int i = kspg_role_slot((DWORD)(DWORD_PTR)self);
+    return i >= 0 && kspg_role[i].obj ? kspg_role[i].role : KR_NONE;
+}
+
+static int kspg_role_late(void *self)
+{   /* 1 when the element got its role past the old 192-entry limit (the weapon window's own pictures, GUESS: that is why they were never reached) */
+    int i = kspg_role_slot((DWORD)(DWORD_PTR)self);
+    return i >= 0 && kspg_role[i].obj ? kspg_role[i].late : 0;
 }
 
 static int kspg_useB(int role) { return role == KR_OLDPRI ? kspg.own[0] : role == KR_OLDSEC ? kspg.own[1] : kspg.shownB; }
@@ -347,7 +361,8 @@ static volatile int kspg_swtact;                           /* the shop gate is o
 static BYTE unbaked[KSPG_ROWS];                           /* per row: the name lookup saw the stock text (an unbaked map); cleared when the shop gate closes */
 static int kspg_swtpic;                                    /* [Shop] OnlineSwapPic 0/1 (set in kspg_init) */
 static LONG kspg_pic_swaps, kspg_pic_restores, kspg_pic_fail, kspg_pic_seen;   /* shoppic: counters (reset when the shop gate closes) */
-static LONG kspg_pic_calls, kspg_pic_big, kspg_pic_told, kspg_pic_bym[4];                       /* shoppic: picture updates reached while the gate is open (all / WeaponBig); first 4 logged */
+static LONG kspg_pic_new2[4];                              /* shoppic: mode-2 updates of elements that got their role past the old 192 limit: WeaponBig / Primary / Secondary / Star */
+static LONG kspg_pic_calls, kspg_pic_big, kspg_pic_told, kspg_pic_bym[4];                     /* shoppic: picture updates reached while the gate is open (all / WeaponBig); first 4 logged */
 static LONG kspg_swt_wrapped;                              /* once per shop stay: the first text key that reached the wrapper */
 static char *kspg_text_swt(void *self, const char *key, char *res)
 {
@@ -492,6 +507,7 @@ static void __fastcall kspg_gfx(void *self, void *edx)
     (void)edx;
     if (kspg_swtpic && kspg_swtact) {   /* GUN8 (10-29): no shoppic line at all with the gate fixed: prove whether slot 8 (the picture update) is called; log only */
         int pr0 = kspg_role_of(self); InterlockedIncrement(&kspg_pic_calls); if (pr0 == KR_BIG) InterlockedIncrement(&kspg_pic_big);
+        if (pr0 >= KR_BIG && pr0 <= KR_STAR && kspg_role_late(self) && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) InterlockedIncrement(&kspg_pic_new2[pr0 - KR_BIG]);   /* the weapon window's set, mode 2 */
         if (pr0 == KR_BIG) {   /* GUN9 (10-29): WeaponBig updated 50076 times, decided 0: log each change of (list mode, shown row, element index) to see which the path never matches */
             /* GUN10: logging every index change spent the 40 lines in one frame (36 elements, one index each): log (mode, shown row) changes only, count updates by mode */
             static DWORD lm = 0xffffffff, ls = 0xffffffff; static LONG nb;
@@ -708,9 +724,11 @@ static int kspg_pin(int c, DWORD vt)
 
 static void kspg_setrole(DWORD obj, int role)
 {
-    int i; if (role == KR_NONE) return;
-    for (i = 0; i < kspg_nrole; i++) if (kspg_role[i].obj == obj) { kspg_role[i].role = role; return; }
-    if (kspg_nrole < KSPG_ROLES) { kspg_role[kspg_nrole].obj = obj; kspg_role[kspg_nrole].role = role; kspg_nrole++; }
+    int i; if (role == KR_NONE || !obj) return;
+    i = kspg_role_slot(obj);
+    if (i < 0 || (!kspg_role[i].obj && kspg_nrole >= KSPG_ROLES * 3 / 4)) { kspg_role_lost++; return; }     /* never fill the table: lookups of absent objects must end */
+    if (!kspg_role[i].obj) { kspg_role[i].obj = obj; kspg_role[i].late = kspg_nrole >= KSPG_ROLES_OLD; kspg_nrole++; }
+    kspg_role[i].role = role;
 }
 
 static void kspg_scan(void)
@@ -722,7 +740,7 @@ static void kspg_scan(void)
     if (n > 0x13e8 || !klh_rd(mgr + 8, tab, 8 * (SIZE_T)n)) return;
     kspg.lastN = n;
     kspg.selobj = 0;
-    kspg_nrole = 0;                                           /* rebuilt on every scan: roles of elements the game dropped do not pile up */
+    memset(kspg_role, 0, sizeof kspg_role); kspg_nrole = 0; kspg_role_lost = 0;   /* rebuilt on every scan: roles of elements the game dropped do not pile up */
     for (k = 0; k < n; k++) {
         DWORD vt, nv; char tag[40]; int role = KR_NONE;
         if (tab[k].kind || tab[k].obj < 0x10000 || !(vt = klh_rd32(tab[k].obj))) continue;
@@ -1385,7 +1403,7 @@ static void kspg_swt_tick(void)
     static DWORD lastGate, lastScan; DWORD now = GetTickCount();
     if (now - lastGate > 250) {
         int g = kspg_gate_x(2); lastGate = now;
-        if (g != 1) { if (kspg_swtact) { if (kspg_swtpic) klog("shoppic: shop closed: picture updates %ld (WeaponBig %ld), decided %ld, swaps %ld, restores %ld, write failures %ld; WeaponBig by list mode 0/1/2/other %ld/%ld/%ld/%ld", (long)kspg_pic_calls, (long)kspg_pic_big, (long)kspg_pic_seen, (long)kspg_pic_swaps, (long)kspg_pic_restores, (long)kspg_pic_fail, kspg_pic_bym[0], kspg_pic_bym[1], kspg_pic_bym[2], kspg_pic_bym[3]); memset(kspg_pic_bym, 0, sizeof kspg_pic_bym); kspg_pic_seen = 0; kspg_pic_calls = 0; kspg_pic_big = 0; InterlockedExchange(&kspg_swt_wrapped, 0); memset(unbaked, 0, sizeof unbaked); } kspg_swtact = 0; return; }
+        if (g != 1) { if (kspg_swtact) { if (kspg_swtpic) klog("shoppic: shop closed: picture updates %ld (WeaponBig %ld), decided %ld, swaps %ld, restores %ld, write failures %ld; WeaponBig by list mode 0/1/2/other %ld/%ld/%ld/%ld; mode-2 updates on the late set (roles past the old 192 limit) Big/Pri/Sec/Star %ld/%ld/%ld/%ld, roles lost %d", (long)kspg_pic_calls, (long)kspg_pic_big, (long)kspg_pic_seen, (long)kspg_pic_swaps, (long)kspg_pic_restores, (long)kspg_pic_fail, kspg_pic_bym[0], kspg_pic_bym[1], kspg_pic_bym[2], kspg_pic_bym[3], kspg_pic_new2[0], kspg_pic_new2[1], kspg_pic_new2[2], kspg_pic_new2[3], kspg_role_lost); memset(kspg_pic_bym, 0, sizeof kspg_pic_bym); memset(kspg_pic_new2, 0, sizeof kspg_pic_new2); kspg_pic_seen = 0; kspg_pic_calls = 0; kspg_pic_big = 0; InterlockedExchange(&kspg_swt_wrapped, 0); memset(unbaked, 0, sizeof unbaked); } kspg_swtact = 0; return; }
         kspg_swtact = 1;
     }
     if (kspg_swtact && !kspg.active && !kspg.hact && now - lastScan > 1500) { lastScan = now; kspg_scan(); }   /* the other two ticks scan when they are active */
