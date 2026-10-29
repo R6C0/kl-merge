@@ -1,3 +1,12 @@
+2026-10-29 ~06:50 - [ce] Merged wk-swappic-1028 + wk-botpar-1028 -> 9a2a1a304 (kl_tests 36 pass, the known 8 fail). All benches 0 faults, restore 9e485dcf/b599def6.
+- GUN10/GUN11 (DM07 online, probe): WeaponBig by list mode 0/1/2 = 0/46008/0: only the CATEGORY window's 36 WeaponBig ever updated. Cause (b3c7e46c8): kspg_setrole
+  kept roles in a 192-entry list and the menu table lists ~190 role elements before the weapon window, so its WeaponBig/Primary/Secondary/Star were wrapped but had no
+  role. Now a 2048 hash. GUN12b: mode-2 updates Big/Pri/Sec/Star 190692/190692/190692/10594, decided 134892, swaps 7494 = restores, write failures 0. Shop picture follows the pool online.
+- BP14 (FreeFirst + BusyRange 1500): free bot sent from 14.7 m, closed to 8 m, then ran off to 34 m, never re-ordered -> OnlineGetUpRecede (3 s gap). BP15: re-orders fire, the bot
+  cycles 3.6 <-> 9 m (joiner census nearest 466 cm, limit 400); also the host's replica body sat ~2 m off the beacon body -> OnlineGetUpHold (eaa59010f: 1 m spot from the beacon,
+  re-held every ~0.9 s within 4 m). BP16b: bot 4 stalled 9-14.7 m for 18 s (KeepGoal/Recede re-orders every ~3 s), Hold never in range; seat rose alone. Diagnosis workflow running.
+- BP16 run 1 + GUN12 run 1 void: C: full (c9's temp dirs) -> BP16's install left a truncated dinput8.dll and its restore failed; restored 9e485dcf by hand from live/_before, sha1-checked.
+
 2026-10-29 ~06:00 - [c9] C: hit 0 MB free (~05:30): tools/kl_map_shift_test.py left a 212 MB mkdtemp dir per run, 214 in %TEMP% (40 GB).
 Removed them (38 GB free) and fixed the tool (e0c73451b: atexit rmtree; --quick ALL OK, no dir left). Door-hold ghost fix on c9-doorhold-1029
 (5201ebc77 + b743640eb after review: all table entries walked, fresh stay after a walk gap or level change; kldoorclose_test 57/57), dlls in
