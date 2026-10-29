@@ -497,7 +497,7 @@ feat('onlinelootfinishpause', G_EXP, 'Online AI heisters pause a stack take when
 feat('onlineescortnode', G_EXP, 'Online AI heisters read your position from the scene node, so escort and get-up help see you (host only; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineEscortNode (wk-botpar): [player+0x460] lags on the host, the node is read first; NOT run live', [('BotFill', 'OnlineEscortNode', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinevangathersmart', G_EXP, 'Online AI heisters: the van is not called while a bot is still taking a stack, unless the round clock is short (host only; recommended on)', 'on', 'start',
-     'klbotfill.c [BotFill] OnlineVanGatherSmart (+ OnlineVanGatherMarginS 60; wk-botpar); needs OnlineVanGather; NOT run live', [('BotFill', 'OnlineVanGatherSmart', 1, 0, 0), ('BotFill', 'OnlineVanGather', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+     'klbotfill.c [BotFill] OnlineVanGatherSmart (+ OnlineVanGatherMarginS 60; wk-botpar); needs OnlineVanGather; NOT run live', [('BotFill', 'OnlineVanGatherSmart', 1, 0, 0), ('BotFill', 'OnlineVanGather', 1, None, 1), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinetriggers', G_EXP, 'Online host: AI heisters set off the police-wave and door trigger boxes like in Arcade (needs the AI heister rows above; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineTriggers (1 = fire, 2 = log only): a bot is never a "player" to a ZTriggerBox online; run live 10-28 (WK2 bench); the ini default stays 0', [('BotFill', 'OnlineTriggers', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinebank', G_EXP, 'Online host: loot carried by AI heisters is counted in a bank and credited to the team score when a human escapes (needs the loot-taking row above; recommended off)', 'off', 'start',
@@ -877,6 +877,8 @@ def scan_keys(srcdir):
             where.setdefault((sec, key), set()).add(base)
             if kind == 'Int' and re.match(r'-?\d+$', dflt):
                 seen.setdefault((sec, key), set()).add(int(dflt))
+            elif kind == 'String' and re.match(r'"-?\d+"$', dflt):           # a number read as text (OnlineGetUpFlopMeter "0" -> atof): its whole-number default counts
+                seen.setdefault((sec, key), set()).add(int(dflt[1:-1]))
     # the helpers: name -> (section, 'param' | literal default)
     helpers = {}
     hdef = re.compile(r'\b(\w+)\s*\(\s*const\s+char\s*\*\s*(?:const\s+)?(\w+)\s*(?:,\s*(?:int|LONG|long|DWORD|unsigned)\s+(\w+))?[^;{)]*\)\s*\{'

@@ -1,3 +1,5 @@
+2026-10-29 ~02:55 UTC - scheduled check-in (cloud, repo-only: the task's session had NO folders connected and the PC is BUSY anyway, c9/ce commits until 02:27 UTC; nothing launched, installed, staged or read on the PC; no dump/log check possible). kl_tests on 99e8a1a in the cloud (gcc-multilib installed): 30 pass 0 fail 15 skip (the 25 logic C tests incl. the new klgetup/klswappic/kldoorclose ones build and pass on Linux). Mod Options --check-defaults: the onlinevangathersmart row's helper key [BotFill] OnlineVanGather said dflt 0 while klbotfill.c reads 1 (fixed, row only, no ini change); scan_keys now also takes a whole-number GetPrivateProfileString default ("0"), so OnlineGetUpFlopMeter's row is checked instead of 'not checked' (kl_mod_options_test +1 check, 46 pass). --check-rec and --check-ini clean. Owner: nothing needed; GUN10 / BP14 / Q28 page-3 benches stay with ce/c9.
+
 2026-10-29 ~04:30 - [c9] Q28 batch 4 online (ship1030 TEST twin): DM03 DM06 DM03A DM05A PASS both seats, 0 faults, restore ok; online LOADs picked
 the bench page + rule (page 2 force=2; DM05A page 3 force=3). 16 of 21 done; left DM06B DM01B DM11B DM07 DD10.
 

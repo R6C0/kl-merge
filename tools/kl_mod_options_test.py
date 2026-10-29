@@ -130,9 +130,11 @@ def main():
                  'static float klx_inif(const char *key, const char *def) { char t[32]; GetPrivateProfileStringA("X", key, def, t, sizeof t, klh_ini); return (float)atof(t); }\n'
                  'void klx_init(void) { int a = GetPrivateProfileIntA("Input", "PumpNoBlock", 0, klh_ini) != 0; char b[8];\n'
                  '  GetPrivateProfileStringA("Expansion", "MountFirst", "", b, sizeof b, klh_ini); int c = GetPrivateProfileIntA("Auto", "Hooks", 1, kla_ini);\n'
-                 '  int d = klx_inii("Rows", 3); float e = klx_inif("Near", "30"); }\n')
+                 '  int d = klx_inii("Rows", 3); float e = klx_inif("Near", "30");\n'
+                 '  GetPrivateProfileStringA("X", "Meter", "3", b, sizeof b, klh_ini); GetPrivateProfileStringA("X", "Cap", "DM05A:60", b, sizeof b, klh_ini); }\n')
     seen, where = M.scan_keys(src)
     check(seen.get(('Input', 'PumpNoBlock')) == {0} and seen.get(('X', 'Rows')) == {3}, 'scan_keys: direct and helper Int defaults: %s' % seen)
+    check(seen.get(('X', 'Meter')) == {3} and ('X', 'Cap') not in seen and ('X', 'Cap') in where, 'scan_keys: a whole-number String default counts, a text one is only read: %s' % seen)
     check(('X', 'Near') in where and ('Expansion', 'MountFirst') in where, 'scan_keys: String helper and direct String keys are read: %s' % sorted(where))
     check(('Auto', 'Hooks') not in where, 'scan_keys: a key read from another ini (kla_ini) is not a KLHook.ini key')
     ini3 = os.path.join(src, 'k.ini')
@@ -140,7 +142,7 @@ def main():
         fh.write('[Input]\n;PumpNoBlock=0\n[X]\n; Rows=3 = the rows\n')
     rowless, un = M.check_ini(src, ini3)
     check(rowless == [], 'check_ini: the pumpnoblock row key is mentioned: %s' % rowless)
-    check(sorted(un) == ['[Expansion] MountFirst (klx.c)', '[X] Near (klx.c)'], 'check_ini: unmentioned = the two keys no line names: %s' % un)
+    check(sorted(un) == ['[Expansion] MountFirst (klx.c)', '[X] Cap (klx.c)', '[X] Meter (klx.c)', '[X] Near (klx.c)'], 'check_ini: unmentioned = the four keys no line names: %s' % un)
     with open(ini3, 'w') as fh:
         fh.write('[Input]\n; nothing here\n')
     rowless, un = M.check_ini(src, ini3)
