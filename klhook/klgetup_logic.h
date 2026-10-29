@@ -97,4 +97,13 @@ static float kgu_boost(float meter, float dt, float per_s, float cap)
     return n > meter ? n : meter;
 }
 
+/* wk-botpar OnlineGetUpFlopMeter: with Flop on, the whole knock-down is the fall (D state 2), so the MashHold meter above is never fed; the flop's own
+   mash meter (kld_s.meter: speed FlopBase + FlopPerPress x meter) is held at `floor` or more while a helper stands by, as kladren.c does for Arcade ([Adrenaline]
+   Meter 3.0). No helper, floor <= 0 or a NaN meter: unchanged. */
+static float kgu_floor(float meter, int helped, float floor)
+{
+    if (!helped || !(floor > 0) || !(meter == meter)) return meter;
+    return meter < floor ? floor : meter;
+}
+
 #endif
