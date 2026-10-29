@@ -1,3 +1,9 @@
+2026-10-29 ~02:30 - [ce] Merged f016b07f9 (wk-botpar, all default off, kl_tests 34/8/1): OnlineGuardLiveOnly origin skip, OnlineGetUpDetour,
+OnlineGetUpBusy. BP11 (DD08 online, out_botpar_j_test, 0 faults, restore 9e485dcf/b599def6 ok): 35 of 40 cops sat at (0,0,0) at the start (skipped),
+14 stacks finished; the getup found '0 free bot(s)' because every bot carried money or walked out (online skipped carriers, Arcade's Rush does not),
+so OnlineGetUpBusy lets carriers and exit walkers answer (never a bot taking a stack or aboard). Bench BP12 = BP11 + Busy (RUN_week_1028.txt).
+GUN6 (F02 = DD02): our gun names are already in the shop rows, OnlineSwapPic not needed there; wk-swappic unmerged.
+
 2026-10-29 ~01:40 - [c9] Q28 batch 1 (ship1030 TEST twin 62fb6b35, online, both seats, --owner-away): DD05, DD08, DD09, DM09 PASS, 0 faults,
 restore ok. Checked the map really loaded despite [Expansion] OnlineSet=9 (random per slot online): every online LOAD line picked the bench's
 page and rule (DM09: force=2 page 2 rule DM09, redirect to KLExpansion\Maps\DM09\F06_Main.bots.zip, KLJoin.ini read; DDxx: page 0 own rule).
