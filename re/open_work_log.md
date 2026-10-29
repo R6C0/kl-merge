@@ -1,3 +1,6 @@
+2026-10-29 ~03:35 - [c9] Q28 batch 3 online (ship1030 TEST twin): DD06 DD07 DM01 DM02 PASS both seats, 0 faults, restore ok; online LOADs picked
+the bench page + rule (DM01/DM02: force=2 page 2). 12 of 21 done; left DM03 DM06 DM03A + page 3 (DM05A DM06B DM01B DM11B DM07 DD10).
+
 2026-10-29 ~01:20 - [ce] BP12 (DD08 online, out_botpar_k_test, OnlineGetUpBusy=1 host): PASS both seats, 0 faults, restore 9e485dcf/b599def6 ok.
 Bot 0 (free, phase 1) sprinted to the joiner, but (1) the joiner got up alone after 19.05 s, 0 presses: with Flop on the knock-down is all fall (D state 2), so
 kld_o_step returns before the MashHold boost and klbf_gu_rate_now never ran -> fb4bf743f [BotFill] OnlineGetUpFlopMeter (holds kld_s.meter at 3 while a bot
