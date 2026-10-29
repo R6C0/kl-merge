@@ -34,6 +34,7 @@ Owner: ce.
 - 10-28 20:25 c9: bench screenshots fixed (--d3shots, in-game back buffer, JPG). A1LIFT3e PASS: the player's own two lift crossings fire the doors 29 s apart. Door-open picture still inconclusive.
 - 10-28 20:50 c9: A1LIFT3f PASS: the player walks through the re-fired lift doors into join box 9 and (3d) rides up to z 879. Retomoto lift T2 item done; open: player downed at 40 % health in the lift.
 - 10-28 21:05 c9: lift downs explained: Ramp=1 kept CopToYou/CrewToYou at stock, the game's own 40 % down did the rest (not a bug in the map or hook). Ramp now logs it (403967a5a).
+- 10-29 02:40 c9: Q28 batch 2 DD01-DD04 PASS both seats online, 0 faults. 8/21 done.
 - 10-29 01:40 c9: Q28 batch 1 (online, ship1030 test twin): DD05 DD08 DD09 DM09 PASS both seats, 0 faults; intended maps confirmed loaded. 17 maps left.
 - 10-29 01:10 c9: SHIPPED ship1030 (lift online: JoinOnline=1 + DoorCloseRemote=1 via the hero table; dll 9e485dcf, ini b599def6). SHIPCHK4 + A1LIFTNET3 PASS 0 faults.
 - 10-29 00:40 c9: lift ONLINE PASS (A1LIFTNET2F both seats, 0 faults; joiner rode box 9 to the lobby car). Merged 154f03c94 (default off). Next: SHIP check + ship JoinOnline=1.

@@ -1,3 +1,5 @@
+2026-10-29 ~02:40 - [c9] Q28 batch 2 online (ship1030 TEST twin): DD01 DD02 DD03 DD04 PASS both seats, 0 faults, restore ok; each online LOAD
+picked page 0 + the map's own rule on both seats. 8 of 21 done; 13 left (DD06 DD07, DM01 DM02 DM03 DM06 DM03A, page 3 six).
 2026-10-29 ~00:05 - [ce] Merged f016b07f9 (wk-botpar, all default off, kl_tests 34/8/1): OnlineGuardLiveOnly origin skip, OnlineGetUpDetour,
 OnlineGetUpBusy. BP11 (DD08 online, out_botpar_j_test, 0 faults, restore 9e485dcf/b599def6 ok): 35 of 40 cops sat at (0,0,0) at the start (skipped),
 14 stacks finished; the getup found '0 free bot(s)' because every bot carried money or walked out (online skipped carriers, Arcade's Rush does not),
