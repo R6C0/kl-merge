@@ -1,3 +1,6 @@
+2026-10-29 ~04:30 - [c9] Q28 batch 4 online (ship1030 TEST twin): DM03 DM06 DM03A DM05A PASS both seats, 0 faults, restore ok; online LOADs picked
+the bench page + rule (page 2 force=2; DM05A page 3 force=3). 16 of 21 done; left DM06B DM01B DM11B DM07 DD10.
+
 2026-10-29 ~04:10 - [ce] Merged wk-botpar-1028 + wk-swappic-1028 onto 12df5078f -> 7a92613fe (kl_tests: the known 8 fails only). BP13 (DD08 online,
 out_botpar_l_test, FlopMeter=3): PASS both seats, 0 faults, restore ok; the hold never ran: bot 5 (phase 2, walking out) was ordered from 27 m, its closing speed
 swung -2.8..+4.3 m/s with a re-order at 27.4 m, nearest 14.4 m; seat 1 rose alone after 19.4 s. Joiner census: 51 actors, team 44, too far 7. Open: why the bot
