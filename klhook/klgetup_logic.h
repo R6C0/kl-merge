@@ -22,6 +22,20 @@ static int kgu_pick(const float *d, int n, float range)
     return best;
 }
 
+/* wk-botpar BP13 (OnlineGetUpFreeFirst / OnlineGetUpBusyRange): kgu_pick with the busy bots (walking out / carrying money) held back. busy[i] != 0 = a walker-out or carrier.
+   busyRange > 0: a busy bot farther than that is no candidate (BP13: a walker-out sent from 27 m swung -2.8 .. +4.3 m/s and never got nearer than 14.4 m);
+   freeFirst: a free bot within `range` wins over every busy one, however near the busy one is (BP12: the free bot 0 sprinted straight to him). Both 0 = kgu_pick. */
+static int kgu_pick_b(const float *d, const int *busy, int n, float range, float busyRange, int freeFirst)
+{
+    int i, best = -1, bestFree = -1; float bd = 1e30f, bf = 1e30f;
+    for (i = 0; i < n; i++) {
+        if (!(d[i] >= 0 && d[i] <= range)) continue;
+        if (busy[i]) { if (busyRange > 0 && d[i] > busyRange) continue; if (d[i] < bd) { bd = d[i]; best = i; } }
+        else { if (d[i] < bf) { bf = d[i]; bestFree = i; } if (d[i] < bd) { bd = d[i]; best = i; } }
+    }
+    return freeFirst && bestFree >= 0 ? bestFree : best;
+}
+
 /* the place a rusher is sent to: `stop` cm from the human toward the bot (the bot's own side), on the human's height; a bot already within `stop`
    is sent to the human's feet. */
 static void kgu_place(const float bot[3], const float hum[3], float stop, float out[3])
@@ -70,6 +84,20 @@ static int kgu_keep_d(float prevD, float curD, float movedCm, DWORD stallMs, flo
     return stallMs >= KGU_STALL_MS ? 2 : 0;
 }
 
+/* wk-botpar OnlineGetUpRecede (BP14, BP13): a rushing bot sent from 14.7 m was 34 m away 15 s later and never re-ordered, because the game resumes the bot's earlier move goal
+   (the stack walk / the exit walk) under the rush order and Detour / KeepGoal excused the walk (moved >= 3 m itself). prevD < 0 = no earlier check; ordD <= 0 = order distance unknown.
+   1 = receding: it got >= KGU_RECEDE_STEP_CM farther since the last check, or it is more than KGU_RECEDE_ORD_CM beyond the distance it was ordered from. A sideways route that is
+   neither is not receding. GUESS: 2 m on both limits (the owner's figure), a route round a wall that first leads away is re-ordered too (re-ordering a bot that is truly routing costs a restart). */
+#define KGU_RECEDE_STEP_CM 200.0f
+#define KGU_RECEDE_ORD_CM  200.0f
+#define KGU_RECEDE_GAP_MS  3000u   /* rate limit: no receding verdict until the order is this old (a bot running off at 3 m/s would otherwise be re-ordered every 1 s pass; GUESS 3 s = KGU_STALL_MS) */
+static int kgu_recede(float prevD, float curD, float ordD, DWORD ordAgeMs)
+{
+    if (!(curD >= 0) || ordAgeMs < KGU_RECEDE_GAP_MS) return 0;
+    if (prevD >= 0 && curD - prevD >= KGU_RECEDE_STEP_CM) return 1;
+    return ordD > 0 && curD - ordD > KGU_RECEDE_ORD_CM;
+}
+
 /* a helper counts when within `range` (cm) horizontally and `dy` (cm) in height */
 static int kgu_helper_ok(float dist, float dy, float range, float dymax)
 {
@@ -114,5 +142,14 @@ static int kgu_at_goal(float bodyD, float goalD, float nearCm)
 {
     return goalD >= 0 && goalD <= KGU_GOAL_CM && bodyD >= 0 && bodyD <= nearCm;
 }
+
+/* wk-botpar BP15 (OnlineGetUpHold): bot 5 closed to 3.6 m, then walked off 8.2 m and again 9.1 m (the rush goal completed on arrival and the game resumed its stack walk),
+   so the joiner's helper scan (limit 4 m) saw 334 cm once and 466 cm later. A rusher within KGU_HOLD_NEAR_CM of him is ordered to a spot KGU_HOLD_STOP_CM from him
+   every KGU_HOLD_GAP_MS. GUESS: 4 m = the helper limit (OnlineGetUpNear), 1 m place, 900 ms (the pass runs once a second, so about every pass). */
+#define KGU_HOLD_NEAR_CM 400.0f
+#define KGU_HOLD_STOP_CM 100.0f
+#define KGU_HOLD_GAP_MS  900u
+static int kgu_hold_near(float bdst) { return bdst >= 0 && bdst <= KGU_HOLD_NEAR_CM; }
+static int kgu_hold_due(DWORD now, DWORD last) { return !last || now - last >= KGU_HOLD_GAP_MS; }
 
 #endif

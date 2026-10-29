@@ -26,6 +26,15 @@ int main(void)
     d[2] = (float)sqrt(-1.0);
     CHECK(kgu_pick(d, 4, 2500) == 1, "NaN skipped, got %d", kgu_pick(d, 4, 2500));
     CHECK(kgu_pick(d, 0, 2500) == -1, "empty");
+    {   /* BP13: busy = walker-out / carrier */
+        float e[3] = { 2700, 4000, 6000 }; int bz[3] = { 1, 0, 0 };
+        CHECK(kgu_pick_b(e, bz, 3, 8000, 0, 0) == 0 && kgu_pick(e, 3, 8000) == 0, "both off: the nearest, as kgu_pick");
+        CHECK(kgu_pick_b(e, bz, 3, 8000, 1500, 0) == 1, "busy cap 15 m: the busy 27 m bot is out, the nearest free one is");
+        CHECK(kgu_pick_b(e, bz, 3, 8000, 0, 1) == 1, "free first: a farther free bot beats a nearer busy one");
+        e[1] = 9000; e[2] = 9000;
+        CHECK(kgu_pick_b(e, bz, 3, 8000, 0, 1) == 0 && kgu_pick_b(e, bz, 3, 8000, 1500, 1) == -1, "no free bot in range: the busy one unless capped");
+        e[0] = 1200; CHECK(kgu_pick_b(e, bz, 3, 8000, 1500, 1) == 0, "busy within its cap still answers");
+    }
 
     /* the place: 200 cm from him toward the bot, his height; a bot already inside goes to his feet */
     kgu_place(bot, hum, KGU_STOP_CM, out);
@@ -94,6 +103,15 @@ int main(void)
     }
     CHECK(hold && i == 60 * 30, "no helper, no press: still held");
 
+    CHECK(kgu_recede(1300, 1500, 1467, 5000) == 1 && kgu_recede(1300, 1499, 1467, 5000) == 0, "recede: grew exactly 2 m between checks");
+    CHECK(kgu_recede(-1, 1668, 1467, 5000) == 1 && kgu_recede(-1, 1667, 1467, 5000) == 0, "recede: more than 2 m beyond the order distance");
+    CHECK(kgu_recede(800, 870, 1467, 5000) == 0 && kgu_recede(870, 800, 1467, 5000) == 0, "recede: closing / sideways is not receding");
+    CHECK(kgu_recede(800, 3410, 1467, 5000) == 1 && kgu_recede(3410, 3000, 1467, 5000) == 1, "recede: BP14 34 m from a 14.7 m order, even while it closes a little");
+    CHECK(kgu_recede(100, 100, 0, 5000) == 0 && kgu_recede(-1, 5000, 0, 5000) == 0 && kgu_recede(100, -1, 1000, 5000) == 0, "recede: unknown order distance / bad input: no verdict");
+    CHECK(kgu_recede(800, 3410, 1467, 2999) == 0 && kgu_recede(800, 3410, 1467, 3000) == 1, "recede: rate limit, no verdict before the order is 3 s old");
+    CHECK(kgu_hold_near(360) && kgu_hold_near(400) && !kgu_hold_near(401) && !kgu_hold_near(-1), "hold: within 4 m (BP15 3.6 m)");
+    CHECK(kgu_hold_due(5000, 0) && !kgu_hold_due(5899, 5000) && kgu_hold_due(5900, 5000) && kgu_hold_due(100, 4294967000UL) == 0, "hold: due at once, then every 900 ms");
+    { float b2[3] = { 1000, 50, 2800 }; kgu_place(b2, hum, KGU_HOLD_STOP_CM, out); CHECK(fabs(out[2] - 2100) < 0.01, "hold place 1 m from him"); }
     printf("klgetup_test: %d check(s), %d failure(s)\n", checks, fails);
     printf(fails ? "FAIL\n" : "ALL PASS\n");
     return fails ? 1 : 0;
