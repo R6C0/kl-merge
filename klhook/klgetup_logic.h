@@ -53,10 +53,36 @@ static int kgu_keep(float prevD, float curD, float movedCm, DWORD stallMs)
     return stallMs >= KGU_STALL_MS ? 2 : 0;
 }
 
+/* wk-botpar OnlineGetUpDetour (BP8/BP9 root cause): kgu_keep reads the STRAIGHT-LINE distance, but a bot sent round a wall or railing runs a route whose
+   straight-line distance first grows (BP8 3.3 -> 12.8 m at 4.8 m/s, BP9 24.6 -> 15.9 -> 23.7 m), and one that arrived (by seat, the caller `continue`s before
+   the keep test) may drift off again while the stall clock kept running through the time it stood there. So:
+   walkedCm = how far the bot itself moved since the last tick it counted as progress (>= KGU_WALK_CM = running, a detour, not stalled), but only while the order
+   is younger than KGU_DETOUR_MS (a route that long is no route); arrivedLeft = the bot stood by him since this order and is now KGU_LEFT_CM out again: order it back at once. */
+#define KGU_WALK_CM     300.0f
+#define KGU_DETOUR_MS   20000u
+#define KGU_LEFT_CM     500.0f
+static int kgu_keep_d(float prevD, float curD, float movedCm, DWORD stallMs, float walkedCm, DWORD ordAgeMs, int arrived)
+{
+    if (movedCm >= KGU_MOVED_CM) return 1;
+    if (arrived && curD >= KGU_LEFT_CM) return 2;
+    if (prevD >= 0 && prevD - curD >= KGU_PROGRESS_CM) return 0;
+    if (walkedCm >= KGU_WALK_CM && ordAgeMs < KGU_DETOUR_MS) return 0;
+    return stallMs >= KGU_STALL_MS ? 2 : 0;
+}
+
 /* a helper counts when within `range` (cm) horizontally and `dy` (cm) in height */
 static int kgu_helper_ok(float dist, float dy, float range, float dymax)
 {
     return dist >= 0 && dist <= range && dy >= -dymax && dy <= dymax;
+}
+
+/* may a bot in this phase / tally answer a downed human? phase 0 idle, 1 walks to a stack, 2 walks out (to the van), 3 aboard, 4 takes a stack.
+   busy 0 (the old rule): phase 0 / 1 with nothing carried. busy 1 (OnlineGetUpBusy, Arcade's Rush: any bot not down, not rushing, not escorting):
+   carriers and exit walkers too; a bot taking a stack (4, a few seconds) or aboard (3) never. */
+static int kgu_free(int phase, int tally, int busy)
+{
+    if (phase == 0 || phase == 1) return busy || tally <= 0;
+    return busy && phase == 2;
 }
 
 /* the mash meter with a helper by: + per_s x dt (dt clamped to 0.25 s, as kldh_step), raised at most up to `cap` (a meter already above it is left
