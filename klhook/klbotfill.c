@@ -1218,7 +1218,7 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
                 if (klbf_gu_det) { float wx = pos[rb][0] - klbf_ob[s].guWp[0], wz = pos[rb][2] - klbf_ob[s].guWp[2]; wk = (float)sqrt(wx * wx + wz * wz); }
                 if (klbf_ob[s].guKd < 0 || klbf_ob[s].guKd - bdst >= KGU_PROGRESS_CM) { klbf_ob[s].guProg = now; memcpy(klbf_ob[s].guWp, pos[rb], 12); }
                 k = klbf_gu_det ? kgu_keep_d(klbf_ob[s].guKd, bdst, mv, now - klbf_ob[s].guProg, wk, now - klbf_ob[s].guOrd, klbf_ob[s].guArr) : kgu_keep(klbf_ob[s].guKd, bdst, mv, now - klbf_ob[s].guProg);
-                if (klbf_gu_recede && k == 0 && kgu_recede(klbf_ob[s].guKd, bdst, klbf_ob[s].guOd)) k = 3;      /* OnlineGetUpRecede: farther from him and not just a sideways route; overrides the Detour / KeepGoal excuse */
+                if (klbf_gu_recede && k == 0 && kgu_recede(klbf_ob[s].guKd, bdst, klbf_ob[s].guOd, now - klbf_ob[s].guOrd)) k = 3;      /* OnlineGetUpRecede: farther from him and not just a sideways route; overrides the Detour / KeepGoal excuse */
                 if (klbf_gu_det && k == 0 && wk >= KGU_WALK_CM) { klbf_ob[s].guProg = now; memcpy(klbf_ob[s].guWp, pos[rb], 12); }      /* running a route: the stall clock restarts */
                 if (k == 0) {
                     if (!klbf_ob[s].guKq) { klbf_ob[s].guKq = 1; klog("botfill: getup: bot %d KEEP goal at %.1f m (OnlineGetUpKeepGoal: closing, target moved %.1f m, last progress %.1f s ago)", s, bdst / 100.0f, mv / 100.0f, (now - klbf_ob[s].guProg) / 1000.0f); }

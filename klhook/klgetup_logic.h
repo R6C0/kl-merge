@@ -90,9 +90,10 @@ static int kgu_keep_d(float prevD, float curD, float movedCm, DWORD stallMs, flo
    neither is not receding. GUESS: 2 m on both limits (the owner's figure), a route round a wall that first leads away is re-ordered too (re-ordering a bot that is truly routing costs a restart). */
 #define KGU_RECEDE_STEP_CM 200.0f
 #define KGU_RECEDE_ORD_CM  200.0f
-static int kgu_recede(float prevD, float curD, float ordD)
+#define KGU_RECEDE_GAP_MS  3000u   /* rate limit: no receding verdict until the order is this old (a bot running off at 3 m/s would otherwise be re-ordered every 1 s pass; GUESS 3 s = KGU_STALL_MS) */
+static int kgu_recede(float prevD, float curD, float ordD, DWORD ordAgeMs)
 {
-    if (!(curD >= 0)) return 0;
+    if (!(curD >= 0) || ordAgeMs < KGU_RECEDE_GAP_MS) return 0;
     if (prevD >= 0 && curD - prevD >= KGU_RECEDE_STEP_CM) return 1;
     return ordD > 0 && curD - ordD > KGU_RECEDE_ORD_CM;
 }

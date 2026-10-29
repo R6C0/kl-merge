@@ -103,11 +103,12 @@ int main(void)
     }
     CHECK(hold && i == 60 * 30, "no helper, no press: still held");
 
-    CHECK(kgu_recede(1300, 1500, 1467) == 1 && kgu_recede(1300, 1499, 1467) == 0, "recede: grew exactly 2 m between checks");
-    CHECK(kgu_recede(-1, 1668, 1467) == 1 && kgu_recede(-1, 1667, 1467) == 0, "recede: more than 2 m beyond the order distance");
-    CHECK(kgu_recede(800, 870, 1467) == 0 && kgu_recede(870, 800, 1467) == 0, "recede: closing / sideways is not receding");
-    CHECK(kgu_recede(800, 3410, 1467) == 1 && kgu_recede(3410, 3000, 1467) == 1, "recede: BP14 34 m from a 14.7 m order, even while it closes a little");
-    CHECK(kgu_recede(100, 100, 0) == 0 && kgu_recede(-1, 5000, 0) == 0 && kgu_recede(100, -1, 1000) == 0, "recede: unknown order distance / bad input: no verdict");
+    CHECK(kgu_recede(1300, 1500, 1467, 5000) == 1 && kgu_recede(1300, 1499, 1467, 5000) == 0, "recede: grew exactly 2 m between checks");
+    CHECK(kgu_recede(-1, 1668, 1467, 5000) == 1 && kgu_recede(-1, 1667, 1467, 5000) == 0, "recede: more than 2 m beyond the order distance");
+    CHECK(kgu_recede(800, 870, 1467, 5000) == 0 && kgu_recede(870, 800, 1467, 5000) == 0, "recede: closing / sideways is not receding");
+    CHECK(kgu_recede(800, 3410, 1467, 5000) == 1 && kgu_recede(3410, 3000, 1467, 5000) == 1, "recede: BP14 34 m from a 14.7 m order, even while it closes a little");
+    CHECK(kgu_recede(100, 100, 0, 5000) == 0 && kgu_recede(-1, 5000, 0, 5000) == 0 && kgu_recede(100, -1, 1000, 5000) == 0, "recede: unknown order distance / bad input: no verdict");
+    CHECK(kgu_recede(800, 3410, 1467, 2999) == 0 && kgu_recede(800, 3410, 1467, 3000) == 1, "recede: rate limit, no verdict before the order is 3 s old");
     printf("klgetup_test: %d check(s), %d failure(s)\n", checks, fails);
     printf(fails ? "FAIL\n" : "ALL PASS\n");
     return fails ? 1 : 0;
