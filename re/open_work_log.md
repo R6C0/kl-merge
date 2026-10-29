@@ -1,4 +1,4 @@
-2026-10-29 ~02:30 - [ce] Merged f016b07f9 (wk-botpar, all default off, kl_tests 34/8/1): OnlineGuardLiveOnly origin skip, OnlineGetUpDetour,
+2026-10-29 ~00:05 - [ce] Merged f016b07f9 (wk-botpar, all default off, kl_tests 34/8/1): OnlineGuardLiveOnly origin skip, OnlineGetUpDetour,
 OnlineGetUpBusy. BP11 (DD08 online, out_botpar_j_test, 0 faults, restore 9e485dcf/b599def6 ok): 35 of 40 cops sat at (0,0,0) at the start (skipped),
 14 stacks finished; the getup found '0 free bot(s)' because every bot carried money or walked out (online skipped carriers, Arcade's Rush does not),
 so OnlineGetUpBusy lets carriers and exit walkers answer (never a bot taking a stack or aboard). Bench BP12 = BP11 + Busy (RUN_week_1028.txt).
