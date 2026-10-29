@@ -1,3 +1,8 @@
+2026-10-29 ~05:55 - [c9] A1HOLD1 (DM09 online, ship1030 TEST twin; joiner ini JoinOnline=0 so it stays in the car ~27 s) PASS both seats, 0 faults,
+restore ok. Host: doors opened 03:40:30, close due +8 s -> 'table player 1 (not ours) is at car 9: doors held': the DoorCloseRemote hold works.
+Open (minor): after the joiner quit (~03:41:08) the host never closed them before its run ended (03:44); likely the departed peer's table entry
+keeps its last feet, then the 120 s stale rule gives up = doors stay open (the pre-ship1029 look, harmless). Kit: ship1030\HOLD1_*.ini.
+
 2026-10-29 ~05:25 - [c9] Q28 COMPLETE: all 21 maps PASS online, both seats IN ROUND, 0 faults, restore ok (ship1030 TEST twin 62fb6b35 with the
 installed ini + bench keys). Batch 5: DM06B DM01B DM11B DM07 DD10 (page 3, force=3). Every online LOAD picked the bench's page + rule on both seats
 (OnlineSet=9 does not override a menu pick). Kit + table: C:\kl_build_1024\c9_1028\q28 (summarize_q28.py). Supersedes Q27 (19 maps).
