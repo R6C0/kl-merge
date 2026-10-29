@@ -506,13 +506,14 @@ static void __fastcall kspg_gfx(void *self, void *edx)
             }
         }
     }
-    if (kspg_swtpic && kspg_swtact && !kspg.active && !kspg.shownB && !kspg.hire && !kspg.ctl) {
+    if (kspg_swtpic && kspg_swtact && !kspg.shownB && !kspg.hire && !kspg.ctl) {
         /* [Shop] OnlineSwapPic: the stock page, an unbaked card over a pool-handed gun: show a look-alike stock card for one update (same swap-and-restore as page II). Data only.
-           GUESS: the look-alike rows (klswappic.h); GUESS: the carried rows are the bytes at 0xced638/9 (header of this file). Fails open: a failed write leaves the stock index. */
+           GUESS: the look-alike rows (klswappic.h); GUESS: the carried rows are the bytes at 0xced638/9 (header of this file). Fails open: a failed write leaves the stock index.
+           GUN7 (DM07 online, 10-29): '!kspg.active' kept this off whenever [ShopPage] Enable=1 (the shipped ini), even on page A; now only a carried PAGE II gun (own[]) is left to the page II path below. */
         int pr = kspg_role_of(self), rr = -99, st, it = 0, P; BYTE cb = 0;
         if (pr == KR_BIG && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) rr = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW));
-        else if (pr == KR_PRI && klh_rd((DWORD_PTR)KLH_VA(KSPG_CARRY), &cb, 1)) rr = (int)cb;
-        else if (pr == KR_SEC && klh_rd((DWORD_PTR)KLH_VA(KSPG_CARRY + 1), &cb, 1)) rr = (int)cb;
+        else if (pr == KR_PRI && !(kspg.active && kspg.own[0]) && klh_rd((DWORD_PTR)KLH_VA(KSPG_CARRY), &cb, 1)) rr = (int)cb;
+        else if (pr == KR_SEC && !(kspg.active && kspg.own[1]) && klh_rd((DWORD_PTR)KLH_VA(KSPG_CARRY + 1), &cb, 1)) rr = (int)cb;
         if (rr >= 0 && rr < KSPG_ROWS) {
             st = kls_row_state(rr, &it);
             P = ksp_pic_row(1, kl_online(), rr, st, it, unbaked[rr]);
