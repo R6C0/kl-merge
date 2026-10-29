@@ -24,6 +24,15 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import atexit
+import shutil
+
+
+def mktmp(prefix):
+    # 10-29: these dirs (212 MB each) were never removed; 214 of them filled C: (40 GB). Removed at exit, pass or fail.
+    d = tempfile.mkdtemp(prefix=prefix)
+    atexit.register(shutil.rmtree, d, True)
+    return d
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -501,7 +510,7 @@ def test_source_guard(stats):
     if not (os.path.isfile(DDSTOCK) and os.path.isfile(whd)):
         stats['source guard'] = 'SKIPPED (stock zip or DM11B .WHD missing)'
         return
-    out = os.path.join(tempfile.mkdtemp(prefix='kl_map_shift_guard_'), 'x.zip')
+    out = os.path.join(mktmp('kl_map_shift_guard_'), 'x.zip')
     try:
         MS.shift(DDSTOCK, out, MS.DEFAULT_T, log=lambda m: None, whd=whd)
         check(False, 'shift() accepted the stock Dog Days F04 zip with the DM11B .WHD')
@@ -537,7 +546,7 @@ def main(argv):
     check(a or RC.audit(src), 'source %s is already in int16 range: DM11S is installed (a bench running?), not the real DM11B' % src)
     rep = MS.shift(src, dst, t, log=lambda m: None, expect_prp_size=MS.DM11B_PRP_SIZE if not a else None,
                    whd=None if a else os.path.join(DD11B, 'F04_Main.WHD'))      # the .before-dm11s name hides the sidecar from check_sound
-    tmp = tempfile.mkdtemp(prefix='kl_map_shift_test_')
+    tmp = mktmp('kl_map_shift_test_')
     back = os.path.join(tmp, 'back.zip')
     MS.shift(dst, back, tuple(-v for v in t), log=lambda m: None, whd=False)
     s = tuple(load(p) for p in (src, dst, back))
@@ -590,7 +599,6 @@ def main(argv):
             try:
                 os.link(src, zsrc)
             except OSError:
-                import shutil
                 shutil.copyfile(src, zsrc)
         rc, last = run_py([os.path.join(HERE, 'kl_sgp_sgd_translate_test.py'), zsrc], 'sgp/sgd on the source')
         if zsrc != src:
