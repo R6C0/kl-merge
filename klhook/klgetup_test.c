@@ -61,6 +61,12 @@ int main(void)
     CHECK(kgu_free(0, 150000, 1) && kgu_free(2, 300000, 1), "busy on: carriers and exit walkers answer (Arcade Rush)");
     CHECK(!kgu_free(3, 300000, 1) && !kgu_free(4, 0, 1), "busy on: aboard / taking a stack never");
 
+    CHECK(kgu_floor(0.5f, 1, 3.0f) == 3.0f && kgu_floor(4.0f, 1, 3.0f) == 4.0f, "flop meter: raised to the floor, never lowered");
+    CHECK(kgu_floor(0.5f, 0, 3.0f) == 0.5f && kgu_floor(0.5f, 1, 0) == 0.5f, "flop meter: no helper / floor off: unchanged");
+    m = (float)sqrt(-1.0); CHECK(kgu_floor(m, 1, 3.0f) != kgu_floor(m, 1, 3.0f), "flop meter: NaN stays NaN");
+
+    CHECK(kgu_at_goal(372, 30, 400) && !kgu_at_goal(372, 101, 400) && !kgu_at_goal(401, 0, 400) && !kgu_at_goal(372, -1, 400), "at its set goal (BP12: 3.7 m from the slid replica)");
+
     /* the helper test: 4 m, same floor (2 m) */
     CHECK(kgu_helper_ok(300, 10, 400, 200) && !kgu_helper_ok(401, 0, 400, 200) && !kgu_helper_ok(100, 250, 400, 200) && !kgu_helper_ok(-1, 0, 400, 200), "helper_ok");
 

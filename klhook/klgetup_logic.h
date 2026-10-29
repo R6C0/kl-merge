@@ -97,4 +97,22 @@ static float kgu_boost(float meter, float dt, float per_s, float cap)
     return n > meter ? n : meter;
 }
 
+/* wk-botpar OnlineGetUpFlopMeter: with Flop on, the whole knock-down is the fall (D state 2), so the MashHold meter above is never fed; the flop's own
+   mash meter (kld_s.meter: speed FlopBase + FlopPerPress x meter) is held at `floor` or more while a helper stands by, as kladren.c does for Arcade ([Adrenaline]
+   Meter 3.0). No helper, floor <= 0 or a NaN meter: unchanged. */
+static float kgu_floor(float meter, int helped, float floor)
+{
+    if (!helped || !(floor > 0) || !(meter == meter)) return meter;
+    return meter < floor ? floor : meter;
+}
+
+/* wk-botpar BP12 (OnlineGetUpDetour): the bot stood on the spot the game set for it (189, 12, 1791) and was re-ordered every 3.5 s as 'stalled at 3.7 m',
+   because the host's replica of the diving body slid ~1.5 m after the order. A bot within KGU_GOAL_CM of its own set goal, and within `nearCm` (OnlineGetUpNear) of
+   the body, has arrived. goalD < 0 = no goal known. */
+#define KGU_GOAL_CM 100.0f
+static int kgu_at_goal(float bodyD, float goalD, float nearCm)
+{
+    return goalD >= 0 && goalD <= KGU_GOAL_CM && bodyD >= 0 && bodyD <= nearCm;
+}
+
 #endif

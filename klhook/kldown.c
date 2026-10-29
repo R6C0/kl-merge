@@ -2776,6 +2776,11 @@ static void kld_tick_main(int game_thread)
     }
     if (btn && !kld_s.btn && (kld_s.up || (KLD_ONE && kld_s.fnow && kld_s.t_land && !kld_s.fdone))) { kld_s.meter += 1.0f; kld_s.presses++; }
     kld_s.btn = btn;
+    if (onl && klbf_gu_flopm > 0 && !kld_s.dead && (kld_s.up || (KLD_ONE && kld_s.fnow && kld_s.t_land && !kld_s.fdone))) {      /* [BotFill] OnlineGetUpFlopMeter: a bot by his body holds the flop's own meter, as kladren.c does in Arcade (klbotfill.c; default off) */
+        static DWORD told_down; float was = kld_s.meter;
+        kld_s.meter = kgu_floor(kld_s.meter, klbf_gu_rate_now(pl, now) > 0, klbf_gu_flopm);
+        if (kld_s.meter > was && told_down != kld_s.t_down) { told_down = kld_s.t_down; klog("down: online: a bot stands by him: the %s mash meter is held at %.1f (OnlineGetUpFlopMeter; was %.2f, %.2f s after he went down)", kld_s.up ? "get-up" : "flop", klbf_gu_flopm, was, (now - kld_s.t_down) / 1000.0f); }
+    }
     if (onl) {                                 /* ONLINE: the hold-mash meter and the mask bit, every pass (it resets and lets go when he is up); a death is seen one pass late here, the dead branch below then stops it */
         float odt = 0; int ook = 1; DWORD ock = klh_rd32((DWORD_PTR)KLH_VA(KLD_CLOCK));
         if (ock) odt = kld_rdf(ock + 0x50, &ook);
