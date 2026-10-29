@@ -347,6 +347,7 @@ static volatile int kspg_swtact;                           /* the shop gate is o
 static BYTE unbaked[KSPG_ROWS];                           /* per row: the name lookup saw the stock text (an unbaked map); cleared when the shop gate closes */
 static int kspg_swtpic;                                    /* [Shop] OnlineSwapPic 0/1 (set in kspg_init) */
 static LONG kspg_pic_swaps, kspg_pic_restores, kspg_pic_fail, kspg_pic_seen;   /* shoppic: counters (reset when the shop gate closes) */
+static LONG kspg_pic_calls, kspg_pic_big, kspg_pic_told;                       /* shoppic: picture updates reached while the gate is open (all / WeaponBig); first 4 logged */
 static LONG kspg_swt_wrapped;                              /* once per shop stay: the first text key that reached the wrapper */
 static char *kspg_text_swt(void *self, const char *key, char *res)
 {
@@ -489,6 +490,11 @@ static void __fastcall kspg_gfx(void *self, void *edx)
 {
     int role = kspg.active ? kspg_role_of(self) : 0, R = -99, swapped = 0; DWORD idx = 0, nidx = 0;
     (void)edx;
+    if (kspg_swtpic && kspg_swtact) {   /* GUN8 (10-29): no shoppic line at all with the gate fixed: prove whether slot 8 (the picture update) is called; log only */
+        int pr0 = kspg_role_of(self); InterlockedIncrement(&kspg_pic_calls); if (pr0 == KR_BIG) InterlockedIncrement(&kspg_pic_big);
+        if (InterlockedIncrement(&kspg_pic_told) <= 4) klog("shoppic: picture update reached: element %08lx role %d, list mode %lu, shown row %lu, shownB %d hire %d ctl %d", (unsigned long)(DWORD_PTR)self, pr0,
+            (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), kspg.shownB, kspg.hire, kspg.ctl);
+    }
     if (kspg.hact && (kspg.hire || kspg.ctl) && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) {
         /* HIRE PAGE: the big gun picture is hidden (PlayerIndex 99 matches no row: no heister portrait exists in this window); the six stars show the heister's
            rank NEED (GUESS: an index below the stock tier is drawn lit, so -1 lights a star when the carrier row has a tier above 0, 99 dims it; the rank itself is
@@ -1372,7 +1378,7 @@ static void kspg_swt_tick(void)
     static DWORD lastGate, lastScan; DWORD now = GetTickCount();
     if (now - lastGate > 250) {
         int g = kspg_gate_x(2); lastGate = now;
-        if (g != 1) { if (kspg_swtact) { if (kspg_swtpic && kspg_pic_seen) klog("shoppic: shop closed: swaps %ld, restores %ld, write failures %ld", (long)kspg_pic_swaps, (long)kspg_pic_restores, (long)kspg_pic_fail); kspg_pic_seen = 0; InterlockedExchange(&kspg_swt_wrapped, 0); memset(unbaked, 0, sizeof unbaked); } kspg_swtact = 0; return; }
+        if (g != 1) { if (kspg_swtact) { if (kspg_swtpic) klog("shoppic: shop closed: picture updates %ld (WeaponBig %ld), decided %ld, swaps %ld, restores %ld, write failures %ld", (long)kspg_pic_calls, (long)kspg_pic_big, (long)kspg_pic_seen, (long)kspg_pic_swaps, (long)kspg_pic_restores, (long)kspg_pic_fail); kspg_pic_seen = 0; kspg_pic_calls = 0; kspg_pic_big = 0; InterlockedExchange(&kspg_swt_wrapped, 0); memset(unbaked, 0, sizeof unbaked); } kspg_swtact = 0; return; }
         kspg_swtact = 1;
     }
     if (kspg_swtact && !kspg.active && !kspg.hact && now - lastScan > 1500) { lastScan = now; kspg_scan(); }   /* the other two ticks scan when they are active */
