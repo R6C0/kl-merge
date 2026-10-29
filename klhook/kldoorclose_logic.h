@@ -54,4 +54,23 @@ static int kldc_remote_slot(int i, int sel0, int sel1, int online, int remote_on
 {
     return remote_on && online && i >= 0 && i < 28 && i != sel0 && i != sel1;
 }
+
+/* Remote hold (DoorCloseRemote=1, 10-29 A1HOLD1: a joiner quit while in the car, his table entry kept its last feet and the host held the doors until
+   the stale give-up). Per table entry: a hold counts only while the entry's feet moved within still_ms AND the continuous time it has been in a car box
+   is under max_ms. A departed peer's feet never change, so his hold ends still_ms later. A live player who stands still in the car for longer
+   than still_ms also stops holding (the doors then close: accepted, he can step out and in). max_ms bounds even a feet-jittering stale entry;
+   it re-arms only after the entry leaves every car box. Local players are not subject to this. */
+struct kldc_r { float f[3]; unsigned long moved, since; };   /* last feet, tick feet last moved, tick this entry's continuous box stay began (0 = not in a box) */
+#define KLDC_MOVE_EPS 0.5f                     /* GUESS: world units; the feet of a standing player are bit-stable, a walking one moves far more per tick */
+static int kldc_rhold(struct kldc_r *r, unsigned long now, const float *feet, int in_box, int still_ms, int max_ms)
+{
+    int k, mv = 0;
+    for (k = 0; k < 3; k++) { float d = feet[k] - r->f[k]; if (d > KLDC_MOVE_EPS || d < -KLDC_MOVE_EPS) mv = 1; }
+    if (!r->moved || mv) { r->moved = now ? now : 1; for (k = 0; k < 3; k++) r->f[k] = feet[k]; }
+    if (!in_box) { r->since = 0; return 0; }
+    if (!r->since) { r->since = now ? now : 1; r->moved = r->since; }       /* first look inside the box: counts as fresh */
+    if (still_ms > 0 && now - r->moved >= (unsigned long)still_ms) return 0;
+    if (max_ms > 0 && now - r->since >= (unsigned long)max_ms) return 0;
+    return 1;
+}
 #endif

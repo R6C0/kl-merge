@@ -76,6 +76,27 @@ int main(void)
               if (f == 1) { t[i].done = 1; closed++; }
           }
       CHECK(closed == 2); }
+    /* remote hold: a departed peer (frozen feet) stops holding after still_ms; a walking one holds; the max cap bounds jitter */
+    { struct kldc_r r; float f[3] = { 100, 200, 0 }; unsigned long now; int held = 0, ok;
+      memset(&r, 0, sizeof r);
+      CHECK(kldc_rhold(&r, 1000, f, 1, 6000, 30000));              /* first look in the box: fresh */
+      CHECK(kldc_rhold(&r, 6999, f, 1, 6000, 30000));              /* 5999 ms still: holds */
+      CHECK(!kldc_rhold(&r, 7000, f, 1, 6000, 30000));             /* 6000 ms still: released (quit peer) */
+      CHECK(!kldc_rhold(&r, 90000, f, 1, 6000, 30000));            /* stays released */
+      f[0] += 40; CHECK(kldc_rhold(&r, 91000, f, 1, 6000, 30000)); /* he moves: holds again */
+      f[0] += 0.2f; CHECK(kldc_rhold(&r, 99000, f, 1, 6000, 30000) == 0);   /* sub-epsilon jitter is not movement */
+      CHECK(!kldc_rhold(&r, 99100, f, 0, 6000, 30000));            /* left the box: no hold, since reset */
+      memset(&r, 0, sizeof r); ok = 1;
+      for (now = 1000; now < 100000; now += 100) { f[1] += 5; held = kldc_rhold(&r, now, f, 1, 6000, 30000); if (now < 31000 && !held) ok = 0; if (now >= 31000 && held) ok = 0; }
+      CHECK(ok);                                                   /* a moving entry holds exactly up to max_ms */
+      f[1] += 5; CHECK(!kldc_rhold(&r, 100000, f, 1, 6000, 30000));
+      CHECK(!kldc_rhold(&r, 100100, f, 0, 6000, 30000));
+      f[1] += 5; CHECK(kldc_rhold(&r, 100200, f, 1, 6000, 30000)); /* re-armed after leaving the box */
+      memset(&r, 0, sizeof r);
+      CHECK(kldc_rhold(&r, 1000, f, 1, 0, 0) && kldc_rhold(&r, 900000, f, 1, 0, 0));   /* 0 = no limit */
+      memset(&r, 0, sizeof r);
+      CHECK(kldc_rhold(&r, 0xfffffff0ul, f, 1, 6000, 30000) && kldc_rhold(&r, 0xfffffff0ul + 5000, f, 1, 6000, 30000));   /* tick wrap */
+    }
     printf("kldoorclose_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

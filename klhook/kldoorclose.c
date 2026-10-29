@@ -35,6 +35,8 @@
 #define KLDC_SCAN_MS   15000
 
 static struct kldc_p kldc_t[KLDC_N];
+static struct kldc_r kldc_r[16]; static int kldc_rgave[16];
+static int kldc_still = 6000, kldc_rmax = 30000;    /* [KLHook] DoorRemoteStillMs / DoorRemoteMaxMs */
 static int kldc_ms, kldc_nscan, kldc_remote;     /* kldc_remote: [KLHook] DoorCloseRemote (default 0) */ static DWORD kldc_find_at, kldc_scan_at;
 #ifdef KLHOOK_TEST
 static void klpr_leaf_start(DWORD me, DWORD at);       /* klprobe.c (DoorLeaves): sample the closing too */
@@ -125,11 +127,17 @@ static int kldc_busy(void)
         if (!sm || !klco_table(sm, &ents, &n)) { if (!toldNone++) klog("doorclose: DoorCloseRemote: the session player table is not readable yet (said once)"); return 0; }
         if (!toldTbl++) klog("doorclose: DoorCloseRemote: the session player table holds %d player(s)", n);
         for (i = 0; i < n && i < 16; i++) {
-            if (!(P = klco_ent(ents, n, i)) || klco_is_master(P) || !klj_feet(P, feet)) continue;
-            for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].on && klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, KLDC_PAD)) {
-                static int told; if (!told++) klog("doorclose: table player %d (not ours) is at car %d: doors held", i, b + 1);
+            int inb = 0;
+            if (!(P = klco_ent(ents, n, i)) || klco_is_master(P) || !klj_feet(P, feet)) { kldc_r[i].since = 0; continue; }
+            for (b = 0; b < KLJ_NBOX; b++) if (klj_box[b].on && klj_box[b].has_car && klj_in_box(feet, klj_box[b].clo, klj_box[b].chi, KLDC_PAD)) { inb = b + 1; break; }
+            /* A1HOLD1: a departed peer's entry keeps its last feet: it holds only while its feet still move (DoorRemoteStillMs) and for at most
+               DoorRemoteMaxMs in one stay (kldc_rhold, kldoorclose_logic.h) */
+            if (kldc_rhold(&kldc_r[i], GetTickCount(), feet, inb != 0, kldc_still, kldc_rmax)) {
+                static int told; if (!told++) klog("doorclose: table player %d (not ours) is at car %d: doors held", i, inb);
                 return 1;
             }
+            if (inb && !kldc_rgave[i]++) klog("doorclose: table player %d at car %d no longer holds the doors (feet still %d ms or held over %d ms): remote hold ignored", i, inb, kldc_still, kldc_rmax);
+            if (!inb) kldc_rgave[i] = 0;
         }
     }
     return 0;
@@ -227,6 +235,12 @@ static void kldc_init(void)
     kldc_ms = GetPrivateProfileIntA("KLHook", "DoorCloseMs", 0, klh_ini);
     if (kldc_ms < 0 || kldc_ms > 120000) kldc_ms = 0;
     kldc_remote = GetPrivateProfileIntA("KLHook", "DoorCloseRemote", 0, klh_ini) != 0;
+    /* GUESS: 6 s of unchanged feet = a departed peer (a live player in a car shifts/walks more often); 30 s cap = a lift ride plus margin. Both 0 = off. */
+    kldc_still = GetPrivateProfileIntA("KLHook", "DoorRemoteStillMs", 6000, klh_ini);   /* (recommended on: 6000) */
+    kldc_rmax = GetPrivateProfileIntA("KLHook", "DoorRemoteMaxMs", 30000, klh_ini);     /* (recommended on: 30000) */
+    if (kldc_still < 0 || kldc_still > 600000) kldc_still = 6000;
+    if (kldc_rmax < 0 || kldc_rmax > 600000) kldc_rmax = 30000;
+    klog("doorclose: [KLHook] DoorRemoteStillMs=%d DoorRemoteMaxMs=%d (a remote hold ends when that player's feet stay still / after that long in one stay; 0 = no limit)", kldc_still, kldc_rmax);
     klog("doorclose: [KLHook] DoorCloseRemote=%d (online: other actors at the car hold the doors)", kldc_remote);
     klog("doorclose: [KLHook] DoorCloseMs=%d (%s)", kldc_ms, kldc_ms ? "doors are closed again that many ms after they opened, never while a player is at the car" : "off");
 }
