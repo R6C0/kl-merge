@@ -1,3 +1,12 @@
+2026-10-29 ~01:20 - [ce] BP12 (DD08 online, out_botpar_k_test, OnlineGetUpBusy=1 host): PASS both seats, 0 faults, restore 9e485dcf/b599def6 ok.
+Bot 0 (free, phase 1) sprinted to the joiner, but (1) the joiner got up alone after 19.05 s, 0 presses: with Flop on the knock-down is all fall (D state 2), so
+kld_o_step returns before the MashHold boost and klbf_gu_rate_now never ran -> fb4bf743f [BotFill] OnlineGetUpFlopMeter (holds kld_s.meter at 3 while a bot
+stands by, as kladren.c), OnlineGetUpAnyHp, a 10 s census of which test turned each actor away; (2) bot 0 stood on the spot the game set (189, 12, 1791) and was
+re-ordered every 3.5 s 'stalled at 3.7 m' (host replica of the diving body slid ~1.5 m) -> 31137198b Detour: within 1 m of the set goal + OnlineGetUpNear = arrived.
+GUN7 (DM07 = F06 page 3 online via OnlineSet=9 rule, out_swappic2_test): PASS, 0 faults; shoptext answered rows 13/16/32/35 (TOQ Model 18 -> HK69, Buqiang
+300BP -> Type 81); no shoppic line at all: gate needed !kspg.active, 1 for the whole shop with [ShopPage] Enable=1 -> wk-swappic 5fc6bae05. Joiner: osw 'STOCK
+gun stays (net sub-object missing)' on all 4 rows. Next: BP13 (FlopMeter=3) and GUN8 (swappic3) in RUN_week_1028.txt.
+
 2026-10-29 ~02:40 - [c9] Q28 batch 2 online (ship1030 TEST twin): DD01 DD02 DD03 DD04 PASS both seats, 0 faults, restore ok; each online LOAD
 picked page 0 + the map's own rule on both seats. 8 of 21 done; 13 left (DD06 DD07, DM01 DM02 DM03 DM06 DM03A, page 3 six).
 
