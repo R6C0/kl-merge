@@ -38,7 +38,7 @@ static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near =
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
 static int klbf_ot_vstate = 1, klbf_ot_late = 75; static DWORD klbf_ot_calledAt;      /* [BotFill] OnlineVanState (BO9: the van node stays at the origin, so "van here" must come from [rules+0x1dc]), OnlineLateExit (s of clock left) */
-static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1;      /* [BotFill] OnlineBoxWalk, OnlineBoard, OnlineBoxProbe (the ZAllyEscapeBox block below) */
+static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1, klbf_ot_scan_always = 0;      /* [BotFill] OnlineBoxWalk, OnlineBoard, OnlineBoxProbe (the ZAllyEscapeBox block below), OnlineScanEveryRound (klbf_ot_kept) */
 static int klbf_gm = 0, klbf_gm_min = 8, klbf_gm_logged = 0; static unsigned int klbf_gm_last = 0, klbf_gm_gap = 15000; static float klbf_gm_floor = 400.0f; static int klbf_gm_tight = 0, klbf_gm_orig = 0;      /* OnlineGuardMode, BypassMin, ... */
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_lk = 0; static DWORD klbf_lk_sm, klbf_lk_sig;      /* [BotFill] OnlineLooks (re/crew_online_1028.md): 2 = LOG ONLY probe, one line per Ally bot per round and whenever the census changes; no game-state write. 1 = klcrewlook.c: the host sends each bot's Arcade look, every seat applies it (klcl_on). Any other value = off */
@@ -167,6 +167,7 @@ static void klbf_init(void)
     klbf_ot_bwalk = GetPrivateProfileIntA("BotFill", "OnlineBoxWalk", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_board = GetPrivateProfileIntA("BotFill", "OnlineBoard", 0, klh_ini) != 0;      /* (recommended off until a live run shows the bot vanishes on every screen) */
     klbf_ot_bprobe = GetPrivateProfileIntA("BotFill", "OnlineBoxProbe", 1, klh_ini) != 0;      /* (recommended on: log only) */
+    klbf_ot_scan_always = GetPrivateProfileIntA("BotFill", "OnlineScanEveryRound", 0, klh_ini) != 0;      /* (recommended off) 1 = the exit-trigger and box scans run at every round (the 10-27 behaviour: a 220 - 280 ms hitch each round); 0 = kept across the rounds of one level load (klbf_ot_kept) */
     klbf_ot_vgather = GetPrivateProfileIntA("BotFill", "OnlineVanGather", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_gm = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineGatherM", 12, klh_ini); if (klbf_ot_gm < 200.0f) klbf_ot_gm = 200.0f;      /* GUESS 12 m */
     klbf_ot_gmax = (int)GetPrivateProfileIntA("BotFill", "OnlineGatherMaxS", 25, klh_ini); if (klbf_ot_gmax < 1) klbf_ot_gmax = 1; if (klbf_ot_gmax > 120) klbf_ot_gmax = 120;      /* GUESS 25 s */
@@ -276,7 +277,7 @@ static void klbf_init(void)
     if (klbf_ot) klog("botfill: OnlineTactics BOS1: OnlineSkipDoorStacks=%d (recommended on)", klbf_ot_door);
     if (klbf_ot) klog("botfill: OnlineTactics BO12 fixes: OnlineGiveUpRetry=%d (recommended on, %d s), OnlineIdleVan=%d (recommended on, %d s), OnlineFireStall=%d (recommended on)", klbf_ot_retry, klbf_ot_retryS, klbf_ot_idlevan, klbf_ot_idleS, klbf_ot_firestall);
     if (klbf_ot) klog("botfill: OnlineTactics van gather/hold: OnlineVanGather=%d (recommended on; GatherM %.0f m, GatherMaxS %d s), OnlineVanHold=%d (recommended on; HoldM %.0f m shield, HoldNearM %.0f m timer, HoldMaxS %d s)", klbf_ot_vgather, klbf_ot_gm / 100, klbf_ot_gmax, klbf_ot_vhold, klbf_ot_hm / 100, klbf_ot_hnear / 100, klbf_ot_hmax);
-    if (klbf_ot) klog("botfill: OnlineTactics box: OnlineBoxWalk=%d (recommended on), OnlineBoard=%d (recommended off until tested), OnlineBoxProbe=%d (log only)", klbf_ot_bwalk, klbf_ot_board, klbf_ot_bprobe);
+    if (klbf_ot) klog("botfill: OnlineTactics box: OnlineBoxWalk=%d (recommended on), OnlineBoard=%d (recommended off until tested), OnlineBoxProbe=%d (log only), OnlineScanEveryRound=%d (recommended off: the exit trigger and the boxes found by the first round's scans are kept for the level load's later rounds)", klbf_ot_bwalk, klbf_ot_board, klbf_ot_bprobe, klbf_ot_scan_always);
     if (klbf_ot) klog("botfill: OnlineTactics van/late: OnlineVanState=%d (recommended on), OnlineLateExit=%d s (recommended 75; 0 = off)", klbf_ot_vstate, klbf_ot_late);
     if (klbf_ot) klog("botfill: OnlineTactics extras: OnlineHealthMul=%d (recommended 5 with OnlineCopToBot 5 = stock Arcade level 1 survival; 1 = off), OnlineTacticsGuard=%.0f m (recommended 25; 0 = off), OnlineTacticsVan=%d (recommended on)",
                       klbf_ot_hmul, klbf_ot_guard / 100, klbf_ot_van);
@@ -676,6 +677,7 @@ static void klbf_ot_health(DWORD a, DWORD h, const float hv[2])
 #define KLBF_SV_VT     0x00bd2eb4
 #define KLBF_SV_CALLVEH 0x0071e180
 static DWORD klbf_ot_trig, klbf_ot_tvt, klbf_ot_vh, klbf_ot_lookAt; static int klbf_ot_trig_looked, klbf_ot_called, klbf_ot_looks; static float klbf_ot_tpos[3];
+static LONG klbf_ot_keep_gen = -1;      /* klmv_level_gen + klmv_scene_gen the kept exit trigger was found under; -1 = nothing kept, the round start scans (klbf_ot_kept, 2026-10-30) */
 static int klbf_ot_call_van(DWORD rules, int who)
 {
     static const BYTE head[16] = { 0x56, 0x8b, 0xf1, 0x80, 0xbe, 0xdc, 0x01, 0x00, 0x00, 0x00, 0x0f, 0x85, 0xb7, 0x00, 0x00, 0x00 };      /* 0x71e180 */
@@ -690,7 +692,7 @@ static int klbf_ot_call_van(DWORD rules, int who)
     /* the trigger is a private-memory scan hit: it must still be the same trigger, with its entity and node, right before its handle is used */
     if (klh_rd32(klbf_ot_trig) != klbf_ot_tvt || !(ent = klh_rd32(klbf_ot_trig + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, tp, 0) || !klbf_ot_vh) {
         klog("botfill: tactics: van: exit trigger %08lx is no longer valid (vtable %08lx, handle %08lx): looked up again", klbf_ot_trig, klh_rd32(klbf_ot_trig), klbf_ot_vh);
-        klbf_ot_vh = 0; klbf_ot_trig_looked = 0; return 0;
+        klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_keep_gen = -1; return 0;      /* nothing kept for the next round either */
     }
     if (!klh_rd(rules + 0x1dc, &veh, 1) || !klh_rd(rules + 0x372, &last, 1) || !klh_rd(rules + 0x1ee, &hold, 1) || !klh_rd32(rules + 0x2c)) return 0;
     /* review wp16tqkg2: 0x71e180 with flag 0 flags the vehicle LAST when the clock [rules+0x4c] is near its end (0x71e1d0..213), which ends the round for humans not aboard: same 20 s gate as klmv_bot_van */
@@ -751,6 +753,40 @@ static void klbf_ot_boxscan(DWORD now)
         if (d < bd) { bd = d; klbf_ot_bxbest = i; }
     }
     klog("botfill: tactics: box scan: %d ZAllyEscapeBox object(s) in %lu ms, bots will walk to box %d%s", klbf_ot_nbx, GetTickCount() - t0, klbf_ot_bxbest, klbf_ot_nbx ? "" : " (none: the bots stay at the exit trigger as before; retried 3 more times)");
+}
+/* 2026-10-30 (scheduled check-in, from the owner's 10-27 20:27 - 20:41 online rounds, F06 host, SHIP 1027): the moment the first bot carried money the game
+   stood still 220 - 280 ms, EVERY round (KLHook.log 20:30:07, 20:34:05, 20:38:37; the hitch probe had the main thread in ntdll under KERNEL32+0x22640 <- this dll,
+   and 'the hook's tick ... slowest 211 / 223 / 283 ms' in the same 10 s windows): klmv_exit_vehicle2 (110 - 156 ms) and klbf_ot_boxscan (93 - 109 ms) are two walks
+   of ALL committed private memory, back to back, on the game thread. The Arcade side got the same cure on 10-23 (klmove.c klmv_scan_kept): what a round's scans
+   found is KEPT for the later rounds of the same level load while (a) the scene name has not changed and (b) no level archive has been opened since (klmove.c's
+   klmv_level_gen + klmv_scene_gen; a freed block keeps its bytes, so (c) alone would not catch a reload of the same map), and (c) every kept object still reads as
+   it was found: the trigger wears the vtable it had, its +0x24 entity's vtable is in the image, its node stands where it stood (1 unit), its vehicle field
+   (the first non-zero of +0x48..+0x54, klmv_exit_vehicle2's) is the same; every kept box passes klbf_ot_box_frame (vtable + entity) and reads a frame. The trigger
+   failing any test = both scans as before; a box failing = the box scan alone (the trigger stays). The round's own books (looks, calls, gather) are reset as before.
+   [BotFill] OnlineScanEveryRound=1 = the old behaviour. NOT RUN IN THE GAME: the proof is 'kept from the last round's scans' from round 2 on and no 'found in' line
+   until the next level load, with the bots still walking to the box. */
+static int klbf_ot_kept(void)
+{
+    DWORD t0 = GetTickCount(), ent, evt, node, v[4]; float p[3], bd = 1e30f; int k, i, bxbest = -1, boxes_ok = 1;
+    LONG gen = klmv_level_gen + klmv_scene_gen;
+    if (klbf_ot_scan_always || klbf_ot_keep_gen < 0 || klbf_ot_keep_gen != gen || !klbf_ot_trig || !klbf_ot_vh) return 0;
+    if (klh_rd32(klbf_ot_trig) != klbf_ot_tvt || !(ent = klh_rd32(klbf_ot_trig + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi
+        || !(node = klh_rd32(ent + 4)) || !kle_node(node, p, 0) || !kle_ok3(p)
+        || fabsf(p[0] - klbf_ot_tpos[0]) > 1.0f || fabsf(p[1] - klbf_ot_tpos[1]) > 1.0f || fabsf(p[2] - klbf_ot_tpos[2]) > 1.0f
+        || !klh_rd(klbf_ot_trig + 0x48, v, sizeof v)) return 0;
+    for (k = 0; k < 4 && !v[k]; k++) ;
+    if (k == 4 || v[k] != klbf_ot_vh) return 0;
+    for (i = 0; i < klbf_ot_nbx; i++) {      /* the boxes: all or none; the best is re-picked as the scan picks it (nearest the exit trigger) */
+        struct klmv_fr f; float d;
+        if (!klbf_ot_box_frame(i, &f)) { boxes_ok = 0; break; }
+        d = kle_dist(f.T, klbf_ot_tpos);
+        if (d < bd) { bd = d; bxbest = i; }
+    }
+    if (!boxes_ok || !klbf_ot_nbx) { klbf_ot_nbx = 0; bxbest = -1; }      /* the box scan runs again (klbf_ot_vh is known, klbf_ot_bxlooks was reset) */
+    klbf_ot_bxbest = bxbest;
+    klog("botfill: tactics: van: exit trigger %08lx (vehicle field %08lx, place (%.0f, %.0f, %.0f)) and %d box(es)%s kept from the last round's scans, checked in %lu ms (the same scene, no level archive opened since, every object still reads as found; a scene change or a level load scans anew; [BotFill] OnlineScanEveryRound=1 = the scans at every round)",
+         klbf_ot_trig, klbf_ot_vh, klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], klbf_ot_nbx, boxes_ok ? "" : " (a kept box no longer reads: the box scan runs again)", GetTickCount() - t0);
+    return 1;
 }
 /* is the bot inside the box: the game's own test 0x758cb0 when its head is the one read, else the frame's distance */
 static int klbf_ot_inside(int bi, const struct klmv_fr *f, DWORD actor, const float pos[3], int *byGame)
@@ -1305,7 +1341,9 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klbf_ot_in) klbf_ot_summary();
         if (klbf_lp && klbf_lp_nok + klbf_lp_nbad) klog("botfill: lootparts: last round: %d stack reads plausible, %d implausible (lump fallback)", klbf_lp_nok, klbf_lp_nbad); klbf_lp_nok = klbf_lp_nbad = klbf_lp_nw = 0; memset(klbf_lp_warned, 0, sizeof klbf_lp_warned);
         memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
-        klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = klbf_ot_lookAt = 0; klbf_ot_trig_looked = klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_ot_nbx = klbf_ot_bxlooks = 0; klbf_ot_bxbest = -1; klbf_ot_bxAt = 0;
+        klbf_ot_lookAt = 0; klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_ot_bxlooks = 0; klbf_ot_bxAt = 0;
+        if (klbf_ot_kept()) klbf_ot_trig_looked = 1;      /* the last round's exit trigger and boxes still stand (same level load): no scan this round */
+        else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; }
         klbf_gm_logged = 0; klbf_gm_last = 0; klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
         klbf_way_load(); klbf_ramp_load(); klbf_trig_load();
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
@@ -1407,7 +1445,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 || (fabsf(klbf_ot_tpos[0]) <= 1 && fabsf(klbf_ot_tpos[1]) <= 1 && fabsf(klbf_ot_tpos[2]) <= 1))) klbf_ot_vh = 0;      /* review wf_1d705c3d: klmv_exit_vehicle2's fallback may still be a husk at (0, 0, 0): not found, retried in 20 s */
             klog("botfill: tactics: van: exit trigger %08lx, vehicle field %08lx (kind %u), its place (%.0f, %.0f, %.0f) - found in %lu ms%s", klbf_ot_trig, klbf_ot_vh, klh_rd32(rules + 0x1ec) & 0xff,
                  klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], GetTickCount() - t0, klbf_ot_vh ? "" : ": none usable yet, looked again in 20 s");
-            if (klbf_ot_vh) klbf_ot_trig_looked = 1;
+            if (klbf_ot_vh) { klbf_ot_trig_looked = 1; klbf_ot_keep_gen = klmv_level_gen + klmv_scene_gen; }      /* kept for this level load's later rounds (klbf_ot_kept) */
         }
     }
     if (klbf_ot_bwalk && klbf_ot_vh && !klbf_ot_nbx && klbf_ot_bxlooks < 4 && (!klbf_ot_bxAt || now - klbf_ot_bxAt >= 20000)) klbf_ot_boxscan(now);      /* once the trigger is known (a bot carries money), the boxes; a miss is retried every 20 s, 4 looks a round */
