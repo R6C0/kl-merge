@@ -34,6 +34,7 @@ Owner: ce.
 - 10-28 20:25 c9: bench screenshots fixed (--d3shots, in-game back buffer, JPG). A1LIFT3e PASS: the player's own two lift crossings fire the doors 29 s apart. Door-open picture still inconclusive.
 - 10-28 20:50 c9: A1LIFT3f PASS: the player walks through the re-fired lift doors into join box 9 and (3d) rides up to z 879. Retomoto lift T2 item done; open: player downed at 40 % health in the lift.
 - 10-28 21:05 c9: lift downs explained: Ramp=1 kept CopToYou/CrewToYou at stock, the game's own 40 % down did the rest (not a bug in the map or hook). Ramp now logs it (403967a5a).
+- 10-30 12:50 c9: A1HOLD2 PASS (a quit joiner no longer holds the lift doors open); fix merged, not shipped. Spend limit hit: work paused to a minimum.
 - 10-29 06:00 c9: disk-full fixed (kl_map_shift_test leaked 40 GB of temp dirs; e0c73451b). Door-hold ghost fix built (c9-doorhold-1029 b743640eb), bench A1HOLD2 next.
 - 10-29 05:55 c9: A1HOLD1 PASS: the online lift-door hold works (host held the doors while the joiner stood in the car), 0 faults. Minor: a peer who quits in the car can leave the host's doors open.
 - 10-29 05:25 c9: Q28 COMPLETE: all 21 maps PASS online both seats, 0 faults, with the installed build (ship1030). T2 'maps work on both sides' done for the current build.

@@ -1,3 +1,9 @@
+2026-10-30 ~12:50 - [c9] A1HOLD2 (10-29 06:13, TEST 807e4498, Retomoto lift online) PASS 0 faults both seats, restore 9e485dcf/b599def6 ok. Host:
+'table player 1 (not ours) is at car 9: doors held' 04:17:10, released 7 s later ('remote hold ignored', feet still 6000 ms), doors closed at once.
+Note: the joiner was still standing in the car (it quit 55 s later), so a live rider who stands still 6 s gets the doors closed on the host's
+screen (cosmetic, his own ride is local). Merged c9-doorhold-1029 (keys DoorRemoteStillMs=6000 / DoorRemoteMaxMs=30000, only with DoorCloseRemote=1).
+NOT shipped: installed is still ship1030. ce stopped on the account's monthly spend limit; c9 keeps work minimal too.
+
 2026-10-29 ~07:20 - [ce] BP16b stall diagnosis (workflow wf_85e985e4-ba1; implement + review agents FAILED on the monthly spend limit, nothing built):
 - Not combat (bot 4 health 1400 throughout, only getup lines in the window), not a fighting pass (escort/stack/guard honour guHum), not the re-order alone (most moves
   happen under KEEP goal). Likely UNREACHABLE place: the order is the joiner's beacon spot, the host's planner dithers 8-14 m short (BP13 14.4, BP14 ~14, BP15 8-9, BP16b 9-11 m).
