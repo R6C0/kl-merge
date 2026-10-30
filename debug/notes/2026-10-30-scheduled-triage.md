@@ -70,3 +70,45 @@ in play.
 - The two 1 s hitches per online session are the Steam lobby leave (tier0/steamclient on the game thread), not the mod.
 - The session's 2-5 small hitches a minute in play match the earlier Medal-loaded sessions; a round with Medal quit is still
   the open comparison (open_work_log 10-25 ~17:58).
+
+---
+
+# Second check-in, 14:47-15:10 UTC: PC still idle, nothing to triage; ce's BP16b "next" list implemented as [BotFill] OnlineGetUpPlateau (default off, NOT built, NOT run)
+
+Read-only on the PC (DD + DM attached by one access request). Game folder unchanged since the morning run: `dinput8.dll` 9e485dcf (10-29 04:21 UTC),
+`KLHook.ini` b599def6, `KLHook.log` ends 10-27 20:50, `KLHook.result` PASS F04 0/0, newest dump `KLHook_1.dmp` 10-26 08:11, newest
+`kl2_490_crash_*.mdmp` 10-25 19:18 (both triaged before), `KL_PortTools\build` newest 10-27 00:50. Last push to origin 11:05 UTC (the morning
+check-in's aeaae90); no local commit since c9's 12:50 note. Nothing launched, installed or touched on screen.
+
+## Offline piece: the four "Next (wk-botpar)" items of ce's 10-29 ~07:20 BP16b diagnosis, behind ONE new key
+
+ce's build + review agents stopped on the spend limit with nothing built, so the list was taken as written (open_work_log 10-29 ~07:20):
+
+1. **Bot x,y,z + goal state on the `closing` line** (klbotfill.c, the 2 s speed window): now `... at (x, y, z), goal set (gx, gy, gz) D m off,
+   place (px, py, pz), best B m T s ago, order A s old`. Logged in every mode as before (first 40 a rush).
+2. **Plateau rule** `kgu_best` / `kgu_plateau` / `kgu_plateau_out` (klgetup_logic.h): best distance since the rush began, stamped when it improves
+   by >= 1 m (smaller gains add up); still > stop + 5 m and no metre in 5 s = `bot N GIVEN UP on seat S ...`, the bot is released (as the release
+   line) and `kgu_plateau_out` keeps it out of the pick 10 s (`guPlat`). Figures = ce's, marked GUESS.
+3. **No Recede while routing** `kgu_recede_w`: with Detour's walked distance >= 3 m and the bot <= 8 m beyond its order distance there is no
+   'receding' verdict (BP16b's 9 -> 14.7 m dither); BP14's 14.7 -> 34 m runaway is still caught once > 8 m beyond. 8 m is a GUESS. Without Detour
+   (walked = 0) it is kgu_recede unchanged.
+4. **Fallback place = the host's replica feet**: after a plateau on a seat (`seatPlat[i]`, reset on each fresh down and each round) the Hold
+   rule's beacon place is skipped when the replica is readable (klbf_feet / +0x460), so the next bot is ordered to where the host's planner can
+   reach. With no readable replica the place stays (the log says so).
+5. **`getup: diag` hp**: `[[P+0x5fc]+4]` printed as `hp32 %08lx` (raw dword), no longer as a float (-2.6e38 was a shared non-health object).
+
+All of 2-4 run only with `[BotFill] OnlineGetUpPlateau=1` (needs OnlineGetUp 1); default 0 = the 10-29 behaviour byte for byte in decisions.
+Key documented in klhook/KLHook.ini after OnlineGetUpHold. Checks: `klgetup_test.c` +17 checks (ALL PASS, gcc -m32), `tools/kl_tests.py`
+30 pass / 0 fail / 15 skip, `kl_mod_options_test` 46/46, `run_harness_linux.sh --check-hook` SHIP + TEST: 15 warnings = the baseline's 15,
+none in klbotfill.c / klgetup_logic.h. NOT built as a DLL, NOT run in the game.
+
+Proof for a local session (BP17, DD08 online, joiner goes down at BP16b's spot, host ini + `OnlineGetUpPlateau=1 OnlineGetUpDetour=1`):
+one `GIVEN UP on seat` line within ~6 s of the dither starting, no `RE-ORDER ... receding` while the `closing` line shows the bot moving
+(walked >= 3 m) within 8 m of its order distance, the next `sent to seat` line's place = the replica feet (differs from the beacon place by
+the 1.6 - 1.9 m of BP15), and the seat up with a bot `HOLD` by it or `is by seat`; a failure mode to watch: every bot given up in turn at the
+same place (the log's "same place (no replica readable)").
+
+## Owner
+
+- Nothing to install; the key ships with the next hook build (ce/c9) and stays off until a bench says otherwise.
+- Still open from the morning: a round with Medal quit for the stutter comparison.

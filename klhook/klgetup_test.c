@@ -112,6 +112,29 @@ int main(void)
     CHECK(kgu_hold_near(360) && kgu_hold_near(400) && !kgu_hold_near(401) && !kgu_hold_near(-1), "hold: within 4 m (BP15 3.6 m)");
     CHECK(kgu_hold_due(5000, 0) && !kgu_hold_due(5899, 5000) && kgu_hold_due(5900, 5000) && kgu_hold_due(100, 4294967000UL) == 0, "hold: due at once, then every 900 ms");
     { float b2[3] = { 1000, 50, 2800 }; kgu_place(b2, hum, KGU_HOLD_STOP_CM, out); CHECK(fabs(out[2] - 2100) < 0.01, "hold place 1 m from him"); }
+
+    /* OnlineGetUpPlateau (BP16b): the best-distance clock and the give-up verdict */
+    { float best = -1; DWORD at = 0, t = 100000;
+      CHECK(kgu_best(&best, 1470) == 1 && best == 1470, "best: the first reading stamps");
+      at = t;
+      CHECK(kgu_best(&best, 1400) == 0 && best == 1470, "best: 0.7 m is not a metre yet (best kept)");
+      CHECK(kgu_best(&best, 1369) == 1 && best == 1369, "best: 1.01 m since the stamp, added up over two checks");
+      CHECK(kgu_best(&best, 1500) == 0 && best == 1369, "best: farther out does not move it");
+      CHECK(kgu_best(&best, -1) == 0 && kgu_best(&best, (float)sqrt(-1.0)) == 0 && best == 1369, "best: bad / NaN input ignored");
+      CHECK(!kgu_plateau(1369, 4999, KGU_HOLD_STOP_CM) && kgu_plateau(1369, 5000, KGU_HOLD_STOP_CM), "plateau: 13.7 m out, no metre gained for 5 s (BP16b 9 - 14.7 m for 18 s)");
+      CHECK(!kgu_plateau(600, 9000, KGU_HOLD_STOP_CM) && kgu_plateau(601, 9000, KGU_HOLD_STOP_CM), "plateau: only beyond stop + 5 m (1 m stop: 6 m)");
+      CHECK(!kgu_plateau(700, 9000, KGU_STOP_CM) && kgu_plateau(701, 9000, KGU_STOP_CM), "plateau: 2 m stop: 7 m");
+      CHECK(!kgu_plateau(-1, 9000, KGU_STOP_CM) && !kgu_plateau((float)sqrt(-1.0), 9000, KGU_STOP_CM), "plateau: no best yet / NaN: no verdict");
+      CHECK(!kgu_plateau_out(5000, 0) && kgu_plateau_out(14999, 5000) && !kgu_plateau_out(15000, 5000), "plateau: out of the pick for 10 s, 0 = never plateaued");
+      CHECK(kgu_plateau_out(100, 4294967000UL), "plateau: out survives the tick wrap");
+      (void)at; }
+
+    /* Recede with the walk excuse (BP16b): a moving bot a few metres beyond its order distance is routing; BP14's runaway is still caught */
+    CHECK(kgu_recede(900, 1470, 900, 5000) == 1 && kgu_recede_w(900, 1470, 900, 5000, 350) == 0, "recede_w: 9 -> 14.7 m while moving 3.5 m = a route, not a retreat");
+    CHECK(kgu_recede_w(900, 1470, 900, 5000, 299) == 1 && kgu_recede_w(900, 1470, 900, 5000, 0) == 1, "recede_w: standing still (walked < 3 m) = kgu_recede");
+    CHECK(kgu_recede_w(1470, 2270, 1470, 5000, 900) == 0 && kgu_recede_w(2270, 2271, 1470, 5000, 900) == 1, "recede_w: the excuse ends 8 m beyond the order distance (BP14 14.7 -> 34 m is caught at 22.7)");
+    CHECK(kgu_recede_w(-1, 3410, 0, 5000, 900) == 0 && kgu_recede_w(800, 3410, 1467, 5000, 900) == 1, "recede_w: no order distance = no excuse, and no verdict without an earlier check (as kgu_recede); 34 m is caught");
+    CHECK(kgu_recede_w(800, 1100, 900, 2999, 0) == 0, "recede_w: the 3 s rate limit stands");
     printf("klgetup_test: %d check(s), %d failure(s)\n", checks, fails);
     printf(fails ? "FAIL\n" : "ALL PASS\n");
     return fails ? 1 : 0;

@@ -152,4 +152,41 @@ static int kgu_at_goal(float bodyD, float goalD, float nearCm)
 static int kgu_hold_near(float bdst) { return bdst >= 0 && bdst <= KGU_HOLD_NEAR_CM; }
 static int kgu_hold_due(DWORD now, DWORD last) { return !last || now - last >= KGU_HOLD_GAP_MS; }
 
+/* wk-botpar BP16b (OnlineGetUpPlateau; ce's 10-29 diagnosis, open_work_log 10-29 ~07:20): bot 4 dithered 9 - 14.7 m from the seat for 18 s, re-ordered every ~3 s (KeepGoal stalled /
+   Recede) and never came nearer; BP13 14.4, BP14 ~14, BP15 8 - 9 m the same. Not combat, not a fighting pass: the order place (the joiner's beacon spot) is most likely UNREACHABLE for
+   the host's planner, which stops short. So the rush is given up, not repeated:
+     kgu_best    : *bestD = the nearest the bot has stood to him since this rush began (< 0 = none yet); returns 1 when curD improves it by KGU_PLATEAU_GAIN_CM or more (the caller stamps
+                   the tick), else leaves it - smaller gains add up until they make the metre, so a slow but real approach still counts.
+     kgu_plateau : 1 = the bot is still more than stopCm + KGU_PLATEAU_FAR_CM out and has not gained a metre in KGU_PLATEAU_MS: stop re-ordering it, release it, keep it out of the
+                   pick (kgu_plateau_out) for KGU_PLATEAU_OUT_MS, and send the seat's next bot to the host's replica feet instead of the beacon place (the fallback place).
+     kgu_plateau_out: is the bot still excluded? platAt = tick of its plateau (0 = none).
+   GUESS: 5 m / 1 m / 5 s / 10 s are the figures of the 10-29 note, not measured. A bot that merely waits 5 s for its order to take effect at > stop + 5 m is given up too (then re-picked 10 s later). */
+#define KGU_PLATEAU_FAR_CM  500.0f
+#define KGU_PLATEAU_GAIN_CM 100.0f
+#define KGU_PLATEAU_MS      5000u
+#define KGU_PLATEAU_OUT_MS  10000u
+static int kgu_best(float *bestD, float curD)
+{
+    if (!(curD >= 0)) return 0;
+    if (!(*bestD >= 0) || *bestD - curD >= KGU_PLATEAU_GAIN_CM) { *bestD = curD; return 1; }
+    return 0;
+}
+static int kgu_plateau(float bestD, DWORD bestAgeMs, float stopCm)
+{
+    if (!(bestD >= 0)) return 0;
+    return bestD > stopCm + KGU_PLATEAU_FAR_CM && bestAgeMs >= KGU_PLATEAU_MS;
+}
+static int kgu_plateau_out(DWORD now, DWORD platAt) { return platAt != 0 && now - platAt < KGU_PLATEAU_OUT_MS; }
+
+/* wk-botpar BP16b, the Recede side: BP16b's re-orders every ~3 s were half 'receding' verdicts on a bot that was MOVING - trying routes round the obstacle (9 -> 14.7 -> 9 m), a detour, not a
+   retreat. A bot that moved >= KGU_WALK_CM itself since its last progress point (walkedCm, the Detour measure) and stands no more than KGU_RECEDE_WALK_CM beyond the distance it was ordered
+   from is on a route: no receding verdict. BP14's runaway (ordered at 14.7 m, 34 m later; the game resumed its stack walk) is still caught once it is > 8 m beyond the order distance.
+   walkedCm 0 (OnlineGetUpDetour off, or the bot stood still) = kgu_recede unchanged. GUESS: 8 m - a route round a wall or railing takes a bot a few metres out, a resumed stack walk takes it tens. */
+#define KGU_RECEDE_WALK_CM 800.0f
+static int kgu_recede_w(float prevD, float curD, float ordD, DWORD ordAgeMs, float walkedCm)
+{
+    if (walkedCm >= KGU_WALK_CM && ordD > 0 && curD >= 0 && curD - ordD <= KGU_RECEDE_WALK_CM) return 0;
+    return kgu_recede(prevD, curD, ordD, ordAgeMs);
+}
+
 #endif
