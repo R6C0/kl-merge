@@ -121,6 +121,8 @@ int main(void)
       CHECK(kgu_best(&best, 1369) == 1 && best == 1369, "best: 1.01 m since the stamp, added up over two checks");
       CHECK(kgu_best(&best, 1500) == 0 && best == 1369, "best: farther out does not move it");
       CHECK(kgu_best(&best, -1) == 0 && kgu_best(&best, (float)sqrt(-1.0)) == 0 && best == 1369, "best: bad / NaN input ignored");
+      CHECK(kgu_best(&best, 1868) == 0 && best == 1369 && kgu_best(&best, 1869) == 1 && best == 1869, "best: 5 m or more beyond the best re-stamps it at the far place (a bot carried back out starts a new plateau clock)");
+      CHECK(kgu_best(&best, 1800) == 0 && best == 1869 && kgu_best(&best, 1769) == 1 && best == 1769, "best: after the re-stamp a metre nearer counts again");
       CHECK(!kgu_plateau(1369, 4999, KGU_HOLD_STOP_CM) && kgu_plateau(1369, 5000, KGU_HOLD_STOP_CM), "plateau: 13.7 m out, no metre gained for 5 s (BP16b 9 - 14.7 m for 18 s)");
       CHECK(!kgu_plateau(600, 9000, KGU_HOLD_STOP_CM) && kgu_plateau(601, 9000, KGU_HOLD_STOP_CM), "plateau: only beyond stop + 5 m (1 m stop: 6 m)");
       CHECK(!kgu_plateau(700, 9000, KGU_STOP_CM) && kgu_plateau(701, 9000, KGU_STOP_CM), "plateau: 2 m stop: 7 m");

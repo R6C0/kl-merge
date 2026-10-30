@@ -72,7 +72,9 @@ Full dated log: `re/open_work_log.md` (newest first).
 klbotfill.c's exit-trigger scan (110-156 ms) + box scan (93-109 ms) back to back when the first bot carries money. Fixed as klmove.c was on 10-23:
 klbf_ot_kept keeps both across the rounds of one level load (level/scene generation + object re-reads); [BotFill] OnlineScanEveryRound=1 = old. --check-hook
 clean, NOT built, NOT run (proof: 'kept from the last round's scans' in rounds 2+). The 2 x 1 s hitches per online session are the Steam lobby leave, not ours.
-Numbers + probe sites: debug/notes/2026-10-30-scheduled-triage.md. PC idle since 10-29 04:21 UTC, no new dump, kl_tests 30/0/15.
+Numbers + probe sites: debug/notes/2026-10-30-scheduled-triage.md. PC idle since 10-29 04:21 UTC, no new dump, kl_tests 30/0/15. 15:10: ce's BP16b next list = [BotFill] OnlineGetUpPlateau
+(default off; give-up after 5 s without a metre, no Recede while routing, fallback place = replica feet). 19:20: both reviewed by a fresh agent, 5 fixes (gen before the walk, box-less level,
+kgu_best re-stamp, seatPlat flicker, log); NOT built, NOT run (proofs in the notes). Owner: nothing to install.
 
 2026-10-29 ~06:50 - [ce] Merged 9a2a1a304: SHOP PICTURE ONLINE WORKS: the role table capped at 192, so the weapon list's WeaponBig had no role
 (GUN11: 0 mode-2 updates); now a 2048 hash, GUN12b DM07 online: 190692 mode-2 updates, 7494 swaps = restores, 0 faults. Getup: Recede/Hold/FreeFirst/BusyRange

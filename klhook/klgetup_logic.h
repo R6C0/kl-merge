@@ -165,10 +165,11 @@ static int kgu_hold_due(DWORD now, DWORD last) { return !last || now - last >= K
 #define KGU_PLATEAU_GAIN_CM 100.0f
 #define KGU_PLATEAU_MS      5000u
 #define KGU_PLATEAU_OUT_MS  10000u
+#define KGU_PLATEAU_BACK_CM 500.0f      /* review 10-30: a bot that once stood near (best 3 m) and was then carried back out (BP15's 3.6 <-> 9 m, a resumed stack walk) would never plateau, its best being inside stop + 5 m for good: standing KGU_PLATEAU_BACK_CM or more BEYOND its best re-stamps the best at the far place and its clock starts anew. GUESS 5 m. */
 static int kgu_best(float *bestD, float curD)
 {
     if (!(curD >= 0)) return 0;
-    if (!(*bestD >= 0) || *bestD - curD >= KGU_PLATEAU_GAIN_CM) { *bestD = curD; return 1; }
+    if (!(*bestD >= 0) || *bestD - curD >= KGU_PLATEAU_GAIN_CM || curD - *bestD >= KGU_PLATEAU_BACK_CM) { *bestD = curD; return 1; }
     return 0;
 }
 static int kgu_plateau(float bestD, DWORD bestAgeMs, float stopCm)

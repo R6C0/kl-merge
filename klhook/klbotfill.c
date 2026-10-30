@@ -680,6 +680,7 @@ static void klbf_ot_health(DWORD a, DWORD h, const float hv[2])
 #define KLBF_SV_CALLVEH 0x0071e180
 static DWORD klbf_ot_trig, klbf_ot_tvt, klbf_ot_vh, klbf_ot_lookAt; static int klbf_ot_trig_looked, klbf_ot_called, klbf_ot_looks; static float klbf_ot_tpos[3];
 static LONG klbf_ot_keep_gen = -1;      /* klmv_level_gen + klmv_scene_gen the kept exit trigger was found under; -1 = nothing kept, the round start scans (klbf_ot_kept, 2026-10-30) */
+static LONG klbf_ot_nobox_gen = -1;     /* the gen under which a round's 4 box looks all found NO ZAllyEscapeBox: the later rounds of that level load skip the box scan too (review 10-30: without this a box-less level kept only the trigger half of the cure) */
 static int klbf_ot_call_van(DWORD rules, int who)
 {
     static const BYTE head[16] = { 0x56, 0x8b, 0xf1, 0x80, 0xbe, 0xdc, 0x01, 0x00, 0x00, 0x00, 0x0f, 0x85, 0xb7, 0x00, 0x00, 0x00 };      /* 0x71e180 */
@@ -728,7 +729,7 @@ static int klbf_ot_box_frame(int i, struct klmv_fr *f)
 }
 static void klbf_ot_boxscan(DWORD now)
 {
-    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD t0 = GetTickCount(); int i; float bd = 1e30f;
+    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD t0 = GetTickCount(); int i; float bd = 1e30f; LONG gen0 = klmv_level_gen + klmv_scene_gen;
     klbf_ot_bxAt = now; klbf_ot_bxlooks++; klbf_ot_nbx = 0; klbf_ot_bxbest = -1;
     while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
         if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
@@ -754,7 +755,9 @@ static void klbf_ot_boxscan(DWORD now)
         klog("botfill: tactics: box %d: ZAllyEscapeBox %08lx entity %08lx centre (%.0f, %.0f, %.0f), %s half (%.0f, %.0f, %.0f), %.0f m from the exit trigger", i, klbf_bx[i].at, klbf_bx[i].ent, f.T[0], f.T[1], f.T[2], f.box ? "BOX" : "POINT (no box primitive)", f.half[0], f.half[1], f.half[2], d / 100);
         if (d < bd) { bd = d; klbf_ot_bxbest = i; }
     }
-    klog("botfill: tactics: box scan: %d ZAllyEscapeBox object(s) in %lu ms, bots will walk to box %d%s", klbf_ot_nbx, GetTickCount() - t0, klbf_ot_bxbest, klbf_ot_nbx ? "" : " (none: the bots stay at the exit trigger as before; retried 3 more times)");
+    if (!klbf_ot_nbx && klbf_ot_bxlooks >= 4 && !klbf_ot_scan_always) klbf_ot_nobox_gen = gen0;      /* a box-less level: the later rounds of this load do not scan for boxes (klbf_ot_kept) */
+    klog("botfill: tactics: box scan: %d ZAllyEscapeBox object(s) in %lu ms, bots will walk to box %d%s", klbf_ot_nbx, GetTickCount() - t0, klbf_ot_bxbest,
+         klbf_ot_nbx ? "" : klbf_ot_bxlooks >= 4 ? " (none in 4 looks: the bots stay at the exit trigger; the later rounds of this level load skip the box scan)" : " (none: the bots stay at the exit trigger as before; retried 3 more times)");
 }
 /* 2026-10-30 (scheduled check-in, from the owner's 10-27 20:27 - 20:41 online rounds, F06 host, SHIP 1027): the moment the first bot carried money the game
    stood still 220 - 280 ms, EVERY round (KLHook.log 20:30:07, 20:34:05, 20:38:37; the hitch probe had the main thread in ntdll under KERNEL32+0x22640 <- this dll,
@@ -784,10 +787,12 @@ static int klbf_ot_kept(void)
         d = kle_dist(f.T, klbf_ot_tpos);
         if (d < bd) { bd = d; bxbest = i; }
     }
-    if (!boxes_ok || !klbf_ot_nbx) { klbf_ot_nbx = 0; bxbest = -1; }      /* the box scan runs again (klbf_ot_vh is known, klbf_ot_bxlooks was reset) */
+    if (!boxes_ok) { klbf_ot_nbx = 0; bxbest = -1; }      /* the box scan runs again (klbf_ot_vh is known, klbf_ot_bxlooks was reset) */
+    else if (!klbf_ot_nbx && klbf_ot_nobox_gen == gen) klbf_ot_bxlooks = 4;      /* a box-less level under this load: no box scan this round either (the bots stay at the exit trigger as they did) */
     klbf_ot_bxbest = bxbest;
     klog("botfill: tactics: van: exit trigger %08lx (vehicle field %08lx, place (%.0f, %.0f, %.0f)) and %d box(es)%s kept from the last round's scans, checked in %lu ms (the same scene, no level archive opened since, every object still reads as found; a scene change or a level load scans anew; [BotFill] OnlineScanEveryRound=1 = the scans at every round)",
-         klbf_ot_trig, klbf_ot_vh, klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], klbf_ot_nbx, boxes_ok ? "" : " (a kept box no longer reads: the box scan runs again)", GetTickCount() - t0);
+         klbf_ot_trig, klbf_ot_vh, klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], klbf_ot_nbx,
+         !boxes_ok ? " (a kept box no longer reads: the box scan runs again)" : klbf_ot_bxlooks >= 4 ? " (this level has none: the box scan is skipped too)" : "", GetTickCount() - t0);
     return 1;
 }
 /* is the bot inside the box: the game's own test 0x758cb0 when its head is the one read, else the frame's distance */
@@ -1160,7 +1165,7 @@ static int klbf_gu_style(DWORD soldier, int on)
 static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sold, const float (*pos)[3], int nb, int vstate)
 {
     DWORD ents = 0; int n = 0, i, b, s; static int toldNone, toldRound, hdown[16], toldMap[16]; static DWORD hAt[16];
-    float rep[16][3]; int rok[16], bsd[16], ownIdx = -1; float bsp[16][3]; static int seatPlat[16];      /* wk-getup2-1028: replica places, and the beacon verdicts mapped to table indexes; seatPlat: OnlineGetUpPlateau gave a rusher up on this seat during this down (the order place falls back to the host's replica feet) */
+    float rep[16][3]; int rok[16], bsd[16], ownIdx = -1; float bsp[16][3]; static int seatPlat[16]; static DWORD hUpAt[16];      /* wk-getup2-1028: replica places, and the beacon verdicts mapped to table indexes; seatPlat: OnlineGetUpPlateau gave a rusher up on this seat during this down (the order place falls back to the host's replica feet) */
     if (!klbf_gu || nb <= 0) return;
     if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; memset(hdown, 0, sizeof hdown); memset(hAt, 0, sizeof hAt); memset(klgb_seats, 0, sizeof klgb_seats); memset(toldMap, 0, sizeof toldMap); memset(seatPlat, 0, sizeof seatPlat); }
     for (s = 0; s < KLBF_OT_BOTS; s++) if (klbf_ob[s].guSp && (!klbf_ob[s].guHum || now - klbf_ob[s].guAt >= 3500)) {      /* OnlineGetUpSprint undone with the release */
@@ -1203,18 +1208,18 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
         }
     }
     for (i = 0; i < n && i < 16; i++) {
-        DWORD P = klco_ent(ents, n, i), D = 0, ds = 0, h; float hv = 1.0f, hp[3] = { 0, 0, 0 }, d[16]; int rb = -1, pick, nn = 0, bs[16], down = 0, bz[16], viaB = 0, fs = 0;
+        DWORD P = klco_ent(ents, n, i), D = 0, ds = 0, h; float hv = 1.0f, hp[3] = { 0, 0, 0 }, d[16]; int rb = -1, pick, nn = 0, bs[16], down = 0, bz[16], viaB = 0, fs = 0, hpB = 0;      /* hpB: hp is the beacon's place (log) */
         if (!P || !klco_heister(P)) continue;
         if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0) hv = 0;
         if (hv > 0 && (D = klh_rd32(P + 0x2948)) != 0 && klh_rd32(D) == P && klh_rd(D + 4, &ds, 4) && kgu_downed(ds) && klbf_feet(P, hp, &fs)) down = 1;      /* wk-botpar: OnlineEscortNode reads the scene node first; off = +0x460 only, as before */
         if (!down && bsd[i]) {      /* the replica says nothing (GU3: its D never lies); a fresh beacon does. Place: the replica's if readable, else the beacon's. No hv test: BP3 read hp -0 for every heister replica (BP2 garbage), so +0x5fc->+4 is not a replica's health; the downed machine only beacons 'down' while it lives */
             down = 1; viaB = 1;
-            if (!(rok[i])) memcpy(hp, bsp[i], 12); else memcpy(hp, rep[i], 12);
+            if (!(rok[i])) { memcpy(hp, bsp[i], 12); hpB = 1; } else memcpy(hp, rep[i], 12);
         }
-        if (down && !hdown[i]) seatPlat[i] = 0;      /* a fresh down: the beacon place again */
-        if (down && klbf_gu_hold && bsd[i] && !(klbf_gu_plat && seatPlat[i] && (rok[i] || !viaB))) memcpy(hp, bsp[i], 12);      /* OnlineGetUpHold: the downed machine's own place beats the host's replica of the diving body (BP15: replica at x -592..-690, body at -782) - unless OnlineGetUpPlateau gave a rusher up on that place this down and the host's replica (its feet / +0x460) is readable: then the replica place is the order place (BP16b fallback) */
+        if (down && !hdown[i] && (!hUpAt[i] || now - hUpAt[i] >= 3000)) seatPlat[i] = 0;      /* a fresh down: the beacon place again - but not after a 1-pass 'up' flicker (the beacon freshness lapsing while the replica's D does not read: review 10-30), which keeps the BP16b fallback; 3 s is a GUESS */
+        if (down && klbf_gu_hold && bsd[i] && !(klbf_gu_plat && seatPlat[i] && (rok[i] || !viaB))) { memcpy(hp, bsp[i], 12); hpB = 1; }      /* OnlineGetUpHold: the downed machine's own place beats the host's replica of the diving body (BP15: replica at x -592..-690, body at -782) - unless OnlineGetUpPlateau gave a rusher up on that place this down and the host's replica (its feet / +0x460) is readable: then the replica place is the order place (BP16b fallback) */
         if (down && !hdown[i]) { hdown[i] = 1; hAt[i] = now; klog("botfill: getup: seat %d IS DOWN (D %08lx state %lu) at (%.0f, %.0f, %.0f)%s%s", i, (unsigned long)D, (unsigned long)ds, hp[0], hp[1], hp[2], viaB ? " (beacon)" : "", klbf_gu == 2 ? " - DRY" : ""); }
-        if (!down) { if (hdown[i]) { hdown[i] = 0; klog("botfill: getup: seat %d is up / out of play after %.1f s", i, (now - hAt[i]) / 1000.0f); } continue; }
+        if (!down) { if (hdown[i]) { hdown[i] = 0; hUpAt[i] = now ? now : 1; klog("botfill: getup: seat %d is up / out of play after %.1f s", i, (now - hAt[i]) / 1000.0f); } continue; }
         if (vstate >= 1 && vstate <= 5) continue;      /* the van is called / waits / leaves: the crew's own orders win (Arcade RushVan) */
         for (b = 0; b < nb; b++) {      /* the bot already sent to this seat, else the nearest free one */
             for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != act[b]; s++) ;
@@ -1252,7 +1257,7 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
             if (klbf_gu_plat && klbf_ob[s].guOrd) {      /* OnlineGetUpPlateau (BP16b): no metre nearer in 5 s while still > stop + 5 m out = the place is most likely unreachable: give the rush up, release the bot (out of the pick 10 s), next bot to the replica place */
                 if (kgu_best(&klbf_ob[s].guBest, bdst)) klbf_ob[s].guBestAt = now;
                 if (kgu_plateau(klbf_ob[s].guBest, now - klbf_ob[s].guBestAt, klbf_gu_hold ? KGU_HOLD_STOP_CM : KGU_STOP_CM)) {
-                    klog("botfill: getup: bot %d GIVEN UP on seat %d: nearest %.1f m, no %.0f m gained in %.1f s, now %.1f m at (%.0f, %.0f, %.0f), place (%.0f, %.0f, %.0f)%s; out of the pick %u s, the seat's next order goes to the %s (OnlineGetUpPlateau)", s, i, klbf_ob[s].guBest / 100.0f, KGU_PLATEAU_GAIN_CM / 100, (now - klbf_ob[s].guBestAt) / 1000.0f, bdst / 100.0f, pos[rb][0], pos[rb][1], pos[rb][2], hp[0], hp[1], hp[2], bsd[i] && !seatPlat[i] ? " (beacon)" : "", (unsigned)(KGU_PLATEAU_OUT_MS / 1000), rok[i] || !viaB ? "host's replica feet" : "same place (no replica readable)");
+                    klog("botfill: getup: bot %d GIVEN UP on seat %d: nearest %.1f m, no %.0f m gained in %.1f s, now %.1f m at (%.0f, %.0f, %.0f), place (%.0f, %.0f, %.0f)%s; out of the pick %u s, the seat's next order goes to the %s (OnlineGetUpPlateau)", s, i, klbf_ob[s].guBest / 100.0f, KGU_PLATEAU_GAIN_CM / 100, (now - klbf_ob[s].guBestAt) / 1000.0f, bdst / 100.0f, pos[rb][0], pos[rb][1], pos[rb][2], hp[0], hp[1], hp[2], hpB ? " (beacon)" : "", (unsigned)(KGU_PLATEAU_OUT_MS / 1000), rok[i] || !viaB ? "host's replica feet" : "same place (no replica readable)");
                     klbf_ob[s].guPlat = now ? now : 1; seatPlat[i] = 1;
                     klbf_ob[s].guHum = 0; klbf_ob[s].guAt = 0; klbf_ob[s].guOrd = 0; klbf_ob[s].guWt = 0; klbf_ob[s].guGk = 0; klbf_ob[s].guProg = 0; klbf_ob[s].guKq = 0; klbf_ob[s].guKn = 0; klbf_ob[s].guHo = 0; klbf_ob[s].guHn = 0; klbf_ob[s].guBest = -1; klbf_ob[s].guBestAt = 0;      /* as the release line */
                     continue;
@@ -1357,7 +1362,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
         klbf_ot_lookAt = 0; klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_ot_bxlooks = 0; klbf_ot_bxAt = 0;
         if (klbf_ot_kept()) klbf_ot_trig_looked = 1;      /* the last round's exit trigger and boxes still stand (same level load): no scan this round */
-        else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; }
+        else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; klbf_ot_nobox_gen = -1; }
         klbf_gm_logged = 0; klbf_gm_last = 0; klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
         klbf_way_load(); klbf_ramp_load(); klbf_trig_load();
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
@@ -1451,7 +1456,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         int q; for (q = 0; q < KLBF_OT_BOTS && !(klbf_ob[q].actor && klbf_ob[q].tally > 0); q++) ;
         if (q == KLBF_OT_BOTS && klbf_ot_idlevan && klbf_ot_vidle) q = 0;      /* OnlineIdleVan: a bot with nothing left to do needs the trigger too */
         if (q < KLBF_OT_BOTS) {
-            DWORD t0 = GetTickCount(), ent, node;
+            DWORD t0 = GetTickCount(), ent, node; LONG gen0 = klmv_level_gen + klmv_scene_gen;      /* read BEFORE the walk (as klmove.c's near cache): an archive opened during the 110-156 ms walk makes the hit stale, and a stale hit must not be kept (review 10-30) */
             klbf_ot_lookAt = now; klbf_ot_looks++;
             klbf_ot_vh = klmv_exit_vehicle2(&klbf_ot_trig, 1);      /* BOS_DD02x: skip husk triggers whose node reads (0, 0, 0) */
             klbf_ot_tvt = klbf_ot_trig ? klh_rd32(klbf_ot_trig) : 0;
@@ -1459,7 +1464,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 || (fabsf(klbf_ot_tpos[0]) <= 1 && fabsf(klbf_ot_tpos[1]) <= 1 && fabsf(klbf_ot_tpos[2]) <= 1))) klbf_ot_vh = 0;      /* review wf_1d705c3d: klmv_exit_vehicle2's fallback may still be a husk at (0, 0, 0): not found, retried in 20 s */
             klog("botfill: tactics: van: exit trigger %08lx, vehicle field %08lx (kind %u), its place (%.0f, %.0f, %.0f) - found in %lu ms%s", klbf_ot_trig, klbf_ot_vh, klh_rd32(rules + 0x1ec) & 0xff,
                  klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], GetTickCount() - t0, klbf_ot_vh ? "" : ": none usable yet, looked again in 20 s");
-            if (klbf_ot_vh) { klbf_ot_trig_looked = 1; klbf_ot_keep_gen = klmv_level_gen + klmv_scene_gen; }      /* kept for this level load's later rounds (klbf_ot_kept) */
+            if (klbf_ot_vh) { klbf_ot_trig_looked = 1; klbf_ot_keep_gen = gen0; }      /* kept for this level load's later rounds (klbf_ot_kept); gen0 = the gen before the walk */
         }
     }
     if (klbf_ot_bwalk && klbf_ot_vh && !klbf_ot_nbx && klbf_ot_bxlooks < 4 && (!klbf_ot_bxAt || now - klbf_ot_bxAt >= 20000)) klbf_ot_boxscan(now);      /* once the trigger is known (a bot carries money), the boxes; a miss is retried every 20 s, 4 looks a round */

@@ -112,3 +112,49 @@ same place (the log's "same place (no replica readable)").
 
 - Nothing to install; the key ships with the next hook build (ce/c9) and stays off until a bench says otherwise.
 - Still open from the morning: a round with Medal quit for the stutter comparison.
+
+---
+
+# Third check-in, 18:48-19:20 UTC: PC still idle, nothing to triage; the two unbuilt 10-30 changes reviewed by a fresh agent, 5 findings fixed
+
+Read-only on the PC (DD + DM attached by one access request; `KL_PortTools\week_resume\resume_index.log` shows the Windows "KLMerge Resume" task
+still skipping every 2 h because a session transcript is fresh, so a local session is alive). Game folder unchanged since the morning: `dinput8.dll`
+9e485dcf (10-29 04:21 UTC), `KLHook.ini` b599def6, `KLHook.log` ends 10-27 20:50, `KLHook.result` PASS F04 0/0, newest dump `KLHook_1.dmp` 10-26 08:11,
+`kl2_490_crash_*.mdmp` 10-25 19:18 (both triaged), `KL_PortTools\build` newest 10-27 00:50. No commit since 7fe6155 (14:57 UTC). Nothing launched,
+installed or touched on screen.
+
+## Offline piece: independent review of aeaae90 (klbf_ot_kept cache) and 7fe6155 (OnlineGetUpPlateau)
+
+Neither change has been compiled with cl or run; a review agent read the whole of klbotfill.c, klgetup_logic.h and the helpers (klh_rd/klh_rd32 are
+ReadProcessMemory-guarded, kle_node, klmv_frame, klmv_exit_vehicle2, the gen counters and where they are bumped). Verdict: no crash path, both keys at
+their old setting reproduce the old decisions byte for byte, all format strings match their arguments, every new declaration is at block top (C89/cl).
+Findings and what was done:
+
+1. **Cache gen stamped AFTER the 110-156 ms walk** (klbotfill.c, the exit-trigger look): `klmv_level_gen` is bumped from the archive hook on any thread,
+   so an archive opened during the walk gave a stale hit a fresh gen and the next round kept it on the object re-reads alone (the very hole the gen test
+   exists for; klmove.c's near cache reads the gen before its walk). FIXED: `gen0` read before `klmv_exit_vehicle2`, stamped from it.
+2. **A level with no ZAllyEscapeBox kept only half the cure**: `klbf_ot_kept()` returned 1 with 0 boxes and `klbf_ot_bxlooks` reset, so the 93-109 ms
+   box walk still ran on the first tick of every round (4 looks a round). FIXED as klmove.c's `klmv_zero_gen`: the 4th empty look stamps
+   `klbf_ot_nobox_gen` (gen read before that walk); a kept round under the same gen sets `klbf_ot_bxlooks = 4` and says "this level has none: the box
+   scan is skipped too". A kept box that no longer reads still rescans.
+3. Plateau exclusion is per bot, not per seat (a bot given up on seat A is out of seat B's pick for 10 s too). LEFT: a design choice, 10 s, documented.
+4. **`kgu_best` only ever lowered**: a rusher that once stood 3 m away and was carried back out to 12 m (BP15's 3.6 <-> 9 m pattern) had a best inside
+   stop + 5 m for good and could never plateau. FIXED: standing `KGU_PLATEAU_BACK_CM` (5 m, GUESS) or more beyond the best re-stamps the best at the far
+   place and starts its 5 s clock anew; +2 checks in klgetup_test.c.
+5. **`seatPlat` wiped by a one-pass down flicker** (beacon freshness lapsing while the replica's D does not read: the paired "is up / IS DOWN" lines):
+   the BP16b fallback place was lost and the next bot went to the unreachable beacon spot again. FIXED: `hUpAt[i]` stamps the up; a down counts as fresh
+   for the reset only when the seat was up >= 3 s (GUESS).
+6. The GIVEN UP line's " (beacon)" suffix was computed from `seatPlat` and wrong after a second plateau. FIXED: `hpB` is set where the beacon place is
+   copied into `hp`.
+7. Note, not a defect: the cache is ON by default (`;OnlineScanEveryRound=0`), unlike the other 10-30 keys: the first SHIP build carries a never-run
+   cache of a vehicle handle handed to 0x71e180, mitigated by `klbf_ot_call_van`'s re-validation (vtable / entity / node) and `klbf_ot_kept`'s
+   re-read of the vehicle field. LEFT ON (it is the cure for the owner's every-round hitch); a builder wanting zero live risk sets OnlineScanEveryRound=1
+   until 'kept from the last round's scans' has been seen once.
+
+Checks: `tools/kl_tests.py` 30 pass / 0 fail / 15 skip (klgetup_test ALL PASS with the 2 new checks), `kl_mod_options_test` 46/46,
+`run_harness_linux.sh --check-hook` SHIP + TEST 15 warnings = the baseline 15, none new. NOT built as a DLL, NOT run in the game.
+
+## Owner
+
+- Nothing to install; both fixes land with the next hook build (ce/c9) and are covered by the proofs in the two sections above.
+- Still open: a round with Medal quit for the stutter comparison.
