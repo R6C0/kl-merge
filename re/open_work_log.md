@@ -1,3 +1,11 @@
+2026-10-29 ~07:20 - [ce] BP16b stall diagnosis (workflow wf_85e985e4-ba1; implement + review agents FAILED on the monthly spend limit, nothing built):
+- Not combat (bot 4 health 1400 throughout, only getup lines in the window), not a fighting pass (escort/stack/guard honour guHum), not the re-order alone (most moves
+  happen under KEEP goal). Likely UNREACHABLE place: the order is the joiner's beacon spot, the host's planner dithers 8-14 m short (BP13 14.4, BP14 ~14, BP15 8-9, BP16b 9-11 m).
+  Inference only: no line logs the bot's own x,y,z.
+- Next (wk-botpar): add bot x,y,z + goal state to the 'closing' line (klbotfill.c ~1229); plateau rule (best d > stop+5 m and no 1 m gain in 5 s -> stop re-ordering,
+  exclude the bot from kgu_pick_b ~10 s); no Recede (k=3, ~1238) while walked distance grows (detour, not retreat); fallback place = the replica's feet rep[i] (~1129).
+- 'getup: diag' hp -2.6e38 is real data, not a format bug: [P+0x5fc]+4 is a shared non-health object on heister replicas (see comment ~1164). Print n/a or hex instead.
+
 2026-10-29 ~06:50 - [ce] Merged wk-swappic-1028 + wk-botpar-1028 -> 9a2a1a304 (kl_tests 36 pass, the known 8 fail). All benches 0 faults, restore 9e485dcf/b599def6.
 - GUN10/GUN11 (DM07 online, probe): WeaponBig by list mode 0/1/2 = 0/46008/0: only the CATEGORY window's 36 WeaponBig ever updated. Cause (b3c7e46c8): kspg_setrole
   kept roles in a 192-entry list and the menu table lists ~190 role elements before the weapon window, so its WeaponBig/Primary/Secondary/Star were wrapped but had no
