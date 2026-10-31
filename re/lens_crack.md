@@ -40,6 +40,13 @@ fxc ps_3_0 (stub header, annotations stripped): compiles clean, ~8500 slots, onl
 (`[branch]`). Preview slider `PreviewCracks` = 1 shows three cracks without the hook.
 
 ## Install (by the owner; nothing was installed)
+2026-10-31 (scheduled check-in): STILL NOT INSTALLED. `<DD>\reshade-shaders\Shaders\` holds KL_Camcorder / KL_CameraFX / KL_FXAA /
+KL_Glare / KL_Look only; the hook (LensCrack=1 default, LiveLeak look) lists the technique in the live preset, so every launch logs
+`reshade: LiveLeak look with a technique that was not loaded: the live preset loaded again (one effect reload)` and then `wanted but not
+among the loaded effects even after a reload: KL_LensCrack@KL_LensCrack.fx` (owner's 10-27 20:27 session, and every session since 10-17).
+Ready kit, game folder untouched: `<work>\build\lenscrack_1031\` (KL_LensCrack.fx = this repo's 615bdccd as CRLF, INSTALL_lenscrack.bat,
+UNDO_lenscrack.bat, README.txt). Owner: double-click INSTALL with the game closed; proof = the technique among "managed technique(s)
+present" in KLHook.log and no "wanted but not among" line; a crack after a burst of hits (or the Preview slider).
 1. `KL_LensCrack.fx` -> `<DD>\reshade-shaders\Shaders\` (beside KL_CameraFX.fx).
 2. New `dinput8.dll` (SHIP build) -> `<DD>`; KLHook.ini needs `[ReShade] Bridge=1` (the Graphics keys are optional, defaults apply).
 3. The bridge writes the live preset itself (technique listed last, after CameraFX). With a custom `[ReShade] Sorting=` add

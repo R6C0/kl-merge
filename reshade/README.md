@@ -12,6 +12,14 @@ Files in this folder:
 | `ReShadePreset_KL.ini` | game folder (back up the old one as `.before-fx`) | SMAA, Uplift, KL_Look, KL_Glare, KL_CameraFX. |
 | `ReShadePreset_LiveLeak.ini` | game folder (back up the old one as `.before-fx`) | SMAA, Uplift, KL_Camcorder, KL_CameraFX (KL_Glare listed but off). |
 
+State on the owner's PC, checked 2026-10-31 (scheduled check-in, sha1 of the installed files): `KL_CameraFX.fx` 9b20324a and
+`KL_Glare.fx` cbc73597 = this folder; `KL_Camcorder.fx` = this folder's text as CRLF (the 10-24 sky shoulder is in both);
+`KL_Look.fx` installed is v2.3 (7043f60d CRLF, 10-15: dilated sky mask, per-pixel sky decision - the owner's "white glow round
+wires / palms / the plane" pictures) and this folder had the older v2.1 text until that check-in copied the live file in, so the
+repo now matches what the owner sees. `KL_LensCrack.fx` is NOT installed there (never was; the hook asks for it every launch):
+kit `<work>\build\lenscrack_1031\` (INSTALL / UNDO bats), see `re\lens_crack.md`. The live preset the hook writes is
+`ReShadePreset_KLLive.ini`, not the two files here.
+
 No textures and no other files are needed. `ReShade.ini` does not need any change (PresetPath / F7 / F8 keys stay).
 KL_FXAA stays off in both presets; SMAA stays first.
 

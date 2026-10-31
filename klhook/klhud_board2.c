@@ -266,7 +266,10 @@ static int klsb_ours(DWORD e, void *ctx, void *cam)
 /* OnlineBoardState (2026-10-27, [HUD] OnlineBoardState=1, needs OnlineBoard=1; NOT run live): online the outro element at osd+0x10b4 can stay 0 for minutes (G10), so there is
    nothing to wrap. The tick then composes the card from the round-end state (GUESS G14: session state 0x1f, as the element path) and this draws it on the CLOCK element's render
    (klhud.c klu_render_elem calls it after the stock render; GUESS G15: that element still renders in state 0x1f; the tick logs when it does not). The countdown runs
-   10 s from the tick that first saw 0x1f (GUESS G13/G16, no deadline to read). Read-only toward the replicated state. Not used once the element is wrapped. */
+   10 s from the tick that first saw 0x1f (GUESS G13/G16, no deadline to read). Read-only toward the replicated state. Not used once the element is wrapped.
+   LIVE 2026-10-27 20:32 (owner hosting DM07 online, TEST 10-27 build): G14 held (state 0x1f, card composed) but G15 is WRONG - "clock element renders +0, card drawn +0"
+   3 s into 0x1f, so this clock path shows nothing online; the end card came from OnlineBoardCarrier (ZFAOutroDisplay present at osd+0x10b0, +678 draws, 0 stock).
+   Keep the path as the fallback for a round without that element (G10), do not count on it. */
 static void klsb_istate_render(void *el, void *ctx, void *cam);      /* below: OnlineIntroState */
 static int klsb_state_paint(void *el, void *ctx, void *cam)
 {   /* the state-path card on ANY element whose transform / table match the clock's (clock element: klsb_state_render; ZFAOutroDisplay: klsb_frender). -> 1 = drawn */

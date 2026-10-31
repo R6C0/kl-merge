@@ -66,25 +66,22 @@ a launch goes straight into the F01 slot and quits after 120 s.
 4. Crash -> `<DD>\KLHook.log` + `KLHook_N.dmp` (KLHook from `klhook/`, installed as `<DD>\dinput8.dll`) and the game's own `kl2_490_crash_*.mdmp` -> `debug/triage.sh`, `debug/dump.py`, `debug/locate.py`.
 
 ## Open work
-Full dated log: `re/open_work_log.md` (newest first).
+Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-10-30 ~11:30 UTC - scheduled check-in: the owner's 10-27 ONLINE rounds hitched 220-283 ms EVERY round (hook tick slowest 212-283 ms) =
-klbotfill.c's exit-trigger scan (110-156 ms) + box scan (93-109 ms) back to back when the first bot carries money. Fixed as klmove.c was on 10-23:
-klbf_ot_kept keeps both across the rounds of one level load (level/scene generation + object re-reads); [BotFill] OnlineScanEveryRound=1 = old. --check-hook
-clean, NOT built, NOT run (proof: 'kept from the last round's scans' in rounds 2+). The 2 x 1 s hitches per online session are the Steam lobby leave, not ours.
-Numbers + probe sites: debug/notes/2026-10-30-scheduled-triage.md. PC idle since 10-29 04:21 UTC, no new dump, kl_tests 30/0/15. 15:10: ce's BP16b next list = [BotFill] OnlineGetUpPlateau
-(default off; give-up after 5 s without a metre, no Recede while routing, fallback place = replica feet). 19:20: both reviewed by a fresh agent, 5 fixes (gen before the walk, box-less level,
-kgu_best re-stamp, seatPlat flicker, log); NOT built, NOT run (proofs in the notes). Owner: nothing to install. 10-31 07:10 (scheduled check-in, PC still idle, no dump):
-the shipped lift keys ([KLHook] DoorCloseMs 8000 / JoinOnline / DoorCloseRemote, + DoorRemoteStillMs/MaxMs) documented in the repo ini's real [KLHook] section and given
-Mod Options rows (liftdoors / liftonline / liftdoorsremote), plus six get-up rows (ReorderS, Recede, FreeFirst, BusyRange, Hold, Plateau); checks + kl_tests clean, no C touched.
+2026-10-31 ~15:05 UTC - scheduled check-in: PC idle since 10-29 04:21 (ship1030: dinput8 9e485dcf, ini b599def6), no new dump. The owner's 10-27
+session log shows `KL_LensCrack.fx` was NEVER installed (asked for every launch since 10-17, one extra effect reload each start): kit
+`<work>\build\lenscrack_1031\` (INSTALL/UNDO bats), game folder untouched - Owner installs. Repo `reshade/KL_Look.fx` synced to the live v2.3.
+G15 (clock element renders in 0x1f) wrong live; the online end card comes from OnlineBoardCarrier. Earlier check-ins (10-30/31): lift + get-up keys
+got Mod Options rows; the three 10-30 klbotfill changes (OnlineScanEveryRound cache, OnlineGetUpPlateau, review fixes) are NOT built, NOT run.
 
-2026-10-29 ~06:50 - [ce] Merged 9a2a1a304: SHOP PICTURE ONLINE WORKS: the role table capped at 192, so the weapon list's WeaponBig had no role
-(GUN11: 0 mode-2 updates); now a 2048 hash, GUN12b DM07 online: 190692 mode-2 updates, 7494 swaps = restores, 0 faults. Getup: Recede/Hold/FreeFirst/BusyRange
-(default off); BP16b bot stalls 9-11 m out, Hold never reached (diagnosis workflow running). Disk-full (c9's temp dirs) broke BP16 run 1 mid-install: dll restored by hand.
-Staged NOT installed: C:\kl_build_1024\gunui_1029 (baked gun UI DM07/DD10; wk-gunbake-1029). Open: bot keys 2nd map, 2-PC side channel.
+2026-10-30 ~12:50 - [c9] A1HOLD2 PASS: door-hold ghost fix merged (DoorRemoteStillMs/MaxMs, with DoorCloseRemote=1), NOT shipped (installed is
+still ship1030). c9 / ce stopped on the account's monthly spend limit; cloud check-ins carry on offline. Open from ce 10-29: BP16b get-up stall =
+likely unreachable order place -> OnlineGetUpPlateau (default off) written 10-30, needs its first MSVC build + a DD08 online bench.
 
-2026-10-28 ~12:00 - [c9] OWNER AWAY ALL WEEK (full access, never ask): the shared queue is re/week_plan_1028.md (T1-T6, claim a track there). Owner status
-page https://claude.ai/artifact/Pp48g1cQgREDE3AsHPqxTa (c9 republishes). AnyDesk prep re/anydesk_setup.md. Q28 (10-29 05:25): all 21 maps PASS online both seats with ship1030, 0 faults (kit C:\kl_build_1024\c9_1028\q28).
+2026-10-29 ~05:25 - [c9] Q28 COMPLETE: all 21 maps PASS online, both seats in round, 0 faults, with the installed ship1030 (lift online:
+JoinOnline=1 + DoorCloseRemote=1; DoorCloseMs=8000 since ship1029). T2 'maps work on both sides' done for the current build; left: Retomoto
+lift door VISUAL check (black shots so far), a round with Medal quit (stutter comparison), [Input] MouseMoveMs=16, gunui_1029 bake kit (staged).
+
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

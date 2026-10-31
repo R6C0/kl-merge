@@ -207,8 +207,10 @@ float3 PS_KLL2_Grade(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 
 	/* the 1/8-res neighbourhood: a small tent of 4 bilinear taps (~16 px reach) */
 	float2 lo = float2(0.75 / KLL2_W, 0.75 / KLL2_H);
-	float4 nb = (tex2D(KLL2_Low, uv + float2(-lo.x, -lo.y)) + tex2D(KLL2_Low, uv + float2(lo.x, -lo.y))
-	           + tex2D(KLL2_Low, uv + float2(-lo.x,  lo.y)) + tex2D(KLL2_Low, uv + float2(lo.x,  lo.y))) * 0.25;
+	float4 t0 = tex2D(KLL2_Low, uv + float2(-lo.x, -lo.y)), t1 = tex2D(KLL2_Low, uv + float2(lo.x, -lo.y));
+	float4 t2 = tex2D(KLL2_Low, uv + float2(-lo.x,  lo.y)), t3 = tex2D(KLL2_Low, uv + float2(lo.x,  lo.y));
+	float4 nb = (t0 + t1 + t2 + t3) * 0.25;
+	float skyRegion = max(max(t0.a, t1.a), max(t2.a, t3.a));   /* v2.3: the coarse sky mask DILATED (max, not mean): it does not fade next to a wire / tree / plane */
 	float l  = dot(c, KLL2_LUMA);
 	float la = dot(nb.rgb, KLL2_LUMA);
 
@@ -217,7 +219,12 @@ float3 PS_KLL2_Grade(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 	if (ad.w > 0.5)
 		sky = KLL2_DepthSky(uv);
 	else
-		sky = nb.a * lerp(smoothstep(0.30, 0.55, la), smoothstep(0.22, 0.60, l), 0.35) * smoothstep(0.80, 0.30, uv.y);   /* v2.1: soft edge (mostly the 1/8 mask), upper screen only - bright objects lower down are not re-toned */
+		{   /* v2.3 (owner 2026-10-15, two pictures: a white glow round wires, palms and the plane against the sky): every pixel decides by ITS OWN
+			   brightness against the measured sky average, inside the dilated region - sky right next to an object is treated like the rest of the
+			   sky (no bright fringe left behind), the dark object itself is not touched */
+			float sa = max(ad.y, 0.05);
+			sky = smoothstep(0.30, 0.60, skyRegion) * smoothstep(sa * 0.55, sa * 0.85, l) * (1.0 - smoothstep(sa * 1.7, sa * 2.4, l)) * smoothstep(0.85, 0.35, uv.y);   /* far brighter than the sky = HUD text / a lamp: left alone */
+		}
 	sky *= SkyControl;
 
 	/* local contrast (not on the sky: its detail is handled below) */
