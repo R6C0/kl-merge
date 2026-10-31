@@ -70,6 +70,17 @@ feat('balance', G_CORE, 'One damage scale for you, police and crew (Dead Men map
      'v71 balance: the owner found the stock numbers too tanky', [('Balance', 'Enable', 1, 0, 0)])
 feat('climb', G_CORE, 'Free climb (hold W + E at a ledge)', 'on', 'start',
      "Dead Men's climb (luvsic's), only on maps with the climb clips", [('Climb', 'Enable', 1, 0, 0)])
+feat('liftdoors', G_CORE, 'Retomoto escape lift: the doors slide shut again 8 s after they opened (recommended on)', 'on', 'start',
+     'kldoorclose.c [KLHook] DoorCloseMs (ms, 8000 = the shipped value, 0 = off): the door clip only ever played its opening half; SHIP-safe (reads the proxies, writes leaf data); '
+     'A1LIFT7/A1LIFT8 PASS, shipped ship1029 10-28', [('KLHook', 'DoorCloseMs', 8000, 0, 0)])
+feat('liftonline', G_CORE, 'Online matches: the Retomoto escape lift works (rides and jumps for the players on this machine) (recommended on)', 'on', 'start',
+     'kljoin.c [KLHook] JoinOnline: kljoin gated every ride in a network session, so the lift was dead for host and joiner; LOCAL players only, nothing written to a remote one; '
+     'A1LIFTNET2F/A1LIFTNET3 PASS 0 faults, shipped ship1030 10-29', [('KLHook', 'JoinOnline', 1, 0, 0)])
+feat('liftdoorsremote', G_CORE, 'Online matches: the lift doors are not shut on another player standing at the car; a hold ends when he stands still 6 s or after 30 s '
+     '(needs the lift doors row; recommended on)', 'on', 'start',
+     'kldoorclose.c [KLHook] DoorCloseRemote (+ DoorRemoteStillMs 6000 / DoorRemoteMaxMs 30000, GUESS values; both read only by a DLL newer than ship1030, harmless before): '
+     'the hero table 0x74ee24 is walked for other players at the car; A1HOLD1 "doors held" PASS, shipped ship1030; the still/max end (A1HOLD2 PASS 10-30) fixes a quit joiner '
+     'holding the doors open for good', [('KLHook', 'DoorCloseRemote', 1, 0, 0), ('KLHook', 'DoorRemoteStillMs', 6000, None, 6000), ('KLHook', 'DoorRemoteMaxMs', 30000, None, 30000)])
 feat('censor', G_CORE, 'Head shots blow the head off (pixelated censor)', 'on', 'start',
      'owner item 9; heap data only', [('Censor', 'Enable', 1, 0, 1)])
 feat('censorlate', G_CORE, 'Censor also corpses, AI heisters and you (late head blow)', 'on', 'start',
@@ -532,6 +543,24 @@ feat('onlinegetupbusy', G_EXP, 'Online AI heisters carrying money or walking out
      'klbotfill.c [BotFill] OnlineGetUpBusy (wk-botpar): kgu_free takes phase 0/1 carriers and phase 2 exit walkers; never phase 3/4; BP11 DD08: 0 free bots, joiner got up alone; NOT run live', [('BotFill', 'OnlineGetUpBusy', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinegetupflopmeter', G_EXP, 'Online AI heister standing by you speeds up your get-up after a knock-down, as in Arcade (needs the get-up row; recommended on)', 'on', 'start',
      'kldown.c + klbotfill.c [BotFill] OnlineGetUpFlopMeter=3 (wk-botpar): with Flop on the MashHold boost never ran (BP12: up after 19 s, 0 presses, bot by); holds kld_s.meter at 3 as kladren.c; NOT run live', [('BotFill', 'OnlineGetUpFlopMeter', 3, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0)])
+feat('onlinegetupreorder', G_EXP, 'Online AI rush to a downed heister is repeated every 8 s instead of every 2.5 s, so the bot runs instead of stop-and-go (needs the get-up row; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineGetUpReorderS (seconds, 8 recommended, 0 = the stock 2.5 s; wk-botpar): BP2 re-ordered every 3 s and ran stop-and-go at 2.2 m/s; a downed man does not move; NOT run live',
+     [('BotFill', 'OnlineGetUpReorderS', 8, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0)])
+feat('onlinegetuprecede', G_EXP, 'Online AI rush to a downed heister: a bot running AWAY from him is re-ordered at once (needs the keep-goal row; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineGetUpRecede (wk-botpar): distance grows 2 m between two 1 s checks or ends 2 m beyond the order distance -> re-order; BP13/BP14 a bot went 14.7 -> 34 m under its old goal; NOT run live',
+     [('BotFill', 'OnlineGetUpRecede', 1, 0, 0), ('BotFill', 'OnlineGetUpKeepGoal', 1, None, 0), ('BotFill', 'OnlineGetUp', 1, None, 0)])
+feat('onlinegetupfreefirst', G_EXP, 'Online get-up help: a free AI heister is sent before one carrying money or walking out, however near that one is (needs the get-up row; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineGetUpFreeFirst (wk-botpar, 10-29): a free bot within OnlineGetUpRange first; off = the nearest bot of any kind; NOT run live',
+     [('BotFill', 'OnlineGetUpFreeFirst', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0)])
+feat('onlinegetupbusyrange', G_EXP, 'Online get-up help: an AI heister carrying money or walking out is only sent from within 15 m (needs the busy row; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineGetUpBusyRange (cm, 1500 recommended, 0 = off; wk-botpar): a walker-out sent from 27 m ran away and back and came no nearer than 14.4 m; NOT run live',
+     [('BotFill', 'OnlineGetUpBusyRange', 1500, 0, 0), ('BotFill', 'OnlineGetUpBusy', 1, None, 0), ('BotFill', 'OnlineGetUp', 1, None, 0)])
+feat('onlinegetuphold', G_EXP, 'Online get-up help: the AI heister that reached you is held 1 m from you until you are up instead of wandering off (needs the get-up row; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineGetUpHold (wk-botpar): within 4 m a rusher is ordered to a spot 1 m from the downed man every 0.9 s; BP15 saw it walk off to 8-9 m twice; uses the beacon place when OnlineGetUpBeacon is on; NOT run live',
+     [('BotFill', 'OnlineGetUpHold', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0)])
+feat('onlinegetupplateau', G_EXP, 'Online get-up help: a rushing AI heister that gains no ground for 5 s is given up and the next one is sent to where the body really lies (needs the get-up row; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineGetUpPlateau (10-30, from ce\'s BP16b diagnosis: the beacon place was most likely unreachable, the rusher dithered 9-14.7 m for 18 s): > stop + 5 m out and no 1 m gained in 5 s -> released, '
+     'out of the pick 10 s, fallback place = the host\'s replica feet; all figures GUESSES; NOT built, NOT run', [('BotFill', 'OnlineGetUpPlateau', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0)])
 feat('onlineescort', G_EXP, 'Online AI heisters with nothing to loot stay near you, as in Arcade (host only; recommended off)', 'off', 'start',
      'klbotfill.c [Bots] OnlineEscort (1 = host seat, 2 = nearest human; + OnlineEscortFar 800 / OnlineEscortSide 300 cm; wk-move-1028, plan 2); NOT run live', [('Bots', 'OnlineEscort', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlineboxspread',G_EXP, 'Online AI heisters: each one walks to its own spot inside the escape box instead of the centre (recommended off)', 'off', 'start',

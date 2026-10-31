@@ -74,7 +74,9 @@ klbf_ot_kept keeps both across the rounds of one level load (level/scene generat
 clean, NOT built, NOT run (proof: 'kept from the last round's scans' in rounds 2+). The 2 x 1 s hitches per online session are the Steam lobby leave, not ours.
 Numbers + probe sites: debug/notes/2026-10-30-scheduled-triage.md. PC idle since 10-29 04:21 UTC, no new dump, kl_tests 30/0/15. 15:10: ce's BP16b next list = [BotFill] OnlineGetUpPlateau
 (default off; give-up after 5 s without a metre, no Recede while routing, fallback place = replica feet). 19:20: both reviewed by a fresh agent, 5 fixes (gen before the walk, box-less level,
-kgu_best re-stamp, seatPlat flicker, log); NOT built, NOT run (proofs in the notes). Owner: nothing to install.
+kgu_best re-stamp, seatPlat flicker, log); NOT built, NOT run (proofs in the notes). Owner: nothing to install. 10-31 07:10 (scheduled check-in, PC still idle, no dump):
+the shipped lift keys ([KLHook] DoorCloseMs 8000 / JoinOnline / DoorCloseRemote, + DoorRemoteStillMs/MaxMs) documented in the repo ini's real [KLHook] section and given
+Mod Options rows (liftdoors / liftonline / liftdoorsremote), plus six get-up rows (ReorderS, Recede, FreeFirst, BusyRange, Hold, Plateau); checks + kl_tests clean, no C touched.
 
 2026-10-29 ~06:50 - [ce] Merged 9a2a1a304: SHOP PICTURE ONLINE WORKS: the role table capped at 192, so the weapon list's WeaponBig had no role
 (GUN11: 0 mode-2 updates); now a 2048 hash, GUN12b DM07 online: 190692 mode-2 updates, 7494 swaps = restores, 0 faults. Getup: Recede/Hold/FreeFirst/BusyRange
