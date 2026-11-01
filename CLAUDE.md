@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~22:55 - [c9] CR1: the online client never runs ring writer 0x81b6f0; the host rings each car on ACTIVATION (DM01 871, 737+792,
+906; DM03 5 cars at t+18 s), so CR2 is dropped. CR3 = both seats prebuild at load in table order (rsv!=0 reuses indices, dasm 0x81b709):
+[CoverRing] ClientBuildHost, kit c9_1028\cr3\run_cr3.sh after ce's RT2. LC2 PASS: Hire Page + ControlsPage cleared in NEXT_SHIP.
+
 2026-11-01 ~21:50 - [c9] Cover ring writer = 0x81b6f0 (car script, bumps [L+0x68] by 8, no host test; ring exists at load). Data probe
 refuted, CC1 dropped. TEST [CoverRing] poll fa8843182 (cr1\test 59fb9fc2), CR1 after LC2. AssertSoft never matched before ce's VA fix
 16918c50a (AS2 regrades). NEXT_SHIP: LV1 keys + OnlineDropFollow=1 cleared; hire/controls pages after LC2.
@@ -76,10 +80,6 @@ refuted, CC1 dropped. TEST [CoverRing] poll fa8843182 (cr1\test 59fb9fc2), CR1 a
 client 83 soft asserts, asserts 0 (ship 98fe8760 protects nothing; SHIP week_1028\as2\ship 9d7e3a1c). RT1 DM09 legs never ran (van stands from
 the start; private vtable refused 17 carries) -> [BotFill] OnlineLegsWithVan + [CrewHop] OnlinePrivVt, kit rt2 after c9's LC2+CR1. SP2B: DropFollow
 in NEXT_SHIP. EO1 held (never triggered). ARC1 11/11: re/arcade_baseline_1101.md.
-
-2026-11-01 ~20:50 - [c9] DM01/DM03 client cover asserts: host-only 8-point rings around Dynamic cars (DM01 ram truck 243; DM03 6946 7019
-7106 7186); writer not found. DM01 PROBE e09affe5a (truck TRUCK->NORMAL_CAR, [9]=0), bench c9_1028\carcover\run_cc1.sh after ce's chain
-+ LC2; else hook route in re/dm_car_cover_1101.md. LV1 4/4 PASS: its 5 keys cleared in NEXT_SHIP. LC1 installed.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

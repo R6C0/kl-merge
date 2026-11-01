@@ -108,3 +108,15 @@ Constraints: no .text patch (hashed); no DR0 watch online (anti-tamper killed th
 ### c9 addendum (11-01 ~21:20)
 - Timing: in Q33_DM01 both seats' coverdumps ran at 17:38:11, right after the load, and the host's points 347..354 ALREADY had positions there. So the ring is written at load / round start on the host, not lazily in play. That makes the SetActive / stream-reader / road-component start callers likelier than the idle goal.
 - The coverdump does not log [L+0x68] (its window starts at +0x70). Next: a TEST-only [CoverRing] probe (poll [L+0x68] + each car script's +0x1c4/+0x1e8/+0x1e9 on both seats; offline-only execute breakpoint on 0x81b6f0 with the return chain). The CC1 data-probe bench is DROPPED: item 4 above says it cannot work.
+
+### c9 CR1 result (11-01 ~22:55)
+- Bench CR1 (c9_1028\cr1\CR1_summary.txt, TEST dll 59fb9fc2, read-only poll). The CLIENT never calls 0x81b6f0: real count [L+0x68] stays 347 (DM01) /
+  556 (DM03) all round, every car script done=0 rsv=0. DM01 client asserts=39; DM03 lists diverge from index 564 (no assert fired in that run).
+- The HOST does NOT ring at load: count 347 at load, then per car on ACTIVATION (car+8c0 flips): DM01 slot 871 at t+22 s -> 347..354, 737 -> 355..362
+  and 792 -> 363..370 at t+45 s, 906 -> 371..378 at t+46 s (order != entity-table order). DM03: all 5 cars at t+18 s, 556 -> 596. The 21:20
+  addendum's 'ring exists right after load' was a coverdump taken after round start, not at load.
+- Dasm 0x81b6fc..0x81b766: done[+1e8] != 0 -> return; rsv[+1e9] != 0 -> skip the 8 x 0x558350 reservation, rewrite points only (car #2's done
+  went 1 -> 0 -> 1 with no count growth). So CR2 (client only, table order) would give the client different indices: DROPPED.
+- CR3: BOTH seats call the writer once at load in table order ([CoverRing] ClientBuild=1 + ClientBuildHost=1, default 0 TEST + SHIP); the host's
+  activation then finds rsv=1 and keeps the indices. Points sit at the spawn position on the client (the host rewrites them at the moving car):
+  GUESS harmless, the asserts are about index existence. Kit c9_1028\cr3 (TEST 70e24b21). PASS = coverdump IDENTICAL, inst2 asserts=0, no FAULT.

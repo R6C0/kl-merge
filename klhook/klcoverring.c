@@ -31,6 +31,9 @@
  * ini: [CoverRing] Enable=1 in the TEST build / 0 in SHIP (recommended on for test runs, off for players)
  *                  Callers=1 TEST / 0 SHIP (recommended on for test runs, off for players): only logs that the slot swaps are skipped (hashed vtables)
  *                  ClientBuild=0 in TEST and SHIP (recommended off: experimental, enable only for the CR2 bench)  ClientBuildMaps=F01,F03 (DM01 / DM03 slots)
+ *                  ClientBuildHost=0 in TEST and SHIP (recommended off: experimental, CR3 bench): the HOST prebuilds at load too. CR1_DM01 showed the client never
+ *                  runs the writer and the host runs it per car on ACTIVATION (order 871, 737+792, 906 = not table order), so client-only table order cannot match;
+ *                  both seats in table order at load can, IF the host's later activation reuses rsv=1 indices (GUESS, see klcoverring_logic.h).
  * LINES (prefix 'coverring:'): on / callers / load / state / poll / car / scan / clientbuild.
  */
 #ifndef KLCOVERRING_C
@@ -41,7 +44,7 @@
 #define KCR_NCAR 64
 static struct {
     int on, callers, bad, have, nenum;
-    int cb, cb_done, cb_last, cb_bad; char cb_maps[64]; DWORD cb_cnt, cb_cnt_at;      /* ClientBuild (CR2) */
+    int cb, cb_host, cb_done, cb_last, cb_bad; char cb_maps[64]; DWORD cb_cnt, cb_cnt_at;      /* ClientBuild (CR2) */
     DWORD gd, st, t_load, t_poll, t_scan, L, cnt, sig, ncars;
     struct { DWORD car, slot; } c[KCR_NCAR];
 } kcr;
@@ -138,7 +141,7 @@ static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
     DWORD sm, role = 0, mode = 0, L, rb, rn, pb, pe, cnt = 0, i; int list_ok, why, map_ok = 0, ran = 0, ok_n = 0;
     char scene[200], key[120];
     if (kcr.cb_bad || kcr.cb_done) return;
-    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !KLH_SM_VT_OK(klh_rd32(sm)) || !klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !kcr_cb_role_ok(role, mode)) return;    /* host / offline: nothing, no log */
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !KLH_SM_VT_OK(klh_rd32(sm)) || !klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !kcr_cb_role_ok(role, mode, kcr.cb_host)) return;    /* host / offline: nothing, no log */
     key[0] = 0;
     if (klh_scene(scene, sizeof scene) && klh_level_key(scene, key, sizeof key)) map_ok = kcr_cb_map_listed(kcr.cb_maps, key);
     if (!map_ok) return;
@@ -231,8 +234,10 @@ static void kcr_init(void)
     kcr.callers = GetPrivateProfileIntA("CoverRing", "Callers", def, klh_ini) != 0;
     kcr.cb = GetPrivateProfileIntA("CoverRing", "ClientBuild", 0, klh_ini) != 0;      /* (recommended off: experimental, enable only for the CR2 bench) default 0 in TEST and SHIP */
     GetPrivateProfileStringA("CoverRing", "ClientBuildMaps", "F01,F03", kcr.cb_maps, sizeof kcr.cb_maps, klh_ini);      /* slots (DM01 = F01, DM03 = F03) */
+    kcr.cb_host = GetPrivateProfileIntA("CoverRing", "ClientBuildHost", 0, klh_ini) != 0;      /* (recommended off: experimental, CR3 bench) the HOST prebuilds too */
     kcr.cb_last = -1;
-    if (kcr.cb) klog("coverring: ClientBuild=1 (experimental, recommended off; online CLIENT only, once per load, slots '%s'): the client calls the ring writer 0x81b6f0 for its cars", kcr.cb_maps);
+    if (kcr.cb) klog("coverring: ClientBuild=1 (experimental, recommended off; online CLIENT%s, once per load, slots '%s'): this seat calls the ring writer 0x81b6f0 for its cars at load, table order",
+                     kcr.cb_host ? " and HOST (ClientBuildHost=1)" : " only", kcr.cb_maps);
     if (!kcr.on) return;
     klog("coverring: on (READ ONLY, LOG ONLY, recommended on for test runs, off for players): [L+0x68] poll + ZHavokCar script ring state, Callers=%d (recommended on for test runs, off for players)", kcr.callers);
     if (kcr.callers) {

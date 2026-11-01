@@ -53,8 +53,11 @@ static long kcr_surplus(unsigned long cnt, unsigned long base, unsigned long ran
 #define KCR_CB_GIVEUP_MS 60000UL            /* no cars / no list this long after the load: give up for this load (log once) */
 #define KCR_CB_MAXSTATE  0x19UL             /* session state 0x19 = in play; a later state (round over / shop) never builds */
 
-/* role/mode of the session ([sm+0x54], [sm+0x5c]): 1 only for a CLIENT (role 3) of an online game-type-4 (FA) session. Host (2), offline (0/other) -> 0 */
-static int kcr_cb_role_ok(unsigned long role, unsigned long mode) { return role == 3ul && mode == 4ul; }
+/* role/mode of the session ([sm+0x54], [sm+0x5c]): 1 for a CLIENT (role 3) of an online game-type-4 (FA) session, and also for the HOST (role 2) when host != 0
+   (ClientBuildHost, CR3 11-01: CR1 showed the host rings its cars only when each one activates mid-round, in activation order 871, 737, 792, 906 on DM01, not table
+   order; so BOTH seats prebuild at load in table order and the host's later activation reuses the reserved indices: VERIFIED in dasm 0x81b709 (rsv != 0 -> jne 0x81b766 skips the
+   8 x 0x558350 reservation and only rewrites the points; done != 0 -> return at 0x81b703)). Offline (0/other) -> 0 */
+static int kcr_cb_role_ok(unsigned long role, unsigned long mode, int host) { return mode == 4ul && (role == 3ul || (host && role == 2ul)); }
 
 /* does the slot of a level key ("f01\f01_main", either slash, any case) appear in the list "F01,F03" (comma / space / semicolon separated)? Empty list = no map */
 static int kcr_cb_map_listed(const char *list, const char *key)

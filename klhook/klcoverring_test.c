@@ -31,7 +31,8 @@ int main(void)
     CHECK(kcr_idx_shown(3) == 3 && kcr_idx_shown(8) == 8 && kcr_idx_shown(99) == 8);
     CHECK(kcr_surplus(347 + 16, 347, 2) == 0); CHECK(kcr_surplus(347, 347, 1) == -8); CHECK(kcr_surplus(363, 347, 1) == 8);
     /* ClientBuild gate */
-    CHECK(kcr_cb_role_ok(3, 4)); CHECK(!kcr_cb_role_ok(2, 4)); CHECK(!kcr_cb_role_ok(0, 0)); CHECK(!kcr_cb_role_ok(3, 1));
+    CHECK(kcr_cb_role_ok(3, 4, 0)); CHECK(!kcr_cb_role_ok(2, 4, 0)); CHECK(!kcr_cb_role_ok(0, 0, 0)); CHECK(!kcr_cb_role_ok(3, 1, 0));
+    CHECK(kcr_cb_role_ok(3, 4, 1)); CHECK(kcr_cb_role_ok(2, 4, 1)); CHECK(!kcr_cb_role_ok(2, 1, 1)); CHECK(!kcr_cb_role_ok(0, 4, 1));
     CHECK(kcr_cb_map_listed("F01,F03", "f01\\f01_main")); CHECK(kcr_cb_map_listed("F01,F03", "F03/F03_Main")); CHECK(kcr_cb_map_listed("f01 f03", "f03"));
     CHECK(!kcr_cb_map_listed("F01,F03", "f02\\f02_main")); CHECK(!kcr_cb_map_listed("F01,F03", "f011\\x")); CHECK(!kcr_cb_map_listed("F01", "f0\\x"));
     CHECK(!kcr_cb_map_listed("", "f01\\f01_main")); CHECK(!kcr_cb_map_listed("F01", "")); CHECK(!kcr_cb_map_listed(0, "f01")); CHECK(kcr_cb_map_listed(" ; F09 ,F01", "f01\\f01_main"));
