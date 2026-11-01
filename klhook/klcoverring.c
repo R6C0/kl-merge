@@ -122,10 +122,14 @@ static void kcr_rearm(DWORD gd, DWORD st, DWORD now)
    edx matches it (the same way the hook calls other thiscall routines, klfreeclimb.c KLFC_CALL). It lies in a CEG-hashed range: it is CALLED, never patched. Returns 1 = ran, 0 = fault. */
 static int kcr_cb_call(DWORD script)
 {
+    unsigned int cw = _control87(0, 0);
     __try {
         KLFC_CALL(void (__fastcall *)(DWORD, DWORD), 0x0081b6f0u)(script, 0);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        _fpreset();      /* review D4: the writer runs x87 code (fld / fstp from 0x81b771); a fault mid-way can leave values on the FPU stack */
+        /* review D4: the writer runs x87 code (fld / fstp from 0x81b771); a fault mid-way can leave values on the FPU stack. _fpreset clears the stack but also resets
+           the control word to the CRT default; the game thread (D3D9) may run another precision, so put the game's word back (review 11-02) */
+        _fpreset();
+        _control87(cw, _MCW_EM | _MCW_RC | _MCW_PC | _MCW_IC);
         return 0;
     }
     return 1;
@@ -161,7 +165,7 @@ static void kcr_cb_note(int why, DWORD now, DWORD st)
 /* called every tick from kcr_tick (game thread, inside its __try). Does nothing unless ClientBuild=1, this is an online CLIENT and the slot is listed. */
 static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
 {
-    DWORD sm, role = 0, mode = 0, L, rb, rn, pb = 0, pe = 0, cnt = 0, i, npts, elig; int list_ok, why, map_ok = 0, ran = 0, ok_n = 0, usable = 0;
+    DWORD sm, role = 0, mode = 0, L, rb, rn, pb = 0, pe = 0, cnt = 0, i, npts, elig; int list_ok, why, map_ok = 0, ran = 0, ok_n = 0, usable = 0, checked = 0;
     char scene[200], key[120];
     if (kcr.cb_bad || kcr.cb_done) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !KLH_SM_VT_OK(klh_rd32(sm)) || !klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !kcr_cb_role_ok(role, mode, kcr.cb_host)) return;    /* host / offline: nothing, no log */
@@ -207,7 +211,7 @@ static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
             kcr.cb_bad = 1;
             klog("coverring: clientbuild car #%lu '%s' script=%08lx: FAULT in 0x81b6f0 (FPU reset) - half state: count %lu -> %lu n[+1c4]=%lu rsv[+1e9]=%lu; %lu later car(s) NOT reserved, "
                  "indices DIVERGE from the other seat from here; ClientBuild off for the rest of the run", (unsigned long)i, nm, (unsigned long)s, (unsigned long)c0,
-                 (unsigned long)klh_rd32(L + 0x68), (unsigned long)klh_rd32(s + 0x1c4), (unsigned long)kcr_rd8(s + 0x1e9), (unsigned long)(kcr.ncars - i - 1));
+                 (unsigned long)klh_rd32(L + 0x68), (unsigned long)klh_rd32(s + 0x1c4), (unsigned long)kcr_rd8(s + 0x1e9), (unsigned long)(elig > (DWORD)ok_n ? elig - (DWORD)ok_n : 0));
             return;
         }
         ran++;
@@ -221,9 +225,10 @@ static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
              (unsigned long)i, (unsigned long)kcr.c[i].slot, nm, (unsigned long)car, (unsigned long)s, (unsigned long)c0, (unsigned long)c1, (long)c1 - (long)c0, (unsigned long)n,
              (unsigned long)kcr_rd8(s + 0x1e8), (unsigned long)kcr_rd8(s + 0x1e9), ix);
         usable += kcr_cb_points("clientbuild", i, idx, n, pb, npts);
+        checked += (int)(n < 8 ? n : 8);
     }
     klog("coverring: clientbuild END cars=%lu eligible=%d called=%d real-count %lu -> %lu usable points %d of %d", (unsigned long)kcr.ncars, ok_n, ran, (unsigned long)cnt,
-         (unsigned long)klh_rd32(L + 0x68), usable, ran * 8);
+         (unsigned long)klh_rd32(L + 0x68), usable, checked);
 }
 
 static void kcr_tick(int game_thread)
