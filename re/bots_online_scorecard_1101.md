@@ -115,3 +115,42 @@ Nothing in Q31 shows a bot lost in the world on a map that otherwise works. Stra
 3. `OnlineLegStallS=<N>` and `OnlineLegScale=1` (G1 DD02, DD08): bench DD02 and DD08.
 4. `OnlineBoardAllM=1600` (G5), after 1 so the bank is on.
 5. Code, new keys: `OnlineVanPosSane` (G1 DM09), the (0,0,0) trigger skip (G3), `OnlineStackRecheck` (G4).
+
+## Gap 4 diagnosis (11-01)
+
+Offline read of `klhook/klbotfill.c` (line numbers of HEAD 7b5ac0b4e) and the finished Q31 host/joiner logs (`...\KL_PortTools\build\klhook\solo\Q31_DD09`, `Q31_DD05`, also `Q31_DD07`, `Q31_DM06`, `Q31_DD03` for comparison). No Q32_DD09 / Q32_DD05 folder existed when this was written.
+
+### Code path
+- Scan `klbotfill.c:1435-1449`: every `ZOnlineMoneyCtrl` in the registry (0xe09e38, count 0xe0e63c); skips type `+0x38 == 1` (drop pool), amount `+0x34 <= 0`, `+0x6c` (armed) == 0, `+0x5c` shut door.
+- Order: bot gets `target` and phase 1. "Gone" test `klbotfill.c:1530`: vtable != money vt, or `+0x34 <= 0`, or `+0x6c == 0`, or no node -> log at `:1531`. The phase-4 twin is `:1569` ("stack gone or hidden").
+- Take: `:1547-1549` (lump) and `:1591` (timed parts) call the game's 0x4e3f40 only AFTER the bot is within `OnlineTacticsNear` (150 cm) of the stack. Nothing else in the hook touches `+0x34`.
+
+### Evidence
+1. It is not the hook's take and not a bot. DD09 round 1 has `round summary: 7 bot(s) given orders, 0 stack(s) taken, 40000 total`; the only take is bot 3's 2 parts (`11:39:57.341 bot 3 starts stack 28b1b5d0`, `left ... after 2 of 45 parts (partial tally 40000`). Bots 4 and 5 were still 27-30 m away when their stacks went (`11:39:51.351 ... bot 4 ... -> stack 28b1b760 (1200000) ..., 27 m away`; `11:40:04.427 bot 4 ... is gone before it got there`). No `GRABBED` line for those stacks. Take=2 cannot remove a stack early: it only runs at arrival.
+2. It is real depletion of `+0x34`, not a hidden flag. The loot bar (`klonline_read.c:134-148`) sums `+0x34` only, ignores `+0x6c`, and falls with it: DD09 `11:40:01.364 on the map 5960000` -> `11:40:04.654 left 3000000` -> `11:40:05.194 left 900000` -> `11:40:05.741 (read not yet, init 0, left 0)`; `11:40:11.399 on the map 0 (NO controller read)`. The 139 money objects stay in the registry (`scan: ... 0 armed stack(s) ... of 139 money object(s)`), so they are not freed; amounts are 0.
+3. It is not a human: the host seat stands still (`pos host-c/-d: me #0 (-14102, 102, 24903)` both reads); the first trigger FIRE is at +32 s.
+4. It is replicated game state, not a host-only hook effect: the JOINER's log shows the same drain at the same moment (`Q31_DD09\inst2`): `11:40:04.320 left 3860000`, `04.866 left 1800000`, `05.428 left 900000`. The joiner has no BotFill take.
+5. It starts at the same round-clock second on both maps and runs ~2 s: DD09 `played[+50]=11.6` at 11:40:02.9, drain 11:40:04-05 (about +13 s); DD05 `played=11.5` at 11:06:44.4, first stack gone at `11:06:41.6 (17%)`, bar `3710000 -> 3150000 -> 2360000` over 11:06:41-46 (about +8-13 s). Round 2 of DD09 repeats it at +13 s: `11:45:05.982 left 6000000` -> `11:45:18.603 left 4800000` -> `19.692 left 900000` -> `20.786 left 0`.
+6. Each loss lines up with a stock script event, 1 to 1 on the maps where it happens. `mfprobe: SCRIPT 0x6d2500` (CPPScript slot 56, ZGeneric/ZCivilian; the owner is a team-1 `ZFFActor` named 'Ground' standing 15-20 m south of the stacks):
+   - DD05: `#1 11:06:41.409` -> bar 17% at 41.631 and bot 1's stack 28ae50c0 (790000) gone at 42.106; `#2 11:06:44.012` -> bar 3150000 at 44.354 and bot 0's stack 28ae4da0 (560000) gone at 44.189.
+   - DD09: `#2 04.107, #3 04.262` -> two stacks gone at 04.427; `#4 04.606, #5 04.769, #6 04.842` -> bar 3.0M at 04.654, 0.9M at 05.194, last stack gone at 06.437.
+   - DD07 `#1 11:23:19.174` -> bar 20% at 19.415, then 40% and 60% as `#2`, `#3` fire (11:23:20.9 / 22.5). DM06 `#1 12:13:18.5` -> bar 23% at 12:13:23.6.
+   - On maps without the drain (DD03, DD02, DM02...) the same script also fires (`Q31_DD03 10:49:42.230 #1`) but the bar moves only 1-2% a second (the bots' timed parts), so the script is a marker for "an actor died / was removed", not the take itself.
+7. Maps where it happens (DD05, DD07, DD09, DM06) are the ones with the guarded-stack pattern of G2: `DD05 guardmode: round scan: 3 cop(s) read live, 6 money stack(s), 6 free stack(s) of which 3 guarded`. re/bots_loot.md section 5 already records "money on armed people (where the person is)" as takeable-from-the-start, and `Deactivate` / the take as the two things that end a stack.
+
+### Answers to the questions
+- Taken by a human? No (evidence 3). By another bot through the hook? No (1). By a stock bot/trigger path (ZTriggerBox2 serving team-2 actors in Arcade rules)? Possible but unproven: bots were 27-50 m from the stacks.
+- Dropped pool (type 1)? Skipped by both the scan and the bar, so it cannot explain a falling bar.
+- Container that empties itself? Best fit (GUESS): the stack is money tied to an armed person or scripted group (a team-1 'Ground' actor), and the stock level script depletes it when its carrier event fires (the 0x6d2500 hits). The loot is then paid out in the game's own accounting, not to the bots.
+- Wrong field / online tally 0? No: `+0x34` is read the same way by the scan, the take, and the HUD bar, and the joiner agrees. Take=2 early? No (code and evidence 1).
+- Type `+0x38`, registry: not logged for the vanished stacks. The scan only counts 139 objects; no per-stack type or state is in any line. This is the missing datum.
+
+### Smallest fix (default off, diagnostic first)
+1. New key `[BotFill] OnlineStackProbe` (default 0, recommended on for benches only). In the gone branch (`klbotfill.c:1531`) and the phase-4 stop (`:1569` log line) append `+0x34`, `+0x38`, `+0x64`, `+0x6c`, `+0x5c`, the node-hidden bit (ent flags 0x400) and the `[+0x80]` looter. Extend the scan summary line (`:1499`) with the per-type counts of the 139 (type 0 / 1 / 2) and, once per round, a one-line dump of each armed stack at the round start: address, type, amount, state, and the nearest team-1 actor within 30 m with its distance.
+2. If stock depletion by an actor event is confirmed, the fix is a re-pick, not a prevention: when a stack goes "gone" while its bot is walking, the next scan already hands the bot another stack, but with 0 armed left the bot idles (DD09: `bot 6 ... no stack to take (0 guarded, 20 s idle ...)`). Nothing to add in the hook for that case; the money is simply gone on the stock rules. To keep it for the bots, the lever is the stock cause (the actor event), to be found with the probe below.
+3. Optional log-only detour of 0x4e3f40 (`OnlineStackProbe=2`, in `klbotfill.c` next to the call at `:1548`): log `caller return address`, `this`, the amount and `+0x38`/`+0x64`, for calls whose `this` is not the one the hook is calling right now (a static flag around the hook's own two call sites at `:1548`/`:1591`). That names the stock caller of the depletion.
+
+### What a bench must show
+- A line such as `botfill: stackprobe: 0x4e3f40 by stock caller=XXXXXXXX this=28b1b760 amt=1200000 type=2 state=1 (hook call 0)` at 11:40:04 in the DD09 host log, with the caller RVA resolving to a script/trigger update (0x626ec0 = ZTriggerBox2, 0x727cb0 = the record state machine, 0x4c95d0 = Deactivate) or to the 0x6d2500 family.
+- And the per-stack round-start dump showing a team-1 actor within 30 m of each stack that vanishes. If the caller is 0x626ec0 with a team-2 actor, the Ally bots' proximity (or `OnlineTriggers` FIRE) is taking it; if it is a script, the stacks are scripted prizes and DD09 / DD05 need a different loot rule (bots should wait for the carrier event, or the stock script gate be left untouched).
+- Run: DD09 and DD05 online, `--n 2`, `OnlineStackProbe=2`, compare against DD03 (no drain) as control.
