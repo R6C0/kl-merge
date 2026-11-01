@@ -35,6 +35,22 @@ int main(void)
       CHECK(kgg_origin(zn), "origin: within 1 cm skipped");
       CHECK(!kgg_origin(st), "origin: a DD08 stack position kept");
       CHECK(!kgg_origin(y2), "origin: 2 cm up kept"); }
+    { float st[3] = { 10298, 80, 7398 }, on[3] = { 10300, 80, 7399 }, nr[3] = { 10298, 80, 7798 }, nn[3] = { 0, 0, 0 };
+      CHECK(kgg_carrier(on, st, 150), "carrier: a cop 2 cm away is the carrier");
+      CHECK(!kgg_carrier(nr, st, 150), "carrier: a cop 4 m away is a guard");
+      CHECK(!kgg_carrier(on, st, 0), "carrier: 0 = off");
+      CHECK(!kgg_carrier(on, st, -5), "carrier: negative = off");
+      nn[0] = (float)sqrt(-1.0); CHECK(!kgg_carrier(nn, st, 150), "carrier: NaN is no carrier"); }
+    CHECK(kgg_partial_hold(1, 440000, 0, 2, 0, 5, 100000, 90000, 60000, 200, 90), "partial hold: DD06 case");
+    CHECK(!kgg_partial_hold(0, 440000, 0, 2, 0, 5, 100000, 90000, 60000, 200, 90), "partial hold: key off");
+    CHECK(!kgg_partial_hold(1, 0, 0, 2, 0, 5, 100000, 90000, 60000, 200, 90), "partial hold: nothing carried");
+    CHECK(!kgg_partial_hold(1, 440000, 2, 2, 0, 5, 100000, 90000, 60000, 200, 90), "partial hold: carry limit reached");
+    CHECK(!kgg_partial_hold(1, 440000, 0, 2, 1, 5, 100000, 90000, 60000, 200, 90), "partial hold: idle-van order wins");
+    CHECK(!kgg_partial_hold(1, 440000, 0, 2, 0, 0, 100000, 90000, 60000, 200, 90), "partial hold: no stack left to wait for");
+    CHECK(!kgg_partial_hold(1, 440000, 0, 2, 0, 5, 100000, 0, 60000, 200, 90), "partial hold: no partial stop");
+    CHECK(!kgg_partial_hold(1, 440000, 0, 2, 0, 5, 150000, 90000, 60000, 200, 90), "partial hold: wait over");
+    CHECK(!kgg_partial_hold(1, 440000, 0, 2, 0, 5, 100000, 90000, 60000, 80, 90), "partial hold: clock low");
+    CHECK(kgg_partial_hold(1, 440000, 0, 2, 0, 5, 5, 4294967000U, 60000, 200, 90), "partial hold: tick wrap, 300 ms after");
     printf("klguard_test: %d checks, %d fail\n", checks, fails);
     return fails != 0;
 }

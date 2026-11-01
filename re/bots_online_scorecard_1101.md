@@ -205,3 +205,43 @@ Code (default off): `[BotFill] OnlineUnplacedGuard` (`kvp_all_unplaced`, `klbotf
 
 Bench recipe change: install the zip first (owner): `python C:\kl_build_1024\botsstock_1026\install_any.py DD01`, then run DD01 with `OnlineTactics=1 OnlineHost=1 OnlineTriggers=1 OnlineTriggerOriginSkip=1`. Control run without the zip adds `OnlineUnplacedGuard=1`.
 PASS (with zip): `botgate: slot F01 ... -> ...\DD01\F01_Main.bots.zip` instead of the WARNING; `tactics: scan:` shows N armed stack(s) with the +M shut-door count falling, or bots take the exit and call the van by +155 s; `exit walk from (x,y,z)` non-zero; no `bot at (0, 0, 0)`; round summary shows a van call and boarded bots. PASS (control, no zip): one `OnlineUnplacedGuard` line per round, no `exit walk from (0, 0, 0)`, no `did not reach`.
+
+## T3 online vs Arcade: table tool, stack give-up reasons, fixes, ARC2 kit (11-01 night, wk-botscore-1101)
+
+### Table tool
+`python tools/kl_online_vs_arcade.py --prefix Q31 --maps <list>` prints one table per map: Arcade (ARC1 note) | online host hook tally (round 1 summary, GRABBED
+lines as fallback), loot ratio and PASS / BELOW / NO-BASELINE / NO-LOG / NO-ROUND. `--arcade` repeats (ARC1 + ARC2 notes merge). PASS = online loot >= 60 pct of Arcade
+loot. The 60 pct is a JUDGEMENT CALL, not measured (Arcade itself swings a lot between rounds). Test: `tools/kl_online_vs_arcade_test.py` (25 checks).
+
+### Why stacks were given up (Q31 host logs, read only)
+- DD05 (Arcade 6 stacks, online 0 to few): `guardmode: round scan: 3 cop(s) read live, 6 money stack(s), 6 free stack(s) of which 3 guarded` (11:06:33), then
+  `stack ... is gone before it got there (taken by someone else?)` x2 (11:06:42/44), then `no stack to take (0 guarded, 24 s idle, clock left 214 s) ... OnlineIdleVan` (11:07:08).
+  Two causes: the guard test, and stacks that vanish (see DD09).
+- DD07: `5 cop(s) read live, 5 money stack(s), 5 free stack(s) of which 5 guarded` (11:23:04); 57 s later `no stack to take (0 guarded, 57 s idle, clock left 192 s)` for
+  bots 0..3 (11:24:02). All five stacks were "guarded", so the bots held, then went idle to the van. ARC1 DD07 shows the cops standing at the stacks are CARRIERS
+  (the stock drop rule), and Arcade bots simply shoot them (6 dead in ARC1).
+- DM06: `14 cop(s) read live, 4 money stack(s), 4 free stack(s) of which 4 guarded` (12:13:05), `no stack to take (0 guarded, 110 s idle, clock left 139 s)` (12:14:56). Same pattern.
+- DD09: `17 cop(s) read live, 6 money stack(s), 6 free stack(s) of which 0 guarded` (11:39:51), so NOT the guard test; then four `stack ... is gone before it got there`
+  within 1 s of each other at 11:40:04-05 (about +13 s). Stacks drained by the stock script (0x6d2500 chain, see "Gap 4 RE"): cause unproven, SP2 (OnlineStackProbe=3 + OnlineDropFollow=1) is
+  the bench that decides it. No new probe key was added (the existing OnlineStackProbe covers it).
+- DD06 (behind, not zero): `lootparts: bot 1 left stack 1f6ce8f0 after 25 of 34 parts (partial tally 500000; bot moved away: 8.3 m from the stack ... limit 2.5 m)` (11:15:23),
+  the same for bots 4, 5, 6 within 1 s. Bots drift off the stack (crowding) mid-loot and the partial stop then blacklists the stack; with the exit commit that follows, the
+  rest of the stack is never finished. Arcade (5.55M) finishes the stacks.
+
+### Fixes in code (both default 0, SHIP-safe: tick/data only, no .text patch, no debug register)
+- `[BotFill] OnlineGuardCarrierCm` (recommended off until benched; try 150; needs OnlineGuardMode=1): a live cop within that many cm of the stack is its CARRIER
+  (it is the money's owner, not a guard), so it does not count as a guard. Pure rule `kgg_carrier` in klguard_logic.h (klguard_test.c). Risk: the bots walk into a
+  cop and may die, as in Arcade (ARC1 DD07: 6 dead). GUESS: 150 cm is the carry offset; unmeasured.
+- `[BotFill] OnlinePartialRetry` + `OnlinePartialRetryS` (60) (recommended off until benched): after a partial stop with a tally > 0 the bot does not commit to the exit
+  for up to S seconds while a free stack remains and enough clock is left (`kgg_partial_hold`); the blacklist retry then picks the stack again. GUESS: 60 s.
+- Rows in tools/kl_mod_options.py, commented doc lines in klhook/KLHook.ini. Not fixed: DD09 vanishing stacks (needs SP2), DD05 second half (same).
+
+### ARC2 kit (staged, NOT run)
+`python tools/kl_arc2_kit.py` writes `C:\kl_build_1024\week_1028\arc2`: KLHook_ARC2.ini, ARC2_<MAP>.ini x10, maps_ARC2.txt, run_arc2.sh, loadcheck.py, README.txt. Maps: DM01B DM02 DM03
+DM03A DM05A DM06B DM07 DM09 DM11B DD10 (slot/page/entry from the live_1026 smoke inis; page 2 = 6 DOWN, page 3 = 7 DOWN). DM09 has a 1000 s cap. Needs the expansion maps installed,
+the TEST dll week_1028 arcbase (ArcadeProbe), the game closed, the owner away. Test: tools/kl_arc2_kit_test.py (58 checks).
+
+### Bench / ship proposal (nothing goes into NEXT_SHIP.txt)
+- Bench: OnlineGuardCarrierCm=150 on DD05 DD07 DM06 DM01 (PASS: stacks taken > 0, ratio column >= 60 pct, deaths not worse than ARC1); OnlinePartialRetry=1 on DD06 DD08 (PASS: no
+  `left stack` followed by an exit commit with a free stack left). Then ARC2, then re-run the table with both ARC notes.
+- Ship only after a bench passes; keys stay at 0 until then.
