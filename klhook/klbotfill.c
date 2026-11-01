@@ -111,7 +111,7 @@ static int klbf_squads(int fill)
 /* The bot actors for klbalance.c's online point-blank wrapper (OnlinePointBlank): the puppeteer pass publishes the live team-2 Ally actors it found (human heisters are team 2 too, so the
    team alone cannot tell them apart; the puppeteer's list is the bots). Entries first, then the count; read on the game thread, fresh for 5 s. Needs OnlineTactics=1 (the census is its). */
 #define KLBF_OT_BOTS_MAX 16      /* = KLBF_OT_BOTS (defined below) */
-static int klbf_way_pm; static float klbf_hop_dy;      /* [BotFill] OnlineWayPerMap (0/1/2), OnlineLegHopDy (cm): both default 0 = today (klway_logic.h) */
+static int klbf_way_pm, klbf_legs_van; static float klbf_hop_dy;      /* klbf_legs_van: [BotFill] OnlineLegsWithVan (klway_logic.h kwy_legs_left) */      /* [BotFill] OnlineWayPerMap (0/1/2), OnlineLegHopDy (cm): both default 0 = today (klway_logic.h) */
 static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used by klbf_way_load below) */
 /* wk-botpath (2026-10-28, static + log analysis of Q27_DD04R/DD05/DD08, BOS_DD08r; NOT run live). Every key defaults to today's behaviour (0). re/bots_path_1028.md.
    OnlineLegScale (0/1)   per-leg timeout = clamp(5 s + leg distance / OnlineLegSpeed, 15 s, OnlineLegMaxS) instead of a flat 15 s (DD08: legs of 40-60 m timed out at 15 s with 28-79 m left)
@@ -236,6 +236,7 @@ static void klbf_init(void)
     klbf_leg_near = (float)GetPrivateProfileIntA("BotFill", "OnlineLegNear", 0, klh_ini); if (klbf_leg_near < 0) klbf_leg_near = 0;      /* 0 = 300 cm */
     klbf_leg_dy = (float)GetPrivateProfileIntA("BotFill", "OnlineLegDy", 0, klh_ini); if (klbf_leg_dy < 0) klbf_leg_dy = 0;      /* 0 = height ignored */
     klbf_way_pm = (int)GetPrivateProfileIntA("BotFill", "OnlineWayPerMap", 0, klh_ini); if (klbf_way_pm < 0 || klbf_way_pm > 2) klbf_way_pm = 0;      /* (recommended off until benched) 1 = [BotFillWay_<MAP>] first, 2 = also no slot route on a redirected map */
+    klbf_legs_van = GetPrivateProfileIntA("BotFill", "OnlineLegsWithVan", 0, klh_ini) != 0;      /* (recommended on for maps whose van stands from the start, DM09; default 0 = today) */
     klbf_hop_dy = (float)GetPrivateProfileIntA("BotFill", "OnlineLegHopDy", 0, klh_ini); if (klbf_hop_dy < 0) klbf_hop_dy = 0; if (klbf_hop_dy > 100000.0f) klbf_hop_dy = 100000.0f;      /* (recommended off until benched) 0 = height ignored */
     klbf_bx_spread = GetPrivateProfileIntA("BotFill", "OnlineBoxSpread", 0, klh_ini) != 0;      /* (recommended off: not yet run live) */
     klbf_bx_latch = GetPrivateProfileIntA("BotFill", "OnlineBoxLatch", 0, klh_ini) != 0;      /* (recommended off: not yet run live) */
@@ -1820,7 +1821,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (!(klbf_ob[s].told & 64) && (klbf_ob[s].told |= 64)) klog("botfill: tactics: bot %d (actor %08lx): van gather: leaves phase %d (tally %d, %d grab(s)) and walks to the box", s, a, klbf_ob[s].phase, klbf_ob[s].tally, klbf_ob[s].grabs);
             if (klbf_ob[s].phase == 4 && klbf_lf) klbf_lf_left++;
             if (klbf_ob[s].phase == 4) klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; van gather)", s, (unsigned long)klbf_ob[s].target, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally);
-            klbf_ob[s].phase = 2; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].told &= ~8; klbf_ob[s].leg = klbf_way_start(bots[b].pos, klbf_ot_tpos); klbf_ob[s].legAt = 0;
+            klbf_ob[s].phase = 2; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].told &= ~8; klbf_ob[s].leg = klbf_way_start(bots[b].pos, kwy_exit(klbf_legs_van, van != 0, klbf_ot_vh != 0, klbf_ot_tpos, vpos)); klbf_ob[s].legAt = 0;
         }
         if (klbf_ob[s].phase == 1) {      /* walking to a stack: reached? gone? stalled? */
             DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0; DWORD ent, node; float mp[3], dh = 0;
@@ -1991,7 +1992,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klog("botfill: tactics: bot %d (actor %08lx soldier %08lx) -> stack %08lx (%d) at (%.0f, %.0f, %.0f), %.0f m away", s, a, bots[b].soldier, mo[best], mamt[best], tgt[0], tgt[1], tgt[2], bd / 100);
             } else if (klbf_ob[s].tally > 0 || idleVan) {      /* BO3: with nothing carried a bot waited at the van for nothing; it now waits for an armed stack */
                 if (!van && !(klbf_ot_vh && !klbf_ot_called) && !(klbf_ot_joincall && klbf_ot_vh && klbf_ot_called && vstate >= 1 && vstate <= 4 && klbf_ot_calledAt && now - klbf_ot_calledAt <= 60000)) {      /* OnlineJoinCalled (BOS_DD04): a carrier whose van another bot called walks to it while it comes or waits (1-4), instead of standing 100 m off for the whole visit */ if (!(klbf_ob[s].told & 1) && (klbf_ob[s].told |= 1)) klog("botfill: tactics: bot %d (actor %08lx): wants the van but it is not here and %s", s, a, klbf_ot_called ? "it was called already" : "no exit trigger was found to call it from"); continue; }
-                klbf_ob[s].phase = 2; klbf_ob[s].nearAt = klbf_ob[s].outAt = 0; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].leg = klbf_way_start(bots[b].pos, klbf_ot_tpos); klbf_ob[s].legAt = 0;      /* OnlineWaypoints: resume at the first leg ahead, never back down */
+                klbf_ob[s].phase = 2; klbf_ob[s].nearAt = klbf_ob[s].outAt = 0; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].leg = klbf_way_start(bots[b].pos, kwy_exit(klbf_legs_van, van != 0, klbf_ot_vh != 0, klbf_ot_tpos, vpos)); klbf_ob[s].legAt = 0;      /* OnlineWaypoints: resume at the first leg ahead, never back down */
                 if (van) klog("botfill: tactics: bot %d (actor %08lx) -> escape van %08lx at (%.0f, %.0f, %.0f) with tally %d (%d grab(s))", s, a, van, vpos[0], vpos[1], vpos[2], klbf_ob[s].tally, klbf_ob[s].grabs);
                 else klog("botfill: tactics: bot %d (actor %08lx) -> exit trigger %08lx at (%.0f, %.0f, %.0f) to call the van, with tally %d (%d grab(s))", s, a, klbf_ot_trig, klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], klbf_ob[s].tally, klbf_ob[s].grabs);
             }
@@ -2075,7 +2076,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     continue;
                 }
             } else if (!bxOn) klbf_ob[s].nearAt = 0;
-            legsLeft = !van && !bxOn && klbf_ot_vh && !klbf_ot_called && klbf_way_n > 0 && klbf_ob[s].leg < klbf_way_n;
+            legsLeft = kwy_legs_left(klbf_legs_van, van != 0, bxOn != 0, klbf_ot_vh != 0, klbf_ot_called, klbf_way_n, klbf_ob[s].leg);
             if (legsLeft) {      /* OnlineWaypoints: reached (300 units horizontally) or 15 s on this leg -> next; the stall / give-up clocks below do not run while legs remain (the 15 s per leg is their clock) */
                 const float *wp = klbf_way_p[klbf_ob[s].leg]; float wd = (float)sqrt((bots[b].pos[0] - wp[0]) * (bots[b].pos[0] - wp[0]) + (bots[b].pos[2] - wp[2]) * (bots[b].pos[2] - wp[2]));
                 float wnear = klbf_leg_near > 0 ? klbf_leg_near : KLBF_WAY_NEAR; int hit, timedout, stalled = 0;
@@ -2128,6 +2129,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 DWORD ent, node;
                 if (!(ent = klh_rd32(klbf_ob[s].target + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, tgt, 0)) continue;
             } else if (klbf_ot_bwalk && (klbf_ot_called || klbf_ot_gat) && klbf_ot_box_frame(klbf_ot_bxbest, &t_bf)) klbf_ot_slot_target(s, &t_bf, tgt);      /* OnlineBoxSpread (off = the centre, as before) */      /* OnlineBoxWalk (and the OnlineVanGather walk) */
+            else if (van && klbf_legs_van && !klbf_ot_called && klbf_ob[s].phase == 2 && klbf_ob[s].leg < klbf_way_n) memcpy(tgt, klbf_way_p[klbf_ob[s].leg], 12);      /* OnlineLegsWithVan: the current leg while legs remain */
             else if (van) memcpy(tgt, vpos, 12);
             else if (klbf_ot_vh) memcpy(tgt, klbf_ob[s].phase == 2 && !klbf_ot_called && klbf_ob[s].leg < klbf_way_n ? klbf_way_p[klbf_ob[s].leg] : klbf_ot_tpos, 12);      /* OnlineWaypoints: the current leg point while legs remain (klbf_way_n is 0 without a section) */      /* OnlineTacticsVan: to the exit box first, where the call is made */
             else continue;      /* never order a walk to the (0,0,0) default */

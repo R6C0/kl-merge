@@ -101,6 +101,8 @@
 #ifndef KLCREW_RT_C
 #define KLCREW_RT_C
 
+#include "klway_logic.h"      /* wk-rt2-1101: kwy_class_ok (the private-vtable class test, klway_test.c) */
+static int klt_privok;      /* [CrewHop] OnlinePrivVt (recommended on; default 0 = today): klt_refuse reads the class through klh_avt, so a bot on klbalance.c's private vtable still counts as a ZFFActor */
 #define KLT_SESSION    0x0168e598             /* +0x5c = mode (4 = Arcade), +0x70 = state */
 #define KLT_SETTINGS   0x0168e9e4             /* +0x54 = the rules object */
 #define KLT_RULES_VT   0x00bd3514             /* ZGameRulesHeist */
@@ -191,7 +193,7 @@ static int klt_code(DWORD va)
 static const char *klt_refuse(DWORD actor)
 {
     DWORD node, fl3c = 0, body[2] = { 0, 0 }, p7c0 = 0, p50c = 0, vt = 0, tmp = 0;
-    if (klh_rd32(actor) != KLT_ACTOR_VT) return "its actor is not a ZFFActor";
+    if (!kwy_class_ok(klt_privok, klh_rd32(actor), klh_avt(actor), KLT_ACTOR_VT)) return "its actor is not a ZFFActor";      /* GUESS: 0x62a900 itself never tests the vtable (it asserts on +0x77c/+0x7c0/+0x50c, all checked below); the private copy differs only in slot 423 */
     if (!(node = klh_rd32(actor + 4)) || !klh_rd(node + 0x3c, &fl3c, 4) || (fl3c >> 10 & 1)) return "its node is off (flag bit 10)";
     if (!klh_rd(actor + 0x77c, body, 8) || (!body[0] && !body[1])) return "both pointers the game's routine asserts on are zero";
     if (!klh_rd((body[0] ? body[0] : body[1]) + 0xec, &tmp, 4)) return "the pointer at +0x77c / +0x780 cannot be read at +0xec (0x62a9d2)";

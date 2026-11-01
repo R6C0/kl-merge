@@ -524,6 +524,7 @@ static void klv_init(void)
     if (klv.online) klog("hop: ONLINE=%d (%s): on the online HOST the AI heisters found by the census are carried over the level's [CrewHop] places (host only, the game's own teleport; heist stage from [BotFill] OnlineTactics, else OnlineStage=%d)", klv.online, klv.online == 2 ? "dry log" : "live", klv.ostage);
     klv.reorder = GetPrivateProfileIntA("CrewHop", "Reorder", 0, klh_ini) != 0;
     klv.orderto = GetPrivateProfileIntA("CrewHop", "OrderTo", 1, klh_ini) != 0;       /* 1 = at the hop the soldier's order becomes the landing place */
+    klt_privok = GetPrivateProfileIntA("CrewHop", "OnlinePrivVt", 0, klh_ini) != 0;      /* (recommended on) RT1L: 17 carries refused 'not a ZFFActor': the host's bots sit on klbalance.c's private vtable */
     klv.log = (int)GetPrivateProfileIntA("CrewHop", "Log", 1, klh_ini);
     klv.walkx = GetPrivateProfileIntA("Bots", "WalkExclusive", 0, klh_ini) != 0;      /* v82i GUESS fix, default 0: while klhop.c walks a bot, klfedkit Hunted and klmove Restless give it no order */
     klv.recheck = (int)GetPrivateProfileIntA("CrewHop", "Recheck", 5, klh_ini);         /* v78: default 5 (the fast watch counts too) */       /* put-backs of a bot that did not land (0 = off) */

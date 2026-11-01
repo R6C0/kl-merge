@@ -41,6 +41,29 @@ static int kwy_hold(float botY, float nextY, float hopdy, unsigned long onLegMs,
     return fabs(nextY - botY) > hopdy;
 }
 
+/* wk-rt2-1101 (RT1 11-01): may the exit walk follow the waypoint legs? Today only while NO van object is known (!van), no escape box (bxOn 0), the exit trigger found (vh) and the van not called.
+   DM09 puts the van object in the street from the start (scan: van 58421b40 at (24235, -59842, 13883) while the bots are in the tower at y 19600): van != 0 made legsLeft 0 AND blocked the
+   exit-trigger lookup (!van), so vh stayed 0 and all 7 bots walked straight at a van 60 km away. withVan (OnlineLegsWithVan): a known van does not stop the legs and the trigger is not needed
+   (the van is the exit; the board test is the old 'van within 2*Near'). Returns 1 = legs run. */
+static int kwy_legs_left(int withVan, int van, int bxOn, int vh, int called, int n, int leg)
+{
+    if (bxOn || called || n <= 0 || leg >= n) return 0;
+    if (van) return withVan != 0;
+    return vh != 0;
+}
+
+/* wk-rt2-1101: the exit point the legs are measured against (kwy_start): the trigger's place when known, else the van's (withVan and a van but no trigger) */
+static const float *kwy_exit(int withVan, int van, int vh, const float *tpos, const float *vpos)
+{
+    return (withVan && van && !vh) ? vpos : tpos;
+}
+
+/* wk-rt2-1101 (RT1): 1 = klt_refuse may read the actor's class through klh_avt (a private copy of the ZFFActor vtable counts as ZFFActor). RT1L: the host's bots were moved onto klbalance.c's
+   private table ('cop->bot factor: bot actor ... now on the private table'), klt_refuse read the raw vtable and refused all 17 carries with 'its actor is not a ZFFActor'. */
+static int kwy_class_ok(int privOk, unsigned long raw, unsigned long viaAvt, unsigned long want)
+{
+    return privOk ? viaAvt == want : raw == want;
+}
 /* 1 = the carry happened: the bot was held on this leg (heldFlag), is now on the NEXT leg's floor (within hopdy) and off the current leg's floor, so the current leg counts as reached (no idle 15 s timer) */
 static int kwy_carried(int heldFlag, float botY, float curY, float nextY, float hopdy)
 {

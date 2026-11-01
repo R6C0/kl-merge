@@ -44,6 +44,13 @@ int main(void)
     CHECK(!kwy_hold(19600, 114, 1500, KWY_HOLD_MS, KWY_HOLD_MS), "hold cap reached");
     CHECK(!kwy_hold(19600, 19601, 1500, 100, KWY_HOLD_MS), "same floor next leg");
 
+    /* wk-rt2-1101 */
+    CHECK(!kwy_legs_left(0, 1, 0, 0, 0, 8, 0) && kwy_legs_left(1, 1, 0, 0, 0, 8, 0), "van known: legs only with OnlineLegsWithVan (no trigger needed)");
+    CHECK(!kwy_legs_left(1, 1, 1, 0, 0, 8, 0) && !kwy_legs_left(1, 1, 0, 0, 1, 8, 0) && !kwy_legs_left(1, 1, 0, 0, 0, 8, 8) && !kwy_legs_left(1, 1, 0, 0, 0, 0, 0), "box / called / done / no legs: no legs");
+    CHECK(kwy_legs_left(0, 0, 0, 1, 0, 5, 2) && !kwy_legs_left(0, 0, 0, 0, 0, 5, 2) && kwy_legs_left(1, 0, 0, 1, 0, 5, 2) && !kwy_legs_left(1, 0, 0, 0, 0, 5, 2), "no van: needs the trigger as before");
+    { float tp[3] = { 1, 2, 3 }, vp[3] = { 4, 5, 6 };
+      CHECK(kwy_exit(1, 1, 0, tp, vp) == vp && kwy_exit(0, 1, 0, tp, vp) == tp && kwy_exit(1, 1, 1, tp, vp) == tp && kwy_exit(1, 0, 0, tp, vp) == tp, "exit point: van only when withVan, van and no trigger"); }
+    CHECK(!kwy_class_ok(0, 0xbb0000, 0xbb3bac, 0xbb3bac) && kwy_class_ok(0, 0xbb3bac, 0, 0xbb3bac) && kwy_class_ok(1, 0xbb0000, 0xbb3bac, 0xbb3bac) && !kwy_class_ok(1, 0xbb3bac, 0x1234, 0xbb3bac), "priv vtable: class ok only through avt when on");
     CHECK(ksp_changed(-9, -9, -9, 5, 1, 1), "first read is a line");
     CHECK(!ksp_changed(1000, 1, 1, 1000, 1, 1) && ksp_changed(1000, 1, 1, 0, 1, 1) && ksp_changed(1000, 1, 1, 1000, 2, 1) && ksp_changed(1000, 1, 1, 1000, 1, 0), "poll: a line only on a change");
     CHECK(ksp_changed(1000, 1, 1, -1, -1, -1), "poll: unreadable is a change");
