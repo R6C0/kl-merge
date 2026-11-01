@@ -41,6 +41,7 @@ Owner: ce.
 - 11-01 09:05 c9: Q30 21/21 PASS (round 2, both seats, 0 faults). DM07 + DD10 wardrobe (+PD2 plates) INSTALLED (undo bat in hirebody); HIREWD running.
 - 11-01 09:50 c9: HIREWD PASS (Kane/Lynch hired online on DM07 + DD10, bodies applied both seats, 0 faults). DD10 largest free VA piece 14.4 MB: watch.
 - 11-01 05:30 c9: Q29 21-map online regression on ship1101: all 21 PASS 0 faults (DD01 after one lobby timeout). GUN13 never opened the weapon list (joiner route bug), GUN14 re-run.
+- 11-01 13:35 c9: Q31 21/21 PASS -> SHIPPED ship1102 (ini 9152e8bb: Arcade-style bot looting/guarding, bots fire cop triggers, get-up 25 m + ignore van, [Keys] Map + Hints). Bank keys missing (ce 10:50): Q32 = ship1103 (+OnlineBank/OnlineBankCredit) running, 21 maps.
 - 11-01 03:45 c9: SHIPPED ship1101 (dll a6ea229f + ini 12d5f8e1): online get-up rescue (ce BP18/BP19) + lift door-hold fix; SHIPCHK5 + A1LIFTNET4 PASS 0 faults.
 - 10-30 12:50 c9: A1HOLD2 PASS (a quit joiner no longer holds the lift doors open); fix merged, not shipped. Spend limit hit: work paused to a minimum.
 - 10-29 06:00 c9: disk-full fixed (kl_map_shift_test leaked 40 GB of temp dirs; e0c73451b). Door-hold ghost fix built (c9-doorhold-1029 b743640eb), bench A1HOLD2 next.

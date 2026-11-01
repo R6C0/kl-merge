@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~13:35 - [c9] SHIPPED ship1102 after Q31 21/21 PASS (online, round 2, 0 faults): <DD>\KLHook.ini = 9152e8bb (ship1101 + 16 keys,
+q31 DELTA.txt; undo C:\kl_build_1024\c9_1028\q31\UNDO_ship1102.bat). It lacks the bank keys (ce 10:50 below): Q32 = ship1103 candidate
+(+OnlineBank=1 +OnlineBankCredit=1, kit C:\kl_build_1024\c9_1028\q32) running on 21 maps, install when it passes.
+
 2026-11-01 ~10:50 UTC - scheduled check-in (cloud; PC BUSY: c9's Q31 twin in <DD>\dinput8.dll 10:47; nothing launched or installed; no new dump).
 FINDING for c9's ship1102: the Recommended set / candidate turns [BotFill] OnlineTacticsTake 0 -> 2 with OnlineBank + OnlineBankCredit still off:
 Take=2 depletes the stack (0x4e3f40) and online the game cannot bank for a bot, so the bots' loot LEAVES the round (WK2 $1.35M, MV1 $4.56M) -
 less for the team than Take=0. Bank paid live (WKBC5/WKBC7/MV1, 0 faults): onlinebank row now recommended on, the take row writes the bank
 keys too, +3 self-tests (62/62). Ship1102 should carry OnlineBank=1 + OnlineBankCredit=1 next to Take=2. debug/notes/2026-11-01-scheduled-triage.md (3rd).
-
-2026-11-01 ~10:30 - [c9] Q31 RUNNING: all 21 maps online, 2 rounds, on the ship1102 CANDIDATE ini (ship1101 + 16 keys, C:\kl_build_1024\c9_1028\q31
-DELTA.txt; INSTALL/UNDO_ship1102.bat ready, ini only, NOT installed). LONGVA: DD10 full match, largest free piece floor 14.4 MB stays flat, 0 refused,
-0 faults (map trait; RoomMB no help). kl_tests green again (b2e99cfd6). kl_solo_test's base ini = the game folder's unless --base is given.
 
 2026-11-01 ~09:50 - [ce] OnlineGetUpIgnoreVan PROVEN by A/B (IV2 / IV2OFF, DD08 online, 0 faults): with it on a bot holds by a seat downed in van
 state 1, up 10.3 s; off = 3 downs, 'no helper'. Mod Options row now recommended on; in c9's NEXT_SHIP with OnlineGetUpRange=2500. GUN13 closed
