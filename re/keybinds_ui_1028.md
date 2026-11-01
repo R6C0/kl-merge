@@ -10,7 +10,7 @@ All via user32 GetAsyncKeyState (looked up at run time), foreground-window gated
 | Key (default) | File:line | Feature | Ini | Default | Arcade / online |
 |---|---|---|---|---|---|
 | F6 (live ini: P) | klshoppage.c:988 | Buy Weapons page I/II | [ShopPage] Key, Hint | Enable=1 live | Arcade + online (OnlineLook/Apply) |
-| F12 | klshoppage.c:980 | Hire a heister page | [Hire] PageKey, Page=1, Confirm | Page OFF live (key absent) | Arcade + online (klhro_set) |
+| F3 (was F12) | klshoppage.c:980 | Hire a heister page | [Hire] PageKey, Page=1, Confirm | Page OFF live (key absent) | Arcade + online (klhro_set) |
 | F5 | klucc.c:182 | Undercover cop ping/accuse | [Ucc] Key, Pings, Accuse | off | online |
 | Insert | klucchide.c:322 | UCC reveal | [Ucc] RevealKey | off | online |
 | F7 | klunstick.c:143 | Unstick (back to last free place) | [Unstick] Key, Enable, Auto | on live | offline only (online returns early) |
@@ -46,11 +46,11 @@ CERTAIN unless marked.
 2. F8: Inv + HostOpts KeyAI + ReShade preset 119. KL_MOD_SETTINGS.txt documents F7/F8 as looks and is stale about the hook uses.
 3. F10: Neural/Uplift vs ReShade EnableKey=121. Home/Print/`'` also ReShade.
 4. CopSquad F = stock close combat, G = stock grenade AND [Grenade] Key. Real clashes (feature is off by default).
-5. F12 may be the Steam screenshot key (GUESS).
+5. F12 is the Steam screenshot key (the hire page was on it; moved to F3 on 2026-11-01, `klkeys.c` table, `klshoppage.c` fallback 0x72). F3 is free in Steam and ReShade.ini; Ctrl+F3 is the host map key (Ctrl-gated, no clash). `tools/klkeys_text_test.py` keeps the text and the table in step.
 6. By design, not bugs: E shared by Climb/Adrenaline/stock use; C mash = stock cover; ShopPage P = pillpop but shop-mode only; CopSquad H vs QoL2 HeisterKey H are in disjoint contexts (round vs menu).
 7. HostOpts keys poll every 30 ms with no lobby gate found (GUESS that they fire in-round offline; the loop reads: window front and role not client).
 
-Context groups: shop-only (F6/P, F12), menu-only (HeisterKey), in-round (Climb, Adren, Mash, Grenade, Unstick, Inv, CopSquad, Sabotage), host/lobby (F7, F8, Delete), online-only (F9, F11, F5, Insert).
+Context groups: shop-only (F6/P, F3 hire), menu-only (HeisterKey), in-round (Climb, Adren, Mash, Grenade, Unstick, Inv, CopSquad, Sabotage), host/lobby (F7, F8, Delete), online-only (F9, F11, F5, Insert).
 
 ## 4. UI surfaces we control (CERTAIN they exist)
 
@@ -67,13 +67,15 @@ Context groups: shop-only (F6/P, F12), menu-only (HeisterKey), in-round (Climb, 
 ### 5.1 [Keys] section (GUESS: not built)
 New klkeys.c, `klkeys_init()` called early in the klh_tick init order (before kus_init/klho_init/klinv_init; modules are #included in klhook.c lines 701-767, ticked 1242-1287). It reads once with GetPrivateProfileIntA, exposes `int klkeys_get(const char* name, int def)`. Each module keeps its own [Section] Key= as an override: precedence = module key if present, else [Keys], else default. Accepts decimal or 0x hex (as klqol2 does) and a name parser reusing kspg_h_keyname in reverse.
 
+(Design-time proposal. The map as built is the klkeys_def table in klhook/klkeys.c: Unstick End, Inv PageUp, CopSquad Num1-3, host keys Ctrl+F3 / Ctrl+F4 / Ctrl+Delete, hire F3, page-cycle F2.)
+
 Proposed default map (avoids stock keys and ReShade F7/F8/F10/Home/Print/`'`):
 
 | Feature | Old | New default |
 |---|---|---|
 | Page II | F6 | F6 (unchanged; live ini P stays) |
-| Hire page | F12 | F12 (owner may move if Steam overlay clashes) |
-| MOD CONTROLS page | new | F4 |
+| Hire page | F12 | F3 (moved from F12 = Steam's screenshot key) |
+| MOD CONTROLS page | new | F4 (built: F2) |
 | Unstick | F7 | Backspace-free: U |
 | Host map set | F7 | PgUp |
 | Host AI heisters | F8 | PgDn |
@@ -95,7 +97,7 @@ After all inits, klkeys_check(): for every enabled feature collect VK + context 
 A third carrier state next to page II and hire: `kspg.ctl`. Reuse hire machinery in klshoppage.c: toggle by a key edge in kspg_hire_tick (new `[Keys] ControlsKey`, default F4, ControlsPage=1 "(recommended on)"), gate with kspg_gate_x, add `kspg_text_ctl` dispatched from kspg_text (caption "  [%s] controls" appended next to the existing hints) and its description in kspg_h_desc style, through the same kspg_ring. Row table (static array, 8 rows per tab, 2 tabs: "IN ROUND", "HOST / ONLINE"): name = "<Feature>  [KEY]", desc = what it does, Arcade/online scope, state "ON/OFF (ini [Section] Key)". State from each module's enable flag (klho_get etc.; online via kl_online()). Pressing BUY is swallowed via the existing BuyWeapon/BuyWeaponDialogVoodoo intercept (informational). Offline-only features shown "Arcade only", online-only "Online only". Works anywhere the Buy Weapons shop opens (9 stock maps, Dead Men grafts, online host/client) because it is the same carrier as page II; client must run the carrier (OnlineLook path).
 
 ### 5.4 One-line hints (GUESS)
-Factor one `klmsg_say(text, seconds)` from the three announce copies (kluc_show_now is the most complete: pending queue + busy check). First time a feature becomes usable per session, say once: "F6 page II  F12 hire  F4 controls". Gate with `[Keys] Hints=1 (recommended on)`.
+Factor one `klmsg_say(text, seconds)` from the three announce copies (kluc_show_now is the most complete: pending queue + busy check). First time a feature becomes usable per session, say once: "F6 page II  F3 hire  F2 controls" (as built: the page-cycle key is F2, not F4). Gate with `[Keys] Hints=1 (recommended on)`.
 
 ### 5.5 Toggles (CERTAIN rule)
 New toggles: [Keys] ControlsPage, Hints, ClashLog. Add Mod Options rows in tools/kl_mod_options.py with matching defaults so --check-rec and --check-ini agree; document in re/mod_options.md and KLHook.ini; regenerate KL_MOD_SETTINGS.txt from the same table.
