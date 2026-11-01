@@ -182,11 +182,13 @@ def main():
         if d3shots and shots:
             # kld3 arms at the first call after From and shoots one interval later, so From = first shot - step (GUESS: Present runs every frame)
             step = (shots[1] - shots[0]) if len(shots) > 1 else 30
-            # the shots run inside klfps's Present wrappers: they need [FrameLimit] Enable=1 SwapChain=1 (re/open_work_log.md, 10-26)
+            # the shots run inside klfps's Present wrappers: they need [FrameLimit] Enable=1. SwapChain=0 (11-01 SHOTS3 A/B): the swap chain
+            # wrap stops ReShade's reshade_present reaching KLHook (no 'effects loaded', no [Memory] D3dShotPost shots, no lens crack uniforms);
+            # the device Present wrap alone takes the shots. Add [Memory] D3dShotPost=1 via --ini1/2 for shots that hold ReShade's effects.
             # JPG (Fmt 0), not PNG: the X8R8G8B8 back buffer saves as PNG with alpha 0, which viewers show as a white page (A1LIFT3e 10-28)
             secs_n = merge(secs_n, [('Memory', [('D3dShotEvery', str(max(1, step))), ('D3dShotFrom', str(max(0, shots[0] - step))),
                                                  ('D3dShotMax', str(len(shots))), ('D3dShotFmt', '0'), ('D3dShotDir', root), ('D3dShotTag', 'inst%d' % n)]),
-                                    ('FrameLimit', [('Enable', '1'), ('SwapChain', '1')])])
+                                    ('FrameLimit', [('Enable', '1'), ('SwapChain', '0')])])
         extra = opt.get('--ini%d' % min(n, 2))
         if extra:
             secs_n = merge(secs_n, read_ini(extra))
@@ -412,7 +414,7 @@ def main():
                 got = sorted(f for f in os.listdir(root) if f.startswith('KLShot_inst%d_' % n))
                 bad = [f for f in got if os.path.getsize(os.path.join(root, f)) < 2000]
                 say('    d3shots | inst%d %d KLShot files%s%s' % (n, len(got), (', %d under 2 KB (blank?): %s' % (len(bad), bad[:3])) if bad else '',
-                    '' if got else ' - NONE: is [FrameLimit] SwapChain on and the TEST dll the one loaded? see the d3count: lines in KLHook.log'))
+                    '' if got else ' - NONE: is [FrameLimit] Enable on (with D3dShotPost=1 also [ReShade] Bridge=1 and SwapChain=0) and the TEST dll the one loaded? see the d3count: lines in KLHook.log'))
             res = os.path.join(d, 'KLHook.result')
             if os.path.isfile(res):
                 say('    KLHook.result | ' + ' '.join(open(res, errors='replace').read().split())[:400])
