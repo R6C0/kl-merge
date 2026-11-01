@@ -38,6 +38,7 @@ Owner: ce.
 - 11-01 05:50 c9: Finding 2 fixed (0af62a4ee): Mod Options Recommended keeps owner-noted / in-game-menu / keep= rows; proven online rows flipped to recommended on.
 - 11-01 06:40 c9: Q30 kit (round 2 on all 21 maps, both seats) staged + verified READY in C:\kl_build_1024\c9_1028\q30; runs when the game is free.
 - 11-01 06:35 c9: Q30 DD01 round 2 PASS; hired-body-stock = DM07 + DD10 lack the wardrobe; built offline (C:/kl_build_1024/c9_1028/hirebody), bench HIREWD after Q30.
+- 11-01 09:05 c9: Q30 21/21 PASS (round 2, both seats, 0 faults). DM07 + DD10 wardrobe (+PD2 plates) INSTALLED (undo bat in hirebody); HIREWD running.
 - 11-01 05:30 c9: Q29 21-map online regression on ship1101: all 21 PASS 0 faults (DD01 after one lobby timeout). GUN13 never opened the weapon list (joiner route bug), GUN14 re-run.
 - 11-01 03:45 c9: SHIPPED ship1101 (dll a6ea229f + ini 12d5f8e1): online get-up rescue (ce BP18/BP19) + lift door-hold fix; SHIPCHK5 + A1LIFTNET4 PASS 0 faults.
 - 10-30 12:50 c9: A1HOLD2 PASS (a quit joiner no longer holds the lift doors open); fix merged, not shipped. Spend limit hit: work paused to a minimum.
@@ -63,7 +64,7 @@ Owner: ce.
 - 10-28 14:00 c9: A1TALK_DM01 + A1TALK_DD04 PASS (crew banter plays online on both seats, host 4 lines / client 3, 0 faults; TEST out_c9talk_1028_test 89117d7e). A1SHIFT run 1 invalid (botgate loaded the unshifted bots.zip -> DM11S bots companion 6c3f59315). A1SHIFT2 FAIL load crash kl2+0x1c6901 = stale .prm type-7 octree refs after the .oct shrank (fixed 723e78443). A1SHIFT3 FAIL: both seats in round, then c0000094 divide by zero at kl2+0x4668b (host 143 s, client 99 s); triage workflow wkthgj0ax (worktree C:\kl_wt\div0). DM11B + ship dll f520f5d1 restored; game handed to ce.
 - 10-28 13:35 c9 benches (--owner-away, 0 faults each): A1NET PARTIAL (A1NET1/A1NET0 both seats in round, clean; netsmooth/tune criteria not met: only the host walks, needs a client input script). A1HIRE2 PARTIAL (out_week_1028f_test, DD06: paid hire works online, price on the name line, round-2 bodies J.C./Tommy worn; NOT proven: money after the hire read back, and no "charonline: stock hero" line, so StockHero=1 unconfirmed). A1SHIFT running 13:36 (ce paused its queue), A1TALK next.
 - 10-28 12:45 c9 A1SND PARTIAL PASS: music/ambience/stinger Loud/voice lines run online on DM01 + DD04 (0 faults); crew banter (kltalk) still silent online. See open_work_log.
-- [ ] 2-seat bench per map (DD 9 stock FA + every DM/graft map), host and client both reach round 2, 0 faults.
+- [x] 2-seat bench per map (DD 9 stock FA + every DM/graft map), host and client both reach round 2, 0 faults. (Q30 11-01: 21/21 PASS)
 - [ ] Fix per-map failures (DM11B int16, Retomoto lift, missing wardrobe models -> hired body stays stock).
 Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - 10-28 12:45 c9 bench results (TEST arcade1to1_1027 f8ae48a1, --owner-away): A1I16 PASS (DM11B online falls back via int16guard, both seats in round; DD01 control ok), Q28_DM06R PASS, Q28_DD09R PASS (both seats to +302 s), A1LIFT PASS (Retomoto Arcade, 7 bots, 0 faults; lift box re-arm not visually checked), A1SND PARTIAL (DM01 + DD04 both seats in round, 0 faults). A1NET held (game handed to ce WK1/WK2 at 12:42). After ce: A1NET, A1HIRE2, A1SHIFT.
