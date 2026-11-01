@@ -1,3 +1,7 @@
+2026-11-01 ~05:45 - [c9] GUN14 (GUN13 with the joiner fixed: waitstate 0x20 + msg ZW_SELECT3) PASS on DM07 + DD10, both seats, 0 faults, restore ok.
+The joiner opened the online weapon list (Category -> Weapon after one lost Enter, 15 s), F12, bought 2, round 2 ran. Shots KLShot_inst2_34.jpg in
+solo/GUN14_DM07 and solo/GUN14_DD10 show names, pictures, prices and per-map lists; whether the M-77B picture is the baked one is left to ce.
+
 2026-11-01 ~05:30 - [c9] Q29 = 21-map online regression on the installed ship1101 (TEST twin 8611f27f, base = installed ini): all 21 PASS, both seats
 IN ROUND, 0 faults, restore a6ea229f/12d5f8e1 every run (DD01-DD10, DM01/02/03/06/09, DM03A, DM05A, DM06B, DM01B, DM11B, DM07). DD01 first try FAILED
 before the round (FALobby not up 60 s after SystemLinkCreate, 0 faults, first launch of the sweep); rerun PASS. GUN13 (DM07 + DD10, 2 rounds) PASS both
