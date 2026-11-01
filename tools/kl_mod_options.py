@@ -448,6 +448,9 @@ feat('fallrescue', G_STAB, 'Put me back on solid ground when I leave the level o
      'owner 2026-10-26: walking off a map edge (DM02 shop rear, Retomoto ledge) restarted the round at full health; the last place he stood still is kept and he is put back before the out-of-world test (klfallrescue.c, not run in the game)', [('FallRescue', 'Enable', 1, 0, 1)])
 feat('continue', G_STAB, 'Keep playing after a game assert', 'on', 'start',
      'the hook logs the assert and goes on instead of ending the game', [('KLHook', 'ContinueAsserts', 1, 0, 1)])
+feat('assertsoft', G_STAB, 'Known harmless game asserts (DM01 online cover points) are skipped without a dump (recommended on)', 'on', 'start',
+     'klhook.c AssertSoft: the five kl2.exe offsets 6567e8 845a8b 51d049 555900 4ede1b read a cover point the client never built; stepped over, no 41 MB dump, not counted toward MaxAsserts (NOT run live)', [('KLHook', 'AssertSoft', '0x6567e8,0x845a8b,0x51d049,0x555900,0x4ede1b', '', '')])
+F[-1]['str'] = 1
 feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', 'start',
      'avoids the 2 GB heap NULL crash on large .prm files', [('Memory', 'Enable', 1, 0, 1)])
 feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call runs out of memory without it)', 'on', 'start',

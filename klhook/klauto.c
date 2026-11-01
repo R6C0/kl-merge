@@ -562,10 +562,10 @@ static void kla_result(const char *state, const char *reason, int code)
     n = snprintf(text, sizeof text,
         "state=%s\r\nreason=%s\r\nexit=%d\r\npid=%lu\r\nscene=%s\r\nloading=%lu\r\nloads=%lu\r\nlevel_loaded=%d\r\n"
         "stage=%lu\r\npercent=%lu\r\nnode=%lu\r\ntotal=%lu\r\nentity=%s\r\ncontroller=%s\r\nphase=%s\r\n"
-        "asserts=%ld\r\nfaults=%ld\r\nforeign_first_chance=%ld\r\nlast_fault=%s\r\nframes=%lu\r\nscript=%d\r\nms=%lu\r\n",
+        "asserts=%ld\r\nfaults=%ld\r\nforeign_first_chance=%ld\r\nlast_fault=%s\r\nframes=%lu\r\nscript=%d\r\nms=%lu\r\nsoft_asserts=%ld\r\n",
         state, reason, code, GetCurrentProcessId(), kb.scene, kb.loading, kb.loads, kb.level_tick != 0,
         kb.stage, kb.percent, kb.node, kb.total, kb.ent, kb.ctrl, kb.phase,
-        kla_asserts, kla_faults, kla_foreign, kla_last_fault, kla_frames, kla_script_pc(), GetTickCount() - kla_t0);
+        kla_asserts, kla_faults, kla_foreign, kla_last_fault, kla_frames, kla_script_pc(), GetTickCount() - kla_t0, klh_soft_n);
     if (n < 0 || n > (int)sizeof text) n = sizeof text;
     EnterCriticalSection(&kla_cs);
     f = CreateFileA(tmp, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
@@ -576,8 +576,8 @@ static void kla_result(const char *state, const char *reason, int code)
 static void kla_finish(const char *state, const char *reason, int code)
 {   /* ends the process; the first caller wins */
     if (InterlockedExchange(&kla_done, 1)) { Sleep(INFINITE); return; }
-    kla_out(1, "RESULT %s (%s) exit code %d, asserts %ld, faults %ld, loads %lu, frames %lu",
-            state, reason, code, kla_asserts, kla_faults, kb.loads, kla_frames);
+    kla_out(1, "RESULT %s (%s) exit code %d, asserts %ld, faults %ld, loads %lu, frames %lu, soft asserts %ld",
+            state, reason, code, kla_asserts, kla_faults, kb.loads, kla_frames, klh_soft_n);
     kla_result(state, reason, code);
     TerminateProcess(GetCurrentProcess(), code);
 }
@@ -2067,6 +2067,7 @@ static LONG CALLBACK kla_veh(EXCEPTION_POINTERS *ep)
     }
     if (inside ? code != EXCEPTION_BREAKPOINT && !kla_bad_code(code) : !kla_bad_code(code)) return EXCEPTION_CONTINUE_SEARCH;
     if (inside && at == (DWORD_PTR)VA(0xa8e3cb)) return EXCEPTION_CONTINUE_SEARCH;       /* Steam's anti-debug probe, not a fault */
+    if (inside && code == EXCEPTION_BREAKPOINT && kas_find(klh_soft_list, klh_soft_n_sites, (DWORD)(at - img_lo)) >= 0) return EXCEPTION_CONTINUE_SEARCH;   /* AssertSoft site: counted by klhook.c's handler as soft, never a FAIL */
     EnterCriticalSection(&kla_cs);
     for (i = 0; i < at_n; i++) if (at_seen[i] == at) first = 0;
     if (first && at_n < 64) at_seen[at_n++] = at;
