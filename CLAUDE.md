@@ -69,7 +69,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
 2026-11-01 ~21:50 - [c9] Cover ring writer = 0x81b6f0 (car script, bumps [L+0x68] by 8, no host test; ring exists at load). Data probe
-refuted, CC1 dropped. TEST [CoverRing] poll fa8843182 (cr1	est 59fb9fc2), CR1 after LC2. AssertSoft never matched before ce's VA fix
+refuted, CC1 dropped. TEST [CoverRing] poll fa8843182 (cr1\test 59fb9fc2), CR1 after LC2. AssertSoft never matched before ce's VA fix
 16918c50a (AS2 regrades). NEXT_SHIP: LV1 keys + OnlineDropFollow=1 cleared; hire/controls pages after LC2.
 
 2026-11-01 ~22:25 - [ce] AS1 FAIL -> AS2 PASS: AssertSoft compared offsets vs the ini's VAs (nothing matched); VAs only since 16918c50a, DM01
