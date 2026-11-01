@@ -1,12 +1,12 @@
 # Online bots scorecard, Q31 (ship1102 candidate ini), 2026-11-01
 
-Offline analysis of the 21 host logs of c9's Q31 run (week-plan T3 "Online bots loot, carry, bank and escape like Arcade"). Game not launched, no code edited.
+Offline analysis of the 21 host logs of c9's Q31 run (week-plan T3 "Online bots loot, carry, bank and escape like Arcade"). Game not launched. The analysis is read-only; the T3 section at the end lists the code added afterwards (two keys, default 0).
 
 Sources: `G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\KL_PortTools\build\klhook\solo\Q31_<MAP>\inst1\KLHook.log` (host), kit `C:\kl_build_1024\c9_1028\q31` (maps.txt, `Q31_<MAP>_run.txt`). Log texts: `klhook/klbotfill.c`.
 
 ## Read this first (limits)
 
-- Arcade baseline: NONE exists per map. The BO*/COVER*/ALL2* benches are online bot benches, not Arcade runs. Arcade bots use the game's own brain (ZLootTactic / ZBoardEscapeVehicleTactic, `re/bots_online_arcade_1028.md` sec. 1), which writes no `botfill:` lines. So no number below is an Arcade number. The "gap" is judged against the Arcade design (bots fight for loot, call the van, board with the loot), not measured against an Arcade run. An Arcade per-map baseline needs an Arcade bench with a stack/board counter (nothing logs one today).
+- Arcade baseline: ARC1 exists for 11 maps (`re/arcade_baseline_1101.md`, 11/11 rounds, the game's own crew records via ArcadeProbe). The sections up to "T3 online vs Arcade" were written before it and judge by design only; the T3 section at the end compares against ARC1 with `tools/kl_online_vs_arcade.py`. The other 10 maps need ARC2 (kit staged, not run; `re/arcade_baseline_1101_arc2.md` is an empty stub). Arcade bots use the game's own brain (ZLootTactic / ZBoardEscapeVehicleTactic, `re/bots_online_arcade_1028.md` sec. 1), which writes no `botfill:` lines, hence the probe.
 - Only round 1 is a full round. The bench stops about 33 s into round 2 (`Q31_<MAP>_run.txt`: "ROUND 2 running"), so round 2 has no summary lines. Per-round columns below are round 1. Round 2 only shows spawn (7 bots every map) and trigger fires.
 - Bank: `OnlineBank=0` in the candidate ini (log: `botfill: bank: OnlineBank=0, OnlineBoardAll=1, ...`), so there is no ledger line anywhere. "Carried" is the hook tally from the round summary. Commit 39697dae7 already says ship1102 needs `OnlineBank=1` + `OnlineBankCredit=1` next to `Take=2`. Until then "$ banked" cannot be scored.
 - "Aboard" is the hook's count (`BOARDED ... hook tally only`), not a physical boarding. "Far-counted" = bots credited by `OnlineBoardAll` (`boardall: bot N ... M m from the escape point ... counted aboard`, `klbotfill.c:992`) from far away, i.e. left behind in fact.
@@ -226,14 +226,27 @@ loot. The 60 pct is a JUDGEMENT CALL, not measured (Arcade itself swings a lot b
   the bench that decides it. No new probe key was added (the existing OnlineStackProbe covers it).
 - DD06 (behind, not zero): `lootparts: bot 1 left stack 1f6ce8f0 after 25 of 34 parts (partial tally 500000; bot moved away: 8.3 m from the stack ... limit 2.5 m)` (11:15:23),
   the same for bots 4, 5, 6 within 1 s. Bots drift off the stack (crowding) mid-loot and the partial stop then blacklists the stack; with the exit commit that follows, the
-  rest of the stack is never finished. Arcade (5.55M) finishes the stacks.
+  rest of the stack is never finished. Arcade (5.55M) finishes the stacks. Log lines (Q31_DD06 host KLHook.log, round 1, 11:15:23-25):
+  ```
+  11:15:23.435 botfill: lootparts: bot 1 left stack 1f6ce8f0 after 25 of 34 parts (partial tally 500000; bot moved away: 8.3 m from the stack, 8.3 m from the anchor, limit 2.5 m)
+  11:15:23.435 botfill: lootparts: bot 4 left stack 1f6ceda0 after 22 of 34 parts (partial tally 440000; ...7.2 m from the stack...)
+  11:15:23.435 botfill: lootparts: bot 5 left stack 1f6cec10 after 22 of 34 parts (partial tally 440000; ...10.1 m from the stack...)
+  11:15:24.426 botfill: lootparts: bot 6 left stack 1f6cee70 after 20 of 34 parts (partial tally 400000; ...4.2 m from the stack...)
+  11:15:25.424 botfill: lootparts: bot 2 left stack 1f6cece0 after 20 of 34 parts (partial tally 400000; ...7.0 m from the stack...)
+  ```
+  So five bots, not four, and the first reason is "bot moved away" (not the 25 s pause cap that klguard_logic.h used to say). DD06 is BEHIND Arcade (hook tally 3.13M vs 5.55M, 2 vs 8 stacks), not zero.
 
 ### Fixes in code (both default 0, SHIP-safe: tick/data only, no .text patch, no debug register)
 - `[BotFill] OnlineGuardCarrierCm` (recommended off until benched; try 150; needs OnlineGuardMode=1): a live cop within that many cm of the stack is its CARRIER
   (it is the money's owner, not a guard), so it does not count as a guard. Pure rule `kgg_carrier` in klguard_logic.h (klguard_test.c). Risk: the bots walk into a
-  cop and may die, as in Arcade (ARC1 DD07: 6 dead). GUESS: 150 cm is the carry offset; unmeasured.
+  cop and may die, as in Arcade (ARC1 DD07: 6 dead). GUESS: 150 cm is the carry offset; unmeasured. The premise "the cop at the stack is its carrier" is a CORRELATION
+  from the Q31 logs (cop spread = stack spread, 5 cops for 5 stacks on DD07), not proven. A real guard within 150 cm of a stack is dropped from the count too (risk: bots die).
+  The log line ("are its carrier") is now said once per ROUND (was once per process), so later rounds show proof.
 - `[BotFill] OnlinePartialRetry` + `OnlinePartialRetryS` (60) (recommended off until benched): after a partial stop with a tally > 0 the bot does not commit to the exit
-  for up to S seconds while a free stack remains and enough clock is left (`kgg_partial_hold`); the blacklist retry then picks the stack again. GUESS: 60 s.
+  for up to S seconds while a free stack remains and enough clock is left (`kgg_partial_hold`); the blacklist retry then picks the stack again. GUESS: 60 s. Only the exit
+  commit is held (no `continue`; the other per-bot handling still runs). A partial stop sets `badLong`; `klbf_ot_isbad` (klbotfill.c line ~882) keeps that stack off the pick for max(30, OnlineGiveUpRetryS = 45) s,
+  so the hold normally ends at ~45 s with the stack free again (S = 60 is the upper bound; with OnlineGiveUpRetry=0 the blacklist never expires and S ends it). `prAt` is cleared at round start, on re-target and on the exit commit.
+  The comparison table now also prints Delta and Gaps columns (stacks, boarded, van s; "boarded" online is the hook tally, not like for like), shows ARC-ZERO instead of an always-true PASS when Arcade took no loot, and warns in the RESULT line about maps with online data and no Arcade baseline.
 - Rows in tools/kl_mod_options.py, commented doc lines in klhook/KLHook.ini. Not fixed: DD09 vanishing stacks (needs SP2), DD05 second half (same).
 
 ### ARC2 kit (staged, NOT run)

@@ -42,7 +42,7 @@ static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppete
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
 static int klbf_ot_vstate = 1, klbf_ot_late = 75; static DWORD klbf_ot_calledAt;      /* [BotFill] OnlineVanState (BO9: the van node stays at the origin, so "van here" must come from [rules+0x1dc]), OnlineLateExit (s of clock left) */
 static int klbf_ot_bwalk = 1, klbf_ot_board = 0, klbf_ot_bprobe = 1, klbf_ot_scan_always = 0;      /* [BotFill] OnlineBoxWalk, OnlineBoard, OnlineBoxProbe (the ZAllyEscapeBox block below), OnlineScanEveryRound (klbf_ot_kept) */
-static float klbf_gc_cm = 0; static int klbf_pr = 0; static unsigned klbf_pr_s = 60;      /* OnlineGuardCarrierCm, OnlinePartialRetry (+S): wk-botscore-1101, default off */
+static float klbf_gc_cm = 0; static int klbf_pr = 0, klbf_gc_said = 0; static unsigned klbf_pr_s = 60;      /* OnlineGuardCarrierCm, OnlinePartialRetry (+S): wk-botscore-1101, default off */
 static int klbf_gm = 0, klbf_gm_min = 8, klbf_gm_logged = 0; static unsigned int klbf_gm_last = 0, klbf_gm_gap = 15000; static float klbf_gm_floor = 400.0f; static int klbf_gm_tight = 0, klbf_gm_orig = 0;      /* OnlineGuardMode, BypassMin, ... */
 static int klbf_ot_hmul = 5, klbf_ot_van = 1, klbf_ot_gtake = 0; static float klbf_ot_guard = 2500.0f;      /* OnlineHealthMul, OnlineTacticsVan, OnlineTacticsGuard (cm) */
 static int klbf_lk = 0; static DWORD klbf_lk_sm, klbf_lk_sig;      /* [BotFill] OnlineLooks (re/crew_online_1028.md): 2 = LOG ONLY probe, one line per Ally bot per round and whenever the census changes; no game-state write. 1 = klcrewlook.c: the host sends each bot's Arcade look, every seat applies it (klcl_on). Any other value = off */
@@ -1663,13 +1663,13 @@ static void klbf_ot_run(DWORD now, DWORD sm)
 {
     DWORD p, tab, i, blk[64 * 32], mo[KLBF_OT_OBJ], van = 0; float mpos[KLBF_OT_OBJ][3], vpos[3] = { 0, 0, 0 }; int mamt[KLBF_OT_OBJ], nm = 0, n = 0, b, nmoney = 0, nvan = 0, ndoor = 0;
     struct { DWORD actor, soldier; float pos[3]; } bots[KLBF_OT_BOTS]; int nb = 0; char why[100];
-    static float cops[256][3]; int ncop = 0, vnew; DWORD rules = 0; int vstate = -1; float left = 1e9f;
+    static float cops[256][3]; int ncop = 0, vnew, holdExit = 0; DWORD rules = 0; int vstate = -1; float left = 1e9f;
     if (now - klbf_ot_last < 1000) return;
     klbf_ot_last = now;
     if (sm != (DWORD)klbf_ot_sm || !klbf_ot_in) {      /* a new session / round */
         if (klbf_ot_in) klbf_ot_summary();
         if (klbf_lp && klbf_lp_nok + klbf_lp_nbad) klog("botfill: lootparts: last round: %d stack reads plausible, %d implausible (lump fallback)", klbf_lp_nok, klbf_lp_nbad); klbf_lp_nok = klbf_lp_nbad = klbf_lp_nw = 0; memset(klbf_lp_warned, 0, sizeof klbf_lp_warned);
-        memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
+        memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_gc_said = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
         klbf_ot_lookAt = 0; klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_eo_at = 0; klbf_ot_bxlooks = 0; klbf_ot_bxAt = 0;
         if (klbf_ot_kept()) klbf_ot_trig_looked = 1;      /* the last round's exit trigger and boxes still stand (same level load): no scan this round */
         else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; klbf_ot_nobox_gen = -1; }
@@ -1935,9 +1935,8 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 d = kle_dist(bots[b].pos, mpos[j]);
                 /* OnlineTacticsGuard: BO5's guard cops stood ON the stacks (slots 706/711/851/852 within 3 m of 4 targets) and every bot walked alone into them */
                 if (klbf_gm && (klbf_ot_guard > 0 || klbf_gm_tight)) {      /* OnlineGuardMode: count every cop in range, same floor only (GUESS: BP5 stacks were all inside 25 m 3D of some cop) */
-                    int cn = 0, carr = 0; float nd = 1e30f; static int carSaid;
-                    for (c = 0; c < ncop; c++) { float dc = kle_dist(cops[c], mpos[j]); if (dc < nd) nd = dc; if (kgg_carrier(cops[c], mpos[j], klbf_gc_cm)) { carr++; continue; } if (kgg_guards(cops[c], mpos[j], kgg_radius(klbf_ot_guard, klbf_lf_copm, klbf_gm_tight), klbf_gm_floor)) cn++; }
-                    if (carr && !carSaid) { carSaid = 1; klog("botfill: guardmode: stack %08lx: %d cop(s) within %.0f cm are its carrier, not a guard (OnlineGuardCarrierCm); %d other cop(s) in range", (unsigned long)mo[j], carr, klbf_gc_cm, cn); }
+                    int cn = 0, carr = 0; float nd = 1e30f;                    for (c = 0; c < ncop; c++) { float dc = kle_dist(cops[c], mpos[j]); if (dc < nd) nd = dc; if (kgg_carrier(cops[c], mpos[j], klbf_gc_cm)) { carr++; continue; } if (kgg_guards(cops[c], mpos[j], kgg_radius(klbf_ot_guard, klbf_lf_copm, klbf_gm_tight), klbf_gm_floor)) cn++; }
+                    if (carr && !klbf_gc_said) { klbf_gc_said = 1; klog("botfill: guardmode: stack %08lx: %d cop(s) within %.0f cm are its carrier, not a guard (OnlineGuardCarrierCm; GUESS, a correlation from the Q31 logs: a real guard this close is dropped from the count); %d other cop(s) in range (said once per round)", (unsigned long)mo[j], carr, klbf_gc_cm, cn); }
                     guarded = cn > 0; gcn[j] = guarded ? cn : -1; gcd[j] = d; gnear[j] = nd;
                 } else
                 if (klbf_ot_guard > 0) for (c = 0; c < ncop && !guarded; c++) if (kle_dist(cops[c], mpos[j]) <= klbf_ot_guard) guarded = 1;
@@ -1992,17 +1991,21 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 if (!(klbf_ob[s].told & 4194304) && (klbf_ob[s].told |= 4194304)) klog("botfill: escort: bot %d (actor %08lx) follows out: van %s (state %d, %lu s since the call), nothing carried%s: %s", s, a, vstate == 3 ? "waits" : "comes", vstate, (unsigned long)((now - (klbf_ot_calledAt ? klbf_ot_calledAt : klbf_eo_at)) / 1000), best >= 0 ? ", a stack was still free" : "", klbf_eo == 2 ? "DRY, no order" : "sent to the exit walk (OnlineEscortOut)");
                 if (klbf_eo == 1) { best = -1; idleVan = 1; vnew = 1; }
             }
-            if (kgg_partial_hold(klbf_pr, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_carry, idleVan, nhold, now, klbf_ob[s].prAt, klbf_pr_s * 1000u, left, (float)(klbf_ot_late ? klbf_ot_late + 20 : 90)) && best < 0) {      /* OnlinePartialRetry: the only stacks left are blacklisted for now; wait for them instead of walking to the exit with a partial tally */
+            holdExit = kgg_partial_hold(klbf_pr, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_carry, idleVan, nhold, now, klbf_ob[s].prAt, klbf_pr_s * 1000u, left, (float)(klbf_ot_late ? klbf_ot_late + 20 : 90)) && best < 0;
+            /* OnlinePartialRetry: the only stacks left are blacklisted for now; hold ONLY the exit commit below (no continue: the late-van, idle-van and escort handling above already ran this tick).
+               The hold ends by itself: a partial stop sets badLong (line ~1924) and klbf_ot_isbad (line ~882) keeps that stack off the pick for max(30, OnlineGiveUpRetryS = 45) s; then it is free,
+               best >= 0 and the bot re-targets it (prAt cleared there). With OnlineGiveUpRetry=0 the blacklist never expires, so the hold ends at OnlinePartialRetryS (kgg_partial_hold wait_ms) or when the clock runs low.
+               prAt is zeroed at round start (memset of klbf_ob), on re-target and when the bot commits to the exit. */
+            if (holdExit) {
                 if (!(klbf_ob[s].told & 8388608) && (klbf_ob[s].told |= 8388608)) klog("botfill: tactics: bot %d (actor %08lx): left a stack part-way (tally %d, %d grab(s)); %d stack(s) blacklisted for now: waits up to %u s for one instead of the exit (OnlinePartialRetry, said once)", s, a, klbf_ob[s].tally, klbf_ob[s].grabs, nhold, klbf_pr_s);
-                continue;
             }
             if (klbf_ob[s].grabs < klbf_ot_carry && best >= 0) {
                 klbf_ob[s].prAt = 0; klbf_ob[s].phase = 1; klbf_ob[s].target = mo[best]; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].told &= ~4;
                 memcpy(tgt, mpos[best], 12);
                 klog("botfill: tactics: bot %d (actor %08lx soldier %08lx) -> stack %08lx (%d) at (%.0f, %.0f, %.0f), %.0f m away", s, a, bots[b].soldier, mo[best], mamt[best], tgt[0], tgt[1], tgt[2], bd / 100);
-            } else if (klbf_ob[s].tally > 0 || idleVan) {      /* BO3: with nothing carried a bot waited at the van for nothing; it now waits for an armed stack */
+            } else if ((klbf_ob[s].tally > 0 || idleVan) && !holdExit) {      /* BO3: with nothing carried a bot waited at the van for nothing; it now waits for an armed stack */
                 if (!van && !(klbf_ot_vh && !klbf_ot_called) && !(klbf_ot_joincall && klbf_ot_vh && klbf_ot_called && vstate >= 1 && vstate <= 4 && klbf_ot_calledAt && now - klbf_ot_calledAt <= 60000)) {      /* OnlineJoinCalled (BOS_DD04): a carrier whose van another bot called walks to it while it comes or waits (1-4), instead of standing 100 m off for the whole visit */ if (!(klbf_ob[s].told & 1) && (klbf_ob[s].told |= 1)) klog("botfill: tactics: bot %d (actor %08lx): wants the van but it is not here and %s", s, a, klbf_ot_called ? "it was called already" : "no exit trigger was found to call it from"); continue; }
-                klbf_ob[s].phase = 2; klbf_ob[s].nearAt = klbf_ob[s].outAt = 0; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].leg = klbf_way_start(bots[b].pos, kwy_exit(klbf_legs_van, van != 0, klbf_ot_vh != 0, klbf_ot_tpos, vpos)); klbf_ob[s].legAt = 0;      /* OnlineWaypoints: resume at the first leg ahead, never back down */
+                klbf_ob[s].prAt = 0; klbf_ob[s].phase = 2; klbf_ob[s].nearAt = klbf_ob[s].outAt = 0; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].leg = klbf_way_start(bots[b].pos, kwy_exit(klbf_legs_van, van != 0, klbf_ot_vh != 0, klbf_ot_tpos, vpos)); klbf_ob[s].legAt = 0;      /* OnlineWaypoints: resume at the first leg ahead, never back down */
                 if (van) klog("botfill: tactics: bot %d (actor %08lx) -> escape van %08lx at (%.0f, %.0f, %.0f) with tally %d (%d grab(s))", s, a, van, vpos[0], vpos[1], vpos[2], klbf_ob[s].tally, klbf_ob[s].grabs);
                 else klog("botfill: tactics: bot %d (actor %08lx) -> exit trigger %08lx at (%.0f, %.0f, %.0f) to call the van, with tally %d (%d grab(s))", s, a, klbf_ot_trig, klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], klbf_ob[s].tally, klbf_ob[s].grabs);
             }

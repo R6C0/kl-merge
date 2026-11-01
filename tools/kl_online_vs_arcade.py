@@ -8,7 +8,9 @@ kl_online_vs_arcade.py - ONE per-map table: the Arcade baseline (ARC1 table of r
     python tools/kl_online_vs_arcade.py --log MAP=<KLHook.log> [--log ...]
 
 Columns: loot ($ carried), stacks taken, boarded, van call s (seconds after 'round N starts' of the first van state 1..4), each Arcade | Online, then the loot ratio
-and PASS / BELOW / NO-BASELINE / NO-LOG / NO-ROUND.
+and PASS / BELOW / ARC-ZERO (Arcade loot 0: no ratio, no PASS) / NO-BASELINE / NO-LOG / NO-ROUND.
+A Delta column (online minus Arcade: stacks / boarded / van s) and a Gaps column (STACKS, BOARDED, VAN; judgement-call limits) are shown even when the loot verdict is PASS.
+The online "boarded" is the hook tally, Arcade's the game's own count: not like for like.
 PASS = online loot >= THRESHOLD x Arcade loot.  THRESHOLD 0.60 is a JUDGEMENT CALL (not measured): Arcade itself spreads a lot between runs (stacks are shot
 away, bots die), so 60 % of one Arcade round is "in the same league", not "equal". Change it with --threshold.
 Online numbers are the HOST's HOOK tally ('round summary: B bot(s) given orders, S stack(s) taken, T total (hook tally ...), X boarded'); the Arcade ones are the game's
@@ -23,8 +25,30 @@ ROOT = os.path.dirname(HERE)
 THRESHOLD = 0.60      # JUDGEMENT CALL, see the module docstring
 DEFAULT_ARCADE = os.path.join(ROOT, 're', 'arcade_baseline_1101.md')
 
-COLS = ['Map', 'Loot Arcade', 'Loot Online', 'Ratio', 'Stacks Arcade', 'Stacks Online', 'Boarded Arcade', 'Boarded Online',
-        'Van s Arcade', 'Van s Online', 'Verdict']
+COLS = ['Map', 'Loot Arcade', 'Loot Online', 'Ratio', 'Stacks Arcade', 'Stacks Online', 'Boarded Arcade', 'Boarded Online (hook tally, not like for like)',
+        'Van s Arcade', 'Van s Online', 'Delta stacks / boarded / van s', 'Gaps', 'Verdict']
+GAP_STACKS = 0.60      # JUDGEMENT CALLS (not measured), flagged even when the loot verdict passes:
+GAP_BOARDED = 2        #   boarded online (hook tally) at least this many below Arcade's real count
+GAP_VAN_S = 30         #   online van call this many seconds later than Arcade (or no van call at all)
+
+
+def deltas(arc, onl):
+    """-> (delta text, gap flags list). Boarded is the hook tally online vs the game's own count in Arcade: a hint, not a like-for-like number."""
+    arc, onl = arc or {}, onl or {}
+    d, gaps = [], []
+    for key in ('taken', 'boarded', 'van'):
+        a, o = arc.get(key), onl.get(key)
+        d.append('-' if a is None or o is None else '%+d' % (o - a))
+    a, o = arc.get('taken'), onl.get('taken')
+    if a and o is not None and o < GAP_STACKS * a:
+        gaps.append('STACKS')
+    a, o = arc.get('boarded'), onl.get('boarded')
+    if a is not None and o is not None and o <= a - GAP_BOARDED:
+        gaps.append('BOARDED')
+    a, o = arc.get('van'), onl.get('van')
+    if a is not None and onl and (o is None or o - a > GAP_VAN_S):
+        gaps.append('VAN')
+    return ' / '.join(d), gaps
 
 R_TS = re.compile(r'^(\d\d):(\d\d):(\d\d)\.(\d\d\d) ')
 R_START = re.compile(r'botfill: tactics: round (\d+) starts')
@@ -135,7 +159,7 @@ def verdict(arc, onl, threshold):
     if onl is None:
         return 'NO-ROUND', None
     if arc['loot'] <= 0:
-        return ('PASS' if (onl['loot'] or 0) >= 0 else 'BELOW'), None      # Arcade took nothing: nothing to fall behind
+        return 'ARC-ZERO', None      # Arcade took nothing: no ratio exists, so no PASS either (the old "loot >= 0" test was always true); read the Gaps column
     ratio = (onl['loot'] or 0) / float(arc['loot'])
     return ('PASS' if ratio >= threshold else 'BELOW'), ratio
 
@@ -148,12 +172,13 @@ def row(name, arc, onl, log_found, threshold):
     a = arc or {}
     o = onl or {}
     note = '' if (onl is None or onl.get('summary')) else ' (no summary)'
+    dtxt, gaps = deltas(arc, onl) if (arc and onl) else ('-', [])
 
     def n(x):
         return '-' if x is None else str(x)
     return [name, money(a.get('loot')), money(o.get('loot')), '-' if ratio is None else '%d%%' % round(ratio * 100),
             n(a.get('taken')), n(o.get('taken')) + (note if onl else ''), n(a.get('boarded')), n(o.get('boarded')),
-            n(a.get('van')), n(o.get('van')), v]
+            n(a.get('van')), n(o.get('van')), dtxt, ' '.join(gaps) or '-', v]
 
 
 def table(rows):
@@ -172,13 +197,17 @@ def read_log(path):
 
 def build(arcade, logs, rnd, threshold):
     """logs: list of (map, lines or None) -> (rows, counts dict)"""
-    rows, cnt = [], dict(PASS=0, BELOW=0, NOBASE=0, NOLOG=0, NOROUND=0)
+    rows, cnt = [], dict(PASS=0, BELOW=0, NOBASE=0, NOLOG=0, NOROUND=0, ARCZERO=0, GAPS=0, nobase_maps=[])
     for m, ls in logs:
         onl = parse_online(ls, rnd) if ls is not None else None
         r = row(m, arcade.get(m), onl, ls is not None, threshold)
         rows.append(r)
-        key = {'PASS': 'PASS', 'BELOW': 'BELOW', 'NO-BASELINE': 'NOBASE', 'NO-LOG': 'NOLOG', 'NO-ROUND': 'NOROUND'}[r[-1]]
+        key = {'PASS': 'PASS', 'BELOW': 'BELOW', 'NO-BASELINE': 'NOBASE', 'NO-LOG': 'NOLOG', 'NO-ROUND': 'NOROUND', 'ARC-ZERO': 'ARCZERO'}[r[-1]]
         cnt[key] += 1
+        if key == 'NOBASE' and onl is not None:
+            cnt['nobase_maps'].append(m)      # online data exists but there is no Arcade row to judge it against
+        if r[-2] != '-':
+            cnt['GAPS'] += 1
     return rows, cnt
 
 
@@ -214,7 +243,10 @@ def main(argv=None):
     print('\nOnline = host hook tally of round %d (prefix %s); Arcade = ARC1 game records (%s, %d map(s)). PASS = online loot >= %d%% of Arcade loot '
           '(JUDGEMENT CALL, not measured). Van s = seconds after the round start to the first van state 1..4.' % (a.round, a.prefix, ', '.join(os.path.basename(x) for x in paths), len(arcade), round(a.threshold * 100)))
     found = len(rows) - cnt['NOLOG']
-    print('RESULT: %s (%d PASS, %d BELOW, %d no baseline, %d no log, %d no round)' % ('OK' if found else 'NONE', cnt['PASS'], cnt['BELOW'], cnt['NOBASE'], cnt['NOLOG'], cnt['NOROUND']))
+    warn = ''
+    if cnt['nobase_maps']:
+        warn = ' WARNING: online data but NO Arcade baseline for %s (run ARC2 / pass --arcade)' % ','.join(cnt['nobase_maps'])
+    print('RESULT: %s (%d PASS, %d BELOW, %d Arcade-zero, %d with gaps, %d no baseline, %d no log, %d no round)%s' % ('OK' if found else 'NONE', cnt['PASS'], cnt['BELOW'], cnt['ARCZERO'], cnt['GAPS'], cnt['NOBASE'], cnt['NOLOG'], cnt['NOROUND'], warn))
     return 0 if found else 1
 
 
