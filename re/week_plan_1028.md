@@ -14,6 +14,7 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
+- 11-01 17:00 c9: SHOTS1 DONE (DD02 online, both seats, PASS 0 faults, restore a6ea229f/81c95751; lens crack installed first, owner OK). Shots in KL_PortTools\build\klhook\solo\SHOTS1\pick\ (stock, page II, hire, hire desc, MOD CONTROLS, crack) and on the status page. Hire page renders 8 heisters with prices and a description; MOD CONTROLS lists every key with ON/OFF. Both are off in ship1103 only because [Hire] Page / [Keys] ControlsPage are absent: queued in C:\kl_build_1024\c9_1028\NEXT_SHIP.txt. Cosmetic to fix first: hire header too long (RANK 8: MUGGER wraps under TOTAL), stray $6,000 + BACK on the controls page, Elwood lock icon with Rank=0, F12 = Steam's screenshot key too. Lens crack fired 3x on inst2 ('reshade: lens crack 1..3') but d3shots capture before ReShade, so no picture shows it. KL_LensCrack.fx stays installed (UNDO_lenscrack.bat). Game handed to ce for SP1; Q33 rest + Q34 after.
 - 11-01 14:35 cloud: OWNER ASK (14:25, away, PC on c9's Q32): "continue with the lens crack effect test and the mod controls whilst the
   ongoing test is going ... is there a shop for the heisters hire send me a screenshot on how it looks". JOB SHOTS1 for c9/ce, NEXT after Q32
   (do not disturb Q32): (1) <work>\build\lenscrack_1031\INSTALL_lenscrack.bat (additive; UNDO_lenscrack.bat) - owner authorised the test today.
