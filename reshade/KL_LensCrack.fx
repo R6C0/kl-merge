@@ -14,6 +14,8 @@
  * Nothing is drawn within ~0.1 screen heights of the middle of the screen (the crosshair) and the cracks keep to the frame edges.
  * Cost: while KL_CrackN is 0 one tap; with cracks 3 taps, and ~30 line tests per crack only for the pixels within its reach.
  * Shader model 3 safe (tex2Dlod only, no gradient ops in branches, no integer ops). Put it AFTER KL_CameraFX.
+ * Keep the line loops [loop], not [unroll]: the game runs D3D9 (ps_3_0) and unrolled the pass was ~9494 slots, so ReShade logged
+ * "Failed to create graphics pipeline" and never drew a crack (11-01); looped it is ~1410 (fxc ps_3_0).
  * Preview: PreviewCracks = 1 shows three cracks without the hook.
  */
 #include "ReShade.fxh"
@@ -84,7 +86,7 @@ void KLC_Crack(float4 cr, float2 uv, float2 pos, inout float2 off, inout float2 
 			float dp, side, taper; float2 nrm;
 
 			/* radial cracks and their forks */
-			[unroll] for (int i = 0; i < 14; i++)
+			[loop] for (int i = 0; i < 14; i++)
 			{
 				float fi = (float)i;
 				float ex = step(fi + 0.5, nrays);
@@ -109,7 +111,7 @@ void KLC_Crack(float4 cr, float2 uv, float2 pos, inout float2 off, inout float2 
 
 			/* two partial concentric rings (the glass breaks in rings round the hit) */
 			float a = atan2(p.y, p.x);
-			[unroll] for (int k = 0; k < 2; k++)
+			[loop] for (int k = 0; k < 2; k++)
 			{
 				float fk = (float)k;
 				float R = k == 0 ? 0.20 + 0.12 * seed : 0.50 + 0.20 * KLC_Hash(float2(seed, 9.0));
