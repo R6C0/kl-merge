@@ -148,15 +148,27 @@ def main():
     rowless, un = M.check_ini(src, ini3)
     check(rowless == ['pumpnoblock: [Input] PumpNoBlock (klx.c)'], 'check_ini: a row key the ini leaves out is reported: %s' % rowless)
 
+    # Recommended leaves the owner's own choices alone (2026-11-01, triage Finding 2: it wrote OnlineSet 9 -> 0, Glare 0 -> 1, ...)
+    own = M.split_lines('[Expansion]\nOnlineSet=9   ; 1026 owner: random stock + Dead Men map\n[Graphics]\nGlare=0\nAA=1\n'
+                        '[Hire]\nEnable=1   ; owner 10-27 evening: try buying characters\n[FrameLimit]\nEnable=0   ; stutter A/B (owner): off again\n'
+                        '[Grenade]\nThrow=1   ; the session installed it\n')
+    wants, kept = M.rec_wants(own)
+    kept = dict(kept)
+    check('onlinerandom' in kept and 'onlinerandom' not in wants, 'Recommended keeps a key with a "1026 owner:" note: %s' % kept.get('onlinerandom'))
+    check('glare' in kept and 'aa' in kept, 'Recommended keeps the keys the game\'s Mod settings menu writes when the ini has them')
+    check('hire' in kept and 'fps60' in kept, 'Recommended keeps "owner 10-27" and "(owner)" notes, the fps rows by [FrameLimit] Enable')
+    check(wants.get('grenade') is False, 'Recommended still sets a row whose key has no owner note (grenade -> off)')
+    check('onlinevanbots' in kept and 'onlinevanbots' not in wants, 'Recommended keeps a row marked keep=')
+
     # the repo ini itself
-    repo = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'klhook', 'KLHook.ini')
+    repo =os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'klhook', 'KLHook.ini')
     if os.path.isfile(repo):
         bad, norow, nocheck = M.check_rec(repo)
         check(not bad, 'repo klhook/KLHook.ini: every row agrees with its marker (%s)' % bad)
         check(not norow, 'repo klhook/KLHook.ini: every proven recommended-on key has a row (%s)' % norow)
         rowless, un = M.check_ini(os.path.dirname(repo), repo)
         check(not rowless, 'repo klhook/KLHook.ini mentions every row key (%s)' % rowless)
-    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 43 + 3 * os.path.isfile(repo), len(FAILS)))
+    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 45 + 3 * os.path.isfile(repo), len(FAILS)))
     return 1 if FAILS else 0
 
 

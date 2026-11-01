@@ -41,8 +41,9 @@ BACKUP_SUFFIX = '.before-modoptions'
 F = []
 
 
-def feat(fid, group, label, rec, when, why, keys, pending=False):
-    F.append(dict(id=fid, group=group, label=label, rec=rec, when=when, why=why, keys=keys, pending=pending))
+def feat(fid, group, label, rec, when, why, keys, pending=False, keep=None):
+    # keep: why the Recommended preset leaves this row as the ini has it (see rec_keep)
+    F.append(dict(id=fid, group=group, label=label, rec=rec, when=when, why=why, keys=keys, pending=pending, keep=keep))
 
 
 G_CORE, G_CREW, G_DOWN, G_AV, G_GFX, G_STAB, G_EXP = ('Core', 'AI crew and traitors', 'Down, revive, fed', 'Sound and music',
@@ -97,17 +98,18 @@ F[-1]['exact'] = True; F[-1]['excl'] = 'onlineset'
 feat('onlinerandround', G_EXP, 'Random online map: a new draw every round (only with the random map row; everyone must be in the lobby from the start)', 'off', 'start',
      "klslot.c OnlineRandomRound=1: the round number (loads more than 60 s apart, counted by each machine) joins the seed; a player who joins after a round was played counts differently and gets another map; NOT run live", [('Expansion', 'OnlineRandomRound', 1, 0, 0)])
 feat('lobbysolo', G_EXP, 'System Link / Private Match: play a round by yourself as host (no "all players left" window; for testing custom matches)', 'off', 'start',
-     'kllobby.c [Lobby] Solo=1 (implies MinPlayers=1): the session error word is cleared while you host with 1 human; private vtable copy of the session manager (heap data); NOT run live', [('Lobby', 'Solo', 1, 0, 0)])
+     'kllobby.c [Lobby] Solo=1 (implies MinPlayers=1): the session error word is cleared while you host with 1 human; private vtable copy of the session manager (heap data); live in the owner\'s ini since 1025solo (hosting a bot round alone); Q28/Q29 set 0 for the 2-human runs', [('Lobby', 'Solo', 1, 0, 0)],
+     keep='how the owner hosts (alone with AI heisters or not) is his call')
 feat('lobbyrows12', G_EXP, 'Online lobby (Fragile Alliance): list shows 12 player rows instead of 8 (rows closer together; needs the file Patch01_rows12.zip in the Overlay folder, built by tools/kl_lobby12.py; recommended on)', 'on', 'start',
      'klslot.c [Lobby] Rows12: answers the open of Patch01.zip with the FALobby-with-12-rows menu; layout GUESS (row pitch 20, rows 9-12 reuse FAStatus_*#09-12 pictures); NOT run live; re/lobby_12rows.md', [('Lobby', 'Rows12', 1, 0, 1)])
 feat('lobbyopts', G_EXP, 'Lobby (host): Heist time 2 to 10 minutes and up to 10 rounds (stock 3-5 minutes, 3-5 rounds); every player gets the numbers the host picks', 'off', 'start',
      'kllobbyopt.c [Lobby] TimeMax/TimeMin/RoundsMax: private vtable copy of the lobby selector (heap data); the stock handler does the work; NOT run live; re/lobby_options.md', [('Lobby', 'TimeMax', 10, 0, 0), ('Lobby', 'TimeMin', 2, 0, 0), ('Lobby', 'RoundsMax', 10, 0, 0)])
 feat('hostserver', G_EXP, 'Host server: this copy keeps hosting a Quick Match lobby by itself, restarts after each round (for a PC left running; implies lobby solo)', 'off', 'start',
      'klserver.c [Server] Enable=1 (Mode=quick|ranked, MinPlayers, WaitSec): drives the menu to QuickJoin, lowers the lobby target after the wait; NOT run live; re/online_server.md', [('Server', 'Enable', 1, 0, 0)])
-feat('hire', G_EXP, 'Arcade shop: hire a heister for the next round (needs the Hire window baked in, tools/kl_hire_bake.py; every round otherwise a random heister) (recommended off until benched)', 'off', 'start',
-     'klhire.c [Hire] Enable=1: body = random default (never Kane / Lynch) or the one hired on the shop page, one round, rank + price; the Heister page pick is ignored; NOT run live', [('Hire', 'Enable', 1, 0, 0)])
-feat('hireonline', G_EXP, 'Online shop (private match / Steam FA): hire a heister for the next round, host charges (needs Hire on, CharOnline on, Character on and the Hire window baked in) (recommended off until benched)', 'off', 'start',
-     'klhire_online.c [Hire] Online=1: client asks (HIRE, payload Q...), host judges + spends with 0x6b1910 / 0x7f6950, body via klcharonline; NOT run live; re/shop_hire.md section 8', [('Hire', 'Online', 1, 0, 0)])
+feat('hire', G_EXP, 'Arcade shop: hire a heister for the next round (needs the Hire window baked in, tools/kl_hire_bake.py; every round otherwise a random heister) (recommended on)', 'on', 'start',
+     'klhire.c [Hire] Enable=1: body = random default (never Kane / Lynch) or the one hired on the shop page, one round, rank + price; the Heister page pick is ignored; proven live: CE27_HRF2 + CE27_HRP2 10-27 (host hires Tommy, client Jean, worn in round 2, both seats 0 faults), A1HIRE3 10-28; the owner turned it on 10-27 (try buying characters); online the shop needs the baked FAHire window or the F12 page', [('Hire', 'Enable', 1, 0, 0)])
+feat('hireonline', G_EXP, 'Online shop (private match / Steam FA): hire a heister for the next round, host charges (needs Hire on, CharOnline on, Character on and the Hire window baked in) (recommended on with Hire)', 'on', 'start',
+     'klhire_online.c [Hire] Online=1: client asks (HIRE, payload Q...), host judges + spends with 0x6b1910 / 0x7f6950, body via klcharonline; proven live: CE27_HRF2/HRP2 10-27 (host charges, refuses a second hire of the same heister, client wears the hire in round 2), A1HIRE3 10-28; re/shop_hire.md section 8', [('Hire', 'Online', 1, 0, 0), ('Hire', 'Enable', 1, None, 0)])
 feat('hirepage', G_EXP, 'Buy Weapons shop: a HIRE A HEISTER page on the F12 key (BUY hires, never buys a gun; works offline and, with Online hire on, in a match) (needs Hire on) (recommended off until benched)', 'off', 'start',
      'klshoppage.c [Hire] Page=1 (PageKey 123 = F12, PageConfirm=1: two presses); the press is klhr_set / klhro_set; works with [ShopPage] Enable=0; NOT run live; re/shop_hire.md section 9', [('Hire', 'Page', 1, 0, 0)])
 feat('hirepageprice', G_EXP, 'Hire page: the hire price is shown on the heister name line and the stock gun price is blanked (needs Hire page on) (recommended on)', 'on', 'start',
@@ -140,10 +142,10 @@ feat('onlineround', G_CORE, 'Online matches: ROUND n OF m line under the clock l
      'klhud.c OnlineRound; needs [Online] Read=1; proven live: Q27_DD01ce6, round 1 of 3 online', [('HUD', 'OnlineRound', 1, 0, 0)])
 feat('onlinefeed', G_CORE, 'Online matches: kill-feed line (X KILLED Y) under REWARDS like Arcade (recommended on)', 'on', 'start',
      'klhud.c OnlineFeed; needs [Online] Read=1 and [HUD] OnlineCrew=1; proven live: CE27_ALL2D..G', [('HUD', 'OnlineFeed', 1, 0, 0)])
-feat('onlineskulls', G_CORE, 'Online matches: death-mark skulls on your row like Arcade lives (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineSkulls; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineSkulls', 1, 0, 0)])
-feat('onlineloot', G_CORE, 'Online matches: loot bar under TOTAL like Arcade (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineLoot; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineLoot', 1, 0, 0)])
+feat('onlineskulls', G_CORE, 'Online matches: death-mark skulls on your row like Arcade lives (recommended on)', 'on', 'start',
+     'klhud.c OnlineSkulls; needs [Online] Read=1 and [HUD] OnlineCrew=1; live in the owner\'s ini since 1026h (online = Arcade); proven live: CE27_HUD6 10-27 (skulls 1 -> lives 2 on both seats)', [('HUD', 'OnlineSkulls', 1, 0, 0)])
+feat('onlineloot', G_CORE, 'Online matches: loot bar under TOTAL like Arcade (recommended on)', 'on', 'start',
+     'klhud.c OnlineLoot; needs [Online] Read=1 and [HUD] OnlineCrew=1; live in the owner\'s ini since 1026h (online = Arcade); proven live: CE27_HUD6 10-27 (loot bar 6.5M -> 5.62M on both seats after a host pickup)', [('HUD', 'OnlineLoot', 1, 0, 0)])
 feat('onlinetags', G_CORE, 'Online matches: heister character names over the other heisters\' heads like Arcade tags (recommended on)', 'on', 'start',
      'klhud_tags.c OnlineTags; needs [Online] Read=1, [HUD] OnlineCrew=1 and HideOnline=1 (the stock list skipped); drawer 0x7b8150 on a player actor is a GUESS; proven live: DD01ce4 on 1027m', [('HUD', 'OnlineTags', 1, 0, 0)])
 feat('onlinetagstyle', G_CORE, 'Online head tags: initials + money line like Arcade HeadTags=2 (recommended off until benched)', 'off', 'start',
@@ -154,10 +156,10 @@ feat('gradesonlinetags', G_CORE, 'Grades: a rank badge before online head tags (
      'klhud_grades.c [Grades] Enable+OnlineTags; needs [HUD] OnlineTags=1; others\' rank from S+0xc8 is a GUESS; NOT run live', [('Grades', 'OnlineTags', 1, 0, 0), ('Grades', 'Enable', 1, None, 0), ('HUD', 'OnlineTags', 1, None, 0)])
 feat('onlinepopups', G_CORE, 'Online matches: loot carry ring and traitor pop-up fall-back like Arcade (recommended off until benched)', 'off', 'start',
      'klhud_popup.c OnlinePopups; needs [Online] Read=1, [HUD] Online=1, OnlineCrew=1 and LootRing=1; the online record offsets +0x15/+0x18/+0x1c are a GUESS (probe line in the log); NOT run live', [('HUD', 'OnlinePopups', 1, 0, 0)])
-feat('onlinetab', G_CORE, 'Online matches: Tab card (full crew list) like Arcade (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineTab; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineTab', 1, 0, 0)])
-feat('onlinevan', G_CORE, 'Online matches: escape / van card like Arcade (recommended off until benched)', 'off', 'start',
-     'klhud.c OnlineVan; needs [Online] Read=1 and [HUD] OnlineCrew=1; NOT run live', [('HUD', 'OnlineVan', 1, 0, 0)])
+feat('onlinetab', G_CORE, 'Online matches: Tab card (full crew list) like Arcade (recommended on)', 'on', 'start',
+     'klhud.c OnlineTab; needs [Online] Read=1 and [HUD] OnlineCrew=1; live in the owner\'s ini since 1026h (online = Arcade); run live: on in every CE27 / Q28 / Q29 bench, 0 faults; the card itself not yet seen in a shot', [('HUD', 'OnlineTab', 1, 0, 0)])
+feat('onlinevan', G_CORE, 'Online matches: escape / van card like Arcade (recommended on)', 'on', 'start',
+     'klhud.c OnlineVan; needs [Online] Read=1 and [HUD] OnlineCrew=1; live in the owner\'s ini since 1026h (online = Arcade); run live: on in every CE27 / Q28 / Q29 bench, 0 faults; BOSE5c..g proved the van icon beside it; the card itself not yet seen in a shot', [('HUD', 'OnlineVan', 1, 0, 0)])
 feat('onlineboardtake', G_CORE, 'Online matches: round-over card shows the money taken this round and money and fate of the AI heisters (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineBoardTake; needs OnlineBoard=1; take = money minus money at the first state-0x1f tick; bot money/ESCAPED are guesses (bots have no score row); NOT run live', [('HUD', 'OnlineBoardTake', 1, 0, 0)])
 feat('onlineintrocount', G_CORE, 'Online matches: HEIST STARTS IN n SEC on the pre-round card (recommended off until benched)', 'off', 'start',
@@ -170,8 +172,8 @@ feat('onlineboardcarrier', G_CORE, 'Online matches: the round-over card is drawn
      'klhud_board2.c OnlineBoardCarrier: ZFAOutroDisplay osd+0x10b0 (vt 0xbbddc8, Render 0x903830) carries the composed card; needs OnlineBoardState=1; proven live: BOSE5g (end card on ZFAOutroDisplay, 184 draws / 0 stock both peers)', [('HUD', 'OnlineBoardCarrier', 1, 0, 0)])
 feat('onlineboardstate', G_CORE, 'Online matches: round-over card also when the game never builds its outro element (shown from the round-end state, recommended on) (recommended on)', 'on', 'start',
      'klhud_board2.c OnlineBoardState; needs OnlineBoard=1; composes in state 0x1f without the element at osd+0x10b4 and draws on the clock element render (GUESS G14-G16); proven live: BOSE5g', [('HUD', 'OnlineBoardState', 1, 0, 0)])
-feat('onlineintro', G_CORE, 'Online matches: round n of m, players, minutes and your heister under the pre-round card (recommended off until benched)', 'off', 'start',
-     'klhud_board2.c OnlineIntro; needs [Online] Read=1, [HUD] Scoreboard=1 and Board=1; NOT run live', [('HUD', 'OnlineIntro', 1, 0, 0)])
+feat('onlineintro', G_CORE, 'Online matches: round n of m, players, minutes and your heister under the pre-round card (recommended on)', 'on', 'start',
+     'klhud_board2.c OnlineIntro; needs [Online] Read=1, [HUD] Scoreboard=1 and Board=1; live in the owner\'s ini since 1026h (online = Arcade); proven live: CE27_ALL2D..G + CE27_ALL2R (round-2 intro card drawn, both seats 0 faults); the two pre-round card rows below need it', [('HUD', 'OnlineIntro', 1, 0, 0)])
 feat('onlineintrostate', G_CORE, 'Online matches: pre-round card (title, round, map, players, crew with heister names) also when the game never builds its intro element (recommended on)', 'on', 'start',
      'klhud_board2.c OnlineIntroState; needs OnlineIntro=1; composes in states 0x16..0x18 without the element at osd+0x10ac and draws on the clock element render (GUESS G15/G17, layout 220,120 840x300 a GUESS); proven live: CE27_ALL2D..G', [('HUD', 'OnlineIntroState', 1, 0, 0)])
 feat('onlineintrocarrier', G_CORE, 'Online matches: the pre-round card is drawn on the game\'s own intro element instead of the clock (needs the pre-round card row; recommended on)', 'on', 'start',
@@ -268,8 +270,8 @@ feat('cardown', G_DOWN, 'A car blast floors people (revivable) instead of killin
 feat('shield', G_DOWN, 'Human shield rework: the hostage covers you and goes down (revivable)', 'on', 'start',
      'offsets partly GUESSED (the hold fields are logged at each hold); OFF = log only (Dry=1). Tune: Absorb, HostageTakes, DownPct', [('Shield', 'Dry', 0, 1, 0), ('Shield', 'Enable', 1, None, 1)])
 
-feat('dying', G_DOWN, 'Almost dead = you drop into the revivable down; downed heisters hold fire', 'off', 'start',
-     'k31dyn: the human ask (trigger 0x8da3b0 from the tick) is a GUESS, shipped with [Dying] Dry=1 (log only) until the log is read; the NoFire half for heisters is data only', [('Dying', 'Enable', 1, 0, 1)])
+feat('dying', G_DOWN, 'Almost dead = you drop into the revivable down (log only until [Dying] Dry=0); downed heisters hold fire', 'on', 'start',
+     'k31dyn: the human ask (trigger 0x8da3b0 from the tick) is a GUESS, shipped with [Dying] Dry=1 (log only) until the log is read; the NoFire half for heisters is data only; owner ask 10-24; run live: COVER10..13 10-26 (\'dying: on\', NoFire forced to 1, 0 faults), in every ship ini since; NoFire not yet seen in a shot', [('Dying', 'Enable', 1, 0, 1)])
 
 feat('ambience', G_AV, 'Ambience bed and timed one-shot sounds', 'on', 'start',
      'MCI mp3 worker; the owner kept it when the stutter was found to be the Payday 2 jukebox', [('Ambience', 'Enable', 1, 0, 0)])
@@ -303,8 +305,8 @@ feat('stingeronline', G_AV, 'Online matches: event stingers too (recommended off
      'klonline.c [Stinger] Online; only the events the online snapshot can show (Loud by timer, Loot by money with OnlineCrew); needs [Stinger] Enable=1; NOT run live', [('Stinger', 'Online', 1, 0, 0)])
 feat('censoronline', G_CORE, 'Online matches: head shots blow the head off on this screen too (recommended off until tested)', 'off', 'start',
      'klcensor.c [Censor] Online (key existed, row was missing); heap float per actor, local look only; peers see their own result; NOT run live', [('Censor', 'Online', 1, 0, 0)])
-feat('botfill', G_EXP, 'Online lobby: log the AI-heister plan for empty seats (recommended off)', 'off', 'start',
-     'klbotfill.c [Bots] OnlineFill; Ready may start below the lobby target (MinPlayers 1); read-only census; re/bots_online_fill.md; NOT run live', [('Bots', 'OnlineFill', 1, 0, 0)])
+feat('botfill', G_EXP, 'Online lobby: AI heisters fill the empty seats (host; master of the online bots) (recommended on)', 'on', 'start',
+     'klbotfill.c [Bots] OnlineFill; Ready may start below the lobby target (MinPlayers 1); re/bots_online_fill.md; live in the owner\'s ini since 10-26 (owner asked for bots online); proven live: BO3..BO6, WK2 10-28, BP4..BP20, Q28 + Q29 all 21 maps both seats 0 faults', [('Bots', 'OnlineFill', 1, 0, 0)])
 feat('botfillsquads', G_EXP, 'Online lobby: keep the first N map heister squads for the empty seats (walkers only; recommended off)', 'off', 'start',
      'klbotfill.c [Bots] OnlineFillSquads; heap byte per squad (mask 8 -> 9) before the round; needs OnlineFill=1; may be too late for the collect (probe); NOT run live', [('Bots', 'OnlineFillSquads', 1, 0, 0)])
 feat('onlinecoptobot', G_EXP, 'Online AI heisters take cop bullets like Arcade (5 % of a hit; needs the host bot options; recommended on)', 'on', 'start',
@@ -318,7 +320,7 @@ feat('onlinebalance', G_EXP, 'Online AI heisters take a human bullets with the A
 feat('onlinepbrefund', G_EXP, 'Online AI heisters get back point-blank hp that went past the cap (recommended on)', 'on', 'start',
      'klbalance.c [BotFill] OnlinePointBlankRefund; health data write after the step, never above the hp before it; BO11 869 hp window; NOT run live', [('BotFill', 'OnlinePointBlankRefund', 1, 0, 1)])
 feat('onlineguardtake', G_EXP, 'Online AI heisters walk into a guarded loot stack after 30 s of waiting (recommended off)', 'off', 'start',
-     'klbotfill.c [BotFill] OnlineGuardTake; BO8c: the 30 s release sent all bots into the cop squads at once; off = hold until a stack is clear; NOT run live', [('BotFill', 'OnlineGuardTake', 1, 0, 0)])
+     'klbotfill.c [BotFill] OnlineGuardTake; BO8c: the 30 s release sent all bots into the cop squads at once; off = hold until a stack is clear; benched 0 in BP4..BP20 / BAL2 (week_1028); the owner\'s ini has 1 since the 10-26 host-keys block (bots then stand up to 30 s at round start)', [('BotFill', 'OnlineGuardTake', 1, 0, 0)])
 feat('onlineguardmode', G_EXP, 'Online AI heisters look at cops on the stack floor only and take the least guarded stack when all are guarded (recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineGuardMode (+ FloorCm, BypassMin, BypassGapS), klguard_logic.h; BP5 DD08: 47 of 47 stacks guarded, bots left empty; NOT run live', [('BotFill', 'OnlineGuardMode', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlineguardliveonly', G_EXP, 'Online guard mode counts cops within 8 m of a stack, not 25 m, so stacks in one vault can be told apart (recommended on)', 'on', 'start',
@@ -352,7 +354,8 @@ feat('onlineskipdoor', G_EXP, 'Online AI heisters skip loot still locked behind 
 feat('onlineboxwalk', G_EXP, 'Online AI heisters walk to the escape box once the van is called and count as aboard only inside it (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxWalk; BO9: the exit trigger is ~570 cm from the DM01 AllyEscapeBox; read-only scan, game inside test 0x758cb0; NOT run live', [('BotFill', 'OnlineBoxWalk', 1, 0, 1)])
 feat('onlinevanbots', G_EXP, 'Online AI heisters inside the escape box while the van waits are removed from the match like in Arcade (recommended off until tested)', 'off', 'start',
-     'klbotfill.c [BotFill] OnlineBoard; calls 0x89c890(actor) (0x907a50\'s own removal); GUESS 60% host-safe, 35% clients see it; needs OnlineBoxWalk; NOT run live', [('BotFill', 'OnlineBoard', 1, 0, 0)])
+     'klbotfill.c [BotFill] OnlineBoard; calls 0x89c890(actor) (0x907a50\'s own removal); GUESS 60% host-safe, 35% clients see it; needs OnlineBoxWalk; live in the owner\'s ini since 10-26 (Arcade parity, open_work_log 10-26 ~19:35), Q28/Q29 ran with it 0 faults, but no log has shown a removal yet', [('BotFill', 'OnlineBoard', 1, 0, 0)],
+     keep='live in the owner\'s ini since 10-26; the removal is not proven or ruled out yet')
 feat('onlineboxprobe', G_EXP, 'Online AI heister boarding and van position written to the log for the next bench (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxProbe; log only: box probe / van probe lines; NOT run live', [('BotFill', 'OnlineBoxProbe', 1, 0, 1)])
 feat('syncvanprobe', G_EXP, 'Sync bench log: the escape van real state and place next to its list line (recommended on)', 'on', 'start',
@@ -480,7 +483,7 @@ feat('names', G_EXP, 'Dead Men map names in the Arcade lists', 'off', 'start',
 feat('inv', G_EXP, 'Gun shelf: carry more than two guns (F8)', 'off', 'start',
      'research feature, off by default', [('Inv', 'Enable', 1, 0, 0)])
 feat('grenade', G_EXP, 'Throw a carried grenade with G (Dead Men style)', 'off', 'start',
-     'klgrenade.c step 1: plays the dead HoldGrenade button; only with a grenade in the inventory (DM01 pickups); never run live',
+     'klgrenade.c step 1: plays the dead HoldGrenade button; only with a grenade in the inventory (DM01 pickups); run live 10-25 and found dead (nothing in kl2.exe reads [P+0x818] bit 0x800, the owner\'s G presses gave [P+0xa1c]=0); a hook-side throw is research',
      [('Grenade', 'Throw', 1, 0, 0)])
 feat('keysmap', G_EXP, 'New key defaults (End, PageUp, Num1-3, Ctrl+F3/F4/Delete)', 'on', 'start',
      'moves features off keys that clash with ReShade, the stock melee/grenade keys and each other; run live 10-28 (WK2); the ini default stays 0', [('Keys', 'Map', 1, 0, 0)])
@@ -497,10 +500,10 @@ feat('onlinebothost', G_EXP, 'Online host: the host runs the AI heisters and sha
      'klbotfill.c [BotFill] OnlineHost; the level must keep the heister squads online (tools/kl_botsonline.py zip or the F0n_Main.bots.zip siblings); re/bots_online_host.md; live in the owner\'s ini since 10-26 (owner asked for online bots), proven live: BO1/BO3.., Q28 all 21 maps online both seats 10-29, every ship since ship1028', [('BotFill', 'OnlineHost', 1, 0, 0)])
 feat('onlinetactics', G_EXP, 'Online host: AI heisters go for the loot and then the van, like in Arcade (needs the row above; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineTactics: hook puppeteer, host only, needs OnlineHost=1; live in the owner\'s ini since 10-26, proven live: BO3..BO6, WK2 10-28 (7 bots grabbed, 5/7 boarded), Q28 all 21 maps, every ship since ship1028; the base every OnlineGetUp*/OnlineLoot*/OnlineTriggers row needs', [('BotFill', 'OnlineTactics', 1, 0, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
-feat('onlinetacticstake', G_EXP, 'Online host: loot the AI heisters grab is taken out of the stack (needs the row above; recommended off)', 'off', 'start',
-     'klbotfill.c [BotFill] OnlineTacticsTake 2 = the game\'s own depletion routine on the host (1 = a guessed plain write); NOT run live', [('BotFill', 'OnlineTacticsTake', 2, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
-feat('onlinelootparts', G_EXP, 'AI heisters loot in timed parts like Arcade (needs the two rows above; recommended off)', 'off', 'start',
-     'klbotfill.c [BotFill] OnlineLootParts (1 on, 2 log only): timed parts while the bot stands at the stack; NOT run live; stack fields +0x40/+0x44 are a GUESS', [('BotFill', 'OnlineLootParts', 1, 0, 0), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinetacticstake', G_EXP, 'Online host: loot the AI heisters grab is taken out of the stack, as Arcade (needs the row above; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineTacticsTake 2 = the game\'s own depletion routine on the host (1 = a guessed plain write); proven live: WK2 10-28, BAL1/BAL2, BP4..BP20 (Take=2 + LootParts=1 + GuardTake=0, 0 faults); the Loot finish / Bank rows need it', [('BotFill', 'OnlineTacticsTake', 2, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinelootparts', G_EXP, 'AI heisters loot in timed parts like Arcade (needs the two rows above; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineLootParts (1 on, 2 log only): timed parts while the bot stands at the stack; proven live: BP4 (22/22 parts, 0 faults) .. BP20; the Loot finish row needs it; stack fields +0x40/+0x44 are a GUESS', [('BotFill', 'OnlineLootParts', 1, 0, 0), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinelootfinish', G_EXP, 'Online AI heisters finish the stack they are taking: held in place, not pulled off by the van gather (needs the timed-parts row above; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineLootFinish (+ OnlineLootFinishStayM 500 / OnlineLootFinishCapS 25; wk-botpar); BAL2/GU3 left 2 of 22 parts; NOT run live', [('BotFill', 'OnlineLootFinish', 1, 0, 0), ('BotFill', 'OnlineVanGatherSmart', 1, None, 0), ('BotFill', 'OnlineLootParts', 1, None, 0), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinelootfinishpause', G_EXP, 'Online AI heisters pause a stack take when pushed off it and resume when back, instead of giving it up (needs the finish row above; recommended on)', 'on', 'start',
@@ -540,7 +543,8 @@ feat('onlinegetupkeepgoal', G_EXP, 'Online AI rush to a downed heister is not re
 feat('onlinegetupdetour', G_EXP, 'Online AI rush to a downed heister: a bot running a route round an obstacle is not called stalled (needs the keep-goal row; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineGetUpDetour (wk-botpar): bot moved >= 3 m itself since its last progress = running, up to 20 s after the order; arrived and 5 m out again = re-order at once; BP8/BP9 root cause; proven live: BP18 + BP19 11-01 (0 faults both seats), shipped ship1101', [('BotFill', 'OnlineGetUpDetour', 1, 0, 0), ('BotFill', 'OnlineGetUpKeepGoal', 1, None, 0), ('BotFill', 'OnlineGetUp', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinegetupignorevan', G_EXP, 'Online AI heisters still run to a downed heister while the escape van is called or waits, as in Arcade (needs the get-up row; recommended on)', 'on', 'start',
-     'klbotfill.c [BotFill] OnlineGetUpIgnoreVan (11-01, triage Finding 3): kgu_van_skip; Arcade kad_rush ignores the van by default (RushVan=0); not run live yet', [('BotFill', 'OnlineGetUpIgnoreVan', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+     'klbotfill.c [BotFill] OnlineGetUpIgnoreVan (11-01, triage Finding 3): kgu_van_skip; Arcade kad_rush ignores the van by default (RushVan=0); not run live yet', [('BotFill', 'OnlineGetUpIgnoreVan', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)],
+     keep='not built or run live yet (ce 11-01: out of Recommended until benched)')
 feat('onlinegetupbusy', G_EXP, 'Online AI heisters carrying money or walking out to the van also run to a downed heister, as in Arcade (needs the get-up row; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineGetUpBusy (wk-botpar): kgu_free takes phase 0/1 carriers and phase 2 exit walkers; never phase 3/4; BP11 DD08: 0 free bots, joiner got up alone; proven live: BP18 + BP19 11-01 (0 faults both seats), shipped ship1101', [('BotFill', 'OnlineGetUpBusy', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinegetupflopmeter', G_EXP, 'Online AI heister standing by you speeds up your get-up after a knock-down, as in Arcade (needs the get-up row; recommended on)', 'on', 'start',
@@ -700,6 +704,46 @@ def plan(lines, wants):
             elif offv is not None:
                 out.append((sec, key, offv))
     return list(dict.fromkeys(out))
+
+
+# What the Recommended preset leaves as it is (2026-11-01, triage Finding 2: on the ship1101 ini it wrote 20 keys back over the
+# owner's own choices - OnlineSet 9 -> 0, RoundsMax 10 -> 0, Hire 1 -> 0, the Glare he set in the game's own menu 0 -> 1, ...):
+#   - a row whose own key carries an owner note on its line ('; 1026 owner: ...', '; 1026h owner test ...', '; owner 10-27 ...',
+#     'stutter A/B (owner)'): the owner set it himself;
+#   - a row the game's Options > Mod settings menu writes (klset.c kset_key) when the ini already has the key: that menu is the
+#     player's own choice;
+#   - a row marked keep=True: live in the owner's ini, neither proven nor ruled out yet.
+_OWNERNOTE = re.compile(r'\b1\d{3}[a-z]*\s+owner\b|\bowner\s+1\d-\d\d|\(owner\)', re.I)
+INGAME_KEYS = {('graphics', 'look'), ('graphics', 'textures'), ('adrenaline', 'prompt'), ('adrenaline', 'needuse'),
+               ('graphics', 'camerafx'), ('graphics', 'glare'), ('graphics', 'aa'), ('graphics', 'neural')}
+
+
+def rec_keep(lines, f):
+    """-> why the Recommended preset leaves this row as it is, or None."""
+    if f.get('keep'):
+        return 'kept: ' + f['keep']
+    sec, key = ('FrameLimit', 'Enable') if 'preset' in f else own_key(f)
+    i, _, _ = find_key(lines, sec, key)
+    if i is None:
+        return None
+    note = lines[i].split('=', 1)[1].partition(';')[2]
+    if _OWNERNOTE.search(note):
+        return 'kept: owner note on [%s] %s' % (sec, key)
+    if (sec.lower(), key.lower()) in INGAME_KEYS:
+        return 'kept: [%s] %s is set from the game\'s Mod settings menu' % (sec, key)
+    return None
+
+
+def rec_wants(lines):
+    """The Recommended preset. -> ({id: bool} for the rows it sets, [(id, why kept)] for the rows it leaves alone)."""
+    wants, kept = {}, []
+    for f in F:
+        k = rec_keep(lines, f)
+        if k:
+            kept.append((f['id'], k))
+        else:
+            wants[f['id']] = f['rec'] == 'on'
+    return wants, kept
 
 
 # ---------------------------------------------------------------- file + safety
@@ -1074,9 +1118,10 @@ def gui(path, force):
         status.config(text=msg + ('; PROBLEMS: ' + '; '.join(bad) if bad else ' - read back OK'))
 
     def recommended():
-        for f in F:
-            vars_[f['id']].set(f['rec'] == 'on')
-        status.config(text='Recommended chosen - press Save to write it')
+        wants, kept = rec_wants(lines)
+        for fid, w in wants.items():
+            vars_[fid].set(w)
+        status.config(text='Recommended chosen - press Save to write it (%d row(s) of your own left as they are)' % len(kept))
 
     def undo():
         if running():
@@ -1142,7 +1187,9 @@ def main():
         print(listing(lines))
     wants = {}
     if a.recommended:
-        wants = {f['id']: f['rec'] == 'on' for f in F}
+        wants, kept = rec_wants(lines)
+        for fid, why in kept:
+            print('  %s: %s' % (fid, why))
     for s in a.set or []:
         k, _, v = s.partition('=')
         if k not in BY_ID or v not in ('on', 'off'):
