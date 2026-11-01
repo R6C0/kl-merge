@@ -68,13 +68,13 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~21:50 - [c9] Cover ring writer = 0x81b6f0 (car script, bumps [L+0x68] by 8, no host test; ring exists at load). Data probe
+refuted, CC1 dropped. TEST [CoverRing] poll fa8843182 (cr1	est 59fb9fc2), CR1 after LC2. AssertSoft never matched before ce's VA fix
+16918c50a (AS2 regrades). NEXT_SHIP: LV1 keys + OnlineDropFollow=1 cleared; hire/controls pages after LC2.
+
 2026-11-01 ~20:50 - [c9] DM01/DM03 client cover asserts: host-only 8-point rings around Dynamic cars (DM01 ram truck 243; DM03 6946 7019
 7106 7186); writer not found. DM01 PROBE e09affe5a (truck TRUCK->NORMAL_CAR, [9]=0), bench c9_1028\carcover\run_cc1.sh after ce's chain
 + LC2; else hook route in re/dm_car_cover_1101.md. LV1 4/4 PASS: its 5 keys cleared in NEXT_SHIP. LC1 installed.
-
-2026-11-01 ~19:40 - [c9] Lens crack never drew: ReShade could not build its ps_3_0 pipeline (game is D3D9; unrolled pass ~9494
-slots), fixed with [loop] (~1410), 13d99199b; kit c9_1028\lc1\install_lc1.sh waits for a gap in ce's chain, then LC2 crack shots.
---d3shots now SwapChain=0 (SC=1 hid ReShade from KLHook, SHOTS3 A/B). Live still ship1103 (a6ea229f / 81c95751).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
