@@ -180,3 +180,70 @@ inis themselves were written before this commit, so they carry no ini-check line
 - The hire-shop / MOD CONTROLS / lens-crack pictures you asked for at 14:25 come from c9/ce's SHOTS1 job right after Q32 (~16:30); nothing a
   cloud session can shoot while the PC is benching.
 - Still open from 10-31: `<DM>\KL_PortTools\build\lenscrack_1031\INSTALL_lenscrack.bat` is what SHOTS1 installs (additive, UNDO bat beside it).
+
+# Scheduled check-in 2026-11-01 ~18:50 UTC (cloud; DD/DM attached by one access request)
+
+## PC state (read only; nothing launched, installed or staged into the game folder)
+- BUSY: `<DD>\dinput8.dll` written 18:38 UTC, ReShade logs 18:39, repo head cb598ee at 18:34 (wk-rtroute); ce's SP2 benches running
+  (`solo\SP2_DD09` ended 18:38, `SP2_DD05` live at 18:43). `KLHook.ini` live = 13:25 (81c95751, ship1103). No game run and no install from here.
+- `<DD>` root: `KLHook.result` still the 10-27 PASS, newest root dump `KLHook_1.dmp` 10-26 and `kl2_490_crash_2026_10_25T19_18_39C0.mdmp`
+  -> nothing new there. The benches dump into their own dirs: `solo\Q31_DM01\inst2`, `Q32_DM01\inst2`, `Q33_DM01\inst2` each hold
+  `KLHook_1..4.dmp` (11:48, 14:44, 17:39) - the DM01 CLIENT seat asserts in every Q run (118 / 61 / 29 asserts; inst1 the host: 0).
+  c9's notes count Q31-Q33 DM01 as PASS from the `RESULT: inst1 IN ROUND, inst2 IN ROUND` line; the client's own
+  `KLHook.result` says `state=FAIL reason=script reached pass, but 29 asserts and 0 faults were logged`.
+- SP2_DD09 (ce, 18:38): inst2 `FAIL script line 52: the session state did not become 0x20 within 600000 ms (it is 0x29)` - the client
+  got `FAStatus_HostDisconnect` 32 s into the round (18:28:49, host seat count 2 -> 1 in the client's rules read) while inst1 stayed IN ROUND
+  with 0 faults. Not a crash; ce's run, left to ce (same 0x19 -> 0x29 move the Lobby Solo=1 work describes, here on a client).
+
+## Finding (triaged offline from the staged Q33_DM01 inst2 dumps + both seats' logs): DM01 client asserts = cover POINT index replicated by value
+Sites (all int3, 29 in 14 s from 17:39:16, main thread, scene F01 = DM01, both dumps `node loader 16632/16632` = level loaded):
+`kl2.exe+2567e8` (0x6567e8) x3, `+445a8b` (0x845a8b) x9, `+11d049` (0x51d049) x2, `+155900` (0x555900) x3, `+0ede1b` (0x4ede1b) x2.
+Every one is the same reader of a cover POINT's kind: `eax = [point+0x68]; test al,2 -> kind 0 (low); test eax,0x200 -> kind 1 (high);
+neither -> int3`, then the fall-through after the int3 is the kind-0 path (ContinueAsserts=1 steps over it, so the game treats the
+point as a low cover and goes on). The point comes from `CFFCoverList` `[[0xdd265c]+0x15a0]` (`0x713130`), array `[L+0x44]`, stride 0x7c,
+index `[soldier+0xe8]` (0x491eb0 = `[ecx+4]*0x7c + [L+0x44]` on the soldier's cover block at +0xe4). In the dump: ZSoldier 374e4120
+(RTTI `ZSoldier@CPPScript`), block {3, idx 0x166 = 358, state 0, soldier, ...}, point 358 = flags **0x400 alone**, pos 0 0 0, +0x34 = the
+array's fill pattern (8345069056 / 4.26e20) = an UNBUILT slot; the whole 0x400 range around it (356..363) is unbuilt the same way.
+Where the index comes from: `0x656740(soldier block, u16 idx)` <- `0x581b40` <- `0x4ce0c0` <- ObjDup `CallMethod` (0x95e7a0 / 0x950f20
+'ByteStream', 0x954290 'CallMethod', 0x957090 'ObjDupProtocol.cpp') - the HOST's soldier state arrives with its cover point INDEX, and
+the client looks that index up in ITS OWN cover list.
+Why the lists differ (the coverdump of both seats, 17:38:11, 2 s into the round; `tools/kl_coverdump_parse.py host.log --compare client.log`):
+```
+cover points: host built 355, client built 347 (of 1371 dumped), lists agree for indices 0..346
+8 index(es) differ: [347 .. 354]  built on host only: #347 (15474 -15 27434) #348 (15324 -15 27284) #349 (15324 -15 27046)
+  #350 (15474 -15 26896) #351 (16295 -15 26896) #352 (16445 -15 27046) #353 (16445 -15 27284) #354 (16295 0 27434)
+```
+The 169 cover RECORDS (0xa8) are identical on both seats (same 11 dwords each; the names resolve on the host only). The first 347 points
+are identical too (the static build). The host's 8 extra points are a ring (two squares, 0 and 45 degrees, radius ~5.6 m) around
+(15884, -15, 27165) at street level, each with the +0x34 fill pattern instead of a second place = a RUNTIME-made point group, and by
+17:39:16 the host had at least 359 (point 358 used by one of its soldiers) while the client stayed at 347. So every host soldier in one
+of those runtime points sends an index the client cannot have -> int3 per read (several readers per frame: 9 at 0x845a8b).
+GUESS (not established offline): the ring is 0x603830's `car` kind (a `*coverboxcar*` / vehicle cover built when the object rests), made
+by host-side logic only; it is NOT one of the three F03 police cars (they stop near x 6000 z 26250, `kl_dm01cars_1025.py` STOP) and no
+record in the list is named `*Car*`. What stands at (15884, 27165) in the DM01 build is the open question (the map zip is 176 MB; not
+staged from a busy PC). The stock maps never show this in Q31-Q33 (0 asserts on 20 of 21), so whatever makes the ring is DM01's.
+Risk: `[KLHook] MaxAsserts=200` - Q31's client reached 118; past 200 the hook stops stepping over and the client's game ENDS
+(`not continuing (limit reached or disabled)` = the Q27_DM11B x200 fatal). A long DM01 round with many cops in those points can hit it.
+Each first-time site also costs a 41 MB dump (4 per run = MaxDumps) = four 1-2 s hitches on the client in the first seconds.
+Suggested fixes, smallest first (none applied here: klhook.c is in two live sessions' hands):
+1. Hook, SHIP-safe, no code patch: in `veh()` (klhook.c ~549) a site list `[KLHook] AssertSoft=6567e8,845a8b,51d049,555900,4ede1b`
+   (kl2.exe offsets): a listed site is counted apart (`soft asserts N` in the RESULT line), never dumped, and does not count toward
+   MaxAsserts - the fall-through is the kind-0 path anyway. Keeps the harness honest (FAIL only on hard asserts) and removes the
+   200 cliff on DM01 clients.
+2. Hook, data write at the receiver: in `0x656740`'s caller path (0x581b40 is the one ObjDup entry) clamp an index >= the client's
+   built count (`([L+0x48]-[L+0x44])/0x7c`, or flags without 0x2|0x200) to -1 = 'no cover' before the setter runs. Cleaner for the
+   client's animation than kind 0, but it is a hook on a hashed-range candidate: check `re/antitamper.md` first.
+3. Data (the real fix): find the object at (15884, 27165) in the DM01 build (kl_fa_cover.all_boxes / a `*coverboxcar*` or vehicle with
+   DynamicCover) and make it a static cover or drop its box; then `--compare` on a DM01 two-seat run must print IDENTICAL.
+Checks for c9/ce: on EVERY two-seat run, `python tools\kl_coverdump_parse.py <inst1>\KLHook.log --compare <inst2>\KLHook.log`
+(exit 3 = diverged); worth a line in kl_solo_test's post-run summary. Point lists of the 20 stock maps are expected IDENTICAL.
+
+## Done this check-in (tools only, no hook build, nothing installed)
+- `tools/kl_coverdump_parse.py --compare` (above) + `tools/kl_coverdump_parse_test.py` (14 checks, synthetic logs shaped like
+  Q33_DM01; picked up by `kl_tests.py`: 7 pass 0 fail 2 skip on the Python side here).
+- debug tools used read-only on the staged files: dump.py (both dumps), dasm.py (the five sites, 0x713130, 0x491eb0), rtti.py.
+
+## Owner
+- Nothing to install. DM01 online: the CLIENT seat logs 29-118 asserts a round (not the host); the game goes on, but a client's round
+  can end at the 200th (`MaxAsserts`). Until a fix lands, a quick stop-gap only you can do: `[KLHook] MaxAsserts=2000` in `<DD>\KLHook.ini`
+  (ini only; the asserts still log and the first four still dump) - or leave it, DM01 clients have not reached 200 in Q31-Q33.

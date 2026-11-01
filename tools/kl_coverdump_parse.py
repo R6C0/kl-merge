@@ -6,6 +6,13 @@ Offline parser for the [CoverDump] lines of KLHook.log (klhook/klcoverdump.c, 20
     python kl_coverdump_parse.py <KLHook.log> --zip <F01_Main.zip> per *coverbox* entity: dumped points inside its footprint + MARGIN
     options: --margin M (default 60)   --yslack Y (default 300: a point counts only if its y is within the box's y range +- Y; 0 = ignore y)
              --list (print every box, default prints only a summary + the boxes WITHOUT points + 12 samples)
+    python kl_coverdump_parse.py <host KLHook.log> --compare <client KLHook.log>
+             host vs client cover POINT lists of a two-seat run (2026-11-01 scheduled check-in, Q33_DM01 inst2's 29 asserts): the
+             BUILT points (pos not 0 0 0) of each side, the common prefix, every index that differs, and the extra points of each
+             side with their places. Exit 3 when the lists diverge. Why it matters: ZSoldier's cover index travels host -> client
+             by VALUE (ObjDup CallMethod -> 0x581b40 -> 0x656740 sets [soldier+0xe8] = a 16-bit point index); a point the client
+             never built has flags +0x68 = 0x400 (neither 0x2 low nor 0x200 high) and the kind readers 0x6567e8 0x845a8b 0x51d049
+             0x555900 0x4ede1b hit their int3 (ContinueAsserts steps over it = kind 0; MaxAsserts=200 ends the game).
 
 The box half: kl_fa_cover.all_boxes (every entity whose name contains 'coverbox': its model's box 'bb' in local space, 'mid' in the world).
 The footprint is the XZ bounding rectangle of the 8 world corners of that box (an upper bound for a rotated box; GUESS that the cover list's
@@ -81,21 +88,63 @@ def count(boxes, points, margin, yslack):
     return boxes
 
 
+BLANK = (0.0, 0.0, 0.0)          # an unbuilt point: pos 0 0 0 (its +0x68 flags are 0x400 alone, +0x34 holds the array's fill pattern)
+
+
+def built_points(d):
+    """{index: (x, y, z)} of the points whose pos is not 0 0 0 (the ones the engine built on that machine)."""
+    return {p[0]: p[1:4] for p in d['points'] if p[1:4] != BLANK}
+
+
+def compare(host, client):
+    """Compare two read_dump() results (host, client) -> dict(host_built, client_built, prefix, differ, host_extra,
+    client_extra, diverge) where differ = sorted indices whose pos differs (a missing side counts as blank), prefix = the
+    number of leading indices that agree (built or blank on both), *_extra = the indices built on one side only."""
+    h, c = built_points(host), built_points(client)
+    n = max([p[0] for p in host['points']] + [p[0] for p in client['points']] + [-1]) + 1
+    differ = [i for i in range(n) if h.get(i, BLANK) != c.get(i, BLANK)]
+    prefix = differ[0] if differ else n
+    return dict(host_built=len(h), client_built=len(c), prefix=prefix, differ=differ, n=n,
+                host_extra=sorted(i for i in h if i not in c), client_extra=sorted(i for i in c if i not in h),
+                h=h, c=c, diverge=bool(differ))
+
+
+def print_compare(r, host_name='host', client_name='client'):
+    print('cover points: %s built %d, %s built %d (of %d dumped), lists agree for indices 0..%d' % (
+        host_name, r['host_built'], client_name, r['client_built'], r['n'], r['prefix'] - 1))
+    if not r['diverge']:
+        print('RESULT: cover point lists IDENTICAL')
+        return
+    print('%d index(es) differ: %s%s' % (len(r['differ']), r['differ'][:24], ' ...' if len(r['differ']) > 24 else ''))
+    for label, idx, pts in ((host_name + ' only', r['host_extra'], r['h']), (client_name + ' only', r['client_extra'], r['c'])):
+        if idx:
+            print('  built on %s (%d): %s' % (label, len(idx), ' '.join('#%d (%.0f %.0f %.0f)' % ((i,) + pts[i]) for i in idx[:16])))
+    both = [i for i in r['differ'] if i in r['h'] and i in r['c']]
+    if both:
+        print('  built on both but at different places (%d): %s' % (len(both), both[:16]))
+    lo = min(r['host_built'], r['client_built'])
+    print('RESULT: cover point lists DIVERGE at index %d - a replicated ZSoldier cover index >= %d is an int3 on the side that lacks it '
+          '(0x6567e8 / 0x845a8b / 0x51d049 / 0x555900 / 0x4ede1b; ContinueAsserts steps over, MaxAsserts=200 ends the game)' % (r['prefix'], lo))
+
+
 def main(argv):
     a = [x for x in argv if not x.startswith('--')]
     opt = {}
     k = 0
     args = list(argv)
     zp = None
+    cmp_log = None
     margin, yslack, full = 60.0, 300.0, '--list' in args
     for i, x in enumerate(args):
         if x == '--zip' and i + 1 < len(args):
             zp = args[i + 1]
+        if x == '--compare' and i + 1 < len(args):
+            cmp_log = args[i + 1]
         if x == '--margin' and i + 1 < len(args):
             margin = float(args[i + 1])
         if x == '--yslack' and i + 1 < len(args):
             yslack = float(args[i + 1])
-    pos = [x for i, x in enumerate(args) if not x.startswith('--') and not (i and args[i - 1] in ('--zip', '--margin', '--yslack'))]
+    pos = [x for i, x in enumerate(args) if not x.startswith('--') and not (i and args[i - 1] in ('--zip', '--compare', '--margin', '--yslack'))]
     if not pos:
         print(__doc__)
         return 2
@@ -103,6 +152,16 @@ def main(argv):
     if d is None:
         print('no "coverdump: begin" line in %s' % pos[0])
         return 1
+    if cmp_log:
+        d2 = read_dump(cmp_log)
+        if d2 is None:
+            print('no "coverdump: begin" line in %s' % cmp_log)
+            return 1
+        for name, dd in ((pos[0], d), (cmp_log, d2)):
+            print('%s: %s' % (name, dd['end'] or 'NO "coverdump: end" line (dump cut short?)'))
+        r = compare(d, d2)
+        print_compare(r)
+        return 3 if r['diverge'] else 0
     for ln in d['head']:
         print(ln)
     print('records dumped: %d   points dumped: %d   near lines: %d' % (len(d['recs']), len(d['points']), len(d['near'])))
