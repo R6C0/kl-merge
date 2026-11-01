@@ -359,6 +359,14 @@ static int klbf_ob_stage(DWORD actor, int dflt)
     }
     return dflt;
 }
+/* [HUD] OnlineBoardBots (2026-11-01, klhud_board2.c): the HOST ledger for one bot actor, read only. -> 1 when klbf_ob[] tracks the actor (OnlineTactics running on the host); *aboard = phase 3, *tally = the
+   money the puppeteer booked for it. GUESS: klbf_ob[].actor and the HUD's bot scan (klor_bots_sorted) name the same ZFFActor (both come from the Ally actor scan; the OB1 bench line says how many matched). */
+static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally)
+{
+    int i; if (!actor) return 0;
+    for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) { *aboard = klbf_ob[i].phase == 3; *tally = klbf_ob[i].tally; return 1; }
+    return 0;
+}
 /* OnlineWaypoints (recommended on): [BotFillWay_<SLOT>] P1..P8 = "x y z" (floats, y = height). The phase-2 exit walk (the exit-trigger goal only, not van/box walks) goes through these in order.
    <SLOT> = the slot name from the engine's scene path (klh_scene -> klh_level_key: 'f02\f02_main' -> F02). That is what the hook reliably knows: a stock map installed through KLExpansion
    plays as its slot (DD02 as F02), so the key is the slot, not the map's own name. GUESS: two expansion maps sharing a slot share a section; the section is only used for the one that needs it. */

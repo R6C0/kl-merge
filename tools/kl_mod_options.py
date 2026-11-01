@@ -164,6 +164,8 @@ feat('onlinevan', G_CORE, 'Online matches: escape / van card like Arcade (recomm
      'klhud.c OnlineVan; needs [Online] Read=1 and [HUD] OnlineCrew=1; live in the owner\'s ini since 1026h (online = Arcade); run live: on in every CE27 / Q28 / Q29 bench, 0 faults; BOSE5c..g proved the van icon beside it; the card itself not yet seen in a shot', [('HUD', 'OnlineVan', 1, 0, 0)])
 feat('onlineboardtake', G_CORE, 'Online matches: round-over card shows the money taken this round and money and fate of the AI heisters (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineBoardTake; needs OnlineBoard=1; take = money minus money at the first state-0x1f tick; bot money/ESCAPED are guesses (bots have no score row); NOT run live', [('HUD', 'OnlineBoardTake', 1, 0, 0)])
+feat('onlineboardbots', G_CORE, 'Online matches: round-over card shows what happened to each AI heister (dead, escaped, left behind; host also their payout) (recommended off until benched)', 'off', 'start',
+     'klhud_board2.c OnlineBoardBots + klhud_boardbots_logic.h; needs OnlineBoard=1; per-round latch of the bot scan, host-only ledger payout, client ESCAPED is inferred (GUESS), unknown cells show "-"; NOT run live (bench OB1, re/online_board_1101.md)', [('HUD', 'OnlineBoardBots', 1, 0, 0)])
 feat('onlineintrocount', G_CORE, 'Online matches: HEIST STARTS IN n SEC on the pre-round card (recommended off until benched)', 'off', 'start',
      'klhud_board2.c OnlineIntroCount; needs OnlineIntroState=1; reads the state timer [rules+0x4c] (GUESS); NOT run live', [('HUD', 'OnlineIntroCount', 1, 0, 0)])
 feat('onlinevanicon', G_CORE, 'Online matches: green ESCAPED van icon beside the watch (recommended on)', 'on', 'start',
