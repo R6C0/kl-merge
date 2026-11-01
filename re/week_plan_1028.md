@@ -14,6 +14,15 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
+- 11-01 14:35 cloud: OWNER ASK (14:25, away, PC on c9's Q32): "continue with the lens crack effect test and the mod controls whilst the
+  ongoing test is going ... is there a shop for the heisters hire send me a screenshot on how it looks". JOB SHOTS1 for c9/ce, NEXT after Q32
+  (do not disturb Q32): (1) <work>\build\lenscrack_1031\INSTALL_lenscrack.bat (additive; UNDO_lenscrack.bat) - owner authorised the test today.
+  (2) one bench on the shipped dll, 1 seat is enough, --d3shots every 2 s in the round-1 shop: ini delta [Keys] Map=1 ControlsPage=1 Hints=1,
+  [Hire] Enable=1; in the shop F2 x3 (stock -> page II -> hire -> MOD CONTROLS), ~5 s on each; also F12 (hire page) and move down two
+  rows so a description shows. (3) in round 2 take fire with [Graphics] LensCrack=1 LensCrackChance=100 Log=1 (Arcade or KeepAlive) until
+  'crack' lines log. (4) copy the best shots (hire page, MOD CONTROLS, page II, a cracked lens) to KL_PortTools\build\klhook\solo\SHOTS1\pick\
+  and log what the pages show (missing text, clipped rows). The cloud session collects pick\ and sends the owner the pictures.
+  Existing shots have none of this: GUN14 F12 never opened the page (no 'hirepage: served'); WK2 opened it between two 30 s shots; HIREWD all black.
 - 11-01 07:05 scheduled: [Keys] Map/Hints are NOT in the live ship1101 ini (DLL default 0) - the owner has never seen the MOD CONTROLS page or the key map. Recommended delta / Q31 suggestion: debug/notes/2026-11-01-scheduled-triage.md Finding 3.
 - 10-28 12:00 ce: research re/keybinds_ui_1028.md (F7/F8/F10 clash with ReShade, CopSquad F/G vs melee/grenade); build wf_ce299754 in wt/wk-keys.
 Owner wants every mod feature reachable on a sensible key and shown on screen (shop pages, hint lines, a controls page).
