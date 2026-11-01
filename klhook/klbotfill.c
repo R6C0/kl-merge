@@ -64,6 +64,7 @@ static DWORD klbf_sq_done;         /* the session object the squad pass finished
    [BotFill] OnlineWalkReach: van waiting (state 3), the bot has walked > 15 s and stands within OnlineExitCrowd of the escape box centre (right height) for 5 s -> counts as inside (the box frame test missed it).
    [Bots] OnlineEscort 0 off / 1 follow the host seat / 2 follow the nearest human; OnlineEscortFar / OnlineEscortSide (cm, Arcade klescort.c defaults 800 / 300): host only, idle bots (no stack, not guard-walking) stay near the human. */
 static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_esc_side = 300.0f;
+static DWORD klbf_eo_at;  /* van first seen in state 1-4 (any caller: a human's exit trigger sets no klbf_ot_called) */
 static int klbf_eo;      /* [BotFill] OnlineEscortOut (0 off, 1 on, 2 dry = log only): Arcade FollowOut parity, an empty-handed bot walks to the van once it is called (klbf_ot_run phase 0) */
 #include "klguard_logic.h"      /* wk-botpar OnlineGuardMode: floor gate + bypass decisions (klguard_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
@@ -1612,7 +1613,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klbf_ot_in) klbf_ot_summary();
         if (klbf_lp && klbf_lp_nok + klbf_lp_nbad) klog("botfill: lootparts: last round: %d stack reads plausible, %d implausible (lump fallback)", klbf_lp_nok, klbf_lp_nbad); klbf_lp_nok = klbf_lp_nbad = klbf_lp_nw = 0; memset(klbf_lp_warned, 0, sizeof klbf_lp_warned);
         memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++;
-        klbf_ot_lookAt = 0; klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_ot_bxlooks = 0; klbf_ot_bxAt = 0;
+        klbf_ot_lookAt = 0; klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_eo_at = 0; klbf_ot_bxlooks = 0; klbf_ot_bxAt = 0;
         if (klbf_ot_kept()) klbf_ot_trig_looked = 1;      /* the last round's exit trigger and boxes still stand (same level load): no scan this round */
         else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; klbf_ot_nobox_gen = -1; }
         klbf_gm_logged = 0; klbf_gm_last = 0; klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
@@ -1691,6 +1692,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     if (rules) {      /* BO9: vstate = the escape vehicle's state [rules+0x1dc] (1/2 coming, 3/4 waiting, 5 leaving, 7 gone, 0 idle; re/retomoto_street.md 6); left = the round clock [rules+0x4c] */
         static BYTE lastv = 0xff; static int lastr; BYTE v = 0; float c = 0;
         if (klh_rd(rules + 0x1dc, &v, 1)) vstate = v;
+        if (vstate >= 1 && vstate <= 4) { if (!klbf_eo_at) klbf_eo_at = now; } else if (vstate == 0) klbf_eo_at = 0;      /* OnlineEscortOut: a human-called van sets no klbf_ot_called */
         if (klh_rd(rules + 0x4c, &c, 4) && klb_finite(c) && c >= 0 && c < 100000.0f) left = c;
         if (lastr != klbf_ot_rounds) { lastr = klbf_ot_rounds; lastv = 0xff; }
         if (vstate >= 0 && vstate != lastv) {
@@ -1920,8 +1922,8 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 if (!(klbf_ob[s].told & 16) && (klbf_ob[s].told |= 16)) klog("botfill: tactics: bot %d (actor %08lx): clock left %.0f s <= OnlineLateExit %d: no new stack, tally %d goes to the van", s, a, left, klbf_ot_late, klbf_ob[s].tally);
                 best = -1;
             }
-            if (klbf_eo && klbf_ob[s].tally == 0 && klbf_ot_joincall && klbf_ot_vh && klbf_ot_called && vstate >= 1 && vstate <= 4 && klbf_ot_calledAt && now - klbf_ot_calledAt <= 60000) {      /* OnlineEscortOut (wk-escort-1101; Arcade FollowOut / klescort.c RELEASE: the vehicle waits -> the escort, which stood still behind the human, is sent to the boarding place). An empty-handed bot (no tally; a carrier already walks by itself) goes down the existing exit-walk machinery (phase 2: waypoints, box walk, OnlineBoxForce, board) as OnlineIdleVan does, instead of waiting for its 20 s idle clock. Same window as OnlineJoinCalled (van state 1-4, 60 s after the call). A bot with a stack to take is released too: Arcade sends every crew member out when the vehicle is called. GUESS: that is wanted online (the stack stays for the humans). */
-                if (!(klbf_ob[s].told & 4194304) && (klbf_ob[s].told |= 4194304)) klog("botfill: escort: bot %d (actor %08lx) follows out: van %s (state %d, %lu s since the call), nothing carried%s: %s", s, a, vstate == 3 ? "waits" : "comes", vstate, (unsigned long)((now - klbf_ot_calledAt) / 1000), best >= 0 ? ", a stack was still free" : "", klbf_eo == 2 ? "DRY, no order" : "sent to the exit walk (OnlineEscortOut)");
+            if (klbf_eo && klbf_ob[s].tally == 0 && klbf_ot_joincall && klbf_ot_vh && vstate >= 1 && vstate <= 4 && (klbf_ot_calledAt ? klbf_ot_calledAt : klbf_eo_at) && now - (klbf_ot_calledAt ? klbf_ot_calledAt : klbf_eo_at) <= 60000) {      /* OnlineEscortOut (wk-escort-1101; Arcade FollowOut / klescort.c RELEASE: the vehicle waits -> the escort, which stood still behind the human, is sent to the boarding place). An empty-handed bot (no tally; a carrier already walks by itself) goes down the existing exit-walk machinery (phase 2: waypoints, box walk, OnlineBoxForce, board) as OnlineIdleVan does, instead of waiting for its 20 s idle clock. Same window as OnlineJoinCalled (van state 1-4, 60 s after the call). A bot with a stack to take is released too: Arcade sends every crew member out when the vehicle is called. GUESS: that is wanted online (the stack stays for the humans). */
+                if (!(klbf_ob[s].told & 4194304) && (klbf_ob[s].told |= 4194304)) klog("botfill: escort: bot %d (actor %08lx) follows out: van %s (state %d, %lu s since the call), nothing carried%s: %s", s, a, vstate == 3 ? "waits" : "comes", vstate, (unsigned long)((now - (klbf_ot_calledAt ? klbf_ot_calledAt : klbf_eo_at)) / 1000), best >= 0 ? ", a stack was still free" : "", klbf_eo == 2 ? "DRY, no order" : "sent to the exit walk (OnlineEscortOut)");
                 if (klbf_eo == 1) { best = -1; idleVan = 1; vnew = 1; }
             }
             if (klbf_ob[s].grabs < klbf_ot_carry && best >= 0) {
