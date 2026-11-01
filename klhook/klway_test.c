@@ -44,6 +44,11 @@ int main(void)
     CHECK(!kwy_hold(19600, 114, 1500, KWY_HOLD_MS, KWY_HOLD_MS), "hold cap reached");
     CHECK(!kwy_hold(19600, 19601, 1500, 100, KWY_HOLD_MS), "same floor next leg");
 
+    CHECK(ksp_changed(-9, -9, -9, 5, 1, 1), "first read is a line");
+    CHECK(!ksp_changed(1000, 1, 1, 1000, 1, 1) && ksp_changed(1000, 1, 1, 0, 1, 1) && ksp_changed(1000, 1, 1, 1000, 2, 1) && ksp_changed(1000, 1, 1, 1000, 1, 0), "poll: a line only on a change");
+    CHECK(ksp_changed(1000, 1, 1, -1, -1, -1), "poll: unreadable is a change");
+    CHECK(!kdf_drop_ok(1, 1) && !kdf_drop_ok(0, 0) && !kdf_drop_ok(-1, 1) && kdf_drop_ok(0, 1), "dropfollow: hidden or undrained pool drop is skipped");
+
     printf("klway_test: %d checks, %d failed\n", checks, fails);
     return fails != 0;
 }

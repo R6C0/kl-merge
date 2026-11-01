@@ -38,7 +38,6 @@ static int klbf_ap;      /* [BotFill] ArcadeProbe 0/1: log-only probe of an OFFL
 static int klbf_sp;      /* [BotFill] OnlineStackProbe 0/1/2/3 (block before klbf_ot_run) */
 static int klbf_df; static float klbf_df_m = 1500.0f;      /* [BotFill] OnlineDropFollow / OnlineDropFollowM (game units): a bot whose stack went 'gone' follows a type-1 drop armed near it (block before klbf_ot_run) */
 #ifdef KLHOOK_TEST
-static void kla_watch_request(DWORD addr, DWORD len, const char *label, DWORD ms);      /* klauto.c (included later): level 3 */
 #endif
 static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near = 150.0f;
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
@@ -147,7 +146,7 @@ static void klbf_init(void)
     klbf_ot_carry = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsCarry", 2, klh_ini); if (klbf_ot_carry < 1) klbf_ot_carry = 1;
     klbf_ot_near = (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsNear", 150, klh_ini); if (klbf_ot_near < 20) klbf_ot_near = 20;
     klbf_ot_take = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsTake", 0, klh_ini); if (klbf_ot_take < 0 || klbf_ot_take > 2) klbf_ot_take = 0;      /* 0 off (also any out-of-range value), 1 raw write of +0x34 (old), 2 the game's own 0x4e3f40 (recommended on once benched) */
-    klbf_sp = (int)GetPrivateProfileIntA("BotFill", "OnlineStackProbe", 0, klh_ini); if (klbf_sp < 0 || klbf_sp > 3) klbf_sp = 0;      /* (recommended off; a diagnostic, TEST use) 1 log the stack fields, 2 + a log-only detour of 0x4e3f40, 3 = 1 + a hardware write watch on one stack's amount; needs OnlineTactics=1 */
+    klbf_sp = (int)GetPrivateProfileIntA("BotFill", "OnlineStackProbe", 0, klh_ini); if (klbf_sp < 0 || klbf_sp > 3) klbf_sp = 0;      /* (recommended off; a diagnostic, TEST use) 1 log the stack fields, 2 + a log-only detour of 0x4e3f40, 3 = 1 + a per-tick POLL of one stack's amount / state / armed byte (NO debug register: SP2 11-01, DR0 in a round = the anti-tamper ends the process); needs OnlineTactics=1 */
     klbf_ap = GetPrivateProfileIntA("BotFill", "ArcadeProbe", 0, klh_ini) != 0;      /* (recommended off: test probe) offline Arcade round log, no game write */
     klbf_df = klbf_ot && GetPrivateProfileIntA("BotFill", "OnlineDropFollow", 0, klh_ini) != 0;      /* (recommended off until benched) SP1: a drained type-0 stack arms a type-1 drop the scan skips; needs OnlineHost=1 + OnlineTactics=1 */
     klbf_df_m = (float)GetPrivateProfileIntA("BotFill", "OnlineDropFollowM", 1500, klh_ini); if (klbf_df_m < 200) klbf_df_m = 200; if (klbf_df_m > 10000) klbf_df_m = 10000;
@@ -1410,7 +1409,7 @@ static int klbf_van_ok(const float *vp, int from)
    1 = log the fields of a stack (+0x34 amount, +0x38 type, +0x64 state, +0x6c armed, +0x5c shut door, node-hidden bit [[[o+0x24]+4]+0x3c] & 0x400 read at 0x6cdb65, [+0x80] GUESS looter) when
        it goes 'gone' / 'gone or hidden' and once per round a dump of every armed stack with the nearest live team-1 actor within 30 m; per-type counts of the money objects; at most 60 lines a round.
    2 = level 1 plus a log-only detour of the game's stack depletion 0x4e3f40 (prologue 56 8b f1 8a 46 64 = push esi; mov esi,ecx; mov al,[esi+0x64]; no relative operand): it logs the stock caller's return address,
-       the stack and the amount, then runs the original unchanged. The hook's own two calls (OnlineTacticsTake=2 and the timed parts) are counted, not logged. 40 lines a round. Installed on the first host round only. */
+       the stack and the amount, then runs the original unchanged. (3 = level 1 + klbf_sp_poll below: a per-tick read of one stack, NO debug register; SP2 11-01.) The hook's own two calls (OnlineTacticsTake=2 and the timed parts) are counted, not logged. 40 lines a round. Installed on the first host round only. */
 #define KLBF_SP_MAXL 60
 #define KLBF_SP_MAXD 40
 static int klbf_sp_nl, klbf_sp_nd, klbf_sp_nown, klbf_sp_inst, klbf_sp_dead, klbf_sp_dumpRound = -1, klbf_sp_ty[4], klbf_sp_tya[4];
@@ -1446,6 +1445,38 @@ static void klbf_sp_gone(int bot, DWORD o, const char *what)
     klog("botfill: stackprobe: bot %d %s: stack %08lx: %s | money objects by type (all/armed) t0 %d/%d t1 %d/%d t2 %d/%d other %d/%d", bot, what, (unsigned long)o, d, klbf_sp_ty[0], klbf_sp_tya[0], klbf_sp_ty[1], klbf_sp_tya[1], klbf_sp_ty[2], klbf_sp_tya[2], klbf_sp_ty[3], klbf_sp_tya[3]);
 }
 
+/* OnlineStackProbe=3 (SP2 11-01): the watched stack, polled once per tick of klbf_ot_run for 40 s after the round's dump. Replaces the DR0 write watch: kl2.exe's anti-tamper ended the host
+   (ExitProcess from 0x8000dead) 67-85 ms after DR0 was armed (DD09 + DD05), so no debug register is ever set in play. One "stackprobe: poll:" line per CHANGE of +0x34 amount / +0x64 state /
+   +0x6c armed (ksp_changed), with the tick time and the nearest bot (bp = the Ally bots) or team-1 actor (cops) to the stack, at most 24 lines a round. Reads are guarded and the money vtable is
+   checked first (GUESS: a freed object reads as -1 or as another vtable). A tick is ~100-250 ms, so a drain and its refill inside one tick show as one line. */
+#define KLBF_SPW_MAXL 24
+static DWORD klbf_spw_o, klbf_spw_until; static int klbf_spw_round = -1, klbf_spw_amt = -9, klbf_spw_st = -9, klbf_spw_arm = -9, klbf_spw_n; static float klbf_spw_pos[3];
+static void klbf_sp_poll(DWORD now, const float (*bp)[3], int nb, const float (*cops)[3], int ncop)
+{
+    int amt = -1, st = -1, arm = -1, c; DWORD ty = 0; BYTE s64 = 0xff, a6c = 0xff;
+    if (klbf_sp != 3 || !klbf_spw_o || klbf_spw_round != klbf_ot_rounds) return;
+    if ((LONG)(now - klbf_spw_until) >= 0) { klog("botfill: stackprobe: poll: stack %08lx: 40 s over, %d change line(s)", (unsigned long)klbf_spw_o, klbf_spw_n); klbf_spw_o = 0; return; }
+    if (klh_rd32(klbf_spw_o) == KLMV_MONEY_VT) {
+        if (!klh_rd(klbf_spw_o + 0x34, &amt, 4)) amt = -1;
+        if (klh_rd(klbf_spw_o + 0x64, &s64, 1) && s64 != 0xff) st = s64;
+        if (klh_rd(klbf_spw_o + 0x6c, &a6c, 1) && a6c != 0xff) arm = a6c;
+        klh_rd(klbf_spw_o + 0x38, &ty, 4);
+    }
+    if (!ksp_changed(klbf_spw_amt, klbf_spw_st, klbf_spw_arm, amt, st, arm)) return;
+    {   int pa = klbf_spw_amt, ps = klbf_spw_st, pr = klbf_spw_arm, bi = -1, ci = -1; float bd = 1e30f, cd = 1e30f; char who[120];
+        klbf_spw_amt = amt; klbf_spw_st = st; klbf_spw_arm = arm;
+        if (++klbf_spw_n > KLBF_SPW_MAXL) { if (klbf_spw_n == KLBF_SPW_MAXL + 1) klog("botfill: stackprobe: poll: %d lines this round - silent until the next round", KLBF_SPW_MAXL); return; }
+        for (c = 0; c < nb; c++) { float d = kle_dist(bp[c], klbf_spw_pos); if (d < bd) { bd = d; bi = c; } }
+        for (c = 0; c < ncop; c++) { float d = kle_dist(cops[c], klbf_spw_pos); if (d < cd) { cd = d; ci = c; } }
+        if (bi >= 0 && (ci < 0 || bd <= cd)) _snprintf(who, sizeof who, "nearest bot %d %.1f m at (%.0f %.0f %.0f)", bi, bd / 100, bp[bi][0], bp[bi][1], bp[bi][2]);
+        else if (ci >= 0) _snprintf(who, sizeof who, "nearest team-1 actor %.1f m at (%.0f %.0f %.0f)", cd / 100, cops[ci][0], cops[ci][1], cops[ci][2]);
+        else _snprintf(who, sizeof who, "no bot or team-1 actor read");
+        who[sizeof who - 1] = 0;
+        klog("botfill: stackprobe: poll: stack %08lx tick %lu (+%.1f s): amt %d -> %d, state %d -> %d, armed %d -> %d, type %ld | %s", (unsigned long)klbf_spw_o, (unsigned long)now, (40000.0 - (double)(klbf_spw_until - now)) / 1000.0,
+             pa < -2 ? -1 : pa, amt, ps < -2 ? -1 : ps, st, pr < -2 ? -1 : pr, arm, (long)ty, who);
+    }
+}
+
 /* once per round: each armed stack with the nearest live team-1 actor within 30 m (cops[] = the live team-1 places read this tick) */
 static void klbf_sp_dump(const DWORD *mo, const int *mamt, const float (*mpos)[3], int nm, const float (*cops)[3], int ncop)
 {
@@ -1464,15 +1495,10 @@ static void klbf_sp_dump(const DWORD *mo, const int *mamt, const float (*mpos)[3
         else klog("botfill: stackprobe: dump: stack %08lx at (%.0f %.0f %.0f) amt %d: %s | no team-1 actor within 30 m", (unsigned long)mo[j], mpos[j][0], mpos[j][1], mpos[j][2], mamt[j], d);
     }
     if (shown < nm) klog("botfill: stackprobe: dump: %d of %d stacks listed (line cap)", shown, nm);
-#ifdef KLHOOK_TEST
-    /* level 3: no code patch (0x4e3f40 sits in a hashed range, level 2 is refused there): DR0 on the first
-       armed stack's amount (+0x34) for 40 s; klauto's handler logs every write with the writer and its callers */
-    if (klbf_sp == 3) { char lab[40]; snprintf(lab, sizeof lab, "stack %08lx amt r%d", (unsigned long)mo[0], klbf_ot_rounds);
-        klog("botfill: stackprobe: watch: stack %08lx +0x34 (amt %d) for 40 s", (unsigned long)mo[0], mamt[0]);
-        kla_watch_request(mo[0] + 0x34, 4, lab, 40000); }
-#else
-    if (klbf_sp == 3) klog("botfill: stackprobe: level 3 (write watch) needs the TEST dll: logging only");
-#endif
+    if (klbf_sp == 3 && klbf_spw_round != klbf_ot_rounds) {      /* level 3: pick the first armed stack of the round; klbf_sp_poll (every tick) does the rest */
+        klbf_spw_round = klbf_ot_rounds; klbf_spw_o = mo[0]; klbf_spw_until = GetTickCount() + 40000u; klbf_spw_amt = klbf_spw_st = klbf_spw_arm = -9; klbf_spw_n = 0; memcpy(klbf_spw_pos, mpos[0], 12);
+        klog("botfill: stackprobe: poll: stack %08lx +0x34 (amt %d) polled every tick for 40 s (no debug register)", (unsigned long)mo[0], mamt[0]);
+    }
 }
 
 /* Type-1 drops (SP1 11-01, re/bots_online_scorecard_1101.md 'Gap 4 diagnosis'; RE: a scripted death runs 0x6d2500 -> 0x4988f0, which empties the carrier's type-0 stack
@@ -1483,7 +1509,7 @@ static void klbf_sp_dump(const DWORD *mo, const int *mamt, const float (*mpos)[3
      online take pays a drop whole: [0x168e59c]==2 and +0x38==1, 0x6138a4 / 0x613951; 0x4e3f40 has no type check). Off: nothing here runs a line of behaviour. */
 #define KLBF_DR_MAX 32
 #define KLBF_DD_MAX 16
-static struct klbf_dr_s { DWORD o, first; int amt, posok, long60; float pos[3]; BYTE logged, seen; } klbf_dr[KLBF_DR_MAX];      /* armed type-1 objects in sight */
+static struct klbf_dr_s { DWORD o, first; int amt, posok, long60, hid; float pos[3]; BYTE logged, seen, drn, skl; } klbf_dr[KLBF_DR_MAX];      /* armed type-1 objects in sight */
 static struct { DWORD o, at; int amt; float pos[3]; } klbf_dp[KLBF_OT_OBJ], klbf_dd[KLBF_DD_MAX];      /* dp = the stacks of the last scan, dd = stacks seen to drain (ring) */
 static int klbf_dp_n, klbf_dd_n, klbf_dd_w, klbf_dr_round = -1;
 
@@ -1500,6 +1526,7 @@ static void klbf_df_see(DWORD o, int amt, DWORD now)
     if (f < 0) return;      /* table full: the rest is not tracked */
     if (klbf_dr[f].o != o) { memset(&klbf_dr[f], 0, sizeof klbf_dr[f]); klbf_dr[f].o = o; klbf_dr[f].first = now ? now : 1; }
     klbf_dr[f].seen = 1; klbf_dr[f].amt = amt;
+    {   DWORD fl = 0, e2, n2; klbf_dr[f].hid = (e2 = klh_rd32(o + 0x24)) && (n2 = klh_rd32(e2 + 4)) && klh_rd(n2 + 0x3c, &fl, 4) ? ((fl & 0x400) ? 1 : 0) : -1; }      /* node-hidden bit as klbf_sp_desc; re-read each tick (GUESS: a real drop is unhidden when it appears, the round-start pool objects stay hidden at one pool point) */
     klbf_dr[f].posok = (ent = klh_rd32(o + 0x24)) && (node = klh_rd32(ent + 4)) && kle_node(node, klbf_dr[f].pos, 0);      /* re-read each tick: the drop settles (0x5f1d0a) */
 }
 
@@ -1521,6 +1548,7 @@ static void klbf_df_tick(const DWORD *mo, const int *mamt, const float (*mpos)[3
         struct klbf_dr_s *r = &klbf_dr[i];
         if (!r->o) continue;
         if (!r->seen) { r->o = 0; continue; }
+        if (!r->drn) for (j = 0; j < klbf_dd_n; j++) if (klbf_dd[j].at - r->first + 3000u <= 6000u) { r->drn = 1; break; }      /* wk-dropfix-1101: a real stack drain within +-3 s of the first sighting (the round-start pool arms with none) */
         if (klbf_sp >= 1 && !r->logged) {      /* OnlineStackProbe: a drop became armed */
             int bd = -1; float bdist = 1e30f; char d[300], ps[64];
             r->logged = 1;
@@ -1557,6 +1585,9 @@ static int klbf_df_pick(DWORD stack, int self, DWORD now)
         if (!klbf_dr[i].o || !klbf_dr[i].seen || !klbf_dr[i].posok || klbf_dr[i].amt <= 0) continue;
         for (q = 0; q < KLBF_OT_BOTS; q++) if (q != self && klbf_ob[q].actor && klbf_ob[q].phase == 1 && klbf_ob[q].target == klbf_dr[i].o) taken = 1;
         if (taken || klbf_ot_isbad(klbf_dr[i].o, now)) continue;
+        if (!kdf_drop_ok(klbf_dr[i].hid, klbf_dr[i].drn)) {      /* wk-dropfix-1101: a hidden pool drop / one with no preceding drain is never a target (SP2: type 1, hidden 1, all at the pool point on DD09 + DD05) */
+            if (!klbf_dr[i].skl) { klbf_dr[i].skl = 1; klog("botfill: dropfollow: drop %08lx (amt %d) skipped: hidden %d, drained-before %d (a round-start pool object, not a dead carrier's drop)", (unsigned long)klbf_dr[i].o, klbf_dr[i].amt, klbf_dr[i].hid, (int)klbf_dr[i].drn); }
+            continue; }
         d = kle_dist(sp, klbf_dr[i].pos);
         eq = lastAmt > 0 && klbf_dr[i].amt == lastAmt;
         if (!(d <= klbf_df_m) && !(eq && drainAt && klbf_dr[i].first - drainAt + 3000u <= 6000u && d <= KLBF_DF_EQM)) continue;      /* first within +-3 s of the drain */
@@ -1712,6 +1743,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
     if (klbf_sp || klbf_df) klbf_df_tick(mo, mamt, (const float (*)[3])mpos, nm, now);      /* drained stacks, new drops (log), freed drops */
     klbf_sp_dump(mo, mamt, (const float (*)[3])mpos, nm, (const float (*)[3])cops, ncop);      /* OnlineStackProbe: once a round, log only */
+    if (klbf_sp == 3) { float bp[KLBF_OT_BOTS][3]; int q; for (q = 0; q < nb && q < KLBF_OT_BOTS; q++) memcpy(bp[q], bots[q].pos, 12); klbf_sp_poll(now, (const float (*)[3])bp, nb < KLBF_OT_BOTS ? nb : KLBF_OT_BOTS, (const float (*)[3])cops, ncop); }      /* level 3: the poll, every tick (no debug register) */
     {   /* the FA rules: [[0x168e9e4]+0x54] when the session's game type [sm+0x5c] is 4 (0x7bb2a0, PROVEN; 0x508ef0 is Arcade-only) */
         DWORD s0 = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), hd;
         if (s0 && klh_rd32(s0 + 0x5c) == 4 && (hd = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4)))) rules = klh_rd32(hd + 0x54);

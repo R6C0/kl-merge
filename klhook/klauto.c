@@ -598,22 +598,15 @@ static void kla_pass(const char *why)
 static volatile DWORD kla_watch_addr, kla_watch_len, kla_watch_arm, kla_watch_hits, kla_watch_defer;
 static char kla_top[64];                             /* name of the top menu window (kla_windows) */
 static char kla_watch_label[48];
-static volatile DWORD kla_watch_until;      /* tick when a timed watch (kla_watch_request) clears itself; 0 = none */
-
-/* A write watch asked for by another module (klbotfill's OnlineStackProbe=3), not by the script. It clears
-   itself after ms: Steam's anti-debug probe before the next scene load must find no debug register set. */
-static void kla_watch_request(DWORD addr, DWORD len, const char *label, DWORD ms)
-{
-    if (!kla_wake) { klog("watch: '%s' %08lx not armed: the klauto thread is not running", label, addr); return; }
-    kla_watch_addr = addr; kla_watch_len = len == 2 || len == 4 ? len : 1; kla_watch_hits = 0; kla_watch_defer = 0;
-    snprintf(kla_watch_label, sizeof kla_watch_label, "%s", label);
-    kla_watch_until = (GetTickCount() + ms) | 1; kla_watch_arm = 1; SetEvent(kla_wake);
-}
+static volatile DWORD kla_watch_until;      /* tick when a timed watch clears itself; 0 = none (nothing sets it since klbotfill's OnlineStackProbe=3 became a poll, 11-01 SP2) */
 
 static void kla_watch_apply(void)
 {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0); THREADENTRY32 te; int n = 0, ok = 0;
     DWORD me = GetCurrentThreadId(), pid = GetCurrentProcessId(), len = kla_watch_len == 4 ? 3 : kla_watch_len == 2 ? 1 : 0;
+    /* SP2 11-01 (DD09 + DD05): the host ended itself (ExitProcess from 0x8000dead) 67-85 ms after a DR0 was set in a round; kl2.exe's anti-tamper kills a process whose thread has a debug
+       register set. Only a direct-boot script run (SessionSafe=0, the scene-load probe 0xa8e3cb is known and the 'load:' label defers past it) may set one; a session run NEVER does. */
+    if (klh_policy != KLH_DIRECT) { if (snap != INVALID_HANDLE_VALUE) CloseHandle(snap); kla_watch_addr = 0; kla_watch_until = 0; klog("watch: REFUSED, no debug register is set in a session run (policy %d, SessionSafe=1 or a SHIP dll): kl2.exe's anti-tamper ends the process (SP2 11-01)", (int)klh_policy); return; }
     if (snap == INVALID_HANDLE_VALUE) return;
     te.dwSize = sizeof te;
     if (Thread32First(snap, &te)) do {

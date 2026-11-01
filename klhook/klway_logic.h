@@ -47,4 +47,18 @@ static int kwy_carried(int heldFlag, float botY, float curY, float nextY, float 
     if (!heldFlag || !(hopdy > 0)) return 0;
     return fabs(nextY - botY) <= hopdy && fabs(curY - botY) > hopdy;
 }
+/* wk-dropfix-1101 (SP2 11-01). OnlineStackProbe=3 POLL: one log line per change of the watched stack's amount (+0x34), state (+0x64) or armed byte (+0x6c); -1 = unreadable (a change to or from
+   unreadable counts, so a freed object is said once). prev* < -2 = nothing read yet (the first read is always a line). */
+static int ksp_changed(int pAmt, int pSt, int pArm, int amt, int st, int arm)
+{
+    if (pAmt < -2) return 1;
+    return amt != pAmt || st != pSt || arm != pArm;
+}
+
+/* OnlineDropFollow: may a bot be sent to this type-1 object? Not a HIDDEN one (the pool objects armed at round start sit hidden at one pool point: DD09 and DD05 (5224, 1020, -11056)),
+   and only one that appeared within the window after a REAL stack drain (drained = a type-0/2 stack was seen to empty within +-3 s of the drop's first sighting). hidden -1 = unreadable = no. */
+static int kdf_drop_ok(int hidden, int drained)
+{
+    return hidden == 0 && drained != 0;
+}
 #endif
