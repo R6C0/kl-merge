@@ -185,6 +185,17 @@ def main():
     fight = [(k, off[k], need[k]) for k in need if k in off and not any(M.BY_ID[i].get('exact') or M.BY_ID[i].get('excl') for i in off[k])]
     check(not fight, 'no recommended-on row needs a key a recommended-off row switches off: %s' % fight)
 
+    # Taking loot online without banking it loses the money (11-01 scheduled check-in): OnlineTacticsTake=2 depletes the stack through the
+    # game's 0x4e3f40, and online the game cannot bank for a bot (no seat), so only the hook's ledger + OnlineBankCredit bring it to the
+    # team. Rule: the take row writes the two bank keys with it, and the two rows are recommended the same way.
+    take, bank = M.BY_ID['onlinetacticstake'], M.BY_ID['onlinebank']
+    tk = {(s.lower(), k.lower()): v for s, k, v, _o, _d in take['keys'][1:]}
+    check(tk.get(('botfill', 'onlinebank')) == 1 and tk.get(('botfill', 'onlinebankcredit')) == 1, 'the loot-taking row writes OnlineBank=1 + OnlineBankCredit=1 with it')
+    check(take['rec'] == bank['rec'], 'the loot-taking and the bank rows are recommended the same way (%s / %s)' % (take['rec'], bank['rec']))
+    ls = M.split_lines(INI + '\n[BotFill]\nOnlineHost=1\nOnlineTactics=1\nOnlineTacticsTake=0\n')
+    w = M.plan(ls, {'onlinetacticstake': True})
+    check(('BotFill', 'OnlineBank', 1) in w and ('BotFill', 'OnlineBankCredit', 1) in w and ('BotFill', 'OnlineTacticsTake', 2) in w, 'ticking the loot-taking row alone also switches the bank on: %s' % w)
+
     def twice(text):
         ls = M.split_lines(text)
         for sec, key, val in M.plan(ls, M.rec_wants(ls)[0]):
@@ -205,7 +216,7 @@ def main():
         check(not rowless, 'repo klhook/KLHook.ini mentions every row key (%s)' % rowless)
         again = twice(M.read_ini(repo))
         check(again == [], 'Recommended pressed twice on the repo ini writes nothing the second time: %s' % again)
-    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 55 + 4 * os.path.isfile(repo), len(FAILS)))
+    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 58 + 4 * os.path.isfile(repo), len(FAILS)))
     return 1 if FAILS else 0
 
 

@@ -107,3 +107,42 @@ first, keeps every owner-noted row and keeps one backup).
 ## Owner
 - Nothing to install from this check-in (Python tool + ini markers only; the next hook build carries nothing new from here).
 - Still open from 10-31: `<DM>\KL_PortTools\build\lenscrack_1031\INSTALL_lenscrack.bat` (game closed) if you still want the cracked lens.
+
+# Scheduled check-in 2026-11-01 ~10:50 UTC (cloud; DD/DM attached by one access request)
+
+## PC state (read only; nothing launched, installed or staged into the game folder)
+- BUSY: `<DD>\dinput8.dll` written 10:47 UTC (sha1 8611f27f, c9's TEST twin), ReShade logs 10:47 = c9's Q31 sweep (all 21 maps on the
+  ship1102 candidate ini) in progress, so no game run, no install, no screen from here. `KLHook.ini` 01:19 = ship1101 (12d5f8e1).
+- `KLHook.result` still the 10-27 PASS; `KLHook.log` ends 10-27 20:50; no dump newer than the 10-26 `KLHook_1.dmp` -> nothing to triage.
+  `<DM>\KL_PortTools\build`: newest still `lenscrack_1031`. Repo head at the start: 740a15d (10:31 UTC).
+- Head health in the cloud: `kl_tests` 30 pass / 0 fail / 15 skip (gcc-multilib), `run_harness_linux.sh --check-hook` SHIP + TEST 0 errors,
+  15 warnings = the baseline (the `%I64d` one in klslot.c is MSVC-correct), `--check-rec` / `--check-defaults` / `--check-ini` clean.
+
+## Finding 1 (FIXED in the table; the ship1102 ini is c9's call): Take=2 without the bank LOSES the bots' loot
+The Recommended set (and so, by inference, c9's ship1102 candidate = ship1101 + the 14-key delta of the 07:05 note + IgnoreVan + Range 2500;
+its DELTA.txt is on the PC and was not read) switches `[BotFill] OnlineTacticsTake` 0 -> 2 while the `onlinebank` row stayed recommended OFF,
+so `OnlineBank` / `OnlineBankCredit` stay absent (DLL default 0). What that does online, from the code and the research, not a guess:
+- Take=2 depletes the stack through the game's own `0x4e3f40` (klbotfill.c ~1527 / ~1570: lump and timed parts), replicated to the clients.
+- Online the game cannot bank for a bot: ZOnlineMoneyCtrl slot 26 needs a ZFFPlayer seat (re/bots_online_arcade_1028.md item 4,
+  re/bots_bank_online_1028.md "a bot has no ZFFPlayer seat, no record, so none of this runs for it"). Only the hook's ledger (`OnlineBank`)
+  + `OnlineBankCredit` (AddSharable 0x5a18c0 to an escaped human seat, before the settlement's equal split) bring that money to the team.
+- With Take=0 (ship1101, the live ini) the stack stays for a human (`klbf_bc_log_skip`: "OnlineTacticsTake=0 would double count").
+So Take=2 alone = the bots carry money out of the round that the humans could have taken: WK2 10-28 F06 had $1.35M on the ledger, MV1 DD04
+$4.56M. The owner would see the AI take the loot and the team score not get it: the opposite of "same as Arcade", where a boarded bot banks
+through rules slot 201. The bank code HAS paid live: WKBC5 F06 (+550k +300k +150k to seat 0 up to the 1,000,000 cap), WKBC7 F06 (the
+overflow waits in the ledger), MV1 DD04 ($4.56M banked, the client's loot sync matched every step), 0 faults both seats each time; and the
+repo ini's own marker said "recommended off UNTIL OnlineBankCredit has paid once". Done here (table + ini markers only, no C code):
+- `onlinebank` row recommended ON with those proofs; `onlinetacticstake` now also writes `OnlineBank=1` + `OnlineBankCredit=1` (ticking Take
+  alone can no longer lose money); ini markers for OnlineBank / OnlineBankCredit / OnlineTacticsTake say why.
+- `kl_mod_options_test`: +3 checks (the take row writes the two bank keys; take and bank rows recommended the same way; a plan that ticks
+  take alone writes the bank) - the old table fails all three, the new one passes 62/62; --check-rec / --check-ini / twice-pressed clean.
+- Dry run on a copy of the live ship1101 ini (12d5f8e1): 17 value changes = the 07:05 list + OnlineGetUpIgnoreVan + OnlineBank + OnlineBankCredit.
+For c9 (ship1102): add `OnlineBank=1` + `OnlineBankCredit=1` to the candidate next to Take=2 (the bank keys were benched together with
+Take=2 in WK2/WKBC/MV1; the credit path needs a human to board the van, as the owner does), or keep Take=0 until they are in. Suggested
+hook line (klbotfill.c init, ce's file, not touched here): WARN when OnlineTacticsTake=2 and OnlineBank=0 ("money a bot takes leaves the round").
+Not covered by the bank: a bot that boards after the last human escaped (said in the round summary); the cap overflow (WKBC7) waits for the
+next escapee. `OnlineLootSync` (every seat sees the bots' loot) stays recommended off: every player must set it, LAN broadcast only.
+
+## Owner
+- Nothing to install from this check-in (Python tool + ini markers only).
+- Still open from 10-31: `<DM>\KL_PortTools\build\lenscrack_1031\INSTALL_lenscrack.bat` (game closed) if you still want the cracked lens.
