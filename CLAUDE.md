@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~01:10 - [ce] Online get-up rescue WORKS on DD08: BP18 (dll ebad2633, Hold + Plateau + FlopMeter on) bot ran 22 m, held at 1.05-1.16 m,
+joiner's meter +3.0, seat up after 9.1 s (BP17 rose alone at 15.5 s); PASS 0 faults. Merged c5284265e (hold kept within 8 m once started) and
+9a2a1a304 (shop gun picture online, GUN12b). Not shipped; installed is still ship1030. Next: 2nd map, multi-round cache check, gunui_1029.
+
 2026-10-31 ~15:05 UTC - scheduled check-in: PC idle since 10-29 04:21 (ship1030: dinput8 9e485dcf, ini b599def6), no new dump. The owner's 10-27
 session log shows `KL_LensCrack.fx` was NEVER installed (asked for every launch since 10-17, one extra effect reload each start): kit
 `<work>\build\lenscrack_1031\` (INSTALL/UNDO bats), game folder untouched - Owner installs. Repo `reshade/KL_Look.fx` synced to the live v2.3.
@@ -78,9 +82,6 @@ got Mod Options rows; the three 10-30 klbotfill changes (OnlineScanEveryRound ca
 still ship1030). c9 / ce stopped on the account's monthly spend limit; cloud check-ins carry on offline. Open from ce 10-29: BP16b get-up stall =
 likely unreachable order place -> OnlineGetUpPlateau (default off) written 10-30, needs its first MSVC build + a DD08 online bench.
 
-2026-10-29 ~05:25 - [c9] Q28 COMPLETE: all 21 maps PASS online, both seats in round, 0 faults, with the installed ship1030 (lift online:
-JoinOnline=1 + DoorCloseRemote=1; DoorCloseMs=8000 since ship1029). T2 'maps work on both sides' done for the current build; left: Retomoto
-lift door VISUAL check (black shots so far), a round with Medal quit (stutter comparison), [Input] MouseMoveMs=16, gunui_1029 bake kit (staged).
 
 
 ## Owner's end goal (2026-10-09)
