@@ -2065,6 +2065,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     if (!(klbf_ob[s].legFlags & 2)) { klbf_ob[s].legFlags |= 2; klog("botfill: tactics: bot %d (actor %08lx): waypoint leg %d of %d: next leg is %.0f m off in height: holding for a carry (OnlineLegHopDy, at most %d s)", s, a, klbf_ob[s].leg + 1, klbf_way_n, (klbf_way_p[klbf_ob[s].leg + 1][1] - bots[b].pos[1]) / 100, KWY_HOLD_MS / 1000); }
                     hit = timedout = stalled = 0;
                 }
+                if (!hit && klbf_ob[s].leg + 1 < klbf_way_n && kwy_carried(klbf_ob[s].legFlags & 2, bots[b].pos[1], wp[1], klbf_way_p[klbf_ob[s].leg + 1][1], klbf_hop_dy)) hit = 1;      /* held for a carry and now on the next leg's floor: this leg is done */
                 if (hit || timedout || stalled) {
                     klog("botfill: tactics: bot %d (actor %08lx): waypoint leg %d of %d %s (%.0f m from (%.0f, %.0f, %.0f), %lu s on the leg, dy %.1f m, limit %lu s)%s", s, a, klbf_ob[s].leg + 1, klbf_way_n, hit ? "reached" : stalled ? "stalled (skipped)" : "timed out", wd / 100, wp[0], wp[1], wp[2], (unsigned long)((now - klbf_ob[s].legAt) / 1000), (bots[b].pos[1] - wp[1]) / 100, (unsigned long)((klbf_ob[s].legMs ? klbf_ob[s].legMs : KLBF_WAY_LEGMS) / 1000), klbf_ob[s].leg + 1 >= klbf_way_n ? ": on to the exit trigger" : "");
                     klbf_ob[s].leg++; klbf_ob[s].legAt = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0;

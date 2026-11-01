@@ -40,4 +40,11 @@ static int kwy_hold(float botY, float nextY, float hopdy, unsigned long onLegMs,
     if (onLegMs >= holdCap) return 0;
     return fabs(nextY - botY) > hopdy;
 }
+
+/* 1 = the carry happened: the bot was held on this leg (heldFlag), is now on the NEXT leg's floor (within hopdy) and off the current leg's floor, so the current leg counts as reached (no idle 15 s timer) */
+static int kwy_carried(int heldFlag, float botY, float curY, float nextY, float hopdy)
+{
+    if (!heldFlag || !(hopdy > 0)) return 0;
+    return fabs(nextY - botY) <= hopdy && fabs(curY - botY) > hopdy;
+}
 #endif

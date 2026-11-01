@@ -37,6 +37,10 @@ int main(void)
     CHECK(!kwy_hold(19600, 114, 0, 1000, KWY_HOLD_MS), "hopdy 0 never holds");
     CHECK(kwy_hold(19600, 114, 1500, 20000, KWY_HOLD_MS), "tower bot holds for the carry");
     CHECK(!kwy_hold(570, 114, 1500, 20000, KWY_HOLD_MS), "carried: next leg is on its floor");
+    CHECK(kwy_carried(2, 570, 19600, 114, 1500), "held then carried: leg counts as reached");
+    CHECK(!kwy_carried(0, 570, 19600, 114, 1500), "never held: no early hit");
+    CHECK(!kwy_carried(2, 19600, 19600, 114, 1500), "still on the tower floor: no hit");
+    CHECK(!kwy_carried(2, 570, 19600, 114, 0), "hopdy 0: off");
     CHECK(!kwy_hold(19600, 114, 1500, KWY_HOLD_MS, KWY_HOLD_MS), "hold cap reached");
     CHECK(!kwy_hold(19600, 19601, 1500, 100, KWY_HOLD_MS), "same floor next leg");
 
