@@ -68,6 +68,7 @@ static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_
 static DWORD klbf_eo_at;  /* van first seen in state 1-4 (any caller: a human's exit trigger sets no klbf_ot_called) */
 static int klbf_eo;      /* [BotFill] OnlineEscortOut (0 off, 1 on, 2 dry = log only): Arcade FollowOut parity, an empty-handed bot walks to the van once it is called (klbf_ot_run phase 0) */
 #include "klguard_logic.h"      /* wk-botpar OnlineGuardMode: floor gate + bypass decisions (klguard_test.c) */
+#include "klway_logic.h"      /* wk-rtroute-1101: [BotFill] OnlineWayPerMap / OnlineLegHopDy, the pure decisions (klway_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
 static int klbf_gu_freefirst, klbf_gu_recede, klbf_gu_hold, klbf_gu_plat; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13); OnlineGetUpPlateau (BP16b) */
 static int klbf_gu, klbf_gu_sprint, klbf_gu_reordS, klbf_gu_keep, klbf_gu_det, klbf_gu_busy, klbf_gu_anyhp, klbf_gu_ignvan; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f, klbf_gu_flopm;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
@@ -113,6 +114,7 @@ static int klbf_squads(int fill)
 /* The bot actors for klbalance.c's online point-blank wrapper (OnlinePointBlank): the puppeteer pass publishes the live team-2 Ally actors it found (human heisters are team 2 too, so the
    team alone cannot tell them apart; the puppeteer's list is the bots). Entries first, then the count; read on the game thread, fresh for 5 s. Needs OnlineTactics=1 (the census is its). */
 #define KLBF_OT_BOTS_MAX 16      /* = KLBF_OT_BOTS (defined below) */
+static int klbf_way_pm; static float klbf_hop_dy;      /* [BotFill] OnlineWayPerMap (0/1/2), OnlineLegHopDy (cm): both default 0 = today (klway_logic.h) */
 static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used by klbf_way_load below) */
 /* wk-botpath (2026-10-28, static + log analysis of Q27_DD04R/DD05/DD08, BOS_DD08r; NOT run live). Every key defaults to today's behaviour (0). re/bots_path_1028.md.
    OnlineLegScale (0/1)   per-leg timeout = clamp(5 s + leg distance / OnlineLegSpeed, 15 s, OnlineLegMaxS) instead of a flat 15 s (DD08: legs of 40-60 m timed out at 15 s with 28-79 m left)
@@ -236,6 +238,8 @@ static void klbf_init(void)
     klbf_leg_stallS = (int)GetPrivateProfileIntA("BotFill", "OnlineLegStallS", 0, klh_ini); if (klbf_leg_stallS < 0) klbf_leg_stallS = 0; if (klbf_leg_stallS > 120) klbf_leg_stallS = 120;      /* (recommended off: not yet run live) */
     klbf_leg_near = (float)GetPrivateProfileIntA("BotFill", "OnlineLegNear", 0, klh_ini); if (klbf_leg_near < 0) klbf_leg_near = 0;      /* 0 = 300 cm */
     klbf_leg_dy = (float)GetPrivateProfileIntA("BotFill", "OnlineLegDy", 0, klh_ini); if (klbf_leg_dy < 0) klbf_leg_dy = 0;      /* 0 = height ignored */
+    klbf_way_pm = (int)GetPrivateProfileIntA("BotFill", "OnlineWayPerMap", 0, klh_ini); if (klbf_way_pm < 0 || klbf_way_pm > 2) klbf_way_pm = 0;      /* (recommended off until benched) 1 = [BotFillWay_<MAP>] first, 2 = also no slot route on a redirected map */
+    klbf_hop_dy = (float)GetPrivateProfileIntA("BotFill", "OnlineLegHopDy", 0, klh_ini); if (klbf_hop_dy < 0) klbf_hop_dy = 0; if (klbf_hop_dy > 100000.0f) klbf_hop_dy = 100000.0f;      /* (recommended off until benched) 0 = height ignored */
     klbf_bx_spread = GetPrivateProfileIntA("BotFill", "OnlineBoxSpread", 0, klh_ini) != 0;      /* (recommended off: not yet run live) */
     klbf_bx_latch = GetPrivateProfileIntA("BotFill", "OnlineBoxLatch", 0, klh_ini) != 0;      /* (recommended off: not yet run live) */
     klbf_bx_latchM = (float)GetPrivateProfileIntA("BotFill", "OnlineBoxLatchM", 1500, klh_ini); if (klbf_bx_latchM < 200.0f) klbf_bx_latchM = 200.0f;      /* GUESS 15 m: DD08 bots wandered up to 18 m out of the box and back */
@@ -356,22 +360,40 @@ static int klbf_ob_stage(DWORD actor, int dflt)
 #define KLBF_WAY_NEAR 300.0f      /* horizontal units (3 m) within which a leg point counts as reached (owner spec) */
 #define KLBF_WAY_LEGMS 15000      /* ms per leg at most (owner spec) */
 static float klbf_way_p[KLBF_WAY_MAX][3]; static int klbf_way_n; static char klbf_way_sec[40];
+static int klbf_way_read(const char *sec)      /* P1..P8 of [sec] into klbf_way_p; the first missing / bad key ends the list; returns the count */
+{
+    char line[120], nm[8]; int i, n = 0;
+    for (i = 1; i <= KLBF_WAY_MAX; i++) {
+        char *c; float x, y, z;
+        snprintf(nm, sizeof nm, "P%d", i);
+        line[0] = 0; GetPrivateProfileStringA(sec, nm, "", line, sizeof line, klh_ini);
+        for (c = line; *c; c++) if (*c == ',' || *c == ';' || *c == '(' || *c == ')') *c = ' ';
+        if (sscanf(line, "%f %f %f", &x, &y, &z) != 3) break;
+        klbf_way_p[n][0] = x; klbf_way_p[n][1] = y; klbf_way_p[n][2] = z; n++;
+    }
+    return n;
+}
 static void klbf_way_load(void)
 {
-    char scene[200], key[120], line[120], nm[8]; int i;
+    char scene[200], key[120], fold[40], psec[60]; int i, pn = 0;
     klbf_way_n = 0; klbf_way_sec[0] = 0;
     if (!klbf_ot_way || !klh_scene(scene, sizeof scene) || !klh_level_key(scene, key, sizeof key)) return;
     strcpy(klbf_way_sec, "BotFillWay_");
     for (i = 0; key[i] && key[i] != 0x5c && i < 20; i++) klbf_way_sec[11 + i] = (char)(key[i] >= 'a' && key[i] <= 'z' ? key[i] - 32 : key[i]);
     klbf_way_sec[11 + i] = 0;
-    for (i = 1; i <= KLBF_WAY_MAX; i++) {
-        char *c; float x, y, z;
-        snprintf(nm, sizeof nm, "P%d", i);
-        line[0] = 0; GetPrivateProfileStringA(klbf_way_sec, nm, "", line, sizeof line, klh_ini);
-        for (c = line; *c; c++) if (*c == ',' || *c == ';' || *c == '(' || *c == ')') *c = ' ';
-        if (sscanf(line, "%f %f %f", &x, &y, &z) != 3) break;      /* the first missing / bad key ends the list */
-        klbf_way_p[klbf_way_n][0] = x; klbf_way_p[klbf_way_n][1] = y; klbf_way_p[klbf_way_n][2] = z; klbf_way_n++;
+    fold[0] = 0; psec[0] = 0;
+    if (klbf_way_pm) {      /* OnlineWayPerMap: [BotFillWay_<MAP>] (the KLJoin.ini folder, upper case, e.g. BotFillWay_DM09) before the slot section */
+        klmv_pm_folder(fold, sizeof fold);
+        if (fold[0]) {
+            strcpy(psec, "BotFillWay_");
+            for (i = 0; fold[i] && i < 24; i++) psec[11 + i] = (char)(fold[i] >= 'a' && fold[i] <= 'z' ? fold[i] - 32 : fold[i]);
+            psec[11 + i] = 0;
+            pn = klbf_way_read(psec);
+            if (pn > 0) { klbf_way_n = pn; strcpy(klbf_way_sec, psec); }
+        }
+        klog("botfill: tactics: OnlineWayPerMap=%d: map folder '%s', per-map section '%s' has %d point(s)%s", klbf_way_pm, fold, psec[0] ? psec : "-", pn, kwy_use_slot(klbf_way_pm, fold[0] != 0, pn) ? "; the slot section is read too" : "; the slot section is NOT read");
     }
+    if (kwy_use_slot(klbf_way_pm, fold[0] != 0, pn)) klbf_way_n = klbf_way_read(klbf_way_sec);
     if (klbf_way_n) {
         klog("botfill: tactics: OnlineWaypoints: [%s] has %d point(s) for the exit walk (slot key '%s')", klbf_way_sec, klbf_way_n, key);
         for (i = 0; i < klbf_way_n; i++) klog("botfill: tactics: OnlineWaypoints: leg %d = (%.0f, %.0f, %.0f)", i + 1, klbf_way_p[i][0], klbf_way_p[i][1], klbf_way_p[i][2]);
@@ -382,13 +404,7 @@ static void klbf_way_load(void)
    GUESS: the legs run toward the exit, each nearer to it than the one before (true for the DD02 route; a winding route would need a smarter test) */
 static int klbf_way_start(const float p[3], const float exitp[3])
 {
-    float bd = (p[0] - exitp[0]) * (p[0] - exitp[0]) + (p[2] - exitp[2]) * (p[2] - exitp[2]), wd; int i;
-    bd = (float)sqrt(bd) - KLBF_WAY_NEAR;
-    for (i = 0; i < klbf_way_n; i++) {
-        wd = (float)sqrt((klbf_way_p[i][0] - exitp[0]) * (klbf_way_p[i][0] - exitp[0]) + (klbf_way_p[i][2] - exitp[2]) * (klbf_way_p[i][2] - exitp[2]));
-        if (wd < bd) return i;
-    }
-    return klbf_way_n;
+    return kwy_start(p, exitp, (const float (*)[3])klbf_way_p, klbf_way_n, klbf_hop_dy, KLBF_WAY_NEAR);      /* OnlineLegHopDy > 0: legs on another floor are skipped */
 }
 
 /* OnlineRampFire (recommended on; OnlineRampDry=0 default since BOS_DD08r proved the fire live on F08). 2026-10-26, stock DD02 (slot F02): TriggerBox_make_the_ramp (node 15776, one-shot, centre (3,5846,-10822),
@@ -2045,6 +2061,10 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     }
                 }
                 timedout = now - klbf_ob[s].legAt >= (klbf_ob[s].legMs ? klbf_ob[s].legMs : KLBF_WAY_LEGMS);
+                if ((hit || timedout || stalled) && klbf_ob[s].leg + 1 < klbf_way_n && kwy_hold(bots[b].pos[1], klbf_way_p[klbf_ob[s].leg + 1][1], klbf_hop_dy, (unsigned long)(now - klbf_ob[s].legAt), KWY_HOLD_MS)) {      /* OnlineLegHopDy: the next leg is across the join; wait for klhop's carry (GUESS) instead of the 15 s timer */
+                    if (!(klbf_ob[s].legFlags & 2)) { klbf_ob[s].legFlags |= 2; klog("botfill: tactics: bot %d (actor %08lx): waypoint leg %d of %d: next leg is %.0f m off in height: holding for a carry (OnlineLegHopDy, at most %d s)", s, a, klbf_ob[s].leg + 1, klbf_way_n, (klbf_way_p[klbf_ob[s].leg + 1][1] - bots[b].pos[1]) / 100, KWY_HOLD_MS / 1000); }
+                    hit = timedout = stalled = 0;
+                }
                 if (hit || timedout || stalled) {
                     klog("botfill: tactics: bot %d (actor %08lx): waypoint leg %d of %d %s (%.0f m from (%.0f, %.0f, %.0f), %lu s on the leg, dy %.1f m, limit %lu s)%s", s, a, klbf_ob[s].leg + 1, klbf_way_n, hit ? "reached" : stalled ? "stalled (skipped)" : "timed out", wd / 100, wp[0], wp[1], wp[2], (unsigned long)((now - klbf_ob[s].legAt) / 1000), (bots[b].pos[1] - wp[1]) / 100, (unsigned long)((klbf_ob[s].legMs ? klbf_ob[s].legMs : KLBF_WAY_LEGMS) / 1000), klbf_ob[s].leg + 1 >= klbf_way_n ? ": on to the exit trigger" : "");
                     klbf_ob[s].leg++; klbf_ob[s].legAt = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0;
