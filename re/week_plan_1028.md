@@ -36,6 +36,7 @@ Owner: ce.
 - 10-28 21:05 c9: lift downs explained: Ramp=1 kept CopToYou/CrewToYou at stock, the game's own 40 % down did the rest (not a bug in the map or hook). Ramp now logs it (403967a5a).
 - 11-01 05:50 c9: Finding 2 fixed (0af62a4ee): Mod Options Recommended keeps owner-noted / in-game-menu / keep= rows; proven online rows flipped to recommended on.
 - 11-01 06:40 c9: Q30 kit (round 2 on all 21 maps, both seats) staged + verified READY in C:\kl_build_1024\c9_1028\q30; runs when the game is free.
+- 11-01 06:35 c9: Q30 DD01 round 2 PASS; hired-body-stock = DM07 + DD10 lack the wardrobe; built offline (C:/kl_build_1024/c9_1028/hirebody), bench HIREWD after Q30.
 - 11-01 05:30 c9: Q29 21-map online regression on ship1101: all 21 PASS 0 faults (DD01 after one lobby timeout). GUN13 never opened the weapon list (joiner route bug), GUN14 re-run.
 - 11-01 03:45 c9: SHIPPED ship1101 (dll a6ea229f + ini 12d5f8e1): online get-up rescue (ce BP18/BP19) + lift door-hold fix; SHIPCHK5 + A1LIFTNET4 PASS 0 faults.
 - 10-30 12:50 c9: A1HOLD2 PASS (a quit joiner no longer holds the lift doors open); fix merged, not shipped. Spend limit hit: work paused to a minimum.

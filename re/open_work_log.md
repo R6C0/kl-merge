@@ -1,3 +1,9 @@
+2026-11-01 ~06:35 - [c9] Q30 DD01 PASS round 2 both seats (passive shop: 0x20 -> 30 s -> 0x24..0x27 -> 0x19), sweep of the other 20 maps running.
+T2 'hired body stays stock': only DM07 (F06) and DD10 (F07) of the 21 maps have no KLWardrobe.ini, so Dead Men hires (char 9..16) are refused there
+('NOT ON THIS MAP', nothing charged); DD heisters 1..8 are fine via StockHero. Wardrobe built offline on the live 10-29 gun-baked zips (problems 0,
+check_passes clean, chunks 44650 / 55618 of 69632, dead indices reused) + rebuilt .bots.zip siblings (OnlineHost=1 loads those). Kit + INSTALL/UNDO bats:
+C:/kl_build_1024/c9_1028/hirebody. Not installed: bench HIREWD after Q30 (watch free VA on DD10, .prm 69 -> 86 MB). Masks=8 there (no PD2 plates).
+
 2026-11-01 ~06:15 - [ce] IV1 PASS (DD08 online, BP20 inis + OnlineGetUpIgnoreVan=1, test dll d82d5d84 from 6b140380a): both seats 0 faults, restore
 a6ea229f/12d5f8e1, key read =1 on both. One down (seat 1, van idle): bot 4 sprinted 13.4 m, held 2.4-3.4 m, up in 15 s. No down in van state 1..5, so
 the IgnoreVan path is NOT exercised: no regression only; the onlinegetupignorevan keep= stays. GUN13 CLOSED via GUN15 (DM07 + DD10 PASS): baked HK69 /
