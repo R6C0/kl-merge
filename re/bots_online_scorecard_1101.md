@@ -180,3 +180,14 @@ Kit C:\kl_build_1024\week_1028\sp1 (ship1103 + the key, TEST hook stackprobe_tes
   follow the stack's money into the newly armed type-1 objects (key OnlineDropFollow, default off), not to block the drain.
 - Next: SP2 = OnlineStackProbe=3 on DD09 + DD05 (TEST hook stackprobe3_test 1cc357df, kit C:\kl_build_1024\week_1028\sp2), after
   c9's SHOTS2 / Q33 / Q34. Look for `WATCH 'stack` lines: the writer, and whether a type-1 object is armed in the same frame.
+
+## Gap 4 RE + OnlineDropFollow (11-01 ~17:40, ce; static read, not run live)
+- Chain (disassembly): actor death/removal -> CPPScript slot 56 0x6d2500 -> 0x4988f0 on [actor+0x8ec] (the carried money ctrl):
+  0x6f9410(C, 0) empties the type-0 stack (amt 0, state 3, armed 0), then the rules' drop spawn (+0x324 online, 0x8f2f60) arms a free
+  type-1 pool object via 0x4ef9a0 with the SAME amount at the CARRIER's position, Activate(1) = state 2 for ~3 s (GUESS: the constant).
+- The game's online take pays a type-1 drop whole in one 0x4e3f40 call (0x6138a4/0x613951); 0x4e3f40 has no type check.
+- Commits d906a4ddb + 32f0c75fb: OnlineStackProbe>=1 logs every armed drop and the stack that drained within 3 s (equal amount yes/NO);
+  new [BotFill] OnlineDropFollow (recommended off until benched) + OnlineDropFollowM (1500): a bot whose stack went gone walks to the drop
+  (equal amount within +-3 s of the drain: up to 80 m), waits out state 2, takes it whole (Take=2). Workflow review: SAFE_TO_MERGE.
+- Bench: SP2 = OnlineStackProbe=3 + OnlineDropFollow=1, DD09 + DD05, TEST hook week_1028\dropfollow_test a40d6834 (SHIP twin
+  dropfollow_ship d1c03cd5), kit week_1028\sp2. PASS = 'drop armed ... equal amount yes' lines and 'dropfollow: ... GRABBED' with a tally > 0.
