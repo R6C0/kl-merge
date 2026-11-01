@@ -72,14 +72,13 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 (379/596), host activation reuses reserved indices. D2-D4 review fixes in, D1 kept (state 0x16, needed before the first activation). NEXT_SHIP:
 [CoverRing] ClientBuild=1 ClientBuildHost=1 ClientBuildMaps=F01,F03 (host + client together). F02 (1 car) unbenched.
 
+2026-11-01 ~23:55 - [ce] RT3 0 faults (DD06 7 boarded, no regression). DM09 still 0 boarded: with OnlineLegScale+StallS the legs run (12
+reached, was 2) but all 7 bots die on the street legs before the van exists (boarding object ~249 s in, 17 s before round over; RT2 the same).
+Fix = hold in cover until van probe state >= 2, then rush: wk-vantime-1101 (offline). Also running: wk-onlineboard-1101 (Arcade board online).
+
 2026-11-01 ~23:45 - [ce] RT2 0 faults: RT2D + RT2R (DD06 7 boarded) PASS; RT2L DM09 route runs (51 legs, 4 carries, 0 ZFFActor refusals) but
 0 BOARDED: every leg times out at the flat 15 s 5-76 m short, bots end 64-76 m off when the van comes (round over 19 s later). RT3 = same hook +
 OnlineLegScale=1 Speed=150 MaxS=60 + OnlineLegStallS=20 (existing keys), kit week_1028\rt3\run_rt3.sh after c9's CR3.
-
-2026-11-01 ~22:25 - [ce] AS1 FAIL -> AS2 PASS: AssertSoft compared offsets vs the ini's VAs (nothing matched); VAs only since 16918c50a, DM01
-client 83 soft asserts, asserts 0 (ship 98fe8760 protects nothing; SHIP week_1028\as2\ship 9d7e3a1c). RT1 DM09 legs never ran (van stands from
-the start; private vtable refused 17 carries) -> [BotFill] OnlineLegsWithVan + [CrewHop] OnlinePrivVt, kit rt2 after c9's LC2+CR1. SP2B: DropFollow
-in NEXT_SHIP. EO1 held (never triggered). ARC1 11/11: re/arcade_baseline_1101.md.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

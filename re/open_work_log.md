@@ -1,3 +1,8 @@
+2026-11-01 ~23:55 - [ce] RT3 2/2 exit 0, 0 faults. DD06 7 boarded ($3.51M), no regression. DM09 still 0 boarded, new cause: the legs now run
+(12 reached, was 2) but all 7 bots die on the street legs 2..6 (23:42:31-23:43:16) before the van exists; its boarding object first shows ~249 s
+into the round (23:43:06), 17 s before round over (same in RT2L). Fix direction: hold in cover until the van probe is state >= 2, then rush
+(wk-vantime-1101, running offline). Grade sheet week_1028\rt3\GRADE.txt.
+
 2026-11-01 ~23:55 - [c9] CR3 PASS (DM01 + DM03 online, ClientBuild=1 + ClientBuildHost=1 on both seats): asserts 0 / soft 0 on host and client (DM01 was 39), counts equal (379 / 596), the host's mid-round car activation reuses the reserved indices (count stays 379). DM03 coverdump IDENTICAL; DM01 differs only on car 871's 8 points, which have the same indices and moved with the car. Review D2-D4 in (per-point usable flags, capacity refusal, _fpreset + half state after a fault); D1 kept at state 0x16 on purpose. NEXT_SHIP: [CoverRing] ClientBuild=1 ClientBuildHost=1 ClientBuildMaps=F01,F03, host and client together. F02 (1 car) still unbenched.
 
 2026-11-01 ~23:45 - [ce] RT2 3/3 exit 0, 0 faults. RT2D + RT2R (DD06 7 boarded $4.8M) PASS. RT2L DM09 PARTIAL: the route runs (51 legs, 4 real carries, 0 ZFFActor
