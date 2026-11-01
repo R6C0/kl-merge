@@ -1,3 +1,5 @@
+2026-11-01 ~23:55 - [c9] CR3 PASS (DM01 + DM03 online, ClientBuild=1 + ClientBuildHost=1 on both seats): asserts 0 / soft 0 on host and client (DM01 was 39), counts equal (379 / 596), the host's mid-round car activation reuses the reserved indices (count stays 379). DM03 coverdump IDENTICAL; DM01 differs only on car 871's 8 points, which have the same indices and moved with the car. Review D2-D4 in (per-point usable flags, capacity refusal, _fpreset + half state after a fault); D1 kept at state 0x16 on purpose. NEXT_SHIP: [CoverRing] ClientBuild=1 ClientBuildHost=1 ClientBuildMaps=F01,F03, host and client together. F02 (1 car) still unbenched.
+
 2026-11-01 ~23:45 - [ce] RT2 3/3 exit 0, 0 faults. RT2D + RT2R (DD06 7 boarded $4.8M) PASS. RT2L DM09 PARTIAL: the route runs (51 legs, 4 real carries, 0 ZFFActor
 refusals, 6 exit walks) but 0 BOARDED: legs 2..8 time out at the flat 15 s with bots 5-76 m short (~1.5 m/s on 23-50 m legs), so they end 64-76 m
 from leg 8 when the van's boarding object shows (23:08:03, round over 23:08:22). RT3 = same hook + OnlineLegScale=1 Speed=150 MaxS=60 + OnlineLegStallS=20

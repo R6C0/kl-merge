@@ -39,6 +39,7 @@
 #ifndef KLCOVERRING_C
 #define KLCOVERRING_C
 
+#include <float.h>      /* _fpreset (review D4) */
 #include "klcoverring_logic.h"
 
 #define KCR_NCAR 64
@@ -84,7 +85,9 @@ static DWORD kcr_cars_sig(DWORD *ran)
     return sig;
 }
 
-static void kcr_car_lines(DWORD now)
+static int kcr_cb_points(const char *who, unsigned long i, const DWORD *idx, DWORD n, DWORD pb, DWORD npts);
+
+static void kcr_car_lines(DWORD now, DWORD pb, DWORD npts)
 {
     DWORD i;
     for (i = 0; i < kcr.ncars; i++) {
@@ -102,6 +105,7 @@ static void kcr_car_lines(DWORD now)
         klog("coverring: car #%lu t+%lums slot %lu '%s' car=%08lx vt=%08lx script=%08lx n[+1c4]=%lu done[+1e8]=%lu rsv[+1e9]=%lu idx[+1c8]=[%s] car+8c0=%08lx car+a28=%08lx",
              (unsigned long)i, (unsigned long)(now - kcr.t_load), (unsigned long)kcr.c[i].slot, nm, (unsigned long)car, (unsigned long)klh_rd32(car),
              (unsigned long)s, (unsigned long)n, (unsigned long)d, (unsigned long)r, ix, (unsigned long)klh_rd32(car + 0x8c0), (unsigned long)klh_rd32(car + 0xa28));
+        if (n && d && npts) kcr_cb_points("poll", i, idx, n, pb, npts);      /* review D2: filled vs spare points of a built ring (host activation rebuilds included) */
     }
 }
 
@@ -121,9 +125,28 @@ static int kcr_cb_call(DWORD script)
     __try {
         KLFC_CALL(void (__fastcall *)(DWORD, DWORD), 0x0081b6f0u)(script, 0);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        _fpreset();      /* review D4: the writer runs x87 code (fld / fstp from 0x81b771); a fault mid-way can leave values on the FPU stack */
         return 0;
     }
     return 1;
+}
+
+/* review D2: after a call, read the flags [pt+0x68] and position (+0x28) of the car's indices from the points vector (begin pb, stride 0x7c, npts entries) and log them, so
+   the bench can see filled (0x200) vs spare (0x400 only) points on both seats. Returns the number of usable points. */
+static int kcr_cb_points(const char *who, unsigned long i, const DWORD *idx, DWORD n, DWORD pb, DWORD npts)
+{
+    char b[400]; int l = 0, good = 0; DWORD k;
+    b[0] = 0;
+    for (k = 0; k < n && k < 8; k++) {
+        DWORD fl = 0; float p[3] = { 0, 0, 0 };
+        if (idx[k] < npts && klh_rd(pb + idx[k] * 0x7c + 0x68, &fl, 4) && klh_rd(pb + idx[k] * 0x7c + 0x28, p, 12)) {
+            good += kcr_pt_usable(fl);
+            if (l < (int)sizeof b - 48) l += _snprintf(b + l, sizeof b - l - 1, " %lu:%03lx(%.0f,%.0f,%.0f)%s", (unsigned long)idx[k], (unsigned long)fl, p[0], p[1], p[2], kcr_pt_usable(fl) ? "" : "SPARE");
+        } else if (l < (int)sizeof b - 24) l += _snprintf(b + l, sizeof b - l - 1, " %lu:UNREADABLE", (unsigned long)idx[k]);
+    }
+    b[sizeof b - 1] = 0;
+    klog("coverring: %s car #%lu points usable %d/%lu:%s", who, i, good, (unsigned long)(n < 8 ? n : 8), b);
+    return good;
 }
 
 static void kcr_cb_note(int why, DWORD now, DWORD st)
@@ -138,7 +161,7 @@ static void kcr_cb_note(int why, DWORD now, DWORD st)
 /* called every tick from kcr_tick (game thread, inside its __try). Does nothing unless ClientBuild=1, this is an online CLIENT and the slot is listed. */
 static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
 {
-    DWORD sm, role = 0, mode = 0, L, rb, rn, pb, pe, cnt = 0, i; int list_ok, why, map_ok = 0, ran = 0, ok_n = 0;
+    DWORD sm, role = 0, mode = 0, L, rb, rn, pb = 0, pe = 0, cnt = 0, i, npts, elig; int list_ok, why, map_ok = 0, ran = 0, ok_n = 0, usable = 0;
     char scene[200], key[120];
     if (kcr.cb_bad || kcr.cb_done) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !KLH_SM_VT_OK(klh_rd32(sm)) || !klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !kcr_cb_role_ok(role, mode, kcr.cb_host)) return;    /* host / offline: nothing, no log */
@@ -158,6 +181,15 @@ static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
     }
     kcr_scan();      /* fresh, in entity-table order */
     kcr.cb_done = 1;
+    npts = (pe >= pb && pe - pb < 0x4000000u) ? (pe - pb) / 0x7c : 0;
+    for (i = 0, elig = 0; i < kcr.ncars; i++) {      /* review D3: count eligible cars first; refuse if their 8 indices each do not fit the points vector */
+        DWORD s = klh_rd32(kcr.c[i].car + 0x968); int ok = kcvd_ptr_ok(s) && kcr_script_matches(kcr.c[i].car, klh_rd32(s + 0x40));
+        if (kcr_cb_car_ok(ok, ok ? kcr_rd8(s + 0x1e8) : 1, ok ? kcr_rd8(s + 0x1e9) : 1)) elig++;
+    }
+    if (!kcr_cb_fits(cnt, elig, npts)) {
+        klog("coverring: clientbuild REFUSED: capacity - count %lu + 8 x %lu eligible cars > points vector %lu (0x558350 has no bound check)", (unsigned long)cnt, (unsigned long)elig, (unsigned long)npts);
+        return;
+    }
     klog("coverring: clientbuild GO t+%lums slot '%s' state=%lx L=%08lx real-count[+68]=%lu cars=%lu (entity-table order; GUESS: equals the host's order - compare with the host's 'coverring: car #' lines)",
          (unsigned long)(now - kcr.t_load), key, (unsigned long)st, (unsigned long)L, (unsigned long)cnt, (unsigned long)kcr.ncars);
     for (i = 0; i < kcr.ncars; i++) {
@@ -171,7 +203,13 @@ static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
         }
         ok_n++;
         c0 = klh_rd32(L + 0x68);
-        if (!kcr_cb_call(s)) { kcr.cb_bad = 1; klog("coverring: clientbuild car #%lu '%s' script=%08lx: FAULT in 0x81b6f0 - ClientBuild off for the rest of the run", (unsigned long)i, nm, (unsigned long)s); return; }
+        if (!kcr_cb_call(s)) {      /* review D4: say what is left half-done; the cars after this one stay unreserved, so this seat's later indices no longer match the other seat */
+            kcr.cb_bad = 1;
+            klog("coverring: clientbuild car #%lu '%s' script=%08lx: FAULT in 0x81b6f0 (FPU reset) - half state: count %lu -> %lu n[+1c4]=%lu rsv[+1e9]=%lu; %lu later car(s) NOT reserved, "
+                 "indices DIVERGE from the other seat from here; ClientBuild off for the rest of the run", (unsigned long)i, nm, (unsigned long)s, (unsigned long)c0,
+                 (unsigned long)klh_rd32(L + 0x68), (unsigned long)klh_rd32(s + 0x1c4), (unsigned long)kcr_rd8(s + 0x1e9), (unsigned long)(kcr.ncars - i - 1));
+            return;
+        }
         ran++;
         c1 = klh_rd32(L + 0x68); n = klh_rd32(s + 0x1c4);
         memset(idx, 0xff, sizeof idx);
@@ -182,8 +220,10 @@ static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
         klog("coverring: clientbuild car #%lu slot %lu '%s' car=%08lx script=%08lx called 0x81b6f0: count %lu -> %lu (delta %ld) n[+1c4]=%lu done[+1e8]=%lu rsv[+1e9]=%lu idx[+1c8]=[%s]",
              (unsigned long)i, (unsigned long)kcr.c[i].slot, nm, (unsigned long)car, (unsigned long)s, (unsigned long)c0, (unsigned long)c1, (long)c1 - (long)c0, (unsigned long)n,
              (unsigned long)kcr_rd8(s + 0x1e8), (unsigned long)kcr_rd8(s + 0x1e9), ix);
+        usable += kcr_cb_points("clientbuild", i, idx, n, pb, npts);
     }
-    klog("coverring: clientbuild END cars=%lu eligible=%d called=%d real-count %lu -> %lu", (unsigned long)kcr.ncars, ok_n, ran, (unsigned long)cnt, (unsigned long)klh_rd32(L + 0x68));
+    klog("coverring: clientbuild END cars=%lu eligible=%d called=%d real-count %lu -> %lu usable points %d of %d", (unsigned long)kcr.ncars, ok_n, ran, (unsigned long)cnt,
+         (unsigned long)klh_rd32(L + 0x68), usable, ran * 8);
 }
 
 static void kcr_tick(int game_thread)
@@ -214,7 +254,7 @@ static void kcr_tick(int game_thread)
              kcr.have ? (cnt != kcr.cnt ? " CHANGED" : " (cars changed)") : " (first sample of this load)",
              (unsigned long)((pe >= pb && pe - pb < 0x4000000u) ? (pe - pb) / 0x7c : 0), (unsigned long)kcr.ncars, (unsigned long)ran);
         if (kcr.have && cnt != kcr.cnt) klog("coverring: poll count %lu -> %lu (delta %ld)", (unsigned long)kcr.cnt, (unsigned long)cnt, (long)cnt - (long)kcr.cnt);
-        kcr_car_lines(now);
+        kcr_car_lines(now, pb, (pe >= pb && pe - pb < 0x4000000u) ? (pe - pb) / 0x7c : 0);
         kcr.nenum++; kcr.L = L; kcr.cnt = cnt; kcr.sig = sig; kcr.have = 1;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         kcr.bad = 1;

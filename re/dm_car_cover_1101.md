@@ -120,3 +120,7 @@ Constraints: no .text patch (hashed); no DR0 watch online (anti-tamper killed th
 - CR3: BOTH seats call the writer once at load in table order ([CoverRing] ClientBuild=1 + ClientBuildHost=1, default 0 TEST + SHIP); the host's
   activation then finds rsv=1 and keeps the indices. Points sit at the spawn position on the client (the host rewrites them at the moving car):
   GUESS harmless, the asserts are about index existence. Kit c9_1028\cr3 (TEST 70e24b21). PASS = coverdump IDENTICAL, inst2 asserts=0, no FAULT.
+
+### c9 CR3 result (11-01 ~23:55)
+
+CR3 PASS (DM01 + DM03 online, ClientBuild=1 + ClientBuildHost=1 on both seats): asserts 0 / soft 0 on host and client (DM01 was 39), counts equal (379 / 596), the host's mid-round car activation reuses the reserved indices (count stays 379). DM03 coverdump IDENTICAL; DM01 differs only on car 871's 8 points, which have the same indices and moved with the car. Review D2-D4 in (per-point usable flags, capacity refusal, _fpreset + half state after a fault); D1 kept at state 0x16 on purpose. NEXT_SHIP: [CoverRing] ClientBuild=1 ClientBuildHost=1 ClientBuildMaps=F01,F03, host and client together. F02 (1 car) still unbenched.

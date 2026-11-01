@@ -52,12 +52,22 @@ static long kcr_surplus(unsigned long cnt, unsigned long base, unsigned long ran
 #define KCR_CB_STABLE_MS 1000UL             /* the real count must be unchanged this long (list finished) before the first call */
 #define KCR_CB_GIVEUP_MS 60000UL            /* no cars / no list this long after the load: give up for this load (log once) */
 #define KCR_CB_MAXSTATE  0x19UL             /* session state 0x19 = in play; a later state (round over / shop) never builds */
+/* review D1 (11-01): no lower state bound, on purpose. CR3 (11-01 23:20/23:28) built at state 0x16, 1 s after the load, on both seats of DM01 and DM03: no fault,
+   asserts 0, counts equal. A later gate would be too late: the DM01 host reached 0x19 at t+21.3 s and its first car activated ~0.7 s after that */
 
 /* role/mode of the session ([sm+0x54], [sm+0x5c]): 1 for a CLIENT (role 3) of an online game-type-4 (FA) session, and also for the HOST (role 2) when host != 0
    (ClientBuildHost, CR3 11-01: CR1 showed the host rings its cars only when each one activates mid-round, in activation order 871, 737, 792, 906 on DM01, not table
    order; so BOTH seats prebuild at load in table order and the host's later activation reuses the reserved indices: VERIFIED in dasm 0x81b709 (rsv != 0 -> jne 0x81b766 skips the
    8 x 0x558350 reservation and only rewrites the points; done != 0 -> return at 0x81b703)). Offline (0/other) -> 0 */
 static int kcr_cb_role_ok(unsigned long role, unsigned long mode, int host) { return mode == 4ul && (role == 3ul || (host && role == 2ul)); }
+
+/* review D3 (11-01): 0x558350 is a bare [L+0x68]++ with no bound against the points vector, so before the first call check that every eligible car's 8 indices fit:
+   1 = cnt + 8 * eligible <= npts (vector size, (end-begin)/0x7c). npts 0 (unreadable) = no */
+static int kcr_cb_fits(unsigned long cnt, unsigned long eligible, unsigned long npts) { return npts > 0ul && eligible <= 4096ul && cnt + 8ul * eligible <= npts; }
+
+/* review D2 (11-01): a ring point the writer filled carries flag 0x200 in [pt+0x68] (the 0x6567e8 test: al&2 / 0x200); one with only 0x400 is a SPARE that still int3s.
+   Returns 1 = usable cover, 0 = spare / unset */
+static int kcr_pt_usable(unsigned long flags) { return (flags & 0x200ul) != 0ul; }
 
 /* does the slot of a level key ("f01\f01_main", either slash, any case) appear in the list "F01,F03" (comma / space / semicolon separated)? Empty list = no map */
 static int kcr_cb_map_listed(const char *list, const char *key)
