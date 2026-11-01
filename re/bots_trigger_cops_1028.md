@@ -106,34 +106,38 @@ Tool: `python tools/kl_trig_census.py` (reads the installed KLExpansion Maps slo
 
 | Map | Slot | TB total | TB missed (cop/door/script/other) | TB2 non-loot players-only (cop/door/script/other) | TB2 non-loot all-objects | OnlineTB (players-only) | Needs | TB hook gap |
 |---|---|---|---|---|---|---|---|---|
-| DM01 | F01 | 12 | 7 (5/0/0/2 +3 civ/npc) | 0 (0/0/0/0 +5 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
-| DM01B | F03 | 37 | 6 (6/0/0/0 +24 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM01 | F01 | 12 | 10 (0/0/3/7 +0 civ/npc) | 0 (0/0/0/0 +5 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM01B | F03 | 37 | 30 (0/0/1/29 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
 | DM02 | F02 | 4 | 0 (0/0/0/0 +0 civ/npc) | 0 (0/0/0/0 +1 civ/npc) | 0 | 2 (2) | OnlineTriggersExtra=1 | - |
-| DM03 | F03 | 18 | 15 (12/0/3/0 +1 civ/npc) | 1 (0/0/1/0 +2 civ/npc) | 0 | 4 (4) | OnlineTriggers=1 + OnlineTriggersExtra=1 | - |
-| DM03A | F07 | 17 | 5 (5/0/0/0 +6 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
-| DM05A | F01 | 110 | 6 (2/0/3/1 +40 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | left 1 |
-| DM06 | F04 | 5 | 3 (3/0/0/0 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 1 | 0 (0) | OnlineTriggers=1 | - |
-| DM06B | F02 | 33 | 4 (1/1/1/1 +20 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
-| DM07 | F06 | 9 | 2 (0/1/1/0 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
-| DM09 | F06 | 35 | 22 (19/0/2/1 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 1 | 0 (0) | OnlineTriggers=1 | - |
-| DM11B | F04 | 9 | 5 (4/0/1/0 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM03 | F03 | 18 | 16 (8/0/3/5 +0 civ/npc) | 1 (0/0/1/0 +2 civ/npc) | 0 | 4 (4) | OnlineTriggers=1 + OnlineTriggersExtra=1 | - |
+| DM03A | F07 | 17 | 11 (0/0/3/8 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM05A | F01 | 110 | 46 (0/0/3/43 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | left 1 |
+| DM06 | F04 | 5 | 3 (0/0/1/2 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 1 | 0 (0) | OnlineTriggers=1 | - |
+| DM06B | F02 | 33 | 24 (0/0/2/22 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM07 | F06 | 9 | 3 (0/0/2/1 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM09 | F06 | 35 | 22 (5/1/3/13 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 1 | 0 (0) | OnlineTriggers=1 | - |
+| DM11B | F04 | 9 | 5 (1/0/2/2 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
 | DM11S | - | not installed | - | - | - | - | - | - |
 
 Findings:
-- Cop waves, doors and scripts on the DM maps are again ZTriggerBox one-shots: the existing `OnlineTriggers=1` covers them. Biggest need: DM09 Retomoto 22 missed (19 cop: OpenExitElevator, LeaveElevator, atrium squads, Squad_Teargasguys, SniperResponse), DM03 15, DM01 7.
+- Cop waves, doors and scripts on the DM maps are again ZTriggerBox one-shots: the existing `OnlineTriggers=1` covers them. Biggest need: DM09 Retomoto 22 missed (by the current keyword guess 5 cop / 1 door / 3 script / 13 other: the squad-behaviour boxes of the atrium and lobby fall in 'other'; OpenExitElevator is a door/elevator box by its targets, LeaveElevator and its timers are script, not cop), DM03 16, DM01 10, DM01B 30, DM05A 46 (mostly 'other').
+- KIND (cop/door/script/other) is a keyword GUESS, not read from what the scripts do. It looks at the LEAF names of the box and of its targets (group separators are `\` and `!`); an earlier version matched the whole path, so the 'enem' keyword matched the `AI_Players!Enemies!` GROUP and called nearly every box under it a cop box (the first table said 19 cop on DM09; OpenExitElevator, LeaveElevator and T_NearWindow were all 'cop'). Reclassified: OpenExitElevator = door, LeaveElevator = script, T_NearWindow (DM05A, no targets, own leaf) = script by the word 'window'. None of this changes which boxes the hook handles (all bot-eligible ZTriggerBox are covered regardless of kind); only the labels are guesses.
 - ZOnlineTriggerBox exists only on DM02 (2: PoliceSwats) and DM03 (4: 3 ArrivingCops, 1 garage door), all players-only. These need `OnlineTriggersExtra=1`. DM03 also has 1 players-only TB2 GarageDoors script.
 - Hook gap (not covered, no new route justified): DM05A has 1 TriggerBox with an on-leave action (`T_NearWindow`, empty target list). Documented only.
 - DM05A has 60 boxes with the team-2 flag set: the game already reaches bots there.
-- Risk found: Extra=1 on DM maps would also fire players-only TB2 pick-up boxes (cash drawers, jewels, watches, money boxes: 49 on DM02) and character interact boxes (civilians, FBI agent, senator). The stock skip knows only MoneyStack/DropMoney.
+- Risk found: Extra=1 on DM maps would also fire players-only TB2 pick-up boxes (cash drawers, jewels, watches, money boxes) and character interact boxes (civilians, FBI agent, senator). Census of players-only TB2 of loot kind (tools/kl_trig_census.py, loot kind = keyword guess on the node path): 378 on DM02, 340 on DM03, 302 on DM01, 133 on DM05A. The stock skip knows only MoneyStack/DropMoney, so it covers part of them (how many is not counted).
 
 ### New key (default 0, SHIP-safe)
-`[BotFill] OnlineTriggersSkipPickups=0|1` (needs Extra): skips TB2 boxes whose node path matches `kvp_pickup_box` (klgetup_logic.h, unit-tested): cashregister, cashdrawer, cashbox, moneybox, money_attach, jewel, watches, creditcard, civilian, waitress, clerk_, gangmember, fbi-agent, senator, hostage, or a `PCnnnn_` path segment. GUESS: the box's name path is at `[[obj+4]+0x6c]` (200 bytes). The bench must confirm it from the scan log ("left to the game" / "kept" first-3 names). Mod options row `onlinetriggerspickups` (off, "recommended off until benched").
+`[BotFill] OnlineTriggersSkipPickups=0|1` (needs Extra): skips TB2 boxes whose own leaf name (after the last `\`, `/` or `!`; a cop or script box under a `Civilians!` group stays) matches `kvp_pickup_box` (klgetup_logic.h, unit-tested): cashregister, cashdrawer, cashbox, moneybox, money_attach, jewel, watches, creditcard, civilian, waitress, clerk_, gangmember, fbi-agent, senator, hostage, or a `PCnnnn_` path segment. GUESS: the box's name path is at `[[obj+4]+0x6c]` (200 bytes). The bench must confirm it from the scan log ("left to the game" / "kept" first-3 names). Mod options row `onlinetriggerspickups` (off, "recommended off until benched").
 
 ### ARC1 reader
+Limit: a `trig: FIRE` line is attributed to the round whose start line came before it; a FIRE before the first round-start line is not counted at all, and one between two rounds goes to the earlier round.
 `tools/kl_arcade_baseline.py` now counts `botfill: trig: FIRE` lines per round and class (new Trigger FIREs column, with test). The existing Arcade logs hold none: the hook is host-only and idle in Arcade, the game fires boxes itself; the cell reads `0 (Arcade: game fires, not logged)`. Use it on online logs to compare.
 
-### Ship proposal (NOT benched, not in NEXT_SHIP)
-`OnlineTriggers=1` + `OnlineTriggerOriginSkip=1` on all DM maps; `OnlineTriggersExtra=1` + `OnlineTriggersSkipPickups=1` on DM02 and DM03 only. Proofs: WK2 F06 (Retomoto), Q31, Q34.
+### Ship candidate (NOT benched, not in NEXT_SHIP, not a recommendation)
+`OnlineTriggers=1` + `OnlineTriggerOriginSkip=1` on all DM maps. `OnlineTriggersExtra=1` + `OnlineTriggersSkipPickups=1` on DM02 and DM03 is only a CANDIDATE, pending the dry bench below (Extra=2 + SkipPickups=1 must show the pick-up names skipped and only cop/door boxes kept); do not ship it before. Proofs for the first line: WK2 F06 (Retomoto), Q31, Q34.
+
+Scan log: skipped boxes (ramp box, stack pick-up, SkipPickups) are remembered, so each is read once; the scan line says how many were new this scan and how many in all. The path is read page-wise (`klh_rdstr`), not byte by byte.
 
 ### Bench recipe
 1. DM03 then DM02, `OnlineTriggersExtra=2` (dry) + SkipPickups=1: read the scan line; confirm cash/jewel/civilian names are "left to the game" and ArrivingCops/PoliceSwats/GarageDoors are "kept".

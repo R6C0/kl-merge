@@ -33,6 +33,8 @@ R_BOT = re.compile(r'arcadeprobe: bot (\d+) status (\d+) -> (\d+)(?: ABOARD| DEA
 R_SUM = re.compile(r'arcadeprobe: tactics: (round|interim) summary: (\d+) bot\(s\) \(AI crew records\), (\d+) stack\(s\) taken, (-?\d+) total .*?, (\d+) boarded, (\d+) stack\(s\) never emptied'
                    r' \| van call s (\d+|none), (\d+) dead')
 # the hook's own box fires (klbotfill.c klbf_trig_tick / klbf_trig_other): 'FIRE box ...' = ZTriggerBox, else the class name. DRY lines are not fires.
+# NOTE: a FIRE line is counted for the round whose start line (R_START) came before it. A FIRE line BEFORE the first round-start line (or in the gap before
+# the next round's start line, which is attributed to the previous round) is NOT counted for the right round / not at all: the Trigger FIREs column can undercount.
 R_FIRE = re.compile(r'botfill: trig: FIRE (box|ZTriggerBox2|ZOnlineTriggerBox) ')
 R_FATAL = re.compile(r'FATAL|CRASH|assert', re.I)
 

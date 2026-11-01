@@ -539,11 +539,14 @@ static DWORD klbf_ot_trig;      /* tentative: defined with the tactics state bel
 #define KLBF_OTB_VT 0x00bc95cc   /* ZOnlineTriggerBox (update 0x49ab90, host/Arcade only) */
 static struct klbf_tb { DWORD obj; BYTE in, dead, nfire, kind, logged; } klbf_tbs[KLBF_TRIG_MAX];      /* kind 0 ZTriggerBox, 1 ZTriggerBox2, 2 ZOnlineTriggerBox */
 static struct { int n, scans, started; DWORD t0, fired, skipped; int kn[3]; int pk; } klbf_tr;
-static void klbf_trig_load(void) { memset(klbf_tbs, 0, sizeof klbf_tbs); memset(&klbf_tr, 0, sizeof klbf_tr); }
-static int klbf_trig_known(DWORD at) { int i; for (i = 0; i < klbf_tr.n; i++) if (klbf_tbs[i].obj == at) return 1; return 0; }
+#define KLBF_SKIP_MAX 1024
+static DWORD klbf_skip[KLBF_SKIP_MAX]; static int klbf_nskip;      /* boxes the scan decided to leave alone (ramp box, stack pick-up, SkipPickups): remembered so each is read and counted once, not again on every scan */
+static void klbf_trig_load(void) { memset(klbf_tbs, 0, sizeof klbf_tbs); memset(&klbf_tr, 0, sizeof klbf_tr); memset(klbf_skip, 0, sizeof klbf_skip); klbf_nskip = 0; }
+static void klbf_trig_remember(DWORD at) { if (klbf_nskip < KLBF_SKIP_MAX) klbf_skip[klbf_nskip++] = at; }
+static int klbf_trig_known(DWORD at) { int i; for (i = 0; i < klbf_tr.n; i++) if (klbf_tbs[i].obj == at) return 1; for (i = 0; i < klbf_nskip; i++) if (klbf_skip[i] == at) return 1; return 0; }
 static void klbf_trig_scan(void)
 {
-    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD hits = 0, added = 0, ramp = 0, t0 = GetTickCount(); int kind;
+    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD hits = 0, added = 0, ramp = 0, t0 = GetTickCount(); int kind, pk_scan = 0;
     klbf_tr.scans++;
     while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
         if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
@@ -559,14 +562,14 @@ static void klbf_trig_scan(void)
                     if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi || !(node = klh_rd32(ent + 4)) || klbf_trig_known(at)) continue;
                     if (kind == 0 && klbf_rp.have) {      /* the ramp box is OnlineRampFire's: same name / centre test as klbf_ramp_probe */
                         klbf_ramp_name(at, nm);
-                        if ((nm[0] && klbf_rp.name[0] && strstr(nm, klbf_rp.name)) || (kle_node(node, np, 0) && fabsf(np[0] - klbf_rp.c[0]) <= 50.0f && fabsf(np[1] - klbf_rp.c[1]) <= 50.0f && fabsf(np[2] - klbf_rp.c[2]) <= 50.0f)) { ramp++; continue; }
+                        if ((nm[0] && klbf_rp.name[0] && strstr(nm, klbf_rp.name)) || (kle_node(node, np, 0) && fabsf(np[0] - klbf_rp.c[0]) <= 50.0f && fabsf(np[1] - klbf_rp.c[1]) <= 50.0f && fabsf(np[2] - klbf_rp.c[2]) <= 50.0f)) { ramp++; klbf_trig_remember(at); continue; }
                     }
-                    if (kind == 1) { klbf_ramp_name(at, nm); if (strstr(nm, "MoneyStack") || strstr(nm, "DropMoney")) { ramp++; continue; } }      /* the loot stacks' own pick-up boxes: the tactics module takes the stack, a second fire could double it (counted with the ramp skips) */
+                    if (kind == 1) { klbf_ramp_name(at, nm); if (strstr(nm, "MoneyStack") || strstr(nm, "DropMoney")) { ramp++; klbf_trig_remember(at); continue; } }      /* the loot stacks' own pick-up boxes: the tactics module takes the stack, a second fire could double it (counted with the ramp skips) */
                     if (kind == 1 && klbf_trig_pk) {      /* OnlineTriggersSkipPickups: Dead Men campaign pick-ups / interact boxes (kvp_pickup_box); the long path, not klbf_ramp_name's 40 bytes */
-                        char pn[200]; DWORD nn = klh_rd32(at + 4), ps; int q; pn[0] = 0;
-                        if (nn && (ps = klh_rd32(nn + 0x6c)) >= 0x10000) { for (q = 0; q < 199; q++) { if (!klh_rd(ps + q, pn + q, 1)) { pn[0] = 0; break; } if (!pn[q]) break; } pn[199] = 0; }
+                        char pn[200]; DWORD nn = klh_rd32(at + 4), ps; pn[0] = 0;
+                        if (nn && (ps = klh_rd32(nn + 0x6c)) >= 0x10000) klh_rdstr(ps, pn, sizeof pn);      /* page-wise read (klhook.c), not byte by byte */
                         if (kvp_pickup_box(1, pn)) {
-                            static int toldPk; klbf_tr.pk++;
+                            static int toldPk; klbf_tr.pk++; pk_scan++; klbf_trig_remember(at);
                             if (toldPk < 3) { toldPk++; klog("botfill: trig: ZTriggerBox2 %08lx left to the game (OnlineTriggersSkipPickups): '%s'", (unsigned long)at, pn); }
                             continue;
                         }
@@ -579,7 +582,7 @@ static void klbf_trig_scan(void)
         a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
     }
     if (!klbf_tr.started) { klbf_tr.started = 1; klog("botfill: trig: on (host, %d boxes)%s", klbf_tr.n, klbf_trig == 2 ? ", DRY (log only)" : ""); }
-    klog("botfill: trig: scan %d: %lu trigger-box vtable hit(s), %lu new, %lu ramp box(es) left to OnlineRampFire, %d pick-up/interact box(es) left to the game, %d tracked (ZTriggerBox %d, ZTriggerBox2 %d, ZOnlineTriggerBox %d), %lu ms", klbf_tr.scans, (unsigned long)hits, (unsigned long)added, (unsigned long)ramp, klbf_tr.pk, klbf_tr.n, klbf_tr.kn[0], klbf_tr.kn[1], klbf_tr.kn[2], (unsigned long)(GetTickCount() - t0));
+    klog("botfill: trig: scan %d: %lu trigger-box vtable hit(s), %lu new, %lu ramp box(es) left to OnlineRampFire, %d new pick-up/interact box(es) left to the game this scan (%d in all), %d tracked (ZTriggerBox %d, ZTriggerBox2 %d, ZOnlineTriggerBox %d), %lu ms", klbf_tr.scans, (unsigned long)hits, (unsigned long)added, (unsigned long)ramp, pk_scan, klbf_tr.pk, klbf_tr.n, klbf_tr.kn[0], klbf_tr.kn[1], klbf_tr.kn[2], (unsigned long)(GetTickCount() - t0));
 }
 
 /* OnlineTriggers, the other two box classes (2026-10-28, wk-bots2, read from kl2.exe; re/bots_trigger_cops_1028.md section 7). Both keep the rules above: no write to a field the update recomputes,

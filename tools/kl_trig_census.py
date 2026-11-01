@@ -14,7 +14,7 @@ For every level archive it reads the three box controllers and sorts them (re/bo
 Each box gets a KIND from the names of what it sends to (and its own node path): loot (MoneyStack/DropMoney/cash drawer/jewel), civ (civilian
 crowd), npc (a TriggerBox2 that targets only its own node: a character's interact box), cop (squad / enemy / police / spawn), door (door / lift /
 elevator / gate / leaf), script (timer / delay / proxy / anim / camera / music / sound / effect), other. loot, civ and npc never count as 'needs'.
-KIND is a keyword GUESS on node paths; the table says what the names say, not what the script does at run time.
+KIND is a keyword GUESS on the LEAF names of the box and its targets (a parent group name is never matched; loot also looks at the box's full path); the table says what the names say, not what the script does at run time.
 Exit 0 always (a table, not a verdict); 1 when no level could be read.
 """
 import argparse, collections, os, re, sys
@@ -46,17 +46,25 @@ def kind_of(text):
     return 'other'
 
 
+def leaf(p):
+    """the node's own name: the part after the last path separator (a parent GROUP such as 'AI_Players!Enemies!' says nothing about the box)."""
+    return re.split(r'[\\/!]', p)[-1]      # '!' also joins group names in the zip's node paths ('Enemies!020_Street!Timer')
+
+
 def level_kind(own, targets, cls=''):
-    """loot beats everything (its own node name is enough); then the targets; then the box's own path."""
-    if kind_of(own) in ('loot', 'civ'):
-        return kind_of(own)
+    """loot beats everything (own full path: its pick-up parent names are specific); civ by the own leaf; then the targets' LEAF names; then the box's own leaf.
+    The keywords never see a parent group name ('enem' used to match AI_Players!Enemies! and made every box under it a cop box)."""
+    if kind_of(own) == 'loot':
+        return 'loot'
+    if kind_of(leaf(own)) == 'civ':
+        return 'civ'
     if cls == 'TriggerBox2' and targets and all(t == own for t in targets):
         return 'npc'
-    ks = [kind_of(t) for t in targets]
+    ks = [kind_of(leaf(t)) for t in targets]
     for k in ('loot', 'civ', 'cop', 'door', 'script'):
         if k in ks:
             return k
-    return kind_of(own) if not targets else 'other'
+    return kind_of(leaf(own)) if not targets else 'other'
 
 
 def short(p):
@@ -72,11 +80,12 @@ def boxes(sc, controllers):
             if name == 'TriggerBox' and len(v) >= 18:
                 tg = [t for t in v[17] if isinstance(t, str)] if isinstance(v[17], list) else []
                 ecps, efamps = v[14], v[16]
-                enter, left = bool(v[1]) or bool(v[4]), bool(v[3])
+                left = bool(v[3])
+                # field 6 = +0x4b 'team 2 (Ally) enters' fire bool: CONFIRMED by re/triggerbox.md (field table + step 7, read off 0x42afd0), not a guess
                 elig = (bool(v[0]) and (bool(v[1]) or bool(v[3])) and ecps in ('ECPS_BOTH', 'ECPS_FA_MERCONLY')
                         and not v[15] and efamps in FA_OK)
                 # why klhook OnlineTriggers (klbf_trig_tick) skips an eligible box: it needs the enter bool, no on-leave action, no tracked objects, a count 1..8
-                gap = ('left' if v[3] else 'tracked' if v[12] else 'count%d' % v[2] if not 1 <= v[2] <= 8 else 'no-enter' if not v[1] else '')
+                gap = ('left' if v[3] else 'tracked' if v[12] else 'count' if not 1 <= v[2] <= 8 else 'no-enter' if not v[1] else '')
                 out.append(dict(cls=name, path=own, targets=tg, players_only=None, bot_eligible=elig, team2_flag=bool(v[6]), gap=gap,
                                 oneshot=v[10] == 0xffffffff, left=left, ecps=ecps, efamps=efamps, local=bool(v[15])))
             elif name == 'TriggerBox2' and len(v) >= 7:
@@ -143,7 +152,7 @@ def row_of(name, slot, bs):
     otb = sum(v for (k, _st), v in s['OnlineTriggerBox'].items() if k != 'gap')
     otb_p = sum(v for (k, st), v in s['OnlineTriggerBox'].items() if st == 'missed')
     gaps = s['TriggerBox']
-    gap = ', '.join('%s %d' % (g, gaps[('gap', g)]) for g in ('left', 'tracked', 'no-enter') if gaps[('gap', g)])
+    gap = ', '.join('%s %d' % (g, gaps[('gap', g)]) for g in ('left', 'tracked', 'count', 'no-enter') if gaps[('gap', g)])
     need = []
     if n('TriggerBox', 'missed'):
         need.append('OnlineTriggers=1')

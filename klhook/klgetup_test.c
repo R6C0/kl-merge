@@ -95,6 +95,7 @@ int main(void)
         CHECK(kvp_pickup_box(1, "ROOT\\AI_Enemies!TheBoss\\The_Senator") && kvp_pickup_box(1, "ROOT\\AI_Enemies!BossFlank_01\\FBI-Agents_01") && kvp_pickup_box(1, "Money_Attachroot"), "pickups on: senator, FBI agent, leaf-only money attach skipped");
         CHECK(kvp_pickup_box(1, "pc0402_m02_fa_jewelsrings_a_01") && kvp_pickup_box(1, "ROOT\\X\\PC1000_thing"), "pickups on: lower case and a bare PCnnnn_ segment");
         CHECK(!kvp_pickup_box(1, "ROOT\\Triggers!GarageDoors!TriggerBox") && !kvp_pickup_box(1, "ROOT\\Triggers!ArrivingCops_Squad_01_Trigger") && !kvp_pickup_box(1, "") && !kvp_pickup_box(1, "ROOT\\PCB_Server_01"), "pickups on: a script / cop-wave box and PCB_ (no 4 digits) are kept");
+        CHECK(!kvp_pickup_box(1, "ROOT\\Civilians!Crowd\\ArrivingCops_Squad_01_Trigger") && !kvp_pickup_box(1, "ROOT\\Civilians!Hostages!Room\\Door_Script") && !kvp_pickup_box(1, "ROOT\\Civilians!ArrivingCops_Trigger") && kvp_pickup_box(1, "ROOT\\Civilians!Crowd\\Clerk_03"), "pickups on: a cop / script box under a Civilians! group is kept (leaf-only keywords), a clerk leaf under it is skipped");
         CHECK(!kvp_pickup_box(0, "ROOT\\Civilians!Waitress\\Fat_Waitress_01") && !kvp_pickup_box(1, 0), "pickups off: nothing skipped (old rule); null path safe");
     }
     CHECK(kgu_floor(0.5f, 1, 3.0f) == 3.0f && kgu_floor(4.0f, 1, 3.0f) == 4.0f, "flop meter: raised to the floor, never lowered");
