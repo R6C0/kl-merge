@@ -40,7 +40,7 @@ comes before kllocname.c (:806), so kllocname.c may call a klshop.c getter.
 - Optional NPC loudness ([Sound] NpcShotVol, patching the shot_npc group volume 0.35): a GUESS needing a locate step; bots are identical in Arcade and online, so NOT a parity gap. Dropped.
 - After benches pass: flip live keys (OnlineSwap=1, OnlineSwapText=2, RemoteShot2D=1). Today none is in the live KLHook.ini, so online=Arcade for these is inactive everywhere.
 
-## C. Needs game-folder data (owner step, not hook code) - DONE 1029, see section E (matrix 2026-11-01); text below is the 10-28 state
+## C. Needs game-folder data (owner step, not hook code) - gunui_1029 INSTALLED 11-01 ~02:10 (archives checked in section E); the baked shop picture is NOT yet confirmed in a shot (GUN13 open, its --d3shots caught only the lobby), so "DONE" is unconfirmed on screen. Text below is the 10-28 state
 
 - Bake DM07 (F06) and DD10 (F07) shelf text/pictures: staged C:\kl_build_1024\gunui_1028\INSTALL_gunui_1028.bat. It touches only the plain F06/F07_Main.zip,
   but online uses F06/F07_Main.bots.zip (both unbaked, 'TOQ' only). Extend stage\shopswap.ps1 + manifest to the .bots.zip siblings and refresh the .bots.base.md5 first,
@@ -65,10 +65,19 @@ mip 0, measured on the untouched Scenes\Locations\F02..F09, identical in all eig
 "baked" is a bake-generation fingerprint (1dbd01 = common bake; ff017d = DD10 and DM07, the 1029 bake; 8f69a4 = DM01, its row-16 card differs, it
 has its own `[Shop] Swap=13:52,16:33,32:49,35:47` line in KLGuns.ini, same pairs as the default).
 
-RESULT: all 21 maps, both archives, are baked on text, cards and dial. No map needs a bake, `OnlineSwapText=2` or `OnlineSwapPic` to look right.
+RESULT: this is a STATIC ARCHIVE STATE, not a live result. All 21 maps, both archives, read as baked on text, cards and the dial pictures
+(113/114 present). Only 4 of the 21 maps (DD04, DM02, DM07, DD10) have any bench evidence, and only DM02/DD04 (osw lines) and DM07 (shop-text
+and picture lines, pre-bake) say anything about the shelf; the dial is an archive check only (no log line proves it drew: "now renders through
+the private vtable" is just the element's vtable wrap, and "the dial stands again" / "no dial" are not what GUN13-15 print). The shelf picture
+after the 1029 bake is not yet confirmed in a shot.
 Caveat: the DD01-DD09 rows are the KLExpansion copies. The untouched stock slots `Scenes\Locations\F01..F09` (project rule: never edited) still hold
-the stock TOQ text/cards, so a stock-slot FA map (not through KLExpansion) shows the carrier's name unless `OnlineSwapText=2` is on (text) and
-keeps the carrier's picture (no bake possible there; `OnlineSwapPic=1` gives a look-alike).
+the stock TOQ text/cards; for a stock-slot FA map (not through KLExpansion) `OnlineSwapText=2` is only a no-harm safety net (it passes a baked
+name through and swaps an unbaked one), and the picture stays the carrier's (no bake possible there; `OnlineSwapPic=1` gives a look-alike).
+
+Bench evidence column: logs older than the gunui_1029 install (11-01 ~02:10) on the rebaked maps DM07 and DD10 show the UNBAKED state and are
+listed as STALE (DM07 GUN7-GUN12b), never mixed with the current status. GUN13-15 (DM07, DD10; post-bake) ran without OnlineSwapLog, so they
+add no shelf evidence. "pool STOCK at the first report, flipped to OURS" is the client seat: it logs `STOCK handed over`, then about a second
+later `OURS (flipped after the first report, state 0x16)` for all four rows (GUN1-5, 7, 10-12 inst2); the host seat logs OURS at once.
 
 Static facts only for maps with "none" in the evidence column: the archives are right, but no bench has looked at them live.
 
@@ -77,22 +86,22 @@ Static facts only for maps with "none" in the evidence column: the archives are 
 | 1 | DD01 | F01 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 2 | DD02 | F02 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 3 | DD03 | F03 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
-| 4 | DD04 | F04 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | GUN1: pool OURS/STOCK, dial; GUN2: pool OURS/STOCK, dial; GUN3: pool OURS/STOCK, dial | OK |
+| 4 | DD04 | F04 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | GUN1: pool STOCK at the first report, flipped to OURS; GUN2: pool STOCK at the first report, flipped to OURS; GUN3: pool STOCK at the first report, flipped to OURS | OK |
 | 5 | DD05 | F05 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 6 | DD06 | F06 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 7 | DD07 | F07 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 8 | DD08 | F08 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 9 | DD09 | F09 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
-| 10 | DD10 | F07 | 13:52,16:33,32:49,35:47 | baked | baked | baked ff017d | baked ff017d | dial | dial | GUN13_DD10: dial; GUN14_DD10: dial; GUN15_DD10: dial | OK |
+| 10 | DD10 | F07 | 13:52,16:33,32:49,35:47 | baked | baked | baked ff017d | baked ff017d | dial | dial | none | OK |
 | 11 | DM01 | F01 | 13:52,16:33,32:49,35:47 | baked | baked | baked 8f69a4 | baked 8f69a4 | dial | dial | none | OK |
 | 12 | DM01B | F03 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
-| 13 | DM02 | F02 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | GUN4: pool OURS/STOCK, dial; GUN5: pool OURS/STOCK, dial; GUN6: shop text baked, pool OURS, dial | OK |
+| 13 | DM02 | F02 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | GUN4: pool STOCK at the first report, flipped to OURS; GUN5: pool STOCK at the first report, flipped to OURS; GUN6: shop text baked, pool OURS | OK |
 | 14 | DM03 | F03 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 15 | DM03A | F07 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 16 | DM05A | F01 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 17 | DM06 | F04 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 18 | DM06B | F02 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
-| 19 | DM07 | F06 | 13:52,16:33,32:49,35:47 | baked | baked | baked ff017d | baked ff017d | dial | dial | GUN7: shop text stock (answered by OnlineSwapText=2), pool OURS/STOCK, no dial; GUN8: shop text stock (answered by OnlineSwapText=2), pool OURS, no dial; GUN9: shop text stock (answered by OnlineSwapText=2), pool OURS, no dial; GUN10: shop text stock (answered by OnlineSwapText=2), pool OURS/STOCK, no dial; GUN11: shop text stock (answered by OnlineSwapText=2), pool OURS/STOCK, no dial; GUN12: pool OURS/STOCK, no dial; GUN12b: shop text stock (answered by OnlineSwapText=2), pool OURS, OnlineSwapPic fired rows 13, no dial; GUN13_DM07: dial; GUN14_DM07: dial; GUN15_DM07: dial | OK |
+| 19 | DM07 | F06 | 13:52,16:33,32:49,35:47 | baked | baked | baked ff017d | baked ff017d | dial | dial | STALE (before the bake, unbaked state, not current): GUN7, GUN8, GUN9, GUN10, GUN11, GUN12, GUN12b | OK |
 | 20 | DM09 | F06 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 | 21 | DM11B | F04 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
 
@@ -101,16 +110,18 @@ Static facts only for maps with "none" in the evidence column: the archives are 
 | key | maps | value | bench tag that proved it |
 |-----|------|-------|--------------------------|
 | Enable, Swap=13:52,16:33,32:49,35:47 | all 21 | 1 / the default line | GUN5, GUN6 (DM02), GUN12b (DM07): 'osw: set 4 pair(s), hash 8ff822a6' |
-| OnlineSwap=1 + OnlineSwapArm=1 | all 21 | 1 | GUN5, GUN6, GUN12b: 'OURS handed over' on rows 13/16/32/35; GUN2 (DD04, map f04): first round rows 13/16/32/35 all OURS |
-| OnlineSwapText=2 | all 21 (safety net; also needed on stock Scenes\Locations slots) | 2 | GUN12b (DM07, then unbaked): answered HK69 / Type 81 over 'TOQ Model 18'; GUN6 (DM02, baked): pass-through, 'stock text 0' |
+| OnlineSwap=1 + OnlineSwapArm=1 | all 21 | 1 | GUN5, GUN6: 'OURS handed over' on rows 13/16/32/35 (host seat at once; the client seat reports STOCK first, then 'OURS (flipped after the first report, state 0x16)' about a second later); GUN12b (DM07) is pre-bake |
+| OnlineSwapText=2 | all 21 as a no-harm safety net for the untouched stock Scenes\Locations slots (not a need on the baked KLExpansion maps) | 2 | GUN12b (DM07, PRE-BAKE, stale for the current archives): answered HK69 / Type 81 over 'TOQ Model 18'; GUN6 (DM02, baked): pass-through, 'stock text 0' |
 | OnlineSwapPic | none (stay 0) | 0 | GUN12b: fired only on the unbaked DM07 (row 13); never on a baked map, and a look-alike is unwanted when the true card exists |
-| HUD dial | all 21 (data, no key) | present | GUN13/14/15 on DM07 and DD10: 'now renders through the private vtable', no 'no dial' line |
+| HUD dial | all 21 (data, no key) | present | ARCHIVE CHECK ONLY (113/114 in every .TEX). Not proven live: 'now renders through the private vtable' only says the element's vtable was wrapped, not that the dial drew |
 
 Not yet seen live (static OK only): DD01-03, DD05-09, DM01, DM01B, DM03, DM03A, DM05A, DM06, DM06B, DM09, DM11B.
 Bench proposal: one two-seat pass per group with OnlineSwapLog=1 on a TEST dll, grep `oswlog:` (all four rows OURS), `shoptext:` and `hud: weapon:`:
 (1) DD01/DD02/DD03 (one each), (2) DD05-DD09 (one of them is enough for the .bots archive family 1dbd01, then spot-check DD08), (3) DM01 (own
 fingerprint 8f69a4 and own [Shop] line, hash must equal 8ff822a6), DM01B, DM03, DM03A, (4) DM05A, DM06, DM06B, DM09, DM11B. Fingerprint 1dbd01 is
-shared by 17 maps, so a pass on three of them is strong, but each map has its own pool (carrier present or not), which only 'oswlog' shows.
+shared by 18 maps, so a pass on three of them is strong, but each map has its own pool (carrier present or not), which only 'oswlog' shows.
 
-Open points from the matrix run: bench logs say 'pool OURS/STOCK' for GUN1-4 (DD04, DM02): some row/round handed STOCK; per-row detail is not
-printed in the table (look at `oswlog:` lines by hand). GUESS: STOCK comes from rounds where the carrier object was absent from the pool.
+Resolved from the matrix run: the 'pool OURS/STOCK' of GUN1-5 (DD04, DM02) is the client seat's first report (`STOCK handed over`, all four rows)
+followed about a second later by `OURS (flipped after the first report, state 0x16)` (GUN5 inst2 22:44:04.826 -> 22:44:05.6). The earlier
+"carrier absent from the pool" GUESS is contradicted by that log and dropped; the matrix regex now reads the flipped line. Not yet explained:
+why the first report is STOCK (what changes by state 0x16); whether a purchase in that second would get the stock gun.

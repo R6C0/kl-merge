@@ -11,7 +11,9 @@ Per map folder under <Dog Days>\KLExpansion\Maps (DD01-DD10, the DM maps) and pe
     'baked' = both differ, 'mixed' = one of two. A fingerprint (first 6 hex of the md5 of the four big cards) tells bake generations apart.
   * DIAL      the level carries the HUD pictures 113 / 114 the weapon dial needs (tex:UserInterface/KLMerge_HUD_01#dab / #disc, kl_hud.py EXTRAS).
   * LOGS      bench logs <work>\build\klhook\solo\<TAG>\inst1|inst2\KLHook.log: the map (Maps\<MAP>\Loader_Sequence), 'shoptext: row N seen ... stock
-    text 0|1', 'oswlog: ... OURS|STOCK', 'shoppic: ... unbaked 1' (OnlineSwapPic fired), 'hud: weapon: no dial' / 'now renders'.
+    text 0|1', 'oswlog: ... OURS|STOCK|OURS (flipped ...)', 'shoppic: ... unbaked 1' (OnlineSwapPic fired). The dial is an ARCHIVE check only: no log
+    line proves it drew ('now renders through the private vtable' is only the element's vtable wrap), so logs are not read for it.
+    Logs older than BAKE_TIME on a rebaked map are listed as stale.
 Then it says per map what is still needed ([Shop] OnlineSwapText=2, OnlineSwapPic, or a bake).
 
     python tools/kl_gunui_matrix.py                     print the table (markdown) and the needs
@@ -20,7 +22,7 @@ Then it says per map what is still needed ([Shop] OnlineSwapText=2, OnlineSwapPi
     python tools/kl_gunui_matrix.py --tags GUN*         bench tags to read (glob; default GUN*; --tags none = no logs)
     python tools/kl_gunui_matrix.py --game DIR --solo DIR --stock-zip F06_Main.zip   other places / one more stock reference
 """
-import argparse, fnmatch, glob, hashlib, os, re, struct, sys, zipfile
+import argparse, fnmatch, glob, hashlib, os, re, struct, sys, time, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -30,9 +32,15 @@ SOLO = r'G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\KL_PortTools\b
 ROWS = (13, 16, 32, 35)
 DEFAULT_SWAP = '13:52,16:33,32:49,35:47'          # tools/kl_shop_swap.py DEFAULT_SWAP = the hook's [Shop] Swap default
 KEY = b'AllLevels/Menu/Online/WeaponShop/Weapon'
-# measured 2026-11-01 on the untouched stock archives Scenes\Locations\F02..F09_Main.zip (identical in all eight): row -> (md5 of the big card's
-# mip 0 data, md5 of the small card's mip 0 data), the full 32 hex digits are checked by stock_hashes(); only the first 12 are kept here.
-STOCK_CARD = {13: ('c8314f', '8309e0'), 16: ('00175f', '5d1cf7'), 32: ('a0662e', 'b45f60'), 35: ('8c3fd3', '129162')}
+# measured 2026-11-01 (read only) on the untouched stock archives Scenes\Locations\F02..F09_Main.zip (identical in all eight): row -> (full md5 of
+# the big card's mip 0 data, full md5 of the small card's mip 0 data); stock_hashes() measures the same from any untouched archive.
+STOCK_CARD = {13: ('c8314f24952e934c5e3456cbbcd4709c', '8309e0b8b58481810ee2036c7363dd46'),
+              16: ('00175f20cb726568f7ff948ff0b87439', '5d1cf7b288388c20ae864639da0a0077'),
+              32: ('a0662e0131ee11f3a262dc7edbfab53e', 'b45f6032d17c2b5e44e86b5663a49a1c'),
+              35: ('8c3fd35fa75d2ddbe97bfcc0cdfee49b', '129162b0a61d0e7e30e11f162307b432')}
+# the gunui_1029 bake was installed on DM07 (F06) and DD10 (F07) at 2026-11-01 ~02:10 (re/open_work_log.md); a bench log older than that
+# on these maps shows the UNBAKED state and is listed as stale, never mixed with the current status.
+BAKE_TIME = {'DM07': time.mktime((2026, 11, 1, 2, 10, 0, 0, 0, -1)), 'DD10': time.mktime((2026, 11, 1, 2, 10, 0, 0, 0, -1))}
 DIAL_NAMES = ('KLMerge_HUD_01#dab', 'KLMerge_HUD_01#disc')     # extras slot 113 / 114 (kl_hud.py EXTRAS_NEW)
 
 
@@ -178,13 +186,13 @@ def map_swap(folder):
 # ------------------------------------------------------------------ the bench logs
 RE_MAP = re.compile(r'Maps[\\/](\w+)[\\/]Loader_Sequ', re.I)
 RE_TXT = re.compile(r'shoptext: row (\d+) seen: .*?stock text (\d)')
-RE_OSW = re.compile(r'oswlog: map \S+ row (\d+) .*?: (OURS|STOCK) handed over')
+RE_OSW = re.compile(r'oswlog: map \S+ row (\d+) .*?: (OURS|STOCK)\b( \(flipped)?')   # 'OURS handed over' | 'STOCK handed over' | 'OURS (flipped after the first report, state 0x16)'
 RE_PIC = re.compile(r'shoppic: element \S+ role \d+ row (\d+) -> pic row')
 
 
 def scan_log(path):
-    """one KLHook.log -> dict(map, text={row: set of 0/1}, osw={row: set}, pic=set of rows, dial='dial'|'no dial'|None)"""
-    ev = dict(map=None, text={}, osw={}, pic=set(), dial=None)
+    """one KLHook.log -> dict(map, text={row: set of 0/1}, osw={row: set of 'OURS'|'STOCK'|'FLIPPED'}, pic=set of rows, mtime)"""
+    ev = dict(map=None, text={}, osw={}, pic=set(), mtime=os.path.getmtime(path))
     with open(path, 'rb') as f:
         for ln in f.read().decode('latin1').splitlines():
             if ev['map'] is None:
@@ -197,15 +205,11 @@ def scan_log(path):
                 continue
             m = RE_OSW.search(ln)
             if m:
-                ev['osw'].setdefault(int(m.group(1)), set()).add(m.group(2))
+                ev['osw'].setdefault(int(m.group(1)), set()).add('FLIPPED' if m.group(3) else m.group(2))
                 continue
             m = RE_PIC.search(ln)
             if m:
                 ev['pic'].add(int(m.group(1)))
-            elif 'hud: weapon: no dial' in ln:
-                ev['dial'] = 'no dial'
-            elif 'hud: weapon:' in ln and 'now renders through the private vtable' in ln and ev['dial'] is None:
-                ev['dial'] = 'dial'
     return ev
 
 
@@ -226,31 +230,33 @@ def scan_tags(solo, pattern='GUN*'):
     return out
 
 
-def evidence_text(items):
-    """[(tag, inst, ev)] of one map -> short strings, one per tag (the seats merged), only tags with something to say"""
+def evidence_text(items, cutoff=None):
+    """[(tag, inst, ev)] of one map -> short strings: one per current tag (the seats merged), then one line naming the stale tags.
+    cutoff = time of the map's last bake: a log older than it (file mtime) is stale (pre-bake), not current status."""
     by = {}
     for tag, inst, ev in items:
-        b = by.setdefault(tag, dict(text=set(), osw=set(), pic=set(), dial=set()))
+        b = by.setdefault(tag, dict(text=set(), osw=set(), pic=set(), stale=bool(cutoff and ev['mtime'] < cutoff)))
         for r, s in ev['text'].items():
             b['text'].add('stock' if 1 in s else 'baked')
         for r, s in ev['osw'].items():
-            b['osw'] |= {'%s' % x for x in s}
-        b['pic'] |= {r for r in ev['pic']}
-        if ev['dial']:
-            b['dial'].add(ev['dial'])
-    out = []
+            b['osw'] |= s
+        b['pic'] |= set(ev['pic'])
+    out, stale = [], []
     for tag, b in by.items():
+        if b['stale']:
+            stale.append(tag)
+            continue
         bits = []
         if b['text']:
             bits.append('shop text ' + ('stock (answered by OnlineSwapText=2)' if 'stock' in b['text'] else 'baked'))
         if b['osw']:
-            bits.append('pool ' + '/'.join(sorted(b['osw'])))
+            bits.append('pool ' + ('STOCK at the first report, flipped to OURS' if 'FLIPPED' in b['osw'] else '/'.join(sorted(b['osw']))))
         if b['pic']:
             bits.append('OnlineSwapPic fired rows ' + ','.join(str(r) for r in sorted(b['pic'])))
-        if b['dial']:
-            bits.append('/'.join(sorted(b['dial'])))
         if bits:
             out.append('%s: %s' % (tag, ', '.join(bits)))
+    if stale:
+        out.append('STALE (before the bake, unbaked state, not current): ' + ', '.join(stale))
     return out
 
 
@@ -301,7 +307,7 @@ def table(rows, logs):
     out = ['| # | map | slot | swap rows | text plain | text bots | card plain | card bots | hud plain | hud bots | bench evidence | status |',
            '|---|-----|------|-----------|------------|-----------|------------|-----------|-----------|----------|----------------|--------|']
     for i, (m, slot, p, b, sw, needs) in enumerate(rows, 1):
-        ev = evidence_text(logs.get(m, []))
+        ev = evidence_text(logs.get(m, []), BAKE_TIME.get(m))
         out.append('| %d | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (
             i, m, slot, ','.join('%d:%d' % x for x in sorted(sw.items())), fmt_text(p), fmt_text(b), fmt_card(p), fmt_card(b),
             fmt_dial(p), fmt_dial(b), '; '.join(ev) if ev else 'none', 'OK' if not needs else 'NEEDS'))
