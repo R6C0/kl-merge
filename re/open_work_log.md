@@ -1,3 +1,8 @@
+2026-11-01 ~06:40 - [c9] Q30 kit staged offline (C:\kl_build_1024\c9_1028\q30, verified READY): Q29's 21 map pairs with a new tail so both seats
+wait 0x20 then 0x19 again (round 2, 30 s, pos), AutoExit 1950, secs 900 (DM09 1100), ~3.5 h. summarize_q30.py counts 'net: state X -> 0x19' with a
+0x1f/0x20 between (GUN14 both PASS; Q29 only DM07, whose short round 1 kept the joiner). Risk: passive shop may end in 0x29; fallback is GUN14's
+ZW_SELECT3 at 0x20+25 s. Waiting for ce's game (GUN15). Lift 40 % down re-checked: Ramp=1 bench factor (10-28 21:05), nothing new.
+
 2026-11-01 ~05:50 - [c9] Triage Finding 2 FIXED (0af62a4ee): Mod Options 'Recommended' no longer undoes the owner's ini. rec_wants() keeps a row when its
 own key has an owner note ('1026 owner:', '1026h owner test', 'owner 10-27', '(owner)'), when the game's Mod settings menu writes it (Look/Glare/AA/
 CameraFX/Textures/Neural), or keep= (onlinevanbots: removal never seen in a log; lobbysolo: owner hosts alone; onlinegetupignorevan: not built).
