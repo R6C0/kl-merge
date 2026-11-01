@@ -91,6 +91,7 @@ Owner: ce (10-28 11:40; 3f is another project).
 Owner: ce (10-28 11:40).
 
 ### T5 Gun UI + sounds Arcade -> multiplayer (MP45 first)
+- 11-01 ~02:10 ce: gunui_1029 INSTALLED (DM07 + DD10 baked; UNDO C:\kl_build_1024\gunui_1029\UNDO_gunui_1029.bat). GU_DM07 / GU_DD10 online PASS 0 faults both seats. Next: GUN13 = a shot of the shop weapon list on each to see the true picture.
 - 10-29 ~06:50 ce: OnlineSwapPic WORKS in the weapon list (merged 9a2a1a304): role table 192 -> 2048 hash; GUN12b DM07 online 7494 swaps = restores, 0 faults. Next: picture is a look-alike stock card; baked kit gunui_1029 (true picture) still staged.
 - 10-28 19:30 ce: research re/gun_ui_parity_1028.md: the MP45 (item 1, row 7) is the SAME online as in Arcade except remote shots are 3D (RemoteShot2D covers it). The real gaps are swap rows 13/16/32/35 on UNBAKED maps (stock F01-F09, DM07, DD10: carrier's name + picture); full fix = bake (C:\kl_build_1024\gunui_1028\INSTALL_gunui_1028.bat). Built wk-gunui2-1028 ([Shop] OnlineSwapText=2 name follows the pool, OnlineSwapArm, OnlineSwapLog; [Sound] RemoteShot2DLogAny; all off); bench GUN1 running.
 - 10-28 14:40 ce SHOT2D (F06, 2 seats, 0 faults, both IN ROUND): the RemoteShot2D vtable route installed live on both seats ("sound system now on the private vtable (slot 74)"); script FAIL = shop timer ran out after a lost Enter tap (not a game fault). Loudness by ear still open (owner).

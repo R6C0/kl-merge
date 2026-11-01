@@ -72,10 +72,10 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 BP18 set). Online a free bot runs to a downed player and stays until he is up; a quit joiner no longer holds the Retomoto lift doors. SHIPCHK5 (DD08)
 + A1LIFTNET4 PASS 0 faults both seats on the ship ini; review 0 confirmed. Undo: UNDO_ship1101.bat in C:\kl_build_1024\c9_1028\ship1101.
 
-2026-11-01 ~01:10 - [ce] Online get-up rescue WORKS on DD08: BP18 (dll ebad2633, Hold + Plateau + FlopMeter on) bot ran 22 m, held at 1.05-1.16 m,
-joiner's meter +3.0, seat up after 9.1 s (BP17 rose alone at 15.5 s); PASS 0 faults. Merged c5284265e (hold kept within 8 m once started) and
-9a2a1a304 (shop gun picture online, GUN12b). Not shipped; installed is still ship1030. BP19 (page 3 F08) same: bot held at 3.1 m, up 9.0 s,
-PASS. Proposed to c9 as a ship (BP18 ini keys). Next: multi-round cache check (script needs a round-2 wait), gunui_1029.
+2026-11-01 ~02:10 - [ce] gunui_1029 INSTALLED (DM07/F06 + DD10/F07 baked gun names/pictures; originals kept as *.before-gunbake1029; UNDO in
+C:\kl_build_1024\gunui_1029). GU_DM07 + GU_DD10 online PASS 0 faults, both seats in round; the shop picture itself is not yet seen in a shot
+(GUN13). BP20 (DD08, 2 rounds) PASS: OnlineScanEveryRound=0 cache works (round 2: 0 ms vs 187+125 ms); rescue up after 12.2 s; a late down at
+the van (~90 m, beyond Range 8000) got no bot = by design. Open: should bots leave the van for a late down? 8 m hold keep never exercised.
 
 2026-10-31 ~15:05 UTC - scheduled check-in: PC idle since 10-29 04:21 (ship1030: dinput8 9e485dcf, ini b599def6), no new dump. The owner's 10-27
 session log shows `KL_LensCrack.fx` was NEVER installed (asked for every launch since 10-17, one extra effect reload each start): kit
