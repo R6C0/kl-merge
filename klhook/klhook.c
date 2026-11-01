@@ -166,7 +166,7 @@
  * KLHook.ini
  *   [KLHook]
  *   ContinueAsserts=1   MaxAsserts=200   MaxDumps=4
- *   AssertSoft=         kl2.exe offsets (0x6567e8,845a8b) of asserts to step over silently: no dump, no ASSERT line, not in MaxAsserts; 'soft assert' lines + soft_asserts= in KLHook.result (default empty)
+ *   AssertSoft=         kl2.exe addresses (0x6567e8,845a8b; the bracketed number of an ASSERT line) of asserts to step over silently: no dump, no ASSERT line, not in MaxAsserts; 'soft assert' lines + soft_asserts= in KLHook.result (default empty)
  *   EndOnFatal=1        end the process ourselves after a fatal fault was logged (see above)
  *   ExitLog=1           wrap ExitProcess and MSVCR90 exit / _exit (the tripwire and the exit line)
  *   Tick=1              wrap SteamAPI_RunCallbacks; 0 = the fallback thread alone drives the tick
@@ -207,7 +207,7 @@ typedef HRESULT (WINAPI *DI8Create)(HINSTANCE, DWORD, REFIID, LPVOID *, LPUNKNOW
 static DI8Create real_create;
 static char dir[MAX_PATH], klh_ini[MAX_PATH], klh_out[MAX_PATH];   /* klh_out: KLHook.ini / .log / dumps = dir, or in TEST the env KLHOOK_DIR (klsolo.c) */
 static int continue_asserts = 1, max_dumps = 4, dumps = 0, max_asserts = 200;
-/* [KLHook] AssertSoft (2026-11-01, klassoft_logic.h): kl2.exe OFFSETS (the number after 'kl2.exe+' in an ASSERT line) of asserts that are stepped
+/* [KLHook] AssertSoft (2026-11-01, klassoft_logic.h): kl2.exe ADDRESSES (the number in brackets of an ASSERT line, e.g. 006567e8) of asserts that are stepped
    over like a continued one but never dumped, never logged as ASSERT and not counted toward MaxAsserts; counted here instead (KLHook.result
    soft_asserts=, the RESULT line's 'soft asserts'). Empty = off. A soft site continues even with ContinueAsserts=0 (soft means 'known harmless'). */
 #include "klassoft_logic.h"
@@ -547,7 +547,7 @@ static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
         return EXCEPTION_CONTINUE_SEARCH;
     }
     if (code == EXCEPTION_BREAKPOINT && klh_soft_n_sites && ((BYTE *)at)[0] == 0xCC) {       /* AssertSoft: step over, no dump, no ASSERT line */
-        int k = kas_find(klh_soft_list, klh_soft_n_sites, at - img_lo);
+        int k = kas_find(klh_soft_list, klh_soft_n_sites, at);      /* VAs (AS1: offsets never matched the ini's VAs) */
         if (k >= 0) {
             LONG h = InterlockedIncrement(&klh_soft_hits[k]); InterlockedIncrement(&klh_soft_n);
             if (h == 1 || h == 10 || h == 100 || h == 1000 || h == 10000 || h == 100000 || h == 1000000)      /* first hit, then each power of ten */
@@ -1626,7 +1626,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     max_asserts = GetPrivateProfileIntA("KLHook", "MaxAsserts", 200, klh_ini);
     { char sl[256] = ""; int bad = 0; GetPrivateProfileStringA("KLHook", "AssertSoft", "", sl, sizeof sl, klh_ini);
       klh_soft_n_sites = kas_parse(sl, klh_soft_list, KAS_MAX, &bad);
-      if (klh_soft_n_sites || bad) klog("AssertSoft: %d site(s) as kl2.exe offsets%s", klh_soft_n_sites, bad ? " (some entries ignored: not hex)" : ""); }
+      if (klh_soft_n_sites || bad) klog("AssertSoft: %d site(s) as kl2.exe addresses (first %08lx)%s", klh_soft_n_sites, klh_soft_n_sites ? klh_soft_list[0] : 0ul, bad ? " (some entries ignored: not hex, or not an address in 0x400000..0x2000000)" : ""); }
     klh_end_on_fatal = GetPrivateProfileIntA("KLHook", "EndOnFatal", 1, klh_ini);
     klh_fastexit = GetPrivateProfileIntA("KLHook", "FastExit", 1, klh_ini) != 0;
     klh_stall_say_ms = GetPrivateProfileIntA("KLHook", "StallSayMs", 3000, klh_ini);

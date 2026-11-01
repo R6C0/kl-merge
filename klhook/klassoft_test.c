@@ -14,7 +14,9 @@ int main(void)
     n = kas_parse(" ,; ", l, KAS_MAX, &bad); CHECK(n == 0 && bad == 0);
     n = kas_parse("zz,0x,6567e8,12345678901,0x6567e8", l, KAS_MAX, &bad); CHECK(n == 1 && l[0] == 0x6567e8 && bad == 3);
     n = kas_parse("0x4000000", l, KAS_MAX, &bad); CHECK(n == 0 && bad == 1);
-    n = kas_parse("1,2,3,4", l, 2, &bad); CHECK(n == 2 && bad == 2);
+    n = kas_parse("400001,400002,400003,400004", l, 2, &bad); CHECK(n == 2 && bad == 2);
+    n = kas_parse("2567e8,0x445a8b,0x6567e8", l, KAS_MAX, &bad); CHECK(n == 2 && bad == 1 && l[0] == 0x445a8b && l[1] == 0x6567e8);      /* AS1: an offset under 0x400000 is refused; 0x445a8b is a valid VA */
+    n = kas_parse("0x3fffff,0x400000", l, KAS_MAX, &bad); CHECK(n == 1 && bad == 1 && l[0] == 0x400000);
     printf("klassoft_test: %d checks, %d fail\n", checks, fails);
     return fails != 0;
 }

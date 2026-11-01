@@ -2067,7 +2067,7 @@ static LONG CALLBACK kla_veh(EXCEPTION_POINTERS *ep)
     }
     if (inside ? code != EXCEPTION_BREAKPOINT && !kla_bad_code(code) : !kla_bad_code(code)) return EXCEPTION_CONTINUE_SEARCH;
     if (inside && at == (DWORD_PTR)VA(0xa8e3cb)) return EXCEPTION_CONTINUE_SEARCH;       /* Steam's anti-debug probe, not a fault */
-    if (inside && code == EXCEPTION_BREAKPOINT && ((BYTE *)at)[0] == 0xCC && kas_find(klh_soft_list, klh_soft_n_sites, (DWORD)(at - img_lo)) >= 0) return EXCEPTION_CONTINUE_SEARCH;   /* AssertSoft site: counted by klhook.c's handler as soft, never a FAIL */
+    if (inside && code == EXCEPTION_BREAKPOINT && ((BYTE *)at)[0] == 0xCC && kas_find(klh_soft_list, klh_soft_n_sites, (DWORD)at) >= 0) return EXCEPTION_CONTINUE_SEARCH;   /* AssertSoft site: counted by klhook.c's handler as soft, never a FAIL */
     EnterCriticalSection(&kla_cs);
     for (i = 0; i < at_n; i++) if (at_seen[i] == at) first = 0;
     if (first && at_n < 64) at_seen[at_n++] = at;
