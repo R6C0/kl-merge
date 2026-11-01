@@ -68,14 +68,13 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~10:30 - [c9] Q31 RUNNING: all 21 maps online, 2 rounds, on the ship1102 CANDIDATE ini (ship1101 + 16 keys, C:\kl_build_1024\c9_1028\q31
+DELTA.txt; INSTALL/UNDO_ship1102.bat ready, ini only, NOT installed). LONGVA: DD10 full match, largest free piece floor 14.4 MB stays flat, 0 refused,
+0 faults (map trait; RoomMB no help). kl_tests green again (b2e99cfd6). kl_solo_test's base ini = the game folder's unless --base is given.
+
 2026-11-01 ~09:05 - [c9] Q30: all 21 maps PASS online through TWO rounds (both seats, shop timer into round 2, 0 faults) on ship1101.
 DM07 + DD10 had no wardrobe (Dead Men hires refused there): built with +4 PD2 plates and INSTALLED (undo C:\kl_build_1024\c9_1028\hirebody\
 UNDO_wardrobe_DM07_DD10.bat); bench HIREWD (Kane/Lynch hired online there) running. Kits: C:\kl_build_1024\c9_1028\q30, \hirewd.
-
-2026-11-01 ~07:05 UTC - scheduled check-in (PC busy with Q30, nothing touched): Mod Options 'Recommended' flip-flopped OnlineGuardMode (LiveOnly on
-needs it, its own row said off) - fixed (row on with BP8/BP9/BP11, 2 table self-tests, dry run + Save now show was/already/new per key). The live
-ship1101 ini has NONE of the week's T1/T3/T4 keys (Keys Map/Hints, OnlineTriggers, Take 2 / LootParts / Finish ...): Recommended = exactly those 14;
-suggested Q31 = Q29 on a TEST twin with that delta, then ship1102. debug/notes/2026-11-01-scheduled-triage.md.
 
 2026-11-01 ~09:50 - [ce] OnlineGetUpIgnoreVan PROVEN by A/B (IV2 / IV2OFF, DD08 online, 0 faults): with it on a bot holds by a seat downed in van
 state 1, up 10.3 s; off = 3 downs, 'no helper'. Mod Options row now recommended on; in c9's NEXT_SHIP with OnlineGetUpRange=2500. GUN13 closed

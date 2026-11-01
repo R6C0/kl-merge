@@ -1,3 +1,10 @@
+2026-11-01 ~10:30 - [c9] LONGVA done (DD10 online, full match, ship1101 TEST twin, [Memory] Log=1): a match is 3 rounds (round 3 -> 0x1f -> 0x28
+match over; my 4th-round wait timed out = script FAIL, game fine): both variants 0 faults, 0 refused, restore a6ea229f/12d5f8e1. Largest free
+piece: A (ReserveMB=128) 30 / 14.4 MB on the two seats, flat to the end; ROOM (RoomMB=128 + ReserveMB=176) 14.4 MB from minute 5-7, flat. A stable
+DD10 floor, not a leak; RoomMB does not raise it -> not shipped. Q31 started 10:30: all 21 maps 2 rounds on the ship1102 candidate ini
+(C:\kl_build_1024\c9_1028\q31, ship1101 + 16 keys: DELTA.txt). Kit bug caught before launch: kl_solo_test's base ini defaults to the GAME
+folder's ini (tools/kl_solo_test.py:162), so run_q31.sh now passes --base KLHook_ship1102.ini. kl_tests green again (b2e99cfd6, 40/0/5).
+
 2026-11-01 ~09:50 - [ce] OnlineGetUpIgnoreVan PROVEN (A/B on DD08 online, test dll d82d5d84, kit C:\kl_build_1024\week_1028\IV2_README.txt): IV2 (=1) van
 called 09:30:22, seat 1 down in van state 1, bot 5 HOLD at 1.37 m, up 10.3 s; IV2OFF (=0) 3 downs in states 3/5/5, each 'no helper'. Both PASS 0 faults,
 restore ok. Row now recommended on (keep= removed, 'proven live: IV2' markers); c9 put =1 in NEXT_SHIP next to OnlineGetUpRange=2500. Joiner 'tele'

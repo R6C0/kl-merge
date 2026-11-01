@@ -52,6 +52,7 @@ Owner: ce.
 - 10-29 01:40 c9: Q28 batch 1 (online, ship1030 test twin): DD05 DD08 DD09 DM09 PASS both seats, 0 faults; intended maps confirmed loaded. 17 maps left.
 - 10-29 01:10 c9: SHIPPED ship1030 (lift online: JoinOnline=1 + DoorCloseRemote=1 via the hero table; dll 9e485dcf, ini b599def6). SHIPCHK4 + A1LIFTNET3 PASS 0 faults.
 - 10-29 00:40 c9: lift ONLINE PASS (A1LIFTNET2F both seats, 0 faults; joiner rode box 9 to the lobby car). Merged 154f03c94 (default off). Next: SHIP check + ship JoinOnline=1.
+- 11-01 10:30 c9: LONGVA: DD10 full 3-round match 0 faults / 0 refused, largest free piece floor 14.4 MB flat (RoomMB no help, not shipped). Q31 (ship1102 candidate, 21 maps) running.
 - 11-01 10:30 c9: DD10 largest free piece 14.4 MB = map trait (also 14.1 MB without wardrobe), 0 refusals; LONGVA (4 rounds, Log=1, A vs RoomMB twin) staged, queued after ce's IV2.
 - 10-28 23:50 c9: lift ONLINE was gated off (kljoin.c, any network session). Fix c9-liftnet (JoinOnline/DoorCloseRemote, default off); A1LIFTNET1F joiner downed by cops before the lift (bench issue) -> TEST KeepAlive, A1LIFTNET2F next.
 - 10-28 23:20 c9: SHIPPED ship1029 (dll 897decf7 + ini ad00a047 with DoorCloseMs=8000): the Retomoto lift doors now close in the owner's game. SHIPCHK3 + A1LIFT7/8 PASS 0 faults. T2 lift item DONE.
