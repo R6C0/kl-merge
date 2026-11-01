@@ -247,3 +247,58 @@ Checks for c9/ce: on EVERY two-seat run, `python tools\kl_coverdump_parse.py <in
 - Nothing to install. DM01 online: the CLIENT seat logs 29-118 asserts a round (not the host); the game goes on, but a client's round
   can end at the 200th (`MaxAsserts`). Until a fix lands, a quick stop-gap only you can do: `[KLHook] MaxAsserts=2000` in `<DD>\KLHook.ini`
   (ini only; the asserts still log and the first four still dump) - or leave it, DM01 clients have not reached 200 in Q31-Q33.
+
+# Scheduled check-in 2026-11-01 ~22:50 UTC (cloud; DD/DM attached by one access request)
+
+## PC state (read only; nothing launched, installed or staged into the game folder)
+- BUSY: `<DD>\dinput8.dll` written 22:44 UTC, ReShade.ini/log 22:44-22:45 (a hook twin going in for the next bench, c9's LC2/CR1 or ce's RT2);
+  repo head a87db77 22:25. No game run, no install, no screen from here.
+- `<DD>` root: no dump newer than the 10-26 ones (`KLHook_1.dmp` 10-26 08:11, last `kl2_490_crash_*` 10-25); `KLHook.result` still the 10-27
+  PASS (F04, 0 asserts 0 faults). `KLHook.log` ends 20:50 with a clean `exit: Alt+F4 / close` (a bench end, perf 255 fps, 19 frames over 33 ms).
+- Live `KLHook.ini` (13:25 = c9's ship1103 install time; md5 of the staged copy d829fe43, c9's own tag 81c95751 is a different hash):
+  `kl_mod_options.py --check-live` = clean ("every row that is on has its further keys at the row's values"; one owner-set row, lobbyopts).
+- `tools/kl_tests.py` from HEAD on this Linux box: 36 pass, 0 fail, 15 skip once gcc-multilib is installed (the 13 pure-logic C tests now run
+  here too: klcoverring_test 55 checks among them). Before that install: 8 pass / 43 skip - a cloud session should `apt-get install gcc-multilib`
+  first (one line, ~40 s) or it verifies almost nothing of klhook.
+
+## Review of klhook [CoverRing] ClientBuild (CR2, 7890e86; code read only, not changed - c9's file)
+Written while c9's CR1 ran; CR1's result (4f0675d, 22:55) confirmed items 1 and 2 by measurement (the client never runs 0x81b6f0; the host
+rings each car on ACTIVATION in a non-table order) and CR3's `ClientBuildHost` (both seats prebuild at load in table order, the host's
+later activation finds rsv set and reuses the indices) answers them. Items 3 and 4 still apply to CR3; the grader below grades CR3 too
+(expected: IDENTICAL on both maps, and the same actor-cover gaps).
+Nothing crash-shaped found in the C: the writer is called inside `__try` on the game thread, only after gamedata, the physics world
+([[0xdd2640]+0xac]) and a 1 s stable count exist, hashed code is called and never patched, a fault latches it off for the run, every
+car and index is logged. Four DESIGN risks, all about which indices come out, for c9 to weigh before CR2 runs (each is testable from
+CR1's logs with the new grader below):
+1. ORDER = the host's is EVENT order, not entity-table order. re/dm_car_cover_1101.md's own caller table says the ring is built lazily
+   (ZHavokCarIdleGoal slot 2 waits on [car+0x8c0] and then calls 0x81b6f0 per pass; the state setter 0x8d6210 tail; behaviour starts), so
+   the host assigns 347.. to whichever car's script gets there first. The GUESS in the code ("entity-table order = host order") is therefore
+   the weakest link; CR1 settles it with no guess: a car's idx[0] IS its place in the host's assignment (0x558350 hands out [L+0x68]++),
+   so sorting the host's ringed cars by idx[0] gives the exact order. `kl_coverring_parse.py --compare` prints that order as a ready list.
+2. OVER-BUILDING is worse than not building. 0x558350 has exactly two callers: the ring (8 points) and ZCreateActorCover (0x795f22, 1 point,
+   runtime). Every index handed out after the seats diverge is misaligned on the client - including every later actor cover - and a WRONG
+   point (bit 2 or 0x200 set, wrong place) passes the kind check silently, where a spare at least int3s into AssertSoft. ClientBuild rings
+   EVERY car with done==0 && rsv==0 at t+1 s; on DM01 the host ringed the ram truck only at 2 s (cement truck / Bentleys not, reason unknown,
+   c9's OPEN list). If the client rings 3 cars where the host rings 1, the client is +16 ahead for the rest of the round. Suggest: a per-map
+   ordered car list from CR1 (e.g. `[CoverRing] ClientBuildCars_F01=243` entity-table slots in host order; empty = refuse, not "all"), or
+   ClientBuild only logs what it WOULD call until CR1 shows the host's set is the same car(s) in the same order on two runs.
+3. ONCE PER LOAD vs growth over time (CR3 too: a car that spawns or activates AFTER the load, DM03's arrivals, rings on the host only again). The host used point 358 by 17:39 in Q33_DM01 (347 + 8 = 355 explains only the first ring): more
+   indices came later (a second ring, DM03's police arrivals spawn mid-round, actor covers). `cb_done` latches after one pass, and a round-2
+   on the same gamedata without a state-0x16 pass keeps it latched (kcvd_rearm's rule). The writer's own done flag already makes a repeat
+   call per script harmless, so the latch could be per car (rescan every 2 s, call new eligible cars) - but only once item 2 says which cars.
+4. HANG, not fault. `__try` catches an access violation, not a wait: the per-point physics probe (vtable+0x264 on [[0xdd2640]+0xac]+0x8c) is
+   normally reached from the car script after its own waits (0x630b50 / 0x55b9f0). Called from the hook's tick, it runs at a different place
+   in the frame. If the client seat freezes in CR2 instead of faulting, this is where to look (KLHook.result would show `hung`, no dump).
+Minor, no change needed: the GO line prints the pre-call count (END has both); `kcr_cb_note(KCR_CB_WAIT_LIST)` reuse for "no gamedata /
+physics world" is silent after the first (fine); the 2 s rescans while waiting read ~8 MB of entity table per scan (negligible).
+
+## Done this check-in (tools only, no hook build, nothing installed)
+- `tools/kl_coverring_parse.py` (+ `_test.py`, 30 checks, synthetic logs shaped like klcoverring.c's format strings; kl_tests picks it up):
+  one seat = count timeline + rings sorted by first index + gaps between rings (= ZCreateActorCover points) + surplus balance;
+  `--compare <host> <client>` = host-only / client-only rings, order, per-car indices, gap pattern, base and final counts, exit 3 on any
+  difference, and the host's assignment order as a slot list for item 2. Reads clientbuild GO/called/SKIPPED/END lines too (CR2 grading).
+  For c9: `python tools\kl_coverring_parse.py <CR1 inst1>\KLHook.log --compare <inst2>\KLHook.log` right after CR1; `--all` prints every sample.
+
+## Owner
+- Nothing to install, nothing to decide. The PC was benching all evening (dinput8.dll 22:44); next hook ship (NEXT_SHIP: AssertSoft, LV1 keys,
+  DropFollow, hire/controls pages) is c9's call after LC2/CR1.
