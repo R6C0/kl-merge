@@ -90,6 +90,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-01 14:50 scheduled: ship1102 went live with Take=2 and no bank keys because nothing read the finished ini: new `kl_mod_options.py --check-live <ini>` (HALF-ON rows = exit 1, do not ship) + `kl_solo_test.py` ini-check lines per instance ini. c9: --check-live the ship1103 candidate before INSTALL_ship1103.bat.
 - 11-01 07:05 scheduled: live ship1101 ini has none of Take 2 / LootParts / LootFinish(+Pause) / GuardMode+LiveOnly / EscortNode / VanGatherSmart / BoardAll / OnlineTriggers (T4): Recommended on a copy = exactly these 14 changes; Mod Options guardmode flip-flop fixed (row on, BP8/BP9/BP11). Suggested Q31 = Q29 maps with that delta, then ship1102.
 - 11-01 ce/c9: get-up rescue SHIPPED (ship1101). BP20 late down at the van = Arcade parity (Arcade rush: 25 m + 3 m height, re/getup_arcade_range_1101.md). NEXT SHIP (c9): OnlineGetUpRange=2500 (strict Arcade; ship1101 has 8000; all passing rescues came from <= 22 m).
 - 10-29 ~06:50 ce: merged 9a2a1a304 (getup FreeFirst/BusyRange/Recede/Hold, all default off; BP14-BP16b DD08 PASS 0 faults). Rescue still fails: the bot recedes (BP15 3.6<->9 m) or stalls at 9-11 m (BP16b); joiner rises alone ~16-19 s. Diagnosis workflow on the stall.

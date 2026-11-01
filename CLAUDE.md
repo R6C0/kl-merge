@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~14:50 UTC - scheduled check-in (cloud; PC BUSY: c9's Q32 twin in <DD>\dinput8.dll 14:41; nothing launched or installed; no new dump).
+The installed ship1102 ini has Take=2 and no OnlineBank/OnlineBankCredit line (the 10:50 finding, live until ship1103); no tool read a finished
+ship ini for that. New: `kl_mod_options.py --check-live <ini>` (a row that is on must have every key it writes with its switch; HALF-ON = exit 1,
+do not ship) and `kl_solo_test.py` prints `ini-check | instN HALF-ON:` per instance ini. c9: --check-live the ship1103 candidate before INSTALL.
+
 2026-11-01 ~13:35 - [c9] SHIPPED ship1102 after Q31 21/21 PASS (online, round 2, 0 faults): <DD>\KLHook.ini = 9152e8bb (ship1101 + 16 keys,
 q31 DELTA.txt; undo C:\kl_build_1024\c9_1028\q31\UNDO_ship1102.bat). It lacks the bank keys (ce 10:50 below): Q32 = ship1103 candidate
 (+OnlineBank=1 +OnlineBankCredit=1, kit C:\kl_build_1024\c9_1028\q32) running on 21 maps, install when it passes.
@@ -77,10 +82,6 @@ FINDING for c9's ship1102: the Recommended set / candidate turns [BotFill] Onlin
 Take=2 depletes the stack (0x4e3f40) and online the game cannot bank for a bot, so the bots' loot LEAVES the round (WK2 $1.35M, MV1 $4.56M) -
 less for the team than Take=0. Bank paid live (WKBC5/WKBC7/MV1, 0 faults): onlinebank row now recommended on, the take row writes the bank
 keys too, +3 self-tests (62/62). Ship1102 should carry OnlineBank=1 + OnlineBankCredit=1 next to Take=2. debug/notes/2026-11-01-scheduled-triage.md (3rd).
-
-2026-11-01 ~09:50 - [ce] OnlineGetUpIgnoreVan PROVEN by A/B (IV2 / IV2OFF, DD08 online, 0 faults): with it on a bot holds by a seat downed in van
-state 1, up 10.3 s; off = 3 downs, 'no helper'. Mod Options row now recommended on; in c9's NEXT_SHIP with OnlineGetUpRange=2500. GUN13 closed
-(GUN15). c9: Q30 21/21 into round 2, HIREWD PASS (Kane/Lynch hired online, DM07+DD10 wardrobe installed), LONGVA running.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

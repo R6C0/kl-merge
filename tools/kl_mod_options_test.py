@@ -196,6 +196,27 @@ def main():
     w = M.plan(ls, {'onlinetacticstake': True})
     check(('BotFill', 'OnlineBank', 1) in w and ('BotFill', 'OnlineBankCredit', 1) in w and ('BotFill', 'OnlineTacticsTake', 2) in w, 'ticking the loot-taking row alone also switches the bank on: %s' % w)
 
+    # A finished ini can still carry a half-on feature (11-01 ~14:50 scheduled check-in): ship1102 was installed with OnlineTacticsTake=2 and
+    # no OnlineBank / OnlineBankCredit line, the exact gap of the 10:50 finding, and no check read the candidate before the install.
+    # check_live: a row that is on must have its further keys at the row's values; an owner-noted switch is his choice, not a gap.
+    ship1102 = INI + '\n[BotFill]\nOnlineHost=1\nOnlineTactics=1\nOnlineTacticsTake=2   ; (recommended on) proven live: WK2\n'
+    gaps, customs, owners = M.check_live(M.split_lines(ship1102))
+    check(sum('onlinetacticstake: [BotFill] OnlineBank absent' in g for g in gaps) == 1
+          and sum('onlinetacticstake: [BotFill] OnlineBankCredit absent' in g for g in gaps) == 1,
+          'check_live: Take=2 without the two bank keys is reported as a half-on row (the ship1102 shape): %s' % gaps)
+    gaps, customs, owners = M.check_live(M.split_lines(ship1102 + 'OnlineBank=1\nOnlineBankCredit=1\n'))
+    check(not [g for g in gaps if g.startswith('onlinetacticstake')], 'check_live: with OnlineBank=1 + OnlineBankCredit=1 (ship1103) the take row is whole: %s' % gaps)
+    gaps, customs, owners = M.check_live(M.split_lines(INI + '\n[Lobby]\nTimeMax=10   ; 1026 owner: heist time up to 10 min\nRoundsMax=10\n'))
+    check(not [g for g in gaps if g.startswith('lobbyopts')] and any('lobbyopts: [Lobby] TimeMin absent' in o for o in owners),
+          'check_live: TimeMin left at stock under an owner-noted TimeMax is listed as his choice, not a gap: %s / %s' % (gaps, owners))
+    gaps, customs, owners = M.check_live(M.split_lines(INI + '\n[Lobby]\nTimeMax=10\nRoundsMax=10\n'))
+    check(any(g.startswith('lobbyopts: [Lobby] TimeMin absent') for g in gaps), 'check_live: the same ini without the owner note is a gap: %s' % gaps)
+    gaps, customs, owners = M.check_live(M.split_lines(ship1102 + 'OnlineBank=1\nOnlineBankCredit=3\n'))
+    check(any('OnlineBankCredit is 3' in c for c in customs) and not any('OnlineBankCredit' in g for g in gaps),
+          'check_live: a further key at another non-zero value is a tuned value, not a gap: %s' % customs)
+    gaps, customs, owners = M.check_live(M.split_lines(INI))
+    check(gaps == [], 'check_live: the synthetic ini has no half-on row: %s' % gaps)
+
     def twice(text):
         ls = M.split_lines(text)
         for sec, key, val in M.plan(ls, M.rec_wants(ls)[0]):
@@ -214,9 +235,11 @@ def main():
         check(not norow, 'repo klhook/KLHook.ini: every proven recommended-on key has a row (%s)' % norow)
         rowless, un = M.check_ini(os.path.dirname(repo), repo)
         check(not rowless, 'repo klhook/KLHook.ini mentions every row key (%s)' % rowless)
+        gaps, customs, owners = M.check_live(M.split_lines(M.read_ini(repo)))
+        check(not gaps, 'repo klhook/KLHook.ini: no row is half on (%s)' % gaps)
         again = twice(M.read_ini(repo))
         check(again == [], 'Recommended pressed twice on the repo ini writes nothing the second time: %s' % again)
-    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 58 + 4 * os.path.isfile(repo), len(FAILS)))
+    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 64 + 5 * os.path.isfile(repo), len(FAILS)))
     return 1 if FAILS else 0
 
 

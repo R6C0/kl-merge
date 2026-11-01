@@ -77,6 +77,16 @@ def read_ini(path):
     return out
 
 
+def half_on(path):
+    """kl_mod_options.check_live on a written instance ini -> its gap lines (a row that is on while a key it writes with its switch reads
+    0 / is absent: ship1102 = OnlineTacticsTake=2 without OnlineBank/OnlineBankCredit, 11-01). Never stops a bench: [] on any error."""
+    try:
+        import kl_mod_options as MO
+        return MO.check_live(MO.split_lines(open(path, encoding='latin1').read()))[0]
+    except Exception as e:                                  # the bench must run even if the options table does not import here
+        return ['(ini check skipped: %r)' % e]
+
+
 def merge(base, over):
     """over's keys win; a [Script] in over replaces base's [Script] entirely."""
     secs = {s.lower(): (s, items) for s, items in base}
@@ -182,6 +192,8 @@ def main():
             secs_n = merge(secs_n, read_ini(extra))
         write_ini(os.path.join(d, 'KLHook.ini'), secs_n)
         inst.append(d)
+        for g in half_on(os.path.join(d, 'KLHook.ini')):   # 11-01: ship1102 benched and shipped with Take=2 and no bank keys; a bench's own report now says so
+            say('  ini-check | inst%d HALF-ON: %s' % (n, g))
     say('  inis | %d written under %s' % (total, root))      # L9e stopped after the firewall line: this places the next stall
     was = at.snapshot(dd, say)
     procs, code = [], 1

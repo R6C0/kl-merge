@@ -146,3 +146,37 @@ next escapee. `OnlineLootSync` (every seat sees the bots' loot) stays recommende
 ## Owner
 - Nothing to install from this check-in (Python tool + ini markers only).
 - Still open from 10-31: `<DM>\KL_PortTools\build\lenscrack_1031\INSTALL_lenscrack.bat` (game closed) if you still want the cracked lens.
+
+# Scheduled check-in 2026-11-01 ~14:50 UTC (cloud; DD/DM attached by one access request)
+
+## PC state (read only; nothing launched, installed or staged into the game folder)
+- BUSY: `<DD>\dinput8.dll` written 14:41 UTC (sha1 8611f27f, c9's TEST twin), ReShade logs 14:41-14:42 = c9's Q32 sweep (ship1103
+  candidate, 21 maps, ~16:30) in progress -> no game run, no install, no screen from here. `KLHook.ini` 09:49 (crc32 f3a81dca) = the
+  installed ship1102 (`OnlineTacticsTake=2`, no `OnlineBank` / `OnlineBankCredit` line - exactly the 10:50 finding, live in the owner's
+  game until ship1103).
+- `KLHook.result` still the 10-27 PASS; `KLHook.log` ends 10-27 20:50; no dump newer than the 10-26 `KLHook_1.dmp` -> nothing to triage.
+  `<DM>\KL_PortTools\build`: newest still `lenscrack_1031` (SHOTS1 for c9/ce installs it after Q32; no `solo\SHOTS1\pick\` yet).
+- Repo head at the start: 8f05fe1 (14:27 UTC). Cloud `kl_tests` without gcc-multilib: 5 pass / 0 fail / 40 skip (the Python tests).
+
+## Finding (FIXED, tools only): nothing read a finished ship ini for half-on features before it went into the game
+ship1102 was benched (Q31 21/21 PASS) and installed with `OnlineTacticsTake=2` while the two keys the take row writes with its switch
+(`OnlineBank`, `OnlineBankCredit`) were absent: the bench cannot see a money gap (0 faults, both seats in round), the Mod Options table knew
+the dependency since 10:50, but only the window / `--recommended` ever applied it, and the kits are hand-written inis. Done:
+- `tools/kl_mod_options.py --check-live <ini>`: for every row whose own switch is on, each further key of its tuple must read the row's
+  on value. Three lists: HALF-ON (0 / off value / absent at a 0 default -> exit 1 = do not ship), tuned values (another non-zero number,
+  informational), owner rows (the row's switch carries an owner note, rec_keep: his choice, e.g. `[Lobby] TimeMax=10 ; 1026 owner:` with
+  TimeMin left at stock). On the staged live ini (ship1102): HALF-ON 2 = `OnlineBank` + `OnlineBankCredit` absent under Take=2; repo ini: 0.
+- `tools/kl_solo_test.py`: after writing each instance ini it prints `ini-check | instN HALF-ON: ...` lines (never stops a bench), so a
+  Q-sweep's own report says it when the candidate has such a gap. Every ship kit so far was run through kl_solo_test (`--base`).
+- `kl_mod_options_test`: +6 synthetic checks (the ship1102 shape is caught, the ship1103 shape is whole, owner note -> owner list, no note ->
+  gap, 3 instead of 1 -> tuned, the plain synthetic ini clean) + the repo ini has no half-on row; 69/69. --check-rec / --check-ini /
+  --check-defaults unchanged.
+For c9: before `INSTALL_ship1103.bat`, `python tools\kl_mod_options.py --check-live C:\kl_build_1024\c9_1028\q32\KLHook_ship1103.ini`
+(or whatever the candidate file is called) must print "every row that is on has its further keys at the row's values"; the Q32 instance
+inis themselves were written before this commit, so they carry no ini-check line.
+
+## Owner
+- Nothing to install from this check-in (Python tools only; no hook build).
+- The hire-shop / MOD CONTROLS / lens-crack pictures you asked for at 14:25 come from c9/ce's SHOTS1 job right after Q32 (~16:30); nothing a
+  cloud session can shoot while the PC is benching.
+- Still open from 10-31: `<DM>\KL_PortTools\build\lenscrack_1031\INSTALL_lenscrack.bat` is what SHOTS1 installs (additive, UNDO bat beside it).

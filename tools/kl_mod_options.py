@@ -15,6 +15,8 @@ full at 9 rows (re\mod_options.md section 3). This tool needs no game code and c
                repo ini (the local sessions mark a key 'proven live: <bench>' there; a row still saying off would make Recommended undo it)
   python tools\kl_mod_options.py --check-ini klhook klhook\KLHook.ini   row keys the repo ini never mentions (document them there), and
                how many keys the hook reads that it leaves out (--verbose lists them; most are probes / logs)
+  python tools\kl_mod_options.py --check-live <ini>   a LIVE or ship-candidate ini: rows that are on while a key they write with their
+               switch reads 0 / is absent (a half-on feature; ship1102 shipped Take=2 without the bank keys this way). Exit 1 = do not ship.
 
 Rules: refuses to write while kl2.exe runs (the hook reads the ini at start, a running game would also overwrite nothing but the player
 would think the change was live); keeps ONE backup, KLHook.ini.before-modoptions (made before the first write, never replaced); writes
@@ -1099,6 +1101,40 @@ def check_defaults(srcdir):
     return bad
 
 
+def check_live(lines):
+    """A LIVE or candidate ini against the rows' own dependency lists (2026-11-01 ~14:50, scheduled check-in). ship1102 went into the
+    owner's game with [BotFill] OnlineTacticsTake=2 and no OnlineBank / OnlineBankCredit line: the take row is ON while two keys it
+    writes with it stayed at the DLL default 0, so the bots' loot left the round (the 10:50 finding) - nothing checked a finished ini for
+    that before it was installed. Rule: a row whose own switch is on must have every further key of its tuple at the row's on value.
+    -> (gaps, customs, owners): gaps = '[sec] key' lines where the further key reads 0 / its off value / is absent at a 0 default (the
+    feature is half on: a dependent code path is dark); customs = the key is set, but to another non-zero value than the row writes (a
+    tuned number such as a range: informational, the row would overwrite it on the next tick of that box); owners = the same findings
+    for a row the owner set himself (rec_keep: an owner note on its switch, e.g. '[Lobby] TimeMax=10 ; 1026 owner:' with TimeMin left at
+    stock): his choice, listed but never a reason to hold a ship. Preset rows are not checked."""
+    gaps, customs, owners = [], [], []
+    for f in F:
+        if 'preset' in f or f.get('str'):
+            continue
+        on, _ = state(lines, f)
+        if not on:
+            continue
+        kept = rec_keep(lines, f)
+        for sec, key, onv, offv, dflt in f['keys'][1:]:
+            i, _h, _e = find_key(lines, sec, key)
+            live = dflt if i is None else get_int(lines, sec, key, dflt)
+            if live == onv:
+                continue
+            how = ('absent, DLL default %s' % dflt) if i is None else ('is %s' % live)
+            text = '%s: [%s] %s %s, the row writes %s (its own switch [%s] %s is on)' % (f['id'], sec, key, how, onv, f['keys'][0][0], f['keys'][0][1])
+            if kept:
+                owners.append(text + ' - ' + kept)
+            elif live == 0 or (offv is not None and live == offv):
+                gaps.append(text)
+            else:
+                customs.append(text)
+    return gaps, customs, owners
+
+
 # ---------------------------------------------------------------- Tk window
 def gui(path, force):
     import tkinter as tk
@@ -1211,7 +1247,17 @@ def main():
                     'keys the hook reads that it leaves out (--verbose lists them)')
     ap.add_argument('--verbose', action='store_true')
     ap.add_argument('--check-rec', metavar='REPO_INI', help='compare each row\'s recommendation with the (recommended ...) marker in klhook\\KLHook.ini')
+    ap.add_argument('--check-live', metavar='INI', help='a live or candidate KLHook.ini: rows that are on while a key they write with '
+                    'their switch is off / absent (half-on feature, exit 1); run it on every ship candidate before the install')
     a = ap.parse_args()
+    if a.check_live:
+        gaps, customs, owners = check_live(split_lines(open(a.check_live, encoding='latin1').read()))
+        print(('HALF-ON rows: %d\n  ' % len(gaps) + '\n  '.join(gaps)) if gaps else 'every row that is on has its further keys at the row\'s values')
+        if customs:
+            print('tuned values (the row would write its own number; informational): %d\n  ' % len(customs) + '\n  '.join(customs))
+        if owners:
+            print('rows the owner set himself (his choice, not held against the ini): %d\n  ' % len(owners) + '\n  '.join(owners))
+        return 1 if gaps else 0
     if a.check_rec:
         bad, norow, nocheck = check_rec(a.check_rec)
         print('\n'.join(bad) if bad else 'every row agrees with the ini markers')
