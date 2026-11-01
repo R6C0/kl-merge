@@ -1,3 +1,11 @@
+2026-11-01 ~05:50 - [c9] Triage Finding 2 FIXED (0af62a4ee): Mod Options 'Recommended' no longer undoes the owner's ini. rec_wants() keeps a row when its
+own key has an owner note ('1026 owner:', '1026h owner test', 'owner 10-27', '(owner)'), when the game's Mod settings menu writes it (Look/Glare/AA/
+CameraFX/Textures/Neural), or keep= (onlinevanbots: removal never seen in a log; lobbysolo: owner hosts alone; onlinegetupignorevan: not built).
+Flipped to recommended on with proofs (evidence workflow + adversarial check): botfill/[Bots] OnlineFill, hire + hireonline, onlineskulls/loot/
+tab/van/intro, dying, onlinetacticstake + onlinelootparts. Dry run on the live ship1101 ini: 30 rows kept; writes only the benched BotFill set
+(GuardTake 0, Take 2, LootParts 1, LootFinish...), Grenade Throw 0 (dead feature), Keys Map/Hints 1. ce dropped the 'proven' -> 'tested' rewording
+(its own brief line, not an owner rule). NEXT_SHIP: + GuardTake=0 / Take=2 / LootParts=1 together (only ever benched as a set), Grenade Throw=0.
+
 2026-11-01 ~05:45 - [c9] GUN14 (GUN13 with the joiner fixed: waitstate 0x20 + msg ZW_SELECT3) PASS on DM07 + DD10, both seats, 0 faults, restore ok.
 The joiner opened the online weapon list (Category -> Weapon after one lost Enter, 15 s), F12, bought 2, round 2 ran. Shots KLShot_inst2_34.jpg in
 solo/GUN14_DM07 and solo/GUN14_DD10 show names, pictures, prices and per-map lists; whether the M-77B picture is the baked one is left to ce.
