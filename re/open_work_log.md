@@ -1,3 +1,9 @@
+2026-11-01 ~09:50 - [c9] HIREWD PASS: Dead Men hires online on the newly installed DM07 + DD10 wardrobes (IgnoreWardrobe 0, OnlineHost 1). Host hires Kane,
+joiner Lynch at the F12 hire page in the round-1 shop ($10000, banked 100000 -> 90000), round 2: 'I wear Kane/Lynch', applied to body on both seats
+(model 10022 -> 9249 Kane, 10134 -> 9263 Lynch, try 1), botgate .bots.zip loaded, 0 faults, restore a6ea229f/12d5f8e1 (sha1 checked). DM07 time in
+round 384 s (< 420 target; free VA min 467 MB so moot); DD10 514 s, free VA min 184 MB but the LARGEST free piece fell to 14.4 MB (DM07 130 MB):
+a big contiguous alloc could fail on DD10 in a long match. T2 'hired body stays stock' closed. Game handed to ce (IV2/IV2OFF).
+
 2026-11-01 ~09:05 - [c9] Q30 DONE: all 21 maps PASS through TWO rounds online on the installed ship1101 (both seats round 1 -> shop 0x20 -> 30 s timer ->
 0x24..0x27 -> round 2 0x19, 30 s in round 2, faults 0; ~8 min a map, no ready press needed). Week-plan T2 'host and client both reach round 2' ticked.
 Then INSTALLED the DM07 + DD10 wardrobe (+4 PD2 plates, Masks 12; chunks 50130 / 61098; rebuilt .bots.zip + md5; KLJoin/KLGuns Entries= raised):
