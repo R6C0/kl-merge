@@ -114,6 +114,17 @@ def main():
     w = M.plan(lines, {'onlinetagstyle': False, 'onlinetags': True})
     check(w == [], 'onlinetagstyle is read from OnlineTagStyle (0 = already off), not from OnlineTags: %s' % w)
 
+    # describe_writes (2026-11-01): a prerequisite write over the same value is told apart from a real change and from a new key
+    d = dict(M.describe_writes(lines, [('HUD', 'Online', 1), ('HUD', 'OnlineTagStyle', 1), ('Grades', 'OnlineTags', 1), ('Input', 'PumpNoBlock', 1), ('Nowhere', 'Key', 1)]))
+    check(d.get('[HUD] Online = 1  (already 1)') is False, 'describe_writes: a write of the value the ini has is no change: %s' % list(d))
+    check(d.get('[HUD] OnlineTagStyle = 1  (was 0)') is True, 'describe_writes: 0 -> 1 is a change')
+    check(d.get('[Grades] OnlineTags = 1  (was 0)') is True, 'describe_writes: the section is told apart ([Grades] OnlineTags, not [HUD])')
+    check(d.get('[Input] PumpNoBlock = 1  (new key; the DLL default was 0)') is True, 'describe_writes: an absent row key names the DLL default and counts as a change')
+    check(d.get('[Nowhere] Key = 1  (new key; the DLL default was ?)') is True, 'describe_writes: an absent key no row carries is still a change')
+    check(M.writes_summary(M.describe_writes(lines, [('HUD', 'Online', 1), ('HUD', 'OnlineTagStyle', 1)])) == '1 value change(s), 1 write(s) that keep the value the ini already has', 'writes_summary counts both kinds')
+    nd = M.describe_writes(lines, [('Input', 'PumpNoBlock', 0)])
+    check(nd[0] == ('[Input] PumpNoBlock = 0  (new key; the DLL default was 0)', False), 'describe_writes: a new key written to its own DLL default is no change: %s' % nd)
+
     # a key the ini only carries commented out still gives its marker (2026-10-27: ';PumpNoBlock=0 ... (recommended off until benched)')
     lines3 = M.split_lines(INI + '\n[Input]\n; the pump\n;MouseMoveMs=0\n;PumpNoBlock=0   ; never waits (recommended off until benched: C27_PNB1)\n')
     check(M.find_commented_key(lines3, 'Input', 'PumpNoBlock') is not None, 'find_commented_key finds ;PumpNoBlock=0')
@@ -160,6 +171,30 @@ def main():
     check(wants.get('grenade') is False, 'Recommended still sets a row whose key has no owner note (grenade -> off)')
     check('onlinevanbots' in kept and 'onlinevanbots' not in wants, 'Recommended keeps a row marked keep=')
 
+    # Recommended must not fight itself (2026-11-01, scheduled check-in): onlineguardliveonly (on) wrote OnlineGuardMode=1 as its
+    # prerequisite while onlineguardmode (then off) wrote it 0 -> the key flip-flopped with every press. Rule: a key a recommended-on row
+    # needs is never the own key of a recommended-off row; and pressing Recommended twice writes nothing the second time.
+    need, off = {}, {}
+    for f in M.F:
+        if f['rec'] == 'on':
+            for sec, key, onv, offv, dflt in f['keys'][1:]:
+                need.setdefault((sec.lower(), key.lower()), []).append(f['id'])
+        else:
+            sec, key = f['keys'][0][:2]
+            off.setdefault((sec.lower(), key.lower()), []).append(f['id'])
+    fight = [(k, off[k], need[k]) for k in need if k in off and not any(M.BY_ID[i].get('exact') or M.BY_ID[i].get('excl') for i in off[k])]
+    check(not fight, 'no recommended-on row needs a key a recommended-off row switches off: %s' % fight)
+
+    def twice(text):
+        ls = M.split_lines(text)
+        for sec, key, val in M.plan(ls, M.rec_wants(ls)[0]):
+            M.set_key(ls, sec, key, val)
+        return M.plan(ls, M.rec_wants(ls)[0])
+    again = twice(INI)
+    check(again == [], 'Recommended pressed twice on the synthetic ini writes nothing the second time: %s' % again)
+    again = twice(INI + '\n[BotFill]\nOnlineGuardMode=1\nOnlineGuardLiveOnly=1\n')
+    check(again == [], 'Recommended pressed twice with the guard keys on writes nothing the second time (the 11-01 flip-flop): %s' % again)
+
     # the repo ini itself
     repo =os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'klhook', 'KLHook.ini')
     if os.path.isfile(repo):
@@ -168,7 +203,9 @@ def main():
         check(not norow, 'repo klhook/KLHook.ini: every proven recommended-on key has a row (%s)' % norow)
         rowless, un = M.check_ini(os.path.dirname(repo), repo)
         check(not rowless, 'repo klhook/KLHook.ini mentions every row key (%s)' % rowless)
-    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 45 + 3 * os.path.isfile(repo), len(FAILS)))
+        again = twice(M.read_ini(repo))
+        check(again == [], 'Recommended pressed twice on the repo ini writes nothing the second time: %s' % again)
+    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 55 + 4 * os.path.isfile(repo), len(FAILS)))
     return 1 if FAILS else 0
 
 

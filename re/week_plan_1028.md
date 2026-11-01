@@ -14,6 +14,7 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
+- 11-01 07:05 scheduled: [Keys] Map/Hints are NOT in the live ship1101 ini (DLL default 0) - the owner has never seen the MOD CONTROLS page or the key map. Recommended delta / Q31 suggestion: debug/notes/2026-11-01-scheduled-triage.md Finding 3.
 - 10-28 12:00 ce: research re/keybinds_ui_1028.md (F7/F8/F10 clash with ReShade, CopSquad F/G vs melee/grenade); build wf_ce299754 in wt/wk-keys.
 Owner wants every mod feature reachable on a sensible key and shown on screen (shop pages, hint lines, a controls page).
 - [x] Inventory of every mod key and feature -> re/keybinds_ui_1028.md, with clashes.
@@ -75,6 +76,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-01 07:05 scheduled: live ship1101 ini has none of Take 2 / LootParts / LootFinish(+Pause) / GuardMode+LiveOnly / EscortNode / VanGatherSmart / BoardAll / OnlineTriggers (T4): Recommended on a copy = exactly these 14 changes; Mod Options guardmode flip-flop fixed (row on, BP8/BP9/BP11). Suggested Q31 = Q29 maps with that delta, then ship1102.
 - 11-01 ce/c9: get-up rescue SHIPPED (ship1101). BP20 late down at the van = Arcade parity (Arcade rush: 25 m + 3 m height, re/getup_arcade_range_1101.md). NEXT SHIP (c9): OnlineGetUpRange=2500 (strict Arcade; ship1101 has 8000; all passing rescues came from <= 22 m).
 - 10-29 ~06:50 ce: merged 9a2a1a304 (getup FreeFirst/BusyRange/Recede/Hold, all default off; BP14-BP16b DD08 PASS 0 faults). Rescue still fails: the bot recedes (BP15 3.6<->9 m) or stalls at 9-11 m (BP16b); joiner rises alone ~16-19 s. Diagnosis workflow on the stall.
 - 10-29 ~00:05 ce: merged f016b07f9 (all default off). BP9 DD08 PASS (LiveOnly 8 m: 9 stacks in the first minute). BP11 DD08 PASS, 0 faults: 35 of 40 'cops' read (0,0,0) at the round start and are now skipped (origin skip), 5 live, 11/47 stacks guarded, 14 stacks finished. Getup: '0 free bot(s)' (all carried / walked out), joiner rose alone in 20.1 s -> new OnlineGetUpBusy (carriers + exit walkers answer, as Arcade Rush; never phase 3/4), bench BP12 queued (out_botpar_k_test). T5: GUN6 showed F02 (DD02) already shows our gun names (stock text 0), so OnlineSwapPic has nothing to do there; wk-swappic stays unmerged until a map with an unbaked row.

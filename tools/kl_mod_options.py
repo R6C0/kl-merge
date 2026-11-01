@@ -321,10 +321,10 @@ feat('onlinepbrefund', G_EXP, 'Online AI heisters get back point-blank hp that w
      'klbalance.c [BotFill] OnlinePointBlankRefund; health data write after the step, never above the hp before it; BO11 869 hp window; NOT run live', [('BotFill', 'OnlinePointBlankRefund', 1, 0, 1)])
 feat('onlineguardtake', G_EXP, 'Online AI heisters walk into a guarded loot stack after 30 s of waiting (recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineGuardTake; BO8c: the 30 s release sent all bots into the cop squads at once; off = hold until a stack is clear; benched 0 in BP4..BP20 / BAL2 (week_1028); the owner\'s ini has 1 since the 10-26 host-keys block (bots then stand up to 30 s at round start)', [('BotFill', 'OnlineGuardTake', 1, 0, 0)])
-feat('onlineguardmode', G_EXP, 'Online AI heisters look at cops on the stack floor only and take the least guarded stack when all are guarded (recommended off)', 'off', 'start',
-     'klbotfill.c [BotFill] OnlineGuardMode (+ FloorCm, BypassMin, BypassGapS), klguard_logic.h; BP5 DD08: 47 of 47 stacks guarded, bots left empty; NOT run live', [('BotFill', 'OnlineGuardMode', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlineguardmode', G_EXP, 'Online AI heisters look at cops on the stack floor only and take the least guarded stack when all are guarded (recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineGuardMode (+ FloorCm, BypassMin, BypassGapS), klguard_logic.h; BP5 DD08: 47 of 47 stacks guarded, bots left empty; proven live: BP8 DD08 (every bot took the least guarded stack, 5 finished 10/10, 0 faults), BP9 + BP11 (with LiveOnly; 14 stacks finished); the 8 m row needs it, so Recommended must not turn it off (11-01: it flip-flopped the key)', [('BotFill', 'OnlineGuardMode', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlineguardliveonly', G_EXP, 'Online guard mode counts cops within 8 m of a stack, not 25 m, so stacks in one vault can be told apart (recommended on)', 'on', 'start',
-     'klbotfill.c [BotFill] OnlineGuardLiveOnly (needs OnlineGuardMode); BP8 DD08: 47 stacks in a 12 m cluster, 38 of 40 cops within 25 m of every one; NOT run live', [('BotFill', 'OnlineGuardLiveOnly', 1, 0, 0), ('BotFill', 'OnlineGuardMode', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+     'klbotfill.c [BotFill] OnlineGuardLiveOnly (needs OnlineGuardMode); BP8 DD08: 47 stacks in a 12 m cluster, 38 of 40 cops within 25 m of every one; proven live: BP9 DD08 (9 stacks in the first minute, 0 faults), BP11 (11/47 guarded, 14 finished)', [('BotFill', 'OnlineGuardLiveOnly', 1, 0, 0), ('BotFill', 'OnlineGuardMode', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinevancall', G_EXP, 'Online AI heisters can call the escape van even with the round-keep rules copy (recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineVanCall; BO8c: the strict vtable test failed on klroundkeep.c\'s private copy and spent the call; 0 = old strict compare; NOT run live', [('BotFill', 'OnlineVanCall', 1, 0, 1)])
 feat('onlinevanstate', G_EXP, 'Online AI heisters board the escape van by its state (waiting) at the exit, not by its position (recommended on)', 'on', 'start',
@@ -704,6 +704,40 @@ def plan(lines, wants):
             elif offv is not None:
                 out.append((sec, key, offv))
     return list(dict.fromkeys(out))
+
+
+def key_default(sec, key):
+    """The DLL default of a row key (the dflt of its tuple in F), or None when no row carries it."""
+    for f in F:
+        for s, k, onv, offv, dflt in f['keys']:
+            if (s.lower(), k.lower()) == (sec.lower(), key.lower()):
+                return dflt
+    return None
+
+
+def describe_writes(lines, writes):
+    """-> [(text, changes)] per planned write, as the dry run and the window's Save question print it (2026-11-01, scheduled check-in):
+    a plain '[BotFill] OnlineTactics = 1' read like a change while the live ini already had 1 (a prerequisite write), and a key the ini
+    never named ('new key; the DLL default was 0') is the one kind of write that turns a feature on without any line saying so before."""
+    out = []
+    for sec, key, val in writes:
+        i, _, _ = find_key(lines, sec, key)
+        if i is None:
+            d = key_default(sec, key)
+            cur = None
+            how = 'new key; the DLL default was %s' % ('?' if d is None else d)
+            changes = d is None or d != val
+        else:
+            cur = get_int(lines, sec, key, None)
+            how = ('already %s' % cur) if cur == val else ('was %s' % cur)
+            changes = cur != val
+        out.append(('[%s] %s = %s  (%s)' % (sec, key, val, how), changes))
+    return out
+
+
+def writes_summary(described):
+    n = sum(1 for _, c in described if c)
+    return '%d value change(s), %d write(s) that keep the value the ini already has' % (n, len(described) - n)
 
 
 # What the Recommended preset leaves as it is (2026-11-01, triage Finding 2: on the ship1101 ini it wrote 20 keys back over the
@@ -1110,8 +1144,16 @@ def gui(path, force):
         if running():
             return
         wants = {fid: v.get() for fid, v in vars_.items() if v.get() != orig[fid]}
+        w = plan(lines, wants)
+        desc = describe_writes(lines, w)
+        changed = [t for t, c in desc if c]
+        if changed:                                         # 2026-11-01: the owner sees every key whose value changes before it is written
+            shown = changed[:30] + (['... and %d more' % (len(changed) - 30)] if len(changed) > 30 else [])
+            if not messagebox.askyesno('KL Mod Options', 'Write these %d change(s) to KLHook.ini?\n\n%s\n\n(%s; a backup is kept once)'
+                                       % (len(changed), '\n'.join(shown), writes_summary(desc))):
+                status.config(text='nothing written'); return
         try:
-            msg, bad = apply_writes(path, plan(lines, wants), force)
+            msg, bad = apply_writes(path, w, force)
         except SystemExit as e:
             messagebox.showerror('KL Mod Options', str(e)); return
         load()
@@ -1199,8 +1241,11 @@ def main():
         raise SystemExit(preset_conflict(wants))
     if wants:
         w = plan(lines, wants)
-        for sec, key, val in w:
-            print('  [%s] %s = %s' % (sec, key, val))
+        desc = describe_writes(lines, w)
+        for text, _ in desc:
+            print('  ' + text)
+        if w:
+            print('  ' + writes_summary(desc))
         if not w:
             print('nothing to change')
         elif a.apply:
