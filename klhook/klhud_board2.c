@@ -139,6 +139,10 @@ static const struct { signed char fnt, align; } klsb_role[KLSB_NTEXT] = {
 
 static const BYTE klsb_code[8] = { 0x83, 0xec, 0x3c, 0x56, 0x8b, 0xf1, 0x8b, 0x0d };     /* 0x577e70 sub esp,0x3c; push esi; mov esi,ecx; mov ecx,[..] */
 
+#include "klhud_boardbots_logic.h"      /* [HUD] OnlineBoardBots: the pure latch / fate decisions of the AI heister rows (klhud_boardbots_test.c) */
+/* klbotfill.c (included later in klhook.c; the harness stubs it): the HOST's bot puppeteer ledger for a bot actor. -> 1 when klbf_ob[] tracks the actor (*aboard = phase 3, *tally = booked money); 0 = not tracked / client */
+static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally);
+
 struct klsb_t { DWORD obj, colour, want_colour; float x, y; int on; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
 static struct {
@@ -148,6 +152,7 @@ static struct {
     int istate;                               /* 2026-10-27: [HUD] OnlineIntroState (default 0; needs OnlineIntro): online, when the intro element at osd+0x10ac is absent, compose the whole intro card from the online snapshot and draw it on the clock element's render (states 0x16..0x18) */
     int icarrier;                             /* 2026-10-27: [HUD] OnlineIntroCarrier (default 0; needs OnlineIntroState): 1 = wrap ZFAIntroDisplay at osd+0x10ac and draw the composed intro card THERE instead of on the clock element (states 0x16..0x18); 2 = PROBE only: the same wrap counts which states its Render is called in (per state, logged), nothing is drawn on it */
     int carrier;                              /* 2026-10-27: [HUD] OnlineBoardCarrier (default 0; needs OnlineBoardState): wrap ZFAOutroDisplay at osd+0x10b0 and draw the online card there INSTEAD of the stock online panel (GUESS G18) */
+    int bots;                                 /* 2026-11-01: [HUD] OnlineBoardBots (default 0; needs OnlineBoard): the AI heister rows are latched through the round (kbb table) and show DEAD / ESCAPED / LEFT BEHIND, and on the HOST the ledger payout; unknown cells stay '-' */
     int online, intro;                        /* 2026-10-26: [HUD] OnlineBoard / OnlineIntro (default 0): the end card / the intro lines in an ONLINE round, from klonline_read.c */
     float x, y; int alpha;
 } klsb;
@@ -162,6 +167,7 @@ static struct {
     float cd_max;                             /* the countdown's first value this round */
     int in_intro; /* 2026-10-27: 1 from the first tick of states 0x16..0x18 until the round-end state, so the per-intro log latches / counters restart in EVERY intro */
     int ipath, ivalid, told_i, told_ic, map_tried; DWORD map_at, i_tick0; char map[48];   /* OnlineIntroState: no intro element, the card is composed / valid, log latches (1 = state path told, 2 = element path told), tick time of the first compose, the map's name */
+    struct kbb_tab btab; int btab_live, btab_told;   /* OnlineBoardBots: the bot latch of this round (cleared in the intro states), live = noted since the last reset, log latch of the 0x1f summary */
     long take0[KLOR_MAX]; BYTE take_have[KLOR_MAX]; int take_set;   /* OnlineBoardTake: each seat's money at the first state-0x1f tick */
     DWORD felem, f_stamp; int f_told_bad, f_told_tx;   /* OnlineBoardCarrier: the wrapped ZFAOutroDisplay of this OSD, tick time of its last card, log latches */
     DWORD ielem, i_stamp; int i_told_bad, i_told_tx, ifail, told_i19;   /* OnlineIntroCarrier: the wrapped ZFAIntroDisplay of this OSD, tick time of its last card, log latches, ifail = the element holds a vtable that is not the stock one (Board=1's private copy?): the element path stays */
@@ -627,7 +633,7 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
 static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG frame)
 {
     float px = klsb.x, py = klsb.y, cdv, cdt, pitch = KLSB_ROW, rowh = KLSB_ROWH, rowc, end; char name[KLSB_NROW][48], buf[64], num[40];
-    int i, row = 0, nused, loc = o->local, lk = KLUV_K_CREW, over, lives; const struct klor_row *me; DWORD fl = 0;
+    int i, row = 0, nused, loc = o->local, lk = KLUV_K_CREW, over, lives, use_b; const struct klor_row *me; DWORD fl = 0;
     if (klsb.fault || !o->ok || o->n < 1) return 0;
     me = klu_onrow(o, loc);
     if (me->used) { fl = klucc_hud_flags(me->flags, loc, loc); lk = klu_online_kind(fl, 1); }
@@ -640,7 +646,8 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
     klu_addpic(klu_r.handle[181] ? 181 : 111, px, py, KLSB_PW, KLSB_PH, ((DWORD)klsb.alpha << 24) | 0x000c0c0du, klsb_ly(4));
     klu_outline(px, py, KLSB_PW, KLSB_PH, KLU_C_CORAL, klsb_ly(3));
     memset(name, 0, sizeof name);
-    nused = o->n + o->nbots; if (nused > KLSB_NROW) nused = KLSB_NROW;
+    use_b = klsb.bots && klsb_r.btab.n > 0;      /* OnlineBoardBots: the latched table (also holds bots that left the scan) instead of the live scan only */
+    nused = o->n + (use_b ? klsb_r.btab.n : o->nbots); if (nused > KLSB_NROW) nused = KLSB_NROW;
     if (nused > KLSB_NROW_OLD) { pitch = 8.0f * KLSB_ROW / (float)nused; rowh = pitch - (KLSB_ROW - KLSB_ROWH); }
     for (i = 0; i < nused; i++) {
         if (i < o->n) {
@@ -648,6 +655,10 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
             if (r->name[0]) snprintf(name[i], sizeof name[i], "%s", r->name);
             else if (r->seat == loc) snprintf(name[i], sizeof name[i], "You");
             else snprintf(name[i], sizeof name[i], "Player %d", r->seat + 1);
+        } else if (use_b) {
+            const struct kbb_lat *bl = &klsb_r.btab.l[i - o->n];
+            snprintf(name[i], sizeof name[i], "%s", bl->name[0] ? bl->name : "Heister");
+            klgrd_decorate_rank(name[i], sizeof name[i], klgrd_bot_rank());
         } else {
             const struct klor_row *r = &o->bot[i - o->n];
             snprintf(name[i], sizeof name[i], "%s", r->name[0] ? r->name : "Heister");
@@ -709,6 +720,13 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
             else { fate = "LEFT BEHIND"; fc = KLU_C_OUT; }
             if (dead) v = 0;
             klu_dollars(num, sizeof num, v);
+        } else if (use_b) {      /* [HUD] OnlineBoardBots: fate from the latch, payout only where the HOST ledger knows it (kbb_*; GUESSes in klhud_boardbots_logic.h) */
+            const struct kbb_lat *bl = &klsb_r.btab.l[i - o->n]; int bf = kbb_fate(bl, (int)o->esc_state); long bv = 0;
+            if (bf == KBB_FATE_DEAD) { dead = 1; fate = "DEAD"; fc = KLU_C_DEAD; }
+            else if (bf == KBB_FATE_ESCAPED) { fate = "ESCAPED"; fc = KLU_C_GREENHI; }
+            else if (bf == KBB_FATE_LEFT) { fate = "LEFT BEHIND"; fc = KLU_C_OUT; }
+            else { fate = "AI"; fc = KLU_C_CHALK; }
+            if (kbb_money(bl, bf, &bv)) klu_dollars(num, sizeof num, bv); else strcpy(num, "-");
         } else {
             const struct klor_row *r = &o->bot[i - o->n];
             if (klsb.take) {      /* [HUD] OnlineBoardTake: GUESS: a bot has no score row (flags and money read 0 for it), so ESCAPED (bit 0x40) never shows today; a living bot at the end is LEFT BEHIND, a dead one DEAD. Human rows: 0x20 ABOARD / 0x40 ESCAPED PROVEN live 10-27 (BOSE4) */
@@ -980,6 +998,40 @@ static void klsb_apply(void)
     }
 }
 
+/* [HUD] OnlineBoardBots: latch every AI heister seen in the actor scan through states 0x19..0x1f (cleared in the intro states 0x16..0x18), ask the HOST's bot ledger for each, and log one summary line
+   when the round-end state is reached. Tick thread only (compose runs on the same thread, so no extra lock). Reads only; client: no ledger, payout stays '-'. */
+static void klsb_bots_track(const struct klor_snap *o, int st)
+{
+    int i, role_host;
+    if (!klsb.bots) return;
+    if (st >= 0x16 && st <= 0x18) { if (klsb_r.btab_live) { kbb_reset(&klsb_r.btab); klsb_r.btab_live = 0; klsb_r.btab_told = 0; } return; }
+    if (st < 0x19 || st > 0x1f) return;
+    kbb_begin(&klsb_r.btab);
+    for (i = 0; i < o->nbots; i++) {
+        const struct klor_row *b = &o->bot[i]; int s = kbb_note(&klsb_r.btab, b->actor, b->name, b->alive);
+        (void)s;
+    }
+    role_host = 0;
+    for (i = 0; i < klsb_r.btab.n; i++) {      /* every latched bot, also one that left the scan (boarded and removed): the ledger may still know it */
+        int ab = 0, tr; long ty = 0;
+        tr = klbf_ob_ledger((DWORD)klsb_r.btab.l[i].actor, &ab, &ty);
+        kbb_ledger(&klsb_r.btab, i, tr, ab, ty);
+        if (tr) role_host = 1;
+    }
+    klsb_r.btab_live = 1;
+    if (st == 0x1f && !klsb_r.btab_told) {
+        int nd, ne, nl, na, nled;
+        klsb_r.btab_told = 1;
+        kbb_summary(&klsb_r.btab, (int)o->esc_state, &nd, &ne, &nl, &na, &nled);
+        klog("hud: scoreboard: OnlineBoardBots: state 1f, %d AI heister(s) latched this round: %d DEAD, %d ESCAPED (host ledger aboard, else INFERRED: vanished alive, never seen dead, van state %d >= %d), %d LEFT BEHIND, %d unknown (AI); host ledger knows %d (%s; payout '-' for the rest). NOT RUN IN THE GAME",
+             klsb_r.btab.n, nd, ne, (int)o->esc_state, KBB_VAN_LASTCALL, nl, na, nled, role_host ? "this seat is the HOST" : "no ledger: CLIENT or OnlineBank off");
+        for (i = 0; i < klsb_r.btab.n; i++) {
+            const struct kbb_lat *l = &klsb_r.btab.l[i];
+            klog("hud: scoreboard: OnlineBoardBots: bot %d actor %08lx '%s' present %d alive %d seen alive/dead %d/%d ledger %d aboard %d tally %ld -> fate %d", i, l->actor, l->name, l->present, l->alive_now, l->seen_alive, l->seen_dead, l->ledger, l->aboard, l->tally, kbb_fate(l, (int)o->esc_state));
+        }
+    }
+}
+
 static void klsb_probe_line(DWORD osd, const struct klb_snap *s, int have)
 {
     static DWORD said; static LONG lc, lu, ls, lclk; DWORD now = GetTickCount(), el, vt = 0, endb = 0, dsys; float end = 0; LONG frame = 0, c = klsb_n_call, u = klsb_n_ours, st = klsb_n_stock, clk = klu_n_call;
@@ -1021,7 +1073,7 @@ static void klsb_tick(int game_thread)
         if (klb_read_hud(&o) && o.online && (int)o.state != told_state && o.state >= 0x1d) {
             DWORD el2 = klsb_r.elem ? klsb_r.elem : 0, vt2 = el2 ? klh_rd32(el2) : 0; int i;
             told_state = o.state;
-            klog("hud: scoreboard: ONLINE state %02lx (the stock round-over panel stays; the Arcade board is not drawn online yet): outro element %08lx vtable %08lx (%s), %d rules records (NOT seats), %d names from the GUESSED std::string at client+8 (0 is expected: klor_read's own names_ok, from the body's model, is the real count - see the 'online read:' line)", (DWORD)o.state, el2, vt2, vt2 == KLSB_VT ? "ZHeistOutroDisplay, same class as Arcade" : "other / not wrapped", o.on_n, o.on_named);
+            klog("hud: scoreboard: ONLINE state %02lx (diagnostic of the Arcade readers only: they refuse online; whether the online card is drawn is told by the 'OnlineBoardState' / 'OnlineBoardCarrier' lines, [HUD] OnlineBoard=1 draws it from the online snapshot): outro element %08lx vtable %08lx (%s), %d rules records (NOT seats), %d names from the GUESSED std::string at client+8 (0 is expected: klor_read's own names_ok, from the body's model, is the real count - see the 'online read:' line)", (DWORD)o.state, el2, vt2, vt2 == KLSB_VT ? "ZHeistOutroDisplay, same class as Arcade" : "other / not wrapped", o.on_n, o.on_named);
             for (i = 0; i < o.on_n && i < 16; i++) klog("hud: scoreboard: ONLINE row %d rec %08lx '%s' flags %08lx loot %ld rewards %ld", i, o.on_rec[i], o.on_name[i], o.on_flags[i], o.on_loot[i], o.on_rew[i]);
         }
     }
@@ -1062,7 +1114,7 @@ static void klsb_tick(int game_thread)
     if (!have && !hon) { klsb_r.valid = 0; return; }
     klgrd_round_reset(st);      /* [Grades] RankUp: latch the ranks in the round (states 0x16..0x19), compare in 0x1f */
     if (have) klgrd_track(0, s.human >= 0 ? s.human : 0, 1, st);
-    else { int q; klgrd_note_online(&on); for (q = 0; q < on.n; q++) klgrd_track(1, on.r[q].seat, on.r[q].seat == on.local, st); }
+    else { int q; klgrd_note_online(&on); for (q = 0; q < on.n; q++) klgrd_track(1, on.r[q].seat, on.r[q].seat == on.local, st); klsb_bots_track(&on, st); }
     if (klsb.on && !klsb_r.made && ((st >= 0x17 && st <= 0x19) || (nowrap && st == 0x1f) || ipath) && klu_r.fonts[0]) {
         EnterCriticalSection(&klsb_cs);
         klsb_r.made = klsb_make_pool();
@@ -1140,6 +1192,7 @@ static void klsb_init(void)
     klsb.online = klu_inii("OnlineBoard", 0, 0, 1); klsb.ostate = klsb.online && klu_inii("OnlineBoardState", 0, 0, 1); klsb.intro = klu_inii("OnlineIntro", 0, 0, 1); klsb.istate = klsb.intro && klu_inii("OnlineIntroState", 0, 0, 1);
     klsb_mapfb = klu_inii("OnlineIntroMapName", 1, 0, 1);      /* (recommended on) the intro card's map name: an expansion map's own name ([Names]) before the stock LOC lookup */
     klsb.carrier = klsb.ostate && klu_inii("OnlineBoardCarrier", 0, 0, 1);
+    klsb.bots = klsb.online && klu_inii("OnlineBoardBots", 0, 0, 1);      /* 2026-11-01 (recommended off until benched, tag OB1): AI heister rows of the online card from a per-round latch + the host ledger */
     klsb.icarrier = klsb.istate ? klu_inii("OnlineIntroCarrier", 0, 0, 2) : 0;
     klsb.take = klsb.online && klu_inii("OnlineBoardTake", 0, 0, 1); klsb.icount = klsb.istate && klu_inii("OnlineIntroCount", 0, 0, 1);
     klsb.probe = klu_inii("ScoreboardProbe", 0, 0, 1); klsb.test = klu_inii("ScoreboardTest", 0, 0, 1); klsb.fault = klu_inii("ScoreboardFault", 0, 0, 1);

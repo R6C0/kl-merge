@@ -59,7 +59,8 @@ static void kllnm_killclear(void) { }
 static const char *kllnm_name_now(int n) { (void)n; return 0; }
 static const char *kllnm_name_cur(int n) { (void)n; return 0; }   /* kllocname.c stub */
 static DWORD kllnm_orig_slot0(void *loc) { (void)loc; return 0; }   /* kllocname.c stub */
-#ifndef KLSB_HARNESS_HAS_BOARD2                        /* klwatch_test.c does not include klhud_board2.c: its state-render slot ([HUD] OnlineBoardState) is a no-op there */
+static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally) { (void)actor; (void)aboard; (void)tally; return 0; }   /* klbotfill.c stub: no puppeteer here (klhud_board2.c OnlineBoardBots) */
+#ifndef KLSB_HARNESS_HAS_BOARD2                       /* klwatch_test.c does not include klhud_board2.c: its state-render slot ([HUD] OnlineBoardState) is a no-op there */
 static void klsb_state_render(void *el, void *ctx, void *cam) { (void)el; (void)ctx; (void)cam; }
 #endif
 
