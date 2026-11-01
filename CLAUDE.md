@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~19:40 - [c9] Lens crack never drew: ReShade could not build its ps_3_0 pipeline (game is D3D9; unrolled pass ~9494
+slots), fixed with [loop] (~1410), 13d99199b; kit c9_1028\lc1\install_lc1.sh waits for a gap in ce's chain, then LC2 crack shots.
+--d3shots now SwapChain=0 (SC=1 hid ReShade from KLHook, SHOTS3 A/B). Live still ship1103 (a6ea229f / 81c95751).
+
 2026-11-01 ~18:30 - [c9] Q33 5/5 + Q34 DM09 PASS. DD01 lacked F01_Main.bots.zip (bots inert): installed via botsstock_1026\install_any.py
 DD01; Q34B_DD01 PASS, 6 bots took 9 stacks $770k. SHOTS2 0 shots: --d3shots benches never get ReShade's present (loaded=0);
 SHOTS3 A/B (SwapChain 0 vs 1) after ce's SP2, then ce LV1, EO1. Live still ship1103 (a6ea229f / 81c95751).
@@ -75,10 +79,6 @@ SHOTS3 A/B (SwapChain 0 vs 1) after ce's SP2, then ce LV1, EO1. Live still ship1
 2026-11-01 ~17:20 - [ce] SP1 stack probe 3/3 PASS (0 faults). The 0x4e3f40 detour is refused in session runs (hashed range), so I added
 OnlineStackProbe=3 = DR0 write watch, TEST only (0fe34f0e2, dll week_1028\stackprobe3_test 1cc357df). Draining maps have type-0 stacks (DD09/DD05),
 control DD03 has type 2; each drained stack arms one type-1 drop pool (money DROPPED where bots don't look). SP2 (kit week_1028\sp2) after c9's queue.
-
-2026-11-01 ~17:00 - [c9] SHOTS1 done (PASS, 0 faults): hire page + MOD CONTROLS render online, shots in KL_PortTools\build\klhook\solo\
-SHOTS1\pick + status page. Off in ship1103 only for lack of [Hire] Page=1 / [Keys] ControlsPage=1 (queued NEXT_SHIP.txt, cosmetics first).
-Lens crack fires (log) but d3shots miss ReShade. ce's SP1 on the game now; then Q33 DD07 DM01 DM06 DD02 + Q34 (rm q33\PAUSE).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
