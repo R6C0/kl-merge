@@ -86,6 +86,7 @@ int main(void)
         CHECK(kvp_origin_skip(1, org) && kvp_origin_skip(1, (float[3]){ 1.0f, -1.0f, 0.5f }), "origin skip on: (0,0,0) within 1 cm skipped");
         CHECK(!kvp_origin_skip(1, (float[3]){ 1.5f, 0, 0 }) && !kvp_origin_skip(1, real), "origin skip on: a placed bot is kept");
         CHECK(!kvp_origin_skip(0, org), "origin skip off: nobody skipped (old rule)");
+        CHECK(kvp_all_unplaced(1, 7, 7, 11000, 10000) && !kvp_all_unplaced(1, 7, 6, 11000, 10000) && !kvp_all_unplaced(1, 7, 7, 9000, 10000) && !kvp_all_unplaced(1, 0, 0, 11000, 10000) && !kvp_all_unplaced(0, 7, 7, 11000, 10000), "unplaced guard: all at origin and old enough only, off = never");
     }
 
     CHECK(kgu_floor(0.5f, 1, 3.0f) == 3.0f && kgu_floor(4.0f, 1, 3.0f) == 4.0f, "flop meter: raised to the floor, never lowered");

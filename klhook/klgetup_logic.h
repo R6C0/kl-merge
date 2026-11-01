@@ -226,4 +226,10 @@ static int kvp_origin_skip(int on, const float *p)
     return on && fabsf(p[0]) <= 1 && fabsf(p[1]) <= 1 && fabsf(p[2]) <= 1;
 }
 
+/* OnlineUnplacedGuard (G3): 1 = nb > 0 bots, all nb of them at the origin, and the round is older than minMs. */
+static int kvp_all_unplaced(int on, int nb, int norigin, unsigned long ageMs, unsigned long minMs)
+{
+    return on && nb > 0 && norigin == nb && ageMs > minMs;
+}
+
 #endif

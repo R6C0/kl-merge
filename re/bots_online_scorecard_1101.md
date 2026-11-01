@@ -191,3 +191,17 @@ Kit C:\kl_build_1024\week_1028\sp1 (ship1103 + the key, TEST hook stackprobe_tes
   (equal amount within +-3 s of the drain: up to 80 m), waits out state 2, takes it whole (Take=2). Workflow review: SAFE_TO_MERGE.
 - Bench: SP2 = OnlineStackProbe=3 + OnlineDropFollow=1, DD09 + DD05, TEST hook week_1028\dropfollow_test a40d6834 (SHIP twin
   dropfollow_ship d1c03cd5), kit week_1028\sp2. PASS = 'drop armed ... equal amount yes' lines and 'dropfollow: ... GRABBED' with a tally > 0.
+
+## G3 DD01 research (11-01)
+
+Cause: the live `KLExpansion\Maps\DD01` folder has no `F01_Main.bots.zip` (DD02..DD09 have one). The stock `merc_bot_squad` scripts are eHeistOnly in the plain archive, so online they never run and nothing places the 7 Ally actors: they are spawned, alive (health 280) and read (0,0,0) all round. The hook reads the right node (`+0x460` gives real positions on DD04).
+- `botgate: WARNING slot F01: Ally bots ON but no .bots.zip next to ...\DD01\F01_Main.zip` in `Q31_DD01` (10:32:42) and `Q32_DD01` (13:27:38); DD04/DD02 log `botgate: slot F04 role 2: Ally bots ON -> ...\F04_Main.bots.zip`.
+- Staged copy exists: `C:\kl_build_1024\botsstock_1026\DD01\F01_Main.bots.zip`; live `F01_Main.zip` md5 27680110... equals `SRC_MD5.txt`, so it still fits. install_any.py placed one on 10-26 ~19:20; a later bench undo probably removed it (GUESS).
+- Explains: `exit walk from (0, 0, 0)` for all 7 at +156 s; `did not reach the exit trigger ... bot at (0, 0, 0)`; the spurious `trig: FIRE` (7 bots stacked at the origin); the 58 `+0x5c` "behind a door" cases (Alu cases in DL10_CtrlRoom behind kick doors 03/04; the squads' KickDoorBehaviourRout -> KickdoorMonitor -> DoorOpened clears them; humans are not gated by `+0x5c`).
+- Not the scripted humans (DD04 has the same fixed host and its bots move at once). A real gap for any online DD01 round without the zip.
+- Not to build: clearing `+0x5c` by a data write (reproduces BOS1's stall, kick-door pathblockers stay shut).
+
+Code (default off): `[BotFill] OnlineUnplacedGuard` (`kvp_all_unplaced`, `klbotfill.c` before the trigger tick): all bots at the origin more than 10 s into a round -> log once per round and give the order loop no bots. It only makes the failure visible and stops useless orders; the fix is the data file. `OnlineTriggerOriginSkip` (G3 a) stays the trigger answer.
+
+Bench recipe change: install the zip first (owner): `python C:\kl_build_1024\botsstock_1026\install_any.py DD01`, then run DD01 with `OnlineTactics=1 OnlineHost=1 OnlineTriggers=1 OnlineTriggerOriginSkip=1`. Control run without the zip adds `OnlineUnplacedGuard=1`.
+PASS (with zip): `botgate: slot F01 ... -> ...\DD01\F01_Main.bots.zip` instead of the WARNING; `tactics: scan:` shows N armed stack(s) with the +M shut-door count falling, or bots take the exit and call the van by +155 s; `exit walk from (x,y,z)` non-zero; no `bot at (0, 0, 0)`; round summary shows a van call and boarded bots. PASS (control, no zip): one `OnlineUnplacedGuard` line per round, no `exit walk from (0, 0, 0)`, no `did not reach`.

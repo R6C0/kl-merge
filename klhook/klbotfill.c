@@ -125,6 +125,7 @@ static float klbf_leg_speed = 300.0f, klbf_leg_near = 0.0f, klbf_leg_dy = 0.0f, 
 static int klbf_bank_mode, klbf_ba_mode; static float klbf_ba_m = 6000.0f; static long klbf_bank_total; static int klbf_bank_n;      /* [BotFill] OnlineBank (0 off, 1 ledger, 2 dry), OnlineBoardAll (0 off, 1 board, 2 dry), OnlineBoardAllM (cm) */
 static int klbf_bc_mode, klbf_bc_told; static long klbf_bc_dry;      /* [BotFill] OnlineBankCredit (0 off, 1 credit, 2 dry); klbf_bc_told: "no escaped seat yet" said this round; klbf_bc_dry: ledger value last logged dry */
 static int klbf_trig;      /* [BotFill] OnlineTriggers: 0 off, 1 fire, 2 dry (klbf_trig_* below) */
+static int klbf_unpl; static DWORD klbf_unpl_at;      /* [BotFill] OnlineUnplacedGuard (recommended off until benched): kvp_all_unplaced; _at = round start tick */
 static int klbf_vp_sane, klbf_trig_orig;    /* [BotFill] OnlineVanPosSane (recommended on), OnlineTriggerOriginSkip (recommended on): kvp_sane / kvp_origin_skip in klgetup_logic.h */
 static int klbf_trig_x;    /* [BotFill] OnlineTriggersExtra: ZTriggerBox2 / ZOnlineTriggerBox too, 0 off, 1 fire, 2 dry */
 static int klbf_ot_ramp, klbf_ot_rampdry;      /* OnlineRampFire / OnlineRampDry toggles (read in the init, used by klbf_ramp_* below) */
@@ -282,6 +283,7 @@ static void klbf_init(void)
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
     klbf_trig_x = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggersExtra", 0, klh_ini); if (klbf_trig_x < 0 || klbf_trig_x > 2) klbf_trig_x = 0;      /* ZTriggerBox2 / ZOnlineTriggerBox: no stock cop wave uses them (money-stack pick-ups, location trackers), so off by default */
     klbf_vp_sane = GetPrivateProfileIntA("BotFill", "OnlineVanPosSane", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a van place that is far outside the map is not used: exit trigger / escape box instead */
+    klbf_unpl = GetPrivateProfileIntA("BotFill", "OnlineUnplacedGuard", 0, klh_ini) != 0;      /* (recommended off until benched) every Ally bot at (0,0,0) 10 s into a round = the level squads are not running (no bots.zip): give no orders */
     klbf_trig_orig = GetPrivateProfileIntA("BotFill", "OnlineTriggerOriginSkip", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a bot that reads (0,0,0) is not "inside" an OnlineTriggers box */
     klbf_bank_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBank", 0, klh_ini); if (klbf_bank_mode < 0 || klbf_bank_mode > 2) klbf_bank_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     klbf_bc_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBankCredit", 0, klh_ini); if (klbf_bc_mode < 0 || klbf_bc_mode > 2) klbf_bc_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
@@ -1619,6 +1621,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         klbf_gm_logged = 0; klbf_gm_last = 0; klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
         klbf_way_load(); klbf_ramp_load(); klbf_trig_load();
         if (klbf_sp) { if (klbf_sp_nown) klog("botfill: stackprobe: last round: %d call(s) of 0x4e3f40 by the hook itself (not logged)", klbf_sp_nown); klbf_sp_nl = klbf_sp_nd = klbf_sp_nown = 0; klbf_sp_install(); }      /* OnlineStackProbe: per-round caps; the detour (key 2) goes in on the first host round */
+        klbf_unpl_at = now;
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
@@ -1655,6 +1658,12 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
     {   int q; for (q = 0; q < nb && q < KLBF_OT_BOTS_MAX; q++) klbf_pb_bots[q] = bots[q].actor; klbf_pb_n = nb < KLBF_OT_BOTS_MAX ? nb : KLBF_OT_BOTS_MAX; klbf_pb_at = GetTickCount(); }      /* OnlinePointBlank's bot list */
     {   float bp[KLBF_OT_BOTS][3]; int q; for (q = 0; q < nb; q++) memcpy(bp[q], bots[q].pos, 12); klbf_ramp_tick(now, bp, nb); }      /* OnlineRampFire */
+    {   int q, no = 0; static int ugRound = -1;      /* OnlineUnplacedGuard (G3, DD01 without F01_Main.bots.zip): the squads that place the Ally actors never run, all read (0,0,0); GUESS: 10 s is enough for a working level to move them */
+        for (q = 0; q < nb; q++) if (kvp_origin_skip(1, bots[q].pos)) no++;
+        if (kvp_all_unplaced(klbf_unpl, nb, no, now - klbf_unpl_at, 10000u)) {
+            if (ugRound != klbf_ot_rounds) { ugRound = klbf_ot_rounds; klog("botfill: tactics: all %d Ally bot(s) read (0,0,0) %lu s into the round: the level's squads are not running (no bots.zip? see botgate WARNING); no orders given (OnlineUnplacedGuard, said once a round)", nb, (unsigned long)((now - klbf_unpl_at) / 1000)); }
+            nb = 0;      /* data/tick only: the order loop, idle-van and exit walk see no bots */
+        } }
     {   DWORD ta[KLBF_OT_BOTS]; int q, nsk = 0; static int skRound = -1; for (q = 0; q < nb; q++) { ta[q] = bots[q].actor; if (kvp_origin_skip(klbf_trig_orig, bots[q].pos)) { ta[q] = 0; nsk++; } }      /* OnlineTriggerOriginSkip (G3, DD01: 7 bots at (0,0,0) fired a box): a 0 actor is left out of the inside tests */
         if (nsk && skRound != klbf_ot_rounds) { skRound = klbf_ot_rounds; klog("botfill: trig: %d of %d bot(s) read (0,0,0): left out of the box inside tests (OnlineTriggerOriginSkip, said once a round)", nsk, nb); }
         klbf_trig_tick(now, ta, nb); }      /* OnlineTriggers */
