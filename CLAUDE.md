@@ -76,10 +76,9 @@ benched BotFill set + Grenade Throw 0. Live ship1101 is still dll a6ea229f + ini
 first launch). GUN13 never opened the shop's weapon list (joiner waited for FABuyWeaponsNew instead of sending ZW_SELECT3 at state 0x20); GUN14
 re-runs it. Next ship ini: OnlineGetUpRange=2500 (Arcade's RushRange). Kit: C:\kl_build_1024\c9_1028\q29, \gun13.
 
-2026-11-01 ~02:55 UTC - scheduled check-in: PC busy (c9 TEST twin on dinput8 02:47 UTC), nothing run. Mod Options 'Recommended' would have UNDONE ship1101 (wrote OnlineGetUp/Beacon/KeepGoal
-and OnlineHost/OnlineTactics = 0 on a live-ini copy): five rows + repo ini markers now recommended on with proofs; preset leaves the get-up/host keys alone. It still rewrites ~20 other live
-keys (Hire, HUD Online*, OnlineSet 9, Lobby Solo, Glare, FrameLimit): list in debug/notes/2026-11-01-scheduled-triage.md for ce/c9. Online get-up skips all help in van state 1..5, Arcade
-(RushVan=0) does not: proposed OnlineGetUpIgnoreVan, left to ce. Owner: nothing to install; lenscrack_1031 INSTALL bat still waiting if wanted.
+2026-11-01 ~06:15 - [ce] IV1 PASS (DD08 online, OnlineGetUpIgnoreVan=1, test dll d82d5d84): 0 faults both seats, restore ok; the only down came
+with the van idle, so the van path is still unexercised (keep= stays). GUN13 CLOSED (GUN15): baked shop pictures show online on DM07 + DD10.
+Game handed to c9 for Q30 (21 maps into round 2).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

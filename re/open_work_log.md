@@ -1,3 +1,8 @@
+2026-11-01 ~06:15 - [ce] IV1 PASS (DD08 online, BP20 inis + OnlineGetUpIgnoreVan=1, test dll d82d5d84 from 6b140380a): both seats 0 faults, restore
+a6ea229f/12d5f8e1, key read =1 on both. One down (seat 1, van idle): bot 4 sprinted 13.4 m, held 2.4-3.4 m, up in 15 s. No down in van state 1..5, so
+the IgnoreVan path is NOT exercised: no regression only; the onlinegetupignorevan keep= stays. GUN13 CLOSED via GUN15 (DM07 + DD10 PASS): baked HK69 /
+TYPE 81 / REM 700 / MINIMI pictures show in the online shop (rows 13/16/32/35); the list highlight lags the info panel by a row. Game handed to c9 (Q30).
+
 2026-11-01 ~06:40 - [c9] Q30 kit staged offline (C:\kl_build_1024\c9_1028\q30, verified READY): Q29's 21 map pairs with a new tail so both seats
 wait 0x20 then 0x19 again (round 2, 30 s, pos), AutoExit 1950, secs 900 (DM09 1100), ~3.5 h. summarize_q30.py counts 'net: state X -> 0x19' with a
 0x1f/0x20 between (GUN14 both PASS; Q29 only DM07, whose short round 1 kept the joiner). Risk: passive shop may end in 0x29; fallback is GUN14's
