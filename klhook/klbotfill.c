@@ -37,8 +37,6 @@ static int klbf_esn, klbf_vgs, klbf_vgs_margin = 60, klbf_vgs_defer; static DWOR
 static int klbf_ap;      /* [BotFill] ArcadeProbe 0/1: log-only probe of an OFFLINE Arcade round (stacks taken, record money, van, aboard); see klbf_ap_run */
 static int klbf_sp;      /* [BotFill] OnlineStackProbe 0/1/2/3 (block before klbf_ot_run) */
 static int klbf_df; static float klbf_df_m = 1500.0f;      /* [BotFill] OnlineDropFollow / OnlineDropFollowM (game units): a bot whose stack went 'gone' follows a type-1 drop armed near it (block before klbf_ot_run) */
-#ifdef KLHOOK_TEST
-#endif
 static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near = 150.0f;
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
@@ -1525,8 +1523,10 @@ static void klbf_df_see(DWORD o, int amt, DWORD now)
     for (i = 0; i < KLBF_DR_MAX; i++) { if (klbf_dr[i].o == o) { f = i; break; } if (f < 0 && !klbf_dr[i].o) f = i; }
     if (f < 0) return;      /* table full: the rest is not tracked */
     if (klbf_dr[f].o != o) { memset(&klbf_dr[f], 0, sizeof klbf_dr[f]); klbf_dr[f].o = o; klbf_dr[f].first = now ? now : 1; }
-    klbf_dr[f].seen = 1; klbf_dr[f].amt = amt;
-    {   DWORD fl = 0, e2, n2; klbf_dr[f].hid = (e2 = klh_rd32(o + 0x24)) && (n2 = klh_rd32(e2 + 4)) && klh_rd(n2 + 0x3c, &fl, 4) ? ((fl & 0x400) ? 1 : 0) : -1; }      /* node-hidden bit as klbf_sp_desc; re-read each tick (GUESS: a real drop is unhidden when it appears, the round-start pool objects stay hidden at one pool point) */
+    {   DWORD fl = 0, e2, n2; int oa = klbf_dr[f].amt, oh = klbf_dr[f].hid, nh = (e2 = klh_rd32(o + 0x24)) && (n2 = klh_rd32(e2 + 4)) && klh_rd(n2 + 0x3c, &fl, 4) ? ((fl & 0x400) ? 1 : 0) : -1;
+        /* wk-dropfix-1101 review: a pool object re-armed for a real drop (amount changed, or hidden 1 -> 0) is a NEW drop: restart its clock and drain window, else a later real drain falls outside the first-sighting +-3 s and DropFollow never fires */
+        if (oa && ((amt != oa) || (oh == 1 && nh == 0))) { klbf_dr[f].first = now ? now : 1; klbf_dr[f].drn = 0; klbf_dr[f].skl = 0; klbf_dr[f].long60 = 0; }
+        klbf_dr[f].hid = nh; klbf_dr[f].seen = 1; klbf_dr[f].amt = amt; }      /* node-hidden bit as klbf_sp_desc; re-read each tick (GUESS: a real drop is unhidden when it appears, the round-start pool objects stay hidden at one pool point; -1 = node unreadable) */
     klbf_dr[f].posok = (ent = klh_rd32(o + 0x24)) && (node = klh_rd32(ent + 4)) && kle_node(node, klbf_dr[f].pos, 0);      /* re-read each tick: the drop settles (0x5f1d0a) */
 }
 
@@ -1586,7 +1586,7 @@ static int klbf_df_pick(DWORD stack, int self, DWORD now)
         for (q = 0; q < KLBF_OT_BOTS; q++) if (q != self && klbf_ob[q].actor && klbf_ob[q].phase == 1 && klbf_ob[q].target == klbf_dr[i].o) taken = 1;
         if (taken || klbf_ot_isbad(klbf_dr[i].o, now)) continue;
         if (!kdf_drop_ok(klbf_dr[i].hid, klbf_dr[i].drn)) {      /* wk-dropfix-1101: a hidden pool drop / one with no preceding drain is never a target (SP2: type 1, hidden 1, all at the pool point on DD09 + DD05) */
-            if (!klbf_dr[i].skl) { klbf_dr[i].skl = 1; klog("botfill: dropfollow: drop %08lx (amt %d) skipped: hidden %d, drained-before %d (a round-start pool object, not a dead carrier's drop)", (unsigned long)klbf_dr[i].o, klbf_dr[i].amt, klbf_dr[i].hid, (int)klbf_dr[i].drn); }
+            if (!klbf_dr[i].skl) { klbf_dr[i].skl = 1; klog("botfill: dropfollow: drop %08lx (amt %d) skipped: hidden %d (-1 = node unreadable), drained-before %d (a round-start pool object, not a dead carrier's drop)", (unsigned long)klbf_dr[i].o, klbf_dr[i].amt, klbf_dr[i].hid, (int)klbf_dr[i].drn); }
             continue; }
         d = kle_dist(sp, klbf_dr[i].pos);
         eq = lastAmt > 0 && klbf_dr[i].amt == lastAmt;
