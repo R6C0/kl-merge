@@ -17,7 +17,7 @@ cannot give (the online hook's far-counted boardall credits, get-up orders, trig
 Round N of a log that has no summary (bench stopped inside the round) is reported from its census / van / bot lines with
 '(no summary)'. Reads only. Exit 0 always (a table, not a verdict); 1 when nothing was found.
 """
-import argparse, os, re, sys
+import argparse, collections, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -32,6 +32,10 @@ R_VAN = re.compile(r'arcadeprobe: van state (\d+) -> (\d+) at \+(\d+) s \(clock 
 R_BOT = re.compile(r'arcadeprobe: bot (\d+) status (\d+) -> (\d+)(?: ABOARD| DEAD)? at \+(\d+) s')
 R_SUM = re.compile(r'arcadeprobe: tactics: (round|interim) summary: (\d+) bot\(s\) \(AI crew records\), (\d+) stack\(s\) taken, (-?\d+) total .*?, (\d+) boarded, (\d+) stack\(s\) never emptied'
                    r' \| van call s (\d+|none), (\d+) dead')
+# the hook's own box fires (klbotfill.c klbf_trig_tick / klbf_trig_other): 'FIRE box ...' = ZTriggerBox, else the class name. DRY lines are not fires.
+# NOTE: a FIRE line is counted for the round whose start line (R_START) came before it. A FIRE line BEFORE the first round-start line (or in the gap before
+# the next round's start line, which is attributed to the previous round) is NOT counted for the right round / not at all: the Trigger FIREs column can undercount.
+R_FIRE = re.compile(r'botfill: trig: FIRE (box|ZTriggerBox2|ZOnlineTriggerBox) ')
 R_FATAL = re.compile(r'FATAL|CRASH|assert', re.I)
 
 
@@ -45,7 +49,11 @@ def parse(lines):
             if cur is not None:
                 rounds.append(cur)
             cur = dict(level=int(m.group(1)), bots=int(m.group(3)), armed=None, door=None, taken=None, total=None, van_call=None,
-                       why='', boarded=set(), dead=set(), never=None, summary=False, clock=int(m.group(4)))
+                       why='', boarded=set(), dead=set(), never=None, summary=False, clock=int(m.group(4)), fires=collections.Counter())
+            continue
+        m = R_FIRE.search(l)
+        if m and cur is not None:
+            cur['fires'][{'box': 'TriggerBox'}.get(m.group(1), m.group(1)[1:])] += 1
             continue
         if cur is None:
             continue
@@ -92,6 +100,15 @@ def money(v):
     return '-' if v is None else ('0' if v == 0 else '%.2fM' % (v / 1e6))
 
 
+def fires_cell(r):
+    """Trigger FIREs of a round: the hook's 'trig: FIRE' lines. OFFLINE Arcade the game's own census fires the boxes (0x7f6850 counts the Ally bots)
+    and the hook's OnlineTriggers stays idle (host-only), so the log holds none: 0 here is 'the game fires, not counted', NOT 'no box fired'."""
+    f = r.get('fires')
+    if not f:
+        return '0 (Arcade: game fires, not logged)'
+    return '%d (%s)' % (sum(f.values()), ', '.join('%s %d' % kv for kv in sorted(f.items())))
+
+
 def row(name, r):
     if r is None:
         return [name, 'no ArcadeProbe round'] + ['-'] * (len(COLS) - 2)
@@ -101,7 +118,7 @@ def row(name, r):
     if not r['summary']:
         taken += ' (no summary)'
     return [name, str(r['bots']), armed, taken, money(r['total']), van, '%d / %d' % (r['boarded_n'], r['bots']),
-            '-', str(r['dead_n']), '-' if r['never'] is None else str(r['never']), '-', '-']
+            '-', str(r['dead_n']), '-' if r['never'] is None else str(r['never']), '-', fires_cell(r)]
 
 
 def table(rows):
@@ -154,7 +171,7 @@ def main(argv=None):
             rows.append(row(m if ls is not None else m + ' (no log)', r))
     print(table(rows))
     print('\nArcade baseline, round %d, offline one seat, game record fields (not a hook tally). Aboard = crew records with status 4 (ABOARD); $ carried = '
-          'sum of each AI record\'s highest money field; Stacks never emptied = followed armed stacks still not at 0 at the round end.' % a.round)
+          'sum of each AI record\'s highest money field; Stacks never emptied = followed armed stacks still not at 0 at the round end; Trigger FIREs = the hook\'s own "trig: FIRE" lines in the round (an online log has them; an Arcade log cannot, the game fires there).' % a.round)
     print('RESULT: %s (%d of %d map(s) with an ArcadeProbe round)' % ('OK' if found else 'NONE', found, len(rows)))
     return 0 if found else 1
 
