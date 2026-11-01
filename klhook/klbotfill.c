@@ -1517,11 +1517,14 @@ static void klbf_df_tick(const DWORD *mo, const int *mamt, const float (*mpos)[3
 }
 
 /* OnlineDropFollow: the best armed drop for a stack that went gone: the stack's place = where it drained (else its node now), the drop within OnlineDropFollowM, an equal amount first, then the nearest;
-   a drop another bot already walks to is skipped. -1 = none. */
-static int klbf_df_pick(DWORD stack, int self)
+   a drop another bot already walks to, or one a bot gave up on (klbf_ot_isbad), is skipped. -1 = none.
+   The drop spawns at the CARRIER's place, not the stack's (RE 0x4988f0), so a drop with the stack's exact amount that showed up within 3 s of the drain
+   is taken up to KLBF_DF_EQM away (DD09: no team-1 actor within 30 m of any stack). */
+#define KLBF_DF_EQM 8000.0f
+static int klbf_df_pick(DWORD stack, int self, DWORD now)
 {
-    float sp[3]; int i, found = 0, best = -1, bestEq = 0, lastAmt = 0; float bd = 1e30f; DWORD ent, node;
-    for (i = 0; i < klbf_dd_n; i++) if (klbf_dd[i].o == stack) { memcpy(sp, klbf_dd[i].pos, 12); lastAmt = klbf_dd[i].amt; found = 1; }
+    float sp[3]; int i, found = 0, best = -1, bestEq = 0, lastAmt = 0; float bd = 1e30f; DWORD ent, node, drainAt = 0;
+    for (i = 0; i < klbf_dd_n; i++) if (klbf_dd[i].o == stack) { memcpy(sp, klbf_dd[i].pos, 12); lastAmt = klbf_dd[i].amt; drainAt = klbf_dd[i].at; found = 1; }
     if (!found) for (i = 0; i < klbf_dp_n; i++) if (klbf_dp[i].o == stack) { memcpy(sp, klbf_dp[i].pos, 12); lastAmt = klbf_dp[i].amt; found = 1; }
     if (!found && (ent = klh_rd32(stack + 0x24)) && (node = klh_rd32(ent + 4)) && kle_node(node, sp, 0)) found = 1;
     if (!found) return -1;
@@ -1529,9 +1532,10 @@ static int klbf_df_pick(DWORD stack, int self)
         int q, taken = 0, eq; float d;
         if (!klbf_dr[i].o || !klbf_dr[i].seen || !klbf_dr[i].posok || klbf_dr[i].amt <= 0) continue;
         for (q = 0; q < KLBF_OT_BOTS; q++) if (q != self && klbf_ob[q].actor && klbf_ob[q].phase == 1 && klbf_ob[q].target == klbf_dr[i].o) taken = 1;
-        if (taken) continue;
-        d = kle_dist(sp, klbf_dr[i].pos); if (!(d <= klbf_df_m)) continue;
+        if (taken || klbf_ot_isbad(klbf_dr[i].o, now)) continue;
+        d = kle_dist(sp, klbf_dr[i].pos);
         eq = lastAmt > 0 && klbf_dr[i].amt == lastAmt;
+        if (!(d <= klbf_df_m) && !(eq && drainAt && klbf_dr[i].first - drainAt + 3000u <= 6000u && d <= KLBF_DF_EQM)) continue;      /* first within +-3 s of the drain */
         if (best < 0 || (eq && !bestEq) || (eq == bestEq && d < bd)) { best = i; bd = d; bestEq = eq; }
     }
     return best;
@@ -1757,7 +1761,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klbf_ob[s].phase == 1) {      /* walking to a stack: reached? gone? stalled? */
             DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0; DWORD ent, node; float mp[3], dh = 0;
             if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) {
-                int di = klbf_df ? klbf_df_pick(o, s) : -1;      /* OnlineDropFollow: a type-1 drop armed near the vanished stack (SP1: the drained stack's money) */
+                int di = klbf_df ? klbf_df_pick(o, s, now) : -1;      /* OnlineDropFollow: a type-1 drop armed near the vanished stack (SP1: the drained stack's money) */
                 klog("botfill: tactics: bot %d (actor %08lx): stack %08lx is gone before it got there (taken by someone else?)", s, a, o); klbf_sp_gone(s, o, "stack gone before arrival");
                 if (di >= 0) {
                     klog("botfill: dropfollow: bot %d (actor %08lx) follows the money of stack %08lx to drop %08lx (amt %d, at (%.0f, %.0f, %.0f), %.1f m from the bot, %lu s armed)%s", s, a, (unsigned long)o, (unsigned long)klbf_dr[di].o, klbf_dr[di].amt, klbf_dr[di].pos[0], klbf_dr[di].pos[1], klbf_dr[di].pos[2], kle_dist(bots[b].pos, klbf_dr[di].pos) / 100, (unsigned long)((now - klbf_dr[di].first) / 1000), klbf_ot_take == 2 ? "" : " (OnlineTacticsTake is not 2: arrival log only)");
@@ -1768,7 +1772,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 if (isdrop) {
                     BYTE st1 = 0; klh_rd(o + 0x64, &st1, 1);
                     if (st1 == 2) {      /* appearing: 0x4e3f40 ignores it for about 3 s (GUESS: the 3 s constant), wait at it */
-                        if (!(klbf_ob[s].told & 2097152) && (klbf_ob[s].told |= 2097152)) klog("botfill: dropfollow: bot %d is at drop %08lx (amt %d) which is still appearing (state 2): waits for state 1", s, (unsigned long)o, amt);
+                        if (!(klbf_ob[s].told & 2097152) && (klbf_ob[s].told |= 2097152) && (klbf_ob[s].since = now)) klog(      /* review: the 20 s below counts from arrival, not from the walk's start */"botfill: dropfollow: bot %d is at drop %08lx (amt %d) which is still appearing (state 2): waits for state 1", s, (unsigned long)o, amt);
                         if (now - klbf_ob[s].since > 20000) { klog("botfill: dropfollow: bot %d gave up on drop %08lx: still in state 2 after 20 s", s, (unsigned long)o); klbf_ob[s].phase = 0; }
                         continue;
                     }
