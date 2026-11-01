@@ -456,7 +456,7 @@ feat('assertsoft', G_STAB, 'Known harmless game asserts (DM01 online cover point
      'klhook.c AssertSoft: the five kl2.exe addresses 6567e8 845a8b 51d049 555900 4ede1b read a cover point the client never built; stepped over, no 41 MB dump, not counted toward MaxAsserts (NOT run live)', [('KLHook', 'AssertSoft', '0x6567e8,0x845a8b,0x51d049,0x555900,0x4ede1b', '', '')])
 F[-1]['str'] = 1
 feat('assertsoftguard', G_STAB, 'Soft asserts: step over only when the cover record lies inside the cover pool (needs the list above) (recommended off until benched)', 'off', 'start',
-     'klhook.c AssertSoftGuard: pool test before the silent step; outside the pool the assert is logged and dumped as usual (re/assertsoft_safety_1101.md; NOT run live)', [('KLHook', 'AssertSoftGuard', 1, 0, 0)])
+     'klhook.c AssertSoftGuard: pool test before the silent step; outside the pool the assert is logged and dumped as usual, and with ContinueAsserts=1 the game still goes on (re/assertsoft_safety_1101.md; NOT run live)', [('KLHook', 'AssertSoftGuard', 1, 0, 0)])
 feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', 'start',
      'avoids the 2 GB heap NULL crash on large .prm files', [('Memory', 'Enable', 1, 0, 1)])
 feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call runs out of memory without it)', 'on', 'start',

@@ -54,6 +54,9 @@ Instead `klassoft_logic.h` carries a per-site table (`kas_sites`: where the reco
 `[L+0x44] .. +0x1788*0x7c` on a 0x7c boundary (or idx < 0x1788); otherwise the hit takes the ordinary, visible assert path
 (logged, dumped once) and the first five refusals are logged as `AssertSoftGuard: ... NOT stepped over silently`. Test:
 `klhook\klassoft_test.c`. Mod options row `assertsoftguard` "(recommended off until benched)". NOT run live.
+Scope (review 11-01): the guard does not prevent the out-of-pool read (it happens before the int3). With ContinueAsserts=1 (default) a
+refused hit still continues through the ordinary assert path, so the guard only adds a log line and one dump; it stops the game going on
+only with ContinueAsserts=0.
 
 ## Anti-tamper (re/antitamper.md)
 Nothing patches .text or uses debug registers: veh() only changes Eip (+1) and reads the pool pointers (data, heap), the

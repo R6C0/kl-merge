@@ -10,7 +10,7 @@ All via user32 GetAsyncKeyState (looked up at run time), foreground-window gated
 | Key (default) | File:line | Feature | Ini | Default | Arcade / online |
 |---|---|---|---|---|---|
 | F6 (live ini: P) | klshoppage.c:988 | Buy Weapons page I/II | [ShopPage] Key, Hint | Enable=1 live | Arcade + online (OnlineLook/Apply) |
-| F3 (was F12) | klshoppage.c:980 | Hire a heister page | [Hire] PageKey, Page=1, Confirm | Page OFF live (key absent) | Arcade + online (klhro_set) |
+| F3 (was F12) | klshoppage.c hireKey fallback (~1243), poll (~1468) | Hire a heister page | [Hire] PageKey, Page=1, Confirm | Page OFF live (key absent) | Arcade + online (klhro_set) |
 | F5 | klucc.c:182 | Undercover cop ping/accuse | [Ucc] Key, Pings, Accuse | off | online |
 | Insert | klucchide.c:322 | UCC reveal | [Ucc] RevealKey | off | online |
 | F7 | klunstick.c:143 | Unstick (back to last free place) | [Unstick] Key, Enable, Auto | on live | offline only (online returns early) |
@@ -46,7 +46,7 @@ CERTAIN unless marked.
 2. F8: Inv + HostOpts KeyAI + ReShade preset 119. KL_MOD_SETTINGS.txt documents F7/F8 as looks and is stale about the hook uses.
 3. F10: Neural/Uplift vs ReShade EnableKey=121. Home/Print/`'` also ReShade.
 4. CopSquad F = stock close combat, G = stock grenade AND [Grenade] Key. Real clashes (feature is off by default).
-5. F12 is the Steam screenshot key (the hire page was on it; moved to F3 on 2026-11-01, `klkeys.c` table, `klshoppage.c` fallback 0x72). F3 is free in Steam and ReShade.ini; Ctrl+F3 is the host map key (Ctrl-gated, no clash). `tools/klkeys_text_test.py` keeps the text and the table in step.
+5. F12 is the Steam screenshot key (the hire page was on it; moved to F3 on 2026-11-01, `klkeys.c` table, `klshoppage.c` fallback 0x72). F3 is free in Steam and in the repo's ReShade presets (GUESS for the live ReShade.ini and for Dog Days' own binds: not checked in game); Ctrl+F3 is the host map key (Ctrl-gated, no clash). `tools/klkeys_text_test.py` keeps the text and the table in step.
 6. By design, not bugs: E shared by Climb/Adrenaline/stock use; C mash = stock cover; ShopPage P = pillpop but shop-mode only; CopSquad H vs QoL2 HeisterKey H are in disjoint contexts (round vs menu).
 7. HostOpts keys poll every 30 ms with no lobby gate found (GUESS that they fire in-round offline; the loop reads: window front and role not client).
 

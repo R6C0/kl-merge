@@ -35,7 +35,7 @@ static int kas_find(const unsigned long *l, int n, unsigned long va)
 
 /* ---- AssertSoftGuard (11-01, re/assertsoft_safety_1101.md): per-site table + the pure pool test ----
  * All five sites read the cover point's flags at [rec+0x68] (rec = [L+0x44] + idx*0x7c, L = [[0xdd265c]+0x15a0], idx < 0x1788 = the game's own
- * bound at 0x656776) and, when neither bit 2 nor 0x200 is set, hit an int3 whose fall-through is the SAME code the "bit 2 set" case runs (kind 0,
+ * bound at 0x656776; GUESS that this is the pool's capacity: the allocation site was not read) and, when neither bit 2 nor 0x200 is set, hit an int3 whose fall-through is the SAME code the "bit 2 set" case runs (kind 0,
  * read-only on rec). So stepping over never writes out of bounds; the only hazard is a rec that is NOT inside the pool (an index without a bound:
  * 0x845a8b with state 0, and the 0x491eb0 helper behind 0x51d049 / 0x555900 never check the upper bound). With AssertSoftGuard=1 veh() steps over
  * a listed site only when the record is provably inside the pool; otherwise the hit takes the ordinary visible assert path (log + one dump).
