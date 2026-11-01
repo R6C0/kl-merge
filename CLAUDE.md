@@ -68,14 +68,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~09:05 - [c9] Q30: all 21 maps PASS online through TWO rounds (both seats, shop timer into round 2, 0 faults) on ship1101.
+DM07 + DD10 had no wardrobe (Dead Men hires refused there): built with +4 PD2 plates and INSTALLED (undo C:\kl_build_1024\c9_1028\hirebody\
+UNDO_wardrobe_DM07_DD10.bat); bench HIREWD (Kane/Lynch hired online there) running. Kits: C:\kl_build_1024\c9_1028\q30, \hirewd.
+
 2026-11-01 ~07:05 UTC - scheduled check-in (PC busy with Q30, nothing touched): Mod Options 'Recommended' flip-flopped OnlineGuardMode (LiveOnly on
 needs it, its own row said off) - fixed (row on with BP8/BP9/BP11, 2 table self-tests, dry run + Save now show was/already/new per key). The live
 ship1101 ini has NONE of the week's T1/T3/T4 keys (Keys Map/Hints, OnlineTriggers, Take 2 / LootParts / Finish ...): Recommended = exactly those 14;
 suggested Q31 = Q29 on a TEST twin with that delta, then ship1102. debug/notes/2026-11-01-scheduled-triage.md.
-
-2026-11-01 ~05:50 - [c9] Mod Options 'Recommended' fixed (0af62a4ee, triage Finding 2): it keeps rows with an owner note, the in-game Mod settings
-keys and keep= rows, and the proven online rows (bots, hire, HUD, loot depletion) are now recommended on. Dry run on the live ini writes only the
-benched BotFill set + Grenade Throw 0. Live ship1101 is still dll a6ea229f + ini 12d5f8e1 (undo: C:\kl_build_1024\c9_1028\ship1101\UNDO_ship1101.bat).
 
 2026-11-01 ~06:15 - [ce] IV1 PASS (DD08 online, OnlineGetUpIgnoreVan=1, test dll d82d5d84): 0 faults both seats, restore ok; the only down came
 with the van idle, so the van path is still unexercised (keep= stays). GUN13 CLOSED (GUN15): baked shop pictures show online on DM07 + DD10.

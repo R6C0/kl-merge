@@ -1,4 +1,3 @@
-
 2026-11-01 ~09:05 - [c9] Q30 DONE: all 21 maps PASS through TWO rounds online on the installed ship1101 (both seats round 1 -> shop 0x20 -> 30 s timer ->
 0x24..0x27 -> round 2 0x19, 30 s in round 2, faults 0; ~8 min a map, no ready press needed). Week-plan T2 'host and client both reach round 2' ticked.
 Then INSTALLED the DM07 + DD10 wardrobe (+4 PD2 plates, Masks 12; chunks 50130 / 61098; rebuilt .bots.zip + md5; KLJoin/KLGuns Entries= raised):
