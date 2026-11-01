@@ -171,6 +171,9 @@ static int kspg_c_feat(int row)
     if (row >= 17 && row <= 24) return row - 17 + 8;
     return -1;
 }
+/* the row names, klkeys ids 0..15 (klkeys.c's table order), <= 11 characters so name + key fits in 16 */
+static const char *const kspg_c_short[16] = { "UNSTICK", "GUN SHELF", "COP FOLLOW", "COP HOLD", "COP ATTACK", "HOLD VAN", "REVEAL UCC", "GRENADE",
+                                              "MAP SET", "AI HEISTERS", "MAP POOL", "HEISTER", "MASK", "HIRE PAGE", "PAGE II", "UCC PING" };
 static void kspg_c_desc(int f, char *o, size_t cap)
 {
     const struct klkeys_def *d = &klkeys_def[f]; char kn[24]; int on = klkeys_on(f);
@@ -317,7 +320,15 @@ static char *kspg_text_ctl(void *self, const char *key, char *res)
         f = kspg_c_feat(row);
         if (!*p) {
             if (f < 0) strcpy(o, "-");
-            else { char kn[24]; klkeys_name(klkeys_vk(f), klkeys_ctl(f), kn, sizeof kn); snprintf(o, 519, "%s  %s  %s", klkeys_def[f].label, kn, klkeys_on(f) ? "ON" : "OFF"); }   /* GUESS: the name column is wide enough for ~28 characters */
+            else {   /* SHOTS3 (11-01): a 25-character row ('COP SQUAD FOLLOW  Num1  OFF') wrapped in the selected row's bigger font: the text hid behind the highlight bar and the rows above
+                      * slid up into 'ASSAULT RIFLES'. The hire page's rows (<= 15 characters, 'MITCHEL $90,000') render clean, so a row is now short name + key, cut to 16 (GUESS: the
+                      * safe width is about the hire page's); the full name, key and ON / OFF stay in the description pane. An OFF feature's key is dropped from the row (its key does nothing) */
+                char kn[24], r[40]; size_t n;
+                klkeys_name(klkeys_vk(f), klkeys_ctl(f), kn, sizeof kn);
+                if (klkeys_on(f)) snprintf(r, sizeof r, "%s %s", kspg_c_short[f], kn); else snprintf(r, sizeof r, "%s OFF", kspg_c_short[f]);
+                if ((n = strlen(r)) > 16) snprintf(r, sizeof r, "%s", kspg_c_short[f]);   /* a long key name ('Ctrl+Delete'): the name alone, the key is in the description */
+                strcpy(o, r);
+            }
             return o;
         }
         if (!strcmp(p, "Desc")) {
