@@ -34,6 +34,7 @@ static int klbf_fill;              /* the plan's fill, for the squad pass */
 static int klbf_lp; static float klbf_lp_scale = 1.0f, klbf_lp_stay = 250.0f; static DWORD klbf_lp_warned[16]; static int klbf_lp_nw, klbf_lp_nok, klbf_lp_nbad;      /* gap2: OnlineLootParts (timed parts) */
 static float klbf_lf_copm = 800.0f; static int klbf_lf, klbf_lfp, klbf_lf_pz, klbf_lf_cap = 25, klbf_lf_start, klbf_lf_fin, klbf_lf_left, klbf_lf_hold, klbf_lf_cops; static float klbf_lf_stay = 500.0f;      /* wk-botpar: [BotFill] OnlineLootFinish / OnlineLootFinishStayM (game units) / OnlineLootFinishCapS; per-round finished / left-early counts */
 static int klbf_esn, klbf_vgs, klbf_vgs_margin = 60, klbf_vgs_defer; static DWORD klbf_vgs_since;      /* wk-botpar: [BotFill] OnlineEscortNode , OnlineVanGatherSmart / OnlineVanGatherMarginS */
+static int klbf_ap;      /* [BotFill] ArcadeProbe 0/1: log-only probe of an OFFLINE Arcade round (stacks taken, record money, van, aboard); see klbf_ap_run */
 static int klbf_sp;      /* [BotFill] OnlineStackProbe 0/1/2/3 (block before klbf_ot_run) */
 static int klbf_df; static float klbf_df_m = 1500.0f;      /* [BotFill] OnlineDropFollow / OnlineDropFollowM (game units): a bot whose stack went 'gone' follows a type-1 drop armed near it (block before klbf_ot_run) */
 #ifdef KLHOOK_TEST
@@ -145,6 +146,7 @@ static void klbf_init(void)
     klbf_ot_near = (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsNear", 150, klh_ini); if (klbf_ot_near < 20) klbf_ot_near = 20;
     klbf_ot_take = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsTake", 0, klh_ini); if (klbf_ot_take < 0 || klbf_ot_take > 2) klbf_ot_take = 0;      /* 0 off (also any out-of-range value), 1 raw write of +0x34 (old), 2 the game's own 0x4e3f40 (recommended on once benched) */
     klbf_sp = (int)GetPrivateProfileIntA("BotFill", "OnlineStackProbe", 0, klh_ini); if (klbf_sp < 0 || klbf_sp > 3) klbf_sp = 0;      /* (recommended off; a diagnostic, TEST use) 1 log the stack fields, 2 + a log-only detour of 0x4e3f40, 3 = 1 + a hardware write watch on one stack's amount; needs OnlineTactics=1 */
+    klbf_ap = GetPrivateProfileIntA("BotFill", "ArcadeProbe", 0, klh_ini) != 0;      /* (recommended off: test probe) offline Arcade round log, no game write */
     klbf_df = klbf_ot && GetPrivateProfileIntA("BotFill", "OnlineDropFollow", 0, klh_ini) != 0;      /* (recommended off until benched) SP1: a drained type-0 stack arms a type-1 drop the scan skips; needs OnlineHost=1 + OnlineTactics=1 */
     klbf_df_m = (float)GetPrivateProfileIntA("BotFill", "OnlineDropFollowM", 1500, klh_ini); if (klbf_df_m < 200) klbf_df_m = 200; if (klbf_df_m > 10000) klbf_df_m = 10000;
     if (klbf_df) klog("botfill: dropfollow: OnlineDropFollow=1, radius %.0f%s", klbf_df_m, klbf_ot_take == 2 ? ", taking through 0x4e3f40" : " (OnlineTacticsTake is not 2: retarget + arrival log only, no take)");
@@ -2208,13 +2210,153 @@ static void klbf_lk_log(const struct klbf_lkrec *r, int n, DWORD role, DWORD sm,
     klbf_lk_sm = sm; klbf_lk_sig = sig;
 }
 
+/* [BotFill] ArcadeProbe (default 0; 11-01 wk-arcbase; recommended off: test probe). LOG ONLY, nothing is written to the game, no code patch (SHIP-safe).
+   The owner's rule is "online AI heisters = Arcade 1:1" but no Arcade number existed: Arcade bots run the game's own brain (ZLootTactic /
+   ZBoardEscapeVehicleTactic) and write no 'botfill:' lines. In an OFFLINE Arcade round (klb_read: game type 4, session sub-role not 2/3, ZGameRulesHeist) this polls at 2 Hz (klbf_tick's
+   500 ms gate) and says, all lines prefixed 'arcadeprobe:':
+     round start (level, crew records, AI records, clock left), a stack census 5 s in (armed / behind a shut door / total $),
+     per money object: each drop of +0x34 amount (a 'take' when it reaches 0 or +0x6c armed clears; the nearest AI crew member within 8 m is named, GUESS),
+     per AI crew record: money field change ([score+0x150+4i], klb_read r->money; GUESS: the loot that member carries / has earned, as klbot.c's 'bots:' line prints it), heist stage change,
+     status change (4 = ABOARD, 7 = dead; klbot.c), van state changes [rules+0x1dc] with seconds since the round start and the clock left [rules+0x4c],
+     and at the round end 'arcadeprobe: tactics: round summary: ...' in the shape of the online summary.
+   Boarded = AI crew records (flags & 1) whose status was ever 4 (ABOARD, set by the boarding rule 0x6840a0, klbot.c); the hook's online 'boarded' is a tally, this is the game's own record.
+   Total = the sum over AI records of the highest money field seen. At most KLBF_AP_MAXL lines a round, nothing per tick. */
+#define KLBF_AP_MAXL 160
+#define KLBF_AP_STK  256
+struct klbf_ap_rec { BYTE seen, status, stage, aboard, dead; long money, peak; };
+static struct {
+    int in, lines, nstk, nbot, ntake, ndrain, ndrops, nboard, ndead, nlines_cut, censused, vsaw, ndrop; DWORD rules, t0, vcallAt, firstTakeAt, lastTakeAt;
+    struct { DWORD o; int first, last; BYTE taken; } stk[KLBF_AP_STK];
+    DWORD drop[32];
+    struct klbf_ap_rec rec[KLB_NREC];
+    BYTE lastv;
+} klbf_ap_s;
+
+static void klbf_ap_say(const char *fmt, ...)
+{
+    char b[400]; va_list ap;
+    if (klbf_ap_s.lines >= KLBF_AP_MAXL) { if (!klbf_ap_s.nlines_cut++) klog("arcadeprobe: %d lines this round - silent until the summary", KLBF_AP_MAXL); return; }
+    klbf_ap_s.lines++;
+    va_start(ap, fmt); _vsnprintf(b, sizeof b - 1, fmt, ap); va_end(ap); b[sizeof b - 1] = 0;
+    klog("arcadeprobe: %s", b);
+}
+
+static void klbf_ap_summary(DWORD now, const char *why)
+{
+    int i; long total = 0; char vc[24];
+    if (!klbf_ap_s.in) return;
+    for (i = 0; i < KLB_NREC; i++) if (klbf_ap_s.rec[i].seen && klbf_ap_s.rec[i].peak > 0) total += klbf_ap_s.rec[i].peak;
+    if (klbf_ap_s.vcallAt) _snprintf(vc, sizeof vc - 1, "%lu", (unsigned long)((klbf_ap_s.vcallAt - klbf_ap_s.t0) / 1000)); else strcpy(vc, "none");
+    vc[sizeof vc - 1] = 0;
+    klog("arcadeprobe: tactics: round summary: %d bot(s) (AI crew records), %d stack(s) taken, %ld total (AI record money peak, the game's own field), %d boarded, %d stack(s) never emptied | van call s %s, %d dead, %d drain step(s), %d type-1 drop(s), first take +%lu s, last take +%lu s, round lasted %lu s (%s)",
+         klbf_ap_s.nbot, klbf_ap_s.ntake, total, klbf_ap_s.nboard, klbf_ap_s.nstk - klbf_ap_s.ntake, vc, klbf_ap_s.ndead, klbf_ap_s.ndrain, klbf_ap_s.ndrops,
+         (unsigned long)(klbf_ap_s.firstTakeAt ? (klbf_ap_s.firstTakeAt - klbf_ap_s.t0) / 1000 : 0), (unsigned long)(klbf_ap_s.lastTakeAt ? (klbf_ap_s.lastTakeAt - klbf_ap_s.t0) / 1000 : 0), (unsigned long)((now - klbf_ap_s.t0) / 1000), why);
+    memset(&klbf_ap_s, 0, sizeof klbf_ap_s);
+}
+
+/* the nearest AI crew member to a point, within r cm, -1 = none */
+static int klbf_ap_near(const struct klb_snap *sn, const float at[3], float r)
+{
+    int i, best = -1; float bd = r;
+    for (i = 0; i < sn->n; i++) {
+        float p[3], d;
+        if (!sn->r[i].used || !(sn->r[i].flags & 1) || sn->r[i].status == 7 || !sn->r[i].actor || !klh_rd(sn->r[i].actor + 0x460, p, 12) || !kle_ok3(p)) continue;      /* feet, as klbf_ot_run's bots (GUESS: same base class) */
+        d = kle_dist(p, at); if (d <= bd) { bd = d; best = i; }
+    }
+    return best;
+}
+
+static void klbf_ap_run(DWORD now)
+{
+    struct klb_snap sn; int i; float c = 0;
+    if (!klbf_ap) return;
+    if (!klb_read(&sn) || sn.state != KLB_ROUND) {      /* no Arcade round now: close the one that was running */
+        if (klbf_ap_s.in) klbf_ap_summary(now, "left the round state or no Arcade session");
+        return;
+    }
+    if (klbf_ap_s.in && klbf_ap_s.rules != sn.rules) klbf_ap_summary(now, "rules object changed");
+    if (!klbf_ap_s.in) {
+        int nai = 0, nrec = 0;
+        memset(&klbf_ap_s, 0, sizeof klbf_ap_s);
+        klbf_ap_s.in = 1; klbf_ap_s.rules = sn.rules; klbf_ap_s.t0 = now; klbf_ap_s.lastv = 0xff;
+        for (i = 0; i < sn.n; i++) if (sn.r[i].used) { nrec++; if (sn.r[i].flags & 1) nai++; }
+        if (!klh_rd(sn.rules + 0x4c, &c, 4) || !klb_finite(c)) c = -1;
+        klbf_ap_say("round start: Arcade level %d, %d crew record(s), %d AI (flags&1), clock left %.0f s, van state %u", sn.level, nrec, nai, c, sn.veh);
+    }
+    klbf_ap_s.nbot = 0;
+    for (i = 0; i < sn.n; i++) {      /* per AI crew record */
+        const struct klb_rec *r = &sn.r[i];
+        struct klbf_ap_rec *q = &klbf_ap_s.rec[i];
+        long mny = (long)(int)r->money; unsigned long sec = (unsigned long)((now - klbf_ap_s.t0) / 1000);
+        if (!r->used || !(r->flags & 1)) continue;
+        klbf_ap_s.nbot++;
+        if (!q->seen) { q->seen = 1; q->status = r->status; q->stage = r->stage; q->money = mny; q->peak = mny > 0 ? mny : 0; }
+        if (mny != q->money) {
+            klbf_ap_say("bot %d money %ld -> %ld (%+ld) at +%lu s, stage %u, status %u", i, q->money, mny, mny - q->money, sec, r->stage, r->status);
+            q->money = mny; if (mny > q->peak) q->peak = mny;
+        }
+        if (r->stage != q->stage) { klbf_ap_say("bot %d heist stage %u -> %u at +%lu s (money %ld)", i, q->stage, r->stage, sec, q->money); q->stage = r->stage; }
+        if (r->status != q->status) {
+            klbf_ap_say("bot %d status %u -> %u%s at +%lu s (stage %u, money %ld)", i, q->status, r->status, r->status == 4 ? " ABOARD" : r->status == 7 ? " DEAD" : "", sec, r->stage, q->money);
+            if (r->status == 4 && !q->aboard) { q->aboard = 1; klbf_ap_s.nboard++; }
+            if (r->status == 7 && !q->dead) { q->dead = 1; klbf_ap_s.ndead++; }
+            q->status = r->status;
+        }
+    }
+    if (!klbf_ap_s.vsaw || sn.veh != klbf_ap_s.lastv) {      /* van state [rules+0x1dc]: 1/2 coming, 3/4 waiting, 5 leaving, 7 gone, 0 idle */
+        c = 0; if (!klh_rd(sn.rules + 0x4c, &c, 4) || !klb_finite(c)) c = -1;
+        if (klbf_ap_s.vsaw) klbf_ap_say("van state %u -> %u at +%lu s (clock left %.0f s, timer %.1f)", klbf_ap_s.lastv, sn.veh, (unsigned long)((now - klbf_ap_s.t0) / 1000), c, sn.timer);
+        if (sn.veh >= 1 && sn.veh <= 4 && !klbf_ap_s.vcallAt) klbf_ap_s.vcallAt = now;      /* the call = the first state 1..4 (GUESS: a call is the only way out of 0) */
+        klbf_ap_s.lastv = sn.veh; klbf_ap_s.vsaw = 1;
+    }
+    {   /* the money objects (registry 0xe09e38 / count 0xe0e63c, vtable 0xbc874c; +0x34 amount, +0x38 type, +0x64 state, +0x6c armed, +0x5c shut door) */
+        DWORD rn = klh_rd32((DWORD_PTR)KLH_VA(0x00e0e63c)), reg[0x400], q, j; int armed = 0, door = 0; long sum = 0;
+        if (rn > 0x1000) rn = 0x1000;
+        for (q = 0; q < rn; q += 0x400) {
+            DWORD m = rn - q < 0x400 ? rn - q : 0x400;
+            if (!klh_rd((DWORD_PTR)KLH_VA(0x00e09e38) + 4 * q, reg, 4 * m)) break;
+            for (j = 0; j < m; j++) {
+                DWORD o = reg[j], type = 0; int amt = 0, k; BYTE act = 0, st = 0, shut = 0;
+                if (o < 0x10000 || klh_rd32(o) != KLMV_MONEY_VT) continue;
+                if (!klh_rd(o + 0x38, &type, 4) || !klh_rd(o + 0x34, &amt, 4) || !klh_rd(o + 0x6c, &act, 1)) continue;
+                klh_rd(o + 0x64, &st, 1); klh_rd(o + 0x5c, &shut, 1);
+                if (type == 1) {      /* a drop pool object: counted once per address per round when it arms with money */
+                    if (amt > 0 && act) {
+                        int seen = 0; for (k = 0; k < klbf_ap_s.ndrop; k++) if (klbf_ap_s.drop[k] == o) seen = 1;
+                        if (!seen) { klbf_ap_s.ndrops++; if (klbf_ap_s.ndrop < 32) klbf_ap_s.drop[klbf_ap_s.ndrop++] = o; klbf_ap_say("type-1 drop %08lx armed with %d at +%lu s", (unsigned long)o, amt, (unsigned long)((now - klbf_ap_s.t0) / 1000)); }
+                    }
+                    continue;
+                }
+                if (amt > 0 && act) { if (shut) door++; else armed++; sum += amt; }
+                for (k = 0; k < klbf_ap_s.nstk && klbf_ap_s.stk[k].o != o; k++) ;
+                if (k == klbf_ap_s.nstk) {      /* first sight: only an armed stack with money is followed */
+                    if (!(amt > 0 && act) || k >= KLBF_AP_STK) continue;
+                    klbf_ap_s.stk[k].o = o; klbf_ap_s.stk[k].first = klbf_ap_s.stk[k].last = amt; klbf_ap_s.nstk++;
+                    continue;
+                }
+                if (klbf_ap_s.stk[k].taken) continue;
+                if (amt < klbf_ap_s.stk[k].last || !act) {      /* drained (or disarmed): a step */
+                    float pos[3]; DWORD ent, node; int who = -1, to = act ? amt : 0;
+                    if ((ent = klh_rd32(o + 0x24)) && (node = klh_rd32(ent + 4)) && kle_node(node, pos, 0)) who = klbf_ap_near(&sn, pos, 800.0f);
+                    klbf_ap_s.ndrain++;
+                    klbf_ap_say("stack %08lx %d -> %d (type %lu state %u armed %u) at +%lu s, nearest AI crew member within 8 m: %d", (unsigned long)o, klbf_ap_s.stk[k].last, to, (unsigned long)type, st, act, (unsigned long)((now - klbf_ap_s.t0) / 1000), who);
+                    klbf_ap_s.stk[k].last = to;
+                    if (to <= 0) { klbf_ap_s.stk[k].taken = 1; klbf_ap_s.ntake++; if (!klbf_ap_s.firstTakeAt) klbf_ap_s.firstTakeAt = now; klbf_ap_s.lastTakeAt = now; }
+                }
+            }
+        }
+        if (!klbf_ap_s.censused && now - klbf_ap_s.t0 >= 5000) { klbf_ap_s.censused = 1; klbf_ap_say("stacks at +5 s: %d armed, %d behind a shut door, $%ld armed in all, %d followed", armed, door, sum, klbf_ap_s.nstk); }
+    }
+}
+
 static void klbf_tick(int game_thread)
 {
     static DWORD last, scan, told_sm; DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0, h, v, lo, hi, p, tab, i, blk[64 * 32]; BYTE cur = 0, mx = 0;
     int conn, target, n = 0, ally = 0, alive = 0, tact = 0, other = 0;
     static struct klbf_lkrec lk[64]; int lkn = 0;
-    if (!(klbf_on || klbf_oh || klbf_ot || klbf_lk == 2) || !game_thread || !klh_exe_ok || now - last < 500) return;      /* OnlineHost alone only runs the census below (no lobby change: kllobby.c reads OnlineFill itself) */
+    if (!(klbf_on || klbf_oh || klbf_ot || klbf_lk == 2 || klbf_ap) || !game_thread || !klh_exe_ok || now - last < 500) return;      /* OnlineHost alone only runs the census below (no lobby change: kllobby.c reads OnlineFill itself) */
     last = now;
+    if (klbf_ap) klbf_ap_run(now);      /* ArcadeProbe: offline Arcade only (klb_read says no for a net role 2/3), log only */
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) return;
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4) || !klh_rd(sm + 0xb9, &cur, 1) || !klh_rd(sm + 0xb8, &mx, 1)) return;
     if (state < 0xd) klbf_lk_sm = 0;      /* OnlineLooks: the next round logs again */
