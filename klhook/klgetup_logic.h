@@ -151,6 +151,10 @@ static int kgu_at_goal(float bodyD, float goalD, float nearCm)
 #define KGU_HOLD_GAP_MS  900u
 static int kgu_hold_near(float bdst) { return bdst >= 0 && bdst <= KGU_HOLD_NEAR_CM; }
 static int kgu_hold_due(DWORD now, DWORD last) { return !last || now - last >= KGU_HOLD_GAP_MS; }
+/* BP17 (11-01): the hold kept bot 6 at 2.7 - 3.6 m for 3 s (the joiner saw it at 388 cm), then it stood at 4.0 m, fell out of the 4 m test and walked off to
+   9 - 14 m. Once a bot has been held (held > 0), keep holding while it is within KGU_HOLD_KEEP_CM. GUESS: 8 m (BP15's walk-offs peaked at 8.2 - 9.1 m). */
+#define KGU_HOLD_KEEP_CM 800.0f
+static int kgu_hold_on(float bdst, int held) { return kgu_hold_near(bdst) || (held > 0 && bdst >= 0 && bdst <= KGU_HOLD_KEEP_CM); }
 
 /* wk-botpar BP16b (OnlineGetUpPlateau; ce's 10-29 diagnosis, open_work_log 10-29 ~07:20): bot 4 dithered 9 - 14.7 m from the seat for 18 s, re-ordered every ~3 s (KeepGoal stalled /
    Recede) and never came nearer; BP13 14.4, BP14 ~14, BP15 8 - 9 m the same. Not combat, not a fighting pass: the order place (the joiner's beacon spot) is most likely UNREACHABLE for

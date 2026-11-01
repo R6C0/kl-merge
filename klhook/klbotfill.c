@@ -1263,7 +1263,7 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
                     continue;
                 }
             }
-            if (klbf_gu_hold && kgu_hold_near(bdst)) {      /* OnlineGetUpHold: arrived (or passing by): keep it standing by the body with a short order to a spot 1 m from him, every KGU_HOLD_GAP_MS */
+            if (klbf_gu_hold && kgu_hold_on(bdst, klbf_ob[s].guHn)) {      /* OnlineGetUpHold: arrived (or passing by): keep it standing by the body with a short order to a spot 1 m from him, every KGU_HOLD_GAP_MS; once held, up to 8 m (BP17) */
                 if (kgu_hold_due(now, klbf_ob[s].guHo)) {
                     struct kle_e he; float hw3[3], hg3[3]; char hwy[100];
                     kgu_place(pos[rb], hp, KGU_HOLD_STOP_CM, hw3);

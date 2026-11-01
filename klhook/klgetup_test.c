@@ -111,6 +111,7 @@ int main(void)
     CHECK(kgu_recede(800, 3410, 1467, 2999) == 0 && kgu_recede(800, 3410, 1467, 3000) == 1, "recede: rate limit, no verdict before the order is 3 s old");
     CHECK(kgu_hold_near(360) && kgu_hold_near(400) && !kgu_hold_near(401) && !kgu_hold_near(-1), "hold: within 4 m (BP15 3.6 m)");
     CHECK(kgu_hold_due(5000, 0) && !kgu_hold_due(5899, 5000) && kgu_hold_due(5900, 5000) && kgu_hold_due(100, 4294967000UL) == 0, "hold: due at once, then every 900 ms");
+    CHECK(!kgu_hold_on(401, 0) && kgu_hold_on(400, 0) && kgu_hold_on(401, 1) && kgu_hold_on(800, 3) && !kgu_hold_on(801, 3) && !kgu_hold_on(-1, 3), "hold: once held, kept up to 8 m (BP17 4.0 m walk-off)");
     { float b2[3] = { 1000, 50, 2800 }; kgu_place(b2, hum, KGU_HOLD_STOP_CM, out); CHECK(fabs(out[2] - 2100) < 0.01, "hold place 1 m from him"); }
 
     /* OnlineGetUpPlateau (BP16b): the best-distance clock and the give-up verdict */
