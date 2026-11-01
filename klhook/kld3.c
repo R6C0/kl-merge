@@ -280,6 +280,12 @@ static void kld3_device(void *dev)
  * 10-28: the bench's GDI grabs were all-zero all week (monitor off); kl_solo_test --d3shots feeds these keys instead. Timing / names:
  * klshot_logic.h (klshot_test.c). */
 static int kld3_shot_s, kld3_shot_n, kld3_shot_from, kld3_shot_max = 40, kld3_shot_fmt; static DWORD kld3_shot_t0; static char kld3_shot_dir[MAX_PATH], kld3_shot_tag[64];
+/* [Memory] D3dShotPost=1 (TEST, default 0): take the D3dShot from ReShade's reshade_present event (klreshade.c) instead of klfps's
+ * Present wrapper. klfps is the outermost wrapper, so its shot reads the back buffer BEFORE ReShade draws its effects: SHOTS1 (11-01)
+ * logged three lens cracks and no picture showed one. Needs [ReShade] Bridge=1 (no event, no shots). kld3_dev is the device the
+ * wrapper saw this frame; reshade_present runs inside that same Present call. GUESS: the back buffer still holds the effects at
+ * reshade_present (ReShade docs: the event fires after effects and overlay, before the real Present) - check with a cracked shot. */
+static int kld3_shot_post; static void *kld3_dev;
 static void kld3_shot(void *dev)
 {
     typedef HRESULT (WINAPI *gbb_fn)(void *, UINT, UINT, DWORD, void **);
@@ -308,7 +314,8 @@ static void kld3_present(void *dev)
     LONG f; void **qvt; LARGE_INTEGER a, b; LONG64 before, after, us; HRESULT hr; BOOL data = 0; int to = 0;
     if (!kld3_on) return;
     f = InterlockedIncrement(&kld3_frames);
-    if (kld3_shot_s && dev) kld3_shot(dev);
+    kld3_dev = dev;
+    if (kld3_shot_s && dev && !kld3_shot_post) kld3_shot(dev);
     if (!kld3_flush_n || f % kld3_flush_n || !dev) return;
     /* a fresh query per flush, released at once: a default-pool query kept across Present would make a later Reset fail (D3DERR_INVALIDCALL),
        and a kept one dangles when the device is recreated */
@@ -409,6 +416,8 @@ static void kld3_init(void)
     kld3_shot_fmt = klshot_fmt(GetPrivateProfileIntA("Memory", "D3dShotFmt", 0, klh_ini));
     kld3_shot_from = GetPrivateProfileIntA("Memory", "D3dShotFrom", 0, klh_ini);   /* seconds after the hook loads before the first shot (bench: a late round end within the 40-shot cap); 0 = at once */
     if (kld3_shot_from < 0) kld3_shot_from = 0;
+    kld3_shot_post = GetPrivateProfileIntA("Memory", "D3dShotPost", 0, klh_ini) != 0;
+    if (kld3_shot_post && kld3_shot_s > 0) klog("d3count: shots from ReShade's present (D3dShotPost=1, needs [ReShade] Bridge=1)");
     kld3_shot_t0 = GetTickCount();
     if (kld3_shot_s > 0) kld3_on = 1; else kld3_shot_s = 0;
     kld3_ring_n = GetPrivateProfileIntA("Memory", "D3dRing", 0, klh_ini);

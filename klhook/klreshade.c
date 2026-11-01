@@ -481,6 +481,9 @@ static void __cdecl klrs_ev_present(void *rt)
 {
     if (!klrs_rt_ok(rt)) return;
     klrs.frames++;
+#ifdef KLHOOK_TEST
+    if (kld3_on && kld3_shot_post && kld3_shot_s && kld3_dev) kld3_shot(kld3_dev);   /* kld3.c D3dShotPost: the shot with ReShade's effects in it */
+#endif
     if (klrs.scan && klrs.frames - klrs.scanat >= 10) klrs_scan(rt);
     if (klrs.frames % 30 == 0 && kset_v[0] != 0) klrs_watch(rt);
     if (klrs.foreign) return;
