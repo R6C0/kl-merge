@@ -104,6 +104,10 @@ static int kgu_helper_ok(float dist, float dy, float range, float dymax)
     return dist >= 0 && dist <= range && dy >= -dymax && dy <= dymax;
 }
 
+/* skip the get-up pass for this van state? 1/2 coming, 3/4 waiting, 5 leaving (re/retomoto_street.md 6). ignore 0 (the old rule): skip 1..5.
+   ignore 1 (OnlineGetUpIgnoreVan): never skip, as Arcade's rush with its default RushVan=0 (kladren.c kad_vanlive; re/getup_arcade_range_1101.md). */
+static int kgu_van_skip(int vstate, int ignore) { return !ignore && vstate >= 1 && vstate <= 5; }
+
 /* may a bot in this phase / tally answer a downed human? phase 0 idle, 1 walks to a stack, 2 walks out (to the van), 3 aboard, 4 takes a stack.
    busy 0 (the old rule): phase 0 / 1 with nothing carried. busy 1 (OnlineGetUpBusy, Arcade's Rush: any bot not down, not rushing, not escorting):
    carriers and exit walkers too; a bot taking a stack (4, a few seconds) or aboard (3) never. */

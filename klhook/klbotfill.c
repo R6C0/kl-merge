@@ -62,7 +62,7 @@ static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_
 #include "klguard_logic.h"      /* wk-botpar OnlineGuardMode: floor gate + bypass decisions (klguard_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
 static int klbf_gu_freefirst, klbf_gu_recede, klbf_gu_hold, klbf_gu_plat; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13); OnlineGetUpPlateau (BP16b) */
-static int klbf_gu, klbf_gu_sprint, klbf_gu_reordS, klbf_gu_keep, klbf_gu_det, klbf_gu_busy, klbf_gu_anyhp; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f, klbf_gu_flopm;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
+static int klbf_gu, klbf_gu_sprint, klbf_gu_reordS, klbf_gu_keep, klbf_gu_det, klbf_gu_busy, klbf_gu_anyhp, klbf_gu_ignvan; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f, klbf_gu_flopm;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
 #include "klgetupbeacon.h"      /* wk-getup2-1028: [BotFill] OnlineGetUpBeacon, the pure part (klgetupbeacon_test.c); sockets in klgetupbeacon.c (AFTER klsync.c) */
 static int klgb_on; static struct klgb_seat klgb_seats[KLGB_MAX_SEATS];      /* [BotFill] OnlineGetUpBeacon (0/1; only with OnlineGetUp): the downed machine tells the host (klgetupbeacon.c); the host's per-seat book */
 static void klgb_own(DWORD pl, DWORD ds, int alive, DWORD now);      /* klgetupbeacon.c (client side; kldown.c calls it) */
@@ -240,6 +240,7 @@ static void klbf_init(void)
     klbf_gu_reordS = klbf_gu ? GetPrivateProfileIntA("BotFill", "OnlineGetUpReorderS", 0, klh_ini) : 0; if (klbf_gu_reordS < 0) klbf_gu_reordS = 0; if (klbf_gu_reordS > 30) klbf_gu_reordS = 30;      /* (recommended on at 8) wk-botpar BP2: bot 4 was re-ordered every 3 s and ran stop-and-go (1.4 .. 3.2 m/s per leg, 2.2 avg); a downed man does not move, so each repeat only restarts the running Defend goal (GUESS, no A/B run live) */
     klbf_gu_keep = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpKeepGoal", 0, klh_ini) != 0;      /* (recommended off) wk-botpar: no repeat order while the bot is closing; GUESS: each repeat restarts the running goal */
     klbf_gu_busy = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpBusy", 0, klh_ini) != 0;      /* (recommended on) wk-botpar BP11: every bot carried or walked out, so '0 free bot(s)' and nobody came */
+    klbf_gu_ignvan = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpIgnoreVan", 0, klh_ini) != 0;      /* (recommended on) Arcade parity: Arcade's rush ignores the van by default (RushVan=0); off = no helper while the van is called / waits / leaves (the old rule) */
     klbf_gu_freefirst = klbf_gu && GetPrivateProfileIntA("BotFill", "OnlineGetUpFreeFirst", 0, klh_ini) != 0;      /* (recommended on) wk-botpar BP13: a free bot (idle / walking to a stack, nothing carried) within range is picked before any walker-out / carrier */
     klbf_gu_busyrange = klbf_gu ? (float)GetPrivateProfileIntA("BotFill", "OnlineGetUpBusyRange", 0, klh_ini) : 0; if (klbf_gu_busyrange < 0) klbf_gu_busyrange = 0; if (klbf_gu_busyrange > 20000.0f) klbf_gu_busyrange = 20000.0f;      /* cm (recommended on at 1500; 0 = off) wk-botpar BP13: a walker-out / carrier farther than this is not sent (27 m: it swung -2.8..+4.3 m/s, nearest 14.4 m, the joiner rose alone) */
     if (klbf_gu) klog("botfill: getup: OnlineGetUpFreeFirst=%d (recommended on): a free bot in range is sent before any walker-out or carrier; OnlineGetUpBusyRange=%.0f cm (recommended on at 1500; 0 = off): a walker-out or carrier farther than that is not sent (needs OnlineGetUpBusy=1 to matter)", klbf_gu_freefirst, klbf_gu_busyrange);
@@ -258,6 +259,7 @@ static void klbf_init(void)
     if (klbf_gu) klog("botfill: getup: OnlineGetUpReorderS=%d (0 = stock 2.5 s)", klbf_gu_reordS);
     if (klbf_gu) klog("botfill: getup: OnlineGetUpKeepGoal=%d (recommended off): 1 = after the first order no repeat while the bot closes >= %.1f m a check and the target moved < %.1f m; re-order when stalled %u s or moved", klbf_gu_keep, KGU_PROGRESS_CM / 100, KGU_MOVED_CM / 100, (unsigned)(KGU_STALL_MS / 1000));
     if (klbf_gu) klog("botfill: getup: OnlineGetUpBusy=%d (recommended on): 1 = a bot carrying money or walking out to the van also answers a downed human (Arcade's Rush); a bot taking a stack or aboard never", klbf_gu_busy);
+    if (klbf_gu) klog("botfill: getup: OnlineGetUpIgnoreVan=%d (recommended on): 1 = helpers are sent while the van is called / waits / leaves, as Arcade (RushVan=0); 0 = none then", klbf_gu_ignvan);
     if (klbf_gu) klog("botfill: getup: OnlineGetUpFlopMeter=%.1f (recommended on at 3.0; 0 = off): a bot by this machine's landed flop holds its mash meter at that (Arcade's helper); OnlineGetUpAnyHp=%d (recommended off): the helper scan skips the health test", klbf_gu_flopm, klbf_gu_anyhp);
     if (klbf_gu) klog("botfill: getup: OnlineGetUpDetour=%d (recommended on): needs KeepGoal; a bot that moved >= %.1f m itself since its last progress is running a route (up to %u s after the order), not stalled; a bot that arrived and is %.1f m out again is re-ordered at once", klbf_gu_det, KGU_WALK_CM / 100, (unsigned)(KGU_DETOUR_MS / 1000), KGU_LEFT_CM / 100);
     if (klbf_gu) klog("botfill: getup: OnlineGetUpSprint=%d (recommended on): the rush order is followed by the Defend move style Sprint (undone when the bot is released)", klbf_gu_sprint);
@@ -1164,7 +1166,7 @@ static int klbf_gu_style(DWORD soldier, int on)
    DOWNED MACHINE (klbf_gu_rate_now, called from kldown.c's online pass): a living Ally bot within OnlineGetUpNear of this machine's own body, same floor, adds OnlineGetUpRate a second to the mash meter. */
 static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sold, const float (*pos)[3], int nb, int vstate)
 {
-    DWORD ents = 0; int n = 0, i, b, s; static int toldNone, toldRound, hdown[16], toldMap[16]; static DWORD hAt[16];
+    DWORD ents = 0; int n = 0, i, b, s; static int toldNone, toldRound, hdown[16], toldMap[16]; static DWORD hAt[16]; static unsigned gvLog;      /* gvLog: seats told 'no helper, van state' during this down */
     float rep[16][3]; int rok[16], bsd[16], ownIdx = -1; float bsp[16][3]; static int seatPlat[16]; static DWORD hUpAt[16];      /* wk-getup2-1028: replica places, and the beacon verdicts mapped to table indexes; seatPlat: OnlineGetUpPlateau gave a rusher up on this seat during this down (the order place falls back to the host's replica feet) */
     if (!klbf_gu || nb <= 0) return;
     if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; memset(hdown, 0, sizeof hdown); memset(hAt, 0, sizeof hAt); memset(klgb_seats, 0, sizeof klgb_seats); memset(toldMap, 0, sizeof toldMap); memset(seatPlat, 0, sizeof seatPlat); }
@@ -1219,8 +1221,11 @@ static void klbf_gu_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sol
         if (down && !hdown[i] && (!hUpAt[i] || now - hUpAt[i] >= 3000)) seatPlat[i] = 0;      /* a fresh down: the beacon place again - but not after a 1-pass 'up' flicker (the beacon freshness lapsing while the replica's D does not read: review 10-30), which keeps the BP16b fallback; 3 s is a GUESS */
         if (down && klbf_gu_hold && bsd[i] && !(klbf_gu_plat && seatPlat[i] && (rok[i] || !viaB))) { memcpy(hp, bsp[i], 12); hpB = 1; }      /* OnlineGetUpHold: the downed machine's own place beats the host's replica of the diving body (BP15: replica at x -592..-690, body at -782) - unless OnlineGetUpPlateau gave a rusher up on that place this down and the host's replica (its feet / +0x460) is readable: then the replica place is the order place (BP16b fallback) */
         if (down && !hdown[i]) { hdown[i] = 1; hAt[i] = now; klog("botfill: getup: seat %d IS DOWN (D %08lx state %lu) at (%.0f, %.0f, %.0f)%s%s", i, (unsigned long)D, (unsigned long)ds, hp[0], hp[1], hp[2], viaB ? " (beacon)" : "", klbf_gu == 2 ? " - DRY" : ""); }
-        if (!down) { if (hdown[i]) { hdown[i] = 0; hUpAt[i] = now ? now : 1; klog("botfill: getup: seat %d is up / out of play after %.1f s", i, (now - hAt[i]) / 1000.0f); } continue; }
-        if (vstate >= 1 && vstate <= 5) continue;      /* the van is called / waits / leaves: the crew's own orders win (Arcade RushVan) */
+        if (!down) { gvLog &= ~(1u << i); if (hdown[i]) { hdown[i] = 0; hUpAt[i] = now ? now : 1; klog("botfill: getup: seat %d is up / out of play after %.1f s", i, (now - hAt[i]) / 1000.0f); } continue; }
+        if (kgu_van_skip(vstate, klbf_gu_ignvan)) {      /* the van is called / waits / leaves: the crew's own orders win, unless OnlineGetUpIgnoreVan (Arcade's default RushVan=0 does not stop a rush) */
+            if (!(gvLog & (1u << i))) { gvLog |= 1u << i; klog("botfill: getup: seat %d is down while the van state is %d: no helper (OnlineGetUpIgnoreVan=0)", i, vstate); }
+            continue;
+        }
         for (b = 0; b < nb; b++) {      /* the bot already sent to this seat, else the nearest free one */
             for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != act[b]; s++) ;
             if (s == KLBF_OT_BOTS) continue;

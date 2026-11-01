@@ -68,6 +68,9 @@ int main(void)
     CHECK(kgu_free(0, 0, 0) && kgu_free(1, 0, 0), "busy off: idle / stack walk with nothing carried are free");
     CHECK(!kgu_free(0, 150000, 0) && !kgu_free(2, 300000, 0), "busy off: a carrier or exit walker is not (BP11: 0 free bots)");
     CHECK(kgu_free(0, 150000, 1) && kgu_free(2, 300000, 1), "busy on: carriers and exit walkers answer (Arcade Rush)");
+    CHECK(kgu_van_skip(1, 0) && kgu_van_skip(3, 0) && kgu_van_skip(5, 0), "ignore-van off: van called / waits / leaves skips the pass");
+    CHECK(!kgu_van_skip(0, 0) && !kgu_van_skip(7, 0) && !kgu_van_skip(-1, 0), "ignore-van off: idle / gone / unreadable does not skip");
+    CHECK(!kgu_van_skip(1, 1) && !kgu_van_skip(3, 1) && !kgu_van_skip(5, 1), "ignore-van on: never skips (Arcade RushVan=0)");
     CHECK(!kgu_free(3, 300000, 1) && !kgu_free(4, 0, 1), "busy on: aboard / taking a stack never");
 
     CHECK(kgu_floor(0.5f, 1, 3.0f) == 3.0f && kgu_floor(4.0f, 1, 3.0f) == 4.0f, "flop meter: raised to the floor, never lowered");
