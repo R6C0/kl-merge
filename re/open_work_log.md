@@ -1,3 +1,8 @@
+2026-11-01 ~23:45 - [ce] RT2 3/3 exit 0, 0 faults. RT2D + RT2R (DD06 7 boarded $4.8M) PASS. RT2L DM09 PARTIAL: the route runs (51 legs, 4 real carries, 0 ZFFActor
+refusals, 6 exit walks) but 0 BOARDED: legs 2..8 time out at the flat 15 s with bots 5-76 m short (~1.5 m/s on 23-50 m legs), so they end 64-76 m
+from leg 8 when the van's boarding object shows (23:08:03, round over 23:08:22). RT3 = same hook + OnlineLegScale=1 Speed=150 MaxS=60 + OnlineLegStallS=20
+(existing default-0 keys), kit week_1028\rt3\run_rt3.sh after c9's CR3. Summary's 'N bot(s) given orders' = actors still set at round end (wording only).
+
 2026-11-01 ~23:30 - [wk-botscore] T3: tools/kl_online_vs_arcade.py (online vs ARC1 table, 60 pct = judgement call), give-up reasons for DD05 DD07 DD09 DM06 DD06 in
 re/bots_online_scorecard_1101.md, new default-0 keys OnlineGuardCarrierCm + OnlinePartialRetry (bench first), ARC2 kit staged in week_1028\arc2 (not run). Merged on rtp-schemas with wk-gunmatrix (21-map gun UI table: all maps baked, re/gun_ui_parity_1028.md E) and wk-trigdm (DM trigger census, [BotFill] OnlineTriggersSkipPickups default 0, re/bots_trigger_cops_1028.md 8); kl_tests 50 pass 0 fail.
 

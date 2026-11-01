@@ -68,13 +68,13 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~23:45 - [ce] RT2 0 faults: RT2D + RT2R (DD06 7 boarded) PASS; RT2L DM09 route runs (51 legs, 4 carries, 0 ZFFActor refusals) but
+0 BOARDED: every leg times out at the flat 15 s 5-76 m short, bots end 64-76 m off when the van comes (round over 19 s later). RT3 = same hook +
+OnlineLegScale=1 Speed=150 MaxS=60 + OnlineLegStallS=20 (existing keys), kit week_1028\rt3\run_rt3.sh after c9's CR3.
+
 2026-11-01 ~22:55 - [c9] CR1: the online client never runs ring writer 0x81b6f0; the host rings each car on ACTIVATION (DM01 871, 737+792,
 906; DM03 5 cars at t+18 s), so CR2 is dropped. CR3 = both seats prebuild at load in table order (rsv!=0 reuses indices, dasm 0x81b709):
 [CoverRing] ClientBuildHost, kit c9_1028\cr3\run_cr3.sh after ce's RT2. LC2 PASS: Hire Page + ControlsPage cleared in NEXT_SHIP.
-
-2026-11-01 ~21:50 - [c9] Cover ring writer = 0x81b6f0 (car script, bumps [L+0x68] by 8, no host test; ring exists at load). Data probe
-refuted, CC1 dropped. TEST [CoverRing] poll fa8843182 (cr1\test 59fb9fc2), CR1 after LC2. AssertSoft never matched before ce's VA fix
-16918c50a (AS2 regrades). NEXT_SHIP: LV1 keys + OnlineDropFollow=1 cleared; hire/controls pages after LC2.
 
 2026-11-01 ~22:25 - [ce] AS1 FAIL -> AS2 PASS: AssertSoft compared offsets vs the ini's VAs (nothing matched); VAs only since 16918c50a, DM01
 client 83 soft asserts, asserts 0 (ship 98fe8760 protects nothing; SHIP week_1028\as2\ship 9d7e3a1c). RT1 DM09 legs never ran (van stands from
