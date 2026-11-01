@@ -99,7 +99,7 @@ static struct {
 
 static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
 static struct { DWORD obj; int role, late; } kspg_role[KSPG_ROLES]; static int kspg_nrole, kspg_role_lost;   /* open-addressing hash by object address (obj == 0: empty) */
-enum { KR_NONE = 0, KR_OLDPRI = 1, KR_OLDSEC = 2, KR_BIG = 11, KR_PRI = 12, KR_SEC = 13, KR_STAR = 14, KR_PRICE = 15 };
+enum { KR_NONE = 0, KR_OLDPRI = 1, KR_OLDSEC = 2, KR_BIG = 11, KR_PRI = 12, KR_SEC = 13, KR_STAR = 14, KR_PRICE = 15, KR_LOCK = 16 };
 static DWORD kspg_info_upd_orig;                                   /* MercsShowInfoFAWeapons slot 8 (0x50c630), saved when the private vtable of class 0 is made */
 static int klhro_waiting(void);                                  /* klhire_online.c (included later): the row the client waits on */
 static int klhro_enabled(void);
@@ -134,7 +134,7 @@ static int kspg_useB(int role) { return role == KR_OLDPRI ? kspg.own[0] : role =
 static char *kspg_ring(void) { return kspg.ring[(InterlockedIncrement(&kspg.ri) - 1) & 7]; }
 
 /* ================================ HIRE PAGE ([Hire] Enable=1 + Page=1; 2026-10-27, NOT RUN IN THE GAME; re/shop_hire.md section 9) ================================
- * A second key ([Hire] PageKey, default F12) turns the open Buy Weapons shop (list mode 2) into a list of HEISTERS and back. Same machinery as page II: per-element private
+ * A second key ([Hire] PageKey, default F3; was F12 = Steam's screenshot key) turns the open Buy Weapons shop (list mode 2) into a list of HEISTERS and back. Same machinery as page II: per-element private
  * vtable copies (text slot 24, picture update, selector slot 20), data writes only. The page is a THIRD state next to set A / set B: `kspg.hire`; shownB stays 0 while it is up,
  * so every page II path (own[], note_buy, hand-over, the F6 toggle's A/B state) keeps meaning "set B on screen" and is untouched.
  *  - rows: GUESS (layout) heisters sit on the rows the shop really lists as one page of 8: Pistols tab rows 0..7 = KLChar 1..8 (Dog Days crew), SMGs tab rows 17..24 = KLChar 9..16
@@ -163,7 +163,7 @@ static void kspg_h_keyname(int vk, char *kn, size_t cap) { klkeys_name(vk, 0, kn
  * Owner 10-28: mod features must be reachable on a sane key and visible in the shop, 'not a secret feature'. The third page state of the open Buy Weapons shop: one row per keyed
  * feature of klkeys.c's table (title + key + ON / OFF, the description: what it does, the key, the live state from KLHook.ini, where it works). The same layout rule as the hire page
  * (GUESS): tab 'Pistols' = rows 0..7 = IN ROUND, tab 'SMGs' = rows 17..24 = HOST + ONLINE; every other row '-'. BUY / BuyWeaponDialogVoodoo are swallowed (an information page: nothing is
- * bought, charged or changed). The page-cycle key ([Keys] PageKey, default F2) goes stock -> page II (if on) -> hire (if on) -> controls -> stock; the old direct keys (F6 / F12) still work.
+ * bought, charged or changed). The page-cycle key ([Keys] PageKey, default F2) goes stock -> page II (if on) -> hire (if on) -> controls -> stock; the old direct keys (F6 / F3) still work.
  * Same rules as the hire page: data writes only, element-private vtables, the carrier's price / rank / lock text is not replaced (the description says it is not used). */
 static int kspg_c_feat(int row)
 {   /* shop row -> klkeys id 0..15, -1 = none */
@@ -192,14 +192,16 @@ static int kspg_next(int cur)
     int i, p; for (i = 1; i <= 4; i++) { p = (cur + i) % 4; if (p != cur && kspg_avail(p)) return p; }
     return cur;
 }
-static const char *const kspg_pname[4] = { "stock page", "Page II", "Hire a heister", "Mod controls" };
+static const char *const kspg_pname[4] = { "stock page", "Page II", "Hire", "Controls" };
 /* the caption's cycle hint, '  [F2] next: Hire a heister'; 0 = none (page off / text too long) */
 static int kspg_cycle_hint(char *o, size_t n, int cur)
 {
     char kn[24];
     if (!kspg.ctlOn || strlen(o) > 440) return 0;
     kspg_h_keyname(kspg.ctlKey, kn, sizeof kn);
-    snprintf(o + strlen(o), n - strlen(o), "  [%s] next: %s", kn, kspg_pname[kspg_next(cur)]);
+    /* SHOTS1: a long caption (the hire page's) drops the word 'next:' so the game's '| RANK n: name' after it stays on one line (about 50 characters of caption plus hint fit with it) */
+    if (strlen(o) > 30) snprintf(o + strlen(o), n - strlen(o), "  [%s] %s", kn, kspg_pname[kspg_next(cur)]);
+    else snprintf(o + strlen(o), n - strlen(o), "  [%s] next: %s", kn, kspg_pname[kspg_next(cur)]);
     return 1;
 }
 
@@ -247,7 +249,7 @@ static char *kspg_text_hire(void *self, const char *key, char *res)
         char kn[16]; size_t n = strlen(res);
         if (n > 440) return 0;
         kspg_h_keyname(kspg.hireKey, kn, sizeof kn);
-        memcpy(o, res, n); snprintf(o + n, 80, "  HIRE A HEISTER  [%s] stock page", kn);
+        memcpy(o, res, n); snprintf(o + n, 80, "  HIRE HEISTER  [%s] stock", kn);   /* SHOTS1: the game appends '| RANK n: name' after this line; the old long caption wrapped it under TOTAL */
         if (kspg.hireLog && !(kspg.hLogT & 1)) { kspg.hLogT |= 1; klog("hirepage: served the caption '%s'", o); }
         return o;
     }
@@ -490,7 +492,7 @@ static void __fastcall kspg_info_upd(void *self, void *edx)
 {
     DWORD row = 0, hide = 99;
     (void)edx;
-    if (kspg.hact && kspg.hire && kspg.hirePrice && kspg_role_of(self) == KR_PRICE && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2 &&
+    if (kspg.hact && ((kspg.hire && kspg.hirePrice) || kspg.ctl) && kspg_role_of(self) == KR_PRICE   /* the controls page has no price either (SHOTS1: a stray $6,000) */ && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2 &&
         klh_rd((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW), &row, 4) && row != hide &&
         klh_data((void *)KLH_VA(KSPG_SHOWN_ROW), &hide, 4, "KLShopPage: hire page: shown row 99 for the price element's update")) {
         ((kspg_gfx_t)(DWORD_PTR)kspg_info_upd_orig)(self, 0);
@@ -523,9 +525,10 @@ static void __fastcall kspg_gfx(void *self, void *edx)
            rank NEED (GUESS: an index below the stock tier is drawn lit, so -1 lights a star when the carrier row has a tier above 0, 99 dims it; the rank itself is
            written in the description either way). Same element-private swap-and-restore as the page II picture. */
         int hr = kspg_role_of(self);
-        if (hr == KR_BIG || hr == KR_STAR) {
+        /* SHOTS1 fix: the lock icons are the CARRIER gun's rank locks. The controls page has no guns, and with [Hire] Rank=0 nothing is gated: no lock is drawn (index 99 = no row, GUESS as the picture's). */
+        if (hr == KR_BIG || hr == KR_STAR || (hr == KR_LOCK && (kspg.ctl || !klhr_rankgate))) {
             idx = klh_rd32((DWORD_PTR)self + 0xc4);
-            if (hr == KR_BIG) nidx = 99;
+            if (hr == KR_BIG || hr == KR_LOCK) nidx = 99;
             else if (kspg.ctl) nidx = 99;                                                  /* the controls page: no picture, no stars */
             else { int ch = kspg_h_ch((int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW))), need = ch ? klhr_need[ch] : 0; nidx = ((int)idx >= 0 && (int)idx < need) ? (DWORD)-1 : 99u; }
             if (nidx != idx && klh_data((void *)((DWORD_PTR)self + 0xc4), &nidx, 4, "KLShopPage: hire page picture index (swapped for one update)")) {
@@ -751,8 +754,9 @@ static void kspg_scan(void)
         if (c == 2 || c == 0) {                                   /* tags: Graphic at [obj+0xb8], ShowInfo at [obj+0xc4] (char*) */
             klh_rdstr(klh_rd32(tab[k].obj + (c == 2 ? 0xb8 : 0xc4)), tag, sizeof tag);
             if (c == 2) role = !strcmp(tag, "WeaponBig") ? KR_BIG : !strcmp(tag, "PrimaryWeapon") ? KR_PRI : !strcmp(tag, "SecondaryWeapon") ? KR_SEC
-                             : ((kspg.hireOn || kspg.ctlOn) && !strcmp(tag, "WeaponShopStar")) ? KR_STAR /* read 2026-10-27 review: 0x58c6cf compares the tag with "WeaponShopStar" (0xb206f0) */ : KR_NONE;
-            else role = !strcmp(tag, "OldPrimaryWeapon") ? KR_OLDPRI : !strcmp(tag, "OldSecondaryWeapon") ? KR_OLDSEC : (kspg.hireOn && !strcmp(tag, "PackagePrice")) ? KR_PRICE : KR_NONE;
+                             : ((kspg.hireOn || kspg.ctlOn) && !strcmp(tag, "WeaponShopStar")) ? KR_STAR /* read 2026-10-27 review: 0x58c6cf compares the tag with "WeaponShopStar" (0xb206f0) */
+                             : ((kspg.hireOn || kspg.ctlOn) && !strcmp(tag, "WeaponShopLock")) ? KR_LOCK /* GUESS (SHOTS1 fix): the list's lock icons are tagged like the stars (XML names WeaponShopLock#01..08, shop_plan.md) */ : KR_NONE;
+            else role = !strcmp(tag, "OldPrimaryWeapon") ? KR_OLDPRI : !strcmp(tag, "OldSecondaryWeapon") ? KR_OLDSEC : ((kspg.hireOn || kspg.ctlOn) && !strcmp(tag, "PackagePrice")) ? KR_PRICE : KR_NONE;
             if (c == 2 && role == KR_NONE) continue;              /* other graphics: not wrapped */
         }
         kspg_setrole(tab[k].obj, role);
@@ -1225,7 +1229,7 @@ static void kspg_init(void)
     /* [Hire] Page (2026-10-27, recommended off until benched; NOT RUN IN THE GAME): the hire page of this shop; needs [Hire] Enable=1; works with [ShopPage] Enable=0 */
     if (GetPrivateProfileIntA("Hire", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("Hire", "Page", 0, klh_ini) != 0) {
         kspg.hireKey = klkeys_vk(KK_HIRE) & 0xff;                                            /* [Hire] PageKey / [Keys] HirePage (klkeys.c) */
-        if (kspg.hireKey < 1 || kspg.hireKey > 0xfe) kspg.hireKey = 0x7b;
+        if (kspg.hireKey < 1 || kspg.hireKey > 0xfe) kspg.hireKey = 0x72;   /* F3 (was F12 = Steam's screenshot key) */
         kspg.hireConfirm = GetPrivateProfileIntA("Hire", "PageConfirm", 1, klh_ini) != 0;
         kspg.hirePrice = GetPrivateProfileIntA("Hire", "PagePrice", 1, klh_ini) != 0;       /* (recommended on) the hire price on the name line, the stock gun price blanked */
         kspg.hireLog = GetPrivateProfileIntA("Hire", "PageLog", 1, klh_ini) != 0;
@@ -1450,7 +1454,7 @@ static void kspg_hire_tick(void)
         else if (!kspg.hRankAt || now - kspg.hRankAt > 2000) { kspg.hRankAt = now | 1; kspg.hRankOk = klhr_rankgate ? klhr_rank(&kspg.hRank) : 0; }
     }
     if (gaks && fgw && wtp) {
-        int down = kspg.hireOn && (gaks(kspg.hireKey) & 0x8000) != 0, scripted = 0;   /* as before the [Keys] work (review 10-28: the extra klhr_on / Online gate was not behind a toggle; kspg_gate_x already holds the online gate) */
+        int down = kspg.hireOn && (gaks(kspg.hireKey) & 0x8000) != 0 && !(kspg.hireKey == 0x72 && (gaks(0x11) & 0x8000)), scripted = 0;   /* Ctrl+F3 is the host's map key: not the hire key */   /* as before the [Keys] work (review 10-28: the extra klhr_on / Online gate was not behind a toggle; kspg_gate_x already holds the online gate) */
 #ifdef KLHOOK_TEST
         if (kspg.hireOn) {   /* bench: a key klauto.c's script holds counts too (as the page II key) */
             static int dik = -1;

@@ -14,7 +14,7 @@
  *
  * THE NEW MAP ([Keys] Map=1), every key checked against the ones in this table, ReShade.ini and Dog Days' own binds:
  *   Unstick End | Inv shelf PageUp | CopSquad follow / hold / attack Num1 / Num2 / Num3 | HostOpts map Ctrl+F3, AI Ctrl+F4, pool Ctrl+Delete | MOD CONTROLS page F2
- *   unchanged: F5 UCC ping, F6 shop page II, F9 heister, F11 mask, F12 hire page (Steam's screenshot key is F12 too: a screenshot is taken with it, [Hire] PageKey= moves it), Insert reveal,
+ *   unchanged: F5 UCC ping, F6 shop page II, F9 heister, F11 mask, F3 hire page (was F12 = Steam's screenshot key; F3 is free in Steam, ReShade.ini and the mod: Ctrl+F3 is the host map key, Ctrl-gated), Insert reveal,
  *   J sabotage, G grenade (the Dead Men grenade key IS the stock grenade key: Dog Days leaves the button dead, klgrenade.c wakes it).
  *   Host keys with Ctrl: there is no reliable 'lobby / before the round' read for the three host keys (klhostopt.c polls them in a round too), so they need Ctrl held: a key pressed
  *   while playing never changes the match by accident. (GUESS: Dog Days binds no F-key; the game's stock binds are only the ones in klkeys_stock below.)
@@ -54,7 +54,7 @@ static const struct klkeys_def {
     { "HostPool",  "HOST: MAP POOL",   "HostOpts",  "KeyPool",    0x2e, 0x2e, 1, 0, "Online host",              "Cycle the random map pool (needs the map pool on)." },
     { "Char",      "HEISTER SELECT",   "CharOnline","KeyChar",    0x78, 0x78, 0, 0, "Online",                   "Pick your heister, seen on every peer. Shift = previous." },
     { "Mask",      "MASK SELECT",      "CharOnline","KeyMask",    0x7a, 0x7a, 0, 0, "Online",                   "Pick your mask, seen on every peer. Ctrl = outfit, Shift = previous." },
-    { "Hire",      "HIRE PAGE",        "Hire",      "PageKey",    0x7b, 0x7b, 0, 0, "Arcade and online",        "In the Buy Weapons shop: hire a heister for the next round. F12 is Steam's screenshot key too." },
+    { "Hire",      "HIRE PAGE",        "Hire",      "PageKey",    0x72, 0x72, 0, 0, "Arcade and online",        "In the Buy Weapons shop: hire a heister for the next round. (Was F12, Steam's screenshot key.)" },
     { "Page2",     "SHOP PAGE II",     "ShopPage",  "Key",        0x75, 0x75, 0, 0, "Arcade (view online)",     "In the Buy Weapons shop: the extra guns of page II." },
     { "UccPing",   "UCC PING / ACCUSE","Ucc",       "Key",        0x74, 0x74, 0, 0, "Online",                   "Cop: ping the heister you aim at as suspicious. Heister: accuse the one you suspect." },
     { "PageKey",   "NEXT SHOP PAGE",   "Keys",      "PageKey",    0x71, 0x71, 0, 0, "Arcade and online",        "In the Buy Weapons shop: next page (page II, hire, mod controls)." },
