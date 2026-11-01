@@ -162,3 +162,21 @@ Q33 = ship1103 + OnlineGuardBypassMin=3 + OnlineBoardAllM=1600 (c9 kit q33). PAS
 - But it gains nothing yet: the stacks drain 6 -> 0 in 22 s (Q32: 24 s) before bot 3 covers the 42 m, and every bot walks
   to the exit with tally 0 in BOTH runs. Gap 4 (stack drain) masks gaps 2 and 5 on DD05; grade those again after gap 4.
 - DD05 exit trigger is found ~1 s after the first "no exit trigger" line (lazy scan), same in both runs; harmless.
+
+## SP1 stack probe (11-01 16:49-17:14, ce): OnlineStackProbe=2 on DD09 DD05 + DD03 control
+Kit C:\kl_build_1024\week_1028\sp1 (ship1103 + the key, TEST hook stackprobe_test bdd1fa08). 3/3 PASS, 0 faults, both seats into round 2.
+- Level 2 never ran: `patch REFUSED 004e3f40 +6 ... inside a range kl2.exe's integrity checks hash`. A session run cannot patch there,
+  so level 3 (commit 0fe34f0e2) uses a hardware write watch (DR0, no code patch) on the first armed stack's +0x34 for 40 s instead.
+- NEW: the type splits the maps. Draining maps DD09 / DD05: stacks are type 0 (t0 6/6). Control DD03 (no drain, the bar moves 1% per
+  second with the bots' timed parts): stacks are type 2 (t2 12/12). Type 1 = 133 / 125 drop-pool objects, all armed in round 1 and
+  none armed in round 2 on every map.
+- DD09 round 2: 6 stacks in state 2 (round 1: state 1). At +13 s all 6 go amt 0, state 3, armed 0. The bar goes 6.0M -> 3.9 -> 1.8 ->
+  0.9 -> 0 in 1.6 s and the type-1 armed count rises 0 -> 2 -> 5 -> 6, one per stack: each drained stack arms a drop-pool
+  object, as if the money were DROPPED, not taken. No team-1 actor within 30 m of any DD09 stack.
+- DD05: 9 of the 12 dump lines (2 rounds) have a team-1 actor 0.0 m from the stack, so on DD05 the money sits ON actors (money
+  carried by armed people). It drains 4.5M -> 0 between +19 and +29 s of round 2.
+- Reading (GUESS, SP2 checks it): a type-0 stack is "loot on a person / dropped on an event". The stock rules empty it into a
+  type-1 drop pool when its event fires, so the bots' scan (which skips type 1) loses it. If SP2 confirms this, the fix is to let bots
+  follow the stack's money into the newly armed type-1 objects (key OnlineDropFollow, default off), not to block the drain.
+- Next: SP2 = OnlineStackProbe=3 on DD09 + DD05 (TEST hook stackprobe3_test 1cc357df, kit C:\kl_build_1024\week_1028\sp2), after
+  c9's SHOTS2 / Q33 / Q34. Look for `WATCH 'stack` lines: the writer, and whether a type-1 object is armed in the same frame.
