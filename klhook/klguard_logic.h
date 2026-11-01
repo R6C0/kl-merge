@@ -48,4 +48,27 @@ static int kgg_origin(const float *p)
 {
     return fabsf(p[0]) <= 1 && fabsf(p[1]) <= 1 && fabsf(p[2]) <= 1;
 }
+
+/* OnlineGuardCarrierCm (wk-botscore-1101, default 0 = off): a cop standing within carrier_cm of a stack is the person the money is ON (Q31 DD07: the cop spread
+   equals the stack spread on all three axes, 5 cops for 5 stacks; DM06 and DD05 the same), not a separate guard. Arcade's bots take those stacks (ARC1: DD05 6/6,
+   DD07 5/5, DM06 4/4); the 8 m / 25 m guard test counts the carrier and holds the bots for the whole round. GUESS: 150 cm; carrier_cm <= 0 = off.
+   GUESS (premise): "the cop at the stack is its carrier" is a CORRELATION read from the Q31 logs (cop spread = stack spread), not proven. A real guard standing within
+   carrier_cm of a stack is dropped from the guard count too (risk: the bots walk into it and die, as in ARC1 DD07). */
+static int kgg_carrier(const float *c, const float *s, float carrier_cm)
+{
+    float dx = c[0] - s[0], dy = c[1] - s[1], dz = c[2] - s[2];
+    if (!(carrier_cm > 0)) return 0;
+    return (dx * dx + dy * dy + dz * dz) <= carrier_cm * carrier_cm;      /* NaN compares false: not a carrier */
+}
+
+/* OnlinePartialRetry (wk-botscore-1101, default 0 = off): Q31 DD06 R1: five bots stopped a stack part-way ("bot moved away" from the stack, 4 to 10 m, limit 2.5 m), every other stack was blacklisted
+   for the 45 s retry, so the same tick they were sent to the exit with their partial tally and never looked at a stack again (hook tally 3.13M, 2 stacks counted taken of 8, BEHIND Arcade's 5.55M / 8 of 8, not zero; scorecard re/bots_online_scorecard_1101.md).
+   hold = stay at the pick (phase 0) instead of committing to the exit walk: a carrier with room for another grab, a blacklisted/taken stack still in the list,
+   the partial stop younger than wait_ms and enough clock left. partial_at 0 = no partial stop. */
+static int kgg_partial_hold(int on, int tally, int grabs, int carry, int idle_van, int nhold, unsigned int now, unsigned int partial_at, unsigned int wait_ms, float left_s, float min_left_s)
+{
+    if (!on || tally <= 0 || idle_van || grabs >= carry || nhold <= 0 || !partial_at) return 0;
+    if ((int)(now - partial_at) >= (int)wait_ms) return 0;
+    return left_s > min_left_s;
+}
 #endif
