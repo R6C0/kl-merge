@@ -154,3 +154,11 @@ Offline read of `klhook/klbotfill.c` (line numbers of HEAD 7b5ac0b4e) and the fi
 - A line such as `botfill: stackprobe: 0x4e3f40 by stock caller=XXXXXXXX this=28b1b760 amt=1200000 type=2 state=1 (hook call 0)` at 11:40:04 in the DD09 host log, with the caller RVA resolving to a script/trigger update (0x626ec0 = ZTriggerBox2, 0x727cb0 = the record state machine, 0x4c95d0 = Deactivate) or to the 0x6d2500 family.
 - And the per-stack round-start dump showing a team-1 actor within 30 m of each stack that vanishes. If the caller is 0x626ec0 with a team-2 actor, the Ally bots' proximity (or `OnlineTriggers` FIRE) is taking it; if it is a script, the stacks are scripted prizes and DD09 / DD05 need a different loot rule (bots should wait for the carrier event, or the stock script gate be left untouched).
 - Run: DD09 and DD05 online, `--n 2`, `OnlineStackProbe=2`, compare against DD03 (no drain) as control.
+
+## Q33 DD05 A/B vs Q32 DD05 (11-01 ~16:35, ce)
+Q33 = ship1103 + OnlineGuardBypassMin=3 + OnlineBoardAllM=1600 (c9 kit q33). PASS, 0 faults, both seats into round 2.
+- Gap 2 key works: at round start (6 stacks, 3 guarded, 3 live cops) bot 3 "all 3 free stacks guarded: takes stack 28f07780
+  with the fewest cops" (Q32: all four bots HOLD). Others still hold (only one release per 15 s).
+- But it gains nothing yet: the stacks drain 6 -> 0 in 22 s (Q32: 24 s) before bot 3 covers the 42 m, and every bot walks
+  to the exit with tally 0 in BOTH runs. Gap 4 (stack drain) masks gaps 2 and 5 on DD05; grade those again after gap 4.
+- DD05 exit trigger is found ~1 s after the first "no exit trigger" line (lazy scan), same in both runs; harmless.
