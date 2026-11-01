@@ -167,6 +167,7 @@
  *   [KLHook]
  *   ContinueAsserts=1   MaxAsserts=200   MaxDumps=4
  *   AssertSoft=         kl2.exe addresses (0x6567e8,845a8b; the bracketed number of an ASSERT line) of asserts to step over silently: no dump, no ASSERT line, not in MaxAsserts; 'soft assert' lines + soft_asserts= in KLHook.result (default empty)
+ *   AssertSoftGuard=0   1 = a listed soft site is stepped over silently only if its cover record lies inside the pool [[0xdd265c]+0x15a0]+0x44 (0x1788 x 0x7c); else the ordinary visible assert path (re/assertsoft_safety_1101.md)
  *   EndOnFatal=1        end the process ourselves after a fatal fault was logged (see above)
  *   ExitLog=1           wrap ExitProcess and MSVCR90 exit / _exit (the tripwire and the exit line)
  *   Tick=1              wrap SteamAPI_RunCallbacks; 0 = the fallback thread alone drives the tick
@@ -211,6 +212,7 @@ static int continue_asserts = 1, max_dumps = 4, dumps = 0, max_asserts = 200;
    over like a continued one but never dumped, never logged as ASSERT and not counted toward MaxAsserts; counted here instead (KLHook.result
    soft_asserts=, the RESULT line's 'soft asserts'). Empty = off. A soft site continues even with ContinueAsserts=0 (soft means 'known harmless'). */
 #include "klassoft_logic.h"
+static int klh_soft_guard;                         /* [KLHook] AssertSoftGuard=0 (default): see klassoft_logic.h kas_guard_ok */
 static unsigned long klh_soft_list[KAS_MAX]; static int klh_soft_n_sites; static volatile LONG klh_soft_hits[KAS_MAX], klh_soft_n;
 static DWORD seen[256]; static int nseen;
 static CRITICAL_SECTION cs;
@@ -548,6 +550,23 @@ static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
     }
     if (code == EXCEPTION_BREAKPOINT && klh_soft_n_sites && ((BYTE *)at)[0] == 0xCC) {       /* AssertSoft: step over, no dump, no ASSERT line */
         int k = kas_find(klh_soft_list, klh_soft_n_sites, at);      /* VAs (AS1: offsets never matched the ini's VAs) */
+        if (k >= 0 && klh_soft_guard) {                 /* AssertSoftGuard: step over only a record inside the cover pool (re/assertsoft_safety_1101.md) */
+            int wh = kas_site_where(at); unsigned long pool = 0, reg = 0, idx = 0;
+            if (wh != KAS_REC_NONE) {
+                DWORD_PTR sys = 0, lv = 0; const DWORD *pp;
+                pp = (const DWORD *)KLH_VA(0xdd265c); if (!IsBadReadPtr(pp, 4)) sys = *pp;
+                if (sys && !IsBadReadPtr((void *)(sys + 0x15a0), 4)) lv = *(const DWORD *)(sys + 0x15a0);
+                if (lv && !IsBadReadPtr((void *)(lv + 0x44), 4)) pool = *(const DWORD *)(lv + 0x44);
+                reg = wh == KAS_REC_EDI ? ep->ContextRecord->Edi : ep->ContextRecord->Esi;
+                if (wh == KAS_IDX_ESI4 && !IsBadReadPtr((void *)(DWORD_PTR)(ep->ContextRecord->Esi + 4), 4)) idx = *(const DWORD *)(DWORD_PTR)(ep->ContextRecord->Esi + 4); else if (wh == KAS_IDX_ESI4) idx = 0xfffffffful;
+            }
+            if (!kas_guard_ok(wh, pool, reg, idx)) {
+                static LONG refused;
+                if (InterlockedIncrement(&refused) <= 5)
+                    klog("AssertSoftGuard: assert at kl2.exe+%06lx (%08lx) NOT stepped over silently: record %08lx / idx %08lx outside the cover pool %08lx (cap 0x1788 x 0x7c); ordinary assert path", at - img_lo, at, reg, idx, pool);
+                k = -1;
+            }
+        }
         if (k >= 0) {
             LONG h = InterlockedIncrement(&klh_soft_hits[k]); InterlockedIncrement(&klh_soft_n);
             if (h == 1 || h == 10 || h == 100 || h == 1000 || h == 10000 || h == 100000 || h == 1000000)      /* first hit, then each power of ten */
@@ -1627,6 +1646,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     { char sl[256] = ""; int bad = 0; GetPrivateProfileStringA("KLHook", "AssertSoft", "", sl, sizeof sl, klh_ini);
       klh_soft_n_sites = kas_parse(sl, klh_soft_list, KAS_MAX, &bad);
       if (klh_soft_n_sites || bad) klog("AssertSoft: %d site(s) as kl2.exe addresses (first %08lx)%s", klh_soft_n_sites, klh_soft_n_sites ? klh_soft_list[0] : 0ul, bad ? " (some entries ignored: not hex, or not an address in 0x400000..0x2000000)" : ""); }
+    klh_soft_guard = GetPrivateProfileIntA("KLHook", "AssertSoftGuard", 0, klh_ini) != 0;
     klh_end_on_fatal = GetPrivateProfileIntA("KLHook", "EndOnFatal", 1, klh_ini);
     klh_fastexit = GetPrivateProfileIntA("KLHook", "FastExit", 1, klh_ini) != 0;
     klh_stall_say_ms = GetPrivateProfileIntA("KLHook", "StallSayMs", 3000, klh_ini);

@@ -32,4 +32,38 @@ static int kas_find(const unsigned long *l, int n, unsigned long va)
     int i; for (i = 0; i < n; i++) if (l[i] == va) return i;
     return -1;
 }
+
+/* ---- AssertSoftGuard (11-01, re/assertsoft_safety_1101.md): per-site table + the pure pool test ----
+ * All five sites read the cover point's flags at [rec+0x68] (rec = [L+0x44] + idx*0x7c, L = [[0xdd265c]+0x15a0], idx < 0x1788 = the game's own
+ * bound at 0x656776) and, when neither bit 2 nor 0x200 is set, hit an int3 whose fall-through is the SAME code the "bit 2 set" case runs (kind 0,
+ * read-only on rec). So stepping over never writes out of bounds; the only hazard is a rec that is NOT inside the pool (an index without a bound:
+ * 0x845a8b with state 0, and the 0x491eb0 helper behind 0x51d049 / 0x555900 never check the upper bound). With AssertSoftGuard=1 veh() steps over
+ * a listed site only when the record is provably inside the pool; otherwise the hit takes the ordinary visible assert path (log + one dump).
+ * Where the record sits at the int3: KAS_REC_EDI / KAS_REC_ESI = a register holds rec; KAS_IDX_ESI4 = rec is not kept, but [esi+4] is the index. */
+#define KAS_POOL_CAP 0x1788ul
+#define KAS_REC_SIZE 0x7cul
+enum { KAS_REC_NONE = 0, KAS_REC_EDI = 1, KAS_REC_ESI = 2, KAS_IDX_ESI4 = 3 };
+typedef struct { unsigned long va; int where; const char *name; } kas_site;
+static const kas_site kas_sites[] = {
+    { 0x6567e8, KAS_REC_EDI,  "0x656740 set-state, rec in edi (idx range-checked at 0x656776)" },
+    { 0x845a8b, KAS_REC_ESI,  "0x845980 set-state(ebx), rec in esi (upper bound checked only when ebx != 0)" },
+    { 0x51d049, KAS_IDX_ESI4, "0x51d020 kind query, rec via 0x491eb0 (no bound), idx = [esi+4]" },
+    { 0x555900, KAS_REC_EDI,  "0x5558d0 cover-point fire/aim, rec = 0x491eb0 result in edi (no bound)" },
+    { 0x4ede1b, KAS_REC_ESI,  "0x4ede00 kind test, this = rec in esi (called from 0x845b53 with an unchecked idx)" },
+};
+#define KAS_NSITES ((int)(sizeof kas_sites / sizeof kas_sites[0]))
+static int kas_site_where(unsigned long va)
+{
+    int i; for (i = 0; i < KAS_NSITES; i++) if (kas_sites[i].va == va) return kas_sites[i].where;
+    return KAS_REC_NONE;                 /* not in the table: the guard cannot judge it, so it passes (the list alone decides) */
+}
+/* 1 = step over is safe. pool = [L+0x44] (0 if unreadable), reg = the register named by 'where' (edi / esi), idx = [esi+4] for KAS_IDX_ESI4 (ignored else) */
+static int kas_guard_ok(int where, unsigned long pool, unsigned long reg, unsigned long idx)
+{
+    if (where == KAS_REC_NONE) return 1;
+    if (!pool) return 0;
+    if (where == KAS_IDX_ESI4) return idx < KAS_POOL_CAP;
+    if (reg < pool || reg >= pool + KAS_POOL_CAP * KAS_REC_SIZE) return 0;
+    return (reg - pool) % KAS_REC_SIZE == 0;
+}
 #endif
