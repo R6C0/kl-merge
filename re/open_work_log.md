@@ -1,3 +1,9 @@
+2026-11-01 ~10:30 - [c9] DD10 address space (HIREWD largest free piece 14.4 MB): a DD10 MAP TRAIT, not the wardrobe - COVER14_DD10 (10-26, no
+wardrobe) sat at 14.1 MB from level load; the wardrobe build grew the .prm reserve block 66.5 -> 84.2 MB but min free VA is higher (184-188 vs 125 MB).
+0 refused requests in every DD10 run. Risk if it keeps falling: a ~15.8 MB heap segment or >14 MB block fails mid-round with no NULL check
+(re/dm05a_heap_1025.md). Workflow wf_41925793-6d5 (2 readers + verifier, 7 spot-checks). Staged LONGVA (C:\kl_build_1024\c9_1028\longva): DD10
+online 4 rounds, [Memory] Log=1, A = ship keys vs ROOM = RoomMB=128 + ReserveMB=176 (never run in the game). Queued after ce's IV2/IV2OFF.
+
 2026-11-01 ~09:50 - [c9] HIREWD PASS: Dead Men hires online on the newly installed DM07 + DD10 wardrobes (IgnoreWardrobe 0, OnlineHost 1). Host hires Kane,
 joiner Lynch at the F12 hire page in the round-1 shop ($10000, banked 100000 -> 90000), round 2: 'I wear Kane/Lynch', applied to body on both seats
 (model 10022 -> 9249 Kane, 10134 -> 9263 Lynch, try 1), botgate .bots.zip loaded, 0 faults, restore a6ea229f/12d5f8e1 (sha1 checked). DM07 time in
