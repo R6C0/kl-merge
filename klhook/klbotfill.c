@@ -34,6 +34,7 @@ static int klbf_fill;              /* the plan's fill, for the squad pass */
 static int klbf_lp; static float klbf_lp_scale = 1.0f, klbf_lp_stay = 250.0f; static DWORD klbf_lp_warned[16]; static int klbf_lp_nw, klbf_lp_nok, klbf_lp_nbad;      /* gap2: OnlineLootParts (timed parts) */
 static float klbf_lf_copm = 800.0f; static int klbf_lf, klbf_lfp, klbf_lf_pz, klbf_lf_cap = 25, klbf_lf_start, klbf_lf_fin, klbf_lf_left, klbf_lf_hold, klbf_lf_cops; static float klbf_lf_stay = 500.0f;      /* wk-botpar: [BotFill] OnlineLootFinish / OnlineLootFinishStayM (game units) / OnlineLootFinishCapS; per-round finished / left-early counts */
 static int klbf_esn, klbf_vgs, klbf_vgs_margin = 60, klbf_vgs_defer; static DWORD klbf_vgs_since;      /* wk-botpar: [BotFill] OnlineEscortNode , OnlineVanGatherSmart / OnlineVanGatherMarginS */
+static int klbf_sp;      /* [BotFill] OnlineStackProbe 0/1/2 (block before klbf_ot_run) */
 static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near = 150.0f;
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
@@ -136,6 +137,7 @@ static void klbf_init(void)
     klbf_ot_carry = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsCarry", 2, klh_ini); if (klbf_ot_carry < 1) klbf_ot_carry = 1;
     klbf_ot_near = (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsNear", 150, klh_ini); if (klbf_ot_near < 20) klbf_ot_near = 20;
     klbf_ot_take = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsTake", 0, klh_ini); if (klbf_ot_take < 0 || klbf_ot_take > 2) klbf_ot_take = 0;      /* 0 off (also any out-of-range value), 1 raw write of +0x34 (old), 2 the game's own 0x4e3f40 (recommended on once benched) */
+    klbf_sp = (int)GetPrivateProfileIntA("BotFill", "OnlineStackProbe", 0, klh_ini); if (klbf_sp < 0 || klbf_sp > 2) klbf_sp = 0;      /* (recommended off; a diagnostic, TEST use) 1 log the stack fields, 2 + a log-only detour of 0x4e3f40; needs OnlineTactics=1 */
     klbf_lp = (int)GetPrivateProfileIntA("BotFill", "OnlineLootParts", 0, klh_ini); if (klbf_lp < 0 || klbf_lp > 2) klbf_lp = 0;      /* (recommended off) 1 timed parts, 2 dry (log only, lumps) */
     { char b[32]; GetPrivateProfileStringA("BotFill", "OnlineLootPartScale", "1.0", b, sizeof b, klh_ini); klbf_lp_scale = (float)atof(b); if (klbf_lp_scale < 0.1f || klbf_lp_scale > 4.0f) klbf_lp_scale = 1.0f; }      /* GUESS: stands in for the tuning object's +0x624, never read live */
     klbf_lp_stay = (float)GetPrivateProfileIntA("BotFill", "OnlineLootStayM", 250, klh_ini); if (klbf_lp_stay < 80) klbf_lp_stay = 80; if (klbf_lp_stay > 800) klbf_lp_stay = 800;
@@ -1372,6 +1374,122 @@ static int klbf_van_ok(const float *vp, int from)
     return ok;
 }
 
+/* [BotFill] OnlineStackProbe (default 0; a diagnostic, TEST use; re/bots_online_scorecard_1101.md 'Gap 4 diagnosis'): LOG ONLY, nothing is changed.
+   1 = log the fields of a stack (+0x34 amount, +0x38 type, +0x64 state, +0x6c armed, +0x5c shut door, node-hidden bit [[[o+0x24]+4]+0x3c] & 0x400 read at 0x6cdb65, [+0x80] GUESS looter) when
+       it goes 'gone' / 'gone or hidden' and once per round a dump of every armed stack with the nearest live team-1 actor within 30 m; per-type counts of the money objects; at most 60 lines a round.
+   2 = level 1 plus a log-only detour of the game's stack depletion 0x4e3f40 (prologue 56 8b f1 8a 46 64 = push esi; mov esi,ecx; mov al,[esi+0x64]; no relative operand): it logs the stock caller's return address,
+       the stack and the amount, then runs the original unchanged. The hook's own two calls (OnlineTacticsTake=2 and the timed parts) are counted, not logged. 40 lines a round. Installed on the first host round only. */
+#define KLBF_SP_MAXL 60
+#define KLBF_SP_MAXD 40
+static int klbf_sp_nl, klbf_sp_nd, klbf_sp_nown, klbf_sp_inst, klbf_sp_dead, klbf_sp_dumpRound = -1, klbf_sp_ty[4], klbf_sp_tya[4];
+static volatile LONG klbf_sp_own; static volatile DWORD klbf_sp_ownTid; static DWORD klbf_sp_back;
+static const BYTE klbf_sp_x[6] = { 0x56, 0x8b, 0xf1, 0x8a, 0x46, 0x64 };
+
+/* a line allowed? (cap per round; the notice is said once) */
+static int klbf_sp_ok(void)
+{
+    if (klbf_sp_nl >= KLBF_SP_MAXL) return 0;
+    if (++klbf_sp_nl == KLBF_SP_MAXL) klog("botfill: stackprobe: %d lines this round - silent until the next round", KLBF_SP_MAXL);
+    return 1;
+}
+
+/* "vt .. amt .. type .. state .. armed .. door .. hidden .. looter" of a stack, safe reads */
+static void klbf_sp_desc(DWORD o, char *out, int cap)
+{
+    DWORD vt = klh_rd32(o), ty = 0xffffffffu, ent = 0, node = 0, fl = 0, lo = 0; int amt = -1, st = -1, hid = -1; BYTE s64 = 0xff, a6c = 0xff, d5c = 0xff;
+    klh_rd(o + 0x38, &ty, 4); klh_rd(o + 0x34, &amt, 4); klh_rd(o + 0x64, &s64, 1); klh_rd(o + 0x6c, &a6c, 1); klh_rd(o + 0x5c, &d5c, 1); klh_rd(o + 0x80, &lo, 4);
+    if (s64 != 0xff) st = s64;
+    if ((ent = klh_rd32(o + 0x24)) && (node = klh_rd32(ent + 4)) && klh_rd(node + 0x3c, &fl, 4)) hid = (fl & 0x400) ? 1 : 0;
+    _snprintf(out, cap - 1, "vt %08lx%s amt %d type %ld state %d armed %d door %d hidden %d ent %08lx node %08lx [+0x80] %08lx", (unsigned long)vt, vt == KLMV_MONEY_VT ? "" : " (NOT the money vtable)", amt, (long)ty, st,
+              a6c == 0xff ? -1 : a6c, d5c == 0xff ? -1 : d5c, hid, (unsigned long)ent, (unsigned long)node, (unsigned long)lo);
+    out[cap - 1] = 0;
+}
+
+/* a stack went gone: the fields, the per-type counts of the last scan */
+static void klbf_sp_gone(int bot, DWORD o, const char *what)
+{
+    char d[300];
+    if (klbf_sp < 1 || !klbf_sp_ok()) return;
+    klbf_sp_desc(o, d, sizeof d);
+    klog("botfill: stackprobe: bot %d %s: stack %08lx: %s | money objects by type (all/armed) t0 %d/%d t1 %d/%d t2 %d/%d other %d/%d", bot, what, (unsigned long)o, d, klbf_sp_ty[0], klbf_sp_tya[0], klbf_sp_ty[1], klbf_sp_tya[1], klbf_sp_ty[2], klbf_sp_tya[2], klbf_sp_ty[3], klbf_sp_tya[3]);
+}
+
+/* once per round: each armed stack with the nearest live team-1 actor within 30 m (cops[] = the live team-1 places read this tick) */
+static void klbf_sp_dump(const DWORD *mo, const int *mamt, const float (*mpos)[3], int nm, const float (*cops)[3], int ncop)
+{
+    int j, c, shown = 0;
+    if (klbf_sp < 1 || klbf_sp_dumpRound == klbf_ot_rounds || nm <= 0) return;
+    klbf_sp_dumpRound = klbf_ot_rounds;
+    if (klbf_sp_ok()) klog("botfill: stackprobe: round %d: %d armed stack(s), %d live team-1 actor(s) read; money objects by type (all/armed) t0 %d/%d t1 %d/%d t2 %d/%d other %d/%d", klbf_ot_rounds, nm, ncop,
+                           klbf_sp_ty[0], klbf_sp_tya[0], klbf_sp_ty[1], klbf_sp_tya[1], klbf_sp_ty[2], klbf_sp_tya[2], klbf_sp_ty[3], klbf_sp_tya[3]);
+    for (j = 0; j < nm && shown < KLBF_SP_MAXL - 12; j++) {
+        char d[300]; int best = -1; float bd = 3000.0f;
+        for (c = 0; c < ncop; c++) { float dc = kle_dist(cops[c], mpos[j]); if (dc <= bd) { bd = dc; best = c; } }
+        klbf_sp_desc(mo[j], d, sizeof d);
+        if (!klbf_sp_ok()) break;
+        shown++;
+        if (best >= 0) klog("botfill: stackprobe: dump: stack %08lx at (%.0f %.0f %.0f) amt %d: %s | nearest team-1 actor %.1f m away at (%.0f %.0f %.0f)", (unsigned long)mo[j], mpos[j][0], mpos[j][1], mpos[j][2], mamt[j], d, bd / 100, cops[best][0], cops[best][1], cops[best][2]);
+        else klog("botfill: stackprobe: dump: stack %08lx at (%.0f %.0f %.0f) amt %d: %s | no team-1 actor within 30 m", (unsigned long)mo[j], mpos[j][0], mpos[j][1], mpos[j][2], mamt[j], d);
+    }
+    if (shown < nm) klog("botfill: stackprobe: dump: %d of %d stacks listed (line cap)", shown, nm);
+}
+
+/* level 2: the detour's C side. sp -> the return address, sp[1] = the amount (the callee pops it: ret 4); ecx = the stack */
+static void __cdecl klbf_sp_pre(DWORD ecx, DWORD *sp)
+{
+    __try {
+        char d[300]; int own;
+        if (klbf_sp != 2 || klbf_sp_dead) return;
+        own = klbf_sp_own && klbf_sp_ownTid == GetCurrentThreadId();
+        if (own) { klbf_sp_nown++; return; }
+        if (klbf_sp_nd >= KLBF_SP_MAXD) return;
+        klbf_sp_nd++;
+        klbf_sp_desc(ecx, d, sizeof d);
+        klog("botfill: stackprobe: 0x4e3f40 by stock caller=%08lx this=%08lx amount=%ld (hook call 0, tid %lu) #%d: %s", (unsigned long)sp[0], (unsigned long)ecx, (long)sp[1], (unsigned long)GetCurrentThreadId(), klbf_sp_nd, d);
+        if (klbf_sp_nd == KLBF_SP_MAXD) klog("botfill: stackprobe: %d detour lines this round - silent until the next round", KLBF_SP_MAXD);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        klbf_sp_dead = 1;
+    }
+}
+
+static void __declspec(naked) klbf_sp_hook(void)
+{
+    __asm {
+        pushfd
+        pushad
+        lea eax, [esp + 0x24]
+        push eax
+        push ecx
+        call klbf_sp_pre
+        add esp, 8
+        popad
+        popfd
+        push esi
+        mov esi, ecx
+        mov al, byte ptr [esi + 0x64]
+        jmp dword ptr [klbf_sp_back]
+    }
+}
+
+/* once, on the first host round with the key at 2 */
+static void klbf_sp_install(void)
+{
+    BYTE cur[8], jmp[8]; DWORD rel;
+    if (klbf_sp != 2 || klbf_sp_inst || klbf_sp_dead) return;
+    klbf_sp_inst = 1;      /* one try only */
+    if (!klh_exe_ok) { klog("botfill: stackprobe: not the known kl2.exe - detour of 0x4e3f40 skipped"); return; }
+    if (!klh_rd((DWORD_PTR)KLH_VA(0x004e3f40u), cur, sizeof klbf_sp_x)) { klog("botfill: stackprobe: cannot read 0x4e3f40 - detour skipped"); return; }
+    if (memcmp(cur, klbf_sp_x, sizeof klbf_sp_x)) { klog("botfill: stackprobe: prologue at 0x4e3f40 differs from build 0490 (%02x %02x %02x %02x %02x %02x) - NOT patched", cur[0], cur[1], cur[2], cur[3], cur[4], cur[5]); return; }
+    klbf_sp_back = (DWORD)(DWORD_PTR)KLH_VA(0x004e3f40u + sizeof klbf_sp_x);
+    rel = (DWORD)((BYTE *)klbf_sp_hook - (KLH_VA(0x004e3f40u) + 5));
+    memset(jmp, 0x90, sizeof jmp); jmp[0] = 0xe9; memcpy(jmp + 1, &rel, 4);
+    if (!klh_poke(KLH_VA(0x004e3f40u), klbf_sp_x, sizeof klbf_sp_x, jmp, sizeof klbf_sp_x, "stackprobe 0x4e3f40")) { klog("botfill: stackprobe: patch at 0x4e3f40 NOT made (refused by the patch guard - a SHIP build never patches code, and a hashed range is refused - or the bytes changed)"); return; }
+    klog("botfill: stackprobe: 0x4e3f40 detoured (LOG ONLY, 6 bytes 56 8b f1 8a 46 64), %d lines a round", KLBF_SP_MAXD);
+}
+
+/* the hook's own calls of 0x4e3f40 wrap this */
+#define KLBF_SP_OWN(call) do { klbf_sp_ownTid = GetCurrentThreadId(); klbf_sp_own = 1; call; klbf_sp_own = 0; } while (0)
+
 /* host, in a round, once a second. sm_state: caller checked role 2, mode 4 */
 static void klbf_ot_run(DWORD now, DWORD sm)
 {
@@ -1389,6 +1507,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; klbf_ot_nobox_gen = -1; }
         klbf_gm_logged = 0; klbf_gm_last = 0; klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
         klbf_way_load(); klbf_ramp_load(); klbf_trig_load();
+        if (klbf_sp) { if (klbf_sp_nown) klog("botfill: stackprobe: last round: %d call(s) of 0x4e3f40 by the hook itself (not logged)", klbf_sp_nown); klbf_sp_nl = klbf_sp_nd = klbf_sp_nown = 0; klbf_sp_install(); }      /* OnlineStackProbe: per-round caps; the detour (key 2) goes in on the first host round */
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
@@ -1434,6 +1553,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
            GUESS: no unregister path was found, so an entry may be stale - each is re-checked by vtable and read safely. */
         DWORD rn = klh_rd32((DWORD_PTR)KLH_VA(0x00e0e63c)), reg[0x400], q, j;
         if (rn > 0x1000) rn = 0x1000;
+        memset(klbf_sp_ty, 0, sizeof klbf_sp_ty); memset(klbf_sp_tya, 0, sizeof klbf_sp_tya);
         for (q = 0; q < rn; q += 0x400) {
             DWORD m = rn - q < 0x400 ? rn - q : 0x400;
             if (!klh_rd((DWORD_PTR)KLH_VA(0x00e09e38) + 4 * q, reg, 4 * m)) break;
@@ -1441,6 +1561,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 DWORD o = reg[j], ent, node, type = 0; int amt = 0; BYTE act = 0; float pos[3];
                 if (o < 0x10000 || klh_rd32(o) != KLMV_MONEY_VT) continue;
                 nmoney++;
+                if (klbf_sp) { DWORD ty = 3; if (klh_rd(o + 0x38, &ty, 4) && ty > 2) ty = 3; klbf_sp_ty[ty]++; if (klh_rd(o + 0x34, &amt, 4) && amt > 0 && klh_rd(o + 0x6c, &act, 1) && act) klbf_sp_tya[ty]++; amt = 0; act = 0; }      /* OnlineStackProbe: per-type counts (t3 = unreadable / other) */
                 if (nm >= KLBF_OT_OBJ || !klh_rd(o + 0x38, &type, 4) || type == 1 || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act) continue;      /* drop pool, taken, or not armed (+0x6c, klmove.c 2) */
                 if (klbf_ot_door) { BYTE shut = 0; if (klh_rd(o + 0x5c, &shut, 1) && shut) { ndoor++; continue; } }      /* field 11 "behind a door" (re/bots_loot.md): cleared by the door's 'DoorOpened' relay; ZLootTactic 0x451920 skips these too */
                 if (!(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, pos, 0)) continue;
@@ -1448,6 +1569,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             }
         }
     }
+    klbf_sp_dump(mo, mamt, (const float (*)[3])mpos, nm, (const float (*)[3])cops, ncop);      /* OnlineStackProbe: once a round, log only */
     {   /* the FA rules: [[0x168e9e4]+0x54] when the session's game type [sm+0x5c] is 4 (0x7bb2a0, PROVEN; 0x508ef0 is Arcade-only) */
         DWORD s0 = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), hd;
         if (s0 && klh_rd32(s0 + 0x5c) == 4 && (hd = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4)))) rules = klh_rd32(hd + 0x54);
@@ -1528,7 +1650,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klbf_ob[s].phase == 1) {      /* walking to a stack: reached? gone? stalled? */
             DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0; DWORD ent, node; float mp[3], dh = 0;
             if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) {
-                klog("botfill: tactics: bot %d (actor %08lx): stack %08lx is gone before it got there (taken by someone else?)", s, a, o); klbf_ob[s].phase = 0;
+                klog("botfill: tactics: bot %d (actor %08lx): stack %08lx is gone before it got there (taken by someone else?)", s, a, o); klbf_sp_gone(s, o, "stack gone before arrival"); klbf_ob[s].phase = 0;
             } else if ((dh = (float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2]))) <= klbf_ot_near && fabs(bots[b].pos[1] - mp[1]) <= 400.0f) {
                 if (klbf_ot_take == 2) { BYTE st0 = 0; if (klh_rd(o + 0x64, &st0, 1) && st0 >= 2 && st0 <= 3) { klog("botfill: tactics: take: stack %08lx is in state %d: 0x4e3f40 refuses it, left alone and not counted", (unsigned long)o, (int)st0); klbf_ob[s].phase = 0; continue; } }      /* review: no tally / claim for a refused stack */
                 if (klbf_lp) {      /* OnlineLootParts: GUESS the stack's +0x40 = int part size (field 4), +0x44 = float seconds per part (field 5), re/bots_loot.md:70,88 */
@@ -1545,7 +1667,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 if (klbf_ot_nclaim < KLBF_OT_OBJ) klbf_ot_claimed[klbf_ot_nclaim++] = o;
                 if (klbf_ot_take == 1) { int z = 0; klh_data((void *)(DWORD_PTR)(o + 0x34), &z, 4, "money amount (OnlineTacticsTake, GUESS)"); }
                 else if (klbf_ot_take == 2) {      /* the game's own depletion 0x4e3f40 (thiscall(stack, remaining), ret 4): subtracts, clamps at 0, and on empty runs the pool / sync tail 0x7f3110. It does nothing while [+0x64] (the stack state) is 2 or 3 */
-                    if (klh_rd32(o) == KLMV_MONEY_VT) KLFC_CALL(void (__fastcall *)(DWORD, DWORD, int), 0x004e3f40)(o, 0, amt);
+                    if (klh_rd32(o) == KLMV_MONEY_VT) KLBF_SP_OWN(KLFC_CALL(void (__fastcall *)(DWORD, DWORD, int), 0x004e3f40)(o, 0, amt));
                 }
                 klog("botfill: tactics: bot %d (actor %08lx) GRABBED stack %08lx = %d; its tally %d after %d grab(s)%s", s, a, o, amt, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_take == 2 ? " (taken through the game's 0x4e3f40 on the host)" : klbf_ot_take ? " (amount zeroed on the host)" : " (host tally only)");
                 klbv_event(s, 1);      /* OnlineVoice: the host's bot grabbed loot (klbotvoice.c) */
@@ -1566,7 +1688,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         }
         if (klbf_ob[s].phase == 4) {      /* OnlineLootParts: the bot stands at the stack and is paid a part every lootSec; same 0x4e3f40 call as the lump */
             DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0, st = 0; DWORD ent, node; float mp[3]; int stop = 0; const char *why = ""; float stayL = (busy || (klbf_lf && now - klbf_ob[s].lootT0 < (DWORD)klbf_lf_cap * 1000u)) ? klbf_lf_stay : klbf_lp_stay; int lfp = klbf_lfp && now - klbf_ob[s].lootT0 < (DWORD)klbf_lf_cap * 1000u;      /* OnlineLootFinishPause: inside the cap the distance never ends the take, it pauses it */      /* wk-botpar BP1 20:53:27: bot 1 'moved away' 3.5 m from its stack 1 s after a cop ended the protection (the strict OnlineLootStayM then applied): the wide limit now holds for the whole cap, the cop only releases the van gather */      /* OnlineLootFinish: a wider drift tolerance while the bot finishes (the vertical 400 limit and the stack / anchor geometry checks stay) */
-            if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) { why = "stack gone or hidden (taken by someone else?)"; stop = 1; }
+            if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) { why = "stack gone or hidden (taken by someone else?)"; stop = 1; klbf_sp_gone(s, o, "phase-4 stop, stack gone or hidden"); }
             else if (klh_rd(o + 0x64, &st, 1) && st >= 2 && st <= 3) { why = "stack changed state"; stop = 1; }      /* same 2/3 refusal as the lump */
             else if (!lfp && ((float)sqrt((bots[b].pos[0] - mp[0]) * (bots[b].pos[0] - mp[0]) + (bots[b].pos[2] - mp[2]) * (bots[b].pos[2] - mp[2])) > stayL || fabs(bots[b].pos[1] - mp[1]) > 400.0f
                      || (now - klbf_ob[s].lootAt >= 3000 && (float)sqrt((bots[b].pos[0] - klbf_ob[s].holdAt[0]) * (bots[b].pos[0] - klbf_ob[s].holdAt[0]) + (bots[b].pos[2] - klbf_ob[s].holdAt[2]) * (bots[b].pos[2] - klbf_ob[s].holdAt[2])) > stayL))) { static char mvw[96]; _snprintf(mvw, sizeof mvw, "bot moved away: %.1f m from the stack, %.1f m from the anchor, limit %.1f m", kle_dist(bots[b].pos, mp) / 100, kle_dist(bots[b].pos, klbf_ob[s].holdAt) / 100, stayL / 100); why = mvw; stop = 1; }      /* wk-lpbal: stay measured from the stack AND from where the bot stood when the grab began (it was within OnlineTacticsNear of the stack, so the anchor is the truer 'standing at it'; the stack centre may sit inside geometry; both limits are OnlineLootStayM) */
@@ -1588,7 +1710,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 int due = (int)((now - klbf_ob[s].lootAt) / (klbf_ob[s].lootSec * 1000.0f)) - klbf_ob[s].lootPaid;      /* catch-up: the tick is ~1 s, a part ~0.7 s */
                 while (due-- > 0 && amt > 0) {
                     int give = amt < klbf_ob[s].lootPart ? amt : klbf_ob[s].lootPart, left = 0;
-                    KLFC_CALL(void (__fastcall *)(DWORD, DWORD, int), 0x004e3f40)(o, 0, give);
+                    KLBF_SP_OWN(KLFC_CALL(void (__fastcall *)(DWORD, DWORD, int), 0x004e3f40)(o, 0, give));
                     klbf_ob[s].lootPaid++;
                     if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &left, 4) || left < 0) left = 0;      /* the game's own remainder; a freed stack reads as empty */
                     give = amt - left; if (give > 0) { klbf_ob[s].tally += give; klbf_ob[s].lootGot += give; }
