@@ -353,6 +353,10 @@ feat('onlinewaypermap', G_EXP, 'Online AI heisters read a route named after the 
      'klbotfill.c [BotFill] OnlineWayPerMap (0/1/2); wk-rtroute-1101: DM09 loaded DD06 route [BotFillWay_F06]; needs [BotFillWay_<MAP>]; NOT run live', [('BotFill', 'OnlineWayPerMap', 1, 0, 0)])
 feat('onlineleghopdy', G_EXP, 'Online AI heisters skip route legs on another floor and wait at the lift for the crew-hop carry (recommended off until benched)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineLegHopDy (cm, 1500 for DM09); wk-rtroute-1101: tower bots could not walk to the street; needs [CrewHop] Online=1; NOT run live', [('BotFill', 'OnlineLegHopDy', 1500, 0, 0)])
+feat('onlinelegswithvan', G_EXP, 'Online AI heisters follow the route even on maps whose getaway van stands there from the start (DM09) (recommended off until benched)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineLegsWithVan; RT1 11-01: DM09\'s van object made the bots skip all legs and walk straight at it 60 km away; NOT run live', [('BotFill', 'OnlineLegsWithVan', 1, 0, 0)])
+feat('crewhopprivvt', G_EXP, 'Online crew-hop carries also accept AI heisters on the hook\'s own damage table (recommended off until benched)', 'off', 'start',
+     'klhop.c/klcrew_rt.c [CrewHop] OnlinePrivVt; RT1 11-01: all 17 DM09 carries refused "not a ZFFActor" because the host bots sit on the private vtable; NOT run live', [('CrewHop', 'OnlinePrivVt', 1, 0, 0)])
 feat('onlinerampfire', G_EXP, 'Online AI heisters fire the DD02 ramp trigger when one stands in its box, if the ini lists the box (recommended on; log only until proven)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineRampFire/OnlineRampDry; DD02: bots are not counted online so make_the_ramp never fires; needs a [BotFillRamp_<SLOT>] section; NOT run live', [('BotFill', 'OnlineRampFire', 1, 0, 1)])
 feat('onlineskipdoor', G_EXP, 'Online AI heisters skip loot still locked behind a closed vault door (recommended on)', 'on', 'start',
