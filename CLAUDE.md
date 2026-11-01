@@ -77,9 +77,9 @@ needs it, its own row said off) - fixed (row on with BP8/BP9/BP11, 2 table self-
 ship1101 ini has NONE of the week's T1/T3/T4 keys (Keys Map/Hints, OnlineTriggers, Take 2 / LootParts / Finish ...): Recommended = exactly those 14;
 suggested Q31 = Q29 on a TEST twin with that delta, then ship1102. debug/notes/2026-11-01-scheduled-triage.md.
 
-2026-11-01 ~06:15 - [ce] IV1 PASS (DD08 online, OnlineGetUpIgnoreVan=1, test dll d82d5d84): 0 faults both seats, restore ok; the only down came
-with the van idle, so the van path is still unexercised (keep= stays). GUN13 CLOSED (GUN15): baked shop pictures show online on DM07 + DD10.
-Game handed to c9 for Q30 (21 maps into round 2).
+2026-11-01 ~09:50 - [ce] OnlineGetUpIgnoreVan PROVEN by A/B (IV2 / IV2OFF, DD08 online, 0 faults): with it on a bot holds by a seat downed in van
+state 1, up 10.3 s; off = 3 downs, 'no helper'. Mod Options row now recommended on; in c9's NEXT_SHIP with OnlineGetUpRange=2500. GUN13 closed
+(GUN15). c9: Q30 21/21 into round 2, HIREWD PASS (Kane/Lynch hired online, DM07+DD10 wardrobe installed), LONGVA running.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

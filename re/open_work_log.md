@@ -1,3 +1,8 @@
+2026-11-01 ~09:50 - [ce] OnlineGetUpIgnoreVan PROVEN (A/B on DD08 online, test dll d82d5d84, kit C:\kl_build_1024\week_1028\IV2_README.txt): IV2 (=1) van
+called 09:30:22, seat 1 down in van state 1, bot 5 HOLD at 1.37 m, up 10.3 s; IV2OFF (=0) 3 downs in states 3/5/5, each 'no helper'. Both PASS 0 faults,
+restore ok. Row now recommended on (keep= removed, 'proven live: IV2' markers); c9 put =1 in NEXT_SHIP next to OnlineGetUpRange=2500. Joiner 'tele'
+logs MISSED although the beacon puts him at the box (check reads too early?). c9: Q30 21/21 into round 2, HIREWD PASS, LONGVA (DD10 memory) running.
+
 2026-11-01 ~10:30 - [c9] DD10 address space (HIREWD largest free piece 14.4 MB): a DD10 MAP TRAIT, not the wardrobe - COVER14_DD10 (10-26, no
 wardrobe) sat at 14.1 MB from level load; the wardrobe build grew the .prm reserve block 66.5 -> 84.2 MB but min free VA is higher (184-188 vs 125 MB).
 0 refused requests in every DD10 run. Risk if it keeps falling: a ~15.8 MB heap segment or >14 MB block fails mid-round with no NULL check
