@@ -598,6 +598,17 @@ static void kla_pass(const char *why)
 static volatile DWORD kla_watch_addr, kla_watch_len, kla_watch_arm, kla_watch_hits, kla_watch_defer;
 static char kla_top[64];                             /* name of the top menu window (kla_windows) */
 static char kla_watch_label[48];
+static volatile DWORD kla_watch_until;      /* tick when a timed watch (kla_watch_request) clears itself; 0 = none */
+
+/* A write watch asked for by another module (klbotfill's OnlineStackProbe=3), not by the script. It clears
+   itself after ms: Steam's anti-debug probe before the next scene load must find no debug register set. */
+static void kla_watch_request(DWORD addr, DWORD len, const char *label, DWORD ms)
+{
+    if (!kla_wake) { klog("watch: '%s' %08lx not armed: the klauto thread is not running", label, addr); return; }
+    kla_watch_addr = addr; kla_watch_len = len == 2 || len == 4 ? len : 1; kla_watch_hits = 0; kla_watch_defer = 0;
+    snprintf(kla_watch_label, sizeof kla_watch_label, "%s", label);
+    kla_watch_until = (GetTickCount() + ms) | 1; kla_watch_arm = 1; SetEvent(kla_wake);
+}
 
 static void kla_watch_apply(void)
 {
@@ -2260,6 +2271,7 @@ static DWORD WINAPI kla_watch(LPVOID unused)
         LPTOP_LEVEL_EXCEPTION_FILTER prev;
         WaitForSingleObject(kla_wake, 250);
         if (kla_done) return 0;
+        if (kla_watch_until && (LONG)(GetTickCount() - kla_watch_until) >= 0) { kla_watch_until = 0; kla_watch_addr = 0; kla_watch_arm = 1; }
         if (kla_watch_arm) { kla_watch_arm = 0; kla_watch_apply(); }
         if (kla_so_ep) { TlsSetValue(kla_tls, (void *)1); kla_log_fault(kla_so_ep, "FATAL stack overflow"); kla_dump_now(0, "KLHook_stackoverflow.dmp"); kla_finish("FAIL", "stack overflow", KLA_CRASH); }
         kla_flush();

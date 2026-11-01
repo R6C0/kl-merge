@@ -34,7 +34,10 @@ static int klbf_fill;              /* the plan's fill, for the squad pass */
 static int klbf_lp; static float klbf_lp_scale = 1.0f, klbf_lp_stay = 250.0f; static DWORD klbf_lp_warned[16]; static int klbf_lp_nw, klbf_lp_nok, klbf_lp_nbad;      /* gap2: OnlineLootParts (timed parts) */
 static float klbf_lf_copm = 800.0f; static int klbf_lf, klbf_lfp, klbf_lf_pz, klbf_lf_cap = 25, klbf_lf_start, klbf_lf_fin, klbf_lf_left, klbf_lf_hold, klbf_lf_cops; static float klbf_lf_stay = 500.0f;      /* wk-botpar: [BotFill] OnlineLootFinish / OnlineLootFinishStayM (game units) / OnlineLootFinishCapS; per-round finished / left-early counts */
 static int klbf_esn, klbf_vgs, klbf_vgs_margin = 60, klbf_vgs_defer; static DWORD klbf_vgs_since;      /* wk-botpar: [BotFill] OnlineEscortNode , OnlineVanGatherSmart / OnlineVanGatherMarginS */
-static int klbf_sp;      /* [BotFill] OnlineStackProbe 0/1/2 (block before klbf_ot_run) */
+static int klbf_sp;      /* [BotFill] OnlineStackProbe 0/1/2/3 (block before klbf_ot_run) */
+#ifdef KLHOOK_TEST
+static void kla_watch_request(DWORD addr, DWORD len, const char *label, DWORD ms);      /* klauto.c (included later): level 3 */
+#endif
 static int klbf_ot, klbf_ot_carry = 2, klbf_ot_take; static float klbf_ot_near = 150.0f;
 static int klbf_ot_in;         /* [BotFill] OnlineTactics state, see the puppeteer block below */
 static int klbf_ot_vcall = 1;      /* [BotFill] OnlineVanCall */
@@ -137,7 +140,7 @@ static void klbf_init(void)
     klbf_ot_carry = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsCarry", 2, klh_ini); if (klbf_ot_carry < 1) klbf_ot_carry = 1;
     klbf_ot_near = (float)GetPrivateProfileIntA("BotFill", "OnlineTacticsNear", 150, klh_ini); if (klbf_ot_near < 20) klbf_ot_near = 20;
     klbf_ot_take = (int)GetPrivateProfileIntA("BotFill", "OnlineTacticsTake", 0, klh_ini); if (klbf_ot_take < 0 || klbf_ot_take > 2) klbf_ot_take = 0;      /* 0 off (also any out-of-range value), 1 raw write of +0x34 (old), 2 the game's own 0x4e3f40 (recommended on once benched) */
-    klbf_sp = (int)GetPrivateProfileIntA("BotFill", "OnlineStackProbe", 0, klh_ini); if (klbf_sp < 0 || klbf_sp > 2) klbf_sp = 0;      /* (recommended off; a diagnostic, TEST use) 1 log the stack fields, 2 + a log-only detour of 0x4e3f40; needs OnlineTactics=1 */
+    klbf_sp = (int)GetPrivateProfileIntA("BotFill", "OnlineStackProbe", 0, klh_ini); if (klbf_sp < 0 || klbf_sp > 3) klbf_sp = 0;      /* (recommended off; a diagnostic, TEST use) 1 log the stack fields, 2 + a log-only detour of 0x4e3f40, 3 = 1 + a hardware write watch on one stack's amount; needs OnlineTactics=1 */
     klbf_lp = (int)GetPrivateProfileIntA("BotFill", "OnlineLootParts", 0, klh_ini); if (klbf_lp < 0 || klbf_lp > 2) klbf_lp = 0;      /* (recommended off) 1 timed parts, 2 dry (log only, lumps) */
     { char b[32]; GetPrivateProfileStringA("BotFill", "OnlineLootPartScale", "1.0", b, sizeof b, klh_ini); klbf_lp_scale = (float)atof(b); if (klbf_lp_scale < 0.1f || klbf_lp_scale > 4.0f) klbf_lp_scale = 1.0f; }      /* GUESS: stands in for the tuning object's +0x624, never read live */
     klbf_lp_stay = (float)GetPrivateProfileIntA("BotFill", "OnlineLootStayM", 250, klh_ini); if (klbf_lp_stay < 80) klbf_lp_stay = 80; if (klbf_lp_stay > 800) klbf_lp_stay = 800;
@@ -1432,6 +1435,15 @@ static void klbf_sp_dump(const DWORD *mo, const int *mamt, const float (*mpos)[3
         else klog("botfill: stackprobe: dump: stack %08lx at (%.0f %.0f %.0f) amt %d: %s | no team-1 actor within 30 m", (unsigned long)mo[j], mpos[j][0], mpos[j][1], mpos[j][2], mamt[j], d);
     }
     if (shown < nm) klog("botfill: stackprobe: dump: %d of %d stacks listed (line cap)", shown, nm);
+#ifdef KLHOOK_TEST
+    /* level 3: no code patch (0x4e3f40 sits in a hashed range, level 2 is refused there): DR0 on the first
+       armed stack's amount (+0x34) for 40 s; klauto's handler logs every write with the writer and its callers */
+    if (klbf_sp == 3) { char lab[40]; snprintf(lab, sizeof lab, "stack %08lx amt r%d", (unsigned long)mo[0], klbf_ot_rounds);
+        klog("botfill: stackprobe: watch: stack %08lx +0x34 (amt %d) for 40 s", (unsigned long)mo[0], mamt[0]);
+        kla_watch_request(mo[0] + 0x34, 4, lab, 40000); }
+#else
+    if (klbf_sp == 3) klog("botfill: stackprobe: level 3 (write watch) needs the TEST dll: logging only");
+#endif
 }
 
 /* level 2: the detour's C side. sp -> the return address, sp[1] = the amount (the callee pops it: ret 4); ecx = the stack */
