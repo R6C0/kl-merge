@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~05:30 - [c9] Q29: all 21 maps PASS online on the installed ship1101 (both seats in round, 0 faults; DD01 after one lobby timeout on the
+first launch). GUN13 never opened the shop's weapon list (joiner waited for FABuyWeaponsNew instead of sending ZW_SELECT3 at state 0x20); GUN14
+re-runs it. Next ship ini: OnlineGetUpRange=2500 (Arcade's RushRange). Kit: C:\kl_build_1024\c9_1028\q29, \gun13.
+
 2026-11-01 ~02:55 UTC - scheduled check-in: PC busy (c9 TEST twin on dinput8 02:47 UTC), nothing run. Mod Options 'Recommended' would have UNDONE ship1101 (wrote OnlineGetUp/Beacon/KeepGoal
 and OnlineHost/OnlineTactics = 0 on a live-ini copy): five rows + repo ini markers now recommended on with proofs; preset leaves the get-up/host keys alone. It still rewrites ~20 other live
 keys (Hire, HUD Online*, OnlineSet 9, Lobby Solo, Glare, FrameLimit): list in debug/notes/2026-11-01-scheduled-triage.md for ce/c9. Online get-up skips all help in van state 1..5, Arcade
@@ -76,11 +80,6 @@ keys (Hire, HUD Online*, OnlineSet 9, Lobby Solo, Glare, FrameLimit): list in de
 2026-11-01 ~03:45 - [c9] SHIPPED ship1101: dll a6ea229f (rtp-schemas 19747234f) + ini 12d5f8e1 (ship1030 ini + 14 [BotFill] OnlineGetUp* keys, the
 BP18 set). Online a free bot runs to a downed player and stays until he is up; a quit joiner no longer holds the Retomoto lift doors. SHIPCHK5 (DD08)
 + A1LIFTNET4 PASS 0 faults both seats on the ship ini; review 0 confirmed. Undo: UNDO_ship1101.bat in C:\kl_build_1024\c9_1028\ship1101.
-
-2026-11-01 ~02:10 - [ce] gunui_1029 INSTALLED (DM07/F06 + DD10/F07 baked gun names/pictures; originals kept as *.before-gunbake1029; UNDO in
-C:\kl_build_1024\gunui_1029). GU_DM07 + GU_DD10 online PASS 0 faults, both seats in round; the shop picture itself is not yet seen in a shot
-(GUN13). BP20 (DD08, 2 rounds) PASS: OnlineScanEveryRound=0 cache works (round 2: 0 ms vs 187+125 ms); rescue up after 12.2 s; a late down at
-the van (~90 m, beyond Range 8000) got no bot = by design. Open: should bots leave the van for a late down? 8 m hold keep never exercised.
 
 
 ## Owner's end goal (2026-10-09)
