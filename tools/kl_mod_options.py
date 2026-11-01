@@ -370,7 +370,7 @@ feat('onlineboxprobe', G_EXP, 'Online AI heister boarding and van position writt
      'klbotfill.c [BotFill] OnlineBoxProbe; log only: box probe / van probe lines; NOT run live', [('BotFill', 'OnlineBoxProbe', 1, 0, 1)])
 feat('syncvanprobe', G_EXP, 'Sync bench log: the escape van real state and place next to its list line (recommended on)', 'on', 'start',
      'klsync.c [Sync] VanProbe; log only, needs Probe=1; BO9: the ZAnimatedVehicle node reads 0,0,0; NOT run live', [('Sync', 'VanProbe', 1, 0, 1)])
-feat('hostopts', G_EXP, 'Host-controlled match options: F7 map set, F8 AI heisters; the host map set reaches clients (recommended on)', 'on', 'start',
+feat('hostopts', G_EXP, 'Host-controlled match options: Ctrl+F3 map set, Ctrl+F4 AI heisters (F7/F8 with the old keys); the host map set reaches clients (recommended on)', 'on', 'start',
      'klhostopt.c [HostOpts] Enable; Steam lobby key klx_opts + UDP 27413; re/host_options.md; proven live: MPX bench (pool + seed shared host to client); the owner\'s live ini has had Enable=1 since 10-26 19:35', [('HostOpts', 'Enable', 1, 0, 0)])
 feat('mappool', G_EXP, 'Online: random map pool for each round, no repeats (host Delete cycles Full Dead Men / Full Dog Days / Mix; needs Host-controlled match options; recommended off until benched)', 'off', 'start',
      'klmappool.c [MapPool] Enable; pool + seed reach clients in klx_opts (p<pool>q<seed>); [MapPool] Apply=1 lets the host move the lobby slot (GUESS); icons by tools/kl_mappool.py; re/map_pool.md; NOT run live', [('MapPool', 'Enable', 1, 0, 0)])
@@ -444,7 +444,7 @@ feat('releasecursor', G_STAB, 'Release the mouse when the game loses focus', 'on
      "in the owner's live ini", [('QoL', 'ReleaseCursor', 1, 0, 0)])
 feat('fastexit', G_STAB, 'Alt+F4 / close ends the game at once', 'on', 'start',
      'fixed the hang on close (verified live 2026-10-24, 545 ms)', [('KLHook', 'FastExit', 1, 0, 1)])
-feat('unstick', G_STAB, 'Put me back when I am stuck inside an object in cover (F7 does it at once)', 'on', 'start',
+feat('unstick', G_STAB, 'Put me back when I am stuck inside an object in cover (End does it at once; F7 with the old keys)', 'on', 'start',
      'owner 2026-10-24: going into cover put him inside the object for the round; held still in cover with a move key down for 4 s = back to the last free place (offline only; k30cov, not run in the game)', [('Unstick', 'Enable', 1, 0, 1)])
 feat('camunstickonline', G_GFX, 'Online matches: the camera unstick remedies work like Arcade (recommended off until benched)', 'off', 'start',
      'klcam.c UnstickOnline (1027 G4): camera-object writes only (latch, blend timer, side copy, low-fps chaser filter); shoulder swap in cover and lean stay offline-only because they write the replicated cover side 0x4520d0; NOT run live', [('Camera', 'UnstickOnline', 1, 0, 0)])
@@ -495,7 +495,7 @@ feat('watchdog', G_EXP, 'Watchdog for a stuck AI heister', 'off', 'start',
      'not run in the game', [('QoL2', 'Watchdog', 1, 0, 0)])
 feat('names', G_EXP, 'Dead Men map names in the Arcade lists', 'off', 'start',
      'live-tested once (PD1); off until the owner OKs the renaming', [('Names', 'Enable', 1, 0, 0)])
-feat('inv', G_EXP, 'Gun shelf: carry more than two guns (F8)', 'off', 'start',
+feat('inv', G_EXP, 'Gun shelf: carry more than two guns (PageUp; F8 with the old keys)', 'off', 'start',
      'research feature, off by default', [('Inv', 'Enable', 1, 0, 0)])
 feat('grenade', G_EXP, 'Throw a carried grenade with G (Dead Men style)', 'off', 'start',
      'klgrenade.c step 1: plays the dead HoldGrenade button; only with a grenade in the inventory (DM01 pickups); run live 10-25 and found dead (nothing in kl2.exe reads [P+0x818] bit 0x800, the owner\'s G presses gave [P+0xa1c]=0); a hook-side throw is research',
