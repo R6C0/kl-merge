@@ -92,6 +92,24 @@ C_TESTS = {
     'klwatch_test.c': 'win',           # klhud.c
 }
 
+# C tests that are not self-tests: they need audio files (mp3 args) the runner does not have. Always SKIP, with the reason.
+C_MANUAL = {
+    'klambience_test.c': 'manual: needs bed.mp3 shot.mp3 arguments (real audio files)',
+    'klmciwrap_test.c': 'manual: needs a long.mp3 argument (real audio file)',
+    'klmusic_test.c': 'manual: needs a.mp3 b.mp3 stinger.mp3 arguments (real audio files)',
+    'klstinger_test.c': 'manual: needs short.mp3 [long.mp3] arguments (real audio files)',
+}
+
+# extra link options per test (the test's own header says how it is meant to be built)
+C_LINK = {
+    'klhigh_test.c': '/link /LARGEADDRESSAWARE',      # header: cl ... klhigh_test.c /Fe:klhigh_test.exe /link /LARGEADDRESSAWARE
+}
+
+# tests that include a file generated from a module (header: sed -n '/bit maps/,/who called/p' klhigh.c | sed '$d' > bits.inc)
+C_GENERATED = {
+    'klhigh_bits_test.c': ('bits.inc', 'klhigh.c', r'^/\* -+ bit maps \*/', r'^/\* -+ who called \*/'),
+}
+
 TIMEOUT = 600
 
 
@@ -143,19 +161,40 @@ def gcc_m32_ok():
             d = tempfile.mkdtemp(prefix='kl_m32_')
             src = os.path.join(d, 'a.c')
             with open(src, 'w') as f:
-                f.write('#include <stdio.h>\nint main(void){return sizeof(long)==4?0:1;}\n')
+                f.write('#include <stdio.h>'+chr(10)+'int main(void){return sizeof(long)==4?0:1;}'+chr(10))
             rc, _ = run(['gcc', '-m32', '-o', os.path.join(d, 'a'), src], d)
             _gcc32 = rc == 0 and run([os.path.join(d, 'a')], d)[0] == 0
             shutil.rmtree(d, ignore_errors=True)
     return _gcc32
 
 
+def gen_include(name, outdir):
+    """write the generated include of a C_GENERATED test into outdir: the module's lines from the start marker up to (not
+    including) the end marker, like the sed in the test header. Returns an error text, '' when fine."""
+    import re
+    inc, mod, start, end = C_GENERATED[name]
+    lines = open(os.path.join(KLHOOK, mod), encoding='utf-8', errors='replace').read().splitlines()
+    a = next((i for i, l in enumerate(lines) if re.match(start, l)), None)
+    b = next((i for i, l in enumerate(lines) if a is not None and i > a and re.match(end, l)), None)
+    if a is None or b is None:
+        return 'markers not found in ' + mod
+    with open(os.path.join(outdir, inc), 'w') as f:
+        f.write(chr(10).join(lines[a:b]) + chr(10))
+    return ''
+
+
 def build_c(name, outdir):
     """returns (rc, output, exe)"""
     src = os.path.join(KLHOOK, name)
     exe = os.path.join(outdir, name[:-2] + ('.exe' if WIN else ''))
+    inc = ''
+    if name in C_GENERATED:
+        err = gen_include(name, outdir)
+        if err:
+            return 1, err, exe
+        inc = ' /I"%s"' % outdir if WIN else ''
     if WIN:
-        cl = 'cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS "%s" /Fe:"%s"' % (src, exe)
+        cl = 'cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS%s "%s" /Fe:"%s" %s' % (inc, src, exe, C_LINK.get(name, ''))
         if shutil.which('cl'):
             rc, out = run(cl, outdir, shell=True)
         elif os.path.exists(VCVARS):
@@ -175,6 +214,9 @@ def c_tests(only, outdir):
         if only and name not in only and name[:-2] not in only:
             continue
         kind = C_TESTS.get(name)
+        if name in C_MANUAL:
+            yield Result(name, 'SKIP', C_MANUAL[name])
+            continue
         tag = '' if kind else ' UNLISTED (add it to C_TESTS)'
         if not WIN:
             if kind == 'win':

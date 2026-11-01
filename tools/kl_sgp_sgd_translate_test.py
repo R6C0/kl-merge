@@ -23,6 +23,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kl_members as MB
 
 TOL_MOVE, TOL_BACK, TOL_PLANE, TOL_EDGE = 0.002, 0.01, 1.5, 0.01
+# Stock-data outlier, measured 2026-11-01 over all 3100 portal corners of the 21 Dog Days maps: every corner is within 0.003 of its
+# portal plane except the four of portal 5 of L07_Main.sgp (a ~358-unit-wide opening whose stored normal is tilted 0.46 deg, so the
+# corners sit 2.414 off the plane). It is the shipped file (untouched by us), not a decoding error, so that one portal gets its own
+# bound; the 1.5 bound stays for everything else.
+PLANE_OUTLIERS = {('L07_Main.zip:L07_Main.sgp', 5): 2.5}
 
 
 def hand_sgp():
@@ -71,7 +76,7 @@ def check_sgp(name, data, t):
         if abs(math.dist(n, (0, 0, 0)) - 1) > 1e-5:
             fail('%s: portal %d normal %r not unit' % (name, k, n))
         for q in K:
-            if abs(sum((q[i] - c[i]) * n[i] for i in range(3))) > TOL_PLANE:
+            if abs(sum((q[i] - c[i]) * n[i] for i in range(3))) > PLANE_OUTLIERS.get((name, k), TOL_PLANE):
                 fail('%s: portal %d corner %r off the plane of centre %r normal %r' % (name, k, q, c, n))
     for pa, pb, d in g.edges:
         ca, cb = g.points(pa)[0], g.points(pb)[0]

@@ -379,12 +379,17 @@ static SIZE_T klvh_high_walk(int want_free, int *count, char *who, int cap)
     MEMORY_BASIC_INFORMATION mbi; BYTE *p = (BYTE *)(DWORD_PTR)KLVH_BASE; SIZE_T total = 0; int n = 0, at = 0;
     who[0] = 0;
     while (p >= (BYTE *)(DWORD_PTR)KLVH_BASE && VirtualQuery(p, &mbi, sizeof mbi)) {
-        if ((mbi.State == MEM_FREE) == (want_free != 0)) {
-            total += mbi.RegionSize; n++;
+        BYTE *rb = (BYTE *)mbi.BaseAddress; SIZE_T rs = mbi.RegionSize;
+        if (want_free && mbi.State == MEM_FREE) {   /* only what VirtualAlloc can hand out: 64 KB aligned pieces (a 60 KB sliver between two mappings cannot be reserved) */
+            BYTE *a = (BYTE *)(((DWORD_PTR)rb + 0xffffu) & ~(DWORD_PTR)0xffffu);
+            rs = (a < rb + rs) ? (SIZE_T)((rb + rs - a) & ~(SIZE_T)0xffffu) : 0; rb = a;
+        }
+        if ((mbi.State == MEM_FREE) == (want_free != 0) && rs) {
+            total += rs; n++;
             if (at < cap - 60) {
                 char name[MAX_PATH] = "", *leaf = name;
                 if (!want_free && mbi.Type == MEM_IMAGE && GetModuleFileNameA((HMODULE)mbi.AllocationBase, name, sizeof name)) { leaf = strrchr(name, '\\'); leaf = leaf ? leaf + 1 : name; }
-                at += snprintf(who + at, cap - at, " %p+%luK%s%s", mbi.BaseAddress, (unsigned long)(mbi.RegionSize >> 10), *leaf ? " " : "", leaf);
+                at += snprintf(who + at, cap - at, " %p+%luK%s%s", rb, (unsigned long)(rs >> 10), *leaf ? " " : "", leaf);
             }
         }
         if ((BYTE *)mbi.BaseAddress + mbi.RegionSize <= p) break;          /* wrapped around the top */
@@ -425,6 +430,25 @@ static int klvh_take_high(void)
             if (!lo || p < lo) lo = p;
             if (p + sizes[s] > hi) hi = p + sizes[s];
             if (klvh_nchunk >= KLVH_CHUNKS) break;
+        }
+    }
+    /* top-down never serves the free holes right under the top of the address space (found 2026-11-01 on Windows 10: a 1 MB top-down
+       request skipped a free 1.5 MB hole at 0xFFE70000, while an explicit address there works), so take the remaining holes by address */
+    {
+        MEMORY_BASIC_INFORMATION mbi; BYTE *q = (BYTE *)(DWORD_PTR)KLVH_BASE;
+        while (klvh_nchunk < KLVH_CHUNKS && q >= (BYTE *)(DWORD_PTR)KLVH_BASE && VirtualQuery(q, &mbi, sizeof mbi)) {
+            BYTE *rb = (BYTE *)mbi.BaseAddress, *a = (BYTE *)(((DWORD_PTR)rb + 0xffffu) & ~(DWORD_PTR)0xffffu);
+            q = rb + mbi.RegionSize;
+            if (mbi.State == MEM_FREE && a < q && (SIZE_T)((q - a) & ~(SIZE_T)0xffffu)) {
+                SIZE_T sz = (SIZE_T)((q - a) & ~(SIZE_T)0xffffu); DWORD i, n;
+                BYTE *p = (BYTE *)klvh_real_VirtualAlloc(a, sz, MEM_RESERVE, PAGE_NOACCESS);
+                if (!p) continue;
+                klvh_chunk[klvh_nchunk].base = p; klvh_chunk[klvh_nchunk].size = sz; klvh_nchunk++;
+                klvh_high_total += sz;
+                for (i = (DWORD)(((DWORD_PTR)p - KLVH_BASE) >> 16), n = (DWORD)(sz >> 16); n; i++, n--) klvh_set(klvh_in, i, 1);
+                if (!lo || p < lo) lo = p;
+                if (p + sz > hi) hi = p + sz;
+            }
         }
     }
     if (!klvh_nchunk) return 0;
