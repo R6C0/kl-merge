@@ -69,6 +69,7 @@ Toggle: `[BotFill] OnlineLooks=1  ; (recommended on)`. Medium risk (model mismat
 
 ### G-E. Escort/follow, BoardAll, FollowOut parity  [GUESS]
 Extend the puppeteer (gather/hold exist). Low-medium value, medium effort. Toggle `OnlineEscort`.
+2026-11-01 wk-escort-1101: the follow part was already built ([Bots] OnlineEscort, klbf_esc_pass, not run live). Added the missing FollowOut part: `[BotFill] OnlineEscortOut` (0/1/2 dry): van called and state 1-4, an empty-handed bot takes the exit walk at once. Not run live.
 
 ### G-F. Down/revive/adrenaline, cardown, cdying, shield parity  [GUESS]
 Needs a crew-record substitute (hook-owned per-bot struct). Higher effort. Toggle per module.

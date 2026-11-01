@@ -64,6 +64,7 @@ static DWORD klbf_sq_done;         /* the session object the squad pass finished
    [BotFill] OnlineWalkReach: van waiting (state 3), the bot has walked > 15 s and stands within OnlineExitCrowd of the escape box centre (right height) for 5 s -> counts as inside (the box frame test missed it).
    [Bots] OnlineEscort 0 off / 1 follow the host seat / 2 follow the nearest human; OnlineEscortFar / OnlineEscortSide (cm, Arcade klescort.c defaults 800 / 300): host only, idle bots (no stack, not guard-walking) stay near the human. */
 static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_esc_side = 300.0f;
+static int klbf_eo;      /* [BotFill] OnlineEscortOut (0 off, 1 on, 2 dry = log only): Arcade FollowOut parity, an empty-handed bot walks to the van once it is called (klbf_ot_run phase 0) */
 #include "klguard_logic.h"      /* wk-botpar OnlineGuardMode: floor gate + bypass decisions (klguard_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
 static int klbf_gu_freefirst, klbf_gu_recede, klbf_gu_hold, klbf_gu_plat; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13); OnlineGetUpPlateau (BP16b) */
@@ -243,6 +244,8 @@ static void klbf_init(void)
     klbf_esc = (int)GetPrivateProfileIntA("Bots", "OnlineEscort", 0, klh_ini); if (klbf_esc < 0 || klbf_esc > 2) klbf_esc = 0;      /* (recommended off) wk-move: not run live */
     klbf_esc_far = (float)GetPrivateProfileIntA("Bots", "OnlineEscortFar", 800, klh_ini); if (klbf_esc_far < 400.0f) klbf_esc_far = 400.0f;      /* cm, as klescort.c EscortFar */
     klbf_esc_side = (float)GetPrivateProfileIntA("Bots", "OnlineEscortSide", 300, klh_ini); if (klbf_esc_side < 0) klbf_esc_side = 0;      /* cm, as klescort.c EscortSide */
+    klbf_eo = (int)GetPrivateProfileIntA("BotFill", "OnlineEscortOut", 0, klh_ini); if (klbf_eo < 0 || klbf_eo > 2) klbf_eo = 0;      /* (recommended off until benched) wk-escort-1101: not run live */
+    if (klbf_ot && klbf_eo) klog("botfill: escort: OnlineEscortOut=%d (0 off, 1 on, 2 dry; needs OnlineJoinCalled=%d and a called van; recommended off until benched)", klbf_eo, klbf_ot_joincall);
     if (klbf_ot) klog("botfill: wk-move: OnlineGuardWalk=%d, OnlineWalkReach=%d, OnlineEscort=%d (Far %.0f cm, Side %.0f cm) - all default 0 = off", klbf_gw, klbf_wr, klbf_esc, klbf_esc_far, klbf_esc_side);
     klbf_gu = (int)GetPrivateProfileIntA("BotFill", "OnlineGetUp", 0, klh_ini); if (klbf_gu < 0 || klbf_gu > 2) klbf_gu = 0;      /* (recommended off) wk-getup-1028: not run live */
     klbf_gu_range = (float)GetPrivateProfileIntA("BotFill", "OnlineGetUpRange", 2500, klh_ini); if (klbf_gu_range < 500.0f) klbf_gu_range = 500.0f; if (klbf_gu_range > 8000.0f) klbf_gu_range = 8000.0f;      /* cm, Arcade RushRange 25 m */
@@ -1916,6 +1919,10 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (klbf_ot_late && klbf_ob[s].tally > 0 && left <= (float)klbf_ot_late && best >= 0) {      /* OnlineLateExit (BO9 rules A/B): a carrier takes no new stack late in the round, it heads for the van */
                 if (!(klbf_ob[s].told & 16) && (klbf_ob[s].told |= 16)) klog("botfill: tactics: bot %d (actor %08lx): clock left %.0f s <= OnlineLateExit %d: no new stack, tally %d goes to the van", s, a, left, klbf_ot_late, klbf_ob[s].tally);
                 best = -1;
+            }
+            if (klbf_eo && klbf_ob[s].tally == 0 && klbf_ot_joincall && klbf_ot_vh && klbf_ot_called && vstate >= 1 && vstate <= 4 && klbf_ot_calledAt && now - klbf_ot_calledAt <= 60000) {      /* OnlineEscortOut (wk-escort-1101; Arcade FollowOut / klescort.c RELEASE: the vehicle waits -> the escort, which stood still behind the human, is sent to the boarding place). An empty-handed bot (no tally; a carrier already walks by itself) goes down the existing exit-walk machinery (phase 2: waypoints, box walk, OnlineBoxForce, board) as OnlineIdleVan does, instead of waiting for its 20 s idle clock. Same window as OnlineJoinCalled (van state 1-4, 60 s after the call). A bot with a stack to take is released too: Arcade sends every crew member out when the vehicle is called. GUESS: that is wanted online (the stack stays for the humans). */
+                if (!(klbf_ob[s].told & 4194304) && (klbf_ob[s].told |= 4194304)) klog("botfill: escort: bot %d (actor %08lx) follows out: van %s (state %d, %lu s since the call), nothing carried%s: %s", s, a, vstate == 3 ? "waits" : "comes", vstate, (unsigned long)((now - klbf_ot_calledAt) / 1000), best >= 0 ? ", a stack was still free" : "", klbf_eo == 2 ? "DRY, no order" : "sent to the exit walk (OnlineEscortOut)");
+                if (klbf_eo == 1) { best = -1; idleVan = 1; vnew = 1; }
             }
             if (klbf_ob[s].grabs < klbf_ot_carry && best >= 0) {
                 klbf_ob[s].phase = 1; klbf_ob[s].target = mo[best]; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].idleAt = 0; klbf_ob[s].told &= ~4;

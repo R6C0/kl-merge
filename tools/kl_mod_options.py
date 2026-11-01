@@ -587,6 +587,8 @@ feat('onlinegetupplateau', G_EXP, 'Online get-up help: a rushing AI heister that
      'out of the pick 10 s, fallback place = the host\'s replica feet; all figures GUESSES; proven live: BP18 + BP19 11-01 (0 faults both seats), shipped ship1101, where it never had to fire (BP17 ran it on, no plateau)', [('BotFill', 'OnlineGetUpPlateau', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0)])
 feat('onlineescort', G_EXP, 'Online AI heisters with nothing to loot stay near you, as in Arcade (host only; recommended off)', 'off', 'start',
      'klbotfill.c [Bots] OnlineEscort (1 = host seat, 2 = nearest human; + OnlineEscortFar 800 / OnlineEscortSide 300 cm; wk-move-1028, plan 2); NOT run live', [('Bots', 'OnlineEscort', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlineescortout', G_EXP, 'Online AI heisters follow you out to the van once it is called, as in Arcade (host only; recommended off until benched)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineEscortOut (wk-escort-1101): van called, state 1-4 -> an empty-handed bot takes the exit walk at once (Arcade FollowOut); NOT run live', [('BotFill', 'OnlineEscortOut', 1, 0, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlineboxspread',G_EXP, 'Online AI heisters: each one walks to its own spot inside the escape box instead of the centre (recommended off)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineBoxSpread: DD08 had 7 bots on one point pushing each other out; NOT run live', [('BotFill', 'OnlineBoxSpread', 1, 0, 0)])
 feat('onlineboxlatch', G_EXP, 'Online AI heisters: one that stood inside the escape box and is still close counts as aboard (recommended off)', 'off', 'start',
