@@ -40,7 +40,7 @@ comes before kllocname.c (:806), so kllocname.c may call a klshop.c getter.
 - Optional NPC loudness ([Sound] NpcShotVol, patching the shot_npc group volume 0.35): a GUESS needing a locate step; bots are identical in Arcade and online, so NOT a parity gap. Dropped.
 - After benches pass: flip live keys (OnlineSwap=1, OnlineSwapText=2, RemoteShot2D=1). Today none is in the live KLHook.ini, so online=Arcade for these is inactive everywhere.
 
-## C. Needs game-folder data (owner step, not hook code)
+## C. Needs game-folder data (owner step, not hook code) - DONE 1029, see section E (matrix 2026-11-01); text below is the 10-28 state
 
 - Bake DM07 (F06) and DD10 (F07) shelf text/pictures: staged C:\kl_build_1024\gunui_1028\INSTALL_gunui_1028.bat. It touches only the plain F06/F07_Main.zip,
   but online uses F06/F07_Main.bots.zip (both unbaked, 'TOQ' only). Extend stage\shopswap.ps1 + manifest to the .bots.zip siblings and refresh the .bots.base.md5 first,
@@ -56,3 +56,61 @@ comes before kllocname.c (:806), so kllocname.c may call a klshop.c getter.
 - [Guns] Start/Set online: needs the variant-byte write blocked by OnlineSafe; no SHIP-safe hook fix. Document as Arcade-only in the mod options.
 - Dropped-gun pickup prompt: new feature, not parity.
 - Weapon dial on unbaked maps: bake only (section C).
+
+## E. Matrix of the 21 maps, 2026-11-01 (job T5, `python tools/kl_gunui_matrix.py --md ...`, read-only)
+
+Read from the installed `KLExpansion\Maps\<map>\F0x_Main.zip` (Arcade) and `.bots.zip` (online) plus the GUN* bench logs. text = rows 13/16/32/35
+of the English .LOC name the swapped gun (HK69 / TYPE 81 / REM 700 / MINIMI); card = big+small shop pictures differ from the stock pixels (md5 of
+mip 0, measured on the untouched Scenes\Locations\F02..F09, identical in all eight); hud = textures 113/114 (the dial) present. The number after
+"baked" is a bake-generation fingerprint (1dbd01 = common bake; ff017d = DD10 and DM07, the 1029 bake; 8f69a4 = DM01, its row-16 card differs, it
+has its own `[Shop] Swap=13:52,16:33,32:49,35:47` line in KLGuns.ini, same pairs as the default).
+
+RESULT: all 21 maps, both archives, are baked on text, cards and dial. No map needs a bake, `OnlineSwapText=2` or `OnlineSwapPic` to look right.
+Caveat: the DD01-DD09 rows are the KLExpansion copies. The untouched stock slots `Scenes\Locations\F01..F09` (project rule: never edited) still hold
+the stock TOQ text/cards, so a stock-slot FA map (not through KLExpansion) shows the carrier's name unless `OnlineSwapText=2` is on (text) and
+keeps the carrier's picture (no bake possible there; `OnlineSwapPic=1` gives a look-alike).
+
+Static facts only for maps with "none" in the evidence column: the archives are right, but no bench has looked at them live.
+
+| # | map | slot | swap rows | text plain | text bots | card plain | card bots | hud plain | hud bots | bench evidence | status |
+|---|-----|------|-----------|------------|-----------|------------|-----------|-----------|----------|----------------|--------|
+| 1 | DD01 | F01 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 2 | DD02 | F02 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 3 | DD03 | F03 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 4 | DD04 | F04 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | GUN1: pool OURS/STOCK, dial; GUN2: pool OURS/STOCK, dial; GUN3: pool OURS/STOCK, dial | OK |
+| 5 | DD05 | F05 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 6 | DD06 | F06 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 7 | DD07 | F07 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 8 | DD08 | F08 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 9 | DD09 | F09 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 10 | DD10 | F07 | 13:52,16:33,32:49,35:47 | baked | baked | baked ff017d | baked ff017d | dial | dial | GUN13_DD10: dial; GUN14_DD10: dial; GUN15_DD10: dial | OK |
+| 11 | DM01 | F01 | 13:52,16:33,32:49,35:47 | baked | baked | baked 8f69a4 | baked 8f69a4 | dial | dial | none | OK |
+| 12 | DM01B | F03 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 13 | DM02 | F02 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | GUN4: pool OURS/STOCK, dial; GUN5: pool OURS/STOCK, dial; GUN6: shop text baked, pool OURS, dial | OK |
+| 14 | DM03 | F03 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 15 | DM03A | F07 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 16 | DM05A | F01 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 17 | DM06 | F04 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 18 | DM06B | F02 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 19 | DM07 | F06 | 13:52,16:33,32:49,35:47 | baked | baked | baked ff017d | baked ff017d | dial | dial | GUN7: shop text stock (answered by OnlineSwapText=2), pool OURS/STOCK, no dial; GUN8: shop text stock (answered by OnlineSwapText=2), pool OURS, no dial; GUN9: shop text stock (answered by OnlineSwapText=2), pool OURS, no dial; GUN10: shop text stock (answered by OnlineSwapText=2), pool OURS/STOCK, no dial; GUN11: shop text stock (answered by OnlineSwapText=2), pool OURS/STOCK, no dial; GUN12: pool OURS/STOCK, no dial; GUN12b: shop text stock (answered by OnlineSwapText=2), pool OURS, OnlineSwapPic fired rows 13, no dial; GUN13_DM07: dial; GUN14_DM07: dial; GUN15_DM07: dial | OK |
+| 20 | DM09 | F06 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+| 21 | DM11B | F04 | 13:52,16:33,32:49,35:47 | baked | baked | baked 1dbd01 | baked 1dbd01 | dial | dial | none | OK |
+
+### Ship proposal (per [Shop] key; NOT for NEXT_SHIP.txt)
+
+| key | maps | value | bench tag that proved it |
+|-----|------|-------|--------------------------|
+| Enable, Swap=13:52,16:33,32:49,35:47 | all 21 | 1 / the default line | GUN5, GUN6 (DM02), GUN12b (DM07): 'osw: set 4 pair(s), hash 8ff822a6' |
+| OnlineSwap=1 + OnlineSwapArm=1 | all 21 | 1 | GUN5, GUN6, GUN12b: 'OURS handed over' on rows 13/16/32/35; GUN2 (DD04, map f04): first round rows 13/16/32/35 all OURS |
+| OnlineSwapText=2 | all 21 (safety net; also needed on stock Scenes\Locations slots) | 2 | GUN12b (DM07, then unbaked): answered HK69 / Type 81 over 'TOQ Model 18'; GUN6 (DM02, baked): pass-through, 'stock text 0' |
+| OnlineSwapPic | none (stay 0) | 0 | GUN12b: fired only on the unbaked DM07 (row 13); never on a baked map, and a look-alike is unwanted when the true card exists |
+| HUD dial | all 21 (data, no key) | present | GUN13/14/15 on DM07 and DD10: 'now renders through the private vtable', no 'no dial' line |
+
+Not yet seen live (static OK only): DD01-03, DD05-09, DM01, DM01B, DM03, DM03A, DM05A, DM06, DM06B, DM09, DM11B.
+Bench proposal: one two-seat pass per group with OnlineSwapLog=1 on a TEST dll, grep `oswlog:` (all four rows OURS), `shoptext:` and `hud: weapon:`:
+(1) DD01/DD02/DD03 (one each), (2) DD05-DD09 (one of them is enough for the .bots archive family 1dbd01, then spot-check DD08), (3) DM01 (own
+fingerprint 8f69a4 and own [Shop] line, hash must equal 8ff822a6), DM01B, DM03, DM03A, (4) DM05A, DM06, DM06B, DM09, DM11B. Fingerprint 1dbd01 is
+shared by 17 maps, so a pass on three of them is strong, but each map has its own pool (carrier present or not), which only 'oswlog' shows.
+
+Open points from the matrix run: bench logs say 'pool OURS/STOCK' for GUN1-4 (DD04, DM02): some row/round handed STOCK; per-row detail is not
+printed in the table (look at `oswlog:` lines by hand). GUESS: STOCK comes from rounds where the carrier object was absent from the pool.
