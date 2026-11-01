@@ -72,6 +72,21 @@ int main(void)
     CHECK(!kgu_van_skip(0, 0) && !kgu_van_skip(7, 0) && !kgu_van_skip(-1, 0), "ignore-van off: idle / gone / unreadable does not skip");
     CHECK(!kgu_van_skip(1, 1) && !kgu_van_skip(3, 1) && !kgu_van_skip(5, 1), "ignore-van on: never skips (Arcade RushVan=0)");
     CHECK(!kgu_free(3, 300000, 1) && !kgu_free(4, 0, 1), "busy on: aboard / taking a stack never");
+    {   /* OnlineVanPosSane / OnlineTriggerOriginSkip (bots_online_scorecard_1101 G1, G3) */
+        float bogus[3] = { 24235, -59842, 13883 }, real[3] = { -1852, 121, 8420 }, org[3] = { 0, 0, 0 }, nan3[3] = { 0, 0, 0 };
+        float refs[2][3] = { { -1500, 100, 8000 }, { 3000, 100, 9000 } };
+        nan3[1] = (float)sqrt(-1.0);
+        CHECK(kvp_sane(0, bogus, 2, (const float (*)[3])refs), "van sane off: always plausible (old rule)");
+        CHECK(!kvp_sane(1, bogus, 0, 0), "van sane on: DM09 bogus place (y -59842) rejected by the bound alone");
+        CHECK(!kvp_sane(1, bogus, 2, (const float (*)[3])refs), "van sane on: DM09 bogus place rejected with refs");
+        CHECK(kvp_sane(1, real, 2, (const float (*)[3])refs) && kvp_sane(1, real, 0, 0), "van sane on: DM09 real boarding place accepted");
+        { float far_[3] = { -39000, 100, -39000 }; CHECK(!kvp_sane(1, far_, 2, (const float (*)[3])refs) && kvp_sane(1, far_, 0, 0), "van sane on: inside the bound but over 500 m from every ref: rejected only when refs exist"); }
+        { float edge[3] = { 40000, -40000, 40000 }, over[3] = { 40001, 0, 0 }; CHECK(kvp_sane(1, edge, 0, 0) && !kvp_sane(1, over, 0, 0), "van sane: bound is 400 m per coordinate"); }
+        CHECK(!kvp_sane(1, nan3, 0, 0), "van sane on: NaN rejected");
+        CHECK(kvp_origin_skip(1, org) && kvp_origin_skip(1, (float[3]){ 1.0f, -1.0f, 0.5f }), "origin skip on: (0,0,0) within 1 cm skipped");
+        CHECK(!kvp_origin_skip(1, (float[3]){ 1.5f, 0, 0 }) && !kvp_origin_skip(1, real), "origin skip on: a placed bot is kept");
+        CHECK(!kvp_origin_skip(0, org), "origin skip off: nobody skipped (old rule)");
+    }
 
     CHECK(kgu_floor(0.5f, 1, 3.0f) == 3.0f && kgu_floor(4.0f, 1, 3.0f) == 4.0f, "flop meter: raised to the floor, never lowered");
     CHECK(kgu_floor(0.5f, 0, 3.0f) == 0.5f && kgu_floor(0.5f, 1, 0) == 0.5f, "flop meter: no helper / floor off: unchanged");

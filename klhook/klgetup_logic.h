@@ -7,6 +7,7 @@
              that owns the get-up. Nothing is sent: the stock GettingUp message (0x6cd720) carries the rise to the others as in any online get-up. */
 #ifndef KLGETUP_LOGIC_H
 #define KLGETUP_LOGIC_H
+#include <math.h>
 
 #define KGU_REORDER_MS 2500      /* Arcade kad_rush: an order again every 2.5 s while the rusher is not by him */
 #define KGU_STOP_CM    200.0f    /* Arcade BotAnimNear 2 m: the place the rusher is sent to */
@@ -196,6 +197,33 @@ static int kgu_recede_w(float prevD, float curD, float ordD, DWORD ordAgeMs, flo
 {
     if (walkedCm >= KGU_WALK_CM && ordD > 0 && curD >= 0 && curD - ordD <= KGU_RECEDE_WALK_CM) return 0;
     return kgu_recede(prevD, curD, ordD, ordAgeMs);
+}
+
+/* OnlineVanPosSane (bots_online_scorecard_1101 G1): the escape van's place is read from its vehicle object's scene node. DM09 (Q31) gave
+   (24235, -59842, 13883) while the real boarding object stood at (-1852, 121, 8420): a node that was never placed. Plausible = every coordinate
+   within KVP_ABS_CM (400 m) AND, when reference places are known (exit trigger, escape boxes), within KVP_REF_CM (500 m, 3D) of one of them.
+   Bounds chosen from the logs: stock maps keep every object within |coord| ~ 15000 cm (DD02 exit leg points y 6010, DM09 boarding y 121, x -1852);
+   the bogus y was 59842. A called van drives in from a few hundred metres at most. Off (on = 0): always plausible (the old rule). */
+#define KVP_ABS_CM 40000.0f
+#define KVP_REF_CM 50000.0f
+static int kvp_sane(int on, const float *p, int nref, const float (*ref)[3])
+{
+    int i;
+    if (!on) return 1;
+    for (i = 0; i < 3; i++) if (!(fabsf(p[i]) <= KVP_ABS_CM)) return 0;      /* also rejects NaN */
+    if (nref <= 0) return 1;
+    for (i = 0; i < nref; i++) {
+        float dx = p[0] - ref[i][0], dy = p[1] - ref[i][1], dz = p[2] - ref[i][2];
+        if (dx * dx + dy * dy + dz * dz <= KVP_REF_CM * KVP_REF_CM) return 1;
+    }
+    return 0;
+}
+
+/* OnlineTriggerOriginSkip (G3): a bot whose place reads exactly the origin (1 cm, as kgg_origin) is not placed yet (DD01: 7 bots at (0,0,0) counted
+   "inside" a box at the origin and fired it). Returns 1 = leave this bot out of the inside test. */
+static int kvp_origin_skip(int on, const float *p)
+{
+    return on && fabsf(p[0]) <= 1 && fabsf(p[1]) <= 1 && fabsf(p[2]) <= 1;
 }
 
 #endif

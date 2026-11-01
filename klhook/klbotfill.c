@@ -118,6 +118,7 @@ static float klbf_leg_speed = 300.0f, klbf_leg_near = 0.0f, klbf_leg_dy = 0.0f, 
 static int klbf_bank_mode, klbf_ba_mode; static float klbf_ba_m = 6000.0f; static long klbf_bank_total; static int klbf_bank_n;      /* [BotFill] OnlineBank (0 off, 1 ledger, 2 dry), OnlineBoardAll (0 off, 1 board, 2 dry), OnlineBoardAllM (cm) */
 static int klbf_bc_mode, klbf_bc_told; static long klbf_bc_dry;      /* [BotFill] OnlineBankCredit (0 off, 1 credit, 2 dry); klbf_bc_told: "no escaped seat yet" said this round; klbf_bc_dry: ledger value last logged dry */
 static int klbf_trig;      /* [BotFill] OnlineTriggers: 0 off, 1 fire, 2 dry (klbf_trig_* below) */
+static int klbf_vp_sane, klbf_trig_orig;    /* [BotFill] OnlineVanPosSane (recommended on), OnlineTriggerOriginSkip (recommended on): kvp_sane / kvp_origin_skip in klgetup_logic.h */
 static int klbf_trig_x;    /* [BotFill] OnlineTriggersExtra: ZTriggerBox2 / ZOnlineTriggerBox too, 0 off, 1 fire, 2 dry */
 static int klbf_ot_ramp, klbf_ot_rampdry;      /* OnlineRampFire / OnlineRampDry toggles (read in the init, used by klbf_ramp_* below) */
 static DWORD klbf_pb_bots[KLBF_OT_BOTS_MAX]; static volatile LONG klbf_pb_n; static volatile DWORD klbf_pb_at;
@@ -266,6 +267,8 @@ static void klbf_init(void)
     if (klbf_gu) klog("botfill: getup: OnlineGetUp=%d (%s): host rush range %.0f cm, helper by the downed body within %.0f cm adds %.1f a second to the mash meter - default 0 = off", klbf_gu, klbf_gu == 2 ? "DRY, log only" : "on", klbf_gu_range, klbf_gu_near, klbf_gu_rate);
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
     klbf_trig_x = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggersExtra", 0, klh_ini); if (klbf_trig_x < 0 || klbf_trig_x > 2) klbf_trig_x = 0;      /* ZTriggerBox2 / ZOnlineTriggerBox: no stock cop wave uses them (money-stack pick-ups, location trackers), so off by default */
+    klbf_vp_sane = GetPrivateProfileIntA("BotFill", "OnlineVanPosSane", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a van place that is far outside the map is not used: exit trigger / escape box instead */
+    klbf_trig_orig = GetPrivateProfileIntA("BotFill", "OnlineTriggerOriginSkip", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a bot that reads (0,0,0) is not "inside" an OnlineTriggers box */
     klbf_bank_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBank", 0, klh_ini); if (klbf_bank_mode < 0 || klbf_bank_mode > 2) klbf_bank_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     klbf_bc_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBankCredit", 0, klh_ini); if (klbf_bc_mode < 0 || klbf_bc_mode > 2) klbf_bc_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     if (klbf_bc_mode && !klbf_bank_mode) { klog("botfill: bankcredit: OnlineBankCredit=%d needs OnlineBank=1 or 2 (the ledger); nothing is done", klbf_bc_mode); klbf_bc_mode = 0; }
@@ -275,6 +278,7 @@ static void klbf_init(void)
     if (klbf_ot) klog("botfill: bank: OnlineBank=%d, OnlineBoardAll=%d, OnlineBoardAllM=%.0f cm (0 off, 1 on, 2 dry; recommended on once tried)", klbf_bank_mode, klbf_ba_mode, klbf_ba_m);
     klbf_ot_ramp = GetPrivateProfileIntA("BotFill", "OnlineRampFire", 1, klh_ini) != 0;      /* (recommended on) DD02: the ramp trigger never fires online because bots are not counted */
     klbf_ot_rampdry = GetPrivateProfileIntA("BotFill", "OnlineRampDry", 0, klh_ini) != 0;      /* default 0 since BOS_DD08r (F08 TriggerBox_Guards fired live, 7/7 boarded); only maps with a [BotFillRamp_<SLOT>] section fire */
+    if (klbf_ot) klog("botfill: OnlineVanPosSane=%d, OnlineTriggerOriginSkip=%d (both recommended on, not run live yet)", klbf_vp_sane, klbf_trig_orig);
     if (klbf_ot) klog("botfill: trig: OnlineTriggers=%d (0 off, 1 fire, 2 dry), OnlineTriggersExtra=%d, OnlineTacticsTake=%d (2 = the game's 0x4e3f40, recommended on once benched)", klbf_trig, klbf_trig_x, klbf_ot_take);
     if (klbf_ot) klog("botfill: ramp: OnlineRampFire=%d (recommended on), OnlineRampDry=%d (log only; needs a [BotFillRamp_<SLOT>] section)", klbf_ot_ramp, klbf_ot_rampdry);
     klbf_ot_door = GetPrivateProfileIntA("BotFill", "OnlineSkipDoorStacks", 1, klh_ini) != 0;      /* (recommended on) BOS1: DD01's 58 vault cases sit behind kick doors; ordered straight at them the bots stalled and took 0 */
@@ -557,7 +561,7 @@ static int klbf_trig_other(struct klbf_tb *t, DWORD now, DWORD gt, const DWORD *
         if (!(klh_rd32(o + 0x18) & 0x10)) { if (!t->logged) { t->logged = 1; klog("botfill: trig: ZTriggerBox2 %08lx is not in the update list ([+0x18] = %08lx, bit 0x10 clear): left alone (GUESS: spent one-shot / disabled)", (unsigned long)o, (unsigned long)klh_rd32(o + 0x18)); } t->in = 0; return 0; }
         if (cd < 0 || cd > 600000) { t->dead = 1; return 0; }      /* a delay that is not a plausible int: a layout this code does not know */
         if (busy) return 0;      /* the update's delay is running (it fires by itself) */
-        for (b = 0; b < nb; b++) if (KLFC_CALL(BYTE (__fastcall *)(DWORD, DWORD, DWORD), 0x0068d030)(o, 0, act[b]) & 0xff) { inside++; if (first < 0) first = b; }
+        for (b = 0; b < nb; b++) if (act[b] && KLFC_CALL(BYTE (__fastcall *)(DWORD, DWORD, DWORD), 0x0068d030)(o, 0, act[b]) & 0xff) { inside++; if (first < 0) first = b; }
     } else {
         BYTE hum = 0;
         if (!klh_rd(o + 0x38, &hum, 1) || !klh_rd(o + 0x39, &mask, 1) || !klh_rd(o + 0x59, &busy, 1)) return 0;
@@ -566,6 +570,7 @@ static int klbf_trig_other(struct klbf_tb *t, DWORD now, DWORD gt, const DWORD *
         if (cd < 0 || cd > 600000) { t->dead = 1; return 0; }
         if (busy) return 0;      /* the delay of a fire is running */
         for (b = 0; b < nb; b++) {
+            if (!act[b]) continue;      /* OnlineTriggerOriginSkip: an unplaced bot */
             if (mask) {      /* the update's second filter: the object's class mask against 0x168cddc / 0x168cde0 */
                 DWORD avt = klh_rd32(act[b]), fn = avt ? klh_rd32(avt + 0x30) : 0;
                 if (!fn || fn < img_lo || fn >= img_hi || (((DWORD (__fastcall *)(DWORD, DWORD))fn)(act[b], 0) & klh_rd32((DWORD_PTR)KLH_VA(0x0168cde0))) != klh_rd32((DWORD_PTR)KLH_VA(0x0168cddc))) continue;
@@ -628,7 +633,7 @@ static void klbf_trig_tick(DWORD now, const DWORD *act, int nb)
         }
         if ((int)gt < (int)klh_rd32(o + 0x74)) continue;      /* the game's re-arm clock (1/1024 s) */
         if (pf) continue;      /* a counted player already set the flag: the game has its own edge */
-        for (b = 0; b < nb; b++) if (KLFC_CALL(BYTE (__fastcall *)(DWORD, DWORD, DWORD), 0x008c16c0)(o, 0, act[b]) & 0xff) inside++;
+        for (b = 0; b < nb; b++) if (act[b] && KLFC_CALL(BYTE (__fastcall *)(DWORD, DWORD, DWORD), 0x008c16c0)(o, 0, act[b]) & 0xff) inside++;
         if (inside < (int)need) { t->in = 0; continue; }
         if (t->in) continue;      /* still inside since our last edge: the bots must leave first (inside < need resets it) */
         t->in = 1;
@@ -1353,6 +1358,20 @@ static float klbf_gu_rate_now(DWORD pl, DWORD now)
     return cached;
 }
 
+/* OnlineVanPosSane: is this van place plausible? refs = the exit trigger (once found) and every escape box frame. Logs once per round when it rejects one.
+   CAUSE of the DM09 place (24235, -59842, 13883): GUESS, not proven: the vehicle object's scene node ([veh+4]) had never been placed (stale / uninitialised
+   transform) while the real boarding object stood at (-1852, 121, 8420) (van probe, Q31_DM09). The old test only refused |coord| <= 1. */
+static int klbf_van_ok(const float *vp, int from)
+{
+    static int toldRound = -1; float ref[1 + 16][3]; int nref = 0, i, ok;
+    if (!klbf_vp_sane) return 1;
+    if (klbf_ot_vh && !(fabsf(klbf_ot_tpos[0]) <= 1 && fabsf(klbf_ot_tpos[1]) <= 1 && fabsf(klbf_ot_tpos[2]) <= 1)) memcpy(ref[nref++], klbf_ot_tpos, 12);
+    for (i = 0; i < klbf_ot_nbx && nref < 17; i++) { struct klmv_fr bf; if (klbf_ot_box_frame(i, &bf)) memcpy(ref[nref++], bf.T, 12); }
+    ok = kvp_sane(1, vp, nref, (const float (*)[3])ref);
+    if (!ok && toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; klog("botfill: tactics: van: target (%.0f, %.0f, %.0f) implausible (a coordinate beyond %.0f cm, or over %.0f cm from every one of %d exit trigger / escape box place(s); source %s): not used, the exit trigger / escape box is the goal (OnlineVanPosSane, said once a round)", vp[0], vp[1], vp[2], KVP_ABS_CM, KVP_REF_CM, nref, from ? "[rules+0x1e4]" : "the object scan"); }
+    return ok;
+}
+
 /* host, in a round, once a second. sm_state: caller checked role 2, mode 4 */
 static void klbf_ot_run(DWORD now, DWORD sm)
 {
@@ -1384,7 +1403,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (vt == KLE_VEH_VT) {
                 DWORD node = klh_rd32(o + 4);
                 nvan++;
-                if (!van && node && kle_node(node, vpos, 0) && (fabs(vpos[0]) > 1 || fabs(vpos[1]) > 1 || fabs(vpos[2]) > 1)) van = o;      /* BO3: the van stood at (0,0,0) at the round start = not here / not called yet; wait for a real place */      /* GUESS: the vehicle object's node is where the van stands (its boarding place is 500 along x, klescort.c kle_boarding; not used) */
+                if (!van && node && kle_node(node, vpos, 0) && (fabs(vpos[0]) > 1 || fabs(vpos[1]) > 1 || fabs(vpos[2]) > 1) && klbf_van_ok(vpos, 0)) van = o;      /* BO3: the van stood at (0,0,0) at the round start = not here / not called yet; wait for a real place */      /* GUESS: the vehicle object's node is where the van stands (its boarding place is 500 along x, klescort.c kle_boarding; not used) */
             } else if (klh_avt(o) == 0x00bb3bac) {
                 DWORD pr, team = 99, hp, snd; float hv[2] = { 0, 0 };
                 if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4)) continue;
@@ -1406,7 +1425,9 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
     {   int q; for (q = 0; q < nb && q < KLBF_OT_BOTS_MAX; q++) klbf_pb_bots[q] = bots[q].actor; klbf_pb_n = nb < KLBF_OT_BOTS_MAX ? nb : KLBF_OT_BOTS_MAX; klbf_pb_at = GetTickCount(); }      /* OnlinePointBlank's bot list */
     {   float bp[KLBF_OT_BOTS][3]; int q; for (q = 0; q < nb; q++) memcpy(bp[q], bots[q].pos, 12); klbf_ramp_tick(now, bp, nb); }      /* OnlineRampFire */
-    {   DWORD ta[KLBF_OT_BOTS]; int q; for (q = 0; q < nb; q++) ta[q] = bots[q].actor; klbf_trig_tick(now, ta, nb); }      /* OnlineTriggers */
+    {   DWORD ta[KLBF_OT_BOTS]; int q, nsk = 0; static int skRound = -1; for (q = 0; q < nb; q++) { ta[q] = bots[q].actor; if (kvp_origin_skip(klbf_trig_orig, bots[q].pos)) { ta[q] = 0; nsk++; } }      /* OnlineTriggerOriginSkip (G3, DD01: 7 bots at (0,0,0) fired a box): a 0 actor is left out of the inside tests */
+        if (nsk && skRound != klbf_ot_rounds) { skRound = klbf_ot_rounds; klog("botfill: trig: %d of %d bot(s) read (0,0,0): left out of the box inside tests (OnlineTriggerOriginSkip, said once a round)", nsk, nb); }
+        klbf_trig_tick(now, ta, nb); }      /* OnlineTriggers */
     {   /* the money: BO4 (DM01) found 0 ZOnlineMoneyCtrl in the entity table - they are controllers, not table objects. Workflow wo8upp5vd
            (verified in disassembly): the ctor 0x9012a0 (0x901323..33) appends every one to the game's object registry via 0x826990: pointers
            at 0xe09e38, count 0xe0e63c (cap 0x1000). Types at +0x38: 0 normal, 1 DROP (the pool a player drops; skipped), 2 container.
@@ -1455,7 +1476,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
     if (!van && rules) {   /* [rules+0x1e4] = the escape vehicle (0x70f0a0, PROVEN), 0 until the vehicle is called (0x71e180 -> 0x84f030 fills the list slot 89 reads) */
         struct kle_veh v; float vp[3];
-        if (kle_veh_read(rules, &v) == 1 && kle_node(klh_rd32(v.obj + 4), vp, 0) && (fabs(vp[0]) > 1 || fabs(vp[1]) > 1 || fabs(vp[2]) > 1)) { van = v.obj; memcpy(vpos, vp, 12); }
+        if (kle_veh_read(rules, &v) == 1 && kle_node(klh_rd32(v.obj + 4), vp, 0) && (fabs(vp[0]) > 1 || fabs(vp[1]) > 1 || fabs(vp[2]) > 1) && klbf_van_ok(vp, 1)) { van = v.obj; memcpy(vpos, vp, 12); }
     }
     if (!van && klbf_ot_van && rules && !klbf_ot_trig_looked && klbf_ot_looks < 6 && (!klbf_ot_lookAt || now - klbf_ot_lookAt >= 20000)) {      /* the exit trigger: when the first bot carries money (a private-memory scan, klmove.c); a miss is retried every 20 s, 6 times a round */
         int q; for (q = 0; q < KLBF_OT_BOTS && !(klbf_ob[q].actor && klbf_ob[q].tally > 0); q++) ;
