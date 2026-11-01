@@ -30,7 +30,7 @@ R_START = re.compile(r'arcadeprobe: round start: Arcade level (\d+), (\d+) crew 
 R_CENSUS = re.compile(r'arcadeprobe: stacks at \+5 s: (\d+) armed, (\d+) behind a shut door, \$(-?\d+) armed in all, (\d+) followed')
 R_VAN = re.compile(r'arcadeprobe: van state (\d+) -> (\d+) at \+(\d+) s \(clock left (-?\d+) s')
 R_BOT = re.compile(r'arcadeprobe: bot (\d+) status (\d+) -> (\d+)(?: ABOARD| DEAD)? at \+(\d+) s')
-R_SUM = re.compile(r'arcadeprobe: tactics: round summary: (\d+) bot\(s\) \(AI crew records\), (\d+) stack\(s\) taken, (-?\d+) total .*?, (\d+) boarded, (\d+) stack\(s\) never emptied'
+R_SUM = re.compile(r'arcadeprobe: tactics: (round|interim) summary: (\d+) bot\(s\) \(AI crew records\), (\d+) stack\(s\) taken, (-?\d+) total .*?, (\d+) boarded, (\d+) stack\(s\) never emptied'
                    r' \| van call s (\d+|none), (\d+) dead')
 R_FATAL = re.compile(r'FATAL|CRASH|assert', re.I)
 
@@ -68,13 +68,17 @@ def parse(lines):
             continue
         m = R_SUM.search(l)
         if m:
-            cur.update(bots=int(m.group(1)), taken=int(m.group(2)), total=int(m.group(3)), never=int(m.group(5)), summary=True)
-            cur['boarded_n'] = int(m.group(4))
-            cur['dead_n'] = int(m.group(7))
-            if m.group(6) != 'none':
-                cur['van_call'] = int(m.group(6))
-            rounds.append(cur)
-            cur = None
+            final = m.group(1) == 'round'
+            cur.update(bots=int(m.group(2)), taken=int(m.group(3)), total=int(m.group(4)), never=int(m.group(6)), summary=final)
+            cur['boarded_n'] = int(m.group(5))
+            cur['dead_n'] = int(m.group(8))
+            if m.group(7) != 'none':
+                cur['van_call'] = int(m.group(7))
+                if not cur['why']:
+                    cur['why'] = 'from summary'
+            if final:
+                rounds.append(cur)
+                cur = None
     if cur is not None:
         rounds.append(cur)
     for r in rounds:

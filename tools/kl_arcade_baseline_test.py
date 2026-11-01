@@ -32,6 +32,11 @@ LOG1 = [
     P + 'arcadeprobe: round start: Arcade level 3, 8 crew record(s), 7 AI (flags&1), clock left 250 s, van state 0',
     P + 'arcadeprobe: van state 0 -> 2 at +50 s (clock left 200 s, timer 0.0)',
 ]
+LOG3 = [
+    P + 'arcadeprobe: round start: Arcade level 1, 8 crew record(s), 7 AI (flags&1), clock left 250 s, van state 0',
+    P + 'arcadeprobe: tactics: interim summary: 7 bot(s) (AI crew records), 3 stack(s) taken, 900000 total (AI record money peak, the game own field), 0 boarded, 12 stack(s) never emptied | van call s 80, 0 dead, 4 drain step(s), 1 type-1 drop(s), first take +20 s, last take +60 s, round lasted 90 s (interim)',
+    P + 'arcadeprobe: tactics: interim summary: 7 bot(s) (AI crew records), 6 stack(s) taken, 1500000 total (AI record money peak, the game own field), 2 boarded, 9 stack(s) never emptied | van call s 80, 1 dead, 8 drain step(s), 1 type-1 drop(s), first take +20 s, last take +120 s, round lasted 120 s (interim)',
+]
 LOG2 = [P + 'nothing here']
 
 
@@ -44,6 +49,9 @@ def main():
     check(r['armed'] == 12 and r['door'] == 3, 'census: 12 armed, 3 behind a shut door')
     check(r['van_call'] == 100 and r['why'] == 'clock left 150', 'van call at +100 s (first state 1..4), clock left 150')
     check(not rs[1]['summary'] and rs[1]['van_call'] == 50 and rs[1]['taken'] is None, 'cut-off round: no summary, van call 50, taken unknown')
+    r3 = B.parse(LOG3)
+    check(len(r3) == 1 and not r3[0]['summary'] and r3[0]['taken'] == 6 and r3[0]['total'] == 1500000, 'killed round: the latest interim summary fills the row, still (no summary)')
+    check(r3[0]['boarded_n'] == 2 and r3[0]['dead_n'] == 1 and r3[0]['van_call'] == 80 and r3[0]['never'] == 9, 'interim: boarded, dead, van call, never emptied')
     row = B.row('DD03', r)
     check(len(row) == len(B.COLS), 'row has the scorecard column count (%d)' % len(B.COLS))
     check(row[0] == 'DD03' and row[1] == '7' and row[2] == '12 (+3 behind shut door)' and row[3] == '5' and row[4] == '1.25M', 'row cells: bots/armed/taken/$')

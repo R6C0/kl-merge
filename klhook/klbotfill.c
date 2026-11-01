@@ -2221,37 +2221,43 @@ static void klbf_lk_log(const struct klbf_lkrec *r, int n, DWORD role, DWORD sm,
      and at the round end 'arcadeprobe: tactics: round summary: ...' in the shape of the online summary.
    Boarded = AI crew records (flags & 1) whose status was ever 4 (ABOARD, set by the boarding rule 0x6840a0, klbot.c); the hook's online 'boarded' is a tally, this is the game's own record.
    Total = the sum over AI records of the highest money field seen. At most KLBF_AP_MAXL lines a round, nothing per tick. */
-#define KLBF_AP_MAXL 160
+#define KLBF_AP_MAXL 120      /* detail lines (money steps, stacks, drops) a round */
+#define KLBF_AP_MAXV 60       /* extra lines kept for van / stage / status events, so a full detail budget never hides them */
 #define KLBF_AP_STK  256
 struct klbf_ap_rec { BYTE seen, status, stage, aboard, dead; long money, peak; };
 static struct {
-    int in, lines, nstk, nbot, ntake, ndrain, ndrops, nboard, ndead, nlines_cut, censused, vsaw, ndrop; DWORD rules, t0, vcallAt, firstTakeAt, lastTakeAt;
-    struct { DWORD o; int first, last; BYTE taken; } stk[KLBF_AP_STK];
-    DWORD drop[32];
+    int in, lines, vlines, nstk, nbot, ntake, ndrain, ndrops, nboard, ndead, nlines_cut, censused, vsaw, ndrop; DWORD rules, t0, vcallAt, firstTakeAt, lastTakeAt, lastInterim;
+    struct { DWORD o; int first, last; BYTE taken, dis; } stk[KLBF_AP_STK];
+    DWORD drop[256];
     struct klbf_ap_rec rec[KLB_NREC];
     BYTE lastv;
 } klbf_ap_s;
 
-static void klbf_ap_say(const char *fmt, ...)
+static void klbf_ap_say2(int vip, const char *fmt, ...)      /* vip = van / stage / status / start / census lines: own budget KLBF_AP_MAXV */
 {
     char b[400]; va_list ap;
-    if (klbf_ap_s.lines >= KLBF_AP_MAXL) { if (!klbf_ap_s.nlines_cut++) klog("arcadeprobe: %d lines this round - silent until the summary", KLBF_AP_MAXL); return; }
-    klbf_ap_s.lines++;
+    if (vip) { if (klbf_ap_s.vlines >= KLBF_AP_MAXV) return; klbf_ap_s.vlines++; }
+    else {
+        if (klbf_ap_s.lines >= KLBF_AP_MAXL) { if (!klbf_ap_s.nlines_cut++) klog("arcadeprobe: %d detail lines this round - only van / status events and the summaries from here", KLBF_AP_MAXL); return; }
+        klbf_ap_s.lines++;
+    }
     va_start(ap, fmt); _vsnprintf(b, sizeof b - 1, fmt, ap); va_end(ap); b[sizeof b - 1] = 0;
     klog("arcadeprobe: %s", b);
 }
+#define klbf_ap_say(...) klbf_ap_say2(0, __VA_ARGS__)
+#define klbf_ap_sayv(...) klbf_ap_say2(1, __VA_ARGS__)
 
-static void klbf_ap_summary(DWORD now, const char *why)
+static void klbf_ap_summary(DWORD now, const char *why, int interim)      /* interim: same numbers so far, the round stays open (a killed process still leaves the latest) */
 {
     int i; long total = 0; char vc[24];
     if (!klbf_ap_s.in) return;
     for (i = 0; i < KLB_NREC; i++) if (klbf_ap_s.rec[i].seen && klbf_ap_s.rec[i].peak > 0) total += klbf_ap_s.rec[i].peak;
     if (klbf_ap_s.vcallAt) _snprintf(vc, sizeof vc - 1, "%lu", (unsigned long)((klbf_ap_s.vcallAt - klbf_ap_s.t0) / 1000)); else strcpy(vc, "none");
     vc[sizeof vc - 1] = 0;
-    klog("arcadeprobe: tactics: round summary: %d bot(s) (AI crew records), %d stack(s) taken, %ld total (AI record money peak, the game's own field), %d boarded, %d stack(s) never emptied | van call s %s, %d dead, %d drain step(s), %d type-1 drop(s), first take +%lu s, last take +%lu s, round lasted %lu s (%s)",
-         klbf_ap_s.nbot, klbf_ap_s.ntake, total, klbf_ap_s.nboard, klbf_ap_s.nstk - klbf_ap_s.ntake, vc, klbf_ap_s.ndead, klbf_ap_s.ndrain, klbf_ap_s.ndrops,
+    klog("arcadeprobe: tactics: %s summary: %d bot(s) (AI crew records), %d stack(s) taken, %ld total (AI record money peak, the game's own field), %d boarded, %d stack(s) never emptied | van call s %s, %d dead, %d drain step(s), %d type-1 drop(s), first take +%lu s, last take +%lu s, round lasted %lu s (%s)",
+         interim ? "interim" : "round", klbf_ap_s.nbot, klbf_ap_s.ntake, total, klbf_ap_s.nboard, klbf_ap_s.nstk - klbf_ap_s.ntake, vc, klbf_ap_s.ndead, klbf_ap_s.ndrain, klbf_ap_s.ndrops,
          (unsigned long)(klbf_ap_s.firstTakeAt ? (klbf_ap_s.firstTakeAt - klbf_ap_s.t0) / 1000 : 0), (unsigned long)(klbf_ap_s.lastTakeAt ? (klbf_ap_s.lastTakeAt - klbf_ap_s.t0) / 1000 : 0), (unsigned long)((now - klbf_ap_s.t0) / 1000), why);
-    memset(&klbf_ap_s, 0, sizeof klbf_ap_s);
+    if (!interim) memset(&klbf_ap_s, 0, sizeof klbf_ap_s);
 }
 
 /* the nearest AI crew member to a point, within r cm, -1 = none */
@@ -2271,17 +2277,17 @@ static void klbf_ap_run(DWORD now)
     struct klb_snap sn; int i; float c = 0;
     if (!klbf_ap) return;
     if (!klb_read(&sn) || sn.state != KLB_ROUND) {      /* no Arcade round now: close the one that was running */
-        if (klbf_ap_s.in) klbf_ap_summary(now, "left the round state or no Arcade session");
+        if (klbf_ap_s.in) klbf_ap_summary(now, "left the round state or no Arcade session", 0);
         return;
     }
-    if (klbf_ap_s.in && klbf_ap_s.rules != sn.rules) klbf_ap_summary(now, "rules object changed");
+    if (klbf_ap_s.in && klbf_ap_s.rules != sn.rules) klbf_ap_summary(now, "rules object changed", 0);
     if (!klbf_ap_s.in) {
         int nai = 0, nrec = 0;
         memset(&klbf_ap_s, 0, sizeof klbf_ap_s);
         klbf_ap_s.in = 1; klbf_ap_s.rules = sn.rules; klbf_ap_s.t0 = now; klbf_ap_s.lastv = 0xff;
         for (i = 0; i < sn.n; i++) if (sn.r[i].used) { nrec++; if (sn.r[i].flags & 1) nai++; }
         if (!klh_rd(sn.rules + 0x4c, &c, 4) || !klb_finite(c)) c = -1;
-        klbf_ap_say("round start: Arcade level %d, %d crew record(s), %d AI (flags&1), clock left %.0f s, van state %u", sn.level, nrec, nai, c, sn.veh);
+        klbf_ap_sayv("round start: Arcade level %d, %d crew record(s), %d AI (flags&1), clock left %.0f s, van state %u", sn.level, nrec, nai, c, sn.veh);
     }
     klbf_ap_s.nbot = 0;
     for (i = 0; i < sn.n; i++) {      /* per AI crew record */
@@ -2295,17 +2301,18 @@ static void klbf_ap_run(DWORD now)
             klbf_ap_say("bot %d money %ld -> %ld (%+ld) at +%lu s, stage %u, status %u", i, q->money, mny, mny - q->money, sec, r->stage, r->status);
             q->money = mny; if (mny > q->peak) q->peak = mny;
         }
-        if (r->stage != q->stage) { klbf_ap_say("bot %d heist stage %u -> %u at +%lu s (money %ld)", i, q->stage, r->stage, sec, q->money); q->stage = r->stage; }
+        if (r->stage != q->stage) { klbf_ap_sayv("bot %d heist stage %u -> %u at +%lu s (money %ld)", i, q->stage, r->stage, sec, q->money); q->stage = r->stage; }
         if (r->status != q->status) {
-            klbf_ap_say("bot %d status %u -> %u%s at +%lu s (stage %u, money %ld)", i, q->status, r->status, r->status == 4 ? " ABOARD" : r->status == 7 ? " DEAD" : "", sec, r->stage, q->money);
+            klbf_ap_sayv("bot %d status %u -> %u%s at +%lu s (stage %u, money %ld)", i, q->status, r->status, r->status == 4 ? " ABOARD" : r->status == 7 ? " DEAD" : "", sec, r->stage, q->money);
             if (r->status == 4 && !q->aboard) { q->aboard = 1; klbf_ap_s.nboard++; }
             if (r->status == 7 && !q->dead) { q->dead = 1; klbf_ap_s.ndead++; }
             q->status = r->status;
         }
     }
+    if (now - (klbf_ap_s.lastInterim ? klbf_ap_s.lastInterim : klbf_ap_s.t0) >= 30000) { klbf_ap_s.lastInterim = now; klbf_ap_summary(now, "interim", 1); }
     if (!klbf_ap_s.vsaw || sn.veh != klbf_ap_s.lastv) {      /* van state [rules+0x1dc]: 1/2 coming, 3/4 waiting, 5 leaving, 7 gone, 0 idle */
         c = 0; if (!klh_rd(sn.rules + 0x4c, &c, 4) || !klb_finite(c)) c = -1;
-        if (klbf_ap_s.vsaw) klbf_ap_say("van state %u -> %u at +%lu s (clock left %.0f s, timer %.1f)", klbf_ap_s.lastv, sn.veh, (unsigned long)((now - klbf_ap_s.t0) / 1000), c, sn.timer);
+        if (klbf_ap_s.vsaw) klbf_ap_sayv("van state %u -> %u at +%lu s (clock left %.0f s, timer %.1f)", klbf_ap_s.lastv, sn.veh, (unsigned long)((now - klbf_ap_s.t0) / 1000), c, sn.timer);
         if (sn.veh >= 1 && sn.veh <= 4 && !klbf_ap_s.vcallAt) klbf_ap_s.vcallAt = now;      /* the call = the first state 1..4 (GUESS: a call is the only way out of 0) */
         klbf_ap_s.lastv = sn.veh; klbf_ap_s.vsaw = 1;
     }
@@ -2323,7 +2330,7 @@ static void klbf_ap_run(DWORD now)
                 if (type == 1) {      /* a drop pool object: counted once per address per round when it arms with money */
                     if (amt > 0 && act) {
                         int seen = 0; for (k = 0; k < klbf_ap_s.ndrop; k++) if (klbf_ap_s.drop[k] == o) seen = 1;
-                        if (!seen) { klbf_ap_s.ndrops++; if (klbf_ap_s.ndrop < 32) klbf_ap_s.drop[klbf_ap_s.ndrop++] = o; klbf_ap_say("type-1 drop %08lx armed with %d at +%lu s", (unsigned long)o, amt, (unsigned long)((now - klbf_ap_s.t0) / 1000)); }
+                        if (!seen && klbf_ap_s.ndrop < 256) { klbf_ap_s.ndrops++; klbf_ap_s.drop[klbf_ap_s.ndrop++] = o; klbf_ap_say("type-1 drop %08lx armed with %d at +%lu s", (unsigned long)o, amt, (unsigned long)((now - klbf_ap_s.t0) / 1000)); }
                     }
                     continue;
                 }
@@ -2335,8 +2342,13 @@ static void klbf_ap_run(DWORD now)
                     continue;
                 }
                 if (klbf_ap_s.stk[k].taken) continue;
-                if (amt < klbf_ap_s.stk[k].last || !act) {      /* drained (or disarmed): a step */
-                    float pos[3]; DWORD ent, node; int who = -1, to = act ? amt : 0;
+                if (!act && amt > 0) {      /* disarmed with money left ('Deactivate' 0x4c95e6 clears +0x6c, nobody took it): not a take */
+                    if (!klbf_ap_s.stk[k].dis) { klbf_ap_s.stk[k].dis = 1; klbf_ap_say("stack %08lx disarmed with %d left at +%lu s (not counted as taken)", (unsigned long)o, amt, (unsigned long)((now - klbf_ap_s.t0) / 1000)); }
+                    continue;
+                }
+                klbf_ap_s.stk[k].dis = 0;
+                if (amt < klbf_ap_s.stk[k].last) {      /* drained: a step */
+                    float pos[3]; DWORD ent, node; int who = -1, to = amt > 0 ? amt : 0;
                     if ((ent = klh_rd32(o + 0x24)) && (node = klh_rd32(ent + 4)) && kle_node(node, pos, 0)) who = klbf_ap_near(&sn, pos, 800.0f);
                     klbf_ap_s.ndrain++;
                     klbf_ap_say("stack %08lx %d -> %d (type %lu state %u armed %u) at +%lu s, nearest AI crew member within 8 m: %d", (unsigned long)o, klbf_ap_s.stk[k].last, to, (unsigned long)type, st, act, (unsigned long)((now - klbf_ap_s.t0) / 1000), who);
@@ -2345,7 +2357,7 @@ static void klbf_ap_run(DWORD now)
                 }
             }
         }
-        if (!klbf_ap_s.censused && now - klbf_ap_s.t0 >= 5000) { klbf_ap_s.censused = 1; klbf_ap_say("stacks at +5 s: %d armed, %d behind a shut door, $%ld armed in all, %d followed", armed, door, sum, klbf_ap_s.nstk); }
+        if (!klbf_ap_s.censused && now - klbf_ap_s.t0 >= 5000) { klbf_ap_s.censused = 1; klbf_ap_sayv("stacks at +5 s: %d armed, %d behind a shut door, $%ld armed in all, %d followed", armed, door, sum, klbf_ap_s.nstk); }
     }
 }
 
