@@ -1,3 +1,5 @@
+2026-11-01 ~23:59 - [wk-vantime] DM09 van life cycle written up (re/dm09_van_timing_1101.md): stale van node blocked the exit-trigger lookup, nothing called the van, the hold only looks at state 3. New default-0 keys OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold(+S), klvantime_logic.h + test, RT4 bench described, not run.
+
 2026-11-01 ~23:45 - [ce] RT2 3/3 exit 0, 0 faults. RT2D + RT2R (DD06 7 boarded $4.8M) PASS. RT2L DM09 PARTIAL: the route runs (51 legs, 4 real carries, 0 ZFFActor
 refusals, 6 exit walks) but 0 BOARDED: legs 2..8 time out at the flat 15 s with bots 5-76 m short (~1.5 m/s on 23-50 m legs), so they end 64-76 m
 from leg 8 when the van's boarding object shows (23:08:03, round over 23:08:22). RT3 = same hook + OnlineLegScale=1 Speed=150 MaxS=60 + OnlineLegStallS=20

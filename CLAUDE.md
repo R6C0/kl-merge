@@ -72,6 +72,9 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 0 BOARDED: every leg times out at the flat 15 s 5-76 m short, bots end 64-76 m off when the van comes (round over 19 s later). RT3 = same hook +
 OnlineLegScale=1 Speed=150 MaxS=60 + OnlineLegStallS=20 (existing keys), kit week_1028\rt3\run_rt3.sh after c9's CR3.
 
+2026-11-01 ~23:59 - [wk-vantime] DM09 van: stale van node blocked the exit-trigger lookup (nothing called the van), OnlineVanHold looks at state 3 only.
+Keys OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold default 0; RT4 bench in re/dm09_van_timing_1101.md, not run.
+
 2026-11-01 ~22:55 - [c9] CR1: the online client never runs ring writer 0x81b6f0; the host rings each car on ACTIVATION (DM01 871, 737+792,
 906; DM03 5 cars at t+18 s), so CR2 is dropped. CR3 = both seats prebuild at load in table order (rsv!=0 reuses indices, dasm 0x81b709):
 [CoverRing] ClientBuildHost, kit c9_1028\cr3\run_cr3.sh after ce's RT2. LC2 PASS: Hire Page + ControlsPage cleared in NEXT_SHIP.
