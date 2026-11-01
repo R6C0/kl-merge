@@ -8,6 +8,7 @@
 #ifndef KLGETUP_LOGIC_H
 #define KLGETUP_LOGIC_H
 #include <math.h>
+#include <string.h>
 
 #define KGU_REORDER_MS 2500      /* Arcade kad_rush: an order again every 2.5 s while the rusher is not by him */
 #define KGU_STOP_CM    200.0f    /* Arcade BotAnimNear 2 m: the place the rusher is sent to */
@@ -230,6 +231,26 @@ static int kvp_origin_skip(int on, const float *p)
 static int kvp_all_unplaced(int on, int nb, int norigin, unsigned long ageMs, unsigned long minMs)
 {
     return on && nb > 0 && norigin == nb && ageMs > minMs;
+}
+
+/* OnlineTriggersSkipPickups (wk-trigdm-1101, re/bots_trigger_cops_1028.md section 8): Dead Men's own FA grafts carry TriggerBox2 boxes that are NOT cop waves:
+   the campaign pick-ups ('PCnnnn_' nodes: cash registers / drawers / cash boxes / jewels / watches / credit card / money boxes with an Attach child) and the
+   characters' own interact boxes (civilians, clerks, gang members, FBI agents, the senator: a TriggerBox2 whose only target is its own node). All are players-only,
+   so OnlineTriggersExtra would fire them for a bot (a pick-up the tactics module may also take, an interact the bots must not do). Name check on the node path,
+   case-insensitive, 1 = leave this box alone. GUESS: the path string [[obj+4]+0x6c] holds the whole path (or at least the leaf); the keywords include the leaf
+   names of the pick-up children (cashbox, money_attach, attach01 under PCnnnn) so a leaf-only string still matches most of them. */
+static int kvp_pickup_box(int on, const char *path)
+{
+    char l[200]; int i, j;
+    static const char *kw[] = { "cashregister", "cashdrawer", "cashbox", "moneybox", "money_attach", "jewel", "watches", "creditcard", "civilian", "waitress",
+                                "clerk_", "gangmember", "fbi-agent", "senator", "hostage", 0 };
+    if (!on || !path) return 0;
+    for (i = 0; path[i] && i < (int)sizeof l - 1; i++) l[i] = (char)((path[i] >= 'A' && path[i] <= 'Z') ? path[i] + 32 : path[i]);
+    l[i] = 0;
+    for (j = 0; kw[j]; j++) if (strstr(l, kw[j])) return 1;
+    for (i = 0; l[i]; i++) if ((i == 0 || l[i - 1] == '\\' || l[i - 1] == '/') && l[i] == 'p' && l[i + 1] == 'c' && l[i + 2] >= '0' && l[i + 2] <= '9' && l[i + 3] >= '0' && l[i + 3] <= '9'
+                                  && l[i + 4] >= '0' && l[i + 4] <= '9' && l[i + 5] >= '0' && l[i + 5] <= '9' && l[i + 6] == '_') return 1;      /* a 'PCnnnn_' pick-up segment */
+    return 0;
 }
 
 #endif

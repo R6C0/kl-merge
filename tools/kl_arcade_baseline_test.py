@@ -37,6 +37,16 @@ LOG3 = [
     P + 'arcadeprobe: tactics: interim summary: 7 bot(s) (AI crew records), 3 stack(s) taken, 900000 total (AI record money peak, the game own field), 0 boarded, 12 stack(s) never emptied | van call s 80, 0 dead, 4 drain step(s), 1 type-1 drop(s), first take +20 s, last take +60 s, round lasted 90 s (interim)',
     P + 'arcadeprobe: tactics: interim summary: 7 bot(s) (AI crew records), 6 stack(s) taken, 1500000 total (AI record money peak, the game own field), 2 boarded, 9 stack(s) never emptied | van call s 80, 1 dead, 8 drain step(s), 1 type-1 drop(s), first take +20 s, last take +120 s, round lasted 120 s (interim)',
 ]
+LOG4 = [
+    P + 'botfill: trig: FIRE box 1234abcd via 0x6ae730 (1 bot(s) inside)',
+    P + 'arcadeprobe: round start: Arcade level 2, 8 crew record(s), 7 AI (flags&1), clock left 250 s, van state 0',
+    P + 'botfill: trig: FIRE box 1234abcd via 0x6ae730 (1 bot(s) inside, need 1, re-arm -1, ecps 0, efamps 7, fire #1)',
+    P + 'botfill: trig: DRY would fire box 1234abce (1 bot(s) inside)',
+    P + 'botfill: trig: FIRE ZTriggerBox2 1234abcf via slot 34 0x557820 (1 bot(s) inside)',
+    P + 'botfill: trig: FIRE ZOnlineTriggerBox 1234abd0 by starting the update own delay',
+    P + 'botfill: trig: FIRE box 1234abd1 via 0x45f5d0',
+    P + 'arcadeprobe: tactics: round summary: 7 bot(s) (AI crew records), 1 stack(s) taken, 100 total (x), 0 boarded, 3 stack(s) never emptied | van call s none, 0 dead',
+]
 LOG2 = [P + 'nothing here']
 
 
@@ -56,6 +66,11 @@ def main():
     check(len(row) == len(B.COLS), 'row has the scorecard column count (%d)' % len(B.COLS))
     check(row[0] == 'DD03' and row[1] == '7' and row[2] == '12 (+3 behind shut door)' and row[3] == '5' and row[4] == '1.25M', 'row cells: bots/armed/taken/$')
     check(row[5] == '100 (clock left 150)' and row[6] == '4 / 7' and row[8] == '1', 'row cells: van, aboard, dead')
+    check(row[11].startswith('0 (Arcade'), 'Arcade log without FIRE lines: Trigger FIREs says the game fires, not logged (%s)' % row[11])
+    r4 = B.parse(LOG4)
+    check(len(r4) == 1 and sum(r4[0]['fires'].values()) == 4, 'FIRE lines before the round start and DRY lines are not counted; 4 fires in the round')
+    check(r4[0]['fires']['TriggerBox'] == 2 and r4[0]['fires']['TriggerBox2'] == 1 and r4[0]['fires']['OnlineTriggerBox'] == 1, 'fires by class')
+    check(B.row('DD01', r4[0])[11] == '4 (OnlineTriggerBox 1, TriggerBox 2, TriggerBox2 1)', 'cell: total and classes (%s)' % B.row('DD01', r4[0])[11])
     row2 = B.row('DD04', rs[1])
     check('(no summary)' in row2[3], 'cut-off round row says (no summary)')
     check(B.row('DM01', None)[1] == 'no ArcadeProbe round', 'missing round row')

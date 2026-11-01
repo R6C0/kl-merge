@@ -89,6 +89,14 @@ int main(void)
         CHECK(kvp_all_unplaced(1, 7, 7, 11000, 10000) && !kvp_all_unplaced(1, 7, 6, 11000, 10000) && !kvp_all_unplaced(1, 7, 7, 9000, 10000) && !kvp_all_unplaced(1, 0, 0, 11000, 10000) && !kvp_all_unplaced(0, 7, 7, 11000, 10000), "unplaced guard: all at origin and old enough only, off = never");
     }
 
+    {   /* OnlineTriggersSkipPickups (wk-trigdm-1101): Dead Men pick-up / interact TriggerBox2 names */
+        CHECK(kvp_pickup_box(1, "ROOT\\Locations/M02_FA_A/M02FAA_LOC_Inside.zip\\M02_FA_A_Ins_StoreWatch_201a\\PC0406_M02_FA_Cashdrawer_01\\Cashbox"), "pickups on: DM02 cash box skipped");
+        CHECK(kvp_pickup_box(1, "ROOT\\Locations/M02_FA_A/X.zip\\Garage\\PC0500_M03_MoneyBox_10\\Attach01") && kvp_pickup_box(1, "ROOT\\Civilians!Waitress\\Fat_Waitress_01"), "pickups on: money box attach and a waitress skipped");
+        CHECK(kvp_pickup_box(1, "ROOT\\AI_Enemies!TheBoss\\The_Senator") && kvp_pickup_box(1, "ROOT\\AI_Enemies!BossFlank_01\\FBI-Agents_01") && kvp_pickup_box(1, "Money_Attachroot"), "pickups on: senator, FBI agent, leaf-only money attach skipped");
+        CHECK(kvp_pickup_box(1, "pc0402_m02_fa_jewelsrings_a_01") && kvp_pickup_box(1, "ROOT\\X\\PC1000_thing"), "pickups on: lower case and a bare PCnnnn_ segment");
+        CHECK(!kvp_pickup_box(1, "ROOT\\Triggers!GarageDoors!TriggerBox") && !kvp_pickup_box(1, "ROOT\\Triggers!ArrivingCops_Squad_01_Trigger") && !kvp_pickup_box(1, "") && !kvp_pickup_box(1, "ROOT\\PCB_Server_01"), "pickups on: a script / cop-wave box and PCB_ (no 4 digits) are kept");
+        CHECK(!kvp_pickup_box(0, "ROOT\\Civilians!Waitress\\Fat_Waitress_01") && !kvp_pickup_box(1, 0), "pickups off: nothing skipped (old rule); null path safe");
+    }
     CHECK(kgu_floor(0.5f, 1, 3.0f) == 3.0f && kgu_floor(4.0f, 1, 3.0f) == 4.0f, "flop meter: raised to the floor, never lowered");
     CHECK(kgu_floor(0.5f, 0, 3.0f) == 0.5f && kgu_floor(0.5f, 1, 0) == 0.5f, "flop meter: no helper / floor off: unchanged");
     m = (float)sqrt(-1.0); CHECK(kgu_floor(m, 1, 3.0f) != kgu_floor(m, 1, 3.0f), "flop meter: NaN stays NaN");

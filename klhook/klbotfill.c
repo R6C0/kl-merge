@@ -128,6 +128,7 @@ static int klbf_trig;      /* [BotFill] OnlineTriggers: 0 off, 1 fire, 2 dry (kl
 static int klbf_unpl; static DWORD klbf_unpl_at;      /* [BotFill] OnlineUnplacedGuard (recommended off until benched): kvp_all_unplaced; _at = round start tick */
 static int klbf_vp_sane, klbf_trig_orig;    /* [BotFill] OnlineVanPosSane (recommended on), OnlineTriggerOriginSkip (recommended on): kvp_sane / kvp_origin_skip in klgetup_logic.h */
 static int klbf_trig_x;    /* [BotFill] OnlineTriggersExtra: ZTriggerBox2 / ZOnlineTriggerBox too, 0 off, 1 fire, 2 dry */
+static int klbf_trig_pk;    /* [BotFill] OnlineTriggersSkipPickups (wk-trigdm-1101, default 0): Extra leaves Dead Men's pick-up / character interact TriggerBox2 alone (kvp_pickup_box) */
 static int klbf_ot_ramp, klbf_ot_rampdry;      /* OnlineRampFire / OnlineRampDry toggles (read in the init, used by klbf_ramp_* below) */
 static DWORD klbf_pb_bots[KLBF_OT_BOTS_MAX]; static volatile LONG klbf_pb_n; static volatile DWORD klbf_pb_at;
 static int klbf_pb_any(void) { return klbf_pb_n > 0 && GetTickCount() - klbf_pb_at < 5000u; }
@@ -286,6 +287,7 @@ static void klbf_init(void)
     if (klbf_gu) klog("botfill: getup: OnlineGetUp=%d (%s): host rush range %.0f cm, helper by the downed body within %.0f cm adds %.1f a second to the mash meter - default 0 = off", klbf_gu, klbf_gu == 2 ? "DRY, log only" : "on", klbf_gu_range, klbf_gu_near, klbf_gu_rate);
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
     klbf_trig_x = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggersExtra", 0, klh_ini); if (klbf_trig_x < 0 || klbf_trig_x > 2) klbf_trig_x = 0;      /* ZTriggerBox2 / ZOnlineTriggerBox: no stock cop wave uses them (money-stack pick-ups, location trackers), so off by default */
+    klbf_trig_pk = GetPrivateProfileIntA("BotFill", "OnlineTriggersSkipPickups", 0, klh_ini) != 0;      /* (recommended off until benched) needs OnlineTriggersExtra */
     klbf_vp_sane = GetPrivateProfileIntA("BotFill", "OnlineVanPosSane", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a van place that is far outside the map is not used: exit trigger / escape box instead */
     klbf_unpl = GetPrivateProfileIntA("BotFill", "OnlineUnplacedGuard", 0, klh_ini) != 0;      /* (recommended off until benched) every Ally bot at (0,0,0) 10 s into a round = the level squads are not running (no bots.zip): give no orders */
     klbf_trig_orig = GetPrivateProfileIntA("BotFill", "OnlineTriggerOriginSkip", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a bot that reads (0,0,0) is not "inside" an OnlineTriggers box */
@@ -300,6 +302,7 @@ static void klbf_init(void)
     klbf_ot_rampdry = GetPrivateProfileIntA("BotFill", "OnlineRampDry", 0, klh_ini) != 0;      /* default 0 since BOS_DD08r (F08 TriggerBox_Guards fired live, 7/7 boarded); only maps with a [BotFillRamp_<SLOT>] section fire */
     if (klbf_ot) klog("botfill: OnlineVanPosSane=%d, OnlineTriggerOriginSkip=%d (both recommended on, not run live yet)", klbf_vp_sane, klbf_trig_orig);
     if (klbf_ot) klog("botfill: trig: OnlineTriggers=%d (0 off, 1 fire, 2 dry), OnlineTriggersExtra=%d, OnlineTacticsTake=%d (2 = the game's 0x4e3f40, recommended on once benched)", klbf_trig, klbf_trig_x, klbf_ot_take);
+    if (klbf_ot && klbf_trig_pk) klog("botfill: trig: OnlineTriggersSkipPickups=1 (recommended off until benched): TriggerBox2 pick-up / character interact boxes are left to the game");
     if (klbf_ot) klog("botfill: ramp: OnlineRampFire=%d (recommended on), OnlineRampDry=%d (log only; needs a [BotFillRamp_<SLOT>] section)", klbf_ot_ramp, klbf_ot_rampdry);
     klbf_ot_door = GetPrivateProfileIntA("BotFill", "OnlineSkipDoorStacks", 1, klh_ini) != 0;      /* (recommended on) BOS1: DD01's 58 vault cases sit behind kick doors; ordered straight at them the bots stalled and took 0 */
     if (klbf_ot) klog("botfill: OnlineTactics BOS1: OnlineSkipDoorStacks=%d (recommended on)", klbf_ot_door);
@@ -535,7 +538,7 @@ static DWORD klbf_ot_trig;      /* tentative: defined with the tactics state bel
 #define KLBF_TB2_VT 0x00bc953c   /* ZTriggerBox2 (update 0x626ec0, fire = slot 34 0x557820). ZOnlineSpeakTrigger shares the update but has its own vtable: not scanned */
 #define KLBF_OTB_VT 0x00bc95cc   /* ZOnlineTriggerBox (update 0x49ab90, host/Arcade only) */
 static struct klbf_tb { DWORD obj; BYTE in, dead, nfire, kind, logged; } klbf_tbs[KLBF_TRIG_MAX];      /* kind 0 ZTriggerBox, 1 ZTriggerBox2, 2 ZOnlineTriggerBox */
-static struct { int n, scans, started; DWORD t0, fired, skipped; int kn[3]; } klbf_tr;
+static struct { int n, scans, started; DWORD t0, fired, skipped; int kn[3]; int pk; } klbf_tr;
 static void klbf_trig_load(void) { memset(klbf_tbs, 0, sizeof klbf_tbs); memset(&klbf_tr, 0, sizeof klbf_tr); }
 static int klbf_trig_known(DWORD at) { int i; for (i = 0; i < klbf_tr.n; i++) if (klbf_tbs[i].obj == at) return 1; return 0; }
 static void klbf_trig_scan(void)
@@ -559,6 +562,16 @@ static void klbf_trig_scan(void)
                         if ((nm[0] && klbf_rp.name[0] && strstr(nm, klbf_rp.name)) || (kle_node(node, np, 0) && fabsf(np[0] - klbf_rp.c[0]) <= 50.0f && fabsf(np[1] - klbf_rp.c[1]) <= 50.0f && fabsf(np[2] - klbf_rp.c[2]) <= 50.0f)) { ramp++; continue; }
                     }
                     if (kind == 1) { klbf_ramp_name(at, nm); if (strstr(nm, "MoneyStack") || strstr(nm, "DropMoney")) { ramp++; continue; } }      /* the loot stacks' own pick-up boxes: the tactics module takes the stack, a second fire could double it (counted with the ramp skips) */
+                    if (kind == 1 && klbf_trig_pk) {      /* OnlineTriggersSkipPickups: Dead Men campaign pick-ups / interact boxes (kvp_pickup_box); the long path, not klbf_ramp_name's 40 bytes */
+                        char pn[200]; DWORD nn = klh_rd32(at + 4), ps; int q; pn[0] = 0;
+                        if (nn && (ps = klh_rd32(nn + 0x6c)) >= 0x10000) { for (q = 0; q < 199; q++) { if (!klh_rd(ps + q, pn + q, 1)) { pn[0] = 0; break; } if (!pn[q]) break; } pn[199] = 0; }
+                        if (kvp_pickup_box(1, pn)) {
+                            static int toldPk; klbf_tr.pk++;
+                            if (toldPk < 3) { toldPk++; klog("botfill: trig: ZTriggerBox2 %08lx left to the game (OnlineTriggersSkipPickups): '%s'", (unsigned long)at, pn); }
+                            continue;
+                        }
+                        else { static int toldKeep; if (toldKeep < 3) { toldKeep++; klog("botfill: trig: ZTriggerBox2 %08lx kept (not a pick-up by name; GUESS the path string is the node path): '%s'", (unsigned long)at, pn); } }
+                    }
                     if (klbf_tr.n < KLBF_TRIG_MAX) { klbf_tbs[klbf_tr.n].obj = at; klbf_tbs[klbf_tr.n].kind = (BYTE)kind; klbf_tr.kn[kind]++; klbf_tr.n++; added++; }
                 }
             }
@@ -566,7 +579,7 @@ static void klbf_trig_scan(void)
         a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
     }
     if (!klbf_tr.started) { klbf_tr.started = 1; klog("botfill: trig: on (host, %d boxes)%s", klbf_tr.n, klbf_trig == 2 ? ", DRY (log only)" : ""); }
-    klog("botfill: trig: scan %d: %lu trigger-box vtable hit(s), %lu new, %lu ramp box(es) left to OnlineRampFire, %d tracked (ZTriggerBox %d, ZTriggerBox2 %d, ZOnlineTriggerBox %d), %lu ms", klbf_tr.scans, (unsigned long)hits, (unsigned long)added, (unsigned long)ramp, klbf_tr.n, klbf_tr.kn[0], klbf_tr.kn[1], klbf_tr.kn[2], (unsigned long)(GetTickCount() - t0));
+    klog("botfill: trig: scan %d: %lu trigger-box vtable hit(s), %lu new, %lu ramp box(es) left to OnlineRampFire, %d pick-up/interact box(es) left to the game, %d tracked (ZTriggerBox %d, ZTriggerBox2 %d, ZOnlineTriggerBox %d), %lu ms", klbf_tr.scans, (unsigned long)hits, (unsigned long)added, (unsigned long)ramp, klbf_tr.pk, klbf_tr.n, klbf_tr.kn[0], klbf_tr.kn[1], klbf_tr.kn[2], (unsigned long)(GetTickCount() - t0));
 }
 
 /* OnlineTriggers, the other two box classes (2026-10-28, wk-bots2, read from kl2.exe; re/bots_trigger_cops_1028.md section 7). Both keep the rules above: no write to a field the update recomputes,

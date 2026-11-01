@@ -99,3 +99,43 @@ Marks: CERTAIN = read in disassembly or in the stock .prp files. GUESS = inferre
 - no write to a recomputed field: `+0x58` (ZOnlineTriggerBox) and the ZTriggerBox2 scratch vector are untouched. ZOnlineTriggerBox: write only the delay start (`+0x54`, `+0x59`) and the game's own update fires 0x6557b0. ZTriggerBox2 with `+0x48 == 0`: call slot 34 with the bot's actor; with a delay: write `+0x68`, `+0x60`, `+0x64` exactly as 0x626ff3 does;
 - neither class has an on-leave action, so the on-leave skip does not apply (ZTriggerBox keeps it).
 GUESS comments are in the code: the `+0x18` bit, bot actor as the object of 0x68d030 / 0x758cb0 (same layout as 0x8c16c0's), the class-mask test via `[obj_vt+0x30]`. Not run live.
+
+## 8. Dead Men graft maps and Retomoto (2026-11-01, read-only census, not benched)
+
+Tool: `python tools/kl_trig_census.py` (reads the installed KLExpansion Maps slot zips, no game start). TB = ZTriggerBox; "missed" = bot-eligible (ECPS BOTH/FA_MERCONLY, local-only 0) with the team-2 flag (field 6) clear, so the online game skips a bot. Civ/npc/loot targets are counted apart and ignored for Needs. DM09 = Retomoto (slot F06). DM11S is not installed.
+
+| Map | Slot | TB total | TB missed (cop/door/script/other) | TB2 non-loot players-only (cop/door/script/other) | TB2 non-loot all-objects | OnlineTB (players-only) | Needs | TB hook gap |
+|---|---|---|---|---|---|---|---|---|
+| DM01 | F01 | 12 | 7 (5/0/0/2 +3 civ/npc) | 0 (0/0/0/0 +5 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM01B | F03 | 37 | 6 (6/0/0/0 +24 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM02 | F02 | 4 | 0 (0/0/0/0 +0 civ/npc) | 0 (0/0/0/0 +1 civ/npc) | 0 | 2 (2) | OnlineTriggersExtra=1 | - |
+| DM03 | F03 | 18 | 15 (12/0/3/0 +1 civ/npc) | 1 (0/0/1/0 +2 civ/npc) | 0 | 4 (4) | OnlineTriggers=1 + OnlineTriggersExtra=1 | - |
+| DM03A | F07 | 17 | 5 (5/0/0/0 +6 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM05A | F01 | 110 | 6 (2/0/3/1 +40 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | left 1 |
+| DM06 | F04 | 5 | 3 (3/0/0/0 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 1 | 0 (0) | OnlineTriggers=1 | - |
+| DM06B | F02 | 33 | 4 (1/1/1/1 +20 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM07 | F06 | 9 | 2 (0/1/1/0 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM09 | F06 | 35 | 22 (19/0/2/1 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 1 | 0 (0) | OnlineTriggers=1 | - |
+| DM11B | F04 | 9 | 5 (4/0/1/0 +0 civ/npc) | 0 (0/0/0/0 +0 civ/npc) | 0 | 0 (0) | OnlineTriggers=1 | - |
+| DM11S | - | not installed | - | - | - | - | - | - |
+
+Findings:
+- Cop waves, doors and scripts on the DM maps are again ZTriggerBox one-shots: the existing `OnlineTriggers=1` covers them. Biggest need: DM09 Retomoto 22 missed (19 cop: OpenExitElevator, LeaveElevator, atrium squads, Squad_Teargasguys, SniperResponse), DM03 15, DM01 7.
+- ZOnlineTriggerBox exists only on DM02 (2: PoliceSwats) and DM03 (4: 3 ArrivingCops, 1 garage door), all players-only. These need `OnlineTriggersExtra=1`. DM03 also has 1 players-only TB2 GarageDoors script.
+- Hook gap (not covered, no new route justified): DM05A has 1 TriggerBox with an on-leave action (`T_NearWindow`, empty target list). Documented only.
+- DM05A has 60 boxes with the team-2 flag set: the game already reaches bots there.
+- Risk found: Extra=1 on DM maps would also fire players-only TB2 pick-up boxes (cash drawers, jewels, watches, money boxes: 49 on DM02) and character interact boxes (civilians, FBI agent, senator). The stock skip knows only MoneyStack/DropMoney.
+
+### New key (default 0, SHIP-safe)
+`[BotFill] OnlineTriggersSkipPickups=0|1` (needs Extra): skips TB2 boxes whose node path matches `kvp_pickup_box` (klgetup_logic.h, unit-tested): cashregister, cashdrawer, cashbox, moneybox, money_attach, jewel, watches, creditcard, civilian, waitress, clerk_, gangmember, fbi-agent, senator, hostage, or a `PCnnnn_` path segment. GUESS: the box's name path is at `[[obj+4]+0x6c]` (200 bytes). The bench must confirm it from the scan log ("left to the game" / "kept" first-3 names). Mod options row `onlinetriggerspickups` (off, "recommended off until benched").
+
+### ARC1 reader
+`tools/kl_arcade_baseline.py` now counts `botfill: trig: FIRE` lines per round and class (new Trigger FIREs column, with test). The existing Arcade logs hold none: the hook is host-only and idle in Arcade, the game fires boxes itself; the cell reads `0 (Arcade: game fires, not logged)`. Use it on online logs to compare.
+
+### Ship proposal (NOT benched, not in NEXT_SHIP)
+`OnlineTriggers=1` + `OnlineTriggerOriginSkip=1` on all DM maps; `OnlineTriggersExtra=1` + `OnlineTriggersSkipPickups=1` on DM02 and DM03 only. Proofs: WK2 F06 (Retomoto), Q31, Q34.
+
+### Bench recipe
+1. DM03 then DM02, `OnlineTriggersExtra=2` (dry) + SkipPickups=1: read the scan line; confirm cash/jewel/civilian names are "left to the game" and ArrivingCops/PoliceSwats/GarageDoors are "kept".
+2. Extra=1: expect FIRE lines for the cop boxes only, a cop wave on the client, no double loot grab.
+3. DM09 with OnlineTriggers=1: the elevator and atrium squads fire once with bots inside.
