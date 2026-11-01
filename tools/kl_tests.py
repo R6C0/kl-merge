@@ -60,6 +60,7 @@ C_TESTS = {
     'klgetupbeacon_test.c': 'logic',   # klgetupbeacon.h (OnlineGetUpBeacon pure part)
     'klway_test.c': 'logic',           # klway_logic.h (OnlineWayPerMap / OnlineLegHopDy pure part)
     'klassoft_test.c': 'logic',        # klassoft_logic.h (AssertSoft list parse, no windows.h)
+    'klcoverring_test.c': 'logic',     # klcoverring_logic.h ([CoverRing] schedule / change detection, no windows.h)
     'kldown_mirror_test.c': 'logic',   # kldown_mirror_logic.h (no windows.h at all)
     'klgrades_test.c': 'logic',        # klgrades.h (uses _snprintf: -D_snprintf=snprintf)
     'kllootsync_test.c': 'logic',      # kllootsync_logic.h
