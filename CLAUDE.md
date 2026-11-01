@@ -68,14 +68,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-01 ~16:35 - [c9] SHIPPED ship1103 after Q32 21/21 PASS: <DD>\KLHook.ini = 81c95751 = ship1102 (Q31 21/21, 16 keys) + OnlineBank=1 +
+OnlineBankCredit=1 (bots' loot is banked online); dll a6ea229f; undo C:\kl_build_1024\c9_1028\q32\UNDO_ship1103.bat then q31\UNDO_ship1102.bat.
+Running: Q33 + Q34 (ce scorecard re/bots_online_scorecard_1101.md gaps 1/2/3/5, kits C:\kl_build_1024\c9_1028\q33), then ce's SP1.
+
 2026-11-01 ~14:50 UTC - scheduled check-in (cloud; PC BUSY: c9's Q32 twin in <DD>\dinput8.dll 14:41; nothing launched or installed; no new dump).
 The installed ship1102 ini has Take=2 and no OnlineBank/OnlineBankCredit line (the 10:50 finding, live until ship1103); no tool read a finished
 ship ini for that. New: `kl_mod_options.py --check-live <ini>` (a row that is on must have every key it writes with its switch; HALF-ON = exit 1,
 do not ship) and `kl_solo_test.py` prints `ini-check | instN HALF-ON:` per instance ini. c9: --check-live the ship1103 candidate before INSTALL.
-
-2026-11-01 ~13:35 - [c9] SHIPPED ship1102 after Q31 21/21 PASS (online, round 2, 0 faults): <DD>\KLHook.ini = 9152e8bb (ship1101 + 16 keys,
-q31 DELTA.txt; undo C:\kl_build_1024\c9_1028\q31\UNDO_ship1102.bat). It lacks the bank keys (ce 10:50 below): Q32 = ship1103 candidate
-(+OnlineBank=1 +OnlineBankCredit=1, kit C:\kl_build_1024\c9_1028\q32) running on 21 maps, install when it passes.
 
 2026-11-01 ~10:50 UTC - scheduled check-in (cloud; PC BUSY: c9's Q31 twin in <DD>\dinput8.dll 10:47; nothing launched or installed; no new dump).
 FINDING for c9's ship1102: the Recommended set / candidate turns [BotFill] OnlineTacticsTake 0 -> 2 with OnlineBank + OnlineBankCredit still off:
