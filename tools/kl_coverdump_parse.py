@@ -148,6 +148,23 @@ def safety_line(r, host_name='host', client_name='client'):
         host_name, client_name, len(r['client_extra']), len([i for i in r['differ'] if i in r['h'] and i in r['c']]))
 
 
+SKEW_S = 60                      # SN2 11-02: host dumped at 11:08:32 (car #0 ring not built yet), client at 11:13:48 -> a DIVERGE that was only time
+
+
+def dump_secs(d):
+    """Seconds of day of the dump's 'coverdump: begin' line (its HH:MM:SS.mmm stamp), or None."""
+    m = re.match(r'\s*(\d\d):(\d\d):(\d\d(?:\.\d+)?)', d['head'][0] if d['head'] else '')
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else None
+
+
+def skew_line(d1, d2, limit=SKEW_S):
+    """A warning when the two dumps were taken more than limit seconds apart (a car ring can be built between them), else None."""
+    t1, t2 = dump_secs(d1), dump_secs(d2)
+    if t1 is None or t2 is None or abs(t1 - t2) <= limit:
+        return None
+    return 'SKEW: the dumps are %.0f s apart (more than %d s): points built in between show as one-sided; compare dumps of the same moment' % (abs(t1 - t2), limit)
+
+
 def main(argv):
     a = [x for x in argv if not x.startswith('--')]
     opt = {}
@@ -182,6 +199,9 @@ def main(argv):
             print('%s: %s' % (name, dd['end'] or 'NO "coverdump: end" line (dump cut short?)'))
         r = compare(d, d2)
         print_compare(r)
+        sk = skew_line(d, d2)
+        if sk:
+            print(sk)
         return 3 if r['diverge'] else 0
     for ln in d['head']:
         print(ln)

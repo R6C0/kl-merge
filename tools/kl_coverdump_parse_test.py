@@ -88,6 +88,10 @@ def main():
         r5 = P.compare(dc, dh)                                                     # roles swapped: the extra points are client-only now
         check(P.safety_line(r5).startswith('SAFE:') and 'client-only 8' in P.safety_line(r5), 'client-only points are SAFE: %s' % P.safety_line(r5))
 
+        check(P.skew_line(dh, P.read_dump(same)) and P.skew_line(dh, P.read_dump(same)).startswith('SKEW: the dumps are 109 s apart'),
+              'dumps 109 s apart get a SKEW line (SN2 DM03): %s' % P.skew_line(dh, P.read_dump(same)))
+        check(P.skew_line(dh, dc) is None, 'dumps of the same moment get no SKEW line')
+
         jit = dict(host_pts); jit[350] = (jit[350][0] + 0.1, jit[350][1], jit[350][2] - 0.1)    # CR5 DM01: the seats differ by 0.1 unit
         r4 = P.compare(dh, P.read_dump(write(tmp, 'jit.log', log(jit, total=1371))))
         check(not r4['diverge'] and r4['jitter'] == [350], 'a 0.1-unit jitter is not a divergence, it is listed as jitter: %s / %s' % (r4['differ'], r4['jitter']))
@@ -116,7 +120,7 @@ def main():
             rc = P.main([host, '--compare', write(tmp, 'empty.log', 'nothing here\n')])
         check(rc == 1, 'a compare log without a dump is exit 1 (got %d)' % rc)
 
-    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 14, len(FAILS)))
+    print('RESULT: %s (%d checks, %d failed)' % ("PASS" if not FAILS else "FAIL", 16, len(FAILS)))
     return 0 if not FAILS else 1
 
 
