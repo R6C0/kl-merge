@@ -183,3 +183,30 @@ kl_kit_summary_test: +18 checks (wrong slot, client soft asserts, host crash + m
 ## Owner
 - Nothing to install or decide from this run. The candidate ship (ship1104) is c9's INSTALL bat once c9 reads Q35; still open from
   earlier notes: Medal-quit stutter round, MouseMoveMs=16, lenscrack INSTALL bat if wanted.
+
+# Scheduled check-in 2026-11-02 ~23:05 UTC (cloud; DD/DM attached by one access request)
+
+## PC state (read only; nothing launched, installed or staged into the game folder)
+- BUSY: live `KLHook.ini` written 22:18 UTC (`.before-botrevert1102` 22:10), `KLHook.log` 22:16 (the owner's online rounds,
+  Alt+F4 at 22:16:37), `dinput8.dll` 21:49 (c9's ship_next install), c9's log note 22:45. No game run, no install, no
+  screen from here. `KLHook.result` = the 10-27 PASS (F04); dumps: newest `KLHook_1.dmp` 10-26 and the 10-25 mdmp, both
+  older than their notes: nothing to triage. Only `kl2.exe` (10.0 MB, sha1 9d99e01d) was staged INTO the cloud for disassembly.
+- Head 3a88724 (research only on top of the verified dda3479 / 0c4b007): no code to re-verify.
+
+## Done: the shadow-rules contract for the Arcade brain (re/arcade_brain_shadow_1102.md)
+c9's plan (re/arcade_brain_online_1102.md, section D) listed three probes to run before any frame code and six
+functions "not disassembled". Offline answers:
+- Item 1 CLOSED without a probe: `[sm+0x5c]` is the game-type word and is 4 online (klsteam.c logs it as `game mode`,
+  today's live log has 153 `game mode 4` transitions including the 20:28 System Link round; klr_online_host gates on
+  it). The frame needs only `[sm+0x54] := 0` and `[G+0x54] := shadow`.
+- Item 6: four of the six were already read in re/ (0x5dd890, 0x8b94d0, 0x43ffb0/0x46d4d0 fields); NEW whole reads of
+  Board RUN 0x82f970, the traitor roll 0x43ffb0 (5/10/30/40 % by level band, LCG at [[0xdd2640]+0xb30], cap
+  `[rules+0x338] < tuning+0x718`), 0x46d4d0 and 0x4322f0 (odd: never increments +0x338, narrows +0x33c; GUESS a shipped bug).
+- Two stage-2 facts the plan lacked: shadow RECORD 0 IS THE LOCAL HUMAN (0x6c7700 returns 0 in the frame; Board RUN reads
+  record 0 +0x10 == 4 to pick the walk mode) -> bots at 1..11; and the `+0x34c` byte table means 0 = live (0x78f470 /
+  0x5dd890 skip non-zero), count at +0x354.
+- Crash rule: Board RUN has no NULL check after 0x508ef0 and states 1/2 reach 0x7bb2a0 + vt[0x130]; call the originals
+  inside the frame or not at all, keep shadow +0x1dc at 0 until the exit is mirrored (then 3/4).
+
+## Owner
+- Nothing to install or decide from this run. Still open from earlier notes: Medal-quit stutter round, MouseMoveMs=16.

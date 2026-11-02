@@ -68,10 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-11-02 ~18:50 - [scheduled] Q35 CLEAN: c9's 21-map pass of the next-ship candidate (dll eb4c46d8, ShopPage staged) 21/21 both seats
-PASS, 0 asserts/faults/soft, slots right -> candidate cleared on every map; ship = c9's INSTALL bat. MT3B RT9A/B/R TP3A/B SAFE by result
-files; RT9A late exit 262 s as predicted, DM09 still 0 boarded (5-6 dead). kl_kit_summary.py --batch PREFIX [KIT] [--gate] = one-command
-batch gate (verdict line, slot check, exit 1), ran on the PC. PC busy, nothing installed. Notes: debug/notes/2026-11-02-scheduled-triage.md.
+2026-11-02 ~23:05 - [scheduled] Arcade-brain plan (re/arcade_brain_online_1102.md) offline support: re/arcade_brain_shadow_1102.md.
+Critic item 1 CLOSED: [sm+0x5c] = game type, 4 online (live log 'game mode 4'), frame writes only [sm+0x54]:=0 + [G+0x54]:=shadow.
+NEW whole reads: Board RUN 0x82f970 (rules touches listed), traitor roll 0x43ffb0 (5/10/30/40 % by level, cap +0x338 < tuning+0x718),
+0x4322f0 (odd). Shadow: record 0 = LOCAL HUMAN (0x6c7700 -> 0 in frame), bots 1..11; +0x34c byte 0 = live; +0x1dc stays 0 until the exit
+is mirrored (states 1/2 reach 0x7bb2a0); Board RUN has no NULL check -> originals only inside the frame. PC busy, nothing installed.
 
 2026-11-02 ~21:30 - [ce] Queue done, all seats 0 asserts. PASS: g1e, sp3/sp3b (no online shop lag), vb2 (loot voice on both seats, f2d848323), q35 (21 maps).
 NOT SHOWN: tp3 0 new cops after bot-fired triggers; rt9 DM09 0 boarded at 370 s even with OnlineLateExitRoute; es3 escort still 8 humans;
