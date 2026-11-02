@@ -71,6 +71,7 @@ static int klbf_stack_recheck;      /* [BotFill] OnlineStackRecheck (default 0, 
 #include "klwaitvan_logic.h"      /* wk-vantime-1101: [BotFill] OnlineLegWaitVan / OnlineLegWaitIdx / OnlineLegWaitMaxS, the pure decision (klwaitvan_test.c) */
 #include "klvantime_logic.h"      /* wk-vantime-1101: [BotFill] OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold, the pure decisions (klvantime_test.c) */
 #include "klway_logic.h"      /* wk-rtroute-1101: [BotFill] OnlineWayPerMap / OnlineLegHopDy, the pure decisions (klway_test.c) */
+#include "kldoorhold_logic.h"      /* wk-doorhold-1102: [BotFill] OnlineDoorHold / OnlineDoorHoldS, the pure decision (kldoorhold_test.c) */
 #include "kldroptake_logic.h"      /* wk-droptake-1102: [BotFill] OnlineDropTake / OnlineDropTakeM, the pure decision (kldroptake_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
 static int klbf_gu_freefirst, klbf_gu_recede, klbf_gu_hold, klbf_gu_plat; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13); OnlineGetUpPlateau (BP16b) */
@@ -118,6 +119,7 @@ static int klbf_squads(int fill)
    team alone cannot tell them apart; the puppeteer's list is the bots). Entries first, then the count; read on the game thread, fresh for 5 s. Needs OnlineTactics=1 (the census is its). */
 #define KLBF_OT_BOTS_MAX 16      /* = KLBF_OT_BOTS (defined below) */
 static int klbf_wv_call, klbf_wv_calln, klbf_wv_hc, klbf_wv_novh;      /* [BotFill] OnlineLegWaitCall (needs OnlineLegWaitVan + OnlineVanAfterLegs), OnlineLegWaitCallN */
+static int klbf_dh, klbf_dh_s = 90; static struct kdh_st klbf_dhs;      /* [BotFill] OnlineDoorHold / OnlineDoorHoldS (recommended off until benched): bots with an empty tally get no stack order while doors are shut, so the Ally squads kick them open (Q34B DD01); klbf_dhs = this round's state */
 static int klbf_dt; static float klbf_dt_m = 8000.0f;      /* [BotFill] OnlineDropTake / OnlineDropTakeM (cm): a bot with no stack to take and nothing carried walks to the nearest tracked type-1 drop (wk-droptake-1102, kldroptake_logic.h) */
 static int klbf_wv_on, klbf_wv_idx = 1, klbf_wv_maxS;      /* [BotFill] OnlineLegWaitVan (needs the legs), OnlineLegWaitIdx (0-based hold leg), OnlineLegWaitMaxS (0 = no cap): klwaitvan_logic.h, default 0 = today */
 static int klbf_vtm_al, klbf_vtm_bo, klbf_vtm_far, klbf_vtm_farS = KVT_FAR_CAP_S;      /* [BotFill] OnlineVanAfterLegs, OnlineVanBoPos, OnlineVanFarHold (+S): klvantime_logic.h, all default 0 = today */
@@ -159,6 +161,9 @@ static void klbf_init(void)
     klbf_ap = GetPrivateProfileIntA("BotFill", "ArcadeProbe", 0, klh_ini) != 0;      /* (recommended off: test probe) offline Arcade round log, no game write */
     klbf_df = klbf_ot && GetPrivateProfileIntA("BotFill", "OnlineDropFollow", 0, klh_ini) != 0;      /* (recommended off until benched) SP1: a drained type-0 stack arms a type-1 drop the scan skips; needs OnlineHost=1 + OnlineTactics=1 */
     klbf_df_m = (float)GetPrivateProfileIntA("BotFill", "OnlineDropFollowM", 1500, klh_ini); if (klbf_df_m < 200) klbf_df_m = 200; if (klbf_df_m > 10000) klbf_df_m = 10000;
+    klbf_dh = klbf_ot && GetPrivateProfileIntA("BotFill", "OnlineDoorHold", 0, klh_ini) != 0;      /* (recommended off until benched) wk-doorhold-1102: Q34B DD01, one opened door sent every bot to the first armed stacks and the other doors were never kicked; needs OnlineHost=1 + OnlineTactics=1; only acts while OnlineSkipDoorStacks=1 counts shut stacks */
+    klbf_dh_s = kdh_clamp(GetPrivateProfileIntA("BotFill", "OnlineDoorHoldS", 90, klh_ini));      /* (recommended 90; 20..150 s from the round start) */
+    if (klbf_dh) klog("botfill: doorhold: OnlineDoorHold=1 (recommended off until benched), up to %d s, or until the shut-door count stalls for %u s", klbf_dh_s, KDH_STALL_MS / 1000u);
     klbf_dt = klbf_ot && GetPrivateProfileIntA("BotFill", "OnlineDropTake", 0, klh_ini) != 0;      /* (recommended off until benched) wk-droptake-1102: Q31-Q33 DD07/DM06/DM01, cops carry the loot, 0x6d2500 drains the stacks into drops the scan skips; needs OnlineHost=1 + OnlineTactics=1, OnlineTacticsTake=2 to take */
     klbf_dt_m = (float)GetPrivateProfileIntA("BotFill", "OnlineDropTakeM", 8000, klh_ini); if (klbf_dt_m < 200) klbf_dt_m = 200; if (klbf_dt_m > 30000) klbf_dt_m = 30000;
     if (klbf_dt) klog("botfill: dropfollow: droptake: OnlineDropTake=1, max distance %.0f cm%s", klbf_dt_m, klbf_ot_take == 2 ? ", taking through 0x4e3f40" : " (OnlineTacticsTake is not 2: retarget + arrival log only, no take)");
@@ -1782,7 +1787,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         klbf_gm_logged = 0; klbf_gm_last = 0; klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; klbf_bo_ok = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
         klbf_way_load(); klbf_ramp_load(); klbf_trig_load();
         if (klbf_sp) { if (klbf_sp_nown) klog("botfill: stackprobe: last round: %d call(s) of 0x4e3f40 by the hook itself (not logged)", klbf_sp_nown); klbf_sp_nl = klbf_sp_nd = klbf_sp_nown = 0; klbf_sp_install(); }      /* OnlineStackProbe: per-round caps; the detour (key 2) goes in on the first host round */
-        klbf_unpl_at = now;
+        klbf_unpl_at = now; memset(&klbf_dhs, 0, sizeof klbf_dhs);
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
@@ -2037,7 +2042,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (stop) { char sd[96]; klbf_sd_text(o, sd, sizeof sd); klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; %s) [%s]", s, (unsigned long)o, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally, why, sd); klbf_ob[s].phase = 0; if (klbf_pr && klbf_ob[s].tally > 0) klbf_ob[s].prAt = now; if (klbf_ot_nbad < KLBF_OT_OBJ) { klbf_ot_badAt[klbf_ot_nbad] = now; klbf_ot_badLong[klbf_ot_nbad] = 1; klbf_ot_bad[klbf_ot_nbad++] = o; } }      /* review: a partial stop blacklists the stack like a give-up, else the nearest-stack pick re-targets it and loops */
         }
         if (klbf_ob[s].phase == 0) {
-            int nguard = 0, gbest = -1, idleVan = 0, nhold = 0, nfreeG = 0, dtIdx = -1, dtAny = 0; float gbd = 1e30f;
+            int nguard = 0, dhb = 0, gbest = -1, idleVan = 0, nhold = 0, nfreeG = 0, dtIdx = -1, dtAny = 0; float gbd = 1e30f;
             static int gcn[KLBF_OT_OBJ]; static float gcd[KLBF_OT_OBJ], gnear[KLBF_OT_OBJ];      /* OnlineGuardMode: per stack cops in range, bot distance, nearest cop */
             if (klbf_gm) { int q; for (q = 0; q < nm; q++) { gcn[q] = -1; gcd[q] = 1e30f; gnear[q] = 1e30f; } }
             for (j = 0; j < nm; j++) {
@@ -2060,7 +2065,13 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (klbf_gm && !klbf_gm_logged && nm > 0) { int q, ng = 0; klbf_gm_logged = 1; for (q = 0; q < nm; q++) if (gcn[q] >= 0) ng++; { float cmn[3] = { 1e30f, 1e30f, 1e30f }, cmx[3] = { -1e30f, -1e30f, -1e30f }, smn[3] = { 1e30f, 1e30f, 1e30f }, smx[3] = { -1e30f, -1e30f, -1e30f }; int k3; for (q = 0; q < ncop; q++) for (k3 = 0; k3 < 3; k3++) { if (cops[q][k3] < cmn[k3]) cmn[k3] = cops[q][k3]; if (cops[q][k3] > cmx[k3]) cmx[k3] = cops[q][k3]; } for (q = 0; q < nm; q++) for (k3 = 0; k3 < 3; k3++) { if (mpos[q][k3] < smn[k3]) smn[k3] = mpos[q][k3]; if (mpos[q][k3] > smx[k3]) smx[k3] = mpos[q][k3]; }
               klog("botfill: guardmode: spread: cops x %.0f..%.0f y %.0f..%.0f z %.0f..%.0f | stacks x %.0f..%.0f y %.0f..%.0f z %.0f..%.0f (cm); %d cop(s) at (0,0,0) skipped (OnlineGuardLiveOnly); first cops (%.0f,%.0f,%.0f) (%.0f,%.0f,%.0f) (%.0f,%.0f,%.0f)", cmn[0], cmx[0], cmn[1], cmx[1], cmn[2], cmx[2], smn[0], smx[0], smn[1], smx[1], smn[2], smx[2], klbf_gm_orig, ncop > 0 ? cops[0][0] : 0, ncop > 0 ? cops[0][1] : 0, ncop > 0 ? cops[0][2] : 0, ncop > 1 ? cops[1][0] : 0, ncop > 1 ? cops[1][1] : 0, ncop > 1 ? cops[1][2] : 0, ncop > 2 ? cops[2][0] : 0, ncop > 2 ? cops[2][1] : 0, ncop > 2 ? cops[2][2] : 0); }
             klog("botfill: guardmode: round scan: %d cop(s) read live, %d money stack(s), %d free stack(s) of which %d guarded (radius %.0f m, floor gate %.0f cm; bot %d sees nguard %d), once per round", ncop, nm, nfreeG, ng, klbf_ot_guard / 100, klbf_gm_floor, s, nguard); }
-            if (klbf_gm && best < 0 && gbest >= 0 && klbf_ob[s].tally == 0 && klbf_ob[s].grabs < klbf_ot_carry && kgg_bypass_ok(nguard, nfreeG, klbf_gm_min, now, klbf_gm_last, klbf_gm_gap)) {      /* OnlineGuardMode bypass: the guard test cannot tell the stacks apart (BP5: 47 of 47) */
+            if (klbf_dh) {      /* OnlineDoorHold (wk-doorhold-1102): shut doors left, nothing carried: no NEW stack order, the bot stays with its squad script (which kicks the doors). Only phase-0 picks are held; an order already in flight (phase 1/2) is NOT cancelled. OnlineIdleVan is already off while ndoor > 0 (its !ndoor guard), except for its late-clock clause, which also ends the hold. Decided BEFORE the guard-mode bypass / GuardTake so they neither burn their release timer nor log a take that the hold then cancels (review) */
+                int hold = kdh_step(&klbf_dhs, 1, klbf_dh_s, now, klbf_unpl_at, ndoor, nm, klbf_ot_late && left <= (float)(klbf_ot_late + 20));
+                if (klbf_dhs.ev == 1) { klog("botfill: doorhold: round %d: holding %d bot(s) for up to %d s, %d stack(s) behind shut doors", klbf_ot_rounds, nb, klbf_dh_s, ndoor); klbf_dhs.ev = 0; }
+                else if (klbf_dhs.ev == 2) { klog("botfill: doorhold: round %d: hold over after %lu s (%s), %d stack(s) still behind shut doors, %d armed", klbf_ot_rounds, (unsigned long)((now - klbf_unpl_at) / 1000), klbf_dhs.reason == KDH_OPEN ? "all doors open" : klbf_dhs.reason == KDH_TIMER ? "timer" : klbf_dhs.reason == KDH_STALL ? "stalled" : "clock low", ndoor, nm); klbf_dhs.ev = 0; }
+                dhb = kdh_applies(hold, klbf_ob[s].tally) && ndoor > 0;
+            }
+            if (klbf_gm && !dhb && best < 0 && gbest >= 0 && klbf_ob[s].tally == 0 && klbf_ob[s].grabs < klbf_ot_carry && kgg_bypass_ok(nguard, nfreeG, klbf_gm_min, now, klbf_gm_last, klbf_gm_gap)) {      /* OnlineGuardMode bypass: the guard test cannot tell the stacks apart (BP5: 47 of 47) */
                 int pk = kgg_pick(gcn, gcd, nm);
                 if (pk >= 0) {
                     best = pk; bd = gcd[pk]; klbf_gm_last = now;
@@ -2068,7 +2079,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 }
             }
             if (best < 0 && gbest >= 0) { if (!klbf_ob[s].idleAt) klbf_ob[s].idleAt = now; } else klbf_ob[s].idleAt = 0;      /* review: idleAt = since when only guarded stacks are left */
-            if (klbf_ot_gtake && best < 0 && gbest >= 0 && now - klbf_ob[s].idleAt >= KLBF_OT_GUARDWAIT) {      /* nothing unguarded for 30 s: take the nearest guarded one (Arcade bots fight for loot too) */
+            if (klbf_ot_gtake && !dhb && best < 0 && gbest >= 0 && now - klbf_ob[s].idleAt >= KLBF_OT_GUARDWAIT) {      /* nothing unguarded for 30 s: take the nearest guarded one (Arcade bots fight for loot too) */
                 best = gbest; bd = gbd;
                 klog("botfill: tactics: bot %d (actor %08lx): every free stack has had a live cop within %.0f m for %lu s: taking the nearest guarded one", s, a, klbf_ot_guard / 100, (unsigned long)((now - klbf_ob[s].idleAt) / 1000));
             } else if (best < 0 && gbest >= 0 && klbf_ob[s].tally == 0 && !(klbf_ob[s].told & 4) && (klbf_ob[s].told |= 4))      /* a bot with money goes to the van instead */
@@ -2086,6 +2097,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     } else if (why[0] && !(klbf_ob[s].told & 131072) && (klbf_ob[s].told |= 131072)) klog("botfill: tactics: bot %d (actor %08lx): guard walk order refused: %s", s, a, why);
                 }
             }
+            if (dhb && best >= 0) best = -1;      /* OnlineDoorHold: decided above (review: after the bypass it left a stale gap timer and a false log line) */
             if (kdt_wanted(klbf_dt, best, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_carry)) dtIdx = klbf_dt_pick(s, bots[b].pos, now, &dtAny);      /* OnlineDropTake: Q31-Q33, the loot lies in drops, the stack list is empty */
             {   /* OnlineIdleVan: no stack for this bot (blacklisted, taken, none armed) and nothing carried: after OnlineIdleVanS with no stack left at all, or with the clock low, it goes to the exit and the van is called (BO12: 0 grabs, nobody called it) */
                 int nostack = best < 0 && !(klbf_ot_gtake && gbest >= 0) && (!dtAny || (klbf_ot_late && left <= (float)(klbf_ot_late + 20)));      /* OnlineDropTake: a drop within reach (even one another bot walks to) holds the van call, but not once the clock is low (review: else the late call never fires) */
