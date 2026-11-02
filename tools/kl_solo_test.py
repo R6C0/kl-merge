@@ -82,7 +82,8 @@ def half_on(path):
     0 / is absent: ship1102 = OnlineTacticsTake=2 without OnlineBank/OnlineBankCredit, 11-01). Never stops a bench: [] on any error."""
     try:
         import kl_mod_options as MO
-        return MO.check_live(MO.split_lines(open(path, encoding='latin1').read()))[0]
+        r = MO.check_live(MO.split_lines(open(path, encoding='latin1').read()))
+        return list(r[0]) + ['CLASH ' + c for c in (r[3] if len(r) > 3 else [])]      # 11-02: 'do not combine' rows (avoid) count like a half-on row
     except Exception as e:                                  # the bench must run even if the options table does not import here
         return ['(ini check skipped: %r)' % e]
 
