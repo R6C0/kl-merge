@@ -4,6 +4,8 @@ pick-up name now read from the scene node (a53764147, kit tp1 re-benches OnlineT
 (workflow diagnosing). SP1A: Arcade shop = state 0x20 confirmed, but probe hl=-6 constant in both modes (wrong field; agent fixing). 37 option rows
 (5d17c7c56). Unfixed: klbf_ramp_name reads the wrong object (MoneyStack skip never matches). Delete C:\kl-build_x (agent stray, removal blocked).
 
+2026-11-02 ~06:55 UTC - scheduled check-in (cloud; DD/DM attached by one access request; PC BUSY: dinput8.dll + ReShade logs 06:51 UTC, head 8165496 06:45; nothing launched, installed or staged into the game folder; no new dump). First cloud run of the 32-bit C self-tests on today's head: klstackdiag_test FAILED (klstackdiag_logic.h ksd_fmt used _snprintf(out, cap-1) + out[cap-1]=0: cap-1 chars under MSVC, cap-2 under C99 snprintf) -> count = cap like klgrades.h / klshot_logic.h; kl_tests now 55 pass / 0 fail / 15 skip, --check-hook SHIP+TEST 0 errors, pyflakes clean on the 66 changed .py. No live effect (96-byte buffer, log text). debug/notes/2026-11-02-scheduled-triage.md. Owner: nothing to install or decide.
+
 2026-11-02 ~06:10 - [ce] DH2 PASS: OnlineTacticsCarry 8 -> 51 stacks grabbed (6 -> 39, 2 -> 14), no van reached; kit dh3 (DM09, Carry 8).
 Merged ModesTab/RoundHints (fc30d43b9, default 0: shop page "Bots and modes", one key-hint line, host toggle text) + TEST scripted host keys
 (8e41ec310). Queue: cs1 (running) g2 g1 sp1a ba1 pr1 co1 es1 le1, then c9 CR10, dh3, mt1 (week_1028\mt1, ~40 min).
