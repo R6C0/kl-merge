@@ -60,6 +60,7 @@ C_TESTS = {
     'klgetupbeacon_test.c': 'logic',   # klgetupbeacon.h (OnlineGetUpBeacon pure part)
     'klway_test.c': 'logic',           # klway_logic.h (OnlineWayPerMap / OnlineLegHopDy pure part)
     'klwaitvan_test.c': 'logic',       # klwaitvan_logic.h (OnlineLegWaitVan pure decision, no windows.h)
+    'klshot2d_test.c': 'logic',        # klshot2d_logic.h (RemoteShot2DGate gate + slot-74 counter, no windows.h)
     'klboardpar_test.c': 'logic',      # klboardpar_logic.h (OnlineBoardAllNear pure decision, no windows.h)
     'kldroptake_test.c': 'logic',      # kldroptake_logic.h (OnlineDropTake pure decision, no windows.h)
     'kldroptable_test.c': 'logic',     # kldroptable_logic.h (type-1 drop table eviction, no windows.h)
