@@ -363,6 +363,8 @@ feat('onlinevanfarhold', G_EXP, 'The van waits longer for a heister with loot wh
      'klbotfill.c [BotFill] OnlineVanFarHold (+S 40); wk-vantime-1101: the hold never ran on DM09 (states 2/4/6, clock under 20 s); needs OnlineVanHold=1; NOT run live', [('BotFill', 'OnlineVanFarHold', 1, 0, 0)])
 feat('onlinelegwaitvan', G_EXP, 'Online AI heisters with loot hold at a safe waypoint leg until the escape van exists, then run the rest (recommended off until benched)', 'off', 'start',
      'klbotfill.c/klwaitvan_logic.h [BotFill] OnlineLegWaitVan (+Idx 1, +MaxS 0); RT3 DM09: all 7 bots died on the street legs ~3 min before the van appeared; needs OnlineWayPerMap legs; NOT run live', [('BotFill', 'OnlineLegWaitVan', 1, 0, 0)])
+feat('onlinelegwaitcall', G_EXP, 'Online AI heisters waiting at the hold leg call the escape van themselves (recommended off until benched)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineLegWaitCall (+N 1); needs OnlineLegWaitVan + OnlineVanAfterLegs; the hook called the van only on arrival at the trigger, past the hold; NOT run live', [('BotFill', 'OnlineLegWaitCall', 1, 0, 0)])
 feat('crewhopprivvt', G_EXP, 'Online crew-hop carries also accept AI heisters on the hook\'s own damage table (recommended off until benched)', 'off', 'start',
      'klhop.c/klcrew_rt.c [CrewHop] OnlinePrivVt; RT1 11-01: all 17 DM09 carries refused "not a ZFFActor" because the host bots sit on the private vtable; NOT run live', [('CrewHop', 'OnlinePrivVt', 1, 0, 0)])
 feat('onlinerampfire', G_EXP, 'Online AI heisters fire the DD02 ramp trigger when one stands in its box, if the ini lists the box (recommended on; log only until proven)', 'on', 'start',

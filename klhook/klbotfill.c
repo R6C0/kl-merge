@@ -114,6 +114,7 @@ static int klbf_squads(int fill)
 /* The bot actors for klbalance.c's online point-blank wrapper (OnlinePointBlank): the puppeteer pass publishes the live team-2 Ally actors it found (human heisters are team 2 too, so the
    team alone cannot tell them apart; the puppeteer's list is the bots). Entries first, then the count; read on the game thread, fresh for 5 s. Needs OnlineTactics=1 (the census is its). */
 #define KLBF_OT_BOTS_MAX 16      /* = KLBF_OT_BOTS (defined below) */
+static int klbf_wv_call, klbf_wv_calln = 1;      /* [BotFill] OnlineLegWaitCall (needs OnlineLegWaitVan + OnlineVanAfterLegs), OnlineLegWaitCallN */
 static int klbf_wv_on, klbf_wv_idx = 1, klbf_wv_maxS;      /* [BotFill] OnlineLegWaitVan (needs the legs), OnlineLegWaitIdx (0-based hold leg), OnlineLegWaitMaxS (0 = no cap): klwaitvan_logic.h, default 0 = today */
 static int klbf_vtm_al, klbf_vtm_bo, klbf_vtm_far, klbf_vtm_farS = KVT_FAR_CAP_S;      /* [BotFill] OnlineVanAfterLegs, OnlineVanBoPos, OnlineVanFarHold (+S): klvantime_logic.h, all default 0 = today */
 static int klbf_way_pm, klbf_legs_van; static float klbf_hop_dy;      /* klbf_legs_van: [BotFill] OnlineLegsWithVan (klway_logic.h kwy_legs_left) */      /* [BotFill] OnlineWayPerMap (0/1/2), OnlineLegHopDy (cm): both default 0 = today (klway_logic.h) */
@@ -254,6 +255,9 @@ static void klbf_init(void)
     klbf_wv_on = GetPrivateProfileIntA("BotFill", "OnlineLegWaitVan", 0, klh_ini) != 0;      /* (recommended off until benched) */
     klbf_wv_idx = (int)GetPrivateProfileIntA("BotFill", "OnlineLegWaitIdx", 1, klh_ini); if (klbf_wv_idx < 0) klbf_wv_idx = 0; if (klbf_wv_idx > 7) klbf_wv_idx = 7;      /* GUESS: default 1 = leg P2 of [BotFillWay_DM09] (2600, 114, -5920): P1 is the tower floor (y 19601), P2 the first point at street-level height after the carry (still the lobby side), P3..P8 run out along the street (RT3: bots died on legs 2..6) */
     klbf_wv_maxS = (int)GetPrivateProfileIntA("BotFill", "OnlineLegWaitMaxS", 0, klh_ini); if (klbf_wv_maxS < 0) klbf_wv_maxS = 0; if (klbf_wv_maxS > 900) klbf_wv_maxS = 900;
+    klbf_wv_call = GetPrivateProfileIntA("BotFill", "OnlineLegWaitCall", 0, klh_ini) != 0;      /* (recommended off until benched) */
+    klbf_wv_calln = (int)GetPrivateProfileIntA("BotFill", "OnlineLegWaitCallN", 1, klh_ini); if (klbf_wv_calln < 1) klbf_wv_calln = 1; if (klbf_wv_calln > 8) klbf_wv_calln = 8;
+    if (klbf_ot && klbf_wv_call) klog("botfill: wk-vantime: OnlineLegWaitCall=1 (needs %d waiting carrier(s); effective only with OnlineLegWaitVan=%d and OnlineVanAfterLegs=%d) - default 0 = off", klbf_wv_calln, klbf_wv_on, klbf_vtm_al);
     if (klbf_ot) klog("botfill: wk-vantime: OnlineLegWaitVan=%d (hold leg index %d = leg %d, cap %d s, 0 = none; needs OnlineWayPerMap legs) - default 0 = off", klbf_wv_on, klbf_wv_idx, klbf_wv_idx + 1, klbf_wv_maxS);
     if (klbf_ot) klog("botfill: wk-vantime: OnlineVanAfterLegs=%d, OnlineVanBoPos=%d, OnlineVanFarHold=%d (cap %d s) - all default 0 = off", klbf_vtm_al, klbf_vtm_bo, klbf_vtm_far, klbf_vtm_farS);
     klbf_hop_dy = (float)GetPrivateProfileIntA("BotFill", "OnlineLegHopDy", 0, klh_ini); if (klbf_hop_dy < 0) klbf_hop_dy = 0; if (klbf_hop_dy > 100000.0f) klbf_hop_dy = 100000.0f;      /* (recommended off until benched) 0 = height ignored */
@@ -2250,6 +2254,15 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         DWORD ga[KLBF_OT_BOTS], gs[KLBF_OT_BOTS]; float gp[KLBF_OT_BOTS][3]; int q;
         for (q = 0; q < nb; q++) { ga[q] = bots[q].actor; gs[q] = bots[q].soldier; memcpy(gp[q], bots[q].pos, 12); }
         __try { klbf_gu_pass(now, sm, ga, gs, (const float (*)[3])gp, nb, vstate); } __except (EXCEPTION_EXECUTE_HANDLER) { klog("botfill: getup: FAULT %08lx in the get-up pass (skipped this second)", (unsigned long)GetExceptionCode()); }
+    }
+    {   /* OnlineLegWaitCall: carriers wait at the hold leg for a van nobody calls (the hook calls it only on ARRIVAL at the trigger, past the hold; the game's own LastVehicle came 249 s in on DM09): call it from here, once */
+        int q, nw = 0, first = -1;
+        if (klbf_wv_call) for (q = 0; q < KLBF_OT_BOTS; q++) if (klbf_ob[q].actor && klbf_ob[q].phase == 2 && klbf_ob[q].wv == KWV_WAITING && klbf_ob[q].tally > 0) { nw++; if (first < 0) first = q; }
+        if (rules && kwv_call_ok(klbf_wv_call, klbf_wv_on, klbf_vtm_al, klbf_ot_vh != 0, klbf_ot_called, vstate, nw, klbf_wv_calln)) {
+            static int toldRound = -1;
+            if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; klog("botfill: tactics: van: wait call: %d carrier(s) wait at leg %d (need %d), van state %d, clock left %.0f s: the van is called from the hold, no bot at the trigger (OnlineLegWaitCall; retried every 5 s if refused)", nw, klbf_wv_idx + 1, klbf_wv_calln, vstate, left); }
+            klbf_ot_call_van(rules, first);
+        }
     }
     {   /* OnlineVanGather decision + OnlineVanHold pass: the walking bots' (phase 2) horizontal distance to the goal (box centre, else the exit trigger) */
         float gc[3], dmin = 1e30f, dmax = 0; int np = 0, nFar = 0, q, r, have = klbf_ot_goal(gc);

@@ -45,6 +45,16 @@ int main(void)
     /* stall cut */
     CHECK(kwv_nostall(0, 4, 0) == 0 && kwv_nostall(1, 0, 0) == 0 && kwv_nostall(1, 2, 0) == 1 && kwv_nostall(1, 0, 1) == 1, "no stall cut once the van is there");
 
+    /* OnlineLegWaitCall */
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 1, 1) == 1, "all set, one carrier waits: call");
+    CHECK(kwv_call_ok(0, 1, 1, 1, 0, 0, 1, 1) == 0 && kwv_call_ok(1, 0, 1, 1, 0, 0, 1, 1) == 0 && kwv_call_ok(1, 1, 0, 1, 0, 0, 1, 1) == 0, "each of the three keys is needed");
+    CHECK(kwv_call_ok(1, 1, 1, 0, 0, 0, 1, 1) == 0, "no trigger handle: no call");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 1, 0, 3, 1) == 0, "already called: no");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 2, 3, 1) == 0 && kwv_call_ok(1, 1, 1, 1, 0, 6, 3, 1) == 0, "a vehicle is under way (the game's own): no call");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 0, 1) == 0, "nobody waits: no");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 2, 3) == 0 && kwv_call_ok(1, 1, 1, 1, 0, 0, 3, 3) == 1, "N = 3 needs three waiting carriers");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 1, 0) == 1, "N below 1 counts as 1");
+
     printf("klwaitvan_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

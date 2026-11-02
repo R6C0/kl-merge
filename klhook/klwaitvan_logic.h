@@ -38,6 +38,15 @@ static int kwv_step(int on, int wv, int leg, int idx, int arrived, int vstate, i
     return kwv_van_ready(vstate, called) ? KWV_NONE : KWV_START;
 }
 
+/* OnlineLegWaitCall: should the hook call the van now, from the hold? callOn = the key, waitOn = OnlineLegWaitVan, afterLegs = OnlineVanAfterLegs, vhKnown = the exit trigger's vehicle handle
+   is known, called = already called (by anyone), vstate = probe state (0 = nothing under way; the game's own call refuses otherwise), nWait = carriers waiting at the hold, nNeed = OnlineLegWaitCallN.
+   klbf_ot_call_van keeps the rest (Sv vtable, state 0, not last, no hold, clock >= 20 s); it needs no bot near the trigger (0x71e180 takes the rules object and the vehicle handle only). */
+static int kwv_call_ok(int callOn, int waitOn, int afterLegs, int vhKnown, int called, int vstate, int nWait, int nNeed)
+{
+    if (nNeed < 1) nNeed = 1;
+    return callOn && waitOn && afterLegs && vhKnown && !called && vstate == 0 && nWait >= nNeed;
+}
+
 /* The stall cut (OnlineLegStallS) is off for the legs once the van is there: the bots run, they do not stop to be re-pathed in the street. */
 static int kwv_nostall(int on, int vstate, int called)
 {
