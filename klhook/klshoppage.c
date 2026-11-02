@@ -1613,7 +1613,8 @@ static void kspg_hlp_tick(void)
             if (hl != lh || sh != ls || hl90 != lh90 || all != lall) {
                 char al[96]; int p = 0;
                 lh = hl; ls = sh; lh90 = hl90; lall = all;
-                for (k2 = 0; k2 < nsel && p < 80; k2++) p += wsprintfA(al + p, "%s%d", k2 ? "," : "", (int)klh_rd32((DWORD_PTR)sel[k2] + 0x90));
+                for (k2 = 0; k2 < nsel && p < 80; k2++) { int v = (int)klh_rd32((DWORD_PTR)sel[k2] + 0x90), neg = v < 0, d = 1; unsigned u = neg ? 0u - (unsigned)v : (unsigned)v;   /* no user32 import in the hook: own itoa */
+                  if (k2) al[p++] = ','; if (neg) al[p++] = '-'; while (u / d >= 10 && d < 1000000000u) d *= 10; for (; d; d /= 10) al[p++] = (char)('0' + (u / d) % 10); }
                 al[p] = 0;
                 if (n < 200) { n++; klog("shopprobe: t=%lu hl=%d shown=%d hl90=%d all=%s g7d4=%d mode=%s", (unsigned long)(now - t0), hl, sh, hl90, al,
                                          (int)klh_rd32((DWORD_PTR)KLH_VA(0x0154d7d4)), kl_online() ? "online" : "arcade"); } else over++;
