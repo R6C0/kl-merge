@@ -29,7 +29,7 @@
  * The object is rebuilt per session, so klss_tick re-points it whenever [[0xdd2640]+0xb00] changes (and only if [obj] is the stock 0xb9ae14; anything else = refused, logged). No code byte is written.
  * A shot is recognised by walking the stack at the wrapper's entry (sp = esp on entry, byte offsets): sp[0] == 0x467eb8 (3D play), sp[0x2c] == 0x902734 (inside 0x467e00 called by 0x9025b0's 3D branch at
  * 0x90272f), sp[0x88] == 0x503772 (0x9025b0 called by 0x503650 at 0x50376d: the ZFFPlayer path; the npc slot-1 path returns to 0x50378a and is excluded), sp[0x8c] == 4 (#def slot 4 shot_player), low byte of
- * sp[0x90] == 0 (3D flag), sp[0xa0] == 0x4cca6d (0x503650 called from the fire path), shooter = sp[0x94] (503650's saved ebp, cross-checked with 9025b0's saved ebp sp[0x50]), weapon = sp[0x98] (= sp[0x54]).
+ * sp[0x90] == 0 (3D flag), sp[0xa0] == 0x4cca6d (0x503650 called from the fire path), shooter = sp[0x50] (9025b0's saved ebp = 503650's ebp = its arg1), weapon = sp[0x54] (9025b0's saved edi = 503650's this). Corrected 2026-11-02 (G1): sp[0x94]/[0x98] are the CALLER's (0x4cb7a0) saved ebp/edi, see ks2_stack_shot.
  * The layout is derived from the pushes of 0x9025b0 / 0x467e00 / 0x503650 (GUESS: no stack walk was seen live); any mismatch = no action, counted and logged (first 5). klss_decide then decides exactly as for the
  * code route; when it says yes the wrapper rewrites a1, a3, a4 IN PLACE to the 2D branch's values (static blocks are fine: the callee does not keep the pointers, as the 2D branch passes stack locals),
  * calls the original slot 74 and replays the 2D branch's post step on the returned handle (GUESS that the 3D branch's own later step, 0x867da0 with [obj+0x18], does not undo 2D-ness). */
@@ -175,7 +175,7 @@ static void klss_count74(DWORD *sp)
         if (!dup && n503 < 6) {
             seen503[n503++] = sp[0xa0 / 4];
             klog("shot2d: slot74: 0x9025b0 called from 0x503650: slot %lu flag %lu shooter %08lx, 0x503650 returns to %08lx (gate=%d; the fire routine is %08lx) kl_online=%d",
-                 (unsigned long)sp[0x8c / 4], (unsigned long)(sp[0x90 / 4] & 0xff), (unsigned long)sp[0x94 / 4], (unsigned long)sp[0xa0 / 4], klss_gate, (unsigned long)KS2_RET_FIRE, kl_online());
+                 (unsigned long)sp[0x8c / 4], (unsigned long)(sp[0x90 / 4] & 0xff), (unsigned long)sp[0x50 / 4], (unsigned long)sp[0xa0 / 4], klss_gate, (unsigned long)KS2_RET_FIRE, kl_online());
         }
     }
     if (!klss_ctr_t0) klss_ctr_t0 = now;
@@ -203,12 +203,23 @@ static int __cdecl klss_vt_pre(DWORD *sp, DWORD self)
             if (!dup && ns < 8) { seen[ns][0] = sp[0xa0 / 4]; seen[ns][1] = sp[0x88 / 4]; ns++; klog("shot2d: LogAny: slot-4 3D play from caller %08lx, 0x9025b0 called from %08lx (the gate wants %08lx / %08lx) shooter %08lx weapon %08lx flag %lu: if this is a remote player's shot the gate misses it (GUESS: caller word at sp[0xa0])", (unsigned long)sp[0xa0 / 4], (unsigned long)sp[0x88 / 4], (unsigned long)klss_fire_ret, (unsigned long)KLSS_9025_FROM503, (unsigned long)sp[0x94 / 4], (unsigned long)sp[0x98 / 4], (unsigned long)(sp[0x90 / 4] & 0xff)); }
         }
         if (sp[0x88 / 4] != KLSS_9025_FROM503) return 0;                                      /* 0x9025b0 from the npc path or another caller */
-        shooter = sp[0x94 / 4]; weapon = sp[0x98 / 4];
-        if (sp[0x8c / 4] != 4 || (sp[0x90 / 4] & 0xff) != 0 || !ks2_gate_ok(klss_gate, sp[0xa0 / 4]) || sp[0x50 / 4] != shooter || sp[0x54 / 4] != weapon || !shooter) {
-            if (sp[0x8c / 4] == 4 && ks2_gate_ok(klss_gate, sp[0xa0 / 4]) && InterlockedIncrement(&klss_n_stack_bad) <= 5)
-                klog("shot2d: vtable route: slot-4 3D play from the fire path but the stack does not match (slot %lu flag %lu shooter %08lx/%08lx weapon %08lx/%08lx); not touched", (unsigned long)sp[0x8c / 4], (unsigned long)sp[0x90 / 4], (unsigned long)shooter, (unsigned long)sp[0x50 / 4], (unsigned long)weapon, (unsigned long)sp[0x54 / 4]);
-            return 0;
+        {   /* shooter = sp[0x50], weapon = sp[0x54] (ks2_stack_shot; the first version read 0x4cb7a0's saved ebp/edi at sp[0x94]/[0x98]: G1 2026-11-02) */
+            unsigned long sh = 0, wp = 0; int why = ks2_stack_shot((const unsigned long *)sp, klss_gate, &sh, &wp);
+            static LONG n_seen;
+            if (klss_logany && sp[0x8c / 4] == 4 && InterlockedIncrement(&n_seen) <= 12) {      /* TEST diagnostics: the words of the first 12 slot-4 3D plays and the result of the walk */
+                DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c)), loc = 0; BYTE sel = 0xff;
+                if (gd && klh_rd(gd + 0x898, &sel, 1) && sel < 28) loc = klh_rd32(gd + 0x828 + 4 * sel);
+                klog("shot2d: stack walk: result %d (0 = ok) shooter %08lx weapon %08lx | caller-frame ebp %08lx edi %08lx | flag word %08lx caller %08lx | local pawn %08lx",
+                     why, sh, wp, (unsigned long)sp[0x94 / 4], (unsigned long)sp[0x98 / 4], (unsigned long)sp[0x90 / 4], (unsigned long)sp[0xa0 / 4], (unsigned long)loc);
+            }
+            if (why != KS2_SHOT_OK) {
+                if (why != KS2_SHOT_NOT3D && why != KS2_SHOT_FROM && sp[0x8c / 4] == 4 && InterlockedIncrement(&klss_n_stack_bad) <= 5)
+                    klog("shot2d: vtable route: slot-4 3D play from the fire path but the stack does not match (check %d, slot %lu flag word %08lx); not touched", why, (unsigned long)sp[0x8c / 4], (unsigned long)sp[0x90 / 4]);
+                return 0;
+            }
+            shooter = sh; weapon = wp;
         }
+        (void)weapon;
         if (!klss_decide(shooter, sp[0xa0 / 4], 2)) return 0;
         {   /* the 2D branch's own arguments: head ctx = slot 52 on the object, the block from 0x7f07a0, (0, 0, [0xb5c050]) */
             DWORD head = klss_vt[KLSS_VT_HEAD] ? ((klss_head_t)(DWORD_PTR)klss_vt[KLSS_VT_HEAD])((void *)(DWORD_PTR)self, 0) : 0;

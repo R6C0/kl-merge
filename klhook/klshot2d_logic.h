@@ -50,4 +50,28 @@ static int ks2_ctr_due(const ks2_ctr_t *c, unsigned long now, unsigned long last
     return c->calls != 0 && (now - last) >= 1000ul;
 }
 
+/* The slot-74 stack walk of a slot-4 3D shot (sp = esp on entry to the wrapper, dword index = byte offset / 4). 2026-11-02 (shot2d2): the first version read the shooter
+   from sp[0x94] and the weapon from sp[0x98]. Those are 0x4cb7a0's SAVED ebp / edi (0x503650 does `push ebx ; push edi ; push ebp` before `mov edi,ecx ; mov ebp,[arg1]`), not
+   0x503650's own. 0x9025b0 pushes edi (= weapon, this of 0x503650) at 0x9025bf and ebp (= shooter, arg1 of 0x503650) at 0x9025dc, so shooter = sp[0x50], weapon = sp[0x54].
+   G1 log: sp[0x94] changed every shot (5cc15e80, 5cc15a60 ...) while sp[0x50] / sp[0x54] stayed 37635030 / 699b2800 = one shooter, one weapon. Returns KS2_SHOT_OK or the
+   first failing check (for the log). */
+#define KS2_SHOT_OK 0
+#define KS2_SHOT_NOT3D 1      /* sp[0] / sp[0x2c]: not the 3D branch of 0x9025b0 */
+#define KS2_SHOT_FROM  2      /* 0x9025b0 not called from 0x503650 (npc path, other caller) */
+#define KS2_SHOT_SLOT  3      /* not #def slot 4 */
+#define KS2_SHOT_FLAG  4      /* 2D flag byte not 0 */
+#define KS2_SHOT_GATE  5      /* 0x503650's return address refused by the gate */
+#define KS2_SHOT_NOSHOOTER 6
+static int ks2_stack_shot(const unsigned long *sp, int gate, unsigned long *shooter, unsigned long *weapon)
+{
+    if (sp[0] != 0x00467eb8ul || sp[0x2c / 4] != 0x00902734ul) return KS2_SHOT_NOT3D;
+    if (sp[0x88 / 4] != 0x00503772ul) return KS2_SHOT_FROM;
+    if (sp[0x8c / 4] != 4) return KS2_SHOT_SLOT;
+    if ((sp[0x90 / 4] & 0xff) != 0) return KS2_SHOT_FLAG;
+    if (!ks2_gate_ok(gate, sp[0xa0 / 4])) return KS2_SHOT_GATE;
+    *shooter = sp[0x50 / 4]; *weapon = sp[0x54 / 4];
+    if (!*shooter) return KS2_SHOT_NOSHOOTER;
+    return KS2_SHOT_OK;
+}
+
 #endif /* KLSHOT2D_LOGIC_H */
