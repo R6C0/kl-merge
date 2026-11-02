@@ -660,6 +660,8 @@ feat('shoponlineswappic', G_EXP, 'Shop: unbaked maps show a look-alike picture f
      'klshoppage.c [Shop] OnlineSwapPic (klswappic.h; wk-swappic-1028): rows 13/16/32/35 show the stock card of row 14 / 30 / 32 / 32 when HK69 / Type 81 / Rem 700 / Minimi is handed over; the true card needs the data bake; baked maps unchanged; small list icons not covered; needs [Shop] Enable=1 + OnlineSwap; log lines shoppic:; NOT run live', [('Shop', 'OnlineSwapPic', 1, 0, 0)])
 feat('shoponlineswaparm', G_EXP, 'Online shop gun swap also works without the weapon shop page II file (recommended off)', 'off', 'start',
      'klshoppage.c [Shop] OnlineSwapArm: arms the early-make hook for OnlineSwap when [ShopPage] is off or KLShopPage.ini has no pairs; NOT run live', [('Shop', 'OnlineSwapArm', 1, 0, 0)])
+feat('shophlprobe', G_EXP, 'Shop: log the list highlight vs the shown row (bench probe, log only; recommended off until benched)', 'off', 'start',
+     'klshoppage.c [Shop] HighlightProbe: lines shopprobe: t= hl= shown= mode=; read-only; re/shop_highlight_lag_1102.md; NOT run live', [('Shop', 'HighlightProbe', 1, 0, 0)])
 feat('shoponlineswaplog', G_EXP, 'Online shop gun swap: log the map and the gun handed over per row (bench; recommended off)', 'off', 'start',
      'klshop.c [Shop] OnlineSwapLog: one oswlog line per row and round; log only; NOT run live', [('Shop', 'OnlineSwapLog', 1, 0, 0)])
 feat('remoteshot2d', G_AV, 'Online: other players\' gunshots close to you play flat (2D) like your own, not 3D (recommended off)', 'off', 'start',
