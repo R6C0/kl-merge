@@ -68,14 +68,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-02 ~11:00 - [ce] DT1 PASS (Carry 8 + DropTake, 0 asserts both seats): bots banked $2.93M on DD05 (SR2B $2.13M) and $4.00M on DM06 (SR2C
+$0.60M), so Carry 8 stays in NEXT_SHIP; sn2 -> co2 run next. G1B SAFE PASS (RemoteShot2D near/far bursts 2D, far-limit case kit g1e), SP1B PASS
+(Arcade shop highlight never lags; online re-check kit sp3). OnlineVoiceByLook merged (66fe9ee2e, loot line only, applied looks only), kit vb1.
+
 2026-11-02 ~10:40 - [ce] MT2 PASS: Ctrl+F3/Ctrl+F4 host keys toggle map set / AI heisters, client applies the host map set; shop pages
 Page II / Hire / Controls / Bots and modes render with per-row ON/OFF + explanation (D3dShotPost shots). Merged [Bots] OnlineCrewHealth
 (0b5bedaf4, host-only max-health factor, NOT Arcade on stock maps, default 0), kit ch1 queued after tp2. Building [BotFill] OnlineVoiceByLook
 (bot lines in the voice of the worn character, workflow). Grudge/traitor online: not feasible (Arcade-only hit attribution).
-
-2026-11-02 ~10:00 - [ce] MT1 SAFE PASS all seats: ModesTab cycle, RoundHints, Ctrl+F4 AI toggle (host only) PASS; Ctrl+F3 map toggle blocked by
-the bench helper's focus freeze, kit mt2 (fixed helper + D3dShotPost) queued after g2b. TP1 (DM03, OnlineTriggersExtra=2 DRY) PASS: pick-ups
-left to the game, bots would fire ZOnlineTriggerBox/ZTriggerBox2; kit tp2 = Extra=1 LIVE (DM03 + DD05), queued after rt8.
 
 2026-11-02 ~09:25 - [c9] CR10 PASS (DM03 online, ringsync alone and with ClientRewrite, 0 asserts all seats, lists IDENTICAL): third clean
 car-cover pass after CR7/CR9 -> [CoverRing] ClientRewrite=1 + ClientRingSync=1 in NEXT_SHIP (c9_1028/ship_next), rows (recommended on). Also in

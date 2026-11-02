@@ -1,3 +1,10 @@
+2026-11-02 ~11:00 - [ce] DT1 PASS: Carry 8 + DropTake, both seats RESULT PASS, 0 asserts/faults. DT1B DD05 5 boarded (4 with loot) banked $2.93M vs SR2B $2.13M;
+DT1C DM06 7 boarded (4 with loot) banked $4.00M vs SR2C $0.60M -> c9's Carry-2 fallback rule not triggered, Carry 8 stays in NEXT_SHIP; VERDICT=pass, sn2 -> co2 next (dt2 skipped).
+G1B SAFE PASS (stack walk 0, shooter != local pawn, near 377-474 cm and far 1121-1296 cm bursts played 2D; far-limit case = kit g1e, RemoteShot2DDist=1000).
+SP1B PASS: fixed probe found 3 FABuyWeaponsNew selectors in Arcade, hl == shown at every sample 11..16 (no lag); online re-check = kit sp3 (g2b used the old probe).
+OnlineVoiceByLook (216d5f0b9 + review fix 6dbaa5ae0, merged 66fe9ee2e): loot line only (kl_dmvoice keeps YouEsc stock: no KLVoice leaf), only for a look applied on
+that seat (klcl a[].last 1/4). Leaf JackPot_01 matches map_events. kl_tests 65/0/5. Kit vb1 (DM06 + DM07, LV1 set + ByLook) queued after sp3.
+
 2026-11-02 ~10:40 - [ce] MT2 PASS: Ctrl+F3/Ctrl+F4 host keys toggle map set / AI heisters, client applies the host map set; shop pages
 Page II / Hire / Controls / Bots and modes render with per-row ON/OFF + explanation (D3dShotPost shots). Merged [Bots] OnlineCrewHealth
 (0b5bedaf4, host-only max-health factor, NOT Arcade on stock maps, default 0), kit ch1 queued after tp2. Building [BotFill] OnlineVoiceByLook
