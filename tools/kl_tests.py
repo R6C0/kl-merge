@@ -59,6 +59,8 @@ C_TESTS = {
     'klgetup_test.c': 'logic',         # klgetup_logic.h (+ kldown_hold.h)
     'klgetupbeacon_test.c': 'logic',   # klgetupbeacon.h (OnlineGetUpBeacon pure part)
     'klway_test.c': 'logic',           # klway_logic.h (OnlineWayPerMap / OnlineLegHopDy pure part)
+    'klwaitvan_test.c': 'logic',       # klwaitvan_logic.h (OnlineLegWaitVan pure decision, no windows.h)
+    'klvantime_test.c': 'logic',       # klvantime_logic.h (OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold pure part, no windows.h)
     'klassoft_test.c': 'logic',        # klassoft_logic.h (AssertSoft list parse, no windows.h)
     'klhud_boardbots_test.c': 'logic', # klhud_boardbots_logic.h ([HUD] OnlineBoardBots: AI heister rows of the online round-over card)
     'klcoverring_test.c': 'logic',     # klcoverring_logic.h ([CoverRing] schedule / change detection, no windows.h)

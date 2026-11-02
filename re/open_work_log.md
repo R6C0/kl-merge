@@ -1,5 +1,7 @@
 2026-11-02 ~00:40 - [c9] CR5 PASS (DM01 + DM02 online, ClientBuild on both seats, TEST 8cdb9829): asserts 0 / soft 0 on host and client of both maps, no FAULT. DM02 coverdump IDENTICAL, but its one car gets 8 SPARE points (0x400, pos 0) on both seats (the probe fails), so F02 stays out of ClientBuildMaps (F01,F03). DM01 'DIVERGE' was only 0.1-unit jitter on the same indices: kl_coverdump_parse now lists that as jitter (tol 1.0). 'usable 0/8' log lines were a bug: kcr_pt_usable ignored bit 0x2 (0x656740 accepts al&2 OR 0x200; real flags 0x100a/0x1012/0x140a). Fixed in 8773e87ad; NEXT_SHIP dll c9_1028\cr6\ship ff114e33. Open: a live bench of ship_next (candidate ini + dll), Elwood lock icon with Rank=0.
 
+2026-11-01 ~23:59 - [wk-vantime] DM09 van life cycle written up (re/dm09_van_timing_1101.md): stale van node blocked the exit-trigger lookup, nothing called the van, the hold only looks at state 3. New default-0 keys OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold(+S), klvantime_logic.h + test, RT4 bench described, not run.
+
 2026-11-01 ~23:55 - [ce] RT3 2/2 exit 0, 0 faults. DD06 7 boarded ($3.51M), no regression. DM09 still 0 boarded, new cause: the legs now run
 (12 reached, was 2) but all 7 bots die on the street legs 2..6 (23:42:31-23:43:16) before the van exists; its boarding object first shows ~249 s
 into the round (23:43:06), 17 s before round over (same in RT2L). Fix direction: hold in cover until the van probe is state >= 2, then rush

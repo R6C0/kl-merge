@@ -72,9 +72,9 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 -> F02 stays out (ClientBuildMaps=F01,F03). DM01 diff = 0.1-unit jitter (parser tolerates it now). kcr_pt_usable log bug (ignored bit 0x2) fixed
 8773e87ad, NEXT_SHIP dll cr6\ship ff114e33. Next: live bench of ship_next candidate; Elwood lock icon (Rank=0).
 
-2026-11-01 ~23:55 - [c9] CR3 PASS: ClientBuild on both seats -> DM01 + DM03 online asserts 0 on host and client (DM01 was 39), counts equal
-(379/596), host activation reuses reserved indices. D2-D4 review fixes in, D1 kept (state 0x16, needed before the first activation). NEXT_SHIP:
-[CoverRing] ClientBuild=1 ClientBuildHost=1 ClientBuildMaps=F01,F03 (host + client together). F02 (1 car) unbenched.
+2026-11-02 ~00:50 - [ce] wk-vantime-1101 merged: DM09 bots wait in cover at leg 1, the hook calls the van (0x71e180) once the carriers are
+there, the van waits (FarHold); keys OnlineVanAfterLegs/BoPos/FarHold + OnlineLegWaitVan/Call default 0. [HUD] OnlineBoardBots merged
+(Arcade board fates online). RT4 kit week_1028\rt4\run_rt4.sh queued after c9's SN1; ARC2 Arcade baseline running.
 
 2026-11-01 ~23:55 - [ce] RT3 0 faults (DD06 7 boarded, no regression). DM09 still 0 boarded: with OnlineLegScale+StallS the legs run (12
 reached, was 2) but all 7 bots die on the street legs before the van exists (boarding object ~249 s in, 17 s before round over; RT2 the same).
