@@ -74,6 +74,7 @@ static int klbf_stack_recheck;      /* [BotFill] OnlineStackRecheck (default 0, 
 #include "klvantime_logic.h"      /* wk-vantime-1101: [BotFill] OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold, the pure decisions (klvantime_test.c) */
 #include "klway_logic.h"      /* wk-rtroute-1101: [BotFill] OnlineWayPerMap / OnlineLegHopDy, the pure decisions (klway_test.c) */
 #include "kldoorhold_logic.h"      /* wk-doorhold-1102: [BotFill] OnlineDoorHold / OnlineDoorHoldS, the pure decision (kldoorhold_test.c) */
+#include "klboardpar_logic.h"      /* wk-boardpar-1102: [BotFill] OnlineBoardAllNear, the pure decision (klboardpar_test.c) */
 #include "kldroptake_logic.h"      /* wk-droptake-1102: [BotFill] OnlineDropTake / OnlineDropTakeM, the pure decision (kldroptake_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
 static int klbf_gu_freefirst, klbf_gu_recede, klbf_gu_hold, klbf_gu_plat; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13); OnlineGetUpPlateau (BP16b) */
@@ -136,7 +137,7 @@ static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used b
    OnlineBoardTeleport (0 off, 1 on, 2 dry) NOT ARCADE: van waiting (state 3) and the bot still outside the box after OnlineBoardTeleportS s of the wait, within OnlineBoardTeleportM (cm): the game's actor teleport (klcrew_rt.c klt_teleport) puts it in the box. Last resort. */
 static int klbf_leg_scale, klbf_leg_stallS, klbf_leg_maxS = 60, klbf_bx_spread, klbf_bx_latch, klbf_bt_mode, klbf_bt_s = 10;
 static float klbf_leg_speed = 300.0f, klbf_leg_near = 0.0f, klbf_leg_dy = 0.0f, klbf_bx_latchM = 1500.0f, klbf_bt_m = 4000.0f;
-static int klbf_bank_mode, klbf_ba_mode; static float klbf_ba_m = 6000.0f; static long klbf_bank_total; static int klbf_bank_n;      /* [BotFill] OnlineBank (0 off, 1 ledger, 2 dry), OnlineBoardAll (0 off, 1 board, 2 dry), OnlineBoardAllM (cm) */
+static int klbf_bank_mode, klbf_ba_mode; static float klbf_ba_m = 6000.0f, klbf_ba_near; static unsigned klbf_ba_left;      /* OnlineBoardAllNear (cm, 0 = off; wk-boardpar-1102), bitmask of bots already logged as left out */ static long klbf_bank_total; static int klbf_bank_n;      /* [BotFill] OnlineBank (0 off, 1 ledger, 2 dry), OnlineBoardAll (0 off, 1 board, 2 dry), OnlineBoardAllM (cm) */
 static int klbf_bc_mode, klbf_bc_told; static long klbf_bc_dry;      /* [BotFill] OnlineBankCredit (0 off, 1 credit, 2 dry); klbf_bc_told: "no escaped seat yet" said this round; klbf_bc_dry: ledger value last logged dry */
 static int klbf_trig;      /* [BotFill] OnlineTriggers: 0 off, 1 fire, 2 dry (klbf_trig_* below) */
 static int klbf_unpl; static DWORD klbf_unpl_at;      /* [BotFill] OnlineUnplacedGuard (recommended off until benched): kvp_all_unplaced; _at = round start tick */
@@ -339,6 +340,8 @@ static void klbf_init(void)
     else if (klbf_bc_mode == 1 && klbf_bank_mode == 2) { klog("botfill: bankcredit: OnlineBank=2 is a dry ledger, so OnlineBankCredit=1 is forced to 2 (dry, log only); set OnlineBank=1 to credit"); klbf_bc_mode = 2; }
     klbf_ba_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBoardAll", 0, klh_ini); if (klbf_ba_mode < 0 || klbf_ba_mode > 2) klbf_ba_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     klbf_ba_m = (float)GetPrivateProfileIntA("BotFill", "OnlineBoardAllM", 6000, klh_ini); if (klbf_ba_m < 500) klbf_ba_m = 500;
+    klbf_ba_near = kbp_near_clamp((int)GetPrivateProfileIntA("BotFill", "OnlineBoardAllNear", 0, klh_ini));      /* (recommended off until benched) wk-boardpar-1102: Arcade boards only bots AT the box; > 0 = boardall radius min(OnlineBoardAllM, this) */
+    if (klbf_ot && klbf_ba_mode && klbf_ba_near > 0) klog("botfill: boardall: OnlineBoardAllNear=%.0f cm: bots farther than that from the escape point are left out (Arcade rule, GUESS from static reading)", klbf_ba_near);
     if (klbf_ot) klog("botfill: bank: OnlineBank=%d, OnlineBoardAll=%d, OnlineBoardAllM=%.0f cm (0 off, 1 on, 2 dry; recommended on once tried)", klbf_bank_mode, klbf_ba_mode, klbf_ba_m);
     klbf_ot_ramp = GetPrivateProfileIntA("BotFill", "OnlineRampFire", 1, klh_ini) != 0;      /* (recommended on) DD02: the ramp trigger never fires online because bots are not counted */
     klbf_ot_rampdry = GetPrivateProfileIntA("BotFill", "OnlineRampDry", 0, klh_ini) != 0;      /* default 0 since BOS_DD08r (F08 TriggerBox_Guards fired live, 7/7 boarded); only maps with a [BotFillRamp_<SLOT>] section fire */
@@ -1096,7 +1099,7 @@ static void klbf_ot_summary(void)
     for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor) { bots++; tot += klbf_ob[i].tally; if (klbf_ob[i].phase == 3) boarded++; }
     if (klbf_bank_mode) klog("botfill: bank: round ledger%s: %d bot(s) banked $%ld of %d carried (hook ledger; the game's seat table has no bot rows)", klbf_bank_mode == 2 ? " (DRY)" : "", klbf_bank_n, klbf_bank_total, tot);
     if (klbf_bc_mode == 1 && klbf_bank_total > 0) klog("botfill: bankcredit: $%ld NOT credited this round (no escaped human seat before the round ended)", klbf_bank_total);
-    klbf_bank_total = 0; klbf_bank_n = 0; klbf_bc_told = 0; klbf_bc_dry = 0;
+    klbf_bank_total = 0; klbf_bank_n = 0; klbf_bc_told = 0; klbf_bc_dry = 0; klbf_ba_left = 0;
     if (klbf_vgs) { int wl = 0, w0 = 0, tl = 0; for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor && klbf_ob[i].phase == 3) { if (klbf_ob[i].tally > 0) wl++; else w0++; if (klbf_ob[i].tally > 0) tl += klbf_ob[i].tally; }
         klog("botfill: tactics: round summary (OnlineVanGatherSmart): %d bot(s) BOARDED with loot ($%d), %d BOARDED with tally 0 (not counted as loot), %d van-call deferral line(s)", wl, tl, w0, klbf_vgs_defer); }
     klog("botfill: tactics: round summary: %d bot(s) given orders, %d stack(s) taken, %d total (hook tally, not the game's), %d boarded, %d stack(s) given up", bots, klbf_ot_nclaim, tot, boarded, klbf_ot_nbad);
@@ -1122,7 +1125,9 @@ static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], i
             for (i = 0; i < KLBF_OT_BOTS && klbf_ob[i].actor != act[q]; i++) ;
             if (i == KLBF_OT_BOTS || klbf_ob[i].phase == 3 || klbf_ob[i].tally <= 0) continue;
             d = (float)sqrt((pos[q][0] - g[0]) * (pos[q][0] - g[0]) + (pos[q][2] - g[2]) * (pos[q][2] - g[2]));
-            if (d > klbf_ba_m) continue;
+            { int dec = kbp_decide(d, klbf_ba_m, klbf_ba_near);
+              if (dec == 0) continue;
+              if (dec == 2) { if (!(klbf_ba_left & (1u << i))) { klbf_ba_left |= 1u << i; klog("botfill: boardall: bot %d (actor %08lx) tally %d LEFT OUT, %.0f m from the escape point (> OnlineBoardAllNear %.0f cm), van state %d: not counted aboard, not banked", i, act[q], klbf_ob[i].tally, d / 100, klbf_ba_near, vstate); } continue; } }
             klog("botfill: boardall: bot %d (actor %08lx) tally %d, %.0f m from the escape point, van state %d: %s", i, act[q], klbf_ob[i].tally, d / 100, vstate, klbf_ba_mode == 2 ? "DRY would board" : "counted aboard");
             if (klbf_ba_mode == 1) { if (klbf_ob[i].phase == 4) klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; boardall)", i, (unsigned long)klbf_ob[i].target, klbf_ob[i].lootPaid, klbf_ob[i].lootLeft, klbf_ob[i].tally); klbf_ob[i].phase = 3; if (klbf_ot_board) klbf_ot_board_call(act[q]); }
         }
