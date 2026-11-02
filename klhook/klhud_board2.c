@@ -1007,10 +1007,7 @@ static void klsb_bots_track(const struct klor_snap *o, int st)
     if (st >= 0x16 && st <= 0x18) { if (klsb_r.btab_live) { kbb_reset(&klsb_r.btab); klsb_r.btab_live = 0; klsb_r.btab_told = 0; } return; }
     if (st < 0x19 || st > 0x1f) return;
     kbb_begin(&klsb_r.btab);
-    for (i = 0; i < o->nbots; i++) {
-        const struct klor_row *b = &o->bot[i]; int s = kbb_note(&klsb_r.btab, b->actor, b->name, b->alive);
-        (void)s;
-    }
+    for (i = 0; i < o->nbots; i++) kbb_note(&klsb_r.btab, o->bot[i].actor, o->bot[i].name, o->bot[i].alive);
     role_host = 0;
     for (i = 0; i < klsb_r.btab.n; i++) {      /* every latched bot, also one that left the scan (boarded and removed): the ledger may still know it */
         int ab = 0, tr; long ty = 0;
