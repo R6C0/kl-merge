@@ -56,6 +56,18 @@ int main(void)
     CHECK(ksp_changed(1000, 1, 1, -1, -1, -1), "poll: unreadable is a change");
     CHECK(!kdf_drop_ok(1, 1) && !kdf_drop_ok(0, 0) && !kdf_drop_ok(-1, 1) && kdf_drop_ok(0, 1), "dropfollow: hidden or undrained pool drop is skipped");
 
+    {   /* wk-rt9-1102 OnlineLateExitRoute */
+        float rp[3][3] = { { 0, 0, 0 }, { 3000, 0, 0 }, { 3000, 0, 4000 } }, o[3] = { 0, 0, 0 }, ex2[3] = { 3000, 0, 5000 };
+        CHECK(fabs(kwy_route_cm(o, rp, 3, 0, ex2) - 8000) < 1, "route: all legs then exit");
+        CHECK(fabs(kwy_route_cm(o, rp, 3, 2, ex2) - 6000) < 1, "route: from leg 2");
+        CHECK(fabs(kwy_route_cm(o, rp, 0, 0, ex2) - 5831) < 2, "route: no legs = straight");
+        CHECK(kwy_late_s(0, 75, 31000, 130, 20) == 75, "route off = base");
+        CHECK(kwy_late_s(1, 0, 31000, 130, 20) == 0, "base 0 stays off");
+        CHECK(kwy_late_s(1, 75, 31000, 130, 20) == 258, "DM09 310 m: 258 s");
+        CHECK(kwy_late_s(1, 75, 1000, 130, 20) == 75, "short route: never below base");
+        CHECK(kwy_late_s(1, 75, 900000, 130, 20) == 400, "clamped to 400");
+        CHECK(kwy_late_s(1, 75, 31000, 0, 20) == 75 && kwy_late_s(1, 75, -1, 130, 20) == 75, "bad pace or length = base");
+    }
     printf("klway_test: %d checks, %d failed\n", checks, fails);
     return fails != 0;
 }

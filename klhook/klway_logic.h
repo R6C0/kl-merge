@@ -84,4 +84,24 @@ static int kdf_drop_ok(int hidden, int drained)
 {
     return hidden == 0 && drained != 0;
 }
+/* wk-rt9-1102 OnlineLateExitRoute: remaining walk length (cm, horizontal x/z) from p through legs[leg..n-1] to the exit point. leg >= n or n <= 0: straight to the exit. */
+static float kwy_route_cm(const float p[3], const float (*pts)[3], int n, int leg, const float exitp[3])
+{
+    float len = 0, cx = p[0], cz = p[2]; int i;
+    for (i = (leg < 0 ? 0 : leg); i < n; i++) { len += (float)sqrt((pts[i][0] - cx) * (pts[i][0] - cx) + (pts[i][2] - cz) * (pts[i][2] - cz)); cx = pts[i][0]; cz = pts[i][2]; }
+    len += (float)sqrt((exitp[0] - cx) * (exitp[0] - cx) + (exitp[2] - cz) * (exitp[2] - cz));
+    return len;
+}
+
+/* wk-rt9-1102: the OnlineLateExit threshold (s of clock left) for one bot. route 0 = base (today). route 1 = walk time of the remaining route at walkCmS plus padS, clamped to 400 (the old OnlineLateExit cap of 200 is below DM09's walk), never below base.
+   DM09: about 310 m at 130 cm/s is 238 s + 20 = 258 s, so a carrier leaves at once on a 250 s clock and loots until about t=112 s on a 370 s clock (258 s clock left). base 0 (OnlineLateExit off) stays 0. */
+static int kwy_late_s(int route, int base, float routeCm, float walkCmS, int padS)
+{
+    float s;
+    if (!route || base <= 0 || !(walkCmS >= 10.0f) || !(routeCm >= 0)) return base;
+    s = routeCm / walkCmS + (float)padS;
+    if (s > 400.0f) s = 400.0f;
+    if (s < (float)base) return base;
+    return (int)(s + 0.5f);
+}
 #endif

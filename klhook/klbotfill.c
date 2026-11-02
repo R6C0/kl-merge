@@ -54,6 +54,7 @@ static void klbv_event(int slot, int ev);      /* klbotvoice.c: the host's bot d
 static int klls_on;       /* OnlineLootSync=1 (kllootsync.c; set in klbf_init) */
 static void klls_summary(void);
 static void klls_precollect(void);      /* kllootsync.c: a bot slot is about to be freed */      /* kllootsync.c: the host's final loot list at the round summary */
+static int klbf_late_route = 0, klbf_late_pad = 20, klbf_late_cmS = 130;      /* [BotFill] OnlineLateExitRoute / OnlineLateExitRoutePadS / OnlineLegWalkCmS (wk-rt9-1102, klway_logic.h kwy_late_s) */
 static int klbf_ot_glate = 0;      /* [BotFill] OnlineGatherLateS (wk-dd04-1028): 0 = the gather's clock clause fires at OnlineLateExit + 20 s left (old); >0 = at that many s left */
 static int klbf_ot_vgather = 1, klbf_ot_vhold = 1, klbf_ot_gmax = 25, klbf_ot_hmax = 15; static float klbf_ot_gm = 1200.0f, klbf_ot_hm = 3000.0f, klbf_ot_hnear = 1800.0f;      /* [BotFill] OnlineVanGather / OnlineGatherM (cm) / OnlineGatherMaxS, OnlineVanHold / OnlineHoldM (cm, shield) / OnlineHoldNearM (cm, timer) / OnlineHoldMaxS */
 static int klbf_ot_door = 1;      /* [BotFill] OnlineSkipDoorStacks (BOS1): stock vault cases with ZOnlineMoneyCtrl +0x5c set wait behind kick doors (re/stock_map_bots.md) */
@@ -224,6 +225,9 @@ static void klbf_init(void)
     klbf_ot_vcall = GetPrivateProfileIntA("BotFill", "OnlineVanCall", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_vstate = GetPrivateProfileIntA("BotFill", "OnlineVanState", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_late = (int)GetPrivateProfileIntA("BotFill", "OnlineLateExit", 75, klh_ini); if (klbf_ot_late < 0) klbf_ot_late = 0; if (klbf_ot_late > 200) klbf_ot_late = 200;      /* (recommended on) GUESS 75 s: 30 s door cutoff + 25 s walk + 20 s slack */
+    klbf_late_route = GetPrivateProfileIntA("BotFill", "OnlineLateExitRoute", 0, klh_ini) != 0;      /* (recommended off until benched; NOT Arcade) wk-rt9-1102: OnlineLateExit = the walk time of the remaining route + pad, per bot (RT6/RT7 DM09: a 310 m route at 1.1-1.5 m/s needs about 240 s, the fixed 75 s sent no carrier early enough) */
+    klbf_late_pad = (int)GetPrivateProfileIntA("BotFill", "OnlineLateExitRoutePadS", 20, klh_ini); if (klbf_late_pad < 0) klbf_late_pad = 0; if (klbf_late_pad > 120) klbf_late_pad = 120;
+    klbf_late_cmS = (int)GetPrivateProfileIntA("BotFill", "OnlineLegWalkCmS", 130, klh_ini); if (klbf_late_cmS < 30) klbf_late_cmS = 30; if (klbf_late_cmS > 400) klbf_late_cmS = 400;      /* GUESS 130 cm/s: the measured DM09 pace was 110-150 */
     klbf_ot_bwalk = GetPrivateProfileIntA("BotFill", "OnlineBoxWalk", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_board = GetPrivateProfileIntA("BotFill", "OnlineBoard", 0, klh_ini) != 0;      /* (recommended off until a live run shows the bot vanishes on every screen) */
     klbf_ot_bprobe = GetPrivateProfileIntA("BotFill", "OnlineBoxProbe", 1, klh_ini) != 0;      /* (recommended on: log only) */
@@ -386,6 +390,7 @@ static void klbf_init(void)
     if (klbf_ot) klog("botfill: OnlineTactics BO12 fixes: OnlineGiveUpRetry=%d (recommended on, %d s), OnlineIdleVan=%d (recommended on, %d s), OnlineFireStall=%d (recommended on)", klbf_ot_retry, klbf_ot_retryS, klbf_ot_idlevan, klbf_ot_idleS, klbf_ot_firestall);
     if (klbf_ot) klog("botfill: OnlineTactics van gather/hold: OnlineVanGather=%d (recommended on; GatherM %.0f m, GatherMaxS %d s), OnlineVanHold=%d (recommended on; HoldM %.0f m shield, HoldNearM %.0f m timer, HoldMaxS %d s)", klbf_ot_vgather, klbf_ot_gm / 100, klbf_ot_gmax, klbf_ot_vhold, klbf_ot_hm / 100, klbf_ot_hnear / 100, klbf_ot_hmax);
     if (klbf_ot) klog("botfill: OnlineTactics box: OnlineBoxWalk=%d (recommended on), OnlineBoard=%d (recommended off until tested), OnlineBoxProbe=%d (log only), OnlineScanEveryRound=%d (recommended off: the exit trigger and the boxes found by the first round's scans are kept for the level load's later rounds)", klbf_ot_bwalk, klbf_ot_board, klbf_ot_bprobe, klbf_ot_scan_always);
+    if (klbf_ot && klbf_late_route) klog("botfill: tactics: OnlineLateExitRoute=1 (recommended off until benched; NOT Arcade): late exit = remaining route / %d cm/s + %d s pad, per bot, clamped 400 s; floor OnlineLateExit %d", klbf_late_cmS, klbf_late_pad, klbf_ot_late);
     if (klbf_ot) klog("botfill: OnlineTactics van/late: OnlineVanState=%d (recommended on), OnlineLateExit=%d s (recommended 75; 0 = off)", klbf_ot_vstate, klbf_ot_late);
     if (klbf_ot) klog("botfill: OnlineTactics extras: OnlineHealthMul=%d (recommended 5 with OnlineCopToBot 5 = stock Arcade level 1 survival; 1 = off), OnlineTacticsGuard=%.0f m (recommended 25; 0 = off), OnlineTacticsVan=%d (recommended on)",
                       klbf_ot_hmul, klbf_ot_guard / 100, klbf_ot_van);
@@ -1853,6 +1858,20 @@ static void klbf_sp_install(void)
 /* the hook's own calls of 0x4e3f40 wrap this */
 #define KLBF_SP_OWN(call) do { klbf_sp_ownTid = GetCurrentThreadId(); klbf_sp_own = 1; call; klbf_sp_own = 0; } while (0)
 
+/* wk-rt9-1102 OnlineLateExitRoute: the OnlineLateExit threshold for the bot at p (route off or no route known: the plain klbf_ot_late). */
+static int klbf_late_for(const float p[3], DWORD van_w, const float vpos[3], float *routeCm)
+{
+    const float *ex; float rc; int leg;
+    if (routeCm) *routeCm = -1.0f;
+    if (!klbf_late_route || !klbf_ot_late) return klbf_ot_late;
+    ex = klbf_bo_ok ? klbf_bo_pos : kwy_exit(klbf_legs_van, van_w != 0, klbf_ot_vh != 0, klbf_ot_tpos, vpos);
+    if (!ex || (ex[0] == 0 && ex[2] == 0)) return klbf_ot_late;
+    leg = klbf_way_n > 0 ? klbf_way_start(p, ex) : 0;
+    rc = kwy_route_cm(p, (const float (*)[3])klbf_way_p, klbf_way_n, leg, ex);
+    if (routeCm) *routeCm = rc;
+    return kwy_late_s(1, klbf_ot_late, rc, (float)klbf_late_cmS, klbf_late_pad);
+}
+
 /* host, in a round, once a second. sm_state: caller checked role 2, mode 4 */
 static void klbf_ot_run(DWORD now, DWORD sm)
 {
@@ -2127,7 +2146,9 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (stop) { char sd[96]; klbf_sd_text(o, sd, sizeof sd); klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; %s) [%s]", s, (unsigned long)o, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally, why, sd); klbf_ob[s].phase = 0; if (klbf_pr && klbf_ob[s].tally > 0) klbf_ob[s].prAt = now; if (klbf_ot_nbad < KLBF_OT_OBJ) { klbf_ot_badAt[klbf_ot_nbad] = now; klbf_ot_badLong[klbf_ot_nbad] = 1; klbf_ot_bad[klbf_ot_nbad++] = o; } }      /* review: a partial stop blacklists the stack like a give-up, else the nearest-stack pick re-targets it and loops */
         }
         if (klbf_ob[s].phase == 0) {
-            int nguard = 0, dhb = 0, gbest = -1, idleVan = 0, nhold = 0, nfreeG = 0, dtIdx = -1, dtAny = 0; float gbd = 1e30f;
+            int nguard = 0, dhb = 0, gbest = -1, idleVan = 0, nhold = 0, nfreeG = 0, dtIdx = -1, dtAny = 0; float gbd = 1e30f, lateRc = -1.0f;
+            int late_s = klbf_late_for(bots[b].pos, van_w, vpos, &lateRc);      /* OnlineLateExitRoute: per-bot threshold, = klbf_ot_late when off */
+            if (klbf_late_route && late_s != klbf_ot_late && !(klbf_ob[s].told & 1073741824) && (klbf_ob[s].told |= 1073741824)) klog("botfill: tactics: bot %d (actor %08lx): OnlineLateExitRoute: route to the exit %.0f m, walk %d cm/s + %d s pad: late exit at clock left %d s instead of %d (said once per bot)", s, a, lateRc / 100, klbf_late_cmS, klbf_late_pad, late_s, klbf_ot_late);
             static int gcn[KLBF_OT_OBJ]; static float gcd[KLBF_OT_OBJ], gnear[KLBF_OT_OBJ];      /* OnlineGuardMode: per stack cops in range, bot distance, nearest cop */
             if (klbf_gm) { int q; for (q = 0; q < nm; q++) { gcn[q] = -1; gcd[q] = 1e30f; gnear[q] = 1e30f; } }
             for (j = 0; j < nm; j++) {
@@ -2151,7 +2172,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
               klog("botfill: guardmode: spread: cops x %.0f..%.0f y %.0f..%.0f z %.0f..%.0f | stacks x %.0f..%.0f y %.0f..%.0f z %.0f..%.0f (cm); %d cop(s) at (0,0,0) skipped (OnlineGuardLiveOnly); first cops (%.0f,%.0f,%.0f) (%.0f,%.0f,%.0f) (%.0f,%.0f,%.0f)", cmn[0], cmx[0], cmn[1], cmx[1], cmn[2], cmx[2], smn[0], smx[0], smn[1], smx[1], smn[2], smx[2], klbf_gm_orig, ncop > 0 ? cops[0][0] : 0, ncop > 0 ? cops[0][1] : 0, ncop > 0 ? cops[0][2] : 0, ncop > 1 ? cops[1][0] : 0, ncop > 1 ? cops[1][1] : 0, ncop > 1 ? cops[1][2] : 0, ncop > 2 ? cops[2][0] : 0, ncop > 2 ? cops[2][1] : 0, ncop > 2 ? cops[2][2] : 0); }
             klog("botfill: guardmode: round scan: %d cop(s) read live, %d money stack(s), %d free stack(s) of which %d guarded (radius %.0f m, floor gate %.0f cm; bot %d sees nguard %d), once per round", ncop, nm, nfreeG, ng, klbf_ot_guard / 100, klbf_gm_floor, s, nguard); }
             if (klbf_dh) {      /* OnlineDoorHold (wk-doorhold-1102): shut doors left, nothing carried: no NEW stack order, the bot stays with its squad script (which kicks the doors). Only phase-0 picks are held; an order already in flight (phase 1/2) is NOT cancelled. OnlineIdleVan is already off while ndoor > 0 (its !ndoor guard), except for its late-clock clause, which also ends the hold. Decided BEFORE the guard-mode bypass / GuardTake so they neither burn their release timer nor log a take that the hold then cancels (review) */
-                int hold = kdh_step(&klbf_dhs, 1, klbf_dh_s, now, klbf_unpl_at, ndoor, nm, klbf_ot_late && left <= (float)(klbf_ot_late + 20));
+                int hold = kdh_step(&klbf_dhs, 1, klbf_dh_s, now, klbf_unpl_at, ndoor, nm, late_s && left <= (float)(late_s + 20));
                 if (klbf_dhs.ev == 1) { klog("botfill: doorhold: round %d: holding %d bot(s) for up to %d s, %d stack(s) behind shut doors", klbf_ot_rounds, nb, klbf_dh_s, ndoor); klbf_dhs.ev = 0; }
                 else if (klbf_dhs.ev == 2) { klog("botfill: doorhold: round %d: hold over after %lu s (%s), %d stack(s) still behind shut doors, %d armed", klbf_ot_rounds, (unsigned long)((now - klbf_unpl_at) / 1000), klbf_dhs.reason == KDH_OPEN ? "all doors open" : klbf_dhs.reason == KDH_TIMER ? "timer" : klbf_dhs.reason == KDH_STALL ? "stalled" : "clock low", ndoor, nm); klbf_dhs.ev = 0; }
                 dhb = kdh_applies(hold, klbf_ob[s].tally) && ndoor > 0;
@@ -2185,24 +2206,24 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (dhb && best >= 0) best = -1;      /* OnlineDoorHold: decided above (review: after the bypass it left a stale gap timer and a false log line) */
             if (kdt_wanted(klbf_dt, best, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_carry)) dtIdx = klbf_dt_pick(s, bots[b].pos, now, &dtAny);      /* OnlineDropTake: Q31-Q33, the loot lies in drops, the stack list is empty */
             {   /* OnlineIdleVan: no stack for this bot (blacklisted, taken, none armed) and nothing carried: after OnlineIdleVanS with no stack left at all, or with the clock low, it goes to the exit and the van is called (BO12: 0 grabs, nobody called it) */
-                int nostack = best < 0 && !(klbf_ot_gtake && gbest >= 0) && (!dtAny || (klbf_ot_late && left <= (float)(klbf_ot_late + 20)));      /* OnlineDropTake: a drop within reach (even one another bot walks to) holds the van call, but not once the clock is low (review: else the late call never fires) */
+                int nostack = best < 0 && !(klbf_ot_gtake && gbest >= 0) && (!dtAny || (late_s && left <= (float)(late_s + 20)));      /* OnlineDropTake: a drop within reach (even one another bot walks to) holds the van call, but not once the clock is low (review: else the late call never fires) */
                 if (klbf_ot_idlevan && nostack && klbf_ob[s].tally == 0) {
                     if (!klbf_ob[s].vidleAt) klbf_ob[s].vidleAt = now;
-                    if ((gbest < 0 && !nhold && !ndoor && now -klbf_ob[s].vidleAt >= (DWORD)klbf_ot_idleS * 1000u) || (klbf_ot_late && left <= (float)(klbf_ot_late + 20))) {
+                    if ((gbest < 0 && !nhold && !ndoor && now -klbf_ob[s].vidleAt >= (DWORD)klbf_ot_idleS * 1000u) || (late_s && left <= (float)(late_s + 20))) {
                         idleVan = 1; vnew = 1;
                         if (!(klbf_ob[s].told & 128) && (klbf_ob[s].told |= 128)) klog("botfill: tactics: bot %d (actor %08lx): no stack to take (%d guarded, %lu s idle, clock left %.0f s) and nothing carried: goes to the exit to call the van (OnlineIdleVan)", s, a, nguard, (unsigned long)((now - klbf_ob[s].vidleAt) / 1000), left);
                     }
                 } else klbf_ob[s].vidleAt = 0;
             }
-            if (klbf_ot_late && klbf_ob[s].tally > 0 && left <= (float)klbf_ot_late && best >= 0) {      /* OnlineLateExit (BO9 rules A/B): a carrier takes no new stack late in the round, it heads for the van */
-                if (!(klbf_ob[s].told & 16) && (klbf_ob[s].told |= 16)) klog("botfill: tactics: bot %d (actor %08lx): clock left %.0f s <= OnlineLateExit %d: no new stack, tally %d goes to the van", s, a, left, klbf_ot_late, klbf_ob[s].tally);
+            if (late_s && klbf_ob[s].tally > 0 && left <= (float)late_s && best >= 0) {      /* OnlineLateExit (BO9 rules A/B): a carrier takes no new stack late in the round, it heads for the van */
+                if (!(klbf_ob[s].told & 16) && (klbf_ob[s].told |= 16)) klog("botfill: tactics: bot %d (actor %08lx): clock left %.0f s <= OnlineLateExit %d%s: no new stack, tally %d goes to the van", s, a, left, late_s, klbf_late_route ? " (OnlineLateExitRoute)" : "", klbf_ob[s].tally);
                 best = -1;
             }
             if (klbf_eo && klbf_ob[s].tally == 0 && klbf_ot_joincall && klbf_ot_vh && vstate >= 1 && vstate <= 4 && (klbf_ot_calledAt ? klbf_ot_calledAt : klbf_eo_at) && now - (klbf_ot_calledAt ? klbf_ot_calledAt : klbf_eo_at) <= (DWORD)klbf_ot_joinS * 1000u) {      /* OnlineEscortOut (wk-escort-1101; Arcade FollowOut / klescort.c RELEASE: the vehicle waits -> the escort, which stood still behind the human, is sent to the boarding place). An empty-handed bot (no tally; a carrier already walks by itself) goes down the existing exit-walk machinery (phase 2: waypoints, box walk, OnlineBoxForce, board) as OnlineIdleVan does, instead of waiting for its 20 s idle clock. Same window as OnlineJoinCalled (van state 1-4, 60 s after the call). A bot with a stack to take is released too: Arcade sends every crew member out when the vehicle is called. GUESS: that is wanted online (the stack stays for the humans). */
                 if (!(klbf_ob[s].told & 4194304) && (klbf_ob[s].told |= 4194304)) klog("botfill: escort: bot %d (actor %08lx) follows out: van %s (state %d, %lu s since the call), nothing carried%s: %s", s, a, vstate == 3 ? "waits" : "comes", vstate, (unsigned long)((now - (klbf_ot_calledAt ? klbf_ot_calledAt : klbf_eo_at)) / 1000), best >= 0 ? ", a stack was still free" : "", klbf_eo == 2 ? "DRY, no order" : "sent to the exit walk (OnlineEscortOut)");
                 if (klbf_eo == 1) { best = -1; idleVan = 1; vnew = 1; }
             }
-            holdExit = kgg_partial_hold(klbf_pr, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_carry, idleVan, nhold, now, klbf_ob[s].prAt, klbf_pr_s * 1000u, left, (float)(klbf_ot_late ? klbf_ot_late + 20 : 90)) && best < 0;
+            holdExit = kgg_partial_hold(klbf_pr, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_carry, idleVan, nhold, now, klbf_ob[s].prAt, klbf_pr_s * 1000u, left, (float)(late_s ? late_s + 20 : 90)) && best < 0;
             /* OnlinePartialRetry: the only stacks left are blacklisted for now; hold ONLY the exit commit below (no continue: the late-van, idle-van and escort handling above already ran this tick).
                The hold ends by itself: a partial stop sets badLong (line ~1924) and klbf_ot_isbad (line ~882) keeps that stack off the pick for max(30, OnlineGiveUpRetryS = 45) s; then it is free,
                best >= 0 and the bot re-targets it (prAt cleared there). With OnlineGiveUpRetry=0 the blacklist never expires, so the hold ends at OnlinePartialRetryS (kgg_partial_hold wait_ms) or when the clock runs low.

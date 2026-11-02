@@ -360,6 +360,8 @@ feat('onlinewaypermap', G_EXP, 'Online AI heisters read a route named after the 
      'klbotfill.c [BotFill] OnlineWayPerMap (0/1/2); wk-rtroute-1101: DM09 loaded DD06 route [BotFillWay_F06]; needs [BotFillWay_<MAP>]; NOT run live', [('BotFill', 'OnlineWayPerMap', 1, 0, 0)])
 feat('onlineleghopdy', G_EXP, 'Online AI heisters skip route legs on another floor and wait at the lift for the crew-hop carry (recommended off until benched)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineLegHopDy (cm, 1500 for DM09); wk-rtroute-1101: tower bots could not walk to the street; needs [CrewHop] Online=1; NOT run live', [('BotFill', 'OnlineLegHopDy', 1500, 0, 0)])
+feat('onlinelateexitroute', G_EXP, 'Online AI heisters with loot leave for the van early enough for the whole walk, worked out from the route left (NOT Arcade) (recommended off until benched)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineLateExitRoute (+PadS 20, OnlineLegWalkCmS 130); wk-rt9-1102: DM09 route 310 m at 1.1-1.5 m/s needs 240 s, the fixed OnlineLateExit 75 never sent a carrier in time (RT6/RT7 0 boarded); needs OnlineLateExit > 0; NOT run live', [('BotFill', 'OnlineLateExitRoute', 1, 0, 0)])
 feat('onlinelegswithvan', G_EXP, 'Online AI heisters follow the route even on maps whose getaway van stands there from the start (DM09) (recommended off until benched)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineLegsWithVan; RT1 11-01: DM09\'s van object made the bots skip all legs and walk straight at it 60 km away; NOT run live', [('BotFill', 'OnlineLegsWithVan', 1, 0, 0)])
 feat('onlinevanafterlegs', G_EXP, 'Online AI heisters walk the route and call the van even when the van object is known from the start (DM09) (recommended off until benched)', 'off', 'start',
