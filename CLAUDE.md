@@ -73,6 +73,10 @@ PASS, 0 asserts/faults/soft, slots right -> candidate cleared on every map; ship
 files; RT9A late exit 262 s as predicted, DM09 still 0 boarded (5-6 dead). kl_kit_summary.py --batch PREFIX [KIT] [--gate] = one-command
 batch gate (verdict line, slot check, exit 1), ran on the PC. PC busy, nothing installed. Notes: debug/notes/2026-11-02-scheduled-triage.md.
 
+2026-11-02 ~21:30 - [ce] Queue done, all seats 0 asserts. PASS: g1e, sp3/sp3b (no online shop lag), vb2 (loot voice on both seats, f2d848323), q35 (21 maps).
+NOT SHOWN: tp3 0 new cops after bot-fired triggers; rt9 DM09 0 boarded at 370 s even with OnlineLateExitRoute; es3 escort still 8 humans;
+co3 approach missed. Next: bot-trigger cop spawn path, DM09 walk speed/street deaths, es3 filter, co3 script.
+
 2026-11-02 ~13:55 - [ce] CH1 SAFE PASS: OnlineCrewHealth x2 host-only (DM03 280->560, DD05 350->700), 0 bot deaths, 7/7 boarded. TP2 census was
 blind (wrap, b0b1cbdea) -> f38a0d145 counts NEW cops per bot-fired trigger, kit tp3. RT6-RT8 ran a 250 s clock (no TimeAuto=6): inconclusive; merged
 OnlineLateExitRoute (878f9688b, off, NOT Arcade), kit rt9 at 370 s. 11 option + 5 page rows (d20f07522). Queue: g1e sp3 vb1 es3 co3 q35 mt3 rt9 tp3.
