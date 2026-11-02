@@ -77,9 +77,9 @@ vs control $3.27M, keep defaults); CO1 SAFE PASS but no hostage ever held (kit c
 Merged: RemoteShot2D stack walk (ee0843148, shooter sp[0x50]), ramp name from scene node (c313423ec), shopprobe multi-instance (069810cf7),
 map_shift_test temp dirs (f238ecb5a). Queue: es1 (running) le1, CR10 dh3 mt1 tp1 g2b, then g1b sp1b dt1.
 
-2026-11-02 ~06:55 - [ce] CS1 PASS (bots fire cop triggers online, DM03+DD05); trigger table 512, pick-up name from scene node (kit tp1).
-G2 names right in shipped config ([Redirect] to baked maps; g2b tests unbaked); G1 FAIL (RemoteShot2D never decides, workflow on it);
-SP1A: Arcade shop = 0x20, probe hl field wrong (agent fixing). Queue: ba1 pr1 co1 es1 le1, then CR10 dh3 mt1 tp1 g2b.
+2026-11-02 ~09:30 - [ce] ES1/LE1 SAFE PASS, features barely triggered. Escort fix: the session table holds AI heisters (37946cfd2).
+DM09 boarding diagnosed: the van is called at leg 2 and its window ends before stragglers arrive; RT4 "5 boarded" = boardall counts. New
+[BotFill] OnlineJoinCalledS (b3be0cab3, default 60). Kit rt6 (late call, longer hold, Near 300) queued after es2; DM01/DM03 kits get CoverRing ClientBuild.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

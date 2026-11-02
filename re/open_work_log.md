@@ -1,3 +1,11 @@
+2026-11-02 ~09:30 - [ce] ES1 SAFE PASS, barely exercised (1 follow line on ES1B, 0 on A): the online escort read "8 human(s)" with 2 seats because the
+session player table also holds the AI heisters; fixed with kvp_on_bot (37946cfd2, kit es2 on escbot_dll). LE1 SAFE PASS, feature not triggered;
+corrected round summaries A0 B0 C7 ($3.71M) D0 boarded (a raw BOARDED grep had matched the summary line). LE1A client 70 asserts = kit missing
+[CoverRing] ClientBuild keys (c9), now added to every DM01/DM03 kit (mt1 tp1 es2). DM09 boarding workflow: R1 street firefight stalls the 8-leg run;
+R2 van called at leg 2 (CallN=1), parked window ~80 s ends before stragglers; R3 RT4 "5 boarded" were OnlineBoardAll radius-6000 counts; R5 fixed
+60 s join window -> new [BotFill] OnlineJoinCalledS (b3be0cab3, default 60, recommended off until benched). Kit rt6 (A idx5 hold120 max150 Near300,
+B idx6, C +JoinCalledS 150, D control, R DD06) on joins_dll, queued after es2. If rt6 reads 0 real boardings: bot survival in the street fight next.
+
 2026-11-02 ~08:05 - [ce] BA1 PASS on DD05 + DM03 (DM09 inconclusive: no van without the van-call set). PR1 FEATURE FAIL: OnlineCarryCapS 55 + PartialRetry
 gave 43 parts but $0 carried vs the control's 34 parts / $3.27M -> defaults stay; client asserts were the known DM01 sites. CO1 SAFE PASS, feature not
 exercised (no hostage ever held; host-only gating right); co2 staging a scripted grab. Merged G1 fix (RemoteShot2D shooter/weapon at sp[0x50]/[0x54],
