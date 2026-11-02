@@ -27,14 +27,15 @@ int main(void)
     /* OnlineVanBoPos */
     CHECK(kvt_bo_ok(0, 2, bo2, 1, (const float (*)[3])trig) == 0, "key 0 never");
     CHECK(kvt_bo_ok(1, 0, bo2, 1, (const float (*)[3])trig) == 0, "state 0: no boarding object yet");
-    CHECK(kvt_bo_ok(1, 2, bo2, 1, (const float (*)[3])trig) == 1, "DM09 state 2 boarding object is 18 m from the trigger: ok");
+    CHECK(kvt_bo_ok(1, 1, bo2, 1, (const float (*)[3])trig) == 0 && kvt_bo_ok(1, 2, bo2, 1, (const float (*)[3])trig) == 0, "states 1 / 2: the vehicle drives in, its place moves: no goal");
+    CHECK(kvt_bo_ok(1, 3, bo4, 1, (const float (*)[3])trig) == 1, "state 3 (DD): parked, ok");
     CHECK(kvt_bo_ok(1, 4, bo4, 1, (const float (*)[3])trig) == 1, "DM09 state 4: ok");
     CHECK(kvt_bo_ok(1, 5, bo4, 1, (const float (*)[3])trig) == 0 && kvt_bo_ok(1, 7, bo4, 1, (const float (*)[3])trig) == 0, "leaving / gone: no");
-    CHECK(kvt_bo_ok(1, 2, stale, 1, (const float (*)[3])trig) == 0 && kvt_bo_ok(1, 2, stale, 0, 0) == 0, "the stale van place is refused with and without refs");
-    CHECK(kvt_bo_ok(1, 2, org, 0, 0) == 0, "origin = unplaced");
-    CHECK(kvt_bo_ok(1, 2, bo2, 0, 0) == 1, "no refs known: only the absolute test");
-    { float far_[3] = { -39000, 100, -39000 }; CHECK(kvt_bo_ok(1, 2, far_, 1, (const float (*)[3])trig) == 0, "within 400 m abs but 500 m+ from the trigger: refused"); }
-    { float nan_[3] = { 1, 1, 1 }; nan_[0] = (float)sqrt(-1.0); CHECK(kvt_bo_ok(1, 2, nan_, 0, 0) == 0, "NaN refused"); }
+    CHECK(kvt_bo_ok(1, 4, stale, 1, (const float (*)[3])trig) == 0 && kvt_bo_ok(1, 4, stale, 0, 0) == 0, "the stale van place is refused with and without refs");
+    CHECK(kvt_bo_ok(1, 4, org, 0, 0) == 0, "origin = unplaced");
+    CHECK(kvt_bo_ok(1, 4, bo2, 0, 0) == 1, "no refs known: only the absolute test");
+    { float far_[3] = { -39000, 100, -39000 }; CHECK(kvt_bo_ok(1, 4, far_, 1, (const float (*)[3])trig) == 0, "within 400 m abs but 500 m+ from the trigger: refused"); }
+    { float nan_[3] = { 1, 1, 1 }; nan_[0] = (float)sqrt(-1.0); CHECK(kvt_bo_ok(1, 4, nan_, 0, 0) == 0, "NaN refused"); }
     CHECK(kvt_use_bo(1, 0, 0, 8, 8) == 1, "legs done: boarding object");
     CHECK(kvt_use_bo(1, 0, 0, 3, 8) == 0, "still on the legs and not called: legs first");
     CHECK(kvt_use_bo(1, 0, 1, 3, 8) == 1, "called: boarding object even mid-route");

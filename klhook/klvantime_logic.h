@@ -27,12 +27,13 @@ static int kvt_lookup_ok(int on, int vanKnown)
     return on || !vanKnown;
 }
 
-/* OnlineVanBoPos: is the boarding object's place [rules+0x1e0] -> node usable as the walk goal? on, van state 1..4 (GUESS: DM09 showed 2 coming and 4 waiting; DD maps 1/3), not
-   the origin (an unplaced node), every coordinate within KVT_ABS_CM, and (when refs exist) within KVT_REF_CM of one exit trigger / escape box place. */
+/* OnlineVanBoPos: is the BOARDING PLACE (kle_boarding in klescort.c: [rules+0x1e0] is the VEHICLE ITSELF, the place is its node + 500 along the node's x axis) usable as the walk goal?
+   Only while the vehicle is PARKED: state 3 or 4 (DD maps 3, DM09 showed 4; klescort.c FollowOutStopPlace: in state 1 / 2 the vehicle drives in, so its place moves 25-47 m along the road).
+   Also: not the origin (an unplaced node), every coordinate within KVT_ABS_CM, and (when refs exist) within KVT_REF_CM of one exit trigger / escape box place. */
 static int kvt_bo_ok(int on, int vstate, const float *p, int nref, const float (*ref)[3])
 {
     int i;
-    if (!on || vstate < 1 || vstate > 4) return 0;
+    if (!on || vstate < 3 || vstate > 4) return 0;
     for (i = 0; i < 3; i++) if (!(fabsf(p[i]) <= KVT_ABS_CM)) return 0;      /* also rejects NaN */
     if (fabsf(p[0]) <= 1 && fabsf(p[1]) <= 1 && fabsf(p[2]) <= 1) return 0;
     if (nref <= 0) return 1;

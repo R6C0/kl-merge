@@ -28,22 +28,35 @@ Where the "exit trigger" target pointed vs the boarding object:
 
 Also: bot arrival at the box is staggered by about 55 s while `OnlineGatherMaxS` caps the gather at 25 s.
 
-## 2. The fix (three keys, default 0 = today, DD maps unchanged)
+## 2. The fix (four keys, default 0 = today, DD maps unchanged)
 
 Pure decisions in `klhook/klvantime_logic.h` (31 checks in `klvantime_test.c`), wired in `klbotfill.c`:
 
 - `[BotFill] OnlineVanAfterLegs=1`: the trigger lookup also runs with a van object known; once the trigger is known the phase-2 loop treats `van` as 0 (`kvt_van_for_walk`), so the legs, `klbf_ot_arrive`, `klbf_ot_call_van` and the stall test run as on a stock map.
-- `[BotFill] OnlineVanBoPos=1`: `klbf_vbo_tick` reads the boarding object once per tick (state 1..4, not the origin, within 400 m, within 500 m of a trigger / box); a bot past its legs or after the call, with no escape box, walks to it (`kvt_use_bo`); it is also the goal for the hold's distance.
-- `[BotFill] OnlineVanFarHold=1` (+ `OnlineVanFarHoldS`, default 40, GUESS): `OnlineVanHold` also runs in state 4; a walker with loot beyond HoldM counts as in range and lifts the visit's cap from `OnlineHoldMaxS` to FarHoldS. Needs `OnlineVanHold=1`.
+- `[BotFill] OnlineVanBoPos=1` (review fix 11-02): `klbf_vbo_tick` takes the BOARDING PLACE from `kle_boarding` (klescort.c, shared, 0x8faf72..0x8fafe6): `[rules+0x1e0]` is the VEHICLE ITSELF, the place is its node + 500 along the node's x axis. Only while PARKED (state 3 or 4; `kvt_bo_ok`), never in state 1/2 where the vehicle moves along its road (klescort.c FollowOutStopPlace, Vault N1018_L22: 25-47 m). Not the origin, within 400 m, within 500 m of a trigger / box. A bot past its legs or after the call, with no escape box, walks to it (`kvt_use_bo`). `klbf_ot_goal()` (so dmin of OnlineVanHold / OnlineVanGather) therefore only ever sees a parked, fixed place. FollowOutStopPlace is the follow-out crew's own latch of the parked place for later drive-ins; independent, not reused (no second visit on DM09).
+- `[BotFill] OnlineVanFarHold=1` (+ `OnlineVanFarHoldS`, default 40, GUESS): `OnlineVanHold` also runs in state 4; a walker with loot beyond HoldM counts as in range and lifts the visit's cap from `OnlineHoldMaxS` to FarHoldS. Needs `OnlineVanHold=1`. Review fix: in state 4 only the Invulnerable byte and VanBlow's paused clock are used; the state timer `[rules+0x1d8]` is written in state 3 only (its meaning in DM09's state 4 is unverified), so no timer GUESS is left.
 
 Recommended together; independent otherwise. SHIP-safe: data, tick and order target only, no new patch.
+- `[BotFill] OnlineLegWaitVan=1` (+ `OnlineLegWaitIdx`, default 1; `OnlineLegWaitMaxS`, default 0 = no cap), needs the legs (`OnlineWayPerMap`). Added after RT3 (below). Pure decision `klhook/klwaitvan_logic.h`, 24 checks in `klwaitvan_test.c`.
+
+## 2b. RT3 result and OnlineLegWaitVan
+
+RT3L (DM09, `KLHook_RT3L.ini`: OnlineLegScale=1 Speed=150 MaxS=60 OnlineLegStallS=20, log `...\solo\RT3L_DM09\inst1\KLHook.log`): the legs complete (12 reached), but all 7 bots die on street legs 2..6 between 23:42:31 and 23:43:16. The van probe first leaves state 0 at 23:43:06.270 (clock left 1.1 s, about 249 s into the round, "state 0 -> 2", boarding object (-1852, 121, 8742)), goes 2 -> 6 at 23:43:13, the round is over at 23:43:23. The bots walked into the street minutes before the van existed.
+
+Rule: a bot in phase 2 (heading for the escape, it has the legs) that is at leg `OnlineLegWaitIdx` (0-based; default 1 = P2 = (2600, 114, -5920) of `[BotFillWay_DM09]`; GUESS: P1 is the tower floor y 19601, P2 the first street-height point still on the lobby side, P3..P8 the street where the bots died) and would advance (reached, timed out or stalled) STOPS there instead when the van is not there: probe state < 2 or unreadable, and the hook has not called it. While it waits the leg timeout, the stall clock and the re-path do not run (the order to the point is still repeated by the normal timer). Released when state >= 2 (or called), or when `OnlineLegWaitMaxS` > 0 seconds passed; then the leg gets a fresh timer and the rest run with the OnlineLegScale timeouts and no stall cut (`kwv_nostall`: once the van is there the stall cut is off for all legs). A bot that never reaches the hold leg is not held earlier. Where the bots call the van themselves (DD maps) the wait would last to the cap: use it on DM09 only.
+Log lines (one per bot each): `waiting for the van at leg N of M ... van state S, clock left T s, tally X (OnlineLegWaitVan)` and `released from the van wait at leg N of M after K s: the van is there | cap OnlineLegWaitMaxS ran out, no van, van state S, clock left T s`.
+GUESS left: the default hold leg; that the lobby side of P2 is safe enough (the bots may still be shot there); that state >= 2 leaves enough time for the street run (RT3: state 2 for 7 s and the van gone 17 s later: bots must be near P2 = about 110 m of road from the exit trigger).
 
 ## 3. Bench RT4 (not run)
 
-DM09 live: RT2L ini plus `OnlineVanPosSane=1 OnlineLegsWithVan=1 OnlineVanAfterLegs=1 OnlineVanBoPos=1 OnlineVanFarHold=1 OnlineVanHold=1`, with the RT3 leg keys (`OnlineLegScale=1`, Speed=150, MaxS=60, `OnlineLegStallS=20`) and `OnlineGatherMaxS=60`.
-DD06 regression: same hook, the three new keys 0, then 1; expect the same BOARDED count (7 boarded $4.8M in RT2D/RT2R) and no `wk-vantime` line besides the ini log.
+DM09 live (kit as RT3: `week_1028t3`, ini `KLHook_RT3L.ini`): RT3L ini deltas
+- `OnlineVanPosSane=1`, `OnlineLegsWithVan=1`, `OnlineVanHold=1`, `OnlineGatherMaxS=60` (as in the RT2/RT3 plan)
+- `OnlineVanAfterLegs=1`, `OnlineVanBoPos=1`, `OnlineLegWaitVan=1`, `OnlineLegWaitIdx=1`, `OnlineLegWaitMaxS=0` (set e.g. 200 if the van should not be waited for beyond the round: GUESS)
+- RT4a: those. RT4b (second variant): plus `OnlineVanFarHold=1`, `OnlineVanFarHoldS=40`.
+- keep OnlineLegScale=1 OnlineLegSpeed=150 OnlineLegMaxS=60 OnlineLegStallS=20 OnlineWayPerMap OnlineLegHopDy=1500 and the `[BotFillWay_DM09]` P1..P8.
+DD06 regression: same hook and ini (the DD06 RT2D ini), the new keys 0, then OnlineVanAfterLegs=1 OnlineVanBoPos=1 OnlineLegWaitVan=1 (and FarHold) on; expect the same BOARDED count (7 boarded in RT2D/RT2R/RT3) and no wait lines unless DD06 has legs (it has none: `OnlineLegWaitVan` is then inert).
 
-Grep lines:
-- `wk-vantime` (ini state), `exit trigger` (lookup now runs with a van known), `CALLED` (van call), `boarding object` (BoPos goal), `far hold` (FarHold), `van state`, `BOARDED`, `hold: cap of`.
-- Pass: DM09 shows `exit trigger` found, a `CALLED` line from the hook, `boarding object ... is the walk goal`, at least one `BOARDED`; DD06 unchanged with the keys 0.
-- Fail modes to read: no `exit trigger` line (lookup still blocked), `far hold` without `BOARDED` (cap too short), boarding object refused (nothing logged; the plausibility test rejected it: check the box/trigger refs).
+Grep lines (KLHook.log):
+- `wk-vantime` (ini state: AfterLegs/BoPos/FarHold and OnlineLegWaitVan), `exit trigger` (lookup now runs with a van known), `CALLED` (van call), `van state` / `van probe` (state 0 -> 2 clock), `waiting for the van` and `released from the van wait` (OnlineLegWaitVan), `parked in state` (BoPos goal), `far hold` (FarHold), `hold: cap of`, `BOARDED`, `waypoint leg`, `is dead or gone`.
+- Pass: every bot prints `waiting for the van` at leg 2 of 8 before 23:4x of the van, none dies there; at the `van state 0 -> 2` line all waiting bots print `released ... the van is there` within one tick; `parked in state 4 (or 3)` appears; a `CALLED` line from the hook; at least one `BOARDED`; DD06 unchanged.
+- Fail modes: bots still `is dead or gone` before `van state 0 -> 2` (the hold leg is not safe: try OnlineLegWaitIdx=0); `released` but legs end short (state 2 too late: lower to idx 0 or raise OnlineLegSpeed); no `parked in state` (the vehicle never parks in 3/4: DM09 went 2 -> 6 in RT3, so BoPos may stay silent there and the trigger remains the goal); `waiting` lines without a `released` (the van never came in the round).
