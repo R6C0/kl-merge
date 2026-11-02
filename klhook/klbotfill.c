@@ -75,6 +75,7 @@ static int klbf_stack_recheck;      /* [BotFill] OnlineStackRecheck (default 0, 
 #include "klway_logic.h"      /* wk-rtroute-1101: [BotFill] OnlineWayPerMap / OnlineLegHopDy, the pure decisions (klway_test.c) */
 #include "kldoorhold_logic.h"      /* wk-doorhold-1102: [BotFill] OnlineDoorHold / OnlineDoorHoldS, the pure decision (kldoorhold_test.c) */
 #include "klboardpar_logic.h"      /* wk-boardpar-1102: [BotFill] OnlineBoardAllNear, the pure decision (klboardpar_test.c) */
+#include "kldroptable_logic.h"      /* wk-droptable-1102: drop table eviction of hidden pool objects (kldroptable_test.c) */
 #include "kldroptake_logic.h"      /* wk-droptake-1102: [BotFill] OnlineDropTake / OnlineDropTakeM, the pure decision (kldroptake_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
 static int klbf_gu_freefirst, klbf_gu_recede, klbf_gu_hold, klbf_gu_plat; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13); OnlineGetUpPlateau (BP16b) */
@@ -1635,7 +1636,18 @@ static void klbf_df_see(DWORD o, int amt, DWORD now)
 {
     int i, f = -1; DWORD ent, node;
     for (i = 0; i < KLBF_DR_MAX; i++) { if (klbf_dr[i].o == o) { f = i; break; } if (f < 0 && !klbf_dr[i].o) f = i; }
-    if (f < 0) return;      /* table full: the rest is not tracked */
+    if (f < 0) {      /* table full. wk-droptable-1102: DT1A_DD07 round 1 armed all 133 pool objects (hidden 1) and the first 32 filled the table, so the real 900000 drops were never tracked. A candidate that is not a hidden pool object replaces the oldest hidden, never-drained entry no bot targets (hidden is read BEFORE the insertion; kldroptable_logic.h) */
+        DWORD e0, n0, fl0 = 0; int ch = (e0 = klh_rd32(o + 0x24)) && (n0 = klh_rd32(e0 + 4)) && klh_rd(n0 + 0x3c, &fl0, 4) ? ((fl0 & 0x400) ? 1 : 0) : -1, v;
+        struct kdtb_ent te[KLBF_DR_MAX]; static int evRound = -1;
+        for (i = 0; i < KLBF_DR_MAX; i++) {
+            int q; te[i].used = klbf_dr[i].o != 0; te[i].hid = klbf_dr[i].hid; te[i].drn = klbf_dr[i].drn; te[i].age = now - klbf_dr[i].first; te[i].target = 0;
+            for (q = 0; q < KLBF_OT_BOTS; q++) if (klbf_ob[q].actor && klbf_ob[q].target == klbf_dr[i].o) te[i].target = 1;
+        }
+        v = kdtb_evict(te, KLBF_DR_MAX, ch);
+        if (v < 0) return;      /* nothing to replace: the rest is not tracked */
+        if (evRound != klbf_ot_rounds) { evRound = klbf_ot_rounds; klog("botfill: dropfollow: drop table full (%d): drop %08lx (hidden %d, amt %d) replaced hidden pool object %08lx (amt %d, never drained, not a bot's target); said once a round (wk-droptable-1102)", KLBF_DR_MAX, (unsigned long)o, ch, amt, (unsigned long)klbf_dr[v].o, klbf_dr[v].amt); }
+        f = v; klbf_dr[f].o = 0;      /* the slot is re-initialised below */
+    }
     if (klbf_dr[f].o != o) { memset(&klbf_dr[f], 0, sizeof klbf_dr[f]); klbf_dr[f].o = o; klbf_dr[f].first = now ? now : 1; }
     {   DWORD fl = 0, e2, n2; int oa = klbf_dr[f].amt, oh = klbf_dr[f].hid, nh = (e2 = klh_rd32(o + 0x24)) && (n2 = klh_rd32(e2 + 4)) && klh_rd(n2 + 0x3c, &fl, 4) ? ((fl & 0x400) ? 1 : 0) : -1;
         /* wk-dropfix-1101 review: a pool object re-armed for a real drop (amount changed, or hidden 1 -> 0) is a NEW drop: restart its clock and drain window, else a later real drain falls outside the first-sighting +-3 s and DropFollow never fires */
