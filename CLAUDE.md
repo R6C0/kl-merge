@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-02 ~13:55 - [ce] CH1 SAFE PASS: OnlineCrewHealth x2 host-only (DM03 280->560, DD05 350->700), 0 bot deaths, 7/7 boarded. TP2 census was
+blind (wrap, b0b1cbdea) -> f38a0d145 counts NEW cops per bot-fired trigger, kit tp3. RT6-RT8 ran a 250 s clock (no TimeAuto=6): inconclusive; merged
+OnlineLateExitRoute (878f9688b, off, NOT Arcade), kit rt9 at 370 s. 11 option + 5 page rows (d20f07522). Queue: g1e sp3 vb1 es3 co3 q35 mt3 rt9 tp3.
+
 2026-11-02 ~13:30 - [ce] CO2 SAFE, not exercised (tele before 0x19) -> kit co3. ES2 escort FAIL (8 humans with 2 seats: bot pos was the lagging +0x460)
 -> ccc030f83, kit es3. Audit of owner asks: Bots-and-modes page fixed (shield row online, '(host only: you are a client)'), labels flipped,
 OnlineTriggersCensus (836063b43, tp2 now grades cops brought in). Queue: rt6 rt7 rt8 tp2 ch1 g1e sp3 vb1 es3 co3, then c9's q35 (21 maps, ship_next).
@@ -75,10 +79,6 @@ OnlineTriggersCensus (836063b43, tp2 now grades cops brought in). Queue: rt6 rt7
 2026-11-02 ~11:40 - [c9] SN2 PASS: the NEXT_SHIP candidate (c9_1028/ship_next: KLHook_next.ini + dll_0925 SHIP 56ac45c1, c9ffcc3cf) on DM01,
 DM03, DD05 online, 0 asserts/soft/faults every seat, Carry 8 (ce's DT1 PASS: DD05 $2.93M, DM06 $4.00M to the van). DM03 coverdump DIVERGE is a
 dump time skew (host dumped before its car #0 ring existed), SAFE. Holds CoverRing ClientRewrite+RingSync and BotFill Carry 8/BoardAllNear/DropTake.
-
-2026-11-02 ~11:00 - [ce] DT1 PASS (Carry 8 + DropTake, 0 asserts both seats): bots banked $2.93M on DD05 (SR2B $2.13M) and $4.00M on DM06 (SR2C
-$0.60M), so Carry 8 stays in NEXT_SHIP; sn2 -> co2 run next. G1B SAFE PASS (RemoteShot2D near/far bursts 2D, far-limit case kit g1e), SP1B PASS
-(Arcade shop highlight never lags; online re-check kit sp3). OnlineVoiceByLook merged (66fe9ee2e, loot line only, applied looks only), kit vb1.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

@@ -1,3 +1,8 @@
+2026-11-02 ~13:55 - [ce] CH1 SAFE PASS (4/4 seats, 0 asserts): OnlineCrewHealth x2 applied on the host only (DM03 280->560, DD05 350->700), 0 bot
+deaths (control CS1B 1), 7/7 boarded. Note: DD05 round 2 the game itself gave bots 3500 right after our write and the hook doubled that (by design: it
+scales the game's latest maximum). TP2 SAFE, feature not shown: census logged at the fire (unsigned wrap, b0b1cbdea) and only counted falling totals ->
+f38a0d145 counts NEW cops per fire (pointer set); kit tp3. RT6-RT8 inconclusive (250 s clock) -> rt9 at 370 s. Queue: g1e sp3 vb1 es3 co3 q35 mt3 rt9 tp3.
+
 2026-11-02 ~13:20 - [ce] RT6 and RT7 SAFE (14/14 seats PASS), DM09 0 boarded in every row, but CONFOUNDED: their inis lacked [Lobby] TimeAuto=6, so the
 clock was 250 s, not 370 s (RT5A, Arcade DM09). The route is ~310 m at 1.1-1.5 m/s (wf dm09-exit-timing: exit walk starts 55-190 s in, not late; the van
 leaves at clock 0 with walkers 28-60 m out). Merged 878f9688b/de0374ca1 [BotFill] OnlineLateExitRoute (off, NOT Arcade): per-bot late exit = route left /
