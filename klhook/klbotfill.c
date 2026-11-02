@@ -1639,6 +1639,7 @@ static void klbf_df_see(DWORD o, int amt, DWORD now)
     if (f < 0) {      /* table full. wk-droptable-1102: DT1A_DD07 round 1 armed all 133 pool objects (hidden 1) and the first 32 filled the table, so the real 900000 drops were never tracked. A candidate that is not a hidden pool object replaces the oldest hidden, never-drained entry no bot targets (hidden is read BEFORE the insertion; kldroptable_logic.h) */
         DWORD e0, n0, fl0 = 0; int ch = (e0 = klh_rd32(o + 0x24)) && (n0 = klh_rd32(e0 + 4)) && klh_rd(n0 + 0x3c, &fl0, 4) ? ((fl0 & 0x400) ? 1 : 0) : -1, v;
         struct kdtb_ent te[KLBF_DR_MAX]; static int evRound = -1;
+        if (!kdtb_cand_ok(ch)) return;      /* a hidden pool object never evicts: skip the snapshot (101 of these per tick at round start) */
         for (i = 0; i < KLBF_DR_MAX; i++) {
             int q; te[i].used = klbf_dr[i].o != 0; te[i].hid = klbf_dr[i].hid; te[i].drn = klbf_dr[i].drn; te[i].age = now - klbf_dr[i].first; te[i].target = 0;
             for (q = 0; q < KLBF_OT_BOTS; q++) if (klbf_ob[q].actor && klbf_ob[q].target == klbf_dr[i].o) te[i].target = 1;
