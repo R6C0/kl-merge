@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-02 ~11:40 - [c9] SN2 PASS: the NEXT_SHIP candidate (c9_1028/ship_next: KLHook_next.ini + dll_0925 SHIP 56ac45c1, c9ffcc3cf) on DM01,
+DM03, DD05 online, 0 asserts/soft/faults every seat, Carry 8 (ce's DT1 PASS: DD05 $2.93M, DM06 $4.00M to the van). DM03 coverdump DIVERGE is a
+dump time skew (host dumped before its car #0 ring existed), SAFE. Holds CoverRing ClientRewrite+RingSync and BotFill Carry 8/BoardAllNear/DropTake.
+
 2026-11-02 ~11:00 - [ce] DT1 PASS (Carry 8 + DropTake, 0 asserts both seats): bots banked $2.93M on DD05 (SR2B $2.13M) and $4.00M on DM06 (SR2C
 $0.60M), so Carry 8 stays in NEXT_SHIP; sn2 -> co2 run next. G1B SAFE PASS (RemoteShot2D near/far bursts 2D, far-limit case kit g1e), SP1B PASS
 (Arcade shop highlight never lags; online re-check kit sp3). OnlineVoiceByLook merged (66fe9ee2e, loot line only, applied looks only), kit vb1.
@@ -76,10 +80,6 @@ $0.60M), so Carry 8 stays in NEXT_SHIP; sn2 -> co2 run next. G1B SAFE PASS (Remo
 Page II / Hire / Controls / Bots and modes render with per-row ON/OFF + explanation (D3dShotPost shots). Merged [Bots] OnlineCrewHealth
 (0b5bedaf4, host-only max-health factor, NOT Arcade on stock maps, default 0), kit ch1 queued after tp2. Building [BotFill] OnlineVoiceByLook
 (bot lines in the voice of the worn character, workflow). Grudge/traitor online: not feasible (Arcade-only hit attribution).
-
-2026-11-02 ~09:25 - [c9] CR10 PASS (DM03 online, ringsync alone and with ClientRewrite, 0 asserts all seats, lists IDENTICAL): third clean
-car-cover pass after CR7/CR9 -> [CoverRing] ClientRewrite=1 + ClientRingSync=1 in NEXT_SHIP (c9_1028/ship_next), rows (recommended on). Also in
-NEXT_SHIP since 07:40: ce's BotFill set (TacticsCarry 8, BoardAllNear 300, DropTake 1). Ship dll must be >= b65a08e09; ce's dt1 grades money-to-van.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

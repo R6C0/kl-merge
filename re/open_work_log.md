@@ -1,3 +1,9 @@
+2026-11-02 ~11:40 - [c9] SN2 PASS = the NEXT_SHIP candidate as a whole (c9_1028/ship_next: KLHook_next.ini + dll_0925, SHIP 56ac45c1 / TEST eb4c46d8,
+c9ffcc3cf): DM01, DM03, DD05 online, 2 seats, Carry 8 (dt1 PASS): asserts 0, soft 0, faults 0 everywhere, script pass at round 2. DM01 and DD05 coverdump
+IDENTICAL. DM03 'DIVERGE at 556, client-only 8' is a time skew: the host's one dump was 11:08:32, before its car #0 ring was built (spare 400);
+by 11:13:46 the host sent car #0 7 usable and the client reported 'host spare 0' on all three cars. SAFE (no host-only index). Ring positions
+still differ per seat (rotated car, CR8 known, cosmetic). Follow-up: the compare should pair dumps by time (or dump again at round end).
+
 2026-11-02 ~11:00 - [ce] DT1 PASS: Carry 8 + DropTake, both seats RESULT PASS, 0 asserts/faults. DT1B DD05 5 boarded (4 with loot) banked $2.93M vs SR2B $2.13M;
 DT1C DM06 7 boarded (4 with loot) banked $4.00M vs SR2C $0.60M -> c9's Carry-2 fallback rule not triggered, Carry 8 stays in NEXT_SHIP; VERDICT=pass, sn2 -> co2 next (dt2 skipped).
 G1B SAFE PASS (stack walk 0, shooter != local pawn, near 377-474 cm and far 1121-1296 cm bursts played 2D; far-limit case = kit g1e, RemoteShot2DDist=1000).
