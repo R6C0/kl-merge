@@ -199,6 +199,11 @@ static int kspg_m_state(int id)
             case KMT_SHIELD:   v[0] = KMI("Shield", "Online"); v[1] = (int)GetPrivateProfileIntA("Shield", "Enable", 1, klh_ini); break;
             case KMT_SWAP:     v[0] = KMI("Shop", "OnlineSwap"); v[1] = KMI("Shop", "Enable"); v[2] = KMI("ShopPage", "Enable") || KMI("Shop", "OnlineSwapArm"); break;
             case KMT_CLOCK:    v[0] = KMI("Lobby", "TimeAuto"); break;
+            case KMT_DROPFOLLOW: v[0] = KMI("BotFill", "OnlineHost"); v[1] = KMI("BotFill", "OnlineTactics"); v[2] = KMI("BotFill", "OnlineDropFollow"); break;
+            case KMT_BOARDALL: v[0] = KMI("BotFill", "OnlineHost"); v[1] = KMI("BotFill", "OnlineTactics"); v[2] = KMI("BotFill", "OnlineBoardAll"); break;
+            case KMT_CREWHP:   { char b[32]; GetPrivateProfileStringA("Bots", "OnlineCrewHealth", "0", b, sizeof b, klh_ini); v[0] = (int)(atof(b) * 100.0 + 0.5); v[1] = KMI("Bots", "OnlineCrewHealthDry"); } break;   /* a factor like 1.5: GetPrivateProfileInt would read 1 */
+            case KMT_LOOKS:    v[0] = KMI("BotFill", "OnlineHost"); v[1] = KMI("BotFill", "OnlineLooks"); break;
+            case KMT_UNIQUE:   v[0] = KMI("CharOnline", "Enable"); v[1] = (int)GetPrivateProfileIntA("CharOnline", "Unique", 1, klh_ini); break;
             }
             st[i] = kmt_state(i, v, kl_online());      /* the shield row needs the online flag: online it works only with [Shield] Online */
         }

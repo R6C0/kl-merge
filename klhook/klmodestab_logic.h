@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-enum { KMT_TACTICS, KMT_DROPTAKE, KMT_DOORHOLD, KMT_BANK, KMT_VOICE, KMT_TRIGGERS, KMT_ESCORT, KMT_SHIELD, KMT_SWAP, KMT_CLOCK, KMT_N };
+enum { KMT_TACTICS, KMT_DROPTAKE, KMT_DOORHOLD, KMT_BANK, KMT_VOICE, KMT_TRIGGERS, KMT_ESCORT, KMT_SHIELD, KMT_SWAP, KMT_CLOCK, KMT_DROPFOLLOW, KMT_BOARDALL, KMT_CREWHP, KMT_LOOKS, KMT_UNIQUE, KMT_N };
 enum { KMT_OFF = 0, KMT_ON = 1, KMT_DRY = 2 };
 
 static const struct kmt_def {
@@ -31,6 +31,11 @@ static const struct kmt_def {
     { "HOSTAGE SHLD", "Hostage shield",     "[Shield] Online",                             "both",        "Grab a hostage as a shield; the hit is taken by the hostage. Arcade: [Shield] Enable=1 (the default). Online: [Shield] Online=1 (host)." },
     { "SHOP SWAP",    "Shop swap",          "[Shop] OnlineSwap",                           "online host", "Online: the Dead Men guns replace shop rows; needs [Shop] Enable=1 and ([ShopPage] Enable=1 or [Shop] OnlineSwapArm=1). Arcade uses [Shop] Swap with Enable=1, not this switch." },
     { "ROUND CLOCK",  "Round clock",        "[Lobby] TimeAuto",                            "online host", "The lobby's round time is set by itself (minutes)." },
+    { "DROP FOLLOW",  "Drop follow",        "[BotFill] OnlineDropFollow",                  "online host", "An AI heister whose loot stack drained follows the money to the drop that appeared near it. Needs Bot tactics; it takes the drop only with [BotFill] OnlineTacticsTake=2. Beyond Arcade (NOT Arcade)." },
+    { "BOARD ALL",    "Board all",          "[BotFill] OnlineBoardAll",                    "online host", "When the van waits, every living AI heister is sent aboard, as Arcade's idle heisters are. Needs Bot tactics." },
+    { "CREW HEALTH",  "Crew health",        "[Bots] OnlineCrewHealth",                     "online host", "AI heisters get a health factor (0.25..10; 0 or 1 = off, e.g. 1.5 = tougher). Beyond Arcade (NOT Arcade). Do not combine with [BotFill] OnlineBalance while [Balance] Tough is not 1." },
+    { "BOT LOOKS",    "Bot looks",          "[BotFill] OnlineLooks",                       "online host", "The host draws each AI heister a random Dead Men / Dog Days look as Arcade does and every player sees it. Needs the host switch (OnlineHost)." },
+    { "UNIQUE HERO",  "Unique heister",     "[CharOnline] Unique",                         "both",        "A heister character is worn by one player only per match. Needs [CharOnline] Enable=1; Unique defaults on." },
 };
 
 /* v[0..4] = the raw ini values of the module's own keys (kspg_m_state in klshoppage.c); 0 OFF, 1 ON, 2 DRY. Prerequisites are the ones the owning module checks (klbotfill.c, klshield.c, klshop.c) */
@@ -46,6 +51,11 @@ static int kmt_state(int id, const int *v, int online)
     case KMT_SHIELD:   return online ? (v[0] == 1 ? KMT_ON : v[0] == 2 ? KMT_DRY : KMT_OFF) : (v[1] ? KMT_ON : KMT_OFF);   /* v0 [Shield] Online, v1 [Shield] Enable (Arcade part, default 1); wk-modestab 1102 fix: online the shield works only with Online=1/2 (klshield.c: klsh.on = arc || online, but the Arcade gate is false online), so Enable=1 alone no longer reads ON there; offline only Enable counts. Enable is not required online (klshield.c keeps the part on with Online alone) */
     case KMT_SWAP:     return !v[1] || !v[2] ? KMT_OFF : kmt_mode12(v[0]);            /* v0 [Shop] OnlineSwap, v1 [Shop] Enable, v2 [ShopPage] Enable or [Shop] OnlineSwapArm (klshop.c:382) */
     case KMT_VOICE: case KMT_TRIGGERS: case KMT_ESCORT: return kmt_mode12(v[0]);      /* BOT VOICE = BotFill OnlineVoice only; [Voice] OnlineTalk is the human crew's banter (kltalk.c) */
+    case KMT_DROPFOLLOW: return v[0] && v[1] && v[2] ? KMT_ON : KMT_OFF;               /* v0 OnlineHost, v1 OnlineTactics, v2 OnlineDropFollow (klbotfill.c: klbf_df = klbf_ot && key) */
+    case KMT_BOARDALL: return !v[0] || !v[1] ? KMT_OFF : kmt_mode12(v[2]);              /* v0 OnlineHost, v1 OnlineTactics, v2 OnlineBoardAll (1 on, 2 dry) */
+    case KMT_CREWHP:   return v[0] >= 25 && v[0] <= 1000 && v[0] != 100 ? (v[1] ? KMT_DRY : KMT_ON) : KMT_OFF;   /* v0 = OnlineCrewHealth x 100 (klgrudge.c: 0.25..10, 1.0 = off), v1 OnlineCrewHealthDry (log only) */
+    case KMT_LOOKS:    return !v[0] ? KMT_OFF : kmt_mode12(v[1]);                       /* v0 OnlineHost, v1 OnlineLooks (1 apply, 2 log only); the Crew Random prerequisite is not shown here */
+    case KMT_UNIQUE:   return v[0] && v[1] ? KMT_ON : KMT_OFF;                          /* v0 [CharOnline] Enable, v1 Unique (default 1; klcharonline.c) */
     case KMT_CLOCK:    return v[0] >= 1 && v[0] <= 20 ? KMT_ON : KMT_OFF;           /* v0 TimeAuto minutes (kllobbyopt.c: 1..20 else 0; kllo_init has no enable key of its own) */
     }
     return KMT_OFF;
@@ -54,7 +64,7 @@ static int kmt_state(int id, const int *v, int online)
  * klshield.c Online (the host's own player), kllobbyopt.c TimeAuto (host only). SHOP SWAP acts on every seat's own shop, so it is not marked */
 static int kmt_host_only(int id)
 {
-    return id == KMT_TACTICS || id == KMT_DROPTAKE || id == KMT_DOORHOLD || id == KMT_BANK || id == KMT_VOICE || id == KMT_TRIGGERS || id == KMT_ESCORT || id == KMT_SHIELD || id == KMT_CLOCK;
+    return id == KMT_TACTICS || id == KMT_DROPTAKE || id == KMT_DOORHOLD || id == KMT_BANK || id == KMT_VOICE || id == KMT_TRIGGERS || id == KMT_ESCORT || id == KMT_SHIELD || id == KMT_CLOCK || id == KMT_DROPFOLLOW || id == KMT_BOARDALL || id == KMT_CREWHP || id == KMT_LOOKS;
 }
 static const char *kmt_state_name(int s) { return s == KMT_ON ? "ON" : s == KMT_DRY ? "DRY" : "OFF"; }
 

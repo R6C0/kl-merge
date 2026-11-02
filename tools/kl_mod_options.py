@@ -797,6 +797,31 @@ feat('crewhealthonline', G_EXP, 'Online host: AI heisters get 1.5x health (healt
      avoid=[('double count: [BotFill] OnlineBalance=1 already divides every hit on an online bot by [Balance] Tough (klbalance.c klr_bo.tough), so a bot would take Tough x OnlineCrewHealth bullets',
              [('BotFill', 'OnlineBalance', (0,)), ('Balance', 'Tough', (0, 1))])])
 
+# wk-auditrows-1102 (owner-asks audit "every feature a toggle, visible in the mod's options"): online keys the hook read that had no row. None has a graded PASS in
+# re/open_work_log.md, so all are recommended off until benched. The DLL defaults are unchanged (OnlineBotDown, OnlineFlop ... default 1 in the code).
+feat('downonline', G_EXP, 'Online matches: your own heister goes down and gets up as in Arcade (fall, mash get-up; others see the stock fall; needs the down row above; recommended off until benched)', 'off', 'start',
+     'kldown.c [Down] Online (master of the Online* keys below; role-2/3 own non-police player only); SHIP 1026f built it, UNBENCHED network claims; re/down_online_built.md', [('Down', 'Online', 1, 0, 0), ('Down', 'Enable', 1, None, 0)])
+feat('onlinebotdown', G_EXP, 'Online host: AI heisters go down and get up like Arcade\'s instead of dying (host only; needs AI heisters in the round; recommended off until benched)', 'off', 'start',
+     'klbotdown.c [Down] OnlineBotDown (OnlineBotDownDry=1 logs only); host only, calls a game function and writes health; client side GUESSED; the DLL default is 1; NOT benched', [('Down', 'OnlineBotDown', 1, 0, 1)])
+feat('onlinenofire', G_EXP, 'Online: no shooting or aiming while you are down, as in Arcade (needs the online down row; recommended off until benched)', 'off', 'start',
+     'kldown.c [Down] OnlineNoFire (the ini NoFire follows you online); the DLL default is 1; NOT benched', [('Down', 'OnlineNoFire', 1, 0, 1)])
+feat('onlineflop', G_EXP, 'Online: your own body plays the Dead Men belly-flop fall and sends the get-up, as in Arcade (needs the online down row; recommended off until benched)', 'off', 'start',
+     'kldown.c [Down] OnlineFlop (needs Flop=1 or 3); the pool [+0x78] may be shared (ReplicaProbe); the DLL default is 1; UNBENCHED', [('Down', 'OnlineFlop', 1, 0, 1)])
+feat('onlinefreefall', G_EXP, 'Online: the fall costs nothing, as in Arcade (needs the online down row; recommended off until benched)', 'off', 'start',
+     'kldown.c [Down] OnlineFreeFall (victim-side give-back, no table write); the DLL default is 1; UNBENCHED', [('Down', 'OnlineFreeFall', 1, 0, 1)])
+feat('onlinefactors', G_EXP, 'Online: police and crew hit you for the down factors while you are down, as in Arcade (needs the online down row; recommended off until benched)', 'off', 'start',
+     'kldown.c [Down] OnlineFactors (DownFromCop / DownFromCrew; victim-side give-back); the DLL default is 1; UNBENCHED', [('Down', 'OnlineFactors', 1, 0, 1)])
+feat('onlinemashspeed', G_EXP, 'Online: Arcade\'s get-up mash (presses count at once, the clip speeds up; needs the online down row; recommended off until benched)', 'off', 'start',
+     'kldown.c [Down] OnlineMashSpeed (0 = the MashHold meter instead); the DLL default is 1; UNBENCHED', [('Down', 'OnlineMashSpeed', 1, 0, 1)])
+feat('onlineprescale', G_EXP, 'Online: the down factors are applied before a hit lands, so a big hit is priced first (needs the factors or free-fall row; recommended off until benched)', 'off', 'start',
+     'kldown.c / klucc_down.c [Down] OnlinePreScale (the rules damage hook, slot 15); the DLL default is 1; UNBENCHED', [('Down', 'OnlinePreScale', 1, 0, 1)])
+feat('onlinebalancecops', G_EXP, 'Online host: with the Arcade balance factors, bots also scale the hits they deal to cops and guards (needs the balance row; beyond Arcade\'s table, NOT Arcade; recommended off until benched)', 'off', 'start',
+     'klbalance.c [BotFill] OnlineBalanceCops (private ZFFActor vtable for up to 128 cops, CrewToCop only); the DLL default is 1; NOT run live', [('BotFill', 'OnlineBalanceCops', 1, 0, 1)])
+feat('shieldreleasedown', G_DOWN, 'Human shield: when you let go, the hostage is floored (revivable) instead of dropped standing (needs the shield row; recommended off until benched)', 'off', 'start',
+     'klshield.c [Shield] ReleaseDown; the DLL default is 1; only an AI hostage; NOT benched on its own', [('Shield', 'ReleaseDown', 1, 0, 1), ('Shield', 'Enable', 1, None, 1)])
+feat('charunique', G_EXP, 'Online: each heister character is worn by one player only per match (needs Online heister select; recommended off until benched)', 'off', 'start',
+     'klcharonline.c [CharOnline] Unique (the DLL default is 1; the owner turned it on live 10-26, no graded PASS found); stage 3 of the expansion', [('CharOnline', 'Unique', 1, 0, 1)])
+
 BY_ID = {f['id']: f for f in F}
 assert len(BY_ID) == len(F) and all(f['rec'] in ('on', 'off') for f in F)      # every row is shown with '(recommended on|off)' (rec_text)
 

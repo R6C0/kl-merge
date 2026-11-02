@@ -46,6 +46,29 @@ int main(void)
     { int v[5] = { 7, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CLOCK, v, 0) == KMT_ON); }
     { int v[5] = { 25, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CLOCK, v, 0) == KMT_OFF); }          /* kllobbyopt.c: > 20 = off */
     { int v[5] = { 0, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CLOCK, v, 0) == KMT_OFF && kmt_state(99, v, 0) == KMT_OFF); }
+    /* DropFollow / BoardAll / CrewHealth / Looks / Unique (wk-auditrows-1102): same prerequisites as klbotfill.c, klgrudge.c, klcharonline.c */
+    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_DROPFOLLOW, v, 0) == KMT_ON); }
+    { int v[5] = { 1, 0, 1, 0, 0 }; CHECK(kmt_state(KMT_DROPFOLLOW, v, 0) == KMT_OFF); }       /* needs Tactics */
+    { int v[5] = { 0, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_DROPFOLLOW, v, 0) == KMT_OFF); }       /* needs OnlineHost */
+    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_DROPFOLLOW, v, 0) == KMT_OFF); }
+    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_BOARDALL, v, 0) == KMT_ON); }
+    { int v[5] = { 1, 1, 2, 0, 0 }; CHECK(kmt_state(KMT_BOARDALL, v, 0) == KMT_DRY); }          /* OnlineBoardAll=2 logs only */
+    { int v[5] = { 1, 0, 1, 0, 0 }; CHECK(kmt_state(KMT_BOARDALL, v, 0) == KMT_OFF); }
+    { int v[5] = { 0, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_BOARDALL, v, 0) == KMT_OFF); }
+    { int v[5] = { 150, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CREWHP, v, 0) == KMT_ON); }          /* x1.5 */
+    { int v[5] = { 150, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_CREWHP, v, 0) == KMT_DRY); }
+    { int v[5] = { 100, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CREWHP, v, 0) == KMT_OFF); }         /* 1.0 = off (klgrudge.c) */
+    { int v[5] = { 0, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_CREWHP, v, 0) == KMT_OFF); }           /* dry alone does nothing */
+    { int v[5] = { 24, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CREWHP, v, 0) == KMT_OFF); }          /* below 0.25 */
+    { int v[5] = { 1001, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CREWHP, v, 0) == KMT_OFF); }        /* above 10 */
+    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_LOOKS, v, 0) == KMT_ON); }
+    { int v[5] = { 1, 2, 0, 0, 0 }; CHECK(kmt_state(KMT_LOOKS, v, 0) == KMT_DRY); }
+    { int v[5] = { 0, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_LOOKS, v, 0) == KMT_OFF); }            /* needs OnlineHost */
+    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_UNIQUE, v, 0) == KMT_ON); }
+    { int v[5] = { 1, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_UNIQUE, v, 0) == KMT_OFF); }
+    { int v[5] = { 0, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_UNIQUE, v, 0) == KMT_OFF); }           /* [CharOnline] Enable=0 */
+    CHECK(kmt_host_only(KMT_DROPFOLLOW) && kmt_host_only(KMT_BOARDALL) && kmt_host_only(KMT_CREWHP) && kmt_host_only(KMT_LOOKS) && !kmt_host_only(KMT_UNIQUE));
+    CHECK(KMT_N <= 16);                                                                         /* the page holds 16 rows (klshoppage.c kspg_m_feat: rows 0..7 + 17..24) */
     {   /* the page cycle: 0 stock, 1 page II, 2 hire, 3 controls, 4 bots and modes. ModesTab off must equal the old 4-page cycle */
         int a1, a2, a3, cur, m;
         for (a1 = 0; a1 < 2; a1++) for (a2 = 0; a2 < 2; a2++) for (a3 = 0; a3 < 2; a3++) for (cur = 0; cur < 4; cur++) {
