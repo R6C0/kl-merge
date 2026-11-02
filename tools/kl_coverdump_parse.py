@@ -8,6 +8,8 @@ Offline parser for the [CoverDump] lines of KLHook.log (klhook/klcoverdump.c, 20
              --list (print every box, default prints only a summary + the boxes WITHOUT points + 12 samples)
     python kl_coverdump_parse.py <host KLHook.log> --compare <client KLHook.log>
              host vs client cover POINT lists of a two-seat run (2026-11-01 scheduled check-in, Q33_DM01 inst2's 29 asserts): the
+             LAST COMPLETE dump of each log (with [CoverDump] RoundEnd=1, 11-02, that is the points as the round ended: the load dump
+             of a seat can predate its car rings, SN2 DM03 - the 'dumps' lines say which dump of each log was read), the
              BUILT points (pos not 0 0 0) of each side, the common prefix, every index that differs, and the extra points of each
              side with their places. Exit 3 when the lists diverge. Why it matters: ZSoldier's cover index travels host -> client
              by VALUE (ObjDup CallMethod -> 0x581b40 -> 0x656740 sets [soldier+0xe8] = a 16-bit point index); a point the client
@@ -19,7 +21,7 @@ The footprint is the XZ bounding rectangle of the 8 world corners of that box (a
 point coordinates are in the same world frame as B.world, as the COVER8 'pos' lines assume). 'ours' = name contains '_K6_' (KL_CoverSix),
 everything else is 'stock' (includes the map's own native boxes).
 """
-import collections, math, os, re, sys
+import collections, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -28,22 +30,22 @@ RE_PT = re.compile(r'coverdump: pt (\d+)\b.*?pos (-?[\d.]+) (-?[\d.]+) (-?[\d.]+
 RE_REC = re.compile(r'coverdump: rec (\d+)\b')
 
 
-def read_dump(path):
-    """-> dict(head=[lines], points=[(i,x,y,z,nx,ny,nz)], recs=[line], near=[line], end=line) of the last dump."""
+def read_dumps(path):
+    """-> [dict(head=[lines], points=[(i,x,y,z,nx,ny,nz)], recs=[line], near=[line], end=line, kind='load'|'round end')] of EVERY dump
+    in the log, in log order ([] when there is none). A dump runs from its 'coverdump: begin' to the next one; 'end' is None when it was
+    cut short (the game ended mid-dump). kind 'round end' = the hook's [CoverDump] RoundEnd dump (points only, taken as the round ended)."""
     with open(path, 'r', errors='replace') as f:
         lines = f.read().splitlines()
-    start = None
-    for i, ln in enumerate(lines):
-        if 'coverdump: begin' in ln:
-            start = i
-    if start is None:
-        return None
-    d = dict(head=[], points=[], recs=[], near=[], end=None, other=[])
-    for ln in lines[start:]:
+    out = []
+    d = None
+    for ln in lines:
         if 'coverdump:' not in ln:
             continue
-        if 'coverdump: begin' in ln and ln is not lines[start]:
-            break
+        if 'coverdump: begin' in ln:
+            d = dict(head=[], points=[], recs=[], near=[], end=None, other=[], kind='round end' if 'ROUND END' in ln else 'load')
+            out.append(d)
+        if d is None:
+            continue
         m = RE_PT.search(ln)
         if m:
             d['points'].append((int(m.group(1)),) + tuple(float(m.group(k)) for k in range(2, 8)))
@@ -55,7 +57,34 @@ def read_dump(path):
             d['end'] = ln
         else:
             d['head'].append(ln)
-    return d
+    return out
+
+
+def pick_dump(dumps):
+    """The dump to read: the LAST COMPLETE one (it has an 'end' line; a round-end dump cut by the game's exit would otherwise show every
+    index it never reached as 'unbuilt' = false one-sided points), else the last one, else None."""
+    if not dumps:
+        return None
+    done = [d for d in dumps if d['end']]
+    return done[-1] if done else dumps[-1]
+
+
+def read_dump(path):
+    """-> the dump of pick_dump(read_dumps(path)): the last complete dump of the log (None without a 'coverdump: begin' line)."""
+    return pick_dump(read_dumps(path))
+
+
+def dump_label(d):
+    """'load 17:38:11 1371 pts' / 'round end 17:40:00 1371 pts (CUT SHORT)' for the dumps line of --compare."""
+    s = dump_secs(d)
+    t = '%02d:%02d:%02d' % (int(s) // 3600, int(s) % 3600 // 60, int(s) % 60) if s is not None else '??:??:??'
+    return '%s %s %d pts%s' % (d['kind'], t, len(d['points']), '' if d['end'] else ' (CUT SHORT)')
+
+
+def dumps_line(name, dumps, used):
+    """One line per log for --compare: every dump with its kind and time, and which one is compared."""
+    return '%s: %d dump(s): %s -> compared the %s' % (name, len(dumps), '; '.join(dump_label(d) for d in dumps),
+                                                         dump_label(used) if used is not None else 'none')
 
 
 def boxes_of(zp):
@@ -166,9 +195,6 @@ def skew_line(d1, d2, limit=SKEW_S):
 
 
 def main(argv):
-    a = [x for x in argv if not x.startswith('--')]
-    opt = {}
-    k = 0
     args = list(argv)
     zp = None
     cmp_log = None
@@ -191,12 +217,16 @@ def main(argv):
         print('no "coverdump: begin" line in %s' % pos[0])
         return 1
     if cmp_log:
-        d2 = read_dump(cmp_log)
+        ds1, ds2 = read_dumps(pos[0]), read_dumps(cmp_log)
+        d, d2 = pick_dump(ds1), pick_dump(ds2)
         if d2 is None:
             print('no "coverdump: begin" line in %s' % cmp_log)
             return 1
-        for name, dd in ((pos[0], d), (cmp_log, d2)):
+        for name, dd, ds in ((pos[0], d, ds1), (cmp_log, d2, ds2)):
+            print(dumps_line(name, ds, dd))
             print('%s: %s' % (name, dd['end'] or 'NO "coverdump: end" line (dump cut short?)'))
+        if d['kind'] != d2['kind']:
+            print('NOTE: a %s dump is compared with a %s dump: a seat whose round-end dump is missing (game ended mid-dump, RoundEnd off) is read at its load dump, which can predate the car rings' % (d['kind'], d2['kind']))
         r = compare(d, d2)
         print_compare(r)
         sk = skew_line(d, d2)

@@ -14,24 +14,30 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kl_coverdump_parse as P
 
 FAILS = []
+NCHECK = [0]
 
 
 def check(cond, what):
+    NCHECK[0] += 1
     print(('ok   ' if cond else 'FAIL ') + what)
     if not cond:
         FAILS.append(what)
 
 
-def log(points, stamp='17:38:11', blank_from=None, total=None, old_dump=False):
+def log(points, stamp='17:38:11', blank_from=None, total=None, old_dump=False, kind='load', cut=False, before=''):
     """A KLHook.log fragment with one coverdump (two when old_dump: an older, different one first, which must be ignored).
-    points = {index: (x, y, z)}; indices from blank_from to total-1 are written as unbuilt (pos 0 0 0, the fill in +34)."""
+    points = {index: (x, y, z)}; indices from blank_from to total-1 are written as unbuilt (pos 0 0 0, the fill in +34).
+    kind 'round end' writes the hook's RoundEnd begin line (11-02); cut=True leaves out the 'end' line (the game ended mid-dump);
+    before = an earlier log fragment to put in front (an earlier dump)."""
     total = total if total is not None else (max(points) + 1 if points else 0)
-    out = []
+    out = [before.rstrip('\n')] if before else []
     if old_dump:
         out += ['17:30:00.000 coverdump: begin gd=1 state=16 L=2 vtable=00bbece4 expected=00bbece4 VTABLE OK',
                 '17:30:00.001 coverdump: pt 0 pos 1.0 2.0 3.0 | +34 1.0 2.0 3.0 | 00000000 00000000',
                 '17:30:00.002 coverdump: end records=1 (lines 1) points=1 (lines 1, cached 1) dropped=0']
-    out.append('%s.300 coverdump: begin gd=28b18c20 state=19 L=36c809f0 vtable=00bbece4 expected=00bbece4 VTABLE OK' % stamp)
+    out.append('%s.300 coverdump: begin gd=28b18c20 state=1a L=36c809f0 vtable=00bbece4 expected=00bbece4 VTABLE OK ROUND END (points only: the list as the round ended, mid-round car rings included; RoundEnd=1)' % stamp
+               if kind == 'round end' else
+               '%s.300 coverdump: begin gd=28b18c20 state=19 L=36c809f0 vtable=00bbece4 expected=00bbece4 VTABLE OK' % stamp)
     out.append('%s.300 coverdump: list records base=39da4030 count=169 stride=0xa8 | points begin=37479020 end=374a2834 stride=0x7c count=%d | MaxRecords=2000 MaxPoints=6000' % (stamp, total))
     out.append("%s.317 coverdump: rec 0 36d17c20 00000000 00000100 00000000 00000000 00000000 00000001 00000001 00000000 00000000 00000000 00000000 | ent@+0x0=36d36870'CoverBoxH_K6_01'" % stamp)
     for i in range(total):
@@ -42,7 +48,8 @@ def log(points, stamp='17:38:11', blank_from=None, total=None, old_dump=False):
         else:
             out.append('%s.361 coverdump: pt %d pos 0.0 0.0 0.0 | +34 8345069056.000 -0.000 426409608812460769280.000 | 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 ee1b95c9' % (stamp, i))
     out.append('%s.385 coverdump: near t+5s me (1400.0 -13.0 30238.0) of %d points: #63 d=847.5 (2229.5 -15.0 30064.4) | #64 d=898.5' % (stamp, total))
-    out.append('%s.394 coverdump: end records=169 (lines 169) points=%d (lines %d, cached %d) dropped=0' % (stamp, total, total, total))
+    if not cut:
+        out.append('%s.394 coverdump: end records=169 (lines 169) points=%d (lines %d, cached %d) dropped=0' % (stamp, total, total, total))
     out.append('%s.400 session: state 0x19 (game mode 4)' % stamp)
     return '\n'.join(out) + '\n'
 
@@ -120,7 +127,34 @@ def main():
             rc = P.main([host, '--compare', write(tmp, 'empty.log', 'nothing here\n')])
         check(rc == 1, 'a compare log without a dump is exit 1 (got %d)' % rc)
 
-    print('RESULT: %s (%d checks, %d failed)' % ("PASS" if not FAILS else "FAIL", 16, len(FAILS)))
+        # 11-02 scheduled check-in: [CoverDump] RoundEnd dumps; the parser reads the last COMPLETE dump and names every dump
+        ds = P.read_dumps(host)
+        check(len(ds) == 2 and [x['kind'] for x in ds] == ['load', 'load'] and len(ds[0]['points']) == 1, 'read_dumps lists every dump in log order with its kind: %s' % [(x['kind'], len(x['points'])) for x in ds])
+        load_early = log(static, stamp='11:08:32', total=1371)                                   # SN2 DM03 host: load dump before its car #0 ring
+        rend_host = write(tmp, 'rend_host.log', log(host_pts, stamp='11:13:40', total=1371, kind='round end', before=load_early))
+        rend_client = write(tmp, 'rend_client.log', log(host_pts, stamp='11:13:41', total=1371, kind='round end', before=log(host_pts, stamp='11:08:40', total=1371)))
+        dr = P.read_dump(rend_host)
+        check(dr['kind'] == 'round end' and len(P.built_points(dr)) == 355, 'read_dump takes the complete ROUND END dump over the earlier load dump: %s / %d built' % (dr['kind'], len(P.built_points(dr))))
+        r6 = P.compare(dr, P.read_dump(rend_client))
+        check(not r6['diverge'], 'SN2 DM03 shape with RoundEnd on both seats: the round-end dumps agree (the host load dump alone lacked the ring): diverge %s' % r6['diverge'])
+        cut_log = write(tmp, 'cut.log', log(host_pts, stamp='11:13:40', total=1371, kind='round end', cut=True, before=load_early))
+        dcut = P.read_dump(cut_log)
+        check(dcut['kind'] == 'load' and dcut['end'] is not None and len(P.read_dumps(cut_log)) == 2, 'a round-end dump cut short by the exit is skipped for the last complete dump: kind %s' % dcut['kind'])
+        check(P.read_dump(write(tmp, 'onlycut.log', log(host_pts, kind='round end', cut=True))) is not None, 'a log whose only dump is cut short is still read (nothing better)')
+        check(P.dump_label(dr) == 'round end 11:13:40 1371 pts' and P.dump_label(P.read_dumps(cut_log)[1]).endswith('(CUT SHORT)'), 'dump labels: %s | %s' % (P.dump_label(dr), P.dump_label(P.read_dumps(cut_log)[1])))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = P.main([rend_host, '--compare', rend_client])
+        out = buf.getvalue()
+        check(rc == 0 and 'IDENTICAL' in out and '2 dump(s): load 11:08:32 1371 pts; round end 11:13:40 1371 pts -> compared the round end 11:13:40 1371 pts' in out,
+              '--compare prints the dumps of each log and which one it read (got %d)' % rc)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = P.main([cut_log, '--compare', rend_client])
+        out = buf.getvalue()
+        check('NOTE: a load dump is compared with a round end dump' in out and 'SKEW' in out, 'a load vs round-end compare gets the NOTE and the SKEW line (got %d)' % rc)
+
+    print('RESULT: %s (%d checks, %d failed)' % ("PASS" if not FAILS else "FAIL", NCHECK[0], len(FAILS)))
     return 0 if not FAILS else 1
 
 

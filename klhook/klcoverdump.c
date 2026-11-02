@@ -18,8 +18,11 @@
  * HOW MUCH: lines are queued by the dump state machine, 100 lines a tick (klog is one WriteFile a line), at most MaxRecords record lines and
  * MaxPoints point lines. Point positions are cached (up to KCVD_CACHE) for the 'near' lines: every 5 s for 60 s after the dump, the 3 points
  * nearest the local player (3D distance).
- * LINES (prefix 'coverdump:'): begin / list / dropped / map / rec / pt / end / near. The parser reads from the last 'coverdump: begin'.
+ * LINES (prefix 'coverdump:'): begin / list / dropped / map / rec / pt / end / near. The parser reads the last COMPLETE dump (begin .. end).
+ * ROUND END (RoundEnd=1, 2026-11-02): when the state leaves 0x19 after the load dump, the points are dumped again ('begin ... ROUND END', no rec / near
+ * lines), at most RoundEndMax (4) times a load: the car cover rings are built in place mid-round, so the load dump of a seat can predate them (SN2 DM03).
  * ini: [CoverDump] Enable=1 in the TEST build / 0 in SHIP (recommended on for test runs, off for players)  MaxPoints=6000  MaxRecords=2000
+ *       RoundEnd=1 (TEST) / 0 (SHIP) (recommended on for test runs, off for players)  RoundEndMax=4
  *       FullRecords=1 (TEST) / 0 (SHIP) (recommended on for test runs, off for players): stage 5, 'full' lines (below)
  *       Finder=1 (TEST) / 0 (SHIP) (recommended on for test runs, off for players): read-only emulation of the finder 0x797480, 'finder' lines
  *       FinderMax=400 (cap of finder lines per load)
@@ -56,6 +59,7 @@ static struct {
     DWORD last_rb, last_rn, last_pb, last_pe, last_tick;
     DWORD fmax, flines, t_find, t_flog, f_sig;
     int bad;
+    int rend, rend_n, rend_max, kind;                                /* [CoverDump] RoundEnd / RoundEndMax (scheduled check-in 11-02): kind 0 = the load dump, 1 = a ROUND END dump (points only) */
 } kcvd;
 static float kcvd_pos[KCVD_CACHE][3];
 static float kcvd_rpos[KCVD_RMAX][3];                  /* record place via its entity's scene node */
@@ -107,8 +111,10 @@ static void kcvd_hexdw(char *out, int cap, const DWORD *d, int n)
 static void kcvd_begin(void)
 {
     char h[400]; DWORD dw[12], i, vt = klh_rd32(kcvd.L), mp = klh_rd32(kcvd.L + 0x98);
-    klog("coverdump: begin gd=%08lx state=%lx L=%08lx vtable=%08lx expected=%08lx %s", (unsigned long)kcvd.gd, (unsigned long)kcvd.st, (unsigned long)kcvd.L,
-         (unsigned long)vt, (unsigned long)(DWORD_PTR)KLH_VA(KCVD_VT), vt == (DWORD)(DWORD_PTR)KLH_VA(KCVD_VT) ? "VTABLE OK" : "VTABLE MISMATCH (offsets are guesses!)");
+    klog("coverdump: begin gd=%08lx state=%lx L=%08lx vtable=%08lx expected=%08lx %s%s", (unsigned long)kcvd.gd, (unsigned long)kcvd.st, (unsigned long)kcvd.L,
+         (unsigned long)vt, (unsigned long)(DWORD_PTR)KLH_VA(KCVD_VT), vt == (DWORD)(DWORD_PTR)KLH_VA(KCVD_VT) ? "VTABLE OK" : "VTABLE MISMATCH (offsets are guesses!)",
+         kcvd.kind ? " ROUND END (points only: the list as the round ended, mid-round car rings included; RoundEnd=1)" : "");
+    if (kcvd.kind) klog("coverdump: round end dump %d of %d this load: the load dump above may predate the car rings (SN2 11-02: host dumped 11:08:32 before its car #0 ring, client 11:13:48 after -> a DIVERGE that was only time); compare the LAST dump of each seat", kcvd.rend_n, kcvd.rend_max);
     klog("coverdump: list records base=%08lx count=%lu stride=0xa8 | points begin=%08lx end=%08lx stride=0x7c count=%lu%s | MaxRecords=%lu MaxPoints=%lu",
          (unsigned long)kcvd.rb, (unsigned long)kcvd.rn, (unsigned long)kcvd.pb, (unsigned long)kcvd.pe, (unsigned long)kcvd.npt,
          (kcvd.pe - kcvd.pb) % 0x7c ? " (NOT a multiple of 0x7c!)" : "", (unsigned long)kcvd.maxr, (unsigned long)kcvd.maxp);
@@ -381,6 +387,25 @@ static void kcvd_rearm(DWORD gd, DWORD st)
     memset(kcvd_rok, 0, sizeof kcvd_rok); memset(kcvd_rname, 0, sizeof kcvd_rname); memset(kcvd_rcell, 0, sizeof kcvd_rcell);
     kcvd.flines = 0; kcvd.f_sig = 0; kcvd.t_flog = 0; kcvd.t_find = 0;
     kcvd.stage = 0; kcvd.stab_at = 0; kcvd.gd = gd; kcvd.st = st; kcvd.last_rn = 0; kcvd.i = 0; kcvd.near_n = 0;
+    kcvd.rend_n = 0; kcvd.kind = 0;
+}
+
+/* [CoverDump] RoundEnd=1 (scheduled check-in 2026-11-02; TEST default on, SHIP off): when the session state leaves 0x19 (the round ended; not 0x16 = a new load,
+   that is kcvd_rearm's case) and the load dump is done (stage 3 / 4), dump the POINTS again, at most RoundEndMax times per load. Why: the load dump is taken ~2 s
+   after the list settles at the round start; car cover rings (CoverRing) are built mid-round IN PLACE (SPARE points pos 0 -> built, the count does not change),
+   so a seat that dumped before its ring showed 'client-only' / 'host-only' points that were only time (SN2 DM03). Both seats see the round end within a second,
+   so their last dumps describe the same moment. Read-only like the rest of the file; the same guarded reads; records are not repeated (the boxes do not change
+   within a load). Returns 1 when a dump was started. */
+static int kcvd_round_end(DWORD prev, DWORD st, DWORD gd, DWORD now)
+{
+    DWORD L, rb, rn, pb, pe;
+    if (!kcvd.rend || prev != 0x19 || st == 0x19 || st == 0x16 || kcvd.stage < 3 || kcvd.rend_n >= kcvd.rend_max) return 0;
+    if (!kcvd_read_list(gd, &L, &rb, &rn, &pb, &pe) || !rn || rn > 100000u || !rb || pe < pb || pe - pb >= 0x4000000u) return 0;
+    kcvd.rend_n++; kcvd.kind = 1;
+    kcvd.L = L; kcvd.rb = rb; kcvd.rn = rn; kcvd.pb = pb; kcvd.pe = pe; kcvd.npt = (pe - pb) / 0x7c; kcvd.t_dump = now;
+    kcvd_begin();
+    kcvd.i = 0; kcvd.stage = 2;
+    return 1;
 }
 
 static void kcvd_tick(int game_thread)
@@ -393,6 +418,7 @@ static void kcvd_tick(int game_thread)
     __try {
         if (!kcvd_state(&gd, &st)) return;
         if (gd != kcvd.gd || (st == 0x16 && kcvd.st != 0x16)) kcvd_rearm(gd, st);      /* a new level load */
+        if (kcvd_round_end(kcvd.st, st, gd, now)) { kcvd.st = st; return; }           /* RoundEnd: the points again as the round ended (stage 2 next tick) */
         kcvd.st = st;
         switch (kcvd.stage) {
         case 0:
@@ -418,6 +444,7 @@ static void kcvd_tick(int game_thread)
                 klog("coverdump: end records=%lu (lines %lu) points=%lu (lines %lu, cached %lu) dropped=%lu", (unsigned long)kcvd.rn,
                      (unsigned long)(kcvd.rn < kcvd.maxr ? kcvd.rn : kcvd.maxr), (unsigned long)kcvd.npt, (unsigned long)(kcvd.npt < kcvd.maxp ? kcvd.npt : kcvd.maxp),
                      (unsigned long)lim, (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KCVD_DROPPED)));
+                if (kcvd.kind) { kcvd.kind = 0; kcvd.stage = 4; return; }       /* a ROUND END dump: no near lines, no full records, no second census */
                 kcvd.t_near = now; kcvd.near_n = 0; kcvd.stage = 3;
                 if (kcvd.full || kcvd.finder) kcvd_census(kcvd.L);
                 if (kcvd.full) { kcvd_full_begin(); kcvd.i = 0; kcvd.stage = 5; }
@@ -457,10 +484,12 @@ static void kcvd_init(void)
     kcvd.fmax = (DWORD)GetPrivateProfileIntA("CoverDump", "FinderMax", 400, klh_ini);
     kcvd.maxp = (DWORD)GetPrivateProfileIntA("CoverDump", "MaxPoints", 6000, klh_ini);
     kcvd.maxr = (DWORD)GetPrivateProfileIntA("CoverDump", "MaxRecords", 2000, klh_ini);
+    kcvd.rend = GetPrivateProfileIntA("CoverDump", "RoundEnd", def, klh_ini) != 0;                  /* (recommended on for test runs, off for players) */
+    kcvd.rend_max = GetPrivateProfileIntA("CoverDump", "RoundEndMax", 4, klh_ini); if (kcvd.rend_max < 0) kcvd.rend_max = 0; if (kcvd.rend_max > 20) kcvd.rend_max = 20;
     if (kcvd.maxp > KCVD_CACHE) kcvd.maxp = KCVD_CACHE;
     if (kcvd.maxr > 100000u) kcvd.maxr = 100000u;
-    if (kcvd.on) klog("coverdump: on (READ ONLY, recommended on for test runs, off for players): once per level load, records <= %lu, points <= %lu, FullRecords=%d Finder=%d (both recommended on for test runs, off for players) FinderMax=%lu",
-                                    (unsigned long)kcvd.maxr, (unsigned long)kcvd.maxp, kcvd.full, kcvd.finder, (unsigned long)kcvd.fmax);
+    if (kcvd.on) klog("coverdump: on (READ ONLY, recommended on for test runs, off for players): once per level load, records <= %lu, points <= %lu, FullRecords=%d Finder=%d (both recommended on for test runs, off for players) FinderMax=%lu, RoundEnd=%d (points again when a round ends, at most RoundEndMax=%d a load; recommended on for test runs, off for players)",
+                                    (unsigned long)kcvd.maxr, (unsigned long)kcvd.maxp, kcvd.full, kcvd.finder, (unsigned long)kcvd.fmax, kcvd.rend, kcvd.rend_max);
 }
 
 #endif

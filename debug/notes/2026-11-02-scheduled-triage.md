@@ -96,3 +96,52 @@ Until now the two 'do not combine' sentences lived in comments only (the ini, kl
 
 ## Owner
 - Nothing to install or decide. Still open from earlier notes: Medal-quit stutter round, MouseMoveMs=16, lenscrack INSTALL bat if wanted.
+
+# Scheduled check-in 2026-11-02 ~15:00 UTC (cloud; DD/DM attached by one access request)
+
+## PC state (read only; nothing launched, installed or staged into the game folder)
+- BUSY: `<DD>\dinput8.dll` written 15:00:04 UTC (the second this run started), ReShade logs 14:51-15:00; ce's solo bench dirs
+  `ES3B_DM03` 14:41, `CO3A_DD05` 14:50 (both seats RESULT PASS, F05), `CO3B_DD05` 14:59, `Q35_DD01` 15:02 (c9's 21-map pass running).
+  No game run, no install, no screen from here.
+- `KLHook.result` = the 10-27 PASS (F04); `KLHook.log` ends 10-27 20:50. Dumps: newest `KLHook_1.dmp` 10-26 08:11 and
+  `kl2_490_crash_2026_10_25T19_18_39C0.mdmp`, both older than their notes. Nothing to triage. `<DM>\KL_PortTools\build`: newest
+  `carcover_1101` (11-01 20:02); the live benches write under `build\klhook\solo\`.
+- Live `KLHook.ini` unchanged (11-01 13:25, md5 d829fe43). The bench inis' `HALF-ON: netsmooth` line in run.txt is the probe
+  ([NetSmooth] Enable=1 Log=1 Probe=1 without CamYaw) - the live ini has no [NetSmooth] section at all; not a ship concern.
+- Verification of head f2d8483 in the cloud (gcc-multilib + mingw installed): `kl_tests` 57 pass / 0 fail / 15 skip (klcensus_test and
+  klway_test new since 10:50); `run_harness_linux.sh --check-hook` SHIP + TEST 0 errors, the baseline warnings; kl_mod_options
+  `--check-defaults` / `--check-ini` / `--check-rec` / `--check-live` clean, test 77/77; pyflakes on the 2 .py changed since 10:50:
+  unused names only (removed in kl_coverdump_parse.py below).
+
+## Review (static, no crash shape found): ce's hook commits since 10:50
+1. `OnlineTriggersCensus` pointer set (f38a0d1 + b0b1cbd, klcensus_logic.h): 2 x 256 DWORDs of static storage, no allocation, `kcs_add`
+   bounds-checked (over flag, 'upper bound' in the line). Order in klbf_ot_run is walk -> klbf_trig_tick (arms with GetTickCount, copies
+   the walk's set as the base) -> klbf_cen_tick, so the +10 / +30 s tallies always come from a walk that ran with st != 0 against that
+   base; the arm tick itself tallies nothing (st was 0 during its walk) - correct. The `(LONG)(now - t0) < 0` guard covers the arm's
+   newer GetTickCount. Round reset clears cur / base / tally. Log only. Nothing to fix.
+2. `OnlineLateExitRoute` (878f968, klway_logic.h kwy_route_cm / kwy_late_s): pure arithmetic, clamped 400 s, never below the base,
+   `klbf_late_for` returns the plain OnlineLateExit when off / no exit / route unknown. Every `klbf_ot_late` use in the pick loop became
+   the per-bot `late_s` (doorhold clock clause, idle-van late clause, late exit, partial hold) - consistent. Design consequence worth
+   knowing for rt9: on a 370 s clock with a 310 m route, late_s ~258, so the idle-van clause (`left <= late_s + 20`) can send a stackless
+   bot to call the van from ~92 s into the round; ce's commit text already expects looting to end around t=112 s. Default off, NOT Arcade.
+3. `klbv_event(s, 1)` on the timed-parts grab (f2d8483): the same call the lump path makes; no new read or write.
+
+## Done (hook: TEST-default feature, read-only; parser + test): [CoverDump] RoundEnd
+c9's SN2 follow-up ("the compare should pair dumps by time, or dump again at round end"): the load dump is taken ~2 s after the list
+settles at the round start, and the car cover rings (CoverRing) are built mid-round IN PLACE (SPARE points pos 0 -> built, the count
+stays), so the host's one dump at 11:08:32 lacked car #0 and the compare said DIVERGE / client-only 8 for a difference that was only time.
+Pairing dumps by time cannot fix a log that holds one dump, so:
+- `klhook/klcoverdump.c`: `[CoverDump] RoundEnd=1` (TEST default on, SHIP off, like Enable) dumps the POINTS again when the session
+  state leaves 0x19 (not 0x16, that is the new-load re-arm) after the load dump finished, at most `RoundEndMax=4` times a load. The
+  begin line carries `ROUND END (points only ...)` plus one explanation line; no rec / near / full / finder repeat. Same `kcvd_read_list`
+  + guarded reads, no write, the existing __try. Both seats see the round end within a second, so their last dumps describe one moment.
+  `--check-hook` 0 errors. NOT RUN in the game: the next TEST dll build carries it; the first two-seat bench with it should show
+  `coverdump: begin ... ROUND END` on both seats at the round end and the compare read "the round end" dumps.
+- `tools/kl_coverdump_parse.py`: `read_dumps()` lists every dump of a log with its kind (load / round end) and time; `read_dump()` =
+  the last COMPLETE dump (a round-end dump cut by the game's exit would otherwise show every unreached index as unbuilt = false
+  one-sided points); `--compare` prints a `dumps` line per log naming which dump it read, and a NOTE when a load dump meets a
+  round-end dump. `kl_coverdump_parse_test.py` 29 checks (was 16): SN2 shape with RoundEnd on both seats = IDENTICAL, cut-short
+  fallback, labels, the compare lines.
+
+## Owner
+- Nothing to install or decide. Still open from earlier notes: Medal-quit stutter round, MouseMoveMs=16, lenscrack INSTALL bat if wanted.
