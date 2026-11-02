@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-02 ~23:45 - [c9] Pushed d2cfc187b: [Names] OnlineLobby (lobby list names the exact OnlineSet=9 pick, off) + brain review fixes;
+ce's PageQueue commits carried. 5eb1a50fb: 'Host: map set' row in Mod settings (Dog Days maps / Dead Men maps / Mixed random = OnlineSet 0/2/9),
+overlay built offline, owner INSTALL bat C:\kl_build_1024\hostmenu_1102 (not run, never seen in game). PAUSE_QUEUE set: owner present, no live runs.
+
 2026-11-02 ~23:05 - [scheduled] Arcade-brain plan (re/arcade_brain_online_1102.md) offline support: re/arcade_brain_shadow_1102.md.
 Critic item 1 CLOSED: [sm+0x5c] = game type, 4 online (live log 'game mode 4'), frame writes only [sm+0x54]:=0 + [G+0x54]:=shadow.
 NEW whole reads: Board RUN 0x82f970 (rules touches listed), traitor roll 0x43ffb0 (5/10/30/40 % by level, cap +0x338 < tuning+0x718),
