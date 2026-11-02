@@ -670,6 +670,8 @@ feat('remoteshot2d', G_AV, 'Online: other players\' gunshots close to you play f
      'klshot2d.c [Sound] RemoteShot2D (+ RemoteShot2DDist 1500, RemoteShot2DRoute); online only, Arcade untouched; 2 = log only; NOT run live', [('Sound', 'RemoteShot2D', 1, 0, 0)])
 feat('remoteshot2dlogany', G_AV, 'Online remote gunshots: log shots the 2D gate does not catch (bench; recommended off)', 'off', 'start',
      'klshot2d.c [Sound] RemoteShot2DLogAny: log only, needs RemoteShot2D; NOT run live', [('Sound', 'RemoteShot2DLogAny', 1, 0, 0)])
+feat('remoteshot2dgate', G_AV, 'Online remote gunshots: also count shots from the weapon-state code for the 2D rule (recommended off until benched)', 'off', 'start',
+     'klshot2d.c [Sound] RemoteShot2DGate (klshot2d_logic.h): 1 = 0x503650 callers 0x8c567b/0x8c56ea/0x8c5837 pass the gate too (GUESS); needs RemoteShot2D; NOT run live', [('Sound', 'RemoteShot2DGate', 1, 0, 0)])
 feat('crewhoponline', G_CREW, 'Online host: AI heisters cross places the navmesh cannot, as in Arcade (needs the AI heister rows above; recommended off)', 'off', 'start',
      'klhop.c [CrewHop] Online (1 on, 2 log only), OnlineStage; host only; NOT run live', [('CrewHop', 'Online', 1, 0, 0)])
 feat('cardownonline', G_DOWN, 'Online host: a car blast floors AI heisters and police (revivable) instead of killing them (recommended off)', 'off', 'start',

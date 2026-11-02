@@ -35,6 +35,7 @@
  * calls the original slot 74 and replays the 2D branch's post step on the returned handle (GUESS that the 3D branch's own later step, 0x867da0 with [obj+0x18], does not undo 2D-ness). */
 #ifndef KLSHOT2D_C
 #define KLSHOT2D_C
+#include "klshot2d_logic.h"   /* RemoteShot2DGate gate + the slot-74 counter (pure; klshot2d_test.c) */
 
 #define KLSS_3D_RET   0x00467eb8u              /* return of the slot-74 call inside 0x467e00 */
 #define KLSS_3D_OUTER 0x00902734u              /* return of `call 0x467e00` at 0x90272f */
@@ -47,6 +48,8 @@
 #define KLSS_PUSH_B   0x0050376bu              /* the `mov ecx,edi ; call 0x9025b0` both paths join */
 #define KLSS_FIRE_RET 0x004cca6du              /* return address of the call 0x4cca68 -> 0x503650 */
 
+static int klss_gate;                   /* [Sound] RemoteShot2DGate: 0 = only the fire routine 0x4cca6d (default), 1 = also the owner-state callers (ks2_gate_ok) */
+static ks2_ctr_t klss_ctr; static DWORD klss_ctr_t0, klss_slot74_total, klss_idle_t0;   /* RemoteShot2DLogAny: every slot-74 call counted by its return address, one line a second */
 static int klss_mode, klss_dist = 1500, klss_patched, klss_logany;   /* klss_logany: [Sound] RemoteShot2DLogAny */
 static DWORD klss_back_a, klss_back_b, klss_push_b, klss_fire_ret, klss_force;
 static LONG klss_n_fire, klss_n_remote, klss_n_force, klss_n_far, klss_n_fault, klss_logn;
@@ -66,7 +69,7 @@ static int __cdecl klss_decide(DWORD shooter, DWORD ret, int site)
     int r = 0;
     __try {
         DWORD gd, loc = 0; BYTE sel = 0xff; float a[3], b[3], d = 0; int ha, hb;
-        if (!klss_mode || ret != klss_fire_ret || !shooter) return 0;      /* only the fire path (0x4cca68) */
+        if (!klss_mode || !ks2_gate_ok(klss_gate, (unsigned long)ret) || !shooter) return 0;      /* only the fire path (0x4cca68) */
         InterlockedIncrement(&klss_n_fire);
         if (!kl_online()) return 0;                                         /* Arcade / story / no session: untouched */
         gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c));
@@ -157,22 +160,52 @@ typedef void (__fastcall *klss_fill_t)(void *blk, void *edx);
 typedef DWORD (__fastcall *klss_head_t)(void *obj, void *edx);
 typedef DWORD (__fastcall *klss_find_t)(void *sys, void *edx, DWORD handle);
 
+/* RemoteShot2DLogAny: count EVERY slot-74 call (any sound the game plays through the wrapper) by sp[0] = the immediate return address; once a second one line
+   "shot2d: slot74: N calls in T ms, 3D-branch D, from 0x503650 F, callers ret=count ... | decide: fire/remote/2D/far | kl_online mode gate". Read-only, no game state changes.
+   Stack words are read inside klss_vt_pre's __try (a fault = the call goes through unchanged). Offsets are the same GUESSed layout as the shot recognition below. */
+static void klss_count74(DWORD *sp)
+{
+    int is3d = sp[0] == KLSS_3D_RET && sp[0x2c / 4] == KLSS_3D_OUTER, is503 = is3d && sp[0x88 / 4] == KLSS_9025_FROM503;
+    DWORD now = GetTickCount();
+    ks2_ctr_add(&klss_ctr, sp[0], is3d, is503);
+    klss_slot74_total++;
+    if (is503) {   /* the first 6 distinct return addresses of 0x503650 that reach the sound system: tells whether a remote shot arrives from the fire routine or from another caller */
+        static DWORD seen503[6]; static int n503; int i, dup = 0;
+        for (i = 0; i < n503; i++) if (seen503[i] == sp[0xa0 / 4]) dup = 1;
+        if (!dup && n503 < 6) {
+            seen503[n503++] = sp[0xa0 / 4];
+            klog("shot2d: slot74: 0x9025b0 called from 0x503650: slot %lu flag %lu shooter %08lx, 0x503650 returns to %08lx (gate=%d; the fire routine is %08lx) kl_online=%d",
+                 (unsigned long)sp[0x8c / 4], (unsigned long)(sp[0x90 / 4] & 0xff), (unsigned long)sp[0x94 / 4], (unsigned long)sp[0xa0 / 4], klss_gate, (unsigned long)KS2_RET_FIRE, kl_online());
+        }
+    }
+    if (!klss_ctr_t0) klss_ctr_t0 = now;
+    if (ks2_ctr_due(&klss_ctr, now, klss_ctr_t0)) {
+        char b[200]; int i, n = 0;
+        for (i = 0; i < klss_ctr.n && n < 170; i++) { int w = _snprintf(b + n, sizeof b - n - 1, " %08lx=%lu", klss_ctr.ret[i], klss_ctr.cnt[i]); if (w < 0) break; n += w; }
+        b[n < (int)sizeof b ? n : (int)sizeof b - 1] = 0;
+        klog("shot2d: slot74: %lu calls in %lu ms (total %lu), 3D-branch %lu, from 0x503650 %lu, callers%s%s | decide: fire %ld remote %ld 2D %ld far %ld | kl_online=%d mode=%d gate=%d",
+             klss_ctr.calls, (unsigned long)(now - klss_ctr_t0), (unsigned long)klss_slot74_total, klss_ctr.d3, klss_ctr.from503, b, klss_ctr.other ? " +more" : "",
+             (long)klss_n_fire, (long)klss_n_remote, (long)klss_n_force, (long)klss_n_far, kl_online(), klss_mode, klss_gate);
+        ks2_ctr_reset(&klss_ctr); klss_ctr_t0 = now;
+    }
+}
 /* 1 = a1 / a3 / a4 at sp[1], sp[3], sp[4] were rewritten to the 2D branch's values */
 static int __cdecl klss_vt_pre(DWORD *sp, DWORD self)
 {
     int r = 0;
     __try {
         DWORD shooter, weapon; float k = 0;
+        if (klss_logany) klss_count74(sp);                                                    /* every call, before any filter */
         if (!klss_mode || sp[0] != KLSS_3D_RET || sp[0x2c / 4] != KLSS_3D_OUTER) return 0;      /* not the 3D branch of 0x9025b0 */
-        if (klss_logany && sp[0x8c / 4] == 4 && (sp[0xa0 / 4] != klss_fire_ret || sp[0x88 / 4] != KLSS_9025_FROM503)) {   /* [Sound] RemoteShot2DLogAny (log only): a slot-4 3D shot the gate does not accept (other caller word OR other 0x9025b0 caller); first 8 distinct (caller, from) pairs. Before the FROM503 return: review 10-28 */
+        if (klss_logany && sp[0x8c / 4] == 4 && (!ks2_gate_ok(klss_gate, sp[0xa0 / 4]) || sp[0x88 / 4] != KLSS_9025_FROM503)) {   /* [Sound] RemoteShot2DLogAny (log only): a slot-4 3D shot the gate does not accept (other caller word OR other 0x9025b0 caller); first 8 distinct (caller, from) pairs. Before the FROM503 return: review 10-28 */
             static DWORD seen[8][2]; static int ns; int i, dup = 0;
             for (i = 0; i < ns; i++) if (seen[i][0] == sp[0xa0 / 4] && seen[i][1] == sp[0x88 / 4]) dup = 1;
             if (!dup && ns < 8) { seen[ns][0] = sp[0xa0 / 4]; seen[ns][1] = sp[0x88 / 4]; ns++; klog("shot2d: LogAny: slot-4 3D play from caller %08lx, 0x9025b0 called from %08lx (the gate wants %08lx / %08lx) shooter %08lx weapon %08lx flag %lu: if this is a remote player's shot the gate misses it (GUESS: caller word at sp[0xa0])", (unsigned long)sp[0xa0 / 4], (unsigned long)sp[0x88 / 4], (unsigned long)klss_fire_ret, (unsigned long)KLSS_9025_FROM503, (unsigned long)sp[0x94 / 4], (unsigned long)sp[0x98 / 4], (unsigned long)(sp[0x90 / 4] & 0xff)); }
         }
         if (sp[0x88 / 4] != KLSS_9025_FROM503) return 0;                                      /* 0x9025b0 from the npc path or another caller */
         shooter = sp[0x94 / 4]; weapon = sp[0x98 / 4];
-        if (sp[0x8c / 4] != 4 || (sp[0x90 / 4] & 0xff) != 0 || sp[0xa0 / 4] != klss_fire_ret || sp[0x50 / 4] != shooter || sp[0x54 / 4] != weapon || !shooter) {
-            if (sp[0x8c / 4] == 4 && sp[0xa0 / 4] == klss_fire_ret && InterlockedIncrement(&klss_n_stack_bad) <= 5)
+        if (sp[0x8c / 4] != 4 || (sp[0x90 / 4] & 0xff) != 0 || !ks2_gate_ok(klss_gate, sp[0xa0 / 4]) || sp[0x50 / 4] != shooter || sp[0x54 / 4] != weapon || !shooter) {
+            if (sp[0x8c / 4] == 4 && ks2_gate_ok(klss_gate, sp[0xa0 / 4]) && InterlockedIncrement(&klss_n_stack_bad) <= 5)
                 klog("shot2d: vtable route: slot-4 3D play from the fire path but the stack does not match (slot %lu flag %lu shooter %08lx/%08lx weapon %08lx/%08lx); not touched", (unsigned long)sp[0x8c / 4], (unsigned long)sp[0x90 / 4], (unsigned long)shooter, (unsigned long)sp[0x50 / 4], (unsigned long)weapon, (unsigned long)sp[0x54 / 4]);
             return 0;
         }
@@ -242,6 +275,12 @@ static void klss_tick(int game_thread)
     DWORD gd, obj, vp; static DWORD t_last, klss_bad, klss_n; DWORD now = GetTickCount();
     if (!klss_route_vt || !game_thread || now - t_last < 500) return;
     t_last = now;
+    if (klss_logany && now - klss_idle_t0 >= 10000) {      /* RemoteShot2DLogAny: proof of silence - total slot-74 calls so far (0 = the wrapper is never called) */
+        klss_idle_t0 = now;
+        klog("shot2d: slot74: total %lu calls so far (vptr %s) | decide: fire %ld remote %ld 2D %ld far %ld | kl_online=%d", (unsigned long)klss_slot74_total,
+             (gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd2640))) && (obj = klh_rd32(gd + 0xb00)) && klh_rd32(obj) == (DWORD)(DWORD_PTR)klss_vt ? "private" : "NOT private",
+             (long)klss_n_fire, (long)klss_n_remote, (long)klss_n_force, (long)klss_n_far, kl_online());
+    }
     /* the vptr is read every tick, not only when the object address changes: a rebuilt sound system can land on the
        same heap address with the stock vptr again (review 10-28); klss_obj / klss_bad only rate-limit the log lines */
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd2640))) || !(obj = klh_rd32(gd + 0xb00))) return;
@@ -271,6 +310,7 @@ static void klss_init(void)
     BYTE put[5]; DWORD rel; int okA, okB;
     klss_mode = (int)GetPrivateProfileIntA("Sound", "RemoteShot2D", 0, klh_ini); if (klss_mode < 0 || klss_mode > 2) klss_mode = 0;      /* (recommended off: not yet run live) */
     klss_dist = (int)GetPrivateProfileIntA("Sound", "RemoteShot2DDist", 1500, klh_ini); if (klss_dist < 0) klss_dist = 0; if (klss_dist > 1000000) klss_dist = 1000000;
+    klss_gate = (int)GetPrivateProfileIntA("Sound", "RemoteShot2DGate", 0, klh_ini); if (klss_gate < 0 || klss_gate > 1) klss_gate = 0;   /* (recommended off until benched) 1 = the owner-state callers of 0x503650 count as shots too (GUESS) */
     klss_logany = klss_mode && GetPrivateProfileIntA("Sound", "RemoteShot2DLogAny", 0, klh_ini) != 0;   /* (recommended off) log only, vtable route; needs RemoteShot2D=1|2 */
     if (klss_logany) klog("shot2d: RemoteShot2DLogAny=1 (log only, NOT run live): the first 8 distinct callers of non-fire-path slot-4 3D shots are logged by the vtable route");
     if (!klss_mode) return;
