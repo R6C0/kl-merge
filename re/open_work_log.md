@@ -1,3 +1,8 @@
+2026-11-02 ~12:45 - [c9] Candidate + ce audit: ship_next/KLHook_next.ini gains the 6 verified ADD keys ([Shop] OnlineSwap/OnlineSwapArm, [BotFill]
+OnlineVanPosSane/OnlineTriggerOriginSkip, [Keys] ModesTab/RoundHints); HOLD list stays out. Finding: kl_solo_test never stages KLShopPage.ini, so SN2/G2B
+ran with [ShopPage] effectively off ('no pairs'). Q35 (all 21 maps, two seats, candidate as is) stages it per seat; chained after ce's co3:
+sh C:/kl_build_1024/c9_1028/q35/run_q35.sh. No crash involved.
+
 2026-11-02 ~12:25 - [ce] CO2 SAFE, NOT EXERCISED: DD05 both rows 0 asserts/faults, but the tele ran before state 0x19 (REFUSED), ents 'Cop' found only
 helicopter props and the goto stalled 4300-5000 units short, so no YOU HOLD; kit co3 (wait for 0x19, real cop places) being staged. ES2 SAFE, FEATURE FAIL: still
 '8 human(s), 0 dropped', because the bots' pos[] is the lagging +0x460 while the table feet are node feet. Fix ccc030f83 (entity identity + bot node feet), kit es3 queued after vb1.
