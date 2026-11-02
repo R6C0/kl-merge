@@ -25,7 +25,8 @@ because Arcade bots die on the way to the van. Existing key `OnlineTacticsCarry`
 | +128 | bot 2 BOARDED (van state 3), bot 0 at +131, bot 1 at +133; bots 3-6 at +133 via OnlineExitCrowd |
 | +133..+273 | no bot has any order: 140 s of round clock with 44 stacks armed. Round summary 03:56:11: 14 stacks, $1.54M, 7 boarded, 0 given up |
 
-DH1B (control, doors mostly shut): stacks trickle in 20 -> 8 armed, still 14 GRABBED; DH1C (hold 120 s): 14 GRABBED, $1.14M (some partial stacks).
+DH1B (control, doors mostly shut): stacks trickle in 20 -> 8 armed, still 14 GRABBED, every bot exactly 2 grabs (n1, n2), 4 give-ups ("did not reach stack"), 7 boarded, $1.54M;
+DH1C (hold 120 s): 14 GRABBED, again every bot exactly 2, but only 5 bots boarded (5 given orders, 5 give-ups), $1.14M (tallies 254000/230000 on two bots = partial/odd stacks). So 14 = 7 x 2 holds in all three runs; "7 boarded, 0 deaths" is DH1A only.
 In all three the loot ends when the 14th grab is done, regardless of what the doors did. That is why OnlineDoorHold armed 58 stacks and the total did not move.
 
 Code: after `grabs >= klbf_ot_carry` the bot takes the phase 2 branch (`else if ((tally > 0 || idleVan) && !holdExit)`, l.2162) -> phase 3 = boarded,
@@ -41,7 +42,7 @@ default 2, ini comment "(recommended 2)" and no re/*.md that I grepped gives a r
 | +33..+61 | first take +33, last take +61: all 58 stacks emptied (peak AI record money 7.46M incl. drops) |
 | +58..+67 | stage 1 -> 2 (left with loot), money per bot: 710k, 872k, 922k, 1058k, 1120k, 1200k (about 6-11 stacks each) |
 | +79, +85, +108, +141, +191, +224 | 6 bots DEAD, their money 0 |
-| +204 | bot 4 (1.882M) calls the van; boarded +318 |
+| +204 | bot 4 calls the van with 1.882M; boarded +318. Its own take was 922k at +61, so about 960k of that is loot picked up from the dead bots' drops, not its own grabs |
 | end (+382) | 1 boarded, banked $1.882M |
 
 So Arcade bots have no 2-stack limit: they empty the whole vault in 28 s, each carrying about 1M. The Arcade result is then decided by survival, not by loot.
@@ -64,11 +65,11 @@ on this walk, so with a higher carry they would bank much more than Arcade did. 
 
 - Not already matching: the online carried amount per bot is a fifth of Arcade's. If the target is "banked total near Arcade's", the 1.54M is already
   inside the Arcade range of one run; if the target is Arcade's pickup behaviour (the vault gets emptied, the money is visible gone from the loot bar), it is not met.
-- Closing key (existing, default left at 2): `[BotFill] OnlineTacticsCarry=6` (or up to 8). Prediction (not run): 7 bots x 6 x 110k = 4.6M carried, the
-  44-58 stacks last about 8 more grabs per bot at 4 s each, so the vault would be empty near +80 s, walk 63 s, boards near +150 s, inside the 273 s round.
+- Closing key (existing, default left at 2): `[BotFill] OnlineTacticsCarry=6` (or up to 8). Prediction (not run): Carry 6 = 7 bots x 6 x 110k = 4.6M carried; Carry 8 = about 6.2M, the
+  vault holds 58 stacks (44 left after the first 14); Carry 6 takes 42 (leaves 16), only Carry 8 takes 56 of 58 (Carry 9 all). At about 4 s per grab the vault would be (near) empty by about +80 s at Carry 8, walk 63 s, boards near +150 s, inside the 273 s round.
   Risks to check in a bench: (a) the 63 s walk with 6 grabs of mixed distance may overrun the stall clocks (OnlineVanGatherSmart margin 60 s, late rules);
   (b) a big bank is higher than Arcade's expected survivors, so the owner may want a death-rate or a cap that keeps the total near Arcade's
   median instead (a new key would then be `OnlineTacticsBankCap`, default 0, a ceiling on credited tally; NOT proposed until the owner says which target counts).
-- Suggested bench (next step, needs the game): DH1D = DH1A with `OnlineTacticsCarry=6`, same pair, then DH1E with 8. PASS: GRABBED lines > 14 per round, boarded 7,
+- Suggested bench (next step, needs the game): DH1D = DH1A with `OnlineTacticsCarry=8` first (the value that nearly empties the vault, 56 of 58 stacks, like Arcade), then DH1E with 6 for a middle point. PASS: GRABBED lines > 14 per round, boarded 7,
   asserts/faults 0, van called before clock left 60 s. Compare against Arcade ARC1 again (a second Arcade DD01 run would tighten the 1.88M sample).
 - The cap is a global constant (Carry 2 for every map), not a DD01 fault; other maps were not checked here.
