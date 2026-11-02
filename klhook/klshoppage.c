@@ -1568,38 +1568,58 @@ static void kspg_hire_tick(void)
  * Max 200 lines per shop stay (counter reset when the weapon list closes). */
 static void kspg_hlp_tick(void)
 {
-    static DWORD sel, lastScan, t0; static int lh = -99, ls = -99, n, up, over;
+    /* 11-02 static RE (kl2.exe): the class 0xbbd494 DOES keep the highlight at [this+0x90] (DOWN 0x879570: inc [esi+0x90]; 0x7d2e94 copies it to 0x154d80c in mode 2),
+     * but the game builds SEVERAL instances of this class (one per FABuyWeaponsNew page) and the first one found sat in slot-select state (-6 = 0xfffffffa) the whole time.
+     * So: keep every instance (max 6), hl = the instance whose +0x90 equals the shown row, else the first with +0x90 >= 0 (GUESS: the live page is the one holding a row index),
+     * hl90 = the old read ([first instance+0x90]), all = every instance's +0x90, g7d4 = global 0x154d7d4 (copy of +0x90 made at 0x53458b). */
+    static DWORD sel[6], lastScan, t0; static int nsel, lh = -99, ls = -99, lh90 = -99, lall = -99, n, up, over, said;
     DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), now = GetTickCount();
     __try {
         DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION));
         if (mode != 2 || !sm || klh_rd32(sm + 0x5c) != 4) {
             if (up && over) klog("shopprobe: shop closed, %d further changes not logged (cap 200)", over);
-            up = 0; sel = 0; lh = ls = -99; n = 0; over = 0; return;
+            up = 0; nsel = 0; lh = ls = lh90 = lall = -99; n = 0; over = 0; said = 0; return;
         }
-        if (!up) { up = 1; t0 = now; lh = ls = -99; n = 0; over = 0; }
-        if (sel) {                                           /* still the selector? (vtable stock or ours) */
-            DWORD vt = klh_rd32(sel);
-            if (vt != (DWORD)(DWORD_PTR)KLH_VA(0x00bbd494) && !(kspg_tab[3].n && vt == (DWORD)(DWORD_PTR)&kspg_tab[3].vt[1])) sel = 0;
-        }
-        if (!sel && now - lastScan > 500) {
+        if (!up) { up = 1; t0 = now; lh = ls = lh90 = lall = -99; n = 0; over = 0; }
+        { int k2, w2 = 0;                                    /* still selectors? (vtable stock or ours) */
+          for (k2 = 0; k2 < nsel; k2++) {
+              DWORD vt = klh_rd32(sel[k2]);
+              if (vt == (DWORD)(DWORD_PTR)KLH_VA(0x00bbd494) || (kspg_tab[3].n && vt == (DWORD)(DWORD_PTR)&kspg_tab[3].vt[1])) sel[w2++] = sel[k2];
+          }
+          nsel = w2; }
+        if (now - lastScan > 500) {
             DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c)), mgr = gd ? klh_rd32(gd + 0x824) : 0, cnt, k; static struct { DWORD obj, kind; } tab[0x13e8];
             lastScan = now;
             if (mgr && klh_rd32(mgr) == (DWORD)(DWORD_PTR)KLH_VA(0x00bb7dc8) && (cnt = klh_rd32(mgr + 0x9f48)) <= 0x13e8 && klh_rd(mgr + 8, tab, 8 * (SIZE_T)cnt)) {
                 for (k = 0; k < cnt; k++) {
-                    DWORD vt;
+                    DWORD vt; int j, have = 0;
                     if (tab[k].kind || tab[k].obj < 0x10000 || !(vt = klh_rd32(tab[k].obj))) continue;
-                    if (vt == (DWORD)(DWORD_PTR)KLH_VA(0x00bbd494) || (kspg_tab[3].n && vt == (DWORD)(DWORD_PTR)&kspg_tab[3].vt[1])) { sel = tab[k].obj; klog("shopprobe: selector %08lx found (%s)", sel, kl_online() ? "online" : "arcade"); break; }
+                    if (vt == (DWORD)(DWORD_PTR)KLH_VA(0x00bbd494) || (kspg_tab[3].n && vt == (DWORD)(DWORD_PTR)&kspg_tab[3].vt[1])) {
+                        for (j = 0; j < nsel; j++) if (sel[j] == tab[k].obj) have = 1;
+                        if (!have && nsel < 6) { sel[nsel++] = tab[k].obj; klog("shopprobe: selector #%d %08lx found (%s)", nsel, tab[k].obj, kl_online() ? "online" : "arcade"); }
+                    }
                 }
             }
         }
-        if (sel) {
-            int hl = (int)klh_rd32((DWORD_PTR)sel + 0x90), sh = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW));
-            if (hl != lh || sh != ls) {
-                lh = hl; ls = sh;
-                if (n < 200) { n++; klog("shopprobe: t=%lu hl=%d shown=%d mode=%s", (unsigned long)(now - t0), hl, sh, kl_online() ? "online" : "arcade"); } else over++;
+        if (nsel) {
+            int sh = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), hl90 = (int)klh_rd32((DWORD_PTR)sel[0] + 0x90), hl = hl90, k2, pick = -1, all = 0;
+            for (k2 = 0; k2 < nsel; k2++) {
+                int v = (int)klh_rd32((DWORD_PTR)sel[k2] + 0x90);
+                all = all * 31 + v;
+                if (pick < 0 && v == sh) pick = k2;
+            }
+            if (pick < 0) for (k2 = 0; k2 < nsel; k2++) if ((int)klh_rd32((DWORD_PTR)sel[k2] + 0x90) >= 0) { pick = k2; break; }
+            if (pick >= 0) hl = (int)klh_rd32((DWORD_PTR)sel[pick] + 0x90);
+            if (hl != lh || sh != ls || hl90 != lh90 || all != lall) {
+                char al[96]; int p = 0;
+                lh = hl; ls = sh; lh90 = hl90; lall = all;
+                for (k2 = 0; k2 < nsel && p < 80; k2++) p += wsprintfA(al + p, "%s%d", k2 ? "," : "", (int)klh_rd32((DWORD_PTR)sel[k2] + 0x90));
+                al[p] = 0;
+                if (n < 200) { n++; klog("shopprobe: t=%lu hl=%d shown=%d hl90=%d all=%s g7d4=%d mode=%s", (unsigned long)(now - t0), hl, sh, hl90, al,
+                                         (int)klh_rd32((DWORD_PTR)KLH_VA(0x0154d7d4)), kl_online() ? "online" : "arcade"); } else over++;
             }
         }
-    } __except (1) { sel = 0; }
+    } __except (1) { nsel = 0; }
 }
 
 static void klshoppage_tick(int game_thread)
