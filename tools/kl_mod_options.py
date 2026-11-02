@@ -783,6 +783,8 @@ feat('cardownonline', G_DOWN, 'Online host: a car blast floors AI heisters and p
      'klcardown.c [CarDown] Online (1 on, 2 log only); host only, no human part; NOT run live', [('CarDown', 'Online', 1, 0, 0)])
 feat('shieldonline', G_DOWN, 'Online host: the human shield covers the host and floors the hostage (revivable), as in Arcade (recommended off until benched)', 'off', 'start',
      'klshield.c [Shield] Online (1 on, 2 log only), klshield_logic.h; host only, the host own player only; offsets GUESSED; NOT run live', [('Shield', 'Online', 1, 0, 0)])
+feat('crewhealthonline', G_EXP, 'Online host: AI heisters get 1.5x health (health object maximum, same share), going beyond Arcade where CrewHealth is off by default (NOT Arcade; recommended off until benched)', 'off', 'start',
+     'klgrudge.c [Bots] OnlineCrewHealth=<factor> (OnlineCrewHealthDry=1 logs only); host only, data writes; hit authority for clients GUESSED; NOT run live', [('Bots', 'OnlineCrewHealth', 1.5, 0, 0)])
 
 BY_ID = {f['id']: f for f in F}
 assert len(BY_ID) == len(F) and all(f['rec'] in ('on', 'off') for f in F)      # every row is shown with '(recommended on|off)' (rec_text)

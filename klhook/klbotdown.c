@@ -373,11 +373,11 @@ static int klbd_online_snap(struct klb_snap *sn, char why[200])
 /* wk-arcmods-1028: the same pseudo-record view for OTHER hook parts (klhop.c who 0, klcardown.c who 1), with a slot table of their own so
    [Down] OnlineBotDown being off (which drops klbd_o) cannot move their record numbers. -> 1 host in a round with *sn filled (sn->n may be 0), 0 not
    the host / not a round (the caller drops its round state), -1 a transient unreadable settings object (the caller returns, changes nothing). Read-only: the census once a second. Host only: a client never runs it. */
-static struct klbd_ov klbd_ovs[3];
+static struct klbd_ov klbd_ovs[4];
 static int klbd_online_view(int who, struct klb_snap *sn, char why[200])
 {
     DWORD rules = 0, state = 0; int h;
-    if (who < 0 || who > 2) return 0;
+    if (who < 0 || who > 3) return 0;
     h = KLBD_ONLINE_HOST(&rules, &state);
     if (h < 0) return -1;                    /* review 10-28: a transient (settings unreadable) keeps the slot table, as klbd_online_snap; the caller changes nothing */
     if (h == 0 || state != KLBD_ROUND) { if (klbd_ovs[who].at) memset(&klbd_ovs[who], 0, sizeof klbd_ovs[who]); return 0; }

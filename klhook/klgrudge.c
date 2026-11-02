@@ -246,19 +246,18 @@ static void kly_undo_all(DWORD rules, DWORD score)
 }
 
 /* 3 a / 3 b: the bot's maximum health. act = the hook acts on this level. */
-static void kly_health(const struct klb_rec *r, struct kly_bot *b, int i, int act)
+static void kly_health2(const struct klb_rec *r, struct kly_bot *b, int i, int act, float crew, float bs_health, float tf)
 {
     float raw[0x28 / 4], cur, max, wmax, wcur, f = 1; DWORD h;
-    float tf = act ? kltt_hp(i) : 1.0f;                       /* kltrait.c: Health / DamageIn of the character he wears (1.0 = none) */
-    if (kly.crew <= 0 && kly.bs_health <= 0 && b->hwrote == 0 && tf == 1.0f) return;
+    if (crew <= 0 && bs_health <= 0 && b->hwrote == 0 && tf == 1.0f) return;
     if (!(h = klh_rd32(r->actor + 0x5fc)) || !klh_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != r->actor) return;
     cur = raw[1]; max = raw[2];
     if (!klb_finite(cur) || !klb_finite(max) || max < 1 || max > 100000 || cur > max * 1.01f + 1) return;
     if (h != b->hobj) { b->hobj = h; b->hmax0 = max; b->hwrote = 0; }
     else if (KLY_ABS(max - b->hmax0) > 0.01f && (b->hwrote == 0 || KLY_ABS(max - b->hwrote) > 0.01f)) { b->hmax0 = max; b->hwrote = 0; }      /* a new maximum of the game's */
     if (act) {
-        if (kly.crew > 0) f *= kly.crew;
-        if ((r->flags & 2) && kly.bs_health > 0) f *= kly.bs_health;
+        if (crew > 0) f *= crew;
+        if ((r->flags & 2) && bs_health > 0) f *= bs_health;
         f *= tf;
     }
     wmax = b->hmax0 * f;
@@ -268,7 +267,53 @@ static void kly_health(const struct klb_rec *r, struct kly_bot *b, int i, int ac
     klh_data((void *)(DWORD_PTR)(h + 4), &wcur, 4, "an AI heister's health, at the same share of the new maximum");
     b->hwrote = KLY_ABS(wmax - b->hmax0) > 0.01f ? wmax : 0;
     if (kly.log) klog("grudge: record %d (%s): health %.1f of %.1f -> %.1f of %.1f (the game gave %.1f; x %.2f%s)", i, klb_who(r), cur, max, wcur, wmax, b->hmax0, f,
-                      !act ? " = put back" : (r->flags & 2) && kly.bs_health > 0 ? ", CrewHealth x BackstabHealth: he has turned" : ", CrewHealth");
+                      !act ? " = put back" : (r->flags & 2) && bs_health > 0 ? ", CrewHealth x BackstabHealth: he has turned" : ", CrewHealth");
+}
+static void kly_health(const struct klb_rec *r, struct kly_bot *b, int i, int act)
+{
+    kly_health2(r, b, i, act, kly.crew, kly.bs_health, act ? kltt_hp(i) : 1.0f);      /* kltt_hp: kltrait.c, Health / DamageIn of the character he wears (1.0 = none) */
+}
+
+/* ONLINE (wk-arcmods2-1102, [Bots] OnlineCrewHealth=<factor>, default 0 = off, OnlineCrewHealthDry=1 logs only; NOT RUN in the game): the HOST scales the maximum health
+   of every AI heister of the census (klbotdown.c klbd_online_view slot 3 = pseudo records, flags 1, the actor only) - the same data writes as CrewHealth above (health
+   object [actor+0x5fc]: +4 health, +8 maximum, +0x24 the actor), same share, put back when the round / host state ends. No crew record, no Arcade gate, no stock-map gate
+   (it also acts on Dog Days' stock FA maps, as Arcade's CrewHealth does not: the owner rule 'every feature on stock maps too'). Traits (kltt_hp) need real crew records: tf = 1.
+   GUESS: the host's health object is the authoritative one for a CLIENT shooter's hit (DDL_ZFFActor::RMCReceiveHit path NOT traced, re/netcode.md 6); the bench must show a client's
+   shots taking the scaled number of bullets and the client's puppet not dying early. Clients need no change (they send hits, the host owns the AI). */
+static struct { float factor; int dry; DWORD rules; int told[KLB_NREC]; struct kly_bot b[KLB_NREC]; DWORD last; } klyo;
+static int klbd_online_view(int who, struct klb_snap *sn, char why[200]);
+
+static void kly_online_undo(void)
+{
+    int i; for (i = 0; i < KLB_NREC; i++) if (klyo.b[i].actor) kly_undo(&klyo.b[i], i, 0, 0);
+    memset(klyo.b, 0, sizeof klyo.b); memset(klyo.told, 0, sizeof klyo.told); klyo.rules = 0;
+}
+
+static void kly_online_tick(int game_thread)
+{
+    struct klb_snap s; char why[200]; DWORD now = GetTickCount(); int i, v;
+    if (klyo.factor <= 0 || !game_thread || !klh_exe_ok) return;
+    if (now - klyo.last < 250) return;
+    klyo.last = KLB_T(now);
+    why[0] = 0;
+    v = klbd_online_view(3, &s, why);
+    if (v < 0) return;                                         /* a transient: change nothing */
+    if (v == 0) { if (klyo.rules || klyo.b[0].actor || klyo.b[1].actor || klyo.b[2].actor || klyo.b[3].actor) kly_online_undo(); return; }      /* not the host / not a round: back */
+    if (s.rules != klyo.rules) { kly_online_undo(); klyo.rules = s.rules; klog("grudge: online CrewHealth x %.2f%s: %s", klyo.factor, klyo.dry ? " (dry log)" : "", why); }
+    for (i = 0; i < s.n && i < KLB_NREC; i++) {
+        const struct klb_rec *r = &s.r[i]; struct kly_bot *b = &klyo.b[i];
+        if (!r->used || !r->actor) continue;
+        if (b->actor != r->actor) { if (b->actor) kly_undo(b, i, 0, 0); memset(b, 0, sizeof *b); b->actor = r->actor; klyo.told[i] = 0; }
+        if (klh_rd32(r->actor) != KLB_ACTOR_VT || r->status != 0) continue;
+        if (klyo.dry) {
+            DWORD h; float hp[2];
+            if (!klyo.told[i] && (h = klh_rd32(r->actor + 0x5fc)) && klh_rd32(h + 0x24) == r->actor && klh_rd(h + 4, hp, 8)) {
+                klyo.told[i] = 1; klog("grudge: online dry: record %d actor %08lx health %.1f of %.1f would be x %.2f", i, r->actor, hp[0], hp[1], klyo.factor);
+            }
+            continue;
+        }
+        kly_health2(r, b, i, 1, klyo.factor, 0, 1.0f);
+    }
 }
 
 /* 3 b: a turned bot's accuracy. The float is NOT the soldier's own memory: the block D belongs to the ZSoldierRout
@@ -419,6 +464,7 @@ static void kly_tick(int game_thread)
 {
     static DWORD last, off_since; static int told_thread;
     struct klb_snap s; DWORD now = GetTickCount(); char why[200]; int i, act, human, hwhy = 0, live; float limit;
+    kly_online_tick(game_thread);             /* the host-only online path: its own key, its own state (returns at once unless OnlineCrewHealth is set) */
     if (!kly.on || !klb.on || !klh_exe_ok) return;
     if (!game_thread) {                       /* the round's objects are only written between two frames of the game itself */
         if (!off_since) off_since = KLB_T(now);
@@ -490,8 +536,11 @@ static float kly_inif(const char *key, const char *def, float lo, float hi, floa
 static void kly_init(void)
 {
     char t[64]; int a = 40, b = 30, c = 30, sum;
-    if (!GetPrivateProfileIntA("Bots", "Enable", 0, klh_ini)) return;
+    klyo.factor = kly_inif("OnlineCrewHealth", "0", 0.25f, 10, 0); if (klyo.factor == 1.0f) klyo.factor = 0;      /* own key: works without [Bots] Enable (online has no Arcade crew) */
+    klyo.dry = klyo.factor > 0 && GetPrivateProfileIntA("Bots", "OnlineCrewHealthDry", 0, klh_ini) != 0;
     kly.log = (int)GetPrivateProfileIntA("Bots", "Log", 1, klh_ini); if (kly.log < 0) kly.log = 0; if (kly.log > 2) kly.log = 2;
+    if (klyo.factor > 0) klog("grudge: OnlineCrewHealth x %.2f%s: HOST only, online rounds, data writes only; acts when this machine hosts a round (GUESS: a client's hit is priced against the host's health object, not traced)", klyo.factor, klyo.dry ? " (dry log)" : "");
+    if (!GetPrivateProfileIntA("Bots", "Enable", 0, klh_ini)) return;
     kly.crew = kly_inif("CrewHealth", "1", 0.25f, 10, 0); if (kly.crew == 1.0f) kly.crew = 0;
     kly.bs_health = kly_inif("BackstabHealth", "1", 0.25f, 10, 0); if (kly.bs_health == 1.0f) kly.bs_health = 0;
     kly.bs_aim = kly_inif("BackstabAim", "-1", -1, 100, -1);
