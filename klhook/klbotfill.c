@@ -1873,7 +1873,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             }
         }
     }
-    if (klbf_sp || klbf_df || klbf_dt) klbf_df_tick(mo, mamt, (const float (*)[3])mpos, nm, now);      /* drained stacks, new drops (log), freed drops */
+    klbf_df_tick(mo, mamt, (const float (*)[3])mpos, nm, now);      /* drained stacks, new drops (log), freed drops; wk-lootmetric-1102 review: always called (was gated on StackProbe / DropFollow / DropTake) so the always-on lootsum drain count works with them off; with them off it only fills the klbf_dd / klbf_dp memory */
     klbf_sp_dump(mo, mamt, (const float (*)[3])mpos, nm, (const float (*)[3])cops, ncop);      /* OnlineStackProbe: once a round, log only */
     if (klbf_sp == 3) { float bp[KLBF_OT_BOTS][3]; int q; for (q = 0; q < nb && q < KLBF_OT_BOTS; q++) memcpy(bp[q], bots[q].pos, 12); klbf_sp_poll(now, (const float (*)[3])bp, nb < KLBF_OT_BOTS ? nb : KLBF_OT_BOTS, (const float (*)[3])cops, ncop); }      /* level 3: the poll, every tick (no debug register) */
     {   /* the FA rules: [[0x168e9e4]+0x54] when the session's game type [sm+0x5c] is 4 (0x7bb2a0, PROVEN; 0x508ef0 is Arcade-only) */
