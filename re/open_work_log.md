@@ -1,3 +1,9 @@
+2026-11-02 ~13:20 - [ce] RT6 and RT7 SAFE (14/14 seats PASS), DM09 0 boarded in every row, but CONFOUNDED: their inis lacked [Lobby] TimeAuto=6, so the
+clock was 250 s, not 370 s (RT5A, Arcade DM09). The route is ~310 m at 1.1-1.5 m/s (wf dm09-exit-timing: exit walk starts 55-190 s in, not late; the van
+leaves at clock 0 with walkers 28-60 m out). Merged 878f9688b/de0374ca1 [BotFill] OnlineLateExitRoute (off, NOT Arcade): per-bot late exit = route left /
+OnlineLegWalkCmS 130 + pad 20. Kit rt9 (A key, B control, both 370 s; R DD06) queued after mt3 (modes page shots, both seats, dll 6E592BF4).
+Merged d20f07522+c8a6337a4: 11 option rows (online down set, BotDown, BalanceCops, ReleaseDown, Unique) + 5 page rows (15/16 slots).
+
 2026-11-02 ~13:30 - [ce] Owner-asks audit (workflow): all 21 maps had a both-seat online PASS in Q32 (ship1103); the candidate only on DM01/DM03/DD05 -> c9 stages q35 (chained
 after co3). Merged 836063b43: the Bots-and-modes shield row reads [Shield] Online when online; host-only rows show '(host only: you are a client)' (klhro_host);
 labels flipped to recommended on for modestab/roundhints/RemoteShot2D/OnlineSwap(+Pic/Arm/Text); LootSync stays off (no graded PASS); [BotFill] OnlineTriggersCensus
