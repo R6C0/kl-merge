@@ -288,7 +288,11 @@ static void klho_init(void)
     klho.minIni = GetPrivateProfileIntA("Lobby", "MinPlayers", 0, klh_ini);
     if (klho.minIni < 0 || klho.minIni > 8) klho.minIni = 0;
     klho.squadsIni = GetPrivateProfileIntA("Bots", "OnlineFillSquads", 0, klh_ini) != 0;
-    klog("hostopts: on; map set %d, AI heisters %d, Solo %d, PD2 guns %d; Steam=%d Udp=%d Keys=%d (F7 map, F8 AI); the host's map set reaches clients as klx_opts", klho.map, klho.ai, klho.solo, klho.pd2, klho.steam, klho.udp, klho.keys);
+    {
+        char km[24], ka[24];          /* the real keys (MT2B log read 'F7 map, F8 AI' while [Keys] Map=1 made them Ctrl+F3 / Ctrl+F4) */
+        klkeys_name(klho.keyMap, klho.ctlMap, km, sizeof km); klkeys_name(klho.keyAI, klho.ctlAI, ka, sizeof ka);
+        klog("hostopts: on; map set %d, AI heisters %d, Solo %d, PD2 guns %d; Steam=%d Udp=%d Keys=%d (%s map, %s AI); the host's map set reaches clients as klx_opts", klho.map, klho.ai, klho.solo, klho.pd2, klho.steam, klho.udp, klho.keys, km, ka);
+    }
 }
 
 #endif
