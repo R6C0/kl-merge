@@ -2088,7 +2088,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             }
             if (kdt_wanted(klbf_dt, best, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ot_carry)) dtIdx = klbf_dt_pick(s, bots[b].pos, now, &dtAny);      /* OnlineDropTake: Q31-Q33, the loot lies in drops, the stack list is empty */
             {   /* OnlineIdleVan: no stack for this bot (blacklisted, taken, none armed) and nothing carried: after OnlineIdleVanS with no stack left at all, or with the clock low, it goes to the exit and the van is called (BO12: 0 grabs, nobody called it) */
-                int nostack = best < 0 && !(klbf_ot_gtake && gbest >= 0) && !dtAny;      /* OnlineDropTake: a drop within reach (even one another bot walks to) holds the van call */
+                int nostack = best < 0 && !(klbf_ot_gtake && gbest >= 0) && (!dtAny || (klbf_ot_late && left <= (float)(klbf_ot_late + 20)));      /* OnlineDropTake: a drop within reach (even one another bot walks to) holds the van call, but not once the clock is low (review: else the late call never fires) */
                 if (klbf_ot_idlevan && nostack && klbf_ob[s].tally == 0) {
                     if (!klbf_ob[s].vidleAt) klbf_ob[s].vidleAt = now;
                     if ((gbest < 0 && !nhold && !ndoor && now -klbf_ob[s].vidleAt >= (DWORD)klbf_ot_idleS * 1000u) || (klbf_ot_late && left <= (float)(klbf_ot_late + 20))) {
