@@ -36,8 +36,14 @@
  *   The hold itself (the animation, the break-free) is the game's: nothing here calls the release routine 0x74fad0 (a GUESS-heavy call
  *   on the player's action state); a downed hostage is therefore still in your arms until you let go.
  *
+ * ONLINE (wk-crewonline-1102, [Shield] Online=0|1|2, default 0, NOT RUN LIVE): online roles 2/3 fail the Arcade test (no crew records), so the Arcade gate is false there.
+ *   Online=1 runs the same pass on the HOST ONLY (klbd_online_view(2, ..) = host in a round) for the host's OWN player (kle_human; GUESS that gamedata+0x828[sel] is the
+ *   host's player online); 2 = dry log. Health is server-side online, so a CLIENT holding a hostage is not covered. GUESSES: the host's hold writes the same
+ *   [pl+0xad0]/[pl+0xad4] as in Arcade; the host's actor sync shows the hostage's down to clients; the per-frame health logic does not undo the refund; a hostage
+ *   that is a remote human's body is judged by the same klbd_bot_ok test (only a ZSoldier actor passes).
+ *
  * KEYS ([Shield]):  Enable=1  Dry=0 (1 = log only: nothing written, nothing called)  Log=1 (2 = every refund)
- *   Absorb=0.65   AbsorbDown=0.30   HostageTakes=2.0 (0 = the victim loses nothing)   DownPct=35   Seconds=2.5   ReleaseDown=1   Down=1
+ *   Absorb=0.65   AbsorbDown=0.30   HostageTakes=2.0 (0 = the victim loses nothing)   DownPct=35   Seconds=2.5   ReleaseDown=1   Down=1   Online=0 (1 = the online host, 2 = dry log)
  *
  * UNPROVEN (nothing here ran): that [pl+0xad0] is the victim ACTOR for an AI victim (it is read and logged at every hold start with the
  * vtable, soldier and [+0x770]; if it is not an actor with a soldier nothing is done: safe), that a health write on the player is not
@@ -45,13 +51,16 @@
  */
 #define KLSH_C
 
+#include "klshield_logic.h"      /* wk-crewonline-1102: the pure arithmetic + the Online world gate (klshield_test.c) */
+static int klbd_online_view(int who, struct klb_snap *sn, char why[200]);
+
 #define KLSH_PL_CARRIER 0xad4        /* [player+0xad4] == player while he holds somebody (0x4d7b71) */
 #define KLSH_PL_VICTIM  0xad0        /* [player+0xad0] = the victim (0x4d7b6b) */
 #define KLSH_ACT_HELD   0x76c        /* [actor+0x76c] = the held, set by 0x7034a0: the AI-holds-AI form (GUESS that the player's hold uses it too) */
 #define KLSH_ACT_HOLDER 0x770        /* [victim+0x770] = the holder */
 
 static struct {
-    int on, dry, log, reldown, downhold; float absorb, absdown, takes, downpct, secs;
+    int on, dry, log, reldown, downhold, arc, online, dry_cfg; float absorb, absdown, takes, downpct, secs;
 } klsh;
 
 struct klsh_ask { int act; DWORD actor, soldier, t0, last; const char *why; };
@@ -65,21 +74,6 @@ static struct {
 static int klsh_fin(float f) { return f == f && f > -1e9f && f < 1e9f; }
 
 /* ---------------------------------------------------------------- pure arithmetic */
-
-/* the health handed back for a loss d of a player whose maximum is mx: eff x d, never past the maximum */
-static float klsh_refund(float hp_now, float d, float mx, float eff)
-{
-    float r = d * eff;
-    if (!(r > 0)) return 0;
-    if (hp_now + r > mx) r = mx - hp_now;
-    return r > 0 ? r : 0;
-}
-/* the health the victim loses for a refund r of a player whose maximum is pmx: takes x (r / pmx) of HIS maximum vmx */
-static float klsh_victim_loss(float r, float pmx, float vmx, float takes)
-{
-    if (!(pmx >= 1.0f) || !(r > 0) || !(takes > 0)) return 0;
-    return takes * (r / pmx) * vmx;
-}
 
 /* ---------------------------------------------------------------- reading */
 
@@ -145,17 +139,31 @@ static void klsh_forget(void) { memset(&klsh_g, 0, sizeof klsh_g); }
 static void klsh_tick(int game_thread)
 {
     struct klb_snap sn; DWORD rules, state, now, pl = 0, v = 0, s = 0, r0, r4, r76; float feet[3], np[3], hp = 0, mx = 0, vhp = 0, vmx = 0; int level, held, vok;
-    DWORD ho = 0, vh = 0, D; BYTE vdn = 0; char why[200];
+    DWORD ho = 0, vh = 0, D; BYTE vdn = 0; char why[200]; int onl = 0;
     if (!klsh.on || !game_thread || !klh_exe_ok) return;
-    if (!(klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLB_ROUND && klb_read(&sn) && sn.state == KLB_ROUND)) { if (klsh_g.rules) klsh_forget(); return; }
+    why[0] = 0;
+    {
+        int arc_ok = klsh.arc && klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLB_ROUND && klb_read(&sn) && sn.state == KLB_ROUND;
+        int ov = (!arc_ok && klsh.online) ? klbd_online_view(2, &sn, why) : 0;      /* slot 2 of the shared pseudo-record table (0 = klhop, 1 = klcardown) */
+        int w = klsh_world(klsh.arc, arc_ok, klsh.online, ov);
+        if (w == KLSH_W_SKIP) return;                                       /* transient unreadable settings: change nothing */
+        if (w == KLSH_W_FORGET) { if (klsh_g.rules) klsh_forget(); return; }
+        onl = (w == KLSH_W_ONLINE);
+    }
+    klsh.dry = klsh.dry_cfg || (onl && klsh.online == 2);
     if (sn.rules != klsh_g.rules) {
         klsh_forget(); klsh_g.rules = sn.rules;
-        klog("shield: a round runs (%s): holding a hostage covers you (Absorb %.2f, down %.2f, victim pays x %.1f), he is floored at %.0f %% health and when let go (ReleaseDown %d)%s",
+        if (onl) klog("shield: ONLINE host round (%s): holding a hostage covers the host's own player (Absorb %.2f, down %.2f, victim pays x %.1f), he is floored at %.0f %% health and when let go (ReleaseDown %d); a client's hold is not covered%s",
+             why, klsh.absorb, klsh.absdown, klsh.takes, klsh.downpct, klsh.reldown, klsh.dry ? " - Dry: nothing is called, nothing is written" : "");
+        else klog("shield: a round runs (%s): holding a hostage covers you (Absorb %.2f, down %.2f, victim pays x %.1f), he is floored at %.0f %% health and when let go (ReleaseDown %d)%s",
              why, klsh.absorb, klsh.absdown, klsh.takes, klsh.downpct, klsh.reldown, klsh.dry ? " - Dry: nothing is called, nothing is written" : "");
     }
     now = GetTickCount();
     klsh_ask_tick(now);
-    if (!kle_human(&pl, feet, np) || !pl) { klsh_g.holding = 0; return; }
+    if (!kle_human(&pl, feet, np) || !pl) {
+        if (onl && now - klsh_g.last_say > 5000) { klsh_g.last_say = now; klog("shield: online host player unreadable (kle_human failed): nothing done"); }
+        klsh_g.holding = 0; return;
+    }
     held = klsh_victim(pl, &v, &s, &r0, &r4, &r76);
     if (!held) {
         if (klsh_g.holding) {                                        /* the hold has ended */
@@ -187,8 +195,7 @@ static void klsh_tick(int game_thread)
         float d = klsh_g.prev_hp - hp;
         if (hp > klsh_g.prev_hp) klsh_g.prev_hp = hp;
         else if (d > 0.05f && d < mx * 2.0f && eff > 0 && hp > 0.01f) {
-            float rf = klsh_refund(hp, d, mx, eff), nh = hp + rf, loss = vdn ? 0.0f : klsh_victim_loss(rf, mx, vmx, klsh.takes), nv = vhp - loss;
-            if (nv < 1.0f) nv = vhp > 1.0f ? 1.0f : vhp;
+            float rf = klsh_refund(hp, d, mx, eff), nh = hp + rf, loss = vdn ? 0.0f : klsh_victim_loss(rf, mx, vmx, klsh.takes), nv = klsh_victim_after(vhp, loss);
             if (rf > 0.01f) {
                 if (klsh.dry) {
                     if (klsh.log >= 2 || now - klsh_g.last_say > 1000) { klsh_g.last_say = now; klog("shield: Dry - you lost %.1f (health %.1f): %.1f WOULD be given back, the hostage (health %.1f) WOULD lose %.1f", d, hp, rf, vhp, vhp - nv); }
@@ -201,7 +208,7 @@ static void klsh_tick(int game_thread)
             } else klsh_g.prev_hp = hp;
         } else klsh_g.prev_hp = hp;
     }
-    if (klsh.downhold && !vdn && vhp > 0.01f && vhp <= (vmx * klsh.downpct / 100.0f > 1.0f ? vmx * klsh.downpct / 100.0f : 1.0f))
+    if (klsh.downhold && !vdn && vhp > 0.01f && vhp <= klsh_down_threshold(vmx, klsh.downpct))
         klsh_ask_start(v, s, "his health reached the shield threshold", now);
     klsh_ask_tick(now);
 }
@@ -220,9 +227,12 @@ static float klsh_inif(const char *key, const char *def, float lo, float hi)
 static void klsh_init(void)
 {
     memset(&klsh, 0, sizeof klsh); klsh_forget();
-    klsh.on = GetPrivateProfileIntA("Shield", "Enable", 1, klh_ini) != 0;
+    klsh.arc = GetPrivateProfileIntA("Shield", "Enable", 1, klh_ini) != 0;
+    klsh.online = (int)GetPrivateProfileIntA("Shield", "Online", 0, klh_ini); if (klsh.online < 0 || klsh.online > 2) klsh.online = 0;
+    klsh.on = klsh.arc || klsh.online;      /* wk-crewonline-1102: Online keeps the part on even with Enable=0, as klcardown */
     if (!klsh.on) return;
-    klsh.dry = GetPrivateProfileIntA("Shield", "Dry", 0, klh_ini) != 0;
+    klsh.dry_cfg = GetPrivateProfileIntA("Shield", "Dry", 0, klh_ini) != 0;
+    klsh.dry = klsh.dry_cfg;
     klsh.log = GetPrivateProfileIntA("Shield", "Log", 1, klh_ini);
     klsh.reldown = GetPrivateProfileIntA("Shield", "ReleaseDown", 1, klh_ini) != 0;
     klsh.downhold = GetPrivateProfileIntA("Shield", "Down", 1, klh_ini) != 0;
@@ -233,4 +243,5 @@ static void klsh_init(void)
     klsh.secs = klsh_inif("Seconds", "2.5", 0.3f, 10.0f);
     klog("shield: on%s (Arcade round, a level that is not the stock one unless [KLHook] AllMaps=1): while you hold an AI soldier, %.0f %% of every hit on you is given back and he pays for it (x %.1f of his health); at %.0f %% health he is floored (revivable: Down %d); the man you let go is floored (ReleaseDown %d), %.1f s of asking",
          klsh.dry ? " (Dry=1: nothing is called, nothing is written)" : "", klsh.absorb * 100.0f, klsh.takes, klsh.downpct, klsh.downhold, klsh.reldown, klsh.secs);
+    klog("shield: ONLINE=%d (%s)%s", klsh.online, klsh.online == 2 ? "dry log" : klsh.online ? "live, host only" : "off", klsh.arc ? "" : " (Enable=0: the Arcade part is off)");
 }

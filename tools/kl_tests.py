@@ -53,6 +53,7 @@ PY_NOT_TESTS = {
 # C tests: 'logic' builds with the shim on any host, 'win' needs the real SDK (includes a whole module).
 C_TESTS = {
     'klcs_test.c': 'logic',            # klcopsquad_logic.h
+    'klshield_test.c': 'logic',        # klshield_logic.h ([Shield] arithmetic + Online world gate, no windows.h)
     'klcv_test.c': 'logic',            # klchar_voice.h
     'kldown_hold_test.c': 'logic',     # kldown_hold.h
     'klguard_test.c': 'logic',         # klguard_logic.h (OnlineGuardMode pure part)

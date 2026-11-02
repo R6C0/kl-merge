@@ -676,6 +676,8 @@ feat('crewhoponline', G_CREW, 'Online host: AI heisters cross places the navmesh
      'klhop.c [CrewHop] Online (1 on, 2 log only), OnlineStage; host only; NOT run live', [('CrewHop', 'Online', 1, 0, 0)])
 feat('cardownonline', G_DOWN, 'Online host: a car blast floors AI heisters and police (revivable) instead of killing them (recommended off)', 'off', 'start',
      'klcardown.c [CarDown] Online (1 on, 2 log only); host only, no human part; NOT run live', [('CarDown', 'Online', 1, 0, 0)])
+feat('shieldonline', G_DOWN, 'Online host: the human shield covers the host and floors the hostage (revivable), as in Arcade (recommended off until benched)', 'off', 'start',
+     'klshield.c [Shield] Online (1 on, 2 log only), klshield_logic.h; host only, the host own player only; offsets GUESSED; NOT run live', [('Shield', 'Online', 1, 0, 0)])
 
 BY_ID = {f['id']: f for f in F}
 assert len(BY_ID) == len(F) and all(f['rec'] in ('on', 'off') for f in F)      # every row is shown with '(recommended on|off)' (rec_text)
