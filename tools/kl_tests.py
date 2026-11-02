@@ -62,6 +62,7 @@ C_TESTS = {
     'klwaitvan_test.c': 'logic',       # klwaitvan_logic.h (OnlineLegWaitVan pure decision, no windows.h)
     'kldroptake_test.c': 'logic',      # kldroptake_logic.h (OnlineDropTake pure decision, no windows.h)
     'kldoorhold_test.c': 'logic',     # kldoorhold_logic.h (OnlineDoorHold pure decision, no windows.h)
+    'kltimeauto_test.c': 'logic',     # kltimeauto_logic.h ([Lobby] TimeAuto clamp / when to apply, no windows.h)
     'klstackdiag_test.c': 'logic',     # klstackdiag_logic.h (stack state log text + OnlineStackRecheck scan decision, no windows.h)
     'klvantime_test.c': 'logic',      # klvantime_logic.h (OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold pure part, no windows.h)
     'klassoft_test.c': 'logic',        # klassoft_logic.h (AssertSoft list parse, no windows.h)
