@@ -65,6 +65,7 @@ C_TESTS = {
     'klshot2d_test.c': 'logic',        # klshot2d_logic.h (RemoteShot2DGate gate + slot-74 counter, no windows.h)
     'klboardpar_test.c': 'logic',      # klboardpar_logic.h (OnlineBoardAllNear pure decision, no windows.h)
     'kldroptake_test.c': 'logic',      # kldroptake_logic.h (OnlineDropTake pure decision, no windows.h)
+    'klcensus_test.c': 'logic',        # klcensus_logic.h (OnlineTriggersCensus new-cop pointer set, no windows.h)
     'kldroptable_test.c': 'logic',     # kldroptable_logic.h (type-1 drop table eviction, no windows.h)
     'kldoorhold_test.c': 'logic',    # kldoorhold_logic.h (OnlineDoorHold pure decision, no windows.h)
     'kltimeauto_test.c': 'logic',     # kltimeauto_logic.h ([Lobby] TimeAuto clamp / when to apply, no windows.h)

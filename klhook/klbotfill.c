@@ -79,6 +79,7 @@ static int klbf_stack_recheck;      /* [BotFill] OnlineStackRecheck (default 0, 
 #include "klboardpar_logic.h"      /* wk-boardpar-1102: [BotFill] OnlineBoardAllNear, the pure decision (klboardpar_test.c) */
 #include "kldroptable_logic.h"      /* wk-droptable-1102: drop table eviction of hidden pool objects (kldroptable_test.c) */
 #include "kldroptake_logic.h"      /* wk-droptake-1102: [BotFill] OnlineDropTake / OnlineDropTakeM, the pure decision (kldroptake_test.c) */
+#include "klcensus_logic.h"      /* wk-census-1102: OnlineTriggersCensus new-cop pointer set + tally (klcensus_test.c) */
 #include "klgetup_logic.h"      /* wk-getup-1028: [BotFill] OnlineGetUp, the pure decisions (klgetup_test.c) */
 static int klbf_gu_freefirst, klbf_gu_recede, klbf_gu_hold, klbf_gu_plat; static float klbf_gu_busyrange;      /* [BotFill] OnlineGetUpFreeFirst / OnlineGetUpBusyRange (wk-botpar BP13); OnlineGetUpPlateau (BP16b) */
 static int klbf_gu, klbf_gu_sprint, klbf_gu_reordS, klbf_gu_keep, klbf_gu_det, klbf_gu_busy, klbf_gu_anyhp, klbf_gu_ignvan; static float klbf_gu_range = 2500.0f, klbf_gu_rate = 3.0f, klbf_gu_near = 400.0f, klbf_gu_flopm;      /* [BotFill] OnlineGetUp (0 off, 1 on, 2 dry = log only), OnlineGetUpRange / OnlineGetUpRate / OnlineGetUpNear; re/bot_getup_online.md */
@@ -152,19 +153,22 @@ static int klbf_trig_pk;    /* [BotFill] OnlineTriggersSkipPickups (wk-trigdm-11
 /* [BotFill] OnlineTriggersCensus (default 0, recommended off until benched; LOG ONLY, no game write): the enemy census after a bot-fired trigger box. klbf_cen_arm() at a "trig: FIRE" remembers the live cops (team 1, health > 0, the tactics scan's count)
    and the fire tick; klbf_cen_tick() (the once-a-second scan, host) reads the count again 10 s and 30 s later and logs one line. One census at a time: a fire while one runs is not counted (the next fire after it ends starts a new one). klbf_cen_live is
    the current scan's count (reset before the table walk in klbf_ot_run), so the figure at the fire is at most one second old. */
-static int klbf_cen_on, klbf_cen_live; static struct { int st, n0, n10; DWORD t0, box; } klbf_cen;      /* st 0 idle, 1 waiting for +10 s, 2 waiting for +30 s */
+static int klbf_cen_on, klbf_cen_live; static struct { int st, n0, n10, new10; DWORD t0, box; } klbf_cen;      /* st 0 idle, 1 waiting for +10 s, 2 waiting for +30 s */
+/* new-cop census (klcensus_logic.h, klcensus_test.c): klbf_cen_cur = actor pointers of the live cops in the current scan (rebuilt every scan, before the fire's arm reads it: the arm runs after the walk), klbf_cen_base = copy of it at the fire,
+   klbf_cen_tl = this scan's tally against the base (live / new / kept). 2 x 256 pointers, no allocation. */
+static struct kcs_set klbf_cen_cur, klbf_cen_base; static struct kcs_tally klbf_cen_tl;
 static void klbf_cen_arm(DWORD box, DWORD now)
 {
     if (!klbf_cen_on || klbf_cen.st) return;
-    klbf_cen.st = 1; klbf_cen.t0 = now; klbf_cen.box = box; klbf_cen.n0 = klbf_cen_live; klbf_cen.n10 = -1;
+    klbf_cen.st = 1; klbf_cen.t0 = now; klbf_cen.box = box; klbf_cen.n0 = klbf_cen_live; klbf_cen.n10 = -1; klbf_cen.new10 = -1; klbf_cen_base = klbf_cen_cur;
 }
 static void klbf_cen_tick(DWORD now)
 {
     if (!klbf_cen_on || !klbf_cen.st) return;
     if ((LONG)(now - klbf_cen.t0) < 0) return;      /* TP2 11-02: the tick's now is taken before klbf_trig_tick arms with GetTickCount(), so now - t0 wrapped and the first census logged +10/+30 at the fire */
-    if (klbf_cen.st == 1 && now - klbf_cen.t0 >= 10000u) { klbf_cen.n10 = klbf_cen_live; klbf_cen.st = 2; }
+    if (klbf_cen.st == 1 && now - klbf_cen.t0 >= 10000u) { klbf_cen.n10 = klbf_cen_live; klbf_cen.new10 = klbf_cen_tl.fresh; klbf_cen.st = 2; }
     if (klbf_cen.st == 2 && now - klbf_cen.t0 >= 30000u) {
-        klog("botfill: trig: census after FIRE %08lx: cops %d at fire, %d at +10 s, %d at +30 s (team 1, health > 0; log only, OnlineTriggersCensus=1)", (unsigned long)klbf_cen.box, klbf_cen.n0, klbf_cen.n10, klbf_cen_live);
+        klog("botfill: trig: census after FIRE %08lx: cops %d at fire, %d at +10 s (%d new), %d at +30 s (%d new, %d gone) (new = live cop actor not seen alive at the fire, gone = one of those not alive now; team 1, health > 0%s; log only, OnlineTriggersCensus=1)", (unsigned long)klbf_cen.box, klbf_cen.n0, klbf_cen.n10, klbf_cen.new10, klbf_cen_live, klbf_cen_tl.fresh, kcs_gone(&klbf_cen_base, &klbf_cen_tl), klbf_cen_base.over ? ", set full: new is an upper bound" : "");
         klbf_cen.st = 0;
     }
 }
@@ -1884,7 +1888,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     if (sm != (DWORD)klbf_ot_sm || !klbf_ot_in) {      /* a new session / round */
         if (klbf_ot_in) klbf_ot_summary();
         if (klbf_lp && klbf_lp_nok + klbf_lp_nbad) klog("botfill: lootparts: last round: %d stack reads plausible, %d implausible (lump fallback)", klbf_lp_nok, klbf_lp_nbad); klbf_lp_nok = klbf_lp_nbad = klbf_lp_nw = 0; memset(klbf_lp_warned, 0, sizeof klbf_lp_warned);
-        memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_gc_said = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++; klbf_ot_t0 = now; klbf_cen.st = 0; klbf_cen_live = 0;      /* review 1102: a census armed at a round end must not block / mix into the next round */
+        memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_gc_said = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++; klbf_ot_t0 = now; klbf_cen.st = 0; klbf_cen_live = 0; kcs_clear(&klbf_cen_cur); kcs_clear(&klbf_cen_base); kcs_tally_clear(&klbf_cen_tl);      /* review 1102: a census armed at a round end must not block / mix into the next round */
         klbf_ot_lookAt = 0; klbf_wv_hc = klbf_wv_novh = 0; klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_eo_at = 0; klbf_ot_bxlooks = 0; klbf_ot_bxAt = 0;
         if (klbf_ot_kept()) klbf_ot_trig_looked = 1;      /* the last round's exit trigger and boxes still stand (same level load): no scan this round */
         else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; klbf_ot_nobox_gen = -1; }
@@ -1895,7 +1899,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
-    klbf_gm_orig = 0;  klbf_cen_live = 0;      /* OnlineTriggersCensus: this scan's live-cop count */
+    klbf_gm_orig = 0;  klbf_cen_live = 0; kcs_clear(&klbf_cen_cur); kcs_tally_clear(&klbf_cen_tl);      /* OnlineTriggersCensus: this scan's live-cop count, pointer set and tally */
     for (i = 0; i < 0x10000; i += 64) {      /* the whole table: BO2 (DM01) capped at 4000 objects never reached the Ally actors */
         DWORD k;
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
@@ -1911,7 +1915,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 DWORD pr, team = 99, hp, snd; float hv[2] = { 0, 0 };
                 if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4)) continue;
                 if (team == 1) {      /* a live cop: OnlineTacticsGuard keeps bots off stacks it stands on */
-                    if (klbf_cen_on) { DWORD ch_; float cv_ = 0; if ((ch_ = klh_rd32(o + 0x5fc)) && klh_rd(ch_ + 4, &cv_, 4) && cv_ > 0) klbf_cen_live++; }      /* OnlineTriggersCensus: the same live-cop test (team 1, health > 0) without the position gates */
+                    if (klbf_cen_on) { DWORD ch_; float cv_ = 0; if ((ch_ = klh_rd32(o + 0x5fc)) && klh_rd(ch_ + 4, &cv_, 4) && cv_ > 0) { klbf_cen_live++; kcs_add(&klbf_cen_cur, o); if (klbf_cen.st) kcs_tally_cop(&klbf_cen_tl, &klbf_cen_base, o); } }      /* OnlineTriggersCensus: the same live-cop test (team 1, health > 0) without the position gates */
                     if (ncop < 256 && (hp = klh_rd32(o + 0x5fc)) && klh_rd(hp + 4, hv, 4) && hv[0] > 0 && klh_rd(o + 0x460, pos, 12) && kle_ok3(pos)) {
                         if (klbf_gm && klbf_gm_tight && kgg_origin(pos)) { klbf_gm_orig++; continue; }      /* BP9 DD08: the first cops read (0,0,0) at the round start; DD08's stacks lie near the origin, so they 'guarded' them. GUESS: (0,0,0) = a cop not placed yet (pooled) */
                         memcpy(cops[ncop++], pos, 12);
