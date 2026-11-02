@@ -83,6 +83,10 @@ def main():
 
         r3 = P.compare(dh, P.read_dump(moved_log))
         check(r3['differ'] == [5] and r3['host_extra'] == [] and r3['client_extra'] == [], 'a point built on both but moved is a differ, not an extra: %s' % r3['differ'])
+        check(P.safety_line(r3).startswith('SAFE:') and 'moved 1' in P.safety_line(r3), 'a moved point only is SAFE (CR9 DM03): %s' % P.safety_line(r3))
+        check(P.safety_line(r).startswith('UNSAFE: 8 '), 'host-only points are UNSAFE: %s' % P.safety_line(r))
+        r5 = P.compare(dc, dh)                                                     # roles swapped: the extra points are client-only now
+        check(P.safety_line(r5).startswith('SAFE:') and 'client-only 8' in P.safety_line(r5), 'client-only points are SAFE: %s' % P.safety_line(r5))
 
         jit = dict(host_pts); jit[350] = (jit[350][0] + 0.1, jit[350][1], jit[350][2] - 0.1)    # CR5 DM01: the seats differ by 0.1 unit
         r4 = P.compare(dh, P.read_dump(write(tmp, 'jit.log', log(jit, total=1371))))

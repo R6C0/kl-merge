@@ -72,6 +72,18 @@ static void kcr_rs_host(DWORD now)
     }
 }
 
+/* CR9 11-02: the CHANGED line came every second for the same moved points; log each index once per load (list cleared while
+   rs_nchg is 0, i.e. after kcr_rearm; past 16 indices the 40-line cap still holds) */
+static unsigned long kcr_rs_told[16]; static int kcr_rs_ntold;
+static int kcr_rs_chg_first(unsigned long idx)
+{
+    int i;
+    if (!kcr.rs_nchg) kcr_rs_ntold = 0;
+    for (i = 0; i < kcr_rs_ntold; i++) if (kcr_rs_told[i] == idx) return 0;
+    if (kcr_rs_ntold < 16) kcr_rs_told[kcr_rs_ntold++] = idx;
+    return 1;
+}
+
 /* CLIENT: a KLSYR arrived (klsy_tick drain, game thread) */
 static void kcr_rs_rx(const char *pk, int len, DWORD now, unsigned long from)
 {
@@ -125,7 +137,7 @@ static void kcr_rs_rx(const char *pk, int len, DWORD now, unsigned long from)
             if (!kcr_ring_apply_decision(cfl, pt[k].flags)) {
                 if (kcr_pt_usable(cfl)) {
                     skipped_used++;
-                    if (kcr_rs_moved(cpos, pt[k].pos) && kcr.rs_nchg++ < 40) klog("coverring: ringsync CLIENT car #%u idx %lu CHANGED: client usable %03lx (%.0f,%.0f,%.0f) vs host %03lx (%.0f,%.0f,%.0f) - left as is (stage 1)",
+                    if (kcr_rs_moved(cpos, pt[k].pos) && kcr_rs_chg_first(pt[k].idx) && kcr.rs_nchg++ < 40) klog("coverring: ringsync CLIENT car #%u idx %lu CHANGED: client usable %03lx (%.0f,%.0f,%.0f) vs host %03lx (%.0f,%.0f,%.0f) - left as is (stage 1)",
                         h.ord, pt[k].idx, (unsigned long)cfl, cpos[0], cpos[1], cpos[2], pt[k].flags, pt[k].pos[0], pt[k].pos[1], pt[k].pos[2]);
                 } else skipped_host++;
                 continue;

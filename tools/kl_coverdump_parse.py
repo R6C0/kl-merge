@@ -136,6 +136,16 @@ def print_compare(r, host_name='host', client_name='client'):
     lo = min(r['host_built'], r['client_built'])
     print('RESULT: cover point lists DIVERGE at index %d - a replicated ZSoldier cover index >= %d is an int3 on the side that lacks it '
           '(0x6567e8 / 0x845a8b / 0x51d049 / 0x555900 / 0x4ede1b; ContinueAsserts steps over, MaxAsserts=200 ends the game)' % (r['prefix'], lo))
+    # CR9 11-02: the int3 needs an index the host built and the client did not; client-only or moved points only give a
+    # different cover place (the dump has no flags, so usable vs spare is in the 'ringsync' lines, not here)
+    print(safety_line(r, host_name, client_name))
+
+
+def safety_line(r, host_name='host', client_name='client'):
+    if r['host_extra']:
+        return 'UNSAFE: %d index(es) built on %s only: %s' % (len(r['host_extra']), host_name, r['host_extra'][:16])
+    return 'SAFE: no index built on %s only (%s-only %d, moved %d)' % (
+        host_name, client_name, len(r['client_extra']), len([i for i in r['differ'] if i in r['h'] and i in r['c']]))
 
 
 def main(argv):
