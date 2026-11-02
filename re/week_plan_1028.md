@@ -124,11 +124,13 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 Owner: ce (10-28 11:40; 3f is another project).
 
 ### T4 AI heisters trigger cops / enemy spawns (not only the player)
+- 11-02 ~10:15 ce: TP1 PASS (DM03 online, OnlineTriggersExtra=2 DRY, 0 faults both seats): pick-up boxes left to the game by real name, no cop box skipped; bots would fire 3-4 ZOnlineTriggerBox + ~8 ZTriggerBox2 (Dead Men maps use these, stock DD waves use ZTriggerBox = already live). Kit tp2 = Extra=1 LIVE on DM03 + DD05, queued last.
 - 10-28 12:00 ce: research re/bots_trigger_cops_1028.md (ZTriggerBox 0x42afd0/ZTriggerBox2 0x626f92 count team-2 only when 0x7f6850); same build as T3.
 - [x] Find what starts cop waves and spawn triggers, make bot actions count online: [BotFill] OnlineTriggers=1 PROVEN live WK2 10-28 (F06: 3 ZTriggerBox FIREs via 0x6ae730 from bots, 0 faults). Arcade already counts team 2.
 Owner: ce (10-28 11:40).
 
 ### T5 Gun UI + sounds Arcade -> multiplayer (MP45 first)
+- 11-02 ~10:15 ce: G2B PASS (REAL stock DD05 + DD09 archives online, 0 faults all seats): rows 13/16 named 'HK69'/'Type 81' instead of the carrier's 'TOQ Model 18'/'Buqiang 300BP'; picture row 13 -> look-alike row 14, 4000-5400 swaps = restores, 0 write failures. Open: a d3 shot of the card (needs D3dShotPost=1), rows 32/35 not shown by the script.
 - 11-01 ~02:10 ce: gunui_1029 INSTALLED (DM07 + DD10 baked; UNDO C:\kl_build_1024\gunui_1029\UNDO_gunui_1029.bat). GU_DM07 / GU_DD10 online PASS 0 faults both seats. Next: GUN13 = a shot of the shop weapon list on each to see the true picture.
 - 10-29 ~06:50 ce: OnlineSwapPic WORKS in the weapon list (merged 9a2a1a304): role table 192 -> 2048 hash; GUN12b DM07 online 7494 swaps = restores, 0 faults. Next: picture is a look-alike stock card; baked kit gunui_1029 (true picture) still staged.
 - 10-28 19:30 ce: research re/gun_ui_parity_1028.md: the MP45 (item 1, row 7) is the SAME online as in Arcade except remote shots are 3D (RemoteShot2D covers it). The real gaps are swap rows 13/16/32/35 on UNBAKED maps (stock F01-F09, DM07, DD10: carrier's name + picture); full fix = bake (C:\kl_build_1024\gunui_1028\INSTALL_gunui_1028.bat). Built wk-gunui2-1028 ([Shop] OnlineSwapText=2 name follows the pool, OnlineSwapArm, OnlineSwapLog; [Sound] RemoteShot2DLogAny; all off); bench GUN1 running.
