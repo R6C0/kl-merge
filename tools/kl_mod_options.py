@@ -474,7 +474,9 @@ feat('clientbuild', G_STAB, 'Online Dead Men maps with parked cars (DM01, DM03):
 feat('clientbuildmaps', G_STAB, 'Cover spots at load: the map slots it acts on (needs the row above) (recommended on)', 'on', 'start',
      'klcoverring.c [CoverRing] ClientBuildMaps: F01,F03 = DM01 and DM03; F02 (DM02) left out on purpose: its one car gets 8 spare points on both seats (CR5 11-02), so it gains nothing', [('CoverRing', 'ClientBuildMaps', 'F01,F03', '', '')])
 F[-1]['str'] = 1
-feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', 'start',
+feat('clientrewrite', G_EXP, 'Online Dead Men maps with parked cars: a joining player re-fits the car cover spots when the car starts (needs the two rows above) (recommended off until benched)', 'off', 'start',
+     'klcoverring.c [CoverRing] ClientRewrite (CR6): client only, re-runs the ring writer 0x81b6f0 for a prebuilt car whose state changes (done cleared first, rsv=1 keeps the indices); NOT run live', [('CoverRing', 'ClientRewrite', 1, 0, 0)])
+feat('memory', G_STAB,'Room for the big Dead Men maps (address space)', 'on', 'start',
      'avoids the 2 GB heap NULL crash on large .prm files', [('Memory', 'Enable', 1, 0, 1)])
 feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call runs out of memory without it)', 'on', 'start',
      'klquad.c: the 4 post-process quad buffers get 128 buffers each; the NVIDIA driver no longer piles a block per frame pass (K50H: 1696 -> 18 MB '

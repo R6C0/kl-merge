@@ -112,4 +112,34 @@ static int kcr_cb_gate(int enabled, int client, int map_ok, int done_load, unsig
     return KCR_CB_GO;
 }
 
+/* ---- ClientRewrite (CR6, 2026-11-02): the online CLIENT re-runs the ring writer for a prebuilt car when that car activates, so the points get real positions like on the host.
+   Why it needs the done flag: ClientBuild leaves done[+1e8]=1 rsv[+1e9]=1; the writer returns at once on done != 0 (0x81b703). The host's own activation runs it with done == 0
+   (CR1: car #2's done went 1 -> 0 -> 1 with no count growth), so the client sets done to 0 itself before the call (GUESS: whatever clears it on the host is not found; the
+   writer sets it to 1 again at 0x81bacb). rsv == 1 makes the writer skip the 8 index reservations (dasm 0x81b709), so the count must NOT grow and the indices must not change.
+   Everything below is the DECISION only (no game memory). */
+#define KCR_RW_MAXTRY   4UL                 /* attempts per car per load (state change + spare retries) */
+#define KCR_RW_RETRY_MS 1500UL              /* spacing of two attempts on one car */
+#define KCR_RW_SCAN_MS  200UL               /* the per-car state is looked at this often */
+enum { KCR_RW_NONE = 0, KCR_RW_STATE, KCR_RW_SPARE };
+
+/* may a prebuilt ring be rewritten? exactly the shape ClientBuild leaves: done 1, rsv 1, 1..8 indices */
+static int kcr_rw_pre_ok(unsigned long done, unsigned long rsv, unsigned long n) { return (done & 0xfful) == 1ul && (rsv & 0xfful) == 1ul && n >= 1ul && n <= 8ul; }
+
+/* when is a rewrite due? state_changed = [car+0x8c0] or [car+0xa28] differs from the value seen right after the prebuild (GUESS: that is the client's view of the activation);
+   spares = points of the ring that are not usable; tries/since_ms = attempts so far / ms since the last one (0xffffffff = never). */
+static int kcr_rw_trigger(int state_changed, unsigned long spares, unsigned long tries, unsigned long since_ms)
+{
+    if (tries >= KCR_RW_MAXTRY) return KCR_RW_NONE;
+    if (tries && since_ms < KCR_RW_RETRY_MS) return KCR_RW_NONE;
+    if (!tries && state_changed) return KCR_RW_STATE;
+    if (tries && state_changed && spares) return KCR_RW_SPARE;      /* only after an activation, and only while spares remain */
+    return KCR_RW_NONE;
+}
+
+/* session gate: ClientRewrite on, an online client (never the host: the host does this itself), ClientBuild finished clean, state not past in-play */
+static int kcr_rw_gate(int enabled, int client, int cb_done_ok, unsigned long state) { return enabled && client && cb_done_ok && state <= KCR_CB_MAXSTATE; }
+
+/* after the call: the count must be unchanged and the indices equal; anything else = the reserve path ran (rsv semantics wrong) -> feature off */
+static int kcr_rw_after_ok(unsigned long cnt_before, unsigned long cnt_after, int idx_same) { return cnt_before == cnt_after && idx_same; }
+
 #endif

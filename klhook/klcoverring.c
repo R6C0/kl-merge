@@ -28,6 +28,7 @@
  *    thread: when the cover list exists, [L+0x68] has been unchanged for 1 s and cars were found, call the ring writer 0x81b6f0 (ecx = car script) for each car in ENTITY-TABLE
  *    order whose script has done==0 and rsv==0 (GUESS: this order equals the host's; every car and the indices are logged so the bench can compare). The writer is hashed
  *    code: CALLED, never patched; no debug register. A fault in it turns the feature off for the run. Lines: 'coverring: clientbuild ...'. Gate logic: klcoverring_logic.h.
+ * 4. CLIENTREWRITE (CR6, 2026-11-02): see kcr_rw_step. Client only, after ClientBuild, per prebuilt car on a state change. NOT RUN LIVE.
  * ini: [CoverRing] Enable=1 in the TEST build / 0 in SHIP (recommended on for test runs, off for players)
  *                  Callers=1 TEST / 0 SHIP (recommended on for test runs, off for players): only logs that the slot swaps are skipped (hashed vtables)
  *                  ClientBuild=0 by default (recommended on, host and every client together: CR3 11-01, CR5 + SN1 11-02 PASS)  ClientBuildMaps=F01,F03 (DM01 / DM03 slots)
@@ -45,6 +46,8 @@
 #define KCR_NCAR 64
 static struct {
     int on, callers, bad, have, nenum;
+    int rw, rw_bad, npre; DWORD rw_t;                                                         /* ClientRewrite (CR6) */
+    struct { DWORD car, script, s8c0, sa28, tries, last; } pre[KCR_NCAR];
     int cb, cb_host, cb_done, cb_last, cb_bad; char cb_maps[64]; DWORD cb_cnt, cb_cnt_at;      /* ClientBuild (CR2) */
     DWORD gd, st, t_load, t_poll, t_scan, L, cnt, sig, ncars;
     struct { DWORD car, slot; } c[KCR_NCAR];
@@ -112,6 +115,7 @@ static void kcr_car_lines(DWORD now, DWORD pb, DWORD npts)
 static void kcr_rearm(DWORD gd, DWORD st, DWORD now)
 {
     memset(&kcr.c, 0, sizeof kcr.c);
+    kcr.npre = 0; kcr.rw_t = 0; memset(&kcr.pre, 0, sizeof kcr.pre);
     kcr.cb_done = 0; kcr.cb_last = -1; kcr.cb_cnt = 0xfffffffful; kcr.cb_cnt_at = now;
     kcr.have = 0; kcr.nenum = 0; kcr.ncars = 0; kcr.gd = gd; kcr.st = st; kcr.t_load = now; kcr.t_poll = 0; kcr.t_scan = 0; kcr.L = 0; kcr.cnt = 0; kcr.sig = 0;
     if (kcr.on) klog("coverring: load gd=%08lx state=%lx (poll every tick for %lu s, then every %lu s)", (unsigned long)gd, (unsigned long)st, KCR_FAST_MS / 1000, KCR_SLOW_MS / 1000);
@@ -215,6 +219,10 @@ static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
             return;
         }
         ran++;
+        if (kcr.npre < KCR_NCAR) {      /* CR6: remember the prebuilt car and its state as seen now; a later change is the GUESSed activation marker */
+            kcr.pre[kcr.npre].car = car; kcr.pre[kcr.npre].script = s; kcr.pre[kcr.npre].s8c0 = klh_rd32(car + 0x8c0); kcr.pre[kcr.npre].sa28 = klh_rd32(car + 0xa28);
+            kcr.pre[kcr.npre].tries = 0; kcr.pre[kcr.npre].last = 0; kcr.npre++;
+        }
         c1 = klh_rd32(L + 0x68); n = klh_rd32(s + 0x1c4);
         memset(idx, 0xff, sizeof idx);
         for (k = 0; k < 8; k++) idx[k] = klh_rd32(s + 0x1c8 + k * 4);
@@ -231,10 +239,59 @@ static void kcr_cb_step(DWORD gd, DWORD st, DWORD now)
          (unsigned long)klh_rd32(L + 0x68), usable, checked);
 }
 
+/* ClientRewrite (CR6): after ClientBuild, when a prebuilt car's state changes (GUESS: [car+0x8c0] / [car+0xa28] as the client sees them mark the activation that makes the HOST
+   run 0x8d6210 -> 0x81b6f0), run the writer again on this seat. The writer returns at once when done[+1e8] != 0, and the host reaches it with done == 0 (CR1: done 1 -> 0 -> 1), so
+   done is cleared here first (GUESS: the host's clearing site is not found). rsv[+1e9] == 1 makes it skip the 8 index reservations (dasm 0x81b709) and only rewrite the points'
+   positions/flags (physics probe + 0x9015d0 per point). Checked after each call: count and the 8 indices must be unchanged, else the feature turns itself off. A fault restores done=1.
+   The script is heap data (not hashed): a plain byte store inside kcr_tick's __try. */
+static void kcr_rw_step(DWORD gd, DWORD st, DWORD now)
+{
+    DWORD sm, role = 0, mode = 0, L, rb, rn, pb = 0, pe = 0, npts, i;
+    if (!kcr.rw || kcr.rw_bad || !kcr.cb_done || kcr.cb_bad || !kcr.npre) return;
+    if (kcr.rw_t && now - kcr.rw_t < KCR_RW_SCAN_MS) return;
+    kcr.rw_t = now;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598))) || !KLH_SM_VT_OK(klh_rd32(sm)) || !klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4)) return;
+    if (!kcr_rw_gate(1, kcr_cb_role_ok(role, mode, 0), 1, st)) return;       /* client only (host = 0 here on purpose) */
+    if (!kcvd_read_list(gd, &L, &rb, &rn, &pb, &pe)) return;
+    npts = (pe >= pb && pe - pb < 0x4000000u) ? (pe - pb) / 0x7c : 0;
+    for (i = 0; i < (DWORD)kcr.npre; i++) {
+        DWORD car = kcr.pre[i].car, s = kcr.pre[i].script, d, r, n, idx[8], idx2[8], k, c0, c1, spares = 0, since; int why, sc, same = 1, fault;
+        if (klh_rd32(car + 0x968) != s || !kcr_script_matches(car, klh_rd32(s + 0x40))) continue;       /* car gone / script replaced: never touch it */
+        d = kcr_rd8(s + 0x1e8); r = kcr_rd8(s + 0x1e9); n = klh_rd32(s + 0x1c4);
+        sc = klh_rd32(car + 0x8c0) != kcr.pre[i].s8c0 || klh_rd32(car + 0xa28) != kcr.pre[i].sa28;
+        for (k = 0; k < 8; k++) idx[k] = klh_rd32(s + 0x1c8 + k * 4);
+        for (k = 0; k < n && k < 8; k++) {
+            DWORD fl = 0;
+            if (idx[k] >= npts || !klh_rd(pb + idx[k] * 0x7c + 0x68, &fl, 4) || !kcr_pt_usable(fl)) spares++;
+        }
+        since = kcr.pre[i].tries ? now - kcr.pre[i].last : 0xfffffffful;
+        why = kcr_rw_trigger(sc, spares, kcr.pre[i].tries, since);
+        if (why == KCR_RW_NONE || !kcr_rw_pre_ok(d, r, n)) continue;
+        kcr.pre[i].tries++; kcr.pre[i].last = now;
+        c0 = klh_rd32(L + 0x68);
+        *(volatile BYTE *)(DWORD_PTR)(s + 0x1e8) = 0;
+        fault = !kcr_cb_call(s);
+        if (fault) { *(volatile BYTE *)(DWORD_PTR)(s + 0x1e8) = 1; kcr.rw_bad = 1; }
+        c1 = klh_rd32(L + 0x68);
+        for (k = 0; k < 8; k++) { idx2[k] = klh_rd32(s + 0x1c8 + k * 4); if (idx2[k] != idx[k]) same = 0; }
+        kcr.pre[i].s8c0 = klh_rd32(car + 0x8c0); kcr.pre[i].sa28 = klh_rd32(car + 0xa28);
+        klog("coverring: rewrite car #%lu script=%08lx %s try %lu: %s, spares before %lu, count %lu -> %lu, indices %s, done=%lu rsv=%lu",
+             (unsigned long)i, (unsigned long)s, why == KCR_RW_STATE ? "state changed" : "spares remain", (unsigned long)kcr.pre[i].tries,
+             fault ? "FAULT in 0x81b6f0 (FPU reset, done restored to 1)" : "called 0x81b6f0", (unsigned long)spares, (unsigned long)c0, (unsigned long)c1,
+             same ? "unchanged" : "CHANGED", (unsigned long)kcr_rd8(s + 0x1e8), (unsigned long)kcr_rd8(s + 0x1e9));
+        if (!fault) kcr_cb_points("rewrite", i, idx2, n, pb, npts);
+        if (!fault && !kcr_rw_after_ok(c0, c1, same)) {
+            kcr.rw_bad = 1;
+            klog("coverring: rewrite WARN car #%lu: the writer reserved or moved indices (rsv semantics not as dasm'd) - ClientRewrite off for the rest of the run", (unsigned long)i);
+        }
+        if (kcr.rw_bad) return;
+    }
+}
+
 static void kcr_tick(int game_thread)
 {
     DWORD now, gd, st, L, rb, rn, pb, pe, cnt, sig, ran;
-    if ((!kcr.on && !kcr.cb) || !game_thread || kcr.bad) return;
+    if ((!kcr.on && !kcr.cb && !kcr.rw) || !game_thread || kcr.bad) return;
     now = GetTickCount();
     __try {
         if (!kcvd_state(&gd, &st)) return;
@@ -244,6 +301,7 @@ static void kcr_tick(int game_thread)
             kcr.st = st;
         }
         if (kcr.cb) kcr_cb_step(gd, st, now);
+        if (kcr.rw) kcr_rw_step(gd, st, now);
         if (!kcr.on) { return; }
         if (!kcr_due((unsigned long)(now - kcr.t_load), kcr.t_poll ? (unsigned long)(now - kcr.t_poll) : 0xfffffffful)) return;
         kcr.t_poll = now;
@@ -280,7 +338,9 @@ static void kcr_init(void)
     kcr.cb = GetPrivateProfileIntA("CoverRing", "ClientBuild", 0, klh_ini) != 0;      /* (recommended on, host and every client together; CR3/CR5/SN1 PASS) default 0 when the key is missing */
     GetPrivateProfileStringA("CoverRing", "ClientBuildMaps", "F01,F03", kcr.cb_maps, sizeof kcr.cb_maps, klh_ini);      /* slots (DM01 = F01, DM03 = F03) */
     kcr.cb_host = GetPrivateProfileIntA("CoverRing", "ClientBuildHost", 0, klh_ini) != 0;      /* (recommended on, with ClientBuild) the HOST prebuilds too */
+    kcr.rw = GetPrivateProfileIntA("CoverRing", "ClientRewrite", 0, klh_ini) != 0;      /* (recommended off until benched) needs ClientBuild=1 */
     kcr.cb_last = -1;
+    if (kcr.rw) klog("coverring: ClientRewrite=1 (recommended off until benched): an online CLIENT re-runs 0x81b6f0 (done cleared first, rsv=1 keeps the indices) for a prebuilt car whose state changes; needs ClientBuild=1");
     if (kcr.cb) klog("coverring: ClientBuild=1 (recommended on, host and every client together; online CLIENT%s, once per load, slots '%s'): this seat calls the ring writer 0x81b6f0 for its cars at load, table order",
                      kcr.cb_host ? " and HOST (ClientBuildHost=1)" : " only", kcr.cb_maps);
     if (!kcr.on) return;

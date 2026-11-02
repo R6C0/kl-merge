@@ -53,6 +53,13 @@ int main(void)
     CHECK(kcr_cb_gate(1, 1, 1, 0, 0x16, 0, 0, KCR_CB_GIVEUP_MS, 0) == KCR_CB_GAVE_UP);
     CHECK(kcr_cb_gate(1, 1, 1, 0, 0x16, 1, 0, KCR_CB_GIVEUP_MS, 5000) == KCR_CB_GAVE_UP);
     CHECK(kcr_cb_gate(1, 1, 1, 0, 0x16, 1, 3, KCR_CB_GIVEUP_MS, 5000) == KCR_CB_GO);   /* cars and list present: late is still fine */
+    /* ClientRewrite (CR6) */
+    CHECK(kcr_rw_pre_ok(1, 1, 8)); CHECK(kcr_rw_pre_ok(1, 1, 1)); CHECK(!kcr_rw_pre_ok(0, 1, 8)); CHECK(!kcr_rw_pre_ok(1, 0, 8)); CHECK(!kcr_rw_pre_ok(1, 1, 0)); CHECK(!kcr_rw_pre_ok(1, 1, 9));
+    CHECK(kcr_rw_trigger(1, 0, 0, 0xfffffffful) == KCR_RW_STATE); CHECK(kcr_rw_trigger(0, 8, 0, 0xfffffffful) == KCR_RW_NONE);   /* spares alone never trigger the first call */
+    CHECK(kcr_rw_trigger(1, 8, 1, 1499) == KCR_RW_NONE); CHECK(kcr_rw_trigger(1, 8, 1, 1500) == KCR_RW_SPARE); CHECK(kcr_rw_trigger(1, 0, 1, 9999) == KCR_RW_NONE);
+    CHECK(kcr_rw_trigger(1, 8, KCR_RW_MAXTRY, 99999) == KCR_RW_NONE); CHECK(kcr_rw_trigger(0, 8, 2, 99999) == KCR_RW_NONE);
+    CHECK(kcr_rw_gate(1, 1, 1, 0x19)); CHECK(!kcr_rw_gate(0, 1, 1, 0x19)); CHECK(!kcr_rw_gate(1, 0, 1, 0x19)); CHECK(!kcr_rw_gate(1, 1, 0, 0x19)); CHECK(!kcr_rw_gate(1, 1, 1, 0x1a));
+    CHECK(kcr_rw_after_ok(556, 556, 1)); CHECK(!kcr_rw_after_ok(556, 564, 1)); CHECK(!kcr_rw_after_ok(556, 556, 0));
     printf("klcoverring_test: %d checks, %d fail\n", checks, fails);
     return fails != 0;
 }

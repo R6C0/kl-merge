@@ -1,4 +1,5 @@
 # DM01 / DM03 host-only car cover ring (2026-11-01)
+2026-11-02 CR6 (offline, not run live): [CoverRing] ClientRewrite=1 (default 0, client only, needs ClientBuild): per prebuilt car, a change of [car+0x8c0]/[car+0xa28] (GUESS: activation marker) clears done[+1e8] then calls 0x81b6f0 (rsv=1 -> positions only); count/indices checked after each call; max 4 tries/car, retry only while spare points remain. Log: "coverring: rewrite ...".
 
 2026-11-02 ~02:05 SN1 PASS with the next-ship candidate (ClientBuild + ClientBuildHost, F01,F03): DM01/DM03 0 asserts on both seats. Residual: DM03 car #0 points 556-563 are spares on both seats at load and only the host rewrites them on activation (rsv path) -> host-only positions on equal indices. Safety net AssertSoft 0x6567e8; CR6 idea: the client re-runs 0x81b6f0 for that car on activation.
 
