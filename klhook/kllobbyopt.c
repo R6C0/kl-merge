@@ -35,12 +35,16 @@
  *   RoundsMax=0     0 = stock (5). 6..20: the host can raise the number of rounds to this many.
  *   PlayersMax=0    0 = stock (8). 9..12 (engine ceiling): the host can raise 'Number of players' to this many (RIGHT clamp 0x7dcb78 / 0x7dcb7d taken over).
  *   PlayersAuto=0   1 = the host's lobby starts at PlayersMax players without a key press (once per lobby; LEFT still lowers it).
+ *   TimeAuto=0      0 = stock. 1..20: the host's lobby starts at this Heist time (minutes) without a key press (once per lobby, host only, lobby state
+ *                   0xd; LEFT/RIGHT still change it). Clamped to the offered range (TimeMin or 3 .. TimeMax or 5, kltimeauto_logic.h), so a 6-minute
+ *                   lobby needs TimeMax>=6. Same setters as the RIGHT-past-ceiling path (kllo_tset). 2026-11-02.
  *                   A 9th heister has no seat in a stock level: [Lobby] ExtraSeats (TEST build) and reound_end_online.md.
  */
 #ifndef KLLOBBYOPT_C
 #define KLLOBBYOPT_C
+#include "kltimeauto_logic.h"
 
-static int kllo_tmax, kllo_tmin, kllo_rmax, kllo_pmax, kllo_pauto, kllo_clockfix;
+static int kllo_tmax, kllo_tmin, kllo_rmax, kllo_pmax, kllo_pauto, kllo_tauto, kllo_clockfix;
 static void klrk_init(void);                                         /* klroundkeep.c (included later) */
 static void klrk_tick(void);
 static DWORD kllo_vt[1 + 36];                                         /* [0] = RTTI locator, [1..36] = slots 0..35 of 0xbbd364 */
@@ -61,6 +65,8 @@ static void kllo_init(void)
     kllo_pmax = GetPrivateProfileIntA("Lobby", "PlayersMax", 0, klh_ini);
     if (kllo_pmax < 9 || kllo_pmax > 12) kllo_pmax = 0;
     kllo_pauto = GetPrivateProfileIntA("Lobby", "PlayersAuto", 0, klh_ini) != 0;
+    kllo_tauto = GetPrivateProfileIntA("Lobby", "TimeAuto", 0, klh_ini);
+    if (kllo_tauto < 1 || kllo_tauto > 20) kllo_tauto = 0;
     klrk_init();
     kllo_clockfix = GetPrivateProfileIntA("Lobby", "RoundClockFix", 0, klh_ini) != 0;
     if (kllo_clockfix) klog("lobbyopt: RoundClockFix=1 (GUESS): [rules+0x4c] is set to the lobby heist time at the round start when it holds less");
@@ -287,6 +293,32 @@ static void kllo_players_auto(DWORD e)
     klog("lobbyopt: PlayersAuto: Number of players %d -> %d (now %d)", cur, kllo_pmax, (signed char)((kllo_f0)KLH_VA(0x54d140))((void *)(DWORD_PTR)sm, 0));
 }
 
+/* [Lobby] TimeAuto=N: the same once-per-selector gates as PlayersAuto, then the time setters (kllo_tset) with the clamped value */
+static void kllo_time_auto(DWORD e)
+{
+    static DWORD done_e;
+    DWORD sm, mode = 0, st, sv, fn, es, so; int cur, n;
+    if (!kllo_tauto || e == done_e) return;
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd((DWORD_PTR)KLH_VA(0x168e59c), &mode, 4) || mode == 2) return;
+    if (klh_rd32(sm) != 0xbd1ebc && !KLH_SM_VT_OK(klh_rd32(sm))) return;
+    if (!(BYTE)((kllo_f0)KLH_VA(0x8df480))((void *)(DWORD_PTR)sm, 0)) return;
+    if (((kllo_f0)KLH_VA(0x8e6a20))((void *)(DWORD_PTR)sm, 0) != 0xd) return;
+    if (!(st = kllo_store()) || !(sv = klh_rd32(st)) || !(fn = klh_rd32(sv + 8))) return;
+    if (!((kllo_f2)(DWORD_PTR)fn)((void *)(DWORD_PTR)st, 0, 0xb41ea0, 0)) return;
+    if (!(so = ((kllo_f0)KLH_VA(0x7bb2a0))((void *)(DWORD_PTR)klh_rd32((DWORD_PTR)KLH_VA(0x168e9e4)), 0))) return;
+    es = ((kllo_f0)(DWORD_PTR)klh_rd32(klh_rd32(sm) + 0x2c))((void *)(DWORD_PTR)sm, 0);
+    if (es) es = ((kllo_f0)(DWORD_PTR)klh_rd32(klh_rd32(es) + 0x140))((void *)(DWORD_PTR)es, 0);
+    if (!es) return;
+    done_e = e;
+    cur = kllo_tsm(sm);
+    n = kta_target(kllo_tauto, kllo_tmin, kllo_tmax, cur);
+    if (!n) return;
+    kllo_tset(sm, so, st, es, n);
+    { BYTE one = 1; klh_data((BYTE *)(DWORD_PTR)es + 0xa, &one, 1, "lobby options: menu block dirty flag"); }
+    ((kllo_f0)KLH_VA(0x549e80))((void *)(DWORD_PTR)sm, 0);
+    klog("lobbyopt: TimeAuto: heist time %d -> %d min (once per lobby)", cur, n);
+}
+
 static void kllo_tick(void)
 {
     static DWORD last; DWORD now = GetTickCount(), gd, mgr, e, vt, nv;
@@ -295,7 +327,7 @@ static void kllo_tick(void)
 #endif
     kllo_clockpoll();
     klrk_tick();
-    if (!(kllo_tmax || kllo_tmin || kllo_rmax || kllo_pmax) || !klh_exe_ok || now - last < 300) return;
+    if (!(kllo_tmax || kllo_tmin || kllo_rmax || kllo_pmax || kllo_tauto) || !klh_exe_ok || now - last < 300) return;
     last = now;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(mgr = klh_rd32(gd + 0x824)) || klh_rd32(mgr) != (DWORD)(DWORD_PTR)KLH_VA(0xbb7dc8)) return;
     if (!(e = (DWORD)(DWORD_PTR)((void *(__fastcall *)(void *, void *, const char *))KLH_VA(0x83faf0))((void *)(DWORD_PTR)mgr, 0, "MercsFASelectorFALobby"))) return;
@@ -308,7 +340,7 @@ static void kllo_tick(void)
         kllo_vt[1 + 10] = (DWORD)(DWORD_PTR)kllo_slot10;
     }
     nv = (DWORD)(DWORD_PTR)&kllo_vt[1];
-    if (vt == nv) { kllo_players_auto(e); return; }
+    if (vt == nv) { kllo_players_auto(e); kllo_time_auto(e); return; }
     if (vt != (DWORD)(DWORD_PTR)KLH_VA(0xbbd364)) return;
     if (klh_data((void *)(DWORD_PTR)e, &nv, 4, "lobby options: selector vtable (private copy)")) klog("lobbyopt: lobby selector %08lx wrapped (slot 10)", (unsigned long)e);
 }
