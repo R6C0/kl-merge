@@ -13,7 +13,8 @@
  * KEYS: the defaults are Multiplayer/JackPot/JackPot_01_C%D (loot) and Multiplayer/You_Esc/YouEsc_01_C%D (boarded), %D = digit 2..8: all 14 are in
  * the English .LOC of F01, F04 and F06 (tools/kl_loc.py keys, 10-28; group keys, no level part). That klk_say plays them for a bot's digit is NOT seen live yet.
  * %L (slot, e.g. F06; klbv_slot) is still expanded for ini overrides ([BotFill] OnlineVoiceKeyLoot / OnlineVoiceKeyEscape), e.g. Multiplayer/%L/ReachlootArea_01_R_C%D.
- * Dead Men bodies (KLVoice/<Name>/<event>) are not handled in v1.
+ * Dead Men bodies (KLVoice/<Name>/<event>) are not handled in v1 -- except with [BotFill] OnlineVoiceByLook=1 (klbv_look_key): each seat looks the digit up in its own KLSYL look table (klcl_t) and
+ * plays KLVoice/<Name>/<leaf> of that character first, the digit key when there is no entry / no leaf. No packet change.
  * SEND SCHEDULE: each event is sent 3 times, 100 ms apart (UDP); the client drops repeats by seq. Gaps: 15 s per bot and event, 2 s between any two lines, queue count > 8: no line.
  *
  * LOG
@@ -96,6 +97,21 @@ static int klbv_make_key(int ev, int digit, char *key, int cap)
     return klbv_key(key, cap, klbv_tl[ev == KLBV_EV_LOOT ? 0 : 1], lk, digit);
 }
 
+/* OnlineVoiceByLook: the key of the character this seat applied for the digit (klcl_t.e[digit-1].ch, the record the look was applied from) as KLVoice/<Name>/<leaf>, the way klvoice.c (Arcade) spells a
+   Dead Men body's line. leaf = the digit key minus folder and _C<n> (klvoice.c kvo_leaf); GUESS: the event leaf of loot is JackPot_01 and of boarded YouEsc_01 as in the digit keys. 0 = no such key (no table, no entry,
+   no character, a name that is not a Dead Men body, wardrobe unreadable, key too long): the caller keeps the digit key. No packet field: the KLSYL table is already on every seat. */
+static int klbv_look_key(int ev, int digit, const char *dkey, char *key, int cap, char *who, int wcap)
+{
+    char leaf[64]; int ch;
+    if (!klbv_bylook || digit < 2 || digit > 8) return 0;
+    if (!klcl_on || !klcl_t.e[digit - 1].have || !(ch = klcl_t.e[digit - 1].ch)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d: no look-table entry / character (OnlineLooks off, stock map or the bot keeps his body): digit key", ev, digit); return 0; }
+    if (!klcl_bot_name(ch, who, wcap) || !kvo_name_of(who)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d ch %d: wardrobe name unreadable or not a Dead Men body: digit key", ev, digit, ch); return 0; }
+    if (!kvo_leaf(dkey, leaf)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d: key %s has no _C<n> leaf: digit key", ev, digit, dkey); return 0; }
+    if (_snprintf(key, cap, "KLVoice/%s/%s", who, leaf) < 0 || (int)strlen(key) >= cap - 1) return 0;
+    key[cap - 1] = 0;
+    return 1;
+}
+
 /* build the key + play it on this seat. seat = "HOST" / "CLIENT". 1 = klk_say said it. */
 static int klbv_play(const char *seat, int ev, int digit, unsigned now, int check_gap)
 {
@@ -108,6 +124,14 @@ static int klbv_play(const char *seat, int ev, int digit, unsigned now, int chec
     if (!klbv_key(key, sizeof key, klbv_tl[ev == KLBV_EV_LOOT ? 0 : 1], lk, digit)) { if (klbv_note(2)) klog("botvoice: %s event %d: key template too long", seat, ev); return 0; }
     if (check_gap && !klbv_gap_ok(&klbv_t.gaps, digit, ev, now)) { if (klbv_note(3)) klog("botvoice: %s event %d digit %d key %s: held back (gap: 15 s per bot and event, 2 s between lines)", seat, ev, digit, key); return 0; }
     if (klbv_queue_full()) { if (klbv_note(4)) klog("botvoice: %s event %d digit %d key %s: held back (speech queue > 8 or unreadable)", seat, ev, digit, key); return 0; }
+    if (klbv_bylook) {      /* OnlineVoiceByLook: the character's own line first; klk_say gives 0 when the level's .LOC has no such leaf, then the digit key below */
+        char lkey[200], who[40];
+        if (klbv_look_key(ev, digit, key, lkey, sizeof lkey, who, sizeof who)) {
+            r = klk_say(lkey, -6, 0.0f, "bot voice (OnlineVoiceByLook)", rules, scene);
+            klog("botvoice: %s say event %d (%s) digit %d bylook %s key %s -> klk_say %d%s", seat, ev, klbv_ev_name(ev), digit, who, lkey, r, r ? "" : " (digit key next)");
+            if (r) return r;
+        }
+    }
     r = klk_say(key, -6, 0.0f, "bot voice (OnlineVoice)", rules, scene);      /* -6 = the crew speaker object [this+0xe0] of 0x7d0e80: GUESS, unconfirmed on a client with no record */
     klog("botvoice: %s say event %d (%s) digit %d key %s -> klk_say %d", seat, ev, klbv_ev_name(ev), digit, key, r);
     return r;
