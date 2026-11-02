@@ -1,3 +1,9 @@
+2026-11-02 ~05:40 - [c9] CR9 PASS (CR8 [CoverRing] ClientRingSync=1 both seats + ClientRewrite=1 on the client, TEST 468eae9c, DM03 + DM01
+online): asserts/soft 0 on all 4 seats, no fault, no dump. DM03: the client filled idx 561 from the host (SPARE 400 -> host 1012, own +0x24
+00001dcc) -> client car #0 8/8 usable; host 6/8; no host-only usable index left (coverdump still says DIVERGE: rotated car, 557/558 client-only).
+DM01 IDENTICAL, ringsync wrote 0. Open: CHANGED line repeats every second (log spam, capped 40); coverdump parser should accept 'no host-only
+usable' as safe. Next: one more map pass, then ClientRewrite + ClientRingSync into NEXT_SHIP.
+
 2026-11-02 ~05:20 - [ce] SR2 PASS (4 rows, asserts/faults 0): round-1 bot money DD09 $1.84M, DD05 $2.13M, DM06 $0.60M, DD09 + OnlineDropTake=1
 $3.90M (6 droptake lines; Arcade DD09 3.4M by +60 s) -> DropTake is the biggest single gain, recommend on after one more map. DM06 one "drop table
 full" line = the DT1 fix replacing a hidden pool object (works). RT5 (DM09, TimeAuto=6): clock 370 s in all rows; A (LegSpeed 100, Near 600) van at

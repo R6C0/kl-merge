@@ -68,9 +68,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-11-02 ~04:20 - [c9] CR8 pushed (95a037a39, [CoverRing] ClientRingSync default 0, not run live): CR7's last DM03 gap (#561) is the car's pose,
-not timing (host car ~11 deg rotated, car not replicated), so the host now sends its ring (KLSYR) and the client fills only its spare points.
-CR7 PASS before it (client 7/8, 0 asserts). Dlls c9_1028\cr8 ship 9d1a4d3c / test 1bb953e9; kit cr9un_cr9.sh after ce's SR2 (~06:30).
+2026-11-02 ~05:40 - [c9] CR9 PASS: CR8 [CoverRing] ClientRingSync (95a037a39 + a56e533db, default 0) live on DM03 + DM01 online, 0 asserts/faults.
+DM03 client car #0 8/8 usable (idx 561 filled from the host's point, own +0x24 handle), no host-only usable index left; DM01 identical.
+Next: one more map, quiet the per-second CHANGED log line, then ClientRewrite + ClientRingSync into NEXT_SHIP (recommended on).
 
 2026-11-02 ~05:00 - [ce] DH1 PASS (DD01, 0 faults): DoorHold opens all vaults but money unchanged ($1.54M) -> off. The 14-stack cap is
 OnlineTacticsCarry 2 x 7 bots; Arcade has no cap (re/dd01_plateau_1102.md) -> kit dh2 (Carry 8/6). Merged: re/t5_status_1102.md, HighlightProbe,

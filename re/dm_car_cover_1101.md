@@ -133,3 +133,11 @@ CR3 PASS (DM01 + DM03 online, ClientBuild=1 + ClientBuildHost=1 on both seats): 
 ### c9 CR5 result (11-02 ~00:40)
 
 CR5 PASS (DM01 + DM02 online, ClientBuild on both seats, TEST 8cdb9829): asserts 0 / soft 0 on host and client of both maps, no FAULT. DM02 coverdump IDENTICAL, but its one car gets 8 SPARE points (0x400, pos 0) on both seats (the probe fails), so F02 stays out of ClientBuildMaps (F01,F03). DM01 'DIVERGE' was only 0.1-unit jitter on the same indices: kl_coverdump_parse now lists that as jitter (tol 1.0). 'usable 0/8' log lines were a bug: kcr_pt_usable ignored bit 0x2 (0x656740 accepts al&2 OR 0x200; real flags 0x100a/0x1012/0x140a). Fixed in 8773e87ad; NEXT_SHIP dll c9_1028\cr6\ship ff114e33. Open: a live bench of ship_next (candidate ini + dll), Elwood lock icon with Rank=0.
+
+### c9 CR9 result (11-02 ~05:40)
+
+CR9 PASS (CR8 [CoverRing] ClientRingSync=1 both seats + ClientRewrite=1 on the client, TEST 468eae9c, DM03 + DM01
+online): asserts/soft 0 on all 4 seats, no fault, no dump. DM03: the client filled idx 561 from the host (SPARE 400 -> host 1012, own +0x24
+00001dcc) -> client car #0 8/8 usable; host 6/8; no host-only usable index left (coverdump still says DIVERGE: rotated car, 557/558 client-only).
+DM01 IDENTICAL, ringsync wrote 0. Open: CHANGED line repeats every second (log spam, capped 40); coverdump parser should accept 'no host-only
+usable' as safe. Next: one more map pass, then ClientRewrite + ClientRingSync into NEXT_SHIP.
