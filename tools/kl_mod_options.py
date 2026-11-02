@@ -476,10 +476,10 @@ feat('clientbuild', G_STAB, 'Online Dead Men maps with parked cars (DM01, DM03):
 feat('clientbuildmaps', G_STAB, 'Cover spots at load: the map slots it acts on (needs the row above) (recommended on)', 'on', 'start',
      'klcoverring.c [CoverRing] ClientBuildMaps: F01,F03 = DM01 and DM03; F02 (DM02) left out on purpose: its one car gets 8 spare points on both seats (CR5 11-02), so it gains nothing', [('CoverRing', 'ClientBuildMaps', 'F01,F03', '', '')])
 F[-1]['str'] = 1
-feat('clientrewrite', G_EXP, 'Online Dead Men maps with parked cars: a joining player re-fits the car cover spots when the car starts (needs the two rows above) (recommended off until benched)', 'off', 'start',
-     'klcoverring.c [CoverRing] ClientRewrite (CR6): client only, re-runs the ring writer 0x81b6f0 for a prebuilt car whose state changes (done cleared first, rsv=1 keeps the indices); NOT run live', [('CoverRing', 'ClientRewrite', 1, 0, 0)])
-feat('clientringsync', G_EXP, 'Online Dead Men maps with parked cars: the host shares its car cover spots so none is usable for the host but missing for a joining player (needs ClientBuild on both) (recommended off until benched)', 'off', 'start',
-     'klcoverring_sync.c [CoverRing] ClientRingSync (CR8): host sends each car 8 cover points (KLSYR, UDP 27415), client copies a point only where the host point is usable and its own is a spare; NOT run live', [('CoverRing', 'ClientRingSync', 1, 0, 0)])
+feat('clientrewrite', G_STAB, 'Online Dead Men maps with parked cars: a joining player re-fits the car cover spots when the car starts (needs the two rows above) (recommended on)', 'on', 'start',
+     'klcoverring.c [CoverRing] ClientRewrite (CR6): client only, re-runs the ring writer 0x81b6f0 for a prebuilt car whose state changes (done cleared first, rsv=1 keeps the indices); CR7 + CR9 + CR10B 11-02 PASS (DM03 + DM01 online, 0 asserts)', [('CoverRing', 'ClientRewrite', 1, 0, 0)])
+feat('clientringsync', G_STAB, 'Online Dead Men maps with parked cars: the host shares its car cover spots so none is usable for the host but missing for a joining player (needs ClientBuild on both) (recommended on)', 'on', 'start',
+     'klcoverring_sync.c [CoverRing] ClientRingSync (CR8): host sends each car 8 cover points (KLSYR, UDP 27415), client copies a point only where the host point is usable and its own is a spare; CR9 11-02 DM03 client 7/8 -> 8/8, CR10 A+B PASS (0 asserts, no-op when the seats agree)', [('CoverRing', 'ClientRingSync', 1, 0, 0)])
 feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', 'start',
      'avoids the 2 GB heap NULL crash on large .prm files', [('Memory', 'Enable', 1, 0, 1)])
 feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call runs out of memory without it)', 'on', 'start',
@@ -652,6 +652,8 @@ feat('onlinejoincalled', G_EXP, 'Online host: an AI heister carrying money walks
      'klbotfill.c [BotFill] OnlineJoinCalled (default 1); BOS_DD04: 4 carriers stood 100 m off the whole visit, 3 of 7 boarded; the ini marks it recommended on', [('BotFill', 'OnlineJoinCalled', 1, 0, 1)])
 feat('onlinejoincalleds', G_EXP, 'Online host: AI heisters keep joining a called van for 150 s after the call instead of 60 (long routes such as Dead Men map 09; needs the tactics rows; recommended off until benched)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineJoinCalledS (default 60 = old behaviour, 10-300); RT4A DM09: 2 carriers done 61/64 s after the call stood idle while the van still waited; bench rt6 (NOT RUN)', [('BotFill', 'OnlineJoinCalledS', 150, 60, 60)])
+feat('onlinelegfightreorders', G_EXP, 'Online host: an AI heister under fire on its route to the van gets its run order renewed every 2 s instead of 6 (keeps it sprinting through street fights such as Dead Men map 09; needs the tactics rows; recommended off until benched)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineLegFightReorderS (default 0 = off, 1-5 s); RT5B/RT5C DM09: ~1 m/s under fire on the street legs, 9 of 13 deaths on legs 6-7; NOT RUN', [('BotFill', 'OnlineLegFightReorderS', 2, 0, 0)])
 feat('onlineboxslack', G_EXP, 'Online host: an AI heister that stood 1 m outside the escape box for 8 s while the van waits counts as inside and boards (needs the tactics rows; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineBoxSlack cm (default 100); BOS_DD02x2: bot 0 stood 0.5 m outside the whole wait; the ini marks it recommended 100', [('BotFill', 'OnlineBoxSlack', 100, 0, 100)])
 feat('onlinescaneveryround', G_EXP, 'Online host: redo the exit-trigger and escape-box scan at every round start, as before 10-30 (costs a brief stall; recommended off)', 'off', 'start',

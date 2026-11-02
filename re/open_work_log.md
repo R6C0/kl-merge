@@ -1,3 +1,9 @@
+2026-11-02 ~09:25 - [c9] CR10 PASS (ce's chain 08:55-09:12, DM03 online, A = ClientRingSync alone, B = + ClientRewrite): asserts/faults/soft 0
+on host and client of both rows, coverdump IDENTICAL (the car was not rotated between seats this time, so ringsync wrote nothing: a no-op when
+the seats agree). With CR7 + CR9 that is 3 clean DM03 passes -> ClientRewrite=1 + ClientRingSync=1 added to NEXT_SHIP (ship_next ini, both seats
+for RingSync), options rows now (recommended on). Dll for the ship must be >= b65a08e09 (CHANGED log once per index; CR10 used cr8/test: 82 lines).
+NEXT_SHIP also got ce's benched BotFill set at 07:40 (Carry 8, BoardAllNear 300, DropTake 1); ce's dt1 checks money-to-van and a 2nd map.
+
 2026-11-02 ~09:30 - [ce] ES1 SAFE PASS, barely exercised (1 follow line on ES1B, 0 on A): the online escort read "8 human(s)" with 2 seats because the
 session player table also holds the AI heisters; fixed with kvp_on_bot (37946cfd2, kit es2 on escbot_dll). LE1 SAFE PASS, feature not triggered;
 corrected round summaries A0 B0 C7 ($3.71M) D0 boarded (a raw BOARDED grep had matched the summary line). LE1A client 70 asserts = kit missing

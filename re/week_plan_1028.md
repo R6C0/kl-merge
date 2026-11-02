@@ -14,6 +14,7 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
+- 11-02 09:25 c9: CR10 PASS (DM03, 2 rows, 0 asserts, IDENTICAL) -> ClientRewrite + ClientRingSync into NEXT_SHIP, option rows recommended on. Car cover track (CR1-CR10) done; next: a ship dll >= b65a08e09 for the candidate pass.
 - 11-02 07:45 c9: NEXT_SHIP ini (c9_1028/ship_next) gets ce's benched [BotFill] set: OnlineTacticsCarry 2 -> 8, OnlineBoardAllNear=300, OnlineDropTake=1 (OnlineTriggers=1 already in, now noted CS1 PASS; dll must be >= 2a2b10419). Checked the 12 bench rows (CS1 SR2 BA1 DH2: all PASS, 0 asserts/faults) and --check-live (clean). Open before ship: Carry 8 money-to-van and DropTake on a 2nd map in the candidate pass.
 - 11-02 05:40 c9: CR9 PASS (DM03 + DM01 online, 0 asserts all seats): ClientRingSync filled DM03 car #0 idx 561 on the client -> 8/8 usable, no host-only usable index; DM01 unchanged. Next: second map pass, then NEXT_SHIP.
 - 11-02 04:20 c9: CR8 [CoverRing] ClientRingSync pushed (95a037a39, default 0): host sends car cover points (KLSYR), client fills spares; two reviews BENCH-OK + hardening. CR9 bench (cr9un_cr9.sh, DM03 + DM01) booked with ce after SR2.

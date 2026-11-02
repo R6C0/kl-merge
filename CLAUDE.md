@@ -68,9 +68,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-11-02 ~05:40 - [c9] CR9 PASS: CR8 [CoverRing] ClientRingSync (95a037a39 + a56e533db, default 0) live on DM03 + DM01 online, 0 asserts/faults.
-DM03 client car #0 8/8 usable (idx 561 filled from the host's point, own +0x24 handle), no host-only usable index left; DM01 identical.
-Next: one more map, quiet the per-second CHANGED log line, then ClientRewrite + ClientRingSync into NEXT_SHIP (recommended on).
+2026-11-02 ~09:25 - [c9] CR10 PASS (DM03 online, ringsync alone and with ClientRewrite, 0 asserts all seats, lists IDENTICAL): third clean
+car-cover pass after CR7/CR9 -> [CoverRing] ClientRewrite=1 + ClientRingSync=1 in NEXT_SHIP (c9_1028/ship_next), rows (recommended on). Also in
+NEXT_SHIP since 07:40: ce's BotFill set (TacticsCarry 8, BoardAllNear 300, DropTake 1). Ship dll must be >= b65a08e09; ce's dt1 grades money-to-van.
 
 2026-11-02 ~08:05 - [ce] BA1 PASS 2/3 maps (DM09 inconclusive, no van); PR1 FEATURE FAIL (CapS 55 + PartialRetry: 43 parts, $0 carried
 vs control $3.27M, keep defaults); CO1 SAFE PASS but no hostage ever held (kit co2 being staged with a scripted grab).
