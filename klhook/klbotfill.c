@@ -1259,7 +1259,15 @@ static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *so
         nHeist++;
         if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0 && !allDeadRetry) { nDead++; continue; }      /* dead / down (GUESS as klucc.c kluc_alive_heister: unreadable = alive). wk-botpar BP1 20:52:28 (round start, state 0x19): all 8 heisters read 0 and counted dead, and no human was ever read that round. GUESS: before the spawn is finished the health object is a blank one whose back-pointer [h+0x24] is not the entity (as klbotdown.c / klbalance.c check for NPCs), so only a health object that points back at this entity counts as 'dead' */
         if (!klbf_feet(P, f, &sr)) { nNoFeet++; continue; }      /* OnlineEscortNode: node first, +0x460 fallback; off = +0x460 only (the old test) */
-        if (i != oi && kvp_on_bot(f, pos, nb, 40.0f)) { nBot++; continue; }      /* ES1A/B: the table holds the AI heisters too; one standing on a bot's place is that bot (mode 2 would follow a bot). Never drops the own seat */
+        if (i != oi) {      /* ES1A/B: the table holds the AI heisters too; one standing on a bot's place is that bot (mode 2 would follow a bot). Never drops the own seat */
+            int isBot = 0;
+            for (b = 0; b < nb && !isBot; b++) {      /* ES2 (11-02): still "0 dropped" - pos[] is the bots' +0x460 (lags / freezes, c9 A1LIFT4d) while f is the scene node: compare the entity itself, then the bot's own node feet */
+                float bf[3]; int bs = 0;
+                if (P == act[b]) isBot = 1;
+                else if (klbf_feet(act[b], bf, &bs) && kvp_on_bot(f, (const float (*)[3])bf, 1, 40.0f)) isBot = 1;
+            }
+            if (isBot || kvp_on_bot(f, pos, nb, 40.0f)) { nBot++; continue; }
+        }
         memcpy(hp[nh], f, 12); hseat[nh] = i; srcNow[nh] = sr; if (i == oi) ownH = nh; nh++;
     }
     if (!(nHeist > 0 && nDead == nHeist)) break;
