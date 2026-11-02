@@ -74,6 +74,10 @@ NEW whole reads: Board RUN 0x82f970 (rules touches listed), traitor roll 0x43ffb
 0x4322f0 (odd). Shadow: record 0 = LOCAL HUMAN (0x6c7700 -> 0 in frame), bots 1..11; +0x34c byte 0 = live; +0x1dc stays 0 until the exit
 is mirrored (states 1/2 reach 0x7bb2a0); Board RUN has no NULL check -> originals only inside the frame. PC busy, nothing installed.
 
+2026-11-02 ~23:10 - [ce] After-match navigation (owner ask): PageQueue (F2/F3/page key on the scoreboard/round-over page is queued and opens
+with Buy Weapons), ScoreboardNextHint line, HintEveryShop, TEST CursorProbe for a clickable button; all off, 9c4d7da14 8e8308354 unpushed (c9 pushes).
+Bench pq1 (TEST dll C:\kl_build_1024\pq_1102_test) waits until the owner stops playing.
+
 2026-11-02 ~21:30 - [ce] Queue done, all seats 0 asserts. PASS: g1e, sp3/sp3b (no online shop lag), vb2 (loot voice on both seats, f2d848323), q35 (21 maps).
 NOT SHOWN: tp3 0 new cops after bot-fired triggers; rt9 DM09 0 boarded at 370 s even with OnlineLateExitRoute; es3 escort still 8 humans;
 co3 approach missed. Next: bot-trigger cop spawn path, DM09 walk speed/street deaths, es3 filter, co3 script.
@@ -81,10 +85,6 @@ co3 approach missed. Next: bot-trigger cop spawn path, DM09 walk speed/street de
 2026-11-02 ~13:55 - [ce] CH1 SAFE PASS: OnlineCrewHealth x2 host-only (DM03 280->560, DD05 350->700), 0 bot deaths, 7/7 boarded. TP2 census was
 blind (wrap, b0b1cbdea) -> f38a0d145 counts NEW cops per bot-fired trigger, kit tp3. RT6-RT8 ran a 250 s clock (no TimeAuto=6): inconclusive; merged
 OnlineLateExitRoute (878f9688b, off, NOT Arcade), kit rt9 at 370 s. 11 option + 5 page rows (d20f07522). Queue: g1e sp3 vb1 es3 co3 q35 mt3 rt9 tp3.
-
-2026-11-02 ~13:30 - [ce] CO2 SAFE, not exercised (tele before 0x19) -> kit co3. ES2 escort FAIL (8 humans with 2 seats: bot pos was the lagging +0x460)
--> ccc030f83, kit es3. Audit of owner asks: Bots-and-modes page fixed (shield row online, '(host only: you are a client)'), labels flipped,
-OnlineTriggersCensus (836063b43, tp2 now grades cops brought in). Queue: rt6 rt7 rt8 tp2 ch1 g1e sp3 vb1 es3 co3, then c9's q35 (21 maps, ship_next).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
