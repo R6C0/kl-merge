@@ -1864,7 +1864,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     if (sm != (DWORD)klbf_ot_sm || !klbf_ot_in) {      /* a new session / round */
         if (klbf_ot_in) klbf_ot_summary();
         if (klbf_lp && klbf_lp_nok + klbf_lp_nbad) klog("botfill: lootparts: last round: %d stack reads plausible, %d implausible (lump fallback)", klbf_lp_nok, klbf_lp_nbad); klbf_lp_nok = klbf_lp_nbad = klbf_lp_nw = 0; memset(klbf_lp_warned, 0, sizeof klbf_lp_warned);
-        memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_gc_said = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++; klbf_ot_t0 = now;
+        memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_gc_said = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++; klbf_ot_t0 = now; klbf_cen.st = 0; klbf_cen_live = 0;      /* review 1102: a census armed at a round end must not block / mix into the next round */
         klbf_ot_lookAt = 0; klbf_wv_hc = klbf_wv_novh = 0; klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_eo_at = 0; klbf_ot_bxlooks = 0; klbf_ot_bxAt = 0;
         if (klbf_ot_kept()) klbf_ot_trig_looked = 1;      /* the last round's exit trigger and boxes still stand (same level load): no scan this round */
         else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; klbf_ot_nobox_gen = -1; }
