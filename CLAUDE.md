@@ -72,10 +72,10 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 car-cover pass after CR7/CR9 -> [CoverRing] ClientRewrite=1 + ClientRingSync=1 in NEXT_SHIP (c9_1028/ship_next), rows (recommended on). Also in
 NEXT_SHIP since 07:40: ce's BotFill set (TacticsCarry 8, BoardAllNear 300, DropTake 1). Ship dll must be >= b65a08e09; ce's dt1 grades money-to-van.
 
-2026-11-02 ~08:05 - [ce] BA1 PASS 2/3 maps (DM09 inconclusive, no van); PR1 FEATURE FAIL (CapS 55 + PartialRetry: 43 parts, $0 carried
-vs control $3.27M, keep defaults); CO1 SAFE PASS but no hostage ever held (kit co2 being staged with a scripted grab).
-Merged: RemoteShot2D stack walk (ee0843148, shooter sp[0x50]), ramp name from scene node (c313423ec), shopprobe multi-instance (069810cf7),
-map_shift_test temp dirs (f238ecb5a). Queue: es1 (running) le1, CR10 dh3 mt1 tp1 g2b, then g1b sp1b dt1.
+2026-11-02 ~09:50 - [ce] DH3 SAFE PASS, FEATURE FAIL (Carry 8 on DM09: van called at 213 s left, left with 0 boarded, $1.85M vs RT5A $3.0M).
+DM09 losses split in two: tower drop (bots held 20-117 s for klhop's walk hops) and street legs 6-7 (order renewed only every 6 s).
+New, both default 0: [BotFill] OnlineLegFightReorderS (c9ffcc3cf, kit rt7) and OnlineLegHopTeleS (b1b32fab3, NOT Arcade, kit rt8).
+Queue: mt1 (running) tp1 g2b g1b sp1b dt1 SN2 co2 es2 rt6 rt7 rt8.
 
 2026-11-02 ~09:30 - [ce] ES1/LE1 SAFE PASS, features barely triggered. Escort fix: the session table holds AI heisters (37946cfd2).
 DM09 boarding diagnosed: the van is called at leg 2 and its window ends before stragglers arrive; RT4 "5 boarded" = boardall counts. New

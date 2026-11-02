@@ -1,3 +1,11 @@
+2026-11-02 ~09:50 - [ce] DH3 graded: SAFE PASS (asserts/faults 0 both seats), FEATURE FAIL. OnlineTacticsCarry=8 on DM09: van called from the hold at
+213 s left, parked 72 s, left at 115 s with 0 BOARDED; a 2nd uncalled van at 1.4 s left. 14 stacks, $1.85M carried (RT5A $3.0M). Carry is not the lever.
+DM09 death sites: tower drop (leg 1 -> 2, -209 m): klhop's KLJoin [CrewHop] hop 2 carries instantly, walk hops 1/3/5 walk at ~0.83 m/s with a 40 s
+give-up, so bots held 20-117 s and 5 died there -> [BotFill] OnlineLegHopTeleS (b1b32fab3, default 0, NOT Arcade): after N s in the carry hold the
+game teleport 0x62a900 puts the bot on a map [CrewJoin] place (DM09: y 570 by the exit, leg 2 P2 y 114), once per leg, refused on a floor mismatch.
+Street legs 6-7: 9 of 13 deaths at ~1 m/s under fire, order renewed every 6 s -> OnlineLegFightReorderS (c9ffcc3cf, kit rt7). Kit rt8 = RT7A +
+HopTeleS 8 vs control, queued after rt7. Arcade boards 0/7 on DM09 too, so both are beyond Arcade.
+
 2026-11-02 ~09:25 - [c9] CR10 PASS (ce's chain 08:55-09:12, DM03 online, A = ClientRingSync alone, B = + ClientRewrite): asserts/faults/soft 0
 on host and client of both rows, coverdump IDENTICAL (the car was not rotated between seats this time, so ringsync wrote nothing: a no-op when
 the seats agree). With CR7 + CR9 that is 3 clean DM03 passes -> ClientRewrite=1 + ClientRingSync=1 added to NEXT_SHIP (ship_next ini, both seats
