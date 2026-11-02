@@ -1,3 +1,8 @@
+2026-11-02 ~22:45 - [c9] Owner back and unhappy: online bots feel nothing like Arcade (puppeteer), lobby shows stock map names. Research
+re/arcade_brain_online_1102.md: the real Arcade tactics can be built for Ally bots on the host (ctors read no rules); evaluate/run need a shadow
+Heist rules block + a one-call role swap. Building now (offline): klbrain.c stage 0 probe + 1a construct + 1b Loot (all default off), and the
+lobby name lookup showing the exact OnlineSet=9 pick (pure peek of kls_rand_pick). Live tests wait until the owner stops playing.
+
 2026-11-02 ~21:50 - [c9] INSTALLED the next-ship candidate in DD on the owner's "install all": dinput8.dll = ship_next/dll_0925/ship 56ac45c1
 (c9ffcc3cf), KLHook.ini = KLHook_next.ini 39b032cd (check-live clean). Backups dinput8.dll.before-ship1102 (c32c00c3), KLHook.ini.before-ship1102
 (81c95751). Not in this dll: ce's f2d848323 (vb2 loot voice). Owner playing: PAUSE_QUEUE stays. No crash involved.
