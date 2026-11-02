@@ -1,3 +1,8 @@
+2026-11-02 ~13:30 - [ce] Owner-asks audit (workflow): all 21 maps had a both-seat online PASS in Q32 (ship1103); the candidate only on DM01/DM03/DD05 -> c9 stages q35 (chained
+after co3). Merged 836063b43: the Bots-and-modes shield row reads [Shield] Online when online; host-only rows show '(host only: you are a client)' (klhro_host);
+labels flipped to recommended on for modestab/roundhints/RemoteShot2D/OnlineSwap(+Pic/Arm/Text); LootSync stays off (no graded PASS); [BotFill] OnlineTriggersCensus
+(log only) counts cops at a bot-fired trigger and +10/+30 s; tp2 now runs that dll. sp3 now stages KLShopPage.ini (c9 found kl_solo_test never does).
+
 2026-11-02 ~12:45 - [c9] Candidate + ce audit: ship_next/KLHook_next.ini gains the 6 verified ADD keys ([Shop] OnlineSwap/OnlineSwapArm, [BotFill]
 OnlineVanPosSane/OnlineTriggerOriginSkip, [Keys] ModesTab/RoundHints); HOLD list stays out. Finding: kl_solo_test never stages KLShopPage.ini, so SN2/G2B
 ran with [ShopPage] effectively off ('no pairs'). Q35 (all 21 maps, two seats, candidate as is) stages it per seat; chained after ce's co3:
