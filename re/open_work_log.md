@@ -1,3 +1,7 @@
+2026-11-02 ~21:50 - [c9] INSTALLED the next-ship candidate in DD on the owner's "install all": dinput8.dll = ship_next/dll_0925/ship 56ac45c1
+(c9ffcc3cf), KLHook.ini = KLHook_next.ini 39b032cd (check-live clean). Backups dinput8.dll.before-ship1102 (c32c00c3), KLHook.ini.before-ship1102
+(81c95751). Not in this dll: ce's f2d848323 (vb2 loot voice). Owner playing: PAUSE_QUEUE stays. No crash involved.
+
 2026-11-02 ~21:30 - [ce] Queue done (g1e..vb2), every seat 0 asserts/faults. PASS: g1e (2D near / 3D far), sp3+sp3b (no online shop highlight lag), vb2
 (loot line now said on both seats: f2d848323, VB1 showed 0 because OnlineLootParts takes skipped klbv_event), q35 (c9: 21 maps both seats, DM03 coverdump
 skew only). FAIL/NOT SHOWN: tp3 0 NEW cops after every bot-fired trigger (bots do not bring cops online); rt9 DM09 still 0 boarded at 370 s with
