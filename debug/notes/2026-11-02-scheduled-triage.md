@@ -57,3 +57,42 @@ changed since 10-25: no undefined names or syntax errors.
 
 ## Owner
 - Nothing to install or decide. The fix is header-only; it reaches the DLL at the next build the local sessions make.
+
+# Scheduled check-in 2026-11-02 ~10:50 UTC (cloud; DD/DM attached by one access request)
+
+## PC state (read only; nothing launched, installed or staged into the game folder)
+- BUSY: `<DD>\dinput8.dll` written 10:48 UTC, ReShade logs 10:49, repo head 66fe9ee (ce's OnlineVoiceByLook merge) committed 10:49:31
+  UTC = the second this run started; ce pushed 11 commits between 09:19 and 10:49. No game run, no install, no screen from here.
+- `KLHook.result` = the 10-27 PASS (F04). Dumps: newest `KLHook_1.dmp` 10-26 08:11 - nothing newer than its triage. `<DM>\KL_PortTools\build`:
+  newest `carcover_1101` (11-01 20:02). Live `KLHook.ini` (11-01 13:25, md5 d829fe43): `--check-live` clean (no half-on row, no clash;
+  2 tuned values FollowOutHold 45, 1 owner row [Lobby] TimeMax).
+- Verification of head 66fe9ee in the cloud: `kl_tests` 55 pass / 0 fail / 15 skip (gcc-multilib); `run_harness_linux.sh --check-hook`
+  SHIP + TEST 0 errors, the 15 baseline warnings; kl_mod_options `--check-defaults` / `--check-ini` / `--check-rec` clean, test 69/69;
+  pyflakes on the 2 .py changed since 06:45: unused locals only.
+
+## Review (static, no crash shape found): ce's two newest hook changes
+1. `[Bots] OnlineCrewHealth` (0b5beda, klgrudge.c kly_online_tick, klbotdown.c view slot 3): the writes and the put-back are the Arcade
+   kly_health2 / kly_undo path with every guard kept (vtable, health object +0x24 = actor, finite, max 1..100000, exact hwrote match before a
+   put-back). Round end / host loss -> undo through `klyo.rules` (set on the first hosted tick); the extra `b[0..3].actor` test in that
+   condition is redundant, not wrong (KLB_NREC is 32: if `rules` were ever 0 while hosting, slots 4+ would keep the scale until the next
+   view change - the view always hands a non-zero rules object today). Game thread only, data writes only, no .text patch: SHIP-safe shape.
+   What only the bench can say: whether the HOST's health object prices a CLIENT's hit (the GUESS in the commit).
+   FOUND (doc / combination, not code): the ini line of 629de8d said "do not combine with [Balance] Tough (two writers of one maximum
+   stack undefined)". Online, Tough never writes a maximum: klbalance.c klr_tough_tick is the Arcade dial, and online `[BotFill]
+   OnlineBalance=1` reads [Balance] Tough as a DIVISOR on every hit on a bot (klr_bo.tough, klbalance.c 1681 / 1282). So the real clash
+   is OnlineCrewHealth x OnlineBalance+Tough = a double count (1.5 x 1.5 = 2.25 x the bullets), silent in the log. Ini line corrected.
+2. `[BotFill] OnlineVoiceByLook` (216d5f0 + 6dbaa5a, klbotvoice.c klbv_look_key): loot line only, gated on the look APPLIED on this seat
+   (klcl_t.a[].last 1 / 4 and the current epoch), name through klcl_bot_name + kvo_name_of, key bounded (_snprintf + cap-1), falls through
+   to the digit key when klk_say returns 0. No packet change, no new write. Nothing to fix.
+
+## Tooling: `kl_mod_options.py --check-live` now knows 'do not combine' (avoid rules)
+Until now the two 'do not combine' sentences lived in comments only (the ini, klhud_names.c) and nothing read a finished ini for them.
+- Rows take `avoid=[(why, [(sec, key, offvals), ...]), ...]`: the row is on and EVERY listed key is live at a value not in offvals ->
+  a CLASH line, exit 1 like a half-on row (`--check-live`), `CLASH ...` in kl_solo_test's `ini-check | instN` lines. Values are read as
+  floats (`_live_num`): `Tough=1.5` was 1 to get_int, i.e. 'off'.
+- Rules: `crewhealthonline` vs [BotFill] OnlineBalance (not 0) + [Balance] Tough (not 0 / 1) - the double count above; `hudnametags` vs
+  [Crew] Names (not 0) - klhud_names.c stands down ("two writers of one string: klcrew.c wins"), so the row did nothing.
+- kl_mod_options_test +8 (77/77; the repo ini and the live ini have no clash). check_live returns a 4th list: both callers updated.
+
+## Owner
+- Nothing to install or decide. Still open from earlier notes: Medal-quit stutter round, MouseMoveMs=16, lenscrack INSTALL bat if wanted.

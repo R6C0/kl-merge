@@ -43,9 +43,12 @@ BACKUP_SUFFIX = '.before-modoptions'
 F = []
 
 
-def feat(fid, group, label, rec, when, why, keys, pending=False, keep=None):
+def feat(fid, group, label, rec, when, why, keys, pending=False, keep=None, avoid=None):
     # keep: why the Recommended preset leaves this row as the ini has it (see rec_keep)
-    F.append(dict(id=fid, group=group, label=label, rec=rec, when=when, why=why, keys=keys, pending=pending, keep=keep))
+    # avoid: 'do not combine' rules (2026-11-02 scheduled check-in): [(why, [(sec, key, offvals), ...]), ...] - the row is on and EVERY listed
+    #   key is live at a value not in offvals -> check_live lists a CLASH (exit 1, like a half-on row): two writers of one value, or a
+    #   double count. The ini / source comments said so in words only, and nothing read a finished ini for it.
+    F.append(dict(id=fid, group=group, label=label, rec=rec, when=when, why=why, keys=keys, pending=pending, keep=keep, avoid=avoid or []))
 
 
 G_CORE, G_CREW, G_DOWN, G_AV, G_GFX, G_STAB, G_EXP = ('Core', 'AI crew and traitors', 'Down, revive, fed', 'Sound and music',
@@ -641,7 +644,8 @@ feat('backstabbusy', G_EXP, 'A bot picked to turn on you waits until you are hur
 feat('hudnames', G_EXP, 'Arcade crew list shows the character each heister wears (J.C., Tommy...) instead of the record\'s own name (needs the HUD; recommended off until benched)', 'off', 'start',
      'klhud_names.c [HUD] Names (default 0 unless [HUD] Draft=1); re/hud_names.md; no bench PASS in the log', [('HUD', 'Names', 1, 0, 0), ('HUD', 'Enable', 1, None, 0)])
 feat('hudnametags', G_EXP, 'Arcade: the tag over a heister\'s head shows his initials (needs the HUD and the row above; do not combine with [Crew] Names=1; recommended off until benched)', 'off', 'start',
-     'klhud_names.c [HUD] NameTags 1 = initials, 2 = full character name; no bench PASS in the log', [('HUD', 'NameTags', 1, 0, 0), ('HUD', 'Names', 1, None, 0), ('HUD', 'Enable', 1, None, 0)])
+     'klhud_names.c [HUD] NameTags 1 = initials, 2 = full character name; no bench PASS in the log', [('HUD', 'NameTags', 1, 0, 0), ('HUD', 'Names', 1, None, 0), ('HUD', 'Enable', 1, None, 0)],
+     avoid=[('klhud_names.c stands down: [Crew] Names=1 and NameTags write the same tag string and klcrew.c wins, so the row does nothing', [('Crew', 'Names', (0,))])])
 feat('hudownname', G_EXP, 'Arcade crew list: your own row shows your Steam name instead of your character\'s (needs the names row; recommended off)', 'off', 'start',
      'klhud_names.c [HUD] OwnName (0 = your character\'s name)', [('HUD', 'OwnName', 1, 0, 0), ('HUD', 'Names', 1, None, 0), ('HUD', 'Enable', 1, None, 0)])
 feat('hudkilledby', G_CORE, 'Offline: a KILLED BY line in the HUD style while you are dead (needs the HUD; recommended on)', 'on', 'start',
@@ -786,7 +790,9 @@ feat('cardownonline', G_DOWN, 'Online host: a car blast floors AI heisters and p
 feat('shieldonline', G_DOWN, 'Online host: the human shield covers the host and floors the hostage (revivable), as in Arcade (recommended off until benched)', 'off', 'start',
      'klshield.c [Shield] Online (1 on, 2 log only), klshield_logic.h; host only, the host own player only; offsets GUESSED; NOT run live', [('Shield', 'Online', 1, 0, 0)])
 feat('crewhealthonline', G_EXP, 'Online host: AI heisters get 1.5x health (health object maximum, same share), going beyond Arcade where CrewHealth is off by default (NOT Arcade; recommended off until benched)', 'off', 'start',
-     'klgrudge.c [Bots] OnlineCrewHealth=<factor> (OnlineCrewHealthDry=1 logs only); host only, data writes; hit authority for clients GUESSED; NOT run live', [('Bots', 'OnlineCrewHealth', 1.5, 0, 0)])
+     'klgrudge.c [Bots] OnlineCrewHealth=<factor> (OnlineCrewHealthDry=1 logs only); host only, data writes; hit authority for clients GUESSED; NOT run live', [('Bots', 'OnlineCrewHealth', 1.5, 0, 0)],
+     avoid=[('double count: [BotFill] OnlineBalance=1 already divides every hit on an online bot by [Balance] Tough (klbalance.c klr_bo.tough), so a bot would take Tough x OnlineCrewHealth bullets',
+             [('BotFill', 'OnlineBalance', (0,)), ('Balance', 'Tough', (0, 1))])])
 
 BY_ID = {f['id']: f for f in F}
 assert len(BY_ID) == len(F) and all(f['rec'] in ('on', 'off') for f in F)      # every row is shown with '(recommended on|off)' (rec_text)
@@ -1292,13 +1298,18 @@ def check_live(lines):
     tuned number such as a range: informational, the row would overwrite it on the next tick of that box); owners = the same findings
     for a row the owner set himself (rec_keep: an owner note on its switch, e.g. '[Lobby] TimeMax=10 ; 1026 owner:' with TimeMin left at
     stock): his choice, listed but never a reason to hold a ship. Preset rows are not checked."""
-    gaps, customs, owners = [], [], []
+    gaps, customs, owners, clashes = [], [], [], []
     for f in F:
         if 'preset' in f or f.get('str'):
             continue
         on, _ = state(lines, f)
         if not on:
             continue
+        for why, need in f.get('avoid', []):
+            live = [(sec, key, _live_num(lines, sec, key)) for sec, key, offvals in need]
+            if all(v is not None and v not in offvals for (sec, key, v), (_s, _k, offvals) in zip(live, need)):
+                clashes.append('%s: on (%s %s) together with %s - %s' % (f['id'], '[%s] %s' % f['keys'][0][:2], get_str(lines, f['keys'][0][0], f['keys'][0][1], '?'),
+                                                                        ' + '.join('[%s] %s=%s' % (sec, key, ('%g' % v)) for sec, key, v in live), why))
         kept = rec_keep(lines, f)
         for sec, key, onv, offv, dflt in f['keys'][1:]:
             i, _h, _e = find_key(lines, sec, key)
@@ -1313,7 +1324,16 @@ def check_live(lines):
                 gaps.append(text)
             else:
                 customs.append(text)
-    return gaps, customs, owners
+    return gaps, customs, owners, clashes
+
+
+def _live_num(lines, sec, key):
+    """The number a key holds in the ini (float: [Balance] Tough is 1.5), None when absent or not a number."""
+    i, _h, _e = find_key(lines, sec, key)
+    if i is None:
+        return None
+    m = re.match(r'^\s*(-?\d+(?:\.\d+)?)', lines[i].split('=', 1)[1])
+    return float(m.group(1)) if m else None
 
 
 # ---------------------------------------------------------------- Tk window
@@ -1432,13 +1452,14 @@ def main():
                     'their switch is off / absent (half-on feature, exit 1); run it on every ship candidate before the install')
     a = ap.parse_args()
     if a.check_live:
-        gaps, customs, owners = check_live(split_lines(open(a.check_live, encoding='latin1').read()))
+        gaps, customs, owners, clashes = check_live(split_lines(open(a.check_live, encoding='latin1').read()))
         print(('HALF-ON rows: %d\n  ' % len(gaps) + '\n  '.join(gaps)) if gaps else 'every row that is on has its further keys at the row\'s values')
+        print(('CLASHES (rows on together with a key they must not be combined with): %d\n  ' % len(clashes) + '\n  '.join(clashes)) if clashes else 'no row is on together with a key it must not be combined with')
         if customs:
             print('tuned values (the row would write its own number; informational): %d\n  ' % len(customs) + '\n  '.join(customs))
         if owners:
             print('rows the owner set himself (his choice, not held against the ini): %d\n  ' % len(owners) + '\n  '.join(owners))
-        return 1 if gaps else 0
+        return 1 if gaps or clashes else 0
     if a.check_rec:
         bad, norow, nocheck = check_rec(a.check_rec)
         print('\n'.join(bad) if bad else 'every row agrees with the ini markers')

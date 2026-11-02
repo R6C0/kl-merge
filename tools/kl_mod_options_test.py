@@ -200,22 +200,43 @@ def main():
     # no OnlineBank / OnlineBankCredit line, the exact gap of the 10:50 finding, and no check read the candidate before the install.
     # check_live: a row that is on must have its further keys at the row's values; an owner-noted switch is his choice, not a gap.
     ship1102 = INI + '\n[BotFill]\nOnlineHost=1\nOnlineTactics=1\nOnlineTacticsTake=2   ; (recommended on) proven live: WK2\n'
-    gaps, customs, owners = M.check_live(M.split_lines(ship1102))
+    gaps, customs, owners, clashes = M.check_live(M.split_lines(ship1102))
     check(sum('onlinetacticstake: [BotFill] OnlineBank absent' in g for g in gaps) == 1
           and sum('onlinetacticstake: [BotFill] OnlineBankCredit absent' in g for g in gaps) == 1,
           'check_live: Take=2 without the two bank keys is reported as a half-on row (the ship1102 shape): %s' % gaps)
-    gaps, customs, owners = M.check_live(M.split_lines(ship1102 + 'OnlineBank=1\nOnlineBankCredit=1\n'))
+    gaps, customs, owners, clashes = M.check_live(M.split_lines(ship1102 + 'OnlineBank=1\nOnlineBankCredit=1\n'))
     check(not [g for g in gaps if g.startswith('onlinetacticstake')], 'check_live: with OnlineBank=1 + OnlineBankCredit=1 (ship1103) the take row is whole: %s' % gaps)
-    gaps, customs, owners = M.check_live(M.split_lines(INI + '\n[Lobby]\nTimeMax=10   ; 1026 owner: heist time up to 10 min\nRoundsMax=10\n'))
+    gaps, customs, owners, clashes = M.check_live(M.split_lines(INI + '\n[Lobby]\nTimeMax=10   ; 1026 owner: heist time up to 10 min\nRoundsMax=10\n'))
     check(not [g for g in gaps if g.startswith('lobbyopts')] and any('lobbyopts: [Lobby] TimeMin absent' in o for o in owners),
           'check_live: TimeMin left at stock under an owner-noted TimeMax is listed as his choice, not a gap: %s / %s' % (gaps, owners))
-    gaps, customs, owners = M.check_live(M.split_lines(INI + '\n[Lobby]\nTimeMax=10\nRoundsMax=10\n'))
+    gaps, customs, owners, clashes = M.check_live(M.split_lines(INI + '\n[Lobby]\nTimeMax=10\nRoundsMax=10\n'))
     check(any(g.startswith('lobbyopts: [Lobby] TimeMin absent') for g in gaps), 'check_live: the same ini without the owner note is a gap: %s' % gaps)
-    gaps, customs, owners = M.check_live(M.split_lines(ship1102 + 'OnlineBank=1\nOnlineBankCredit=3\n'))
+    gaps, customs, owners, clashes = M.check_live(M.split_lines(ship1102 + 'OnlineBank=1\nOnlineBankCredit=3\n'))
     check(any('OnlineBankCredit is 3' in c for c in customs) and not any('OnlineBankCredit' in g for g in gaps),
           'check_live: a further key at another non-zero value is a tuned value, not a gap: %s' % customs)
-    gaps, customs, owners = M.check_live(M.split_lines(INI))
+    gaps, customs, owners, clashes = M.check_live(M.split_lines(INI))
     check(gaps == [], 'check_live: the synthetic ini has no half-on row: %s' % gaps)
+    check(clashes == [], 'check_live: the synthetic ini has no clash: %s' % clashes)
+    # avoid ('do not combine', 11-02 scheduled check-in): a row that is on together with a key it must not be combined with is a CLASH (exit 1)
+    both = INI + '\n[Bots]\nOnlineCrewHealth=1.5\n[BotFill]\nOnlineBalance=1\n[Balance]\nTough=1.5\n'
+    gaps, customs, owners, clashes = M.check_live(M.split_lines(both))
+    check(any(c.startswith('crewhealthonline:') and 'Tough=1.5' in c for c in clashes),
+          'check_live: OnlineCrewHealth=1.5 + OnlineBalance=1 + Tough=1.5 is a clash (double count; Tough read as a float, not 1): %s' % clashes)
+    gaps, customs, owners, clashes = M.check_live(M.split_lines(INI + '\n[Bots]\nOnlineCrewHealth=1.5\n[BotFill]\nOnlineBalance=1\n[Balance]\nTough=1\n'))
+    check(not [c for c in clashes if c.startswith('crewhealthonline:')], 'check_live: the same with Tough=1 (= off) is no clash: %s' % clashes)
+    gaps, customs, owners, clashes = M.check_live(M.split_lines(INI + '\n[Bots]\nOnlineCrewHealth=1.5\n[Balance]\nTough=1.5\n'))
+    check(not [c for c in clashes if c.startswith('crewhealthonline:')], 'check_live: Tough=1.5 without OnlineBalance is no clash (Tough is Arcade-only then): %s' % clashes)
+    def tags(crew_names):                                     # INI already has a [HUD] section: set_key puts the keys into it (a 2nd [HUD] block would be unread)
+        ls = M.split_lines(INI)
+        for sec, key, val in (('HUD', 'Enable', 1), ('HUD', 'Names', 1), ('HUD', 'NameTags', 1), ('Crew', 'Names', crew_names)):
+            M.set_key(ls, sec, key, val)
+        return ls
+    gaps, customs, owners, clashes = M.check_live(tags(1))
+    check(any(c.startswith('hudnametags:') and '[Crew] Names=1' in c for c in clashes), 'check_live: NameTags=1 with [Crew] Names=1 is a clash (klhud_names.c stands down): %s' % clashes)
+    gaps, customs, owners, clashes = M.check_live(tags(0))
+    check(not [c for c in clashes if c.startswith('hudnametags:')], 'check_live: NameTags=1 with [Crew] Names=0 is no clash: %s' % clashes)
+    check(all(isinstance(f.get('avoid'), list) and all(len(a) == 2 and all(len(k) == 3 and isinstance(k[2], tuple) for k in a[1]) for a in f['avoid']) for f in M.F),
+          'every avoid rule is (why, [(sec, key, offvals tuple), ...])')
 
     def twice(text):
         ls = M.split_lines(text)
@@ -235,11 +256,12 @@ def main():
         check(not norow, 'repo klhook/KLHook.ini: every proven recommended-on key has a row (%s)' % norow)
         rowless, un = M.check_ini(os.path.dirname(repo), repo)
         check(not rowless, 'repo klhook/KLHook.ini mentions every row key (%s)' % rowless)
-        gaps, customs, owners = M.check_live(M.split_lines(M.read_ini(repo)))
+        gaps, customs, owners, clashes = M.check_live(M.split_lines(M.read_ini(repo)))
         check(not gaps, 'repo klhook/KLHook.ini: no row is half on (%s)' % gaps)
+        check(not clashes, 'repo klhook/KLHook.ini: no row is on together with a key it must not be combined with (%s)' % clashes)
         again = twice(M.read_ini(repo))
         check(again == [], 'Recommended pressed twice on the repo ini writes nothing the second time: %s' % again)
-    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 64 + 5 * os.path.isfile(repo), len(FAILS)))
+    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 71 + 6 * os.path.isfile(repo), len(FAILS)))
     return 1 if FAILS else 0
 
 
