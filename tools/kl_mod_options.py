@@ -560,7 +560,7 @@ feat('onlinedroptake', G_EXP, 'Online host: an AI heister with no stack left to 
      [('BotFill', 'OnlineDropTake', 1, 0, 0), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinedoorhold', G_EXP, 'Online host: an AI heister with nothing carried waits for its squad to kick the vault doors open instead of running to the first opened case (DD01; needs the tactics rows; recommended off until benched)', 'off', 'start',
      'klbotfill.c/kldoorhold_logic.h [BotFill] OnlineDoorHold (+ OnlineDoorHoldS 90, 20..150): Q34B DD01, one opened door sent every bot to the first armed stacks, 48 doors stayed shut all round (Arcade opens all 58 by +105 s); no new stack order while stacks are behind shut doors, ends on all open / timer / 25 s stall / low clock; NOT run live',
-     [('BotFill', 'OnlineDoorHold', 1, 0, 0), ('BotFill', 'OnlineSkipDoorStacks', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+     [('BotFill', 'OnlineDoorHold', 1, 0, 0), ('BotFill', 'OnlineSkipDoorStacks', 1, None, 1), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('grudge', G_EXP, 'AI heisters you shoot turn on you in proportion (three tempers per bot: escalates, snaps, takes it; recommended off until benched)', 'off', 'start',
      'klgrudge.c [Bots] Grudge (+ GrudgeMix/SnapHits/Base/Per/Max/ForGood); killing a bot that fights you by Grudge makes YOU the traitor (game rule); no bench PASS in the log',
      [('Bots', 'Grudge', 1, 0, 0)])
@@ -579,6 +579,83 @@ feat('lobbykeepround', G_EXP, 'Online: skip the early round cuts (fewer than 2 h
 feat('lobbyclockfix', G_EXP, 'Online: set the round clock to the lobby heist time at the round start when it holds less (GUESS; recommended off until benched)', 'off', 'start',
      'kllobbyopt.c [Lobby] RoundClockFix; no bench PASS in the log',
      [('Lobby', 'RoundClockFix', 1, 0, 0)])
+# 2026-11-02 discoverability pass: [Bots] boarding / van-call / follow-out / traitor extras, [HUD] names, [BotFill] online extras. All keys default
+# 0 in the code unless a row says otherwise; none of the [Bots] keys has a bench PASS of its own in re/open_work_log.md. A value written
+# "(GUESS)" is the suggestion of a code comment (klmove.c header, klescort.c), not a measured number. Meaning of each key: the [Bots] block of klhook/KLHook.ini.
+feat('boardreach', G_EXP, 'Offline Arcade: an AI heister boards the escape vehicle only if it stands about where a human could get in (within 1 m of the boarding box), not from 30 m away; use with the follow-out hold rows (recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] BoardReach (100 = 1 m, least 50) + BoardReachDoors/Order/Visits; klmove.c header section 4; no bench PASS of its own in the log', [('Bots', 'BoardReach', 100, 0, 0)])
+feat('boardreachlast', G_EXP, 'Offline Arcade: the boarding help also works at the round\'s last vehicle (needs the row above; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] BoardReachLast (+ BoardReachLastRange); GUESS that 8 s is enough for the walk; no bench PASS in the log', [('Bots', 'BoardReachLast', 1, 0, 0), ('Bots', 'BoardReach', 100, None, 0)])
+feat('boardreachfight', G_EXP, 'Offline Arcade: a called AI heister that was just hurt near the van is sent to the doors at once (needs the boarding row; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] BoardReachFight (+ BoardReachFightRange 1500 cm, a GUESS); no bench PASS in the log', [('Bots', 'BoardReachFight', 1, 0, 0), ('Bots', 'BoardReach', 100, None, 0)])
+feat('boardreachflat', G_EXP, 'Offline Arcade: the boarding reach ignores height within 2.5 m when the boarding object is no box (needs the boarding row; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] BoardReachFlat; no bench PASS in the log', [('Bots', 'BoardReachFlat', 1, 0, 0), ('Bots', 'BoardReach', 100, None, 0)])
+feat('boardreachchase', G_EXP, 'Offline Arcade: a called AI heister that walks off after its order to the doors is sent again every few seconds (needs the boarding row; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] BoardReachChase needs BoardReachRepeat; 3 s is a GUESS from the code comment; no bench PASS in the log', [('Bots', 'BoardReachChase', 1, 0, 0), ('Bots', 'BoardReachRepeat', 3, None, 0), ('Bots', 'BoardReach', 100, None, 0)])
+feat('boardreachsettle', G_EXP, 'Offline Arcade: a called AI heister within 2 m of the boarding box counts as close enough to board (needs the boarding row; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] BoardReachSettle (cm, 200 is a GUESS, at most 300); no bench PASS in the log', [('Bots', 'BoardReachSettle', 200, 0, 0), ('Bots', 'BoardReach', 100, None, 0)])
+feat('boardreachaim', G_EXP, 'Offline Arcade: the order to the van points a little short of it on the bot\'s own floor, so bots do not walk a detour (needs the boarding row; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] BoardReachAim (cm, 150 is a GUESS, at most 300; + BoardReachAimHeight); no bench PASS in the log', [('Bots', 'BoardReachAim', 150, 0, 0), ('Bots', 'BoardReach', 100, None, 0)])
+feat('boardreachsent', G_EXP, 'Offline Arcade: a called AI heister up to 60 m from the van (stock 30 m) still gets the order to walk to the doors (needs the boarding row; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] BoardReachSent (cm, 6000 is a GUESS, at most 10000); no bench PASS in the log', [('Bots', 'BoardReachSent', 6000, 0, 0), ('Bots', 'BoardReach', 100, None, 0)])
+feat('crewroutehold', G_EXP, 'Offline Arcade: the escape vehicle waits for the crew that is walking the route to it (45 s; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] CrewRouteHold seconds (0 = off; 45 is a GUESS from the code comment) + CrewRouteRange (100 m GUESS); no bench PASS of its own in the log', [('Bots', 'CrewRouteHold', 45, 0, 0)])
+feat('crewroutealone', G_EXP, 'Offline Arcade: that wait also runs while you are in play and not aboard (needs the row above; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] CrewRouteAlone; Park II run N1018_L66; no bench PASS in the log', [('Bots', 'CrewRouteAlone', 1, 0, 0), ('Bots', 'CrewRouteHold', 45, None, 0)])
+feat('crewroutefed', G_EXP, 'Offline Arcade: that wait also runs while you are a policeman, so the leaderless crew still catches the van (needs the crew-route row; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] CrewRouteFed; no bench PASS in the log', [('Bots', 'CrewRouteFed', 1, 0, 0), ('Bots', 'CrewRouteHold', 45, None, 0)])
+feat('vancallnear', G_EXP, 'Offline Arcade: an AI heister still outside that stands within 40 m of the exit is called to the van, so it is not left behind (recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] VanCallNear metres (40 is a GUESS) + VanCallDelay 3 / VanCallMinStage 1; a 10-18 log line reports L71 PASS for it (two bots called 17 m out) but it is mixed with other keys; treated as not benched', [('Bots', 'VanCallNear', 40, 0, 0)])
+feat('vancalllast', G_EXP, 'Offline Arcade: at the round\'s last vehicle the distance limit of the van call is dropped (needs the row above; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] VanCallLast; Last Call L74 PASS but the key did not fire there; no bench PASS of its own', [('Bots', 'VanCallLast', 1, 0, 0), ('Bots', 'VanCallNear', 40, None, 0)])
+feat('lastvehicleflagged', G_EXP, 'Offline Arcade: a "last vehicle" flag with no vehicle on the way no longer stops the bots\' fallback call (GUESS; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] LastVehicleFlagged (a GUESS, Last Call L29); no bench PASS of its own in the log', [('Bots', 'LastVehicleFlagged', 1, 0, 0)])
+feat('halfguard', G_EXP, 'Offline Arcade, two-part maps: the crew is not ordered to a place on the other half when it is more than 4 m above or below (GUESS; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] HalfGuard (units, 400 is a GUESS from the code comment); no bench PASS of its own in the log', [('Bots', 'HalfGuard', 400, 0, 0)])
+feat('walkawayreorder', G_EXP, 'Offline Arcade: a called AI heister that keeps walking away from the van is ordered to it again (GUESS; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] WalkAwayReorder (samples, 3 is a GUESS) + WalkAwayGoal / WalkAwayHeight; no bench PASS in the log', [('Bots', 'WalkAwayReorder', 3, 0, 0)])
+feat('walkexclusive', G_EXP, 'Offline Arcade: while a map-hop walk moves a bot, other orders leave it alone (GUESS; recommended off until benched)', 'off', 'start',
+     'klhop.c [Bots] WalkExclusive (v82i GUESS fix); no bench PASS in the log', [('Bots', 'WalkExclusive', 1, 0, 0)])
+feat('escvisitfix', G_EXP, 'Offline Arcade: try to repair a first escape-vehicle visit that boarded nobody (GUESS fix; recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] EscVisitFix, GUESS fix, see klmv_escvisit; no bench PASS in the log', [('Bots', 'EscVisitFix', 1, 0, 0)])
+feat('escvisitprobe', G_EXP, 'Offline Arcade: log what the first escape-vehicle visit looks like (diagnostic) (recommended off)', 'off', 'start',
+     'klmove.c [Bots] EscVisitProbe; logging only', [('Bots', 'EscVisitProbe', 1, 0, 0)])
+feat('boardprobe', G_EXP, 'Offline Arcade: log the boarding state every half second while the vehicle waits (diagnostic) (recommended off)', 'off', 'start',
+     'klmove.c [Bots] BoardProbe; read-only logging', [('Bots', 'BoardProbe', 1, 0, 0)])
+feat('ordertrace', G_EXP, 'Offline Arcade: log every order any module gives an AI heister (diagnostic) (recommended off)', 'off', 'start',
+     'klescort.c [Bots] OrderTrace; logging only, capped per round', [('Bots', 'OrderTrace', 1, 0, 0)])
+feat('permap', G_EXP, 'Dead Men maps: a map\'s own [Bots.<folder>] section overrides the [Bots] numbers while it is loaded (recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] PerMap; the section is re-read at every map load; no bench PASS in the log', [('Bots', 'PerMap', 1, 0, 0)])
+feat('followoutcrewmoney', G_EXP, 'Offline Arcade, follow-out: the loyal crew\'s money counts toward the call, not only yours (needs the follow-out row; recommended off until benched)', 'off', 'start',
+     'klescort.c [Bots] FollowOutCrewMoney; a 10-18 vault run showed the call working with it, mixed with other keys; treated as not benched', [('Bots', 'FollowOutCrewMoney', 1, 0, 0), ('Bots', 'FollowOut', 1, None, 0)])
+feat('followoutholdalone', G_EXP, 'Offline Arcade, follow-out: the van also waits when you stand alone near it, not only when you are aboard (needs follow-out with a hold; recommended off until benched)', 'off', 'start',
+     'klescort.c [Bots] FollowOutHoldAlone (+ FollowOutHoldAloneRange 40 m, a GUESS); FollowOutHold 25 is the suggestion of the klmove.c header', [('Bots', 'FollowOutHoldAlone', 1, 0, 0), ('Bots', 'FollowOutHold', 25, None, 0), ('Bots', 'FollowOut', 1, None, 0)])
+feat('followoutstopplace', G_EXP, 'Offline Arcade, follow-out: the crew is sent to the place the van waited at the first time, not to the van while it drives in (needs follow-out; recommended off until benched)', 'off', 'start',
+     'klescort.c [Bots] FollowOutStopPlace (Vault run N1018_L22; GUESS that the van parks at the same place each visit)', [('Bots', 'FollowOutStopPlace', 1, 0, 0), ('Bots', 'FollowOut', 1, None, 0)])
+feat('followoutcomemoved', G_EXP, 'Offline Arcade, follow-out: a called bot that moved 2 m in 2 s counts as on its way, for the van\'s hold (needs follow-out with a hold; recommended off until benched)', 'off', 'start',
+     'klescort.c [Bots] FollowOutComeMoved; no bench PASS of its own in the log', [('Bots', 'FollowOutComeMoved', 1, 0, 0), ('Bots', 'FollowOutHold', 25, None, 0), ('Bots', 'FollowOut', 1, None, 0)])
+feat('backstabbehind', G_EXP, 'A bot picked to turn on you waits until it is behind you (judged by how you move: GUESS; needs the traitors row with Backstab; recommended off until benched)', 'off', 'start',
+     'klbot.c [Bots] BackstabBehind; no bench PASS in the log', [('Bots', 'BackstabBehind', 1, 0, 0), ('Bots', 'Backstab', 20, None, 0)])
+feat('backstabbusy', G_EXP, 'A bot picked to turn on you waits until you are hurt (needs the traitors row with Backstab; recommended off until benched)', 'off', 'start',
+     'klbot.c [Bots] BackstabBusy; no bench PASS in the log', [('Bots', 'BackstabBusy', 1, 0, 0), ('Bots', 'Backstab', 20, None, 0)])
+feat('hudnames', G_EXP, 'Arcade crew list shows the character each heister wears (J.C., Tommy...) instead of the record\'s own name (needs the HUD; recommended off until benched)', 'off', 'start',
+     'klhud_names.c [HUD] Names (default 0 unless [HUD] Draft=1); re/hud_names.md; no bench PASS in the log', [('HUD', 'Names', 1, 0, 0), ('HUD', 'Enable', 1, None, 0)])
+feat('hudnametags', G_EXP, 'Arcade: the tag over a heister\'s head shows his initials (needs the HUD and the row above; do not combine with [Crew] Names=1; recommended off until benched)', 'off', 'start',
+     'klhud_names.c [HUD] NameTags 1 = initials, 2 = full character name; no bench PASS in the log', [('HUD', 'NameTags', 1, 0, 0), ('HUD', 'Names', 1, None, 0), ('HUD', 'Enable', 1, None, 0)])
+feat('hudownname', G_EXP, 'Arcade crew list: your own row shows your Steam name instead of your character\'s (needs the names row; recommended off)', 'off', 'start',
+     'klhud_names.c [HUD] OwnName (0 = your character\'s name)', [('HUD', 'OwnName', 1, 0, 0), ('HUD', 'Names', 1, None, 0), ('HUD', 'Enable', 1, None, 0)])
+feat('hudkilledby', G_CORE, 'Offline: a KILLED BY line in the HUD style while you are dead (needs the HUD; recommended on)', 'on', 'start',
+     'klhud.c [HUD] KilledBy; the owner plays with it; the next row hides the stock panel text', [('HUD', 'KilledBy', 1, 0, 1)])
+feat('onlinetacticscarry', G_EXP, 'Online host: an AI heister takes up to 8 loot stacks before it heads for the van instead of 2 (needs the tactics rows; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineTacticsCarry (the code and ini default stay 2): DH2 PASS 11-02 on DD01, Carry 8 grabbed 51 stacks (Carry 6: 39, Carry 2: 14); Arcade has no cap', [('BotFill', 'OnlineTacticsCarry', 8, 2, 2), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('onlinejoincalled', G_EXP, 'Online host: an AI heister carrying money walks to the exit while a van another bot called is on its way or waiting, instead of waiting where it stands (needs the tactics rows; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineJoinCalled (default 1); BOS_DD04: 4 carriers stood 100 m off the whole visit, 3 of 7 boarded; the ini marks it recommended on', [('BotFill', 'OnlineJoinCalled', 1, 0, 1)])
+feat('onlineboxslack', G_EXP, 'Online host: an AI heister that stood 1 m outside the escape box for 8 s while the van waits counts as inside and boards (needs the tactics rows; recommended on)', 'on', 'start',
+     'klbotfill.c [BotFill] OnlineBoxSlack cm (default 100); BOS_DD02x2: bot 0 stood 0.5 m outside the whole wait; the ini marks it recommended 100', [('BotFill', 'OnlineBoxSlack', 100, 0, 100)])
+feat('onlinescaneveryround', G_EXP, 'Online host: redo the exit-trigger and escape-box scan at every round start, as before 10-30 (costs a brief stall; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineScanEveryRound (default 0 = the result is kept while the scene stays); BP20 saw the kept scan work', [('BotFill', 'OnlineScanEveryRound', 1, 0, 0)])
+feat('onlinegetupanyhp', G_EXP, 'Online get-up help: the downed machine\'s helper scan skips the bot health test (a joiner may read a bot\'s health as 0; needs the get-up row; recommended off)', 'off', 'start',
+     'klbotfill.c [BotFill] OnlineGetUpAnyHp (default 0); the ini marks it recommended off', [('BotFill', 'OnlineGetUpAnyHp', 1, 0, 0), ('BotFill', 'OnlineGetUp', 1, None, 0)])
 feat('onlinelootparts', G_EXP,'AI heisters loot in timed parts like Arcade (needs the two rows above; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineLootParts (1 on, 2 log only): timed parts while the bot stands at the stack; proven live: BP4 (22/22 parts, 0 faults) .. BP20; the Loot finish row needs it; stack fields +0x40/+0x44 are a GUESS', [('BotFill', 'OnlineLootParts', 1, 0, 0), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinelootfinish', G_EXP, 'Online AI heisters finish the stack they are taking: held in place, not pulled off by the van gather (needs the timed-parts row above; recommended on)', 'on', 'start',
