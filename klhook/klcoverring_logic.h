@@ -120,6 +120,8 @@ static int kcr_cb_gate(int enabled, int client, int map_ok, int done_load, unsig
 #define KCR_RW_MAXTRY   4UL                 /* attempts per car per load (state change + spare retries) */
 #define KCR_RW_RETRY_MS 1500UL              /* spacing of two attempts on one car */
 #define KCR_RW_SCAN_MS  200UL               /* the per-car state is looked at this often */
+#define KCR_RW_SPARE_MS 15000UL             /* review 11-02: spares left after a try are retried this long after it even without a new state change
+                                               (a field that moved at load would otherwise burn the only try on a parked car) */
 enum { KCR_RW_NONE = 0, KCR_RW_STATE, KCR_RW_SPARE };
 
 /* may a prebuilt ring be rewritten? exactly the shape ClientBuild leaves: done 1, rsv 1, 1..8 indices */
@@ -132,7 +134,7 @@ static int kcr_rw_trigger(int state_changed, unsigned long spares, unsigned long
     if (tries >= KCR_RW_MAXTRY) return KCR_RW_NONE;
     if (tries && since_ms < KCR_RW_RETRY_MS) return KCR_RW_NONE;
     if (!tries && state_changed) return KCR_RW_STATE;
-    if (tries && state_changed && spares) return KCR_RW_SPARE;      /* only after an activation, and only while spares remain */
+    if (tries && spares && (state_changed || since_ms >= KCR_RW_SPARE_MS)) return KCR_RW_SPARE;   /* only after a first try, only while spares remain */
     return KCR_RW_NONE;
 }
 

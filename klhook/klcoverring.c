@@ -255,19 +255,28 @@ static void kcr_rw_step(DWORD gd, DWORD st, DWORD now)
     if (!kcvd_read_list(gd, &L, &rb, &rn, &pb, &pe)) return;
     npts = (pe >= pb && pe - pb < 0x4000000u) ? (pe - pb) / 0x7c : 0;
     for (i = 0; i < (DWORD)kcr.npre; i++) {
-        DWORD car = kcr.pre[i].car, s = kcr.pre[i].script, d, r, n, idx[8], idx2[8], k, c0, c1, spares = 0, since; int why, sc, same = 1, fault;
-        if (klh_rd32(car + 0x968) != s || !kcr_script_matches(car, klh_rd32(s + 0x40))) continue;       /* car gone / script replaced: never touch it */
+        DWORD car = kcr.pre[i].car, s = kcr.pre[i].script, d, r, n, idx[8], idx2[8], k, c0, c1, spares = 0, since, v8c0, va28; int why, sc, same = 1, fault, oob = 0;
+        if (!kcvd_ptr_ok(car) || !kcvd_ptr_ok(s) || klh_rd32(car + 0x968) != s || !kcr_script_matches(car, klh_rd32(s + 0x40))) continue;   /* car gone / script replaced: never touch it */
         d = kcr_rd8(s + 0x1e8); r = kcr_rd8(s + 0x1e9); n = klh_rd32(s + 0x1c4);
-        sc = klh_rd32(car + 0x8c0) != kcr.pre[i].s8c0 || klh_rd32(car + 0xa28) != kcr.pre[i].sa28;
+        v8c0 = klh_rd32(car + 0x8c0); va28 = klh_rd32(car + 0xa28);
+        sc = v8c0 != kcr.pre[i].s8c0 || va28 != kcr.pre[i].sa28;
         for (k = 0; k < 8; k++) idx[k] = klh_rd32(s + 0x1c8 + k * 4);
         for (k = 0; k < n && k < 8; k++) {
             DWORD fl = 0;
+            if (idx[k] >= npts) oob = 1;
             if (idx[k] >= npts || !klh_rd(pb + idx[k] * 0x7c + 0x68, &fl, 4) || !kcr_pt_usable(fl)) spares++;
+        }
+        if (oob) {                                  /* review 11-02: the writer would write pb + idx*0x7c past the list: never call it for this car */
+            if (kcr.pre[i].tries < KCR_RW_MAXTRY) klog("coverring: rewrite car #%lu skipped: an index is past the list end (%lu points) - car left as built", (unsigned long)i, (unsigned long)npts);
+            kcr.pre[i].tries = KCR_RW_MAXTRY;
+            continue;
         }
         since = kcr.pre[i].tries ? now - kcr.pre[i].last : 0xfffffffful;
         why = kcr_rw_trigger(sc, spares, kcr.pre[i].tries, since);
         if (why == KCR_RW_NONE || !kcr_rw_pre_ok(d, r, n)) continue;
         kcr.pre[i].tries++; kcr.pre[i].last = now;
+        klog("coverring: rewrite car #%lu trigger: [car+8c0] %08lx -> %08lx, [car+a28] %08lx -> %08lx, spares %lu", (unsigned long)i, (unsigned long)kcr.pre[i].s8c0,
+             (unsigned long)v8c0, (unsigned long)kcr.pre[i].sa28, (unsigned long)va28, (unsigned long)spares);
         c0 = klh_rd32(L + 0x68);
         *(volatile BYTE *)(DWORD_PTR)(s + 0x1e8) = 0;
         fault = !kcr_cb_call(s);
