@@ -450,7 +450,7 @@ static void klsb_put(int i, float x, float y, const char *s, DWORD colour)
 /* [HUD] ScoreboardNextHint (NOT RUN IN THE GAME): called by both composes before they close; the line sits centred under the plate and is drawn with the other texts */
 static void klsb_next_hint(float px, float py)
 {
-    char t[96];
+    char t[KLU_TEXTLEN];      /* the text slot's size: kpq_board_hint cuts at a whole entry, never mid-word in the slot copy */
     if (!klsb.nexthint) return;
     if (kspg_board_hint(t, sizeof t)) klsb_put(KLSB_T_NEXT, px + KLSB_PW * 0.5f, klu_cen(py + KLSB_PH + KLSB_Y_NEXT + 5.0f, KLU_FNT_LABEL), t, KLU_C_CHALK);
 }

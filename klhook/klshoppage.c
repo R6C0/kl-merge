@@ -96,7 +96,7 @@ static struct {
     int modesOn; volatile int ctlMode;               /* [Keys] ModesTab: the controls page has a 2nd view (BOTS AND MODES); ctlMode 1 = that view is up (only with ctl) */
     int ctlOn, ctlKey, ctlKeyDown, hPendPg, hintDone, ctlTold; DWORD ctlLastKey;   /* config (the page-cycle key), edge, the early press's target (0 hire / 1 controls), the once-per-session hint, presses logged */
     volatile int ctl;                            /* the controls page is on screen (never together with hire / shownB) */
-    int queueOn, hQueued, hintEvery; DWORD pq2At;   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none) */
+    int queueOn, hQueued, hintEvery, hscore, pscore; DWORD pq2At;   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
 } kspg;
 
 static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
@@ -1262,6 +1262,9 @@ static int kspg_load(void)
     return ok;
 }
 
+#ifdef KLHOOK_TEST
+static int kspg_curprobe;      /* [ShopPage] CursorProbe, see kspg_curprobe_tick (declared here: kspg_init reads it) */
+#endif
 static void kspg_init(void)
 {
     kspg.on = GetPrivateProfileIntA("ShopPage", "Enable", 0, klh_ini) != 0;
@@ -1436,7 +1439,7 @@ static int kspg_board_hint(char *out, size_t cap)
     if (kspg.ctlOn) kspg_h_keyname(kspg.ctlKey, c, sizeof c);
     if (kspg.hireOn && klhr_on && (!kl_online() || klhro_enabled())) kspg_h_keyname(kspg.hireKey, h, sizeof h);
     if (kspg.on && (!kl_online() || kspg.online)) kspg_h_keyname(kspg.key, p, sizeof p);
-    return kpq_board_hint(out, cap, c, h, p);
+    return kpq_board_hint(out, cap, kspg.queueOn, c, h, p);
 }
 /* [Keys] RoundHints=1 (wk-modestab-1102, NOT RUN IN THE GAME): once per session, the first time the FA announcement element exists (= a round is loaded; GUESS: it does not exist in the menus, as the
  * 'no FA announcement element yet' log of klannounce.c suggests) and 8 s later, one line of the keyed features that are ON, built by kmt_hint_build. klan_show waits while a stock message is up. */
@@ -1498,7 +1501,7 @@ static void kspg_cycle_key(SHORT (WINAPI *gaks)(int), HWND (WINAPI *fgw)(void), 
         if (dik > 0 && kla_key_held(dik)) down = scripted = 1;
     }
 #endif
-    if (down && !kspg.ctlKeyDown && kspg.hpre && now - kspg.ctlLastKey > 500) {
+    if (down && !kspg.ctlKeyDown && (kspg.hpre || (kspg.queueOn && kspg.hscore)) && now - kspg.ctlLastKey > 500) {      /* PageQueue: the scoreboard too */
         DWORD pid = 0; HWND f = fgw(); if (f) wtp(f, &pid);
         if (scripted || pid == GetCurrentProcessId()) {
             DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
@@ -1542,7 +1545,7 @@ static void kspg_hire_tick(void)
     }
     if (now - lastGate > 250) {
         int g = kspg_gate_x(kspg.ctlOn ? 2 : 1); lastGate = now;
-        kspg.hpre = (g == 1);
+        kspg.hpre = (g == 1); kspg.hscore = (g == 2 && kspg.st == KPQ_ST_SCORE);
         if (g != 1) {
             if (kspg.hire && kspg.hireLog) klog("hirepage: page hidden (the shop closed)");
             if (kspg.ctl) klog("controls: page hidden (the shop closed)");
@@ -1585,7 +1588,7 @@ static void kspg_hire_tick(void)
             if (dik > 0 && kla_key_held(dik)) down = scripted = 1;
         }
 #endif
-        if (down && !kspg.hireKeyDown && kspg.hpre && now - kspg.hLastKey > 500) {
+        if (down && !kspg.hireKeyDown && (kspg.hpre || (kspg.queueOn && kspg.hscore)) && now - kspg.hLastKey > 500) {      /* PageQueue: the scoreboard too */
             DWORD pid = 0; HWND f = fgw(); if (f) wtp(f, &pid);
             if (scripted || pid == GetCurrentProcessId()) {     /* a two-seat bench has one window in front: klauto's own key is this process's */
                 DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
@@ -1681,7 +1684,6 @@ static void kspg_hlp_tick(void)
  * 'cursorprobe: st=.. visible=.. flags=.. pos=x,y client=x,y rect=WxH fg=.. lbutton edges=..' - is the OS cursor shown over the game's window at the round-over screens, where is it in window
  * coordinates, do left clicks arrive. Answers whether a clickable 'NEXT' button is possible at all (klhook has no mouse code). The hook tick is about 4 Hz (GUESS, as the key comments in this
  * file say), so a click shorter than one tick can be missed: the edge count is a lower bound. user32 looked up at run time (the hook links no user32). */
-static int kspg_curprobe;
 static void kspg_curprobe_tick(void)
 {
     static BOOL (WINAPI *gci)(void *); static BOOL (WINAPI *gcp)(POINT *); static BOOL (WINAPI *s2c)(HWND, POINT *); static BOOL (WINAPI *gcr)(HWND, RECT *);
@@ -1765,7 +1767,7 @@ static void klshoppage_tick(int game_thread)
             klog("shopPage: key pressed in the weapon list, but session state 0x%lx is not a shop state: ignored", sm ? klh_rd32(sm + 0x70) : 0);
         }
         /* k48d: 500 ms, not 150: K48C (10-25 01:54:45) flipped B then A 320 ms apart on ONE SendInput press (250 ms hold) -> the buy came from set A */
-        if (down && !kspg.keyDown && kspg.pre && now - kspg.lastKey > 500) {
+        if (down && !kspg.keyDown && (kspg.pre || (kspg.queueOn && kspg.pscore)) && now - kspg.lastKey > 500) {      /* PageQueue: the scoreboard too */
             DWORD pid = 0; HWND f = fgw(); if (f) wtp(f, &pid);
             if (pid == GetCurrentProcessId()) {
                 DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
@@ -1815,7 +1817,7 @@ static void klshoppage_tick(int game_thread)
     if (now - kspg.lastScan < 250) return;
     kspg.lastScan = now; kspg.sane = 0;
     g = kspg_gate();
-    kspg.pre = (g == 1);
+    kspg.pre = (g == 1); kspg.pscore = (g == 2 && kspg.st == KPQ_ST_SCORE);
     if (g != 1) { kspg.tbAt = 0; kspg.tbLast = 0; kspg.tbDone = 0; kspg.selobj = 0; kspo.bmDone = 0; kspo.bmAt = 0; kspo.bmSeats = 0; }                      /* OnlineTestBuy: a new shop stay presses again */
     if (!g) { kspg.active = 0; kspg.shownB = 0; return; }
     if (g == 2 && kspg.shownB) { kspg.shownB = 0; if (kspg.log) klog("shopPage: the round runs: page back to set A"); }

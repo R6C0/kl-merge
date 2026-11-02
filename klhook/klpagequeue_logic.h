@@ -12,27 +12,35 @@
 #include <stdio.h>
 
 #define KPQ_ST_ROUNDOVER 0x20          /* session state of the shop between rounds */
+#define KPQ_ST_SCORE     0x1f          /* the scoreboard before it (review 11-02: the board's hint invites the press there, so a press is queued there too) */
 #define KPQ_MODE_LIST    2             /* shop mode 0x154d810: the weapon list is open */
 #define KPQ_EARLY_MS     3000u         /* the old hold: the selector is wrapped within 1.5 s of the list opening */
-#define KPQ_CAP_MS       35000u        /* the queue's longest hold (GUESS: the round-over page lasts about 30 s; 35 s covers it) */
+#define KPQ_CAP_MS       60000u        /* the queue's longest hold (GUESS: the scoreboard lasts a few seconds and the round-over page about 30 s; 60 s covers both) */
 enum { KPQ_WAIT = 0, KPQ_APPLY = 1, KPQ_LAPSE = 2 };
 
-/* a page key came: queue it? Only with PageQueue on, in the round-over state, with the list not open and nothing pending yet */
+/* the scoreboard or the round-over page: where a press is queued */
+static int kpq_qstate(int st)
+{
+    return st == KPQ_ST_ROUNDOVER || st == KPQ_ST_SCORE;
+}
+
+/* a page key came: queue it? Only with PageQueue on, on the scoreboard or the round-over page, with the list not open and nothing pending yet */
 static int kpq_should_queue(int queueOn, int st, int mode, int pending)
 {
-    return queueOn && st == KPQ_ST_ROUNDOVER && mode != KPQ_MODE_LIST && !pending;
+    return queueOn && kpq_qstate(st) && mode != KPQ_MODE_LIST && !pending;
 }
 
 /* a page key came while a QUEUED press is pending and the list is still not open: it cancels the queue (as a second press cancels the old early press) */
 static int kpq_cancels(int queueOn, int st, int mode, int pending, int queued)
 {
-    return queueOn && pending && queued && st == KPQ_ST_ROUNDOVER && mode != KPQ_MODE_LIST;
+    return queueOn && pending && queued && kpq_qstate(st) && mode != KPQ_MODE_LIST;
 }
 
 /* one tick of the hold. queued 0 = the old early press (3 s, the list must be open all the time); queued 1 = the queued press (while st stays 0x20, up to the cap;
    the mode-2 check waits until the list opens). hpre = the shop gate is open, selok = the selector is wrapped (pages that need it; page II passes 1), age in ms */
 static int kpq_step(int queued, int hpre, int st, int mode, int selok, unsigned int age)
 {
+    if (queued && st == KPQ_ST_SCORE) return age > KPQ_CAP_MS ? KPQ_LAPSE : KPQ_WAIT;      /* the scoreboard: no shop gate yet (it refuses 0x1f), the press waits for 0x20 */
     if (!hpre) return KPQ_LAPSE;
     if (queued) {
         if (st != KPQ_ST_ROUNDOVER || age > KPQ_CAP_MS) return KPQ_LAPSE;
@@ -49,9 +57,10 @@ static int kpq_hint_done_after_close(int everyShop, int done)
     return everyShop ? 0 : done;
 }
 
-/* [HUD] ScoreboardNextHint: 'NEXT: BUY WEAPONS, THEN [F2] MORE PAGES  [F3] HEISTERS'. An empty / NULL key name = that feature is off. page2Key is offered only when the
+/* [HUD] ScoreboardNextHint: 'NEXT: BUY WEAPONS, THEN [F2] MORE PAGES  [F3] HEISTERS'; with PageQueue on (queueOn) the press works right on the board:
+   'PRESS NOW: [F2] MORE PAGES ...' (the page opens with Buy Weapons). An empty / NULL key name = that feature is off. page2Key is offered only when the
    cycle key is off (the cycle key already reaches page II). Upper case (the label font is capitals). -> 1 = a line was built, 0 = no page feature on (out is empty) */
-static int kpq_board_hint(char *out, size_t cap, const char *cycleKey, const char *hireKey, const char *page2Key)
+static int kpq_board_hint(char *out, size_t cap, int queueOn, const char *cycleKey, const char *hireKey, const char *page2Key)
 {
     size_t l; int n = 0, i;
     const char *k[3], *w[3];
@@ -60,7 +69,7 @@ static int kpq_board_hint(char *out, size_t cap, const char *cycleKey, const cha
     k[2] = (cycleKey && cycleKey[0]) ? 0 : page2Key; w[2] = "page II";
     if (!out || cap < 16) return 0;
     out[0] = 0;
-    l = (size_t)snprintf(out, cap, "NEXT: BUY WEAPONS, THEN");
+    l = (size_t)snprintf(out, cap, "%s", queueOn ? "PRESS NOW:" : "NEXT: BUY WEAPONS, THEN");
     if (l >= cap) { out[0] = 0; return 0; }
     for (i = 0; i < 3; i++) {
         size_t m; char *p;
