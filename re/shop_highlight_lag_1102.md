@@ -18,7 +18,7 @@ Offline, read-only. Result: NOT shown to be caused by our swap. Most likely stoc
   Neither touches [selector+0x90] or inserts rows (swap 'never adds a row').
 
 ## Verdict
-Stock skew (Arcade shows it too, S11). Fix: none. Only if the owner still sees it with all shop hook keys at 0 would it be ours.
+UNPROVEN, leaning stock. Fix: none. (Review 1102: S11 ran with [Shop] Swap on, so it is not a clean stock baseline, and its symptom - Type 88 text while the swapped Rem 700 came out - is the swap's expected text/gun mismatch, a different thing from a one-row skew. kspg_fire (klshoppage.c ~1302) does write [selector+0x90], but only in OnlineTestBuy/OnlineApply presses, restored in the same call; it does not run during rendering. The original 'lags by a row' note (open_work_log 2026-11-01 06:15, GUN15) has no row-level shot in the folders, so only the probe below can settle it.) Only if the owner still sees it with all shop hook keys at 0 would it be ours.
 
 ## Probe that would settle it (not written; would be a default-0 log-only key)
 Offline Arcade, hook with [Shop] Swap=0, OnlineSwapPic=0: script DOWN x1 in a category, shot at +0.05/+0.2/+1.0 s, and log
