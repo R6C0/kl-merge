@@ -7,6 +7,15 @@ usage: python tools/kl_kit_summary.py KITDIR [--solo DIR] [--grep REGEX]... [--c
 Per run dir and seat: log exists, last RESULT line (200 chars), asserts / faults (parsed from the RESULT line when it has
 them, else counted), 'is dead or gone' count, last 'round summary:' money + boarded, every round clock (left[+4c]=) at state 25.
 Lines with 'netsmooth' or 'heli:' are ignored. Always exits 0.
+
+Batch gate (2026-11-02 scheduled, for the 21-map passes Q28..Q35):
+  python tools/kl_kit_summary.py --batch Q35_ [KITDIR] [--solo DIR] [--gate]
+  One line per <solo>/<PREFIX>* run dir from the two seats' KLHook.result files (state, asserts, faults, soft_asserts,
+  level_loaded, scene) plus the run.txt RESULT line; a run is CLEAN when both seats say state=PASS, level_loaded=1 and
+  asserts = faults = soft_asserts = 0 (a missing result file or seat = NOT clean). With KITDIR the scene's Fxx is checked
+  against the slot of the maps_*.txt line of that tag (a wrong slot = NOT clean). The last line is the verdict:
+  'BATCH Q35_: 21 run(s), 21 clean -> CLEARED' or the list of the runs that are not. --gate exits 1 unless every run is
+  clean (for a ship script); without it the exit code stays 0.
 """
 import argparse
 import glob
@@ -91,13 +100,115 @@ def show(name, seat, s, greps_src):
             print('      ' + ln)
 
 
+RE_SLOT = re.compile(r'Locations[\\/](F\d\d)[\\/]', re.I)
+
+
+def read_result(path):
+    """KLHook.result (key=value lines) -> dict, or None when the file is missing. Values stay strings."""
+    if not os.path.isfile(path):
+        return None
+    r = {}
+    with open(path, errors='replace') as f:
+        for ln in f:
+            if '=' in ln:
+                k, v = ln.rstrip('\r\n').split('=', 1)
+                r[k.strip()] = v.strip()
+    return r
+
+
+def read_kit_slots(kit):
+    """maps_*.txt -> {'TAG_MAP': 'Fxx'} (the slot column, upper case); {} when there is no kit."""
+    slots = {}
+    if not kit:
+        return slots
+    for p in sorted(glob.glob(os.path.join(kit, 'maps_*.txt'))):
+        with open(p, errors='replace') as f:
+            for ln in f:
+                a = ln.strip().split('|')
+                if len(a) >= 3 and not a[0].startswith('#'):
+                    slots[a[0] + '_' + a[1]] = a[2].strip().upper()
+    return slots
+
+
+def seat_clean(r):
+    """(clean?, why) for one seat's result dict: PASS, level loaded, 0 asserts / faults / soft asserts (soft_asserts is
+    absent in older hooks: then not counted)."""
+    if r is None:
+        return False, 'no result file'
+    why = []
+    if r.get('state') != 'PASS':
+        why.append('state=%s' % r.get('state', '?'))
+    if r.get('level_loaded') != '1':
+        why.append('level_loaded=%s' % r.get('level_loaded', '?'))
+    for k in ('asserts', 'faults', 'soft_asserts'):
+        if k in r and r[k] != '0':
+            why.append('%s=%s' % (k, r[k]))
+    return not why, ', '.join(why)
+
+
+def run_txt_result(d):
+    """The last RESULT line of run.txt (the launcher's verdict), '' when none."""
+    p, last = os.path.join(d, 'run.txt'), ''
+    if os.path.isfile(p):
+        with open(p, errors='replace') as f:
+            for ln in f:
+                s = ln.strip()
+                if s.startswith('RESULT'):
+                    last = s
+    return last
+
+
+def batch(solo, prefix, slots):
+    """[(name, clean?, line)] for every <solo>/<prefix>* run dir, sorted by name."""
+    rows = []
+    for d in sorted(glob.glob(os.path.join(solo, prefix + '*'))):
+        if not os.path.isdir(d):
+            continue
+        name, parts, clean, scene = os.path.basename(d), [], True, ''
+        for seat, inst in (('host', 'inst1'), ('client', 'inst2')):
+            r = read_result(os.path.join(d, inst, 'KLHook.result'))
+            ok, why = seat_clean(r)
+            clean = clean and ok
+            if r and not scene:
+                m = RE_SLOT.search(r.get('scene', ''))
+                scene = m.group(1).upper() if m else r.get('scene', '')[:30]
+            parts.append('%s %s' % (seat, 'clean' if ok else 'NOT clean (%s)' % why))
+        want = slots.get(name)
+        if want and scene and scene != want:
+            clean = False
+            parts.append('SLOT %s, kit says %s' % (scene, want))
+        rt = run_txt_result(d)
+        rows.append((name, clean, '%-11s %-4s %s | %s' % (name, scene or '?', '; '.join(parts), rt or 'run.txt: no RESULT line')))
+    return rows
+
+
+def verdict(prefix, rows):
+    n, bad = len(rows), [r[0] for r in rows if not r[1]]
+    if not n:
+        return 'BATCH %s: no run dir -> NOT CLEARED' % prefix, False
+    if bad:
+        return 'BATCH %s: %d run(s), %d clean, NOT CLEARED: %s' % (prefix, n, n - len(bad), ' '.join(bad)), False
+    return 'BATCH %s: %d run(s), %d clean -> CLEARED' % (prefix, n, n), True
+
+
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('kit')
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('kit', nargs='?')
     ap.add_argument('--solo', default=SOLO)
     ap.add_argument('--grep', action='append', default=[])
     ap.add_argument('--control', action='append', default=[])
+    ap.add_argument('--batch', metavar='PREFIX', help="gate every <solo>/<PREFIX>* run dir from its KLHook.result files")
+    ap.add_argument('--gate', action='store_true', help='with --batch: exit 1 unless every run is clean')
     a = ap.parse_args()
+    if a.batch:
+        rows = batch(a.solo, a.batch, read_kit_slots(a.kit))
+        for _, _, line in rows:
+            print(line)
+        text, ok = verdict(a.batch, rows)
+        print(text)
+        raise SystemExit(1 if a.gate and not ok else 0)
+    if not a.kit:
+        ap.error('KITDIR is needed without --batch')
     greps = [re.compile(g) for g in a.grep]
     runs = read_kit(a.kit)
     print('kit %s: %d run(s)' % (a.kit, len(runs)))

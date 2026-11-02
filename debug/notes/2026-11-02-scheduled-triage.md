@@ -145,3 +145,41 @@ Pairing dumps by time cannot fix a log that holds one dump, so:
 
 ## Owner
 - Nothing to install or decide. Still open from earlier notes: Medal-quit stutter round, MouseMoveMs=16, lenscrack INSTALL bat if wanted.
+
+# Scheduled check-in 2026-11-02 ~18:50 UTC (cloud; DD/DM attached by one access request)
+
+## PC state (read only; nothing launched, installed or staged into the game folder)
+- BUSY: `<DD>\dinput8.dll` written 18:44:25 UTC, ReShade logs 18:44-18:45 (a game run in progress); ce's bench dirs under
+  `<DM>\KL_PortTools\build\klhook\solo\`: MT3B_DM03 18:04, RT9A_DM09 18:15, RT9B_DM09 18:27, RT9R_DD06 18:35, TP3A_DM03 18:44,
+  TP3B_DD05 18:51. No game run, no install, no screen from here. Nothing pushed to rtp-schemas since 15:13 (head dda3479).
+- `KLHook.result` = the 10-27 PASS (F04); `KLHook.log` ends 10-27 20:50; live `KLHook.ini` 11-01 13:25 (sha1 81c95751) unchanged.
+  Dumps: newest `KLHook_1.dmp` 10-26 08:11 and `kl2_490_crash_2026_10_25T19_18_39C0.mdmp`, both older than their notes: nothing to triage.
+- Head dda3479 verified in the cloud (fresh container: gcc-multilib + mingw-w64, pefile + capstone): `kl_tests` 57 pass / 0 fail /
+  15 skip; `run_harness_linux.sh --check-hook` SHIP + TEST 0 errors; `kl_mod_options_test` 77/77.
+
+## Finding: Q35 = the 21-map pass of the next-ship candidate is COMPLETE and CLEAN (c9's ship gate)
+Q35 ran 15:08-17:55 UTC (c9_1028/q35, `ship_next/dll_0925/test` sha1 eb4c46d8 = the TEST twin of SHIP 56ac45c1, KLShopPage.ini staged:
+'shopPage: on; 20 pairs' on every seat). All 21 run dirs, both seats: state=PASS, level_loaded=1, asserts 0, faults 0, soft_asserts 0,
+run.txt 'RESULT: inst1 IN ROUND, inst2 IN ROUND'; slots as intended (DD10 and DM03A on F07, DM01B on F03, DM05A on F01, DM06B on F02,
+DM07 and DM09 on F06, DM11B on F04). The only ini-check line is the known `HALF-ON: netsmooth` probe (not in the live ini).
+So the candidate (ship_next: ship1103 + the 13 cleared keys incl. the CoverRing trio + the 6 audit ADD keys + Carry 8 / BoardAllNear /
+DropTake) has the both-seat PASS on every map that the 12:45 audit asked for. SHIP = c9 / owner (INSTALL bat from c9_1028; not from here).
+
+Also graded from the result files (feature verdicts are ce's): MT3B_DM03, RT9A/RT9B_DM09, RT9R_DD06, TP3A_DM03, TP3B_DD05 all
+SAFE (both seats PASS, 0 asserts / faults / soft). RT9A (OnlineLateExitRoute=1) host log: 'route to the exit 315 m ... late exit at
+clock left 262 s instead of 75' = the 15:00 note's ~258 s; the van was called by five bots 18:08:43-18:09:26 (the first ~70 s after
+the round start), round summary 0 boarded, 13 stacks, $1.2M tally, 5 'dead or gone'; RT9B (control) 0 boarded, 14 stacks, $0.6M,
+6 dead. The per-bot late exit changed the timing, not the outcome: DM09 boarding is still the street-leg survival / walk problem.
+
+## Done: `kl_kit_summary.py --batch PREFIX [KITDIR] [--gate]` (the one-command ship gate; read-only, self-tested)
+Until now 'all 21 maps both seats PASS' was read by hand (21 run.txt + 42 KLHook.result files). Now one line per `<solo>/<PREFIX>*`
+run dir from the two seats' KLHook.result (state, level_loaded, asserts, faults, soft_asserts; a missing file or seat = NOT clean),
+the scene's Fxx, the run.txt RESULT line, and a verdict line `BATCH Q35_: 21 run(s), 21 clean -> CLEARED` or the names of the
+runs that are not; with KITDIR the scene slot is checked against the maps_*.txt line; `--gate` exits 1 unless every run is clean
+(for a ship script: `python tools/kl_kit_summary.py --batch Q35_ C:/kl_build_1024/c9_1028/q35 --gate && INSTALL...`). Older hooks
+without soft_asserts= are not penalised. Ran on the PC against the real solo dir: Q35_ 21/21 CLEARED, RT9 3/3, TP3 2/2.
+kl_kit_summary_test: +18 checks (wrong slot, client soft asserts, host crash + missing client file, run.txt verdict, old hook).
+
+## Owner
+- Nothing to install or decide from this run. The candidate ship (ship1104) is c9's INSTALL bat once c9 reads Q35; still open from
+  earlier notes: Medal-quit stutter round, MouseMoveMs=16, lenscrack INSTALL bat if wanted.

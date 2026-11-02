@@ -56,6 +56,38 @@ def main():
             f.write('x assert\ny Fault\nz netsmooth assert\n')
         s3 = k.summarize(os.path.join(d, 'b.log'), [])
         chk('count', (s3['assert'], s3['fault'], s3['result']), (1, 1, None))
+        # --batch: KLHook.result per seat + run.txt RESULT line + kit slot check
+        RES = 'state=%s\nreason=script reached pass\nscene=SCENES\\Locations\\%s\\%s_Main.gms\nlevel_loaded=%s\nasserts=%s\nfaults=0\nsoft_asserts=%s\n'
+
+        def run(name, h, c, rt='RESULT: inst1 IN ROUND, inst2 IN ROUND'):
+            rd = os.path.join(solo, name)
+            for inst, txt in (('inst1', h), ('inst2', c)):
+                os.makedirs(os.path.join(rd, inst), exist_ok=True)
+                if txt is not None:
+                    with open(os.path.join(rd, inst, 'KLHook.result'), 'w') as f:
+                        f.write(txt)
+            with open(os.path.join(rd, 'run.txt'), 'w') as f:
+                f.write('  start | inst1\n  ' + rt + '\n')
+        run('Q9_DD05', RES % ('PASS', 'F05', 'F05', 1, 0, 0), RES % ('PASS', 'F05', 'F05', 1, 0, 0))
+        run('Q9_DM03', RES % ('PASS', 'F03', 'F03', 1, 0, 0), RES % ('PASS', 'F03', 'F03', 1, 0, 2))     # client soft asserts
+        run('Q9_DM09', RES % ('CRASH', 'F06', 'F06', 1, 0, 0), None, 'RESULT: inst1 FAULT')         # host crash, no client file
+        run('Q9_DD01', RES % ('PASS', 'F02', 'F02', 1, 0, 0), RES % ('PASS', 'F02', 'F02', 1, 0, 0))     # wrong slot vs the kit
+        with open(os.path.join(kit, 'maps_Q9.txt'), 'w') as f:
+            f.write('Q9|DD05|F05|0|500\nQ9|DM03|F03|2|500\nQ9|DM09|F06|2|500\nQ9|DD01|F01|0|500\n')
+        rows = k.batch(solo, 'Q9_', k.read_kit_slots(kit))
+        chk('batch n', [r[0] for r in rows], ['Q9_DD01', 'Q9_DD05', 'Q9_DM03', 'Q9_DM09'])
+        chk('batch clean', [r[1] for r in rows], [False, True, False, False])
+        chk('batch slot', 'SLOT F02, kit says F01' in rows[0][2], True)
+        chk('batch soft', 'NOT clean (soft_asserts=2)' in rows[2][2], True)
+        chk('batch crash', 'NOT clean (state=CRASH)' in rows[3][2] and 'no result file' in rows[3][2], True)
+        chk('batch rt', rows[3][2].endswith('RESULT: inst1 FAULT'), True)
+        chk('verdict bad', k.verdict('Q9_', rows), ('BATCH Q9_: 4 run(s), 1 clean, NOT CLEARED: Q9_DD01 Q9_DM03 Q9_DM09', False))
+        chk('verdict ok', k.verdict('Q9_', [rows[1]]), ('BATCH Q9_: 1 run(s), 1 clean -> CLEARED', True))
+        chk('verdict none', k.verdict('ZZ_', [])[1], False)
+        chk('seat old hook', k.seat_clean({'state': 'PASS', 'level_loaded': '1', 'asserts': '0', 'faults': '0'}), (True, ''))
+        chk('seat missing', k.seat_clean(None), (False, 'no result file'))
+        chk('kit slots', k.read_kit_slots(kit)['Q9_DD01'], 'F01')
+        chk('kit none', k.read_kit_slots(None), {})
     for m in fails:
         print('FAIL ' + m)
     print('kl_kit_summary_test: %s' % ('FAIL' if fails else 'all pass'))
