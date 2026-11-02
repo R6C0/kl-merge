@@ -557,6 +557,24 @@ feat('onlinedroptake', G_EXP, 'Online host: an AI heister with no stack left to 
 feat('onlinedoorhold', G_EXP, 'Online host: an AI heister with nothing carried waits for its squad to kick the vault doors open instead of running to the first opened case (DD01; needs the tactics rows; recommended off until benched)', 'off', 'start',
      'klbotfill.c/kldoorhold_logic.h [BotFill] OnlineDoorHold (+ OnlineDoorHoldS 90, 20..150): Q34B DD01, one opened door sent every bot to the first armed stacks, 48 doors stayed shut all round (Arcade opens all 58 by +105 s); no new stack order while stacks are behind shut doors, ends on all open / timer / 25 s stall / low clock; NOT run live',
      [('BotFill', 'OnlineDoorHold', 1, 0, 0), ('BotFill', 'OnlineSkipDoorStacks', 1, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
+feat('grudge', G_EXP, 'AI heisters you shoot turn on you in proportion (three tempers per bot: escalates, snaps, takes it; recommended off until benched)', 'off', 'start',
+     'klgrudge.c [Bots] Grudge (+ GrudgeMix/SnapHits/Base/Per/Max/ForGood); killing a bot that fights you by Grudge makes YOU the traitor (game rule); no bench PASS in the log',
+     [('Bots', 'Grudge', 1, 0, 0)])
+feat('backstabmark', G_EXP, 'A traitor bot gets the game traitor bit, so killing it is free (changes the payout: a marked bot that escapes is out of the split; recommended off until benched)', 'off', 'start',
+     'klgrudge.c [Bots] BackstabMark (also GrudgeMark); an assumption, see re/bots_fight.md 3.4; no bench PASS in the log',
+     [('Bots', 'BackstabMark', 1, 0, 0), ('Bots', 'Backstab', 20, None, 0)])
+feat('foeskipfed', G_EXP, 'No traitor booking or cap while a human heister is a policeman (recommended off until benched)', 'off', 'start',
+     'klbot.c [Bots] FoeSkipWhileFed, opt-in; no bench PASS in the log',
+     [('Bots', 'FoeSkipWhileFed', 1, 0, 0), ('Bots', 'TraitorFoe', 1, None, 0)])
+feat('stairgather', G_EXP, 'Hasta level: bots heading down gather at a stair point first (recommended off until benched)', 'off', 'start',
+     'klmove.c [Bots] StairGather (+ StairGatherAt/Radius); no bench PASS in the log',
+     [('Bots', 'StairGather', 1, 0, 0)])
+feat('lobbykeepround', G_EXP, 'Online: skip the early round cuts (fewer than 2 heisters, all humans out) while alone or with AI heisters planned (recommended off until benched)', 'off', 'start',
+     'klroundkeep.c [Lobby] KeepRound 1 (2 = always); no bench PASS in the log',
+     [('Lobby', 'KeepRound', 1, 0, 0)])
+feat('lobbyclockfix', G_EXP, 'Online: set the round clock to the lobby heist time at the round start when it holds less (GUESS; recommended off until benched)', 'off', 'start',
+     'kllobbyopt.c [Lobby] RoundClockFix; no bench PASS in the log',
+     [('Lobby', 'RoundClockFix', 1, 0, 0)])
 feat('onlinelootparts', G_EXP,'AI heisters loot in timed parts like Arcade (needs the two rows above; recommended on)', 'on', 'start',
      'klbotfill.c [BotFill] OnlineLootParts (1 on, 2 log only): timed parts while the bot stands at the stack; proven live: BP4 (22/22 parts, 0 faults) .. BP20; the Loot finish row needs it; stack fields +0x40/+0x44 are a GUESS', [('BotFill', 'OnlineLootParts', 1, 0, 0), ('BotFill', 'OnlineTacticsTake', 2, None, 0), ('BotFill', 'OnlineTactics', 1, None, 0), ('BotFill', 'OnlineHost', 1, None, 0)])
 feat('onlinelootfinish', G_EXP, 'Online AI heisters finish the stack they are taking: held in place, not pulled off by the van gather (needs the timed-parts row above; recommended on)', 'on', 'start',
