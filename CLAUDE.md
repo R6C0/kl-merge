@@ -72,13 +72,13 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 DM03 car #0 spares 0/8 -> 7/8 on the client (trigger [car+8c0] 0->1 confirmed, 15 s retry did it); host-only usable indices 6 -> 1 (#561),
 rings rotated per seat (car heading at probe time). DM01 identical. SN1 PASS earlier: next-ship candidate whole, 0 asserts (715127ffa).
 
+2026-11-02 ~03:55 - [ce] DT1 PASS: DropTake grabs drops in round 2, never in round 1 (133 armed hidden pool drops filled the 32-slot table):
+fixed (wk-droptable-1102). SR1 0 taken = stock drain to drops + follow keys off (re/stack_state3_1102.md). Merged: lootsum line,
+OnlineStackRecheckHid, OnlineBoardAllNear (all default 0). Chain DH1 -> RT5 -> SR2 running from 03:51.
+
 2026-11-02 ~00:50 - [ce] wk-vantime-1101 merged: DM09 bots wait in cover at leg 1, the hook calls the van (0x71e180) once the carriers are
 there, the van waits (FarHold); keys OnlineVanAfterLegs/BoPos/FarHold + OnlineLegWaitVan/Call default 0. [HUD] OnlineBoardBots merged
 (Arcade board fates online). RT4 kit week_1028\rt4\run_rt4.sh queued after c9's SN1; ARC2 Arcade baseline running.
-
-2026-11-01 ~23:55 - [ce] RT3 0 faults (DD06 7 boarded, no regression). DM09 still 0 boarded: with OnlineLegScale+StallS the legs run (12
-reached, was 2) but all 7 bots die on the street legs before the van exists (boarding object ~249 s in, 17 s before round over; RT2 the same).
-Fix = hold in cover until van probe state >= 2, then rush: wk-vantime-1101 (offline). Also running: wk-onlineboard-1101 (Arcade board online).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
