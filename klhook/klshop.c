@@ -61,6 +61,7 @@ typedef void *(__fastcall *kls_tmpl_t)(void *self, void *edx, int item);
 typedef void *(__cdecl *kls_realloc_t)(void *, size_t);
 
 static struct { int on, log, n; int row[KLS_MAX], item[KLS_MAX]; DWORD made[KLS_MAX][KLS_PER]; BYTE fixed[KLS_MAX][KLS_PER]; int applied[KLS_MAX], decided[KLS_MAX], told; int wait; LONG gen; int clips; int osw, oswrep, oswlog; } kls;
+static DWORD kls_osw_t0;                                                 /* GetTickCount at the early make: the STOCK window of the client seat is measured from it (OnlineSwapLog) */
 static char kls_oswmap[32];                                              /* the map key of the last klshop_level_open (any thread, plain bytes; [Shop] OnlineSwapLog only) */
 #define KLS_AMMO_KEY 0xbeebbeeb                                        /* ZFFItemWeapon keeps rounds [obj+0xdc] and reserve [obj+0xe0] XORed with it */
 /* the swap set to use, filled by klshop_init (KLHook.ini = default) and klshop_level_open (the map's KLGuns.ini [Shop] Swap, any thread);
@@ -232,7 +233,7 @@ static void kls_osw_early(int host)
     if (!sm || klh_rd32(sm + 0x5c) != 4 || (st != 0x14 && st != 0x15)) { static BYTE t1; if (!t1) { t1 = 1; klog("osw: early make skipped: mode %d state 0x%lx", sm ? (int)klh_rd32(sm + 0x5c) : -1, (unsigned long)st); } return; }
     if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || !klh_rd(a + 8, &cap, 4) || !klh_rd(a + 0xc, &grow, 4) || !n || n > 4096 || !(ents = klh_rd32(a + 0x10))) { klog("osw: early make skipped: pool empty or unreadable"); return; }
     if (!(self = (void *)(DWORD_PTR)klh_rd32(klh_rd32((DWORD_PTR)KLH_VA(KLS_UI)) + 0x15b0))) { klog("osw: early make skipped: UI object (template lookup) not ready"); return; }
-    kls.oswrep = 1;
+    kls.oswrep = 1; kls_osw_t0 = GetTickCount();
     klog("osw: set %d pair(s), hash %08lx (compare on every peer), mode %d (%s site, state 0x%lx)", kls.n, (unsigned long)kls_osw_hash(), kls.osw, host ? "host" : "client", (unsigned long)st);
     for (row = 0; row < 36; row++) for (k = 0; k < kls.n; k++) {
         void *tmpl; int j, parked = 0;
@@ -297,7 +298,7 @@ static void kls_osw_tick(DWORD st)
             if (ours) { if (!kls.applied[k] && !(e[2] & 0xff)) klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &one, 1, "KLShop: online unpark ours (net sub-object linked)"); }
             else if (e[2] & 0xff) klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &zero, 1, "KLShop: online park stock gun");
         }
-        if (!kls.applied[k] && kls.oswlog && !kls.oswrep) klog("oswlog: map %s row %d carrier %lu item %d: OURS (flipped after the first report, state 0x%lx)", kls_oswmap[0] ? kls_oswmap : "?", kls.row[k], (unsigned long)carrier, kls.item[k], (unsigned long)st);
+        if (!kls.applied[k] && kls.oswlog && !kls.oswrep) klog("oswlog: map %s row %d carrier %lu item %d: OURS (flipped after the first report, state 0x%lx; stock window %lu ms after the early make, the loadout reads the pool at spawn so only a buy resolved inside it would get the stock gun)", kls_oswmap[0] ? kls_oswmap : "?", kls.row[k], (unsigned long)carrier, kls.item[k], (unsigned long)st, (unsigned long)(GetTickCount() - kls_osw_t0));
         kls.applied[k] = 1; kls.decided[k] = 0;
     }
     kls.oswrep = 0;
