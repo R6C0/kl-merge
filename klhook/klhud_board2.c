@@ -52,9 +52,9 @@
 #endif
 #define KLSB_O_FOUTRO    0x10b0               /* osd: the element (re\hud.md line 155, size 0xdc) */
 #define KLSB_NTEXT_BASE  52                   /* the pool before [Grades]: with Grades off (or Letter and RankUp off) no more text objects are made than before (inert when off) */
-#define KLSB_NT()        (klgrd_pool_extra() ? KLSB_NTEXT : KLSB_NTEXT_BASE)
+#define KLSB_NT()        (klsb.nexthint || klgrd_pool_extra() ? KLSB_NTEXT : KLSB_NTEXT_BASE)      /* [HUD] ScoreboardNextHint needs the last slot, so the pool is whole then */
 #define KLSB_NSLOT       16
-#define KLSB_NTEXT       66                   /* was 40: 4 more rows of 3 texts (2026-10-26); 52 -> 66: [Grades] GRADE head, RANK UP line, 12 letters (2026-10-27) */
+#define KLSB_NTEXT       67                   /* was 40: 4 more rows of 3 texts (2026-10-26); 52 -> 66: [Grades] GRADE head, RANK UP line, 12 letters (2026-10-27); 67: the NEXT hint line (2026-11-02) */
 #define KLSB_NPIC        112
 #define KLSB_NROW        12                   /* was 8 (online FA is up to 12). More than 8 rows: the pitch shrinks so the plate and summary stay put (klsb_compose, GUESS) */
 #define KLSB_NROW_OLD    8
@@ -111,6 +111,8 @@
 #define KLSB_T_GHEAD     52                   /* [Grades] Letter: the GRADE column head */
 #define KLSB_T_RANKUP    53                   /* [Grades] RankUp: the 'RANK UP: <rank>' line */
 #define KLSB_T_GRADE(i)  (54 + (i))           /* [Grades] Letter: the row's letter, 12 rows */
+#define KLSB_T_NEXT      66                   /* [HUD] ScoreboardNextHint: 'NEXT: BUY WEAPONS, THEN [F2] ...', centred under the plate */
+#define KLSB_Y_NEXT      14.0f                /* plate y + PH + 14 = 536: below the plate's bottom edge (522), so nothing of the card is overlapped; the screen is 1280 wide, the line (about 55 label glyphs, GUESS ~680 px) fits */
 #define KLSB_COLG        400.0f               /* [Grades] the GRADE column: plate x + 400 (between FATE and PAYOUT; GUESS: free at every row count) */
 
 #define KLSB_ALIGN_L 0
@@ -135,13 +137,16 @@ static const struct { signed char fnt, align; } klsb_role[KLSB_NTEXT] = {
     { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_BIG, KLSB_ALIGN_L }, { KLU_FNT_LABEL, KLSB_ALIGN_C }, { KLU_FNT_NAME, KLSB_ALIGN_C },
     { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
     { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L },
-    { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L } };
+    { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L },
+    { KLU_FNT_LABEL, KLSB_ALIGN_C } };
 
 static const BYTE klsb_code[8] = { 0x83, 0xec, 0x3c, 0x56, 0x8b, 0xf1, 0x8b, 0x0d };     /* 0x577e70 sub esp,0x3c; push esi; mov esi,ecx; mov ecx,[..] */
 
 #include "klhud_boardbots_logic.h"      /* [HUD] OnlineBoardBots: the pure latch / fate decisions of the AI heister rows (klhud_boardbots_test.c) */
 /* klbotfill.c (included later in klhook.c; the harness stubs it): the HOST's bot puppeteer ledger for a bot actor. -> 1 when klbf_ob[] tracks the actor (*aboard = phase 3, *tally = booked money); 0 = not tracked / client */
 static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally);
+/* klshoppage.c (included later; a stub in klhud_harness_online.h): the NEXT hint's text for the 0x1f board, from the page keys that are on. -> 1 = built, 0 = no page feature on */
+static int kspg_board_hint(char *out, size_t cap);
 
 struct klsb_t { DWORD obj, colour, want_colour; float x, y; int on; char cur[KLU_TEXTLEN], want[KLU_TEXTLEN]; };
 
@@ -152,6 +157,7 @@ static struct {
     int istate;                               /* 2026-10-27: [HUD] OnlineIntroState (default 0; needs OnlineIntro): online, when the intro element at osd+0x10ac is absent, compose the whole intro card from the online snapshot and draw it on the clock element's render (states 0x16..0x18) */
     int icarrier;                             /* 2026-10-27: [HUD] OnlineIntroCarrier (default 0; needs OnlineIntroState): 1 = wrap ZFAIntroDisplay at osd+0x10ac and draw the composed intro card THERE instead of on the clock element (states 0x16..0x18); 2 = PROBE only: the same wrap counts which states its Render is called in (per state, logged), nothing is drawn on it */
     int carrier;                              /* 2026-10-27: [HUD] OnlineBoardCarrier (default 0; needs OnlineBoardState): wrap ZFAOutroDisplay at osd+0x10b0 and draw the online card there INSTEAD of the stock online panel (GUESS G18) */
+    int nexthint;                             /* 2026-11-02: [HUD] ScoreboardNextHint (default 0, recommended on): one extra line under the plate, 'NEXT: BUY WEAPONS, THEN [F2] MORE PAGES  [F3] HEISTERS', when a page feature is on (klshoppage.c) */
     int bots;                                 /* 2026-11-01: [HUD] OnlineBoardBots (default 0; needs OnlineBoard): the AI heister rows are latched through the round (kbb table) and show DEAD / ESCAPED / LEFT BEHIND, and on the HOST the ledger payout; unknown cells stay '-' */
     int online, intro;                        /* 2026-10-26: [HUD] OnlineBoard / OnlineIntro (default 0): the end card / the intro lines in an ONLINE round, from klonline_read.c */
     float x, y; int alpha;
@@ -441,6 +447,14 @@ static void klsb_put(int i, float x, float y, const char *s, DWORD colour)
     t->x = x; t->y = y; t->on = s && s[0]; snprintf(t->want, sizeof t->want, "%s", s ? s : ""); t->want_colour = colour;
 }
 
+/* [HUD] ScoreboardNextHint (NOT RUN IN THE GAME): called by both composes before they close; the line sits centred under the plate and is drawn with the other texts */
+static void klsb_next_hint(float px, float py)
+{
+    char t[96];
+    if (!klsb.nexthint) return;
+    if (kspg_board_hint(t, sizeof t)) klsb_put(KLSB_T_NEXT, px + KLSB_PW * 0.5f, klu_cen(py + KLSB_PH + KLSB_Y_NEXT + 5.0f, KLU_FNT_LABEL), t, KLU_C_CHALK);
+}
+
 static const char *klsb_fate(const struct klb_snap *s, int i, int traitor, DWORD *colour, int *dead)
 {
     *dead = 0; *colour = KLU_C_CHALK;
@@ -618,6 +632,7 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
         klu_track(NULL, NULL, cx, cy, KLSB_R_RING, KLU_TRACK_C, klsb_ly(1));
         klu_arc(NULL, NULL, cx, cy, KLSB_R_RING, 0, 0.0f, cdt, KLU_C_CHALK, klu.layer);
     }
+    klsb_next_hint(px, py);
     klu_addpic_q = 0;
     return 1;
 }
@@ -785,6 +800,7 @@ static int klsb_compose_online(const struct klor_snap *o, DWORD end_bits, LONG f
         klu_track(NULL, NULL, cx, cy, KLSB_R_RING, KLU_TRACK_C, klsb_ly(1));
         klu_arc(NULL, NULL, cx, cy, KLSB_R_RING, 0, 0.0f, cdt, KLU_C_CHALK, klu.layer);
     }
+    klsb_next_hint(px, py);
     klu_addpic_q = 0;
     return 1;
 }
@@ -1193,6 +1209,7 @@ static void klsb_init(void)
     klsb.icarrier = klsb.istate ? klu_inii("OnlineIntroCarrier", 0, 0, 2) : 0;
     klsb.take = klsb.online && klu_inii("OnlineBoardTake", 0, 0, 1); klsb.icount = klsb.istate && klu_inii("OnlineIntroCount", 0, 0, 1);
     klsb.probe = klu_inii("ScoreboardProbe", 0, 0, 1); klsb.test = klu_inii("ScoreboardTest", 0, 0, 1); klsb.fault = klu_inii("ScoreboardFault", 0, 0, 1);
+    klsb.nexthint = klu_inii("ScoreboardNextHint", 0, 0, 1);      /* 2026-11-02 (recommended on once benched): the NEXT line under the plate */
     klsb.rows12 = klu_inii("Rows12", 1, 0, 1); klsb.textonly = klu_inii("ScoreboardTextOnly", 0, 0, 1); klsb.total = klu_inii("ScoreboardTotal", 1, 0, 2); klsb.count = klu_inii("ScoreboardCount", 0, 0, 1); klsb.lead = klu_inii("ScoreboardShopLead", 30, 0, 100);   /* tenths of a second cut off the 10 s countdown: the shop opens at 7 (owner 2026-10-25) */
     klsb.alpha = klu_inii("ScoreboardAlpha", 230, 0, 255);
     klsb.x = klu_inif("ScoreboardX", "320"); klsb.y = klu_inif("ScoreboardY", "150");

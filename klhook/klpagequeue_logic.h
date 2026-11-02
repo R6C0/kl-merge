@@ -1,0 +1,77 @@
+/* klpagequeue_logic.h - [ShopPage] PageQueue / HintEveryShop and [HUD] ScoreboardNextHint, the PURE decisions (no game memory, no log, no windows.h).
+   Included by klshoppage.c and klpagequeue_test.c. Written 2026-11-02 for the owner's ask 'a button on the after-match screen to get to the next page or the heisters
+   page' (NOT RUN IN THE GAME).
+   The session runs 0x1f (score) -> 0x20 (the round-over page, the shop between rounds) and only THERE the Buy Weapons list (shop mode 0x154d810 == 2) opens after a click.
+   A page key pressed in 0x20 before the list is open used to be ignored ('shop mode is 0, not 2'). With PageQueue=1 the press is queued: it is held while the state stays
+   0x20 (capped) and the page shows as soon as the list is open and the selector is wrapped. PageQueue=0 keeps every old rule: the early press of a wrapped-selector wait
+   (3 s, mode 2 required) is exactly kpq_step with queued = 0. */
+#ifndef KLPAGEQUEUE_LOGIC_H
+#define KLPAGEQUEUE_LOGIC_H
+
+#include <stddef.h>
+#include <stdio.h>
+
+#define KPQ_ST_ROUNDOVER 0x20          /* session state of the shop between rounds */
+#define KPQ_MODE_LIST    2             /* shop mode 0x154d810: the weapon list is open */
+#define KPQ_EARLY_MS     3000u         /* the old hold: the selector is wrapped within 1.5 s of the list opening */
+#define KPQ_CAP_MS       35000u        /* the queue's longest hold (GUESS: the round-over page lasts about 30 s; 35 s covers it) */
+enum { KPQ_WAIT = 0, KPQ_APPLY = 1, KPQ_LAPSE = 2 };
+
+/* a page key came: queue it? Only with PageQueue on, in the round-over state, with the list not open and nothing pending yet */
+static int kpq_should_queue(int queueOn, int st, int mode, int pending)
+{
+    return queueOn && st == KPQ_ST_ROUNDOVER && mode != KPQ_MODE_LIST && !pending;
+}
+
+/* a page key came while a QUEUED press is pending and the list is still not open: it cancels the queue (as a second press cancels the old early press) */
+static int kpq_cancels(int queueOn, int st, int mode, int pending, int queued)
+{
+    return queueOn && pending && queued && st == KPQ_ST_ROUNDOVER && mode != KPQ_MODE_LIST;
+}
+
+/* one tick of the hold. queued 0 = the old early press (3 s, the list must be open all the time); queued 1 = the queued press (while st stays 0x20, up to the cap;
+   the mode-2 check waits until the list opens). hpre = the shop gate is open, selok = the selector is wrapped (pages that need it; page II passes 1), age in ms */
+static int kpq_step(int queued, int hpre, int st, int mode, int selok, unsigned int age)
+{
+    if (!hpre) return KPQ_LAPSE;
+    if (queued) {
+        if (st != KPQ_ST_ROUNDOVER || age > KPQ_CAP_MS) return KPQ_LAPSE;
+        if (mode != KPQ_MODE_LIST) return KPQ_WAIT;
+        return selok ? KPQ_APPLY : KPQ_WAIT;
+    }
+    if (age > KPQ_EARLY_MS || mode != KPQ_MODE_LIST) return KPQ_LAPSE;
+    return selok ? KPQ_APPLY : KPQ_WAIT;
+}
+
+/* [ShopPage] HintEveryShop: what 'hint shown' becomes when the shop closes (0 = the hint may show again in the next shop) */
+static int kpq_hint_done_after_close(int everyShop, int done)
+{
+    return everyShop ? 0 : done;
+}
+
+/* [HUD] ScoreboardNextHint: 'NEXT: BUY WEAPONS, THEN [F2] MORE PAGES  [F3] HEISTERS'. An empty / NULL key name = that feature is off. page2Key is offered only when the
+   cycle key is off (the cycle key already reaches page II). Upper case (the label font is capitals). -> 1 = a line was built, 0 = no page feature on (out is empty) */
+static int kpq_board_hint(char *out, size_t cap, const char *cycleKey, const char *hireKey, const char *page2Key)
+{
+    size_t l; int n = 0, i;
+    const char *k[3], *w[3];
+    k[0] = cycleKey; w[0] = "more pages";
+    k[1] = hireKey;  w[1] = "heisters";
+    k[2] = (cycleKey && cycleKey[0]) ? 0 : page2Key; w[2] = "page II";
+    if (!out || cap < 16) return 0;
+    out[0] = 0;
+    l = (size_t)snprintf(out, cap, "NEXT: BUY WEAPONS, THEN");
+    if (l >= cap) { out[0] = 0; return 0; }
+    for (i = 0; i < 3; i++) {
+        size_t m; char *p;
+        if (!k[i] || !k[i][0]) continue;
+        m = (size_t)snprintf(out + l, cap - l, "%s[%s] %s", n ? "  " : " ", k[i], w[i]);
+        if (l + m >= cap) { out[l] = 0; break; }           /* cut at a whole entry */
+        for (p = out + l; *p; p++) if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 'a' + 'A');
+        l += m; n++;
+    }
+    if (!n) { out[0] = 0; return 0; }
+    return 1;
+}
+
+#endif /* KLPAGEQUEUE_LOGIC_H */

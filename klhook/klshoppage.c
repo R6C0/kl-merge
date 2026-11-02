@@ -96,6 +96,7 @@ static struct {
     int modesOn; volatile int ctlMode;               /* [Keys] ModesTab: the controls page has a 2nd view (BOTS AND MODES); ctlMode 1 = that view is up (only with ctl) */
     int ctlOn, ctlKey, ctlKeyDown, hPendPg, hintDone, ctlTold; DWORD ctlLastKey;   /* config (the page-cycle key), edge, the early press's target (0 hire / 1 controls), the once-per-session hint, presses logged */
     volatile int ctl;                            /* the controls page is on screen (never together with hire / shownB) */
+    int queueOn, hQueued, hintEvery; DWORD pq2At;   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none) */
 } kspg;
 
 static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
@@ -111,6 +112,7 @@ static int kspg_netok(int row);                                  /* defined belo
 static void kspg_link_check(const char *when);                   /* log-only link proof, defined below */
 #include "klmodestab_logic.h"                           /* [Keys] ModesTab: BOTS AND MODES rows + RoundHints text (pure) */
 #include "klswappic.h"                                  /* [Shop] OnlineSwapPic: pure decision (look-alike rows) */
+#include "klpagequeue_logic.h"                          /* [ShopPage] PageQueue / HintEveryShop, [HUD] ScoreboardNextHint: pure decisions (klpagequeue_test.c) */
 #include "klshoppage_online.c"                             /* [ShopPage] OnlineSend: page II press sent to the host (SHOPG), host judges + logs, no writes */
 
 static int kspg_role_slot(DWORD obj)
@@ -1296,6 +1298,17 @@ static void kspg_init(void)
         else { kspg.ctlOn = 1; klog("controls: on ([Keys] ControlsPage=1): key 0x%02x cycles the Buy Weapons pages (NOT RUN IN THE GAME)", kspg.ctlKey); }
         if (kspg.ctlOn && klkeys_modes_on()) { kspg.modesOn = 1; klog("controls: [Keys] ModesTab=1: the cycle also shows BOTS AND MODES (host / gamemode switches, ON / OFF from the ini; NOT RUN IN THE GAME)"); }
     }
+    /* [ShopPage] PageQueue (2026-11-02, default 0, recommended on once benched; NOT RUN IN THE GAME): a page key pressed on the round-over page (state 0x20) before Buy Weapons is open is
+       queued and shows the page when the list opens (klpagequeue_logic.h). HintEveryShop (default 0, recommended on): the [Keys] Hints line shows in every shop, not once per session.
+       Both are read here, before the 'if (!kspg.on) return;' below: the hire / cycle keys work with [ShopPage] Enable=0. */
+    kspg.queueOn = GetPrivateProfileIntA("ShopPage", "PageQueue", 0, klh_ini) != 0;
+    kspg.hintEvery = GetPrivateProfileIntA("ShopPage", "HintEveryShop", 0, klh_ini) != 0;
+#ifdef KLHOOK_TEST
+    kspg_curprobe = GetPrivateProfileIntA("ShopPage", "CursorProbe", 0, klh_ini) != 0;      /* TEST builds only, read-only (see kspg_curprobe_tick) */
+    if (kspg_curprobe) klog("cursorprobe: [ShopPage] CursorProbe=1 (TEST build, recommended off, read-only): one line a second in states 0x1f / 0x20");
+#endif
+    if (kspg.queueOn) klog("pagequeue: [ShopPage] PageQueue=1 (recommended on once benched; NOT RUN IN THE GAME): a page key pressed on the round-over page before Buy Weapons is open is held up to %u s and shows the page when the list opens", KPQ_CAP_MS / 1000u);
+    if (kspg.hintEvery) klog("controls: [ShopPage] HintEveryShop=1: the page hint shows in every shop (needs [Keys] Hints=1 and the cycle key)");
     /* [Shop] OnlineSwapArm (2026-10-28, default 0, recommended off until benched; NOT RUN IN THE GAME): [Shop] OnlineSwap rides this file's early-make hook, which was armed only
        with [ShopPage] Enable=1 AND pairs in KLShopPage.ini; without them OnlineSwap=1 did nothing (SHOT2D logs: OnlineSwap=1, 'no pairs', no 'osw:' line). =1: the hook is armed for the
        swap alone (page II stays off). The page II code returns early on kspg.have == 0 (kspg_early_body). */
@@ -1414,6 +1427,17 @@ static void kspg_hint(void)
     if (!n) { kspg.hintDone = 1; return; }
     if (klan_show(t, 7.0f, 0)) { kspg.hintDone = 1; klog("controls: hint shown: '%s'", t); }
 }
+/* [HUD] ScoreboardNextHint (2026-11-02, NOT RUN IN THE GAME): klhud_board2.c asks for the line under the 0x1f board while it composes it (main thread, nothing is read from the game here).
+ * Keys with the live names, each only when its page is on: the cycle key (controls page on), the hire key (hire page on, online only with [Hire] Online), the page II key when the cycle key is
+ * off. The page II gate (kspg.pre) is a shop state, so it is not asked here: the round-over page that follows 0x1f is one. */
+static int kspg_board_hint(char *out, size_t cap)
+{
+    char c[24], h[24], p[24]; c[0] = h[0] = p[0] = 0;
+    if (kspg.ctlOn) kspg_h_keyname(kspg.ctlKey, c, sizeof c);
+    if (kspg.hireOn && klhr_on && (!kl_online() || klhro_enabled())) kspg_h_keyname(kspg.hireKey, h, sizeof h);
+    if (kspg.on && (!kl_online() || kspg.online)) kspg_h_keyname(kspg.key, p, sizeof p);
+    return kpq_board_hint(out, cap, c, h, p);
+}
 /* [Keys] RoundHints=1 (wk-modestab-1102, NOT RUN IN THE GAME): once per session, the first time the FA announcement element exists (= a round is loaded; GUESS: it does not exist in the menus, as the
  * 'no FA announcement element yet' log of klannounce.c suggests) and 8 s later, one line of the keyed features that are ON, built by kmt_hint_build. klan_show waits while a stock message is up. */
 static void kspg_round_hint(void)
@@ -1436,12 +1460,21 @@ static void kspg_round_hint(void)
     if (!kmt_hint_build(keys, what, on, n, t, 60)) { done = 1; return; }          /* 60: cut at a whole entry; the other hints are 20..45 characters, the width is a GUESS to verify in the first live run */
     if (klan_show(t, 8.0f, 0)) { done = 1; klog("roundhints: shown: '%s'", t); }
 }
+/* [ShopPage] PageQueue (NOT RUN IN THE GAME): hold a page key pressed on the round-over page before Buy Weapons is open. key = which key (1 hire, 2 cycle, 3 page II: a second press of the SAME key cancels,
+ * another key replaces), target = the page (0 hire, 1 controls, 2 bots and modes: hPendPg; 3 page II: pq2At, applied by the page II tick). One queued press at a time; the hold ends with the state (kpq_step). */
+static void kspg_pq_hold(DWORD now, int key, int target, const char *what)
+{
+    kspg.hPendAt = 0; kspg.pq2At = 0;
+    if (target == 3) kspg.pq2At = now | 1; else { kspg.hPendAt = now | 1; kspg.hPendPg = target; }
+    kspg.hQueued = key;
+    klog("pagequeue: %s key pressed on the round-over page (state 0x%x), Buy Weapons is not open: queued, it shows when the list opens (held up to %u s)", what, kspg.st, KPQ_CAP_MS / 1000u);
+}
 static void kspg_cycle(DWORD now)
 {
     int cur = kspg_cur(), nxt = kspg_next(cur);
     if (nxt == cur) { klog("controls: the cycle key: no other page is available here"); return; }
     if (nxt >= 2 && !kspg_h_selok()) {          /* as the hire key: the page opens once the scan has wrapped the selector (up to 3 s) */
-        if (!kspg.hPendAt) { kspg.hPendAt = now | 1; kspg.hPendPg = kmt_pend_of(nxt); klog("controls: the cycle key came before the shop's selector is wrapped: %s opens once it is (up to 3 s)", kspg_pname[nxt]); }
+        if (!kspg.hPendAt) { kspg.hPendAt = now | 1; kspg.hQueued = 0; kspg.hPendPg = kmt_pend_of(nxt); klog("controls: the cycle key came before the shop's selector is wrapped: %s opens once it is (up to 3 s)", kspg_pname[nxt]); }
         if (!kspg.active) kspg_scan();
         return;
     }
@@ -1470,7 +1503,13 @@ static void kspg_cycle_key(SHORT (WINAPI *gaks)(int), HWND (WINAPI *fgw)(void), 
         if (scripted || pid == GetCurrentProcessId()) {
             DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
             kspg.ctlLastKey = now;
-            if (mode == 2) kspg_cycle(now); else klog("controls: the cycle key was pressed but the shop mode is %lu, not 2 (weapon list): ignored", mode);
+            int same = kspg.hQueued == 2 && (kspg.hPendAt != 0 || kspg.pq2At != 0);
+            if (kpq_should_queue(kspg.queueOn, kspg.st, (int)mode, same)) {      /* PageQueue: the page this press would open now, held until the list is open */
+                int cur = kspg_cur(), nxt = kspg_next(cur);
+                if (nxt == cur || nxt == 0) klog("controls: the cycle key: no other page is available here");
+                else kspg_pq_hold(now, 2, nxt == 1 ? 3 : kmt_pend_of(nxt), kspg_pname[nxt]);
+            } else if (kpq_cancels(kspg.queueOn, kspg.st, (int)mode, same, same)) { kspg.hPendAt = 0; kspg.pq2At = 0; kspg.hQueued = 0; klog("pagequeue: the queued cycle key press was cancelled by a second press"); }
+            else if (mode == 2) kspg_cycle(now); else klog("controls: the cycle key was pressed but the shop mode is %lu, not 2 (weapon list): ignored", mode);
         }
     }
     kspg.ctlKeyDown = down;
@@ -1508,6 +1547,7 @@ static void kspg_hire_tick(void)
             if (kspg.hire && kspg.hireLog) klog("hirepage: page hidden (the shop closed)");
             if (kspg.ctl) klog("controls: page hidden (the shop closed)");
             kspg.hire = 0; kspg.ctl = 0; kspg.hArm = 0; kspg.hact = 0;
+            kspg.hintDone = kpq_hint_done_after_close(kspg.hintEvery, kspg.hintDone);      /* [ShopPage] HintEveryShop: the next shop shows the hint again */
         } else {
             kspg.hact = 1;
             if (kspg.ctlOn && !kspg.hintDone && klkeys_hints_on()) kspg_hint();
@@ -1515,10 +1555,14 @@ static void kspg_hire_tick(void)
         }
     }
     if (kspg.hPendAt) {                          /* A1HIRE review 10-28: an early press used to be dropped (the scan wraps the selector every 1.5 s) */
-        if (!kspg.hpre || now - kspg.hPendAt > 3000 || klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) != 2) {
-            kspg.hPendAt = 0; if (kspg.hireLog) klog("hirepage: the early key press lapsed (the selector was not wrapped within 3 s): press the key again");
-        } else if (kspg_h_selok()) {
-            kspg.hPendAt = 0; if (kspg.hPendPg >= 1) { kspg.ctlMode = kmt_pend_ctl_mode(kspg.hPendPg); kspg.ctl = 1; } else kspg.hire = 1; kspg.hArm = 0; kspg.shownB = 0;
+        int pq = kspg.hQueued != 0, r = kpq_step(pq, kspg.hpre, kspg.st, (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), kspg_h_selok(), (unsigned int)(now - kspg.hPendAt));   /* PageQueue: a queued press waits for the list too (klpagequeue_logic.h); queued 0 = the old rules */
+        if (r == KPQ_LAPSE) {
+            kspg.hPendAt = 0; kspg.hQueued = 0;
+            if (pq) klog("pagequeue: the queued key press lapsed (the round-over page ended, or no selector within %u s): press the key again", KPQ_CAP_MS / 1000u);
+            else if (kspg.hireLog) klog("hirepage: the early key press lapsed (the selector was not wrapped within 3 s): press the key again");
+        } else if (r == KPQ_APPLY) {
+            if (pq) klog("pagequeue: the queued key press is applied after %lu ms (the list is open, the selector is wrapped)", (unsigned long)(now - kspg.hPendAt));
+            kspg.hPendAt = 0; kspg.hQueued = 0; if (kspg.hPendPg >= 1) { kspg.ctlMode = kmt_pend_ctl_mode(kspg.hPendPg); kspg.ctl = 1; } else kspg.hire = 1; kspg.hArm = 0; kspg.shownB = 0;
             if (kspg.hPendPg >= 1) klog("controls: page SHOWN (after the early key press)");
             else if (kspg.hireLog) klog("hirepage: page SHOWN (%s, after the early key press; highlighted row %d, category %d)", kl_online() ? "online" : "offline",
                                    (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), (int)klh_rd32((DWORD_PTR)KLH_VA(0x00ced640)));
@@ -1546,10 +1590,13 @@ static void kspg_hire_tick(void)
             if (scripted || pid == GetCurrentProcessId()) {     /* a two-seat bench has one window in front: klauto's own key is this process's */
                 DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
                 kspg.hLastKey = now;
-                if (mode == 2 && !kspg.hire && !kspg_h_selok()) {
+                int same = kspg.hQueued == 1 && kspg.hPendAt != 0;
+                if (kpq_should_queue(kspg.queueOn, kspg.st, (int)mode, same)) kspg_pq_hold(now, 1, 0, "the hire page");      /* PageQueue: the round-over page, Buy Weapons not open yet */
+                else if (kpq_cancels(kspg.queueOn, kspg.st, (int)mode, same, same)) { kspg.hPendAt = 0; kspg.hQueued = 0; klog("pagequeue: the queued hire key press was cancelled by a second press"); }
+                else if (mode == 2 && !kspg.hire && !kspg_h_selok()) {
                     /* REVIEW 1027: the stock buy would buy a gun if the selector were not wrapped (its BuyWeapon message is what the page swallows): no page then.
                        10-28: the press is kept for 3 s and the page opens as soon as the scan has wrapped the selector */
-                    if (!kspg.hPendAt) { kspg.hPendAt = now | 1; kspg.hPendPg = 0; if (kspg.hireLog) klog("hirepage: key pressed before the shop's selector is wrapped: the page opens once it is (up to 3 s)"); }
+                    if (!kspg.hPendAt) { kspg.hPendAt = now | 1; kspg.hQueued = 0; kspg.hPendPg = 0; if (kspg.hireLog) klog("hirepage: key pressed before the shop's selector is wrapped: the page opens once it is (up to 3 s)"); }
                     if (!kspg.active) kspg_scan();
                 } else if (mode == 2 && kspg.hPendAt) {
                     kspg.hPendAt = 0;                                     /* a second press while one is pending cancels it */
@@ -1629,12 +1676,55 @@ static void kspg_hlp_tick(void)
     } __except (1) { nsel = 0; }
 }
 
+#ifdef KLHOOK_TEST
+/* [ShopPage] CursorProbe (2026-11-02, TEST builds only, default 0, recommended off; NOT RUN IN THE GAME): READ-ONLY, never consumes input. Once a second in session states 0x1f and 0x20 one line:
+ * 'cursorprobe: st=.. visible=.. flags=.. pos=x,y client=x,y rect=WxH fg=.. lbutton edges=..' - is the OS cursor shown over the game's window at the round-over screens, where is it in window
+ * coordinates, do left clicks arrive. Answers whether a clickable 'NEXT' button is possible at all (klhook has no mouse code). The hook tick is about 4 Hz (GUESS, as the key comments in this
+ * file say), so a click shorter than one tick can be missed: the edge count is a lower bound. user32 looked up at run time (the hook links no user32). */
+static int kspg_curprobe;
+static void kspg_curprobe_tick(void)
+{
+    static BOOL (WINAPI *gci)(void *); static BOOL (WINAPI *gcp)(POINT *); static BOOL (WINAPI *s2c)(HWND, POINT *); static BOOL (WINAPI *gcr)(HWND, RECT *);
+    static SHORT (WINAPI *gaks)(int); static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static int looked, lastDown, edges; static DWORD lastLog;
+    DWORD now = GetTickCount(), sm, st = 0; int down;
+    if (!looked) {
+        HMODULE u = GetModuleHandleA("user32.dll"); looked = 1;
+        if (u) {
+            gci = (BOOL (WINAPI *)(void *))GetProcAddress(u, "GetCursorInfo"); gcp = (BOOL (WINAPI *)(POINT *))GetProcAddress(u, "GetCursorPos"); s2c = (BOOL (WINAPI *)(HWND, POINT *))GetProcAddress(u, "ScreenToClient");
+            gcr = (BOOL (WINAPI *)(HWND, RECT *))GetProcAddress(u, "GetClientRect"); gaks = (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState");
+            fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId");
+        }
+        if (!gci || !gcp || !s2c || !gcr || !gaks || !fgw || !wtp) klog("cursorprobe: user32's cursor functions not found: no probe");
+    }
+    if (!gci || !gcp || !s2c || !gcr || !gaks || !fgw || !wtp) return;
+    sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION));
+    if (!sm || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &st, 4) || (st != 0x1f && st != 0x20)) { lastDown = 0; edges = 0; return; }
+    down = (gaks(VK_LBUTTON) & 0x8000) != 0; if (down && !lastDown) edges++; lastDown = down;
+    if (lastLog && now - lastLog < 1000) return;
+    lastLog = now | 1;
+    {
+        struct { DWORD cbSize, flags; HANDLE hCursor; POINT pt; } ci; POINT p = { 0, 0 }, c; RECT r = { 0, 0, 0, 0 }; HWND f = fgw(); DWORD pid = 0;
+        ci.cbSize = sizeof ci; ci.flags = 0; ci.hCursor = 0; ci.pt.x = ci.pt.y = 0;
+        if (!gci(&ci)) ci.flags = 0xffffffffu;
+        gcp(&p); c = p;
+        if (f) wtp(f, &pid);
+        if (f && pid == GetCurrentProcessId()) { s2c(f, &c); gcr(f, &r); }
+        klog("cursorprobe: st=0x%lx cursorinfo flags=0x%lx (1 = shown) pos=%ld,%ld client=%ld,%ld rect=%ldx%ld foreground=%s lbutton down=%d edges since last line=%d",
+             (unsigned long)st, (unsigned long)ci.flags, (long)p.x, (long)p.y, (long)c.x, (long)c.y, (long)r.right, (long)r.bottom, (f && pid == GetCurrentProcessId()) ? "game" : "other window", down, edges);
+        edges = 0;
+    }
+}
+#endif /* KLHOOK_TEST */
+
 static void klshoppage_tick(int game_thread)
 {
     DWORD now, w; int g, s, i;
     static SHORT (WINAPI *gaks)(int); static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static int looked;
     static DWORD lastfull;
     if ((kspg.hireOn || kspg.ctlOn) && game_thread && klh_exe_ok) kspg_hire_tick();
+#ifdef KLHOOK_TEST
+    if (kspg_curprobe && game_thread && klh_exe_ok) kspg_curprobe_tick();
+#endif
     if (game_thread && klh_exe_ok && klkeys_roundhints_on()) kspg_round_hint();
     if (kspg.probe && game_thread && klh_exe_ok) kspp_tick();
     if (kspg_hlp && game_thread && klh_exe_ok) kspg_hlp_tick();
@@ -1679,8 +1769,11 @@ static void klshoppage_tick(int game_thread)
             DWORD pid = 0; HWND f = fgw(); if (f) wtp(f, &pid);
             if (pid == GetCurrentProcessId()) {
                 DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
+                int same = kspg.hQueued == 3 && (kspg.hPendAt != 0 || kspg.pq2At != 0);
                 kspg.lastKey = now;
-                if (mode == 2) {
+                if (kpq_should_queue(kspg.queueOn, kspg.st, (int)mode, same)) kspg_pq_hold(now, 3, 3, "the page II");      /* PageQueue: the round-over page, Buy Weapons not open yet */
+                else if (kpq_cancels(kspg.queueOn, kspg.st, (int)mode, same, same)) { kspg.hPendAt = 0; kspg.pq2At = 0; kspg.hQueued = 0; klog("pagequeue: the queued page II key press was cancelled by a second press"); }
+                else if (mode == 2) {
                     if (kspg.hire) { kspg.hire = 0; if (kspg.hireLog) klog("hirepage: page hidden (the page II key was pressed)"); }
                     if (kspg.ctl) { kspg.ctl = 0; klog("controls: page hidden (the page II key was pressed)"); }
                     kspg.shownB = !kspg.shownB; kspg.togglePend = 1; kspg.txtSeen = 0; kspg.toggleAt = now;
@@ -1690,6 +1783,15 @@ static void klshoppage_tick(int game_thread)
             }
         }
         kspg.keyDown = down;
+    }
+    if (kspg.pq2At) {                                               /* PageQueue: a queued page II press; it needs no wrapped selector (selok 1), the page II gate is kspg.pre */
+        int r = kpq_step(1, kspg.pre, kspg.st, (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), 1, (unsigned int)(now - kspg.pq2At));
+        if (r == KPQ_LAPSE) { kspg.pq2At = 0; kspg.hQueued = 0; klog("pagequeue: the queued page II key press lapsed (the round-over page ended): press the key again"); }
+        else if (r == KPQ_APPLY) {
+            klog("pagequeue: the queued page II key press is applied after %lu ms (the list is open)", (unsigned long)(now - kspg.pq2At));
+            kspg.pq2At = 0; kspg.hQueued = 0;
+            kspg.hire = 0; kspg.ctl = 0; kspg.shownB = 1; kspg.togglePend = 1; kspg.txtSeen = 0; kspg.toggleAt = now;
+        }
     }
     if (kspg.togglePend && now - kspg.toggleAt > 1500) {
         kspg.togglePend = 0;

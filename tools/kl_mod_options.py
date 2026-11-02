@@ -534,6 +534,12 @@ feat('controlspage', G_EXP, 'MOD CONTROLS page in the Buy Weapons shop (F2 cycle
      'lists every feature, its key, ON/OFF and where it works; BUY does nothing there; cleared for the next ship (NEXT_SHIP 11-01), SN1 11-02 PASS with it on (DM01/DM03/DD05 online, 0 faults)', [('Keys', 'ControlsPage', 1, 0, 0)])
 feat('keyhints', G_EXP, 'One-time shop hint about the extra pages', 'on', 'start',
      'one HUD line the first time a shop opens', [('Keys', 'Hints', 1, 0, 0)])
+feat('shophinteach', G_EXP, 'Shop hint again in every shop (recommended on)', 'on', 'start',
+     'the [F2] hint shows each time the between-rounds shop opens, not once per session; needs Keys Hints=1', [('ShopPage', 'HintEveryShop', 1, 0, 0), ('Keys', 'Hints', 1, None, 0)])
+feat('pagequeue', G_EXP, 'Page key pressed on the round-over page is queued (recommended on)', 'on', 'start',
+     'F2/F3/page II pressed before Buy Weapons is open waits (up to 35 s) and shows the page once the list opens; NOT RUN IN THE GAME', [('ShopPage', 'PageQueue', 1, 0, 0)])
+feat('sbnexthint', G_EXP, 'NEXT line under the after-match scoreboard (recommended on)', 'on', 'start',
+     'one line on the score board: NEXT: BUY WEAPONS, THEN [F2] MORE PAGES [F3] HEISTERS (live key names); NOT RUN IN THE GAME', [('HUD', 'ScoreboardNextHint', 1, 0, 0)])
 feat('clashlog', G_EXP, 'Log key clashes at boot', 'off', 'start',
      'one WARN per clash in KLHook.log (also reads ReShade.ini); harmless', [('Keys', 'ClashLog', 1, 0, 0)])
 feat('modestab', G_EXP, 'BOTS AND MODES view on the MOD CONTROLS shop page (recommended on; MT1/MT2 PASS 11-02)', 'on', 'start',

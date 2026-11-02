@@ -193,6 +193,17 @@ int main(int argc, char **argv)
     CHECK(klu_addpic_q == 0);                                                         /* the redirect is always cleared */
     CHECK(klu_r.npic == 0);                                                           /* the HUD's own queue was not touched */
     dump_case(dumpdir, "escaped");
+    /* [HUD] ScoreboardNextHint: one centred label line under the plate, only when on AND a page feature gives a text */
+    CHECK(!tx(KLSB_T_NEXT)->on && KLSB_NT() == KLSB_NTEXT_BASE);                       /* default off: no text, no extra pool slot */
+    klsb.nexthint = 1; kspg_hint_stub = "NEXT: BUY WEAPONS, THEN [F2] MORE PAGES  [F3] HEISTERS";
+    CHECK(KLSB_NT() == KLSB_NTEXT);                                                   /* the pool is whole (slot 66 exists) */
+    CHECK(klsb_compose(&s, endb, 1000) == 1 && tx(KLSB_T_NEXT)->on && !strcmp(tx(KLSB_T_NEXT)->want, kspg_hint_stub) && tx(KLSB_T_NEXT)->want_colour == KLU_C_CHALK);
+    CHECK(tx(KLSB_T_NEXT)->x == KLSB_PX + KLSB_PW * 0.5f && tx(KLSB_T_NEXT)->y > KLSB_PY + KLSB_PH && tx(KLSB_T_NEXT)->y < 720.0f);      /* centred, below the plate, on the screen */
+    CHECK(klsb_role[KLSB_T_NEXT].fnt == KLU_FNT_LABEL && klsb_role[KLSB_T_NEXT].align == KLSB_ALIGN_C);
+    { int k, over = 0; for (k = 0; k < KLSB_NTEXT; k++) if (k != KLSB_T_NEXT && klsb_r.t[k].on && klsb_r.t[k].y >= tx(KLSB_T_NEXT)->y - 10.0f) over++; CHECK(over == 0); }      /* no other text near its line */
+    kspg_hint_stub = 0; CHECK(klsb_compose(&s, endb, 1000) == 1 && !tx(KLSB_T_NEXT)->on);   /* no page feature on: no line */
+    kspg_hint_stub = "X"; klsb.nexthint = 0; CHECK(klsb_compose(&s, endb, 1000) == 1 && !tx(KLSB_T_NEXT)->on && KLSB_NT() == KLSB_NTEXT_BASE);   /* toggle off: the stub is not even asked */
+    CHECK(klsb_compose(&s, endb, 1000) == 1);                                         /* leave the round composed as the checks below expect */
     klsb_apply();
     CHECK(!strcmp(pool_objs[1].text, "ROUND 1") && pool_objs[0].colour == KLU_C_CORAL);
 

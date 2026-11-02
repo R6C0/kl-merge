@@ -60,6 +60,10 @@ static const char *kllnm_name_now(int n) { (void)n; return 0; }
 static const char *kllnm_name_cur(int n) { (void)n; return 0; }   /* kllocname.c stub */
 static DWORD kllnm_orig_slot0(void *loc) { (void)loc; return 0; }   /* kllocname.c stub */
 static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally) { (void)actor; (void)aboard; (void)tally; return 0; }   /* klbotfill.c stub: no puppeteer here (klhud_board2.c OnlineBoardBots) */
+#ifdef KLSB_HARNESS_HAS_BOARD2                          /* klshoppage.c stub (klhud_board2.c [HUD] ScoreboardNextHint): the test sets kspg_hint_stub to the text the page keys would give, 0 = no page feature on */
+static const char *kspg_hint_stub;
+static int kspg_board_hint(char *out, size_t cap) { if (!kspg_hint_stub) return 0; snprintf(out, cap, "%s", kspg_hint_stub); return 1; }
+#endif
 #ifndef KLSB_HARNESS_HAS_BOARD2                       /* klwatch_test.c does not include klhud_board2.c: its state-render slot ([HUD] OnlineBoardState) is a no-op there */
 static void klsb_state_render(void *el, void *ctx, void *cam) { (void)el; (void)ctx; (void)cam; }
 #endif
