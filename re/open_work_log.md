@@ -1,3 +1,10 @@
+2026-11-02 ~05:20 - [ce] SR2 PASS (4 rows, asserts/faults 0): round-1 bot money DD09 $1.84M, DD05 $2.13M, DM06 $0.60M, DD09 + OnlineDropTake=1
+$3.90M (6 droptake lines; Arcade DD09 3.4M by +60 s) -> DropTake is the biggest single gain, recommend on after one more map. DM06 one "drop table
+full" line = the DT1 fix replacing a hidden pool object (works). RT5 (DM09, TimeAuto=6): clock 370 s in all rows; A (LegSpeed 100, Near 600) van at
+199 s left, 2 bots aboard; C 1 aboard ($1.275M); B (LegWaitIdx=0) van leaves 1 s after arrival, 0 aboard -> keep WaitIdx=1. Pushed klshield
+[Shield] Online (5c8200f89, tests 63/0). New kits: cs1 ([BotFill] OnlineTriggers: bots fire ZTriggerBox cop waves online, DM03+DD05+control),
+es1 ([Bots] OnlineEscort / OnlineEscortOut, DM03), le1 (OnlineLateExit DM01/DM09/DD05 + control). Game with c9 (CR9) from 05:20, then the queue.
+
 2026-11-02 ~05:00 - [ce] DH1 PASS (DD01 online, 3 rows, asserts/faults 0): OnlineDoorHold opens every vault (0 shut at +46 s vs 38 shut in the
 control) but money is the same ($1.54M, 14 GRABBED both; DoorHoldS=120 $1.14M) -> keep off. Cause of the 14 cap = OnlineTacticsCarry 2 x 7 bots;
 Arcade has no cap, empties all 58 by +61 s (re/dd01_plateau_1102.md). Kit dh2 (Carry 8 / 6) staged. Merged offline: re/t5_status_1102.md (21 maps x

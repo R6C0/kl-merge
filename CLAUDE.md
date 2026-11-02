@@ -76,9 +76,9 @@ CR7 PASS before it (client 7/8, 0 asserts). Dlls c9_1028\cr8 ship 9d1a4d3c / tes
 OnlineTacticsCarry 2 x 7 bots; Arcade has no cap (re/dd01_plateau_1102.md) -> kit dh2 (Carry 8/6). Merged: re/t5_status_1102.md, HighlightProbe,
 RemoteShot2DGate + slot-74 counter. Game queue after SR2 + c9 CR9: week_1028\QUEUE_after_sr2.txt (dh2 g2 g1 sp1a ba1 pr1).
 
-2026-11-02 ~03:55 - [ce] DT1 PASS: DropTake grabs drops in round 2, never in round 1 (133 armed hidden pool drops filled the 32-slot table):
-fixed (wk-droptable-1102). SR1 0 taken = stock drain to drops + follow keys off (re/stack_state3_1102.md). Merged: lootsum line,
-OnlineStackRecheckHid, OnlineBoardAllNear (all default 0). Chain DH1 -> RT5 -> SR2 running from 03:51.
+2026-11-02 ~05:20 - [ce] SR2 PASS (4 rows, 0 asserts): OnlineDropTake=1 lifts DD09 bot money in round 1 from $1.84M to $3.90M (Arcade 3.4M+);
+RT5 PASS on A/C (6-min clock, van at 199 s left, 2 bots aboard), B (LegWaitIdx=0) boards nobody -> keep 1. Pushed klshield Online (5c8200f89).
+New kits cs1 (bots fire cop triggers online, DM03+DD05), es1 (escort), le1 (LateExit); queue after c9's CR9: week_1028\QUEUE_after_sr2.txt.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
