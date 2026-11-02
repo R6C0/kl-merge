@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-02 ~00:40 - [c9] CR5 PASS: DM01 + DM02 online, ClientBuild both seats, asserts 0, no fault. DM02 car gets 8 spare points both seats
+-> F02 stays out (ClientBuildMaps=F01,F03). DM01 diff = 0.1-unit jitter (parser tolerates it now). kcr_pt_usable log bug (ignored bit 0x2) fixed
+8773e87ad, NEXT_SHIP dll cr6\ship ff114e33. Next: live bench of ship_next candidate; Elwood lock icon (Rank=0).
+
 2026-11-01 ~23:55 - [c9] CR3 PASS: ClientBuild on both seats -> DM01 + DM03 online asserts 0 on host and client (DM01 was 39), counts equal
 (379/596), host activation reuses reserved indices. D2-D4 review fixes in, D1 kept (state 0x16, needed before the first activation). NEXT_SHIP:
 [CoverRing] ClientBuild=1 ClientBuildHost=1 ClientBuildMaps=F01,F03 (host + client together). F02 (1 car) unbenched.
@@ -75,10 +79,6 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 2026-11-01 ~23:55 - [ce] RT3 0 faults (DD06 7 boarded, no regression). DM09 still 0 boarded: with OnlineLegScale+StallS the legs run (12
 reached, was 2) but all 7 bots die on the street legs before the van exists (boarding object ~249 s in, 17 s before round over; RT2 the same).
 Fix = hold in cover until van probe state >= 2, then rush: wk-vantime-1101 (offline). Also running: wk-onlineboard-1101 (Arcade board online).
-
-2026-11-01 ~23:45 - [ce] RT2 0 faults: RT2D + RT2R (DD06 7 boarded) PASS; RT2L DM09 route runs (51 legs, 4 carries, 0 ZFFActor refusals) but
-0 BOARDED: every leg times out at the flat 15 s 5-76 m short, bots end 64-76 m off when the van comes (round over 19 s later). RT3 = same hook +
-OnlineLegScale=1 Speed=150 MaxS=60 + OnlineLegStallS=20 (existing keys), kit week_1028\rt3\run_rt3.sh after c9's CR3.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

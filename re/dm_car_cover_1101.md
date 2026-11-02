@@ -124,3 +124,7 @@ Constraints: no .text patch (hashed); no DR0 watch online (anti-tamper killed th
 ### c9 CR3 result (11-01 ~23:55)
 
 CR3 PASS (DM01 + DM03 online, ClientBuild=1 + ClientBuildHost=1 on both seats): asserts 0 / soft 0 on host and client (DM01 was 39), counts equal (379 / 596), the host's mid-round car activation reuses the reserved indices (count stays 379). DM03 coverdump IDENTICAL; DM01 differs only on car 871's 8 points, which have the same indices and moved with the car. Review D2-D4 in (per-point usable flags, capacity refusal, _fpreset + half state after a fault); D1 kept at state 0x16 on purpose. NEXT_SHIP: [CoverRing] ClientBuild=1 ClientBuildHost=1 ClientBuildMaps=F01,F03, host and client together. F02 (1 car) still unbenched.
+
+### c9 CR5 result (11-02 ~00:40)
+
+CR5 PASS (DM01 + DM02 online, ClientBuild on both seats, TEST 8cdb9829): asserts 0 / soft 0 on host and client of both maps, no FAULT. DM02 coverdump IDENTICAL, but its one car gets 8 SPARE points (0x400, pos 0) on both seats (the probe fails), so F02 stays out of ClientBuildMaps (F01,F03). DM01 'DIVERGE' was only 0.1-unit jitter on the same indices: kl_coverdump_parse now lists that as jitter (tol 1.0). 'usable 0/8' log lines were a bug: kcr_pt_usable ignored bit 0x2 (0x656740 accepts al&2 OR 0x200; real flags 0x100a/0x1012/0x140a). Fixed in 8773e87ad; NEXT_SHIP dll c9_1028\cr6\ship ff114e33. Open: a live bench of ship_next (candidate ini + dll), Elwood lock icon with Rank=0.
