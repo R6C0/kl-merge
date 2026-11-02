@@ -1,3 +1,10 @@
+2026-11-02 ~10:00 - [ce] MT1 (DM03 + DD02 online, mt1_dll_b): SAFE PASS on all seats; ModesTab cycle (stock, II, Hire, Controls, Bots and modes,
+stock) PASS and absent in the control; RoundHints PASS; Ctrl+F4 AI toggle PASS, host only. Ctrl+F3 map toggle bench-blocked: the helper's
+SetForegroundWindow froze the game 4.6 s and the press landed in the freeze, and no shots because ReShade owns Present. Kit mt2 = early focus,
+8 s settle, 0.6 s hold, one retry, D3dShotPost=1; queued after g2b, before g1b. TP1 (DM03, Extra=2 DRY) PASS: pick-up names read from
+the scene node (18 'PC0500_M03_Money_Arranged_*' left to the game), no cop box skipped, bots would fire 3-4 ZOnlineTriggerBox + ~8 ZTriggerBox2.
+Kit tp2 = Extra=1 LIVE on DM03 + stock DD05 (the bots-trigger-cops ask), queued after rt8. Chain: g2b (running), mt2 g1b sp1b dt1 [dt2] sn2 co2 es2 rt6 rt7 rt8 tp2.
+
 2026-11-02 ~09:50 - [ce] DH3 graded: SAFE PASS (asserts/faults 0 both seats), FEATURE FAIL. OnlineTacticsCarry=8 on DM09: van called from the hold at
 213 s left, parked 72 s, left at 115 s with 0 BOARDED; a 2nd uncalled van at 1.4 s left. 14 stacks, $1.85M carried (RT5A $3.0M). Carry is not the lever.
 DM09 death sites: tower drop (leg 1 -> 2, -209 m): klhop's KLJoin [CrewHop] hop 2 carries instantly, walk hops 1/3/5 walk at ~0.83 m/s with a 40 s

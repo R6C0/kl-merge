@@ -77,9 +77,9 @@ DM09 losses split in two: tower drop (bots held 20-117 s for klhop's walk hops) 
 New, both default 0: [BotFill] OnlineLegFightReorderS (c9ffcc3cf, kit rt7) and OnlineLegHopTeleS (b1b32fab3, NOT Arcade, kit rt8).
 Queue: mt1 (running) tp1 g2b g1b sp1b dt1 SN2 co2 es2 rt6 rt7 rt8.
 
-2026-11-02 ~09:30 - [ce] ES1/LE1 SAFE PASS, features barely triggered. Escort fix: the session table holds AI heisters (37946cfd2).
-DM09 boarding diagnosed: the van is called at leg 2 and its window ends before stragglers arrive; RT4 "5 boarded" = boardall counts. New
-[BotFill] OnlineJoinCalledS (b3be0cab3, default 60). Kit rt6 (late call, longer hold, Near 300) queued after es2; DM01/DM03 kits get CoverRing ClientBuild.
+2026-11-02 ~10:00 - [ce] MT1 SAFE PASS all seats: ModesTab cycle, RoundHints, Ctrl+F4 AI toggle (host only) PASS; Ctrl+F3 map toggle blocked by
+the bench helper's focus freeze, kit mt2 (fixed helper + D3dShotPost) queued after g2b. TP1 (DM03, OnlineTriggersExtra=2 DRY) PASS: pick-ups
+left to the game, bots would fire ZOnlineTriggerBox/ZTriggerBox2; kit tp2 = Extra=1 LIVE (DM03 + DD05), queued after rt8.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
