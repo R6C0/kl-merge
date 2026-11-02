@@ -595,7 +595,7 @@ static void __fastcall kspg_gfx(void *self, void *edx)
         if (rr >= 0 && rr < KSPG_ROWS) {
             st = kls_row_state(rr, &it);
             P = ksp_pic_row(1, kl_online(), rr, st, it, unbaked[rr]);
-            if (P < 0 && (rr == 13 || rr == 16 || rr == 32 || rr == 35)) { static BYTE told[KSPG_ROWS]; if (!told[rr]) { told[rr] = 1; klog("shoppic: row %d not swapped: pool state %d (item %d), unbaked flag %d (a name that is not the carrier's means a baked or already renamed card), role %d", rr, st, it, (int)unbaked[rr], pr); } }
+            if (P < 0 && (rr == 13 || rr == 16 || rr == 32 || rr == 35)) { static BYTE told[KSPG_ROWS]; if (!told[rr]) { told[rr] = 1; klog("shoppic: row %d not swapped: pool state %d (item %d), unbaked flag %d (a name that is not the carrier's means a baked or already renamed card), role %d%s", rr, st, it, (int)unbaked[rr], pr, (st == 2 && !unbaked[rr]) ? "; the slot archive already carries the Dog Days name (baked LOC, e.g. [Redirect] to a KLExpansion Maps copy): by design no look-alike; G2 needs the real stock F0x archive ([Expansion] Enable=0)" : ""); } }
             if (P >= 0) {
                 idx = klh_rd32((DWORD_PTR)self + 0xc4); nidx = (DWORD)ksp_new_index((int)idx, rr, P);
                 if (InterlockedIncrement(&kspg_pic_seen) == 1) klog("shoppic: element %08lx role %d row %d -> pic row %d (item %d, mode %lu, unbaked %d, online %d, index %lu)", (unsigned long)(DWORD_PTR)self, pr, rr, P, it, (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), (int)unbaked[rr], kl_online(), (unsigned long)idx);
