@@ -71,6 +71,7 @@ static void klho_live(void)
 static void klho_put(int which, int value)
 {
     char v[16];
+    if (!klho.on) return;                              /* 1102: the Mod settings rows (klset.c) reach here even with [HostOpts] Enable=0 */
     if (which == 2) {
         if (value < 0 || value > 3 || value == klho.pool) return;
         klho.pool = value; snprintf(v, sizeof v, "%d", value);

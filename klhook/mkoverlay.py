@@ -303,7 +303,7 @@ SET_ROWS = (('KLS_Look', 'Look', 'KLSLook', ['Off', 'KL', 'LiveLeak']),
 # 2026-10-25 [HostOpts] Menu=1 (klhostopt.c): two host rows 'Host map set' (KLSHMap) and 'Host options' (KLSHOpt) are added, and 'Sharper textures'
 # + 'Neural' become ONE row 'Textures / Neural (next start)' (KLSNext, 4 entries): net +4 table entries (+8 -4), 10 rows at 30 apart. Default off.
 HOSTOPTS = False
-HOST_ROWS = (('KLS_HMap', 'Host: map set', 'KLSHMap', ['Dog Days', 'Dead Men', 'Mixed random']),
+HOST_ROWS = (('KLS_HMap', 'Host: map set', 'KLSHMap', ['Dog Days maps', 'Dead Men maps', 'Mixed random']),   # value k = klhostopt.c klho_maps[k] = OnlineSet 0 / 2 / 9 (tools/kl_hostmenu_test.py checks)
              ('KLS_HOpt', 'Host: AI / solo / PD2 guns', 'KLSHOpt', ['AI off, solo off, PD2 off', 'AI on, solo off, PD2 off', 'AI off, solo on, PD2 off', 'AI on, solo on, PD2 off',
                                                                     'AI off, solo off, PD2 on', 'AI on, solo off, PD2 on', 'AI off, solo on, PD2 on', 'AI on, solo on, PD2 on']))
 SET_NOTE = None                                       # v26c had a note text block on the right: dropped for room (see above)
