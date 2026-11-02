@@ -531,6 +531,10 @@ feat('watchdog', G_EXP, 'Watchdog for a stuck AI heister', 'off', 'start',
      'not run in the game', [('QoL2', 'Watchdog', 1, 0, 0)])
 feat('names', G_EXP, 'Dead Men map names in the Arcade lists', 'off', 'start',
      'live-tested once (PD1); off until the owner OKs the renaming', [('Names', 'Enable', 1, 0, 0)])
+feat('onlinelobby', G_EXP, 'Private match / System Link: the multiplayer map list shows the Dead Men map names that will load (needs an online map set row)', 'off', 'start',
+     'kllocname.c [Names] OnlineLobby=1 (recommended off until proven live): Enable/Override implied, answers only online; random set shows the exact map (peek of the lobby-id pick) or a label of all maps; NOT run live', [('Names', 'OnlineLobby', 1, 0, 0)])
+feat('lobbypeekround', G_EXP, 'Random online map with a new draw every round: predict the next map in the list (else it shows all candidates)', 'off', 'start',
+     'kllocname.c [Names] LobbyPeekRound=1 (recommended off): GUESS that every machine counted the rounds alike; NOT run live', [('Names', 'LobbyPeekRound', 1, 0, 0)])
 feat('inv', G_EXP, 'Gun shelf: carry more than two guns (PageUp; F8 with the old keys)', 'off', 'start',
      'research feature, off by default', [('Inv', 'Enable', 1, 0, 0)])
 feat('grenade', G_EXP, 'Throw a carried grenade with G (Dead Men style)', 'off', 'start',

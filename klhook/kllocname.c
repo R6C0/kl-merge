@@ -38,7 +38,20 @@
  *   Enable=0        1 = wrap the LOC lookup (needs [Expansion] Enable=1 and a [Redirect] rule; otherwise nothing is wrapped)
  *   Log=0           1 = one line per distinct (folder,key)->result for keys containing Scenarios/Title (at most 64 lines)
  *   Override=0      1 = answer the expansion map's name; 0 = pass-through that only logs (the first live check)
+ *   OnlineLobby=0   1 = (recommended on, once proven live) the online map set's names without Enable/Override (see LOBBY OF THE ONLINE MAP SETS)
+ *   LobbyPeekRound=0  1 = (recommended off) with [Expansion] OnlineRandomRound=1, predict the next round's map instead of the label
  *   DM01=Hot Coffee         names, 47 characters at most (printable ASCII); at most 32
+ *
+ * LOBBY OF THE ONLINE MAP SETS (2026-11-02, names-lobby-1102; owner: 'the maps are still not listed correctly on the multiplayer screen'). Online,
+ * kls_page_now() answers [Expansion] OnlineSet (2/3 = a fixed page, 9 = RANDOM per slot). The lookup asked kls_find_rule(slot, 9), found none and
+ * fell back to page 0 = the stock title. Now, for 9: kls_rand_peek (klslot.c, the same math as the load's kls_rand_pick via klslot_rand_logic.h,
+ * no side effect) names the EXACT map that will load (a Steam lobby id is readable and OnlineRandomRound=0); when it cannot be known (System Link:
+ * no lobby id; OnlineRandomRound=1 without LobbyPeekRound) the slot shows a LABEL of all candidates '<stock> / <DM name> / <DM name>' (47 chars;
+ * too long -> '<stock> / <first> / ...' else '<stock> / Dead Men'). A Dead Men page picked whose rule has no name -> '<stock> / Dead Men' (review
+ * fix: never the bare stock title while a Dead Men map loads). Stock picked -> the stock title. One line per change: 'names: lobby slot F01 -> ...'.
+ *   OnlineLobby=1 implies Enable/Override with [Expansion] Enable=1 and OnlineSet != 0, answering ONLY while kl_online() (Arcade lists and
+ *   offline stay stock). Default 0: the peek/label code has not run in the game yet, and a fault in this lookup would hit every menu text.
+ * PICTURES are not changed here: the lobby picture is a per-slot entity of the lobby scene (kl_lobbynames.py collage or the [MapPool] overlay).
  *
  * GUESSES (each also marked where it is used): that vtable slot 0 of the object is that lookup for EVERY LOC object the game makes
  * (kllnm_pin checks the slot's code for a 'ret 0xc'); that the dictionary strings are plain 8-bit text (klpu_str / the HUD read them so);
@@ -63,6 +76,9 @@ static int kllnm_ntab;
 static char kllnm_rname[KLS_RULES][KLLNM_NAME];   /* the display name of each klslot.c rule ("" = none) */
 static volatile LONG kllnm_hits;
 static DWORD kllnm_seen[96]; static LONG kllnm_nseen, kllnm_nlog;
+static int kllnm_onlineonly, kllnm_peekround;          /* [Names] OnlineLobby implied mode (answers only online); LobbyPeekRound */
+static char kllnm_lbl[10][KLLNM_NAME];                  /* per slot Title01..09: the label (random set, map not knowable, or a nameless DM page) */
+static char kllnm_lastline[10][128]; static LONG kllnm_nlobbylog;
 
 typedef const char *(__fastcall *KLLNM_LOOKUP)(void *self, void *edx, const char *folder, const char *key, DWORD third);
 /* 2026-10-27 [HUD] OnlineKilledStock=1 (default 0, NOT RUN; needs OnlineKilled=1 and HideKilledBy): before a lookup made inside 0x500670 is blanked, the REAL lookup is made once more and its text latched, so the HUD's KILLED BY line can
@@ -125,17 +141,81 @@ static int kllnm_title_slot(const char *folder, const char *key, int klen)
    refreshes (menus.md 4.2); a pool entry with no name in [Names] keeps the stock label (the log prints which). */
 static int kllnm_pool; static int kmp_peek(int s);       /* kmp_peek: klmappool.c (included after this file) */
 
-/* the name of the map slot F0<n> loads NOW, or 0 = the stock slot name stays */
-static const char *kllnm_name_now(int n)
+static void kllnm_note(int n, const char *what, int page, const char *kind)
+{   /* names-lobby-1102: one line each time a slot's answer changes (the lobby asks every frame it draws) */
+    char line[128];
+    if (n < 1 || n > 9) return;
+    snprintf(line, sizeof line, "names: lobby slot F%02d -> %s (page %d, %s)", n, what, page, kind);
+    if (!strcmp(line, kllnm_lastline[n])) return;
+    memcpy(kllnm_lastline[n], line, strlen(line) + 1);
+    if (kllnm_nlobbylog < 200) { kllnm_nlobbylog++; klog("%s", line); }
+}
+
+static int kllnm_ascii_ok(const char *t)
+{   /* the rules of kllnm_init: printable ASCII, no '%', no leading '/' */
+    if (!t[0] || t[0] == '/') return 0;
+    for (; *t; t++) if ((BYTE)*t < 0x20 || (BYTE)*t > 0x7e || *t == '%') return 0;
+    return 1;
+}
+
+/* the label of slot index s: '<stock> / <name> / <name>' of every named candidate (all = 1) or '<stock> / Dead Men' (all = 0), max 47 characters;
+   0 = no label (the stock text stays). stock = the stock lookup's answer (game memory, read with care), may be 0 */
+static const char *kllnm_label(int s, int n, const char *stock, int all)
 {
-    int s, r, page; char slot[4];
+    int cand[KLS_PAGES], nc, i, j, nn = 0, r; const char *nm[KLS_PAGES]; char st[KLLNM_NAME], *o; size_t l;
+    if (n < 1 || n > 9 || !stock || !klh_rdstr((DWORD_PTR)stock, st, sizeof st) || !kllnm_ascii_ok(st) || strlen(st) > 30) return 0;
+    o = kllnm_lbl[n];
+    if (all) {
+        nc = kls_rand_cands(s, cand);
+        for (i = 1; i < nc; i++) {                                       /* i = 0 is the stock page */
+            r = kls_find_rule(s, cand[i]);
+            if (r < 0 || !kllnm_rname[r][0]) continue;
+            for (j = 0; j < nn && strcmp(nm[j], kllnm_rname[r]); j++) ;
+            if (j == nn) nm[nn++] = kllnm_rname[r];
+        }
+    }
+    snprintf(o, KLLNM_NAME, "%s", st); l = strlen(o);
+    for (i = 0; i < nn; i++) {
+        if (l + 3 + strlen(nm[i]) >= KLLNM_NAME) {                       /* does not fit: shorten */
+            if (i > 0 && l + 6 < KLLNM_NAME) { memcpy(o + l, " / ...", 7); return o; }
+            nn = 0; break;
+        }
+        memcpy(o + l, " / ", 3); l += 3; memcpy(o + l, nm[i], strlen(nm[i]) + 1); l += strlen(nm[i]);
+    }
+    if (!nn) snprintf(o, KLLNM_NAME, "%s / Dead Men", st);              /* no names, or the first does not fit */
+    return strlen(o) < KLLNM_NAME - 1 ? o : 0;
+}
+
+/* the name of the map slot F0<n> loads NOW (for the random set: the NEXT load), or 0 = the stock slot name stays. stock = the stock lookup's answer
+   (only for the labels; 0 = no label possible) */
+static const char *kllnm_name_now2(int n, const char *stock)
+{
+    int s, r, page, how = 0; char slot[4]; const char *nm;
     snprintf(slot, sizeof slot, "F%02d", n);
     for (s = 0; s < kls_nslots && _stricmp(kls_slot[s].name, slot); s++) ;
     if (s == kls_nslots) return 0;
+    if (kllnm_onlineonly && !kl_online()) return 0;                      /* OnlineLobby mode: nothing outside a network session */
     page = kls_page_now();
     if (!kl_online()) { int o = kpm_override(kls_slot[s].name); if (o >= 0) page = o; }   /* the Arcade playlist's choice, as kls_map does */
     else if (kllnm_pool) { int o = kmp_peek(s); if (o >= 0) page = o; }                  /* [MapPool] LobbyName: the page the pool's NEXT load of this slot will take (read-only peek) */
+    if (page == KLS_RANDOM && kl_online()) {                             /* OnlineSet=9: the exact map that will load, or the label */
+        page = kls_rand_peek(s, kllnm_peekround, &how);
+        if (!how) {
+            nm = kllnm_label(s, n, stock, 1);
+            kllnm_note(n, nm ? nm : "(stock)", -1, nm ? "random: not knowable, label of all maps" : "random: not knowable, stock");
+            return nm;
+        }
+        r = page ? kls_find_rule(s, page) : -1;
+        nm = r >= 0 && kllnm_rname[r][0] ? kllnm_rname[r] : (page ? kllnm_label(s, n, stock, 0) : 0);
+        kllnm_note(n, nm ? nm : "(stock)", page, page ? (how == 2 ? "random peek, next round" : "random peek") : "stock");
+        return nm;
+    }
     r = kls_find_rule(s, page); if (r < 0 && page) r = kls_find_rule(s, 0);
+    if (!kllnm_pool && kl_online() && kls_online_set && page) {          /* fixed online set: one line per change, and a nameless DM map gets '<stock> / Dead Men' */
+        nm = r >= 0 && kllnm_rname[r][0] ? kllnm_rname[r] : (r >= 0 && kls_rule[r].page == page ? kllnm_label(s, n, stock, 0) : 0);
+        kllnm_note(n, nm ? nm : "(stock)", page, r >= 0 && kls_rule[r].page == page ? "fixed" : "fixed, no rule: stock");
+        return nm;
+    }
     if (kllnm_pool && kl_online()) {      /* ONE line per distinct answer (a bench greps 'names: LOBBY'): proves what the lobby's Location label was given on this peer */
         static int lastPage[10] = {-9,-9,-9,-9,-9,-9,-9,-9,-9,-9}, lastR[10] = {-9,-9,-9,-9,-9,-9,-9,-9,-9,-9}, told;       /* last answer PER slot */
         if (s >= 0 && s < 10 && (page != lastPage[s] || r != lastR[s]) && told < 16) {
@@ -146,6 +226,7 @@ static const char *kllnm_name_now(int n)
     }
     return r >= 0 && kllnm_rname[r][0] ? kllnm_rname[r] : 0;
 }
+static const char *kllnm_name_now(int n) { return kllnm_name_now2(n, 0); }   /* klhud_board2.c: no stock text, so no label (a nameless/unknown pick answers 0) */
 
 /* 2026-10-27 [HUD] OnlineIntroMapName: the name of the map the slot F0<n> LOADED LAST (kls_slot[s].page, set at the load by klslot.c incl. the OnlineSet=9 random pick and the pool), not the
    page a load would take now (kllnm_name_now). 0 = a stock level or no name: the stock LOC text is right then. Read-only. */
@@ -202,12 +283,12 @@ static const char *__fastcall kllnm_lookup(void *self, void *edx, const char *fo
         n = kllnm_title_slot(f, k, klen);
     }
     if (!n) return orig(self, 0, folder, key, third);
-    if (kllnm_override && (mine = kllnm_name_now(n)) != 0) {
+    res = orig(self, 0, folder, key, third);                              /* the stock title first: the random set's label starts with it */
+    if (kllnm_override && (mine = kllnm_name_now2(n, res)) != 0) {
         InterlockedIncrement(&kllnm_hits);
         if (kllnm_log) kllnm_say(f, k, "OVERRIDDEN", mine);
         return mine;
     }
-    res = orig(self, 0, folder, key, third);
     if (kllnm_log) {
         char r[96]; r[0] = 0; if (res) klh_rdstr((DWORD_PTR)res, r, sizeof r);
         kllnm_say(f, k, kllnm_override ? "stock: no expansion map in this slot now" : "pass-through, Override=0", r);
@@ -275,9 +356,14 @@ static void kllnm_init(void)
     if (kllnm_hk) klog("names: [HUD] HideKilledBy=1: the stock death panel's 'Killed by' text is blanked (LOC lookups from 0x500670 and the key KilledBy); the LOC object is wrapped by the tick");
     en = GetPrivateProfileIntA("Names", "Enable", 0, klh_ini) != 0;
     fb = GetPrivateProfileIntA("HUD", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "OnlineIntroMapName", 1, klh_ini) != 0;      /* [HUD] OnlineIntroMapName (recommended on): the names are read for the online intro card even with [Names] off; nothing is wrapped then */
+    kllnm_peekround = GetPrivateProfileIntA("Names", "LobbyPeekRound", 0, klh_ini) != 0;                 /* (recommended off) */
+    if (!en && GetPrivateProfileIntA("Names", "OnlineLobby", 0, klh_ini) && kls_on && kls_online_set) {  /* (recommended on once proven live) */
+        en = 1; kllnm_onlineonly = 1;
+        klog("names: OnlineLobby=1 with OnlineSet=%d: Enable/Override implied, the lobby names answer only inside a network session", kls_online_set);
+    }
     if (!en && !fb) return;
     kllnm_log = en && GetPrivateProfileIntA("Names", "Log", 0, klh_ini) != 0;
-    kllnm_override = en && GetPrivateProfileIntA("Names", "Override", 0, klh_ini) != 0;
+    kllnm_override = en && (kllnm_onlineonly || GetPrivateProfileIntA("Names", "Override", 0, klh_ini) != 0);
     if (!kls_on) { if (en) klog("names: Enable=1 but [Expansion] is off: there is no slot to rename, nothing is wrapped"); return; }
     for (r = 0; r < kls_nrules; r++) {
         char sec[16], key[8];

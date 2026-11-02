@@ -337,34 +337,74 @@ etsmooth_solo.md H3); its CreateSession / JoinSession
                                                         1025a refused this vtable and read seed 0 on System Link, SL3) */
 static char kls_rnd_txt[300];                        /* the last draw, for the LOAD line */
 static int kls_rnd_round_on;                         /* [Expansion] OnlineRandomRound=1: the round number joins the seed */
-static DWORD kls_rnd_round, kls_rnd_last, kls_rnd_lobby[2];
+static unsigned kls_rnd_round, kls_rnd_last, kls_rnd_lobby[2];
 
-static int kls_rand_pick(int s)
-{   /* -> the page (0 = stock) chosen for slot index s */
-    int cand[KLS_PAGES], n = 0, p, k, num = atoi(kls_slot[s].name + 1), src = 0, len = 0;
-    DWORD sm = 0, svc = 0, svt = 0, lob[2] = { 0, 0 }, now = GetTickCount(); BYTE ex = 0; unsigned __int64 x;
+/* names-lobby-1102: the seed, the choice and the round rule live in klslot_rand_logic.h so the lobby's title lookup (kls_rand_peek, used by
+   kllocname.c) computes EXACTLY what the pick will. */
+#include "klslot_rand_logic.h"
+
+static int kls_rand_cands(int s, int *cand)
+{   /* the candidate pages of slot s: 0 = stock first, then every page 2..8 that has a rule for the slot -> count */
+    int n = 0, p;
     cand[n++] = 0;
     for (p = 2; p < KLS_RANDOM; p++) if (kls_find_rule(s, p) >= 0) cand[n++] = p;
+    return n;
+}
+
+static int kls_rand_lobby(DWORD *svc_o, DWORD *svt_o, BYTE *ex_o, DWORD lob[2])
+{   /* READ-ONLY: the lobby id of the session in progress -> 1 = readable (Steam or Wintel service, 'exists' byte set, id not 0); the raw fields
+       are returned either way for the log line. No state of kls_rnd_* is touched. */
+    DWORD sm = 0, svc = 0, svt = 0; BYTE ex = 0; int src = 0;
+    lob[0] = lob[1] = 0;
     if (klh_exe_ok && (sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) != 0 && (svc = klh_rd32(sm + 0x17c)) != 0 &&
         ((svt = klh_rd32(svc)) == KLS_SVC_VT || svt == KLS_SVC_VT2) && klh_rd(svc + 0x35c, &ex, 1) && ex && klh_rd(svc + 0x35e, lob, 8) && (lob[0] || lob[1])) src = 1;
     else { if (svc) { klh_rd(svc + 0x35c, &ex, 1); klh_rd(svc + 0x35e, lob, 8); } else lob[0] = lob[1] = 0; }   /* kept only for the log line */
-    if (src) { if (lob[0] != kls_rnd_lobby[0] || lob[1] != kls_rnd_lobby[1]) { kls_rnd_lobby[0] = lob[0]; kls_rnd_lobby[1] = lob[1]; kls_rnd_round = 0; kls_rnd_last = 0; } }
-    else lob[0] = lob[1] = 0;
+    *svc_o = svc; *svt_o = svt; *ex_o = ex;
+    return src;
+}
+
+static int kls_rand_pick(int s)
+{   /* -> the page (0 = stock) chosen for slot index s. THIS ONE ADVANCES THE ROUND (a load is happening); the lobby uses kls_rand_peek */
+    int cand[KLS_PAGES], n, k, num = atoi(kls_slot[s].name + 1), src, len = 0, p;
+    DWORD svc = 0, svt = 0, lob[2]; unsigned now = GetTickCount(); BYTE ex = 0; kls_u64 x;
+    n = kls_rand_cands(s, cand);
+    src = kls_rand_lobby(&svc, &svt, &ex, lob);
+    if (src) { int ch = lob[0] != kls_rnd_lobby[0] || lob[1] != kls_rnd_lobby[1]; if (ch) { kls_rnd_lobby[0] = lob[0]; kls_rnd_lobby[1] = lob[1]; } kls_rnd_advance(&kls_rnd_round, &kls_rnd_last, now, 1, ch); }
+    else { lob[0] = lob[1] = 0; kls_rnd_advance(&kls_rnd_round, &kls_rnd_last, now, 0, 0); }
     /* the round: a load is the first open of any slot archive more than 60 s after the previous one (the probes of one load come within seconds; rounds
        are further apart). Peers present from the lobby on count the same; a late joiner would not (hence default off). */
-    if (!src && kls_rnd_last && now - kls_rnd_last > 1800000) kls_rnd_round = 0;      /* 30 min without a load: a new session (backstop to the reset in kls_tick) */
-    if (!kls_rnd_last || now - kls_rnd_last > 60000) kls_rnd_round++;
-    kls_rnd_last = now ? now : 1;
-    x = ((unsigned __int64)lob[1] << 32 | lob[0]) ^ ((unsigned __int64)(num + 1) * 0x9E3779B97F4A7C15ULL);
     /* System Link has no Steam lobby (SL3b: exists 0): the round number is then the only thing that varies, so it joins the seed whatever the key says */
-    if (kls_rnd_round_on || !src) x ^= (unsigned __int64)kls_rnd_round * 0xD6E8FEB86659FD93ULL;
-    x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL; x ^= x >> 27; x *= 0x94D049BB133111EBULL; x ^= x >> 31;
-    k = (int)(x % (unsigned)n);
+    x = kls_rand_mix(lob[0], lob[1], num, kls_rnd_round, kls_rnd_round_on || !src);
+    k = kls_rand_index(x, n);
     len = snprintf(kls_rnd_txt, sizeof kls_rnd_txt, "random: seed lobby %08lx%08lx (%s; service %08lx vt %08lx exists %u) round %lu%s slot %d, %d choices [stock", (unsigned long)lob[1], (unsigned long)lob[0],
                    src ? "lobby id" : "NOT readable: fixed pick", (unsigned long)svc, (unsigned long)svt, (unsigned)ex, (unsigned long)kls_rnd_round, (kls_rnd_round_on || !src) ? (src ? " (in the seed)" : " (in the seed: no lobby id, System Link)") : " (not in the seed)", num, n);
     for (p = 1; p < n && len < (int)sizeof kls_rnd_txt - 40; p++) len += snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, " p%d=%s", cand[p], kls_rule[kls_find_rule(s, cand[p])].map);
     snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, "] -> choice %d (page %d)", k, cand[k]);
     return cand[k];
+}
+
+/* names-lobby-1102: WHICH page the NEXT load of slot s will pick, asked WITHOUT any side effect (no kls_rnd_* write, no log): the FA lobby's
+ * title lookup (kllocname.c) uses it so the lobby shows the exact map that loads. -> the page (0 = stock) and *how:
+ *   1 = EXACT: a lobby id is readable and the round is not in the seed: the pick is a pure function of (lobby id, slot, candidates);
+ *   2 = PREDICTED: the round is in the seed (OnlineRandomRound=1) and allow_round: the round the next load gets is replicated read-only
+ *       (the lobby changed -> round 1; else the 60 s rule on a COPY of the state). GUESS: every peer counted the rounds alike (a late joiner
+ *       did not), and the load happens later than 60 s after the previous one (true for any lobby seen after a round);
+ *   0 = UNKNOWN: no lobby id (the pick is then keyed by the round alone = System Link), or the round is in the seed and not allow_round:
+ *       the caller shows a label naming all the maps instead of one. The returned page is then 0 and meaningless. */
+static int kls_rand_peek(int s, int allow_round, int *how)
+{
+    int cand[KLS_PAGES], n, num = atoi(kls_slot[s].name + 1), src; DWORD svc, svt, lob[2]; BYTE ex; kls_u64 x; unsigned round, last;
+    *how = 0;
+    n = kls_rand_cands(s, cand);
+    if (n < 2) { *how = 1; return 0; }                                    /* only the stock map: no draw at all */
+    src = kls_rand_lobby(&svc, &svt, &ex, lob);
+    if (!src) return 0;
+    if (!kls_rnd_round_on) { *how = 1; x = kls_rand_mix(lob[0], lob[1], num, 0, 0); return cand[kls_rand_index(x, n)]; }
+    if (!allow_round) return 0;
+    round = kls_rnd_round; last = kls_rnd_last;
+    kls_rnd_advance(&round, &last, GetTickCount(), 1, lob[0] != kls_rnd_lobby[0] || lob[1] != kls_rnd_lobby[1]);
+    *how = 2; x = kls_rand_mix(lob[0], lob[1], num, round, 1);
+    return cand[kls_rand_index(x, n)];
 }
 
 /* BOT GATE (2026-10-26, botgate_1026a; peer: eAllTypes squads staged on every map, but an online round must stay stock unless the HOST wants Ally bots).

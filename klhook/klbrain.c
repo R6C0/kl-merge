@@ -34,8 +34,8 @@
      destructor). Slot 2: 0x7bc7d0 / 0x82f970 / 0x488eb0; slot 3: 0x66b570 / 0x5478e0 / 0x66b570; slot 11: 0x451920 / 0x4faf60 / 0x79b7c0. CERTAIN.
    - 0x508ef0 (thiscall ecx = G = [0x168e9e4]): returns [G+0x54] only if [sm+0x5c] == 4 AND 0x7f6850() (see above); no class check. CERTAIN. Evaluate 0x451920 etc. begin by reading
      rules through it; with NULL rules they leave early with 0.0 (read for 0x451920, 0x4faf60, 0x79b7c0: first returns are plain rets; GUESS only for the paths after a non-null).
-   - Destruction (CERTAIN): the soldier dtor deletes each tactic through vtable slot 0 (0x4fe6f0 with flag 1), so the GAME frees the objects (with its own free). We therefore never free
-     them, and every vtable copy keeps slot 0 = 0x4fe6f0. A vector buffer we regrow is allocated with 0x89e850 (the ctor's own pattern); the OLD buffer is leaked on purpose (40 bytes, an
+   - Destruction (CORRECTED by review 11-02): the soldier dtor chain 0x7f9de0 -> 0x740510 frees only the four vector buffers (0x6ad680); nothing reads +0x5f0..+0x5f8 there,
+     so the game never deletes these tactics (Arcade leaks them too). No double free; a small leak per bot per round. We never free them, and every vtable copy keeps slot 0 = 0x4fe6f0. A vector buffer we regrow is allocated with 0x89e850 (the ctor's own pattern); the OLD buffer is leaked on purpose (40 bytes, an
      allocator mismatch on it would crash and nothing proves which allocator regrew it).
    - Hashing (plan section 4, CERTAIN from klhook.c notes): CEG hashes about 85 % of .text and 66 % of .rdata. This module writes NO code byte and NO .rdata: it writes game HEAP (the soldier's
      fields and vectors, the objects), the tactics' vtable pointer, and memory this DLL owns (VirtualAlloc: the vtable copies, the shadow block). Calls are to unhashed-by-call game routines.
@@ -136,17 +136,17 @@ static float klbr_ev(int cls, DWORD self)
     if (cls == 0 && klbr_loot && klbr_shadow && GetCurrentThreadId() == klbr_game_tid && InterlockedCompareExchange(&klbr_in_swap, 1, 0) == 0) {
         G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)); sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION));
         if (G > 0xffff && sm > 0xffff) {
-            DWORD got = 0;
+            DWORD got = 0; int told_now = klbr_sw_told < 6;      /* review fix: decide once, so swap 7+ neither calls nor logs */
             klbr_swap_in(G, sm, &svr, &svo);
             __try {
-                if (klbr_sw_told < 6) { klbr_sw_told++; got = ((DWORD (__fastcall *)(DWORD, DWORD))KLH_VA(KLBR_ADDR_GETRULES))(G, 0); }      /* items 1 and 2: does the swap make the getter answer the shadow? */
+                if (told_now) { klbr_sw_told++; got = ((DWORD (__fastcall *)(DWORD, DWORD))KLH_VA(KLBR_ADDR_GETRULES))(G, 0); }      /* items 1 and 2: does the swap make the getter answer the shadow? */
                 r = klbr_call_ev(klbr_org[id], self, &flt);
             } __finally {
                 klbr_swap_out(G, sm, svr, svo);
             }
             klbr_swaps++;
-            if (klbr_sw_told <= 6 && got) klog("brain: loot: swapped evaluate: 0x508ef0(G) answered %08lx (shadow %08lx, role was %lu, rules was %08lx): %s", (unsigned long)got, (unsigned long)klbr_shadow, (unsigned long)svo, (unsigned long)svr, got == klbr_shadow ? "the swap works" : "the swap does NOT reach the getter ([sm+0x5c] != 4? see the probe)");
-            else if (klbr_sw_told <= 6) klog("brain: loot: swapped evaluate: 0x508ef0(G) answered 0 (role was %lu, rules was %08lx): the getter refuses even with role 0 ([sm+0x5c] != 4?)", (unsigned long)svo, (unsigned long)svr);
+            if (told_now && got) klog("brain: loot: swapped evaluate: 0x508ef0(G) answered %08lx (shadow %08lx, role was %lu, rules was %08lx): %s", (unsigned long)got, (unsigned long)klbr_shadow, (unsigned long)svo, (unsigned long)svr, got == klbr_shadow ? "the swap works" : "the swap does NOT reach the getter ([sm+0x5c] != 4? see the probe)");
+            else if (told_now) klog("brain: loot: swapped evaluate: 0x508ef0(G) answered 0 (role was %lu, rules was %08lx): the getter refuses even with role 0 ([sm+0x5c] != 4?)", (unsigned long)svo, (unsigned long)svr);
         } else r = klbr_call_ev(klbr_org[id], self, &flt);
         InterlockedExchange(&klbr_in_swap, 0);
     } else r = klbr_call_ev(klbr_org[id], self, &flt);
@@ -380,9 +380,9 @@ static void klbr_tick(int game_thread)
             if (e->state == 3 && built < 2) { klbr_build_one(e, now); built++; }      /* at most two a tick */
             else if (e->state == 1 && klh_rd32(snd[i] + 0x5f0) != e->tac[0]) { klog("brain: soldier %08lx no longer holds our Loot tactic (%08lx vs %08lx): tag dropped, nothing freed by us", (unsigned long)snd[i], (unsigned long)klh_rd32(snd[i] + 0x5f0), (unsigned long)e->tac[0]); e->state = 2; }
         }
-        for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && now - klbr_t[i].seenAt > 15000u && klh_rd32(klbr_t[i].snd) != KLE_SOLDIER_VT) { klog("brain: soldier %08lx is gone (dead or despawned); the game's destructor frees its tactics through slot 0, we do not", (unsigned long)klbr_t[i].snd); klbr_t[i].state = 0; }
+        for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && now - klbr_t[i].seenAt > 15000u && klh_rd32(klbr_t[i].snd) != KLE_SOLDIER_VT) { klog("brain: soldier %08lx is gone (dead or despawned); the game's destructor does NOT free its tactics (about 0x64 bytes leak per bot per round, accepted); we free nothing", (unsigned long)klbr_t[i].snd); klbr_t[i].state = 0; }
     }
-    if (klbr_probe || klbr_build) { if (!told || klbr_probe) klbr_probe_log(now, sm, role, mode, state, actor, snd, n); told = 1; }
+    if (klbr_probe || klbr_build) { if (!told || klbr_probe || klbr_build) klbr_probe_log(now, sm, role, mode, state, actor, snd, n); told = 1; }
 }
 
 static void klbr_init(void)

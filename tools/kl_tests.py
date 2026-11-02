@@ -64,6 +64,7 @@ C_TESTS = {
     'klwaitvan_test.c': 'logic',       # klwaitvan_logic.h (OnlineLegWaitVan pure decision, no windows.h)
     'klshot2d_test.c': 'logic',        # klshot2d_logic.h (RemoteShot2DGate gate + slot-74 counter, no windows.h)
     'klboardpar_test.c': 'logic',      # klboardpar_logic.h (OnlineBoardAllNear pure decision, no windows.h)
+    'klslot_rand_test.c': 'logic',     # klslot_rand_logic.h (random online map pick: mix, index, round advance, no windows.h)
     'klbrain_test.c': 'logic',         # klbrain_logic.h ([Brain] vector insertion order, growth, switches, PuppetOff window, no windows.h)
     'kldroptake_test.c': 'logic',      # kldroptake_logic.h (OnlineDropTake pure decision, no windows.h)
     'klcensus_test.c': 'logic',        # klcensus_logic.h (OnlineTriggersCensus new-cop pointer set, no windows.h)
