@@ -68,9 +68,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-11-02 ~02:05 - [c9] SN1 PASS: the next-ship candidate (ship_next ini + cr6 dll ff114e33/b6f25104) on DM01/DM03/DD05 online,
-2 seats: asserts 0, soft 0, faults 0 everywhere. DM03 residual: car #0 points 556-563 spare on both at load, host-only positions after
-activation (same indices); AssertSoft covers it, CR6 idea = client re-runs 0x81b6f0 on activation. Rows flipped on + clientbuild rows: 715127ffa.
+2026-11-02 ~03:55 - [c9] CR7 PASS: CR6 [CoverRing] ClientRewrite (e4d6635ed, default 0) on the client, DM03 + DM01 online: asserts/faults 0.
+DM03 car #0 spares 0/8 -> 7/8 on the client (trigger [car+8c0] 0->1 confirmed, 15 s retry did it); host-only usable indices 6 -> 1 (#561),
+rings rotated per seat (car heading at probe time). DM01 identical. SN1 PASS earlier: next-ship candidate whole, 0 asserts (715127ffa).
 
 2026-11-02 ~00:50 - [ce] wk-vantime-1101 merged: DM09 bots wait in cover at leg 1, the hook calls the van (0x71e180) once the carriers are
 there, the van waits (FarHold); keys OnlineVanAfterLegs/BoPos/FarHold + OnlineLegWaitVan/Call default 0. [HUD] OnlineBoardBots merged
