@@ -499,20 +499,31 @@ static void klbf_ramp_load(void)
     klog("botfill: ramp: [%s] name '%s' centre (%.0f, %.0f, %.0f) half (%.0f, %.0f, %.0f), %s", klbf_rp.sec, klbf_rp.name, klbf_rp.c[0], klbf_rp.c[1], klbf_rp.c[2], klbf_rp.h[0], klbf_rp.h[1], klbf_rp.h[2], klbf_ot_rampdry ? "DRY (log only)" : "LIVE");
 }
 
-/* the entity name path [[obj+4]+0x6c] (a C string): klclubholster.c's GUESS, never proven for ZTriggerBox; b gets "" when unreadable */
-static void klbf_ramp_name(DWORD obj, char b[40])
+/* the box name (a C string, 40 bytes). 2026-11-02 fix, same mistake as OnlineTriggersSkipPickups (a53764147): this read [[obj+4]+0x6c], i.e. the controller's own +4, not the
+   entity's scene node, so the name came back empty and the 'make_the_ramp' / MoneyStack / DropMoney name tests never matched (the ramp box was found by centre only; stack pick-up
+   boxes were not skipped by name). Source 1 (first): the scene node [[obj+0x24]+4] +0x6c, as kle_node / klauto.c 1332 / klbf_trig_scan's `node`; source 2: the old read (kept as
+   a fallback; klgetup_logic.h kvp_name_pick decides). GUESS: the node's +0x6c string holds this name for ZTriggerBox / ZTriggerBox2 (CS1A showed the old read empty; the node read is not benched). b gets "" when unreadable. */
+static void klbf_rd_name40(DWORD p, char b[40])
 {
-    DWORD n = klh_rd32(obj + 4), s; int i;
-    b[0] = 0;
-    if (!n || !(s = klh_rd32(n + 0x6c)) || s < 0x10000) return;
+    DWORD s; int i; b[0] = 0;
+    if (!p || !(s = klh_rd32(p + 0x6c)) || s < 0x10000) return;
     for (i = 0; i < 39; i++) { if (!klh_rd(s + i, b + i, 1)) { b[0] = 0; return; } if (!b[i]) return; }
     b[39] = 0;
+}
+static void klbf_ramp_name(DWORD obj, char b[40])
+{
+    char nn[40], ln[40]; DWORD ent, node; int src = 0; static int told;
+    nn[0] = ln[0] = 0;
+    if ((ent = klh_rd32(obj + 0x24)) && (node = klh_rd32(ent + 4))) klbf_rd_name40(node, nn);
+    klbf_rd_name40(klh_rd32(obj + 4), ln);
+    kvp_name_pick(nn, ln, b, 40, &src);
+    if (told < 3) { told++; klog("botfill: ramp: name read %d of 3: obj %08lx '%s' (name source %d: %s)", told, (unsigned long)obj, b, src, src == 1 ? "node [[obj+0x24]+4]+0x6c" : src == 2 ? "legacy [[obj+4]+0x6c]" : "none readable"); }
 }
 
 /* ~5 s after the first tick of the round (also when Dry; BOS_DD02r: the entity-table walk klch_panic uses found 0 ZTriggerBox, so this is now klmove.c's PROVEN
    exit-trigger method): scan the private RW memory for the ZTriggerBox vtable, keep objects whose +0x24 entity has a vtable in the image, and read the box place
    from that entity's node (kle_node) as klbotfill does for the exit trigger. GUESS: ZTriggerBox keeps its entity at +0x24 like ZOnlineExitLevelTrigger (a trigger
-   subclass). A candidate = node within 50 units of Centre, or the name GUESS [[obj+4]+0x6c] contains Name. A miss is retried 20 s later, 3 probes a round. */
+   subclass). A candidate = node within 50 units of Centre, or the name (klbf_ramp_name: scene node first, legacy fallback) contains Name. A miss is retried 20 s later, 3 probes a round. */
 static void klbf_ramp_probe(void)
 {
     static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD total = 0, withent = 0, byname = 0, bycent = 0, t0 = GetTickCount();

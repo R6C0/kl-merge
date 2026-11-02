@@ -105,6 +105,18 @@ int main(void)
             CHECK(!kvp_pickup_decide(0, "ROOT\\X\\PC0406_Cashbox", "", &src) && src == 1, "decide: key off skips nothing");
         }
     }
+    {   char o[8]; int src = -1; /* ramp / stack-box name pick */
+        kvp_name_pick("TriggerBox_make_the_ramp", "", o, sizeof o, &src);
+        CHECK(src == 1 && !strcmp(o, "Trigger"), "name pick: node name first, truncated to cap-1");
+        kvp_name_pick("", "MoneyStack", o, sizeof o, &src);
+        CHECK(src == 2 && !strcmp(o, "MoneySt"), "name pick: empty node name falls back to legacy");
+        kvp_name_pick("A", "B", o, sizeof o, &src);
+        CHECK(src == 1 && !strcmp(o, "A"), "name pick: node wins over legacy");
+        kvp_name_pick(0, 0, o, sizeof o, &src);
+        CHECK(src == 0 && o[0] == 0, "name pick: both empty -> \"\", source 0");
+        kvp_name_pick("X", "Y", 0, 0, &src); kvp_name_pick("X", 0, o, 1, 0);
+        CHECK(o[0] == 0, "name pick: null / cap 1 safe");
+    }
     CHECK(kgu_floor(0.5f, 1, 3.0f) == 3.0f && kgu_floor(4.0f, 1, 3.0f) == 4.0f, "flop meter: raised to the floor, never lowered");
     CHECK(kgu_floor(0.5f, 0, 3.0f) == 0.5f && kgu_floor(0.5f, 1, 0) == 0.5f, "flop meter: no helper / floor off: unchanged");
     m = (float)sqrt(-1.0); CHECK(kgu_floor(m, 1, 3.0f) != kgu_floor(m, 1, 3.0f), "flop meter: NaN stays NaN");

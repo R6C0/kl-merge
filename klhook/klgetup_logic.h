@@ -267,4 +267,16 @@ static int kvp_pickup_decide(int on, const char *nodeNm, const char *legacyNm, i
     return n ? kvp_pickup_box(on, n) : 0;
 }
 
+/* Box-name pick for klbf_ramp_name (2026-11-02; same wrong-object mistake as kvp_pickup_decide fixed): the scene-node name first (src 1), else the legacy [[box+4]+0x6c]
+   read (src 2), else "" (src 0). Copies at most cap-1 chars into out (NUL-terminated). */
+static void kvp_name_pick(const char *nodeNm, const char *legacyNm, char *out, int cap, int *src)
+{
+    const char *n = (nodeNm && nodeNm[0]) ? nodeNm : 0; int s = 1, i = 0;
+    if (!n && legacyNm && legacyNm[0]) { n = legacyNm; s = 2; }
+    if (src) *src = n ? s : 0;
+    if (!out || cap < 1) return;
+    if (n) for (; i < cap - 1 && n[i]; i++) out[i] = n[i];
+    out[i] = 0;
+}
+
 #endif
