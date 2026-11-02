@@ -38,8 +38,7 @@
  *   TimeAuto=0      0 = stock. 1..20: the host's lobby starts at this Heist time (minutes) without a key press (once per lobby, host only, lobby state
  *                   0xd; LEFT/RIGHT still change it). Clamped to the offered range (TimeMin or 3 .. TimeMax or 5, kltimeauto_logic.h), so a 6-minute
  *                   lobby needs TimeMax>=6. Same setters as the RIGHT-past-ceiling path (kllo_tset). 2026-11-02.
- *                   A 9th heister has no seat in a stock level: [Lobby] ExtraSeats (TEST build) and re
-ound_end_online.md.
+ *                   A 9th heister has no seat in a stock level: [Lobby] ExtraSeats (TEST build) and re/round_end_online.md.
  */
 #ifndef KLLOBBYOPT_C
 #define KLLOBBYOPT_C
