@@ -362,6 +362,14 @@ feat('onlineleghopdy', G_EXP, 'Online AI heisters skip route legs on another flo
      'klbotfill.c [BotFill] OnlineLegHopDy (cm, 1500 for DM09); wk-rtroute-1101: tower bots could not walk to the street; needs [CrewHop] Online=1; NOT run live', [('BotFill', 'OnlineLegHopDy', 1500, 0, 0)])
 feat('onlinelateexitroute', G_EXP, 'Online AI heisters with loot leave for the van early enough for the whole walk, worked out from the route left (NOT Arcade) (recommended off until benched)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineLateExitRoute (+PadS 20, OnlineLegWalkCmS 130); wk-rt9-1102: DM09 route 310 m at 1.1-1.5 m/s needs 240 s, the fixed OnlineLateExit 75 never sent a carrier in time (RT6/RT7 0 boarded); needs OnlineLateExit > 0; NOT run live', [('BotFill', 'OnlineLateExitRoute', 1, 0, 0)])
+feat('brainprobe', G_EXP, 'Log the online host AI facts once a second (role, mode, rules pointer, tactic fields); read only (recommended off)', 'off', 'start',
+     'klbrain.c [Brain] Probe; wk-brain-1102 stage 0, answers critic items 1/3/4 of re/arcade_brain_online_1102.md; host round only; NOT run live', [('Brain', 'Probe', 1, 0, 0)])
+feat('brainbuild', G_EXP, 'Online host: give the Ally AI heisters the Arcade Loot / Board / Traitor tactics, logged but not yet steering (recommended off until benched)', 'off', 'start',
+     'klbrain.c [Brain] Build; wk-brain-1102 stage 1a: builds the 3 tactics as the ZSoldier ctor does and pushes them into the AI vectors, DLL-owned vtable copies with logging wrappers; host only; NOT run live', [('Brain', 'Build', 1, 0, 0)])
+feat('brainloot', G_EXP, 'Online host: swap a shadow rules block around one Loot tactic evaluate call; UNTESTED (recommended off)', 'off', 'start',
+     'klbrain.c [Brain] Loot (needs Build); wk-brain-1102 stage 1b, proves the swap path only; NOT run live', [('Brain', 'Loot', 1, 0, 0)])
+feat('brainpuppetoff', G_EXP, 'Online host: the bot puppeteer leaves a bot alone while its real Loot tactic wants something; UNTESTED (recommended off)', 'off', 'start',
+     'klbrain.c [Brain] PuppetOff (needs Build + Loot, PuppetWindowMs 5000); klbotfill.c OnlineTactics skips that bot\'s steering; NOT run live', [('Brain', 'PuppetOff', 1, 0, 0)])
 feat('onlinelegswithvan', G_EXP, 'Online AI heisters follow the route even on maps whose getaway van stands there from the start (DM09) (recommended off until benched)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineLegsWithVan; RT1 11-01: DM09\'s van object made the bots skip all legs and walk straight at it 60 km away; NOT run live', [('BotFill', 'OnlineLegsWithVan', 1, 0, 0)])
 feat('onlinevanafterlegs', G_EXP, 'Online AI heisters walk the route and call the van even when the van object is known from the start (DM09) (recommended off until benched)', 'off', 'start',

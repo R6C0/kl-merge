@@ -1927,6 +1927,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klbf_ot_health(o, hp, hv);
                 if (!(snd = klh_rd32(o + 0x77c)) || klh_rd32(snd) != KLE_SOLDIER_VT) continue;
                 if (!klh_rd(o + 0x460, pos, 12) || !kle_ok3(pos)) continue;      /* feet, as klcrew_rt.c (ASSUMPTION: same base class as a player) */
+                klbr_see(o, snd, now);      /* klbrain.c [Brain]: the same Ally soldier list (no second scan) */
                 bots[nb].actor = o; bots[nb].soldier = snd; memcpy(bots[nb].pos, pos, 12); nb++;
             }
         }
@@ -2042,6 +2043,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != a; s++) ;
         if (s == KLBF_OT_BOTS) { for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor; s++) ; if (s == KLBF_OT_BOTS) continue; klbf_ob[s].actor = a; }
         if (klbf_ob[s].phase == 3) continue;
+        if (klbr_puppet_off(bots[b].soldier)) continue;      /* [Brain] PuppetOff=1 (UNTESTED): the real Loot tactic of this bot wants something right now, so the puppeteer leaves its steering alone this tick */
         if (klbf_gu == 1 && klbf_ob[s].guHum && now - klbf_ob[s].guAt < 3500) {      /* OnlineGetUp: this bot runs to / stands by a downed human; its stack order must not undo the rush */
             if (klbf_ob[s].phase == 4 && klbf_lfp) { klbf_ob[s].lootAt += now - klbf_ob[s].lpLast; klbf_ob[s].lpLast = now; }      /* review: the rush gap is time away: no catch-up burst of parts afterwards */
             if (klbf_ob[s].phase == 1) { klbf_ob[s].phase = 0; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].since = now; }      /* review: a held walk to a stack is dropped (stack stays unclaimed), else its 12 s / 90 s stall clocks blacklist a reachable stack */

@@ -808,6 +808,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klnetload.c"                                   /* klnetload.c: [NetLoad] Probe / ScaleSend - load probe and sender-rate scaling for bigger lobbies (off unless set); AFTER klnet.c */
 #include "kllobby.c"                                      /* kllobby.c: [Lobby] MinPlayers - a hosted FA lobby may start below 4 (off unless set) */
 #include "kllobbyopt.c"                                   /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax - more choices on the FA lobby rows (off unless set); AFTER kllobby.c */
+#include "klbrain.c"                                      /* klbrain.c: [Brain] Probe / Build / Loot / PuppetOff - the Arcade AI tactics on the online FA host (all off unless set); AFTER kllobby.c, BEFORE klbotfill.c (which feeds it) */
 #include "klbotfill.c"                                    /* klbotfill.c: [Bots] OnlineFill plan + probe, read-only (off unless set); AFTER kllobby.c */
 #include "klcopsquad.c"                                   /* klcopsquad.c: [CopSquad] AI police under each human cop in Cops and Robbers (off unless Enable=1); AFTER klbotfill.c, klescort.c */
 #include "klsabotage.c"                                   /* klsabotage.c: [Sabotage] VanHold - the hosting UCC holds the escape van N s (off unless VanHold=1); AFTER klnet.c (KLNET_SESSION) */
@@ -1348,6 +1349,7 @@ static void klh_tick(int game_thread)
     kluc_tick(game_thread);                           /* klucc.c: [Ucc] suspicion messages (off unless Pings=1 or Accuse=1) */
     kllo_tick();                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
     klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
+    klbr_tick(game_thread);                           /* klbrain.c: [Brain] Probe / Build (off unless set) */
     klls_tick(game_thread);                            /* kllootsync.c: [BotFill] OnlineLootSync=1 collect / show (off unless set) */
     klbv_tick(game_thread);                           /* klbotvoice.c: [BotFill] OnlineVoice send (off unless 1 / 2) */
     klcl_tick(game_thread);                           /* klcrewlook.c: [BotFill] OnlineLooks=1 draw / apply (off unless set) */
@@ -1784,6 +1786,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klep_init();                                      /* klescprobe.c: [Online] EscProbe */
     klsn_init();                                      /* klhud_shopnames.c: [HUD] OnlineShopNames (after klor_init) */
     klbf_init();                                      /* klbotfill.c: reads [Bots] OnlineFill (after kllb_init: it reads the same key) */
+    klbr_init();                                      /* klbrain.c: reads [Brain] */
     klcq_init();                                      /* klcopsquad.c: reads [CopSquad] */
     klsab_init();                                     /* klsabotage.c: reads [Sabotage] */
     klkeys_check();                                   /* klkeys.c: [Keys] ClashLog - one WARN per key clash (after every module read its key) */
