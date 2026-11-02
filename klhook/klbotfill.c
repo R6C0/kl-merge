@@ -161,6 +161,7 @@ static void klbf_cen_arm(DWORD box, DWORD now)
 static void klbf_cen_tick(DWORD now)
 {
     if (!klbf_cen_on || !klbf_cen.st) return;
+    if ((LONG)(now - klbf_cen.t0) < 0) return;      /* TP2 11-02: the tick's now is taken before klbf_trig_tick arms with GetTickCount(), so now - t0 wrapped and the first census logged +10/+30 at the fire */
     if (klbf_cen.st == 1 && now - klbf_cen.t0 >= 10000u) { klbf_cen.n10 = klbf_cen_live; klbf_cen.st = 2; }
     if (klbf_cen.st == 2 && now - klbf_cen.t0 >= 30000u) {
         klog("botfill: trig: census after FIRE %08lx: cops %d at fire, %d at +10 s, %d at +30 s (team 1, health > 0; log only, OnlineTriggersCensus=1)", (unsigned long)klbf_cen.box, klbf_cen.n0, klbf_cen.n10, klbf_cen_live);
