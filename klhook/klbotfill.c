@@ -66,6 +66,8 @@ static int klbf_gw, klbf_wr, klbf_esc; static float klbf_esc_far = 800.0f, klbf_
 static DWORD klbf_eo_at;  /* van first seen in state 1-4 (any caller: a human's exit trigger sets no klbf_ot_called) */
 static int klbf_eo;      /* [BotFill] OnlineEscortOut (0 off, 1 on, 2 dry = log only): Arcade FollowOut parity, an empty-handed bot walks to the van once it is called (klbf_ot_run phase 0) */
 #include "klguard_logic.h"      /* wk-botpar OnlineGuardMode: floor gate + bypass decisions (klguard_test.c) */
+#include "klstackdiag_logic.h"      /* wk-scorefix-1102: stack state text for the gone / left-stack log lines, [BotFill] OnlineStackRecheck decision (klstackdiag_test.c) */
+static int klbf_stack_recheck;      /* [BotFill] OnlineStackRecheck (default 0, recommended off until benched) */
 #include "klwaitvan_logic.h"      /* wk-vantime-1101: [BotFill] OnlineLegWaitVan / OnlineLegWaitIdx / OnlineLegWaitMaxS, the pure decision (klwaitvan_test.c) */
 #include "klvantime_logic.h"      /* wk-vantime-1101: [BotFill] OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold, the pure decisions (klvantime_test.c) */
 #include "klway_logic.h"      /* wk-rtroute-1101: [BotFill] OnlineWayPerMap / OnlineLegHopDy, the pure decisions (klway_test.c) */
@@ -312,6 +314,7 @@ static void klbf_init(void)
     klbf_trig_pk = GetPrivateProfileIntA("BotFill", "OnlineTriggersSkipPickups", 0, klh_ini) != 0;      /* (recommended off until benched) needs OnlineTriggersExtra */
     klbf_vp_sane = GetPrivateProfileIntA("BotFill", "OnlineVanPosSane", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a van place that is far outside the map is not used: exit trigger / escape box instead */
     klbf_unpl = GetPrivateProfileIntA("BotFill", "OnlineUnplacedGuard", 0, klh_ini) != 0;      /* (recommended off until benched) every Ally bot at (0,0,0) 10 s into a round = the level squads are not running (no bots.zip): give no orders */
+    klbf_stack_recheck = GetPrivateProfileIntA("BotFill", "OnlineStackRecheck", 0, klh_ini) != 0;      /* (recommended off until benched; wk-scorefix-1102, G4) the stack list drops a stack in state 2/3 or with a hidden node */
     klbf_trig_orig = GetPrivateProfileIntA("BotFill", "OnlineTriggerOriginSkip", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a bot that reads (0,0,0) is not "inside" an OnlineTriggers box */
     klbf_bank_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBank", 0, klh_ini); if (klbf_bank_mode < 0 || klbf_bank_mode > 2) klbf_bank_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
     klbf_bc_mode = (int)GetPrivateProfileIntA("BotFill", "OnlineBankCredit", 0, klh_ini); if (klbf_bc_mode < 0 || klbf_bc_mode > 2) klbf_bc_mode = 0;      /* (recommended on once tried; 2 = dry, log only) */
@@ -1508,6 +1511,17 @@ static void klbf_sp_desc(DWORD o, char *out, int cap)
     out[cap - 1] = 0;
 }
 
+/* wk-scorefix-1102: [+0x34] amount, state byte, armed byte and node-hidden bit of a stack in the fixed text of ksd_fmt (safe reads; -1 = unreadable). Log only. */
+static void klbf_sd_text(DWORD o, char *out, int cap)
+{
+    int amt = -1, st = -1, ar = -1, hid = -1; BYTE s64 = 0xff, a6c = 0xff; DWORD ent, node, fl = 0; int vtOk = klh_rd32(o) == KLMV_MONEY_VT;
+    if (!klh_rd(o + 0x34, &amt, 4)) amt = -1;
+    if (klh_rd(o + 0x64, &s64, 1) && s64 != 0xff) st = s64;
+    if (klh_rd(o + 0x6c, &a6c, 1) && a6c != 0xff) ar = a6c;
+    if ((ent = klh_rd32(o + 0x24)) && (node = klh_rd32(ent + 4)) && klh_rd(node + 0x3c, &fl, 4)) hid = (fl & 0x400) ? 1 : 0;
+    ksd_fmt(out, cap, vtOk, amt, st, ar, hid);
+}
+
 /* a stack went gone: the fields, the per-type counts of the last scan */
 static void klbf_sp_gone(int bot, DWORD o, const char *what)
 {
@@ -1811,6 +1825,10 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 if (nm >= KLBF_OT_OBJ || !klh_rd(o + 0x38, &type, 4) || type == 1 || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act) continue;      /* drop pool, taken, or not armed (+0x6c, klmove.c 2) */
                 if (klbf_ot_door) { BYTE shut = 0; if (klh_rd(o + 0x5c, &shut, 1) && shut) { ndoor++; continue; } }      /* field 11 "behind a door" (re/bots_loot.md): cleared by the door's 'DoorOpened' relay; ZLootTactic 0x451920 skips these too */
                 if (!(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, pos, 0)) continue;
+                if (klbf_stack_recheck) {      /* OnlineStackRecheck (G4): a stack in state 2/3 or with a hidden node is not takeable (GUESS, see klstackdiag_logic.h) */
+                    BYTE s64 = 0xff; DWORD fl = 0; int st = (klh_rd(o + 0x64, &s64, 1) && s64 != 0xff) ? s64 : -1, hid = klh_rd(node + 0x3c, &fl, 4) ? ((fl & 0x400) ? 1 : 0) : -1;
+                    if (ksd_scan_drop(1, st, hid)) { static int rcRound = -1, rcN; if (rcRound != klbf_ot_rounds) { rcRound = klbf_ot_rounds; rcN = 0; } if (rcN++ < 6) klog("botfill: tactics: scan: stack %08lx dropped (state %d, hidden %d; OnlineStackRecheck)", (unsigned long)o, st, hid); continue; }
+                }
                 mo[nm] = o; mamt[nm] = amt; memcpy(mpos[nm], pos, 12); nm++;
             }
         }
@@ -1903,7 +1921,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             DWORD o = klbf_ob[s].target; int amt = 0; BYTE act = 0; DWORD ent, node; float mp[3], dh = 0;
             if (klh_rd32(o) != KLMV_MONEY_VT || !klh_rd(o + 0x34, &amt, 4) || amt <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act || !(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, mp, 0)) {
                 int di = klbf_df ? klbf_df_pick(o, s, now) : -1;      /* OnlineDropFollow: a type-1 drop armed near the vanished stack (SP1: the drained stack's money) */
-                klog("botfill: tactics: bot %d (actor %08lx): stack %08lx is gone before it got there (taken by someone else?)", s, a, o); klbf_sp_gone(s, o, "stack gone before arrival");
+                { char sd[96]; klbf_sd_text(o, sd, sizeof sd); klog("botfill: tactics: bot %d (actor %08lx): stack %08lx is gone before it got there (taken by someone else?) [%s]", s, a, o, sd); } klbf_sp_gone(s, o, "stack gone before arrival");
                 if (di >= 0) {
                     klog("botfill: dropfollow: bot %d (actor %08lx) follows the money of stack %08lx to drop %08lx (amt %d, at (%.0f, %.0f, %.0f), %.1f m from the bot, %lu s armed)%s", s, a, (unsigned long)o, (unsigned long)klbf_dr[di].o, klbf_dr[di].amt, klbf_dr[di].pos[0], klbf_dr[di].pos[1], klbf_dr[di].pos[2], kle_dist(bots[b].pos, klbf_dr[di].pos) / 100, (unsigned long)((now - klbf_dr[di].first) / 1000), klbf_ot_take == 2 ? "" : " (OnlineTacticsTake is not 2: arrival log only)");
                     klbf_ob[s].target = klbf_dr[di].o; klbf_ob[s].since = now; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].told &= ~2097152;      /* stays in phase 1: the order block re-reads the drop's node every tick */
@@ -1992,7 +2010,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 }
             }
             if (stop && klbf_lf) klbf_lf_left++;
-            if (stop) { klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; %s)", s, (unsigned long)o, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally, why); klbf_ob[s].phase = 0; if (klbf_pr && klbf_ob[s].tally > 0) klbf_ob[s].prAt = now; if (klbf_ot_nbad < KLBF_OT_OBJ) { klbf_ot_badAt[klbf_ot_nbad] = now; klbf_ot_badLong[klbf_ot_nbad] = 1; klbf_ot_bad[klbf_ot_nbad++] = o; } }      /* review: a partial stop blacklists the stack like a give-up, else the nearest-stack pick re-targets it and loops */
+            if (stop) { char sd[96]; klbf_sd_text(o, sd, sizeof sd); klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; %s) [%s]", s, (unsigned long)o, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].tally, why, sd); klbf_ob[s].phase = 0; if (klbf_pr && klbf_ob[s].tally > 0) klbf_ob[s].prAt = now; if (klbf_ot_nbad < KLBF_OT_OBJ) { klbf_ot_badAt[klbf_ot_nbad] = now; klbf_ot_badLong[klbf_ot_nbad] = 1; klbf_ot_bad[klbf_ot_nbad++] = o; } }      /* review: a partial stop blacklists the stack like a give-up, else the nearest-stack pick re-targets it and loops */
         }
         if (klbf_ob[s].phase == 0) {
             int nguard = 0, gbest = -1, idleVan = 0, nhold = 0, nfreeG = 0; float gbd = 1e30f;
