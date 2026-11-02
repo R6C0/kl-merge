@@ -64,6 +64,7 @@ C_TESTS = {
     'kldoorhold_test.c': 'logic',     # kldoorhold_logic.h (OnlineDoorHold pure decision, no windows.h)
     'kltimeauto_test.c': 'logic',     # kltimeauto_logic.h ([Lobby] TimeAuto clamp / when to apply, no windows.h)
     'klstackdiag_test.c': 'logic',     # klstackdiag_logic.h (stack state log text + OnlineStackRecheck scan decision, no windows.h)
+    'klstackhid_test.c': 'logic',      # klstackhid_logic.h ([BotFill] OnlineStackRecheckHid grace for state 0 + hidden 1 stacks, no windows.h)
     'klvantime_test.c': 'logic',      # klvantime_logic.h (OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold pure part, no windows.h)
     'klassoft_test.c': 'logic',        # klassoft_logic.h (AssertSoft list parse, no windows.h)
     'klhud_boardbots_test.c': 'logic', # klhud_boardbots_logic.h ([HUD] OnlineBoardBots: AI heister rows of the online round-over card)
