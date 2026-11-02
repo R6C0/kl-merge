@@ -1,3 +1,7 @@
+2026-11-02 ~12:25 - [ce] CO2 SAFE, NOT EXERCISED: DD05 both rows 0 asserts/faults, but the tele ran before state 0x19 (REFUSED), ents 'Cop' found only
+helicopter props and the goto stalled 4300-5000 units short, so no YOU HOLD; kit co3 (wait for 0x19, real cop places) being staged. ES2 SAFE, FEATURE FAIL: still
+'8 human(s), 0 dropped', because the bots' pos[] is the lagging +0x460 while the table feet are node feet. Fix ccc030f83 (entity identity + bot node feet), kit es3 queued after vb1.
+
 2026-11-02 ~11:40 - [c9] SN2 PASS = the NEXT_SHIP candidate as a whole (c9_1028/ship_next: KLHook_next.ini + dll_0925, SHIP 56ac45c1 / TEST eb4c46d8,
 c9ffcc3cf): DM01, DM03, DD05 online, 2 seats, Carry 8 (dt1 PASS): asserts 0, soft 0, faults 0 everywhere, script pass at round 2. DM01 and DD05 coverdump
 IDENTICAL. DM03 'DIVERGE at 556, client-only 8' is a time skew: the host's one dump was 11:08:32, before its car #0 ring was built (spare 400);
