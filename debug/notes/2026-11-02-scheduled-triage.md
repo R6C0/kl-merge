@@ -33,3 +33,27 @@ Written into `re/lobby_options.md` ("Row order and keyboard navigation") and the
 
 ## Owner
 - Nothing to install or decide. RT5 (6-minute DM09) is c9's bench to run when the game is free; its script step is no longer a guess.
+
+# Scheduled check-in 2026-11-02 ~06:55 UTC (cloud; DD/DM attached by one access request)
+
+## PC state (read only; nothing launched, installed or staged into the game folder)
+- BUSY: `<DD>\dinput8.dll`, `ReShade.log` and `ReShadePreset_KLLive.ini` written 06:51 UTC (a bench was running as this check-in
+  started); origin head 8165496 at 06:45 UTC (ce's shoppic merge), 8 commits between 06:07 and 06:45. No game run, no install, no screen.
+- `KLHook.result` still the 10-27 PASS (F04); `KLHook.log` ends 10-27 20:50 (benches log into their own inst dirs).
+- Dumps: newest `KLHook_1.dmp` 10-26 08:11 and `kl2_490_crash_2026_10_25T19_18_39C0.mdmp`, both older than their notes. Nothing to triage.
+- `<DM>\KL_PortTools\build`: newest `carcover_1101` (11-01 20:02). (`hasta_e11nests_1018` is a dangling symlink there; harmless.)
+
+## Finding (self-test, no crash): klstackdiag_test FAILED on Linux, a host-dependent off-by-one in ksd_fmt
+First cloud run of the 32-bit C tests on today's head (gcc-multilib installed here): `kl_tests` 54 pass / 1 FAIL / 15 skip.
+`klhook/klstackdiag_logic.h` (4ebe301, wk-scorefix-1102, included by klbotfill.c) called `_snprintf(out, cap - 1, ...)` and then
+`out[cap - 1] = 0`. MSVC `_snprintf` writes cap-1 characters with no terminator when it fills the count, so cl gives cap-1 characters;
+C99 `snprintf` (the shim's `-D_snprintf=snprintf`) terminates inside the count, so Linux gave cap-2 and the "truncated and
+terminated" check (expects 11 of 12) read 10. Fix: count = cap, terminate at cap-1, the pattern klgrades.h / klshot_logic.h already
+use, identical output on both hosts. Live effect: none (the caller passes a 96-byte buffer, the text is < 70 characters; log only).
+After the fix: 55 pass / 0 fail / 15 skip (the 15 are SDK-only or need real audio files).
+`tools/run_harness_linux.sh --check-hook` (MinGW -fsyntax-only, SHIP + TEST): 0 errors; warnings are unused variables, the two
+stubbed naked forwarders and MinGW not knowing `%I64d` (klslot.c:414, correct under MSVC). pyflakes on the 66 tools/debug .py files
+changed since 10-25: no undefined names or syntax errors.
+
+## Owner
+- Nothing to install or decide. The fix is header-only; it reaches the DLL at the next build the local sessions make.

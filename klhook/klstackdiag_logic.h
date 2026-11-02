@@ -10,8 +10,11 @@
 static void ksd_fmt(char *out, int cap, int vtOk, int amt, int st, int armed, int hid)
 {
     if (cap <= 0) return;
-    if (!vtOk) _snprintf(out, cap - 1, "[+0x34]=%d state %d armed %d hidden %d (NOT the money vtable)", amt, st, armed, hid);
-    else _snprintf(out, cap - 1, "[+0x34]=%d state %d armed %d hidden %d", amt, st, armed, hid);
+    /* count = cap, then terminate at cap-1: the klgrades.h / klshot_logic.h pattern. It yields cap-1 characters under both MSVC
+       _snprintf (no terminator when it fills the buffer) and C99 snprintf (the shim maps _snprintf to it); `cap - 1` gave cap-2 on
+       the C99 side, which failed klstackdiag_test's truncation check on Linux (11-02 cloud run, first with gcc -m32). */
+    if (!vtOk) _snprintf(out, cap, "[+0x34]=%d state %d armed %d hidden %d (NOT the money vtable)", amt, st, armed, hid);
+    else _snprintf(out, cap, "[+0x34]=%d state %d armed %d hidden %d", amt, st, armed, hid);
     out[cap - 1] = 0;
 }
 
