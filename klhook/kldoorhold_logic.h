@@ -15,6 +15,8 @@ struct kdh_st {
     int ev;                /* 1 = hold just started, 2 = just ended: the caller logs it and clears this */
     int armed;             /* an armed stack has been seen this round */
     int min_shut;          /* lowest shut count seen since the first armed stack */
+    int zero_n;            /* consecutive ticks with no shut stack (2 = all open) */
+    unsigned zero_now;     /* the tick of the last zero count */
     unsigned min_at;       /* tick when min_shut was reached (or the first armed stack appeared) */
 };
 
@@ -30,7 +32,11 @@ static int kdh_step(struct kdh_st *h, int on, int hold_s, unsigned now, unsigned
     }
     if (narmed > 0 && !h->armed) { h->armed = 1; h->min_shut = nshut; h->min_at = now; }
     if (h->armed && nshut < h->min_shut) { h->min_shut = nshut; h->min_at = now; }
-    if (nshut <= 0) { h->state = 2; h->reason = KDH_OPEN; h->ev = 2; return 0; }
+    if (nshut > 0) h->zero_n = 0;
+    else {      /* review: one zero tick may be a failed registry read; "all open" needs two different ticks in a row (same now = same tick, the caller runs this once per bot) */
+        if (!h->zero_n || now != h->zero_now) { h->zero_n++; h->zero_now = now; }
+        if (h->zero_n >= 2) { h->state = 2; h->reason = KDH_OPEN; h->ev = 2; return 0; }
+    }
     if (late) { h->state = 2; h->reason = KDH_LATE; h->ev = 2; return 0; }
     if ((unsigned)(now - start) >= (unsigned)kdh_clamp(hold_s) * 1000u) { h->state = 2; h->reason = KDH_TIMER; h->ev = 2; return 0; }
     if (h->armed && (unsigned)(now - h->min_at) >= KDH_STALL_MS) { h->state = 2; h->reason = KDH_STALL; h->ev = 2; return 0; }

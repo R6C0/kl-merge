@@ -18,7 +18,11 @@ int main(void)
     CHECK(kdh_applies(1, 0) == 1 && kdh_applies(1, 500) == 0 && kdh_applies(0, 0) == 0, "tally > 0 is not held");
     CHECK(kdh_step(&h, 1, 90, t0 + 3000, t0, 48, 0, 0) == 1 && h.ev == 0, "still holding, no second start event");
     /* all open */
-    CHECK(kdh_step(&h, 1, 90, t0 + 40000, t0, 0, 20, 0) == 0 && h.state == 2 && h.reason == KDH_OPEN && h.ev == 2, "all doors open ends it");
+    CHECK(kdh_step(&h, 1, 90, t0 + 40000, t0, 0, 20, 0) == 1 && h.state == 1 && h.ev == 0, "one zero tick does not latch");
+    CHECK(kdh_step(&h, 1, 90, t0 + 40000, t0, 0, 20, 0) == 1 && h.state == 1, "same tick again (second bot) is still one tick");
+    CHECK(kdh_step(&h, 1, 90, t0 + 40500, t0, 5, 20, 0) == 1 && h.zero_n == 0, "a nonzero count resets the zero run");
+    CHECK(kdh_step(&h, 1, 90, t0 + 41000, t0, 0, 20, 0) == 1 && h.state == 1, "zero, one tick again");
+    CHECK(kdh_step(&h, 1, 90, t0 + 41500, t0, 0, 20, 0) == 0 && h.state == 2 && h.reason == KDH_OPEN && h.ev == 2, "two zero ticks in a row: all doors open ends it");
     CHECK(kdh_step(&h, 1, 90, t0 + 41000, t0, 5, 20, 0) == 0, "latched for the round");
 
     /* timer */
