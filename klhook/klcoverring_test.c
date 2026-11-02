@@ -61,6 +61,44 @@ int main(void)
     CHECK(kcr_rw_trigger(0, 8, 2, 14999) == KCR_RW_NONE); CHECK(kcr_rw_trigger(0, 8, 2, 15000) == KCR_RW_SPARE); CHECK(kcr_rw_trigger(0, 0, 2, 99999) == KCR_RW_NONE);
     CHECK(kcr_rw_gate(1, 1, 1, 0x19)); CHECK(!kcr_rw_gate(0, 1, 1, 0x19)); CHECK(!kcr_rw_gate(1, 0, 1, 0x19)); CHECK(!kcr_rw_gate(1, 1, 0, 0x19)); CHECK(!kcr_rw_gate(1, 1, 1, 0x1a));
     CHECK(kcr_rw_after_ok(556, 556, 1)); CHECK(!kcr_rw_after_ok(556, 564, 1)); CHECK(!kcr_rw_after_ok(556, 556, 0));
+    /* ClientRingSync (CR8) */
+    {
+        struct kcr_rhdr h, h2; struct kcr_rpt a[8], b[8]; unsigned char pk[KCR_RS_HDR + 8 * KCR_RS_REC + 8]; int i, k, len; unsigned long own[8] = { 556, 557, 558, 559, 560, 561, 562, 563 };
+        memset(a, 0, sizeof a);
+        for (i = 0; i < 8; i++) { a[i].idx = 556 + i; a[i].flags = (i & 1) ? 0x1412 : 0x140a; a[i].pos[0] = 3000.5f + i; a[i].pos[1] = -1230.25f; a[i].pos[2] = 12.0f; for (k = 0; k < 9; k++) a[i].blk[k] = 0x01020304ul * (unsigned long)(k + i); a[i].f24 = 0xdeadbeeful; }
+        h.T = 123456789ul; h.seq = 7; h.ord = 3; h.n = 8;
+        len = kcr_ring_pack(pk, sizeof pk, &h, a);
+        CHECK(len == KCR_RS_HDR + 8 * KCR_RS_REC); CHECK(len <= 1472);
+        CHECK(kcr_ring_unpack(pk, len, &h2, b) == 8);
+        CHECK(h2.T == h.T && h2.seq == 7 && h2.ord == 3 && h2.n == 8);
+        for (i = 0; i < 8; i++) { CHECK(b[i].idx == a[i].idx && b[i].flags == a[i].flags && b[i].f24 == a[i].f24 && b[i].pos[0] == a[i].pos[0] && b[i].pos[1] == a[i].pos[1] && b[i].pos[2] == a[i].pos[2]); for (k = 0; k < 9; k++) CHECK(b[i].blk[k] == a[i].blk[k]); }
+        CHECK(kcr_ring_pack(pk, len - 1, &h, a) == 0);                                    /* cap too small */
+        h.n = 0; CHECK(kcr_ring_pack(pk, sizeof pk, &h, a) == 0); h.n = 9; CHECK(kcr_ring_pack(pk, sizeof pk, &h, a) == 0); h.n = 8;
+        h.seq = 0; CHECK(kcr_ring_pack(pk, sizeof pk, &h, a) == 0); h.seq = 7;
+        a[2].idx = KCR_RS_MAXIDX; CHECK(kcr_ring_pack(pk, sizeof pk, &h, a) == 0); a[2].idx = 558;
+        len = kcr_ring_pack(pk, sizeof pk, &h, a);
+        pk[4] = 'X'; CHECK(kcr_ring_unpack(pk, len, &h2, b) == 0); pk[4] = 'R';              /* bad magic */
+        pk[14] = 2; CHECK(kcr_ring_unpack(pk, len, &h2, b) == 0); pk[14] = 1;               /* bad version */
+        CHECK(kcr_ring_unpack(pk, len - 1, &h2, b) == 0); CHECK(kcr_ring_unpack(pk, len + 1, &h2, b) == 0); CHECK(kcr_ring_unpack(pk, 10, &h2, b) == 0);   /* short / long */
+        pk[15] = 9; CHECK(kcr_ring_unpack(pk, len, &h2, b) == 0); pk[15] = 0; CHECK(kcr_ring_unpack(pk, len, &h2, b) == 0); pk[15] = 8;
+        pk[18] = 1; CHECK(kcr_ring_unpack(pk, len, &h2, b) == 0); pk[18] = 0;
+        pk[KCR_RS_HDR + 3] = 0xff; CHECK(kcr_ring_unpack(pk, len, &h2, b) == 0); pk[KCR_RS_HDR + 3] = 0;            /* index out of range (idx >= 100000 after the high byte is set) */
+        CHECK(kcr_ring_unpack(pk, len, &h2, b) == 8);
+        CHECK(kcr_ring_unpack(0, len, &h2, b) == 0);
+        /* apply decision: host usable + client spare = write; already usable = skip; host spare = skip */
+        CHECK(kcr_ring_apply_decision(0x400, 0x140a)); CHECK(kcr_ring_apply_decision(0x400, 0x1012)); CHECK(kcr_ring_apply_decision(0, 0x200));
+        CHECK(!kcr_ring_apply_decision(0x100a, 0x140a)); CHECK(!kcr_ring_apply_decision(0x1012, 0x1012));      /* client usable: never overwritten */
+        CHECK(!kcr_ring_apply_decision(0x400, 0x400)); CHECK(!kcr_ring_apply_decision(0x100a, 0x400)); CHECK(!kcr_ring_apply_decision(0, 0));   /* host spare */
+        /* ownership and bounds */
+        CHECK(kcr_rs_idx_owned(own, 8, 556, 1580)); CHECK(kcr_rs_idx_owned(own, 8, 563, 1580)); CHECK(!kcr_rs_idx_owned(own, 8, 564, 1580));
+        CHECK(!kcr_rs_idx_owned(own, 8, 560, 560)); CHECK(!kcr_rs_idx_owned(own, 4, 560, 1580)); CHECK(!kcr_rs_idx_owned(0, 8, 556, 1580));
+        CHECK(kcr_rs_car_sendable(1, 8, own, 1580)); CHECK(!kcr_rs_car_sendable(0, 8, own, 1580)); CHECK(!kcr_rs_car_sendable(1, 0, own, 1580)); CHECK(!kcr_rs_car_sendable(1, 9, own, 1580)); CHECK(!kcr_rs_car_sendable(1, 8, own, 560));
+        { float p1[3] = { 0, 0, 0 }, p2[3] = { 19, 0, 0 }, p3[3] = { 21, 0, 0 }; CHECK(!kcr_rs_moved(p1, p2)); CHECK(kcr_rs_moved(p1, p3)); }
+        { volatile float z = 0.0f; float ok[3] = { 3425, -1230, 12 }, nan3[3] = { 0, 0, 0 }, big[3] = { 2e7f, 0, 0 }, inf3[3] = { 0, 0, 0 };
+          nan3[1] = z / z; inf3[2] = 1.0f / z;
+          CHECK(kcr_rs_pos_ok(ok)); CHECK(!kcr_rs_pos_ok(nan3)); CHECK(!kcr_rs_pos_ok(big)); CHECK(!kcr_rs_pos_ok(inf3)); }
+        CHECK(kcr_rs_next_seq(1) == 2 && kcr_rs_next_seq(65535) == 1 && kcr_rs_next_seq(0) == 1);
+    }
     printf("klcoverring_test: %d checks, %d fail\n", checks, fails);
     return fails != 0;
 }

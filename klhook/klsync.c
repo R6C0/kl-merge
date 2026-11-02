@@ -237,6 +237,9 @@ static int klls_send(DWORD now, int force);
 static void klbv_rx(const char *pk, int len, DWORD now, unsigned long from);
 /* klgetupbeacon.c: OnlineGetUpBeacon, the downed machine's 'KLSYD' to the host (klgb_on is klbotfill.c's) */
 static void klgb_host_rx(DWORD now);
+/* klcoverring_sync.c: [CoverRing] ClientRingSync, the host's car cover points 'KLSYR' (kcr is klcoverring.c's, included before this file) */
+static void kcr_rs_rx(const char *pk, int len, DWORD now, unsigned long from);
+static void kcr_rs_host(DWORD now);
 
 static void klsy_open(void)
 {
@@ -1008,12 +1011,12 @@ static void klsy_drain(void)
 static void klsy_tick(int game_thread)
 {
     DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0;
-    if (!(klsy.on || klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on || klcl_on || klls_on || klbv_mode || klgb_on) || !game_thread || !klh_exe_ok) return;
+    if (!(klsy.on || klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on || klcl_on || klls_on || klbv_mode || klgb_on || kcr.rs) || !game_thread || !klh_exe_ok) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) { klsy_leave(); return; }
     if (!klh_rd(sm + 0x54, &role, 4) || !klh_rd(sm + 0x5c, &mode, 4) || !klh_rd(sm + 0x70, &state, 4)) { klsy_leave(); return; }
     if (klsy.on < 2 && ((role != 2 && role != 3) || mode != 4)) { klsy_leave(); return; }
     if (state < 0x13 || state > 0x1f) { klsy_leave(); return; }                /* in a round (botfill's window) */
-    if ((klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on || klcl_on || klls_on || klbv_mode || klgb_on) && !klsy.sock) klsy_open();
+    if ((klsy.share || klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on || klcl_on || klls_on || klbv_mode || klgb_on || kcr.rs) && !klsy.sock) klsy_open();
     if (!klsy.inwin) {                                                         /* entering the window: nothing from before this moment counts */
         klsy.inwin = 1; klsy_drain();
         klsy.nhost = 0; klsy.applyRx = 0; klsy.rxT = 0; klsy.rxAnchored = 0; klsy.srcSet = 0; klsy.agree = 0; klsy.nbad = 0;
@@ -1037,15 +1040,17 @@ static void klsy_tick(int game_thread)
     }
     if (kpl.on && role == 2 && klsy.sock && now - kpl.shAt >= klsy.shareMs) kpl_send(sm, now);         /* PlayerProbe: the host's player table places */
     if (klls_on && role == 2 && klsy.sock) klls_send(now, 0);                                           /* OnlineLootSync=1: the host's bot loot list (kllootsync.c; its own schedule) */
+    if (kcr.rs && role == 2 && klsy.sock) kcr_rs_host(now);                                            /* ClientRingSync=1: the host's car cover points (klcoverring_sync.c) */
     if (klgb_on && role == 2 && klsy.sock) klgb_host_rx(now);                                          /* OnlineGetUpBeacon=1: the downed machines' 'KLSYD' (klgetupbeacon.c) */
     if (klcl_on && role == 2 && klsy.sock) klcl_send(sm, now);                                        /* OnlineLooks=1: the host's look list (its own schedule) */
-    if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on || klcl_on || klls_on || klbv_mode || klgb_on) && role == 3 && klsy.sock) {                                /* client: take the newest FRESH host list, compare once a second */
+    if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on || klcl_on || klls_on || klbv_mode || klgb_on || kcr.rs) && role == 3 && klsy.sock) {                                /* client: take the newest FRESH host list, compare once a second */
         static char pk[16 + KLSY_MAXP * KLSY_REC]; klsy_sin from; int fl, len, k;
         for (k = 0; k < 256; k++) {                                                            /* drain the whole queue; the newest acceptable list wins */
             WORD cnt; DWORD T; int age;
             fl = sizeof from; len = klsy.recvfrom(klsy.sock, pk, sizeof pk, 0, &from, &fl);
             if (len < 0) break;
             if (len >= 24 && !memcmp(pk, "KLSYL", 5)) { if (klcl_on) klcl_rx(pk, len, now, from.addr); continue; }      /* OnlineLooks=1: the host's look list */
+            if (len >= 24 && !memcmp(pk, "KLSYR", 5)) { if (kcr.rs) kcr_rs_rx(pk, len, now, from.addr); continue; }      /* ClientRingSync: the host's car cover points */
             if (len >= 20 && !memcmp(pk, "KLSYV", 5)) { if (klbv_mode) klbv_rx(pk, len, now, from.addr); continue; }      /* OnlineVoice: the host's bot event line */
             if (len >= 28 && !memcmp(pk, "KLSYB", 5)) { if (klls_on) klls_rx(pk, len, now, from.addr); continue; }      /* OnlineLootSync=1: the host's bot loot list */
             if (!(klsy.cmp || klsy.apply || ksp.pup || ksp.diag || kpl.on)) continue;                                  /* OnlineLooks alone: no other list is used */

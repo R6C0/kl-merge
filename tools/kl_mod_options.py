@@ -478,6 +478,8 @@ feat('clientbuildmaps', G_STAB, 'Cover spots at load: the map slots it acts on (
 F[-1]['str'] = 1
 feat('clientrewrite', G_EXP, 'Online Dead Men maps with parked cars: a joining player re-fits the car cover spots when the car starts (needs the two rows above) (recommended off until benched)', 'off', 'start',
      'klcoverring.c [CoverRing] ClientRewrite (CR6): client only, re-runs the ring writer 0x81b6f0 for a prebuilt car whose state changes (done cleared first, rsv=1 keeps the indices); NOT run live', [('CoverRing', 'ClientRewrite', 1, 0, 0)])
+feat('clientringsync', G_EXP, 'Online Dead Men maps with parked cars: the host shares its car cover spots so none is usable for the host but missing for a joining player (needs ClientBuild on both) (recommended off until benched)', 'off', 'start',
+     'klcoverring_sync.c [CoverRing] ClientRingSync (CR8): host sends each car 8 cover points (KLSYR, UDP 27415), client copies a point only where the host point is usable and its own is a spare; NOT run live', [('CoverRing', 'ClientRingSync', 1, 0, 0)])
 feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', 'start',
      'avoids the 2 GB heap NULL crash on large .prm files', [('Memory', 'Enable', 1, 0, 1)])
 feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call runs out of memory without it)', 'on', 'start',

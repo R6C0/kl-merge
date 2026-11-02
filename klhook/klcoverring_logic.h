@@ -7,6 +7,8 @@
 #ifndef KLCOVERRING_LOGIC_H
 #define KLCOVERRING_LOGIC_H
 
+#include <string.h>
+
 #define KCR_FAST_MS 90000UL                 /* poll every tick this long after the load */
 #define KCR_SLOW_MS 5000UL                  /* then every 5 s */
 #define KCR_MAX_ENUM 60                     /* cap of car enumerations per load (log budget) */
@@ -143,5 +145,111 @@ static int kcr_rw_gate(int enabled, int client, int cb_done_ok, unsigned long st
 
 /* after the call: the count must be unchanged and the indices equal; anything else = the reserve path ran (rsv semantics wrong) -> feature off */
 static int kcr_rw_after_ok(unsigned long cnt_before, unsigned long cnt_after, int idx_same) { return cnt_before == cnt_after && idx_same; }
+
+/* ---- ClientRingSync (CR8, 2026-11-02): the HOST sends the cover points of each prebuilt car ('KLSYR', UDP 27415 broadcast, the KLSYV socket); the CLIENT copies a point
+   into its own list only where the host's point is usable and the client's is a spare. Reason (CR7): the ring is a function of the car's world pose at call time and the car is
+   NOT replicated (GUESS: no ZHavokCar net sync in the RTTI), so the rings differ per seat (yaw 11 vs 0 deg on DM03 car #0); only a copy makes "usable on the host" imply
+   "usable on the client". Pure encode / decode / decision here; no game memory.
+   KLSYR (little endian), header 24 bytes then n x 60 bytes:
+      0 8 "KLSYR\0\0\0" | 8 u32 T (host klsy_T) | 12 u16 seq | 14 u8 ver=1 | 15 u8 n (1..8) | 16 u16 car ordinal (entity-table order, informational) | 18 u16 0 | 20 u32 0
+      per point: u32 idx | u32 flags [pt+0x68] | f32 x3 [pt+0x28] | 9 x u32 [pt+0x40..0x63] | u32 [pt+0x24]
+   The format is a GUESS of this build. */
+#define KCR_RS_HDR   24
+#define KCR_RS_REC   60
+#define KCR_RS_MAXN  8
+#define KCR_RS_MAXIDX 100000ul
+#define KCR_RS_MS    1000UL                 /* host: every car is re-sent this often (a lost datagram is repaired by the next) */
+#define KCR_RS_MAXCARS 16                   /* host: cars per sweep (1 packet each, ~504 bytes, far under the 1472 MTU) */
+#define KCR_RS_MOVED 20.0f                  /* a client point farther than this from the host's one is only LOGGED (stage 1 never overwrites a usable point) */
+
+struct kcr_rpt { unsigned long idx, flags, blk[9], f24; float pos[3]; };
+struct kcr_rhdr { unsigned long T; unsigned seq, ord, n; };
+
+static void kcr_rs_p32(unsigned char *p, unsigned long v) { p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24); }
+static unsigned long kcr_rs_g32(const unsigned char *p) { return (unsigned long)p[0] | (unsigned long)p[1] << 8 | (unsigned long)p[2] << 16 | (unsigned long)p[3] << 24; }
+static void kcr_rs_pf(unsigned char *p, float f) { unsigned long v; memcpy(&v, &f, 4); kcr_rs_p32(p, v); }
+static float kcr_rs_gf(const unsigned char *p) { unsigned long v = kcr_rs_g32(p); float f; unsigned int u = (unsigned int)v; memcpy(&f, &u, 4); return f; }
+
+/* bytes written, 0 = refused (cap, n, an index out of range, seq 0) */
+static int kcr_ring_pack(unsigned char *out, int cap, const struct kcr_rhdr *h, const struct kcr_rpt *pts)
+{
+    unsigned i; int k, len;
+    if (!out || !h || !pts || h->n < 1u || h->n > KCR_RS_MAXN || h->seq < 1u || h->seq > 65535u || h->ord > 65535u) return 0;
+    len = KCR_RS_HDR + (int)h->n * KCR_RS_REC;
+    if (cap < len) return 0;
+    for (i = 0; i < h->n; i++) if (pts[i].idx >= KCR_RS_MAXIDX) return 0;
+    memset(out, 0, (size_t)len);
+    memcpy(out, "KLSYR", 5);
+    kcr_rs_p32(out + 8, h->T); out[12] = (unsigned char)h->seq; out[13] = (unsigned char)(h->seq >> 8); out[14] = 1; out[15] = (unsigned char)h->n;
+    out[16] = (unsigned char)h->ord; out[17] = (unsigned char)(h->ord >> 8);
+    for (i = 0; i < h->n; i++) {
+        unsigned char *r = out + KCR_RS_HDR + i * KCR_RS_REC;
+        kcr_rs_p32(r, pts[i].idx); kcr_rs_p32(r + 4, pts[i].flags);
+        for (k = 0; k < 3; k++) kcr_rs_pf(r + 8 + k * 4, pts[i].pos[k]);
+        for (k = 0; k < 9; k++) kcr_rs_p32(r + 20 + k * 4, pts[i].blk[k]);
+        kcr_rs_p32(r + 56, pts[i].f24);
+    }
+    return len;
+}
+
+/* n points decoded (1..8), 0 = refused: short / long / foreign magic / wrong version / reserved bytes / n out of range / index out of range / T or seq out of range */
+static int kcr_ring_unpack(const unsigned char *pk, int len, struct kcr_rhdr *h, struct kcr_rpt *pts)
+{
+    unsigned i; int k;
+    if (!pk || !h || !pts || len < KCR_RS_HDR || memcmp(pk, "KLSYR\0\0\0", 8)) return 0;
+    if (pk[14] != 1 || pk[18] || pk[19] || kcr_rs_g32(pk + 20)) return 0;
+    h->T = kcr_rs_g32(pk + 8); h->seq = (unsigned)pk[12] | (unsigned)pk[13] << 8; h->n = pk[15]; h->ord = (unsigned)pk[16] | (unsigned)pk[17] << 8;
+    if (h->T >= 1000000000ul || h->seq < 1u || h->n < 1u || h->n > KCR_RS_MAXN || len != KCR_RS_HDR + (int)h->n * KCR_RS_REC) return 0;
+    for (i = 0; i < h->n; i++) {
+        const unsigned char *r = pk + KCR_RS_HDR + i * KCR_RS_REC;
+        memset(&pts[i], 0, sizeof pts[i]);
+        pts[i].idx = kcr_rs_g32(r); pts[i].flags = kcr_rs_g32(r + 4);
+        if (pts[i].idx >= KCR_RS_MAXIDX) return 0;
+        for (k = 0; k < 3; k++) pts[i].pos[k] = kcr_rs_gf(r + 8 + k * 4);
+        for (k = 0; k < 9; k++) pts[i].blk[k] = kcr_rs_g32(r + 20 + k * 4);
+        pts[i].f24 = kcr_rs_g32(r + 56);
+    }
+    return (int)h->n;
+}
+
+/* the next seq (1..65535) */
+static unsigned kcr_rs_next_seq(unsigned s) { return s >= 65535u || s < 1u ? 1u : s + 1u; }
+
+/* what to do with one received point. 1 = write it into the client's slot (host usable, client spare). 0 = leave: the host's point is a spare (nothing to give), or the client's is
+   already usable (stage 1 never overwrites a usable point: no position / nav churn). */
+static int kcr_ring_apply_decision(unsigned long client_flags, unsigned long host_flags) { return kcr_pt_usable(host_flags) && !kcr_pt_usable(client_flags); }
+
+/* 1 when the points are farther apart than KCR_RS_MOVED on any axis pair (squared distance); used for the log only */
+static int kcr_rs_moved(const float *a, const float *b)
+{
+    float dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2];
+    return dx * dx + dy * dy + dz * dz > KCR_RS_MOVED * KCR_RS_MOVED;
+}
+
+/* a received position is written only when every axis is finite and inside +-1e7 (a NaN fails both compares) */
+static int kcr_rs_pos_ok(const float *p)
+{
+    int k;
+    for (k = 0; k < 3; k++) if (!(p[k] > -1e7f && p[k] < 1e7f)) return 0;
+    return 1;
+}
+
+/* may this index be written? it must be one of the client's own car's ring indices (idx list of n entries) and inside the points vector; anything else = the car sets differ */
+static int kcr_rs_idx_owned(const unsigned long *own, unsigned long nown, unsigned long idx, unsigned long npts)
+{
+    unsigned long k;
+    if (!own || idx >= npts) return 0;
+    for (k = 0; k < nown && k < 8ul; k++) if (own[k] == idx) return 1;
+    return 0;
+}
+
+/* host side: may a car be sent? built ring (done 1), 1..8 indices, every index inside the points vector */
+static int kcr_rs_car_sendable(unsigned long done, unsigned long n, const unsigned long *idx, unsigned long npts)
+{
+    unsigned long k;
+    if ((done & 0xfful) != 1ul || n < 1ul || n > 8ul) return 0;
+    for (k = 0; k < n; k++) if (idx[k] >= npts) return 0;
+    return 1;
+}
 
 #endif

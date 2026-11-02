@@ -47,6 +47,7 @@
 static struct {
     int on, callers, bad, have, nenum;
     int rw, rw_bad, npre; DWORD rw_t;                                                         /* ClientRewrite (CR6) */
+    int rs, rs_bad, rs_mis, rs_seq, rs_srcset; DWORD rs_t, rs_nrx, rs_nap, rs_toldrx, rs_nchg; unsigned long rs_src;   /* ClientRingSync (CR8, klcoverring_sync.c); rs_bad 1 = fault (run), 2 = mismatches (this load) */
     struct { DWORD car, script, s8c0, sa28, tries, last; } pre[KCR_NCAR];
     int cb, cb_host, cb_done, cb_last, cb_bad; char cb_maps[64]; DWORD cb_cnt, cb_cnt_at;      /* ClientBuild (CR2) */
     DWORD gd, st, t_load, t_poll, t_scan, L, cnt, sig, ncars;
@@ -116,6 +117,8 @@ static void kcr_rearm(DWORD gd, DWORD st, DWORD now)
 {
     memset(&kcr.c, 0, sizeof kcr.c);
     kcr.npre = 0; kcr.rw_t = 0; memset(&kcr.pre, 0, sizeof kcr.pre);
+    kcr.rs_t = 0; kcr.rs_mis = 0; kcr.rs_nrx = 0; kcr.rs_nap = 0; kcr.rs_toldrx = 0; kcr.rs_nchg = 0; kcr.rs_srcset = 0; kcr.rs_src = 0;
+    if (kcr.rs_bad == 2) kcr.rs_bad = 0;                                                     /* mismatches end with the load; a fault (1) stays off for the run */
     kcr.cb_done = 0; kcr.cb_last = -1; kcr.cb_cnt = 0xfffffffful; kcr.cb_cnt_at = now;
     kcr.have = 0; kcr.nenum = 0; kcr.ncars = 0; kcr.gd = gd; kcr.st = st; kcr.t_load = now; kcr.t_poll = 0; kcr.t_scan = 0; kcr.L = 0; kcr.cnt = 0; kcr.sig = 0;
     if (kcr.on) klog("coverring: load gd=%08lx state=%lx (poll every tick for %lu s, then every %lu s)", (unsigned long)gd, (unsigned long)st, KCR_FAST_MS / 1000, KCR_SLOW_MS / 1000);
@@ -300,7 +303,7 @@ static void kcr_rw_step(DWORD gd, DWORD st, DWORD now)
 static void kcr_tick(int game_thread)
 {
     DWORD now, gd, st, L, rb, rn, pb, pe, cnt, sig, ran;
-    if ((!kcr.on && !kcr.cb && !kcr.rw) || !game_thread || kcr.bad) return;
+    if ((!kcr.on && !kcr.cb && !kcr.rw && !kcr.rs) || !game_thread || kcr.bad) return;
     now = GetTickCount();
     __try {
         if (!kcvd_state(&gd, &st)) return;
@@ -348,7 +351,9 @@ static void kcr_init(void)
     GetPrivateProfileStringA("CoverRing", "ClientBuildMaps", "F01,F03", kcr.cb_maps, sizeof kcr.cb_maps, klh_ini);      /* slots (DM01 = F01, DM03 = F03) */
     kcr.cb_host = GetPrivateProfileIntA("CoverRing", "ClientBuildHost", 0, klh_ini) != 0;      /* (recommended on, with ClientBuild) the HOST prebuilds too */
     kcr.rw = GetPrivateProfileIntA("CoverRing", "ClientRewrite", 0, klh_ini) != 0;      /* (recommended off until benched) needs ClientBuild=1 */
+    kcr.rs = GetPrivateProfileIntA("CoverRing", "ClientRingSync", 0, klh_ini) != 0;      /* (recommended off until benched) needs ClientBuild=1 on both seats; CR8 */
     kcr.cb_last = -1;
+    if (kcr.rs) klog("coverring: ClientRingSync=1 (recommended off until benched): the HOST sends its cars' cover points (KLSYR, UDP 27415), an online CLIENT copies a point only where the host's is usable and its own is a spare; needs ClientBuild=1");
     if (kcr.rw) klog("coverring: ClientRewrite=1 (recommended off until benched): an online CLIENT re-runs 0x81b6f0 (done cleared first, rsv=1 keeps the indices) for a prebuilt car whose state changes; needs ClientBuild=1");
     if (kcr.cb) klog("coverring: ClientBuild=1 (recommended on, host and every client together; online CLIENT%s, once per load, slots '%s'): this seat calls the ring writer 0x81b6f0 for its cars at load, table order",
                      kcr.cb_host ? " and HOST (ClientBuildHost=1)" : " only", kcr.cb_maps);
