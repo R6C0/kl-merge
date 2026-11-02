@@ -372,6 +372,7 @@ static void kspg_hire_press(void *self, const char *nm)
 static int kspg_swt;                                       /* 0 off, 1, 2 (set in kspg_init) */
 static volatile int kspg_swtact;                           /* the shop gate is open (kspg_swt_tick) */
 static BYTE unbaked[KSPG_ROWS];                           /* per row: the name lookup saw the stock text (an unbaked map); cleared when the shop gate closes */
+static int kspg_hlp;                                        /* [Shop] HighlightProbe (kspg_hlp_tick) */
 static int kspg_swtpic;                                    /* [Shop] OnlineSwapPic 0/1 (set in kspg_init) */
 static LONG kspg_pic_swaps, kspg_pic_restores, kspg_pic_fail, kspg_pic_seen;   /* shoppic: counters (reset when the shop gate closes) */
 static LONG kspg_pic_new2[4];                              /* shoppic: mode-2 updates of elements that got their role past the old 192 limit: WeaponBig / Primary / Secondary / Star */
@@ -1222,6 +1223,7 @@ static int kspg_load(void)
 static void kspg_init(void)
 {
     kspg.on = GetPrivateProfileIntA("ShopPage", "Enable", 0, klh_ini) != 0;
+    kspg_hlp = GetPrivateProfileIntA("Shop", "HighlightProbe", 0, klh_ini) != 0;      /* (recommended off until benched) log only, see kspg_hlp_tick */
     kspg.probe = GetPrivateProfileIntA("ShopPage", "OnlineProbe", 0, klh_ini) != 0;      /* (recommended off until benched) read even with Enable=0: the pool poll needs no pairs */
     if (kspg.probe) klog("shopProbe: [ShopPage] OnlineProbe=1 (log only, writes nothing; at most %d lines)", KSPP_MAXLOG);
     {   /* OnlineTestBuy=<row>[,<row>..] (bench only, recommended off): 'b' before a row = page II (b3), plain = stock page; up to 4 */
@@ -1502,6 +1504,47 @@ static void kspg_hire_tick(void)
     if (kspg.ctlOn && gaks && fgw && wtp) kspg_cycle_key(gaks, fgw, wtp, now);
 }
 
+/* [Shop] HighlightProbe (default 0, recommended off until benched; re/shop_highlight_lag_1102.md): LOG ONLY, no writes, no wrapper. While the weapon list is up (shop mode 0x154d810 == 2)
+ * it logs one line whenever the stock highlight [selector+0x90] or the shown-row global 0x154d80c changes: "shopprobe: t=<ms> hl=<n> shown=<m> mode=<arcade|online>".
+ * Own read-only scan for the SelectorWeapons element (class vtable 0xbbd494 stock, or our private copy); it does not use kspg_scan, so it works with every other shop key at 0.
+ * Sampling rate = the hook tick (about 4 Hz GUESS, as the key comment in this file says): a skew shorter than one tick is seen only if the two values differ at a sample.
+ * Max 200 lines per shop stay (counter reset when the weapon list closes). */
+static void kspg_hlp_tick(void)
+{
+    static DWORD sel, lastScan, t0; static int lh = -99, ls = -99, n, up, over;
+    DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), now = GetTickCount();
+    __try {
+        DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION));
+        if (mode != 2 || !sm || klh_rd32(sm + 0x5c) != 4) {
+            if (up && over) klog("shopprobe: shop closed, %d further changes not logged (cap 200)", over);
+            up = 0; sel = 0; lh = ls = -99; n = 0; over = 0; return;
+        }
+        if (!up) { up = 1; t0 = now; lh = ls = -99; n = 0; over = 0; }
+        if (sel) {                                           /* still the selector? (vtable stock or ours) */
+            DWORD vt = klh_rd32(sel);
+            if (vt != (DWORD)(DWORD_PTR)KLH_VA(0x00bbd494) && !(kspg_tab[3].n && vt == (DWORD)(DWORD_PTR)&kspg_tab[3].vt[1])) sel = 0;
+        }
+        if (!sel && now - lastScan > 500) {
+            DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c)), mgr = gd ? klh_rd32(gd + 0x824) : 0, cnt, k; static struct { DWORD obj, kind; } tab[0x13e8];
+            lastScan = now;
+            if (mgr && klh_rd32(mgr) == (DWORD)(DWORD_PTR)KLH_VA(0x00bb7dc8) && (cnt = klh_rd32(mgr + 0x9f48)) <= 0x13e8 && klh_rd(mgr + 8, tab, 8 * (SIZE_T)cnt)) {
+                for (k = 0; k < cnt; k++) {
+                    DWORD vt;
+                    if (tab[k].kind || tab[k].obj < 0x10000 || !(vt = klh_rd32(tab[k].obj))) continue;
+                    if (vt == (DWORD)(DWORD_PTR)KLH_VA(0x00bbd494) || (kspg_tab[3].n && vt == (DWORD)(DWORD_PTR)&kspg_tab[3].vt[1])) { sel = tab[k].obj; klog("shopprobe: selector %08lx found (%s)", sel, kl_online() ? "online" : "arcade"); break; }
+                }
+            }
+        }
+        if (sel) {
+            int hl = (int)klh_rd32((DWORD_PTR)sel + 0x90), sh = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW));
+            if (hl != lh || sh != ls) {
+                lh = hl; ls = sh;
+                if (n < 200) { n++; klog("shopprobe: t=%lu hl=%d shown=%d mode=%s", (unsigned long)(now - t0), hl, sh, kl_online() ? "online" : "arcade"); } else over++;
+            }
+        }
+    } __except (1) { sel = 0; }
+}
+
 static void klshoppage_tick(int game_thread)
 {
     DWORD now, w; int g, s, i;
@@ -1509,6 +1552,7 @@ static void klshoppage_tick(int game_thread)
     static DWORD lastfull;
     if ((kspg.hireOn || kspg.ctlOn) && game_thread && klh_exe_ok) kspg_hire_tick();
     if (kspg.probe && game_thread && klh_exe_ok) kspp_tick();
+    if (kspg_hlp && game_thread && klh_exe_ok) kspg_hlp_tick();
     if (kspo.on && game_thread && klh_exe_ok) kspo_tick();
     if ((kspg_swt || kspg_swtpic) && game_thread && klh_exe_ok) kspg_swt_tick();
     if (kspg.swapArm && !kspg.on && game_thread && klh_exe_ok) {          /* [Shop] OnlineSwapArm: only the early-make hook, for the swap (page II is off) */
