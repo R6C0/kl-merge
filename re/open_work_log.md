@@ -1,3 +1,9 @@
+2026-11-02 ~06:55 - [ce] CS1 PASS: bots fire cop triggers online (DM03 + DD05, 0 faults; TB2 repeat fires match Arcade); trigger table 512 (2a2b10419);
+pick-up name now read from the scene node (a53764147, kit tp1 re-benches OnlineTriggersExtra=2). G2: Dog Days gun names right in the shipped config
+(F05/F09 [Redirect] to baked DD maps, log explains it, f20632d81); kit g2b tests the unbaked fallback. G1 FEATURE FAIL: RemoteShot2D never decides
+(workflow diagnosing). SP1A: Arcade shop = state 0x20 confirmed, but probe hl=-6 constant in both modes (wrong field; agent fixing). 37 option rows
+(5d17c7c56). Unfixed: klbf_ramp_name reads the wrong object (MoneyStack skip never matches). Delete C:\kl-build_x (agent stray, removal blocked).
+
 2026-11-02 ~06:10 - [ce] DH2 PASS: OnlineTacticsCarry 8 -> 51 stacks grabbed (6 -> 39, 2 -> 14), no van reached; kit dh3 (DM09, Carry 8).
 Merged ModesTab/RoundHints (fc30d43b9, default 0: shop page "Bots and modes", one key-hint line, host toggle text) + TEST scripted host keys
 (8e41ec310). Queue: cs1 (running) g2 g1 sp1a ba1 pr1 co1 es1 le1, then c9 CR10, dh3, mt1 (week_1028\mt1, ~40 min).

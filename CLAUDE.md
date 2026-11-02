@@ -76,9 +76,9 @@ Next: one more map, quiet the per-second CHANGED log line, then ClientRewrite + 
 Merged ModesTab/RoundHints (fc30d43b9, default 0: shop page "Bots and modes", one key-hint line, host toggle text) + TEST scripted host keys
 (8e41ec310). Queue: cs1 (running) g2 g1 sp1a ba1 pr1 co1 es1 le1, then c9 CR10, dh3, mt1 (week_1028\mt1, ~40 min).
 
-2026-11-02 ~05:20 - [ce] SR2 PASS (4 rows, 0 asserts): OnlineDropTake=1 lifts DD09 bot money in round 1 from $1.84M to $3.90M (Arcade 3.4M+);
-RT5 PASS on A/C (6-min clock, van at 199 s left, 2 bots aboard), B (LegWaitIdx=0) boards nobody -> keep 1. Pushed klshield Online (5c8200f89).
-New kits cs1 (bots fire cop triggers online, DM03+DD05), es1 (escort), le1 (LateExit); queue after c9's CR9: week_1028\QUEUE_after_sr2.txt.
+2026-11-02 ~06:55 - [ce] CS1 PASS (bots fire cop triggers online, DM03+DD05); trigger table 512, pick-up name from scene node (kit tp1).
+G2 names right in shipped config ([Redirect] to baked maps; g2b tests unbaked); G1 FAIL (RemoteShot2D never decides, workflow on it);
+SP1A: Arcade shop = 0x20, probe hl field wrong (agent fixing). Queue: ba1 pr1 co1 es1 le1, then CR10 dh3 mt1 tp1 g2b.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
