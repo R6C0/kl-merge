@@ -169,9 +169,22 @@ static void klho_tick(int game_thread)
             if (k) bp = (BOOL (WINAPI *)(DWORD, DWORD))GetProcAddress(k, "Beep");
         }
         if (gaks && fgw && wtp && !cli) {
-            DWORD pid = 0; HWND f = fgw(); int ctl = (gaks(0x11) & 0x8000) != 0, m = (gaks(klho.keyMap) & 0x8000) != 0 && (!klho.ctlMap || ctl), a = (gaks(klho.keyAI) & 0x8000) != 0 && (!klho.ctlAI || ctl), pl = kmp.on && (gaks(klho.keyPool) & 0x8000) != 0 && (!klho.ctlPool || ctl);
+            DWORD pid = 0; HWND f = fgw(); int ctl = (gaks(0x11) & 0x8000) != 0, km = (gaks(klho.keyMap) & 0x8000) != 0, ka = (gaks(klho.keyAI) & 0x8000) != 0, kp = (gaks(klho.keyPool) & 0x8000) != 0, scripted = 0, m, a, pl;
+#ifdef KLHOOK_TEST
+            {   /* bench: keys klauto.c's script holds count too (a DirectInput tap never sets GetAsyncKeyState; klshoppage.c does the same) */
+                static UINT (WINAPI *mvk)(UINT, UINT); static int lk;
+                if (!lk) { HMODULE u = GetModuleHandleA("user32.dll"); lk = 1; if (u) mvk = (UINT (WINAPI *)(UINT, UINT))GetProcAddress(u, "MapVirtualKeyA"); }
+                if (mvk) {
+                    if (kla_key_held(0x1d)) ctl = scripted = 1;                                  /* DIK_LCONTROL */
+                    if (kla_key_held((int)mvk((UINT)klho.keyMap, 0))) km = scripted = 1;
+                    if (kla_key_held((int)mvk((UINT)klho.keyAI, 0))) ka = scripted = 1;
+                    if (kla_key_held((int)mvk((UINT)klho.keyPool, 0))) kp = scripted = 1;
+                }
+            }
+#endif
+            m = km && (!klho.ctlMap || ctl); a = ka && (!klho.ctlAI || ctl); pl = kmp.on && kp && (!klho.ctlPool || ctl);
             if (f) wtp(f, &pid);
-            if (pid == GetCurrentProcessId()) {
+            if (scripted || pid == GetCurrentProcessId()) {
                 if (m && !dMap) { klho_put(0, (klho_get(0) + 1) % 3); if (bp) bp(660 + 220 * klho_get(0), 40); klho_say(0, klho_get(0)); }
                 if (a && !dAI) { klho_put(1, klho_get(1) ^ 1); if (bp) bp(klho.ai ? 880 : 440, 40); klho_say(1, klho_get(1)); }
                 if (pl && !dPool) { klho_put(2, (klho.pool + 1) % 4); if (bp) bp(500 + 150 * klho.pool, 40); klho_say(2, klho.pool); }
