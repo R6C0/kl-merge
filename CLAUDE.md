@@ -72,9 +72,9 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 DM03 client car #0 8/8 usable (idx 561 filled from the host's point, own +0x24 handle), no host-only usable index left; DM01 identical.
 Next: one more map, quiet the per-second CHANGED log line, then ClientRewrite + ClientRingSync into NEXT_SHIP (recommended on).
 
-2026-11-02 ~05:00 - [ce] DH1 PASS (DD01, 0 faults): DoorHold opens all vaults but money unchanged ($1.54M) -> off. The 14-stack cap is
-OnlineTacticsCarry 2 x 7 bots; Arcade has no cap (re/dd01_plateau_1102.md) -> kit dh2 (Carry 8/6). Merged: re/t5_status_1102.md, HighlightProbe,
-RemoteShot2DGate + slot-74 counter. Game queue after SR2 + c9 CR9: week_1028\QUEUE_after_sr2.txt (dh2 g2 g1 sp1a ba1 pr1).
+2026-11-02 ~06:10 - [ce] DH2 PASS: OnlineTacticsCarry 8 -> 51 stacks grabbed (6 -> 39, 2 -> 14), no van reached; kit dh3 (DM09, Carry 8).
+Merged ModesTab/RoundHints (fc30d43b9, default 0: shop page "Bots and modes", one key-hint line, host toggle text) + TEST scripted host keys
+(8e41ec310). Queue: cs1 (running) g2 g1 sp1a ba1 pr1 co1 es1 le1, then c9 CR10, dh3, mt1 (week_1028\mt1, ~40 min).
 
 2026-11-02 ~05:20 - [ce] SR2 PASS (4 rows, 0 asserts): OnlineDropTake=1 lifts DD09 bot money in round 1 from $1.84M to $3.90M (Arcade 3.4M+);
 RT5 PASS on A/C (6-min clock, van at 199 s left, 2 bots aboard), B (LegWaitIdx=0) boards nobody -> keep 1. Pushed klshield Online (5c8200f89).

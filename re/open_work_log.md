@@ -1,3 +1,7 @@
+2026-11-02 ~06:10 - [ce] DH2 PASS: OnlineTacticsCarry 8 -> 51 stacks grabbed (6 -> 39, 2 -> 14), no van reached; kit dh3 (DM09, Carry 8).
+Merged ModesTab/RoundHints (fc30d43b9, default 0: shop page "Bots and modes", one key-hint line, host toggle text) + TEST scripted host keys
+(8e41ec310). Queue: cs1 (running) g2 g1 sp1a ba1 pr1 co1 es1 le1, then c9 CR10, dh3, mt1 (week_1028\mt1, ~40 min).
+
 2026-11-02 ~05:40 - [c9] CR9 PASS (CR8 [CoverRing] ClientRingSync=1 both seats + ClientRewrite=1 on the client, TEST 468eae9c, DM03 + DM01
 online): asserts/soft 0 on all 4 seats, no fault, no dump. DM03: the client filled idx 561 from the host (SPARE 400 -> host 1012, own +0x24
 00001dcc) -> client car #0 8/8 usable; host 6/8; no host-only usable index left (coverdump still says DIVERGE: rotated car, 557/558 client-only).
