@@ -239,8 +239,8 @@ def main():
     # kl_mod_options labels
     feats = {f['id']: f for f in M.F}
     check('F3' in feats['hirepage']['label'], "kl_mod_options 'hirepage' label names F3: %s" % feats['hirepage']['label'][:70])
-    check('(recommended off until benched)' in feats['hirepage']['label'], "'hirepage' keeps its (recommended off until benched) label")
-    check('F2' in feats['controlspage']['label'] and feats['controlspage']['rec'] == 'off', "'controlspage' label names F2 and stays recommended off")
+    check('(recommended on)' in feats['hirepage']['label'], "'hirepage' label says (recommended on) (LC2 + SN1 PASS, cleared for the next ship)")
+    check('F2' in feats['controlspage']['label'] and feats['controlspage']['rec'] == 'on', "'controlspage' label names F2 and is recommended on (LC2 + SN1 PASS)")
     check('Ctrl+F3' in feats['keysmap']['label'], "'keysmap' label names Ctrl+F3 (the host map key of Map=1)")
 
     # F12 text sweep: a line with F12 must carry the Steam / screenshot / history context

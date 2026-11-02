@@ -30,8 +30,8 @@
  *    code: CALLED, never patched; no debug register. A fault in it turns the feature off for the run. Lines: 'coverring: clientbuild ...'. Gate logic: klcoverring_logic.h.
  * ini: [CoverRing] Enable=1 in the TEST build / 0 in SHIP (recommended on for test runs, off for players)
  *                  Callers=1 TEST / 0 SHIP (recommended on for test runs, off for players): only logs that the slot swaps are skipped (hashed vtables)
- *                  ClientBuild=0 in TEST and SHIP (recommended off: experimental, enable only for the CR2 bench)  ClientBuildMaps=F01,F03 (DM01 / DM03 slots)
- *                  ClientBuildHost=0 in TEST and SHIP (recommended off: experimental, CR3 bench): the HOST prebuilds at load too. CR1_DM01 showed the client never
+ *                  ClientBuild=0 by default (recommended on, host and every client together: CR3 11-01, CR5 + SN1 11-02 PASS)  ClientBuildMaps=F01,F03 (DM01 / DM03 slots)
+ *                  ClientBuildHost=0 by default (recommended on, with ClientBuild): the HOST prebuilds at load too. CR1_DM01 showed the client never
  *                  runs the writer and the host runs it per car on ACTIVATION (order 871, 737+792, 906 = not table order), so client-only table order cannot match;
  *                  both seats in table order at load can, IF the host's later activation reuses rsv=1 indices (GUESS, see klcoverring_logic.h).
  * LINES (prefix 'coverring:'): on / callers / load / state / poll / car / scan / clientbuild.
@@ -277,11 +277,11 @@ static void kcr_init(void)
     memset(&kcr, 0, sizeof kcr);
     kcr.on = GetPrivateProfileIntA("CoverRing", "Enable", def, klh_ini) != 0;
     kcr.callers = GetPrivateProfileIntA("CoverRing", "Callers", def, klh_ini) != 0;
-    kcr.cb = GetPrivateProfileIntA("CoverRing", "ClientBuild", 0, klh_ini) != 0;      /* (recommended off: experimental, enable only for the CR2 bench) default 0 in TEST and SHIP */
+    kcr.cb = GetPrivateProfileIntA("CoverRing", "ClientBuild", 0, klh_ini) != 0;      /* (recommended on, host and every client together; CR3/CR5/SN1 PASS) default 0 when the key is missing */
     GetPrivateProfileStringA("CoverRing", "ClientBuildMaps", "F01,F03", kcr.cb_maps, sizeof kcr.cb_maps, klh_ini);      /* slots (DM01 = F01, DM03 = F03) */
-    kcr.cb_host = GetPrivateProfileIntA("CoverRing", "ClientBuildHost", 0, klh_ini) != 0;      /* (recommended off: experimental, CR3 bench) the HOST prebuilds too */
+    kcr.cb_host = GetPrivateProfileIntA("CoverRing", "ClientBuildHost", 0, klh_ini) != 0;      /* (recommended on, with ClientBuild) the HOST prebuilds too */
     kcr.cb_last = -1;
-    if (kcr.cb) klog("coverring: ClientBuild=1 (experimental, recommended off; online CLIENT%s, once per load, slots '%s'): this seat calls the ring writer 0x81b6f0 for its cars at load, table order",
+    if (kcr.cb) klog("coverring: ClientBuild=1 (recommended on, host and every client together; online CLIENT%s, once per load, slots '%s'): this seat calls the ring writer 0x81b6f0 for its cars at load, table order",
                      kcr.cb_host ? " and HOST (ClientBuildHost=1)" : " only", kcr.cb_maps);
     if (!kcr.on) return;
     klog("coverring: on (READ ONLY, LOG ONLY, recommended on for test runs, off for players): [L+0x68] poll + ZHavokCar script ring state, Callers=%d (recommended on for test runs, off for players)", kcr.callers);
