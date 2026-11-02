@@ -10,9 +10,11 @@
  *   fields into the client's heap point; flags LAST. A usable client point is never touched (stage 1). The index must be one of the client's own car's ring indices (car = the
  *   host's ordinal in entity-table order, GUESS: same on both seats) and < the points vector; 20 mismatches turn the feature off for the run.
  * GUESS list: (1) the entity-table ordinal is equal on both seats (verified per packet by the index ownership check, not assumed); (2) copying flags 0x140a / 0x1412 verbatim is
- *   harmless (the extra 0x400 is a "persisted" mark, bit 2 is what the assert tests); (3) the fields +0x24 / +0x40..0x63 are plain per-point data with no pointers (the writer fills them
- *   from the local vertex and the probe; not proven: a pointer there would be wrong across seats - the log prints them so the bench can look); (4) the nav-side record
- *   [L+0x58]+idx*0x2c (set by the 0x9015d0 vtable+0x1c call) is NOT written here; whether a soldier using the point needs it is unproven (stage 2 would replay 0x9015d0).
+ *   harmless (the extra 0x400 is a "persisted" mark, bit 2 is what the assert tests); (3) +0x40..0x63 are plain per-point data (0x8a7d90 fills them from the direction vector);
+ *   +0x24 is the car's SEAT-LOCAL handle (0x6ece90 -> 0x86ca10 table index + 1), so the client writes its own value from a usable sibling point and the host's only as a fallback;
+ *   (4) the nav-side record [L+0x58]+idx*0x2c is NOT registered here. Nav study 11-02 (static, verified twice): an unregistered record is in no bucket, release on it is a
+ *   no-op, the asserts 0x6567e8 / 0x656913 test only +0x68, and no reader of L's group was found, so registering would add risk (a stale bucket link) for no use. Do NOT replay
+ *   0x9015d0 on the client: its 'and 0x78' rewrites the flags and a bad mode int3s.
  * No debug register, no code or vtable patch: heap writes inside __try only.
  * LINES: 'coverring: ringsync HOST ...' / 'coverring: ringsync CLIENT ...'.
  */
@@ -74,7 +76,7 @@ static void kcr_rs_host(DWORD now)
 static void kcr_rs_rx(const char *pk, int len, DWORD now, unsigned long from)
 {
     struct kcr_rhdr h; struct kcr_rpt pt[8]; int n, k, wrote = 0, skipped_used = 0, skipped_host = 0, mis = 0; static int toldmis, toldsrc;
-    DWORD sm, role = 0, mode = 0, gd, st, L, rb, rn, pb = 0, pe = 0, npts, car, s, cn = 0, i; unsigned long own[8]; char scene[200], key[120];
+    DWORD sm, role = 0, mode = 0, gd, st, L, rb, rn, pb = 0, pe = 0, npts, car, s, cn = 0, i, own24 = 0; int have24 = 0; unsigned long own[8]; char scene[200], key[120];
     if (!kcr.rs || kcr.rs_bad) return;
     n = kcr_ring_unpack((const unsigned char *)pk, len, &h, pt);
     if (!n) return;
@@ -103,6 +105,13 @@ static void kcr_rs_rx(const char *pk, int len, DWORD now, unsigned long from)
         if (!kcvd_ptr_ok(s) || !kcr_script_matches(car, klh_rd32(s + 0x40))) goto done;
         cn = klh_rd32(s + 0x1c4);
         for (i = 0; i < 8; i++) own[i] = klh_rd32(s + 0x1c8 + i * 4);
+        /* +0x24 is the car's seat-local handle (0x8a7d90 arg8 = 0x6ece90(car) = 0x86ca10 table index + 1; CR8 nav study 11-02): take THIS seat's value from a usable point of
+           the same car's ring, the host's only when the car has none here (GUESS: the table index then matches, as the ordinal does) */
+        own24 = 0; have24 = 0;
+        for (i = 0; i < cn && i < 8 && !have24; i++) {
+            DWORD f = 0, v = 0;
+            if (own[i] < npts && klh_rd(pb + own[i] * 0x7c + 0x68, &f, 4) && kcr_pt_usable(f) && klh_rd(pb + own[i] * 0x7c + 0x24, &v, 4)) { own24 = v; have24 = 1; }
+        }
         for (k = 0; k < n; k++) {
             DWORD pp, cfl = 0; float cpos[3] = { 0, 0, 0 };
             if (!kcr_rs_idx_owned(own, cn, pt[k].idx, npts)) {
@@ -122,13 +131,13 @@ static void kcr_rs_rx(const char *pk, int len, DWORD now, unsigned long from)
                 continue;
             }
             /* heap data only: fields first, flags LAST (a reader that sees the usable bit sees a whole point) */
-            memcpy((void *)(DWORD_PTR)(pp + 0x24), &pt[k].f24, 4);
+            *(volatile DWORD *)(DWORD_PTR)(pp + 0x24) = have24 ? own24 : (DWORD)pt[k].f24;
             memcpy((void *)(DWORD_PTR)(pp + 0x28), pt[k].pos, 12);
             memcpy((void *)(DWORD_PTR)(pp + 0x40), pt[k].blk, 36);
             *(volatile DWORD *)(DWORD_PTR)(pp + 0x68) = (DWORD)pt[k].flags;
             wrote++; kcr.rs_nap++;
-            klog("coverring: ringsync CLIENT car #%u idx %lu was SPARE (%03lx) -> host point %03lx (%.0f,%.0f,%.0f) written (blk %08lx.. f24 %08lx; nav record [L+0x58] NOT written, GUESS)", h.ord, pt[k].idx,
-                 (unsigned long)cfl, pt[k].flags, pt[k].pos[0], pt[k].pos[1], pt[k].pos[2], pt[k].blk[0], pt[k].f24);
+            klog("coverring: ringsync CLIENT car #%u idx %lu was SPARE (%03lx) -> host point %03lx (%.0f,%.0f,%.0f) written (blk %08lx.. f24 host %08lx -> %s %08lx; nav record [L+0x58] not registered: no reader of this group found)", h.ord, pt[k].idx,
+                 (unsigned long)cfl, pt[k].flags, pt[k].pos[0], pt[k].pos[1], pt[k].pos[2], pt[k].blk[0], pt[k].f24, have24 ? "own" : "host", have24 ? (unsigned long)own24 : pt[k].f24);
         }
 done:
         if (mis && ++kcr.rs_mis >= 20) { kcr.rs_bad = 2; klog("coverring: ringsync CLIENT 20 mismatching packets (index / ordinal) - the two seats' car rings differ; ClientRingSync off until the next load"); }
