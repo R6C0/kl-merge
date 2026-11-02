@@ -68,18 +68,18 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-11-02 ~09:25 - [c9] CR10 PASS (DM03 online, ringsync alone and with ClientRewrite, 0 asserts all seats, lists IDENTICAL): third clean
-car-cover pass after CR7/CR9 -> [CoverRing] ClientRewrite=1 + ClientRingSync=1 in NEXT_SHIP (c9_1028/ship_next), rows (recommended on). Also in
-NEXT_SHIP since 07:40: ce's BotFill set (TacticsCarry 8, BoardAllNear 300, DropTake 1). Ship dll must be >= b65a08e09; ce's dt1 grades money-to-van.
-
-2026-11-02 ~09:50 - [ce] DH3 SAFE PASS, FEATURE FAIL (Carry 8 on DM09: van called at 213 s left, left with 0 boarded, $1.85M vs RT5A $3.0M).
-DM09 losses split in two: tower drop (bots held 20-117 s for klhop's walk hops) and street legs 6-7 (order renewed only every 6 s).
-New, both default 0: [BotFill] OnlineLegFightReorderS (c9ffcc3cf, kit rt7) and OnlineLegHopTeleS (b1b32fab3, NOT Arcade, kit rt8).
-Queue: mt1 (running) tp1 g2b g1b sp1b dt1 SN2 co2 es2 rt6 rt7 rt8.
+2026-11-02 ~10:40 - [ce] MT2 PASS: Ctrl+F3/Ctrl+F4 host keys toggle map set / AI heisters, client applies the host map set; shop pages
+Page II / Hire / Controls / Bots and modes render with per-row ON/OFF + explanation (D3dShotPost shots). Merged [Bots] OnlineCrewHealth
+(0b5bedaf4, host-only max-health factor, NOT Arcade on stock maps, default 0), kit ch1 queued after tp2. Building [BotFill] OnlineVoiceByLook
+(bot lines in the voice of the worn character, workflow). Grudge/traitor online: not feasible (Arcade-only hit attribution).
 
 2026-11-02 ~10:00 - [ce] MT1 SAFE PASS all seats: ModesTab cycle, RoundHints, Ctrl+F4 AI toggle (host only) PASS; Ctrl+F3 map toggle blocked by
 the bench helper's focus freeze, kit mt2 (fixed helper + D3dShotPost) queued after g2b. TP1 (DM03, OnlineTriggersExtra=2 DRY) PASS: pick-ups
 left to the game, bots would fire ZOnlineTriggerBox/ZTriggerBox2; kit tp2 = Extra=1 LIVE (DM03 + DD05), queued after rt8.
+
+2026-11-02 ~09:25 - [c9] CR10 PASS (DM03 online, ringsync alone and with ClientRewrite, 0 asserts all seats, lists IDENTICAL): third clean
+car-cover pass after CR7/CR9 -> [CoverRing] ClientRewrite=1 + ClientRingSync=1 in NEXT_SHIP (c9_1028/ship_next), rows (recommended on). Also in
+NEXT_SHIP since 07:40: ce's BotFill set (TacticsCarry 8, BoardAllNear 300, DropTake 1). Ship dll must be >= b65a08e09; ce's dt1 grades money-to-van.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

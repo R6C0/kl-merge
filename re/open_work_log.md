@@ -1,3 +1,8 @@
+2026-11-02 ~10:40 - [ce] MT2 PASS: Ctrl+F3/Ctrl+F4 host keys toggle map set / AI heisters, client applies the host map set; shop pages
+Page II / Hire / Controls / Bots and modes render with per-row ON/OFF + explanation (D3dShotPost shots). Merged [Bots] OnlineCrewHealth
+(0b5bedaf4, host-only max-health factor, NOT Arcade on stock maps, default 0), kit ch1 queued after tp2. Building [BotFill] OnlineVoiceByLook
+(bot lines in the voice of the worn character, workflow). Grudge/traitor online: not feasible (Arcade-only hit attribution).
+
 2026-11-02 ~10:00 - [ce] MT1 (DM03 + DD02 online, mt1_dll_b): SAFE PASS on all seats; ModesTab cycle (stock, II, Hire, Controls, Bots and modes,
 stock) PASS and absent in the control; RoundHints PASS; Ctrl+F4 AI toggle PASS, host only. Ctrl+F3 map toggle bench-blocked: the helper's
 SetForegroundWindow froze the game 4.6 s and the press landed in the freeze, and no shots because ReShade owns Present. Kit mt2 = early focus,
