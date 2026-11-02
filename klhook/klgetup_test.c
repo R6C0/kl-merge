@@ -185,6 +185,11 @@ int main(void)
     CHECK(kgu_recede_w(1470, 2270, 1470, 5000, 900) == 0 && kgu_recede_w(2270, 2271, 1470, 5000, 900) == 1, "recede_w: the excuse ends 8 m beyond the order distance (BP14 14.7 -> 34 m is caught at 22.7)");
     CHECK(kgu_recede_w(-1, 3410, 0, 5000, 900) == 0 && kgu_recede_w(800, 3410, 1467, 5000, 900) == 1, "recede_w: no order distance = no excuse, and no verdict without an earlier check (as kgu_recede); 34 m is caught");
     CHECK(kgu_recede_w(800, 1100, 900, 2999, 0) == 0, "recede_w: the 3 s rate limit stands");
+    /* Online escort: a table heister on a bot's place is that bot (ES1A/B read 8 humans with 2 seats) */
+    { const float bots[2][3] = { { 100, 0, 100 }, { -500, 10, 200 } }; const float onA[3] = { 110, 0, 95 }, far1[3] = { 300, 0, 100 }, onB[3] = { -500, 39, 200 }, nan3[3] = { (float)sqrt(-1.0), 0, 0 };
+      CHECK(kvp_on_bot(onA, bots, 2, 40.0f) && kvp_on_bot(onB, bots, 2, 40.0f), "on_bot: within 40 of a bot = that bot");
+      CHECK(!kvp_on_bot(far1, bots, 2, 40.0f) && !kvp_on_bot(onA, bots, 0, 40.0f), "on_bot: 2 m away / no bots = a human");
+      CHECK(!kvp_on_bot(nan3, bots, 2, 40.0f), "on_bot: a NaN place is not on a bot"); }
     printf("klgetup_test: %d check(s), %d failure(s)\n", checks, fails);
     printf(fails ? "FAIL\n" : "ALL PASS\n");
     return fails ? 1 : 0;

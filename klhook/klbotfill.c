@@ -1234,13 +1234,13 @@ static int klbf_feet(DWORD P, float f[3], int *src)
    The Arcade klescort path (klb_read crew records) is untouched. */
 static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *sold, const float (*pos)[3], int nb, int vstate)
 {
-    DWORD ents = 0, own = 0; int n = 0, how = 0, oi, i, b, nh = 0, ownH = -1, hseat[16], nTab = 0, nHeist = 0, nDead = 0, nNoFeet = 0, srcNow[16], allDeadRetry; float hp[16][3]; static int toldNone, toldRound, toldSrc, toldAllDead; static DWORD toldAt;
+    DWORD ents = 0, own = 0; int n = 0, how = 0, oi, i, b, nh = 0, ownH = -1, hseat[16], nTab = 0, nHeist = 0, nDead = 0, nNoFeet = 0, nBot = 0, srcNow[16], allDeadRetry; float hp[16][3]; static int toldNone, toldRound, toldSrc, toldAllDead; static DWORD toldAt;
     if (!klbf_esc || nb <= 0) return;
     if (toldRound != klbf_ot_rounds) { toldRound = klbf_ot_rounds; toldNone = 0; toldSrc = 0; }
     if (!klco_table(sm, &ents, &n)) { if (!toldNone++) klog("botfill: escort: online: the session player table is not readable: no escort this round yet (said once)"); return; }
     oi = klco_find_own(ents, n, now, &own, &how);
     for (allDeadRetry = 0; allDeadRetry < 2; allDeadRetry++) {      /* wk-botpar: BP1 read 8 of 8 heisters dead all round while bots fought; when every heister reads dead the health read is not trusted and the pass goes again on the feet alone */
-    nh = 0; nTab = 0; nHeist = 0; nDead = 0; nNoFeet = 0; ownH = -1;
+    nh = 0; nTab = 0; nHeist = 0; nDead = 0; nNoFeet = 0; nBot = 0; ownH = -1;
     for (i = 0; i < n && nh < 16; i++) {
         DWORD P = klco_ent(ents, n, i), h; float f[3], hv = 1.0f; int sr = 0;
         if (P) nTab++;
@@ -1248,12 +1248,13 @@ static void klbf_esc_pass(DWORD now, DWORD sm, const DWORD *act, const DWORD *so
         nHeist++;
         if ((h = klh_rd32(P + 0x5fc)) != 0 && klh_rd(h + 4, &hv, 4) && hv <= 0 && !allDeadRetry) { nDead++; continue; }      /* dead / down (GUESS as klucc.c kluc_alive_heister: unreadable = alive). wk-botpar BP1 20:52:28 (round start, state 0x19): all 8 heisters read 0 and counted dead, and no human was ever read that round. GUESS: before the spawn is finished the health object is a blank one whose back-pointer [h+0x24] is not the entity (as klbotdown.c / klbalance.c check for NPCs), so only a health object that points back at this entity counts as 'dead' */
         if (!klbf_feet(P, f, &sr)) { nNoFeet++; continue; }      /* OnlineEscortNode: node first, +0x460 fallback; off = +0x460 only (the old test) */
+        if (i != oi && kvp_on_bot(f, pos, nb, 40.0f)) { nBot++; continue; }      /* ES1A/B: the table holds the AI heisters too; one standing on a bot's place is that bot (mode 2 would follow a bot). Never drops the own seat */
         memcpy(hp[nh], f, 12); hseat[nh] = i; srcNow[nh] = sr; if (i == oi) ownH = nh; nh++;
     }
     if (!(nHeist > 0 && nDead == nHeist)) break;
     if (!allDeadRetry && !toldAllDead++) klog("botfill: escort: all %d heister(s) read dead / down: the health read is not trusted, trying the feet alone (said once)", nHeist);
     }
-    if (!toldSrc && nh) { toldSrc = 1; klog("botfill: escort: feet source this round (OnlineEscortNode=%d): %d human(s) read, host seat %s; seat sources:%s%s%s%s", klbf_esn, nh, ownH >= 0 ? (srcNow[ownH] == 1 ? "by the scene node" : "by +0x460 (node unusable)") : "not read", srcNow[0] == 1 ? " node" : " +0x460", nh > 1 ? (srcNow[1] == 1 ? " node" : " +0x460") : "", nh > 2 ? (srcNow[2] == 1 ? " node" : " +0x460") : "", nh > 3 ? " ..." : ""); }
+    if (!toldSrc && nh) { toldSrc = 1; klog("botfill: escort: feet source this round (OnlineEscortNode=%d): %d human(s) read (%d table heister(s) on a bot's place dropped), host seat %s; seat sources:%s%s%s%s", klbf_esn, nh, nBot, ownH >= 0 ? (srcNow[ownH] == 1 ? "by the scene node" : "by +0x460 (node unusable)") : "not read", srcNow[0] == 1 ? " node" : " +0x460", nh > 1 ? (srcNow[1] == 1 ? " node" : " +0x460") : "", nh > 2 ? (srcNow[2] == 1 ? " node" : " +0x460") : "", nh > 3 ? " ..." : ""); }
     if (!nh || (klbf_esc == 1 && ownH < 0)) {
         if (!toldNone++ || now - toldAt >= 20000u) {      /* wk-botpar: the pass retries every second; the line is said once per round, then again every 20 s while still nobody is read (counts included) */
             toldAt = now;

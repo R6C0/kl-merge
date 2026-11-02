@@ -279,4 +279,17 @@ static void kvp_name_pick(const char *nodeNm, const char *legacyNm, char *out, i
     out[i] = 0;
 }
 
+/* Online escort humans (2026-11-02, bench ES1A/B DM03: "8 human(s) read" with 2 human seats): the session player table holds the AI heisters too, so a table heister whose
+   feet are within r of a bot's own place IS that bot. 1 = it stands on a bot (drop it), 0 = keep. GUESS: r = 40 as klsync.c klsy_human ("40 units around a player's feet =
+   his own body"); a NaN distance is not near. */
+static int kvp_on_bot(const float f[3], const float (*bots)[3], int nb, float r)
+{
+    int b;
+    for (b = 0; b < nb; b++) {
+        float dx = f[0] - bots[b][0], dy = f[1] - bots[b][1], dz = f[2] - bots[b][2];
+        if (dx * dx + dy * dy + dz * dz < r * r) return 1;
+    }
+    return 0;
+}
+
 #endif
