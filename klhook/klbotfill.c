@@ -136,6 +136,7 @@ static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used b
    OnlineBoxSpread (0/1)  each bot gets its own place inside the escape box instead of all ordered to the one centre point (Q27_DD08: 7 bots on one point were pushed 12-18 m out and back, only 4 counted inside during the 15 s wait)
    OnlineBoxLatch (0/1)   a bot that stood inside the box since the van was called and is still within OnlineBoxLatchM (cm) of it when the van waits (state 3/4) counts as aboard
    OnlineBoardTeleport (0 off, 1 on, 2 dry) NOT ARCADE: van waiting (state 3) and the bot still outside the box after OnlineBoardTeleportS s of the wait, within OnlineBoardTeleportM (cm): the game's actor teleport (klcrew_rt.c klt_teleport) puts it in the box. Last resort. */
+static int klbf_leg_frS;      /* [BotFill] OnlineLegFightReorderS (wk-dm09fight-1102; 0 off, 1-5 s): under fire, re-assert the leg order (Sprint + goal check) after this many s instead of KLBF_OT_REORD */
 static int klbf_leg_scale, klbf_leg_stallS, klbf_leg_maxS = 60, klbf_bx_spread, klbf_bx_latch, klbf_bt_mode, klbf_bt_s = 10;
 static float klbf_leg_speed = 300.0f, klbf_leg_near = 0.0f, klbf_leg_dy = 0.0f, klbf_bx_latchM = 1500.0f, klbf_bt_m = 4000.0f;
 static int klbf_bank_mode, klbf_ba_mode; static float klbf_ba_m = 6000.0f, klbf_ba_near; static unsigned klbf_ba_left;      /* OnlineBoardAllNear (cm, 0 = off; wk-boardpar-1102), bitmask of bots already logged as left out */ static long klbf_bank_total; static int klbf_bank_n;      /* [BotFill] OnlineBank (0 off, 1 ledger, 2 dry), OnlineBoardAll (0 off, 1 board, 2 dry), OnlineBoardAllM (cm) */
@@ -263,6 +264,8 @@ static void klbf_init(void)
     klbf_leg_speed = (float)GetPrivateProfileIntA("BotFill", "OnlineLegSpeed", 300, klh_ini); if (klbf_leg_speed < 100.0f) klbf_leg_speed = 100.0f;      /* GUESS 3 m/s: DD08 leg 1 to 2 (46 m) took more than 15 s */
     klbf_leg_maxS = (int)GetPrivateProfileIntA("BotFill", "OnlineLegMaxS", 60, klh_ini); if (klbf_leg_maxS < 15) klbf_leg_maxS = 15; if (klbf_leg_maxS > 180) klbf_leg_maxS = 180;
     klbf_leg_stallS = (int)GetPrivateProfileIntA("BotFill", "OnlineLegStallS", 0, klh_ini); if (klbf_leg_stallS < 0) klbf_leg_stallS = 0; if (klbf_leg_stallS > 120) klbf_leg_stallS = 120;      /* (recommended off: not yet run live) */
+    klbf_leg_frS = (int)GetPrivateProfileIntA("BotFill", "OnlineLegFightReorderS", 0, klh_ini); if (klbf_leg_frS < 0) klbf_leg_frS = 0; if (klbf_leg_frS > 5) klbf_leg_frS = 5;      /* (recommended off until benched) wk-dm09fight-1102: RT5B/RT5C DM09 bots crossed the street legs at ~1 m/s under fire and 9 of 13 deaths fell on legs 6-7; works without OnlineLegStallS (own cop test, guard radius OnlineTacticsGuard) */
+    if (klbf_ot && klbf_leg_frS) klog("botfill: wk-dm09fight: OnlineLegFightReorderS=%d s (default 0 = off): a bot with a live cop within the guard radius on a waypoint leg gets its order (Sprint style, goal check) re-asserted every %d s instead of 6 (KLBF_OT_REORD; recommended off until benched)", klbf_leg_frS, klbf_leg_frS);
     klbf_leg_near = (float)GetPrivateProfileIntA("BotFill", "OnlineLegNear", 0, klh_ini); if (klbf_leg_near < 0) klbf_leg_near = 0;      /* 0 = 300 cm */
     klbf_leg_dy = (float)GetPrivateProfileIntA("BotFill", "OnlineLegDy", 0, klh_ini); if (klbf_leg_dy < 0) klbf_leg_dy = 0;      /* 0 = height ignored */
     klbf_way_pm = (int)GetPrivateProfileIntA("BotFill", "OnlineWayPerMap", 0, klh_ini); if (klbf_way_pm < 0 || klbf_way_pm > 2) klbf_way_pm = 0;      /* (recommended off until benched) 1 = [BotFillWay_<MAP>] first, 2 = also no slot route on a redirected map */
@@ -2282,6 +2285,14 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     else if (now - klbf_ob[s].legBestAt >= (DWORD)klbf_leg_stallS * 500u && !(klbf_ob[s].legFlags & 1)) {      /* re-path: the same order again at half the stall time (the game re-plans the route on a new order; GUESS) */
                         klbf_ob[s].legFlags |= 1; klbf_ob[s].ordered = 0;
                         klog("botfill: tactics: bot %d (actor %08lx): waypoint leg %d of %d: no 3 m of progress for %lu s (%.0f m left): order repeated (OnlineLegStallS re-path)", s, a, klbf_ob[s].leg + 1, klbf_way_n, (unsigned long)((now - klbf_ob[s].legBestAt) / 1000), wd / 100);
+                    }
+                }
+                if (klbf_leg_frS > 0 && klbf_ot_guard > 0 && !hit && !waiting && klbf_ob[s].ordered && now - klbf_ob[s].ordered >= (DWORD)klbf_leg_frS * 1000u && now - klbf_ob[s].ordered < KLBF_OT_REORD) {      /* OnlineLegFightReorderS (own cop test, so it works without OnlineLegStallS): make the 6 s repeat below due now; ordered stays non-zero, so OnlineExitKeepGoal still skips the re-push of a goal that runs toward the leg. GUESS: combat displaces the Defend block / Sprint style between repeats (no per-second trace yet; bench with OnlineExitTrace=1) */
+                    int c;
+                    for (c = 0; c < ncop; c++) if (kle_dist(cops[c], bots[b].pos) <= klbf_ot_guard) break;
+                    if (c < ncop) {
+                        klbf_ob[s].ordered = now - KLBF_OT_REORD;
+                        if (!(klbf_ob[s].legFlags & 4)) { klbf_ob[s].legFlags |= 4; klog("botfill: tactics: bot %d (actor %08lx): waypoint leg %d of %d: under fire, order re-asserted every %d s (OnlineLegFightReorderS)", s, a, klbf_ob[s].leg + 1, klbf_way_n, klbf_leg_frS); }
                     }
                 }
                 timedout = !waiting && now - klbf_ob[s].legAt >= (klbf_ob[s].legMs ? klbf_ob[s].legMs : KLBF_WAY_LEGMS);
