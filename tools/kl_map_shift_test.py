@@ -538,7 +538,13 @@ def main(argv):
     src = a[0] if a else os.path.join(DD11B, 'F04_Main.zip')
     if not a and os.path.exists(os.path.join(DD11B, 'Int16Ok.txt')) and os.path.exists(src + '.before-dm11s'):
         src += '.before-dm11s'      # SHIP_DM11S.bat (10-28) installed DM11S there; the real DM11B is kept beside it
-    dst = a[1] if len(a) > 1 else os.path.join(DM, 'F04_Main_DM11S.zip')
+    if not a:
+        # 11-02: src is the live DM11B build (benches / stagers rewrite it) and dst was a fixed path under shift_1028, shared by every run of this test
+        # (two kl_tests.py runs at once overwrote each other's dst: EOFError in patch_zip). Both now live in this run's own temp dir.
+        snap = mktmp('kl_map_shift_src_')
+        shutil.copyfile(src, os.path.join(snap, os.path.basename(src)))
+        src = os.path.join(snap, os.path.basename(src))
+    dst = a[1] if len(a) > 1 else os.path.join(mktmp('kl_map_shift_dst_'), 'F04_Main_DM11S.zip')
     stats = {}
     test_source_guard(stats)
     # a bench (stage_a1shift.ps1 install) puts DM11S itself into the DM11B folder; shifting that again pushes the M11 section pivots to
