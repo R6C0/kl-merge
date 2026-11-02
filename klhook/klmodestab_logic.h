@@ -36,19 +36,25 @@ static const struct kmt_def {
 /* v[0..4] = the raw ini values of the module's own keys (kspg_m_state in klshoppage.c); 0 OFF, 1 ON, 2 DRY. Prerequisites are the ones the owning module checks (klbotfill.c, klshield.c, klshop.c) */
 #define KMT_NV 5
 static int kmt_mode12(int v) { return v == 1 ? KMT_ON : v == 2 ? KMT_DRY : KMT_OFF; }
-static int kmt_state(int id, const int *v)
+static int kmt_state(int id, const int *v, int online)
 {
     switch (id) {
     case KMT_TACTICS:  return v[0] && v[1] ? KMT_ON : KMT_OFF;                       /* v0 OnlineHost, v1 OnlineTactics */
     case KMT_DROPTAKE: return v[0] && v[1] && v[2] && v[3] == 2 ? KMT_ON : KMT_OFF;   /* v0 OnlineHost, v1 OnlineTactics, v2 OnlineDropTake, v3 OnlineTacticsTake (klbotfill.c: without 2 it only retargets, takes nothing) */
     case KMT_DOORHOLD: return v[0] && v[1] && v[2] && v[3] ? KMT_ON : KMT_OFF;        /* v3 OnlineSkipDoorStacks (default 1; DoorHold only acts while it counts shut stacks) */
     case KMT_BANK:     return !v[0] || !v[1] || !v[2] ? KMT_OFF : v[0] == 1 && v[1] == 1 ? KMT_ON : KMT_DRY;   /* v0 OnlineBank, v1 OnlineBankCredit, v2 OnlineTacticsTake != 0 (klbotfill.c: no credit without take 1/2); a dry ledger or dry credit = dry */
-    case KMT_SHIELD:   return v[0] == 1 || v[1] ? KMT_ON : v[0] == 2 ? KMT_DRY : KMT_OFF;   /* v0 [Shield] Online, v1 [Shield] Enable (Arcade part, default 1); klshield.c: Online alone keeps the part on */
+    case KMT_SHIELD:   return online ? (v[0] == 1 ? KMT_ON : v[0] == 2 ? KMT_DRY : KMT_OFF) : (v[1] ? KMT_ON : KMT_OFF);   /* v0 [Shield] Online, v1 [Shield] Enable (Arcade part, default 1); wk-modestab 1102 fix: online the shield works only with Online=1/2 (klshield.c: klsh.on = arc || online, but the Arcade gate is false online), so Enable=1 alone no longer reads ON there; offline only Enable counts. Enable is not required online (klshield.c keeps the part on with Online alone) */
     case KMT_SWAP:     return !v[1] || !v[2] ? KMT_OFF : kmt_mode12(v[0]);            /* v0 [Shop] OnlineSwap, v1 [Shop] Enable, v2 [ShopPage] Enable or [Shop] OnlineSwapArm (klshop.c:382) */
     case KMT_VOICE: case KMT_TRIGGERS: case KMT_ESCORT: return kmt_mode12(v[0]);      /* BOT VOICE = BotFill OnlineVoice only; [Voice] OnlineTalk is the human crew's banter (kltalk.c) */
     case KMT_CLOCK:    return v[0] >= 1 && v[0] <= 20 ? KMT_ON : KMT_OFF;           /* v0 TimeAuto minutes (kllobbyopt.c: 1..20 else 0; kllo_init has no enable key of its own) */
     }
     return KMT_OFF;
+}
+/* rows whose feature acts on the HOST only: a client seat can set the ini switch but nothing happens on its machine. Read from the code: klbotfill.c (tactics / take / door hold / bank / voice send / triggers / escort: 'HOST only', role 2),
+ * klshield.c Online (the host's own player), kllobbyopt.c TimeAuto (host only). SHOP SWAP acts on every seat's own shop, so it is not marked */
+static int kmt_host_only(int id)
+{
+    return id == KMT_TACTICS || id == KMT_DROPTAKE || id == KMT_DOORHOLD || id == KMT_BANK || id == KMT_VOICE || id == KMT_TRIGGERS || id == KMT_ESCORT || id == KMT_SHIELD || id == KMT_CLOCK;
 }
 static const char *kmt_state_name(int s) { return s == KMT_ON ? "ON" : s == KMT_DRY ? "DRY" : "OFF"; }
 
@@ -67,6 +73,17 @@ static void kmt_desc(int id, int state, char *o, size_t cap)
     snprintf(o, cap, "%s\n%s.  Now: %s in the ini.  Works in: %s.\nSwitch: %s in KLHook.ini or Mod Options.%s\nInformation page: BUY does nothing.",
              kmt_def[id].desc, kmt_def[id].label, kmt_state_name(state), kmt_def[id].scope, kmt_def[id].ini,
              state == KMT_DRY ? "\nDRY = it only writes the log, it changes nothing." : "");
+}
+
+/* the description with the client note: client = this seat is online and not the host; a host-only row then gets " (host only: you are a client)" at the end of its first line */
+static void kmt_desc_ex(int id, int state, int client, char *o, size_t cap)
+{
+    char t[640]; char *nl;
+    kmt_desc(id, state, t, sizeof t);
+    if (client && kmt_host_only(id) && (nl = strchr(t, '\n')) != NULL) {
+        size_t head = (size_t)(nl - t);
+        snprintf(o, cap, "%.*s (host only: you are a client)%s", (int)head, t, nl);
+    } else snprintf(o, cap, "%s", t);
 }
 
 /* RoundHints: 'F2 shop pages  E+W climb  G grenade'. keys[i] empty / on[i] 0 = left out. The result is cut at a whole entry within cap-1 characters. Returns the entry count */

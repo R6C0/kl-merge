@@ -8,37 +8,44 @@ static int fails, checks;
 int main(void)
 {
     int i; char o[300];
-    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_TACTICS, v) == KMT_ON); }
-    { int v[5] = { 0, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_TACTICS, v) == KMT_OFF); }         /* needs OnlineHost */
-    { int v[5] = { 1, 0, 1, 2, 0 }; CHECK(kmt_state(KMT_DROPTAKE, v) == KMT_OFF); }        /* needs Tactics */
-    { int v[5] = { 1, 1, 1, 2, 0 }; CHECK(kmt_state(KMT_DROPTAKE, v) == KMT_ON); }         /* v3 = OnlineTacticsTake */
-    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_DROPTAKE, v) == KMT_OFF); }        /* default ini: Take=0 -> nothing is taken */
-    { int v[5] = { 1, 1, 1, 1, 0 }; CHECK(kmt_state(KMT_DROPTAKE, v) == KMT_OFF); }        /* only Take=2 takes */
-    { int v[5] = { 1, 1, 1, 1, 0 }; CHECK(kmt_state(KMT_DOORHOLD, v) == KMT_ON); }         /* v3 = OnlineSkipDoorStacks */
-    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_DOORHOLD, v) == KMT_OFF); }        /* SkipDoorStacks=0: nothing to hold */
-    { int v[5] = { 1, 1, 0, 1, 0 }; CHECK(kmt_state(KMT_DOORHOLD, v) == KMT_OFF); }
-    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_BANK, v) == KMT_ON); }             /* v2 = OnlineTacticsTake (1 or 2) */
-    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_BANK, v) == KMT_OFF); }            /* Take=0: no credit */
-    { int v[5] = { 1, 0, 2, 0, 0 }; CHECK(kmt_state(KMT_BANK, v) == KMT_OFF); }            /* the ledger alone credits nothing */
-    { int v[5] = { 1, 2, 2, 0, 0 }; CHECK(kmt_state(KMT_BANK, v) == KMT_DRY); }
-    { int v[5] = { 2, 1, 2, 0, 0 }; CHECK(kmt_state(KMT_BANK, v) == KMT_DRY); }
-    { int v[5] = { 0, 1, 2, 0, 0 }; CHECK(kmt_state(KMT_BANK, v) == KMT_OFF); }            /* credit without a ledger does nothing */
-    { int v[5] = { 1, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_VOICE, v) == KMT_ON); }
-    { int v[5] = { 0, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_VOICE, v) == KMT_OFF); }           /* [Voice] OnlineTalk is the crew banter, not bot voice (extra values are ignored) */
-    { int v[5] = { 2, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_VOICE, v) == KMT_DRY); }
-    { int v[5] = { 2, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_TRIGGERS, v) == KMT_DRY); }
-    { int v[5] = { 3, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_ESCORT, v) == KMT_OFF); }          /* out of range = the module's 0 */
-    { int v[5] = { 1, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v) == KMT_ON); }           /* Online alone keeps the part on (klshield.c) */
-    { int v[5] = { 0, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v) == KMT_ON); }           /* Arcade Enable=1 */
-    { int v[5] = { 0, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v) == KMT_OFF); }
-    { int v[5] = { 2, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v) == KMT_DRY); }
-    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_SWAP, v) == KMT_ON); }             /* v1 Shop Enable, v2 ShopPage Enable | OnlineSwapArm */
-    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_SWAP, v) == KMT_OFF); }            /* the early-make hook is not armed */
-    { int v[5] = { 1, 0, 1, 0, 0 }; CHECK(kmt_state(KMT_SWAP, v) == KMT_OFF); }            /* [Shop] Enable=0 */
-    { int v[5] = { 2, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_SWAP, v) == KMT_DRY); }
-    { int v[5] = { 7, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CLOCK, v) == KMT_ON); }
-    { int v[5] = { 25, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CLOCK, v) == KMT_OFF); }          /* kllobbyopt.c: > 20 = off */
-    { int v[5] = { 0, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CLOCK, v) == KMT_OFF && kmt_state(99, v) == KMT_OFF); }
+    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_TACTICS, v, 0) == KMT_ON); }
+    { int v[5] = { 0, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_TACTICS, v, 0) == KMT_OFF); }         /* needs OnlineHost */
+    { int v[5] = { 1, 0, 1, 2, 0 }; CHECK(kmt_state(KMT_DROPTAKE, v, 0) == KMT_OFF); }        /* needs Tactics */
+    { int v[5] = { 1, 1, 1, 2, 0 }; CHECK(kmt_state(KMT_DROPTAKE, v, 0) == KMT_ON); }         /* v3 = OnlineTacticsTake */
+    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_DROPTAKE, v, 0) == KMT_OFF); }        /* default ini: Take=0 -> nothing is taken */
+    { int v[5] = { 1, 1, 1, 1, 0 }; CHECK(kmt_state(KMT_DROPTAKE, v, 0) == KMT_OFF); }        /* only Take=2 takes */
+    { int v[5] = { 1, 1, 1, 1, 0 }; CHECK(kmt_state(KMT_DOORHOLD, v, 0) == KMT_ON); }         /* v3 = OnlineSkipDoorStacks */
+    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_DOORHOLD, v, 0) == KMT_OFF); }        /* SkipDoorStacks=0: nothing to hold */
+    { int v[5] = { 1, 1, 0, 1, 0 }; CHECK(kmt_state(KMT_DOORHOLD, v, 0) == KMT_OFF); }
+    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_BANK, v, 0) == KMT_ON); }             /* v2 = OnlineTacticsTake (1 or 2) */
+    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_BANK, v, 0) == KMT_OFF); }            /* Take=0: no credit */
+    { int v[5] = { 1, 0, 2, 0, 0 }; CHECK(kmt_state(KMT_BANK, v, 0) == KMT_OFF); }            /* the ledger alone credits nothing */
+    { int v[5] = { 1, 2, 2, 0, 0 }; CHECK(kmt_state(KMT_BANK, v, 0) == KMT_DRY); }
+    { int v[5] = { 2, 1, 2, 0, 0 }; CHECK(kmt_state(KMT_BANK, v, 0) == KMT_DRY); }
+    { int v[5] = { 0, 1, 2, 0, 0 }; CHECK(kmt_state(KMT_BANK, v, 0) == KMT_OFF); }            /* credit without a ledger does nothing */
+    { int v[5] = { 1, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_VOICE, v, 0) == KMT_ON); }
+    { int v[5] = { 0, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_VOICE, v, 0) == KMT_OFF); }           /* [Voice] OnlineTalk is the crew banter, not bot voice (extra values are ignored) */
+    { int v[5] = { 2, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_VOICE, v, 0) == KMT_DRY); }
+    { int v[5] = { 2, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_TRIGGERS, v, 0) == KMT_DRY); }
+    { int v[5] = { 3, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_ESCORT, v, 0) == KMT_OFF); }          /* out of range = the module's 0 */
+    /* KMT_SHIELD takes the online flag (the caller passes kl_online()): Arcade = [Shield] Enable (v1), online = [Shield] Online (v0) alone (klshield.c: klsh.on = arc || online; Online=2 is the dry log) */
+    { int v[5] = { 1, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v, 1) == KMT_ON); }          /* online, Online=1 alone keeps the part on (klshield.c) */
+    { int v[5] = { 1, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v, 0) == KMT_OFF); }         /* Arcade: Enable=0 and the online switch does not act offline */
+    { int v[5] = { 0, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v, 0) == KMT_ON); }          /* Arcade Enable=1 */
+    { int v[5] = { 0, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v, 1) == KMT_OFF); }         /* online with Enable=1 but Online=0: the shield does not work online (the old row said ON) */
+    { int v[5] = { 0, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v, 0) == KMT_OFF && kmt_state(KMT_SHIELD, v, 1) == KMT_OFF); }
+    { int v[5] = { 2, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v, 1) == KMT_DRY); }         /* online dry log */
+    { int v[5] = { 2, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v, 0) == KMT_ON); }          /* offline the Arcade part is on, Online is not read */
+    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_SHIELD, v, 1) == KMT_ON); }
+    /* kmt_host_only: the rows a client seat cannot act on (host-side code), and the description suffix */
+    CHECK(kmt_host_only(KMT_TACTICS) && kmt_host_only(KMT_DROPTAKE) && kmt_host_only(KMT_TRIGGERS) && kmt_host_only(KMT_ESCORT) && kmt_host_only(KMT_SHIELD) && !kmt_host_only(KMT_SWAP) && !kmt_host_only(-1) && !kmt_host_only(KMT_N));
+    { int v[5] = { 1, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_SWAP, v, 0) == KMT_ON); }             /* v1 Shop Enable, v2 ShopPage Enable | OnlineSwapArm */
+    { int v[5] = { 1, 1, 0, 0, 0 }; CHECK(kmt_state(KMT_SWAP, v, 0) == KMT_OFF); }            /* the early-make hook is not armed */
+    { int v[5] = { 1, 0, 1, 0, 0 }; CHECK(kmt_state(KMT_SWAP, v, 0) == KMT_OFF); }            /* [Shop] Enable=0 */
+    { int v[5] = { 2, 1, 1, 0, 0 }; CHECK(kmt_state(KMT_SWAP, v, 0) == KMT_DRY); }
+    { int v[5] = { 7, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CLOCK, v, 0) == KMT_ON); }
+    { int v[5] = { 25, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CLOCK, v, 0) == KMT_OFF); }          /* kllobbyopt.c: > 20 = off */
+    { int v[5] = { 0, 0, 0, 0, 0 }; CHECK(kmt_state(KMT_CLOCK, v, 0) == KMT_OFF && kmt_state(99, v, 0) == KMT_OFF); }
     {   /* the page cycle: 0 stock, 1 page II, 2 hire, 3 controls, 4 bots and modes. ModesTab off must equal the old 4-page cycle */
         int a1, a2, a3, cur, m;
         for (a1 = 0; a1 < 2; a1++) for (a2 = 0; a2 < 2; a2++) for (a3 = 0; a3 < 2; a3++) for (cur = 0; cur < 4; cur++) {
@@ -63,6 +70,9 @@ int main(void)
     kmt_desc(KMT_BANK, KMT_DRY, o, sizeof o); CHECK(strstr(o, "DRY = it only writes the log"));
     kmt_desc(KMT_BANK, KMT_ON, o, sizeof o); CHECK(!strstr(o, "DRY ="));
     kmt_desc(-1, 0, o, 8); CHECK(o[0] == 0);
+    kmt_desc_ex(KMT_TRIGGERS, KMT_ON, 1, o, sizeof o); CHECK(strstr(o, " (host only: you are a client)"));      /* client seat, host-only row */
+    kmt_desc_ex(KMT_TRIGGERS, KMT_ON, 0, o, sizeof o); CHECK(!strstr(o, "host only: you are a client"));
+    kmt_desc_ex(KMT_SWAP, KMT_ON, 1, o, sizeof o); CHECK(!strstr(o, "host only: you are a client"));         /* not a host-only row */
     {   /* hint line */
         const char *k[5] = { "F2", "E+W", "G", "End", "" }; const char *w[5] = { "shop pages", "climb", "grenade", "unstick", "x" }; int on[5] = { 1, 1, 1, 1, 1 };
         CHECK(kmt_hint_build(k, w, on, 5, o, sizeof o) == 4 && !strcmp(o, "F2 shop pages  E+W climb  G grenade  End unstick"));
