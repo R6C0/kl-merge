@@ -191,7 +191,10 @@ def short(path, game):
 
 
 def find(guesses, exe):
-    for g in guesses:
+    """The game folder holding exe: the first guess that has it. A cloud session that only has a staged copy of the exe
+    sets KL_DD_DIR / KL_DM_DIR (a folder with kl2.exe / kaneandlynch.exe in it); those win over the guesses."""
+    env = os.environ.get("KL_DD_DIR" if exe == DD_EXE else "KL_DM_DIR")
+    for g in ([env] if env else []) + list(guesses):
         if g and os.path.isfile(os.path.join(g, exe)):
             return g
     return None

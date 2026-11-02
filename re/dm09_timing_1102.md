@@ -32,5 +32,11 @@ TimeMin=2
 +OnlineLegNear=600
 ```
 (`OnlineLegSpeed` and `OnlineLegMaxS=60` lines already sit near ini:1108; add `OnlineLegNear=600   ; RT5`.) RT5B = same plus `OnlineLegWaitIdx=0` (lever d), to isolate it.
-Host script `RT4A_DM09_run.txt`: after step 43 (the 4th RIGHT that picks F06) and before 47, add, GUESS (row order unverified, run once with `windows` + screenshots first): `DOWN` x N to the Heist time row, then `RIGHT` x2 (4 -> 6; the host's row, client follows), then back UP. If the row cannot be reached, fall back to the lobby `[Lobby] TimeMin=6` trick: with TimeMin=6 the stock floor/keys leave the default at 4, so this does NOT work; the script step is required.
+Host script (the `[Script]` block of the host ini; klauto reads keys 1.. in order and STOPS at the first missing number, so renumber
+everything after the insert): after step 43 (the 4th RIGHT that picks F06) and before the old 44 (`log MAPS9 ...`), add
+`tap DOWN`, `wait 900`, `tap DOWN`, `wait 900`, `tap RIGHT`, `wait 900`, `tap RIGHT`, `wait 900`. CERTAIN (2026-11-02, re/lobby_options.md
+"Row order"): the FA lobby opens on the level row (-4), DOWN = row + 1, so two DOWNs land on Heist time (-2); LEFT / RIGHT never move the
+row; Ready (RETURN) works from any row, so no UP is needed. The first RIGHT is stock (4 -> 5), the second goes through kllobbyopt
+(TimeMax=10 is already in the ini): expect `lobbyopt: Heist time 5 -> 6 (the stock clamp would have kept 5)` and
+`lobbyopt-test: session state 13 -> 18: time sm=6 min`. `[Lobby] TimeMin=6` does NOT work (the floor only limits LEFT; the default stays 4).
 Pass check in the log: `lobbyopt: round clock at state 25 ... left[+4c]=370`, then `van ... parked` with >70 s left and `boardall` counts at state 3.

@@ -6,7 +6,7 @@ Generates the per-map System Link bench inis of C:/kl_build_1024/maps9_1026/ (de
 
 How a System Link host's map is chosen (klhook/klslot.c, re/fa_slots.md; see run_all.md):
   SLOT  = the host's lobby row MP_SelectedLevel (menu position 0..8 = F01 F02 F03 F04 F06 F07 F05 F08 F09), replicated to the clients.
-          The lobby selector steps it with LEFT / RIGHT on the first row (GUESS: default focus; SL6..SL11 needed DOWN DOWN to reach 'Heist time').
+          The lobby selector steps it with LEFT / RIGHT on the first row (CERTAIN 2026-11-02, re/lobby_options.md: the lobby opens on the level row, DOWN = next row, so DOWN DOWN = 'Heist time').
   PAGE  = which map folder that slot loads (kls_page_now): [Expansion] Page=N (force, any state) beats OnlineSet beats the menu latch.
           Page 0 = stock Dog Days (DD01..DD09 via [Redirect]), 2 = [Redirect.2] Dead Men maps, 3 = [Redirect.3] Dead Men campaign maps.
           The page is read from EACH PEER'S OWN ini and is not sent (re/private_match_mapsync.md): the host and every joiner need the same Page.
