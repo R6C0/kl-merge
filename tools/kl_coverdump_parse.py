@@ -96,15 +96,25 @@ def built_points(d):
     return {p[0]: p[1:4] for p in d['points'] if p[1:4] != BLANK}
 
 
-def compare(host, client):
+TOL = 1.0                        # CR5 11-02: a parked car's ring points settle 0.1 unit apart on the two seats (physics jitter); the dump prints 1 decimal
+
+
+def _near(a, b, tol):
+    return all(abs(x - y) <= tol for x, y in zip(a, b))
+
+
+def compare(host, client, tol=TOL):
     """Compare two read_dump() results (host, client) -> dict(host_built, client_built, prefix, differ, host_extra,
-    client_extra, diverge) where differ = sorted indices whose pos differs (a missing side counts as blank), prefix = the
-    number of leading indices that agree (built or blank on both), *_extra = the indices built on one side only."""
+    client_extra, diverge, jitter) where differ = sorted indices whose pos differs by more than tol on an axis (a missing side
+    counts as blank), jitter = indices built on both within tol but not equal, prefix = the number of leading indices that
+    agree (built or blank on both), *_extra = the indices built on one side only."""
     h, c = built_points(host), built_points(client)
     n = max([p[0] for p in host['points']] + [p[0] for p in client['points']] + [-1]) + 1
-    differ = [i for i in range(n) if h.get(i, BLANK) != c.get(i, BLANK)]
+    neq = [i for i in range(n) if h.get(i, BLANK) != c.get(i, BLANK)]
+    jitter = [i for i in neq if i in h and i in c and _near(h[i], c[i], tol)]
+    differ = [i for i in neq if i not in set(jitter)]
     prefix = differ[0] if differ else n
-    return dict(host_built=len(h), client_built=len(c), prefix=prefix, differ=differ, n=n,
+    return dict(host_built=len(h), client_built=len(c), prefix=prefix, differ=differ, n=n, jitter=jitter,
                 host_extra=sorted(i for i in h if i not in c), client_extra=sorted(i for i in c if i not in h),
                 h=h, c=c, diverge=bool(differ))
 
@@ -113,7 +123,8 @@ def print_compare(r, host_name='host', client_name='client'):
     print('cover points: %s built %d, %s built %d (of %d dumped), lists agree for indices 0..%d' % (
         host_name, r['host_built'], client_name, r['client_built'], r['n'], r['prefix'] - 1))
     if not r['diverge']:
-        print('RESULT: cover point lists IDENTICAL')
+        j = r.get('jitter') or []
+        print('RESULT: cover point lists IDENTICAL' + (' (%d point(s) within %.1f unit: %s)' % (len(j), TOL, j[:16]) if j else ''))
         return
     print('%d index(es) differ: %s%s' % (len(r['differ']), r['differ'][:24], ' ...' if len(r['differ']) > 24 else ''))
     for label, idx, pts in ((host_name + ' only', r['host_extra'], r['h']), (client_name + ' only', r['client_extra'], r['c'])):

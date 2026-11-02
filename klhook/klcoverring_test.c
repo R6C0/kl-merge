@@ -34,6 +34,7 @@ int main(void)
     CHECK(kcr_cb_role_ok(3, 4, 0)); CHECK(!kcr_cb_role_ok(2, 4, 0)); CHECK(!kcr_cb_role_ok(0, 0, 0)); CHECK(!kcr_cb_role_ok(3, 1, 0));
     CHECK(kcr_cb_fits(347, 4, 1371)); CHECK(kcr_cb_fits(556, 5, 1580)); CHECK(kcr_cb_fits(8, 1, 16)); CHECK(!kcr_cb_fits(9, 1, 16)); CHECK(!kcr_cb_fits(0, 1, 0));
     CHECK(kcr_pt_usable(0x368)); CHECK(kcr_pt_usable(0x200)); CHECK(!kcr_pt_usable(0x400)); CHECK(!kcr_pt_usable(0));
+    CHECK(kcr_pt_usable(0x100a)); CHECK(kcr_pt_usable(0x1012)); CHECK(kcr_pt_usable(0x140a)); CHECK(!kcr_pt_usable(0x1400));   /* CR5 real ring flags (bit 2) */
     CHECK(kcr_cb_role_ok(3, 4, 1)); CHECK(kcr_cb_role_ok(2, 4, 1)); CHECK(!kcr_cb_role_ok(2, 1, 1)); CHECK(!kcr_cb_role_ok(0, 4, 1));
     CHECK(kcr_cb_map_listed("F01,F03", "f01\\f01_main")); CHECK(kcr_cb_map_listed("F01,F03", "F03/F03_Main")); CHECK(kcr_cb_map_listed("f01 f03", "f03"));
     CHECK(!kcr_cb_map_listed("F01,F03", "f02\\f02_main")); CHECK(!kcr_cb_map_listed("F01,F03", "f011\\x")); CHECK(!kcr_cb_map_listed("F01", "f0\\x"));

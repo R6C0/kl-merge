@@ -84,6 +84,10 @@ def main():
         r3 = P.compare(dh, P.read_dump(moved_log))
         check(r3['differ'] == [5] and r3['host_extra'] == [] and r3['client_extra'] == [], 'a point built on both but moved is a differ, not an extra: %s' % r3['differ'])
 
+        jit = dict(host_pts); jit[350] = (jit[350][0] + 0.1, jit[350][1], jit[350][2] - 0.1)    # CR5 DM01: the seats differ by 0.1 unit
+        r4 = P.compare(dh, P.read_dump(write(tmp, 'jit.log', log(jit, total=1371))))
+        check(not r4['diverge'] and r4['jitter'] == [350], 'a 0.1-unit jitter is not a divergence, it is listed as jitter: %s / %s' % (r4['differ'], r4['jitter']))
+
         buf = io.StringIO()
         with redirect_stdout(buf):
             rc = P.main([host, '--compare', client])

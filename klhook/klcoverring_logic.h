@@ -65,9 +65,10 @@ static int kcr_cb_role_ok(unsigned long role, unsigned long mode, int host) { re
    1 = cnt + 8 * eligible <= npts (vector size, (end-begin)/0x7c). npts 0 (unreadable) = no */
 static int kcr_cb_fits(unsigned long cnt, unsigned long eligible, unsigned long npts) { return npts > 0ul && eligible <= 4096ul && cnt + 8ul * eligible <= npts; }
 
-/* review D2 (11-01): a ring point the writer filled carries flag 0x200 in [pt+0x68] (the 0x6567e8 test: al&2 / 0x200); one with only 0x400 is a SPARE that still int3s.
-   Returns 1 = usable cover, 0 = spare / unset */
-static int kcr_pt_usable(unsigned long flags) { return (flags & 0x200ul) != 0ul; }
+/* review D2 (11-01): the assert check 0x656740 is `test al,2; jne ok; test eax,0x200; jne ok; int3`, so a point is valid with bit 0x2 OR bit 0x200 in [pt+0x68];
+   one with only 0x400 is a SPARE that still int3s. CR5 (11-02): the real ring points read 0x100a / 0x1012 / 0x140a (bit 2, no 0x200), so the old 0x200-only test
+   logged every one as spare. Returns 1 = usable cover, 0 = spare / unset */
+static int kcr_pt_usable(unsigned long flags) { return (flags & 0x2ul) != 0ul || (flags & 0x200ul) != 0ul; }
 
 /* does the slot of a level key ("f01\f01_main", either slash, any case) appear in the list "F01,F03" (comma / space / semicolon separated)? Empty list = no map */
 static int kcr_cb_map_listed(const char *list, const char *key)
