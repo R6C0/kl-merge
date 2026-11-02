@@ -590,7 +590,7 @@ static void klbf_ramp_tick(DWORD now, float bp[][3], int nb)
    GUESSES: bots[].actor is a valid 'object' argument of 0x8c16c0 (it reads [obj+4] node +0x30..+0x38, as the tracker's objects have); the update's extra skips (0x4ea3b0(actor) at 0x42b1f7, node flag +0x3c bit 10, 0x806cc0) are not mirrored (only the census' live status guards; GUESS that this is enough).
    ZTriggerBox2 / ZOnlineTriggerBox: scanned too, see klbf_trig_other below (layouts read from kl2.exe 2026-10-28). Host only, fire is host-side + the box's own sync object. Log prefix 'botfill: trig:'. */
 #define KLBF_TRIG_CAP 3          /* fires of one box a round (re-armable boxes) */
-#define KLBF_TRIG_MAX 256
+#define KLBF_TRIG_MAX 512        /* CS1A DM03 had 365 trigger-box hits (13 ZTriggerBox, 239 ZTriggerBox2, 4 ZOnlineTriggerBox + repeats); 256 dropped the rest in scan order */
 #define KLBF_TRIG_SCAN1 7000      /* ms after the round's first tick */
 #define KLBF_TRIG_SCAN2 30000
 static DWORD klbf_ot_trig;      /* tentative: defined with the tactics state below (the exit trigger, never fired from here) */
@@ -635,6 +635,7 @@ static void klbf_trig_scan(void)
                         else { static int toldKeep; if (toldKeep < 3) { toldKeep++; klog("botfill: trig: ZTriggerBox2 %08lx kept (not a pick-up by name; GUESS the path string is the node path): '%s'", (unsigned long)at, pn); } }
                     }
                     if (klbf_tr.n < KLBF_TRIG_MAX) { klbf_tbs[klbf_tr.n].obj = at; klbf_tbs[klbf_tr.n].kind = (BYTE)kind; klbf_tr.kn[kind]++; klbf_tr.n++; added++; }
+                    else { static int toldFull; if (!toldFull) { toldFull = 1; klog("botfill: trig: table full (%d boxes): %s box %08lx and later ones are NOT evaluated", KLBF_TRIG_MAX, kind == 0 ? "ZTriggerBox" : kind == 1 ? "ZTriggerBox2" : "ZOnlineTriggerBox", (unsigned long)at); } }
                 }
             }
         }
