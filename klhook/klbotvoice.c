@@ -104,7 +104,11 @@ static int klbv_look_key(int ev, int digit, const char *dkey, char *key, int cap
 {
     char leaf[64]; int ch;
     if (!klbv_bylook || digit < 2 || digit > 8) return 0;
+    /* loot only: tools/kl_dmvoice.py keeps YouEsc / AllEsc stock (KEEP_STOCK), so no level .LOC has KLVoice/<Name>/YouEsc_01 and boarded always took the fallback (review of 216d5f0b9) */
+    if (ev != KLBV_EV_LOOT) return 0;
     if (!klcl_on || !klcl_t.e[digit - 1].have || !(ch = klcl_t.e[digit - 1].ch)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d: no look-table entry / character (OnlineLooks off, stock map or the bot keeps his body): digit key", ev, digit); return 0; }
+    /* the look must be APPLIED on this seat (klcl_note 1 = applied, 4 = model taken, as klcl_bot_look): a received but skipped / pending record leaves the Dog Days body, whose digit voice fits */
+    if (klcl_t.a[digit - 1].epoch != klcl_t.epoch || (klcl_t.a[digit - 1].last != 1 && klcl_t.a[digit - 1].last != 4)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d ch %d: look not applied on this seat (outcome %d): digit key", ev, digit, ch, klcl_t.a[digit - 1].last); return 0; }
     if (!klcl_bot_name(ch, who, wcap) || !kvo_name_of(who)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d ch %d: wardrobe name unreadable or not a Dead Men body: digit key", ev, digit, ch); return 0; }
     if (!kvo_leaf(dkey, leaf)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d: key %s has no _C<n> leaf: digit key", ev, digit, dkey); return 0; }
     if (_snprintf(key, cap, "KLVoice/%s/%s", who, leaf) < 0 || (int)strlen(key) >= cap - 1) return 0;
@@ -128,7 +132,7 @@ static int klbv_play(const char *seat, int ev, int digit, unsigned now, int chec
         char lkey[200], who[40];
         if (klbv_look_key(ev, digit, key, lkey, sizeof lkey, who, sizeof who)) {
             r = klk_say(lkey, -6, 0.0f, "bot voice (OnlineVoiceByLook)", rules, scene);
-            klog("botvoice: %s say event %d (%s) digit %d bylook %s key %s -> klk_say %d%s", seat, ev, klbv_ev_name(ev), digit, who, lkey, r, r ? "" : " (digit key next)");
+            klog("botvoice: %s say event %d (%s) digit %d bylook %s key %s -> klk_say %d%s", seat, ev, klbv_ev_name(ev), digit, who, lkey, r, r ? "" : " (no leaf or speech gate closed: digit key next)");
             if (r) return r;
         }
     }
