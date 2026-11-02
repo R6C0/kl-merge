@@ -21,6 +21,8 @@
  * Map=1 puts CopSquad on the NUMPAD keys: NumLock must be ON (with it off the keys send End / Down / PageDown and the squad commands do nothing; End is Unstick's key then).
  * Only the three host keys take Ctrl (klhostopt.c); a "Ctrl+" on any other key is ignored with a log line. A module line in KLHook.ini beats [Keys]: the sample ini has them commented.
  * [Keys] ControlsPage=1 turns the shop's MOD CONTROLS page + the page-cycle key on, Hints=1 the on-screen hints, ClashLog=1 the boot check. All default 0 (recommended on once benched).
+ * [Keys] ModesTab=1 (wk-modestab-1102, NOT RUN IN THE GAME): the controls page gets a second view, BOTS AND MODES (the host / gamemode switches that have no key: klmodestab_logic.h, klshoppage.c);
+ * [Keys] RoundHints=1: one announce line at the first round of a session naming the keys that are ON, and the host toggles (their keys: see the MOD CONTROLS page; F9 / F11) announce their new state.
  *
  * WIRING: klhook.c #include "klkeys.c" right after klmem.c (before every module that reads a key); klkeys_check() in the init block after the module inits.
  */
@@ -61,7 +63,7 @@ static const struct klkeys_def {
 };
 
 static struct {
-    int done, map, page, hints, clash;                   /* [Keys] Map / ControlsPage / Hints / ClashLog */
+    int done, map, page, hints, clash, modes, rhint;     /* [Keys] Map / ControlsPage / Hints / ClashLog / ModesTab / RoundHints */
     int vk[KK_N], ctl[KK_N], src[KK_N];                  /* resolved; src 0 = default, 1 = module line, 2 = [Keys] line */
     DWORD onAt; int on[KK_N];                            /* the live ON/OFF of each feature (klkeys_on), cached 2 s */
 } klkeys;
@@ -129,6 +131,8 @@ static void klkeys_init(void)
     klkeys.page = GetPrivateProfileIntA("Keys", "ControlsPage", 0, klh_ini) != 0;       /* (recommended on once benched) MOD CONTROLS shop page + page-cycle key */
     klkeys.hints = GetPrivateProfileIntA("Keys", "Hints", 0, klh_ini) != 0;             /* (recommended on once benched) on-screen hint when the shop opens */
     klkeys.clash = GetPrivateProfileIntA("Keys", "ClashLog", 0, klh_ini) != 0;          /* (recommended on once benched) boot clash check, one WARN per clash */
+    klkeys.modes = GetPrivateProfileIntA("Keys", "ModesTab", 0, klh_ini) != 0;          /* (recommended off until benched) the controls page's BOTS AND MODES view; needs ControlsPage=1 */
+    klkeys.rhint = GetPrivateProfileIntA("Keys", "RoundHints", 0, klh_ini) != 0;        /* (recommended off until benched) the first-round key line + the host toggles' state text */
     for (i = 0; i < KK_N; i++) {
         const struct klkeys_def *d = &klkeys_def[i]; int vk, ctl;
         klkeys.src[i] = 0;
@@ -146,6 +150,8 @@ static int klkeys_vk(int id) { klkeys_init(); return id >= 0 && id < KK_N ? klke
 static int klkeys_ctl(int id) { klkeys_init(); return id >= 0 && id < KK_N ? klkeys.ctl[id] : 0; }
 static int klkeys_page_on(void) { klkeys_init(); return klkeys.page; }
 static int klkeys_hints_on(void) { klkeys_init(); return klkeys.hints; }
+static int klkeys_modes_on(void) { klkeys_init(); return klkeys.modes; }
+static int klkeys_roundhints_on(void) { klkeys_init(); return klkeys.rhint; }
 
 /* is the feature switched on in the ini RIGHT NOW (read again every 2 s: the host options and Mod Options write the file while the game runs) */
 static int klkeys_on_ini(int id)

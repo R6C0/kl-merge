@@ -93,6 +93,7 @@ static struct {
     int hArm; DWORD hArmAt, hPressAt; int hPressRow;   /* the two-press arm (klchar number armed, tick), the last press (dedupe of the Voodoo + BuyWeapon of one click) */
     int hRank, hRankOk; DWORD hRankAt;           /* my FA rank (klhr_rank), cached 2 s */
     /* MOD CONTROLS page (2026-10-28, [Keys] ControlsPage=1, NOT RUN IN THE GAME): a THIRD overlay next to the hire page, same carrier mechanism (kspg.ctl, see 'MOD CONTROLS PAGE' below) */
+    int modesOn; volatile int ctlMode;               /* [Keys] ModesTab: the controls page has a 2nd view (BOTS AND MODES); ctlMode 1 = that view is up (only with ctl) */
     int ctlOn, ctlKey, ctlKeyDown, hPendPg, hintDone, ctlTold; DWORD ctlLastKey;   /* config (the page-cycle key), edge, the early press's target (0 hire / 1 controls), the once-per-session hint, presses logged */
     volatile int ctl;                            /* the controls page is on screen (never together with hire / shownB) */
 } kspg;
@@ -107,6 +108,7 @@ static int klhro_enabled(void);
 #include "klshoppage_probe.c"                              /* [ShopPage] OnlineProbe: pool / hand-out / buy log lines, no writes */
 static int kspg_netok(int row);                                  /* defined below; used by the book tick */
 static void kspg_link_check(const char *when);                   /* log-only link proof, defined below */
+#include "klmodestab_logic.h"                           /* [Keys] ModesTab: BOTS AND MODES rows + RoundHints text (pure) */
 #include "klswappic.h"                                  /* [Shop] OnlineSwapPic: pure decision (look-alike rows) */
 #include "klshoppage_online.c"                             /* [ShopPage] OnlineSend: page II press sent to the host (SHOPG), host judges + logs, no writes */
 
@@ -174,6 +176,35 @@ static int kspg_c_feat(int row)
 /* the row names, klkeys ids 0..15 (klkeys.c's table order), <= 11 characters so name + key fits in 16 */
 static const char *const kspg_c_short[16] = { "UNSTICK", "GUN SHELF", "COP FOLLOW", "COP HOLD", "COP ATTACK", "HOLD VAN", "REVEAL UCC", "GRENADE",
                                               "MAP SET", "AI HEISTERS", "MAP POOL", "HEISTER", "MASK", "HIRE PAGE", "PAGE II", "UCC PING" };
+/* BOTS AND MODES view ([Keys] ModesTab=1): rows 0..7 (tab Pistols) = modes 0..7, rows 17..24 (tab SMGs) = modes 8..15 (10 exist), the same layout rule as the keys view. The state is read from the
+ * ini with the keys and defaults the owning modules use (no new hooks); 2 s cache like klkeys_on. Modes that need a host (Tactics ...) read 'ON' when the ini says so: whether this seat IS the host is not shown. */
+static int kspg_m_feat(int row) { int f = row >= 0 && row <= 7 ? row : row >= 17 && row <= 24 ? row - 17 + 8 : -1; return f >= 0 && f < KMT_N ? f : -1; }
+static int kspg_m_state(int id)
+{
+    static DWORD at; static int st[KMT_N]; DWORD now = GetTickCount(); int i;
+#define KMI(s, k) ((int)GetPrivateProfileIntA(s, k, 0, klh_ini))
+    if (!at || now - at > 2000) {
+        at = now | 1;
+        for (i = 0; i < KMT_N; i++) {
+            int v[KMT_NV] = { 0, 0, 0, 0, 0 };
+            switch (i) {
+            case KMT_TACTICS:  v[0] = KMI("BotFill", "OnlineHost"); v[1] = KMI("BotFill", "OnlineTactics"); break;
+            case KMT_DROPTAKE: v[0] = KMI("BotFill", "OnlineHost"); v[1] = KMI("BotFill", "OnlineTactics"); v[2] = KMI("BotFill", "OnlineDropTake"); v[3] = KMI("BotFill", "OnlineTacticsTake"); break;
+            case KMT_DOORHOLD: v[0] = KMI("BotFill", "OnlineHost"); v[1] = KMI("BotFill", "OnlineTactics"); v[2] = KMI("BotFill", "OnlineDoorHold"); v[3] = (int)GetPrivateProfileIntA("BotFill", "OnlineSkipDoorStacks", 1, klh_ini); break;
+            case KMT_BANK:     v[0] = KMI("BotFill", "OnlineBank"); v[1] = KMI("BotFill", "OnlineBankCredit"); v[2] = KMI("BotFill", "OnlineTacticsTake"); break;
+            case KMT_VOICE:    v[0] = KMI("BotFill", "OnlineVoice"); break;
+            case KMT_TRIGGERS: v[0] = KMI("BotFill", "OnlineTriggers"); break;
+            case KMT_ESCORT:   v[0] = KMI("Bots", "OnlineEscort"); break;
+            case KMT_SHIELD:   v[0] = KMI("Shield", "Online"); v[1] = (int)GetPrivateProfileIntA("Shield", "Enable", 1, klh_ini); break;
+            case KMT_SWAP:     v[0] = KMI("Shop", "OnlineSwap"); v[1] = KMI("Shop", "Enable"); v[2] = KMI("ShopPage", "Enable") || KMI("Shop", "OnlineSwapArm"); break;
+            case KMT_CLOCK:    v[0] = KMI("Lobby", "TimeAuto"); break;
+            }
+            st[i] = kmt_state(i, v);
+        }
+    }
+#undef KMI
+    return id >= 0 && id < KMT_N ? st[id] : KMT_OFF;
+}
 static void kspg_c_desc(int f, char *o, size_t cap)
 {
     const struct klkeys_def *d = &klkeys_def[f]; char kn[24]; int on = klkeys_on(f);
@@ -181,21 +212,22 @@ static void kspg_c_desc(int f, char *o, size_t cap)
     snprintf(o, cap, "%s\nKey: %s.  Now: %s.  Works in: %s.\n%s\nMove the key: [Keys] %s= in KLHook.ini.  Information page: BUY does nothing.",
              d->desc, kn, on ? "ON" : "OFF", d->scope, on ? "Switched on in the ini." : "Switched OFF: the key does nothing until it is on in Mod Options (or KLHook.ini [Keys] / the feature's section).", d->name);
 }
-/* page ids for the cycle key: 0 stock / set A, 1 page II (set B), 2 hire, 3 controls */
-static int kspg_cur(void) { return kspg.ctl ? 3 : kspg.hire ? 2 : kspg.shownB ? 1 : 0; }
+/* page ids for the cycle key: 0 stock / set A, 1 page II (set B), 2 hire, 3 controls, 4 bots and modes ([Keys] ModesTab=1: the controls page's second view) */
+static int kspg_cur(void) { return kspg.ctl ? 3 + (kspg.ctlMode != 0) : kspg.hire ? 2 : kspg.shownB ? 1 : 0; }
 static int kspg_avail(int p)
 {
     if (p == 0) return 1;
     if (p == 1) return kspg.on && kspg.pre;
     if (p == 2) return kspg.hireOn && klhr_on && (!kl_online() || klhro_enabled());
+    if (p == 4) return kspg.ctlOn && kspg.modesOn;
     return kspg.ctlOn;
 }
 static int kspg_next(int cur)
 {
-    int i, p; for (i = 1; i <= 4; i++) { p = (cur + i) % 4; if (p != cur && kspg_avail(p)) return p; }
-    return cur;
+    int av[5], p; for (p = 0; p < 5; p++) av[p] = kspg_avail(p);
+    return kmt_next(cur, av);      /* klmodestab_logic.h, tested: with ModesTab off page 4 is never available = the old 4-page cycle */
 }
-static const char *const kspg_pname[4] = { "stock page", "Page II", "Hire", "Controls" };
+static const char *const kspg_pname[5] = { "stock page", "Page II", "Hire", "Controls", "Bots and modes" };
 /* the caption's cycle hint, '  [F2] next: Hire a heister'; 0 = none (page off / text too long) */
 static int kspg_cycle_hint(char *o, size_t n, int cur)
 {
@@ -297,16 +329,17 @@ static char *kspg_text_ctl(void *self, const char *key, char *res)
     const char *p; int row, f, t; char *o = kspg_ring();
     static const char *const hk[4] = { "HeadlinePistol", "HeadlineShot", "HeadlineSub", "HeadlineAssaultRifle" };
     static const char *const hn[4] = { "IN ROUND", "-", "HOST + ONLINE", "-" };
+    static const char *const hm[4] = { "BOTS AND HOST", "-", "MORE MODES", "-" };
     if (strstr(key, "BuyWeapons_Title")) {   /* GUESS: BuyWeapons_Title is the shop's caption (page II's hint relies on the same key) */
         size_t n = strlen(res);
         if (n > 420) return 0;
-        memcpy(o, res, n); snprintf(o + n, 60, "  MOD CONTROLS");
-        kspg_cycle_hint(o, 520, 3);
+        memcpy(o, res, n); snprintf(o + n, 60, kspg.ctlMode ? "  BOTS AND MODES" : "  MOD CONTROLS");
+        kspg_cycle_hint(o, 520, kspg_cur());
         if (kspg.ctlTold < 1) { kspg.ctlTold = 1; klog("controls: served the caption '%s'", o); }
         return o;
     }
     for (t = 0; t < 4 && !strstr(key, hk[t]); t++) ;
-    if (t < 4) { strcpy(o, hn[t]); return o; }
+    if (t < 4) { strcpy(o, kspg.ctlMode ? hm[t] : hn[t]); return o; }
     if (strstr(key, "WeaponLocked")) { strcpy(o, "see rank"); return o; }          /* GUESS: as the hire page: the carrier's lock hint is not this page's */
     if (strstr(key, "UnLocksWith")) { strcpy(o, "Gun lock, not used here:"); return o; }
     if ((p = strstr(key, "WeaponShop/Weapon")) != 0) {
@@ -317,9 +350,10 @@ static char *kspg_text_ctl(void *self, const char *key, char *res)
         if (row < 0 || row >= KSPG_ROWS) return 0;
         role = kspg_role_of(self);
         if (role == KR_OLDPRI || role == KR_OLDSEC) return 0;                        /* the carried-gun cards keep the real loadout */
-        f = kspg_c_feat(row);
+        f = kspg.ctlMode ? kspg_m_feat(row) : kspg_c_feat(row);
         if (!*p) {
             if (f < 0) strcpy(o, "-");
+            else if (kspg.ctlMode) kmt_row(f, kspg_m_state(f), o, 520);
             else {   /* SHOTS3 (11-01): a 25-character row ('COP SQUAD FOLLOW  Num1  OFF') wrapped in the selected row's bigger font: the text hid behind the highlight bar and the rows above
                       * slid up into 'ASSAULT RIFLES'. The hire page's rows (<= 15 characters, 'MITCHEL $90,000') render clean, so a row is now short name + key, cut to 16 (GUESS: the
                       * safe width is about the hire page's); the full name, key and ON / OFF stay in the description pane. An OFF feature's key is dropped from the row (its key does nothing) */
@@ -332,7 +366,7 @@ static char *kspg_text_ctl(void *self, const char *key, char *res)
             return o;
         }
         if (!strcmp(p, "Desc")) {
-            if (f < 0) o[0] = 0; else kspg_c_desc(f, o, 519);
+            if (f < 0) o[0] = 0; else if (kspg.ctlMode) kmt_desc(f, kspg_m_state(f), o, 519); else kspg_c_desc(f, o, 519);
             return o;
         }
     }
@@ -1254,6 +1288,7 @@ static void kspg_init(void)
         if (kspg.ctlKey < 1 || kspg.ctlKey > 0xfe) { klog("controls: the page-cycle key is not valid: the controls page stays OFF"); }
         else if ((kspg.hireOn && kspg.ctlKey == kspg.hireKey) || (kspg.on && kspg.ctlKey == (klkeys_vk(KK_PAGE2) & 0xff))) klog("controls: the page-cycle key 0x%02x is the hire / page II key: the controls page stays OFF", kspg.ctlKey);
         else { kspg.ctlOn = 1; klog("controls: on ([Keys] ControlsPage=1): key 0x%02x cycles the Buy Weapons pages (NOT RUN IN THE GAME)", kspg.ctlKey); }
+        if (kspg.ctlOn && klkeys_modes_on()) { kspg.modesOn = 1; klog("controls: [Keys] ModesTab=1: the cycle also shows BOTS AND MODES (host / gamemode switches, ON / OFF from the ini; NOT RUN IN THE GAME)"); }
     }
     /* [Shop] OnlineSwapArm (2026-10-28, default 0, recommended off until benched; NOT RUN IN THE GAME): [Shop] OnlineSwap rides this file's early-make hook, which was armed only
        with [ShopPage] Enable=1 AND pairs in KLShopPage.ini; without them OnlineSwap=1 did nothing (SHOT2D logs: OnlineSwap=1, 'no pairs', no 'osw:' line). =1: the hook is armed for the
@@ -1369,23 +1404,45 @@ static void kspg_hint(void)
     char kn[24], t[160]; int p, n = 0; size_t l;
     kspg_h_keyname(kspg.ctlKey, kn, sizeof kn);
     l = (size_t)snprintf(t, sizeof t, "[%s] more shop pages:", kn);
-    for (p = 1; p < 4; p++) if (kspg_avail(p) || (p == 1 && kspg.on)) { l += (size_t)snprintf(t + l, sizeof t - l, "%s %s", n ? "," : "", p == 1 ? "page II" : p == 2 ? "hire" : "mod controls"); n++; }
+    for (p = 1; p < 5; p++) if (kspg_avail(p) || (p == 1 && kspg.on)) { l += (size_t)snprintf(t + l, sizeof t - l, "%s %s", n ? "," : "", p == 1 ? "page II" : p == 2 ? "hire" : p == 3 ? "mod controls" : "bots and modes"); n++; }
     if (!n) { kspg.hintDone = 1; return; }
     if (klan_show(t, 7.0f, 0)) { kspg.hintDone = 1; klog("controls: hint shown: '%s'", t); }
+}
+/* [Keys] RoundHints=1 (wk-modestab-1102, NOT RUN IN THE GAME): once per session, the first time the FA announcement element exists (= a round is loaded; GUESS: it does not exist in the menus, as the
+ * 'no FA announcement element yet' log of klannounce.c suggests) and 8 s later, one line of the keyed features that are ON, built by kmt_hint_build. klan_show waits while a stock message is up. */
+static void kspg_round_hint(void)
+{
+    static int done; static DWORD seenAt, nextTry; DWORD now = GetTickCount();
+    char kn[7][24], t[160]; const char *keys[7], *what[7]; int on[7], n = 0;
+    if (done || !klkeys_roundhints_on()) return;
+    if (!klan_element()) { seenAt = 0; return; }       /* the element went away (menu): the 8 s count starts again */
+    if (!seenAt) { seenAt = now | 1; return; }
+    if (now - seenAt < 8000) return;
+    if (nextTry && (int)(now - nextTry) < 0) return;    /* rate limit: a stock message can hold klan_show off, the line is rebuilt at most once a second */
+    nextTry = now + 1000;
+    kspg_h_keyname(kspg.ctlKey, kn[n], sizeof kn[n]); keys[n] = kn[n]; what[n] = "shop pages"; on[n++] = kspg.ctlOn;
+    if (GetPrivateProfileIntA("Climb", "Enable", 0, klh_ini)) { kspg_h_keyname(GetPrivateProfileIntA("Climb", "Key", 0x45, klh_ini) & 0xff, kn[n], sizeof kn[n] - 2); strcat(kn[n], "+W"); keys[n] = kn[n]; what[n] = "climb"; on[n++] = 1; }
+    klkeys_name(klkeys_vk(KK_GREN), 0, kn[n], sizeof kn[n]); keys[n] = kn[n]; what[n] = "grenade"; on[n++] = klkeys_on(KK_GREN);
+    klkeys_name(klkeys_vk(KK_UNSTICK), 0, kn[n], sizeof kn[n]); keys[n] = kn[n]; what[n] = "unstick"; on[n++] = klkeys_on(KK_UNSTICK) && !kl_online();   /* klunstick.c returns early online */
+    klkeys_name(klkeys_vk(KK_INV), 0, kn[n], sizeof kn[n]); keys[n] = kn[n]; what[n] = "gun shelf"; on[n++] = klkeys_on(KK_INV) && !kl_online();
+    klkeys_name(klkeys_vk(KK_CHAR), 0, kn[n], sizeof kn[n]); keys[n] = kn[n]; what[n] = "heister"; on[n++] = klkeys_on(KK_CHAR) && kl_online();
+    klkeys_name(klkeys_vk(KK_UPING), 0, kn[n], sizeof kn[n]); keys[n] = kn[n]; what[n] = "cop ping"; on[n++] = klkeys_on(KK_UPING) && kl_online();
+    if (!kmt_hint_build(keys, what, on, n, t, 60)) { done = 1; return; }          /* 60: cut at a whole entry; the other hints are 20..45 characters, the width is a GUESS to verify in the first live run */
+    if (klan_show(t, 8.0f, 0)) { done = 1; klog("roundhints: shown: '%s'", t); }
 }
 static void kspg_cycle(DWORD now)
 {
     int cur = kspg_cur(), nxt = kspg_next(cur);
     if (nxt == cur) { klog("controls: the cycle key: no other page is available here"); return; }
-    if ((nxt == 2 || nxt == 3) && !kspg_h_selok()) {          /* as the hire key: the page opens once the scan has wrapped the selector (up to 3 s) */
-        if (!kspg.hPendAt) { kspg.hPendAt = now | 1; kspg.hPendPg = nxt == 3; klog("controls: the cycle key came before the shop's selector is wrapped: %s opens once it is (up to 3 s)", kspg_pname[nxt]); }
+    if (nxt >= 2 && !kspg_h_selok()) {          /* as the hire key: the page opens once the scan has wrapped the selector (up to 3 s) */
+        if (!kspg.hPendAt) { kspg.hPendAt = now | 1; kspg.hPendPg = kmt_pend_of(nxt); klog("controls: the cycle key came before the shop's selector is wrapped: %s opens once it is (up to 3 s)", kspg_pname[nxt]); }
         if (!kspg.active) kspg_scan();
         return;
     }
     kspg.hPendAt = 0; kspg.hire = 0; kspg.ctl = 0; kspg.hArm = 0;
     if (nxt == 1 || (nxt == 0 && kspg.shownB)) { kspg.shownB = nxt == 1; kspg.togglePend = 1; kspg.txtSeen = 0; kspg.toggleAt = now; }
     else kspg.shownB = 0;
-    if (nxt == 2) kspg.hire = 1; else if (nxt == 3) kspg.ctl = 1;
+    if (nxt == 2) kspg.hire = 1; else if (nxt >= 3) { kspg.ctlMode = nxt == 4; kspg.ctl = 1; }
     klog("controls: cycle key: page %s (was %s; highlighted row %d, category %d)", kspg_pname[nxt], kspg_pname[cur],
          (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), (int)klh_rd32((DWORD_PTR)KLH_VA(0x00ced640)));
 }
@@ -1455,8 +1512,8 @@ static void kspg_hire_tick(void)
         if (!kspg.hpre || now - kspg.hPendAt > 3000 || klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) != 2) {
             kspg.hPendAt = 0; if (kspg.hireLog) klog("hirepage: the early key press lapsed (the selector was not wrapped within 3 s): press the key again");
         } else if (kspg_h_selok()) {
-            kspg.hPendAt = 0; if (kspg.hPendPg == 1) kspg.ctl = 1; else kspg.hire = 1; kspg.hArm = 0; kspg.shownB = 0;
-            if (kspg.hPendPg == 1) klog("controls: page SHOWN (after the early key press)");
+            kspg.hPendAt = 0; if (kspg.hPendPg >= 1) { kspg.ctlMode = kmt_pend_ctl_mode(kspg.hPendPg); kspg.ctl = 1; } else kspg.hire = 1; kspg.hArm = 0; kspg.shownB = 0;
+            if (kspg.hPendPg >= 1) klog("controls: page SHOWN (after the early key press)");
             else if (kspg.hireLog) klog("hirepage: page SHOWN (%s, after the early key press; highlighted row %d, category %d)", kl_online() ? "online" : "offline",
                                    (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), (int)klh_rd32((DWORD_PTR)KLH_VA(0x00ced640)));
         }
@@ -1551,6 +1608,7 @@ static void klshoppage_tick(int game_thread)
     static SHORT (WINAPI *gaks)(int); static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static int looked;
     static DWORD lastfull;
     if ((kspg.hireOn || kspg.ctlOn) && game_thread && klh_exe_ok) kspg_hire_tick();
+    if (game_thread && klh_exe_ok && klkeys_roundhints_on()) kspg_round_hint();
     if (kspg.probe && game_thread && klh_exe_ok) kspp_tick();
     if (kspg_hlp && game_thread && klh_exe_ok) kspg_hlp_tick();
     if (kspo.on && game_thread && klh_exe_ok) kspo_tick();
