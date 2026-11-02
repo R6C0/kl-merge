@@ -28,6 +28,20 @@ int main(void)
     CHECK(c.calls == 20 && c.n == KS2_N && c.other == 20 - KS2_N, "table full: the rest counted as other");
     ks2_ctr_reset(&c);
     CHECK(c.calls == 0 && c.other == 0 && c.ret[0] == 0, "reset clears");
+    /* stack walk with the words of the G1B host log: caller-frame ebp 368f4460, real shooter 35a20dc0, weapon 699eb480 */
+    {
+        unsigned long sp[0x30], sh = 0, wp = 0; int k;
+        for (k = 0; k < 0x30; k++) sp[k] = 0;
+        sp[0] = 0x467eb8ul; sp[0x2c / 4] = 0x902734ul; sp[0x88 / 4] = 0x503772ul; sp[0x8c / 4] = 4; sp[0x90 / 4] = 0x35a20d00ul;
+        sp[0xa0 / 4] = 0x4cca6dul; sp[0x94 / 4] = 0x368f4460ul; sp[0x98 / 4] = 0x35a20dc0ul; sp[0x50 / 4] = 0x35a20dc0ul; sp[0x54 / 4] = 0x699eb480ul;
+        CHECK(ks2_stack_shot(sp, 0, &sh, &wp) == KS2_SHOT_OK && sh == 0x35a20dc0ul && wp == 0x699eb480ul, "G1 shot accepted, shooter/weapon from sp[0x50]/[0x54] (got %lx/%lx)", sh, wp);
+        sp[0x8c / 4] = 12; CHECK(ks2_stack_shot(sp, 0, &sh, &wp) == KS2_SHOT_SLOT, "other slot refused"); sp[0x8c / 4] = 4;
+        sp[0x90 / 4] = 1; CHECK(ks2_stack_shot(sp, 0, &sh, &wp) == KS2_SHOT_FLAG, "2D flag refused"); sp[0x90 / 4] = 0;
+        sp[0xa0 / 4] = 0x8c5680ul; CHECK(ks2_stack_shot(sp, 0, &sh, &wp) == KS2_SHOT_GATE && ks2_stack_shot(sp, 1, &sh, &wp) == KS2_SHOT_OK, "gate by caller word"); sp[0xa0 / 4] = 0x4cca6dul;
+        sp[0x88 / 4] = 0x50378aul; CHECK(ks2_stack_shot(sp, 0, &sh, &wp) == KS2_SHOT_FROM, "npc path refused"); sp[0x88 / 4] = 0x503772ul;
+        sp[0x2c / 4] = 0; CHECK(ks2_stack_shot(sp, 0, &sh, &wp) == KS2_SHOT_NOT3D, "not the 3D branch"); sp[0x2c / 4] = 0x902734ul;
+        sp[0x50 / 4] = 0; CHECK(ks2_stack_shot(sp, 0, &sh, &wp) == KS2_SHOT_NOSHOOTER, "null shooter");
+    }
     printf("klshot2d_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }
