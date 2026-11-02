@@ -97,6 +97,13 @@ int main(void)
         CHECK(!kvp_pickup_box(1, "ROOT\\Triggers!GarageDoors!TriggerBox") && !kvp_pickup_box(1, "ROOT\\Triggers!ArrivingCops_Squad_01_Trigger") && !kvp_pickup_box(1, "") && !kvp_pickup_box(1, "ROOT\\PCB_Server_01"), "pickups on: a script / cop-wave box and PCB_ (no 4 digits) are kept");
         CHECK(!kvp_pickup_box(1, "ROOT\\Civilians!Crowd\\ArrivingCops_Squad_01_Trigger") && !kvp_pickup_box(1, "ROOT\\Civilians!Hostages!Room\\Door_Script") && !kvp_pickup_box(1, "ROOT\\Civilians!ArrivingCops_Trigger") && kvp_pickup_box(1, "ROOT\\Civilians!Crowd\\Clerk_03"), "pickups on: a cop / script box under a Civilians! group is kept (leaf-only keywords), a clerk leaf under it is skipped");
         CHECK(!kvp_pickup_box(0, "ROOT\\Civilians!Waitress\\Fat_Waitress_01") && !kvp_pickup_box(1, 0), "pickups off: nothing skipped (old rule); null path safe");
+        {   int src = -1; /* name source (CS1A: the legacy [box+4] read was empty) */
+            CHECK(kvp_pickup_decide(1, "ROOT\\X\\PC0406_Cashbox", "", &src) && src == 1, "decide: node name first, pick-up skipped, source 1");
+            CHECK(kvp_pickup_decide(1, "", "ROOT\\X\\PC0406_Cashbox", &src) && src == 2, "decide: empty node name falls back to the legacy read, source 2");
+            CHECK(!kvp_pickup_decide(1, "ROOT\\Triggers!ArrivingCops_Squad_01_Trigger", "ROOT\\X\\PC0406_Cashbox", &src) && src == 1, "decide: a readable node name wins over the legacy one (cop box kept)");
+            CHECK(!kvp_pickup_decide(1, "", "", &src) && src == 0 && !kvp_pickup_decide(1, 0, 0, 0), "decide: both empty -> kept, source 0; nulls safe");
+            CHECK(!kvp_pickup_decide(0, "ROOT\\X\\PC0406_Cashbox", "", &src) && src == 1, "decide: key off skips nothing");
+        }
     }
     CHECK(kgu_floor(0.5f, 1, 3.0f) == 3.0f && kgu_floor(4.0f, 1, 3.0f) == 4.0f, "flop meter: raised to the floor, never lowered");
     CHECK(kgu_floor(0.5f, 0, 3.0f) == 0.5f && kgu_floor(0.5f, 1, 0) == 0.5f, "flop meter: no helper / floor off: unchanged");

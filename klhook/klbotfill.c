@@ -625,14 +625,17 @@ static void klbf_trig_scan(void)
                     }
                     if (kind == 1) { klbf_ramp_name(at, nm); if (strstr(nm, "MoneyStack") || strstr(nm, "DropMoney")) { ramp++; klbf_trig_remember(at); continue; } }      /* the loot stacks' own pick-up boxes: the tactics module takes the stack, a second fire could double it (counted with the ramp skips) */
                     if (kind == 1 && klbf_trig_pk) {      /* OnlineTriggersSkipPickups: Dead Men campaign pick-ups / interact boxes (kvp_pickup_box); the long path, not klbf_ramp_name's 40 bytes */
-                        char pn[200]; DWORD nn = klh_rd32(at + 4), ps; pn[0] = 0;
-                        if (nn && (ps = klh_rd32(nn + 0x6c)) >= 0x10000) klh_rdstr(ps, pn, sizeof pn);      /* page-wise read (klhook.c), not byte by byte */
-                        if (kvp_pickup_box(1, pn)) {
+                        char pn[200], pl[200]; DWORD ps, bn, lst; int src = 0; pn[0] = pl[0] = 0;
+                        /* name source 1 (bench CS1A fix): the entity's scene node [[box+0x24]+4] = `node` above, name pointer +0x6c (klauto.c 1332's read); source 2: the old [[box+4]+0x6c] (kept as a fallback) */
+                        if ((ps = klh_rd32(node + 0x6c)) >= 0x10000) klh_rdstr(ps, pn, sizeof pn);      /* page-wise read (klhook.c), not byte by byte */
+                        if ((bn = klh_rd32(at + 4)) && (ps = klh_rd32(bn + 0x6c)) >= 0x10000) klh_rdstr(ps, pl, sizeof pl);
+                        lst = klh_rd32(at + 0x38);      /* the AITrigger target list pointer (0x45f5d0 reads [box+0x38]); logged only: its entries are handles, not names, so it is no name source */
+                        if (kvp_pickup_decide(1, pn, pl, &src)) {
                             static int toldPk; klbf_tr.pk++; pk_scan++; klbf_trig_remember(at);
-                            if (toldPk < 3) { toldPk++; klog("botfill: trig: ZTriggerBox2 %08lx left to the game (OnlineTriggersSkipPickups): '%s'", (unsigned long)at, pn); }
+                            if (toldPk < 3) { toldPk++; klog("botfill: trig: ZTriggerBox2 %08lx left to the game (OnlineTriggersSkipPickups): '%s' (name source %d: %s)", (unsigned long)at, src == 1 ? pn : pl, src, src == 1 ? "node [[box+0x24]+4]+0x6c" : "legacy [[box+4]+0x6c]"); }
                             continue;
                         }
-                        else { static int toldKeep; if (toldKeep < 3) { toldKeep++; klog("botfill: trig: ZTriggerBox2 %08lx kept (not a pick-up by name; GUESS the path string is the node path): '%s'", (unsigned long)at, pn); } }
+                        else { static int toldKeep; if (toldKeep < 3) { toldKeep++; klog("botfill: trig: ZTriggerBox2 %08lx kept (not a pick-up by name; GUESS the string is the node path): '%s' (name source %d: %s), target list %08lx", (unsigned long)at, src == 1 ? pn : pl, src, src == 0 ? "none readable" : src == 1 ? "node" : "legacy", (unsigned long)lst); } }
                     }
                     if (klbf_tr.n < KLBF_TRIG_MAX) { klbf_tbs[klbf_tr.n].obj = at; klbf_tbs[klbf_tr.n].kind = (BYTE)kind; klbf_tr.kn[kind]++; klbf_tr.n++; added++; }
                     else { static int toldFull; if (!toldFull) { toldFull = 1; klog("botfill: trig: table full (%d boxes): %s box %08lx and later ones are NOT evaluated", KLBF_TRIG_MAX, kind == 0 ? "ZTriggerBox" : kind == 1 ? "ZTriggerBox2" : "ZOnlineTriggerBox", (unsigned long)at); } }

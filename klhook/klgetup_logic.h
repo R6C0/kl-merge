@@ -255,4 +255,16 @@ static int kvp_pickup_box(int on, const char *path)
     return 0;
 }
 
+/* OnlineTriggersSkipPickups name SOURCE (2026-11-02, bench CS1A DM03: the old read [[box+4]+0x6c] came back EMPTY for every box). Cause found in the code: klbf_trig_scan
+   already holds node = [[box+0x24]+4] (the entity's scene node, the one kle_node reads the place from and klauto.c reads the name from: [[entity+4]+0x6c], klauto.c 1332),
+   but the name read used [box+4], the controller object's own +4, not the entity's node. src 1 = the node name (first), src 2 = the legacy [box+4] read (kept as a
+   fallback). Both empty -> src 0 and the box is kept. Returns kvp_pickup_box on the first non-empty name. GUESS: the node name string holds the path (or at least the leaf). */
+static int kvp_pickup_decide(int on, const char *nodeNm, const char *legacyNm, int *src)
+{
+    const char *n = (nodeNm && nodeNm[0]) ? nodeNm : 0; int s = 1;
+    if (!n && legacyNm && legacyNm[0]) { n = legacyNm; s = 2; }
+    if (src) *src = n ? s : 0;
+    return n ? kvp_pickup_box(on, n) : 0;
+}
+
 #endif
