@@ -104,6 +104,7 @@ enum { KR_NONE = 0, KR_OLDPRI = 1, KR_OLDSEC = 2, KR_BIG = 11, KR_PRI = 12, KR_S
 static DWORD kspg_info_upd_orig;                                   /* MercsShowInfoFAWeapons slot 8 (0x50c630), saved when the private vtable of class 0 is made */
 static int klhro_waiting(void);                                  /* klhire_online.c (included later): the row the client waits on */
 static int klhro_enabled(void);
+static int klhro_host(void);                                     /* klhire_online.c: this seat is the online host (session role 2); used for the host-only note on the BOTS AND MODES rows */
 
 #include "klshoppage_probe.c"                              /* [ShopPage] OnlineProbe: pool / hand-out / buy log lines, no writes */
 static int kspg_netok(int row);                                  /* defined below; used by the book tick */
@@ -199,7 +200,7 @@ static int kspg_m_state(int id)
             case KMT_SWAP:     v[0] = KMI("Shop", "OnlineSwap"); v[1] = KMI("Shop", "Enable"); v[2] = KMI("ShopPage", "Enable") || KMI("Shop", "OnlineSwapArm"); break;
             case KMT_CLOCK:    v[0] = KMI("Lobby", "TimeAuto"); break;
             }
-            st[i] = kmt_state(i, v);
+            st[i] = kmt_state(i, v, kl_online());      /* the shield row needs the online flag: online it works only with [Shield] Online */
         }
     }
 #undef KMI
@@ -366,7 +367,7 @@ static char *kspg_text_ctl(void *self, const char *key, char *res)
             return o;
         }
         if (!strcmp(p, "Desc")) {
-            if (f < 0) o[0] = 0; else if (kspg.ctlMode) kmt_desc(f, kspg_m_state(f), o, 519); else kspg_c_desc(f, o, 519);
+            if (f < 0) o[0] = 0; else if (kspg.ctlMode) kmt_desc_ex(f, kspg_m_state(f), kl_online() && !klhro_host(), o, 519);      /* client = online and not role 2 (klhire_online.c klhro_host); host-only rows say so */ else kspg_c_desc(f, o, 519);
             return o;
         }
     }

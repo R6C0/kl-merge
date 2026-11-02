@@ -148,7 +148,25 @@ static int klbf_unpl; static DWORD klbf_unpl_at;      /* [BotFill] OnlineUnplace
 static int klbf_vp_sane, klbf_trig_orig;    /* [BotFill] OnlineVanPosSane (recommended on), OnlineTriggerOriginSkip (recommended on): kvp_sane / kvp_origin_skip in klgetup_logic.h */
 static int klbf_trig_x;    /* [BotFill] OnlineTriggersExtra: ZTriggerBox2 / ZOnlineTriggerBox too, 0 off, 1 fire, 2 dry */
 static int klbf_trig_pk;    /* [BotFill] OnlineTriggersSkipPickups (wk-trigdm-1101, default 0): Extra leaves Dead Men's pick-up / character interact TriggerBox2 alone (kvp_pickup_box) */
-static int klbf_ot_ramp, klbf_ot_rampdry;      /* OnlineRampFire / OnlineRampDry toggles (read in the init, used by klbf_ramp_* below) */
+/* [BotFill] OnlineTriggersCensus (default 0, recommended off until benched; LOG ONLY, no game write): the enemy census after a bot-fired trigger box. klbf_cen_arm() at a "trig: FIRE" remembers the live cops (team 1, health > 0, the tactics scan's count)
+   and the fire tick; klbf_cen_tick() (the once-a-second scan, host) reads the count again 10 s and 30 s later and logs one line. One census at a time: a fire while one runs is not counted (the next fire after it ends starts a new one). klbf_cen_live is
+   the current scan's count (reset before the table walk in klbf_ot_run), so the figure at the fire is at most one second old. */
+static int klbf_cen_on, klbf_cen_live; static struct { int st, n0, n10; DWORD t0, box; } klbf_cen;      /* st 0 idle, 1 waiting for +10 s, 2 waiting for +30 s */
+static void klbf_cen_arm(DWORD box, DWORD now)
+{
+    if (!klbf_cen_on || klbf_cen.st) return;
+    klbf_cen.st = 1; klbf_cen.t0 = now; klbf_cen.box = box; klbf_cen.n0 = klbf_cen_live; klbf_cen.n10 = -1;
+}
+static void klbf_cen_tick(DWORD now)
+{
+    if (!klbf_cen_on || !klbf_cen.st) return;
+    if (klbf_cen.st == 1 && now - klbf_cen.t0 >= 10000u) { klbf_cen.n10 = klbf_cen_live; klbf_cen.st = 2; }
+    if (klbf_cen.st == 2 && now - klbf_cen.t0 >= 30000u) {
+        klog("botfill: trig: census after FIRE %08lx: cops %d at fire, %d at +10 s, %d at +30 s (team 1, health > 0; log only, OnlineTriggersCensus=1)", (unsigned long)klbf_cen.box, klbf_cen.n0, klbf_cen.n10, klbf_cen_live);
+        klbf_cen.st = 0;
+    }
+}
+static int klbf_ot_ramp, klbf_ot_rampdry;     /* OnlineRampFire / OnlineRampDry toggles (read in the init, used by klbf_ramp_* below) */
 static DWORD klbf_pb_bots[KLBF_OT_BOTS_MAX]; static volatile LONG klbf_pb_n; static volatile DWORD klbf_pb_at;
 static int klbf_pb_any(void) { return klbf_pb_n > 0 && GetTickCount() - klbf_pb_at < 5000u; }
 static int klbf_pb_is_bot(DWORD a) { int i, n = klbf_pb_n; if (!a || !klbf_pb_any()) return 0; for (i = 0; i < n && i < KLBF_OT_BOTS_MAX; i++) if (klbf_pb_bots[i] == a) return 1; return 0; }
@@ -338,6 +356,8 @@ static void klbf_init(void)
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
     klbf_trig_x = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggersExtra", 0, klh_ini); if (klbf_trig_x < 0 || klbf_trig_x > 2) klbf_trig_x = 0;      /* ZTriggerBox2 / ZOnlineTriggerBox: no stock cop wave uses them (money-stack pick-ups, location trackers), so off by default */
     klbf_trig_pk = GetPrivateProfileIntA("BotFill", "OnlineTriggersSkipPickups", 0, klh_ini) != 0;      /* (recommended off until benched) needs OnlineTriggersExtra */
+    klbf_cen_on = GetPrivateProfileIntA("BotFill", "OnlineTriggersCensus", 0, klh_ini) != 0;      /* (recommended off until benched) log only: live cops at an OnlineTriggers fire, +10 s, +30 s; needs OnlineTriggers=1 */
+    if (klbf_cen_on) klog("botfill: trig: OnlineTriggersCensus=1 (recommended off until benched): a bot-fired box logs the live cops (team 1, health > 0) at the fire, +10 s and +30 s; log only%s", klbf_trig == 1 ? "" : " (OnlineTriggers is not 1: no box is fired, nothing to count)");
     klbf_vp_sane = GetPrivateProfileIntA("BotFill", "OnlineVanPosSane", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a van place that is far outside the map is not used: exit trigger / escape box instead */
     klbf_unpl = GetPrivateProfileIntA("BotFill", "OnlineUnplacedGuard", 0, klh_ini) != 0;      /* (recommended off until benched) every Ally bot at (0,0,0) 10 s into a round = the level squads are not running (no bots.zip): give no orders */
     klbf_stack_recheck = GetPrivateProfileIntA("BotFill", "OnlineStackRecheck", 0, klh_ini) != 0;      /* (recommended off until benched; wk-scorefix-1102, G4) the stack list drops a stack in state 2/3 or with a hidden node */
@@ -716,7 +736,7 @@ static int klbf_trig_other(struct klbf_tb *t, DWORD now, DWORD gt, const DWORD *
     t->in = 1;
     if (t->nfire >= KLBF_TRIG_CAP || (t->nfire && t->kind == 1 && once)) { klbf_tr.skipped++; return 0; }
     if (klbf_trig == 2 || klbf_trig_x == 2) { klog("botfill: trig: DRY would fire %s %08lx (%d bot(s) inside, delay %d, one-shot %d, entry edge)", t->kind == 1 ? "ZTriggerBox2" : "ZOnlineTriggerBox", (unsigned long)o, inside, cd, (int)once); return 0; }
-    t->nfire++; klbf_tr.fired++;
+    t->nfire++; klbf_tr.fired++;      klbf_cen_arm(o, GetTickCount());      /* OnlineTriggersCensus: ZTriggerBox2 / ZOnlineTriggerBox fire (log only) */
     f = (float)cd;
     if (t->kind == 1) {
         klog("botfill: trig: FIRE ZTriggerBox2 %08lx via %s (%d bot(s) inside, delay %d, one-shot %d, fire #%d)", (unsigned long)o, cd ? "the update's delay (+0x68/+0x64/+0x60)" : "slot 34 0x557820", inside, cd, (int)once, (int)t->nfire);
@@ -772,7 +792,7 @@ static void klbf_trig_tick(DWORD now, const DWORD *act, int nb)
         t->in = 1;
         if (t->nfire >= KLBF_TRIG_CAP || (t->nfire && rearm == -1)) { klbf_tr.skipped++; continue; }      /* one-shot spent / cap */
         if (klbf_trig == 2) { klog("botfill: trig: DRY would fire box %08lx (%d bot(s) inside, need %lu, re-arm %d, ecps %d, efamps %lu, entry edge, +0x74 %lu)", (unsigned long)o, inside, (unsigned long)need, rearm, ecps, (unsigned long)gate, (unsigned long)klh_rd32(o + 0x74)); continue; }      /* dry: no counters touched */
-        t->nfire++; fired++; klbf_tr.fired++;
+        t->nfire++; fired++; klbf_tr.fired++;      klbf_cen_arm(o, GetTickCount());      /* OnlineTriggersCensus (log only) */
         {   DWORD sync = klh_rd32(o + 0x6c);
             klog("botfill: trig: FIRE box %08lx via %s (%d bot(s) inside, need %lu, re-arm %d, ecps %d, efamps %lu, fire #%d)", (unsigned long)o, sync ? "0x6ae730" : "0x45f5d0", inside, (unsigned long)need, rearm, ecps, (unsigned long)gate, (int)t->nfire);
             KLFC_CALL(void (__fastcall *)(DWORD, DWORD), sync ? 0x006ae730 : KLBF_RAMP_FIRE)(o, 0);
@@ -1855,7 +1875,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
     }
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
-    klbf_gm_orig = 0;
+    klbf_gm_orig = 0;  klbf_cen_live = 0;      /* OnlineTriggersCensus: this scan's live-cop count */
     for (i = 0; i < 0x10000; i += 64) {      /* the whole table: BO2 (DM01) capped at 4000 objects never reached the Ally actors */
         DWORD k;
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
@@ -1871,6 +1891,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 DWORD pr, team = 99, hp, snd; float hv[2] = { 0, 0 };
                 if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4)) continue;
                 if (team == 1) {      /* a live cop: OnlineTacticsGuard keeps bots off stacks it stands on */
+                    if (klbf_cen_on) { DWORD ch_; float cv_ = 0; if ((ch_ = klh_rd32(o + 0x5fc)) && klh_rd(ch_ + 4, &cv_, 4) && cv_ > 0) klbf_cen_live++; }      /* OnlineTriggersCensus: the same live-cop test (team 1, health > 0) without the position gates */
                     if (ncop < 256 && (hp = klh_rd32(o + 0x5fc)) && klh_rd(hp + 4, hv, 4) && hv[0] > 0 && klh_rd(o + 0x460, pos, 12) && kle_ok3(pos)) {
                         if (klbf_gm && klbf_gm_tight && kgg_origin(pos)) { klbf_gm_orig++; continue; }      /* BP9 DD08: the first cops read (0,0,0) at the round start; DD08's stacks lie near the origin, so they 'guarded' them. GUESS: (0,0,0) = a cop not placed yet (pooled) */
                         memcpy(cops[ncop++], pos, 12);
@@ -1896,7 +1917,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         } }
     {   DWORD ta[KLBF_OT_BOTS]; int q, nsk = 0; static int skRound = -1; for (q = 0; q < nb; q++) { ta[q] = bots[q].actor; if (kvp_origin_skip(klbf_trig_orig, bots[q].pos)) { ta[q] = 0; nsk++; } }      /* OnlineTriggerOriginSkip (G3, DD01: 7 bots at (0,0,0) fired a box): a 0 actor is left out of the inside tests */
         if (nsk && skRound != klbf_ot_rounds) { skRound = klbf_ot_rounds; klog("botfill: trig: %d of %d bot(s) read (0,0,0): left out of the box inside tests (OnlineTriggerOriginSkip, said once a round)", nsk, nb); }
-        klbf_trig_tick(now, ta, nb); }      /* OnlineTriggers */
+        klbf_trig_tick(now, ta, nb); klbf_cen_tick(now); }      /* OnlineTriggers, then its census (OnlineTriggersCensus, log only) */
     {   /* the money: BO4 (DM01) found 0 ZOnlineMoneyCtrl in the entity table - they are controllers, not table objects. Workflow wo8upp5vd
            (verified in disassembly): the ctor 0x9012a0 (0x901323..33) appends every one to the game's object registry via 0x826990: pointers
            at 0xe09e38, count 0xe0e63c (cap 0x1000). Types at +0x38: 0 normal, 1 DROP (the pool a player drops; skipped), 2 container.
