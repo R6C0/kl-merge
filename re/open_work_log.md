@@ -1,3 +1,9 @@
+2026-11-02 ~08:05 - [ce] BA1 PASS on DD05 + DM03 (DM09 inconclusive: no van without the van-call set). PR1 FEATURE FAIL: OnlineCarryCapS 55 + PartialRetry
+gave 43 parts but $0 carried vs the control's 34 parts / $3.27M -> defaults stay; client asserts were the known DM01 sites. CO1 SAFE PASS, feature not
+exercised (no hostage ever held; host-only gating right); co2 staging a scripted grab. Merged G1 fix (RemoteShot2D shooter/weapon at sp[0x50]/[0x54],
+ee0843148, re-bench g1b), ramp name from scene node (c313423ec, tp1), shopprobe tracks 6 selector instances (069810cf7, sp1b), map_shift_test
+temp dirs (f238ecb5a). Option rows for the DM09 van-call set now say they ran live as a set. Kit dt1 (DropTake on a 2nd map + Carry 8 to van) for c9.
+
 2026-11-02 ~06:55 - [ce] CS1 PASS: bots fire cop triggers online (DM03 + DD05, 0 faults; TB2 repeat fires match Arcade); trigger table 512 (2a2b10419);
 pick-up name now read from the scene node (a53764147, kit tp1 re-benches OnlineTriggersExtra=2). G2: Dog Days gun names right in the shipped config
 (F05/F09 [Redirect] to baked DD maps, log explains it, f20632d81); kit g2b tests the unbaked fallback. G1 FEATURE FAIL: RemoteShot2D never decides

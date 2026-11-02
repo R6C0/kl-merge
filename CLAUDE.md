@@ -72,9 +72,10 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 DM03 client car #0 8/8 usable (idx 561 filled from the host's point, own +0x24 handle), no host-only usable index left; DM01 identical.
 Next: one more map, quiet the per-second CHANGED log line, then ClientRewrite + ClientRingSync into NEXT_SHIP (recommended on).
 
-2026-11-02 ~06:10 - [ce] DH2 PASS: OnlineTacticsCarry 8 -> 51 stacks grabbed (6 -> 39, 2 -> 14), no van reached; kit dh3 (DM09, Carry 8).
-Merged ModesTab/RoundHints (fc30d43b9, default 0: shop page "Bots and modes", one key-hint line, host toggle text) + TEST scripted host keys
-(8e41ec310). Queue: cs1 (running) g2 g1 sp1a ba1 pr1 co1 es1 le1, then c9 CR10, dh3, mt1 (week_1028\mt1, ~40 min).
+2026-11-02 ~08:05 - [ce] BA1 PASS 2/3 maps (DM09 inconclusive, no van); PR1 FEATURE FAIL (CapS 55 + PartialRetry: 43 parts, $0 carried
+vs control $3.27M, keep defaults); CO1 SAFE PASS but no hostage ever held (kit co2 being staged with a scripted grab).
+Merged: RemoteShot2D stack walk (ee0843148, shooter sp[0x50]), ramp name from scene node (c313423ec), shopprobe multi-instance (069810cf7),
+map_shift_test temp dirs (f238ecb5a). Queue: es1 (running) le1, CR10 dh3 mt1 tp1 g2b, then g1b sp1b dt1.
 
 2026-11-02 ~06:55 - [ce] CS1 PASS (bots fire cop triggers online, DM03+DD05); trigger table 512, pick-up name from scene node (kit tp1).
 G2 names right in shipped config ([Redirect] to baked maps; g2b tests unbaked); G1 FAIL (RemoteShot2D never decides, workflow on it);
