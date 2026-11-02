@@ -74,7 +74,7 @@ except OSError as e:
 at = next((i for i, l in enumerate(lines) if 'starting entry' in l), None)
 if at is None:
     print("  LOAD CHECK: no 'starting entry' marker - the menu script never reached the start (%s)" % want); sys.exit(2)
-rules = [m.group(1) for l in lines[at:] for m in [re.search(r'expansion: LOAD F\\w+: .*? rule (D[DM]\\d\\d)', l)] if m]
+rules = [m.group(1) for l in lines[at:] for m in [re.search(r'expansion: LOAD F\\w+: .*? rule (D[DM]\\d\\d[A-Z]?)\\b', l)] if m]
 if not rules:
     print("  LOAD CHECK: no LOAD line after 'starting entry' - the map did not load (%s)" % want); sys.exit(2)
 if want not in set(rules):
