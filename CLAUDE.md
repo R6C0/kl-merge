@@ -68,9 +68,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-11-02 ~03:55 - [c9] CR7 PASS: CR6 [CoverRing] ClientRewrite (e4d6635ed, default 0) on the client, DM03 + DM01 online: asserts/faults 0.
-DM03 car #0 spares 0/8 -> 7/8 on the client (trigger [car+8c0] 0->1 confirmed, 15 s retry did it); host-only usable indices 6 -> 1 (#561),
-rings rotated per seat (car heading at probe time). DM01 identical. SN1 PASS earlier: next-ship candidate whole, 0 asserts (715127ffa).
+2026-11-02 ~04:20 - [c9] CR8 pushed (95a037a39, [CoverRing] ClientRingSync default 0, not run live): CR7's last DM03 gap (#561) is the car's pose,
+not timing (host car ~11 deg rotated, car not replicated), so the host now sends its ring (KLSYR) and the client fills only its spare points.
+CR7 PASS before it (client 7/8, 0 asserts). Dlls c9_1028\cr8 ship 9d1a4d3c / test 1bb953e9; kit cr9un_cr9.sh after ce's SR2 (~06:30).
 
 2026-11-02 ~03:55 - [ce] DT1 PASS: DropTake grabs drops in round 2, never in round 1 (133 armed hidden pool drops filled the 32-slot table):
 fixed (wk-droptable-1102). SR1 0 taken = stock drain to drops + follow keys off (re/stack_state3_1102.md). Merged: lootsum line,
