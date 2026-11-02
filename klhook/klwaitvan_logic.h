@@ -38,13 +38,30 @@ static int kwv_step(int on, int wv, int leg, int idx, int arrived, int vstate, i
     return kwv_van_ready(vstate, called) ? KWV_NONE : KWV_START;
 }
 
+#define KWV_CALL_GRACE_MS 30000ul      /* GUESS: the call is made at the latest this long after the first carrier began to wait, even if a carrier is still on a leg below the hold */
+
 /* OnlineLegWaitCall: should the hook call the van now, from the hold? callOn = the key, waitOn = OnlineLegWaitVan, afterLegs = OnlineVanAfterLegs, vhKnown = the exit trigger's vehicle handle
-   is known, called = already called (by anyone), vstate = probe state (0 = nothing under way; the game's own call refuses otherwise), nWait = carriers waiting at the hold, nNeed = OnlineLegWaitCallN.
+   is known, called = already called (by anyone), vstate = probe state (0 = nothing under way; the game's own call refuses otherwise), nWait = carriers waiting at the hold, nNeed = OnlineLegWaitCallN
+   (0 = all: wait for the carriers still below the hold), nBelow = live carriers (phase 2, loot) still on a leg below the hold, firstAgeMs = how long the longest-waiting carrier has waited.
+   Call when someone waits and: nNeed >= 1 carriers wait, or no carrier is left below the hold, or the grace ran out.
    klbf_ot_call_van keeps the rest (Sv vtable, state 0, not last, no hold, clock >= 20 s); it needs no bot near the trigger (0x71e180 takes the rules object and the vehicle handle only). */
-static int kwv_call_ok(int callOn, int waitOn, int afterLegs, int vhKnown, int called, int vstate, int nWait, int nNeed)
+static int kwv_call_ok(int callOn, int waitOn, int afterLegs, int vhKnown, int called, int vstate, int nWait, int nNeed, int nBelow, unsigned long firstAgeMs)
 {
-    if (nNeed < 1) nNeed = 1;
-    return callOn && waitOn && afterLegs && vhKnown && !called && vstate == 0 && nWait >= nNeed;
+    if (!(callOn && waitOn && afterLegs && vhKnown && !called && vstate == 0 && nWait >= 1)) return 0;
+    return (nNeed >= 1 && nWait >= nNeed) || nBelow <= 0 || firstAgeMs >= KWV_CALL_GRACE_MS;
+}
+
+/* A hook call made from the hold must not strip the legs (klway_logic.h kwy_legs_left returns 0 once `called`): the legs see `called` as 0 while this bot still has legs and the call was the hook's own wait call. */
+static int kwv_legs_called(int called, int hookWaitCall, int waitOn, int leg, int nlegs)
+{
+    if (called && hookWaitCall && waitOn && leg < nlegs) return 0;
+    return called;
+}
+
+/* A wait that has gone on this long with no exit trigger handle known is worth a log line */
+static int kwv_novh_log(int waitOn, int vhKnown, unsigned long firstAgeMs)
+{
+    return waitOn && !vhKnown && firstAgeMs >= 30000ul;
 }
 
 /* The stall cut (OnlineLegStallS) is off for the legs once the van is there: the bots run, they do not stop to be re-pathed in the street. */

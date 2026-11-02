@@ -45,15 +45,23 @@ int main(void)
     /* stall cut */
     CHECK(kwv_nostall(0, 4, 0) == 0 && kwv_nostall(1, 0, 0) == 0 && kwv_nostall(1, 2, 0) == 1 && kwv_nostall(1, 0, 1) == 1, "no stall cut once the van is there");
 
-    /* OnlineLegWaitCall */
-    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 1, 1) == 1, "all set, one carrier waits: call");
-    CHECK(kwv_call_ok(0, 1, 1, 1, 0, 0, 1, 1) == 0 && kwv_call_ok(1, 0, 1, 1, 0, 0, 1, 1) == 0 && kwv_call_ok(1, 1, 0, 1, 0, 0, 1, 1) == 0, "each of the three keys is needed");
-    CHECK(kwv_call_ok(1, 1, 1, 0, 0, 0, 1, 1) == 0, "no trigger handle: no call");
-    CHECK(kwv_call_ok(1, 1, 1, 1, 1, 0, 3, 1) == 0, "already called: no");
-    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 2, 3, 1) == 0 && kwv_call_ok(1, 1, 1, 1, 0, 6, 3, 1) == 0, "a vehicle is under way (the game's own): no call");
-    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 0, 1) == 0, "nobody waits: no");
-    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 2, 3) == 0 && kwv_call_ok(1, 1, 1, 1, 0, 0, 3, 3) == 1, "N = 3 needs three waiting carriers");
-    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 1, 0) == 1, "N below 1 counts as 1");
+    /* OnlineLegWaitCall: (callOn, waitOn, afterLegs, vh, called, vstate, nWait, nNeed, nBelow, ageMs) */
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 1, 0, 0, 0) == 1, "all set, one waits, none below: call");
+    CHECK(kwv_call_ok(0, 1, 1, 1, 0, 0, 1, 0, 0, 0) == 0 && kwv_call_ok(1, 0, 1, 1, 0, 0, 1, 0, 0, 0) == 0 && kwv_call_ok(1, 1, 0, 1, 0, 0, 1, 0, 0, 0) == 0, "each of the three keys is needed");
+    CHECK(kwv_call_ok(1, 1, 1, 0, 0, 0, 1, 0, 0, 0) == 0, "no trigger handle: no call");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 1, 0, 3, 0, 0, 0) == 0, "already called: no");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 2, 3, 0, 0, 0) == 0 && kwv_call_ok(1, 1, 1, 1, 0, 6, 3, 0, 0, 0) == 0 && kwv_call_ok(1, 1, 1, 1, 0, -1, 3, 0, 0, 0) == 0, "a vehicle is under way / unreadable: no call");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 0, 0, 0, 0) == 0, "nobody waits: no");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 1, 0, 2, 5000) == 0, "N 0: a carrier is still below the hold, grace not over: wait");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 1, 0, 2, 29999) == 0 && kwv_call_ok(1, 1, 1, 1, 0, 0, 1, 0, 2, 30000) == 1, "grace 30 s");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 2, 3, 1, 0) == 0 && kwv_call_ok(1, 1, 1, 1, 0, 0, 3, 3, 1, 0) == 1, "N = 3: three waiting carriers call although one is below");
+    CHECK(kwv_call_ok(1, 1, 1, 1, 0, 0, 1, 1, 4, 0) == 1, "N = 1: the first waiting carrier calls");
+
+    /* a hook call from the hold keeps the legs */
+    CHECK(kwv_legs_called(0, 0, 1, 1, 8) == 0 && kwv_legs_called(1, 0, 1, 1, 8) == 1, "someone else's call: called as before");
+    CHECK(kwv_legs_called(1, 1, 1, 2, 8) == 0 && kwv_legs_called(1, 1, 1, 8, 8) == 1 && kwv_legs_called(1, 1, 0, 2, 8) == 1, "hook wait call: legs run while legs remain, key off = today");
+
+    CHECK(kwv_novh_log(1, 0, 30000) == 1 && kwv_novh_log(1, 0, 29999) == 0 && kwv_novh_log(1, 1, 99999) == 0 && kwv_novh_log(0, 0, 99999) == 0, "no-handle log");
 
     printf("klwaitvan_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
