@@ -38,7 +38,8 @@
  *   TimeAuto=0      0 = stock. 1..20: the host's lobby starts at this Heist time (minutes) without a key press (once per lobby, host only, lobby state
  *                   0xd; LEFT/RIGHT still change it). Clamped to the offered range (TimeMin or 3 .. TimeMax or 5, kltimeauto_logic.h), so a 6-minute
  *                   lobby needs TimeMax>=6. Same setters as the RIGHT-past-ceiling path (kllo_tset). 2026-11-02.
- *                   A 9th heister has no seat in a stock level: [Lobby] ExtraSeats (TEST build) and reound_end_online.md.
+ *                   A 9th heister has no seat in a stock level: [Lobby] ExtraSeats (TEST build) and re
+ound_end_online.md.
  */
 #ifndef KLLOBBYOPT_C
 #define KLLOBBYOPT_C
@@ -72,8 +73,10 @@ static void kllo_init(void)
     if (kllo_clockfix) klog("lobbyopt: RoundClockFix=1 (GUESS): [rules+0x4c] is set to the lobby heist time at the round start when it holds less");
     if (kllo_tmax < 6 || kllo_tmax > 20) kllo_tmax = 0;
     if (kllo_tmin < 1 || kllo_tmin > 2) kllo_tmin = 0;
+    if (kllo_tauto > 5 && !kllo_tmax) kllo_tmax = kllo_tauto;   /* TimeAuto above the stock ceiling lifts the ceiling to itself, so the row works alone (review 1102: TimeAuto=6 was clamped to 5) */
     if (kllo_rmax < 6 || kllo_rmax > 20) kllo_rmax = 0;
     if (kllo_pmax) klog("lobbyopt: Number of players up to %d (stock 8; engine ceiling 12). A 9th heister needs a seat: see [Lobby] ExtraSeats (TEST) in klroundkeep.c", kllo_pmax);
+    if (kllo_tauto) klog("lobbyopt: TimeAuto=%d requested, clamp range %d..%d min (TimeAuto above the ceiling is lowered to it; ceiling 5 unless TimeMax is 6..20)", kllo_tauto, kllo_tmin ? kllo_tmin : 3, kllo_tmax ? kllo_tmax : 5);
     if (kllo_tmax || kllo_tmin || kllo_rmax)
         klog("lobbyopt: Heist time %d..%d minutes, rounds 3..%d (0 = stock 3..5)", kllo_tmin ? kllo_tmin : 3, kllo_tmax ? kllo_tmax : 5, kllo_rmax ? kllo_rmax : 5);
 }
@@ -270,11 +273,11 @@ static void kllo_roundlog(void)
 /* find the lobby selector by name and give it the private vtable (the old one is the .rdata original, never written) */
 /* [Lobby] PlayersAuto=1: once per lobby selector, the host's 'Number of players' is set to PlayersMax without a key press (owner 1025: 'get FA up
    to 12'), through the setters of the RIGHT case (kllo_pset) behind the stock case's own gates (host, state 0xd, store 0xb41ea0) */
+static DWORD kllo_auto_done_p, kllo_auto_done_t;   /* once-per-selector latches; kllo_tick clears both when no selector is found (lobby left) */
 static void kllo_players_auto(DWORD e)
 {
-    static DWORD done_e;
     DWORD sm, mode = 0, st, sv, fn, es; int cur;
-    if (!kllo_pauto || !kllo_pmax || e == done_e) return;
+    if (!kllo_pauto || !kllo_pmax || e == kllo_auto_done_p) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd((DWORD_PTR)KLH_VA(0x168e59c), &mode, 4) || mode == 2) return;
     if (klh_rd32(sm) != 0xbd1ebc && !KLH_SM_VT_OK(klh_rd32(sm))) return;
     if (!(BYTE)((kllo_f0)KLH_VA(0x8df480))((void *)(DWORD_PTR)sm, 0)) return;
@@ -284,7 +287,7 @@ static void kllo_players_auto(DWORD e)
     es = ((kllo_f0)(DWORD_PTR)klh_rd32(klh_rd32(sm) + 0x2c))((void *)(DWORD_PTR)sm, 0);
     if (es) es = ((kllo_f0)(DWORD_PTR)klh_rd32(klh_rd32(es) + 0x140))((void *)(DWORD_PTR)es, 0);
     if (!es) return;
-    done_e = e;
+    kllo_auto_done_p = e;
     cur = (signed char)((kllo_f0)KLH_VA(0x54d140))((void *)(DWORD_PTR)sm, 0);
     if (cur >= kllo_pmax) return;
     kllo_pset(sm, st, es, kllo_pmax);
@@ -296,9 +299,8 @@ static void kllo_players_auto(DWORD e)
 /* [Lobby] TimeAuto=N: the same once-per-selector gates as PlayersAuto, then the time setters (kllo_tset) with the clamped value */
 static void kllo_time_auto(DWORD e)
 {
-    static DWORD done_e;
     DWORD sm, mode = 0, st, sv, fn, es, so; int cur, n;
-    if (!kllo_tauto || e == done_e) return;
+    if (!kllo_tauto || e == kllo_auto_done_t) return;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd((DWORD_PTR)KLH_VA(0x168e59c), &mode, 4) || mode == 2) return;
     if (klh_rd32(sm) != 0xbd1ebc && !KLH_SM_VT_OK(klh_rd32(sm))) return;
     if (!(BYTE)((kllo_f0)KLH_VA(0x8df480))((void *)(DWORD_PTR)sm, 0)) return;
@@ -309,14 +311,14 @@ static void kllo_time_auto(DWORD e)
     es = ((kllo_f0)(DWORD_PTR)klh_rd32(klh_rd32(sm) + 0x2c))((void *)(DWORD_PTR)sm, 0);
     if (es) es = ((kllo_f0)(DWORD_PTR)klh_rd32(klh_rd32(es) + 0x140))((void *)(DWORD_PTR)es, 0);
     if (!es) return;
-    done_e = e;
+    kllo_auto_done_t = e;
     cur = kllo_tsm(sm);
     n = kta_target(kllo_tauto, kllo_tmin, kllo_tmax, cur);
     if (!n) return;
     kllo_tset(sm, so, st, es, n);
     { BYTE one = 1; klh_data((BYTE *)(DWORD_PTR)es + 0xa, &one, 1, "lobby options: menu block dirty flag"); }
     ((kllo_f0)KLH_VA(0x549e80))((void *)(DWORD_PTR)sm, 0);
-    klog("lobbyopt: TimeAuto: heist time %d -> %d min (once per lobby)", cur, n);
+    klog("lobbyopt: TimeAuto: heist time %d -> %d min (once per lobby); read back after the setters: %d", cur, n, kllo_tsm(sm));
 }
 
 static void kllo_tick(void)
@@ -329,8 +331,8 @@ static void kllo_tick(void)
     klrk_tick();
     if (!(kllo_tmax || kllo_tmin || kllo_rmax || kllo_pmax || kllo_tauto) || !klh_exe_ok || now - last < 300) return;
     last = now;
-    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(mgr = klh_rd32(gd + 0x824)) || klh_rd32(mgr) != (DWORD)(DWORD_PTR)KLH_VA(0xbb7dc8)) return;
-    if (!(e = (DWORD)(DWORD_PTR)((void *(__fastcall *)(void *, void *, const char *))KLH_VA(0x83faf0))((void *)(DWORD_PTR)mgr, 0, "MercsFASelectorFALobby"))) return;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !(mgr = klh_rd32(gd + 0x824)) || klh_rd32(mgr) != (DWORD)(DWORD_PTR)KLH_VA(0xbb7dc8)) { kllo_auto_done_p = kllo_auto_done_t = 0; return; }
+    if (!(e = (DWORD)(DWORD_PTR)((void *(__fastcall *)(void *, void *, const char *))KLH_VA(0x83faf0))((void *)(DWORD_PTR)mgr, 0, "MercsFASelectorFALobby"))) { kllo_auto_done_p = kllo_auto_done_t = 0; return; }
     vt = klh_rd32(e);
     if (!kllo_vt[0]) {
         if (vt != (DWORD)(DWORD_PTR)KLH_VA(0xbbd364)) { if (!InterlockedExchange(&kllo_told, 1)) klog("lobbyopt: the lobby selector has vtable %08lx, not the known one: left alone", (unsigned long)vt); return; }
