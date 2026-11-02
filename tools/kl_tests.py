@@ -54,6 +54,7 @@ PY_NOT_TESTS = {
 C_TESTS = {
     'klcs_test.c': 'logic',            # klcopsquad_logic.h
     'klshield_test.c': 'logic',        # klshield_logic.h ([Shield] arithmetic + Online world gate, no windows.h)
+    'klmodestab_test.c': 'logic',      # klmodestab_logic.h ([Keys] ModesTab rows + RoundHints text, no windows.h)
     'klcv_test.c': 'logic',            # klchar_voice.h
     'kldown_hold_test.c': 'logic',     # kldown_hold.h
     'klguard_test.c': 'logic',         # klguard_logic.h (OnlineGuardMode pure part)

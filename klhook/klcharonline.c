@@ -337,6 +337,10 @@ static void klco_keys(DWORD now)
             klog("charonline: I chose %s = %d (key press; written to [Character] %s=%d)", klc_names[which], v, klc_keys[which], v);
             if (which == 0) klog("charonline: I chose heister %s", klco_nm(v));
             if (bp) bp(500 + 40 * (which * 6 + v), 40);
+            if (klkeys_roundhints_on()) {   /* wk-modestab-1102 (NOT RUN IN THE GAME): the choice on the announcement line, next to the beep; dropped when no FA element is up */
+                char t[64]; if (which == 0) snprintf(t, sizeof t, "HEISTER: %s", klco_nm(v)); else snprintf(t, sizeof t, which == 1 ? "MASK %d  (Ctrl+key: outfit)" : "OUTFIT %d  (key: mask)", v);
+                klan_show(t, 3.0f, 0);
+            }
         }
     }
     dC = c; dM = m;

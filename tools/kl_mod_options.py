@@ -531,6 +531,10 @@ feat('keyhints', G_EXP, 'One-time shop hint about the extra pages', 'on', 'start
      'one HUD line the first time a shop opens', [('Keys', 'Hints', 1, 0, 0)])
 feat('clashlog', G_EXP, 'Log key clashes at boot', 'off', 'start',
      'one WARN per clash in KLHook.log (also reads ReShade.ini); harmless', [('Keys', 'ClashLog', 1, 0, 0)])
+feat('modestab', G_EXP, 'BOTS AND MODES view on the MOD CONTROLS shop page (recommended off until benched)', 'off', 'start',
+     'wk-modestab-1102, NOT run live: the second view of the controls page lists bot tactics, drop take, door hold, bank credit, bot voice, bot-triggered cops, escort, hostage shield, shop swap, round clock with ON/OFF and where they work; needs ControlsPage=1', [('Keys', 'ModesTab', 1, 0, 0), ('Keys', 'ControlsPage', 1, None, 0)])
+feat('roundhints', G_EXP, 'Round hint line and host toggle texts (recommended off until benched)', 'off', 'start',
+     'wk-modestab-1102, NOT run live: one HUD line at the first round naming the keys that are on (F2 shop pages, climb, grenade, unstick ...); the host keys / F9 / F11 also announce the new state next to the beep', [('Keys', 'RoundHints', 1, 0, 0)])
 
 
 # ---- 2026-10-28 week features: online AI-heister (bot) host paths, shop swap, remote shot sound, car-blast / hop online. All default 0 in the ini.

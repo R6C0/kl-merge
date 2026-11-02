@@ -140,6 +140,16 @@ static int klho_parse(const char *s, int *m, int *a, int *so, int *b)
     return 1;
 }
 
+/* [Keys] RoundHints=1 (wk-modestab-1102, NOT RUN IN THE GAME): the new state of a host toggle on the announcement line, next to the beep (klmodestab_logic.h text). Dropped when no FA element is up (a lobby) */
+static void klho_say(int which, int value)
+{
+    char t[48];
+    if (!klkeys_roundhints_on()) return;
+    kmt_host_text(which, value, t, sizeof t);
+    klog("hostopts: toggle: %s", t);
+    klan_show(t, 3.0f, 0);
+}
+
 static void klho_tick(int game_thread)
 {
     static DWORD keyAt; static int dMap, dAI, dPool;
@@ -162,9 +172,9 @@ static void klho_tick(int game_thread)
             DWORD pid = 0; HWND f = fgw(); int ctl = (gaks(0x11) & 0x8000) != 0, m = (gaks(klho.keyMap) & 0x8000) != 0 && (!klho.ctlMap || ctl), a = (gaks(klho.keyAI) & 0x8000) != 0 && (!klho.ctlAI || ctl), pl = kmp.on && (gaks(klho.keyPool) & 0x8000) != 0 && (!klho.ctlPool || ctl);
             if (f) wtp(f, &pid);
             if (pid == GetCurrentProcessId()) {
-                if (m && !dMap) { klho_put(0, (klho_get(0) + 1) % 3); if (bp) bp(660 + 220 * klho_get(0), 40); }
-                if (a && !dAI) { klho_put(1, klho_get(1) ^ 1); if (bp) bp(klho.ai ? 880 : 440, 40); }
-                if (pl && !dPool) { klho_put(2, (klho.pool + 1) % 4); if (bp) bp(500 + 150 * klho.pool, 40); }
+                if (m && !dMap) { klho_put(0, (klho_get(0) + 1) % 3); if (bp) bp(660 + 220 * klho_get(0), 40); klho_say(0, klho_get(0)); }
+                if (a && !dAI) { klho_put(1, klho_get(1) ^ 1); if (bp) bp(klho.ai ? 880 : 440, 40); klho_say(1, klho_get(1)); }
+                if (pl && !dPool) { klho_put(2, (klho.pool + 1) % 4); if (bp) bp(500 + 150 * klho.pool, 40); klho_say(2, klho.pool); }
             }
             dMap = m; dAI = a; dPool = pl;
         }
