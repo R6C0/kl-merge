@@ -2144,6 +2144,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     klbf_ob[s].grabs++; klbf_ls_grab++; if (klbf_ot_nclaim < KLBF_OT_OBJ) klbf_ot_claimed[klbf_ot_nclaim++] = o;
                     klog("botfill: tactics: bot %d (actor %08lx) GRABBED stack %08lx = %d; its tally %d after %d grab(s) (timed parts, %d parts in %.1f s)", s, a, o, klbf_ob[s].lootGot, klbf_ob[s].tally, klbf_ob[s].grabs, klbf_ob[s].lootPaid, (double)(now - klbf_ob[s].lootT0) / 1000.0);
                     if (klbf_lf) { klbf_lf_fin++; klog("botfill: lootparts: bot %d finished stack %08lx: %d of %d parts, $%d in %.1f s%s (OnlineLootFinish; %d finished, %d left early so far this round)", s, (unsigned long)o, klbf_ob[s].lootPaid, klbf_ob[s].lootLeft, klbf_ob[s].lootGot, (double)(now - klbf_ob[s].lootT0) / 1000.0, busy ? ", protected" : "", klbf_lf_fin, klbf_lf_left); }
+                    klbv_event(s, 1);      /* OnlineVoice: the timed-parts grab (VB1 11-02: with OnlineLootParts=1 every take came here and no loot line was ever said) */
                     klbf_ob[s].phase = 0;
                 }
             }
