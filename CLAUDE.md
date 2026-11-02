@@ -72,13 +72,13 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 not timing (host car ~11 deg rotated, car not replicated), so the host now sends its ring (KLSYR) and the client fills only its spare points.
 CR7 PASS before it (client 7/8, 0 asserts). Dlls c9_1028\cr8 ship 9d1a4d3c / test 1bb953e9; kit cr9un_cr9.sh after ce's SR2 (~06:30).
 
+2026-11-02 ~05:00 - [ce] DH1 PASS (DD01, 0 faults): DoorHold opens all vaults but money unchanged ($1.54M) -> off. The 14-stack cap is
+OnlineTacticsCarry 2 x 7 bots; Arcade has no cap (re/dd01_plateau_1102.md) -> kit dh2 (Carry 8/6). Merged: re/t5_status_1102.md, HighlightProbe,
+RemoteShot2DGate + slot-74 counter. Game queue after SR2 + c9 CR9: week_1028\QUEUE_after_sr2.txt (dh2 g2 g1 sp1a ba1 pr1).
+
 2026-11-02 ~03:55 - [ce] DT1 PASS: DropTake grabs drops in round 2, never in round 1 (133 armed hidden pool drops filled the 32-slot table):
 fixed (wk-droptable-1102). SR1 0 taken = stock drain to drops + follow keys off (re/stack_state3_1102.md). Merged: lootsum line,
 OnlineStackRecheckHid, OnlineBoardAllNear (all default 0). Chain DH1 -> RT5 -> SR2 running from 03:51.
-
-2026-11-02 ~00:50 - [ce] wk-vantime-1101 merged: DM09 bots wait in cover at leg 1, the hook calls the van (0x71e180) once the carriers are
-there, the van waits (FarHold); keys OnlineVanAfterLegs/BoPos/FarHold + OnlineLegWaitVan/Call default 0. [HUD] OnlineBoardBots merged
-(Arcade board fates online). RT4 kit week_1028\rt4\run_rt4.sh queued after c9's SN1; ARC2 Arcade baseline running.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
