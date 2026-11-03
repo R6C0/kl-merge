@@ -814,7 +814,8 @@ static int klb_foe_turn_actor(DWORD actor, const DWORD *others, int no, int nslo
 {
     DWORD gd, info = 0, t = 0, one = KLB_FOE_TEAM, avt, pl; int j;
     why[0] = 0;
-    if ((avt = klh_rd32(actor)) != KLB_ACTOR_VT) snprintf(why, whylen, "its actor's vtable is %08lx, not ZFFActor's", avt);
+    /* klh_avt, not a raw read: bench bs8 (2026-11-03) refused every online turn on vtable 523cabdc = [BotFill] OnlineCopToBot's own private ZFFActor copy (klh_actor_priv2, slot 423 wrapped) */
+    if ((avt = klh_avt(actor)) != KLB_ACTOR_VT) snprintf(why, whylen, "its actor's vtable is %08lx, not ZFFActor's", klh_rd32(actor));
     else if (!(info = klh_rd32(actor + 0x54)) || !klh_rd(info + 4, &t, 4)) snprintf(why, whylen, "its team object cannot be read");
     else if (t != 2) snprintf(why, whylen, "its team reads %lu, not 2 (Ally)", t);
     else {
