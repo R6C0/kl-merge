@@ -1,3 +1,8 @@
+2026-11-03 ~08:15 - [c9] bs10 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorArcade (a555a37b6) marks 1 bot a map, wraps ZSoldier slot 111
+on a private table, team stays Ally, round end restores; Turn correctly ignored. Real Board 7/7 DM03, 4/7 DD05. Pushed babc92071 (raw vtable sweep:
+klgrudge/klcampool/klauto see through private copies). Research 7c2d368ab (re/fireline_gap_1103.md): online every ally bot already scores humans;
+the fire-line friend list 0x570a12 is what holds them. OnlineBrainTraitorFireLine (slots 113/114, log-only first) being built in C:\kl_wtl.
+
 2026-11-03 ~07:20 - [c9] arc3 (offline Arcade, idle $0 player, ArcadeDiag): Arcade marks 0/2/1/5 traitors a round too, so online's 5 is Arcade.
 Research (re/arcade_traitor_consequence_1103.md, checked by hand): a mark never swaps teams; it only lets that bot target humans (0x882470 behind
 the Arcade gate 0x7f6850, fire-line 0x570a12). bs9 PASS (4 seats, 0 faults): the team-swap turn now works (1 turned + restored per map, after
