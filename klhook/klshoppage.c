@@ -96,7 +96,8 @@ static struct {
     int modesOn; volatile int ctlMode;               /* [Keys] ModesTab: the controls page has a 2nd view (BOTS AND MODES); ctlMode 1 = that view is up (only with ctl) */
     int ctlOn, ctlKey, ctlKeyDown, hPendPg, hintDone, ctlTold; DWORD ctlLastKey;   /* config (the page-cycle key), edge, the early press's target (0 hire / 1 controls), the once-per-session hint, presses logged */
     volatile int ctl;                            /* the controls page is on screen (never together with hire / shownB) */
-    int queueOn, hQueued, hintEvery, hscore, pscore, autoOn, aoSends, aoSentOk, aoShopSeen; DWORD pq2At, aoUpAt, aoLast;   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
+    int queueOn, hQueued, hintEvery, hscore, pscore, autoOn, aoSends, aoSentOk, aoShopSeen; DWORD pq2At, aoUpAt, aoLast;
+    int aoSteps, aoStep, aoTopK; DWORD aoStepAt, aoTopAt;   /* [ShopPage] AutoOpenSteps: step 0..2 (9 = finished / aborted for this press), its stamp, the top window kind and since when */   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
 } kspg;
 
 static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
@@ -1309,6 +1310,9 @@ static void kspg_init(void)
     kspg.autoOn = GetPrivateProfileIntA("ShopPage", "AutoOpen", 0, klh_ini) != 0;      /* 2026-11-03, default 0, recommended on once benched; needs PageQueue=1 (klpagequeue_logic.h kpq_autoopen_due) */
     if (kspg.autoOn && !kspg.queueOn) klog("pagequeue: [ShopPage] AutoOpen=1 needs PageQueue=1: AutoOpen does nothing");
     else if (kspg.autoOn) klog("pagequeue: [ShopPage] AutoOpen=1 (recommended on once benched; NOT RUN IN THE GAME): a queued page press on the round-over page also presses Buy Weapons (ZW_SELECT3 to the page's Ready element, up to %d sends)", KPQ_AO_MAXSEND);
+    kspg.aoSteps = GetPrivateProfileIntA("ShopPage", "AutoOpenSteps", 0, klh_ini) != 0;   /* 2026-11-03, default 0, recommended on once benched; needs AutoOpen=1 (klpagequeue_logic.h kpq_aostep) */
+    if (kspg.aoSteps && !(kspg.autoOn && kspg.queueOn)) klog("pagequeue: [ShopPage] AutoOpenSteps=1 needs AutoOpen=1 and PageQueue=1: it does nothing");
+    else if (kspg.aoSteps) klog("pagequeue: [ShopPage] AutoOpenSteps=1 (recommended on once benched; NOT RUN IN THE GAME): after AutoOpen the hook opens the category list and the weapon list (Primary, pistols) itself");
 #ifdef KLHOOK_TEST
     kspg_curprobe = GetPrivateProfileIntA("ShopPage", "CursorProbe", 0, klh_ini) != 0;      /* TEST builds only, read-only (see kspg_curprobe_tick) */
     if (kspg_curprobe) klog("cursorprobe: [ShopPage] CursorProbe=1 (TEST build, recommended off, read-only): one line a second in states 0x1f / 0x20");
@@ -1756,6 +1760,42 @@ static int kspg_find_ready(const char *elem)
     if (!klh_exe_ok || !(gui = klh_rd32((DWORD_PTR)KLH_VA(0x00dd265c))) || !(mgr = klh_rd32(gui + 0x824))) return 0;
     return ((KSPG_FIND)KLH_VA(0x0083faf0))((void *)(DWORD_PTR)mgr, 0, elem) != 0;
 }
+static int kls_win_name(DWORD win, char *out, int cap);      /* klslot.c (included after this file): a window's name without a game call */
+/* the menu window system ([[[0xdd265c]+0x824]+4], vtables checked as klserver.c klsv_open does) and the kind of its top window (klpagequeue_logic.h kpq_top_kind) */
+static DWORD kspg_wsys(int *topKind)
+{
+    DWORD gd, mgr, w, n, top; char nm[64];
+    *topKind = KPQ_TOP_OTHER;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(0x00dd265c))) || !(mgr = klh_rd32(gd + 0x824)) || klh_rd32(mgr) != (DWORD)(DWORD_PTR)KLH_VA(0x00bb7dc8) ||
+        !(w = klh_rd32(mgr + 4)) || klh_rd32(w) != (DWORD)(DWORD_PTR)KLH_VA(0x00baf2fc)) return 0;
+    n = klh_rd32(w + 0x328);
+    if (n && n <= 24 && klh_rd(w + 0x32c + 4 * n, &top, 4) && top && kls_win_name(top, nm, sizeof nm)) *topKind = kpq_top_kind(nm);   /* windows at +0x32c + 4*i, i = 1..n, top last */
+    return w;
+}
+/* [ShopPage] AutoOpenSteps tick (after a successful AutoOpen send; game thread, see below). Opens FABuyWeaponsNewCategory, then FABuyWeaponsNewWeapon, with the call the
+ * XML's OpenWindow rows make (0x6bee50(name, 1, 0, 1), as klserver.c klsv_open); every step is checked by kpq_aostep. aoStep 9 = this press is finished or aborted. */
+static void kspg_aosteps_tick(DWORD now, int mode)
+{
+    static const char *const wname[3] = { "FABuyWeaponsNewCategory", "FABuyWeaponsNewWeapon", 0 };
+    int top, r, slot = (int)klh_rd32((DWORD_PTR)KLH_VA(0x00ced63c)), cat = (int)klh_rd32((DWORD_PTR)KLH_VA(0x00ced640)), busy;
+    DWORD w = kspg_wsys(&top);
+    if (!w) return;
+    busy = (int)(klh_rd32(w + 0x4bc) & 0xff);
+    if (top != kspg.aoTopK || !kspg.aoTopAt) { kspg.aoTopK = top; kspg.aoTopAt = now | 1; }
+    r = kpq_aostep(kspg.aoStep, top, mode, slot, cat, busy, kpq_age(now, kspg.aoStep ? kspg.aoStepAt : kspg.aoLast), kpq_age(now, kspg.aoTopAt));
+    if (r == KPQ_AS_WAIT) return;
+    if (r == KPQ_AS_DONE) { klog("pagequeue: autoopen steps: the weapon list is open (shop mode 2, slot %d, category %d)", slot, cat); kspg.aoStep = 9; return; }
+    if (r == KPQ_AS_ABORT) {
+        klog("pagequeue: autoopen steps: stopped at step %d (top window kind %d, shop mode %d, slot %d, category %d, busy %d, %lu ms): pick the list by hand", kspg.aoStep, top, mode, slot, cat, busy,
+             (unsigned long)kpq_age(now, kspg.aoStep ? kspg.aoStepAt : kspg.aoLast));
+        kspg.aoStep = 9; return;
+    }
+    {   const char *nm = wname[r == KPQ_AS_OPENCAT ? 0 : 1];
+        klog("pagequeue: autoopen steps: opening %s (shop mode %d, slot %d, category %d)", nm, mode, slot, cat);
+        ((void (__fastcall *)(void *, void *, const char *, int, int, int))(DWORD_PTR)KLH_VA(0x6bee50))((void *)(DWORD_PTR)w, 0, nm, 1, 0, 1);
+        kspg.aoStep = r == KPQ_AS_OPENCAT ? 1 : 2; kspg.aoStepAt = now | 1;
+    }
+}
 /* [ShopPage] AutoOpen tick. THREAD: klshoppage_tick is called from klhook.c's klh_tick(game_thread); this runs only when game_thread is 1 = the tick driven by the game's main loop
  * (the SteamAPI_RunCallbacks detour), the same thread kspg_hire_tick and the GUI run on; the fallback thread (game_thread 0) never gets here. A queued press: kspg.hPendAt with
  * kspg.hQueued, or kspg.pq2At (page II). It clears itself on a lapse, a cancel or the apply, which resets the send count. */
@@ -1764,11 +1804,12 @@ static void kspg_autoopen_tick(void)
     DWORD now = GetTickCount(), sm, lst = 0; int queued = (kspg.hPendAt && kspg.hQueued) || kspg.pq2At, mode = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), i;
     /* review: read the LIVE session state (kspg.st is only refreshed inside kspg_gate_x, which returns early with no level running): not at 4 / not 0x20 = reset everything */
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &lst, 4) || (int)lst != KPQ_ST_ROUNDOVER) {
-        kspg.aoUpAt = 0; kspg.aoSends = 0; kspg.aoLast = 0; kspg.aoSentOk = 0; kspg.aoShopSeen = 0; return;
+        kspg.aoUpAt = 0; kspg.aoSends = 0; kspg.aoLast = 0; kspg.aoSentOk = 0; kspg.aoShopSeen = 0; kspg.aoStep = 0; kspg.aoTopK = 0; kspg.aoTopAt = 0; return;
     }
     if (!kspg.aoUpAt) kspg.aoUpAt = now | 1;
     if (mode == KPQ_MODE_LIST) kspg.aoShopSeen = 1;             /* review: the player has had the list this 0x20 phase (shopped / backed out / readied): never auto-open again until the phase ends */
-    if (!queued) { kspg.aoSends = 0; kspg.aoLast = 0; kspg.aoSentOk = 0; return; }
+    if (!queued) { kspg.aoSends = 0; kspg.aoLast = 0; kspg.aoSentOk = 0; kspg.aoStep = 0; kspg.aoTopK = 0; kspg.aoTopAt = 0; return; }
+    if (kspg.aoSteps && kspg.aoSentOk && kspg.aoStep < 9) { kspg_aosteps_tick(now, mode); return; }   /* before the aoShopSeen return: mode 2 is the steps' DONE */
     if (kspg.aoSentOk || kspg.aoShopSeen) return;               /* review: a successful send is final (no resend while the list is still opening); retries only when no element / vtable */
     if (!kpq_autoopen_due(kspg.autoOn, kspg.queueOn, queued, kspg.st, mode, kspg.aoUpAt ? kpq_age(now, kspg.aoUpAt) : 0u, kspg.aoSends, kspg.aoLast ? kpq_age(now, kspg.aoLast) : 0u)) return;
     kspg.aoLast = now | 1; kspg.aoSends++;                      /* counted even when nothing is found: the cap bounds the retries */

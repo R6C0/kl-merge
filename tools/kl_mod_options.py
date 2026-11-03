@@ -562,6 +562,8 @@ feat('pagequeue', G_EXP, 'Page key pressed after the match (scoreboard / round-o
      'F2/F3/page II pressed on the scoreboard or before Buy Weapons is open waits (up to 60 s) and shows the page once the list opens; NOT RUN IN THE GAME', [('ShopPage', 'PageQueue', 1, 0, 0)])
 feat('pageautoopen', G_EXP, 'Page key after the match also presses Buy Weapons (recommended on)', 'on', 'start',
      'one press of F2/F3/page II on the scoreboard opens Buy Weapons and the page, like clicking it (3 tries); needs Page key queue; NOT RUN IN THE GAME', [('ShopPage', 'AutoOpen', 1, 0, 0), ('ShopPage', 'PageQueue', 1, None, 0)])
+feat('pageautosteps', G_EXP, 'Buy Weapons also steps into the weapon list by itself (recommended off until benched)', 'off', 'start',
+     'after the page key opens Buy Weapons, the hook opens Primary and the pistol list so the page shows with no RETURN presses; stops when you pick a list yourself; needs Buy Weapons auto-open; NOT RUN IN THE GAME', [('ShopPage', 'AutoOpenSteps', 1, 0, 0), ('ShopPage', 'AutoOpen', 1, None, 0), ('ShopPage', 'PageQueue', 1, None, 0)])
 feat('sbnexthint', G_EXP, 'NEXT line under the after-match scoreboard (recommended on)', 'on', 'start',
      'one line on the score board: NEXT: BUY WEAPONS, THEN [F2] MORE PAGES [F3] HEISTERS (live key names); NOT RUN IN THE GAME', [('HUD', 'ScoreboardNextHint', 1, 0, 0)])
 feat('clashlog', G_EXP, 'Log key clashes at boot', 'off', 'start',

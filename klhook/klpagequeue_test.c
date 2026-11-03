@@ -82,6 +82,28 @@ int main(void)
     CHECK(kpq_board_hint(0, 96, 0, "F2", 0, 0) == 0 && kpq_board_hint(t, 4, 0, "F2", 0, 0) == 0, "bad buffer");
     CHECK(strlen("NEXT: BUY WEAPONS, THEN [PAGEUP] MORE PAGES  [NUM1] HEISTERS") < 96, "the longest realistic line fits the 96-byte buffer klhud_board2.c uses");
 
+    /* AutoOpenSteps */
+    CHECK(kpq_top_kind("FABuyWeaponsNew") == KPQ_TOP_NEW && kpq_top_kind("FABuyWeaponsNewCategory") == KPQ_TOP_CAT && kpq_top_kind("FABuyWeaponsNewWeapon") == KPQ_TOP_WPN, "window names");
+    CHECK(kpq_top_kind("FABuyWeaponsNewX") == KPQ_TOP_OTHER && kpq_top_kind("FAStatus") == KPQ_TOP_OTHER && kpq_top_kind("") == KPQ_TOP_OTHER && kpq_top_kind(0) == KPQ_TOP_OTHER, "other names");
+    CHECK(kpq_aostep(0, KPQ_TOP_OTHER, 0, -6, -4, 0, 1000, 5000) == KPQ_AS_WAIT, "step 0: Buy Weapons not up yet: wait");
+    CHECK(kpq_aostep(0, KPQ_TOP_NEW, 0, -6, -4, 0, 1300, 100) == KPQ_AS_WAIT, "step 0: just on top: settle");
+    CHECK(kpq_aostep(0, KPQ_TOP_NEW, 0, -6, -4, 1, 1600, 400) == KPQ_AS_WAIT, "step 0: window system busy: wait");
+    CHECK(kpq_aostep(0, KPQ_TOP_NEW, 0, -5, -4, 0, 1600, 400) == KPQ_AS_WAIT, "step 0: Secondary focused: never step");
+    CHECK(kpq_aostep(0, KPQ_TOP_NEW, 0, -6, -4, 0, 1600, 400) == KPQ_AS_OPENCAT, "step 0: open Category");
+    CHECK(kpq_aostep(0, KPQ_TOP_CAT, 1, -6, -4, 0, 1600, 400) == KPQ_AS_ABORT, "step 0: the player walked on: abort");
+    CHECK(kpq_aostep(0, KPQ_TOP_OTHER, 0, -6, -4, 0, 5001, 0) == KPQ_AS_ABORT, "step 0: timeout");
+    CHECK(kpq_aostep(1, KPQ_TOP_NEW, 0, -6, -4, 1, 50, 0) == KPQ_AS_WAIT, "step 1: request queued: wait");
+    CHECK(kpq_aostep(1, KPQ_TOP_CAT, 1, -6, -4, 0, 400, 100) == KPQ_AS_WAIT, "step 1: settle");
+    CHECK(kpq_aostep(1, KPQ_TOP_CAT, 0, -6, -4, 0, 400, 400) == KPQ_AS_WAIT, "step 1: mode not 1 yet");
+    CHECK(kpq_aostep(1, KPQ_TOP_CAT, 1, -6, -4, 0, 400, 400) == KPQ_AS_OPENWPN, "step 1: open Weapon");
+    CHECK(kpq_aostep(1, KPQ_TOP_CAT, 1, -6, -6, 0, 400, 400) == KPQ_AS_ABORT, "step 1: category rewritten: abort");
+    CHECK(kpq_aostep(1, KPQ_TOP_OTHER, 0, -6, -4, 0, 400, 400) == KPQ_AS_ABORT, "step 1: shop closed: abort");
+    CHECK(kpq_aostep(1, KPQ_TOP_CAT, 1, -6, -4, 1, 2501, 400) == KPQ_AS_ABORT, "step 1: timeout");
+    CHECK(kpq_aostep(2, KPQ_TOP_CAT, 1, -6, -4, 1, 100, 400) == KPQ_AS_WAIT && kpq_aostep(2, KPQ_TOP_WPN, 1, -6, -4, 0, 100, 10) == KPQ_AS_WAIT, "step 2: waiting for mode 2");
+    CHECK(kpq_aostep(2, KPQ_TOP_WPN, 2, -6, -4, 0, 100, 10) == KPQ_AS_DONE && kpq_aostep(0, KPQ_TOP_WPN, 2, -6, -4, 0, 100, 10) == KPQ_AS_DONE, "mode 2: done");
+    CHECK(kpq_aostep(2, KPQ_TOP_OTHER, 0, -6, -4, 0, 100, 10) == KPQ_AS_ABORT && kpq_aostep(2, KPQ_TOP_WPN, 1, -6, -4, 0, 2501, 10) == KPQ_AS_ABORT, "step 2: closed / timeout");
+    CHECK(kpq_aostep(3, KPQ_TOP_NEW, 0, -6, -4, 0, 0, 999) == KPQ_AS_ABORT, "unknown step");
+
     printf("klpagequeue_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

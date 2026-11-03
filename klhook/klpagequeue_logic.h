@@ -90,6 +90,53 @@ static int kpq_ready_name_ok(const char *n)
     return 0;
 }
 
+/* [ShopPage] AutoOpenSteps (2026-11-03, NOT RUN IN THE GAME): after AutoOpen's send opened FABuyWeaponsNew (shop mode 0), the hook opens FABuyWeaponsNewCategory and then
+   FABuyWeaponsNewWeapon itself (window system 0x6bee50(name, 1, 0, 1), the call the XML's OpenWindow rows make), so the page lands on the weapon list (mode 2) with no
+   RETURN. Read in kl2.exe 11-03 (research agent): each window's selector init 0x534530 sets mode = the XML SelectionState; in mode 0 it sets slot 0xced63c = -6 (Primary)
+   and category 0xced640 = -4 (pistols); mode 1 keeps the slot and sets the category -4; mode 2 keeps both. The window system queues ONE request while busy (+0x4bc), so
+   a step is made only when it is idle. Selector messages are never sent (ZW_SELECT3 to a selector in mode 2 BUYS). The times below are GUESSES. */
+#define KPQ_AS_SETTLE_MS 300u          /* GUESS: a new top window has been on top this long before the next step (its selector init has run) */
+#define KPQ_AS_FIRST_MS  5000u         /* step 0: FABuyWeaponsNew must come up within this long of the AutoOpen send (pq3: about 1.2 s) */
+#define KPQ_AS_STEP_MS   2500u         /* steps 1 and 2: the asked window must answer within this long */
+#define KPQ_SLOT_PRIMARY (-6)
+#define KPQ_CAT_PISTOLS  (-4)
+enum { KPQ_AS_WAIT = 0, KPQ_AS_OPENCAT = 1, KPQ_AS_OPENWPN = 2, KPQ_AS_DONE = 3, KPQ_AS_ABORT = 4 };
+enum { KPQ_TOP_OTHER = 0, KPQ_TOP_NEW = 1, KPQ_TOP_CAT = 2, KPQ_TOP_WPN = 3 };
+
+static int kpq_top_kind(const char *n)
+{
+    const char *p = "FABuyWeaponsNew"; const char *q = n;
+    if (!n) return KPQ_TOP_OTHER;
+    while (*p && *p == *q) { p++; q++; }
+    if (*p) return KPQ_TOP_OTHER;
+    if (!*q) return KPQ_TOP_NEW;
+    p = "Category"; { const char *r = q; while (*p && *p == *r) { p++; r++; } if (!*p && !*r) return KPQ_TOP_CAT; }
+    p = "Weapon";   { const char *r = q; while (*p && *p == *r) { p++; r++; } if (!*p && !*r) return KPQ_TOP_WPN; }
+    return KPQ_TOP_OTHER;
+}
+
+/* one tick of the steps. step 0 = waiting for FABuyWeaponsNew (age = ms since the AutoOpen send), 1 = Category asked, 2 = Weapon asked (age = ms since that call).
+   top = kpq_top_kind of the top window, topMs = ms it has been on top, slot / cat = 0xced63c / 0xced640, busy = the window system's +0x4bc byte */
+static int kpq_aostep(int step, int top, int mode, int slot, int cat, int busy, unsigned int age, unsigned int topMs)
+{
+    if (mode == KPQ_MODE_LIST) return KPQ_AS_DONE;                   /* the list is open (by us or the player): the queued press applies */
+    if (step == 0) {
+        if (age > KPQ_AS_FIRST_MS) return KPQ_AS_ABORT;
+        if (top == KPQ_TOP_CAT || top == KPQ_TOP_WPN) return KPQ_AS_ABORT;   /* the player already walks the shop: never race their own RETURN */
+        if (top != KPQ_TOP_NEW || mode != 0 || slot != KPQ_SLOT_PRIMARY || busy || topMs < KPQ_AS_SETTLE_MS) return KPQ_AS_WAIT;
+        return KPQ_AS_OPENCAT;
+    }
+    if (age > KPQ_AS_STEP_MS) return KPQ_AS_ABORT;
+    if (step == 1) {
+        if (top == KPQ_TOP_NEW) return KPQ_AS_WAIT;                   /* the request is still queued */
+        if (top != KPQ_TOP_CAT) return KPQ_AS_ABORT;
+        if (mode != 1 || busy || topMs < KPQ_AS_SETTLE_MS) return KPQ_AS_WAIT;
+        return cat == KPQ_CAT_PISTOLS ? KPQ_AS_OPENWPN : KPQ_AS_ABORT;   /* research: a lower selector's update could rewrite the category; abort rather than open a bad list */
+    }
+    if (step == 2) return (top == KPQ_TOP_CAT || top == KPQ_TOP_WPN) ? KPQ_AS_WAIT : KPQ_AS_ABORT;
+    return KPQ_AS_ABORT;
+}
+
 /* [ShopPage] HintEveryShop: what 'hint shown' becomes when the shop closes (0 = the hint may show again in the next shop) */
 static int kpq_hint_done_after_close(int everyShop, int done)
 {
