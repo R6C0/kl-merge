@@ -1377,11 +1377,25 @@ static void klbr_hl_pump(DWORD now)
                 if (klh_rd(B, &cnt, 4) && cnt <= 16) for (k2 = 0; k2 < (int)cnt && n < (int)sizeof buf - 64; k2++) {
                     DWORD q = B + 4 + 0x14 * k2, fl = klh_rd32(q), ent = klh_rd32(q + 4), ty = klh_rd32(q + 8), ts = klh_rd32(q + 0xc);
                     int ep = ent > 0xffff && klh_pvt(ent) == 0x00bb45f4u, ea = ent > 0xffff && !ep && klh_avt(ent) == 0x00bb3bacu, es = ent > 0xffff && !ep && !ea && klh_svt(ent) == 0x00bd0954u;
-                    n += _snprintf(buf + n, sizeof buf - n, " [%d %08lx f%03lx t%lu %s%s t%ld]", k2, (unsigned long)ent, (unsigned long)fl, (unsigned long)ty, ep ? "ZFFPlayer" : ea ? "ZFFActor" : es ? "ZSoldier" : "other",
-                                   (ent == hp && hp) ? " PICK" : "", (long)ts);
+                    double ed = -1.0; float ep3[3]; int ebot = ep && (klbr_hl_body(ent) != 0 || klbr_hl_find(ent) != 0);      /* w53r6g2xi: 0x10 = in range, 0x4 = fire line blocked (same-team entity in the line) */
+                    if (ep && klbr_bot_pos(e->actor, bp, &alive) && klh_rd(ent + 0x460, ep3, 12) && kle_ok3(ep3)) ed = kle_dist(bp, ep3) / 100;
+                    n += _snprintf(buf + n, sizeof buf - n, " [%d %08lx f%03lx t%lu %s%s%s %.0fm t%ld]", k2, (unsigned long)ent, (unsigned long)fl, (unsigned long)ty, ep ? "ZFFPlayer" : ea ? "ZFFActor" : es ? "ZSoldier" : "other",
+                                   ep ? (ebot ? "/bot" : "/human") : "", (ent == hp && hp) ? " PICK" : "", ed, (long)ts);
                 }
                 buf[sizeof buf - 1] = 0;
                 klog("brain: traitor target: bot %d B list (%lu):%s", i, (unsigned long)cnt, n > 0 ? buf : " (empty / unreadable)");
+            }
+            {   /* w0g1x0zbt (verified, 11-03; READ ONLY): the shot is ZSoldier method 0x7088c0 (thiscall ecx = soldier, one float, ret 4) -> [[[s+0x40]]+0x6e4](holder handle, 2, f) at 0x708991.
+                   Its gates, all pure reads here: [s+0x72c] != clock (once a frame); [s+0x88] == 2; team [[[s+0x40]+0x54]+4] != 0; float arg > 0 (Idle 0x77bbd0 passes 0.0 = never fires, the
+                   positive callers are 0x5d7db9 / 0x6082c6 / 0x608476 / 0x7303f6, w53r6g2xi); [[s+0x678]+8] in {0,4}; 0x658050: o = [[s+0x40]+0x88c] blocks when o && [o+0x18] && ![o+0x40];
+                   0x8eb610: p = [s+0x4a8] blocks when [p+8] not in {0,4}; holder handle != 0 and bit0 (bit7 clear for Idle site 1). Goal objects (GUESS from ctors): +0x634 Idle, +0x638 Attack, state [g+8]. */
+                DWORD body = klh_rd32(e->snd + 0x40), p54 = body > 0xffff ? klh_rd32(body + 0x54) : 0, team = p54 > 0xffff ? klh_rd32(p54 + 4) : 0xffffffff;
+                DWORD g678 = klh_rd32(e->snd + 0x678), o = body > 0xffff ? klh_rd32(body + 0x88c) : 0, p4a8 = klh_rd32(e->snd + 0x4a8), gi = klh_rd32(e->snd + 0x634), ga = klh_rd32(e->snd + 0x638);
+                long s678 = g678 > 0xffff ? (long)klh_rd32(g678 + 8) : -1, v4a8 = p4a8 > 0xffff ? (long)klh_rd32(p4a8 + 8) : 0;
+                int b658 = o > 0xffff && klh_rd32(o + 0x18) != 0 && klh_rd32(o + 0x40) == 0;
+                klog("brain: traitor target: bot %d GATES (0x7088c0): +0x72c %ld clock %ld; +0x88 %lu (want 2); team %ld (want !=0); [[+0x678]+8] %ld (want 0/4); 0x658050 %s; [[+0x4a8]+8] %ld (%s); holder handle %08lx bit0 %lu bit7 %lu; Idle %08lx state %ld, Attack %08lx state %ld",
+                     i, (long)klh_rd32(e->snd + 0x72c), (long)clk, (unsigned long)klh_rd32(e->snd + 0x88), (long)team, s678, b658 ? "BLOCKS" : "ok", v4a8, (v4a8 != 0 && v4a8 != 4) ? "BLOCKS" : "ok",
+                     (unsigned long)hh, (unsigned long)(hf & 1), (unsigned long)((hf >> 7) & 1), (unsigned long)gi, gi > 0xffff ? (long)klh_rd32(gi + 8) : -1L, (unsigned long)ga, ga > 0xffff ? (long)klh_rd32(ga + 8) : -1L);
             }
         }
     }
