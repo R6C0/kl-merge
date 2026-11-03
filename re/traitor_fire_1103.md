@@ -180,3 +180,72 @@ Follows re/traitor_handoff_1103.md. Disassembly was read with capstone. Three pa
 - Victim: ZFFPlayer slot 423 0x458880 -> 0x4db580; friendly-fire drop at 0x4db5ab via 0x7aca80 (0 for roles >= 2, GUESS host role 2). Untraced to the final apply.
 - Most likely blocker (GUESS): our slot-83 calls (Restart/EntryFix/AttackHandle) re-run or pop the parent ZAttackTarget so the child lives only 1.5-2.5 s, before ZFireWeaponTask fires.
 - Next: read-only probes (0x62a540 ret + [body+0x544/0x68c], 0x7c02b0 call count, 0x8b84b0 ret + tuning floats + distance, 0x4db580 / 0x7aca80 on the victim) and a toggle that skips slot-83 calls while the child runs.
+
+## Workflow w6wznnvc5 (ZFireWeaponTask owner, shot dispatch, victim path; tracer + verifier, read only; verifier's corrected report)
+**Corrected report: why a host bot's ZFireWeaponTask never lowers a host-local human's hp (kl2.exe, static, read-only)**
+
+Method: I disassembled each claim myself. Labels are HELD, WRONG (with the correct reading), or UNVERIFIED. CONFIRMED means I read it in the disassembly. GUESS means I did not.
+
+**A) Where the task lives and how to observe it**
+- HELD, CONFIRMED: ZFireWeaponTask has vtable 0xbd0bd4 and tick 0x7c02b0. It is entered from the ZRunToPosShootingTask burst path (vtable 0xbd0ba4, tick 0x4a7e60). That path calls body vt+0x6e4 (0x62a540), which only sets the aim target. It then calls `vt+0x164(1)` (0x8cb920), which builds the child, and RunChild (0x521350) runs it.
+- Tick gates:
+  - 0x7c02e0-0x7c0321: waits while the holder's `+0x774` is set.
+  - 0x7c0435: `0x7836b0(body,-1)`.
+  - 0x7c0455-0x7c047b: flag tests.
+  - 0x7c0584: targeted aim `0x574af0(F, holder, 0, -1.0)`. This sets `[F+0x28]` and calls body vt+0x6e0.
+  - 0x7c06a4: `call 0x8c1830`.
+  - 0x7c0748: `call 0x8c62e0`.
+  - 0x7c074d: sets `[task+0x15]=1`.
+- `[task+0x15]` is a done or fired flag set after the shot call. It is not a "shot landed" flag. Treat it as that, not as proof of damage.
+- Observation points: the task's tick entry 0x7c02b0, the return of 0x8c1830, and `[body+0x550]` before and after.
+- UNVERIFIED: 0x8b84b0 min-distance compare and `[s+0x98]=1` at 0x8f55d0. Both are taken from online_bot_damage.md.
+
+**B) Call chain and hold-fire gates**
+- WRONG, tracer's reading of 0x8c1830 (return value): it does not just return a delay where "<=0 means no shot".
+  - The shot is dispatched inside it. 0x8c19fb calls 0x8dc6a0, then 0x8c1a81 and 0x8c1a99 call 0x6c81a0.
+  - Hold paths return +0.1 (`[0xb4c788]`) or 0.0 (fldz). So a returned 0.1 means held, not fired.
+- WRONG, tracer's argument order for 0x6c81a0: it is (count, item), not (F, item, count).
+- What 0x6c81a0 does, CONFIRMED:
+  - `[body+0x550] += count`.
+  - It stamps `[[body+0x54]+0x34]`.
+  - It calls body vt+0x6c0 (0x432440) with (count, 0).
+  - So `[body+0x550]` rising means a shot was dispatched.
+- Item side:
+  - Item vt+0x2cc (0x536dc0) only stores a vector to `[item+0xc8..0xd0]`. It does not create a projectile or raycast, so the tracer's GUESS is resolved as no.
+  - Item vt+0x25c (0x8a3510) is a state switch. State 8 calls vt+0x338 (0x7d3360) when `[0x15351e4]==0`.
+  - The weapon controller is `F=[s+0x6a0]`, item `[F+4]`, burst plan at `F+0x34` stored in `[item+0xfc]`. 0x4f2460 resets F (`[F+0xc]=[F+0x10]=0`, `[F+0x1c]=-1`, random burst count, flags in `[F+8]`).
+- GAP, not located: the actual ProjectileHit or bullet creation site. It is in the item tick or after state 8, along vt+0x338 -> 0x7d3360 -> vt+0x344 (0x8bf680). That chain is a GUESS and not traced.
+
+**C) Victim side (ZFFPlayer)**
+- Chain, CONFIRMED: ProjectileHit message (`[0x1548d10]`) -> victim slot 89 -> slot 424 (0x4db580) -> router slot 422 -> slot 423 -> 0x6e3400 -> health write 0x8a7c60.
+- WRONG, tracer's claim that 424 "does the hp write": 0x4db580 only builds the record. It calls slot 422 at 0x4dbc61. The hp write happens later via 423 -> 0x6e3400 -> 0x8a7c60.
+- Gaps the tracer missed. Each can zero or drop damage:
+  1. 0x4db58f: early drop when `[sm+0x70] >= 0x28`. `sm` is the session object `[0x168e598]`. Role is `+0x54` (2 = host, 3 = client), type `+0x5c` (4 = FA/Arcade family), state `+0x70` (0x19 = round).
+  2. 0x7e1700 routing: it drops only when the attacker is not a ZFFPlayer and the victim is remote (station ownership 0x7de570 / 0x9425a0, `[victim+0x274c]`). A host-local victim reaches slot 423 directly, so routing is NOT the blocker for a host-local human.
+  3. 0x6e3400 sub-mode 0 (`[0x168e59c]`: 0 = FA, 1 = UCC, 2 = C&R): it zeroes the delta when all of these hold.
+     - The attacker is a ZFFPlayer-class crew member that is not a traitor (`+0x2726`) and not police (`+0x2723`).
+     - The victim is neither police nor traitor.
+     - `[rules+0x285]==0`, where rules is `[0x168e9e4]+0x54`.
+     - Fix for a bot that must hurt crew: set the bot's `+0x2726=1`.
+  4. Global `[0x1535a2c]`: 1 skips the health write at 0x8a7c60. 2 puts health back to 0.01.
+  5. 0x458880 has the down trigger 0x8da3b0 gate at 0x458e7f, then calls 0x6e3400 at 0x458ea8. If the trigger fires, the hit is routed to the down handling instead of a plain hp loss.
+
+**D) Cheapest probe set, in order**
+1. `[body+0x550]` delta per burst, plus the 0x8c1830 return. This shows whether shots are dispatched at all.
+2. At 0x4db580 entry, log the attacker body class, `[sm+0x70]` and `[0x1535a2c]`. This tells which of gaps 1, 3 and 4 is hit.
+3. At 0x6e3400, log the delta before and after, `[rules+0x285]`, and the attacker and victim `+0x2726` / `+0x2723`.
+4. Also log `[victim+0x438]` bit 0x12, `[victim+0x274c]`, and the 0x8da3b0 result at 0x458e7f.
+5. Decision rule:
+   - `[body+0x550]` flat: the problem is upstream (B), meaning the hold-fire gates or the 0.1 returns.
+   - `[body+0x550]` rises but no record reaches 0x4db580: look at the missing projectile creation site (B gap).
+   - The record arrives but the delta is zero: gap 3 first, then `[0x1535a2c]`, then `[sm+0x70]`.
+
+**What changed from the tracer's report**
+- 0x8c1830 return semantics: the shot is dispatched inside it, and hold returns are +0.1 or 0.0.
+- 0x6c81a0 argument order: (count, item).
+- Slot 424 (0x4db580) builds the record; it does not write hp.
+- Item vt+0x2cc: only a vector setter.
+- New gates added: `[sm+0x70]>=0x28`, the 0x8da3b0 down trigger, the 0x6e3400 same-side zeroing with `[rules+0x285]`, `[0x1535a2c]`, and the 0x7e1700 ownership drop, which does not apply to a host-local victim.
+- `[task+0x15]` is a fired flag, not a damage result.
+- Still open: the bullet creation site, and a re-check of 0x8b84b0 and `[s+0x98]`.
+
