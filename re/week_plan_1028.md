@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-03 12:45 c9: bs18 PASS 0 faults: humans are scored (-500..-800), not refused, but the bot never picks them (a cop likely outscores them); bs19 running; score workflow waeaosjjr.
 - 11-03 12:40 c9: the target probe read the wrong field (last aggressor); 4ecfc0234 logs the real selection holder + attack goal; bs19 chained after bs18 (re/traitor_target_holder_1103.md).
 - 11-03 12:25 c9: bs17 PASS 0 faults: the marked bot now scores humans in slot 111 (88 calls) but picks no target. Gate log added (1268242d3); bs18 chained after ce's pq13; workflow wwr26esf3 on the target gap.
 - 11-03 11:50 c9: bs16: feed works (humans in the traitor's known list). DM03 client asserted when the traitor took car #0 cover (spare points on the client); kits lacked live AssertSoft. bs17 (MarkSeen) running with it.

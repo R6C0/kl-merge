@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~12:45 - [c9] bs18 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults). Slot 111 does NOT refuse the humans: every human scored -500..-800
+('targetable', gates passed, B entry flags 0x11/0x15), 132 (DM03) and 316 (DD05) calls, yet 0 hits. Up to 8 other (police) entries share the list;
+selection keeps the strictly greatest score, so a cop likely wins. bs19 (holder probe 4ecfc0234) is running and shows the pick's class. Workflows:
+waeaosjjr (score formula, how cops are scored, what lets a human win in Arcade), w9ady1fn9 (holder -> Attack hand-off).
+
 2026-11-03 ~12:40 - [c9] wwr26esf3 (capstone): the 'traitor target:' probe read [soldier+0x708] = LAST AGGRESSOR, not the pick. 0x767510 stores
 its winner in the holder soldier+0xa8 (+0xb0 handle); the ZAttackTarget goal [soldier+0x658] fires on its own [+0x14], set by Attack slot 83 only in state 0/4.
 Gate 11a reads the session (passes under the swap). 4ecfc0234 logs the holder + goal (read only, out_thold_1103g); bs19 chained after bs18.
 Notes: re/traitor_target_holder_1103.md.
-
-2026-11-03 ~12:25 - [c9] bs17 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; DM03 client 16 soft asserts stepped over = car #0, AssertSoft now in kits).
-SenseSeen (MarkSeen) works: the marked bot called slot 111 88 times, all with human candidates (first time ever), but its target stayed 0 and 0 hits.
-With FireLine=2 every call was nested in slot 113's swap, so no score was logged: 1268242d3 adds a read-only gate log there. Kits lacked live
-ClientRewrite/ClientRingSync (re/dm03_car0_spare_1103.md); bs18 has them, chained after ce's pq13. Workflow wwr26esf3: where the target is stored + gate 11a.
 
 2026-11-03 ~10:20 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)

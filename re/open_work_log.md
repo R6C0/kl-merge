@@ -1,3 +1,8 @@
+2026-11-03 ~12:45 - [c9] bs18 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults). Slot 111 does NOT refuse the humans: every human scored -500..-800
+('targetable', gates passed, B entry flags 0x11/0x15), 132 (DM03) and 316 (DD05) calls, yet 0 hits. Up to 8 other (police) entries share the list;
+selection keeps the strictly greatest score, so a cop likely wins. bs19 (holder probe 4ecfc0234) is running and shows the pick's class. Workflows:
+waeaosjjr (score formula, how cops are scored, what lets a human win in Arcade), w9ady1fn9 (holder -> Attack hand-off).
+
 2026-11-03 ~12:40 - [c9] wwr26esf3 (capstone): the 'traitor target:' probe read [soldier+0x708] = LAST AGGRESSOR, not the pick. 0x767510 stores
 its winner in the holder soldier+0xa8 (+0xb0 handle); the ZAttackTarget goal [soldier+0x658] fires on its own [+0x14], set by Attack slot 83 only in state 0/4.
 Gate 11a reads the session (passes under the swap). 4ecfc0234 logs the holder + goal (read only, out_thold_1103g); bs19 chained after bs18.
