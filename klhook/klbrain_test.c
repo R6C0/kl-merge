@@ -217,6 +217,29 @@ int main(void)
         CHECK(kbr_bs_live(0, 1, 0, 5000, 0, 2500) && kbr_bs_live(0, 1, 0, 5000, 3001, 2500) && !kbr_bs_live(0, 1, 0, 5600, 3001, 2500), "grace: no evaluate yet waits grace_ms from the deferral start");
         CHECK(kbr_bs_live(0, 1, 0, 0x100ul, 0xfffffff1ul, 2500), "grace: tick wrap safe");
     }
+    {   /* OnlineBrainTraitorTurn: diagnostics counter, row 0, score terms, back reasons, kill booking, cap word */
+        int dn = 0, w = -9, i; long m[4] = { 100, 900000, 5, 2000000 }; unsigned char u[4] = { 1, 1, 0, 1 }; float d[4];
+        for (i = 0; i < 6; i++) CHECK(kbr_diag_take(&dn, 6), "diag: slot %d of 6", i);
+        CHECK(!kbr_diag_take(&dn, 6) && dn == 6, "diag: the 7th is refused, counter stays 6");
+        CHECK(kbr_row0_money(0, m, u, 4, &w) == 100 && w == 0, "row0: host mode = seat 0");
+        CHECK(kbr_row0_money(1, m, u, 4, &w) == 2000000 && w == 3, "row0: richest mode = seat 3");
+        u[0] = 0; CHECK(kbr_row0_money(0, m, u, 4, &w) == 900000 && w == 1, "row0: host mode with seat 0 unused = first used seat");
+        m[1] = -5; CHECK(kbr_row0_money(0, m, u, 4, &w) == 0 && w == 1, "row0: negative money counts as 0");
+        u[1] = u[3] = 0; CHECK(kbr_row0_money(1, m, u, 4, &w) == 0 && w == -1, "row0: no used seat -> 0, which -1");
+        CHECK(kbr_tr_bot_term(0) == 0 && kbr_tr_bot_term(749999) == 0 && kbr_tr_bot_term(750000) == 1 && kbr_tr_bot_term(1000000) == 2 && kbr_tr_bot_term(1250000) == 3, "terms: bot money 0/1/2/3 at 750k / 1.0M / 1.25M");
+        CHECK(kbr_tr_pl_term(0) == 3 && kbr_tr_pl_term(1000000) == 1 && kbr_tr_pl_term(9000000) == 0, "terms: player money 3..0");
+        CHECK(kbr_tr_sum(3.0f, 800000, 0) == 7.0f && kbr_tr_sum(2.0f, 1000000, 0) == 7.0f && kbr_tr_sum(3.0f, 700000, 0) == 6.0f, "sum: the reachable level-6 sums (3+1+3, 2+2+3 pass 7; 3+0+3 does not)");
+        CHECK(kbr_tr_back_why(0, 0, 1, 1, 1) == 0, "back: nothing wrong stays turned");
+        CHECK(kbr_tr_back_why(1, 0, 1, 1, 1) == KBR_TB_DEAD && kbr_tr_back_why(0, 1, 1, 1, 1) == KBR_TB_ABOARD && kbr_tr_back_why(0, 0, 0, 1, 1) == KBR_TB_STATE, "back: dead / aboard / untracked");
+        CHECK(kbr_tr_back_why(1, 1, 0, 0, 0) == KBR_TB_ROUND && kbr_tr_back_why(1, 1, 0, 1, 0) == KBR_TB_CHANGED && kbr_tr_back_why(1, 1, 0, 1, 1) == KBR_TB_DEAD, "back: priority round > changed > dead > aboard > state");
+        CHECK(kbr_tb_name[KBR_TB_ROUND][0] && kbr_tb_name[KBR_TB_CHANGED][0], "back: names");
+        d[0] = 5000; d[1] = 2500; d[2] = -1; d[3] = 3000;
+        CHECK(kbr_tr_nearest(d, 4, 3000) == 1, "nearest: the closest within range wins");
+        d[1] = 3500; CHECK(kbr_tr_nearest(d, 4, 3000) == 3, "nearest: out-of-range and unknown skipped");
+        d[3] = 4000; CHECK(kbr_tr_nearest(d, 4, 3000) == -1 && kbr_tr_nearest(d, 0, 3000) == -1, "nearest: none in range / empty");
+        CHECK(!kbr_tr_capped(1, 2) && kbr_tr_capped(2, 2) && kbr_tr_capped(5, 2) && !kbr_tr_capped(9, 0), "cap: reached at max, never with max 0");
+        CHECK(kbr_tr_cap_word(1, 2) == 0 && kbr_tr_cap_word(2, 2) == 0x7ffful && kbr_tr_cap_word(9, 0) == 0, "cap word: 0 below the cap or off, 0x7fff at the cap");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }

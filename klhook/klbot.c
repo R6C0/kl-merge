@@ -808,23 +808,41 @@ static void klb_foe_back(const struct klb_snap *s, int i, const char *why)
               i, why, klb_f.actor[i], r->used ? r->actor : 0, klb_f.info[i], info, t);
 }
 
+/* the team-swap tail, shared with the online brain (klbrain.c, OnlineBrainTraitorTurn): actor -> team Enemy ([[actor+0x54]+4] 2 -> 1). others[0..no) = the other tracked actors whose team object must differ
+   (0 = unused); nslot = player slots 0..nslot-1 of the game data checked the same way (Arcade 4, online 32). 1 = written (*pinfo = team object, *pt0 = old team), 0 = refused (why = the reason) */
+static int klb_foe_turn_actor(DWORD actor, const DWORD *others, int no, int nslot, DWORD *pinfo, DWORD *pt0, char *why, int whylen)
+{
+    DWORD gd, info = 0, t = 0, one = KLB_FOE_TEAM, avt, pl; int j;
+    why[0] = 0;
+    if ((avt = klh_rd32(actor)) != KLB_ACTOR_VT) snprintf(why, whylen, "its actor's vtable is %08lx, not ZFFActor's", avt);
+    else if (!(info = klh_rd32(actor + 0x54)) || !klh_rd(info + 4, &t, 4)) snprintf(why, whylen, "its team object cannot be read");
+    else if (t != 2) snprintf(why, whylen, "its team reads %lu, not 2 (Ally)", t);
+    else {
+        for (j = 0; j < no && !why[0]; j++)
+            if (others[j] && klh_rd32(others[j] + 0x54) == info) snprintf(why, whylen, "its team object %08lx is record %d's too", info, j);
+        if (!why[0] && (gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) != 0)
+            for (j = 0; j < nslot && !why[0]; j++) if ((pl = klh_rd32(gd + 0x828 + 4 * j)) != 0 && klh_rd32(pl + 0x54) == info) snprintf(why, whylen, "its team object %08lx is player slot %d's too", info, j);
+    }
+    if (!why[0] && !klh_data((void *)(DWORD_PTR)(info + 4), &one, 4, "a turned AI heister's team: Enemy (TraitorFoe)")) snprintf(why, whylen, "the team dword is not writable");
+    if (why[0]) return 0;
+    *pinfo = info; *pt0 = t;
+    return 1;
+}
+/* and back: only while the actor still has that team object and it still reads Enemy. 1 = written */
+static int klb_foe_unturn_actor(DWORD actor, DWORD info, DWORD team0)
+{
+    DWORD t = 0;
+    return actor && info && klh_rd32(actor + 0x54) == info && klh_rd(info + 4, &t, 4) && t == KLB_FOE_TEAM &&
+           klh_data((void *)(DWORD_PTR)(info + 4), &team0, 4, "a turned AI heister's team: his own back (TraitorFoe)");
+}
+
 static void klb_foe_swap(const struct klb_snap *s, int i)
 {
-    DWORD gd, info, t = 0, one = KLB_FOE_TEAM, avt, pl; BYTE fl, st; int j; char why[100];
+    DWORD info = 0, t = 0, oth[KLB_NREC]; BYTE fl, st; int j, n = s->n < KLB_NREC ? s->n : KLB_NREC; char why[100];
     const struct klb_rec *r = &s->r[i];
-    why[0] = 0;
     if (!klb_still(s, i, &fl, &st) || !(fl & 2) || st != 0) return;
-    if ((avt = klh_rd32(r->actor)) != KLB_ACTOR_VT) snprintf(why, sizeof why, "its actor's vtable is %08lx, not ZFFActor's", avt);
-    else if (!(info = klh_rd32(r->actor + 0x54)) || !klh_rd(info + 4, &t, 4)) strcpy(why, "its team object cannot be read");
-    else if (t != 2) snprintf(why, sizeof why, "its team reads %lu, not 2 (Ally)", t);
-    else {
-        for (j = 0; j < s->n && !why[0]; j++)
-            if (j != i && s->r[j].used && s->r[j].actor && klh_rd32(s->r[j].actor + 0x54) == info) snprintf(why, sizeof why, "its team object %08lx is record %d's too", info, j);
-        if (!why[0] && (gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) != 0)
-            for (j = 0; j < 4 && !why[0]; j++) if ((pl = klh_rd32(gd + 0x828 + 4 * j)) != 0 && klh_rd32(pl + 0x54) == info) snprintf(why, sizeof why, "its team object %08lx is player slot %d's too", info, j);
-    }
-    if (!why[0] && !klh_data((void *)(DWORD_PTR)(info + 4), &one, 4, "a turned AI heister's team: Enemy (TraitorFoe)")) strcpy(why, "the team dword is not writable");
-    if (why[0]) { klb_f.refused[i] = 1; klog("bots: FOE: record %d (TRAITOR) stays team Ally: %s - nothing written; the crew will not fight him", i, why); return; }
+    for (j = 0; j < n; j++) oth[j] = (j != i && s->r[j].used) ? s->r[j].actor : 0;
+    if (!klb_foe_turn_actor(r->actor, oth, n, 4, &info, &t, why, sizeof why)) { klb_f.refused[i] = 1; klog("bots: FOE: record %d (TRAITOR) stays team Ally: %s - nothing written; the crew will not fight him", i, why); return; }
     klb_f.swapped[i] = klb_f.was[i] = 1; klb_f.actor[i] = r->actor; klb_f.info[i] = info; klb_f.team0[i] = t;
     klog("bots: FOE: record %d (TRAITOR, actor %08lx, stage %u, $%lu) is team Enemy now (team object %08lx: 2 -> 1): the crew and the escort should shoot him, he shoots them and you", i, r->actor, r->stage, r->money, info);
 }

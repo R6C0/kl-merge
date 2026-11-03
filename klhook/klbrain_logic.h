@@ -278,4 +278,58 @@ static int kbr_drop_valid(int armed, long amt, int hidden, int tracked_ok)
     return armed && amt > 0 && hidden == 0 && tracked_ok;
 }
 
+/* ---- OnlineBrainTraitorTurn (2026-11-03; design re/ + scratchpad traitor_design.md / traitor_refute.md) -------------------------------------------------------------------------------- */
+/* diagnostics: take one of the first `cap` log slots of a counter (1 = log this one) */
+static int kbr_diag_take(int *n, int cap) { if (*n >= cap) return 0; (*n)++; return 1; }
+
+/* row 0 of the shadow money row = "the player" of Arcade's Traitor evaluate. mode 0 = the host (seat 0; else the first used seat), 1 = the richest used human. money[i] / used[i] for seats 0..n-1;
+   *which = the seat chosen (-1 none -> 0). Negative money counts as 0. GUESS: seat 0 is the host on the Sv rules */
+static long kbr_row0_money(int mode, const long *money, const unsigned char *used, int n, int *which)
+{
+    int i, best = -1;
+    for (i = 0; i < n; i++) {
+        if (!used[i]) continue;
+        if (best < 0) { best = i; if (mode == 0) break; continue; }
+        if (mode == 1 && money[i] > money[best]) best = i;
+    }
+    *which = best;
+    return best < 0 ? 0 : (money[best] < 0 ? 0 : money[best]);
+}
+
+/* the Traitor evaluate's score at level 6-8 as read in the disassembly (bots_behaviour 1.3): stage term (from the tuning row) + bot money term (0..3 against 750k / 1.0M / 1.25M) + player money term (3..0 against the
+   same limits). GUESS: the comparisons are >= and the thresholds are the same at every level (only read for 6-8). Diagnostic only: the game computes its own */
+static int kbr_tr_bot_term(long m) { return m >= 1250000L ? 3 : m >= 1000000L ? 2 : m >= 750000L ? 1 : 0; }
+static int kbr_tr_pl_term(long m) { return 3 - kbr_tr_bot_term(m); }
+static float kbr_tr_sum(float stage_term, long bot, long player) { return stage_term + (float)kbr_tr_bot_term(bot) + (float)kbr_tr_pl_term(player); }
+
+/* why a turned bot goes back to his own team (priority order); 0 = stays turned. Inputs: dead, aboard, bot still tracked (klbr state 1), round still running (role 2, mode 4, state 0x19, same session), actor and team object unchanged */
+#define KBR_TB_DEAD 1
+#define KBR_TB_ABOARD 2
+#define KBR_TB_STATE 3
+#define KBR_TB_ROUND 4
+#define KBR_TB_CHANGED 5
+static const char *const kbr_tb_name[] = { "", "he is dead", "he is aboard", "the bot is no longer tracked", "the round is not running", "the actor or its team object changed" };
+static int kbr_tr_back_why(int dead, int aboard, int tracked, int round_ok, int same)
+{
+    if (!round_ok) return KBR_TB_ROUND;
+    if (!same) return KBR_TB_CHANGED;
+    if (dead) return KBR_TB_DEAD;
+    if (aboard) return KBR_TB_ABOARD;
+    if (!tracked) return KBR_TB_STATE;
+    return 0;
+}
+
+/* TraitorKillMax: a crew death is booked to the nearest live turned bot within `rng`; d[i] < 0 = unknown / not a candidate. -1 = none */
+static int kbr_tr_nearest(const float *d, int n, float rng)
+{
+    int i, best = -1;
+    for (i = 0; i < n; i++) if (d[i] >= 0.0f && d[i] <= rng && (best < 0 || d[i] < d[best])) best = i;
+    return best;
+}
+/* kills booked to a turned bot after this death; 1 when the cap is reached (max <= 0 = no cap, never) */
+static int kbr_tr_capped(int kills, int max) { return max > 0 && kills >= max; }
+
+/* optional hard cap on turns per round through [shadow+0x338] (0x43ffb0 tests `[rules+0x338] < tuning[R+0x6c]`): 0 = leave (cap off or still room), 0x7fff = block every further roll once `turned` reached `cap` */
+static unsigned long kbr_tr_cap_word(int turned, int cap) { return cap > 0 && turned >= cap ? 0x7ffful : 0ul; }
+
 #endif /* KLBRAIN_LOGIC_H */
