@@ -1560,6 +1560,14 @@ static void kspg_hire_tick(void)
             if (!kspg.active && now - lastScan > 1500) { lastScan = now; kspg_scan(); }     /* page II's own tick scans when it is active */
         }
     }
+    if (kspg.queueOn && ((kspg.hPendAt && kspg.hQueued) || kspg.pq2At)) {   /* bench pq3 11-03: a queued press held all through FABuyWeaponsNewCategory and no line said which test failed */
+        static DWORD diagAt;
+        if (!diagAt || (int)(now - diagAt) >= 2000) {
+            diagAt = now | 1;
+            klog("pagequeue: holding (state 0x%x, shop mode %lu, gate %d/%d, selector %08lx %s, page II active %d, queued %d, %lu ms)", kspg.st, (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)),
+                 kspg.hpre, kspg.pre, (unsigned long)kspg.selobj, kspg_h_selok() ? "wrapped" : "NOT wrapped", kspg.active, kspg.hQueued, (unsigned long)kpq_age(now, kspg.hPendAt ? kspg.hPendAt : kspg.pq2At));
+        }
+    }
     if (kspg.hPendAt) {                          /* A1HIRE review 10-28: an early press used to be dropped (the scan wraps the selector every 1.5 s) */
         int pq = kspg.hQueued != 0, r = kpq_step(pq, kspg.hpre, kspg.st, (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), kspg_h_selok(), kpq_age(now, kspg.hPendAt));   /* PageQueue: a queued press waits for the list too (klpagequeue_logic.h); queued 0 = the old rules */
         if (r == KPQ_LAPSE) {
