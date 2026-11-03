@@ -1,6 +1,7 @@
 /* klbrain_test.c - off-game harness for klbrain_logic.h ([Brain] vector insertion order, growth, switches, PuppetOff window). No windows.h.
    Build: cl /nologo /W3 klbrain_test.c /Fe:klbrain_test.exe     Run: klbrain_test.exe (exit 0 = all pass) */
 #include <stdio.h>
+#include <string.h>
 #include "klbrain_logic.h"
 
 static int fails, checks;
@@ -274,6 +275,22 @@ int main(void)
         CHECK(kbr_tfl_decide(2, 1, 1, 0, 0, 1) == KBR_TFL_PASS, "tfl: shooter not ours = PASS");
         CHECK(kbr_tfl_decide(2, 1, 1, 1, 1, 1) == KBR_TFL_PASS, "tfl: Turn on = PASS");
         CHECK(kbr_tfl_decide(2, 1, 1, 1, 0, 0) == KBR_TFL_PASS, "tfl: not a host round = PASS");
+    }
+    {   /* HitLog probe + OnlineBrainTraitorDamage decisions */
+        CHECK(kbr_tgt_valid(100, 101) && !kbr_tgt_valid(101, 101) && !kbr_tgt_valid(200, 101), "tgt: valid while clock < stamp");
+        CHECK(kbr_tgt_class(0, 1, 0, 0, 0) == KBR_TG_NONE, "tgt: no target = none");
+        CHECK(kbr_tgt_class(1, 1, 0, 0, 0) == KBR_TG_HUMAN, "tgt: plain player body = human");
+        CHECK(kbr_tgt_class(1, 1, 1, 0, 0) == KBR_TG_BOT, "tgt: tagged bot body = bot, not human");
+        CHECK(kbr_tgt_class(1, 1, 0, 1, 0) == KBR_TG_COP, "tgt: police byte = cop");
+        CHECK(kbr_tgt_class(1, 0, 0, 0, 1) == KBR_TG_COP && kbr_tgt_class(1, 0, 1, 0, 1) == KBR_TG_BOT && kbr_tgt_class(1, 0, 0, 0, 0) == KBR_TG_OTHER, "tgt: AI object = cop, tagged = bot, unknown = other");
+        CHECK(!strcmp(kbr_tgt_name(KBR_TG_HUMAN), "human") && !strcmp(kbr_tgt_name(99), "none"), "tgt: names");
+        CHECK(kbr_rate_ok(0, 5, 1000) && !kbr_rate_ok(5000, 5999, 1000) && kbr_rate_ok(5000, 6000, 1000), "rate: gap");
+        CHECK(kbr_rate_ok(0xfffffff0ul, 0x00000400ul, 1000), "rate: wraps");
+        CHECK(kbr_hp_drop(550.0f, 530.0f) == 20.0f && kbr_hp_drop(5.0f, 5.0f) == 0.0f, "hp drop");
+        CHECK(kbr_dm_decide(1, 1, 1, 0) == KBR_DM_SET && kbr_dm_decide(1, 1, 1, 7) == KBR_DM_HAVE && kbr_dm_decide(1, 1, 1, 2) == KBR_DM_HAVE, "dm: byte 0 = SET, any nonzero = HAVE");
+        CHECK(kbr_dm_decide(1, 1, 1, 1) == KBR_DM_HAVE, "dm: already 1 = HAVE (not ours to restore)");
+        CHECK(kbr_dm_decide(0, 1, 1, 0) == KBR_DM_SKIP && kbr_dm_decide(1, 0, 1, 0) == KBR_DM_SKIP && kbr_dm_decide(1, 1, 0, 0) == KBR_DM_SKIP && kbr_dm_decide(1, 1, 1, -1) == KBR_DM_SKIP, "dm: off / unmarked / no body / unreadable = SKIP");
+        CHECK(kbr_dm_restore_ok(1) && !kbr_dm_restore_ok(0) && !kbr_dm_restore_ok(2), "dm: restore only our 1");
     }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;

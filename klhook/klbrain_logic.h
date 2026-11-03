@@ -375,4 +375,37 @@ static int kbr_tfl_decide(int mode, int taOn, int marked, int shooterOurs, int t
     return mode >= 2 ? KBR_TFL_SWAP : KBR_TFL_LOG;
 }
 
+/* ---- OnlineBrainTraitorHitLog probe + OnlineBrainTraitorDamage (2026-11-03; re/fireline_goal_path_1103.md section D / Verification 2). Pure decisions, no game access. ---- */
+#define KBR_TG_NONE 0
+#define KBR_TG_HUMAN 1
+#define KBR_TG_BOT 2
+#define KBR_TG_COP 3
+#define KBR_TG_OTHER 4
+/* the soldier's target field is valid while the game clock [[0xdd2640]+0x48] < [soldier+0x70c] (0x5da810, signed compare jge) */
+static int kbr_tgt_valid(long clock, long stamp) { return clock < stamp; }
+/* have: valid and non-null; player: the object is a ZFFPlayer body; taggedBot: it maps to a tagged bot (klbr_hl_body / klbr_hl_find); police: body byte +0x2723; ai: ZFFActor / ZSoldier object */
+static int kbr_tgt_class(int have, int player, int taggedBot, int police, int ai)
+{
+    if (!have) return KBR_TG_NONE;
+    if (taggedBot) return KBR_TG_BOT;
+    if (player) return police ? KBR_TG_COP : KBR_TG_HUMAN;
+    return ai ? KBR_TG_COP : KBR_TG_OTHER;      /* GUESS: a non-player AI target is a cop (or an untagged bot) */
+}
+static const char *kbr_tgt_name(int c) { return c == KBR_TG_HUMAN ? "human" : c == KBR_TG_BOT ? "tagged bot" : c == KBR_TG_COP ? "cop" : c == KBR_TG_OTHER ? "other" : "none"; }
+/* a once-per-gap limiter; last 0 = never; unsigned wrap safe */
+static int kbr_rate_ok(unsigned long last, unsigned long now, unsigned long gap) { return !last || (unsigned long)(now - last) >= gap; }
+/* health drop between two reads (positive = lost health) */
+static float kbr_hp_drop(float before, float after) { return before - after; }
+/* OnlineBrainTraitorDamage: what to do with the marked bot body's +0x2726 byte before a hit */
+#define KBR_DM_SKIP 0
+#define KBR_DM_SET 1
+#define KBR_DM_HAVE 2
+static int kbr_dm_decide(int on, int marked, int bodyOk, int cur)
+{
+    if (!on || !marked || !bodyOk || cur < 0) return KBR_DM_SKIP;
+    return cur != 0 ? KBR_DM_HAVE : KBR_DM_SET;      /* any nonzero byte already passes 0x6e3400's cmp byte,0: nothing to write, remember or restore */
+}
+/* restore only a byte that still holds our 1 (never overwrite what someone else wrote since) */
+static int kbr_dm_restore_ok(int cur) { return cur == 1; }
+
 #endif /* KLBRAIN_LOGIC_H */

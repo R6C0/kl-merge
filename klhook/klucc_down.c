@@ -50,7 +50,7 @@
 #define KLUD_TRIG_CALL(d, rec) ((BYTE (__fastcall *)(void *, void *, void *))(DWORD_PTR)KLH_VA(KLUD_TRIG))((void *)(DWORD_PTR)(d), 0, (void *)(rec))
 #endif
 
-static struct { int on, mode, dry, log, pre, hl; float floor, force_secs; } klud;
+static struct { int on, mode, dry, log, pre, hl, dm; float floor, force_secs; } klud;
 /* TRACK DAMAGE (2026-10-26, small separate hook): this wrapper is also the carrier of kldown.c's OnlinePreScale. kld_o_prescale(victim, &delta, attacker) (kldown.c, included AFTER this file, hence
    the forward declaration) prices a hit on this machine's own knocked-down body BEFORE the game subtracts it - the same slot-15 call, FA / UCC / C&R alike (the rules classes are the same
    Sv / Cl). klud.pre = [Down] Enable=1 + Online=1 + OnlinePreScale=1 (read here because klud_init runs before kld_init); klud.mode = [Ucc] DownOnly as before. Either one installs the table. */
@@ -159,6 +159,7 @@ static DWORD __fastcall klud_w15(void *self, void *edx, DWORD victim, float *pde
     static int told;
     if (!told) { told = 1; klog("uccdown: the rules' damage hook (slot 15) is reached - the wrapper works"); }
     if (klud.hl && pdelta && victim && attacker) klbr_hitlog(victim, pdelta, attacker);      /* klbrain.c OnlineBrainTraitorHitLog: READ ONLY, before anything below may change the delta */
+    if (klud.dm && victim && attacker) klbr_dm_hit(victim, attacker);      /* klbrain.c OnlineBrainTraitorDamage: a marked bot's body gets +0x2726 = 1 BEFORE 0x6e3400's filter (restored by klbrain.c) */
     if (klud.pre && pdelta && victim) kld_o_prescale(victim, pdelta, attacker);      /* kldown.c: the downed own body's price, FIRST: the UCC clamp below then sees the priced delta (it only ever raises it toward 0) */
     if (klud.mode && pdelta && victim && attacker && attacker != victim) klud_filter((DWORD)(DWORD_PTR)self, victim, pdelta, attacker);
     return ((DWORD (__fastcall *)(void *, void *, DWORD, float *, DWORD))(DWORD_PTR)KLH_VA(KLUD_SLOT_FN))(self, edx, victim, pdelta, attacker);
@@ -264,7 +265,8 @@ static void klud_init(void)
                GetPrivateProfileIntA("Down", "OnlinePreScale", 1, klh_ini) != 0 &&
                (GetPrivateProfileIntA("Down", "OnlineFactors", 1, klh_ini) != 0 || GetPrivateProfileIntA("Down", "OnlineFreeFall", 1, klh_ini) != 0);
     klud.hl = klbr_hlon != 0;      /* read-only observer of klbrain.c; klbr_hlon already needs the Brain on (klbr_init runs first), so no private table is installed for nothing */
-    klud.on = klud.mode != 0 || klud.pre || klud.hl;
+    klud.dm = klbr_dmon != 0;      /* klbrain.c OnlineBrainTraitorDamage (needs Arcade + the Brain on) */
+    klud.on = klud.mode != 0 || klud.pre || klud.hl || klud.dm;
     if (klud.pre) klog("uccdown: [Down] OnlinePreScale=1: the rules' damage hook (slot 15) is wrapped for kldown.c's pre-apply price of a downed own body's hits (FA online; UCC / C&R share the rules' Sv/Cl classes by the static read, NOT traced - GUESS)");
     if (!klud.mode) return;
     klud.dry = GetPrivateProfileIntA("Ucc", "Dry", 0, klh_ini) != 0;
