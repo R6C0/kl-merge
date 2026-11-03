@@ -74,7 +74,8 @@ workflow wpl6ggc4m (Board gap). Traitor: checks never ran online (Traitor=0 in e
 
 2026-11-03 ~04:30 - [ce] After-match navigation INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, SHIP 79ce4c7c4, UNDO bat beside it). pq6 PASS (DD05, 2 seats,
 0 faults, round 2): F3/F2 -> page SHOWN in 0.3 s steps with no RETURN; ESC from the auto-opened weapon list pops back to the category list (5 -> 4 windows)
-like a hand-opened one. A second ESC 90 ms later did nothing (Category stayed 14 s): timing or a real gap? pq7 (same, ESCs 1.5 s apart) chained on "end bs6".
+like a hand-opened one. pq7 PASS (ESCs 1.5 s apart): Weapon -> Category -> New on both seats, so pq6's ignored second ESC (90 ms later) was only
+timing. After-match navigation is DONE; the next owner play test decides whether it feels right.
 
 2026-11-03 ~04:20 - [c9] bs5 PASS (DM03 + DD05, 4 seats, 0 faults): StackClaims works: DM03 watchdog take-backs 12 -> 0, 14 grabs, $6.82M paid,
 7/7 boarded (still by the hook van path). 7c78417e8 BoardStage (real Board tactic boards; review fixes in). DD05: 0 real grabs because cops carry all loot

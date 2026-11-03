@@ -1,3 +1,7 @@
+2026-11-03 ~04:50 - [ce] pq7 PASS (DD05, 2 seats, 0 faults, round 2 on both; kit week_1028/pq7 = pq6 with ESCs 1.5 s apart): ESC pops
+Weapon -> Category -> New on both seats (windows 5 -> 4 -> 3). pq6's ignored second ESC 90 ms after the first was timing, not a hook-open
+difference. After-match navigation (installed 03:49) is complete; waiting for the owner's play test.
+
 2026-11-03 ~04:45 - [c9] bs6 PASS (DM03 + DD05, 4 seats, 0 faults). DM03: BoardStage = 3 bots boarded by the REAL Board tactic, 4 by the
 fallback; $6.92M paid, watchdog 0. DD05: DropCands works: 2 drop grabs, $1.58M paid (bs5: 0), but real Board 0 (slot 45 never called, board nz 4) ->
 workflow wpl6ggc4m (Board gap). Traitor: checks never ran online (Traitor=0 in every bench); OnlineBrainTraitorTurn being built in worktree (wq571v5zk).
