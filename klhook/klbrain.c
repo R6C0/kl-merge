@@ -89,6 +89,7 @@ static const DWORD klbr_size[3] = { 0x30, 0x14, 0x20 };
 
 static int klbr_probe, klbr_build, klbr_loot, klbr_puppet, klbr_on, klbr_win_ms = 5000;
 static int klbr_apick; static volatile LONG klbr_run_skip[2], klbr_npick;      /* ArcadePick; Loot / Board RUN calls answered inert (coroutine rule) */
+static int klbr_claims; static DWORD klbr_cur_snd; static long klbr_claim_skip, klbr_claim_fb;      /* StackClaims; the soldier whose evaluate / RUN slice is running (game thread only); stacks skipped, fallbacks to grabs-only */
 static int klbr_bridge, klbr_board, klbr_traitor, klbr_boardreal, klbr_cops, klbr_level = 6, klbr_lootwin = 1500, klbr_boardwin = 2000;      /* stage 2 / 3 switches (all default 0) */
 static DWORD klbr_game_tid;             /* the thread of the hook tick (SteamAPI_RunCallbacks gameplay call) */
 static int klbr_verdict_n;
@@ -221,7 +222,7 @@ static void klbr_rr_put_back(void)      /* PLAIN (no SEH): each field only while
     if (m & 1) *(volatile DWORD *)(DWORD_PTR)(klbr_rr_G + 0x54) = klbr_rr_rules;
     if (m & 2) *(volatile DWORD *)(DWORD_PTR)(klbr_rr_sm + 0x54) = klbr_rr_role;
     if (m != 3) klbr_rr_mis++;
-    klbr_rr_sw = 0; klbr_rr_out++;
+    klbr_rr_sw = 0; klbr_rr_out++; klbr_cur_snd = 0;
 }
 static void klbr_rr_swap_in(DWORD ctx, int val, DWORD tac, int cls)
 {
@@ -234,7 +235,7 @@ static void klbr_rr_swap_in(DWORD ctx, int val, DWORD tac, int cls)
     if (rules == klbr_shadow) { klbr_rr_nested++; return; }      /* never save the shadow as the "real" rules */
     klbr_rr_G = G; klbr_rr_sm = sm; klbr_rr_rules = rules; klbr_rr_role = role;
     *(volatile DWORD *)(DWORD_PTR)(G + 0x54) = klbr_shadow; *(volatile DWORD *)(DWORD_PTR)(sm + 0x54) = 0;
-    klbr_rr_sw = 1; k = klbr_rr_in++; klbr_rr_val[val == 2 ? 2 : 1]++;
+    klbr_rr_sw = 1; k = klbr_rr_in++; klbr_rr_val[val == 2 ? 2 : 1]++; klbr_cur_snd = *(volatile DWORD *)(DWORD_PTR)(tac + 4);      /* StackClaims: a slot 202 call inside this slice knows who asks */
     if (val == 1) { struct klbr_s *e = klbr_find(*(volatile DWORD *)(DWORD_PTR)(tac + 4)); if (e && e->state == 1) { if (cls == 0) e->nzAt = GetTickCount() | 1u; else e->bnzAt = GetTickCount() | 1u; klbr_rr_hand_run++; } }      /* bs3 judge: a live RUN slice keeps its bot handed over (own table only, no game call); the 8 s stall watchdog still takes a bot back that does not move */
     if (k < 8) { klbr_rr_first[k].goal = tac; klbr_rr_first[k].ctx = ctx; klbr_rr_first[k].val = (DWORD)val; klbr_rr_first[k].tid = tid; klbr_rr_first[k].cls = cls; klbr_rr_first[k].snd = *(volatile DWORD *)(DWORD_PTR)(tac + 4); }
 }
@@ -324,7 +325,7 @@ static float klbr_ev(int cls, DWORD self)
     klbr_hit(id);
     if (klbr_wanted(cls, self, &e)) {
         int told_now = klbr_sw_told < 4 && cls == 0;
-        r = klbr_framed(id, self, 1, &flt);
+        { DWORD was = klbr_cur_snd; klbr_cur_snd = e->snd; r = klbr_framed(id, self, 1, &flt); klbr_cur_snd = was; }      /* StackClaims: slot 202 inside this evaluate knows who asks */
         if (told_now) { klbr_sw_told++; klog("brain: frame: %s evaluate under the shadow returned %.3f (frames %d, max %u us, rec %d)", "Loot", (double)r, klbr_frames, klbr_us_max, e->rec); }
     }
     if (flt) { InterlockedIncrement(&klbr_ev_flt[cls]); klbr_fault(cls, e, "evaluate"); r = 0.0f; }      /* a faulted answer is never trusted and never refreshes the hand-off */
@@ -571,6 +572,7 @@ static struct klbr_s *klbr_new(DWORD snd, DWORD actor, DWORD now)
 
 /* ---- the real money controls (registry 0xe09e38, count 0xe0e63c) as slot 202 and the grab see them ------------------------------------------------------------------------------- */
 #define KLBR_NSCAN 128
+#define KLBR_CLAIM_MS 4000u            /* StackClaims: a peer's Loot-evaluate pick keeps its stack off my candidate list this long (GUESS, bs4 11-03: re-evaluates come every few 100 ms) */
 static int klbr_money_ok(DWORD o, int *amt, float pos[3])        /* a takeable stack: vtable, not a drop (type 1), something left, armed, not behind a door, a node with a place */
 {
     DWORD type = 0, ent, node; BYTE act = 0, shut = 0; int a = 0;
@@ -580,9 +582,17 @@ static int klbr_money_ok(DWORD o, int *amt, float pos[3])        /* a takeable s
     if (!(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, pos, 0)) return 0;
     *amt = a; return 1;
 }
-static int klbr_money_near(const float p[3], unsigned long *out, int cap)
+static int klbr_money_near(const float p[3], unsigned long *out, int cap, DWORD me)      /* me = the asking soldier (0 = unknown): with StackClaims a stack another bot grabs or freshly picked is skipped */
 {
-    DWORD rn = klh_rd32((DWORD_PTR)KLH_VA(0x00e0e63c)), reg[0x400], q, j; unsigned long obj[KLBR_NSCAN]; float d2[KLBR_NSCAN]; int n = 0;
+    DWORD rn = klh_rd32((DWORD_PTR)KLH_VA(0x00e0e63c)), reg[0x400], q, j, now = GetTickCount(); unsigned long obj[KLBR_NSCAN], cc[2 * KLBR_MAX], co[2 * KLBR_MAX], ca[2 * KLBR_MAX]; float d2[KLBR_NSCAN]; int n = 0, nc = 0, i, pass;
+    if (klbr_claims) for (i = 0; i < KLBR_MAX; i++) {
+        struct klbr_s *e = &klbr_t[i];
+        if (e->state != 1) continue;
+        if (e->rec > 0 && e->rec < KLBR_NREC && klbr_gr[e->rec].on) { cc[nc] = klbr_gr[e->rec].ctrl; co[nc] = e->snd; ca[nc] = 0; nc++; }
+        if (e->pick && e->pickAt) { cc[nc] = e->pick; co[nc] = e->snd; ca[nc] = e->pickAt; nc++; }
+    }
+    for (pass = 0; pass < 2; pass++) {      /* pass 1: every stack is claimed by peer PICKS -> grabs-only (the bot still gets a stack nobody is grabbing) */
+    n = 0;
     if (rn > 0x1000) rn = 0x1000;
     for (q = 0; q < rn && n < KLBR_NSCAN; q += 0x400) {
         DWORD m = rn - q < 0x400 ? rn - q : 0x400;
@@ -590,8 +600,12 @@ static int klbr_money_near(const float p[3], unsigned long *out, int cap)
         for (j = 0; j < m && n < KLBR_NSCAN; j++) {
             float mp[3]; int amt;
             if (!klbr_money_ok(reg[j], &amt, mp)) continue;
+            if (nc && kbr_claimed(reg[j], me, !pass, cc, co, ca, nc, now, KLBR_CLAIM_MS)) { if (!pass) klbr_claim_skip++; continue; }
             obj[n] = reg[j]; d2[n] = (mp[0] - p[0]) * (mp[0] - p[0]) + (mp[1] - p[1]) * (mp[1] - p[1]) + (mp[2] - p[2]) * (mp[2] - p[2]); n++;
         }
+    }
+    if (n || !nc || !me) break;
+    klbr_claim_fb++;
     }
     return kbr_cand_sort(obj, d2, n, out, cap);
 }
@@ -646,7 +660,7 @@ static DWORD __fastcall klbr_s202(DWORD rules, DWORD edx, const float *pos, DWOR
     unsigned long best[5]; float p[3]; int n, i; (void)rules; (void)edx;
     klbr_s202_n++;
     if (!out || !pos || !klh_rd((DWORD_PTR)pos, p, 12) || !kle_ok3(p)) { if (klbr_s202_told++ < 3) klog("brain: bridge: slot 202 called with pos %08lx out %08lx: pos does not read as 3 finite floats (GUESS of the argument layout wrong?): no candidates", (unsigned long)(DWORD_PTR)pos, (unsigned long)(DWORD_PTR)out); return 0; }
-    n = klbr_money_near(p, best, 5);
+    n = klbr_money_near(p, best, 5, klbr_cur_snd);
     __try { for (i = 0; i < 5; i++) out[i] = (DWORD)best[i]; } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
     if (klbr_s202_told++ < 4) klog("brain: bridge: slot 202: %d candidate(s) from the real money controls near (%.0f, %.0f, %.0f); nearest %08lx", n, (double)p[0], (double)p[1], (double)p[2], best[0]);
     return (DWORD)n;
@@ -785,6 +799,7 @@ static void klbr_summary(void)
         if (klbr_bridge || klbr_board || klbr_traitor)
             klog("brain: round end: bridge: %d grab(s) started, %d part(s) paid ($%ld), %d stopped; slot 202 calls %d, slot 45 calls %d; traitor mirrors %d; Board run/exit calls %ld/%ld",
                 klbr_nstart, klbr_npay, klbr_paid, klbr_nabort, klbr_s202_n, klbr_s45_n, klbr_ntraitor, (long)klbr_hits[3], (long)klbr_hits[4]);
+        if (klbr_claims) klog("brain: round end: StackClaims: %ld stack(s) kept off a bot's candidate list (a peer grabs it or picked it within %u ms), %ld fallback(s) to grabs-only (every stack picked by a peer)", klbr_claim_skip, KLBR_CLAIM_MS, klbr_claim_fb);
         if (klbr_realrun)
             klog("brain: round end: realrun: swap-ins %ld (RUN %ld, EXIT %ld), swap-outs %ld, leaks %ld, veh restores %ld, mismatches %ld, foreign-thread %ld, nested %ld, mode!=4 %ld, unregistered [tac+0x10] %ld, hand-off stamps evaluate-pick %ld / resume %ld; %ld tactic(s) in the registry (kept across rounds: a coroutine alive past the round end still gets the shadow)", (long)klbr_rr_in, (long)klbr_rr_val[1], (long)klbr_rr_val[2], (long)klbr_rr_out, (long)klbr_rr_leak, (long)klbr_rr_veh, (long)klbr_rr_mis, (long)klbr_rr_foreign, (long)klbr_rr_nested, (long)klbr_rr_mode, (long)klbr_rr_t10, (long)klbr_rr_hand_ev, (long)klbr_rr_hand_run, (long)klbr_rrn);
         if (klbr_puppet || klbr_boardreal)
@@ -845,7 +860,7 @@ static void klbr_tick(int game_thread)
         return;
     }
     klbr_game_tid = GetCurrentThreadId();
-    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); memset(klbr_t, 0, sizeof klbr_t); klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_paid = 0; klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
+    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); memset(klbr_t, 0, sizeof klbr_t); klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_paid = 0; klbr_claim_skip = klbr_claim_fb = 0; klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
         klog("brain: round starts on the host (Probe %d, Build %d, Loot %d, Bridge %d, Board %d/%d, Traitor %d, PuppetOff %d, Cops %d)", klbr_probe, klbr_build, klbr_loot, klbr_bridge, klbr_board, klbr_boardreal, klbr_traitor, klbr_puppet, klbr_cops); }
     if (klbr_fed_at && now - klbr_fed_at < 2500u) { for (i = 0; i < klbr_nseen && n < KLBR_MAX; i++) { actor[n] = klbr_seen[i].actor; snd[n] = klbr_seen[i].snd; n++; } }
     else n = klbr_scan(actor, snd, KLBR_MAX);
@@ -882,6 +897,9 @@ static void klbr_init(void)
     if (klbr_key("PuppetOff") && !klbr_puppet) klog("brain: PuppetOff needs Build=1, Loot=1 and OnlineBrainBridge=1: off");
     if (klbr_key("OnlineBrainCops") && !klbr_cops) klog("brain: OnlineBrainCops needs OnlineBrainBridge=1: off");
     klbr_apick = klbr_bridge && klbr_key("ArcadePick");
+    klbr_claims = klbr_bridge && klbr_key("StackClaims");
+    if (klbr_key("StackClaims") && !klbr_claims) klog("brain: StackClaims needs Build=1, Loot=1 and OnlineBrainBridge=1: off");
+    if (klbr_claims) klog("brain: StackClaims=1 UNTESTED: the loot candidates (slot 202) skip a stack another bot grabs or picked within %u ms, so each bot walks to its own stack (bs4: 12 watchdog take-backs from shared stacks)", KLBR_CLAIM_MS);
     if (klbr_key("ArcadePick") && !klbr_apick) klog("brain: ArcadePick needs Build=1, Loot=1 and OnlineBrainBridge=1: off");
     if (klbr_apick) klog("brain: ArcadePick=1 UNTESTED: the puppeteer walks a bot to the stack its real Loot evaluate chose (within %u ms), else to its own nearest stack", KLBR_PICK_MS);
     if (klbr_on) klog("brain: Probe %d, Build %d (recommended off until benched), Loot %d, Bridge %d, Board %d, BoardReal %d, Traitor %d, PuppetOff %d, Cops %d, Level %d; HOST round only, no code byte is patched", klbr_probe, klbr_build, klbr_loot, klbr_bridge, klbr_board, klbr_boardreal, klbr_traitor, klbr_puppet, klbr_cops, klbr_level);

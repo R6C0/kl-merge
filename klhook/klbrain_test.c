@@ -191,6 +191,15 @@ int main(void)
         CHECK(kbr_cand_sort(ob, d2, 2, res, 5) == 2 && res[0] == 11 && res[1] == 22 && res[2] == 0 && res[4] == 0, "fewer than 5: tail zero");
         CHECK(kbr_cand_sort(ob, d2, 0, res, 5) == 0 && res[0] == 0, "empty");
     }
+    {   /* StackClaims: a peer's grab always, a peer's fresh pick within the window, never my own */
+        unsigned long ct[3] = { 100, 200, 300 }, ow[3] = { 1, 2, 3 }, at[3] = { 0, 10001, 2001 };
+        CHECK(kbr_claimed(100, 2, 1, ct, ow, at, 3, 12000, 4000) && !kbr_claimed(100, 1, 1, ct, ow, at, 3, 12000, 4000), "claims: a peer's grab is claimed, my own grab is not");
+        CHECK(kbr_claimed(200, 1, 1, ct, ow, at, 3, 12000, 4000) && !kbr_claimed(200, 2, 1, ct, ow, at, 3, 12000, 4000), "claims: a peer's fresh pick is claimed, my own pick is not");
+        CHECK(!kbr_claimed(300, 1, 1, ct, ow, at, 3, 12000, 4000), "claims: a stale pick (10 s old, window 4 s) is free");
+        CHECK(kbr_claimed(100, 0, 1, ct, ow, at, 3, 12000, 4000) && !kbr_claimed(200, 0, 1, ct, ow, at, 3, 12000, 4000), "claims: unknown caller sees grabs only");
+        CHECK(!kbr_claimed(100, 1, 0, ct, ow, at, 3, 12000, 4000) && kbr_claimed(100, 2, 0, ct, ow, at, 3, 12000, 4000) && !kbr_claimed(200, 1, 0, ct, ow, at, 3, 12000, 4000), "claims: picks off = grabs only, my own grab still mine");
+        CHECK(!kbr_claimed(400, 1, 1, ct, ow, at, 3, 12000, 4000) && !kbr_claimed(0, 1, 1, ct, ow, at, 3, 12000, 4000), "claims: unclaimed / null stack free");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }

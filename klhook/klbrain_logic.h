@@ -215,6 +215,19 @@ static int kbr_lj_restore_mask(unsigned long cur_rules, unsigned long shadow, un
 /* ArcadePick: the stack the real Loot evaluate chose (kbr_chosen) still counts this long after it was stamped (now|1 stamp: masked, see kbr_puppet_released) */
 static int kbr_pick_live(unsigned long now, unsigned long at, unsigned long win) { return at && (unsigned long)(now - (at & ~1ul)) <= win; }
 
+/* StackClaims (bs4 11-03: several bots got the same nearest stack from slot 202, one grabbed, the rest stood at it until the watchdog took them back): stack c is claimed by ANOTHER bot when a
+   claim i has ctrl[i] == c, owner[i] != me, and is either a grab (at[i] == 0, always counts) or a pick stamped within win (now|1 stamp masked). Picks count only with picks != 0 and me != 0 (caller known) */
+static int kbr_claimed(unsigned long c, unsigned long me, int picks, const unsigned long *ctrl, const unsigned long *owner, const unsigned long *at, int n, unsigned long now, unsigned long win)
+{
+    int i;
+    for (i = 0; i < n; i++) {
+        if (!c || ctrl[i] != c || owner[i] == me) continue;
+        if (!at[i]) return 1;
+        if (picks && me && (unsigned long)(now - (at[i] & ~1ul)) <= win) return 1;
+    }
+    return 0;
+}
+
 /* keep the cap nearest objects of obj[0..n) by squared distance d2 (ties: the lower index first), written to out[0..cap), tail zero-filled; returns how many were kept */
 static int kbr_cand_sort(const unsigned long *obj, const float *d2, int n, unsigned long *out, int cap)
 {
