@@ -1043,9 +1043,25 @@ static void klbr_sense_feed(int i, DWORD now)      /* game thread, depth 0, host
         if (r < 0) break;
     }
     if (!nr && !klbr_sn_flt && klbr_sn_dlog < 8 && now - klbr_sn_dat >= 5000) { klbr_sn_dlog++; klbr_sn_dat = now; klog("brain: traitor sense: bot %d fed nothing: %s; rules %08lx%s vt %08lx count %lu; records free %d, empty body %d, dead %d, not ZFFPlayer %d, police %d, bot %d (seat-match only, still fed %d), handle 0 %d; found %d", i, why ? why : "gates passed", (unsigned long)rules, shadow ? " (shadow was in)" : "", (unsigned long)vt, (unsigned long)cnt, c_used, c_null, c_dead, c_cls, c_pol, c_bot, c_seat, c_h0, n); }
-    if (klbr_sn_logged < 12 && (nr || klbr_sn_flt)) { klbr_sn_logged++; klog("brain: traitor sense: bot %d (soldier %08lx) NoteEntity fed %d of %d human body(ies) found (nearest %d max; list %08lx, ally count %lu parked during the call); calls this round %d, faults %d%s", i, (unsigned long)e->snd, nr, n, KBR_SN_MAXFEED, (unsigned long)B, (unsigned long)klh_rd32(B + 0xcc), klbr_sn_fed, klbr_sn_flt, klbr_sn_flt >= 3 ? "; Sense off for this round" : ""); }
+    if (klbr_sn_logged < 12 && (nr || klbr_sn_flt)) { klbr_sn_logged++; klog("brain: traitor sense: bot %d (soldier %08lx) %s fed %d of %d human body(ies) found (nearest %d max; list %08lx, ally count %lu parked during the call); calls this round %d, faults %d%s", i, (unsigned long)e->snd, klbr_sn_seen ? "MarkSeen" : "NoteEntity", nr, n, KBR_SN_MAXFEED, (unsigned long)B, (unsigned long)klh_rd32(B + 0xcc), klbr_sn_fed, klbr_sn_flt, klbr_sn_flt >= 3 ? "; Sense off for this round" : ""); }
 }
 typedef float (__fastcall *klbr_scfn)(DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD);
+/* bs17 (11-03): with FireLine=2 every slot-111 call of the marked bot came NESTED in slot 113's swap (klbr_depth > 0), so the score was never logged
+   (88 human candidates, target stayed 0). READ ONLY: after the untouched original, log the score and slot 111's gate inputs (re/traitor_slot111_gates_1103.md
+   items 6-11a): bit10 of [[cand+4]+0x3c], [cand+0x2721], [cand+0x2723], [cand+0x2728], [cand+0xad4]==cand, the cand's entry flags in B=[self+0x698], and
+   [rules+0x54] / [rules+0x5c] of [G+0x54] as it is during the call (GUESS: the swapped-in object; 11a needs [+0x5c]==4). Shares the 8-a-round budget. */
+static void klbr_ta_gatelog(DWORD self, DWORD a1, float r, const char *path)
+{
+    DWORD G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)), rules = G > 0xffff ? klh_rd32(G + 0x54) : 0, B = klh_rd32(self + 0x698), w4 = klh_rd32(a1 + 4), f3c = 0, cnt = 0, fl = 0xffffffff, k;
+    unsigned char b21 = 0xff, b23 = 0xff, b28 = 0xff; float nt = 0.0f;
+    if (w4 > 0xffff) f3c = klh_rd32(w4 + 0x3c);
+    klh_rd(a1 + 0x2721, &b21, 1); klh_rd(a1 + 0x2723, &b23, 1); klh_rd(a1 + 0x2728, &b28, 1);
+    if (B > 0xffff && klh_rd(B, &cnt, 4) && cnt <= 10) for (k = 0; k < cnt; k++) if (klh_rd32(B + 4 + 0x14 * k + 4) == a1) { fl = klh_rd32(B + 4 + 0x14 * k); break; }
+    klh_rd((DWORD_PTR)KLH_VA(KLBR_TA_NOTARGET), &nt, 4); klbr_ta_sc_n++;
+    klog("brain: traitor arcade: marked soldier %08lx scored human %08lx: %.2f ('no target' = %.2f: %s; %s) gates: bit10 %d, +2721 %u, +2723 %u, +2728 %u, +ad4==cand %d, B entry flags %08lx (ffffffff = not in B, count %lu), rules %08lx +54 %lu +5c %lu (11a needs 4)",
+         (unsigned long)self, (unsigned long)a1, (double)r, (double)nt, r == nt ? "refused" : "targetable", path, (int)((f3c >> 10) & 1), b21, b23, b28, klh_rd32(a1 + 0xad4) == a1,
+         (unsigned long)fl, (unsigned long)cnt, (unsigned long)rules, rules > 0xffff ? (unsigned long)klh_rd32(rules + 0x54) : 0ul, rules > 0xffff ? (unsigned long)klh_rd32(rules + 0x5c) : 0ul);
+}
 static float __fastcall klbr_w_score(DWORD self, DWORD edx, DWORD a1, DWORD a2, DWORD a3, DWORD a4, DWORD a5, DWORD a6, DWORD a7)      /* thiscall + 7 stack args, ret 0x1c: a __fastcall has the same stack layout */
 {
     klbr_scfn org = (klbr_scfn)(DWORD_PTR)klbr_ta_org; float r = 0.0f; DWORD G, sm, role = 0, mode = 0, state = 0, probe = 0; struct klbr_s *e; int host, dec, flt = 0;
@@ -1053,6 +1069,9 @@ static float __fastcall klbr_w_score(DWORD self, DWORD edx, DWORD a1, DWORD a2, 
     if (!org) return 0.0f;
     if (klbr_clon && a1 > 0xffff && GetCurrentThreadId() == klbr_game_tid) klbr_cand_note(self, a1);      /* OnlineBrainTraitorCandLog: read only, before every other path */
     if (a1 > 0xffff && (klbr_hlon || klbr_dmon) && GetCurrentThreadId() == klbr_game_tid) klbr_hl_body(a1);      /* learns the bodies of tagged bots (the candidates), read only */
+    if (klbr_taon && !klbr_ta_dis && (klbr_depth > 0 || klbr_rr_sw) && klbr_ta_sc_n < 8 && a1 > 0xffff && GetCurrentThreadId() == klbr_game_tid && klh_pvt(a1) == 0x00bb45f4ul && (e = klbr_find(self)) != 0 && e->state == 1 && e->traitor) {
+        r = org(self, 0, a1, a2, a3, a4, a5, a6, a7); klbr_ta_gatelog(self, a1, r, klbr_depth > 0 ? "nested in a swap frame" : "thunk swap in"); return r;      /* bs17: read only, the original runs as before */
+    }
     if (!klbr_taon || klbr_ta_dis || klbr_depth > 0 || klbr_rr_sw || GetCurrentThreadId() != klbr_game_tid) return org(self, 0, a1, a2, a3, a4, a5, a6, a7);      /* nested in a DLL frame / thunk slice: never swap twice */
     G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)); sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION)); e = klbr_find(self);
     host = sm > 0xffff && klh_rd(sm + 0x54, &role, 4) && klh_rd(sm + 0x5c, &mode, 4) && klh_rd(sm + 0x70, &state, 4) && role == 2 && mode == 4 && state == KLB_ROUND;
@@ -1067,8 +1086,7 @@ static float __fastcall klbr_w_score(DWORD self, DWORD edx, DWORD a1, DWORD a2, 
         klog("brain: traitor arcade: fault %d in the swapped slot-111 call (soldier %08lx, candidate %08lx), 'no target' returned%s", klbr_ta_flt, (unsigned long)self, (unsigned long)a1, klbr_ta_flt >= 3 ? "; feature off for this round" : "");
         if (klbr_ta_flt >= 3) klbr_ta_dis = 1;
     } else if (klbr_ta_sc_n < 8) {
-        float nt = 0.0f; klh_rd((DWORD_PTR)KLH_VA(KLBR_TA_NOTARGET), &nt, 4); klbr_ta_sc_n++;
-        klog("brain: traitor arcade: marked soldier %08lx scored human %08lx: %.2f ('no target' = %.2f: %s)", (unsigned long)self, (unsigned long)a1, (double)r, (double)nt, r == nt ? "still refused, the Arcade gate did not open" : "targetable");
+        klbr_ta_gatelog(self, a1, r, "own swap");
     }
     return r;
 }
