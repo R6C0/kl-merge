@@ -80,7 +80,9 @@ workflow wpl6ggc4m (Board gap). Traitor: checks never ran online (Traitor=0 in e
 2026-11-03 ~04:30 - [ce] After-match navigation INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, SHIP 79ce4c7c4, UNDO bat beside it). pq6 PASS (DD05, 2 seats,
 0 faults, round 2): F3/F2 -> page SHOWN in 0.3 s steps with no RETURN; ESC from the auto-opened weapon list pops back to the category list (5 -> 4 windows)
 like a hand-opened one. pq7 PASS (ESCs 1.5 s apart): Weapon -> Category -> New on both seats, so pq6's ignored second ESC (90 ms later) was only
-timing. After-match navigation is DONE; the next owner play test decides whether it feels right.
+timing. ~06:20: pq8 + pq9 PASS on the 8 other stock FA maps (DD01-04, DD06-09; 0 faults, round 2 everywhere): page SHOWN + ESC 5 -> 4 -> 3 on
+15/16 seats; DD04 client reached 0x1f ~2 s before the host began round 2 (scoreboard 31 ms, shop 0.5 s), so its F2 came too late (bench timing).
+After-match navigation is DONE on all 9 stock maps; the next owner play test decides whether it feels right.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

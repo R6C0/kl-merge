@@ -1,3 +1,9 @@
+2026-11-03 ~06:20 - [ce] pq8 (DD01-DD04) + pq9 (DD06-DD09) PASS: 8 runs, 0 faults, both seats reached round 2 on every map. Kits
+week_1028/pq8 + pq9 = pq7 with the host's lobby RIGHT taps per map (gen_pq89.py in the session scratchpad). 15/16 seats: 2 autoopen steps, page SHOWN,
+ESC windows 5 -> 4 -> 3. DD04 client: no page, because it reached 0x1f at 05:38:07.88 when the host was already at 0x24 (scoreboard 31 ms, shop
+0.5 s, FAWaitForPlayers at 08.4), so the scripted F2 at +2.5 s came after the shop had closed. That is bench timing, not a navigation fault.
+Together with DD05 (pq5-pq7), the after-match navigation is benched on all 9 stock FA maps plus DM06.
+
 2026-11-03 ~05:20 - [c9] bs7 PASS (DM03 + DD05, 4 seats, 0 faults). The real Traitor evaluate fires online: 5 records marked a round on both maps
 (mirror only; Arcade turns ~1). DM03: 5/7 boarded by the real Board tactic, $7M paid, watchdog 0. DD05: real Board still 0, 3 drop grabs, $1.58M.
 Pushed e6b74553c: board-gap keys (BoardHold/BoardNode/BoardStage0/BoardLog) + OnlineBrainTraitorTurn/Row0/KillMax/Max (all default off).
