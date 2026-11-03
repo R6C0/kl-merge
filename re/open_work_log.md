@@ -1,3 +1,8 @@
+2026-11-03 ~03:00 - [ce] AutoOpenSteps pushed (7bf5be192, default 0, recommended off until benched): after AutoOpen the hook opens FABuyWeaponsNewCategory then
+FABuyWeaponsNewWeapon itself (0x6bee50 as klsv_open), gated by kpq_aostep (top window, mode 0/1, slot -6, cat -4, busy, 300 ms; aborts 5 s / 2.5 s). Review (3 lenses):
+no defect; open point = selector init setting slot/cat is unverified in game (graceful abort if wrong). Kit pq5 (dll pq_1103e_test, no scripted RETURN) chained on
+"end bs3" (queue pq4 -> bs3 -> pq5); SHIP C:\kl_build_1024\pq_1103e_ship for the install once pq5 passes.
+
 2026-11-03 ~02:35 - [ce] pq3 SAFE PASS on DM06 + DD05, 2 seats, 0 asserts. The queued press now survives 0x1f -> 0x20 and AutoOpen send 1 (~813 ms after the page
 came up, ZW_SELECT3 to MercsFAStatusReadyHeistLBStatus) opens FABuyWeaponsNew on every seat. The page did not apply: the script stopped at FABuyWeaponsNewCategory
 = shop mode 1 (re/shop_cap.md: 0 slots, 1 categories, 2 weapon list), and kpq_step correctly waits for mode 2. e686a9fb7: 'pagequeue: holding' every 2 s. pq4 = pq3

@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~03:00 - [ce] AutoOpenSteps pushed (7bf5be192, default 0, recommended off until benched): after AutoOpen the hook opens FABuyWeaponsNewCategory then
+FABuyWeaponsNewWeapon itself (0x6bee50 as klsv_open), gated by kpq_aostep (top window, mode 0/1, slot -6, cat -4, busy, 300 ms; aborts 5 s / 2.5 s). Review (3 lenses):
+no defect; open point = selector init setting slot/cat is unverified in game (graceful abort if wrong). Kit pq5 (dll pq_1103e_test, no scripted RETURN) chained on
+"end bs3" (queue pq4 -> bs3 -> pq5); SHIP C:\kl_build_1024\pq_1103e_ship for the install once pq5 passes.
+
 2026-11-03 ~02:35 - [ce] pq3 SAFE PASS (2 maps x 2 seats): the queued press survives 0x1f -> 0x20 and AutoOpen opens Buy Weapons on every seat (~0.8 s), but
 the page never applied: the bench stopped in FABuyWeaponsNewCategory = shop mode 1; the page needs mode 2 (FABuyWeaponsNewWeapon). e686a9fb7 adds a 2 s
 'pagequeue: holding' line; kit pq4 (dll pq_1103d_test, scripts step into the weapon list) chained on "end bs2". Research: AutoOpen steps 0 -> 2 by itself.
@@ -80,11 +85,6 @@ out_brain3_1103a_test, ArcadePick=1, DM03 + DD05) chained on "end nm1". Real Arc
 2026-11-03 ~00:55 - [c9] Arcade brain online stage 2/3 pushed (443fc0806 + review fixes 2f66db9ca, doc re/arcade_brain_stage2_1103.md): real Loot/Board
 tactics drive online bots through a shadow rules frame; chosen stack = [tac+0x2c], stall watchdog 8 s, per-class fault kill, ret-8 install check. All keys
 off. Host map-set menu (5eb1a50fb, C:\kl_build_1024\hostmenu_1102 INSTALL bat) still not seen in game.
-
-2026-11-03 ~01:50 - [ce] After-match navigation: pq1 + pq2 SAFE PASS (2 seats, DM06 + DD05, 0 asserts) but every queued page press lapsed 1 ms after queuing:
-now - (now | 1) wrapped to 0xffffffff in the same GetTickCount ms (95339b43f: kpq_age + signed timers in klgun/klhud/popup/shoppage) and a stale 250 ms
-hpre on the 0x1f -> 0x20 edge (6495aefa5). Cursor hidden in 0x1f/0x20 -> keys + [ShopPage] AutoOpen. pq3 (dll C:\kl_build_1024\pq_1103c_test,
-AutoOpen=1, no scripted click) chained on "end bs1"; SHIP pq_1103c_ship ready for the install once pq3 passes.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
