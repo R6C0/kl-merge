@@ -1959,6 +1959,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 DWORD pr, team = 99, hp, snd; float hv[2] = { 0, 0 };
                 if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4)) continue;
                 if (team == 1) {      /* a live cop: OnlineTacticsGuard keeps bots off stacks it stands on */
+                    if (klbf_brain_turned(o)) continue;      /* an AI heister turned traitor online (OnlineBrainTraitorTurn) reads team 1 but is no cop: not in the guard list, not in the census */
                     if (klbf_cen_on) { DWORD ch_; float cv_ = 0; if ((ch_ = klh_rd32(o + 0x5fc)) && klh_rd(ch_ + 4, &cv_, 4) && cv_ > 0) { klbf_cen_live++; kcs_add(&klbf_cen_cur, o); if (klbf_cen.st) kcs_tally_cop(&klbf_cen_tl, &klbf_cen_base, o); } }      /* OnlineTriggersCensus: the same live-cop test (team 1, health > 0) without the position gates */
                     if (ncop < 256 && (hp = klh_rd32(o + 0x5fc)) && klh_rd(hp + 4, hv, 4) && hv[0] > 0 && klh_rd(o + 0x460, pos, 12) && kle_ok3(pos)) {
                         if (klbf_gm && klbf_gm_tight && kgg_origin(pos)) { klbf_gm_orig++; continue; }      /* BP9 DD08: the first cops read (0,0,0) at the round start; DD08's stacks lie near the origin, so they 'guarded' them. GUESS: (0,0,0) = a cop not placed yet (pooled) */
