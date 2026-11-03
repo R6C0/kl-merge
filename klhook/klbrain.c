@@ -1167,6 +1167,66 @@ static DWORD __fastcall klbr_w_fl114(DWORD self, DWORD edx, DWORD a1, DWORD a2, 
     klbr_tfl_log(e, self, 1, m, r);
     return r;
 }
+/* ---- HitLog part A.4 (2026-11-03, w9ady1fn9; READ ONLY): ZSoldier slot 83 = Attack 0x831850 (vt + 0x14c, verified: the table dword at 0xbd0aa0) on the SAME private table, log only.
+   thiscall (handle, pos *, float), ret 0xc; the return value is passed through (GUESS: none is used). Only a nonzero handle sets the ZAttackTarget goal [[soldier+0x658]+0x14] (0x8318e8), and only
+   while [[soldier+0x5ac]+8] is 0 or 4; the five static callers (0x907c46 leap-frog, 0x59b9a7, 0x60ff69 ambush, 0x748e8e follow, 0x49a676) all pass handle 0 = a POSITION goal. Logged per
+   marked bot: handle, the return address (which caller), the position, the state, the goal handle before / after, [soldier+0x720]. 12 lines per bot per round. */
+#define KLBR_ATK_SLOT 83
+#define KLBR_ATK_ORG 0x00831850
+#define KLBR_ATK_LOGMAX 12
+static DWORD klbr_atk_org; static int klbr_atk_n[KLBR_MAX]; static long klbr_atk_calls[KLBR_MAX], klbr_atk_nz[KLBR_MAX];
+typedef DWORD (__fastcall *klbr_atkfn)(DWORD, DWORD, DWORD, DWORD, DWORD);
+static DWORD __fastcall klbr_w_atk(DWORD self, DWORD edx, DWORD h, DWORD pos, DWORD f)      /* thiscall + 3 stack args, ret 0xc */
+{
+    klbr_atkfn org = (klbr_atkfn)(DWORD_PTR)klbr_atk_org; DWORD r, ra = (DWORD)(DWORD_PTR)_ReturnAddress(), g = 0, gh0 = 0, gh1 = 0, s5 = 0, st = 0xffffffff; float p[3] = { 0, 0, 0 }; struct klbr_s *e = 0; int ix = -1;
+    (void)edx;
+    if (!org) return 0;
+    if (klbr_hlon && GetCurrentThreadId() == klbr_game_tid && (e = klbr_find(self)) != 0 && e->state == 1 && e->traitor) {
+        ix = (int)(e - klbr_t);
+        if ((g = klh_rd32(self + 0x658)) > 0xffff) gh0 = klh_rd32(g + 0x14);
+        if ((s5 = klh_rd32(self + 0x5ac)) > 0xffff) st = klh_rd32(s5 + 8);
+        if (pos > 0xffff) klh_rd(pos, p, 12);
+    }
+    r = org(self, 0, h, pos, f);
+    if (ix >= 0 && ix < KLBR_MAX) {
+        klbr_atk_calls[ix]++; if (h) klbr_atk_nz[ix]++;
+        if (klbr_atk_n[ix] < KLBR_ATK_LOGMAX) {
+            DWORD p720 = klh_rd32(self + 0x720); int pl = p720 > 0xffff && klh_pvt(p720) == 0x00bb45f4u;
+            klbr_atk_n[ix]++; if (g > 0xffff) gh1 = klh_rd32(g + 0x14);
+            klog("brain: traitor attack: bot %d soldier %08lx Attack(handle %08lx, pos %.0f %.0f %.0f) from %08lx; state [[+0x5ac]+8] %ld (goal set only at 0 / 4); goal %08lx handle %08lx -> %08lx; +0x720 %08lx%s",
+                 ix, (unsigned long)self, (unsigned long)h, (double)p[0], (double)p[1], (double)p[2], (unsigned long)(ra - (DWORD)klh_delta), (long)st, (unsigned long)g, (unsigned long)gh0, (unsigned long)gh1,
+                 (unsigned long)p720, pl ? " (a ZFFPlayer)" : "");
+        }
+    }
+    return r;
+}
+/* ---- OnlineBrainTraitorHumanFirst (2026-11-03, waeaosjjr; UNTESTED, recommended off): ZSoldier slot 110 = 0x7ffd20 (vt + 0x1b8) scores type-1 (police) entries of the known list, slot 111 the humans.
+   0x767510 keeps the STRICT maximum (start -1e38, no threshold), and the human score falls 0.09 per cm past 4 m (bs18: -500..-800 at range) while a near / locked cop scores up to +10000, so the
+   marked bot never picks a human. With this on, for a MARKED bot only, slot 110 still runs (it stores [cand+0x71c]) but returns the 'no target' float while its list B holds a ZFFPlayer entry
+   with bit0 (seen) and 0x10 (in range) set: the human is then the only finite score and 0x8bd420 holds it. Cops are scored normally again as soon as no such human is in B.
+   GUESS: slot 110 has the same 7-arg / ret 0x1c shape as slot 111 (read by the workflow from the call sites 0x767a6a-0x767bfc, not checked live). Table dword checked against 0x7ffd20 first. */
+#define KLBR_HF_SLOT 110
+#define KLBR_HF_ORG 0x007ffd20
+static int klbr_hfon; static DWORD klbr_hf_org; static long klbr_hf_null, klbr_hf_pass;
+static int klbr_hf_human_in_b(DWORD self)
+{
+    DWORD B = klh_rd32(self + 0x698), cnt = 0, k;
+    if (B <= 0xffff || !klh_rd(B, &cnt, 4) || cnt > 16) return 0;
+    for (k = 0; k < cnt; k++) { DWORD q = B + 4 + 0x14 * k, fl = klh_rd32(q), ent = klh_rd32(q + 4); if ((fl & 0x11) == 0x11 && ent > 0xffff && klh_pvt(ent) == 0x00bb45f4u) return 1; }
+    return 0;
+}
+static float __fastcall klbr_w_cop(DWORD self, DWORD edx, DWORD a1, DWORD a2, DWORD a3, DWORD a4, DWORD a5, DWORD a6, DWORD a7)      /* thiscall + 7 stack args, ret 0x1c (GUESS, see above) */
+{
+    klbr_scfn org = (klbr_scfn)(DWORD_PTR)klbr_hf_org; float r; struct klbr_s *e;
+    (void)edx;
+    if (!org) return 0.0f;
+    r = org(self, 0, a1, a2, a3, a4, a5, a6, a7);
+    if (klbr_hfon && !klbr_ta_dis && GetCurrentThreadId() == klbr_game_tid && (e = klbr_find(self)) != 0 && e->state == 1 && e->traitor) {
+        if (klbr_hf_human_in_b(self)) { float nt = 0.0f; if (klh_rd((DWORD_PTR)KLH_VA(KLBR_TA_NOTARGET), &nt, 4)) { klbr_hf_null++; return nt; } }
+        klbr_hf_pass++;
+    }
+    return r;
+}
 /* ---- OnlineBrainTraitorHitLog (2026-11-03; READ ONLY): does a marked bot really DAMAGE humans? Observation point = the rules' damage hook (slot 15, klucc_down.c's klud_w15: victim, float *delta, attacker),
    the same call OnlinePreScale and DownOnly use; klucc_down.c calls klbr_hitlog FIRST, before any other filter prices the delta. No new patch, nothing is written, no game call is made (klh_rd / class reads only).
    A hit = delta < 0 (damage = -delta, pre-apply). Attacker bot = a tagged soldier of klbr_t (state 1) matched by its actor OR its soldier pointer (GUESS: the attacker argument of slot 15 is the ZFFActor; the
@@ -1245,6 +1305,10 @@ static void klbr_hitlog_summary(void)
         klog("brain: traitor hits: ATTEMPTED (counted before the game's own self / team filters, so an upper bound): marked %d (dmg %.1f) on humans, unmarked %d (dmg %.1f) on humans, marked %d on bots", klbr_hl.mh, (double)klbr_hl.md, klbr_hl.uh, (double)klbr_hl.ud, klbr_hl.mb);
         if (klbr_hl.unk || klbr_hl.ub || klbr_hl.pl) klog("brain: traitor hits: (not in the line above) %d hit(s) on humans by an actor / soldier klbr_t does not tag, %d by a player body matching no tagged bot (seat GUESS check), %d unmarked-bot hit(s) on bots", klbr_hl.unk, klbr_hl.pl, klbr_hl.ub);
     }
+    if (klbr_hlon) { int j; for (j = 0; j < KLBR_MAX; j++) if (klbr_atk_calls[j]) klog("brain: traitor attack: bot %d round total: Attack (slot 83) called %ld time(s), %ld with a nonzero handle", j, klbr_atk_calls[j], klbr_atk_nz[j]); }
+    if (klbr_hfon) klog("brain: traitor humanfirst: round total: police scores nulled %ld (a seen human was in the list), passed %ld", klbr_hf_null, klbr_hf_pass);
+    klbr_hf_null = klbr_hf_pass = 0;
+    memset(klbr_atk_n, 0, sizeof klbr_atk_n); memset(klbr_atk_calls, 0, sizeof klbr_atk_calls); memset(klbr_atk_nz, 0, sizeof klbr_atk_nz);
     memset(&klbr_hl, 0, sizeof klbr_hl); klbr_hl_s15 = 0;
 }
 /* ---- HitLog probe (A.1 / A.2 / A.3), READ ONLY, game thread at depth 0 (called from klbr_pump) -------------------------------------------------------------------------------------------------
@@ -1308,6 +1372,17 @@ static void klbr_hl_pump(DWORD now)
             klog("brain: traitor target: bot %d HOLDER (B %08lx, [B+0x154] %08lx %s soldier) flags %08lx ptr %08lx class %s handle %08lx entry %ld; goal %08lx handle %08lx; state [[+0x5ac]+8] %ld (Attack sets the goal only at 0 / 4); +0x654 %08lx +0x720 %08lx; B rescan %ld force %lu hold %ld",
                  i, (unsigned long)B, (unsigned long)so, so == e->snd ? "==" : "!=", (unsigned long)hf, (unsigned long)hp, kbr_tgt_name(hcls), (unsigned long)hh, (long)ht, (unsigned long)g, (unsigned long)gh,
                  (long)st, (unsigned long)klh_rd32(e->snd + 0x654), (unsigned long)klh_rd32(e->snd + 0x720), (long)b180, (unsigned long)b184, (long)b18c);
+            if (B > 0xffff) {      /* w9ady1fn9 lever 1: every B entry (flags / type / class / last-seen); fire test 0x616480 wants bit0 + 0x10 set, 0x4 / 0x40 / 0x200 clear */
+                char buf[700]; int n = 0, k2; DWORD cnt = 0;
+                if (klh_rd(B, &cnt, 4) && cnt <= 16) for (k2 = 0; k2 < (int)cnt && n < (int)sizeof buf - 64; k2++) {
+                    DWORD q = B + 4 + 0x14 * k2, fl = klh_rd32(q), ent = klh_rd32(q + 4), ty = klh_rd32(q + 8), ts = klh_rd32(q + 0xc);
+                    int ep = ent > 0xffff && klh_pvt(ent) == 0x00bb45f4u, ea = ent > 0xffff && !ep && klh_avt(ent) == 0x00bb3bacu, es = ent > 0xffff && !ep && !ea && klh_svt(ent) == 0x00bd0954u;
+                    n += _snprintf(buf + n, sizeof buf - n, " [%d %08lx f%03lx t%lu %s%s t%ld]", k2, (unsigned long)ent, (unsigned long)fl, (unsigned long)ty, ep ? "ZFFPlayer" : ea ? "ZFFActor" : es ? "ZSoldier" : "other",
+                                   (ent == hp && hp) ? " PICK" : "", (long)ts);
+                }
+                buf[sizeof buf - 1] = 0;
+                klog("brain: traitor target: bot %d B list (%lu):%s", i, (unsigned long)cnt, n > 0 ? buf : " (empty / unreadable)");
+            }
         }
     }
     for (k = 0; k < 5; k++) {      /* A.3 */
@@ -1364,6 +1439,14 @@ static int klbr_ta_make(void)      /* the shared private ZSoldier table, made on
     if (!(blk = (DWORD *)VirtualAlloc(0, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE))) return 0;
     blk[0] = col; memcpy(blk + 1, org, sizeof org);
     klbr_ta_org = org[KLBR_TA_SLOT]; blk[1 + KLBR_TA_SLOT] = (DWORD)(DWORD_PTR)klbr_w_score;
+    if (klbr_hfon) {      /* HumanFirst: slot 110 (police score), only when it reads as 0x7ffd20 */
+        if (org[KLBR_HF_SLOT] == KLBR_HF_ORG + (DWORD)klh_delta) { klbr_hf_org = org[KLBR_HF_SLOT]; blk[1 + KLBR_HF_SLOT] = (DWORD)(DWORD_PTR)klbr_w_cop; klog("brain: traitor humanfirst: slot %d (police score) wrapped on the private table", KLBR_HF_SLOT); }
+        else { klog("brain: traitor humanfirst: ZSoldier slot %d reads %08lx, not 0x7ffd20: OnlineBrainTraitorHumanFirst off", KLBR_HF_SLOT, (unsigned long)org[KLBR_HF_SLOT]); klbr_hfon = 0; }
+    }
+    if (klbr_hlon) {      /* HitLog A.4: Attack slot 83 log-only, only when it reads as the documented original */
+        if (org[KLBR_ATK_SLOT] == KLBR_ATK_ORG + (DWORD)klh_delta) { klbr_atk_org = org[KLBR_ATK_SLOT]; blk[1 + KLBR_ATK_SLOT] = (DWORD)(DWORD_PTR)klbr_w_atk; klog("brain: traitor attack: slot %d (Attack) wrapped log-only on the private table", KLBR_ATK_SLOT); }
+        else klog("brain: traitor attack: ZSoldier slot %d reads %08lx, not 0x831850: not wrapped", KLBR_ATK_SLOT, (unsigned long)org[KLBR_ATK_SLOT]);
+    }
     klh_soldier_priv = (DWORD)(DWORD_PTR)(blk + 1);
     if (klbr_tflmode) {      /* FireLine: only when both slots read as the documented originals, else neither is wrapped */
         if (org[KLBR_TFL_S113] == KLBR_TFL_ORG113 + (DWORD)klh_delta && org[KLBR_TFL_S114] == KLBR_TFL_ORG114 + (DWORD)klh_delta) {
@@ -1816,6 +1899,8 @@ static void klbr_init(void)
     if (klbr_tflmode) klog("brain: OnlineBrainTraitorFireLine=%d UNTESTED (recommended off): a marked bot's ZSoldier slots 113 / 114 (fire-line friend list) are wrapped on the private table: %s", klbr_tflmode, klbr_tflmode == 1 ? "LOG ONLY, the original runs untouched" : "the Arcade rules are swapped in around the original so the human is not a friend");
     klbr_hlon = klbr_on && klbr_key("OnlineBrainTraitorHitLog");
     if (klbr_key("OnlineBrainTraitorHitLog") && !klbr_hlon) klog("brain: OnlineBrainTraitorHitLog needs the Brain on: off");
+    klbr_hfon = klbr_taon && klbr_key("OnlineBrainTraitorHumanFirst");
+    if (klbr_key("OnlineBrainTraitorHumanFirst") && !klbr_hfon) klog("brain: OnlineBrainTraitorHumanFirst needs OnlineBrainTraitorArcade: off");
     if (klbr_hlon) klog("brain: OnlineBrainTraitorHitLog=1 (recommended off): READ ONLY, counts hits of tagged bots (marked traitor vs other) on humans in the rules' damage hook (slot 15); one 'traitor hits:' line per round end");
     klbr_clon = klbr_taon && klbr_key("OnlineBrainTraitorCandLog");
     if (klbr_key("OnlineBrainTraitorCandLog") && !klbr_clon) klog("brain: OnlineBrainTraitorCandLog needs OnlineBrainTraitorArcade=1 (the census sits in the private slot 111): off");
