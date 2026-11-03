@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~04:45 - [c9] bs6 PASS (DM03 + DD05, 4 seats, 0 faults). DM03: BoardStage = 3 bots boarded by the REAL Board tactic, 4 by the
+fallback; $6.92M paid, watchdog 0. DD05: DropCands works: 2 drop grabs, $1.58M paid (bs5: 0), but real Board 0 (slot 45 never called, board nz 4) ->
+workflow wpl6ggc4m (Board gap). Traitor: checks never ran online (Traitor=0 in every bench); OnlineBrainTraitorTurn being built in worktree (wq571v5zk).
+
 2026-11-03 ~04:30 - [ce] After-match navigation INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, SHIP 79ce4c7c4, UNDO bat beside it). pq6 PASS (DD05, 2 seats,
 0 faults, round 2): F3/F2 -> page SHOWN in 0.3 s steps with no RETURN; ESC from the auto-opened weapon list pops back to the category list (5 -> 4 windows)
 like a hand-opened one. A second ESC 90 ms later did nothing (Category stayed 14 s): timing or a real gap? pq7 (same, ESCs 1.5 s apart) chained on "end bs6".
@@ -76,11 +80,6 @@ like a hand-opened one. A second ESC 90 ms later did nothing (Category stayed 14
 7/7 boarded (still by the hook van path). 7c78417e8 BoardStage (real Board tactic boards; review fixes in). DD05: 0 real grabs because cops carry all loot
 and slot 202 skips type-1 DROPS (Arcade's 0x8b94d0 walks the drop list too) -> DropCands in workflow w61ao6bnq. bs6 (BoardStage+StackClaims, dll
 out_brain7_1103g_test) chained on "end pq6".
-
-2026-11-03 ~04:00 - [c9] bs4 PASS (DM03 + DD05, 4 seats, 0 faults): FIRST real Arcade looting online. DM03: real Loot RUN + DLL pump = 17 grabs, $5.97M
-paid, van called by a bot, 7/7 boarded with $7M. Gaps: watchdog took 12 bots back (slot 202 gave all bots the same nearest stack) -> 5e785adcf StackClaims;
-boarding still by the hook van path, real Board RUN too late (stage byte mirrors 'aboard' only) -> BoardStage in a workflow; DD05 loot evaluate barely runs
-(227 calls). bs5 (out_brain6_1103e_test, StackClaims=1) chained on "end pqinst"; ce pq6 after it, then mine on "end pq6".
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

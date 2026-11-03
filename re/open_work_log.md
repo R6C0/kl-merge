@@ -1,3 +1,7 @@
+2026-11-03 ~04:45 - [c9] bs6 PASS (DM03 + DD05, 4 seats, 0 faults). DM03: BoardStage = 3 bots boarded by the REAL Board tactic, 4 by the
+fallback; $6.92M paid, watchdog 0. DD05: DropCands works: 2 drop grabs, $1.58M paid (bs5: 0), but real Board 0 (slot 45 never called, board nz 4) ->
+workflow wpl6ggc4m (Board gap). Traitor: checks never ran online (Traitor=0 in every bench); OnlineBrainTraitorTurn being built in worktree (wq571v5zk).
+
 2026-11-03 ~04:30 - [ce] After-match navigation INSTALLED 03:49 (C:/kl_build_1024/pq_1103f_install, SHIP 79ce4c7c4, UNDO bat beside it). pq6 PASS (DD05,
 2 seats, 0 faults, round 2 on both): F3/F2 -> AutoOpen + steps -> page SHOWN with no RETURN; ESC from the auto-opened weapon list pops back to the
 category list (windows 5 -> 4: New > Category) like a hand-opened one. A second ESC 90 ms after the first did nothing: Category stayed until the round
