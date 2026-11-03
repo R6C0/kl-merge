@@ -75,3 +75,32 @@ Follows re/traitor_handoff_1103.md. Disassembly was read with capstone. Three pa
 - Patching 0x5706a0 (hashed) or 0x8f6990.
 - Giving humans another team.
 - Calling slot 83 with a nonzero handle.
+
+## Workflow wvf2fzwhg (6 agents: 3 traces + 3 verifiers), read only
+### Why an ally bot wins (slot 111 0x882470, CONFIRMED structure)
+- No term tests human vs bot, friend or team. The mark only matters inside the Arcade gate, which online skips.
+- Flag terms decide it: bit0 +100, 0x4 -100, 0x10 clear -200, a1c == 0 -100, visibility -100 x k, and [[cand+0x54]+0x38] +150 (else bit7 -100).
+- Distance is flat past 400 (the -0.09 x d term needs the second-vector distance to be exactly 0). Stickiness: cand == [s+0x720] gives +300.
+- The replace rule (0x767c3b) is strictly greater than the -1e38 start, so the "no target" float can never win.
+### +0x88 (soldier mode)
+- The base ctor 0x7cfac0 writes 2. Setter = vt+0x4c (ZSoldier 0x588000; 1 -> 2 is a plain store, side effects only when leaving 3).
+- Known writers of 1: 0x421680 and 0x543fa0, each paired with 0x7088c0(0.0). The verifier REFUTED the six 0x75f960 vtables as writers. Which one hits the crew bot is unknown.
+- 2 opens 0x7088c0 / 0x582033 / 0x60836f and skips the slot-111 ally notification at 0x4883ba.
+### What starts the shooting tasks
+- Goals: list [s+0x48], AddGoal 0x6cabf0, arbiter 0x81eb90 (max prio, an early return if the winner is already current), goal state at +8 (0 never started, 2 running, 4 terminated).
+- Tasks run as children through 0x521350. Who pushes ZTurnAndShootTask / ZRunToPosShootingTask is UNRESOLVED.
+- Idle 0x64 at 0x6ac605; CoverFire +0x654 at prio 0xa0 through 0x637800.
+- Slot 83 with handle 0 (the shipped call 0x907c0f-0x907c46: pos = 0x7b3020(ecx=[ent+4], &pos), float 5.0 [0xbcb330]) -> 0x717f90 SetPosition + 0x637800(+0x654, 0xa0, clock+0x800) + slot 20, but only while [[s+0x5ac]+8] is 0 or 4.
+
+## bs22 (out_thx_1103k, HolderFix=1): PASS 4 seats, 0 asserts, 0 faults
+- TEAMS: bot team 2, human holder team 0/1: they DIFFER. So the human holder's 0x4 does not come from team sharing (the human-slot stage, 0x828 / 0x82c).
+- HolderFix holds: DM03 fixed 276 times; DD05 156 in range, 67 out of range.
+- The fire test PASSES on the holder in 13/37 DM03 lines and 21/49 DD05 lines.
+- DD05 holder: human 22, cop 21, bot 4 (bs21: human 2).
+- Still 0 hits (HitLog's slot-15 hook was never reached). GATES on every line: Idle state 4 (terminated), Attack 0, +0x88 1. The bot has no running goal to shoot from.
+
+## Levers for bs23 (both default off, UNTESTED)
+- OnlineBrainTraitorHumanOnly: in the private slot 111, a marked bot returns "no target" for a tagged bot's body while a seen, in-range HUMAN is in B.
+  - klbr_hf_human_in_b now skips tagged bot bodies, which also fixes HumanFirst counting an ally bot as a human.
+- OnlineBrainTraitorCoverFire: after slot 113 (and after HolderFix), when the holder is a human passing 0x616480 and [[s+0x5ac]+8] is 0 or 4, call slot 83 like 0x907c34, at most every 2 s per bot.
+  - It logs the CoverFire goal state and the current goal before and after.
