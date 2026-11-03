@@ -150,3 +150,14 @@ Follows re/traitor_handoff_1103.md. Disassembly was read with capstone. Three pa
   so the bot may sit on a dead goal (frozen-bot risk from wedrgngwi item 6). Human hp 550 flat on every read (DM03 6, DD05 9).
 - Human ~ (-1214 702 -12237) on DM03, (-11803 1007 583) on DD05.
 - Next: wuwffuc4b (how the engine resets a state-4 goal, why it terminated) and w0bnwus0v (B-list entry flags for the human).
+
+## Workflow wuwffuc4b (goal restart; trace + verifier, read only)
+- Nothing resets [g+8] after construction. Scheduler 0x63c5c0 takes the stack top: state 2 resumes, state 0/4 -> Run 0x65bbf0 (fresh: [g+0x11]=0, state 1, Activate vt+4, 2, tick vt+8, 3, vt+0xc, 4).
+  After a state-4 run the scheduler frees [g+0xc] and pops g (0x63c7b5). CONFIRMED.
+- Back on the stack only via the arbiter 0x81eb90 switch path 0x81ec3a-0x81ec91 (pops the WHOLE stack via 0x7bea40, writes [s+0x74/0x78/0x7c], pushes the winner, +0x12=1) or 0x7bbf70
+  (re-pushes the BOTTOM goal). Early return 0x81ec18 when the winner is already [s+0x74]. AddGoal never restarts. CONFIRMED.
+- Slot 83 correction: nonzero handle + goal state 1-3 -> only [s+0x720] = handle, return. State 0/4 -> 0x68fd70, vt+0x1b4 (0x6e49b0 -> RemoveGoal 0x8883d0 on 11 slots, prio 0x96), AddGoal, vt+0x50(1) = arbiter(1).
+- bs25 "stack 1 top g state 4" = a pre-scheduler snapshot: each call DID re-run g when [s+0x74] != g (case A); the run ends at 0x4f4e01-0x4f4e04, the normal end after the entry
+  fire test (0x4f4da6 / 0x4f4db1) fails on flags 0. Case B ([s+0x74] == g after a run): empty stack, every later arbiter call early-returns, Idle (0x64) cannot beat g (0x96): FROZEN bot.
+- Levers: EntryFix (bs26) for the fire test; OnlineBrainTraitorRestart (out_trs_1103p, UNTESTED): clear [s+0x74] before our slot-83 call when it equals g (0x651d5b pattern), and an unfreeze
+  (g state 4 + empty stack + [s+0x74] == g -> vt+0x1b4, [s+0x74]=0, arbiter(1)) so Idle runs again.
