@@ -1,3 +1,8 @@
+2026-11-03 ~14:05 - [c9] bs22 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; HolderFix on). The human holder now passes the fire test (0x11);
+on DD05 the human is the holder in 22/49 lines (bs21: 2). The teams DIFFER (bot 2, human 0/1). Still 0 hits: the marked bot's Idle goal is terminated (state 4) and Attack never starts.
+wvf2fzwhg (re/traitor_fire_1103.md): slot 111 has no human term (ally bots win on flags); +0x88 setter vt+0x4c; slot 83 with handle 0 = CoverFire prio 0xa0.
+acbe108da: OnlineBrainTraitorHumanOnly + OnlineBrainTraitorCoverFire (off by default) -> bs23 running (out_tcf_1103l).
+
 2026-11-03 ~14:00 - [c9] bs21 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; read-only GATES ee8d93d1b). The marked bot never reaches 0x7088c0
 (+0x88 = 1, wants 2). w53r6g2xi (re/traitor_fire_1103.md): real shots are tasks gated by 0x616480 (holder 0x11, 0x4 clear). 0x4 = same-team sweep 0x5706a0
 (the target blocks itself); 0x10 = within 2x weapon range (~120 m; the bench humans idle 50-190 m away). The holder is mostly an ALLY bot (DM03 76/86).
