@@ -37,7 +37,9 @@ int main(void)
     CHECK(kpq_step(1, 0, 0x1f, 0, 0, 60001) == KPQ_LAPSE, "scoreboard: the cap");
     CHECK(kpq_step(1, 1, 0x20, 2, 1, 8000) == KPQ_APPLY, "scoreboard press, then 0x20 and the list opens: applied");
     CHECK(kpq_step(0, 0, 0x1f, 2, 1, 10) == KPQ_LAPSE, "old press on the scoreboard: lapses (old rules)");
-    CHECK(kpq_step(1, 0, 0x20, 2, 1, 100) == KPQ_LAPSE, "the shop gate closed: dropped");
+    CHECK(kpq_step(1, 0, 0x20, 2, 1, 100) == KPQ_WAIT, "the shop gate reads shut on 0x20 (stale 0x1f hpre, pq1 DM06 11-03): waits, never applies");
+    CHECK(kpq_step(1, 0, 0x20, 0, 0, 5) == KPQ_WAIT && kpq_step(1, 1, 0x20, 2, 1, 5500) == KPQ_APPLY, "the 0x1f -> 0x20 edge with the gate stale: kept, applied once open");
+    CHECK(kpq_step(1, 0, 0x20, 2, 1, 60001) == KPQ_LAPSE && kpq_step(1, 0, 0x23, 0, 0, 10) == KPQ_LAPSE, "gate shut: the cap and the state change still drop it");
     CHECK(kpq_step(1, 1, 0x20, 1, 1, 100) == KPQ_WAIT, "list mode 1 (category) is not the weapon list: wait");
 
     /* PageQueue=0: queued 0 is exactly the old rules */

@@ -1473,7 +1473,7 @@ static void kspg_pq_hold(DWORD now, int key, int target, const char *what)
     kspg.hPendAt = 0; kspg.pq2At = 0;
     if (target == 3) kspg.pq2At = now | 1; else { kspg.hPendAt = now | 1; kspg.hPendPg = target; }
     kspg.hQueued = key;
-    klog("pagequeue: %s key pressed on the round-over page (state 0x%x), Buy Weapons is not open: queued, it shows when the list opens (held up to %u s)", what, kspg.st, KPQ_CAP_MS / 1000u);
+    klog("pagequeue: %s pressed on the round-over page (state 0x%x), Buy Weapons is not open: queued, it shows when the list opens (held up to %u s)", what, kspg.st, KPQ_CAP_MS / 1000u);
 }
 static void kspg_cycle(DWORD now)
 {
@@ -1513,7 +1513,7 @@ static void kspg_cycle_key(SHORT (WINAPI *gaks)(int), HWND (WINAPI *fgw)(void), 
             if (kpq_should_queue(kspg.queueOn, kspg.st, (int)mode, same)) {      /* PageQueue: the page this press would open now, held until the list is open */
                 int cur = kspg_cur(), nxt = kspg_next(cur);
                 if (nxt == cur || nxt == 0) klog("controls: the cycle key: no other page is available here");
-                else kspg_pq_hold(now, 2, nxt == 1 ? 3 : kmt_pend_of(nxt), kspg_pname[nxt]);
+                else { char w[48]; snprintf(w, sizeof w, "the cycle key (%s page)", kspg_pname[nxt]); kspg_pq_hold(now, 2, nxt == 1 ? 3 : kmt_pend_of(nxt), w); }   /* pq1: 'Hire key pressed' read as the hire key */
             } else if (kpq_cancels(kspg.queueOn, kspg.st, (int)mode, same, same)) { kspg.hPendAt = 0; kspg.pq2At = 0; kspg.hQueued = 0; klog("pagequeue: the queued cycle key press was cancelled by a second press"); }
             else if (mode == 2) kspg_cycle(now); else klog("controls: the cycle key was pressed but the shop mode is %lu, not 2 (weapon list): ignored", mode);
         }
@@ -1597,7 +1597,7 @@ static void kspg_hire_tick(void)
                 DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
                 kspg.hLastKey = now;
                 int same = kspg.hQueued == 1 && kspg.hPendAt != 0;
-                if (kpq_should_queue(kspg.queueOn, kspg.st, (int)mode, same)) kspg_pq_hold(now, 1, 0, "the hire page");      /* PageQueue: the round-over page, Buy Weapons not open yet */
+                if (kpq_should_queue(kspg.queueOn, kspg.st, (int)mode, same)) kspg_pq_hold(now, 1, 0, "the hire page key");      /* PageQueue: the round-over page, Buy Weapons not open yet */
                 else if (kpq_cancels(kspg.queueOn, kspg.st, (int)mode, same, same)) { kspg.hPendAt = 0; kspg.hQueued = 0; klog("pagequeue: the queued hire key press was cancelled by a second press"); }
                 else if (mode == 2 && !kspg.hire && !kspg_h_selok()) {
                     /* REVIEW 1027: the stock buy would buy a gun if the selector were not wrapped (its BuyWeapon message is what the page swallows): no page then.
@@ -1829,7 +1829,7 @@ static void klshoppage_tick(int game_thread)
                 DWORD mode = klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE));
                 int same = kspg.hQueued == 3 && (kspg.hPendAt != 0 || kspg.pq2At != 0);
                 kspg.lastKey = now;
-                if (kpq_should_queue(kspg.queueOn, kspg.st, (int)mode, same)) kspg_pq_hold(now, 3, 3, "the page II");      /* PageQueue: the round-over page, Buy Weapons not open yet */
+                if (kpq_should_queue(kspg.queueOn, kspg.st, (int)mode, same)) kspg_pq_hold(now, 3, 3, "the page II key");      /* PageQueue: the round-over page, Buy Weapons not open yet */
                 else if (kpq_cancels(kspg.queueOn, kspg.st, (int)mode, same, same)) { kspg.hPendAt = 0; kspg.pq2At = 0; kspg.hQueued = 0; klog("pagequeue: the queued page II key press was cancelled by a second press"); }
                 else if (mode == 2) {
                     if (kspg.hire) { kspg.hire = 0; if (kspg.hireLog) klog("hirepage: page hidden (the page II key was pressed)"); }

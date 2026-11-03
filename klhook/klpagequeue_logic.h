@@ -40,14 +40,14 @@ static int kpq_cancels(int queueOn, int st, int mode, int pending, int queued)
    the mode-2 check waits until the list opens). hpre = the shop gate is open, selok = the selector is wrapped (pages that need it; page II passes 1), age in ms */
 static int kpq_step(int queued, int hpre, int st, int mode, int selok, unsigned int age)
 {
-    if (queued && st == KPQ_ST_SCORE) return age > KPQ_CAP_MS ? KPQ_LAPSE : KPQ_WAIT;      /* the scoreboard: no shop gate yet (it refuses 0x1f), the press waits for 0x20 */
-    if (!hpre) return KPQ_LAPSE;
     if (queued) {
-        if (st != KPQ_ST_ROUNDOVER || age > KPQ_CAP_MS) return KPQ_LAPSE;
-        if (mode != KPQ_MODE_LIST) return KPQ_WAIT;
+        if (!kpq_qstate(st) || age > KPQ_CAP_MS) return KPQ_LAPSE;
+        /* the scoreboard (no shop gate yet, it refuses 0x1f) and a closed gate WAIT: bench pq1 11-03 (DM06 host) lapsed on the 0x1f -> 0x20 edge because hpre is refreshed
+           every 250 ms while kspg.st follows every gate caller, so the first 0x20 tick still saw the 0x1f gate's hpre 0 */
+        if (st == KPQ_ST_SCORE || !hpre || mode != KPQ_MODE_LIST) return KPQ_WAIT;
         return selok ? KPQ_APPLY : KPQ_WAIT;
     }
-    if (age > KPQ_EARLY_MS || mode != KPQ_MODE_LIST) return KPQ_LAPSE;
+    if (!hpre || age > KPQ_EARLY_MS || mode != KPQ_MODE_LIST) return KPQ_LAPSE;
     return selok ? KPQ_APPLY : KPQ_WAIT;
 }
 
