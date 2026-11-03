@@ -292,3 +292,24 @@ Metrics logged by Probe: frame count per second, max frame microseconds, EVAL > 
 5. Board EVAL/RUN/EXIT wrappers; van fields; kit s2b; then slot 45 stub; kit s2c.
 6. Traitor EVAL/RUN; kit s3a. Cops probe, no behaviour, kit s3b.
 Every step: ini key default 0, "(recommended off)", options row, KLHook.ini line, `kl_tests.py` green, commit message says what crashed and why when something did.
+
+## 2026-11-03 coroutine rule + RealRun
+Source: commits f5f0ccd3e (crash fix) and 06101ed05 (RealRun); code in klhook/klbrain.c and klhook/klbrain_logic.h (kbr_orig_ok, kbr_run_direct, kbr_lj_decide, kbr_lj_restore_mask).
+
+Facts (kl2.exe build 0490):
+- Loot RUN 0x7bc7d0 and Board RUN 0x82f970 are stack-copying setjmp coroutines. Yield 0x55b9f0 does _setjmp3 into [[tactic+0xc]+0xc] (the ctx), copies the stack image to [ctx+0x40], then longjmps (msvcr90) to the scheduler jmp_buf 0x168e4c8. Scheduler 0x63c5c0 owns that jmp_buf; goal start is 0x65bbf0.
+- msvcr90 longjmp (IAT 0xb10370) is called from exactly three sites: 0x55ba52 (yield, longjmp(0x168e4c8, 1)), 0x63c8d1 (scheduler resume, longjmp(ctx = [goal+0xc], val), copies the stack back first), 0x65bc8a (goal end, longjmp(0x168e4c8, 1)). Resume val 1 = continue (RUN), val 2 = exit path (EXIT, Board EXIT 0x5478e0 always runs in a resumed slice).
+
+bs1 crash (BS1B DM03 + BS1C DD05, host, c0000029 in ntdll): PuppetOff handed bots to the real Loot RUN through klbr_framed. Its __try/__finally was live across the yield, so longjmp's RtlUnwind hit an invalid unwind target (STATUS_INVALID_UNWIND_TARGET). Separately, a resumed slice runs on the real online rules where 0x508ef0 answers 0 and 0x78f470(ecx=0) faults, so the RUN cannot run online even unwrapped.
+
+Rule: no DLL SEH frame (__try/__finally, or a call into anything that has one) may be live across a yield. The DLL never calls Loot/Board RUN itself (kbr_orig_ok; inert return counted and logged). Loot/Board evaluates are never shown > 0 to the AI. PuppetOff and OnlineBrainBoardReal are forced off with a log line unless RealRun is on.
+
+ArcadePick ([Brain] ArcadePick=0|1, recommended off, needs Build+Loot+Bridge): the puppeteer walks a bot to the stack the real Arcade Loot evaluate chose ([tac+0x14][+0x2c], stamped now|1) when that stack is free and unguarded, else its own nearest. Safe replacement for PuppetOff while RealRun is unproven.
+
+RealRun ([Brain] RealRun, default 0, UNTESTED live): run the real Loot/Board tactics for online host bots.
+- Vtable slots Loot/Board slot 2 (RUN) and Board slot 3 (EXIT) point STRAIGHT at the originals (kbr_run_direct, checked all-or-nothing), so no DLL frame exists.
+- The swap rides on a longjmp IAT thunk, klbr_w_longjmp: plain cdecl, no SEH (verified in the SHIP obj: no fs:0). kbr_lj_decide: buf == 0x168e4c8 and shadow swapped in -> RESTORE (put the real rules back, then always tail-call the real longjmp); buf is the live ctx [tac+0xc] of a Loot/Board tactic we built, val 1 or 2, not yet swapped -> SWAP (shadow rules in: [G+0x54] = shadow, [sm+0x54] = 0); else pass through.
+- kbr_lj_restore_mask: restore [G+0x54] only if it still reads the shadow, [sm+0x54] only if it still reads 0; anything else changed under us is left alone and counted.
+- Safety nets: game thread only (restore also thread-checked), append-only tactic registry (tactic objects are never freed), leak put-back at the tick and in veh, mismatch counters, stall watchdog and per-class fault kill from stage 2. If RealRun turns itself off late, the forced-off PuppetOff/BoardReal rule returns.
+- Open risks: never run live; coroutine alive across a round end still gets the shadow (registry is append-only, a stale ctx could be matched); a swap that is not undone (a longjmp path other than the 3 sites, or a fault inside the slice) leaves the shadow in G+0x54; the shadow carries no money without Bridge; other exe code reading 0x508ef0/G+0x54 during a swapped slice sees the shadow; thunk correctness depends on the IAT being patched before any tactic exists.
+- Bench bs3 (DM03 PuppetOff, DD05 BoardReal; queued after pq4). PASS criteria: no c0000029 or any host crash; log shows swaps == restores (mismatch counters 0, no leak put-back); real Loot/Board slices run (bots take loot and board the van); 0 asserts; clean exit at AutoExit; with RealRun=0 behaviour identical to bs2.

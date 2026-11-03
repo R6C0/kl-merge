@@ -34,7 +34,7 @@
                              (the objects are never freed), so a coroutine alive across a round end still gets the shadow. With RealRun Loot is shown to the AI under the old PuppetOff rules and Board under
                              BoardReal + a van state (PuppetOff / BoardReal may be set again), a gated hand-off keeps the stall watchdog.
      [Brain] ArcadePick=0|1  (recommended off; needs Build + Loot + Bridge) the puppeteer walks a bot to the stack its real Loot evaluate chose ([tac+0x2c]) instead of its own nearest.
-   One frame = one tactic call (evaluate, run or exit of Loot / Board / Traitor), depth-counted, the original under __try, [G+0x54] and [sm+0x54] restored in a __finally and verified. A tactic call that is not
+   One frame = one tactic call (evaluate, run or exit of Loot / Board / Traitor), depth-counted; the evaluates, Board EXIT (without RealRun) and Traitor RUN run under __try in a frame; Loot/Board RUN are never called by the DLL (RealRun points the vtable at them directly); [G+0x54] and [sm+0x54] restored in a __finally and verified. A tactic call that is not
    for one of our bots, or not on the host game thread in a host FA round, is answered INERT and the original is never called (Board EXIT 0x5478e0 would dereference the null 0x508ef0 answer).
 
    WHAT WAS VERIFIED IN DISASSEMBLY (kl2.exe build 0490, 2026-11-02, debug/dasm.py, offline; CERTAIN = read in the bytes, GUESS = inferred):

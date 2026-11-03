@@ -43,6 +43,7 @@ Moved verbatim out of CLAUDE.md on 2026-10-23 to keep the always-loaded brief sm
   it is read. So 600,000 is the block, 612,634 .. 616,400 (0xea6888) is a grey band the stock game lives in, and the
   first live state a bigger file hits is the stack-switch slots 0xea6888..0xea6894, then the handle allocator
   (free stack of words 0xea68d6, records 0xea70d8, counters 0xeac158..0xeac174 - 0xeac170 is the count 0x926b20 pops).
+- Loot RUN 0x7bc7d0 / Board RUN 0x82f970 (Arcade brain tactics): stack-copying setjmp COROUTINES. Yield 0x55b9f0 (_setjmp3 into ctx [[tac+0xc]+0xc], stack copy to ctx+0x40) longjmps to the scheduler jmp_buf 0x168e4c8 (scheduler 0x63c5c0, goal start 0x65bbf0). msvcr90 longjmp IAT 0xb10370 has 3 call sites: 0x55ba52 yield, 0x63c8d1 resume (val 1 = continue, 2 = exit), 0x65bc8a goal end. CRASH RISK: a DLL __try/__finally live across a yield makes RtlUnwind fail (bs1 11-03, host c0000029); a resumed slice also runs on the online rules (0x508ef0 = 0, 0x78f470(ecx=0) faults). The DLL must never call these RUNs; RealRun swaps rules in a plain-cdecl longjmp thunk instead. Details: re/arcade_brain_stage2_1103.md.
 
 ## Exact schemas (2026-10-08, method from HHCHunter/hbm-editor's RTP recovery)
 - `tools/kl_exe.py` (PE by address, RTTI, exports) + `tools/kl_rtp.py`: every class's serialized
