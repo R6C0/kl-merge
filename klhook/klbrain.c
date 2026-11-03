@@ -581,7 +581,7 @@ static int klbr_puppet_off(DWORD snd)
         if (!e->wHas || (p[0] - e->wpos[0]) * (p[0] - e->wpos[0]) + (p[2] - e->wpos[2]) * (p[2] - e->wpos[2]) >= 100.0f * 100.0f) { if (e->wHas) progress = 1; memcpy(e->wpos, p, 12); e->wHas = 1; }
     }
     if (e->rec > 0 && klbr_gr[e->rec].on) progress = 1;
-    if (e->s45At && now - e->s45At < KLBR_STALL_MS) progress = 1;
+    if (e->s45At && now - (e->s45At & ~1u) < KLBR_STALL_MS) progress = 1;      /* |1 stamp: mask it or an even tick wraps */
     { DWORD was = e->wUntil; ok = kbr_watch(now, handed, progress, &e->wSince, &e->wUntil, KLBR_STALL_MS, KLBR_REVOKE_MS); progress = !was && e->wUntil; }      /* progress now = "revoked on this call" */
     if (progress) { klbr_nrevoke++; if (klbr_nrevoke <= 12) klog("brain: watchdog: record %d (actor %08lx) was handed to the real %s tactic for %u s without moving 1 m or grabbing: the puppeteer steers it again for %u s", e->rec, (unsigned long)e->actor, br ? "Board" : "Loot", KLBR_STALL_MS / 1000u, KLBR_REVOKE_MS / 1000u); }
     return ok;

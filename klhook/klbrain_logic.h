@@ -84,7 +84,7 @@ static void kbr_switches(int probe, int build, int loot, int puppet, int *out)
 static int kbr_puppet_released(int puppet_on, int built, unsigned long now, unsigned long nz_at, unsigned long win_ms)
 {
     if (!puppet_on || !built || !nz_at) return 0;
-    return (unsigned long)(now - nz_at) <= win_ms;
+    return (unsigned long)(now - (nz_at & ~1ul)) <= win_ms;      /* nz_at is stamped now|1: 1 ms ahead on an even tick would wrap (ce 95339b43f) */
 }
 
 /* ===== stage 2 / 3 (arcade-brain2-1103, design re/arcade_brain_stage2_1103.md): pure parts ======================================================================================== */
@@ -156,7 +156,7 @@ static long kbr_part(long part, long remaining) { long p = part < remaining ? pa
    board_real: Board on, van in {3,4}, and a Board evaluate > 0 within board_win ms. At most one steerer: board_real wins over loot_real. */
 static void kbr_hand(int puppet_on, int built, int board_on, unsigned long now, unsigned long loot_nz_at, unsigned long board_nz_at, int van, unsigned long loot_win, unsigned long board_win, int *loot_real, int *board_real)
 {
-    int b = board_on && built && kbr_board_state_ok(van) && board_nz_at && (unsigned long)(now - board_nz_at) <= board_win;
+    int b = board_on && built && kbr_board_state_ok(van) && board_nz_at && (unsigned long)(now - (board_nz_at & ~1ul)) <= board_win;      /* |1 stamp, see kbr_puppet_released */
     int l = kbr_puppet_released(puppet_on, built, now, loot_nz_at, loot_win) && !kbr_board_state_ok(van);
     *board_real = b; *loot_real = b ? 0 : l;
 }

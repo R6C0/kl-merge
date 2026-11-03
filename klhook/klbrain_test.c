@@ -137,6 +137,10 @@ int main(void)
             CHECK(br == 1, "board wrap");
             kbr_hand(0, 1, 1, 10000, 9000, 0, 0, 1500, 2000, &lr, &br);
             CHECK(lr == 0, "PuppetOff off: never released");
+            kbr_hand(1, 1, 1, 10000, 0, 10000ul | 1ul, 4, 1500, 2000, &lr, &br);
+            CHECK(br == 1, "board: a now|1 stamp read in the same even ms still counts (no wrap)");
+            kbr_hand(1, 1, 1, 10000, 10000ul | 1ul, 0, 0, 1500, 2000, &lr, &br);
+            CHECK(lr == 1 && br == 0, "loot: a now|1 stamp read in the same even ms still counts (no wrap)");
         }
         /* stall watchdog */
         {
