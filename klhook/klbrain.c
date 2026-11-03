@@ -1187,7 +1187,9 @@ static void klbr_hx_apply(struct klbr_s *e, DWORD self)
 #define KLBR_CF_LOGMAX 10
 typedef DWORD (__fastcall *klbr_cfposfn)(DWORD, DWORD, DWORD);
 typedef DWORD (__fastcall *klbr_cfatkfn)(DWORD, DWORD, DWORD, DWORD, DWORD);
-static int klbr_cfon, klbr_cfh, klbr_cf_n, klbr_cf_flt; static long klbr_cf_calls, klbr_cf_skip; static DWORD klbr_cf_at[KLBR_MAX];
+#define KLBR_CF_REF 0x008ccde0      /* cdecl (handle) -> entity, generation-checked: a stale handle gives 0 (wedrgngwi, bytes 0x40a880) */
+typedef DWORD (__cdecl *klbr_cfrefn)(DWORD);
+static int klbr_cfon, klbr_cfh, klbr_cf_n, klbr_cf_flt; static long klbr_cf_calls, klbr_cf_skip, klbr_cf_stale; static DWORD klbr_cf_at[KLBR_MAX];
 /* CoverFire health readout (READ ONLY, bs24): the human holder's health at the call, +300 ms and +2 s, with the CoverFire goal state at each read. A drop can also come from cops or other bots,
    so it is evidence, not proof, that CoverFire shot; a flat line over many calls says it did not. */
 static int klud_idx(DWORD p);      /* klucc_down.c (included after this file) */
@@ -1203,6 +1205,12 @@ static void klbr_cf_apply(struct klbr_s *e, DWORD self)
     if (klbr_cf_at[ix] && now - klbr_cf_at[ix] < 2000) return;
     if ((s5 = klh_rd32(self + 0x5ac)) <= 0xffff || ((st = klh_rd32(s5 + 8)) != 0 && st != 4)) { klbr_cf_skip++; return; }
     if ((node = klh_rd32(hp + 4)) <= 0xffff || (vt = klh_rd32(self)) <= 0xffff || (fn = klh_rd32(vt + 0x14c)) <= 0xffff || !klh_rd((DWORD_PTR)KLH_VA(KLBR_CF_F5), &f5, 4)) return;
+    if (klbr_cfh) {      /* wedrgngwi guards: the tick derefs 0x8ccde0([goal+0x14]) unchecked (0x4f44a7), so the handle must still resolve to this human; slot 83 rewrites +0x14 before its state test, so +0x658 must be idle */
+        DWORD r = 0, ga = klh_rd32(self + 0x658), gs;
+        if (ga <= 0xffff || ((gs = klh_rd32(ga + 8)) != 0 && gs != 4)) { klbr_cf_skip++; return; }
+        __try { r = ((klbr_cfrefn)(DWORD_PTR)KLH_VA(KLBR_CF_REF))(hh); } __except (EXCEPTION_EXECUTE_HANDLER) { r = 0; }
+        if (r != hp) { klbr_cf_stale++; klbr_cf_skip++; return; }
+    }
     klbr_cf_at[ix] = now;
     g = klh_rd32(self + (klbr_cfh ? 0x658 : 0x654)); if (g > 0xffff) g0s = klh_rd32(g + 8); cur0 = klh_rd32(self + 0x74);      /* AttackHandle: ZAttackTarget +0x658 (prio 0x96), else CoverFire +0x654 */
     __try {
@@ -1237,7 +1245,7 @@ static void klbr_cf_pump(DWORD now)      /* game thread, depth 0 (klbr_pump) */
         d = kbr_hp_drop(klbr_cf_hp[i].hp0, h1);
         if (klbr_cf_hpn < KLBR_CF_HPLOGMAX) {
             klbr_cf_hpn++;
-            klog("brain: traitor coverfire health: bot %d human %08lx (crew seat %d) hp %.1f -> %.1f, drop %.1f +%lu ms; CoverFire +0x654 %08lx state %ld",
+            klog("brain: traitor coverfire health: bot %d human %08lx (crew seat %d) hp %.1f -> %.1f, drop %.1f +%lu ms; goal %08lx state %ld",
                  i, (unsigned long)v, klud_idx(v), (double)klbr_cf_hp[i].hp0, (double)h1, (double)d, (unsigned long)dt, (unsigned long)g, g > 0xffff ? (long)klh_rd32(g + 8) : -1L);
         }
         if (klbr_cf_hp[i].step == 0) { klbr_cf_hp[i].step = 1; continue; }
@@ -1418,9 +1426,9 @@ static void klbr_hitlog_summary(void)
     if (klbr_hlon) { int j; for (j = 0; j < KLBR_MAX; j++) if (klbr_atk_calls[j]) klog("brain: traitor attack: bot %d round total: Attack (slot 83) called %ld time(s), %ld with a nonzero handle", j, klbr_atk_calls[j], klbr_atk_nz[j]); }
     if (klbr_hfon) klog("brain: traitor humanfirst: round total: police scores nulled %ld (a seen human was in the list), passed %ld", klbr_hf_null, klbr_hf_pass);
     if (klbr_hoon) klog("brain: traitor humanonly: round total: ally-bot scores nulled %ld (a seen human was in the list), other ZFFPlayer candidates passed %ld", klbr_ho_null, klbr_ho_pass);
-    if (klbr_cfon) klog("brain: traitor coverfire: round total: CoverFire calls %ld, skipped (+0x5ac busy) %ld, faults %d; holder health 2 s later: dropped %ld (total %.1f), flat %ld", klbr_cf_calls, klbr_cf_skip, klbr_cf_flt, klbr_cf_hpdrop, klbr_cf_hpsum, klbr_cf_hpflat);
+    if (klbr_cfon) klog("brain: traitor coverfire: round total: CoverFire calls %ld, skipped (busy / stale) %ld, stale handle %ld, faults %d; holder health 2 s later: dropped %ld (total %.1f), flat %ld", klbr_cf_calls, klbr_cf_skip, klbr_cf_stale, klbr_cf_flt, klbr_cf_hpdrop, klbr_cf_hpsum, klbr_cf_hpflat);
     if (klbr_hxon) klog("brain: traitor holderfix: round total: human holder flags fixed in range (0x4 cleared, 0x10 set) %ld, out of range / range unknown (0x4 cleared only) %ld, range faults %ld", klbr_hx_set, klbr_hx_far, klbr_hx_flt);
-    klbr_hf_null = klbr_hf_pass = 0; klbr_hx_set = klbr_hx_far = 0; klbr_ho_null = klbr_ho_pass = 0; klbr_cf_calls = klbr_cf_skip = 0; klbr_cf_flt = klbr_cf_n = 0; memset(klbr_cf_at, 0, sizeof klbr_cf_at);
+    klbr_hf_null = klbr_hf_pass = 0; klbr_hx_set = klbr_hx_far = 0; klbr_ho_null = klbr_ho_pass = 0; klbr_cf_calls = klbr_cf_skip = klbr_cf_stale = 0; klbr_cf_flt = klbr_cf_n = 0; memset(klbr_cf_at, 0, sizeof klbr_cf_at);
     memset(klbr_cf_hp, 0, sizeof klbr_cf_hp); klbr_cf_hpn = 0; klbr_cf_hpdrop = klbr_cf_hpflat = 0; klbr_cf_hpsum = 0.0;
     memset(klbr_atk_n, 0, sizeof klbr_atk_n); memset(klbr_atk_calls, 0, sizeof klbr_atk_calls); memset(klbr_atk_nz, 0, sizeof klbr_atk_nz);
     memset(&klbr_hl, 0, sizeof klbr_hl); klbr_hl_s15 = 0;

@@ -1,3 +1,9 @@
+2026-11-03 ~14:55 - [c9] bs24 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_tah_1103m). DM03 (CoverFire, handle 0): 7 calls, CoverFire current and
+sometimes running (state 2), human hp 550 -> 550 in 6/6 reads. DD05 (AttackHandle): 10 calls, ZAttackTarget +0x658 becomes current but is terminated (0 -> 4) within 0.6 s;
+once a child task ran (stack 3, top state 2); hp flat 8/8. The bench human idled ~42 m away and 6 m higher (sight GUESS). +0x88 stays 1, Idle 4.
+wedrgngwi: the handle kind is right, but for a HUMAN target the tick has no direct shot; it only runs the ZRunToPosShootingTask child, whose fire test reads holder flags
+rewritten from the bot's B-list entry (fresh = 0), so HolderFix is lost. A stale handle AVs at 0x4f44a7: guards added (re-resolve the handle, +0x658 idle) -> bs25.
+
 2026-11-03 ~14:40 - [c9] bs23 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; HumanOnly + CoverFire on). HumanOnly nulls ally-bot scores (DM03 44);
 CoverFire really becomes the marked bot's current goal (26 / 17 calls) and ends 3-6 s later. 0 hits, but the slot-15 damage hook is entered by nobody, so hits cannot be seen there.
 wee6blb1x (re/traitor_fire_1103.md): Idle's 0x7088c0 call passes 0.0 (never shoots); the shooting tasks run only under ZAttackTarget, added by slot 83 with a NONZERO handle.

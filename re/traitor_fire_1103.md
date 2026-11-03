@@ -122,3 +122,23 @@ Follows re/traitor_handoff_1103.md. Disassembly was read with capstone. Three pa
 ## Levers for bs24 (5400b88e7)
 - CoverFire health readout (read only): the human holder's health at the call, +300 ms and +2 s; also stack count / top state, +0x88, +0x6e8, Idle state.
 - OnlineBrainTraitorAttackHandle (default off, UNTESTED, needs CoverFire): the same call with handle = [s+0xb0]; logs the +0x658 state and the current goal.
+
+## bs24 (out_tah_1103m): PASS 4 seats, 0 asserts, 0 faults
+- DM03, CoverFire (handle 0) + health readout: 7 calls. The current goal becomes CoverFire (stack 1, top = CoverFire); its state is 0, sometimes 2 (running), later 4.
+  The human holder's health stayed 550 at +0.4 s to +3 s (6/6 flat). +0x88 1, +0x6e8 0, Idle 4 on every line.
+- DD05, AttackHandle (handle = [s+0xb0] = 0x1aa): 10 calls, all nonzero (HitLog's slot-83 counter agrees). ZAttackTarget +0x658 becomes current,
+  but its state is 4 at the next read (< 0.6 s). Once the stack held 3 goals with a running top (a child task, 14:44:29). Health flat 8/8.
+- The bench human stood at (-11405 1001 355); the marked bot was near (-7430 400 1820): ~42 m away and 6 m lower. Line of sight is a GUESS.
+- The damage hook (slot 15) was again entered 0 times.
+## Workflow wedrgngwi (trace + verifier, read only, capstone on kl2.exe)
+- Handle kind CONFIRMED: [s+0xb0] is the generation-checked pool handle (0x86ca10 builds idx + gen*cap + 1); 0x8ccde0 -> 0x40a880 compares the generation, so a stale handle resolves to 0.
+- Slot 83 nonzero path CONFIRMED: 0x68fd70 stores the handle in [goal+0x14] BEFORE the state test; state not 0/4 -> 0x7bbf70 (pop) and no AddGoal; vt+0x1b4 0x6e49b0 removes every prio-0x96 entry
+  (also a real Attack); AddGoal 0x6cabf0 refuses role 3 because ZAttackTarget vt+0x24 (0x429f30) returns 0. The entry never expires (byte 0).
+- ZAttackTarget tick 0x4f4460 for a ZFFPlayer target: the class tests leave [ebp-0xc] and [ebp-0x10] at 0 (only the first class sets the target), so
+  Mode A ([body+0x5c8] != 0) ends with no shot; the direct body shot 0x6e4 at 0x4f4605 is unreachable for humans.
+  Mode B jumps to the route branch 0x4f4ad2 before the entry-flags test; 0x4e1750 must accept a path point (distance under ~2x weapon range + a nav check vt+0x80 on [[0xdd2640+0xac]+0xc], untraced),
+  then RunChild ZRunToPosShootingTask [s+0x56c]. At 0x4f4ccd 0x8bd420 rewrites the HOLDER from the B entry (flags | 1): HolderFix is lost.
+  A B entry made by 0x425fa0 for a human has flags 0, so the child's fire test 0x616480 fails unless the engine already set 0x10 (range) without 0x4 (same team).
+- Crash risk CONFIRMED: no null check on 0x8ccde0's result (0x4f44a7, 0x8bd468, 0x426014). A leaver / dead human whose node is freed -> AV (whether FA frees it is a GUESS).
+- Guards added (bs25, out_tag_1103n): AttackHandle calls only when 0x8ccde0(handle) == the holder pointer and the +0x658 goal state is 0 or 4; skips are counted ("stale handle").
+- Next lever candidate: set 0x11 in the bot's B-list entry for the human (body+0x698, lookup 0x4c75f0) so the rewrite keeps the fire bits. Entry layout not traced yet.
