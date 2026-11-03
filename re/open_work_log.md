@@ -1,3 +1,8 @@
+2026-11-03 ~13:20 - [c9] bs20 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; HumanFirst 73e41f775 on). DD05: the holder is a human 17/20 (bs19: 7/50),
+but its entry flags are 0x05 (0x10 never set, 0x4 set) and 0 shots. DM03: 71 police scores nulled; the pick sits on the other ZFFPlayer entry, flags 0x01.
+wkbj5dple (re/traitor_handoff_1103.md): the ZAttackTarget goal is never fed by the holder in shipped code (0 Attack calls is normal). Real route:
+Idle 0x77bbd0 (holder bit7 clear) -> 0x7088c0 -> [vt+0x6e4]. Workflow w0g1x0zbt pins its gates for a read-only probe (bs21).
+
 2026-11-03 ~13:05 - [c9] bs19 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults). HOLDER probe: the marked bot DOES pick a human (holder soldier+0xa8 =
 human, handle 0x320/0x1aa) for 2-6 s, then an ally bot (DM03, 33/43 lines) or cops (DD05, 38/50). Its ZAttackTarget goal handle [[s+0x658]+0x14]
 never takes the pick (0 / stale) with state 0: two gaps, score AND hand-off. 73e41f775: OnlineBrainTraitorHumanFirst (slot 110 nulls cops while a
