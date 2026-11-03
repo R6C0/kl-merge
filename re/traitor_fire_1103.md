@@ -220,7 +220,7 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - Chain, CONFIRMED: ProjectileHit message (`[0x1548d10]`) -> victim slot 89 -> slot 424 (0x4db580) -> router slot 422 -> slot 423 -> 0x6e3400 -> health write 0x8a7c60.
 - WRONG, tracer's claim that 424 "does the hp write": 0x4db580 only builds the record. It calls slot 422 at 0x4dbc61. The hp write happens later via 423 -> 0x6e3400 -> 0x8a7c60.
 - Gaps the tracer missed. Each can zero or drop damage:
-  1. 0x4db58f: early drop when `[sm+0x70] >= 0x28`. `sm` is the session object `[0x168e598]`. Role is `+0x54` (2 = host, 3 = client), type `+0x5c` (4 = FA/Arcade family), state `+0x70` (0x19 = round).
+  1. 0x4db58c (call 0x8e6a20; cmp eax,0x28 at 0x4db591): early drop when `[sm+0x70] >= 0x28`. `sm` is the session object `[0x168e598]`. Role is `+0x54` (2 = host, 3 = client), type `+0x5c` (4 = FA/Arcade family), state `+0x70` (0x19 = round).
   2. 0x7e1700 routing: it drops only when the attacker is not a ZFFPlayer and the victim is remote (station ownership 0x7de570 / 0x9425a0, `[victim+0x274c]`). A host-local victim reaches slot 423 directly, so routing is NOT the blocker for a host-local human.
   3. 0x6e3400 sub-mode 0 (`[0x168e59c]`: 0 = FA, 1 = UCC, 2 = C&R): it zeroes the delta when all of these hold.
      - The attacker is a ZFFPlayer-class crew member that is not a traitor (`+0x2726`) and not police (`+0x2723`).
