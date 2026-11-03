@@ -1,3 +1,7 @@
+2026-11-03 ~03:20 - [c9] bs3 SAFE PASS (4 seats, 0 asserts/faults): RealRun runs the REAL Arcade Loot RUN online for the first time. DM03 host 13776 RUN +
+163 EXIT resumes, swap-ins = swap-outs, 0 leaks/mismatches, mode!=4 0, [tac+0x10] 0 (71d099212 judge guards in). DD05 only 37 resumes. Behaviour NOT yet
+Arcade: shadow shows grabs 0, van 0, crew records 0. Workflow w2vymslb2 grades movement/looting vs bs2 and names the blocker for bs4.
+
 2026-11-03 ~03:05 - [ce] pq4 PASS (DM06 + DD05, 2 seats, 0 faults, round 2 everywhere): with the scripted RETURNs the queued F3/F2 press reaches the page on
 every seat: 'queued key press is applied after ~13.6 s' + 'hirepage: page SHOWN (online, after the early key press)', rows served. AutoOpen send 1 at 812 ms
 on all four. So PageQueue + AutoOpen are proven; only the two RETURNs remain, which pq5 (AutoOpenSteps, no RETURN) tests after bs3.

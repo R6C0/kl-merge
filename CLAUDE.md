@@ -68,10 +68,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-11-03 ~03:05 - [c9] bs2 SAFE PASS (DM03 + DD05, 2 seats, 0 asserts/faults: the bs1 crash setup no longer crashes) but ArcadePick gave only 1 / 0 orders.
-nm1 PASS: lobby 'Withdrawal' = LOAD DM03 on both seats (random peek). Real Arcade RUN online: 06101ed05 [Brain] RealRun (off) = MSVCR90.longjmp IAT thunk swaps
-the shadow rules in per resumed Loot/Board slice, out at each yield (no SEH across it; SHIP obj checked). bs3 (dll out_brain4_1103c_test = + 71d099212 judge guards: mode 4, van node, [tac+0x10]; RealRun=1, DM03
-PuppetOff + DD05 BoardReal) chained on "end pq4"; pass = no c0000029/fault 120 s and swap-ins > 0 with bots taking loot.
+2026-11-03 ~03:20 - [c9] bs3 SAFE PASS (4 seats, 0 asserts/faults): RealRun runs the REAL Arcade Loot RUN online for the first time. DM03 host 13776 RUN +
+163 EXIT resumes, swap-ins = swap-outs, 0 leaks/mismatches, mode!=4 0, [tac+0x10] 0 (71d099212 judge guards in). DD05 only 37 resumes. Behaviour NOT yet
+Arcade: shadow shows grabs 0, van 0, crew records 0. Workflow w2vymslb2 grades movement/looting vs bs2 and names the blocker for bs4.
 
 2026-11-03 ~03:00 - [ce] AutoOpenSteps pushed (7bf5be192, default 0, recommended off until benched): after AutoOpen the hook opens FABuyWeaponsNewCategory then
 FABuyWeaponsNewWeapon itself (0x6bee50 as klsv_open), gated by kpq_aostep (top window, mode 0/1, slot -6, cat -4, busy, 300 ms; aborts 5 s / 2.5 s). Review (3 lenses):
