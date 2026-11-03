@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~04:00 - [c9] bs4 PASS (DM03 + DD05, 4 seats, 0 faults): FIRST real Arcade looting online. DM03: real Loot RUN + DLL pump = 17 grabs, $5.97M
+paid, van called by a bot, 7/7 boarded with $7M. Gaps: watchdog took 12 bots back (slot 202 gave all bots the same nearest stack) -> 5e785adcf StackClaims;
+boarding still by the hook van path, real Board RUN too late (stage byte mirrors 'aboard' only) -> BoardStage in a workflow; DD05 loot evaluate barely runs
+(227 calls). bs5 (out_brain6_1103e_test, StackClaims=1) chained on "end pqinst"; ce pq6 after it, then mine on "end pq6".
+
 2026-11-03 ~03:40 - [ce] pq5 PASS (DM06 + DD05, 2 seats, 0 faults, round 2 everywhere), NO scripted RETURN: F3/F2 on the scoreboard -> AutoOpen send 1 at
 811 ms -> steps open FABuyWeaponsNewCategory (+310 ms, slot -6 cat -4) and FABuyWeaponsNewWeapon (+310 ms) -> 'page SHOWN' on all four seats, ~7 s after
 the press (was ~13.6 s with scripted RETURNs). Stack nests like RETURN (New > Category > Weapon). Install kit C:\kl_build_1024\pq_1103f_install (SHIP from
@@ -77,11 +82,6 @@ the press (was ~13.6 s with scripted RETURNs). Stack nests like RETURN (New > Ca
 163 EXIT resumes, swap-ins = swap-outs, 0 leaks/mismatches, mode!=4 0, [tac+0x10] 0 (71d099212 judge guards in). DD05 only 37 resumes. Behaviour NOT yet
 Arcade: grade w2vymslb2 = the hand-off never opened (evaluate picks a stack at +0x2c but +0x28 = 0), so puppeteer + real RUN steered the same bots: 0 grabs,
 0 boarded. 8b9a29bd2 opens it from the chosen stack, shows Loot only when handed, restamps per live RUN slice. bs4 (DM03 + DD05, BoardReal both) on "end pq5".
-
-2026-11-03 ~03:00 - [ce] AutoOpenSteps pushed (7bf5be192, default 0, recommended off until benched): after AutoOpen the hook opens FABuyWeaponsNewCategory then
-FABuyWeaponsNewWeapon itself (0x6bee50 as klsv_open), gated by kpq_aostep (top window, mode 0/1, slot -6, cat -4, busy, 300 ms; aborts 5 s / 2.5 s). Review (3 lenses):
-no defect; open point = selector init setting slot/cat is unverified in game (graceful abort if wrong). Kit pq5 (dll pq_1103e_test, no scripted RETURN) chained on
-"end bs3" (queue pq4 -> bs3 -> pq5); SHIP C:\kl_build_1024\pq_1103e_ship for the install once pq5 passes.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

@@ -1,3 +1,8 @@
+2026-11-03 ~04:00 - [c9] bs4 PASS (DM03 + DD05, 4 seats, 0 faults): FIRST real Arcade looting online. DM03: real Loot RUN + DLL pump = 17 grabs, $5.97M
+paid, van called by a bot, 7/7 boarded with $7M. Gaps: watchdog took 12 bots back (slot 202 gave all bots the same nearest stack) -> 5e785adcf StackClaims;
+boarding still by the hook van path, real Board RUN too late (stage byte mirrors 'aboard' only) -> BoardStage in a workflow; DD05 loot evaluate barely runs
+(227 calls). bs5 (out_brain6_1103e_test, StackClaims=1) chained on "end pqinst"; ce pq6 after it, then mine on "end pq6".
+
 2026-11-03 ~03:40 - [ce] pq5 PASS (DM06 + DD05, 2 seats, 0 faults, round 2 everywhere), NO scripted RETURN: F3/F2 on the scoreboard -> AutoOpen send 1 at
 811 ms -> steps open FABuyWeaponsNewCategory (+310 ms, slot -6 cat -4) and FABuyWeaponsNewWeapon (+310 ms) -> 'page SHOWN' on all four seats, ~7 s after
 the press (was ~13.6 s with scripted RETURNs). Stack nests like RETURN (New > Category > Weapon). Install kit C:\kl_build_1024\pq_1103f_install (SHIP from
