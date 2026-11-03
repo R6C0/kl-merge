@@ -522,7 +522,7 @@ static int kls_map(const char *in, char *out, const char *api)
                 klog("expansion: LOAD %s: latch=%ld force=%d online=%d OnlineSet=%d keep=%d -> page %d, rule %s; stack [%s]%s%s%s", kls_slot[s].name, (long)kls_menu_page, kls_page_force,
                      on, kls_online_set, kls_keep, page, r < 0 ? "none (stock level)" : kls_rule[r].map, kls_stack_txt[0] ? kls_stack_txt : "not read yet",
                      kls_rnd_txt[0] ? "; " : "", kls_rnd_txt,
-                     on && page ? " - WARNING: online, every peer needs the SAME map set (the host's choice is not sent; see re/private_match_mapsync.md)" : ""); } }
+                     on && page ? " - WARNING: online, every peer needs the SAME map set (the host sends its choice only with [HostOpts] Enable=1 on both seats, klhostopt.c; see re/private_match_mapsync.md)" : ""); } }
             if (!kl_online() && (r = kpm_override(kls_slot[s].name)) >= 0) page = r;      /* klpm.c: the Arcade playlist names the page of the map it chose for this slot */
             if (InterlockedExchange(&kls_slot[s].page, page) != page) {
                 r = kls_find_rule(s, page); if (r < 0) r = kls_find_rule(s, 0);
