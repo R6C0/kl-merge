@@ -145,6 +145,18 @@ int main(void)
         /* coroutine rule (bs1 c0000029): Loot / Board RUN are never called; their evaluates, Board EXIT and the Traitor are */
         CHECK(!kbr_orig_ok(0, 0) && !kbr_orig_ok(1, 0), "coroutine rule: Loot RUN and Board RUN are never called");
         CHECK(kbr_orig_ok(1, 1) && kbr_orig_ok(2, 0) && kbr_orig_ok(0, 1), "coroutine rule: Board EXIT, Traitor RUN and Loot EXIT may be called");
+        /* RealRun: vtable slots straight at the originals, and the longjmp thunk decision */
+        CHECK(kbr_run_direct(1, 0, 0) && kbr_run_direct(1, 1, 0) && kbr_run_direct(1, 1, 1), "realrun: Loot RUN, Board RUN, Board EXIT go straight to the original");
+        CHECK(!kbr_run_direct(1, 0, 1) && !kbr_run_direct(1, 2, 0) && !kbr_run_direct(1, 2, 1) && !kbr_run_direct(0, 0, 0) && !kbr_run_direct(0, 1, 0) && !kbr_run_direct(0, 1, 1), "realrun: nothing else, and nothing with RealRun off");
+        CHECK(!kbr_orig_ok(0, 0) && !kbr_orig_ok(1, 0), "realrun does not let the DLL call a yielding RUN itself");
+        CHECK(kbr_lj_decide(0x1000, 1, 0x168e4c8, 0, 1) == KBR_LJ_SWAP && kbr_lj_decide(0x1000, 2, 0x168e4c8, 0, 1) == KBR_LJ_SWAP, "longjmp: a resume (val 1 / 2) of our tactic swaps");
+        CHECK(kbr_lj_decide(0x1000, 1, 0x168e4c8, 0, 0) == KBR_LJ_PASS, "longjmp: a foreign goal passes");
+        CHECK(kbr_lj_decide(0x1000, 0, 0x168e4c8, 0, 1) == KBR_LJ_PASS && kbr_lj_decide(0x1000, 3, 0x168e4c8, 0, 1) == KBR_LJ_PASS, "longjmp: only val 1 / 2 resume a goal");
+        CHECK(kbr_lj_decide(0x1000, 1, 0x168e4c8, 1, 1) == KBR_LJ_PASS, "longjmp: already swapped, no second swap (would overwrite the saved real rules)");
+        CHECK(kbr_lj_decide(0x168e4c8, 1, 0x168e4c8, 1, 0) == KBR_LJ_RESTORE, "longjmp: the slice leaves to the scheduler while swapped -> restore");
+        CHECK(kbr_lj_decide(0x168e4c8, 1, 0x168e4c8, 0, 0) == KBR_LJ_PASS, "longjmp: a foreign slice ends, nothing swapped");
+        CHECK(kbr_lj_decide(0x168e4c8, 1, 0x168e4c8, 0, 1) == KBR_LJ_PASS && kbr_lj_decide(0, 1, 0x168e4c8, 1, 1) == KBR_LJ_PASS, "longjmp: the scheduler buf never swaps in; a null buf passes");
+        CHECK(kbr_lj_restore_mask(0x500, 0x500, 0) == 3 && kbr_lj_restore_mask(0x600, 0x500, 0) == 2 && kbr_lj_restore_mask(0x500, 0x500, 2) == 1 && kbr_lj_restore_mask(0x600, 0x500, 3) == 0, "restore mask: each field only when it still reads what we wrote");
         /* ArcadePick window */
         CHECK(kbr_pick_live(20000, 10001, 15000) && !kbr_pick_live(30000, 10001, 15000) && !kbr_pick_live(20000, 0, 15000), "pick: live inside the window, stale after, never stamped = none");
         CHECK(kbr_pick_live(10000, 10000ul | 1ul, 15000), "pick: a now|1 stamp read in the same even ms still counts (no wrap)");

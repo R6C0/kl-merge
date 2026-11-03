@@ -186,8 +186,31 @@ static unsigned long kbr_chosen(const unsigned long *cand, unsigned long idx) { 
 /* COROUTINE RULE (bs1 11-03, BS1B + BS1C host crash c0000029 in ntdll): the Loot RUN 0x7bc7d0 and the Board RUN 0x82f970 are stack-copying coroutines. Their yield
    0x55b9f0 does _setjmp3 into [[tactic+0xc]+0xc], copies the stack image to [ctx+0x40] and longjmps (msvcr90) to the scheduler's jmp_buf 0x168e4c8; the resumer
    (0x63c8d1) copies it back and longjmps into the RUN. A DLL __try / __finally frame live across that yield makes longjmp's RtlUnwind fail (STATUS_INVALID_UNWIND_TARGET),
-   and a resumed slice runs on the REAL online rules where 0x508ef0 answers 0 and 0x78f470(ecx = 0) faults. So the DLL never calls those two originals: 1 = may call. */
+   and a resumed slice runs on the REAL online rules where 0x508ef0 answers 0 and 0x78f470(ecx = 0) faults. So the DLL never CALLS those two originals itself: 1 = may call.
+   RealRun (UNTESTED) does not change this: with it the DLL-owned vtable copy points slot 2 (Loot, Board) and Board slot 3 (EXIT 0x5478e0, which always runs in a resumed slice too)
+   STRAIGHT at the originals (kbr_run_direct), so the scheduler calls them with no DLL frame, and the swap rides on the msvcr90 longjmp IAT thunk (kbr_lj_decide). */
 static int kbr_orig_ok(int cls, int slot) { return !(slot == 0 && (cls == 0 || cls == 1)); }
+/* RealRun: does the vtable copy's slot go straight to the original (no DLL frame at all)? cls 0 Loot, 1 Board, 2 Traitor; slot 0 = RUN (vt slot 2), 1 = EXIT (vt slot 3). Only the coroutine bodies: Loot RUN, Board RUN, Board EXIT */
+static int kbr_run_direct(int realrun, int cls, int slot) { return realrun && ((slot == 0 && (cls == 0 || cls == 1)) || (slot == 1 && cls == 1)); }
+
+/* RealRun: the msvcr90 longjmp thunk (kl2.exe has 3 call sites: yield 0x55ba52 and goal end 0x65bc8a -> longjmp(sched_buf 0x168e4c8, 1); resume 0x63c8d1 -> longjmp(ctx = [goal+0xc], 1 | 2)).
+   -> KBR_LJ_RESTORE: leaving a slice to the scheduler while the shadow is swapped in: put the real rules back first. KBR_LJ_SWAP: resuming one of OUR Loot / Board coroutines
+   (val 1 = RUN, 2 = EXIT; match = buf is the live ctx of a tactic we built): swap the shadow in first, unless it already is. Anything else passes through untouched. */
+#define KBR_LJ_PASS 0
+#define KBR_LJ_SWAP 1
+#define KBR_LJ_RESTORE 2
+static int kbr_lj_decide(unsigned long buf, int val, unsigned long sched_buf, int swapped, int match)
+{
+    if (!buf) return KBR_LJ_PASS;
+    if (buf == sched_buf) return swapped ? KBR_LJ_RESTORE : KBR_LJ_PASS;
+    if (!swapped && match && (val == 1 || val == 2)) return KBR_LJ_SWAP;
+    return KBR_LJ_PASS;
+}
+/* restore only what is still ours: [G+0x54] only when it still reads the shadow, [sm+0x54] only when it still reads 0 (the swapped role). Anything else changed under us: leave it, count it. bit0 = restore rules, bit1 = restore role */
+static int kbr_lj_restore_mask(unsigned long cur_rules, unsigned long shadow, unsigned long cur_role)
+{
+    return (cur_rules == shadow ? 1 : 0) | (cur_role == 0 ? 2 : 0);
+}
 
 /* ArcadePick: the stack the real Loot evaluate chose (kbr_chosen) still counts this long after it was stamped (now|1 stamp: masked, see kbr_puppet_released) */
 static int kbr_pick_live(unsigned long now, unsigned long at, unsigned long win) { return at && (unsigned long)(now - (at & ~1ul)) <= win; }

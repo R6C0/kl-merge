@@ -534,6 +534,7 @@ static void log_context(CONTEXT *c)
     klog("%s", line);
 }
 
+static void klbr_veh_restore(void);               /* klbrain.c (included below): [Brain] RealRun - a fault with the shadow rules swapped in puts the real ones back */
 static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
 {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
@@ -575,6 +576,7 @@ static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
             return EXCEPTION_CONTINUE_EXECUTION;
         }
     }
+    if (code != EXCEPTION_BREAKPOINT) klbr_veh_restore();      /* [Brain] RealRun: SEH-protected, game thread only, a no-op unless the longjmp thunk has the shadow swapped in */
     EnterCriticalSection(&cs);
     int first = 1;
     for (int i = 0; i < nseen; i++) if (seen[i] == at) first = 0;
