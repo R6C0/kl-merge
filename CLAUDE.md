@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~07:20 - [c9] arc3 (offline Arcade, idle $0 player, ArcadeDiag): Arcade marks 0/2/1/5 traitors a round too, so online's 5 is Arcade.
+Research (re/arcade_traitor_consequence_1103.md, checked by hand): a mark never swaps teams; it only lets that bot target humans (0x882470 behind
+the Arcade gate 0x7f6850, fire-line 0x570a12). bs9 PASS (4 seats, 0 faults): the team-swap turn now works (1 turned + restored per map, after
+fixes b848198f4 klh_avt gate, b845188d3 traitor not a cop) but is not Arcade. OnlineBrainTraitorArcade being built in C:\kl_wt\tarc (wj8sfl36y).
+
 2026-11-03 ~06:40 - [c9] bs8 PASS (DM03 + DD05, 4 seats, 0 faults). The real Board tactic now boards DM03 7/7 ($6.73M paid, watchdog 0)
 and DD05 5/7 (bs7: 0; 2 by fallback, $1.58M). Traitor turn: 0 turned, every attempt refused because the gate read the actor vtable raw
 and online bots carry OnlineCopToBot's private ZFFActor copy (523cabdc). Fix b848198f4 (klh_avt), TEST out_brain10_1103k_test.
 arc3 (offline Arcade traitor reference, ArcadeDiag) running since 06:31; bs9 (the fix) chained on "end arc3".
-
-2026-11-03 ~05:20 - [c9] bs7 PASS (DM03 + DD05, 4 seats, 0 faults). The real Traitor evaluate fires online: 5 records marked a round on both maps
-(mirror only; Arcade turns ~1). DM03: 5/7 boarded by the real Board tactic, $7M paid, watchdog 0. DD05: real Board still 0, 3 drop grabs, $1.58M.
-Pushed e6b74553c: board-gap keys (BoardHold/BoardNode/BoardStage0/BoardLog) + OnlineBrainTraitorTurn/Row0/KillMax/Max (all default off).
-bs8 (out_brain9_1103j_test, all on, TraitorMax=1) chained on "end pq9".
 
 2026-11-03 ~04:30 - [ce] After-match navigation INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, SHIP 79ce4c7c4, UNDO bat beside it). pq6 PASS (DD05, 2 seats,
 0 faults, round 2): F3/F2 -> page SHOWN in 0.3 s steps with no RETURN; ESC from the auto-opened weapon list pops back to the category list (5 -> 4 windows)

@@ -111,6 +111,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
 - 11-03 03:20 c9: bs3 SAFE PASS 4 seats with the guarded RealRun dll (71d099212): real Arcade Loot RUN resumes online (DM03 13776, DD05 37), swaps balanced, 0 leaks; bots not yet looting (grabs 0). Grading workflow w2vymslb2 -> bs4.
+- 11-03 07:20 c9: arc3: offline Arcade marks 0-5 traitors a round too; a mark never swaps teams (only lets the bot shoot humans). bs9 PASS 0 faults: team-swap turn works but is not Arcade -> OnlineBrainTraitorArcade in C:\kl_wt\tarc.
 - 11-03 06:40 c9: bs8 PASS 4 seats 0 faults: real Board boards DM03 7/7, DD05 5/7; traitor turn refused by a raw vtable gate (private ZFFActor copy) -> fix b848198f4, bs9 after arc3.
 - 11-03 05:20 c9: bs7 PASS 4 seats 0 faults: real Traitor evaluate fires online (5 marked a round, mirror only); DM03 real Board 5/7, $7M; DD05 real Board 0. e6b74553c pushed (board-gap + OnlineBrainTraitorTurn, default off); bs8 chained on "end pq9".
 - 11-03 04:45 c9: bs6 PASS 4 seats 0 faults: DM03 real Board boards 3/7, $6.92M; DD05 DropCands 2 drop grabs $1.58M, real Board 0 -> Board-gap workflow; traitor turn in worktree

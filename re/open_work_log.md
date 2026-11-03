@@ -1,3 +1,8 @@
+2026-11-03 ~07:20 - [c9] arc3 (offline Arcade, idle $0 player, ArcadeDiag): Arcade marks 0/2/1/5 traitors a round too, so online's 5 is Arcade.
+Research (re/arcade_traitor_consequence_1103.md, checked by hand): a mark never swaps teams; it only lets that bot target humans (0x882470 behind
+the Arcade gate 0x7f6850, fire-line 0x570a12). bs9 PASS (4 seats, 0 faults): the team-swap turn now works (1 turned + restored per map, after
+fixes b848198f4 klh_avt gate, b845188d3 traitor not a cop) but is not Arcade. OnlineBrainTraitorArcade being built in C:\kl_wt\tarc (wj8sfl36y).
+
 2026-11-03 ~06:40 - [c9] bs8 PASS (DM03 + DD05, 4 seats, 0 faults). The real Board tactic now boards DM03 7/7 ($6.73M paid, watchdog 0)
 and DD05 5/7 (bs7: 0; 2 by fallback, $1.58M). Traitor turn: 0 turned, every attempt refused because the gate read the actor vtable raw
 and online bots carry OnlineCopToBot's private ZFFActor copy (523cabdc). Fix b848198f4 (klh_avt), TEST out_brain10_1103k_test.
