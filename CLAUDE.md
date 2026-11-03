@@ -79,9 +79,9 @@ NEW whole reads: Board RUN 0x82f970 (rules touches listed), traitor roll 0x43ffb
 0x4322f0 (odd). Shadow: record 0 = LOCAL HUMAN (0x6c7700 -> 0 in frame), bots 1..11; +0x34c byte 0 = live; +0x1dc stays 0 until the exit
 is mirrored (states 1/2 reach 0x7bb2a0); Board RUN has no NULL check -> originals only inside the frame. PC busy, nothing installed.
 
-2026-11-02 ~23:10 - [ce] After-match navigation (owner ask): PageQueue (F2/F3/page key on the scoreboard/round-over page is queued and opens
-with Buy Weapons), ScoreboardNextHint line, HintEveryShop, TEST CursorProbe for a clickable button; all off, 9c4d7da14 8e8308354 unpushed (c9 pushes).
-Bench pq1 (TEST dll C:\kl_build_1024\pq_1102_test) waits until the owner stops playing.
+2026-11-03 ~01:30 - [ce] After-match navigation: pq1 SAFE PASS (2 seats, DM06 + DD05, 0 asserts) but the queued page press lapsed: DD05 used a dll built
+before 551e734fb; DM06 hit a stale 250 ms hpre on the 0x1f -> 0x20 edge -> 6495aefa5 (a queued press waits while the gate reads shut). The cursor is hidden in 0x1f/0x20,
+so there is no clickable button: keys + [ShopPage] AutoOpen. pq2 (old dll) is running; pq3 (dll pq_1103b_test, AutoOpen=1, no scripted click) is chained on "end bs1".
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
