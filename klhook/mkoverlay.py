@@ -316,7 +316,9 @@ def guns_window(nl):
     """The window KLGuns ('Mod settings'): the heister page's row pattern, rows 34 apart, the last one where v26c's last one was (493)."""
     rows = (SET_ROWS + GUN_ROWS) if SETTINGS else GUN_ROWS
     last = 493 if SETTINGS else 425
-    step = 30 if HOSTOPTS else ROW                      # 10 rows (HostOpts): 30 apart, first row at 493 - 9 x 30 = 223
+    step = ROW                                          # 9 rows: 34 apart (first row 221)
+    if HOSTOPTS:                                        # 11 rows (HostOpts, Tex + Neural kept): 27 apart, first row at 493 - 10 x 27 = 223 (was 10 rows at 30)
+        step = min(ROW, (last - 220) // (len(rows) - 1))
     ys = tuple(last - step * (len(rows) - 1 - k) for k in range(len(rows)))
     if ys[0] < 220:
         raise SystemExit('%d rows do not fit the Mod settings window' % len(rows))
@@ -860,8 +862,8 @@ def main():
     global HOSTOPTS, SET_ROWS
     HOSTOPTS = cp.has_section('HostOpts') and cp.get('HostOpts', 'Enable', fallback='0').strip() != '0' and cp.get('HostOpts', 'Menu', fallback='0').strip() != '0'
     if HOSTOPTS:
-        SET_ROWS = tuple(r for r in SET_ROWS if r[2] not in ('KLSTex', 'KLSNeural'))
-        SET_ROWS = SET_ROWS[:4] + (('KLS_Next', 'Textures / Neural (next start)', 'KLSNext', ['Off', 'Sharper textures', 'Neural', 'Both']),) + SET_ROWS[4:] + HOST_ROWS
+        # 2026-11-03: the Tex and Neural rows STAY (the merged 'KLS_Next' row dropped them from the installed menu); the host rows are only added.
+        SET_ROWS = SET_ROWS + HOST_ROWS
         print('HostOpts rows: ON (%d Mod settings rows)' % len(SET_ROWS))
     global MATCH, MATCH_MAPS
     MATCH = cp.has_section('Match') and cp.get('Match', 'Enable', fallback='0').strip() != '0' and cp.get('Match', 'Menu', fallback='1').strip() != '0'
