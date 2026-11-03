@@ -1,3 +1,8 @@
+2026-11-03 ~04:30 - [ce] After-match navigation INSTALLED 03:49 (C:/kl_build_1024/pq_1103f_install, SHIP 79ce4c7c4, UNDO bat beside it). pq6 PASS (DD05,
+2 seats, 0 faults, round 2 on both): F3/F2 -> AutoOpen + steps -> page SHOWN with no RETURN; ESC from the auto-opened weapon list pops back to the
+category list (windows 5 -> 4: New > Category) like a hand-opened one. A second ESC 90 ms after the first did nothing: Category stayed until the round
+started 14 s later. Timing (menu transition) or a real gap with the (1,0,1) open flags? pq7 (kit week_1028/pq7, ESCs 1.5 s apart) chained on "end bs6".
+
 2026-11-03 ~04:20 - [c9] bs5 PASS (DM03 + DD05, 4 seats, 0 faults): StackClaims works: DM03 watchdog take-backs 12 -> 0, 14 grabs, $6.82M paid,
 7/7 boarded (still by the hook van path). 7c78417e8 BoardStage (real Board tactic boards; review fixes in). DD05: 0 real grabs because cops carry all loot
 and slot 202 skips type-1 DROPS (Arcade's 0x8b94d0 walks the drop list too) -> DropCands in workflow w61ao6bnq. bs6 (BoardStage+StackClaims, dll
