@@ -1050,6 +1050,138 @@ static void klbr_probe_log(DWORD now, DWORD sm, DWORD role, DWORD mode, DWORD st
     }
 }
 
+/* ---- ArcadeDiag (2026-11-03, [Brain] ArcadeDiag, default 0, test runs only) -------------------------------------------------------------------------------------------------------------------------
+   READ-ONLY reference numbers from STOCK ARCADE for the Traitor evaluate, to compare with the online 'traitor diag' lines. Offline (role 0 / 1, session mode 4), no host round, no shadow rules, no rules swap.
+   MECHANISM (the same one the online wrap uses, a vtable pointer on the object, because no code or .rdata byte may be written): the wrap in klbrain.c is NOT installed in Arcade (klbr_make_vtables runs only for
+   Build=1 and acts only on the host round, klbr_wanted needs role 2). Here a SEPARATE DLL-owned copy of the Traitor vtable 0xbd13bc is made (slot 2 RUN = a counting tail-jump stub, slot 11 evaluate = an observer that
+   calls the original straight (no swap, no fault guard, so a fault behaves exactly as stock) and then reads), and the tick writes that copy's address into [tactic] of each Arcade Ally soldier's Traitor tactic
+   ([soldier+0x5f8], built by the game's own ctor). THE ONLY GAME-MEMORY WRITE IS THAT ONE DWORD PER TACTIC OBJECT (its vtable pointer; the copy differs only in the two slots, which call the originals with the same
+   arguments). Everything else is data reads. GUESS: nothing compares the object's vtable pointer to 0xbd13bc (same GUESS as the online wrap); evaluate is thiscall with no stack argument (CERTAIN, 0x85f8e2). */
+static int klbr_adiag;
+static DWORD klbr_ad_vt, klbr_ad_ev_org, klbr_ad_run_org;      /* the vtable copy (pointer to slot 0) and the two originals */
+static volatile LONG klbr_ad_on, klbr_ad_ev_n, klbr_ad_ev_nz, klbr_ad_run_n, klbr_ad_marks, klbr_ad_wrapped, klbr_ad_unused_n, klbr_ad_smp, klbr_ad_smp_pass, klbr_ad_zero_pass, klbr_ad_nz_fail, klbr_ad_bad;
+static volatile LONG klbr_ad_slotmask;
+static int klbr_ad_dg0, klbr_ad_dg1, klbr_ad_told;
+static DWORD klbr_ad_rules, klbr_ad_t0, klbr_ad_last, klbr_ad_scan_at, klbr_ad_hb_at, klbr_ad_slot_at[12]; static LONG klbr_ad_hb_ev;
+static BYTE klbr_ad_seen[12]; static int klbr_ad_seeded, klbr_ad_hbn;      /* seeded: the first mark poll of a round only records the bytes; hbn: capped heartbeat lines */
+static struct { DWORD obj, snd; } klbr_ad_o[32]; static int klbr_ad_no;
+static long klbr_ad_row0; static int klbr_ad_row0_un = -1, klbr_ad_lvl; static float klbr_ad_limit; static long klbr_ad_cap = -9;      /* last readings, for the summary after the rules are gone */
+
+static void __cdecl klbr_ad_hit(void) { InterlockedIncrement(&klbr_ad_run_n); }
+static __declspec(naked) void klbr_ad_run_stub(void) { __asm push ecx __asm push edx __asm call klbr_ad_hit __asm pop edx __asm pop ecx __asm jmp dword ptr [klbr_ad_run_org] }      /* any signature: counted, then the original */
+
+/* what the Arcade evaluate sees for this tactic, from the REAL rules: data reads only. Offsets as the shadow block mirrors the Heist rules (crew [+0x348] stride 0x7c, free bytes [+0x34c], count [+0x354], score block
+   [+0x5f8] with money rows at +0x150 + 4*slot and the level byte at +0x45; tuning row R = [0x168d7c0] + 0x6ac + 0x70*L: limit R+0x20, stage terms R+0x24.., cap R+0x6c); GUESS: the REAL Arcade rules have these same
+   offsets and the slot is [tactic+0x14] (set by 0x78f470 before the cap/score steps, so on an early return of the evaluate it may be stale) */
+static void klbr_ad_note(DWORD self, float r)
+{
+    int nz = r > 0.0f, take; int *cnt = nz ? &klbr_ad_dg1 : &klbr_ad_dg0; DWORD G, rules, slot, nrec, crew, fr, score, tun, R, now = GetTickCount(); BYTE sb = 0, fb = 0, f0 = 0, lv = 0; float f[9], st[4] = { 0, 0, 0, 0 };
+    int unused, unused0, L, pass; long own, row0, own_g, row0_g; float sum, sum0;
+    InterlockedIncrement(&klbr_ad_ev_n); if (nz) InterlockedIncrement(&klbr_ad_ev_nz);
+    G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)); rules = G > 0xffff ? klh_rd32(G + 0x54) : 0;
+    if (rules <= 0xffff || rules != klbr_ad_rules) return;
+    slot = klh_rd32(self + 0x14);
+    if (slot < 12) InterlockedOr(&klbr_ad_slotmask, 1L << slot);
+    take = *cnt < 6;
+    if (!take) { if (slot >= 12 || (int)(now - klbr_ad_slot_at[slot]) < 1000) return; klbr_ad_slot_at[slot] = now; }      /* counters: one model sample per slot and second */
+    nrec = klh_rd32(rules + 0x354); crew = klh_rd32(rules + 0x348); fr = klh_rd32(rules + 0x34c); score = klh_rd32(rules + 0x5f8);
+    if (!kbr_ad_slot_ok(slot, nrec) || crew <= 0xffff || fr <= 0xffff || score <= 0xffff) { InterlockedIncrement(&klbr_ad_bad); if (klbr_ad_told++ < 3) klog("brain: arcade diag: evaluate %.3f but the slot/crew/score read badly (slot %lu, count %lu, crew %08lx, free %08lx, score %08lx): the GUESSed offsets may not fit the real Arcade rules", (double)r, (unsigned long)slot, (unsigned long)nrec, (unsigned long)crew, (unsigned long)fr, (unsigned long)score); return; }
+    klh_rd(crew + 0x7c * slot + 0x78, &sb, 1); klh_rd(fr + slot, &fb, 1); klh_rd(fr, &f0, 1); klh_rd(score + 0x45, &lv, 1);
+    L = kbr_level_clamp(lv); unused = kbr_ad_unused(fb, slot, nrec); unused0 = kbr_ad_unused(f0, 0, nrec);
+    own = (long)klh_rd32(score + 0x150 + 4 * slot); row0 = (long)klh_rd32(score + 0x150);
+    own_g = kbr_ad_money(own, unused); row0_g = kbr_ad_money(row0, unused0);
+    if (!(tun = klh_rd32((DWORD_PTR)KLH_VA(0x0168d7c0))) || !klh_rd(R = tun + 0x6ac + 0x70 * (DWORD)L, f, sizeof f) || !klh_rd(R + 0x24, st, sizeof st)) return;
+    sum = kbr_ad_sum(st, sb, own_g, row0_g); sum0 = kbr_ad_sum(st, sb, own_g, 0); pass = kbr_ad_pass(sum, f[8]);
+    klbr_ad_row0 = row0; klbr_ad_row0_un = unused0; klbr_ad_lvl = L; klbr_ad_limit = f[8]; klbr_ad_cap = (long)klh_rd32(R + 0x6c);
+    if (unused) InterlockedIncrement(&klbr_ad_unused_n);
+    InterlockedIncrement(&klbr_ad_smp); if (pass) InterlockedIncrement(&klbr_ad_smp_pass);
+    if (!nz && pass) InterlockedIncrement(&klbr_ad_zero_pass);
+    if (nz && !pass) InterlockedIncrement(&klbr_ad_nz_fail);
+    if (take && kbr_diag_take(cnt, 6))
+        klog("brain: arcade diag: evaluate %s %.3f: slot %lu soldier %08lx stage byte %d, bot row $%ld%s, row 0 $%ld%s (real rules), sum %.1f (stage term %.1f + bot %d + player %d) vs limit %.1f -> score %s; sum with row 0 = 0 would be %.1f; level %d, tuning cap %ld",
+             nz ? "NONZERO" : "zero", (double)r, (unsigned long)slot, (unsigned long)klh_rd32(self + 4), (int)sb, own_g, unused ? " (unused slot, game reads -1)" : "", row0_g, unused0 ? " (unused slot, game reads -1)" : "", (double)sum, (double)st[kbr_ad_stage_ix(sb)],
+             kbr_ad_term_u(own_g), 3 - kbr_ad_term_u(row0_g), (double)f[8], pass ? "PASSES" : "fails", (double)sum0, L, (long)klh_rd32(R + 0x6c));
+}
+static float __fastcall klbr_ad_ev(DWORD self, DWORD d)
+{
+    float r = ((klbr_evfn)(DWORD_PTR)klbr_ad_ev_org)(self, 0);      /* the original FIRST and unguarded: identical to stock, then read-only bookkeeping */
+    (void)d;
+    if (klbr_ad_on) klbr_ad_note(self, r);
+    return r;
+}
+static int klbr_ad_make_vt(void)
+{
+    DWORD org[KLBR_NSLOT], va = klbr_vt_va[2] + (DWORD)klh_delta, col = 0, *blk;
+    if (klbr_ad_vt) return 1;
+    if (!klh_rd(va, org, sizeof org) || org[0] != 0x004fe6f0u + (DWORD)klh_delta || org[2] != 0x00488eb0u + (DWORD)klh_delta || org[11] != 0x0079b7c0u + (DWORD)klh_delta) { klog("brain: arcade diag: the Traitor vtable %08lx does not read as {0x4fe6f0, run 0x488eb0, evaluate 0x79b7c0} (slots %08lx %08lx %08lx): ArcadeDiag off", (unsigned long)va, (unsigned long)org[0], (unsigned long)org[2], (unsigned long)org[11]); klbr_adiag = 0; return 0; }
+    klh_rd(va - 4, &col, 4);
+    if (!(blk = (DWORD *)VirtualAlloc(0, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE))) { klbr_adiag = 0; return 0; }
+    blk[0] = col; memcpy(blk + 1, org, sizeof org);
+    klbr_ad_run_org = org[2]; klbr_ad_ev_org = org[11]; blk[1 + 2] = (DWORD)(DWORD_PTR)klbr_ad_run_stub; blk[1 + 11] = (DWORD)(DWORD_PTR)klbr_ad_ev;
+    klbr_ad_vt = (DWORD)(DWORD_PTR)(blk + 1);
+    klog("brain: arcade diag: observer vtable copy %08lx made (slot 2 run -> counting stub -> %08lx, slot 11 evaluate -> observer -> %08lx; slot 0 = the game's destructor)", (unsigned long)klbr_ad_vt, (unsigned long)klbr_ad_run_org, (unsigned long)klbr_ad_ev_org);
+    return 1;
+}
+static void klbr_ad_summary(const char *why, DWORD now)
+{
+    int ns = 0, i; LONG m = klbr_ad_slotmask;
+    for (i = 0; i < 12; i++) if (m & (1L << i)) ns++;
+    klog("brain: arcade diag: round summary (%s, %lu s): rules %08lx level %d limit %.1f tuning cap %ld; Traitor tactics wrapped %ld; evaluate calls %ld (nonzero %ld, distinct slots %d); model samples %ld: score passes %ld, zero-although-score-passes (0.30 roll / cap / timer refused) %ld, nonzero-although-score-fails (model contradicted) %ld, unused-slot reads %ld, bad reads %ld; Traitor RUN calls %ld, marks (rec+0x79 bit 2 rose) %ld; real rules row 0 money $%ld (%s)",
+         why, (unsigned long)((now - klbr_ad_t0) / 1000u), (unsigned long)klbr_ad_rules, klbr_ad_lvl, (double)klbr_ad_limit, klbr_ad_cap, (long)klbr_ad_wrapped, (long)klbr_ad_ev_n, (long)klbr_ad_ev_nz, ns, (long)klbr_ad_smp, (long)klbr_ad_smp_pass, (long)klbr_ad_zero_pass, (long)klbr_ad_nz_fail, (long)klbr_ad_unused_n, (long)klbr_ad_bad,
+         (long)klbr_ad_run_n, (long)klbr_ad_marks, klbr_ad_row0, klbr_ad_row0_un < 0 ? "never read" : klbr_ad_row0_un ? "unused slot, the game reads -1" : "used slot");
+}
+static void klbr_ad_tick(int game_thread, DWORD now)
+{
+    DWORD sm, role = 0, mode = 0, G, rules = 0; int arcade, i;
+    if (!klbr_adiag || !game_thread || !klh_exe_ok || now - klbr_ad_last < 250u) return;
+    klbr_ad_last = now;
+    G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)); if (G > 0xffff) rules = klh_rd32(G + 0x54);
+    sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION));
+    /* Arcade = the Arcade-like roles of 0x7f6850 (role 0 / 1, mode 4; CERTAIN for the question, GUESS that offline Arcade really reads role 0 / 1 and mode 4 here) with real rules present */
+    arcade = sm > 0xffff && klh_rd(sm + 0x54, &role, 4) && klh_rd(sm + 0x5c, &mode, 4) && role <= 1 && mode == 4 && rules > 0xffff && rules != klbr_shadow;
+    if (!arcade) {
+        if (klbr_ad_rules) { klbr_ad_on = 0; klbr_ad_summary("round end", now); klbr_ad_rules = 0; klbr_ad_no = 0; memset(klbr_ad_seen, 0, sizeof klbr_ad_seen); }
+        return;
+    }
+    if (rules != klbr_ad_rules) {      /* a new rules object = a new round */
+        if (klbr_ad_rules) { klbr_ad_on = 0; klbr_ad_summary("round change", now); }
+        klbr_ad_ev_n = klbr_ad_ev_nz = klbr_ad_run_n = klbr_ad_marks = klbr_ad_wrapped = klbr_ad_unused_n = klbr_ad_smp = klbr_ad_smp_pass = klbr_ad_zero_pass = klbr_ad_nz_fail = klbr_ad_bad = klbr_ad_slotmask = 0;
+        klbr_ad_dg0 = klbr_ad_dg1 = klbr_ad_told = klbr_ad_no = klbr_ad_seeded = klbr_ad_hbn = 0; klbr_ad_row0 = 0; klbr_ad_row0_un = -1; klbr_ad_lvl = 0; klbr_ad_limit = 0; klbr_ad_cap = -9;
+        memset(klbr_ad_seen, 0, sizeof klbr_ad_seen); memset(klbr_ad_slot_at, 0, sizeof klbr_ad_slot_at); memset(klbr_ad_o, 0, sizeof klbr_ad_o);
+        klbr_ad_rules = rules; klbr_ad_t0 = klbr_ad_scan_at = klbr_ad_hb_at = now; klbr_ad_hb_ev = 0;
+        if (!klbr_ad_make_vt()) { klbr_ad_rules = 0; return; }
+        klog("brain: arcade diag: Arcade round starts (read only): role %lu mode %lu rules %08lx (vtable %08lx), no state is written except the vtable dword of each Traitor tactic", (unsigned long)role, (unsigned long)mode, (unsigned long)rules, (unsigned long)klh_rd32(rules));
+        klbr_ad_on = 1;
+    }
+    if (now - klbr_ad_scan_at >= 2000u && klbr_ad_vt) {      /* bots spawn over time: look for new Ally soldiers every 2 s */
+        DWORD actor[KLBR_MAX], snd[KLBR_MAX]; int n = klbr_scan(actor, snd, KLBR_MAX);      /* team 2 (Ally) only, as the online scan; GUESS: Arcade crew bots are team 2 (the ctor builds the tactics for teams 0 and 2 only) */
+        klbr_ad_scan_at = now;
+        for (i = 0; i < n; i++) {
+            DWORD obj = klh_rd32(snd[i] + 0x5f8), v; int k, known = 0;
+            if (obj < 0x10000) continue;
+            for (k = 0; k < klbr_ad_no; k++) if (klbr_ad_o[k].obj == obj) known = 1;
+            if (known || klbr_ad_no >= 32) continue;
+            v = klh_rd32(obj);
+            if (v != klbr_vt_va[2] + (DWORD)klh_delta) continue;      /* not (yet) a stock Traitor tactic */
+            if (!klbr_w32(obj, klbr_ad_vt)) continue;
+            klbr_ad_o[klbr_ad_no].obj = obj; klbr_ad_o[klbr_ad_no].snd = snd[i]; klbr_ad_no++; klbr_ad_wrapped++;
+            if (klbr_ad_wrapped <= 6) klog("brain: arcade diag: wrapped the Traitor tactic %08lx of soldier %08lx (actor %08lx)", (unsigned long)obj, (unsigned long)snd[i], (unsigned long)actor[i]);
+        }
+    }
+    if (klbr_ad_on) {      /* marks: bit 1 (value 2) of rec+0x79 rising */
+        DWORD crew = klh_rd32(rules + 0x348), nrec = klh_rd32(rules + 0x354);
+        if (crew > 0xffff && nrec <= 12)
+            for (i = 0; i < (int)nrec; i++) {
+                BYTE b = 0;
+                if (!klh_rd(crew + 0x7c * (DWORD)i + 0x79, &b, 1)) continue;
+                if (klbr_ad_seeded && kbr_ad_rose(klbr_ad_seen[i], b)) { klbr_ad_marks++; if (klbr_ad_marks <= 12) klog("brain: arcade diag: Traitor MARK %ld: slot %d (actor %08lx) rec+0x79 %02x, %lu s into the round, evaluate calls so far %ld", (long)klbr_ad_marks, i, (unsigned long)klh_rd32(crew + 0x7c * (DWORD)i + 4), (unsigned)b, (unsigned long)((now - klbr_ad_t0) / 1000u), (long)klbr_ad_ev_n); }
+                klbr_ad_seen[i] = b;
+            }
+        if (crew > 0xffff && nrec <= 12) klbr_ad_seeded = 1;
+        if (now - klbr_ad_hb_at >= 30000u) { klbr_ad_hb_at = now; if ((LONG)klbr_ad_ev_n != klbr_ad_hb_ev && klbr_ad_hbn < 20) { klbr_ad_hbn++; klbr_ad_hb_ev = klbr_ad_ev_n; klbr_ad_summary("running", now); } }
+    }
+}
+
 static void klbr_tick(int game_thread)
 {
     static DWORD last, told; DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0, actor[KLBR_MAX], snd[KLBR_MAX]; int n = 0, i, built = 0;
@@ -1061,6 +1193,7 @@ static void klbr_tick(int game_thread)
         int k = (int)klbr_rr_told++;
         klog("brain: realrun: swap-in #%d: goal(tactic) %08lx class %s ctx %08lx val %lu soldier %08lx thread %lu rec %d", k + 1, (unsigned long)klbr_rr_first[k].goal, klbr_cls_nm[klbr_rr_first[k].cls], (unsigned long)klbr_rr_first[k].ctx, (unsigned long)klbr_rr_first[k].val, (unsigned long)klbr_rr_first[k].snd, (unsigned long)klbr_rr_first[k].tid, klbr_find(klbr_rr_first[k].snd) ? klbr_find(klbr_rr_first[k].snd)->rec : -1);
     }
+    klbr_ad_tick(game_thread, now);      /* ArcadeDiag: read only, its own 250 ms clock, before the host-round gate */
     if (!klbr_on || !game_thread || !klh_exe_ok || now - last < 1000) return;
     last = now;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !KLH_SM_VT_OK(klh_rd32(sm))) { klbr_tr_restore_all("the session is gone"); return; }
@@ -1100,6 +1233,8 @@ static void klbr_init(void)
     klbr_boardwin = (int)GetPrivateProfileIntA("Brain", "BoardWinMs", 2000, klh_ini); if (klbr_boardwin < 500) klbr_boardwin = 500; if (klbr_boardwin > 60000) klbr_boardwin = 60000;
     klbr_level = kbr_level_clamp((int)GetPrivateProfileIntA("Brain", "OnlineBrainLevel", 6, klh_ini));
     klbr_on = klbr_probe || klbr_build;
+    klbr_adiag = klbr_key("ArcadeDiag");
+    if (klbr_adiag) klog("brain: ArcadeDiag=1 (recommended off; test runs only): in an OFFLINE Arcade round the real Traitor evaluate / RUN are observed (counts, marks, first 6 zero + 6 nonzero answers with their score terms); the only write is the vtable dword of each Arcade Traitor tactic, pointing at a DLL copy that calls the originals");
     if (klbr_key("Loot") && !klbr_build) klog("brain: Loot needs Build=1: off");
     if (klbr_key("OnlineBrainBridge") && !klbr_loot) klog("brain: OnlineBrainBridge needs Build=1 and Loot=1: off");
     if (klbr_key("OnlineBrainBoard") && !klbr_build) klog("brain: OnlineBrainBoard needs Build=1: off");

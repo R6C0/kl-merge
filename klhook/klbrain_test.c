@@ -243,6 +243,17 @@ int main(void)
         CHECK(!kbr_tr_capped(1, 2) && kbr_tr_capped(2, 2) && kbr_tr_capped(5, 2) && !kbr_tr_capped(9, 0), "cap: reached at max, never with max 0");
         CHECK(kbr_tr_cap_word(1, 2) == 0 && kbr_tr_cap_word(2, 2) == 0x7ffful && kbr_tr_cap_word(9, 0) == 0, "cap word: 0 below the cap or off, 0x7fff at the cap");
     }
+    {   /* ArcadeDiag helpers */
+        float st[4] = { 0, 0, 2, 3 };
+        CHECK(kbr_ad_slot_ok(0, 12) && kbr_ad_slot_ok(11, 12) && !kbr_ad_slot_ok(12, 12) && !kbr_ad_slot_ok(0, 0), "ad: slot range");
+        CHECK(!kbr_ad_unused(0, 3, 12) && kbr_ad_unused(1, 3, 12) && kbr_ad_unused(0, 12, 12), "ad: unused = free byte set or slot >= count");
+        CHECK(kbr_ad_money(500, 0) == 500 && kbr_ad_money(500, 1) == -1, "ad: unused slot reads -1");
+        CHECK(kbr_ad_term_u(-1) == 3 && kbr_ad_term_u(0) == 0 && kbr_ad_term_u(750000) == 1 && kbr_ad_term_u(1250000) == 3, "ad: unsigned terms, -1 = 3");
+        CHECK(kbr_ad_stage_ix(3) == 3 && kbr_ad_stage_ix(4) == 0 && kbr_ad_stage_ix(-1) == 0, "ad: stage > 3 -> index 0");
+        CHECK(kbr_ad_sum(st, 3, 800000, 0) == 7.0f && kbr_ad_sum(st, 3, -1, 0) == 9.0f && kbr_ad_sum(st, 3, 0, -1) == 3.0f && kbr_ad_sum(st, 9, 0, 0) == 3.0f, "ad: sums incl. -1 rows");
+        CHECK(kbr_ad_pass(7.0f, 7.0f) && !kbr_ad_pass(6.9f, 7.0f) && kbr_ad_pass(9.0f, 7.0f), "ad: pass is >= the limit");
+        CHECK(kbr_ad_rose(0, 2) && !kbr_ad_rose(2, 3) && !kbr_ad_rose(1, 1) && kbr_ad_rose(1, 3), "ad: mark = bit 1 rising");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }

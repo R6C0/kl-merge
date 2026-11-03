@@ -338,4 +338,17 @@ static int kbr_tr_capped(int kills, int max) { return max > 0 && kills >= max; }
 /* optional hard cap on turns per round through [shadow+0x338] (0x43ffb0 tests `[rules+0x338] < tuning[R+0x6c]`): 0 = leave (cap off or still room), 0x7fff = block every further roll once `turned` reached `cap` */
 static unsigned long kbr_tr_cap_word(int turned, int cap) { return cap > 0 && turned >= cap ? 0x7ffful : 0ul; }
 
+/* ArcadeDiag (read-only reference numbers from stock Arcade). The game's own money read, vt[0xe0] 0x6f86c0, answers -1 (0xffffffff) for an unused slot and the threshold compares are UNSIGNED (jae at 0x79b8e9..0x79b923,
+   traitor_cap_1103.md refute item 6), so an unused slot scores own term 3 / other term 0. GUESS: the "unused" test is `free byte != 0 or slot >= count` as the shadow block assumes ([rules+0x34c] bytes, [rules+0x354] count) */
+static int kbr_ad_slot_ok(unsigned long slot, unsigned long nrec) { return slot < nrec && slot < 64ul; }
+static int kbr_ad_unused(unsigned freebyte, unsigned long slot, unsigned long nrec) { return slot >= nrec || freebyte != 0; }
+static long kbr_ad_money(long raw, int unused) { return unused ? -1L : raw; }
+static int kbr_ad_term_u(long m) { unsigned long u = (unsigned long)m; return u >= 1250000ul ? 3 : u >= 1000000ul ? 2 : u >= 750000ul ? 1 : 0; }
+static int kbr_ad_stage_ix(int stage) { return stage >= 0 && stage <= 3 ? stage : 0; }      /* jump table 0x79b970: stage > 3 takes the stage-0 term (R+0x24) */
+static float kbr_ad_sum(const float *st4, int stage, long bot, long player) { return st4[kbr_ad_stage_ix(stage)] + (float)kbr_ad_term_u(bot) + (float)(3 - kbr_ad_term_u(player)); }
+/* the evaluate answers 1.0 iff sum >= limit (fcompp at 0x79b956: equal also passes, refute item 5) */
+static int kbr_ad_pass(float sum, float limit) { return !(sum < limit); }
+/* a Traitor mark: bit 1 of rec+0x79 rose since the last poll (seen = the last polled byte) */
+static int kbr_ad_rose(unsigned seen, unsigned now_b) { return (now_b & 2u) && !(seen & 2u); }
+
 #endif /* KLBRAIN_LOGIC_H */
