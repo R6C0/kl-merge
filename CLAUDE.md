@@ -68,14 +68,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~11:50 - [c9] bs15 PASS (skip log: both humans 'empty body', the crew record holds the CLIENT at +0, body = [[rec]+0x378]; fixed 547f9a263).
+bs16: the Sense feed WORKS (2 of 2 humans in the marked bot's known list, both maps). DD05 PASS. DM03 client FAIL: the fed traitor took car #0
+cover, whose points are SPARE on the client even with ClientBuild -> asserts 0x6567e8/0x845a8b, then d3d9 death. All bench kits lacked the live
+ini's AssertSoft line; bs17 (SenseSeen = MarkSeen 0x4880d0, 4906688b0, off by default) carries it and is running.
+
 2026-11-03 ~11:05 - [c9] bs14 PASS (DM03 + DD05, 4 seats, 0 faults) with CandLog + Sense (4f3e17a9e): a marked bot's known list B=[soldier+0x698]
 held only police (type-1, up to 9), slot 111 got 0 humans, and Sense never fed (its only log needed a fed entry). 72fbea75d adds a skip-reason log
 and stops klbr_hl_body excluding humans (real seat k collided with shadow bot rec k). bs15 (same maps, out_tdiag_1103c_test) running.
-
-2026-11-03 ~10:15 - [c9] bs13 PASS (DM03 + DD05, 4 seats, 0 faults) with the traitor probe + OnlineBrainTraitorDamage (e97d8651f, both off by default).
-Finding: the slot-15 gate byte is set and slot 15 is our wrapper, yet it is never entered; the marked bot's target is only ever a cop (DD05) or nothing (DM03),
-and slot 111 has NEVER been called with a human candidate in bs11-bs13. So the gap is upstream: the marked bot's candidate list holds no human.
-Workflow w8ykuqnkv (worktree C:\kl_wt\tcand): where the candidates come from + a census probe + an off-by-default fix if a lever is found.
 
 2026-11-03 ~10:20 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)
