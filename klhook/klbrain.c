@@ -1049,18 +1049,18 @@ typedef float (__fastcall *klbr_scfn)(DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, 
 /* bs17 (11-03): with FireLine=2 every slot-111 call of the marked bot came NESTED in slot 113's swap (klbr_depth > 0), so the score was never logged
    (88 human candidates, target stayed 0). READ ONLY: after the untouched original, log the score and slot 111's gate inputs (re/traitor_slot111_gates_1103.md
    items 6-11a): bit10 of [[cand+4]+0x3c], [cand+0x2721], [cand+0x2723], [cand+0x2728], [cand+0xad4]==cand, the cand's entry flags in B=[self+0x698], and
-   [rules+0x54] / [rules+0x5c] of [G+0x54] as it is during the call (GUESS: the swapped-in object; 11a needs [+0x5c]==4). Shares the 8-a-round budget. */
+   the session's role [sm+0x54] / mode [sm+0x5c] (wwr26esf3: 11a's 0x7f6850 reads the SESSION [0x168e598], not the rules; inside the swap expect 0 / 4). Shares the 8-a-round budget. */
 static void klbr_ta_gatelog(DWORD self, DWORD a1, float r, const char *path)
 {
-    DWORD G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)), rules = G > 0xffff ? klh_rd32(G + 0x54) : 0, B = klh_rd32(self + 0x698), w4 = klh_rd32(a1 + 4), f3c = 0, cnt = 0, fl = 0xffffffff, k;
+    DWORD G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)), rules = G > 0xffff ? klh_rd32(G + 0x54) : 0, sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION)), B = klh_rd32(self + 0x698), w4 = klh_rd32(a1 + 4), f3c = 0, cnt = 0, fl = 0xffffffff, k;
     unsigned char b21 = 0xff, b23 = 0xff, b28 = 0xff; float nt = 0.0f;
     if (w4 > 0xffff) f3c = klh_rd32(w4 + 0x3c);
     klh_rd(a1 + 0x2721, &b21, 1); klh_rd(a1 + 0x2723, &b23, 1); klh_rd(a1 + 0x2728, &b28, 1);
     if (B > 0xffff && klh_rd(B, &cnt, 4) && cnt <= 10) for (k = 0; k < cnt; k++) if (klh_rd32(B + 4 + 0x14 * k + 4) == a1) { fl = klh_rd32(B + 4 + 0x14 * k); break; }
     klh_rd((DWORD_PTR)KLH_VA(KLBR_TA_NOTARGET), &nt, 4); klbr_ta_sc_n++;
-    klog("brain: traitor arcade: marked soldier %08lx scored human %08lx: %.2f ('no target' = %.2f: %s; %s) gates: bit10 %d, +2721 %u, +2723 %u, +2728 %u, +ad4==cand %d, B entry flags %08lx (ffffffff = not in B, count %lu), rules %08lx +54 %lu +5c %lu (11a needs 4)",
+    klog("brain: traitor arcade: marked soldier %08lx scored human %08lx: %.2f ('no target' = %.2f: %s; %s) gates: bit10 %d, +2721 %u, +2723 %u, +2728 %u, +ad4==cand %d, B entry flags %08lx (ffffffff = not in B, count %lu), shadow rules %08lx; session role %lu mode %lu (11a reads the SESSION [0x168e598]: needs role 0/1 and mode 4)",
          (unsigned long)self, (unsigned long)a1, (double)r, (double)nt, r == nt ? "refused" : "targetable", path, (int)((f3c >> 10) & 1), b21, b23, b28, klh_rd32(a1 + 0xad4) == a1,
-         (unsigned long)fl, (unsigned long)cnt, (unsigned long)rules, rules > 0xffff ? (unsigned long)klh_rd32(rules + 0x54) : 0ul, rules > 0xffff ? (unsigned long)klh_rd32(rules + 0x5c) : 0ul);
+         (unsigned long)fl, (unsigned long)cnt, (unsigned long)rules, sm > 0xffff ? (unsigned long)klh_rd32(sm + 0x54) : 0ul, sm > 0xffff ? (unsigned long)klh_rd32(sm + 0x5c) : 0ul);
 }
 static float __fastcall klbr_w_score(DWORD self, DWORD edx, DWORD a1, DWORD a2, DWORD a3, DWORD a4, DWORD a5, DWORD a6, DWORD a7)      /* thiscall + 7 stack args, ret 0x1c: a __fastcall has the same stack layout */
 {
@@ -1288,8 +1288,27 @@ static void klbr_hl_pump(DWORD now)
         if (have && klbr_bot_pos(e->actor, bp, &alive) && klh_rd(tgt + 0x460, tp, 12) && kle_ok3(tp)) dist = kle_dist(bp, tp) / 100;
         body = klbr_dm[i].body; bok = body > 0xffff && klh_pvt(body) == 0x00bb45f4u && klud_idx(body) == e->rec;
         if (bok) { if (klh_rd(body + 0x2723, &x, 1)) b23 = x; if (klh_rd(body + 0x2726, &x, 1)) b26 = x; }
-        klog("brain: traitor target: bot %d (soldier %08lx, rec %d) target %08lx class %s dist %.1f m (clock %ld stamp %ld valid %d); own body %08lx +0x2723 %d +0x2726 %d (-1 = body unknown / unreadable)",
-             i, (unsigned long)e->snd, e->rec, (unsigned long)(have ? tgt : 0), kbr_tgt_name(cls), dist, (long)clk, (long)stamp, have, (unsigned long)(bok ? body : 0), b23, b26);
+        klog("brain: traitor target: bot %d (soldier %08lx, rec %d) last aggressor %08lx (raw %08lx) class %s dist %.1f m (clock %ld stamp %ld valid %d); own body %08lx +0x2723 %d +0x2726 %d (-1 = body unknown / unreadable)",
+             i, (unsigned long)e->snd, e->rec, (unsigned long)(have ? tgt : 0), (unsigned long)tgt, kbr_tgt_name(cls), dist, (long)clk, (long)stamp, have, (unsigned long)(bok ? body : 0), b23, b26);
+        {   /* wwr26esf3 (capstone, 11-03): +0x708/+0x70c is the LAST AGGRESSOR (0x506f50), not the selection. 0x767510 (entered via thunk 0x47a0f0, edi = B = [soldier+0x698])
+               stores its pick with 0x8bd420 at 0x767eee into the holder H = [B+0x154]+0xa8 (= soldier+0xa8 if [B+0x154] == soldier): +0 flags, +4 entity ptr (GUESS, only +8 is
+               confirmed by cmp [H+8],0 at 0x767555), +8 handle, soldier+0xbc entry time; 0x767f77 clears it when nothing wins. [soldier+0x658] = ZAttackTarget goal (ctor 0x6ab81b),
+               fires on its own handle [goal+0x14], set by Attack slot 83 0x831850 only when [[soldier+0x5ac]+8] is 0 or 4. B+0x180 rescan time, +0x184 force flag, +0x18c hold time. */
+            DWORD B = klh_rd32(e->snd + 0x698), so = B > 0xffff ? klh_rd32(B + 0x154) : 0, hf = 0, hp = 0, hh = 0, ht = 0, g = 0, gh = 0, s5ac = 0, st = 0xffffffff, b180 = 0, b184 = 0, b18c = 0;
+            int hpl, htag, hai, hcls; BYTE hpol = 0;
+            if (so > 0xffff) { hf = klh_rd32(so + 0xa8); hp = klh_rd32(so + 0xac); hh = klh_rd32(so + 0xb0); ht = klh_rd32(so + 0xbc); }
+            if ((g = klh_rd32(e->snd + 0x658)) > 0xffff) gh = klh_rd32(g + 0x14);
+            if ((s5ac = klh_rd32(e->snd + 0x5ac)) > 0xffff) st = klh_rd32(s5ac + 8);
+            if (B > 0xffff) { b180 = klh_rd32(B + 0x180); b184 = klh_rd32(B + 0x184); b18c = klh_rd32(B + 0x18c); }
+            hpl = hp > 0xffff && klh_pvt(hp) == 0x00bb45f4u;
+            htag = hp > 0xffff && (klbr_hl_body(hp) != 0 || klbr_hl_find(hp) != 0);
+            hai = hp > 0xffff && !hpl && (klh_avt(hp) == 0x00bb3bacu || klh_svt(hp) == 0x00bd0954u);
+            if (hpl) klh_rd(hp + 0x2723, &hpol, 1);
+            hcls = kbr_tgt_class(hp > 0xffff, hpl, htag, hpol != 0, hai);
+            klog("brain: traitor target: bot %d HOLDER (B %08lx, [B+0x154] %08lx %s soldier) flags %08lx ptr %08lx class %s handle %08lx entry %ld; goal %08lx handle %08lx; state [[+0x5ac]+8] %ld (Attack sets the goal only at 0 / 4); +0x654 %08lx +0x720 %08lx; B rescan %ld force %lu hold %ld",
+                 i, (unsigned long)B, (unsigned long)so, so == e->snd ? "==" : "!=", (unsigned long)hf, (unsigned long)hp, kbr_tgt_name(hcls), (unsigned long)hh, (long)ht, (unsigned long)g, (unsigned long)gh,
+                 (long)st, (unsigned long)klh_rd32(e->snd + 0x654), (unsigned long)klh_rd32(e->snd + 0x720), (long)b180, (unsigned long)b184, (long)b18c);
+        }
     }
     for (k = 0; k < 5; k++) {      /* A.3 */
         float h1 = 0.0f; DWORD v = klbr_hl.hp[k].victim, dt;
