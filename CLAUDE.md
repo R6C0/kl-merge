@@ -68,15 +68,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~15:45 - [c9] bs26 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; EntryFix + AttackHandle, out_tef_1103o). ZRunToPosShootingTask ran at the human with holder flags 011
+(DM03 163, DD05 307 slot-113 calls) yet hp 550 flat (19 + 20 reads); EntryFix's gate never passed (all counts 0). Every call was case A (current goal != g), so no freeze seen.
+wuwffuc4b: nothing resets goal state; the arbiter re-pushes only on a winner change. dc682828e: OnlineBrainTraitorRestart (reviewed by w4em63f8z) + EntryFix gate dump -> bs27 running;
+wqb7g1pxd traces why the child task does no damage.
+
 2026-11-03 ~15:15 - [c9] bs25 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; guarded AttackHandle on both maps, out_tag_1103n). Guards never skipped (stale 0).
 ZAttackTarget runs once (DM03: a child task ran, stack 3 top state 2), ends within ~2 s, and every later call leaves it terminated (state 4 -> 4) yet current:
 re-adding does not restart it. Human hp flat 15/15. Workflows w0bnwus0v (B-list entry, child fire path) and wuwffuc4b (goal restart) running.
-
-2026-11-03 ~14:55 - [c9] bs24 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_tah_1103m). DM03 (CoverFire, handle 0): 7 calls, CoverFire current and
-sometimes running (state 2), human hp 550 -> 550 in 6/6 reads. DD05 (AttackHandle): 10 calls, ZAttackTarget +0x658 becomes current but is terminated (0 -> 4) within 0.6 s;
-once a child task ran (stack 3, top state 2); hp flat 8/8. The bench human idled ~42 m away and 6 m higher (sight GUESS). +0x88 stays 1, Idle 4.
-wedrgngwi: the handle kind is right, but for a HUMAN target the tick has no direct shot; it only runs the ZRunToPosShootingTask child, whose fire test reads holder flags
-rewritten from the bot's B-list entry (fresh = 0), so HolderFix is lost. A stale handle AVs at 0x4f44a7: guards added (re-resolve the handle, +0x658 idle) -> bs25.
 
 2026-11-03 ~10:20 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)

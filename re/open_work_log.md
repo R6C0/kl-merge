@@ -1,3 +1,8 @@
+2026-11-03 ~15:45 - [c9] bs26 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; EntryFix + AttackHandle, out_tef_1103o). ZRunToPosShootingTask ran at the human with holder flags 011
+(DM03 163, DD05 307 slot-113 calls) yet hp 550 flat (19 + 20 reads); EntryFix's gate never passed (all counts 0). Every call was case A (current goal != g), so no freeze seen.
+wuwffuc4b: nothing resets goal state; the arbiter re-pushes only on a winner change. dc682828e: OnlineBrainTraitorRestart (reviewed by w4em63f8z) + EntryFix gate dump -> bs27 running;
+wqb7g1pxd traces why the child task does no damage.
+
 2026-11-03 ~15:15 - [c9] bs25 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; guarded AttackHandle on both maps, out_tag_1103n). Guards never skipped (stale 0).
 ZAttackTarget runs once (DM03: a child task ran, stack 3 top state 2), ends within ~2 s, and every later call leaves it terminated (state 4 -> 4) yet current:
 re-adding does not restart it. Human hp flat 15/15. Workflows w0bnwus0v (B-list entry, child fire path) and wuwffuc4b (goal restart) running.

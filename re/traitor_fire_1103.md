@@ -161,3 +161,8 @@ Follows re/traitor_handoff_1103.md. Disassembly was read with capstone. Three pa
   fire test (0x4f4da6 / 0x4f4db1) fails on flags 0. Case B ([s+0x74] == g after a run): empty stack, every later arbiter call early-returns, Idle (0x64) cannot beat g (0x96): FROZEN bot.
 - Levers: EntryFix (bs26) for the fire test; OnlineBrainTraitorRestart (out_trs_1103p, UNTESTED): clear [s+0x74] before our slot-83 call when it equals g (0x651d5b pattern), and an unfreeze
   (g state 4 + empty stack + [s+0x74] == g -> vt+0x1b4, [s+0x74]=0, arbiter(1)) so Idle runs again.
+
+## bs26 (out_tef_1103o, EntryFix + AttackHandle on DM03 + DD05): PASS 4 seats, 0 asserts, 0 faults
+- ZRunToPosShootingTask (vt 0xbd0ba4) state 2 on the stack with holder = the human, holder flags 011: DM03 178 slot-113 calls (163 human holder), DD05 590 (307). Human hp 550 flat (DM03 19, DD05 20 reads).
+- EntryFix round total: set 0, kept 0, no entry 0, stale 0 = the gate (+0x658 vt 0xbd1104, current, state <= 2, handle != 0) never passed. bs27 dumps the gate inputs, stack and B list per child task.
+- Every call: "current goal X -> g" with X != g (case A of wuwffuc4b): each call re-runs g; it ends at once again (state 4 on the next call).
