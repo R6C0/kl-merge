@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~04:20 - [c9] bs5 PASS (DM03 + DD05, 4 seats, 0 faults): StackClaims works: DM03 watchdog take-backs 12 -> 0, 14 grabs, $6.82M paid,
+7/7 boarded (still by the hook van path). 7c78417e8 BoardStage (real Board tactic boards; review fixes in). DD05: 0 real grabs because cops carry all loot
+and slot 202 skips type-1 DROPS (Arcade's 0x8b94d0 walks the drop list too) -> DropCands in workflow w61ao6bnq. bs6 (BoardStage+StackClaims, dll
+out_brain7_1103g_test) chained on "end pq6".
+
 2026-11-03 ~04:00 - [c9] bs4 PASS (DM03 + DD05, 4 seats, 0 faults): FIRST real Arcade looting online. DM03: real Loot RUN + DLL pump = 17 grabs, $5.97M
 paid, van called by a bot, 7/7 boarded with $7M. Gaps: watchdog took 12 bots back (slot 202 gave all bots the same nearest stack) -> 5e785adcf StackClaims;
 boarding still by the hook van path, real Board RUN too late (stage byte mirrors 'aboard' only) -> BoardStage in a workflow; DD05 loot evaluate barely runs
@@ -77,11 +82,6 @@ boarding still by the hook van path, real Board RUN too late (stage byte mirrors
 811 ms -> steps open FABuyWeaponsNewCategory (+310 ms, slot -6 cat -4) and FABuyWeaponsNewWeapon (+310 ms) -> 'page SHOWN' on all four seats, ~7 s after
 the press (was ~13.6 s with scripted RETURNs). Stack nests like RETURN (New > Category > Weapon). Install kit C:\kl_build_1024\pq_1103f_install (SHIP from
 79ce4c7c4 + PageQueue/AutoOpen/AutoOpenSteps/HintEveryShop + ScoreboardNextHint) runs after "end bs4" (start/end pqinst).
-
-2026-11-03 ~03:20 - [c9] bs3 SAFE PASS (4 seats, 0 asserts/faults): RealRun runs the REAL Arcade Loot RUN online for the first time. DM03 host 13776 RUN +
-163 EXIT resumes, swap-ins = swap-outs, 0 leaks/mismatches, mode!=4 0, [tac+0x10] 0 (71d099212 judge guards in). DD05 only 37 resumes. Behaviour NOT yet
-Arcade: grade w2vymslb2 = the hand-off never opened (evaluate picks a stack at +0x2c but +0x28 = 0), so puppeteer + real RUN steered the same bots: 0 grabs,
-0 boarded. 8b9a29bd2 opens it from the chosen stack, shows Loot only when handed, restamps per live RUN slice. bs4 (DM03 + DD05, BoardReal both) on "end pq5".
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

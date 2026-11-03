@@ -1,3 +1,8 @@
+2026-11-03 ~04:20 - [c9] bs5 PASS (DM03 + DD05, 4 seats, 0 faults): StackClaims works: DM03 watchdog take-backs 12 -> 0, 14 grabs, $6.82M paid,
+7/7 boarded (still by the hook van path). 7c78417e8 BoardStage (real Board tactic boards; review fixes in). DD05: 0 real grabs because cops carry all loot
+and slot 202 skips type-1 DROPS (Arcade's 0x8b94d0 walks the drop list too) -> DropCands in workflow w61ao6bnq. bs6 (BoardStage+StackClaims, dll
+out_brain7_1103g_test) chained on "end pq6".
+
 2026-11-03 ~04:00 - [c9] bs4 PASS (DM03 + DD05, 4 seats, 0 faults): FIRST real Arcade looting online. DM03: real Loot RUN + DLL pump = 17 grabs, $5.97M
 paid, van called by a bot, 7/7 boarded with $7M. Gaps: watchdog took 12 bots back (slot 202 gave all bots the same nearest stack) -> 5e785adcf StackClaims;
 boarding still by the hook van path, real Board RUN too late (stage byte mirrors 'aboard' only) -> BoardStage in a workflow; DD05 loot evaluate barely runs

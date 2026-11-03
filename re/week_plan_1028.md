@@ -111,6 +111,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
 - 11-03 03:20 c9: bs3 SAFE PASS 4 seats with the guarded RealRun dll (71d099212): real Arcade Loot RUN resumes online (DM03 13776, DD05 37), swaps balanced, 0 leaks; bots not yet looting (grabs 0). Grading workflow w2vymslb2 -> bs4.
+- 11-03 04:20 c9: bs5 PASS 4 seats, 0 faults: StackClaims DM03 watchdog 12 -> 0, 14 grabs $6.82M, 7/7 boarded; 7c78417e8 BoardStage; DD05 drops-only -> DropCands workflow; bs6 on "end pq6"
 - 11-03 04:00 c9: bs4 PASS 4 seats, 0 faults: FIRST real Arcade looting online (DM03: 17 grabs, $5.97M paid, van called, 7/7 boarded); 5e785adcf StackClaims vs 12 watchdog take-backs; BoardStage in a workflow; bs5 queued
 - 11-03 02:50 c9: bs2 SAFE PASS (DM03 + DD05, the bs1 crash setup no longer crashes) but ArcadePick 1/0 orders (evaluate = nearest, same stack for all, read before the first evaluate: dead end).
   RealRun 06101ed05 (longjmp IAT thunk, real Loot/Board RUN online, off) -> bench bs3 after ce's pq4. Workflow realrun-shadow-coverage predicts what the real RUN reads from the shadow. nm1 PASS (lobby name = load).
