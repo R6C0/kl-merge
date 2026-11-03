@@ -947,7 +947,7 @@ static void klbr_cand_summary(void)      /* round end, next to the 'traitor hits
    whose team bit is not in [[bot team record]+0xc]. We call B::NoteEntity 0x7bd720 ourselves (thiscall: ecx = B = [soldier+0x698], one stack arg = the entity HANDLE, callee pops 4 = a fastcall with edx unused)
    for each live human ZFFPlayer body, every [Brain] OnlineBrainTraitorSenseMs (default 500) per wrapped marked bot. The handle is 0x6ece90(body) (fastcall, ecx = entity; the call klshop.c makes): 0x5a8140 hands its
    argument to 0x8ccde0 = handle -> entity, so NoteEntity takes a handle (read from code). A re-note of a known entity only refreshes its timestamp [entry+0xc] (0x7bd806, read from code): no duplicates.
-   Human bodies: the crew records [rules+8] + 0x74*i, in use when byte [rules+0xc]+i == 0, ZFFPlayer at +0x378 (klucc_find_me; GUESS that this holds for remote bodies on the host), minus tagged bots' bodies and police (+0x2723).
+   Human bodies: the crew records [rules+8] + 0x74*i, in use when byte [rules+0xc]+i == 0, client struct at +0, ZFFPlayer at [client+0x378] (bs15: +0x378 on the record itself is empty; GUESS that this holds for remote bodies on the host), minus tagged bots' bodies and police (+0x2723).
    UNDO: the only thing written is the game's own entries in B; feeding stops on unmark, death, round end, tag change (the klbr_ta_restore paths); the entries expire through the game's prune 0x51e480
    (GUESS: within seconds; cap 10 entries). Effects of NoteEntity beyond the list (byte [soldier+0x184], timestamps) were NOT traced: GUESS harmless. The rest of NoteEntity (past 0x7bd83c) was not read. ---- */
 static int klbr_snon, klbr_snms = 500, klbr_sn_flt, klbr_sn_fed, klbr_sn_logged, klbr_sn_unfed, klbr_sn_dlog; static DWORD klbr_sn_dat;      /* + skip-reason log lines this round, last one's tick */      /* on; interval; faults this round (3 = off for the round); NoteEntity calls this round; log lines; entries taken back out */
@@ -1013,7 +1013,8 @@ static void klbr_sense_feed(int i, DWORD now)      /* game thread, depth 0, host
     for (k = 0; k < (int)cnt && n < 16; k++) {
         BYTE used = 1, pol = 0; DWORD p; float hp = 1.0f, tp[3];
         if (!klh_rd(freeb + k, &used, 1) || used) { c_used++; continue; }
-        if (!(p = klh_rd32(recs + 0x74 * (DWORD)k + 0x378)) || p < 0x10000) { c_null++; continue; }
+        { DWORD cl = klh_rd32(recs + 0x74 * (DWORD)k); p = cl > 0xffff ? klh_rd32(cl + 0x378) : 0; }      /* bs15: the record holds the CLIENT struct, the ZFFPlayer is [client+0x378] (klonline_read.c G1, klroundkeep.c); rec+0x378 read empty for both humans */
+        if (p < 0x10000) { c_null++; continue; }
         klh_rd(p + 0x2723, &pol, 1);
         if (klbr_hp_read(p, &hp) && hp <= 0.0f) { c_dead++; continue; }      /* a dead body is not fed (unreadable health = fed) */
         if (klh_pvt(p) != 0x00bb45f4u) { c_cls++; continue; }
