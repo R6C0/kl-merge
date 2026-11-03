@@ -206,7 +206,7 @@ static DWORD klbr_rrt[KLBR_RRT]; static BYTE klbr_rrc[KLBR_RRT]; static volatile
 static void (__cdecl *klbr_real_longjmp)(void *, int);
 static volatile LONG klbr_rr_sw;        /* 1 = the thunk has the shadow swapped in (game thread only) */
 static DWORD klbr_rr_G, klbr_rr_sm, klbr_rr_rules, klbr_rr_role;      /* what the thunk saved */
-static volatile LONG klbr_rr_in, klbr_rr_out, klbr_rr_leak, klbr_rr_veh, klbr_rr_mis, klbr_rr_foreign, klbr_rr_nested, klbr_rr_val[3], klbr_rr_told, klbr_rr_leak_told, klbr_rr_mode, klbr_rr_t10;
+static volatile LONG klbr_rr_in, klbr_rr_out, klbr_rr_leak, klbr_rr_veh, klbr_rr_mis, klbr_rr_foreign, klbr_rr_nested, klbr_rr_val[3], klbr_rr_told, klbr_rr_leak_told, klbr_rr_mode, klbr_rr_t10, klbr_rr_hand_ev, klbr_rr_hand_run;
 static struct { DWORD goal, ctx, val, snd, tid; int rec, cls; } klbr_rr_first[8];      /* the first swap-ins, logged by the tick */
 
 static int klbr_rr_match(DWORD buf, DWORD *tac, int *cls)      /* buf is the live ctx [tac+0xc] of a Loot / Board tactic we built (read live: 0x63c75c frees and reuses the ctx) */
@@ -235,6 +235,7 @@ static void klbr_rr_swap_in(DWORD ctx, int val, DWORD tac, int cls)
     klbr_rr_G = G; klbr_rr_sm = sm; klbr_rr_rules = rules; klbr_rr_role = role;
     *(volatile DWORD *)(DWORD_PTR)(G + 0x54) = klbr_shadow; *(volatile DWORD *)(DWORD_PTR)(sm + 0x54) = 0;
     klbr_rr_sw = 1; k = klbr_rr_in++; klbr_rr_val[val == 2 ? 2 : 1]++;
+    if (val == 1) { struct klbr_s *e = klbr_find(*(volatile DWORD *)(DWORD_PTR)(tac + 4)); if (e && e->state == 1) { if (cls == 0) e->nzAt = GetTickCount() | 1u; else e->bnzAt = GetTickCount() | 1u; klbr_rr_hand_run++; } }      /* bs3 judge: a live RUN slice keeps its bot handed over (own table only, no game call); the 8 s stall watchdog still takes a bot back that does not move */
     if (k < 8) { klbr_rr_first[k].goal = tac; klbr_rr_first[k].ctx = ctx; klbr_rr_first[k].val = (DWORD)val; klbr_rr_first[k].tid = tid; klbr_rr_first[k].cls = cls; klbr_rr_first[k].snd = *(volatile DWORD *)(DWORD_PTR)(tac + 4); }
 }
 static void __cdecl klbr_w_longjmp(void *buf, int val)      /* the exe's `call [0xb10370]` lands here with the real longjmp's arguments; the real one is ALWAYS called last and never returns */
@@ -319,7 +320,7 @@ static void klbr_fault(int cls, struct klbr_s *e, const char *what)
 static int klbr_revoked(const struct klbr_s *e, DWORD now) { return e->flt >= 2 || (e->wUntil && (long)(now - e->wUntil) < 0); }
 static float klbr_ev(int cls, DWORD self)
 {
-    float r = 0.0f; int flt = 0, id = cls * 3 + 2; struct klbr_s *e = 0;
+    float r = 0.0f; int flt = 0, id = cls * 3 + 2, stamped = 0; struct klbr_s *e = 0;
     klbr_hit(id);
     if (klbr_wanted(cls, self, &e)) {
         int told_now = klbr_sw_told < 4 && cls == 0;
@@ -331,7 +332,10 @@ static float klbr_ev(int cls, DWORD self)
     if (r > 0.0f) {
         InterlockedIncrement(&klbr_ev_nz[cls]); if (r > klbr_ev_max[cls]) klbr_ev_max[cls] = r;
         if (e) {
-            if (cls == 0 && (!klbr_bridge || klh_rd32(self + 0x28))) e->nzAt = GetTickCount() | 1u;      /* [tactic+0x28] = the chosen TRIGGER BOX (review 11-03, 0x451b8a): non-zero = the walk has a goal */
+            DWORD pc[5], pk0 = 0;
+            if (cls == 0 && klbr_realrun && klh_rd(self + 0x14, pc, sizeof pc)) pk0 = (DWORD)kbr_chosen(pc, klh_rd32(self + 0x2c));
+            if (cls == 0 && (!klbr_bridge || klh_rd32(self + 0x28))) { e->nzAt = GetTickCount() | 1u; stamped = 1; }      /* [tactic+0x28] = the chosen TRIGGER BOX (review 11-03, 0x451b8a): non-zero = the walk has a goal */
+            else if (cls == 0 && pk0) { e->nzAt = GetTickCount() | 1u; stamped = 1; klbr_rr_hand_ev++; }      /* bs3 11-03: under RealRun the scene-query branch returns 1.0 with a chosen stack (+0x2c) but +0x28 = 0, so the hand-off never opened and the puppeteer + real RUN steered the same bot (0 grabs, 0 boarded); the chosen stack opens it */
             else if (cls == 0) { static int told; DWORD cand[5]; if (told < 6 && klh_rd(self + 0x14, cand, sizeof cand) && kbr_chosen(cand, klh_rd32(self + 0x2c))) { told++; klog("brain: gate: Loot evaluate %.3f with a chosen stack %08lx but trigger box +0x28 = 0: NOT handed over (if bots never grab, the gate should use the chosen stack)", (double)r, (unsigned long)kbr_chosen(cand, klh_rd32(self + 0x2c))); } }      /* DIAGNOSTIC (review 11-03, unconfirmed concern) */
             if (cls == 1) e->bnzAt = GetTickCount() | 1u;
             if (cls == 0) { DWORD cand[5], pk; if (klh_rd(self + 0x14, cand, sizeof cand) && (pk = (DWORD)kbr_chosen(cand, klh_rd32(self + 0x2c))) != 0) { e->pick = pk; e->pickAt = GetTickCount() | 1u; } }      /* ArcadePick: the Arcade evaluate's own choice, read for the puppeteer */
@@ -342,7 +346,7 @@ static float klbr_ev(int cls, DWORD self)
     /* what the AI sees: Loot and Board NEVER (bs1 11-03: once the AI picks them it calls their RUN, a coroutine the DLL cannot run online, see kbr_orig_ok); the evaluate still
        runs in the frame and ArcadePick hands its choice to the puppeteer. Traitor always (its RUN only flips a bit and does not yield) */
     if (klbr_realrun) {      /* RealRun: the pre-f5f0ccd3e rules; the AI's RUN call lands on the original through the vtable copy, the thunk swaps the shadow for each slice */
-        int van_ok = kbr_board_state_ok(klbr_van), vis = cls == 0 ? (klbr_puppet && !(klbr_boardreal && van_ok)) : cls == 1 ? (klbr_boardreal && van_ok) : 1;
+        int van_ok = kbr_board_state_ok(klbr_van), vis = cls == 0 ? (klbr_puppet && !(klbr_boardreal && van_ok) && stamped) : cls == 1 ? (klbr_boardreal && van_ok) : 1;      /* bs3: Loot is shown only with the hand-off stamped on this call, so the puppeteer never steers a bot the real RUN steers */
         return vis ? r : 0.0f;
     }
     return cls == 2 ? r : 0.0f;
@@ -782,7 +786,7 @@ static void klbr_summary(void)
             klog("brain: round end: bridge: %d grab(s) started, %d part(s) paid ($%ld), %d stopped; slot 202 calls %d, slot 45 calls %d; traitor mirrors %d; Board run/exit calls %ld/%ld",
                 klbr_nstart, klbr_npay, klbr_paid, klbr_nabort, klbr_s202_n, klbr_s45_n, klbr_ntraitor, (long)klbr_hits[3], (long)klbr_hits[4]);
         if (klbr_realrun)
-            klog("brain: round end: realrun: swap-ins %ld (RUN %ld, EXIT %ld), swap-outs %ld, leaks %ld, veh restores %ld, mismatches %ld, foreign-thread %ld, nested %ld, mode!=4 %ld, unregistered [tac+0x10] %ld; %ld tactic(s) in the registry (kept across rounds: a coroutine alive past the round end still gets the shadow)", (long)klbr_rr_in, (long)klbr_rr_val[1], (long)klbr_rr_val[2], (long)klbr_rr_out, (long)klbr_rr_leak, (long)klbr_rr_veh, (long)klbr_rr_mis, (long)klbr_rr_foreign, (long)klbr_rr_nested, (long)klbr_rr_mode, (long)klbr_rr_t10, (long)klbr_rrn);
+            klog("brain: round end: realrun: swap-ins %ld (RUN %ld, EXIT %ld), swap-outs %ld, leaks %ld, veh restores %ld, mismatches %ld, foreign-thread %ld, nested %ld, mode!=4 %ld, unregistered [tac+0x10] %ld, hand-off stamps evaluate-pick %ld / resume %ld; %ld tactic(s) in the registry (kept across rounds: a coroutine alive past the round end still gets the shadow)", (long)klbr_rr_in, (long)klbr_rr_val[1], (long)klbr_rr_val[2], (long)klbr_rr_out, (long)klbr_rr_leak, (long)klbr_rr_veh, (long)klbr_rr_mis, (long)klbr_rr_foreign, (long)klbr_rr_nested, (long)klbr_rr_mode, (long)klbr_rr_t10, (long)klbr_rr_hand_ev, (long)klbr_rr_hand_run, (long)klbr_rrn);
         if (klbr_puppet || klbr_boardreal)
             klog("brain: round end: watchdog took %d stalled bot(s) back from the real tactics; %d slow frame(s) (3 in a row switch the tactics off)", klbr_nrevoke, klbr_slow);
     }
