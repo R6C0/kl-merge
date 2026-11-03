@@ -1180,12 +1180,20 @@ static void klbr_hx_apply(struct klbr_s *e, DWORD self)
    SetPosition into +0x654) and 0x637800(CoverFire +0x654, prio 0xa0, clock + 0x800) + slot 20 (arbiter): CoverFire outranks Idle 0x64. When +0x5ac is in another state slot 83 takes a different path
    (0x4c53b0 / 0x809830), so we do not call it then. Host bots only (klbr_t), marked bot, human holder whose flags pass 0x616480 (bit0 + 0x10, no 0x4 / 0x40 / 0x200), at most once per 2 s per bot.
    That CoverFire then shoots the human is a GUESS (bench bs23). The call goes through the private table, so HitLog's log-only slot-83 wrapper sees it. 3 faults -> off for the round. */
+/* OnlineBrainTraitorAttackHandle (11-03, workflow wee6blb1x tasks verifier; UNTESTED, recommended off): the same call with handle = holder handle [s+0xb0]. Slot 83 then sets ZAttackTarget +0x14 and AddGoal
+   at 0x831986 (prio 0x96); ZAttackTarget's tick 0x4f4460 runs ZRunToPosShootingTask / ZTurnAndShootTask through fire test 0x616480 -> [[s+0x40]+0x6e4]. Shipped callers all pass 0 (unexercised path). */
 #define KLBR_CF_POS 0x007b3020
 #define KLBR_CF_F5 0x00bcb330
 #define KLBR_CF_LOGMAX 10
 typedef DWORD (__fastcall *klbr_cfposfn)(DWORD, DWORD, DWORD);
 typedef DWORD (__fastcall *klbr_cfatkfn)(DWORD, DWORD, DWORD, DWORD, DWORD);
-static int klbr_cfon, klbr_cf_n, klbr_cf_flt; static long klbr_cf_calls, klbr_cf_skip; static DWORD klbr_cf_at[KLBR_MAX];
+static int klbr_cfon, klbr_cfh, klbr_cf_n, klbr_cf_flt; static long klbr_cf_calls, klbr_cf_skip; static DWORD klbr_cf_at[KLBR_MAX];
+/* CoverFire health readout (READ ONLY, bs24): the human holder's health at the call, +300 ms and +2 s, with the CoverFire goal state at each read. A drop can also come from cops or other bots,
+   so it is evidence, not proof, that CoverFire shot; a flat line over many calls says it did not. */
+static int klud_idx(DWORD p);      /* klucc_down.c (included after this file) */
+#define KLBR_CF_HPLOGMAX 24
+static struct { DWORD victim, t0, g; float hp0; int step; } klbr_cf_hp[KLBR_MAX];
+static int klbr_cf_hpn; static long klbr_cf_hpdrop, klbr_cf_hpflat; static double klbr_cf_hpsum;
 static void klbr_cf_apply(struct klbr_s *e, DWORD self)
 {
     DWORD hf, hp, hh, node, s5, st, vt, fn, f5 = 0, g, g0s = 0xffffffff, g1s = 0xffffffff, cur0, cur1, now = GetTickCount(); float p[3] = { 0, 0, 0 }; int ix, ok = 0;
@@ -1196,18 +1204,45 @@ static void klbr_cf_apply(struct klbr_s *e, DWORD self)
     if ((s5 = klh_rd32(self + 0x5ac)) <= 0xffff || ((st = klh_rd32(s5 + 8)) != 0 && st != 4)) { klbr_cf_skip++; return; }
     if ((node = klh_rd32(hp + 4)) <= 0xffff || (vt = klh_rd32(self)) <= 0xffff || (fn = klh_rd32(vt + 0x14c)) <= 0xffff || !klh_rd((DWORD_PTR)KLH_VA(KLBR_CF_F5), &f5, 4)) return;
     klbr_cf_at[ix] = now;
-    g = klh_rd32(self + 0x654); if (g > 0xffff) g0s = klh_rd32(g + 8); cur0 = klh_rd32(self + 0x74);
+    g = klh_rd32(self + (klbr_cfh ? 0x658 : 0x654)); if (g > 0xffff) g0s = klh_rd32(g + 8); cur0 = klh_rd32(self + 0x74);      /* AttackHandle: ZAttackTarget +0x658 (prio 0x96), else CoverFire +0x654 */
     __try {
         ((klbr_cfposfn)(DWORD_PTR)KLH_VA(KLBR_CF_POS))(node, 0, (DWORD)(DWORD_PTR)p);
-        if (kle_ok3(p)) { ((klbr_cfatkfn)(DWORD_PTR)fn)(self, 0, 0, (DWORD)(DWORD_PTR)p, f5); ok = 1; }
+        if (kle_ok3(p)) { ((klbr_cfatkfn)(DWORD_PTR)fn)(self, 0, klbr_cfh ? hh : 0, (DWORD)(DWORD_PTR)p, f5); ok = 1; }
     }
     __except (EXCEPTION_EXECUTE_HANDLER) { if (++klbr_cf_flt >= 3) klog("brain: traitor coverfire: 3 faults: off for the round"); return; }
     if (!ok) return;
     klbr_cf_calls++;
+    { float h0 = 0.0f; if (!klbr_cf_hp[ix].victim && klbr_hp_read(hp, &h0)) { klbr_cf_hp[ix].victim = hp; klbr_cf_hp[ix].hp0 = h0; klbr_cf_hp[ix].t0 = now; klbr_cf_hp[ix].g = g; klbr_cf_hp[ix].step = 0; } }
     if (klbr_cf_n < KLBR_CF_LOGMAX) {
         if (g > 0xffff) g1s = klh_rd32(g + 8); cur1 = klh_rd32(self + 0x74); klbr_cf_n++;
-        klog("brain: traitor coverfire: bot %d soldier %08lx -> CoverFire at human %08lx (%.0f %.0f %.0f), holder flags %03lx; +0x654 %08lx state %ld -> %ld; current goal %08lx -> %08lx%s",
-             ix, (unsigned long)self, (unsigned long)hp, (double)p[0], (double)p[1], (double)p[2], (unsigned long)hf, (unsigned long)g, (long)g0s, (long)g1s, (unsigned long)cur0, (unsigned long)cur1, cur1 == g ? " (CoverFire is current)" : "");
+        {   /* wee6blb1x step 0 (read only): goal stack [s+4..s+8) top-runs, +0x88 mode, +0x6e8 (0x82cae0 branch) */
+            DWORD sb = klh_rd32(self + 4), se = klh_rd32(self + 8), top = 0; long n = (sb > 0xffff && se >= sb) ? (long)((se - sb) / 4) : -1;
+            if (n > 0 && n < 64) top = klh_rd32(se - 4);
+            klog("brain: traitor coverfire: bot %d soldier %08lx -> %s at human %08lx handle %08lx (%.0f %.0f %.0f), holder flags %03lx; goal %08lx state %ld -> %ld; current goal %08lx -> %08lx%s; stack %ld top %08lx state %ld; +0x88 %ld +0x6e8 %08lx Idle state %ld",
+                 ix, (unsigned long)self, klbr_cfh ? "ZAttackTarget" : "CoverFire", (unsigned long)hp, (unsigned long)(klbr_cfh ? hh : 0), (double)p[0], (double)p[1], (double)p[2], (unsigned long)hf, (unsigned long)g, (long)g0s, (long)g1s, (unsigned long)cur0, (unsigned long)cur1, cur1 == g ? " (it is current)" : "",
+                 n, (unsigned long)top, top > 0xffff ? (long)klh_rd32(top + 8) : -1L, (long)klh_rd32(self + 0x88), (unsigned long)klh_rd32(self + 0x6e8), klh_rd32(self + 0x634) > 0xffff ? (long)klh_rd32(klh_rd32(self + 0x634) + 8) : -1L);
+        }
+    }
+}
+static void klbr_cf_pump(DWORD now)      /* game thread, depth 0 (klbr_pump) */
+{
+    int i;
+    if (!klbr_cfon) return;
+    for (i = 0; i < KLBR_MAX; i++) {
+        DWORD v = klbr_cf_hp[i].victim, dt, g = klbr_cf_hp[i].g; float h1 = 0.0f, d;
+        if (!v) continue;
+        dt = now - klbr_cf_hp[i].t0;
+        if (dt < (klbr_cf_hp[i].step ? 2000u : 300u)) continue;
+        if (klh_pvt(v) != 0x00bb45f4u || !klbr_hp_read(v, &h1)) { klbr_cf_hp[i].victim = 0; continue; }
+        d = kbr_hp_drop(klbr_cf_hp[i].hp0, h1);
+        if (klbr_cf_hpn < KLBR_CF_HPLOGMAX) {
+            klbr_cf_hpn++;
+            klog("brain: traitor coverfire health: bot %d human %08lx (crew seat %d) hp %.1f -> %.1f, drop %.1f +%lu ms; CoverFire +0x654 %08lx state %ld",
+                 i, (unsigned long)v, klud_idx(v), (double)klbr_cf_hp[i].hp0, (double)h1, (double)d, (unsigned long)dt, (unsigned long)g, g > 0xffff ? (long)klh_rd32(g + 8) : -1L);
+        }
+        if (klbr_cf_hp[i].step == 0) { klbr_cf_hp[i].step = 1; continue; }
+        if (d > 0.0f) { klbr_cf_hpdrop++; klbr_cf_hpsum += d; } else klbr_cf_hpflat++;
+        klbr_cf_hp[i].victim = 0;
     }
 }
 static DWORD __fastcall klbr_w_fl113(DWORD self, DWORD edx, DWORD a1)      /* thiscall + 1 stack arg, ret 4 */
@@ -1383,9 +1418,10 @@ static void klbr_hitlog_summary(void)
     if (klbr_hlon) { int j; for (j = 0; j < KLBR_MAX; j++) if (klbr_atk_calls[j]) klog("brain: traitor attack: bot %d round total: Attack (slot 83) called %ld time(s), %ld with a nonzero handle", j, klbr_atk_calls[j], klbr_atk_nz[j]); }
     if (klbr_hfon) klog("brain: traitor humanfirst: round total: police scores nulled %ld (a seen human was in the list), passed %ld", klbr_hf_null, klbr_hf_pass);
     if (klbr_hoon) klog("brain: traitor humanonly: round total: ally-bot scores nulled %ld (a seen human was in the list), other ZFFPlayer candidates passed %ld", klbr_ho_null, klbr_ho_pass);
-    if (klbr_cfon) klog("brain: traitor coverfire: round total: CoverFire calls %ld, skipped (+0x5ac busy) %ld, faults %d", klbr_cf_calls, klbr_cf_skip, klbr_cf_flt);
+    if (klbr_cfon) klog("brain: traitor coverfire: round total: CoverFire calls %ld, skipped (+0x5ac busy) %ld, faults %d; holder health 2 s later: dropped %ld (total %.1f), flat %ld", klbr_cf_calls, klbr_cf_skip, klbr_cf_flt, klbr_cf_hpdrop, klbr_cf_hpsum, klbr_cf_hpflat);
     if (klbr_hxon) klog("brain: traitor holderfix: round total: human holder flags fixed in range (0x4 cleared, 0x10 set) %ld, out of range / range unknown (0x4 cleared only) %ld, range faults %ld", klbr_hx_set, klbr_hx_far, klbr_hx_flt);
     klbr_hf_null = klbr_hf_pass = 0; klbr_hx_set = klbr_hx_far = 0; klbr_ho_null = klbr_ho_pass = 0; klbr_cf_calls = klbr_cf_skip = 0; klbr_cf_flt = klbr_cf_n = 0; memset(klbr_cf_at, 0, sizeof klbr_cf_at);
+    memset(klbr_cf_hp, 0, sizeof klbr_cf_hp); klbr_cf_hpn = 0; klbr_cf_hpdrop = klbr_cf_hpflat = 0; klbr_cf_hpsum = 0.0;
     memset(klbr_atk_n, 0, sizeof klbr_atk_n); memset(klbr_atk_calls, 0, sizeof klbr_atk_calls); memset(klbr_atk_nz, 0, sizeof klbr_atk_nz);
     memset(&klbr_hl, 0, sizeof klbr_hl); klbr_hl_s15 = 0;
 }
@@ -1686,6 +1722,7 @@ static void klbr_pump(DWORD now)       /* game thread, from klbotfill.c's Online
     }
     klbr_ta_pump();      /* OnlineBrainTraitorArcade */
     klbr_hl_pump(now);      /* OnlineBrainTraitorHitLog probe (read only) */
+    klbr_cf_pump(now);      /* OnlineBrainTraitorCoverFire health readout (read only) */
     klbr_cl_list(now);      /* OnlineBrainTraitorCandLog: known-list size (read only) */
     klbr_tr_pump();      /* OnlineBrainTraitorTurn: before the bridge / puppet early return, so it also runs without them */
     klbr_boardlog(now);
@@ -2008,6 +2045,9 @@ static void klbr_init(void)
     if (klbr_hoon) klog("brain: OnlineBrainTraitorHumanOnly=1 UNTESTED (recommended off): a marked bot scores no ally-bot body while a seen, in-range human is in its list");
     klbr_cfon = klbr_tflmode && klbr_key("OnlineBrainTraitorCoverFire");
     if (klbr_key("OnlineBrainTraitorCoverFire") && !klbr_cfon) klog("brain: OnlineBrainTraitorCoverFire needs OnlineBrainTraitorFireLine (slot 113 wrapped): off");
+    klbr_cfh = klbr_cfon && klbr_key("OnlineBrainTraitorAttackHandle");
+    if (klbr_key("OnlineBrainTraitorAttackHandle") && !klbr_cfh) klog("brain: OnlineBrainTraitorAttackHandle needs OnlineBrainTraitorCoverFire: off");
+    if (klbr_cfh) klog("brain: OnlineBrainTraitorAttackHandle=1 UNTESTED (recommended off): the CoverFire call passes the human's handle, so slot 83 adds ZAttackTarget (+0x658, prio 0x96, runs the shooting tasks) instead of CoverFire; shipped DD never passes a nonzero handle (host only)");
     if (klbr_cfon) klog("brain: OnlineBrainTraitorCoverFire=1 UNTESTED (recommended off): a marked bot whose holder is a human passing the fire test gets the shipped CoverFire goal (slot 83, handle 0) at that human, at most every 2 s");
     if (klbr_hlon) klog("brain: OnlineBrainTraitorHitLog=1 (recommended off): READ ONLY, counts hits of tagged bots (marked traitor vs other) on humans in the rules' damage hook (slot 15); one 'traitor hits:' line per round end");
     klbr_clon = klbr_taon && klbr_key("OnlineBrainTraitorCandLog");
