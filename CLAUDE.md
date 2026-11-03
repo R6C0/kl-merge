@@ -68,14 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~16:15 - [c9] bs27 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; EntryFix + Restart, out_trs_1103p). DM03: EntryFix set once (015 -> 011 = cleared same-team 0x4),
+Restart cleared [s+0x74] 8 times, unfroze 0, hp flat. DD05: 0 CoverFire calls; the shooting chain also runs under normal goals (vt 0xbd0674).
+wqb7g1pxd: vt+0x6e4 (0x62a540) only SETS an aim target; the trigger is ZFireWeaponTask (vt 0xbd0bd4, tick 0x7c02b0) -> 0x8c1830 -> 0x8dc6a0 -> 0x8b84b0, aimed at holder [s+0xac].
+Likely cause GUESS: our repeated slot-83 calls end the child after 1.5-2.5 s, before ZFireWeaponTask fires. Next: read-only probes of those functions + a no-recall-while-shooting toggle.
+
 2026-11-03 ~15:45 - [c9] bs26 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; EntryFix + AttackHandle, out_tef_1103o). ZRunToPosShootingTask ran at the human with holder flags 011
 (DM03 163, DD05 307 slot-113 calls) yet hp 550 flat (19 + 20 reads); EntryFix's gate never passed (all counts 0). Every call was case A (current goal != g), so no freeze seen.
 wuwffuc4b: nothing resets goal state; the arbiter re-pushes only on a winner change. dc682828e: OnlineBrainTraitorRestart (reviewed by w4em63f8z) + EntryFix gate dump -> bs27 running;
 wqb7g1pxd traces why the child task does no damage.
-
-2026-11-03 ~15:15 - [c9] bs25 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; guarded AttackHandle on both maps, out_tag_1103n). Guards never skipped (stale 0).
-ZAttackTarget runs once (DM03: a child task ran, stack 3 top state 2), ends within ~2 s, and every later call leaves it terminated (state 4 -> 4) yet current:
-re-adding does not restart it. Human hp flat 15/15. Workflows w0bnwus0v (B-list entry, child fire path) and wuwffuc4b (goal restart) running.
 
 2026-11-03 ~10:20 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)

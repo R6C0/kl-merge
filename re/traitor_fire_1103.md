@@ -166,3 +166,17 @@ Follows re/traitor_handoff_1103.md. Disassembly was read with capstone. Three pa
 - ZRunToPosShootingTask (vt 0xbd0ba4) state 2 on the stack with holder = the human, holder flags 011: DM03 178 slot-113 calls (163 human holder), DD05 590 (307). Human hp 550 flat (DM03 19, DD05 20 reads).
 - EntryFix round total: set 0, kept 0, no entry 0, stale 0 = the gate (+0x658 vt 0xbd1104, current, state <= 2, handle != 0) never passed. bs27 dumps the gate inputs, stack and B list per child task.
 - Every call: "current goal X -> g" with X != g (case A of wuwffuc4b): each call re-runs g; it ends at once again (state 4 on the next call).
+
+## bs27 (out_trs_1103p, EntryFix + Restart + AttackHandle on DM03 + DD05): PASS 4 seats, 0 asserts, 0 faults
+- DM03: EntryFix gate passed sometimes: set 1 (flags 015 -> 011, so bit 0x4 = same team was cleared), already set 5. Restart cleared [s+0x74] 8 times, unfroze 0. Human hp flat (0 drops in 22 reads).
+- DD05: 0 CoverFire / attack calls; ZRunToPosShootingTask was seen under a normal goal (vt 0xbd0674): chain 0xbd02bc -> 0xbd04ac -> 0xbd0ba4.
+
+## Workflow wqb7g1pxd (child fire path, tracer + verifier, read only)
+- Tick 0x4a7e60: three call sites of body vt+0x6e4 = 0x62a540 = SetAttackTarget(handle, prio, secs): burst 0x4a85eb (0.5 s), NEAR 0x4a86d8 (3.0 s, no flag test, needs byte [task+0x24]), shot A 0x4a822d (after a ~2 s start delay + 0x80dcf0). CONFIRMED.
+- 0x62a540 only stores [body+0x544] (aim, read at 0x815852 -> vt+0x344); it bails if [body+0x68c] > prio, body not alive, vt+0x620/0x624 true, or brain mode 6. No shot. CONFIRMED.
+- Burst gates: [s+0x5a8]==0, 0x449cf0 != 0xb, mode [[s+0x6d8]] not 5/6, 0x616480(holder flags) true, random > 0.2, 3-4 s lockout, distance to the task dest > 300. CONFIRMED.
+- The trigger (verifier): after 6e4 the burst path runs ZFireWeaponTask (vt 0xbd0bd4, tick 0x7c02b0) via brain vt+0x164(1) when 0x4d2750(body); it calls 0x8c1830 -> 0x8dc6a0 -> 0x8b84b0 (burst plan) -> 0x719b00 (accuracy), plan at [body+0xfc]. Target = holder [s+0xac] via 0x5990e0 (so HolderFix flags matter). CONFIRMED to the plan.
+- 0x8b84b0 distance gate vs tuning [[0x168d7c0]+0x38c] (+0x3a4 variant): the tracer read it as a max range, the verifier as a min distance. Unresolved; probe.
+- Victim: ZFFPlayer slot 423 0x458880 -> 0x4db580; friendly-fire drop at 0x4db5ab via 0x7aca80 (0 for roles >= 2, GUESS host role 2). Untraced to the final apply.
+- Most likely blocker (GUESS): our slot-83 calls (Restart/EntryFix/AttackHandle) re-run or pop the parent ZAttackTarget so the child lives only 1.5-2.5 s, before ZFireWeaponTask fires.
+- Next: read-only probes (0x62a540 ret + [body+0x544/0x68c], 0x7c02b0 call count, 0x8b84b0 ret + tuning floats + distance, 0x4db580 / 0x7aca80 on the victim) and a toggle that skips slot-83 calls while the child runs.

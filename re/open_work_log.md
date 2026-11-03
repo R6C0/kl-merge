@@ -1,3 +1,8 @@
+2026-11-03 ~16:15 - [c9] bs27 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; EntryFix + Restart, out_trs_1103p). DM03: EntryFix set once (015 -> 011 = cleared same-team 0x4),
+Restart cleared [s+0x74] 8 times, unfroze 0, hp flat. DD05: 0 CoverFire calls; the shooting chain also runs under normal goals (vt 0xbd0674).
+wqb7g1pxd: vt+0x6e4 (0x62a540) only SETS an aim target; the trigger is ZFireWeaponTask (vt 0xbd0bd4, tick 0x7c02b0) -> 0x8c1830 -> 0x8dc6a0 -> 0x8b84b0, aimed at holder [s+0xac].
+Likely cause GUESS: our repeated slot-83 calls end the child after 1.5-2.5 s, before ZFireWeaponTask fires. Next: read-only probes of those functions + a no-recall-while-shooting toggle.
+
 2026-11-03 ~15:45 - [c9] bs26 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; EntryFix + AttackHandle, out_tef_1103o). ZRunToPosShootingTask ran at the human with holder flags 011
 (DM03 163, DD05 307 slot-113 calls) yet hp 550 flat (19 + 20 reads); EntryFix's gate never passed (all counts 0). Every call was case A (current goal != g), so no freeze seen.
 wuwffuc4b: nothing resets goal state; the arbiter re-pushes only on a winner change. dc682828e: OnlineBrainTraitorRestart (reviewed by w4em63f8z) + EntryFix gate dump -> bs27 running;
