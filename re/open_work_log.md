@@ -1,3 +1,7 @@
+2026-11-03 ~03:05 - [ce] pq4 PASS (DM06 + DD05, 2 seats, 0 faults, round 2 everywhere): with the scripted RETURNs the queued F3/F2 press reaches the page on
+every seat: 'queued key press is applied after ~13.6 s' + 'hirepage: page SHOWN (online, after the early key press)', rows served. AutoOpen send 1 at 812 ms
+on all four. So PageQueue + AutoOpen are proven; only the two RETURNs remain, which pq5 (AutoOpenSteps, no RETURN) tests after bs3.
+
 2026-11-03 ~03:05 - [c9] bs2 SAFE PASS (DM03 + DD05, 2 seats, 0 asserts/faults: the bs1 crash setup no longer crashes) but ArcadePick gave only 1 / 0 orders.
 nm1 PASS: lobby 'Withdrawal' = LOAD DM03 on both seats (random peek). Real Arcade RUN online: 06101ed05 [Brain] RealRun (off) = MSVCR90.longjmp IAT thunk swaps
 the shadow rules in per resumed Loot/Board slice, out at each yield (no SEH across it; SHIP obj checked). bs3 (dll out_brain4_1103b_test, RealRun=1, DM03
