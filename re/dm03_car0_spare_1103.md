@@ -1,0 +1,17 @@
+2026-11-03 DM03 car #0 (slot 7627, points 556-563) all SPARE on the client. Read-only research, nothing run.
+
+## Facts (bs16 logs, BS16B_DM03 inst1 = host, inst2 = client)
+- bs16 ini has ONLY ClientBuild=1 / ClientBuildHost=1 / ClientBuildMaps=F01,F03. ClientRewrite and ClientRingSync are NOT set (default 0): no "coverring: rewrite" / "ringsync" lines on either seat. So this is the known CR7/CR9 residual, not a new fault.
+- At load BOTH seats (host too, ClientBuildHost=1) run 0x81b6f0 once: count 556 -> 564, idx 556..563, done=1 rsv=1, and car #0 comes out 0/8 usable (flags 0x400, pos 0,0,0) while cars #1-#4 get 8/8 (y=200 / y=700). So the load-time failure is on the host too, not client-specific.
+- Host later (inst1): t+125 s car #0 shows done[+1e8]=0, [car+8c0]=1 (activation; the 0x8d6210 tail clears 8c0 and calls 0x81b6f0, the state setter / ZHavokCarIdleGoal path). By t+135 s done=1 again and car #0 is 6/8 usable (556,559-563; 557/558 spare) at (3155..3656, 0, -1408..-842), i.e. y=0 around x~3400, away from the other cars. The client never sees that call (car AI/script activation is host-side; client has no rewrite without ClientRewrite).
+
+## Why spare at load (GUESS)
+- 0x81b6f0 reserves 8 indices first (count bump, always works), then per point does a physics probe ([0xdd2640]+0xac -> vtable+0x264); a failed probe SKIPS the point and leaves the reservation spare (0x400, never filled). Car #0 is parked at load where the probe fails (GUESS: car not yet at its final pose / the nav-physics area under it not loaded; its ring is also at y=0 while cars 1-4 are at y=200). It succeeds later after the car is placed. CR7 supports it: try 1 at the activation moment still 0/8, a retry 15 s later got 7/8.
+- Not proven which input fails (pose, box [car+8f8..90c], or nav query in 0x9015d0). Host ends 6/8 because 557/558 still fail even then.
+
+## Lever (all already in the hook, default 0)
+1. [CoverRing] ClientRewrite=1 (client only, needs ClientBuild): on [car+8c0]/[car+a28] change, clears done and re-runs 0x81b6f0 (rsv=1 keeps indices), retries while spares remain (max 4/car, 15 s). CR7: 7/8 on client, 0 asserts/faults. Risk: calls a CEG-hashed routine (called, never patched, same as ClientBuild); client pose differs from host (ring rotated), so points are near but not equal to the host's.
+2. [CoverRing] ClientRingSync=1 (both seats): host sends its usable points (KLSYR UDP 27415), client copies only where host usable and own spare. CR9: client car #0 8/8 on idx 561. Risk: extra UDP packet, the nav record [L+0x58] is not written (GUESS harmless), needs both seats on the build.
+3. Recommended: bs16 repeat with ClientRewrite=1 on the client AND ClientRingSync=1 on both seats (the CR9 config, PASS: 0 asserts on 4 seats). That fixes the bs16 crash path (a marked host bot taking an index in 556-563 that is spare on the client). Remaining hole: host-usable index where client probe still fails and the sync packet has not yet arrived (up to ~1 s); AssertSoft 0x6567e8 stays the net.
+4. Not possible: patching 0x81b6f0 / 0x9015d0 / 0x6567e8 (CEG-hashed, tools/ceg_ranges.py). A GUESS-only option, untested: a delayed ClientBuild pass for car #0 alone ~10-20 s after load (not worth it; ClientRewrite already does it on the activation trigger).
+5. Also consider (host side, off by default, new): keep the traitor-bot cover choice off spare-on-client indices by skipping 556-563 for the marked bot until the client reports them usable; needs a client-to-host ack, so more work than 1+2.
