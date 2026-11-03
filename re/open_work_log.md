@@ -1,3 +1,8 @@
+2026-11-03 ~13:05 - [c9] bs19 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults). HOLDER probe: the marked bot DOES pick a human (holder soldier+0xa8 =
+human, handle 0x320/0x1aa) for 2-6 s, then an ally bot (DM03, 33/43 lines) or cops (DD05, 38/50). Its ZAttackTarget goal handle [[s+0x658]+0x14]
+never takes the pick (0 / stale) with state 0: two gaps, score AND hand-off. 73e41f775: OnlineBrainTraitorHumanFirst (slot 110 nulls cops while a
+seen human is listed, default off) + Attack slot-83 log; bs20 runs it. Workflow wkbj5dple traces the holder -> goal hand-off.
+
 2026-11-03 ~12:45 - [c9] bs18 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults). Slot 111 does NOT refuse the humans: every human scored -500..-800
 ('targetable', gates passed, B entry flags 0x11/0x15), 132 (DM03) and 316 (DD05) calls, yet 0 hits. Up to 8 other (police) entries share the list;
 selection keeps the strictly greatest score, so a cop likely wins. bs19 (holder probe 4ecfc0234) is running and shows the pick's class. Workflows:
