@@ -1127,7 +1127,7 @@ static int kla_player_pos(int i, float *v)
 static int kla_find_players(void)
 {   /* scan the committed private read-write memory; 0.2 - 1 s, so only on demand and at most every 5 s */
     MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; static BYTE buf[0x10000]; DWORD t0 = GetTickCount(); int i;
-    if (kla_npl >= 16 && kla_rd32(kla_pl[0]) == KLA_VT_FFPLAYER) return kla_npl;
+    if (kla_npl >= 16 && (kla_rd32(kla_pl[0]) == KLA_VT_FFPLAYER || (klh_player_priv && kla_rd32(kla_pl[0]) == klh_player_priv))) return kla_npl;
     if (kla_pl_scan_t && t0 - kla_pl_scan_t < 5000) return kla_npl;
     kla_npl = 0; kla_me = -1;
     while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
@@ -1137,7 +1137,7 @@ static int kla_find_players(void)
                 SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
                 if (!kla_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
                 for (k = 0; k + 4 <= n; k += 16)
-                    if (*(DWORD *)(buf + k) == KLA_VT_FFPLAYER && kla_npl < 32) kla_pl[kla_npl++] = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + k);
+                    if ((*(DWORD *)(buf + k) == KLA_VT_FFPLAYER || (klh_player_priv && *(DWORD *)(buf + k) == klh_player_priv)) && kla_npl < 32) kla_pl[kla_npl++] = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + k);
             }
         }
         a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;

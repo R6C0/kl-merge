@@ -220,14 +220,14 @@ static const char *kly_kind(int k) { return k == KLY_ESCALATES ? "ESCALATES" : k
 static void kly_undo(struct kly_bot *b, int i, DWORD rules, DWORD score)
 {
     float raw[0x28 / 4], cur, v; DWORD fl = 0;
-    if (b->hwrote != 0 && b->actor && klh_rd32(b->actor) == KLB_ACTOR_VT && b->hobj && klh_rd32(b->actor + 0x5fc) == b->hobj &&
+    if (b->hwrote != 0 && b->actor && klh_avt(b->actor) == KLB_ACTOR_VT && b->hobj && klh_rd32(b->actor + 0x5fc) == b->hobj &&
         klh_rd(b->hobj, raw, sizeof raw) && ((DWORD *)raw)[0x24 / 4] == b->actor && klb_finite(raw[1]) && klb_finite(raw[2]) && raw[2] >= 1 && KLY_ABS(raw[2] - b->hwrote) <= 0.01f) {
         v = b->hmax0; cur = raw[1] * v / raw[2];
         if (klh_data((void *)(DWORD_PTR)(b->hobj + 8), &v, 4, "an AI heister's maximum health (the game's own back)") && raw[1] > 0)
             klh_data((void *)(DWORD_PTR)(b->hobj + 4), &cur, 4, "an AI heister's health, at the same share of the game's maximum");
     }
     b->hwrote = 0;
-    if (b->aset && b->actor && klh_rd32(b->actor) == KLB_ACTOR_VT && b->soldier && klh_rd32(b->actor + 0x77c) == b->soldier && klh_svt(b->soldier) == KLY_SOLDIER_VT &&
+    if (b->aset && b->actor && klh_avt(b->actor) == KLB_ACTOR_VT && b->soldier && klh_rd32(b->actor + 0x77c) == b->soldier && klh_svt(b->soldier) == KLY_SOLDIER_VT &&
         klh_rd32(b->soldier + 0x6d8) == b->dblk && klh_rd(b->dblk + 0x10, &cur, 4) && KLY_ABS(cur - b->awrote) <= 0.01f)
         klh_data((void *)(DWORD_PTR)(b->dblk + 0x10), &b->aim0, 4, "an AI heister's accuracy (his own back)");
     b->aset = 0;
@@ -304,7 +304,7 @@ static void kly_online_tick(int game_thread)
         const struct klb_rec *r = &s.r[i]; struct kly_bot *b = &klyo.b[i];
         if (!r->used || !r->actor) continue;
         if (b->actor != r->actor) { if (b->actor) kly_undo(b, i, 0, 0); memset(b, 0, sizeof *b); b->actor = r->actor; klyo.told[i] = 0; }
-        if (klh_rd32(r->actor) != KLB_ACTOR_VT || r->status != 0) continue;
+        if (klh_avt(r->actor) != KLB_ACTOR_VT || r->status != 0) continue;
         if (klyo.dry) {
             DWORD h; float hp[2];
             if (!klyo.told[i] && (h = klh_rd32(r->actor + 0x5fc)) && klh_rd32(h + 0x24) == r->actor && klh_rd(h + 4, hp, 8)) {
@@ -507,7 +507,7 @@ static void kly_tick(int game_thread)
             if (b->actor) kly_undo(b, i, s.rules, s.score);
             memset(b, 0, sizeof *b); b->actor = r->actor; b->kind = -1;
         }
-        if (klh_rd32(r->actor) != KLB_ACTOR_VT) continue;
+        if (klh_avt(r->actor) != KLB_ACTOR_VT) continue;
         kly_mark(&s, r, b, i, act);
         if (r->status != 0) continue;         /* aboard, dead, escaped: not written any more */
         kly_health(r, b, i, act);

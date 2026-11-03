@@ -223,6 +223,7 @@ static DWORD klcam_player(DWORD *gdout)
 {
     DWORD gd, pl; BYTE idx = 0xff;
     if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || idx >= KLCAM_NPL) return 0;   /* 0xff / a negative signed char = none */
+    /* raw compare = skip peer bodies on the NetSmooth copy (wanted: Camera writes touch only my own body) */
     if (!(pl = klh_rd32(gd + 0x828 + 4 * idx)) || klh_rd32(pl) != KLCAM_PL_VT) return 0;
     *gdout = gd;
     return pl;

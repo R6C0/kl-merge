@@ -48,7 +48,7 @@ static void klcampool_tick(int game_thread)
     {   /* the local player's health every tick while 0x19 (peer COVER6 04:11: klauto samples only at keyboard polls, which stopped 11.4 s before
            the restart, and the 2nd round had no poll at 0x19 at all): logged at a direct restart = was it a death? Reads only. */
         static float hl = -1, hmin = -1; static DWORD hmin_t, hl_t; DWORD now = GetTickCount(), pl, ho; BYTE sel = 0xff; float hv[2];
-        if (st == 0x19 && !drop && klh_rd(gd + 0x898, &sel, 1) && sel < 28 && (pl = klh_rd32(gd + 0x828 + 4 * sel)) && klh_rd32(pl) == KLCAM_PL_VT
+        if (st == 0x19 && !drop && klh_rd(gd + 0x898, &sel, 1) && sel < 28 && (pl = klh_rd32(gd + 0x828 + 4 * sel)) && klh_pvt(pl) == KLCAM_PL_VT
             && (ho = klh_rd32(pl + 0xa48)) && klh_rd(ho + 4, hv, 8) && klb_finite(hv[0])) {
             hl = hv[0]; hl_t = now;
             if (hmin < 0 || hv[0] <= hmin || now - hmin_t > 3000) { hmin = hv[0]; hmin_t = now; }
@@ -62,7 +62,7 @@ static void klcampool_tick(int game_thread)
     for (i = 0; i < n; i++) if (ent[2 * i + 1] & 0xff) nfree++;
     if (h != kcp.handler) { kcp.handler = h; if (kcp.log) klog("campool: handler %08lx: %lu camera(s) in the pool, %d free", h, n, nfree); }
     if (nfree && !drop) return;
-    for (k = 0; k < KLCAM_NPL; k++) { DWORD pl = klh_rd32(gd + 0x828 + 4 * k), c; if (pl && klh_rd32(pl) == KLCAM_PL_VT && (c = klh_rd32(pl + 0xbd8))) held[nh++] = c; }
+    for (k = 0; k < KLCAM_NPL; k++) { DWORD pl = klh_rd32(gd + 0x828 + 4 * k), c; if (pl && klh_pvt(pl) == KLCAM_PL_VT && (c = klh_rd32(pl + 0xbd8))) held[nh++] = c; }
     if (!klb_same_code(KLCP_RELEASE, rel, sizeof rel)) { if (!kcp.told && (kcp.told = 1)) klog("campool: 0x418310 is not the routine this build knows: nothing done"); return; }
     if (drop) {
         /* 0x19 -> 0x16 straight: the player init at 0x18 (0x60a520) takes a camera again without giving this one back, so give the held
