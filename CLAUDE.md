@@ -81,7 +81,8 @@ ini's AssertSoft line; bs17 (SenseSeen = MarkSeen 0x4880d0, 4906688b0, off by de
 2026-11-03 ~10:20 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)
 and all 7 DM-pool maps DM06/DM01/DM02/DM03/DM09/DM07/DD10 (pq10-pq12; DM02 = F02 page 2, 1 RIGHT; pq10's DD10 died in d3d9 on both seats in the
-same ms = a display change, rerun clean). 32/33 seats show the page; the miss was a client whose shop lasted 0.5 s. Waiting for the owner's play test.
+same ms = a display change, rerun clean). 32/33 seats show the page; the miss was a client whose shop lasted 0.5 s. Those kits lacked live keys (c9: OnlineSwap,
+AssertSoft, ClientRewrite/RingSync): pq13 = DD05 + DM03 on a copy of the LIVE KLHook.ini, 4/4 seats page SHOWN, 0 asserts, 0 faults. Waiting for the owner's play test.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
