@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~09:20 - [c9] bs12 PASS (DM03 + DD05, 4 seats, 0 faults) with OnlineBrainTraitorHitLog (762663323, read-only) and FireLine=2 on both maps:
+marked 0 / unmarked 0 hits on humans, and the rules' damage hook (slot 15) was never reached on the host at all (Cops 0, idle humans), so it is
+INCONCLUSIVE, not a refusal. Research 72a3bf065: the goal-code fire-line path 0x8f6990 feeds a constant-false stub 0x655a40, so slots 113/114 are
+the whole fire-line gap. Running: the remaining hold-fire tests in 0x8c1830 and the slot-15 team filter 0x719720 (static).
+
 2026-11-03 ~08:50 - [c9] bs11 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorFireLine (c32286473) wraps the marked bot's ZSoldier
 slots 113/114 (fire-line friend list); mode 1 logged calls on DM03, mode 2 swapped the Arcade rules in cleanly on DD05 (slot 114 returned 0 x7, 1 x1).
 Not yet shown: that the marked bot really shoots a human (no hit counter). Real Board 7/7 DM03, 5/7 DD05. Host menu INSTALLED 08:44 (mkoverlay
@@ -77,11 +82,6 @@ Not yet shown: that the marked bot really shoots a human (no hit counter). Real 
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)
 and DM06/DM01/DM03/DM09/DM07/DD10 (pq10/pq11; pq10's DD10 died in d3d9 on both seats in the same ms = a display change, rerun clean). 30/31 seats
 show the page; the miss was a client whose shop lasted 0.5 s. DM02 not benched (lobby step count unknown). Waiting for the owner's play test.
-
-2026-11-03 ~08:15 - [c9] bs10 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorArcade (a555a37b6) marks 1 bot a map, wraps ZSoldier slot 111
-on a private table, team stays Ally, round end restores; Turn correctly ignored. Real Board 7/7 DM03, 4/7 DD05. Pushed babc92071 (raw vtable sweep:
-klgrudge/klcampool/klauto see through private copies). Research 7c2d368ab (re/fireline_gap_1103.md): online every ally bot already scores humans;
-the fire-line friend list 0x570a12 is what holds them. OnlineBrainTraitorFireLine (slots 113/114, log-only first) being built in C:\kl_wtl.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

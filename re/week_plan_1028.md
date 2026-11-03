@@ -111,6 +111,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
 - 11-03 03:20 c9: bs3 SAFE PASS 4 seats with the guarded RealRun dll (71d099212): real Arcade Loot RUN resumes online (DM03 13776, DD05 37), swaps balanced, 0 leaks; bots not yet looting (grabs 0). Grading workflow w2vymslb2 -> bs4.
+- 11-03 09:20 c9: bs12 PASS 4 seats 0 faults; hit counter 0/0 but slot 15 never reached on the host (no damage at all): inconclusive. Goal-code fire-line path is a dead stub (72a3bf065). Next: hold-fire tests + 0x719720 research, then a bench where humans are actually in a bot's line of fire.
 - 11-03 08:50 c9: bs11 PASS 4 seats 0 faults: fire-line wrap runs in log and swap mode. Host menu installed (Tex/Neural rows kept). Next: a hit counter to show a marked bot really shoots humans.
 - 11-03 08:15 c9: bs10 PASS 4 seats 0 faults: Arcade-style traitor mark works (1/map, team Ally, restored). Fire-line friend list is the real online gap -> OnlineBrainTraitorFireLine in C:\kl_wtl.
 - 11-03 07:20 c9: arc3: offline Arcade marks 0-5 traitors a round too; a mark never swaps teams (only lets the bot shoot humans). bs9 PASS 0 faults: team-swap turn works but is not Arcade -> OnlineBrainTraitorArcade in C:\kl_wt\tarc.
