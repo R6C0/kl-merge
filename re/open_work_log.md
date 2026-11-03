@@ -1,3 +1,7 @@
+2026-11-03 ~02:00 - [c9] bs1 ladder: BS1A (dry, DM03) SAFE PASS 2 seats, 0 asserts, ~2250 Loot evaluates, 0 evaluate faults. BS1B (PuppetOff) HOST CRASH
+c0000029 at ntdll+0xa5a30 3.7 s after the real Loot RUN took 7 bots (run calls loot 7, frames 14), stack 0x55e6e0 -> 0x6741a0 -> 0x719850 x7 -> 0x9272d0 ->
+0x796ff0 -> msvcr90, dinput8 not on it; root-cause workflow wf_a07653f5-196 running. Gate diag fired: Loot evaluate 1.0 with a chosen stack but [tac+0x28] = 0.
+Also 6ae1ba85b: now|1 mask in kbr_puppet_released / kbr_hand Board / s45 progress (hand-off flapped every even ms). bs2 (B+C, that dll) chained on "end nm1".
 2026-11-03 ~01:50 - [ce] CORRECTION to the 01:30 note: pq2 (dll with the 0x1f wait) lapsed the same way, so the cause was not the old dll. A stamp now | 1 read
 in the same GetTickCount ms gives now - stamp = 0xffffffff > the 60 s cap (the old 3 s early hire press lapsed instantly too). 95339b43f: kpq_age() + signed
 compares in klgun (3 s notice), klhud (10 s OSD wait), klhud_popup (loot ring), shoppage round hint / link16 / early report. 2-agent review: fix holds.
