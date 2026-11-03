@@ -1,3 +1,9 @@
+2026-11-03 ~08:25 - [ce] pq10 (DM01, DM03, DM09, DM07, DD10; pages 2/3, base + [CoverRing] ClientBuild keys) and pq11 (DD10 rerun). DM01/DM03/DM09/
+DM07 PASS (0 faults, round 2, page SHOWN, ESC 5 -> 4 -> 3 on both seats). pq10 DD10: both seats FATAL c0000005 at d3d9.dll+0x5feeb in the same ms
+(07:55:34.34, round 1, before any shop), System log Display 4107 at 07:55:39 'SDC_FORCE_MODE_ENUMERATION in SetDisplayConfig' = a display change, not
+the hook (same driver site as 10-12 W8 and 10-26 COVER13b). pq11 DD10 PASS on both seats. After-match navigation total: 9 stock + 6 DM-pool maps, 30/31
+seats (miss = pq8 DD04 client with a 0.5 s shop). DM02 not benched: no kit recorded its lobby RIGHT count.
+
 2026-11-03 ~08:15 - [c9] bs10 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorArcade (a555a37b6) marks 1 bot a map, wraps ZSoldier slot 111
 on a private table, team stays Ally, round end restores; Turn correctly ignored. Real Board 7/7 DM03, 4/7 DD05. Pushed babc92071 (raw vtable sweep:
 klgrudge/klcampool/klauto see through private copies). Research 7c2d368ab (re/fireline_gap_1103.md): online every ally bot already scores humans;

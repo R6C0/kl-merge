@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~08:25 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
+page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)
+and DM06/DM01/DM03/DM09/DM07/DD10 (pq10/pq11; pq10's DD10 died in d3d9 on both seats in the same ms = a display change, rerun clean). 30/31 seats
+show the page; the miss was a client whose shop lasted 0.5 s. DM02 not benched (lobby step count unknown). Waiting for the owner's play test.
 2026-11-03 ~08:15 - [c9] bs10 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorArcade (a555a37b6) marks 1 bot a map, wraps ZSoldier slot 111
 on a private table, team stays Ally, round end restores; Turn correctly ignored. Real Board 7/7 DM03, 4/7 DD05. Pushed babc92071 (raw vtable sweep:
 klgrudge/klcampool/klauto see through private copies). Research 7c2d368ab (re/fireline_gap_1103.md): online every ally bot already scores humans;
@@ -77,13 +81,6 @@ the fire-line friend list 0x570a12 is what holds them. OnlineBrainTraitorFireLin
 Research (re/arcade_traitor_consequence_1103.md, checked by hand): a mark never swaps teams; it only lets that bot target humans (0x882470 behind
 the Arcade gate 0x7f6850, fire-line 0x570a12). bs9 PASS (4 seats, 0 faults): the team-swap turn now works (1 turned + restored per map, after
 fixes b848198f4 klh_avt gate, b845188d3 traitor not a cop) but is not Arcade. OnlineBrainTraitorArcade being built in C:\kl_wt\tarc (wj8sfl36y).
-
-2026-11-03 ~04:30 - [ce] After-match navigation INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, SHIP 79ce4c7c4, UNDO bat beside it). pq6 PASS (DD05, 2 seats,
-0 faults, round 2): F3/F2 -> page SHOWN in 0.3 s steps with no RETURN; ESC from the auto-opened weapon list pops back to the category list (5 -> 4 windows)
-like a hand-opened one. pq7 PASS (ESCs 1.5 s apart): Weapon -> Category -> New on both seats, so pq6's ignored second ESC (90 ms later) was only
-timing. ~06:20: pq8 + pq9 PASS on the 8 other stock FA maps (DD01-04, DD06-09; 0 faults, round 2 everywhere): page SHOWN + ESC 5 -> 4 -> 3 on
-15/16 seats; DD04 client reached 0x1f ~2 s before the host began round 2 (scoreboard 31 ms, shop 0.5 s), so its F2 came too late (bench timing).
-After-match navigation is DONE on all 9 stock maps; the next owner play test decides whether it feels right.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
