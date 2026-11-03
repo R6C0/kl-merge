@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-03 12:25 c9: bs17 PASS 0 faults: the marked bot now scores humans in slot 111 (88 calls) but picks no target. Gate log added (1268242d3); bs18 chained after ce's pq13; workflow wwr26esf3 on the target gap.
 - 11-03 11:50 c9: bs16: feed works (humans in the traitor's known list). DM03 client asserted when the traitor took car #0 cover (spare points on the client); kits lacked live AssertSoft. bs17 (MarkSeen) running with it.
 - 11-03 11:05 c9: bs14 PASS 0 faults: known list holds police only, Sense never fed (silent). 72fbea75d: skip-reason log + seat-collision fix; bs15 running.
 - 11-03 10:15 c9: bs13 PASS 4 seats 0 faults: the marked bot is never offered a human target (slot 111 never sees a human), so no hit happens; research into where the candidates come from + census probe running (w8ykuqnkv).
