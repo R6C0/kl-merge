@@ -104,3 +104,21 @@ Follows re/traitor_handoff_1103.md. Disassembly was read with capstone. Three pa
   - klbr_hf_human_in_b now skips tagged bot bodies, which also fixes HumanFirst counting an ally bot as a human.
 - OnlineBrainTraitorCoverFire: after slot 113 (and after HolderFix), when the holder is a human passing 0x616480 and [[s+0x5ac]+8] is 0 or 4, call slot 83 like 0x907c34, at most every 2 s per bot.
   - It logs the CoverFire goal state and the current goal before and after.
+
+## bs23 (out_tcf_1103l, HumanOnly + CoverFire): PASS 4 seats, 0 asserts, 0 faults
+- HumanOnly nulled ally-bot scores: DM03 44 (54 passed), DD05 26. DM03 holder: human 21, bot 20; DD05: human 20, cop 20, bot 7.
+- CoverFire: DM03 26 calls, DD05 17, 0 skips, 0 faults. It becomes the current goal ("current goal X -> +0x654"), state 0 at the call, 4 about 3-6 s later, then the old goal returns.
+- 0 hits, but the HitLog slot-15 wrapper was entered 0 times by anyone: hits are unobservable there. bs24 reads the human's health instead.
+
+## Workflow wee6blb1x (4 agents: 2 traces + 2 verifiers), read only
+- Scheduler (CONFIRMED): [s+4..s+8) goal stack (top runs), [s+0x10..] abort queue, [s+0x48] goal list {goal, prio, expiry flag, clock}, [s+0x74] current goal, [s+0x78] its prio.
+  Goal states at [g+8]: 0 new, 1 starting, 2 running, 3 exiting, 4 terminated. Goal slots: +0x634 Idle, +0x638 Attack, +0x654 CoverFire, +0x658 AttackTarget (ctor 0x6ab250).
+- Idle never ends by itself: it is aborted (arbiter switch / PopGoal). The arbiter 0x81eb90 early-returns at 0x81ec18 when the winner == [s+0x74], so a stale current goal is never re-pushed.
+- Idle is re-added by shipped 0x82cae0 (vt+0x4c(2), AddGoal Idle 0x64 at 0x82cb5f, re-arbitrate), when [s+0x6e8] == 0.
+- REFUTED: "+0x88 = 2 lets Idle shoot". Idle calls 0x7088c0 with 0.0 and the arg test at 0x70892f skips the aim call unless arg > 0.
+- The shooting tasks (ZRunToPosShootingTask [s+0x56c], ZTurnAndShootTask [s+0x588]) run only as RunChild of ZSoldierAttack 0x6c8350, ZAttackTarget 0x4f4460 / 0x4f4bed and ZAttackFromCornerCover 0x45ff54.
+- Slot 83 with a NONZERO handle reaches AddGoal at 0x831986 and adds ZAttackTarget (prio 0x96); the AddGoal gate refuses only role 3 (client). Shipped DD never passes a nonzero handle (unexercised path).
+
+## Levers for bs24 (5400b88e7)
+- CoverFire health readout (read only): the human holder's health at the call, +300 ms and +2 s; also stack count / top state, +0x88, +0x6e8, Idle state.
+- OnlineBrainTraitorAttackHandle (default off, UNTESTED, needs CoverFire): the same call with handle = [s+0xb0]; logs the +0x658 state and the current goal.
