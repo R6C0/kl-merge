@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~12:40 - [c9] wwr26esf3 (capstone): the 'traitor target:' probe read [soldier+0x708] = LAST AGGRESSOR, not the pick. 0x767510 stores
+its winner in the holder soldier+0xa8 (+0xb0 handle); the ZAttackTarget goal [soldier+0x658] fires on its own [+0x14], set by Attack slot 83 only in state 0/4.
+Gate 11a reads the session (passes under the swap). 4ecfc0234 logs the holder + goal (read only, out_thold_1103g); bs19 chained after bs18.
+Notes: re/traitor_target_holder_1103.md.
+
 2026-11-03 ~12:25 - [c9] bs17 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; DM03 client 16 soft asserts stepped over = car #0, AssertSoft now in kits).
 SenseSeen (MarkSeen) works: the marked bot called slot 111 88 times, all with human candidates (first time ever), but its target stayed 0 and 0 hits.
 With FireLine=2 every call was nested in slot 113's swap, so no score was logged: 1268242d3 adds a read-only gate log there. Kits lacked live
 ClientRewrite/ClientRingSync (re/dm03_car0_spare_1103.md); bs18 has them, chained after ce's pq13. Workflow wwr26esf3: where the target is stored + gate 11a.
-
-2026-11-03 ~11:50 - [c9] bs15 PASS (skip log: both humans 'empty body', the crew record holds the CLIENT at +0, body = [[rec]+0x378]; fixed 547f9a263).
-bs16: the Sense feed WORKS (2 of 2 humans in the marked bot's known list, both maps). DD05 PASS. DM03 client FAIL: the fed traitor took car #0
-cover, whose points are SPARE on the client even with ClientBuild -> asserts 0x6567e8/0x845a8b, then d3d9 death. All bench kits lacked the live
-ini's AssertSoft line; bs17 (SenseSeen = MarkSeen 0x4880d0, 4906688b0, off by default) carries it and is running.
 
 2026-11-03 ~10:20 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)
