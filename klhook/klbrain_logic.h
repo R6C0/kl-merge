@@ -271,4 +271,11 @@ static int kbr_cand_sort(const unsigned long *obj, const float *d2, int n, unsig
     return c;
 }
 
+/* DropCands (bs4c DD05: cops carry the loot, every stack drains into a type-1 drop within ~20 s, slot 202 returned 0 candidates): may a type-1 drop be offered? Armed, amount left, node hidden bit clear
+   (hidden: 0 = clear; 1 / -1 unreadable = no) and tracked_ok = the OnlineDropFollow rule (kdf_drop_ok: unhidden AND preceded by a real stack drain; klbotfill.c). A type-0/2 stack is never judged here */
+static int kbr_drop_valid(int armed, long amt, int hidden, int tracked_ok)
+{
+    return armed && amt > 0 && hidden == 0 && tracked_ok;
+}
+
 #endif /* KLBRAIN_LOGIC_H */

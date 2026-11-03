@@ -200,6 +200,10 @@ int main(void)
         CHECK(!kbr_claimed(100, 1, 0, ct, ow, at, 3, 12000, 4000) && kbr_claimed(100, 2, 0, ct, ow, at, 3, 12000, 4000) && !kbr_claimed(200, 1, 0, ct, ow, at, 3, 12000, 4000), "claims: picks off = grabs only, my own grab still mine");
         CHECK(!kbr_claimed(400, 1, 1, ct, ow, at, 3, 12000, 4000) && !kbr_claimed(0, 1, 1, ct, ow, at, 3, 12000, 4000), "claims: unclaimed / null stack free");
     }
+    {   /* DropCands: drop validity (the ranking is the shared kbr_cand_sort: stacks and drops merged by distance, as Arcade) */
+        CHECK(kbr_drop_valid(1, 100, 0, 1) && !kbr_drop_valid(0, 100, 0, 1) && !kbr_drop_valid(1, 0, 0, 1) && !kbr_drop_valid(1, -5, 0, 1), "drop: armed with an amount left is valid");
+        CHECK(!kbr_drop_valid(1, 100, 1, 1) && !kbr_drop_valid(1, 100, -1, 1) && !kbr_drop_valid(1, 100, 0, 0), "drop: hidden / unreadable node / not tracked-ok (no real drain) is not valid");
+    }
     {   /* BoardStage: stage byte and the deferral clock */
         unsigned long since = 0;
         CHECK(kbr_stage_byte(0, 0, 5, 3, 1) == 2 && kbr_stage_byte(0, 0, 0, 3, 1) == 1 && kbr_stage_byte(0, 1, 0, 0, 0) == 3, "stage: off = the old 1 / 2 / 3 (aboard only)");

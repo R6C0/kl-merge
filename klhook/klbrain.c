@@ -90,6 +90,12 @@ static const DWORD klbr_size[3] = { 0x30, 0x14, 0x20 };
 static int klbr_probe, klbr_build, klbr_loot, klbr_puppet, klbr_on, klbr_win_ms = 5000;
 static int klbr_apick; static volatile LONG klbr_run_skip[2], klbr_npick;      /* ArcadePick; Loot / Board RUN calls answered inert (coroutine rule) */
 static int klbr_bstage; static long klbr_bs_defer_n, klbr_bs_real, klbr_bs_fb;      /* BoardStage: on; bots whose hook boarding was deferred, boarded by the real Board tactic (slot 45), boarded by the fallback */
+static int klbr_dropc; static long klbr_dc_offered, klbr_dc_grabs;      /* DropCands: slot 202 also offers valid type-1 drops; drops offered / drop grabs started */
+static int klbf_brain_drop_ok(DWORD o);      /* klbotfill.c: a tracked drop that passes kdf_drop_ok (unhidden, armed after a real drain) */
+static int klbf_brain_targeted(DWORD o);     /* klbotfill.c: a puppeteer bot (phase 1) walks to o */
+/* DropCands GUESS (review 11-03): that Arcade's second slot-202 list (rules+0xdb8 / count +0xdac per bots_loot.md; hud_values.md says +0xda8) holds these type-1 drops is not verified. Arcade also applies
+   windows (stacks 800 / dy 400, drops 400 / dy 200, tuning +0xc1c..+0xc28); this slot 202 applies none, for stacks as before and now for drops (cops carry the loot far from the bots on DD05 / DD09).
+   The pump pays a drop in parts through 0x4e3f40 and does not return an emptied drop to the pool (0x57f320, stage-2 R9 unverified); an emptied drop stays registered with amount 0 (filtered out). */
 static int klbr_claims; static DWORD klbr_cur_snd; static long klbr_claim_skip, klbr_claim_fb;      /* StackClaims; the soldier whose evaluate / RUN slice is running (game thread only); stacks skipped, fallbacks to grabs-only */
 static int klbr_bridge, klbr_board, klbr_traitor, klbr_boardreal, klbr_cops, klbr_level = 6, klbr_lootwin = 1500, klbr_boardwin = 2000;      /* stage 2 / 3 switches (all default 0) */
 static DWORD klbr_game_tid;             /* the thread of the hook tick (SteamAPI_RunCallbacks gameplay call) */
@@ -575,18 +581,29 @@ static struct klbr_s *klbr_new(DWORD snd, DWORD actor, DWORD now)
 /* ---- the real money controls (registry 0xe09e38, count 0xe0e63c) as slot 202 and the grab see them ------------------------------------------------------------------------------- */
 #define KLBR_NSCAN 128
 #define KLBR_CLAIM_MS 4000u            /* StackClaims: a peer's Loot-evaluate pick keeps its stack off my candidate list this long (GUESS, bs4 11-03: re-evaluates come every few 100 ms) */
-static int klbr_money_ok(DWORD o, int *amt, float pos[3])        /* a takeable stack: vtable, not a drop (type 1), something left, armed, not behind a door, a node with a place */
+static int klbr_money_ex(DWORD o, int *amt, float pos[3], int *isdrop)        /* a takeable stack: vtable, not a drop (type 1; with DropCands a valid drop passes, *isdrop = 1), something left, armed, not behind a door, a node with a place */
 {
-    DWORD type = 0, ent, node; BYTE act = 0, shut = 0; int a = 0;
+    DWORD type = 0, ent, node, fl = 0; BYTE act = 0, shut = 0; int a = 0;
+    if (isdrop) *isdrop = 0;
     if (o < 0x10000 || klh_rd32(o) != KLMV_MONEY_VT) return 0;
-    if (!klh_rd(o + 0x38, &type, 4) || type == 1 || !klh_rd(o + 0x34, &a, 4) || a <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act) return 0;
+    if (!klh_rd(o + 0x38, &type, 4) || (type == 1 && !(klbr_dropc && isdrop)) || !klh_rd(o + 0x34, &a, 4) || a <= 0 || !klh_rd(o + 0x6c, &act, 1) || !act) return 0;
     if (klh_rd(o + 0x5c, &shut, 1) && shut) return 0;      /* GUESS: +0x5c = "behind a door" (the puppeteer's OnlineDoor test reads it so; Arcade's evaluate tests it too) */
     if (!(ent = klh_rd32(o + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, pos, 0)) return 0;
+    if (type == 1) {      /* DropCands: the OnlineDropFollow rule (tracked in klbotfill.c: unhidden AND preceded by a real drain), plus the node's hidden bit read here */
+        int hid = klh_rd(node + 0x3c, &fl, 4) ? ((fl & 0x400) ? 1 : 0) : -1;
+        if (!kbr_drop_valid(act != 0, a, hid, klbf_brain_drop_ok(o))) return 0;
+        *isdrop = 1;
+    }
     *amt = a; return 1;
+}
+static int klbr_money_ok(DWORD o, int *amt, float pos[3]) { return klbr_money_ex(o, amt, pos, 0); }      /* stacks only (the original rule) */
+static int klbr_money_cand(DWORD o, int *amt, float pos[3])      /* the pump's re-check: a stack, or with DropCands a valid drop */
+{
+    int dr = 0; return klbr_money_ex(o, amt, pos, klbr_dropc ? &dr : 0);
 }
 static int klbr_money_near(const float p[3], unsigned long *out, int cap, DWORD me)      /* me = the asking soldier (0 = unknown): with StackClaims a stack another bot grabs or freshly picked is skipped */
 {
-    DWORD rn = klh_rd32((DWORD_PTR)KLH_VA(0x00e0e63c)), reg[0x400], q, j, now = GetTickCount(); unsigned long obj[KLBR_NSCAN], cc[2 * KLBR_MAX], co[2 * KLBR_MAX], ca[2 * KLBR_MAX]; float d2[KLBR_NSCAN]; int n = 0, nc = 0, i, pass;
+    DWORD rn = klh_rd32((DWORD_PTR)KLH_VA(0x00e0e63c)), reg[0x400], q, j, now = GetTickCount(); unsigned long obj[KLBR_NSCAN], cc[2 * KLBR_MAX], co[2 * KLBR_MAX], ca[2 * KLBR_MAX]; unsigned char isd[KLBR_NSCAN]; float d2[KLBR_NSCAN]; int n = 0, nc = 0, i, pass, r;
     if (klbr_claims) for (i = 0; i < KLBR_MAX; i++) {
         struct klbr_s *e = &klbr_t[i];
         if (e->state != 1) continue;
@@ -600,16 +617,19 @@ static int klbr_money_near(const float p[3], unsigned long *out, int cap, DWORD 
         DWORD m = rn - q < 0x400 ? rn - q : 0x400;
         if (!klh_rd((DWORD_PTR)KLH_VA(0x00e09e38) + 4 * q, reg, 4 * m)) break;
         for (j = 0; j < m && n < KLBR_NSCAN; j++) {
-            float mp[3]; int amt;
-            if (!klbr_money_ok(reg[j], &amt, mp)) continue;
+            float mp[3]; int amt, dr = 0;
+            if (!klbr_money_ex(reg[j], &amt, mp, klbr_dropc ? &dr : 0)) continue;
             if (nc && kbr_claimed(reg[j], me, !pass, cc, co, ca, nc, now, KLBR_CLAIM_MS)) { if (!pass) klbr_claim_skip++; continue; }
-            obj[n] = reg[j]; d2[n] = (mp[0] - p[0]) * (mp[0] - p[0]) + (mp[1] - p[1]) * (mp[1] - p[1]) + (mp[2] - p[2]) * (mp[2] - p[2]); n++;
+            obj[n] = reg[j]; isd[n] = (unsigned char)dr; d2[n] = (mp[0] - p[0]) * (mp[0] - p[0]) + (mp[1] - p[1]) * (mp[1] - p[1]) + (mp[2] - p[2]) * (mp[2] - p[2]); n++;
         }
     }
     if (n || !nc || !me) break;
     klbr_claim_fb++;
     }
-    return kbr_cand_sort(obj, d2, n, out, cap);
+    r = kbr_cand_sort(obj, d2, n, out, cap);      /* DropCands review 11-03: Arcade's slot 202 (0x8b94d0) sorts the survivors of BOTH lists together by distance (bots_loot.md:177-186), so stacks and drops are merged */
+    if (!klbr_dropc) return r;
+    for (i = 0; i < r; i++) { int k; for (k = 0; k < n; k++) if (obj[k] == out[i]) { if (isd[k]) klbr_dc_offered++; break; } }
+    return r;
 }
 
 /* ---- the sync: the host ledger -> the shadow crew table / score block / van state (DATA ONLY: no game call, safe inside an AI wrapper) ------------------------------------------------ */
@@ -788,23 +808,25 @@ static void klbr_pump(DWORD now)       /* game thread, from klbotfill.c's Online
             DWORD node, ent, fl = 0; int hid = 0, j, free_ = 1; BYTE act = 0;
             if (!klbr_puppet_off(e->snd)) continue;      /* only a bot the REAL Loot tactic steers right now */
             {   DWORD cand[5]; if (!klh_rd(e->tac[0] + 0x14, cand, sizeof cand)) continue; c = (DWORD)kbr_chosen(cand, klh_rd32(e->tac[0] + 0x2c)); }      /* review 11-03 (0x451b8a): +0x2c = index into the 5 candidates at +0x14; +0x28 is the trigger box */
-            if (!c || !klbr_money_ok(c, &amt, mp)) continue;
+            if (!c || !klbr_money_cand(c, &amt, mp)) continue;      /* DropCands: a valid drop passes here too (only then); otherwise the pump never grabs a drop */
             if (!klh_rd(c + 0x64, &st64, 1)) continue;
             ctrlst = st64; klh_rd(c + 0x6c, &act, 1);
             ent = klh_rd32(c + 0x24); node = ent ? klh_rd32(ent + 4) : 0; if (node && klh_rd(node + 0x3c, &fl, 4)) hid = (fl & 0x400) != 0;
             for (j = 0; j < KLBR_NREC; j++) if (j != k && klbr_gr[j].on && klbr_gr[j].ctrl == c) free_ = 0;
+            if (klbr_dropc && klbf_brain_targeted(c)) { DWORD ty = 0; if (klh_rd(c + 0x38, &ty, 4) && ty == 1) free_ = 0; }      /* DropCands review 11-03: a drop a puppeteer bot walks to is not started (both would take it) */
             inside = (float)sqrt((pos[0] - mp[0]) * (pos[0] - mp[0]) + (pos[2] - mp[2]) * (pos[2] - mp[2])) <= klbf_brain_near() && fabs(pos[1] - mp[1]) <= 400.0f;
             if (!inside || !kbr_grab_ok(klbr_gr[k].on ? 1 : 0, st, ctrlst, act != 0, hid, amt, free_, alive)) continue;      /* our own busy flag, not rec+0x15 (review 11-03) */
             {   int part = 0; float sec = 0;
                 if (!(klh_rd(c + 0x40, &part, 4) && klh_rd(c + 0x44, &sec, 4) && part >= 1 && sec >= 0.05f && sec <= 10.0f)) { part = amt; sec = 0.7f; }      /* GUESS: +0x40 part size, +0x44 seconds per part (re/bots_loot.md; the puppeteer's OnlineLootParts reads the same) */
                 klbr_gr[k].ctrl = c; klbr_gr[k].timer = sec; klbr_gr[k].last = (DWORD)part; klbr_gr[k].outside = 0; klbr_gr[k].on = 1; klbr_nstart++;
+                if (klbr_dropc) { DWORD ty = 0; if (klh_rd(c + 0x38, &ty, 4) && ty == 1) klbr_dc_grabs++; }
                 KLBR_PB(KLBR_REC(k) + 0x15) = 1; KLBR_P32(KLBR_FLAGS(k)) = 0x2000;
                 if (klbr_ngrab++ < 400) klog("brain: grab: record %d (actor %08lx) starts stack %08lx (amt %d, part %d, %.2f s/part), %.1f m from it", k, (unsigned long)e->actor, (unsigned long)c, amt, part, (double)sec, (double)(sqrt((pos[0] - mp[0]) * (pos[0] - mp[0]) + (pos[2] - mp[2]) * (pos[2] - mp[2])) / 100.0));
             }
             continue;
         }
         c = klbr_gr[k].ctrl;
-        {   int taken = !klbr_money_ok(c, &amt, mp), r;
+        {   int taken = !klbr_money_cand(c, &amt, mp), r;      /* DropCands: a drop being grabbed stays "not taken" while it is still valid */
             if (!taken) { inside = (float)sqrt((pos[0] - mp[0]) * (pos[0] - mp[0]) + (pos[2] - mp[2]) * (pos[2] - mp[2])) <= klbf_brain_near() && fabs(pos[1] - mp[1]) <= 400.0f; klh_rd(c + 0x64, &st64, 1); ctrlst = st64; }
             else { inside = 0; ctrlst = 0; }
             r = kbr_grab_step(&klbr_gr[k].timer, dt, inside, &klbr_gr[k].outside, alive, taken, ctrlst);
@@ -833,6 +855,7 @@ static void klbr_summary(void)
             klog("brain: round end: bridge: %d grab(s) started, %d part(s) paid ($%ld), %d stopped; slot 202 calls %d, slot 45 calls %d; traitor mirrors %d; Board run/exit calls %ld/%ld",
                 klbr_nstart, klbr_npay, klbr_paid, klbr_nabort, klbr_s202_n, klbr_s45_n, klbr_ntraitor, (long)klbr_hits[3], (long)klbr_hits[4]);
         if (klbr_claims) klog("brain: round end: StackClaims: %ld stack(s) kept off a bot's candidate list (a peer grabs it or picked it within %u ms), %ld fallback(s) to grabs-only (every stack picked by a peer)", klbr_claim_skip, KLBR_CLAIM_MS, klbr_claim_fb);
+        if (klbr_dropc) klog("brain: round end: DropCands: %ld drop(s) offered in slot 202 candidate lists (counted per call), %ld drop grab(s) started by the pump", klbr_dc_offered, klbr_dc_grabs);
         if (klbr_bstage) klog("brain: round end: BoardStage: %ld boarded by the real Board tactic (slot 45), %ld by the fallback (the hook's own path after at most %lu ms of waiting); %ld bot(s) had their hook boarding deferred", klbr_bs_real, klbr_bs_fb, KLBR_BS_MS, klbr_bs_defer_n);
         if (klbr_realrun)
             klog("brain: round end: realrun: swap-ins %ld (RUN %ld, EXIT %ld), swap-outs %ld, leaks %ld, veh restores %ld, mismatches %ld, foreign-thread %ld, nested %ld, mode!=4 %ld, unregistered [tac+0x10] %ld, hand-off stamps evaluate-pick %ld / resume %ld; %ld tactic(s) in the registry (kept across rounds: a coroutine alive past the round end still gets the shadow)", (long)klbr_rr_in, (long)klbr_rr_val[1], (long)klbr_rr_val[2], (long)klbr_rr_out, (long)klbr_rr_leak, (long)klbr_rr_veh, (long)klbr_rr_mis, (long)klbr_rr_foreign, (long)klbr_rr_nested, (long)klbr_rr_mode, (long)klbr_rr_t10, (long)klbr_rr_hand_ev, (long)klbr_rr_hand_run, (long)klbr_rrn);
@@ -894,7 +917,7 @@ static void klbr_tick(int game_thread)
         return;
     }
     klbr_game_tid = GetCurrentThreadId();
-    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); memset(klbr_t, 0, sizeof klbr_t); klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_paid = 0; klbr_claim_skip = klbr_claim_fb = 0; klbr_bs_defer_n = klbr_bs_real = klbr_bs_fb = 0; klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
+    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); memset(klbr_t, 0, sizeof klbr_t); klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_paid = 0; klbr_claim_skip = klbr_claim_fb = 0; klbr_dc_offered = klbr_dc_grabs = 0; klbr_bs_defer_n = klbr_bs_real = klbr_bs_fb = 0; klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
         klog("brain: round starts on the host (Probe %d, Build %d, Loot %d, Bridge %d, Board %d/%d, Traitor %d, PuppetOff %d, Cops %d)", klbr_probe, klbr_build, klbr_loot, klbr_bridge, klbr_board, klbr_boardreal, klbr_traitor, klbr_puppet, klbr_cops); }
     if (klbr_fed_at && now - klbr_fed_at < 2500u) { for (i = 0; i < klbr_nseen && n < KLBR_MAX; i++) { actor[n] = klbr_seen[i].actor; snd[n] = klbr_seen[i].snd; n++; } }
     else n = klbr_scan(actor, snd, KLBR_MAX);
@@ -934,6 +957,9 @@ static void klbr_init(void)
     klbr_claims = klbr_bridge && klbr_key("StackClaims");
     if (klbr_key("StackClaims") && !klbr_claims) klog("brain: StackClaims needs Build=1, Loot=1 and OnlineBrainBridge=1: off");
     if (klbr_claims) klog("brain: StackClaims=1 UNTESTED: the loot candidates (slot 202) skip a stack another bot grabs or picked within %u ms, so each bot walks to its own stack (bs4: 12 watchdog take-backs from shared stacks)", KLBR_CLAIM_MS);
+    klbr_dropc = klbr_bridge && klbr_key("DropCands");
+    if (klbr_key("DropCands") && !klbr_dropc) klog("brain: DropCands needs Build=1, Loot=1 and OnlineBrainBridge=1: off");
+    if (klbr_dropc) klog("brain: DropCands=1 UNTESTED: slot 202 also offers valid type-1 drops (armed, amount left, unhidden, preceded by a real stack drain, a node with a place), merged with the stacks by distance as Arcade; the pump grabs a chosen drop (bs4c DD05: cops drain every stack into a drop in ~20 s, 0 candidates after)");
     if (klbr_key("ArcadePick") && !klbr_apick) klog("brain: ArcadePick needs Build=1, Loot=1 and OnlineBrainBridge=1: off");
     if (klbr_apick) klog("brain: ArcadePick=1 UNTESTED: the puppeteer walks a bot to the stack its real Loot evaluate chose (within %u ms), else to its own nearest stack", KLBR_PICK_MS);
     if (klbr_on) klog("brain: Probe %d, Build %d (recommended off until benched), Loot %d, Bridge %d, Board %d, BoardReal %d, Traitor %d, PuppetOff %d, Cops %d, Level %d; HOST round only, no code byte is patched", klbr_probe, klbr_build, klbr_loot, klbr_bridge, klbr_board, klbr_boardreal, klbr_traitor, klbr_puppet, klbr_cops, klbr_level);

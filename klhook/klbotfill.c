@@ -1728,7 +1728,7 @@ static void klbf_df_see(DWORD o, int amt, DWORD now)
     if (klbf_dr[f].o != o) { memset(&klbf_dr[f], 0, sizeof klbf_dr[f]); klbf_dr[f].o = o; klbf_dr[f].first = now ? now : 1; }
     {   DWORD fl = 0, e2, n2; int oa = klbf_dr[f].amt, oh = klbf_dr[f].hid, nh = (e2 = klh_rd32(o + 0x24)) && (n2 = klh_rd32(e2 + 4)) && klh_rd(n2 + 0x3c, &fl, 4) ? ((fl & 0x400) ? 1 : 0) : -1;
         /* wk-dropfix-1101 review: a pool object re-armed for a real drop (amount changed, or hidden 1 -> 0) is a NEW drop: restart its clock and drain window, else a later real drain falls outside the first-sighting +-3 s and DropFollow never fires */
-        if (oa && ((amt != oa) || (oh == 1 && nh == 0))) { klbf_dr[f].first = now ? now : 1; klbf_dr[f].drn = 0; klbf_dr[f].skl = 0; klbf_dr[f].long60 = 0; klbf_dr[f].logged = 0; }      /* wk-lootmetric-1102: log only, so the "drop armed" probe line is printed again for the real drop (a pool object was marked logged at its first, round-start sighting and never said it) */
+        if (oa && ((klbr_dropc ? amt > oa : amt != oa) || (oh == 1 && nh == 0))) {      /* DropCands review 11-03: a drop paid in parts goes DOWN; that is the same drop (keep its drain mark, else the pump's grab aborts after one part). Up / unhidden = a re-armed pool object */ klbf_dr[f].first = now ? now : 1; klbf_dr[f].drn = 0; klbf_dr[f].skl = 0; klbf_dr[f].long60 = 0; klbf_dr[f].logged = 0; }      /* wk-lootmetric-1102: log only, so the "drop armed" probe line is printed again for the real drop (a pool object was marked logged at its first, round-start sighting and never said it) */
         klbf_dr[f].hid = nh; klbf_dr[f].seen = 1; klbf_dr[f].amt = amt; }      /* node-hidden bit as klbf_sp_desc; re-read each tick (GUESS: a real drop is unhidden when it appears, the round-start pool objects stay hidden at one pool point; -1 = node unreadable) */
     klbf_dr[f].posok = (ent = klh_rd32(o + 0x24)) && (node = klh_rd32(ent + 4)) && kle_node(node, klbf_dr[f].pos, 0);      /* re-read each tick: the drop settles (0x5f1d0a) */
 }
@@ -1877,6 +1877,13 @@ static void klbf_sp_install(void)
 /* [Brain] hand-over helpers (klbrain.c, OnlineBrainBridge / OnlineBrainBoardReal; UNTESTED): small, game-thread, called from the brain's pump / its board stub. They book into the SAME ledger klbf_ob[] the
    puppeteer uses, so OnlineBank / the HUD board / OnlineBoardAll see a real-brain bot exactly like a puppeteer one. */
 static int klbf_brain_slot(DWORD actor) { int i; if (!actor) return -1; for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) return i; return -1; }
+static int klbf_brain_drop_ok(DWORD o)      /* DropCands (klbrain.c): o is a tracked armed drop that passes the OnlineDropFollow rule (kdf_drop_ok: unhidden, armed after a real stack drain); untracked / not seen this tick = 0 */
+{
+    int i; if (!o) return 0;
+    for (i = 0; i < KLBF_DR_MAX; i++) if (klbf_dr[i].o == o) return klbf_dr[i].seen && klbf_dr[i].amt > 0 && kdf_drop_ok(klbf_dr[i].hid, klbf_dr[i].drn);
+    return 0;
+}
+static int klbf_brain_targeted(DWORD o) { int q; if (!o) return 0; for (q = 0; q < KLBF_OT_BOTS; q++) if (klbf_ob[q].actor && klbf_ob[q].phase == 1 && klbf_ob[q].target == o) return 1; return 0; }      /* DropCands: a puppeteer bot walks to o */
 static float klbf_brain_near(void) { return klbf_ot_near; }      /* OnlineTacticsNear, cm: the ball the puppeteer grabs in */
 static int klbf_brain_take(DWORD ctrl, int amt)      /* -> the stack's amount left after the game's own depletion 0x4e3f40; -1 refused (OnlineTacticsTake is not 2, or the stack is gone) */
 {
