@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~10:15 - [c9] bs13 PASS (DM03 + DD05, 4 seats, 0 faults) with the traitor probe + OnlineBrainTraitorDamage (e97d8651f, both off by default).
+Finding: the slot-15 gate byte is set and slot 15 is our wrapper, yet it is never entered; the marked bot's target is only ever a cop (DD05) or nothing (DM03),
+and slot 111 has NEVER been called with a human candidate in bs11-bs13. So the gap is upstream: the marked bot's candidate list holds no human.
+Workflow w8ykuqnkv (worktree C:\kl_wt	cand): where the candidates come from + a census probe + an off-by-default fix if a lever is found.
+
 2026-11-03 ~09:20 - [c9] bs12 PASS (DM03 + DD05, 4 seats, 0 faults) with OnlineBrainTraitorHitLog (762663323, read-only) and FireLine=2 on both maps:
 marked 0 / unmarked 0 hits on humans, and the rules' damage hook (slot 15) was never reached on the host at all (Cops 0, idle humans), so it is
 INCONCLUSIVE, not a refusal. Research 72a3bf065: the goal-code fire-line path 0x8f6990 feeds a constant-false stub 0x655a40, so slots 113/114 are
 the whole fire-line gap. Running: the remaining hold-fire tests in 0x8c1830 and the slot-15 team filter 0x719720 (static).
-
-2026-11-03 ~08:50 - [c9] bs11 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorFireLine (c32286473) wraps the marked bot's ZSoldier
-slots 113/114 (fire-line friend list); mode 1 logged calls on DM03, mode 2 swapped the Arcade rules in cleanly on DD05 (slot 114 returned 0 x7, 1 x1).
-Not yet shown: that the marked bot really shoots a human (no hit counter). Real Board 7/7 DM03, 5/7 DD05. Host menu INSTALLED 08:44 (mkoverlay
-6e10e11c4 keeps KLS_Tex/KLS_Neural, adds KLS_HMap/KLS_HOpt, 11 rows 27 apart; UNDO hostmenu 1102.bat restores the identical previous zip).
 
 2026-11-03 ~08:25 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)
