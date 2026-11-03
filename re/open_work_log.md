@@ -1,3 +1,8 @@
+2026-11-03 ~03:05 - [c9] bs2 SAFE PASS (DM03 + DD05, 2 seats, 0 asserts/faults: the bs1 crash setup no longer crashes) but ArcadePick gave only 1 / 0 orders.
+nm1 PASS: lobby 'Withdrawal' = LOAD DM03 on both seats (random peek). Real Arcade RUN online: 06101ed05 [Brain] RealRun (off) = MSVCR90.longjmp IAT thunk swaps
+the shadow rules in per resumed Loot/Board slice, out at each yield (no SEH across it; SHIP obj checked). bs3 (dll out_brain4_1103b_test, RealRun=1, DM03
+PuppetOff + DD05 BoardReal) chained on "end pq4"; pass = no c0000029/fault 120 s and swap-ins > 0 with bots taking loot.
+
 2026-11-03 ~03:00 - [ce] AutoOpenSteps pushed (7bf5be192, default 0, recommended off until benched): after AutoOpen the hook opens FABuyWeaponsNewCategory then
 FABuyWeaponsNewWeapon itself (0x6bee50 as klsv_open), gated by kpq_aostep (top window, mode 0/1, slot -6, cat -4, busy, 300 ms; aborts 5 s / 2.5 s). Review (3 lenses):
 no defect; open point = selector init setting slot/cat is unverified in game (graceful abort if wrong). Kit pq5 (dll pq_1103e_test, no scripted RETURN) chained on

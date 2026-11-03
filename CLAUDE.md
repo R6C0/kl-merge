@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~03:05 - [c9] bs2 SAFE PASS (DM03 + DD05, 2 seats, 0 asserts/faults: the bs1 crash setup no longer crashes) but ArcadePick gave only 1 / 0 orders.
+nm1 PASS: lobby 'Withdrawal' = LOAD DM03 on both seats (random peek). Real Arcade RUN online: 06101ed05 [Brain] RealRun (off) = MSVCR90.longjmp IAT thunk swaps
+the shadow rules in per resumed Loot/Board slice, out at each yield (no SEH across it; SHIP obj checked). bs3 (dll out_brain4_1103b_test, RealRun=1, DM03
+PuppetOff + DD05 BoardReal) chained on "end pq4"; pass = no c0000029/fault 120 s and swap-ins > 0 with bots taking loot.
+
 2026-11-03 ~03:00 - [ce] AutoOpenSteps pushed (7bf5be192, default 0, recommended off until benched): after AutoOpen the hook opens FABuyWeaponsNewCategory then
 FABuyWeaponsNewWeapon itself (0x6bee50 as klsv_open), gated by kpq_aostep (top window, mode 0/1, slot -6, cat -4, busy, 300 ms; aborts 5 s / 2.5 s). Review (3 lenses):
 no defect; open point = selector init setting slot/cat is unverified in game (graceful abort if wrong). Kit pq5 (dll pq_1103e_test, no scripted RETURN) chained on
@@ -76,15 +81,6 @@ no defect; open point = selector init setting slot/cat is unverified in game (gr
 2026-11-03 ~02:35 - [ce] pq3 SAFE PASS (2 maps x 2 seats): the queued press survives 0x1f -> 0x20 and AutoOpen opens Buy Weapons on every seat (~0.8 s), but
 the page never applied: the bench stopped in FABuyWeaponsNewCategory = shop mode 1; the page needs mode 2 (FABuyWeaponsNewWeapon). e686a9fb7 adds a 2 s
 'pagequeue: holding' line; kit pq4 (dll pq_1103d_test, scripts step into the weapon list) chained on "end bs2". Research: AutoOpen steps 0 -> 2 by itself.
-
-2026-11-03 ~02:15 - [c9] bs1 B + C HOST CRASH c0000029 FIXED (f5f0ccd3e): Loot RUN 0x7bc7d0 / Board RUN 0x82f970 are setjmp coroutines (yield 0x55b9f0,
-longjmp to 0x168e4c8); our __try/__finally was live across the yield, and a resumed slice runs on the online rules (0x508ef0 = 0 -> fault). The DLL never
-calls them now; PuppetOff/BoardReal are forced off; new [Brain] ArcadePick = the puppeteer walks to the Arcade evaluate's chosen stack. bs2 (dll
-out_brain3_1103a_test, ArcadePick=1, DM03 + DD05) chained on "end nm1". Real Arcade movement online still needs a SHIP-legal RUN path (research).
-
-2026-11-03 ~00:55 - [c9] Arcade brain online stage 2/3 pushed (443fc0806 + review fixes 2f66db9ca, doc re/arcade_brain_stage2_1103.md): real Loot/Board
-tactics drive online bots through a shadow rules frame; chosen stack = [tac+0x2c], stall watchdog 8 s, per-class fault kill, ret-8 install check. All keys
-off. Host map-set menu (5eb1a50fb, C:\kl_build_1024\hostmenu_1102 INSTALL bat) still not seen in game.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
