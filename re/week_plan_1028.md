@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-03 11:05 c9: bs14 PASS 0 faults: known list holds police only, Sense never fed (silent). 72fbea75d: skip-reason log + seat-collision fix; bs15 running.
 - 11-03 10:15 c9: bs13 PASS 4 seats 0 faults: the marked bot is never offered a human target (slot 111 never sees a human), so no hit happens; research into where the candidates come from + census probe running (w8ykuqnkv).
 - 11-03 03:20 c9: bs3 SAFE PASS 4 seats with the guarded RealRun dll (71d099212): real Arcade Loot RUN resumes online (DM03 13776, DD05 37), swaps balanced, 0 leaks; bots not yet looting (grabs 0). Grading workflow w2vymslb2 -> bs4.
 - 11-03 09:20 c9: bs12 PASS 4 seats 0 faults; hit counter 0/0 but slot 15 never reached on the host (no damage at all): inconclusive. Goal-code fire-line path is a dead stub (72a3bf065). Next: hold-fire tests + 0x719720 research, then a bench where humans are actually in a bot's line of fire.

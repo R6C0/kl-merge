@@ -1,3 +1,7 @@
+2026-11-03 ~11:05 - [c9] bs14 PASS (DM03 + DD05, 4 seats, 0 faults) with CandLog + Sense (4f3e17a9e): a marked bot's known list B=[soldier+0x698]
+held only police (type-1, up to 9), slot 111 got 0 humans, and Sense never fed (its only log needed a fed entry). 72fbea75d adds a skip-reason log
+and stops klbr_hl_body excluding humans (real seat k collided with shadow bot rec k). bs15 (same maps, out_tdiag_1103c_test) running.
+
 2026-11-03 ~10:20 - [ce] pq12 (DM02 only; F02 page 2, 1 x RIGHT, from arc2/ARC2_DM02.ini 'F02 page 2 entry 1'; kit = pq10 base with [CoverRing]
 ClientBuild keys) PASS: 2 seats, 0 faults, round 2 on both. Both seats: hire key at 0x1f queued, autoopen send 1 at +812 ms of state 0x20, steps open
 Category then Weapon, 'page SHOWN' about 7 s after the press, ESC 5 -> 4 -> 3. After-match navigation total: all 9 stock FA maps + all 7 DM-pool maps,
