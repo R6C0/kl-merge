@@ -87,4 +87,95 @@ static int kbr_puppet_released(int puppet_on, int built, unsigned long now, unsi
     return (unsigned long)(now - nz_at) <= win_ms;
 }
 
+/* ===== stage 2 / 3 (arcade-brain2-1103, design re/arcade_brain_stage2_1103.md): pure parts ======================================================================================== */
+
+/* the full switch set after the dependencies. out[0..8] = Probe, Build, Loot, Bridge, Board, Traitor, PuppetOff, BoardReal, Cops.
+   Board needs Build; Bridge needs Loot; Traitor needs Build + Bridge; PuppetOff needs Loot + Bridge (the money must count); BoardReal needs Board; Cops needs Bridge. */
+#define KBR_S_PROBE 0
+#define KBR_S_BUILD 1
+#define KBR_S_LOOT 2
+#define KBR_S_BRIDGE 3
+#define KBR_S_BOARD 4
+#define KBR_S_TRAITOR 5
+#define KBR_S_PUPPET 6
+#define KBR_S_BOARDREAL 7
+#define KBR_S_COPS 8
+#define KBR_NSW 9
+static void kbr_switches2(int probe, int build, int loot, int bridge, int board, int traitor, int puppet, int boardreal, int cops, int *out)
+{
+    out[KBR_S_PROBE] = probe != 0; out[KBR_S_BUILD] = build != 0;
+    out[KBR_S_LOOT] = out[KBR_S_BUILD] && loot != 0;
+    out[KBR_S_BRIDGE] = out[KBR_S_LOOT] && bridge != 0;
+    out[KBR_S_BOARD] = out[KBR_S_BUILD] && board != 0;
+    out[KBR_S_TRAITOR] = out[KBR_S_BUILD] && out[KBR_S_BRIDGE] && traitor != 0;
+    out[KBR_S_PUPPET] = out[KBR_S_LOOT] && out[KBR_S_BRIDGE] && puppet != 0;
+    out[KBR_S_BOARDREAL] = out[KBR_S_BOARD] && boardreal != 0;
+    out[KBR_S_COPS] = out[KBR_S_BRIDGE] && cops != 0;
+}
+
+/* re-entry: depth counter of the swap frame (game thread only). enter returns 1 for the OUTERMOST call (it swaps), 0 for a nested one (it must not swap again); leave returns 1 when the outermost ends */
+static int kbr_frame_enter(int *depth) { return (*depth)++ == 0; }
+static int kbr_frame_leave(int *depth) { if (*depth > 0) (*depth)--; return *depth == 0; }
+
+/* the shadow data is stale (a sync is due) when older than age_ms; GetTickCount wrap safe; never synced = stale */
+static int kbr_sync_stale(unsigned long now, unsigned long last, unsigned long age_ms) { return !last || (unsigned long)(now - last) > age_ms; }
+
+/* money row of a shadow seat: the host ledger value clamped to a non-negative int (a bot that has no ledger slot reports -1 = 0) */
+static long kbr_money_row(long ledger) { return ledger < 0 ? 0 : (ledger > 2000000000L ? 2000000000L : ledger); }
+
+/* the Arcade level byte [S2+0x45] is clamped 1..11 (0x46d4d0 / 0x43ffb0) */
+static int kbr_level_clamp(int lv) { return lv < 1 ? 1 : (lv > 11 ? 11 : lv); }
+
+/* the van states the Board tactic walks in: 3 = waiting at the door, 4 = boarding (1 / 2 = called, not there yet) */
+static int kbr_board_state_ok(int van) { return van == 3 || van == 4; }
+
+/* grab precondition (0x6cdb40's own gates, bots_loot.md 66): record idle, session state 0x19, stack state 1, armed (+0x74), node not hidden, something left, our bit free, bot alive */
+static int kbr_grab_ok(int rec_state, unsigned long round_state, int ctrl_state, int active, int hidden, long amount, int bit_free, int alive)
+{
+    return rec_state == 0 && round_state == 0x19ul && ctrl_state == 1 && active && !hidden && amount > 0 && bit_free && alive;
+}
+
+/* one grab tick. timer = seconds left for the current part; inside = the bot is in the ball; *outside = consecutive ticks outside (Arcade state-2 rule: one tick of grace).
+   -> 0 keep, 1 pay a part (timer reached 0), 2 abort (taken / not state 1 / dead / left the ball for more than one tick) */
+#define KBR_G_KEEP 0
+#define KBR_G_PAY 1
+#define KBR_G_ABORT 2
+static int kbr_grab_step(float *timer, float dt, int inside, int *outside, int alive, int taken, int ctrl_state)
+{
+    if (taken || ctrl_state != 1 || !alive) return KBR_G_ABORT;
+    if (!inside) { if (++*outside > 1) return KBR_G_ABORT; return KBR_G_KEEP; }
+    *outside = 0;
+    if (dt < 0) dt = 0;
+    *timer -= dt;
+    return *timer <= 0.0f ? KBR_G_PAY : KBR_G_KEEP;
+}
+/* part size of a grab: min(stack part size, what is left) and never negative */
+static long kbr_part(long part, long remaining) { long p = part < remaining ? part : remaining; return p < 0 ? 0 : p; }
+
+/* hand-off per tactic. loot_real: the real Loot tactic steers (PuppetOff semantics, kbr_puppet_released) and the van is not at 3 / 4 (Board owns the bot then);
+   board_real: Board on, van in {3,4}, and a Board evaluate > 0 within board_win ms. At most one steerer: board_real wins over loot_real. */
+static void kbr_hand(int puppet_on, int built, int board_on, unsigned long now, unsigned long loot_nz_at, unsigned long board_nz_at, int van, unsigned long loot_win, unsigned long board_win, int *loot_real, int *board_real)
+{
+    int b = board_on && built && kbr_board_state_ok(van) && board_nz_at && (unsigned long)(now - board_nz_at) <= board_win;
+    int l = kbr_puppet_released(puppet_on, built, now, loot_nz_at, loot_win) && !kbr_board_state_ok(van);
+    *board_real = b; *loot_real = b ? 0 : l;
+}
+
+/* keep the cap nearest objects of obj[0..n) by squared distance d2 (ties: the lower index first), written to out[0..cap), tail zero-filled; returns how many were kept */
+static int kbr_cand_sort(const unsigned long *obj, const float *d2, int n, unsigned long *out, int cap)
+{
+    float kd[16]; int i, k, c = 0;
+    if (cap > 16) cap = 16;
+    for (k = 0; k < cap; k++) out[k] = 0;
+    for (i = 0; i < n; i++) {
+        int at = c;
+        if (!obj[i]) continue;
+        for (k = 0; k < c; k++) if (d2[i] < kd[k]) { at = k; break; }      /* strict <: an equal distance goes behind the earlier index */
+        if (at >= cap) continue;
+        for (k = (c < cap ? c : cap - 1); k > at; k--) { out[k] = out[k - 1]; kd[k] = kd[k - 1]; }
+        out[at] = obj[i]; kd[at] = d2[i]; if (c < cap) c++;
+    }
+    return c;
+}
+
 #endif /* KLBRAIN_LOGIC_H */

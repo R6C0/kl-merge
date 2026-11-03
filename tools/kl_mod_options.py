@@ -370,6 +370,16 @@ feat('brainloot', G_EXP, 'Online host: swap a shadow rules block around one Loot
      'klbrain.c [Brain] Loot (needs Build); wk-brain-1102 stage 1b, proves the swap path only; NOT run live', [('Brain', 'Loot', 1, 0, 0)])
 feat('brainpuppetoff', G_EXP, 'Online host: the bot puppeteer leaves a bot alone while its real Loot tactic wants something; UNTESTED (recommended off)', 'off', 'start',
      'klbrain.c [Brain] PuppetOff (needs Build + Loot, PuppetWindowMs 5000); klbotfill.c OnlineTactics skips that bot\'s steering; NOT run live', [('Brain', 'PuppetOff', 1, 0, 0)])
+feat('brainbridge', G_EXP, 'Online host: the AI heisters pick and take loot through the real Arcade brain (recommended off)', 'off', 'start',
+     'klbrain.c [Brain] OnlineBrainBridge (needs Build + Loot; PuppetOff hands a bot over); wk-brain2-1103 stage 2: shadow crew table / score block, slot 202 candidates, DLL-run grab; UNTESTED live', [('Brain', 'OnlineBrainBridge', 1, 0, 0)])
+feat('brainboard', G_EXP, 'Online host: evaluate the real Arcade van-walk tactic for the AI heisters, a dry run (recommended off)', 'off', 'start',
+     'klbrain.c [Brain] OnlineBrainBoard (needs Build); wk-brain2-1103: Board evaluate / run / exit framed (EXIT 0x5478e0 needs the frame); its answer reaches the AI only with BoardReal; UNTESTED live', [('Brain', 'OnlineBrainBoard', 1, 0, 0)])
+feat('brainboardreal', G_EXP, 'Online host: the AI heisters board the van through the real Arcade tactic (recommended off)', 'off', 'start',
+     'klbrain.c [Brain] OnlineBrainBoardReal (needs OnlineBrainBoard); slot 45 stub books the host ledger (phase 3) and uses the squad removal of OnlineBoard; UNTESTED live', [('Brain', 'OnlineBrainBoardReal', 1, 0, 0)])
+feat('braintraitor', G_EXP, 'Online host: the real Arcade traitor roll for the AI heisters, logged only (recommended off)', 'off', 'start',
+     'klbrain.c [Brain] OnlineBrainTraitor (needs Build + Bridge); stage 3a MIRROR ONLY: the record bit is logged, no team change, no announce; UNTESTED live', [('Brain', 'OnlineBrainTraitor', 1, 0, 0)])
+feat('braincops', G_EXP, 'Online host: AI heister cop triggers through the real brain, research only (recommended off)', 'off', 'start',
+     'klbrain.c [Brain] OnlineBrainCops (needs Bridge); stage 3b: no behaviour yet (design 8.2 asks for research first); UNTESTED', [('Brain', 'OnlineBrainCops', 1, 0, 0)])
 feat('onlinelegswithvan', G_EXP, 'Online AI heisters follow the route even on maps whose getaway van stands there from the start (DM09) (recommended off until benched)', 'off', 'start',
      'klbotfill.c [BotFill] OnlineLegsWithVan; RT1 11-01: DM09\'s van object made the bots skip all legs and walk straight at it 60 km away; NOT run live', [('BotFill', 'OnlineLegsWithVan', 1, 0, 0)])
 feat('onlinevanafterlegs', G_EXP, 'Online AI heisters walk the route and call the van even when the van object is known from the start (DM09) (recommended off until benched)', 'off', 'start',

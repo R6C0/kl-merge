@@ -1863,6 +1863,28 @@ static void klbf_sp_install(void)
 /* the hook's own calls of 0x4e3f40 wrap this */
 #define KLBF_SP_OWN(call) do { klbf_sp_ownTid = GetCurrentThreadId(); klbf_sp_own = 1; call; klbf_sp_own = 0; } while (0)
 
+/* [Brain] hand-over helpers (klbrain.c, OnlineBrainBridge / OnlineBrainBoardReal; UNTESTED): small, game-thread, called from the brain's pump / its board stub. They book into the SAME ledger klbf_ob[] the
+   puppeteer uses, so OnlineBank / the HUD board / OnlineBoardAll see a real-brain bot exactly like a puppeteer one. */
+static int klbf_brain_slot(DWORD actor) { int i; if (!actor) return -1; for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) return i; return -1; }
+static float klbf_brain_near(void) { return klbf_ot_near; }      /* OnlineTacticsNear, cm: the ball the puppeteer grabs in */
+static int klbf_brain_take(DWORD ctrl, int amt)      /* -> the stack's amount left after the game's own depletion 0x4e3f40; -1 refused (OnlineTacticsTake is not 2, or the stack is gone) */
+{
+    int left = 0;
+    if (klbf_ot_take != 2 || klh_rd32(ctrl) != KLMV_MONEY_VT || amt <= 0) return -1;
+    KLBF_SP_OWN(KLFC_CALL(void (__fastcall *)(DWORD, DWORD, int), 0x004e3f40)(ctrl, 0, amt));
+    if (klh_rd32(ctrl) != KLMV_MONEY_VT || !klh_rd(ctrl + 0x34, &left, 4) || left < 0) left = 0;      /* a freed stack reads as empty (same rule as OnlineLootParts) */
+    return left;
+}
+static void klbf_brain_credit(DWORD actor, int amt, int done)
+{
+    int s = klbf_brain_slot(actor);
+    if (s < 0 || amt <= 0) return;
+    klbf_ob[s].tally += amt;
+    if (done) { klbf_ob[s].grabs++; klbf_ls_grab++; klbv_event(s, 1); klog("botfill: tactics: bot %d (actor %08lx) GRABBED a stack through the real brain; its tally %d after %d grab(s) ([Brain] OnlineBrainBridge)", s, (unsigned long)actor, klbf_ob[s].tally, klbf_ob[s].grabs); }
+}
+static void klbf_brain_boarded(DWORD actor) { int s = klbf_brain_slot(actor); if (s >= 0 && klbf_ob[s].phase != 3) { klbf_ob[s].phase = 3; klog("botfill: tactics: bot %d (actor %08lx) boards through the real Board tactic (tally %d; [Brain] OnlineBrainBoardReal)", s, (unsigned long)actor, klbf_ob[s].tally); } }
+static int klbf_brain_board_call(DWORD actor) { return klbf_ot_board ? klbf_ot_board_call(actor) : 0; }      /* the existing guarded squad removal, only when OnlineBoard is on */
+
 /* wk-rt9-1102 OnlineLateExitRoute: the OnlineLateExit threshold for the bot at p (route off or no route known: the plain klbf_ot_late). */
 static int klbf_late_for(const float p[3], DWORD van_w, const float vpos[3], float *routeCm)
 {
@@ -1975,6 +1997,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     klbf_df_tick(mo, mamt, (const float (*)[3])mpos, nm, now);      /* drained stacks, new drops (log), freed drops; wk-lootmetric-1102 review: always called (was gated on StackProbe / DropFollow / DropTake) so the always-on lootsum drain count works with them off; with them off it only fills the klbf_dd / klbf_dp memory */
     klbf_sp_dump(mo, mamt, (const float (*)[3])mpos, nm, (const float (*)[3])cops, ncop);      /* OnlineStackProbe: once a round, log only */
     if (klbf_sp == 3) { float bp[KLBF_OT_BOTS][3]; int q; for (q = 0; q < nb && q < KLBF_OT_BOTS; q++) memcpy(bp[q], bots[q].pos, 12); klbf_sp_poll(now, (const float (*)[3])bp, nb < KLBF_OT_BOTS ? nb : KLBF_OT_BOTS, (const float (*)[3])cops, ncop); }      /* level 3: the poll, every tick (no debug register) */
+    klbr_pump(now);      /* klbrain.c [Brain] OnlineBrainBridge: the DLL-owned grab ticks (game calls are made here, never inside an AI wrapper); a no-op unless the bridge is on */
     {   /* the FA rules: [[0x168e9e4]+0x54] when the session's game type [sm+0x5c] is 4 (0x7bb2a0, PROVEN; 0x508ef0 is Arcade-only) */
         DWORD s0 = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)), hd;
         if (s0 && klh_rd32(s0 + 0x5c) == 4 && (hd = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4)))) rules = klh_rd32(hd + 0x54);

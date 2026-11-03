@@ -1,3 +1,7 @@
+2026-11-03 - [brain2] Arcade brain online stage 2 / 3 built on branch arcade-brain2-1103 (klbrain.c, all keys off, UNTESTED live): framed Loot/Board/Traitor evaluate+run+exit
+(inert when not ours, Board EXIT needs the frame), shadow crew table + score block + van mirror, slot 202 candidates, DLL-run grab (klbr_pump), slot 45 board stub, traitor mirror (log only), cops = research.
+New [Brain] keys OnlineBrainBridge/Board/BoardReal/Traitor/Cops/Level, LootWinMs, BoardWinMs. PuppetOff now needs Loot + Bridge. Next: one host bench per key, in that order.
+
 2026-11-02 ~23:45 - [c9] Pushed d2cfc187b: [Names] OnlineLobby (lobby list names the exact OnlineSet=9 pick, off) + brain review fixes;
 ce's PageQueue commits carried. 5eb1a50fb: 'Host: map set' row in Mod settings (Dog Days maps / Dead Men maps / Mixed random = OnlineSet 0/2/9),
 overlay built offline, owner INSTALL bat C:\kl_build_1024\hostmenu_1102 (not run, never seen in game). PAUSE_QUEUE set: owner present, no live runs.
