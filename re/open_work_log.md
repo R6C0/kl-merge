@@ -1,3 +1,8 @@
+2026-11-03 ~10:20 - [ce] pq12 (DM02 only; F02 page 2, 1 x RIGHT, from arc2/ARC2_DM02.ini 'F02 page 2 entry 1'; kit = pq10 base with [CoverRing]
+ClientBuild keys) PASS: 2 seats, 0 faults, round 2 on both. Both seats: hire key at 0x1f queued, autoopen send 1 at +812 ms of state 0x20, steps open
+Category then Weapon, 'page SHOWN' about 7 s after the press, ESC 5 -> 4 -> 3. After-match navigation total: all 9 stock FA maps + all 7 DM-pool maps,
+32/33 seats show the page. Nothing left to bench; waiting for the owner's play test.
+
 2026-11-03 ~08:25 - [ce] pq10 (DM01, DM03, DM09, DM07, DD10; pages 2/3, base + [CoverRing] ClientBuild keys) and pq11 (DD10 rerun). DM01/DM03/DM09/
 DM07 PASS (0 faults, round 2, page SHOWN, ESC 5 -> 4 -> 3 on both seats). pq10 DD10: both seats FATAL c0000005 at d3d9.dll+0x5feeb in the same ms
 (07:55:34.34, round 1, before any shop), System log Display 4107 at 07:55:39 'SDC_FORCE_MODE_ENUMERATION in SetDisplayConfig' = a display change, not

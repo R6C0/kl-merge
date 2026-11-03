@@ -78,10 +78,10 @@ marked 0 / unmarked 0 hits on humans, and the rules' damage hook (slot 15) was n
 INCONCLUSIVE, not a refusal. Research 72a3bf065: the goal-code fire-line path 0x8f6990 feeds a constant-false stub 0x655a40, so slots 113/114 are
 the whole fire-line gap. Running: the remaining hold-fire tests in 0x8c1830 and the slot-15 team filter 0x719720 (static).
 
-2026-11-03 ~08:25 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
+2026-11-03 ~10:20 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)
-and DM06/DM01/DM03/DM09/DM07/DD10 (pq10/pq11; pq10's DD10 died in d3d9 on both seats in the same ms = a display change, rerun clean). 30/31 seats
-show the page; the miss was a client whose shop lasted 0.5 s. DM02 not benched (lobby step count unknown). Waiting for the owner's play test.
+and all 7 DM-pool maps DM06/DM01/DM02/DM03/DM09/DM07/DD10 (pq10-pq12; DM02 = F02 page 2, 1 RIGHT; pq10's DD10 died in d3d9 on both seats in the
+same ms = a display change, rerun clean). 32/33 seats show the page; the miss was a client whose shop lasted 0.5 s. Waiting for the owner's play test.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
