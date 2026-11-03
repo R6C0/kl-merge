@@ -1,3 +1,8 @@
+2026-11-03 ~05:20 - [c9] bs7 PASS (DM03 + DD05, 4 seats, 0 faults). The real Traitor evaluate fires online: 5 records marked a round on both maps
+(mirror only; Arcade turns ~1). DM03: 5/7 boarded by the real Board tactic, $7M paid, watchdog 0. DD05: real Board still 0, 3 drop grabs, $1.58M.
+Pushed e6b74553c: board-gap keys (BoardHold/BoardNode/BoardStage0/BoardLog) + OnlineBrainTraitorTurn/Row0/KillMax/Max (all default off).
+bs8 (out_brain9_1103j_test, all on, TraitorMax=1) chained on "end pq9".
+
 2026-11-03 ~04:50 - [ce] pq7 PASS (DD05, 2 seats, 0 faults, round 2 on both; kit week_1028/pq7 = pq6 with ESCs 1.5 s apart): ESC pops
 Weapon -> Category -> New on both seats (windows 5 -> 4 -> 3). pq6's ignored second ESC 90 ms after the first was timing, not a hook-open
 difference. After-match navigation (installed 03:49) is complete; waiting for the owner's play test.
