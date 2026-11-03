@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-03 14:00 c9: bs21 PASS 0 faults: the 0x7088c0 route is dead (+0x88=1); real shots are tasks gated by 0x616480 (re/traitor_fire_1103.md); HolderFix 88c41e3a1 in bs22; the marked bot mostly picks an ally bot (workflow wvf2fzwhg).
 - 11-03 13:20 c9: bs20 PASS 0 faults: HumanFirst makes the bot pick a human on DD05 (17/20) but the entry lacks 0x10, 0 shots; real fire route is Idle 0x77bbd0 -> 0x7088c0 (re/traitor_handoff_1103.md); probe workflow w0g1x0zbt.
 - 11-03 13:05 c9: bs19 PASS 0 faults: the bot picks a human for seconds, then an ally bot / cops, and never hands the pick to its attack goal; HumanFirst toggle 73e41f775 in bs20; hand-off workflow wkbj5dple.
 - 11-03 12:45 c9: bs18 PASS 0 faults: humans are scored (-500..-800), not refused, but the bot never picks them (a cop likely outscores them); bs19 running; score workflow waeaosjjr.

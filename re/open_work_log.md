@@ -1,3 +1,8 @@
+2026-11-03 ~14:00 - [c9] bs21 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; read-only GATES ee8d93d1b). The marked bot never reaches 0x7088c0
+(+0x88 = 1, wants 2). w53r6g2xi (re/traitor_fire_1103.md): real shots are tasks gated by 0x616480 (holder 0x11, 0x4 clear). 0x4 = same-team sweep 0x5706a0
+(the target blocks itself); 0x10 = within 2x weapon range (~120 m; the bench humans idle 50-190 m away). The holder is mostly an ALLY bot (DM03 76/86).
+88c41e3a1 OnlineBrainTraitorHolderFix (off by default) -> bs22 running. Workflow wvf2fzwhg: ally pick, +0x88, what starts the shooting tasks.
+
 2026-11-03 ~13:20 - [c9] bs20 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; HumanFirst 73e41f775 on). DD05: the holder is a human 17/20 (bs19: 7/50),
 but its entry flags are 0x05 (0x10 never set, 0x4 set) and 0 shots. DM03: 71 police scores nulled; the pick sits on the other ZFFPlayer entry, flags 0x01.
 wkbj5dple (re/traitor_handoff_1103.md): the ZAttackTarget goal is never fed by the holder in shipped code (0 Attack calls is normal). Real route:
