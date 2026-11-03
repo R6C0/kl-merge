@@ -255,6 +255,7 @@ static float klbr_ev(int cls, DWORD self)
         InterlockedIncrement(&klbr_ev_nz[cls]); if (r > klbr_ev_max[cls]) klbr_ev_max[cls] = r;
         if (e) {
             if (cls == 0 && (!klbr_bridge || klh_rd32(self + 0x28))) e->nzAt = GetTickCount() | 1u;      /* [tactic+0x28] = the chosen TRIGGER BOX (review 11-03, 0x451b8a): non-zero = the walk has a goal */
+            else if (cls == 0) { static int told; DWORD cand[5]; if (told < 6 && klh_rd(self + 0x14, cand, sizeof cand) && kbr_chosen(cand, klh_rd32(self + 0x2c))) { told++; klog("brain: gate: Loot evaluate %.3f with a chosen stack %08lx but trigger box +0x28 = 0: NOT handed over (if bots never grab, the gate should use the chosen stack)", (double)r, (unsigned long)kbr_chosen(cand, klh_rd32(self + 0x2c))); } }      /* DIAGNOSTIC (review 11-03, unconfirmed concern) */
             if (cls == 1) e->bnzAt = GetTickCount() | 1u;
         }
     }
