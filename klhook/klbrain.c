@@ -950,7 +950,7 @@ static void klbr_cand_summary(void)      /* round end, next to the 'traitor hits
    Human bodies: the crew records [rules+8] + 0x74*i, in use when byte [rules+0xc]+i == 0, ZFFPlayer at +0x378 (klucc_find_me; GUESS that this holds for remote bodies on the host), minus tagged bots' bodies and police (+0x2723).
    UNDO: the only thing written is the game's own entries in B; feeding stops on unmark, death, round end, tag change (the klbr_ta_restore paths); the entries expire through the game's prune 0x51e480
    (GUESS: within seconds; cap 10 entries). Effects of NoteEntity beyond the list (byte [soldier+0x184], timestamps) were NOT traced: GUESS harmless. The rest of NoteEntity (past 0x7bd83c) was not read. ---- */
-static int klbr_snon, klbr_snms = 500, klbr_sn_flt, klbr_sn_fed, klbr_sn_logged, klbr_sn_unfed;      /* on; interval; faults this round (3 = off for the round); NoteEntity calls this round; log lines; entries taken back out */
+static int klbr_snon, klbr_snms = 500, klbr_sn_flt, klbr_sn_fed, klbr_sn_logged, klbr_sn_unfed, klbr_sn_dlog; static DWORD klbr_sn_dat;      /* + skip-reason log lines this round, last one's tick */      /* on; interval; faults this round (3 = off for the round); NoteEntity calls this round; log lines; entries taken back out */
 static DWORD klbr_sn_at[KLBR_MAX];
 static DWORD klbr_sn_fb[KLBR_MAX][KBR_SN_MAXFEED];      /* per bot: the human bodies we noted into its list (taken out again when the wrap ends) */
 static int klbr_sn_nfb[KLBR_MAX];
@@ -996,23 +996,30 @@ static void klbr_sn_unfeed(int i, DWORD snd)      /* wrap ends (klbr_ta_restore)
 }
 static void klbr_sense_feed(int i, DWORD now)      /* game thread, depth 0, host round, bot i is wrapped (klbr_ta[i].snd) and alive */
 {
-    struct klbr_s *e = &klbr_t[i]; DWORD G, rules, recs, freeb, B, hs[16], cnt = 0; float hd[16], bp[3]; int n = 0, k, nr = 0, pick[KBR_SN_MAXFEED], np, alive = 0, haveb;
+    struct klbr_s *e = &klbr_t[i]; DWORD G, rules, recs = 0, freeb = 0, B = 0, hs[16], cnt = 0, vt = 0; float hd[16], bp[3]; int n = 0, k, nr = 0, pick[KBR_SN_MAXFEED], np, alive = 0, haveb, shadow = 0;
+    int c_used = 0, c_null = 0, c_dead = 0, c_cls = 0, c_bot = 0, c_seat = 0, c_pol = 0, c_h0 = 0; const char *why = 0;      /* bs14: Sense never fed and logged nothing; these say which gate skips */
     if (!klbr_snon || klbr_sn_flt >= 3 || klbr_trturn || !e->traitor) return;
     if (!kbr_sense_decide(1, 1, 1, 1, 1, 0, 1, 0, 0, kbr_rate_ok(klbr_sn_at[i], now, (unsigned long)klbr_snms))) return;
     klbr_sn_at[i] = now | 1u;
     G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)); rules = G > 0xffff ? klh_rd32(G + 0x54) : 0;
-    if (rules < 0x10000 || !klh_rd(rules + 0x14, &cnt, 4) || cnt > 16) return;
-    recs = klh_rd32(rules + 8); freeb = klh_rd32(rules + 0xc);
-    B = klh_rd32(e->snd + 0x698);
-    if (!recs || !freeb || B < 0x10000) return;
+    if (rules && rules == klbr_shadow) { shadow = 1; rules = klbr_rr_sw ? klbr_rr_rules : 0; }      /* the shadow holds the BOTS' table (crew at +0x348), not the humans' records at +8 */
+    if (rules >= 0x10000) vt = klh_rd32(rules);
+    if (rules < 0x10000) why = shadow ? "rules = shadow, no saved real rules" : "no rules";
+    else if (!KLH_RULES_SV_OK(vt) && !KLH_RULES_CL_OK(vt)) why = "rules vtable not Sv/Cl";
+    else if (!klh_rd(rules + 0x14, &cnt, 4) || cnt > 16) why = "record count unreadable or > 16";
+    else { recs = klh_rd32(rules + 8); freeb = klh_rd32(rules + 0xc); B = klh_rd32(e->snd + 0x698); if (!recs || !freeb) why = "no records / free bytes"; else if (B < 0x10000) why = "no known list"; }
+    if (why) cnt = 0;
     haveb = klbr_bot_pos(e->actor, bp, &alive);
     for (k = 0; k < (int)cnt && n < 16; k++) {
         BYTE used = 1, pol = 0; DWORD p; float hp = 1.0f, tp[3];
-        if (!klh_rd(freeb + k, &used, 1) || used) continue;
-        if (!(p = klh_rd32(recs + 0x74 * (DWORD)k + 0x378)) || p < 0x10000) continue;
+        if (!klh_rd(freeb + k, &used, 1) || used) { c_used++; continue; }
+        if (!(p = klh_rd32(recs + 0x74 * (DWORD)k + 0x378)) || p < 0x10000) { c_null++; continue; }
         klh_rd(p + 0x2723, &pol, 1);
-        if (klbr_hp_read(p, &hp) && hp <= 0.0f) continue;      /* a dead body is not fed (unreadable health = fed) */
-        if (kbr_sense_decide(1, 1, 1, 1, 1, 0, klh_pvt(p) == 0x00bb45f4u, klbr_hl_body(p) != 0 || klbr_hl_find(p) != 0, pol != 0, 1) != KBR_SN_FEED) continue;
+        if (klbr_hp_read(p, &hp) && hp <= 0.0f) { c_dead++; continue; }      /* a dead body is not fed (unreadable health = fed) */
+        if (klh_pvt(p) != 0x00bb45f4u) { c_cls++; continue; }
+        if (pol) { c_pol++; continue; }
+        if (klbr_hl_body(p)) c_seat++;      /* counted only: klbr_hl_body matches the seat index against the SHADOW record index, so a human in real seat k collided with bot rec k (bs14 suspect). GUESS: the real records hold no bot bodies */
+        if (kbr_sense_decide(1, 1, 1, 1, 1, 0, 1, klbr_hl_find(p) != 0, 0, 1) != KBR_SN_FEED) { c_bot++; continue; }
         hd[n] = (haveb && klh_rd(p + 0x460, tp, 12) && kle_ok3(tp)) ? (float)kle_dist(bp, tp) : 1.0e30f;
         hs[n++] = p;
     }
@@ -1024,8 +1031,10 @@ static void klbr_sense_feed(int i, DWORD now)      /* game thread, depth 0, host
             for (j = 0; j < klbr_sn_nfb[i]; j++) if (klbr_sn_fb[i][j] == hs[pick[k]]) have = 1;
             if (!have && klbr_sn_nfb[i] < KBR_SN_MAXFEED) klbr_sn_fb[i][klbr_sn_nfb[i]++] = hs[pick[k]];
         }
+        if (r == 0) c_h0++;
         if (r < 0) break;
     }
+    if (!nr && !klbr_sn_flt && klbr_sn_dlog < 8 && now - klbr_sn_dat >= 5000) { klbr_sn_dlog++; klbr_sn_dat = now; klog("brain: traitor sense: bot %d fed nothing: %s; rules %08lx%s vt %08lx count %lu; records free %d, empty body %d, dead %d, not ZFFPlayer %d, police %d, bot %d (seat-match only, still fed %d), handle 0 %d; found %d", i, why ? why : "gates passed", (unsigned long)rules, shadow ? " (shadow was in)" : "", (unsigned long)vt, (unsigned long)cnt, c_used, c_null, c_dead, c_cls, c_pol, c_bot, c_seat, c_h0, n); }
     if (klbr_sn_logged < 12 && (nr || klbr_sn_flt)) { klbr_sn_logged++; klog("brain: traitor sense: bot %d (soldier %08lx) NoteEntity fed %d of %d human body(ies) found (nearest %d max; list %08lx, ally count %lu parked during the call); calls this round %d, faults %d%s", i, (unsigned long)e->snd, nr, n, KBR_SN_MAXFEED, (unsigned long)B, (unsigned long)klh_rd32(B + 0xcc), klbr_sn_fed, klbr_sn_flt, klbr_sn_flt >= 3 ? "; Sense off for this round" : ""); }
 }
 typedef float (__fastcall *klbr_scfn)(DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD);
@@ -1337,7 +1346,7 @@ static void klbr_ta_restore_all(const char *why)      /* before every memset of 
     for (i = 0; i < KLBR_MAX; i++) if (klbr_ta[i].snd) { klbr_ta_restore(i, 1, why); n++; }
     for (i = 0; i < KLBR_MAX; i++) klbr_dm_restore(i, why);      /* a marked bot that was never wrapped may still carry our byte */
     memset(klbr_dm, 0, sizeof klbr_dm);
-    klbr_sn_flt = 0; klbr_sn_fed = 0; klbr_sn_logged = 0; klbr_sn_unfed = 0;      /* OnlineBrainTraitorSense: the round's counters */
+    klbr_sn_flt = 0; klbr_sn_fed = 0; klbr_sn_logged = 0; klbr_sn_unfed = 0; klbr_sn_dlog = 0; klbr_sn_dat = 0;      /* OnlineBrainTraitorSense: the round's counters */
     if (n) klog("brain: traitor arcade: %s: %d wrapped bot(s) cleared", why, n);
 }
 static void klbr_ta_pump(void)      /* game thread, depth 0, outside the AI walk: give a freshly marked bot the table; take it away on death / tag change / round end */
