@@ -1,3 +1,8 @@
+2026-11-03 ~06:40 - [c9] bs8 PASS (DM03 + DD05, 4 seats, 0 faults). The real Board tactic now boards DM03 7/7 ($6.73M paid, watchdog 0)
+and DD05 5/7 (bs7: 0; 2 by fallback, $1.58M). Traitor turn: 0 turned, every attempt refused because the gate read the actor vtable raw
+and online bots carry OnlineCopToBot's private ZFFActor copy (523cabdc). Fix b848198f4 (klh_avt), TEST out_brain10_1103k_test.
+arc3 (offline Arcade traitor reference, ArcadeDiag) running since 06:31; bs9 (the fix) chained on "end arc3".
+
 2026-11-03 ~06:20 - [ce] pq8 (DD01-DD04) + pq9 (DD06-DD09) PASS: 8 runs, 0 faults, both seats reached round 2 on every map. Kits
 week_1028/pq8 + pq9 = pq7 with the host's lobby RIGHT taps per map (gen_pq89.py in the session scratchpad). 15/16 seats: 2 autoopen steps, page SHOWN,
 ESC windows 5 -> 4 -> 3. DD04 client: no page, because it reached 0x1f at 05:38:07.88 when the host was already at 0x24 (scoreboard 31 ms, shop
