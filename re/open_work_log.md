@@ -1,3 +1,8 @@
+2026-11-03 ~17:00 - [c9] OWNER HOME (~16:40): live runs stopped, offline only. bs29 (TraitorByte) gave no data: DM03 d3d9 crash on a display reset, DD05 stopped.
+wdntba8eu (verified): the shooting task's first check SKIP1 0x6d9eb0 needs byte [body+0x5c8]==0; the body ctor sets it to 1, only a real weapon switch clears it. Arcade clears it
+every tick (SelectWeapon(-1) at 0x7089ad, only when [s+0x88]==2); online the bot has 1, so the task loops without aiming. Committed eb15e460e (TraitorByte) and b2be1851a
+(FireProbe ext2 + OnlineBrainTraitorWeaponReady, TEST out_twr_1103s, kl_tests 71 pass). Next bench (when allowed): bs30 = bs28 keys + TraitorByte + WeaponReady.
+
 2026-11-03 ~16:40 - [c9] bs28 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe + HoldFire, out_tfp_1103q). HoldFire works: 165/197 orders skipped, the shooting task now lives
 up to 6 s (DM03) / 43.6 s (DD05) instead of 1.5-2.5 s, yet the aim target [body+0x544] stayed 0 in EVERY sample: the task's burst path never calls SetAttackTarget,
 so it never fires. Human 55-72 m away; holder flips between the human (flags 011) and another (010). Tuning [+0x38c] 600 (6 m minimum). hp 550 flat (10/10).

@@ -258,3 +258,12 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - hp 550 flat (DM03 6, DD05 4 CoverFire checks).
 - Candidates for the dead burst path: 0x449cf0([s+0x64c]) == 0xb; the 0.2 random roll (cannot block every time); d to the task destination <= 300 (the NEAR leg, which never shoots unless byte [task+0x24]);
   holder flag flips between ticks; 0x6d9eb0 hold. Next probe: [task+0x14..0x1c] destination vs bot position, byte [task+0x24], the 0x449cf0 stance, [body+0x550] shot counter.
+
+## Workflow wdntba8eu (why the burst path never aims; read only, tracer + verifier)
+- The tick 0x4a7e60 is a coroutine; one shared ZRunToPosShootingTask per soldier at [s+0x56c] (built 0x6ab2f4), args set by soldier vt+0x74 -> 0x5faeb0 (dest [task+0x14..0x1c], [task+0x20], byte [task+0x24]).
+- SKIP1 0x6d9eb0 = [s+0x700]==0 && (mode==6 || byte [body+0x5c8]==0); false -> wait 0.2-0.4 s, loop, never any 0x62a540 site. CONFIRMED.
+- [body+0x5c8]: set 1 by the body ctor 0x83043e (and 0x6420d4), cleared only in SelectWeapon 0x511450 (0x511536 on a real switch, 0x51149b mode 6). CONFIRMED by a .text byte scan.
+- Arcade: soldier tick block 0x708912 runs only when [s+0x88]==2: body vt+0x6e4(holder) at 0x70898e and SelectWeapon(-1) when [body+0x5c8]!=0 at 0x7089ad. Online bot [s+0x88]=1. CONFIRMED.
+- Only 0x44ab50 (from ZFireWeaponTask 0x7c02b0) clears [body+0x544], so an always-0 aim = 0x6e4 never reached. Shot A at 55-72 m is nearly dead (0x80dcf0 alt path); the burst is the live route.
+- Ranked: SKIP1 false via [body+0x5c8] ~55-60 % (GUESS until probed); bl latched ([s+0x5a8] at task start) ~10 %.
+- Built: FireProbe ext2 + OnlineBrainTraitorWeaponReady (b2be1851a). bs29 (TraitorByte) had no data (owner came home).

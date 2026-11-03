@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~17:00 - [c9] OWNER HOME (~16:40): live runs stopped, offline only. bs29 (TraitorByte) gave no data: DM03 d3d9 crash on a display reset, DD05 stopped.
+wdntba8eu (verified): the shooting task's first check SKIP1 0x6d9eb0 needs byte [body+0x5c8]==0; the body ctor sets it to 1, only a real weapon switch clears it. Arcade clears it
+every tick (SelectWeapon(-1) at 0x7089ad, only when [s+0x88]==2); online the bot has 1, so the task loops without aiming. Committed eb15e460e (TraitorByte) and b2be1851a
+(FireProbe ext2 + OnlineBrainTraitorWeaponReady, TEST out_twr_1103s, kl_tests 71 pass). Next bench (when allowed): bs30 = bs28 keys + TraitorByte + WeaponReady.
+
 2026-11-03 ~16:40 - [c9] bs28 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe + HoldFire, out_tfp_1103q). HoldFire works: 165/197 orders skipped, the shooting task now lives
 up to 6 s (DM03) / 43.6 s (DD05) instead of 1.5-2.5 s, yet the aim target [body+0x544] stayed 0 in EVERY sample: the task's burst path never calls SetAttackTarget,
 so it never fires. Human 55-72 m away; holder flips between the human (flags 011) and another (010). Tuning [+0x38c] 600 (6 m minimum). hp 550 flat (10/10).
 w6wznnvc5: the fire task runs as the run task's child; 0x6e3400 zeroes a ZFFPlayer-class attacker's hit unless +0x2726. w3q3kg8a4 builds FireProbe2 + TraitorByte.
-
-2026-11-03 ~16:15 - [c9] bs27 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; EntryFix + Restart, out_trs_1103p). DM03: EntryFix set once (015 -> 011 = cleared same-team 0x4),
-Restart cleared [s+0x74] 8 times, unfroze 0, hp flat. DD05: 0 CoverFire calls; the shooting chain also runs under normal goals (vt 0xbd0674).
-wqb7g1pxd: vt+0x6e4 (0x62a540) only SETS an aim target; the trigger is ZFireWeaponTask (vt 0xbd0bd4, tick 0x7c02b0) -> 0x8c1830 -> 0x8dc6a0 -> 0x8b84b0, aimed at holder [s+0xac].
-Likely cause GUESS: our repeated slot-83 calls end the child after 1.5-2.5 s, before ZFireWeaponTask fires. Next: read-only probes of those functions + a no-recall-while-shooting toggle.
 
 2026-11-03 ~10:20 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)

@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-03 17:00 c9: owner home, live runs stopped. Likely blocker found: byte [body+0x5c8] keeps the shooting task from aiming online (Arcade clears it). WeaponReady + TraitorByte built and committed; bs30 waits for the owner's OK.
 - 11-03 16:40 c9: bs28 PASS 0 faults: HoldFire keeps the shooting task alive (up to 43 s) but the aim target never gets set, so no shot; hp flat. FireProbe2 + TraitorByte building (w3q3kg8a4).
 - 11-03 16:15 c9: bs27 PASS 0 faults, hp still flat; wqb7g1pxd: 6e4 only aims, the trigger is ZFireWeaponTask 0x7c02b0 -> 0x8b84b0; next = fire-path probes + no-recall-while-shooting toggle.
 - 11-03 15:45 c9: bs26 PASS 0 faults: the shooting child runs at the human, hp flat, EntryFix gate never passed; Restart + gate dump in bs27; wqb7g1pxd traces the child's fire path.
