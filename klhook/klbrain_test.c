@@ -142,6 +142,12 @@ int main(void)
             kbr_hand(1, 1, 1, 10000, 10000ul | 1ul, 0, 0, 1500, 2000, &lr, &br);
             CHECK(lr == 1 && br == 0, "loot: a now|1 stamp read in the same even ms still counts (no wrap)");
         }
+        /* coroutine rule (bs1 c0000029): Loot / Board RUN are never called; their evaluates, Board EXIT and the Traitor are */
+        CHECK(!kbr_orig_ok(0, 0) && !kbr_orig_ok(1, 0), "coroutine rule: Loot RUN and Board RUN are never called");
+        CHECK(kbr_orig_ok(1, 1) && kbr_orig_ok(2, 0) && kbr_orig_ok(0, 1), "coroutine rule: Board EXIT, Traitor RUN and Loot EXIT may be called");
+        /* ArcadePick window */
+        CHECK(kbr_pick_live(20000, 10001, 15000) && !kbr_pick_live(30000, 10001, 15000) && !kbr_pick_live(20000, 0, 15000), "pick: live inside the window, stale after, never stamped = none");
+        CHECK(kbr_pick_live(10000, 10000ul | 1ul, 15000), "pick: a now|1 stamp read in the same even ms still counts (no wrap)");
         /* stall watchdog */
         {
             unsigned long since = 0, until = 0, cc[5] = { 11, 22, 33, 44, 55 }; int run = 0;

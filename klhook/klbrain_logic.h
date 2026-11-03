@@ -183,6 +183,15 @@ static int kbr_slow_rule(unsigned us, unsigned limit_us, int *run, int need)
    (from 0x454c20), not the money ctrl. cand = the 5 dwords at +0x14. -> the ctrl, 0 when the index is out of range */
 static unsigned long kbr_chosen(const unsigned long *cand, unsigned long idx) { return idx < 5 ? cand[idx] : 0; }
 
+/* COROUTINE RULE (bs1 11-03, BS1B + BS1C host crash c0000029 in ntdll): the Loot RUN 0x7bc7d0 and the Board RUN 0x82f970 are stack-copying coroutines. Their yield
+   0x55b9f0 does _setjmp3 into [[tactic+0xc]+0xc], copies the stack image to [ctx+0x40] and longjmps (msvcr90) to the scheduler's jmp_buf 0x168e4c8; the resumer
+   (0x63c8d1) copies it back and longjmps into the RUN. A DLL __try / __finally frame live across that yield makes longjmp's RtlUnwind fail (STATUS_INVALID_UNWIND_TARGET),
+   and a resumed slice runs on the REAL online rules where 0x508ef0 answers 0 and 0x78f470(ecx = 0) faults. So the DLL never calls those two originals: 1 = may call. */
+static int kbr_orig_ok(int cls, int slot) { return !(slot == 0 && (cls == 0 || cls == 1)); }
+
+/* ArcadePick: the stack the real Loot evaluate chose (kbr_chosen) still counts this long after it was stamped (now|1 stamp: masked, see kbr_puppet_released) */
+static int kbr_pick_live(unsigned long now, unsigned long at, unsigned long win) { return at && (unsigned long)(now - (at & ~1ul)) <= win; }
+
 /* keep the cap nearest objects of obj[0..n) by squared distance d2 (ties: the lower index first), written to out[0..cap), tail zero-filled; returns how many were kept */
 static int kbr_cand_sort(const unsigned long *obj, const float *d2, int n, unsigned long *out, int cap)
 {
