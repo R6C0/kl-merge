@@ -1253,6 +1253,51 @@ static void klbr_cf_pump(DWORD now)      /* game thread, depth 0 (klbr_pump) */
         klbr_cf_hp[i].victim = 0;
     }
 }
+/* ---- OnlineBrainTraitorEntryFix (11-03, workflow w0bnwus0v trace + verifier; UNTESTED, recommended off; needs AttackHandle). For a ZFFPlayer target the ZAttackTarget tick 0x4f4460 captures the
+   flags of the bot's known-list entry for the human (0x4f45d2) and tests them with 0x616480 at 0x4f4db1 (fail -> the goal ends); at 0x4f4ccd it copies them (| 1) into the holder. An entry made by
+   0x425fa0 has flags 0. B = [s+0x698]: [B] count (max 10), entries at B+4 stride 0x14 {+0 flags, +4 entity pointer, +8 kind (2 = player), +0xc clock, +0x10 team object}. Slot 113's full update
+   recomputes 0x4 / 0x10 / 0x20 / 0x40 / 0x2 only for entries with bit0 set and never sets 0x200 (stub 0x655a40), so we OR 0x11 and clear 0x244 after every slot-113 call while the marked bot's CURRENT
+   goal is ZAttackTarget (vt 0xbd1104, state 0-2) on a human that 0x8ccde0 still resolves. Only the flags dword is written; no engine call except the pure lookup 0x8ccde0.
+   Read-only child watch (with AttackHandle): counts slot-113 calls where the goal stack holds ZRunToPosShootingTask (vt 0xbd0ba4), the only task that shoots a human (via the HOLDER flags). */
+#define KLBR_EF_ZAT_VT 0x00bd1104
+#define KLBR_EF_RUN_VT 0x00bd0ba4
+#define KLBR_EF_LOGMAX 12
+static int klbr_efon, klbr_ef_n, klbr_ef_cn; static long klbr_ef_set, klbr_ef_keep, klbr_ef_miss, klbr_ef_stale, klbr_ef_child, klbr_ef_childh;
+static void klbr_ef_apply(struct klbr_s *e, DWORD self)
+{
+    DWORD sb, se, g, gs, h, H = 0, B, cnt = 0, k; int ix;
+    if (!klbr_cfh || !e || (ix = (int)(e - klbr_t)) < 0 || ix >= KLBR_MAX) return;
+    sb = klh_rd32(self + 4); se = klh_rd32(self + 8);
+    if (sb > 0xffff && se > sb && se - sb <= 64 * 4) {      /* child watch, read only */
+        DWORD p;
+        for (p = sb; p < se; p += 4) {
+            DWORD t = klh_rd32(p);
+            if (t > 0xffff && klh_pvt(t) == KLBR_EF_RUN_VT) {
+                DWORD hp = klh_rd32(self + 0xac); int hum = hp > 0xffff && klh_pvt(hp) == 0x00bb45f4u && !klbr_hl_body(hp) && !klbr_hl_find(hp);
+                klbr_ef_child++; if (hum) klbr_ef_childh++;
+                if (klbr_ef_cn < KLBR_EF_LOGMAX) { klbr_ef_cn++; klog("brain: traitor entryfix: bot %d ZRunToPosShootingTask %08lx state %ld on the stack; holder %08lx flags %03lx%s", ix, (unsigned long)t, (long)klh_rd32(t + 8), (unsigned long)hp, (unsigned long)klh_rd32(self + 0xa8), hum ? " (a human)" : ""); }
+                break;
+            }
+        }
+    }
+    if (!klbr_efon) return;
+    if ((g = klh_rd32(self + 0x658)) <= 0xffff || klh_pvt(g) != KLBR_EF_ZAT_VT || klh_rd32(self + 0x74) != g || (gs = klh_rd32(g + 8)) > 2 || !(h = klh_rd32(g + 0x14))) return;
+    __try { H = ((klbr_cfrefn)(DWORD_PTR)KLH_VA(KLBR_CF_REF))(h); } __except (EXCEPTION_EXECUTE_HANDLER) { H = 0; }
+    if (H <= 0xffff) { klbr_ef_stale++; return; }      /* the tick would AV at 0x4f44a7: counted, nothing written (GUESS: no safe way found yet to end the goal from here) */
+    if (klh_pvt(H) != 0x00bb45f4u || klbr_hl_body(H) || klbr_hl_find(H)) return;
+    if ((B = klh_rd32(self + 0x698)) <= 0xffff || !klh_rd(B, &cnt, 4) || cnt > 10) return;
+    for (k = 0; k < cnt; k++) {
+        DWORD q = B + 4 + 0x14 * k, fl, nf;
+        if (klh_rd32(q + 4) != H || klh_rd32(q + 8) != 2) continue;
+        fl = klh_rd32(q); nf = (fl | 0x11ul) & ~0x244ul;
+        if (nf == fl) { klbr_ef_keep++; return; }
+        __try { KLBR_P32(q) = nf; } __except (EXCEPTION_EXECUTE_HANDLER) { return; }
+        klbr_ef_set++;
+        if (klbr_ef_n < KLBR_EF_LOGMAX) { klbr_ef_n++; klog("brain: traitor entryfix: bot %d entry %lu of %lu for human %08lx: flags %03lx -> %03lx; ZAttackTarget %08lx state %ld; holder %08lx flags %03lx", ix, (unsigned long)k, (unsigned long)cnt, (unsigned long)H, (unsigned long)fl, (unsigned long)nf, (unsigned long)g, (long)gs, (unsigned long)klh_rd32(self + 0xac), (unsigned long)klh_rd32(self + 0xa8)); }
+        return;
+    }
+    klbr_ef_miss++;
+}
 static DWORD __fastcall klbr_w_fl113(DWORD self, DWORD edx, DWORD a1)      /* thiscall + 1 stack arg, ret 4 */
 {
     klbr_fl113fn org = (klbr_fl113fn)(DWORD_PTR)klbr_tfl_org113; DWORD r = 0; int sw = 0, m, flt = 0; struct klbr_s *e;
@@ -1266,7 +1311,8 @@ static DWORD __fastcall klbr_w_fl113(DWORD self, DWORD edx, DWORD a1)      /* th
     }
     if (klbr_tfl_end(self, sw, flt, KLBR_TFL_S113)) return 0;
     klbr_hx_apply(e, self);      /* OnlineBrainTraitorHolderFix: after the swap is out, so the engine's own holder write stands and only our bits change */
-    klbr_cf_apply(e, self);      /* OnlineBrainTraitorCoverFire: after HolderFix, so it sees the fixed flags */
+    klbr_ef_apply(e, self);      /* OnlineBrainTraitorEntryFix + the read-only child watch: after the full update recomputed the entries */
+    klbr_cf_apply(e, self);     /* OnlineBrainTraitorCoverFire: after HolderFix, so it sees the fixed flags */
     klbr_tfl_log(e, self, 0, m, r);
     return r;
 }
@@ -1427,6 +1473,9 @@ static void klbr_hitlog_summary(void)
     if (klbr_hfon) klog("brain: traitor humanfirst: round total: police scores nulled %ld (a seen human was in the list), passed %ld", klbr_hf_null, klbr_hf_pass);
     if (klbr_hoon) klog("brain: traitor humanonly: round total: ally-bot scores nulled %ld (a seen human was in the list), other ZFFPlayer candidates passed %ld", klbr_ho_null, klbr_ho_pass);
     if (klbr_cfon) klog("brain: traitor coverfire: round total: CoverFire calls %ld, skipped (busy / stale) %ld, stale handle %ld, faults %d; holder health 2 s later: dropped %ld (total %.1f), flat %ld", klbr_cf_calls, klbr_cf_skip, klbr_cf_stale, klbr_cf_flt, klbr_cf_hpdrop, klbr_cf_hpsum, klbr_cf_hpflat);
+    if (klbr_cfh) klog("brain: traitor entryfix: round total: entry flags set %ld, already set %ld, no entry %ld, stale target handle under a live goal %ld; ZRunToPosShootingTask seen on %ld slot-113 calls (%ld with a human holder)%s",
+                       klbr_ef_set, klbr_ef_keep, klbr_ef_miss, klbr_ef_stale, klbr_ef_child, klbr_ef_childh, klbr_efon ? "" : " (EntryFix off: watch only)");
+    klbr_ef_set = klbr_ef_keep = klbr_ef_miss = klbr_ef_stale = klbr_ef_child = klbr_ef_childh = 0; klbr_ef_n = klbr_ef_cn = 0;
     if (klbr_hxon) klog("brain: traitor holderfix: round total: human holder flags fixed in range (0x4 cleared, 0x10 set) %ld, out of range / range unknown (0x4 cleared only) %ld, range faults %ld", klbr_hx_set, klbr_hx_far, klbr_hx_flt);
     klbr_hf_null = klbr_hf_pass = 0; klbr_hx_set = klbr_hx_far = 0; klbr_ho_null = klbr_ho_pass = 0; klbr_cf_calls = klbr_cf_skip = klbr_cf_stale = 0; klbr_cf_flt = klbr_cf_n = 0; memset(klbr_cf_at, 0, sizeof klbr_cf_at);
     memset(klbr_cf_hp, 0, sizeof klbr_cf_hp); klbr_cf_hpn = 0; klbr_cf_hpdrop = klbr_cf_hpflat = 0; klbr_cf_hpsum = 0.0;
@@ -2056,6 +2105,9 @@ static void klbr_init(void)
     klbr_cfh = klbr_cfon && klbr_key("OnlineBrainTraitorAttackHandle");
     if (klbr_key("OnlineBrainTraitorAttackHandle") && !klbr_cfh) klog("brain: OnlineBrainTraitorAttackHandle needs OnlineBrainTraitorCoverFire: off");
     if (klbr_cfh) klog("brain: OnlineBrainTraitorAttackHandle=1 UNTESTED (recommended off): the CoverFire call passes the human's handle, so slot 83 adds ZAttackTarget (+0x658, prio 0x96, runs the shooting tasks) instead of CoverFire; shipped DD never passes a nonzero handle (host only)");
+    klbr_efon = klbr_cfh && klbr_key("OnlineBrainTraitorEntryFix");
+    if (klbr_key("OnlineBrainTraitorEntryFix") && !klbr_efon) klog("brain: OnlineBrainTraitorEntryFix needs OnlineBrainTraitorAttackHandle: off");
+    if (klbr_efon) klog("brain: OnlineBrainTraitorEntryFix=1 UNTESTED (recommended off): while the marked bot's current goal is ZAttackTarget on a human, its known-list entry for that human gets 0x11 set and 0x244 cleared after every slot-113 call (host only)");
     if (klbr_cfon) klog("brain: OnlineBrainTraitorCoverFire=1 UNTESTED (recommended off): a marked bot whose holder is a human passing the fire test gets the shipped CoverFire goal (slot 83, handle 0) at that human, at most every 2 s");
     if (klbr_hlon) klog("brain: OnlineBrainTraitorHitLog=1 (recommended off): READ ONLY, counts hits of tagged bots (marked traitor vs other) on humans in the rules' damage hook (slot 15); one 'traitor hits:' line per round end");
     klbr_clon = klbr_taon && klbr_key("OnlineBrainTraitorCandLog");
