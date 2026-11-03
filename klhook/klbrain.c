@@ -206,7 +206,7 @@ static DWORD klbr_rrt[KLBR_RRT]; static BYTE klbr_rrc[KLBR_RRT]; static volatile
 static void (__cdecl *klbr_real_longjmp)(void *, int);
 static volatile LONG klbr_rr_sw;        /* 1 = the thunk has the shadow swapped in (game thread only) */
 static DWORD klbr_rr_G, klbr_rr_sm, klbr_rr_rules, klbr_rr_role;      /* what the thunk saved */
-static volatile LONG klbr_rr_in, klbr_rr_out, klbr_rr_leak, klbr_rr_veh, klbr_rr_mis, klbr_rr_foreign, klbr_rr_nested, klbr_rr_val[3], klbr_rr_told, klbr_rr_leak_told;
+static volatile LONG klbr_rr_in, klbr_rr_out, klbr_rr_leak, klbr_rr_veh, klbr_rr_mis, klbr_rr_foreign, klbr_rr_nested, klbr_rr_val[3], klbr_rr_told, klbr_rr_leak_told, klbr_rr_mode, klbr_rr_t10;
 static struct { DWORD goal, ctx, val, snd, tid; int rec, cls; } klbr_rr_first[8];      /* the first swap-ins, logged by the tick */
 
 static int klbr_rr_match(DWORD buf, DWORD *tac, int *cls)      /* buf is the live ctx [tac+0xc] of a Loot / Board tactic we built (read live: 0x63c75c frees and reuses the ctx) */
@@ -229,6 +229,7 @@ static void klbr_rr_swap_in(DWORD ctx, int val, DWORD tac, int cls)
     if (!klbr_shadow || !klbr_game_tid || tid != klbr_game_tid) { klbr_rr_foreign++; return; }      /* only the host game thread (its tick id); another thread resuming a goal of ours is counted and left alone */
     if (klbr_depth > 0) { klbr_rr_nested++; return; }      /* a DLL frame already has the shadow in */
     if (G <= 0xffff || sm <= 0xffff) return;
+    if (*(volatile DWORD *)(DWORD_PTR)(sm + 0x5c) != 4) { klbr_rr_mode++; return; }      /* judge 11-03: 0x508ef0 hands out [G+0x54] only in session mode 4; any other mode the slice would read null rules, so leave it unswapped (RUN then exits on its own gate) */
     rules = *(volatile DWORD *)(DWORD_PTR)(G + 0x54); role = *(volatile DWORD *)(DWORD_PTR)(sm + 0x54);
     if (rules == klbr_shadow) { klbr_rr_nested++; return; }      /* never save the shadow as the "real" rules */
     klbr_rr_G = G; klbr_rr_sm = sm; klbr_rr_rules = rules; klbr_rr_role = role;
@@ -522,7 +523,13 @@ static void klbr_build_one(struct klbr_s *e, DWORD now)
         if (!ok) { klbr_nvec_fail++; klog("brain: build: soldier %08lx: vector +0x%x insert failed part way (count %d -> %d)", (unsigned long)snd, kbr_vecoff[v], before[v], klbr_vcount(snd, v)); }
     }
     e->tac[0] = o[0]; e->tac[1] = o[1]; e->tac[2] = o[2]; e->state = 1; e->builtAt = now; klbr_nbuilt++;
-    if (klbr_realrun) { LONG k = (InterlockedIncrement(&klbr_rrn) - 1) % KLBR_RRT, k2 = (InterlockedIncrement(&klbr_rrn) - 1) % KLBR_RRT; klbr_rrc[k] = 0; klbr_rrt[k] = o[0]; klbr_rrc[k2] = 1; klbr_rrt[k2] = o[1]; }      /* RealRun registry: append-only, survives the round-end table clear (objects are never freed) */
+    if (klbr_realrun) {      /* RealRun registry: append-only, survives the round-end table clear (objects are never freed) */
+        int c; for (c = 0; c < 2; c++) {
+            BYTE t10 = 1; LONG k;
+            if (!klh_rd(o[c] + 0x10, &t10, 1) || t10) { klbr_rr_t10++; klog("brain: realrun: %s %08lx has [tac+0x10]=%u: the first slice (0x65bbf0 slot 6) would skip the yield and run RUN unswapped, so it is NOT registered", c ? "Board" : "Loot", (unsigned long)o[c], (unsigned)t10); continue; }      /* judge 11-03 */
+            k = (InterlockedIncrement(&klbr_rrn) - 1) % KLBR_RRT; klbr_rrc[k] = (BYTE)c; klbr_rrt[k] = o[c];
+        }
+    }
     klog("brain: build: soldier %08lx (actor %08lx): Loot %08lx Board %08lx Traitor %08lx stored at +0x5f0/+0x5f4/+0x5f8; vectors A %d->%d B %d->%d C %d->%d (+3 each wanted); vtable copies %08lx %08lx %08lx",
          (unsigned long)snd, (unsigned long)e->actor, (unsigned long)o[0], (unsigned long)o[1], (unsigned long)o[2], before[0], klbr_vcount(snd, 0), before[1], klbr_vcount(snd, 1), before[2], klbr_vcount(snd, 2),
          (unsigned long)klbr_vt_copy[0], (unsigned long)klbr_vt_copy[1], (unsigned long)klbr_vt_copy[2]);
@@ -619,7 +626,9 @@ static void klbr_sync(DWORD now)
         if (KLH_RULES_SV_OK(vt) || KLH_RULES_CL_OK(vt)) {      /* review 11-03: online the rules vtable is often a private copy (klroundkeep.c / klucc_down.c); the exact-address test missed it and left the van at -1 */
             BYTE vb = 0; DWORD f1 = 0, f2 = 0, f3 = 0;
             if (klh_rd(real + 0x1dc, &vb, 1) && klh_rd(real + 0x1d8, &f1, 4) && klh_rd(real + 0x1e0, &f2, 4) && klh_rd(real + 0x1e4, &f3, 4)) {
-                KLBR_PB(klbr_shadow + 0x1dc) = vb; KLBR_P32(klbr_shadow + 0x1d8) = f1; KLBR_P32(klbr_shadow + 0x1e0) = f2; KLBR_P32(klbr_shadow + 0x1e4) = f3; klbr_van = vb;
+                DWORD nd = f2 > 0xffff ? klh_rd32(f2 + 4) : 0; BYTE t4[12];
+                int nok = nd > 0xffff && klh_rd(nd + 0x18, t4, 4) && klh_rd(nd + 0x24, t4, 12) && klh_rd(nd + 0x50, t4, 4);      /* judge 11-03: Board RUN (0x5aeb00 / 0x6be1c0) reads [[+0x1e0]+4]+0x18/+0x24/+0x50 unchecked; an unreadable van node gets 0 (RUN then returns) */
+                KLBR_PB(klbr_shadow + 0x1dc) = vb; KLBR_P32(klbr_shadow + 0x1d8) = f1; KLBR_P32(klbr_shadow + 0x1e0) = nok ? f2 : 0; KLBR_P32(klbr_shadow + 0x1e4) = nok ? f3 : 0; klbr_van = vb;
             }
         }
     }
@@ -773,7 +782,7 @@ static void klbr_summary(void)
             klog("brain: round end: bridge: %d grab(s) started, %d part(s) paid ($%ld), %d stopped; slot 202 calls %d, slot 45 calls %d; traitor mirrors %d; Board run/exit calls %ld/%ld",
                 klbr_nstart, klbr_npay, klbr_paid, klbr_nabort, klbr_s202_n, klbr_s45_n, klbr_ntraitor, (long)klbr_hits[3], (long)klbr_hits[4]);
         if (klbr_realrun)
-            klog("brain: round end: realrun: swap-ins %ld (RUN %ld, EXIT %ld), swap-outs %ld, leaks %ld, veh restores %ld, mismatches %ld, foreign-thread %ld, nested %ld; %ld tactic(s) in the registry (kept across rounds: a coroutine alive past the round end still gets the shadow)", (long)klbr_rr_in, (long)klbr_rr_val[1], (long)klbr_rr_val[2], (long)klbr_rr_out, (long)klbr_rr_leak, (long)klbr_rr_veh, (long)klbr_rr_mis, (long)klbr_rr_foreign, (long)klbr_rr_nested, (long)klbr_rrn);
+            klog("brain: round end: realrun: swap-ins %ld (RUN %ld, EXIT %ld), swap-outs %ld, leaks %ld, veh restores %ld, mismatches %ld, foreign-thread %ld, nested %ld, mode!=4 %ld, unregistered [tac+0x10] %ld; %ld tactic(s) in the registry (kept across rounds: a coroutine alive past the round end still gets the shadow)", (long)klbr_rr_in, (long)klbr_rr_val[1], (long)klbr_rr_val[2], (long)klbr_rr_out, (long)klbr_rr_leak, (long)klbr_rr_veh, (long)klbr_rr_mis, (long)klbr_rr_foreign, (long)klbr_rr_nested, (long)klbr_rr_mode, (long)klbr_rr_t10, (long)klbr_rrn);
         if (klbr_puppet || klbr_boardreal)
             klog("brain: round end: watchdog took %d stalled bot(s) back from the real tactics; %d slow frame(s) (3 in a row switch the tactics off)", klbr_nrevoke, klbr_slow);
     }
