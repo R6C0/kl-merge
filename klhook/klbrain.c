@@ -1209,13 +1209,123 @@ static int klud_idx(DWORD p);      /* klucc_down.c (included after this file) */
 #define KLBR_CF_HPLOGMAX 24
 static struct { DWORD victim, t0, g; float hp0; int step; } klbr_cf_hp[KLBR_MAX];
 static int klbr_cf_hpn; static long klbr_cf_hpdrop, klbr_cf_hpflat; static double klbr_cf_hpsum;
+/* OnlineBrainTraitorFireProbe (11-03, workflow wqb7g1pxd follow-up; READ ONLY, recommended off; needs AttackHandle). After every slot-113 call of a marked bot: is ZRunToPosShootingTask (vt 0xbd0ba4) on the goal
+   stack [s+4..s+8) and for how long, does ZFireWeaponTask (vt 0xbd0bd4, tick 0x7c02b0) ever appear there, and the gate inputs of the burst path (wqb7g1pxd): body = [s+0x40]; [body+0x544] = aim target HANDLE
+   (0x62a540 compares it with its handle argument at 0x62a5b1: verified), [body+0x68c] prio, [body+0x690] expiry (read at the same function's tail, not re-disassembled: GUESS dword), byte [body+0x576] (must be 1
+   at 0x62a581: verified), byte [body+0x57d] & 0x10 (GUESS: from the trace notes, not re-verified), brain [s+0x5a8] / [s+0x700] (GUESS gates from the trace), mode dword [[s+0x6d8]] (5 / 6 block: verified 6 at 0x62a553),
+   holder [s+0xa8] flags / [s+0xac] / [s+0xb0], tuning floats [[0x168d7c0]+0x38c / 0x394 / 0x3a4 / 0x3ac] (0x394 / 0x3ac verified read at 0x8b8500-0x8b8514; 0x38c / 0x3a4 from the trace) once per bot per round,
+   and the bot-to-holder distance. NOT done: counting calls of body vt+0x6e4 (0x62a540) and its return value: that needs a DLL-owned copy of the ZFFActor vtable (vt 0xbb3bac), which the codebase only has for the
+   soldier (klbr_make_vtables); a body vtable swap would also touch every ZFFActor and the log would need a return hook, so it is skipped. Log lines: "traitor fireprobe:" (per-bot cap KLBR_FP_LOGMAX per round)
+   plus one round total; faults of the 0x8ccde0 lookup switch it off after 3. */
+#define KLBR_FP_RUN_VT 0x00bd0ba4
+#define KLBR_FP_FIRE_VT 0x00bd0bd4
+#define KLBR_FP_ZAT_VT 0x00bd1104
+#define KLBR_FP_TUNE 0x0168d7c0
+#define KLBR_FP_LOGMAX 10      /* episode-end lines per bot per round */
+#define KLBR_FP_SMPMAX 6      /* sample lines per bot per round (separate counter, so they cannot starve the episode-end lines) */
+static int klbr_fpon, klbr_fp_flt;
+static struct { DWORD rt, ft, rf, rl, ff, fl, lastlog, t0; int n, en, atk, tuned; long calls, rcalls, fcalls, eps, fireeps; DWORD maxep; } klbr_fp[KLBR_MAX];
+/* OnlineBrainTraitorHoldFire (11-03; UNTESTED, recommended off, CHANGES behaviour; needs AttackHandle). klbr_cf_apply (our slot-83 order, with Restart's [s+0x74] clear) is skipped for a bot while its ZAttackTarget
+   goal [s+0x658] is in state 1-3, or a ZRunToPosShootingTask / ZFireWeaponTask on its stack is in state 1-3 (GUESS: the task's state is at +8 like every goal; the extra task test is broader than the goal test
+   because cf_apply's own gate already skips goal states 1-3), for at most KLBR_HF_MAXMS from the first held call; then one call is allowed (so a stuck bot is not frozen) and the window restarts at the next hold.
+   Hypothesis (GUESS, wqb7g1pxd): our re-runs end the child before ZFireWeaponTask fires. Skips are counted in the round total. No engine call, no write. */
+#define KLBR_HF_MAXMS 6000
+static int klbr_hfion; static long klbr_hfi_skip, klbr_hfi_allow; static DWORD klbr_hfi_at[KLBR_MAX], klbr_hfi_seen;      /* at = hold window start; seen = bitmask of bots whose raw task/goal states were logged */
+static int klbr_fp_scan(DWORD self, DWORD *run, DWORD *fire)      /* read only: first ZRunToPosShootingTask / ZFireWeaponTask on the goal stack; returns the stack depth (-1 unreadable) */
+{
+    DWORD sb = klh_rd32(self + 4), se = klh_rd32(self + 8), p; *run = *fire = 0;
+    if (sb <= 0xffff || se < sb || se - sb > 64 * 4) return -1;
+    for (p = sb; p < se; p += 4) {
+        DWORD t = klh_rd32(p), v;
+        if (t <= 0xffff) continue;
+        v = klh_pvt(t);
+        if (v == KLBR_FP_RUN_VT && !*run) *run = t;
+        else if (v == KLBR_FP_FIRE_VT && !*fire) *fire = t;
+    }
+    return (int)((se - sb) / 4);
+}
+static int klbr_hfi_hold(int ix, DWORD self, DWORD now)      /* 1 = skip this order; 0 with klbr_hfi_at[ix] set = release due (cleared by the caller only when the order is really sent) */
+{
+    DWORD run, fire, g, gs = 0xffffffff, rs = 0xffffffff, fs = 0xffffffff; int busy;
+    if (!klbr_hfion || ix < 0 || ix >= KLBR_MAX) return 0;
+    klbr_fp_scan(self, &run, &fire);
+    g = klh_rd32(self + 0x658); if (g > 0xffff && klh_pvt(g) == KLBR_FP_ZAT_VT) gs = klh_rd32(g + 8);
+    if (run) rs = klh_rd32(run + 8);      /* GUESS: task state at +8 like every goal */
+    if (fire) fs = klh_rd32(fire + 8);
+    if ((run || fire) && !(klbr_hfi_seen & (1u << ix))) { klbr_hfi_seen |= 1u << ix; klog("brain: traitor holdfire: bot %d first task seen: run %08lx state %08lx fire %08lx state %08lx ZAttackTarget goal state %08lx (offset +8 is a GUESS: 0xffffffff = absent)", ix, (unsigned long)run, (unsigned long)rs, (unsigned long)fire, (unsigned long)fs, (unsigned long)gs); }
+    busy = (run && rs >= 1 && rs <= 3) || (fire && fs >= 1 && fs <= 3) || ((run || fire) && gs >= 1 && gs <= 3);      /* either task running, or a goal in state 1-3 with a shooting task on the stack */
+    if (!busy) { klbr_hfi_at[ix] = 0; return 0; }
+    if (!klbr_hfi_at[ix]) klbr_hfi_at[ix] = now;
+    if (now - klbr_hfi_at[ix] < KLBR_HF_MAXMS) { klbr_hfi_skip++; return 1; }
+    return 0;      /* window over: the order may go; the window is cleared and 'allowed' counted only when it is sent */
+}
+static DWORD klbr_fp_gt(void)      /* GUESS: game time tick = [[0xdd2640]+0x48] (from the 0x62a5eb disassembly notes), 0 if unreadable */
+{
+    DWORD g = klh_rd32((DWORD)(DWORD_PTR)KLH_VA(0xdd2640)); return g > 0xffff ? klh_rd32(g + 0x48) : 0;
+}
+static void klbr_fp_apply(struct klbr_s *e, DWORD self)      /* game thread, after the slot-113 call; read only */
+{
+    DWORD now = GetTickCount(), run, fire, body, hp, hh, tgt, mode, p6, depth; int ix, d; float dist = -1.0f, bp[3], tp[3]; int alive = 0;
+    if (!klbr_fpon || klbr_fp_flt >= 3 || !klbr_cfh || !e || (ix = (int)(e - klbr_t)) < 0 || ix >= KLBR_MAX) return;
+    d = klbr_fp_scan(self, &run, &fire); depth = (DWORD)d;
+    klbr_fp[ix].calls++; if (!klbr_fp[ix].t0) klbr_fp[ix].t0 = now;
+    if (run) {
+        klbr_fp[ix].rcalls++;
+        if (run != klbr_fp[ix].rt) { klbr_fp[ix].rt = run; klbr_fp[ix].rf = now; klbr_fp[ix].eps++; klbr_fp[ix].ff = 0; { DWORD a = klh_rd32(self + 0x658); klbr_fp[ix].atk = (a > 0xffff && klh_pvt(a) == KLBR_FP_ZAT_VT && klh_rd32(self + 0x74) == a); } }
+        klbr_fp[ix].rl = now;
+        if (now - klbr_fp[ix].rf > klbr_fp[ix].maxep) klbr_fp[ix].maxep = now - klbr_fp[ix].rf;
+    } else if (klbr_fp[ix].rt) {      /* episode over */
+        if (klbr_fp[ix].en < KLBR_FP_LOGMAX) { klbr_fp[ix].en++; klog("brain: traitor fireprobe: bot %d ZRunToPosShootingTask %08lx gone after %lu ms (seen %lu..%lu ms after the bot's first call, ZAttackTarget current at start: %s); ZFireWeaponTask on the soldier goal stack [s+4..s+8) in this episode: %s (it may be owned by the run task instead: 'no' is not conclusive)",
+            ix, (unsigned long)klbr_fp[ix].rt, (unsigned long)(klbr_fp[ix].rl - klbr_fp[ix].rf), (unsigned long)(klbr_fp[ix].rf - klbr_fp[ix].t0), (unsigned long)(klbr_fp[ix].rl - klbr_fp[ix].t0), klbr_fp[ix].atk ? "yes" : "no", klbr_fp[ix].ff ? "yes" : "no"); }
+        klbr_fp[ix].rt = 0;
+    }
+    if (fire) {
+        klbr_fp[ix].fcalls++;
+        if (fire != klbr_fp[ix].ft) { klbr_fp[ix].ft = fire; klbr_fp[ix].fireeps++; }
+        if (!klbr_fp[ix].ff) klbr_fp[ix].ff = now;
+        klbr_fp[ix].fl = now;
+    } else klbr_fp[ix].ft = 0;
+    if (!run && !fire) return;
+    if (klbr_fp[ix].n >= KLBR_FP_SMPMAX || (now - klbr_fp[ix].lastlog < 1000 && !(fire && klbr_fp[ix].ff == now))) return;
+    klbr_fp[ix].lastlog = now; klbr_fp[ix].n++;
+    body = klh_rd32(self + 0x40); hp = klh_rd32(self + 0xac); hh = klh_rd32(self + 0xb0); tgt = 0; mode = 0xffffffff;
+    if (body > 0xffff) {
+        DWORD h = klh_rd32(body + 0x544);      /* aim target handle */
+        if (h) { __try { tgt = ((klbr_cfrefn)(DWORD_PTR)KLH_VA(KLBR_CF_REF))(h); } __except (EXCEPTION_EXECUTE_HANDLER) { tgt = 0; if (++klbr_fp_flt >= 3) klog("brain: traitor fireprobe: 0x8ccde0 faulted 3 times: off"); } }
+    }
+    p6 = klh_rd32(self + 0x6d8); if (p6 > 0xffff) mode = klh_rd32(p6);
+    if (hp > 0xffff && klh_pvt(hp) == 0x00bb45f4u && klbr_bot_pos(e->actor, bp, &alive) && klh_rd(hp + 0x460, tp, 12) && kle_ok3(tp)) dist = (float)kle_dist(bp, tp);
+    { BYTE b576 = 0, b57d = 0; if (body > 0xffff) { klh_rd(body + 0x576, &b576, 1); klh_rd(body + 0x57d, &b57d, 1); }
+      klog("brain: traitor fireprobe: bot %d t+%lu ms stack %ld run %08lx (%lu ms) fire %08lx; body %08lx aim %08lx%s prio %ld expiry %lu (game time %lu, GUESS [[0xdd2640]+0x48]) b576 %02x b57d&10 %d; brain +5a8 %08lx +700 %08lx mode %ld; holder %08lx flags %03lx handle %08lx dist %.1f m",
+           ix, (unsigned long)(now - klbr_fp[ix].t0), (long)(int)depth, (unsigned long)run, (unsigned long)(run ? now - klbr_fp[ix].rf : 0), (unsigned long)fire, (unsigned long)body, (unsigned long)tgt, (tgt && tgt == hp) ? " (= holder)" : "",
+           (long)(int)(body > 0xffff ? klh_rd32(body + 0x68c) : 0), (unsigned long)(body > 0xffff ? klh_rd32(body + 0x690) : 0), (unsigned long)klbr_fp_gt(), (unsigned)b576, (b57d & 0x10) ? 1 : 0,
+           (unsigned long)klh_rd32(self + 0x5a8), (unsigned long)klh_rd32(self + 0x700), (long)(int)mode, (unsigned long)hp, (unsigned long)klh_rd32(self + 0xa8), (unsigned long)hh, (double)(dist >= 0.0f ? dist / 100.0f : dist)); }
+    if (!klbr_fp[ix].tuned) {
+        DWORD tp0 = 0, f[4] = { 0, 0, 0, 0 }; float v[4]; static const DWORD off[4] = { 0x38c, 0x394, 0x3a4, 0x3ac }; int k, ok = 1;
+        klbr_fp[ix].tuned = 1;
+        if (!klh_rd((DWORD_PTR)KLH_VA(KLBR_FP_TUNE), &tp0, 4) || tp0 <= 0xffff) return;
+        for (k = 0; k < 4; k++) { if (!klh_rd(tp0 + off[k], &f[k], 4)) ok = 0; memcpy(&v[k], &f[k], 4); }
+        if (ok) klog("brain: traitor fireprobe: bot %d tuning floats [[0x168d7c0]+0x38c/0x394/0x3a4/0x3ac] = %.1f %.1f %.1f %.1f (0x8b84b0 distance gate; distance to the holder above)", ix, (double)v[0], (double)v[1], (double)v[2], (double)v[3]);
+    }
+}
+static void klbr_fp_summary(void)
+{
+    int i;
+    if (klbr_fpon) for (i = 0; i < KLBR_MAX; i++) if (klbr_fp[i].calls)
+        klog("brain: traitor fireprobe: round total: bot %d slot-113 calls %ld, with ZRunToPosShootingTask %ld (%ld episodes, longest %lu ms), with ZFireWeaponTask %ld (%ld episodes)%s", i, klbr_fp[i].calls, klbr_fp[i].rcalls, klbr_fp[i].eps, (unsigned long)klbr_fp[i].maxep, klbr_fp[i].fcalls, klbr_fp[i].fireeps, klbr_fp[i].fcalls ? "" : " (ZFireWeaponTask never on the stack)");
+    if (klbr_fpon) for (i = 0; i < KLBR_MAX; i++) if (klbr_fp[i].rt) klog("brain: traitor fireprobe: bot %d episode still open at round end: ZRunToPosShootingTask %08lx, ZFireWeaponTask on the stack %s", i, (unsigned long)klbr_fp[i].rt, klbr_fp[i].ff ? "yes" : "no");
+    if (klbr_fpon) klog("brain: traitor fireprobe: round total: faults %d", klbr_fp_flt);
+    if (klbr_hfion) klog("brain: traitor holdfire: round total: orders skipped %ld, allowed after %d ms %ld", klbr_hfi_skip, KLBR_HF_MAXMS, klbr_hfi_allow);
+    memset(klbr_fp, 0, sizeof klbr_fp); klbr_fp_flt = 0; klbr_hfi_skip = klbr_hfi_allow = 0; memset(klbr_hfi_at, 0, sizeof klbr_hfi_at); klbr_hfi_seen = 0;
+}
 static void klbr_cf_apply(struct klbr_s *e, DWORD self)
 {
     DWORD hf, hp, hh, node, s5, st, vt, fn, f5 = 0, g, g0s = 0xffffffff, g1s = 0xffffffff, cur0, cur1, now = GetTickCount(); float p[3] = { 0, 0, 0 }; int ix, ok = 0;
     if (!klbr_cfon || klbr_cf_flt >= 3 || !e || (ix = (int)(e - klbr_t)) < 0 || ix >= KLBR_MAX) return;
     hf = klh_rd32(self + 0xa8); hp = klh_rd32(self + 0xac); hh = klh_rd32(self + 0xb0);
-    if (!hh || (hf & 0x11) != 0x11 || (hf & 0x244) || hp <= 0xffff || klh_pvt(hp) != 0x00bb45f4u || klbr_hl_body(hp) || klbr_hl_find(hp)) return;      /* human holder that passes the fire test */
+    if (!hh || (hf & 0x11) != 0x11 || (hf & 0x244) || hp <= 0xffff || klh_pvt(hp) != 0x00bb45f4u || klbr_hl_body(hp) || klbr_hl_find(hp)) { klbr_hfi_at[ix] = 0; return; }      /* human holder that passes the fire test; else a HoldFire window is stale */
     if (klbr_cf_at[ix] && now - klbr_cf_at[ix] < 2000) return;
+    if (klbr_cfh && klbr_hfi_hold(ix, self, now)) return;      /* OnlineBrainTraitorHoldFire: let a running shooting task finish */
     if ((s5 = klh_rd32(self + 0x5ac)) <= 0xffff || ((st = klh_rd32(s5 + 8)) != 0 && st != 4)) { klbr_cf_skip++; return; }
     if ((node = klh_rd32(hp + 4)) <= 0xffff || (vt = klh_rd32(self)) <= 0xffff || (fn = klh_rd32(vt + 0x14c)) <= 0xffff || !klh_rd((DWORD_PTR)KLH_VA(KLBR_CF_F5), &f5, 4)) return;
     if (klbr_cfh) {      /* wedrgngwi guards: the tick derefs 0x8ccde0([goal+0x14]) unchecked (0x4f44a7), so the handle must still resolve to this human; slot 83 rewrites +0x14 before its state test, so +0x658 must be idle */
@@ -1225,6 +1335,7 @@ static void klbr_cf_apply(struct klbr_s *e, DWORD self)
         if (r != hp) { klbr_cf_stale++; klbr_cf_skip++; return; }
     }
     klbr_cf_at[ix] = now;
+    if (klbr_hfi_at[ix]) { klbr_hfi_at[ix] = 0; klbr_hfi_allow++; }      /* HoldFire: a window still open here was released (expired), and the order is now really sent */
     g = klh_rd32(self + (klbr_cfh ? 0x658 : 0x654)); if (g > 0xffff) g0s = klh_rd32(g + 8); cur0 = klh_rd32(self + 0x74);      /* AttackHandle: ZAttackTarget +0x658 (prio 0x96), else CoverFire +0x654 */
     __try {
         ((klbr_cfposfn)(DWORD_PTR)KLH_VA(KLBR_CF_POS))(node, 0, (DWORD)(DWORD_PTR)p);
@@ -1389,6 +1500,7 @@ static DWORD __fastcall klbr_w_fl113(DWORD self, DWORD edx, DWORD a1)      /* th
     if (klbr_tfl_end(self, sw, flt, KLBR_TFL_S113)) return 0;
     klbr_hx_apply(e, self);      /* OnlineBrainTraitorHolderFix: after the swap is out, so the engine's own holder write stands and only our bits change */
     klbr_ef_apply(e, self);      /* OnlineBrainTraitorEntryFix + the read-only child watch: after the full update recomputed the entries */
+    klbr_fp_apply(e, self);     /* OnlineBrainTraitorFireProbe (read only): sees the stack as the scheduler left it, before our own order below */
     klbr_cf_apply(e, self);     /* OnlineBrainTraitorCoverFire: after HolderFix, so it sees the fixed flags */
     klbr_rs_apply(e, self);     /* OnlineBrainTraitorRestart unfreeze: after the call, so a goal it just pushed is still on the stack and is left alone */
     klbr_tfl_log(e, self, 0, m, r);
@@ -1556,6 +1668,7 @@ static void klbr_hitlog_summary(void)
     klbr_ef_set = klbr_ef_keep = klbr_ef_miss = klbr_ef_stale = klbr_ef_child = klbr_ef_childh = 0; klbr_ef_n = klbr_ef_cn = klbr_ef_gn = 0;
     if (klbr_rson) klog("brain: traitor restart: round total: current goal cleared before the call %ld, unfrozen %ld, aborted on a stale target %ld, switch skipped (vt+0x1b4 not 0x6e49b0 / no Idle entry / g entry left) %ld, faults %d", klbr_rs_clr, klbr_rs_unf, klbr_rs_abort, klbr_rs_unfskip, klbr_rs_flt);
     klbr_rs_clr = klbr_rs_unf = klbr_rs_abort = klbr_rs_unfskip = 0; klbr_rs_n = klbr_rs_flt = 0;
+    klbr_fp_summary();
     if (klbr_hxon) klog("brain: traitor holderfix: round total: human holder flags fixed in range (0x4 cleared, 0x10 set) %ld, out of range / range unknown (0x4 cleared only) %ld, range faults %ld", klbr_hx_set, klbr_hx_far, klbr_hx_flt);
     klbr_hf_null = klbr_hf_pass = 0; klbr_hx_set = klbr_hx_far = 0; klbr_ho_null = klbr_ho_pass = 0; klbr_cf_calls = klbr_cf_skip = klbr_cf_stale = 0; klbr_cf_flt = klbr_cf_n = 0; memset(klbr_cf_at, 0, sizeof klbr_cf_at);
     memset(klbr_cf_hp, 0, sizeof klbr_cf_hp); klbr_cf_hpn = 0; klbr_cf_hpdrop = klbr_cf_hpflat = 0; klbr_cf_hpsum = 0.0;
@@ -2190,6 +2303,12 @@ static void klbr_init(void)
     klbr_rson = klbr_cfh && klbr_key("OnlineBrainTraitorRestart");
     if (klbr_key("OnlineBrainTraitorRestart") && !klbr_rson) klog("brain: OnlineBrainTraitorRestart needs OnlineBrainTraitorAttackHandle: off");
     if (klbr_rson) klog("brain: OnlineBrainTraitorRestart=1 UNTESTED (recommended off): the marked bot's attack goal is re-run on every order (current-goal pointer cleared first), and a finished one that left the bot with no goal is dropped so Idle runs again (host only)");
+    klbr_fpon = klbr_cfh && klbr_key("OnlineBrainTraitorFireProbe");
+    if (klbr_key("OnlineBrainTraitorFireProbe") && !klbr_fpon) klog("brain: OnlineBrainTraitorFireProbe needs OnlineBrainTraitorAttackHandle: off");
+    if (klbr_fpon) klog("brain: OnlineBrainTraitorFireProbe=1 UNTESTED (recommended off): READ ONLY, logs ZRunToPosShootingTask / ZFireWeaponTask on the marked bot's goal stack, the body aim target and gates, the tuning floats and the distance to the holder (host only)");
+    klbr_hfion = klbr_cfh && klbr_key("OnlineBrainTraitorHoldFire");
+    if (klbr_key("OnlineBrainTraitorHoldFire") && !klbr_hfion) klog("brain: OnlineBrainTraitorHoldFire needs OnlineBrainTraitorAttackHandle: off");
+    if (klbr_hfion) klog("brain: OnlineBrainTraitorHoldFire=1 UNTESTED (recommended off): our slot-83 attack order is skipped while the marked bot's ZAttackTarget goal or its shooting task is running (state 1-3), for at most %d ms (host only)", KLBR_HF_MAXMS);
     if (klbr_efon) klog("brain: OnlineBrainTraitorEntryFix=1 UNTESTED (recommended off): while the marked bot's current goal is ZAttackTarget on a human, its known-list entry for that human gets 0x11 set and 0x244 cleared after every slot-113 call (host only)");
     if (klbr_cfon) klog("brain: OnlineBrainTraitorCoverFire=1 UNTESTED (recommended off): a marked bot whose holder is a human passing the fire test gets the shipped CoverFire goal (slot 83, handle 0) at that human, at most every 2 s");
     if (klbr_hlon) klog("brain: OnlineBrainTraitorHitLog=1 (recommended off): READ ONLY, counts hits of tagged bots (marked traitor vs other) on humans in the rules' damage hook (slot 15); one 'traitor hits:' line per round end");
