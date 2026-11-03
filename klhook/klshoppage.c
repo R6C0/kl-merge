@@ -96,7 +96,7 @@ static struct {
     int modesOn; volatile int ctlMode;               /* [Keys] ModesTab: the controls page has a 2nd view (BOTS AND MODES); ctlMode 1 = that view is up (only with ctl) */
     int ctlOn, ctlKey, ctlKeyDown, hPendPg, hintDone, ctlTold; DWORD ctlLastKey;   /* config (the page-cycle key), edge, the early press's target (0 hire / 1 controls), the once-per-session hint, presses logged */
     volatile int ctl;                            /* the controls page is on screen (never together with hire / shownB) */
-    int queueOn, hQueued, hintEvery, hscore, pscore, autoOn, aoSends; DWORD pq2At, aoUpAt, aoLast;   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
+    int queueOn, hQueued, hintEvery, hscore, pscore, autoOn, aoSends, aoSentOk, aoShopSeen; DWORD pq2At, aoUpAt, aoLast;   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
 } kspg;
 
 static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
@@ -1753,14 +1753,20 @@ static int kspg_find_ready(const char *elem)
  * kspg.hQueued, or kspg.pq2At (page II). It clears itself on a lapse, a cancel or the apply, which resets the send count. */
 static void kspg_autoopen_tick(void)
 {
-    DWORD now = GetTickCount(); int queued = (kspg.hPendAt && kspg.hQueued) || kspg.pq2At, mode = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), i;
-    if (kspg.st != KPQ_ST_ROUNDOVER) kspg.aoUpAt = 0; else if (!kspg.aoUpAt) kspg.aoUpAt = now | 1;
-    if (!queued || mode == KPQ_MODE_LIST) { kspg.aoSends = 0; kspg.aoLast = 0; if (!queued) return; }
+    DWORD now = GetTickCount(), sm, lst = 0; int queued = (kspg.hPendAt && kspg.hQueued) || kspg.pq2At, mode = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), i;
+    /* review: read the LIVE session state (kspg.st is only refreshed inside kspg_gate_x, which returns early with no level running): not at 4 / not 0x20 = reset everything */
+    if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) || klh_rd32(sm + 0x5c) != 4 || !klh_rd(sm + 0x70, &lst, 4) || (int)lst != KPQ_ST_ROUNDOVER) {
+        kspg.aoUpAt = 0; kspg.aoSends = 0; kspg.aoLast = 0; kspg.aoSentOk = 0; kspg.aoShopSeen = 0; return;
+    }
+    if (!kspg.aoUpAt) kspg.aoUpAt = now | 1;
+    if (mode == KPQ_MODE_LIST) kspg.aoShopSeen = 1;             /* review: the player has had the list this 0x20 phase (shopped / backed out / readied): never auto-open again until the phase ends */
+    if (!queued) { kspg.aoSends = 0; kspg.aoLast = 0; kspg.aoSentOk = 0; return; }
+    if (kspg.aoSentOk || kspg.aoShopSeen) return;               /* review: a successful send is final (no resend while the list is still opening); retries only when no element / vtable */
     if (!kpq_autoopen_due(kspg.autoOn, kspg.queueOn, queued, kspg.st, mode, kspg.aoUpAt ? (unsigned int)(now - kspg.aoUpAt) : 0u, kspg.aoSends, kspg.aoLast ? (unsigned int)(now - kspg.aoLast) : 0u)) return;
     kspg.aoLast = now | 1; kspg.aoSends++;                      /* counted even when nothing is found: the cap bounds the retries */
     for (i = 0; kpq_ready_names[i]; i++) {
         if (!kspg_find_ready(kpq_ready_names[i])) continue;
-        if (kspg_send_msg(kpq_ready_names[i], "ZW_SELECT3")) klog("pagequeue: autoopen send %d -> %s (ZW_SELECT3; state 0x%x, shop mode %d, page up %lu ms)", kspg.aoSends, kpq_ready_names[i], kspg.st, mode, (unsigned long)(now - kspg.aoUpAt));
+        if (kspg_send_msg(kpq_ready_names[i], "ZW_SELECT3")) { kspg.aoSentOk = 1; klog("pagequeue: autoopen send %d -> %s (ZW_SELECT3; state 0x%x, shop mode %d, page up %lu ms)", kspg.aoSends, kpq_ready_names[i], kspg.st, mode, (unsigned long)(now - kspg.aoUpAt)); }
         else klog("pagequeue: autoopen send %d -> %s failed (no usable vtable)", kspg.aoSends, kpq_ready_names[i]);
         return;
     }
