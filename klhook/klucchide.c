@@ -55,7 +55,7 @@
  *    round over the internet there is NO carrier yet). Types: UHID host -> all "S;<epoch>;<ucc mask>;<revealed mask>" (taken only from a
  *    sender saying role 2) on a change and every 5 s; UREV client -> host "R;<epoch>;<client index>" at the press and every 2 s until the
  *    host's state shows it (15 s at most). Without a carrier the host's OWN UCC still reveals for the host's screen only.
- *    GUESSES (marked in the code too): the own client index on a CLIENT (records at [rules+8] carry the ZFFPlayer at +0x378 - only the
+ *    GUESSES (marked in the code too): the own client index on a CLIENT (records at [rules+8] carry the ZFFPlayer at [[rec]+0x378] - only the
  *    host's 0x40f870 was read); the round clock [rules+0x4c] online; the session state window on a client.
  *
  * KLHook.ini, the shared [Ucc] section (keys of klucc.c / klucc_down.c there too: Pings PingMinS PingMaxS Accuse Key Name CooldownS ConeDeg
@@ -152,7 +152,8 @@ static void klucc_wrap(DWORD rules, DWORD now)
 }
 
 /* ---- the own client index ----
-   GUESS: the 0x74-byte records at [rules+8] hold the ZFFPlayer at +0x378 on a CLIENT as on the host (only the host's 0x40f870 was read);
+   GUESS: the 0x74-byte records at [rules+8] hold the client struct at +0 and the ZFFPlayer at [client+0x378] on a CLIENT as on the host
+   (bs15 2026-11-03 read record+0x378 empty on the host; this read used that wrong offset until then, never run since [Ucc] Hide defaults to 0);
    the one whose DDL object passes the master test is ours (klco_is_master). Fallbacks: the crew index of the game's local player (klud_local
    + klud_idx: (signed char)([[P+0x2748]+0xdc] ^ 0xac), klucc_down.c), then the stock player list's index ([[osd+0x10c4]+0xefc], klhud.c). */
 static int klucc_find_me(DWORD rules, int n, int *how)
@@ -162,7 +163,8 @@ static int klucc_find_me(DWORD rules, int n, int *how)
     for (i = 0; recs && freeb && i < n; i++) {
         DWORD p;
         if (!klh_rd(freeb + i, &b, 1) || b) continue;
-        if (!(p = klh_rd32(recs + 0x74 * (DWORD)i + 0x378)) || !klud_is_player(p)) continue;
+        { DWORD cl = klh_rd32(recs + 0x74 * (DWORD)i); p = cl > 0xffff ? klh_rd32(cl + 0x378) : 0; }   /* the record holds the CLIENT struct at +0, the ZFFPlayer is [client+0x378] (klonline_read.c G1, klroundkeep.c; c9's bs15 read rec+0x378 empty) */
+        if (!p || !klud_is_player(p)) continue;
         if (klco_is_master(p)) { *how = 1; return i; }
     }
     if (klud_local(&me) && klud_is_player(me) && (i = klud_idx(me)) >= 0 && i < n) { *how = 2; return i; }
