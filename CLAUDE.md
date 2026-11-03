@@ -70,7 +70,8 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 
 2026-11-03 ~03:20 - [c9] bs3 SAFE PASS (4 seats, 0 asserts/faults): RealRun runs the REAL Arcade Loot RUN online for the first time. DM03 host 13776 RUN +
 163 EXIT resumes, swap-ins = swap-outs, 0 leaks/mismatches, mode!=4 0, [tac+0x10] 0 (71d099212 judge guards in). DD05 only 37 resumes. Behaviour NOT yet
-Arcade: shadow shows grabs 0, van 0, crew records 0. Workflow w2vymslb2 grades movement/looting vs bs2 and names the blocker for bs4.
+Arcade: grade w2vymslb2 = the hand-off never opened (evaluate picks a stack at +0x2c but +0x28 = 0), so puppeteer + real RUN steered the same bots: 0 grabs,
+0 boarded. 8b9a29bd2 opens it from the chosen stack, shows Loot only when handed, restamps per live RUN slice. bs4 (DM03 + DD05, BoardReal both) on "end pq5".
 
 2026-11-03 ~03:00 - [ce] AutoOpenSteps pushed (7bf5be192, default 0, recommended off until benched): after AutoOpen the hook opens FABuyWeaponsNewCategory then
 FABuyWeaponsNewWeapon itself (0x6bee50 as klsv_open), gated by kpq_aostep (top window, mode 0/1, slot -6, cat -4, busy, 300 ms; aborts 5 s / 2.5 s). Review (3 lenses):
