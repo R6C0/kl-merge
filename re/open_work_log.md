@@ -1,3 +1,7 @@
+2026-11-03 ~01:30 - [ce] PageQueue bench pq1: SAFE PASS (both seats, DM06 + DD05, 0 asserts, round 2 reached), feature FAIL: the queued press lapsed.
+DD05: a pq1 dll built seconds before 551e734fb. DM06: a stale 250 ms hpre on the 0x1f -> 0x20 edge -> 6495aefa5 (a queued press WAITS while the gate reads shut).
+pq2 (AutoOpen, old dll) is running; pq3 (C:\kl_build_1024\week_1028\pq3, dll pq_1103b_test, AutoOpen=1, no scripted click) is chained on "end bs1". Cursor hidden in 0x1f/0x20, so no clickable button.
+
 2026-11-03 ~00:55 - [c9] Review fixes for the stage-2 brain pushed (2f66db9ca): the chosen stack is cand[[tac+0x2c]] at tac+0x14 (0x451b8a), not +0x28 (trigger box);
 van mirror uses KLH_RULES_SV_OK/CL_OK; sync no longer writes rec+0x10 down or +0x15; slow rule = 3 consecutive >50 ms frames; 2 faults in a class switch that
 tactic off; slots 45/202 replaced only when the original is the verified ret-8 function; slot 45 queues boarding for klbr_pump (no game call in a frame);
