@@ -959,14 +959,21 @@ static int klbr_hp_read(DWORD pl, float *hp);      /* defined with the HitLog bl
    (the same insert into the ALLY's list, no team test) plus an actor alert: a plain NoteEntity would hand the human to the whole squad. So B+0xcc is set to 0 for the duration of the call and put back at once (game thread, nothing runs in between).
    (2) The prune 0x51e480 keeps every type-2 entry whose entity is alive and non-null (bl = 1 at 0x51e4b0 -> 0x51e5b3), so the entries do NOT expire by time: they are removed here (game's own swap-remove 0x67df10, thiscall ret 4)
    when the wrap ends. (3) A full list (10) evicts the oldest entry whose flag bit0 is clear: at most KBR_SN_MAXFEED nearest humans are fed so the bot keeps its police entries. */
+static int klbr_sn_seen;      /* OnlineBrainTraitorSenseSeen: 1 = B::MarkSeen 0x4880d0 instead of NoteEntity */
+/* OnlineBrainTraitorSenseSeen (research re/traitor_slot111_gates_1103.md, verified; MarkSeen prologue/ret 4 and the game's caller 0x65fab8 (ecx = [..+0x698]) re-read 11-03):
+   a NoteEntity entry has flags 0, and ZAttackTarget's fire test 0x616480 (0x4f493a) needs bit0 SET (plus 0x10 set, 0x4/0x200/0x40 clear), so a fed human could be targeted but never shot at.
+   B::MarkSeen 0x4880d0 (thiscall, ecx = B, ONE arg = entity POINTER, ret 4) sets bit0 on an existing entry or adds a type-2 entry with bit0 set, sets B+0x184 (full rescan:
+   loop 1 then computes 0x10 / 0x20 / 0x40 / friend bit 0x4) and also notifies the ally list B+0xd0 via vcall +0x1a0 (unless [soldier+0x88]==2): B+0xcc is parked as for NoteEntity.
+   GUESS: who clears an entry's bit0 was not found, so it is repeated every SenseMs. MarkSeen also writes flag bit7 = byte [human+0x25c5] (slot 111: -100 / +150 terms). */
 static int klbr_sn_call(DWORD B, DWORD body)      /* 1 = called, 0 = no handle (not fed), -1 = fault */
 {
     DWORD h = 0, ac = klh_rd32(B + 0xcc); int ok = 0, zeroed = 0;
     __try {
-        h = ((DWORD (__fastcall *)(DWORD))(DWORD_PTR)KLH_VA(0x6ece90))(body);
+        h = klbr_sn_seen ? body : ((DWORD (__fastcall *)(DWORD))(DWORD_PTR)KLH_VA(0x6ece90))(body);
         if (h) {
             if (ac && ac <= 16) { *(volatile DWORD *)(DWORD_PTR)(B + 0xcc) = 0; zeroed = 1; }
-            ((void (__fastcall *)(DWORD, DWORD, DWORD))(DWORD_PTR)KLH_VA(0x7bd720))(B, 0, h);
+            if (klbr_sn_seen) ((void (__fastcall *)(DWORD, DWORD, DWORD))(DWORD_PTR)KLH_VA(0x4880d0))(B, 0, body);      /* MarkSeen: thiscall + 1 stack arg (pointer) */
+            else ((void (__fastcall *)(DWORD, DWORD, DWORD))(DWORD_PTR)KLH_VA(0x7bd720))(B, 0, h);
             if (zeroed) { *(volatile DWORD *)(DWORD_PTR)(B + 0xcc) = ac; zeroed = 0; }
             ok = 1;
         }
@@ -1779,6 +1786,8 @@ static void klbr_init(void)
     klbr_snon = klbr_taon && klbr_key("OnlineBrainTraitorSense");
     if (klbr_key("OnlineBrainTraitorSense") && !klbr_snon) klog("brain: OnlineBrainTraitorSense needs OnlineBrainTraitorArcade=1: off");
     klbr_snms = kbr_sense_ms((long)GetPrivateProfileIntA("Brain", "OnlineBrainTraitorSenseMs", 500, klh_ini));
+    klbr_sn_seen = klbr_snon && klbr_key("OnlineBrainTraitorSenseSeen");
+    if (klbr_sn_seen) klog("brain: OnlineBrainTraitorSenseSeen=1 UNTESTED (recommended off): the Sense feed calls B::MarkSeen 0x4880d0 (entry bit0 set, which ZAttackTarget's fire test 0x616480 needs) instead of NoteEntity");
     if (klbr_snon) klog("brain: OnlineBrainTraitorSense=1 UNTESTED (recommended off): every %d ms the game's B::NoteEntity (0x7bd720) is called for each live human body on a wrapped marked bot's known list, so slot 111 can see humans; stops with the wrap (unmark, death, round end); 3 faults = off for the round", klbr_snms);
     klbr_dmon = klbr_taon && klbr_key("OnlineBrainTraitorDamage");
     if (klbr_key("OnlineBrainTraitorDamage") && !klbr_dmon) klog("brain: OnlineBrainTraitorDamage needs OnlineBrainTraitorArcade=1 (and the Brain on): off");
