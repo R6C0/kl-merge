@@ -4,6 +4,11 @@ DM07 PASS (0 faults, round 2, page SHOWN, ESC 5 -> 4 -> 3 on both seats). pq10 D
 the hook (same driver site as 10-12 W8 and 10-26 COVER13b). pq11 DD10 PASS on both seats. After-match navigation total: 9 stock + 6 DM-pool maps, 30/31
 seats (miss = pq8 DD04 client with a 0.5 s shop). DM02 not benched: no kit recorded its lobby RIGHT count.
 
+2026-11-03 ~08:50 - [c9] bs11 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorFireLine (c32286473) wraps the marked bot's ZSoldier
+slots 113/114 (fire-line friend list); mode 1 logged calls on DM03, mode 2 swapped the Arcade rules in cleanly on DD05 (slot 114 returned 0 x7, 1 x1).
+Not yet shown: that the marked bot really shoots a human (no hit counter). Real Board 7/7 DM03, 5/7 DD05. Host menu INSTALLED 08:44 (mkoverlay
+6e10e11c4 keeps KLS_Tex/KLS_Neural, adds KLS_HMap/KLS_HOpt, 11 rows 27 apart; UNDO hostmenu 1102.bat restores the identical previous zip).
+
 2026-11-03 ~08:15 - [c9] bs10 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorArcade (a555a37b6) marks 1 bot a map, wraps ZSoldier slot 111
 on a private table, team stays Ally, round end restores; Turn correctly ignored. Real Board 7/7 DM03, 4/7 DD05. Pushed babc92071 (raw vtable sweep:
 klgrudge/klcampool/klauto see through private copies). Research 7c2d368ab (re/fireline_gap_1103.md): online every ally bot already scores humans;

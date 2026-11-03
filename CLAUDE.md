@@ -68,19 +68,20 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~08:50 - [c9] bs11 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorFireLine (c32286473) wraps the marked bot's ZSoldier
+slots 113/114 (fire-line friend list); mode 1 logged calls on DM03, mode 2 swapped the Arcade rules in cleanly on DD05 (slot 114 returned 0 x7, 1 x1).
+Not yet shown: that the marked bot really shoots a human (no hit counter). Real Board 7/7 DM03, 5/7 DD05. Host menu INSTALLED 08:44 (mkoverlay
+6e10e11c4 keeps KLS_Tex/KLS_Neural, adds KLS_HMap/KLS_HOpt, 11 rows 27 apart; UNDO hostmenu 1102.bat restores the identical previous zip).
+
 2026-11-03 ~08:25 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
 page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)
 and DM06/DM01/DM03/DM09/DM07/DD10 (pq10/pq11; pq10's DD10 died in d3d9 on both seats in the same ms = a display change, rerun clean). 30/31 seats
 show the page; the miss was a client whose shop lasted 0.5 s. DM02 not benched (lobby step count unknown). Waiting for the owner's play test.
+
 2026-11-03 ~08:15 - [c9] bs10 PASS (DM03 + DD05, 4 seats, 0 faults): OnlineBrainTraitorArcade (a555a37b6) marks 1 bot a map, wraps ZSoldier slot 111
 on a private table, team stays Ally, round end restores; Turn correctly ignored. Real Board 7/7 DM03, 4/7 DD05. Pushed babc92071 (raw vtable sweep:
 klgrudge/klcampool/klauto see through private copies). Research 7c2d368ab (re/fireline_gap_1103.md): online every ally bot already scores humans;
 the fire-line friend list 0x570a12 is what holds them. OnlineBrainTraitorFireLine (slots 113/114, log-only first) being built in C:\kl_wtl.
-
-2026-11-03 ~07:20 - [c9] arc3 (offline Arcade, idle $0 player, ArcadeDiag): Arcade marks 0/2/1/5 traitors a round too, so online's 5 is Arcade.
-Research (re/arcade_traitor_consequence_1103.md, checked by hand): a mark never swaps teams; it only lets that bot target humans (0x882470 behind
-the Arcade gate 0x7f6850, fire-line 0x570a12). bs9 PASS (4 seats, 0 faults): the team-swap turn now works (1 turned + restored per map, after
-fixes b848198f4 klh_avt gate, b845188d3 traitor not a cop) but is not Arcade. OnlineBrainTraitorArcade being built in C:\kl_wt\tarc (wj8sfl36y).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
