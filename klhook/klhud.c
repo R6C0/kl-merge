@@ -1806,7 +1806,7 @@ static DWORD klu_current_osd(int may_scan)
            in the countdown). Only when it has not become ready in 10 s does the scan run, as before. */
         DWORD now = GetTickCount();
         if (!klu_wait_t) { klu_wait_t = now | 1; if (klu.log > 1) klog("hud: the game's OSD is there and not ready yet (no FA player list or its transform not written): waiting, no scan"); }
-        if (now - klu_wait_t < 10000) return 0;
+        if ((int)(now - klu_wait_t) < 10000) return 0;      /* signed: now | 1 is 1 ms ahead in the same tick (pq2 11-03) */
     }
     if (!klu_find_osd()) { klu_scan_fails++; return 0; }
     for (i = 0; i < klu_ncand; i++) if (klu_osd_ok(klu_cand[i])) { klu_scan_fails = 0; return klu_cand[i]; }

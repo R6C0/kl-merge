@@ -495,7 +495,7 @@ static void klpu_ring_tick(DWORD osd, DWORD state, DWORD at, DWORD now)
         frac = part > 0 ? 1.0f - part / klpu_r.part_max : 1.0f;
     }
     if (looting) klpu_r.loot_seen = now | 1;
-    else if (klpu_r.loot_seen && now - klpu_r.loot_seen >= KLPU_RING_LINGER) { klpu_r.loot_seen = 0; klpu_r.loot_obj = 0; klpu_r.loot_start = 0; }
+    else if (klpu_r.loot_seen && (int)(now - klpu_r.loot_seen) >= (int)KLPU_RING_LINGER) { klpu_r.loot_seen = 0; klpu_r.loot_obj = 0; klpu_r.loot_start = 0; }
     if (!klpu_r.loot_seen) { InterlockedExchange(&klpu_ring_on, 0); return; }
     /* where: the use-action prompt's place, read from its element (Update 0x51f4a0 writes it every frame) */
     cx = KLPU_RING_X0; cy = KLPU_RING_Y0;

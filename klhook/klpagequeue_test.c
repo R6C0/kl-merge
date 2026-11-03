@@ -25,6 +25,9 @@ int main(void)
     CHECK(kpq_cancels(1, 0x1f, 0, 1, 1) == 1, "a second press on the scoreboard cancels");
 
     /* the hold of a queued press */
+    CHECK(kpq_age(1000u, 1000u | 1u) == 0u && kpq_age(1016u, 1001u) == 15u && kpq_age(5u, 0xfffffff1u) == 20u, "kpq_age: a stamp of now | 1 in the same ms is 0 (pq2), tick wrap");
+    CHECK(kpq_step(1, 0, 0x1f, 0, 0, kpq_age(1000u, 1000u | 1u)) == KPQ_WAIT && kpq_step(0, 1, 0x20, 2, 0, kpq_age(1000u, 1000u | 1u)) == KPQ_WAIT,
+          "the tick right after the press (same ms): queued and early presses both wait (they lapsed in pq2)");
     CHECK(kpq_step(1, 1, 0x20, 0, 0, 0) == KPQ_WAIT, "fresh: wait");
     CHECK(kpq_step(1, 1, 0x20, 0, 0, 20000) == KPQ_WAIT, "20 s on, list still closed: still waits (the old hold lapsed at 3 s)");
     CHECK(kpq_step(1, 1, 0x20, 0, 0, 60000) == KPQ_WAIT && kpq_step(1, 1, 0x20, 0, 0, 60001) == KPQ_LAPSE, "the cap is 60 s");

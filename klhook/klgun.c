@@ -357,7 +357,7 @@ static int klg_apply(int gi, int want, DWORD count, int k, DWORD lo, DWORD hi, D
     }
     if (why) {
         if (!klg_f.g[gi].since) klg_f.g[gi].since = now | 1;
-        else if (!klg_f.g[gi].told && now - klg_f.g[gi].since >= 3000) {
+        else if (!klg_f.g[gi].told && (int)(now - klg_f.g[gi].since) >= 3000) {      /* signed: a stamp of now | 1 is 1 ms ahead in the same tick (pq2 11-03) */
             klg_f.g[gi].told = 1;
             klog("guns: %s (model %lu) left alone on this level: %s", klg_f.g[gi].tpl, klg_f.g[gi].root, why);
         }

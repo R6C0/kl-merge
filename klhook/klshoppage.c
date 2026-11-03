@@ -1017,8 +1017,8 @@ static void kspg_link_tick(void)
     if (!kspg.linkArm) return;
     if (st == 0x16 && !kspg.link16) kspg.link16 = now | 1;
     if (st == 0x17 && !(kspg.linkDone & 2)) { kspg.linkDone |= 2; __try { kspg_link_check("state 0x17"); } __except (1) { klog("shopPage: link check FAULTED"); } }
-    if (kspg.link16 && now - kspg.link16 >= 3000 && !(kspg.linkDone & 4)) { kspg.linkDone |= 4; __try { kspg_link_check("3 s after state 0x16"); } __except (1) { klog("shopPage: link check FAULTED"); } }
-    if (kspg.link16 && now - kspg.link16 >= 10000 && !(kspg.linkDone & 8)) { kspg.linkDone |= 8; __try { kspg_link_check("10 s after state 0x16"); } __except (1) { klog("shopPage: link check FAULTED"); } }
+    if (kspg.link16 && (int)(now - kspg.link16) >= 3000 && !(kspg.linkDone & 4)) { kspg.linkDone |= 4; __try { kspg_link_check("3 s after state 0x16"); } __except (1) { klog("shopPage: link check FAULTED"); } }
+    if (kspg.link16 && (int)(now - kspg.link16) >= 10000 && !(kspg.linkDone & 8)) { kspg.linkDone |= 8; __try { kspg_link_check("10 s after state 0x16"); } __except (1) { klog("shopPage: link check FAULTED"); } }
     if (kspg.linkDone == 15 || (st >= 0 && st < 0x12)) kspg.linkArm = 0;   /* done, or the session went back to the lobby */
 }
 
@@ -1027,7 +1027,7 @@ static void kspg_early_report(void)
 {
     DWORD sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION)), now = GetTickCount(); int st = sm ? (int)klh_rd32(sm + 0x70) : -1, row, m;
     if (!kspg.earlyPend) return;
-    if (st < 0x16 && now - kspg.earlyAt < 5000) return;
+    if (st < 0x16 && (int)(now - kspg.earlyAt) < 5000) return;      /* signed: a stamp 1 ms ahead in the same tick (pq2 11-03) */
     kspg.earlyPend = 0;
     for (row = 0; row < KSPG_ROWS; row++) {
         int k = 0, linked = 0; DWORD g0, id = 0;
@@ -1453,7 +1453,7 @@ static void kspg_round_hint(void)
     if (done || !klkeys_roundhints_on()) return;
     if (!klan_element()) { seenAt = 0; return; }       /* the element went away (menu): the 8 s count starts again */
     if (!seenAt) { seenAt = now | 1; return; }
-    if (now - seenAt < 8000) return;
+    if ((int)(now - seenAt) < 8000) return;             /* signed: seenAt = now | 1 is 1 ms ahead in the same tick (pq2 11-03) */
     if (nextTry && (int)(now - nextTry) < 0) return;    /* rate limit: a stock message can hold klan_show off, the line is rebuilt at most once a second */
     nextTry = now + 1000;
     kspg_h_keyname(kspg.ctlKey, kn[n], sizeof kn[n]); keys[n] = kn[n]; what[n] = "shop pages"; on[n++] = kspg.ctlOn;
@@ -1484,7 +1484,7 @@ static void kspg_cycle(DWORD now)
         if (!kspg.active) kspg_scan();
         return;
     }
-    kspg.hPendAt = 0; kspg.hire = 0; kspg.ctl = 0; kspg.hArm = 0;
+    kspg.hPendAt = 0; kspg.hQueued = 0; kspg.hire = 0; kspg.ctl = 0; kspg.hArm = 0;
     if (nxt == 1 || (nxt == 0 && kspg.shownB)) { kspg.shownB = nxt == 1; kspg.togglePend = 1; kspg.txtSeen = 0; kspg.toggleAt = now; }
     else kspg.shownB = 0;
     if (nxt == 2) kspg.hire = 1; else if (nxt >= 3) { kspg.ctlMode = nxt == 4; kspg.ctl = 1; }
@@ -1561,13 +1561,13 @@ static void kspg_hire_tick(void)
         }
     }
     if (kspg.hPendAt) {                          /* A1HIRE review 10-28: an early press used to be dropped (the scan wraps the selector every 1.5 s) */
-        int pq = kspg.hQueued != 0, r = kpq_step(pq, kspg.hpre, kspg.st, (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), kspg_h_selok(), (unsigned int)(now - kspg.hPendAt));   /* PageQueue: a queued press waits for the list too (klpagequeue_logic.h); queued 0 = the old rules */
+        int pq = kspg.hQueued != 0, r = kpq_step(pq, kspg.hpre, kspg.st, (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), kspg_h_selok(), kpq_age(now, kspg.hPendAt));   /* PageQueue: a queued press waits for the list too (klpagequeue_logic.h); queued 0 = the old rules */
         if (r == KPQ_LAPSE) {
             kspg.hPendAt = 0; kspg.hQueued = 0;
             if (pq) klog("pagequeue: the queued key press lapsed (the round-over page ended, or no selector within %u s): press the key again", KPQ_CAP_MS / 1000u);
             else if (kspg.hireLog) klog("hirepage: the early key press lapsed (the selector was not wrapped within 3 s): press the key again");
         } else if (r == KPQ_APPLY) {
-            if (pq) klog("pagequeue: the queued key press is applied after %lu ms (the list is open, the selector is wrapped)", (unsigned long)(now - kspg.hPendAt));
+            if (pq) klog("pagequeue: the queued key press is applied after %lu ms (the list is open, the selector is wrapped)", (unsigned long)kpq_age(now, kspg.hPendAt));
             kspg.hPendAt = 0; kspg.hQueued = 0; if (kspg.hPendPg >= 1) { kspg.ctlMode = kmt_pend_ctl_mode(kspg.hPendPg); kspg.ctl = 1; } else kspg.hire = 1; kspg.hArm = 0; kspg.shownB = 0;
             if (kspg.hPendPg >= 1) klog("controls: page SHOWN (after the early key press)");
             else if (kspg.hireLog) klog("hirepage: page SHOWN (%s, after the early key press; highlighted row %d, category %d)", kl_online() ? "online" : "offline",
@@ -1605,7 +1605,7 @@ static void kspg_hire_tick(void)
                     if (!kspg.hPendAt) { kspg.hPendAt = now | 1; kspg.hQueued = 0; kspg.hPendPg = 0; if (kspg.hireLog) klog("hirepage: key pressed before the shop's selector is wrapped: the page opens once it is (up to 3 s)"); }
                     if (!kspg.active) kspg_scan();
                 } else if (mode == 2 && kspg.hPendAt) {
-                    kspg.hPendAt = 0;                                     /* a second press while one is pending cancels it */
+                    kspg.hPendAt = 0; kspg.hQueued = 0;                                   /* a second press while one is pending cancels it */
                     if (kspg.hireLog) klog("hirepage: the pending key press was cancelled by a second press");
                 } else if (mode == 2) {
                     kspg.hire = !kspg.hire; kspg.hArm = 0; kspg.ctl = 0;
@@ -1762,11 +1762,11 @@ static void kspg_autoopen_tick(void)
     if (mode == KPQ_MODE_LIST) kspg.aoShopSeen = 1;             /* review: the player has had the list this 0x20 phase (shopped / backed out / readied): never auto-open again until the phase ends */
     if (!queued) { kspg.aoSends = 0; kspg.aoLast = 0; kspg.aoSentOk = 0; return; }
     if (kspg.aoSentOk || kspg.aoShopSeen) return;               /* review: a successful send is final (no resend while the list is still opening); retries only when no element / vtable */
-    if (!kpq_autoopen_due(kspg.autoOn, kspg.queueOn, queued, kspg.st, mode, kspg.aoUpAt ? (unsigned int)(now - kspg.aoUpAt) : 0u, kspg.aoSends, kspg.aoLast ? (unsigned int)(now - kspg.aoLast) : 0u)) return;
+    if (!kpq_autoopen_due(kspg.autoOn, kspg.queueOn, queued, kspg.st, mode, kspg.aoUpAt ? kpq_age(now, kspg.aoUpAt) : 0u, kspg.aoSends, kspg.aoLast ? kpq_age(now, kspg.aoLast) : 0u)) return;
     kspg.aoLast = now | 1; kspg.aoSends++;                      /* counted even when nothing is found: the cap bounds the retries */
     for (i = 0; kpq_ready_names[i]; i++) {
         if (!kspg_find_ready(kpq_ready_names[i])) continue;
-        if (kspg_send_msg(kpq_ready_names[i], "ZW_SELECT3")) { kspg.aoSentOk = 1; klog("pagequeue: autoopen send %d -> %s (ZW_SELECT3; state 0x%x, shop mode %d, page up %lu ms)", kspg.aoSends, kpq_ready_names[i], kspg.st, mode, (unsigned long)(now - kspg.aoUpAt)); }
+        if (kspg_send_msg(kpq_ready_names[i], "ZW_SELECT3")) { kspg.aoSentOk = 1; klog("pagequeue: autoopen send %d -> %s (ZW_SELECT3; state 0x%x, shop mode %d, page up %lu ms)", kspg.aoSends, kpq_ready_names[i], kspg.st, mode, (unsigned long)kpq_age(now, kspg.aoUpAt)); }
         else klog("pagequeue: autoopen send %d -> %s failed (no usable vtable)", kspg.aoSends, kpq_ready_names[i]);
         return;
     }
@@ -1843,10 +1843,10 @@ static void klshoppage_tick(int game_thread)
         kspg.keyDown = down;
     }
     if (kspg.pq2At) {                                               /* PageQueue: a queued page II press; it needs no wrapped selector (selok 1), the page II gate is kspg.pre */
-        int r = kpq_step(1, kspg.pre, kspg.st, (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), 1, (unsigned int)(now - kspg.pq2At));
+        int r = kpq_step(1, kspg.pre, kspg.st, (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), 1, kpq_age(now, kspg.pq2At));
         if (r == KPQ_LAPSE) { kspg.pq2At = 0; kspg.hQueued = 0; klog("pagequeue: the queued page II key press lapsed (the round-over page ended): press the key again"); }
         else if (r == KPQ_APPLY) {
-            klog("pagequeue: the queued page II key press is applied after %lu ms (the list is open)", (unsigned long)(now - kspg.pq2At));
+            klog("pagequeue: the queued page II key press is applied after %lu ms (the list is open)", (unsigned long)kpq_age(now, kspg.pq2At));
             kspg.pq2At = 0; kspg.hQueued = 0;
             kspg.hire = 0; kspg.ctl = 0; kspg.shownB = 1; kspg.togglePend = 1; kspg.txtSeen = 0; kspg.toggleAt = now;
         }

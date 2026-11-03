@@ -18,6 +18,14 @@
 #define KPQ_CAP_MS       60000u        /* the queue's longest hold (GUESS: the scoreboard lasts a few seconds and the round-over page about 30 s; 60 s covers both) */
 enum { KPQ_WAIT = 0, KPQ_APPLY = 1, KPQ_LAPSE = 2 };
 
+/* ms since a stamp taken as 'now | 1' (0 = none). Bench pq2 11-03: the tick right after the press runs in the same GetTickCount ms (15.6 ms steps), so now - (now | 1) wrapped
+   to 0xffffffff > the cap and every queued press lapsed 1 ms after it was queued (the old 3 s early press too). A stamp a little in the future counts as 0. */
+static unsigned int kpq_age(unsigned int now, unsigned int at)
+{
+    unsigned int d = now - at;
+    return d > 0x80000000u ? 0u : d;
+}
+
 /* the scoreboard or the round-over page: where a press is queued */
 static int kpq_qstate(int st)
 {
