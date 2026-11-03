@@ -7,7 +7,7 @@ seats (miss = pq8 DD04 client with a 0.5 s shop). DM02 not benched: no kit recor
 2026-11-03 ~10:15 - [c9] bs13 PASS (DM03 + DD05, 4 seats, 0 faults) with the traitor probe + OnlineBrainTraitorDamage (e97d8651f, both off by default).
 Finding: the slot-15 gate byte is set and slot 15 is our wrapper, yet it is never entered; the marked bot's target is only ever a cop (DD05) or nothing (DM03),
 and slot 111 has NEVER been called with a human candidate in bs11-bs13. So the gap is upstream: the marked bot's candidate list holds no human.
-Workflow w8ykuqnkv (worktree C:\kl_wt	cand): where the candidates come from + a census probe + an off-by-default fix if a lever is found.
+Workflow w8ykuqnkv (worktree C:\kl_wt\tcand): where the candidates come from + a census probe + an off-by-default fix if a lever is found.
 
 2026-11-03 ~09:20 - [c9] bs12 PASS (DM03 + DD05, 4 seats, 0 faults) with OnlineBrainTraitorHitLog (762663323, read-only) and FireLine=2 on both maps:
 marked 0 / unmarked 0 hits on humans, and the rules' damage hook (slot 15) was never reached on the host at all (Cops 0, idle humans), so it is
