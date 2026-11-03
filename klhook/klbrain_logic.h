@@ -228,6 +228,32 @@ static int kbr_claimed(unsigned long c, unsigned long me, int picks, const unsig
     return 0;
 }
 
+/* BoardStage: the crew-record stage byte [rec+0x78] the shadow shows the real Board tactic. 3 = aboard (as before); with board_stage ALSO 3 while the van is called / waiting (kbr_board_state_ok) and the bot
+   carries loot (tally > 0) or is inside / ordered to the exit box (exit_ordered). Otherwise 2 carrying (tally > 0) / 1 looting. GUESS: the real Board evaluate is gated on stage 3 = "reached the exit / van called" (static reading only) */
+static int kbr_stage_byte(int board_stage, int aboard, long tally, int van, int exit_ordered)
+{
+    if (aboard) return 3;
+    if (board_stage && kbr_board_state_ok(van) && (tally > 0 || exit_ordered)) return 3;
+    return tally > 0 ? 2 : 1;
+}
+
+/* BoardStage: should the hook's own boarding path (klbotfill.c) wait for the real Board tactic? live = the real tactic holds the bot now (fresh Board evaluate > 0, not revoked). *since = tick the deferral
+   began (0 none; |1 stamp). Defers up to max_ms per bot, then -> 0 (fall back, so no bot is stranded). A tactic that stops being live ends the deferral at once (-> 0); the clock is NOT reset by that, so the per-bot total stays capped. */
+/* BoardStage grace (review 11-03 defect 1): a bot can stand in the box before its first nonzero Board evaluate (stage 3 is shown by the 1 s sync only). While the van waits (staged) and the bot has
+   no Board evaluate yet, it counts as live for grace_ms from the start of its deferral, so the real tactic gets one chance. A bot the tactic already evaluated nonzero (has_bnz) gets no grace. */
+static int kbr_bs_live(int live, int staged, int has_bnz, unsigned long now, unsigned long since, unsigned long grace_ms)
+{
+    if (live) return 1;
+    if (!staged || has_bnz) return 0;
+    return !since || (unsigned long)(now - (since & ~1ul)) < grace_ms;
+}
+static int kbr_bs_defer(int on, int live, unsigned long now, unsigned long *since, unsigned long max_ms)
+{
+    if (!on || !live) return 0;
+    if (!*since) *since = now | 1ul;
+    return (unsigned long)(now - (*since & ~1ul)) < max_ms;
+}
+
 /* keep the cap nearest objects of obj[0..n) by squared distance d2 (ties: the lower index first), written to out[0..cap), tail zero-filled; returns how many were kept */
 static int kbr_cand_sort(const unsigned long *obj, const float *d2, int n, unsigned long *out, int cap)
 {

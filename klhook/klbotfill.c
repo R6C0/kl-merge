@@ -425,7 +425,7 @@ static void klbf_init(void)
 #define KLBF_OT_REORD  6000       /* ms between repeats of the same order (the game's chain may overwrite it) */
 #define KLBF_OT_GUARDWAIT 30000   /* ms a bot holds while every free stack is guarded (OnlineTacticsGuard) before it takes the nearest guarded one */
 
-static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; DWORD lootAt, lootTick, lootT0, lpLast; int lpPaused, lpN; int lootPaid, lootPart, lootLeft, lootGot; float lootSec; DWORD gwAt, gwOrd, reachAt, esAt, esLog; float esAnc[3]; int esN; float holdAt[3]; DWORD holdOrd; int holdN, holdChk; DWORD guAt, guOrd, guLog; int guHum, guSp, guKn, guKq; float guKd, guTp[3], guWd, guWp[3], guGs[3], guOd; int guArr, guGk, guHn; DWORD guHo, guProg, guWt; float guBest; DWORD guBestAt, guPlat; DWORD prAt; int wv; DWORD wvAt; DWORD hopAt; } klbf_ob[KLBF_OT_BOTS];      /* hopAt: OnlineLegHopTeleS, tick the carry hold began (0 none) */      /* wv/wvAt: OnlineLegWaitVan wait state (KWV_*) and the tick it began */      /* prAt: OnlinePartialRetry, tick of this bot's last partial stack stop (0 none) */      /* OnlineGetUpPlateau (BP16b): nearest it stood to its seat this rush (< 0 none), tick of the last metre gained, tick it was given up (0 none; out of the pick 10 s) */      /* wk-botpar OnlineGetUpKeepGoal: re-order count, keep told, last check dist, order target, speed window dist, last progress tick, window start */      /* wk-lpbal: phase-4 hold: where the bot stood when the grab began, its order clock, orders given */      /* wk-move: gwAt = last tick the bot guard-walked / held at the edge (OnlineGuardWalk), gwOrd its order clock, reachAt OnlineWalkReach clock, esAt/esLog/esAnc/esN the OnlineEscort order clock, log clock, the human's place at the order, orders since the log */      /* wk-arcmods-1028: see klbf_ob_stage below. legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
+static struct { DWORD actor, target; int phase, grabs, tally; DWORD since, ordered; int told; float best; DWORD bestAt, idleAt, pAt, vidleAt, outAt, nearAt; int leg; DWORD legAt; int banked; float legBest; DWORD legBestAt, legMs, tpAt; int legFlags; DWORD lootAt, lootTick, lootT0, lpLast; int lpPaused, lpN; int lootPaid, lootPart, lootLeft, lootGot; float lootSec; DWORD gwAt, gwOrd, reachAt, esAt, esLog; float esAnc[3]; int esN; float holdAt[3]; DWORD holdOrd; int holdN, holdChk; DWORD guAt, guOrd, guLog; int guHum, guSp, guKn, guKq; float guKd, guTp[3], guWd, guWp[3], guGs[3], guOd; int guArr, guGk, guHn; DWORD guHo, guProg, guWt; float guBest; DWORD guBestAt, guPlat; DWORD prAt; int wv; DWORD wvAt; DWORD hopAt; DWORD bsAt; } klbf_ob[KLBF_OT_BOTS];      /* bsAt: BoardStage, tick the hook's own boarding of this bot began to wait for the real Board tactic (0 none) */      /* hopAt: OnlineLegHopTeleS, tick the carry hold began (0 none) */      /* wv/wvAt: OnlineLegWaitVan wait state (KWV_*) and the tick it began */      /* prAt: OnlinePartialRetry, tick of this bot's last partial stack stop (0 none) */      /* OnlineGetUpPlateau (BP16b): nearest it stood to its seat this rush (< 0 none), tick of the last metre gained, tick it was given up (0 none; out of the pick 10 s) */      /* wk-botpar OnlineGetUpKeepGoal: re-order count, keep told, last check dist, order target, speed window dist, last progress tick, window start */      /* wk-lpbal: phase-4 hold: where the bot stood when the grab began, its order clock, orders given */      /* wk-move: gwAt = last tick the bot guard-walked / held at the edge (OnlineGuardWalk), gwOrd its order clock, reachAt OnlineWalkReach clock, esAt/esLog/esAnc/esN the OnlineEscort order clock, log clock, the human's place at the order, orders since the log */      /* wk-arcmods-1028: see klbf_ob_stage below. legBest/legBestAt/legMs/legFlags: OnlineLeg* (wk-botpath); tpAt: OnlineBoardTeleport clock */
 static DWORD klbf_ot_claimed[KLBF_OT_OBJ], klbf_ot_bad[KLBF_OT_OBJ], klbf_ot_badAt[KLBF_OT_OBJ]; static BYTE klbf_ot_badLong[KLBF_OT_OBJ]; static int klbf_ot_nclaim, klbf_ot_nbad, klbf_ot_rounds, klbf_ot_sm;
 static DWORD klbf_ot_last;
 static DWORD klbf_ot_t0;      /* tick count at the host tactics round start (OnlineStackRecheckHid) */
@@ -451,6 +451,17 @@ static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally)
     for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) { *aboard = klbf_ob[i].phase == 3; *tally = klbf_ob[i].tally; return 1; }
     return 0;
 }
+/* [Brain] BoardStage (klbrain.c): read only. -> 1 when the puppeteer tracks the actor and it is aboard (phase 3), or walking to the van (phase 2) with the van called / gathering, or ordered to the escape box
+   (told & 32: the box-walk line). GUESS: that is what the Arcade Board tactic's "reached the exit / van called" stage means; klbr_sync adds the tally and the van-state test. */
+static int klbf_ot_called;      /* tentative definition, the real one is with the trigger state below */
+static int klbf_ob_called(DWORD actor)
+{
+    int i; if (!actor) return 0;
+    for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) return klbf_ob[i].phase == 3 || (klbf_ob[i].phase == 2 && ((klbf_ob[i].told & 32) || (klbf_ot_called && klbf_ob[i].bsAt)));      /* review 11-03 defect 4: the van call alone no longer shows stage 3 to every walker; a bot whose box boarding is being deferred (bsAt) is in the box */
+    return 0;
+}
+/* [Brain] BoardStage: 1 = this bot's own hook boarding waits (the real Board tactic has it, at most 6 s per bot), 0 = board it now (counted as a fallback). Off = always 0. */
+static int klbf_bs_wait(int s) { return klbr_bs_gate(klbf_ob[s].actor, &klbf_ob[s].bsAt); }
 /* OnlineWaypoints (recommended on): [BotFillWay_<SLOT>] P1..P8 = "x y z" (floats, y = height). The phase-2 exit walk (the exit-trigger goal only, not van/box walks) goes through these in order.
    <SLOT> = the slot name from the engine's scene path (klh_scene -> klh_level_key: 'f02\f02_main' -> F02). That is what the hook reliably knows: a stock map installed through KLExpansion
    plays as its slot (DD02 as F02), so the key is the slot, not the map's own name. GUESS: two expansion maps sharing a slot share a section; the section is only used for the one that needs it. */
@@ -1186,7 +1197,7 @@ static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], i
               if (dec == 0) continue;
               if (dec == 2) { if (!(klbf_ba_left & (1u << i))) { klbf_ba_left |= 1u << i; klog("botfill: boardall: bot %d (actor %08lx) tally %d LEFT OUT, %.0f m from the escape point (> OnlineBoardAllNear %.0f cm), van state %d: not counted aboard, not banked", i, act[q], klbf_ob[i].tally, d / 100, klbf_ba_near, vstate); } continue; } }
             klog("botfill: boardall: bot %d (actor %08lx) tally %d, %.0f m from the escape point, van state %d: %s", i, act[q], klbf_ob[i].tally, d / 100, vstate, klbf_ba_mode == 2 ? "DRY would board" : "counted aboard");
-            if (klbf_ba_mode == 1) { if (klbf_ob[i].phase == 4) klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; boardall)", i, (unsigned long)klbf_ob[i].target, klbf_ob[i].lootPaid, klbf_ob[i].lootLeft, klbf_ob[i].tally); klbf_ob[i].phase = 3; if (klbf_ot_board) klbf_ot_board_call(act[q]); }
+            if (klbf_ba_mode == 1) { if (klbf_ob[i].phase == 4) klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; boardall)", i, (unsigned long)klbf_ob[i].target, klbf_ob[i].lootPaid, klbf_ob[i].lootLeft, klbf_ob[i].tally); klbf_ob[i].phase = 3; if (klbr_bstage) klbr_bs_fb++; if (klbf_ot_board) klbf_ot_board_call(act[q]); }      /* BoardStage: not deferred (the van is leaving) but counted as a fallback boarding (review 11-03 defect 2) */
         }
     }
     if (klbv_mode) for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor && klbf_ob[i].phase == 3) klbv_event(i, 2);      /* OnlineVoice: boarded (once per actor and round, klbotvoice.c) */
@@ -2333,26 +2344,26 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                     }
                 } else if (in || vstate != 3) klbf_ob[s].tpAt = 0;
                 if (klbf_ot_bprobe && now - klbf_ob[s].pAt >= 5000) { klbf_ob[s].pAt = now; klog("botfill: tactics: box probe: bot %d (actor %08lx) %.1f m from the box centre (frame distance %.1f m), inside %d (%s), van state %d, +%lu s since the call", s, a, dd / 100, klmv_fr_dist(&bf, bots[b].pos) / 100, in, byGame ? "game 0x758cb0" : "frame", vstate, klbf_ot_calledAt ? (unsigned long)((now - klbf_ot_calledAt) / 1000) : 0); }
-                if (in && (vstate == 3 || vstate == 4 || (!klbf_ot_vstate && van_w))) {      /* OnlineVanState off: the old rule, the van's node known and the bot at it */
+                if (in && (vstate == 3 || vstate == 4 || (!klbf_ot_vstate && van_w)) && !klbf_bs_wait(s)) {      /* BoardStage: the real Board tactic may board it first */      /* OnlineVanState off: the old rule, the van's node known and the bot at it */
                     klbf_ob[s].phase = 3;
                     klog("botfill: tactics: bot %d (actor %08lx) BOARDED in the escape box (van state %d, inside by %s): tally %d; OnlineBoard %s", s, a, vstate, byGame ? "0x758cb0" : "the frame", klbf_ob[s].tally,
                          !klbf_ot_board ? "off (host tally only, bot stays)" : klbf_ot_board_call(a) ? "-> 0x89c890 called (squad removal; watch the census and the clients)" : "-> refused (code head / actor / squad check): host tally only");
                     continue;
                 }
             }
-            if (van_w && !bxOn && dd <= 2 * klbf_ot_near) {
+            if (van_w && !bxOn && dd <= 2 * klbf_ot_near && !klbf_bs_wait(s)) {
                 klbf_ob[s].phase = 3;
                 klog("botfill: tactics: bot %d (actor %08lx) BOARDED (hook tally only, nothing removed in the game): tally %d", s, a, klbf_ob[s].tally);
                 continue;
             }
-            if (!van_w && !bxOn && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= klbf_ot_exitdy) {      /* OnlineVanState: BO9's van node stayed at the origin, so the waiting state + the bot at the exit box counts as aboard */      /* GUESS: the exit trigger's box is where the van's boarding box is */
+            if (!van_w && !bxOn && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= 2 * klbf_ot_near && fabs(bots[b].pos[1] - g[1]) <= klbf_ot_exitdy && !klbf_bs_wait(s)) {      /* OnlineVanState: BO9's van node stayed at the origin, so the waiting state + the bot at the exit box counts as aboard */      /* GUESS: the exit trigger's box is where the van's boarding box is */
                 klbf_ob[s].phase = 3;
                 klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineVanState; hook tally only, %.0f m from the exit trigger): tally %d", s, a, vstate, dd / 100, klbf_ob[s].tally);
                 continue;
             }
             if (!van_w && !bxOn && klbf_ot_crowd > 0 && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= klbf_ot_crowd && fabs(bots[b].pos[1] - g[1]) <= klbf_ot_exitdy) {      /* OnlineExitCrowd (BOS_DD07): 7 sprinting bots crowd the trigger; 3 stood 2-10 m off its centre for the whole 19 s wait and missed the 3 m (2*Near) test. GUESS: the game's van takes a crew member standing at the trigger's edge (the stall call already trusts 15 m) */
                 if (!klbf_ob[s].nearAt) klbf_ob[s].nearAt = now;
-                else if (now - klbf_ob[s].nearAt >= 5000) {
+                else if (now - klbf_ob[s].nearAt >= 5000 && !klbf_bs_wait(s)) {
                     klbf_ob[s].phase = 3;
                     klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineExitCrowd %.0f cm: %.1f m from the exit trigger for %lu s of van wait; hook tally only): tally %d", s, a, vstate, klbf_ot_crowd, dd / 100, (unsigned long)((now - klbf_ob[s].nearAt) / 1000), klbf_ob[s].tally);
                     continue;

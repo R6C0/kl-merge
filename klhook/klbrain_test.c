@@ -200,6 +200,19 @@ int main(void)
         CHECK(!kbr_claimed(100, 1, 0, ct, ow, at, 3, 12000, 4000) && kbr_claimed(100, 2, 0, ct, ow, at, 3, 12000, 4000) && !kbr_claimed(200, 1, 0, ct, ow, at, 3, 12000, 4000), "claims: picks off = grabs only, my own grab still mine");
         CHECK(!kbr_claimed(400, 1, 1, ct, ow, at, 3, 12000, 4000) && !kbr_claimed(0, 1, 1, ct, ow, at, 3, 12000, 4000), "claims: unclaimed / null stack free");
     }
+    {   /* BoardStage: stage byte and the deferral clock */
+        unsigned long since = 0;
+        CHECK(kbr_stage_byte(0, 0, 5, 3, 1) == 2 && kbr_stage_byte(0, 0, 0, 3, 1) == 1 && kbr_stage_byte(0, 1, 0, 0, 0) == 3, "stage: off = the old 1 / 2 / 3 (aboard only)");
+        CHECK(kbr_stage_byte(1, 0, 5, 3, 0) == 3 && kbr_stage_byte(1, 0, 5, 4, 0) == 3 && kbr_stage_byte(1, 0, 0, 3, 1) == 3, "stage: van waiting + loot or ordered to the box = 3");
+        CHECK(kbr_stage_byte(1, 0, 5, 2, 1) == 2 && kbr_stage_byte(1, 0, 5, 0, 1) == 2 && kbr_stage_byte(1, 0, 0, 3, 0) == 1 && kbr_stage_byte(1, 0, -1, 3, 0) == 1, "stage: van not called / nothing carried or ordered = 2 / 1");
+        CHECK(kbr_stage_byte(1, 1, 0, 0, 0) == 3, "stage: aboard is 3 whatever the van says");
+        CHECK(!kbr_bs_defer(0, 1, 1000, &since, 6000) && since == 0 && !kbr_bs_defer(1, 0, 1000, &since, 6000) && since == 0, "defer: off or not live = no deferral, no clock");
+        CHECK(kbr_bs_defer(1, 1, 1000, &since, 6000) && since && kbr_bs_defer(1, 1, 6900, &since, 6000) && !kbr_bs_defer(1, 1, 7001, &since, 6000), "defer: live defers up to max_ms, then falls back");
+        since = 0; CHECK(kbr_bs_defer(1, 1, 0xfffffff0ul, &since, 6000) && kbr_bs_defer(1, 1, 0x1000ul, &since, 6000) && !kbr_bs_defer(1, 1, 0x2000ul, &since, 6000), "defer: tick wrap safe");
+        CHECK(kbr_bs_live(1, 0, 1, 5000, 1, 2500) && !kbr_bs_live(0, 0, 0, 5000, 0, 2500) && !kbr_bs_live(0, 1, 1, 5000, 0, 2500), "grace: live passes; no van wait or an earlier Board evaluate = no grace");
+        CHECK(kbr_bs_live(0, 1, 0, 5000, 0, 2500) && kbr_bs_live(0, 1, 0, 5000, 3001, 2500) && !kbr_bs_live(0, 1, 0, 5600, 3001, 2500), "grace: no evaluate yet waits grace_ms from the deferral start");
+        CHECK(kbr_bs_live(0, 1, 0, 0x100ul, 0xfffffff1ul, 2500), "grace: tick wrap safe");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }
