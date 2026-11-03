@@ -389,7 +389,8 @@ static int kls_rand_pick(int s)
  *   2 = PREDICTED: the round is in the seed (OnlineRandomRound=1) and allow_round: the round the next load gets is replicated read-only
  *       (the lobby changed -> round 1; else the 60 s rule on a COPY of the state). GUESS: every peer counted the rounds alike (a late joiner
  *       did not), and the load happens later than 60 s after the previous one (true for any lobby seen after a round);
- *   0 = UNKNOWN: no lobby id (the pick is then keyed by the round alone = System Link), or the round is in the seed and not allow_round:
+ *       Also System Link (no lobby id, the pick keyed by the round alone) with allow_round, same GUESS;
+ *   0 = UNKNOWN: no lobby id and not allow_round, or the round is in the seed and not allow_round:
  *       the caller shows a label naming all the maps instead of one. The returned page is then 0 and meaningless. */
 static int kls_rand_peek(int s, int allow_round, int *how)
 {
@@ -398,7 +399,13 @@ static int kls_rand_peek(int s, int allow_round, int *how)
     n = kls_rand_cands(s, cand);
     if (n < 2) { *how = 1; return 0; }                                    /* only the stock map: no draw at all */
     src = kls_rand_lobby(&svc, &svt, &ex, lob);
-    if (!src) return 0;
+    if (!src) {      /* System Link (no lobby id): kls_rand_pick keys the draw by the round alone; with allow_round replicate that round read-only (br2 11-03: the lobby showed the all-maps label) */
+        if (!allow_round) return 0;
+        round = kls_rnd_round; last = kls_rnd_last;
+        kls_rnd_advance(&round, &last, GetTickCount(), 0, 0);
+        *how = 2; x = kls_rand_mix(0, 0, num, round, 1);
+        return cand[kls_rand_index(x, n)];
+    }
     if (!kls_rnd_round_on) { *how = 1; x = kls_rand_mix(lob[0], lob[1], num, 0, 0); return cand[kls_rand_index(x, n)]; }
     if (!allow_round) return 0;
     round = kls_rnd_round; last = kls_rnd_last;
