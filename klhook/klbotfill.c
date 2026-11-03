@@ -457,7 +457,7 @@ static int klbf_ot_called;      /* tentative definition, the real one is with th
 static int klbf_ob_called(DWORD actor)
 {
     int i; if (!actor) return 0;
-    for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) return klbf_ob[i].phase == 3 || (klbf_ob[i].phase == 2 && ((klbf_ob[i].told & 32) || (klbf_ot_called && klbf_ob[i].bsAt)));      /* review 11-03 defect 4: the van call alone no longer shows stage 3 to every walker; a bot whose box boarding is being deferred (bsAt) is in the box */
+    for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) return klbf_ob[i].phase == 3 || (klbf_ob[i].phase == 2 && ((klbf_ob[i].told & 32) || (klbf_ot_called && klbf_ob[i].bsAt) || (klbr_bs0 && !(klbf_ob[i].told & 32) && (klbf_ob[i].nearAt || klbr_board_handed(actor)))));      /* review 11-03 defect 4: the van call alone no longer shows stage 3 to every walker; a bot whose box boarding is being deferred (bsAt) is in the box. BoardStage0: a bot the real Board tactic holds keeps stage 3 after BoardNode moves its crowd test to the node (nearAt is cleared there; without this, stage 3 drops, the hand-off lapses and the bot loops back to the trigger) */
     return 0;
 }
 /* [Brain] BoardStage: 1 = this bot's own hook boarding waits (the real Board tactic has it, at most 6 s per bot), 0 = board it now (counted as a fallback). Off = always 0. */
@@ -860,6 +860,8 @@ static void klbf_ot_health(DWORD a, DWORD h, const float hv[2])
 #define KLBF_SV_VT     0x00bd2eb4
 #define KLBF_SV_CALLVEH 0x0071e180
 static DWORD klbf_ot_trig, klbf_ot_tvt, klbf_ot_vh, klbf_ot_lookAt; static int klbf_ot_trig_looked, klbf_ot_looks; static float klbf_ot_tpos[3];
+/* BoardNode / BoardLog helper (klbrain.c): the exit trigger's place when the key is known. */
+static int klbf_bn_trig(float out[3]) { if (!klbf_ot_trig) return 0; memcpy(out, klbf_ot_tpos, 12); return 1; }
 static LONG klbf_ot_keep_gen = -1;      /* klmv_level_gen + klmv_scene_gen the kept exit trigger was found under; -1 = nothing kept, the round start scans (klbf_ot_kept, 2026-10-30) */
 static LONG klbf_ot_nobox_gen = -1;     /* the gen under which a round's 4 box looks all found NO ZAllyEscapeBox: the later rounds of that level load skip the box scan too (review 10-30: without this a box-less level kept only the trigger half of the cure) */
 static int klbf_ot_call_van(DWORD rules, int who)
@@ -2077,6 +2079,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
     vnew = 0;
     klbf_vbo_tick(rules, vstate);      /* OnlineVanBoPos: the boarding object's place for this tick (klbf_bo_ok 0 when the key is off) */
+    { float btp[3]; klbr_bn_tick(rules, vstate, klbf_bn_trig(btp) ? btp : 0); }      /* BoardNode / BoardLog: the boarding node for this tick (klbr_bn_ok) */
     for (b = 0; b < nb; b++) {
         DWORD van_known = van;      /* OnlineVanAfterLegs: the loop below sees `van_w` 0 once the exit trigger is known (kvt_van_for_walk), as on a stock map */
         DWORD van_w = kvt_van_for_walk(klbf_vtm_al, klbf_ot_vh != 0, van_known != 0) ? van_known : 0;
@@ -2368,11 +2371,12 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineVanState; hook tally only, %.0f m from the exit trigger): tally %d", s, a, vstate, dd / 100, klbf_ob[s].tally);
                 continue;
             }
-            if (!van_w && !bxOn && klbf_ot_crowd > 0 && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && dd <= klbf_ot_crowd && fabs(bots[b].pos[1] - g[1]) <= klbf_ot_exitdy) {      /* OnlineExitCrowd (BOS_DD07): 7 sprinting bots crowd the trigger; 3 stood 2-10 m off its centre for the whole 19 s wait and missed the 3 m (2*Near) test. GUESS: the game's van takes a crew member standing at the trigger's edge (the stall call already trusts 15 m) */
+            int bnUse = !van_w && !bxOn && klbr_board_handed(a); float ddN = bnUse ? (float)sqrt((bots[b].pos[0] - klbr_bn_pos[0]) * (bots[b].pos[0] - klbr_bn_pos[0]) + (bots[b].pos[2] - klbr_bn_pos[2]) * (bots[b].pos[2] - klbr_bn_pos[2])) : 0.0f;      /* BoardNode (bs6 DD05: the real Board RUN walks to the boarding node, 15.7 m from the exit trigger, and slot 45 needs 3 m of it; GUESS: the crowd test against the node lets the real tactic finish before the 5 s crowd fallback; the trigger test applies to every bot the real tactic does not hold, so it is the fallback once the signals lapse) */
+            if (!van_w && !bxOn && klbf_ot_crowd > 0 && klbf_ot_vstate && klbf_ot_called && (vstate == 3 || vstate == 4) && (bnUse ? (ddN <= klbf_ot_crowd && fabs(bots[b].pos[1] - klbr_bn_pos[1]) <= klbf_ot_exitdy) : (dd <= klbf_ot_crowd && fabs(bots[b].pos[1] - g[1]) <= klbf_ot_exitdy))) {      /* OnlineExitCrowd (BOS_DD07): 7 sprinting bots crowd the trigger; 3 stood 2-10 m off its centre for the whole 19 s wait and missed the 3 m (2*Near) test. GUESS: the game's van takes a crew member standing at the trigger's edge (the stall call already trusts 15 m) */
                 if (!klbf_ob[s].nearAt) klbf_ob[s].nearAt = now;
                 else if (now - klbf_ob[s].nearAt >= 5000 && !klbf_bs_wait(s)) {
                     klbf_ob[s].phase = 3;
-                    klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineExitCrowd %.0f cm: %.1f m from the exit trigger for %lu s of van wait; hook tally only): tally %d", s, a, vstate, klbf_ot_crowd, dd / 100, (unsigned long)((now - klbf_ob[s].nearAt) / 1000), klbf_ob[s].tally);
+                    klog("botfill: tactics: bot %d (actor %08lx) BOARDED by van state %d (OnlineExitCrowd %.0f cm: %.1f m from the %s for %lu s of van wait; hook tally only): tally %d", s, a, vstate, klbf_ot_crowd, (bnUse ? ddN : dd) / 100, bnUse ? "board node (BoardNode)" : "exit trigger", (unsigned long)((now - klbf_ob[s].nearAt) / 1000), klbf_ob[s].tally);
                     continue;
                 }
             } else if (!bxOn) klbf_ob[s].nearAt = 0;
