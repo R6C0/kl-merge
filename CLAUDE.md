@@ -70,7 +70,7 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 
 2026-11-03 ~03:05 - [c9] bs2 SAFE PASS (DM03 + DD05, 2 seats, 0 asserts/faults: the bs1 crash setup no longer crashes) but ArcadePick gave only 1 / 0 orders.
 nm1 PASS: lobby 'Withdrawal' = LOAD DM03 on both seats (random peek). Real Arcade RUN online: 06101ed05 [Brain] RealRun (off) = MSVCR90.longjmp IAT thunk swaps
-the shadow rules in per resumed Loot/Board slice, out at each yield (no SEH across it; SHIP obj checked). bs3 (dll out_brain4_1103b_test, RealRun=1, DM03
+the shadow rules in per resumed Loot/Board slice, out at each yield (no SEH across it; SHIP obj checked). bs3 (dll out_brain4_1103c_test = + 71d099212 judge guards: mode 4, van node, [tac+0x10]; RealRun=1, DM03
 PuppetOff + DD05 BoardReal) chained on "end pq4"; pass = no c0000029/fault 120 s and swap-ins > 0 with bots taking loot.
 
 2026-11-03 ~03:00 - [ce] AutoOpenSteps pushed (7bf5be192, default 0, recommended off until benched): after AutoOpen the hook opens FABuyWeaponsNewCategory then
