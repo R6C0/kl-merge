@@ -550,6 +550,8 @@ feat('shophinteach', G_EXP, 'Shop hint again in every shop (recommended on)', 'o
      'the [F2] hint shows each time the between-rounds shop opens, not once per session; needs Keys Hints=1', [('ShopPage', 'HintEveryShop', 1, 0, 0), ('Keys', 'Hints', 1, None, 0)])
 feat('pagequeue', G_EXP, 'Page key pressed after the match (scoreboard / round-over page) is queued (recommended on)', 'on', 'start',
      'F2/F3/page II pressed on the scoreboard or before Buy Weapons is open waits (up to 60 s) and shows the page once the list opens; NOT RUN IN THE GAME', [('ShopPage', 'PageQueue', 1, 0, 0)])
+feat('pageautoopen', G_EXP, 'Page key after the match also presses Buy Weapons (recommended on)', 'on', 'start',
+     'one press of F2/F3/page II on the scoreboard opens Buy Weapons and the page, like clicking it (3 tries); needs Page key queue; NOT RUN IN THE GAME', [('ShopPage', 'AutoOpen', 1, 0, 0), ('ShopPage', 'PageQueue', 1, None, 0)])
 feat('sbnexthint', G_EXP, 'NEXT line under the after-match scoreboard (recommended on)', 'on', 'start',
      'one line on the score board: NEXT: BUY WEAPONS, THEN [F2] MORE PAGES [F3] HEISTERS (live key names); NOT RUN IN THE GAME', [('HUD', 'ScoreboardNextHint', 1, 0, 0)])
 feat('clashlog', G_EXP, 'Log key clashes at boot', 'off', 'start',

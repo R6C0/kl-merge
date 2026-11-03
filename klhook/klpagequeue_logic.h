@@ -51,6 +51,37 @@ static int kpq_step(int queued, int hpre, int st, int mode, int selok, unsigned 
     return selok ? KPQ_APPLY : KPQ_WAIT;
 }
 
+/* [ShopPage] AutoOpen (2026-11-03, NOT RUN IN THE GAME): with a QUEUED page press pending on the round-over page the hook itself presses Buy Weapons (ZW_SELECT3 to the page's
+   MercsFAStatusReady element), so one press on the scoreboard = Buy Weapons + the page. The values below are GUESSES to be graded by the bench ('pagequeue: autoopen send N'). */
+#define KPQ_AO_SETTLE_MS 800u          /* GUESS: the 0x20 page must have been up this long (its GUI pages are built and the Ready element answers) before the first send */
+#define KPQ_AO_GAP_MS    1500u         /* GUESS: a retry waits this long (the list opens within about 1.5 s of a click in the log of the old early-press work) */
+#define KPQ_AO_MAXSEND   3             /* at most this many sends per queued press while the list stays closed */
+
+/* send ZW_SELECT3 now? autoOn = [ShopPage] AutoOpen, queueOn = PageQueue (AutoOpen alone does nothing), queued = a QUEUED press is pending (not lapsed / cancelled; the old early
+   press of PageQueue=0 never counts), st / mode = session state / shop mode, upMs = ms the 0x20 page has been up, sends = sends so far for this press, sinceMs = ms since the last send */
+static int kpq_autoopen_due(int autoOn, int queueOn, int queued, int st, int mode, unsigned int upMs, int sends, unsigned int sinceMs)
+{
+    if (!autoOn || !queueOn || !queued) return 0;
+    if (st != KPQ_ST_ROUNDOVER) return 0;                       /* never on the scoreboard (the page does not exist yet) or in any other state */
+    if (mode == KPQ_MODE_LIST) return 0;                        /* the list is open: the existing apply path takes over */
+    if (upMs < KPQ_AO_SETTLE_MS) return 0;
+    if (sends >= KPQ_AO_MAXSEND) return 0;
+    if (sends > 0 && sinceMs < KPQ_AO_GAP_MS) return 0;
+    return 1;
+}
+
+/* the Ready elements whose name may be sent to: Arcade (HeistStatus = no leaderboard, HeistLBStatus = leaderboard) and online (FAStatus, FAStatusTeam), read from the level XML
+   (hire_1027/F01/online.xml). The _EndGame / _Endgame variants (game over) are NOT in the list and are refused by name: game over must never open the shop. */
+static const char *const kpq_ready_names[] = { "MercsFAStatusReadyHeistLBStatus", "MercsFAStatusReadyHeistStatus", "MercsFAStatusReadyFAStatusTeam", "MercsFAStatusReadyFAStatus", 0 };
+
+static int kpq_ready_name_ok(const char *n)
+{
+    int i;
+    if (!n) return 0;
+    for (i = 0; kpq_ready_names[i]; i++) { const char *a = kpq_ready_names[i], *b = n; while (*a && *a == *b) { a++; b++; } if (!*a && !*b) return 1; }
+    return 0;
+}
+
 /* [ShopPage] HintEveryShop: what 'hint shown' becomes when the shop closes (0 = the hint may show again in the next shop) */
 static int kpq_hint_done_after_close(int everyShop, int done)
 {

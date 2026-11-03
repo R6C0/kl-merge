@@ -96,7 +96,7 @@ static struct {
     int modesOn; volatile int ctlMode;               /* [Keys] ModesTab: the controls page has a 2nd view (BOTS AND MODES); ctlMode 1 = that view is up (only with ctl) */
     int ctlOn, ctlKey, ctlKeyDown, hPendPg, hintDone, ctlTold; DWORD ctlLastKey;   /* config (the page-cycle key), edge, the early press's target (0 hire / 1 controls), the once-per-session hint, presses logged */
     volatile int ctl;                            /* the controls page is on screen (never together with hire / shownB) */
-    int queueOn, hQueued, hintEvery, hscore, pscore; DWORD pq2At;   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
+    int queueOn, hQueued, hintEvery, hscore, pscore, autoOn, aoSends; DWORD pq2At, aoUpAt, aoLast;   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
 } kspg;
 
 static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
@@ -1306,6 +1306,9 @@ static void kspg_init(void)
        Both are read here, before the 'if (!kspg.on) return;' below: the hire / cycle keys work with [ShopPage] Enable=0. */
     kspg.queueOn = GetPrivateProfileIntA("ShopPage", "PageQueue", 0, klh_ini) != 0;
     kspg.hintEvery = GetPrivateProfileIntA("ShopPage", "HintEveryShop", 0, klh_ini) != 0;
+    kspg.autoOn = GetPrivateProfileIntA("ShopPage", "AutoOpen", 0, klh_ini) != 0;      /* 2026-11-03, default 0, recommended on once benched; needs PageQueue=1 (klpagequeue_logic.h kpq_autoopen_due) */
+    if (kspg.autoOn && !kspg.queueOn) klog("pagequeue: [ShopPage] AutoOpen=1 needs PageQueue=1: AutoOpen does nothing");
+    else if (kspg.autoOn) klog("pagequeue: [ShopPage] AutoOpen=1 (recommended on once benched; NOT RUN IN THE GAME): a queued page press on the round-over page also presses Buy Weapons (ZW_SELECT3 to the page's Ready element, up to %d sends)", KPQ_AO_MAXSEND);
 #ifdef KLHOOK_TEST
     kspg_curprobe = GetPrivateProfileIntA("ShopPage", "CursorProbe", 0, klh_ini) != 0;      /* TEST builds only, read-only (see kspg_curprobe_tick) */
     if (kspg_curprobe) klog("cursorprobe: [ShopPage] CursorProbe=1 (TEST build, recommended off, read-only): one line a second in states 0x1f / 0x20");
@@ -1718,12 +1721,59 @@ static void kspg_curprobe_tick(void)
 }
 #endif /* KLHOOK_TEST */
 
+/* [ShopPage] AutoOpen (NOT RUN IN THE GAME): send one message to a named GUI element, the logic of klauto.c's kla_msg (TEST only) kept here for SHIP: the element is found by name in the
+ * menu manager [[0xdd265c]+0x824] (0x83faf0, thiscall, ret 4), its vtable slot 0x50 (slot 20, what ZSendMessage calls) gets a pointer to a char* (the message). Only from the game thread.
+ * The slot must lie in kl2.exe's image or in this dll (a private vtable copy of ours, see kspg_sel). -> 1 sent, 0 not (no manager / no such element / odd vtable) */
+typedef void *(__fastcall *KSPG_FIND)(void *mgr, void *edx, const char *name);
+typedef void (__fastcall *KSPG_SEND)(void *elem, void *edx, const char **text);
+static int kspg_send_msg(const char *elem, const char *msg)
+{
+    DWORD gui, mgr, vt, fn; void *e;
+    if (!klh_exe_ok || !(gui = klh_rd32((DWORD_PTR)KLH_VA(0x00dd265c))) || !(mgr = klh_rd32(gui + 0x824))) return 0;
+    e = ((KSPG_FIND)KLH_VA(0x0083faf0))((void *)(DWORD_PTR)mgr, 0, elem);
+    if (!e) return 0;
+    vt = klh_rd32((DWORD_PTR)e); if (!vt) return 0;
+    fn = klh_rd32(vt + 0x50);
+    if (fn < img_lo || fn >= img_hi) {
+        HMODULE of = 0, me = 0; const DWORD fl = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+        if (!GetModuleHandleExA(fl, (LPCSTR)(DWORD_PTR)fn, &of) || !GetModuleHandleExA(fl, (LPCSTR)kspg_send_msg, &me) || of != me) return 0;
+    }
+    ((KSPG_SEND)(DWORD_PTR)fn)(e, 0, &msg);
+    return 1;
+}
+/* does the Ready element exist (found by name, nothing sent)? */
+static int kspg_find_ready(const char *elem)
+{
+    DWORD gui, mgr;
+    if (!klh_exe_ok || !(gui = klh_rd32((DWORD_PTR)KLH_VA(0x00dd265c))) || !(mgr = klh_rd32(gui + 0x824))) return 0;
+    return ((KSPG_FIND)KLH_VA(0x0083faf0))((void *)(DWORD_PTR)mgr, 0, elem) != 0;
+}
+/* [ShopPage] AutoOpen tick. THREAD: klshoppage_tick is called from klhook.c's klh_tick(game_thread); this runs only when game_thread is 1 = the tick driven by the game's main loop
+ * (the SteamAPI_RunCallbacks detour), the same thread kspg_hire_tick and the GUI run on; the fallback thread (game_thread 0) never gets here. A queued press: kspg.hPendAt with
+ * kspg.hQueued, or kspg.pq2At (page II). It clears itself on a lapse, a cancel or the apply, which resets the send count. */
+static void kspg_autoopen_tick(void)
+{
+    DWORD now = GetTickCount(); int queued = (kspg.hPendAt && kspg.hQueued) || kspg.pq2At, mode = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), i;
+    if (kspg.st != KPQ_ST_ROUNDOVER) kspg.aoUpAt = 0; else if (!kspg.aoUpAt) kspg.aoUpAt = now | 1;
+    if (!queued || mode == KPQ_MODE_LIST) { kspg.aoSends = 0; kspg.aoLast = 0; if (!queued) return; }
+    if (!kpq_autoopen_due(kspg.autoOn, kspg.queueOn, queued, kspg.st, mode, kspg.aoUpAt ? (unsigned int)(now - kspg.aoUpAt) : 0u, kspg.aoSends, kspg.aoLast ? (unsigned int)(now - kspg.aoLast) : 0u)) return;
+    kspg.aoLast = now | 1; kspg.aoSends++;                      /* counted even when nothing is found: the cap bounds the retries */
+    for (i = 0; kpq_ready_names[i]; i++) {
+        if (!kspg_find_ready(kpq_ready_names[i])) continue;
+        if (kspg_send_msg(kpq_ready_names[i], "ZW_SELECT3")) klog("pagequeue: autoopen send %d -> %s (ZW_SELECT3; state 0x%x, shop mode %d, page up %lu ms)", kspg.aoSends, kpq_ready_names[i], kspg.st, mode, (unsigned long)(now - kspg.aoUpAt));
+        else klog("pagequeue: autoopen send %d -> %s failed (no usable vtable)", kspg.aoSends, kpq_ready_names[i]);
+        return;
+    }
+    klog("pagequeue: autoopen no element (send %d of %d; none of the MercsFAStatusReady page elements is open yet)", kspg.aoSends, KPQ_AO_MAXSEND);
+}
+
 static void klshoppage_tick(int game_thread)
 {
     DWORD now, w; int g, s, i;
     static SHORT (WINAPI *gaks)(int); static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static int looked;
     static DWORD lastfull;
     if ((kspg.hireOn || kspg.ctlOn) && game_thread && klh_exe_ok) kspg_hire_tick();
+    if (kspg.autoOn && kspg.queueOn && game_thread && klh_exe_ok) kspg_autoopen_tick();      /* [ShopPage] AutoOpen (after the hire tick: it queues the press, this opens the list) */
 #ifdef KLHOOK_TEST
     if (kspg_curprobe && game_thread && klh_exe_ok) kspg_curprobe_tick();
 #endif

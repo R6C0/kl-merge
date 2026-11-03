@@ -46,6 +46,20 @@ int main(void)
     CHECK(kpq_step(0, 1, 0x20, 0, 1, 10) == KPQ_LAPSE, "old: the list closed = lapse (mode must be 2 all the time)");
     CHECK(kpq_step(0, 0, 0x16, 2, 1, 10) == KPQ_LAPSE && kpq_step(0, 1, 0x16, 2, 1, 10) == KPQ_APPLY, "old: no state test (the first shop)");
 
+    /* AutoOpen */
+    CHECK(kpq_autoopen_due(1, 1, 1, 0x20, 0, 800, 0, 0) == 1 && kpq_autoopen_due(1, 1, 1, 0x20, 1, 5000, 0, 0) == 1, "settled 0x20, list closed, queued: send");
+    CHECK(kpq_autoopen_due(0, 1, 1, 0x20, 0, 5000, 0, 0) == 0, "AutoOpen=0: never");
+    CHECK(kpq_autoopen_due(1, 0, 1, 0x20, 0, 5000, 0, 0) == 0, "AutoOpen alone (PageQueue=0): nothing");
+    CHECK(kpq_autoopen_due(1, 1, 0, 0x20, 0, 5000, 0, 0) == 0, "nothing queued / lapsed / cancelled / old early press: no send");
+    CHECK(kpq_autoopen_due(1, 1, 1, 0x20, 0, 799, 0, 0) == 0, "page up < 800 ms: wait");
+    CHECK(kpq_autoopen_due(1, 1, 1, 0x20, 2, 5000, 0, 0) == 0, "list open: no send");
+    CHECK(kpq_autoopen_due(1, 1, 1, 0x1f, 0, 5000, 0, 0) == 0 && kpq_autoopen_due(1, 1, 1, 0x19, 0, 5000, 0, 0) == 0 && kpq_autoopen_due(1, 1, 1, 0x23, 0, 5000, 0, 0) == 0 && kpq_autoopen_due(1, 1, 1, 0x24, 0, 5000, 0, 0) == 0, "only state 0x20");
+    CHECK(kpq_autoopen_due(1, 1, 1, 0x20, 0, 5000, 1, 1499) == 0 && kpq_autoopen_due(1, 1, 1, 0x20, 0, 5000, 1, 1500) == 1, "retry after 1500 ms");
+    CHECK(kpq_autoopen_due(1, 1, 1, 0x20, 0, 5000, 2, 1500) == 1 && kpq_autoopen_due(1, 1, 1, 0x20, 0, 5000, 3, 9999) == 0, "at most 3 sends");
+    CHECK(kpq_ready_name_ok("MercsFAStatusReadyHeistStatus") && kpq_ready_name_ok("MercsFAStatusReadyHeistLBStatus") && kpq_ready_name_ok("MercsFAStatusReadyFAStatus") && kpq_ready_name_ok("MercsFAStatusReadyFAStatusTeam"), "the four page elements");
+    CHECK(!kpq_ready_name_ok("MercsFAStatusReadyHeistStatus_EndGame") && !kpq_ready_name_ok("MercsFAStatusReadyHeistLBStatus_EndGame") && !kpq_ready_name_ok("MercsFAStatusReadyFAStatus_Endgame") && !kpq_ready_name_ok("MercsFAStatusReadyFAStatus_Team_Endgame"), "game over variants refused");
+    CHECK(!kpq_ready_name_ok(0) && !kpq_ready_name_ok("") && !kpq_ready_name_ok("MercsFAStatusReadyFAStatu"), "null / empty / prefix refused");
+
     /* hint every shop */
     CHECK(kpq_hint_done_after_close(0, 1) == 1 && kpq_hint_done_after_close(0, 0) == 0, "off: once per session (done stays)");
     CHECK(kpq_hint_done_after_close(1, 1) == 0 && kpq_hint_done_after_close(1, 0) == 0, "on: re-armed when the shop closes");
