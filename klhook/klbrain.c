@@ -984,6 +984,65 @@ static DWORD __fastcall klbr_w_fl114(DWORD self, DWORD edx, DWORD a1, DWORD a2, 
     klbr_tfl_log(e, self, 1, m, r);
     return r;
 }
+/* ---- OnlineBrainTraitorHitLog (2026-11-03; READ ONLY): does a marked bot really DAMAGE humans? Observation point = the rules' damage hook (slot 15, klucc_down.c's klud_w15: victim, float *delta, attacker),
+   the same call OnlinePreScale and DownOnly use; klucc_down.c calls klbr_hitlog FIRST, before any other filter prices the delta. No new patch, nothing is written, no game call is made (klh_rd / class reads only).
+   A hit = delta < 0 (damage = -delta, pre-apply). Attacker bot = a tagged soldier of klbr_t (state 1) matched by its actor OR its soldier pointer (GUESS: the attacker argument of slot 15 is the ZFFActor; the
+   soldier match is a fallback). Victim human = ZFFPlayer (klh_pvt, also NetSmooth's private copy). Marked = e->traitor at the moment of the hit. Hits by a ZFFActor / ZSoldier attacker that klbr_t does
+   not know are counted apart (unk) so a wrong attacker GUESS shows in the log instead of as a silent zero. Printed at the round end by klbr_summary. */
+static int klud_idx(DWORD p);      /* klucc_down.c (included after this file): the crew index of a player, -1 none */
+static int klbr_hlon;
+static struct { int mh, uh, mb, ub, unk, pl, nlog, nplog; float md, ud; DWORD t0; } klbr_hl;      /* marked / unmarked ATTEMPTED hits on humans, marked / unmarked on bots, untagged actor hits on humans, player-body attackers no tagged bot matches, logged marked hits, logged player-body seats; damage sums; first hit tick of the round */
+static struct klbr_s *klbr_hl_find(DWORD o)
+{
+    int i;
+    if (o < 0x10000) return 0;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && (klbr_t[i].actor == o || klbr_t[i].snd == o)) return &klbr_t[i];
+    return 0;
+}
+/* slot 15 treats attacker and victim as crew ZFFPlayer bodies (disassembly 0x425320: class-mask test, [body+0x2748] -> crew index), so a bot arrives as its player body, not its actor / soldier.
+   GUESS (not traced): a tagged bot's crew seat equals its shadow record e->rec (the money rows at score+0x150+4*rec are indexed by crew seat). A wrong guess shows as the 'pl' counter + seat log. */
+static struct klbr_s *klbr_hl_body(DWORD body)
+{
+    int i, seat;
+    if (klh_pvt(body) != 0x00bb45f4u || (seat = klud_idx(body)) <= 0) return 0;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && klbr_t[i].rec == seat) return &klbr_t[i];
+    return 0;
+}
+static void klbr_hitlog(DWORD victim, float *pdelta, DWORD attacker)
+{
+    float d = 0.0f; struct klbr_s *a, *v; int human, marked; DWORD now;
+    if (!klbr_game_tid || GetCurrentThreadId() != klbr_game_tid) return;      /* klbr_t / klbr_hl are game-thread data */
+    if (!klbr_hlon || victim < 0x10000 || attacker < 0x10000 || attacker == victim) return;
+    if (!klh_rd((DWORD_PTR)pdelta, &d, 4) || !(d < 0.0f)) return;      /* a heal, a zero or a NaN is no hit */
+    v = klbr_hl_find(victim); if (!v) v = klbr_hl_body(victim);
+    human = !v && klh_pvt(victim) == 0x00bb45f4u;
+    if (!human && !v) return;      /* neither a human nor a tagged bot: not counted */
+    a = klbr_hl_find(attacker); if (!a) a = klbr_hl_body(attacker);
+    if (!a) {
+        if (human && klh_pvt(attacker) == 0x00bb45f4u) {
+            klbr_hl.pl++;
+            if (klbr_hl.nplog < 5) { klbr_hl.nplog++; klog("brain: traitor hit: player-body attacker %08lx (crew seat %d) on human %08lx matches no tagged bot (rec of bots: see 'brain: traitor:' lines)", (unsigned long)attacker, klud_idx(attacker), (unsigned long)victim); }
+        } else if (human && (klh_avt(attacker) == 0x00bb3bacu || klh_svt(attacker) == 0x00bd0954u)) klbr_hl.unk++;
+        return;
+    }
+    marked = a->traitor != 0; now = GetTickCount();
+    if (!klbr_hl.t0) klbr_hl.t0 = now;
+    if (human) {
+        if (marked) {
+            klbr_hl.mh++; klbr_hl.md -= d;
+            if (klbr_hl.nlog < 5) { klbr_hl.nlog++; klog("brain: traitor hit %d: t=%.1f s bot %d (soldier %08lx actor %08lx) hit human %08lx (crew seat %d) for %.1f", klbr_hl.nlog, (now - klbr_hl.t0) / 1000.0, (int)(a - klbr_t), (unsigned long)a->snd, (unsigned long)a->actor, (unsigned long)victim, klud_idx(victim), (double)-d); }
+        } else { klbr_hl.uh++; klbr_hl.ud -= d; }
+    } else if (marked) klbr_hl.mb++;
+    else klbr_hl.ub++;
+}
+static void klbr_hitlog_summary(void)
+{
+    if (klbr_hlon) {
+        klog("brain: traitor hits: ATTEMPTED (counted before the game's own self / team filters, so an upper bound): marked %d (dmg %.1f) on humans, unmarked %d (dmg %.1f) on humans, marked %d on bots", klbr_hl.mh, (double)klbr_hl.md, klbr_hl.uh, (double)klbr_hl.ud, klbr_hl.mb);
+        if (klbr_hl.unk || klbr_hl.ub || klbr_hl.pl) klog("brain: traitor hits: (not in the line above) %d hit(s) on humans by an actor / soldier klbr_t does not tag, %d by a player body matching no tagged bot (seat GUESS check), %d unmarked-bot hit(s) on bots", klbr_hl.unk, klbr_hl.pl, klbr_hl.ub);
+    }
+    memset(&klbr_hl, 0, sizeof klbr_hl);
+}
 static int klbr_ta_make(void)      /* the shared private ZSoldier table, made once; 0 = not possible (feature off) */
 {
     DWORD org[KLBR_TA_NSLOT], *blk, va = KLBR_TA_SOLDIER_VT + (DWORD)klh_delta, col = 0;
@@ -1182,6 +1241,7 @@ static void klbr_summary(void)
 {
     klbr_tr_restore_all("round end");      /* before the caller's memset of klbr_t */
     if (klbr_sm_round) {
+        klbr_hitlog_summary();      /* OnlineBrainTraitorHitLog (a no-op line unless on); clears the round's counters */
         if (klbr_trturn) klog("brain: round end: traitor turn: turned %d, restored %d, kills %d, capped %d (%d turn(s) refused)", klbr_tt_turned, klbr_tt_back, klbr_tt_kills, klbr_tt_capped, klbr_tt_refused);
         klog("brain: round end: built %d soldier(s) (%d refused, %d vector failure(s)); frames %d (%d fault(s), %d restore mismatch(es), max %u us); evaluate calls loot %ld board %ld traitor %ld, nonzero %ld/%ld/%ld, faults %ld/%ld/%ld; run faults %ld/%ld/%ld",
             klbr_nbuilt, klbr_nrefused, klbr_nvec_fail, klbr_frames, klbr_sw_flt, klbr_sw_bad, klbr_us_max, (long)klbr_hits[2], (long)klbr_hits[5], (long)klbr_hits[8], (long)klbr_ev_nz[0], (long)klbr_ev_nz[1], (long)klbr_ev_nz[2],
@@ -1387,7 +1447,7 @@ static void klbr_tick(int game_thread)
         return;
     }
     klbr_game_tid = GetCurrentThreadId();
-    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); klbr_tr_restore_all("round change"); memset(klbr_t, 0, sizeof klbr_t); memset(klbr_tt, 0, sizeof klbr_tt); klbr_tt_turned = klbr_tt_back = klbr_tt_kills = klbr_tt_capped = klbr_tt_refused = klbr_dg0 = klbr_dg1 = 0; klbr_row0_which = -2; klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_ta_n = klbr_ta_flt = klbr_ta_sc_n = klbr_ta_wlog = 0; klbr_ta_dis = 0; memset(klbr_ta, 0, sizeof klbr_ta); klbr_paid = 0; klbr_claim_skip = klbr_claim_fb = 0; klbr_dc_offered = klbr_dc_grabs = 0; klbr_bs_defer_n = klbr_bs_real = klbr_bs_fb = 0; klbr_bl_new = klbr_bl_rep = klbr_bl_gate = klbr_bl_sec = 0; klbr_bn_told = klbr_bn_ok = 0; memset(klbr_bl_at, 0, sizeof klbr_bl_at); klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
+    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); klbr_tr_restore_all("round change"); memset(klbr_t, 0, sizeof klbr_t); memset(klbr_tt, 0, sizeof klbr_tt); klbr_tt_turned = klbr_tt_back = klbr_tt_kills = klbr_tt_capped = klbr_tt_refused = klbr_dg0 = klbr_dg1 = 0; klbr_row0_which = -2; memset(&klbr_hl, 0, sizeof klbr_hl); klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_ta_n = klbr_ta_flt = klbr_ta_sc_n = klbr_ta_wlog = 0; klbr_ta_dis = 0; memset(klbr_ta, 0, sizeof klbr_ta); klbr_paid = 0; klbr_claim_skip = klbr_claim_fb = 0; klbr_dc_offered = klbr_dc_grabs = 0; klbr_bs_defer_n = klbr_bs_real = klbr_bs_fb = 0; klbr_bl_new = klbr_bl_rep = klbr_bl_gate = klbr_bl_sec = 0; klbr_bn_told = klbr_bn_ok = 0; memset(klbr_bl_at, 0, sizeof klbr_bl_at); klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
         klog("brain: round starts on the host (Probe %d, Build %d, Loot %d, Bridge %d, Board %d/%d, Traitor %d, PuppetOff %d, Cops %d)", klbr_probe, klbr_build, klbr_loot, klbr_bridge, klbr_board, klbr_boardreal, klbr_traitor, klbr_puppet, klbr_cops); }
     if (klbr_fed_at && now - klbr_fed_at < 2500u) { for (i = 0; i < klbr_nseen && n < KLBR_MAX; i++) { actor[n] = klbr_seen[i].actor; snd[n] = klbr_seen[i].snd; n++; } }
     else n = klbr_scan(actor, snd, KLBR_MAX);
@@ -1434,6 +1494,9 @@ static void klbr_init(void)
     klbr_tflmode = (int)GetPrivateProfileIntA("Brain", "OnlineBrainTraitorFireLine", 0, klh_ini); if (klbr_tflmode < 0) klbr_tflmode = 0; if (klbr_tflmode > 2) klbr_tflmode = 2;
     if (klbr_tflmode && !klbr_taon) { klog("brain: OnlineBrainTraitorFireLine needs OnlineBrainTraitorArcade=1: off"); klbr_tflmode = 0; }
     if (klbr_tflmode) klog("brain: OnlineBrainTraitorFireLine=%d UNTESTED (recommended off): a marked bot's ZSoldier slots 113 / 114 (fire-line friend list) are wrapped on the private table: %s", klbr_tflmode, klbr_tflmode == 1 ? "LOG ONLY, the original runs untouched" : "the Arcade rules are swapped in around the original so the human is not a friend");
+    klbr_hlon = klbr_on && klbr_key("OnlineBrainTraitorHitLog");
+    if (klbr_key("OnlineBrainTraitorHitLog") && !klbr_hlon) klog("brain: OnlineBrainTraitorHitLog needs the Brain on: off");
+    if (klbr_hlon) klog("brain: OnlineBrainTraitorHitLog=1 (recommended off): READ ONLY, counts hits of tagged bots (marked traitor vs other) on humans in the rules' damage hook (slot 15); one 'traitor hits:' line per round end");
     if (klbr_taon && klbr_trturn) { klog("brain: traitor arcade: OnlineBrainTraitorTurn ignored (Arcade=1: no team swap)"); klbr_trturn = 0; }
     if (klbr_taon) klog("brain: OnlineBrainTraitorArcade=1 UNTESTED (recommended off): a bot the real Traitor tactic marks stays team Ally but may target and shoot HUMAN players (ZSoldier slot 111 on a private table, the Arcade gate swapped in for that call); OnlineBrainTraitorMax %d; friend-list gap (no hook): the fire line of a marked bot still lists humans as friends", klbr_trcap);
     if (klbr_trturn) klog("brain: OnlineBrainTraitorTurn=1 UNTESTED (recommended off): a bot the real Traitor tactic marks goes team Enemy (the Arcade team swap, pump-applied) and back on death / aboard / the round end; row 0 = %s; TraitorKillMax %d within %.0f m (0 = no cap; stock Arcade killed 5 crewmates in 22 s uncapped), turn cap %d (0 = off)",
