@@ -1392,7 +1392,7 @@ static void klmv_restless(const struct klb_snap *s, DWORD now, int human_in, con
         }
         /* the place its chain ordered: whatever the defend block holds that this file did not put there. A place within
            KLE_ROUTE of ours is one of the soldier's own tactics moving it (klescort.c 2, the same GUESS): the centre stays */
-        if ((soldier = klh_rd32(r->actor + 0x77c)) != 0 && klh_rd32(soldier) == KLE_SOLDIER_VT && kle_block(soldier, cur) && (cur[0] || cur[1] || cur[2])) {
+        if ((soldier = klh_rd32(r->actor + 0x77c)) != 0 && klh_svt(soldier) == KLE_SOLDIER_VT && kle_block(soldier, cur) && (cur[0] || cur[1] || cur[2])) {
             if (i < KLB_NREC && klmv_fo_on[i] && kle_dist(cur, klmv_fo[i]) <= 50.0f && !(b->have_target && kle_dist(cur, b->target) <= 50.0f)) {
                 /* v82f: a place klfedkit.c ordered, not the chain's: the anchor and its counts stay (the bot is walked back to its chain's place, not kept on the hunt step) */
                 b->have_target = 0; b->paced = 0; b->beside = 0;

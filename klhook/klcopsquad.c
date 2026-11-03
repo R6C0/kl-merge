@@ -141,7 +141,7 @@ static DWORD klcq_soldier(DWORD actor)
     if (!(h = klh_rd32(actor + 0x5fc)) || !klh_rd(h + 4, hv, 8) || hv[0] <= 0) return 0;
     if (!(node = klh_rd32(actor + 4)) || !klh_rd(node + 0x3c, &fl, 4) || (fl >> 10 & 1)) return 0;
     if (!klh_rd(actor + 0x576, &b, 1) || b != 1 || !klh_rd(actor + 0x770, &held, 4) || held) return 0;
-    if (!(s = klh_rd32(actor + 0x77c)) || klh_rd32(s) != KLE_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
+    if (!(s = klh_rd32(actor + 0x77c)) || klh_svt(s) != KLE_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
     if (!klh_rd32(s + 0x63c) || !klh_rd32(s + 0x738) || !klh_rd32(s + 0x6d8)) return 0;      /* 0x4c3b10 (SetOwner) dereferences +0x63c / +0x738, 0x48c480 (squad add) [+0x6d8]: VERIFIED, unchecked there */
     if (!klh_rd(s + 0x6a4, &b, 1) || !b) return 0;                                             /* commandable: Follow's member test 0x6c8510 skips a soldier with 0 here (set 0 by 0x6bf452 / 0x8fd4b8) */
     return s;

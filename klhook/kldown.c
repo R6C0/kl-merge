@@ -1453,7 +1453,7 @@ static int kld_bot_ok(DWORD actor, DWORD *soldier)
 {
     DWORD s;
     if (!actor || klh_rd32(actor) != KLB_ACTOR_VT) return 0;
-    if (!(s = klh_rd32(actor + 0x77c)) || klh_rd32(s) != KLD_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
+    if (!(s = klh_rd32(actor + 0x77c)) || klh_svt(s) != KLD_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
     *soldier = s;
     return 1;
 }

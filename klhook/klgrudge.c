@@ -227,7 +227,7 @@ static void kly_undo(struct kly_bot *b, int i, DWORD rules, DWORD score)
             klh_data((void *)(DWORD_PTR)(b->hobj + 4), &cur, 4, "an AI heister's health, at the same share of the game's maximum");
     }
     b->hwrote = 0;
-    if (b->aset && b->actor && klh_rd32(b->actor) == KLB_ACTOR_VT && b->soldier && klh_rd32(b->actor + 0x77c) == b->soldier && klh_rd32(b->soldier) == KLY_SOLDIER_VT &&
+    if (b->aset && b->actor && klh_rd32(b->actor) == KLB_ACTOR_VT && b->soldier && klh_rd32(b->actor + 0x77c) == b->soldier && klh_svt(b->soldier) == KLY_SOLDIER_VT &&
         klh_rd32(b->soldier + 0x6d8) == b->dblk && klh_rd(b->dblk + 0x10, &cur, 4) && KLY_ABS(cur - b->awrote) <= 0.01f)
         klh_data((void *)(DWORD_PTR)(b->dblk + 0x10), &b->aim0, 4, "an AI heister's accuracy (his own back)");
     b->aset = 0;
@@ -324,7 +324,7 @@ static void kly_aim(const struct klb_snap *s, const struct klb_rec *r, struct kl
 {
     DWORD sol, d; float cur, want; int k;
     if (kly.bs_aim < 0 && !b->aset && !(act && kltt_aim(i, 50.0f) != 50.0f)) return;      /* kltrait.c: AimSpread / DamageOut move the accuracy too */
-    if (!(sol = klh_rd32(r->actor + 0x77c)) || klh_rd32(sol) != KLY_SOLDIER_VT || klh_rd32(sol + 0x40) != r->actor || !(d = klh_rd32(sol + 0x6d8)) ||
+    if (!(sol = klh_rd32(r->actor + 0x77c)) || klh_svt(sol) != KLY_SOLDIER_VT || klh_rd32(sol + 0x40) != r->actor || !(d = klh_rd32(sol + 0x6d8)) ||
         !klh_rd(d + 0x10, &cur, 4) || !klb_finite(cur) || cur < 0 || cur > 100) return;
     if (d != b->dblk || sol != b->soldier) { b->soldier = sol; b->dblk = d; b->aim0 = cur; b->aset = 0; }
     else if (!b->aset) b->aim0 = cur;
@@ -335,7 +335,7 @@ static void kly_aim(const struct klb_snap *s, const struct klb_rec *r, struct kl
     if (!b->aset) for (k = 0; k < s->n && k < KLB_NREC; k++) {      /* going in: is the block his alone? */
         DWORD a2 = s->r[k].actor, s2;
         if (k == i || !s->r[k].used || !(s->r[k].flags & 1) || !a2 || a2 == r->actor || klh_rd32(a2) != KLB_ACTOR_VT) continue;
-        if ((s2 = klh_rd32(a2 + 0x77c)) != 0 && klh_rd32(s2) == KLY_SOLDIER_VT && klh_rd32(s2 + 0x6d8) == d) {
+        if ((s2 = klh_rd32(a2 + 0x77c)) != 0 && klh_svt(s2) == KLY_SOLDIER_VT && klh_rd32(s2 + 0x6d8) == d) {
             if (!b->aim_told++) klog("grudge: record %d (%s): its accuracy block %08lx is also record %d's (one ZSoldierRout made both): BackstabAim is NOT written for it", i, klb_who(r), d, k);
             return;
         }

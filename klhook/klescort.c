@@ -544,7 +544,7 @@ static int kle_bot(const struct klb_snap *s, int i, DWORD *actor_, DWORD *soldie
     if (!(node = klh_rd32(actor + 4)) || !klh_rd(node + 0x3c, &fl, 4) || (fl >> 10 & 1)) { strcpy(why, "its node is off (flag bit 10)"); return 0; }
     if (!klh_rd(actor + 0x576, &b576, 1) || b576 != 1) { strcpy(why, "its actor takes no orders now ([actor+0x576] is not 1)"); return 0; }
     if (!klh_rd(actor + 0x770, &held, 4) || held) { strcpy(why, "somebody holds it as a human shield"); return 0; }
-    if (!(soldier = klh_rd32(actor + 0x77c)) || klh_rd32(soldier) != KLE_SOLDIER_VT || klh_rd32(soldier + 0x40) != actor) { strcpy(why, "actor +0x77c is not its ZSoldier"); return 0; }
+    if (!(soldier = klh_rd32(actor + 0x77c)) || klh_svt(soldier) != KLE_SOLDIER_VT || klh_rd32(soldier + 0x40) != actor) { strcpy(why, "actor +0x77c is not its ZSoldier"); return 0; }
     if (!(blk = klh_rd32(soldier + 0x64c)) || !klh_rd(blk, raw, sizeof raw) || *(DWORD *)(raw + 0x14) != soldier) { strcpy(why, "its soldier has no defend block yet"); return 0; }
     if (!(goal = klh_rd32(soldier + 0x648)) || !klh_rd(goal + 8, &tmp, 4)) { strcpy(why, "its soldier has no defend goal yet"); return 0; }
     if (tmp != 0 && tmp != 4) {               /* the defend goal RUNS: a not-soft order goes through 0x7bbf70, which pops the goal stack with no empty test */
@@ -622,7 +622,7 @@ static void kltr_poll(const struct klb_snap *s, DWORD now)
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; DWORD soldier;
         if (!r->used || !(r->flags & 1) || r->status || !r->actor || klh_rd32(r->actor) != KLB_ACTOR_VT) { kltr.have[i] = 0; continue; }
-        if (!(soldier = klh_rd32(r->actor + 0x77c)) || klh_rd32(soldier) != KLE_SOLDIER_VT || !kle_block(soldier, cur)) continue;
+        if (!(soldier = klh_rd32(r->actor + 0x77c)) || klh_svt(soldier) != KLE_SOLDIER_VT || !kle_block(soldier, cur)) continue;
         if (!kltr.have[i]) { memcpy(kltr.last[i], cur, 12); kltr.have[i] = 1; continue; }
         if (kle_dist(cur, kltr.last[i]) > 5.0f) {
             if (now - kltr.said[i] >= 1000) { kltr.said[i] = KLB_T(now); kltr_line(i, "GAME?", "BLOCK-CHANGED", cur, " was=", kltr.last[i], "block now differs from the last traced order or poll: the game's chain or a tactic (or a module that bypasses kle_order2)"); }

@@ -254,6 +254,17 @@ int main(void)
         CHECK(kbr_ad_pass(7.0f, 7.0f) && !kbr_ad_pass(6.9f, 7.0f) && kbr_ad_pass(9.0f, 7.0f), "ad: pass is >= the limit");
         CHECK(kbr_ad_rose(0, 2) && !kbr_ad_rose(2, 3) && !kbr_ad_rose(1, 1) && kbr_ad_rose(1, 3), "ad: mark = bit 1 rising");
     }
+    {   /* OnlineBrainTraitorArcade decision */
+        const unsigned long PL = 0xbb45f4ul;
+        CHECK(kbr_tarc_decide(1, 1, 1, PL, PL, 1, 0, 1) == KBR_TA_ARCADE, "tarc: every condition met = ARCADE");
+        CHECK(kbr_tarc_decide(0, 1, 1, PL, PL, 1, 0, 1) == KBR_TA_PASS, "tarc: key off = PASS");
+        CHECK(kbr_tarc_decide(1, 0, 1, PL, PL, 1, 0, 1) == KBR_TA_PASS, "tarc: unmarked = PASS");
+        CHECK(kbr_tarc_decide(1, 1, 0, PL, PL, 1, 0, 1) == KBR_TA_PASS, "tarc: shooter not ours = PASS");
+        CHECK(kbr_tarc_decide(1, 1, 1, PL, PL, 1, 1, 1) == KBR_TA_PASS, "tarc: Turn on = PASS (exclusive)");
+        CHECK(kbr_tarc_decide(1, 1, 1, PL, PL, 1, 0, 0) == KBR_TA_PASS, "tarc: not a host round = PASS");
+        CHECK(kbr_tarc_decide(1, 1, 1, PL, PL, 0, 0, 1) == KBR_TA_PASS, "tarc: unreadable target = PASS");
+        CHECK(kbr_tarc_decide(1, 1, 1, 0xbb3bacul, PL, 1, 0, 1) == KBR_TA_PASS && kbr_tarc_decide(1, 1, 1, 0xbd0954ul, PL, 1, 0, 1) == KBR_TA_PASS, "tarc: a ZFFActor / ZSoldier target = PASS (bots untouched)");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }

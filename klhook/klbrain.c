@@ -104,7 +104,7 @@ static int klbr_verdict_n;
 static int klbr_realrun;                /* [Brain] RealRun (the longjmp thunk is installed), 0 unless init succeeded */
 
 /* ---- the soldier tags ------------------------------------------------------------------------------------------------------------------------------------------------------------- */
-struct klbr_s { DWORD snd, actor, tac[3], seenAt, builtAt, nzAt, bnzAt, wSince, wUntil, s45At, pick, pickAt; float wpos[3]; int state, rec, traitor, flt, wHas, pendBoard, pendTurn; };      /* rec: shadow crew record 1..11 (0 none); bnzAt: tick of the last Board evaluate > 0;
+struct klbr_s { DWORD snd, actor, tac[3], seenAt, builtAt, nzAt, bnzAt, wSince, wUntil, s45At, pick, pickAt; float wpos[3]; int state, rec, traitor, flt, wHas, pendBoard, pendTurn, pendArc; };      /* rec: shadow crew record 1..11 (0 none); bnzAt: tick of the last Board evaluate > 0;
                                                                                                     wSince / wUntil / wpos: the hand-off stall watchdog (kbr_watch); flt: framed faults of this bot (2 = never handed again); pendBoard: slot 45 asked, the pump boards it */      /* state 0 free, 1 built by us, 2 refused (told once), 3 pending build */
 static struct klbr_s klbr_t[KLBR_MAX];
 static int klbr_nbuilt, klbr_nrefused, klbr_nvec_fail;
@@ -115,6 +115,7 @@ static DWORD klbr_sm_round;             /* the session object of the round the t
 static int klbr_trturn, klbr_trrow0, klbr_trkillmax = 2, klbr_trcap; static float klbr_trnear = 3000.0f;      /* TraitorTurn on; Row0 mode 0 host / 1 richest; TraitorKillMax (online key, 0 = no cap); [shadow+0x338] cap (0 = off); TraitorKillNear */
 static struct { DWORD actor, info, team0; int on, kills, was_alive; float pos[3]; } klbr_tt[KLBR_MAX];      /* on: team Enemy written and not yet restored; kills: crew deaths booked to him; was_alive/pos: the death booking */
 static int klbr_tt_turned, klbr_tt_back, klbr_tt_kills, klbr_tt_capped, klbr_tt_refused;      /* round-end counters: turned, restored, kills booked, capped by TraitorKillMax, refused swaps */
+static int klbr_taon, klbr_ta_dis, klbr_ta_n, klbr_ta_flt, klbr_ta_sc_n, klbr_ta_made, klbr_ta_wlog;      /* OnlineBrainTraitorArcade (block below, before the Turn pump): on; off for the round after 3 faults; marks this round; faults; logged scores; table attempted; logged wraps */
 static int klbr_dg0, klbr_dg1;          /* diagnostics under OnlineBrainTraitor: first 6 Traitor evaluates that returned 0 / nonzero per round */
 static int klbr_row0_which = -2; static long klbr_row0_val;      /* row 0 source of the last sync (seat, money), logged on a change */
 static int klbr_turned_actor(DWORD actor)      /* klbotfill.c: a bot whose team is Enemy now is not steered / escorted / boarded / banked */
@@ -536,7 +537,7 @@ static int klbr_vcount(DWORD snd, int v) { DWORD b = klh_rd32(snd + kbr_vecoff[v
 static void klbr_build_one(struct klbr_s *e, DWORD now)
 {
     DWORD snd = e->snd, mo, o[3] = { 0, 0, 0 }; int v, before[KBR_NVEC], failed = 0;
-    if (klh_rd32(snd) != KLE_SOLDIER_VT) { e->state = 2; return; }
+    if (klh_svt(snd) != KLE_SOLDIER_VT) { e->state = 2; return; }
     if (klh_rd32(snd + 0x5f0) || klh_rd32(snd + 0x5f4) || klh_rd32(snd + 0x5f8)) {      /* GUESS fields; someone (the game, or us earlier) already built: never double-tag */
         e->state = 2; klbr_nrefused++;
         klog("brain: build: soldier %08lx already has tactics (%08lx %08lx %08lx): left alone", (unsigned long)snd, (unsigned long)klh_rd32(snd + 0x5f0), (unsigned long)klh_rd32(snd + 0x5f4), (unsigned long)klh_rd32(snd + 0x5f8));
@@ -593,7 +594,7 @@ static int klbr_scan(DWORD *actor, DWORD *snd, int cap)
             if (o < 0x10000 || klh_avt(o) != 0x00bb3bac) continue;      /* ZFFActor */
             if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4) || team != 2) continue;
             if (!(hp = klh_rd32(o + 0x5fc)) || !klh_rd(hp + 4, hv, 8) || !(hv[0] > 0)) continue;
-            if (!(s = klh_rd32(o + 0x77c)) || klh_rd32(s) != KLE_SOLDIER_VT) continue;
+            if (!(s = klh_rd32(o + 0x77c)) || klh_svt(s) != KLE_SOLDIER_VT) continue;
             actor[n] = o; snd[n] = s; n++;
         }
     }
@@ -758,9 +759,10 @@ static void klbr_traitor_mirror(struct klbr_s *e)
     if (!e || e->rec <= 0 || e->traitor) return;
     if (KLBR_PB(KLBR_REC(e->rec) + 0x79) & 2) {
         e->traitor = 1; klbr_ntraitor++;
+        if (klbr_taon) { klbr_ta_n++; e->pendArc = 1; }      /* OnlineBrainTraitorArcade: FLAG ONLY too, klbr_ta_pump wraps him on the game thread */
         if (klbr_trturn) e->pendTurn = 1;      /* FLAG ONLY: no game write inside the AI walk; klbr_tr_pump turns him on the game thread outside any frame */
         klog("brain: traitor: Traitor RUN marked record %d (actor %08lx, level %d, money row %ld) as a traitor. %s", e->rec, (unsigned long)e->actor, kbr_level_clamp(klbr_level), (long)KLBR_P32(klbr_score + 0x150 + 4 * (DWORD)e->rec),
-             klbr_trturn ? "OnlineBrainTraitorTurn: the pump swaps his team to Enemy (pending)" : "MIRROR ONLY (OnlineBrainTraitor, UNTESTED): the bot's team, hostility and the announce are NOT changed");
+             klbr_trturn ? "OnlineBrainTraitorTurn: the pump swaps his team to Enemy (pending)" : klbr_taon ? "OnlineBrainTraitorArcade: the pump wraps his target score (team stays Ally)" : "MIRROR ONLY (OnlineBrainTraitor, UNTESTED): the bot's team, hostility and the announce are NOT changed");
     }
 }
 
@@ -864,6 +866,100 @@ static void klbr_grab_end(struct klbr_s *e, const char *why, int done)
     if (!done) klbr_nabort++;
     klbr_gr[k].on = 0; klbr_gr[k].outside = 0; KLBR_PB(KLBR_REC(k) + 0x15) = 0; KLBR_P32(KLBR_FLAGS(k)) = 0;
 }
+/* ---- OnlineBrainTraitorArcade (2026-11-03; re/arcade_traitor_consequence_1103.md) ------------------------------------------------------------------------------------------------------------
+   Stock Arcade: the Traitor mark (rec+0x79 bit 2) changes no team; it only lets the marked ally score a HUMAN ZFFPlayer in ZSoldier slot 111 (0x882470, the target score). Online 0x7f6850 is false, so that
+   function returns the 'no target' float for a human. The two call sites (0x8826ec, 0x5709c2) are in hashed code, so no byte is patched: the marked bot gets ONE shared private copy of the ZSoldier vtable
+   (klh_soldier_priv; every 'vtable == ZSoldier' test reads through klh_svt) whose slot 111 (+0x1bc, 7 stack args, ret 0x1c, verified from 0x8824e4 / 0x882732 and the table dword) is klbr_w_score.
+   For a ZFFPlayer candidate it runs the original with the shadow rules swapped in (klbr_swap_in: [G+0x54] = shadow, role 0 -> 0x7f6850 true, as in Arcade) so the original reads the mark from the shadow
+   record. Everything else (other candidates, other bots, the cops) calls the original untouched. NOT reproduced: the fire-line friend list (0x570a12 inside 0x5706a0, hashed): a marked bot's line still
+   lists humans as friends (documented gap). GUESS: swapping the rules around the whole call also changes whatever else the original reads from the rules (0x6a1c40 floats, level byte); the shadow block
+   carries the same fields the Traitor evaluate reads, nothing more is known. The stock table is never written; a bot is put back on it on death, round end or a tag change. */
+#define KLBR_TA_SLOT 111                /* ZSoldier slot 111 = vt + 0x1bc = 0x882470 (verified: the table dword at 0xbd0954 + 0x1bc) */
+#define KLBR_TA_NSLOT 128               /* GUESS: the table has at least 118 code pointers (counted from the exe); 128 dwords are copied, only slot 111 is changed */
+#define KLBR_TA_SOLDIER_VT 0x00bd0954
+#define KLBR_TA_ORG 0x00882470
+#define KLBR_TA_NOTARGET 0x00b5f1e0    /* the float 0x882726 loads for 'no target' */
+static DWORD klbr_ta_org;
+static struct { DWORD snd; int rec; } klbr_ta[KLBR_MAX];      /* OUTSIDE klbr_t (like klbr_tt): index = the slot of klbr_t; snd = the soldier we gave the private table */
+typedef float (__fastcall *klbr_scfn)(DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD);
+static float __fastcall klbr_w_score(DWORD self, DWORD edx, DWORD a1, DWORD a2, DWORD a3, DWORD a4, DWORD a5, DWORD a6, DWORD a7)      /* thiscall + 7 stack args, ret 0x1c: a __fastcall has the same stack layout */
+{
+    klbr_scfn org = (klbr_scfn)(DWORD_PTR)klbr_ta_org; float r = 0.0f; DWORD G, sm, role = 0, mode = 0, state = 0, probe = 0; struct klbr_s *e; int host, dec, flt = 0;
+    (void)edx;
+    if (!org) return 0.0f;
+    if (!klbr_taon || klbr_ta_dis || klbr_depth > 0 || klbr_rr_sw || GetCurrentThreadId() != klbr_game_tid) return org(self, 0, a1, a2, a3, a4, a5, a6, a7);      /* nested in a DLL frame / thunk slice: never swap twice */
+    G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)); sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION)); e = klbr_find(self);
+    host = sm > 0xffff && klh_rd(sm + 0x54, &role, 4) && klh_rd(sm + 0x5c, &mode, 4) && klh_rd(sm + 0x70, &state, 4) && role == 2 && mode == 4 && state == KLB_ROUND;
+    dec = kbr_tarc_decide(1, e && e->state == 1 && e->traitor, e != 0, a1 > 0xffff ? klh_pvt(a1) : 0, 0x00bb45f4ul, a1 > 0xffff && klh_rd(a1, &probe, 4), klbr_trturn, host);      /* candidate = first stack arg ([ebp+8] -> esi at 0x882477) */
+    if (dec != KBR_TA_ARCADE || G <= 0xffff || !klbr_shadow) return org(self, 0, a1, a2, a3, a4, a5, a6, a7);
+    if (!kbr_frame_enter(&klbr_depth) || !klbr_swap_in(G, sm)) { kbr_frame_leave(&klbr_depth); return org(self, 0, a1, a2, a3, a4, a5, a6, a7); }
+    __try { r = org(self, 0, a1, a2, a3, a4, a5, a6, a7); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { flt = 1; }      /* the veh restore hook may already have put the real rules back; swap_out below is idempotent */
+    if (kbr_frame_leave(&klbr_depth)) klbr_swap_out();
+    if (flt) {      /* GUESS: after a fault the x87 stack is left as it is; the stock 'no target' float is the answer and the feature goes off for the rest of the round after 3 faults */
+        float nt = 0.0f; klh_rd((DWORD_PTR)KLH_VA(KLBR_TA_NOTARGET), &nt, 4); r = nt; klbr_ta_flt++;
+        klog("brain: traitor arcade: fault %d in the swapped slot-111 call (soldier %08lx, candidate %08lx), 'no target' returned%s", klbr_ta_flt, (unsigned long)self, (unsigned long)a1, klbr_ta_flt >= 3 ? "; feature off for this round" : "");
+        if (klbr_ta_flt >= 3) klbr_ta_dis = 1;
+    } else if (klbr_ta_sc_n < 8) {
+        float nt = 0.0f; klh_rd((DWORD_PTR)KLH_VA(KLBR_TA_NOTARGET), &nt, 4); klbr_ta_sc_n++;
+        klog("brain: traitor arcade: marked soldier %08lx scored human %08lx: %.2f ('no target' = %.2f: %s)", (unsigned long)self, (unsigned long)a1, (double)r, (double)nt, r == nt ? "still refused, the Arcade gate did not open" : "targetable");
+    }
+    return r;
+}
+static int klbr_ta_make(void)      /* the shared private ZSoldier table, made once; 0 = not possible (feature off) */
+{
+    DWORD org[KLBR_TA_NSLOT], *blk, va = KLBR_TA_SOLDIER_VT + (DWORD)klh_delta, col = 0;
+    if (klh_soldier_priv) return 1;
+    if (klbr_ta_made) return 0;
+    klbr_ta_made = 1;
+    if (!klh_rd(va, org, sizeof org) || org[KLBR_TA_SLOT] != KLBR_TA_ORG + (DWORD)klh_delta) { klog("brain: traitor arcade: ZSoldier slot %d does not read as 0x882470: OnlineBrainTraitorArcade off", KLBR_TA_SLOT); return 0; }
+    klh_rd(va - 4, &col, 4);      /* slot -1 = the RTTI locator, copied like the tactic tables above */
+    if (!(blk = (DWORD *)VirtualAlloc(0, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE))) return 0;
+    blk[0] = col; memcpy(blk + 1, org, sizeof org);
+    klbr_ta_org = org[KLBR_TA_SLOT]; blk[1 + KLBR_TA_SLOT] = (DWORD)(DWORD_PTR)klbr_w_score;
+    klh_soldier_priv = (DWORD)(DWORD_PTR)(blk + 1);
+    klog("brain: traitor arcade: private ZSoldier table %08lx made (slot %d wrapped, %d slots copied)", (unsigned long)klh_soldier_priv, KLBR_TA_SLOT, KLBR_TA_NSLOT);
+    return 1;
+}
+static void klbr_ta_restore(int i, int clearbit, const char *why)      /* the stock table back (only where it is still ours); clearbit: also rec+0x79 &= ~2 (only for a record this DLL saw marked) */
+{
+    DWORD snd = klbr_ta[i].snd, stock = KLBR_TA_SOLDIER_VT + (DWORD)klh_delta; int rec = klbr_ta[i].rec;
+    if (!snd) return;
+    klbr_ta[i].snd = 0; klbr_ta[i].rec = 0;
+    if (klh_soldier_priv && klh_rd32(snd) == klh_soldier_priv) klh_data((void *)(DWORD_PTR)snd, &stock, 4, "ZSoldier vtable pointer back (OnlineBrainTraitorArcade)");
+    if (clearbit && rec > 0 && klbr_shadow) { __try { KLBR_PB(KLBR_REC(rec) + 0x79) &= (BYTE)~2; } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_sw_flt++; } }
+    klog("brain: traitor arcade: slot %d soldier %08lx back on the stock table (%s)", i, (unsigned long)snd, why);
+}
+static void klbr_ta_restore_all(const char *why)      /* before every memset of klbr_t (called from klbr_tr_restore_all) */
+{
+    int i, n = 0;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_ta[i].snd) { klbr_ta_restore(i, 1, why); n++; }
+    if (n) klog("brain: traitor arcade: %s: %d wrapped bot(s) cleared", why, n);
+}
+static void klbr_ta_pump(void)      /* game thread, depth 0, outside the AI walk: give a freshly marked bot the table; take it away on death / tag change / round end */
+{
+    DWORD sm = 0, role = 0, mode = 0, state = 0; int i, rok;
+    if (!klbr_taon) return;
+    rok = (sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) && sm == klbr_sm_round && klh_rd(sm + 0x54, &role, 4) && klh_rd(sm + 0x5c, &mode, 4) && klh_rd(sm + 0x70, &state, 4) && role == 2 && mode == 4 && state == KLB_ROUND;
+    if (klbr_trcap > 0 && klbr_shadow) KLBR_P32(klbr_shadow + 0x338) = kbr_tr_cap_word(klbr_ta_n, klbr_trcap);      /* same cap word as Turn: marks (not turns) count; OnlineBrainTraitorMax 0 = stock behaviour */
+    for (i = 0; i < KLBR_MAX; i++) {
+        struct klbr_s *e = &klbr_t[i]; float pos[3]; int alive = 0;
+        if (klbr_ta[i].snd) {
+            if (!rok || e->state != 1 || e->snd != klbr_ta[i].snd || !e->actor || !klbr_bot_pos(e->actor, pos, &alive) || !alive) klbr_ta_restore(i, 0, !rok ? "round or state ended" : "dead, gone or the tag changed");
+            continue;
+        }
+        if (!e->pendArc) continue;
+        e->pendArc = 0;
+        if (!rok || e->state != 1 || !e->snd || e->rec <= 0) { klog("brain: traitor arcade: slot %d: the mark is not wrapped (round or tag gone)", i); continue; }
+        if (!klbr_bot_pos(e->actor, pos, &alive) || !alive) { klog("brain: traitor arcade: slot %d: not wrapped (the bot is dead)", i); continue; }
+        if (!klbr_ta_make()) { klbr_taon = 0; return; }
+        if (klh_rd32(e->snd) != KLBR_TA_SOLDIER_VT + (DWORD)klh_delta) { klog("brain: traitor arcade: slot %d soldier %08lx has vtable %08lx, not the stock ZSoldier one: not wrapped", i, (unsigned long)e->snd, (unsigned long)klh_rd32(e->snd)); continue; }
+        if (!klh_data((void *)(DWORD_PTR)e->snd, &klh_soldier_priv, 4, "ZSoldier vtable pointer (OnlineBrainTraitorArcade)")) { klog("brain: traitor arcade: slot %d: the vtable write was refused", i); continue; }
+        klbr_ta[i].snd = e->snd; klbr_ta[i].rec = e->rec;
+        if (++klbr_ta_wlog <= 8) klog("brain: traitor arcade: bot %d wrapped (soldier %08lx, actor %08lx, rec %d): it may now target human players as in Arcade; team stays Ally", i, (unsigned long)e->snd, (unsigned long)e->actor, e->rec);
+    }
+}
+
 /* ---- OnlineBrainTraitorTurn: turn / back / booking, all on the game thread at depth 0 (the pump) ------------------------------------------------------------------------------------------------- */
 static void klbr_tr_restore(int i, const char *why)
 {
@@ -875,6 +971,7 @@ static void klbr_tr_restore(int i, const char *why)
 static void klbr_tr_restore_all(const char *why)      /* before every memset of klbr_t, at the round end and in the not-a-round branch of the tick */
 {
     int i;
+    klbr_ta_restore_all(why);      /* OnlineBrainTraitorArcade: the stock ZSoldier tables back and the marks cleared BEFORE the tags are wiped */
     for (i = 0; i < KLBR_MAX; i++) klbr_tr_restore(i, why);
 }
 static void klbr_tr_pump(void)
@@ -944,6 +1041,7 @@ static void klbr_pump(DWORD now)       /* game thread, from klbotfill.c's Online
             klbf_brain_boarded(e->actor); klbf_brain_board_call(e->actor);
         }
     }
+    klbr_ta_pump();      /* OnlineBrainTraitorArcade */
     klbr_tr_pump();      /* OnlineBrainTraitorTurn: before the bridge / puppet early return, so it also runs without them */
     klbr_boardlog(now);
     if (!klbr_bridge || !klbr_puppet) return;
@@ -1204,7 +1302,7 @@ static void klbr_tick(int game_thread)
         return;
     }
     klbr_game_tid = GetCurrentThreadId();
-    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); klbr_tr_restore_all("round change"); memset(klbr_t, 0, sizeof klbr_t); memset(klbr_tt, 0, sizeof klbr_tt); klbr_tt_turned = klbr_tt_back = klbr_tt_kills = klbr_tt_capped = klbr_tt_refused = klbr_dg0 = klbr_dg1 = 0; klbr_row0_which = -2; klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_paid = 0; klbr_claim_skip = klbr_claim_fb = 0; klbr_dc_offered = klbr_dc_grabs = 0; klbr_bs_defer_n = klbr_bs_real = klbr_bs_fb = 0; klbr_bl_new = klbr_bl_rep = klbr_bl_gate = klbr_bl_sec = 0; klbr_bn_told = klbr_bn_ok = 0; memset(klbr_bl_at, 0, sizeof klbr_bl_at); klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
+    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); klbr_tr_restore_all("round change"); memset(klbr_t, 0, sizeof klbr_t); memset(klbr_tt, 0, sizeof klbr_tt); klbr_tt_turned = klbr_tt_back = klbr_tt_kills = klbr_tt_capped = klbr_tt_refused = klbr_dg0 = klbr_dg1 = 0; klbr_row0_which = -2; klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_ta_n = klbr_ta_flt = klbr_ta_sc_n = klbr_ta_wlog = 0; klbr_ta_dis = 0; memset(klbr_ta, 0, sizeof klbr_ta); klbr_paid = 0; klbr_claim_skip = klbr_claim_fb = 0; klbr_dc_offered = klbr_dc_grabs = 0; klbr_bs_defer_n = klbr_bs_real = klbr_bs_fb = 0; klbr_bl_new = klbr_bl_rep = klbr_bl_gate = klbr_bl_sec = 0; klbr_bn_told = klbr_bn_ok = 0; memset(klbr_bl_at, 0, sizeof klbr_bl_at); klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
         klog("brain: round starts on the host (Probe %d, Build %d, Loot %d, Bridge %d, Board %d/%d, Traitor %d, PuppetOff %d, Cops %d)", klbr_probe, klbr_build, klbr_loot, klbr_bridge, klbr_board, klbr_boardreal, klbr_traitor, klbr_puppet, klbr_cops); }
     if (klbr_fed_at && now - klbr_fed_at < 2500u) { for (i = 0; i < klbr_nseen && n < KLBR_MAX; i++) { actor[n] = klbr_seen[i].actor; snd[n] = klbr_seen[i].snd; n++; } }
     else n = klbr_scan(actor, snd, KLBR_MAX);
@@ -1216,7 +1314,7 @@ static void klbr_tick(int game_thread)
             if (e->state == 3 && built < 2) { klbr_build_one(e, now); built++; }      /* at most two a tick */
             else if (e->state == 1 && klh_rd32(snd[i] + 0x5f0) != e->tac[0]) { klog("brain: soldier %08lx no longer holds our Loot tactic (%08lx vs %08lx): tag dropped, nothing freed by us", (unsigned long)snd[i], (unsigned long)klh_rd32(snd[i] + 0x5f0), (unsigned long)e->tac[0]); e->state = 2; }
         }
-        for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && now - klbr_t[i].seenAt > 15000u && klh_rd32(klbr_t[i].snd) != KLE_SOLDIER_VT) { klog("brain: soldier %08lx is gone (dead or despawned); the game's destructor does NOT free its tactics (about 0x64 bytes leak per bot per round, accepted); we free nothing", (unsigned long)klbr_t[i].snd); klbr_t[i].state = 0; }
+        for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && now - klbr_t[i].seenAt > 15000u && klh_svt(klbr_t[i].snd) != KLE_SOLDIER_VT) { klog("brain: soldier %08lx is gone (dead or despawned); the game's destructor does NOT free its tactics (about 0x64 bytes leak per bot per round, accepted); we free nothing", (unsigned long)klbr_t[i].snd); klbr_t[i].state = 0; }
     }
     if (klbr_shadow) klbr_sync(now);
     if (klbr_probe || klbr_build) { if (!told || klbr_probe || klbr_build) klbr_probe_log(now, sm, role, mode, state, actor, snd, n); told = 1; }
@@ -1246,6 +1344,10 @@ static void klbr_init(void)
     klbr_trcap = (int)GetPrivateProfileIntA("Brain", "OnlineBrainTraitorMax", 0, klh_ini); if (klbr_trcap < 0) klbr_trcap = 0; if (klbr_trcap > 16) klbr_trcap = 16;
     { int nr = (int)GetPrivateProfileIntA("Brain", "OnlineBrainTraitorKillNear", 3000, klh_ini); klbr_trnear = (nr >= 100 && nr <= 100000) ? (float)nr : 3000.0f; }
     if (klbr_key("OnlineBrainTraitorTurn") && !klbr_trturn) klog("brain: OnlineBrainTraitorTurn needs OnlineBrainTraitor=1: off");
+    klbr_taon = klbr_traitor && klbr_key("OnlineBrainTraitorArcade");
+    if (klbr_key("OnlineBrainTraitorArcade") && !klbr_taon) klog("brain: OnlineBrainTraitorArcade needs OnlineBrainTraitor=1: off");
+    if (klbr_taon && klbr_trturn) { klog("brain: traitor arcade: OnlineBrainTraitorTurn ignored (Arcade=1: no team swap)"); klbr_trturn = 0; }
+    if (klbr_taon) klog("brain: OnlineBrainTraitorArcade=1 UNTESTED (recommended off): a bot the real Traitor tactic marks stays team Ally but may target and shoot HUMAN players (ZSoldier slot 111 on a private table, the Arcade gate swapped in for that call); OnlineBrainTraitorMax %d; friend-list gap (no hook): the fire line of a marked bot still lists humans as friends", klbr_trcap);
     if (klbr_trturn) klog("brain: OnlineBrainTraitorTurn=1 UNTESTED (recommended off): a bot the real Traitor tactic marks goes team Enemy (the Arcade team swap, pump-applied) and back on death / aboard / the round end; row 0 = %s; TraitorKillMax %d within %.0f m (0 = no cap; stock Arcade killed 5 crewmates in 22 s uncapped), turn cap %d (0 = off)",
                           klbr_trrow0 ? "the richest human" : "the host", klbr_trkillmax, (double)(klbr_trnear / 100.0f), klbr_trcap);
     if (klbr_key("PuppetOff") && !klbr_puppet) klog("brain: PuppetOff needs Build=1, Loot=1 and OnlineBrainBridge=1: off");
@@ -1262,7 +1364,7 @@ static void klbr_init(void)
     if (klbr_on) klog("brain: Probe %d, Build %d (recommended off until benched), Loot %d, Bridge %d, Board %d, BoardReal %d, Traitor %d, PuppetOff %d, Cops %d, Level %d; HOST round only, no code byte is patched", klbr_probe, klbr_build, klbr_loot, klbr_bridge, klbr_board, klbr_boardreal, klbr_traitor, klbr_puppet, klbr_cops, klbr_level);
     if (klbr_loot || klbr_board) {
         klog("brain: Loot / Board = 1 is UNTESTED: a DLL-owned shadow rules block (crew table, score block, van state mirrored from the host ledger) is swapped into [G+0x54] around ONE tactic call (host game thread, fault-guarded, restored in a __finally and verified)");
-        if (!klbr_make_shadow()) { klog("brain: shadow rules block could not be made: Loot / Board / Traitor / Bridge off"); klbr_trturn = 0; klbr_loot = klbr_board = klbr_traitor = klbr_bridge = klbr_boardreal = klbr_puppet = 0; }
+        if (!klbr_make_shadow()) { klog("brain: shadow rules block could not be made: Loot / Board / Traitor / Bridge off"); klbr_trturn = klbr_taon = 0; klbr_loot = klbr_board = klbr_traitor = klbr_bridge = klbr_boardreal = klbr_puppet = 0; }
     }
     if (klbr_key("RealRun") && !(klbr_bridge && klbr_shadow && klh_exe_ok)) klog("brain: RealRun needs Build=1, Loot=1, OnlineBrainBridge=1, the shadow block and the known kl2.exe: off");
     else if (klbr_key("RealRun")) {      /* the longjmp thunk: ONE IAT slot, MSVCR90.longjmp, 0xb10370 in the known exe */

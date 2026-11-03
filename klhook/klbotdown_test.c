@@ -82,6 +82,7 @@ enum { KLTT_REVIVE = 4, KLTT_ADREN = 5 }; static float kltt_get(int r, int k) { 
 /* ONLINE harness: the host test, the census and the clock are the part's own #ifndef hooks, replaced by fakes */
 static int g_ohost = 0, g_ncen; static DWORD g_ostate = 0x19;      /* g_ohost: 1 host, 0 not, -1 settings unreadable */ static DWORD g_cen[KLB_NREC]; static DWORD g_now = 5000;
 static DWORD klh_avt(DWORD a) { return klh_rd32(a); }
+static DWORD klh_svt(DWORD a) { return klh_rd32(a); }      /* klhook.c: maps the private ZSoldier table of OnlineBrainTraitorArcade; none here */
 static int fake_census(DWORD *out, int max) { int i; for (i = 0; i < g_ncen && i < max; i++) out[i] = g_cen[i]; return g_ncen < max ? g_ncen : max; }
 static int fake_host(DWORD *rules, DWORD *state) { if (g_ohost <= 0) return g_ohost; *rules = 0x2222; *state = g_ostate; return 1; }
 #define KLBD_CENSUS(out, max) fake_census(out, max)

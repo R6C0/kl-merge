@@ -59,7 +59,7 @@ static int klua_asker(int site, DWORD ebp, DWORD edi, DWORD esi, DWORD *player, 
     case KLUA_SITE_CONE:  s = edi >= 0x10000 ? klh_rd32(edi + 0x154) : 0; *player = esi; break;
     default: return -1;
     }
-    if (s < 0x10000 || klh_rd32(s) != (DWORD)(DWORD_PTR)KLH_VA(KLUA_SOLDIER_VT)) return -1;
+    if (s < 0x10000 || klh_svt(s) != (DWORD)(DWORD_PTR)KLH_VA(KLUA_SOLDIER_VT)) return -1;
     if (!(a = klh_rd32(s + 0x40)) || !(tp = klh_rd32(a + 0x54)) || !klh_rd(tp + 4, &t, 4)) return -1;
     *soldier = s;
     if (site == KLUA_SITE_LINE) {                                    /* 0x5706a0 keeps the same team at [ebp-8]: cross-check the frame reading once */

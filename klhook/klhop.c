@@ -215,7 +215,7 @@ static DWORD klv_soldier(DWORD actor, char why[100])
     DWORD soldier, blk, goal, held = 1, tmp; BYTE b576 = 0, raw[0x1c];
     if (!klh_rd(actor + 0x576, &b576, 1) || b576 != 1) { strcpy(why, "its actor takes no orders now ([actor+0x576] is not 1)"); return 0; }
     if (!klh_rd(actor + 0x770, &held, 4) || held) { strcpy(why, "somebody holds it as a human shield"); return 0; }
-    if (!(soldier = klh_rd32(actor + 0x77c)) || klh_rd32(soldier) != KLE_SOLDIER_VT || klh_rd32(soldier + 0x40) != actor) { strcpy(why, "actor +0x77c is not its ZSoldier"); return 0; }
+    if (!(soldier = klh_rd32(actor + 0x77c)) || klh_svt(soldier) != KLE_SOLDIER_VT || klh_rd32(soldier + 0x40) != actor) { strcpy(why, "actor +0x77c is not its ZSoldier"); return 0; }
     if (!(blk = klh_rd32(soldier + 0x64c)) || !klh_rd(blk, raw, sizeof raw) || *(DWORD *)(raw + 0x14) != soldier) { strcpy(why, "its soldier has no defend block"); return 0; }
     if (!(goal = klh_rd32(soldier + 0x648)) || !klh_rd(goal + 8, &tmp, 4)) { strcpy(why, "its soldier has no defend goal"); return 0; }
     if (!kle_callable(why)) return 0;
@@ -254,7 +254,7 @@ static int klv_order(DWORD actor, const float p[3], float set[3], char why[100])
 {
     DWORD soldier = klh_rd32(actor + 0x77c); float q[4];
     set[0] = set[1] = set[2] = 0;
-    if (!soldier || klh_rd32(soldier) != KLE_SOLDIER_VT) { strcpy(why, "actor +0x77c is not its ZSoldier"); return 0; }
+    if (!soldier || klh_svt(soldier) != KLE_SOLDIER_VT) { strcpy(why, "actor +0x77c is not its ZSoldier"); return 0; }
     if (!kle_callable(why)) return 0;
     q[0] = p[0]; q[1] = p[1]; q[2] = p[2]; q[3] = 0;
     ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)soldier, 0, q, 0, 1, 0);
@@ -479,7 +479,7 @@ static void klv_tick(int game_thread)
                 return;
             }
             if ((p = klv_free(hi, &s, now)) < 0) continue;                    /* every landing place is taken just now */
-            if ((soldier = klh_rd32(r->actor + 0x77c)) != 0 && klh_rd32(soldier) == KLE_SOLDIER_VT) have_blk = kle_block(soldier, blk);
+            if ((soldier = klh_rd32(r->actor + 0x77c)) != 0 && klh_svt(soldier) == KLE_SOLDIER_VT) have_blk = kle_block(soldier, blk);
             klv_r.done[hi][i] = 1; klv_r.doneat[hi][i] = KLB_T(now); klv_r.used[hi][p] = KLB_T(now); klv_r.next[hi] = (p + 1) % h->nto; klv_r.last_hop = KLB_T(now);
             if (klv.dry) {
                 klog("hop: bot %d (actor %08lx) hop %d: at From for %.1f s, node (%.0f, %.0f, %.0f): WOULD be put on To.%d (%.0f, %.0f, %.0f) - DRY RUN, nothing is called; its order (%.0f, %.0f, %.0f)%s",
@@ -488,7 +488,7 @@ static void klv_tick(int game_thread)
             }
             klt_teleport(r->actor, h->to[p]);
             kltr_tp(i, "hop", h->to[p], "carried hop: From to landing place To.n");
-            if (klv.orderto && soldier && klh_rd32(soldier) == KLE_SOLDIER_VT) {
+            if (klv.orderto && soldier && klh_svt(soldier) == KLE_SOLDIER_VT) {
                 /* OrderTo (2026-10-14, live on Retomoto: bots 4 / 5 / 7 were back at the lobby 2 s after the hop, falling - the soldier still
                    walked to its old place, which no path reaches from the landing): in the same tick its order becomes the landing place */
                 char why2[100]; float q[4], set[3];
