@@ -351,4 +351,16 @@ static int kbr_ad_pass(float sum, float limit) { return !(sum < limit); }
 /* a Traitor mark: bit 1 of rec+0x79 rose since the last poll (seen = the last polled byte) */
 static int kbr_ad_rose(unsigned seen, unsigned now_b) { return (now_b & 2u) && !(seen & 2u); }
 
+/* OnlineBrainTraitorArcade (2026-11-03; re/arcade_traitor_consequence_1103.md): the wrapped ZSoldier slot 111 (target score 0x882470) of a bot the real Traitor RUN marked.
+   ARCADE = run the original with the shadow rules swapped in (so 0x7f6850 and the record read at 0x8826b6 answer as in Arcade); PASS = call the original untouched. Only a marked bot of ours, in a host
+   round, with the feature on, with OnlineBrainTraitorTurn off (exclusive: Arcade never swaps the team), against a readable ZFFPlayer body (vtable 0xbb45f4, read through klh_pvt). */
+#define KBR_TA_PASS 0
+#define KBR_TA_ARCADE 1
+static int kbr_tarc_decide(int enabled, int marked, int shooterOurs, unsigned long targetVt, unsigned long playerVt, int targetReadable, int turnOn, int hostRound)
+{
+    if (!enabled || !hostRound || !marked || !shooterOurs || turnOn) return KBR_TA_PASS;
+    if (!targetReadable || targetVt != playerVt) return KBR_TA_PASS;
+    return KBR_TA_ARCADE;
+}
+
 #endif /* KLBRAIN_LOGIC_H */

@@ -762,7 +762,7 @@ static int kad_ba_graph(WORD *stand, WORD *scripted, WORD *dnd)
 static int kad_ba_actor_ok(DWORD actor, DWORD soldier)
 {
     BYTE d = 1;
-    return actor && klh_rd32(actor) == KLB_ACTOR_VT && soldier && klh_rd32(actor + 0x77c) == soldier && klh_rd32(soldier) == KAD_SOLDIER_VT &&
+    return actor && klh_rd32(actor) == KLB_ACTOR_VT && soldier && klh_rd32(actor + 0x77c) == soldier && klh_svt(soldier) == KAD_SOLDIER_VT &&
            klh_rd32(soldier + 0x40) == actor && klh_rd(actor + 0x64c, &d, 1) && !d;
 }
 
@@ -770,7 +770,7 @@ static int kad_ba_actor_ok(DWORD actor, DWORD soldier)
 static int kad_ba_release_body(void *arg)
 {
     struct kad_ba *b = (struct kad_ba *)arg; WORD st = 0xffff; DWORD ch;
-    if (!b->actor || klh_rd32(b->actor) != KLB_ACTOR_VT || klh_rd32(b->actor + 0x77c) != b->soldier || klh_rd32(b->soldier) != KAD_SOLDIER_VT) return 2;   /* he is gone: nothing to give back */
+    if (!b->actor || klh_rd32(b->actor) != KLB_ACTOR_VT || klh_rd32(b->actor + 0x77c) != b->soldier || klh_svt(b->soldier) != KAD_SOLDIER_VT) return 2;   /* he is gone: nothing to give back */
     if (!kad_ba_state(b->actor, &st) || st != b->scripted) return 3;                    /* the game's own state stands */
     ch = KLFC_CALL(DWORD (__fastcall *)(DWORD, DWORD, DWORD), KAD_BA_FINDCH)(b->actor, 0, b->clip);
     if (ch && klfc_ok(ch, 0x38)) KLFC_CALL(void (__fastcall *)(DWORD, DWORD, DWORD), KAD_BA_STOPCH)(b->actor, 0, ch);
@@ -1092,7 +1092,7 @@ static void kad_tick(int game_thread)
         if (k->actor != r->actor) { memset(k, 0, sizeof *k); k->actor = r->actor; k->by = -1; }
         if (r->status != 0) continue;           /* aboard / escaped / dead: out of play */
         if (i == sn.human) { if (i == hs && ds >= 1 && ds <= 3) d = 1; }     /* 2 = on the floor in kldown.c's knock-down (live, run v52_RTW2: 'down state 2'): down too */
-        else if ((r->flags & 1) && r->actor && klh_rd32(r->actor) == KLB_ACTOR_VT && (s = klh_rd32(r->actor + 0x77c)) != 0 && klh_rd32(s) == KAD_SOLDIER_VT && klh_rd32(s + 0x40) == r->actor) {
+        else if ((r->flags & 1) && r->actor && klh_rd32(r->actor) == KLB_ACTOR_VT && (s = klh_rd32(r->actor + 0x77c)) != 0 && klh_svt(s) == KAD_SOLDIER_VT && klh_rd32(s + 0x40) == r->actor) {
             klh_rd(r->actor + 0x64c, &d, 1);
             if (d) { dn_ = klh_rd32(s + 0x4b8); if (dn_ && klh_rd32(dn_ + 4) != s) dn_ = 0; dnd[i] = dn_; }
         }

@@ -151,7 +151,7 @@ static int klbd_bot_ok(DWORD actor, DWORD *soldier)
 {
     DWORD s;
     if (!actor || KLBD_AVT(actor) != KLB_ACTOR_VT) return 0;      /* KLBD_AVT: also an actor on one of the hook's private ZFFActor tables (OnlineCopToBot, the puppeteer) */
-    if (!(s = klh_rd32(actor + 0x77c)) || klh_rd32(s) != KLBD_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
+    if (!(s = klh_rd32(actor + 0x77c)) || klh_svt(s) != KLBD_SOLDIER_VT || klh_rd32(s + 0x40) != actor) return 0;
     *soldier = s;
     return 1;
 }

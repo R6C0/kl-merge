@@ -1558,7 +1558,7 @@ static float klbf_gu_rate_now(DWORD pl, DWORD now)
             nact++;
             if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4) || team != 2) { nteam++; continue; }
             if (!klbf_gu_anyhp && (!(hp = klh_rd32(o + 0x5fc)) || !klh_rd(hp + 4, &hv, 4) || !(hv > 0))) { nhp++; continue; }
-            if (!(snd = klh_rd32(o + 0x77c)) || klh_rd32(snd) != KLE_SOLDIER_VT) { nsold++; continue; }
+            if (!(snd = klh_rd32(o + 0x77c)) || klh_svt(snd) != KLE_SOLDIER_VT) { nsold++; continue; }
             if (klh_rd(o + 0x64c, &dn, 1) && dn) { ndn++; continue; }      /* himself down */
             if (!klh_rd(o + 0x460, bp, 12) || !kle_ok3(bp)) { npos++; continue; }
             dx = bp[0] - me[0]; dz = bp[2] - me[2]; dist = (float)sqrt(dx * dx + dz * dz);
@@ -1970,7 +1970,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 if (team != 2 || nb >= KLBF_OT_BOTS) continue;      /* review: the bot cap no longer hides the cops */
                 if (!(hp = klh_rd32(o + 0x5fc)) || !klh_rd(hp + 4, hv, 8) || !(hv[0] > 0)) continue;      /* alive */
                 klbf_ot_health(o, hp, hv);
-                if (!(snd = klh_rd32(o + 0x77c)) || klh_rd32(snd) != KLE_SOLDIER_VT) continue;
+                if (!(snd = klh_rd32(o + 0x77c)) || klh_svt(snd) != KLE_SOLDIER_VT) continue;
                 if (!klh_rd(o + 0x460, pos, 12) || !kle_ok3(pos)) continue;      /* feet, as klcrew_rt.c (ASSUMPTION: same base class as a player) */
                 klbr_see(o, snd, now);      /* klbrain.c [Brain]: the same Ally soldier list (no second scan) */
                 bots[nb].actor = o; bots[nb].soldier = snd; memcpy(bots[nb].pos, pos, 12); nb++;
