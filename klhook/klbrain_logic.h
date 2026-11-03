@@ -363,4 +363,16 @@ static int kbr_tarc_decide(int enabled, int marked, int shooterOurs, unsigned lo
     return KBR_TA_ARCADE;
 }
 
+/* OnlineBrainTraitorFireLine (2026-11-03; re/fireline_gap_1103.md H1): ZSoldier slots 113 / 114 (the fire-line friend list callers) of a marked bot.
+   mode 0 = off, 1 = LOG ONLY (original untouched), 2 = SWAP (original with the shadow rules in, as slot 111). Needs OnlineBrainTraitorArcade on (taOn), a marked bot of ours, a host round and
+   Turn off (exclusive, like slot 111). */
+#define KBR_TFL_PASS 0
+#define KBR_TFL_LOG 1
+#define KBR_TFL_SWAP 2
+static int kbr_tfl_decide(int mode, int taOn, int marked, int shooterOurs, int turnOn, int hostRound)
+{
+    if (mode < 1 || !taOn || !hostRound || !marked || !shooterOurs || turnOn) return KBR_TFL_PASS;
+    return mode >= 2 ? KBR_TFL_SWAP : KBR_TFL_LOG;
+}
+
 #endif /* KLBRAIN_LOGIC_H */

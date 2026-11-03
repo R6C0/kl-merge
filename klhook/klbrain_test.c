@@ -265,6 +265,16 @@ int main(void)
         CHECK(kbr_tarc_decide(1, 1, 1, PL, PL, 0, 0, 1) == KBR_TA_PASS, "tarc: unreadable target = PASS");
         CHECK(kbr_tarc_decide(1, 1, 1, 0xbb3bacul, PL, 1, 0, 1) == KBR_TA_PASS && kbr_tarc_decide(1, 1, 1, 0xbd0954ul, PL, 1, 0, 1) == KBR_TA_PASS, "tarc: a ZFFActor / ZSoldier target = PASS (bots untouched)");
     }
+    {   /* OnlineBrainTraitorFireLine decision */
+        CHECK(kbr_tfl_decide(1, 1, 1, 1, 0, 1) == KBR_TFL_LOG && kbr_tfl_decide(2, 1, 1, 1, 0, 1) == KBR_TFL_SWAP, "tfl: 1 = LOG, 2 = SWAP");
+        CHECK(kbr_tfl_decide(0, 1, 1, 1, 0, 1) == KBR_TFL_PASS && kbr_tfl_decide(-1, 1, 1, 1, 0, 1) == KBR_TFL_PASS, "tfl: key 0 / negative = PASS");
+        CHECK(kbr_tfl_decide(3, 1, 1, 1, 0, 1) == KBR_TFL_SWAP, "tfl: a value above 2 acts as SWAP");
+        CHECK(kbr_tfl_decide(2, 0, 1, 1, 0, 1) == KBR_TFL_PASS, "tfl: Arcade off = PASS");
+        CHECK(kbr_tfl_decide(2, 1, 0, 1, 0, 1) == KBR_TFL_PASS, "tfl: unmarked = PASS");
+        CHECK(kbr_tfl_decide(2, 1, 1, 0, 0, 1) == KBR_TFL_PASS, "tfl: shooter not ours = PASS");
+        CHECK(kbr_tfl_decide(2, 1, 1, 1, 1, 1) == KBR_TFL_PASS, "tfl: Turn on = PASS");
+        CHECK(kbr_tfl_decide(2, 1, 1, 1, 0, 0) == KBR_TFL_PASS, "tfl: not a host round = PASS");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }
