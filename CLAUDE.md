@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~03:40 - [ce] pq5 PASS (DM06 + DD05, 2 seats, 0 faults, round 2 everywhere), NO scripted RETURN: F3/F2 on the scoreboard -> AutoOpen send 1 at
+811 ms -> steps open FABuyWeaponsNewCategory (+310 ms, slot -6 cat -4) and FABuyWeaponsNewWeapon (+310 ms) -> 'page SHOWN' on all four seats, ~7 s after
+the press (was ~13.6 s with scripted RETURNs). Stack nests like RETURN (New > Category > Weapon). Install kit C:\kl_build_1024\pq_1103f_install (SHIP from
+79ce4c7c4 + PageQueue/AutoOpen/AutoOpenSteps/HintEveryShop + ScoreboardNextHint) runs after "end bs4" (start/end pqinst).
+
 2026-11-03 ~03:20 - [c9] bs3 SAFE PASS (4 seats, 0 asserts/faults): RealRun runs the REAL Arcade Loot RUN online for the first time. DM03 host 13776 RUN +
 163 EXIT resumes, swap-ins = swap-outs, 0 leaks/mismatches, mode!=4 0, [tac+0x10] 0 (71d099212 judge guards in). DD05 only 37 resumes. Behaviour NOT yet
 Arcade: grade w2vymslb2 = the hand-off never opened (evaluate picks a stack at +0x2c but +0x28 = 0), so puppeteer + real RUN steered the same bots: 0 grabs,
@@ -77,10 +82,6 @@ Arcade: grade w2vymslb2 = the hand-off never opened (evaluate picks a stack at +
 FABuyWeaponsNewWeapon itself (0x6bee50 as klsv_open), gated by kpq_aostep (top window, mode 0/1, slot -6, cat -4, busy, 300 ms; aborts 5 s / 2.5 s). Review (3 lenses):
 no defect; open point = selector init setting slot/cat is unverified in game (graceful abort if wrong). Kit pq5 (dll pq_1103e_test, no scripted RETURN) chained on
 "end bs3" (queue pq4 -> bs3 -> pq5); SHIP C:\kl_build_1024\pq_1103e_ship for the install once pq5 passes.
-
-2026-11-03 ~02:35 - [ce] pq3 SAFE PASS (2 maps x 2 seats): the queued press survives 0x1f -> 0x20 and AutoOpen opens Buy Weapons on every seat (~0.8 s), but
-the page never applied: the bench stopped in FABuyWeaponsNewCategory = shop mode 1; the page needs mode 2 (FABuyWeaponsNewWeapon). e686a9fb7 adds a 2 s
-'pagequeue: holding' line; kit pq4 (dll pq_1103d_test, scripts step into the weapon list) chained on "end bs2". Research: AutoOpen steps 0 -> 2 by itself.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
