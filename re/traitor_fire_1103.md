@@ -249,3 +249,12 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - `[task+0x15]` is a fired flag, not a damage result.
 - Still open: the bullet creation site, and a re-check of 0x8b84b0 and `[s+0x98]`.
 
+
+## bs28 (out_tfp_1103q, FireProbe + HoldFire on top of bs27 keys, DM03 + DD05): PASS 4 seats, 0 asserts, 0 faults
+- HoldFire: orders skipped DM03 165 (allowed after 6 s 1), DD05 197 (3). ZRunToPosShootingTask episodes: DM03 12 (longest 6047 ms), DD05 26 (longest 43625 ms, one still open at round end).
+- In EVERY FireProbe sample the body aim target [body+0x544] = 0 (prio 0, once 5; expiry 0), b576 01, b57d&0x10 1, [s+0x5a8] 0, [s+0x700] 0, mode 1. So SetAttackTarget (0x62a540) never registers:
+  the run task's burst path (0x4a84b7) never reaches its 6e4 call, or 6e4 bails. The fire child is never started (ZFireWeaponTask 0 on the stack; it would be a child anyway).
+- Holder: human 35c66030 flags 011 alternates with another holder 35ce6760 flags 010 (fails 0x616480: bit 0x10 = in range clear). Distance to the human 55-72 m. Tuning [[0x168d7c0]+0x38c/0x394/0x3a4/0x3ac] = 600 2.5 50 5.
+- hp 550 flat (DM03 6, DD05 4 CoverFire checks).
+- Candidates for the dead burst path: 0x449cf0([s+0x64c]) == 0xb; the 0.2 random roll (cannot block every time); d to the task destination <= 300 (the NEAR leg, which never shoots unless byte [task+0x24]);
+  holder flag flips between ticks; 0x6d9eb0 hold. Next probe: [task+0x14..0x1c] destination vs bot position, byte [task+0x24], the 0x449cf0 stance, [body+0x550] shot counter.

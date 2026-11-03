@@ -1,3 +1,8 @@
+2026-11-03 ~16:40 - [c9] bs28 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe + HoldFire, out_tfp_1103q). HoldFire works: 165/197 orders skipped, the shooting task now lives
+up to 6 s (DM03) / 43.6 s (DD05) instead of 1.5-2.5 s, yet the aim target [body+0x544] stayed 0 in EVERY sample: the task's burst path never calls SetAttackTarget,
+so it never fires. Human 55-72 m away; holder flips between the human (flags 011) and another (010). Tuning [+0x38c] 600 (6 m minimum). hp 550 flat (10/10).
+w6wznnvc5: the fire task runs as the run task's child; 0x6e3400 zeroes a ZFFPlayer-class attacker's hit unless +0x2726. w3q3kg8a4 builds FireProbe2 + TraitorByte.
+
 2026-11-03 ~16:15 - [c9] bs27 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; EntryFix + Restart, out_trs_1103p). DM03: EntryFix set once (015 -> 011 = cleared same-team 0x4),
 Restart cleared [s+0x74] 8 times, unfroze 0, hp flat. DD05: 0 CoverFire calls; the shooting chain also runs under normal goals (vt 0xbd0674).
 wqb7g1pxd: vt+0x6e4 (0x62a540) only SETS an aim target; the trigger is ZFireWeaponTask (vt 0xbd0bd4, tick 0x7c02b0) -> 0x8c1830 -> 0x8dc6a0 -> 0x8b84b0, aimed at holder [s+0xac].
