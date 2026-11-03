@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-03 ~02:35 - [ce] pq3 SAFE PASS (2 maps x 2 seats): the queued press survives 0x1f -> 0x20 and AutoOpen opens Buy Weapons on every seat (~0.8 s), but
+the page never applied: the bench stopped in FABuyWeaponsNewCategory = shop mode 1; the page needs mode 2 (FABuyWeaponsNewWeapon). e686a9fb7 adds a 2 s
+'pagequeue: holding' line; kit pq4 (dll pq_1103d_test, scripts step into the weapon list) chained on "end bs2". Research: AutoOpen steps 0 -> 2 by itself.
+
 2026-11-03 ~02:15 - [c9] bs1 B + C HOST CRASH c0000029 FIXED (f5f0ccd3e): Loot RUN 0x7bc7d0 / Board RUN 0x82f970 are setjmp coroutines (yield 0x55b9f0,
 longjmp to 0x168e4c8); our __try/__finally was live across the yield, and a resumed slice runs on the online rules (0x508ef0 = 0 -> fault). The DLL never
 calls them now; PuppetOff/BoardReal are forced off; new [Brain] ArcadePick = the puppeteer walks to the Arcade evaluate's chosen stack. bs2 (dll

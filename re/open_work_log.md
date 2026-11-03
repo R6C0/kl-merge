@@ -1,3 +1,8 @@
+2026-11-03 ~02:35 - [ce] pq3 SAFE PASS on DM06 + DD05, 2 seats, 0 asserts. The queued press now survives 0x1f -> 0x20 and AutoOpen send 1 (~813 ms after the page
+came up, ZW_SELECT3 to MercsFAStatusReadyHeistLBStatus) opens FABuyWeaponsNew on every seat. The page did not apply: the script stopped at FABuyWeaponsNewCategory
+= shop mode 1 (re/shop_cap.md: 0 slots, 1 categories, 2 weapon list), and kpq_step correctly waits for mode 2. e686a9fb7: 'pagequeue: holding' every 2 s. pq4 = pq3
+with dll pq_1103d_test (SHIP pq_1103d_ship) and a second tapuntil RETURN FABuyWeaponsNewWeapon; chained on "end bs2". Agent researches an AutoOpen step 0 -> 2.
+
 2026-11-03 ~02:15 - [c9] bs1: BS1B (DM03) and BS1C (DD05) both HOST CRASH c0000029 after the real Loot RUN ran (3-7 calls). Root cause: Loot RUN 0x7bc7d0 and Board RUN
 0x82f970 are stack-copying coroutines; yield 0x55b9f0 = _setjmp3([ctx+0xc]) + stack image to [ctx+0x40] + msvcr90 longjmp(0x168e4c8); resumer longjmps back at 0x63c8d1.
 klbr_framed's __try/__finally around RUN was live across the yield -> RtlUnwind STATUS_INVALID_UNWIND_TARGET. Even unwrapped, after the first yield RUN calls
