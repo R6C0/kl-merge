@@ -882,7 +882,7 @@ static void klbr_tr_pump(void)
     DWORD sm = 0, role = 0, mode = 0, state = 0; int i, j, rok; float d[KLBR_MAX];
     if (!klbr_trturn) return;
     rok = (sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) && sm == klbr_sm_round && klh_rd(sm + 0x54, &role, 4) && klh_rd(sm + 0x5c, &mode, 4) && klh_rd(sm + 0x70, &state, 4) && role == 2 && mode == 4 && state == KLB_ROUND;
-    if (klbr_trcap > 0) KLBR_P32(klbr_shadow + 0x338) = kbr_tr_cap_word(klbr_tt_turned, klbr_trcap);      /* optional hard cap: 0x43ffb0 tests [rules+0x338] < tuning[R+0x6c]; GUESS: that word is the turned count of the Arcade rules and the DLL may own it in the shadow (0x4322f0 never increments it) */
+    if (klbr_trcap > 0) KLBR_P32(klbr_shadow + 0x338) = kbr_tr_cap_word(klbr_tt_turned, klbr_trcap);      /* optional hard cap, a 0 / 0x7fff block switch (not a count): 0x43ffb0 tests [rules+0x338] < tuning[R+0x6c] (0/1/2/3/4 by level, 2 at level 6). Static check 11-03 (scratchpad traitor_cap.md): in Arcade the word stays 0 all round (ctor 0x835771 and round reset 0x8c7abe zero it; the only inc, 0x432310 in 0x4322f0, is dead code), so Arcade has no working count cap: its ~1 traitor comes from the evaluate's score >= 7.0 gate. Max=0 is the Arcade behaviour */
     for (i = 0; i < KLBR_MAX; i++) {      /* 1. back-conditions and the death booking, every pump */
         struct klbr_s *e = &klbr_t[i]; float pos[3]; int alive = 0, have = e->state == 1 && e->actor && klbr_bot_pos(e->actor, pos, &alive), ab = 0; long ty = 0;
         if (klbr_tt[i].on) {
