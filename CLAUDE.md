@@ -68,9 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-11-02 ~23:45 - [c9] Pushed d2cfc187b: [Names] OnlineLobby (lobby list names the exact OnlineSet=9 pick, off) + brain review fixes;
-ce's PageQueue commits carried. 5eb1a50fb: 'Host: map set' row in Mod settings (Dog Days maps / Dead Men maps / Mixed random = OnlineSet 0/2/9),
-overlay built offline, owner INSTALL bat C:\kl_build_1024\hostmenu_1102 (not run, never seen in game). PAUSE_QUEUE set: owner present, no live runs.
+2026-11-03 ~00:55 - [c9] Arcade brain online stage 2/3 pushed (443fc0806 + review fixes 2f66db9ca, doc re/arcade_brain_stage2_1103.md): real Loot/Board
+tactics drive online bots through a shadow rules frame; chosen stack = [tac+0x2c], stall watchdog 8 s, per-class fault kill, ret-8 install check. All keys
+off, NOT run live. Bench chain: ce pq2 -> br2 (stage 1 + lobby names) -> bs1 (ladder A dry / B PuppetOff / C BoardReal on DD05). Host map-set menu
+(5eb1a50fb, C:\kl_build_1024\hostmenu_1102 INSTALL bat) still not seen in game.
 
 2026-11-02 ~23:05 - [scheduled] Arcade-brain plan (re/arcade_brain_online_1102.md) offline support: re/arcade_brain_shadow_1102.md.
 Critic item 1 CLOSED: [sm+0x5c] = game type, 4 online (live log 'game mode 4'), frame writes only [sm+0x54]:=0 + [G+0x54]:=shadow.
@@ -81,14 +82,6 @@ is mirrored (states 1/2 reach 0x7bb2a0); Board RUN has no NULL check -> original
 2026-11-02 ~23:10 - [ce] After-match navigation (owner ask): PageQueue (F2/F3/page key on the scoreboard/round-over page is queued and opens
 with Buy Weapons), ScoreboardNextHint line, HintEveryShop, TEST CursorProbe for a clickable button; all off, 9c4d7da14 8e8308354 unpushed (c9 pushes).
 Bench pq1 (TEST dll C:\kl_build_1024\pq_1102_test) waits until the owner stops playing.
-
-2026-11-02 ~21:30 - [ce] Queue done, all seats 0 asserts. PASS: g1e, sp3/sp3b (no online shop lag), vb2 (loot voice on both seats, f2d848323), q35 (21 maps).
-NOT SHOWN: tp3 0 new cops after bot-fired triggers; rt9 DM09 0 boarded at 370 s even with OnlineLateExitRoute; es3 escort still 8 humans;
-co3 approach missed. Next: bot-trigger cop spawn path, DM09 walk speed/street deaths, es3 filter, co3 script.
-
-2026-11-02 ~13:55 - [ce] CH1 SAFE PASS: OnlineCrewHealth x2 host-only (DM03 280->560, DD05 350->700), 0 bot deaths, 7/7 boarded. TP2 census was
-blind (wrap, b0b1cbdea) -> f38a0d145 counts NEW cops per bot-fired trigger, kit tp3. RT6-RT8 ran a 250 s clock (no TimeAuto=6): inconclusive; merged
-OnlineLateExitRoute (878f9688b, off, NOT Arcade), kit rt9 at 370 s. 11 option + 5 page rows (d20f07522). Queue: g1e sp3 vb1 es3 co3 q35 mt3 rt9 tp3.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

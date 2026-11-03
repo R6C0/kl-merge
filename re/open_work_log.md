@@ -1,3 +1,8 @@
+2026-11-03 ~00:55 - [c9] Review fixes for the stage-2 brain pushed (2f66db9ca): the chosen stack is cand[[tac+0x2c]] at tac+0x14 (0x451b8a), not +0x28 (trigger box);
+van mirror uses KLH_RULES_SV_OK/CL_OK; sync no longer writes rec+0x10 down or +0x15; slow rule = 3 consecutive >50 ms frames; 2 faults in a class switch that
+tactic off; slots 45/202 replaced only when the original is the verified ret-8 function; slot 45 queues boarding for klbr_pump (no game call in a frame);
+watchdog: a handed-off bot must move 1 m / grab / board within 8 s or the puppeteer takes it back for 10 s. Kit bs1 (C:\kl_build_1024\week_1028\bs1) chained after br2.
+
 2026-11-03 - [brain2] Arcade brain online stage 2 / 3 built on branch arcade-brain2-1103 (klbrain.c, all keys off, UNTESTED live): framed Loot/Board/Traitor evaluate+run+exit
 (inert when not ours, Board EXIT needs the frame), shadow crew table + score block + van mirror, slot 202 candidates, DLL-run grab (klbr_pump), slot 45 board stub, traitor mirror (log only), cops = research.
 New [Brain] keys OnlineBrainBridge/Board/BoardReal/Traitor/Cops/Level, LootWinMs, BoardWinMs. PuppetOff now needs Loot + Bridge. Next: one host bench per key, in that order.
