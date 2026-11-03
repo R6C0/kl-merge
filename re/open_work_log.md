@@ -1,3 +1,8 @@
+2026-11-03 ~01:50 - [ce] CORRECTION to the 01:30 note: pq2 (dll with the 0x1f wait) lapsed the same way, so the cause was not the old dll. A stamp now | 1 read
+in the same GetTickCount ms gives now - stamp = 0xffffffff > the 60 s cap (the old 3 s early hire press lapsed instantly too). 95339b43f: kpq_age() + signed
+compares in klgun (3 s notice), klhud (10 s OSD wait), klhud_popup (loot ring), shoppage round hint / link16 / early report. 2-agent review: fix holds.
+pq3 restaged with C:\kl_build_1024\pq_1103c_test (SHIP pq_1103c_ship), still chained on "end bs1".
+
 2026-11-03 ~01:30 - [ce] PageQueue bench pq1: SAFE PASS (both seats, DM06 + DD05, 0 asserts, round 2 reached), feature FAIL: the queued press lapsed.
 DD05: a pq1 dll built seconds before 551e734fb. DM06: a stale 250 ms hpre on the 0x1f -> 0x20 edge -> 6495aefa5 (a queued press WAITS while the gate reads shut).
 pq2 (AutoOpen, old dll) is running; pq3 (C:\kl_build_1024\week_1028\pq3, dll pq_1103b_test, AutoOpen=1, no scripted click) is chained on "end bs1". Cursor hidden in 0x1f/0x20, so no clickable button.

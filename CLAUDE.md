@@ -79,9 +79,10 @@ NEW whole reads: Board RUN 0x82f970 (rules touches listed), traitor roll 0x43ffb
 0x4322f0 (odd). Shadow: record 0 = LOCAL HUMAN (0x6c7700 -> 0 in frame), bots 1..11; +0x34c byte 0 = live; +0x1dc stays 0 until the exit
 is mirrored (states 1/2 reach 0x7bb2a0); Board RUN has no NULL check -> originals only inside the frame. PC busy, nothing installed.
 
-2026-11-03 ~01:30 - [ce] After-match navigation: pq1 SAFE PASS (2 seats, DM06 + DD05, 0 asserts) but the queued page press lapsed: DD05 used a dll built
-before 551e734fb; DM06 hit a stale 250 ms hpre on the 0x1f -> 0x20 edge -> 6495aefa5 (a queued press waits while the gate reads shut). The cursor is hidden in 0x1f/0x20,
-so there is no clickable button: keys + [ShopPage] AutoOpen. pq2 (old dll) is running; pq3 (dll pq_1103b_test, AutoOpen=1, no scripted click) is chained on "end bs1".
+2026-11-03 ~01:50 - [ce] After-match navigation: pq1 + pq2 SAFE PASS (2 seats, DM06 + DD05, 0 asserts) but every queued page press lapsed 1 ms after queuing:
+now - (now | 1) wrapped to 0xffffffff in the same GetTickCount ms (95339b43f: kpq_age + signed timers in klgun/klhud/popup/shoppage) and a stale 250 ms
+hpre on the 0x1f -> 0x20 edge (6495aefa5). Cursor hidden in 0x1f/0x20 -> keys + [ShopPage] AutoOpen. pq3 (dll C:\kl_build_1024\pq_1103c_test,
+AutoOpen=1, no scripted click) chained on "end bs1"; SHIP pq_1103c_ship ready for the install once pq3 passes.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
