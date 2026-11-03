@@ -247,6 +247,12 @@ static int kbr_bs_live(int live, int staged, int has_bnz, unsigned long now, uns
     if (!staged || has_bnz) return 0;
     return !since || (unsigned long)(now - (since & ~1ul)) < grace_ms;
 }
+/* BoardHold: the real Board tactic keeps a bot for hold_ms after its LAST nonzero Board evaluate or RUN-resume stamp (bnzAt, |1 stamped), not only BoardWinMs: bs6 DD05 / DM03 showed bots whose RUN was
+   mid-walk with a bnzAt older than BoardWinMs (GUESS: the planner re-evaluates 0-2 times per second there). 0 hold_ms = off. Needs the van waiting (staged). */
+static int kbr_bs_hold(unsigned long now, unsigned long bnz_at, int staged, unsigned long hold_ms)
+{
+    return hold_ms && staged && bnz_at && (unsigned long)(now - (bnz_at & ~1ul)) < hold_ms;
+}
 static int kbr_bs_defer(int on, int live, unsigned long now, unsigned long *since, unsigned long max_ms)
 {
     if (!on || !live) return 0;

@@ -214,6 +214,9 @@ int main(void)
         CHECK(kbr_bs_defer(1, 1, 1000, &since, 6000) && since && kbr_bs_defer(1, 1, 6900, &since, 6000) && !kbr_bs_defer(1, 1, 7001, &since, 6000), "defer: live defers up to max_ms, then falls back");
         since = 0; CHECK(kbr_bs_defer(1, 1, 0xfffffff0ul, &since, 6000) && kbr_bs_defer(1, 1, 0x1000ul, &since, 6000) && !kbr_bs_defer(1, 1, 0x2000ul, &since, 6000), "defer: tick wrap safe");
         CHECK(kbr_bs_live(1, 0, 1, 5000, 1, 2500) && !kbr_bs_live(0, 0, 0, 5000, 0, 2500) && !kbr_bs_live(0, 1, 1, 5000, 0, 2500), "grace: live passes; no van wait or an earlier Board evaluate = no grace");
+        CHECK(kbr_bs_hold(5000, 2001, 1, 4500) && kbr_bs_hold(6400, 2001, 1, 4500) && !kbr_bs_hold(6500, 2001, 1, 4500), "hold: live for hold_ms after bnzAt (|1 stamp masked)");
+        CHECK(!kbr_bs_hold(5000, 2001, 0, 4500) && !kbr_bs_hold(5000, 0, 1, 4500) && !kbr_bs_hold(5000, 2001, 1, 0), "hold: off without van wait, without a stamp, or hold 0");
+        CHECK(kbr_bs_hold(0x100ul, 0xfffffff1ul, 1, 4500) && !kbr_bs_hold(0x2000ul, 0xfffffff1ul, 1, 4500), "hold: tick wrap safe");
         CHECK(kbr_bs_live(0, 1, 0, 5000, 0, 2500) && kbr_bs_live(0, 1, 0, 5000, 3001, 2500) && !kbr_bs_live(0, 1, 0, 5600, 3001, 2500), "grace: no evaluate yet waits grace_ms from the deferral start");
         CHECK(kbr_bs_live(0, 1, 0, 0x100ul, 0xfffffff1ul, 2500), "grace: tick wrap safe");
     }
