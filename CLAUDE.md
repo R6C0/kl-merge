@@ -68,9 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
-2026-11-03 ~02:00 - [c9] Arcade brain bench bs1: A (dry) SAFE PASS; B (PuppetOff) HOST CRASH c0000029 ntdll 3.7 s after the real Loot RUN took 7 bots
-(stack 0x719850 recursion -> 0x9272d0 -> 0x796ff0 -> msvcr90; dinput8 not on it). Root-cause workflow wf_a07653f5-196. 6ae1ba85b pushed: now|1 wrap
-made the hand-off flap every even ms. bs2 (B+C with that dll) chained on "end nm1". Keep PuppetOff/BoardReal OFF for players until this is fixed.
+2026-11-03 ~02:15 - [c9] bs1 B + C HOST CRASH c0000029 FIXED (f5f0ccd3e): Loot RUN 0x7bc7d0 / Board RUN 0x82f970 are setjmp coroutines (yield 0x55b9f0,
+longjmp to 0x168e4c8); our __try/__finally was live across the yield, and a resumed slice runs on the online rules (0x508ef0 = 0 -> fault). The DLL never
+calls them now; PuppetOff/BoardReal are forced off; new [Brain] ArcadePick = the puppeteer walks to the Arcade evaluate's chosen stack. bs2 (dll
+out_brain3_1103a_test, ArcadePick=1, DM03 + DD05) chained on "end nm1". Real Arcade movement online still needs a SHIP-legal RUN path (research).
 
 2026-11-03 ~00:55 - [c9] Arcade brain online stage 2/3 pushed (443fc0806 + review fixes 2f66db9ca, doc re/arcade_brain_stage2_1103.md): real Loot/Board
 tactics drive online bots through a shadow rules frame; chosen stack = [tac+0x2c], stall watchdog 8 s, per-class fault kill, ret-8 install check. All keys

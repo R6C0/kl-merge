@@ -1,3 +1,9 @@
+2026-11-03 ~02:15 - [c9] bs1: BS1B (DM03) and BS1C (DD05) both HOST CRASH c0000029 after the real Loot RUN ran (3-7 calls). Root cause: Loot RUN 0x7bc7d0 and Board RUN
+0x82f970 are stack-copying coroutines; yield 0x55b9f0 = _setjmp3([ctx+0xc]) + stack image to [ctx+0x40] + msvcr90 longjmp(0x168e4c8); resumer longjmps back at 0x63c8d1.
+klbr_framed's __try/__finally around RUN was live across the yield -> RtlUnwind STATUS_INVALID_UNWIND_TARGET. Even unwrapped, after the first yield RUN calls
+0x508ef0 (0 online) then 0x78f470(ecx=0) -> fault. f5f0ccd3e: never call Loot/Board RUN (kbr_orig_ok), never show Loot/Board > 0 to the AI, PuppetOff/BoardReal
+forced off, new [Brain] ArcadePick (puppeteer prefers the evaluate's chosen stack). bs2 restaged with it. Open: SHIP-legal real RUN (needs 0x508ef0 non-null per slice).
+
 2026-11-03 ~02:00 - [c9] bs1 ladder: BS1A (dry, DM03) SAFE PASS 2 seats, 0 asserts, ~2250 Loot evaluates, 0 evaluate faults. BS1B (PuppetOff) HOST CRASH
 c0000029 at ntdll+0xa5a30 3.7 s after the real Loot RUN took 7 bots (run calls loot 7, frames 14), stack 0x55e6e0 -> 0x6741a0 -> 0x719850 x7 -> 0x9272d0 ->
 0x796ff0 -> msvcr90, dinput8 not on it; root-cause workflow wf_a07653f5-196 running. Gate diag fired: Loot evaluate 1.0 with a chosen stack but [tac+0x28] = 0.
