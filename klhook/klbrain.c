@@ -1137,6 +1137,32 @@ static void klbr_tfl_log(struct klbr_s *e, DWORD self, int which, int mode, DWOR
     klbr_ta[ix].nlog[which]++;
     klog("brain: traitor fireline: slot %d bot %d soldier %08lx %s: returned %08lx%s", which ? KLBR_TFL_S114 : KLBR_TFL_S113, ix, (unsigned long)self, mode == 2 ? "SWAPPED" : "log only", (unsigned long)ret, which ? "" : " (meaningless for slot 113)");
 }
+/* ---- OnlineBrainTraitorHolderFix (2026-11-03, workflow w53r6g2xi, verified by its third pass; UNTESTED, default off). ----------------------------------------------------------------------------------
+   The marked bot's shots come from its tasks, not 0x7088c0: ZRunToPosShootingTask 0x4a7e60 (0x4a84ff / 0x4a855d / 0x4a85a1) and ZAttackTarget (0x4f494f / 0x4f4db1) call the fire test 0x616480
+   (thiscall ecx = &holder flags [s+0xa8]: bit0 AND 0x10 set, 0x4 / 0x40 / 0x200 clear) before the body shot [[s+0x40]+0x6e4](handle, 2, f). bs20: the human holder sat at 0x05 (0x4 set, 0x10 clear).
+   0x4 comes from the same-team sweep in 0x5706a0 (a same-team alive body on the line blocks, and nothing excludes the target itself; the session swap cannot change that stage); slot 113's quick
+   path rewrites 0x4 on every call (0x76762e), so the fix is reapplied after every call. 0x10 = dist < range strictly (0x767a9b), range = 0x71e050 (thiscall ecx = [s+0x6a0], no args, float in st0:
+   2 x weapon template range, else 10000.0); we recompute it with the actors' +0x460 positions (GUESS: the engine measures eye y+170 to aim y+150, close enough for a cap) and set 0x10 only inside it.
+   Data write to one flag dword of the marked bot only; no code patch, no call other than the pure read 0x71e050 under __try. */
+#define KLBR_HX_RANGE 0x0071e050
+typedef float (__fastcall *klbr_rangefn)(DWORD, DWORD);
+static int klbr_hxon; static long klbr_hx_set, klbr_hx_far, klbr_hx_flt;
+static void klbr_hx_apply(struct klbr_s *e, DWORD self)
+{
+    DWORD hf, hp, hh, f6a0; float bp[3], tp[3], range = -1.0f; int alive = 0; double d;
+    if (!klbr_hxon || !e || klh_rd32(self + 0x698) <= 0xffff) return;
+    hf = klh_rd32(self + 0xa8); hp = klh_rd32(self + 0xac); hh = klh_rd32(self + 0xb0);
+    if (!hh || !(hf & 1) || hp <= 0xffff || klh_pvt(hp) != 0x00bb45f4u || klbr_hl_body(hp) || klbr_hl_find(hp)) return;      /* only a human ZFFPlayer in the holder */
+    if (!klbr_bot_pos(e->actor, bp, &alive) || !klh_rd(hp + 0x460, tp, 12) || !kle_ok3(tp)) return;
+    if ((f6a0 = klh_rd32(self + 0x6a0)) > 0xffff && klbr_hx_flt < 3) {
+        __try { range = ((klbr_rangefn)(DWORD_PTR)KLH_VA(KLBR_HX_RANGE))(f6a0, 0); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { range = -1.0f; if (++klbr_hx_flt >= 3) klog("brain: traitor holderfix: 0x71e050 faulted 3 times: range read off (no 0x10 set)"); }
+    }
+    d = kle_dist(bp, tp);
+    if (!(range > 0.0f && range < 1.0e7f) || !(d < range)) { klbr_hx_far++; hf &= ~0x4ul; }      /* out of range / unknown: only the self-block bit goes */
+    else { klbr_hx_set++; hf = (hf & ~0x4ul) | 0x10ul; }
+    KLBR_P32(self + 0xa8) = hf;      /* just read through klh_rd: the live soldier, on the game thread */
+}
 static DWORD __fastcall klbr_w_fl113(DWORD self, DWORD edx, DWORD a1)      /* thiscall + 1 stack arg, ret 4 */
 {
     klbr_fl113fn org = (klbr_fl113fn)(DWORD_PTR)klbr_tfl_org113; DWORD r = 0; int sw = 0, m, flt = 0; struct klbr_s *e;
@@ -1149,6 +1175,7 @@ static DWORD __fastcall klbr_w_fl113(DWORD self, DWORD edx, DWORD a1)      /* th
         __except (EXCEPTION_EXECUTE_HANDLER) { flt = 1; }      /* GUESS: x87 stack left as is after a fault (no _fpreset: it would also reset the game's control word) */
     }
     if (klbr_tfl_end(self, sw, flt, KLBR_TFL_S113)) return 0;
+    klbr_hx_apply(e, self);      /* OnlineBrainTraitorHolderFix: after the swap is out, so the engine's own holder write stands and only our bits change */
     klbr_tfl_log(e, self, 0, m, r);
     return r;
 }
@@ -1307,7 +1334,8 @@ static void klbr_hitlog_summary(void)
     }
     if (klbr_hlon) { int j; for (j = 0; j < KLBR_MAX; j++) if (klbr_atk_calls[j]) klog("brain: traitor attack: bot %d round total: Attack (slot 83) called %ld time(s), %ld with a nonzero handle", j, klbr_atk_calls[j], klbr_atk_nz[j]); }
     if (klbr_hfon) klog("brain: traitor humanfirst: round total: police scores nulled %ld (a seen human was in the list), passed %ld", klbr_hf_null, klbr_hf_pass);
-    klbr_hf_null = klbr_hf_pass = 0;
+    if (klbr_hxon) klog("brain: traitor holderfix: round total: human holder flags fixed in range (0x4 cleared, 0x10 set) %ld, out of range / range unknown (0x4 cleared only) %ld, range faults %ld", klbr_hx_set, klbr_hx_far, klbr_hx_flt);
+    klbr_hf_null = klbr_hf_pass = 0; klbr_hx_set = klbr_hx_far = 0;
     memset(klbr_atk_n, 0, sizeof klbr_atk_n); memset(klbr_atk_calls, 0, sizeof klbr_atk_calls); memset(klbr_atk_nz, 0, sizeof klbr_atk_nz);
     memset(&klbr_hl, 0, sizeof klbr_hl); klbr_hl_s15 = 0;
 }
@@ -1396,6 +1424,13 @@ static void klbr_hl_pump(DWORD now)
                 klog("brain: traitor target: bot %d GATES (0x7088c0): +0x72c %ld clock %ld; +0x88 %lu (want 2); team %ld (want !=0); [[+0x678]+8] %ld (want 0/4); 0x658050 %s; [[+0x4a8]+8] %ld (%s); holder handle %08lx bit0 %lu bit7 %lu; Idle %08lx state %ld, Attack %08lx state %ld",
                      i, (long)klh_rd32(e->snd + 0x72c), (long)clk, (unsigned long)klh_rd32(e->snd + 0x88), (long)team, s678, b658 ? "BLOCKS" : "ok", v4a8, (v4a8 != 0 && v4a8 != 4) ? "BLOCKS" : "ok",
                      (unsigned long)hh, (unsigned long)(hf & 1), (unsigned long)((hf >> 7) & 1), (unsigned long)gi, gi > 0xffff ? (long)klh_rd32(gi + 8) : -1L, (unsigned long)ga, ga > 0xffff ? (long)klh_rd32(ga + 8) : -1L);
+                if (hp > 0xffff) {      /* w53r6g2xi: the 0x5706a0 sweep lists E when [[E+0x54]+4] == the bot's team and byte [E+0x576] == 1 (the target blocks itself); fire test 0x616480 wants 0x11 with 0x4/0x40/0x200 clear */
+                    DWORD h54 = klh_rd32(hp + 0x54); BYTE a576 = 0xff;
+                    klh_rd(hp + 0x576, &a576, 1);
+                    klog("brain: traitor target: bot %d TEAMS bot %ld holder %ld (%s) holder +0x576 %d +0x774 %08lx [0xce89b0] %08lx; fire test 0x616480 on holder flags %03lx: %s",
+                         i, (long)team, h54 > 0xffff ? (long)klh_rd32(h54 + 4) : -1L, (h54 > 0xffff && klh_rd32(h54 + 4) == team) ? "SAME: the sweep lists the target" : "differ", (int)a576,
+                         (unsigned long)klh_rd32(hp + 0x774), (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(0xce89b0)), (unsigned long)(hf & 0x3ff), ((hf & 0x11) == 0x11 && !(hf & 0x244)) ? "PASS" : "FAIL");
+                }
             }
         }
     }
@@ -1915,6 +1950,9 @@ static void klbr_init(void)
     if (klbr_key("OnlineBrainTraitorHitLog") && !klbr_hlon) klog("brain: OnlineBrainTraitorHitLog needs the Brain on: off");
     klbr_hfon = klbr_taon && klbr_key("OnlineBrainTraitorHumanFirst");
     if (klbr_key("OnlineBrainTraitorHumanFirst") && !klbr_hfon) klog("brain: OnlineBrainTraitorHumanFirst needs OnlineBrainTraitorArcade: off");
+    klbr_hxon = klbr_tflmode && klbr_key("OnlineBrainTraitorHolderFix");
+    if (klbr_key("OnlineBrainTraitorHolderFix") && !klbr_hxon) klog("brain: OnlineBrainTraitorHolderFix needs OnlineBrainTraitorFireLine (slot 113 wrapped): off");
+    if (klbr_hxon) klog("brain: OnlineBrainTraitorHolderFix=1 UNTESTED (recommended off): after a marked bot's slot 113, a human holder loses the self-block bit 0x4 and gains 0x10 inside the engine's weapon range (0x71e050)");
     if (klbr_hlon) klog("brain: OnlineBrainTraitorHitLog=1 (recommended off): READ ONLY, counts hits of tagged bots (marked traitor vs other) on humans in the rules' damage hook (slot 15); one 'traitor hits:' line per round end");
     klbr_clon = klbr_taon && klbr_key("OnlineBrainTraitorCandLog");
     if (klbr_key("OnlineBrainTraitorCandLog") && !klbr_clon) klog("brain: OnlineBrainTraitorCandLog needs OnlineBrainTraitorArcade=1 (the census sits in the private slot 111): off");
