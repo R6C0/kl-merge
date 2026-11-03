@@ -1,3 +1,7 @@
+2026-11-03 ~15:15 - [c9] bs25 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; guarded AttackHandle on both maps, out_tag_1103n). Guards never skipped (stale 0).
+ZAttackTarget runs once (DM03: a child task ran, stack 3 top state 2), ends within ~2 s, and every later call leaves it terminated (state 4 -> 4) yet current:
+re-adding does not restart it. Human hp flat 15/15. Workflows w0bnwus0v (B-list entry, child fire path) and wuwffuc4b (goal restart) running.
+
 2026-11-03 ~14:55 - [c9] bs24 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_tah_1103m). DM03 (CoverFire, handle 0): 7 calls, CoverFire current and
 sometimes running (state 2), human hp 550 -> 550 in 6/6 reads. DD05 (AttackHandle): 10 calls, ZAttackTarget +0x658 becomes current but is terminated (0 -> 4) within 0.6 s;
 once a child task ran (stack 3, top state 2); hp flat 8/8. The bench human idled ~42 m away and 6 m higher (sight GUESS). +0x88 stays 1, Idle 4.

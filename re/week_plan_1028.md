@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-03 15:15 c9: bs25 PASS 0 faults: guarded AttackHandle on both maps; ZAttackTarget runs once then stays terminated though current; hp flat; workflows w0bnwus0v + wuwffuc4b.
 - 11-03 14:55 c9: bs24 PASS 0 faults: ZAttackTarget (AttackHandle) becomes the marked bot's current goal but ends within 0.6 s; human health flat on both maps; workflow wedrgngwi on why.
 - 11-03 14:40 c9: bs23 PASS 0 faults: CoverFire becomes the marked bot's current goal, 0 hits seen (damage hook never entered); wee6blb1x: shooting tasks only under ZAttackTarget (slot 83, nonzero handle); 5400b88e7 AttackHandle + health readout in bs24.
 - 11-03 14:05 c9: bs22 PASS 0 faults: HolderFix makes the human holder pass the fire test (DD05: human holder in 22/49 lines); still 0 hits (Idle goal terminated); acbe108da HumanOnly + CoverFire in bs23.

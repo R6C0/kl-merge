@@ -142,3 +142,11 @@ Follows re/traitor_handoff_1103.md. Disassembly was read with capstone. Three pa
 - Crash risk CONFIRMED: no null check on 0x8ccde0's result (0x4f44a7, 0x8bd468, 0x426014). A leaver / dead human whose node is freed -> AV (whether FA frees it is a GUESS).
 - Guards added (bs25, out_tag_1103n): AttackHandle calls only when 0x8ccde0(handle) == the holder pointer and the +0x658 goal state is 0 or 4; skips are counted ("stale handle").
 - Next lever candidate: set 0x11 in the bot's B-list entry for the human (body+0x698, lookup 0x4c75f0) so the rewrite keeps the fire bits. Entry layout not traced yet.
+
+## bs25 (out_tag_1103n, guarded AttackHandle on DM03 + DD05): PASS 4 seats, 0 asserts, 0 faults
+- Calls: DM03 10, DD05 9; skipped (busy / stale) 0, stale handle 0: the guards never fired.
+- First call: ZAttackTarget state 0, becomes current; DM03 once ran a child (stack 3, top 54538e60 state 2, 14:59:33). Within ~2 s the goal is state 4.
+- Every later call: goal state 4 -> 4, [s+0x74] == the goal ("it is current"), stack 1, top = the goal in state 4. Re-adding a terminated goal does not reset it,
+  so the bot may sit on a dead goal (frozen-bot risk from wedrgngwi item 6). Human hp 550 flat on every read (DM03 6, DD05 9).
+- Human ~ (-1214 702 -12237) on DM03, (-11803 1007 583) on DD05.
+- Next: wuwffuc4b (how the engine resets a state-4 goal, why it terminated) and w0bnwus0v (B-list entry flags for the human).
