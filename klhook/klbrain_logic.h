@@ -161,6 +161,28 @@ static void kbr_hand(int puppet_on, int built, int board_on, unsigned long now, 
     *board_real = b; *loot_real = b ? 0 : l;
 }
 
+/* hand-off stall watchdog (review 11-03): a bot handed to the real tactic must show progress (moved >= 1 m since the last progress, a grab on, a slot-45 call) within stall_ms,
+   else the hand-off is revoked for revoke_ms and the puppeteer steers it again. since = start of the current stall (0 none), until = revoked until (0 none). -> 1 the hand-off may stand. */
+static int kbr_watch(unsigned long now, int handed, int progress, unsigned long *since, unsigned long *until, unsigned long stall_ms, unsigned long revoke_ms)
+{
+    if (*until) { if ((long)(now - *until) < 0) { *since = 0; return 0; } *until = 0; }
+    if (!handed || progress) { *since = 0; return handed; }
+    if (!*since) *since = now | 1ul;
+    if ((unsigned long)(now - (*since & ~1ul)) >= stall_ms) {      /* the |1 marker may sit 1 ms ahead of now */ *since = 0; *until = (now + revoke_ms) | 1ul; return 0; }
+    return 1;
+}
+
+/* the slow-frame rule (review 11-03): only `need` CONSECUTIVE frames over limit_us trip it (one dump write or hitch does not) -> 1 trip now */
+static int kbr_slow_rule(unsigned us, unsigned limit_us, int *run, int need)
+{
+    if (us <= limit_us) { *run = 0; return 0; }
+    return ++*run >= need;
+}
+
+/* the Loot tactic's chosen stack (review 11-03, read at 0x451b8a..0x451b94): [tactic+0x2c] = index 0..4 into the candidate array at tactic+0x14; [tactic+0x28] is the TRIGGER BOX
+   (from 0x454c20), not the money ctrl. cand = the 5 dwords at +0x14. -> the ctrl, 0 when the index is out of range */
+static unsigned long kbr_chosen(const unsigned long *cand, unsigned long idx) { return idx < 5 ? cand[idx] : 0; }
+
 /* keep the cap nearest objects of obj[0..n) by squared distance d2 (ties: the lower index first), written to out[0..cap), tail zero-filled; returns how many were kept */
 static int kbr_cand_sort(const unsigned long *obj, const float *d2, int n, unsigned long *out, int cap)
 {

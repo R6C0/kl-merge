@@ -138,6 +138,28 @@ int main(void)
             kbr_hand(0, 1, 1, 10000, 9000, 0, 0, 1500, 2000, &lr, &br);
             CHECK(lr == 0, "PuppetOff off: never released");
         }
+        /* stall watchdog */
+        {
+            unsigned long since = 0, until = 0, cc[5] = { 11, 22, 33, 44, 55 }; int run = 0;
+            CHECK(kbr_watch(1000, 1, 0, &since, &until, 8000, 10000) == 1 && since == (1000ul | 1ul), "stall starts, hand-off stands");
+            CHECK(kbr_watch(5000, 1, 1, &since, &until, 8000, 10000) == 1 && since == 0, "progress clears the stall");
+            CHECK(kbr_watch(6000, 1, 0, &since, &until, 8000, 10000) == 1, "new stall");
+            CHECK(kbr_watch(13999, 1, 0, &since, &until, 8000, 10000) == 1, "just under the limit");
+            CHECK(kbr_watch(14000, 1, 0, &since, &until, 8000, 10000) == 0 && until != 0, "stall limit: revoked");
+            CHECK(kbr_watch(20000, 1, 1, &since, &until, 8000, 10000) == 0, "revoked even with progress");
+            CHECK(kbr_watch(24001, 1, 0, &since, &until, 8000, 10000) == 1 && until == 0, "revoke ends, hand-off again");
+            CHECK(kbr_watch(25000, 0, 0, &since, &until, 8000, 10000) == 0 && since == 0, "not handed: nothing to watch");
+            since = 0; until = 0;
+            CHECK(kbr_watch(0xfffff000ul, 1, 0, &since, &until, 8000, 10000) == 1, "wrap: stall starts");
+            CHECK(kbr_watch(0x00001000ul + 0x1000ul, 1, 0, &since, &until, 8000, 10000) == 0, "wrap: limit reached across 0");
+            CHECK(kbr_watch(0x00001000ul + 0x2000ul, 1, 0, &since, &until, 8000, 10000) == 0, "wrap: still revoked");
+            /* slow rule */
+            CHECK(!kbr_slow_rule(60000, 50000, &run, 3) && !kbr_slow_rule(60000, 50000, &run, 3) && kbr_slow_rule(60000, 50000, &run, 3), "three consecutive slow frames trip");
+            run = 0;
+            CHECK(!kbr_slow_rule(60000, 50000, &run, 3) && !kbr_slow_rule(60000, 50000, &run, 3) && !kbr_slow_rule(100, 50000, &run, 3) && !kbr_slow_rule(60000, 50000, &run, 3), "a fast frame resets the run");
+            /* chosen stack */
+            CHECK(kbr_chosen(cc, 0) == 11 && kbr_chosen(cc, 4) == 55 && kbr_chosen(cc, 5) == 0 && kbr_chosen(cc, 0xffffffffu) == 0, "chosen = cand[idx], range checked");
+        }
         /* cand_sort */
         ob[0] = 11; ob[1] = 22; ob[2] = 33; ob[3] = 44; ob[4] = 55; ob[5] = 66; ob[6] = 77; ob[7] = 0;
         d2[0] = 50; d2[1] = 10; d2[2] = 30; d2[3] = 20; d2[4] = 40; d2[5] = 5; d2[6] = 60; d2[7] = 1;

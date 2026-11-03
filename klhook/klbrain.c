@@ -7,9 +7,9 @@
                              0x6ab250 does when 0x7f6850() is true (which it is not on online roles 2 and 3), store them, put them in the AI vectors, and give each a DLL-owned vtable copy whose
                              slots 2, 3 and 11 are logging wrappers that call the originals (no frame swap, no behaviour change: an online evaluate answers 0.0 because 0x508ef0 answers NULL).
      [Brain] Loot=0|1        (recommended off; UNTESTED, needs Build=1) STAGE 1b: a zero-filled DLL-owned "shadow" rules block with a vtable copy of the Heist rules (0xbd3514) is swapped into [G+0x54]
-                             and the role [sm+0x54] is set to 0 (so 0x7f6850 answers true) for the length of ONE ZLootTactic evaluate call (slot 11), host game thread only, re-entry guard, put back in a
-                             __finally, the call itself under a fault guard. Loot RUN (slot 2) is NOT swapped (its argument bytes are unknown, a naked tail-jump cannot restore afterwards): it only logs.
-                             The shadow carries no money, so this proves the swap path (item 2 of the critic list) and cannot yet make a bot loot. Startup logs "UNTESTED".
+                             and the role [sm+0x54] is set to 0 (so 0x7f6850 answers true) for the length of ONE Loot tactic call (evaluate, run or exit: all plain `ret`, no stack argument),
+                             host game thread only, depth-counted, put back in a __finally, the call itself under a fault guard. Without Bridge the shadow carries no money, so the
+                             evaluate answers 0 and no bot loots; with Bridge it carries the crew table and the 5 nearest stacks (stage 2 below). Startup logs "UNTESTED".
      [Brain] PuppetOff=0|1   (recommended off; needs Build=1 + Loot=1) klbotfill.c OnlineTactics (the puppeteer) skips its per-bot movement / loot / stack walk for a bot while that bot's REAL
                              Loot evaluate returned > 0 within PuppetWindowMs (default 5000): a bot whose brain wants nothing is still steered, it never stands idle. DropTake's action, OnlineBank,
                              OnlineTriggers and the van code are outside that loop and keep running.
@@ -83,7 +83,8 @@ static DWORD klbr_game_tid;             /* the thread of the hook tick (SteamAPI
 static int klbr_verdict_n;
 
 /* ---- the soldier tags ------------------------------------------------------------------------------------------------------------------------------------------------------------- */
-struct klbr_s { DWORD snd, actor, tac[3], seenAt, builtAt, nzAt, bnzAt; int state, rec, traitor; };      /* rec: shadow crew record 1..11 (0 none); bnzAt: tick of the last Board evaluate > 0 */      /* state 0 free, 1 built by us, 2 refused (told once), 3 pending build */
+struct klbr_s { DWORD snd, actor, tac[3], seenAt, builtAt, nzAt, bnzAt, wSince, wUntil, s45At; float wpos[3]; int state, rec, traitor, flt, wHas, pendBoard; };      /* rec: shadow crew record 1..11 (0 none); bnzAt: tick of the last Board evaluate > 0;
+                                                                                                    wSince / wUntil / wpos: the hand-off stall watchdog (kbr_watch); flt: framed faults of this bot (2 = never handed again); pendBoard: slot 45 asked, the pump boards it */      /* state 0 free, 1 built by us, 2 refused (told once), 3 pending build */
 static struct klbr_s klbr_t[KLBR_MAX];
 static int klbr_nbuilt, klbr_nrefused, klbr_nvec_fail;
 static DWORD klbr_sm_round;             /* the session object of the round the table belongs to */
@@ -131,7 +132,7 @@ static volatile LONG klbr_ev_nz[3], klbr_ev_flt[3], klbr_run_flt[3]; static floa
 static DWORD klbr_vt_copy[3];           /* the DLL-owned vtable copies (pointer to slot 0) */
 static int klbr_vt_ready;
 static DWORD klbr_shadow, klbr_shadow_vt, klbr_crew, klbr_free, klbr_score, klbr_cli;   /* the shadow rules block W and the parts of it */
-static int klbr_sw_told, klbr_swaps, klbr_sw_flt, klbr_sw_bad, klbr_frames, klbr_slow; static unsigned klbr_us_max;
+static int klbr_sw_told, klbr_swaps, klbr_sw_flt, klbr_sw_bad, klbr_frames, klbr_slow, klbr_slow_run, klbr_nrevoke, klbr_crash_told; static unsigned klbr_us_max;
 static int klbr_depth;                  /* swap frame nesting depth, game thread only (kbr_frame_enter / leave) */
 static DWORD klbr_sv_G, klbr_sv_sm, klbr_sv_rules, klbr_sv_role;      /* what the OUTERMOST frame saved */
 static DWORD klbr_sync_at; static int klbr_van = -1;      /* last sync tick; van state byte mirrored from the real rules (-1 never) */
@@ -206,6 +207,7 @@ static float klbr_framed(int id, DWORD self, int isfloat, int *flt)
     if (G <= 0xffff || sm <= 0xffff || !klbr_org[id]) return 0.0f;
     outer = kbr_frame_enter(&klbr_depth);
     if (outer) {
+        if (!klbr_crash_told) { klbr_crash_told = 1; klog("brain: frame: first framed tactic call. A fault inside a frame is caught here, but the hook's vectored handler logs it first as CRASH (and may write a dump): a CRASH line followed by 'brain: fault' is a GUARDED fault, not a game crash"); }
         QueryPerformanceCounter(&t0);
         if (!klbr_swap_in(G, sm)) { kbr_frame_leave(&klbr_depth); return 0.0f; }
     }
@@ -218,8 +220,9 @@ static float klbr_framed(int id, DWORD self, int isfloat, int *flt)
         unsigned us; QueryPerformanceCounter(&t1); QueryPerformanceFrequency(&fq);
         us = fq.QuadPart ? (unsigned)(((t1.QuadPart - t0.QuadPart) * 1000000) / fq.QuadPart) : 0;
         klbr_swaps++; klbr_frames++; if (us > klbr_us_max) klbr_us_max = us;
-        if (us > 20000u && ++klbr_slow >= 3) {      /* risk R6: a frame this long is visible to other threads; the switches go off */
-            klog("brain: frame took %u us three times: Loot / Board / Traitor frames switched OFF for the rest of the session", us);
+        if (us > 50000u) klbr_slow++;
+        if (kbr_slow_rule(us, 50000u, &klbr_slow_run, 3)) {      /* risk R6: a frame this long is visible to other threads. Review 11-03: 50 ms and three CONSECUTIVE (pathfinding in RUN or one hitch must not trip it) */
+            klog("brain: frame took over 50 ms three times in a row (last %u us, wall time): Loot / Board / Traitor frames switched OFF for the rest of the session", us);
             klbr_loot = klbr_board = klbr_traitor = 0;
         }
     }
@@ -227,6 +230,16 @@ static float klbr_framed(int id, DWORD self, int isfloat, int *flt)
 }
 
 static void klbr_traitor_mirror(struct klbr_s *e);
+static const char *const klbr_cls_nm[3] = { "Loot", "Board", "Traitor" };
+/* a framed fault (review 11-03): the bot is never handed over again after 2, the class is switched off for the session after 2 in total (a deterministic fault would repeat every AI tick) */
+static void klbr_fault(int cls, struct klbr_s *e, const char *what)
+{
+    long n = klbr_ev_flt[cls] + klbr_run_flt[cls]; int *sw = cls == 0 ? &klbr_loot : cls == 1 ? &klbr_board : &klbr_traitor;
+    if (e) e->flt++;
+    if (n <= 4) klog("brain: fault: %s %s faulted inside the frame (guarded; class faults %ld, bot record %d faults %d)", klbr_cls_nm[cls], what, n, e ? e->rec : -1, e ? e->flt : 0);
+    if (n >= 2 && *sw) { *sw = 0; klog("brain: fault: %s faulted twice: its frames are switched OFF for the rest of the session (the puppeteer steers these bots again)", klbr_cls_nm[cls]); }
+}
+static int klbr_revoked(const struct klbr_s *e, DWORD now) { return e->flt >= 2 || (e->wUntil && (long)(now - e->wUntil) < 0); }
 static float klbr_ev(int cls, DWORD self)
 {
     float r = 0.0f; int flt = 0, id = cls * 3 + 2; struct klbr_s *e = 0;
@@ -236,16 +249,17 @@ static float klbr_ev(int cls, DWORD self)
         r = klbr_framed(id, self, 1, &flt);
         if (told_now) { klbr_sw_told++; klog("brain: frame: %s evaluate under the shadow returned %.3f (frames %d, max %u us, rec %d)", "Loot", (double)r, klbr_frames, klbr_us_max, e->rec); }
     }
-    if (flt) InterlockedIncrement(&klbr_ev_flt[cls]);
+    if (flt) { InterlockedIncrement(&klbr_ev_flt[cls]); klbr_fault(cls, e, "evaluate"); r = 0.0f; }      /* a faulted answer is never trusted and never refreshes the hand-off */
     klbr_ev_last[cls] = r;
     if (r > 0.0f) {
         InterlockedIncrement(&klbr_ev_nz[cls]); if (r > klbr_ev_max[cls]) klbr_ev_max[cls] = r;
         if (e) {
-            if (cls == 0 && (!klbr_bridge || klh_rd32(self + 0x28))) e->nzAt = GetTickCount() | 1u;      /* GUESS: [tactic+0x28] is the chosen object (RUN reads it so); with the bridge the walk must have a goal */
+            if (cls == 0 && (!klbr_bridge || klh_rd32(self + 0x28))) e->nzAt = GetTickCount() | 1u;      /* [tactic+0x28] = the chosen TRIGGER BOX (review 11-03, 0x451b8a): non-zero = the walk has a goal */
             if (cls == 1) e->bnzAt = GetTickCount() | 1u;
         }
     }
     if (!e) return r;      /* not wanted: r is 0.0 and the original was not called */
+    if (cls != 2 && klbr_revoked(e, GetTickCount())) return 0.0f;      /* the stall watchdog gave this bot back to the puppeteer: the AI must not steer it too */
     {   int van_ok = kbr_board_state_ok(klbr_van), vis;      /* what the AI sees: Loot only with PuppetOff (else a dry run), never while Board owns the bot; Board only with BoardReal in a van state; Traitor always (its RUN only flips a bit) */
         vis = cls == 0 ? (klbr_puppet && !(klbr_boardreal && van_ok)) : cls == 1 ? (klbr_boardreal && van_ok) : 1;
         return vis ? r : 0.0f;
@@ -261,9 +275,9 @@ static void klbr_run(int cls, int slot, DWORD self)      /* slot 0 = RUN (slot 2
     klbr_hit(id);
     if (klbr_wanted(cls, self, &e)) {
         klbr_framed(id, self, 0, &flt);
-        if (cls == 2 && slot == 0) klbr_traitor_mirror(e);
+        if (cls == 2 && slot == 0 && !flt) klbr_traitor_mirror(e);
     }
-    if (flt) InterlockedIncrement(&klbr_run_flt[cls]);
+    if (flt) { InterlockedIncrement(&klbr_run_flt[cls]); klbr_fault(cls, e, slot ? "exit" : "run"); }
 }
 static void __fastcall klbr_run_l(DWORD self, DWORD d) { (void)d; klbr_run(0, 0, self); }
 static void __fastcall klbr_run_b(DWORD self, DWORD d) { (void)d; klbr_run(1, 0, self); }
@@ -327,8 +341,11 @@ static int klbr_make_shadow(void)
     blk = (BYTE *)VirtualAlloc(0, KLBR_BLOCK, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!vt || !blk) return 0;
     memcpy(vt, org, sizeof org);      /* the Heist methods as they are (GUESS: harmless on the mirrored fields); the tactic calls are under a fault guard */
-    if (klbr_board) vt[KLBR_SLOT_BOARD] = (DWORD)(DWORD_PTR)klbr_s45;       /* the Heist 0x6840a0 would run the Arcade vehicle state of W: replaced (design 6) */
-    if (klbr_bridge) vt[KLBR_SLOT_CAND] = (DWORD)(DWORD_PTR)klbr_s202;      /* candidates from the REAL registry (design 5.2) */
+    /* the two stubs are thiscall with 2 stack args (ret 8). Verified 11-03 in disassembly: 0x6840a0 returns with `ret 8` at 0x6841bd / 0x6841fa / 0x68428c, 0x8b94d0 with `ret 8` at 0x8b9898;
+       callers: 0x74d7f0 pushes (actor, 0) for slot 45, 0x451a32 pushes (pos, out) for slot 202. A stack mismatch is NOT caught by __try, so a slot is replaced ONLY when the exe's own entry is
+       that exact function (same build as the one read); otherwise the game's own method stays and this is logged. */
+    if (klbr_board) { if (org[KLBR_SLOT_BOARD] == 0x006840a0u + (DWORD)klh_delta) vt[KLBR_SLOT_BOARD] = (DWORD)(DWORD_PTR)klbr_s45; else { klog("brain: board: Heist slot 45 reads %08lx, not 0x6840a0: stub NOT installed, Board / BoardReal off", (unsigned long)org[KLBR_SLOT_BOARD]); klbr_board = klbr_boardreal = 0; } }
+    if (klbr_bridge) { if (org[KLBR_SLOT_CAND] == 0x008b94d0u + (DWORD)klh_delta) vt[KLBR_SLOT_CAND] = (DWORD)(DWORD_PTR)klbr_s202; else { klog("brain: bridge: Heist slot 202 reads %08lx, not 0x8b94d0: stub NOT installed, Bridge off", (unsigned long)org[KLBR_SLOT_CAND]); klbr_bridge = klbr_puppet = klbr_traitor = 0; } }
     klbr_shadow_vt = (DWORD)(DWORD_PTR)vt; klbr_shadow = (DWORD)(DWORD_PTR)blk; KLBR_P32(klbr_shadow) = klbr_shadow_vt;
     klbr_shadow_reset();
     return 1;
@@ -495,15 +512,15 @@ static void klbr_sync(DWORD now)
         KLBR_P32(r + 4) = e->actor;
         KLBR_PB(r + 0x78) = (BYTE)(aboard ? 3 : (tally > 0 ? 2 : 1));      /* GUESS: [rec+0x78] is a byte stage 1 looting / 2 carrying / 3 aboard, as klbf_ob_stage() and the Loot EVAL notes read it; +0x79 is its neighbour byte */
         KLBR_PB(r + 0x79) = (BYTE)((KLBR_PB(r + 0x79) & 2) | 1);      /* bit 0 = AI record; bit 1 (traitor) is kept: Traitor RUN sets it */
-        KLBR_P32(r + 0x10) = aboard ? 4 : 0;
-        KLBR_PB(r + 0x15) = klbr_gr[e->rec].on ? 1 : 0;
+        if (aboard) KLBR_P32(r + 0x10) = 4;      /* review 11-03: only RAISED on the aboard transition; the Board tactic keeps its own progress in +0x10 between syncs (cleared only when the record is assigned) */
+        /* +0x15 (grab state) is NOT rewritten here (review 11-03: the Loot code may write it itself); the grab start / end write it once, and the grab gate uses klbr_gr[].on */
         KLBR_P32(klbr_score + 0x150 + 4 * (DWORD)e->rec) = (DWORD)kbr_money_row(tally);
         KLBR_P32(KLBR_FLAGS(e->rec)) = klbr_gr[e->rec].on ? 0x2000u : 0u;
     }
     KLBR_PB(klbr_score + 0x45) = (BYTE)kbr_level_clamp(klbr_level);
     if (klbr_depth == 0 && (G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G))) > 0xffff && (real = klh_rd32(G + 0x54)) > 0xffff && real != klbr_shadow) {      /* the van state the Board / Loot code reads */
         DWORD vt = klh_rd32(real);
-        if (vt == 0x00bd2eb4u + (DWORD)klh_delta || vt == 0x00bd31e4u + (DWORD)klh_delta) {
+        if (KLH_RULES_SV_OK(vt) || KLH_RULES_CL_OK(vt)) {      /* review 11-03: online the rules vtable is often a private copy (klroundkeep.c / klucc_down.c); the exact-address test missed it and left the van at -1 */
             BYTE vb = 0; DWORD f1 = 0, f2 = 0, f3 = 0;
             if (klh_rd(real + 0x1dc, &vb, 1) && klh_rd(real + 0x1d8, &f1, 4) && klh_rd(real + 0x1e0, &f2, 4) && klh_rd(real + 0x1e4, &f3, 4)) {
                 KLBR_PB(klbr_shadow + 0x1dc) = vb; KLBR_P32(klbr_shadow + 0x1d8) = f1; KLBR_P32(klbr_shadow + 0x1e0) = f2; KLBR_P32(klbr_shadow + 0x1e4) = f3; klbr_van = vb;
@@ -532,8 +549,9 @@ static void __fastcall klbr_s45(DWORD rules, DWORD edx, DWORD actor, DWORD arg2)
     struct klbr_s *e = 0; int i; (void)rules; (void)edx;
     klbr_s45_n++;
     for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && ((klbr_t[i].actor == actor && actor > 0xffff) || (actor < KLBR_NREC && klbr_t[i].rec == (int)actor && actor > 0))) e = &klbr_t[i];
-    if (klbr_s45_n <= 8) klog("brain: board: the Board tactic called slot 45 (actor %08lx, arg2 %08lx): %s", (unsigned long)actor, (unsigned long)arg2, !e ? "not one of our bots, ignored" : klbr_boardreal ? "boarding through the host ledger (OnlineBrainBoardReal)" : "DRY (OnlineBrainBoardReal is off): log only");
-    if (e && klbr_boardreal) { klbf_brain_boarded(e->actor); klbf_brain_board_call(e->actor); }
+    if (klbr_s45_n <= 8) klog("brain: board: the Board tactic called slot 45 (actor %08lx, arg2 %08lx): %s", (unsigned long)actor, (unsigned long)arg2, !e ? "not one of our bots, ignored" : klbr_boardreal ? "boarding queued for the pump (OnlineBrainBoardReal)" : "DRY (OnlineBrainBoardReal is off): log only");
+    if (e) e->s45At = GetTickCount() | 1u;
+    if (e && klbr_boardreal) e->pendBoard = 1;      /* review 11-03: NO game call here (we are inside the AI walk and the frame); klbr_pump boards it on the game thread outside any frame */
 }
 
 /* Traitor RUN only flips rec+0x79 bit 1 (CERTAIN, 0x488ecd). Stage 3a MIRRORS it: log, count, nothing else changes for the bot (no team change, no announce: the puppeteer has no traitor path to call). */
@@ -547,14 +565,25 @@ static void klbr_traitor_mirror(struct klbr_s *e)
 }
 
 /* ---- PuppetOff / hand-off ------------------------------------------------------------------------------------------------------------------------------------------------------- */
+static int klbr_bot_pos(DWORD actor, float pos[3], int *alive);
+#define KLBR_STALL_MS 8000u             /* review 11-03: a handed-off bot must move 1 m, start a grab or call slot 45 within this, else ... */
+#define KLBR_REVOKE_MS 10000u           /* ... the puppeteer steers it again for this long */
 static int klbr_puppet_off(DWORD snd)
 {
-    struct klbr_s *e; int lr = 0, br = 0;
+    struct klbr_s *e; int lr = 0, br = 0, handed, progress = 0, alive = 0, ok; DWORD now = GetTickCount(); float p[3];
     if ((!klbr_puppet && !klbr_boardreal) || !snd) return 0;
     e = klbr_find(snd);
-    if (!e || e->state != 1) return 0;
-    kbr_hand(klbr_puppet, 1, klbr_boardreal, GetTickCount(), e->nzAt, e->bnzAt, klbr_van, (unsigned long)(klbr_bridge ? klbr_lootwin : klbr_win_ms), (unsigned long)klbr_boardwin, &lr, &br);
-    return lr || br;
+    if (!e || e->state != 1 || e->flt >= 2) return 0;
+    kbr_hand(klbr_puppet && klbr_loot, 1, klbr_boardreal && klbr_board, now, e->nzAt, e->bnzAt, klbr_van, (unsigned long)(klbr_bridge ? klbr_lootwin : klbr_win_ms), (unsigned long)klbr_boardwin, &lr, &br);
+    handed = lr || br;
+    if (klbr_bot_pos(e->actor, p, &alive)) {      /* progress: 1 m from the last checkpoint (horizontal), a grab on, or a slot-45 call within the stall window */
+        if (!e->wHas || (p[0] - e->wpos[0]) * (p[0] - e->wpos[0]) + (p[2] - e->wpos[2]) * (p[2] - e->wpos[2]) >= 100.0f * 100.0f) { if (e->wHas) progress = 1; memcpy(e->wpos, p, 12); e->wHas = 1; }
+    }
+    if (e->rec > 0 && klbr_gr[e->rec].on) progress = 1;
+    if (e->s45At && now - e->s45At < KLBR_STALL_MS) progress = 1;
+    { DWORD was = e->wUntil; ok = kbr_watch(now, handed, progress, &e->wSince, &e->wUntil, KLBR_STALL_MS, KLBR_REVOKE_MS); progress = !was && e->wUntil; }      /* progress now = "revoked on this call" */
+    if (progress) { klbr_nrevoke++; if (klbr_nrevoke <= 12) klog("brain: watchdog: record %d (actor %08lx) was handed to the real %s tactic for %u s without moving 1 m or grabbing: the puppeteer steers it again for %u s", e->rec, (unsigned long)e->actor, br ? "Board" : "Loot", KLBR_STALL_MS / 1000u, KLBR_REVOKE_MS / 1000u); }
+    return ok;
 }
 
 /* ---- the bridge grab (design 5.3): the DLL owns the grab table; the Arcade tick 0x727cb0 is never run (HUD calls, reads the local player) -------------------------------------------------- */
@@ -576,7 +605,14 @@ static void klbr_grab_end(struct klbr_s *e, const char *why, int done)
 static void klbr_pump(DWORD now)       /* game thread, from klbotfill.c's OnlineTactics tick (and nothing else): game calls (0x4e3f40) are made HERE, never inside an AI wrapper */
 {
     static DWORD last; int i; float dt; DWORD sm, st = 0;
-    if (!klbr_bridge || !klbr_puppet || !klbr_shadow || !klbr_sm_round || GetCurrentThreadId() != klbr_game_tid) return;
+    if (!klbr_shadow || !klbr_sm_round || GetCurrentThreadId() != klbr_game_tid || klbr_depth != 0) return;
+    for (i = 0; i < KLBR_MAX; i++) {      /* boarding asked by slot 45 inside the AI walk (review 11-03): done here, outside any frame */
+        struct klbr_s *e = &klbr_t[i];
+        if (!e->pendBoard) continue;
+        e->pendBoard = 0;
+        if (e->state == 1 && klbr_boardreal) { klbf_brain_boarded(e->actor); klbf_brain_board_call(e->actor); }
+    }
+    if (!klbr_bridge || !klbr_puppet) return;
     dt = last ? (float)(now - last) / 1000.0f : 0.1f; last = now; if (dt > 1.0f) dt = 1.0f;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd(sm + 0x70, &st, 4)) return;
     for (i = 0; i < KLBR_MAX; i++) {
@@ -586,14 +622,14 @@ static void klbr_pump(DWORD now)       /* game thread, from klbotfill.c's Online
         if (!klbr_gr[k].on) {
             DWORD node, ent, fl = 0; int hid = 0, j, free_ = 1; BYTE act = 0;
             if (!klbr_puppet_off(e->snd)) continue;      /* only a bot the REAL Loot tactic steers right now */
-            c = klh_rd32(e->tac[0] + 0x28);              /* GUESS: [tactic+0x28] = the chosen stack (RUN reads it as its goal) */
+            {   DWORD cand[5]; if (!klh_rd(e->tac[0] + 0x14, cand, sizeof cand)) continue; c = (DWORD)kbr_chosen(cand, klh_rd32(e->tac[0] + 0x2c)); }      /* review 11-03 (0x451b8a): +0x2c = index into the 5 candidates at +0x14; +0x28 is the trigger box */
             if (!c || !klbr_money_ok(c, &amt, mp)) continue;
             if (!klh_rd(c + 0x64, &st64, 1)) continue;
             ctrlst = st64; klh_rd(c + 0x6c, &act, 1);
             ent = klh_rd32(c + 0x24); node = ent ? klh_rd32(ent + 4) : 0; if (node && klh_rd(node + 0x3c, &fl, 4)) hid = (fl & 0x400) != 0;
             for (j = 0; j < KLBR_NREC; j++) if (j != k && klbr_gr[j].on && klbr_gr[j].ctrl == c) free_ = 0;
             inside = (float)sqrt((pos[0] - mp[0]) * (pos[0] - mp[0]) + (pos[2] - mp[2]) * (pos[2] - mp[2])) <= klbf_brain_near() && fabs(pos[1] - mp[1]) <= 400.0f;
-            if (!inside || !kbr_grab_ok(KLBR_PB(KLBR_REC(k) + 0x15), st, ctrlst, act != 0, hid, amt, free_, alive)) continue;
+            if (!inside || !kbr_grab_ok(klbr_gr[k].on ? 1 : 0, st, ctrlst, act != 0, hid, amt, free_, alive)) continue;      /* our own busy flag, not rec+0x15 (review 11-03) */
             {   int part = 0; float sec = 0;
                 if (!(klh_rd(c + 0x40, &part, 4) && klh_rd(c + 0x44, &sec, 4) && part >= 1 && sec >= 0.05f && sec <= 10.0f)) { part = amt; sec = 0.7f; }      /* GUESS: +0x40 part size, +0x44 seconds per part (re/bots_loot.md; the puppeteer's OnlineLootParts reads the same) */
                 klbr_gr[k].ctrl = c; klbr_gr[k].timer = sec; klbr_gr[k].last = (DWORD)part; klbr_gr[k].outside = 0; klbr_gr[k].on = 1; klbr_nstart++;
@@ -631,6 +667,8 @@ static void klbr_summary(void)
         if (klbr_bridge || klbr_board || klbr_traitor)
             klog("brain: round end: bridge: %d grab(s) started, %d part(s) paid ($%ld), %d stopped; slot 202 calls %d, slot 45 calls %d; traitor mirrors %d; Board run/exit calls %ld/%ld",
                 klbr_nstart, klbr_npay, klbr_paid, klbr_nabort, klbr_s202_n, klbr_s45_n, klbr_ntraitor, (long)klbr_hits[3], (long)klbr_hits[4]);
+        if (klbr_puppet || klbr_boardreal)
+            klog("brain: round end: watchdog took %d stalled bot(s) back from the real tactics; %d slow frame(s) (3 in a row switch the tactics off)", klbr_nrevoke, klbr_slow);
     }
     klbr_sm_round = 0;
 }
@@ -678,7 +716,7 @@ static void klbr_tick(int game_thread)
         return;
     }
     klbr_game_tid = GetCurrentThreadId();
-    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); memset(klbr_t, 0, sizeof klbr_t); klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_paid = 0; klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
+    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); memset(klbr_t, 0, sizeof klbr_t); klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_paid = 0; klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
         klog("brain: round starts on the host (Probe %d, Build %d, Loot %d, Bridge %d, Board %d/%d, Traitor %d, PuppetOff %d, Cops %d)", klbr_probe, klbr_build, klbr_loot, klbr_bridge, klbr_board, klbr_boardreal, klbr_traitor, klbr_puppet, klbr_cops); }
     if (klbr_fed_at && now - klbr_fed_at < 2500u) { for (i = 0; i < klbr_nseen && n < KLBR_MAX; i++) { actor[n] = klbr_seen[i].actor; snd[n] = klbr_seen[i].snd; n++; } }
     else n = klbr_scan(actor, snd, KLBR_MAX);
