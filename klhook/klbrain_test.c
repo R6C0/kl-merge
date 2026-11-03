@@ -292,6 +292,26 @@ int main(void)
         CHECK(kbr_dm_decide(0, 1, 1, 0) == KBR_DM_SKIP && kbr_dm_decide(1, 0, 1, 0) == KBR_DM_SKIP && kbr_dm_decide(1, 1, 0, 0) == KBR_DM_SKIP && kbr_dm_decide(1, 1, 1, -1) == KBR_DM_SKIP, "dm: off / unmarked / no body / unreadable = SKIP");
         CHECK(kbr_dm_restore_ok(1) && !kbr_dm_restore_ok(0) && !kbr_dm_restore_ok(2), "dm: restore only our 1");
     }
+    {   /* CandLog / Sense */
+        kbr_u32 seen[KBR_CC_SEEN]; int n = 0, k; long ty[4] = { 2, 1, 2, 0 };
+        CHECK(kbr_cand_class(1, 1, 1) == KBR_CC_PLAYER && kbr_cand_class(0, 1, 1) == KBR_CC_ACTOR && kbr_cand_class(0, 0, 1) == KBR_CC_SOLDIER && kbr_cand_class(0, 0, 0) == KBR_CC_OTHER, "cc: class order");
+        CHECK(!strcmp(kbr_cand_name(0), "ZFFPlayer") && !strcmp(kbr_cand_name(9), "other"), "cc: names");
+        CHECK(kbr_cand_note(seen, &n, 0x100) == 1 && kbr_cand_note(seen, &n, 0x100) == 0 && kbr_cand_note(seen, &n, 0) == 0 && n == 1, "cc: distinct, null refused");
+        for (k = 1; k <= 10; k++) kbr_cand_note(seen, &n, 0x100 + k);
+        CHECK(n == KBR_CC_SEEN && kbr_cand_note(seen, &n, 0x999) == 0, "cc: capped at 6");
+        CHECK(kbr_list_count(3) == 3 && kbr_list_count(-1) == 0 && kbr_list_count(11) == 0 && kbr_list_count(10) == 10, "list: count clamp");
+        CHECK(kbr_list_type2(ty, 4) == 2 && kbr_list_type2(ty, 0) == 0 && kbr_list_type2(ty, 2) == 1, "list: type 2 count");
+        CHECK(kbr_sense_decide(1, 1, 1, 1, 1, 0, 1, 0, 0, 1) == KBR_SN_FEED, "sense: all hold = FEED");
+        CHECK(kbr_sense_decide(0, 1, 1, 1, 1, 0, 1, 0, 0, 1) == KBR_SN_SKIP && kbr_sense_decide(1, 0, 1, 1, 1, 0, 1, 0, 0, 1) == KBR_SN_SKIP, "sense: off / not host round = SKIP");
+        CHECK(kbr_sense_decide(1, 1, 0, 1, 1, 0, 1, 0, 0, 1) == KBR_SN_SKIP && kbr_sense_decide(1, 1, 1, 0, 1, 0, 1, 0, 0, 1) == KBR_SN_SKIP && kbr_sense_decide(1, 1, 1, 1, 0, 0, 1, 0, 0, 1) == KBR_SN_SKIP, "sense: unmarked / unwrapped / dead = SKIP");
+        CHECK(kbr_sense_decide(1, 1, 1, 1, 1, 1, 1, 0, 0, 1) == KBR_SN_SKIP && kbr_sense_decide(1, 1, 1, 1, 1, 0, 1, 0, 0, 0) == KBR_SN_SKIP, "sense: Turn on / rate = SKIP");
+        CHECK(kbr_sense_decide(1, 1, 1, 1, 1, 0, 0, 0, 0, 1) == KBR_SN_SKIP && kbr_sense_decide(1, 1, 1, 1, 1, 0, 1, 1, 0, 1) == KBR_SN_SKIP && kbr_sense_decide(1, 1, 1, 1, 1, 0, 1, 0, 1, 1) == KBR_SN_SKIP, "sense: not a player / tagged bot / cop body = SKIP");
+        {   float d[6] = { 9.0f, 1.0f, 5.0f, 1.0f, 7.0f, 2.0f }; int o[4], c = kbr_sense_nearest(d, 6, KBR_SN_MAXFEED, o);
+            CHECK(c == 4 && o[0] == 1 && o[1] == 3 && o[2] == 5 && o[3] == 2, "sense: nearest 4 of 6, ties in list order");
+            c = kbr_sense_nearest(d, 2, KBR_SN_MAXFEED, o); CHECK(c == 2 && o[0] == 1 && o[1] == 0, "sense: fewer than max");
+            CHECK(kbr_sense_nearest(d, 0, KBR_SN_MAXFEED, o) == 0, "sense: none"); }
+        CHECK(kbr_sense_ms(500) == 500 && kbr_sense_ms(0) == 500 && kbr_sense_ms(100) == 500 && kbr_sense_ms(200) == 200 && kbr_sense_ms(9000) == 500, "sense: interval clamp");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }

@@ -408,4 +408,52 @@ static int kbr_dm_decide(int on, int marked, int bodyOk, int cur)
 /* restore only a byte that still holds our 1 (never overwrite what someone else wrote since) */
 static int kbr_dm_restore_ok(int cur) { return cur == 1; }
 
+
+/* OnlineBrainTraitorCandLog / OnlineBrainTraitorSense (2026-11-03; re/traitor_candidates_1103.md, re/traitor_senses_1103.md). Pure parts only. */
+#define KBR_CC_PLAYER 0
+#define KBR_CC_ACTOR 1
+#define KBR_CC_SOLDIER 2
+#define KBR_CC_OTHER 3
+#define KBR_CC_N 4
+#define KBR_CC_SEEN 6
+/* candidate class from three vtable tests (ZFFPlayer 0xbb45f4, ZFFActor 0xbb3bac, ZSoldier 0xbd0954): player first */
+static int kbr_cand_class(int isPlayer, int isActor, int isSoldier) { return isPlayer ? KBR_CC_PLAYER : isActor ? KBR_CC_ACTOR : isSoldier ? KBR_CC_SOLDIER : KBR_CC_OTHER; }
+static const char *kbr_cand_name(int c) { return c == KBR_CC_PLAYER ? "ZFFPlayer" : c == KBR_CC_ACTOR ? "ZFFActor" : c == KBR_CC_SOLDIER ? "ZSoldier" : "other"; }
+/* remember a distinct candidate: 1 = new and stored (at most KBR_CC_SEEN), 0 = already known, full or null */
+static int kbr_cand_note(kbr_u32 *seen, int *n, kbr_u32 cand)
+{
+    int i;
+    if (!cand) return 0;
+    for (i = 0; i < *n; i++) if (seen[i] == cand) return 0;
+    if (*n >= KBR_CC_SEEN) return 0;
+    seen[(*n)++] = cand; return 1;
+}
+/* known-entities list B = [soldier+0x698] (count dword at +0, 0x14-byte entries from +4, entity at entry+4, type dword at entry+8 = the jump index at 0x7bd770, timestamp at +0xc; offsets read from 0x7bd770..0x7bd789, that 'type 2' is ZFFPlayer is research A's reading, count capped at 10):
+   how many entries of type 2 (ZFFPlayer per research A); count is clamped to 0..10, a negative or absurd count counts as 0 */
+static int kbr_list_count(long count) { return count < 0 || count > 10 ? 0 : (int)count; }
+static int kbr_list_type2(const long *types, int n) { int i, c = 0; for (i = 0; i < n && i < 10; i++) if (types[i] == 2) c++; return c; }
+/* OnlineBrainTraitorSense: feed a human body into a marked bot's known list (B::NoteEntity 0x7bd720). Everything must hold. */
+#define KBR_SN_SKIP 0
+#define KBR_SN_FEED 1
+static int kbr_sense_decide(int enabled, int hostRound, int marked, int wrapped, int alive, int turnOn, int bodyIsPlayer, int bodyIsTaggedBot, int police, int rateOk)
+{
+    if (!enabled || !hostRound || !marked || !wrapped || !alive || turnOn || !rateOk) return KBR_SN_SKIP;
+    if (!bodyIsPlayer || bodyIsTaggedBot || police) return KBR_SN_SKIP;
+    return KBR_SN_FEED;
+}
+/* at most this many humans are fed per bot: the known list holds 10 and a full list evicts the oldest entry (review 11-03) */
+#define KBR_SN_MAXFEED 4
+/* indexes (into d[0..n-1]) of the up-to-maxn smallest distances, nearest first; ties keep list order; returns the count */
+static int kbr_sense_nearest(const float *d, int n, int maxn, int *out)
+{
+    int c = 0, i, j;
+    for (i = 0; i < n; i++) {
+        for (j = c; j > 0 && d[out[j - 1]] > d[i]; j--) if (j < maxn) out[j] = out[j - 1];
+        if (j < maxn) { out[j] = i; if (c < maxn) c++; }
+    }
+    return c;
+}
+/* the feed key clamp: interval in ms, 200..5000, default 500 */
+static int kbr_sense_ms(long v) { return v < 200 || v > 5000 ? 500 : (int)v; }
+
 #endif /* KLBRAIN_LOGIC_H */
