@@ -968,5 +968,17 @@ static int kbr_pull_skip(int own_blk, int alive, int hum_known, long dblk_cm, in
     if (since_ms < 250ul) return 6;
     return 0;
 }
+/* DefendPull mode 2 (11-04): stock ZCloseIn stops 550 cm (= [S+0x6a8] 1100 * 0.5) short of the holder. Straight-line approximation (the stock cut runs along the nav path, GUESS that this is close enough).
+   out = h + norm(bot - h) * 550. DEVIATION from the task text ("keep h.z"): the game's up axis is y (kle_place in klescort.c steps in x and z), so the offset is HORIZONTAL (x, z) and the HEIGHT h.y is kept.
+   Returns 0 ok, 7 = skip: horizontal |bot-h| <= 550 cm, or not finite. */
+#define KBR_PULL2_STOP_CM 550.0f
+static int kbr_pull2_target(const float *h, const float *bot, float *out)
+{
+    float dx = bot[0] - h[0], dz = bot[2] - h[2], l2 = dx * dx + dz * dz, l;
+    if (!(l2 == l2) || l2 > 1e12f || l2 <= KBR_PULL2_STOP_CM * KBR_PULL2_STOP_CM) return 7;
+    l = kbr_f6_sqrt(l2);
+    out[0] = h[0] + dx / l * KBR_PULL2_STOP_CM; out[1] = h[1]; out[2] = h[2] + dz / l * KBR_PULL2_STOP_CM;
+    return 0;
+}
 static int kbr_pull_ok(int own_blk, int alive, int hum_known, long dblk_cm, int wclass, unsigned long since_ms) { return kbr_pull_skip(own_blk, alive, hum_known, dblk_cm, wclass, since_ms) == 0; }
 #endif /* KLBRAIN_LOGIC_H */

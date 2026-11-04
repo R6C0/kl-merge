@@ -536,6 +536,13 @@ int main(void)
         CHECK(kbr_pull_skip(0, 1, 1, 9000, 0, 999) == 1 && kbr_pull_skip(1, 0, 1, 9000, 0, 999) == 2 && kbr_pull_skip(1, 1, 0, 9000, 0, 999) == 3 && kbr_pull_skip(1, 1, 1, -1, 0, 999) == 3, "pull: not ours 1, dead 2, no human or unknown distance 3");
         CHECK(kbr_pull_skip(1, 1, 1, 2500, 0, 999) == 4 && kbr_pull_skip(1, 1, 1, 100, 0, 999) == 4 && kbr_pull_skip(1, 1, 1, 2501, 0, 999) == 0, "pull: block within 2500 cm of a human is left alone (boundary 2500 inclusive)");
         CHECK(kbr_pull_skip(1, 1, 1, 9000, 1, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 2, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 3, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 4, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 0, 249) == 6 && !kbr_pull_ok(1, 1, 1, 9000, 1, 999), "pull: CloseIn / Board / Loot own the block (5), rate limit 250 ms (6)");
+        {   /* DefendPull mode 2 target: 550 cm short of the holder along the horizontal line to the bot, height of the holder kept */
+            float h[3] = { 100, 50, 200 }, bot[3] = { 1100, 0, 200 }, t[3] = { 0, 0, 0 }, near_[3] = { 600, 0, 200 }, diag[3] = { 100 + 3000, 7, 200 + 4000 }, nan_[3];
+            float z = 0.0f; nan_[0] = z / z; nan_[1] = 0; nan_[2] = 0;
+            CHECK(kbr_pull2_target(h, bot, t) == 0 && t[0] > 649.9f && t[0] < 650.1f && t[1] == 50.0f && t[2] > 199.9f && t[2] < 200.1f, "pull2 target: 550 cm from the holder toward the bot, holder's height");
+            CHECK(kbr_pull2_target(h, diag, t) == 0 && t[0] > 429.0f && t[0] < 431.0f && t[2] > 639.0f && t[2] < 641.0f, "pull2 target: diagonal 3-4-5 (330, 440 off the holder)");
+            CHECK(kbr_pull2_target(h, near_, t) == 7 && kbr_pull2_target(h, h, t) == 7 && kbr_pull2_target(h, nan_, t) == 7, "pull2 target: bot within 550 cm (boundary inclusive), on the holder, or NaN -> skip 7");
+        }
     }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;

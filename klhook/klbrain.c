@@ -3117,8 +3117,9 @@ static void klbr_af_summary(const char *why)      /* round edges only (not the 3
 #define KLBR_PL_LOGMAX 60
 static int klbr_dfon, klbr_plon, klbr_df_dead, klbr_df_nlog, klbr_df_nchg, klbr_pl_nlog, klbr_df_have[KLBR_MAX]; static DWORD klbr_df_at[KLBR_MAX], klbr_pl_at[KLBR_MAX]; static float klbr_df_last[KLBR_MAX][3];
 static int klbr_nb_probe_on(void) { return (klbr_dfon || klbr_rpon) && !klbr_df_dead && klbr_f6_flt < 3; }      /* klbotfill.c klbf_nb_drop: DriftProbe or RunProbe on (read-only log gate) */
-static long klbr_df_n, klbr_df_far, klbr_df_hh, klbr_df_chg, klbr_pl_w, klbr_pl_sk[7], klbr_pl_n; static char klbr_df_cn[12][32]; static long klbr_df_cc[12];
-static void klbr_df_reset(void) { klbr_df_nlog = klbr_df_nchg = klbr_pl_nlog = 0; memset(klbr_df_have, 0, sizeof klbr_df_have); memset(klbr_df_at, 0, sizeof klbr_df_at); memset(klbr_pl_at, 0, sizeof klbr_pl_at); memset(klbr_df_last, 0, sizeof klbr_df_last); klbr_df_n = klbr_df_far = klbr_df_hh = klbr_df_chg = klbr_pl_w = klbr_pl_n = 0; memset(klbr_pl_sk, 0, sizeof klbr_pl_sk); memset(klbr_df_cn, 0, sizeof klbr_df_cn); memset(klbr_df_cc, 0, sizeof klbr_df_cc); }
+static int klbr_plmode; static long klbr_pl2_noop, klbr_pl2_snap, klbr_pl2_hold;      /* DefendPull mode (0 off, 1 raw xyz store, 2 stock order 0x760e50); mode 2 counters: silent no-ops (block unchanged), snapped (block != target), holder used as the target base */
+static long klbr_df_n, klbr_df_far, klbr_df_hh, klbr_df_chg, klbr_pl_w, klbr_pl_sk[9], klbr_pl_n; static char klbr_df_cn[12][32]; static long klbr_df_cc[12];
+static void klbr_df_reset(void) { klbr_df_nlog = klbr_df_nchg = klbr_pl_nlog = 0; memset(klbr_df_have, 0, sizeof klbr_df_have); memset(klbr_df_at, 0, sizeof klbr_df_at); memset(klbr_pl_at, 0, sizeof klbr_pl_at); memset(klbr_df_last, 0, sizeof klbr_df_last); klbr_df_n = klbr_df_far = klbr_df_hh = klbr_df_chg = klbr_pl_w = klbr_pl_n = 0; klbr_pl2_noop = klbr_pl2_snap = klbr_pl2_hold = 0; memset(klbr_pl_sk, 0, sizeof klbr_pl_sk); memset(klbr_df_cn, 0, sizeof klbr_df_cn); memset(klbr_df_cc, 0, sizeof klbr_df_cc); }
 static void klbr_df_win(DWORD S, char *wn, int cap)      /* Defend winner RTTI when the Defend goal is current, else "-"; call under __try */
 {
     DWORD cur = klh_rd32(S + 0x74), win; wn[0] = 0;
@@ -3129,7 +3130,7 @@ static void klbr_df_win(DWORD S, char *wn, int cap)      /* Defend winner RTTI w
 static void klbr_df_sample(int i, DWORD S, DWORD now)      /* called by klbr_mb_sample after its own 250 ms due test */
 {
     DWORD body = 0, blk = 0, b0 = 0, ac = 0, a8 = 0, H = 0, who = 0, whoblk = 0; BYTE b10 = 0, b11 = 0, b12 = 0, f4 = 0; float hp = 1.0f, bp[3], bx[3], hx[3], hbx[3], hh[3], hold[3], dbl = -1.0f; double dbh = -1.0, dhb = -1.0, dhh = -1.0, dd; DWORD v720 = 0;
-    int haveb = 0, haveblk = 0, own = 0, alive = 1, humb = 0, humbot = 0, hhum = 0, hhpos = 0, wc = 0, dolog, moved = 0, dopull = 0, sk = 0; char wn[32], t1[24], t2[24], t3[24], t4[24]; float old[3];
+    int haveb = 0, haveblk = 0, own = 0, alive = 1, humb = 0, humbot = 0, hhum = 0, hhpos = 0, wc = 0, dolog, moved = 0, dopull = 0, sk = 0, p2 = 0, p2hold = 0, p2snap = 0, p2noop = 0; float p2t[3], p2h[3], p2a[3]; char wn[32], t1[24], t2[24], t3[24], t4[24]; float old[3];
     if ((!klbr_dfon && !klbr_plon) || klbr_df_dead || klbr_f6_flt >= 3) return;
     if (klbr_mb_arc && !klbr_mb_akind[i]) return;      /* Arcade: only the traitor-marked soldier */
     dolog = klbr_dfon && (!klbr_df_at[i] || now - klbr_df_at[i] >= 1000u);
@@ -3175,7 +3176,26 @@ static void klbr_df_sample(int i, DWORD S, DWORD now)      /* called by klbr_mb_
             wc = kbr_win_class(wn);
             dbl = (humb && haveblk) ? (float)dhb : -1.0f;
             sk = kbr_pull_skip(own && haveblk, alive, humb && humbot, (long)dbl, wc, klbr_pl_at[i] ? (unsigned long)(now - klbr_pl_at[i]) : 100000ul);
-            if (sk) klbr_pl_sk[sk]++;
+            if (!sk && klbr_plmode == 2) {      /* mode 2: the stock order 0x760e50 to a place 550 cm short of the holder (else the nearest human), reset 0; mode 1 below is unchanged */
+                DWORD ac2 = klh_rd32(S + 0xac), hw = 0; double dh2 = 0; struct kle_e te; float got2[3]; char why2[100];
+                memset(p2t, 0, sizeof p2t); memset(p2a, 0, sizeof p2a); why2[0] = 0;
+                memcpy(p2h, hx, 12);
+                if (ac2 > 0xffff && klh_pvt(ac2) == 0x00bb45f4u && !klbr_hl_find(ac2) && klh_rd(ac2 + 0x460, hold, 12) && kle_ok3(hold) && klbr_human_near(hold, &dh2, &hw) && hw == ac2) { memcpy(p2h, hold, 12); p2hold = 1; }      /* holder [S+0xac] is a living human */
+                if (!haveb) sk = 8;
+                else if (kbr_pull2_target(p2h, bp, p2t)) sk = 7;
+                else {
+                    memset(&te, 0, sizeof te); te.rec = -1; te.soldier = S; te.told_soft = 1;      /* temporary entry, rec -1: no OrderGap debounce (as klbotfill.c:412 / :1292) */
+                    if (!kle_callable(why2)) sk = 8;
+                    else if (kle_order3(&te, p2t, got2, why2, 0) != 1) sk = 8;
+                    else {
+                        if (!kle_block(S, p2a)) memcpy(p2a, bx, 12);
+                        p2 = 1; p2noop = kle_dist(p2a, bx) < 1.0f; p2snap = kle_dist(p2a, p2t) > 1.0f;
+                    }
+                }
+                if (sk) klbr_pl_sk[sk]++;
+                else { memcpy(old, bx, 12); dopull = 1; }
+            }
+            else if (sk) klbr_pl_sk[sk]++;
             else {
                 memcpy(old, bx, 12); dopull = 1;
                 *(volatile float *)(DWORD_PTR)(blk + 0) = hx[0]; *(volatile float *)(DWORD_PTR)(blk + 4) = hx[1]; *(volatile float *)(DWORD_PTR)(blk + 8) = hx[2];      /* only xyz: +0x10 / +0x11 / +0x12 untouched */
@@ -3197,8 +3217,16 @@ static void klbr_df_sample(int i, DWORD S, DWORD now)      /* called by klbr_mb_
         }
         if (dopull) {
             klbr_pl_w++; klbr_pl_at[i] = now | 1u;
+            if (p2) {
+                klbr_pl2_noop += p2noop; klbr_pl2_snap += p2snap; klbr_pl2_hold += p2hold;
+                if (klbr_pl_nlog < KLBR_PL_LOGMAX) { klbr_pl_nlog++; klog("brain: pull2: rec %d block before (%.0f %.0f %.0f) after (%.0f %.0f %.0f), target (%.0f %.0f %.0f) base %s (%.0f %.0f %.0f) bot (%.0f %.0f %.0f), snapped %d, silent no-op %d (no-ops so far %ld; block was %.0f cm from the nearest human; winner %s; S %08lx)",
+                    i, (double)old[0], (double)old[1], (double)old[2], (double)p2a[0], (double)p2a[1], (double)p2a[2], (double)p2t[0], (double)p2t[1], (double)p2t[2], p2hold ? "holder" : "nearest human", (double)p2h[0], (double)p2h[1], (double)p2h[2],
+                    (double)bp[0], (double)bp[1], (double)bp[2], p2snap, p2noop, klbr_pl2_noop, (double)dbl, wn, (unsigned long)S); }
+                memcpy(klbr_df_last[i], p2a, 12); klbr_df_have[i] = 1;
+            } else {
             if (klbr_pl_nlog < KLBR_PL_LOGMAX) { klbr_pl_nlog++; klog("brain: pull: rec %d from (%.0f %.0f %.0f) to (%.0f %.0f %.0f) dhum %.0f (block was %.0f cm from the nearest human; winner %s; S %08lx)", i, (double)old[0], (double)old[1], (double)old[2], (double)hx[0], (double)hx[1], (double)hx[2], dbh, (double)dbl, wn, (unsigned long)S); }
             memcpy(klbr_df_last[i], hx, 12); klbr_df_have[i] = 1;      /* our own write is not a 'chg' event */
+            }
         } else { memcpy(klbr_df_last[i], bx, 12); klbr_df_have[i] = 1; }
     } else klbr_df_have[i] = 0;
     if (!dolog) return;
@@ -3225,8 +3253,9 @@ static void klbr_df_summary(const char *why)      /* round edges only; counters 
              klbr_mb_arc ? "arcade" : "online", why, klbr_df_n, kbr_ci_pct(klbr_df_far, klbr_df_n), kbr_ci_pct(klbr_df_hh, klbr_df_n), klbr_df_chg, tl[0] ? tl : " none", klbr_df_nchg, KLBR_DF_CHGMAX, klbr_df_nlog, KLBR_DF_LOGMAX, klbr_df_dead, klbr_f6_flt);
     }
     if (klbr_plon && klbr_pl_n)
-        klog("brain: pull round (%s) %s: ticks %ld, pulls written %ld, skipped: not ours/no block %ld, dead %ld, no human %ld, block near a human %ld, winner owns the block or Defend not current (CloseIn/Board/Loot/-) %ld, rate %ld; lines %d of %d; dead %d",
-             klbr_mb_arc ? "arcade" : "online", why, klbr_pl_n, klbr_pl_w, klbr_pl_sk[1], klbr_pl_sk[2], klbr_pl_sk[3], klbr_pl_sk[4], klbr_pl_sk[5], klbr_pl_sk[6], klbr_pl_nlog, KLBR_PL_LOGMAX, klbr_df_dead);
+        klog("brain: pull round (%s) %s: ticks %ld, pulls written %ld, skipped: not ours/no block %ld, dead %ld, no human %ld, block near a human %ld, winner owns the block or Defend not current (CloseIn/Board/Loot/-) %ld, rate %ld, mode 2 only: bot within 550 cm of the holder %ld, order refused / no bot position %ld; lines %d of %d; dead %d; mode %d (mode 2: orders %ld, silent no-ops %ld, snapped %ld, holder base %ld)",
+             klbr_mb_arc ? "arcade" : "online", why, klbr_pl_n, klbr_pl_w, klbr_pl_sk[1], klbr_pl_sk[2], klbr_pl_sk[3], klbr_pl_sk[4], klbr_pl_sk[5], klbr_pl_sk[6], klbr_pl_sk[7], klbr_pl_sk[8], klbr_pl_nlog, KLBR_PL_LOGMAX, klbr_df_dead,
+             klbr_plmode, klbr_plmode == 2 ? klbr_pl_w : 0L, klbr_pl2_noop, klbr_pl2_snap, klbr_pl2_hold);
 }
 /* OnlineBrainTraitorCombatFlag (11-04; TEST build only, UNTESTED, recommended off; CHANGES the game: ONE data byte, [S+0x4fc], and only under the gates below). Lever from re/approach_lever_1104.md: the Defend tick 0x85f6c0 walks tactic list A (with ZCloseIn) only while [S+0x4fc] != 0 AND a [S+0x6fc] condition holds.
    Value 1 = the spec of the verifier text (write only while [S+0x6fc] == 0); value 2 = the disassembly (write only while [S+0x6fc] != 0). RE-READ 11-04 at 0x85f896: cmp [eax+4fc],0 / je -> flag 0; cmp [eax+6fc],0 / mov flag,1 / jne keep / else flag 0: list A needs BOTH bytes nonzero, so the verifier text is wrong and 2 is the useful mode; 1 is kept only to be able to test the claim. Once a human is clear again the byte WE set is written back to 0 (stock firing needs it 0). Host game thread, online marked bots only, every 250 ms per wrapped bot.
@@ -4795,8 +4824,10 @@ static void klbr_init(void)
     if (klbr_afon) klog("brain: OnlineBrainTraitorAfcProbe=1 UNTESTED (recommended off): READ ONLY, no detour (TEST build only); once a second per marked bot (online: the host's Arcade-marked wrapped bots, needs OnlineBrainTraitorArcade=1; Arcade offline: the traitor-marked soldier) reads the ZAttackFromCover eval inputs and the distance to the defend place [S+0x64c] (position layout GUESS); lines: brain: afc / afc round");
     klbr_dfon = klbr_key("OnlineBrainTraitorDriftProbe");
     if (klbr_dfon) klog("brain: OnlineBrainTraitorDriftProbe=1 UNTESTED (recommended off): READ ONLY, no detour (TEST build only); once a second per marked bot (online: needs OnlineBrainTraitorArcade=1; Arcade offline: the traitor-marked soldier) logs the defend block [S+0x64c] and the holder; EVENT lines 'brain: drift chg' when the block moves > 300 cm; lines: brain: drift / drift chg / drift round");
-    klbr_plon = klbr_key("OnlineBrainTraitorDefendPull");
-    if (klbr_plon) klog("brain: OnlineBrainTraitorDefendPull=1 UNTESTED (recommended off): CHANGES the game (TEST build only, marked traitor only): writes the defend block xyz [[S+0x64c]+0..8] (nothing else) toward the nearest living human when the block is > 2500 cm from every human, never while the Defend winner is ZCloseIn / Board / Loot, at most every 250 ms per bot; lines: brain: pull / pull round");
+    klbr_plmode = klbr_keyi("OnlineBrainTraitorDefendPull", 0); if (klbr_plmode < 0 || klbr_plmode > 2) klbr_plmode = 1;      /* any other nonzero value = 1 as before */
+    klbr_plon = klbr_plmode != 0;
+    if (klbr_plmode == 2) klog("brain: OnlineBrainTraitorDefendPull=2 UNTESTED (recommended off): CHANGES the game: instead of the raw xyz store the stock order 0x760e50 (soft 0, reset 0, via kle_order3) is given to a place 550 cm short of the holder [S+0xac] (living human) else the nearest human, same gates as mode 1; side effects of the order (GUESS): [block+0x11]=1, [S+0x4fc], a go-to 0x6cabf0 that may fight Defend; lines: brain: pull2 / pull round");
+    else if (klbr_plon) klog("brain: OnlineBrainTraitorDefendPull=1 UNTESTED (recommended off): CHANGES the game (TEST build only, marked traitor only): writes the defend block xyz [[S+0x64c]+0..8] (nothing else) toward the nearest living human when the block is > 2500 cm from every human, never while the Defend winner is ZCloseIn / Board / Loot, at most every 250 ms per bot; lines: brain: pull / pull round");
     klbr_f6act = klbr_f6on || klbr_f7on || klbr_raon || klbr_f8on || klbr_mbon || klbr_cion || klbr_dpon || klbr_afon || klbr_dfon || klbr_plon;
     if (klbr_cion) klog("brain: OnlineBrainTraitorCloseInProbe=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only; counting detours on the ZCloseIn eval 0x6724e0 and its two return tails 0x672722 / 0x672770, the run-task tick 0x4a7e60 and the soldier arm 0x800630, all unhashed so they also install under SessionSafe=1; plus 250 ms DATA-side sampling of the current goal, the tactic lists, [S+0x4fc] / [S+0x6fc] and the ZCloseIn timer / destination); needs the slot-113 wrapper (the FireProbe keys) to mark the online bot; offline Arcade is sampled like ModeBProbe");
     if (klbr_cbmode) klog("brain: OnlineBrainTraitorCombatFlag=%d UNTESTED (recommended off): CHANGES the game (TEST build only, host only, online marked bots only): writes the byte [S+0x4fc] = 1 every 250 ms, only while OnlineBrainTraitorLosGate and OnlineBrainTraitorSense report every human BLOCKED for the bot (none clear) and [S+0x6fc] is %s (value 1 = the verifier text, which the disassembly REFUTES; 3 = as 2 but it also writes [S+0x6fc] = 1 itself while that byte is 0 and puts it back to 0 afterwards, GUESS that this makes ZCloseIn run; 2 = the Defend tick 0x85f896..0x85f8bc as re-read in debug/dasm.py 11-04: list A needs [S+0x4fc] != 0 AND [S+0x6fc] != 0, so 2 is the one that can work); it never writes while a human is clear; 3 faults = off", klbr_cbmode, klbr_cbmode == 1 ? "0" : klbr_cbmode == 3 ? "0 or nonzero (mode 3 sets it to 1 when 0)" : "nonzero");

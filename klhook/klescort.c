@@ -657,7 +657,11 @@ static int kle_gap_check(const struct kle_e *e, char why[100])
     return 1;
 }
 
-static int kle_order2(struct kle_e *e, const float want[3], float got[3], char why[100], int dry)
+static int kle_order_x(struct kle_e *e, const float want[3], float got[3], char why[100], int dry, int reset);
+static int kle_order2(struct kle_e *e, const float want[3], float got[3], char why[100], int dry) { return kle_order_x(e, want, got, why, dry, 1); }
+/* 2026-11-04 kle_order3: the same call with reset = 0 (what stock ZCloseInOnTarget 0x5c4360 passes: [S+0x720] is NOT zeroed), soft = 0. Used by DefendPull mode 2. */
+static int kle_order3(struct kle_e *e, const float want[3], float got[3], char why[100], int reset) { return kle_order_x(e, want, got, why, 0, reset ? 1 : 0); }
+static int kle_order_x(struct kle_e *e, const float want[3], float got[3], char why[100], int dry, int reset)
 {
     float p[4]; BYTE soft = 0; LARGE_INTEGER t0, t1; double ms;
     memcpy(got, want, 12);
@@ -668,7 +672,7 @@ static int kle_order2(struct kle_e *e, const float want[3], float got[3], char w
     p[0] = want[0]; p[1] = want[1]; p[2] = want[2]; p[3] = 0;
     if (!kle_order_f.QuadPart) QueryPerformanceFrequency(&kle_order_f);
     QueryPerformanceCounter(&t0);
-    ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)e->soldier, 0, p, 0, 1, 0);
+    ((void (__fastcall *)(void *, void *, const float *, int, int, int))(DWORD_PTR)KLH_VA(KLE_ORDER))((void *)(DWORD_PTR)e->soldier, 0, p, 0, reset, 0);
     QueryPerformanceCounter(&t1);
     ms = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)kle_order_f.QuadPart;
     kle_order_at = GetTickCount(); InterlockedIncrement(&kle_order_n);
