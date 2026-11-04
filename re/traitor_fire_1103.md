@@ -413,3 +413,13 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - DD05: [S+0x6fc] nonzero 47% (stock writer: squad unleash / modifier / ambush), [S+0x4fc] 58%; list A walked; ZCloseIn eval 30 calls (1.0 x1, 0.0 x29), arm 19; the stock scan replaces our holder (0x3d6, flags 0x10, not a human); humans ~175 m away; 100 marked shots, target 'something else' 100, all BLOCKED from the eye, s3human 0.
 - Lists: A[9] = ReactToHumanShield, BecomeTraitor, BoardEscapeVehicle, AttackMountedWeapon, CloseAttack, CloseIn, AttackFromCover, AttackNoCover, ...; B[9] starts the same, C empty.
 - Conclusion: the research (wzerqnft4) holds: 6fc gates list A and is 0 for our StayBack squads. Next: CombatFlag mode 3 (write 4fc and 6fc while blocked, restore 6fc) + HolderSet, bs44.
+
+## arc43 (Arcade offline, out_hs_1104n, ModeBProbe v2 + CloseInProbe): PASS, 0 faults
+- DM03: [S+0x4fc] 31%, [S+0x6fc] 50% (both set 22/78 data lines); ZCloseIn eval 61 calls, 1.0 x2; goals Idle x260, Defend x826.
+- DD05: 4fc 64%, 6fc 44%; ZCloseIn eval 0 calls. Arcade bots close in rarely too.
+
+## bs44 (out_cf3_1104o: LosGate + HolderSet=1 + CombatFlag=3 + CloseInProbe=1): PASS, 0 asserts, 0 faults
+- DM03: 6fc nonzero 98% (mode 3 wrote 6fc once, never restored: humans blocked all round), 4fc 92%; list A 80/97 data lines; ZCloseIn eval 689, 1.0 x2, arm 22; arms with byte 1 point 548.9 cm from the nearest human (= 550 short of the holder). HolderSet writes 25 kept 84. Marked shots 0.
+- DD05: 6fc 99%, 4fc 93%; list A 77/93; eval 382, 1.0 x7, arm 35 (one arm 543.1 cm from the human); 125 marked shots, target 'something else' 125 (crew bots, stock TraitorFoe), all blocked from the eye, s3human 0; holder = the human on 31 shots.
+- Distance bot->nearest human: DM03 52-70 m early, 110-129 m later; DD05 42-48 m early, 110-140 m later: the approach order does not turn into a closing distance yet.
+- Next: DefendProbe (which list A tactic wins, list C condition) + per-gate ZCloseIn trace (w21syogv3), bs45.
