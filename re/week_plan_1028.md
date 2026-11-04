@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-04 09:25 c9: bs42 PASS 0 faults: confirmed our line-of-sight fix is what empties the traitor's target online; without it the target fills but the bot fires through walls again. wj2driobk builds the fix that keeps the target (without firing) while the player is behind a wall, so the bot can move in.
 - 11-04 08:55 c9: bs41 + arc41 PASS 0 faults: online and Arcade bots run the same 'defend' order, but online the traitor never gets a target in its target field (Arcade bots always have one), so it can neither close in nor fire. wgxzr8q8l researches who fills it; w7ipt21r0 builds the close-in probe.
 - 11-04 07:50 c9: bs40 PASS 0 faults: the line-of-sight test works (control rays) and the humans really are behind walls at 48-57 m; the traitor bot never moves to get a clear shot (its attack goal is set but never started, another goal runs). wruioc1db researches that goal and Arcade's approach, and extends the probe to compare Arcade with online.
 - 11-04 07:15 c9: bs39 PASS 0 faults: the line-of-sight gate stopped the DM03 traitor firing through walls (0 shots), but on DD05 another path still fired 187 blocked shots; the test never answered clear (players 60-100 m away). w18ipq4cv checks the test + the DD05 path; wowvy02qv builds ModeBProbe for bs40.

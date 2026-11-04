@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~09:25 - [c9] bs42 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; bs41 kit with LosGate OFF). CONFIRMED: LosGate empties the holder. Without it [S+0xb0] fills online
+(DM03 0x320/0x321 on 86/88 data lines, DD05 0x1ab/0x39f/0x3dc 41/41), flags 0x1/0x5/0x11; DM03 ZAttackTarget current on 106/746 samples, 199 marked shots aimed at the human
+(190 within 5 deg) but ALL blocked (through walls again, as bs38); DD05 0 shots (HolderFix range unknown 251, never sets 0x10). Research wgxzr8q8l (8af089bea) +
+CloseInProbe/CombatFlag d396f7e40 (Defend walks list A only when 4fc AND 6fc are nonzero). wj2driobk builds HolderSet (holder kept, non-firing flags, while blocked) for bs43.
+
 2026-11-04 ~08:55 - [c9] bs41 + arc41 PASS (online DM03 + DD05 4 seats, Arcade offline DM03 + DD05; 0 asserts, 0 faults; ModeBProbe v2 f84a963fd). Online vs Arcade goal picture:
 BOTH run Defend (vt 0xbd0674, slot [S+0x648], state 2) nearly always (Arcade also Idle 0xbd0f54 with mode 2); mode [S+0x88]=1 in Defend on both, so mode is not the gap.
 THE GAP: holder [S+0xb0] online = 0 on every sample (16/16 data lines); Arcade = a changing small handle (DD05 0x364..0x3e8, DM03 0x320/0x1e91/0x525f) ~70% of samples,
 and [S+0xa8] bits 0x1/0x2/0x4 vary in Arcade (online always 0x10). CloseIn 0x6724e0 and the fire clause 0x85ece0 both need [S+0xb0]!=0. wgxzr8q8l: who writes it; w7ipt21r0 builds CloseInProbe + CombatFlag.
-
-2026-11-04 ~07:50 - [c9] bs40 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; cdc7488e3: LosGate direction fixed + LOS control + ModeBProbe). The line test WORKS
-(control: DM03 3/6 short rays clear, DD05 6/6, down400 BLOCKED both) and the humans (48-57 m, at spawn) are truly BLOCKED (DM03 334/334, DD05 396/396): DM03 bot fired 0.
-The bot never moves to get a line: its ZAttackTarget [S+0x658] is set but stays state 0 on all 674/792 samples, never current; the current goal is prio 150 (0x96) other.
-DD05's 302 shots aim at a ZFFActor holder (261 within 5 deg), not the human. wruioc1db: which prio-0x96 goal runs + Arcade approach + probe v2 (Arcade vs online).
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

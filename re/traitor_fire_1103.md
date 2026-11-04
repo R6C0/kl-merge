@@ -401,3 +401,9 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - Arcade DM03 (traitor + control bots): Defend 0xbd0674 mostly, Idle 0xbd0f54 (slot 634) with mode 2 on ~17%; [S+0xb0] 0x320, 0x1e91, 0x525f ... non-zero on 74/120 lines; [S+0xa8] 0x10/0x14.
 - Arcade DD05 (control bots): [S+0xb0] cycles 0x364/0x36f/0x37b/0x382/0x386... (changes every second or so = the enemy it engages); [S+0xa8] 0x10..0x17 (bits 0x1/0x2/0x4 vary); [S+0x4fc] set often.
 - Conclusion: same goal (Defend) and mode both sides; online the bot never gets a holder/target in [S+0xb0] and the 0x1/0x4 flags, so neither CloseIn nor the NoCover fire clause can pass.
+
+## bs42 (out_mb2_1104l, bs41 kit with OnlineBrainTraitorLosGate=0): PASS, 0 faults
+- DM03: [S+0xb0] = 0x320/0x321 on 86 of 88 data lines (bs41 with LosGate: 0 on 15/15); [S+0xa8] 0x01 x46, 0x11 x28, 0x05 x3, 0x10 x3; [S+0x4fc] 1 on 33/88.
+  Goal: Defend 638/746, ZAttackTarget (slot 658) current 106/746 (bs41: 0). Shots 199, aim->human chest < 5 deg 190, all 199 BLOCKED from the eye, s3human 0: firing through walls again (bs38). HolderFix in range 262, out of range 76. hp 550 flat.
+- DD05: [S+0xb0] 0x1ab/0x1aa/0x39f/0x3dc on 41/41 lines; flags 0x01/0x05/0x10/0x14; Defend 589/590; shots 0; HolderFix in range 0, range unknown 251 (0x10 never set -> fire test fails).
+- Conclusion: the empty holder in bs39-bs41 is caused by LosGate (Sense skips blocked humans -> 0x767510 no-winner clear at 0x767f8a). Next: keep the holder with non-firing flags while blocked (HolderSet) + CombatFlag mode 2, so CloseIn can pass without firing through walls.

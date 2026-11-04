@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~09:25 - [c9] bs42 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; bs41 kit with LosGate OFF). CONFIRMED: LosGate empties the holder. Without it [S+0xb0] fills online
+(DM03 0x320/0x321 on 86/88 data lines, DD05 0x1ab/0x39f/0x3dc 41/41), flags 0x1/0x5/0x11; DM03 ZAttackTarget current on 106/746 samples, 199 marked shots aimed at the human
+(190 within 5 deg) but ALL blocked (through walls again, as bs38); DD05 0 shots (HolderFix range unknown 251, never sets 0x10). Research wgxzr8q8l (8af089bea) +
+CloseInProbe/CombatFlag d396f7e40 (Defend walks list A only when 4fc AND 6fc are nonzero). wj2driobk builds HolderSet (holder kept, non-firing flags, while blocked) for bs43.
+
 2026-11-04 ~08:55 - [c9] bs41 + arc41 PASS (online DM03 + DD05 4 seats, Arcade offline DM03 + DD05; 0 asserts, 0 faults; ModeBProbe v2 f84a963fd). Online vs Arcade goal picture:
 BOTH run Defend (vt 0xbd0674, slot [S+0x648], state 2) nearly always (Arcade also Idle 0xbd0f54 with mode 2); mode [S+0x88]=1 in Defend on both, so mode is not the gap.
 THE GAP: holder [S+0xb0] online = 0 on every sample (16/16 data lines); Arcade = a changing small handle (DD05 0x364..0x3e8, DM03 0x320/0x1e91/0x525f) ~70% of samples,
