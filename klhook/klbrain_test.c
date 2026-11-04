@@ -311,6 +311,21 @@ int main(void)
             c = kbr_sense_nearest(d, 2, KBR_SN_MAXFEED, o); CHECK(c == 2 && o[0] == 1 && o[1] == 0, "sense: fewer than max");
             CHECK(kbr_sense_nearest(d, 0, KBR_SN_MAXFEED, o) == 0, "sense: none"); }
         CHECK(kbr_sense_ms(500) == 500 && kbr_sense_ms(0) == 500 && kbr_sense_ms(100) == 500 && kbr_sense_ms(200) == 200 && kbr_sense_ms(9000) == 500, "sense: interval clamp");
+        {   /* FireProbe3 stub / jump / histogram */
+            unsigned char b[64], j[10], st[6] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x1c }; kbr_u32 ra[3], r; long cnt[3]; int na = 0, k;
+            k = kbr_f3_emit(b, 0x10000, 1, 0x12345678UL, st, 6, 0x8c1836UL);
+            CHECK(k == 17 + 6 + 5 && k <= KBR_F3_MAXSTUB, "f3: stub size %d", k);
+            CHECK(b[0] == 0x60 && b[1] == 0x9c && b[2] == 0x54 && b[3] == 0x6a && b[4] == 1 && b[5] == 0xb8 && b[6] == 0x78 && b[9] == 0x12 && b[10] == 0xff && b[11] == 0xd0 && b[14] == 0x08 && b[15] == 0x9d && b[16] == 0x61, "f3: stub prologue bytes");
+            CHECK(memcmp(b + 17, st, 6) == 0 && b[23] == 0xe9, "f3: stolen bytes then jmp");
+            r = (kbr_u32)b[24] | (kbr_u32)b[25] << 8 | (kbr_u32)b[26] << 16 | (kbr_u32)b[27] << 24; CHECK((kbr_u32)(0x10000 + 23 + 5 + r) == 0x8c1836UL, "f3: return jump lands after the stolen bytes");
+            CHECK(kbr_f3_emit(b, 0, 0, 0, st, 4, 0) == 0 && kbr_f3_emit(b, 0, 0, 0, st, 11, 0) == 0, "f3: bad stolen length refused");
+            kbr_f3_jmp(j, 0x8c1830UL, 0x20000UL, 6);
+            r = (kbr_u32)j[1] | (kbr_u32)j[2] << 8 | (kbr_u32)j[3] << 16 | (kbr_u32)j[4] << 24; CHECK(j[0] == 0xe9 && j[5] == 0x90 && (kbr_u32)(0x8c1830UL + 5 + r) == 0x20000UL, "f3: patch jmp + nop");
+            CHECK(kbr_f3_ra_add(ra, cnt, &na, 3, 0x5000) == 1 && kbr_f3_ra_add(ra, cnt, &na, 3, 0x5000) == 0 && cnt[0] == 2 && na == 1, "f3: histogram counts a known address");
+            kbr_f3_ra_add(ra, cnt, &na, 3, 0x6000); kbr_f3_ra_add(ra, cnt, &na, 3, 0x7000);
+            CHECK(kbr_f3_ra_add(ra, cnt, &na, 3, 0x8000) == 0 && na == 3, "f3: histogram full");
+            CHECK(kbr_f3_ammo(0xbeebbeebUL) == 0 && kbr_f3_ammo(0xbeebbeeaUL) == 1, "f3: ammo xor");
+        }
     }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;

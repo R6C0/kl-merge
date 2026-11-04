@@ -456,4 +456,40 @@ static int kbr_sense_nearest(const float *d, int n, int maxn, int *out)
 /* the feed key clamp: interval in ms, 200..5000, default 500 */
 static int kbr_sense_ms(long v) { return v < 200 || v > 5000 ? 500 : (int)v; }
 
+/* OnlineBrainTraitorFireProbe3 (11-04): a counting detour on a game function. The stub at 'at' (the address it will run from) saves the registers in pushad + pushfd order, calls
+   handler(id, regs) (cdecl), restores them, runs the 'len' stolen prologue bytes and jumps back to 'back'. Returns the bytes written (17 + len + 5). The stolen bytes must
+   hold no relative operand (the caller checks them with the disassembler). Layout: 60 9C 54 6A id B8 handler FF D0 83 C4 08 9D 61 <stolen> E9 rel32. */
+#define KBR_F3_MAXSTUB 40
+static int kbr_f3_emit(unsigned char *p, kbr_u32 at, int id, kbr_u32 handler, const unsigned char *stolen, int len, kbr_u32 back)
+{
+    static const unsigned char pre[5] = { 0x60, 0x9c, 0x54, 0x6a, 0 }; int n = 0, i; kbr_u32 rel;
+    if (len < 5 || len > 10) return 0;
+    for (i = 0; i < 5; i++) p[n++] = pre[i];
+    p[4] = (unsigned char)id;
+    p[n++] = 0xb8; for (i = 0; i < 4; i++) p[n++] = (unsigned char)(handler >> (8 * i));
+    p[n++] = 0xff; p[n++] = 0xd0; p[n++] = 0x83; p[n++] = 0xc4; p[n++] = 0x08; p[n++] = 0x9d; p[n++] = 0x61;
+    for (i = 0; i < len; i++) p[n++] = stolen[i];
+    rel = back - (at + (kbr_u32)n + 5);
+    p[n++] = 0xe9; for (i = 0; i < 4; i++) p[n++] = (unsigned char)(rel >> (8 * i));
+    return n;
+}
+/* the jump written over the function's first 'len' bytes: E9 rel32 (to the stub) then NOPs */
+static void kbr_f3_jmp(unsigned char *out, kbr_u32 fn, kbr_u32 stub, int len)
+{
+    int i; kbr_u32 rel = stub - (fn + 5);
+    out[0] = 0xe9; for (i = 0; i < 4; i++) out[1 + i] = (unsigned char)(rel >> (8 * i));
+    for (i = 5; i < len; i++) out[i] = 0x90;
+}
+/* per-round histogram of return addresses: counts one more call from 'ra'; returns 1 when it was a new address, 0 when known or the table (cap entries) is full (the count of 'lost' is the caller's) */
+static int kbr_f3_ra_add(kbr_u32 *ra, long *cnt, int *n, int cap, kbr_u32 r)
+{
+    int i;
+    for (i = 0; i < *n; i++) if (ra[i] == r) { cnt[i]++; return 0; }
+    if (*n >= cap) return 0;
+    ra[*n] = r; cnt[*n] = 1; (*n)++;
+    return 1;
+}
+/* ammo word of an item: stored xor 0xbeebbeeb (verify note 11-04) */
+static kbr_u32 kbr_f3_ammo(kbr_u32 raw) { return raw ^ 0xbeebbeebUL; }
+
 #endif /* KLBRAIN_LOGIC_H */
