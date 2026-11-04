@@ -479,3 +479,8 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - DD05 marked rec 6 at 15:13:43 (clock ~310 s left; bs52 on the 4 min clock never marked): 91 attempted hits, 3450.8 dmg; far 5%, holder human 91%; 5 orders, 1211 near a human.
 - Van: DM03 1->3 at +7 s, 3->5 at +16 s (9 s at the curb); DD05 3->5 after 15 s. Arcade ~53 s: bs55 (call distance + hold) and OnlineVanCrewHold (37d1ab8ae) address it.
 - So far with DefendPull=2: every map run that marked a traitor hit humans (DM03 x3, DD01, DD07, DD09, DD05); the 6 min clock made DD05 mark.
+
+## bs55 (11-04 15:21-15:40, bs54 kit + OnlineGatherM=40 OnlineVanFarHold=1 FarHoldS=45 HoldM=100 HoldMaxS=45 OnlineVanMoverProbe=1, out_vm_1104x): 4/4 seats PASS, 0 faults
+- DM03: marked rec 7 at 15:25:28; van called at 228.7 s left, state 3 for 8 s (hold started 'walking bot 1 m from the box', shield on, timer never written), mover probe: up to 6 bots count under Arcade's crewhold rule per sample, 14 of 42 bot samples; HitLog 13 attempted hits, 396.1 dmg; ROUND LENGTH 392 s.
+- DD05: marked rec 4 at 15:35:35; state 3 for 12 s (legacy floor 2.5 -> 3.0 once), up to 6 movers, 30 of 60 bot samples count; HitLog 12 attempted hits, 7266.9 dmg; ROUND LENGTH 292 s.
+- Probe verdict: Arcade's crewhold condition is met online (bots still walk to the van when it parks), so OnlineVanCrewHold (37d1ab8ae) should hold the van; bench bs56. The 'hold itself: never started' text in this build's summary is a call-order artefact (fixed in out_ch_1104y, sampler runs first).

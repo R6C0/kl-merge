@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-04 15:45 c9: bs55 PASS 0 faults. The van probe shows the bots are still walking to the van when it parks (as in Arcade), so Arcade's 'wait for the crew' rule will work online; the old hold kept the van only 7-11 s. bs56 tests that rule now (DM03, DD05, DD03).
 - 11-04 15:25 c9: bs54 PASS 0 faults. With Arcade's 6 minute round clock DD05 now picks a traitor too, and it shot players 91 times (DM03: 39). The van still leaves too soon (9-15 s at the curb, Arcade ~53 s); bs55 tests that next, and the Arcade 'wait for the crew' rule is built (off by default).
 - 11-04 15:05 c9: bs53 PASS 0 faults on four more Dog Days maps. Wherever a traitor was picked, it shot players online (DD01 78 hits, DD07 8, DD09 37); on DD03 no traitor was picked. Next tests: an Arcade-length round clock (bs54), then an Arcade-like van wait (bs55).
 - 11-04 14:30 c9: bs51 + bs52 PASS 0 faults. Pull mode 2 (the game's own move order, 5.5 m short of the player) keeps the DM03 traitor near the players 94% of the round; it shot players 111 times (bs51) and 39 times (bs52). The 'thought it was dead' bug is fixed and confirmed. DD05 marked its traitor late or not at all, so no DD05 data yet. Next: mode 2 on more stock maps.

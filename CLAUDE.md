@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~15:45 - [c9] bs55 (bs54 kit + OnlineGatherM=40, FarHold 45 s, HoldMaxS=45, OnlineVanMoverProbe, out_vm_1104x) PASS 4/4 seats 0 faults. The probe says crewhold WOULD fire online:
+at most 6 loyal bots per sample moved >= 200 cm in 2 s within 100 m of kle_boarding at the curb (DM03 14 of 42 bot samples count, DD05 30 of 60), but the legacy hold (3 s floor, walker within 18 m)
+kept the van only 7-11 s in state 3 (Arcade 53 s). Traitor marked on both maps, hits DM03 13 (396 dmg), DD05 12 (7267 dmg). bs56 (OnlineVanCrewHold=1, out_ch_1104y; DM03 DD05 DD03) running from 15:41.
+Parity audit (scratchpad parity_audit_1104.md, verified): next gaps = real Board tactic never used on DD01/DD03/DD07 (research wa4ox109n running), host HUD log gap, traitor marked 2-4x earlier (money row).
+
 2026-11-04 ~15:25 - [c9] bs54 (bs52 kit + [Lobby] TimeAuto=6 = Arcade's 6 min clock, out_po2_1104w) PASS 4/4 seats 0 faults. The clock fix closes the marking gap: heist time 4 -> 6 min,
 ROUND LENGTH 316 s (DM03) / 397 s (DD05). DD05 marked a traitor at 15:13:43 (bs52 never, bs51 late): 91 attempted hits on humans (3451 dmg), far 5%; DM03 39 hits (2750 dmg), far 0%, 25 orders.
 Van dwell still short (DM03 state 3 for 9 s, DD05 15 s). 37d1ab8ae: OnlineVanCrewHold (Arcade's klmv_crewhold online, default off, out_ch_1104y md5 2c0b5e89).
 bs55 running (TimeAuto + OnlineGatherM=40, FarHold 45 s, HoldMaxS=45, mover probe); next: TimeAuto=6 on DD03 + crewhold bench if the probe shows walkers.
-
-2026-11-04 ~15:05 - [c9] bs53 (DefendPull=2, out_po2_1104w) on stock DD01 DD03 DD07 DD09: 8/8 seats PASS, 0 asserts, 0 faults. Online marked traitor hit humans on 3 of 4 maps:
-DD01 78 attempted hits (1504 dmg, far 29%, 4 orders), DD07 8 hits (7067 dmg, far 13%, 7 orders), DD09 37 hits (1012 dmg, far 14%, 5 orders); DD03 never marked a traitor (round length / loot pace).
-abf696475: OnlineHoldMaxS clamp 30 -> 60 + read-only OnlineVanMoverProbe (out_vm_1104x, md5 3cf8ab24). Running: bs54 (DM03+DD05, TimeAuto=6 Arcade-length clock),
-then bs55 (+ OnlineGatherM=40, FarHold 45 s, HoldMaxS=45, mover probe). Design workflow for a full online crewhold rule running (implement only if the probe shows movers).
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

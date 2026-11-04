@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~15:45 - [c9] bs55 (bs54 kit + OnlineGatherM=40, FarHold 45 s, HoldMaxS=45, OnlineVanMoverProbe, out_vm_1104x) PASS 4/4 seats 0 faults. The probe says crewhold WOULD fire online:
+at most 6 loyal bots per sample moved >= 200 cm in 2 s within 100 m of kle_boarding at the curb (DM03 14 of 42 bot samples count, DD05 30 of 60), but the legacy hold (3 s floor, walker within 18 m)
+kept the van only 7-11 s in state 3 (Arcade 53 s). Traitor marked on both maps, hits DM03 13 (396 dmg), DD05 12 (7267 dmg). bs56 (OnlineVanCrewHold=1, out_ch_1104y; DM03 DD05 DD03) running from 15:41.
+Parity audit (scratchpad parity_audit_1104.md, verified): next gaps = real Board tactic never used on DD01/DD03/DD07 (research wa4ox109n running), host HUD log gap, traitor marked 2-4x earlier (money row).
+
 2026-11-04 ~15:25 - [c9] bs54 (bs52 kit + [Lobby] TimeAuto=6 = Arcade's 6 min clock, out_po2_1104w) PASS 4/4 seats 0 faults. The clock fix closes the marking gap: heist time 4 -> 6 min,
 ROUND LENGTH 316 s (DM03) / 397 s (DD05). DD05 marked a traitor at 15:13:43 (bs52 never, bs51 late): 91 attempted hits on humans (3451 dmg), far 5%; DM03 39 hits (2750 dmg), far 0%, 25 orders.
 Van dwell still short (DM03 state 3 for 9 s, DD05 15 s). 37d1ab8ae: OnlineVanCrewHold (Arcade's klmv_crewhold online, default off, out_ch_1104y md5 2c0b5e89).
