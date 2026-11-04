@@ -78,11 +78,10 @@ wdntba8eu (verified): the shooting task's first check SKIP1 0x6d9eb0 needs byte 
 every tick (SelectWeapon(-1) at 0x7089ad, only when [s+0x88]==2); online the bot has 1, so the task loops without aiming. Committed eb15e460e (TraitorByte) and b2be1851a
 (FireProbe ext2 + OnlineBrainTraitorWeaponReady, TEST out_twr_1103s, kl_tests 71 pass). Next bench (when allowed): bs30 = bs28 keys + TraitorByte + WeaponReady.
 
-2026-11-03 ~10:20 - [ce] After-match navigation DONE, INSTALLED 03:49 (C:\kl_build_1024\pq_1103f_install, UNDO bat beside it). F3/F2 on the scoreboard ->
-page SHOWN with no RETURN, ESC backs out Weapon -> Category -> New. Benched PASS (2 seats, 0 faults, round 2) on all 9 stock FA maps (pq5-pq9)
-and all 7 DM-pool maps DM06/DM01/DM02/DM03/DM09/DM07/DD10 (pq10-pq12; DM02 = F02 page 2, 1 RIGHT; pq10's DD10 died in d3d9 on both seats in the
-same ms = a display change, rerun clean). 32/33 seats show the page; the miss was a client whose shop lasted 0.5 s. Those kits lacked live keys (c9: OnlineSwap,
-AssertSoft, ClientRewrite/RingSync): pq13 = DD05 + DM03 on a copy of the LIVE KLHook.ini, 4/4 seats page SHOWN, 0 asserts, 0 faults. Waiting for the owner's play test.
+2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
+71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list
+(mode 1) already open now walks on to the weapon list and shows the page (the owner's 11-02 'ignored' presses). pq14 PASS 4/4 seats (DD05 + DM03, live ini);
+pq14b on the install build: DM03 PASS, DD05 menu flake before the match (SystemLinkCreate timeout, 0 faults). The scoreboard path (pq_1103f, all 16 maps) is unchanged. Waiting for the owner's play test.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

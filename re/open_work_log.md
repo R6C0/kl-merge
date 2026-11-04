@@ -1,3 +1,11 @@
+2026-11-04 ~01:20 - [ce] InShopSteps (71f9bfbf5) INSTALLED 01:19 as pq_1104b (C:/kl_build_1024/pq_1104b_install, INSTALL/UNDO bats; dll md5 b84d456b, built from
+79ce4c7c4 + 71f9bfbf5's klhook files = local branch ce_inshop_ship aa88030f2, so none of c9's klbrain work went live; live ini gains only [ShopPage] InShopSteps=1).
+Why: the installed PageQueue path queued a page key pressed inside the shop (mode 0/1) but AutoOpen only sends ZW_SELECT3 to the Ready element, which is gone
+once the shop is up, so the press waited for a manual list open (owner 11-02 log). kpq_inshop_start starts the AutoOpenSteps where the player is (0 = Buy Weapons,
+1 = Category). pq14 (pq_1104a_test, DD05 + DM03, live ini + InShopSteps=1): 4/4 seats 'inshop' -> weapon list in 0.3-0.6 s, press applied, 0 asserts, 0 faults.
+pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
+to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
+
 2026-11-04 ~00:50 - [c9] Owner 00:30: "pc all yours again 24 hours". bs30 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; TraitorByte + WeaponReady, out_twr_1103s).
 wdntba8eu's top guess REFUTED: [body+0x5c8] == 0 on all 1696 calls (SKIP1 open), WeaponReady cleared nothing. Both traitor bots have ZFFActor bodies (vt 0xbb3bac), so TraitorByte
 (+0x2726, ZFFPlayer only) never applied. Aim [body+0x544] still 0, no ZFireWeaponTask, hp 550 flat. The run task is re-armed every 1-2 s with a new dest (mostly d 2-5 m,
