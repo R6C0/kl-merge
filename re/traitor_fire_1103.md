@@ -465,3 +465,10 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - bs51 (out_po_1104v, mode 2): DM03 111 attempted hits on humans, 2460.9 dmg; drift far 6%, holder human 93%; 15 orders, 0 silent no-ops, all on the holder base; skip 'dead' 24 (old alive test). DD05 marked late (14:06, recs 5/6): 0 hits, far 51%, 3 orders, skip 'dead' 251.
 - bs52 (out_po2_1104w, + alive fix 43793c462): DM03 39 attempted hits, 550.0 dmg; far 6%, holder human 92%; pull round 12 orders, 0 no-ops, 0 snapped, skip 'dead' 0, near a human 552, winner-owned 34. All 120 drift lines: hp 280000.0 src npc5fc alive 1 a48 -999.0, so the old [body+0xa48]+4 read was the defect (confirmed). DD05: no traitor marked this round, no data.
 - Compare bs50 (mode 1) DM03: 15 hits / 675 dmg, far 19%. Mode 2 keeps the block within 25 m of a human 94% of the round.
+
+## bs53 (11-04 14:28-15:00, DefendPull=2 on stock DD01 DD03 DD07 DD09, out_po2_1104w): 8/8 seats PASS, 0 faults
+- DD01 marked rec 3 at 14:31:44: HitLog 78 attempted hits on humans, 1503.5 dmg; drift far 29%, holder human 90%; pull round 4 orders, 559 near a human, 204 winner-owned.
+- DD03: no traitor marked (traitor evaluate nz 0 all round); 0 hits.
+- DD07 marked rec 2 at 14:47:33: 8 attempted hits, 7066.7 dmg; far 13%, holder human 57%; 7 orders, 26 'bot within 550 cm'.
+- DD09 marked rec 1 at 14:55:47: 37 attempted hits, 1011.9 dmg; far 14%, holder human 52%; 5 orders.
+- With bs51/bs52 (DM03): mode 2 hits humans on every map run where a traitor was marked (5 of 5); the open gap is marking (DD03, DD05), tested next by bs54 (TimeAuto=6).
