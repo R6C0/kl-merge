@@ -6,6 +6,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~01:45 - [c9] bs31 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe3, out_fp3_1104a). THE TRAITOR BOT DOES FIRE: the weapon controller tick 0x8c1830 runs for it
+(91 / 54 calls, all from ZFireWeaponTask 0x7c06b2), its ammo falls (DM03 18 -> 12 -> 0, DD05 30 -> 24 -> 14), pending shots [item+0xe8] 2 / 10. Range R 60 m (2R 120 m) vs 47-59 m: passes.
+So the earlier "aim 0 = never fires" reading was wrong; the loss is between the bullet and the human's hp. Re-arms all come from 0x800650, seconds apart: not the blocker.
+w8tlxwm93 suspects: per-shot gate bit 12 [[owner+4]+0x3c], ZFFActor ray path, 0x7e1700 drop for a client-seat human. bs32 (FireProbe4, c32e31d35) runs after ce's pq14c.
+
 2026-11-04 ~00:50 - [c9] Owner 00:30: "pc all yours again 24 hours". bs30 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; TraitorByte + WeaponReady, out_twr_1103s).
 wdntba8eu's top guess REFUTED: [body+0x5c8] == 0 on all 1696 calls (SKIP1 open), WeaponReady cleared nothing. Both traitor bots have ZFFActor bodies (vt 0xbb3bac), so TraitorByte
 (+0x2726, ZFFPlayer only) never applied. Aim [body+0x544] still 0, no ZFireWeaponTask, hp 550 flat. The run task is re-armed every 1-2 s with a new dest (mostly d 2-5 m,

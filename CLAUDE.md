@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~01:45 - [c9] bs31 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe3, out_fp3_1104a). THE TRAITOR BOT DOES FIRE: the weapon controller tick 0x8c1830 runs for it
+(91 / 54 calls, all from ZFireWeaponTask 0x7c06b2), its ammo falls (DM03 18 -> 12 -> 0, DD05 30 -> 24 -> 14), pending shots [item+0xe8] 2 / 10. Range R 60 m (2R 120 m) vs 47-59 m: passes.
+So the earlier "aim 0 = never fires" reading was wrong; the loss is between the bullet and the human's hp. Re-arms all come from 0x800650, seconds apart: not the blocker.
+w8tlxwm93 suspects: per-shot gate bit 12 [[owner+4]+0x3c], ZFFActor ray path, 0x7e1700 drop for a client-seat human. bs32 (FireProbe4, c32e31d35) runs after ce's pq14c.
+
 2026-11-04 ~00:50 - [c9] Owner 00:30: "pc all yours again 24 hours". bs30 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; TraitorByte + WeaponReady, out_twr_1103s).
 wdntba8eu's top guess REFUTED: [body+0x5c8] == 0 on all 1696 calls (SKIP1 open), WeaponReady cleared nothing. Both traitor bots have ZFFActor bodies (vt 0xbb3bac), so TraitorByte
 (+0x2726, ZFFPlayer only) never applied. Aim [body+0x544] still 0, no ZFireWeaponTask, hp 550 flat. The run task is re-armed every 1-2 s with a new dest (mostly d 2-5 m,
 [task+0x24]=0); episodes 47 ms .. 30 s. [body+0x550] is a float on ZFFActor (not a shot counter). wgby0tb0u traces the gates after SKIP1. pq14 (ce) next.
-
-2026-11-03 ~17:00 - [c9] OWNER HOME (~16:40): live runs stopped, offline only. bs29 (TraitorByte) gave no data: DM03 d3d9 crash on a display reset, DD05 stopped.
-wdntba8eu (verified): the shooting task's first check SKIP1 0x6d9eb0 needs byte [body+0x5c8]==0; the body ctor sets it to 1, only a real weapon switch clears it. Arcade clears it
-every tick (SelectWeapon(-1) at 0x7089ad, only when [s+0x88]==2); online the bot has 1, so the task loops without aiming. Committed eb15e460e (TraitorByte) and b2be1851a
-(FireProbe ext2 + OnlineBrainTraitorWeaponReady, TEST out_twr_1103s, kl_tests 71 pass). Next bench (when allowed): bs30 = bs28 keys + TraitorByte + WeaponReady.
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

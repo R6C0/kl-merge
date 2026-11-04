@@ -294,3 +294,12 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - 0x458880 (vt+0x69c apply) early gates: word [[victim+0x54]+0x3a] != 0 skips all; vt+0x5d8()==0xb with [rec+0xc] -> return; then 0x7f6850, 0x863a60, 0x4ea3b0, 0x8da3b0 (unread).
 - Ranked: (1) [esp+0x1f] = 0 for the bot owner, (2) ZFFActor ray path skipping the impact, (3) client-seat victim drop at 0x7e1800, (4) host-local victim with [victim+0x438] bit 18 clear, (5) [[victim+0x54]+0x3a], (6) null owner handle.
 - Data-only probes (no hooks needed): [item+0x138] (shot routine calls, ++ at 0x4cb8b9), [item+0xe8] falling, [item+0x160] vs [[0xdd2640]+0x44], [item+0x5c] -> owner, [[owner+4]+0x3c] bit 12, owner type vs ZLNKOBJ mask; per human: [+0x438] bit 18, [+0x274c] and its [+0x14], [[+0x54]+0x3a], hp; [sm+0x54/0x5c/0x70], [0x1535a2c].
+
+## bs31 (out_fp3_1104a, + FireProbe3, DM03 + DD05): PASS 4 seats, 0 asserts, 0 faults
+- Both detours installed (0x8c1830, 0x5faeb0). The weapon controller tick ran for the marked bot: DM03 bot 5 91 calls, DD05 bot 2 54 calls, every one returning to 0x7c06b2 (inside ZFireWeaponTask 0x7c02b0). The fire task IS running.
+- The bot SHOOTS: ammo [item+0xdc]^0xbeebbeeb DM03 18 -> 12 -> 0, DD05 30 -> 24 -> 22 -> 14; pending shots [item+0xe8] 2 (DM03), 0xa (DD05). [F+8] 0x31/0x33/0x35/0x91/0x95 (0x10 auto, 0x20 fire phase, 4 burst done, 0x80 pause).
+- Weapon template R [+0xe0] 6000.0 (2R 12000) vs bot->holder 4732-5879 cm: the range hold passes. [s+0x570] fire task present, +0x14 = 1.
+- Body: [+0x5c4] 0, [+0x68c] 0, byte [+0x576] 1, [+0x654] 0, [+0x50c] set, [+0x824] 1 + [+0x42c] 4 in some samples (weapon raised).
+- Run-task re-arms: one caller only, 0x800650 (also for all other soldiers); DM03 14 in the round, DD05 20, gaps mostly 3-20 s (bursts of 30-50 ms when the goal re-picks). Not the blocker.
+- Correction: "aim [body+0x544] 0 = no shot" (bs28-bs30) was wrong: the fire task aims at the holder directly (wgby0tb0u). The loss is from the bullet to the human's hp.
+- Host log: botfill counted "other hits on bots untouched" 2-5 per 5 s: some may be the traitor's rounds hitting bots (unproven). Next: bs32 FireProbe4 ([item+0x138] per-shot calls, owner bit 12, victim route fields).
