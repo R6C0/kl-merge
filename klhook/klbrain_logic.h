@@ -702,4 +702,19 @@ static int kbr_ra_dir(const float *o, const float *tg, float maxd, float *dir, f
 /* may the rewrite run at all: switch on, the game thread, a LIVE marked traitor shot, the shot record valid, geometry readable (not branch A0), a target position known */
 static int kbr_ra_gate(int on, int game_thread, int marked_live, int valid, int geo, int have_target) { return on && game_thread && marked_live && valid && geo && have_target; }
 
+/* RayAim site bit 2 (item aim point [item+0xc8..0xd0]): the point origin + dir * dist; 0 (out untouched) when dist is negative or anything is not finite */
+static int kbr_ra_point(const float *o, const float *dir, float dist, float *out)
+{
+    float p[3];
+    if (!(dist >= 0.0f) || !kbr_ra_finite(o, 3) || !kbr_ra_finite(dir, 3)) return 0;
+    p[0] = o[0] + dir[0] * dist; p[1] = o[1] + dir[1] * dist; p[2] = o[2] + dir[2] * dist;
+    if (!kbr_ra_finite(p, 3)) return 0;
+    out[0] = p[0]; out[1] = p[1]; out[2] = p[2];
+    return 1;
+}
+/* OnlineBrainTraitorRayAimSite: bits 1 (T), 2 (item aim point), 4 (M); nothing valid set -> 5 (the default) */
+static int kbr_ra_sitemask(int v) { int m = v & 7; return m ? m : 5; }
+/* distance bucket for the FireProbe7 aim-point lines: 0 under 1000 units, 1 under 3000, 2 under 6000, 3 more, 4 unknown (negative) */
+static int kbr_f7_dbucket(float d) { return d < 0.0f ? 4 : d < 1000.0f ? 0 : d < 3000.0f ? 1 : d < 6000.0f ? 2 : 3; }
+
 #endif /* KLBRAIN_LOGIC_H */

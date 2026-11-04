@@ -411,6 +411,17 @@ int main(void)
         { float cc[3], f2[3] = { 0, 1, 0 }; CHECK(kbr_ra_cone(f2, 30, 0.0f, 1.0f, cc) && kbr_f6_acos_deg(kbr_ra_dot(cc, f2)) <= 30.2f, "ra cone: capped at 30 deg, vertical fwd ok"); CHECK(kbr_ra_cone(f2, 500, 0.99f, 0.99f, cc) && kbr_f6_acos_deg(kbr_ra_dot(cc, f2)) <= 30.2f, "ra cone: 500 deg request capped"); }
         CHECK(kbr_ra_gate(1, 1, 1, 1, 1, 1) && !kbr_ra_gate(0, 1, 1, 1, 1, 1) && !kbr_ra_gate(1, 0, 1, 1, 1, 1) && !kbr_ra_gate(1, 1, 0, 1, 1, 1) && !kbr_ra_gate(1, 1, 1, 0, 1, 1) && !kbr_ra_gate(1, 1, 1, 1, 0, 1) && !kbr_ra_gate(1, 1, 1, 1, 1, 0), "ra gate: every condition is needed (on, game thread, live marked, valid, geo, target)");
     }
+    /* RayAim site bit 2 / FireProbe7 aim-point helpers */
+    {
+        float o[3] = { 10, 100, -5 }, d[3] = { 0.6f, 0.0f, 0.8f }, p[3] = { 7, 7, 7 }, inf[3], big;
+        unsigned int q = 0x7f800000u; memcpy(&big, &q, 4); inf[0] = big; inf[1] = 0; inf[2] = 0;
+        CHECK(kbr_ra_point(o, d, 500.0f, p) && p[0] > 309.9f && p[0] < 310.1f && p[1] > 99.9f && p[1] < 100.1f && p[2] > 394.9f && p[2] < 395.1f, "ra point: origin + dir * dist");
+        CHECK(kbr_ra_point(o, d, 0.0f, p) && p[0] == 10.0f && p[2] == -5.0f, "ra point: dist 0 = origin");
+        p[0] = 7.0f;
+        CHECK(!kbr_ra_point(o, d, -1.0f, p) && !kbr_ra_point(o, inf, 5.0f, p) && !kbr_ra_point(inf, d, 5.0f, p) && !kbr_ra_point(o, d, big, p) && p[0] == 7.0f, "ra point: negative dist / non-finite refused, out untouched");
+        CHECK(kbr_ra_sitemask(5) == 5 && kbr_ra_sitemask(7) == 7 && kbr_ra_sitemask(2) == 2 && kbr_ra_sitemask(3) == 3 && kbr_ra_sitemask(0) == 5 && kbr_ra_sitemask(8) == 5 && kbr_ra_sitemask(-1) == 7 && kbr_ra_sitemask(15) == 7, "ra sitemask: bits 1/2/4, empty -> 5");
+        CHECK(kbr_f7_dbucket(-1.0f) == 4 && kbr_f7_dbucket(0.0f) == 0 && kbr_f7_dbucket(999.0f) == 0 && kbr_f7_dbucket(1000.0f) == 1 && kbr_f7_dbucket(2999.0f) == 1 && kbr_f7_dbucket(3000.0f) == 2 && kbr_f7_dbucket(5999.0f) == 2 && kbr_f7_dbucket(6000.0f) == 3 && kbr_f7_dbucket(9e6f) == 3, "f7 dbucket edges");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }
