@@ -476,6 +476,27 @@ int main(void)
         CHECK(kbr_hs_decide(1, 1, 0, 2, 0, 1) == 1 && kbr_hs_decide(1, 1, 1, 2, 0, 0) == 3 && kbr_hs_decide(1, 0, 1, 2, 0, 1) == 5 && kbr_hs_decide(0, 1, 1, 2, 0, 1) == 5 && kbr_hs_decide(3, 1, 1, 2, 0, 1) == 5, "hs: stale pass, no human, dead, off / unknown");
         CHECK(!kbr_hs_need(7, 1, 7, 1) && kbr_hs_need(0, 1, 7, 1) && kbr_hs_need(7, 0x201, 7, 1) && kbr_hs_need(8, 1, 7, 1), "hs: write only when handle or flags differ");
     }
+    /* DefendProbe helpers */
+    {
+        long g[8] = { 3, 2, 0, 1, 0, 0, 4, 0 }, p8, p9, res; unsigned char st[40], o[6], nw[6]; kbr_u32 t[4] = { 0x1000, 0x2000, 0x3000, 0x4000 };
+        const unsigned char jl[6] = { 0x0f, 0x8c, 0x15, 0x02, 0x00, 0x00 };
+        CHECK(kbr_dp_c_active(1, 0) && !kbr_dp_c_active(1, 1) && !kbr_dp_c_active(0, 0) && !kbr_dp_c_active(0, 1), "dp: list C = byte set AND getter false");
+        CHECK(kbr_dp_getter(0, 6) == 0 && kbr_dp_getter(0x1000, 6) == 1 && kbr_dp_getter(0x1000, 5) == 0, "dp: getter 0x575100 on data");
+        CHECK(kbr_dp_index(t, 4, 0x3000) == 2 && kbr_dp_index(t, 4, 0x5000) == -1 && kbr_dp_index(t, 4, 0) == -1 && kbr_dp_index(t, 0, 0x1000) == -1, "dp: index of a tactic in a list");
+        res = kbr_dp_split(20, g, 8, 9, 4, &p8, &p9);      /* sum(g) = 10, P9 = 9 - 4 = 5, P8 = 20 - 10 - 5 = 5 */
+        CHECK(res == 0 && p9 == 5 && p8 == 5, "dp split: P9 from p8pass - ones, P8 = the rest");
+        res = kbr_dp_split(10, g, 8, 2, 3, &p8, &p9);      /* ones > p8pass: P9 clamps to 0, P8 = 0 */
+        CHECK(res == 0 && p9 == 0 && p8 == 0, "dp split: clamp, balanced");
+        res = kbr_dp_split(8, g, 8, 0, 0, &p8, &p9);      /* sum 10 > 8 total (a call in flight): P8 clamps, residual negative */
+        CHECK(res == -2 && p8 == 0 && p9 == 0, "dp split: residual shows an inconsistent count");
+        CHECK(kbr_dp_taken_emit(st, 0x500000, 51, 0x401000, 0x672722) == 22, "dp taken stub: 22 bytes");
+        CHECK(st[0] == 0x60 && st[1] == 0x9c && st[2] == 0x54 && st[3] == 0x6a && st[4] == 51 && st[5] == 0xb8 && st[6] == 0x00 && st[7] == 0x10 && st[8] == 0x40 && st[9] == 0 && st[10] == 0xff && st[11] == 0xd0 && st[12] == 0x83 && st[13] == 0xc4 && st[14] == 8 && st[15] == 0x9d && st[16] == 0x61 && st[17] == 0xe9, "dp taken stub: pushad pushfd push esp push id call popfd popad jmp");
+        CHECK((kbr_u32)(0x500000 + 22 + (kbr_u32)(st[18] | (st[19] << 8) | (st[20] << 16) | ((kbr_u32)st[21] << 24))) == 0x672722u, "dp taken stub: jumps to the original target");
+        memcpy(o, jl, 6);
+        CHECK(kbr_dp_jcc_target(o, 0x672507) == 0x672722u, "dp jcc: original target of 0x672507 is the 0.0 tail");
+        CHECK(kbr_dp_jcc(nw, o, 0x672507, 0x700000) == 1 && nw[0] == 0x0f && nw[1] == 0x8c && kbr_dp_jcc_target(nw, 0x672507) == 0x700000u, "dp jcc: same condition, retargeted to the stub");
+        o[0] = 0x74; CHECK(!kbr_dp_jcc(nw, o, 0x6726b1, 0x700000) && kbr_dp_jcc_target(o, 0x6726b1) == 0, "dp jcc: a short jump (rel8) is refused");
+    }
     /* LOS helpers */
     {
         float a[3] = { 0, 150, 0 }, b[3] = { 300, 150, 400 }, c[3] = { 0, 150, 1000 }, dl[3] = { 9, 9, 9 }, ln = 0, nan3[3];

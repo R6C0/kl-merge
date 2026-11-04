@@ -856,4 +856,51 @@ static int kbr_hs_decide(int mode, int alive, int pass_fresh, int n_blocked, int
 /* 1 = the holder must be (re)written: handle or flags differ from what we would write (no churn when equal) */
 static int kbr_hs_need(unsigned long cur_handle, unsigned long cur_flags, unsigned long new_handle, unsigned long new_flags) { return cur_handle != new_handle || cur_flags != new_flags; }
 
+/* OnlineBrainTraitorDefendProbe (11-04; pure helpers). (b) list C as the Defend tick reads it (0x85f8c2..0x85f8e2): C is walked when the byte [[S+0x40]+0x5c8] != 0 AND the getter 0x575100 (ecx = body; pure: eax = [body+0x77c]; 0 -> false; else [[eax+0x6d8]] == 6; read in the disassembly, no calls, no writes) is false. */
+static int kbr_dp_c_active(int b5c8, int getter) { return b5c8 != 0 && !getter; }
+/* the getter 0x575100 on already-read data: p = [body+0x77c], v = [[p+0x6d8]] (only meaningful when p != 0) */
+static int kbr_dp_getter(kbr_u32 p, kbr_u32 v) { return p != 0 && v == 6; }
+/* index of tactic pointer t in the list [begin, begin+4n) given as an array, or -1 */
+static int kbr_dp_index(const kbr_u32 *l, int n, kbr_u32 t) { int i; if (!t) return -1; for (i = 0; i < n; i++) if (l[i] == t) return i; return -1; }
+/* ZCloseIn 0.0 attribution. Counted directly: g[0..7] = zeros taken at P1 timer, P2 holder, P3 smoothed value, P4 distance, P5 time since event, P6 reachable, P7 squad count, P4b second distance test (0x672691, after P7 / the bl shortcut);
+   p8pass = times 0x6726b3 was reached (P8 class mask passed); ones = 1.0 returns; zeros_total = 0.0 returns. DERIVED: P9 (nav path, falls through 0x672718) = p8pass - ones; P8 (class mask, rel8 je 0x6726b1: not retargetable) = zeros_total - sum(g) - P9.
+   Negatives (calls in flight at a round edge) clamp to 0; the return value is the unattributed residual = zeros_total - sum(g) - p8 - p9 (0 when the counters agree). */
+static long kbr_dp_split(long zeros_total, const long *g, int ng, long p8pass, long ones, long *p8, long *p9)
+{
+    long s = 0, a, b; int i;
+    for (i = 0; i < ng; i++) s += g[i];
+    a = p8pass - ones; if (a < 0) a = 0;
+    b = zeros_total - s - a; if (b < 0) b = 0;
+    *p9 = a; *p8 = b;
+    return zeros_total - s - a - b;
+}
+/* the taken-branch stub: pushad, pushfd, push esp, push id, call handler(id, regs) (cdecl), popfd, popad, jmp back (no stolen bytes: the stub is the TARGET of a retargeted jcc rel32 and continues to the original target 'back'). Layout: 60 9C 54 6A id B8 handler FF D0 83 C4 08 9D 61 E9 rel32 (22 bytes). */
+static int kbr_dp_taken_emit(unsigned char *p, kbr_u32 at, int id, kbr_u32 handler, kbr_u32 back)
+{
+    static const unsigned char pre[5] = { 0x60, 0x9c, 0x54, 0x6a, 0 }; int n = 0, i; kbr_u32 rel;
+    for (i = 0; i < 5; i++) p[n++] = pre[i];
+    p[4] = (unsigned char)id;
+    p[n++] = 0xb8; for (i = 0; i < 4; i++) p[n++] = (unsigned char)(handler >> (8 * i));
+    p[n++] = 0xff; p[n++] = 0xd0; p[n++] = 0x83; p[n++] = 0xc4; p[n++] = 0x08; p[n++] = 0x9d; p[n++] = 0x61;
+    rel = back - (at + (kbr_u32)n + 5);
+    p[n++] = 0xe9; for (i = 0; i < 4; i++) p[n++] = (unsigned char)(rel >> (8 * i));
+    return n;
+}
+/* the 6 bytes written over a near conditional jump (0F cc rel32) at 'site': the same condition code, retargeted to 'stub'. Returns 0 when 'orig' is not a 0F 8x rel32 jump. */
+static int kbr_dp_jcc(unsigned char *out, const unsigned char *orig, kbr_u32 site, kbr_u32 stub)
+{
+    kbr_u32 rel = stub - (site + 6); int i;
+    if (orig[0] != 0x0f || (orig[1] & 0xf0) != 0x80) return 0;
+    out[0] = 0x0f; out[1] = orig[1];
+    for (i = 0; i < 4; i++) out[2 + i] = (unsigned char)(rel >> (8 * i));
+    return 1;
+}
+/* the absolute target of a 0F 8x rel32 jump at 'site' (to check that every retargeted jcc really goes to the 0.0 tail), 0 when it is not one */
+static kbr_u32 kbr_dp_jcc_target(const unsigned char *b, kbr_u32 site)
+{
+    kbr_u32 rel; if (b[0] != 0x0f || (b[1] & 0xf0) != 0x80) return 0;
+    rel = (kbr_u32)b[2] | ((kbr_u32)b[3] << 8) | ((kbr_u32)b[4] << 16) | ((kbr_u32)b[5] << 24);
+    return site + 6 + rel;
+}
+
 #endif /* KLBRAIN_LOGIC_H */
