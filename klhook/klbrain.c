@@ -2657,15 +2657,25 @@ static void klbr_ci_install(void)      /* once (game thread); a refusal is final
     klog("brain: closein: %d of %d sites installed (state %d; policy %s); installed site ids:%s%s", ok, KLBR_CI_NSITE, klbr_ci_state, klh_policy == KLH_DIRECT ? "direct" : "session/ship", nlist ? list : " none", ok < KLBR_CI_NSITE ? " (the others refused or differ: those counts stay 0, the DATA-side samples still run)" : "");
 }
 /* nearest live human ZFFPlayer from the rules' record list (the Sense enumeration: record = client struct at recs + 0x74 * k, player = [client + 0x378]); 1 = found. Offline Arcade has no such list (the rules vtable test fails): the caller then falls back to the holder [S+0xac] when that is a ZFFPlayer (GUESS that offline Arcade's human is the holder). */
+/* Offline fallback (11-04, DriftProbe baseline on Arcade; used ONLY when kl_online() == 0 and the record walk is unavailable, so online behaviour is unchanged). Source: klh_slot_player_mine() = the game's own local player
+   [[0xdd265c]+0x828+4*(sel<28)], sel = byte [gd+0x898] (klbot.c / klchar.c / klauto.c kla_local_player; offline it returns the slot as is). Offline Arcade has exactly one human, the local player, so he is THE human.
+   Tests as in the record walk: ZFFPlayer vtable 0xbb45f4 (klh_pvt), not a tagged bot (klbr_hl_find), health not <= 0, feet [+0x460] sane. GUESS: nothing else is a human offline (no split screen; the other 27 slots are not read). Returns 0 when no such body exists. */
+static int klbr_hn_local(const float *bp, double *dist, DWORD *who)
+{
+    DWORD p = klh_slot_player_mine(); float hp = 1.0f, tp[3];
+    if (p < 0x10000 || klh_pvt(p) != 0x00bb45f4u || klbr_hl_find(p) || (klbr_hp_read(p, &hp) && hp <= 0.0f) || !klh_rd(p + 0x460, tp, 12) || !kle_ok3(tp)) return 0;
+    *dist = kle_dist(bp, tp); if (who) *who = p;
+    return 1;
+}
 static int klbr_human_near(const float *bp, double *dist, DWORD *who)      /* nearest live human ZFFPlayer body (entity pointer into *who when given); same walk as before, shared with HolderSet */
 {
     DWORD G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)), rules = G > 0xffff ? klh_rd32(G + 0x54) : 0, vt, recs, freeb, cnt = 0; int k, found = 0;
     if (rules && rules == klbr_shadow) rules = klbr_rr_sw ? klbr_rr_rules : 0;
-    if (rules < 0x10000) return 0;
+    if (rules < 0x10000) return kl_online() ? 0 : klbr_hn_local(bp, dist, who);
     vt = klh_rd32(rules);
-    if ((!KLH_RULES_SV_OK(vt) && !KLH_RULES_CL_OK(vt)) || !klh_rd(rules + 0x14, &cnt, 4) || cnt > 16) return 0;
+    if ((!KLH_RULES_SV_OK(vt) && !KLH_RULES_CL_OK(vt)) || !klh_rd(rules + 0x14, &cnt, 4) || cnt > 16) return kl_online() ? 0 : klbr_hn_local(bp, dist, who);
     recs = klh_rd32(rules + 8); freeb = klh_rd32(rules + 0xc);
-    if (!recs || !freeb) return 0;
+    if (!recs || !freeb) return kl_online() ? 0 : klbr_hn_local(bp, dist, who);
     for (k = 0; k < (int)cnt; k++) {
         BYTE used = 1; DWORD cl, p; float hp = 1.0f, tp[3]; double d;
         if (!klh_rd(freeb + k, &used, 1) || used) continue;
@@ -3106,6 +3116,7 @@ static void klbr_af_summary(const char *why)      /* round edges only (not the 3
 #define KLBR_DF_CHGMAX 60
 #define KLBR_PL_LOGMAX 60
 static int klbr_dfon, klbr_plon, klbr_df_dead, klbr_df_nlog, klbr_df_nchg, klbr_pl_nlog, klbr_df_have[KLBR_MAX]; static DWORD klbr_df_at[KLBR_MAX], klbr_pl_at[KLBR_MAX]; static float klbr_df_last[KLBR_MAX][3];
+static int klbr_nb_probe_on(void) { return (klbr_dfon || klbr_rpon) && !klbr_df_dead && klbr_f6_flt < 3; }      /* klbotfill.c klbf_nb_drop: DriftProbe or RunProbe on (read-only log gate) */
 static long klbr_df_n, klbr_df_far, klbr_df_hh, klbr_df_chg, klbr_pl_w, klbr_pl_sk[7], klbr_pl_n; static char klbr_df_cn[12][32]; static long klbr_df_cc[12];
 static void klbr_df_reset(void) { klbr_df_nlog = klbr_df_nchg = klbr_pl_nlog = 0; memset(klbr_df_have, 0, sizeof klbr_df_have); memset(klbr_df_at, 0, sizeof klbr_df_at); memset(klbr_pl_at, 0, sizeof klbr_pl_at); memset(klbr_df_last, 0, sizeof klbr_df_last); klbr_df_n = klbr_df_far = klbr_df_hh = klbr_df_chg = klbr_pl_w = klbr_pl_n = 0; memset(klbr_pl_sk, 0, sizeof klbr_pl_sk); memset(klbr_df_cn, 0, sizeof klbr_df_cn); memset(klbr_df_cc, 0, sizeof klbr_df_cc); }
 static void klbr_df_win(DWORD S, char *wn, int cap)      /* Defend winner RTTI when the Defend goal is current, else "-"; call under __try */

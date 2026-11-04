@@ -1899,6 +1899,20 @@ static void klbf_nb_drop(int s, DWORD a, DWORD snd, DWORD now)      /* OnlineBra
 {
     int ph = klbf_ob[s].phase;
     klbr_nb_note(a, 0, ph);
+    if ((ph == 1 || ph == 2 || ph == 4) && klbr_nb_probe_on()) {      /* read only, once per drop (the phase becomes 0 below): does the defend block stay at the last ledger place? */
+        DWORD blk = 0; float bx[3] = { 0, 0, 0 }, tp[3] = { 0, 0, 0 }; double dh = 0; int haveb = 0, own = 0, havet = 0, humb = 0; char sd[24], sp[48];
+        __try {
+            blk = snd > 0xffff ? klh_rd32(snd + 0x64c) : 0;
+            if (blk > 0xffff) { own = klh_rd32(blk + 0x14) == snd; haveb = klh_rd(blk, bx, 12) && kle_ok3(bx); }
+            if (haveb) humb = klbr_human_near(bx, &dh, 0);
+            if ((ph == 1 || ph == 4) && klbf_ob[s].target > 0xffff) { DWORD ent = klh_rd32(klbf_ob[s].target + 0x24), node = ent > 0xffff ? klh_rd32(ent + 4) : 0; havet = node && kle_node(node, tp, 0) && kle_ok3(tp); }      /* GUESS: the same target -> [+0x24] -> [+4] -> node place as the phase-1 order (the ledger target is the stack's ctrl); phase 2 has no single target place (the exit walk), so 'none' */
+        } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klog("brain: nb drop blk: fault at the game data (shared fault counter now %d)", klbr_f6_flt); goto nb_probe_done; }
+        if (humb) _snprintf(sd, sizeof sd, "%.0f", dh); else _snprintf(sd, sizeof sd, "none");
+        if (havet) _snprintf(sp, sizeof sp, "%.0f %.0f %.0f", (double)tp[0], (double)tp[1], (double)tp[2]); else _snprintf(sp, sizeof sp, "none");
+        sd[sizeof sd - 1] = sp[sizeof sp - 1] = 0;
+        klog("brain: nb drop blk: rec %d blk xyz %.0f %.0f %.0f (blk %08lx, have %d) own==S %d dblk_hum %s ledger phase %d place xyz %s", s, (double)bx[0], (double)bx[1], (double)bx[2], (unsigned long)blk, haveb, own, sd, ph, sp);
+      nb_probe_done: ;
+    }
     if (ph == 1 || ph == 4) { klbf_ob[s].phase = 0; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].since = now; klbf_ob[s].lootAt = 0; klbr_nb_drop++; }      /* GUESS: phase 0 is the claim test everywhere (phase 1 / 4 + target), so the stack is unclaimed; a part-paid tally stays on the bot */
     else if (ph == 2) {
         if ((klbf_ob[s].told & 2048) && snd > 0xffff) { DWORD blk = klh_rd32(snd + 0x64c); BYTE zero = 0; if (blk && klh_rd32(blk + 0x14) == snd) klh_data((void *)(DWORD_PTR)(blk + 0x10), &zero, 1, "defend block style given (OnlineExitSprint undone, NoBoard)"); }
