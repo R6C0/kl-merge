@@ -1393,6 +1393,77 @@ static void klbr_f3_summary(void)      /* at round end, before the arrays are cl
     klbr_f3_ctrl_m = klbr_f3_ctrl_o = klbr_f3_re_m = klbr_f3_re_o = klbr_f3_ra_lost = 0; klbr_f3_nm = klbr_f3_no = 0;
     memset(klbr_f3_F, 0, sizeof klbr_f3_F); memset(klbr_f3_tk, 0, sizeof klbr_f3_tk); memset(klbr_f3_last, 0, sizeof klbr_f3_last); memset(klbr_f3_tkn, 0, sizeof klbr_f3_tkn);
 }
+/* OnlineBrainTraitorFireProbe4 (11-04, workflow w8tlxwm93 "bullet -> victim hp"; DATA READS ONLY: no hook, no game-state write; recommended off; needs FireProbe, so AttackHandle). Piggybacks FireProbe's sample point. Two kinds of line,
+   at most KLBR_F4_LOGMAX per round each, and a round total "brain: traitor fireprobe4 round:".
+   1. "fireprobe4 item:" for the marked bot's item = [[s+0x6a0]+4]: [+0x138] (calls into the per-shot routine 0x4cb7a0, ++ at 0x4cb8b9), [+0xe8] pending shots, [+0xe4], bytes +0xed +0xef +0x136 +0x137, float +0xf0, [+0x104], [+0x160]
+      against [[0xdd2640]+0x44] (GUESS: the game-time word the shot loop compares), and the deltas of +0x138 and +0xe8 since the previous sample of this bot. The owner handle [item+0x5c] is resolved with 0x8ccde0, the SAME pure
+      handle -> entity lookup FireProbe already calls on [body+0x544] (read from code at 0x4f44a7 / 0x4cb7a0: a table lookup, no side effect), on the game thread (we are inside the slot-113 call of the soldier) and under __try; it is
+      NOT called once FireProbe's lookup has faulted 3 times. For the owner (the bot body if unresolved): bit 12 of [[owner+4]+0x3c] (0x4cb7a0's 'may shoot' byte, with the ZLNKOBJ type test as the other way in), the owner's vtable (class by
+      vtable compare, as everywhere in this file; vt+0x30 is NOT called), the masks [0x153a898] / [0x153a89c] raw, and [0x1535230] against [[0xdd265c]+0x8b4] (the per-frame cap of the item tick 0x488ad0, GUESS types: unsigned compare).
+   2. "fireprobe4 victim:" for the holder [s+0xac] when it is a ZFFPlayer (the only human the probe finds without a new scan): [+0x438] bit 18, [+0x274c] and dword [[+0x274c]+0x14], word [[+0x54]+0x3a] (0x458880 skips everything
+      when non-zero), hp (klbr_hp_read), [+0x774]; the bot's [body+0x274c] / [+0x774]; the session [sm+0x54] / [+0x5c] / [+0x70] (sm = [0x168e598]); [0x1535a2c]. The predicted route of a bot's hit (GUESS, from the 0x7e1700
+      trace: kbr_f4_route in klbrain_logic.h; whether the station is 'remote' (0x7de570) is not read, so a set station with a non-zero id is 'undetermined'). */
+#define KLBR_F4_LOGMAX 60
+static int klbr_f4on;
+static DWORD klbr_f4_p138[KLBR_MAX], klbr_f4_pe8[KLBR_MAX]; static BYTE klbr_f4_have[KLBR_MAX];
+static long klbr_f4_ni, klbr_f4_nv, klbr_f4_samples, klbr_f4_d138, klbr_f4_de8, klbr_f4_unres, klbr_f4_b12, klbr_f4_route[4];
+static void klbr_f4_sample(int ix, struct klbr_s *e, DWORD self, DWORD body)      /* game thread, read only */
+{
+    DWORD F, item, h, owner = 0, o4 = 0, o3c = 0, ovt = 0, c138, ce8, d138 = 0, de8 = 0, g160, g44, p2640, p265c, cap, fcnt, m98, m9c;
+    DWORD hp, sm, st = 0, st14 = 0, bst = 0; WORD w3a = 0; BYTE bits[4]; int b12, hpok, route, hum;
+    float hpv = 0.0f;
+    (void)e;
+    if (!klbr_f4on || ix < 0 || ix >= KLBR_MAX) return;
+    klbr_f4_samples++;
+    F = klbr_f3_d(self + 0x6a0); item = F > 0xffff ? klbr_f3_d(F + 4) : 0;
+    if (item > 0xffff) {      /* counts and deltas on every sample; only the line printing is capped */
+        DWORD sub, a3c, a40; BYTE b4 = 0xff;
+        h = klh_rd32(item + 0x5c);
+        if (h && klbr_fp_flt < 3) { __try { owner = ((klbr_cfrefn)(DWORD_PTR)KLH_VA(KLBR_CF_REF))(h); } __except (EXCEPTION_EXECUTE_HANDLER) { owner = 0; klbr_fp_flt++; } }
+        if (owner <= 0xffff) klbr_f4_unres++;
+        sub = owner > 0xffff ? owner : body;
+        o4 = sub > 0xffff ? klh_rd32(sub + 4) : 0; o3c = o4 > 0xffff ? klh_rd32(o4 + 0x3c) : 0; ovt = sub > 0xffff ? klh_rd32(sub) : 0;
+        b12 = kbr_f4_bit(o3c, 12); if (b12) klbr_f4_b12++;
+        c138 = klh_rd32(item + 0x138); ce8 = klh_rd32(item + 0xe8);
+        d138 = kbr_f4_delta(klbr_f4_have[ix], klbr_f4_p138[ix], c138); de8 = kbr_f4_delta(klbr_f4_have[ix], ce8, klbr_f4_pe8[ix]);      /* +0xe8 falls as shots are taken: delta = previous - current */
+        klbr_f4_d138 += (long)d138; klbr_f4_de8 += (long)de8;
+        g160 = klh_rd32(item + 0x160); p2640 = KLBR_RDG(0xdd2640); g44 = p2640 > 0xffff ? klh_rd32(p2640 + 0x44) : 0;
+        p265c = KLBR_RDG(0xdd265c); cap = p265c > 0xffff ? klh_rd32(p265c + 0x8b4) : 0; fcnt = KLBR_RDG(0x1535230); m98 = KLBR_RDG(0x153a898); m9c = KLBR_RDG(0x153a89c);
+        bits[0] = bits[1] = bits[2] = bits[3] = 0xff;
+        a3c = KLBR_RDG(0x1535a3c); a40 = KLBR_RDG(0x1535a40); klh_rd(item + 0xe4, &b4, 1);
+        if (klbr_f4_ni < KLBR_F4_LOGMAX) {
+        klh_rd(item + 0xed, &bits[0], 1); klh_rd(item + 0xef, &bits[1], 1); klh_rd(item + 0x136, &bits[2], 1); klh_rd(item + 0x137, &bits[3], 1);
+        klog("brain: traitor fireprobe4 item: bot %d item %08lx [+0x138](0x4cb7a0 calls) %lu (+%lu since the last sample) [+0xe8](pending) %lu (-%lu) byte[+0xe4] %02x bytes +0xed %02x +0xef %02x +0x136 %02x +0x137 %02x float+0xf0 %.3f [+0x104] %08lx [+0x160] %08lx vs [[0xdd2640]+0x44] %08lx (%s, GUESS unsigned compare); "
+             "owner handle [+0x5c] %08lx -> %s %08lx (vt %08lx) [owner+4] %08lx [[owner+4]+0x3c] %08lx bit12 %d (0 = 0x4cb7a0 fires nothing unless the ZLNKOBJ type test passes: masks [0x153a898] %08lx [0x153a89c] %08lx, vt+0x30 not called); [0x1535230] %lu vs [[0xdd265c]+0x8b4] %lu (%s, GUESS; 0x488ad0 bypasses the cap via the pair [0x1535a40] %08lx / [0x1535a3c] %08lx)",
+             ix, (unsigned long)item, (unsigned long)c138, (unsigned long)d138, (unsigned long)ce8, (unsigned long)de8, (unsigned)b4, (unsigned)bits[0], (unsigned)bits[1], (unsigned)bits[2], (unsigned)bits[3], klbr_fp_f(klh_rd32(item + 0xf0)), (unsigned long)klh_rd32(item + 0x104),
+             (unsigned long)g160, (unsigned long)g44, g160 >= g44 ? ">=" : "<", (unsigned long)h, owner > 0xffff ? "owner" : "UNRESOLVED, using the bot body", (unsigned long)sub, (unsigned long)ovt, (unsigned long)o4, (unsigned long)o3c, b12,
+             (unsigned long)m98, (unsigned long)m9c, (unsigned long)fcnt, (unsigned long)cap, fcnt < cap ? "below the cap" : "AT/OVER the cap", (unsigned long)a40, (unsigned long)a3c);
+        klbr_f4_ni++;
+        }
+        klbr_f4_p138[ix] = c138; klbr_f4_pe8[ix] = ce8; klbr_f4_have[ix] = 1;
+    }
+    hp = klbr_f3_d(self + 0xac); hum = hp > 0xffff && klh_pvt(hp) == 0x00bb45f4u;
+    if (hum && klbr_f4_nv < KLBR_F4_LOGMAX) {
+        DWORD p54 = klh_rd32(hp + 0x54), b438 = klh_rd32(hp + 0x438); int bit18 = kbr_f4_bit(b438, 18);
+        st = klh_rd32(hp + 0x274c); st14 = st > 0xffff ? klh_rd32(st + 0x14) : 0; if (p54 > 0xffff) klh_rd(p54 + 0x3a, &w3a, 2);
+        hpok = klbr_hp_read(hp, &hpv);
+        bst = body > 0xffff ? klh_rd32(body + 0x274c) : 0; sm = KLBR_RDG(0x168e598);
+        route = kbr_f4_route(bit18, 1, st > 0xffff, st14); klbr_f4_route[route]++;
+        klog("brain: traitor fireprobe4 victim: bot %d holder %08lx (ZFFPlayer) [+0x438] %08lx bit18 %d [+0x274c] %08lx [[+0x274c]+0x14] %08lx [+0x54] %08lx word[[+0x54]+0x3a] %04x (non-zero = 0x458880 skips the hit) hp %.1f%s [+0x774] %08lx; bot [body+0x274c] %08lx [body+0x774] %08lx; "
+             "session sm %08lx [+0x54] %08lx [+0x5c] %08lx [+0x70] %08lx; [0x1535a2c] %08lx; predicted route (GUESS, 0x7e1700 trace): %s",
+             ix, (unsigned long)hp, (unsigned long)b438, bit18, (unsigned long)st, (unsigned long)st14, (unsigned long)p54, (unsigned)w3a, (double)hpv, hpok ? "" : " (unreadable)", (unsigned long)klh_rd32(hp + 0x774), (unsigned long)bst, (unsigned long)(body > 0xffff ? klh_rd32(body + 0x774) : 0),
+             (unsigned long)sm, (unsigned long)(sm > 0xffff ? klh_rd32(sm + 0x54) : 0), (unsigned long)(sm > 0xffff ? klh_rd32(sm + 0x5c) : 0), (unsigned long)(sm > 0xffff ? klh_rd32(sm + 0x70) : 0), (unsigned long)KLBR_RDG(0x1535a2c), kbr_f4_route_name(route));
+        klbr_f4_nv++;
+    }
+}
+static void klbr_f4_summary(void)      /* at round end */
+{
+    if (klbr_f4on)
+        klog("brain: traitor fireprobe4 round: samples %ld item lines %ld victim lines %ld; item [+0x138] (0x4cb7a0 calls) rose by %ld, [+0xe8] fell by %ld between samples; owner unresolved %ld, bit 12 set %ld; predicted victim routes (GUESS): apply-local %ld, drop %ld, apply %ld, undetermined %ld",
+             klbr_f4_samples, klbr_f4_ni, klbr_f4_nv, klbr_f4_d138, klbr_f4_de8, klbr_f4_unres, klbr_f4_b12, klbr_f4_route[0], klbr_f4_route[1], klbr_f4_route[2], klbr_f4_route[3]);
+    klbr_f4_ni = klbr_f4_nv = klbr_f4_samples = klbr_f4_d138 = klbr_f4_de8 = klbr_f4_unres = klbr_f4_b12 = 0; memset(klbr_f4_route, 0, sizeof klbr_f4_route);
+    memset(klbr_f4_have, 0, sizeof klbr_f4_have);
+}
 /* OnlineBrainTraitorWeaponReady (11-03, workflow wdntba8eu; UNTESTED, recommended off, CHANGES behaviour; needs AttackHandle; host only). For a MARKED bot after every slot-113 call: byte [body+0x5c8] != 0 (SKIP1 of the
    shooting task would loop forever), [body+0x860] == 0, [body+0x70] != 0 and [s+0x6a0] != 0 (weapon controller present) -> write byte 0 through klh_data. NOT restored on purpose: the game's own SelectWeapon 0x511450
    clears the byte on a real weapon switch anyway, so 0 is the state the game reaches by itself; a pre-installed weapon (vt+0x6b8) just never got that switch. The gate offsets are GUESS (workflow trace, not re-disassembled here).
@@ -1503,6 +1574,7 @@ static void klbr_fp_apply(struct klbr_s *e, DWORD self)      /* game thread, aft
     klbr_fp_ext(ix, self, body, run, klbr_fp[ix].sl);
     klbr_fp_ext2(ix, self, body);
     klbr_f3_sample(ix, e, self, body);      /* OnlineBrainTraitorFireProbe3 (no-op unless on) */
+    klbr_f4_sample(ix, e, self, body);      /* OnlineBrainTraitorFireProbe4 (no-op unless on) */
     if (!klbr_fp[ix].tuned) {
         DWORD tp0 = 0, f[4] = { 0, 0, 0, 0 }; float v[4]; static const DWORD off[4] = { 0x38c, 0x394, 0x3a4, 0x3ac }; int k, ok = 1;
         klbr_fp[ix].tuned = 1;
@@ -1561,6 +1633,7 @@ static void klbr_fp_summary(void)
     int i;
     klbr_tb_restore_all("round end");      /* OnlineBrainTraitorTraitorByte: before the counts, while klbr_t is still intact */
     klbr_f3_summary();      /* OnlineBrainTraitorFireProbe3 round counts (before klbr_fp is cleared below) */
+    klbr_f4_summary();      /* OnlineBrainTraitorFireProbe4 round total */
     if (klbr_tbon) klog("brain: traitor traitorbyte: round total: byte set %ld, restored %ld, not restored (body gone / byte changed / refused) %ld, re-set after a reset %ld, slot-113 calls: byte already nonzero %ld, with a ZFFActor body (not applicable) %ld, other class %ld; refused writes %ld", klbr_tb_set, klbr_tb_rest, klbr_tb_lost, klbr_tb_reset, klbr_tb_have, klbr_tb_actor, klbr_tb_other, klbr_tb_refused);
     klbr_tb_set = klbr_tb_reset = klbr_tb_rest = klbr_tb_lost = klbr_tb_have = klbr_tb_actor = klbr_tb_other = klbr_tb_refused = 0; klbr_tb_told = 0; memset(klbr_tb, 0, sizeof klbr_tb);
     if (klbr_fpon) for (i = 0; i < KLBR_MAX; i++) if (klbr_fp[i].calls)
@@ -2571,6 +2644,9 @@ static void klbr_init(void)
     klbr_f3on = klbr_fpon && klbr_key("OnlineBrainTraitorFireProbe3");
     if (klbr_key("OnlineBrainTraitorFireProbe3") && !klbr_f3on) klog("brain: OnlineBrainTraitorFireProbe3 needs OnlineBrainTraitorFireProbe: off");
     if (klbr_f3on) klog("brain: OnlineBrainTraitorFireProbe3=1 UNTESTED (recommended off): READ ONLY toward the game state; counting detours on 0x8c1830 and 0x5faeb0 (TEST build only, unhashed code), per-sample item / template / body numbers, round counts (host only)");
+    klbr_f4on = klbr_fpon && klbr_key("OnlineBrainTraitorFireProbe4");
+    if (klbr_key("OnlineBrainTraitorFireProbe4") && !klbr_f4on) klog("brain: OnlineBrainTraitorFireProbe4 needs OnlineBrainTraitorFireProbe: off");
+    if (klbr_f4on) klog("brain: OnlineBrainTraitorFireProbe4=1 UNTESTED (recommended off): DATA READS ONLY, no hook, no write; item shot counters / owner gate bit / victim gates / predicted victim route per FireProbe sample (host only)");
     klbr_wron = klbr_cfh && klbr_key("OnlineBrainTraitorWeaponReady");
     if (klbr_key("OnlineBrainTraitorWeaponReady") && !klbr_wron) klog("brain: OnlineBrainTraitorWeaponReady needs OnlineBrainTraitorAttackHandle: off");
     if (klbr_wron) klog("brain: OnlineBrainTraitorWeaponReady=1 UNTESTED (recommended off): a marked bot's byte [body+0x5c8] (weapon not ready, blocks the shooting task) is cleared to 0 when its weapon controller exists (host only; not put back)");

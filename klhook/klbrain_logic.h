@@ -492,4 +492,19 @@ static int kbr_f3_ra_add(kbr_u32 *ra, long *cnt, int *n, int cap, kbr_u32 r)
 /* ammo word of an item: stored xor 0xbeebbeeb (verify note 11-04) */
 static kbr_u32 kbr_f3_ammo(kbr_u32 raw) { return raw ^ 0xbeebbeebUL; }
 
+/* OnlineBrainTraitorFireProbe4 (11-04): pure helpers. bit n of a dword; delta of a counter against its previous sample (first sample = 0, a counter that went down = 0); GUESS route of a hit on a human ZFFPlayer
+   after the trace of 0x7e1700 (workflow w8tlxwm93): 0 apply-local (victim+0x438 bit 18 set), 1 drop (bot attacker, bit 18 clear, station SET and its [+0x14] id is 0), 2 apply (player attacker, or a null station
+   (0x7de570 returns false for null)), 3 undetermined (bot attacker, bit 18 clear, station set and non-zero id: whether it is 'remote' is not read) */
+static int kbr_f4_bit(kbr_u32 v, int n) { return (int)((v >> n) & 1u); }
+static kbr_u32 kbr_f4_delta(int have_prev, kbr_u32 prev, kbr_u32 cur) { return (have_prev && cur >= prev) ? cur - prev : 0; }
+static int kbr_f4_route(int bit18, int attacker_is_bot, int station_set, kbr_u32 station_id)
+{
+    if (bit18) return 0;
+    if (!attacker_is_bot) return 2;
+    if (!station_set) return 2;      /* 0x7de570 returns false for a null station: falls through to the apply call */
+    if (station_id == 0) return 1;
+    return 3;
+}
+static const char *kbr_f4_route_name(int r) { return r == 0 ? "apply-local (bit18)" : r == 1 ? "drop (bot attacker, station set, id 0)" : r == 2 ? "apply" : "undetermined (station set, id != 0: remote not read)"; }
+
 #endif /* KLBRAIN_LOGIC_H */

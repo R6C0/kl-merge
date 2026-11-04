@@ -326,6 +326,10 @@ int main(void)
             CHECK(kbr_f3_ra_add(ra, cnt, &na, 3, 0x8000) == 0 && na == 3, "f3: histogram full");
             CHECK(kbr_f3_ammo(0xbeebbeebUL) == 0 && kbr_f3_ammo(0xbeebbeeaUL) == 1, "f3: ammo xor");
         }
+        CHECK(kbr_f4_bit(0x1000, 12) == 1 && kbr_f4_bit(0x1000, 11) == 0 && kbr_f4_bit(0x40000, 18) == 1 && kbr_f4_bit(0xffffffffUL, 31) == 1, "f4: bit");
+        CHECK(kbr_f4_delta(0, 5, 9) == 0 && kbr_f4_delta(1, 5, 9) == 4 && kbr_f4_delta(1, 9, 5) == 0 && kbr_f4_delta(1, 7, 7) == 0, "f4: delta");
+        CHECK(kbr_f4_route(1, 1, 0, 0) == 0 && kbr_f4_route(0, 0, 1, 5) == 2 && kbr_f4_route(0, 1, 0, 0) == 2 && kbr_f4_route(0, 1, 1, 0) == 1 && kbr_f4_route(0, 1, 1, 7) == 3, "f4: route");
+        CHECK(strcmp(kbr_f4_route_name(1), "drop (bot attacker, station set, id 0)") == 0 && kbr_f4_route_name(9)[0] == 'u', "f4: route name");
     }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
