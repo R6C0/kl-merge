@@ -1089,6 +1089,8 @@ static void klbf_ot_arrive(DWORD rules, int s, DWORD now)
     klbf_ot_gat = 1; klbf_ot_gatAt = now; klbf_ot_gcar = s; klbf_ot_gtold = 0; klbf_vgs_since = 0;
     klog("botfill: tactics: van: gather: bot %d reached the exit trigger %08lx; every living bot walks to the box now and the van is called when all are within %.0f m of it, after %d s at the latest (OnlineVanGather)", s, klbf_ot_trig, klbf_ot_gm / 100, klbf_ot_gmax);
 }
+/* [Brain] OnlineBrainTraitorStage2Gate (read only): 1 once the van is called or the OnlineVanGather phase runs (klbf_ot_gat is only ever set with OnlineVanGather on; with it off the call sets klbf_ot_called) */
+static int klbf_ot_s2open(void) { return klbf_ot_called || klbf_ot_gat; }
 /* the walk goal: the chosen box's centre (OnlineBoxWalk), else the exit trigger's place */
 /* OnlineVanBoPos (wk-vantime-1101; NOT run live): the BOARDING PLACE while the van is PARKED (state 3 / 4), once per tick. Same place as klescort.c kle_boarding (0x8faf72..0x8fafe6): [rules+0x1e0] is the
    VEHICLE ITSELF, its node + 500 along the node's x axis; kle_boarding is shared here, not copied. While the van drives in (state 1 / 2) that place moves along the road (Vault N1018_L22: 25-47 m on), so

@@ -205,6 +205,25 @@ int main(void)
         CHECK(kbr_drop_valid(1, 100, 0, 1) && !kbr_drop_valid(0, 100, 0, 1) && !kbr_drop_valid(1, 0, 0, 1) && !kbr_drop_valid(1, -5, 0, 1), "drop: armed with an amount left is valid");
         CHECK(!kbr_drop_valid(1, 100, 1, 1) && !kbr_drop_valid(1, 100, -1, 1) && !kbr_drop_valid(1, 100, 0, 0), "drop: hidden / unreadable node / not tracked-ok (no real drain) is not valid");
     }
+    {   /* OnlineBrainTraitorStage2Gate */
+        int bs, ab, van, ex, op, ok = 1; long ty;
+        for (bs = 0; bs < 2; bs++) for (ab = 0; ab < 2; ab++) for (van = 0; van < 8; van++) for (ex = 0; ex < 2; ex++) for (op = 0; op < 2; op++) for (ty = -1; ty < 3; ty++) {
+            int s = kbr_stage_byte(bs, ab, ty, van, ex);      /* key off: identical for every input, whatever the openers and the fallback */
+            if (kbr_stage_gate(0, s, ty, op, ex, 1250000) != s) ok = 0;
+            if (kbr_stage_gate(1, s, ty, op, ex, 0) != s && s != 2) ok = 0;      /* key on: only a 2 may change */
+        }
+        CHECK(ok, "stage2 gate: key off = the byte of kbr_stage_byte for every input; key on never touches 0 / 1 / 3");
+        CHECK(kbr_stage_gate(1, 2, 5, 0, 0, 0) == 1 && kbr_stage_gate(1, 2, 1249999, 0, 0, 1250000) == 1, "stage2 gate: closed = a carrying bot shows 1 (no opener, below the fallback)");
+        CHECK(kbr_stage_gate(1, 2, 5, 1, 0, 1250000) == 2 && kbr_stage_gate(1, 2, 5, 0, 1, 1250000) == 2, "stage2 gate: van called / gather (open) or ordered to the box = 2");
+        CHECK(kbr_stage_gate(1, 2, 1250000, 0, 0, 1250000) == 2 && kbr_stage_gate(1, 2, 9000000, 0, 0, 1250000) == 2 && kbr_stage_gate(1, 2, 9000000, 0, 0, 0) == 1, "stage2 gate: money fallback opens at >= the figure, 0 = no fallback");
+        CHECK(kbr_stage_gate(1, 3, 5, 0, 0, 0) == 3 && kbr_stage_gate(1, 1, 5, 0, 0, 0) == 1 && kbr_stage_gate(1, 0, 0, 0, 0, 0) == 0 && kbr_stage_gate(1, kbr_stage_byte(1, 0, 5, 3, 0), 5, 0, 0, 0) == 3, "stage2 gate: stage 3 (aboard / BoardStage ready) and 1 / 0 untouched");
+        /* kbr_stage_compose(gate, board_stage, aboard, tally, van, ob_called, hook_open, money_fb) */
+        CHECK(kbr_stage_compose(1, 0, 0, 5, 0, 0, 0, 0) == 1 && kbr_stage_compose(1, 0, 0, 5, 5, 0, 0, 0) == 1, "stage2 compose: carrying, van not called (state 0 / 5), no opener = 1");
+        CHECK(kbr_stage_compose(1, 0, 0, 5, 1, 0, 0, 0) == 2 && kbr_stage_compose(1, 0, 0, 5, 4, 0, 0, 0) == 2, "stage2 compose: a human-called van (real state 1..4, no hook flag) opens the gate");
+        CHECK(kbr_stage_compose(1, 0, 0, 5, 0, 1, 0, 0) == 2 && kbr_stage_compose(1, 0, 0, 5, 0, 0, 1, 0) == 2, "stage2 compose: exit-box order (also without BoardStage) or hook opener opens it");
+        CHECK(kbr_stage_compose(1, 1, 0, 5, 3, 0, 0, 0) == 3 && kbr_stage_compose(1, 1, 0, 5, 0, 0, 0, 0) == 1 && kbr_stage_compose(1, 1, 1, 0, 0, 0, 0, 0) == 3, "stage2 compose: BoardStage 3 passes the gate; BoardStage with no van and no order = gated 1; aboard = 3");
+        CHECK(kbr_stage_compose(0, 0, 0, 5, 0, 0, 0, 0) == 2 && kbr_stage_compose(0, 1, 0, 5, 3, 0, 0, 0) == kbr_stage_byte(1, 0, 5, 3, 0), "stage2 compose: gate off = kbr_stage_byte exactly");
+    }
     {   /* BoardStage: stage byte and the deferral clock */
         unsigned long since = 0;
         CHECK(kbr_stage_byte(0, 0, 5, 3, 1) == 2 && kbr_stage_byte(0, 0, 0, 3, 1) == 1 && kbr_stage_byte(0, 1, 0, 0, 0) == 3, "stage: off = the old 1 / 2 / 3 (aboard only)");

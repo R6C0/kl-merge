@@ -237,6 +237,26 @@ static int kbr_stage_byte(int board_stage, int aboard, long tally, int van, int 
     return tally > 0 ? 2 : 1;
 }
 
+/* OnlineBrainTraitorStage2Gate (11-04, UNTESTED): Arcade shows stage 2 to the Traitor evaluate only around the van call / exit trigger, online it was 2 from the first loot (score 7.0 at $1M, marks ~60-90 s in).
+   gate 0 = the byte unchanged. gate 1 = a byte of 2 (carrying, not aboard) drops to 1 unless an opener holds: van called or gather running (open), bot ordered to the exit box (exit_ordered), or its tally has reached
+   money_fb (> 0; 0 = no fallback). 0, 1 and 3 pass through untouched (stage 3 = aboard / board-ready, stage 0/1 = not carrying). */
+static int kbr_stage_gate(int gate, int stage, long tally, int open, int exit_ordered, long money_fb)
+{
+    if (!gate || stage != 2) return stage;
+    if (open || exit_ordered) return stage;
+    if (money_fb > 0 && tally >= money_fb) return stage;
+    return 1;
+}
+
+/* The whole stage-byte composition the sync uses (pure, so the wiring is testable): kbr_stage_byte, then (gate on) kbr_stage_gate. Opener = hook's van called / gather (hook_open) OR the REAL van state
+   1..4 (a human's exit trigger sets no hook flag, Arcade opens on any trigger). ex = BoardStage's exit-ordered answer; without BoardStage the gate's own exit-box answer (ob_called) is used. */
+static int kbr_stage_compose(int gate, int board_stage, int aboard, long tally, int van, int ob_called, int hook_open, long money_fb)
+{
+    int ex = board_stage ? ob_called : 0, st = kbr_stage_byte(board_stage, aboard, tally, van, ex);
+    if (gate) st = kbr_stage_gate(1, st, tally, hook_open || (van >= 1 && van <= 4), ex || (!board_stage && ob_called), money_fb);
+    return st;
+}
+
 /* BoardStage: should the hook's own boarding path (klbotfill.c) wait for the real Board tactic? live = the real tactic holds the bot now (fresh Board evaluate > 0, not revoked). *since = tick the deferral
    began (0 none; |1 stamp). Defers up to max_ms per bot, then -> 0 (fall back, so no bot is stranded). A tactic that stops being live ends the deferral at once (-> 0); the clock is NOT reset by that, so the per-bot total stays capped. */
 /* BoardStage grace (review 11-03 defect 1): a bot can stand in the box before its first nonzero Board evaluate (stage 3 is shown by the 1 s sync only). While the van waits (staged) and the bot has
