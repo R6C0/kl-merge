@@ -939,4 +939,34 @@ static int kbr_af_gate(unsigned long b108, unsigned long holder, unsigned long c
     return 5;
 }
 
+
+/* OnlineBrainTraitorDriftProbe / DefendPull (11-04; pure; re/traitor_drift_1104.md). Class of the Defend winner by its RTTI name (substring, GUESS that the names contain CloseIn / Board / Loot): 0 other or none (Defend current, no owning tactic), 1 CloseIn, 2 Board, 3 Loot, 4 Defend not the current goal. */
+static int kbr_win_class(const char *n)
+{
+    if (!n) return 0;
+    if (!n[0] || !strcmp(n, "-")) return 4;      /* Defend is not the current goal: nobody known to own the block, the pull must not write (review fix) */
+    if (strstr(n, "CloseIn")) return 1;
+    if (strstr(n, "Board")) return 2;
+    if (strstr(n, "Loot")) return 3;
+    return 0;
+}
+/* the defend block moved: squared distance > limit^2 (cm) */
+static int kbr_drift_moved(const float *a, const float *b, float limit)
+{
+    float dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2];
+    return dx * dx + dy * dy + dz * dz > limit * limit;
+}
+/* DefendPull gate (lever L-A). 0 = write; 1 block missing or not ours (blk+0x14 != S); 2 bot dead; 3 no living human known; 4 block within 2500 cm of a human (dblk_cm; negative = unknown = no human);
+   5 the current winner owns the block (CloseIn 1, Board 2, Loot 3: class != 0); 6 rate limit (since_ms < 250). Order as listed. */
+static int kbr_pull_skip(int own_blk, int alive, int hum_known, long dblk_cm, int wclass, unsigned long since_ms)
+{
+    if (!own_blk) return 1;
+    if (!alive) return 2;
+    if (!hum_known || dblk_cm < 0) return 3;
+    if (dblk_cm <= 2500L) return 4;
+    if (wclass != 0) return 5;
+    if (since_ms < 250ul) return 6;
+    return 0;
+}
+static int kbr_pull_ok(int own_blk, int alive, int hum_known, long dblk_cm, int wclass, unsigned long since_ms) { return kbr_pull_skip(own_blk, alive, hum_known, dblk_cm, wclass, since_ms) == 0; }
 #endif /* KLBRAIN_LOGIC_H */

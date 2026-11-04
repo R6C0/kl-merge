@@ -527,6 +527,16 @@ int main(void)
         CHECK(kbr_af_gate(0, 5, 0, 1) == 1 && kbr_af_gate(1, 0, 0, 1) == 2 && kbr_af_gate(1, 5, 1, 1) == 3 && kbr_af_gate(1, 5, 0, 0) == 4 && kbr_af_gate(1, 5, 0, 1) == 5, "afc gate: first failing gate in code order, else pass");
         CHECK(kbr_af_gate(0x100, 5, 0, 1) == 1 && kbr_af_gate(1, 5, 0x100, 1) == 5 && kbr_af_gate(0, 0, 1, 0) == 1, "afc gate: byte widths (108 and 5c8 are bytes), gate 1 first");
     }
+    /* OnlineBrainTraitorDriftProbe / DefendPull */
+    {
+        float a[3] = { 0, 0, 0 }, b[3] = { 300, 0, 0 }, c[3] = { 301, 0, 0 }, d[3] = { 210, 200, 100 };
+        CHECK(kbr_win_class("ZCloseIn") == 1 && kbr_win_class("ZBoard") == 2 && kbr_win_class("ZLoot") == 3 && kbr_win_class("ZAttackFromCover") == 0 && kbr_win_class("-") == 4 && kbr_win_class("") == 4 && kbr_win_class("none") == 0 && kbr_win_class(0) == 0, "win class by substring, others 0");
+        CHECK(!kbr_drift_moved(a, b, 300.0f) && kbr_drift_moved(a, c, 300.0f) && kbr_drift_moved(a, d, 300.0f) && !kbr_drift_moved(a, a, 300.0f), "drift moved: strictly more than the limit, 3D");
+        CHECK(kbr_pull_ok(1, 1, 1, 2501, 0, 250) && kbr_pull_ok(1, 1, 1, 9000, 0, 100000ul), "pull: far block, no owning winner, rate ok -> write");
+        CHECK(kbr_pull_skip(0, 1, 1, 9000, 0, 999) == 1 && kbr_pull_skip(1, 0, 1, 9000, 0, 999) == 2 && kbr_pull_skip(1, 1, 0, 9000, 0, 999) == 3 && kbr_pull_skip(1, 1, 1, -1, 0, 999) == 3, "pull: not ours 1, dead 2, no human or unknown distance 3");
+        CHECK(kbr_pull_skip(1, 1, 1, 2500, 0, 999) == 4 && kbr_pull_skip(1, 1, 1, 100, 0, 999) == 4 && kbr_pull_skip(1, 1, 1, 2501, 0, 999) == 0, "pull: block within 2500 cm of a human is left alone (boundary 2500 inclusive)");
+        CHECK(kbr_pull_skip(1, 1, 1, 9000, 1, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 2, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 3, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 4, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 0, 249) == 6 && !kbr_pull_ok(1, 1, 1, 9000, 1, 999), "pull: CloseIn / Board / Loot own the block (5), rate limit 250 ms (6)");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }
