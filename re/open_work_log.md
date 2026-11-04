@@ -23,7 +23,7 @@ to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash invo
 [Lobby] TimeAuto=6, [HUD] KilledBy/OnlineBoardBots, [CrewHop], [Names] OnlineLobby. Kept the owner's 11-02 back-offs (DropFollow 0, TacticsCarry 2, DropTake 0, BoardAllNear 0); Stage2Gate and all
 probe/log keys left off. Zombie kl2.exe pid 129272 (access denied) blocks the bat's game check, steps run by hand; needs a reboot. Next: owner play test; bs57/bs58 when the game is free.
 
-2026-11-04 ~17:10 - [c9] bs57 LOST: out_bp_1104z (and bs58's out_s2_1104a) were SHIP builds (klhookuild.bat, no klauto), so every bench seat hung with no window and NO LOG (SB57A DD03,
+2026-11-04 ~17:10 - [c9] bs57 LOST: out_bp_1104z (and bs58's out_s2_1104a) were SHIP builds (klhook\build.bat, no klauto), so every bench seat hung with no window and NO LOG (SB57A DD03,
 SB57B DD01, ARC57 DD03). Bench dlls must come from build_auto.bat (TEST). c54c3b264: [Brain] OnlineBrainTraitorStage2Gate (default off; carrying bots show stage 1 to the Traitor evaluate until
 van call / gather / real van state 1-4 / exit box / $1.25M). TEST dll out_s2t_1104b (md5 35b0bbc2, HEAD = BoardProbe + Stage2Gate) is in the bs57 and bs58 kits. Owner back 16:55: both kits
 PAUSED (bs57/PAUSE, bs58/PAUSE); rerun bs57 (DD03 DD01 online + Arcade) and bs58 (Stage2Gate on DM03 DD05 DD03) when the game is free.
