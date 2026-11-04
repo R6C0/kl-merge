@@ -613,4 +613,93 @@ static const char *kbr_f6_branch_name(int b)
 /* is a value inside the exe's code range (the probe only calls a class getter whose address is there) */
 static int kbr_f6_incode(kbr_u32 a) { return a >= 0x401000u && a < 0xb00000u; }
 
+/* OnlineBrainTraitorFireProbe7 / OnlineBrainTraitorRayAim (11-04, after bs35): pure helpers for the ray-matrix rewrite. A 3x3 matrix is 9 floats, ROW-major, rows at 0 / 3 / 6 (the game's layout, research wgqnxsl7e / A).
+   Which row is the forward axis is a GUESS (row 2, the pellet loop reads it); the bench tries 0..2 with +1 / -1. Nothing here touches the game. */
+static int kbr_ra_finite(const float *v, int n) { int i; for (i = 0; i < n; i++) if (!(v[i] > -1.0e9f && v[i] < 1.0e9f)) return 0; return 1; }
+static float kbr_ra_dot(const float *a, const float *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+static void kbr_ra_cross(const float *a, const float *b, float *o) { o[0] = a[1] * b[2] - a[2] * b[1]; o[1] = a[2] * b[0] - a[0] * b[2]; o[2] = a[0] * b[1] - a[1] * b[0]; }
+static int kbr_ra_unit(float *v)      /* normalise in place; 0 when (nearly) zero or not finite */
+{
+    float l;
+    if (!kbr_ra_finite(v, 3)) return 0;
+    l = kbr_f6_len(v);
+    if (l < 1.0e-6f) return 0;
+    v[0] /= l; v[1] /= l; v[2] /= l;
+    return 1;
+}
+static float kbr_ra_det(const float *m) { float c[3]; kbr_ra_cross(m + 3, m + 6, c); return kbr_ra_dot(m, c); }
+/* a usable rotation: finite, every row length 0.9..1.1, |det| 0.8..1.2 (a scaled or garbage matrix is never rewritten) */
+static int kbr_ra_valid(const float *m)
+{
+    int k; float d;
+    if (!kbr_ra_finite(m, 9)) return 0;
+    for (k = 0; k < 3; k++) { float l = kbr_f6_len(m + 3 * k); if (l < 0.9f || l > 1.1f) return 0; }
+    d = kbr_ra_det(m);
+    return (d > 0.8f && d < 1.2f) || (d < -0.8f && d > -1.2f);
+}
+/* configured forward row: -1 (auto) or out of range -> 2 (GUESS), else 0..2 */
+static int kbr_ra_row(int cfg) { return (cfg >= 0 && cfg <= 2) ? cfg : 2; }
+static int kbr_ra_sign(int cfg) { return cfg < 0 ? -1 : 1; }
+/* Build an orthonormal matrix out[9] from the old one: row `row` = sign * fwd (unit), the other two rows keep the old 'up' (the one with the larger |y|, projected off fwd) and its cross product,
+   handedness (sign of det) as the old matrix. Returns 0 and leaves out untouched when the old matrix is not a valid rotation or fwd is degenerate. */
+static int kbr_ra_build(const float *old, const float *fwd, int row, int sgn, float *out)
+{
+    float f[3], u[3], s[3], t[9], det0; int a, b, ui, si, k;
+    if (row < 0 || row > 2 || !kbr_ra_finite(fwd, 3) || !kbr_ra_valid(old)) return 0;
+    f[0] = fwd[0] * (float)(sgn < 0 ? -1 : 1); f[1] = fwd[1] * (float)(sgn < 0 ? -1 : 1); f[2] = fwd[2] * (float)(sgn < 0 ? -1 : 1);
+    if (!kbr_ra_unit(f)) return 0;
+    det0 = kbr_ra_det(old);
+    a = (row + 1) % 3; b = (row + 2) % 3;
+    { float ya = old[3 * a + 1], yb = old[3 * b + 1]; if (ya < 0.0f) ya = -ya; if (yb < 0.0f) yb = -yb; ui = ya >= yb ? a : b; si = ui == a ? b : a; }
+    for (k = 0; k < 3; k++) u[k] = old[3 * ui + k];
+    { float d = kbr_ra_dot(u, f); u[0] -= d * f[0]; u[1] -= d * f[1]; u[2] -= d * f[2]; }
+    if (!kbr_ra_unit(u)) {
+        u[0] = 0.0f; u[1] = 1.0f; u[2] = 0.0f; { float d = kbr_ra_dot(u, f); u[0] -= d * f[0]; u[1] -= d * f[1]; u[2] -= d * f[2]; }
+        if (!kbr_ra_unit(u)) { u[0] = 1.0f; u[1] = 0.0f; u[2] = 0.0f; { float d = kbr_ra_dot(u, f); u[0] -= d * f[0]; u[1] -= d * f[1]; u[2] -= d * f[2]; } if (!kbr_ra_unit(u)) return 0; }
+    }
+    kbr_ra_cross(u, f, s);
+    for (k = 0; k < 3; k++) { t[3 * row + k] = f[k]; t[3 * ui + k] = u[k]; t[3 * si + k] = s[k]; }
+    if ((kbr_ra_det(t) < 0.0f) != (det0 < 0.0f)) for (k = 0; k < 3; k++) t[3 * si + k] = -s[k];
+    for (k = 0; k < 9; k++) out[k] = t[k];
+    return 1;
+}
+/* xorshift32 -> float in [0,1) (state must be nonzero) */
+static float kbr_ra_rng(kbr_u32 *st)
+{
+    kbr_u32 x = *st ? *st : 0x9e3779b9u;
+    x ^= x << 13; x ^= x >> 17; x ^= x << 5; *st = x;
+    return (float)(x >> 8) * (1.0f / 16777216.0f);
+}
+/* a direction at most `deg` degrees (capped to 0..30) off the unit-ish direction f: a point of the unit disc (a square sample clamped to the disc) times tan(deg), added to f at right angles; u1 / u2 in [0,1) */
+static int kbr_ra_cone(const float *f, int deg, float u1, float u2, float *out)
+{
+    float d[3], a[3], e1[3], e2[3], x, y, r2, t, tn; int k;
+    for (k = 0; k < 3; k++) d[k] = f[k];
+    if (!kbr_ra_unit(d)) return 0;
+    if (deg > 30) deg = 30;
+    if (deg <= 0) { for (k = 0; k < 3; k++) out[k] = d[k]; return 1; }
+    a[0] = 0.0f; a[1] = 1.0f; a[2] = 0.0f;
+    if (d[1] > 0.9f || d[1] < -0.9f) { a[0] = 1.0f; a[1] = 0.0f; }
+    kbr_ra_cross(d, a, e1); if (!kbr_ra_unit(e1)) return 0;
+    kbr_ra_cross(d, e1, e2);
+    x = 2.0f * u1 - 1.0f; y = 2.0f * u2 - 1.0f; r2 = x * x + y * y;
+    if (r2 > 1.0f) { float r = kbr_f6_sqrt(r2); x /= r; y /= r; }
+    t = (float)deg * 0.01745329f; tn = t + t * t * t * (1.0f / 3.0f) + t * t * t * t * t * (2.0f / 15.0f);      /* tan(t), 3 terms */
+    for (k = 0; k < 3; k++) out[k] = d[k] + tn * (x * e1[k] + y * e2[k]);
+    return kbr_ra_unit(out);
+}
+/* the unit direction origin -> target and its length; 0 (out untouched) when degenerate, not finite, or farther than maxd (maxd <= 0 = no limit) */
+static int kbr_ra_dir(const float *o, const float *tg, float maxd, float *dir, float *dist)
+{
+    float d[3];
+    if (!kbr_ra_finite(o, 3) || !kbr_ra_finite(tg, 3)) return 0;
+    d[0] = tg[0] - o[0]; d[1] = tg[1] - o[1]; d[2] = tg[2] - o[2];
+    *dist = kbr_f6_len(d);
+    if (*dist < 1.0f || (maxd > 0.0f && *dist > maxd)) return 0;
+    dir[0] = d[0] / *dist; dir[1] = d[1] / *dist; dir[2] = d[2] / *dist;
+    return 1;
+}
+/* may the rewrite run at all: switch on, the game thread, a LIVE marked traitor shot, the shot record valid, geometry readable (not branch A0), a target position known */
+static int kbr_ra_gate(int on, int game_thread, int marked_live, int valid, int geo, int have_target) { return on && game_thread && marked_live && valid && geo && have_target; }
+
 #endif /* KLBRAIN_LOGIC_H */

@@ -374,6 +374,43 @@ int main(void)
         kbr_f3_jmp(jm, 0x4cc440u, 0x30000000u, 7);
         CHECK(jm[0] == 0xe9 && jm[5] == 0x90 && jm[6] == 0x90, "f6 jump padded with nops to 7 bytes");
     }
+    /* RayAim / FireProbe7 helpers */
+    {
+        float id3[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 }, old[9] = { 0, 0, 1, 0, 1, 0, -1, 0, 0 }, out[9], fw[3] = { 0.6f, 0.3f, 0.7416198f }, o[3] = { 0, 100, 0 }, tg[3] = { 300, 100, 400 }, dir[3], dist, c[3], sc[9] = { 2, 0, 0, 0, 1, 0, 0, 0, 1 };
+        int row, k, ok = 1; kbr_u32 st = 12345u; float mx = 0.0f;
+        CHECK(kbr_ra_valid(id3) && kbr_ra_valid(old) && !kbr_ra_valid(sc), "ra valid: rotations yes, scaled no");
+        for (row = 0; row < 3; row++) {
+            int sg;
+            for (sg = -1; sg <= 1; sg += 2) {
+                float *r0, *r1, *r2, f[3]; int j;
+                CHECK(kbr_ra_build(old, fw, row, sg, out), "ra build ok");
+                r0 = out; r1 = out + 3; r2 = out + 6;
+                CHECK(kbr_ra_valid(out) && kbr_ra_dot(r0, r1) < 1e-4f && kbr_ra_dot(r0, r1) > -1e-4f && kbr_ra_dot(r0, r2) < 1e-4f && kbr_ra_dot(r0, r2) > -1e-4f && kbr_ra_dot(r1, r2) < 1e-4f && kbr_ra_dot(r1, r2) > -1e-4f, "ra build: orthonormal");
+                for (j = 0; j < 3; j++) f[j] = out[3 * row + j] * (float)sg;
+                CHECK(kbr_ra_dot(f, fw) > 0.9999f, "ra build: the chosen row is sign * fwd");
+                CHECK((kbr_ra_det(out) > 0.0f) == (kbr_ra_det(old) > 0.0f), "ra build: handedness kept");
+            }
+        }
+        { float neg[9] = { 0, 0, 1, 0, 1, 0, 1, 0, 0 }; CHECK(kbr_ra_det(neg) < 0.0f && kbr_ra_build(neg, fw, 2, 1, out) && kbr_ra_det(out) < 0.0f && kbr_ra_valid(out), "ra build: a left-handed old matrix stays left-handed"); }
+        { float up[3] = { 0, 1, 0 }, v[3] = { 0, 0, 1 }; CHECK(kbr_ra_build(old, up, 2, 1, out) && kbr_ra_valid(out) && out[7] > 0.9999f, "ra build: fwd parallel to up is handled"); CHECK(kbr_ra_build(old, v, 0, 1, out) && kbr_ra_valid(out), "ra build: other row"); }
+        { float z[3] = { 0, 0, 0 }, nan[3]; unsigned int q = 0x7fc00000u; memcpy(nan, &q, 4); nan[1] = nan[2] = 0; out[0] = 77.0f;
+          CHECK(!kbr_ra_build(old, z, 2, 1, out) && !kbr_ra_build(old, nan, 2, 1, out) && !kbr_ra_build(sc, fw, 2, 1, out) && !kbr_ra_build(old, fw, 3, 1, out) && out[0] == 77.0f, "ra build: degenerate fwd / NaN / scaled old / bad row refused, out untouched"); }
+        CHECK(kbr_ra_row(-1) == 2 && kbr_ra_row(0) == 0 && kbr_ra_row(1) == 1 && kbr_ra_row(2) == 2 && kbr_ra_row(7) == 2 && kbr_ra_sign(-1) == -1 && kbr_ra_sign(1) == 1 && kbr_ra_sign(0) == 1, "ra row / sign config");
+        CHECK(kbr_ra_dir(o, tg, 6000.0f, dir, &dist) && dist > 499.9f && dist < 500.1f && dir[0] > 0.599f && dir[0] < 0.601f && dir[2] > 0.799f, "ra dir 500 units");
+        CHECK(!kbr_ra_dir(o, tg, 400.0f, dir, &dist) && kbr_ra_dir(o, tg, 0.0f, dir, &dist) && !kbr_ra_dir(o, o, 0.0f, dir, &dist), "ra dir: max distance, 0 = unlimited, degenerate refused");
+        for (k = 0; k < 2000; k++) {
+            float a = kbr_ra_rng(&st), b = kbr_ra_rng(&st), e;
+            if (a < 0.0f || a >= 1.0f || b < 0.0f || b >= 1.0f) ok = 0;
+            CHECK(kbr_ra_cone(fw, 3, a, b, c), "ra cone ok");
+            e = kbr_f6_acos_deg(kbr_ra_dot(c, fw) / kbr_f6_len(fw));
+            if (e > mx) mx = e;
+        }
+        CHECK(ok, "ra rng in [0,1)");
+        CHECK(mx <= 3.05f && mx > 1.0f, "ra cone: error never above the spread, and it does spread (max %.3f)", (double)mx);
+        CHECK(kbr_ra_cone(fw, 0, 0.9f, 0.1f, c) && kbr_f6_acos_deg(kbr_ra_dot(c, fw) / kbr_f6_len(fw)) < 0.05f, "ra cone: 0 deg = exact");
+        { float cc[3], f2[3] = { 0, 1, 0 }; CHECK(kbr_ra_cone(f2, 30, 0.0f, 1.0f, cc) && kbr_f6_acos_deg(kbr_ra_dot(cc, f2)) <= 30.2f, "ra cone: capped at 30 deg, vertical fwd ok"); CHECK(kbr_ra_cone(f2, 500, 0.99f, 0.99f, cc) && kbr_f6_acos_deg(kbr_ra_dot(cc, f2)) <= 30.2f, "ra cone: 500 deg request capped"); }
+        CHECK(kbr_ra_gate(1, 1, 1, 1, 1, 1) && !kbr_ra_gate(0, 1, 1, 1, 1, 1) && !kbr_ra_gate(1, 0, 1, 1, 1, 1) && !kbr_ra_gate(1, 1, 0, 1, 1, 1) && !kbr_ra_gate(1, 1, 1, 0, 1, 1) && !kbr_ra_gate(1, 1, 1, 1, 0, 1) && !kbr_ra_gate(1, 1, 1, 1, 1, 0), "ra gate: every condition is needed (on, game thread, live marked, valid, geo, target)");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }

@@ -1702,21 +1702,26 @@ static void klbr_gf_summary(void)      /* at round end: the counts, then the per
    Branch classes are only meaningful for bl = 1 shots (vt+0x250 is called only then; bl = 0 takes 0x4cb853: 0x7f07a0 then 0x8c51b0): those shots are class 0 'not via vt+0x250'.
    Only the game thread is handled (the tick records its id); the 5-7 byte code writes at install time cannot be made thread-safe (same exposure as FireProbe5). */
 #define KLBR_F6_LOGMAX 8
-#define KLBR_F6_NSITE 6
+#define KLBR_F6_NSITE 6      /* the FireProbe6 / RayAim sites; FireProbe7 adds a 7th (AimAt 0x70f130) */
+#define KLBR_F6_NSITE_ALL 7
 static int klbr_f6on, klbr_f6_state, klbr_f6_flt; static DWORD klbr_f6_tid;      /* tid: the game thread (set by the tick; the stub handler ignores every other thread) */      /* state: 0 not tried, 1 every site installed, 2 some sites, -1 none */
+static int klbr_f6act, klbr_f7on, klbr_raon, klbr_f7_flt, klbr_ra_flt, klbr_ra_rowcfg = -1, klbr_ra_signcfg = 1, klbr_ra_spread = 3, klbr_ra_maxd = 6000, klbr_ra_site = 5, klbr_ra_chest = 130;      /* f6act: any of FireProbe6 / 7 / RayAim wants the sites */
+static kbr_u32 klbr_ra_seed = 0x2545f491u;
 static BYTE *klbr_f6_stub;
+static DWORD klbr_f6_sold[KLBR_MAX];      /* the marked bots' soldier objects (FireProbe7: fire task fields) */
 static DWORD klbr_f6_body[KLBR_MAX], klbr_f6_item[KLBR_MAX], klbr_f6_hold[KLBR_MAX];
 typedef struct { DWORD site; int len; BYTE b[8]; int id; } KLBR_F6SITE;
-static const KLBR_F6SITE klbr_f6_sites[KLBR_F6_NSITE] = {
+static const KLBR_F6SITE klbr_f6_sites[KLBR_F6_NSITE_ALL] = {
     { 0x4cb8b9, 6, { 0xff, 0x86, 0x38, 0x01, 0x00, 0x00 }, 1 },
     { 0x4cc3a0, 5, { 0x80, 0x7c, 0x24, 0x17, 0x00 }, 2 },
     { 0x4cc440, 7, { 0x8d, 0x8c, 0x24, 0xf4, 0x00, 0x00, 0x00 }, 4 },
     { 0x4cc450, 6, { 0x8b, 0xce, 0x89, 0x44, 0x24, 0x18 }, 5 },
     { 0x4cc65d, 7, { 0x83, 0xbe, 0x14, 0x01, 0x00, 0x00, 0x00 }, 6 },
-    { 0x4cc644, 6, { 0x8b, 0x4c, 0x24, 0x10, 0x85, 0xc9 }, 7 } };
+    { 0x4cc644, 6, { 0x8b, 0x4c, 0x24, 0x10, 0x85, 0xc9 }, 7 },
+    { 0x70f130, 5, { 0x56, 0x8b, 0xf1, 0x8b, 0x06 }, 8 } };      /* FireProbe7 only: AimAt entry (push esi; mov esi,ecx; mov eax,[esi]): ecx = body, [esp+4] = target, no relative operand, no jump into the 5 bytes (dasm 11-04) */
 typedef struct { long shots, forced, br[6], ident, pass, d0, ray, proj, rnull, rhit, rhuman, rplayer, rowb[5], rayAb[5], rayBb[5], nlm, nls; } KLBR_F6C;
 static KLBR_F6C klbr_f6_c[2][2];      /* [networked][marked] */
-static struct { int valid, net, marked, ix, bl, branch, known, bit21, pass, ray, haveh, ownok, geo; DWORD item, owner, human, desc, req, ret; float pos[3], mat[9], va[3], vb[3], hp[3], bp[3]; int havehp, havebp; } klbr_f6_cur;
+static struct { int valid, net, marked, ix, bl, branch, known, bit21, pass, ray, haveh, ownok, geo; DWORD item, owner, human, desc, req, ret; float pos[3], mat[9], va[3], vb[3], hp[3], bp[3], m4[9], ra_dir[3], rng; int havehp, havebp, havem4, havevb, ra_have; } klbr_f6_cur;      /* m4: the ray matrix at S4 before RayAim writes; ra_dir: the direction RayAim chose at S1; rng: template range [[item+0xc4]+0xe0] (GUESS cm) */
 static DWORD klbr_f6_last, klbr_f6_lastshots;
 static int klud_local(DWORD *me);      /* klucc_down.c (included after this file) */
 static int klud_is_player(DWORD p);
@@ -1741,6 +1746,158 @@ static float klbr_f6_row_err(const float *m, const float *o, const float *q)    
     int k; float best = 1.0e9f;
     for (k = 0; k < 3; k++) { float a = kbr_f6_ang_dir(m + 3 * k, o, q), b; if (a < 0.0f) return -1.0f; b = 180.0f - a; if (b < a) a = b; if (a < best) best = a; }
     return best;
+}
+/* OnlineBrainTraitorFireProbe7 (11-04, after bs35; TEST build only, UNTESTED, recommended off; READ ONLY toward the game: no game byte is written, only reads under __try, own fault counter klbr_f7_flt; game thread only).
+   bs35: marked traitor shots take the Arcade path (gate passed, A1 muzzle, ray, request) but the weapon bone does not point at the human (2..52 deg), hp flat. Research B (wgqnxsl7e + 11-04): the AI aims through ZFireWeaponTask -> 0x574af0 -> body AimAt 0x70f130
+   ([body+0x824]=mode 1 entity / 2 position, [+0x828] target pointer, [+0x82c..0x834] offset, [+0x838] bone byte, [+0x83c] float, [+0x68c]=5 priority, byte [+0x64c] = 'busy' flag that makes AimAt a silent no-op). Per MARKED shot (sampled lines, first KLBR_F6_LOGMAX per round, a running total every
+   30 s with the FireProbe6 clock, round totals) this logs those fields at S1 (0x4cb8b9, same stub as FireProbe6), who [body+0x828] / the holder [soldier+0xac] / the fire task's [task+0x28] (GUESS: a target pointer or handle) is (the host-local human = the shot's target, another seat's player, other),
+   whether AimAt ran in the last second (SEVENTH site 0x70f130, 5 bytes push esi; mov esi,ecx; mov eax,[esi] - a counting detour like the other six, installed only with this key: ecx = body, [esp+4] = target), and at S4 (0x4cc440) the three rows of the ray matrix M = [esp+0xf4] with their
+   SIGNED angle to the direction ray start (*eax, GUESS = P) -> the human's chest (feet [human+0x460] + OnlineBrainTraitorRayAimChest, GUESS), counting rows within 15 deg of +dir and -dir; the template range R = [[item+0xc4]+0xe0] (GUESS cm, as FireProbe3) against the bot -> human distance. */
+typedef struct { long shots, modeN[4], tgtHuman, tgtSeat, tgtPlayer, tgtOther, tgtNone, holdHuman, taskHuman, b64c, aimRecent, aimNot, outRange, inRange, mN, mPos[3], mNeg[3], nl; } KLBR_F7C;
+static KLBR_F7C klbr_f7_c;
+static struct { int valid, ix, who_tgt, seat_tgt, who_hold, seat_hold, who_task, seat_task, aimN; long aimAge; DWORD body, sold, pbody, mode, tgt, hold, task, ttgt, b544, pri; BYTE b64c, b840, bone, t14, t15; float off[3], f83c, R; } klbr_f7_cur;
+static int klbr_f7_site8;      /* 1 when the AimAt detour (site 8) went in; else the aim-recency lines are meaningless */
+static long klbr_f7_aim_n[KLBR_MAX]; static DWORD klbr_f7_aim_t[KLBR_MAX], klbr_f7_aim_tg[KLBR_MAX];
+static int klbr_f7_who(DWORD p, DWORD human, int *seat)      /* 0 none, 1 the shot's target human, 2 another seat's player, 3 another player object, 4 something else; seat = the index in [[0xdd265c]+0x828..] or -1 */
+{
+    DWORD gd; int i;
+    *seat = -1;
+    if (p <= 0xffff) return 0;
+    gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c));
+    for (i = 0; i < 28 && gd > 0xffff; i++) if (klh_rd32(gd + 0x828 + 4 * i) == p && klud_is_player(p)) { *seat = i; break; }
+    if (p == human) return 1;
+    if (*seat >= 0) return 2;
+    return klud_is_player(p) ? 3 : 4;
+}
+static void klbr_f7_aimat(KLBR_F3REGS *r)      /* site 8: AimAt entry (game thread): ecx = body, [esp+4] = the target; remembered per marked body */
+{
+    int i;
+    if (!klbr_f7on || klbr_f7_flt >= 3) return;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_f6_body[i] && klbr_f6_body[i] == r->ecx) { klbr_f7_aim_n[i]++; klbr_f7_aim_t[i] = GetTickCount(); klbr_f7_aim_tg[i] = klh_rd32(r->esp + 4); }
+}
+static void klbr_f7_capture(int ix, DWORD sp, DWORD item)      /* S1 of a MARKED shot (game thread): the aim state of the body */
+{
+    DWORD B = klbr_f6_body[ix], S = klbr_f6_sold[ix], task = 0, tpl, now = GetTickCount(); KLBR_F7C *c = &klbr_f7_c; int sh;
+    memset(&klbr_f7_cur, 0, sizeof klbr_f7_cur);
+    if (!klbr_f7on || klbr_f7_flt >= 3 || B <= 0xffff) return;
+    __try {
+        klbr_f7_cur.ix = ix; klbr_f7_cur.body = B; klbr_f7_cur.sold = S; klbr_f7_cur.pbody = klh_rd32(sp + 0x6c);
+        klbr_f7_cur.mode = klh_rd32(B + 0x824); klbr_f7_cur.tgt = klh_rd32(B + 0x828); klh_rd(B + 0x82c, klbr_f7_cur.off, 12); klh_rd(B + 0x838, &klbr_f7_cur.bone, 1); klh_rd(B + 0x83c, &klbr_f7_cur.f83c, 4);
+        klbr_f7_cur.pri = klh_rd32(B + 0x68c); klh_rd(B + 0x64c, &klbr_f7_cur.b64c, 1); klh_rd(B + 0x840, &klbr_f7_cur.b840, 1); klbr_f7_cur.b544 = klh_rd32(B + 0x544);
+        klbr_f7_cur.hold = S > 0xffff ? klh_rd32(S + 0xac) : klbr_f6_hold[ix];
+        task = S > 0xffff ? klh_rd32(S + 0x570) : 0; klbr_f7_cur.task = task;
+        if (task > 0xffff) { klh_rd(task + 0x14, &klbr_f7_cur.t14, 1); klh_rd(task + 0x15, &klbr_f7_cur.t15, 1); klbr_f7_cur.ttgt = klh_rd32(task + 0x28); }      /* GUESS: +0x28 is a target pointer / handle (research B) */
+        klbr_f7_cur.who_tgt = klbr_f7_who(klbr_f7_cur.tgt, klbr_f6_cur.human, &klbr_f7_cur.seat_tgt);
+        klbr_f7_cur.who_hold = klbr_f7_who(klbr_f7_cur.hold, klbr_f6_cur.human, &klbr_f7_cur.seat_hold);
+        klbr_f7_cur.who_task = klbr_f7_who(klbr_f7_cur.ttgt, klbr_f6_cur.human, &klbr_f7_cur.seat_task);
+        tpl = item > 0xffff ? klh_rd32(item + 0xc4) : 0;
+        if (tpl > 0xffff) { DWORD rr = klh_rd32(tpl + 0xe0); memcpy(&klbr_f7_cur.R, &rr, 4); }
+        klbr_f6_cur.rng = klbr_f7_cur.R;
+        klbr_f7_cur.aimN = (int)klbr_f7_aim_n[ix];
+        klbr_f7_cur.aimAge = klbr_f7_aim_n[ix] ? (long)(now - klbr_f7_aim_t[ix]) : -1;
+        klbr_f7_cur.valid = 1;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f7_flt++; klbr_f7_cur.valid = 0; klog("brain: traitor fireprobe7: fault reading the aim state (%d of 3 allowed)", klbr_f7_flt); return; }
+    c->shots++; sh = klbr_f7_cur.mode < 3 ? (int)klbr_f7_cur.mode : 3; c->modeN[sh]++;
+    switch (klbr_f7_cur.who_tgt) { case 0: c->tgtNone++; break; case 1: c->tgtHuman++; break; case 2: c->tgtSeat++; break; case 3: c->tgtPlayer++; break; default: c->tgtOther++; }
+    if (klbr_f7_cur.who_hold == 1) c->holdHuman++;
+    if (klbr_f7_cur.who_task == 1) c->taskHuman++;
+    if (klbr_f7_cur.b64c) c->b64c++;
+    if (klbr_f7_cur.aimAge >= 0 && klbr_f7_cur.aimAge <= 1000) c->aimRecent++; else c->aimNot++;
+    if (klbr_f6_cur.geo && klbr_f6_cur.havehp && klbr_f7_cur.R > 0.0f) { if (kbr_f6_dist(klbr_f6_cur.pos, klbr_f6_cur.hp) > klbr_f7_cur.R) c->outRange++; else c->inRange++; }
+}
+static int klbr_ra_chest_pt(float *tg)      /* the aim point: the shot's target human's feet [human+0x460] + OnlineBrainTraitorRayAimChest in y (y is up; GUESS: +0x460 is the feet and ~130 is a chest) */
+{
+    if (!klbr_f6_cur.havehp) return 0;
+    tg[0] = klbr_f6_cur.hp[0]; tg[1] = klbr_f6_cur.hp[1] + (float)klbr_ra_chest; tg[2] = klbr_f6_cur.hp[2];
+    return kbr_ra_finite(tg, 3);
+}
+static void klbr_f7_at_s4(void)      /* S4 (read only): the signed angle of each ray-matrix row to ray start -> chest */
+{
+    float tg[3], e[3] = { -1.0f, -1.0f, -1.0f }; int k;
+    if (!klbr_f7_cur.valid || !klbr_f6_cur.havem4 || !klbr_ra_chest_pt(tg)) return;
+    klbr_f7_c.mN++;
+    for (k = 0; k < 3; k++) {
+        e[k] = kbr_f6_ang_dir(klbr_f6_cur.m4 + 3 * k, klbr_f6_cur.vb, tg);
+        if (e[k] >= 0.0f && e[k] < 15.0f) klbr_f7_c.mPos[k]++; else if (e[k] >= 0.0f && 180.0f - e[k] < 15.0f) klbr_f7_c.mNeg[k]++;
+    }
+}
+static void klbr_f7_line(void)      /* the sampled line of one marked shot (at the ray result / projectile site) */
+{
+    KLBR_F7C *c = &klbr_f7_c; float tg[3], e[3] = { -1.0f, -1.0f, -1.0f }, d = -1.0f, dr = -1.0f; int k, haveg;
+    if (!klbr_f7_cur.valid) return;
+    klbr_f7_cur.valid = 0;
+    if (c->nl >= KLBR_F6_LOGMAX) return;
+    c->nl++;
+    haveg = klbr_ra_chest_pt(tg);
+    if (klbr_f6_cur.geo && klbr_f6_cur.havehp) d = kbr_f6_dist(klbr_f6_cur.pos, klbr_f6_cur.hp);
+    if (klbr_f6_cur.havem4 && haveg) { for (k = 0; k < 3; k++) e[k] = kbr_f6_ang_dir(klbr_f6_cur.m4 + 3 * k, klbr_f6_cur.vb, tg); dr = kbr_f6_dist(klbr_f6_cur.vb, tg); }
+    klog("brain: traitor fireprobe7 shot: bot %d body %08lx soldier %08lx (item vt+0x2c8 obj [esp+0x6c] %08lx): AimAt mode [+0x824] %lu, target [+0x828] %08lx = %s%s, offset (%.1f %.1f %.1f) bone %02x f[+0x83c] %.2f, priority [+0x68c] %lu, byte [+0x64c] (busy; AimAt is a no-op when set) %02x, byte [+0x840] %02x, [+0x544] %08lx; "
+         "holder [soldier+0xac] %08lx = %s; fire task [soldier+0x570] %08lx bytes +0x14 %02x +0x15 %02x, [task+0x28] (GUESS: target) %08lx = %s; AimAt (0x70f130) calls so far %d%s, last %s (%ld ms ago); human (the shot's target) %08lx; |origin-human| %.1f, template range R %.1f (GUESS cm); "
+         "ray matrix M at S4 (before RayAim) %s: signed angle of rows 0/1/2 to ray start -> chest %.1f %.1f %.1f deg (near 0 = that row points at the human, near 180 = away), |ray start - chest| %.1f",
+         klbr_f7_cur.ix, (unsigned long)klbr_f7_cur.body, (unsigned long)klbr_f7_cur.sold, (unsigned long)klbr_f7_cur.pbody, (unsigned long)klbr_f7_cur.mode, (unsigned long)klbr_f7_cur.tgt,
+         klbr_f7_cur.who_tgt == 0 ? "none" : klbr_f7_cur.who_tgt == 1 ? "THE HUMAN" : klbr_f7_cur.who_tgt == 2 ? "another seat's player" : klbr_f7_cur.who_tgt == 3 ? "another player object" : "something else", klbr_f7_cur.seat_tgt >= 0 ? " (a seat)" : "",
+         (double)klbr_f7_cur.off[0], (double)klbr_f7_cur.off[1], (double)klbr_f7_cur.off[2], klbr_f7_cur.bone, (double)klbr_f7_cur.f83c, (unsigned long)klbr_f7_cur.pri, klbr_f7_cur.b64c, klbr_f7_cur.b840, (unsigned long)klbr_f7_cur.b544,
+         (unsigned long)klbr_f7_cur.hold, klbr_f7_cur.who_hold == 0 ? "none" : klbr_f7_cur.who_hold == 1 ? "THE HUMAN" : klbr_f7_cur.who_hold == 2 ? "another seat's player" : klbr_f7_cur.who_hold == 3 ? "another player object" : "something else",
+         (unsigned long)klbr_f7_cur.task, klbr_f7_cur.t14, klbr_f7_cur.t15, (unsigned long)klbr_f7_cur.ttgt, klbr_f7_cur.who_task == 0 ? "none" : klbr_f7_cur.who_task == 1 ? "THE HUMAN" : klbr_f7_cur.who_task == 2 ? "another seat's player" : klbr_f7_cur.who_task == 3 ? "another player object" : "something else",
+         klbr_f7_cur.aimN, klbr_f7_site8 ? "" : " (SITE 8 NOT INSTALLED: no AimAt data)", klbr_f7_cur.aimAge < 0 ? "never" : klbr_f7_cur.aimAge <= 1000 ? "WITHIN 1 s" : "older than 1 s", klbr_f7_cur.aimAge, (unsigned long)klbr_f6_cur.human, (double)d, (double)klbr_f7_cur.R,
+         klbr_f6_cur.havem4 ? "read" : "NOT read", (double)e[0], (double)e[1], (double)e[2], (double)dr);
+}
+static void klbr_f7_summary(const char *why)
+{
+    KLBR_F7C *c = &klbr_f7_c;
+    if (!klbr_f7on || !c->shots) return;
+    klog("brain: traitor fireprobe7 %s: marked shots %ld; AimAt mode [+0x824] 0/1/2/other %ld %ld %ld %ld; target [+0x828]: the human %ld, another seat %ld, another player %ld, something else %ld, none %ld; holder [soldier+0xac] = the human %ld; fire task [task+0x28] = the human %ld; byte [+0x64c] set %ld; AimAt called within 1 s %ld, not %ld; "
+         "human beyond the template range R %ld, within %ld; ray matrix samples (S4, before RayAim) %ld: rows 0/1/2 within 15 deg of the human direction %ld %ld %ld, of the opposite %ld %ld %ld; faults %d",
+         why, c->shots, c->modeN[0], c->modeN[1], c->modeN[2], c->modeN[3], c->tgtHuman, c->tgtSeat, c->tgtPlayer, c->tgtOther, c->tgtNone, c->holdHuman, c->taskHuman, c->b64c, c->aimRecent, c->aimNot, c->outRange, c->inRange, c->mN, c->mPos[0], c->mPos[1], c->mPos[2], c->mNeg[0], c->mNeg[1], c->mNeg[2], klbr_f7_flt);
+}
+/* OnlineBrainTraitorRayAim (11-04, after bs35; TEST build only, UNTESTED, recommended off; CHANGES the game: writes 36 bytes of the game thread's own STACK frame in the per-shot routine, no code and no heap byte; game thread only, own fault counter klbr_ra_flt).
+   Research A (11-04): the real bullet is built from the muzzle transform T (3x3 at E0+0xc4) and position V (E0+0x60) right after the vt+0x250 call; the ray 0x713e80 at 0x4cc44b only places a muzzle-effect group with the matrix M (E0+0xe8) = node matrix composed with T (0x60ad10) and the position P (E0+0x28).
+   So two writes, each only for a LIVE MARKED traitor shot (the same marked test as GateForce: body of an armed klbr_t entry with state 1 and the traitor flag), the shot record valid, the muzzle outputs read (not branch A0), a target position known, and the target within OnlineBrainTraitorRayAimMaxDist (GUESS 6000):
+     S1 (site bit 1): T at [esp+0xc4] at 0x4cb8b9 (esp = E0). The forward row (OnlineBrainTraitorRayAimRow, auto = 2: GUESS, the pellet loop reads T row 2) is replaced by the direction origin(V) -> chest (+ a random cone error, GUESS 3 deg, so it is not an aimbot), the other two rows are rebuilt orthonormal (kbr_ra_build),
+         handedness of the old matrix kept; refused when the old T is not a valid rotation. This steers the bullet (research A, medium confidence) and, through 0x60ad10, the flash.
+     S4 (site bit 4): M at [esp+0xf4] at 0x4cc440 (esp = E0-12), the same rewrite with the S1 direction when S1 wrote, else with a fresh one from the ray start P = *eax. This steers the pooled ray / flash group only (research A: not a hit by itself).
+   The target is the shot's human (the marked bot's holder when it is a player, else the local player) at feet [human+0x460] + OnlineBrainTraitorRayAimChest (GUESS 130 units). The forward SIGN is OnlineBrainTraitorRayAimSign. */
+static struct { long s1, s4, w1, w4, nogate, farc, bad, noP, flt, rab[5]; } klbr_ra_c;
+static int klbr_ra_live(int ix) { return ix >= 0 && ix < KLBR_MAX && klbr_t[ix].state == 1 && klbr_t[ix].traitor && klbr_f6_body[ix] > 0xffff; }
+static int klbr_ra_write(DWORD addr, const float *m)      /* 9 floats into the game thread's own stack frame; 0 on a fault */
+{
+    __try { memcpy((void *)(DWORD_PTR)addr, m, 36); } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_ra_flt++; klbr_ra_c.flt++; return 0; }
+    return 1;
+}
+static void klbr_ra_apply(int which, DWORD sp, const float *o, DWORD matAddr)      /* which 1 = S1 (T), 4 = S4 (M); o = the ray origin (V at S1, P at S4); matAddr = the 3x3 */
+{
+    float tg[3], dir[3], fd[3], nt[9], oldm[9], dist = 0.0f, u1, u2, eold, enew, econe; int row = kbr_ra_row(klbr_ra_rowcfg), sg = kbr_ra_sign(klbr_ra_signcfg), k, haveg;
+    (void)sp;
+    if (which == 1) klbr_ra_c.s1++; else klbr_ra_c.s4++;
+    if (klbr_ra_flt >= 3) return;
+    haveg = klbr_ra_chest_pt(tg);
+    if (!kbr_ra_gate(klbr_raon, GetCurrentThreadId() == klbr_f6_tid, klbr_f6_cur.marked && klbr_ra_live(klbr_f6_cur.ix), klbr_f6_cur.valid, klbr_f6_cur.geo && klbr_f6_cur.bl, haveg)) { klbr_ra_c.nogate++; return; }      /* review 11-04: only shots that took the vt+0x250 muzzle path (bl = 1, the researched one); the bl = 0 path fills T / V by other code */
+    if (kbr_f6_is_zero3(o)) { klbr_ra_c.bad++; return; }      /* review 11-04: a zero origin is the 0x857110 fallback or a failed read, not a muzzle */
+    if (!klh_rd(matAddr, oldm, 36)) { klbr_ra_c.bad++; return; }
+    if (which == 4 && klbr_f6_cur.ra_have) { for (k = 0; k < 3; k++) fd[k] = klbr_f6_cur.ra_dir[k]; if (!kbr_ra_dir(o, tg, 0.0f, dir, &dist)) { klbr_ra_c.farc++; return; } }      /* S4 follows the S1 choice (the cone draw is per shot) */
+    else {
+        if (!kbr_ra_dir(o, tg, (float)klbr_ra_maxd, dir, &dist)) { klbr_ra_c.farc++; return; }
+        u1 = kbr_ra_rng(&klbr_ra_seed); u2 = kbr_ra_rng(&klbr_ra_seed);
+        if (!kbr_ra_cone(dir, klbr_ra_spread, u1, u2, fd)) { klbr_ra_c.bad++; return; }
+    }
+    if (!kbr_ra_build(oldm, fd, row, sg, nt)) { klbr_ra_c.bad++; return; }
+    { float od[3]; for (k = 0; k < 3; k++) od[k] = oldm[3 * row + k] * (float)sg; eold = kbr_f6_ang_dir(od, o, tg); klbr_ra_c.rab[kbr_f6_bucket(eold)]++; }
+    if (!klbr_ra_write(matAddr, nt)) return;
+    { float nd[3]; for (k = 0; k < 3; k++) nd[k] = nt[3 * row + k] * (float)sg; enew = kbr_f6_ang_dir(nd, o, tg); econe = kbr_f6_ang_dir(fd, o, tg); }
+    if (which == 1) {
+        klbr_ra_c.w1++; for (k = 0; k < 3; k++) klbr_f6_cur.ra_dir[k] = fd[k];
+        klbr_f6_cur.ra_have = 1;
+    } else klbr_ra_c.w4++;
+    if (klbr_ra_c.w1 + klbr_ra_c.w4 <= 8 || ((klbr_ra_c.w1 + klbr_ra_c.w4) % 64) == 0)
+        klog("brain: traitor rayaim write: site %s (%s) bot %d: origin (%.1f %.1f %.1f) chest target (%.1f %.1f %.1f) dist %.1f (max %d); row %d%s sign %d, cone %d deg: old forward-row error to the exact line %.1f deg -> new %.2f deg (the cone draw itself %.2f deg off); matrix %s",
+             which == 1 ? "S1 0x4cb8b9" : "S4 0x4cc440", which == 1 ? "muzzle T, steers the bullet" : "ray matrix M, steers the flash/ray group", klbr_f6_cur.ix, (double)o[0], (double)o[1], (double)o[2], (double)tg[0], (double)tg[1], (double)tg[2], (double)dist, klbr_ra_maxd,
+             row, klbr_ra_rowcfg < 0 ? " (auto: GUESS 2)" : "", sg, klbr_ra_spread, (double)eold, (double)enew, (double)econe, "rewritten orthonormal");
+}
+static void klbr_ra_summary(const char *why)
+{
+    if (!klbr_raon || !(klbr_ra_c.s1 || klbr_ra_c.s4)) return;
+    klog("brain: traitor rayaim %s: S1 seen %ld written %ld, S4 seen %ld written %ld; not written: gate (not a live marked shot / no target / no geometry) %ld, target beyond %d units or degenerate %ld, matrix not a valid rotation or read failed %ld; old forward-row error before the write (<5 <15 <45 >=45 unknown deg) %ld %ld %ld %ld %ld; faults %ld (row %d%s, sign %d, spread %d deg, site mask %d, chest %d)",
+         why, klbr_ra_c.s1, klbr_ra_c.w1, klbr_ra_c.s4, klbr_ra_c.w4, klbr_ra_c.nogate, klbr_ra_maxd, klbr_ra_c.farc, klbr_ra_c.bad, klbr_ra_c.rab[0], klbr_ra_c.rab[1], klbr_ra_c.rab[2], klbr_ra_c.rab[3], klbr_ra_c.rab[4], klbr_ra_c.flt, kbr_ra_row(klbr_ra_rowcfg), klbr_ra_rowcfg < 0 ? " (auto: GUESS 2)" : "", kbr_ra_sign(klbr_ra_signcfg), klbr_ra_spread, klbr_ra_site, klbr_ra_chest);
 }
 static void klbr_f6_shotline(KLBR_F6C *c)      /* the combined line of one shot (muzzle + ray) */
 {
@@ -1767,6 +1924,7 @@ static void klbr_f6_shotline(KLBR_F6C *c)      /* the combined line of one shot 
 static void klbr_f6_body_fn(int id, KLBR_F3REGS *r)      /* the stub handler's work (game thread); reads only */
 {
     DWORD sp = r->esp; int net, i, ix = -1; KLBR_F6C *c; DWORD sm, role = 0;
+    if (id == 8) { klbr_f7_aimat(r); return; }      /* FireProbe7: the AimAt entry */
     sm = KLBR_RDG(0x168e598); if (sm > 0xffff) role = klh_rd32(sm + 0x54);
     net = role == 2 || role == 3;
     if (id == 1) {
@@ -1790,7 +1948,9 @@ static void klbr_f6_body_fn(int id, KLBR_F3REGS *r)      /* the stub handler's w
         if (klbr_f6_cur.geo && kbr_f6_is_ident(klbr_f6_cur.mat) && kbr_f6_is_zero3(klbr_f6_cur.pos)) { c->ident++; }
         klbr_f6_cur.havebp = owner > 0xffff && klh_rd(owner + 0x460, klbr_f6_cur.bp, 12) && kle_ok3(klbr_f6_cur.bp);
         klbr_f6_cur.havehp = klbr_f6_human(ix, &klbr_f6_cur.human, klbr_f6_cur.hp);
-        if (c->nlm < KLBR_F6_LOGMAX) {
+        if (ix >= 0 && klbr_f7on) klbr_f7_capture(ix, sp, item);      /* FireProbe7: read only, BEFORE RayAim rewrites T */
+        if (klbr_raon && (klbr_ra_site & 1) && klbr_f6_cur.geo) klbr_ra_apply(1, sp, klbr_f6_cur.pos, sp + 0xc4);      /* RayAim S1: T at [esp+0xc4], origin V = klbr_f6_cur.pos */
+        if (klbr_f6on && c->nlm < KLBR_F6_LOGMAX) {
             c->nlm++;
             klog("brain: traitor fireprobe6 muzzle: networked %s %s bot %d item %08lx owner(esp+0x54) %08lx bl (muzzle path via vt+0x250) %d: [[item+4]+0x3c] %08lx bit21 %d, [item+0x5c] %08lx 0x8ccde0 -> %08lx, class test owner %d node [[node+0x50]+0x60] %08lx %d (%s); branch %s; outputs origin (%.1f %.1f %.1f) %s, matrix %s%s; 0x857110 identity fallback %s",
                  net ? "yes" : "no", ix >= 0 ? "MARKED" : "other", ix, (unsigned long)item, (unsigned long)owner, forced, (unsigned long)flags, bit21, (unsigned long)h, (unsigned long)own, oc, (unsigned long)nn, nc, klbr_f6_cur.known ? "class getter called" : "class test NOT run (no usable getter): GUESS miss",
@@ -1811,7 +1971,10 @@ static void klbr_f6_body_fn(int id, KLBR_F3REGS *r)      /* the stub handler's w
     if (id == 4) {
         klbr_f6_cur.ray = 1; c->ray++;
         klh_rd(sp + 0xf4, klbr_f6_cur.va, 12);      /* GUESS: the second pushed argument (lea ecx,[esp+0xf4]) */
-        klh_rd(r->eax, klbr_f6_cur.vb, 12);      /* GUESS: the third pushed argument (eax = lea [esp+0x34 at the call]) */
+        klbr_f6_cur.havevb = klh_rd(r->eax, klbr_f6_cur.vb, 12);      /* GUESS: the third pushed argument (eax = lea [esp+0x34 at the call]) */
+        klbr_f6_cur.havem4 = klh_rd(sp + 0xf4, klbr_f6_cur.m4, 36);      /* the ray matrix M (9 floats at the site esp+0xf4), BEFORE RayAim writes it */
+        if (klbr_f7on) klbr_f7_at_s4();
+        if (klbr_raon && (klbr_ra_site & 4) && klbr_f6_cur.havevb && kbr_ra_finite(klbr_f6_cur.vb, 3)) klbr_ra_apply(4, sp, klbr_f6_cur.vb, sp + 0xf4);      /* RayAim S4: the ray start P = *eax is the origin */
         if (klbr_f6_cur.geo && klbr_f6_cur.havehp) { c->rayAb[kbr_f6_bucket(kbr_f6_ang(klbr_f6_cur.pos, klbr_f6_cur.va, klbr_f6_cur.hp))]++; c->rayBb[kbr_f6_bucket(kbr_f6_ang(klbr_f6_cur.pos, klbr_f6_cur.vb, klbr_f6_cur.hp))]++; }
         return;
     }
@@ -1820,23 +1983,25 @@ static void klbr_f6_body_fn(int id, KLBR_F3REGS *r)      /* the stub handler's w
         DWORD ent = klh_rd32(sp + 0x10);      /* the entity written by 'call [req vt+0x78]' (esp = E at 0x4cc644) */
         klbr_f6_cur.ret = ent;
         if (!ent) c->rnull++; else { c->rhit++; if (ent == klbr_f6_cur.human) c->rhuman++; else if (klud_is_player(ent)) c->rplayer++; }      /* GUESS: the hit entity is the player object itself (not a collision child) when it is the human */
-        klbr_f6_shotline(c); klbr_f6_cur.valid = 0;
+        if (klbr_f7on) klbr_f7_line();
+        if (klbr_f6on) klbr_f6_shotline(c);
+        klbr_f6_cur.valid = 0;
         return;
     }
-    if (id == 6) { c->proj++; klbr_f6_cur.ray = 0; klbr_f6_shotline(c); klbr_f6_cur.valid = 0; return; }
+    if (id == 6) { c->proj++; klbr_f6_cur.ray = 0; if (klbr_f7on) klbr_f7_line(); if (klbr_f6on) klbr_f6_shotline(c); klbr_f6_cur.valid = 0; return; }
 }
 static void __cdecl klbr_f6_hit(int id, KLBR_F3REGS *r)      /* called by the stubs on the game thread */
 {
-    if (!klbr_f6on || !r || klbr_f6_flt >= 3 || !klbr_f6_tid || GetCurrentThreadId() != klbr_f6_tid) return;      /* game thread only */
+    if (!klbr_f6act || !r || klbr_f6_flt >= 3 || !klbr_f6_tid || GetCurrentThreadId() != klbr_f6_tid) return;      /* game thread only */
     __try { klbr_f6_body_fn(id, r); } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klbr_f6_cur.valid = 0; if (klbr_f6_flt <= 3) klog("brain: traitor fireprobe6: fault in the handler (site id %d): %d of 3 allowed", id, klbr_f6_flt); }
 }
 static void klbr_f6_install(void)      /* once (game thread); a refusal is final for the run */
 {
-    int s, ok = 0; BYTE cur[8], jmp[8]; DWORD stub;
+    int s, ok = 0, nwant = klbr_f7on ? KLBR_F6_NSITE_ALL : KLBR_F6_NSITE; BYTE cur[8], jmp[8]; DWORD stub;
     if (klbr_f6_state) return;
     klbr_f6_state = -1;
     if (!klbr_f6_stub && !(klbr_f6_stub = (BYTE *)VirtualAlloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) { klog("brain: traitor fireprobe6: no memory for the stubs: off"); return; }
-    for (s = 0; s < KLBR_F6_NSITE; s++) {
+    for (s = 0; s < nwant; s++) {
         const KLBR_F6SITE *k = &klbr_f6_sites[s]; BYTE *at = KLH_VA(k->site); int n;
         memset(cur, 0, sizeof cur);
         if (klh_is_hashed(k->site, k->len)) { klog("brain: traitor fireprobe6: site %d 0x%x is inside a hashed range: NOT installed", k->id, (unsigned)k->site); continue; }
@@ -1845,17 +2010,18 @@ static void klbr_f6_install(void)      /* once (game thread); a refusal is final
         n = kbr_f3_emit(klbr_f6_stub + s * 0x40, stub, k->id, (DWORD)(DWORD_PTR)klbr_f6_hit, k->b, k->len, (DWORD)(DWORD_PTR)(at + k->len));
         if (!n) { klog("brain: traitor fireprobe6: site %d: stub not built", k->id); continue; }
         kbr_f3_jmp(jmp, (DWORD)(DWORD_PTR)at, stub, k->len);
-        if (klh_poke(at, k->b, k->len, jmp, k->len, "brain: FireProbe6 counting detour")) { ok++; klog("brain: traitor fireprobe6: site %d 0x%x (%d bytes stolen) installed, stub %d bytes", k->id, (unsigned)k->site, k->len, n); }
+        if (klh_poke(at, k->b, k->len, jmp, k->len, "brain: FireProbe6 counting detour")) { ok++; if (k->id == 8) klbr_f7_site8 = 1; klog("brain: traitor fireprobe6: site %d 0x%x (%d bytes stolen) installed, stub %d bytes", k->id, (unsigned)k->site, k->len, n); }
         else klog("brain: traitor fireprobe6: site %d 0x%x NOT installed (refused by the patch guard - a SHIP build writes no code - or the bytes differ)", k->id, (unsigned)k->site);
     }
-    klbr_f6_state = ok == KLBR_F6_NSITE ? 1 : ok ? 2 : -1;
-    klog("brain: traitor fireprobe6: %d of %d sites installed", ok, KLBR_F6_NSITE);
+    klbr_f6_state = ok == nwant ? 1 : ok ? 2 : -1;
+    klog("brain: traitor fireprobe6: %d of %d sites installed (FireProbe6 %d, FireProbe7 %d, RayAim %d)", ok, nwant, klbr_f6on, klbr_f7on, klbr_raon);
 }
 static void klbr_f6_track(struct klbr_s *e, DWORD self)      /* every slot-113 call of a bot (game thread): a marked traitor's body / item / holder (read only) */
 {
     int ix; DWORD F;
-    if (!klbr_f6on || !e || (ix = (int)(e - klbr_t)) < 0 || ix >= KLBR_MAX) return;
-    if (e->state != 1 || !e->traitor) { klbr_f6_body[ix] = klbr_f6_item[ix] = klbr_f6_hold[ix] = 0; return; }
+    if (!klbr_f6act || !e || (ix = (int)(e - klbr_t)) < 0 || ix >= KLBR_MAX) return;
+    if (e->state != 1 || !e->traitor) { klbr_f6_body[ix] = klbr_f6_item[ix] = klbr_f6_hold[ix] = klbr_f6_sold[ix] = 0; klbr_f7_aim_n[ix] = 0; klbr_f7_aim_t[ix] = klbr_f7_aim_tg[ix] = 0; return; }
+    klbr_f6_sold[ix] = self;
     klbr_f6_body[ix] = klh_rd32(self + 0x40); if (klbr_f6_body[ix] <= 0xffff) klbr_f6_body[ix] = 0;
     F = klh_rd32(self + 0x6a0); klbr_f6_item[ix] = F > 0xffff ? klh_rd32(F + 4) : 0;
     klbr_f6_hold[ix] = klh_rd32(self + 0xac);      /* the holder the FireProbe lines use ([soldier+0xac]) */
@@ -1863,6 +2029,7 @@ static void klbr_f6_track(struct klbr_s *e, DWORD self)      /* every slot-113 c
 static void klbr_f6_summary(const char *why)
 {
     int n, m;
+    klbr_f7_summary(why); klbr_ra_summary(why);
     if (!klbr_f6on) return;
     for (n = 0; n < 2; n++) for (m = 0; m < 2; m++) {
         KLBR_F6C *c = &klbr_f6_c[n][m];
@@ -1877,12 +2044,12 @@ static long klbr_f6_total(void) { int n, m; long t = 0; for (n = 0; n < 2; n++) 
 static void klbr_f6_round_end(void)      /* round end (klbr_fp_summary): the totals, then the counters cleared (the detours stay in) */
 {
     klbr_f6_summary("round");
-    memset(klbr_f6_c, 0, sizeof klbr_f6_c); memset(klbr_f6_body, 0, sizeof klbr_f6_body); memset(klbr_f6_item, 0, sizeof klbr_f6_item); memset(klbr_f6_hold, 0, sizeof klbr_f6_hold); klbr_f6_cur.valid = 0; klbr_f6_lastshots = 0;
+    memset(klbr_f6_c, 0, sizeof klbr_f6_c); memset(klbr_f6_body, 0, sizeof klbr_f6_body); memset(klbr_f6_item, 0, sizeof klbr_f6_item); memset(klbr_f6_hold, 0, sizeof klbr_f6_hold); memset(klbr_f6_sold, 0, sizeof klbr_f6_sold); memset(&klbr_f7_c, 0, sizeof klbr_f7_c); memset(klbr_f7_aim_n, 0, sizeof klbr_f7_aim_n); memset(klbr_f7_aim_t, 0, sizeof klbr_f7_aim_t); memset(klbr_f7_aim_tg, 0, sizeof klbr_f7_aim_tg); memset(&klbr_ra_c, 0, sizeof klbr_ra_c); klbr_f7_cur.valid = 0; klbr_f6_cur.valid = 0; klbr_f6_lastshots = 0;
 }
 static void klbr_f6_tick(int game_thread, DWORD now)      /* klbr_tick, before the host-round gate (so Arcade is covered): install once, a running total every 30 s when shots were seen */
 {
     long t;
-    if (!klbr_f6on || !game_thread || !klh_exe_ok) return;
+    if (!klbr_f6act || !game_thread || !klh_exe_ok) return;
     klbr_f6_tid = GetCurrentThreadId();
     if (!klbr_f6_state) klbr_f6_install();
     if (now - klbr_f6_last < 30000u) return;
@@ -3023,6 +3190,12 @@ static void klbr_tick(int game_thread)
 }
 
 static int klbr_key(const char *k) { return GetPrivateProfileIntA("Brain", k, 0, klh_ini) != 0; }
+static int klbr_keyi(const char *k, int def)      /* a signed integer key (GetPrivateProfileInt cannot return a negative value) */
+{
+    char b[32];
+    b[0] = 0; GetPrivateProfileStringA("Brain", k, "", b, (DWORD)sizeof b, klh_ini);
+    return b[0] ? atoi(b) : def;
+}
 static void klbr_init(void)
 {
     int sw[KBR_NSW];
@@ -3085,6 +3258,17 @@ static void klbr_init(void)
     if (klbr_f4on) klog("brain: OnlineBrainTraitorFireProbe4=1 UNTESTED (recommended off): DATA READS ONLY, no hook, no write; item shot counters / owner gate bit / victim gates / predicted victim route per FireProbe sample (host only)");
     klbr_f6on = klbr_key("OnlineBrainTraitorFireProbe6");      /* independent of AttackHandle / FireProbe: also Arcade; marking of online traitor bots needs the slot-113 wrapper (the FireProbe keys) */
     if (klbr_f6on) klog("brain: OnlineBrainTraitorFireProbe6=1 UNTESTED (recommended off): READ ONLY toward the game state; counting detours on 0x4cb8b9, 0x4cc3a0, 0x4cc440, 0x4cc450, 0x4cc644, 0x4cc65d (TEST build only, unhashed code 0x4ca000-0x4cd000): per shot the muzzle origin / matrix, the 0x7cb080 branch, the ray from / to and its return, tagged networked yes/no (host and Arcade)");
+    klbr_f7on = klbr_key("OnlineBrainTraitorFireProbe7");
+    klbr_raon = klbr_key("OnlineBrainTraitorRayAim");
+    klbr_ra_rowcfg = klbr_keyi("OnlineBrainTraitorRayAimRow", -1); klbr_ra_signcfg = klbr_keyi("OnlineBrainTraitorRayAimSign", 1);
+    klbr_ra_spread = klbr_keyi("OnlineBrainTraitorRayAimSpreadDeg", 3); if (klbr_ra_spread < 0) klbr_ra_spread = 0; if (klbr_ra_spread > 30) klbr_ra_spread = 30;
+    klbr_ra_maxd = klbr_keyi("OnlineBrainTraitorRayAimMaxDist", 6000); if (klbr_ra_maxd < 0) klbr_ra_maxd = 0;
+    klbr_ra_site = klbr_keyi("OnlineBrainTraitorRayAimSite", 5) & 5; if (!klbr_ra_site) klbr_ra_site = 5;
+    klbr_ra_chest = klbr_keyi("OnlineBrainTraitorRayAimChest", 130);
+    klbr_ra_seed = (kbr_u32)GetTickCount() * 2654435761u | 1u;
+    klbr_f6act = klbr_f6on || klbr_f7on || klbr_raon;
+    if (klbr_f7on) klog("brain: OnlineBrainTraitorFireProbe7=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only: the FireProbe6 counting detours plus a seventh on AimAt 0x70f130, unhashed code); per marked shot the AimAt fields [body+0x824..0x83c], [+0x68c], [+0x64c], who the target / holder / fire task target is, AimAt called in the last second, the ray matrix rows against the human, the template range (host only; needs the slot-113 wrapper to mark the bot: the FireProbe keys)");
+    if (klbr_raon) klog("brain: OnlineBrainTraitorRayAim=1 UNTESTED (recommended off): CHANGES the game (TEST build only, host only, marked traitor shots only): the muzzle matrix T at 0x4cb8b9 (site bit 1) and the ray matrix M at 0x4cc440 (site bit 4) are rewritten in the game thread's own stack so the forward row (row %d%s, sign %d: GUESS) points at the human's chest (feet + %d: GUESS) with a random cone error of %d deg (GUESS), target within %d units (GUESS), site mask %d", kbr_ra_row(klbr_ra_rowcfg), klbr_ra_rowcfg < 0 ? " auto" : "", kbr_ra_sign(klbr_ra_signcfg), klbr_ra_chest, klbr_ra_spread, klbr_ra_maxd, klbr_ra_site);
     klbr_wron = klbr_cfh && klbr_key("OnlineBrainTraitorWeaponReady");
     if (klbr_key("OnlineBrainTraitorWeaponReady") && !klbr_wron) klog("brain: OnlineBrainTraitorWeaponReady needs OnlineBrainTraitorAttackHandle: off");
     if (klbr_wron) klog("brain: OnlineBrainTraitorWeaponReady=1 UNTESTED (recommended off): a marked bot's byte [body+0x5c8] (weapon not ready, blocks the shooting task) is cleared to 0 when its weapon controller exists (host only; not put back)");
