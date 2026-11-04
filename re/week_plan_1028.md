@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-04 18:00 c9: INSTALLED live (owner asked): online AI heisters as benched today (traitor shoots humans, 6-minute traitor clock, van waits for the crew, real boarding) on top of ce's shop fix; owner's 11-02 back-offs kept. Undo bat in C:\kl_build_1024\c9_1104c_install.
 - 11-04 17:10 c9: the helicopter boarding test (bs57) was lost: its test dll was built without the test rig, so the game never opened. The traitor-timing fix (Stage2Gate, off by default) is committed; both tests are rebuilt with the right dll and wait until the owner has finished playing.
 - 11-04 16:20 c9: bs56 PASS 0 faults. Arcade's 'wait for the crew' rule works online: on DD05 the van waited 51 s for walking bots (Arcade ~53 s); on DM03 every bot boarded through the game's own Board tactic, so the van rightly left. DD03 (helicopter) has no boarding place online yet, and now picks a traitor with the 6 minute clock. bs57 logs the helicopter boarding fields online vs Arcade.
 - 11-04 15:45 c9: bs55 PASS 0 faults. The van probe shows the bots are still walking to the van when it parks (as in Arcade), so Arcade's 'wait for the crew' rule will work online; the old hold kept the van only 7-11 s. bs56 tests that rule now (DM03, DD05, DD03).

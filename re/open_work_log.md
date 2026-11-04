@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~18:00 - [c9] INSTALLED c9_1104c (owner: 'okay install all'): C:\kl_build_1024\c9_1104c_install (INSTALL/UNDO bats, backups <DD>\*.before-c91104c). SHIP dll from f958539ac
+(md5 69f534cf, keeps ce's InShopSteps; kl_tests 71 pass) + 80 benched keys: [Brain] Arcade traitor/board/loot set, [BotFill] crewhold/doorhold/gather/legs/DM09 way, [Bots] CrewHealth 2,
+[Lobby] TimeAuto=6, [HUD] KilledBy/OnlineBoardBots, [CrewHop], [Names] OnlineLobby. Kept the owner's 11-02 back-offs (DropFollow 0, TacticsCarry 2, DropTake 0, BoardAllNear 0); Stage2Gate and all
+probe/log keys left off. Zombie kl2.exe pid 129272 (access denied) blocks the bat's game check, steps run by hand; needs a reboot. Next: owner play test; bs57/bs58 when the game is free.
+
 2026-11-04 ~17:10 - [c9] bs57 LOST: out_bp_1104z (and bs58's out_s2_1104a) were SHIP builds (klhookuild.bat, no klauto), so every bench seat hung with no window and NO LOG (SB57A DD03,
 SB57B DD01, ARC57 DD03). Bench dlls must come from build_auto.bat (TEST). c54c3b264: [Brain] OnlineBrainTraitorStage2Gate (default off; carrying bots show stage 1 to the Traitor evaluate until
 van call / gather / real van state 1-4 / exit box / $1.25M). TEST dll out_s2t_1104b (md5 35b0bbc2, HEAD = BoardProbe + Stage2Gate) is in the bs57 and bs58 kits. Owner back 16:55: both kits
