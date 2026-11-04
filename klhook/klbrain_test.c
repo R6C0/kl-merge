@@ -450,6 +450,23 @@ int main(void)
             CHECK(kbr_mb_arc_pick(tr, 0, sel, 2) == 0, "mb arc pick: empty");
         }
     }
+    /* CloseInProbe / CombatFlag helpers */
+    {
+        char nm[3][32]; long nc[3];
+        memset(nm, 0, sizeof nm); memset(nc, 0, sizeof nc);
+        CHECK(kbr_ci_list_n(0x101000, 0x101000) == 0 && kbr_ci_list_n(0x101000, 0x101010) == 4 && kbr_ci_list_n(0x101000, 0x101100) == 64, "ci list: empty, 4 entries, 64 (the cap)");
+        CHECK(kbr_ci_list_n(0, 0x10) == -1 && kbr_ci_list_n(0x101000, 0x100ff0) == -1 && kbr_ci_list_n(0x101000, 0x101002) == -1 && kbr_ci_list_n(0x101000, 0x101104) == -1 && kbr_ci_list_n(0x20, 0x30) == -1, "ci list: null, backwards, misaligned, too long, tiny pointer");
+        CHECK(kbr_ci_list_pick(1, 1, 0) == 0 && kbr_ci_list_pick(1, 0, 0) == 1 && kbr_ci_list_pick(0, 1, 0) == 1 && kbr_ci_list_pick(0, 0, 0) == 1 && kbr_ci_list_pick(1, 1, 1) == 2 && kbr_ci_list_pick(0, 0, 1) == 2, "ci list pick: A needs 4fc AND 6fc, C wins when active, else B");
+        CHECK(kbr_ci_timer_left(1000, 400) == 600 && kbr_ci_timer_left(1000, 1000) == 0 && kbr_ci_timer_left(1000, 1500) == 0 && kbr_ci_timer_left(5, -10) == 15 && kbr_ci_timer_left(-5, 10) == 0, "ci timer: signed compare, open at equal");
+        CHECK(kbr_ci_pct(1, 4) == 25 && kbr_ci_pct(0, 9) == 0 && kbr_ci_pct(9, 9) == 100 && kbr_ci_pct(5, 0) == -1 && kbr_ci_pct(1, 3) == 33, "ci pct");
+        CHECK(kbr_ci_name_tally(nm, nc, 3, "ZDefend") == 0 && kbr_ci_name_tally(nm, nc, 3, "ZFollow") == 1 && kbr_ci_name_tally(nm, nc, 3, "ZDefend") == 0 && nc[0] == 2 && nc[1] == 1, "ci name tally: new, repeat");
+        CHECK(kbr_ci_name_tally(nm, nc, 3, "A") == 2 && kbr_ci_name_tally(nm, nc, 3, "B") == -1 && kbr_ci_name_tally(nm, nc, 3, "") == -1 && kbr_ci_name_tally(nm, nc, 3, 0) == -1, "ci name tally: full, empty, null");
+        CHECK(kbr_cb_decide(1, 1, 1, 2, 0, 0, 0) == 0 && kbr_cb_decide(2, 1, 1, 1, 0, 1, 0) == 0, "cb: write (mode 1 needs 6fc 0, mode 2 needs 6fc nonzero)");
+        CHECK(kbr_cb_decide(1, 1, 1, 2, 0, 1, 0) == 3 && kbr_cb_decide(2, 1, 1, 2, 0, 0, 0) == 3, "cb: 6fc condition fails");
+        CHECK(kbr_cb_decide(1, 1, 1, 2, 1, 0, 0) == 2 && kbr_cb_decide(2, 1, 1, 1, 3, 1, 0) == 2, "cb: a clear human = never write");
+        CHECK(kbr_cb_decide(1, 1, 0, 2, 0, 0, 0) == 1 && kbr_cb_decide(1, 1, 1, 0, 0, 0, 0) == 1, "cb: no fresh pass / nobody evaluated");
+        CHECK(kbr_cb_decide(1, 1, 1, 2, 0, 0, 1) == 4 && kbr_cb_decide(1, 0, 1, 2, 0, 0, 0) == 5 && kbr_cb_decide(0, 1, 1, 2, 0, 0, 0) == 5 && kbr_cb_decide(3, 1, 1, 2, 0, 0, 0) == 5, "cb: already set, dead, mode off / unknown");
+    }
     /* LOS helpers */
     {
         float a[3] = { 0, 150, 0 }, b[3] = { 300, 150, 400 }, c[3] = { 0, 150, 1000 }, dl[3] = { 9, 9, 9 }, ln = 0, nan3[3];

@@ -800,4 +800,43 @@ static int kbr_mb_arc_pick(const int *trait, int n, int *sel, int ctl)
     return c;
 }
 
+/* OnlineBrainTraitorCloseInProbe / OnlineBrainTraitorCombatFlag (11-04, re/approach_lever_1104.md Verifier; pure helpers).
+   A tactic list is a vector of 4-byte tactic pointers: begin at [S+0x604 / 0x610 / 0x61c], end at +4 (the Defend tick 0x85f8e2..0x85f90c loops edi = [ebx] until edi == [ebx+4], step 4: read from the disassembly; the third dword
+   (capacity) is not read there: GUESS that it follows). Count, or -1 for a null / misaligned / backwards / more than 64 entries. */
+static int kbr_ci_list_n(kbr_u32 begin, kbr_u32 end)
+{
+    kbr_u32 d;
+    if (begin <= 0xffffu || end < begin) return -1;
+    d = end - begin;
+    if ((d & 3u) || d > 64u * 4u) return -1;
+    return (int)(d >> 2);
+}
+/* which list the Defend tick walks (0x85f896..0x85f8bc, 0x85f8d9): 0 = A [S+0x604] when [S+0x4fc] != 0 AND [S+0x6fc] != 0 (cmp byte [eax+0x6fc],0 then 'mov byte [ebp-1],1; jne keep'), else 1 = B [S+0x610];
+   2 = C [S+0x61c] when the body test [[S+0x40]+0x5c8] != 0 and 0x575100 is false (c_active). NOTE the verifier text said '6fc == 0'; the disassembly reads '6fc != 0' (jne taken keeps the 1): the logged data settles it. */
+static int kbr_ci_list_pick(int b4fc, int b6fc, int c_active) { return c_active ? 2 : (b4fc && b6fc) ? 0 : 1; }
+/* the ZCloseIn eval gate 1 (0x672505 cmp edx,[edi]; jl -> return 0.0): the clock [[0xdd2640]+0x48] against the tactic timer [this+0x14], signed; milliseconds still to wait, 0 when the gate is open */
+static long kbr_ci_timer_left(long timer, long clock) { return clock < timer ? timer - clock : 0; }
+/* percent of whole, rounded down; -1 when whole <= 0 */
+static int kbr_ci_pct(long part, long whole) { return whole <= 0 ? -1 : (int)((part * 100L) / whole); }
+/* tally of distinct names (cap slots of 32 bytes); the slot, -1 when full or the name is empty */
+static int kbr_ci_name_tally(char names[][32], long *cnt, int cap, const char *name)
+{
+    int i;
+    if (!name || !name[0]) return -1;
+    for (i = 0; i < cap; i++) if (names[i][0] && !strncmp(names[i], name, 31)) { cnt[i]++; return i; }
+    for (i = 0; i < cap; i++) if (!names[i][0]) { strncpy(names[i], name, 31); names[i][31] = 0; cnt[i] = 1; return i; }
+    return -1;
+}
+/* CombatFlag decision. mode 1 = as specified (write only while [S+0x6fc] == 0), mode 2 = as the disassembly reads (write only while [S+0x6fc] != 0, so the Defend tick really picks list A). Codes:
+   0 write, 1 no fresh LosGate pass, 2 skip: a human is clear / unknown, 3 skip: the 6fc condition fails, 4 already set, 5 off / not alive. */
+static int kbr_cb_decide(int mode, int alive, int pass_fresh, int n_blocked, int n_open, int b6fc, int b4fc)
+{
+    if (mode != 1 && mode != 2) return 5;
+    if (!alive) return 5;
+    if (!pass_fresh || n_blocked <= 0) return 1;
+    if (n_open > 0) return 2;
+    if (mode == 1 ? (b6fc != 0) : (b6fc == 0)) return 3;
+    return b4fc ? 4 : 0;
+}
+
 #endif /* KLBRAIN_LOGIC_H */
