@@ -429,6 +429,16 @@ int main(void)
         CHECK(kbr_f8_in_set(set, 3, 0x11) && kbr_f8_in_set(set, 3, 0x33) && !kbr_f8_in_set(set, 3, 0x22) && !kbr_f8_in_set(set, 3, 0) && !kbr_f8_in_set(set, 0, 0x11), "f8 in set: zero never matches");
         CHECK(kbr_f8_nulls(10, 7) == 3 && kbr_f8_nulls(5, 5) == 0 && kbr_f8_nulls(3, 4) == 0, "f8 nulls");
     }
+    /* ModeBProbe helpers */
+    {
+        CHECK(kbr_mb_branch(0, 0, 5) == 3 && kbr_mb_branch(4, 4, 5) == 3 && kbr_mb_branch(0, 2, 5) == 4 && kbr_mb_branch(4, 1, 5) == 4, "mb branch: handle, +0x5ac free: create when +0x658 free, else retarget");
+        CHECK(kbr_mb_branch(2, 0, 5) == 2 && kbr_mb_branch(1, 4, 5) == 2 && kbr_mb_branch(3, 0, 5) == 2, "mb branch: +0x5ac busy -> store720 only");
+        CHECK(kbr_mb_branch(0, 0, 0) == 1 && kbr_mb_branch(4, 2, 0) == 1 && kbr_mb_branch(2, 0, 0) == 0, "mb branch: handle 0 -> CoverFire when free, else the 0x8318c2 path");
+        CHECK(kbr_mb_branch(-1, 0, 5) == 5 && kbr_mb_branch(0, -1, 5) == 5 && kbr_mb_branch(2, -1, 5) == 2 && kbr_mb_branch(-1, -1, 0) == 5, "mb branch: unreadable state");
+        CHECK(kbr_mb_cand_addr(0x1000, 0) == 0x1000 - 0xbc && kbr_mb_cand_addr(0x1000, 3) == 0x1000 - 0xbc + 36 && !kbr_mb_cand_addr(0x1000, -1) && !kbr_mb_cand_addr(0x1000, 16), "mb cand addr");
+        CHECK(kbr_mb_inwin(1500, 1000, 10000) && kbr_mb_inwin(11000, 1000, 10000) && !kbr_mb_inwin(11001, 1000, 10000) && !kbr_mb_inwin(5, 0, 10000) && !kbr_mb_inwin(500, 1000, 10000) && kbr_mb_inwin(100, 0xfffffff0UL, 10000), "mb window: edges, none, before, wrap");
+        CHECK(kbr_mb_due(1000, 1000) && kbr_mb_due(1500, 1000) && !kbr_mb_due(999, 1000) && kbr_mb_due(10, 0xfffffff0UL), "mb due: wrap safe");
+    }
     /* LOS helpers */
     {
         float a[3] = { 0, 150, 0 }, b[3] = { 300, 150, 400 }, c[3] = { 0, 150, 1000 }, dl[3] = { 9, 9, 9 }, ln = 0, nan3[3];

@@ -738,8 +738,8 @@ static int kbr_f8_in_set(const kbr_u32 *set, int n, kbr_u32 v)
 static long kbr_f8_nulls(long iter, long ok) { return iter > ok ? iter - ok : 0; }
 
 /* OnlineBrainTraitorLosGate / LosProbe (11-04): the stock clear-line test 0x4e1750 builds its physics query like this (disassembled 11-04, 0x4e1831..0x4e18f5):
-   buf+0 = start point (the target's position, y + 150 [0xb31878]); buf+0xc = delta = arg2 - start; when |delta| > 500 [0xb64e20] the delta is scaled by (|delta| - 200 [0xb2d8e8]) / |delta|
-   (the ray stops 200 short of arg2). Returns 1 and fills delta[3] (and *len = the original length) for a usable segment, 0 for non-finite input or a zero-length segment (out untouched). */
+   buf+0 = start point (arg1 = the SHOOTER-side point, y + 150 [0xb31878]); buf+0xc = delta = arg2 (the target point) - start; when |delta| > 500 [0xb64e20] the delta is scaled by (|delta| - 200 [0xb2d8e8]) / |delta|
+   (the ray stops 200 short of the target, arg2). Call as kbr_los_delta(shooter_side, target, ...). Returns 1 and fills delta[3] (and *len = the original length) for a usable segment, 0 for non-finite input or a zero-length segment (out untouched). */
 static int kbr_los_delta(const float *start, const float *end, float *delta, float *len)
 {
     float d[3], l, k; int i;
@@ -756,5 +756,24 @@ static int kbr_los_delta(const float *start, const float *end, float *delta, flo
 }
 /* the physics call answers 'hit' (al != 0) -> the line is BLOCKED; al == 0 -> clear (0x4e1750 returns sete al). ok < 0 = the query could not be made: 2 */
 static int kbr_los_class(int ok, unsigned int al) { return ok < 0 ? 2 : (al & 0xffu) ? 1 : 0; }      /* 0 clear, 1 blocked, 2 error */
+
+/* OnlineBrainTraitorModeBProbe (11-04): pure helpers. State words of the goals are 0 new, 1 starting, 2 running, 3 exiting, 4 terminated; -1 = unreadable.
+   free: a goal in state 0 or 4 can be (re)started. branch of ZSoldier slot 83 0x831850 (ecx = soldier S) from the states read at entry (disassembled 0x831870..0x831994):
+   0 handle 0, [[S+0x5ac]+8] busy: the 0x8318c2 path; 1 handle 0, free: CoverFire; 2 handle != 0, +0x5ac busy: stores [S+0x720] only;
+   3 handle != 0, +0x5ac free, +0x658 free: AddGoal ZAttackTarget (create); 4 same but +0x658 running: retarget via 0x68fd70, no re-add; 5 unreadable state. */
+static int kbr_mb_free(int st) { return st == 0 || st == 4; }
+static int kbr_mb_branch(int s5ac, int s658, unsigned long handle)
+{
+    if (s5ac < 0) return 5;
+    if (!handle) return kbr_mb_free(s5ac) ? 1 : 0;
+    if (!kbr_mb_free(s5ac)) return 2;
+    if (s658 < 0) return 5;
+    return kbr_mb_free(s658) ? 3 : 4;
+}
+/* the candidate firing points of the ZAttackTarget mode-B search are vec3s at [ebp - 0xbc + 12 * index] (0x4f4bf3..0x4f4bf9); 0 for a bad index (10 candidates at most) */
+static kbr_u32 kbr_mb_cand_addr(kbr_u32 ebp, long idx) { return idx < 0 || idx > 14 ? 0 : ebp - 0xbc + (kbr_u32)(12 * idx); }
+/* in the observation window [t0, t0 + len] (wrap safe); due: now reached next (wrap safe) */
+static int kbr_mb_inwin(unsigned long now, unsigned long t0, unsigned long len) { unsigned long d; if (!t0) return 0; d = (now - t0) & 0xffffffffUL; return d <= len; }
+static int kbr_mb_due(unsigned long now, unsigned long next) { return ((now - next) & 0xffffffffUL) < 0x80000000UL; }
 
 #endif /* KLBRAIN_LOGIC_H */
