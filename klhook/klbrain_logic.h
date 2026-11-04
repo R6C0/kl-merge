@@ -544,4 +544,73 @@ static kbr_u32 kbr_gf_force(int on, int all, int marked, int isbot, kbr_u32 ra, 
     return (marked || (all && isbot)) ? cls_val : 0;
 }
 
+
+/* OnlineBrainTraitorFireProbe6 (11-04, after bs34): pure helpers. No libm (the self-test links without it): own sqrt (Newton) and acos (Abramowitz-Stegun 4.4.45, error < 7e-5 rad).
+   Geometry is plain float vec3 (the unit is whatever the caller feeds; the probe feeds the game's own numbers and says which is which). */
+static float kbr_f6_sqrt(float x)
+{
+    float g; int i;
+    if (!(x > 0.0f)) return 0.0f;
+    g = x > 1.0f ? x * 0.5f : 1.0f;
+    for (i = 0; i < 40; i++) g = 0.5f * (g + x / g);
+    return g;
+}
+static float kbr_f6_acos_deg(float c)
+{
+    float a, r;
+    if (c > 1.0f) c = 1.0f;
+    if (c < -1.0f) c = -1.0f;
+    a = c < 0.0f ? -c : c;
+    r = kbr_f6_sqrt(1.0f - a) * (1.5707288f + a * (-0.2121144f + a * (0.0742610f + a * -0.0187293f)));
+    if (c < 0.0f) r = 3.14159265f - r;
+    return r * 57.2957795f;
+}
+static float kbr_f6_len(const float *v) { return kbr_f6_sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
+static float kbr_f6_dist(const float *a, const float *b) { float d[3]; d[0] = a[0] - b[0]; d[1] = a[1] - b[1]; d[2] = a[2] - b[2]; return kbr_f6_len(d); }
+/* angle in degrees between the directions (p - o) and (q - o); -1 when either is (nearly) zero */
+static float kbr_f6_ang(const float *o, const float *p, const float *q)
+{
+    float a[3], b[3], la, lb;
+    a[0] = p[0] - o[0]; a[1] = p[1] - o[1]; a[2] = p[2] - o[2]; b[0] = q[0] - o[0]; b[1] = q[1] - o[1]; b[2] = q[2] - o[2];
+    la = kbr_f6_len(a); lb = kbr_f6_len(b);
+    if (la < 1.0e-4f || lb < 1.0e-4f) return -1.0f;
+    return kbr_f6_acos_deg((a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (la * lb));
+}
+/* angle between a DIRECTION d and the direction o -> q */
+static float kbr_f6_ang_dir(const float *d, const float *o, const float *q)
+{
+    float b[3], ld, lb;
+    b[0] = q[0] - o[0]; b[1] = q[1] - o[1]; b[2] = q[2] - o[2];
+    ld = kbr_f6_len(d); lb = kbr_f6_len(b);
+    if (ld < 1.0e-4f || lb < 1.0e-4f) return -1.0f;
+    return kbr_f6_acos_deg((d[0] * b[0] + d[1] * b[1] + d[2] * b[2]) / (ld * lb));
+}
+/* error bucket of an angle: 0 under 5 deg, 1 under 15, 2 under 45, 3 45 or more, 4 unknown (negative) */
+static int kbr_f6_bucket(float deg) { return deg < 0.0f ? 4 : deg < 5.0f ? 0 : deg < 15.0f ? 1 : deg < 45.0f ? 2 : 3; }
+/* is the 3x3 float block (9 floats) the identity matrix (within 1e-4)? is the vec3 all zero? */
+static int kbr_f6_is_ident(const float *m)
+{
+    static const float id[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 }; int i;
+    for (i = 0; i < 9; i++) { float d = m[i] - id[i]; if (d > 1.0e-4f || d < -1.0e-4f) return 0; }
+    return 1;
+}
+static int kbr_f6_is_zero3(const float *v) { return v[0] > -1.0e-4f && v[0] < 1.0e-4f && v[1] > -1.0e-4f && v[1] < 1.0e-4f && v[2] > -1.0e-4f && v[2] < 1.0e-4f; }
+/* which branch of the shared muzzle transform 0x7cb080 (item vt+0x250, a thunk to it; branch B tail-jumps to the node vt+0x254) a call takes, read from its disassembly (11-04); inputs are the reads the probe makes (not the call):
+     bit21   = bit 21 of [[item+4]+0x3c];  have_h = [item+0x5c] != 0;  owner_ok = 0x8ccde0([item+0x5c]) != 0;  owner_cls = (owner vt+0x30 & [0x1535228]) == [0x1535224] (the 'redirect to its own owner' test)
+     node_ok = 0x598460([item+4]) != 0 where 0x598460(n) = [[n+0x50]+0x60] (GUESS: read from 0x598460's code, the probe reads it instead of calling it);  node_cls = the same class test on that node
+   1 A0: bit21, no handle or no owner: returns with the outputs UNTOUCHED     2 A1: bit21, owner is used directly (vt+0x268 then 0x8c51b0)
+   3 A2: bit21, owner passes the class test, so its own owner is used         4 B: bit21 clear, node passes the class test: tail-jump to the node's vt+0x254
+   5 C: bit21 clear, node null or fails the class test: 0x857110 identity fallback (identity matrix, position zeroed) */
+static int kbr_f6_branch(int bit21, int have_h, int owner_ok, int owner_cls, int node_ok, int node_cls)
+{
+    if (bit21) return (!have_h || !owner_ok) ? 1 : owner_cls ? 3 : 2;
+    return (node_ok && node_cls) ? 4 : 5;
+}
+static const char *kbr_f6_branch_name(int b)
+{
+    return b == 1 ? "A0 (bit21, no owner: outputs untouched)" : b == 2 ? "A1 (bit21, owner direct)" : b == 3 ? "A2 (bit21, owner's owner)" : b == 4 ? "B (node vt+0x254)" : b == 5 ? "C (0x857110 identity fallback)" : "unknown";
+}
+/* is a value inside the exe's code range (the probe only calls a class getter whose address is there) */
+static int kbr_f6_incode(kbr_u32 a) { return a >= 0x401000u && a < 0xb00000u; }
+
 #endif /* KLBRAIN_LOGIC_H */

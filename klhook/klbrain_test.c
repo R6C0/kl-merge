@@ -340,6 +340,40 @@ int main(void)
         CHECK(kbr_gf_force(1, 0, 0, 1, 0x4cb81b, 0x4cb81b, 0x77c, 0xfff) == 0 && kbr_gf_force(1, 1, 0, 1, 0x4cb81b, 0x4cb81b, 0x77c, 0xfff) == 0x77c && kbr_gf_force(1, 1, 0, 0, 0x4cb81b, 0x4cb81b, 0x77c, 0xfff) == 0, "gf: unmarked needs 'all' and a bot");
         CHECK(kbr_gf_force(1, 1, 1, 1, 0x4cb81b, 0x4cb81b, 0, 0xfff) == 0 && kbr_gf_force(1, 1, 1, 1, 0x4cb81b, 0x4cb81b, 0x1000, 0xfff) == 0, "gf: a value the test cannot pass is never forced");
     }
+    /* FireProbe6 helpers */
+    {
+        float o[3] = { 0, 0, 0 }, p[3] = { 10, 0, 0 }, q[3] = { 0, 10, 0 }, r[3] = { 10, 1, 0 }, d[3] = { 1, 0, 0 }, m[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 }, m2[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 0.5f }, z[3] = { 0, 0, 0 }, z2[3] = { 0, 0.5f, 0 };
+        CHECK(kbr_f6_sqrt(4.0f) > 1.9999f && kbr_f6_sqrt(4.0f) < 2.0001f, "f6 sqrt 4");
+        CHECK(kbr_f6_sqrt(-1.0f) == 0.0f && kbr_f6_sqrt(0.0f) == 0.0f, "f6 sqrt non-positive");
+        CHECK(kbr_f6_acos_deg(1.0f) < 0.01f && kbr_f6_acos_deg(0.0f) > 89.99f && kbr_f6_acos_deg(0.0f) < 90.01f, "f6 acos 1 and 0");
+        CHECK(kbr_f6_acos_deg(-1.0f) > 179.9f && kbr_f6_acos_deg(0.5f) > 59.9f && kbr_f6_acos_deg(0.5f) < 60.1f, "f6 acos -1 and 0.5");
+        CHECK(kbr_f6_acos_deg(2.0f) < 0.01f && kbr_f6_acos_deg(-2.0f) > 179.9f, "f6 acos clamps");
+        CHECK(kbr_f6_ang(o, p, q) > 89.9f && kbr_f6_ang(o, p, q) < 90.1f, "f6 ang 90");
+        CHECK(kbr_f6_ang(o, p, p) < 0.01f, "f6 ang same direction");
+        CHECK(kbr_f6_ang(o, p, r) > 5.6f && kbr_f6_ang(o, p, r) < 5.8f, "f6 ang 5.7 deg");
+        CHECK(kbr_f6_ang(o, o, p) < 0.0f, "f6 ang degenerate = -1");
+        CHECK(kbr_f6_ang_dir(d, o, q) > 89.9f && kbr_f6_ang_dir(d, o, q) < 90.1f && kbr_f6_ang_dir(z, o, q) < 0.0f, "f6 ang_dir");
+        CHECK(kbr_f6_dist(o, p) > 9.999f && kbr_f6_dist(o, p) < 10.001f && kbr_f6_len(p) > 9.999f, "f6 dist and len");
+        CHECK(kbr_f6_bucket(0.0f) == 0 && kbr_f6_bucket(4.9f) == 0 && kbr_f6_bucket(5.0f) == 1 && kbr_f6_bucket(14.9f) == 1 && kbr_f6_bucket(15.0f) == 2 && kbr_f6_bucket(44.9f) == 2 && kbr_f6_bucket(45.0f) == 3 && kbr_f6_bucket(-1.0f) == 4, "f6 bucket edges");
+        CHECK(kbr_f6_is_ident(m) && !kbr_f6_is_ident(m2), "f6 identity test");
+        CHECK(kbr_f6_is_zero3(z) && !kbr_f6_is_zero3(z2) && !kbr_f6_is_zero3(p), "f6 zero test");
+    }
+    CHECK(kbr_f6_branch(1, 0, 0, 0, 0, 0) == 1 && kbr_f6_branch(1, 1, 0, 0, 1, 1) == 1, "f6 branch A0: no handle or no owner");
+    CHECK(kbr_f6_branch(1, 1, 1, 0, 0, 0) == 2 && kbr_f6_branch(1, 1, 1, 1, 0, 0) == 3, "f6 branch A1 / A2");
+    CHECK(kbr_f6_branch(0, 0, 0, 0, 1, 1) == 4 && kbr_f6_branch(0, 1, 1, 1, 1, 1) == 4, "f6 branch B ignores the owner inputs");
+    CHECK(kbr_f6_branch(0, 1, 1, 1, 0, 1) == 5 && kbr_f6_branch(0, 0, 0, 0, 1, 0) == 5 && kbr_f6_branch(0, 0, 0, 0, 0, 0) == 5, "f6 branch C: node null or class miss");
+    CHECK(strstr(kbr_f6_branch_name(5), "identity") && strstr(kbr_f6_branch_name(1), "untouched") && strstr(kbr_f6_branch_name(9), "unknown"), "f6 branch names");
+    CHECK(kbr_f6_incode(0x4cb8b9) && !kbr_f6_incode(0x50700c14) && !kbr_f6_incode(0x10), "f6 incode");
+    {   /* the stubs for the Probe6 sites: a 6-byte stolen prologue (inc dword [esi+0x138]) and a 7-byte one (lea ecx,[esp+0xf4]) fit kbr_f3_emit; the jump covers exactly the stolen bytes */
+        static const unsigned char inc6[6] = { 0xff, 0x86, 0x38, 0x01, 0x00, 0x00 }, lea7[7] = { 0x8d, 0x8c, 0x24, 0xf4, 0x00, 0x00, 0x00 };
+        unsigned char st[KBR_F3_MAXSTUB + 8], jm[7]; int n;
+        n = kbr_f3_emit(st, 0x30000000u, 6, 0x12345678u, inc6, 6, 0x4cb8bfu);
+        CHECK(n == 17 + 6 + 5 && st[n - 5] == 0xe9 && st[4] == 6, "f6 stub with 6 stolen bytes");
+        n = kbr_f3_emit(st, 0x30000000u, 7, 0x12345678u, lea7, 7, 0x4cc447u);
+        CHECK(n == 17 + 7 + 5 && n <= KBR_F3_MAXSTUB, "f6 stub with 7 stolen bytes fits the stub cap");
+        kbr_f3_jmp(jm, 0x4cc440u, 0x30000000u, 7);
+        CHECK(jm[0] == 0xe9 && jm[5] == 0x90 && jm[6] == 0x90, "f6 jump padded with nops to 7 bytes");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }
