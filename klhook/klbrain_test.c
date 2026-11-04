@@ -534,6 +534,11 @@ int main(void)
         CHECK(!kbr_drift_moved(a, b, 300.0f) && kbr_drift_moved(a, c, 300.0f) && kbr_drift_moved(a, d, 300.0f) && !kbr_drift_moved(a, a, 300.0f), "drift moved: strictly more than the limit, 3D");
         CHECK(kbr_pull_ok(1, 1, 1, 2501, 0, 250) && kbr_pull_ok(1, 1, 1, 9000, 0, 100000ul), "pull: far block, no owning winner, rate ok -> write");
         CHECK(kbr_pull_skip(0, 1, 1, 9000, 0, 999) == 1 && kbr_pull_skip(1, 0, 1, 9000, 0, 999) == 2 && kbr_pull_skip(1, 1, 0, 9000, 0, 999) == 3 && kbr_pull_skip(1, 1, 1, -1, 0, 999) == 3, "pull: not ours 1, dead 2, no human or unknown distance 3");
+        { float h = 9; int a = 9;
+          CHECK(kbr_alive_pick(1, 120.0f, 1, -1.0f, &h, &a) == 1 && a == 1 && h == 120.0f, "alive: NPC object wins over a bogus player read");
+          CHECK(kbr_alive_pick(1, 0.0f, 0, 0.0f, &h, &a) == 1 && a == 0, "alive: NPC hp 0 = dead");
+          CHECK(kbr_alive_pick(0, 0.0f, 1, 50.0f, &h, &a) == 2 && a == 1 && kbr_alive_pick(0, 0.0f, 1, 0.0f, &h, &a) == 2 && a == 0, "alive: player object when no NPC object");
+          CHECK(kbr_alive_pick(0, 0.0f, 0, 0.0f, &h, &a) == 0 && a == 1, "alive: unreadable = alive"); }
         CHECK(kbr_pull_skip(1, 1, 1, 2500, 0, 999) == 4 && kbr_pull_skip(1, 1, 1, 100, 0, 999) == 4 && kbr_pull_skip(1, 1, 1, 2501, 0, 999) == 0, "pull: block within 2500 cm of a human is left alone (boundary 2500 inclusive)");
         CHECK(kbr_pull_skip(1, 1, 1, 9000, 1, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 2, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 3, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 4, 999) == 5 && kbr_pull_skip(1, 1, 1, 9000, 0, 249) == 6 && !kbr_pull_ok(1, 1, 1, 9000, 1, 999), "pull: CloseIn / Board / Loot own the block (5), rate limit 250 ms (6)");
         {   /* DefendPull mode 2 target: 550 cm short of the holder along the horizontal line to the bot, height of the holder kept */

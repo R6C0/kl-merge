@@ -3130,7 +3130,7 @@ static void klbr_df_win(DWORD S, char *wn, int cap)      /* Defend winner RTTI w
 static void klbr_df_sample(int i, DWORD S, DWORD now)      /* called by klbr_mb_sample after its own 250 ms due test */
 {
     DWORD body = 0, blk = 0, b0 = 0, ac = 0, a8 = 0, H = 0, who = 0, whoblk = 0; BYTE b10 = 0, b11 = 0, b12 = 0, f4 = 0; float hp = 1.0f, bp[3], bx[3], hx[3], hbx[3], hh[3], hold[3], dbl = -1.0f; double dbh = -1.0, dhb = -1.0, dhh = -1.0, dd; DWORD v720 = 0;
-    int haveb = 0, haveblk = 0, own = 0, alive = 1, humb = 0, humbot = 0, hhum = 0, hhpos = 0, wc = 0, dolog, moved = 0, dopull = 0, sk = 0, p2 = 0, p2hold = 0, p2snap = 0, p2noop = 0; float p2t[3], p2h[3], p2a[3]; char wn[32], t1[24], t2[24], t3[24], t4[24]; float old[3];
+    int haveb = 0, haveblk = 0, own = 0, alive = 1, humb = 0, humbot = 0, hhum = 0, hhpos = 0, wc = 0, dolog, moved = 0, dopull = 0, sk = 0, p2 = 0, p2hold = 0, p2snap = 0, p2noop = 0, hpsrc = 0; float hp_a48 = -999.0f, p2t[3], p2h[3], p2a[3]; char wn[32], t1[24], t2[24], t3[24], t4[24]; float old[3];
     if ((!klbr_dfon && !klbr_plon) || klbr_df_dead || klbr_f6_flt >= 3) return;
     if (klbr_mb_arc && !klbr_mb_akind[i]) return;      /* Arcade: only the traitor-marked soldier */
     dolog = klbr_dfon && (!klbr_df_at[i] || now - klbr_df_at[i] >= 1000u);
@@ -3145,7 +3145,13 @@ static void klbr_df_sample(int i, DWORD S, DWORD now)      /* called by klbr_mb_
         }
         if (body > 0xffff) {
             haveb = klh_rd(body + 0x460, bp, 12) && kle_ok3(bp);
-            if (klbr_hp_read(body, &hp) && hp <= 0.0f) alive = 0;
+            {   /* GUESS (root cause): a bot body keeps its health at [body+0x5fc] (NPC object, klbot.c), not at the player's [+0xa48], where +4 read <= 0 every tick */
+                DWORD nh = klh_rd32(body + 0x5fc); float nv[2] = { 0, 0 }, pv = 0.0f; int nok = 0, pok = 0;
+                if (nh > 0xffff && klh_rd32(nh + 0x24) == body && klh_rd(nh + 4, nv, 8) && nv[0] == nv[0]) nok = 1;
+                if (!nok && klh_pvt(body) == 0x00bb45f4u && klbr_hp_read(body, &pv)) pok = 1;
+                hpsrc = kbr_alive_pick(nok, nv[0], pok, pv, &hp, &alive);
+                { float pv2 = 0.0f; hp_a48 = klbr_hp_read(body, &pv2) ? pv2 : -999.0f; }      /* diagnostic only: what the old test read */
+            }
         }
         if (haveblk) {      /* EVENT: the block moved more than 300 cm since the last sample (also feeds the pull's own bookkeeping) */
             if (klbr_dfon && klbr_df_have[i] && kbr_drift_moved(klbr_df_last[i], bx, 300.0f)) {
@@ -3237,8 +3243,9 @@ static void klbr_df_sample(int i, DWORD S, DWORD now)      /* called by klbr_mb_
     dd = (haveb && haveblk) ? kle_dist(bp, bx) : -1.0;
     _snprintf(t1, sizeof t1, "%.0f", (haveblk && humb) ? dhb : -1.0); _snprintf(t2, sizeof t2, "%.0f", (haveb && humbot) ? dbh : -1.0); _snprintf(t3, sizeof t3, "%.0f", dd); _snprintf(t4, sizeof t4, "%.0f", H > 0xffff && hhpos ? dhh : -1.0);
     t1[sizeof t1 - 1] = t2[sizeof t2 - 1] = t3[sizeof t3 - 1] = t4[sizeof t4 - 1] = 0;
-    klog("brain: drift: rec %d blk %08lx xyz %.0f %.0f %.0f own==S %d b10 %u b11 %u b12 %u dblk_hum %s dbot_hum %s dbot_blk %s hold ac %08lx b0 %08lx a8 %08lx hold_human %d dhold_hum %s win %s 4fc %u (%s S %08lx)",
+    klog("brain: drift: rec %d blk %08lx xyz %.0f %.0f %.0f own==S %d b10 %u b11 %u b12 %u dblk_hum %s dbot_hum %s dbot_blk %s hold ac %08lx b0 %08lx a8 %08lx hold_human %d dhold_hum %s win %s 4fc %u hp %.1f src %s alive %d a48 %.1f (%s S %08lx)",
          i, (unsigned long)blk, haveblk ? (double)bx[0] : 0.0, haveblk ? (double)bx[1] : 0.0, haveblk ? (double)bx[2] : 0.0, own, (unsigned)b10, (unsigned)b11, (unsigned)b12, t1, t2, t3, (unsigned long)ac, (unsigned long)b0, (unsigned long)a8, hhum, t4, wn, (unsigned)f4,
+         (double)hp, hpsrc == 1 ? "npc5fc" : hpsrc == 2 ? "player" : "none", alive, (double)hp_a48,
          klbr_mb_arc ? "arcade traitor" : "online marked", (unsigned long)S);
 }
 static void klbr_df_summary(const char *why)      /* round edges only; counters cleared by klbr_df_reset */

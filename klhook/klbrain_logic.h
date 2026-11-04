@@ -980,5 +980,13 @@ static int kbr_pull2_target(const float *h, const float *bot, float *out)
     out[0] = h[0] + dx / l * KBR_PULL2_STOP_CM; out[1] = h[1]; out[2] = h[2] + dz / l * KBR_PULL2_STOP_CM;
     return 0;
 }
+/* Alive test for the drift/pull sample (11-04, bs50 DD05: 'dead 719 of 719'). src 1 = NPC health object [body+0x5fc] (owner [h+0x24] == body, as klbot.c / klbr_bot_pos),
+   src 2 = player health object [body+0xa48] (only when the body has the ZFFPlayer vtable), src 0 = unreadable = alive. *alive out. Returns src. hp is the value used (0 for src 0). */
+static int kbr_alive_pick(int npc_ok, float npc_hp, int pl_ok, float pl_hp, float *hp, int *alive)
+{
+    if (npc_ok) { *hp = npc_hp; *alive = npc_hp > 0.0f; return 1; }
+    if (pl_ok) { *hp = pl_hp; *alive = pl_hp > 0.0f; return 2; }
+    *hp = 0.0f; *alive = 1; return 0;
+}
 static int kbr_pull_ok(int own_blk, int alive, int hum_known, long dblk_cm, int wclass, unsigned long since_ms) { return kbr_pull_skip(own_blk, alive, hum_known, dblk_cm, wclass, since_ms) == 0; }
 #endif /* KLBRAIN_LOGIC_H */
