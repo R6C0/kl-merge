@@ -129,6 +129,7 @@ static int klbf_wv_call, klbf_wv_calln, klbf_wv_hc, klbf_wv_novh;      /* [BotFi
 static int klbf_dh, klbf_dh_s = 90; static struct kdh_st klbf_dhs;      /* [BotFill] OnlineDoorHold / OnlineDoorHoldS (recommended off until benched): bots with an empty tally get no stack order while doors are shut, so the Ally squads kick them open (Q34B DD01); klbf_dhs = this round's state */
 static int klbf_dt; static float klbf_dt_m = 8000.0f;      /* [BotFill] OnlineDropTake / OnlineDropTakeM (cm): a bot with no stack to take and nothing carried walks to the nearest tracked type-1 drop (wk-droptake-1102, kldroptake_logic.h) */
 static int klbf_wv_on, klbf_wv_idx = 1, klbf_wv_maxS;      /* [BotFill] OnlineLegWaitVan (needs the legs), OnlineLegWaitIdx (0-based hold leg), OnlineLegWaitMaxS (0 = no cap): klwaitvan_logic.h, default 0 = today */
+static int klbf_vm_probe;      /* [BotFill] OnlineVanMoverProbe (default 0): log-only probe of who would count for Arcade's crewhold while the van waits (klbf_vm_pass) */
 static int klbf_vtm_al, klbf_vtm_bo, klbf_vtm_far, klbf_vtm_farS = KVT_FAR_CAP_S;      /* [BotFill] OnlineVanAfterLegs, OnlineVanBoPos, OnlineVanFarHold (+S): klvantime_logic.h, all default 0 = today */
 static int klbf_way_pm, klbf_legs_van; static float klbf_hop_dy;      /* klbf_legs_van: [BotFill] OnlineLegsWithVan (klway_logic.h kwy_legs_left) */      /* [BotFill] OnlineWayPerMap (0/1/2), OnlineLegHopDy (cm): both default 0 = today (klway_logic.h) */
 static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used by klbf_way_load below) */
@@ -258,7 +259,8 @@ static void klbf_init(void)
     klbf_ot_vhold = GetPrivateProfileIntA("BotFill", "OnlineVanHold", 1, klh_ini) != 0;      /* (recommended on) */
     klbf_ot_hm = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineHoldM", 30, klh_ini); if (klbf_ot_hm < 500.0f) klbf_ot_hm = 500.0f;      /* GUESS 30 m (re/van_hold_online.md) */
     klbf_ot_hnear = 100.0f * (float)GetPrivateProfileIntA("BotFill", "OnlineHoldNearM", 18, klh_ini); if (klbf_ot_hnear < 500.0f) klbf_ot_hnear = 500.0f;      /* GUESS 18 m (research: 15-20 m) */
-    klbf_ot_hmax = (int)GetPrivateProfileIntA("BotFill", "OnlineHoldMaxS", 15, klh_ini); if (klbf_ot_hmax < 1) klbf_ot_hmax = 1; if (klbf_ot_hmax > 30) klbf_ot_hmax = 30;      /* GUESS 15 s (research: cap 15-20 s; N1 saw a van held 15 s destroyed unshielded) */
+    klbf_ot_hmax = (int)GetPrivateProfileIntA("BotFill", "OnlineHoldMaxS", 15, klh_ini); if (klbf_ot_hmax < 1) klbf_ot_hmax = 1; if (klbf_ot_hmax > 60) klbf_ot_hmax = 60;      /* GUESS 15 s (research: cap 15-20 s; N1 saw a van held 15 s destroyed unshielded). c9 11-04: max 30 -> 60 so a bench can try Arcade's ~45 s (GUESS); N1's van was unshielded, the shield is on now */
+    klbf_vm_probe = GetPrivateProfileIntA("BotFill", "OnlineVanMoverProbe", 0, klh_ini) != 0;      /* UNTESTED (recommended off): log only, no game writes */
     klbf_ot_retry = GetPrivateProfileIntA("BotFill", "OnlineGiveUpRetry", 1, klh_ini) != 0;      /* (recommended on) BO12: 4 given-up stacks stayed blacklisted for the whole round and the bots idled for 3 min */
     klbf_ot_retryS = (int)GetPrivateProfileIntA("BotFill", "OnlineGiveUpRetryS", 45, klh_ini); if (klbf_ot_retryS < 5) klbf_ot_retryS = 5; if (klbf_ot_retryS > 600) klbf_ot_retryS = 600;      /* GUESS 45 s */
     klbf_gc_cm = (float)GetPrivateProfileIntA("BotFill", "OnlineGuardCarrierCm", 0, klh_ini); if (klbf_gc_cm < 0 || klbf_gc_cm > 1000) klbf_gc_cm = 0;      /* (recommended off until benched) wk-botscore-1101: a cop within this many cm of a stack carries it and is not a guard (needs OnlineGuardMode=1); Q31 DD05/DD07/DM06 held all round */
@@ -1164,6 +1166,55 @@ static void klbf_vh_pass(DWORD rules, int vstate, float left, float dmin, int nF
     if (vstate == 3 && near18 && klh_rd(rules + 0x1d8, &tm, 4) && klb_finite(tm) && tm >= 0 && tm < want) {
         if (klh_data((void *)(DWORD_PTR)(rules + 0x1d8), &want, 4, "rules: escape vehicle state timer held (OnlineVanHold)")) { if (!klbf_vh.tmr++) klog("botfill: tactics: van: hold: timer [rules+0x1d8] %.1f -> %.1f s (a walker %.0f m from the box; said once, %d s cap)", tm, want, dmin / 100, klbf_ot_hmax); }
         else if (!(klbf_vh.told & 8) && (klbf_vh.told |= 8)) klog("botfill: tactics: van: hold: [rules+0x1d8] could NOT be written");
+    }
+}
+
+/* OnlineVanMoverProbe (c9 11-04; LOG ONLY, no game write; UNTESTED). Online the van leaves ~8-17 s after it parks (state 3), in Arcade ~53 s because klmv_crewhold (klmove.c) adds up to CrewRouteHold = 45 s
+   while a called loyal bot WALKS (moved 200 cm over a 2 s sample) within CrewRouteRange of the boarding place. This asks, every 2 s while the van is in state 3 / 4, which of the host's loyal bots (team 2, alive, from
+   the same list klbf_ot_run builds; a turned traitor reads team 1 and is not in it) would count under that rule, so a bench can tell whether the crewhold rule would hold the van online at all.
+   Distance: kle_boarding (the vehicle node + 500 along x, as klmv_crewhold) when readable, else the hold's own goal (klbf_ot_goal: escape box centre / exit trigger, horizontal only); the line says which.
+   One line per bot per sample (at most KLBF_VM_LINES per round), one summary per visit when the state leaves 3 / 4. A bot whose position cannot be read is not in the list and is skipped. */
+#define KLBF_VM_LINES 60
+static struct { DWORD rules, sampleAt, lastMs; int vst, round, lines, nsamp, maxMov, ms3, have[KLBF_OT_BOTS]; float prev[KLBF_OT_BOTS][3]; DWORD prevAt[KLBF_OT_BOTS]; } klbf_vm;
+static void klbf_vm_pass(DWORD rules, int vstate, float left, DWORD now, const DWORD *actor, const float (*pos)[3], int nb)
+{
+    int in = (vstate == 3 || vstate == 4), q;
+    if (!klbf_vm_probe) return;
+    if (klbf_vm.round != klbf_ot_rounds) { memset(&klbf_vm, 0, sizeof klbf_vm); klbf_vm.round = klbf_ot_rounds; }
+    if (klbf_vm.rules != rules) { klbf_vm.rules = rules; klbf_vm.vst = 0; }
+    if (!in) {
+        if (klbf_vm.vst) {      /* the visit ends: one summary */
+            klog("botfill: vanmover: visit over (van state %d -> %d, clock left %.0f s): %d s in state 3, %d sample(s) of 2 s, at most %d loyal bot(s) would count under Arcade's crewhold rule at once (moved %.0f cm in 2 s and within %.0f m of the place); the hold itself: %s%s",
+                 klbf_vm.vst, vstate, left, klbf_vm.ms3 / 1000, klbf_vm.nsamp, klbf_vm.maxMov, KCW_MOVE_CM, klmv.crew_range, klbf_vh.capped ? "capped (OnlineHoldMaxS / far cap reached)" : (klbf_vh.startAt ? "ran" : "never started"), klbf_vh.obj || kle_vh_hold ? " (still on)" : "");
+            klbf_vm.vst = 0; klbf_vm.nsamp = klbf_vm.maxMov = klbf_vm.ms3 = 0; memset(klbf_vm.have, 0, sizeof klbf_vm.have);
+        }
+        return;
+    }
+    if (!klbf_vm.vst) { klbf_vm.nsamp = klbf_vm.maxMov = klbf_vm.ms3 = 0; klbf_vm.sampleAt = 0; memset(klbf_vm.have, 0, sizeof klbf_vm.have); klog("botfill: vanmover: the van parks (state %d, clock left %.0f s): sampling the loyal bots every 2 s (OnlineVanMoverProbe, log only; Arcade's rule: %.0f cm in 2 s within %.0f m)", vstate, left, KCW_MOVE_CM, klmv.crew_range); }
+    else if (vstate == 3 && klbf_vm.vst == 3 && klbf_vm.lastMs) klbf_vm.ms3 += (int)(now - klbf_vm.lastMs);
+    klbf_vm.vst = vstate; klbf_vm.lastMs = now;
+    if (klbf_vm.sampleAt && now - klbf_vm.sampleAt < 2000u) return;
+    {
+        float bd[3], gc[3], rangeCm = klb_finite(klmv.crew_range) && klmv.crew_range >= 5 ? klmv.crew_range * 100.0f : 10000.0f;      /* klmv.crew_range is set by klmv_init; 100 m = its default */
+        int haveBd = kle_boarding(rules, bd), haveGc = !haveBd && klbf_ot_goal(gc), nmov = 0, nseen = 0, firstSample = !klbf_vm.sampleAt;
+        klbf_vm.sampleAt = now;
+        if (!haveBd && !haveGc) return;      /* no place to measure against */
+        for (q = 0; q < nb; q++) {
+            int r; float dx, dy, dz, dist, mv; int cnt;
+            for (r = 0; r < KLBF_OT_BOTS && klbf_ob[r].actor != actor[q]; r++) ;
+            if (r >= KLBF_OT_BOTS) continue;      /* not (yet) a tracked bot */
+            if (!klbf_vm.have[r] || now - klbf_vm.prevAt[r] > 5000u) { memcpy(klbf_vm.prev[r], pos[q], 12); klbf_vm.prevAt[r] = now; klbf_vm.have[r] = 1; continue; }      /* first sight: no displacement yet */
+            dx = pos[q][0] - klbf_vm.prev[r][0]; dy = pos[q][1] - klbf_vm.prev[r][1]; dz = pos[q][2] - klbf_vm.prev[r][2];
+            memcpy(klbf_vm.prev[r], pos[q], 12); klbf_vm.prevAt[r] = now;
+            if (haveBd) dist = (float)sqrt((pos[q][0] - bd[0]) * (pos[q][0] - bd[0]) + (pos[q][1] - bd[1]) * (pos[q][1] - bd[1]) + (pos[q][2] - bd[2]) * (pos[q][2] - bd[2]));      /* 3D, as kle_dist in klmv_crewhold */
+            else dist = (float)sqrt((pos[q][0] - gc[0]) * (pos[q][0] - gc[0]) + (pos[q][2] - gc[2]) * (pos[q][2] - gc[2]));
+            mv = (float)sqrt(dx * dx + dy * dy + dz * dz);
+            cnt = kcw_counts(dx, dy, dz, dist, rangeCm);
+            nseen++; if (cnt) nmov++;
+            if (klbf_vm.lines < KLBF_VM_LINES) { klbf_vm.lines++; klog("botfill: vanmover: bot %d (actor %08lx) phase %d tally %d: moved %.0f cm in %.1f s, %.1f m from the %s: %s Arcade's crewhold rule%s", r, (unsigned long)actor[q], klbf_ob[r].phase, klbf_ob[r].tally, mv, 2.0f, dist / 100, haveBd ? "boarding place (kle_boarding)" : "hold goal (klbf_ot_goal, horizontal; kle_boarding unreadable)", cnt ? "COUNTS under" : "does not count under", klbf_vm.lines == KLBF_VM_LINES ? " (line cap reached for this round)" : ""); }
+        }
+        if (!firstSample) { klbf_vm.nsamp++; if (nmov > klbf_vm.maxMov) klbf_vm.maxMov = nmov; }
+        (void)nseen;
     }
 }
 
@@ -2592,6 +2643,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             }
         }
         if (rules) klbf_vh_pass(rules, vstate, left, np ? dmin : 1e30f, nFar, now);
+        if (klbf_vm_probe && rules) { DWORD va[KLBF_OT_BOTS]; float vp_[KLBF_OT_BOTS][3]; int q2; for (q2 = 0; q2 < nb; q2++) { va[q2] = bots[q2].actor; memcpy(vp_[q2], bots[q2].pos, 12); } __try { klbf_vm_pass(rules, vstate, left, now, va, (const float (*)[3])vp_, nb); } __except (EXCEPTION_EXECUTE_HANDLER) { klog("botfill: vanmover: FAULT %08lx in the probe (skipped this second)", (unsigned long)GetExceptionCode()); } }      /* OnlineVanMoverProbe: log only */
         if (klbf_bank_mode || klbf_ba_mode) { DWORD ba[KLBF_OT_BOTS]; float bpp[KLBF_OT_BOTS][3]; int q; for (q = 0; q < nb; q++) { ba[q] = bots[q].actor; memcpy(bpp[q], bots[q].pos, 12); } klbf_bank_pass(now, ba, (const float (*)[3])bpp, nb, vstate); }      /* OnlineBank / OnlineBoardAll */
         if (klbf_bc_mode && klbf_bank_total > 0) klbf_bc_credit(rules);      /* OnlineBankCredit: the ledger to an escaped human seat, before the settlement */
     }

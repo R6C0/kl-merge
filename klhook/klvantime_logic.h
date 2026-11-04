@@ -71,6 +71,19 @@ static int kvt_cap_s(int farOn, int farSeen, int baseS, int farS)
     return baseS;
 }
 
+/* OnlineVanMoverProbe (log only): would this loyal bot count as a WALKER under Arcade's crewhold rule (klmove.c klmv_crewhold: it moved KLE_COME = 200 cm (3D) over a 2 s sample AND is within
+   CrewRouteRange of the boarding place)? dx,dy,dz = displacement over the sample in cm, distCm = distance to the boarding place in cm, rangeCm = CrewRouteRange * 100. 200 cm exactly counts (>=, as klmv_crewhold).
+   Any non-finite input = no. */
+#define KCW_MOVE_CM 200.0f      /* = KLE_COME (klescort.c) */
+static int kcw_counts(float dx, float dy, float dz, float distCm, float rangeCm)
+{
+    float m2;
+    if (!(fabsf(dx) < 1e9f) || !(fabsf(dy) < 1e9f) || !(fabsf(dz) < 1e9f)) return 0;      /* also rejects NaN / inf */
+    if (!(distCm >= 0 && distCm < 1e9f) || !(rangeCm > 0 && rangeCm < 1e9f)) return 0;
+    m2 = dx * dx + dy * dy + dz * dz;
+    return m2 >= KCW_MOVE_CM * KCW_MOVE_CM && distCm <= rangeCm;
+}
+
 /* OnlineVanFarHold: count the walkers (phase 2, tally > 0) farther than holdM from the goal. d[] are horizontal cm; n entries; carrier[i] 1 = tally > 0. */
 static int kvt_count_far(const float *d, const int *carrier, int n, float holdM)
 {

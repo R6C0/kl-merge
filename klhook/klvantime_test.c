@@ -54,6 +54,17 @@ int main(void)
     CHECK(kvt_count_far(d, car, 4, 3000.0f) == 1, "only the carrier farther than 30 m: got %d", kvt_count_far(d, car, 4, 3000.0f));
     CHECK(kvt_count_far(d, car, 4, 10000.0f) == 0 && kvt_count_far(d, car, 0, 3000.0f) == 0, "none");
 
+    /* OnlineVanMoverProbe: kcw_counts */
+    { float nan_ = (float)sqrt(-1.0), inf_ = (float)HUGE_VAL;
+      CHECK(kcw_counts(0, 0, 0, 3000, 10000) == 0, "a standing bot does not count");
+      CHECK(kcw_counts(300, 0, 0, 3000, 10000) == 1, "3 m in 2 s inside 100 m counts");
+      CHECK(kcw_counts(0, 0, 300, 20000, 10000) == 0, "a mover outside 100 m does not count");
+      CHECK(kcw_counts(200, 0, 0, 3000, 10000) == 1 && kcw_counts(199, 0, 0, 3000, 10000) == 0, "exactly 200 cm counts, 199 does not");
+      CHECK(kcw_counts(0, 120, 160, 3000, 10000) == 1, "3D displacement (120,160 = 200)");
+      CHECK(kcw_counts(300, 0, 0, 10000, 10000) == 1 && kcw_counts(300, 0, 0, 10001, 10000) == 0, "the range edge is inside");
+      CHECK(kcw_counts(nan_, 0, 0, 3000, 10000) == 0 && kcw_counts(300, inf_, 0, 3000, 10000) == 0 && kcw_counts(300, 0, 0, nan_, 10000) == 0 && kcw_counts(300, 0, 0, 3000, inf_) == 0 && kcw_counts(300, 0, 0, 3000, nan_) == 0, "NaN / inf: no");
+    }
+
     printf("klvantime_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }
