@@ -989,4 +989,33 @@ static int kbr_alive_pick(int npc_ok, float npc_hp, int pl_ok, float pl_hp, floa
     *hp = 0.0f; *alive = 1; return 0;
 }
 static int kbr_pull_ok(int own_blk, int alive, int hum_known, long dblk_cm, int wclass, unsigned long since_ms) { return kbr_pull_skip(own_blk, alive, hum_known, dblk_cm, wclass, since_ms) == 0; }
+/* ---- [Brain] BoardProbe (log only, default 0; 11-04). Pure decisions, no game reads. ---- */
+/* A vehicle VISIT starts when the van state (byte [rules+0x1dc]) enters 1..4 (called / arriving / parked) from outside that range (0 idle, 5 gone, -1 unknown). Returns the new visit counter. */
+static int kbr_bp_van_visit(int prev, int cur, int vis)
+{
+    int in_prev = prev >= 1 && prev <= 4, in_cur = cur >= 1 && cur <= 4;
+    return (in_cur && !in_prev) ? vis + 1 : vis;
+}
+/* BoardLog slot-45 accounting: 0 = new (bot not aboard in the hook ledger), 1 = repeat (aboard, boarded in THIS visit or its visit is unknown, bvis 0), 2 = stale ledger (aboard since an EARLIER visit: bvis < cur_vis). */
+static int kbr_bp_s45_class(int aboard, int bvis, int cur_vis)
+{
+    if (!aboard) return 0;
+    return (bvis > 0 && bvis < cur_vis) ? 2 : 1;
+}
+/* The per-bot visit stamp of the 1 s sync: the first sync that sees the bot aboard stamps the CURRENT visit (lower bound for 'stale'); kept afterwards. on = BoardLog active. */
+static int kbr_bp_stamp(int on, int aboard, int bvis, int vis) { return (on && aboard && !bvis) ? vis : bvis; }
+/* Rules probe: log when the van/heli is first called (state 1..5 seen, first_done 0) and whenever the state changes afterwards. */
+static int kbr_bp_rules_due(int first_done, int prev, int cur)
+{
+    if (cur < 1 || cur > 5) return 0;
+    return !first_done || cur != prev;
+}
+/* Per-bot 1 s line clock (last is a |1 tick stamp, 0 = never) and the per-round line cap. */
+static int kbr_bp_bot_due(unsigned long now, unsigned long last, unsigned long period_ms)
+{
+    return !last || (unsigned long)(now - (last & ~1ul)) >= period_ms;
+}
+static int kbr_bp_cap_ok(long lines, long cap) { return lines < cap; }
+/* Per-bot waiting line gate: the vehicle waits (state 3 / 4), the bot is not a traitor and not aboard yet. */
+static int kbr_bp_bot_wanted(int van, int traitor, int aboard) { return (van == 3 || van == 4) && !traitor && !aboard; }
 #endif /* KLBRAIN_LOGIC_H */

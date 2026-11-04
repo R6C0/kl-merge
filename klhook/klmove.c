@@ -1800,6 +1800,9 @@ static void klmv_walkaway(const struct klb_snap *s, DWORD now)
 static int klmv_pm;      /* [Bots] PerMap, see klmv_read */
 static void klmv_pm_check(DWORD now);
 
+/* BUILD TRAP: these forward declarations resolve only because klhook.c includes klmove.c and klbrain.c in ONE translation unit; a test that includes klmove.c alone gets an undefined static klbr_bp_rules (LNK2001). */
+static int klbr_bprobe;                                   /* klbrain.c: [Brain] BoardProbe (tentative definition; the same object) */
+static void klbr_bp_rules(DWORD rules, int src);          /* klbrain.c */
 static void klmv_tick(int game_thread)
 {
     static DWORD last; struct klb_snap s; DWORD now = GetTickCount(), player = 0; char why[200]; float hp[3] = { 0, 0, 0 }, hn[3];
@@ -1837,6 +1840,7 @@ static void klmv_tick(int game_thread)
         return;
     }
     if (s.state != KLB_ROUND) { klmv_last_end(s.rules, s.state, 0); klmv_stand_down(s.rules, "the round is over"); return; }
+    if (klbr_bprobe) klbr_bp_rules(s.rules, 1);      /* [Brain] BoardProbe (log only, default 0): Arcade baseline of the real rules' boarding fields; klbrain.c is included AFTER this file, hence the forward declarations at klmv_tick */
     if (!klb_level(why)) {                    /* klbot.c section 0 */
         if (!klmv_r.told_gate++) klog("move / wait / near: %s: nothing is done here (this part acts only on a level that is not stock)", why);
         klmv_stand_down(s.rules, "this level is stock or not known");

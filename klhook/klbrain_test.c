@@ -549,6 +549,27 @@ int main(void)
             CHECK(kbr_pull2_target(h, near_, t) == 7 && kbr_pull2_target(h, h, t) == 7 && kbr_pull2_target(h, nan_, t) == 7, "pull2 target: bot within 550 cm (boundary inclusive), on the holder, or NaN -> skip 7");
         }
     }
+    /* BoardProbe (log only) */
+    {
+        int v = 0, seq[] = { -1, 1, 3, 3, 4, 5, 0, 2, 4, 5 }, i, prev = -1;
+        for (i = 0; i < 10; i++) { v = kbr_bp_van_visit(prev, seq[i], v); prev = seq[i]; }
+        CHECK(v == 2, "visit: DD01 sequence 1,3,4,5,0,2,4,5 = two visits");
+        {   /* DD01 wiring: sync order = visit counter first, then the bot stamp; one sync per state sample */
+            int vis = 0, pv = -1, bv_a = 0, bv_b = 0, vs[] = { 1, 3, 5, 0, 2, 4, 5 }, ab_a[] = { 0, 1, 1, 1, 1, 1, 1 }, ab_b[] = { 0, 0, 0, 0, 0, 1, 1 };
+            for (i = 0; i < 7; i++) { vis = kbr_bp_van_visit(pv, vs[i], vis); pv = vs[i]; bv_a = kbr_bp_stamp(1, ab_a[i], bv_a, vis); bv_b = kbr_bp_stamp(1, ab_b[i], bv_b, vis); }
+            CHECK(vis == 2 && bv_a == 1 && bv_b == 2, "wiring: bot aboard in visit 1 keeps 1, bot aboard in visit 2 gets 2");
+            CHECK(kbr_bp_s45_class(1, bv_a, vis) == 2 && kbr_bp_s45_class(1, bv_b, vis) == 1, "wiring: visit-1 bot called in visit 2 = stale, visit-2 bot = repeat");
+            CHECK(kbr_bp_stamp(0, 1, 0, 1) == 0 && kbr_bp_stamp(1, 0, 0, 1) == 0, "stamp: off or not aboard = unchanged");
+        }
+        CHECK(kbr_bp_van_visit(-1, 0, 0) == 0 && kbr_bp_van_visit(5, 5, 3) == 3 && kbr_bp_van_visit(0, 1, 0) == 1 && kbr_bp_van_visit(2, 4, 1) == 1 && kbr_bp_van_visit(5, 3, 1) == 2, "visit: only entering 1..4 from outside counts");
+        CHECK(kbr_bp_s45_class(0, 0, 1) == 0 && kbr_bp_s45_class(0, 1, 2) == 0, "s45: not aboard = new");
+        CHECK(kbr_bp_s45_class(1, 1, 1) == 1 && kbr_bp_s45_class(1, 0, 2) == 1 && kbr_bp_s45_class(1, 2, 2) == 1, "s45: aboard this visit or unknown visit = repeat");
+        CHECK(kbr_bp_s45_class(1, 1, 2) == 2 && kbr_bp_s45_class(1, 1, 3) == 2, "s45: aboard in an earlier visit = stale ledger");
+        CHECK(kbr_bp_rules_due(0, -1, 0) == 0 && kbr_bp_rules_due(0, -1, 1) == 1 && kbr_bp_rules_due(1, 1, 1) == 0 && kbr_bp_rules_due(1, 1, 3) == 1 && kbr_bp_rules_due(1, 3, 6) == 0 && kbr_bp_rules_due(0, 0, 0xff) == 0, "rules probe: first called, then each change, only states 1..5");
+        CHECK(kbr_bp_bot_due(5000, 0, 1000) && !kbr_bp_bot_due(5500, 5000 | 1, 1000) && kbr_bp_bot_due(6001, 5000 | 1, 1000) && kbr_bp_bot_due(5000, 0xfffffff0ul | 1, 1000), "bot line clock: 1 s, |1 stamp, wraps");
+        CHECK(kbr_bp_cap_ok(79, 80) && !kbr_bp_cap_ok(80, 80), "line cap 80");
+        CHECK(kbr_bp_bot_wanted(3, 0, 0) && kbr_bp_bot_wanted(4, 0, 0) && !kbr_bp_bot_wanted(2, 0, 0) && !kbr_bp_bot_wanted(5, 0, 0) && !kbr_bp_bot_wanted(3, 1, 0) && !kbr_bp_bot_wanted(3, 0, 1), "bot wanted: state 3/4, not traitor, not aboard");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }
