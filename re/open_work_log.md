@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~14:00 - [c9] bs49 / arc48 / bs50 all PASS (0 asserts, 0 faults). Online marked traitor hit humans on BOTH maps in bs50 (DefendPull=1, out_dp2_1104u): DM03 15 attempted hits (675 dmg), block far 19%, 9 pulls;
+DD05 10 hits (375 dmg), far 82%, 0 pulls because the alive test said dead on 719/719 ticks for a live bot ([body+0xa48]+4 health read; fix w4hmvyh2f running). bs49: DM03 0 hits (far 87%, Loot owned the block, 663 skips),
+DD05 25 hits (7850 dmg). arc48 (Arcade + DriftProbe, offline human found): the Arcade traitor's block is ALSO 89-124 m from the bench human on DM03 (AFC / DefendCover, holder = human), DD05 Board only.
+nb drop blk: DM03 block 53 m from humans at the drop, then CloseIn moved it onto the human. DefendPull=2 (stock order 0x760e50, 550 cm short of the holder, effa5ba73, out_po_1104v) committed; bs51 running.
+
 2026-11-04 ~13:05 - [c9] DefendPull WORKS on DM03: bs48p (out_dp_1104t, ea0d6a8fd, OnlineBrainTraitorDefendPull=1) PASS 4 seats 0 faults: 14 pulls, block > 25 m from humans 100% -> 17%,
 marked traitor ATTEMPTED 78 hits on humans (1108 dmg, 10 health drops logged; bs48 same kit without the pull: 0). DD05 bs48p: traitor marked late, Board/van all 60 samples, 0 pulls (no data).
 bs48 DriftProbe (no pull): holder human 89-92% (hypothesis b ruled out); the defend block [S+0x64c] sits > 25 m from every human 89-100% (cause a confirmed). bs47 PASS: DD05 8 hits (321 dmg),
