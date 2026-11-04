@@ -14,6 +14,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~04:45 - [c9] bs35 PASS (DM03 + DD05, 4 seats, 0 faults; GateForce + FireProbe6 6305b51a6) + arc35 (Arcade, 1 seat). Every marked traitor shot now runs the
+same path as Arcade: muzzle branch A1 (real hand-bone origin ~115 units from the bot, never the identity fallback), ray 0x713e80, request + child non-null (DM03 120/120, DD05 48/48).
+hp still 550: the gun does not point at the human (DM03 63 m, row error 2-52 deg, only 19/120 under 5; DD05 40 m, 32-52 deg, bot running away while firing).
+wgqnxsl7e (verified): [body+0x544] is not the shot aim (AimAt 0x70f130 is); SetAttackTarget is not the lever. wb8i8skjo: ray forward axis + aim pose research, FireProbe7 + RayAim lever (default off).
+
 2026-11-04 ~03:45 - [c9] bs34 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; GateForce aa60f94d3, out_gf_1104d). The gate is FIXED: marked traitor shots now pass 0x4cc389
 (DM03 114/114, DD05 407/407; other bots still 0/88 and 0/5237), the forced muzzle path did not crash. BUT the human's hp stays 550 (16/16 checks flat): the shot runs and misses.
 The bot's aim target [body+0x544] is still 0, holder ~53 m away; slot 422 saw 0 hits. w9x3uc1vs (verified): risks in 0x4a30e0 / 0x7cb080 (origin 0,0,0 fallback);

@@ -332,3 +332,18 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - Arcade passes because its bot nodes have a render entry (bit 12 set by 0x5ed700/0x441041); why online bots lack one is not found.
 - Client seat: 0x7e1700 drops a bot attacker's hit at 0x7e1800. Lever: wrap kns_vt[422] (chain after FireProbe5's wrapper), host role 2, bot attacker + remote victim -> call 0x891490 (ecx = [victim+0x274c], six args) which sends RMCReceiveHit; client stub 0x59f140 applies via 0x458880.
   Gaps: kns swap is lazy (new clients keep the stock table until the next scan), position/direction floats lost, bot handle may not resolve on the client, double-apply, skipped rules vt+0x1e4 notify (kill credit). Use 0x9425a0 for the remote test, not [0x168fd00].
+
+## bs35 (out_fp6_1104e: GateForce + FireProbe6, DM03 + DD05, 2 seats) + arc35 (same dll, Arcade offline, 1 seat): PASS, 0 faults
+- Online MARKED: DM03 shots 120, bl=1 120, branch A1 120 (bit 0x200000 set, owner direct, 0x8ccde0 -> the bot), identity fallback 0, gate passed 120, ray 120, request/child non-null 120, projectile 0. DD05: 48 / 48 / A1 48 / ray 48.
+- Origin is a real hand position: |origin-bot| 113-118 (DM03), y (up) ~100 above the bot root. vecB = *eax at 0x4cc440 is origin + 48.5 (or 17.7 for the DD05 weapon): probably the muzzle tip = ray start [esp+0x28]. vecA = [esp+0xf4] is a unit row of the ray matrix.
+- Aim: DM03 bot ~6300 units (63 m if cm) from the host human, running ~375 u/s while firing; best muzzle-matrix-row angle to the human 2-52 deg, buckets <5/<15/<45/>=45 = 19/37/52/12 of 120. DD05 ~4000 units, bot moving away, row error 32-52 deg, (vecB-origin) 118-138 deg from the human.
+- arc35 Arcade: same path (A1, ray, request, child) for all sampled shots; bots were shooting cops, not the human (human never attacked: no Arcade hit baseline yet). 2 traitor flags set on DM03, 1 on DD05, FOE/BACKSTAB 0.
+- hp: host human 550/550 at round end both maps (script lines 04:07:45, 04:16:20). Faults 0, asserts 0.
+- Conclusion: the loss is no longer in the shot code; it is aim (the weapon bone does not point at the human), possibly range / line of sight (40-63 m, human idle at spawn).
+
+## wgqnxsl7e (research + verify, static) 11-04
+- 0x4cb7a0 reads no aim point or target: ray = request vt+0x8c(matrix [esp+0xe8], pos [esp+0x28]); direction = weapon-bone transform from 0x7cb080 -> owner vt+0x268 (0x807620 -> 0x425ce0 bone table) -> 0x8c51b0.
+- AI aim = ZFireWeaponTask 0x7c02b0 -> 0x574af0 -> body AimAt 0x70f130 ([+0x824]=1, [+0x828] handle, [+0x82c..0x834] offset, [+0x838], [+0x83c], [+0x68c]=5, 0x740270([body+0x8d8])); skipped when byte [body+0x64c] is set. [task+0x14]==0 -> 0x4deb20 aim at a position.
+- [body+0x544] is cleared by 0x44ab50 (via AimAt's vt+0x6e8(5) and the fire task's vt+0x6e8(4)): 0 is expected, not a symptom. SetAttackTarget 0x62a540 (prio must be >= 6 and called twice with the same handle) only drives look-at IK; not the lever.
+- Refuted: 0x857110 is not origin (0,0,0), it is the item node's world transform. [req+4] / [esp+0x10] at 0x4cc644 is a child of the pooled bullet group (sibling loop), not a hit; 0x4cc4ba stamps the shooter id into [child+0x60]+0x6c and calls child vt+0x15c (probably the real ray / damage).
+- Missed by the first pass: 0x425ce0 can return without writing the outputs (stale stack) - bs35 shows this does not happen (A1, sane origin). 0x8ca940 picks a random template; 0x54efb0 may convert the ray to owner-local space; 0x4cc328 per-frame dedupe.

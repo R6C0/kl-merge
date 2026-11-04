@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-04 04:45 c9: bs35 + arc35 PASS 0 faults: marked traitor shots now run the same code path as Arcade (real muzzle, ray, request), hp still flat - the gun does not point at the human (40-63 m, 2-52 deg off, bot running). wb8i8skjo builds FireProbe7 + RayAim (default off).
 - 11-04 03:45 c9: bs34 PASS 0 faults: GateForce works (every marked traitor shot now passes the gate), but the human's hp is still flat - the shot runs and misses (aim target 0). FireProbe6 building (wz51cazg9) to trace muzzle origin / ray / hit, online vs Arcade.
 - 11-04 02:50 c9: bs33 PASS 0 faults: LOSS FOUND - online, every host AI shot fails the per-shot gate 0x4cc389 (owner node bit 12 = 0), so it only plays a sound. Fix workflow wu60j1ez0 running.
 - 11-04 02:10 c9: bs32 PASS 0 faults: shots run (per-shot calls rise), hp flat; gate reading suspect (probe owner wrong), victim route undetermined. FireProbe5 building (wr2kwhoqm).
