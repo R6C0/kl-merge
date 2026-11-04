@@ -267,3 +267,11 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - Only 0x44ab50 (from ZFireWeaponTask 0x7c02b0) clears [body+0x544], so an always-0 aim = 0x6e4 never reached. Shot A at 55-72 m is nearly dead (0x80dcf0 alt path); the burst is the live route.
 - Ranked: SKIP1 false via [body+0x5c8] ~55-60 % (GUESS until probed); bl latched ([s+0x5a8] at task start) ~10 %.
 - Built: FireProbe ext2 + OnlineBrainTraitorWeaponReady (b2be1851a). bs29 (TraitorByte) had no data (owner came home).
+
+## bs30 (out_twr_1103s, + TraitorByte + WeaponReady, DM03 + DD05): PASS 4 seats, 0 asserts, 0 faults
+- [body+0x5c8] == 0 on every slot-113 call (DM03 696, DD05 1000): SKIP1 0x6d9eb0 is OPEN online. wdntba8eu's lever 1 refuted; WeaponReady cleared 0.
+- Both marked bots (DM03 bot 5, DD05 bot 1) have ZFFActor bodies (vt 0xbb3bac): TraitorByte not applicable (ZFFActor 696 / 1000).
+- Still: aim [body+0x544] 0 in every sample, ZFireWeaponTask 0 episodes, hp 550 flat (DM03 6, DD05 10 checks). [s+0x5a8] 0 (bl not latched), [body+0x76c]/[body+0x770] 0, [body+0x860] 0, [s+0x88] 1.
+- Episode starts: the shared run task is re-armed every ~1-2 s with a new dest, [task+0x20] -50.0, byte [task+0x24] 0, [task+0x28] 2; d to dest mostly 1-5 m (near leg, which needs [task+0x24]) and sometimes 25-160 m. ZAttackTarget's own call (byte 1) seen with dest 55-72 m. DM03 episodes 18 (longest 5.7 s), DD05 19 (longest 30.4 s).
+- [body+0x550] on ZFFActor holds a float-looking value (0x3eXXXXXX), not the 0x6c81a0 shot counter; [s+0x550] rose 124 -> 261 / 41 -> 380 (meaning unknown).
+- Holder still flips 011 / 010. Human 37-72 m away.
