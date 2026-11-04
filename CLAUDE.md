@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~11:40 - [c9] bs46 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_nb_1104r: bs45 kit + RunProbe + OnlineBrainTraitorNoBoard=1, 49677dd93). FIRST ONLINE TRAITOR HITS ON A HUMAN:
+DD05 marked bot (rec 2) dropped by the puppeteer (phase 2 -> 0), Defend winners AFC x413 / CloseIn x117 / Loot x105, Board x132 only at the end; ZCloseIn win #2 closed 49.1 m -> 15.9 m,
+then 11 hits on crew seat 0 (391 dmg), LOS CLEAR from eye and muzzle (fireprobe8), aim 1.4 deg; LosGate round clear 25 blocked 370. DM03 (rec 6): CloseIn/DefendCover until the van,
+then the REAL Board tactic boarded it at van state 5 (Arcade-like, late); 0 hits, 1 of 2 CloseIn runs closed. wbbizoo57 (AFC research, 128ea0b5e); w9tmcqect builds AfcProbe for bs47.
+
 2026-11-04 ~11:00 - [c9] bs45 + arc45 PASS (online DM03 + DD05 4 seats, Arcade DM03 + DD05; 0 asserts, 0 faults; DefendProbe 938cdc2dd). FOUND why the online traitor walks away:
 with 4fc+6fc forced (mode 3) Defend walks list A (713/798) and the winner is ZBoardEscapeVehicle x531 (list A slot 3, BEFORE ZCloseIn), DefendCover 117, NoCover 58, CloseIn 1.
 Arcade (all bots) stays on list B (DM03 1127/1276, DD05 2031/2356): AttackFromCover wins (354 / 1134), Board only late in the round. ZCloseIn rarely wins on either side (gate P1 = its 1-4 s timer).
 bs45 DD05: no bot was marked (chance). RunProbe built (46cd1a0aa, out_rp_1104q). w4t14cjcd: who makes Board win online (stock vs our Board/RealRun) + lever.
-
-2026-11-04 ~10:25 - [c9] bs44 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_cf3_1104o: LosGate + HolderSet + CombatFlag=3 (4fc AND 6fc while blocked) + CloseInProbe). Mode 3 WORKS:
-[S+0x6fc] nonzero 98-99% (bs43 DM03: 0%), Defend walks list A on 80/97 (DM03) and 77/93 (DD05) data lines, ZCloseIn eval 689 calls (bs43 DM03: 0) / 382; 1.0 on 2 / 7. ZCloseIn's arms point
-549 cm / 543 cm from the human (550 short of the holder = the human): the traitor is ordered to close in on the player for the first time. No marked shot at the human (DM03 0 shots, DD05 125 at crew bots, all blocked).
-Bot-human distance did not shrink (48-62 m -> 110-140 m). arc43 Arcade: DM03 6fc 50%, eval 61 (1.0 x2); DD05 eval 0. w21syogv3 builds DefendProbe + ZCloseIn per-gate trace (wzosc72u0) for bs45.
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

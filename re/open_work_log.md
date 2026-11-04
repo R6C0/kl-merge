@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~11:40 - [c9] bs46 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_nb_1104r: bs45 kit + RunProbe + OnlineBrainTraitorNoBoard=1, 49677dd93). FIRST ONLINE TRAITOR HITS ON A HUMAN:
+DD05 marked bot (rec 2) dropped by the puppeteer (phase 2 -> 0), Defend winners AFC x413 / CloseIn x117 / Loot x105, Board x132 only at the end; ZCloseIn win #2 closed 49.1 m -> 15.9 m,
+then 11 hits on crew seat 0 (391 dmg), LOS CLEAR from eye and muzzle (fireprobe8), aim 1.4 deg; LosGate round clear 25 blocked 370. DM03 (rec 6): CloseIn/DefendCover until the van,
+then the REAL Board tactic boarded it at van state 5 (Arcade-like, late); 0 hits, 1 of 2 CloseIn runs closed. wbbizoo57 (AFC research, 128ea0b5e); w9tmcqect builds AfcProbe for bs47.
+
 2026-11-04 ~11:00 - [c9] bs45 + arc45 PASS (online DM03 + DD05 4 seats, Arcade DM03 + DD05; 0 asserts, 0 faults; DefendProbe 938cdc2dd). FOUND why the online traitor walks away:
 with 4fc+6fc forced (mode 3) Defend walks list A (713/798) and the winner is ZBoardEscapeVehicle x531 (list A slot 3, BEFORE ZCloseIn), DefendCover 117, NoCover 58, CloseIn 1.
 Arcade (all bots) stays on list B (DM03 1127/1276, DD05 2031/2356): AttackFromCover wins (354 / 1134), Board only late in the round. ZCloseIn rarely wins on either side (gate P1 = its 1-4 s timer).

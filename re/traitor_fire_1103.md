@@ -436,3 +436,9 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - DD05: list A 325, B 2031; winners AttackFromCover x1134, Board x564 (from ~10:53, late), Loot x66; ZCloseIn eval 0.
 - Probe glitch: DM03 running total shows 'eval calls 1' with gate zeros 626 (unattributed -640): the eval counter and the gate counters are reset at different points (probe accounting only).
 - Conclusion: Arcade bots fight from cover on list B; boarding only near the end. Online, forcing list A early makes Board win from the start.
+
+## bs46 (out_nb_1104r: bs45 kit + RunProbe + OnlineBrainTraitorNoBoard=1): PASS, 0 faults - first online traitor hits on a human
+- DD05: marked rec 2 at 11:33:43 (ledger phase 2 exit walk -> dropped once); puppeteer skips 173, boardall 0, pendboard 0. Defend winners ([goal+0x14]): AFC x413, CloseIn x117, Loot x105, Board x132 (last ~30 s of the round); list A 718 / B 57.
+  RunProbe: 3 wins, direct 2 cover 1; win #2 d0 49.1 m -> d5 38.5 -> d15 15.9 m (CLOSED). At 11:34:10-14 shots at the human holder 3600a020 from 15.6 m, LOS CLEAR (eye + muzzle), aim 1.4 deg; HitLog: 11 hits on crew seat 0, 391.0 dmg (5 logged individually). LosGate round: clear 25 blocked 370.
+- DM03: marked rec 6 at 11:25:37 (ledger phase 4 loot -> dropped); puppeteer skips 93. Winners: DefendCover x200, CloseIn x100, AFC x30, Loot x8, then Board x415 from van state 1 -> 5 (real slot-45 board, stage 3, aboard 11:27:22). RunProbe 2 wins, 1 closed (57.6 -> 36.3 m); 0 hits.
+- Conclusion: our OnlineBoard fallback was what parked the traitor at the van; without it the stock tactics close in and fire like Arcade (DD05). Board now wins only once the van is there, as in arc45.
