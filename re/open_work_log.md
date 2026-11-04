@@ -10,6 +10,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~02:10 - [c9] bs32 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe4, out_fp4_1104b). Per-shot calls [item+0x138] rise (56 / 34 per round) while hp stays 550.
+FireProbe4 read the gate bit 12 of [[owner+4]+0x3c] as 0 on every sample, BUT its owner (0x8ccde0([item+0x5c])) has vt 7c2cec14 / 506fec14 (not a code vtable): the reading is suspect.
+Victim (ZFFPlayer holder): bit 18 0, station set ([+0x14] 00c00001), [[+0x54]+0x3a] 0, host role 2; route undetermined (local id [0x168fd00] not logged). wx315tp48 (3 lever plans,
+checked): client-seat drop at 0x7e1800 most likely, gate 0x4cc389 second, impact block ruled out (FX only). wr2kwhoqm builds FireProbe5: counting detour at 0x4cc389 + slot-422 trace.
+
 2026-11-04 ~01:45 - [c9] bs31 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe3, out_fp3_1104a). THE TRAITOR BOT DOES FIRE: the weapon controller tick 0x8c1830 runs for it
 (91 / 54 calls, all from ZFireWeaponTask 0x7c06b2), its ammo falls (DM03 18 -> 12 -> 0, DD05 30 -> 24 -> 14), pending shots [item+0xe8] 2 / 10. Range R 60 m (2R 120 m) vs 47-59 m: passes.
 So the earlier "aim 0 = never fires" reading was wrong; the loss is between the bullet and the human's hp. Re-arms all come from 0x800650, seconds apart: not the blocker.
