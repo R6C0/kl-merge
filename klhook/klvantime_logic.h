@@ -75,14 +75,44 @@ static int kvt_cap_s(int farOn, int farSeen, int baseS, int farS)
    CrewRouteRange of the boarding place)? dx,dy,dz = displacement over the sample in cm, distCm = distance to the boarding place in cm, rangeCm = CrewRouteRange * 100. 200 cm exactly counts (>=, as klmv_crewhold).
    Any non-finite input = no. */
 #define KCW_MOVE_CM 200.0f      /* = KLE_COME (klescort.c) */
-static int kcw_counts(float dx, float dy, float dz, float distCm, float rangeCm)
+static int kcw_moved(float dx, float dy, float dz)      /* the displacement half of kcw_counts (OnlineVanCrewHold latches it per 2 s sample) */
 {
     float m2;
     if (!(fabsf(dx) < 1e9f) || !(fabsf(dy) < 1e9f) || !(fabsf(dz) < 1e9f)) return 0;      /* also rejects NaN / inf */
-    if (!(distCm >= 0 && distCm < 1e9f) || !(rangeCm > 0 && rangeCm < 1e9f)) return 0;
     m2 = dx * dx + dy * dy + dz * dz;
-    return m2 >= KCW_MOVE_CM * KCW_MOVE_CM && distCm <= rangeCm;
+    return m2 >= KCW_MOVE_CM * KCW_MOVE_CM;
 }
+static int kcw_counts(float dx, float dy, float dz, float distCm, float rangeCm)
+{
+    if (!(distCm >= 0 && distCm < 1e9f) || !(rangeCm > 0 && rangeCm < 1e9f)) return 0;
+    return kcw_moved(dx, dy, dz) && distCm <= rangeCm;
+}
+
+/* OnlineVanCrewHold (UNTESTED, recommended off; design crewhold_design_1104.md): Arcade's klmv_crewhold rule on the online host. timer = [rules+0x1d8]. Returns the seconds to add, 0 = no write.
+   Window (0, holdAt) as klmv_crewhold (NaN fails); add = min(budget - used, step); under 0.5 s of budget left = used up. */
+static float kcw_add(float timer, float holdAt, float budget, float used, float step, int nwalk)
+{
+    float add;
+    if (!(timer > 0 && timer < holdAt)) return 0;
+    if (!(budget > 0 && budget < 1e6f) || !(used >= 0)) return 0;
+    if (!(step > 0 && step < 1e6f)) return 0;
+    if (budget - used < 0.5f) return 0;
+    if (nwalk <= 0) return 0;
+    add = budget - used; if (add > step) add = step;
+    return add;
+}
+/* wall cap of the crew shield in ms. GUESS: 8 s margin on top of budget + window (Arcade measured ~53 s dwell with a 45 s budget) */
+static unsigned kcw_shield_cap_ms(float budget, float holdAt) { return (unsigned)((budget + holdAt + 8.0f) * 1000.0f); }
+/* hold reasons: bit 1 = legacy (a walker within HoldM), bit 2 = crew (a walker within CrewRouteRange and budget left) */
+static int kcw_reason(int legacyIn, int crewOn, int nwalk, float used, float budget)
+{
+    int r = legacyIn ? 1 : 0;
+    if (crewOn && nwalk > 0 && budget - used >= 0.5f) r |= 2;
+    return r;
+}
+/* verifier fix 1: while the crew reason is active the legacy 3.0 s timer floor must NOT run (the 1 s tick would keep the timer at >= 2 and the (0, 2) window would never open) */
+static int kcw_floor_ok(int reason) { return !(reason & 2); }
+static int kcw_latch(int sampled, int newWalk, int oldWalk) { return sampled ? newWalk : oldWalk; }
 
 /* OnlineVanFarHold: count the walkers (phase 2, tally > 0) farther than holdM from the goal. d[] are horizontal cm; n entries; carrier[i] 1 = tally > 0. */
 static int kvt_count_far(const float *d, const int *carrier, int n, float holdM)

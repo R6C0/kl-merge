@@ -65,6 +65,41 @@ int main(void)
       CHECK(kcw_counts(nan_, 0, 0, 3000, 10000) == 0 && kcw_counts(300, inf_, 0, 3000, 10000) == 0 && kcw_counts(300, 0, 0, nan_, 10000) == 0 && kcw_counts(300, 0, 0, 3000, inf_) == 0 && kcw_counts(300, 0, 0, 3000, nan_) == 0, "NaN / inf: no");
     }
 
+    /* OnlineVanCrewHold: kcw_add / kcw_reason / kcw_shield_cap_ms / kcw_latch / kcw_moved */
+    { float nan_ = (float)sqrt(-1.0), inf_ = (float)HUGE_VAL; int r, tick; float tm, used, dwell, added;
+      CHECK(kcw_add(1.8f, 2.0f, 45, 0, 60, 3) == 45.0f, "Arcade log 1.8 -> 46.8: adds 45");
+      CHECK(kcw_add(1.8f, 2.0f, 45, 0, 5, 3) == 5.0f, "step 5");
+      CHECK(kcw_add(1.8f, 2.0f, 45, 40, 60, 3) == 5.0f && kcw_add(1.8f, 2.0f, 45, 44.5f, 60, 3) == 0.5f, "budget left caps the add");
+      CHECK(kcw_add(1.8f, 2.0f, 45, 44.6f, 60, 3) == 0, "under 0.5 s left = used");
+      CHECK(kcw_add(2.0f, 2.0f, 45, 0, 60, 3) == 0 && kcw_add(0, 2.0f, 45, 0, 60, 3) == 0 && kcw_add(-1, 2.0f, 45, 0, 60, 3) == 0 && kcw_add(nan_, 2.0f, 45, 0, 60, 3) == 0 && kcw_add(inf_, 2.0f, 45, 0, 60, 3) == 0, "window is (0, 2.0)");
+      CHECK(kcw_add(1.8f, 2.0f, 45, 0, 60, 0) == 0, "no walker, no add");
+      CHECK(kcw_add(1.8f, 2.0f, 0, 0, 60, 3) == 0 && kcw_add(1.8f, 2.0f, nan_, 0, 60, 3) == 0 && kcw_add(1.8f, 2.0f, 45, -1, 60, 3) == 0 && kcw_add(1.8f, 2.0f, 45, 0, 0, 3) == 0 && kcw_add(1.8f, 2.0f, 45, 0, nan_, 3) == 0, "budget 0 inert; NaN / negative / step 0: no");
+      CHECK(kcw_reason(1, 0, 3, 0, 45) == 1 && kcw_reason(0, 1, 3, 0, 45) == 2 && kcw_reason(1, 1, 3, 0, 45) == 3, "reason bits");
+      CHECK(kcw_reason(0, 1, 0, 0, 45) == 0 && kcw_reason(1, 1, 0, 0, 45) == 1, "crew on, no walker: legacy bit only");
+      CHECK(kcw_reason(1, 1, 3, 44.8f, 45) == 1 && kcw_reason(0, 1, 3, 44.8f, 45) == 0, "budget used: crew bit gone");
+      CHECK(kcw_reason(1, 0, 3, 0, 45) == 1 && kcw_reason(0, 0, 3, 0, 45) == 0, "crew off: never bit 2");
+      CHECK(kcw_shield_cap_ms(45, 2) == 55000u && kcw_shield_cap_ms(0, 2) == 10000u && kcw_shield_cap_ms(30, 2) < kcw_shield_cap_ms(45, 2), "shield cap");
+      CHECK(kcw_latch(0, 1, 0) == 0 && kcw_latch(0, 0, 1) == 1 && kcw_latch(1, 0, 1) == 0 && kcw_latch(1, 1, 0) == 1, "latch");
+      CHECK(kcw_moved(199, 0, 0) == 0 && kcw_moved(200, 0, 0) == 1 && kcw_moved(0, 120, 160) == 1 && kcw_moved(nan_, 0, 0) == 0, "moved");
+      /* sequence: timer falls 8 -> window, 1 s ticks, 3 walkers, budget 45, legacy near walker present too (verifier fix 1) */
+      tm = 8.0f; used = 0; added = 0; dwell = 0;
+      for (tick = 0; tick < 200 && tm > 0; tick++) {
+          float a;
+          r = kcw_reason(tick < 15, 1, 3, used, 45);      /* legacy reason ends at the 15 s OnlineHoldMaxS cap */
+          if (r && kcw_floor_ok(r)) {      /* r == 0: vh_pass returns before any write */ if (tm < 3.0f) tm = 3.0f; }      /* legacy floor, only without the crew reason */
+          a = (r & 2) ? kcw_add(tm, 2.0f, 45, used, 60, 3) : 0;
+          if (a > 0) { tm += a; used += a; added += a; }
+          tm -= 1.0f; dwell += 1.0f;
+      }
+      CHECK(added == 45.0f, "legacy near walker + crew walker: the 45 s are added (got %.1f)", added);
+      CHECK(dwell >= 50.0f && dwell <= 56.0f, "dwell about 8 + 45 s (got %.0f)", dwell);
+      /* the old floor alone would have kept tm >= 2 forever: prove the bug the fix avoids */
+      tm = 8.0f; added = 0;
+      for (tick = 0; tick < 30; tick++) { if (tm < 3.0f) tm = 3.0f; added += kcw_add(tm, 2.0f, 45, 0, 60, 3); tm -= 1.0f; }
+      CHECK(added == 0, "with the floor always on the window never opens");
+      CHECK(kcw_floor_ok(3) == 0 && kcw_floor_ok(2) == 0 && kcw_floor_ok(1) == 1 && kcw_floor_ok(0) == 1, "floor only without bit 2");
+    }
+
     printf("klvantime_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }
