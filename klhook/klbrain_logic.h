@@ -737,4 +737,24 @@ static int kbr_f8_in_set(const kbr_u32 *set, int n, kbr_u32 v)
 /* null pellets of a funnel: loop iterations minus the non-null ones (never negative) */
 static long kbr_f8_nulls(long iter, long ok) { return iter > ok ? iter - ok : 0; }
 
+/* OnlineBrainTraitorLosGate / LosProbe (11-04): the stock clear-line test 0x4e1750 builds its physics query like this (disassembled 11-04, 0x4e1831..0x4e18f5):
+   buf+0 = start point (the target's position, y + 150 [0xb31878]); buf+0xc = delta = arg2 - start; when |delta| > 500 [0xb64e20] the delta is scaled by (|delta| - 200 [0xb2d8e8]) / |delta|
+   (the ray stops 200 short of arg2). Returns 1 and fills delta[3] (and *len = the original length) for a usable segment, 0 for non-finite input or a zero-length segment (out untouched). */
+static int kbr_los_delta(const float *start, const float *end, float *delta, float *len)
+{
+    float d[3], l, k; int i;
+    for (i = 0; i < 3; i++) {
+        d[i] = end[i] - start[i];
+        if (!(d[i] > -1.0e7f && d[i] < 1.0e7f) || !(start[i] > -1.0e7f && start[i] < 1.0e7f)) return 0;
+    }
+    l = kbr_f6_len(d);
+    if (!(l > 0.001f)) return 0;
+    k = l > 500.0f ? (l - 200.0f) / l : 1.0f;
+    delta[0] = d[0] * k; delta[1] = d[1] * k; delta[2] = d[2] * k;
+    if (len) *len = l;
+    return 1;
+}
+/* the physics call answers 'hit' (al != 0) -> the line is BLOCKED; al == 0 -> clear (0x4e1750 returns sete al). ok < 0 = the query could not be made: 2 */
+static int kbr_los_class(int ok, unsigned int al) { return ok < 0 ? 2 : (al & 0xffu) ? 1 : 0; }      /* 0 clear, 1 blocked, 2 error */
+
 #endif /* KLBRAIN_LOGIC_H */

@@ -429,6 +429,16 @@ int main(void)
         CHECK(kbr_f8_in_set(set, 3, 0x11) && kbr_f8_in_set(set, 3, 0x33) && !kbr_f8_in_set(set, 3, 0x22) && !kbr_f8_in_set(set, 3, 0) && !kbr_f8_in_set(set, 0, 0x11), "f8 in set: zero never matches");
         CHECK(kbr_f8_nulls(10, 7) == 3 && kbr_f8_nulls(5, 5) == 0 && kbr_f8_nulls(3, 4) == 0, "f8 nulls");
     }
+    /* LOS helpers */
+    {
+        float a[3] = { 0, 150, 0 }, b[3] = { 300, 150, 400 }, c[3] = { 0, 150, 1000 }, dl[3] = { 9, 9, 9 }, ln = 0, nan3[3];
+        unsigned int q = 0x7fc00000u; memcpy(&nan3[0], &q, 4); nan3[1] = 0; nan3[2] = 0;
+        CHECK(kbr_los_delta(a, b, dl, &ln) && dl[0] == 300.0f && dl[2] == 400.0f && dl[1] == 0.0f && ln > 499.9f && ln < 500.1f, "los delta: length 500 is not shortened");
+        CHECK(kbr_los_delta(a, c, dl, &ln) && dl[2] > 799.9f && dl[2] < 800.1f && dl[0] == 0.0f && ln > 999.9f && ln < 1000.1f, "los delta: 1000 -> 800 (stops 200 short)");
+        dl[0] = 9;
+        CHECK(!kbr_los_delta(a, a, dl, &ln) && !kbr_los_delta(a, nan3, dl, &ln) && !kbr_los_delta(nan3, a, dl, &ln) && dl[0] == 9.0f, "los delta: zero length / NaN refused, out untouched");
+        CHECK(kbr_los_class(0, 0) == 0 && kbr_los_class(0, 1) == 1 && kbr_los_class(0, 0xffffff00u) == 0 && kbr_los_class(0, 0x80u) == 1 && kbr_los_class(-1, 1) == 2, "los class: al only, error 2");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }
