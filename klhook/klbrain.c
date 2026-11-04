@@ -1407,6 +1407,7 @@ static void klbr_f3_summary(void)      /* at round end, before the arrays are cl
 static int klbr_f4on;
 static DWORD klbr_f4_p138[KLBR_MAX], klbr_f4_pe8[KLBR_MAX]; static BYTE klbr_f4_have[KLBR_MAX];
 static long klbr_f4_ni, klbr_f4_nv, klbr_f4_samples, klbr_f4_d138, klbr_f4_de8, klbr_f4_unres, klbr_f4_b12, klbr_f4_route[4];
+static DWORD klbr_f5_f4own[KLBR_MAX];      /* FireProbe5: what FireProbe4 resolved as the owner of the item (0x8ccde0 of [item+0x5c]) at its last sample, per bot */
 static void klbr_f4_sample(int ix, struct klbr_s *e, DWORD self, DWORD body)      /* game thread, read only */
 {
     DWORD F, item, h, owner = 0, o4 = 0, o3c = 0, ovt = 0, c138, ce8, d138 = 0, de8 = 0, g160, g44, p2640, p265c, cap, fcnt, m98, m9c;
@@ -1421,6 +1422,7 @@ static void klbr_f4_sample(int ix, struct klbr_s *e, DWORD self, DWORD body)    
         h = klh_rd32(item + 0x5c);
         if (h && klbr_fp_flt < 3) { __try { owner = ((klbr_cfrefn)(DWORD_PTR)KLH_VA(KLBR_CF_REF))(h); } __except (EXCEPTION_EXECUTE_HANDLER) { owner = 0; klbr_fp_flt++; } }
         if (owner <= 0xffff) klbr_f4_unres++;
+        klbr_f5_f4own[ix] = owner;
         sub = owner > 0xffff ? owner : body;
         o4 = sub > 0xffff ? klh_rd32(sub + 4) : 0; o3c = o4 > 0xffff ? klh_rd32(o4 + 0x3c) : 0; ovt = sub > 0xffff ? klh_rd32(sub) : 0;
         b12 = kbr_f4_bit(o3c, 12); if (b12) klbr_f4_b12++;
@@ -1448,21 +1450,171 @@ static void klbr_f4_sample(int ix, struct klbr_s *e, DWORD self, DWORD body)    
         st = klh_rd32(hp + 0x274c); st14 = st > 0xffff ? klh_rd32(st + 0x14) : 0; if (p54 > 0xffff) klh_rd(p54 + 0x3a, &w3a, 2);
         hpok = klbr_hp_read(hp, &hpv);
         bst = body > 0xffff ? klh_rd32(body + 0x274c) : 0; sm = KLBR_RDG(0x168e598);
-        route = kbr_f4_route(bit18, 1, st > 0xffff, st14); klbr_f4_route[route]++;
+        route = kbr_f4_route(sm > 0xffff ? klh_rd32(sm + 0x54) : 0, bit18, st > 0xffff, st14, KLBR_RDG(0x168fd00)); klbr_f4_route[route]++;      /* exact since FireProbe5: 0x7e1700 / 0x7de570 / 0x9425a0 read from the disassembly (kbr_f5_route); local station id = [0x168fd00] (0x94bc10 with 0x744a40() == 0) */
         klog("brain: traitor fireprobe4 victim: bot %d holder %08lx (ZFFPlayer) [+0x438] %08lx bit18 %d [+0x274c] %08lx [[+0x274c]+0x14] %08lx [+0x54] %08lx word[[+0x54]+0x3a] %04x (non-zero = 0x458880 skips the hit) hp %.1f%s [+0x774] %08lx; bot [body+0x274c] %08lx [body+0x774] %08lx; "
-             "session sm %08lx [+0x54] %08lx [+0x5c] %08lx [+0x70] %08lx; [0x1535a2c] %08lx; predicted route (GUESS, 0x7e1700 trace): %s",
+             "session sm %08lx [+0x54] %08lx [+0x5c] %08lx [+0x70] %08lx; [0x1535a2c] %08lx; local station id [0x168fd00] %08lx; route 0x7e1700 -> 0x7de570 -> 0x9425a0 (exact for a bot attacker): %s",
              ix, (unsigned long)hp, (unsigned long)b438, bit18, (unsigned long)st, (unsigned long)st14, (unsigned long)p54, (unsigned)w3a, (double)hpv, hpok ? "" : " (unreadable)", (unsigned long)klh_rd32(hp + 0x774), (unsigned long)bst, (unsigned long)(body > 0xffff ? klh_rd32(body + 0x774) : 0),
-             (unsigned long)sm, (unsigned long)(sm > 0xffff ? klh_rd32(sm + 0x54) : 0), (unsigned long)(sm > 0xffff ? klh_rd32(sm + 0x5c) : 0), (unsigned long)(sm > 0xffff ? klh_rd32(sm + 0x70) : 0), (unsigned long)KLBR_RDG(0x1535a2c), kbr_f4_route_name(route));
+             (unsigned long)sm, (unsigned long)(sm > 0xffff ? klh_rd32(sm + 0x54) : 0), (unsigned long)(sm > 0xffff ? klh_rd32(sm + 0x5c) : 0), (unsigned long)(sm > 0xffff ? klh_rd32(sm + 0x70) : 0), (unsigned long)KLBR_RDG(0x1535a2c), (unsigned long)KLBR_RDG(0x168fd00), kbr_f4_route_name(route));
         klbr_f4_nv++;
     }
 }
 static void klbr_f4_summary(void)      /* at round end */
 {
     if (klbr_f4on)
-        klog("brain: traitor fireprobe4 round: samples %ld item lines %ld victim lines %ld; item [+0x138] (0x4cb7a0 calls) rose by %ld, [+0xe8] fell by %ld between samples; owner unresolved %ld, bit 12 set %ld; predicted victim routes (GUESS): apply-local %ld, drop %ld, apply %ld, undetermined %ld",
+        klog("brain: traitor fireprobe4 round: samples %ld item lines %ld victim lines %ld; item [+0x138] (0x4cb7a0 calls) rose by %ld, [+0xe8] fell by %ld between samples; owner unresolved %ld, bit 12 set %ld; victim routes (exact for a bot attacker): apply-local (bit 18) %ld, drop (station remote) %ld, apply %ld, apply (session not networked) %ld",
              klbr_f4_samples, klbr_f4_ni, klbr_f4_nv, klbr_f4_d138, klbr_f4_de8, klbr_f4_unres, klbr_f4_b12, klbr_f4_route[0], klbr_f4_route[1], klbr_f4_route[2], klbr_f4_route[3]);
     klbr_f4_ni = klbr_f4_nv = klbr_f4_samples = klbr_f4_d138 = klbr_f4_de8 = klbr_f4_unres = klbr_f4_b12 = 0; memset(klbr_f4_route, 0, sizeof klbr_f4_route);
     memset(klbr_f4_have, 0, sizeof klbr_f4_have);
+}
+/* OnlineBrainTraitorFireProbe5 (11-04, after bs32: FireProbe4's owner resolution looked wrong; TEST build only for part 1; recommended off; needs FireProbe, so AttackHandle; host only). Measures from the game's own registers
+   instead of re-deriving. Part 3 (FireProbe4's victim line) is above. SITE CHECK 11-04 against kl2.exe build 0490: 0x4cc389 is in 0x4cb7a0 (the per-shot routine, called on the item), after the ray/projectile choice (byte [esp+0x17]) at 0x4cc377..0x4cc384:
+       4cc389: cmp byte ptr [esp+0x1f], 0   (80 7c 24 1f 00)     4cc38e: je 0x4cc9d2 (0f 84 3e 06 00 00)     then 4cc394 mov eax, [esp+0x54] (the owner, so [esp+0x54] is the owner at this site)
+   The 11 bytes are exactly 80 7c 24 1f 00 0f 84 3e 06 00 00 (read from the exe, and checked again at run time before patching). 0x4cc389 lies between the hashed ranges [0x4c5000,0x4ca000) and [0x4cd000,0x4cf000): UNHASHED
+   (klh_is_hashed and the test below). The frame is the same as at 0x4cb7c5 (mov [esp+0x54], edi: owner = 0x6ee930(item), which is 0x6ee930(item) = [item+0x5c] then 0x8ccde0 (entry+0x60), so the register owner and a fresh lookup agree by construction; 'differs' would mean FireProbe4's item ([[s+0x6a0]+4]) is not the this of 0x4cb7a0) and 0x4cb815 (mov [esp+0x1f], bl: the gate; 0x4cb829 sets it to 1 when the
+   class mask matches): no push/pop is outstanding on the path (the same [esp+0x1f] / [esp+0x17] offsets are used before and after), and esi is only ever written by 'mov esi, ecx' at 0x4cb7a9, so ESI = the item.
+   1. GATE COUNTER: ONE detour at 0x4cc389 steals only the 5-byte cmp (the je after it has a relative operand and is NOT stolen: the stub jumps back to 0x4cc38e). The stub (kbr_f3_emit) saves flags and registers around the handler,
+      so the cmp is re-executed with fresh flags before the je. Handler: owner = [esp+0x54], item = ESI, gate = byte [esp+0x1f] (esp = the saved original ESP of the stub registers). Per round: gate pass / fail for a MARKED traitor
+      bot (owner is a marked body, or item is a marked bot's item) versus all others. The first few samples log owner / item / [item+0x5c], 0x8ccde0([item+0x5c]) re-resolved now (the same pure lookup FireProbe4 calls) and
+      compared with the register, what FireProbe4 resolved at its last sample, the owner's vtable, the ADDRESS of its vt+0x30 slot and the value stored there (read, NOT called), [owner+4], [[owner+4]+0x3c] and bit 12.
+   2. SLOT 422 COUNTER: klnetsmooth.c's private ZFFPlayer vtable (klbr_f5_attach): if slot 422 holds 0x7e1700 and [NetSmooth] is on, a wrapper counts every victim hit and calls the original unchanged (arguments and result untouched).
+      LIMIT: the private table is given to REMOTE players only, so only hits on remote-seat humans are seen (the host-local human is never swapped). Per call: attacker class, marked or not, bit 18, station and its id, local id, role,
+      the predicted route (kbr_f5_route) and the victim's health before and after the original. Else logged once as inert.
+   Log: "fireprobe5 gate:" / "fireprobe5 hit:" lines (capped per round) and "fireprobe5 round:". */
+#define KLBR_F5_SITE 0x4cc389
+#define KLBR_F5_LOGMAX 30
+static const BYTE klbr_f5_bytes[11] = { 0x80, 0x7c, 0x24, 0x1f, 0x00, 0x0f, 0x84, 0x3e, 0x06, 0x00, 0x00 };
+static int klbr_f5on, klbr_f5_state, klbr_f5_wrapped;      /* state: 0 not tried, 1 detour installed, -1 refused / bytes differ; wrapped: slot 422 of the private table is ours */
+static BYTE *klbr_f5_stub;
+static DWORD klbr_f5_soldier[KLBR_MAX];
+static long klbr_f5_gate_unread, klbr_f5_nla;      /* gate byte unreadable (not counted as pass or fail); unmatched samples whose owner has the ZFFActor vtable (logged so the register is visible even when marking misses) */
+static DWORD klbr_f5_body[KLBR_MAX], klbr_f5_item[KLBR_MAX];     /* the marked bots' bodies ([soldier+0x40]) and items ([[soldier+0x6a0]+4]) as of their last slot-113 call */
+static long klbr_f5_gate[4], klbr_f5_by_owner, klbr_f5_by_item, klbr_f5_nlm, klbr_f5_nlo, klbr_f5_res_same, klbr_f5_res_diff, klbr_f5_res_none;
+static void __cdecl klbr_f5_gatehit(int id, KLBR_F3REGS *r)      /* called by the stub on the game thread; reads only (the lookup 0x8ccde0 is the one pure call, under __try) */
+{
+    DWORD sp, owner, item, h, res = 0, vt, slot, o4, o3c; BYTE gate = 0xff; int i, bo = 0, bi = 0, marked, ix = -1, kind, gok, actor;
+    (void)id;
+    if (!klbr_f5on || !r) return;
+    sp = r->esp; owner = klh_rd32(sp + 0x54); item = r->esi; gok = klh_rd(sp + 0x1f, &gate, 1);
+    for (i = 0; i < KLBR_MAX; i++) {
+        if (klbr_f5_body[i] && klbr_f5_body[i] == owner) { bo = 1; ix = i; }
+        if (klbr_f5_item[i] && klbr_f5_item[i] == item) { bi = 1; if (ix < 0) ix = i; }
+    }
+    marked = bo || bi; kind = kbr_f5_kind(marked, gate);
+    if (gok) klbr_f5_gate[kind]++; else klbr_f5_gate_unread++;
+    if (bo) klbr_f5_by_owner++; if (bi) klbr_f5_by_item++;
+    actor = !marked && owner > 0xffff && klh_pvt(owner) == 0x00bb3bacu;      /* an unmatched ZFFActor owner may still be a traitor body (marking missed) */
+    if (marked ? klbr_f5_nlm >= 6 : actor ? klbr_f5_nla >= 6 : klbr_f5_nlo >= 3) return;
+    if (marked) klbr_f5_nlm++; else if (actor) klbr_f5_nla++; else klbr_f5_nlo++;
+    h = item > 0xffff ? klh_rd32(item + 0x5c) : 0;
+    if (h && klbr_fp_flt < 3) { __try { res = ((klbr_cfrefn)(DWORD_PTR)KLH_VA(KLBR_CF_REF))(h); } __except (EXCEPTION_EXECUTE_HANDLER) { res = 0; klbr_fp_flt++; } }
+    if (h && owner == res) klbr_f5_res_same++; else if (h && res) klbr_f5_res_diff++; else klbr_f5_res_none++;
+    vt = owner > 0xffff ? klh_rd32(owner) : 0; slot = vt > 0xffff ? vt + 0x30 : 0; o4 = owner > 0xffff ? klh_rd32(owner + 4) : 0; o3c = o4 > 0xffff ? klh_rd32(o4 + 0x3c) : 0;
+    klog("brain: traitor fireprobe5 gate: %s bot %d (by owner %d, by item %d) byte[esp+0x1f] %02x (%s) owner [esp+0x54] %08lx item(esi) %08lx [item+0x5c] %08lx 0x8ccde0 now %08lx (%s) FireProbe4's last owner %08lx; owner [owner] %08lx slot vt+0x30 at %08lx = %08lx (not called) [owner+4] %08lx [[owner+4]+0x3c] %08lx bit12 %d; esp %08lx [esp+0x17](ray=1) %02x",
+         marked ? "MARKED" : actor ? "other(ZFFActor owner)" : "other", ix, bo, bi, (unsigned)gate, gate ? "pass: shot fires" : "FAIL: sound + message only", (unsigned long)owner, (unsigned long)item, (unsigned long)h, (unsigned long)res,
+         !h ? "no handle" : owner == res ? "same as the register" : res ? "DIFFERS from the register" : "lookup gave 0", (unsigned long)(ix >= 0 ? klbr_f5_f4own[ix] : 0), (unsigned long)vt, (unsigned long)slot,
+         (unsigned long)(slot ? klh_rd32(slot) : 0), (unsigned long)o4, (unsigned long)o3c, kbr_f4_bit(o3c, 12), (unsigned long)sp, (unsigned)klbr_f3_b(sp + 0x17));
+}
+static void klbr_f5_install(void)      /* once, at the first marked-bot call (game thread); a refusal is final for this run */
+{
+    BYTE cur[11] = { 0 }, jmp[5]; BYTE *at; DWORD stub; int n;
+    if (klbr_f5_state) return;
+    klbr_f5_state = -1;
+    at = KLH_VA(KLBR_F5_SITE);
+    if (klh_is_hashed(KLBR_F5_SITE, 11)) { klog("brain: traitor fireprobe5: 0x4cc389 is inside a hashed range: gate counter NOT installed"); return; }
+    if (!klh_rd((DWORD_PTR)at, cur, 11) || memcmp(cur, klbr_f5_bytes, 11)) { klog("brain: traitor fireprobe5: the 11 bytes at 0x4cc389 are not 80 7c 24 1f 00 0f 84 3e 06 00 00 (got %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x): gate counter NOT installed",
+        cur[0], cur[1], cur[2], cur[3], cur[4], cur[5], cur[6], cur[7], cur[8], cur[9], cur[10]); return; }
+    if (!klbr_f5_stub && !(klbr_f5_stub = (BYTE *)VirtualAlloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) { klog("brain: traitor fireprobe5: no memory for the stub: gate counter off"); return; }
+    stub = (DWORD)(DWORD_PTR)klbr_f5_stub;
+    n = kbr_f3_emit(klbr_f5_stub, stub, 2, (DWORD)(DWORD_PTR)klbr_f5_gatehit, klbr_f5_bytes, 5, (DWORD)(DWORD_PTR)(at + 5));      /* only the cmp is stolen: back to the je at 0x4cc38e */
+    if (!n) return;
+    kbr_f3_jmp(jmp, (DWORD)(DWORD_PTR)at, stub, 5);
+    if (klh_poke(at, klbr_f5_bytes, 5, jmp, 5, "brain: FireProbe5 gate counter")) { klbr_f5_state = 1; klog("brain: traitor fireprobe5: gate counter on 0x4cc389 (cmp byte [esp+0x1f],0) installed, stub %d bytes", n); }
+    else klog("brain: traitor fireprobe5: gate counter NOT installed (refused by the patch guard - a SHIP build writes no code - or the bytes differ)");
+}
+static void klbr_f5_track(int ix, DWORD self, DWORD body)      /* every slot-113 call of a marked bot FireProbe sees: remember its body and item (the counters filter on them) and install the detour once */
+{
+    DWORD F;
+    if (!klbr_f5on || ix < 0 || ix >= KLBR_MAX) return;
+    klbr_f5_install();
+    klbr_f5_body[ix] = body > 0xffff ? body : 0; klbr_f5_soldier[ix] = self > 0xffff ? self : 0;
+    F = klh_rd32(self + 0x6a0); klbr_f5_item[ix] = F > 0xffff ? klh_rd32(F + 4) : 0;
+}
+
+typedef void (__fastcall *klbr_f5_fn)(void *self, void *edx, DWORD rec);
+static klbr_f5_fn klbr_f5_orig;
+typedef struct { DWORD V, A, role, b438, vst, vid, ast, aid, local, sm, rec; int bit18, aset, aplayer, aclass, marked, route, hp0ok; float hp0; } KLBR_F5H;
+static long klbr_f5_hit_n, klbr_f5_hit_m, klbr_f5_rt[6], klbr_f5_rtm[6], klbr_f5_cls[4], klbr_f5_drop, klbr_f5_same, klbr_f5_unread, klbr_f5_mis_a, klbr_f5_mis_d, klbr_f5_nlog, klbr_f5_nlogo, klbr_f5_flt;
+static void klbr_f5_pre(void *self, DWORD rec, KLBR_F5H *k)      /* reads only; every read is klh_rd (safe), so no fault is expected - the caller still wraps it in __try */
+{
+    int i; DWORD vt;
+    memset(k, 0, sizeof *k);
+    k->V = (DWORD)(DWORD_PTR)self; k->rec = rec;
+    k->sm = KLBR_RDG(0x168e598); k->role = k->sm > 0xffff ? klh_rd32(k->sm + 0x54) : 0;
+    k->b438 = klh_rd32(k->V + 0x438); k->bit18 = kbr_f4_bit(k->b438, 18);
+    k->vst = klh_rd32(k->V + 0x274c); k->vid = k->vst > 0xffff ? klh_rd32(k->vst + 0x14) : 0;
+    k->local = KLBR_RDG(0x168fd00);
+    k->A = rec > 0xffff ? klh_rd32(rec) : 0; k->aset = k->A > 0xffff;
+    if (k->aset) {
+        vt = klh_pvt(k->A);
+        k->aplayer = vt == 0x00bb45f4u;      /* GUESS: 0x7e1750's class-mask test (vt+0x30 & [0x1548c80] == [0x1548c7c]) is 'a ZFFPlayer'; the vtable is compared instead of calling it */
+        k->aclass = k->aplayer ? 1 : vt == 0x00bb3bacu ? 2 : 3;      /* 1 ZFFPlayer, 2 ZFFActor (the bots' bodies, vt 0xbb3bac), 3 other; 0 = no attacker */
+        k->ast = klh_rd32(k->A + 0x274c); k->aid = k->ast > 0xffff ? klh_rd32(k->ast + 0x14) : 0;
+        for (i = 0; i < KLBR_MAX; i++) if ((klbr_f5_body[i] && klbr_f5_body[i] == k->A) || (klbr_f5_soldier[i] && klbr_f5_soldier[i] == k->A)) k->marked = 1;      /* also the soldier itself (GUESS: a record may name the soldier, not its body) */
+    }
+    k->route = kbr_f5_route(k->role, k->bit18, k->aset, k->aplayer, k->ast > 0xffff, k->aid, k->vst > 0xffff, k->vid, k->local);
+    k->hp0ok = klbr_hp_read(k->V, &k->hp0);
+}
+static void __fastcall klbr_f5_hit(void *self, void *edx, DWORD rec)      /* slot 422 of the private ZFFPlayer vtable: count, call the original UNCHANGED, read the health after */
+{
+    KLBR_F5H k; float hp1 = 0.0f; int ok = 0, have = 0, hp1ok;
+    memset(&k, 0, sizeof k);
+    if (klbr_f5on && klbr_f5_flt < 3) { __try { klbr_f5_pre(self, rec, &k); have = 1; } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f5_flt++; have = 0; } }
+    klbr_f5_orig(self, edx, rec);      /* arguments and result are never changed */
+    if (!have) return;
+    __try {
+        hp1ok = klbr_hp_read(k.V, &hp1); ok = k.hp0ok && hp1ok;
+        klbr_f5_hit_n++; klbr_f5_rt[k.route]++; klbr_f5_cls[k.aclass]++;
+        if (k.marked) {
+            int drop = ok && hp1 < k.hp0 - 0.001f;
+            klbr_f5_hit_m++; klbr_f5_rtm[k.route]++;
+            if (!ok) klbr_f5_unread++; else if (drop) klbr_f5_drop++; else klbr_f5_same++;
+            if (ok && k.route != 3 && kbr_f5_applies(k.route) && !drop) klbr_f5_mis_a++;      /* predicted to apply, health unchanged: another gate (0x458880 / 0x6e3400 ...) or a later write; route 3 (send block) is 'unknown', never counted */
+            if (ok && k.route != 3 && !kbr_f5_applies(k.route) && drop) klbr_f5_mis_d++;     /* predicted to drop, health fell: the route model is wrong */
+        }
+        if (k.marked ? klbr_f5_nlog < KLBR_F5_LOGMAX : klbr_f5_nlogo < 6) {
+            if (k.marked) klbr_f5_nlog++; else klbr_f5_nlogo++;
+            klog("brain: traitor fireprobe5 hit: %s attacker %08lx (class %s, vt %08lx) victim %08lx role %lu [victim+0x438] %08lx bit18 %d victim station %08lx id %08lx; attacker station %08lx id %08lx; local id [0x168fd00] %08lx; predicted route %d = %s; victim hp %.1f -> %.1f%s%s",
+                 k.marked ? "MARKED" : "other", (unsigned long)k.A, k.aclass == 1 ? "ZFFPlayer" : k.aclass == 2 ? "ZFFActor" : k.aclass == 3 ? "other" : "none", (unsigned long)(k.aset ? klh_rd32(k.A) : 0), (unsigned long)k.V, (unsigned long)k.role, (unsigned long)k.b438, k.bit18, (unsigned long)k.vst, (unsigned long)k.vid,
+                 (unsigned long)k.ast, (unsigned long)k.aid, (unsigned long)k.local, k.route, kbr_f5_route_name(k.route), (double)k.hp0, (double)hp1, ok ? "" : " (unreadable)",
+                 !ok ? "" : k.route == 3 ? (hp1 < k.hp0 - 0.001f ? " (send block: hp fell by another path)" : " (send block: hp unchanged)") : kbr_f5_applies(k.route) ? (hp1 < k.hp0 - 0.001f ? " (applied, hp fell)" : " (predicted apply, hp UNCHANGED)") : (hp1 < k.hp0 - 0.001f ? " (predicted DROP but hp FELL: model wrong)" : " (dropped, hp unchanged)"));
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f5_flt++; }
+}
+static void klbr_f5_attach(DWORD *vt)      /* klnetsmooth.c, before any object points at the private table (game thread): wrap slot 422 */
+{
+    if (!klbr_f5on) return;
+    if (vt[422] != (DWORD)(DWORD_PTR)KLH_VA(0x7e1700)) { klog("brain: traitor fireprobe5: part 2 inert: private ZFFPlayer slot 422 holds %08lx, not 0x7e1700", (unsigned long)vt[422]); return; }
+    klbr_f5_orig = (klbr_f5_fn)(DWORD_PTR)vt[422]; vt[422] = (DWORD)(DWORD_PTR)klbr_f5_hit; klbr_f5_wrapped = 1;
+    klog("brain: traitor fireprobe5: slot 422 (0x7e1700) of the private ZFFPlayer vtable wrapped (counting only; remote-seat victims only)");
+}
+static void klbr_f5_netsmooth_init(int ns_on)      /* klnetsmooth_init, once: part 2 needs [NetSmooth] Enable=1 */
+{
+    if (klbr_f5on && !ns_on) klog("brain: traitor fireprobe5: part 2 (slot 422 counter) inert: [NetSmooth] Enable is off (no private ZFFPlayer vtable)");
+}
+static void klbr_f5_summary(void)      /* at round end */
+{
+    if (klbr_f5on) {
+        klog("brain: traitor fireprobe5 round: gate byte [esp+0x1f] at 0x4cc389 (detour %s): MARKED pass %ld fail %ld, other pass %ld fail %ld, gate unreadable %ld (matched by owner %ld, by item %ld); owner register vs a fresh 0x8ccde0([item+0x5c]) in the logged samples: same %ld, differs %ld, none %ld",
+             klbr_f5_state > 0 ? "on" : "NOT installed", klbr_f5_gate[0], klbr_f5_gate[1], klbr_f5_gate[2], klbr_f5_gate[3], klbr_f5_gate_unread, klbr_f5_by_owner, klbr_f5_by_item, klbr_f5_res_same, klbr_f5_res_diff, klbr_f5_res_none);
+        klog("brain: traitor fireprobe5 round: slot 422 %s: hits %ld (marked %ld); attacker class none %ld ZFFPlayer %ld ZFFActor %ld other %ld; routes (all) apply-nonet %ld apply-bit18 %ld drop-att %ld send %ld drop-victim %ld apply %ld; routes (marked) %ld %ld %ld %ld %ld %ld; marked hp fell %ld, unchanged %ld, unreadable %ld; predicted apply but hp unchanged %ld, predicted drop but hp fell %ld; faults %ld",
+             klbr_f5_wrapped ? "wrapped" : "inert", klbr_f5_hit_n, klbr_f5_hit_m, klbr_f5_cls[0], klbr_f5_cls[1], klbr_f5_cls[2], klbr_f5_cls[3],
+             klbr_f5_rt[0], klbr_f5_rt[1], klbr_f5_rt[2], klbr_f5_rt[3], klbr_f5_rt[4], klbr_f5_rt[5], klbr_f5_rtm[0], klbr_f5_rtm[1], klbr_f5_rtm[2], klbr_f5_rtm[3], klbr_f5_rtm[4], klbr_f5_rtm[5],
+             klbr_f5_drop, klbr_f5_same, klbr_f5_unread, klbr_f5_mis_a, klbr_f5_mis_d, klbr_f5_flt);
+    }
+    memset(klbr_f5_gate, 0, sizeof klbr_f5_gate); klbr_f5_gate_unread = klbr_f5_nla = 0; memset(klbr_f5_soldier, 0, sizeof klbr_f5_soldier); klbr_f5_by_owner = klbr_f5_by_item = klbr_f5_nlm = klbr_f5_nlo = klbr_f5_res_same = klbr_f5_res_diff = klbr_f5_res_none = 0;
+    klbr_f5_hit_n = klbr_f5_hit_m = klbr_f5_drop = klbr_f5_same = klbr_f5_unread = klbr_f5_mis_a = klbr_f5_mis_d = klbr_f5_nlog = klbr_f5_nlogo = 0;
+    memset(klbr_f5_rt, 0, sizeof klbr_f5_rt); memset(klbr_f5_rtm, 0, sizeof klbr_f5_rtm); memset(klbr_f5_cls, 0, sizeof klbr_f5_cls);
+    memset(klbr_f5_body, 0, sizeof klbr_f5_body); memset(klbr_f5_item, 0, sizeof klbr_f5_item); memset(klbr_f5_f4own, 0, sizeof klbr_f5_f4own);
 }
 /* OnlineBrainTraitorWeaponReady (11-03, workflow wdntba8eu; UNTESTED, recommended off, CHANGES behaviour; needs AttackHandle; host only). For a MARKED bot after every slot-113 call: byte [body+0x5c8] != 0 (SKIP1 of the
    shooting task would loop forever), [body+0x860] == 0, [body+0x70] != 0 and [s+0x6a0] != 0 (weapon controller present) -> write byte 0 through klh_data. NOT restored on purpose: the game's own SelectWeapon 0x511450
@@ -1537,7 +1689,8 @@ static void klbr_fp_apply(struct klbr_s *e, DWORD self)      /* game thread, aft
     klbr_f3_track(ix, self, run);      /* OnlineBrainTraitorFireProbe3: controller / run-task bookkeeping for the detours (read only) */
     klbr_fp[ix].calls++; if (!klbr_fp[ix].t0) klbr_fp[ix].t0 = now;
     /* shot counter (0x6c81a0 adds to [body+0x550]) and the [s+0x550] reading: first / latest value per round */
-    body = klh_rd32(self + 0x40); { DWORD sc = body > 0xffff ? klh_rd32(body + 0x550) : 0, bs = klh_rd32(self + 0x550); if (body > 0xffff) { if (!klbr_fp[ix].shv) { klbr_fp[ix].shv = 1; klbr_fp[ix].s0 = sc; klbr_fp[ix].bs0 = bs; } klbr_fp[ix].sl = sc; klbr_fp[ix].bsl = bs; } }
+    body = klh_rd32(self + 0x40); klbr_f5_track(ix, self, body);      /* OnlineBrainTraitorFireProbe5 (no-op unless on) */
+    { DWORD sc = body > 0xffff ? klh_rd32(body + 0x550) : 0, bs = klh_rd32(self + 0x550); if (body > 0xffff) { if (!klbr_fp[ix].shv) { klbr_fp[ix].shv = 1; klbr_fp[ix].s0 = sc; klbr_fp[ix].bs0 = bs; } klbr_fp[ix].sl = sc; klbr_fp[ix].bsl = bs; } }
     if (body > 0xffff) { BYTE c5 = 0xff; if (klh_rd(body + 0x5c8, &c5, 1)) { if (c5) klbr_fp[ix].c5nz++; else klbr_fp[ix].c5z++; } }      /* every slot-113 call: byte [body+0x5c8] zero / nonzero (SKIP1 of the shooting task) */
     if (run) {
         klbr_fp[ix].rcalls++;
@@ -1634,6 +1787,7 @@ static void klbr_fp_summary(void)
     klbr_tb_restore_all("round end");      /* OnlineBrainTraitorTraitorByte: before the counts, while klbr_t is still intact */
     klbr_f3_summary();      /* OnlineBrainTraitorFireProbe3 round counts (before klbr_fp is cleared below) */
     klbr_f4_summary();      /* OnlineBrainTraitorFireProbe4 round total */
+    klbr_f5_summary();      /* OnlineBrainTraitorFireProbe5 round counts */
     if (klbr_tbon) klog("brain: traitor traitorbyte: round total: byte set %ld, restored %ld, not restored (body gone / byte changed / refused) %ld, re-set after a reset %ld, slot-113 calls: byte already nonzero %ld, with a ZFFActor body (not applicable) %ld, other class %ld; refused writes %ld", klbr_tb_set, klbr_tb_rest, klbr_tb_lost, klbr_tb_reset, klbr_tb_have, klbr_tb_actor, klbr_tb_other, klbr_tb_refused);
     klbr_tb_set = klbr_tb_reset = klbr_tb_rest = klbr_tb_lost = klbr_tb_have = klbr_tb_actor = klbr_tb_other = klbr_tb_refused = 0; klbr_tb_told = 0; memset(klbr_tb, 0, sizeof klbr_tb);
     if (klbr_fpon) for (i = 0; i < KLBR_MAX; i++) if (klbr_fp[i].calls)
@@ -2646,6 +2800,9 @@ static void klbr_init(void)
     if (klbr_f3on) klog("brain: OnlineBrainTraitorFireProbe3=1 UNTESTED (recommended off): READ ONLY toward the game state; counting detours on 0x8c1830 and 0x5faeb0 (TEST build only, unhashed code), per-sample item / template / body numbers, round counts (host only)");
     klbr_f4on = klbr_fpon && klbr_key("OnlineBrainTraitorFireProbe4");
     if (klbr_key("OnlineBrainTraitorFireProbe4") && !klbr_f4on) klog("brain: OnlineBrainTraitorFireProbe4 needs OnlineBrainTraitorFireProbe: off");
+    klbr_f5on = klbr_fpon && klbr_key("OnlineBrainTraitorFireProbe5");
+    if (klbr_key("OnlineBrainTraitorFireProbe5") && !klbr_f5on) klog("brain: OnlineBrainTraitorFireProbe5 needs OnlineBrainTraitorFireProbe: off");
+    if (klbr_f5on) klog("brain: OnlineBrainTraitorFireProbe5=1 UNTESTED (recommended off): READ ONLY toward the game state; a counting detour on 0x4cc389 (the per-shot gate byte, TEST build only, unhashed code) and a counting wrapper on slot 422 (0x7e1700, victim hit routing; needs [NetSmooth] Enable=1, remote-seat victims only) (host only)");
     if (klbr_f4on) klog("brain: OnlineBrainTraitorFireProbe4=1 UNTESTED (recommended off): DATA READS ONLY, no hook, no write; item shot counters / owner gate bit / victim gates / predicted victim route per FireProbe sample (host only)");
     klbr_wron = klbr_cfh && klbr_key("OnlineBrainTraitorWeaponReady");
     if (klbr_key("OnlineBrainTraitorWeaponReady") && !klbr_wron) klog("brain: OnlineBrainTraitorWeaponReady needs OnlineBrainTraitorAttackHandle: off");

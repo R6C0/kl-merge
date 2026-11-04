@@ -364,6 +364,7 @@ static void klnetsmooth_tick(int game_thread)
             kns.on = 0; return;
         }
         kns_orig = kns_vt[KNS_SLOT]; kns_vt[KNS_SLOT] = (DWORD)(DWORD_PTR)kns_update;
+        klbr_f5_attach(kns_vt);                                  /* klbrain.c OnlineBrainTraitorFireProbe5: a counting wrapper on slot 422 of the private table (no-op unless on) */
         klh_player_priv = kns_ours();                            /* the other modules' ZFFPlayer tests (klh_pvt / klh_avt) now see through it */
     }
     if (!kns_local(&me) || !me) return;                          /* local player unknown: swap nothing (it must never be swapped) */
@@ -424,6 +425,7 @@ static void klnetsmooth_init(void)
     kns.offline = GetPrivateProfileIntA("NetSmooth", "OfflineTest", 0, klh_ini) != 0;   /* TEST build only: smooth the Arcade AI heisters */
     if (kns.offline) klog("netsmooth: OfflineTest=1 (TEST build): the smoother also runs offline, on non-local players with the master flag (Arcade AI heisters)");
 #endif
+    klbr_f5_netsmooth_init(kns.on);                               /* FireProbe5 part 2 needs the private vtable */
     kns.probe = GetPrivateProfileIntA("NetSmooth", "Probe", 0, klh_ini) != 0;
     kns.probems = GetPrivateProfileIntA("NetSmooth", "ProbeMs", 1000, klh_ini); if (kns.probems < 250) kns.probems = 250;
     kns.probemax = GetPrivateProfileIntA("NetSmooth", "ProbeLines", 400, klh_ini);

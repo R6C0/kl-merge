@@ -328,8 +328,14 @@ int main(void)
         }
         CHECK(kbr_f4_bit(0x1000, 12) == 1 && kbr_f4_bit(0x1000, 11) == 0 && kbr_f4_bit(0x40000, 18) == 1 && kbr_f4_bit(0xffffffffUL, 31) == 1, "f4: bit");
         CHECK(kbr_f4_delta(0, 5, 9) == 0 && kbr_f4_delta(1, 5, 9) == 4 && kbr_f4_delta(1, 9, 5) == 0 && kbr_f4_delta(1, 7, 7) == 0, "f4: delta");
-        CHECK(kbr_f4_route(1, 1, 0, 0) == 0 && kbr_f4_route(0, 0, 1, 5) == 2 && kbr_f4_route(0, 1, 0, 0) == 2 && kbr_f4_route(0, 1, 1, 0) == 1 && kbr_f4_route(0, 1, 1, 7) == 3, "f4: route");
-        CHECK(strcmp(kbr_f4_route_name(1), "drop (bot attacker, station set, id 0)") == 0 && kbr_f4_route_name(9)[0] == 'u', "f4: route name");
+        CHECK(kbr_f4_route(0, 0, 0, 0, 0) == 3 && kbr_f4_route(2, 1, 0, 0, 0) == 0 && kbr_f4_route(2, 0, 1, 0, 5) == 1 && kbr_f4_route(2, 0, 1, 5, 5) == 2 && kbr_f4_route(3, 0, 0, 0, 5) == 2 && kbr_f4_route(2, 0, 1, 7, 5) == 1, "f4: route");
+        CHECK(strcmp(kbr_f4_route_name(1), "drop (bot attacker, victim station remote: id 0 or not the local id)") == 0 && kbr_f4_route_name(9)[0] == 'u', "f4: route name");
+        CHECK(kbr_f5_route(1, 0, 0, 0, 0, 0, 0, 0, 0) == 0 && kbr_f5_route(2, 1, 1, 1, 1, 9, 1, 9, 5) == 1 && kbr_f5_route(2, 0, 1, 1, 1, 9, 0, 0, 5) == 2 && kbr_f5_route(2, 0, 1, 1, 1, 5, 0, 0, 5) == 3 && kbr_f5_route(3, 0, 1, 0, 0, 0, 1, 0, 5) == 4 && kbr_f5_route(2, 0, 0, 0, 0, 0, 1, 5, 0) == 5 && kbr_f5_route(2, 0, 0, 0, 0, 0, 0, 0, 5) == 5, "f5: route");
+        CHECK(kbr_f5_remote(1, 0, 0) == 1 && kbr_f5_remote(1, 7, 5) == 1 && kbr_f5_remote(1, 5, 5) == 0 && kbr_f5_remote(0, 0, 5) == 0 && kbr_f5_remote(1, 7, 0) == 0, "f5: remote");
+        CHECK(kbr_f5_applies(0) && kbr_f5_applies(1) && kbr_f5_applies(5) && !kbr_f5_applies(2) && !kbr_f5_applies(3) && !kbr_f5_applies(4) && kbr_f5_route_name(2)[0] != 0, "f5: applies");
+        { static const kbr_u32 rg[2][2] = { { 0x4c5000u, 0x4ca000u }, { 0x4cd000u, 0x4cf000u } };      /* the ranges around 0x4cc389 (klranges.h) */
+          CHECK(!kbr_f5_in_ranges(rg, 2, 0x4cc389u, 11) && kbr_f5_in_ranges(rg, 2, 0x4c9ffcu, 11) && kbr_f5_in_ranges(rg, 2, 0x4cd000u, 1) && !kbr_f5_in_ranges(rg, 2, 0x4ca000u, 0x1000), "f5: in_ranges"); }
+        CHECK(kbr_f5_kind(1, 1) == 0 && kbr_f5_kind(1, 0) == 1 && kbr_f5_kind(0, 1) == 2 && kbr_f5_kind(0, 0) == 3 && kbr_f5_kind(1, 0x80) == 0, "f5: kind");
     }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;

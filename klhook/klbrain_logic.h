@@ -492,19 +492,47 @@ static int kbr_f3_ra_add(kbr_u32 *ra, long *cnt, int *n, int cap, kbr_u32 r)
 /* ammo word of an item: stored xor 0xbeebbeeb (verify note 11-04) */
 static kbr_u32 kbr_f3_ammo(kbr_u32 raw) { return raw ^ 0xbeebbeebUL; }
 
-/* OnlineBrainTraitorFireProbe4 (11-04): pure helpers. bit n of a dword; delta of a counter against its previous sample (first sample = 0, a counter that went down = 0); GUESS route of a hit on a human ZFFPlayer
-   after the trace of 0x7e1700 (workflow w8tlxwm93): 0 apply-local (victim+0x438 bit 18 set), 1 drop (bot attacker, bit 18 clear, station SET and its [+0x14] id is 0), 2 apply (player attacker, or a null station
-   (0x7de570 returns false for null)), 3 undetermined (bot attacker, bit 18 clear, station set and non-zero id: whether it is 'remote' is not read) */
+/* OnlineBrainTraitorFireProbe5 (11-04): the victim hit routing of the ZFFPlayer router, slot 422 = 0x7e1700 (this = victim V, one stack arg = record R, [R] = attacker A), read from the disassembly (not a trace):
+     1. 0x863a60([sm]) = (role [sm+0x54] is 2 or 3); false -> 0x7e181f: vt+0x69c(R) = APPLY (route 0)
+     2. V vt+0x3d0 (0x4cee60) = bit 18 of [V+0x438]; true -> vt+0x69c(R) = APPLY (route 1)
+     3. A non-null and A's class mask test passes (0x7e1750: (A vt+0x30)() & [0x1548c80] == [0x1548c7c]; GUESS: that is 'A is a ZFFPlayer', the caller passes att_player) ->
+        0x7de570([A+0x274c]) true -> return, DROP (route 2); false -> the send block 0x7a8410, no direct apply (route 3)
+     4. else (A null, or not that class) 0x7de570([V+0x274c]) true -> return, DROP (route 4); false -> vt+0x69c(R) = APPLY (route 5)
+   0x7de570(st) = st != 0 && !0x9425a0(st);  0x9425a0(st) = [st+0x14] != 0 && (local == 0 || [st+0x14] == local), local = [0x168fd00] (0x94bc10 with 0x744a40() == 0, always). So remote(st) =
+   st set && (id == 0 || (local != 0 && id != local)). */
+static int kbr_f5_remote(int st_set, kbr_u32 id, kbr_u32 local) { return st_set && (id == 0 || (local != 0 && id != local)); }
+static int kbr_f5_route(kbr_u32 role, int bit18, int att_set, int att_player, int att_st_set, kbr_u32 att_id, int vst_set, kbr_u32 vid, kbr_u32 local)
+{
+    if (role != 2 && role != 3) return 0;
+    if (bit18) return 1;
+    if (att_set && att_player) return kbr_f5_remote(att_st_set, att_id, local) ? 2 : 3;
+    return kbr_f5_remote(vst_set, vid, local) ? 4 : 5;
+}
+static int kbr_f5_applies(int route) { return route == 0 || route == 1 || route == 5; }
+static const char *kbr_f5_route_name(int r)
+{
+    return r == 0 ? "apply (session not networked)" : r == 1 ? "apply (victim bit 18)" : r == 2 ? "DROP (attacker is a player on a remote station)" : r == 3 ? "send block (attacker is a locally owned player; no direct apply)" :
+           r == 4 ? "DROP (victim station remote: id 0 or not the local id)" : r == 5 ? "apply (victim station local or null)" : "unknown";
+}
+/* is [va, va+len) inside any of n ranges [lo, hi)? (the klh_is_hashed rule, as a pure helper for the test: FireProbe5 refuses a hashed site) */
+static int kbr_f5_in_ranges(const kbr_u32 (*r)[2], int n, kbr_u32 va, kbr_u32 len)
+{
+    int i;
+    for (i = 0; i < n; i++) if (va < r[i][1] && va + len > r[i][0]) return 1;
+    return 0;
+}
+/* the gate byte [esp+0x1f] counted per round: kind 0 marked pass, 1 marked fail, 2 other pass, 3 other fail */
+static int kbr_f5_kind(int marked, unsigned gate) { return (marked ? 0 : 2) + (gate ? 0 : 1); }
+
+/* OnlineBrainTraitorFireProbe4 (11-04): pure helpers. bit n of a dword; delta of a counter against its previous sample (first sample = 0, a counter that went down = 0); the route of a hit by a BOT (not a ZFFPlayer)
+   on a human ZFFPlayer, now exact (FireProbe5's reading of 0x7e1700, kbr_f5_route with a non-player attacker): 0 apply-local (victim+0x438 bit 18 set), 1 drop (victim station remote), 2 apply (station local or null),
+   3 apply (session not networked) */
 static int kbr_f4_bit(kbr_u32 v, int n) { return (int)((v >> n) & 1u); }
 static kbr_u32 kbr_f4_delta(int have_prev, kbr_u32 prev, kbr_u32 cur) { return (have_prev && cur >= prev) ? cur - prev : 0; }
-static int kbr_f4_route(int bit18, int attacker_is_bot, int station_set, kbr_u32 station_id)
+static int kbr_f4_route(kbr_u32 role, int bit18, int station_set, kbr_u32 station_id, kbr_u32 local)
 {
-    if (bit18) return 0;
-    if (!attacker_is_bot) return 2;
-    if (!station_set) return 2;      /* 0x7de570 returns false for a null station: falls through to the apply call */
-    if (station_id == 0) return 1;
-    return 3;
+    switch (kbr_f5_route(role, bit18, 1, 0, 0, 0, station_set, station_id, local)) { case 0: return 3; case 1: return 0; case 4: return 1; default: return 2; }
 }
-static const char *kbr_f4_route_name(int r) { return r == 0 ? "apply-local (bit18)" : r == 1 ? "drop (bot attacker, station set, id 0)" : r == 2 ? "apply" : "undetermined (station set, id != 0: remote not read)"; }
+static const char *kbr_f4_route_name(int r) { return r == 0 ? "apply-local (bit18)" : r == 1 ? "drop (bot attacker, victim station remote: id 0 or not the local id)" : r == 2 ? "apply (station local or null)" : r == 3 ? "apply (session not networked)" : "unknown"; }
 
 #endif /* KLBRAIN_LOGIC_H */
