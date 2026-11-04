@@ -1,3 +1,7 @@
+2026-11-04 ~01:46 - [ce] pq14c = pq14b's DD05 rerun on the install build (pq_1104b_test, live ini + InShopSteps=1): PASS, both seats round 2, 0 asserts, 0 faults.
+Host F3 at Buy Weapons (mode 0): inshop steps 0 -> weapon list 0.62 s, hire page applied; client F2 at Category (mode 1): steps 1 -> list 0.31 s, page II applied.
+So the pq14b DD05 miss was the menu flake (SystemLinkCreate). pq_1104b is now benched on both maps. no crash involved
+
 2026-11-04 ~01:20 - [ce] InShopSteps (71f9bfbf5) INSTALLED 01:19 as pq_1104b (C:/kl_build_1024/pq_1104b_install, INSTALL/UNDO bats; dll md5 b84d456b, built from
 79ce4c7c4 + 71f9bfbf5's klhook files = local branch ce_inshop_ship aa88030f2, so none of c9's klbrain work went live; live ini gains only [ShopPage] InShopSteps=1).
 Why: the installed PageQueue path queued a page key pressed inside the shop (mode 0/1) but AutoOpen only sends ZW_SELECT3 to the Ready element, which is gone
