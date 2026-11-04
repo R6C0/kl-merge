@@ -347,3 +347,12 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - [body+0x544] is cleared by 0x44ab50 (via AimAt's vt+0x6e8(5) and the fire task's vt+0x6e8(4)): 0 is expected, not a symptom. SetAttackTarget 0x62a540 (prio must be >= 6 and called twice with the same handle) only drives look-at IK; not the lever.
 - Refuted: 0x857110 is not origin (0,0,0), it is the item node's world transform. [req+4] / [esp+0x10] at 0x4cc644 is a child of the pooled bullet group (sibling loop), not a hit; 0x4cc4ba stamps the shooter id into [child+0x60]+0x6c and calls child vt+0x15c (probably the real ray / damage).
 - Missed by the first pass: 0x425ce0 can return without writing the outputs (stale stack) - bs35 shows this does not happen (A1, sane origin). 0x8ca940 picks a random template; 0x54efb0 may convert the ray to owner-local space; 0x4cc328 per-frame dedupe.
+
+## bs36 (out_ra_1104f: RayAim site 5 = T + M row 2, MaxDist 0) + bs37 (out_ap_1104g: DM03 site 7, DD05 site 2 = aim point only): PASS, 0 faults
+- FireProbe7: AimAt mode [+0x824] = 1 on 90/90 (bs36 DM03), 261/270 (DD05); target [+0x828] = the human 90/90 DM03, 141/270 DD05 (the rest another object); byte [+0x64c] never set; AimAt not called within 1 s of any shot (fields set earlier and kept).
+- Human beyond template range R (6000) on most shots: bs36 DM03 56/90, DD05 187/270; bs37 DM03 85/104, DD05 192/225 (DD05 bot runs away while firing).
+- Ray matrix M (S4, before RayAim): with the T rewrite on (bs36 both maps, bs37 DM03) row 0 is within 15 deg of the human on every sample; WITHOUT it (bs37 DD05) row 1 on 49/222, row 0 never. So M is derived from T (T row 2 -> M row 0) and the game's own ray does NOT point at the human; RayAim row 2 on T steers M row 0. Which row is the ray forward is still unproven.
+- Item aim point [item+0xc8..0xd0] before our write: within 5 deg of the chest DM03 60/104 (0.05-0.1 deg), DD05 100/225; [item+0xf8] byte set 0/104 DM03, 62/225 DD05; [item+0xfc] set 104/104, 163/225. Bit 2 wrote the chest point 104/104 and 225/225 (0 refused, 0 faults).
+- First ray child at 0x4cc644: [child+0x60] never the human or a player; vtable 0x00b9e9a4 every time; [[child+0x60]+0x6c] = 0 (the shooter stamp comes later at 0x4cc4ba).
+- hp 550/550 at round end on all four runs; coverfire health checks flat.
+- Conclusion: the pellets carry a correct aim point inside (or just beyond) range, so the loss is the bullet hit/damage path or a victim-side filter, not the aim.

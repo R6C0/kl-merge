@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~06:00 - [c9] bs36 + bs37 PASS (DM03 + DD05, 4 seats each, 0 asserts, 0 faults; RayAim e34885be1, aim point dae9bc300). hp still 550 on all four maps.
+AIM IS NOT THE LOSS: AimAt mode 1, target [body+0x828] = the human (DM03 90/90 in bs36); the item aim point [item+0xc8..0xd0] that every pellet bullet carries (ctor 0x748900 arg8)
+is already within 0.1 deg of the human chest (60/104 DM03, 100/225 DD05), ~5800 units vs range R 6000, and bit 2 rewrote it to the chest on 104/104 + 225/225 shots: no damage.
+Ray children [child+0x60] = vtable 0xb9e9a4, [+0x6c] 0 at 0x4cc644. wmcd2s92o researches the bullet hit path + the human's damage filters (friendly fire / shooter-not-a-player).
+
 2026-11-04 ~04:45 - [c9] bs35 PASS (DM03 + DD05, 4 seats, 0 faults; GateForce + FireProbe6 6305b51a6) + arc35 (Arcade, 1 seat). Every marked traitor shot now runs the
 same path as Arcade: muzzle branch A1 (real hand-bone origin ~115 units from the bot, never the identity fallback), ray 0x713e80, request + child non-null (DM03 120/120, DD05 48/48).
 hp still 550: the gun does not point at the human (DM03 63 m, row error 2-52 deg, only 19/120 under 5; DD05 40 m, 32-52 deg, bot running away while firing).
