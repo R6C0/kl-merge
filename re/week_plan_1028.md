@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-04 11:00 c9: bs45 + arc45 PASS 0 faults: found why the online traitor walks away from the player: with the aggressive list forced, 'board the escape vehicle' comes first and wins most of the time. Arcade bots mostly fight from cover and board only near the end. w4t14cjcd researches the lever.
 - 11-04 10:25 c9: bs44 + arc43 PASS 0 faults: with both flags set, the online traitor now uses its aggressive move list and for the first time gets 'close in on the player' orders (to a point 5.5 m from the player), without firing through walls. It does not get closer yet. w21syogv3 builds a probe showing which move wins and which close-in condition fails.
 - 11-04 09:50 c9: bs43 PASS 0 faults: the traitor now keeps the player as its target while a wall is in the way (without firing), but its 'aggressive' move list stays closed on DM03 because a second flag is never set for our bot squads. w1ztfdggn builds the fix that sets both flags (mode 3) for bs44.
 - 11-04 09:25 c9: bs42 PASS 0 faults: confirmed our line-of-sight fix is what empties the traitor's target online; without it the target fills but the bot fires through walls again. wj2driobk builds the fix that keeps the target (without firing) while the player is behind a wall, so the bot can move in.

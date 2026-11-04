@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~11:00 - [c9] bs45 + arc45 PASS (online DM03 + DD05 4 seats, Arcade DM03 + DD05; 0 asserts, 0 faults; DefendProbe 938cdc2dd). FOUND why the online traitor walks away:
+with 4fc+6fc forced (mode 3) Defend walks list A (713/798) and the winner is ZBoardEscapeVehicle x531 (list A slot 3, BEFORE ZCloseIn), DefendCover 117, NoCover 58, CloseIn 1.
+Arcade (all bots) stays on list B (DM03 1127/1276, DD05 2031/2356): AttackFromCover wins (354 / 1134), Board only late in the round. ZCloseIn rarely wins on either side (gate P1 = its 1-4 s timer).
+bs45 DD05: no bot was marked (chance). RunProbe built (46cd1a0aa, out_rp_1104q). w4t14cjcd: who makes Board win online (stock vs our Board/RealRun) + lever.
+
 2026-11-04 ~10:25 - [c9] bs44 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_cf3_1104o: LosGate + HolderSet + CombatFlag=3 (4fc AND 6fc while blocked) + CloseInProbe). Mode 3 WORKS:
 [S+0x6fc] nonzero 98-99% (bs43 DM03: 0%), Defend walks list A on 80/97 (DM03) and 77/93 (DD05) data lines, ZCloseIn eval 689 calls (bs43 DM03: 0) / 382; 1.0 on 2 / 7. ZCloseIn's arms point
 549 cm / 543 cm from the human (550 short of the holder = the human): the traitor is ordered to close in on the player for the first time. No marked shot at the human (DM03 0 shots, DD05 125 at crew bots, all blocked).

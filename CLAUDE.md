@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~11:00 - [c9] bs45 + arc45 PASS (online DM03 + DD05 4 seats, Arcade DM03 + DD05; 0 asserts, 0 faults; DefendProbe 938cdc2dd). FOUND why the online traitor walks away:
+with 4fc+6fc forced (mode 3) Defend walks list A (713/798) and the winner is ZBoardEscapeVehicle x531 (list A slot 3, BEFORE ZCloseIn), DefendCover 117, NoCover 58, CloseIn 1.
+Arcade (all bots) stays on list B (DM03 1127/1276, DD05 2031/2356): AttackFromCover wins (354 / 1134), Board only late in the round. ZCloseIn rarely wins on either side (gate P1 = its 1-4 s timer).
+bs45 DD05: no bot was marked (chance). RunProbe built (46cd1a0aa, out_rp_1104q). w4t14cjcd: who makes Board win online (stock vs our Board/RealRun) + lever.
+
 2026-11-04 ~10:25 - [c9] bs44 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_cf3_1104o: LosGate + HolderSet + CombatFlag=3 (4fc AND 6fc while blocked) + CloseInProbe). Mode 3 WORKS:
 [S+0x6fc] nonzero 98-99% (bs43 DM03: 0%), Defend walks list A on 80/97 (DM03) and 77/93 (DD05) data lines, ZCloseIn eval 689 calls (bs43 DM03: 0) / 382; 1.0 on 2 / 7. ZCloseIn's arms point
 549 cm / 543 cm from the human (550 short of the holder = the human): the traitor is ordered to close in on the player for the first time. No marked shot at the human (DM03 0 shots, DD05 125 at crew bots, all blocked).
 Bot-human distance did not shrink (48-62 m -> 110-140 m). arc43 Arcade: DM03 6fc 50%, eval 61 (1.0 x2); DD05 eval 0. w21syogv3 builds DefendProbe + ZCloseIn per-gate trace (wzosc72u0) for bs45.
-
-2026-11-04 ~09:50 - [c9] bs43 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_hs_1104n: LosGate + HolderSet=1 + CombatFlag=2 + CloseInProbe). HolderSet WORKS: holder = the human
-(DM03 0x320, DD05 0x1ab; 0x8ccde0 round-trip yes, 0 mismatches) while blocked. DM03: [S+0x6fc] 0 on 100% of samples -> Defend walks list B, ZCloseIn eval 0 calls, CombatFlag 2 skipped (6fc) 139/139.
-DD05: a stock writer sets 6fc (47%) -> list A walked, ZCloseIn eval 30 calls (1.0 once, armed a run), but the holder is replaced by the stock scan (0x3d6, flags 0x10) and the 100 marked shots go at
-'something else', all blocked. wzerqnft4 (89c24f42b): ZCloseIn always built, in list A; our squads are StayBack so 6fc stays 0. w1ztfdggn builds CombatFlag mode 3 (4fc AND 6fc) for bs44.
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

@@ -423,3 +423,16 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - DD05: 6fc 99%, 4fc 93%; list A 77/93; eval 382, 1.0 x7, arm 35 (one arm 543.1 cm from the human); 125 marked shots, target 'something else' 125 (crew bots, stock TraitorFoe), all blocked from the eye, s3human 0; holder = the human on 31 shots.
 - Distance bot->nearest human: DM03 52-70 m early, 110-129 m later; DD05 42-48 m early, 110-140 m later: the approach order does not turn into a closing distance yet.
 - Next: DefendProbe (which list A tactic wins, list C condition) + per-gate ZCloseIn trace (w21syogv3), bs45.
+
+## bs45 (out_dp_1104p: bs44 kit + DefendProbe=1): PASS, 0 asserts, 0 faults (4 seats)
+- DM03 marked bot 5: Defend 796/798 samples; list picks A 713, B 85, C 0 (list C byte 0, getter false always).
+- Defend winner [goal+0x14]: ZBoardEscapeVehicle x531, ZDefendCover x117 (list B), ZAttackNoCover x58, ZLoot x15, ZAttackFromCover x15, ZCloseIn x1, none 59.
+- ZCloseIn eval 567: 1.0 x1; zeros P1 (timer) 517, P2 (no holder) 22, P9 (path) 27, P3..P8 0; reached P8-passed 28.
+- DD05: no bot marked this round (the traitor mark is chance), no DefendProbe data.
+- Conclusion: CombatFlag mode 3 opens list A, but list A puts ZBoardEscapeVehicle (slot 3) before ZCloseIn, so the traitor walks to the escape vehicle: this is why the distance grows.
+
+## arc45 (Arcade offline, out_dp_1104p, ModeBProbe v2 + CloseInProbe + DefendProbe): PASS, 0 faults
+- DM03 (sampled bots, not only the traitor): list A 149, B 1127; winners AttackFromCover x354, Loot x315, Board x52 (late), CloseIn x13, CloseAttack x3.
+- DD05: list A 325, B 2031; winners AttackFromCover x1134, Board x564 (from ~10:53, late), Loot x66; ZCloseIn eval 0.
+- Probe glitch: DM03 running total shows 'eval calls 1' with gate zeros 626 (unattributed -640): the eval counter and the gate counters are reset at different points (probe accounting only).
+- Conclusion: Arcade bots fight from cover on list B; boarding only near the end. Online, forcing list A early makes Board win from the start.
