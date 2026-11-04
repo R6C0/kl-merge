@@ -1,3 +1,7 @@
+2026-11-04 ~05:22 - [ce] pq16 (installed pq_1104b_test, live ini, lobby scripts from pq5/pq10/pq12): DM06 DM01 DM02 DM09 DM07 DD10 PASS 6/6, 12/12 seats 'inshop' ->
+weapon list (host F3 at mode 0 applied after 624-671 ms, client F2 at mode 1 after 311-313 ms), both seats round 2, 0 faults. With pq14/pq14c/pq15 InShopSteps
+is benched on all 16 maps the scoreboard path covers (9 stock FA + 7 DM pool). no crash involved
+
 2026-11-04 ~03:46 - [ce] pq15 (installed pq_1104b_test, live ini, kit from pq8/pq9's per-map lobby scripts + pq14's in-shop body): DD01-04 + DD06-09 PASS 8/8,
 16/16 seats 'inshop' -> weapon list, host F3 at mode 0 applied after 624-625 ms, client F2 at mode 1 after 311-343 ms, both seats round 2, 0 faults.
 Run in three parts around c9's bs33/bs34 (PAUSE file). With pq14c (DD05) InShopSteps is benched on all 9 stock FA maps + DM03. no crash involved
