@@ -127,6 +127,40 @@ static int klbr_turned_actor(DWORD actor)      /* klbotfill.c: a bot whose team 
     for (i = 0; i < KLBR_MAX; i++) if (klbr_tt[i].on && klbr_tt[i].actor == actor) return 1;
     return 0;
 }
+/* ---- OnlineBrainTraitorNoBoard (11-04; re/traitor_board_1104.md, verifier endorsed lever C narrowed; UNTESTED, default off). DLL-owned code and data only: NO detour.
+   A bot marked by OnlineBrainTraitorArcade (e->traitor, team stays Ally) is treated like a TraitorTurn bot by the puppeteer (klbf_brain_turned) so the hook never steers, escorts, boards or banks-by-fallback it.
+   Mode 1: puppeteer + BoardAll skip. Mode 2: also the pendBoard hook boarding after slot 45. The stage byte [rec+0x78], the real Board tactic and the grab path are NOT touched. Host only (only the host's Brain marks). ---- */
+static int klbr_nbmode;                 /* 0 off, 1, 2 */
+static long klbr_nb_skip[3];            /* round: skips per path 0 puppeteer / 1 BoardAll / 2 pendBoard (every skipping call counts) */
+static unsigned char klbr_nb_seen[KLBR_MAX];      /* round: bit per path already logged for this klbr_t slot (the first skip per bot and path is logged) */
+static int klbr_nb_lines; static DWORD klbr_nb_at[KLBR_MAX]; static long klbr_nb_ev0[KLBR_MAX]; static int klbr_nb_drop;      /* round: 'brain: traitor board:' lines (budget 120), last line tick per slot, the ZCloseIn eval counter at the last line, orders dropped */
+static const char *const klbr_nb_pname[3] = { "puppeteer", "boardall", "pendboard" };
+static int klbr_nb_slot(DWORD actor)    /* klbr_t slot of a live marked bot (Arcade marking, no team swap), -1 otherwise */
+{
+    int i;
+    if (klbr_nbmode < 1 || !klbr_taon || klbr_ta_dis || klbr_trturn || !actor) return -1;      /* ta_dis: Arcade disabled after faults, the marks no longer mean a wrapped bot */
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && klbr_t[i].traitor && klbr_t[i].actor == actor) return i;
+    return -1;
+}
+static int klbr_noboard_actor(DWORD actor) { return kbr_nb_skip(klbr_nbmode, 0, klbr_taon, klbr_trturn, klbr_nb_slot(actor) >= 0); }
+static void klbr_nb_note(DWORD actor, int path, int phase)      /* a skip happened on 'path' (0..2); phase = the ledger phase (-1 untracked) */
+{
+    int ix = klbr_nb_slot(actor);
+    if (ix < 0 || path < 0 || path > 2 || !kbr_nb_skip(klbr_nbmode, path, klbr_taon, klbr_trturn, 1)) return;
+    klbr_nb_skip[path]++;
+    if (!(klbr_nb_seen[ix] & (1u << path))) {
+        klbr_nb_seen[ix] |= (unsigned char)(1u << path);
+        klog("brain: traitor noboard: rec %d (actor %08lx) skipped by the %s path (OnlineBrainTraitorNoBoard %d), ledger phase %d", klbr_t[ix].rec, (unsigned long)actor, klbr_nb_pname[path], klbr_nbmode, phase);
+    }
+}
+static void klbr_nb_summary(void)      /* round end (called by klbr_summary before the memsets); clears the round */
+{
+    int i, bots = 0;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_nb_seen[i]) bots++;
+    if (klbr_nbmode > 0 && (bots || klbr_nb_skip[0] || klbr_nb_skip[1] || klbr_nb_skip[2] || klbr_nb_lines))
+        klog("brain: traitor noboard: round end: skips puppeteer %ld, boardall %ld, pendboard %ld; bots affected %d; ledger orders dropped %d; board lines %d", klbr_nb_skip[0], klbr_nb_skip[1], klbr_nb_skip[2], bots, klbr_nb_drop, klbr_nb_lines);
+    klbr_nb_skip[0] = klbr_nb_skip[1] = klbr_nb_skip[2] = 0; memset(klbr_nb_seen, 0, sizeof klbr_nb_seen); memset(klbr_nb_at, 0, sizeof klbr_nb_at); memset(klbr_nb_ev0, 0, sizeof klbr_nb_ev0); klbr_nb_lines = klbr_nb_drop = 0;
+}
 
 /* ---- the feed from klbotfill.c's host scan (no second heavy scan) ------------------------------------------------------------------------------------------------------------------- */
 static struct { DWORD actor, snd; } klbr_seen[KLBR_MAX]; static int klbr_nseen; static DWORD klbr_fed_at;
@@ -141,6 +175,7 @@ static void klbr_see(DWORD actor, DWORD snd, DWORD now)
 static struct klbr_s *klbr_find(DWORD snd);
 static void klbr_sync(DWORD now);
 static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally);   /* klbotfill.c: the host ledger of one bot */
+static int klbf_ob_phase(DWORD actor);                              /* klbotfill.c: the ledger phase of one bot (0 idle, 1 walking to a stack, 2 exit walk, 3 aboard, 4 looting), -1 when untracked (read only) */
 static int klbf_ob_called(DWORD actor);                             /* klbotfill.c: BoardStage, 1 when the bot is ordered to / inside the exit box or aboard (read only) */
 static int klbf_brain_take(DWORD ctrl, int amt);        /* the game's 0x4e3f40 through the puppeteer's guard; -> the stack's amount left, -1 when refused */
 static void klbf_brain_credit(DWORD actor, int amt, int done);    /* tally += amt; done: grabs++ and the loot voice */
@@ -4154,6 +4189,32 @@ static void klbr_boardlog(DWORD now)
         klog("brain: boardlog: bot %08lx rec %d van %d alive %d bnzAt age %ld ms node %.1f m trigger %.1f m stage %u s45 age %ld ms", (unsigned long)e->actor, e->rec, klbr_van, alive, e->bnzAt ? (long)(now - (e->bnzAt & ~1u)) : -1L, kle_dist(p, klbr_bn_pos) / 100, tv ? kle_dist(p, tp) / 100 : -1.0f, (unsigned)KLBR_PB(KLBR_REC(e->rec) + 0x78), e->s45At ? (long)(now - (e->s45At & ~1u)) : -1L);
     }
 }
+/* OnlineBrainTraitorNoBoard / RunProbe: a read-only line per marked bot per second, 120 lines per round (re/traitor_board_1104.md Q4 + verifier additions). Game thread, outside any AI frame (called from klbr_pump). Every game read is guarded.
+   Fields: stage [rec+0x78] and rec10 [rec+0x10] (BYTE width GUESS), the ledger phase / aboard (klbotfill.c), the van state, the Defend child ([goal+0x14] RTTI when the current goal [S+0x74] is the Defend goal [S+0x648], else '-'; GUESS that
+   [goal+0x14] is not stale, the verifier doubted it), the ZCloseIn eval counter delta since the last line (needs the CloseInProbe sites, else n/a; GUESS that the klbr_ci_b index is the klbr_t slot) and the distance to the nearest human. */
+static void klbr_nb_lines_pump(DWORD now)
+{
+    int i;
+    if ((klbr_nbmode < 1 && !klbr_rpon) || klbr_nb_lines >= 120) return;
+    for (i = 0; i < KLBR_MAX && klbr_nb_lines < 120; i++) {
+        struct klbr_s *e = &klbr_t[i]; float p[3]; int alive = 0, ph, ab = 0, havd = 0; long tl = 0, dev = -1; double dh = -1.0; DWORD S = e->snd, cur = 0, win = 0; BYTE st, r10; char wn[32], dtxt[16], etxt[16];
+        if (e->state != 1 || e->rec <= 0 || !e->traitor || (klbr_nb_at[i] && now - klbr_nb_at[i] < 1000u)) continue;
+        if (!klbr_bot_pos(e->actor, p, &alive) || !alive) continue;
+        klbr_nb_at[i] = now | 1u; klbr_nb_lines++;
+        st = KLBR_PB(KLBR_REC(e->rec) + 0x78); r10 = KLBR_PB(KLBR_REC(e->rec) + 0x10);
+        ph = klbf_ob_ledger(e->actor, &ab, &tl) ? klbf_ob_phase(e->actor) : -1;
+        wn[0] = 0;
+        if (S > 0xffff) {
+            __try { cur = klh_rd32(S + 0x74); if (cur > 0xffff && cur == klh_rd32(S + 0x648)) { win = klh_rd32(cur + 0x14); if (win > 0xffff) klbr_f8_rtti(win, wn, sizeof wn); else _snprintf(wn, sizeof wn, "none"); } } __except (EXCEPTION_EXECUTE_HANDLER) { wn[0] = 0; }
+        }
+        if (!wn[0]) _snprintf(wn, sizeof wn, cur > 0xffff ? "-" : "?"); wn[sizeof wn - 1] = 0;
+        if (klbr_cion && klbr_ci_state > 0) { dev = klbr_ci_b[i].ev - klbr_nb_ev0[i]; klbr_nb_ev0[i] = klbr_ci_b[i].ev; }
+        havd = klbr_human_near(p, &dh, 0);
+        if (dev >= 0) _snprintf(etxt, sizeof etxt, "%ld", dev); else _snprintf(etxt, sizeof etxt, "n/a"); etxt[sizeof etxt - 1] = 0;
+        if (havd) _snprintf(dtxt, sizeof dtxt, "%.1f m", dh / 100); else _snprintf(dtxt, sizeof dtxt, "none"); dtxt[sizeof dtxt - 1] = 0;
+        klog("brain: traitor board: rec %d stage [rec+0x78] %u rec10 [rec+0x10] %u ledger phase %d aboard %d van %d defend-child %s closein-eval-delta %s dist-to-nearest-human %s", e->rec, (unsigned)st, (unsigned)r10, ph, ab, klbr_van, wn, etxt, dtxt);
+    }
+}
 static void klbr_pump(DWORD now)       /* game thread, from klbotfill.c's OnlineTactics tick (and nothing else): game calls (0x4e3f40) are made HERE, never inside an AI wrapper */
 {
     static DWORD last; int i; float dt; DWORD sm, st = 0;
@@ -4162,7 +4223,7 @@ static void klbr_pump(DWORD now)       /* game thread, from klbotfill.c's Online
         struct klbr_s *e = &klbr_t[i];
         if (!e->pendBoard) continue;
         e->pendBoard = 0;
-        if (e->state == 1 && klbr_boardreal && !klbr_turned_actor(e->actor)) {      /* TraitorTurn: a turned bot does not board */
+        if (e->state == 1 && klbr_boardreal && !klbr_turned_actor(e->actor) && !(kbr_nb_skip(klbr_nbmode, 2, klbr_taon, klbr_trturn, klbr_nb_slot(e->actor) >= 0) && (klbr_nb_note(e->actor, 2, klbf_ob_phase(e->actor)), 1))) {      /* TraitorTurn: a turned bot does not board; OnlineBrainTraitorNoBoard 2: neither does a marked Arcade traitor (the real Board tactic may still walk it to the van) */
             if (klbr_bstage) { int ab = 0; long ty = 0; if (klbf_ob_ledger(e->actor, &ab, &ty) && !ab) klbr_bs_real++; }      /* BoardStage: only a bot the hook path tracks and has not already boarded counts as the real tactic's (review 11-03 defect 3: an untracked bot is not counted) */
             klbf_brain_boarded(e->actor); klbf_brain_board_call(e->actor);
         }
@@ -4173,6 +4234,7 @@ static void klbr_pump(DWORD now)       /* game thread, from klbotfill.c's Online
     klbr_cl_list(now);      /* OnlineBrainTraitorCandLog: known-list size (read only) */
     klbr_tr_pump();      /* OnlineBrainTraitorTurn: before the bridge / puppet early return, so it also runs without them */
     klbr_boardlog(now);
+    klbr_nb_lines_pump(now);      /* OnlineBrainTraitorNoBoard / RunProbe: read only */
     if (!klbr_bridge || !klbr_puppet) return;
     dt = last ? (float)(now - last) / 1000.0f : 0.1f; last = now; if (dt > 1.0f) dt = 1.0f;
     if (!(sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION))) || !klh_rd(sm + 0x70, &st, 4)) return;
@@ -4224,6 +4286,7 @@ static void klbr_pump(DWORD now)       /* game thread, from klbotfill.c's Online
 
 static void klbr_summary(void)
 {
+    klbr_nb_summary();      /* OnlineBrainTraitorNoBoard: the round's skips (silent unless on) */
     klbr_tr_restore_all("round end");      /* before the caller's memset of klbr_t */
     if (klbr_sm_round) {
         klbr_hitlog_summary();      /* OnlineBrainTraitorHitLog (a no-op line unless on); clears the round's counters */
@@ -4540,6 +4603,9 @@ static void klbr_init(void)
     klbr_dpon = klbr_key("OnlineBrainTraitorDefendProbe"); if (klbr_dpon) { klbr_cion = 1; klog("brain: OnlineBrainTraitorDefendProbe=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only; implies the CloseInProbe counting sites; adds counting detours on the ZCloseIn gate branches 0x672507 0x6725a1 0x6725c9 0x6725f4 0x67261e 0x67264e 0x672678 0x672691, 0x6726b3 and the ZGraceShot eval 0x41a5b0, plus data reads of the Defend winner [goal+0x14] and the list C inputs); lines: brain: defendprobe data / round"); }
     klbr_rpon = klbr_key("OnlineBrainTraitorRunProbe"); if (klbr_rpon) { klbr_dpon = 1; klbr_cion = 1; klog("brain: OnlineBrainTraitorRunProbe=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only; forces DefendProbe and CloseInProbe on; adds counting detours on the ZCloseIn run body 0x76e8c0 and its two branch targets 0x76e8ed (direct) / 0x76e935 (cover), all unhashed; reuses the CloseInProbe sites 0x4a7e60 (run task), 0x800630 (arm) and 0x672770 (1.0 tail, for the wins); data reads of the run task [S+0x56c] and the movement component [S+0x4a4]); lines: brain: runprobe win / data / round"); }
     klbr_cbmode = klbr_keyi("OnlineBrainTraitorCombatFlag", 0); if (klbr_cbmode < 1 || klbr_cbmode > 3) klbr_cbmode = 0;
+    klbr_nbmode = klbr_keyi("OnlineBrainTraitorNoBoard", 0); if (klbr_nbmode < 1 || klbr_nbmode > 2) klbr_nbmode = 0;
+    if (klbr_nbmode && !klbr_taon) { klog("brain: OnlineBrainTraitorNoBoard %d ignored: needs OnlineBrainTraitorArcade=1 (Arcade=1 turns OnlineBrainTraitorTurn off later in init, so only the Arcade key is tested here)", klbr_nbmode); klbr_nbmode = 0; }
+    if (klbr_nbmode) klog("brain: OnlineBrainTraitorNoBoard=%d UNTESTED (recommended off): host only; a bot marked by OnlineBrainTraitorArcade is skipped by the puppeteer like a TraitorTurn bot (no steering, escort, exit walk, fallback boarding, van / box orders, BoardAll count)%s; its ledger order is dropped once; the stage byte, the real Board tactic and the grab path are untouched; no detour; lines: brain: traitor noboard / traitor board", klbr_nbmode, klbr_nbmode == 2 ? " and the slot-45 pendBoard hook boarding" : "");
     klbr_hsmode = klbr_keyi("OnlineBrainTraitorHolderSet", 0); if (klbr_hsmode != 1 && klbr_hsmode != 2) klbr_hsmode = 0;
     if (klbr_hsmode) klog("brain: OnlineBrainTraitorHolderSet=%d UNTESTED (recommended off): CHANGES the game (TEST build only, host only, online marked bots only): while OnlineBrainTraitorLosGate and OnlineBrainTraitorSense report every human BLOCKED for the bot, points its holder [S+0xa8..] at the nearest live human (0x6ece90 handle, 0x8ccde0 round-trip check, SetHolder 0x8bd420, flags 0x%lx: the fire test 0x616480 fails with it, ZCloseIn passes); re-applied every 100 ms (the next 0x767510 scan wipes it); stops writing when a human is clear; HolderFix yields to it while blocked; 3 faults = off for the round", klbr_hsmode, kbr_hs_flags(klbr_hsmode));
     klbr_f6act = klbr_f6on || klbr_f7on || klbr_raon || klbr_f8on || klbr_mbon || klbr_cion || klbr_dpon;

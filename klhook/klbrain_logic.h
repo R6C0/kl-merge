@@ -917,4 +917,13 @@ static int kbr_rp_next(int ph, unsigned long elapsed)
 /* a win 'closed' the distance when both distances are valid (>= 0; -1 = unknown) and d15 < d0 */
 static int kbr_rp_closed(double d0, double d15) { return d0 >= 0.0 && d15 >= 0.0 && d15 < d0; }
 
+/* OnlineBrainTraitorNoBoard (11-04; pure). Does the DLL skip a bot on 'path'? path 0 = puppeteer (steering, escort, exit walk, fallback boarding, van / box orders), 1 = BoardAll count, 2 = the pendBoard hook boarding after slot 45.
+   mode 0 off; 1 = paths 0 and 1; 2 = all three. Needs the Arcade marking (arcade) and not the team swap (trturn: that bot is a TraitorTurn bot already); 'marked' = alive bot with the mark this round (the caller). */
+static int kbr_nb_skip(int mode, int path, int arcade, int trturn, int marked)
+{
+    if (mode < 1 || mode > 2 || !arcade || trturn || !marked) return 0;
+    if (path == 0 || path == 1) return 1;
+    return path == 2 && mode == 2;
+}
+
 #endif /* KLBRAIN_LOGIC_H */

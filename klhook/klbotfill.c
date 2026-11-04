@@ -451,6 +451,12 @@ static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally)
     for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) { *aboard = klbf_ob[i].phase == 3; *tally = klbf_ob[i].tally; return 1; }
     return 0;
 }
+static int klbf_ob_phase(DWORD actor)      /* the ledger phase of one bot (read only, klbrain.c OnlineBrainTraitorNoBoard lines), -1 when untracked */
+{
+    int i; if (!actor) return -1;
+    for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor == actor) return klbf_ob[i].phase;
+    return -1;
+}
 /* [Brain] BoardStage (klbrain.c): read only. -> 1 when the puppeteer tracks the actor and it is aboard (phase 3), or walking to the van (phase 2) with the van called / gathering, or ordered to the escape box
    (told & 32: the box-walk line). GUESS: that is what the Arcade Board tactic's "reached the exit / van called" stage means; klbr_sync adds the tally and the van-state test. */
 static int klbf_ot_called;      /* tentative definition, the real one is with the trigger state below */
@@ -1184,6 +1190,7 @@ static void klbf_ot_summary(void)
    Online the Sv rules (vtable 0xbd2eb4) slot 46 (0x8234d0, called from ZOnlineMoneyCtrl 0x6cdbf9) needs a ZFFPlayer with a seat ([player+0x2748], 12-seat table): a bot has none, so the game cannot bank for it.
    OnlineBank is therefore a HOST LEDGER: when a bot's phase turns 3 (aboard) its tally is booked once (log + klbf_bank_total, listed in the round summary). OnlineBoardAll: once the van is leaving-or-last-call
    (state 4 or 5, GUESS: 4 = last call) a bot that still carries money, is not aboard and stands within OnlineBoardAllM of the escape box centre (else the exit trigger) is counted aboard (and removed by OnlineBoard when that is on). */
+static int klbf_brain_team_turned(DWORD actor);      /* the team swap only (defined with klbf_brain_turned) */
 static int klbf_brain_turned(DWORD actor);      /* [Brain] OnlineBrainTraitorTurn: this bot is team Enemy now (defined with the other klbf_brain_* helpers) */
 static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], int nb, int vstate)
 {
@@ -1194,7 +1201,7 @@ static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], i
         for (q = 0; have && q < nb; q++) {
             float d;
             for (i = 0; i < KLBF_OT_BOTS && klbf_ob[i].actor != act[q]; i++) ;
-            if (i == KLBF_OT_BOTS || klbf_ob[i].phase == 3 || klbf_ob[i].tally <= 0 || klbf_brain_turned(act[q])) continue;      /* a turned bot is never counted aboard (his tally stays on him) */
+            if (i == KLBF_OT_BOTS || klbf_ob[i].phase == 3 || klbf_ob[i].tally <= 0 || (klbf_brain_turned(act[q]) && (klbr_nb_note(act[q], 1, klbf_ob[i].phase), 1))) continue;      /* a turned bot is never counted aboard (his tally stays on him) */
             d = (float)sqrt((pos[q][0] - g[0]) * (pos[q][0] - g[0]) + (pos[q][2] - g[2]) * (pos[q][2] - g[2]));
             { int dec = kbp_decide(d, klbf_ba_m, klbf_ba_near);
               if (dec == 0) continue;
@@ -1205,7 +1212,7 @@ static void klbf_bank_pass(DWORD now, const DWORD *act, const float (*pos)[3], i
     }
     if (klbv_mode) for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor && klbf_ob[i].phase == 3) klbv_event(i, 2);      /* OnlineVoice: boarded (once per actor and round, klbotvoice.c) */
     if (klbf_bank_mode) for (i = 0; i < KLBF_OT_BOTS; i++) {
-        if (!klbf_ob[i].actor || klbf_ob[i].banked || klbf_brain_turned(klbf_ob[i].actor)) continue;
+        if (!klbf_ob[i].actor || klbf_ob[i].banked || klbf_brain_team_turned(klbf_ob[i].actor)) continue;
         if (klbf_ob[i].phase != 3) continue;
         klbf_ob[i].banked = 1;
         if (klbf_ob[i].tally <= 0) continue;
@@ -1886,7 +1893,21 @@ static int klbf_brain_drop_ok(DWORD o)      /* DropCands (klbrain.c): o is a tra
     for (i = 0; i < KLBF_DR_MAX; i++) if (klbf_dr[i].o == o) return klbf_dr[i].seen && klbf_dr[i].amt > 0 && kdf_drop_ok(klbf_dr[i].hid, klbf_dr[i].drn);
     return 0;
 }
-static int klbf_brain_turned(DWORD actor) { return klbr_turned_actor(actor); }      /* klbrain.c OnlineBrainTraitorTurn: team Enemy now */
+static int klbf_brain_turned(DWORD actor) { return klbr_turned_actor(actor) || klbr_noboard_actor(actor); }      /* klbrain.c OnlineBrainTraitorTurn: team Enemy now; OnlineBrainTraitorNoBoard: ALSO a live bot marked by OnlineBrainTraitorArcade (team stays Ally): no steering, escort, exit walk, boarding */
+static int klbf_brain_team_turned(DWORD actor) { return klbr_turned_actor(actor); }      /* the team swap only: the uses that mean 'reads team 1 / drops out of the team-2 scan / keeps his tally' (a marked Arcade traitor is still an Ally: his slot is freed when he dies, he banks if the real Board tactic boarded him) */
+static void klbf_nb_drop(int s, DWORD a, DWORD snd, DWORD now)      /* OnlineBrainTraitorNoBoard: the marked bot is out of the puppeteer. Its ledger order is dropped once (phase 1 / 4 -> 0 frees the stack claim; phase 2 exit walk -> 0, the same reset as the walk's own end), then only counted */
+{
+    int ph = klbf_ob[s].phase;
+    klbr_nb_note(a, 0, ph);
+    if (ph == 1 || ph == 4) { klbf_ob[s].phase = 0; klbf_ob[s].ordered = 0; klbf_ob[s].bestAt = 0; klbf_ob[s].since = now; klbf_ob[s].lootAt = 0; klbr_nb_drop++; }      /* GUESS: phase 0 is the claim test everywhere (phase 1 / 4 + target), so the stack is unclaimed; a part-paid tally stays on the bot */
+    else if (ph == 2) {
+        if ((klbf_ob[s].told & 2048) && snd > 0xffff) { DWORD blk = klh_rd32(snd + 0x64c); BYTE zero = 0; if (blk && klh_rd32(blk + 0x14) == snd) klh_data((void *)(DWORD_PTR)(blk + 0x10), &zero, 1, "defend block style given (OnlineExitSprint undone, NoBoard)"); }
+        klbf_ob[s].phase = 0; klbf_ob[s].told &= ~(8 | 512 | 2048 | 4096 | 8192 | 32768 | 65536 | 262144 | 524288 | 1048576); klbf_ob[s].reachAt = 0; klbf_ob[s].gwAt = 0; klbf_ob[s].esAt = 0; klbf_ob[s].esN = 0; klbf_ob[s].tpAt = 0; klbf_ob[s].leg = 0; klbf_ob[s].legAt = 0; klbf_ob[s].bsAt = 0;
+        if (klbf_ob[s].wv != KWV_RELEASED) { klbf_ob[s].wv = 0; klbf_ob[s].wvAt = 0; }
+        klbr_nb_drop++;
+    }
+}
+
 static int klbf_brain_targeted(DWORD o) { int q; if (!o) return 0; for (q = 0; q < KLBF_OT_BOTS; q++) if (klbf_ob[q].actor && klbf_ob[q].phase == 1 && klbf_ob[q].target == o) return 1; return 0; }      /* DropCands: a puppeteer bot walks to o */
 static float klbf_brain_near(void) { return klbf_ot_near; }      /* OnlineTacticsNear, cm: the ball the puppeteer grabs in */
 static int klbf_brain_take(DWORD ctrl, int amt)      /* -> the stack's amount left after the game's own depletion 0x4e3f40; -1 refused (OnlineTacticsTake is not 2, or the stack is gone) */
@@ -1959,7 +1980,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
                 DWORD pr, team = 99, hp, snd; float hv[2] = { 0, 0 };
                 if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4)) continue;
                 if (team == 1) {      /* a live cop: OnlineTacticsGuard keeps bots off stacks it stands on */
-                    if (klbf_brain_turned(o)) continue;      /* an AI heister turned traitor online (OnlineBrainTraitorTurn) reads team 1 but is no cop: not in the guard list, not in the census */
+                    if (klbf_brain_team_turned(o)) continue;      /* an AI heister turned traitor online (OnlineBrainTraitorTurn) reads team 1 but is no cop: not in the guard list, not in the census */
                     if (klbf_cen_on) { DWORD ch_; float cv_ = 0; if ((ch_ = klh_rd32(o + 0x5fc)) && klh_rd(ch_ + 4, &cv_, 4) && cv_ > 0) { klbf_cen_live++; kcs_add(&klbf_cen_cur, o); if (klbf_cen.st) kcs_tally_cop(&klbf_cen_tl, &klbf_cen_base, o); } }      /* OnlineTriggersCensus: the same live-cop test (team 1, health > 0) without the position gates */
                     if (ncop < 256 && (hp = klh_rd32(o + 0x5fc)) && klh_rd(hp + 4, hv, 4) && hv[0] > 0 && klh_rd(o + 0x460, pos, 12) && kle_ok3(pos)) {
                         if (klbf_gm && klbf_gm_tight && kgg_origin(pos)) { klbf_gm_orig++; continue; }      /* BP9 DD08: the first cops read (0,0,0) at the round start; DD08's stacks lie near the origin, so they 'guarded' them. GUESS: (0,0,0) = a cop not placed yet (pooled) */
@@ -2075,7 +2096,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     {   /* free the slot of a bot that is dead / gone (else its target stack stays "taken" and the 16 slots run out); boarded bots (phase 3) keep theirs for the summary */
         int q, r;
         for (q = 0; q < KLBF_OT_BOTS; q++) {
-            if (!klbf_ob[q].actor || klbf_ob[q].phase == 3 || klbf_brain_turned(klbf_ob[q].actor)) continue;      /* a turned bot (team Enemy) drops out of the team-2 scan: keep his slot and tally until he is back */
+            if (!klbf_ob[q].actor || klbf_ob[q].phase == 3 || klbf_brain_team_turned(klbf_ob[q].actor)) continue;      /* a turned bot (team Enemy) drops out of the team-2 scan: keep his slot and tally until he is back */
             for (r = 0; r < nb && bots[r].actor != klbf_ob[q].actor; r++) ;
             if (r == nb) { klls_precollect(); if (klbf_ob[q].phase == 4 && klbf_lf) klbf_lf_left++; if (klbf_ob[q].phase == 4) klog("botfill: lootparts: bot %d left stack %08lx after %d of %d parts (partial tally %d; the bot died or left)", q, (unsigned long)klbf_ob[q].target, klbf_ob[q].lootPaid, klbf_ob[q].lootLeft, klbf_ob[q].tally); klog("botfill: tactics: bot %d (actor %08lx) is dead or gone: slot freed (phase %d, tally %d)", q, klbf_ob[q].actor, klbf_ob[q].phase, klbf_ob[q].tally); memset(&klbf_ob[q], 0, sizeof klbf_ob[q]); }
         }
@@ -2090,7 +2111,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor != a; s++) ;
         if (s == KLBF_OT_BOTS) { for (s = 0; s < KLBF_OT_BOTS && klbf_ob[s].actor; s++) ; if (s == KLBF_OT_BOTS) continue; klbf_ob[s].actor = a; }
         if (klbf_ob[s].phase == 3) continue;
-        if (klbf_brain_turned(a)) continue;      /* [Brain] OnlineBrainTraitorTurn: no steering, escort or boarding for a turned bot */
+        if (klbf_brain_turned(a)) { if (!klbf_brain_team_turned(a)) klbf_nb_drop(s, a, bots[b].soldier, now); continue; }      /* [Brain] OnlineBrainTraitorTurn: no steering, escort or boarding for a turned bot; OnlineBrainTraitorNoBoard: the same for a marked Arcade traitor (its ledger order is dropped once) */
         if (klbr_puppet_off(bots[b].soldier)) continue;      /* [Brain] PuppetOff=1 (UNTESTED): the real Loot tactic of this bot wants something right now, so the puppeteer leaves its steering alone this tick */
         if (klbf_gu == 1 && klbf_ob[s].guHum && now - klbf_ob[s].guAt < 3500) {      /* OnlineGetUp: this bot runs to / stands by a downed human; its stack order must not undo the rush */
             if (klbf_ob[s].phase == 4 && klbf_lfp) { klbf_ob[s].lootAt += now - klbf_ob[s].lpLast; klbf_ob[s].lpLast = now; }      /* review: the rush gap is time away: no catch-up burst of parts afterwards */

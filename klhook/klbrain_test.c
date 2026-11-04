@@ -515,6 +515,13 @@ int main(void)
         CHECK(!kbr_los_delta(a, a, dl, &ln) && !kbr_los_delta(a, nan3, dl, &ln) && !kbr_los_delta(nan3, a, dl, &ln) && dl[0] == 9.0f, "los delta: zero length / NaN refused, out untouched");
         CHECK(kbr_los_class(0, 0) == 0 && kbr_los_class(0, 1) == 1 && kbr_los_class(0, 0xffffff00u) == 0 && kbr_los_class(0, 0x80u) == 1 && kbr_los_class(-1, 1) == 2, "los class: al only, error 2");
     }
+    /* OnlineBrainTraitorNoBoard */
+    {
+        CHECK(!kbr_nb_skip(0, 0, 1, 0, 1) && !kbr_nb_skip(3, 0, 1, 0, 1) && !kbr_nb_skip(-1, 0, 1, 0, 1), "noboard: mode 0 / out of range never skips");
+        CHECK(kbr_nb_skip(1, 0, 1, 0, 1) && kbr_nb_skip(1, 1, 1, 0, 1) && !kbr_nb_skip(1, 2, 1, 0, 1), "noboard: mode 1 skips puppeteer and boardall, not pendBoard");
+        CHECK(kbr_nb_skip(2, 0, 1, 0, 1) && kbr_nb_skip(2, 1, 1, 0, 1) && kbr_nb_skip(2, 2, 1, 0, 1) && !kbr_nb_skip(2, 3, 1, 0, 1), "noboard: mode 2 skips all three paths only");
+        CHECK(!kbr_nb_skip(2, 0, 0, 0, 1) && !kbr_nb_skip(2, 0, 1, 1, 1) && !kbr_nb_skip(2, 0, 1, 0, 0), "noboard: needs Arcade, no TraitorTurn, a marked bot");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }
