@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~15:25 - [c9] bs54 (bs52 kit + [Lobby] TimeAuto=6 = Arcade's 6 min clock, out_po2_1104w) PASS 4/4 seats 0 faults. The clock fix closes the marking gap: heist time 4 -> 6 min,
+ROUND LENGTH 316 s (DM03) / 397 s (DD05). DD05 marked a traitor at 15:13:43 (bs52 never, bs51 late): 91 attempted hits on humans (3451 dmg), far 5%; DM03 39 hits (2750 dmg), far 0%, 25 orders.
+Van dwell still short (DM03 state 3 for 9 s, DD05 15 s). 37d1ab8ae: OnlineVanCrewHold (Arcade's klmv_crewhold online, default off, out_ch_1104y md5 2c0b5e89).
+bs55 running (TimeAuto + OnlineGatherM=40, FarHold 45 s, HoldMaxS=45, mover probe); next: TimeAuto=6 on DD03 + crewhold bench if the probe shows walkers.
+
 2026-11-04 ~15:05 - [c9] bs53 (DefendPull=2, out_po2_1104w) on stock DD01 DD03 DD07 DD09: 8/8 seats PASS, 0 asserts, 0 faults. Online marked traitor hit humans on 3 of 4 maps:
 DD01 78 attempted hits (1504 dmg, far 29%, 4 orders), DD07 8 hits (7067 dmg, far 13%, 7 orders), DD09 37 hits (1012 dmg, far 14%, 5 orders); DD03 never marked a traitor (round length / loot pace).
 abf696475: OnlineHoldMaxS clamp 30 -> 60 + read-only OnlineVanMoverProbe (out_vm_1104x, md5 3cf8ab24). Running: bs54 (DM03+DD05, TimeAuto=6 Arcade-length clock),

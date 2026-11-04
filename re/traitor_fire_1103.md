@@ -472,3 +472,10 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - DD07 marked rec 2 at 14:47:33: 8 attempted hits, 7066.7 dmg; far 13%, holder human 57%; 7 orders, 26 'bot within 550 cm'.
 - DD09 marked rec 1 at 14:55:47: 37 attempted hits, 1011.9 dmg; far 14%, holder human 52%; 5 orders.
 - With bs51/bs52 (DM03): mode 2 hits humans on every map run where a traitor was marked (5 of 5); the open gap is marking (DD03, DD05), tested next by bs54 (TimeAuto=6).
+
+## bs54 (11-04 15:00-15:20, bs52 kit + [Lobby] TimeAuto=6, out_po2_1104w): 4/4 seats PASS, 0 faults
+- lobbyopt: heist time 4 -> 6 min on both maps; ROUND LENGTH DM03 315.8 s, DD05 397.1 s (set 360 s).
+- DM03 marked rec 3 at 15:04:47: HitLog 39 attempted hits on humans, 2750.2 dmg; drift far 0%, holder human 89%; pull round 25 orders, 75 'dead' skips (bot died), 759 near a human.
+- DD05 marked rec 6 at 15:13:43 (clock ~310 s left; bs52 on the 4 min clock never marked): 91 attempted hits, 3450.8 dmg; far 5%, holder human 91%; 5 orders, 1211 near a human.
+- Van: DM03 1->3 at +7 s, 3->5 at +16 s (9 s at the curb); DD05 3->5 after 15 s. Arcade ~53 s: bs55 (call distance + hold) and OnlineVanCrewHold (37d1ab8ae) address it.
+- So far with DefendPull=2: every map run that marked a traitor hit humans (DM03 x3, DD01, DD07, DD09, DD05); the 6 min clock made DD05 mark.
