@@ -275,3 +275,13 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - Episode starts: the shared run task is re-armed every ~1-2 s with a new dest, [task+0x20] -50.0, byte [task+0x24] 0, [task+0x28] 2; d to dest mostly 1-5 m (near leg, which needs [task+0x24]) and sometimes 25-160 m. ZAttackTarget's own call (byte 1) seen with dest 55-72 m. DM03 episodes 18 (longest 5.7 s), DD05 19 (longest 30.4 s).
 - [body+0x550] on ZFFActor holds a float-looking value (0x3eXXXXXX), not the 0x6c81a0 shot counter; [s+0x550] rose 124 -> 261 / 41 -> 380 (meaning unknown).
 - Holder still flips 011 / 010. Human 37-72 m away.
+
+## Workflow wgby0tb0u (gates after SKIP1, tracer + verifier, read only)
+- Bot bodies are ZFFActor (vt 0xbb3bac); the ZFFPlayer vtable ends at +0x6a8, so the fire task could not run on one. 0x6e3400 keeps a ZFFActor attacker's full hit: TraitorByte not needed. CONFIRMED.
+- 0x8b84b0 tuning +0x38c (600) is a MINIMUM distance; it only picks plan vs single shot, 0x6c81a0 fires either way. NOT a blocker. [0x15351e4] never written (0). 0x4c36c0 = out-of-ammo reaction, not the bullet.
+- 0x8cb920 returns the ctor-built ZFireWeaponTask [s+0x570] (sets +0x14=1). The fire task aims at holder [s+0xac], not [body+0x544]: aim 0 alone does not prove no shot.
+- Fire task 0x7c02b0 gates: 0x5cced0 (AI stop), 0x7836b0(body,-1) active weapon, holder flags bit 1 + 0x10 (010 fails), 0x739030 empty, 0x561470 burst done; holder ZFFActor with +0x774 takes another path.
+- Ctrl tick 0x8c1830: item, ammo (0 -> reload), range hold at 0x8c1985 when 2R < d (R = template [item+0xc4]+0xe0, UNREAD; 55-72 m needs R >= 27.5-36 m).
+- Trigger 0x6c81a0 -> ZFFActor::FireWeapon 0x432440 ([body+0x50c] vt+0x88 stunned, vt+0x654 raised or [body+0x824]) -> item 0x8a3510 -> 0x7d3360. Bullet -> slot 89 hop UNREAD.
+- 0x7e1700 tests the ATTACKER first (ZFFPlayer mask, 0x7de570([+0x274c]) = not locally owned), then the victim at 0x7e17f9: a client-seat human may route differently. UNVERIFIED.
+- Ranked: (1) run-task re-arm every 1-2 s cuts the fire task, (2) burst-entry holder flags / d > 300, (3) 2R < d range hold, (4) active weapon / ammo state, (5) 0x7e1700 routing. Next: FireProbe3 (workflow wbp9fee9q) = counters on 0x7c02b0..0x7e1700 + 0x5faeb0 re-arm callers + ctrl/item/template fields.
