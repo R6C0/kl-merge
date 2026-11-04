@@ -317,3 +317,18 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - Owner register [esp+0x54] == fresh 0x8ccde0([item+0x5c]) on all logged samples (FireProbe4's owner was right after all). [owner] = 50700c14 in both maps: a heap vtable copy; its slot +0x30 = 0x557ba0 (ZFFActor getter). [[owner+4]+0x3c] = 4b418182, bit 12 = 0.
 - FireProbe4 victim line with the local id: station [[victim+0x274c]+0x14] 00c00001 == [0x168fd00] 00c00001: the holder is the HOST-LOCAL human, route = apply. The slot-422 wrapper saw 0 hits (it only covers remote-seat victims; none were hit since no shot passed the gate).
 - Open: why bit 12 (set by 0x5ed841 in the ZRenderEntryGeom ctor and by 0x441041/0x441060; cleared 0x6a4fa0/0x455562) is 0 for every online host shooter, whether Arcade has it set, and which object gave these bodies a heap vtable. Workflow wu60j1ez0.
+
+## bs34 (out_gf_1104d, GateForce on top of bs33 keys, DM03 + DD05): PASS 4 seats, 0 asserts, 0 faults
+- gateforce: slot 12 of the private ZFFActor table 50701c14 wrapped; real answer 00027b7c -> 0000077c. DM03: 0x4cb819 seen 202, forced 114, other bot 88. DD05: 2153, forced 408, other bot 1745.
+- FireProbe5: MARKED pass 114 fail 0 (DM03), pass 407 fail 0 (DD05); other shooters pass 0 (fail 88 / 5237). The forced path (0x4cb838 -> 0x7638a0 -> 0x7cb080, 0x4cb974 transforms) did not fault.
+- hp: CoverFire health checks 6 + 9 + FireProbe4 victim lines, all 550 -> 550. Slot-422 (remote victims) hits 0. FireProbe4 victim routes DD05: apply 4, drop (station remote) 2.
+- The aim target [body+0x544] is still 0 (FireProbe line 03:32:18: aim 00000000, holder flags 011, dist 52.7 m), so the shot direction may not point at the human at all.
+- Cops (stock ZFFActor table 0xbb3bac) fail the same gate online (bit 12 0, class 00027b7c): online cops' shots are sound only as well (cop->bot hits arrive by another path).
+
+## w9x3uc1vs (research + adversarial verify, static) 11-04
+- Item vtable starts 0xbc042c (0xbc076c is the +0x340 slot). vt+0x250 = 0x7638a0 thunk -> [vt+0x254] 0x7cb080 (shared ZItem muzzle transform). Class force == bit-12 force in post-gate state; class force avoids touching render flags.
+- Gate fail jumps straight to 0x4cc9d2 (sound + owner vt+0x120 message); muzzle flash 0x4cc891 is skipped too. [esp+0x17] is rewritten at 0x4cc377/0x4cc384 (0x150cb38-class test on 0x8ca940's object): ray 0x713e80 vs projectile 0x4cc655.
+- Forced path extra calls (bl=1, 0x4cb974): 0x51f910, 0x60ad10, 0x6be1c0, 0x42a4d0 (only when [item+0x140..0x148] == 0). Risks: 0x4a30e0 (fault at 0x4a3118 if word [N+0x5a]==0 with bit 30; null -> 0x4cc3a5); 0x7cb080 branch B -> 0x857110 identity = origin (0,0,0).
+- Arcade passes because its bot nodes have a render entry (bit 12 set by 0x5ed700/0x441041); why online bots lack one is not found.
+- Client seat: 0x7e1700 drops a bot attacker's hit at 0x7e1800. Lever: wrap kns_vt[422] (chain after FireProbe5's wrapper), host role 2, bot attacker + remote victim -> call 0x891490 (ecx = [victim+0x274c], six args) which sends RMCReceiveHit; client stub 0x59f140 applies via 0x458880.
+  Gaps: kns swap is lazy (new clients keep the stock table until the next scan), position/direction floats lost, bot handle may not resolve on the client, double-apply, skipped rules vt+0x1e4 notify (kill credit). Use 0x9425a0 for the remote test, not [0x168fd00].

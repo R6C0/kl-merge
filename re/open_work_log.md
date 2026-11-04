@@ -10,6 +10,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~03:45 - [c9] bs34 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; GateForce aa60f94d3, out_gf_1104d). The gate is FIXED: marked traitor shots now pass 0x4cc389
+(DM03 114/114, DD05 407/407; other bots still 0/88 and 0/5237), the forced muzzle path did not crash. BUT the human's hp stays 550 (16/16 checks flat): the shot runs and misses.
+The bot's aim target [body+0x544] is still 0, holder ~53 m away; slot 422 saw 0 hits. w9x3uc1vs (verified): risks in 0x4a30e0 / 0x7cb080 (origin 0,0,0 fallback);
+client-seat lever = kns_vt[422] -> 0x891490 RMCReceiveHit. wz51cazg9 builds FireProbe6 (muzzle origin, shot direction, ray 0x713e80 hit; online vs Arcade).
+
 2026-11-04 ~02:50 - [c9] bs33 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe5, b33683d29). LOSS FOUND: the per-shot gate at 0x4cc389 FAILS for every shot:
 marked traitor DM03 120/120, DD05 459/459, all other shooters 102/102 and 4695/4695 (0 passes), so every host AI shot takes 0x4cc9d2 (sound + message, no ray/projectile).
 Owner (game register == 0x8ccde0 lookup) is a ZFFActor with a HEAP vtable 50700c14; [[owner+4]+0x3c] 4b418182 -> bit 12 = 0; ZLNKOBJ mask fails. The victim was the host-local

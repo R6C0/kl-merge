@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~03:45 - [c9] bs34 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; GateForce aa60f94d3, out_gf_1104d). The gate is FIXED: marked traitor shots now pass 0x4cc389
+(DM03 114/114, DD05 407/407; other bots still 0/88 and 0/5237), the forced muzzle path did not crash. BUT the human's hp stays 550 (16/16 checks flat): the shot runs and misses.
+The bot's aim target [body+0x544] is still 0, holder ~53 m away; slot 422 saw 0 hits. w9x3uc1vs (verified): risks in 0x4a30e0 / 0x7cb080 (origin 0,0,0 fallback);
+client-seat lever = kns_vt[422] -> 0x891490 RMCReceiveHit. wz51cazg9 builds FireProbe6 (muzzle origin, shot direction, ray 0x713e80 hit; online vs Arcade).
+
 2026-11-04 ~02:50 - [c9] bs33 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe5, b33683d29). LOSS FOUND: the per-shot gate at 0x4cc389 FAILS for every shot:
 marked traitor DM03 120/120, DD05 459/459, all other shooters 102/102 and 4695/4695 (0 passes), so every host AI shot takes 0x4cc9d2 (sound + message, no ray/projectile).
 Owner (game register == 0x8ccde0 lookup) is a ZFFActor with a HEAP vtable 50700c14; [[owner+4]+0x3c] 4b418182 -> bit 12 = 0; ZLNKOBJ mask fails. The victim was the host-local
 human (station id == local id 00c00001: route apply), so the victim side is not the loss here. wu60j1ez0: why bit 12 is 0 online + default-off scoped fix (research/implement/review/fix).
-
-2026-11-04 ~02:10 - [c9] bs32 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe4, out_fp4_1104b). Per-shot calls [item+0x138] rise (56 / 34 per round) while hp stays 550.
-FireProbe4 read the gate bit 12 of [[owner+4]+0x3c] as 0 on every sample, BUT its owner (0x8ccde0([item+0x5c])) has vt 7c2cec14 / 506fec14 (not a code vtable): the reading is suspect.
-Victim (ZFFPlayer holder): bit 18 0, station set ([+0x14] 00c00001), [[+0x54]+0x3a] 0, host role 2; route undetermined (local id [0x168fd00] not logged). wx315tp48 (3 lever plans,
-checked): client-seat drop at 0x7e1800 most likely, gate 0x4cc389 second, impact block ruled out (FX only). wr2kwhoqm builds FireProbe5: counting detour at 0x4cc389 + slot-422 trace.
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list
