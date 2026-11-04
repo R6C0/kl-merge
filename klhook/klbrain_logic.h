@@ -535,4 +535,13 @@ static int kbr_f4_route(kbr_u32 role, int bit18, int station_set, kbr_u32 statio
 }
 static const char *kbr_f4_route_name(int r) { return r == 0 ? "apply-local (bit18)" : r == 1 ? "drop (bot attacker, victim station remote: id 0 or not the local id)" : r == 2 ? "apply (station local or null)" : r == 3 ? "apply (session not networked)" : "unknown"; }
 
+/* OnlineBrainTraitorGateForce (11-04): pure decision of the class-getter wrapper. The game's per-shot routine 0x4cb7a0 calls the owner's vt+0x30 at 0x4cb819 (return address 0x4cb81b) and, when
+   (result & [0x153a89c]) == [0x153a898] (the ZLNKOBJ test, 0xfff / 0x77c), forces its gate byte to 1 itself. Returns the value to hand back (cls_val, which passes that test) or 0 = leave the real answer.
+   Only for that one return address, for a marked bot (or, with 'all', any bot on the OnlineCopToBot table), and only when cls_val is a subset of the mask (else the forced value could not pass). */
+static kbr_u32 kbr_gf_force(int on, int all, int marked, int isbot, kbr_u32 ra, kbr_u32 want_ra, kbr_u32 cls_val, kbr_u32 cls_mask)
+{
+    if (!on || ra != want_ra || !cls_val || (cls_val & cls_mask) != cls_val) return 0;
+    return (marked || (all && isbot)) ? cls_val : 0;
+}
+
 #endif /* KLBRAIN_LOGIC_H */

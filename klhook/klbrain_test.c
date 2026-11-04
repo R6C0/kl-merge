@@ -336,6 +336,9 @@ int main(void)
         { static const kbr_u32 rg[2][2] = { { 0x4c5000u, 0x4ca000u }, { 0x4cd000u, 0x4cf000u } };      /* the ranges around 0x4cc389 (klranges.h) */
           CHECK(!kbr_f5_in_ranges(rg, 2, 0x4cc389u, 11) && kbr_f5_in_ranges(rg, 2, 0x4c9ffcu, 11) && kbr_f5_in_ranges(rg, 2, 0x4cd000u, 1) && !kbr_f5_in_ranges(rg, 2, 0x4ca000u, 0x1000), "f5: in_ranges"); }
         CHECK(kbr_f5_kind(1, 1) == 0 && kbr_f5_kind(1, 0) == 1 && kbr_f5_kind(0, 1) == 2 && kbr_f5_kind(0, 0) == 3 && kbr_f5_kind(1, 0x80) == 0, "f5: kind");
+        CHECK(kbr_gf_force(1, 0, 1, 1, 0x4cb81b, 0x4cb81b, 0x77c, 0xfff) == 0x77c && kbr_gf_force(1, 0, 1, 1, 0x4cb81c, 0x4cb81b, 0x77c, 0xfff) == 0 && kbr_gf_force(0, 0, 1, 1, 0x4cb81b, 0x4cb81b, 0x77c, 0xfff) == 0, "gf: marked, right return address only, on only");
+        CHECK(kbr_gf_force(1, 0, 0, 1, 0x4cb81b, 0x4cb81b, 0x77c, 0xfff) == 0 && kbr_gf_force(1, 1, 0, 1, 0x4cb81b, 0x4cb81b, 0x77c, 0xfff) == 0x77c && kbr_gf_force(1, 1, 0, 0, 0x4cb81b, 0x4cb81b, 0x77c, 0xfff) == 0, "gf: unmarked needs 'all' and a bot");
+        CHECK(kbr_gf_force(1, 1, 1, 1, 0x4cb81b, 0x4cb81b, 0, 0xfff) == 0 && kbr_gf_force(1, 1, 1, 1, 0x4cb81b, 0x4cb81b, 0x1000, 0xfff) == 0, "gf: a value the test cannot pass is never forced");
     }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;

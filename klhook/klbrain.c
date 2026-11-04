@@ -1616,6 +1616,72 @@ static void klbr_f5_summary(void)      /* at round end */
     memset(klbr_f5_rt, 0, sizeof klbr_f5_rt); memset(klbr_f5_rtm, 0, sizeof klbr_f5_rtm); memset(klbr_f5_cls, 0, sizeof klbr_f5_cls);
     memset(klbr_f5_body, 0, sizeof klbr_f5_body); memset(klbr_f5_item, 0, sizeof klbr_f5_item); memset(klbr_f5_f4own, 0, sizeof klbr_f5_f4own);
 }
+/* OnlineBrainTraitorGateForce (11-04, after bs33; UNTESTED, recommended off, CHANGES behaviour; needs AttackHandle; host only, online only; needs [BotFill] OnlineCopToBot, whose private ZFFActor table it uses).
+   bs33: every host-side AI shot fails the per-shot gate 0x4cc389 ([esp+0x1f] = 0: sound + message only, no ray, no projectile). The byte is set at 0x4cb802..0x4cb815 from bit 12 of [[owner+4]+0x3c] (GUESS: 'the node has
+   a live render-geometry entry', 0 for the host's online bots), and 0x4cb819 then calls the owner's vt+0x30 (a ZFFActor class getter, stock 0x557ba0 = mov eax,[0x1547b24]; ret): if (result & [0x153a89c]) == [0x153a898]
+   (the ZLNKOBJ test, 0xfff / 0x77c) the game ITSELF writes the gate byte 1 (0x4cb829) and takes the muzzle path 0x4cb838, which the later re-tests (0x4cb970, 0x4cc655) agree with. So the fix is a DATA write, no code patch and
+   no node flag, and it ships (a SHIP build writes no code, klh_poke refuses): slot 12 (vt+0x30) of the ONE private ZFFActor table klbalance.c OnlineCopToBot made (klr_cb_vt, our own memory) is wrapped. The wrapper calls the real
+   getter and changes the answer ONLY when its return address is 0x4cb81b (that one call), the owner is a marked traitor bot or, with OnlineBrainTraitorGateForceAll=1, any bot on that table (klr_cb.inst), and the host is online.
+   Every other caller of vt+0x30 (class tests everywhere) gets the real value. Needs the bot to be on the private table (a bot on the stock table 0xbb3bac cannot be reached without a code patch: counted as 'stock', logged);
+   the stock table is never written. GUESS: nothing else on 0x4cb7a0's path reads the class id of the owner. Damage then goes the host's ordinary ray route (0x713e80 -> victim chain); a double hit on the client is not
+   expected (bench: hp on both seats). Review 11-04 limits: the forced branch (0x4cb838, item vt+0x250 muzzle) is NOT verified safe for a node with bit 12 = 0 (UNTESTED; watch for faults/garbage origins); a remote-seat victim still drops the hit
+   (kbr_f4_route 1), so expect only the host seat's hp to fall; forced only on the game thread, never for cops (klr_bo_is_cop), the marked entry must still be live; the wrapper does not check the session itself (klr_cb_tick
+   only builds the table online on the host); GateForceAll changes AI-heister balance (they start hurting cops/humans). Log: "brain: traitor gateforce:" (install, first 6 forced calls) and a round total (calls at the site, forced, not marked, other bots, stock table). */
+#define KLBR_GF_SLOT 12
+#define KLBR_GF_GETTER 0x557ba0u
+#define KLBR_GF_RET 0x4cb81bu
+static int klbr_gfon, klbr_gfall, klbr_gf_state;      /* state: 0 not tried, 1 slot wrapped, -1 refused */
+typedef DWORD (__fastcall *klbr_gf_fn)(DWORD self, DWORD edx);
+static klbr_gf_fn klbr_gf_org;
+static DWORD klbr_gf_body[KLBR_MAX];      /* the marked bots' bodies ([soldier+0x40]) as of their last slot-113 call */
+static volatile LONG klbr_gf_site, klbr_gf_forced, klbr_gf_unmarked, klbr_gf_otherbot, klbr_gf_offthread, klbr_gf_noval;
+static long klbr_gf_stock, klbr_gf_calls, klbr_gf_tracked;
+static DWORD __fastcall klbr_gf_cls(DWORD self, DWORD edx)      /* slot 12 of the private ZFFActor table (vt+0x30): the real getter first, always */
+{
+    DWORD r = klbr_gf_org(self, edx), ra = (DWORD)(DWORD_PTR)_ReturnAddress(), val, mask, f; int i, marked = 0, isbot = 0;
+    if (ra != (DWORD)(DWORD_PTR)KLH_VA(KLBR_GF_RET) || !klbr_gfon) return r;      /* every other caller: untouched */
+    InterlockedIncrement(&klbr_gf_site);
+    val = KLBR_RDG(0x153a898); mask = KLBR_RDG(0x153a89c);
+    if (klbr_game_tid && GetCurrentThreadId() != klbr_game_tid) { InterlockedIncrement(&klbr_gf_offthread); return r; }      /* review 11-04: never force off the game thread (the muzzle computation would race the scene) */
+    if (klr_bo_is_cop(self)) { InterlockedIncrement(&klbr_gf_unmarked); return r; }      /* review 11-04: cops share the private table; never touched */
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_gf_body[i] && klbr_gf_body[i] == self && klbr_t[i].state == 1 && klbr_t[i].traitor) marked = 1;      /* review 11-04: the entry must still be a live marked bot (a stale body address reused by another actor is not forced) */
+    for (i = 0; i < KLR_CB_MAX; i++) if (klr_cb.inst[i] && klr_cb.inst[i] == self) isbot = 1;
+    f = kbr_gf_force(1, klbr_gfall, marked, isbot, ra, ra, val, mask);
+    if (!f) {
+        if (!val || (val & mask) != val) InterlockedIncrement(&klbr_gf_noval);
+        else if (isbot && !marked) InterlockedIncrement(&klbr_gf_otherbot);
+        else if (!marked) InterlockedIncrement(&klbr_gf_unmarked);
+        return r;
+    }
+    if (InterlockedIncrement(&klbr_gf_forced) <= 6) klog("brain: traitor gateforce: owner %08lx (%s) vt+0x30 at the 0x4cb819 call: real answer %08lx -> %08lx (ZLNKOBJ value; the game sets its gate byte to 1 and fires)", (unsigned long)self, marked ? "marked traitor bot" : "bot on the private table (All)", (unsigned long)r, (unsigned long)f);
+    return f;
+}
+static void klbr_gf_apply(struct klbr_s *e, DWORD self)      /* game thread, after every slot-113 call of a bot (host only): remember a marked bot's body, wrap slot 12 once */
+{
+    int ix; DWORD body;
+    if (!klbr_gfon || !klbr_cfh || !e || (ix = (int)(e - klbr_t)) < 0 || ix >= KLBR_MAX) return;
+    if (e->state != 1 || !e->traitor) { klbr_gf_body[ix] = 0; return; }      /* review 11-04: unmarked / dead / reset: the body is forgotten at once */
+    klbr_gf_calls++;
+    body = klh_rd32(self + 0x40);
+    if (body <= 0xffff) return;
+    if (klbr_gf_body[ix] != body) klbr_gf_tracked++;
+    klbr_gf_body[ix] = body;
+    if (klh_rd32(body) != (DWORD)(DWORD_PTR)klr_cb_vt) { klbr_gf_stock++; if (klbr_gf_stock <= 3) klog("brain: traitor gateforce: bot %d body %08lx vtable %08lx is NOT the private ZFFActor table %08lx of OnlineCopToBot (ready %d; stock table is 0xbb3bac, anything else is another private table, e.g. a heap copy): this bot cannot be reached (the stock table needs a code patch; not done)", ix, (unsigned long)body, (unsigned long)klh_rd32(body), (unsigned long)(DWORD_PTR)klr_cb_vt, klr_cb.ready); }
+    if (klbr_gf_state) return;
+    if (!klr_cb.ready) return;      /* the private table is made by klbalance.c's tick: try again at the next call */
+    klbr_gf_state = -1;
+    if (klr_cb_vt[KLBR_GF_SLOT] != (DWORD)(DWORD_PTR)KLH_VA(KLBR_GF_GETTER)) { klog("brain: traitor gateforce: private ZFFActor slot %d holds %08lx, not 0x557ba0: OnlineBrainTraitorGateForce does nothing", KLBR_GF_SLOT, (unsigned long)klr_cb_vt[KLBR_GF_SLOT]); return; }
+    klbr_gf_org = (klbr_gf_fn)(DWORD_PTR)klr_cb_vt[KLBR_GF_SLOT];
+    _ReadWriteBarrier();      /* klbr_gf_org must be visible before the wrapper can be called */
+    klr_cb_vt[KLBR_GF_SLOT] = (DWORD)(DWORD_PTR)klbr_gf_cls; klbr_gf_state = 1;      /* our own memory (klr_cb.blk), no game byte written */
+    klog("brain: traitor gateforce: slot %d (vt+0x30, 0x557ba0) of the private ZFFActor table %08lx wrapped; the answer changes only for the call at 0x4cb819 (host, %s)", KLBR_GF_SLOT, (unsigned long)(DWORD_PTR)klr_cb_vt, klbr_gfall ? "marked bots and every bot on the table" : "marked traitor bots only");
+}
+static void klbr_gf_summary(void)      /* at round end: the counts, then the per-round state cleared (the wrapper stays in the table, inert without bodies) */
+{
+    if (klbr_gfon) klog("brain: traitor gateforce round: slot %s; marked-bot slot-113 calls %ld, bodies tracked %ld, marked bots not on the private table (stock) %ld; the 0x4cb819 call seen %ld times: forced %ld (off-thread %ld), owner not a bot %ld, other bot (no All) %ld, no usable ZLNKOBJ value %ld",
+        klbr_gf_state > 0 ? "wrapped" : "NOT wrapped", klbr_gf_calls, klbr_gf_tracked, klbr_gf_stock, (long)klbr_gf_site, (long)klbr_gf_forced, (long)klbr_gf_offthread, (long)klbr_gf_unmarked, (long)klbr_gf_otherbot, (long)klbr_gf_noval);
+    memset(klbr_gf_body, 0, sizeof klbr_gf_body); klbr_gf_site = klbr_gf_forced = klbr_gf_unmarked = klbr_gf_otherbot = klbr_gf_offthread = klbr_gf_noval = 0; klbr_gf_calls = klbr_gf_tracked = klbr_gf_stock = 0;
+}
 /* OnlineBrainTraitorWeaponReady (11-03, workflow wdntba8eu; UNTESTED, recommended off, CHANGES behaviour; needs AttackHandle; host only). For a MARKED bot after every slot-113 call: byte [body+0x5c8] != 0 (SKIP1 of the
    shooting task would loop forever), [body+0x860] == 0, [body+0x70] != 0 and [s+0x6a0] != 0 (weapon controller present) -> write byte 0 through klh_data. NOT restored on purpose: the game's own SelectWeapon 0x511450
    clears the byte on a real weapon switch anyway, so 0 is the state the game reaches by itself; a pre-installed weapon (vt+0x6b8) just never got that switch. The gate offsets are GUESS (workflow trace, not re-disassembled here).
@@ -1788,6 +1854,7 @@ static void klbr_fp_summary(void)
     klbr_f3_summary();      /* OnlineBrainTraitorFireProbe3 round counts (before klbr_fp is cleared below) */
     klbr_f4_summary();      /* OnlineBrainTraitorFireProbe4 round total */
     klbr_f5_summary();      /* OnlineBrainTraitorFireProbe5 round counts */
+    klbr_gf_summary();      /* OnlineBrainTraitorGateForce round counts */
     if (klbr_tbon) klog("brain: traitor traitorbyte: round total: byte set %ld, restored %ld, not restored (body gone / byte changed / refused) %ld, re-set after a reset %ld, slot-113 calls: byte already nonzero %ld, with a ZFFActor body (not applicable) %ld, other class %ld; refused writes %ld", klbr_tb_set, klbr_tb_rest, klbr_tb_lost, klbr_tb_reset, klbr_tb_have, klbr_tb_actor, klbr_tb_other, klbr_tb_refused);
     klbr_tb_set = klbr_tb_reset = klbr_tb_rest = klbr_tb_lost = klbr_tb_have = klbr_tb_actor = klbr_tb_other = klbr_tb_refused = 0; klbr_tb_told = 0; memset(klbr_tb, 0, sizeof klbr_tb);
     if (klbr_fpon) for (i = 0; i < KLBR_MAX; i++) if (klbr_fp[i].calls)
@@ -1988,6 +2055,7 @@ static DWORD __fastcall klbr_w_fl113(DWORD self, DWORD edx, DWORD a1)      /* th
     klbr_ef_apply(e, self);      /* OnlineBrainTraitorEntryFix + the read-only child watch: after the full update recomputed the entries */
     klbr_tb_apply(e, self);     /* OnlineBrainTraitorTraitorByte: the bot's own traitor byte, before the probe so the probe shows the live value */
     klbr_fp_apply(e, self);     /* OnlineBrainTraitorFireProbe (read only): sees the stack as the scheduler left it, before our own order below */
+    klbr_gf_apply(e, self);     /* OnlineBrainTraitorGateForce: the marked body set + the one-time slot wrap */
     klbr_wr_apply(e, self);     /* OnlineBrainTraitorWeaponReady: after the probe, so the probe shows the game's own [body+0x5c8] */
     klbr_cf_apply(e, self);     /* OnlineBrainTraitorCoverFire: after HolderFix, so it sees the fixed flags */
     klbr_rs_apply(e, self);     /* OnlineBrainTraitorRestart unfreeze: after the call, so a goal it just pushed is still on the stack and is left alone */
@@ -2807,6 +2875,10 @@ static void klbr_init(void)
     klbr_wron = klbr_cfh && klbr_key("OnlineBrainTraitorWeaponReady");
     if (klbr_key("OnlineBrainTraitorWeaponReady") && !klbr_wron) klog("brain: OnlineBrainTraitorWeaponReady needs OnlineBrainTraitorAttackHandle: off");
     if (klbr_wron) klog("brain: OnlineBrainTraitorWeaponReady=1 UNTESTED (recommended off): a marked bot's byte [body+0x5c8] (weapon not ready, blocks the shooting task) is cleared to 0 when its weapon controller exists (host only; not put back)");
+    klbr_gfon = klbr_cfh && klbr_key("OnlineBrainTraitorGateForce"); klbr_gfall = klbr_gfon && klbr_key("OnlineBrainTraitorGateForceAll");
+    if (klbr_key("OnlineBrainTraitorGateForce") && !klbr_gfon) klog("brain: OnlineBrainTraitorGateForce needs OnlineBrainTraitorAttackHandle: off");
+    if (klbr_key("OnlineBrainTraitorGateForceAll") && !klbr_gfon) klog("brain: OnlineBrainTraitorGateForceAll needs OnlineBrainTraitorGateForce: off");
+    if (klbr_gfon) klog("brain: OnlineBrainTraitorGateForce=1 UNTESTED (recommended off): the per-shot gate 0x4cc389 fails for the host's online bots (bs33); slot 12 (vt+0x30) of the private OnlineCopToBot ZFFActor table is wrapped so the game's own ZLNKOBJ test at 0x4cb819 passes for %s (data write, ships; needs [BotFill] OnlineCopToBot; host only)", klbr_gfall ? "marked bots AND every bot on the table (GateForceAll)" : "marked traitor bots");
     klbr_tbon = klbr_cfh && klbr_key("OnlineBrainTraitorTraitorByte");
     if (klbr_key("OnlineBrainTraitorTraitorByte") && !klbr_tbon) klog("brain: OnlineBrainTraitorTraitorByte needs OnlineBrainTraitorAttackHandle: off");
     if (klbr_tbon) klog("brain: OnlineBrainTraitorTraitorByte=1 UNTESTED (recommended off): while a bot is marked and its body is a ZFFPlayer, its traitor byte +0x2726 is set to 1 so the game's friendly-fire filter 0x6e3400 does not zero its hits on heisters; put back at unmark / round end (host only). Other bots may treat that body as hostile");
