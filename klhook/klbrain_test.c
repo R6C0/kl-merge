@@ -466,6 +466,13 @@ int main(void)
         CHECK(kbr_cb_decide(1, 1, 1, 2, 1, 0, 0) == 2 && kbr_cb_decide(2, 1, 1, 1, 3, 1, 0) == 2, "cb: a clear human = never write");
         CHECK(kbr_cb_decide(1, 1, 0, 2, 0, 0, 0) == 1 && kbr_cb_decide(1, 1, 1, 0, 0, 0, 0) == 1, "cb: no fresh pass / nobody evaluated");
         CHECK(kbr_cb_decide(1, 1, 1, 2, 0, 0, 1) == 4 && kbr_cb_decide(1, 0, 1, 2, 0, 0, 0) == 5 && kbr_cb_decide(0, 1, 1, 2, 0, 0, 0) == 5 && kbr_cb_decide(3, 1, 1, 2, 0, 0, 0) == 5, "cb: already set, dead, mode off / unknown");
+        CHECK(kbr_hs_flags(1) == 0x01ul && kbr_hs_flags(2) == 0x15ul && kbr_hs_flags(0) == 0ul && kbr_hs_flags(3) == 0ul, "hs: flags per mode");
+        CHECK(!kbr_hs_fires(kbr_hs_flags(1)) && !kbr_hs_fires(kbr_hs_flags(2)), "hs: neither value passes the fire test 0x616480");
+        CHECK(kbr_hs_fires(0x11ul) && !kbr_hs_fires(0x15ul) && !kbr_hs_fires(0x251ul) && !kbr_hs_fires(0x211ul) && !kbr_hs_fires(0x51ul) && !kbr_hs_fires(0x10ul), "hs: fire test reference (0x11 passes; 0x4 / 0x40 / 0x200 or a missing bit fail)");
+        CHECK(kbr_hs_decide(1, 1, 1, 2, 0, 1) == 0 && kbr_hs_decide(2, 1, 1, 1, 0, 1) == 0, "hs: write when all blocked and a human exists");
+        CHECK(kbr_hs_decide(1, 1, 1, 2, 1, 1) == 2 && kbr_hs_decide(2, 1, 1, 0, 3, 1) == 1, "hs: a clear human = skip (nobody evaluated = no pass)");
+        CHECK(kbr_hs_decide(1, 1, 0, 2, 0, 1) == 1 && kbr_hs_decide(1, 1, 1, 2, 0, 0) == 3 && kbr_hs_decide(1, 0, 1, 2, 0, 1) == 5 && kbr_hs_decide(0, 1, 1, 2, 0, 1) == 5 && kbr_hs_decide(3, 1, 1, 2, 0, 1) == 5, "hs: stale pass, no human, dead, off / unknown");
+        CHECK(!kbr_hs_need(7, 1, 7, 1) && kbr_hs_need(0, 1, 7, 1) && kbr_hs_need(7, 0x201, 7, 1) && kbr_hs_need(8, 1, 7, 1), "hs: write only when handle or flags differ");
     }
     /* LOS helpers */
     {

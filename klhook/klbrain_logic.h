@@ -838,5 +838,21 @@ static int kbr_cb_decide(int mode, int alive, int pass_fresh, int n_blocked, int
     if (mode == 1 ? (b6fc != 0) : (b6fc == 0)) return 3;
     return b4fc ? 4 : 0;
 }
+/* HolderSet (OnlineBrainTraitorHolderSet): the flags dword written into the holder. 1 -> 0x01 (what every stock one-shot setter leaves: bit0 only, so bit 0x10 is missing and the fire test 0x616480 fails);
+   2 -> 0x15 (bit0 + 0x10 + 0x4: bit 0x4 set also fails the fire test, and it is the 'friend in the line, hold fire' shape the Arcade bots alternate through); 0 for off / unknown. CloseIn 0x6724e0 reads no flags. */
+static unsigned long kbr_hs_flags(int mode) { return mode == 1 ? 0x01ul : mode == 2 ? 0x15ul : 0ul; }
+/* the fire test 0x616480 as read in the disassembly: bit0 AND bit 0x10 set, bits 0x4 / 0x40 / 0x200 clear (1 = the bot may shoot) */
+static int kbr_hs_fires(unsigned long fl) { return (fl & 1ul) && (fl & 0x10ul) && !(fl & 0x244ul); }
+/* HolderSet decision. Codes: 0 write allowed, 1 no fresh pass / nobody evaluated, 2 skip: a human is clear / unknown, 3 no human body found, 5 off / not alive. */
+static int kbr_hs_decide(int mode, int alive, int pass_fresh, int n_blocked, int n_open, int have_human)
+{
+    if (mode != 1 && mode != 2) return 5;
+    if (!alive) return 5;
+    if (!pass_fresh || n_blocked <= 0) return 1;
+    if (n_open > 0) return 2;
+    return have_human ? 0 : 3;
+}
+/* 1 = the holder must be (re)written: handle or flags differ from what we would write (no churn when equal) */
+static int kbr_hs_need(unsigned long cur_handle, unsigned long cur_flags, unsigned long new_handle, unsigned long new_flags) { return cur_handle != new_handle || cur_flags != new_flags; }
 
 #endif /* KLBRAIN_LOGIC_H */
