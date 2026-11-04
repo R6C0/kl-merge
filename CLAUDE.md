@@ -81,7 +81,7 @@ human (station id == local id 00c00001: route apply), so the victim side is not 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list
 (mode 1) already open now walks on to the weapon list and shows the page (the owner's 11-02 'ignored' presses). pq14 PASS 4/4 seats (DD05 + DM03, live ini);
-pq14b on the install build: DM03 PASS, DD05 menu flake; rerun pq14c (01:45) DD05 PASS both seats (inshop 0 -> list 0.6 s, inshop 1 -> 0.3 s, 0 faults). The scoreboard path (pq_1103f, all 16 maps) is unchanged. Waiting for the owner's play test.
+pq14b on the install build: DM03 PASS, DD05 menu flake; rerun pq14c (01:45) DD05 PASS both seats (inshop 0 -> list 0.6 s, inshop 1 -> 0.3 s, 0 faults); pq15 (03:46) the other 8 stock maps PASS 16/16 seats, so all 9 stock FA maps. The scoreboard path (pq_1103f, all 16 maps) is unchanged. Waiting for the owner's play test.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

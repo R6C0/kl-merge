@@ -1,3 +1,7 @@
+2026-11-04 ~03:46 - [ce] pq15 (installed pq_1104b_test, live ini, kit from pq8/pq9's per-map lobby scripts + pq14's in-shop body): DD01-04 + DD06-09 PASS 8/8,
+16/16 seats 'inshop' -> weapon list, host F3 at mode 0 applied after 624-625 ms, client F2 at mode 1 after 311-343 ms, both seats round 2, 0 faults.
+Run in three parts around c9's bs33/bs34 (PAUSE file). With pq14c (DD05) InShopSteps is benched on all 9 stock FA maps + DM03. no crash involved
+
 2026-11-04 ~01:46 - [ce] pq14c = pq14b's DD05 rerun on the install build (pq_1104b_test, live ini + InShopSteps=1): PASS, both seats round 2, 0 asserts, 0 faults.
 Host F3 at Buy Weapons (mode 0): inshop steps 0 -> weapon list 0.62 s, hire page applied; client F2 at Category (mode 1): steps 1 -> list 0.31 s, page II applied.
 So the pq14b DD05 miss was the menu flake (SystemLinkCreate). pq_1104b is now benched on both maps. no crash involved
