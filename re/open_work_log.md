@@ -10,6 +10,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~02:50 - [c9] bs33 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe5, b33683d29). LOSS FOUND: the per-shot gate at 0x4cc389 FAILS for every shot:
+marked traitor DM03 120/120, DD05 459/459, all other shooters 102/102 and 4695/4695 (0 passes), so every host AI shot takes 0x4cc9d2 (sound + message, no ray/projectile).
+Owner (game register == 0x8ccde0 lookup) is a ZFFActor with a HEAP vtable 50700c14; [[owner+4]+0x3c] 4b418182 -> bit 12 = 0; ZLNKOBJ mask fails. The victim was the host-local
+human (station id == local id 00c00001: route apply), so the victim side is not the loss here. wu60j1ez0: why bit 12 is 0 online + default-off scoped fix (research/implement/review/fix).
+
 2026-11-04 ~02:10 - [c9] bs32 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe4, out_fp4_1104b). Per-shot calls [item+0x138] rise (56 / 34 per round) while hp stays 550.
 FireProbe4 read the gate bit 12 of [[owner+4]+0x3c] as 0 on every sample, BUT its owner (0x8ccde0([item+0x5c])) has vt 7c2cec14 / 506fec14 (not a code vtable): the reading is suspect.
 Victim (ZFFPlayer holder): bit 18 0, station set ([+0x14] 00c00001), [[+0x54]+0x3a] 0, host role 2; route undetermined (local id [0x168fd00] not logged). wx315tp48 (3 lever plans,
