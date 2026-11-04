@@ -775,5 +775,29 @@ static kbr_u32 kbr_mb_cand_addr(kbr_u32 ebp, long idx) { return idx < 0 || idx >
 /* in the observation window [t0, t0 + len] (wrap safe); due: now reached next (wrap safe) */
 static int kbr_mb_inwin(unsigned long now, unsigned long t0, unsigned long len) { unsigned long d; if (!t0) return 0; d = (now - t0) & 0xffffffffUL; return d <= len; }
 static int kbr_mb_due(unsigned long now, unsigned long next) { return ((now - next) & 0xffffffffUL) < 0x80000000UL; }
+/* ModeBProbe data2 (11-04, read only): the vtable of the current goal [S+0x74] (unrebased), classes 0 none, 1 ZSoldierAttack 0xbd0f14, 2 ZAttackTarget 0xbd1104 (both from re/traitor_fire_1103.md / attack_goal_1104.md), 3 any other (logged as hex) */
+static int kbr_mb_vtclass(kbr_u32 vt) { return !vt ? 0 : vt == 0x00bd0f14u ? 1 : vt == 0x00bd1104u ? 2 : 3; }
+static const char *kbr_mb_vtname(kbr_u32 vt) { switch (kbr_mb_vtclass(vt)) { case 0: return "none"; case 1: return "ZSoldierAttack"; case 2: return "ZAttackTarget"; default: return "other"; } }
+/* [S+0x88] mode histogram slot: 0..4 as is, anything else 5 */
+static int kbr_mb_modeslot(kbr_u32 m) { return m <= 4 ? (int)m : 5; }
+/* which of n goal pointers (loaded from S+offsets) equals the current goal: its index, -1 for none / a null current goal (a null pointer in the list never matches) */
+static int kbr_mb_match(kbr_u32 cur, const kbr_u32 *ptrs, int n) { int i; if (cur <= 0xffffu) return -1; for (i = 0; i < n; i++) if (ptrs[i] == cur) return i; return -1; }
+/* small tally of distinct keys: the slot of key (existing or new), -1 when the table is full or key is 0 */
+static int kbr_mb_tally(kbr_u32 *keys, long *cnt, int cap, kbr_u32 key)
+{
+    int i; if (!key) return -1;
+    for (i = 0; i < cap; i++) if (keys[i] == key) { cnt[i]++; return i; }
+    for (i = 0; i < cap; i++) if (!keys[i]) { keys[i] = key; cnt[i] = 1; return i; }
+    return -1;
+}
+/* Arcade sampling pick: trait[i] -1 = not a candidate, 0 = candidate without the Traitor mark (rec+0x79 bit 1), 1 = marked. sel[i] = 1 for every marked candidate; when none is marked, for the first ctl candidates (controls). Returns how many are selected. */
+static int kbr_mb_arc_pick(const int *trait, int n, int *sel, int ctl)
+{
+    int i, m = 0, c = 0;
+    for (i = 0; i < n; i++) { sel[i] = 0; if (trait[i] == 1) { sel[i] = 1; m++; } }
+    if (m) return m;
+    for (i = 0; i < n && c < ctl; i++) if (trait[i] == 0) { sel[i] = 1; c++; }
+    return c;
+}
 
 #endif /* KLBRAIN_LOGIC_H */

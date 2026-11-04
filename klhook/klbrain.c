@@ -2418,15 +2418,17 @@ static const KLBR_MBSITE klbr_mb_sites[KLBR_MB_NSITE] = {
     { 0x4f4ba9, 5, { 0x8b, 0x4e, 0x04, 0x8b, 0x01 }, 26 },
     { 0x4f4bed, 9, { 0x8b, 0x40, 0x74, 0x6a, 0x01, 0x51, 0x8d, 0x14, 0x5b }, 27 },
     { 0x800650, 6, { 0x8b, 0x86, 0x6c, 0x05, 0x00, 0x00 }, 28 } };
-typedef struct { long s83[6], ticks, cand, candsum, notclear, clear0, clearN, none, none0, runchild, rearm, rearm_win, dist, nl[9], dsamp, datk, ahist[5], aother, anull, dnocl, dtrans, dlog; } KLBR_MBC;      /* s83: other, cover0, store720, create, retarget, unknown; d*: DATA-side samples every 250 ms per marked bot (dsamp samples, datk = [S+0x74] == [S+0x658], ahist = state [g+8] of the ZAttackTarget goal 0..4, aother = other value, anull = no goal, dnocl = byte [S+0x4fc] set, dtrans = state transitions seen, dlog = lines logged) */
+typedef struct { long s83[6], ticks, cand, candsum, notclear, clear0, clearN, none, none0, runchild, rearm, rearm_win, dist, nl[9], dsamp, datk, ahist[5], aother, anull, dnocl, dtrans, dlog, vth[4], modeh[6], holdh[10], d2samp; DWORD ovtk[8]; long ovtn[8], ovtfull; } KLBR_MBC;      /* s83: other, cover0, store720, create, retarget, unknown; d*: DATA-side samples every 250 ms per marked bot (dsamp samples, datk = [S+0x74] == [S+0x658], ahist = state [g+8] of the ZAttackTarget goal 0..4, aother = other value, anull = no goal, dnocl = byte [S+0x4fc] set, dtrans = state transitions seen, dlog = lines logged) */
 static KLBR_MBC klbr_mb_c;
-typedef struct { int g, gst, iscur, curnz, st654, nocl, st56c, st5ac; DWORD pri, tgt, last; int have; } KLBR_MBSIG;
+typedef struct { int g, gst, iscur, curnz, st654, nocl, st56c, st5ac, st638, st634, st648, st65c, st63c, hold; DWORD pri, tgt, last, curvt, mode, fa8, fb0; int have; } KLBR_MBSIG;
 static KLBR_MBSIG klbr_mb_sig[KLBR_MAX]; static DWORD klbr_mb_dnext[KLBR_MAX];
 #define KLBR_MB_DSTEP 250
-#define KLBR_MB_DLOGMAX 60
+#define KLBR_MB_DLOGMAX 120
 #define KLBR_MB_DLOGGAP 500
 static DWORD klbr_mb_t0[KLBR_MAX], klbr_mb_next[KLBR_MAX]; static float klbr_mb_pt[KLBR_MAX][3], klbr_mb_d0[KLBR_MAX], klbr_mb_dmin[KLBR_MAX];
-static int klbr_mb_ix(DWORD S) { int i; if (S <= 0xffff) return -1; for (i = 0; i < KLBR_MAX; i++) if (klbr_f6_sold[i] == S) return i; return -1; }
+static int klbr_mb_arc; static DWORD klbr_mb_arules, klbr_mb_asold[KLBR_MAX], klbr_mb_ascan; static int klbr_mb_akind[KLBR_MAX];      /* Arcade source (offline): the sampled bots' soldiers, kind 1 = Traitor-marked, 0 = control */
+static DWORD klbr_mb_src(int i) { return klbr_mb_arc ? klbr_mb_asold[i] : klbr_f6_sold[i]; }
+static int klbr_mb_ix(DWORD S) { int i; if (S <= 0xffff) return -1; for (i = 0; i < KLBR_MAX; i++) if (klbr_mb_src(i) == S) return i; return -1; }
 static int klbr_mb_state_of(DWORD S, DWORD off)      /* [[S+off]+8], -1 when the pointer is not readable */
 {
     DWORD p = klh_rd32(S + off);
@@ -2524,11 +2526,16 @@ static void klbr_mb_install(void)      /* once (game thread); a refusal is final
      [S+0x74] current goal, [S+0x78] its priority: 0x81eb90 (goal chooser; callers 0x5f0cb2, 0x6353b9, 0x651d62) stores the chosen entry's [+0] to [this+0x74] and [+4] to [this+0x78] (0x81ec54 / 0x81ec5a) and
               compares them (0x81ec13 / 0x81ec29). That THIS is the ZSoldier S of slot 83 (and not a base sub-object at the same address) is a GUESS: the data will show (current == [S+0x658] while it attacks).
    Only transitions of the tuple (g state, current == attack goal, attack goal null, CoverFire state, 4fc, run-task state, 5ac state, priority, target handle) are logged, at most one line per bot per 500 ms and 60 per round. */
+static const DWORD klbr_mb_hoff[9] = { 0x638, 0x634, 0x648, 0x65c, 0x63c, 0x658, 0x654, 0x56c, 0x5ac };
+static const char *const klbr_mb_hname[10] = { "Attack+638", "Idle+634", "Defend+648", "StayInCover+65c", "Follow+63c", "AttackTarget+658", "CoverFire+654", "RunTask+56c", "+5ac", "none of those" };
+/* data2 (11-04b, read only, same key; the verifier of attack_goal_1104.md asked which goal holds the bot at priority 0x96): per sample also the vtable of the current goal [S+0x74] (ZSoldierAttack 0xbd0f14 / ZAttackTarget 0xbd1104, else hex), which of the soldier's goal slots
+   (+0x638 Attack, +0x634 Idle, +0x648 Defend, +0x65c StayInCover, +0x63c Follow, +0x658 AttackTarget, +0x654 CoverFire, +0x56c run task, +0x5ac) holds that same pointer, the states of 638 / 634 / 648 / 65c / 63c, the dword mode [S+0x88] (Arcade 2, online bot 1 per attack_goal_1104.md; GUESS that the field is a dword on every bot) and the two dwords [S+0xa8] / [S+0xb0] (the task calls them holder flags; GUESS: raw dwords, no meaning assumed).
+   Round histograms: current-goal vtable class, other vtables (up to 8), [S+0x88], holder slot. Source: online = the marked bots of the slot-113 wrapper (klbr_f6_sold); Arcade (offline; role 0 / 1, mode 4, real rules: the ArcadeDiag test) = every Ally soldier whose record has rec+0x79 bit 1 (the Traitor mark), else the first 2 Ally soldiers as controls ('arcade control'), rescanned every 3 s. */
 static void klbr_mb_sample(DWORD now)
 {
     int i; KLBR_MBC *c = &klbr_mb_c;
     for (i = 0; i < KLBR_MAX; i++) {
-        DWORD S = klbr_f6_sold[i], g, cur; KLBR_MBSIG n, *o = &klbr_mb_sig[i]; BYTE b4 = 0;
+        DWORD S = klbr_mb_src(i), g, cur, hp[9]; KLBR_MBSIG n, *o = &klbr_mb_sig[i]; BYTE b4 = 0; int k;
         if (S <= 0xffff) { o->have = 0; continue; }
         if (klbr_mb_dnext[i] && !kbr_mb_due(now, klbr_mb_dnext[i])) continue;
         klbr_mb_dnext[i] = now + KLBR_MB_DSTEP; if (!klbr_mb_dnext[i]) klbr_mb_dnext[i] = 1;
@@ -2539,24 +2546,79 @@ static void klbr_mb_sample(DWORD now)
             n.iscur = n.g && cur == g; n.curnz = cur > 0xffff; n.pri = klh_rd32(S + 0x78);
             n.st654 = klbr_mb_state_of(S, 0x654); n.st56c = klbr_mb_state_of(S, 0x56c); n.st5ac = klbr_mb_state_of(S, 0x5ac);
             klh_rd(S + 0x4fc, &b4, 1); n.nocl = b4 != 0;
+            n.curvt = n.curnz ? klh_rd32(cur) : 0; if (n.curvt) n.curvt -= (DWORD)klh_delta;      /* unrebased, as the notes quote it */
+            for (k = 0; k < 9; k++) hp[k] = klh_rd32(S + klbr_mb_hoff[k]);
+            n.hold = kbr_mb_match(cur, hp, 9);
+            n.st638 = klbr_mb_state_of(S, 0x638); n.st634 = klbr_mb_state_of(S, 0x634); n.st648 = klbr_mb_state_of(S, 0x648); n.st65c = klbr_mb_state_of(S, 0x65c); n.st63c = klbr_mb_state_of(S, 0x63c);
+            n.mode = klh_rd32(S + 0x88); n.fa8 = klh_rd32(S + 0xa8); n.fb0 = klh_rd32(S + 0xb0);
         } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klbr_mb_flt++; continue; }
-        c->dsamp++; if (n.iscur) c->datk++; if (n.nocl) c->dnocl++;
+        c->dsamp++; c->d2samp++; if (n.iscur) c->datk++; if (n.nocl) c->dnocl++;
         if (!n.g) c->anull++; else if (n.gst >= 0 && n.gst <= 4) c->ahist[n.gst]++; else c->aother++;
-        if (!o->have || o->g != n.g || o->gst != n.gst || o->iscur != n.iscur || o->curnz != n.curnz || o->st654 != n.st654 || o->nocl != n.nocl || o->st56c != n.st56c || o->st5ac != n.st5ac || o->pri != n.pri || o->tgt != n.tgt) {
+        c->vth[kbr_mb_vtclass(n.curvt)]++; c->modeh[kbr_mb_modeslot(n.mode)]++;
+        if (kbr_mb_vtclass(n.curvt) == 3 && kbr_mb_tally(c->ovtk, c->ovtn, 8, n.curvt) < 0) c->ovtfull++;
+        if (n.curnz) c->holdh[n.hold >= 0 ? n.hold : 9]++;
+        if (!o->have || o->g != n.g || o->gst != n.gst || o->iscur != n.iscur || o->curnz != n.curnz || o->st654 != n.st654 || o->nocl != n.nocl || o->st56c != n.st56c || o->st5ac != n.st5ac || o->pri != n.pri || o->tgt != n.tgt
+            || o->curvt != n.curvt || o->hold != n.hold || o->st638 != n.st638 || o->st634 != n.st634 || o->st648 != n.st648 || o->st65c != n.st65c || o->st63c != n.st63c || o->mode != n.mode || o->fa8 != n.fa8 || o->fb0 != n.fb0) {
             if (o->have) c->dtrans++;
             if (c->dlog < KLBR_MB_DLOGMAX && (!o->last || (now - o->last) >= KLBR_MB_DLOGGAP)) {
+                char vtx[24];
                 c->dlog++; n.last = now ? now : 1;
-                klog("brain: modeb data: bot %d S %08lx: attack goal %s state %d target %08lx; current goal %s attack goal, priority %lu; CoverFire state %d; [S+0x4fc] %d; run task state %d; [S+0x5ac] state %d%s",
-                     i, (unsigned long)S, n.g ? "set" : "NULL", n.gst, (unsigned long)n.tgt, !n.curnz ? "none (!=)" : n.iscur ? "==" : "!=", (unsigned long)n.pri, n.st654, n.nocl, n.st56c, n.st5ac, o->have ? "" : " (first sample)");
+                if (kbr_mb_vtclass(n.curvt) == 3) _snprintf(vtx, sizeof vtx, "other %08lx", (unsigned long)n.curvt); else _snprintf(vtx, sizeof vtx, "%s", kbr_mb_vtname(n.curvt));
+                vtx[sizeof vtx - 1] = 0;
+                klog("brain: modeb data: %s bot %d S %08lx: attack goal %s state %d target %08lx; current goal %s attack goal, priority %lu; CoverFire state %d; [S+0x4fc] %d; run task state %d; [S+0x5ac] state %d%s; "
+                     "data2: current goal vtable %s, held by slot %s; states Attack(638) %d Idle(634) %d Defend(648) %d StayInCover(65c) %d Follow(63c) %d; mode [S+0x88] %lu; [S+0xa8] %08lx [S+0xb0] %08lx",
+                     klbr_mb_arc ? (klbr_mb_akind[i] ? "arcade traitor" : "arcade control") : "online marked", i, (unsigned long)S, n.g ? "set" : "NULL", n.gst, (unsigned long)n.tgt, !n.curnz ? "none (!=)" : n.iscur ? "==" : "!=", (unsigned long)n.pri, n.st654, n.nocl, n.st56c, n.st5ac, o->have ? "" : " (first sample)",
+                     vtx, n.curnz ? klbr_mb_hname[n.hold >= 0 ? n.hold : 9] : "-", n.st638, n.st634, n.st648, n.st65c, n.st63c, (unsigned long)n.mode, (unsigned long)n.fa8, (unsigned long)n.fb0);
             } else n.last = o->last;
         } else n.last = o->last;
         n.have = 1; *o = n;
     }
 }
+static int klbr_mb_arcade(DWORD *rules)      /* the ArcadeDiag test: role 0 / 1, mode 4, real rules present (CERTAIN for the question; GUESS that offline Arcade reads role 0 / 1 and mode 4 here) */
+{
+    DWORD sm, role = 0, mode = 0, G, r = 0;
+    G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)); if (G > 0xffff) r = klh_rd32(G + 0x54);
+    sm = klh_rd32((DWORD_PTR)KLH_VA(KLNET_SESSION));
+    *rules = r;
+    return sm > 0xffff && klh_rd(sm + 0x54, &role, 4) && klh_rd(sm + 0x5c, &mode, 4) && role <= 1 && mode == 4 && r > 0xffff && r != klbr_shadow;
+}
+static void klbr_mb_arc_scan(DWORD now, DWORD rules)      /* every 3 s in Arcade: pick the soldiers to sample (marked, else 2 controls) */
+{
+    DWORD actor[KLBR_MAX], snd[KLBR_MAX], crew = klh_rd32(rules + 0x348), nrec = klh_rd32(rules + 0x354), nw[KLBR_MAX]; int n, i, k, trait[KLBR_MAX], sel[KLBR_MAX], nk[KLBR_MAX];
+    klbr_mb_ascan = now ? now : 1;
+    n = klbr_scan(actor, snd, KLBR_MAX);
+    memset(nw, 0, sizeof nw); memset(nk, 0, sizeof nk);
+    for (i = 0; i < n; i++) {
+        BYTE b = 0; trait[i] = 0;
+        if (crew > 0xffff && nrec <= 12)
+            for (k = 0; k < (int)nrec; k++) if (klh_rd32(crew + 0x7c * (DWORD)k + 4) == actor[i] && klh_rd(crew + 0x7c * (DWORD)k + 0x79, &b, 1)) { trait[i] = (b & 2) ? 1 : 0; break; }
+    }
+    kbr_mb_arc_pick(trait, n, sel, 2);
+    for (i = 0, k = 0; i < n && k < KLBR_MAX; i++) if (sel[i]) { nw[k] = snd[i]; nk[k] = trait[i]; k++; }
+    for (i = 0; i < KLBR_MAX; i++) {      /* compared by index: a slot whose soldier changed starts over */
+        if (nw[i] != klbr_mb_asold[i]) { memset(&klbr_mb_sig[i], 0, sizeof klbr_mb_sig[i]); klbr_mb_dnext[i] = 0; klbr_mb_t0[i] = 0; }
+        klbr_mb_asold[i] = nw[i]; klbr_mb_akind[i] = nk[i];
+    }
+}
+static void klbr_mb_summary(const char *why);
 static void klbr_mb_tick(DWORD now)      /* game thread: the bot-to-point distance every 500 ms for 10 s after a stock RunChild */
 {
     int i;
     if (!klbr_mbon || klbr_f6_flt >= 3) return;
+    {
+        DWORD rules = 0; int arc;
+        __try { arc = klbr_mb_arcade(&rules); } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klbr_mb_flt++; arc = 0; }
+        if (arc && rules != klbr_mb_arules) {      /* a new Arcade round (new rules object): the last one's summary, then fresh counters */
+            if (klbr_mb_arules) klbr_mb_summary("arcade round change");
+            memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); memset(klbr_mb_asold, 0, sizeof klbr_mb_asold); klbr_mb_ascan = 0;
+            klbr_mb_arules = rules; klbr_mb_arc = 1;
+            klog("brain: modeb data: Arcade round starts (read only sampling of the Traitor-marked Ally soldiers, else 2 controls): rules %08lx", (unsigned long)rules);
+        } else if (!arc && klbr_mb_arc) {
+            klbr_mb_summary("arcade round end"); klbr_mb_arc = 0; klbr_mb_arules = 0;
+            memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); memset(klbr_mb_asold, 0, sizeof klbr_mb_asold);
+        }
+        if (arc && (!klbr_mb_ascan || now - klbr_mb_ascan >= 3000u)) { __try { klbr_mb_arc_scan(now, rules); } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klbr_mb_flt++; } }
+    }
     klbr_mb_sample(now);
     for (i = 0; i < KLBR_MAX; i++) {
         float bp[3], d, pt[3];
@@ -2569,7 +2631,7 @@ static void klbr_mb_tick(DWORD now)      /* game thread: the bot-to-point distan
         klbr_mb_next[i] = now + KLBR_MB_STEPMS;
         if (klbr_mb_c.dist >= 200) continue;
         __try {
-            if (klbr_f6_body[i] > 0xffff && klh_rd(klbr_f6_body[i] + 0x460, bp, 12) && kle_ok3(bp)) {
+            if ((klbr_f6_body[i] > 0xffff || klbr_mb_arc) && klh_rd((klbr_f6_body[i] > 0xffff ? klbr_f6_body[i] : klh_rd32(klbr_mb_src(i) + 0x40)) + 0x460, bp, 12) && kle_ok3(bp)) {
                 memcpy(pt, klbr_mb_pt[i], 12); d = kbr_f6_dist(bp, pt); klbr_mb_c.dist++;
                 if (klbr_mb_dmin[i] < 0.0f || d < klbr_mb_dmin[i]) klbr_mb_dmin[i] = d;
                 klog("brain: modeb dist: bot %d t+%lu ms distance to the RunChild point %.1f (at the RunChild %.1f)", i, (unsigned long)(now - klbr_mb_t0[i]), (double)d, (double)klbr_mb_d0[i]);
@@ -2582,6 +2644,13 @@ static void klbr_mb_summary(const char *why)
     KLBR_MBC *c = &klbr_mb_c;
     if (!klbr_mbon) return;
     if (c->dsamp) klog("brain: modeb data %s: samples %ld, 'atk current' ([S+0x74] == attack goal) %ld, atk state hist 0..4 = %ld %ld %ld %ld %ld (other value %ld, no goal %ld), nocl(4fc) set %ld, transitions %ld, lines logged %ld", why, c->dsamp, c->datk, c->ahist[0], c->ahist[1], c->ahist[2], c->ahist[3], c->ahist[4], c->aother, c->anull, c->dnocl, c->dtrans, c->dlog);
+    if (c->d2samp) {
+        char ov[200]; int k, nv = 0; ov[0] = 0;
+        for (k = 0; k < 8; k++) if (c->ovtk[k] && nv < (int)sizeof ov - 24) nv += _snprintf(ov + nv, sizeof ov - nv, " %08lx x%ld", (unsigned long)c->ovtk[k], c->ovtn[k]);
+        klog("brain: modeb data2 %s (%s): samples %ld; current-goal vtable none %ld ZSoldierAttack %ld ZAttackTarget %ld other %ld (other vtables:%s%s); mode [S+0x88] hist 0..4 = %ld %ld %ld %ld %ld, other %ld; goal held by slot Attack638 %ld Idle634 %ld Defend648 %ld StayInCover65c %ld Follow63c %ld AttackTarget658 %ld CoverFire654 %ld RunTask56c %ld slot5ac %ld none-of-those %ld",
+             why, klbr_mb_arc ? "arcade" : "online", c->d2samp, c->vth[0], c->vth[1], c->vth[2], c->vth[3], nv ? ov : " -", c->ovtfull ? " (table full, more not listed)" : "", c->modeh[0], c->modeh[1], c->modeh[2], c->modeh[3], c->modeh[4], c->modeh[5],
+             c->holdh[0], c->holdh[1], c->holdh[2], c->holdh[3], c->holdh[4], c->holdh[5], c->holdh[6], c->holdh[7], c->holdh[8], c->holdh[9]);
+    }
     if (!c->s83[0] && !c->s83[1] && !c->s83[2] && !c->s83[3] && !c->s83[4] && !c->s83[5] && !c->ticks && !c->cand && !c->none && !c->runchild && !c->rearm) return;
     klog("brain: modeb %s: slot83 create=%ld retarget=%ld store720=%ld ticks=%ld cand=%ld clear0=%ld clearN=%ld none=%ld runchild=%ld rearm=%ld (slot83 cover0=%ld other=%ld unknown=%ld; candidate-count-sum=%ld notclear=%ld none-with-0-candidates=%ld rearm-within-10s-of-runchild=%ld; sites installed %d of %d; faults %d, shared %d)",
          why, c->s83[3], c->s83[4], c->s83[2], c->ticks, c->cand, c->clear0, c->clearN, c->none, c->runchild, c->rearm, c->s83[1], c->s83[0], c->s83[5], c->candsum, c->notclear, c->none0, c->rearm_win, klbr_mb_nok, KLBR_MB_NSITE, klbr_mb_flt, klbr_f6_flt);
@@ -2635,7 +2704,7 @@ static long klbr_f6_total(void) { int n, m; long t = 0; for (n = 0; n < 2; n++) 
 static void klbr_f6_round_end(void)      /* round end (klbr_fp_summary): the totals, then the counters cleared (the detours stay in) */
 {
     klbr_f6_summary("round");
-    memset(klbr_f6_c, 0, sizeof klbr_f6_c); memset(klbr_f6_body, 0, sizeof klbr_f6_body); memset(klbr_f6_item, 0, sizeof klbr_f6_item); memset(klbr_f6_hold, 0, sizeof klbr_f6_hold); memset(klbr_f6_sold, 0, sizeof klbr_f6_sold); memset(&klbr_f7_c, 0, sizeof klbr_f7_c); memset(klbr_f7_aim_n, 0, sizeof klbr_f7_aim_n); memset(klbr_f7_aim_t, 0, sizeof klbr_f7_aim_t); memset(klbr_f7_aim_tg, 0, sizeof klbr_f7_aim_tg); memset(&klbr_ra_c, 0, sizeof klbr_ra_c); memset(&klbr_f8_c, 0, sizeof klbr_f8_c); memset(klbr_f8_hand, 0, sizeof klbr_f8_hand); klbr_f8_lastmark = 0; memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); klbr_f7_cur.valid = 0; klbr_f6_cur.valid = 0; klbr_f6_lastshots = 0;
+    memset(klbr_f6_c, 0, sizeof klbr_f6_c); memset(klbr_f6_body, 0, sizeof klbr_f6_body); memset(klbr_f6_item, 0, sizeof klbr_f6_item); memset(klbr_f6_hold, 0, sizeof klbr_f6_hold); memset(klbr_f6_sold, 0, sizeof klbr_f6_sold); memset(&klbr_f7_c, 0, sizeof klbr_f7_c); memset(klbr_f7_aim_n, 0, sizeof klbr_f7_aim_n); memset(klbr_f7_aim_t, 0, sizeof klbr_f7_aim_t); memset(klbr_f7_aim_tg, 0, sizeof klbr_f7_aim_tg); memset(&klbr_ra_c, 0, sizeof klbr_ra_c); memset(&klbr_f8_c, 0, sizeof klbr_f8_c); memset(klbr_f8_hand, 0, sizeof klbr_f8_hand); klbr_f8_lastmark = 0; memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); memset(klbr_mb_asold, 0, sizeof klbr_mb_asold); klbr_f7_cur.valid = 0; klbr_f6_cur.valid = 0; klbr_f6_lastshots = 0;
 }
 static void klbr_f6_tick(int game_thread, DWORD now)      /* klbr_tick, before the host-round gate (so Arcade is covered): install once, a running total every 30 s when shots were seen */
 {

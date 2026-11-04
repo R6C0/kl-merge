@@ -438,6 +438,17 @@ int main(void)
         CHECK(kbr_mb_cand_addr(0x1000, 0) == 0x1000 - 0xbc && kbr_mb_cand_addr(0x1000, 3) == 0x1000 - 0xbc + 36 && !kbr_mb_cand_addr(0x1000, -1) && !kbr_mb_cand_addr(0x1000, 16), "mb cand addr");
         CHECK(kbr_mb_inwin(1500, 1000, 10000) && kbr_mb_inwin(11000, 1000, 10000) && !kbr_mb_inwin(11001, 1000, 10000) && !kbr_mb_inwin(5, 0, 10000) && !kbr_mb_inwin(500, 1000, 10000) && kbr_mb_inwin(100, 0xfffffff0UL, 10000), "mb window: edges, none, before, wrap");
         CHECK(kbr_mb_due(1000, 1000) && kbr_mb_due(1500, 1000) && !kbr_mb_due(999, 1000) && kbr_mb_due(10, 0xfffffff0UL), "mb due: wrap safe");
+        {
+            kbr_u32 keys[3] = { 0, 0, 0 }; long cnt[3] = { 0, 0, 0 }; kbr_u32 ptrs[4] = { 0, 0x100000, 0x200000, 0x200000 }; int tr[5] = { 0, -1, 0, 0, 0 }, sel[5], tr2[5] = { 0, 1, -1, 1, 0 };
+            CHECK(kbr_mb_vtclass(0) == 0 && kbr_mb_vtclass(0xbd0f14u) == 1 && kbr_mb_vtclass(0xbd1104u) == 2 && kbr_mb_vtclass(0xbd0954u) == 3, "mb vt class");
+            CHECK(!strcmp(kbr_mb_vtname(0xbd0f14u), "ZSoldierAttack") && !strcmp(kbr_mb_vtname(0xbd1104u), "ZAttackTarget") && !strcmp(kbr_mb_vtname(0), "none") && !strcmp(kbr_mb_vtname(7), "other"), "mb vt name");
+            CHECK(kbr_mb_modeslot(0) == 0 && kbr_mb_modeslot(4) == 4 && kbr_mb_modeslot(5) == 5 && kbr_mb_modeslot(0xffffffffu) == 5, "mb mode slot");
+            CHECK(kbr_mb_match(0x200000, ptrs, 4) == 2 && kbr_mb_match(0x100000, ptrs, 4) == 1 && kbr_mb_match(0x300000, ptrs, 4) == -1 && kbr_mb_match(0, ptrs, 4) == -1 && kbr_mb_match(0x20, ptrs, 4) == -1, "mb match: first hit, none, null current");
+            CHECK(kbr_mb_tally(keys, cnt, 3, 0x11) == 0 && kbr_mb_tally(keys, cnt, 3, 0x22) == 1 && kbr_mb_tally(keys, cnt, 3, 0x11) == 0 && cnt[0] == 2 && cnt[1] == 1 && kbr_mb_tally(keys, cnt, 3, 0x33) == 2 && kbr_mb_tally(keys, cnt, 3, 0x44) == -1 && kbr_mb_tally(keys, cnt, 3, 0) == -1, "mb tally: new, repeat, full, zero key");
+            CHECK(kbr_mb_arc_pick(tr, 5, sel, 2) == 2 && sel[0] == 1 && sel[1] == 0 && sel[2] == 1 && sel[3] == 0 && sel[4] == 0, "mb arc pick: no mark -> first 2 candidates");
+            CHECK(kbr_mb_arc_pick(tr2, 5, sel, 2) == 2 && !sel[0] && sel[1] && !sel[2] && sel[3] && !sel[4], "mb arc pick: marked only");
+            CHECK(kbr_mb_arc_pick(tr, 0, sel, 2) == 0, "mb arc pick: empty");
+        }
     }
     /* LOS helpers */
     {
