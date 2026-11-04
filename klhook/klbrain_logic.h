@@ -827,14 +827,15 @@ static int kbr_ci_name_tally(char names[][32], long *cnt, int cap, const char *n
     for (i = 0; i < cap; i++) if (!names[i][0]) { strncpy(names[i], name, 31); names[i][31] = 0; cnt[i] = 1; return i; }
     return -1;
 }
-/* CombatFlag decision. mode 1 = as specified (write only while [S+0x6fc] == 0), mode 2 = as the disassembly reads (write only while [S+0x6fc] != 0, so the Defend tick really picks list A). Codes:
+/* CombatFlag decision. mode 1 = as specified (write only while [S+0x6fc] == 0), mode 2 = as the disassembly reads (write only while [S+0x6fc] != 0, so the Defend tick really picks list A), mode 3 = as 2 but 6fc is written 1 by the caller when 0 (write whenever 4fc or 6fc is missing). Codes:
    0 write, 1 no fresh LosGate pass, 2 skip: a human is clear / unknown, 3 skip: the 6fc condition fails, 4 already set, 5 off / not alive. */
 static int kbr_cb_decide(int mode, int alive, int pass_fresh, int n_blocked, int n_open, int b6fc, int b4fc)
 {
-    if (mode != 1 && mode != 2) return 5;
+    if (mode < 1 || mode > 3) return 5;
     if (!alive) return 5;
     if (!pass_fresh || n_blocked <= 0) return 1;
     if (n_open > 0) return 2;
+    if (mode == 3) return (b4fc && b6fc) ? 4 : 0;      /* mode 3 writes 6fc itself (when 0), so it never fails the 6fc condition; nothing left to write once both are nonzero */
     if (mode == 1 ? (b6fc != 0) : (b6fc == 0)) return 3;
     return b4fc ? 4 : 0;
 }

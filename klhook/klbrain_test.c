@@ -465,7 +465,9 @@ int main(void)
         CHECK(kbr_cb_decide(1, 1, 1, 2, 0, 1, 0) == 3 && kbr_cb_decide(2, 1, 1, 2, 0, 0, 0) == 3, "cb: 6fc condition fails");
         CHECK(kbr_cb_decide(1, 1, 1, 2, 1, 0, 0) == 2 && kbr_cb_decide(2, 1, 1, 1, 3, 1, 0) == 2, "cb: a clear human = never write");
         CHECK(kbr_cb_decide(1, 1, 0, 2, 0, 0, 0) == 1 && kbr_cb_decide(1, 1, 1, 0, 0, 0, 0) == 1, "cb: no fresh pass / nobody evaluated");
-        CHECK(kbr_cb_decide(1, 1, 1, 2, 0, 0, 1) == 4 && kbr_cb_decide(1, 0, 1, 2, 0, 0, 0) == 5 && kbr_cb_decide(0, 1, 1, 2, 0, 0, 0) == 5 && kbr_cb_decide(3, 1, 1, 2, 0, 0, 0) == 5, "cb: already set, dead, mode off / unknown");
+        CHECK(kbr_cb_decide(1, 1, 1, 2, 0, 0, 1) == 4 && kbr_cb_decide(1, 0, 1, 2, 0, 0, 0) == 5 && kbr_cb_decide(0, 1, 1, 2, 0, 0, 0) == 5 && kbr_cb_decide(4, 1, 1, 2, 0, 0, 0) == 5, "cb: already set, dead, mode off / unknown");
+        CHECK(kbr_cb_decide(3, 1, 1, 2, 0, 0, 0) == 0 && kbr_cb_decide(3, 1, 1, 2, 0, 1, 0) == 0 && kbr_cb_decide(3, 1, 1, 2, 0, 0, 1) == 0, "cb3: write while 4fc or 6fc is missing, whatever 6fc was");
+        CHECK(kbr_cb_decide(3, 1, 1, 2, 0, 1, 1) == 4 && kbr_cb_decide(3, 1, 1, 2, 1, 0, 0) == 2 && kbr_cb_decide(3, 1, 0, 2, 0, 0, 0) == 1 && kbr_cb_decide(3, 1, 1, 0, 0, 0, 0) == 1 && kbr_cb_decide(3, 0, 1, 2, 0, 0, 0) == 5, "cb3: both set = already, clear human, no pass, nobody blocked, dead");
         CHECK(kbr_hs_flags(1) == 0x01ul && kbr_hs_flags(2) == 0x15ul && kbr_hs_flags(0) == 0ul && kbr_hs_flags(3) == 0ul, "hs: flags per mode");
         CHECK(!kbr_hs_fires(kbr_hs_flags(1)) && !kbr_hs_fires(kbr_hs_flags(2)), "hs: neither value passes the fire test 0x616480");
         CHECK(kbr_hs_fires(0x11ul) && !kbr_hs_fires(0x15ul) && !kbr_hs_fires(0x251ul) && !kbr_hs_fires(0x211ul) && !kbr_hs_fires(0x51ul) && !kbr_hs_fires(0x10ul), "hs: fire test reference (0x11 passes; 0x4 / 0x40 / 0x200 or a missing bit fail)");

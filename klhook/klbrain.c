@@ -1098,8 +1098,8 @@ static void klbr_sn_unfeed(int i, DWORD snd)      /* wrap ends (klbr_ta_restore)
 }
 typedef struct { DWORD at; int blocked, open; } KLBR_CBP;      /* OnlineBrainTraitorCombatFlag: the last Sense pass of a bot: when, humans skipped as BLOCKED by LosGate, humans fed (not blocked) */
 static KLBR_CBP klbr_cb_pass[KLBR_MAX];
-static int klbr_cbmode, klbr_cb_flt, klbr_cb_nolog, klbr_cb_first[KLBR_MAX], klbr_cb_set[KLBR_MAX]; static long klbr_cb_undo; static DWORD klbr_cb_next[KLBR_MAX];      /* mode 0 off, 1 / 2 see kbr_cb_decide */
-static long klbr_cb_w, klbr_cb_sk_clear, klbr_cb_sk_6fc, klbr_cb_sk_nopass, klbr_cb_already, klbr_cb_b0null;
+static int klbr_cbmode, klbr_cb_flt, klbr_cb_nolog, klbr_cb_first[KLBR_MAX], klbr_cb_set[KLBR_MAX], klbr_cb_set6[KLBR_MAX]; static long klbr_cb_undo; static DWORD klbr_cb_next[KLBR_MAX];      /* mode 0 off, 1 / 2 / 3 see kbr_cb_decide; set6 = WE wrote [S+0x6fc] = 1 (mode 3) */
+static long klbr_cb_w6, klbr_cb_r6, klbr_cb_nz6, klbr_cb_w, klbr_cb_sk_clear, klbr_cb_sk_6fc, klbr_cb_sk_nopass, klbr_cb_already, klbr_cb_b0null;
 static int klbr_hsmode, klbr_hs_flt;      /* OnlineBrainTraitorHolderSet: 0 off, 1 flags 0x01, 2 flags 0x15 (see klbr_hs_apply) */
 static int klbr_pass_all_blocked(int i, DWORD now)      /* the per-bot Sense / LosGate pass record is fresh, at least one human was skipped as BLOCKED and none is open (CombatFlag's and HolderSet's input) */
 {
@@ -2729,14 +2729,15 @@ static void klbr_ci_summary(const char *why)      /* the round line; printed whe
 }
 /* OnlineBrainTraitorCombatFlag (11-04; TEST build only, UNTESTED, recommended off; CHANGES the game: ONE data byte, [S+0x4fc], and only under the gates below). Lever from re/approach_lever_1104.md: the Defend tick 0x85f6c0 walks tactic list A (with ZCloseIn) only while [S+0x4fc] != 0 AND a [S+0x6fc] condition holds.
    Value 1 = the spec of the verifier text (write only while [S+0x6fc] == 0); value 2 = the disassembly (write only while [S+0x6fc] != 0). RE-READ 11-04 at 0x85f896: cmp [eax+4fc],0 / je -> flag 0; cmp [eax+6fc],0 / mov flag,1 / jne keep / else flag 0: list A needs BOTH bytes nonzero, so the verifier text is wrong and 2 is the useful mode; 1 is kept only to be able to test the claim. Once a human is clear again the byte WE set is written back to 0 (stock firing needs it 0). Host game thread, online marked bots only, every 250 ms per wrapped bot.
+   Value 3 (UNTESTED, GUESS that it makes ZCloseIn run): same gates, writes 4fc = 1 AND, if [S+0x6fc] == 0, 6fc = 1 (klbr_cb_set6 remembers it was OURS); both undone when a human turns clear / the pass goes stale, 6fc only if still 1 (stock writers 0x7b3991, 0x578d3b/0x578d93, 0x5a3a03 are never clobbered). Unwrap / round end only forget (the memory may be gone).
    Gates (kbr_cb_decide): the bot is wrapped and alive; LosGate AND Sense are on (the per-bot Sense pass record says how many humans were skipped as BLOCKED and how many were fed/open); at least one human is blocked and NONE is open; byte 4fc not already 1. Never written while any human is clear. Faults: 3 = off. */
-static void klbr_cb_reset(void) { klbr_cb_undo = 0; memset(klbr_cb_set, 0, sizeof klbr_cb_set); klbr_cb_w = klbr_cb_sk_clear = klbr_cb_sk_6fc = klbr_cb_sk_nopass = klbr_cb_already = klbr_cb_b0null = 0; memset(klbr_cb_first, 0, sizeof klbr_cb_first); memset(klbr_cb_next, 0, sizeof klbr_cb_next); memset(klbr_cb_pass, 0, sizeof klbr_cb_pass); }
+static void klbr_cb_reset(void) { klbr_cb_undo = 0; klbr_cb_w6 = klbr_cb_r6 = klbr_cb_nz6 = 0; memset(klbr_cb_set, 0, sizeof klbr_cb_set); memset(klbr_cb_set6, 0, sizeof klbr_cb_set6); klbr_cb_w = klbr_cb_sk_clear = klbr_cb_sk_6fc = klbr_cb_sk_nopass = klbr_cb_already = klbr_cb_b0null = 0; memset(klbr_cb_first, 0, sizeof klbr_cb_first); memset(klbr_cb_next, 0, sizeof klbr_cb_next); memset(klbr_cb_pass, 0, sizeof klbr_cb_pass); }
 static void klbr_cb_summary(const char *why)
 {
     if (!klbr_cbmode) return;
-    if (!klbr_cb_w && !klbr_cb_sk_clear && !klbr_cb_sk_6fc && !klbr_cb_sk_nopass && !klbr_cb_already && !klbr_cb_undo && !klbr_cb_flt) return;
-    klog("brain: combatflag round %s: writes %ld (of those [S+0xb0] was null %ld), skipped (clear human) %ld, skipped (6fc) %ld, skipped (no fresh pass or nobody blocked) %ld, already set %ld, undone when a human turned clear %ld, faults %d; mode %d", why, klbr_cb_w, klbr_cb_b0null, klbr_cb_sk_clear, klbr_cb_sk_6fc, klbr_cb_sk_nopass, klbr_cb_already, klbr_cb_undo, klbr_cb_flt, klbr_cbmode);
-    klbr_cb_w = klbr_cb_sk_clear = klbr_cb_sk_6fc = klbr_cb_sk_nopass = klbr_cb_already = klbr_cb_b0null = klbr_cb_undo = 0;
+    if (!klbr_cb_w && !klbr_cb_w6 && !klbr_cb_r6 && !klbr_cb_nz6 && !klbr_cb_sk_clear && !klbr_cb_sk_6fc && !klbr_cb_sk_nopass && !klbr_cb_already && !klbr_cb_undo && !klbr_cb_flt) return;
+    klog("brain: combatflag round %s: writes %ld (of those [S+0xb0] was null %ld), skipped (clear human) %ld, skipped (6fc) %ld, skipped (no fresh pass or nobody blocked) %ld, already set %ld, undone when a human turned clear %ld, faults %d; 6fc (mode 3) written by us %ld, restored to 0 %ld, already nonzero (left alone) %ld; mode %d", why, klbr_cb_w, klbr_cb_b0null, klbr_cb_sk_clear, klbr_cb_sk_6fc, klbr_cb_sk_nopass, klbr_cb_already, klbr_cb_undo, klbr_cb_flt, klbr_cb_w6, klbr_cb_r6, klbr_cb_nz6, klbr_cbmode);
+    klbr_cb_w = klbr_cb_sk_clear = klbr_cb_sk_6fc = klbr_cb_sk_nopass = klbr_cb_already = klbr_cb_b0null = klbr_cb_undo = klbr_cb_w6 = klbr_cb_r6 = klbr_cb_nz6 = 0;
 }
 /* OnlineBrainTraitorHolderSet (11-04; TEST build only, UNTESTED, recommended off; CHANGES the game: re-writes the marked bot's target holder [S+0xa8..] through the game's own setter). Lever from re/holder_b0_1104.md (Verifier, 'Endorsed lever'):
    ZCloseIn 0x6724e0 and the fire clause 0x85ece0 both bail on [S+0xb0] == 0, and online the stock target scan 0x767510 clears it (SetHolder(0) at 0x767f8a, no winner) because LosGate keeps every blocked human out of the known list.
@@ -3692,7 +3693,7 @@ static void klbr_ta_restore(int i, int clearbit, const char *why)      /* the st
     DWORD snd = klbr_ta[i].snd, stock = KLBR_TA_SOLDIER_VT + (DWORD)klh_delta; int rec = klbr_ta[i].rec;
     klbr_dm_restore(i, why);      /* OnlineBrainTraitorDamage: the body byte back with the table */
     if (!snd) return;
-    klbr_sn_unfeed(i, snd); klbr_ta[i].snd = 0; klbr_ta[i].rec = 0; klbr_ta[i].nlog[0] = klbr_ta[i].nlog[1] = 0; klbr_sn_at[i] = 0; klbr_cl[i].lat = 0; klbr_cb_pass[i].at = 0; klbr_cb_next[i] = 0; klbr_cb_set[i] = 0;      /* OnlineBrainTraitorSense: feeding stops with the wrap */
+    klbr_sn_unfeed(i, snd); klbr_ta[i].snd = 0; klbr_ta[i].rec = 0; klbr_ta[i].nlog[0] = klbr_ta[i].nlog[1] = 0; klbr_sn_at[i] = 0; klbr_cl[i].lat = 0; klbr_cb_pass[i].at = 0; klbr_cb_next[i] = 0; klbr_cb_set[i] = 0; klbr_cb_set6[i] = 0;      /* OnlineBrainTraitorSense: feeding stops with the wrap */
     if (klh_soldier_priv && klh_rd32(snd) == klh_soldier_priv) klh_data((void *)(DWORD_PTR)snd, &stock, 4, "ZSoldier vtable pointer back (OnlineBrainTraitorArcade)");
     if (clearbit && rec > 0 && klbr_shadow) { __try { KLBR_PB(KLBR_REC(rec) + 0x79) &= (BYTE)~2; } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_sw_flt++; } }
     klog("brain: traitor arcade: slot %d soldier %08lx back on the stock table (%s)", i, (unsigned long)snd, why);
@@ -3707,6 +3708,14 @@ static void klbr_ta_restore_all(const char *why)      /* before every memset of 
     klbr_sn_flt = 0; klbr_sn_fed = 0; klbr_sn_logged = 0; klbr_sn_unfed = 0; klbr_sn_dlog = 0; klbr_sn_dat = 0;      /* OnlineBrainTraitorSense: the round's counters */
     if (n) klog("brain: traitor arcade: %s: %d wrapped bot(s) cleared", why, n);
 }
+static void klbr_cb_restore6(int i, DWORD S, DWORD d6)      /* mode 3: [S+0x6fc] back to 0, only if WE set it and it is still 1 (a changed byte is a stock write: left alone); d6 = the dword read this tick */
+{
+    if (!klbr_cb_set6[i]) return;
+    klbr_cb_set6[i] = 0;
+    if ((d6 & 0xffu) != 1) return;
+    __try { *(volatile BYTE *)(DWORD_PTR)(S + 0x6fc) = 0; } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_cb_flt++; klog("brain: combatflag: fault at the 6fc undo (%d of 3 allowed)", klbr_cb_flt); return; }
+    klbr_cb_r6++;
+}
 static void klbr_cb_apply(int i, DWORD now)      /* OnlineBrainTraitorCombatFlag: game thread, depth 0, bot i is wrapped and alive (the pump just checked); the one game write is the byte [S+0x4fc] = 1 */
 {
     DWORD S = klbr_ta[i].snd, d6 = 0, fb0 = 0; BYTE b4 = 0; int dec, fresh;
@@ -3717,6 +3726,7 @@ static void klbr_cb_apply(int i, DWORD now)      /* OnlineBrainTraitorCombatFlag
     fresh = klbr_cb_pass[i].at && (int)(now - klbr_cb_pass[i].at) <= 2 * klbr_snms + 1000;      /* signed: the record stamp is now|1, up to 1 ms ahead */
     __try { klh_rd(S + 0x4fc, &b4, 1); d6 = klh_rd32(S + 0x6fc); } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_cb_flt++; return; }
     dec = kbr_cb_decide(klbr_cbmode, 1, fresh, klbr_cb_pass[i].blocked, klbr_cb_pass[i].open, (d6 & 0xffu) != 0, b4 != 0);
+    if (dec == 1 || dec == 2) klbr_cb_restore6(i, S, d6);      /* mode 3: no longer eligible (stale pass / nobody blocked) or a human is clear: put back the 6fc byte WE wrote */
     if (dec == 1) { klbr_cb_sk_nopass++; return; }
     if (dec == 2) {      /* a human is clear again: give the stock firing clause (needs [S+0x4fc] == 0) back its state, but only the byte WE wrote (it was 0 before) */
         klbr_cb_sk_clear++;
@@ -3726,6 +3736,11 @@ static void klbr_cb_apply(int i, DWORD now)      /* OnlineBrainTraitorCombatFlag
     if (dec == 3) { klbr_cb_sk_6fc++; return; }
     if (dec == 4) { klbr_cb_already++; return; }
     if (dec != 0) return;
+    if (klbr_cbmode == 3) {      /* 6fc: set to 1 only when it is 0 (then remembered as ours); a nonzero byte is a stock write and is never touched */
+        if (!(d6 & 0xffu)) { __try { *(volatile BYTE *)(DWORD_PTR)(S + 0x6fc) = 1; } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_cb_flt++; klog("brain: combatflag: fault at the 6fc write (%d of 3 allowed)", klbr_cb_flt); return; } klbr_cb_set6[i] = 1; klbr_cb_w6++; }
+        else if (!klbr_cb_set6[i]) klbr_cb_nz6++;
+        if (b4) return;      /* 4fc already 1 (ours or stock): only 6fc was missing */
+    }
     __try { fb0 = klh_rd32(S + 0xb0); *(volatile BYTE *)(DWORD_PTR)(S + 0x4fc) = 1; } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_cb_flt++; klog("brain: combatflag: fault at the write (%d of 3 allowed)", klbr_cb_flt); return; }
     klbr_cb_w++; klbr_cb_set[i] = 1; if (!fb0) klbr_cb_b0null++;
     if (!klbr_cb_first[i]) { klbr_cb_first[i] = 1; klog("brain: combatflag: bot %d S %08lx: [S+0x4fc] written 1 (all %d human(s) blocked, none open; [S+0x6fc] %08lx; [S+0xb0] %08lx%s); mode %d (UNTESTED)", i, (unsigned long)S, klbr_cb_pass[i].blocked, (unsigned long)d6, (unsigned long)fb0, fb0 ? "" : " NULL", klbr_cbmode); }
@@ -4239,12 +4254,12 @@ static void klbr_init(void)
     if (klbr_losprobe) klog("brain: OnlineBrainTraitorLosProbe=1 UNTESTED (recommended off): FireProbe8 also runs the game's physics line test (a pure query into our own buffer; reads the collision world, writes no game memory) per marked shot, from the muzzle origin and from the bot eye to the human chest");
     klbr_mbon = klbr_key("OnlineBrainTraitorModeBProbe");
     klbr_cion = klbr_key("OnlineBrainTraitorCloseInProbe");
-    klbr_cbmode = klbr_keyi("OnlineBrainTraitorCombatFlag", 0); if (klbr_cbmode != 1 && klbr_cbmode != 2) klbr_cbmode = 0;
+    klbr_cbmode = klbr_keyi("OnlineBrainTraitorCombatFlag", 0); if (klbr_cbmode < 1 || klbr_cbmode > 3) klbr_cbmode = 0;
     klbr_hsmode = klbr_keyi("OnlineBrainTraitorHolderSet", 0); if (klbr_hsmode != 1 && klbr_hsmode != 2) klbr_hsmode = 0;
     if (klbr_hsmode) klog("brain: OnlineBrainTraitorHolderSet=%d UNTESTED (recommended off): CHANGES the game (TEST build only, host only, online marked bots only): while OnlineBrainTraitorLosGate and OnlineBrainTraitorSense report every human BLOCKED for the bot, points its holder [S+0xa8..] at the nearest live human (0x6ece90 handle, 0x8ccde0 round-trip check, SetHolder 0x8bd420, flags 0x%lx: the fire test 0x616480 fails with it, ZCloseIn passes); re-applied every 100 ms (the next 0x767510 scan wipes it); stops writing when a human is clear; HolderFix yields to it while blocked; 3 faults = off for the round", klbr_hsmode, kbr_hs_flags(klbr_hsmode));
     klbr_f6act = klbr_f6on || klbr_f7on || klbr_raon || klbr_f8on || klbr_mbon || klbr_cion;
     if (klbr_cion) klog("brain: OnlineBrainTraitorCloseInProbe=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only; counting detours on the ZCloseIn eval 0x6724e0 and its two return tails 0x672722 / 0x672770, the run-task tick 0x4a7e60 and the soldier arm 0x800630, all unhashed so they also install under SessionSafe=1; plus 250 ms DATA-side sampling of the current goal, the tactic lists, [S+0x4fc] / [S+0x6fc] and the ZCloseIn timer / destination); needs the slot-113 wrapper (the FireProbe keys) to mark the online bot; offline Arcade is sampled like ModeBProbe");
-    if (klbr_cbmode) klog("brain: OnlineBrainTraitorCombatFlag=%d UNTESTED (recommended off): CHANGES the game (TEST build only, host only, online marked bots only): writes the byte [S+0x4fc] = 1 every 250 ms, only while OnlineBrainTraitorLosGate and OnlineBrainTraitorSense report every human BLOCKED for the bot (none clear) and [S+0x6fc] is %s (value 1 = the verifier text, which the disassembly REFUTES; 2 = the Defend tick 0x85f896..0x85f8bc as re-read in debug/dasm.py 11-04: list A needs [S+0x4fc] != 0 AND [S+0x6fc] != 0, so 2 is the one that can work); it never writes while a human is clear; 3 faults = off", klbr_cbmode, klbr_cbmode == 1 ? "0" : "nonzero");
+    if (klbr_cbmode) klog("brain: OnlineBrainTraitorCombatFlag=%d UNTESTED (recommended off): CHANGES the game (TEST build only, host only, online marked bots only): writes the byte [S+0x4fc] = 1 every 250 ms, only while OnlineBrainTraitorLosGate and OnlineBrainTraitorSense report every human BLOCKED for the bot (none clear) and [S+0x6fc] is %s (value 1 = the verifier text, which the disassembly REFUTES; 3 = as 2 but it also writes [S+0x6fc] = 1 itself while that byte is 0 and puts it back to 0 afterwards, GUESS that this makes ZCloseIn run; 2 = the Defend tick 0x85f896..0x85f8bc as re-read in debug/dasm.py 11-04: list A needs [S+0x4fc] != 0 AND [S+0x6fc] != 0, so 2 is the one that can work); it never writes while a human is clear; 3 faults = off", klbr_cbmode, klbr_cbmode == 1 ? "0" : klbr_cbmode == 3 ? "0 or nonzero (mode 3 sets it to 1 when 0)" : "nonzero");
     if (klbr_mbon) klog("brain: OnlineBrainTraitorModeBProbe=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only; counting detours on slot 83 0x831850, the ZAttackTarget tick 0x4f4460 and its mode-B search 0x4f4b5f / 0x4f4b9b / 0x4f4bd1 / 0x4f4ba9 / 0x4f4bed, the run-task re-arm 0x800650; installed through the patch guard: under SessionSafe=1 only the unhashed 0x831850 and 0x800650 go in, the hashed 0x4f4xxx ones are refused; plus 250 ms DATA-side goal sampling that needs no site); needs the slot-113 wrapper (the FireProbe keys) to mark the bot");
     if (klbr_f8on) klog("brain: OnlineBrainTraitorFireProbe8=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only; counting detours: pellet loop 0x4cc1c0 / 0x4cc1d8, ZProjectile Activate 0x900d80, hit callback via the 0x8ccde0 lookup, send via 0x596fc0, victim entry 0x4db580; the sites in hashed ranges install only with SessionSafe=0); needs the slot-113 wrapper (the FireProbe keys) to mark the bot");
     if (klbr_f7on) klog("brain: OnlineBrainTraitorFireProbe7=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only: the FireProbe6 counting detours plus a seventh on AimAt 0x70f130, unhashed code); per marked shot the AimAt fields [body+0x824..0x83c], [+0x68c], [+0x64c], who the target / holder / fire task target is, AimAt called in the last second, the ray matrix rows against the human, the template range (host only; needs the slot-113 wrapper to mark the bot: the FireProbe keys)");
