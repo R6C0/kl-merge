@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-04 16:20 c9: bs56 PASS 0 faults. Arcade's 'wait for the crew' rule works online: on DD05 the van waited 51 s for walking bots (Arcade ~53 s); on DM03 every bot boarded through the game's own Board tactic, so the van rightly left. DD03 (helicopter) has no boarding place online yet, and now picks a traitor with the 6 minute clock. bs57 logs the helicopter boarding fields online vs Arcade.
 - 11-04 15:45 c9: bs55 PASS 0 faults. The van probe shows the bots are still walking to the van when it parks (as in Arcade), so Arcade's 'wait for the crew' rule will work online; the old hold kept the van only 7-11 s. bs56 tests that rule now (DM03, DD05, DD03).
 - 11-04 15:25 c9: bs54 PASS 0 faults. With Arcade's 6 minute round clock DD05 now picks a traitor too, and it shot players 91 times (DM03: 39). The van still leaves too soon (9-15 s at the curb, Arcade ~53 s); bs55 tests that next, and the Arcade 'wait for the crew' rule is built (off by default).
 - 11-04 15:05 c9: bs53 PASS 0 faults on four more Dog Days maps. Wherever a traitor was picked, it shot players online (DD01 78 hits, DD07 8, DD09 37); on DD03 no traitor was picked. Next tests: an Arcade-length round clock (bs54), then an Arcade-like van wait (bs55).

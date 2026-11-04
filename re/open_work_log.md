@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~16:20 - [c9] bs56 (bs55 kit + OnlineVanCrewHold=1, out_ch_1104y) PASS 6/6 seats 0 faults. Arcade's crewhold works online: DD05 van 51 s in state 3 (Arcade ~53 s; one add 1.5 -> 46.5 s,
+5 walkers, shield 52 s). DM03: all 7 bots boarded by the REAL Board tactic (0 fallback) and nobody was left walking, so the van left after 7 s (correct, as in Arcade). DD03 (heli): no boarding place
+([+0x1e0] = 0) so no crew hold, 15 s; 0 real Board, 6 fallback. TimeAuto=6 now marks a traitor on DD03 too (500 marked shots, 373 aimed at a human chest). 803833d72: [Brain] BoardProbe (log only,
+out_bp_1104z) after research wa4ox109n (DD03 no boarding object; DD01 'race' theory refuted). bs57 running (BoardProbe online DD03+DD01, then Arcade DD03+DD01 baseline); traitor-early research running.
+
 2026-11-04 ~15:45 - [c9] bs55 (bs54 kit + OnlineGatherM=40, FarHold 45 s, HoldMaxS=45, OnlineVanMoverProbe, out_vm_1104x) PASS 4/4 seats 0 faults. The probe says crewhold WOULD fire online:
 at most 6 loyal bots per sample moved >= 200 cm in 2 s within 100 m of kle_boarding at the curb (DM03 14 of 42 bot samples count, DD05 30 of 60), but the legacy hold (3 s floor, walker within 18 m)
 kept the van only 7-11 s in state 3 (Arcade 53 s). Traitor marked on both maps, hits DM03 13 (396 dmg), DD05 12 (7267 dmg). bs56 (OnlineVanCrewHold=1, out_ch_1104y; DM03 DD05 DD03) running from 15:41.
