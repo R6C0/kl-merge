@@ -422,6 +422,13 @@ int main(void)
         CHECK(kbr_ra_sitemask(5) == 5 && kbr_ra_sitemask(7) == 7 && kbr_ra_sitemask(2) == 2 && kbr_ra_sitemask(3) == 3 && kbr_ra_sitemask(0) == 5 && kbr_ra_sitemask(8) == 5 && kbr_ra_sitemask(-1) == 7 && kbr_ra_sitemask(15) == 7, "ra sitemask: bits 1/2/4, empty -> 5");
         CHECK(kbr_f7_dbucket(-1.0f) == 4 && kbr_f7_dbucket(0.0f) == 0 && kbr_f7_dbucket(999.0f) == 0 && kbr_f7_dbucket(1000.0f) == 1 && kbr_f7_dbucket(2999.0f) == 1 && kbr_f7_dbucket(3000.0f) == 2 && kbr_f7_dbucket(5999.0f) == 2 && kbr_f7_dbucket(6000.0f) == 3 && kbr_f7_dbucket(9e6f) == 3, "f7 dbucket edges");
     }
+    /* FireProbe8 helpers */
+    {
+        kbr_u32 set[3] = { 0x11, 0, 0x33 };
+        CHECK(kbr_f8_near(5000, 3500, 2000) && kbr_f8_near(5000, 3000, 2000) && !kbr_f8_near(5000, 2999, 2000) && !kbr_f8_near(5000, 0, 2000) && kbr_f8_near(100, 0xfffffff0UL, 2000) && !kbr_f8_near(100, 5000, 2000), "f8 near: window edge, none, wrap, future");
+        CHECK(kbr_f8_in_set(set, 3, 0x11) && kbr_f8_in_set(set, 3, 0x33) && !kbr_f8_in_set(set, 3, 0x22) && !kbr_f8_in_set(set, 3, 0) && !kbr_f8_in_set(set, 0, 0x11), "f8 in set: zero never matches");
+        CHECK(kbr_f8_nulls(10, 7) == 3 && kbr_f8_nulls(5, 5) == 0 && kbr_f8_nulls(3, 4) == 0, "f8 nulls");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }

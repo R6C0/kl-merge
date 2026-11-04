@@ -717,4 +717,24 @@ static int kbr_ra_sitemask(int v) { int m = v & 7; return m ? m : 5; }
 /* distance bucket for the FireProbe7 aim-point lines: 0 under 1000 units, 1 under 3000, 2 under 6000, 3 more, 4 unknown (negative) */
 static int kbr_f7_dbucket(float d) { return d < 0.0f ? 4 : d < 1000.0f ? 0 : d < 3000.0f ? 1 : d < 6000.0f ? 2 : 3; }
 
+/* OnlineBrainTraitorFireProbe8 (11-04): pure helpers of the pellet / hit funnel counters.
+   near: was 'last' (a GetTickCount of a marked shot, 0 = none yet) within win ms before 'now' (unsigned wrap safe; a last in the future counts as not near) */
+static int kbr_f8_near(unsigned long now, unsigned long last, unsigned long win)
+{
+    unsigned long d;
+    if (!last) return 0;
+    d = (now - last) & 0xffffffffUL;
+    return d <= win;
+}
+/* is v (non-zero) one of the n entries of set (the marked bots' shooter handles) */
+static int kbr_f8_in_set(const kbr_u32 *set, int n, kbr_u32 v)
+{
+    int i;
+    if (!v) return 0;
+    for (i = 0; i < n; i++) if (set[i] == v) return 1;
+    return 0;
+}
+/* null pellets of a funnel: loop iterations minus the non-null ones (never negative) */
+static long kbr_f8_nulls(long iter, long ok) { return iter > ok ? iter - ok : 0; }
+
 #endif /* KLBRAIN_LOGIC_H */
