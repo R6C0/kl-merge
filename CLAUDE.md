@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~09:50 - [c9] bs43 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_hs_1104n: LosGate + HolderSet=1 + CombatFlag=2 + CloseInProbe). HolderSet WORKS: holder = the human
+(DM03 0x320, DD05 0x1ab; 0x8ccde0 round-trip yes, 0 mismatches) while blocked. DM03: [S+0x6fc] 0 on 100% of samples -> Defend walks list B, ZCloseIn eval 0 calls, CombatFlag 2 skipped (6fc) 139/139.
+DD05: a stock writer sets 6fc (47%) -> list A walked, ZCloseIn eval 30 calls (1.0 once, armed a run), but the holder is replaced by the stock scan (0x3d6, flags 0x10) and the 100 marked shots go at
+'something else', all blocked. wzerqnft4 (89c24f42b): ZCloseIn always built, in list A; our squads are StayBack so 6fc stays 0. w1ztfdggn builds CombatFlag mode 3 (4fc AND 6fc) for bs44.
+
 2026-11-04 ~09:25 - [c9] bs42 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; bs41 kit with LosGate OFF). CONFIRMED: LosGate empties the holder. Without it [S+0xb0] fills online
 (DM03 0x320/0x321 on 86/88 data lines, DD05 0x1ab/0x39f/0x3dc 41/41), flags 0x1/0x5/0x11; DM03 ZAttackTarget current on 106/746 samples, 199 marked shots aimed at the human
 (190 within 5 deg) but ALL blocked (through walls again, as bs38); DD05 0 shots (HolderFix range unknown 251, never sets 0x10). Research wgxzr8q8l (8af089bea) +
 CloseInProbe/CombatFlag d396f7e40 (Defend walks list A only when 4fc AND 6fc are nonzero). wj2driobk builds HolderSet (holder kept, non-firing flags, while blocked) for bs43.
-
-2026-11-04 ~08:55 - [c9] bs41 + arc41 PASS (online DM03 + DD05 4 seats, Arcade offline DM03 + DD05; 0 asserts, 0 faults; ModeBProbe v2 f84a963fd). Online vs Arcade goal picture:
-BOTH run Defend (vt 0xbd0674, slot [S+0x648], state 2) nearly always (Arcade also Idle 0xbd0f54 with mode 2); mode [S+0x88]=1 in Defend on both, so mode is not the gap.
-THE GAP: holder [S+0xb0] online = 0 on every sample (16/16 data lines); Arcade = a changing small handle (DD05 0x364..0x3e8, DM03 0x320/0x1e91/0x525f) ~70% of samples,
-and [S+0xa8] bits 0x1/0x2/0x4 vary in Arcade (online always 0x10). CloseIn 0x6724e0 and the fire clause 0x85ece0 both need [S+0xb0]!=0. wgxzr8q8l: who writes it; w7ipt21r0 builds CloseInProbe + CombatFlag.
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

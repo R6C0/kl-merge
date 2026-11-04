@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~09:50 - [c9] bs43 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_hs_1104n: LosGate + HolderSet=1 + CombatFlag=2 + CloseInProbe). HolderSet WORKS: holder = the human
+(DM03 0x320, DD05 0x1ab; 0x8ccde0 round-trip yes, 0 mismatches) while blocked. DM03: [S+0x6fc] 0 on 100% of samples -> Defend walks list B, ZCloseIn eval 0 calls, CombatFlag 2 skipped (6fc) 139/139.
+DD05: a stock writer sets 6fc (47%) -> list A walked, ZCloseIn eval 30 calls (1.0 once, armed a run), but the holder is replaced by the stock scan (0x3d6, flags 0x10) and the 100 marked shots go at
+'something else', all blocked. wzerqnft4 (89c24f42b): ZCloseIn always built, in list A; our squads are StayBack so 6fc stays 0. w1ztfdggn builds CombatFlag mode 3 (4fc AND 6fc) for bs44.
+
 2026-11-04 ~09:25 - [c9] bs42 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; bs41 kit with LosGate OFF). CONFIRMED: LosGate empties the holder. Without it [S+0xb0] fills online
 (DM03 0x320/0x321 on 86/88 data lines, DD05 0x1ab/0x39f/0x3dc 41/41), flags 0x1/0x5/0x11; DM03 ZAttackTarget current on 106/746 samples, 199 marked shots aimed at the human
 (190 within 5 deg) but ALL blocked (through walls again, as bs38); DD05 0 shots (HolderFix range unknown 251, never sets 0x10). Research wgxzr8q8l (8af089bea) +

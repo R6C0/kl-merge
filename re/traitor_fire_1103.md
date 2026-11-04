@@ -407,3 +407,9 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
   Goal: Defend 638/746, ZAttackTarget (slot 658) current 106/746 (bs41: 0). Shots 199, aim->human chest < 5 deg 190, all 199 BLOCKED from the eye, s3human 0: firing through walls again (bs38). HolderFix in range 262, out of range 76. hp 550 flat.
 - DD05: [S+0xb0] 0x1ab/0x1aa/0x39f/0x3dc on 41/41 lines; flags 0x01/0x05/0x10/0x14; Defend 589/590; shots 0; HolderFix in range 0, range unknown 251 (0x10 never set -> fire test fails).
 - Conclusion: the empty holder in bs39-bs41 is caused by LosGate (Sense skips blocked humans -> 0x767510 no-winner clear at 0x767f8a). Next: keep the holder with non-firing flags while blocked (HolderSet) + CombatFlag mode 2, so CloseIn can pass without firing through walls.
+
+## bs43 (out_hs_1104n: LosGate + HolderSet=1 + CombatFlag=2 + CloseInProbe=1): PASS, 0 asserts, 0 faults
+- DM03: HolderSet writes 28 then kept 139 (holder 0x320 = the human, 0x8ccde0 round-trip yes); [S+0x6fc] 0 on 769/769 samples -> list B; ZCloseIn eval calls 0; CombatFlag mode 2 skipped (6fc) 139, writes 0; marked shots 0 (fireprobe8 shots 0). Current goal ZDefendPosition x769.
+- DD05: [S+0x6fc] nonzero 47% (stock writer: squad unleash / modifier / ambush), [S+0x4fc] 58%; list A walked; ZCloseIn eval 30 calls (1.0 x1, 0.0 x29), arm 19; the stock scan replaces our holder (0x3d6, flags 0x10, not a human); humans ~175 m away; 100 marked shots, target 'something else' 100, all BLOCKED from the eye, s3human 0.
+- Lists: A[9] = ReactToHumanShield, BecomeTraitor, BoardEscapeVehicle, AttackMountedWeapon, CloseAttack, CloseIn, AttackFromCover, AttackNoCover, ...; B[9] starts the same, C empty.
+- Conclusion: the research (wzerqnft4) holds: 6fc gates list A and is 0 for our StayBack squads. Next: CombatFlag mode 3 (write 4fc and 6fc while blocked, restore 6fc) + HolderSet, bs44.
