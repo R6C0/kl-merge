@@ -522,6 +522,11 @@ int main(void)
         CHECK(kbr_nb_skip(2, 0, 1, 0, 1) && kbr_nb_skip(2, 1, 1, 0, 1) && kbr_nb_skip(2, 2, 1, 0, 1) && !kbr_nb_skip(2, 3, 1, 0, 1), "noboard: mode 2 skips all three paths only");
         CHECK(!kbr_nb_skip(2, 0, 0, 0, 1) && !kbr_nb_skip(2, 0, 1, 1, 1) && !kbr_nb_skip(2, 0, 1, 0, 0), "noboard: needs Arcade, no TraitorTurn, a marked bot");
     }
+    /* OnlineBrainTraitorAfcProbe */
+    {
+        CHECK(kbr_af_gate(0, 5, 0, 1) == 1 && kbr_af_gate(1, 0, 0, 1) == 2 && kbr_af_gate(1, 5, 1, 1) == 3 && kbr_af_gate(1, 5, 0, 0) == 4 && kbr_af_gate(1, 5, 0, 1) == 5, "afc gate: first failing gate in code order, else pass");
+        CHECK(kbr_af_gate(0x100, 5, 0, 1) == 1 && kbr_af_gate(1, 5, 0x100, 1) == 5 && kbr_af_gate(0, 0, 1, 0) == 1, "afc gate: byte widths (108 and 5c8 are bytes), gate 1 first");
+    }
     printf("klbrain_test: %d checks, %d FAIL\n", checks, fails);
     return fails ? 1 : 0;
 }

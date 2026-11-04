@@ -926,4 +926,17 @@ static int kbr_nb_skip(int mode, int path, int arcade, int trturn, int marked)
     return path == 2 && mode == 2;
 }
 
+/* OnlineBrainTraitorAfcProbe (11-04; pure; re/attackfromcover_1104.md Q1 + Verifier). Predicted outcome of the ZAttackFromCover eval 0x680b20 from its read inputs:
+   1 = gate 1 fails ([S+0x108] use-covers byte 0; the level-wide ban 0x72bc70 is not read, so a pass here is only 'not known to fail'), 2 = holder [S+0xb0] 0, 3 = body byte [[S+0x40]+0x5c8] nonzero,
+   4 = cover state [S+0xec] 0 (gate 4: the cover search 0x807c60 runs INSIDE the eval and may fill [S+0xec], so this is where the sample is at its least certain: GUESS that the sampled value is the one the eval saw),
+   5 = pass (all four gates look open). Order as the code: 1, 2, 3, 4. */
+static int kbr_af_gate(unsigned long b108, unsigned long holder, unsigned long c5, unsigned long ec)
+{
+    if (!(b108 & 0xfful)) return 1;
+    if (!holder) return 2;
+    if (c5 & 0xfful) return 3;
+    if (!ec) return 4;
+    return 5;
+}
+
 #endif /* KLBRAIN_LOGIC_H */
