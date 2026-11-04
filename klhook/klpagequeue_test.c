@@ -104,6 +104,11 @@ int main(void)
     CHECK(kpq_aostep(2, KPQ_TOP_OTHER, 0, -6, -4, 0, 100, 10) == KPQ_AS_ABORT && kpq_aostep(2, KPQ_TOP_WPN, 1, -6, -4, 0, 2501, 10) == KPQ_AS_ABORT, "step 2: closed / timeout");
     CHECK(kpq_aostep(3, KPQ_TOP_NEW, 0, -6, -4, 0, 0, 999) == KPQ_AS_ABORT, "unknown step");
 
+    /* InShopSteps */
+    CHECK(kpq_inshop_start(KPQ_TOP_NEW, 0) == 0 && kpq_inshop_start(KPQ_TOP_CAT, 1) == 1, "in the shop: start at Buy Weapons / Category");
+    CHECK(kpq_inshop_start(KPQ_TOP_OTHER, 0) == -1 && kpq_inshop_start(KPQ_TOP_WPN, 2) == -1 && kpq_inshop_start(KPQ_TOP_CAT, 0) == -1 && kpq_inshop_start(KPQ_TOP_NEW, 1) == -1, "not in the shop / list open / mode lags: send path");
+    CHECK(kpq_aostep(1, KPQ_TOP_CAT, 1, -6, -4, 0, 400, 400) == KPQ_AS_OPENWPN && kpq_aostep(1, KPQ_TOP_CAT, 1, -6, -2, 0, 400, 400) == KPQ_AS_ABORT, "start at 1: pistols opens the list, another category stops");
+
     printf("klpagequeue_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

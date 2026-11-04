@@ -97,7 +97,7 @@ static struct {
     int ctlOn, ctlKey, ctlKeyDown, hPendPg, hintDone, ctlTold; DWORD ctlLastKey;   /* config (the page-cycle key), edge, the early press's target (0 hire / 1 controls), the once-per-session hint, presses logged */
     volatile int ctl;                            /* the controls page is on screen (never together with hire / shownB) */
     int queueOn, hQueued, hintEvery, hscore, pscore, autoOn, aoSends, aoSentOk, aoShopSeen; DWORD pq2At, aoUpAt, aoLast;
-    int aoSteps, aoStep, aoTopK; DWORD aoStepAt, aoTopAt;   /* [ShopPage] AutoOpenSteps: step 0..2 (9 = finished / aborted for this press), its stamp, the top window kind and since when */   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
+    int aoSteps, aoStep, aoTopK, inShop; DWORD aoStepAt, aoTopAt;   /* [ShopPage] AutoOpenSteps: step 0..2 (9 = finished / aborted for this press), its stamp, the top window kind and since when */   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
 } kspg;
 
 static struct { DWORD stock, orig; int n; DWORD vt[KSPG_MAXSLOT + 1]; } kspg_tab[KSPG_NCLS];       /* vt[0] = RTTI locator, vt[1+i] = slot i */
@@ -1311,6 +1311,9 @@ static void kspg_init(void)
     if (kspg.autoOn && !kspg.queueOn) klog("pagequeue: [ShopPage] AutoOpen=1 needs PageQueue=1: AutoOpen does nothing");
     else if (kspg.autoOn) klog("pagequeue: [ShopPage] AutoOpen=1 (recommended on once benched; NOT RUN IN THE GAME): a queued page press on the round-over page also presses Buy Weapons (ZW_SELECT3 to the page's Ready element, up to %d sends)", KPQ_AO_MAXSEND);
     kspg.aoSteps = GetPrivateProfileIntA("ShopPage", "AutoOpenSteps", 0, klh_ini) != 0;   /* 2026-11-03, default 0, recommended on once benched; needs AutoOpen=1 (klpagequeue_logic.h kpq_aostep) */
+    kspg.inShop = GetPrivateProfileIntA("ShopPage", "InShopSteps", 0, klh_ini) != 0;   /* 2026-11-04, default 0, recommended on once benched; needs AutoOpenSteps=1 (klpagequeue_logic.h kpq_inshop_start) */
+    if (kspg.inShop && !(kspg.aoSteps && kspg.autoOn && kspg.queueOn)) klog("pagequeue: [ShopPage] InShopSteps=1 needs AutoOpenSteps=1, AutoOpen=1 and PageQueue=1: it does nothing");
+    else if (kspg.inShop) klog("pagequeue: [ShopPage] InShopSteps=1 (recommended on once benched; NOT RUN IN THE GAME): a page key pressed with Buy Weapons or the category list open walks on to the weapon list");
     if (kspg.aoSteps && !(kspg.autoOn && kspg.queueOn)) klog("pagequeue: [ShopPage] AutoOpenSteps=1 needs AutoOpen=1 and PageQueue=1: it does nothing");
     else if (kspg.aoSteps) klog("pagequeue: [ShopPage] AutoOpenSteps=1 (recommended on once benched; NOT RUN IN THE GAME): after AutoOpen the hook opens the category list and the weapon list (Primary, pistols) itself");
 #ifdef KLHOOK_TEST
@@ -1810,6 +1813,14 @@ static void kspg_autoopen_tick(void)
     if (mode == KPQ_MODE_LIST) kspg.aoShopSeen = 1;             /* review: the player has had the list this 0x20 phase (shopped / backed out / readied): never auto-open again until the phase ends */
     if (!queued) { kspg.aoSends = 0; kspg.aoLast = 0; kspg.aoSentOk = 0; kspg.aoStep = 0; kspg.aoTopK = 0; kspg.aoTopAt = 0; return; }
     if (kspg.aoSteps && kspg.aoSentOk && kspg.aoStep < 9) { kspg_aosteps_tick(now, mode); return; }   /* before the aoShopSeen return: mode 2 is the steps' DONE */
+    if (kspg.inShop && kspg.aoSteps && !kspg.aoSentOk && kpq_autoopen_due(kspg.autoOn, kspg.queueOn, queued, kspg.st, mode, kspg.aoUpAt ? kpq_age(now, kspg.aoUpAt) : 0u, 0, 0u)) {
+        int top, s0;   /* InShopSteps: the shop is already open (no Ready element to send to): start the steps where the player is; aoShopSeen does not block it (no send, so no re-opened shop) */
+        if (kspg_wsys(&top) && (s0 = kpq_inshop_start(top, mode)) >= 0) {
+            kspg.aoSentOk = 1; kspg.aoLast = now | 1; kspg.aoStep = s0; kspg.aoStepAt = s0 ? (now | 1) : 0; kspg.aoTopK = 0; kspg.aoTopAt = 0;
+            klog("pagequeue: inshop: the press came with %s on top (shop mode %d): steps start at %d, no Buy Weapons send", s0 ? "FABuyWeaponsNewCategory" : "FABuyWeaponsNew", mode, s0);
+            return;
+        }
+    }
     if (kspg.aoSentOk || kspg.aoShopSeen) return;               /* review: a successful send is final (no resend while the list is still opening); retries only when no element / vtable */
     if (!kpq_autoopen_due(kspg.autoOn, kspg.queueOn, queued, kspg.st, mode, kspg.aoUpAt ? kpq_age(now, kspg.aoUpAt) : 0u, kspg.aoSends, kspg.aoLast ? kpq_age(now, kspg.aoLast) : 0u)) return;
     kspg.aoLast = now | 1; kspg.aoSends++;                      /* counted even when nothing is found: the cap bounds the retries */

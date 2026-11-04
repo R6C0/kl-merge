@@ -137,6 +137,16 @@ static int kpq_aostep(int step, int top, int mode, int slot, int cat, int busy, 
     return KPQ_AS_ABORT;
 }
 
+/* [ShopPage] InShopSteps (2026-11-04, NOT RUN IN THE GAME): a queued press made while the shop is already open needs no Buy Weapons send (the MercsFAStatusReady element may be
+   gone, the 11-02 owner log had such presses 'ignored'): the steps start where the player is. Returns the step to start at (0 = FABuyWeaponsNew on top in mode 0, 1 = its
+   Category list on top in mode 1), or -1 = not in the shop (AutoOpen's send path, or the list is open and the press applies as it is). */
+static int kpq_inshop_start(int top, int mode)
+{
+    if (top == KPQ_TOP_NEW && mode == 0) return 0;
+    if (top == KPQ_TOP_CAT && mode == 1) return 1;
+    return -1;
+}
+
 /* [ShopPage] HintEveryShop: what 'hint shown' becomes when the shop closes (0 = the hint may show again in the next shop) */
 static int kpq_hint_done_after_close(int everyShop, int done)
 {
