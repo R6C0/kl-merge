@@ -369,3 +369,14 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - ZProjectile = component (vt 0xba925c): Activate slot 35 0x900d80, Update slot 25 0x897460 (sweep 0x4cd400, layer mask 6), hit callback slot 36 0x6f7950 called only at 0x8977c9.
 - desc+0x44 (moving) = 1 only when template [+0xac]==7, else hitscan (50000-unit step, R not checked): range is not the loss. Loop writes desc+0x48 (frame delay).
 - Slot-36 filters F2/F3 only for ZFFPlayer shooters; 0x7aca80 returns 0 for session type 4. F1 ([[0xdd265c]+0x8b1] && [victim+0x780]) and victim-side G1 ([session+0x70] >= 0x28 at 0x4db58c), G3 (null item) remain but are moot while no pellet reaches a player.
+
+## bs39 (out_lg_1104i: LosGate + LosProbe + FireProbe6..8 + GateForce + RayAim site 2): PASS, 0 faults
+- LOS answers: DM03 clear 0 blocked 342 err 0; DD05 clear 0 blocked 312 err 0 (physics faults 0). Bot eye -> human chest 61-63 m (DM03), 100-108 m (DD05).
+- DM03: Sense skipped the blocked human 342x, HolderFix 0; marked bot fired 0 shots (all callbacks 494 = other shooters).
+- DD05: Sense skipped 312x, HolderFix 0, but 187 shots / 187 pellets / 187 hit callbacks, s3human 0; LosProbe at shot time: muzzle BLOCKED 187, eye BLOCKED 187; victim class ZSTDOBJ (handle 0x1bd8).
+- Open: is the test ever clear (no control yet)? Which path fires on DD05 without Sense/HolderFix (shared task [S+0x56c] / AttackHandle / stale entry)? -> w18ipq4cv.
+
+## w4funhvyl (static, verified) 11-04: ZAttackTarget mode B
+- Slot 83 0x831850: handle 0 -> CoverFire (0xa0); nonzero -> if [[S+0x5ac]+8] not 0/4 only stores [S+0x720]; else retarget 0x68fd70 and, only if [[S+0x658]+8] in 0/4, AddGoal(+0x658, 0x96) + arbiter. CoverFire 0xa0 outranks ZAttackTarget 0x96.
+- Mode B: candidates (point 0 = own position), test 0x4e1750 at 0x4f4b92 (al!=0 = clear point here), first clear index != 0 -> RunChild vt+0x74 at 0x4f4bed; none -> [S+0x4fc]=1 + vt+0x13c (0x4f4ba9).
+- Verifier: do not build an Approach lever yet (it repeats AttackHandle); first ModeBProbe (slot 83 branch, tick, candidates, RunChild, re-arm 0x800650). Unverified whether Arcade runs ZAttackTarget at all.

@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-04 07:15 c9: bs39 PASS 0 faults: the line-of-sight gate stopped the DM03 traitor firing through walls (0 shots), but on DD05 another path still fired 187 blocked shots; the test never answered clear (players 60-100 m away). w18ipq4cv checks the test + the DD05 path; wowvy02qv builds ModeBProbe for bs40.
 - 11-04 06:40 c9: bs38 PASS 0 faults: found the loss - every marked traitor bullet is created and hits something, but always level objects between the bot and the human (no line of sight), never a player. wp201e2bn researches Arcade's line-of-sight gate / approach.
 - 11-04 06:00 c9: bs36 + bs37 PASS 0 faults, hp still flat: the traitor already aims at the human (aim point within 0.1 deg, ~58 m, range 60 m) and forcing the aim point changed nothing; the loss is the bullet hit / damage filter. wmcd2s92o researches it.
 - 11-04 04:45 c9: bs35 + arc35 PASS 0 faults: marked traitor shots now run the same code path as Arcade (real muzzle, ray, request), hp still flat - the gun does not point at the human (40-63 m, 2-52 deg off, bot running). wb8i8skjo builds FireProbe7 + RayAim (default off).

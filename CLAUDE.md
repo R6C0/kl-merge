@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~07:15 - [c9] bs39 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; LosGate + LosProbe 5c7294fa8). The line test never answered clear (DM03 0/342, DD05 0/312; humans 60-100 m away at spawn).
+DM03: Sense skipped the blocked human 342 times and the marked bot fired 0 shots (bs38: 124 through walls). DD05: Sense skipped 312, HolderFix 0, yet 187 shots, all BLOCKED from muzzle and eye,
+every pellet on a ZSTDOBJ (static object): another path still fires. w18ipq4cv checks klbr_los_clear vs 0x4e1750 (a clear control) and finds the DD05 firing path;
+wowvy02qv builds ModeBProbe (read-only, research w4funhvyl verified: the stock firing-position search is reached only via slot 83 with both goal states 0/4) for bs40.
+
 2026-11-04 ~06:40 - [c9] bs38 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe8 ce4aff56c, read-only pellet funnel). FOUND THE LOSS: every marked traitor shot builds its
 pellet (DM03 124/124, DD05 266/266; desc speed 30000, R 6000) and every pellet gets a hit callback (ZProjectile slot 36 via Update 0x897460), but the victim is never a player:
 always low-handle objects (DM03 0x606/0x6aa/0x6d7, DD05 0x1968/0x207e) = probably level geometry between bot and human. The bot fires at the human WITHOUT LINE OF SIGHT
 (our Sense/MarkSeen likely feeds unseen humans). wp201e2bn researches Arcade's LOS gate + approach and a default-off lever. Range (hitscan) and filters F1/F2/F3 ruled out.
-
-2026-11-04 ~06:00 - [c9] bs36 + bs37 PASS (DM03 + DD05, 4 seats each, 0 asserts, 0 faults; RayAim e34885be1, aim point dae9bc300). hp still 550 on all four maps.
-AIM IS NOT THE LOSS: AimAt mode 1, target [body+0x828] = the human (DM03 90/90 in bs36); the item aim point [item+0xc8..0xd0] that every pellet bullet carries (ctor 0x748900 arg8)
-is already within 0.1 deg of the human chest (60/104 DM03, 100/225 DD05), ~5800 units vs range R 6000, and bit 2 rewrote it to the chest on 104/104 + 225/225 shots: no damage.
-Ray children [child+0x60] = vtable 0xb9e9a4, [+0x6c] 0 at 0x4cc644. wmcd2s92o researches the bullet hit path + the human's damage filters (friendly fire / shooter-not-a-player).
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

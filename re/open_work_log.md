@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~07:15 - [c9] bs39 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; LosGate + LosProbe 5c7294fa8). The line test never answered clear (DM03 0/342, DD05 0/312; humans 60-100 m away at spawn).
+DM03: Sense skipped the blocked human 342 times and the marked bot fired 0 shots (bs38: 124 through walls). DD05: Sense skipped 312, HolderFix 0, yet 187 shots, all BLOCKED from muzzle and eye,
+every pellet on a ZSTDOBJ (static object): another path still fires. w18ipq4cv checks klbr_los_clear vs 0x4e1750 (a clear control) and finds the DD05 firing path;
+wowvy02qv builds ModeBProbe (read-only, research w4funhvyl verified: the stock firing-position search is reached only via slot 83 with both goal states 0/4) for bs40.
+
 2026-11-04 ~06:40 - [c9] bs38 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe8 ce4aff56c, read-only pellet funnel). FOUND THE LOSS: every marked traitor shot builds its
 pellet (DM03 124/124, DD05 266/266; desc speed 30000, R 6000) and every pellet gets a hit callback (ZProjectile slot 36 via Update 0x897460), but the victim is never a player:
 always low-handle objects (DM03 0x606/0x6aa/0x6d7, DD05 0x1968/0x207e) = probably level geometry between bot and human. The bot fires at the human WITHOUT LINE OF SIGHT
