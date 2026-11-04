@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~12:00 - [c9] bs46r (repeat of bs46) PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults). Hits reproduce on the OTHER map: DM03 marked rec 6: 9 hits on humans (351.7 dmg),
+LosGate clear 27 / blocked 373; winners NoCover x134, CloseIn x90, DefendCover x83, AFC x59, Board x67 (late). DD05 rec 3: 0 hits, LosGate clear 0 / blocked 422, AFC x340, CloseIn x222,
+Board x250; 7 CloseIn wins, 3 closed, but the bot drifted to 120-190 m. So far 2 of 4 NoBoard map runs hit a human (before NoBoard: 0 in bs31-bs45). AfcProbe built (26082b224, out_afc_1104s);
+bs47 (online + AfcProbe) and arc47 (Arcade baseline, same probes) running from 11:57.
+
 2026-11-04 ~11:40 - [c9] bs46 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_nb_1104r: bs45 kit + RunProbe + OnlineBrainTraitorNoBoard=1, 49677dd93). FIRST ONLINE TRAITOR HITS ON A HUMAN:
 DD05 marked bot (rec 2) dropped by the puppeteer (phase 2 -> 0), Defend winners AFC x413 / CloseIn x117 / Loot x105, Board x132 only at the end; ZCloseIn win #2 closed 49.1 m -> 15.9 m,
 then 11 hits on crew seat 0 (391 dmg), LOS CLEAR from eye and muzzle (fireprobe8), aim 1.4 deg; LosGate round clear 25 blocked 370. DM03 (rec 6): CloseIn/DefendCover until the van,

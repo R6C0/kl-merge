@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~12:00 - [c9] bs46r (repeat of bs46) PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults). Hits reproduce on the OTHER map: DM03 marked rec 6: 9 hits on humans (351.7 dmg),
+LosGate clear 27 / blocked 373; winners NoCover x134, CloseIn x90, DefendCover x83, AFC x59, Board x67 (late). DD05 rec 3: 0 hits, LosGate clear 0 / blocked 422, AFC x340, CloseIn x222,
+Board x250; 7 CloseIn wins, 3 closed, but the bot drifted to 120-190 m. So far 2 of 4 NoBoard map runs hit a human (before NoBoard: 0 in bs31-bs45). AfcProbe built (26082b224, out_afc_1104s);
+bs47 (online + AfcProbe) and arc47 (Arcade baseline, same probes) running from 11:57.
+
 2026-11-04 ~11:40 - [c9] bs46 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; out_nb_1104r: bs45 kit + RunProbe + OnlineBrainTraitorNoBoard=1, 49677dd93). FIRST ONLINE TRAITOR HITS ON A HUMAN:
 DD05 marked bot (rec 2) dropped by the puppeteer (phase 2 -> 0), Defend winners AFC x413 / CloseIn x117 / Loot x105, Board x132 only at the end; ZCloseIn win #2 closed 49.1 m -> 15.9 m,
 then 11 hits on crew seat 0 (391 dmg), LOS CLEAR from eye and muzzle (fireprobe8), aim 1.4 deg; LosGate round clear 25 blocked 370. DM03 (rec 6): CloseIn/DefendCover until the van,
 then the REAL Board tactic boarded it at van state 5 (Arcade-like, late); 0 hits, 1 of 2 CloseIn runs closed. wbbizoo57 (AFC research, 128ea0b5e); w9tmcqect builds AfcProbe for bs47.
-
-2026-11-04 ~11:00 - [c9] bs45 + arc45 PASS (online DM03 + DD05 4 seats, Arcade DM03 + DD05; 0 asserts, 0 faults; DefendProbe 938cdc2dd). FOUND why the online traitor walks away:
-with 4fc+6fc forced (mode 3) Defend walks list A (713/798) and the winner is ZBoardEscapeVehicle x531 (list A slot 3, BEFORE ZCloseIn), DefendCover 117, NoCover 58, CloseIn 1.
-Arcade (all bots) stays on list B (DM03 1127/1276, DD05 2031/2356): AttackFromCover wins (354 / 1134), Board only late in the round. ZCloseIn rarely wins on either side (gate P1 = its 1-4 s timer).
-bs45 DD05: no bot was marked (chance). RunProbe built (46cd1a0aa, out_rp_1104q). w4t14cjcd: who makes Board win online (stock vs our Board/RealRun) + lever.
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

@@ -442,3 +442,8 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
   RunProbe: 3 wins, direct 2 cover 1; win #2 d0 49.1 m -> d5 38.5 -> d15 15.9 m (CLOSED). At 11:34:10-14 shots at the human holder 3600a020 from 15.6 m, LOS CLEAR (eye + muzzle), aim 1.4 deg; HitLog: 11 hits on crew seat 0, 391.0 dmg (5 logged individually). LosGate round: clear 25 blocked 370.
 - DM03: marked rec 6 at 11:25:37 (ledger phase 4 loot -> dropped); puppeteer skips 93. Winners: DefendCover x200, CloseIn x100, AFC x30, Loot x8, then Board x415 from van state 1 -> 5 (real slot-45 board, stage 3, aboard 11:27:22). RunProbe 2 wins, 1 closed (57.6 -> 36.3 m); 0 hits.
 - Conclusion: our OnlineBoard fallback was what parked the traitor at the van; without it the stock tactics close in and fire like Arcade (DD05). Board now wins only once the van is there, as in arc45.
+
+## bs46r (repeat of bs46, out_nb_1104r): PASS, 0 faults
+- DM03 rec 6 (marked 11:43:17): HitLog 9 hits on humans, 351.7 dmg; LosGate clear 27 blocked 373; puppeteer skips 181, BoardAll skips 8. Winners: NoCover x134, CloseIn x90, DefendCover x83, AFC x59, Loot x21, Board x67 (late), none 101. RunProbe 2 wins (58.7 -> 57.4 m closed; 34.4 -> 36.4 m).
+- DD05 rec 3 (marked 11:51:34): 0 hits; LosGate clear 0 blocked 422. Winners AFC x340, CloseIn x222, Board x250, DefendCover x23. RunProbe 7 wins (direct 2, cover 5), 3 closed, distance 40 -> 120-190 m over the round.
+- Tally with NoBoard: DD05 (bs46) 11 hits 391 dmg, DM03 (bs46r) 9 hits 352 dmg; the other two map runs 0 hits (humans never in line of sight).
