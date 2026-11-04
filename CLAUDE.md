@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~17:10 - [c9] bs57 LOST: out_bp_1104z (and bs58's out_s2_1104a) were SHIP builds (klhookuild.bat, no klauto), so every bench seat hung with no window and NO LOG (SB57A DD03,
+SB57B DD01, ARC57 DD03). Bench dlls must come from build_auto.bat (TEST). c54c3b264: [Brain] OnlineBrainTraitorStage2Gate (default off; carrying bots show stage 1 to the Traitor evaluate until
+van call / gather / real van state 1-4 / exit box / $1.25M). TEST dll out_s2t_1104b (md5 35b0bbc2, HEAD = BoardProbe + Stage2Gate) is in the bs57 and bs58 kits. Owner back 16:55: both kits
+PAUSED (bs57/PAUSE, bs58/PAUSE); rerun bs57 (DD03 DD01 online + Arcade) and bs58 (Stage2Gate on DM03 DD05 DD03) when the game is free.
+
 2026-11-04 ~16:20 - [c9] bs56 (bs55 kit + OnlineVanCrewHold=1, out_ch_1104y) PASS 6/6 seats 0 faults. Arcade's crewhold works online: DD05 van 51 s in state 3 (Arcade ~53 s; one add 1.5 -> 46.5 s,
 5 walkers, shield 52 s). DM03: all 7 bots boarded by the REAL Board tactic (0 fallback) and nobody was left walking, so the van left after 7 s (correct, as in Arcade). DD03 (heli): no boarding place
 ([+0x1e0] = 0) so no crew hold, 15 s; 0 real Board, 6 fallback. TimeAuto=6 now marks a traitor on DD03 too (500 marked shots, 373 aimed at a human chest). 803833d72: [Brain] BoardProbe (log only,
 out_bp_1104z) after research wa4ox109n (DD03 no boarding object; DD01 'race' theory refuted). bs57 running (BoardProbe online DD03+DD01, then Arcade DD03+DD01 baseline); traitor-early research running.
-
-2026-11-04 ~15:45 - [c9] bs55 (bs54 kit + OnlineGatherM=40, FarHold 45 s, HoldMaxS=45, OnlineVanMoverProbe, out_vm_1104x) PASS 4/4 seats 0 faults. The probe says crewhold WOULD fire online:
-at most 6 loyal bots per sample moved >= 200 cm in 2 s within 100 m of kle_boarding at the curb (DM03 14 of 42 bot samples count, DD05 30 of 60), but the legacy hold (3 s floor, walker within 18 m)
-kept the van only 7-11 s in state 3 (Arcade 53 s). Traitor marked on both maps, hits DM03 13 (396 dmg), DD05 12 (7267 dmg). bs56 (OnlineVanCrewHold=1, out_ch_1104y; DM03 DD05 DD03) running from 15:41.
-Parity audit (scratchpad parity_audit_1104.md, verified): next gaps = real Board tactic never used on DD01/DD03/DD07 (research wa4ox109n running), host HUD log gap, traitor marked 2-4x earlier (money row).
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

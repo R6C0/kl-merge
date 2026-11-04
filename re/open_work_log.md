@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~17:10 - [c9] bs57 LOST: out_bp_1104z (and bs58's out_s2_1104a) were SHIP builds (klhookuild.bat, no klauto), so every bench seat hung with no window and NO LOG (SB57A DD03,
+SB57B DD01, ARC57 DD03). Bench dlls must come from build_auto.bat (TEST). c54c3b264: [Brain] OnlineBrainTraitorStage2Gate (default off; carrying bots show stage 1 to the Traitor evaluate until
+van call / gather / real van state 1-4 / exit box / $1.25M). TEST dll out_s2t_1104b (md5 35b0bbc2, HEAD = BoardProbe + Stage2Gate) is in the bs57 and bs58 kits. Owner back 16:55: both kits
+PAUSED (bs57/PAUSE, bs58/PAUSE); rerun bs57 (DD03 DD01 online + Arcade) and bs58 (Stage2Gate on DM03 DD05 DD03) when the game is free.
+
 2026-11-04 ~16:20 - [c9] bs56 (bs55 kit + OnlineVanCrewHold=1, out_ch_1104y) PASS 6/6 seats 0 faults. Arcade's crewhold works online: DD05 van 51 s in state 3 (Arcade ~53 s; one add 1.5 -> 46.5 s,
 5 walkers, shield 52 s). DM03: all 7 bots boarded by the REAL Board tactic (0 fallback) and nobody was left walking, so the van left after 7 s (correct, as in Arcade). DD03 (heli): no boarding place
 ([+0x1e0] = 0) so no crew hold, 15 s; 0 real Board, 6 fallback. TimeAuto=6 now marks a traitor on DD03 too (500 marked shots, 373 aimed at a human chest). 803833d72: [Brain] BoardProbe (log only,
