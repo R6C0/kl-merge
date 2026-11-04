@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~06:40 - [c9] bs38 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe8 ce4aff56c, read-only pellet funnel). FOUND THE LOSS: every marked traitor shot builds its
+pellet (DM03 124/124, DD05 266/266; desc speed 30000, R 6000) and every pellet gets a hit callback (ZProjectile slot 36 via Update 0x897460), but the victim is never a player:
+always low-handle objects (DM03 0x606/0x6aa/0x6d7, DD05 0x1968/0x207e) = probably level geometry between bot and human. The bot fires at the human WITHOUT LINE OF SIGHT
+(our Sense/MarkSeen likely feeds unseen humans). wp201e2bn researches Arcade's LOS gate + approach and a default-off lever. Range (hitscan) and filters F1/F2/F3 ruled out.
+
 2026-11-04 ~06:00 - [c9] bs36 + bs37 PASS (DM03 + DD05, 4 seats each, 0 asserts, 0 faults; RayAim e34885be1, aim point dae9bc300). hp still 550 on all four maps.
 AIM IS NOT THE LOSS: AimAt mode 1, target [body+0x828] = the human (DM03 90/90 in bs36); the item aim point [item+0xc8..0xd0] that every pellet bullet carries (ctor 0x748900 arg8)
 is already within 0.1 deg of the human chest (60/104 DM03, 100/225 DD05), ~5800 units vs range R 6000, and bit 2 rewrote it to the chest on 104/104 + 225/225 shots: no damage.

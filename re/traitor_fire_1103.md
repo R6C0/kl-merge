@@ -356,3 +356,16 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - First ray child at 0x4cc644: [child+0x60] never the human or a player; vtable 0x00b9e9a4 every time; [[child+0x60]+0x6c] = 0 (the shooter stamp comes later at 0x4cc4ba).
 - hp 550/550 at round end on all four runs; coverfire health checks flat.
 - Conclusion: the pellets carry a correct aim point inside (or just beyond) range, so the loss is the bullet hit/damage path or a victim-side filter, not the aim.
+
+## bs38 (out_fp8_1104h: FireProbe8 pellet funnel + GateForce + FireProbe6/7 + RayAim site 2): PASS, 0 faults
+- Sites installed 4 of 6 (0x900d80 Activate and 0x4db580 victim entry are hashed: SessionSafe=0 only, so s2/s5 = 0 by design).
+- DM03: shots 124, pellets 124 (1 per shot, s1null 0), hit callbacks 125, hits on a player 0, past the door check 125 (none on a player). DD05: 266 / 266 / 266 / 0 / 266.
+- Descriptor: +8 speed 30000, +0xc R 6000, +0x2c..0x38 1000/2/1000/1000, +0x3c 1.0; [comp+0x90] 300, [comp+0x54] 9, [comp+0xb8] 1.0.
+- Hit victims (rate-limited sample): DM03 handles 0x606, 0x6aa, 0x6d7; DD05 0x1968, 0x207e - all 'not a player', low handles = probably static level objects/cover between the bot and the human.
+- So pellets are created, fly toward the chest and are stopped by geometry: no line of sight. hp 550 on both maps.
+
+## wmcd2s92o + wljmqprl9 (static, verified) 11-04
+- Damage carriers are the pellets of loop 0x4cc1c0 (before gate 0x4cc389); 0x713e80 children are ZParticleEmitter FX (vt 0xb9e9a4). Descriptor at esp+0x164 at the loop head (ctor 0x748900 ret 0x4c).
+- ZProjectile = component (vt 0xba925c): Activate slot 35 0x900d80, Update slot 25 0x897460 (sweep 0x4cd400, layer mask 6), hit callback slot 36 0x6f7950 called only at 0x8977c9.
+- desc+0x44 (moving) = 1 only when template [+0xac]==7, else hitscan (50000-unit step, R not checked): range is not the loss. Loop writes desc+0x48 (frame delay).
+- Slot-36 filters F2/F3 only for ZFFPlayer shooters; 0x7aca80 returns 0 for session type 4. F1 ([[0xdd265c]+0x8b1] && [victim+0x780]) and victim-side G1 ([session+0x70] >= 0x28 at 0x4db58c), G3 (null item) remain but are moot while no pellet reaches a player.
