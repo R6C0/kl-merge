@@ -68,15 +68,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~14:30 - [c9] DefendPull=2 (stock order 0x760e50, 550 cm short of the holder) works on DM03: bs51 (out_po_1104v) 111 attempted hits on humans (2461 dmg), far 6%, 15 orders 0 no-ops;
+bs52 (out_po2_1104w = + NPC health alive fix 43793c462) 39 hits (550 dmg), far 6%, 12 orders, skip 'dead' 0 (bs50 DD05: 719). Alive root cause confirmed: drift line hp 280000 src npc5fc alive 1,
+a48 -999 (the old player-layout read). Both PASS 0 faults. DD05: bs51 marked late (0 hits, 3 orders), bs52 never marked a traitor (no data). Next: mode 2 on more stock DD maps.
+
 2026-11-04 ~14:00 - [c9] bs49 / arc48 / bs50 all PASS (0 asserts, 0 faults). Online marked traitor hit humans on BOTH maps in bs50 (DefendPull=1, out_dp2_1104u): DM03 15 attempted hits (675 dmg), block far 19%, 9 pulls;
 DD05 10 hits (375 dmg), far 82%, 0 pulls because the alive test said dead on 719/719 ticks for a live bot ([body+0xa48]+4 health read; fix w4hmvyh2f running). bs49: DM03 0 hits (far 87%, Loot owned the block, 663 skips),
 DD05 25 hits (7850 dmg). arc48 (Arcade + DriftProbe, offline human found): the Arcade traitor's block is ALSO 89-124 m from the bench human on DM03 (AFC / DefendCover, holder = human), DD05 Board only.
 nb drop blk: DM03 block 53 m from humans at the drop, then CloseIn moved it onto the human. DefendPull=2 (stock order 0x760e50, 550 cm short of the holder, effa5ba73, out_po_1104v) committed; bs51 running.
-
-2026-11-04 ~13:05 - [c9] DefendPull WORKS on DM03: bs48p (out_dp_1104t, ea0d6a8fd, OnlineBrainTraitorDefendPull=1) PASS 4 seats 0 faults: 14 pulls, block > 25 m from humans 100% -> 17%,
-marked traitor ATTEMPTED 78 hits on humans (1108 dmg, 10 health drops logged; bs48 same kit without the pull: 0). DD05 bs48p: traitor marked late, Board/van all 60 samples, 0 pulls (no data).
-bs48 DriftProbe (no pull): holder human 89-92% (hypothesis b ruled out); the defend block [S+0x64c] sits > 25 m from every human 89-100% (cause a confirmed). bs47 PASS: DD05 8 hits (321 dmg),
-DM03 0 (AFC gate 4: no cover on 133/160). arc47 (Arcade) traitor marked late, mostly Board; ddef 11-18 m vs online DD05 163 m. Next: bs49 repeats bs48p; research who writes the far block.
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

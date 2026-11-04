@@ -18,6 +18,10 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~14:30 - [c9] DefendPull=2 (stock order 0x760e50, 550 cm short of the holder) works on DM03: bs51 (out_po_1104v) 111 attempted hits on humans (2461 dmg), far 6%, 15 orders 0 no-ops;
+bs52 (out_po2_1104w = + NPC health alive fix 43793c462) 39 hits (550 dmg), far 6%, 12 orders, skip 'dead' 0 (bs50 DD05: 719). Alive root cause confirmed: drift line hp 280000 src npc5fc alive 1,
+a48 -999 (the old player-layout read). Both PASS 0 faults. DD05: bs51 marked late (0 hits, 3 orders), bs52 never marked a traitor (no data). Next: mode 2 on more stock DD maps.
+
 2026-11-04 ~14:00 - [c9] bs49 / arc48 / bs50 all PASS (0 asserts, 0 faults). Online marked traitor hit humans on BOTH maps in bs50 (DefendPull=1, out_dp2_1104u): DM03 15 attempted hits (675 dmg), block far 19%, 9 pulls;
 DD05 10 hits (375 dmg), far 82%, 0 pulls because the alive test said dead on 719/719 ticks for a live bot ([body+0xa48]+4 health read; fix w4hmvyh2f running). bs49: DM03 0 hits (far 87%, Loot owned the block, 663 skips),
 DD05 25 hits (7850 dmg). arc48 (Arcade + DriftProbe, offline human found): the Arcade traitor's block is ALSO 89-124 m from the bench human on DM03 (AFC / DefendCover, holder = human), DD05 Board only.

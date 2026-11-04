@@ -460,3 +460,8 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - bs50 (bs49 kit on out_dp2_1104u + nb drop log): DM03 marked rec 5, nb drop: block 53 m from the humans, ledger phase 1; then CloseIn wrote the block onto the human (dblk_hum 0) and DefendCover / AFC held it; drift round far 19%, holder human 98%, 24 moves (CloseIn x12); pull round 9 pulls, 536 near a human, 122 winner-owned; HitLog 15 attempted hits, 674.7 dmg.
   DD05 marked rec 3, nb drop: block 47 m, phase 2, place none; drift round far 82%, holder human 84%, CloseIn x12 moves; pull round 0 pulls, skip 'dead' 719 of 719 although the bot acted the whole round (klbr_hp_read [body+0xa48]+4 <= 0 for this online bot: defect, w4hmvyh2f); HitLog 10 attempted hits, 375.0 dmg.
 - Tally of online traitor hits since NoBoard (bs46..bs50, 10 map runs): 7 runs with hits on humans.
+
+## bs51 / bs52 (11-04 13:50-14:25): DefendPull=2, all PASS, 0 faults
+- bs51 (out_po_1104v, mode 2): DM03 111 attempted hits on humans, 2460.9 dmg; drift far 6%, holder human 93%; 15 orders, 0 silent no-ops, all on the holder base; skip 'dead' 24 (old alive test). DD05 marked late (14:06, recs 5/6): 0 hits, far 51%, 3 orders, skip 'dead' 251.
+- bs52 (out_po2_1104w, + alive fix 43793c462): DM03 39 attempted hits, 550.0 dmg; far 6%, holder human 92%; pull round 12 orders, 0 no-ops, 0 snapped, skip 'dead' 0, near a human 552, winner-owned 34. All 120 drift lines: hp 280000.0 src npc5fc alive 1 a48 -999.0, so the old [body+0xa48]+4 read was the defect (confirmed). DD05: no traitor marked this round, no data.
+- Compare bs50 (mode 1) DM03: 15 hits / 675 dmg, far 19%. Mode 2 keeps the block within 25 m of a human 94% of the round.
