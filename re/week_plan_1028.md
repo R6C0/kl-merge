@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-04 13:05 c9: found why the online traitor wanders off: the spot it is told to defend sits far from every player. New option DefendPull moves that spot to the nearest player; on DM03 (bs48p, PASS, 0 faults) the traitor then shot at players about 78 times (1108 damage) where the same run without it did 0. DD05 had no data (traitor chosen late). bs49 repeats it.
 - 11-04 12:00 c9: bs46r (repeat) PASS 0 faults: this time the DM03 traitor shot a player 9 times (352 damage); on DD05 it never got a line of sight. 2 of 4 map runs now hit a player online (none before the fix). bs47 + arc47 (cover-tactic probe, online vs Arcade) running.
 - 11-04 11:40 c9: bs46 PASS 0 faults: with our own van-boarding orders switched off for the marked traitor, the DD05 traitor ran in from 49 m to 16 m and shot a player 11 times (391 damage) with a clear line of sight - the first online traitor hits. DM03's traitor boarded only when the van arrived, like Arcade. Next: bs47 repeats it with a cover-tactic probe.
 - 11-04 11:00 c9: bs45 + arc45 PASS 0 faults: found why the online traitor walks away from the player: with the aggressive list forced, 'board the escape vehicle' comes first and wins most of the time. Arcade bots mostly fight from cover and board only near the end. w4t14cjcd researches the lever.

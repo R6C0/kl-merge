@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~13:05 - [c9] DefendPull WORKS on DM03: bs48p (out_dp_1104t, ea0d6a8fd, OnlineBrainTraitorDefendPull=1) PASS 4 seats 0 faults: 14 pulls, block > 25 m from humans 100% -> 17%,
+marked traitor ATTEMPTED 78 hits on humans (1108 dmg, 10 health drops logged; bs48 same kit without the pull: 0). DD05 bs48p: traitor marked late, Board/van all 60 samples, 0 pulls (no data).
+bs48 DriftProbe (no pull): holder human 89-92% (hypothesis b ruled out); the defend block [S+0x64c] sits > 25 m from every human 89-100% (cause a confirmed). bs47 PASS: DD05 8 hits (321 dmg),
+DM03 0 (AFC gate 4: no cover on 133/160). arc47 (Arcade) traitor marked late, mostly Board; ddef 11-18 m vs online DD05 163 m. Next: bs49 repeats bs48p; research who writes the far block.
+
 2026-11-04 ~12:00 - [c9] bs46r (repeat of bs46) PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults). Hits reproduce on the OTHER map: DM03 marked rec 6: 9 hits on humans (351.7 dmg),
 LosGate clear 27 / blocked 373; winners NoCover x134, CloseIn x90, DefendCover x83, AFC x59, Board x67 (late). DD05 rec 3: 0 hits, LosGate clear 0 / blocked 422, AFC x340, CloseIn x222,
 Board x250; 7 CloseIn wins, 3 closed, but the bot drifted to 120-190 m. So far 2 of 4 NoBoard map runs hit a human (before NoBoard: 0 in bs31-bs45). AfcProbe built (26082b224, out_afc_1104s);

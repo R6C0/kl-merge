@@ -447,3 +447,9 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - DM03 rec 6 (marked 11:43:17): HitLog 9 hits on humans, 351.7 dmg; LosGate clear 27 blocked 373; puppeteer skips 181, BoardAll skips 8. Winners: NoCover x134, CloseIn x90, DefendCover x83, AFC x59, Loot x21, Board x67 (late), none 101. RunProbe 2 wins (58.7 -> 57.4 m closed; 34.4 -> 36.4 m).
 - DD05 rec 3 (marked 11:51:34): 0 hits; LosGate clear 0 blocked 422. Winners AFC x340, CloseIn x222, Board x250, DefendCover x23. RunProbe 7 wins (direct 2, cover 5), 3 closed, distance 40 -> 120-190 m over the round.
 - Tally with NoBoard: DD05 (bs46) 11 hits 391 dmg, DM03 (bs46r) 9 hits 352 dmg; the other two map runs 0 hits (humans never in line of sight).
+
+## bs47 (AfcProbe) / arc47 (Arcade) / bs48 (DriftProbe) / bs48p (DefendPull): all PASS, 0 faults
+- bs47 DM03: 0 hits; afc round: g2 17, g4 (ec 0, no cover) 133, pass 10; ddef > 10 m 42/160. DD05: 8 attempted hits 320.9 dmg (health drops confirmed); afc pass 119 / g4 80, ddef > 10 m 185/210 (example ddef 16285 cm with dhum 3847).
+- arc47 (Arcade, 1 seat): traitor marked late on both maps; DM03 winners Board x85 / AFC x32 / CloseIn x1, ec 0 mostly; DD05 Board x120. Mean ddef DM03 11.1 m, DD05 12.2 m (the Arcade traitor stays near its defend place).
+- bs48 (DriftProbe, no pull): DM03 dblk_hum > 2500 cm 100%, holder human 92%, block moves 14 (DefendCover 13); DD05 89% / 89%, moves 9 (CloseIn 6). 0 hits. => the holder is the human (hypothesis b ruled out); the defend block is far from every human (a).
+- bs48p (DefendPull=1): DM03 rec 6: 14 pulls (DefendCover winner), dblk_hum > 2500 cm 17%, ATTEMPTED 78 hits on humans 1108.4 dmg, 10 'traitor hit health' drops. DD05: marked late, Board winner all 60 samples, 270 ticks skipped (winner owns the block), 0 pulls.
