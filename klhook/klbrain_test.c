@@ -497,6 +497,14 @@ int main(void)
         CHECK(kbr_dp_jcc(nw, o, 0x672507, 0x700000) == 1 && nw[0] == 0x0f && nw[1] == 0x8c && kbr_dp_jcc_target(nw, 0x672507) == 0x700000u, "dp jcc: same condition, retargeted to the stub");
         o[0] = 0x74; CHECK(!kbr_dp_jcc(nw, o, 0x6726b1, 0x700000) && kbr_dp_jcc_target(o, 0x6726b1) == 0, "dp jcc: a short jump (rel8) is refused");
     }
+    /* RunProbe helpers */
+    {
+        CHECK(kbr_rp_elapsed(5000ul, 1000ul) == 4000ul && kbr_rp_elapsed(10ul, 0xfffffff0ul) == 26ul && kbr_rp_elapsed(1000ul, 5000ul) == 0ul && kbr_rp_elapsed(7ul, 7ul) == 0ul, "rp elapsed: plain, wrap, backwards = 0");
+        CHECK(kbr_rp_next(0, 0) == 1 && kbr_rp_next(0, 99999) == 1, "rp next: phase 0 -> 1 at once");
+        CHECK(kbr_rp_next(1, 4999) == 1 && kbr_rp_next(1, 5000) == 2 && kbr_rp_next(1, 20000) == 2, "rp next: +5 s");
+        CHECK(kbr_rp_next(2, 14999) == 2 && kbr_rp_next(2, 15000) == 3 && kbr_rp_next(3, 0) == 3, "rp next: +15 s, done stays done");
+        CHECK(kbr_rp_closed(500.0, 300.0) && !kbr_rp_closed(500.0, 500.0) && !kbr_rp_closed(500.0, 900.0) && !kbr_rp_closed(-1.0, 300.0) && !kbr_rp_closed(500.0, -1.0), "rp closed: d15 < d0, both known");
+    }
     /* LOS helpers */
     {
         float a[3] = { 0, 150, 0 }, b[3] = { 300, 150, 400 }, c[3] = { 0, 150, 1000 }, dl[3] = { 9, 9, 9 }, ln = 0, nan3[3];

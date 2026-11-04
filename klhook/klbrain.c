@@ -2543,7 +2543,8 @@ static void klbr_mb_install(void)      /* once (game thread); a refusal is final
 #define KLBR_CI_LOGMAX 120
 #define KLBR_CI_GAP 500
 #define KLBR_CI_ARMMAX 8
-static int klbr_dpon, klbr_cion, klbr_ci_state, klbr_ci_flt, klbr_ci_nok;
+static int klbr_dpon, klbr_cion, klbr_rpon, klbr_ci_state, klbr_ci_flt, klbr_ci_nok, klbr_ci_okmask;
+static void klbr_rp_win(int ix);      /* OnlineBrainTraitorRunProbe: a ZCloseIn 1.0 return (integer code only) */
 static BYTE *klbr_ci_stub;
 static const KLBR_MBSITE klbr_ci_sites[KLBR_CI_NSITE] = {
     { 0x6724e0, 8, { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x7c, 0x53, 0x56 }, 31 },
@@ -2573,7 +2574,7 @@ static void klbr_ci_body(int id, KLBR_F3REGS *r)      /* integer code only (see 
     if (id >= 31 && id <= 33) {
         DWORD t = id == 31 ? r->ecx : r->esi;
         if ((ix = klbr_ci_by(t, 0x590)) < 0) { klbr_ci_unm++; return; }
-        b = &klbr_ci_b[ix]; if (id == 31) b->ev++; else if (id == 32) b->ev0++; else b->ev1++;
+        b = &klbr_ci_b[ix]; if (id == 31) b->ev++; else if (id == 32) b->ev0++; else { b->ev1++; if (klbr_rpon) klbr_rp_win(ix); }
         return;
     }
     if (id == 34) {
@@ -2613,7 +2614,7 @@ static void klbr_ci_install(void)      /* once (game thread); a refusal is final
         n = kbr_f3_emit(klbr_ci_stub + s * 0x40, stub, k->id, (DWORD)(DWORD_PTR)klbr_ci_hit, k->b, k->len, (DWORD)(DWORD_PTR)(at + k->len));
         if (!n) { klog("brain: closein: site %d: stub not built", k->id); continue; }
         kbr_f3_jmp(jmp, (DWORD)(DWORD_PTR)at, stub, k->len);
-        if (klh_poke(at, k->b, k->len, jmp, k->len, "brain: CloseInProbe counting detour")) { ok++; if (nlist < (int)sizeof list - 8) nlist += _snprintf(list + nlist, sizeof list - nlist, " %d", k->id); klog("brain: closein: site %d 0x%x (%d bytes stolen) installed, stub %d bytes", k->id, (unsigned)k->site, k->len, n); }
+        if (klh_poke(at, k->b, k->len, jmp, k->len, "brain: CloseInProbe counting detour")) { ok++; klbr_ci_okmask |= 1 << s; if (nlist < (int)sizeof list - 8) nlist += _snprintf(list + nlist, sizeof list - nlist, " %d", k->id); klog("brain: closein: site %d 0x%x (%d bytes stolen) installed, stub %d bytes", k->id, (unsigned)k->site, k->len, n); }
         else klog("brain: closein: site %d 0x%x NOT installed (refused by the patch guard or the bytes differ)", k->id, (unsigned)k->site);
     }
     klbr_ci_nok = ok; klbr_ci_state = ok == KLBR_CI_NSITE ? 1 : ok ? 2 : -1;
@@ -2869,6 +2870,146 @@ static void klbr_dp_summary(const char *why)      /* the round line; printed whe
          klbr_mb_arc ? "arcade" : "online", why, sm, df, pk[0], pk[1], pk[2], n ? wh : " -", wn, wo, c5, gt, ca, ev, e1, e0, g[0], g[1], g[2], g[3], g[4], g[5], g[6], p8, p9, g[7], res, gs, p8pass, klbr_dp_unm, klbr_dp_nok, KLBR_DP_NSITE,
          miss[0] ? "; NOT hooked (those counts are 0 / skipped), site ids:" : "", miss, klbr_dp_flt, klbr_f6_flt);
 }
+/* OnlineBrainTraitorRunProbe (11-04; TEST build only, UNTESTED, recommended off; READ ONLY toward the game: the only game bytes touched are the detours at install; game thread only; every read under __try; shares the fault counter klbr_f6_flt, limit 3).
+   Question (re/closein_run_1104.md, Verifier 'Endorsed next step'): after ZCloseIn eval 0x6724e0 answers 1.0, does the run body 0x76e8c0 run, which branch, does 0x800630 / the run task 0x4a7e60 follow, and does the bot get closer to the human. Forces the DefendProbe and the CloseInProbe on. Sampled bots = the ones the DefendProbe samples (online marked bots, Arcade traitor-marked / control soldiers).
+   (1) RUN BODY 0x76e8c0 (vt+8 of the ZCloseIn tactic, unhashed). The two branches are decided by SHORT jumps (0x76e8d6 'je 0x76e8ed' = 74 15 and 0x76e8eb 'jge 0x76e935' = 7d 48): not retargetable, so the first suitable instructions of the two TARGETS are counted instead (documented deviation):
+         id 61 0x76e8c0  (7) 55 8b ec 83 ec 18 56                   run body entry (ecx = tactic)           push ebp / mov ebp,esp / sub esp,0x18 / push esi
+         id 62 0x76e8ed  (9) 8b 4e 04 81 c1 e4 00 00 00             DIRECT branch (esi = tactic)            mov ecx,[esi+4] / add ecx,0xe4 (reached from the je AND by falling through the not-taken jge)
+         id 63 0x76e935 (10) 8b 4e 04 57 81 c1 e4 00 00 00          COVER branch (esi = tactic, edi = cover index)   mov ecx,[esi+4] / push edi / add ecx,0xe4
+       All stolen ranges are whole instructions without a relative operand (python debug/dasm.py 11-04 + a scan of the whole .text: no jump or call from outside lands inside a stolen interior; the only references to 0x76e8ed / 0x76e935 are the two short jumps above). Unhashed per klranges.h (checked with a script, the whole stolen spans).
+   (2) 0x800630 (soldier vt+0x74, arms the ZRunToPosShootingTask) and 0x4a7e60 (the run task's run body) are the CloseInProbe's sites c5 / c4 (ids 35 / 34): re-checked unhashed; their counts are reused ('arm800630', 'runtask').
+   (3) WINS. The success tail 0x672763 is 'call 0x5caf90' (rel32; not stealable), so the win is taken at the CloseInProbe's c3 (id 33, 0x672770 'fld1' tail, unhashed, esi = tactic), which is on the same path right after the point and the timestamp are written. The handler is integer only (the caller's x87 stack is live): it stores the tick, the game clock, the bot position (raw dwords) and [S+0x98] [S+0x4e8] [S+0x700] [S+0x108]. The 250 ms sampler then takes d0 = the nearest human to the STORED bot position (position helper klbr_human_near, the one the CloseInProbe uses; up to 250 ms after the win), remembers that human, and logs the distance bot (now) -> the same human at the first sample >= +5 s and >= +15 s. Up to 16 wins per round; the rest are only counted.
+   (4) DATA every 250 ms per sampled bot: run task [S+0x56c]: [t+8] state (GUESS: same goal layout as the other goals), +0x14..+0x1c dest, +0x20 radius, byte +0x24 shoot flag (field offsets read in 0x5faeb0 in the research, not re-read at run time); movement component [S+0x4a4]: [m+0x14] mode, [m+0x18] speed, [m+0x24..0x2c] target (GUESS: from the research reading of 0x46ce40); [S+0x98] [S+0x4e8] [S+0x700] read as dwords and [S+0x108] as a byte (GUESS: widths). Own budget: 80 lines per round, on change, <= 500 ms apart per bot.
+   Lines: 'brain: runprobe win #k t=.. d0=.. d5=.. d15=.. 98=.. 4e8=.. 700=.. 108=..' (-1.0 = unknown), 'brain: runprobe data: ...', 'brain: runprobe round (<online|arcade>) <why>: runbody N direct N cover N arm800630 N runtask N wins N closed(d15<d0) N ...' with the sites not installed. */
+#define KLBR_RP_NSITE 3
+#define KLBR_RP_NWIN 16
+#define KLBR_RP_LOGMAX 80
+#define KLBR_RP_GAP 500
+static const KLBR_DPSITE klbr_rp_sites[KLBR_RP_NSITE] = {
+    { 0x76e8c0, 7, { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x18, 0x56 }, 61, 1 },
+    { 0x76e8ed, 9, { 0x8b, 0x4e, 0x04, 0x81, 0xc1, 0xe4, 0x00, 0x00, 0x00 }, 62, 1 },
+    { 0x76e935, 10, { 0x8b, 0x4e, 0x04, 0x57, 0x81, 0xc1, 0xe4, 0x00, 0x00, 0x00 }, 63, 1 } };
+static int klbr_rp_state, klbr_rp_nok, klbr_rp_okmask, klbr_rp_flt, klbr_rp_nw;
+static BYTE *klbr_rp_stub;
+typedef struct { long rb, direct, cover, wins, samp; DWORD last; int have; DWORD sig[17]; } KLBR_RPB;
+typedef struct { int ix, ph, k, h0; DWORD t0, clk, pos[3], who, f98, f4e8, f700, f108; double d0, d5, d15; } KLBR_RPW;      /* h0: d0 was taken */
+static KLBR_RPB klbr_rp_b[KLBR_MAX];
+static KLBR_RPW klbr_rp_w[KLBR_RP_NWIN];
+static long klbr_rp_unm, klbr_rp_wins, klbr_rp_wdrop, klbr_rp_done, klbr_rp_closed, klbr_rp_nlog;
+static void klbr_rp_reset(void) { memset(klbr_rp_b, 0, sizeof klbr_rp_b); memset(klbr_rp_w, 0, sizeof klbr_rp_w); klbr_rp_nw = 0; klbr_rp_unm = klbr_rp_wins = klbr_rp_wdrop = klbr_rp_done = klbr_rp_closed = klbr_rp_nlog = 0; }
+static void klbr_rp_win(int ix)      /* a ZCloseIn 1.0 return, inside the CloseInProbe handler (integer code only, no float math: st0 is live) */
+{
+    DWORD S = klbr_mb_src(ix), body, g; KLBR_RPW *w;
+    klbr_rp_b[ix].wins++; klbr_rp_wins++;
+    if (klbr_rp_nw >= KLBR_RP_NWIN) { klbr_rp_wdrop++; return; }
+    w = &klbr_rp_w[klbr_rp_nw]; memset(w, 0, sizeof *w);
+    w->ix = ix; w->k = ++klbr_rp_nw; w->t0 = GetTickCount(); if (!w->t0) w->t0 = 1;
+    g = klh_rd32((DWORD_PTR)KLH_VA(0xdd2640)); w->clk = g > 0xffff ? klh_rd32(g + 0x48) : 0;
+    body = klh_rd32(S + 0x40); if (body > 0xffff) klh_rd(body + 0x460, w->pos, 12);
+    w->f98 = klh_rd32(S + 0x98); w->f4e8 = klh_rd32(S + 0x4e8); w->f700 = klh_rd32(S + 0x700); w->f108 = klh_rd32(S + 0x108) & 0xffu;      /* GUESS: widths */
+}
+static void __cdecl klbr_rp_hit(int id, KLBR_F3REGS *r)      /* called by the stubs on the game thread */
+{
+    if (!klbr_rpon || !r || klbr_f6_flt >= 3 || !klbr_f6_tid || GetCurrentThreadId() != klbr_f6_tid) return;
+    __try {
+        int ix = klbr_ci_by(id == 61 ? r->ecx : r->esi, 0x590);
+        if (ix < 0) { klbr_rp_unm++; return; }
+        if (id == 61) klbr_rp_b[ix].rb++; else if (id == 62) klbr_rp_b[ix].direct++; else if (id == 63) klbr_rp_b[ix].cover++;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klbr_rp_flt++; if (klbr_rp_flt <= 3) klog("brain: runprobe: fault in the handler (site id %d): %d of 3 allowed", id, klbr_f6_flt); }
+}
+static void klbr_rp_install(void)      /* once (game thread); a refusal is final for the run */
+{
+    int s, ok = 0; BYTE cur[16], jmp[16]; DWORD stub;
+    if (klbr_rp_state) return;
+    klbr_rp_state = -1;
+    if (!klbr_rp_stub && !(klbr_rp_stub = (BYTE *)VirtualAlloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) { klog("brain: runprobe: no memory for the stubs: off"); return; }
+    for (s = 0; s < KLBR_RP_NSITE; s++) {
+        const KLBR_DPSITE *k = &klbr_rp_sites[s]; BYTE *at = KLH_VA(k->site); int n;
+        memset(cur, 0, sizeof cur);
+        if (!klh_rd((DWORD_PTR)at, cur, k->len) || memcmp(cur, k->b, k->len)) { klog("brain: runprobe: site %d 0x%x bytes differ from the expected %d (got %02x %02x %02x %02x %02x %02x %02x %02x): NOT installed", k->id, (unsigned)k->site, k->len, cur[0], cur[1], cur[2], cur[3], cur[4], cur[5], cur[6], cur[7]); continue; }
+        stub = (DWORD)(DWORD_PTR)(klbr_rp_stub + s * 0x40);
+        n = kbr_f3_emit(klbr_rp_stub + s * 0x40, stub, k->id, (DWORD)(DWORD_PTR)klbr_rp_hit, k->b, k->len, (DWORD)(DWORD_PTR)(at + k->len));
+        if (!n) { klog("brain: runprobe: site %d: stub not built", k->id); continue; }
+        kbr_f3_jmp(jmp, (DWORD)(DWORD_PTR)at, stub, k->len);
+        if (klh_poke(at, k->b, k->len, jmp, k->len, "brain: RunProbe counting detour")) { ok++; klbr_rp_okmask |= 1 << s; klog("brain: runprobe: site %d 0x%x (%d bytes stolen) installed, stub %d bytes", k->id, (unsigned)k->site, k->len, n); }
+        else klog("brain: runprobe: site %d 0x%x NOT installed (refused by the patch guard or the bytes differ)", k->id, (unsigned)k->site);
+    }
+    klbr_rp_nok = ok; klbr_rp_state = ok == KLBR_RP_NSITE ? 1 : ok ? 2 : -1;
+    klog("brain: runprobe: %d of %d sites installed (state %d; policy %s)%s", ok, KLBR_RP_NSITE, klbr_rp_state, klh_policy == KLH_DIRECT ? "direct" : "session/ship", ok < KLBR_RP_NSITE ? " (the others refused or differ: those counts stay 0, the DATA-side samples still run)" : "");
+}
+static int klbr_rp_hpos(DWORD who, float *tp) { return who > 0xffff && klh_pvt(who) == 0x00bb45f4u && klh_rd(who + 0x460, tp, 12) && kle_ok3(tp); }      /* position of a human ZFFPlayer body (the same type test as klbr_human_near) */
+static void klbr_rp_wlog(const KLBR_RPW *w, const char *kind, const char *tail)
+{
+    klog("brain: runprobe win #%d t=%ld d0=%.1f d5=%.1f d15=%.1f 98=%lx 4e8=%lx 700=%lx 108=%lx (%s bot %d; t = game clock ms at the win%s%s)",
+         w->k, (long)w->clk, w->h0 ? w->d0 : -1.0, w->ph >= 2 ? w->d5 : -1.0, w->ph >= 3 ? w->d15 : -1.0, (unsigned long)w->f98, (unsigned long)w->f4e8, (unsigned long)w->f700, (unsigned long)w->f108, kind, w->ix, tail && tail[0] ? "; " : "", tail ? tail : "");
+}
+static void klbr_rp_steps(int i, const float *bp, int haveb, DWORD now, const char *kind)      /* advance the pending wins of bot i (float math allowed here) */
+{
+    int k;
+    for (k = 0; k < klbr_rp_nw; k++) {
+        KLBR_RPW *w = &klbr_rp_w[k]; float tp[3], pos[3]; double d = -1.0; int np;
+        if (w->ix != i || w->ph >= 3) continue;
+        np = kbr_rp_next(w->ph, kbr_rp_elapsed(now, w->t0));
+        if (np == w->ph) continue;
+        if (w->ph == 0) {
+            double dd = 0.0; DWORD who = 0;
+            memcpy(pos, w->pos, 12);
+            if (kle_ok3(pos) && klbr_human_near(pos, &dd, &who)) { d = dd; w->who = who; }
+            w->d0 = d; w->h0 = 1;
+        } else {
+            if (haveb && klbr_rp_hpos(w->who, tp)) d = kle_dist(bp, tp);
+            if (w->ph == 1) w->d5 = d; else w->d15 = d;
+        }
+        w->ph = np;
+        if (np == 3) {
+            int cl = kbr_rp_closed(w->d0, w->d15);
+            klbr_rp_done++; if (cl) klbr_rp_closed++;
+            klbr_rp_wlog(w, kind, cl ? "CLOSED (d15 < d0)" : "");
+        }
+    }
+}
+static void klbr_rp_sample(int i, DWORD S, DWORD now)      /* every 250 ms per sampled bot (called by klbr_mb_sample after its own due test) */
+{
+    KLBR_RPB *b = &klbr_rp_b[i]; DWORD body, t = 0, m = 0, sig[17]; float bp[3], dv[3], tv[3], rad, spd; int haveb = 0, chg;
+    const char *kind = klbr_mb_arc ? (klbr_mb_akind[i] ? "arcade traitor" : "arcade control") : "online marked";
+    memset(sig, 0, sizeof sig);
+    __try {
+        body = klh_rd32(S + 0x40); haveb = body > 0xffff && klh_rd(body + 0x460, bp, 12) && kle_ok3(bp);
+        t = klh_rd32(S + 0x56c); m = klh_rd32(S + 0x4a4);
+        sig[0] = t;
+        if (t > 0xffff) { sig[1] = klh_rd32(t + 8); sig[2] = klh_rd32(t + 0x14); sig[3] = klh_rd32(t + 0x18); sig[4] = klh_rd32(t + 0x1c); sig[5] = klh_rd32(t + 0x20); sig[6] = klh_rd32(t + 0x24) & 0xffu; }
+        sig[7] = m;
+        if (m > 0xffff) { sig[8] = klh_rd32(m + 0x14); sig[9] = klh_rd32(m + 0x18); sig[10] = klh_rd32(m + 0x24); sig[11] = klh_rd32(m + 0x28); sig[12] = klh_rd32(m + 0x2c); }
+        sig[13] = klh_rd32(S + 0x98); sig[14] = klh_rd32(S + 0x4e8); sig[15] = klh_rd32(S + 0x700); sig[16] = klh_rd32(S + 0x108) & 0xffu;      /* GUESS: widths */
+    } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klbr_rp_flt++; return; }
+    __try { klbr_rp_steps(i, bp, haveb, now, kind); } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klbr_rp_flt++; return; }
+    b->samp++;
+    chg = !b->have || memcmp(sig, b->sig, sizeof sig);
+    if (!chg) return;
+    if (klbr_rp_nlog < KLBR_RP_LOGMAX && (!b->last || kbr_mb_due(now, b->last + KLBR_RP_GAP))) {
+        memcpy(dv, &sig[2], 12); memcpy(&rad, &sig[5], 4); memcpy(&spd, &sig[9], 4); memcpy(tv, &sig[10], 12);
+        klbr_rp_nlog++; b->last = now ? now : 1;
+        klog("brain: runprobe data: %s bot %d S %08lx: run task [S+0x56c] %08lx state [t+8] %lu, dest %.1f %.1f %.1f, radius %.1f, shoot byte %lu; movement [S+0x4a4] %08lx mode %lu speed %.2f target %.1f %.1f %.1f (GUESS: [m+0x14] mode, +0x18 speed, +0x24..+0x2c target); [S+0x98] %lx [S+0x4e8] %lx [S+0x700] %lx [S+0x108] %lx; so far runbody %ld direct %ld cover %ld arm800630 %ld runtask %ld wins %ld%s",
+             kind, i, (unsigned long)S, (unsigned long)t, (unsigned long)sig[1], (double)dv[0], (double)dv[1], (double)dv[2], (double)rad, (unsigned long)sig[6], (unsigned long)m, (unsigned long)sig[8], (double)spd, (double)tv[0], (double)tv[1], (double)tv[2],
+             (unsigned long)sig[13], (unsigned long)sig[14], (unsigned long)sig[15], (unsigned long)sig[16], b->rb, b->direct, b->cover, klbr_ci_b[i].arm, klbr_ci_b[i].rt, b->wins, b->have ? "" : " (first sample)");
+    }
+    memcpy(b->sig, sig, sizeof sig); b->have = 1;
+}
+static void klbr_rp_summary(const char *why)      /* the round line; printed when anything was sampled or counted */
+{
+    long rb = 0, dr = 0, cv = 0, sm = 0, arm = 0, rt = 0; int i, k, n = 0; char miss[96];
+    if (!klbr_rpon) return;
+    for (i = 0; i < KLBR_MAX; i++) { rb += klbr_rp_b[i].rb; dr += klbr_rp_b[i].direct; cv += klbr_rp_b[i].cover; sm += klbr_rp_b[i].samp; arm += klbr_ci_b[i].arm; rt += klbr_ci_b[i].rt; }
+    if (!sm && !rb && !klbr_rp_wins && !arm && !rt) return;
+    /* the 30 s 'running total' summary must NOT close pending wins (they would be cut short at <15 s): only round edges do */
+    for (k = 0; k < klbr_rp_nw; k++) if (klbr_rp_w[k].ph < 3 && strcmp(why, "running total")) { klbr_rp_wlog(&klbr_rp_w[k], klbr_mb_arc ? "arcade" : "online", "INCOMPLETE at the round edge, unknown values are -1.0"); klbr_rp_w[k].ph = 4; }
+    miss[0] = 0;
+    for (i = 0; i < KLBR_RP_NSITE; i++) if (!(klbr_rp_okmask & (1 << i)) && n < (int)sizeof miss - 12) n += _snprintf(miss + n, sizeof miss - n, " %d", klbr_rp_sites[i].id);
+    for (i = 2; i < 5; i++) if (!(klbr_ci_okmask & (1 << i)) && n < (int)sizeof miss - 12) n += _snprintf(miss + n, sizeof miss - n, " %d", 31 + i);      /* CloseInProbe c3 (win), c4 (runtask), c5 (arm800630) */
+    miss[sizeof miss - 1] = 0;
+    klog("brain: runprobe round (%s) %s: runbody %ld direct %ld cover %ld arm800630 %ld runtask %ld wins %ld closed(d15<d0) %ld; wins completed %ld, recorded %d of %d (rest only counted: %ld), samples %ld, hits on soldiers not sampled %ld; sites not installed:%s; faults %d, shared %d",
+         klbr_mb_arc ? "arcade" : "online", why, rb, dr, cv, arm, rt, klbr_rp_wins, klbr_rp_closed, klbr_rp_done, klbr_rp_nw, KLBR_RP_NWIN, klbr_rp_wdrop, sm, klbr_rp_unm, miss[0] ? miss : " none", klbr_rp_flt, klbr_f6_flt);
+}
 /* OnlineBrainTraitorCombatFlag (11-04; TEST build only, UNTESTED, recommended off; CHANGES the game: ONE data byte, [S+0x4fc], and only under the gates below). Lever from re/approach_lever_1104.md: the Defend tick 0x85f6c0 walks tactic list A (with ZCloseIn) only while [S+0x4fc] != 0 AND a [S+0x6fc] condition holds.
    Value 1 = the spec of the verifier text (write only while [S+0x6fc] == 0); value 2 = the disassembly (write only while [S+0x6fc] != 0). RE-READ 11-04 at 0x85f896: cmp [eax+4fc],0 / je -> flag 0; cmp [eax+6fc],0 / mov flag,1 / jne keep / else flag 0: list A needs BOTH bytes nonzero, so the verifier text is wrong and 2 is the useful mode; 1 is kept only to be able to test the claim. Once a human is clear again the byte WE set is written back to 0 (stock firing needs it 0). Host game thread, online marked bots only, every 250 ms per wrapped bot.
    Value 3 (UNTESTED, GUESS that it makes ZCloseIn run): same gates, writes 4fc = 1 AND, if [S+0x6fc] == 0, 6fc = 1 (klbr_cb_set6 remembers it was OURS); both undone when a human turns clear / the pass goes stale, 6fc only if still 1 (stock writers 0x7b3991, 0x578d3b/0x578d93, 0x5a3a03 are never clobbered). Unwrap / round end only forget (the memory may be gone).
@@ -2922,7 +3063,7 @@ static void klbr_mb_sample(DWORD now)
         if (S <= 0xffff) { o->have = 0; continue; }
         if (klbr_mb_dnext[i] && !kbr_mb_due(now, klbr_mb_dnext[i])) continue;
         klbr_mb_dnext[i] = now + KLBR_MB_DSTEP; if (!klbr_mb_dnext[i]) klbr_mb_dnext[i] = 1;
-        if (klbr_cion) klbr_ci_sample(i, S, now); if (klbr_dpon) klbr_dp_sample(i, S, now);      /* OnlineBrainTraitorCloseInProbe */
+        if (klbr_cion) klbr_ci_sample(i, S, now); if (klbr_dpon) klbr_dp_sample(i, S, now); if (klbr_rpon) klbr_rp_sample(i, S, now);      /* OnlineBrainTraitorCloseInProbe */
         if (!klbr_mbon) continue;
         memset(&n, 0, sizeof n);
         __try {
@@ -2994,13 +3135,13 @@ static void klbr_mb_tick(DWORD now)      /* game thread: the bot-to-point distan
         DWORD rules = 0; int arc;
         __try { arc = klbr_mb_arcade(&rules); } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klbr_mb_flt++; arc = 0; }
         if (arc && rules != klbr_mb_arules) {      /* a new Arcade round (new rules object): the last one's summary, then fresh counters */
-            if (klbr_mb_arules) { klbr_mb_summary("arcade round change"); klbr_ci_summary("arcade round change"); klbr_dp_summary("arcade round change"); }
-            memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); memset(klbr_mb_asold, 0, sizeof klbr_mb_asold); klbr_ci_reset(); klbr_dp_reset(); klbr_mb_ascan = 0;
+            if (klbr_mb_arules) { klbr_mb_summary("arcade round change"); klbr_ci_summary("arcade round change"); klbr_dp_summary("arcade round change"); klbr_rp_summary("arcade round change"); }
+            memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); memset(klbr_mb_asold, 0, sizeof klbr_mb_asold); klbr_ci_reset(); klbr_dp_reset(); klbr_rp_reset(); klbr_mb_ascan = 0;
             klbr_mb_arules = rules; klbr_mb_arc = 1;
             klog("brain: modeb data: Arcade round starts (read only sampling of the Traitor-marked Ally soldiers, else 2 controls): rules %08lx", (unsigned long)rules);
         } else if (!arc && klbr_mb_arc) {
-            klbr_mb_summary("arcade round end"); klbr_ci_summary("arcade round end"); klbr_dp_summary("arcade round end"); klbr_mb_arc = 0; klbr_mb_arules = 0;
-            memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); memset(klbr_mb_asold, 0, sizeof klbr_mb_asold); klbr_ci_reset(); klbr_dp_reset();
+            klbr_mb_summary("arcade round end"); klbr_ci_summary("arcade round end"); klbr_dp_summary("arcade round end"); klbr_rp_summary("arcade round end"); klbr_mb_arc = 0; klbr_mb_arules = 0;
+            memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); memset(klbr_mb_asold, 0, sizeof klbr_mb_asold); klbr_ci_reset(); klbr_dp_reset(); klbr_rp_reset();
         }
         if (arc && (!klbr_mb_ascan || now - klbr_mb_ascan >= 3000u)) { __try { klbr_mb_arc_scan(now, rules); } __except (EXCEPTION_EXECUTE_HANDLER) { klbr_f6_flt++; klbr_mb_flt++; } }
     }
@@ -3074,7 +3215,7 @@ static void klbr_f6_track(struct klbr_s *e, DWORD self)      /* every slot-113 c
 static void klbr_f6_summary(const char *why)
 {
     int n, m;
-    klbr_f7_summary(why); klbr_ra_summary(why); klbr_f8_summary(why); klbr_mb_summary(why); klbr_ci_summary(why); klbr_dp_summary(why); klbr_cb_summary(why); klbr_hs_summary(why);
+    klbr_f7_summary(why); klbr_ra_summary(why); klbr_f8_summary(why); klbr_mb_summary(why); klbr_ci_summary(why); klbr_dp_summary(why); klbr_rp_summary(why); klbr_cb_summary(why); klbr_hs_summary(why);
     if (!klbr_f6on) return;
     for (n = 0; n < 2; n++) for (m = 0; m < 2; m++) {
         KLBR_F6C *c = &klbr_f6_c[n][m];
@@ -3089,7 +3230,7 @@ static long klbr_f6_total(void) { int n, m; long t = 0; for (n = 0; n < 2; n++) 
 static void klbr_f6_round_end(void)      /* round end (klbr_fp_summary): the totals, then the counters cleared (the detours stay in) */
 {
     klbr_f6_summary("round");
-    memset(klbr_f6_c, 0, sizeof klbr_f6_c); memset(klbr_f6_body, 0, sizeof klbr_f6_body); memset(klbr_f6_item, 0, sizeof klbr_f6_item); memset(klbr_f6_hold, 0, sizeof klbr_f6_hold); memset(klbr_f6_sold, 0, sizeof klbr_f6_sold); memset(&klbr_f7_c, 0, sizeof klbr_f7_c); memset(klbr_f7_aim_n, 0, sizeof klbr_f7_aim_n); memset(klbr_f7_aim_t, 0, sizeof klbr_f7_aim_t); memset(klbr_f7_aim_tg, 0, sizeof klbr_f7_aim_tg); memset(&klbr_ra_c, 0, sizeof klbr_ra_c); memset(&klbr_f8_c, 0, sizeof klbr_f8_c); memset(klbr_f8_hand, 0, sizeof klbr_f8_hand); klbr_f8_lastmark = 0; memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); memset(klbr_mb_asold, 0, sizeof klbr_mb_asold); klbr_ci_reset(); klbr_dp_reset(); klbr_f7_cur.valid = 0; klbr_f6_cur.valid = 0; klbr_f6_lastshots = 0; klbr_cb_reset(); klbr_hs_reset();
+    memset(klbr_f6_c, 0, sizeof klbr_f6_c); memset(klbr_f6_body, 0, sizeof klbr_f6_body); memset(klbr_f6_item, 0, sizeof klbr_f6_item); memset(klbr_f6_hold, 0, sizeof klbr_f6_hold); memset(klbr_f6_sold, 0, sizeof klbr_f6_sold); memset(&klbr_f7_c, 0, sizeof klbr_f7_c); memset(klbr_f7_aim_n, 0, sizeof klbr_f7_aim_n); memset(klbr_f7_aim_t, 0, sizeof klbr_f7_aim_t); memset(klbr_f7_aim_tg, 0, sizeof klbr_f7_aim_tg); memset(&klbr_ra_c, 0, sizeof klbr_ra_c); memset(&klbr_f8_c, 0, sizeof klbr_f8_c); memset(klbr_f8_hand, 0, sizeof klbr_f8_hand); klbr_f8_lastmark = 0; memset(&klbr_mb_c, 0, sizeof klbr_mb_c); memset(klbr_mb_sig, 0, sizeof klbr_mb_sig); memset(klbr_mb_dnext, 0, sizeof klbr_mb_dnext); memset(klbr_mb_t0, 0, sizeof klbr_mb_t0); memset(klbr_mb_asold, 0, sizeof klbr_mb_asold); klbr_ci_reset(); klbr_dp_reset(); klbr_rp_reset(); klbr_f7_cur.valid = 0; klbr_f6_cur.valid = 0; klbr_f6_lastshots = 0; klbr_cb_reset(); klbr_hs_reset();
 }
 static void klbr_f6_tick(int game_thread, DWORD now)      /* klbr_tick, before the host-round gate (so Arcade is covered): install once, a running total every 30 s when shots were seen */
 {
@@ -3099,7 +3240,7 @@ static void klbr_f6_tick(int game_thread, DWORD now)      /* klbr_tick, before t
     if (!klbr_f6_state) klbr_f6_install();
     if (klbr_f8on && !klbr_f8_state) klbr_f8_install();
     if (klbr_mbon && !klbr_mb_state) klbr_mb_install();
-    if (klbr_cion && !klbr_ci_state) klbr_ci_install(); if (klbr_dpon && !klbr_dp_state) klbr_dp_install();
+    if (klbr_cion && !klbr_ci_state) klbr_ci_install(); if (klbr_dpon && !klbr_dp_state) klbr_dp_install(); if (klbr_rpon && !klbr_rp_state) klbr_rp_install();
     klbr_mb_tick(now);
     if (now - klbr_f6_last < 30000u) return;
     klbr_f6_last = now;
@@ -4397,6 +4538,7 @@ static void klbr_init(void)
     klbr_mbon = klbr_key("OnlineBrainTraitorModeBProbe");
     klbr_cion = klbr_key("OnlineBrainTraitorCloseInProbe");
     klbr_dpon = klbr_key("OnlineBrainTraitorDefendProbe"); if (klbr_dpon) { klbr_cion = 1; klog("brain: OnlineBrainTraitorDefendProbe=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only; implies the CloseInProbe counting sites; adds counting detours on the ZCloseIn gate branches 0x672507 0x6725a1 0x6725c9 0x6725f4 0x67261e 0x67264e 0x672678 0x672691, 0x6726b3 and the ZGraceShot eval 0x41a5b0, plus data reads of the Defend winner [goal+0x14] and the list C inputs); lines: brain: defendprobe data / round"); }
+    klbr_rpon = klbr_key("OnlineBrainTraitorRunProbe"); if (klbr_rpon) { klbr_dpon = 1; klbr_cion = 1; klog("brain: OnlineBrainTraitorRunProbe=1 UNTESTED (recommended off): READ ONLY toward the game state (TEST build only; forces DefendProbe and CloseInProbe on; adds counting detours on the ZCloseIn run body 0x76e8c0 and its two branch targets 0x76e8ed (direct) / 0x76e935 (cover), all unhashed; reuses the CloseInProbe sites 0x4a7e60 (run task), 0x800630 (arm) and 0x672770 (1.0 tail, for the wins); data reads of the run task [S+0x56c] and the movement component [S+0x4a4]); lines: brain: runprobe win / data / round"); }
     klbr_cbmode = klbr_keyi("OnlineBrainTraitorCombatFlag", 0); if (klbr_cbmode < 1 || klbr_cbmode > 3) klbr_cbmode = 0;
     klbr_hsmode = klbr_keyi("OnlineBrainTraitorHolderSet", 0); if (klbr_hsmode != 1 && klbr_hsmode != 2) klbr_hsmode = 0;
     if (klbr_hsmode) klog("brain: OnlineBrainTraitorHolderSet=%d UNTESTED (recommended off): CHANGES the game (TEST build only, host only, online marked bots only): while OnlineBrainTraitorLosGate and OnlineBrainTraitorSense report every human BLOCKED for the bot, points its holder [S+0xa8..] at the nearest live human (0x6ece90 handle, 0x8ccde0 round-trip check, SetHolder 0x8bd420, flags 0x%lx: the fire test 0x616480 fails with it, ZCloseIn passes); re-applied every 100 ms (the next 0x767510 scan wipes it); stops writing when a human is clear; HolderFix yields to it while blocked; 3 faults = off for the round", klbr_hsmode, kbr_hs_flags(klbr_hsmode));

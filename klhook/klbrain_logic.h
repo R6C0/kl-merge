@@ -903,4 +903,18 @@ static kbr_u32 kbr_dp_jcc_target(const unsigned char *b, kbr_u32 site)
     return site + 6 + rel;
 }
 
+/* OnlineBrainTraitorRunProbe (11-04; pure helpers). A ZCloseIn win (1.0 return) is followed over time: the bot-to-human distance is taken at the first sample (d0), at +5 s (d5) and at +15 s (d15).
+   Phases: 0 = d0 not taken yet, 1 = waiting for +5 s, 2 = waiting for +15 s, 3 = done. Times are unsigned 32-bit millisecond ticks (wrap safe: a 'negative' difference counts as 0). */
+static unsigned long kbr_rp_elapsed(unsigned long now, unsigned long t0) { unsigned long d = (now - t0) & 0xfffffffful; return d > 0x7ffffffful ? 0ul : d; }
+/* the next phase for a win in 'ph' at 'elapsed' ms since the win: 0 -> 1 at once (the first sample takes d0), 1 -> 2 from 5000 ms, 2 -> 3 from 15000 ms (the one-step-per-sample rule: the caller takes the matching distance when the phase changes) */
+static int kbr_rp_next(int ph, unsigned long elapsed)
+{
+    if (ph == 0) return 1;
+    if (ph == 1) return elapsed >= 5000ul ? 2 : 1;
+    if (ph == 2) return elapsed >= 15000ul ? 3 : 2;
+    return 3;
+}
+/* a win 'closed' the distance when both distances are valid (>= 0; -1 = unknown) and d15 < d0 */
+static int kbr_rp_closed(double d0, double d15) { return d0 >= 0.0 && d15 >= 0.0 && d15 < d0; }
+
 #endif /* KLBRAIN_LOGIC_H */
