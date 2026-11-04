@@ -394,3 +394,10 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - Stock never calls slot 83 with a nonzero handle (all 5 callers pass 0 = CoverFire): ZAttackTarget / mode B is not the Arcade path. 0x4e1750's only caller is 0x4f4b92.
 - Fire gate 0x616480 tests flags bits 0x1 set, 0x4 clear, 0x200 clear, 0x10 set, 0x40 clear. 0x7088c0 needs [S+0x88]==2.
 - Not proven: that Arcade has no fire-time LOS test; candidate 0x5fb040 (physics vt+0x264 call at 0x5fb4f3) unread. Where ZSoldierAttack is activated: untraced.
+
+## bs41 + arc41 (out_mb2_1104l: ModeBProbe v2, online marked bot vs offline Arcade bots): PASS, 0 faults
+- Online DM03: 686 samples, current goal vt 0xbd0674 held by Defend [S+0x648] 686/686, states Attack 0 Idle 4 Defend 2; mode [S+0x88]=1 686/686; [S+0x4fc] 1 on 3/15 data lines; [S+0xa8] 0x10; [S+0xb0] 0 (15/15). LosGate blocked 342, shots 0.
+- Online DD05: 293 samples, same (Defend 293/293, mode 1); [S+0xb0] 0; LosGate blocked 162, shots 0.
+- Arcade DM03 (traitor + control bots): Defend 0xbd0674 mostly, Idle 0xbd0f54 (slot 634) with mode 2 on ~17%; [S+0xb0] 0x320, 0x1e91, 0x525f ... non-zero on 74/120 lines; [S+0xa8] 0x10/0x14.
+- Arcade DD05 (control bots): [S+0xb0] cycles 0x364/0x36f/0x37b/0x382/0x386... (changes every second or so = the enemy it engages); [S+0xa8] 0x10..0x17 (bits 0x1/0x2/0x4 vary); [S+0x4fc] set often.
+- Conclusion: same goal (Defend) and mode both sides; online the bot never gets a holder/target in [S+0xb0] and the 0x1/0x4 flags, so neither CloseIn nor the NoCover fire clause can pass.

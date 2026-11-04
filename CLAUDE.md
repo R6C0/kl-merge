@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~08:55 - [c9] bs41 + arc41 PASS (online DM03 + DD05 4 seats, Arcade offline DM03 + DD05; 0 asserts, 0 faults; ModeBProbe v2 f84a963fd). Online vs Arcade goal picture:
+BOTH run Defend (vt 0xbd0674, slot [S+0x648], state 2) nearly always (Arcade also Idle 0xbd0f54 with mode 2); mode [S+0x88]=1 in Defend on both, so mode is not the gap.
+THE GAP: holder [S+0xb0] online = 0 on every sample (16/16 data lines); Arcade = a changing small handle (DD05 0x364..0x3e8, DM03 0x320/0x1e91/0x525f) ~70% of samples,
+and [S+0xa8] bits 0x1/0x2/0x4 vary in Arcade (online always 0x10). CloseIn 0x6724e0 and the fire clause 0x85ece0 both need [S+0xb0]!=0. wgxzr8q8l: who writes it; w7ipt21r0 builds CloseInProbe + CombatFlag.
+
 2026-11-04 ~07:50 - [c9] bs40 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; cdc7488e3: LosGate direction fixed + LOS control + ModeBProbe). The line test WORKS
 (control: DM03 3/6 short rays clear, DD05 6/6, down400 BLOCKED both) and the humans (48-57 m, at spawn) are truly BLOCKED (DM03 334/334, DD05 396/396): DM03 bot fired 0.
 The bot never moves to get a line: its ZAttackTarget [S+0x658] is set but stays state 0 on all 674/792 samples, never current; the current goal is prio 150 (0x96) other.
 DD05's 302 shots aim at a ZFFActor holder (261 within 5 deg), not the human. wruioc1db: which prio-0x96 goal runs + Arcade approach + probe v2 (Arcade vs online).
-
-2026-11-04 ~07:15 - [c9] bs39 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; LosGate + LosProbe 5c7294fa8). The line test never answered clear (DM03 0/342, DD05 0/312; humans 60-100 m away at spawn).
-DM03: Sense skipped the blocked human 342 times and the marked bot fired 0 shots (bs38: 124 through walls). DD05: Sense skipped 312, HolderFix 0, yet 187 shots, all BLOCKED from muzzle and eye,
-every pellet on a ZSTDOBJ (static object): another path still fires. w18ipq4cv checks klbr_los_clear vs 0x4e1750 (a clear control) and finds the DD05 firing path;
-wowvy02qv builds ModeBProbe (read-only, research w4funhvyl verified: the stock firing-position search is reached only via slot 83 with both goal states 0/4) for bs40.
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list
