@@ -110,6 +110,7 @@ Owner: c9 (benches A1I16/A1LIFT/A1SND/A1NET queued 10-28).
 - A1I16 done 10-28 11:45 (c9): PASS, DM11B online falls back to stock F04, DD01 control untouched, 0 faults.
 
 ### T3 AI heisters online = Arcade (behaviour + looting)
+- 11-04 07:50 c9: bs40 PASS 0 faults: the line-of-sight test works (control rays) and the humans really are behind walls at 48-57 m; the traitor bot never moves to get a clear shot (its attack goal is set but never started, another goal runs). wruioc1db researches that goal and Arcade's approach, and extends the probe to compare Arcade with online.
 - 11-04 07:15 c9: bs39 PASS 0 faults: the line-of-sight gate stopped the DM03 traitor firing through walls (0 shots), but on DD05 another path still fired 187 blocked shots; the test never answered clear (players 60-100 m away). w18ipq4cv checks the test + the DD05 path; wowvy02qv builds ModeBProbe for bs40.
 - 11-04 06:40 c9: bs38 PASS 0 faults: found the loss - every marked traitor bullet is created and hits something, but always level objects between the bot and the human (no line of sight), never a player. wp201e2bn researches Arcade's line-of-sight gate / approach.
 - 11-04 06:00 c9: bs36 + bs37 PASS 0 faults, hp still flat: the traitor already aims at the human (aim point within 0.1 deg, ~58 m, range 60 m) and forcing the aim point changed nothing; the loss is the bullet hit / damage filter. wmcd2s92o researches it.

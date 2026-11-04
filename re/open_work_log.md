@@ -18,6 +18,11 @@ once the shop is up, so the press waited for a manual list open (owner 11-02 log
 pq14b (pq_1104b_test = the install source): DM03 PASS both seats; DD05 host failed at SystemLinkCreate (menu, 15 s) before any match, 0 faults. Backups pruned
 to 3 per file (21 older *.before-* moved to D:/KL_before_backups). no crash involved
 
+2026-11-04 ~07:50 - [c9] bs40 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; cdc7488e3: LosGate direction fixed + LOS control + ModeBProbe). The line test WORKS
+(control: DM03 3/6 short rays clear, DD05 6/6, down400 BLOCKED both) and the humans (48-57 m, at spawn) are truly BLOCKED (DM03 334/334, DD05 396/396): DM03 bot fired 0.
+The bot never moves to get a line: its ZAttackTarget [S+0x658] is set but stays state 0 on all 674/792 samples, never current; the current goal is prio 150 (0x96) other.
+DD05's 302 shots aim at a ZFFActor holder (261 within 5 deg), not the human. wruioc1db: which prio-0x96 goal runs + Arcade approach + probe v2 (Arcade vs online).
+
 2026-11-04 ~07:15 - [c9] bs39 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; LosGate + LosProbe 5c7294fa8). The line test never answered clear (DM03 0/342, DD05 0/312; humans 60-100 m away at spawn).
 DM03: Sense skipped the blocked human 342 times and the marked bot fired 0 shots (bs38: 124 through walls). DD05: Sense skipped 312, HolderFix 0, yet 187 shots, all BLOCKED from muzzle and eye,
 every pellet on a ZSTDOBJ (static object): another path still fires. w18ipq4cv checks klbr_los_clear vs 0x4e1750 (a clear control) and finds the DD05 firing path;

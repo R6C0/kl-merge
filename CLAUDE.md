@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-04 ~07:50 - [c9] bs40 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; cdc7488e3: LosGate direction fixed + LOS control + ModeBProbe). The line test WORKS
+(control: DM03 3/6 short rays clear, DD05 6/6, down400 BLOCKED both) and the humans (48-57 m, at spawn) are truly BLOCKED (DM03 334/334, DD05 396/396): DM03 bot fired 0.
+The bot never moves to get a line: its ZAttackTarget [S+0x658] is set but stays state 0 on all 674/792 samples, never current; the current goal is prio 150 (0x96) other.
+DD05's 302 shots aim at a ZFFActor holder (261 within 5 deg), not the human. wruioc1db: which prio-0x96 goal runs + Arcade approach + probe v2 (Arcade vs online).
+
 2026-11-04 ~07:15 - [c9] bs39 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; LosGate + LosProbe 5c7294fa8). The line test never answered clear (DM03 0/342, DD05 0/312; humans 60-100 m away at spawn).
 DM03: Sense skipped the blocked human 342 times and the marked bot fired 0 shots (bs38: 124 through walls). DD05: Sense skipped 312, HolderFix 0, yet 187 shots, all BLOCKED from muzzle and eye,
 every pellet on a ZSTDOBJ (static object): another path still fires. w18ipq4cv checks klbr_los_clear vs 0x4e1750 (a clear control) and finds the DD05 firing path;
 wowvy02qv builds ModeBProbe (read-only, research w4funhvyl verified: the stock firing-position search is reached only via slot 83 with both goal states 0/4) for bs40.
-
-2026-11-04 ~06:40 - [c9] bs38 PASS (DM03 + DD05, 4 seats, 0 asserts, 0 faults; FireProbe8 ce4aff56c, read-only pellet funnel). FOUND THE LOSS: every marked traitor shot builds its
-pellet (DM03 124/124, DD05 266/266; desc speed 30000, R 6000) and every pellet gets a hit callback (ZProjectile slot 36 via Update 0x897460), but the victim is never a player:
-always low-handle objects (DM03 0x606/0x6aa/0x6d7, DD05 0x1968/0x207e) = probably level geometry between bot and human. The bot fires at the human WITHOUT LINE OF SIGHT
-(our Sense/MarkSeen likely feeds unseen humans). wp201e2bn researches Arcade's LOS gate + approach and a default-off lever. Range (hitscan) and filters F1/F2/F3 ruled out.
 
 2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
 71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list

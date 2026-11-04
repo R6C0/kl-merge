@@ -380,3 +380,17 @@ Method: I disassembled each claim myself. Labels are HELD, WRONG (with the corre
 - Slot 83 0x831850: handle 0 -> CoverFire (0xa0); nonzero -> if [[S+0x5ac]+8] not 0/4 only stores [S+0x720]; else retarget 0x68fd70 and, only if [[S+0x658]+8] in 0/4, AddGoal(+0x658, 0x96) + arbiter. CoverFire 0xa0 outranks ZAttackTarget 0x96.
 - Mode B: candidates (point 0 = own position), test 0x4e1750 at 0x4f4b92 (al!=0 = clear point here), first clear index != 0 -> RunChild vt+0x74 at 0x4f4bed; none -> [S+0x4fc]=1 + vt+0x13c (0x4f4ba9).
 - Verifier: do not build an Approach lever yet (it repeats AttackHandle); first ModeBProbe (slot 83 branch, tick, candidates, RunChild, re-arm 0x800650). Unverified whether Arcade runs ZAttackTarget at all.
+
+## bs40 (out_lm_1104k: LosGate fixed direction + LOS control + ModeBProbe + LosProbe + FireProbe6..8 + GateForce + RayAim site 2): PASS, 0 faults
+- LOS control: DM03 bot 5 eye (-91 410 -6214): up50 CLEAR, up300 BLOCKED, +x100 CLEAR, -x100 BLOCKED, +z100 CLEAR, -z100 BLOCKED, down400 BLOCKED, reversed CLEAR -> WORKS. DD05: 6/6 clear, down400 BLOCKED -> WORKS.
+- Humans: DM03 54.8 / 57.4 m, DD05 48.6 / 50.5 m from the marked bot's eye, BLOCKED on every query (DM03 334/334, DD05 396/396; 0 errors, 0 physics faults). DM03 marked bot fired 0 shots.
+- DD05: 302 marked shots, all blocked from the eye, pellets 302, s3human 0; aim->holder < 5 deg on 261/302 (holder class ZFFActor), aim->human chest < 5 deg 0: the bot shoots at its holder target (stock), not the human.
+- ModeBProbe: 2 of 8 sites installed (0x831850 slot 83, 0x800650 re-arm; the 6 in 0x4f0000..0x4f6000 refused by the guard as expected). slot 83 calls 0 both maps; re-arm 25 (DM03), 13 (DD05).
+- Data sampler: [S+0x658] set (DM03 target 802d5b24, DD05 target 0) but state 0 on 674/674 (DM03) and 792/792 (DD05) samples; [S+0x74] never the attack goal; [S+0x78] = 150 (0x96) almost always, 4000 briefly; CoverFire state 0; [S+0x4fc] set on 333/674 and 211/792; run task [[S+0x56c]+8] flips 2 <-> 4.
+- Conclusion: the line test is right and the humans are behind geometry; the bot never approaches. Some other prio-0x96 goal runs and ZAttackTarget is never started (stock never starts it either, per wc555a9o3).
+
+## wc555a9o3 (research + verify, static) 11-04
+- Arcade attack path: ZSoldierAttack [S+0x638] (vt 0xbd0f14, tick 0x6c8350; built in the ZSoldier ctor 0x6ab250 at 0x6ab6fc/0x6ebb20) + Idle [S+0x634] + tactics [S+0x604..0x608] (vt+0x2c evaluate, best > [0xb69b98] via RunChild 0x521350) + ZRunToPosShootingTask [S+0x56c] armed by vt+0x74 0x800630 -> 0x5faeb0 (0x800650 is the return site inside 0x800630).
+- Stock never calls slot 83 with a nonzero handle (all 5 callers pass 0 = CoverFire): ZAttackTarget / mode B is not the Arcade path. 0x4e1750's only caller is 0x4f4b92.
+- Fire gate 0x616480 tests flags bits 0x1 set, 0x4 clear, 0x200 clear, 0x10 set, 0x40 clear. 0x7088c0 needs [S+0x88]==2.
+- Not proven: that Arcade has no fire-time LOS test; candidate 0x5fb040 (physics vt+0x264 call at 0x5fb4f3) unread. Where ZSoldierAttack is activated: untraced.
