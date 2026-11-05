@@ -18,12 +18,18 @@ What it changes in every status window of Menu/online.xml (HeistStatus, HeistSta
 No ButtonGraphic is created (no F-key glyph exists), so the cost is plain table slots: 2 per keyboard block, 4 per PC_GC block.
 Idempotent (marker comment). A level whose table would pass the budget (tools\\kl_menu_count.py, 5000) is not baked.
 Originals: install MOVES <zip> to <zip>.before-shopbuttons (never KL_PortBackup, an existing backup is never overwritten) and re-bakes from it.
+Same bake for the [BotGate] sibling <slot>_Main.bots.zip where a map has one (the 21 KLExpansion maps; the stock Fxx folders have none), through
+tools/kl_bake_siblings.py: the sibling gets the same transform and tag, <slot>_Main.bots.base.md5 is rewritten to the new plain zip md5, Int16Ok.txt
+(DM11B) gets the new zip=/bots= sizes, every changed file is backed up with the tag and a failure restores the whole map; undo restores all of them.
+ORDER (re/shop_buttons_1105.md): after build/pd2guns_1105/install.py, before kl_shop_pics.py; undo in reverse. 'INSTALL ALL 1105.bat' does it.
+--root DIR: a Dog Days folder other than the default (rehearsals on copies); --skip-run-check only with --root.
 """
 import argparse, os, re, shutil, sys, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import kl_menu_count as mc                      # noqa: E402
+import kl_bake_siblings as BS                   # noqa: E402
 
 DD = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 MAPS = os.path.join(DD, 'KLExpansion', 'Maps')
@@ -131,7 +137,7 @@ def kl2_running():
     try:
         return b'kl2.exe' in subprocess.run(['tasklist', '/fi', 'imagename eq kl2.exe'], capture_output=True).stdout.lower()
     except OSError:
-        return False
+        return True                                 # cannot tell: refuse (an unreadable tasklist must not wave a write through)
 
 
 def zip_in(d):
@@ -141,16 +147,18 @@ def zip_in(d):
     return None
 
 
-def targets(names):
-    """name -> zip path. Default: the 9 stock maps + every KLExpansion map folder that has a *_Main.zip."""
+def targets(names, dd=None):
+    """name -> zip path. Default: the 9 stock maps + every KLExpansion map folder that has a *_Main.zip (in the Dog Days folder dd)."""
+    dd = dd or DD
+    maps = os.path.join(dd, 'KLExpansion', 'Maps')
     t = {}
     for n in STOCK_MAPS:
-        z = zip_in(os.path.join(DD, 'Scenes', 'Locations', n)) if os.path.isdir(os.path.join(DD, 'Scenes', 'Locations', n)) else None
+        z = zip_in(os.path.join(dd, 'Scenes', 'Locations', n)) if os.path.isdir(os.path.join(dd, 'Scenes', 'Locations', n)) else None
         if z:
             t[n] = z
-    if os.path.isdir(MAPS):
-        for n in sorted(os.listdir(MAPS)):
-            z = zip_in(os.path.join(MAPS, n)) if os.path.isdir(os.path.join(MAPS, n)) else None
+    if os.path.isdir(maps):
+        for n in sorted(os.listdir(maps)):
+            z = zip_in(os.path.join(maps, n)) if os.path.isdir(os.path.join(maps, n)) else None
             if z:
                 t[n] = z
     return {k: v for k, v in t.items() if not names or k in names}
@@ -171,6 +179,8 @@ def main(argv):
     ap.add_argument('--out', default=None)
     ap.add_argument('--more-key', default='F2')
     ap.add_argument('--hire-key', default='F3')
+    ap.add_argument('--root', default=None, help='a Dog Days folder other than the default (rehearsal on copies)')
+    ap.add_argument('--skip-run-check', action='store_true', help='with --root only: do not refuse while kl2.exe runs')
     a = ap.parse_args(argv)
     if a.mode in ('check', 'bake'):
         if not a.paths or (a.mode == 'bake' and len(a.paths) != 2):
@@ -186,9 +196,9 @@ def main(argv):
                 print('refusing: <out> is the source zip'); return 2
             rewrite(a.paths[0], a.paths[1], member, new); print('wrote %s' % a.paths[1])
         return 0
-    if a.mode in ('install', 'undo') and kl2_running():
+    if a.mode in ('install', 'undo') and kl2_running() and not (a.skip_run_check and a.root):
         print('kl2.exe is running: close the game first (nothing changed)'); return 2
-    tg = targets(a.maps)
+    tg = targets(a.maps, a.root)
     out = a.out
     if a.mode == 'stage' and not out:
         import kl_port_check
@@ -196,9 +206,11 @@ def main(argv):
     bad, lines = 0, []
     for name, zp in tg.items():
         if a.mode == 'undo':
-            if os.path.exists(zp + BAK):
-                os.replace(zp + BAK, zp); print('%-6s restored %s' % (name, zp))
-            else:
+            try:
+                n = BS.undo_map(zp, BAK, lambda m: print('%-6s%s' % (name, m)))
+            except OSError as e:
+                print('%-6s FAIL undo (map restored to its state before the undo): %s' % (name, e)); bad += 1; continue
+            if not n:
                 print('%-6s no backup %s' % (name, zp + BAK))
             continue
         src = zp                                                                          # bake() is idempotent (marker): always from the LIVE zip so edits by other bakers (hire) are kept
@@ -210,24 +222,33 @@ def main(argv):
         print(msg); lines.append(msg)
         if b1 > mc.BUDGET:
             bad += 1; continue
-        if rep == ['already baked']:
+        if rep == ['already baked'] and a.mode != 'install':
             continue
         if a.mode == 'stage':
             os.makedirs(os.path.join(out, name), exist_ok=True)
             open(os.path.join(out, name, 'online.xml'), 'wb').write(new)
+            sib = BS.paths(zp)['bots']
+            if os.path.isfile(sib):                                                       # the [BotGate] sibling is baked by install with the same transform: prove it can be
+                try:
+                    _m, _o, _n, srep, s0, s1 = analyse(sib, a.more_key, a.hire_key)
+                    smsg = '%-6s   bots sibling: %s; element table %d -> %d%s' % (name, srep[-1], s0, s1, '' if s1 <= mc.BUDGET else '  OVER BUDGET')
+                except (ValueError, KeyError, zipfile.BadZipFile) as e:
+                    smsg = '%-6s   bots sibling FAIL %s' % (name, e); bad += 1
+                print(smsg); lines.append(smsg)
         elif a.mode == 'install':
-            if not os.path.exists(zp + BAK):
-                os.replace(zp, zp + BAK)                                                   # MOVE the original (never KL_PortBackup)
-                rsrc = zp + BAK
-            else:
-                rsrc = zp
+            def bake_one(src, dst, name=name):
+                m2, on2, new2, rep2, c0, c1 = analyse(src, a.more_key, a.hire_key)           # the sibling gets the same transform from ITS OWN online.xml
+                if c1 > mc.BUDGET:
+                    raise ValueError('%s: element table %d over budget %d' % (os.path.basename(src), c1, mc.BUDGET))
+                if rep2 == ['already baked']:
+                    return False
+                rewrite(src, dst, m2, new2)
+                return True
             try:
-                rewrite(rsrc, zp, member, new)
-            except Exception:
-                if not os.path.exists(zp):
-                    os.replace(zp + BAK, zp)
-                raise
-            print('       installed %s (original: %s)' % (zp, os.path.basename(zp + BAK)))
+                r = BS.install_map(zp, BAK, bake_one, lambda m: print('%-6s%s' % (name, m)))
+            except (OSError, ValueError, KeyError, zipfile.BadZipFile) as e:
+                print('%-6s FAIL %s (every file of the map restored)' % (name, e)); bad += 1; continue
+            print('       %s %s%s' % (r, zp, ' (original: %s)' % os.path.basename(zp + BAK) if r == 'installed' else ''))
     if a.mode == 'stage':
         open(os.path.join(out, 'report.txt'), 'w').write('\n'.join(lines) + '\n')
         write_bats(out, list(tg))
@@ -235,7 +256,7 @@ def main(argv):
 
 
 def write_bats(out, maps):
-    for f in ('kl_shop_buttons.py', 'kl_menu_count.py'):
+    for f in ('kl_shop_buttons.py', 'kl_menu_count.py', 'kl_bake_siblings.py'):
         shutil.copy2(os.path.join(HERE, f), os.path.join(out, f))
     ml = ' '.join(maps)
     for nm, mode, txt in (('INSTALL shop buttons.bat', 'install', 'Moves each live map zip to <zip>%s and writes the baked zip in its place (an existing backup is never overwritten).' % BAK),

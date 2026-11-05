@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~20:00 - [shop] F2/F3 shop buttons, B/W hire pictures (KLPic_*, DM01 first), PD2 guns+names staged, NOT installed. Owner order: Last Call chain -> <work>/build/INSTALL ALL 1105.bat
+-> C:/kl_build_1024/pics_1105_hook/INSTALL pics 1105 hook.bat (SHIP 727a73bb = cda03a57 + ini keys; replaces perf_1105 APPLY). Undo in reverse. DM05A: pd2guns pins clash with the
+chain; agent rebasing pd2guns onto the chain output (DM05A_chain variant). Pics = never loaded in game: check "ownpic:" in KLHook.log on DM01 before the other-maps bat.
+
 2026-11-05 ~19:45 - [c9] LAST CALL CHAIN STAGED (not installed, untested live): C:/kl_build_1024/lastcall_chain_1105/stage = life (crowd 9 looks/12 women, street emitters, music rooms)
 -> fight (130/73: Rush, F2_Hold/Flank/Shot, loot guards, wave/roof chains) -> heli (Escape_Chopper unhidden 0x3244400->0x3244000, EscCamera01 LookFromPos, CamPos01 off the eye; re/lastcall_heli_1105.md).
 zip e9fab045 -> c8dd18ee, bots 42ed37ba; skeptic verify SAFE. DD10 slim staged (re/dd10_slim_1105.md, F07 376->264 MB). Kick doors: no door leaves in DM05A (--doors variant untested).
@@ -76,10 +80,6 @@ zip e9fab045 -> c8dd18ee, bots 42ed37ba; skeptic verify SAFE. DD10 slim staged (
 front assault rushing to cover, guards before the loot room, kickable doors toward the exit. Offline agents: tools/kl_club_life_1105.py (crowd+sound), kl_club_fight_1105.py (combat), DD10 slim (re/dd10_slim_1105.md).
 FLAT RAID MENU FIXED: the 11-03 host-menu overlay had page 3 entry 6 = stock Title07 + H05 picture; live Patch01.zip ab86738f -> d00527ff ("Flat Raid", L05 picture; The Dig gets L06),
 backup .before-1105flatraid, UNDO in C:/kl_build_1024/flatraid_menu_1105. DM02 rear wall IS live (cover_fix_1026d built on edddbb67 -> 6589566e), never run on its own.
-
-2026-11-05 ~15:20 - [c9] Owner back ("install all"): everything built was already live (c9_1105e, SHIP 288fb016). Switched on the two off-by-default features in the live ini:
-[Adrenaline] OnlineRevive=1 and [Bots] OnlineEscort=2 (backup <DD>/KLHook.ini.before-c9_1105f; copy it back to undo). OnlineRevive is unexercised on benches (needs a human by a downed bot):
-owner play is its first real test, grep "adren-online:" in KLHook.log. Owner rebooting: clears stuck kl2.exe 119840/129272; then delete <DD>/dinput8.dll.rv3-test-leftover.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
