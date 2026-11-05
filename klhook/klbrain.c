@@ -185,6 +185,7 @@ static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally);   /* klbotfill
 static int klbf_ob_phase(DWORD actor);                              /* klbotfill.c: the ledger phase of one bot (0 idle, 1 walking to a stack, 2 exit walk, 3 aboard, 4 looting), -1 when untracked (read only) */
 static int klbf_ob_called(DWORD actor);                             /* klbotfill.c: BoardStage, 1 when the bot is ordered to / inside the exit box or aboard (read only) */
 static int klbf_ot_s2open(void);                                    /* klbotfill.c: van called or gather running (read only) */
+static int klbr_s2vrel; static volatile LONG klbr_s2vrel_logged;      /* [Brain] OnlineBrainTraitorMinSVanRelease (0 = off) and its once-per-round log */
 static long klbr_mkgap; static DWORD klbr_mk_last; static volatile LONG klbr_mkgap_logged;      /* [Brain] OnlineBrainTraitorMarkGapMs (0 = off), tick of this round's last mark (0 = none), once-per-round log */
 static long klbr_s2min, klbr_s2max; static volatile LONG klbr_s2min_logged, klbr_s2max_logged, klbr_s2hold_logged;    /* [Brain] OnlineBrainTraitorStage2MinS / MaxS (seconds after round start, 0 = off; UNTESTED) and the once-per-round log flags */
 static int klbr_s2gate; static long klbr_s2money = 1250000;        /* [Brain] OnlineBrainTraitorStage2Gate / OnlineBrainTraitorStage2Money (UNTESTED, default off) */
@@ -434,7 +435,9 @@ static float klbr_ev(int cls, DWORD self)
     if (flt) { InterlockedIncrement(&klbr_ev_flt[cls]); klbr_fault(cls, e, "evaluate"); r = 0.0f; }      /* a faulted answer is never trusted and never refreshes the hand-off */
     klbr_ev_last[cls] = r;
     if (klbr_bprobe && cls == 1 && e) { e->bLast = r; e->bLastAt = GetTickCount() | 1u; }      /* BoardProbe: the last Board evaluate answer of this bot (0 when faulted) */
-    if (cls == 2 && e && !flt && r > 0.0f && !e->traitor && kbr_mark_held(klbr_s2gate, klbr_trr_t0 ? (long)((GetTickCount() - klbr_trr_t0) / 1000) : -1L, klbr_s2min)) {
+    if (klbr_s2vrel && cls == 2 && e && !flt && r > 0.0f && !e->traitor && !InterlockedCompareExchange(&klbr_s2vrel_logged, 0, 0) && klbr_trr_t0 && kbr_mark_held(klbr_s2gate, (long)((GetTickCount() - klbr_trr_t0) / 1000), klbr_s2min) && !kbr_mark_held_v(klbr_s2gate, (long)((GetTickCount() - klbr_trr_t0) / 1000), klbr_s2min, klbr_van, 1)
+        && !InterlockedExchange(&klbr_s2vrel_logged, 1)) klog("brain: MinSVanRelease: van state %d released the MinS hold at +%ld s (MinS %ld): record %d evaluate %.3f may mark now", klbr_van, (long)((GetTickCount() - klbr_trr_t0) / 1000), klbr_s2min, e->rec, (double)r);
+    if (cls == 2 && e && !flt && r > 0.0f && !e->traitor && kbr_mark_held_v(klbr_s2gate, klbr_trr_t0 ? (long)((GetTickCount() - klbr_trr_t0) / 1000) : -1L, klbr_s2min, klbr_van, klbr_s2vrel)) {
         /* OnlineBrainTraitorStage2MinS (11-05, bs66): the stage BYTE cannot carry this floor for a board-ready bot (byte 3 is also read by the real Board tactic, lowering it would stop boarding), so the
            MARK itself waits: the Traitor evaluate answers 0 before MinS, the AI never picks the Traitor RUN, nothing else is touched. Needs gate on and MinS > 0 and a known round clock (else unchanged).
            Runs BEFORE the diag / roll counters (review 11-05) so a held evaluate is not logged as NONZERO nor counted as a refused roll, and klbr_ev_last / klbr_ev_nz stay honest. */
@@ -4640,7 +4643,7 @@ static void klbr_summary(void)
             klog("brain: round end: TraitorRoll: score passed on %ld evaluate(s) of unmarked bots, %ld mark(s), %ld pass(es) with no mark (roll refused, GUESS); first pass %s%ld s, first mark %s%ld s into the round (-1 = none); Stage2Gate %d, money fallback $%ld, MinS %ld, MaxS %ld",
                  klbr_trr_pass, klbr_trr_marks, refused, "+", klbr_trr_pass1 ? (long)((klbr_trr_pass1 - klbr_trr_t0) / 1000) : -1L, "+", klbr_trr_mark1 ? (long)((klbr_trr_mark1 - klbr_trr_t0) / 1000) : -1L, klbr_s2gate, klbr_s2money, klbr_s2min, klbr_s2max);
         }
-        klbr_s2min_logged = klbr_s2max_logged = klbr_s2hold_logged = 0;
+        klbr_s2min_logged = klbr_s2max_logged = klbr_s2hold_logged = klbr_s2vrel_logged = 0;
         klbr_trr_pass = klbr_trr_marks = 0; klbr_trr_pass1 = klbr_trr_mark1 = 0; klbr_mk_last = 0; klbr_mkgap_logged = 0;
         if (klbr_realrun)
             klog("brain: round end: realrun: swap-ins %ld (RUN %ld, EXIT %ld), swap-outs %ld, leaks %ld, veh restores %ld, mismatches %ld, foreign-thread %ld, nested %ld, mode!=4 %ld, unregistered [tac+0x10] %ld, hand-off stamps evaluate-pick %ld / resume %ld; %ld tactic(s) in the registry (kept across rounds: a coroutine alive past the round end still gets the shadow)", (long)klbr_rr_in, (long)klbr_rr_val[1], (long)klbr_rr_val[2], (long)klbr_rr_out, (long)klbr_rr_leak, (long)klbr_rr_veh, (long)klbr_rr_mis, (long)klbr_rr_foreign, (long)klbr_rr_nested, (long)klbr_rr_mode, (long)klbr_rr_t10, (long)klbr_rr_hand_ev, (long)klbr_rr_hand_run, (long)klbr_rrn);
@@ -4889,6 +4892,8 @@ static void klbr_init(void)
       klbr_s2min = a < 0 ? 0 : a > 3600 ? 3600 : a; klbr_s2max = b < 0 ? 0 : b > 3600 ? 3600 : b;
       if (klbr_s2gate && (klbr_s2min || klbr_s2max)) klog("brain: OnlineBrainTraitorStage2MinS=%ld / MaxS=%ld (UNTESTED): the gate never opens before MinS seconds into the round, and opens at MaxS even with no van call (0 = off)", klbr_s2min, klbr_s2max);
       else if (!klbr_s2gate && (a || b)) klog("brain: OnlineBrainTraitorStage2MinS / MaxS need OnlineBrainTraitorStage2Gate=1: off"); }
+    klbr_s2vrel = klbr_s2gate && klbr_s2min && GetPrivateProfileIntA("Brain", "OnlineBrainTraitorMinSVanRelease", 0, klh_ini) != 0;      /* (recommended on, with NoBoard=2) UNTESTED */
+    if (klbr_s2vrel) klog("brain: OnlineBrainTraitorMinSVanRelease=1 (UNTESTED): MinS no longer holds the Traitor evaluate once the van is called (state 1..4), like Arcade's window; use with OnlineBrainTraitorNoBoard=2");
     { long g = GetPrivateProfileIntA("Brain", "OnlineBrainTraitorMarkGapMs", 0, klh_ini); klbr_mkgap = !klbr_traitor || g < 0 ? 0 : g > 60000 ? 60000 : g;      /* (recommended on: 500) UNTESTED */
       if (klbr_mkgap) klog("brain: OnlineBrainTraitorMarkGapMs=%ld (UNTESTED): a Traitor mark waits this long after the previous mark of the round (Arcade spaces its marks >= ~0.5 s)", klbr_mkgap); }
     if (klbr_key("OnlineBrainTraitorStage2Gate") && !klbr_s2gate) klog("brain: OnlineBrainTraitorStage2Gate needs OnlineBrainTraitor=1: off");

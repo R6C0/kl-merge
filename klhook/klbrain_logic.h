@@ -279,6 +279,14 @@ static int kbr_mark_held(int gate, long elapsed_s, long min_s)
     return gate && min_s > 0 && elapsed_s >= 0 && elapsed_s < min_s;
 }
 
+/* MinS van release (11-05, bs72): with van_release on, a called van (state 1..4, the same range that opens the stage gate) ends the MinS hold early. bs72 DM03: all 7 bots boarded at +131 s and the
+   crew's evaluates stopped at +135 s, so MinS 150 left nothing to mark; Arcade DM03 marks +118..166 s, mostly around the van call. Needs NoBoard=2 (a bot marked before boarding was ghost-boarded, bs69). */
+static int kbr_mark_held_v(int gate, long elapsed_s, long min_s, int van, int van_release)
+{
+    if (van_release && van >= 1 && van <= 4) return 0;
+    return kbr_mark_held(gate, elapsed_s, min_s);
+}
+
 /* Mark spacing (11-05, bs71): 1 = hold the Traitor evaluate at 0 now because the previous mark of this round is less than gap_ms old. Arcade marks 1-5 traitors spaced >= ~0.5 s;
    the MinS hold released every waiting bot in one tick (bs71: 3 marks at once). last_ms 0 = no mark yet this round; gap_ms <= 0 = off. Unsigned tick math survives the 49-day wrap. */
 static int kbr_mark_spaced(unsigned long now_ms, unsigned long last_ms, long gap_ms)
