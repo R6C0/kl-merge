@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~13:00 - [c9] FOUND + FIXED (e965ae89f): NO BENCH EVER SAW A BOT DOWN because klbotdeath ([BotDeathProbe], on by default in every TEST build) detoured
+0x688190 = soldier slot 51, whose code bytes klbd_callable checks: botdown, cardown and shield were refused ("down routine ... not the one this build knows"). SHIP
+builds were not affected (probe off). The probe now skips site 3 unless [BotDeathProbe] Slot51=1. RV3B/C ran 12:10-12:46 (owner OK "continue til 3pm"): PASS on faults.
+TEST 5f52009d / SHIP 288fb016; install kit C:/kl_build_1024/c9_1105e_install now holds 288fb016 (not run). RV4 down bench (rv4/, DD05 DM03) waiting for the owner to be idle.
+
 2026-11-05 ~12:05 - [c9] OWNER STOPPED TESTS ("stop tests got something to do"). RV3B (DM03) killed mid-run; live dll 9159711e put back by hand (the TEST dll was locked by a stuck kl2.exe:
 renamed to <DD>/dinput8.dll.rv3-test-leftover, delete once that process is gone). Live ini NOW OnlineHealthMul=5, OnlineCrewHealth=0 (the 11:50 edit had been undone by RV2's end-of-run ini restore).
 RV3A (DD05, klhpmax TEST 3e6cdd67, OnlineCrewHealth 2 + OnlineHealthMul 5): composition right, 7 bots 700 -> 3500 flat, 1 bot down; BUT both seats ended 'unhandled exception c0000005 at
@@ -77,11 +82,6 @@ d3d9.dll+0x4b31f' at the same ms at run end (11:59:22, likely the bench's close;
 TEST out_c9_1105hp_test 3e6cdd67, SHIP out_c9_1105hp 8825e0a0 (not installed). RV2A (ini fix on the old dll) PASS: 14 bots 350 -> 3500 flat, faults 0, but still 0 downs (1702 cop hits x0.05 = ~2 hp each).
 LIVE INI 11:50: OnlineHealthMul 10 -> 5 (= stock Arcade survival with OnlineCopToBot 5, notes 10-26: ~430 hits vs 417; 10 doubled it). RV3 (C:/kl_build_1024/week_1028/rv3, TEST 3e6cdd67) chained after RV2:
 A DD05 OnlineCrewHealth 2 + OnlineHealthMul 5 (composition, expect 3500 flat), B DM03 OnlineHealthMul 5 alone (expect 1750 / 1400 and bot downs).
-
-2026-11-05 ~11:35 - [c9] FOUND: online AI heisters were near-immortal since c9_1104c. [Bots] OnlineCrewHealth=2 (klgrudge) and [BotFill] OnlineHealthMul=5 (klbotfill) each took the other's
-max-health write as the game's and re-based: 350 -> 700 -> 3500 -> 7000 -> 35000 -> 70000 -> 350000 (stops at their 100000 sanity cap); every online bench since SB60 shows 140k-350k, no online bot ever went down.
-RV1 (OnlineRevive) PASS 4/4 seats 0 faults but 0 downs for that reason. LIVE INI FIXED 11:30 (backup KLHook.ini.before-hpfix-1105): OnlineCrewHealth=0 + OnlineHealthMul=10 = one writer, 3500.
-RV2 bench (C:/kl_build_1024/week_1028/rv2, same + the ini fix) running; code fix (writers compose) in workflow wou2kgqnw.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
