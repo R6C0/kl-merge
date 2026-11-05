@@ -49,7 +49,10 @@ static int klb_read(struct klb_snap *s) { *s = g_snap; return 1; }
 static int klr_arcade(DWORD *rules, DWORD *state, int *level) { *rules = g_snap.rules; *state = g_snap.state; *level = 1; return 1; }
 static int klb_level(char why[200]) { strcpy(why, "test level"); return 1; }
 static int kle_node(DWORD node, float pos[3], float dir[3]) { (void)dir; if (!node) return 0; klh_rd(node, pos, 12); return 1; }
-static int kle_human(DWORD *player, float feet[3], float nodepos[3]) { (void)player; (void)feet; (void)nodepos; return 0; }      /* no human in the harness: LieFar sees "not in play" */
+static int g_hum; static float g_hpos[3]; static int g_use, g_kad_on = 1, g_needuse;      /* OnlineRevive: the host's human (0 = none, as before), his place, Use held, [Adrenaline] Enable, the NeedUse row */
+static int kle_human(DWORD *player, float feet[3], float nodepos[3]) { if (!g_hum) return 0; *player = 0x00f00000; memcpy(feet, g_hpos, 12); memcpy(nodepos, g_hpos, 12); return 1; }      /* g_hum 0: LieFar sees "not in play" */
+static int klbd_kad(float *range, float *rate, float *minhelp, int *needuse) { if (!g_kad_on) return 0; *range = 2.5f; *rate = 3.0f; *minhelp = 1.0f; *needuse = g_needuse; return 1; }      /* kladren.c's numbers (defaults) */
+static int kad_use_held(DWORD pl) { (void)pl; return g_use; }
 static int klb_same_code(DWORD va, const BYTE *bytes, int n) { (void)va; (void)bytes; (void)n; return g_code_ok; }
 
 #define SCORE 0x00300000
@@ -133,7 +136,7 @@ static void world(void)
     klbd.on = 1; klbd.arc = 1; klbd.log = 1; klbd.downs_max = 2; klbd.traitors = 1; klbd.down_pct = 20; klbd.floor_pct = 6; klbd.refuse = 3000; klbd.lie = 6; klbd.free_t = 0.75f;
     klbd.attr = 1.5f; klbd.watch = 8; klbd.preshield = 0; g_btest = 1; g_nb = 0;
     memset(klbd_r, 0, sizeof klbd_r); memset(&klbd_g, 0, sizeof klbd_g);
-    g_ohost = 0; g_ostate = 0x19; g_ncen = 0; g_now = 5000; klbd_online_reset(); g_accept = 1; g_ncalls = 0; g_goal_never = 0; g_code_ok = 1; nlog = 0; logbuf[0] = 0; nwrites = 0;
+    g_hum = 0; g_use = 0; g_kad_on = 1; g_needuse = 0; g_ohost = 0; g_ostate = 0x19; g_ncen = 0; g_now = 5000; klbd_online_reset(); g_accept = 1; g_ncalls = 0; g_goal_never = 0; g_code_ok = 1; nlog = 0; logbuf[0] = 0; nwrites = 0;
 }
 
 static void pass(int ms) { tick += ms * 1024 / 1000; W32(CLOCK + 0x48, tick); game_frame(); klbd_tick(1); }
@@ -291,6 +294,29 @@ int main(void)
       g_ohost = -1; run(300); g_ohost = 1; run(300);
       q = logbuf; while ((q = strstr(q, "ONLINE round runs")) != NULL) { rounds--; q++; }
       CHECK(rounds == 0, "settings unreadable for a moment: no forget, no second round-start line"); }
+
+    /* ---- 12: OnlineRevive: the host's human by a downed online bot pulls his lie (Range 2.5 m, MinHelp 1 s, Rate 3) */
+    printf("--- scenario 12: online revive\n");
+#define OREV(mode, hx, hy, nu, use, kon) do { world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 1; g_ohost = 1; g_ncen = 1; g_cen[0] = ACT(1); klbd.orev = (mode); klbd.orevlog = 1; \
+        g_hum = 1; g_hpos[0] = (hx); g_hpos[1] = (hy); g_hpos[2] = 0; g_needuse = (nu); g_use = (use); g_kad_on = (kon); WF(HO(1) + 4, 20); run(300); } while (0)
+    OREV(1, 6100, 0, 0, 0, 1); run(3200);
+    CHECK(R32(ACT(1) + 0x64c) == 0 && has("you help him up") && has("is up after") && has("the pull ran"), "by him (1 m), NeedUse off: up by 3.5 s (lie 6 s alone)");
+    OREV(1, 6100, 0, 1, 0, 1); run(3200);
+    CHECK(R32(ACT(1) + 0x64c) == 1 && has("not holding Use") && !has("you help him up"), "NeedUse on, Use not held: no help, still down at 3.5 s");
+    OREV(1, 6100, 0, 1, 1, 1); run(3200);
+    CHECK(R32(ACT(1) + 0x64c) == 0 && has("you help him up"), "NeedUse on, Use held: up by 3.5 s");
+    OREV(1, 6600, 0, 0, 0, 1); run(3200);
+    CHECK(R32(ACT(1) + 0x64c) == 1 && !has("you help him up"), "6 m away (Range 2.5): no help");
+    OREV(1, 6100, 300, 0, 0, 1); run(3200);
+    CHECK(R32(ACT(1) + 0x64c) == 1 && !has("you help him up"), "3 m above (another floor): no help");
+    OREV(1, 6100, 0, 0, 0, 0); run(3200);
+    CHECK(R32(ACT(1) + 0x64c) == 1 && !has("you help him up"), "[Adrenaline] Enable=0: no help");
+    OREV(0, 6100, 0, 0, 0, 1); run(3200);
+    CHECK(R32(ACT(1) + 0x64c) == 1 && !has("adren-online"), "OnlineRevive=0: nothing");
+    OREV(2, 6100, 0, 0, 0, 1); { DWORD t0 = R32(DND(1) + 0x14); run(3200);
+    CHECK(R32(ACT(1) + 0x64c) == 1 && has("log only") && R32(DND(1) + 0x14) == t0, "OnlineRevive=2: the line, the lie tick untouched"); }
+    world(); klbd.orev = 1; g_hum = 1; g_hpos[0] = 6100; WF(HO(1) + 4, 20); run(300); run(3200);
+    CHECK(R32(ACT(1) + 0x64c) == 1 && !has("adren-online"), "Arcade (not online): OnlineRevive does nothing (kladren.c's own adrenaline is the Arcade one)");
 
     printf("\n%s (%d failure(s))\n", fails ? "FAILED" : "ALL PASS", fails);
     return fails ? 1 : 0;

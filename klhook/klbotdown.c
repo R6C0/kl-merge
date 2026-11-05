@@ -93,6 +93,7 @@ static struct {
     float down_pct, floor_pct, lie, free_t, lie_pct, up_pct, refuse, attr, watch; int preshield;
     float lie_far, lie_far_at;      /* LieFar / LieFarAt (2026-10-15): the lie when the human is not near (nobody can help) */
     int fed_downs; float fed_free, fed_up, fed_health;      /* while the local human is police (klfed.c's fed) */
+    int orev, orevlog;              /* [Adrenaline] OnlineRevive (0 off, 1 on, 2 log only) / OnlineReviveLog: the host's human helps a downed AI heister up online */
 } klbd;
 
 static struct klbd_rec {
@@ -102,6 +103,7 @@ static struct klbd_rec {
     DWORD tick_down, l0, lie_tick, first_try, last_try, spd_last, a_tick, watch_log;
     float prevA, hp, hmax;
     BYTE fed_done; DWORD fed_h; float fed_from, fed_to;     /* FedHealth: the health object written and the maximum before / after */
+    float rv_hm; DWORD rv_last; BYTE rv_said, rv_wait;      /* OnlineRevive: ms of the human's help this down, the last tick counted, the 'pulling' / 'by him, not holding Use' lines said */
 } klbd_r[KLB_NREC];
 static struct { DWORD rules; int told_code, fed; } klbd_g;
 
@@ -252,6 +254,47 @@ static int klbd_speed(int record, float rate)
     cur = klh_rd32(dnd + 0x14); nw = klbd_lie_step(cur, tick, dt, rate, &done);
     b->lie_done = 1;
     return nw != cur && klh_data((void *)(DWORD_PTR)(dnd + 0x14), &nw, 4, "an AI heister's down-not-dead: the tick he lies until (botdown, a helper)");
+}
+
+/* ---------------------------------------------------------------- OnlineRevive (2026-11-05, re\bot_revive_online_1105.md Phase 1)
+   Online, on the HOST: kladren.c's adrenaline returns at once when the round is not Arcade, so a downed AI heister lies his whole
+   LieSeconds even with the human crouched by him. Here the host's own human (kle_human: the LOCAL one only - remote humans are not
+   read yet) by a downed AI heister pulls his lie tick earlier through klbd_speed, with the [Adrenaline] numbers: Range (m, same floor
+   = |dy| <= 2 m), MinHelp (s of help before the pull starts), Rate (x the helper's Adrenaline trait - here the BOT's drawn character,
+   GUESS: the host's own wardrobe record is not this human online), and the menu's NeedUse row (hold Use / E). No anim, no prompt yet. */
+static int klbd_kad(float *range, float *rate, float *minhelp, int *needuse);      /* kladren.c (included later): 0 when [Adrenaline] Enable=0 */
+static int kad_use_held(DWORD pl);                                                /* kladren.c: the game's Use bit or the UseKey */
+#ifdef KLHOOK_TEST
+static int kla_key_held(int dik);                                                 /* klauto.c (TEST only): a scripted DIK_E counts as held */
+#endif
+static void klbd_revive_one(int i, struct klbd_rec *b, const struct klb_rec *r, DWORD dnd, DWORD tick, const float pos[3], int have)
+{
+    float range, rate, minhelp, hf[3], hn[3], dx, dz, d, k; int needuse, held; DWORD pl = 0, dt;
+    dt = b->rv_last ? tick - b->rv_last : 0; b->rv_last = tick;
+    if (dt > 512) dt = 0;                                                         /* a stall or the first pass: nothing counted */
+    if (!klbd.orev || !klbd_kad(&range, &rate, &minhelp, &needuse) || !have || !dnd) return;
+    if (KLBD_FED() || !kle_human(&pl, hf, hn) || !pl) return;                     /* police helps nobody; not in play = no body */
+    if (fabsf(hn[1] - pos[1]) > 200.0f) return;                                   /* another floor */
+    dx = hn[0] - pos[0]; dz = hn[2] - pos[2]; d = sqrtf(dx * dx + dz * dz);
+    if (d > range * 100.0f) return;
+    held = kad_use_held(pl);
+#ifdef KLHOOK_TEST
+    if (kla_key_held(0x12)) held = 1;
+#endif
+    if (needuse && !held) {
+        if (!b->rv_wait && klbd.orevlog) { b->rv_wait = 1; klog("adren-online: record %d: you are by him (%.1f m) but not holding Use (NeedUse): no help counted", i, d / 100.0f); }
+        return;
+    }
+    b->rv_hm += (float)dt * 1000.0f / 1024.0f;
+    if (b->rv_hm < minhelp * 1000.0f) return;
+    k = 1.0f + (rate - 1.0f) * kltt_bot(r->actor, KLTT_ADREN);
+    if (!b->rv_said) {
+        b->rv_said = 1;
+        klog("adren-online: record %d: you help him up (%.1f m, %.0f ms of help >= MinHelp %.1f s): his lie runs x %.2f (Rate %.1f)%s", i, d / 100.0f, b->rv_hm, minhelp, k, rate,
+             (klbd.orev == 2 || klbd.dry) ? " - OnlineRevive=2 / Dry: log only, nothing is written" : "");
+    }
+    if (klbd.orev == 2 || klbd.dry) return;
+    klbd_speed(i, k);
 }
 
 /* ---------------------------------------------------------------- one pass */
@@ -467,7 +510,7 @@ static void klbd_pass(struct klb_snap *snp, const char *why, int online)
 
         if (!b->down && dn) {
             /* ---- he is down (ours or the game's own) */
-            b->down = 1; b->tick_down = tick; b->lie_done = 0; b->pct_done = 0; b->spd_last = 0; b->watch_log = 0;
+            b->down = 1; b->tick_down = tick; b->lie_done = 0; b->pct_done = 0; b->spd_last = 0; b->watch_log = 0; b->rv_hm = 0; b->rv_last = 0; b->rv_said = b->rv_wait = 0;
             if (!b->mine) b->downs++;
             b->by = (b->a_tick && (long)(tick - b->a_tick) <= (long)(klbd.attr * 1024.0f) && sn.human >= 0) ? sn.human : -1;
             klog("botdown: record %d IS DOWN, NOT DEAD (%d of %d) at (%.0f, %.0f, %.0f) - %s; health %.1f of %.1f; %s; put down by %s",
@@ -479,6 +522,7 @@ static void klbd_pass(struct klb_snap *snp, const char *why, int online)
             /* ---- he is up */
             b->down = 0; b->mine = 0; b->first_try = b->last_try = 0; b->tries = 0; b->gaveup = 0;
             if (b->shield) klbd_shield(b, 0);
+            if (online && klbd.orev && b->rv_hm > 0) klog("adren-online: record %d is up after %.2f s with %.0f ms of your help%s", i, (float)(long)(tick - b->tick_down) / 1024.0f, b->rv_hm, b->rv_said ? " (the pull ran)" : " (under MinHelp: no pull)");
             klog("botdown: record %d IS UP after %.2f s at (%.0f, %.0f, %.0f): health %.1f of %.1f (READ in B2: the game's get-up gave FULL health, 252 of 252, twice - not the 75 %% the script's constant suggests), heist stage %u", i, (float)(long)(tick - b->tick_down) / 1024.0f,
                  have ? pos[0] : 0, have ? pos[1] : 0, have ? pos[2] : 0, hp, hmax, (unsigned)r->stage);
             {
@@ -492,6 +536,7 @@ static void klbd_pass(struct klb_snap *snp, const char *why, int online)
         }
         if (b->down) {
             /* ---- he lies */
+            if (online && (b->lie_done || klbd.dry || klbd.orev == 2)) klbd_revive_one(i, b, r, dnd, tick, pos, have);      /* after our LieSeconds went in (klbd_speed sets lie_done); Dry / 2: log only */
             if (klbd.dry) { b->hp = hp; b->hmax = hmax; continue; }
             if (dnd && !b->lie_done) {
                 DWORD cur = klh_rd32(dnd + 0x14);
@@ -627,6 +672,12 @@ static void klbd_init(void)
     klbd.fed_free = klbd_inif("FedFree", "0", 0.0f, 5.0f);
     klbd.fed_up = klbd_inif("FedUpPct", "25", 0.0f, 100.0f);
     klbd.fed_health = klbd_inif("FedHealth", "0", 0.0f, 1000.0f);
+    /* [Adrenaline] OnlineRevive (2026-11-05, BUILT, bench before it goes on): online, on the HOST, you by a downed AI heister pull his lie
+       shorter with the [Adrenaline] Range / MinHelp / Rate / NeedUse (needs [Adrenaline] Enable=1). 0 off, 1 on (recommended on once benched), 2 log only.
+       OnlineReviveLog=1 also says 'by him but not holding Use'. */
+    klbd.orev = GetPrivateProfileIntA("Adrenaline", "OnlineRevive", 0, klh_ini); if (klbd.orev < 0 || klbd.orev > 2) klbd.orev = 0;
+    klbd.orevlog = GetPrivateProfileIntA("Adrenaline", "OnlineReviveLog", 1, klh_ini) != 0;
+    if (klbd.orev) klog("adren-online: OnlineRevive=%d: online, the host's human by a downed AI heister pulls his lie shorter ([Adrenaline] Range / MinHelp / Rate / NeedUse)%s", klbd.orev, klbd.orev == 2 ? " - log only" : "");
     if (klbd.fed_health > 0 && klbd.fed_health < 5.0f) klbd.fed_health = 5.0f;
     klog("botdown: worlds: Arcade %s ([BotDown] Enable%s); online HOST %s ([Down] OnlineBotDown%s; only where the level keeps the Ally squads online; never on a client, never police). The lines below are the Arcade ones; the online census uses the same numbers",
          klbd.arc ? "ON" : "off", klbd.adry ? ", Dry=1" : "", klbd.oon ? "ON" : "off", klbd.odry ? ", OnlineBotDownDry=1: log only" : "");

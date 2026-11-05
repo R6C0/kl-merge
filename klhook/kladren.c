@@ -1238,6 +1238,14 @@ static void kad_tick(int game_thread)
 
 /* ---------------------------------------------------------------- init */
 
+/* klbotdown.c's OnlineRevive reads the adrenaline numbers here (kad is defined in this file, included after klbotdown.c) */
+static int klbd_kad(float *range, float *rate, float *minhelp, int *needuse)
+{
+    if (!kad.on) return 0;
+    *range = kad.range; *rate = kad.rate; *minhelp = kad.minhelp; *needuse = kset_v[3] != 0;
+    return 1;
+}
+
 static float kad_inif(const char *key, const char *def, float lo, float hi)
 {
     char t[40]; float v;
