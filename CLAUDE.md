@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~04:00 - [c9] 12e5472a8: [Brain] OnlineBrainTraitorStage2MinS/MaxS (default 0; needs Stage2Gate=1): before MinS a carrying bot shows stage 1 whatever opens the gate, from MaxS it shows 2 with no
+opener. Review clean. Betrayal investigation (wi55li98s): LOS works; the gather walks the marked bot 120-190 m from the humans (DM03 0 hits, DD03 36 hits late); Arcade's mark is passive and has the
+same far-block on benches, and no Arcade hit rate has been measured. bs66 queued after bs65 (MinS=150 MaxS=240, out_sw_1105a md5 5128545d, DM03 DD05 DD03; check that bots still board). Workflow w4kanzjlt:
+[BotFill] OnlineVanGatherSkipTraitor (+MaxS hold-off) keeps a marked bot out of the gather. Queue: ce pqq3 (running), bs63, bs64, bs65, bs66.
+
 2026-11-05 ~03:40 - [c9] bs62 PASS 6/6 seats (Stage2Gate=1 + Stage2Money=0, TEST out_cp_1105a, DM03 DD05 DD03 online, 0 faults). First traitor mark +118/+147.6/+156 s (bs58 with the $1.25M
 fallback: +94/+56/+108; Arcade 150-240). Money released nothing ($0); the gate now opens on the gather / van call (DM03 +116, DD05 +143.6, DD03 gather +156). DM03 still early because bots call
 early. Open: the marked bot never attacks on DM03 (LosGate blocked 546/546, boarded the van) or DD03 (LOS blocked ~190 m); DD05 tried 49 hits. Workflow wi55li98s: [Brain] Stage2MinS/MaxS
 (floor / no-gather fallback) + read-only betrayal investigation vs Arcade. Pushed 60c39a2b9 OnlineBanterBots (bench bs65). Queue: ce pqq3 (running), bs63, bs64 (+BotDeathProbe 500), bs65.
-
-2026-11-05 ~03:05 - [c9] 60d4b2d19: OnlineVanCallFirst only calls early for a bot with tally > 0 (bs60 DD05 $0 caller); new [BotFill] OnlineVanCrewNoShield (default 0: timer-only crewhold add when the van
-health is unreadable, DD03 heli); DM03 post-call bot deaths = stock death path, also seen before CallFirst (SB54B). bs61 follow-up: ByLook fallbacks are correct (Dog Days bodies keep digit voices);
-online banter members are the other HUMAN seat, NOT bots ("a bot" log label is wrong). Workflow wkjjw49ns: log fixes + [BotFill] OnlineBanterBots. Queue: bs62 (running), ce pqq3, bs63, bs64
-(out_cf_1105b md5 89a5f74f: DM03 DD05 CallFirst carrier rule, DD03 CrewNoShield=1).
 
 2026-11-05 ~02:20 - [ce] InShopSteps is live (pq_1104b, benched on all 16 maps; UNDO bat in C:\kl_build_1024\pq_1104b_install). Waiting for the owner's play test.
 QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq: [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND seat inis -> stock cut (B) ends round 1 13 s in,

@@ -1,3 +1,8 @@
+2026-11-05 ~04:00 - [c9] 12e5472a8: [Brain] OnlineBrainTraitorStage2MinS/MaxS (default 0; needs Stage2Gate=1): before MinS a carrying bot shows stage 1 whatever opens the gate, from MaxS it shows 2 with no
+opener. Review clean. Betrayal investigation (wi55li98s): LOS works; the gather walks the marked bot 120-190 m from the humans (DM03 0 hits, DD03 36 hits late); Arcade's mark is passive and has the
+same far-block on benches, and no Arcade hit rate has been measured. bs66 queued after bs65 (MinS=150 MaxS=240, out_sw_1105a md5 5128545d, DM03 DD05 DD03; check that bots still board). Workflow w4kanzjlt:
+[BotFill] OnlineVanGatherSkipTraitor (+MaxS hold-off) keeps a marked bot out of the gather. Queue: ce pqq3 (running), bs63, bs64, bs65, bs66.
+
 2026-11-05 ~03:40 - [c9] bs62 PASS 6/6 seats (Stage2Gate=1 + Stage2Money=0, TEST out_cp_1105a, DM03 DD05 DD03 online, 0 faults). First traitor mark +118/+147.6/+156 s (bs58 with the $1.25M
 fallback: +94/+56/+108; Arcade 150-240). Money released nothing ($0); the gate now opens on the gather / van call (DM03 +116, DD05 +143.6, DD03 gather +156). DM03 still early because bots call
 early. Open: the marked bot never attacks on DM03 (LosGate blocked 546/546, boarded the van) or DD03 (LOS blocked ~190 m); DD05 tried 49 hits. Workflow wi55li98s: [Brain] Stage2MinS/MaxS
