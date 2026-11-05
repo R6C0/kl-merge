@@ -1,3 +1,8 @@
+2026-11-05 ~12:05 - [c9] OWNER STOPPED TESTS ("stop tests got something to do"). RV3B (DM03) killed mid-run; live dll 9159711e put back by hand (the TEST dll was locked by a stuck kl2.exe:
+renamed to <DD>/dinput8.dll.rv3-test-leftover, delete once that process is gone). Live ini NOW OnlineHealthMul=5, OnlineCrewHealth=0 (the 11:50 edit had been undone by RV2's end-of-run ini restore).
+RV3A (DD05, klhpmax TEST 3e6cdd67, OnlineCrewHealth 2 + OnlineHealthMul 5): composition right, 7 bots 700 -> 3500 flat, 1 bot down; BUT both seats ended 'unhandled exception c0000005 at
+d3d9.dll+0x4b31f' at the same ms at run end (11:59:22, likely the bench's close; not yet checked against older benches). Next: that check, re-run RV3B, then an install kit with SHIP 8825e0a0.
+
 2026-11-05 ~11:55 - [c9] CODE FIX c260b654d: klhpmax_logic.h, one registry for every writer of a bot's max health (grudge, botfill, Fed); wanted = game's base x the factors, a new base drops them. klhpmax_test 302 checks, kl_tests 73/0.
 TEST out_c9_1105hp_test 3e6cdd67, SHIP out_c9_1105hp 8825e0a0 (not installed). RV2A (ini fix on the old dll) PASS: 14 bots 350 -> 3500 flat, faults 0, but still 0 downs (1702 cop hits x0.05 = ~2 hp each).
 LIVE INI 11:50: OnlineHealthMul 10 -> 5 (= stock Arcade survival with OnlineCopToBot 5, notes 10-26: ~430 hits vs 417; 10 doubled it). RV3 (C:/kl_build_1024/week_1028/rv3, TEST 3e6cdd67) chained after RV2:
