@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~05:45 - [c9] bs65 PASS 4/4 seats, 0 faults (OnlineBanterBots=1 + ByLook, out_vb_1105b, DM03 DD05). Bots now join the online banter: DM03 4/4, DD05 5/5 bot lines played on
+the client (all previous runs: 0); triple packets deduped. A Dead Men body (Hutchison) once spoke an unsuffixed squad-pool key (FA_ShootOffMoney_01): kltalk's squad fallback by record parity,
+the same pick Arcade makes, so not changed. Fix: the "banter bots" note wrote 237-364 lines a round, now once per digit. Install candidate together with OnlineVoice=1 + VoiceClientRetry=1
+(bs65 ran without the retry: 1 line held on DD05). Unexplained: DM03 slot-45 "stale ledger" 70/153 (bs63 0/183). Queue: bs66, bs67, ce pqq4.
+
 2026-11-05 ~05:15 - [c9] bs64 PASS 6/6 seats, 0 faults (out_cf_1105b). CallFirst: every early call by a carrier (+102/+171/+154 s); its "carries nothing" branch never fired (untested).
 Aboard after the call: DM03 7/7 (bs60: 5, 2 dead), DD05 6/7, DD03 6/7 (missing = the marked traitor); 0 deaths, so BotDeathProbe (prefix `bd:`) had nothing. DD03 CrewNoShield held 59 s
 (bs60 14 s), van unharmed but nothing shot it: keep default 0. Log label fix: the crewhold add line now says "shield off (timer-only)" when no shield. Install candidates: CallFirst rule,
 VoiceClientRetry. Queue: bs65 (running), bs66, bs67, ce pqq4.
-
-2026-11-05 ~04:00 - [c9] 12e5472a8: [Brain] OnlineBrainTraitorStage2MinS/MaxS (default 0; needs Stage2Gate=1): before MinS a carrying bot shows stage 1 whatever opens the gate, from MaxS it shows 2 with no
-opener. Review clean. Betrayal investigation (wi55li98s): LOS works; the gather walks the marked bot 120-190 m from the humans (DM03 0 hits, DD03 36 hits late); Arcade's mark is passive and has the
-same far-block on benches, and no Arcade hit rate has been measured. bs66 queued after bs65 (MinS=150 MaxS=240, out_sw_1105a md5 5128545d, DM03 DD05 DD03; check that bots still board). 15332c637:
-[BotFill] OnlineVanGatherSkipTraitor (+MaxS 90 s hold-off) keeps a marked bot out of the gather (review: 3 defects fixed); bench bs67 (out_gt_1105a md5 c4e19931). bs63 PASS: client OnlineVoiceClientRetry=1 played 17/17 (3 parked lines retried), install candidate. Queue: bs64-bs67, ce pqq4.
 
 2026-11-05 ~02:20 - [ce] InShopSteps is live (pq_1104b, benched on all 16 maps; UNDO bat in C:\kl_build_1024\pq_1104b_install). Waiting for the owner's play test.
 QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq: [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND seat inis -> stock cut (B) ends round 1 13 s in,

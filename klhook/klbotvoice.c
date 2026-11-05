@@ -392,7 +392,7 @@ static void klbv_probe_tick(void)      /* game thread: install once, role and pe
    SYNC: a bot line the host said is sent as KLSYV event 3 (digit + a 16-bit tag of the key, klbv_tag16; layout in klbotvoice_logic.h) through the OnlineVoice path, so it needs [BotFill] OnlineVoice=1; the client finds
    the line among its own KLTalk.ini pool keys (raw, _C<digit>) and pair keys by that tag and plays it with klk_say, 2 s global gap only. An old client rejects event 3 (unknown event). OnlineVoice 0: the bots still
    banter but the line is HOST-LOCAL (logged once). OnlineVoice 2: DRY (logged, nothing sent). A tag found for two different lines, or for none, plays nothing (logged). The 16-bit tag and the speaker -6 are GUESSes.
-   LOG: botvoice: banter bots: HOST slot S digit D as <Name | digit voice>     (class 11, first 10 then every 20th)
+   LOG: botvoice: banter bots: HOST slot S digit D as <Name | digit voice>     (once per digit and body kind per session)
         botvoice: HOST banter digit D seq S tag T: queued, key K            botvoice: CLIENT banter digit D tag T: <key K -> klk_say R | no line | ambiguous | gate> */
 static int klbv_bb_dm(int digit, int *ch)      /* OnlineVoiceByLook: the Dead Men body this seat applied for the digit (klbv_look_key's tests) */
 {
@@ -406,8 +406,9 @@ static int klbv_bb_dm(int digit, int *ch)      /* OnlineVoiceByLook: the Dead Me
 /* called by klvoice_online.c on the HOST while it builds the wide who: appends the living bots (never past KLW_NREC members). Returns how many. Game thread. */
 static int klbv_banter_bots(struct klw_who *w)
 {
-    DWORD sm, role; int i, k, added = 0;
+    DWORD sm, role; int i, k, added = 0; static DWORD toldSm; static unsigned told;
     if (!klbv_banter || !klbv_round(&sm, &role) || role != 2) return 0;
+    if (toldSm != sm) { toldSm = sm; told = 0; }      /* bs65: the who-build runs every tick, the old every-20th note wrote 237-364 lines a round */
     for (i = 0; i < KLBF_OT_BOTS; i++) {
         char nm[28], dg = 0; int digit, rec = klbv_bb_rec(i), ch = 0, dm, dup = 0; DWORD a = klbf_ob[i].actor;
         if (!a || rec < 0) continue;
@@ -421,7 +422,7 @@ static int klbv_banter_bots(struct klw_who *w)
         memset(&w->m[k], 0, sizeof w->m[k]);
         w->m[k].rec = rec; w->m[k].ai = 1; w->m[k].ch = dm ? ch : 0x7fff; w->m[k].status = (BYTE)klbv_bb_status(klbf_ob[i].phase); w->m[k].actor = a; w->m[k].bd = digit; w->m[k].bdm = dm;      /* ch 0x7fff = no wardrobe character (never Kane / Lynch, not stock) */
         added++;
-        if (klbv_note(11)) klog("botvoice: banter bots: HOST slot %d digit %d (record %d) as %s", i, digit, rec, dm ? "its Dead Men body (OnlineVoiceByLook)" : "its digit voice");
+        if (!(told & (1u << (digit * 2 + (dm != 0)))) && (told |= 1u << (digit * 2 + (dm != 0)))) klog("botvoice: banter bots: HOST slot %d digit %d (record %d) as %s", i, digit, rec, dm ? "its Dead Men body (OnlineVoiceByLook)" : "its digit voice");
     }
     return added;
 }
