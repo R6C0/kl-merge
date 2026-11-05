@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~03:40 - [c9] bs62 PASS 6/6 seats (Stage2Gate=1 + Stage2Money=0, TEST out_cp_1105a, DM03 DD05 DD03 online, 0 faults). First traitor mark +118/+147.6/+156 s (bs58 with the $1.25M
+fallback: +94/+56/+108; Arcade 150-240). Money released nothing ($0); the gate now opens on the gather / van call (DM03 +116, DD05 +143.6, DD03 gather +156). DM03 still early because bots call
+early. Open: the marked bot never attacks on DM03 (LosGate blocked 546/546, boarded the van) or DD03 (LOS blocked ~190 m); DD05 tried 49 hits. Workflow wi55li98s: [Brain] Stage2MinS/MaxS
+(floor / no-gather fallback) + read-only betrayal investigation vs Arcade. Pushed 60c39a2b9 OnlineBanterBots (bench bs65). Queue: ce pqq3 (running), bs63, bs64 (+BotDeathProbe 500), bs65.
+
 2026-11-05 ~03:05 - [c9] 60d4b2d19: OnlineVanCallFirst only calls early for a bot with tally > 0 (bs60 DD05 $0 caller); new [BotFill] OnlineVanCrewNoShield (default 0: timer-only crewhold add when the van
 health is unreadable, DD03 heli); DM03 post-call bot deaths = stock death path, also seen before CallFirst (SB54B). bs61 follow-up: ByLook fallbacks are correct (Dog Days bodies keep digit voices);
 online banter members are the other HUMAN seat, NOT bots ("a bot" log label is wrong). Workflow wkjjw49ns: log fixes + [BotFill] OnlineBanterBots. Queue: bs62 (running), ce pqq3, bs63, bs64
@@ -76,11 +81,6 @@ online banter members are the other HUMAN seat, NOT bots ("a bot" log label is w
 2026-11-05 ~02:20 - [ce] InShopSteps is live (pq_1104b, benched on all 16 maps; UNDO bat in C:\kl_build_1024\pq_1104b_install). Waiting for the owner's play test.
 QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq: [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND seat inis -> stock cut (B) ends round 1 13 s in,
 ~4 min a 2-seat map instead of ~8.5 (pqq2 DD05 PASS). pqq3 = all 16 maps, queued after c9's bs62.
-
-2026-11-05 ~01:30 - [c9] bs57 rerun PASS 4/4 (SB57A DD03, SB57B DD01 online 2 seats + ARC57 DD03/DD01 Arcade; TEST out_s2t_1104b, 0 faults). DD01 online = Arcade (boarding object
-from state 1, crewhold 45 s, real Board slot 45). DD03 heli: [+0x1e0] = 0 in states 1-4 in BOTH modes, but Arcade's crewhold still held ~60 s while online returns early (kle_boarding fails): 15 s
-dwell. Workflow wr2z2gihl: [BotFill] OnlineVanCrewPlace + OnlineVanBoardPoll. Also pushed: d91fa070c OnlineVanCallFirst (bench bs60), d8abd1499/036707148 voice leaf keys + OnlineVoiceProbe=2
-(bench bs61 DM03), re/voice_parity_1105.md. Queue: bs58, bs59, ce pqq2, bs60, bs61.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

@@ -1,3 +1,8 @@
+2026-11-05 ~03:40 - [c9] bs62 PASS 6/6 seats (Stage2Gate=1 + Stage2Money=0, TEST out_cp_1105a, DM03 DD05 DD03 online, 0 faults). First traitor mark +118/+147.6/+156 s (bs58 with the $1.25M
+fallback: +94/+56/+108; Arcade 150-240). Money released nothing ($0); the gate now opens on the gather / van call (DM03 +116, DD05 +143.6, DD03 gather +156). DM03 still early because bots call
+early. Open: the marked bot never attacks on DM03 (LosGate blocked 546/546, boarded the van) or DD03 (LOS blocked ~190 m); DD05 tried 49 hits. Workflow wi55li98s: [Brain] Stage2MinS/MaxS
+(floor / no-gather fallback) + read-only betrayal investigation vs Arcade. Pushed 60c39a2b9 OnlineBanterBots (bench bs65). Queue: ce pqq3 (running), bs63, bs64 (+BotDeathProbe 500), bs65.
+
 2026-11-05 ~03:05 - [c9] 60d4b2d19: OnlineVanCallFirst only calls early for a bot with tally > 0 (bs60 DD05 $0 caller); new [BotFill] OnlineVanCrewNoShield (default 0: timer-only crewhold add when the van
 health is unreadable, DD03 heli); DM03 post-call bot deaths = stock death path, also seen before CallFirst (SB54B). bs61 follow-up: ByLook fallbacks are correct (Dog Days bodies keep digit voices);
 online banter members are the other HUMAN seat, NOT bots ("a bot" log label is wrong). Workflow wkjjw49ns: log fixes + [BotFill] OnlineBanterBots. Queue: bs62 (running), ce pqq3, bs63, bs64
