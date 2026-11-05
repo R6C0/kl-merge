@@ -1,3 +1,6 @@
+2026-11-05 ~04:35 - [c9] bs63 PASS 4/4 seats (client [BotFill] OnlineVoiceClientRetry=1, TEST out_vr_1105a, DM03 DD05 online, 0 faults). DM03: host sent 17 bot lines, client played 17/17; 3 boarded lines
+refused by the 2 s gap were parked and played on retry after 281 ms (bs59 without the retry: 9/10). DD05: 5/5. ClientRetry is an install candidate (recommended on). ce pqq3 PASS 16/16; ce pqq4 (DM06) after bs67.
+
 2026-11-05 ~04:00 - [c9] 12e5472a8: [Brain] OnlineBrainTraitorStage2MinS/MaxS (default 0; needs Stage2Gate=1): before MinS a carrying bot shows stage 1 whatever opens the gate, from MaxS it shows 2 with no
 opener. Review clean. Betrayal investigation (wi55li98s): LOS works; the gather walks the marked bot 120-190 m from the humans (DM03 0 hits, DD03 36 hits late); Arcade's mark is passive and has the
 same far-block on benches, and no Arcade hit rate has been measured. bs66 queued after bs65 (MinS=150 MaxS=240, out_sw_1105a md5 5128545d, DM03 DD05 DD03; check that bots still board). 15332c637:
