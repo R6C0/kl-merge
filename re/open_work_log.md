@@ -1,3 +1,7 @@
+2026-11-05 ~02:15 - [c9] bs59 PASS 4/4 seats (DM03 DD05 online, TEST out_hh_1105a, 0 faults, both rounds): bot voice online DM03 17/17 lines heard on the client (loot + boarded), DD05 9/10
+(the client's own 2 s gap dropped boarded seq 9 for good; the host retries, the client does not). ProbeJmp=1 'accepted 1 routine' on both hosts. Voice/looks keys are already live: nothing to install.
+Workflow wfjhm1230: [BotFill] OnlineVoiceClientRetry (client parks gap-held lines and retries, default 0).
+
 2026-11-05 ~02:00 - [c9] bs58 rerun PASS 6/6 (Stage2Gate=1, DM03 DD05 DD03 online, 0 faults) but the gate does NOT reach Arcade timing: first traitor mark +94 / +56 / +108 s
 (bs56 baseline 87 / 46 / 108, Arcade 150-240 s); every release came from the $1.25M money fallback (van / gather / exit-box never fired). Not for install. bs62 kit = bs58 +
 [Brain] OnlineBrainTraitorStage2Money=0 (no fallback), TEST out_cp_1105a, queued after bs61 (c9_chain_62.sh). Queue: bs59 (running), ce pqq2, bs60, bs61, bs62.
