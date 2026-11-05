@@ -1,3 +1,8 @@
+2026-11-05 ~07:45 - [c9] bs69 PASS 2/2 seats (DM03, bs68 keys, host goes to the van road: the goto legs stuck on a wall at z -9791, the tele + last goto reached (2068,22,-318) at +192 s).
+DM03 0 hits is NOT only a bench artifact: mark +154 s, van called +157 s, the marked bot (stage 3) boarded by the stock Board tactic (slot 45 -> pendBoard) at ~+170 s, then sat aboard 3 min
+7.8 m from the human (saw him: cand list 1 ZFFPlayer) and never fired (damage hook 0 entries). Live NoBoard=1 only skips the puppeteer. bs70 running: same kit with NoBoard=2 (also skips the
+slot-45 pendBoard boarding of a marked bot), host tele at ~+135 s. Kit C:/kl_build_1024/week_1028/bs70.
+
 2026-11-05 ~07:20 - [ce] pqq5 PASS 4/4 maps, 8/8 seats, 0 faults: quick shop smoke on a TEST twin of the installed c9_1105a (263ba9517 built with build_auto.bat in a worktree, C:/kl_build_1024/c9_1105a_test)
 + the live ini (CallFirst, VoiceClientRetry, BanterBots, Stage2Gate on). DD05 DM03 DD01 DM06: every seat reached the weapon list with no RETURN through 'pagequeue: inshop:'. Live dll restored to eb5775cb after the run. Logs: pqq/run5.
 

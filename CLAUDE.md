@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~07:45 - [c9] bs69 PASS 2/2 seats (DM03, bs68 keys, host goes to the van road: the goto legs stuck on a wall at z -9791, the tele + last goto reached (2068,22,-318) at +192 s).
+DM03 0 hits is NOT only a bench artifact: mark +154 s, van called +157 s, the marked bot (stage 3) boarded by the stock Board tactic (slot 45 -> pendBoard) at ~+170 s, then sat aboard 3 min
+7.8 m from the human (saw him: cand list 1 ZFFPlayer) and never fired (damage hook 0 entries). Live NoBoard=1 only skips the puppeteer. bs70 running: same kit with NoBoard=2 (also skips the
+slot-45 pendBoard boarding of a marked bot), host tele at ~+135 s. Kit C:/kl_build_1024/week_1028/bs70.
+
 2026-11-05 ~07:05 - [c9] bs68 PASS 6/6 seats, 0 faults (bs67 keys + the 9ccfd0ad3 MinS mark hold, out_s3_1105b). First marks +150 / +161 / +171 s: none before MinS 150 on any map
 (bs66 DM03 +134, bs67 +129). Hits on humans DM03 0, DD05 11, DD03 76 (upper bound). Banked DM03 7/7, DD05 and DD03 traitor out. INSTALLED c9_1105a (SHIP md5 eb5775cb: OnlineVanCallFirst,
 VoiceClientRetry, BanterBots, Stage2Gate=1 + Money0; MinS/MaxS not set); [ShopPage] keys intact. UNDO: C:/kl_build_1024/c9_1105a_install/UNDO c9 1105a.bat. A windowless kl2.exe
 (pid 129272, since 11-03 16:49) cannot be stopped (access denied); the INSTALL bat skips that pid. Then c9_1105b INSTALLED 07:18 (SHIP f5cc8455 from d5b9de6ba + [Brain] Stage2MinS=150 MaxS=240; UNDO C:/kl_build_1024/c9_1105b_install/UNDO c9 1105b.bat -> c9_1105a).
-
-2026-11-05 ~06:45 - [c9] bs67 PASS 6/6 seats, 0 faults (GatherSkipTraitor=1 + Stage2Gate/Money0/MinS150/MaxS240, out_gt_1105a, pre-9ccfd0ad3). SkipTraitor NEVER acted (workflow
-wwzhhsh6y, verified): Stage2Gate marks come after the gather (DD05 +4.2 s, DD03 +0.2 s after a same-tick gather+call; DM03 +129 s via byte 3, bots already phase 3), and with the live
-NoBoard=1 a marked bot leaves the puppeteer (klbotfill.c:2326) before the klbf_gts call. Redundant on the live config: stays default 0, not installed. Marks +129 (byte 3, fixed by 9ccfd0ad3,
-bs68 checks) / +155 / +168.8 s. Hits on humans DM03 0 (LOS ~130 m), DD05 6 (host 550->214 hp), DD03 15 (host downed twice, got up). Banked: DM03 7/7, DD05 6/7, DD03 6/7 (traitor out).
 
 2026-11-05 ~07:20 - [ce] InShopSteps is live (in every SHIP dll since pq_1104b; to turn off: InShopSteps=0, C:\kl_build_1024\pq_1104b_install UNDO bat). Waiting for the owner's play test.
 QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq (gen_pqq.py; PQQ_HOOK=<TEST dir> picks the dll): [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND
