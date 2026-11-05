@@ -368,6 +368,9 @@ typedef void (__fastcall *klu_set1_t)(void *, void *, DWORD);
 typedef void (__fastcall *klu_draw_t)(void *, void *, void *, void *, const float *, const float *);
 typedef char (__fastcall *klu_render_t)(void *, void *, void *, void *);
 
+#include "klhud_codeguard_logic.h"      /* [HUD] ProbeJmp: the pure guard decision (klhud_codeguard_test.c) */
+static int klu_probejmp;                /* [HUD] ProbeJmp (default 0) */
+
 static int klu_same_code(DWORD va, const BYTE *bytes, int n)
 {
     BYTE c[16];
@@ -734,10 +737,23 @@ static int klu_make_all(DWORD osd)
                                                         { KLU_VT_STYLE, 0x41a470 }, { KLU_VT_LAYER, 0x514720 }, { KLU_VT_FONT, 0x641ba0 }, { KLU_VT_TEXT, 0x896e50 } };
     DWORD tref = 0, fref = 0, bref = 0, tmpl, font, big = 0, tvt = 0, fvt = 0; int i, k, n = 0, ns = 0; char why[160];
     klu_choose_look(osd);                          /* W2: before the layout reads klu.wstyle */
-    if (!klu_same_code(KLU_REFOBJ, refobj_code, sizeof refobj_code) || !klu_same_code(KLU_PARENT, parent_code, sizeof parent_code) ||
-        !klu_same_code(KLU_CREATE, create_code, sizeof create_code) || !klu_same_code(0x896e50, text_code, sizeof text_code) || !klu_same_code(KLU_DRAW, draw_code, sizeof draw_code) ||
-        !klu_same_code(KLU_TIME_RENDER, render_code, sizeof render_code) || !klu_same_code(KLU_PLACE, place_code, sizeof place_code)) {
-        klog("hud: osd %08lx: a routine of the text path is not the one this build knows (0x8ccde0 / 0x598460 / 0x817810 / 0x896e50 / 0x5a6d40 / 0x81e090 / 0x5a3e90): nothing is made", osd); return 0;
+    {   /* the code-bytes guard: [HUD] ProbeJmp=1 lets a forwarding jmp (a TEST-build probe detour) stand in for the known bytes */
+        static const struct { DWORD va; const BYTE *b; int n; } chk[7] = { { KLU_REFOBJ, refobj_code, sizeof refobj_code }, { KLU_PARENT, parent_code, sizeof parent_code },
+            { KLU_CREATE, create_code, sizeof create_code }, { 0x896e50, text_code, sizeof text_code }, { KLU_DRAW, draw_code, sizeof draw_code },
+            { KLU_TIME_RENDER, render_code, sizeof render_code }, { KLU_PLACE, place_code, sizeof place_code } };
+        int bad = -1, njmp = 0; BYTE c[16];
+        for (k = 0; k < 7; k++) {
+            int r; memset(c, 0, sizeof c);
+            if (!klh_rd((DWORD_PTR)KLH_VA(chk[k].va), c, chk[k].n)) { bad = k; break; }
+            r = klcg_check(c, chk[k].b, chk[k].n, klu_probejmp);
+            if (r == KLCG_REFUSE) { bad = k; break; }
+            if (r == KLCG_JMP) njmp++;
+        }
+        if (bad >= 0) {     /* which of the seven failed and what was found there: an e9 is a probe detour */
+            klog("hud: code check failed at %08lx, found %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x (ProbeJmp=%d)", chk[bad].va, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], klu_probejmp);
+            klog("hud: osd %08lx: a routine of the text path is not the one this build knows (0x8ccde0 / 0x598460 / 0x817810 / 0x896e50 / 0x5a6d40 / 0x81e090 / 0x5a3e90): nothing is made", osd); return 0;
+        }
+        if (njmp) klog("hud: code check: ProbeJmp=1 accepted %d routine(s) of the text path behind a forwarding jmp (a probe detour): the HUD is built through it", njmp);
     }
     for (k = 0; k < 7; k++) if (klh_rd32((DWORD_PTR)KLH_VA(KLU_TEXT_VT + slots[k].off)) != slots[k].fn) {
         klog("hud: osd %08lx: ZCHAROBJ vtable +0x%lx is %08lx, not %08lx: nothing is made", osd, slots[k].off, klh_rd32((DWORD_PTR)KLH_VA(KLU_TEXT_VT + slots[k].off)), slots[k].fn); return 0;
@@ -1946,6 +1962,7 @@ static void klu_init(void)
     if (!klu.on) return;
     klu.log = klu_inii("Log", 1, 0, 2);
     klu.stock = klu_inii("Stock", 0, 0, 1);
+    klu_probejmp = klu_inii("ProbeJmp", 0, 0, 1);         /* (recommended off until benched) bench probes that detour the text path no longer stop the HUD from being built */
     klb_hud_online = klu_inii("Online", 0, 0, 1);         /* 2026-10-18: the local, cosmetic parts in a network FA round (klbot.c klb_read_hud; re/hud_online.md). Default 0: never run online */
     klu_onnames = klu_inii("OnlineNames", 0, 0, 1); klu_onkill = klu_inii("OnlineKilled", 0, 0, 1); klu_onround = klu_inii("OnlineRound", 0, 0, 1);
     klu_onkillai = klu_inii("OnlineKilledAI", 0, 0, 1); klor_aikill = klu_onkillai;
