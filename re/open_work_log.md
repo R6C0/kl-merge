@@ -1,3 +1,8 @@
+2026-11-05 ~02:20 - [ce] QUICK shop smoke kit (owner 11-04 'option 3'): C:/kl_build_1024/week_1028/pqq (generator gen_pqq.py in ce's scratchpad; kit =
+pq14-style in-shop presses, TEST pq_1104b_test, live ini base). Round 1 cut by [Bench] SelfDownAt=10 SelfDownRepeat=4 SelfDownGap=1500 + [Lobby] KeepRound=0 in BOTH the base and
+the seat inis (run 1: the seat ini's KeepRound=1 overrode the base: full 280 s round). pqq2 DD05 PASS both seats, 0 faults: stock cut (B) 'all heisters out' from 0x46c2ba (slot 193, 3.0)
+fired 10 s in, round 1 = 13 s, map 3 min 54 s instead of ~8.5. pqq3 (all 16 maps, ~65 min) queued after c9's bs62.
+
 2026-11-05 ~02:15 - [c9] bs59 PASS 4/4 seats (DM03 DD05 online, TEST out_hh_1105a, 0 faults, both rounds): bot voice online DM03 17/17 lines heard on the client (loot + boarded), DD05 9/10
 (the client's own 2 s gap dropped boarded seq 9 for good; the host retries, the client does not). ProbeJmp=1 'accepted 1 routine' on both hosts. Voice/looks keys are already live: nothing to install.
 Workflow wfjhm1230: [BotFill] OnlineVoiceClientRetry (client parks gap-held lines and retries, default 0).

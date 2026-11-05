@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~02:20 - [ce] InShopSteps is live (pq_1104b, benched on all 16 maps; UNDO bat in C:\kl_build_1024\pq_1104b_install). Waiting for the owner's play test.
+QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq: [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND seat inis -> stock cut (B) ends round 1 13 s in,
+~4 min a 2-seat map instead of ~8.5 (pqq2 DD05 PASS). pqq3 = all 16 maps, queued after c9's bs62.
+
 2026-11-05 ~01:30 - [c9] bs57 rerun PASS 4/4 (SB57A DD03, SB57B DD01 online 2 seats + ARC57 DD03/DD01 Arcade; TEST out_s2t_1104b, 0 faults). DD01 online = Arcade (boarding object
 from state 1, crewhold 45 s, real Board slot 45). DD03 heli: [+0x1e0] = 0 in states 1-4 in BOTH modes, but Arcade's crewhold still held ~60 s while online returns early (kle_boarding fails): 15 s
 dwell. Workflow wr2z2gihl: [BotFill] OnlineVanCrewPlace + OnlineVanBoardPoll. Also pushed: d91fa070c OnlineVanCallFirst (bench bs60), d8abd1499/036707148 voice leaf keys + OnlineVoiceProbe=2
