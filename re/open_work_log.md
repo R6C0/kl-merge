@@ -2,7 +2,7 @@
 0x688190 = soldier slot 51, whose code bytes klbd_callable checks: botdown, cardown and shield were refused ("down routine ... not the one this build knows"). SHIP
 builds were not affected (probe off). The probe now skips site 3 unless [BotDeathProbe] Slot51=1. RV3B/C ran 12:10-12:46 (owner OK "continue til 3pm"): PASS on faults.
 TEST 5f52009d / SHIP 288fb016. RV4 (rv4/, TEST 5f52009d, OnlineHealthMul 5, DownPct 60) PASS 4/4 seats 0 faults: DD05 = FIRST ONLINE BOT DOWNS (7, all up after 15 s at 1750),
-DM03 0 downs (no bot under 60 %). c9_1105e INSTALLED 13:15 (SHIP 288fb016 + OnlineCrewHealth 0 / OnlineHealthMul 5; UNDO bat in C:/kl_build_1024/c9_1105e_install). Smoke sm1105e (TEST twin 5f52009d, live ini) DD05 + DM03 PASS 4/4 seats, 0 faults/asserts, round 1 -> shop -> round 2; live dll/ini restored.
+DM03 0 downs (no bot under 60 %). c9_1105e INSTALLED 13:15 (SHIP 288fb016 + OnlineCrewHealth 0 / OnlineHealthMul 5; UNDO bat in C:/kl_build_1024/c9_1105e_install). Smoke sm1105e (TEST twin 5f52009d, live ini) DD05 + DM03 PASS 4/4 seats, 0 faults/asserts, round 1 -> shop -> round 2; live dll/ini restored. RV5 (rv5/, same TEST) PASS 4/4: DD03 4 downs 4 up, DM01 3 downs 3 up, 0 faults. OnlineRevive still unexercised (no human by a downed bot on a bench).
 
 2026-11-05 ~12:05 - [c9] OWNER STOPPED TESTS ("stop tests got something to do"). RV3B (DM03) killed mid-run; live dll 9159711e put back by hand (the TEST dll was locked by a stuck kl2.exe:
 renamed to <DD>/dinput8.dll.rv3-test-leftover, delete once that process is gone). Live ini NOW OnlineHealthMul=5, OnlineCrewHealth=0 (the 11:50 edit had been undone by RV2's end-of-run ini restore).
