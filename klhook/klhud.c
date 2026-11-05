@@ -1764,6 +1764,11 @@ static void klu_reset(const char *why, DWORD osd)
 
 /* ---------------------------------------------------------------- finding the OSD (main thread) */
 static DWORD klu_cand[4]; static int klu_ncand, klu_scan_fails; static DWORD klu_scan_t, klu_wait_t;
+#ifndef KLPERF_HAVE                           /* an off-game test that includes this file without klhook.c: [Perf] is off there */
+#include "klperf_logic.h"
+static int klperf_osd = -1;
+static int klperf_on(int *cache, const char *key) { (void)cache; (void)key; return 0; }
+#endif
 
 static int klu_osd_ok(DWORD osd)
 {   /* a ZOnScreenDisplay2 with the FA player list whose transform the HUD render has written (1280 x 720) */
@@ -1790,7 +1795,7 @@ static int klu_find_osd(void)
 {   /* the fall-back: every ZOnScreenDisplay2 in the committed private read-write memory (0.1 - 0.3 s on the main thread:
        only in an Arcade session's round states, at most every 2 s, every 15 s after three empty scans of a scene) */
     MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; static BYTE buf[0x10000]; DWORD t0 = GetTickCount();
-    if (klu_scan_t && t0 - klu_scan_t < (klu_scan_fails < 3 ? 2000u : 15000u)) return klu_ncand;
+    if (klu_scan_t && t0 - klu_scan_t < klperf_osd_interval(klu_scan_fails, klperf_on(&klperf_osd, "OsdBackoff"))) return klu_ncand;     /* [Perf] OsdBackoff: 2 s, 15 s after 3 empty scans, 60 s after 6 (default off = 2 s / 15 s) */
     klu_ncand = 0;
     while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
         if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
@@ -1864,6 +1869,16 @@ static void klu_tick(int game_thread)
         klu_stand_down(klu_r.osd);
         klu_reset(pre.state < 0x16 ? "the session state is below 0x16" : "the Arcade rules object changed", 0);
         snprintf(klu_r.scene, sizeof klu_r.scene, "%s", scene);
+        if (klperf_on(&klperf_osd, "OsdBackoff")) { klu_scan_fails = 0; klu_scan_t = 0; klu_wait_t = 0; }     /* [Perf] OsdBackoff: a new round under the same scene still gets a prompt scan */
+    }
+    /* [Perf] OsdBackoff, review 11-05: a round that never found an OSD leaves the scans 60 s apart, and the block above needs a
+       held OSD. A new rules object (a new round) clears the back-off on its own, once per rules object. */
+    {
+        static DWORD perf_rules;
+        if (have && pre.rules && pre.rules != perf_rules && klperf_on(&klperf_osd, "OsdBackoff")) {
+            perf_rules = pre.rules;
+            if (klu_scan_fails) { klu_scan_fails = 0; klu_scan_t = 0; klu_wait_t = 0; }
+        }
     }
     /* section 4 / 6: a level that is not stock, or any level with Stock=1 */
     allowed = scene[0] && (klu.stock || klb_online_session() || (klx_on && klx_level_verdict(scene, why) == 2));       /* online: any level (cosmetic only; Steam stays blocked by klsteam.c as before) */
