@@ -1,3 +1,8 @@
+2026-11-05 ~09:40 - [c9] bs74 (bs73 + MinSVanRelease=1, TEST 73967c79) PASS 8/8 seats, 0 faults/asserts, traitor hits on every map: DM03 39 + 81 (van release freed the hold at +139/+145 s), DD05 24,
+DD03 9. c9_1105c INSTALLED 09:36 (live ini NoBoard=2, dll f5cc8455). bs73 DD03 0 hits = the muzzle had no line of sight (blocked 726/758, eye clear 714; workflows wi16jr6dt + wcy0p9stv):
+losvar diag (5a1d4fe72, TEST only) benched in bs75 (DD03 DD05 DD03, TEST 3118ada1). c9_1105d (SHIP 9159711e + MarkGapMs=500, MinSVanRelease=1, NoBoard=2; UNDO bat in
+C:/kl_build_1024/c9_1105d_install) is chained to INSTALL after bs75.
+
 2026-11-05 ~09:05 - [c9] bs73 (bs72 + MarkGapMs=500, TEST 1268812a) PASS 6/6 seats, 0 faults/asserts. DD05: mark +156 s, 112 hits on humans, pendboard skipped 13x. DM03: 0 marks again (MinS race,
 workflow w4z06uj62: Arcade DM03 marks +118..166 s around the van call) -> new [Brain] OnlineBrainTraitorMinSVanRelease (f572df35b, default 0): a called van (1..4) ends the MinS hold; bs74 benches it
 (DM03 DD05 DD03 DM03, TEST 73967c79). DD03: mark +246 s, walked to 2.3 m of a human, fire test PASS 22x, still 0 hits (workflow wi16jr6dt digs). c9_1105c (NoBoard=2, ini only) is chained to
