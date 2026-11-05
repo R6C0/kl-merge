@@ -248,6 +248,10 @@ int main(void)
         CHECK(kbr_mark_held(1, 0, 150) && kbr_mark_held(1, 149, 150), "mark hold: held from round start up to MinS - 1");
         CHECK(!kbr_mark_held(0, 10, 150) && !kbr_mark_held(1, 10, 0) && !kbr_mark_held(1, -1, 150) && !kbr_mark_held(1, 10, -5), "mark hold: gate off / MinS 0 / unknown clock = no change (defaults)");
         CHECK(kbr_stage_compose_w(1, 1, 1, 5, 4, 0, 0, 0, 10, 150, 0, &ev) == 3, "mark hold: aboard byte stays 3 before MinS");
+        CHECK(kbr_mark_spaced(10000, 9800, 500) && kbr_mark_spaced(10000, 10000, 500), "mark gap: held within the gap after a mark (same tick too)");
+        CHECK(!kbr_mark_spaced(10500, 10000, 500) && !kbr_mark_spaced(20000, 10000, 500), "mark gap: released at the gap and after");
+        CHECK(!kbr_mark_spaced(10000, 0, 500) && !kbr_mark_spaced(10000, 9900, 0) && !kbr_mark_spaced(10000, 9900, -1), "mark gap: no mark yet / gap 0 / negative = no change (defaults)");
+        CHECK(kbr_mark_spaced(100, 0xFFFFFF00ul, 500) && !kbr_mark_spaced(300, 0xFFFFFF00ul, 500), "mark gap: tick wrap");
     }
     {   /* BoardStage: stage byte and the deferral clock */
         unsigned long since = 0;

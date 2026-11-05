@@ -185,7 +185,8 @@ static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally);   /* klbotfill
 static int klbf_ob_phase(DWORD actor);                              /* klbotfill.c: the ledger phase of one bot (0 idle, 1 walking to a stack, 2 exit walk, 3 aboard, 4 looting), -1 when untracked (read only) */
 static int klbf_ob_called(DWORD actor);                             /* klbotfill.c: BoardStage, 1 when the bot is ordered to / inside the exit box or aboard (read only) */
 static int klbf_ot_s2open(void);                                    /* klbotfill.c: van called or gather running (read only) */
-static long klbr_s2min, klbr_s2max; static volatile LONG klbr_s2min_logged, klbr_s2max_logged, klbr_s2hold_logged;     /* [Brain] OnlineBrainTraitorStage2MinS / MaxS (seconds after round start, 0 = off; UNTESTED) and the once-per-round log flags */
+static long klbr_mkgap; static DWORD klbr_mk_last; static volatile LONG klbr_mkgap_logged;      /* [Brain] OnlineBrainTraitorMarkGapMs (0 = off), tick of this round's last mark (0 = none), once-per-round log */
+static long klbr_s2min, klbr_s2max; static volatile LONG klbr_s2min_logged, klbr_s2max_logged, klbr_s2hold_logged;    /* [Brain] OnlineBrainTraitorStage2MinS / MaxS (seconds after round start, 0 = off; UNTESTED) and the once-per-round log flags */
 static int klbr_s2gate; static long klbr_s2money = 1250000;        /* [Brain] OnlineBrainTraitorStage2Gate / OnlineBrainTraitorStage2Money (UNTESTED, default off) */
 static DWORD klbr_trr_t0, klbr_trr_pass1, klbr_trr_mark1; static long klbr_trr_pass, klbr_trr_marks;      /* TraitorRoll log: round start tick, first pass / first mark tick (|1), passed evaluates of unmarked bots, marks */
 static int klbf_brain_take(DWORD ctrl, int amt);      /* the game's 0x4e3f40 through the puppeteer's guard; -> the stack's amount left, -1 when refused */
@@ -438,6 +439,12 @@ static float klbr_ev(int cls, DWORD self)
            MARK itself waits: the Traitor evaluate answers 0 before MinS, the AI never picks the Traitor RUN, nothing else is touched. Needs gate on and MinS > 0 and a known round clock (else unchanged).
            Runs BEFORE the diag / roll counters (review 11-05) so a held evaluate is not logged as NONZERO nor counted as a refused roll, and klbr_ev_last / klbr_ev_nz stay honest. */
         if (!InterlockedExchange(&klbr_s2hold_logged, 1)) klog("brain: Stage2Gate: MinS holds the Traitor evaluate (%.3f -> 0) at +%ld s of the round (MinS %ld): record %d, stage byte %d, cannot be marked yet (GUESS: Arcade's first traitor is 150-240 s in)", (double)r, (long)((GetTickCount() - klbr_trr_t0) / 1000), klbr_s2min, e->rec, klbr_shadow ? KLBR_PB(KLBR_REC(e->rec) + 0x78) : -1);
+        klbr_ev_last[cls] = 0.0f;
+        return 0.0f;
+    }
+    if (cls == 2 && e && !flt && r > 0.0f && !e->traitor && kbr_mark_spaced(GetTickCount(), klbr_mk_last, klbr_mkgap)) {
+        /* OnlineBrainTraitorMarkGapMs (11-05, bs71): after a mark the next one waits gap ms, like Arcade's spaced marks; the MinS hold alone releases every waiting bot in one tick. Same rule as above: before the counters, byte untouched. */
+        if (!InterlockedExchange(&klbr_mkgap_logged, 1)) klog("brain: MarkGap: Traitor evaluate of record %d held (%.3f -> 0), the last mark was %lu ms ago (gap %ld ms)", e->rec, (double)r, (unsigned long)(GetTickCount() - klbr_mk_last), klbr_mkgap);
         klbr_ev_last[cls] = 0.0f;
         return 0.0f;
     }
@@ -875,7 +882,7 @@ static void klbr_traitor_mirror(struct klbr_s *e)
 {
     if (!e || e->rec <= 0 || e->traitor) return;
     if (KLBR_PB(KLBR_REC(e->rec) + 0x79) & 2) {
-        e->traitor = 1; klbr_ntraitor++; InterlockedIncrement(&klbr_trr_marks); if (!klbr_trr_mark1) klbr_trr_mark1 = GetTickCount() | 1u;
+        e->traitor = 1; klbr_ntraitor++; InterlockedIncrement(&klbr_trr_marks); if (!klbr_trr_mark1) klbr_trr_mark1 = GetTickCount() | 1u; klbr_mk_last = GetTickCount() | 1u;
         if (klbr_taon) { klbr_ta_n++; e->pendArc = 1; }      /* OnlineBrainTraitorArcade: FLAG ONLY too, klbr_ta_pump wraps him on the game thread */
         if (klbr_trturn) e->pendTurn = 1;      /* FLAG ONLY: no game write inside the AI walk; klbr_tr_pump turns him on the game thread outside any frame */
         klog("brain: traitor: Traitor RUN marked record %d (actor %08lx, level %d, money row %ld) as a traitor. %s", e->rec, (unsigned long)e->actor, kbr_level_clamp(klbr_level), (long)KLBR_P32(klbr_score + 0x150 + 4 * (DWORD)e->rec),
@@ -4634,7 +4641,7 @@ static void klbr_summary(void)
                  klbr_trr_pass, klbr_trr_marks, refused, "+", klbr_trr_pass1 ? (long)((klbr_trr_pass1 - klbr_trr_t0) / 1000) : -1L, "+", klbr_trr_mark1 ? (long)((klbr_trr_mark1 - klbr_trr_t0) / 1000) : -1L, klbr_s2gate, klbr_s2money, klbr_s2min, klbr_s2max);
         }
         klbr_s2min_logged = klbr_s2max_logged = klbr_s2hold_logged = 0;
-        klbr_trr_pass = klbr_trr_marks = 0; klbr_trr_pass1 = klbr_trr_mark1 = 0;
+        klbr_trr_pass = klbr_trr_marks = 0; klbr_trr_pass1 = klbr_trr_mark1 = 0; klbr_mk_last = 0; klbr_mkgap_logged = 0;
         if (klbr_realrun)
             klog("brain: round end: realrun: swap-ins %ld (RUN %ld, EXIT %ld), swap-outs %ld, leaks %ld, veh restores %ld, mismatches %ld, foreign-thread %ld, nested %ld, mode!=4 %ld, unregistered [tac+0x10] %ld, hand-off stamps evaluate-pick %ld / resume %ld; %ld tactic(s) in the registry (kept across rounds: a coroutine alive past the round end still gets the shadow)", (long)klbr_rr_in, (long)klbr_rr_val[1], (long)klbr_rr_val[2], (long)klbr_rr_out, (long)klbr_rr_leak, (long)klbr_rr_veh, (long)klbr_rr_mis, (long)klbr_rr_foreign, (long)klbr_rr_nested, (long)klbr_rr_mode, (long)klbr_rr_t10, (long)klbr_rr_hand_ev, (long)klbr_rr_hand_run, (long)klbr_rrn);
         if (klbr_puppet || klbr_boardreal)
@@ -4830,7 +4837,7 @@ static void klbr_tick(int game_thread)
         return;
     }
     klbr_game_tid = GetCurrentThreadId();
-    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); klbr_tr_restore_all("round change"); memset(klbr_t, 0, sizeof klbr_t); memset(klbr_tt, 0, sizeof klbr_tt); klbr_tt_turned = klbr_tt_back = klbr_tt_kills = klbr_tt_capped = klbr_tt_refused = klbr_dg0 = klbr_dg1 = 0; klbr_trr_t0 = GetTickCount(); klbr_trr_pass = klbr_trr_marks = 0; klbr_trr_pass1 = klbr_trr_mark1 = 0; klbr_row0_which = -2; memset(&klbr_hl, 0, sizeof klbr_hl); klbr_hl_s15 = 0; klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_ta_n = klbr_ta_flt = klbr_ta_sc_n = klbr_ta_wlog = 0; klbr_ta_dis = 0; memset(klbr_ta, 0, sizeof klbr_ta); klbr_paid = 0; klbr_claim_skip = klbr_claim_fb = 0; klbr_dc_offered = klbr_dc_grabs = 0; klbr_bs_defer_n = klbr_bs_real = klbr_bs_fb = 0; klbr_bl_new = klbr_bl_rep = klbr_bl_gate = klbr_bl_sec = 0; klbr_bl_stale = klbr_bp_lines = 0; klbr_bp_lvis = 0; memset(klbr_bp_st, 0, sizeof klbr_bp_st); klbr_vis = 0; klbr_bn_told = klbr_bn_ok = 0; memset(klbr_bl_at, 0, sizeof klbr_bl_at); klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
+    if (klbr_sm_round != sm) { if (klbr_sm_round) klbr_summary(); klbr_tr_restore_all("round change"); memset(klbr_t, 0, sizeof klbr_t); memset(klbr_tt, 0, sizeof klbr_tt); klbr_tt_turned = klbr_tt_back = klbr_tt_kills = klbr_tt_capped = klbr_tt_refused = klbr_dg0 = klbr_dg1 = 0; klbr_trr_t0 = GetTickCount(); klbr_trr_pass = klbr_trr_marks = 0; klbr_trr_pass1 = klbr_trr_mark1 = 0; klbr_mk_last = 0; klbr_mkgap_logged = 0; klbr_row0_which = -2; memset(&klbr_hl, 0, sizeof klbr_hl); klbr_hl_s15 = 0; klbr_sm_round = sm; klbr_nbuilt = klbr_nrefused = klbr_nvec_fail = klbr_swaps = klbr_frames = klbr_sw_flt = klbr_sw_bad = klbr_slow = klbr_slow_run = klbr_nrevoke = klbr_crash_told = 0; klbr_us_max = 0; klbr_ngrab = klbr_npay = klbr_nabort = klbr_nstart = klbr_s202_n = klbr_s202_told = klbr_s45_n = klbr_ntraitor = 0; klbr_ta_n = klbr_ta_flt = klbr_ta_sc_n = klbr_ta_wlog = 0; klbr_ta_dis = 0; memset(klbr_ta, 0, sizeof klbr_ta); klbr_paid = 0; klbr_claim_skip = klbr_claim_fb = 0; klbr_dc_offered = klbr_dc_grabs = 0; klbr_bs_defer_n = klbr_bs_real = klbr_bs_fb = 0; klbr_bl_new = klbr_bl_rep = klbr_bl_gate = klbr_bl_sec = 0; klbr_bl_stale = klbr_bp_lines = 0; klbr_bp_lvis = 0; memset(klbr_bp_st, 0, sizeof klbr_bp_st); klbr_vis = 0; klbr_bn_told = klbr_bn_ok = 0; memset(klbr_bl_at, 0, sizeof klbr_bl_at); klbr_sync_at = 0; klbr_depth = 0; klbr_shadow_reset(); klbr_verdict_n = 0;
         klog("brain: round starts on the host (Probe %d, Build %d, Loot %d, Bridge %d, Board %d/%d, Traitor %d, PuppetOff %d, Cops %d)", klbr_probe, klbr_build, klbr_loot, klbr_bridge, klbr_board, klbr_boardreal, klbr_traitor, klbr_puppet, klbr_cops); }
     if (klbr_fed_at && now - klbr_fed_at < 2500u) { for (i = 0; i < klbr_nseen && n < KLBR_MAX; i++) { actor[n] = klbr_seen[i].actor; snd[n] = klbr_seen[i].snd; n++; } }
     else n = klbr_scan(actor, snd, KLBR_MAX);
@@ -4882,6 +4889,8 @@ static void klbr_init(void)
       klbr_s2min = a < 0 ? 0 : a > 3600 ? 3600 : a; klbr_s2max = b < 0 ? 0 : b > 3600 ? 3600 : b;
       if (klbr_s2gate && (klbr_s2min || klbr_s2max)) klog("brain: OnlineBrainTraitorStage2MinS=%ld / MaxS=%ld (UNTESTED): the gate never opens before MinS seconds into the round, and opens at MaxS even with no van call (0 = off)", klbr_s2min, klbr_s2max);
       else if (!klbr_s2gate && (a || b)) klog("brain: OnlineBrainTraitorStage2MinS / MaxS need OnlineBrainTraitorStage2Gate=1: off"); }
+    { long g = GetPrivateProfileIntA("Brain", "OnlineBrainTraitorMarkGapMs", 0, klh_ini); klbr_mkgap = !klbr_traitor || g < 0 ? 0 : g > 60000 ? 60000 : g;      /* (recommended on: 500) UNTESTED */
+      if (klbr_mkgap) klog("brain: OnlineBrainTraitorMarkGapMs=%ld (UNTESTED): a Traitor mark waits this long after the previous mark of the round (Arcade spaces its marks >= ~0.5 s)", klbr_mkgap); }
     if (klbr_key("OnlineBrainTraitorStage2Gate") && !klbr_s2gate) klog("brain: OnlineBrainTraitorStage2Gate needs OnlineBrainTraitor=1: off");
     if (klbr_s2gate) klog("brain: OnlineBrainTraitorStage2Gate=1 (UNTESTED): a carrying bot shows stage 1 to the Traitor evaluate until the van is called / the gather runs / it is ordered to the exit box%s", klbr_s2money ? " or it holds the money fallback" : " (no money fallback)");
     klbr_trkillmax = (int)GetPrivateProfileIntA("Brain", "OnlineBrainTraitorKillMax", 2, klh_ini); if (klbr_trkillmax < 0) klbr_trkillmax = 0; if (klbr_trkillmax > 32) klbr_trkillmax = 32;

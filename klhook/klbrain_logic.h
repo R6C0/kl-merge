@@ -279,6 +279,13 @@ static int kbr_mark_held(int gate, long elapsed_s, long min_s)
     return gate && min_s > 0 && elapsed_s >= 0 && elapsed_s < min_s;
 }
 
+/* Mark spacing (11-05, bs71): 1 = hold the Traitor evaluate at 0 now because the previous mark of this round is less than gap_ms old. Arcade marks 1-5 traitors spaced >= ~0.5 s;
+   the MinS hold released every waiting bot in one tick (bs71: 3 marks at once). last_ms 0 = no mark yet this round; gap_ms <= 0 = off. Unsigned tick math survives the 49-day wrap. */
+static int kbr_mark_spaced(unsigned long now_ms, unsigned long last_ms, long gap_ms)
+{
+    return gap_ms > 0 && last_ms != 0 && (unsigned long)(now_ms - last_ms) < (unsigned long)gap_ms;
+}
+
 /* BoardStage: should the hook's own boarding path (klbotfill.c) wait for the real Board tactic? live = the real tactic holds the bot now (fresh Board evaluate > 0, not revoked). *since = tick the deferral
    began (0 none; |1 stamp). Defers up to max_ms per bot, then -> 0 (fall back, so no bot is stranded). A tactic that stops being live ends the deferral at once (-> 0); the clock is NOT reset by that, so the per-bot total stays capped. */
 /* BoardStage grace (review 11-03 defect 1): a bot can stand in the box before its first nonzero Board evaluate (stage 3 is shown by the 1 s sync only). While the van waits (staged) and the bot has
