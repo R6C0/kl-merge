@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~11:55 - [c9] CODE FIX c260b654d: klhpmax_logic.h, one registry for every writer of a bot's max health (grudge, botfill, Fed); wanted = game's base x the factors, a new base drops them. klhpmax_test 302 checks, kl_tests 73/0.
+TEST out_c9_1105hp_test 3e6cdd67, SHIP out_c9_1105hp 8825e0a0 (not installed). RV2A (ini fix on the old dll) PASS: 14 bots 350 -> 3500 flat, faults 0, but still 0 downs (1702 cop hits x0.05 = ~2 hp each).
+LIVE INI 11:50: OnlineHealthMul 10 -> 5 (= stock Arcade survival with OnlineCopToBot 5, notes 10-26: ~430 hits vs 417; 10 doubled it). RV3 (C:/kl_build_1024/week_1028/rv3, TEST 3e6cdd67) chained after RV2:
+A DD05 OnlineCrewHealth 2 + OnlineHealthMul 5 (composition, expect 3500 flat), B DM03 OnlineHealthMul 5 alone (expect 1750 / 1400 and bot downs).
+
 2026-11-05 ~11:35 - [c9] FOUND: online AI heisters were near-immortal since c9_1104c. [Bots] OnlineCrewHealth=2 (klgrudge) and [BotFill] OnlineHealthMul=5 (klbotfill) each took the other's
 max-health write as the game's and re-based: 350 -> 700 -> 3500 -> 7000 -> 35000 -> 70000 -> 350000 (stops at their 100000 sanity cap); every online bench since SB60 shows 140k-350k, no online bot ever went down.
 RV1 (OnlineRevive) PASS 4/4 seats 0 faults but 0 downs for that reason. LIVE INI FIXED 11:30 (backup KLHook.ini.before-hpfix-1105): OnlineCrewHealth=0 + OnlineHealthMul=10 = one writer, 3500.
@@ -77,10 +82,6 @@ RV2 bench (C:/kl_build_1024/week_1028/rv2, same + the ini fix) running; code fix
 'RULES RECORDS, records in use 2, 2 kept, 6 dropped', and the escort followed only the two human seats (DD05 27x seat 1, DD03 9x seat 0 + 6x seat 1; ES3 had a bot follow seat 7, an AI heister).
 New [Adrenaline] OnlineRevive (41391c35a + review fix 1e1c19e61, default 0): online, the host's human by a downed AI heister pulls his lie shorter (Range/MinHelp/Rate/NeedUse).
 RV1 bench (C:/kl_build_1024/week_1028/rv1, TEST 2f704406, DownPct=60 + OnlineEscort=2, DD05 DM03) running since 11:05; grep 'adren-online:' in the host log.
-
-2026-11-05 ~10:20 - [c9] c9_1105d INSTALLED 10:07 (SHIP 9159711e + [Brain] MarkGapMs=500, MinSVanRelease=1, NoBoard=2; UNDO bat in C:/kl_build_1024/c9_1105d_install).
-bs75 (losvar diag, TEST 3118ada1) PASS 6/6 seats, 0 faults: DD03 28 + 13 hits, DD05 34; the only losvar lines (DD05) were a target 93-139 m away, so bs73's 0-hit DD03 did not recur.
-Live-ini smoke sm1105d (C:/kl_build_1024/week_1028/sm1105d, TEST twin 3118ada1): DD05 + DM03 PASS 4/4 seats, 0 faults/asserts, shop steps reached the weapon list, live dll restored to 9159711e.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

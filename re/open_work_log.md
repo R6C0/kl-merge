@@ -1,3 +1,8 @@
+2026-11-05 ~11:55 - [c9] CODE FIX c260b654d: klhpmax_logic.h, one registry for every writer of a bot's max health (grudge, botfill, Fed); wanted = game's base x the factors, a new base drops them. klhpmax_test 302 checks, kl_tests 73/0.
+TEST out_c9_1105hp_test 3e6cdd67, SHIP out_c9_1105hp 8825e0a0 (not installed). RV2A (ini fix on the old dll) PASS: 14 bots 350 -> 3500 flat, faults 0, but still 0 downs (1702 cop hits x0.05 = ~2 hp each).
+LIVE INI 11:50: OnlineHealthMul 10 -> 5 (= stock Arcade survival with OnlineCopToBot 5, notes 10-26: ~430 hits vs 417; 10 doubled it). RV3 (C:/kl_build_1024/week_1028/rv3, TEST 3e6cdd67) chained after RV2:
+A DD05 OnlineCrewHealth 2 + OnlineHealthMul 5 (composition, expect 3500 flat), B DM03 OnlineHealthMul 5 alone (expect 1750 / 1400 and bot downs).
+
 2026-11-05 ~11:35 - [c9] FOUND: online AI heisters were near-immortal since c9_1104c. [Bots] OnlineCrewHealth=2 (klgrudge) and [BotFill] OnlineHealthMul=5 (klbotfill) each took the other's
 max-health write as the game's and re-based: 350 -> 700 -> 3500 -> 7000 -> 35000 -> 70000 -> 350000 (stops at their 100000 sanity cap); every online bench since SB60 shows 140k-350k, no online bot ever went down.
 RV1 (OnlineRevive) PASS 4/4 seats 0 faults but 0 downs for that reason. LIVE INI FIXED 11:30 (backup KLHook.ini.before-hpfix-1105): OnlineCrewHealth=0 + OnlineHealthMul=10 = one writer, 3500.
