@@ -1,3 +1,8 @@
+2026-11-05 ~03:05 - [c9] 60d4b2d19: OnlineVanCallFirst only calls early for a bot with tally > 0 (bs60 DD05 $0 caller); new [BotFill] OnlineVanCrewNoShield (default 0: timer-only crewhold add when the van
+health is unreadable, DD03 heli); DM03 post-call bot deaths = stock death path, also seen before CallFirst (SB54B). bs61 follow-up: ByLook fallbacks are correct (Dog Days bodies keep digit voices);
+online banter members are the other HUMAN seat, NOT bots ("a bot" log label is wrong). Workflow wkjjw49ns: log fixes + [BotFill] OnlineBanterBots. Queue: bs62 (running), ce pqq3, bs63, bs64
+(out_cf_1105b md5 89a5f74f: DM03 DD05 CallFirst carrier rule, DD03 CrewNoShield=1).
+
 2026-11-05 ~02:45 - [c9] bs61 PASS 2/2 (DM03 online, ByLook + Probe=2 both seats, TEST out_vp_1105b, 0 faults): ByLook played the DM character on 6 of 11 loot lines, identical on both seats
 (Lynch x3, Standen, Hutchison, Kane = KLVoice/<Name>/JackPot_01, klk_say 1); digits 2/3/4 fell back ('wardrobe name unreadable or not a DM body'). Poll: stock groups 31 Boarding, 33 LastTransport,
 52 BoardingEnd, 0 briefing fire on BOTH seats with different random picks. Banter: bots do speak online but each seat picks its own speaker, and DM03 uses F05/F06/F02/F08 keys. Workflow wo1kfyt6o investigates.

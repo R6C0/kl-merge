@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~03:05 - [c9] 60d4b2d19: OnlineVanCallFirst only calls early for a bot with tally > 0 (bs60 DD05 $0 caller); new [BotFill] OnlineVanCrewNoShield (default 0: timer-only crewhold add when the van
+health is unreadable, DD03 heli); DM03 post-call bot deaths = stock death path, also seen before CallFirst (SB54B). bs61 follow-up: ByLook fallbacks are correct (Dog Days bodies keep digit voices);
+online banter members are the other HUMAN seat, NOT bots ("a bot" log label is wrong). Workflow wkjjw49ns: log fixes + [BotFill] OnlineBanterBots. Queue: bs62 (running), ce pqq3, bs63, bs64
+(out_cf_1105b md5 89a5f74f: DM03 DD05 CallFirst carrier rule, DD03 CrewNoShield=1).
+
 2026-11-05 ~02:20 - [ce] InShopSteps is live (pq_1104b, benched on all 16 maps; UNDO bat in C:\kl_build_1024\pq_1104b_install). Waiting for the owner's play test.
 QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq: [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND seat inis -> stock cut (B) ends round 1 13 s in,
 ~4 min a 2-seat map instead of ~8.5 (pqq2 DD05 PASS). pqq3 = all 16 maps, queued after c9's bs62.
@@ -76,16 +81,6 @@ QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq: [Bench] SelfDownAt=10 Repea
 from state 1, crewhold 45 s, real Board slot 45). DD03 heli: [+0x1e0] = 0 in states 1-4 in BOTH modes, but Arcade's crewhold still held ~60 s while online returns early (kle_boarding fails): 15 s
 dwell. Workflow wr2z2gihl: [BotFill] OnlineVanCrewPlace + OnlineVanBoardPoll. Also pushed: d91fa070c OnlineVanCallFirst (bench bs60), d8abd1499/036707148 voice leaf keys + OnlineVoiceProbe=2
 (bench bs61 DM03), re/voice_parity_1105.md. Queue: bs58, bs59, ce pqq2, bs60, bs61.
-
-2026-11-04 ~18:00 - [c9] INSTALLED c9_1104c (owner: 'okay install all'): C:\kl_build_1024\c9_1104c_install (INSTALL/UNDO bats, backups <DD>\*.before-c91104c). SHIP dll from f958539ac
-(md5 69f534cf, keeps ce's InShopSteps; kl_tests 71 pass) + 80 benched keys: [Brain] Arcade traitor/board/loot set, [BotFill] crewhold/doorhold/gather/legs/DM09 way, [Bots] CrewHealth 2,
-[Lobby] TimeAuto=6, [HUD] KilledBy/OnlineBoardBots, [CrewHop], [Names] OnlineLobby. Kept the owner's 11-02 back-offs (DropFollow 0, TacticsCarry 2, DropTake 0, BoardAllNear 0); Stage2Gate and all
-probe/log keys left off. Zombie kl2.exe pid 129272 (access denied) blocks the bat's game check, steps run by hand; needs a reboot. Next: owner play test; bs57/bs58 when the game is free.
-
-2026-11-04 ~17:10 - [c9] bs57 LOST: out_bp_1104z (and bs58's out_s2_1104a) were SHIP builds (klhook\build.bat, no klauto), so every bench seat hung with no window and NO LOG (SB57A DD03,
-SB57B DD01, ARC57 DD03). Bench dlls must come from build_auto.bat (TEST). c54c3b264: [Brain] OnlineBrainTraitorStage2Gate (default off; carrying bots show stage 1 to the Traitor evaluate until
-van call / gather / real van state 1-4 / exit box / $1.25M). TEST dll out_s2t_1104b (md5 35b0bbc2, HEAD = BoardProbe + Stage2Gate) is in the bs57 and bs58 kits. Owner back 16:55: both kits
-PAUSED (bs57/PAUSE, bs58/PAUSE); rerun bs57 (DD03 DD01 online + Arcade) and bs58 (Stage2Gate on DM03 DD05 DD03) when the game is free.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
