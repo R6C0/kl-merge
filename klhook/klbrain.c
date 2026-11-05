@@ -178,7 +178,8 @@ static int klbf_ob_ledger(DWORD actor, int *aboard, long *tally);   /* klbotfill
 static int klbf_ob_phase(DWORD actor);                              /* klbotfill.c: the ledger phase of one bot (0 idle, 1 walking to a stack, 2 exit walk, 3 aboard, 4 looting), -1 when untracked (read only) */
 static int klbf_ob_called(DWORD actor);                             /* klbotfill.c: BoardStage, 1 when the bot is ordered to / inside the exit box or aboard (read only) */
 static int klbf_ot_s2open(void);                                    /* klbotfill.c: van called or gather running (read only) */
-static int klbr_s2gate; static long klbr_s2money = 1250000;         /* [Brain] OnlineBrainTraitorStage2Gate / OnlineBrainTraitorStage2Money (UNTESTED, default off) */
+static long klbr_s2min, klbr_s2max; static volatile LONG klbr_s2min_logged, klbr_s2max_logged;      /* [Brain] OnlineBrainTraitorStage2MinS / MaxS (seconds after round start, 0 = off; UNTESTED) and the once-per-round log flags */
+static int klbr_s2gate; static long klbr_s2money = 1250000;        /* [Brain] OnlineBrainTraitorStage2Gate / OnlineBrainTraitorStage2Money (UNTESTED, default off) */
 static DWORD klbr_trr_t0, klbr_trr_pass1, klbr_trr_mark1; static long klbr_trr_pass, klbr_trr_marks;      /* TraitorRoll log: round start tick, first pass / first mark tick (|1), passed evaluates of unmarked bots, marks */
 static int klbf_brain_take(DWORD ctrl, int amt);      /* the game's 0x4e3f40 through the puppeteer's guard; -> the stack's amount left, -1 when refused */
 static void klbf_brain_credit(DWORD actor, int amt, int done);    /* tally += amt; done: grabs++ and the loot voice */
@@ -772,7 +773,12 @@ static void klbr_bp_rules(DWORD rules, int src)
    the hook's own boarding read the LEDGER (phase / tally), not this byte, so they are unaffected. */
 static int klbr_stage_now(const struct klbr_s *e, int aboard, long tally)
 {
-    return kbr_stage_compose(klbr_s2gate, klbr_bstage, aboard, tally, klbr_van, klbf_ob_called(e->actor), klbr_s2gate ? klbf_ot_s2open() : 0, klbr_s2money);      /* pure composition in klbrain_logic.h; the real van state 1..4 also opens the gate */
+    int ev = 0, st;
+    long el = (klbr_s2gate && klbr_trr_t0) ? (long)((GetTickCount() - klbr_trr_t0) / 1000) : -1L;      /* round clock = the TraitorRoll one (set at the round change); unknown (-1) = no window */
+    st = kbr_stage_compose_w(klbr_s2gate, klbr_bstage, aboard, tally, klbr_van, klbf_ob_called(e->actor), klbr_s2gate ? klbf_ot_s2open() : 0, klbr_s2money, el, klbr_s2min, klbr_s2max, &ev);      /* pure composition in klbrain_logic.h; the real van state 1..4 also opens the gate */
+    if (ev == 1 && !InterlockedExchange(&klbr_s2min_logged, 1)) klog("brain: Stage2Gate: MinS holds back an open gate at +%ld s of the round (MinS %ld): record %d shows stage 1 instead of 2 (GUESS: Arcade's first traitor is 150-240 s in)", el, klbr_s2min, e->rec);
+    if (ev == 2 && !InterlockedExchange(&klbr_s2max_logged, 1)) klog("brain: Stage2Gate: MaxS opens the gate at +%ld s of the round (MaxS %ld) with no van call / gather / exit box: record %d shows stage 2", el, klbr_s2max, e->rec);
+    return st;
 }
 
 /* ---- the sync: the host ledger -> the shadow crew table / score block / van state (DATA ONLY: no game call, safe inside an AI wrapper) ------------------------------------------------ */
@@ -4609,9 +4615,10 @@ static void klbr_summary(void)
         if (klbr_blog) klog("brain: round end: BoardLog: slot 45 calls for a bot not aboard yet %ld, repeats for an aboard bot %ld, stale ledger (aboard since an earlier vehicle visit) %ld (total %ld; %d visit(s))", klbr_bl_new, klbr_bl_rep, klbr_bl_stale, (long)klbr_s45_n, klbr_vis);
         if (klbr_s2gate || klbr_hlon) {
             long refused = klbr_trr_pass - klbr_trr_marks; if (refused < 0) refused = 0;
-            klog("brain: round end: TraitorRoll: score passed on %ld evaluate(s) of unmarked bots, %ld mark(s), %ld pass(es) with no mark (roll refused, GUESS); first pass %s%ld s, first mark %s%ld s into the round (-1 = none); Stage2Gate %d, money fallback $%ld",
-                 klbr_trr_pass, klbr_trr_marks, refused, "+", klbr_trr_pass1 ? (long)((klbr_trr_pass1 - klbr_trr_t0) / 1000) : -1L, "+", klbr_trr_mark1 ? (long)((klbr_trr_mark1 - klbr_trr_t0) / 1000) : -1L, klbr_s2gate, klbr_s2money);
+            klog("brain: round end: TraitorRoll: score passed on %ld evaluate(s) of unmarked bots, %ld mark(s), %ld pass(es) with no mark (roll refused, GUESS); first pass %s%ld s, first mark %s%ld s into the round (-1 = none); Stage2Gate %d, money fallback $%ld, MinS %ld, MaxS %ld",
+                 klbr_trr_pass, klbr_trr_marks, refused, "+", klbr_trr_pass1 ? (long)((klbr_trr_pass1 - klbr_trr_t0) / 1000) : -1L, "+", klbr_trr_mark1 ? (long)((klbr_trr_mark1 - klbr_trr_t0) / 1000) : -1L, klbr_s2gate, klbr_s2money, klbr_s2min, klbr_s2max);
         }
+        klbr_s2min_logged = klbr_s2max_logged = 0;
         klbr_trr_pass = klbr_trr_marks = 0; klbr_trr_pass1 = klbr_trr_mark1 = 0;
         if (klbr_realrun)
             klog("brain: round end: realrun: swap-ins %ld (RUN %ld, EXIT %ld), swap-outs %ld, leaks %ld, veh restores %ld, mismatches %ld, foreign-thread %ld, nested %ld, mode!=4 %ld, unregistered [tac+0x10] %ld, hand-off stamps evaluate-pick %ld / resume %ld; %ld tactic(s) in the registry (kept across rounds: a coroutine alive past the round end still gets the shadow)", (long)klbr_rr_in, (long)klbr_rr_val[1], (long)klbr_rr_val[2], (long)klbr_rr_out, (long)klbr_rr_leak, (long)klbr_rr_veh, (long)klbr_rr_mis, (long)klbr_rr_foreign, (long)klbr_rr_nested, (long)klbr_rr_mode, (long)klbr_rr_t10, (long)klbr_rr_hand_ev, (long)klbr_rr_hand_run, (long)klbr_rrn);
@@ -4856,6 +4863,10 @@ static void klbr_init(void)
     klbr_trrow0 = GetPrivateProfileIntA("Brain", "OnlineBrainTraitorRow0", 0, klh_ini) == 1;
     klbr_s2gate = klbr_traitor && klbr_key("OnlineBrainTraitorStage2Gate");      /* UNTESTED, default off; the stage byte only reaches the real Traitor evaluate when the Brain's shadow runs */
     { long m = GetPrivateProfileIntA("Brain", "OnlineBrainTraitorStage2Money", 1250000, klh_ini); klbr_s2money = m < 0 ? 0 : m > 100000000 ? 100000000 : m; }
+    { long a = GetPrivateProfileIntA("Brain", "OnlineBrainTraitorStage2MinS", 0, klh_ini), b = GetPrivateProfileIntA("Brain", "OnlineBrainTraitorStage2MaxS", 0, klh_ini);
+      klbr_s2min = a < 0 ? 0 : a > 3600 ? 3600 : a; klbr_s2max = b < 0 ? 0 : b > 3600 ? 3600 : b;
+      if (klbr_s2gate && (klbr_s2min || klbr_s2max)) klog("brain: OnlineBrainTraitorStage2MinS=%ld / MaxS=%ld (UNTESTED): the gate never opens before MinS seconds into the round, and opens at MaxS even with no van call (0 = off)", klbr_s2min, klbr_s2max);
+      else if (!klbr_s2gate && (a || b)) klog("brain: OnlineBrainTraitorStage2MinS / MaxS need OnlineBrainTraitorStage2Gate=1: off"); }
     if (klbr_key("OnlineBrainTraitorStage2Gate") && !klbr_s2gate) klog("brain: OnlineBrainTraitorStage2Gate needs OnlineBrainTraitor=1: off");
     if (klbr_s2gate) klog("brain: OnlineBrainTraitorStage2Gate=1 (UNTESTED): a carrying bot shows stage 1 to the Traitor evaluate until the van is called / the gather runs / it is ordered to the exit box%s", klbr_s2money ? " or it holds the money fallback" : " (no money fallback)");
     klbr_trkillmax = (int)GetPrivateProfileIntA("Brain", "OnlineBrainTraitorKillMax", 2, klh_ini); if (klbr_trkillmax < 0) klbr_trkillmax = 0; if (klbr_trkillmax > 32) klbr_trkillmax = 32;

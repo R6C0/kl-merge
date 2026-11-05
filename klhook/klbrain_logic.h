@@ -257,6 +257,21 @@ static int kbr_stage_compose(int gate, int board_stage, int aboard, long tally, 
     return st;
 }
 
+/* OnlineBrainTraitorStage2MinS / MaxS (11-05, UNTESTED): a time window around the Stage2Gate. gate 0, or elapsed_s < 0 (round clock unknown), or both min_s and max_s 0 = kbr_stage_compose exactly.
+   Otherwise, for a bot whose UNGATED byte is 2 (carrying, not aboard): elapsed < min_s (> 0) -> 1 whatever the openers say (money fallback, van call, exit box included); elapsed >= max_s (> 0, and
+   not below min_s) -> 2 even with no opener (no-gather fallback); otherwise the gated byte. *ev (may be null): 1 = MinS held back a byte the gate would have shown as 2, 2 = MaxS opened a byte the gate
+   would have shown as 1, else 0. Stage 0/1/3 pass through. The 150 / 240 s figures in KLHook.ini are a GUESS from Arcade's first traitor mark (150-240 s after round start). */
+static int kbr_stage_compose_w(int gate, int board_stage, int aboard, long tally, int van, int ob_called, int hook_open, long money_fb, long elapsed_s, long min_s, long max_s, int *ev)
+{
+    int st = kbr_stage_compose(gate, board_stage, aboard, tally, van, ob_called, hook_open, money_fb);
+    if (ev) *ev = 0;
+    if (!gate || elapsed_s < 0 || (min_s <= 0 && max_s <= 0)) return st;
+    if (kbr_stage_compose(0, board_stage, aboard, tally, van, ob_called, hook_open, money_fb) != 2) return st;
+    if (min_s > 0 && elapsed_s < min_s) { if (st == 2 && ev) *ev = 1; return 1; }
+    if (max_s > 0 && elapsed_s >= max_s) { if (st == 1 && ev) *ev = 2; return 2; }
+    return st;
+}
+
 /* BoardStage: should the hook's own boarding path (klbotfill.c) wait for the real Board tactic? live = the real tactic holds the bot now (fresh Board evaluate > 0, not revoked). *since = tick the deferral
    began (0 none; |1 stamp). Defers up to max_ms per bot, then -> 0 (fall back, so no bot is stranded). A tactic that stops being live ends the deferral at once (-> 0); the clock is NOT reset by that, so the per-bot total stays capped. */
 /* BoardStage grace (review 11-03 defect 1): a bot can stand in the box before its first nonzero Board evaluate (stage 3 is shown by the 1 s sync only). While the van waits (staged) and the bot has

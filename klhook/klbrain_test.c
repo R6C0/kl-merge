@@ -224,6 +224,25 @@ int main(void)
         CHECK(kbr_stage_compose(1, 1, 0, 5, 3, 0, 0, 0) == 3 && kbr_stage_compose(1, 1, 0, 5, 0, 0, 0, 0) == 1 && kbr_stage_compose(1, 1, 1, 0, 0, 0, 0, 0) == 3, "stage2 compose: BoardStage 3 passes the gate; BoardStage with no van and no order = gated 1; aboard = 3");
         CHECK(kbr_stage_compose(0, 0, 0, 5, 0, 0, 0, 0) == 2 && kbr_stage_compose(0, 1, 0, 5, 3, 0, 0, 0) == kbr_stage_byte(1, 0, 5, 3, 0), "stage2 compose: gate off = kbr_stage_byte exactly");
     }
+    {   /* OnlineBrainTraitorStage2MinS / MaxS */
+        int ev = 9, ok = 1, van, ab, bs, ex, ho; long ty, el;
+        for (bs = 0; bs < 2; bs++) for (ab = 0; ab < 2; ab++) for (van = 0; van < 8; van++) for (ex = 0; ex < 2; ex++) for (ho = 0; ho < 2; ho++) for (ty = -1; ty < 3; ty++) for (el = -1; el < 400; el += 37) {
+            int a = kbr_stage_compose(1, bs, ab, ty, van, ex, ho, 0), b = kbr_stage_compose_w(1, bs, ab, ty, van, ex, ho, 0, el, 0, 0, 0), c = kbr_stage_compose_w(0, bs, ab, ty, van, ex, ho, 0, el, 150, 240, 0);
+            if (a != b || c != kbr_stage_compose(0, bs, ab, ty, van, ex, ho, 0)) ok = 0;
+        }
+        CHECK(ok, "stage2 window: min 0 / max 0, or gate off = kbr_stage_compose exactly");
+        /* carrying (tally 5), van called (hook_open 1): gate alone shows 2 */
+        CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 1, 0, 100, 150, 0, &ev) == 1 && ev == 1, "stage2 window: MinS holds an open gate before min_s (ev 1)");
+        CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 1, 0, 150, 150, 0, &ev) == 2 && ev == 0, "stage2 window: at min_s the open gate shows 2");
+        CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 1, 0, 1000, 10, 150, 0, &ev) == 1, "stage2 window: MinS beats the exit-box order and the money fallback");
+        CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, 100, 0, 240, &ev) == 1 && ev == 0, "stage2 window: closed gate before max_s stays 1");
+        CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, 240, 0, 240, &ev) == 2 && ev == 2, "stage2 window: MaxS opens a closed gate at max_s (ev 2)");
+        CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 1, 0, 300, 0, 240, &ev) == 2 && ev == 0, "stage2 window: MaxS on an already open gate = no event");
+        CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, 200, 150, 240, &ev) == 1 && kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, 245, 150, 240, &ev) == 2, "stage2 window: both set: closed in between, opened at max");
+        CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, 250, 300, 240, &ev) == 1 && kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, 500, 300, 240, &ev) == 2, "stage2 window: max below min: min wins until it passes, then max opens");
+        CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, -1, 150, 240, &ev) == 1 && kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 1, 0, -1, 150, 240, &ev) == 2, "stage2 window: unknown round clock = the gate alone");
+        CHECK(kbr_stage_compose_w(1, 0, 0, 0, 0, 0, 1, 0, 10, 150, 240, &ev) == 1 && kbr_stage_compose_w(1, 0, 1, 5, 0, 0, 1, 0, 10, 150, 240, &ev) == 3 && kbr_stage_compose_w(1, 0, 0, 0, 0, 0, 0, 0, 999, 150, 240, &ev) == 1, "stage2 window: not carrying stays 1, aboard stays 3, MaxS never lifts a bot with nothing");
+    }
     {   /* BoardStage: stage byte and the deferral clock */
         unsigned long since = 0;
         CHECK(kbr_stage_byte(0, 0, 5, 3, 1) == 2 && kbr_stage_byte(0, 0, 0, 3, 1) == 1 && kbr_stage_byte(0, 1, 0, 0, 0) == 3, "stage: off = the old 1 / 2 / 3 (aboard only)");
