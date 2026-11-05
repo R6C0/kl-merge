@@ -2311,6 +2311,7 @@ static void __cdecl klbr_f6_hit(int id, KLBR_F3REGS *r)      /* called by the st
      S5  id 16 0x4db580 (6)  83 ec 40 56 8b f1            sub esp,0x40 ; push esi ; mov esi,ecx   the victim side (slot 424): ecx = victim. HASHED (0x4db000-0x4dd000): refused unless SessionSafe=0. Counts entries whose victim is the host-local human and how many happened within 2 s of a marked pellet loop.
    Only marked bots count for s1..s4 (S1a needs the FireProbe6 S1 shot record: klbr_f6_cur is valid, marked, same item; the other filters compare the shooter handle with the handles S1a remembered). Baselines (not filtered by mark): s2 by shooter class (player / other), s3all, s5all. The hashed sites are skipped with a log line under SessionSafe=1 (the default). */
 #define KLBR_F8_LOGMAX 8
+#define KLBR_F8_LOSVMAX 24      /* losvar lines per round (every 32nd blocked marked shot) */
 #define KLBR_F8_NSITE 6
 #define KLBR_F8_NEARMS 2000
 static int klbr_f8on, klbr_f8_state, klbr_f8_flt, klbr_f8_nok;
@@ -2324,7 +2325,7 @@ static const KLBR_F8SITE klbr_f8_sites[KLBR_F8_NSITE] = {
     { 0x8ccde0, 10, { 0x8b, 0x44, 0x24, 0x04, 0x8b, 0x0d, 0x90, 0xff, 0xe0, 0x00 }, 14 },
     { 0x596fc0, 5, { 0x56, 0x8b, 0x74, 0x24, 0x08 }, 15 },
     { 0x4db580, 6, { 0x83, 0xec, 0x40, 0x56, 0x8b, 0xf1 }, 16 } };
-typedef struct { long shots, iter, ok, pelsum, s2, s2player, s2other, s3, s3all, s3null, s3human, s3obj, s4, s4human, s5all, s5human, s5near, nl1, nl1p, nl2, nl3, nl4, nl5, los[3], eye[3], nlos, ahTot, ahLt5, ahNone, ahIsHuman, ahHumLt5, nlh; } KLBR_F8C;      /* los / eye: clear, blocked, error per marked shot from the muzzle origin / the bot eye (LosProbe) */
+typedef struct { long shots, iter, ok, pelsum, s2, s2player, s2other, s3, s3all, s3null, s3human, s3obj, s4, s4human, s5all, s5human, s5near, nl1, nl1p, nl2, nl3, nl4, nl5, los[3], eye[3], nlos, nlosv, ahTot, ahLt5, ahNone, ahIsHuman, ahHumLt5, nlh; } KLBR_F8C;      /* los / eye: clear, blocked, error per marked shot from the muzzle origin / the bot eye (LosProbe) */
 static KLBR_F8C klbr_f8_c;
 static DWORD klbr_f8_hand[KLBR_MAX];      /* the marked bots' shooter handles (desc+0 of their last pellet loop) */
 static void klbr_f8_rtti(DWORD obj, char *out, int cap)      /* class name of a C++ object (copy of klauto.c kla_rtti: vtable[-1] -> locator -> type descriptor + 8); every read guarded, "" on any failure */
@@ -2412,6 +2413,24 @@ static void klbr_f8_body_fn(int id, KLBR_F3REGS *r)
                 klog("brain: fireprobe8 los: bot %d shot %ld: muzzle %.0f %.0f %.0f -> human chest %.0f %.0f %.0f (%.1f m): %s; bot eye -> chest (%.1f m): %s",
                      ix, c->shots, (double)klbr_f6_cur.pos[0], (double)klbr_f6_cur.pos[1], (double)klbr_f6_cur.pos[2], (double)ch[0], (double)ch[1], (double)ch[2], haveo ? (double)kbr_f6_dist(klbr_f6_cur.pos, ch) / 100.0 : -1.0, !haveo ? "no muzzle origin" : !ok1 ? "QUERY FAILED" : cl1 ? "CLEAR" : "BLOCKED",
                      havee ? (double)kbr_f6_dist(eye, ch) / 100.0 : -1.0, !havee ? "no bot position" : !ok2 ? "QUERY FAILED" : cl2 ? "CLEAR" : "BLOCKED");
+            } else if (haveo && ok1 && !cl1 && c->nlosv < KLBR_F8_LOSVMAX && (c->shots & 31) == 0) {
+                /* 11-05 bs73 DD03: muzzle blocked 726/758 while the eye was clear 714, and the 8 lines above all came from the first spot. Which variant clears tells low cover (raised muzzle),
+                   a muzzle inside a wall (muzzle pushed 50 toward the chest) or a blocker near the target (none). Sampled every 32nd shot after the first 8, blocked shots only. */
+                static const char *vn[3] = { "muzzle+60y", "muzzle+100y", "muzzle+50fwd" };
+                char vr[3][16]; float o[3], dd = kbr_f6_dist(klbr_f6_cur.pos, ch); int v, okv, clv;
+                c->nlosv++;
+                for (v = 0; v < 3; v++) {
+                    o[0] = klbr_f6_cur.pos[0]; o[1] = klbr_f6_cur.pos[1]; o[2] = klbr_f6_cur.pos[2];
+                    if (v == 0) o[1] += 60.0f; else if (v == 1) o[1] += 100.0f;
+                    else if (dd > 100.0f) { o[0] += (ch[0] - o[0]) * 50.0f / dd; o[1] += (ch[1] - o[1]) * 50.0f / dd; o[2] += (ch[2] - o[2]) * 50.0f / dd; }
+                    okv = 0; clv = klbr_los_clear(o, ch, &okv);
+                    strcpy(vr[v], !okv ? "QUERY FAILED" : clv ? "CLEAR" : "BLOCKED");
+                }
+                if (klbr_los_flt != fl0) { klbr_f6_flt++; klbr_f8_flt++; }
+                klog("brain: fireprobe8 losvar: bot %d shot %ld: bot %.0f %.0f %.0f muzzle %.0f %.0f %.0f (muzzle-bot y %.0f) -> chest %.0f %.0f %.0f (%.1f m): muzzle BLOCKED, %s %s, %s %s, %s %s, bot eye %s",
+                     ix, c->shots, havee ? (double)klbr_f6_cur.bp[0] : 0.0, havee ? (double)klbr_f6_cur.bp[1] : 0.0, havee ? (double)klbr_f6_cur.bp[2] : 0.0,
+                     (double)klbr_f6_cur.pos[0], (double)klbr_f6_cur.pos[1], (double)klbr_f6_cur.pos[2], havee ? (double)(klbr_f6_cur.pos[1] - klbr_f6_cur.bp[1]) : -1.0,
+                     (double)ch[0], (double)ch[1], (double)ch[2], (double)dd / 100.0, vn[0], vr[0], vn[1], vr[1], vn[2], vr[2], !havee ? "n/a" : !ok2 ? "QUERY FAILED" : cl2 ? "CLEAR" : "BLOCKED");
             }
         }
         if (c->nl1 < KLBR_F8_LOGMAX) {
