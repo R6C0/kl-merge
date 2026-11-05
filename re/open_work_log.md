@@ -1,3 +1,7 @@
+2026-11-05 ~02:45 - [c9] bs61 PASS 2/2 (DM03 online, ByLook + Probe=2 both seats, TEST out_vp_1105b, 0 faults): ByLook played the DM character on 6 of 11 loot lines, identical on both seats
+(Lynch x3, Standen, Hutchison, Kane = KLVoice/<Name>/JackPot_01, klk_say 1); digits 2/3/4 fell back ('wardrobe name unreadable or not a DM body'). Poll: stock groups 31 Boarding, 33 LastTransport,
+52 BoardingEnd, 0 briefing fire on BOTH seats with different random picks. Banter: bots do speak online but each seat picks its own speaker, and DM03 uses F05/F06/F02/F08 keys. Workflow wo1kfyt6o investigates.
+
 2026-11-05 ~02:30 - [c9] bs60 PASS 6/6 seats (CallFirst DM03 DD05 DD03 + DD03 CrewPlace/BoardPoll, TEST out_cp_1105a, 0 faults). Van call +129/+150/+138 s (Arcade DM03 ~110, DD05 185-191;
 bs56 online 147/212/205); crewhold dwell 53/52 s (Arcade ~60), clock clamp never bit. Defects: DD05 caller carried $0; DD03 heli dwell still 14 s (CrewPlace measures walkers, but the add is refused:
 heli health unreadable, no shield); DM03 two bots zeroed 1-1.7 s after the call (unexplained). [+0x1e0] = 0 in states 1-5 on DD03 online. Not for install; workflow wiqspa20i fixes.
