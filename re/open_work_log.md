@@ -1,3 +1,7 @@
+2026-11-05 ~19:00 - [chain] Last Call chain stage (life -> fight --force -> heli --force, bots sibling = kl_botsonline.convert of the final zip), NOT installed:
+C:\kl_build_1024\lastcall_chain_1105\stage (install.py, INSTALL/UNDO bats; backups .before-1105chain). Live in e9fab045 / bots 7a1024ed / base.md5 fe3373c8 / LS.SND 3b21242c
+-> zip c8dd18ee / bots 42ed37ba / base.md5 7dd4a1c9 (content = c8dd18ee) / LS.SND b6fdd4c0. .prm chunks 54305 (inis unchanged). Rehearsed on a scratch copy: install, refused re-install, byte-identical undo.
+
 2026-11-05 ~18:30 - [c9] Owner played Last Call: wants NPC variety (women in suits, club-goers, varied voices), street traffic noise, club music with no dead spots, 2nd-floor spawns, roof squad personality,
 front assault rushing to cover, guards before the loot room, kickable doors toward the exit. Offline agents: tools/kl_club_life_1105.py (crowd+sound), kl_club_fight_1105.py (combat), DD10 slim (re/dd10_slim_1105.md).
 FLAT RAID MENU FIXED: the 11-03 host-menu overlay had page 3 entry 6 = stock Title07 + H05 picture; live Patch01.zip ab86738f -> d00527ff ("Flat Raid", L05 picture; The Dig gets L06),
