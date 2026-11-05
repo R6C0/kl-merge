@@ -77,7 +77,8 @@ static struct {
     int own[2];                                  /* 0/1: the gun carried in the primary / secondary slot came from set B */
     int carried[2];                              /* last seen carried rows */
     int have;                                    /* pairs loaded */
-    struct { int ok, cfg, row, item, pic; DWORD retry; int fails; char name[48]; char desc[480]; } p[KSPG_ROWS];
+    int bakedHire, ownPics; unsigned long ownMask[2];   /* [Hire] BakedPics / [ShopPage] OwnPics (default 0): the level carries baked KLPic_ cards (tools/kl_shop_pics.py); ownMask = the own elements the last scan found */
+    struct { int ok, cfg, row, item, pic, slot; DWORD retry; int fails; char name[48]; char desc[480]; } p[KSPG_ROWS];
     DWORD made[KSPG_ROWS][KSPG_PER]; int applied[KSPG_ROWS];
     DWORD parked[KSPG_PARK]; int nparked;
     int told, wait, trickOn, trickRow, trickSlot;
@@ -113,6 +114,7 @@ static int kspg_netok(int row);                                  /* defined belo
 static void kspg_link_check(const char *when);                   /* log-only link proof, defined below */
 #include "klmodestab_logic.h"                           /* [Keys] ModesTab: BOTS AND MODES rows + RoundHints text (pure) */
 #include "klswappic.h"                                  /* [Shop] OnlineSwapPic: pure decision (look-alike rows) */
+#include "klpicown_logic.h"                             /* [Hire] BakedPics / [ShopPage] OwnPics: baked own big pictures, pure decision (klpicown_test.c) */
 #include "klpagequeue_logic.h"                          /* [ShopPage] PageQueue / HintEveryShop, [HUD] ScoreboardNextHint: pure decisions (klpagequeue_test.c) */
 #include "klshoppage_online.c"                             /* [ShopPage] OnlineSend: page II press sent to the host (SHOPG), host judges + logs, no writes */
 
@@ -575,6 +577,28 @@ static void __fastcall kspg_gfx(void *self, void *edx)
         if (InterlockedIncrement(&kspg_pic_told) <= 4) klog("shoppic: picture update reached: element %08lx role %d, list mode %lu, shown row %lu, shownB %d hire %d ctl %d", (unsigned long)(DWORD_PTR)self, pr0,
             (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), kspg.shownB, kspg.hire, kspg.ctl);
     }
+    if ((kspg.bakedHire || kspg.ownPics) && role == KR_BIG && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) {
+        /* OWN PICTURES (2026-11-05, [Hire] BakedPics / [ShopPage] OwnPics, default 0, NOT RUN IN THE GAME): the level's online.xml was baked by tools/kl_shop_pics.py with 36 extra
+           WeaponBig elements (PlayerIndex 100..115 heister cards, 120..139 Page II cards). The wanted one gets the shown row for this update (it draws), the stock card gets 99.
+           GUESS: an element whose PlayerIndex equals no row draws nothing (as 99 does on the hire page); fails open: no found element = no change. Same swap-and-restore as below. */
+        int shown = (int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW)), ch = 0, slot = -1, want, ni;
+        int hup = kspg.bakedHire && kspg.hact && kspg.hire && !kspg.ctl, pup = kspg.ownPics && kspg.active && kspg.shownB && !kspg.hire && !kspg.ctl;
+        if (hup) ch = (shown >= 0 && shown < KSPG_ROWS) ? kspg_h_ch(shown) : 0;
+        if (pup && shown >= 0 && shown < KSPG_ROWS && kspg.p[shown].ok) slot = kspg.p[shown].slot;
+        want = kpo_want(hup, ch, pup, slot, kspg.ownMask);
+        idx = klh_rd32((DWORD_PTR)self + 0xc4);
+        ni = kpo_big_index((int)idx, shown, want);
+        if (ni >= 0 && (DWORD)ni != idx) {
+            nidx = (DWORD)ni;
+            if (klh_data((void *)((DWORD_PTR)self + 0xc4), &nidx, 4, "KLShopPage: own picture index (swapped for one update)")) {
+                static LONG told;
+                if (InterlockedIncrement(&told) <= 6) klog("ownpic: element %08lx index %lu -> %lu (shown row %d, want %d)", (unsigned long)(DWORD_PTR)self, (unsigned long)idx, (unsigned long)nidx, shown, want);
+                ((kspg_gfx_t)(DWORD_PTR)kspg_tab[2].orig)(self, 0);
+                klh_data((void *)((DWORD_PTR)self + 0xc4), &idx, 4, "KLShopPage: own picture index restored");
+                return;
+            }
+        }
+    }
     if (kspg.hact && (kspg.hire || kspg.ctl) && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) {
         /* HIRE PAGE: the big gun picture is hidden (PlayerIndex 99 matches no row: no heister portrait exists in this window); the six stars show the heister's
            rank NEED (GUESS: an index below the stock tier is drawn lit, so -1 lights a star when the carrier row has a tier above 0, 99 dims it; the rank itself is
@@ -791,14 +815,15 @@ static void kspg_setrole(DWORD obj, int role)
 
 static void kspg_scan(void)
 {
-    static struct { DWORD obj, kind; } tab[0x13e8]; static int told[KSPG_NCLS], dumped; int hits[KSPG_NCLS] = { 0 };
+    static struct { DWORD obj, kind; } tab[0x13e8]; static int told[KSPG_NCLS], dumped; int hits[KSPG_NCLS] = { 0 }; unsigned long own[2];
     DWORD gd = klh_rd32((DWORD_PTR)KLH_VA(0xdd265c)), mgr = gd ? klh_rd32(gd + 0x824) : 0, n, k; int c;
     if (!mgr || klh_rd32(mgr) != (DWORD)(DWORD_PTR)KLH_VA(0x00bb7dc8)) return;
     n = klh_rd32(mgr + 0x9f48);
     if (n > 0x13e8 || !klh_rd(mgr + 8, tab, 8 * (SIZE_T)n)) return;
     kspg.lastN = n;
     kspg.selobj = 0;
-    memset(kspg_role, 0, sizeof kspg_role); kspg_nrole = 0; kspg_role_lost = 0;   /* rebuilt on every scan: roles of elements the game dropped do not pile up */
+    memset(kspg_role, 0, sizeof kspg_role); kspg_nrole = 0; kspg_role_lost = 0;
+    own[0] = own[1] = 0;   /* rebuilt on every scan: roles of elements the game dropped do not pile up */
     for (k = 0; k < n; k++) {
         DWORD vt, nv; char tag[40]; int role = KR_NONE;
         if (tab[k].kind || tab[k].obj < 0x10000 || !(vt = klh_rd32(tab[k].obj))) continue;
@@ -812,6 +837,7 @@ static void kspg_scan(void)
                              : ((kspg.hireOn || kspg.ctlOn) && !strcmp(tag, "WeaponShopStar")) ? KR_STAR /* read 2026-10-27 review: 0x58c6cf compares the tag with "WeaponShopStar" (0xb206f0) */
                              : ((kspg.hireOn || kspg.ctlOn) && !strcmp(tag, "WeaponShopLock")) ? KR_LOCK /* GUESS (SHOTS1 fix): the list's lock icons are tagged like the stars (XML names WeaponShopLock#01..08, shop_plan.md) */ : KR_NONE;
             else role = !strcmp(tag, "OldPrimaryWeapon") ? KR_OLDPRI : !strcmp(tag, "OldSecondaryWeapon") ? KR_OLDSEC : ((kspg.hireOn || kspg.ctlOn) && !strcmp(tag, "PackagePrice")) ? KR_PRICE : KR_NONE;
+            if (c == 2 && role == KR_BIG && (kspg.bakedHire || kspg.ownPics)) kpo_mask_set(own, (int)klh_rd32(tab[k].obj + 0xc4));   /* a baked own card (PlayerIndex 100..139) */
             if (c == 2 && role == KR_NONE) continue;              /* other graphics: not wrapped */
         }
         kspg_setrole(tab[k].obj, role);
@@ -819,6 +845,11 @@ static void kspg_scan(void)
         nv = (DWORD)(DWORD_PTR)&kspg_tab[c].vt[1];
         if (vt == nv) continue;                                   /* already ours: role kept, nothing to write */
         if (klh_data((void *)(DWORD_PTR)tab[k].obj, &nv, 4, "KLShopPage: element vtable (private copy)") && kspg.log) klog("shopPage: element %08lx (class %d, role %d) wrapped", tab[k].obj, c, role);
+    }
+    if (kspg.bakedHire || kspg.ownPics) {
+        static unsigned long lastOwn[2] = { 0xfffffffful, 0 };
+        kspg.ownMask[0] = own[0]; kspg.ownMask[1] = own[1];
+        if (own[0] != lastOwn[0] || own[1] != lastOwn[1]) { lastOwn[0] = own[0]; lastOwn[1] = own[1]; klog("ownpic: scan found own cards, mask %08lx %02lx (bits: 100..115 heisters, 120..139 page II)", own[0], own[1]); }
     }
     if (kspg.log && dumped < 2 && klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)) == 2) {   /* k42: proves whether list rows (1) and the buy handler (3) are in this table at all */
         dumped++;
@@ -1258,7 +1289,7 @@ static int kspg_load(void)
         GetPrivateProfileStringA("Desc", key, "", buf, sizeof buf, file);
         for (q = d = buf; *q; q++) { if (q[0] == '\\' && q[1] == 'n') { *d++ = '\n'; q++; } else *d++ = *q; } *d = 0;
         strncpy(kspg.p[row].desc, buf, 479); kspg.p[row].desc[479] = 0;
-        kspg.p[row].row = row; kspg.p[row].item = item; kspg.p[row].pic = pic; kspg.p[row].ok = kspg.p[row].cfg = 1; ok++;
+        kspg.p[row].slot = i; kspg.p[row].row = row; kspg.p[row].item = item; kspg.p[row].pic = pic; kspg.p[row].ok = kspg.p[row].cfg = 1; ok++;
     }
     return ok;
 }
@@ -1353,6 +1384,9 @@ static void kspg_init(void)
     if (kspg.apply && !kspo.on) { klog("shopg: [ShopPage] OnlineApply=1 needs OnlineSend=1 (the host's judgement): apply stays OFF"); kspg.apply = 0; }
     if (kspg.apply) { kspg.online = 1; klog("shopg: apply: on ([ShopPage] OnlineApply=1, recommended off until benched): an approved page II buy is the stock buy of its carrier + the pool relabel on every peer"); }
     kspg.early = GetPrivateProfileIntA("ShopPage", "OnlineEarlyMake", 0, klh_ini) != 0;   /* (recommended off until benched) online: make the page II guns right after the pool build so the stock pass gives them gun+0x13c */
+    kspg.ownPics = GetPrivateProfileIntA("ShopPage", "OwnPics", 0, klh_ini) != 0;       /* (recommended off until benched) Page II cards baked by tools/kl_shop_pics.py: klpicown_logic.h */
+    kspg.bakedHire = GetPrivateProfileIntA("Hire", "BakedPics", 0, klh_ini) != 0;       /* (recommended off until benched) the hire page's baked heister cards */
+    if (kspg.ownPics || kspg.bakedHire) klog("ownpic: on (OwnPics %d, BakedPics %d): the maps need tools/kl_shop_pics.py baked zips, else the stock pictures stay (NOT RUN IN THE GAME)", kspg.ownPics, kspg.bakedHire);
     kspg.have = kspg_load();
     if (!kspg.have) {
         klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0;

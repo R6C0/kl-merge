@@ -86,6 +86,7 @@ C_TESTS = {
     'kllootsync_test.c': 'logic',      # kllootsync_logic.h
     'klbalonline_test.c': 'logic',     # klbalonline.h
     'klswappic_test.c': 'logic',       # klswappic.h ([Shop] OnlineSwapPic decision)
+    'klpicown_test.c': 'logic',        # klpicown_logic.h ([Hire] BakedPics / [ShopPage] OwnPics decision)
     'klbottrait_test.c': 'logic',      # klbottrait.h
     'klshot_test.c': 'logic',          # klshot_logic.h (uses _snprintf: shim may need -D_snprintf=snprintf)
     'klleaf_test.c': 'logic',          # klleaf_logic.h (leaf probe schedule + CarStall door gate)
@@ -93,6 +94,7 @@ C_TESTS = {
     'klbotvoice_test.c': 'logic',      # klbotvoice_logic.h
     'klht_test.c': 'logic',            # klhud_tags_dist.h
     'klmappool_ov_test.c': 'logic',    # no windows.h
+    'klhirepic_test.c': 'logic',       # no windows.h
     'klnc_test.c': 'logic',            # klnetchan_logic.h + klucc_logic.h
     'klonline_read_test.c': 'logic',   # klonline_read.h
     'klsteamside_test.c': 'logic',     # klsteamside.h ([Net] SideChannelSteam probe: version order, peer parse, log budget)

@@ -346,7 +346,8 @@ static void klfps_post(void)
 }
 
 static void klmpo_present(void *dev);                           /* klmappool_ov.c: the lobby map-pool overlay, drawn right before the real Present (depth 0 only) */
-static void *klmpo_dev;                                          /* the device klfps_createdev saw (klmappool_ov.c draws with it; the swap chain route has no device argument) */
+static void klhp_present(void *dev);                            /* klhirepic.c: [Hire] PagePics, the heister card over the hire page's big picture (same place, depth 0 only) */
+static void *klmpo_dev;                                         /* the device klfps_createdev saw (klmappool_ov.c draws with it; the swap chain route has no device argument) */
 
 static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst, HWND wnd, const void *dirty)
 {
@@ -355,7 +356,7 @@ static HRESULT WINAPI klfps_present(void *self, const RECT *src, const RECT *dst
     t = klfps_pre("device (slot 17)", d, ret);
     if (t < 0) return 0;
     klfps_depth_set(d + 1);
-    if (!d) klmpo_present(self);
+    if (!d) { klmpo_present(self); klhp_present(self); }       /* klhp_present: klhirepic.c, the hire page's picture */
 #ifdef KLHOOK_TEST
     if (!d) kld3_present(self);                                      /* kld3.c: frame count, flush experiment; after the map-pool overlay so a D3dShot holds it (CE27_MPX: the lobby shots missed the panel) */
 #endif
@@ -375,7 +376,7 @@ static HRESULT WINAPI klfps_present_sc(void *self, const RECT *src, const RECT *
     t = klfps_pre("swap chain (slot 3)", d, ret);
     if (t < 0) return 0;
     klfps_depth_set(d + 1);
-    if (!d) klmpo_present(klmpo_dev);
+    if (!d) { klmpo_present(klmpo_dev); klhp_present(klmpo_dev); }
 #ifdef KLHOOK_TEST
     if (!d) kld3_present(kld3_dev);                                  /* kld3.c: frame count, flush experiment (the swap chain route needs the device); after the overlay, as above */
 #endif

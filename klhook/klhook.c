@@ -259,12 +259,49 @@ static void klog(const char *fmt, ...)
     if (line != buf) HeapFree(GetProcessHeap(), 0, line);
 }
 
+#define KLPERF_HAVE 1                              /* klhud.c: the real klperf_on / klperf_osd are here */
+#include "klperf_logic.h"                           /* klperf_logic.h: pure parts of [Perf] (OsdBackoff interval, OnlineCache validity, FastRead range test) */
+/* [Perf] (2026-11-05, read-only sweep + verify): three cheap-by-construction savings. Each key is read once; a MISSING key = 0 = the old behaviour
+   exactly (the sample KLHook.ini sets them to 1 = recommended on). OsdBackoff: klhud.c klu_find_osd. OnlineCache: kl_online() per tick.
+   FastRead: klh_rd of an address inside kl2.exe's own readable sections is a memcpy instead of ReadProcessMemory. */
+static int klperf_osd = -1, klperf_oc = -1, klperf_fr = -1;
+static int klperf_on(int *cache, const char *key)
+{
+    if (*cache < 0) *cache = klh_ini[0] ? GetPrivateProfileIntA("Perf", key, 0, klh_ini) != 0 : 0;
+    return *cache;
+}
 static volatile LONG klh_reads;              /* klh_rd calls (the perf line; approximate: a plain count from several threads) */
+static volatile LONG klh_reads_fast;         /* of those, answered by the FastRead memcpy */
+#define KLPERF_NSEC 16
+static DWORD klperf_lo[KLPERF_NSEC], klperf_hi[KLPERF_NSEC]; static int klperf_nsec;   /* readable sections of the image, filled once by klperf_fast_init */
 static int klh_rd(DWORD_PTR p, void *out, SIZE_T n)
 {   /* never faults: nothing in this DLL may raise an exception of its own */
     SIZE_T got = 0;
     klh_reads++;
+    if (klperf_nsec && p > 0xffff && n) {          /* [Perf] FastRead: only inside one readable section of kl2.exe (never the heap: a stale pointer there must keep failing cheaply through RPM) */
+        int i;
+        for (i = 0; i < klperf_nsec; i++)
+            if (klperf_in_range((unsigned long)p, (unsigned long)n, klperf_lo[i], klperf_hi[i])) { memcpy(out, (const void *)p, n); klh_reads_fast++; return 1; }
+    }
     return p > 0xffff && ReadProcessMemory(GetCurrentProcess(), (void *)p, out, n, &got) && got == n;
+}
+static void klperf_fast_init(HMODULE exe, IMAGE_NT_HEADERS *nt)
+{   /* [Perf] FastRead: the sections of the running kl2.exe that VirtualQuery says are committed and readable over their whole length (no NOACCESS / GUARD).
+       Only the known exe at 0x400000 (klh_delta 0: an off-game harness maps a copy elsewhere and keeps ReadProcessMemory). GUESS: nothing in the game
+       or this DLL later decommits or PAGE_NOACCESSes a piece of the exe image (the hook's own patches only make pages writable, never unreadable). */
+    IMAGE_SECTION_HEADER *sh = IMAGE_FIRST_SECTION(nt); int i;
+    klperf_nsec = 0;
+    if (!klperf_on(&klperf_fr, "FastRead") || !klh_exe_ok || klh_delta) return;
+    for (i = 0; i < nt->FileHeader.NumberOfSections && klperf_nsec < KLPERF_NSEC; i++) {
+        BYTE *a = (BYTE *)exe + sh[i].VirtualAddress, *e = a + sh[i].Misc.VirtualSize; MEMORY_BASIC_INFORMATION mbi; int ok = 1;
+        if (!(sh[i].Characteristics & IMAGE_SCN_MEM_READ) || (sh[i].Characteristics & IMAGE_SCN_MEM_DISCARDABLE) || e <= a) continue;
+        while (a < e) {
+            if (!VirtualQuery(a, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) || !mbi.Protect) { ok = 0; break; }
+            a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+        }
+        if (!ok) continue;
+        klperf_lo[klperf_nsec] = (DWORD)((DWORD_PTR)exe + sh[i].VirtualAddress); klperf_hi[klperf_nsec] = klperf_lo[klperf_nsec] + sh[i].Misc.VirtualSize; klperf_nsec++;
+    }
 }
 static DWORD klh_rd32(DWORD_PTR p) { DWORD v = 0; klh_rd(p, &v, 4); return v; }
 /* the session manager [0x168e598] (ZSessionManagerMultiplayer) has vtable 0xbd1ebc, or - with [Lobby] Solo=1, kllobby.c - the private copy of it at klh_sm_vt2 */
@@ -293,7 +330,7 @@ static int klh_rules_vt_is(DWORD v, DWORD orig, DWORD reg)
    vtable is not ZGameRulesHeist 0xbd3514 (online: ...FragileAllianceSv / Cl). No session, a story mode or an unreadable object = 0, so
    with the key absent (or =0) and offline the answer is always 0 and nothing changes. GUESS: a role of 2 / 3 is only ever set by a
    network session (klbot.c's reading; not seen live in an online game). Needs no later include: it reads three addresses itself. */
-static int kl_online(void)
+static int kl_online_raw(void)
 {
     static int safe = -1; DWORD sm, gs, rules, role = 0, mode = 0;
     if (safe < 0) safe = GetPrivateProfileIntA("Net", "OnlineSafe", 1, klh_ini) != 0;
@@ -303,6 +340,26 @@ static int kl_online(void)
     if (!klh_rd(sm + 0x5c, &mode, 4) || mode != 4) return 0;
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(0x0168e9e4))) || !(rules = klh_rd32(gs + 0x54))) return 0;
     return !klh_rules_vt_is(klh_rd32(rules), 0x00bd3514, 0);      /* a copy of the Heist vtable (slot 0 0x4b6c90) is still Arcade */
+}
+/* [Perf] OnlineCache: kl_online() is called dozens of times a frame by the parts' gates and costs 3 - 6 reads each. The main loop's thread reuses the
+   answer within one hook tick (klh_ticks unchanged, and never older than 1 s in case no tick runs); any other thread (the ticker) reuses it for 50 ms.
+   OnlineSafe handling is inside kl_online_raw, unchanged. Separate cache slots per thread class. GUESS: a one-frame lag in noticing a session start
+   is harmless (every caller already polls it each tick). */
+static DWORD klh_main_tid; static volatile DWORD klh_ticks;       /* defined with the tick state further down */
+static int kl_online(void)
+{
+    static int c_g, c_o, have_g, have_o; static DWORD tick_g, at_g, at_o; DWORD now, age; int gt, r;
+    if (!klperf_on(&klperf_oc, "OnlineCache")) return kl_online_raw();
+    gt = klh_main_tid && klh_main_tid == GetCurrentThreadId();
+    now = GetTickCount();
+    if (gt) {
+        age = now - at_g;
+        if (klperf_cache_ok(have_g, 1, tick_g == klh_ticks && age < 1000u, age)) return c_g;
+        r = kl_online_raw(); c_g = r; tick_g = klh_ticks; at_g = now; have_g = 1; return r;
+    }
+    age = now - at_o;
+    if (klperf_cache_ok(have_o, 0, 0, age)) return c_o;
+    r = kl_online_raw(); c_o = r; at_o = now; have_o = 1; return r;
 }
 
 static int klh_rdstr(DWORD_PTR p, char *out, int cap)
@@ -852,6 +909,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klqol2.c"                                        /* klqol2.c: [QoL2] stuck-AI watchdog, Heister page key, mute when unfocused (off unless set); AFTER klslot.c / klpm_arc.c */
 #include "klmappool.c"                                   /* klmappool.c: [MapPool] random map pools Dead Men / Dog Days / Mix, no repeats (off unless Enable=1); AFTER klslot.c / kllobbyopt.c, BEFORE klhostopt.c */
 #include "klmappool_ov.c"                                /* klmappool_ov.c: [MapPool] Overlay - the live pool (label + thumbnails, NEXT / played) drawn over the lobby by klfps.c's Present wrapper (off unless Overlay=1); AFTER klmappool.c, BEFORE klhostopt.c */
+#include "klhirepic.c"                                   /* klhirepic.c: [Hire] PagePics - the heister's B/W card drawn over the hire page's big picture (off unless PagePics=1); AFTER klshoppage.c + klmappool_ov.c (its D3D9 helpers) */
 #include "klhostopt.c"                                    /* klhostopt.c: [HostOpts] host-controlled match options (off unless Enable=1); AFTER klslot.c / klbotfill.c / kllobby.c / klmm.c */
 #include "klcharonline.c"                               /* klcharonline.c: [CharOnline] every player's heister/mask/outfit on every peer (off unless Enable=1); AFTER klchar.c / klmm.c / klslot.c */
 #include "klsync.c"                                    /* klsync.c: [Sync] read-only probe + host list compare of actors / world objects per peer (off unless set); AFTER klcensus.c, klcharonline.c */
@@ -1375,6 +1433,7 @@ static void klh_tick(int game_thread)
     klucc_tick(game_thread);                          /* klucchide.c: [Ucc] Hide (off unless set; game thread only); AFTER klud_tick and kllo_tick (their rules vtable copies go first) */
     klua_tick(game_thread);                           /* klucc_aim.c: [Ucc] PoliceAim (off unless set; game thread only); AFTER klucc_tick (patches slot 188 into whichever private rules vtable exists) */
     klrigid_tick(game_thread);                        /* klrigid.c: [Rigid] 10 s summary line (Log=1) */
+    khp_snap(game_thread);                            /* klhirepic.c: which heister the hire page shows (off unless [Hire] PagePics=1) */
     klshoppage_tick(game_thread);                     /* klshoppage.c: page II of the weapon shop (off unless [ShopPage] Enable=1) */
     klshop_tick(game_thread);                         /* klshop.c: [Shop] Swap= a shop row hands over another gun, Arcade only (off unless Enable=1) */
     klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
@@ -1418,8 +1477,8 @@ static void __cdecl klh_w_runcallbacks(void)
         /* [KLHook] Perf=1 (2026-10-14, the owner's '200+ fps'): every 10 s one line - the game's frames (this wrapper runs once a frame
            on the main loop), the time this hook's tick took on the main thread, and its memory reads. The whole-run frames / ms of
            KLHook.result mixes menus and loads (it varied +-40 % between equal runs); this line is the in-game figure. */
-        static LARGE_INTEGER f, t0, a, b, prev; static LONGLONG spent, dt_max, tick_max; static LONG frames, reads0, hitch, told; static int perf = -1;
-        if (perf < 0) { perf = GetPrivateProfileIntA("KLHook", "Perf", 1, klh_ini); QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0); reads0 = klh_reads; }
+        static LARGE_INTEGER f, t0, a, b, prev; static LONGLONG spent, dt_max, tick_max; static LONG frames, reads0, fast0, hitch, told; static int perf = -1;
+        if (perf < 0) { perf = GetPrivateProfileIntA("KLHook", "Perf", 1, klh_ini); QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0); reads0 = klh_reads; fast0 = klh_reads_fast; }
         if (perf) QueryPerformanceCounter(&a);
         klh_rcb_ra = ra;
         klh_tick(1);
@@ -1438,11 +1497,11 @@ static void __cdecl klh_w_runcallbacks(void)
             prev = a;
             if (b.QuadPart - t0.QuadPart >= f.QuadPart * 10) {
                 double secs = (double)(b.QuadPart - t0.QuadPart) / (double)f.QuadPart, ms = (double)spent * 1000.0 / (double)f.QuadPart; LONG rd = klh_reads - reads0;
-                klog("core: perf: %ld frames in %.1f s = %.1f fps; the hook's tick %.2f ms a frame (%.1f %% of the frame time, slowest %.1f ms), %ld memory reads a frame; "
+                klog("core: perf: %ld frames in %.1f s = %.1f fps; the hook's tick %.2f ms a frame (%.1f %% of the frame time, slowest %.1f ms), %ld memory reads a frame (%ld of them FastRead); "
                      "stutter: %ld frame(s) over 33 ms, the longest %.0f ms; UI Automation requests refused: %ld",
                      frames, secs, frames / secs, frames ? ms / frames : 0.0, ms / (secs * 10.0), (double)tick_max * 1000.0 / (double)f.QuadPart,
-                     frames ? rd / frames : 0L, hitch, (double)dt_max * 1000.0 / (double)f.QuadPart, (long)InterlockedExchange(&klh_uia_n, 0));
-                t0 = b; spent = 0; frames = 0; reads0 = klh_reads; hitch = 0; told = 0; dt_max = 0; tick_max = 0;
+                     frames ? rd / frames : 0L, frames ? (LONG)(klh_reads_fast - fast0) / frames : 0L, hitch, (double)dt_max * 1000.0 / (double)f.QuadPart, (long)InterlockedExchange(&klh_uia_n, 0));
+                t0 = b; spent = 0; frames = 0; reads0 = klh_reads; fast0 = klh_reads_fast; hitch = 0; told = 0; dt_max = 0; tick_max = 0;
             }
         }
         klfps_mapcap_tick();                             /* klfps.c: [FrameLimit] MapCap, the per-map ceiling (DM05A:60) */
@@ -1669,6 +1728,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)((BYTE *)exe + ((IMAGE_DOS_HEADER *)exe)->e_lfanew);
     img_lo = (DWORD)exe; img_hi = img_lo + nt->OptionalHeader.SizeOfImage;
     klh_exe_ok = img_lo == KL2_BASE && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;
+    klperf_fast_init(exe, nt);
+    if (klperf_nsec) klog("perf: FastRead on for %d section(s) of kl2.exe; OsdBackoff %d, OnlineCache %d", klperf_nsec, klperf_on(&klperf_osd, "OsdBackoff"), klperf_on(&klperf_oc, "OnlineCache"));
     AddVectoredExceptionHandler(1, veh);
     klog("==== KLHook loaded (ContinueAsserts=%d MaxDumps=%d) kl2.exe %08lx-%08lx", continue_asserts, max_dumps, img_lo, img_hi);
     klog("build: %s, %s %s; exe %s; patch policy: %s",
@@ -1812,6 +1873,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klrigid_init();
     klaiturn_init();                                  /* klaiturn.c: after klrigid_init; one guarded data write at start-up */
     klshop_init();
+    khp_init();                                       /* klhirepic.c: reads [Hire] PagePics */
     kspg_init();                                      /* klshoppage.c: reads KLShopPage.ini */
     klp_init();
     klfk_init();

@@ -13,6 +13,12 @@ Pictures for the Heister page: the wardrobe's characters and masks as menu pictu
         The stock archive is only READ; klslot.c's Overlay answers the game's open of Scenes\kaneandlynch.zip
         with the copy (give <game>\KLExpansion as <out folder>, or copy it there).
         klhook\mkoverlay.py puts the pictures on the page (it must be run with --pictures, see there).
+    python kl_portraits.py gray <pictures folder> [<out folder>]
+        The black and white heister cards of the hire page (hook, [Hire] PagePics=1): <pictures folder>\char_01..16.png ->
+        <out folder>\kmi\char_01..16.kmi (KMI1, 445 x 210 = the big picture box, klmappool_ov.c's image file) and <out folder>\cards.png
+        (contact sheet). The look of the white gun cards (kl_shop_cards.paint_white: dark ground, steel ring, hairline frame, red corner
+        bracket), the heister in grey with the contrast pulled up, the name in white. <out folder> defaults to <pictures folder>.
+        Needs numpy and Pillow (like kl_shop_cards.py).
     python kl_portraits.py check <a menu scene zip> [<stock zip>]
         Reads a built archive back: every picture entity -> picture chunk -> sprite -> texture, and that
         nothing of the stock scene moved except what has to (slot ids).
@@ -386,6 +392,98 @@ def check(path, stock=None, log=print):
     log('  check: %d of %d pictures found, %d problems' % (len(seen), len(NAMES), len(bad)))
     return bad
 
+# ---------------------------------------------------------------- the hire page's black and white cards (hook klhirepic.c)
+CARD = (445, 210)                 # the big picture box of the weapon / hire page, virtual pixels (klhirepic.h KHP_BW x KHP_BH)
+CARD_NAMES = ('J.C.', 'Tommy', 'Pierre', 'Liam', 'Jean', 'Elwood', 'Bud', 'Mitchel',            # KLChar 1..8, kl_chars.DD_NAMES
+              'Kane', 'Lynch', 'Ashkanan', 'Meldal', 'Red', 'Parker', 'Standen', 'Hutchison')   # KLChar 9..16, kl_chars.DM_NAMES (rank n = Hero_0n, see re/shop_hire.md section 11)
+
+
+def _font(px):
+    from PIL import ImageFont
+    for f in ('C:/Windows/Fonts/arialbd.ttf', 'C:/Windows/Fonts/arial.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'):
+        try:
+            return ImageFont.truetype(f, px)
+        except Exception:
+            pass
+    return ImageFont.load_default()
+
+
+def gray_card(n, png):
+    """-> RGBA bytes of one card, CARD size. png = (w, h, RGBA bytearray) of the heister's picture (kl_portraits.render)."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    import kl_shop_cards as C
+    W_, H_ = CARD
+    w, h, px = png
+    a = np.frombuffer(bytes(px), np.uint8).reshape(h, w, 4).astype(np.float32)
+    lum = (a[:, :, 0] * 0.30 + a[:, :, 1] * 0.59 + a[:, :, 2] * 0.11) / 255.0
+    alpha = a[:, :, 3] / 255.0
+    ys, xs = np.nonzero(alpha > 0.5)
+    if len(xs):                                                           # crop to the figure, then fit its height into the card
+        lum, alpha = lum[ys.min():ys.max() + 1, xs.min():xs.max() + 1], alpha[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    lo, hi = np.percentile(lum[alpha > 0.5], (4, 96)) if (alpha > 0.5).any() else (0.0, 1.0)
+    lum = np.clip((lum - lo) / max(hi - lo, 1e-3), 0, 1) ** 0.9           # contrast pulled up, then to 55..100 % grey (reads as white-ish on the dark ground)
+    grey = 0.40 + 0.60 * lum
+    th = H_ - 18; tw = max(1, int(round(lum.shape[1] * th / float(lum.shape[0]))))
+    g = np.asarray(Image.fromarray((grey * 255).astype(np.uint8)).resize((tw, th), Image.LANCZOS), np.float32)
+    al = np.asarray(Image.fromarray((alpha * 255).astype(np.uint8)).resize((tw, th), Image.LANCZOS), np.float32) / 255.0
+    out = C.ground_white((W_, H_), (W_, H_), 300 + n)                     # dark ground, smudges, dirty edges, specks (the gun cards' ground)
+    steel = np.array(C.STEEL, np.float32)
+    cx, cy = W_ * 0.64, H_ * 0.5
+    yy, xx = np.mgrid[0:H_, 0:W_].astype(np.float32)
+    rr = np.sqrt(((xx - cx) * 0.62) ** 2 + (yy - cy) ** 2)                # the thin ring behind the figure
+    for R, k in ((92.0, 0.26), (118.0, 0.10)):
+        ring = np.clip(1.15 - np.abs(rr - R), 0, 1)
+        out = out * (1 - ring * k)[:, :, None] + steel * (ring * k)[:, :, None]
+    x0, y0 = int(round(cx - tw / 2.0)), 9
+    sx0, sx1 = max(0, x0), min(W_, x0 + tw)
+    A = np.zeros((H_, W_), np.float32); G = np.zeros((H_, W_), np.float32)
+    A[y0:y0 + th, sx0:sx1] = al[:, sx0 - x0:sx1 - x0]; G[y0:y0 + th, sx0:sx1] = g[:, sx0 - x0:sx1 - x0]
+    glow = C._blur(A, 7) * 0.16                                          # a faint bloom round the figure
+    out = out * (1 - glow)[:, :, None] + steel * (glow * 0.9)[:, :, None]
+    out = out * (1 - A[:, :, None]) + G[:, :, None] * A[:, :, None]
+    x1, y1 = W_ - 5, H_ - 5                                               # the hairline frame and the red corner bracket (paint_white)
+    for ys_, xs_ in ((slice(4, 5), slice(4, x1 + 1)), (slice(y1, y1 + 1), slice(4, x1 + 1)), (slice(4, y1 + 1), slice(4, 5)), (slice(4, y1 + 1), slice(x1, x1 + 1))):
+        out[ys_, xs_] = out[ys_, xs_] * 0.5 + steel * 0.5
+    red = np.array(C.RED, np.float32)
+    out[4:7, 4:30] = out[4:7, 4:30] * 0.12 + red * 0.88
+    out[4:26, 4:7] = out[4:26, 4:7] * 0.12 + red * 0.88
+    im = Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8)).convert('RGB')
+    d = ImageDraw.Draw(im)
+    name = CARD_NAMES[n - 1].upper()
+    f = _font(30)
+    d.text((22, H_ - 52), name, font=f, fill=tuple(C.WHITE_FILL))
+    d.rectangle((22, H_ - 18, 22 + min(150, 12 * len(name)), H_ - 16), fill=tuple(C.RED))
+    rgba = np.dstack([np.asarray(im), np.full((H_, W_), 255, np.uint8)])
+    return bytes(rgba.tobytes())
+
+
+def gray(pics, out=None, log=print):
+    """pictures folder -> <out>/kmi/char_01..16.kmi + <out>/cards.png. A missing char_NN.png is skipped (logged)."""
+    import kl_mappool
+    out = out or pics
+    kd = os.path.join(out, 'kmi'); os.makedirs(kd, exist_ok=True)
+    W_, H_ = CARD; made = []
+    for n in range(1, NCHAR + 1):
+        src = os.path.join(pics, 'char_%02d.png' % n)
+        if not os.path.exists(src):
+            log('  char_%02d.png missing: skipped' % n); continue
+        rgba = gray_card(n, png_read(src))
+        open(os.path.join(kd, 'char_%02d.kmi' % n), 'wb').write(kl_mappool.kmi_bytes(W_, H_, rgba))
+        made.append(rgba)
+    cols = 4; rows = (len(made) + cols - 1) // cols
+    if made:
+        SW = W_ * cols; sh = bytearray(SW * H_ * rows * 4)
+        for k, rg in enumerate(made):
+            ox, oy = (k % cols) * W_, (k // cols) * H_
+            for y in range(H_):
+                o = ((oy + y) * SW + ox) * 4
+                sh[o:o + W_ * 4] = rg[y * W_ * 4:(y + 1) * W_ * 4]
+        png_write(os.path.join(out, 'cards.png'), SW, H_ * rows, sh)
+    log('gray: %d cards -> %s (+ cards.png)' % (len(made), kd))
+    return len(made)
+
+
 
 if __name__ == '__main__':
     a = [x for x in sys.argv[1:] if not x.startswith('--')]
@@ -393,6 +491,8 @@ if __name__ == '__main__':
         render(a[1], a[2], force='--force' in sys.argv)
     elif len(a) == 4 and a[0] == 'menu':
         menu(a[1], a[2], a[3])
+    elif len(a) in (2, 3) and a[0] == 'gray':
+        gray(a[1], a[2] if len(a) == 3 else None)
     elif len(a) in (2, 3) and a[0] == 'check':
         for b in check(a[1], a[2] if len(a) == 3 else None):
             print('  ' + b)
