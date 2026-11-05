@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~18:30 - [c9] Owner played Last Call: wants NPC variety (women in suits, club-goers, varied voices), street traffic noise, club music with no dead spots, 2nd-floor spawns, roof squad personality,
+front assault rushing to cover, guards before the loot room, kickable doors toward the exit. Offline agents: tools/kl_club_life_1105.py (crowd+sound), kl_club_fight_1105.py (combat), DD10 slim (re/dd10_slim_1105.md).
+FLAT RAID MENU FIXED: the 11-03 host-menu overlay had page 3 entry 6 = stock Title07 + H05 picture; live Patch01.zip ab86738f -> d00527ff ("Flat Raid", L05 picture; The Dig gets L06),
+backup .before-1105flatraid, UNDO in C:/kl_build_1024/flatraid_menu_1105. DM02 rear wall IS live (cover_fix_1026d built on edddbb67 -> 6589566e), never run on its own.
+
 2026-11-05 ~15:20 - [c9] Owner back ("install all"): everything built was already live (c9_1105e, SHIP 288fb016). Switched on the two off-by-default features in the live ini:
 [Adrenaline] OnlineRevive=1 and [Bots] OnlineEscort=2 (backup <DD>/KLHook.ini.before-c9_1105f; copy it back to undo). OnlineRevive is unexercised on benches (needs a human by a downed bot):
 owner play is its first real test, grep "adren-online:" in KLHook.log. Owner rebooting: clears stuck kl2.exe 119840/129272; then delete <DD>/dinput8.dll.rv3-test-leftover.
@@ -77,11 +82,6 @@ owner play is its first real test, grep "adren-online:" in KLHook.log. Owner reb
 builds were not affected (probe off). The probe now skips site 3 unless [BotDeathProbe] Slot51=1. RV3B/C ran 12:10-12:46 (owner OK "continue til 3pm"): PASS on faults.
 TEST 5f52009d / SHIP 288fb016. RV4 (rv4/, TEST 5f52009d, OnlineHealthMul 5, DownPct 60) PASS 4/4 seats 0 faults: DD05 = FIRST ONLINE BOT DOWNS (7, all up after 15 s at 1750),
 DM03 0 downs (no bot under 60 %). c9_1105e INSTALLED 13:15 (SHIP 288fb016 + OnlineCrewHealth 0 / OnlineHealthMul 5; UNDO bat in C:/kl_build_1024/c9_1105e_install). Smoke sm1105e (TEST twin 5f52009d, live ini) DD05 + DM03 PASS 4/4 seats, 0 faults/asserts, round 1 -> shop -> round 2; live dll/ini restored. RV5 (rv5/, same TEST) PASS 4/4: DD03 4 downs 4 up, DM01 3 downs 3 up, 0 faults. OnlineRevive still unexercised (no human by a downed bot on a bench).
-
-2026-11-05 ~12:05 - [c9] OWNER STOPPED TESTS ("stop tests got something to do"). RV3B (DM03) killed mid-run; live dll 9159711e put back by hand (the TEST dll was locked by a stuck kl2.exe:
-renamed to <DD>/dinput8.dll.rv3-test-leftover, delete once that process is gone). Live ini NOW OnlineHealthMul=5, OnlineCrewHealth=0 (the 11:50 edit had been undone by RV2's end-of-run ini restore).
-RV3A (DD05, klhpmax TEST 3e6cdd67, OnlineCrewHealth 2 + OnlineHealthMul 5): composition right, 7 bots 700 -> 3500 flat, 1 bot down; BUT both seats ended 'unhandled exception c0000005 at
-d3d9.dll+0x4b31f' at the same ms at run end (11:59:22, likely the bench's close; not yet checked against older benches). Next: that check, re-run RV3B, then an install kit with SHIP 8825e0a0.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

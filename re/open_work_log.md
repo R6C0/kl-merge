@@ -1,3 +1,8 @@
+2026-11-05 ~18:30 - [c9] Owner played Last Call: wants NPC variety (women in suits, club-goers, varied voices), street traffic noise, club music with no dead spots, 2nd-floor spawns, roof squad personality,
+front assault rushing to cover, guards before the loot room, kickable doors toward the exit. Offline agents: tools/kl_club_life_1105.py (crowd+sound), kl_club_fight_1105.py (combat), DD10 slim (re/dd10_slim_1105.md).
+FLAT RAID MENU FIXED: the 11-03 host-menu overlay had page 3 entry 6 = stock Title07 + H05 picture; live Patch01.zip ab86738f -> d00527ff ("Flat Raid", L05 picture; The Dig gets L06),
+backup .before-1105flatraid, UNDO in C:/kl_build_1024/flatraid_menu_1105. DM02 rear wall IS live (cover_fix_1026d built on edddbb67 -> 6589566e), never run on its own.
+
 2026-11-05 ~15:20 - [c9] Owner back ("install all"): everything built was already live (c9_1105e, SHIP 288fb016). Switched on the two off-by-default features in the live ini:
 [Adrenaline] OnlineRevive=1 and [Bots] OnlineEscort=2 (backup <DD>/KLHook.ini.before-c9_1105f; copy it back to undo). OnlineRevive is unexercised on benches (needs a human by a downed bot):
 owner play is its first real test, grep "adren-online:" in KLHook.log. Owner rebooting: clears stuck kl2.exe 119840/129272; then delete <DD>/dinput8.dll.rv3-test-leftover.
