@@ -68,15 +68,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~10:20 - [c9] c9_1105d INSTALLED 10:07 (SHIP 9159711e + [Brain] MarkGapMs=500, MinSVanRelease=1, NoBoard=2; UNDO bat in C:/kl_build_1024/c9_1105d_install).
+bs75 (losvar diag, TEST 3118ada1) PASS 6/6 seats, 0 faults: DD03 28 + 13 hits, DD05 34; the only losvar lines (DD05) were a target 93-139 m away, so bs73's 0-hit DD03 did not recur.
+Live-ini smoke sm1105d (C:/kl_build_1024/week_1028/sm1105d, TEST twin 3118ada1): DD05 + DM03 PASS 4/4 seats, 0 faults/asserts, shop steps reached the weapon list, live dll restored to 9159711e.
+
 2026-11-05 ~09:40 - [c9] bs74 (bs73 + MinSVanRelease=1, TEST 73967c79) PASS 8/8 seats, 0 faults/asserts, traitor hits on every map: DM03 39 + 81 (van release freed the hold at +139/+145 s), DD05 24,
 DD03 9. c9_1105c INSTALLED 09:36 (live ini NoBoard=2, dll f5cc8455). bs73 DD03 0 hits = the muzzle had no line of sight (blocked 726/758, eye clear 714; workflows wi16jr6dt + wcy0p9stv):
 losvar diag (5a1d4fe72, TEST only) benched in bs75 (DD03 DD05 DD03, TEST 3118ada1). c9_1105d (SHIP 9159711e + MarkGapMs=500, MinSVanRelease=1, NoBoard=2; UNDO bat in
 C:/kl_build_1024/c9_1105d_install) is chained to INSTALL after bs75.
-
-2026-11-05 ~09:05 - [c9] bs73 (bs72 + MarkGapMs=500, TEST 1268812a) PASS 6/6 seats, 0 faults/asserts. DD05: mark +156 s, 112 hits on humans, pendboard skipped 13x. DM03: 0 marks again (MinS race,
-workflow w4z06uj62: Arcade DM03 marks +118..166 s around the van call) -> new [Brain] OnlineBrainTraitorMinSVanRelease (f572df35b, default 0): a called van (1..4) ends the MinS hold; bs74 benches it
-(DM03 DD05 DD03 DM03, TEST 73967c79). DD03: mark +246 s, walked to 2.3 m of a human, fire test PASS 22x, still 0 hits (workflow wi16jr6dt digs). c9_1105c (NoBoard=2, ini only) is chained to
-INSTALL right after bs74 (UNDO bat in C:/kl_build_1024/c9_1105c_install).
 
 2026-11-05 ~07:20 - [ce] InShopSteps is live (in every SHIP dll since pq_1104b; to turn off: InShopSteps=0, C:\kl_build_1024\pq_1104b_install UNDO bat). Waiting for the owner's play test.
 QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq (gen_pqq.py; PQQ_HOOK=<TEST dir> picks the dll): [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND

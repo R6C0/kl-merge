@@ -1,3 +1,7 @@
+2026-11-05 ~10:20 - [c9] c9_1105d INSTALLED 10:07 (SHIP 9159711e + [Brain] MarkGapMs=500, MinSVanRelease=1, NoBoard=2; UNDO bat in C:/kl_build_1024/c9_1105d_install).
+bs75 (losvar diag, TEST 3118ada1) PASS 6/6 seats, 0 faults: DD03 28 + 13 hits, DD05 34; the only losvar lines (DD05) were a target 93-139 m away, so bs73's 0-hit DD03 did not recur.
+Live-ini smoke sm1105d (C:/kl_build_1024/week_1028/sm1105d, TEST twin 3118ada1): DD05 + DM03 PASS 4/4 seats, 0 faults/asserts, shop steps reached the weapon list, live dll restored to 9159711e.
+
 2026-11-05 ~09:40 - [c9] bs74 (bs73 + MinSVanRelease=1, TEST 73967c79) PASS 8/8 seats, 0 faults/asserts, traitor hits on every map: DM03 39 + 81 (van release freed the hold at +139/+145 s), DD05 24,
 DD03 9. c9_1105c INSTALLED 09:36 (live ini NoBoard=2, dll f5cc8455). bs73 DD03 0 hits = the muzzle had no line of sight (blocked 726/758, eye clear 714; workflows wi16jr6dt + wcy0p9stv):
 losvar diag (5a1d4fe72, TEST only) benched in bs75 (DD03 DD05 DD03, TEST 3118ada1). c9_1105d (SHIP 9159711e + MarkGapMs=500, MinSVanRelease=1, NoBoard=2; UNDO bat in
