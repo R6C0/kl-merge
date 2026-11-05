@@ -1,3 +1,7 @@
+2026-11-05 ~02:30 - [c9] bs60 PASS 6/6 seats (CallFirst DM03 DD05 DD03 + DD03 CrewPlace/BoardPoll, TEST out_cp_1105a, 0 faults). Van call +129/+150/+138 s (Arcade DM03 ~110, DD05 185-191;
+bs56 online 147/212/205); crewhold dwell 53/52 s (Arcade ~60), clock clamp never bit. Defects: DD05 caller carried $0; DD03 heli dwell still 14 s (CrewPlace measures walkers, but the add is refused:
+heli health unreadable, no shield); DM03 two bots zeroed 1-1.7 s after the call (unexplained). [+0x1e0] = 0 in states 1-5 on DD03 online. Not for install; workflow wiqspa20i fixes.
+
 2026-11-05 ~02:20 - [ce] QUICK shop smoke kit (owner 11-04 'option 3'): C:/kl_build_1024/week_1028/pqq (generator gen_pqq.py in ce's scratchpad; kit =
 pq14-style in-shop presses, TEST pq_1104b_test, live ini base). Round 1 cut by [Bench] SelfDownAt=10 SelfDownRepeat=4 SelfDownGap=1500 + [Lobby] KeepRound=0 in BOTH the base and
 the seat inis (run 1: the seat ini's KeepRound=1 overrode the base: full 280 s round). pqq2 DD05 PASS both seats, 0 faults: stock cut (B) 'all heisters out' from 0x46c2ba (slot 193, 3.0)
