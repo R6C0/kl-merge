@@ -2795,6 +2795,27 @@ static int klbr_human_near(const float *bp, double *dist, DWORD *who)      /* ne
     }
     return found;
 }
+/* 11-05 (klbotfill OnlineEscort, ES4): is body P the player of a used rules record (a session seat = a human)? 1 yes, 0 no, -1 walk unavailable; *nused = used records.
+   Same walk and shadow handling as klbr_human_near (SB74C DD05: 12 slots, 10 free = the 2 human seats; AI heisters have no record). GUESS: [cl+0x378] is the same pointer as the session player-table entry on the host for remote seats too (the caller falls back when no entry matches). */
+static int klbr_rec_member(DWORD P, int *nused)
+{
+    DWORD G = klh_rd32((DWORD_PTR)KLH_VA(KLBR_GLOBAL_G)), rules = G > 0xffff ? klh_rd32(G + 0x54) : 0, vt, recs, freeb, cnt = 0; int k, found = 0, nu = 0;
+    if (nused) *nused = 0;
+    if (rules && rules == klbr_shadow) rules = klbr_rr_sw ? klbr_rr_rules : 0;
+    if (rules < 0x10000) return -1;
+    vt = klh_rd32(rules);
+    if ((!KLH_RULES_SV_OK(vt) && !KLH_RULES_CL_OK(vt)) || !klh_rd(rules + 0x14, &cnt, 4) || cnt > 16) return -1;
+    recs = klh_rd32(rules + 8); freeb = klh_rd32(rules + 0xc);
+    if (!recs || !freeb) return -1;
+    for (k = 0; k < (int)cnt; k++) {
+        BYTE used = 1; DWORD cl;
+        if (!klh_rd(freeb + k, &used, 1) || used) continue;
+        nu++; cl = klh_rd32(recs + 0x74 * (DWORD)k);
+        if (cl > 0xffff && klh_rd32(cl + 0x378) == P) found = 1;
+    }
+    if (nused) *nused = nu;
+    return found;
+}
 static int klbr_ci_human(const float *bp, double *dist) { return klbr_human_near(bp, dist, 0); }
 static void klbr_ci_lists(int i, DWORD S, const char *kind, KLBR_CIB *b)      /* tactic lists A / B / C: logged once per bot per round and when they change */
 {
