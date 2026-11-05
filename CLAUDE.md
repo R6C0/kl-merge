@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~11:05 - [c9] ES4 (OnlineEscort human filter by rules record, 5d306b233, TEST 8a11c0c6) PASS 6/6 seats, 0 faults/asserts on DM03 DD05 DD03: every map read
+'RULES RECORDS, records in use 2, 2 kept, 6 dropped', and the escort followed only the two human seats (DD05 27x seat 1, DD03 9x seat 0 + 6x seat 1; ES3 had a bot follow seat 7, an AI heister).
+New [Adrenaline] OnlineRevive (41391c35a + review fix 1e1c19e61, default 0): online, the host's human by a downed AI heister pulls his lie shorter (Range/MinHelp/Rate/NeedUse).
+RV1 bench (C:/kl_build_1024/week_1028/rv1, TEST 2f704406, DownPct=60 + OnlineEscort=2, DD05 DM03) running since 11:05; grep 'adren-online:' in the host log.
+
 2026-11-05 ~10:20 - [c9] c9_1105d INSTALLED 10:07 (SHIP 9159711e + [Brain] MarkGapMs=500, MinSVanRelease=1, NoBoard=2; UNDO bat in C:/kl_build_1024/c9_1105d_install).
 bs75 (losvar diag, TEST 3118ada1) PASS 6/6 seats, 0 faults: DD03 28 + 13 hits, DD05 34; the only losvar lines (DD05) were a target 93-139 m away, so bs73's 0-hit DD03 did not recur.
 Live-ini smoke sm1105d (C:/kl_build_1024/week_1028/sm1105d, TEST twin 3118ada1): DD05 + DM03 PASS 4/4 seats, 0 faults/asserts, shop steps reached the weapon list, live dll restored to 9159711e.
@@ -76,11 +81,6 @@ Live-ini smoke sm1105d (C:/kl_build_1024/week_1028/sm1105d, TEST twin 3118ada1):
 DD03 9. c9_1105c INSTALLED 09:36 (live ini NoBoard=2, dll f5cc8455). bs73 DD03 0 hits = the muzzle had no line of sight (blocked 726/758, eye clear 714; workflows wi16jr6dt + wcy0p9stv):
 losvar diag (5a1d4fe72, TEST only) benched in bs75 (DD03 DD05 DD03, TEST 3118ada1). c9_1105d (SHIP 9159711e + MarkGapMs=500, MinSVanRelease=1, NoBoard=2; UNDO bat in
 C:/kl_build_1024/c9_1105d_install) is chained to INSTALL after bs75.
-
-2026-11-05 ~07:20 - [ce] InShopSteps is live (in every SHIP dll since pq_1104b; to turn off: InShopSteps=0, C:\kl_build_1024\pq_1104b_install UNDO bat). Waiting for the owner's play test.
-QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq (gen_pqq.py; PQQ_HOOK=<TEST dir> picks the dll): [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND
-seat inis -> round 1 ends 13 s in, ~4 min a 2-seat map. All 16 maps PASS (pqq3 + pqq4). pqq5 on a TEST twin of c9_1105a (263ba9517, C:/kl_build_1024/c9_1105a_test)
-+ the live ini: DD05 DM03 DD01 DM06 PASS 8/8 seats, 0 faults, so c9's install keeps the in-shop fix working.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

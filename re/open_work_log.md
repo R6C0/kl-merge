@@ -1,3 +1,8 @@
+2026-11-05 ~11:05 - [c9] ES4 (OnlineEscort human filter by rules record, 5d306b233, TEST 8a11c0c6) PASS 6/6 seats, 0 faults/asserts on DM03 DD05 DD03: every map read
+'RULES RECORDS, records in use 2, 2 kept, 6 dropped', and the escort followed only the two human seats (DD05 27x seat 1, DD03 9x seat 0 + 6x seat 1; ES3 had a bot follow seat 7, an AI heister).
+New [Adrenaline] OnlineRevive (41391c35a + review fix 1e1c19e61, default 0): online, the host's human by a downed AI heister pulls his lie shorter (Range/MinHelp/Rate/NeedUse).
+RV1 bench (C:/kl_build_1024/week_1028/rv1, TEST 2f704406, DownPct=60 + OnlineEscort=2, DD05 DM03) running since 11:05; grep 'adren-online:' in the host log.
+
 2026-11-05 ~10:20 - [c9] c9_1105d INSTALLED 10:07 (SHIP 9159711e + [Brain] MarkGapMs=500, MinSVanRelease=1, NoBoard=2; UNDO bat in C:/kl_build_1024/c9_1105d_install).
 bs75 (losvar diag, TEST 3118ada1) PASS 6/6 seats, 0 faults: DD03 28 + 13 hits, DD05 34; the only losvar lines (DD05) were a target 93-139 m away, so bs73's 0-hit DD03 did not recur.
 Live-ini smoke sm1105d (C:/kl_build_1024/week_1028/sm1105d, TEST twin 3118ada1): DD05 + DM03 PASS 4/4 seats, 0 faults/asserts, shop steps reached the weapon list, live dll restored to 9159711e.
