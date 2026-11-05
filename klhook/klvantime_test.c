@@ -114,6 +114,17 @@ int main(void)
         CHECK(kvt_cf_clamp(45, 1.8f, 200, 0) == 45.0f && kvt_cf_clamp(45, 1.8f, 110, 0) > 47.9f - 46.0f, "margin 0");
         CHECK(kvt_cf_carrier_ok(1310000) == 1 && kvt_cf_carrier_ok(1) == 1 && kvt_cf_carrier_ok(0) == 0 && kvt_cf_carrier_ok(-5) == 0, "only a bot with tally > 0 calls early");
     }
+    {   /* OnlineVanGatherSkipTraitor */
+        CHECK(kvt_gts_state(0, 1, 0, 1, 1000, 2000, 90) == 0, "key off: gathered as today");
+        CHECK(kvt_gts_state(1, 0, 0, 1, 1000, 2000, 90) == 0, "not marked: gathered");
+        CHECK(kvt_gts_state(1, 1, 3, 1, 1000, 2000, 90) == 0 && kvt_gts_state(1, 1, 3, 1, 1000, 999000, 90) == 0, "aboard / boarded: never skipped");
+        CHECK(kvt_gts_state(1, 1, 0, 0, 1000, 2000, 90) == 0, "no gather running: nothing to skip");
+        CHECK(kvt_gts_state(1, 1, 0, 1, 1000, 2000, 90) == 1 && kvt_gts_state(1, 1, 2, 1, 1000, 90999, 90) == 1, "marked, inside the hold-off: skipped");
+        CHECK(kvt_gts_state(1, 1, 0, 1, 1000, 91000, 90) == 2 && kvt_gts_state(1, 1, 1, 1, 1000, 500000, 90) == 2, "hold-off over: released");
+        CHECK(kvt_gts_state(1, 1, 0, 1, 1000, 10999, 0) == 1 && kvt_gts_state(1, 1, 0, 1, 1000, 11000, 0) == 2, "maxS clamps up to 10");
+        CHECK(kvt_gts_state(1, 1, 0, 1, 0, 599999, 9999) == 1 && kvt_gts_state(1, 1, 0, 1, 0, 600000, 9999) == 2, "maxS clamps down to 600");
+        CHECK(kvt_gts_state(1, 1, 0, 1, 0xFFFFFF00ul, 0x100ul, 10) == 1, "tick wrap");
+    }
     {   /* OnlineVanCrewNoShield */
         CHECK(kvt_cw_noshield_ok(1, 0, 1, 0) == 1, "key on, unreadable van, shield wanted: timer-only add");
         CHECK(kvt_cw_noshield_ok(0, 0, 1, 0) == 0, "key off: refused as today");

@@ -132,6 +132,14 @@ static float kvt_cf_clamp(float add, float timer, float left, float marginS)
 
 /* OnlineVanCallFirst: only a bot whose tally is above 0 may make the early call (bs60 DD05: a $0 bot called it). */
 static int kvt_cf_carrier_ok(int tally) { return tally > 0; }
+/* OnlineVanGatherSkipTraitor (default 0): 0 = the bot is gathered as today, 1 = a marked traitor is kept out of the gather / box walk / 'all gathered' decision, 2 = it was marked but the hold-off ran out (maxS s since the gather began): gather it again.
+   keyOn = the key; marked = the brain marks it; phase 3 = aboard / boarded (never skipped); gat = the gather runs; gatAt/now = ticks (DWORD wrap safe); maxS clamped 10..600. */
+static int kvt_gts_state(int keyOn, int marked, int phase, int gat, unsigned long gatAt, unsigned long now, int maxS)
+{
+    if (!keyOn || !marked || phase == 3 || !gat) return 0;
+    if (maxS < 10) maxS = 10; if (maxS > 600) maxS = 600;
+    return (unsigned long)(now - gatAt) >= (unsigned long)maxS * 1000ul ? 2 : 1;
+}
 /* OnlineVanCrewNoShield (default 0): the crew add may go ahead with the timer only when the shield is wanted but impossible because the van's health object is unreadable (hpReadable 0).
    shieldOk = shield set; shieldWanted = kle.fo_shield != 0. Returns 1 = add allowed without shield. A readable van whose shield write failed stays refused. */
 static int kvt_cw_noshield_ok(int keyOn, int shieldOk, int shieldWanted, int hpReadable) { return keyOn && !shieldOk && shieldWanted && !hpReadable; }

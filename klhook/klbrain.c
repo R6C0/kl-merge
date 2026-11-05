@@ -143,7 +143,14 @@ static int klbr_nb_slot(DWORD actor)    /* klbr_t slot of a live marked bot (Arc
     return -1;
 }
 static int klbr_noboard_actor(DWORD actor) { return kbr_nb_skip(klbr_nbmode, 0, klbr_taon, klbr_trturn, klbr_nb_slot(actor) >= 0); }
-static void klbr_nb_note(DWORD actor, int path, int phase)      /* a skip happened on 'path' (0..2); phase = the ledger phase (-1 untracked) */
+static int klbr_marked_actor(DWORD actor)      /* klbotfill.c OnlineVanGatherSkipTraitor: read only, 1 = a live bot with this actor is marked (e->traitor), whatever the NoBoard / Turn mode; plain int reads like klbr_nb_slot */
+{
+    int i;
+    if (!actor) return 0;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && klbr_t[i].traitor && klbr_t[i].actor == actor) return 1;
+    return 0;
+}
+static void klbr_nb_note(DWORD actor, int path, int phase)     /* a skip happened on 'path' (0..2); phase = the ledger phase (-1 untracked) */
 {
     int ix = klbr_nb_slot(actor);
     if (ix < 0 || path < 0 || path > 2 || !kbr_nb_skip(klbr_nbmode, path, klbr_taon, klbr_trturn, 1)) return;
