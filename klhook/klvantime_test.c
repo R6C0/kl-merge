@@ -112,6 +112,14 @@ int main(void)
         CHECK(kvt_cf_clamp(nanv, 1.8f, 200, 10) == 0.0f && kvt_cf_clamp(45, nanv, 200, 10) == 0.0f && kvt_cf_clamp(45, 1.8f, nanv, 10) == 0.0f && kvt_cf_clamp(45, 1.8f, 200, nanv) == 0.0f, "NaN = none");
         CHECK(kvt_cf_clamp(45, 1.8f, 0, 10) == 0.0f && kvt_cf_clamp(45, 1.8f, -5, 10) == 0.0f, "no clock = none");
         CHECK(kvt_cf_clamp(45, 1.8f, 200, 0) == 45.0f && kvt_cf_clamp(45, 1.8f, 110, 0) > 47.9f - 46.0f, "margin 0");
+        CHECK(kvt_cf_carrier_ok(1310000) == 1 && kvt_cf_carrier_ok(1) == 1 && kvt_cf_carrier_ok(0) == 0 && kvt_cf_carrier_ok(-5) == 0, "only a bot with tally > 0 calls early");
+    }
+    {   /* OnlineVanCrewNoShield */
+        CHECK(kvt_cw_noshield_ok(1, 0, 1, 0) == 1, "key on, unreadable van, shield wanted: timer-only add");
+        CHECK(kvt_cw_noshield_ok(0, 0, 1, 0) == 0, "key off: refused as today");
+        CHECK(kvt_cw_noshield_ok(1, 0, 1, 1) == 0, "readable van whose shield failed: still refused");
+        CHECK(kvt_cw_noshield_ok(1, 1, 1, 0) == 0 && kvt_cw_noshield_ok(1, 0, 0, 0) == 0, "shield ok / not wanted: no special case");
+        CHECK(kvt_cw_refused_shield(0, 1) == 1 && kvt_cw_refused_shield(2, 1) == 0 && kvt_cw_refused_shield(0, 0) == 0, "summary label refused (no shield)");
     }
 
     printf("klvantime_test: %d checks, %d failed\n", checks, fails);

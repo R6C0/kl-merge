@@ -130,6 +130,14 @@ static float kvt_cf_clamp(float add, float timer, float left, float marginS)
     return add < room ? add : room;
 }
 
+/* OnlineVanCallFirst: only a bot whose tally is above 0 may make the early call (bs60 DD05: a $0 bot called it). */
+static int kvt_cf_carrier_ok(int tally) { return tally > 0; }
+/* OnlineVanCrewNoShield (default 0): the crew add may go ahead with the timer only when the shield is wanted but impossible because the van's health object is unreadable (hpReadable 0).
+   shieldOk = shield set; shieldWanted = kle.fo_shield != 0. Returns 1 = add allowed without shield. A readable van whose shield write failed stays refused. */
+static int kvt_cw_noshield_ok(int keyOn, int shieldOk, int shieldWanted, int hpReadable) { return keyOn && !shieldOk && shieldWanted && !hpReadable; }
+/* the summary label for the crew hold's end: 1 = the add was refused for the shield (no add happened) */
+static int kvt_cw_refused_shield(int adds, int refused) { return adds == 0 && refused; }
+
 /* OnlineVanFarHold: count the walkers (phase 2, tally > 0) farther than holdM from the goal. d[] are horizontal cm; n entries; carrier[i] 1 = tally > 0. */
 static int kvt_count_far(const float *d, const int *carrier, int n, float holdM)
 {
