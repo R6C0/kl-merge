@@ -100,6 +100,20 @@ int main(void)
       CHECK(kcw_floor_ok(3) == 0 && kcw_floor_ok(2) == 0 && kcw_floor_ok(1) == 1 && kcw_floor_ok(0) == 1, "floor only without bit 2");
     }
 
+    {   /* OnlineVanCallFirst */
+        float nanv = (float)sqrt(-1.0);
+        CHECK(kvt_cf_active(0, 1) == 0 && kvt_cf_active(1, 0) == 0 && kvt_cf_active(0, 0) == 0 && kvt_cf_active(1, 1) == 1, "callfirst needs both keys");
+        CHECK(kvt_cf_clamp(45, 1.8f, 200, 10) == 45.0f, "plenty of clock: the whole add");
+        CHECK(kvt_cf_clamp(45, 1.8f, 43, 10) == 0.0f, "DD07/DD03 low clock (43 s left): no add");
+        CHECK(kvt_cf_clamp(45, 1.8f, 100, 10) > 27.9f && kvt_cf_clamp(45, 1.8f, 100, 10) < 28.3f, "100 s left: add capped to ~28.2 s");
+        CHECK(kvt_cf_clamp(45, 1.8f, 71.8f, 10) == 0.0f && kvt_cf_clamp(45, 1.8f, 72.0f, 10) == 0.0f && kvt_cf_clamp(45, 1.8f, 72.5f, 10) > 0.4f, "under 0.5 s of room = none");
+        CHECK(kvt_cf_clamp(5, 1.8f, 100, 10) == 5.0f, "a small add that fits stays");
+        CHECK(kvt_cf_clamp(0, 1.8f, 200, 10) == 0.0f && kvt_cf_clamp(-3, 1.8f, 200, 10) == 0.0f, "no add in = none");
+        CHECK(kvt_cf_clamp(nanv, 1.8f, 200, 10) == 0.0f && kvt_cf_clamp(45, nanv, 200, 10) == 0.0f && kvt_cf_clamp(45, 1.8f, nanv, 10) == 0.0f && kvt_cf_clamp(45, 1.8f, 200, nanv) == 0.0f, "NaN = none");
+        CHECK(kvt_cf_clamp(45, 1.8f, 0, 10) == 0.0f && kvt_cf_clamp(45, 1.8f, -5, 10) == 0.0f, "no clock = none");
+        CHECK(kvt_cf_clamp(45, 1.8f, 200, 0) == 45.0f && kvt_cf_clamp(45, 1.8f, 110, 0) > 47.9f - 46.0f, "margin 0");
+    }
+
     printf("klvantime_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

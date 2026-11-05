@@ -114,6 +114,22 @@ static int kcw_reason(int legacyIn, int crewOn, int nwalk, float used, float bud
 static int kcw_floor_ok(int reason) { return !(reason & 2); }
 static int kcw_latch(int sampled, int newWalk, int oldWalk) { return sampled ? newWalk : oldWalk; }
 
+/* OnlineVanCallFirst (recommended off until benched): the van is called by the FIRST bot at the exit (Arcade's rule) instead of after the gather. Needs OnlineVanCrewHold (it holds the van
+   for the walkers). Returns 1 = active. Key 0, or the crewhold off = 0 = today. */
+static int kvt_cf_active(int cfOn, int cwOn) { return cfOn != 0 && cwOn != 0; }
+/* the clock cap of the crew hold: stock cuts state 5 -> 7 at KVT_CF_END_LEFT_S s left; the van must have left (timer out + the state-5 drive, marginS) before that.
+   Seconds of the timer add that still fit: the van would leave in `timer` s, plus `add` s, and the clock then reads left - timer - add, which must stay >= KVT_CF_END_LEFT_S + marginS.
+   Returns the add clamped to that room (0 = no room; NaN / non-finite inputs = 0). */
+#define KVT_CF_END_LEFT_S 60.0f      /* stock: state 5 -> 7 at 60 s left (round_length_1104.md) */
+static float kvt_cf_clamp(float add, float timer, float left, float marginS)
+{
+    float room;
+    if (!(add > 0 && add < 1e6f) || !(timer >= 0 && timer < 1e6f) || !(left > 0 && left < 1e9f) || !(marginS >= 0 && marginS < 1e6f)) return 0;
+    room = left - timer - KVT_CF_END_LEFT_S - marginS;
+    if (!(room >= 0.5f)) return 0;
+    return add < room ? add : room;
+}
+
 /* OnlineVanFarHold: count the walkers (phase 2, tally > 0) farther than holdM from the goal. d[] are horizontal cm; n entries; carrier[i] 1 = tally > 0. */
 static int kvt_count_far(const float *d, const int *carrier, int n, float holdM)
 {
