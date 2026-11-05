@@ -203,20 +203,26 @@ static void klbd_shield(struct klbd_rec *b, int on)
     b->shield = (BYTE)on;
 }
 
+#include "klhpmax_logic.h"      /* the one registry of every hook writer of an AI heister's maximum health (klhpmax_test.c); klgrudge.c / klbotfill.c use it too */
 /* FedHealth put back: his maximum as it was, his health at the same share - only when the object is still his and still
    holds our maximum (another value = the game wrote one: left alone) */
+static int klbd_hp_alive(unsigned int h, unsigned int a) { return klh_rd32(h + 0x24) == a; }      /* the object still belongs to that actor */
 static void klbd_fed_undo(struct klbd_rec *b, int i, const char *why)
 {
-    DWORD h; int ok = 1; float hp, hmax, nh;
+    DWORD h; int ok = 1; float hp, hmax, nh, to; struct khpm_ent *e;
     if (!b->fed_done) return;
     b->fed_done = 0;
     if (!b->actor || KLBD_AVT(b->actor) != KLB_ACTOR_VT || !(h = klh_rd32(b->actor + 0x5fc)) || h != b->fed_h || klh_rd32(h + 0x24) != b->actor) return;
     hp = klbd_rdf(h + 4, &ok); hmax = klbd_rdf(h + 8, &ok);
-    if (!ok || fabsf(hmax - b->fed_to) > 0.5f || b->fed_to < 1.0f) { if (klbd.log) klog("botdown: record %d: FedHealth not put back (%s): his maximum is %.1f, not the %.1f written", i, why, hmax, b->fed_to); return; }
-    nh = hp > 0.01f ? hp * b->fed_from / b->fed_to : hp;
-    if (klh_data((void *)(DWORD_PTR)(h + 8), &b->fed_from, 4, "an AI heister's maximum health put back (botdown FedHealth)")) {
+    if (!ok || hmax < 1.0f || !(e = khpm_find(h, b->actor, klbd_hp_alive, 0))) { if (klbd.log) klog("botdown: record %d: FedHealth not put back (%s): his maximum is %.1f, not the %.1f written", i, why, hmax, b->fed_to); return; }
+    /* klhpmax_logic.h: only OUR factor goes; a maximum that is not the hook's is the game's and stays (another writer's factor, e.g. klgrudge.c CrewHealth, stays in) */
+    khpm_see(e, hmax);
+    if (!khpm_plan(e, KHPM_FED, 1.0f, hmax, &to)) return;
+    nh = hp > 0.01f ? hp * to / hmax : hp;
+    if (klh_data((void *)(DWORD_PTR)(h + 8), &to, 4, "an AI heister's maximum health put back (botdown FedHealth)")) {
+        khpm_done(e, to);
         if (hp > 0.01f) klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health at the same share (botdown FedHealth put back)");
-        if (klbd.log) klog("botdown: record %d: FedHealth put back (%s): maximum %.1f -> %.1f, health %.1f -> %.1f", i, why, b->fed_to, b->fed_from, hp, hp > 0.01f ? nh : hp);
+        if (klbd.log) klog("botdown: record %d: FedHealth put back (%s): maximum %.1f -> %.1f, health %.1f -> %.1f", i, why, hmax, to, hp, hp > 0.01f ? nh : hp);
     }
 }
 
@@ -496,13 +502,15 @@ static void klbd_pass(struct klb_snap *snp, const char *why, int online)
         /* FedHealth: once per bot while you are police, at the same share; put back when you are not */
         if (!fed && b->fed_done) { klbd_fed_undo(b, i, "you are no longer police"); hok = 1; hp = klbd_rdf(h + 4, &hok); hmax = klbd_rdf(h + 8, &hok); if (!hok || hmax < 1.0f) continue; thr = klbd_thresh(hmax, klbd.down_pct); }
         if (fed && !b->fed_done && !klbd.dry && r->status == 0 && hp > 0.01f && fabsf(fed_k - 1.0f) > 0.001f) {
-            float nmax = hmax * fed_k, nh = hp * fed_k;
+            float nmax = hmax * fed_k, nh = hp * fed_k; struct khpm_ent *fe = khpm_find(h, r->actor, klbd_hp_alive, 1);
+            if (fe) { khpm_see(fe, hmax); khpm_plan(fe, KHPM_FED, fed_k, hmax, &nmax); nh = hp * nmax / hmax; }      /* klhpmax_logic.h: base x every writer's factor */
             b->fed_done = 1; b->fed_h = h; b->fed_from = hmax; b->fed_to = nmax;
-            if (klh_data((void *)(DWORD_PTR)(h + 8), &nmax, 4, "an AI heister's maximum health while you are police (botdown FedHealth)") &&
-                klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health at the same share (botdown FedHealth)")) {
+            if (fe && klh_data((void *)(DWORD_PTR)(h + 8), &nmax, 4, "an AI heister's maximum health while you are police (botdown FedHealth)")) {
+                khpm_done(fe, nmax);      /* the maximum is in: the hook's from now on, even if the health write below is refused (review wou2kgqnw) */
+                klh_data((void *)(DWORD_PTR)(h + 4), &nh, 4, "an AI heister's health at the same share (botdown FedHealth)");
                 if (klbd.log) klog("botdown: record %d%s: maximum %.1f -> %.1f, health %.1f -> %.1f (FedHealth x %.3f: you are police)", i, (r->flags & 2) ? " (TRAITOR)" : "", hmax, nmax, hp, nh, fed_k);
                 hp = nh; hmax = nmax; thr = klbd_thresh(hmax, klbd.down_pct);
-            } else { b->fed_done = 0; }
+            } else { b->fed_done = 0; if (fe) { float u; khpm_plan(fe, KHPM_FED, 1.0f, hmax, &u); } }      /* refused: our factor goes again */
         }
 
         if (r->status != 0) {                                            /* aboard / escaped / dead */

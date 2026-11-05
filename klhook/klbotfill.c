@@ -82,6 +82,7 @@ static int klbf_stack_recheck;      /* [BotFill] OnlineStackRecheck (default 0, 
 #include "klway_logic.h"      /* wk-rtroute-1101: [BotFill] OnlineWayPerMap / OnlineLegHopDy, the pure decisions (klway_test.c) */
 #include "kldoorhold_logic.h"      /* wk-doorhold-1102: [BotFill] OnlineDoorHold / OnlineDoorHoldS, the pure decision (kldoorhold_test.c) */
 #include "klboardpar_logic.h"      /* wk-boardpar-1102: [BotFill] OnlineBoardAllNear, the pure decision (klboardpar_test.c) */
+#include "klhpmax_logic.h"      /* the one registry of every hook writer of an AI heister's maximum health (klhpmax_test.c); klgrudge.c includes it first */
 #include "kldroptable_logic.h"      /* wk-droptable-1102: drop table eviction of hidden pool objects (kldroptable_test.c) */
 #include "kldroptake_logic.h"      /* wk-droptake-1102: [BotFill] OnlineDropTake / OnlineDropTakeM, the pure decision (kldroptake_test.c) */
 #include "klcensus_logic.h"      /* wk-census-1102: OnlineTriggersCensus new-cop pointer set + tally (klcensus_test.c) */
@@ -872,26 +873,22 @@ static void klbf_trig_tick(DWORD now, const DWORD *act, int nb)
    CopToCrew 0.05) is never applied, and BO5's bots went 280 -> 0 inside one 3 s sync window. The game call can't be reached online (0x591b60 reads
    Heist-only rules fields), so each bot's health object [actor+0x5fc] gets max and current x K once (klgrudge.c kly_health's checks): data writes only.
    Side effect: the human's damage on a bot is divided by K too (Arcade has YouToCrew 0.25). Host only; whether a client's puppet follows is NOT known. */
-#define KLBF_OT_HP 32
-static struct { DWORD h, actor; float orig, wrote; } klbf_hp[KLBF_OT_HP];
 static void klbf_ot_health(DWORD a, DWORD h, const float hv[2])
 {
-    int i, f = -1; float nv[2];
+    struct khpm_ent *e; float t, c;
     if (klbf_ot_hmul <= 1) return;
-    for (i = 0; i < KLBF_OT_HP; i++) if (klbf_hp[i].h == h && klbf_hp[i].actor == a) break;
-    if (i < KLBF_OT_HP && hv[1] == klbf_hp[i].wrote) return;      /* ours, still in place */
     if (klh_rd32(h + 0x24) != a || !klb_finite(hv[0]) || !klb_finite(hv[1]) || hv[1] < 1.0f || hv[1] > 100000.0f || hv[0] > hv[1] * 1.01f + 1.0f || !(hv[0] > 0)) return;
-    if (i == KLBF_OT_HP) {      /* a new object, or a maximum that is not ours: taken as the game's. Review wp16tqkg2: a full table reuses only a slot that is no longer ours, else skips */
-        float m = 0;
-        for (i = 0; i < KLBF_OT_HP && klbf_hp[i].h; i++) ;
-        for (f = 0; i == KLBF_OT_HP && f < KLBF_OT_HP; f++) if (klh_rd32(klbf_hp[f].h + 0x24) != klbf_hp[f].actor || !klh_rd(klbf_hp[f].h + 8, &m, 4) || m != klbf_hp[f].wrote) i = f;
-        if (i == KLBF_OT_HP) return;
-    }
-    f = i; nv[0] = hv[0] * klbf_ot_hmul; nv[1] = hv[1] * klbf_ot_hmul;
-    klh_data((void *)(DWORD_PTR)(h + 8), &nv[1], 4, "bot health max (OnlineHealthMul)");
-    klh_data((void *)(DWORD_PTR)(h + 4), &nv[0], 4, "bot health (OnlineHealthMul)");
-    klbf_hp[f].h = h; klbf_hp[f].actor = a; klbf_hp[f].orig = hv[1]; klbf_hp[f].wrote = nv[1];
-    klog("botfill: tactics: bot actor %08lx health %.0f/%.0f -> %.0f/%.0f (OnlineHealthMul %d: Arcade's police->crew damage factor is not applied online)", a, hv[0], hv[1], nv[0], nv[1], klbf_ot_hmul);
+    /* klhpmax_logic.h: the game's maximum and every hook writer's factor (klgrudge.c OnlineCrewHealth, klbotdown.c FedHealth, this one) live in one registry, so the writers compose.
+       BUG before (RV1A_DD05 2026-11-05, host log, one bot, the game gave 350): this table took klgrudge.c's 700 for 'the game's' and made 3500, klgrudge.c took that for a new maximum of the
+       game's and made 7000, ... up to 350000 (both refuse > 100000). Now 350 x 2 (OnlineCrewHealth) x 5 (OnlineHealthMul) = 3500, whoever ticks first and however often. */
+    if (!(e = khpm_find(h, a, kly_hp_alive, 1))) return;
+    khpm_see(e, hv[1]);
+    if (!khpm_plan(e, KHPM_BOTFILL, (float)klbf_ot_hmul, hv[1], &t)) return;      /* ours (or composed with another writer's) and still in place */
+    c = hv[0] * t / hv[1];      /* the same share of the new maximum */
+    if (!klh_data((void *)(DWORD_PTR)(h + 8), &t, 4, "bot health max (OnlineHealthMul)")) return;
+    klh_data((void *)(DWORD_PTR)(h + 4), &c, 4, "bot health (OnlineHealthMul)");
+    khpm_done(e, t);
+    klog("botfill: tactics: bot actor %08lx health %.0f/%.0f -> %.0f/%.0f (OnlineHealthMul %d x the other writers' factors, the game gave %.0f: Arcade's police->crew damage factor is not applied online)", a, hv[0], hv[1], c, t, klbf_ot_hmul, e->base);
 }
 
 /* OnlineTacticsVan (2026-10-26, workflow wg4n9od9h, verified in disassembly by a second pass): online the exit box (ZOnlineExitLevelTrigger 0x6c3d50)

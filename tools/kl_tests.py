@@ -68,6 +68,7 @@ C_TESTS = {
     'klbrain_test.c': 'logic',         # klbrain_logic.h ([Brain] vector insertion order, growth, switches, PuppetOff window, no windows.h)
     'kldroptake_test.c': 'logic',      # kldroptake_logic.h (OnlineDropTake pure decision, no windows.h)
     'klcensus_test.c': 'logic',        # klcensus_logic.h (OnlineTriggersCensus new-cop pointer set, no windows.h)
+    'klhpmax_test.c': 'logic',         # klhpmax_logic.h (one registry of every writer of an AI heister's maximum health: grudge + botfill + FedHealth compose, RV1A_DD05 350 -> 350000)
     'kldroptable_test.c': 'logic',     # kldroptable_logic.h (type-1 drop table eviction, no windows.h)
     'kldoorhold_test.c': 'logic',    # kldoorhold_logic.h (OnlineDoorHold pure decision, no windows.h)
     'kltimeauto_test.c': 'logic',     # kltimeauto_logic.h ([Lobby] TimeAuto clamp / when to apply, no windows.h)

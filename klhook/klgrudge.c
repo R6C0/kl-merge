@@ -174,10 +174,13 @@ static struct {
     float base, per, max, good, forget;       /* ESCALATES: seconds, seconds per per cent, seconds, per cent (0 = never); forget: seconds */
 } kly;
 
+#include "klhpmax_logic.h"      /* the one registry of every hook writer of an AI heister's maximum health (klhpmax_test.c); klbotfill.c / klbotdown.c use it too */
+static int kly_hp_alive(unsigned int h, unsigned int a) { return klh_rd32(h + 0x24) == a; }      /* the object still belongs to that actor */
+
 struct kly_bot {
-    DWORD actor; int kind, snap_hits;         /* kind -1 = not drawn yet */
+    DWORD actor; int kind, snap_hits;        /* kind -1 = not drawn yet */
     int have, hostile, good, hits, handed; float wrote, tally; DWORD hit_at, angry_until;      /* the grudge: wrote = the float as last seen / written */
-    DWORD hobj; float hmax0, hwrote;          /* health: the game's maximum, ours (0 = nothing of ours is in) */
+    DWORD hobj; float hmax0, hwrote;          /* health: the game's maximum (the registry's base, klhpmax_logic.h), the maximum wanted with our factor in (0 = our factor is 1) */
     DWORD soldier, dblk; float aim0; int aset; float awrote;      /* aim: the block, what he had, ours is in (awrote = the number we wrote) */
     int marked;                               /* BackstabMark / GrudgeMark: bit 1 of his score dword is ours */
     int turned;                               /* he was held your enemy FOR GOOD at least once this round (GrudgeMark keeps its bit from then on) */
@@ -219,12 +222,17 @@ static const char *kly_kind(int k) { return k == KLY_ESCALATES ? "ESCALATES" : k
    no longer ours is left alone. rules / score = the round object the record belongs to, 0 when it is gone. */
 static void kly_undo(struct kly_bot *b, int i, DWORD rules, DWORD score)
 {
-    float raw[0x28 / 4], cur, v; DWORD fl = 0;
+    float raw[0x28 / 4], cur, v; DWORD fl = 0; struct khpm_ent *e;
     if (b->hwrote != 0 && b->actor && klh_avt(b->actor) == KLB_ACTOR_VT && b->hobj && klh_rd32(b->actor + 0x5fc) == b->hobj &&
-        klh_rd(b->hobj, raw, sizeof raw) && ((DWORD *)raw)[0x24 / 4] == b->actor && klb_finite(raw[1]) && klb_finite(raw[2]) && raw[2] >= 1 && KLY_ABS(raw[2] - b->hwrote) <= 0.01f) {
-        v = b->hmax0; cur = raw[1] * v / raw[2];
-        if (klh_data((void *)(DWORD_PTR)(b->hobj + 8), &v, 4, "an AI heister's maximum health (the game's own back)") && raw[1] > 0)
-            klh_data((void *)(DWORD_PTR)(b->hobj + 4), &cur, 4, "an AI heister's health, at the same share of the game's maximum");
+        klh_rd(b->hobj, raw, sizeof raw) && ((DWORD *)raw)[0x24 / 4] == b->actor && klb_finite(raw[1]) && klb_finite(raw[2]) && raw[2] >= 1 && (e = khpm_find(b->hobj, b->actor, kly_hp_alive, 0)) != 0) {
+        khpm_see(e, raw[2]);      /* a maximum that is not the hook's is the game's: it stays; only OUR factor goes (another writer's factor stays in: 350 x 2 x 5 -> x 5 = 1750) */
+        if (khpm_plan(e, KHPM_GRUDGE, 1.0f, raw[2], &v)) {
+            cur = raw[1] * v / raw[2];
+            if (klh_data((void *)(DWORD_PTR)(b->hobj + 8), &v, 4, "an AI heister's maximum health (the game's own back)")) {
+                khpm_done(e, v);
+                if (raw[1] > 0) klh_data((void *)(DWORD_PTR)(b->hobj + 4), &cur, 4, "an AI heister's health, at the same share of the game's maximum");
+            }
+        }
     }
     b->hwrote = 0;
     if (b->aset && b->actor && klh_avt(b->actor) == KLB_ACTOR_VT && b->soldier && klh_rd32(b->actor + 0x77c) == b->soldier && klh_svt(b->soldier) == KLY_SOLDIER_VT &&
@@ -248,24 +256,29 @@ static void kly_undo_all(DWORD rules, DWORD score)
 /* 3 a / 3 b: the bot's maximum health. act = the hook acts on this level. */
 static void kly_health2(const struct klb_rec *r, struct kly_bot *b, int i, int act, float crew, float bs_health, float tf)
 {
-    float raw[0x28 / 4], cur, max, wmax, wcur, f = 1; DWORD h;
+    float raw[0x28 / 4], cur, max, wmax, wcur, f = 1; DWORD h; struct khpm_ent *e;
     if (crew <= 0 && bs_health <= 0 && b->hwrote == 0 && tf == 1.0f) return;
     if (!(h = klh_rd32(r->actor + 0x5fc)) || !klh_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != r->actor) return;
     cur = raw[1]; max = raw[2];
     if (!klb_finite(cur) || !klb_finite(max) || max < 1 || max > 100000 || cur > max * 1.01f + 1) return;
-    if (h != b->hobj) { b->hobj = h; b->hmax0 = max; b->hwrote = 0; }
-    else if (KLY_ABS(max - b->hmax0) > 0.01f && (b->hwrote == 0 || KLY_ABS(max - b->hwrote) > 0.01f)) { b->hmax0 = max; b->hwrote = 0; }      /* a new maximum of the game's */
     if (act) {
         if (crew > 0) f *= crew;
         if ((r->flags & 2) && bs_health > 0) f *= bs_health;
         f *= tf;
     }
-    wmax = b->hmax0 * f;
-    if (KLY_ABS(max - wmax) <= 0.01f || cur <= 0) return;                  /* as wanted; or he is down: a dead man's object is left */
+    /* the game's maximum and every hook writer's factor live in klhpmax_logic.h's registry (RV1A_DD05 2026-11-05: this file and klbotfill.c's OnlineHealthMul each took the other's write for 'a new maximum of
+       the game's' and multiplied again, 350 -> 350000): our write is the product of ALL factors, a maximum that is the hook's is never taken as the game's */
+    if (h != b->hobj) { b->hobj = h; b->hwrote = 0; }
+    if (!(e = khpm_find(h, r->actor, kly_hp_alive, f != 1.0f || b->hwrote != 0))) return;      /* no factor of ours and none ever set: nothing to do */
+    khpm_see(e, max);
+    b->hmax0 = e->base;
+    if (!khpm_plan(e, KHPM_GRUDGE, f, max, &wmax)) { b->hwrote = f != 1.0f ? e->base * f : 0; return; }      /* as wanted (another writer's factor in) */
+    if (cur <= 0) return;                  /* he is down: a dead man's object is left; hwrote unchanged, so a put-back is tried again (review wou2kgqnw) */
     wcur = cur * wmax / max;
     if (!klh_data((void *)(DWORD_PTR)(h + 8), &wmax, 4, "an AI heister's maximum health")) return;
     klh_data((void *)(DWORD_PTR)(h + 4), &wcur, 4, "an AI heister's health, at the same share of the new maximum");
-    b->hwrote = KLY_ABS(wmax - b->hmax0) > 0.01f ? wmax : 0;
+    khpm_done(e, wmax);
+    b->hwrote = f != 1.0f ? e->base * f : 0;      /* only once the write is in */
     if (kly.log) klog("grudge: record %d (%s): health %.1f of %.1f -> %.1f of %.1f (the game gave %.1f; x %.2f%s)", i, klb_who(r), cur, max, wcur, wmax, b->hmax0, f,
                       !act ? " = put back" : (r->flags & 2) && bs_health > 0 ? ", CrewHealth x BackstabHealth: he has turned" : ", CrewHealth");
 }
