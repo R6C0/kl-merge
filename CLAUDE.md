@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~06:10 - [c9] bs66 PASS 6/6 seats, 0 faults (Stage2MinS=150 MaxS=240, out_sw_1105a). First marks +134 / +164 / +187 s (bs62 +118 / +147.6 / +156). DD05 and DD03 are inside
+Arcade's 150-240 s window; DM03 is NOT: the van call at +124.6 s made the bot board-ready (stage byte 3), and kbr_stage_compose_w only floors byte 2, so it was marked at +134 s. Hits on humans:
+DM03 0 (LOS blocked 510/510), DD05 27, DD03 14. The MaxS log line wrongly says "no van call" after a van visit closed the gate (DD03, DD05). Not an install candidate yet; workflow ww1pyimtq
+holds marks before MinS on every stage + fixes the label, then a DM03 rebench. Install kit c9_1105a (CallFirst, VoiceClientRetry, BanterBots, Stage2Gate+Money0) is ready in C:/kl_build_1024.
+
 2026-11-05 ~05:45 - [c9] bs65 PASS 4/4 seats, 0 faults (OnlineBanterBots=1 + ByLook, out_vb_1105b, DM03 DD05). Bots now join the online banter: DM03 4/4, DD05 5/5 bot lines played on
 the client (all previous runs: 0); triple packets deduped. A Dead Men body (Hutchison) once spoke an unsuffixed squad-pool key (FA_ShootOffMoney_01): kltalk's squad fallback by record parity,
 the same pick Arcade makes, so not changed. Fix: the "banter bots" note wrote 237-364 lines a round, now once per digit. Install candidate together with OnlineVoice=1 + VoiceClientRetry=1
 (bs65 ran without the retry: 1 line held on DD05). Unexplained: DM03 slot-45 "stale ledger" 70/153 (bs63 0/183). Queue: bs66, bs67, ce pqq4.
-
-2026-11-05 ~05:15 - [c9] bs64 PASS 6/6 seats, 0 faults (out_cf_1105b). CallFirst: every early call by a carrier (+102/+171/+154 s); its "carries nothing" branch never fired (untested).
-Aboard after the call: DM03 7/7 (bs60: 5, 2 dead), DD05 6/7, DD03 6/7 (missing = the marked traitor); 0 deaths, so BotDeathProbe (prefix `bd:`) had nothing. DD03 CrewNoShield held 59 s
-(bs60 14 s), van unharmed but nothing shot it: keep default 0. Log label fix: the crewhold add line now says "shield off (timer-only)" when no shield. Install candidates: CallFirst rule,
-VoiceClientRetry. Queue: bs65 (running), bs66, bs67, ce pqq4.
 
 2026-11-05 ~02:20 - [ce] InShopSteps is live (pq_1104b, benched on all 16 maps; UNDO bat in C:\kl_build_1024\pq_1104b_install). Waiting for the owner's play test.
 QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq: [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND seat inis -> stock cut (B) ends round 1 13 s in,

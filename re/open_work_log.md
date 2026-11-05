@@ -1,3 +1,8 @@
+2026-11-05 ~06:10 - [c9] bs66 PASS 6/6 seats, 0 faults (Stage2MinS=150 MaxS=240, out_sw_1105a). First marks +134 / +164 / +187 s (bs62 +118 / +147.6 / +156). DD05 and DD03 are inside
+Arcade's 150-240 s window; DM03 is NOT: the van call at +124.6 s made the bot board-ready (stage byte 3), and kbr_stage_compose_w only floors byte 2, so it was marked at +134 s. Hits on humans:
+DM03 0 (LOS blocked 510/510), DD05 27, DD03 14. The MaxS log line wrongly says "no van call" after a van visit closed the gate (DD03, DD05). Not an install candidate yet; workflow ww1pyimtq
+holds marks before MinS on every stage + fixes the label, then a DM03 rebench. Install kit c9_1105a (CallFirst, VoiceClientRetry, BanterBots, Stage2Gate+Money0) is ready in C:/kl_build_1024.
+
 2026-11-05 ~05:55 - [c9] Read-only check (wfgf22nk5) of bs65 DM03 slot-45 "stale ledger" 70/153: not a defect. Two parked bots (2, 5) moved when the second, timer-end van arrived and the
 real Board tactic re-fired for ~1 s; no double bank, no money or tally change. Every repeat call (bs63 77, bs64 141) also re-runs klbf_brain_board_call (klbrain.c:862 sets pendBoard
 whatever the ledger says); possible guard `!aboard` there, read even with BoardLog off. Not changed (harmless, Arcade-shaped). OnlineBanterBots not involved (moderate confidence).
