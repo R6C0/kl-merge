@@ -1,3 +1,8 @@
+2026-11-05 ~09:05 - [c9] bs73 (bs72 + MarkGapMs=500, TEST 1268812a) PASS 6/6 seats, 0 faults/asserts. DD05: mark +156 s, 112 hits on humans, pendboard skipped 13x. DM03: 0 marks again (MinS race,
+workflow w4z06uj62: Arcade DM03 marks +118..166 s around the van call) -> new [Brain] OnlineBrainTraitorMinSVanRelease (f572df35b, default 0): a called van (1..4) ends the MinS hold; bs74 benches it
+(DM03 DD05 DD03 DM03, TEST 73967c79). DD03: mark +246 s, walked to 2.3 m of a human, fire test PASS 22x, still 0 hits (workflow wi16jr6dt digs). c9_1105c (NoBoard=2, ini only) is chained to
+INSTALL right after bs74 (UNDO bat in C:/kl_build_1024/c9_1105c_install).
+
 2026-11-05 ~08:35 - [c9] bs72 (NoBoard=2 + live keys, workflow w2xl0pq92 verified): DD03 PASS 2/2, mark +198 s (before the van call), marked bot never boarded (202 puppeteer + 13 boardall skips),
 82 hits, host downed once. DM03 PASS 2/2 but 0 marks: the crew's evaluates STOPPED at +135 s (all 7 aboard +131 s, van 3->5 +135.4 s), before MinS 150; bs70 (same dll + ini) kept evaluating to
 ~+171 s and marked at +151 s, so MinS 150 vs that stop is a race (cause of the stop not found yet). DD05 FAILED at the menu (SystemLink -> SysUIErrorScreen, first time, no level). New toggle
