@@ -1,3 +1,7 @@
+2026-11-05 ~15:20 - [c9] Owner back ("install all"): everything built was already live (c9_1105e, SHIP 288fb016). Switched on the two off-by-default features in the live ini:
+[Adrenaline] OnlineRevive=1 and [Bots] OnlineEscort=2 (backup <DD>/KLHook.ini.before-c9_1105f; copy it back to undo). OnlineRevive is unexercised on benches (needs a human by a downed bot):
+owner play is its first real test, grep "adren-online:" in KLHook.log. Owner rebooting: clears stuck kl2.exe 119840/129272; then delete <DD>/dinput8.dll.rv3-test-leftover.
+
 2026-11-05 ~13:00 - [c9] FOUND + FIXED (e965ae89f): NO BENCH EVER SAW A BOT DOWN because klbotdeath ([BotDeathProbe], on by default in every TEST build) detoured
 0x688190 = soldier slot 51, whose code bytes klbd_callable checks: botdown, cardown and shield were refused ("down routine ... not the one this build knows"). SHIP
 builds were not affected (probe off). The probe now skips site 3 unless [BotDeathProbe] Slot51=1. RV3B/C ran 12:10-12:46 (owner OK "continue til 3pm"): PASS on faults.

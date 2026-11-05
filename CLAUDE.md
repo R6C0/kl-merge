@@ -68,6 +68,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~15:20 - [c9] Owner back ("install all"): everything built was already live (c9_1105e, SHIP 288fb016). Switched on the two off-by-default features in the live ini:
+[Adrenaline] OnlineRevive=1 and [Bots] OnlineEscort=2 (backup <DD>/KLHook.ini.before-c9_1105f; copy it back to undo). OnlineRevive is unexercised on benches (needs a human by a downed bot):
+owner play is its first real test, grep "adren-online:" in KLHook.log. Owner rebooting: clears stuck kl2.exe 119840/129272; then delete <DD>/dinput8.dll.rv3-test-leftover.
+
 2026-11-05 ~13:00 - [c9] FOUND + FIXED (e965ae89f): NO BENCH EVER SAW A BOT DOWN because klbotdeath ([BotDeathProbe], on by default in every TEST build) detoured
 0x688190 = soldier slot 51, whose code bytes klbd_callable checks: botdown, cardown and shield were refused ("down routine ... not the one this build knows"). SHIP
 builds were not affected (probe off). The probe now skips site 3 unless [BotDeathProbe] Slot51=1. RV3B/C ran 12:10-12:46 (owner OK "continue til 3pm"): PASS on faults.
@@ -78,11 +82,6 @@ DM03 0 downs (no bot under 60 %). c9_1105e INSTALLED 13:15 (SHIP 288fb016 + Onli
 renamed to <DD>/dinput8.dll.rv3-test-leftover, delete once that process is gone). Live ini NOW OnlineHealthMul=5, OnlineCrewHealth=0 (the 11:50 edit had been undone by RV2's end-of-run ini restore).
 RV3A (DD05, klhpmax TEST 3e6cdd67, OnlineCrewHealth 2 + OnlineHealthMul 5): composition right, 7 bots 700 -> 3500 flat, 1 bot down; BUT both seats ended 'unhandled exception c0000005 at
 d3d9.dll+0x4b31f' at the same ms at run end (11:59:22, likely the bench's close; not yet checked against older benches). Next: that check, re-run RV3B, then an install kit with SHIP 8825e0a0.
-
-2026-11-05 ~11:55 - [c9] CODE FIX c260b654d: klhpmax_logic.h, one registry for every writer of a bot's max health (grudge, botfill, Fed); wanted = game's base x the factors, a new base drops them. klhpmax_test 302 checks, kl_tests 73/0.
-TEST out_c9_1105hp_test 3e6cdd67, SHIP out_c9_1105hp 8825e0a0 (not installed). RV2A (ini fix on the old dll) PASS: 14 bots 350 -> 3500 flat, faults 0, but still 0 downs (1702 cop hits x0.05 = ~2 hp each).
-LIVE INI 11:50: OnlineHealthMul 10 -> 5 (= stock Arcade survival with OnlineCopToBot 5, notes 10-26: ~430 hits vs 417; 10 doubled it). RV3 (C:/kl_build_1024/week_1028/rv3, TEST 3e6cdd67) chained after RV2:
-A DD05 OnlineCrewHealth 2 + OnlineHealthMul 5 (composition, expect 3500 flat), B DM03 OnlineHealthMul 5 alone (expect 1750 / 1400 and bot downs).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
