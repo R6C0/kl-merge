@@ -1,3 +1,7 @@
+2026-11-05 ~05:55 - [c9] Read-only check (wfgf22nk5) of bs65 DM03 slot-45 "stale ledger" 70/153: not a defect. Two parked bots (2, 5) moved when the second, timer-end van arrived and the
+real Board tactic re-fired for ~1 s; no double bank, no money or tally change. Every repeat call (bs63 77, bs64 141) also re-runs klbf_brain_board_call (klbrain.c:862 sets pendBoard
+whatever the ledger says); possible guard `!aboard` there, read even with BoardLog off. Not changed (harmless, Arcade-shaped). OnlineBanterBots not involved (moderate confidence).
+
 2026-11-05 ~05:45 - [c9] bs65 PASS 4/4 seats, 0 faults (OnlineBanterBots=1 + ByLook, out_vb_1105b, DM03 DD05). Bots now join the online banter: DM03 4/4, DD05 5/5 bot lines played on
 the client (all previous runs: 0); triple packets deduped. A Dead Men body (Hutchison) once spoke an unsuffixed squad-pool key (FA_ShootOffMoney_01): kltalk's squad fallback by record parity,
 the same pick Arcade makes, so not changed. Fix: the "banter bots" note wrote 237-364 lines a round, now once per digit. Install candidate together with OnlineVoice=1 + VoiceClientRetry=1
