@@ -48,6 +48,20 @@ int main(void)
     CHECK(klbv_key(key, sizeof key, "Multiplayer/%L/ReachlootArea_01_C%D", "F06", 3) && !strcmp(key, "Multiplayer/F06/ReachlootArea_01_C3"));
     CHECK(klbv_key(key, sizeof key, "100%%/%X", "F06", 3) && !strcmp(key, "100%/%X"));
     CHECK(!klbv_key(key, 8, "Multiplayer/%L/x", "F06", 3)); CHECK(strlen(key) < 8);
+    /* OnlineVoiceClientRetry park queue */
+    { struct klbv_park q; int sq[4], n;
+      memset(&q, 0, sizeof q);
+      CHECK(klbv_park_add(&q, 2, 3, 9, 1000)); CHECK(!klbv_park_add(&q, 2, 3, 9, 1100)); CHECK(q.n == 1);      /* same seq twice = once */
+      CHECK(!klbv_park_add(&q, 0, 3, 10, 1000)); CHECK(!klbv_park_add(&q, 3, 3, 10, 1000)); CHECK(!klbv_park_add(&q, 1, 1, 10, 1000)); CHECK(!klbv_park_add(&q, 1, 9, 10, 1000)); CHECK(q.n == 1);
+      CHECK(klbv_park_add(&q, 1, 4, 10, 2000)); CHECK(klbv_park_add(&q, 1, 5, 11, 3000)); CHECK(klbv_park_add(&q, 1, 6, 12, 4000)); CHECK(q.n == 4);
+      CHECK(!klbv_park_add(&q, 1, 7, 13, 4000)); CHECK(q.n == 4);                                                  /* full */
+      CHECK(klbv_park_expire(&q, 7000, KLBV_PARK_MAXAGE, sq, 4) == 0 && q.n == 4);                                 /* age 6000 is not older than 6000 */
+      n = klbv_park_expire(&q, 8001, KLBV_PARK_MAXAGE, sq, 4); CHECK(n == 2 && q.n == 2 && sq[0] == 9 && sq[1] == 10);
+      CHECK(q.e[0].seq == 11 && q.e[1].seq == 12);                                                                   /* order kept */
+      klbv_park_del(&q, 0); CHECK(q.n == 1 && q.e[0].seq == 12); klbv_park_del(&q, 5); klbv_park_del(&q, -1); CHECK(q.n == 1);
+      n = klbv_park_expire(&q, 20000, KLBV_PARK_MAXAGE, 0, 0); CHECK(n == 1 && q.n == 0);
+      memset(&q, 0, sizeof q); CHECK(klbv_park_add(&q, 2, 3, 1, 0xfffffff0u)); CHECK(klbv_park_expire(&q, 5, KLBV_PARK_MAXAGE, 0, 0) == 0);      /* across the 32-bit wrap */
+      CHECK(klbv_park_expire(&q, 7000, KLBV_PARK_MAXAGE, 0, 0) == 1); }
     /* leaf override */
     { char lf[64]; int u;
       CHECK(klbv_pick_leaf("", "JackPot_01", lf, sizeof lf, &u) && !strcmp(lf, "JackPot_01") && !u);

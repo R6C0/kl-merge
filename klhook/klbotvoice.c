@@ -34,11 +34,14 @@ static struct {
     struct { struct klbv_pk pk; int left; DWORD at; } pend[4];
     struct klbv_seqs sq; struct klbv_gaps gaps;
     DWORD escActor[16]; int role, srcSet; unsigned long srcAddr; DWORD srcOkAt; unsigned lastT; int haveT;
+    struct klbv_park park;      /* OnlineVoiceClientRetry: taken packets the gap / queue check refused (cleared by klbv_reset) */
 } klbv_t;
+/* why the last klbv_play returned 0: 0 = something else (or it played), 1 = ONLY the gap check or the speech-queue check (the retryable reasons) */
+static int klbv_why;
 
 /* HOST seq: kept across rounds (monotonic per session, so a client that never left the state window still takes round 2's packets); zeroed only when the session object changes */
 static int klbv_seq; static DWORD klbv_seqSm;
-/* log throttle per reason class (0 digit, 1 rules, 2 template, 3 gap, 4 queue, 5 host hold, 6 key read, 7 host gap, 8 pin): the first 10, then every 20th, so a flood of packets does not flood the log; not cleared by klbv_reset */
+/* log throttle per reason class (0 digit, 1 rules, 2 template, 3 gap, 4 queue, 5 host hold, 6 key read, 7 host gap, 8 pin, 9 bylook, 10 client retry): the first 10, then every 20th, so a flood of packets does not flood the log; not cleared by klbv_reset */
 static unsigned klbv_logN[16];
 static int klbv_note(int cls) { unsigned n = klbv_logN[cls & 15]++; return n < 10 || n % 20 == 0; }
 
@@ -48,7 +51,7 @@ static const char *klbv_ev_name(int ev) { return ev == KLBV_EV_LOOT ? "loot" : e
 
 static void klbv_reset(void)
 {
-    if (!klbv_t.sm && !klbv_t.sq.have && !klbv_t.rxN && !klbv_t.pend[0].left && !klbv_t.escActor[0]) return;
+    if (!klbv_t.sm && !klbv_t.sq.have && !klbv_t.rxN && !klbv_t.pend[0].left && !klbv_t.escActor[0] && !klbv_t.park.n) return;
     memset(&klbv_t, 0, sizeof klbv_t);
 }
 
@@ -121,15 +124,22 @@ static int klbv_look_key(int ev, int digit, const char *dkey, char *key, int cap
 /* build the key + play it on this seat. seat = "HOST" / "CLIENT". 1 = klk_say said it. */
 static int klbv_play(const char *seat, int ev, int digit, unsigned now, int check_gap)
 {
-    char scene[160], lk[64], key[200]; DWORD gs, rules; int r;
+    char scene[160], lk[64], key[200]; DWORD gs, rules; int r; struct klbv_gaps gsave;
+    klbv_why = 0;
     if (!klbv_digit_ok(digit)) { if (klbv_note(0)) klog("botvoice: %s event %d digit %d: not played (digit not in the OnlineLooks table / range)", seat, ev, digit); return 0; }
     if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLW_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || !klh_scene(scene, sizeof scene) || !klbv_slot(lk, sizeof lk)) {
         if (klbv_note(1)) klog("botvoice: %s event %d digit %d: not played (rules object / scene not readable)", seat, ev, digit);
         return 0;
     }
     if (!klbv_key(key, sizeof key, klbv_tl[ev == KLBV_EV_LOOT ? 0 : 1], lk, digit)) { if (klbv_note(2)) klog("botvoice: %s event %d: key template too long", seat, ev); return 0; }
-    if (check_gap && !klbv_gap_ok(&klbv_t.gaps, digit, ev, now)) { if (klbv_note(3)) klog("botvoice: %s event %d digit %d key %s: held back (gap: 15 s per bot and event, 2 s between lines)", seat, ev, digit, key); return 0; }
-    if (klbv_queue_full()) { if (klbv_note(4)) klog("botvoice: %s event %d digit %d key %s: held back (speech queue > 8 or unreadable)", seat, ev, digit, key); return 0; }
+    gsave = klbv_t.gaps;
+    if (check_gap && !klbv_gap_ok(&klbv_t.gaps, digit, ev, now)) { klbv_why = 1; if (klbv_note(3)) klog("botvoice: %s event %d digit %d key %s: held back (gap: 15 s per bot and event, 2 s between lines)", seat, ev, digit, key); return 0; }
+    if (klbv_queue_full()) {
+        klbv_why = 1;
+        if (klbv_cretry && check_gap) klbv_t.gaps = gsave;      /* OnlineVoiceClientRetry: the gap check above already recorded this line; undo it so the retry is not refused by its own record (off: today's behaviour, the record stays) */
+        if (klbv_note(4)) klog("botvoice: %s event %d digit %d key %s: held back (speech queue > 8 or unreadable)", seat, ev, digit, key);
+        return 0;
+    }
     if (klbv_bylook) {      /* OnlineVoiceByLook: the character's own line first; klk_say gives 0 when the level's .LOC has no such leaf, then the digit key below */
         char lkey[200], who[40];
         if (klbv_look_key(ev, digit, key, lkey, sizeof lkey, who, sizeof who)) {
@@ -225,7 +235,26 @@ static void klbv_rx(const char *pk, int len, DWORD now, unsigned long from)
     klbv_t.rxN++;
     if (!take) return;
     if (klbv_mode == 2) { char key[200]; if (klbv_make_key(k.ev, k.digit, key, sizeof key)) klog("botvoice: DRY CLIENT would say event %d digit %d key %s (mode 2: nothing played)", k.ev, k.digit, key); return; }
-    klbv_play("CLIENT", k.ev, k.digit, now, 1);
+    /* GUESS (known, accepted): a fresh packet that passes the gap check plays at once, ahead of older parked lines (they retry on the next tick, max age KLBV_PARK_MAXAGE): event order is only slightly off, never a double play or overlap. */
+    if (!klbv_play("CLIENT", k.ev, k.digit, now, 1) && klbv_cretry && klbv_why) {      /* OnlineVoiceClientRetry: refused only by the gap / queue check = park it, klbv_retry_tick tries again */
+        if (klbv_park_add(&klbv_t.park, k.ev, k.digit, k.seq, now)) { if (klbv_note(10)) klog("botvoice: CLIENT event %d digit %d seq %d: parked for a retry (%d parked)", k.ev, k.digit, k.seq, klbv_t.park.n); }
+        else if (klbv_note(10)) klog("botvoice: CLIENT event %d digit %d seq %d: park queue full / duplicate, dropped", k.ev, k.digit, k.seq);
+    }
+}
+
+/* CLIENT, every game-thread tick: expire the old parked lines, retry the rest oldest first. The retry still goes through klbv_gap_ok (inside klbv_play), so the 2 s spacing holds. */
+static void klbv_retry_tick(DWORD now)
+{
+    int i, ex[KLBV_PARK_N], n;
+    if (!klbv_t.park.n) return;
+    n = klbv_park_expire(&klbv_t.park, now, KLBV_PARK_MAXAGE, ex, KLBV_PARK_N);
+    for (i = 0; i < n && i < KLBV_PARK_N; i++) if (klbv_note(10)) klog("botvoice: CLIENT parked seq %d expired (older than %u ms), dropped", ex[i], KLBV_PARK_MAXAGE);
+    for (i = 0; i < klbv_t.park.n; ) {
+        int ev = klbv_t.park.e[i].ev, dg = klbv_t.park.e[i].digit, sq = klbv_t.park.e[i].seq; unsigned at = klbv_t.park.e[i].at;
+        if (klbv_play("CLIENT", ev, dg, now, 1)) { if (klbv_note(10)) klog("botvoice: CLIENT parked event %d digit %d seq %d: retried and played after %u ms", ev, dg, sq, (unsigned)(now - at)); klbv_park_del(&klbv_t.park, i); }
+        else if (klbv_why) i++;      /* still the gap / queue: stay parked (until it expires) */
+        else { if (klbv_note(10)) klog("botvoice: CLIENT parked event %d digit %d seq %d: retry refused for another reason, dropped", ev, dg, sq); klbv_park_del(&klbv_t.park, i); }
+    }
 }
 
 /* [BotFill] OnlineVoiceProbe (default 0, recommended off until benched; TEST build only writes code, UNTESTED): LOG ONLY probe of the speech-group entry 0x58a070 (this = speech manager,
@@ -355,6 +384,7 @@ static void klbv_tick(int game_thread)
     if (!klbv_mode || !game_thread || !klh_exe_ok) return;
     if (!klbv_round(&sm, &role)) { klbv_reset(); return; }
     if (role == 2 && klbv_t.sm == sm) klbv_send_due(GetTickCount());
+    if (role == 3 && klbv_t.sm == sm && klbv_cretry && klbv_mode == 1) klbv_retry_tick(GetTickCount());
 }
 
 #endif /* KLBOTVOICE_C */

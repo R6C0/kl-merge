@@ -82,6 +82,40 @@ static int klbv_gap_ok(struct klbv_gaps *g, int digit, int ev, unsigned now)
     return 1;
 }
 
+/* OnlineVoiceClientRetry: the client's small queue of taken packets the gap / speech-queue check refused. Fixed size, oldest first. at = the wrapping 32-bit ms clock. */
+#define KLBV_PARK_N      4
+#define KLBV_PARK_MAXAGE 6000u    /* ms: GUESS, longer than the 2 s global gap times a few queued lines, shorter than a line stays relevant */
+struct klbv_park { int n; struct { int ev, digit, seq; unsigned at; } e[KLBV_PARK_N]; };
+
+/* 1 = parked; 0 = full or a bad field or the same seq is already parked (nothing changes) */
+static int klbv_park_add(struct klbv_park *q, int ev, int digit, int seq, unsigned now)
+{
+    int i;
+    if (ev < 1 || ev >= KLBV_NEV || digit < 2 || digit > 8 || q->n >= KLBV_PARK_N) return 0;
+    for (i = 0; i < q->n; i++) if (q->e[i].seq == seq) return 0;
+    q->e[q->n].ev = ev; q->e[q->n].digit = digit; q->e[q->n].seq = seq; q->e[q->n].at = now; q->n++;
+    return 1;
+}
+
+/* drop entry i (order of the rest kept) */
+static void klbv_park_del(struct klbv_park *q, int i)
+{
+    if (i < 0 || i >= q->n) return;
+    for (; i + 1 < q->n; i++) q->e[i] = q->e[i + 1];
+    q->n--;
+}
+
+/* removes every entry older than maxage (age > maxage, wrapping clock); returns how many. If out != 0 the seqs of the first (up to cap) removed are written there. */
+static int klbv_park_expire(struct klbv_park *q, unsigned now, unsigned maxage, int *out, int cap)
+{
+    int i = 0, k = 0;
+    while (i < q->n) {
+        if ((unsigned)(now - q->e[i].at) > maxage) { if (out && k < cap) out[k] = q->e[i].seq; k++; klbv_park_del(q, i); }
+        else i++;
+    }
+    return k;
+}
+
 /* the key from a template: "%L" = the level key (F01), "%D" = the digit. Anything else is copied; "%%" is a '%'. 1 = whole key written, 0 = cap too small. */
 static int klbv_key(char *out, int cap, const char *tmpl, const char *level, int digit)
 {
