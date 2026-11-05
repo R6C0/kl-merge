@@ -48,6 +48,29 @@ int main(void)
     CHECK(klbv_key(key, sizeof key, "Multiplayer/%L/ReachlootArea_01_C%D", "F06", 3) && !strcmp(key, "Multiplayer/F06/ReachlootArea_01_C3"));
     CHECK(klbv_key(key, sizeof key, "100%%/%X", "F06", 3) && !strcmp(key, "100%/%X"));
     CHECK(!klbv_key(key, 8, "Multiplayer/%L/x", "F06", 3)); CHECK(strlen(key) < 8);
-    printf("klbotvoice_test: %d checks, %d failed\n", checks, fails);
+    /* leaf override */
+    { char lf[64]; int u;
+      CHECK(klbv_pick_leaf("", "JackPot_01", lf, sizeof lf, &u) && !strcmp(lf, "JackPot_01") && !u);
+      CHECK(klbv_pick_leaf(0, "JackPot_01", lf, sizeof lf, &u) && !strcmp(lf, "JackPot_01") && !u);
+      CHECK(klbv_pick_leaf("JackPot_03", "JackPot_01", lf, sizeof lf, &u) && !strcmp(lf, "JackPot_03") && u);
+      CHECK(klbv_pick_leaf("FA_JackPot_04", "JackPot_01", lf, sizeof lf, &u) && !strcmp(lf, "FA_JackPot_04") && u);
+      CHECK(klbv_pick_leaf("a/b", "JackPot_01", lf, sizeof lf, &u) && !strcmp(lf, "JackPot_01") && !u);      /* a path is not a leaf */
+      CHECK(klbv_pick_leaf("a b", "JackPot_01", lf, sizeof lf, &u) && !strcmp(lf, "JackPot_01") && !u);
+      CHECK(klbv_pick_leaf("a\\b", "JackPot_01", lf, sizeof lf, &u) && !u);
+      CHECK(klbv_pick_leaf("abcdefgh", "X", lf, 8, &u) && !strcmp(lf, "X") && !u);                          /* override does not fit */
+      CHECK(klbv_pick_leaf("YouEsc_01", 0, lf, sizeof lf, &u) && u);
+      CHECK(!klbv_pick_leaf("", "", lf, sizeof lf, &u) && !lf[0]); CHECK(!klbv_pick_leaf("", 0, lf, sizeof lf, 0));
+      CHECK(!klbv_pick_leaf("a/b", "TooLongDerived", lf, 8, &u)); CHECK(!klbv_pick_leaf("x", "y", lf, 1, &u)); }
+    /* speech probe helpers */
+    { int n = 0, k, got = 0;
+      CHECK(klbv_probe_group_idx(0x1000, 0x1000) == 0 && klbv_probe_group_idx(0x1018, 0x1000) == 1 && klbv_probe_group_idx(0x1000 + 0x8b8, 0x1000) == 93);
+      CHECK(klbv_probe_group_idx(0x1001, 0x1000) == -1 && klbv_probe_group_idx(0x0fff, 0x1000) == -1 && klbv_probe_group_idx(0x3000, 0x1000) == -1);
+      CHECK(klbv_probe_group_idx(0, 0x1000) == -1 && klbv_probe_group_idx(0x1000, 0) == -1);
+      CHECK(!strcmp(klbv_probe_spk(0), "slot") && !strcmp(klbv_probe_spk(7), "slot") && !strcmp(klbv_probe_spk(8), "?"));
+      CHECK(!strcmp(klbv_probe_spk(0xfe), "crew") && !strcmp(klbv_probe_spk(0xfffffffeul), "crew") && !strcmp(klbv_probe_spk(0xfa), "glazer"));
+      CHECK(!strcmp(klbv_probe_spk(0xfd), "police") && !strcmp(klbv_probe_spk(0xfc), "driver") && !strcmp(klbv_probe_spk(0xfb), "undercover") && !strcmp(klbv_probe_spk(0xff), "?"));
+      for (k = 0; k < 500; k++) got += klbv_probe_take(&n, KLBV_PROBE_CAP);
+      CHECK(got == KLBV_PROBE_CAP && n == KLBV_PROBE_CAP); n = -1; CHECK(!klbv_probe_take(&n, 5)); }
+    printf("klbotvoice_test:%d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

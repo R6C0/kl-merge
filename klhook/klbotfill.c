@@ -49,7 +49,9 @@ static int klbf_lk = 0; static DWORD klbf_lk_sm, klbf_lk_sig;      /* [BotFill] 
 static int klcl_on;      /* OnlineLooks=1 (klcrewlook.c; set in klbf_init) */
 static int klbv_mode;      /* OnlineVoice (klbotvoice.c): 0 off, 1 send + play, 2 log only (set in klbf_init) */
 static char klbv_tl[2][160];      /* its key templates: [0] loot grab, [1] boarded / escaped (GUESS spellings, ini overrides) */
-static int klbv_bylook;      /* OnlineVoiceByLook (klbotvoice.c): 1 = a seat speaks the line of the character its own KLSYL look table holds for the digit (KLVoice/<Name>/<leaf>), the digit key stays the fallback */
+static char klbv_leaf[2][64];      /* [BotFill] OnlineVoiceLeafLoot / OnlineVoiceLeafEsc: the KLVoice leaf the ByLook path uses ("" = derived from the digit key, today's behaviour) */
+static int klbv_probe_on;      /* [BotFill] OnlineVoiceProbe (klbotvoice.c): log-only detour of the speech-group entry 0x58a070 (TEST build, SessionSafe=0) */
+static int klbv_bylook;    /* OnlineVoiceByLook (klbotvoice.c): 1 = a seat speaks the line of the character its own KLSYL look table holds for the digit (KLVoice/<Name>/<leaf>), the digit key stays the fallback */
 static void klbv_event(int slot, int ev);      /* klbotvoice.c: the host's bot did an event (1 loot grab, 2 boarded) */
 static int klls_on;       /* OnlineLootSync=1 (kllootsync.c; set in klbf_init) */
 static void klls_summary(void);
@@ -252,6 +254,11 @@ static void klbf_init(void)
     if (!klbv_tl[0][0]) strcpy(klbv_tl[0], "Multiplayer/JackPot/JackPot_01_C%D");      /* an empty template would reach klk_say("") */
     if (!klbv_tl[1][0]) strcpy(klbv_tl[1], "Multiplayer/You_Esc/YouEsc_01_C%D");
     klbv_bylook = GetPrivateProfileIntA("BotFill", "OnlineVoiceByLook", 0, klh_ini) != 0;      /* (recommended off until benched) needs OnlineVoice=1 + OnlineLooks=1; Dead Men bodies speak their own KLVoice line */
+    GetPrivateProfileStringA("BotFill", "OnlineVoiceLeafLoot", "", klbv_leaf[0], sizeof klbv_leaf[0], klh_ini);      /* (recommended off until benched) ByLook only; "" = JackPot_01 derived from the key; DM03 .LOC has JackPot_01..04, FA_JackPot_04..06 */
+    GetPrivateProfileStringA("BotFill", "OnlineVoiceLeafEsc", "", klbv_leaf[1], sizeof klbv_leaf[1], klh_ini);      /* (recommended off until benched) ByLook only; "" = boarded stays the digit key; DM03 .LOC has YouEsc_01..04, FA_YouEscaped01..03 */
+    klbv_probe_on = GetPrivateProfileIntA("BotFill", "OnlineVoiceProbe", 0, klh_ini) != 0;      /* (recommended off until benched) log-only detour of 0x58a070, klbotvoice.c; TEST build + SessionSafe=0 */
+    if (klbv_probe_on) klog("botfill: OnlineVoiceProbe=1 UNTESTED (recommended off): log-only detour of the speech-group entry 0x58a070 (TEST build, hashed range: needs SessionSafe=0), 200 lines per round");
+    if (klbv_mode && klbv_bylook && (klbv_leaf[0][0] || klbv_leaf[1][0])) klog("botfill: OnlineVoiceLeafLoot='%s' OnlineVoiceLeafEsc='%s' (ByLook leaf overrides; an invalid name is ignored; GUESS: the leaf exists in the level .LOC)", klbv_leaf[0], klbv_leaf[1]);
     if (klbv_mode && klbv_bylook) klog("botfill: OnlineVoiceByLook=1: a seat plays KLVoice/<Name>/<leaf> of the character it applied for the digit (klcl_t), the digit key when that has no line (GUESS: leaf = the digit key minus folder and _C<n>)");
     if (klbv_mode) klog("botfill: OnlineVoice=%d: the host's AI heister events (loot grab, boarded) %s (KLSYV on UDP %d, klbotvoice.c); keys '%s' / '%s' (GUESS); needs [Voice] Enable / Online / OnlineTalk / OnlineTalkNoScore and OnlineLooks=1%s", klbv_mode, klbv_mode == 2 ? "are only LOGGED" : "are sent and played on every seat", 27415, klbv_tl[0], klbv_tl[1], klbf_lk == 1 ? "" : " (OnlineLooks is not 1: only the digit range is checked)");
     klls_on = GetPrivateProfileIntA("BotFill", "OnlineLootSync", 0, klh_ini) != 0;      /* (recommended off) kllootsync.c: the host sends what the bots carry / banked (KLSYB, UDP 27415), every seat shows one HUD line */

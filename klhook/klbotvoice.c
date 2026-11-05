@@ -102,15 +102,17 @@ static int klbv_make_key(int ev, int digit, char *key, int cap)
    no character, a name that is not a Dead Men body, wardrobe unreadable, key too long): the caller keeps the digit key. No packet field: the KLSYL table is already on every seat. */
 static int klbv_look_key(int ev, int digit, const char *dkey, char *key, int cap, char *who, int wcap)
 {
-    char leaf[64]; int ch;
+    char leaf[64], dleaf[64]; int ch, used;
     if (!klbv_bylook || digit < 2 || digit > 8) return 0;
     /* loot only: tools/kl_dmvoice.py keeps YouEsc / AllEsc stock (KEEP_STOCK), so no level .LOC has KLVoice/<Name>/YouEsc_01 and boarded always took the fallback (review of 216d5f0b9) */
-    if (ev != KLBV_EV_LOOT) return 0;
+    if (ev != KLBV_EV_LOOT && !(ev == KLBV_EV_ESCAPE && klbv_leaf[1][0])) return 0;      /* boarded only with an explicit OnlineVoiceLeafEsc (DM03's .LOC still carries YouEsc_* leaves from an older kl_dmvoice build; DM07's has no KLVoice at all) */
     if (!klcl_on || !klcl_t.e[digit - 1].have || !(ch = klcl_t.e[digit - 1].ch)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d: no look-table entry / character (OnlineLooks off, stock map or the bot keeps his body): digit key", ev, digit); return 0; }
     /* the look must be APPLIED on this seat (klcl_note 1 = applied, 4 = model taken, as klcl_bot_look): a received but skipped / pending record leaves the Dog Days body, whose digit voice fits */
     if (klcl_t.a[digit - 1].epoch != klcl_t.epoch || (klcl_t.a[digit - 1].last != 1 && klcl_t.a[digit - 1].last != 4)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d ch %d: look not applied on this seat (outcome %d): digit key", ev, digit, ch, klcl_t.a[digit - 1].last); return 0; }
     if (!klcl_bot_name(ch, who, wcap) || !kvo_name_of(who)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d ch %d: wardrobe name unreadable or not a Dead Men body: digit key", ev, digit, ch); return 0; }
-    if (!kvo_leaf(dkey, leaf)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d: key %s has no _C<n> leaf: digit key", ev, digit, dkey); return 0; }
+    if (!kvo_leaf(dkey, dleaf)) dleaf[0] = 0;
+    /* OnlineVoiceLeafLoot / LeafEsc: an explicit leaf replaces the derived one; the per-name fallback to the digit key stays (klbv_play) */
+    if (!klbv_pick_leaf(klbv_leaf[ev == KLBV_EV_LOOT ? 0 : 1], dleaf, leaf, sizeof leaf, &used)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d: key %s has no _C<n> leaf: digit key", ev, digit, dkey); return 0; }
     if (_snprintf(key, cap, "KLVoice/%s/%s", who, leaf) < 0 || (int)strlen(key) >= cap - 1) return 0;
     key[cap - 1] = 0;
     return 1;
@@ -226,9 +228,70 @@ static void klbv_rx(const char *pk, int len, DWORD now, unsigned long from)
     klbv_play("CLIENT", k.ev, k.digit, now, 1);
 }
 
+/* [BotFill] OnlineVoiceProbe (default 0, recommended off until benched; TEST build only writes code, UNTESTED): LOG ONLY probe of the speech-group entry 0x58a070 (this = speech manager,
+   [esp+4] group, [esp+8] other line, [esp+0xc] speaker byte, [esp+0x10] x, ret 0x10; re/bots_voice.md 1.2). Answers which events (by return address and group) the stock ONLINE rules
+   already say on each seat. Disassembled 11-05 (debug/dasm.py): prologue 51 a1 98 e5 68 01 = push ecx ; mov eax,[0x168e598] - whole instructions, absolute operand, stolen 6 bytes.
+   0x58a070 is in the hashed range [0x584000,0x591000) (klranges.h): installed only with SessionSafe=0 (direct policy), like FireProbe8. NOT in the HUD's code guard list (klhud.c chk[]: 0x8ccde0 0x598460
+   0x817810 0x896e50 0x5a6d40 0x81e090 0x5a3e90), so no ProbeJmp is needed. The original always runs (the stub runs the stolen bytes after the handler); nothing is written but the detour.
+   Speaker: the game passes a BYTE (slot 0..7 / -2 crew / -6 Glazer ...), not an actor, so 'bot or human' is NOT decidable from it (GUESS: it needs the rules' player list): the line carries
+   the kind of the byte, the count of host-tracked bot actors (klbf_ob) and whether this seat is host (role 2) or client (3). Game thread only, every read under __try, 3 faults switch it off.
+   LOG: botvoice: probe say #N <HOST|CLIENT> group %08lx idx I|-1 (mgr %08lx + 0x%lx) lines C last-said %.1f other %08lx speaker %d (kind) x %08lx ra %08lx bots-tracked B
+        botvoice: probe round: calls C logged L (cap 200)        (at the end of a round)  */
+#define KLBV_PROBE_VA 0x58a070
+static const BYTE klbv_probe_bytes[6] = { 0x51, 0xa1, 0x98, 0xe5, 0x68, 0x01 };
+static int klbv_probe_state, klbv_probe_flt, klbv_probe_n, klbv_probe_role;
+static long klbv_probe_calls;
+static DWORD klbv_probe_tid;
+static BYTE *klbv_probe_stub;
+static void __cdecl klbv_probe_hit(int id, KLBR_F3REGS *r)      /* called by the stub on the game thread */
+{
+    DWORD sp, grp, other, spk, x, ra, cnt = 0, last = 0, mgr; int idx, bots = 0, i; float lastf;
+    (void)id;
+    if (!klbv_probe_on || !r || klbv_probe_flt >= 3 || !klbv_probe_role || GetCurrentThreadId() != klbv_probe_tid) return;
+    klbv_probe_calls++;
+    if (!klbv_probe_take(&klbv_probe_n, KLBV_PROBE_CAP)) return;
+    __try {
+        sp = r->esp; mgr = r->ecx; ra = klh_rd32(sp); grp = klh_rd32(sp + 4); other = klh_rd32(sp + 8); spk = klh_rd32(sp + 12); x = klh_rd32(sp + 16);
+        if (grp > 0xffff) { cnt = klh_rd32(grp + 4); last = klh_rd32(grp + 0x14); }
+        memcpy(&lastf, &last, 4);
+        idx = klbv_probe_group_idx(grp, mgr);
+        for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor) bots++;
+        klog("botvoice: probe say #%d %s group %08lx idx %d (mgr %08lx + 0x%lx) lines %lu last-said %.1f other %08lx speaker %d (%s) x %08lx ra %08lx bots-tracked %d",
+             klbv_probe_n, klbv_probe_role == 2 ? "HOST" : "CLIENT", (unsigned long)grp, idx, (unsigned long)mgr, (unsigned long)(grp - mgr), (unsigned long)cnt, (double)lastf, (unsigned long)other,
+             (int)(signed char)(spk & 0xff), klbv_probe_spk(spk), (unsigned long)x, (unsigned long)ra, bots);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { klbv_probe_flt++; klog("botvoice: probe: fault in the handler: %d of 3 allowed", klbv_probe_flt); }
+}
+static void klbv_probe_install(void)      /* once, game thread; a refusal is final for the run */
+{
+    BYTE cur[16], jmp[16]; BYTE *at = KLH_VA(KLBV_PROBE_VA); DWORD stub; int n;
+    if (klbv_probe_state) return;
+    klbv_probe_state = -1;
+    if (klh_is_hashed(KLBV_PROBE_VA, 6) && klh_policy != KLH_DIRECT) { klog("botvoice: probe: 0x%x is inside a hashed range: NOT installed (SessionSafe=0 is needed, a direct-boot run only)", KLBV_PROBE_VA); return; }
+    memset(cur, 0, sizeof cur);
+    if (!klh_rd((DWORD_PTR)at, cur, 6) || memcmp(cur, klbv_probe_bytes, 6)) { klog("botvoice: probe: 0x%x bytes differ from 51 a1 98 e5 68 01 (got %02x %02x %02x %02x %02x %02x): NOT installed", KLBV_PROBE_VA, cur[0], cur[1], cur[2], cur[3], cur[4], cur[5]); return; }
+    if (!(klbv_probe_stub = (BYTE *)VirtualAlloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) { klog("botvoice: probe: no memory for the stub: off"); return; }
+    stub = (DWORD)(DWORD_PTR)klbv_probe_stub;
+    n = kbr_f3_emit(klbv_probe_stub, stub, 1, (DWORD)(DWORD_PTR)klbv_probe_hit, klbv_probe_bytes, 6, (DWORD)(DWORD_PTR)(at + 6));
+    if (!n) { klog("botvoice: probe: stub not built"); return; }
+    kbr_f3_jmp(jmp, (DWORD)(DWORD_PTR)at, stub, 6);
+    klbv_probe_tid = GetCurrentThreadId();
+    if (klh_poke(at, klbv_probe_bytes, 6, jmp, 6, "botvoice: OnlineVoiceProbe detour")) { klbv_probe_state = 1; klog("botvoice: probe: 0x%x installed (6 bytes stolen, stub %d bytes), log only", KLBV_PROBE_VA, n); }
+    else klog("botvoice: probe: 0x%x NOT installed (refused by the patch guard - a SHIP build writes no code - or the bytes differ)", KLBV_PROBE_VA);
+}
+static void klbv_probe_tick(void)      /* game thread: install once, role and per-round counters */
+{
+    DWORD sm, role;
+    if (!klbv_probe_on) return;
+    if (!klbv_probe_state) klbv_probe_install();
+    if (klbv_round(&sm, &role)) { klbv_probe_role = (int)role; return; }
+    if (klbv_probe_role && klbv_probe_calls) klog("botvoice: probe round: calls %ld logged %d (cap %d)", klbv_probe_calls, klbv_probe_n, KLBV_PROBE_CAP);
+    klbv_probe_role = 0; klbv_probe_n = 0; klbv_probe_calls = 0;
+}
+
 static void klbv_tick(int game_thread)
 {
     DWORD sm, role;
+    if (klbv_probe_on && game_thread && klh_exe_ok) klbv_probe_tick();
     if (!klbv_mode || !game_thread || !klh_exe_ok) return;
     if (!klbv_round(&sm, &role)) { klbv_reset(); return; }
     if (role == 2 && klbv_t.sm == sm) klbv_send_due(GetTickCount());

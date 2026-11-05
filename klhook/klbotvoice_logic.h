@@ -100,4 +100,49 @@ static int klbv_key(char *out, int cap, const char *tmpl, const char *level, int
     return 1;
 }
 
+/* OnlineVoiceLeafLoot / OnlineVoiceLeafEsc: the KLVoice leaf of the ByLook path. ovr = the ini text ("" = off). Returns the leaf to use in out (cap bytes):
+ * the override when it is a plain leaf name (1..cap-1 chars, no '/', '\\', no control char or space, not edge-blank), else the derived leaf (the digit key minus folder and _C<n>, today's behaviour).
+ * 0 = no leaf at all (both empty / too long). *used = 1 when the override won. A bad override is ignored (derived wins) so a typo never silences the line. */
+static int klbv_pick_leaf(const char *ovr, const char *derived, char *out, int cap, int *used)
+{
+    int i, n, ok = 0;
+    if (used) *used = 0;
+    if (cap < 2) return 0;
+    if (ovr && ovr[0]) {
+        n = (int)strlen(ovr);
+        ok = n < cap;
+        for (i = 0; ok && i < n; i++) { unsigned char c = (unsigned char)ovr[i]; if (c <= ' ' || c == '/' || c == '\\' || c == 127) ok = 0; }
+        if (ok) { memcpy(out, ovr, (size_t)n + 1); if (used) *used = 1; return 1; }
+    }
+    if (!derived || !derived[0] || (int)strlen(derived) >= cap) { out[0] = 0; return 0; }
+    memcpy(out, derived, strlen(derived) + 1);
+    return 1;
+}
+
+/* OnlineVoiceProbe (log only; klbotvoice.c): pure helpers for the 0x58a070 speech-group probe. */
+#define KLBV_PROBE_CAP 200      /* log lines per round */
+/* the speech manager keeps its groups 0x18 apart from mgr+0 (re/bots_voice.md 1.1: lists at +0x00 .. +0x8b8); -1 = group is not at such an offset (then log the raw pointer only) */
+static int klbv_probe_group_idx(unsigned long group, unsigned long mgr)
+{
+    unsigned long off;
+    if (!group || !mgr || group < mgr) return -1;
+    off = group - mgr;
+    if (off >= 0x1000ul || off % 0x18ul) return -1;
+    return (int)(off / 0x18ul);
+}
+/* the speaker byte (third pushed argument): 0..7 a player slot, -2 crew, -6 Glazer; -3 police, -4 driver, -5 undercover are the ASSUMPTION of re/bots_voice.md 1.2. A slot does NOT say bot or human (GUESS: it needs the rules player list). */
+static const char *klbv_probe_spk(unsigned long raw)
+{
+    int b = (int)(signed char)(raw & 0xffu);
+    if (b >= 0 && b <= 7) return "slot";
+    switch (b) { case -2: return "crew"; case -3: return "police"; case -4: return "driver"; case -5: return "undercover"; case -6: return "glazer"; default: return "?"; }
+}
+/* the per-round line cap: 1 and count it while *n < cap, else 0 (the call is still counted by the caller) */
+static int klbv_probe_take(int *n, int cap)
+{
+    if (*n < 0 || *n >= cap) return 0;
+    (*n)++;
+    return 1;
+}
+
 #endif /* KLBOTVOICE_LOGIC_H */
