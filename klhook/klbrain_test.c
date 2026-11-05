@@ -242,6 +242,12 @@ int main(void)
         CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, 250, 300, 240, &ev) == 1 && kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, 500, 300, 240, &ev) == 2, "stage2 window: max below min: min wins until it passes, then max opens");
         CHECK(kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 0, 0, -1, 150, 240, &ev) == 1 && kbr_stage_compose_w(1, 0, 0, 5, 0, 0, 1, 0, -1, 150, 240, &ev) == 2, "stage2 window: unknown round clock = the gate alone");
         CHECK(kbr_stage_compose_w(1, 0, 0, 0, 0, 0, 1, 0, 10, 150, 240, &ev) == 1 && kbr_stage_compose_w(1, 0, 1, 5, 0, 0, 1, 0, 10, 150, 240, &ev) == 3 && kbr_stage_compose_w(1, 0, 0, 0, 0, 0, 0, 0, 999, 150, 240, &ev) == 1, "stage2 window: not carrying stays 1, aboard stays 3, MaxS never lifts a bot with nothing");
+        /* MinS mark hold (bs66): the byte of a board-ready bot stays 3 (the real Board tactic reads it); only the Traitor evaluate is held */
+        CHECK(kbr_stage_compose_w(1, 1, 0, 5, 3, 1, 1, 0, 134, 150, 0, &ev) == 3 && kbr_mark_held(1, 134, 150), "mark hold: board-ready bot at +134 s shows byte 3 (boarding unaffected) and its mark is held before MinS");
+        CHECK(!kbr_mark_held(1, 150, 150) && !kbr_mark_held(1, 200, 150), "mark hold: released at MinS and after");
+        CHECK(kbr_mark_held(1, 0, 150) && kbr_mark_held(1, 149, 150), "mark hold: held from round start up to MinS - 1");
+        CHECK(!kbr_mark_held(0, 10, 150) && !kbr_mark_held(1, 10, 0) && !kbr_mark_held(1, -1, 150) && !kbr_mark_held(1, 10, -5), "mark hold: gate off / MinS 0 / unknown clock = no change (defaults)");
+        CHECK(kbr_stage_compose_w(1, 1, 1, 5, 4, 0, 0, 0, 10, 150, 0, &ev) == 3, "mark hold: aboard byte stays 3 before MinS");
     }
     {   /* BoardStage: stage byte and the deferral clock */
         unsigned long since = 0;

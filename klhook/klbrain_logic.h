@@ -272,6 +272,13 @@ static int kbr_stage_compose_w(int gate, int board_stage, int aboard, long tally
     return st;
 }
 
+/* MinS mark hold (11-05, bs66): 1 = the Traitor evaluate answer must be held at 0 (no mark) now. Only with the gate on, min_s > 0 and a known round clock (elapsed_s >= 0) and elapsed_s < min_s;
+   whatever the stage byte is (a board-ready bot shows byte 3, which the real Board tactic also reads, so the byte itself is not floored). gate 0 / min_s 0 / unknown clock = 0 = no change. */
+static int kbr_mark_held(int gate, long elapsed_s, long min_s)
+{
+    return gate && min_s > 0 && elapsed_s >= 0 && elapsed_s < min_s;
+}
+
 /* BoardStage: should the hook's own boarding path (klbotfill.c) wait for the real Board tactic? live = the real tactic holds the bot now (fresh Board evaluate > 0, not revoked). *since = tick the deferral
    began (0 none; |1 stamp). Defers up to max_ms per bot, then -> 0 (fall back, so no bot is stranded). A tactic that stops being live ends the deferral at once (-> 0); the clock is NOT reset by that, so the per-bot total stays capped. */
 /* BoardStage grace (review 11-03 defect 1): a bot can stand in the box before its first nonzero Board evaluate (stage 3 is shown by the 1 s sync only). While the van waits (staged) and the bot has
