@@ -1,3 +1,8 @@
+2026-11-05 ~01:30 - [c9] bs57 rerun PASS 4/4 (SB57A DD03, SB57B DD01 online 2 seats + ARC57 DD03/DD01 Arcade; TEST out_s2t_1104b, 0 faults). DD01 online = Arcade (boarding object
+from state 1, crewhold 45 s, real Board slot 45). DD03 heli: [+0x1e0] = 0 in states 1-4 in BOTH modes, but Arcade's crewhold still held ~60 s while online returns early (kle_boarding fails): 15 s
+dwell. Workflow wr2z2gihl: [BotFill] OnlineVanCrewPlace + OnlineVanBoardPoll. Also pushed: d91fa070c OnlineVanCallFirst (bench bs60), d8abd1499/036707148 voice leaf keys + OnlineVoiceProbe=2
+(bench bs61 DM03), re/voice_parity_1105.md. Queue: bs58, bs59, ce pqq2, bs60, bs61.
+
 2026-11-04 ~05:22 - [ce] pq16 (installed pq_1104b_test, live ini, lobby scripts from pq5/pq10/pq12): DM06 DM01 DM02 DM09 DM07 DD10 PASS 6/6, 12/12 seats 'inshop' ->
 weapon list (host F3 at mode 0 applied after 624-671 ms, client F2 at mode 1 after 311-313 ms), both seats round 2, 0 faults. With pq14/pq14c/pq15 InShopSteps
 is benched on all 16 maps the scoreboard path covers (9 stock FA + 7 DM pool). no crash involved

@@ -68,6 +68,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~01:30 - [c9] bs57 rerun PASS 4/4 (SB57A DD03, SB57B DD01 online 2 seats + ARC57 DD03/DD01 Arcade; TEST out_s2t_1104b, 0 faults). DD01 online = Arcade (boarding object
+from state 1, crewhold 45 s, real Board slot 45). DD03 heli: [+0x1e0] = 0 in states 1-4 in BOTH modes, but Arcade's crewhold still held ~60 s while online returns early (kle_boarding fails): 15 s
+dwell. Workflow wr2z2gihl: [BotFill] OnlineVanCrewPlace + OnlineVanBoardPoll. Also pushed: d91fa070c OnlineVanCallFirst (bench bs60), d8abd1499/036707148 voice leaf keys + OnlineVoiceProbe=2
+(bench bs61 DM03), re/voice_parity_1105.md. Queue: bs58, bs59, ce pqq2, bs60, bs61.
+
 2026-11-04 ~18:00 - [c9] INSTALLED c9_1104c (owner: 'okay install all'): C:\kl_build_1024\c9_1104c_install (INSTALL/UNDO bats, backups <DD>\*.before-c91104c). SHIP dll from f958539ac
 (md5 69f534cf, keeps ce's InShopSteps; kl_tests 71 pass) + 80 benched keys: [Brain] Arcade traitor/board/loot set, [BotFill] crewhold/doorhold/gather/legs/DM09 way, [Bots] CrewHealth 2,
 [Lobby] TimeAuto=6, [HUD] KilledBy/OnlineBoardBots, [CrewHop], [Names] OnlineLobby. Kept the owner's 11-02 back-offs (DropFollow 0, TacticsCarry 2, DropTake 0, BoardAllNear 0); Stage2Gate and all
@@ -77,11 +82,6 @@ probe/log keys left off. Zombie kl2.exe pid 129272 (access denied) blocks the ba
 SB57B DD01, ARC57 DD03). Bench dlls must come from build_auto.bat (TEST). c54c3b264: [Brain] OnlineBrainTraitorStage2Gate (default off; carrying bots show stage 1 to the Traitor evaluate until
 van call / gather / real van state 1-4 / exit box / $1.25M). TEST dll out_s2t_1104b (md5 35b0bbc2, HEAD = BoardProbe + Stage2Gate) is in the bs57 and bs58 kits. Owner back 16:55: both kits
 PAUSED (bs57/PAUSE, bs58/PAUSE); rerun bs57 (DD03 DD01 online + Arcade) and bs58 (Stage2Gate on DM03 DD05 DD03) when the game is free.
-
-2026-11-04 ~01:20 - [ce] After-match navigation: InShopSteps INSTALLED 01:19 (C:\kl_build_1024\pq_1104b_install, UNDO bat beside it; dll = 79ce4c7c4 +
-71f9bfbf5's klhook files, local branch ce_inshop_ship aa88030f2, none of c9's klbrain). A page key pressed with Buy Weapons (mode 0) or the Category list
-(mode 1) already open now walks on to the weapon list and shows the page (the owner's 11-02 'ignored' presses). pq14 PASS 4/4 seats (DD05 + DM03, live ini);
-pq14b on the install build: DM03 PASS, DD05 menu flake; rerun pq14c (01:45) DD05 PASS both seats (inshop 0 -> list 0.6 s, inshop 1 -> 0.3 s, 0 faults); pq15 (03:46) the other 8 stock maps PASS 16/16 seats, pq16 (05:21) DM06 DM01 DM02 DM09 DM07 DD10 PASS 12/12: all 16 maps. The scoreboard path (pq_1103f, all 16 maps) is unchanged. Waiting for the owner's play test.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
