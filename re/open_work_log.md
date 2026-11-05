@@ -1,3 +1,12 @@
+2026-11-05 ~06:40 - [ce] pqq4 (DM06 rerun, host tour dropped) PASS: both seats reached the weapon list with no RETURN (host from Buy Weapons mode 0 at 06:27:22, client from Category mode 1 at 06:27:24),
+round 1 ended 13 s in (0x19 -> 0x1f at 06:27:10), both seats back in round 2, 0 faults, 4 min. With pqq3 that is all 16 maps PASS on the quick kit. Kit regenerated for all 16 maps
+(C:/kl_build_1024/week_1028/pqq; pqq4 logs in run4/). Only a smoke kit: no hook or ini change. Next: the owner's play test of InShopSteps.
+
+2026-11-05 ~06:45 - [c9] bs67 PASS 6/6 seats, 0 faults (GatherSkipTraitor=1 + Stage2Gate/Money0/MinS150/MaxS240, out_gt_1105a, pre-9ccfd0ad3). SkipTraitor NEVER acted (workflow
+wwzhhsh6y, verified): Stage2Gate marks come after the gather (DD05 +4.2 s, DD03 +0.2 s after a same-tick gather+call; DM03 +129 s via byte 3, bots already phase 3), and with the live
+NoBoard=1 a marked bot leaves the puppeteer (klbotfill.c:2326) before the klbf_gts call. Redundant on the live config: stays default 0, not installed. Marks +129 (byte 3, fixed by 9ccfd0ad3,
+bs68 checks) / +155 / +168.8 s. Hits on humans DM03 0 (LOS ~130 m), DD05 6 (host 550->214 hp), DD03 15 (host downed twice, got up). Banked: DM03 7/7, DD05 6/7, DD03 6/7 (traitor out).
+
 2026-11-05 ~06:10 - [c9] bs66 PASS 6/6 seats, 0 faults (Stage2MinS=150 MaxS=240, out_sw_1105a). First marks +134 / +164 / +187 s (bs62 +118 / +147.6 / +156). DD05 and DD03 are inside
 Arcade's 150-240 s window; DM03 is NOT: the van call at +124.6 s made the bot board-ready (stage byte 3), and kbr_stage_compose_w only floors byte 2, so it was marked at +134 s. Hits on humans:
 DM03 0 (LOS blocked 510/510), DD05 27, DD03 14. The MaxS log line wrongly says "no van call" after a van visit closed the gate (DD03, DD05). Not an install candidate yet; workflow ww1pyimtq

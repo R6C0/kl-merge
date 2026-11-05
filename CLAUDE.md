@@ -68,19 +68,20 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~06:45 - [c9] bs67 PASS 6/6 seats, 0 faults (GatherSkipTraitor=1 + Stage2Gate/Money0/MinS150/MaxS240, out_gt_1105a, pre-9ccfd0ad3). SkipTraitor NEVER acted (workflow
+wwzhhsh6y, verified): Stage2Gate marks come after the gather (DD05 +4.2 s, DD03 +0.2 s after a same-tick gather+call; DM03 +129 s via byte 3, bots already phase 3), and with the live
+NoBoard=1 a marked bot leaves the puppeteer (klbotfill.c:2326) before the klbf_gts call. Redundant on the live config: stays default 0, not installed. Marks +129 (byte 3, fixed by 9ccfd0ad3,
+bs68 checks) / +155 / +168.8 s. Hits on humans DM03 0 (LOS ~130 m), DD05 6 (host 550->214 hp), DD03 15 (host downed twice, got up). Banked: DM03 7/7, DD05 6/7, DD03 6/7 (traitor out).
+
 2026-11-05 ~06:10 - [c9] bs66 PASS 6/6 seats, 0 faults (Stage2MinS=150 MaxS=240, out_sw_1105a). First marks +134 / +164 / +187 s (bs62 +118 / +147.6 / +156). DD05 and DD03 are inside
 Arcade's 150-240 s window; DM03 is NOT: the van call at +124.6 s made the bot board-ready (stage byte 3), and kbr_stage_compose_w only floors byte 2, so it was marked at +134 s. Hits on humans:
 DM03 0 (LOS blocked 510/510), DD05 27, DD03 14. The MaxS log line wrongly says "no van call" after a van visit closed the gate (DD03, DD05). Not an install candidate yet; workflow ww1pyimtq
 holds marks before MinS on every stage + fixes the label, then a DM03 rebench. Install kit c9_1105a (CallFirst, VoiceClientRetry, BanterBots, Stage2Gate+Money0) is ready in C:/kl_build_1024.
 
-2026-11-05 ~05:45 - [c9] bs65 PASS 4/4 seats, 0 faults (OnlineBanterBots=1 + ByLook, out_vb_1105b, DM03 DD05). Bots now join the online banter: DM03 4/4, DD05 5/5 bot lines played on
-the client (all previous runs: 0); triple packets deduped. A Dead Men body (Hutchison) once spoke an unsuffixed squad-pool key (FA_ShootOffMoney_01): kltalk's squad fallback by record parity,
-the same pick Arcade makes, so not changed. Fix: the "banter bots" note wrote 237-364 lines a round, now once per digit. Install candidate together with OnlineVoice=1 + VoiceClientRetry=1
-(bs65 ran without the retry: 1 line held on DD05). Unexplained: DM03 slot-45 "stale ledger" 70/153 (bs63 0/183). Queue: bs66, bs67, ce pqq4.
-
-2026-11-05 ~02:20 - [ce] InShopSteps is live (pq_1104b, benched on all 16 maps; UNDO bat in C:\kl_build_1024\pq_1104b_install). Waiting for the owner's play test.
-QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq: [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND seat inis -> stock cut (B) ends round 1 13 s in,
-~4 min a 2-seat map instead of ~8.5 (pqq2 DD05 PASS). pqq3 = all 16 maps, queued after c9's bs62.
+2026-11-05 ~06:40 - [ce] InShopSteps is live (pq_1104b, benched on all 16 maps; UNDO bat in C:\kl_build_1024\pq_1104b_install). Waiting for the owner's play test.
+QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq (gen_pqq.py): [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND seat inis -> stock cut ends round 1
+13 s in, ~4 min a 2-seat map instead of ~8.5. pqq3 15/16 maps PASS; DM06 host missed the shop (its script tour ran past the short round), tour dropped,
+pqq4 DM06 PASS both seats. Kit regenerated for all 16 maps: run with run_pqq.sh after a chain_queue start line.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
