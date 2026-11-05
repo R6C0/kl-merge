@@ -52,6 +52,7 @@ static char klbv_tl[2][160];      /* its key templates: [0] loot grab, [1] board
 static char klbv_leaf[2][64];      /* [BotFill] OnlineVoiceLeafLoot / OnlineVoiceLeafEsc: the KLVoice leaf the ByLook path uses ("" = derived from the digit key, today's behaviour) */
 static int klbv_cretry;    /* [BotFill] OnlineVoiceClientRetry (klbotvoice.c): 1 = the client parks a taken packet the gap / speech-queue check refused and retries it (default 0 = dropped, as before) */
 static int klbv_probe_on;     /* [BotFill] OnlineVoiceProbe (klbotvoice.c): log-only detour of the speech-group entry 0x58a070 (TEST build, SessionSafe=0) */
+static int klbv_banter;    /* [BotFill] OnlineBanterBots (klbotvoice.c): 1 = the host's Ally bots join the online banter crew (default 0 = today) */
 static int klbv_bylook;    /* OnlineVoiceByLook (klbotvoice.c): 1 = a seat speaks the line of the character its own KLSYL look table holds for the digit (KLVoice/<Name>/<leaf>), the digit key stays the fallback */
 static void klbv_event(int slot, int ev);      /* klbotvoice.c: the host's bot did an event (1 loot grab, 2 boarded) */
 static int klls_on;       /* OnlineLootSync=1 (kllootsync.c; set in klbf_init) */
@@ -259,6 +260,8 @@ static void klbf_init(void)
     klbv_bylook = GetPrivateProfileIntA("BotFill", "OnlineVoiceByLook", 0, klh_ini) != 0;      /* (recommended off until benched) needs OnlineVoice=1 + OnlineLooks=1; Dead Men bodies speak their own KLVoice line */
     GetPrivateProfileStringA("BotFill", "OnlineVoiceLeafLoot", "", klbv_leaf[0], sizeof klbv_leaf[0], klh_ini);      /* (recommended off until benched) ByLook only; "" = JackPot_01 derived from the key; DM03 .LOC has JackPot_01..04, FA_JackPot_04..06 */
     GetPrivateProfileStringA("BotFill", "OnlineVoiceLeafEsc", "", klbv_leaf[1], sizeof klbv_leaf[1], klh_ini);      /* (recommended off until benched) ByLook only; "" = boarded stays the digit key; DM03 .LOC has YouEsc_01..04, FA_YouEscaped01..03 */
+    klbv_banter = GetPrivateProfileIntA("BotFill", "OnlineBanterBots", 0, klh_ini) != 0;      /* (recommended off until benched; NOT run live) bots speak / are answered in the online banter; the host sends their lines as KLSYV event 3 (needs OnlineVoice=1 for the clients to hear them) */
+    if (klbv_banter) klog("botfill: OnlineBanterBots=1 UNTESTED (recommended off): the host's living Ally bots join the online banter (needs [Voice] OnlineTalk=1); clients hear them only with OnlineVoice=1 (KLSYV event 3), else host-local");
     klbv_cretry = GetPrivateProfileIntA("BotFill", "OnlineVoiceClientRetry", 0, klh_ini) != 0;      /* (recommended off until benched) client parks a gap-refused bot line and retries it for up to 6 s */
     if (klbv_mode && klbv_cretry) klog("botfill: OnlineVoiceClientRetry=1 UNTESTED (recommended off): a client packet refused by the gap / speech-queue check is parked (4) and retried every tick for up to 6 s (GUESS)");
     klbv_probe_on = GetPrivateProfileIntA("BotFill", "OnlineVoiceProbe", 0, klh_ini); if (klbv_probe_on < 0) klbv_probe_on = 0; if (klbv_probe_on > 2) klbv_probe_on = 2;      /* (recommended off until benched) 1 = log-only detour of 0x58a070 (klbotvoice.c; TEST build + SessionSafe=0); 2 = polled read-only sampler of the speech manager groups (no code write, SessionSafe=1 ok) */

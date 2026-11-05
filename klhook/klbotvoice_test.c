@@ -96,6 +96,32 @@ int main(void)
       CHECK(klbv_poll_clean("Multi/Key", 100, k, sizeof k) == 7 && !strcmp(k, "Multi/K"));
       ls = klbv_poll_clean("a\x01z", 3, k, sizeof k); CHECK(ls == 3 && !strcmp(k, "a?z"));
       CHECK(klbv_poll_clean(0, 5, k, sizeof k) == 0 && !k[0]); CHECK(klbv_poll_clean("abc", 2, k, sizeof k) == 2 && !strcmp(k, "ab")); }
+    /* OnlineBanterBots: event 3 carries a key tag in the reserved field; old receivers reject it (event >= 3 / non-zero reserved) */
+    {
+        unsigned char e[KLBV_LEN + 8]; struct klbv_pk bk, bd;
+        memset(&bk, 0, sizeof bk); bk.T = 5000u; bk.seq = 7; bk.ev = KLBV_EV_BANTER; bk.digit = 4; bk.var = 1; bk.tag = 0xBEEF;
+        CHECK(klbv_encode(e, sizeof e, &bk) == KLBV_LEN); CHECK(e[18] == 0xEF && e[19] == 0xBE);
+        CHECK(klbv_decode(e, KLBV_LEN, &bd)); CHECK(bd.ev == KLBV_EV_BANTER && bd.tag == 0xBEEF && bd.digit == 4 && bd.seq == 7);
+        bk.tag = 0; CHECK(!klbv_encode(e, sizeof e, &bk)); bk.tag = 65536; CHECK(!klbv_encode(e, sizeof e, &bk));
+        bk.tag = 1; bk.ev = KLBV_EV_LOOT; CHECK(!klbv_encode(e, sizeof e, &bk));      /* a tag on an old event is refused */
+        bk.ev = KLBV_EV_BANTER; CHECK(klbv_encode(e, sizeof e, &bk) == KLBV_LEN); e[18] = 0; e[19] = 0; CHECK(!klbv_decode(e, KLBV_LEN, &bd));      /* tag 0 */
+        bk.tag = 9; klbv_encode(e, sizeof e, &bk); e[15] = KLBV_EV_ESCAPE; CHECK(!klbv_decode(e, KLBV_LEN, &bd));      /* old event with a non-zero reserved field: still refused */
+        /* an OLD decoder (KLBV_NEV 3, reserved must be 0) refuses an event-3 packet: modelled here by its two rules */
+        bk.ev = KLBV_EV_BANTER; bk.tag = 9; bk.seq = 8; klbv_encode(e, sizeof e, &bk); CHECK(e[15] >= 3 && (e[18] || e[19]));
+        /* gaps: banter only has the 2 s global gap, never the 15 s per bot */
+        memset(&g, 0, sizeof g);
+        CHECK(klbv_gap_ok(&g, 4, KLBV_EV_BANTER, 1000)); CHECK(!klbv_gap_ok(&g, 4, KLBV_EV_BANTER, 2500)); CHECK(klbv_gap_ok(&g, 4, KLBV_EV_BANTER, 3100));
+        CHECK(klbv_gap_ok(&g, 4, KLBV_EV_BANTER, 5200)); CHECK(klbv_gap_ok(&g, 4, KLBV_EV_LOOT, 7500));      /* banter does not use the loot slot of the digit */
+        CHECK(!klbv_gap_ok(&g, 9, KLBV_EV_BANTER, 20000));
+        /* member records, room, voice, status */
+        CHECK(klbv_bb_rec(0) == 16 && klbv_bb_rec(15) == 31 && klbv_bb_rec(16) == -1 && klbv_bb_rec(-1) == -1);
+        CHECK(klbv_bb_room(0, 32) && klbv_bb_room(31, 32) && !klbv_bb_room(32, 32) && !klbv_bb_room(-1, 32));
+        CHECK(klbv_bb_voice(2) == 1 && klbv_bb_voice(8) == 7 && klbv_bb_voice(1) == -1 && klbv_bb_voice(9) == -1);
+        CHECK(klbv_bb_status(3) == 4 && klbv_bb_status(4) == 0 && klbv_bb_status(0) == 0);
+        /* tags and the verdict */
+        CHECK(klbv_tag16(0) == 1 && klbv_tag16(0x12340000ul) == 0x1234 && klbv_tag16(0x00010001ul) == 1 && klbv_tag16(0xffffffffu) == 1 && klbv_tag16(0x1234ul) == 0x1234);
+        CHECK(klbv_bb_verdict(1) == 1 && klbv_bb_verdict(0) == 0 && klbv_bb_verdict(2) == 2 && klbv_bb_verdict(-1) == 0);
+    }
     printf("klbotvoice_test:%d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

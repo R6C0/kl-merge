@@ -495,8 +495,10 @@ static int klk_say(const char *key, int rec, float rt, const char *what, DWORD r
     if (!(line = (DWORD *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x28 + 12))) return 0;      /* a new one per say, never freed (section 2) */
     line[0] = (DWORD)(DWORD_PTR)e; line[1] = KLK_LINE_LIST; line[3] = 3; line[4] = 1; line[5] = (DWORD)(DWORD_PTR)(line + 10); line[9] = 0xffffffffu;      /* +0x1c 0.0, +0x20 flag 0, +0x24 priority -1 */
     ((void (__fastcall *)(void *, void *, void *, void *, int, int))(DWORD_PTR)KLH_VA(KLK_SAY))((void *)(DWORD_PTR)mgr, 0, line, 0, rec, 0);
-    klh_rd(queue, &q1, 4);
-    klog("talk: said %s at %.2f s (%s; speech queue %lu -> %lu)", key, rt, what, q0, q1);
+    q1 = q0 + 0xffffu;      /* sentinel: stays if the re-read fails */
+    { int rd1 = klh_rd(queue, &q1, 4);
+      /* GUESS: the queue count [[mgr+0x974]] rising means the line was queued; unchanged may also mean it was played or dropped at once, so "no" is not proof of silence. Log text only. */
+      klog("talk: said %s at %.2f s (%s; speech queue %lu -> %lu) (queued: %s)", key, rt, what, q0, rd1 ? q1 : 0ul, !rd1 ? "unknown" : q1 > q0 && q1 <= 10 ? "yes" : q1 == q0 ? "no" : "unknown"); }
     return 1;
 }
 
@@ -511,7 +513,7 @@ static void klk_present_as(const struct klw_who *w, struct klk_here *h, int kch,
     h->kane = h->lynch = h->kane_i = h->lynch_i = -1;
     for (i = 0; i < w->n; i++) {
         int there = w->m[i].status == 0 || w->m[i].status == 4, hum = i == w->human;
-        if (!there || !w->m[i].ch) continue;
+        if (!there || !w->m[i].ch || w->m[i].bd) continue;      /* a host bot (OnlineBanterBots) never plays Kane / Lynch of a scene: those lines are local to each seat */
         if (kch && w->m[i].ch == kch && (h->kane < 0 || hum)) { h->kane = w->m[i].rec; h->kane_i = i; }
         if (lch && w->m[i].ch == lch && (h->lynch < 0 || hum)) { h->lynch = w->m[i].rec; h->lynch_i = i; }
     }
@@ -532,7 +534,7 @@ static int klk_member_ch(const struct klw_who *w, int ch)
     int i, r = -1;
     if (ch < 1) return -1;
     for (i = 0; i < w->n; i++) {
-        if (w->m[i].ch != ch || !(w->m[i].status == 0 || w->m[i].status == 4)) continue;
+        if (w->m[i].ch != ch || w->m[i].bd || !(w->m[i].status == 0 || w->m[i].status == 4)) continue;
         if (r < 0 || i == w->human) r = i;
     }
     return r;
@@ -603,9 +605,11 @@ static int klk_pool_key(const struct klw_who *w, int i, int on, DWORD rules, cha
 {
     /* V2: pools that name the member's own character (Who=Ashkanan / Char11) come first, keys as written; only when
        none of them has a key left does the class of his body (Kane / Lynch / Any / Squad) decide, as before. */
-    int cls = klk_pool_class(w, i), ch = w->m[i].ch, named, p, k, n = 0, pick; BYTE voice = (BYTE)(klk_rules_onl(rules) ? w->m[i].rec : 0xff); char cand[KLK_KEYLEN];
-    for (named = ch > 0; named >= 0; named--) {
-        if (!named && cls == KLK_ANY && (w->m[i].rec > 7 || (!klk_rules_onl(rules) && (!klh_rd(rules + 0x33e + w->m[i].rec, &voice, 1) || voice > 7)))) return 0;      /* OOB: online rules are 0x3a8 (Sv) / 0x334 (Cl) bytes, so +0x33e is no voice table there (Cl: past the end); online the voice = seat number (GUESS V1, klvoice_online.c) */      /* the table has eight entries, the voices are 0..7 */
+    int cls = klk_pool_class(w, i), ch = w->m[i].ch, named, p, k, n = 0, pick, digitvoice = w->m[i].bd > 0 && !w->m[i].bdm; BYTE voice = (BYTE)(klk_rules_onl(rules) ? w->m[i].rec : 0xff); char cand[KLK_KEYLEN];
+    if (w->m[i].bd > 0) voice = (BYTE)(w->m[i].bd - 1);      /* never the member record 16+ */
+    if (digitvoice) cls = KLK_ANY;      /* OnlineBanterBots: a host bot with its Dog Days digit voice speaks the _C<digit> key of its bot voice (klbotvoice.c), no named pool, no seat number */
+    for (named = ch > 0 && !digitvoice; named >= 0; named--) {
+        if (!named && cls == KLK_ANY && !w->m[i].bd && (w->m[i].rec > 7 || (!klk_rules_onl(rules) && (!klh_rd(rules + 0x33e + w->m[i].rec, &voice, 1) || voice > 7)))) return 0;      /* OOB: online rules are 0x3a8 (Sv) / 0x334 (Cl) bytes, so +0x33e is no voice table there (Cl: past the end); online the voice = seat number (GUESS V1, klvoice_online.c) */      /* the table has eight entries, the voices are 0..7 */
         for (pick = -1, n = 0; ; pick = (int)klk_rnd((DWORD)n), n = 0) {          /* pass 1 counts, pass 2 takes number `pick` */
             for (p = 0; p < klk_lv.npool; p++) {
                 if (klk_lv.pool[p].on != on) continue;
@@ -623,13 +627,17 @@ static int klk_pool_key(const struct klw_who *w, int i, int on, DWORD rules, cha
     return 0;
 }
 
+static void klbv_banter_send(int digit, const char *key);      /* klbotvoice.c ([BotFill] OnlineBanterBots): the host tells the clients which banter line its bot said */
 static int klk_chatter_say(const struct klw_who *w, int i, const char *key, const char *pool, float rt, DWORD rules, const char *scene, int is_reply)
 {
-    char what[160]; int rec = w->m[i].rec;
-    snprintf(what, sizeof what, "%s = record %d, character %d; chatter %s", klk_lv.kane && w->m[i].ch == klk_lv.kane ? "Kane" : klk_lv.lynch && w->m[i].ch == klk_lv.lynch ? "Lynch" : i == w->human ? "the player" : "a bot", rec, w->m[i].ch, pool);
-    klk_mark_said(klk_hash(key));                                            /* also when it was not said: a key the game does not know is not tried again */
+    char what[160]; int rec = w->m[i].rec, bot = w->m[i].bd, r;
+    snprintf(what, sizeof what, "%s = record %d, character %d; chatter %s", bot ? "an online host bot" : klk_lv.kane && w->m[i].ch == klk_lv.kane ? "Kane" : klk_lv.lynch && w->m[i].ch == klk_lv.lynch ? "Lynch" : i == w->human ? "the player" : klk_rules_onl(rules) ? "a remote human" : "a bot", rec, w->m[i].ch, pool);      /* online the other members are the other human seats (klvoice_online.c kvo_online_who_wide) */
+    klk_mark_said(klk_hash(key));                                        /* also when it was not said: a key the game does not know is not tried again */
     klk_r.member_last[rec] = rt; klk_r.last_chatter = rt; (void)is_reply;
-    return klk_say(key, rec, rt, what, rules, scene);
+    r = klk_say(key, bot ? -6 : rec, rt, what, rules, scene);      /* a bot has no seat: speaker -6 as klbotvoice.c's bot lines (GUESS, unconfirmed) */
+    if (bot && r && !klk.logonly) klbv_banter_send(bot, key);      /* LogOnly=1: klk_say returns 1 but called nothing, the clients must not play a line the host did not */
+    /* KNOWN GAP: a bot reads status 0 or 4 and never 7, and its 'at' is 0, so the ON_DOWN / shoot / traitor / stage / money chatter events never fire for a bot (Arcade does); the receiver's tag guard sees only its own KLTalk.ini, so a host line missing there that shares a 16-bit tag with another key plays the wrong line (GUESS, accepted) */
+    return r;
 }
 
 /* ---- the Fed events (owner item 12): the local player is police after his death. Own reader: klfed.c comes after this file,

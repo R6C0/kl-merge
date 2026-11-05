@@ -47,7 +47,7 @@ static int klbv_note(int cls) { unsigned n = klbv_logN[cls & 15]++; return n < 1
 
 /* klbv_mode and klbv_tl (the key templates) are klbotfill.c's, read in klbf_init */
 
-static const char *klbv_ev_name(int ev) { return ev == KLBV_EV_LOOT ? "loot" : ev == KLBV_EV_ESCAPE ? "escaped" : "?"; }
+static const char *klbv_ev_name(int ev) { return ev == KLBV_EV_LOOT ? "loot" : ev == KLBV_EV_ESCAPE ? "escaped" : ev == KLBV_EV_BANTER ? "banter" : "?"; }
 
 static void klbv_reset(void)
 {
@@ -112,7 +112,8 @@ static int klbv_look_key(int ev, int digit, const char *dkey, char *key, int cap
     if (!klcl_on || !klcl_t.e[digit - 1].have || !(ch = klcl_t.e[digit - 1].ch)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d: no look-table entry / character (OnlineLooks off, stock map or the bot keeps his body): digit key", ev, digit); return 0; }
     /* the look must be APPLIED on this seat (klcl_note 1 = applied, 4 = model taken, as klcl_bot_look): a received but skipped / pending record leaves the Dog Days body, whose digit voice fits */
     if (klcl_t.a[digit - 1].epoch != klcl_t.epoch || (klcl_t.a[digit - 1].last != 1 && klcl_t.a[digit - 1].last != 4)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d ch %d: look not applied on this seat (outcome %d): digit key", ev, digit, ch, klcl_t.a[digit - 1].last); return 0; }
-    if (!klcl_bot_name(ch, who, wcap) || !kvo_name_of(who)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d ch %d: wardrobe name unreadable or not a Dead Men body: digit key", ev, digit, ch); return 0; }
+    if (!klcl_bot_name(ch, who, wcap)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d ch %d: wardrobe name unreadable: digit key", ev, digit, ch); return 0; }
+    if (!kvo_name_of(who)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d ch %d: Dog Days body (%s): its digit voice stays", ev, digit, ch, who); return 0; }
     if (!kvo_leaf(dkey, dleaf)) dleaf[0] = 0;
     /* OnlineVoiceLeafLoot / LeafEsc: an explicit leaf replaces the derived one; the per-name fallback to the digit key stays (klbv_play) */
     if (!klbv_pick_leaf(klbv_leaf[ev == KLBV_EV_LOOT ? 0 : 1], dleaf, leaf, sizeof leaf, &used)) { if (klbv_note(9)) klog("botvoice: bylook event %d digit %d: key %s has no _C<n> leaf: digit key", ev, digit, dkey); return 0; }
@@ -180,7 +181,7 @@ static void klbv_event(int slot, int ev)
     if (i < 4) {
         struct klbv_pk *p = &klbv_t.pend[i].pk;
         klbv_seq = klbv_next_seq(klbv_seq);
-        p->T = (DWORD)klsy_T(); p->seq = klbv_seq; p->ev = ev; p->digit = digit; p->var = 1;
+        p->T = (DWORD)klsy_T(); p->seq = klbv_seq; p->ev = ev; p->digit = digit; p->var = 1; p->tag = 0;      /* a slot an earlier banter packet used still holds its tag, and klbv_encode refuses a non-banter event with a tag (the packet would be dropped) */
         klbv_t.pend[i].left = 3; klbv_t.pend[i].at = now;
         klog("botvoice: HOST event %d (%s) digit %d seq %d: queued, key %s", ev, klbv_ev_name(ev), digit, klbv_seq, key);
     } else klog("botvoice: HOST event %d digit %d: send queue full, not sent to the clients", ev, digit);
@@ -204,6 +205,7 @@ static void klbv_send_due(DWORD now)
     }
 }
 
+static void klbv_banter_rx(const struct klbv_pk *k);      /* OnlineBanterBots, below */
 /* CLIENT: a KLSYV arrived (called from klsy_tick's drain, game thread) */
 static void klbv_rx(const char *pk, int len, DWORD now, unsigned long from)
 {
@@ -234,6 +236,11 @@ static void klbv_rx(const char *pk, int len, DWORD now, unsigned long from)
              take ? "taken" : "dropped", klbv_t.sq.taken, klbv_t.sq.repeats, klbv_t.sq.stale, klbv_t.sq.lost);
     klbv_t.rxN++;
     if (!take) return;
+    if (k.ev == KLBV_EV_BANTER) {      /* OnlineBanterBots: a bot's banter line; no key template, the tag finds it in this seat's KLTalk.ini */
+        if (klbv_mode == 2) { if (klbv_note(11)) klog("botvoice: DRY CLIENT would play banter digit %d tag %d (mode 2: nothing played)", k.digit, k.tag); }
+        else klbv_banter_rx(&k);
+        return;
+    }
     if (klbv_mode == 2) { char key[200]; if (klbv_make_key(k.ev, k.digit, key, sizeof key)) klog("botvoice: DRY CLIENT would say event %d digit %d key %s (mode 2: nothing played)", k.ev, k.digit, key); return; }
     /* GUESS (known, accepted): a fresh packet that passes the gap check plays at once, ahead of older parked lines (they retry on the next tick, max age KLBV_PARK_MAXAGE): event order is only slightly off, never a double play or overlap. */
     if (!klbv_play("CLIENT", k.ev, k.digit, now, 1) && klbv_cretry && klbv_why) {      /* OnlineVoiceClientRetry: refused only by the gap / queue check = park it, klbv_retry_tick tries again */
@@ -375,6 +382,92 @@ static void klbv_probe_tick(void)      /* game thread: install once, role and pe
     if (klbv_round(&sm, &role)) { klbv_probe_role = (int)role; return; }
     if (klbv_probe_role && klbv_probe_calls) klog("botvoice: probe round: calls %ld logged %d (cap %d)", klbv_probe_calls, klbv_probe_n, KLBV_PROBE_CAP);
     klbv_probe_role = 0; klbv_probe_n = 0; klbv_probe_calls = 0;
+}
+
+/* ---- [BotFill] OnlineBanterBots (default 0 = today; recommended off until benched; NOT run live). On the online HOST the Ally bots klbf_ob[] tracks (the living ones: a dead or gone bot's slot is freed) become
+   members of kltalk.c's wide banter who (kvo_online_who_wide), so a bot can be the speaker or the one another member answers, as in Arcade (kltalk.c rules unchanged: member gap, quiet, Speakers, pools).
+   Member record = 16 + slot (klbv_bb_rec; the human seats are 0..7, the voice table has 8 entries), bd = the bot's group digit, bdm = 1 when it speaks as a Dead Men body (OnlineVoiceByLook and the look is
+   applied here, the same test as klbv_look_key), else its Dog Days digit voice: kltalk.c klk_pool_key then builds the key <pool key>_C<digit>, exactly the digit keys of OnlineVoice (_C%D).
+   Bots are not Kane / Lynch of a scene and not pair members (their scene lines would be local to the host); they take idle chatter and event answers. Humans are untouched: each seat still picks its own human speaker.
+   SYNC: a bot line the host said is sent as KLSYV event 3 (digit + a 16-bit tag of the key, klbv_tag16; layout in klbotvoice_logic.h) through the OnlineVoice path, so it needs [BotFill] OnlineVoice=1; the client finds
+   the line among its own KLTalk.ini pool keys (raw, _C<digit>) and pair keys by that tag and plays it with klk_say, 2 s global gap only. An old client rejects event 3 (unknown event). OnlineVoice 0: the bots still
+   banter but the line is HOST-LOCAL (logged once). OnlineVoice 2: DRY (logged, nothing sent). A tag found for two different lines, or for none, plays nothing (logged). The 16-bit tag and the speaker -6 are GUESSes.
+   LOG: botvoice: banter bots: HOST slot S digit D as <Name | digit voice>     (class 11, first 10 then every 20th)
+        botvoice: HOST banter digit D seq S tag T: queued, key K            botvoice: CLIENT banter digit D tag T: <key K -> klk_say R | no line | ambiguous | gate> */
+static int klbv_bb_dm(int digit, int *ch)      /* OnlineVoiceByLook: the Dead Men body this seat applied for the digit (klbv_look_key's tests) */
+{
+    char who[40]; int c;
+    if (!klbv_bylook || digit < 2 || digit > 8 || !klcl_on || !klcl_t.e[digit - 1].have || !(c = klcl_t.e[digit - 1].ch)) return 0;
+    if (klcl_t.a[digit - 1].epoch != klcl_t.epoch || (klcl_t.a[digit - 1].last != 1 && klcl_t.a[digit - 1].last != 4)) return 0;
+    if (!klcl_bot_name(c, who, sizeof who) || !kvo_name_of(who)) return 0;
+    *ch = c; return 1;
+}
+
+/* called by klvoice_online.c on the HOST while it builds the wide who: appends the living bots (never past KLW_NREC members). Returns how many. Game thread. */
+static int klbv_banter_bots(struct klw_who *w)
+{
+    DWORD sm, role; int i, k, added = 0;
+    if (!klbv_banter || !klbv_round(&sm, &role) || role != 2) return 0;
+    for (i = 0; i < KLBF_OT_BOTS; i++) {
+        char nm[28], dg = 0; int digit, rec = klbv_bb_rec(i), ch = 0, dm, dup = 0; DWORD a = klbf_ob[i].actor;
+        if (!a || rec < 0) continue;
+        if (!klbv_bb_room(w->n, KLW_NREC)) break;
+        klbf_lk_name(a, nm, &dg); digit = dg >= '0' && dg <= '9' ? dg - '0' : 0;
+        if (!klbv_digit_ok(digit)) continue;
+        for (k = 0; k < w->n; k++) if (w->m[k].bd == digit) dup = 1;      /* one member per digit (the client finds the voice by digit) */
+        if (dup) continue;
+        dm = klbv_bb_dm(digit, &ch);
+        k = w->n++;
+        memset(&w->m[k], 0, sizeof w->m[k]);
+        w->m[k].rec = rec; w->m[k].ai = 1; w->m[k].ch = dm ? ch : 0x7fff; w->m[k].status = (BYTE)klbv_bb_status(klbf_ob[i].phase); w->m[k].actor = a; w->m[k].bd = digit; w->m[k].bdm = dm;      /* ch 0x7fff = no wardrobe character (never Kane / Lynch, not stock) */
+        added++;
+        if (klbv_note(11)) klog("botvoice: banter bots: HOST slot %d digit %d (record %d) as %s", i, digit, rec, dm ? "its Dead Men body (OnlineVoiceByLook)" : "its digit voice");
+    }
+    return added;
+}
+
+/* HOST: kltalk.c said a banter line for the bot of that digit: tell the clients (event 3). The host already played it. Game thread. */
+static void klbv_banter_send(int digit, const char *key)
+{
+    DWORD sm, role, now = GetTickCount(); int i; unsigned long h;
+    if (!klbv_banter || !key || !klbv_round(&sm, &role) || role != 2) return;
+    h = (unsigned long)klk_hash(key);
+    if (klbv_mode == 2) { if (klbv_note(11)) klog("botvoice: DRY would send banter digit %d tag %d key %s (OnlineVoice=2: no packet)", digit, klbv_tag16(h), key); return; }
+    if (klbv_mode != 1) { static int told; if (!told++) klog("botvoice: banter of bots is HOST-LOCAL: [BotFill] OnlineVoice is 0, so no KLSYV is sent and the clients hear nothing of it (first line: digit %d key %s)", digit, key); return; }
+    if (!klbv_digit_ok(digit)) return;
+    if (klbv_seqSm != sm) { klbv_seq = 0; klbv_seqSm = sm; }
+    if (klbv_t.sm != sm || klbv_t.round != (int)klbf_ot_rounds) { klbv_reset(); klbv_t.sm = sm; klbv_t.round = (int)klbf_ot_rounds; }
+    klbv_t.role = 2;
+    for (i = 0; i < 4 && klbv_t.pend[i].left; i++) ;
+    if (i >= 4) { klog("botvoice: HOST banter digit %d: send queue full, not sent to the clients", digit); return; }
+    klbv_seq = klbv_next_seq(klbv_seq);
+    klbv_t.pend[i].pk.T = (DWORD)klsy_T(); klbv_t.pend[i].pk.seq = klbv_seq; klbv_t.pend[i].pk.ev = KLBV_EV_BANTER; klbv_t.pend[i].pk.digit = digit; klbv_t.pend[i].pk.var = 1; klbv_t.pend[i].pk.tag = klbv_tag16(h);
+    klbv_t.pend[i].left = 3; klbv_t.pend[i].at = now;
+    klbv_t.gaps.gseen = 1; klbv_t.gaps.glast = now;      /* the host already played this line: a loot / boarded line within 2 s waits (else it overlaps and the client's 2 s gap refuses it) */
+    klog("botvoice: HOST banter digit %d seq %d tag %d: queued, key %s", digit, klbv_seq, klbv_tag16(h), key);
+}
+
+/* CLIENT: a taken event-3 packet. Looks for the line in this seat's own KLTalk.ini (pool keys raw and _C<digit>, pair call / reply keys) by tag. */
+static void klbv_banter_rx(const struct klbv_pk *k)
+{
+    char found[4][KLK_KEYLEN + 8], cand[KLK_KEYLEN + 8]; int nf = 0, p, q, nd = 0, i;
+    char scene[160]; DWORD gs, rules; int r;
+#define KLBV_BB_TRY(s) do { if (strlen(s) < KLK_KEYLEN && klbv_tag16(klk_hash(s)) == k->tag) { for (i = 0; i < nf && strcmp(found[i], (s)); i++) ; if (i == nf) { nd++; if (nf < 4) { strcpy(found[nf], (s)); nf++; } } } } while (0)
+    if (!klk_lv.have) { if (klbv_note(11)) klog("botvoice: CLIENT banter digit %d tag %d: no KLTalk.ini loaded on this seat (the level is not a talking level here): not played", k->digit, k->tag); return; }
+    for (p = 0; p < klk_lv.npool; p++) for (q = 0; q < klk_lv.pool[p].nkeys; q++) {
+        const char *s = klk_lv.pool[p].key[q];
+        if (!s[0]) continue;
+        KLBV_BB_TRY(s);
+        snprintf(cand, sizeof cand, "%s_C%d", s, k->digit); KLBV_BB_TRY(cand);
+    }
+    for (p = 0; p < klk_lv.npair; p++) { if (klk_lv.pair[p].call[0]) KLBV_BB_TRY(klk_lv.pair[p].call); if (klk_lv.pair[p].reply[0]) KLBV_BB_TRY(klk_lv.pair[p].reply); }
+#undef KLBV_BB_TRY
+    if (klbv_bb_verdict(nd) != 1) { if (klbv_note(11)) klog("botvoice: CLIENT banter digit %d tag %d: %s: not played", k->digit, k->tag, nd ? "two different lines carry this tag (ambiguous)" : "no such line in this seat's KLTalk.ini"); return; }
+    if (!(gs = klh_rd32((DWORD_PTR)KLH_VA(KLW_SETTINGS))) || !(rules = klh_rd32(gs + 0x54)) || !klh_scene(scene, sizeof scene)) return;
+    if (klbv_queue_full()) { if (klbv_note(11)) klog("botvoice: CLIENT banter digit %d key %s: held back (speech queue > 8 or unreadable)", k->digit, found[0]); return; }      /* queue check first: the gap check below records the 2 s gap, a refused line must not spend it */
+    if (!klbv_gap_ok(&klbv_t.gaps, k->digit, KLBV_EV_BANTER, GetTickCount())) { if (klbv_note(11)) klog("botvoice: CLIENT banter digit %d key %s: held back (2 s global gap)", k->digit, found[0]); return; }
+    r = klk_say(found[0], -6, 0.0f, "bot banter (OnlineBanterBots)", rules, scene);
+    klog("botvoice: CLIENT banter digit %d tag %d key %s -> klk_say %d", k->digit, k->tag, found[0], r);
 }
 
 static void klbv_tick(int game_thread)

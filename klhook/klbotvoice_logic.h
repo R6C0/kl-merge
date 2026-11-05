@@ -7,10 +7,10 @@
  *    8   u32 T       the host's klsy_T() (ms modulo 1e9)
  *   12   u16 seq     a new value per event (1..65535, wraps past 65535 to 1); the client drops a repeated or older seq
  *   14   u8  ver = 1
- *   15   u8  event   1 = loot grab, 2 = boarded / escaped
+ *   15   u8  event   1 = loot grab, 2 = boarded / escaped, 3 = banter line of a bot (OnlineBanterBots; the line is found by the tag in the receiver's own KLTalk.ini pools)
  *   16   u8  digit   the bot's group digit 2..8 (klcrewlook.c's key)
  *   17   u8  variant 1..3 (v1 always 1)
- *   18   u16 0
+ *   18   u16 0 -- except event 3 (OnlineBanterBots): the key tag (see klbv_tag16), never 0. An OLD receiver rejects event 3 (unknown event) and any non-zero reserved field, so it just skips it.
  * The format is a GUESS of this build (nothing else on the wire uses it). */
 #ifndef KLBOTVOICE_LOGIC_H
 #define KLBOTVOICE_LOGIC_H
@@ -21,11 +21,12 @@
 #define KLBV_LEN       20
 #define KLBV_EV_LOOT   1
 #define KLBV_EV_ESCAPE 2
-#define KLBV_NEV       3          /* ids 0..2 index the gap table */
+#define KLBV_EV_BANTER 3
+#define KLBV_NEV       4          /* ids 0..3 index the gap table */
 #define KLBV_PER_GAP   15000u     /* ms: per bot per event (the game's own group gap is 15 s) */
 #define KLBV_GLOBAL_GAP 2000u     /* ms: between any two bot lines */
 
-struct klbv_pk { unsigned T; int seq, ev, digit, var; };
+struct klbv_pk { unsigned T; int seq, ev, digit, var, tag; };      /* tag: only event 3 */
 
 static void klbv_put32(unsigned char *p, unsigned v) { p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24); }
 static unsigned klbv_get32(const unsigned char *p) { return (unsigned)p[0] | (unsigned)p[1] << 8 | (unsigned)p[2] << 16 | (unsigned)p[3] << 24; }
@@ -37,6 +38,8 @@ static int klbv_encode(unsigned char *out, int cap, const struct klbv_pk *k)
     memset(out, 0, KLBV_LEN);
     memcpy(out, "KLSYV", 5);
     klbv_put32(out + 8, k->T); out[12] = (unsigned char)k->seq; out[13] = (unsigned char)(k->seq >> 8); out[14] = 1; out[15] = (unsigned char)k->ev; out[16] = (unsigned char)k->digit; out[17] = (unsigned char)k->var;
+    if (k->ev == KLBV_EV_BANTER) { if (k->tag < 1 || k->tag > 65535) return 0; out[18] = (unsigned char)k->tag; out[19] = (unsigned char)(k->tag >> 8); }
+    else if (k->tag) return 0;
     return KLBV_LEN;
 }
 
@@ -44,10 +47,12 @@ static int klbv_encode(unsigned char *out, int cap, const struct klbv_pk *k)
 static int klbv_decode(const unsigned char *pk, int len, struct klbv_pk *k)
 {
     if (!pk || !k || len < KLBV_LEN || memcmp(pk, "KLSYV\0\0\0", 8)) return 0;
-    if (pk[14] != 1 || pk[18] || pk[19]) return 0;
+    if (pk[14] != 1) return 0;
+    if (pk[15] != KLBV_EV_BANTER && (pk[18] || pk[19])) return 0;
     memset(k, 0, sizeof *k);
     k->T = klbv_get32(pk + 8); k->seq = pk[12] | pk[13] << 8; k->ev = pk[15]; k->digit = pk[16]; k->var = pk[17];
     if (k->T >= 1000000000u || k->seq < 1 || k->ev < 1 || k->ev >= KLBV_NEV || k->digit < 2 || k->digit > 8 || k->var < 1 || k->var > 3) return 0;
+    if (k->ev == KLBV_EV_BANTER) { k->tag = pk[18] | pk[19] << 8; if (k->tag < 1) return 0; }
     return 1;
 }
 
@@ -77,6 +82,7 @@ static int klbv_gap_ok(struct klbv_gaps *g, int digit, int ev, unsigned now)
 {
     if (digit < 2 || digit > 8 || ev < 1 || ev >= KLBV_NEV) return 0;
     if (g->gseen && (unsigned)(now - g->glast) < KLBV_GLOBAL_GAP) return 0;
+    if (ev == KLBV_EV_BANTER) { g->gseen = 1; g->glast = now; return 1; }      /* banter: the host already spaced the lines (member gap, quiet); only the 2 s global gap applies here */
     if (g->seen[digit][ev] && (unsigned)(now - g->last[digit][ev]) < KLBV_PER_GAP) return 0;
     g->gseen = 1; g->glast = now; g->seen[digit][ev] = 1; g->last[digit][ev] = now;
     return 1;
@@ -91,7 +97,7 @@ struct klbv_park { int n; struct { int ev, digit, seq; unsigned at; } e[KLBV_PAR
 static int klbv_park_add(struct klbv_park *q, int ev, int digit, int seq, unsigned now)
 {
     int i;
-    if (ev < 1 || ev >= KLBV_NEV || digit < 2 || digit > 8 || q->n >= KLBV_PARK_N) return 0;
+    if (ev < 1 || ev > KLBV_EV_ESCAPE || digit < 2 || digit > 8 || q->n >= KLBV_PARK_N) return 0;
     for (i = 0; i < q->n; i++) if (q->e[i].seq == seq) return 0;
     q->e[q->n].ev = ev; q->e[q->n].digit = digit; q->e[q->n].seq = seq; q->e[q->n].at = now; q->n++;
     return 1;
@@ -213,5 +219,22 @@ static int klbv_poll_summary(char *out, int cap, const int *counts, int n)
     }
     return listed;
 }
+
+/* ---- OnlineBanterBots (klbotvoice.c): the host's Ally bots as members of the online banter crew -------------------------------------------------------- */
+#define KLBV_BB_REC0 16      /* a bot's member record = 16 + its klbf_ob slot (0..15): above the human seats 0..7 (the voice table has 8 entries), below KLW_NREC 32 */
+#define KLBV_BB_NREC 32      /* = KLW_NREC (klcrew.c) */
+#define KLBV_BB_PH_ABOARD 3  /* klbf_ob[].phase 3 = aboard the van: there, but not chattering (status 4) */
+/* the member record of bot slot s; -1 = no such slot */
+static int klbv_bb_rec(int slot) { return slot >= 0 && KLBV_BB_REC0 + slot < KLBV_BB_NREC ? KLBV_BB_REC0 + slot : -1; }
+/* may another member be added to a list of n members (cap = KLW_NREC)? */
+static int klbv_bb_room(int n, int cap) { return n >= 0 && n < cap; }
+/* the voice number (0..6 -> the key suffix _C<voice+1> = _C<digit>) the digit voice of a bot uses; -1 = digit not 2..8 */
+static int klbv_bb_voice(int digit) { return digit >= 2 && digit <= 8 ? digit - 1 : -1; }
+/* member status of a bot: 0 in play, 4 aboard (as klk_present reads it) */
+static int klbv_bb_status(int phase) { return phase == KLBV_BB_PH_ABOARD ? 4 : 0; }
+/* the 16-bit tag of a key hash (FNV of kltalk.c's klk_hash): never 0 */
+static int klbv_tag16(unsigned long h) { int t = (int)((h ^ (h >> 16)) & 0xffffu); return t ? t : 1; }
+/* the receiver collected the DISTINCT candidate lines whose tag equals the packet's: n of them. 1 = play it, 0 = not in this seat's KLTalk.ini, 2 = ambiguous (two different lines share the 16-bit tag: nothing is played) */
+static int klbv_bb_verdict(int ndistinct) { return ndistinct == 1 ? 1 : ndistinct <= 0 ? 0 : 2; }
 
 #endif /* KLBOTVOICE_LOGIC_H */

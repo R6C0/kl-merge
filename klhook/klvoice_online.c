@@ -31,6 +31,7 @@ static int kvo_crew_on(void)
 }
 /* kvo_onl_seatname[8][32] (declared in klvoice.c): per seat: the heister name of that seat's member in the last who ("" = not in it) */
 
+static int klbv_banter_bots(struct klw_who *w);      /* klbotvoice.c ([BotFill] OnlineBanterBots; included later): appends the host's living Ally bots, host only */
 static int kvo_online_who_wide(struct klw_who *w, char *name, int wide)
 {
     /* wide = 1 (kltalk.c [Voice] OnlineTalk=1): also the other human rows, as OnlineCrew=1 does; own cache [1] so klvoice.c's narrow who is not changed by it */
@@ -73,6 +74,7 @@ static int kvo_online_who_wide(struct klw_who *w, char *name, int wide)
                         snprintf(lsn[o.r[k].seat], sizeof lsn[0], "%s", o.r[k].name); last.n++;
                     }
                 }
+                if (wide) klbv_banter_bots(&last);                                     /* OnlineBanterBots=1 on the host: the bots as further members (records 16+, never in lsn) */
                 if (kvo_diag) { int a, b; for (a = 0; a < 8; a++) for (b = 0; lsn[a][b]; b++) hsh = hsh * 31 + (BYTE)lsn[a][b] + (DWORD)a * 7; }   /* OnlineDiag: the (seat, name) set */
                 if (lok && (lround_rules != o.b.rules || lround != o.round || (kvo_diag && lhash != hsh))) {       /* once per round (OnlineDiag=1: and again whenever a seat's name changes or a human joins; bench ce5 froze the first stale snapshot) */
                     lround_rules = o.b.rules; lround = o.round; lhash = hsh;
@@ -83,9 +85,12 @@ static int kvo_online_who_wide(struct klw_who *w, char *name, int wide)
                     }
                     klog("voice: online: local seat %d plays '%s' (character %d of %d), round %d of %d; its lines use voice number %d (GUESS V1: the seat number)", (int)li, lname, last.m[0].ch, last.nchar, o.round, o.rounds, (int)li);
                     if (kvo.log >= 1 && last.n > 1) {
-                        char mp[256]; int q, ml = 0; mp[0] = 0;
-                        for (q = 0; q < last.n && ml < 200; q++) ml += snprintf(mp + ml, sizeof mp - ml, "%sseat %d=voice %d '%s'", q ? ", " : "", last.m[q].rec, last.m[q].rec, lsn[last.m[q].rec]);
-                        klog("voice: online crew (OnlineCrew=1): %d humans: %s (GUESS V1: voice number = seat; seats above 7 skipped)", last.n, mp);
+                        char mp[256]; int q, ml = 0, nh = 0; mp[0] = 0;
+                        for (q = 0; q < last.n && ml < 200; q++) {
+                            if (last.m[q].bd || last.m[q].rec < 0 || last.m[q].rec > 7) continue;      /* host bots (record 16+) are not in lsn (8 seats) */
+                            ml += snprintf(mp + ml, sizeof mp - ml, "%sseat %d=voice %d '%s'", nh ? ", " : "", last.m[q].rec, last.m[q].rec, lsn[last.m[q].rec]); nh++;
+                        }
+                        klog("voice: online crew (OnlineCrew=1): %d humans: %s (GUESS V1: voice number = seat; seats above 7 skipped)", nh, mp);
                     }
                 }
             }

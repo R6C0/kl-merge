@@ -214,7 +214,7 @@ static int klw_char_of(const struct klw_src *s, DWORD model)
    draw or on the level gate. ch = the character whose root is the model the member wears NOW (0 = none of the list). */
 struct klw_who {
     DWORD rules, state; int n, human, wardrobe, nchar; char key[64];
-    struct { int rec, ai, ch; BYTE status; DWORD at, actor, model; } m[KLW_NREC];      /* at = the crew record */
+    struct { int rec, ai, ch; BYTE status; DWORD at, actor, model; int bd, bdm; } m[KLW_NREC];      /* at = the crew record. bd/bdm: only the ONLINE banter who (klbotvoice.c OnlineBanterBots): bd = the group digit 2..8 of a host Ally bot (0 = a human / Arcade member), bdm = 1 when it speaks as the Dead Men body ch (ByLook), else its digit voice */
 };
 
 static int klw_who_now(struct klw_who *w)
