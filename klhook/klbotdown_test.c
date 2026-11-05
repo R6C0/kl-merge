@@ -305,6 +305,8 @@ int main(void)
     CHECK(R32(ACT(1) + 0x64c) == 1 && has("not holding Use") && !has("you help him up"), "NeedUse on, Use not held: no help, still down at 3.5 s");
     OREV(1, 6100, 0, 1, 1, 1); run(3200);
     CHECK(R32(ACT(1) + 0x64c) == 0 && has("you help him up"), "NeedUse on, Use held: up by 3.5 s");
+    OREV(1, 6100, 0, 1, 1, 1); { int t; for (t = 0; t < 3200; t += 250) { g_use = (t / 250) & 1 ? 0 : 1; run(250); } }
+    CHECK(R32(ACT(1) + 0x64c) == 1 && has("you help him up"), "NeedUse on, Use tapped (250 ms on / off): the pauses are not credited - still down at 3.5 s");
     OREV(1, 6600, 0, 0, 0, 1); run(3200);
     CHECK(R32(ACT(1) + 0x64c) == 1 && !has("you help him up"), "6 m away (Range 2.5): no help");
     OREV(1, 6100, 300, 0, 0, 1); run(3200);

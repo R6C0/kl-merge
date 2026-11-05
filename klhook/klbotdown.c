@@ -267,34 +267,41 @@ static int kad_use_held(DWORD pl);                                              
 #ifdef KLHOOK_TEST
 static int kla_key_held(int dik);                                                 /* klauto.c (TEST only): a scripted DIK_E counts as held */
 #endif
-static void klbd_revive_one(int i, struct klbd_rec *b, const struct klb_rec *r, DWORD dnd, DWORD tick, const float pos[3], int have)
+static float klbd_revive_k(int i, struct klbd_rec *b, const struct klb_rec *r, DWORD dnd, DWORD tick, const float pos[3], int have)
 {
     float range, rate, minhelp, hf[3], hn[3], dx, dz, d, k; int needuse, held; DWORD pl = 0, dt;
     dt = b->rv_last ? tick - b->rv_last : 0; b->rv_last = tick;
     if (dt > 512) dt = 0;                                                         /* a stall or the first pass: nothing counted */
-    if (!klbd.orev || !klbd_kad(&range, &rate, &minhelp, &needuse) || !have || !dnd) return;
-    if (KLBD_FED() || !kle_human(&pl, hf, hn) || !pl) return;                     /* police helps nobody; not in play = no body */
-    if (fabsf(hn[1] - pos[1]) > 200.0f) return;                                   /* another floor */
+    if (!klbd.orev || !klbd_kad(&range, &rate, &minhelp, &needuse) || !have || !dnd) return 0;
+    if (KLBD_FED() || !kle_human(&pl, hf, hn) || !pl) return 0;                     /* police helps nobody; not in play = no body */
+    if (fabsf(hn[1] - pos[1]) > 200.0f) return 0;                                   /* another floor */
     dx = hn[0] - pos[0]; dz = hn[2] - pos[2]; d = sqrtf(dx * dx + dz * dz);
-    if (d > range * 100.0f) return;
+    if (d > range * 100.0f) return 0;
     held = kad_use_held(pl);
 #ifdef KLHOOK_TEST
     if (kla_key_held(0x12)) held = 1;
 #endif
     if (needuse && !held) {
         if (!b->rv_wait && klbd.orevlog) { b->rv_wait = 1; klog("adren-online: record %d: you are by him (%.1f m) but not holding Use (NeedUse): no help counted", i, d / 100.0f); }
-        return;
+        return 0;
     }
     b->rv_hm += (float)dt * 1000.0f / 1024.0f;
-    if (b->rv_hm < minhelp * 1000.0f) return;
+    if (b->rv_hm < minhelp * 1000.0f) return 0;
     k = 1.0f + (rate - 1.0f) * kltt_bot(r->actor, KLTT_ADREN);
     if (!b->rv_said) {
         b->rv_said = 1;
         klog("adren-online: record %d: you help him up (%.1f m, %.0f ms of help >= MinHelp %.1f s): his lie runs x %.2f (Rate %.1f)%s", i, d / 100.0f, b->rv_hm, minhelp, k, rate,
              (klbd.orev == 2 || klbd.dry) ? " - OnlineRevive=2 / Dry: log only, nothing is written" : "");
     }
-    if (klbd.orev == 2 || klbd.dry) return;
-    klbd_speed(i, k);
+    return (klbd.orev == 2 || klbd.dry) ? 0.0f : k;
+}
+
+/* the pull, or none: a pass without one forgets klbd_speed's last tick, so a pause in the help (Use let go, a step out of Range) is not
+   credited to the next pull (review wflgrhqjw: tapping Use every 0.5 s pulled about twice as fast as holding it) */
+static void klbd_revive_one(int i, struct klbd_rec *b, const struct klb_rec *r, DWORD dnd, DWORD tick, const float pos[3], int have)
+{
+    float k = klbd_revive_k(i, b, r, dnd, tick, pos, have);
+    if (k > 0) klbd_speed(i, k); else b->spd_last = 0;
 }
 
 /* ---------------------------------------------------------------- one pass */
