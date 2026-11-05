@@ -71,6 +71,17 @@ int main(void)
       CHECK(!strcmp(klbv_probe_spk(0xfd), "police") && !strcmp(klbv_probe_spk(0xfc), "driver") && !strcmp(klbv_probe_spk(0xfb), "undercover") && !strcmp(klbv_probe_spk(0xff), "?"));
       for (k = 0; k < 500; k++) got += klbv_probe_take(&n, KLBV_PROBE_CAP);
       CHECK(got == KLBV_PROBE_CAP && n == KLBV_PROBE_CAP); n = -1; CHECK(!klbv_probe_take(&n, 5)); }
+    /* poll helpers */
+    { int cnt[8] = {0, 2, 0, 1, 0, 0, 0, 12}; char b[64], k[8]; int ls;
+      CHECK(klbv_poll_changed(0.0f, 5.0f) && klbv_poll_changed(5.0f, 21.5f) && klbv_poll_changed(30.0f, 4.0f));
+      CHECK(!klbv_poll_changed(5.0f, 5.0f) && !klbv_poll_changed(5.0f, 0.0f) && !klbv_poll_changed(5.0f, -1.0f));
+      { float nan = 0.0f; nan = nan / nan; CHECK(!klbv_poll_changed(1.0f, nan) && !klbv_poll_changed(nan, 1.0f)); }
+      CHECK(klbv_poll_summary(b, sizeof b, cnt, 8) == 3 && !strcmp(b, "1:2 3:1 7:12"));
+      CHECK(klbv_poll_summary(b, 12, cnt, 8) == 2 && !strcmp(b, "1:2 3:1..."));
+      CHECK(klbv_poll_summary(b, sizeof b, cnt, 0) == 0 && !b[0]); CHECK(klbv_poll_summary(b, 4, cnt, 8) == 0);
+      CHECK(klbv_poll_clean("Multi/Key", 100, k, sizeof k) == 7 && !strcmp(k, "Multi/K"));
+      ls = klbv_poll_clean("a\x01z", 3, k, sizeof k); CHECK(ls == 3 && !strcmp(k, "a?z"));
+      CHECK(klbv_poll_clean(0, 5, k, sizeof k) == 0 && !k[0]); CHECK(klbv_poll_clean("abc", 2, k, sizeof k) == 2 && !strcmp(k, "ab")); }
     printf("klbotvoice_test:%d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

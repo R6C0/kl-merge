@@ -247,7 +247,7 @@ static void __cdecl klbv_probe_hit(int id, KLBR_F3REGS *r)      /* called by the
 {
     DWORD sp, grp, other, spk, x, ra, cnt = 0, last = 0, mgr; int idx, bots = 0, i; float lastf;
     (void)id;
-    if (!klbv_probe_on || !r || klbv_probe_flt >= 3 || !klbv_probe_role || GetCurrentThreadId() != klbv_probe_tid) return;
+    if (klbv_probe_on != 1 || !r || klbv_probe_flt >= 3 || !klbv_probe_role || GetCurrentThreadId() != klbv_probe_tid) return;
     klbv_probe_calls++;
     if (!klbv_probe_take(&klbv_probe_n, KLBV_PROBE_CAP)) return;
     __try {
@@ -278,10 +278,70 @@ static void klbv_probe_install(void)      /* once, game thread; a refusal is fin
     if (klh_poke(at, klbv_probe_bytes, 6, jmp, 6, "botvoice: OnlineVoiceProbe detour")) { klbv_probe_state = 1; klog("botvoice: probe: 0x%x installed (6 bytes stolen, stub %d bytes), log only", KLBV_PROBE_VA, n); }
     else klog("botvoice: probe: 0x%x NOT installed (refused by the patch guard - a SHIP build writes no code - or the bytes differ)", KLBV_PROBE_VA);
 }
+/* [BotFill] OnlineVoiceProbe=2 (default 0, recommended off until benched; UNTESTED): the POLLED, READ-ONLY sampler. It writes NO code (SessionSafe=1 and SHIP are fine, the hashed range is only read).
+   Evidence (debug/dasm.py 58a070, 877a30, 6b8710, 88d780; re/bots_voice.md 1.1/1.2): the speech manager is the global [0x168e958] (the 'this' of 0x58a070, e.g. lea edx,[mgr+0x390] at 0x4dc1ac); it embeds
+   94 list objects 0x18 apart, +0x000 .. +0x8b8 (the 25 single lines follow at +0x8d0). A list: +4 count (0x58a08b cmp [ebx+4],1), +0x10 data = array of entry pointers (0x58a103/106), +0x14 float
+   last-said = the game clock, stored by 0x58a138 only when the line really plays (the 15.0 s gate 0xd1af98 passed). An entry (0x28 bytes, ctor 0x6b8710): +0x18 key char* (GUESS: the 2nd argument of the ctor,
+   a persistent string; read bounded under __try), +0x1c float time of FIRST use (0x58a129). Which alternative played is not stored (GUESS), so the key logged is the entry whose first-use time equals the new
+   last-said, else entry 0. The speaker byte is NOT stored: use =1 (detour) for it. Every ~150 ms on the game thread inside a round (host or client): a group whose last-said changed is logged.
+   LOG: botvoice: poll say #N <HOST|CLIENT> group idx I key 'K' (first-use entry E | entry 0 of C, which alternative played is unknown) last-said %.1f -> %.1f lines C
+        botvoice: poll round <HOST|CLIENT>: said T logged L (cap 200) by group idx: I:count I:count ...        (at the end of a round)
+        botvoice: poll: fault ... (3 faults switch it off) */
+static float klbv_poll_last[KLBV_POLL_GROUPS];
+static int klbv_poll_cnt[KLBV_POLL_GROUPS], klbv_poll_have, klbv_poll_n, klbv_poll_total, klbv_poll_role, klbv_poll_flt;
+static DWORD klbv_poll_at;
+static void klbv_poll_key(DWORD data, DWORD cnt, float cur, char *out, int cap, int *ent)      /* the key of the entry whose first-use time == cur, else of entry 0; bounded, game thread */
+{
+    char raw[64]; DWORD e, kp, k, j, pick = 0; float fu;
+    out[0] = 0; *ent = -1;
+    if (cap < 2 || data < 0x10000 || cnt < 1 || cnt > 3) return;
+    for (k = 0; k < cnt; k++) {
+        e = klh_rd32(data + k * 4);
+        if (e > 0xffff) { DWORD b = klh_rd32(e + 0x1c); memcpy(&fu, &b, 4); if (fu == cur) { pick = k; *ent = (int)k; break; } }
+    }
+    e = klh_rd32(data + pick * 4); if (e < 0x10000) return;
+    kp = klh_rd32(e + 0x18); if (kp < 0x10000) return;
+    for (j = 0; j < sizeof raw - 1; j++) { BYTE c = 0; if (!klh_rd(kp + j, &c, 1) || !c) break; raw[j] = (char)c; }
+    raw[j] = 0;
+    klbv_poll_clean(raw, (int)j, out, cap);
+}
+static void klbv_poll_tick(void)      /* game thread */
+{
+    DWORD sm, role, now, mgr, i; char sum[400]; const char *rn;
+    if (klbv_poll_flt >= 3) return;
+    if (!klbv_round(&sm, &role)) {
+        if (klbv_poll_role && klbv_poll_total) { klbv_poll_summary(sum, sizeof sum, klbv_poll_cnt, KLBV_POLL_GROUPS); klog("botvoice: poll round %s: said %d logged %d (cap %d) by group idx: %s", klbv_poll_role == 2 ? "HOST" : "CLIENT", klbv_poll_total, klbv_poll_n, KLBV_PROBE_CAP, sum); }
+        klbv_poll_role = 0; klbv_poll_have = 0; klbv_poll_n = 0; klbv_poll_total = 0; memset(klbv_poll_cnt, 0, sizeof klbv_poll_cnt);
+        return;
+    }
+    klbv_poll_role = (int)role; rn = role == 2 ? "HOST" : "CLIENT";
+    now = GetTickCount();
+    if (klbv_poll_have && (DWORD)(now - klbv_poll_at) < KLBV_POLL_MS) return;
+    klbv_poll_at = now;
+    __try {
+        mgr = klh_rd32((DWORD_PTR)KLH_VA(0x0168e958));
+        if (mgr < 0x10000) return;
+        for (i = 0; i < KLBV_POLL_GROUPS; i++) {
+            DWORD g = mgr + i * 0x18, b = klh_rd32(g + 0x14); float cur; memcpy(&cur, &b, 4);
+            if (klbv_poll_have && klbv_poll_changed(klbv_poll_last[i], cur)) {
+                klbv_poll_cnt[i]++; klbv_poll_total++;
+                if (klbv_probe_take(&klbv_poll_n, KLBV_PROBE_CAP)) {
+                    char key[64]; int ent; DWORD cnt = klh_rd32(g + 4);
+                    klbv_poll_key(klh_rd32(g + 0x10), cnt, cur, key, sizeof key, &ent);
+                    if (ent >= 0) klog("botvoice: poll say #%d %s group idx %lu key '%s' (first-use entry %d) last-said %.1f -> %.1f lines %lu", klbv_poll_n, rn, (unsigned long)i, key, ent, (double)klbv_poll_last[i], (double)cur, (unsigned long)cnt);
+                    else klog("botvoice: poll say #%d %s group idx %lu key '%s' (entry 0 of %lu, which alternative played is unknown) last-said %.1f -> %.1f lines %lu", klbv_poll_n, rn, (unsigned long)i, key, (unsigned long)cnt, (double)klbv_poll_last[i], (double)cur, (unsigned long)cnt);
+                }
+            }
+            klbv_poll_last[i] = cur;
+        }
+        klbv_poll_have = 1;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { klbv_poll_flt++; klog("botvoice: poll: fault in the sampler: %d of 3 allowed", klbv_poll_flt); }
+}
 static void klbv_probe_tick(void)      /* game thread: install once, role and per-round counters */
 {
     DWORD sm, role;
-    if (!klbv_probe_on) return;
+    if (klbv_probe_on == 2) { klbv_poll_tick(); return; }
+    if (klbv_probe_on != 1) return;
     if (!klbv_probe_state) klbv_probe_install();
     if (klbv_round(&sm, &role)) { klbv_probe_role = (int)role; return; }
     if (klbv_probe_role && klbv_probe_calls) klog("botvoice: probe round: calls %ld logged %d (cap %d)", klbv_probe_calls, klbv_probe_n, KLBV_PROBE_CAP);

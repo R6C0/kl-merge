@@ -145,4 +145,39 @@ static int klbv_probe_take(int *n, int cap)
     return 1;
 }
 
+/* OnlineVoiceProbe=2: the POLLED, READ-ONLY sampler (klbotvoice.c). Layout from the disassembly of 0x58a070 (11-05): the manager [0x168e958] embeds 94 list objects 0x18 apart (+0x000 .. +0x8b8;
+   the 25 single lines start at +0x8d0); a list: +4 count, +0x10 data (array of entry pointers), +0x14 float last-said (game clock, written only when a line really plays; the stock gate is 15.0 s). */
+#define KLBV_POLL_GROUPS 94
+#define KLBV_POLL_MS 150u      /* poll period (GUESS: 100..250 ms asked; the stock gate is 15 s, so a group changes at most once per 15 s) */
+/* a group counts as 'said' when its last-said time changed and is a real time (> 0, not NaN); the baseline sample of a round never counts */
+static int klbv_poll_changed(float prev, float cur)
+{
+    if (cur != cur || prev != prev) return 0;
+    return cur > 0.0f && cur != prev;
+}
+/* a key string copied bounded and printable-only (the key is a char* in the line object, entry +0x18; GUESS: a persistent literal); returns the length */
+static int klbv_poll_clean(const char *src, int srclen, char *out, int cap)
+{
+    int i, n = 0;
+    if (cap < 1) return 0;
+    for (i = 0; src && i < srclen && n < cap - 1 && src[i]; i++) out[n++] = (src[i] >= 32 && src[i] < 127) ? src[i] : '?';
+    out[n] = 0;
+    return n;
+}
+/* the end-of-round summary "idx:count idx:count ..." of the groups with a count; returns the number of groups listed (a cut-off ends with "...") */
+static int klbv_poll_summary(char *out, int cap, const int *counts, int n)
+{
+    int i, len = 0, listed = 0, w;
+    if (cap < 8) { if (cap > 0) out[0] = 0; return 0; }
+    out[0] = 0;
+    for (i = 0; i < n; i++) {
+        char tmp[24];
+        if (counts[i] <= 0) continue;
+        w = sprintf(tmp, "%s%d:%d", len ? " " : "", i, counts[i]);
+        if (len + w > cap - 5) { strcpy(out + len, "..."); return listed; }
+        memcpy(out + len, tmp, (size_t)w + 1); len += w; listed++;
+    }
+    return listed;
+}
+
 #endif /* KLBOTVOICE_LOGIC_H */
