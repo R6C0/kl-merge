@@ -68,15 +68,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 
+2026-11-05 ~08:35 - [c9] bs72 (NoBoard=2 + live keys, workflow w2xl0pq92 verified): DD03 PASS 2/2, mark +198 s (before the van call), marked bot never boarded (202 puppeteer + 13 boardall skips),
+82 hits, host downed once. DM03 PASS 2/2 but 0 marks: the crew's evaluates STOPPED at +135 s (all 7 aboard +131 s, van 3->5 +135.4 s), before MinS 150; bs70 (same dll + ini) kept evaluating to
+~+171 s and marked at +151 s, so MinS 150 vs that stop is a race (cause of the stop not found yet). DD05 FAILED at the menu (SystemLink -> SysUIErrorScreen, first time, no level). New toggle
+[Brain] OnlineBrainTraitorMarkGapMs (fb99cff87, default 0, recommended 500): spaces marks like Arcade. bs73 running (bs72 + gap 500, TEST 1268812a). NoBoard=2 kit ready, NOT installed: C:/kl_build_1024/c9_1105c_install.
+
 2026-11-05 ~08:10 - [c9] DM03 traitor: bs70 + bs71 PASS 2/2 each. The 0 hits came from WHEN the mark lands (workflow wujbyvqpx, verified): marked BEFORE the van call (bs69), the
 slot-45 pendBoard pump (left open by live NoBoard=1) ghost-boards him: Board stays Defend's child, fire test FAIL 46/46, 0 hits. Marked after boarding (bs70): attacks, 25 hits. bs71 (NoBoard=2
 + MinS=100 bench only, mark before the van): pendboard skipped 38x, marked bots stay off the van, 42 hits (1434 dmg), round ends normally. BUT bs71 marked 3 bots in one tick (all other benches 1):
 workflow wimxqei6l checks Arcade's count and whether live MinS 150 can do it. bs72 running: NoBoard=2 + live keys on DM03 DD05 DD03 (kit week_1028/bs72). NoBoard=2 not installed yet.
-
-2026-11-05 ~07:45 - [c9] bs69 PASS 2/2 seats (DM03, bs68 keys, host goes to the van road: the goto legs stuck on a wall at z -9791, the tele + last goto reached (2068,22,-318) at +192 s).
-DM03 0 hits is NOT only a bench artifact: mark +154 s, van called +157 s, the marked bot (stage 3) boarded by the stock Board tactic (slot 45 -> pendBoard) at ~+170 s, then sat aboard 3 min
-7.8 m from the human (saw him: cand list 1 ZFFPlayer) and never fired (damage hook 0 entries). Live NoBoard=1 only skips the puppeteer. bs70 running: same kit with NoBoard=2 (also skips the
-slot-45 pendBoard boarding of a marked bot), host tele at ~+135 s. Kit C:/kl_build_1024/week_1028/bs70.
 
 2026-11-05 ~07:20 - [ce] InShopSteps is live (in every SHIP dll since pq_1104b; to turn off: InShopSteps=0, C:\kl_build_1024\pq_1104b_install UNDO bat). Waiting for the owner's play test.
 QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq (gen_pqq.py; PQQ_HOOK=<TEST dir> picks the dll): [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND
