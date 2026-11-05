@@ -78,10 +78,10 @@ wwzhhsh6y, verified): Stage2Gate marks come after the gather (DD05 +4.2 s, DD03 
 NoBoard=1 a marked bot leaves the puppeteer (klbotfill.c:2326) before the klbf_gts call. Redundant on the live config: stays default 0, not installed. Marks +129 (byte 3, fixed by 9ccfd0ad3,
 bs68 checks) / +155 / +168.8 s. Hits on humans DM03 0 (LOS ~130 m), DD05 6 (host 550->214 hp), DD03 15 (host downed twice, got up). Banked: DM03 7/7, DD05 6/7, DD03 6/7 (traitor out).
 
-2026-11-05 ~06:40 - [ce] InShopSteps is live (pq_1104b, benched on all 16 maps; UNDO bat in C:\kl_build_1024\pq_1104b_install). Waiting for the owner's play test.
-QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq (gen_pqq.py): [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND seat inis -> stock cut ends round 1
-13 s in, ~4 min a 2-seat map instead of ~8.5. pqq3 15/16 maps PASS; DM06 host missed the shop (its script tour ran past the short round), tour dropped,
-pqq4 DM06 PASS both seats. Kit regenerated for all 16 maps: run with run_pqq.sh after a chain_queue start line.
+2026-11-05 ~07:20 - [ce] InShopSteps is live (in every SHIP dll since pq_1104b; to turn off: InShopSteps=0, C:\kl_build_1024\pq_1104b_install UNDO bat). Waiting for the owner's play test.
+QUICK shop smoke kit C:/kl_build_1024/week_1028/pqq (gen_pqq.py; PQQ_HOOK=<TEST dir> picks the dll): [Bench] SelfDownAt=10 Repeat=4 + KeepRound=0 in base AND
+seat inis -> round 1 ends 13 s in, ~4 min a 2-seat map. All 16 maps PASS (pqq3 + pqq4). pqq5 on a TEST twin of c9_1105a (263ba9517, C:/kl_build_1024/c9_1105a_test)
++ the live ini: DD05 DM03 DD01 DM06 PASS 8/8 seats, 0 faults, so c9's install keeps the in-shop fix working.
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

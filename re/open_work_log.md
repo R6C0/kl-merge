@@ -1,3 +1,6 @@
+2026-11-05 ~07:20 - [ce] pqq5 PASS 4/4 maps, 8/8 seats, 0 faults: quick shop smoke on a TEST twin of the installed c9_1105a (263ba9517 built with build_auto.bat in a worktree, C:/kl_build_1024/c9_1105a_test)
++ the live ini (CallFirst, VoiceClientRetry, BanterBots, Stage2Gate on). DD05 DM03 DD01 DM06: every seat reached the weapon list with no RETURN through 'pagequeue: inshop:'. Live dll restored to eb5775cb after the run. Logs: pqq/run5.
+
 2026-11-05 ~07:05 - [c9] bs68 PASS 6/6 seats, 0 faults (bs67 keys + the 9ccfd0ad3 MinS mark hold, out_s3_1105b). First marks +150 / +161 / +171 s: none before MinS 150 on any map
 (bs66 DM03 +134, bs67 +129). Hits on humans DM03 0, DD05 11, DD03 76 (upper bound). Banked DM03 7/7, DD05 and DD03 traitor out. INSTALLED c9_1105a (SHIP md5 eb5775cb: OnlineVanCallFirst,
 VoiceClientRetry, BanterBots, Stage2Gate=1 + Money0; MinS/MaxS not set); [ShopPage] keys intact. UNDO: C:/kl_build_1024/c9_1105a_install/UNDO c9 1105a.bat. A windowless kl2.exe
