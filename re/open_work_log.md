@@ -21,6 +21,10 @@ online banter members are the other HUMAN seat, NOT bots ("a bot" log label is w
 bs56 online 147/212/205); crewhold dwell 53/52 s (Arcade ~60), clock clamp never bit. Defects: DD05 caller carried $0; DD03 heli dwell still 14 s (CrewPlace measures walkers, but the add is refused:
 heli health unreadable, no shield); DM03 two bots zeroed 1-1.7 s after the call (unexplained). [+0x1e0] = 0 in states 1-5 on DD03 online. Not for install; workflow wiqspa20i fixes.
 
+2026-11-05 ~04:20 - [ce] pqq3 (quick kit, all 16 maps, 03:00-04:10, 70 min instead of ~2 h 15): 16/16 PASS on rounds (both seats round 1 -> shop -> round 2, 0 faults),
+round 1 = 13 s on every map; 31/32 seats reached the weapon list from the in-shop press. Miss: DM06 host (pq5 script walks a 30 s pos/mouse tour before 'waitstate 0x1f', so the
+short round's scoreboard and shop passed unseen; it then sat to round 2's end 0x29). gen_pqq.py now drops the tour lines; pqq4 = DM06 rerun, queued after c9's bs67.
+
 2026-11-05 ~02:20 - [ce] QUICK shop smoke kit (owner 11-04 'option 3'): C:/kl_build_1024/week_1028/pqq (generator gen_pqq.py in ce's scratchpad; kit =
 pq14-style in-shop presses, TEST pq_1104b_test, live ini base). Round 1 cut by [Bench] SelfDownAt=10 SelfDownRepeat=4 SelfDownGap=1500 + [Lobby] KeepRound=0 in BOTH the base and
 the seat inis (run 1: the seat ini's KeepRound=1 overrode the base: full 280 s round). pqq2 DD05 PASS both seats, 0 faults: stock cut (B) 'all heisters out' from 0x46c2ba (slot 193, 3.0)
