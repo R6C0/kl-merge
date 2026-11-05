@@ -230,7 +230,10 @@ static void klbdp_init(void)
     k += klbdp_site(0, 0x0061efd0u, klbdp_x0, sizeof klbdp_x0, klbdp_hook0, "health write 0x61efd0");
     k += klbdp_site(1, 0x0061a980u, klbdp_x1, sizeof klbdp_x1, klbdp_hook1, "hit handler 0x61a980");
     k += klbdp_site(2, 0x004bd540u, klbdp_x2, sizeof klbdp_x2, klbdp_hook2, "death routine 0x4bd540");
-    k += klbdp_site(3, 0x00688190u, klbdp_x3, sizeof klbdp_x3, klbdp_hook3, "slot 51 0x688190");
+    /* c9 1105: site 3 is OFF unless [BotDeathProbe] Slot51=1 (recommended off). Its jmp at 0x688190 fails klbd_callable's byte check (klbotdown.c, also
+       klcardown.c / klshield.c), so while it was on (every TEST build: Enable defaults to 1 there) no bot down, car down or shield was ever called on a bench */
+    if (GetPrivateProfileIntA("BotDeathProbe", "Slot51", 0, klh_ini)) k += klbdp_site(3, 0x00688190u, klbdp_x3, sizeof klbdp_x3, klbdp_hook3, "slot 51 0x688190");
+    else klog("bd: site 3 (slot 51 0x688190) left alone: its detour would stop botdown / cardown / shield (klbd_callable); [BotDeathProbe] Slot51=1 to probe it anyway");
     k += klbdp_site(4, 0x008edaf0u, klbdp_x4, sizeof klbdp_x4, klbdp_hook4, "refill 0x8edaf0");
     klog("bd: on (LOG ONLY, recommended on for test runs, off for players): %d of %d sites detoured (0x61efd0 / 0x61a980 / 0x4bd540 / 0x688190 / 0x8edaf0; 0x792bc0 and 0x8473a0 are hashed), max %lu lines per site and %lu samples per load; sampling every 250 ms in state 0x19",
          k, KLBDP_NSITE, (unsigned long)klbdp.maxl, (unsigned long)klbdp.maxs);
