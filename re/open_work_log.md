@@ -1,3 +1,8 @@
+2026-11-05 ~08:10 - [c9] DM03 traitor: bs70 + bs71 PASS 2/2 each. The 0 hits came from WHEN the mark lands (workflow wujbyvqpx, verified): marked BEFORE the van call (bs69), the
+slot-45 pendBoard pump (left open by live NoBoard=1) ghost-boards him: Board stays Defend's child, fire test FAIL 46/46, 0 hits. Marked after boarding (bs70): attacks, 25 hits. bs71 (NoBoard=2
++ MinS=100 bench only, mark before the van): pendboard skipped 38x, marked bots stay off the van, 42 hits (1434 dmg), round ends normally. BUT bs71 marked 3 bots in one tick (all other benches 1):
+workflow wimxqei6l checks Arcade's count and whether live MinS 150 can do it. bs72 running: NoBoard=2 + live keys on DM03 DD05 DD03 (kit week_1028/bs72). NoBoard=2 not installed yet.
+
 2026-11-05 ~07:45 - [c9] bs69 PASS 2/2 seats (DM03, bs68 keys, host goes to the van road: the goto legs stuck on a wall at z -9791, the tele + last goto reached (2068,22,-318) at +192 s).
 DM03 0 hits is NOT only a bench artifact: mark +154 s, van called +157 s, the marked bot (stage 3) boarded by the stock Board tactic (slot 45 -> pendBoard) at ~+170 s, then sat aboard 3 min
 7.8 m from the human (saw him: cand list 1 ZFFPlayer) and never fired (damage hook 0 entries). Live NoBoard=1 only skips the puppeteer. bs70 running: same kit with NoBoard=2 (also skips the
