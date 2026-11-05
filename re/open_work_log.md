@@ -1,3 +1,8 @@
+2026-11-05 ~05:15 - [c9] bs64 PASS 6/6 seats, 0 faults (out_cf_1105b). CallFirst: every early call by a carrier (+102/+171/+154 s); its "carries nothing" branch never fired (untested).
+Aboard after the call: DM03 7/7 (bs60: 5, 2 dead), DD05 6/7, DD03 6/7 (missing = the marked traitor); 0 deaths, so BotDeathProbe (prefix `bd:`) had nothing. DD03 CrewNoShield held 59 s
+(bs60 14 s), van unharmed but nothing shot it: keep default 0. Log label fix: the crewhold add line now says "shield off (timer-only)" when no shield (klbotfill.c crewhold add line). bd: probe HIT lines stop at #20 despite MaxLines=500 (probe quirk). Install candidates: CallFirst rule,
+VoiceClientRetry. Queue: bs65 (running), bs66, bs67, ce pqq4.
+
 2026-11-05 ~04:35 - [c9] bs63 PASS 4/4 seats (client [BotFill] OnlineVoiceClientRetry=1, TEST out_vr_1105a, DM03 DD05 online, 0 faults). DM03: host sent 17 bot lines, client played 17/17; 3 boarded lines
 refused by the 2 s gap were parked and played on retry after 281 ms (bs59 without the retry: 9/10). DD05: 5/5. ClientRetry is an install candidate (recommended on). ce pqq3 PASS 16/16; ce pqq4 (DM06) after bs67.
 
