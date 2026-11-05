@@ -1,3 +1,7 @@
+2026-11-05 ~02:00 - [c9] bs58 rerun PASS 6/6 (Stage2Gate=1, DM03 DD05 DD03 online, 0 faults) but the gate does NOT reach Arcade timing: first traitor mark +94 / +56 / +108 s
+(bs56 baseline 87 / 46 / 108, Arcade 150-240 s); every release came from the $1.25M money fallback (van / gather / exit-box never fired). Not for install. bs62 kit = bs58 +
+[Brain] OnlineBrainTraitorStage2Money=0 (no fallback), TEST out_cp_1105a, queued after bs61 (c9_chain_62.sh). Queue: bs59 (running), ce pqq2, bs60, bs61, bs62.
+
 2026-11-05 ~01:30 - [c9] bs57 rerun PASS 4/4 (SB57A DD03, SB57B DD01 online 2 seats + ARC57 DD03/DD01 Arcade; TEST out_s2t_1104b, 0 faults). DD01 online = Arcade (boarding object
 from state 1, crewhold 45 s, real Board slot 45). DD03 heli: [+0x1e0] = 0 in states 1-4 in BOTH modes, but Arcade's crewhold still held ~60 s while online returns early (kle_boarding fails): 15 s
 dwell. Workflow wr2z2gihl: [BotFill] OnlineVanCrewPlace + OnlineVanBoardPoll. Also pushed: d91fa070c OnlineVanCallFirst (bench bs60), d8abd1499/036707148 voice leaf keys + OnlineVoiceProbe=2
