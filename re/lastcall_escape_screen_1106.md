@@ -67,3 +67,10 @@ Did the screen go black, show the sky, or show the map frozen? Did the round-ove
 lclive1106 (live DM05A): E held 3 s inside BoardingTrigger_Heli -> "0 you aboard g3" one second later, then van 5, status6, round over,
 outro camera eye = EscCamera01, heli closest pass 314 m. The escape flow works; the earlier missing escape screen was the bench never
 holding E. Picture still unchecked (no shots: ReShade owns Present); rerun with D3dShotPost=1 + Bridge=1.
+
+## 11-06 ~11:35 run2 with shots: the "grey screen" is real (black outro)
+lclive1106 run2 (D3dShotPost=1 + ReShade Bridge=1, 23 shots). Boarded 11:29:17 (E hold). While the heli waits (shots 17/18) the outro eye
+is fixed at EscCamera01 (7093,2181,2727), looking at the heli: a very dark frame, heli silhouette. Heli leaves ~11:29:59 (veh1dc 5); the
+eye stays fixed and the look-at pivot follows the heli up and away (-4536,5892,2364 by 11:30:08). Shots 19-21 (11:30:09-11:30:49) are
+fully black except the HUD, ~60 s until 0x1f at 11:31:00. Score screen fine. Cause/fix: workflow lastcall-black-outro, note
+re/lastcall_outro_black_1106.md.
