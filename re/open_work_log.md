@@ -1,3 +1,7 @@
+## 2026-11-06 ~13:45 [c9] lcspawn2f1106 bench PASS: Last Call players start on the 2nd floor (no crash involved)
+lcspawn2f1106 (DM05A solo, lcspawn2f_1106 88e23dd5 via install/undo): PASS 4/4, 0 faults, undo md5s OK.
+`pos spawn: me #14 (-4800, 462, 1000)` = 2nd floor (y ~460) west end; shot 02 shows the heisters standing indoors at the round-1 card. Not installed (pinned e6d2f73e; install with the other DM05A stages after 6b's pd2guns layer).
+
 ## 2026-11-06 ~13:25 [f0] ONLINE GRUDGE PASS B LIVE: a human who kills an AI heister is made traitor (no crash involved)
 grudge_1106 pass B (OnlineGrudgeDry=0, TEST 0bf88e4c, 2 seats DD09, 12:56): 16 human hits, 3 lethal blows, 1 "died ... killer found" (heister 1) ->
 "made traitor (slot 129 killer 0 victim -1, then slot 105), flags 00000000 -> 00000001", "traitors now: bots 0 human 1". 0 faults, 0 crashes.

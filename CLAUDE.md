@@ -67,10 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
-2026-11-06 ~12:30 - [c9] LAST CALL: escape boarding works (hold E); the "grey screen" is real: after departure the fixed EscCamera01 eye follows the heli
-into dark sky, ~60 s black (two heli visits 20+40 s). Staged + reviewed, NOT installed, all pinned to live e6d2f73e (install one, restage the rest):
-lcoutro_1106 77a42f74 (spline 17->6 pts), lcdoors_1106 a24d7432, lcspawn2f_1106 88e23dd5; kits lcoutro1106/lcdoors1106/lcspawn2f1106.
-Found: every map's inis Entries 72 short (shop pics) -> gun looks + fed bodies refused live; 6b fixes with kl_entries_fix after f0's bench.
+2026-11-06 ~13:45 - [c9] LAST CALL: escape boarding works (hold E). Outro still dark: lcoutro (spline 17->6) cuts it 60 s -> ~23 s but stays black;
+lcoutcam (eye rides heli at -9 m x) = flat grey. Workflow lc-heli-cam-2 picks lit offsets from geometry (kits lcoutcam2a/2b1106).
+Benched PASS, NOT installed (all pinned live e6d2f73e): lcspawn2f_1106 88e23dd5 (start 2nd floor west, -4800,462,1000); lcdoors_1106 a24d7432 restaged
+after 6b's Entries fix, bench pending. Install DM05A stages together with 6b's held pd2guns layer.
 
 2026-11-06 ~12:40 - [db] 9-SEAT PERF: n9_1106 sweep = one-PC contention (13-26 fps). Hook fixes, all [Perf] "(recommended on)", NOT installed (live 727a73bb):
 OsdScanSlice f62cfbe4, ScanMinFrames ce1dc86d+baa51a0e, ShopPoolBlock 50916295 (kls_ammo 471 reads/frame -> 1). Bench OSS_DD09_SPB on TEST 4a3387ea: 9/9 in round,
