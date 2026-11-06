@@ -36,7 +36,7 @@ LAYERS = {
                   title='1106b (items 62 C45 pistol, 50 / 51 HRL-7 launchers: the specs C45, HRL50, HRL51)', short='C45 / HRL-7',
                   seeds=[]),
     '1106c': dict(keys=['R700', 'GL40', 'GL40GAS', 'GL40FLR'], tag='.before-pd2guns1106c', base=os.path.join(WORK_BUILD, 'pd2guns_1106b'),
-                  out=r'D:\kl_stage\pd2guns_1106c',
+                  out=r'D:\kl_stage\pd2guns_1106c', backup=r'D:\kl_stage\pd2guns_1106c_backup',      # backup = off-drive installer (C: is full)
                   title='1106c (items 49 R700 sniper, 52 / 53 / 54 GL40 grenade launchers: the specs R700, GL40, GL40GAS, GL40FLR), staged on top of layer 1106b',
                   short='R700 / GL40', seeds=[os.path.join(WORK_BUILD, 'pd2b5_scratch', 'r700_out', 'fits.json'),
                                               os.path.join(WORK_BUILD, 'pd2b6_scratch', 'fits.json')]),
@@ -400,9 +400,200 @@ if failed:
 '''
 
 
+INSTALL_PY_OFFDRIVE = r'''"""PD2 guns @TITLE@ as a layer ON TOP of the live Dead Men maps - OFF-DRIVE BACKUP mode.
+The game drive is nearly full, so nothing is kept beside the live files. Per map and file (<slot>_Main.zip, <slot>_Main.bots.zip, <slot>_Main.bots.base.md5,
+KLGuns.ini, KLJoin.ini, DM11B's Int16Ok.txt): the live file is COPIED to <backup>/<map>/<file> (md5 must be the pinned old one), then the staged file is
+copied to <live>.new beside it (md5 must be the pinned new one) and os.replace'd over the live file. Any failure rolls the whole map back from the backup
+copies (md5-checked) and removes them, so the map is left as it was. A map that already has a backup file on the backup drive is refused ('backup exists').
+Backups live in the BACKUP folder set below (override: --backup DIR). Every live md5 is pinned (pins.json): a map whose live file drifted is refused, the others still install.
+Disk: the game drive needs only the largest staged file + 512 MB spare per map (the new file replaces the old one), the backup drive the old files of the maps installed.
+--undo restores a file only when live md5 == pinned new and the backup md5 == pinned old; a map's backup files are DELETED only after every file of that map
+is restored and its md5 verified (they are then redundant and would make a re-install refuse with 'backup exists'; deleting after the check frees the D: space).
+usage: python install.py [--dry] [--maps DM01,DM02] [--skip-run-check] [--backup DIR] [--game DIR] | --undo [same options]   (run with the game closed)"""
+import hashlib, json, os, subprocess, shutil, sys, time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
+BACKUP = r'@BACKUP@'
+TAG = '@TAG@'                              # the in-place rename tag of the older installer; unused here, kept so layer tags stay greppable
+SPARE = 512 << 20                          # transient headroom kept free on the game drive
+pins = json.load(open(os.path.join(HERE, 'pins.json')))['maps']
+
+
+def md5(p):
+    h = hashlib.md5()
+    with open(p, 'rb') as f:
+        for b in iter(lambda: f.read(1 << 20), b''):
+            h.update(b)
+    return h.hexdigest()
+
+
+def arg(name):
+    return sys.argv[sys.argv.index(name) + 1].split(',') if name in sys.argv else None
+
+
+if '--skip-run-check' not in sys.argv and b'kl2.exe' in subprocess.run(['tasklist'], capture_output=True).stdout:
+    sys.exit('kl2.exe is running')
+if arg('--game'):                          # rehearsal on a scratch copy of a Dog Days folder
+    GAME = arg('--game')[0]
+if arg('--backup'):
+    BACKUP = arg('--backup')[0]
+if arg('--spare-mb'):                      # test only
+    SPARE = int(arg('--spare-mb')[0]) << 20
+FAIL_AFTER = int(arg('--fail-after')[0]) if arg('--fail-after') else None      # test only: raise after N files of a map were swapped in
+MAPS = os.path.join(GAME, 'KLExpansion', 'Maps')
+want = arg('--maps') or list(pins)
+undo, dry = '--undo' in sys.argv, '--dry' in sys.argv
+mb = lambda n: '%d MB' % (n >> 20)
+
+
+def retry(fn, *a):
+    """A just-read zip can stay locked a few seconds by another process (WinError 32 on 11-06, likely a scanner, GUESS): retry up to ~60 s."""
+    for i in range(30):
+        try:
+            return fn(*a)
+        except PermissionError:
+            if i == 29:
+                raise
+            time.sleep(2)
+
+
+def bk(m, f):
+    return os.path.join(BACKUP, m, f)
+
+
+def swap_in(src, live, want_md5):
+    """src -> <live>.new (same drive) -> os.replace over live; md5 checked on the .new and on the result."""
+    tmp = live + '.new'
+    try:
+        retry(shutil.copyfile, src, tmp)
+        if md5(tmp) != want_md5:
+            raise IOError('md5 of %s after copy is not %s' % (os.path.basename(tmp), want_md5[:8]))
+        retry(os.replace, tmp, live)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    if md5(live) != want_md5:
+        raise IOError('md5 of %s after replace is not %s' % (os.path.basename(live), want_md5[:8]))
+
+
+jobs = {}          # map -> [(file, live path, staged path, old md5, new md5)]
+for m in want:
+    jobs[m] = [(f, os.path.join(MAPS, m, f), os.path.join(HERE, m, f), p['old'], p['new']) for f, p in pins[m].items()]
+bad = {}
+for m, js in jobs.items():
+    for f, live, new, o, n in js:
+        why = None
+        if not os.path.exists(live):
+            why = 'live %s missing' % f
+        elif undo:
+            if not os.path.exists(bk(m, f)) or md5(bk(m, f)) != o:
+                why = 'backup %s missing or changed' % bk(m, f)
+            elif md5(live) not in (n, o):
+                why = 'live %s is neither the staged nor the original file (%s)' % (f, md5(live)[:8])
+        else:
+            if os.path.exists(bk(m, f)):
+                why = 'backup exists %s' % bk(m, f)
+            elif md5(live) != o:
+                why = 'live %s changed since staging (md5 %s, pinned %s)' % (f, md5(live)[:8], o[:8])
+            elif not os.path.exists(new) or md5(new) != n:
+                why = 'staged %s missing or md5 != pinned' % f
+        if why:
+            print('SKIP %s: %s' % (m, why)); bad[m] = why
+            break
+todo = [m for m in want if m not in bad]
+print('%s maps %s (skipped: %s)' % ('dry:' if dry else ('undo' if undo else 'install'), todo, sorted(bad) or 'none'))
+for m in todo:
+    big = max(os.path.getsize(j[1]) if undo else os.path.getsize(j[2]) for j in jobs[m])
+    delta = sum(os.path.getsize(j[2]) - os.path.getsize(j[1]) for j in jobs[m]) * (-1 if undo else 1)
+    print('  %-6s game drive: %s transient (largest file + spare), net %+d MB%s' % (m, mb(big + SPARE), delta >> 20,
+          '' if undo else ', backup drive: %s' % mb(sum(os.path.getsize(j[1]) for j in jobs[m]))))
+if not undo and todo:
+    need = sum(os.path.getsize(j[1]) for m in todo for j in jobs[m])
+    probe = BACKUP
+    while not os.path.isdir(probe) and os.path.dirname(probe) != probe:
+        probe = os.path.dirname(probe)
+    free = shutil.disk_usage(probe).free
+    print('backup drive: %s needed, %s free on %s' % (mb(need), mb(free), os.path.splitdrive(os.path.abspath(BACKUP))[0]))
+    if not dry and free < need + SPARE:
+        sys.exit('not enough space on the backup drive (want %s + %s spare); install with --maps for fewer maps' % (mb(need), mb(SPARE)))
+if dry:
+    sys.exit()
+
+
+def drop_backups(m):
+    for f, live, new, o, n in jobs[m]:
+        if os.path.exists(bk(m, f)):
+            retry(os.remove, bk(m, f))
+    d = os.path.join(BACKUP, m)
+    if os.path.isdir(d) and not os.listdir(d):
+        os.rmdir(d)
+
+
+def roll_back(m):
+    """Put every file of the map whose live md5 != pinned old back from its backup copy (md5-verified; covers a failure after the replace too),
+    then drop the map's backups. True when the map is exactly as before."""
+    ok = True
+    for f, live, new, o, n in reversed(jobs[m]):
+        if not os.path.exists(bk(m, f)) or md5(live) == o:
+            continue
+        try:
+            swap_in(bk(m, f), live, o)
+            print('  rolled back', f, o[:8])
+        except Exception as e:
+            print('  ROLLBACK FAILED %s: %s (backup kept in %s)' % (f, e, bk(m, f))); ok = False
+    if ok:
+        drop_backups(m)
+    return ok
+
+
+failed = []
+for m in todo:
+    swapped = 0
+    try:
+        big = max(os.path.getsize(j[1]) if undo else os.path.getsize(j[2]) for j in jobs[m])
+        free = shutil.disk_usage(MAPS).free
+        if free < big + SPARE:
+            raise IOError('game drive has %s free, want %s (largest file + spare)' % (mb(free), mb(big + SPARE)))
+        if undo:
+            for f, live, new, o, n in jobs[m]:
+                if md5(live) == n:
+                    swap_in(bk(m, f), live, o)
+                print('restored', m, f, md5(live)[:8])
+            for f, live, new, o, n in jobs[m]:
+                assert md5(live) == o, f
+            drop_backups(m)               # every file of the map is restored and md5-verified
+            print('  backups of %s deleted (verified restored)' % m)
+        else:
+            os.makedirs(os.path.join(BACKUP, m), exist_ok=True)
+            for f, live, new, o, n in jobs[m]:          # 1: copy every live file off the drive, md5 = pinned old
+                retry(shutil.copyfile, live, bk(m, f))
+                if md5(bk(m, f)) != o:
+                    raise IOError('backup copy of %s md5 != pinned old' % f)
+            for f, live, new, o, n in jobs[m]:          # 2: staged -> <live>.new -> replace
+                swap_in(new, live, n)
+                swapped += 1
+                print('installed', m, f, n[:8], '| backup', o[:8], 'in', bk(m, f))
+                if FAIL_AFTER is not None and swapped >= FAIL_AFTER:
+                    raise IOError('forced failure (test)')
+    except Exception as e:
+        print('FAILED %s: %s' % (m, e)); failed.append(m)
+        if not undo and not roll_back(m):
+            failed.append(m + '(ROLLBACK INCOMPLETE, backups kept)')
+if failed:
+    sys.exit('failed: %s' % ' '.join(failed))
+'''
+
+
 def write_installer(out):
     L = LAYERS[LAYER]
-    py = INSTALL_PY.replace('@TITLE@', L['title']).replace('@TAG@', TAG)
+    if L.get('backup'):            # off-drive backup mode: the live drive keeps no backup files
+        py = INSTALL_PY_OFFDRIVE.replace('@TITLE@', L['title']).replace('@TAG@', TAG).replace('@BACKUP@', L['backup'])
+        open(os.path.join(out, 'README.txt'), 'w', encoding='utf-8', newline='').write(
+            'PD2 guns %s: install.py keeps its backups OFF the game drive, in %s/<map>/<file> (copied and md5-checked before the live file is replaced;\r\n'
+            'deleted by --undo only after the restored files are md5-verified). Nothing is renamed beside the live files.\r\n' % (LAYER, L['backup']))
+    else:
+        py = INSTALL_PY.replace('@TITLE@', L['title']).replace('@TAG@', TAG)
     open(os.path.join(out, 'install.py'), 'w', encoding='utf-8', newline='').write(py.replace('\n', '\r\n'))
     open(os.path.join(out, 'INSTALL.bat'), 'w', encoding='utf-8', newline='').write(
         '@echo off\r\nrem PD2 guns ' + LAYER + ' (' + LAYERS[LAYER]['short'] + '): install ON TOP of the live maps (game closed). Add --dry to only check, --maps DM01,DM02 for some maps.\r\n'
