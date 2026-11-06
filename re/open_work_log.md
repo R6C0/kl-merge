@@ -1,3 +1,8 @@
+## 2026-11-06 ~16:45 [db] FillCensusSlice re-bench with pd2guns 1106s on DD09 (no crash involved)
+- OSS_DD09_FCS_S3_PD2S (TEST a77e0546, kit C:/kl_build_1024/oss_1106, run.py --fcs --seats 3 --suffix PD2S): SMOOTH on every seat, 0 hitches/stalls,
+  fps 29.9/30.0/30.0, max frame 184 ms, p95 84-118 ms, 0 asserts/faults/dumps; live dll/ini restored byte-exact. 6b's +203-chunk layer costs no smoothness.
+- Still NOT installed (live 727a73bb): offer SHIP out_fcs1106 e88a6093 + the 6 [Perf] keys.
+
 ## 2026-11-06 ~16:30 [6b] PD2 guns 1106s LIVE on the 9 stock DD maps (no crash involved)
 - Layer 1106s (all 19 PD2 gun keys, +203 chunks/map, live zips as base) installed on DD05 first, bench C:\kl_build_1024\pd2s_1106 (2 seats, stock DD05 slot F05,
   PQQ_DD05 pair, TEST b6a69772) PASS: both seats round 2, 0 faults/asserts, "guns: level f0505_main has 6 gun(s) with 7 look(s)",
