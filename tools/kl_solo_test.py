@@ -248,11 +248,17 @@ def main():
                 sw, sh = ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)
                 reset = {(0, 0), (320, 240), (sw // 2, sh // 2), (480, 270), (1440, 270), (960, 0)}
                 # n9_1106 DD02 11-06: 9 seats = 3x3 of 640x360, the game re-centred the cursor on inst1 (320,180) - a false abort.
-                # Every bench window's centre and top-left corner counts as a reset point.
+                # Every bench window's centre and top-left corner counts as a reset point; so does any pixel on a window's edge
+                # (DD03 11-06: 639,359 = inst1's bottom-right, the game clips the cursor to its window).
+                edge = False
                 for i in range(1, total + 1):
                     d = dict(solo_secs(i, total)[0][1])
                     x, y, w, h = int(d['X']), int(d['Y']), int(d['W']), int(d['H'])
                     reset |= {(x + w // 2, y + h // 2), (x, y)}
+                    if x <= pt[0] < x + w and y <= pt[1] < y + h and (pt[0] in (x, x + w - 1) or pt[1] in (y, y + h - 1)):
+                        edge = True
+                if edge:
+                    reset.add((pt[0], pt[1]))
                 btn = any(ctypes.windll.user32.GetAsyncKeyState(v) & 0x8000 for v in (1, 2, 4))
                 # Q27_DD09 17:33: the game put the cursor at 960,0 (inst2's window corner) with idle 72 s - a false abort.
                 # Game-made moves do not reset idle; a hand does. Off a reset point counts only with input in the last 3 s.
