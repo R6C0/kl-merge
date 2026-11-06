@@ -1,3 +1,9 @@
+## 2026-11-06 ~17:40 [6b] PD2 guns: DM05A c+d+e+f and 1106f on the last four DM maps LIVE (no crash involved)
+- DM05A: 1106c/d/e/f staged with --base live on c9's chain 2c (e10ea488), installed in order. Bench pd2a_1106 (2 seats, kit from lcglass1106's online pair) PASS: round 2, 0 faults, items 40/42/45/47/62/63 logged on host + client.
+  Live: zip 14c8d9dd, bots 909e9689, base.md5 c4cd6dde, KLJoin 3e29f738, KLGuns 5e2c7a36, Entries=54659.
+- 1106f installed one map at a time (D: ~1 GB free; dedupe after each): DM01B 69065, DM03A 66470, DM06B 53232 (no KLJoin, as before), DM11B 60662 (KLGuns = KLJoin).
+- 1106f is now on all 11 DM maps. Undo: UNDO ALL 1105.bat (0f before 0a; 0c = c9's chain 2c after 1106c).
+
 ## 2026-11-06 ~16:55 [6b] PD2 guns 1106f LIVE on 6 DM maps: MG42 (item 42), PAR (item 40) + their shop pictures (no crash involved)
 - No free item id is left (33/35/38/40-54/62/63 PD2, 55-59 grenades), so 1106f re-looks two of the eight RPK duplicates on the MG hold (Type88). Minigun rejected (fit cost 16.8, hangs 52 cm under the hand).
   Shotgun/SMG/pistol PD2 guns would have to change page I stock looks (and the AI's guns): needs the owner's OK, not done.
