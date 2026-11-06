@@ -1055,7 +1055,7 @@ static int kla_install(void)
 /* ---------------------------------------------------------------- script */
 
 typedef struct { char op; BYTE key; DWORD n, n2; char text[80]; float f[4]; DWORD off[6]; BYTE noff; } KCMD;
-enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP, C_POKE, C_WAITPEERS, C_TELE, C_ENTS, C_ONFAIL };
+enum { C_WAIT = 1, C_FRAMES, C_TAP, C_DOWN, C_UP, C_WAITSCENE, C_WAITLOAD, C_LOG, C_PASS, C_FAIL, C_QUIT, C_MSG, C_PEEK, C_SEL, C_EXPECT, C_WAITWIN, C_OPEN, C_WINDOWS, C_FOCUS, C_WATCH, C_MOUSE, C_MDOWN, C_MUP, C_POS, C_GOTO, C_FACE, C_ONWIN, C_LABEL, C_REWRITE, C_WAITSTATE, C_WAITVAN, C_SETTLE, C_TAPUNTIL, C_JUMP, C_POKE, C_WAITPEERS, C_TELE, C_ENTS, C_ONFAIL, C_FIREBOT };
 static KCMD kla_cmd[640]; static int kla_ncmd, kla_pc; static DWORD kla_cmd_t, kla_cmd_f, kla_seq;
 static BYTE kla_held[256]; static DWORD kla_rel_t[256], kla_rel_f[256]; static int kla_taps, kla_started;
 static DWORD kla_tap_polls = 2;                   /* [Auto] TapPolls: a tap's key stays down for at least this many polls */
@@ -1460,6 +1460,12 @@ static void kla_script_load(void)
             if (!a[0]) { kla_out(1, "script line %d: onfail needs <label> [max] - script not loaded", i); kla_ncmd = 0; return; }
             c->op = C_ONFAIL; snprintf(c->text, sizeof c->text, "%s", a); c->n = 6; c->n2 = 0; sscanf(rest + strlen(a), "%lu", &c->n);
         }
+        else if (!_stricmp(op, "firebot")) {            /* firebot [ms 6000] [maxm 30] [deg 4]: TEST rig, online HOST: turn to the nearest living Ally AI heister and hold fire (OnlineGrudge bench) */
+            c->op = C_FIREBOT; c->n = 6000; c->f[0] = 30.0f; c->f[2] = 4.0f; c->f[3] = 0.0f;
+            sscanf(rest, "%lu %f %f %f", &c->n, &c->f[0], &c->f[2], &c->f[3]);   /* 4th = pulse ms (0 = hold the button; N = N ms down, 1.5 N up, for semi-auto weapons) */
+            if (c->n < 500) c->n = 500;
+            if (c->f[2] < 0.5f) c->f[2] = 0.5f;
+        }
         else if (!_stricmp(op, "pos")) { c->op = C_POS; snprintf(c->text, sizeof c->text, "%s", rest); }
         else if (!_stricmp(op, "tele")) {               /* tele <x> <y> <z>: the local player to a world place (TEST rig only) */
             if (sscanf(rest, "%f %f %f", &c->f[0], &c->f[1], &c->f[2]) < 3) { kla_out(1, "script line %d: tele needs <x> <y> <z> - script not loaded", i); kla_ncmd = 0; return; }
@@ -1741,6 +1747,78 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             break;
         case C_MDOWN: case C_MUP: kla_m_btn[c->n] = (BYTE)(c->op == C_MDOWN ? 0x80 : 0); kla_out(1, "script %d: mouse button %lu %s", kla_pc + 1, c->n, c->op == C_MDOWN ? "down" : "up"); next = 1; break;
         case C_POS: kla_log_pos(c->text); next = 1; break;
+        case C_FIREBOT: {
+            /* firebot [ms] [maxm] [deg] (TEST rig, OnlineGrudge bench): the HOST's own player turns (yaw only, as 'face') to the nearest living Ally AI heister within maxm metres
+               (world units are cm) and holds mouse button 0 while the bearing error is within deg (released again beyond 3 x deg). The census is klbd_online_view(3) = the SAME pseudo-record
+               table OnlineGrudge uses, so "rec I" here is "AI heister I" in its log. Runs in the keyboard poll = the game's thread. GUESSES: the pseudo-record view may be shared with
+               klgrudge's tick (it only reads); pitch is not aimed (bots on the host's level, torso height); a ZFFActor's team is [[actor+0x54]+4] == 2 for Ally (as klgrudge.c). */
+            static DWORD t0, lastv, lasthp, held_t, held_ms; static int pc0 = -1, nfire, ndown, nkill; static DWORD tact, ptog; static float hp_start, hp_last;
+            static struct klb_snap fs; static char fwhy[200];
+            int me = kla_local_player(), i, best = -1, end = 0, aimed = 0; float v[3], h = 0, bp[3], p[3], bd = 1e30f, dx, dz, err = 0, rate, hp, lim = c->f[0] * 100.0f; DWORD act;
+            if (pc0 != kla_pc || t0 != kla_cmd_t) {
+                pc0 = kla_pc; t0 = kla_cmd_t; lastv = 0; lasthp = 0; held_t = 0; ptog = 0; held_ms = 0; nfire = ndown = nkill = 0; tact = 0; hp_start = hp_last = -1;
+                kla_out(1, "script %d: firebot start: %lu ms, within %.0f m, aim window %.1f deg", kla_pc + 1, c->n, c->f[0], c->f[2]);
+            }
+            if (now - lastv >= 100) {
+                lastv = now | 1; fwhy[0] = 0;
+                if (klbd_online_view(3, &fs, fwhy) <= 0) fs.n = 0;           /* not the host / not in a round: no census, no target */
+            }
+            if (me < 0 || !kla_player_pos(me, v) || !kla_player_dir(me, &h)) {
+                if (now - kla_cmd_t < c->n) return;
+                end = 1;
+            }
+            for (i = 0; !end && i < fs.n && i < KLB_NREC; i++) {
+                const struct klb_rec *r = &fs.r[i]; DWORD pr, team = 99, hh; float hv = -1;
+                if (!r->used || !r->actor || r->status != 0 || klh_avt(r->actor) != KLB_ACTOR_VT) continue;
+                pr = klh_rd32(r->actor + 0x54); if (pr > 0xffff) klh_rd(pr + 4, &team, 4);
+                if (team != 2) continue;                                    /* Ally only (the bots OnlineGrudge tracks) */
+                hh = klh_rd32(r->actor + 0x5fc);
+                if (!hh || klh_rd32(hh + 0x24) != r->actor || !klh_rd(hh + 4, &hv, 4) || !(hv > 0.0f)) continue;
+                if (!kle_node(klh_rd32(r->actor + 4), p, 0)) continue;
+                dx = p[0] - v[0]; dz = p[2] - v[2];
+                { float d = dx * dx + dz * dz; if (d > lim * lim) continue; if (r->actor == tact) d *= 0.25f; if (d < bd) { bd = d; best = i; memcpy(bp, p, 12); } }
+            }
+            if (tact) {                                                     /* the old target: dead or gone from the census? */
+                int still = 0;
+                for (i = 0; i < fs.n && i < KLB_NREC; i++) if (fs.r[i].used && fs.r[i].actor == tact && fs.r[i].status == 0) still = 1;
+                if (!still || (best >= 0 && fs.r[best].actor != tact)) {
+                    float hv = -1; DWORD hh = klh_rd32(tact + 0x5fc);
+                    if (hh && klh_rd32(hh + 0x24) == tact) klh_rd(hh + 4, &hv, 4);
+                    if (!still) { nkill++; kla_out(1, "script %d: firebot: target actor %08lx is dead or left the census (health read %.1f; start %.1f)", kla_pc + 1, (unsigned long)tact, hv, hp_start); }
+                    tact = 0; hp_start = hp_last = -1;
+                }
+            }
+            if (!end && best >= 0) {
+                const struct klb_rec *r = &fs.r[best]; DWORD hh = klh_rd32(r->actor + 0x5fc); float hv = -1;
+                if (hh && klh_rd32(hh + 0x24) == r->actor) klh_rd(hh + 4, &hv, 4);
+                act = r->actor;
+                dx = bp[0] - v[0]; dz = bp[2] - v[2];
+                if (act != tact) {
+                    tact = act; hp_start = hp_last = hv;
+                    kla_out(1, "script %d: firebot target rec %d actor %08lx at (%.0f, %.0f, %.0f), %.1f m from (%.0f, %.0f, %.0f), vertical delta %.0f cm (yaw-only aim), health %.1f", kla_pc + 1, best, (unsigned long)act, bp[0], bp[1], bp[2], sqrt(dx * dx + dz * dz) / 100.0, v[0], v[1], v[2], bp[1] - v[1], hv);
+                }
+                hp_last = hv;
+                err = (float)(atan2(dx, dz) * 57.29577951) - h; while (err > 180) err -= 360; while (err < -180) err += 360;
+                rate = err / kla_turn_deg * 5.0f; if (rate > 1800) rate = 1800; if (rate < -1800) rate = -1800;
+                kla_m_rate[0] = rate; kla_m_rate[1] = 0;
+                aimed = err < c->f[2] && err > -c->f[2];
+                if (aimed && !kla_m_btn[0] && (c->f[3] <= 0.0f || now - ptog >= (DWORD)(c->f[3] * 1.5f))) { kla_m_btn[0] = 0x80; held_t = now; ptog = now; ndown++; if (ndown <= 6) kla_out(1, "script %d: firebot fire DOWN #%d: rec %d actor %08lx, %.1f m, bearing error %.1f, health %.1f", kla_pc + 1, ndown, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, hv); }
+                else if (kla_m_btn[0] && c->f[3] > 0.0f && aimed && now - ptog >= (DWORD)c->f[3]) { kla_m_btn[0] = 0; held_ms += now - held_t; ptog = now; }
+                else if (kla_m_btn[0] && (err > c->f[2] * 3.0f || err < -c->f[2] * 3.0f)) { kla_m_btn[0] = 0; held_ms += now - held_t; if (ndown <= 6) kla_out(1, "script %d: firebot fire UP: bearing error %.1f", kla_pc + 1, err); }
+                if (now - lasthp >= 1000) { lasthp = now | 1; nfire++; if (nfire <= 20) kla_out(1, "script %d: firebot hp: rec %d actor %08lx %.1f m, bearing error %.1f, fire %s, health %.1f (target start %.1f)", kla_pc + 1, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, kla_m_btn[0] ? "DOWN" : "up", hv, hp_start); }
+            } else if (!end) {
+                kla_m_rate[0] = kla_m_rate[1] = 0;
+                if (kla_m_btn[0]) { kla_m_btn[0] = 0; held_ms += now - held_t; kla_out(1, "script %d: firebot fire UP: no target in range", kla_pc + 1); }
+                if (now - lasthp >= 2000) { lasthp = now | 1; kla_out(1, "script %d: firebot: no living Ally AI heister within %.0f m (census %d records%s%s)", kla_pc + 1, c->f[0], fs.n, fwhy[0] ? ": " : "", fwhy); }
+            }
+            if (!end && now - kla_cmd_t >= c->n) end = 1;
+            if (!end) return;
+            kla_m_rate[0] = kla_m_rate[1] = 0;
+            if (kla_m_btn[0]) { kla_m_btn[0] = 0; held_ms += now - held_t; }
+            hp = -1; if (tact) { DWORD hh = klh_rd32(tact + 0x5fc); if (hh && klh_rd32(hh + 0x24) == tact) klh_rd(hh + 4, &hp, 4); }
+            kla_out(1, "script %d: firebot over after %lu ms: fire held %lu ms in %d press(es), %d target(s) died; current target %08lx health now %.1f (at its start %.1f)",
+                    kla_pc + 1, now - kla_cmd_t, held_ms, ndown, nkill, (unsigned long)tact, hp, hp_start);
+            pc0 = -1; next = 1; break; }
         case C_TELE: kla_tele(kla_pc + 1, c->f); next = 1; break;
         case C_ENTS: kla_ents(kla_pc + 1, c->text, (int)c->n); next = 1; break;
         case C_LABEL: next = 1; break;
