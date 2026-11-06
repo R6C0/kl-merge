@@ -12,7 +12,22 @@ def t(name, ok):
         fails.append(name)
 
 
+# --doors subset: default = all four, names pick in DOORS order, bad picks are refused
+t('select() default is all four doors', D.select() is D.DOORS and D.select('') is D.DOORS and len(D.DOORS) == 4)
+t('select() subset keeps DOORS order', [x[0] for x in D.select('A02,B01')] == ['B01', 'A02'] and [x[0] for x in D.select(['F02'])] == ['F02'])
+for bad in ('X9', 'B01,B01', 'B01,Z', ',', 'b01'):
+    try:
+        D.select(bad)
+        t('select refuses %r' % bad, False)
+    except ValueError:
+        t('select refuses %r' % bad, True)
 with tempfile.TemporaryDirectory() as d:
+    # a bad --doors is refused before the live zip is read
+    try:
+        D.stage(os.path.join(d, 'o2'), os.path.join(d, 'nolive'), doors='X9')
+        t('stage refuses a bad doors pick first', False)
+    except ValueError as e:
+        t('stage refuses a bad doors pick first', '--doors' in str(e))
     # patch_entries: exactly one line replaced, nothing else changed
     ini = os.path.join(d, 'a.ini')
     open(ini, 'wb').write(b'[FedBody]\r\n; Entries = text\r\nEntries=54354\r\nRoot=0\r\n')

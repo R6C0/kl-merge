@@ -11,6 +11,7 @@ It is read by COPYING it into the stage folder (out\_in); any other md5 is refus
   4. KLJoin.ini / KLGuns.ini Entries= set to the new .prm chunk count (the graft appends .prm chunks), read from the live ini
   5. install.py (md5 pinned to the live files, refuses while kl2.exe runs, backups '.before-doors1106' next to the originals) with --undo / --dry
   6. `check`: the offline self-check live vs staged (see check()).
+--doors B01,A02 (stage/check) builds only that subset of the four (default: all four, unchanged); unknown/duplicate names are refused.
 
 WHAT STAYS BYTE-IDENTICAL: every archive member except .prp .gms .buf .oct .rmi .rmc .prm .MAT .TEX .HVK .hrd. In particular the .sgd (the
 HavokShatterGlassConnectivity section is keyed by REF label, not slot id, so renumbering slots cannot invalidate it) and the .LOC (cap 600,000 B).
@@ -47,6 +48,18 @@ DOORS = (('B01', (1500.0, 360.0, 3433.0), (0.0, 0.0, 1.0)),
          ('F03', (-3120.0, 860.0, 2306.0), (1.0, 0.0, 0.0)),
          ('F02', (-3720.0, 860.0, 3287.0), (1.0, 0.0, 0.0)))
 INI_FILES = ('KLJoin.ini', 'KLGuns.ini')
+
+
+def select(names=None):
+    """The DOORS subset named by names ('B01,A02' or a list), in DOORS order. None/'' = all (the default). Unknown or duplicate name, or an empty pick: ValueError (refuse, not guess)."""
+    if names is None or names == '':
+        return DOORS
+    names = [x.strip() for x in (names.split(',') if isinstance(names, str) else names)]
+    known = [n for n, _h, _c in DOORS]
+    bad = [x for x in names if x not in known]
+    if bad or not names or len(set(names)) != len(names):
+        raise ValueError('--doors %r: want distinct names from %s' % (names, ','.join(known)))
+    return tuple(d for d in DOORS if d[0] in names)
 # members the doors pass may change (everything else must be byte-identical to the live zip)
 CHANGED_OK = ('.prp', '.gms', '.buf', '.oct', '.rmi', '.rmc', '.prm', '.MAT', '.TEX', '.HVK', '.hrd')
 
@@ -73,13 +86,13 @@ def patch_entries(path_in, n):
     return new.encode('latin-1'), c
 
 
-def graft(src, dst, log):
+def graft(src, dst, log, doors=DOORS):
     # spots=[]: DOORS ONLY. (ext=0 alone still picks one extinguisher spot, whose template no longer builds in this checkout; the owner asked for doors.)
     import kl_interact_graft as IG
     orig = IG.virtual_host
     IG.virtual_host = lambda hinge, cx, width=WIDTH, height=HEIGHT: orig(hinge, cx, width, height)
     try:
-        return IG.build(src, dst, ext=0, spots=[], doors=[('at', h, cx) for _n, h, cx in DOORS], log=log)
+        return IG.build(src, dst, ext=0, spots=[], doors=[('at', h, cx) for _n, h, cx in doors], log=log)
     finally:
         IG.virtual_host = orig
 
@@ -193,7 +206,8 @@ def allowed(h, allow=()):
     return h == LIVE_PIN or any(len(a) >= 8 and h.startswith(a.lower()) for a in allow)
 
 
-def stage(out, live_dir=MAPDIR, bots=True, log=print, allow=()):
+def stage(out, live_dir=MAPDIR, bots=True, log=print, allow=(), doors=None):
+    ds = select(doors)
     import kl_botsonline, kl_bots_kick_1025 as KK
     live_zip = os.path.join(live_dir, 'F01_Main.zip')
     if not allowed(md5(live_zip), allow):
@@ -208,8 +222,8 @@ def stage(out, live_dir=MAPDIR, bots=True, log=print, allow=()):
     if md5(src) != pin:
         raise ValueError('the copy of the live zip changed while it was read (md5 %s): the game or another pass is writing it' % md5(src))
     g = os.path.join(work, 'grafted.zip')
-    rep = {'live_zip_md5': pin, 'doors': [[n, list(h), list(c)] for n, h, c in DOORS]}
-    rep['graft'] = graft(src, g, log)
+    rep = {'live_zip_md5': pin, 'doors': [[n, list(h), list(c)] for n, h, c in ds]}
+    rep['graft'] = graft(src, g, log, ds)
     final = os.path.join(out, 'F01_Main.zip')
     if bots:
         rep['kick'] = KK.build(g, 'F01', final, log=log)
@@ -240,9 +254,10 @@ def stage(out, live_dir=MAPDIR, bots=True, log=print, allow=()):
 
 
 # ------------------------------------------------------------------ the offline self-check
-def check(out, live_dir=MAPDIR, log=print, allow=()):
+def check(out, live_dir=MAPDIR, log=print, allow=(), doors=None):
     """Diff the live zip against the staged one. Returns (faults list, facts dict). Reads the live zip through a scratch copy in out\\_chk."""
     import kl_fa_bots as KB, kl_octree as O, kl_prmgraph, kl_glass_conn as GC, kl_gms
+    ds = select(doors)
     bad, facts = [], collections.OrderedDict()
 
     def fail(s):
@@ -394,12 +409,12 @@ def check(out, live_dir=MAPDIR, log=print, allow=()):
         tail = lambda sc_, key: sum(1 for pth in sc_.path[1:] if key.lower() in pth.rsplit(chr(92), 1)[-1].lower())
         kr_l, kr_s = tail(L.sc, 'KickDoorBehaviourRout'), tail(S.sc, 'KickDoorBehaviourRout')
         pb_l, pb_s = tail(L.sc, 'PathBlocker'), tail(S.sc, 'PathBlocker')
-        if len(doors) != len(DOORS):
-            fail('%d KL_Door groups (want %d)' % (len(doors), len(DOORS)))
+        if len(doors) != len(ds):
+            fail('%d KL_Door groups (want %d)' % (len(doors), len(ds)))
         if kr_s <= kr_l:
             fail('no kick steps added (%d -> %d)' % (kr_l, kr_s))
         ok('doors', '%d kick doors (%s); KickDoorBehaviourRout nodes live %d -> staged %d; PathBlocker nodes live %d -> staged %d' % (
-            len(doors), ','.join(n for n, _h, _c in DOORS), kr_l, kr_s, pb_l, pb_s))
+            len(doors), ','.join(n for n, _h, _c in ds), kr_l, kr_s, pb_l, pb_s))
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
     log('SELFCHECK ' + ('PASS' if not bad else 'FAIL (%d)' % len(bad)))
@@ -413,9 +428,9 @@ def main():
         print(__doc__)
         return 2
     if a[0] == 'stage':
-        stage(opt('--out', OUT), opt('--live', MAPDIR), bots='--no-bots' not in a, allow=[opt('--allow-md5', '')])
+        stage(opt('--out', OUT), opt('--live', MAPDIR), bots='--no-bots' not in a, allow=[opt('--allow-md5', '')], doors=opt('--doors'))
         return 0
-    bad, _ = check(opt('--out', OUT), opt('--live', MAPDIR), allow=[opt('--allow-md5', '')])
+    bad, _ = check(opt('--out', OUT), opt('--live', MAPDIR), allow=[opt('--allow-md5', '')], doors=opt('--doors'))
     return 1 if bad else 0
 
 

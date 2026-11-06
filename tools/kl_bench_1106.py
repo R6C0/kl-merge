@@ -101,8 +101,14 @@ KITS = {
                            files={'F01_Main.zip': 'f048f569be30795d9b4ac6b958aacd8b', 'F01_Main.bots.zip': '34d25023', 'F01_Main.bots.base.md5': '5f486ecf',
                                   'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
                            solo_secs=900, parts=('solo',), shots='400-556:4'),
+    # d: as b, on the SAFE-DOORS chain (kl_lastcall_chain_1106.py chain --cam 2a --doors B01,A02): F03/F02 dropped (bots stood 12 s short of F03 in both chain runs)
+    'lcchain2a1106d': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2a_safedoors_live_1a97e186', tag='.before-chain1106',
+                           files={'F01_Main.zip': 'f4e801bda084228b4aee09ce4c86a14c', 'F01_Main.bots.zip': '6a552f8d', 'F01_Main.bots.base.md5': 'e9b020ca',
+                                  'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
+                           solo_secs=900, parts=('solo',), shots='400-556:4'),
 }
-LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b')
+LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d')
+FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d')          # LastVehicleLead=600 in solo.ini + boards at once at state 3
 
 
 def md5(p):
@@ -152,7 +158,7 @@ def solo_script(k, secs_total):
         # Escape: the vehicle state machine is open-loop timers (re/lastcall_heli_1105.md). Wait for state 3 (van/chopper at the pad),
         # board by teleporting into the box (GUESS: the coordinates are the box from the doc, 7361/2014/3201; 'tele' is TEST-rig only),
         # then wait for the round-over panel (0x1f) and the shop (0x20). Every wait goes on at its timeout so a dead chain still ends.
-        if k == 'lcchain2a1106b':
+        if k in FASTBOARD:
             # fast boarding: state 3 also matches 4; the player goes into the box at once and holds E (a human boards by HOLDING E, 2-5 s)
             s += ['wait 30000', 'pos at-60s', 'log BENCH1106 waiting for vehicle state 3', 'waitvan 3 600000', 'pos van3',
                   # c9: keep the +x walk-in that boarded in lclive/lcspawn2f/lcoutro (facing GUESS as below), only the long waits go
@@ -251,7 +257,7 @@ def gen():
              '; the seat stands still; cops hurt it 0.001 x so its death does not end the round (as ARC1)',
              '[Balance]', 'CopToYou=0.001', 'PointBlankToYou=0.0'] + probes(k)
         n = c['solo_secs']
-        if k == 'lcchain2a1106b':
+        if k in FASTBOARD:
             t += ['[Bots]', 'LastVehicleLead=600']
         t += [l.replace('{x}', str(n - 60)).replace('{m}', str((n - 70) * 1000)) for l in AUTO]
         t += ['[Script]'] + renumber(solo_script(k, n))
@@ -407,7 +413,7 @@ def verify(k, part, tagbase=None):
             i0 = next((i for i, l in enumerate(a) if re.search(r'session: state \S+ -> 0x1f', l)), len(a))
             eyes = [tuple(float(m.group(j)) for j in (1, 2, 3)) for l in a[i0:] if ' cam:' in l for m in [re.search(r'\beye (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)', l)] if m]
             hit = [e for e in eyes if near(e, eye, 150)]
-            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b'):
+            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d'):
                 # these stages move the eye on purpose (LookAtPos, f5/f6 offset from the heli): info only, the frames are judged by eye
                 chk('escape camera eye moved off (7093,2181,2727) (info)', True, '%d outro cam eyes, last %s' % (len(eyes), ('(%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
             else:

@@ -8,7 +8,7 @@ benches) or all four as one chain (live -> doors -> spawn2f -> outro -> helicam)
   python tools/kl_lastcall_chain_1106.py status [--in-dir <dir>]
   python tools/kl_lastcall_chain_1106.py single doors|spawn2f|outro|helicam [--cam 2a|2b] [--in-dir <dir>] [--root <dir> | --out <dir>]
         -> <root>\<name>_live_<first 8 of the zip md5>   (default root C:\kl_build_1024; name lcdoors / lcspawn2f / lcoutro / lcoutcam2a / lcoutcam2b)
-  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|none] [--only doors,outro,...] [--in-dir <dir>] [--root <dir> | --out <dir>] [--keep-steps]
+  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|none] [--only doors,outro,...] [--doors B01,A02] [--in-dir <dir>] [--root <dir> | --out <dir>] [--keep-steps]
         -> <root>\lcchain_<cam|nocam>_live_<8>   (one stage + install.py; helicam default = the lcoutcam2a set: f5 +700, f6 -500, aim the heli's ShatterGeom)
 --in-dir (default: the live DM05A folder) holds the 5 files F01_Main.zip F01_Main.bots.zip F01_Main.bots.base.md5 KLJoin.ini KLGuns.ini.
 It is only READ (each pass works on a copy). Nothing is ever written into the game folder (a stage under it is refused).
@@ -78,10 +78,10 @@ def cam_params(cam):
     raise ValueError('--cam must be 2a, 2b or none')
 
 
-def out_name(name, cam, live_md5, in_dir):
+def out_name(name, cam, live_md5, in_dir, doors=None):
     tag = ('live_' if os.path.abspath(in_dir) == os.path.abspath(MAPDIR) else 'in_') + live_md5[:8]
     if name == 'chain':
-        return 'lcchain_%s_%s' % ('nocam' if cam == 'none' else cam, tag)
+        return 'lcchain_%s%s_%s' % ('nocam' if cam == 'none' else cam, '_d' + '-'.join(d[0] for d in doors) if doors else '', tag)
     if name == 'helicam':
         return 'lcoutcam%s_%s' % (cam, tag)
     return '%s_%s' % (NAMES[name], tag)
@@ -94,7 +94,7 @@ def guard_out(out):
 
 
 # ------------------------------------------------------------------ one pass on one input dir
-def run_pass(name, in_dir, out, cam='2a', log=print):
+def run_pass(name, in_dir, out, cam='2a', log=print, doors=None):
     """Stage pass `name` from the files in in_dir into out and verify it with the pass tool's own check. -> {file: md5} of out (the files that pass writes).
     Any failure, or a failed check, becomes Refused (out is deleted by the caller)."""
     h = md5(os.path.join(in_dir, 'F01_Main.zip'))
@@ -102,8 +102,8 @@ def run_pass(name, in_dir, out, cam='2a', log=print):
     try:
         if name == 'doors':
             import kl_club_doors_1106 as D
-            D.stage(out, in_dir, True, log, allow=allow)
-            bad, _ = D.check(out, in_dir, log, allow=allow)
+            D.stage(out, in_dir, True, log, allow=allow, doors=doors)
+            bad, _ = D.check(out, in_dir, log, allow=allow, doors=doors)
             if bad:
                 raise ValueError('doors self-check: %d faults: %s' % (len(bad), '; '.join(bad[:3])))
             files = FILES5
@@ -279,8 +279,15 @@ def stage_single(name, in_dir=MAPDIR, out=None, root=ROOT, cam='2a', log=print):
     return out, live, got
 
 
-def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_steps=False, log=print):
+def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_steps=False, log=print, doors=None):
     """live -> doors -> spawn2f -> outro -> helicam as ONE stage in out whose install.py pins the md5s of in_dir's files read first."""
+    import kl_club_doors_1106 as D
+    try:
+        sel = D.select(doors) if doors else None                   # None = all four doors (the default, unchanged)
+    except ValueError as e:
+        raise Refused(str(e))
+    if sel and only and 'doors' not in only:
+        raise Refused('--doors given but the doors pass is not in --only')
     live = read_live(in_dir)
     todo = [p for p in PASSES if (only is None or p in only) and not (p == 'helicam' and cam == 'none')]
     if not todo:
@@ -289,7 +296,7 @@ def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_st
         bad = [p for p in only if p not in PASSES]
         if bad:
             raise Refused('unknown pass %s' % bad)
-    out = out or os.path.join(root, out_name('chain', cam, live['F01_Main.zip'], in_dir))
+    out = out or os.path.join(root, out_name('chain', cam, live['F01_Main.zip'], in_dir, sel))
     guard_out(out)
     shutil.rmtree(out, ignore_errors=True)
     steps = os.path.join(out, '_steps')
@@ -300,7 +307,7 @@ def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_st
         for i, p in enumerate(todo):
             d = os.path.join(steps, '%d_%s' % (i + 1, p))
             log('=== step %d/%d: %s on %s (zip %s)' % (i + 1, len(todo), p, cur, md5(os.path.join(cur, 'F01_Main.zip'))[:8]))
-            got = run_pass(p, cur, d, cam, log)
+            got = run_pass(p, cur, d, cam, log, [x[0] for x in sel] if sel else None)
             report['steps'].append({'pass': p, 'out': d, 'files': got})
             if p == 'doors':                                    # the only pass that changes the inis (Entries=, recomputed from the actual input inis)
                 for n in INIS:
@@ -392,7 +399,7 @@ def main(a):
             stage_single(a[1], in_dir, out, root, cam)
         else:
             only = opt('--only')
-            stage_chain(in_dir, out, root, cam, only.split(',') if only else None, '--keep-steps' in a)
+            stage_chain(in_dir, out, root, cam, only.split(',') if only else None, '--keep-steps' in a, doors=opt('--doors'))
     except Refused as e:
         print('REFUSED: %s' % e)
         return 1

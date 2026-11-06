@@ -89,6 +89,20 @@ with tempfile.TemporaryDirectory() as d:
       and C.out_name('helicam', '2b', 'e6d2f73e' + '0' * 24, C.MAPDIR) == 'lcoutcam2b_live_e6d2f73e'
       and C.out_name('chain', 'none', 'e6d2f73e' + '0' * 24, C.MAPDIR) == 'lcchain_nocam_live_e6d2f73e')
 
+import kl_club_doors_1106 as _D
+t('chain out name carries the doors subset only when given', C.out_name('chain', '2a', 'e6d2f73e' + '0' * 24, C.MAPDIR, _D.select('B01,A02')) == 'lcchain_2a_dB01-A02_live_e6d2f73e'
+  and C.out_name('chain', '2a', 'e6d2f73e' + '0' * 24, C.MAPDIR) == 'lcchain_2a_live_e6d2f73e')
+try:
+    C.stage_chain(doors='X9', root=os.path.join(tempfile.gettempdir(), 'klchain_nowhere'), log=lambda *a: None)
+    t('chain refuses an unknown door name', False)
+except C.Refused as e:
+    t('chain refuses an unknown door name', '--doors' in str(e))
+try:
+    C.stage_chain(doors='B01', only=['outro'], root=os.path.join(tempfile.gettempdir(), 'klchain_nowhere'), log=lambda *a: None)
+    t('chain refuses --doors without the doors pass', False)
+except C.Refused as e:
+    t('chain refuses --doors without the doors pass', 'doors pass' in str(e))
+
 # the generated installer: pins, install, undo, all-or-nothing, never overwrites a backup
 with tempfile.TemporaryDirectory() as d:
     st, game = os.path.join(d, 'st'), os.path.join(d, 'game')
