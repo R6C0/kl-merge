@@ -417,7 +417,7 @@ def summarize(names, refs=('N9S_ARC_DD01',)):
     order = [e['map'] for e in meta['order']] if meta else [m for m, *_ in map_list()]
     sel = order if not names or names == ['all'] else names
     rows, lines = [], []
-    ref_list = [r for r in refs if os.path.isdir(os.path.join(SOLO, r))]
+    ref_list = [sm.analyse(r, expect=1) for r in refs if os.path.isdir(os.path.join(SOLO, r))]   # fmt_run wants analysed runs, not names
     worst = 0
     for m in sel + (['ARC_DD01'] if os.path.isdir(os.path.join(SOLO, 'N9S_ARC_DD01')) and names in ([], ['all']) else []):
         tag = tag_of(m)
