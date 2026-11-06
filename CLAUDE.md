@@ -72,9 +72,10 @@ into dark sky, ~60 s black (two heli visits 20+40 s). Staged + reviewed, NOT ins
 lcoutro_1106 77a42f74 (spline 17->6 pts), lcdoors_1106 a24d7432, lcspawn2f_1106 88e23dd5; kits lcoutro1106/lcdoors1106/lcspawn2f1106.
 Found: every map's inis Entries 72 short (shop pics) -> gun looks + fed bodies refused live; 6b fixes with kl_entries_fix after f0's bench.
 
-2026-11-06 ~11:50 - [db] 9-SEAT PERF: n9_1106 sweep = one-PC contention (13-26 fps). Hook fixes, all [Perf] "(recommended on)", NOT installed (live 727a73bb):
-OsdScanSlice f62cfbe4, ScanMinFrames ce1dc86d+baa51a0e (bench OSS_DD09_SMF: 9/9 in round, no starved seat, all 20-22 fps), ShopPoolBlock 50916295 (kls_ammo 471 reads/frame -> 1).
-Current build TEST out_spb1106_test 4a3387ea / SHIP out_spb1106 58e710e6. Next: one DD09 9-seat bench of 4a3387ea, then offer the SHIP install.
+2026-11-06 ~12:40 - [db] 9-SEAT PERF: n9_1106 sweep = one-PC contention (13-26 fps). Hook fixes, all [Perf] "(recommended on)", NOT installed (live 727a73bb):
+OsdScanSlice f62cfbe4, ScanMinFrames ce1dc86d+baa51a0e, ShopPoolBlock 50916295 (kls_ammo 471 reads/frame -> 1). Bench OSS_DD09_SPB on TEST 4a3387ea: 9/9 in round,
+0 FAIL (9 HITCHY: max stop 1.5-2.8 s), seats 20.9-24.3 fps, summed 206 (SMF 189, old N9S 202 with 1 seat dead). klshop_tick left the top costs.
+Ready to offer: SHIP out_spb1106 58e710e6 + the 3 ini keys. Remaining hitches are the PC (9 games on one box), not the hook (~1-2 ms a frame).
 
 2026-11-06 ~10:00 - [shop] KLPic pictures now on 28 maps (stock F01-F09, DD01-09, all DM but DM05A); DD10 + DM05A get them in c9's slot_1106 step E. Bench pc7 DD05+DM07 PASS (2 seats, round 2, 0 faults).
 C: hit 274 MB free (bake refused, maps restored): 118 old backups moved to D:\kl_old_backups\dd_1106b. Earlier: pd2guns_1106 (11 maps + KLShopPage.ini), F2/F3 shop buttons (all maps), dll SHIP 727a73bb, ini e91096c7 (.before-pics1105 = 288fb016/abb2144f).

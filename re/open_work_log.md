@@ -1,3 +1,9 @@
+## 2026-11-06 ~12:40 [db] OSS_DD09_SPB bench (TEST 4a3387ea = OsdScanSlice + ScanMinFrames + ShopPoolBlock), no crash
+9 seats DD09, 9/9 in round, 0 asserts/faults/dumps. Verdicts: 9 HITCHY, 0 FAIL (SMF run: 1 FAIL host 3.1 s stop). fps per seat 20.9/22.6/22.4/23.2/22.8/23.6/22.7/23.2/24.3,
+summed 206 vs SMF 189, OSS 199 (2 seats starved at 2-3), N9S 202 (inst9 dead). Max stops 1.5-2.8 s. TickProfile: klshop_tick no longer in the top list; top now
+klbf_tick/klsy_tick/klcl_tick ~0.5 ms a frame each (klsy = bench-only [Sync] Probe). Hitch rate (~30/min) is the same on all builds = one-PC contention.
+Verdict: ship candidate SHIP out_spb1106 58e710e6 + ini keys OsdScanSlice=1, ScanMinFrames=1, ShopPoolBlock=1; not installed (owner OK needed, live 727a73bb).
+
 ## 2026-11-06 ~12:30 [6b] REGRESSION: KLGuns/KLJoin Entries= stale after the shop pics bake (no crash)
 kl_shop_pics adds 72 .prm chunks per map (36 cards x sprite + picture) and never rewrote Entries=, so the hook ignored KLGuns.ini / KLJoin.ini on 21 maps (31 files):
 PD2/DM gun looks and fed bodies off. Chunks are appended, so Root indexes stay valid. Fix 361a1d3e: tools/kl_entries_fix.py --delta 72 (dry: 31 files, 0 refused, DM05A
