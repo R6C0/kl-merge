@@ -15,7 +15,7 @@ MAP/SEATS: Dry Dock = DD05 (slot F05, page 0, stock), 1 host + 1 joiner through 
   (c9_1028/q32, PASS 2-seat, copied into the kit as tpl_*.ini) with the script replaced after "SOLO match started" and these host-only keys added:
   [Bots] OnlineGrudge=1 / OnlineGrudgeDry=1|0, [Down] OnlineBotDown=0 (else the bot goes down at DownPct and never has a lethal blow), [BotFill] OnlineHealthMul=1
   (bot health 350, not 1750). Base ini = a COPY of the live <DD>/KLHook.ini made at gen time (sha1 pinned in kit.json); kl_solo_test restores the live one at run end.
-THE FIRING RIG: klauto op "firebot [ms] [maxm] [deg]" (TEST build only: klauto.c is not compiled into SHIP). See klauto.c C_FIREBOT.
+THE FIRING RIG: klauto op "firebot [ms] [maxm] [deg] [pulse] [aim]" (TEST build only: klauto.c is not compiled into SHIP). See klauto.c C_FIREBOT.
 SAFETY: never launches kl2.exe except through kl_solo_test (only in `run`); refuses if kl2.exe runs; never writes into the game folder itself; re-checks the live
   dll + ini md5 after every pass; never touches KL_PortBackup; never kills a process. A file <kit>/STOP stops the queue.
 """
@@ -30,7 +30,7 @@ DD = N.DD
 SOLO = N.SOLO
 Q32 = 'C:/kl_build_1024/c9_1028/q32'
 TPL_HOST, TPL_JOIN = '%s/Q32_DD05_host.ini' % Q32, '%s/Q32_DD05_join.ini' % Q32
-TEST_DLL_DEFAULT = os.path.join(ROOT, 'klhook', 'out_ogb1106c_test', 'dinput8.dll')      # 11-06 04:18: + klbrain traitor-cap fix 410ab59d (both checked in one slot)
+TEST_DLL_DEFAULT = os.path.join(ROOT, 'klhook', 'out_ogb1106d_test', 'dinput8.dll')      # 11-06 04:18: + klbrain traitor-cap fix 410ab59d (both checked in one slot)
 LIVE_SHIP_MD5 = '727a73bb'                               # the live SHIP the bench starts from and restores (sha1 dc41cc8f...)
 LIVE_SHIP_SHA1 = 'c8598902'
 LIVE_INI_SHA1 = 'a64a3996'
@@ -46,15 +46,15 @@ FIRE_BLOCK = ['waitstate 0x19 180000',
               'log GRUDGE1106 round running (state 0x19); bots hold at their spawn for ~25 s',
               'wait 2500',
               'pos g0',
-              'firebot 8000 40 4 60',
+              'firebot 8000 40 15 60 1',
               'pos g1',
               'tap R',
               'wait 2500',
-              'firebot 8000 40 4 60',
+              'firebot 8000 40 15 60 1',
               'pos g2',
               'tap R',
               'wait 2500',
-              'firebot 25000 40 4 60',
+              'firebot 25000 40 15 60 1',
               'pos g3',
               'log GRUDGE1106 firebot phase over; waiting for the death logs',
               'wait 5000',
@@ -306,7 +306,7 @@ def validate():
                 v.ok(d.get('BotFill', {}).get('OnlineHealthMul') == '1', '%s: [BotFill] OnlineHealthMul=1 (bench only; live 5)' % nm)
                 v.ok(sum(1 for c in scr if c == 'tap RIGHT') == 6, '%s: 6 x tap RIGHT = slot F05' % nm)
                 fb = [c for c in scr if c.startswith('firebot')]
-                v.ok(len(fb) == 3 and all(re.match(r'^firebot \d+ \d+(\.\d+)? \d+(\.\d+)?( \d+)?$', c) for c in fb), '%s: %d firebot lines, args ms maxm deg parse' % (nm, len(fb)))
+                v.ok(len(fb) == 3 and all(re.match(r'^firebot \d+ \d+(\.\d+)? \d+(\.\d+)?( \d+( [01])?)?$', c) for c in fb), '%s: %d firebot lines, args ms maxm deg parse' % (nm, len(fb)))
                 i0 = next((i for i, c in enumerate(scr) if c.startswith('waitstate 0x19')), 99999); i1 = next((i for i, c in enumerate(scr) if c.startswith('firebot')), -1)
                 v.ok(0 <= i0 < i1, '%s: firebot comes after waitstate 0x19' % nm)
                 v.ok(any(c.startswith('waitpeers 2') for c in scr), '%s: waitpeers 2' % nm)

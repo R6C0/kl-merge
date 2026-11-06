@@ -1461,8 +1461,10 @@ static void kla_script_load(void)
             c->op = C_ONFAIL; snprintf(c->text, sizeof c->text, "%s", a); c->n = 6; c->n2 = 0; sscanf(rest + strlen(a), "%lu", &c->n);
         }
         else if (!_stricmp(op, "firebot")) {            /* firebot [ms 6000] [maxm 30] [deg 4]: TEST rig, online HOST: turn to the nearest living Ally AI heister and hold fire (OnlineGrudge bench) */
-            c->op = C_FIREBOT; c->n = 6000; c->f[0] = 30.0f; c->f[2] = 4.0f; c->f[3] = 0.0f;
-            sscanf(rest, "%lu %f %f %f", &c->n, &c->f[0], &c->f[2], &c->f[3]);   /* 4th = pulse ms (0 = hold the button; N = N ms down, 1.5 N up, for semi-auto weapons) */
+            c->op = C_FIREBOT; c->n = 6000; c->f[0] = 30.0f; c->f[1] = 1.0f; c->f[2] = 4.0f; c->f[3] = 0.0f;
+            sscanf(rest, "%lu %f %f %f %f", &c->n, &c->f[0], &c->f[2], &c->f[3], &c->f[1]);   /* 4th = pulse ms (0 = hold the button; N = N ms down, 1.5 N up, for semi-auto weapons);
+                                                                                    5th = aim (1 = hold mouse button 1 while a target is in range, 0 = no): grudge_1106 pass A
+                                                                                    showed the read heading stuck 21 deg off a still target for 5 s without it */
             if (c->n < 500) c->n = 500;
             if (c->f[2] < 0.5f) c->f[2] = 0.5f;
         }
@@ -1801,6 +1803,7 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                 err = (float)(atan2(dx, dz) * 57.29577951) - h; while (err > 180) err -= 360; while (err < -180) err += 360;
                 rate = err / kla_turn_deg * 5.0f; if (rate > 1800) rate = 1800; if (rate < -1800) rate = -1800;
                 kla_m_rate[0] = rate; kla_m_rate[1] = 0;
+                if (c->f[1] > 0.0f) kla_m_btn[1] = 0x80;                    /* GUESS: button 1 = aim in Dog Days' default binds; aiming turns the body to the camera */
                 aimed = err < c->f[2] && err > -c->f[2];
                 if (aimed && !kla_m_btn[0] && (c->f[3] <= 0.0f || now - ptog >= (DWORD)(c->f[3] * 1.5f))) { kla_m_btn[0] = 0x80; held_t = now; ptog = now; ndown++; if (ndown <= 6) kla_out(1, "script %d: firebot fire DOWN #%d: rec %d actor %08lx, %.1f m, bearing error %.1f, health %.1f", kla_pc + 1, ndown, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, hv); }
                 else if (kla_m_btn[0] && c->f[3] > 0.0f && aimed && now - ptog >= (DWORD)c->f[3]) { kla_m_btn[0] = 0; held_ms += now - held_t; ptog = now; }
@@ -1808,12 +1811,14 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                 if (now - lasthp >= 1000) { lasthp = now | 1; nfire++; if (nfire <= 20) kla_out(1, "script %d: firebot hp: rec %d actor %08lx %.1f m, bearing error %.1f, fire %s, health %.1f (target start %.1f)", kla_pc + 1, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, kla_m_btn[0] ? "DOWN" : "up", hv, hp_start); }
             } else if (!end) {
                 kla_m_rate[0] = kla_m_rate[1] = 0;
+                if (c->f[1] > 0.0f) kla_m_btn[1] = 0;
                 if (kla_m_btn[0]) { kla_m_btn[0] = 0; held_ms += now - held_t; kla_out(1, "script %d: firebot fire UP: no target in range", kla_pc + 1); }
                 if (now - lasthp >= 2000) { lasthp = now | 1; kla_out(1, "script %d: firebot: no living Ally AI heister within %.0f m (census %d records%s%s)", kla_pc + 1, c->f[0], fs.n, fwhy[0] ? ": " : "", fwhy); }
             }
             if (!end && now - kla_cmd_t >= c->n) end = 1;
             if (!end) return;
             kla_m_rate[0] = kla_m_rate[1] = 0;
+            if (c->f[1] > 0.0f) kla_m_btn[1] = 0;
             if (kla_m_btn[0]) { kla_m_btn[0] = 0; held_ms += now - held_t; }
             hp = -1; if (tact) { DWORD hh = klh_rd32(tact + 0x5fc); if (hh && klh_rd32(hh + 0x24) == tact) klh_rd(hh + 4, &hp, 4); }
             kla_out(1, "script %d: firebot over after %lu ms: fire held %lu ms in %d press(es), %d target(s) died; current target %08lx health now %.1f (at its start %.1f)",
