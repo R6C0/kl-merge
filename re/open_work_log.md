@@ -1,3 +1,10 @@
+## 2026-11-06 ~12:45 [f0] Grudge pass A run 4 (TEST 6def0e58, DD09 2 seats): the gun FIRES, still 0 human hits (no crash)
+Truth lines per firebot step (clip drops / FIRED byte in held polls / hand item): control inside the round-start window 0 / 0 of 689 / 29 (window blocks fire,
+not only turning); aimed steps 10, 30, 30, 31 rounds spent, FIRED 0 of 121..1019 (the byte is not "shot fired", ignore it). Bots walk 1.6 -> 8.4 m during the
+steps; bursts at bearing error 0.3-4.6 deg at 4.1 m, yet health stays 350 and slot 96 (kog_hit) logs no human attacker. G1 +0x285 held 1 throughout.
+Next: log the aimed handle [[P+0xbd4]+0x2ac] vs the target (camera ray is over the shoulder, yaw-only aim may pass beside), read-only entry counters on
+0x6050a0/0x69f900/0x8689c0 for human attackers, then a new bench slot via the peers. Pass B not run.
+
 ## 2026-11-06 ~12:40 [db] OSS_DD09_SPB bench (TEST 4a3387ea = OsdScanSlice + ScanMinFrames + ShopPoolBlock), no crash
 9 seats DD09, 9/9 in round, 0 asserts/faults/dumps. Verdicts: 9 HITCHY, 0 FAIL (SMF run: 1 FAIL host 3.1 s stop). fps per seat 20.9/22.6/22.4/23.2/22.8/23.6/22.7/23.2/24.3,
 summed 206 vs SMF 189, OSS 199 (2 seats starved at 2-3), N9S 202 (inst9 dead). Max stops 1.5-2.8 s. TickProfile: klshop_tick no longer in the top list; top now
