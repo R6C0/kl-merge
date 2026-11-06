@@ -41,6 +41,11 @@ t('cam 2e = variant E (LookFromPosFA, heli group, eye 7400,2500,2800) + the nort
 t('2e route: 5 points, starts at the pad point, 5 equal steps, last point as researched', len(O.ROUTE_2E) == 5 and O.ROUTE_2E[0] == O.ROUTE_2C[0] and O.ROUTE_2E[-1] == (8800.0, 6200.0, 3100.0)
   and all(abs((b[i] - a[i]) - (O.ROUTE_2E[1][i] - O.ROUTE_2E[0][i])) <= 1.0 for a, b in zip(O.ROUTE_2E, O.ROUTE_2E[1:]) for i in range(3)))
 t('2e eye inside Roof box 7', all(lo <= v <= hi for v, lo, hi in zip(H.EYE_E, (6676, 1460, 2594), (8080, 2610, 4426))))
+t('cam 2f = 2e camera + north route + the rmi pass only for 2f', C.cam_params('2f') == C.cam_params('2e') and C.route_for('2f') == O.ROUTE_2E and '2f' in C.ROUTE_CAMS
+  and C.PASSES[-1] == 'rmi' and C.out_name('chain', '2f', 'abcdef01' + '0' * 24, C.MAPDIR) == 'lcchain_2f_abcdef01' and C.out_name('chain', '2e', 'abcdef01' + '0' * 24, C.MAPDIR) == 'lcchain_2e_abcdef01')
+import kl_club_rmi_1106 as RM
+t('2f rmi box covers the 2e eye and every ROUTE_2E point, 2c route z is outside', all(abs(p[a] - RM.NEW_CENTRE[a]) <= RM.NEW_HALF[a] for p in list(O.ROUTE_2E) + [H.EYE_E] for a in range(3))
+  and any(abs(p[2] - RM.NEW_CENTRE[2]) > RM.NEW_HALF[2] for p in O.ROUTE_2C))
 t('2e chain name = lcchain_2e_<base8>; 2d unchanged', C.out_name('chain', '2e', 'abcdef01' + '0' * 24, C.MAPDIR) == 'lcchain_2e_abcdef01'
   and C.out_name('chain', '2d', 'a' * 32, C.MAPDIR).startswith('lcchain_2d_live_') and C.out_name('outro', '2e', 'a' * 32, C.MAPDIR) == 'lcoutro2e_live_aaaaaaaa')
 try:

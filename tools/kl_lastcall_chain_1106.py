@@ -6,9 +6,9 @@ live DM05A files, every pass is stale. This tool reads the CURRENT md5 of the fi
 benches) or all four as one chain (live -> doors -> spawn2f -> outro -> helicam) with ONE install.py pinning the md5s it read.
 
   python tools/kl_lastcall_chain_1106.py status [--in-dir <dir>]
-  python tools/kl_lastcall_chain_1106.py single doors|spawn2f|outro|helicam [--cam 2a|2b|2c|2d|2e] [--in-dir <dir>] [--root <dir> | --out <dir>]
+  python tools/kl_lastcall_chain_1106.py single doors|spawn2f|outro|helicam [--cam 2a|2b|2c|2d|2e|2f] [--in-dir <dir>] [--root <dir> | --out <dir>]
         -> <root>\<name>_live_<first 8 of the zip md5>   (default root C:\kl_build_1024; name lcdoors / lcspawn2f / lcoutro / lcoutcam2a / lcoutcam2b)
-  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|2c|2d|2e|none] [--expect-base <zip md5 prefix[,prefix]>] [--only doors,outro,...] [--doors B01,A02] [--in-dir <dir>] [--pin-dir <dir>] [--tag .before-x] [--root <dir> | --out <dir>] [--keep-steps]
+  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|2c|2d|2e|2f|none] [--expect-base <zip md5 prefix[,prefix]>] [--only doors,outro,...] [--doors B01,A02] [--in-dir <dir>] [--pin-dir <dir>] [--tag .before-x] [--root <dir> | --out <dir>] [--keep-steps]
         -> <root>\lcchain_<cam|nocam>_live_<8>   (one stage + install.py; helicam default = the lcoutcam2a set: f5 +700, f6 -500, aim the heli's ShatterGeom)
 --in-dir (default: the live DM05A folder) holds the 5 files F01_Main.zip F01_Main.bots.zip F01_Main.bots.base.md5 KLJoin.ini KLGuns.ini.
 It is only READ (each pass works on a copy). Nothing is ever written into the game folder (a stage under it is refused).
@@ -38,15 +38,15 @@ ROOT = r'C:\kl_build_1024'
 FILES5 = ('F01_Main.zip', 'F01_Main.bots.zip', 'F01_Main.bots.base.md5', 'KLJoin.ini', 'KLGuns.ini')
 BIG3 = FILES5[:3]
 INIS = FILES5[3:]
-PASSES = ('doors', 'spawn2f', 'outro', 'helicam')       # the chain order
+PASSES = ('doors', 'spawn2f', 'outro', 'helicam', 'rmi')       # the chain order; 'rmi' (Roof .rmi box 7 enlarged) runs only for --cam 2f
 TAG = '.before-chain1106'
-ROUTE_CAMS = ('2c', '2d', '2e')       # the cams that REPLACE the Escaping spline by a 5-point climb: 2c/2d the NE one (kl_club_outro_1106.ROUTE_2C), 2e the north one (ROUTE_2E)
+ROUTE_CAMS = ('2c', '2d', '2e', '2f')       # the cams that REPLACE the Escaping spline by a 5-point climb: 2c/2d the NE one (kl_club_outro_1106.ROUTE_2C), 2e the north one (ROUTE_2E)
 
 
 def route_for(cam):
     import kl_club_outro_1106 as O
-    return O.ROUTE_2E if cam == '2e' else O.ROUTE_2C if cam in ROUTE_CAMS else None
-NAMES = {'doors': 'lcdoors', 'spawn2f': 'lcspawn2f', 'outro': 'lcoutro'}
+    return O.ROUTE_2E if cam in ('2e', '2f') else O.ROUTE_2C if cam in ROUTE_CAMS else None
+NAMES = {'doors': 'lcdoors', 'spawn2f': 'lcspawn2f', 'outro': 'lcoutro', 'rmi': 'lcrmi'}
 
 
 class Refused(Exception):
@@ -87,12 +87,14 @@ def cam_params(cam):
         return ('D', None, None, H.AIM_D)              # stock outside camera (LookFromPosFA): eye = box node moved to the 2c eye, aim = the heli group; 2c's climb route
     if cam == '2e':
         return ('E', None, None, H.AIM_D)              # as 2d (LookFromPosFA, aim the heli group) but the eye is EYE_E (7400,2500,2800) and the route is ROUTE_2E (north climb)
-    raise ValueError('--cam must be 2a, 2b, 2c, 2d, 2e or none')
+    if cam == '2f':
+        return ('E', None, None, H.AIM_D)              # exactly 2e (eye EYE_E, aim the heli group, north route ROUTE_2E) + the 'rmi' pass: Roof .rmi box 7 enlarged upward/eastward
+    raise ValueError('--cam must be 2a, 2b, 2c, 2d, 2e, 2f or none')
 
 
 def out_name(name, cam, live_md5, in_dir, doors=None):
-    if name == 'chain' and cam == '2e':
-        return 'lcchain_2e_' + live_md5[:8]                     # the folder asked for: C:\kl_build_1024\lcchain_2e_<base8>
+    if name == 'chain' and cam in ('2e', '2f'):
+        return 'lcchain_%s_' % cam + live_md5[:8]                     # the folder asked for: C:\kl_build_1024\lcchain_2e_<base8>
     tag = ('live_' if os.path.abspath(in_dir) == os.path.abspath(MAPDIR) else 'in_') + live_md5[:8]
     if name == 'chain':
         return 'lcchain_%s%s_%s' % ('nocam' if cam == 'none' else cam, '_d' + '-'.join(d[0] for d in doors) if doors else '', tag)
@@ -148,6 +150,13 @@ def run_pass(name, in_dir, out, cam='2a', log=print, doors=None):
             fl, ai = H.wanted(variant, f5, f6, aim)
             if not H.done_state(v, fl, ai, H.MODES[variant]) or not H.eye_done(*H.state(os.path.join(out, 'F01_Main.zip'))[:2], variant):
                 raise ValueError('helicam self-check: the camera box reads back as %r' % (v,))
+            files = BIG3
+        elif name == 'rmi':
+            import kl_club_rmi_1106 as R
+            R.stage(out, in_dir, log, allow=allow)
+            bad = R.check(os.path.join(out, 'F01_Main.zip'), os.path.join(in_dir, 'F01_Main.zip'))
+            if bad:
+                raise ValueError('rmi self-check: %d faults: %s' % (len(bad), '; '.join(bad[:3])))
             files = BIG3
         else:
             raise ValueError('unknown pass %r' % name)
@@ -309,7 +318,7 @@ def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_st
     live = read_live(in_dir)
     if expect and not any(live['F01_Main.zip'].startswith(e) for e in expect):
         raise Refused('--expect-base: the zip of %s is %s, not one of %s: build on the live base you meant (or change --expect-base)' % (in_dir, live['F01_Main.zip'], ', '.join(expect)))
-    todo = [p for p in PASSES if (only is None or p in only) and not (p == 'helicam' and cam == 'none')]
+    todo = [p for p in PASSES if (only is None or p in only) and not (p == 'helicam' and cam == 'none') and not (p == 'rmi' and cam != '2f')]
     if not todo:
         raise Refused('nothing to do')
     if only:
@@ -389,6 +398,11 @@ def verify_final(out, todo, cam, log=print):
             bad.append('helicam edit gone in the final zip: %r' % (v,))
         else:
             log('  final: EscCamera01 %s f5/f6 %s,%s aim %s' % (v[11], v[5], v[6], v[9]))
+    if 'rmi' in todo:
+        import kl_club_rmi_1106 as R
+        b = R.check(zp)
+        bad += ['rmi check: %s' % x for x in b]
+        log('  final: Roof .rmi box 7 enlarged: %s' % ('PASS' if not b else 'FAIL'))
     if 'spawn2f' in todo:
         import kl_lc_spawns2f_1106 as S
         b, _rows = S.points(zp)
