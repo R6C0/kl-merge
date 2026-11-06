@@ -53,10 +53,11 @@ FIRE_BLOCK = ['waitstate 0x19 180000',
               # lines log clip drops / the FIRED byte / the input mask, so 'never fired' and 'fired and missed' tell apart.
               # This one sits in the ~8 s no-turn window after 0x19; the second one comes after it.
               'firebot 3000 0 15 0 0',
-              # Run 4: 101 rounds spent, 0 slot-423 hits on the target = the shots miss. The aimed steps now steer the CROSSHAIR (aim point
-              # P+0x27b0 while aim bit [P+0x2720]&4 is set) and try pitch steering with both signs (6th arg, which is 'up' is a GUESS).
+              # Run 4: 101 rounds spent, 0 slot-423 hits on the target = the shots miss. The aimed steps steer the CROSSHAIR (aim point
+              # P+0x27b0 while aim bit [P+0x2720]&4 is set) and the pitch: run 5 (11-06 12:15) showed sign -1 = up (+1 drove the aim point
+              # to the ceiling, pitch error -69 deg; -1 converged to 0 deg and put 9 hits on the target). Pass A PASS on run 5.
               'pos g0',
-              'firebot 8000 40 15 60 1 1',
+              'firebot 8000 40 15 60 1 -1',
               'pos g1',
               'tap R',
               'wait 2500',
@@ -65,7 +66,7 @@ FIRE_BLOCK = ['waitstate 0x19 180000',
               'tap R',
               'wait 2500',
               'firebot 3000 0 15 0 0',
-              'firebot 25000 40 15 0 1 0',
+              'firebot 25000 40 15 0 1 -1',
               'pos g3',
               'log GRUDGE1106 firebot phase over; waiting for the death logs',
               'wait 5000',

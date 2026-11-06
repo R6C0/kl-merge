@@ -1,3 +1,10 @@
+## 2026-11-06 ~12:25 [f0] GRUDGE PASS A: ALL GATES PASS (run 5, TEST 0bf88e4c, DD09 2 seats, no crash)
+First proof that a human's hit on an Ally AI heister ONLINE reaches OnlineGrudge: 15 human hits (attacker vtable 00bb45f4) on AI heisters 5/2/4, every one with a health
+drop (350 -> 284 ...), 2 lethal blows, heister 4 "died: lethal blow human -> killer found", "would call slot 129" (dry), 0 marks, 0 crashes. The run 4 misses were the rig:
+the crosshair, not the body, has to be steered, and the pitch too. Pitch sign -1 = up (+1 put the aim point on the ceiling, pitch error -69 deg). slot-423 hits on the
+target per step: 0/8, 9/47, 5/126 (of all team-2). Heister 5 took a lethal blow but went on at 87.5 hp (down + revive?), no "died" line: check in pass B.
+Kit now uses pitch -1 on all aimed steps (validate 0 FAIL). Next: pass B (OnlineGrudgeDry=0, the real slot-129 mark), queued after db's oss_1106 bench.
+
 ## 2026-11-06 ~12:30 [db] bench "snaps / trk_err" = [Sync] cop puppet, bench-only (research wf_2d563861, read-only, no crash)
 snaps = klsync.c ksp_snap2 teleports of AI cops on a client (cop > SnapDist 300 from the host's place, max 1 per SnapEvery 2000 ms); trk_err = Track's
 pre-placement cop error (>= TrackTol 40). Humans are not covered. The kits turn it on (DD09_host.ini Share=1, DD09_join.ini Puppet=1 PuppetMode=2); the LIVE
