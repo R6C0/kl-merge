@@ -1,6 +1,8 @@
 ## 2026-11-06 ~16:00 [c9] Last Call safe-doors chain bench lcchain2a1106d PASS; boarding works, outro still grey (no crash involved)
 - Kick doors cut to B01+A02 (`--doors`): chain benches had no bot past z 2145 before F03 (no AI kick step on the hook's exit orders); in 1106d 0 stalls there.
   LastVehicleLead=600 (kit only) called the heli at 300 s, before any bot reached stage 2, so the bots' own call time is still unmeasured.
+  ~16:15 kit lcchain2a1106n (same stage, NO lead) PASS: bots called it themselves, record 4 stage 2->3 at ~293 s, heli state 3 at ~304 s
+  (door-less runs 281-346 s): B01+A02 do not hold the bots. Player boarded again ("drives out with you aboard").
 - Fast boarding: "the vehicle drives out with you aboard" 8 s after state 4 (tele reports MISSED but goto reached the box, you -> stage 3).
 - Outro 0x19 -> 0x1f 23 s, shots 14:58:50-58 flat grey (film grain only). From 14:58:44 the heli stands at x 5965 (west, BuildingF side) and
   the logged camera freezes at eye (6664,2110,3929). Hypothesis (unproven): the eye is outside every room volume -> nothing drawn = fog grey.
