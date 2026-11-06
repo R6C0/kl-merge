@@ -47,3 +47,12 @@ look at the counters first). Proposed, in order:
 
 ## 6. Open question list for the owner
 Did the screen go black, show the sky, or show the map frozen? Did the round-over list appear at all before the next round started?
+
+## 2026-11-06 ~10:40 - [c9] bench lc1106 findings (live zip e6d2f73e)
+- EscCamera01 in the live zip is valid (LookFromPos, eye 7093/2181/2727); the chopper flies in, hovers at (7250, 2600, 3512), leaves. The camera is not the fault.
+- A bot with $0 boarded from (7827, 2014, 3382): boarding needs no money.
+- The scripted player did NOT board: tele to the box (7361, 2014, 3201) left it at y 1883 (130 under the box), the walk through the box
+  ended at (7335, 1883, 3233), the record reached heist stage g3 but never "aboard". The outro eye near the box is then the follow
+  camera on a player who did not escape, not a broken escape screen.
+- GUESS: the box's height test misses a body that fell to 1883 (the tele target is not floor). Next bench: second try on the bot's floor
+  point (tools/kl_bench_1106.py LC script, 'pos bot-point' / 'pos boarded2'). Needs the game free.

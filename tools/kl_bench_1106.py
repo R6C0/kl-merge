@@ -103,7 +103,12 @@ def solo_script(k, secs_total):
               'tele 7361 2014 3201', 'log BENCH1106 teleported into the escape box', 'wait 3000', 'pos teleported',
               # run lc1106_solo 11-06: the tele landed (7361, 1882, 3201) but the record stayed in-play (a teleport does not seem to fire
               # the box's enter test; GUESS) -> walk through it: toward the vehicle (7234, 3464, veh1dc=3 'at'), then back to the box node
-              'goto 7234 3464 60 8000', 'wait 2000', 'pos walk1', 'goto 7361 3201 60 8000', 'wait 2000', 'pos boarded', 'waitvan 5 120000', 'pos van5',
+              'goto 7234 3464 60 8000', 'wait 2000', 'pos walk1', 'goto 7361 3201 60 8000', 'wait 2000', 'pos boarded',
+              # run lc1106 (11-06 02:43): 'pos boarded' was (7335, 1883, 3233), 130 under the box's 2014, and the player never went aboard,
+              # while a bot boarded from (7827, 2014, 3382). GUESS: the box's height test misses a body that fell to 1883 -> second try on the
+              # bot's floor point, walked into so the enter test runs
+              'tele 7827 2014 3382', 'wait 3000', 'pos bot-point', 'goto 7361 3201 60 8000', 'wait 2000', 'goto 7827 3382 60 8000', 'wait 2000',
+              'pos boarded2', 'waitvan 5 120000', 'pos van5',
               'wait 8000', 'pos after5', 'waitstate 0x1f 240000', 'pos s1f', 'wait 12000', 'waitstate 0x20 120000', 'log BENCH1106 LC solo done', 'wait 3000', 'pass 1000']
     else:
         for i in range(1, 11):
