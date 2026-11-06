@@ -6,9 +6,9 @@ live DM05A files, every pass is stale. This tool reads the CURRENT md5 of the fi
 benches) or all four as one chain (live -> doors -> spawn2f -> outro -> helicam) with ONE install.py pinning the md5s it read.
 
   python tools/kl_lastcall_chain_1106.py status [--in-dir <dir>]
-  python tools/kl_lastcall_chain_1106.py single doors|spawn2f|outro|helicam [--cam 2a|2b|2c|2d] [--in-dir <dir>] [--root <dir> | --out <dir>]
+  python tools/kl_lastcall_chain_1106.py single doors|spawn2f|outro|helicam [--cam 2a|2b|2c|2d|2e] [--in-dir <dir>] [--root <dir> | --out <dir>]
         -> <root>\<name>_live_<first 8 of the zip md5>   (default root C:\kl_build_1024; name lcdoors / lcspawn2f / lcoutro / lcoutcam2a / lcoutcam2b)
-  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|2c|2d|none] [--only doors,outro,...] [--doors B01,A02] [--in-dir <dir>] [--pin-dir <dir>] [--tag .before-x] [--root <dir> | --out <dir>] [--keep-steps]
+  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|2c|2d|2e|none] [--expect-base <zip md5 prefix[,prefix]>] [--only doors,outro,...] [--doors B01,A02] [--in-dir <dir>] [--pin-dir <dir>] [--tag .before-x] [--root <dir> | --out <dir>] [--keep-steps]
         -> <root>\lcchain_<cam|nocam>_live_<8>   (one stage + install.py; helicam default = the lcoutcam2a set: f5 +700, f6 -500, aim the heli's ShatterGeom)
 --in-dir (default: the live DM05A folder) holds the 5 files F01_Main.zip F01_Main.bots.zip F01_Main.bots.base.md5 KLJoin.ini KLGuns.ini.
 It is only READ (each pass works on a copy). Nothing is ever written into the game folder (a stage under it is refused).
@@ -40,7 +40,12 @@ BIG3 = FILES5[:3]
 INIS = FILES5[3:]
 PASSES = ('doors', 'spawn2f', 'outro', 'helicam')       # the chain order
 TAG = '.before-chain1106'
-ROUTE_CAMS = ('2c', '2d')       # the cams that need the 5-point NE climb route (kl_club_outro_1106.ROUTE_2C)
+ROUTE_CAMS = ('2c', '2d', '2e')       # the cams that REPLACE the Escaping spline by a 5-point climb: 2c/2d the NE one (kl_club_outro_1106.ROUTE_2C), 2e the north one (ROUTE_2E)
+
+
+def route_for(cam):
+    import kl_club_outro_1106 as O
+    return O.ROUTE_2E if cam == '2e' else O.ROUTE_2C if cam in ROUTE_CAMS else None
 NAMES = {'doors': 'lcdoors', 'spawn2f': 'lcspawn2f', 'outro': 'lcoutro'}
 
 
@@ -80,10 +85,14 @@ def cam_params(cam):
         return ('F', None, None, H.AIM_F)              # fixed eye CamPos01 (LookFromPos, in Roof .rmi box 7) + the climb route of the outro pass
     if cam == '2d':
         return ('D', None, None, H.AIM_D)              # stock outside camera (LookFromPosFA): eye = box node moved to the 2c eye, aim = the heli group; 2c's climb route
-    raise ValueError('--cam must be 2a, 2b, 2c, 2d or none')
+    if cam == '2e':
+        return ('E', None, None, H.AIM_D)              # as 2d (LookFromPosFA, aim the heli group) but the eye is EYE_E (7400,2500,2800) and the route is ROUTE_2E (north climb)
+    raise ValueError('--cam must be 2a, 2b, 2c, 2d, 2e or none')
 
 
 def out_name(name, cam, live_md5, in_dir, doors=None):
+    if name == 'chain' and cam == '2e':
+        return 'lcchain_2e_' + live_md5[:8]                     # the folder asked for: C:\kl_build_1024\lcchain_2e_<base8>
     tag = ('live_' if os.path.abspath(in_dir) == os.path.abspath(MAPDIR) else 'in_') + live_md5[:8]
     if name == 'chain':
         return 'lcchain_%s%s_%s' % ('nocam' if cam == 'none' else cam, '_d' + '-'.join(d[0] for d in doors) if doors else '', tag)
@@ -123,7 +132,7 @@ def run_pass(name, in_dir, out, cam='2a', log=print, doors=None):
             files = BIG3
         elif name == 'outro':
             import kl_club_outro_1106 as O
-            O.stage(out, in_dir, O.KEEP, False, log, allow=allow, route=O.ROUTE_2C if cam in ROUTE_CAMS else None)
+            O.stage(out, in_dir, O.KEEP, False, log, allow=allow, route=route_for(cam))
             n = O.count_of(os.path.join(out, 'F01_Main.zip'))[4]
             if n > O.KEEP:
                 raise ValueError('outro self-check: the Escaping spline has %d points, want <= %d' % (n, O.KEEP))
@@ -286,7 +295,7 @@ def stage_single(name, in_dir=MAPDIR, out=None, root=ROOT, cam='2a', log=print):
     return out, live, got
 
 
-def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_steps=False, log=print, doors=None, pin_dir=None, tag=TAG):
+def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_steps=False, log=print, doors=None, pin_dir=None, tag=TAG, expect=None):
     """live -> doors -> spawn2f -> outro -> helicam as ONE stage in out whose install.py pins the md5s of in_dir's files read first.
     pin_dir (default in_dir): the folder whose 5 files are pinned as the install's "before" (e.g. the LIVE folder when in_dir is the pre-chain base of an
     earlier candidate, so the new stage installs directly over it); tag: the backup suffix of that install (default .before-chain1106)."""
@@ -298,6 +307,8 @@ def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_st
     if sel and only and 'doors' not in only:
         raise Refused('--doors given but the doors pass is not in --only')
     live = read_live(in_dir)
+    if expect and not any(live['F01_Main.zip'].startswith(e) for e in expect):
+        raise Refused('--expect-base: the zip of %s is %s, not one of %s: build on the live base you meant (or change --expect-base)' % (in_dir, live['F01_Main.zip'], ', '.join(expect)))
     todo = [p for p in PASSES if (only is None or p in only) and not (p == 'helicam' and cam == 'none')]
     if not todo:
         raise Refused('nothing to do')
@@ -365,7 +376,7 @@ def verify_final(out, todo, cam, log=print):
         if cam in ROUTE_CAMS:
             B, k, _l, raw, _n = O.count_of(zp)
             R, T = O.frame_of(zp, k)
-            if not O.route_done(O.world_points(raw, R, T), O.ROUTE_2C, 1.0):
+            if not O.route_done(O.world_points(raw, R, T), route_for(cam), 1.0):
                 bad.append('%s climb route gone in the final zip: %r' % (cam, O.world_points(raw, R, T),))
             else:
                 log('  final: Escaping spline is the %s climb route (%d points)' % (cam, n))
@@ -418,7 +429,8 @@ def main(a):
         else:
             only = opt('--only')
             stage_chain(in_dir, out, root, cam, only.split(',') if only else None, '--keep-steps' in a, doors=opt('--doors'),
-                        pin_dir=opt('--pin-dir'), tag=opt('--tag', TAG))
+                        pin_dir=opt('--pin-dir'), tag=opt('--tag', TAG),
+                        expect=[x for x in opt('--expect-base', '').split(',') if x] or None)
     except Refused as e:
         print('REFUSED: %s' % e)
         return 1

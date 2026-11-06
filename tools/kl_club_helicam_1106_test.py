@@ -61,6 +61,9 @@ with tempfile.TemporaryDirectory() as d:
     src = open(os.path.join(st, 'install.py')).read()
     t('install.py takes a custom tag and the live pin', "'.before-outcam2a1106'" in src and H.LIVE_PINS['F01_Main.zip'] in src
       and H.LIVE_PINS['F01_Main.zip'].startswith('e6d2f73e'))
-t('wanted() message names A, B, D, F', 'A, B, D or F' in open(H.__file__, encoding='utf-8').read())
+flE, aimE = H.wanted('E')
+t('variant E = variant D with the eye (7400,2500,2800); D unchanged', (flE, aimE) == H.wanted('D') and H.MODES['E'] == H.MODES['D'] and H.EYES['E'] == (7400.0, 2500.0, 2800.0)
+  and H.EYES['D'] == (7093.0, 2181.0, 2727.0))
+t('wanted() message names A, B, D, F', 'A, B, D, E or F' in open(H.__file__, encoding='utf-8').read())
 print('RESULT: %s' % ('FAIL %d' % len(fails) if fails else 'PASS'))
 sys.exit(1 if fails else 0)

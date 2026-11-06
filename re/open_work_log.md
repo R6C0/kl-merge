@@ -12,6 +12,16 @@
 - Backups D:\kl_stage\pd2guns_1106f_backup hard-linked to the byte-identical 1106e stage files (frees ~2.3 GB). UNDO ALL: new step 0f (before 1106e) and 0c = c9's DM05A chain 2c undo (between 1106c and 1106b).
 - Left: DM01B/DM03A/DM06B/DM11B not yet staged for 1106f; DM05A c+d+e+f re-stage on c9's e10ea488 running offline.
 
+## 2026-11-06 ~16:45 [c9] Last Call outro 2e benched, NOT installed: the heli is not drawn outside the Roof .rmi box (no crash involved)
+- 2e = the 2d mode (LookFromPosFA, aim = heli group) with eye (7400,2500,2800) in box 7 and ROUTE_2E, a north climb (7058,2271,3467) -> (8800,6200,3100).
+  The route was chosen with render-triangle LOS (scratchpad rtris.npz; DD .prm stride 40, u16 tri list) and has sky behind the heli.
+  Built on 6b's live 14c8d9dd: kl_lastcall_chain_1106.py chain --cam 2e --only outro,helicam --expect-base 14c8d9dd,e10ea488. Stage C:\kl_build_1024\lcchain_2e_14c8d9dd (zip 9ba99a7c).
+- Bench lcchain2e1106d PASS, undo byte-exact. The heli stops at (8268,5005,3207), 1300 cm short of the route end as predicted. The cam aims there within 2 s.
+  Shots 09-15 show open sky, a neon sign and a tower edge, with no heli in frame.
+- Conclusion over 2c, 2d and 2e: the heli is visible on the pad and invisible as soon as it leaves Roof .rmi box 7, whatever the aim. A dynamic object outside
+  every room box is evidently not drawn. Next: enlarge Roof box 7 in the .rmi to cover the climb, or route the heli into another room's box.
+  2c stays live. The 2d cracked glass was the ReShade KL_LensCrack hit overlay (klhook/klreshade.c s.6), not geometry.
+
 ## 2026-11-06 ~17:10 [c9] Last Call outro cam 2d benched, NOT installed (no crash involved)
 - 2d = EscCamera01 eFMM_LookFromPosFA (mode 4: eye = the box's own node, aim = field 9 re-read every frame, kl2.exe 0x4471a1), box node 11576 moved
   (7800,2271,3500) -> (7093,2181,2727) in Roof box 7, field 9 = ROOT\EscapeSetup!EscapeChopper\Escape_Chopper (node 10807), floats 0,-270,-270,80,0,0 (stock

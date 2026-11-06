@@ -45,6 +45,9 @@ for nm, rt, RR in (('one point', O.ROUTE_2C[:1], R), ('more than the field', O.R
     except ValueError:
         t('route_raw refuses %s' % nm, True)
 t('ROUTE_2C starts at the pad point and climbs north-east', O.ROUTE_2C[0] == (7058.0, 2271.0, 3467.0) and all(a[1] < b[1] and a[0] < b[0] for a, b in zip(O.ROUTE_2C, O.ROUTE_2C[1:])))
+nr5, _n = O.route_raw(rr, O.ROUTE_2E, R, T)
+t('route_raw 2e: count 5, world points read back, not the 2c route', struct.unpack_from('<I', nr5, 4)[0] == 5 and O.route_done(O.world_points(nr5, R, T), O.ROUTE_2E, 0.5)
+  and not O.route_done(O.world_points(nr5, R, T), O.ROUTE_2C))
 with tempfile.TemporaryDirectory() as d:
     os.makedirs(os.path.join(d, 'in'))
     open(os.path.join(d, 'in', 'F01_Main.zip'), 'wb').write(b'not the live zip')

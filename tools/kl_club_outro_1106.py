@@ -49,6 +49,11 @@ TAG = '.before-outro1106'
 # so the camera frame starts from the Backdrop room alone (skydome = uniform grey). Point 0 is the pad point of the stock route; checked offline
 # against the collision proxy: no triangle crosses any segment and the eye-to-heli line of sight from CamPos01 has 0 hits.
 ROUTE_2C = ((7058.0, 2271.0, 3467.0), (7250.0, 2500.0, 3650.0), (7600.0, 3000.0, 4000.0), (8100.0, 3700.0, 4600.0), (8800.0, 4400.0, 5600.0))
+# ROUTE_2E (candidate 2e): the 2c/2d route stops (the heli halts ~1300 cm of path short of the last point, GUESS, 4 runs) at (8131,3814,4696) on the terrace
+# slab of BuildingJ_01, whose render shell the collision proxy lacks: dark heli on a dark slab, hidden. 2e climbs NORTH over the street instead (render-triangle
+# research 11-06): equal steps P0 + i/4 * (P4 - P0); predicted stop (8274,5015,3210), 2695 cm from EYE_E, clearance 1741 cm, min margin along the route 483 cm.
+# 5 points = the spline count of the live zip (2 <= len <= count). Checked with triangle ray casts, NOT benched.
+ROUTE_2E = ((7058.0, 2271.0, 3467.0), (7493.0, 3253.0, 3375.0), (7929.0, 4235.0, 3283.0), (8364.0, 5217.0, 3191.0), (8800.0, 6200.0, 3100.0))
 HDR = 12                                   # raw: tag, point count, 1, then 24 bytes a point
 POINT = 24
 

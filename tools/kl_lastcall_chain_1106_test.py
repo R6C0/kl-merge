@@ -36,6 +36,18 @@ t('2c chain name', C.out_name('chain', '2c', 'a' * 32, C.MAPDIR).startswith('lcc
 t('cam 2d = variant D (LookFromPosFA, heli group) + the 2c climb route', C.cam_params('2d') == ('D', None, None, H.AIM_D) and '2d' in C.ROUTE_CAMS and '2c' in C.ROUTE_CAMS)
 t('2d outro/chain names', C.out_name('outro', '2d', 'a' * 32, C.MAPDIR) == 'lcoutro2d_live_aaaaaaaa' and C.out_name('chain', '2d', 'a' * 32, C.MAPDIR).startswith('lcchain_2d_live_'))
 t('2a/2b/2c unchanged', C.cam_params('2c') == ('F', None, None, H.AIM_F) and C.cam_params('2a')[0] == 'A' and '2a' not in C.ROUTE_CAMS)
+t('cam 2e = variant E (LookFromPosFA, heli group, eye 7400,2500,2800) + the north route', C.cam_params('2e') == ('E', None, None, H.AIM_D) and '2e' in C.ROUTE_CAMS
+  and C.route_for('2e') == O.ROUTE_2E and C.route_for('2d') == O.ROUTE_2C and C.route_for('2a') is None and O.ROUTE_2E != O.ROUTE_2C)
+t('2e route: 5 points, starts at the pad point, 5 equal steps, last point as researched', len(O.ROUTE_2E) == 5 and O.ROUTE_2E[0] == O.ROUTE_2C[0] and O.ROUTE_2E[-1] == (8800.0, 6200.0, 3100.0)
+  and all(abs((b[i] - a[i]) - (O.ROUTE_2E[1][i] - O.ROUTE_2E[0][i])) <= 1.0 for a, b in zip(O.ROUTE_2E, O.ROUTE_2E[1:]) for i in range(3)))
+t('2e eye inside Roof box 7', all(lo <= v <= hi for v, lo, hi in zip(H.EYE_E, (6676, 1460, 2594), (8080, 2610, 4426))))
+t('2e chain name = lcchain_2e_<base8>; 2d unchanged', C.out_name('chain', '2e', 'abcdef01' + '0' * 24, C.MAPDIR) == 'lcchain_2e_abcdef01'
+  and C.out_name('chain', '2d', 'a' * 32, C.MAPDIR).startswith('lcchain_2d_live_') and C.out_name('outro', '2e', 'a' * 32, C.MAPDIR) == 'lcoutro2e_live_aaaaaaaa')
+try:
+    C.stage_chain(expect=['deadbeef'], root=os.path.join(tempfile.gettempdir(), 'klchain_nowhere'), log=lambda *a: None)
+    t('--expect-base refuses another base', False)
+except C.Refused as e:
+    t('--expect-base refuses another base', 'expect-base' in str(e) or 'not there' in str(e))
 try:
     C.cam_params('3'); t('unknown cam refused', False)
 except ValueError:

@@ -126,11 +126,19 @@ KITS = {
     'lcchain2d1106d': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2d_safedoors_live_1a97e186', tag='.before-chain2d1106',
                            files={'F01_Main.zip': '1c1fc5d46dc60ce2a71319e8b56ece8b', 'F01_Main.bots.zip': '2718b4ca', 'F01_Main.bots.base.md5': 'a97a3f26'},
                            solo_secs=900, parts=('solo',), shots='400-556:4'),
+    # e (c9 11-06, candidate 2e): the 2d camera with the eye moved to (7400,2500,2800) (Roof box 7) and the NORTH climb ROUTE_2E (the 2d route made the heli stop
+    # on BuildingJ's terrace slab, hidden). Built with: kl_lastcall_chain_1106.py chain --cam 2e --only outro,helicam --tag .before-chain2e1106 on the LIVE zip
+    # 14c8d9dd (6b's pd2guns c+d+e+f over the installed 2c chain, which already holds doors B01,A02 and spawn2f, hence --only). The stage installs over 14c8d9dd.
+    # KLJoin/KLGuns are unchanged by this stage, so the kit keeps the live inis (pd2guns) and only lists the three changed files.
+    'lcchain2e1106d': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2e_14c8d9dd', tag='.before-chain2e1106',
+                           files={'F01_Main.zip': '9ba99a7c76aecaad2a7322fbcccc7563', 'F01_Main.bots.zip': '1fa0ff33', 'F01_Main.bots.base.md5': '62cdd295'},
+                           solo_secs=900, parts=('solo',), shots='400-556:4'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
-      'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d')
-FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d')          # boards at once at state 3
-LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d', 'lcchain2d1106d')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
+      'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d')
+EYE_OF = {'lcchain2e1106d': (7400, 2500, 2800)}          # kits whose outro eye is not the 2c CamPos01 eye (7093,2181,2727)
+FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d')          # boards at once at state 3
+LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
 
 
 def md5(p):
@@ -430,7 +438,7 @@ def verify(k, part, tagbase=None):
                 chk('ZHeli moves toward (7300,2249,3500)', d1 < d0 * 0.5, 'first %s %.0f m away, closest %.0f m (%d samples; stock hang was 15394,6942,18351)' % (hel[0][0], d0, d1, len(hel)))
             else:
                 chk('ZHeli moves toward (7300,2249,3500)', False, 'no "heli: t=" line with a ZHeli (is [Heli] Probe=2 in the run ini?)')
-            eye = (7093, 2181, 2727)
+            eye = EYE_OF.get(k, (7093, 2181, 2727))
             # klcam.c logs the render camera as "cam: ... eye X Y Z"; only the outro (after 0x19 -> 0x1f) counts
             i0 = next((i for i, l in enumerate(a) if re.search(r'session: state \S+ -> 0x1f', l)), len(a))
             eyes = [tuple(float(m.group(j)) for j in (1, 2, 3)) for l in a[i0:] if ' cam:' in l for m in [re.search(r'\beye (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)', l)] if m]
@@ -439,7 +447,7 @@ def verify(k, part, tagbase=None):
                 # these stages move the eye on purpose (LookAtPos, f5/f6 offset from the heli): info only, the frames are judged by eye
                 chk('escape camera eye moved off (7093,2181,2727) (info)', True, '%d outro cam eyes, last %s' % (len(eyes), ('(%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
             else:   # includes lcchain2c1106d / lcchain2d1106d: the eye is FIXED at CamPos01 (2d: the box node itself), so it is still checked
-              chk('escape camera eye about (7093,2181,2727) in the outro', bool(hit), '%d outro cam eyes, %s' % (len(eyes), ('e.g. (%.0f,%.0f,%.0f)' % hit[0]) if hit else ('last (%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
+              chk('escape camera eye about (%d,%d,%d) in the outro' % eye, bool(hit), '%d outro cam eyes, %s' % (len(eyes), ('e.g. (%.0f,%.0f,%.0f)' % hit[0]) if hit else ('last (%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
         st = [m.group(1) for l in a for m in [re.search(r'session: state \S+ -> (0x[0-9a-f]+)', l)] if m]
         chk('session reaches 0x1f then 0x20', '0x1f' in st and '0x20' in st[st.index('0x1f'):] if '0x1f' in st else False, 'states seen: %s' % ' '.join(st[-8:]))
         van = [l[:140] for l in a if 'van card' in l or 'vehicle state' in l]

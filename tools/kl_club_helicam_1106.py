@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """kl_club_helicam_1106.py - Last Call (DM05A) pass helicam1106: the escape camera rides WITH the heli and looks back at the tower. OFFLINE, level data only.
 
-  python tools/kl_club_helicam_1106.py stage [--in-dir <dir>] [--out <dir>] [--variant A|B|D|F] [--f5 N] [--f6 N] [--aim <path>] [--pin-live] [--tag .before-x]
-  python tools/kl_club_helicam_1106.py check <zip> [--variant A|B|D|F]
+  python tools/kl_club_helicam_1106.py stage [--in-dir <dir>] [--out <dir>] [--variant A|B|D|E|F] [--f5 N] [--f6 N] [--aim <path>] [--pin-live] [--tag .before-x]
+  python tools/kl_club_helicam_1106.py check <zip> [--variant A|B|D|E|F]
 (no --force: the input md5 must be a pinned one or --allow-md5 <8+ hex digits>; chain with --in-dir on another stage, e.g. C:\\kl_build_1024\\lcoutro_1106)
 
 Plan and reasoning: re/lastcall_helicam_plan_1106.md. Problem: EscCamera01 is eFMM_LookFromPos, a FIXED eye at CamPos01 (7093, 2181, 2727); once the
@@ -56,8 +56,12 @@ LOOK_FROM_FA = 'eFMM_LookFromPosFA'
 AIM_D = 'ROOT\\EscapeSetup!EscapeChopper\\Escape_Chopper'    # the heli group (ZGROUP with OnlineEscHavokCar), the analogue of stock F08 node 767
 FLOATS_D = (0.0, -270.0, -270.0, 80.0, 0.0, 0.0)               # the stock F02/F03/F08 outside cameras; GUESS: mode 4 ignores f1..f6 (kl2 0x447190 reads positions only)
 EYE_D = (7093.0, 2181.0, 2727.0)                               # = the 2c eye CamPos01, inside Roof .rmi box 7 (an eye outside every box gives a grey frame)
-MODES = {'A': LOOK_AT, 'B': LOOK_AT, 'F': LOOK_FROM, 'D': LOOK_FROM_FA}
-EYES = {'D': EYE_D}                                            # variants that also move the camera box node to this world place
+# Variant E (candidate 2e, 11-06): exactly variant D (same mode, floats, aim) but the eye is EYE_E. Research: from (7400,2500,2800) the clearance to the render
+# geometry is ~573 cm (2d eye: ~200) and with the 2e route the min LOS margin is ~483 cm. Inside Roof .rmi box 7 (x 6676..8080, y 1460..2610, z 2594..4426).
+# GUESS: the box node can sit anywhere in box 7 without changing the culling room (not benched).
+EYE_E = (7400.0, 2500.0, 2800.0)
+MODES = {'A': LOOK_AT, 'B': LOOK_AT, 'F': LOOK_FROM, 'D': LOOK_FROM_FA, 'E': LOOK_FROM_FA}
+EYES = {'D': EYE_D, 'E': EYE_E}                                            # variants that also move the camera box node to this world place
 # live DM05A of 2026-11-06 (e6d2f73e), doors-1106 (a24d7432), outro-1106 (77a42f74), spawn2f-1106 (88e23dd5)
 KNOWN_IN = ('e6d2f73e', 'a24d7432', '77a42f74', '88e23dd5')
 TAG = '.before-helicam1106'
@@ -83,10 +87,10 @@ def wanted(variant, f5=None, f6=None, aim=None):
         fl, aim = list(STOCK_B), aim or AIM_B
     elif variant == 'F':
         fl, aim = list(FLOATS_F), aim or AIM_F
-    elif variant == 'D':
+    elif variant in ('D', 'E'):
         fl, aim = list(FLOATS_D), aim or AIM_D
     else:
-        raise ValueError('variant must be A, B, D or F')
+        raise ValueError('variant must be A, B, D, E or F')
     if f5 is not None:
         fl[4] = float(f5)
     if f6 is not None:
