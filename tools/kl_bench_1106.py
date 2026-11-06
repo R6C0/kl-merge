@@ -66,8 +66,13 @@ KITS = {
     'lcoutro1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcoutro_1106', tag='.before-outro1106',
                         files={'F01_Main.zip': '77a42f74a8d6853299612a63884b1b89', 'F01_Main.bots.zip': '2cef6d0b', 'F01_Main.bots.base.md5': '5115b51a'},
                         solo_secs=1500, parts=('solo',)),
+    # lcoutro1106 bench (11-06 12:15): outro 60 -> ~23 s but still black with the heli parked 18 m from the fixed eye; this adds the in-heli LookAtPos camera
+    # (kl_club_helicam_1106 variant A on lcoutro_1106; lchelicam_1106's install.py re-pinned on the live e6d2f73e files)
+    'lcoutcam1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcoutcam_1106', tag='.before-outcam1106',
+                         files={'F01_Main.zip': '24576526f95507cbc8b9ffe61951b5c1', 'F01_Main.bots.zip': '2ae52345', 'F01_Main.bots.base.md5': 'd7116a6b'},
+                         solo_secs=1500, parts=('solo',)),
 }
-LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106')
+LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106')
 
 
 def md5(p):
