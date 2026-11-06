@@ -1,3 +1,9 @@
+## 2026-11-06 ~15:05 [db] CensusSlice bench SMOOTH: OSS_DD09_CEN_S3 (no crash involved)
+- [Perf] CensusSlice=1 (a1cb61a4, TEST 24306dec, SHIP out_cen1106 9d096198): the host's AI-heister census (8 MB walk, ~18 ms) is shared and walked 1/8 a frame.
+- Bench, 3 seats on the bss ini + CensusSlice=1: all SMOOTH, 0 hitches/min; host 29.8 fps, 0 stalls, p95 81 ms (BSS_S3 103 ms); 0 asserts/faults/dumps; live dll/ini unchanged.
+- TickProfile: klbd_tick ~0.3 ms a frame (max 4-10 ms), klv_tick ~0.05; hook ~1.2 ms a frame. Botdown still fires ("record 3 IS DOWN").
+- Next costs: klu_tick 4.7 ms single calls (one 24.7), klsy_tick 17-24 ms once, klbf_tick max 14-38 ms. Offer: SHIP 9d096198 + OsdScanSlice/ScanMinFrames/ShopPoolBlock/BotScanSlice/CensusSlice=1.
+
 ## 2026-11-06 ~14:55 [c9] lcchain2a1106 bench PASS: all four Last Call passes on 6b's 1a97e186 in one install (no crash involved)
 kl_lastcall_chain_1106 (b8cd84d9) re-based doors + spawn2f + outro + cam 2a on live 1a97e186 (pd2guns 1106b), stage lcchain_2a_live_1a97e186 (zip f048f569, Entries 54467).
 Bench: 4/4 PASS, 0 faults, undo byte-exact; start (-4800,462,1000); outro 0x1f->0x20 now 8 s (was 60 s, then 23 s); 2a eye ~(7426,2043,3035) beside the pad,
