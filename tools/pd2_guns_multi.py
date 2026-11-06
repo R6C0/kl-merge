@@ -52,6 +52,9 @@ SPECS = [
          key='RPK42', name='PD2 RPK', kind='light machine gun'),
     dict(item=43, template='MG_GP_Type88_L09_Heli_Player', unit='pd2_dlc_mad/weapons/wpn_npc_rpk', mesh='g_body', tex='wpn_npc_rpk_df.texture',
          key='RPK43', name='PD2 RPK', kind='light machine gun'),
+    # ---- batch 3 (2026-11-06)
+    dict(item=62, template='HG_M-77B_Human_Shield', unit='payday2/weapons/wpn_npc_c45', mesh='g_body', tex='pistol_df.texture',
+         key='C45', name='PD2 Chimano 88', kind='pistol'),
 ]
 # Tried and dropped (fit on the MG hold leaves the stock 4 - 5 cm IN FRONT of the right hand): item 42 <- PD2 M4 (cost 3.30, butt +5.0),
 # item 43 <- PD2 AKMSU (cost 3.99, butt +3.8). A short rifle model does not suit the long MG hold; a PD2 LMG (M249: 9 materials) would.
@@ -59,6 +62,9 @@ SPECS = [
 # as bad as the dropped M4) and on the Minimi holds 3.77 / 3.46 (scaled x1.2 it reaches 1.95 - 2.39 but is then a 130 cm gun: rejected, and it needs
 # a 9-material writer). So items 45 - 48 (Minimi holds, names KSP*) stay on their Dead Men model. PD2 RPK on the Minimi holds: cost 1.99 / 1.89,
 # muzzle 83.2 / 82.7 (host 81.9 / 80.4) but there is no free RPK name left for them, so also not used.
+# Batch 3 (2026-11-06, fit on DM02): item 62 <- PD2 C45 (Chimano 88) accepted: cost 1.17 (1.11 with another host sample), shift (10.0, 4.0), muzzle 28.2 vs
+# host 25.6, butt 1.5 vs host 2.9, 148 tris, no magazine split. Item 63 <- PD2 Beretta 92 (Bernetti 9) dropped: cost 2.84 - 2.86, shift at the grid edge (-6),
+# muzzle 31.9 vs 28.5, butt -11.5; the PD2 mesh is 43.5 cm long (-5.5 .. 37.9, a long barrel / suppressor) against the 25.9 cm host.
 
 
 def work():
@@ -96,7 +102,8 @@ def _host(p, root, C, MG, V, rng, S):
     sh = MG.shape(p, root)
     parts = [o for o in C.objects(p, root) if p.u32(o, 0x3c) in (1, 2, 4) and p.chunks[o][0x0e] != 16]
     pts = np.vstack([S(*V.part_mesh(p, o), rng) for o in parts])
-    lh = sh['bones']['l hand attacher'][9:12]
+    # GUESS (batch 3): a one-handed pistol has no 'l hand attacher'; its w_bone_frame x (12.8) stands in for the left-hand reference x
+    lh = (sh['bones'].get('l hand attacher') or sh['bones']['w_bone_frame'])[9:12]
     return pts, lh[0], float(pts[:, 0].max())
 
 
@@ -153,11 +160,20 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
         objs = C.objects(p, old)
         nvs = {o: p.u32(p.u32(p.u32(o, 0x28), 0), 0) for o in objs}
         hidden = [o for o in objs if p.chunks[o][0x0e] == 16]
-        cands = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] != 16]
-        if len(hidden) != 1 or not cands or var != 0:
+        lowd, body_lod, mag_lod = [], 15, 15
+        if not hidden:
+            # GUESS (batch 3): a pistol root (HG_*) has no hidden 'box' part (detail 16): body / slide / magazine carry detail 7 and one
+            # small type-1 object carries detail 24 (35 verts for Chimano's 596 = the low-detail copy). The new body takes 7|24 and
+            # the stock low-detail copy is dropped, so the PD2 gun is drawn at every distance.
+            lowd = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] == 24]
+            if len(lowd) != 1:
+                raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
+            body_lod = mag_lod = 7 | 24
+        cands = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] not in (16, 24)]
+        if (len(hidden) != 1 and not lowd) or not cands or var != 0:
             raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
         body = max(cands, key=lambda o: nvs[o])
-        mags = [o for o in objs if p.u32(o, 0x3c) == 3 and p.chunks[o][0x0e] == 15]
+        mags = [o for o in objs if p.u32(o, 0x3c) == 3 and p.chunks[o][0x0e] == (15 if hidden else 7)]
         cached = bool((fits or {}).get(spec['key']))
         shift, frep = (fits or {}).get(spec['key']) or fit_one(spec, _host(p, old, C, MG, V, rng, F.sample))
         plate, df_dds = pd2_plate_of(spec, 1.0, shift)
@@ -184,14 +200,14 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
         slot = P.clone_material(mat, src_slot, 'Weapons/W_PD2_%s_01' % key, df, nm, sp)
         v = G.new_chunk(p, P.vertex_chunk(plate, flip=True)); i = G.new_chunk(p, PM.index_chunk(plate.tris, flip=True))
         d = G.new_chunk(p, PM.descriptor(len(plate.pos), v, i, 0)); sub = G.new_chunk(p, PM.subtab(d))
-        new_body = G.new_chunk(p, P.rigid_object(p.chunks[body], 15, p.chunks[body][0x0f], slot, sub), p.refs[body])
+        new_body = G.new_chunk(p, P.rigid_object(p.chunks[body], body_lod, p.chunks[body][0x0f], slot, sub), p.refs[body])
         parts = [new_body]
         if magp is not None:
             mv = G.new_chunk(p, P.vertex_chunk(magp, flip=True)); mi = G.new_chunk(p, PM.index_chunk(magp.tris, flip=True))
             md = G.new_chunk(p, PM.descriptor(len(magp.pos), mv, mi, 0)); msub = G.new_chunk(p, PM.subtab(md))
-            parts.append(G.new_chunk(p, P.rigid_object(p.chunks[mags[0]], 15, p.chunks[mags[0]][0x0f], slot, msub), p.refs[mags[0]]))
+            parts.append(G.new_chunk(p, P.rigid_object(p.chunks[mags[0]], mag_lod, p.chunks[mags[0]][0x0f], slot, msub), p.refs[mags[0]]))
         root = C._new(p, p.chunks[old]); p.refs[root] = 1
-        C._set_objects(p, root, parts + [hidden[0]])
+        C._set_objects(p, root, parts + hidden)
         PM.widen_root(p, root, whole.box())
         ref = p.u32(old, 0x1c)
         if ref:
