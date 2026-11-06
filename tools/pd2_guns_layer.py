@@ -56,6 +56,15 @@ LAYERS = {
                   pic_items=[40, 42],      # shop items whose Page II card (KLPic_PairNN, tools/kl_shop_pics.py) is re-pictured from <out>/pics/item_NN.png in the SAME zips
                   title='1106f (item 42 PD2 MG42, item 40 PD2 PAR: the specs MG42, PAR40 re-look two RPK duplicates), staged on top of layer 1106e',
                   short='MG42 / PAR on items 42 / 40', seeds=[r'D:\kl_stage\pd2b9_scratch\fits.json']),
+    # 1106t: the 1106f change (MG42 on item 42, PAR on item 40 + their Page II shop cards) on the STOCK maps, on top of the 1106s stage (which is what is live
+    # on DD01..DD09, md5-equal). Space: stage ONE map at a time (`build --maps DD05 --spare-mb 300`), install it, then `install.py --cleanup` drops that map's
+    # staged files (--undo needs only pins.json + the off-drive backup). Card texture ids are looked up per map (kl_shop_pics.card_tids), a map without the card is skipped.
+    '1106t': dict(keys=['MG42', 'PAR40'], tag='.before-pd2guns1106t', base=r'D:\kl_stage\pd2guns_1106s',
+                  out=r'D:\kl_stage\pd2guns_1106t', backup=r'D:\kl_stage\pd2guns_1106t_backup',
+                  maps=['DD01', 'DD02', 'DD03', 'DD04', 'DD05', 'DD06', 'DD07', 'DD08', 'DD09'],
+                  pic_items=[40, 42],
+                  title='1106t (item 42 PD2 MG42, item 40 PD2 PAR re-look the two RPK duplicates + their shop cards, on the 9 stock FA maps DD01..DD09), staged on top of layer 1106s',
+                  short='MG42 / PAR on items 42 / 40, stock maps', seeds=[r'D:\kl_stage\pd2b9_scratch\fits.json']),
     # 1106s: ALL 19 spec keys on Dog Days' 9 stock FA maps (KLExpansion\Maps\DD01..DD09; NOT DD10 = slot F07 again, NOT Scenes\Locations), baked on the LIVE zips
     # (base=None: pics yes, PD2 no). Fits frozen = the union of the 1106c / 1106d / 1106e fits.json (host roots 13812 ... 16134 are identical on DD02 and Scenes F02,
     # re/pd2_guns_stock_maps.md). Plan and staged notes: re/pd2_guns_stock_maps.md.
@@ -194,6 +203,12 @@ def repic(out, d, newp, newb, log=print):
         tex = T.read_tex(z.read(names[(stem + '.TEX').lower()]))
         z.close()
         cards = P.cards_of_items(items, pics, tex, os.path.join(P.DD, 'KLShopPage.ini'), log)
+        have = P.card_tids(zipfile.ZipFile(f))      # texture ids are per map: never assumed
+        for n in sorted(set(cards) - set(have)):
+            log('  NOTE %s: no card %s in this zip (pic item not on this map): skipped' % (os.path.basename(f), n))
+            del cards[n]
+        if not cards:
+            continue
         tmp = f + '.repic'
         P.replace_cards(f, tmp, cards, log)
         os.replace(tmp, f)
@@ -319,7 +334,7 @@ def check_zip(live_zip, new_zip, rep):
         n0, s0 = nm(a); n1, s1 = nm(b)
         t0, t1 = T.read_tex(a.read(n0[(s0 + '.TEX').lower()])), T.read_tex(b.read(n1[(s1 + '.TEX').lower()]))
         ids = P.card_tids(b)
-        want = {ids[n] for n in P.cards_of_items(items, os.path.join(os.path.dirname(new_zip), '..', 'pics'), None, os.path.join(P.DD, 'KLShopPage.ini'), lambda s: None)}
+        want = {ids[n] for n in P.cards_of_items(items, os.path.join(os.path.dirname(new_zip), '..', 'pics'), None, os.path.join(P.DD, 'KLShopPage.ini'), lambda s: None) if n in ids}      # a card the map lacks is skipped by repic
         diff = {k for k in t0.tex if t0.tex[k].entry != t1.tex.get(k, t0.tex[k]).entry}      # textures that existed before the layer and now differ (the layer's own new gun textures are additions)
         row['cards_changed'] = ','.join(str(x) for x in sorted(diff))
         ok &= diff == want and set(t0.tex) <= set(t1.tex)
@@ -479,7 +494,9 @@ Backups live in the BACKUP folder set below (override: --backup DIR). Every live
 Disk: the game drive needs only the largest staged file + 512 MB spare per map (the new file replaces the old one), the backup drive the old files of the maps installed.
 --undo restores a file only when live md5 == pinned new and the backup md5 == pinned old; a map's backup files are DELETED only after every file of that map
 is restored and its md5 verified (they are then redundant and would make a re-install refuse with 'backup exists'; deleting after the check frees the D: space).
-usage: python install.py [--dry] [--maps DM01,DM02] [--skip-run-check] [--backup DIR] [--game DIR] | --undo [same options]   (run with the game closed)"""
+--cleanup (space-tight stage drive): after a map is installed and every live md5 == the pinned new, that map's STAGED files are deleted (pins.json and the
+backups stay; --undo needs only those two, never the staged files).
+usage: python install.py [--dry] [--maps DM01,DM02] [--skip-run-check] [--backup DIR] [--game DIR] [--cleanup] | --undo [same options]   (run with the game closed)"""
 import hashlib, json, os, subprocess, shutil, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -514,6 +531,7 @@ FAIL_AFTER = int(arg('--fail-after')[0]) if arg('--fail-after') else None      #
 MAPS = os.path.join(GAME, 'KLExpansion', 'Maps')
 want = arg('--maps') or list(pins)
 undo, dry = '--undo' in sys.argv, '--dry' in sys.argv
+CLEANUP = '--cleanup' in sys.argv
 mb = lambda n: '%d MB' % (n >> 20)
 
 
@@ -575,7 +593,8 @@ todo = [m for m in want if m not in bad]
 print('%s maps %s (skipped: %s)' % ('dry:' if dry else ('undo' if undo else 'install'), todo, sorted(bad) or 'none'))
 for m in todo:
     big = max(os.path.getsize(j[1]) if undo else os.path.getsize(j[2]) for j in jobs[m])
-    delta = sum(os.path.getsize(j[2]) - os.path.getsize(j[1]) for j in jobs[m]) * (-1 if undo else 1)
+    ssz = lambda j: os.path.getsize(j[2]) if os.path.exists(j[2]) else pins[m][j[0]]['size']      # a cleaned-up stage: the pinned size
+    delta = sum(ssz(j) - os.path.getsize(j[1]) for j in jobs[m]) * (-1 if undo else 1)
     print('  %-6s game drive: %s transient (largest file + spare), net %+d MB%s' % (m, mb(big + SPARE), delta >> 20,
           '' if undo else ', backup drive: %s' % mb(sum(os.path.getsize(j[1]) for j in jobs[m]))))
 if not undo and todo:
@@ -646,6 +665,13 @@ for m in todo:
                 print('installed', m, f, n[:8], '| backup', o[:8], 'in', bk(m, f))
                 if FAIL_AFTER is not None and swapped >= FAIL_AFTER:
                     raise IOError('forced failure (test)')
+            if CLEANUP:                   # verified install: every live md5 == pinned new AND the backup == pinned old, then the staged copies go
+                for f, live, new, o, n in jobs[m]:
+                    assert md5(live) == n and md5(bk(m, f)) == o, 'not verified: ' + f
+                for f, live, new, o, n in jobs[m]:
+                    if os.path.exists(new):
+                        retry(os.remove, new)
+                print('  staged files of %s deleted (install verified; undo needs only pins.json + the backup)' % m)
     except Exception as e:
         print('FAILED %s: %s' % (m, e)); failed.append(m)
         if not undo and not roll_back(m):

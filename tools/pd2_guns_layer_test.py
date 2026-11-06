@@ -32,7 +32,7 @@ seen = set()
 for name, lay in L.LAYERS.items():
     check(set(lay['keys']) <= spec_keys, '%s: keys are pd2_guns_multi SPECS' % name)
     check(set(lay['keys']) <= set(L.DETAIL), '%s: a body detail byte per key' % name)
-    if name == '1106s':      # the stock-map layer repeats every key by design (other maps, other base)
+    if name in ('1106s', '1106t'):      # the stock-map layers repeat every key by design (other maps, other base)
         continue
     check(not (set(lay['keys']) & seen), '%s: keys disjoint from the other layers' % name)
     seen |= set(lay['keys'])
@@ -173,6 +173,38 @@ try:
     shutil.rmtree(td, ignore_errors=True)
 except ImportError:
     pass
+L.configure('1106b')
+
+# 1106t: the 1106f change on the 9 stock maps, on the 1106s stage; one map at a time; --cleanup deletes the staged files of a verified map, undo works without them
+L.configure('1106t')
+check(L.KEYS == ['MG42', 'PAR40'] and L.TAG == '.before-pd2guns1106t' and L.LAYERS['1106t']['pic_items'] == [40, 42], '1106t keys / tag / pic_items')
+check(L.BASE == r'D:\kl_stage\pd2guns_1106s' and L.src_root() == L.BASE, '1106t is staged on the 1106s stage')
+check(L.default_out() == r'D:\kl_stage\pd2guns_1106t' and L.LAYERS['1106t']['backup'] == r'D:\kl_stage\pd2guns_1106t_backup', '1106t out / backup on D:')
+check(L.LAYERS['1106t']['maps'] == L.LAYERS['1106s']['maps'], '1106t: DD01..DD09')
+check(L.KEYS == L.LAYERS['1106f']['keys'], '1106t = the 1106f keys')
+py_t = L.INSTALL_PY_OFFDRIVE.replace('@TITLE@', L.LAYERS['1106t']['title']).replace('@TAG@', L.TAG).replace('@BACKUP@', L.LAYERS['1106t']['backup'])
+check("TAG = '.before-pd2guns1106t'" in py_t and '@' not in py_t.replace('@echo', ''), '1106t installer text')
+L.configure('1106c')
+tmp = tempfile.mkdtemp(prefix='pd2gl_')
+try:
+    stage, game, bkp = [os.path.join(tmp, x) for x in ('stage', 'game', 'bk')]
+    pins = {}
+    for m in ('DMA', 'DMB'):
+        pins[m] = {}
+        for f in ('F01_Main.zip', 'KLGuns.ini'):
+            old, new = (m + f + 'old').encode() * 50, (m + f + 'NEW').encode() * 60
+            wr(os.path.join(game, 'KLExpansion', 'Maps', m, f), old); wr(os.path.join(stage, m, f), new)
+            pins[m][f] = dict(old=hashlib.md5(old).hexdigest(), new=hashlib.md5(new).hexdigest(), size=len(new))
+    json.dump(dict(maps=pins), open(os.path.join(stage, 'pins.json'), 'w'))
+    L.write_installer(stage)
+    rc, o = run('--maps', 'DMA', '--cleanup')
+    check(rc == 0 and is_new('DMA') and is_old('DMB') and 'staged files of DMA deleted' in o and not os.path.exists(os.path.join(stage, 'DMA', 'F01_Main.zip'))
+          and os.path.isfile(os.path.join(stage, 'DMB', 'F01_Main.zip')) and os.path.isfile(os.path.join(stage, 'pins.json')), 'cleanup: installed map loses its staged files, the others and pins.json stay')
+    rc, o = run('--undo', '--maps', 'DMA')
+    check(rc == 0 and is_old('DMA') and 'restored DMA' in o, 'undo works with the staged files deleted (pins.json + backup only)')
+    rc, o = run('--undo', '--maps', 'DMA', '--dry'); check(rc == 0, 'dry undo without staged files')
+finally:
+    shutil.rmtree(tmp, ignore_errors=True)
 L.configure('1106b')
 
 print('pd2_guns_layer_test: %d checks, %d FAIL' % (checks, fails))
