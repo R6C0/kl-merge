@@ -92,8 +92,17 @@ KITS = {
                            files={'F01_Main.zip': 'f048f569be30795d9b4ac6b958aacd8b', 'F01_Main.bots.zip': '34d25023', 'F01_Main.bots.base.md5': '5f486ecf',
                                   'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
                            solo_secs=900, parts=('solo',), shots='380-540:4'),
+    # lcchain2a1106(s) 11-06: the bots' exit call never came, so the hook's clock call fired at 2.5 s left (heli state 4 at ~339 s), the bench player was left
+    # behind and the outro was the TIME IS UP panel. 'b': same stage and files, the solo.ini sets [Bots] LastVehicleLead=600 (the clock call 60 s before the end,
+    # the hook's own knob, 'Bots.DM05A' does not set it), boards at once at state 3 (tele + 2 E holds, no 5 s / 3 s / goto waits). The Arcade round cannot be
+    # lengthened from a bench ini (RoundClockFix/TimeAuto act on an online lobby's heist time only). Shots are time-based (D3dShotFrom/Every/Max, no
+    # event trigger): 400-556 every 4 s = the 40-shot cap, centred on the expected state 3 -> outro at ~400-450 s after launch
+    'lcchain2a1106b': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2a_live_1a97e186', tag='.before-chain1106',
+                           files={'F01_Main.zip': 'f048f569be30795d9b4ac6b958aacd8b', 'F01_Main.bots.zip': '34d25023', 'F01_Main.bots.base.md5': '5f486ecf',
+                                  'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
+                           solo_secs=900, parts=('solo',), shots='400-556:4'),
 }
-LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s')
+LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b')
 
 
 def md5(p):
@@ -143,6 +152,15 @@ def solo_script(k, secs_total):
         # Escape: the vehicle state machine is open-loop timers (re/lastcall_heli_1105.md). Wait for state 3 (van/chopper at the pad),
         # board by teleporting into the box (GUESS: the coordinates are the box from the doc, 7361/2014/3201; 'tele' is TEST-rig only),
         # then wait for the round-over panel (0x1f) and the shop (0x20). Every wait goes on at its timeout so a dead chain still ends.
+        if k == 'lcchain2a1106b':
+            # fast boarding: state 3 also matches 4; the player goes into the box at once and holds E (a human boards by HOLDING E, 2-5 s)
+            s += ['wait 30000', 'pos at-60s', 'log BENCH1106 waiting for vehicle state 3', 'waitvan 3 600000', 'pos van3',
+                  # c9: keep the +x walk-in that boarded in lclive/lcspawn2f/lcoutro (facing GUESS as below), only the long waits go
+                  'tele 7361 2014 3201', 'log BENCH1106 teleported into the escape box', 'wait 1000',
+                  'goto 7561 3201 60 8000', 'goto 7361 3201 60 8000', 'pos in-box', 'tap E 3500', 'wait 500', 'tap E 3500', 'wait 500', 'tap E 4000', 'pos boarded',
+                  'waitvan 5 120000', 'pos van5',
+                  'wait 8000', 'pos after5', 'waitstate 0x1f 240000', 'pos s1f', 'wait 12000', 'waitstate 0x20 120000', 'log BENCH1106 LC solo done', 'wait 3000', 'pass 1000']
+            return s
         s += ['wait 30000', 'pos at-60s', 'log BENCH1106 waiting for vehicle state 3', 'waitvan 3 600000', 'pos van3', 'wait 5000',
               'tele 7361 2014 3201', 'log BENCH1106 teleported into the escape box', 'wait 3000', 'pos teleported',
               # run lc1106 (11-06 02:43): the player stood in BoardingTrigger_Heli (centre 7361/2014/3201, half extents 400x200x300, so y 1814..2214;
@@ -233,6 +251,8 @@ def gen():
              '; the seat stands still; cops hurt it 0.001 x so its death does not end the round (as ARC1)',
              '[Balance]', 'CopToYou=0.001', 'PointBlankToYou=0.0'] + probes(k)
         n = c['solo_secs']
+        if k == 'lcchain2a1106b':
+            t += ['[Bots]', 'LastVehicleLead=600']
         t += [l.replace('{x}', str(n - 60)).replace('{m}', str((n - 70) * 1000)) for l in AUTO]
         t += ['[Script]'] + renumber(solo_script(k, n))
         write('%s/solo.ini' % d, '\n'.join(t) + '\n')
@@ -387,7 +407,7 @@ def verify(k, part, tagbase=None):
             i0 = next((i for i, l in enumerate(a) if re.search(r'session: state \S+ -> 0x1f', l)), len(a))
             eyes = [tuple(float(m.group(j)) for j in (1, 2, 3)) for l in a[i0:] if ' cam:' in l for m in [re.search(r'\beye (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)', l)] if m]
             hit = [e for e in eyes if near(e, eye, 150)]
-            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s'):
+            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b'):
                 # these stages move the eye on purpose (LookAtPos, f5/f6 offset from the heli): info only, the frames are judged by eye
                 chk('escape camera eye moved off (7093,2181,2727) (info)', True, '%d outro cam eyes, last %s' % (len(eyes), ('(%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
             else:
