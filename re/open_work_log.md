@@ -1,3 +1,8 @@
+2026-11-06 ~04:00 - [6b] SHOP STACK LIVE: pd2guns_1106 on all 11 maps + KLShopPage.ini, shop buttons on all maps, shop pics on DM01 only, pics SHIP dll 727a73bb, ini e91096c7 (backups .before-pics1105: 288fb016 / abb2144f; old backups moved to D:/kl_old_backups/dd_root_1106).
+Install hit WinError 32 mid-map on DM01 and DM03 (a just-read zip stayed locked for seconds, cause GUESS: scanner). Both maps were rolled back by hand, then install.py got retry (30 x 2 s) + per-map rollback; tools/pd2_guns_stage.py now writes that loop (INSTALL_LOOP), and its output matches byte for byte.
+Zombie kl2.exe 52560/47672 (0 threads, taskkill denied) make every tasklist check refuse: ran the bat steps by hand with --skip-run-check (+ --root "<DD>" for kl_shop_buttons/kl_shop_pics).
+Bench pc6 DM01 (2 seats, TEST b6a69772): both seats IN ROUND, 0 faults/asserts, "ownpic: scan found own cards, mask fff0ffff ff", stock elements swapped to 99 so the own card draws, F2/F3 legends visible. DM05A_glass pd2guns variant staged (ed14b8a3 on 3f0018b3).
+
 2026-11-06 ~03:45 - [f0] (1) ONLINE GRUDGE fix a95bbc90: slot 15 never runs for AI heisters (ZFFPlayer-only), so 25ce04c5 could attribute no bot kill. Now the ZSoldier hit handler 0x8473a0 (slot 96) is wrapped through a private per-bot vtable copy (klh_soldier_og) and reads health before/after. Default off, not run live; GUESSes: synchronous damage, [hit+0] = ZFFPlayer body. Bench kit pending (firebot TEST op).
 (2) LENS CRACK DM: one live F01 launch (SHIP 288fb016): KL_LensCrackDM.fx compiled (0.39 s) and was loaded as a managed technique, no crash, 30 fps. No hit taken, so no crack seen yet. Undone afterwards; live state back to dll dc41cc8f / ini 82555ab8. Kit: <work>/build/lenscrack_dm_1106/kit.
 

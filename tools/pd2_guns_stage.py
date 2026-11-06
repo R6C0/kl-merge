@@ -2,8 +2,8 @@
 """
 pd2_guns_stage.py - stage pd2_guns_multi.SPECS (batch 1 + batch 2) as ONE installer (2026-11-06, offline; writes only the stage folder, never the game).
 
-    python tools/pd2_guns_stage.py [--out <dir>] [--maps DM01,DM02] [--no-chain] [--no-doors]   (default out <work>/build/pd2guns_1106)
-    python tools/pd2_guns_stage.py --variant doors|chain      rebuild only that DM05A variant into the existing stage (pins.json keeps the rest)
+    python tools/pd2_guns_stage.py [--out <dir>] [--maps DM01,DM02] [--no-chain] [--no-doors] [--no-glass]   (default out <work>/build/pd2guns_1106)
+    python tools/pd2_guns_stage.py --variant doors|chain|glass      rebuild only that DM05A variant into the existing stage (pins.json keeps the rest)
 
 DM05A_doors = the same bake on the chain + kick doors stage (C:\\kl_build_1024\\lastcall_chain_doors_1106\\stage, zip 803a29c8). That stage ships its own
 KLGuns.ini / KLJoin.ini (Entries 54378): they are the ini sources and the 'old' pins, stage_map rewrites 54378 to the new count, so NO follow-up step is needed.
@@ -22,7 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import pd2_guns_multi as M
 
-CHAIN, DOORS = M.CHAIN, M.DOORS
+CHAIN, DOORS, GLASS = M.CHAIN, M.DOORS, M.GLASS
 
 
 def md5(p):
@@ -98,7 +98,49 @@ def variant(out, vname, vstage, vnote, log=print):
 VARIANTS = [   # (name, stage dir, pins note); install order everywhere: the Last Call stage FIRST, then this installer
     ('chain', CHAIN, 'on top of the Last Call chain 1105 (zip %s): install the chain FIRST'),
     ('doors', DOORS, 'on top of the Last Call chain + doors 1106 (zip %s): install the doors stage FIRST (INSTEAD of the chain); undo this first'),
+    ('glass', GLASS, 'on top of the Last Call chain + glass connectivity 1106 (zip %s): install the glass stage FIRST (INSTEAD of the chain); undo this first'),
 ]
+# replaces the batch 1 installer's plain loop: on 11-06 a just-swapped map hit WinError 32 halfway (DM01, DM03) and was left half-installed
+INSTALL_LOOP = '''def retry(fn, *a):
+    """A just-read zip can stay locked a few seconds by another process (WinError 32 on 11-06, likely a scanner, GUESS): retry up to ~60 s."""
+    import time
+    for i in range(30):
+        try:
+            return fn(*a)
+        except PermissionError:
+            if i == 29:
+                raise
+            time.sleep(2)
+
+
+def roll_back(done):
+    """Put a map's already-swapped files back (reverse order) so a failed map is left exactly as before."""
+    for live, tag in reversed(done):
+        retry(os.remove, live); retry(os.rename, live + tag, live)
+        print('  rolled back', os.path.basename(live))
+
+
+failed = []
+for mm in sorted({j[0] for j in todo}, key=[j[0] for j in todo].index):
+    done = []
+    try:
+        for m, live, new, o, n, tag in [j for j in todo if j[0] == mm]:
+            if undo:
+                retry(os.remove, live); retry(os.rename, live + tag, live)
+                print('restored', m, os.path.basename(live), _md5(live)[:8])
+            else:
+                retry(os.rename, live, live + tag)
+                done.append((live, tag))
+                shutil.copyfile(new, live)
+                assert _md5(live) == n
+                print('installed', m, os.path.basename(live), n[:8], '| backup', o[:8])
+    except Exception as e:
+        print('FAILED %s: %s' % (mm, e)); failed.append(mm)
+        if not undo:
+            roll_back(done)
+if failed:
+    sys.exit('failed (left as before): %s' % ' '.join(failed))
+'''
 
 
 def main(a):
@@ -157,6 +199,8 @@ def main(a):
     s = open(os.path.join(old, 'install.py'), encoding='utf-8', newline='').read()
     s = s.replace('"""PD2 guns 1105 (items 35 SG 417, 38 G36, 41 RPK, 44 MK17 on shop page II)',
                   '"""PD2 guns 1106 (items 35 SG 417, 38 G36, 40 / 41 / 42 / 43 RPK, 44 MK17 on shop page II; batch 1 + batch 2 in one)', 1)
+    loop = s.index('for m, live, new, o, n, tag in todo:')
+    s = s[:loop] + INSTALL_LOOP.replace('\n', '\r\n' if '\r\n' in s else '\n')
     open(os.path.join(out, 'install.py'), 'w', encoding='utf-8', newline='').write(s)
     for f in ('INSTALL.bat', 'UNDO.bat'):
         t = open(os.path.join(old, f), encoding='utf-8', newline='').read().replace('1105', '1106')

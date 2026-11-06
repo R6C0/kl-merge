@@ -69,9 +69,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 2026-11-06 ~09:00 - [esc] Last Call escape screen: static research only, re/lastcall_escape_screen_1106.md. Hook does not hide the stock camera/outro; cause unproven (degenerate EscCamera01 in live zip, or round-over never reached). Nothing staged; next: one Log Level=2 live run when owner says test.
 
-2026-11-06 ~03:00 - [shop] F2/F3 shop buttons, B/W hire pictures (KLPic_*, DM01 first), PD2 guns batch 1+2 (pd2guns_1106: + RPK on 40/42/43) staged, NOT installed. Order: Last Call chain
--> <work>/build/INSTALL ALL 1105.bat (now pd2guns_1106; DM05A stock + _chain + _doors variants, picked by live md5) -> C:/kl_build_1024/pics_1105_hook/INSTALL pics 1105 hook.bat (SHIP 727a73bb). Undo in reverse.
-Bench pf1106 PASS (Perf keys incl. FastRead=1, BakedPics/OwnPics on unbaked maps, 2 seats DD05+DM01). Pics never loaded in game: check "ownpic:" in KLHook.log on DM01 before the other-maps bat.
+2026-11-06 ~04:00 - [shop] LIVE: pd2guns_1106 (11 maps + KLShopPage.ini), F2/F3 shop buttons (all maps), KLPic pictures on DM01 only, dll SHIP 727a73bb, ini e91096c7 (.before-pics1105 = 288fb016/abb2144f).
+Undo: shop_pics uninstall -> shop_buttons uninstall -> pd2guns_1106/install.py --undo -> restore dll/ini. Zombie kl2.exe (0 threads) block tasklist checks: --skip-run-check (+ --root "<DD>" for buttons/pics).
+Bench pc6 DM01 2 seats: IN ROUND, 0 faults, "ownpic: scan found own cards, mask fff0ffff ff". Next: other-maps pics bat; DM05A_glass variant staged for c9's glass fix. install.py retries WinError 32 + per-map rollback.
 
 2026-11-06 ~13:00 - [c9] LAST CALL CHAIN LIVE in DM05A (zip c8dd18ee, bots 42ed37ba, .before-1105chain; undo: lastcall_chain_1105/stage/install.py --undo). Bench lc1106: 130 actors, chopper flies in, round ends to the shop.
 ROUND-2 FREEZE = stripped .sgd HavokShatterGlassConnectivity (0x25 reset recomputes pane neighbours, 21-29 s per seat, host drops client). Fix staged: C:/kl_build_1024/lastcall_glass_1106/stage (zip 3f0018b3,
