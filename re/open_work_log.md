@@ -1,3 +1,10 @@
+## 2026-11-06 ~14:10 [db] BotScanSlice bench SMOOTH: 3-seat DD09 host hitches gone (no crash involved)
+OSS_DD09_BSS_S3 (TEST 1913d42d, kit base spb + BotScanSlice=1): 3/3 IN ROUND, all SMOOTH, 0 asserts/faults/dumps. Live dll/ini unchanged.
+- Host inst1: 29.8 fps, 0 hitches/min, 0 stalls, p95 103 ms. Before (OSS_DD09_TPC_S3): HITCHY, 1.4/min, 6 stalls up to 262 ms, p95 249.
+- The walks now run in slices: trig scan 406 ms over 13 slices, exit trigger 296 ms over 9, box scan 250-312 ms over 9-10. Bots still get exit trigger 516b2ed0 and walk to it.
+- TickProfile: klbf_tick 0.16 ms a frame, slowest call 8.8 ms (once 21 ms wall / 9 cpu). The top costs are now klbd/klv at ~18 ms cpu slowest calls.
+- Ready to offer the owner: SHIP out_bss1106 e34d038b + OsdScanSlice/ScanMinFrames/ShopPoolBlock/BotScanSlice=1. Next candidate: klbd_tick / klv_tick 18 ms spikes.
+
 ## 2026-11-06 ~13:45 [c9] lcspawn2f1106 bench PASS: Last Call players start on the 2nd floor (no crash involved)
 lcspawn2f1106 (DM05A solo, lcspawn2f_1106 88e23dd5 via install/undo): PASS 4/4, 0 faults, undo md5s OK.
 `pos spawn: me #14 (-4800, 462, 1000)` = 2nd floor (y ~460) west end; shot 02 shows the heisters standing indoors at the round-1 card. Not installed (pinned e6d2f73e; install with the other DM05A stages after 6b's pd2guns layer).
