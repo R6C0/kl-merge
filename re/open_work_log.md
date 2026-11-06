@@ -4,6 +4,13 @@
 - 1106e (d195c6fd, agent): PD2 Deagle npc on item 63 (HG_M9Beretta_Human_Shield), cost 1.73, muzzle 35.5 vs host 28.5 (Deagle is longer). Only deagle/beretta92/c45 pistols are extracted. Dry install PASS on live. Bench pending.
 - UNDO ALL 1105.bat: new steps 0a (1106e) and 0b (1106d) before 0 (1106c); a skip-all undo exits 0. D: free fell to ~10.8 GB (layer backups ~3.7 GB each).
 
+## 2026-11-06 ~14:30 [db] FillCensusSlice bench SMOOTH: OSS_DD09_FCS_S3 (no crash involved)
+- [Perf] FillCensusSlice=1 (85fdae39, TEST a77e0546, SHIP e88a6093): the online host's 'botfill: round census' (8 MB walk + log lines, 13 ms CPU every 5 s; live has OnlineFill=1/OnlineHost=1) walked 1/8 a frame.
+- Bench, 3 seats, cen ini + the key: all SMOOTH, 0 hitches, 0 stalls; host 29.9 fps, max frame 128 ms (CEN_S3 486), p95 87; 0 asserts/faults/dumps; live dll/ini unchanged.
+- Host klbf_tick windows >=10 ms CPU: 24/30 -> 0/18 (max 9.4); census lines identical (54 ZFFActor, 7 Ally). Review workflow (2 lenses): 0 findings.
+- klsy_tick 13-17 ms every 5 s on all seats = the kit's [Sync] Probe=1 (602 log lines); shipped ini Probe=0/Share=0, live has no [Sync]: not a player cost.
+- Left: several ~5 ms whole-table walks a second on the host (klbf_ot_run, klbr_scan 1/s, klbf_ally_census 2 s): one shared walk would save ~10-15 ms/s CPU, no hitch. Offer: SHIP e88a6093 + 6 [Perf] keys.
+
 ## 2026-11-06 ~15:05 [db] CensusSlice bench SMOOTH: OSS_DD09_CEN_S3 (no crash involved)
 - [Perf] CensusSlice=1 (a1cb61a4, TEST 24306dec, SHIP out_cen1106 9d096198): the host's AI-heister census (8 MB walk, ~18 ms) is shared and walked 1/8 a frame.
 - Bench, 3 seats on the bss ini + CensusSlice=1: all SMOOTH, 0 hitches/min; host 29.8 fps, 0 stalls, p95 81 ms (BSS_S3 103 ms); 0 asserts/faults/dumps; live dll/ini unchanged.
