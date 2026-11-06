@@ -365,7 +365,11 @@ def verify(k, part, tagbase=None):
             # a round ends 0x19 -> 0x1f; after the match's last round 0x1f goes to 0x28 (match over), not to the shop 0x20
             want = 3 if part == 'long' else 2
             ends = sum(1 for i in range(1, len(st)) if st[i] == '0x1f' and st[i - 1] == '0x19')
-            chk('inst%d rounds completed (>= %d round ends 0x19 -> 0x1f)' % (n, want), ends >= want, 'round ends %d, shops %d, match over %s' % (ends, st.count('0x20'), '0x28' in st))
+            # the online script ends ~30 s into the last round (lcglass1106 11-06: round 2 entered, never ended), so the gate is
+            # "round N entered" (N entries into 0x19) plus N-1 completed round ends; a full last round is the long part's job
+            ins = st.count('0x19')
+            chk('inst%d reaches round %d (%d+ entries into 0x19, %d+ round ends)' % (n, want, want, want - 1), ins >= want and ends >= want - 1,
+                'entries %d, round ends %d, shops %d, match over %s' % (ins, ends, st.count('0x20'), '0x28' in st))
         for n, lines in L.items():
             # round reset dwell: the stripped HavokShatterGlassConnectivity made 0x25 last 21-29 s per seat on DM05A (DD maps ~0.01 s)
             ts = [(l[:12], m.group(1), m.group(2)) for l in lines for m in [re.search(r'session: state (0x[0-9a-f]+) -> (0x[0-9a-f]+)', l)] if m]

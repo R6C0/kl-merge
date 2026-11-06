@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-06 ~10:45 - [c9] GLASS LIVE ON DM05A: round-2 freeze fixed (0x25 dwell 0.1 s vs 28 s, bench lcglass1106). DM05A zip e6d2f73e (chain+glass+pd2guns+buttons+pics, installer
+C:/kl_build_1024/bench_1106/glass_install_1106.py), DD10 zip bc4d0bc3 (slim+buttons+pics). Escape camera still wrong in solo (outro eye near the box, not EscCamera01; heli far off).
+Next: glass on the other 10 DM maps rebuilt on 6b's live zips; escape triage offline.
+
 2026-11-06 ~10:00 - [db] 9-SEAT SWEEP n9_1106: 1 SMOOTH / 6 HITCHY / 11 FAIL, all 9-seat runs 13-26 fps (one-PC contention). Hook bug: OSD scan 50-85 s in one call, watchdog killed 3 seats.
 Fix f62cfbe4 [Perf] OsdScanSlice=1: TEST out_oss1106_test 655ec675 / SHIP 2b3f2a22, not installed, not run. Next (game free): DD09 9 seats on it. Report C:/kl_build_1024/n9_1106/summary_1106.txt.
 
@@ -76,10 +80,6 @@ Fix f62cfbe4 [Perf] OsdScanSlice=1: TEST out_oss1106_test 655ec675 / SHIP 2b3f2a
 C: hit 274 MB free (bake refused, maps restored): 118 old backups moved to D:\kl_old_backups\dd_1106b. Earlier: pd2guns_1106 (11 maps + KLShopPage.ini), F2/F3 shop buttons (all maps), dll SHIP 727a73bb, ini e91096c7 (.before-pics1105 = 288fb016/abb2144f).
 Undo: shop_pics uninstall -> shop_buttons uninstall -> pd2guns_1106/install.py --undo -> restore dll/ini. Zombie kl2.exe (0 threads) block tasklist checks: --skip-run-check (+ --root "<DD>" for buttons/pics).
 Bench pc6 DM01 2 seats: IN ROUND, 0 faults, "ownpic: scan found own cards, mask fff0ffff ff". Next: other-maps pics bat; DM05A_glass variant staged for c9's glass fix. install.py retries WinError 32 + per-map rollback.
-
-2026-11-06 ~13:00 - [c9] LAST CALL CHAIN LIVE in DM05A (zip c8dd18ee, bots 42ed37ba, .before-1105chain; undo: lastcall_chain_1105/stage/install.py --undo). Bench lc1106: 130 actors, chopper flies in, round ends to the shop.
-ROUND-2 FREEZE = stripped .sgd HavokShatterGlassConnectivity (0x25 reset recomputes pane neighbours, 21-29 s per seat, host drops client). Fix staged: C:/kl_build_1024/lastcall_glass_1106/stage (zip 3f0018b3,
-tools/kl_glass_conn.py), needs an online bench, then 6b re-bakes pd2guns on it. DD10 slim bench PASS (free block 102-134 MB vs 14.4), not installed. Escape camera still unproven (bench boarding teleport missed).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never
