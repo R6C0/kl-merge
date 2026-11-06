@@ -2,7 +2,11 @@
 """
 pd2_guns_stage.py - stage pd2_guns_multi.SPECS (batch 1 + batch 2) as ONE installer (2026-11-06, offline; writes only the stage folder, never the game).
 
-    python tools/pd2_guns_stage.py [--out <dir>] [--maps DM01,DM02] [--no-chain]   (default out <work>/build/pd2guns_1106)
+    python tools/pd2_guns_stage.py [--out <dir>] [--maps DM01,DM02] [--no-chain] [--no-doors]   (default out <work>/build/pd2guns_1106)
+    python tools/pd2_guns_stage.py --variant doors|chain      rebuild only that DM05A variant into the existing stage (pins.json keeps the rest)
+
+DM05A_doors = the same bake on the chain + kick doors stage (C:\\kl_build_1024\\lastcall_chain_doors_1106\\stage, zip 803a29c8). That stage ships its own
+KLGuns.ini / KLJoin.ini (Entries 54378): they are the ini sources and the 'old' pins, stage_map rewrites 54378 to the new count, so NO follow-up step is needed.
 
 Per map folder of the stage: the plate zip built by pd2_guns_multi.stage_map, the [BotGate] sibling (kl_botsonline.convert(zip, 'eAllTypes') as the
 live ones), <slot>_Main.bots.base.md5 (md5 of the staged plain zip + LF, 33 bytes), DM11B's Int16Ok.txt (zip= / bots= sizes of the staged files),
@@ -18,7 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import pd2_guns_multi as M
 
-CHAIN = r'C:\kl_build_1024\lastcall_chain_1105\stage'
+CHAIN, DOORS = M.CHAIN, M.DOORS
 
 
 def md5(p):
@@ -65,10 +69,52 @@ def pin_files(d, livedir, slot):
     return pins
 
 
+def variant(out, vname, vstage, vnote, log=print):
+    """DM05A baked on another Last Call stage (its F01_Main.zip, and its .ini files when it ships them; else the live ones) -> folder DM05A_<vname>.
+    -> the pins.json variants entry. 'old' of every file = the stage's own file when it has one, else the live file (the stage does not change it).
+    The stage's KLGuns.ini / KLJoin.ini already carry Entries= the stage's chunk count; stage_map rewrites exactly that number to the new count."""
+    dname = 'DM05A_' + vname
+    scratch = os.path.join(out, '_%ssrc' % vname)
+    shutil.rmtree(scratch, ignore_errors=True); os.makedirs(scratch)
+    live = os.path.join(M.MAPROOT, 'DM05A')
+    shutil.copyfile(os.path.join(vstage, 'F01_Main.zip'), os.path.join(scratch, 'F01_Main.zip'))
+    for src in (vstage, live):                    # the stage's inis win over the live ones
+        for f in os.listdir(src):
+            if f.lower().endswith('.ini') and not f.endswith('.before') and not os.path.isfile(os.path.join(scratch, f)):
+                shutil.copyfile(os.path.join(src, f), os.path.join(scratch, f))
+    rep = M.stage_map('DM05A', out, src=scratch, dirname=dname)
+    d = os.path.join(out, dname)
+    finish(dname, rep['slot'], d)
+    shutil.rmtree(scratch, ignore_errors=True)
+    fs = {}
+    for f in sorted(os.listdir(d)):
+        if f == 'report.json':
+            continue
+        src = os.path.join(vstage, f) if os.path.isfile(os.path.join(vstage, f)) else os.path.join(live, f)
+        fs[f] = dict(old=md5(src), new=md5(os.path.join(d, f)), size=os.path.getsize(os.path.join(d, f)))
+    return dict(dir=dname, note=vnote % fs['F01_Main.zip']['old'][:8], files=fs)
+
+
+VARIANTS = [   # (name, stage dir, pins note); install order everywhere: the Last Call stage FIRST, then this installer
+    ('chain', CHAIN, 'on top of the Last Call chain 1105 (zip %s): install the chain FIRST'),
+    ('doors', DOORS, 'on top of the Last Call chain + doors 1106 (zip %s): install the doors stage FIRST (INSTEAD of the chain); undo this first'),
+]
+
+
 def main(a):
     out = os.path.join(M.work(), 'build', 'pd2guns_1106')
     if '--out' in a:
         out = a[a.index('--out') + 1]
+    if '--variant' in a:         # rebuild ONE variant (chain|doors) into an existing stage: pins.json keeps everything else
+        vn = a[a.index('--variant') + 1]
+        v = [x for x in VARIANTS if x[0] == vn][0]
+        pp = os.path.join(out, 'pins.json')
+        pins = json.load(open(pp))
+        ent = variant(out, *v)
+        pins['variants']['DM05A'] = [e for e in pins['variants'].get('DM05A', []) if e['dir'] != ent['dir']] + [ent]
+        json.dump(pins, open(pp, 'w'), indent=1)
+        print('variant %s staged in %s' % (vn, out))
+        return
     maps = a[a.index('--maps') + 1].split(',') if '--maps' in a else list(M.MAPS)
     os.makedirs(out, exist_ok=True)
     need = (len(maps) + 1) * 450 << 20
@@ -90,27 +136,12 @@ def main(a):
             int16(live, d, rep['slot'])
         pins['maps'][m] = pin_files(d, live, rep['slot'])
         print('%s done (%.0f s)' % (m, time.time() - t0), flush=True)
-    if 'DM05A' in maps and '--no-chain' not in a and os.path.isdir(CHAIN):
-        scratch = os.path.join(out, '_chainsrc')
-        shutil.rmtree(scratch, ignore_errors=True); os.makedirs(scratch)
-        live = os.path.join(M.MAPROOT, 'DM05A')
-        shutil.copyfile(os.path.join(CHAIN, 'F01_Main.zip'), os.path.join(scratch, 'F01_Main.zip'))
-        for f in os.listdir(live):
-            if f.lower().endswith('.ini') and not f.endswith('.before'):
-                shutil.copyfile(os.path.join(live, f), os.path.join(scratch, f))
-        rep = M.stage_map('DM05A', out, src=scratch, dirname='DM05A_chain')
-        d = os.path.join(out, 'DM05A_chain')
-        finish('DM05A_chain', rep['slot'], d)
-        shutil.rmtree(scratch, ignore_errors=True)
-        # 'old' of the chain variant: the chain stage's own files (zip, bots, base.md5) and the live ini (the chain does not change them)
-        fs = {}
-        for f in sorted(os.listdir(d)):
-            if f == 'report.json':
+    if 'DM05A' in maps:
+        for vname, vstage, vnote in VARIANTS:
+            if '--no-' + vname in a or not os.path.isdir(vstage):
                 continue
-            src = os.path.join(CHAIN, f) if os.path.isfile(os.path.join(CHAIN, f)) else os.path.join(live, f)
-            fs[f] = dict(old=md5(src), new=md5(os.path.join(d, f)), size=os.path.getsize(os.path.join(d, f)))
-        pins['variants']['DM05A'] = [dict(dir='DM05A_chain', note='on top of the Last Call chain 1105 (zip %s): install the chain FIRST' % fs['F01_Main.zip']['old'][:8], files=fs)]
-        print('DM05A_chain done (%.0f s)' % (time.time() - t0), flush=True)
+            pins['variants'].setdefault('DM05A', []).append(variant(out, vname, vstage, vnote))
+            print('DM05A_%s done (%.0f s)' % (vname, time.time() - t0), flush=True)
     # the shop page II names
     import kl_pd2names
     sd = os.path.join(out, 'shoppage')

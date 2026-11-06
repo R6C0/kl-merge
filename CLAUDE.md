@@ -69,9 +69,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
 2026-11-06 ~09:00 - [esc] Last Call escape screen: static research only, re/lastcall_escape_screen_1106.md. Hook does not hide the stock camera/outro; cause unproven (degenerate EscCamera01 in live zip, or round-over never reached). Nothing staged; next: one Log Level=2 live run when owner says test.
 
-2026-11-05 ~20:00 - [shop] F2/F3 shop buttons, B/W hire pictures (KLPic_*, DM01 first), PD2 guns+names staged, NOT installed. Owner order: Last Call chain -> <work>/build/INSTALL ALL 1105.bat
--> C:/kl_build_1024/pics_1105_hook/INSTALL pics 1105 hook.bat (SHIP 727a73bb = cda03a57 + ini keys; replaces perf_1105 APPLY). Undo in reverse. DM05A: pd2guns pins clash with the
-chain; agent rebasing pd2guns onto the chain output (DM05A_chain variant). Pics = never loaded in game: check "ownpic:" in KLHook.log on DM01 before the other-maps bat.
+2026-11-06 ~03:00 - [shop] F2/F3 shop buttons, B/W hire pictures (KLPic_*, DM01 first), PD2 guns batch 1+2 (pd2guns_1106: + RPK on 40/42/43) staged, NOT installed. Order: Last Call chain
+-> <work>/build/INSTALL ALL 1105.bat (now pd2guns_1106; DM05A stock + _chain + _doors variants, picked by live md5) -> C:/kl_build_1024/pics_1105_hook/INSTALL pics 1105 hook.bat (SHIP 727a73bb). Undo in reverse.
+Bench pf1106 PASS (Perf keys incl. FastRead=1, BakedPics/OwnPics on unbaked maps, 2 seats DD05+DM01). Pics never loaded in game: check "ownpic:" in KLHook.log on DM01 before the other-maps bat.
 
 2026-11-05 ~19:45 - [c9] LAST CALL CHAIN STAGED (not installed, untested live): C:/kl_build_1024/lastcall_chain_1105/stage = life (crowd 9 looks/12 women, street emitters, music rooms)
 -> fight (130/73: Rush, F2_Hold/Flank/Shot, loot guards, wave/roof chains) -> heli (Escape_Chopper unhidden 0x3244400->0x3244000, EscCamera01 LookFromPos, CamPos01 off the eye; re/lastcall_heli_1105.md).

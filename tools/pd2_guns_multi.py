@@ -27,6 +27,8 @@ import pd2_gun as P
 
 DD = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 MAPROOT = os.path.join(DD, 'KLExpansion', 'Maps')
+CHAIN = r'C:\kl_build_1024\lastcall_chain_1105\stage'          # DM05A_chain is baked on this stage's zip
+DOORS = r'C:\kl_build_1024\lastcall_chain_doors_1106\stage'    # DM05A_doors is baked on this stage's zip (+ its KLGuns/KLJoin)
 MAPS = ['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM05A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B']
 TAG = '1105pd2guns'
 MUZZLE_W = 0.15            # GUESS: weight of |PD2 muzzle x - host muzzle x| in the fit (the AKM fit used 0.3; the hands decide, not the muzzle)
@@ -324,8 +326,9 @@ def verify(out, log=print):
         rep = json.load(open(os.path.join(d, 'report.json')))
         live = os.path.join(MAPROOT, name)
         if name.endswith('_chain') and not os.path.isdir(live):      # variant on the Last Call chain stage (pd2_guns_stage.CHAIN)
-            live = r'C:\kl_build_1024\lastcall_chain_1105\stage'
-            lv_slot = rep['slot']
+            live = CHAIN
+        elif name.endswith('_doors') and not os.path.isdir(live):    # variant on the Last Call chain + doors stage (pd2_guns_stage.DOORS)
+            live = DOORS
         zp = os.path.join(d, rep['slot'] + '_Main.zip')
         a, b = zipfile.ZipFile(os.path.join(live, rep['slot'] + '_Main.zip')), zipfile.ZipFile(zp)
         same_list = a.namelist() == b.namelist()
