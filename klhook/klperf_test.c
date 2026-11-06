@@ -11,6 +11,10 @@ int main(void)
     CHECK(klperf_osd_interval(5, 0) == 15000u); CHECK(klperf_osd_interval(99, 0) == 15000u); CHECK(klperf_osd_interval(1, 0) == 2000u);
     CHECK(klperf_osd_slice_ms(0) == 0u); CHECK(klperf_osd_slice_ms(1) == 24u);
     CHECK(!klperf_slice_over(0, 0xffffffffu)); CHECK(!klperf_slice_over(8u, 7u)); CHECK(klperf_slice_over(8u, 8u)); CHECK(klperf_slice_over(8u, 84719u));
+    CHECK(!klperf_due(999u, 1000u, 1000u, 0)); CHECK(klperf_due(1000u, 0u, 1000u, 0)); CHECK(!klperf_due(999u, 1000u, 1000u, 1));
+    CHECK(!klperf_due(5000u, 19u, 1000u, 1)); CHECK(klperf_due(5000u, 20u, 1000u, 1)); CHECK(klperf_due(1000u, 20u, 1000u, 1));    /* 20 fps: unchanged */
+    CHECK(!klperf_due(250u, 4u, 250u, 1)); CHECK(klperf_due(250u, 5u, 250u, 1)); CHECK(!klperf_due(9000u, 2u, 3001u, 1)); CHECK(klperf_due(3001u, 61u, 3001u, 1));
+    CHECK(klperf_due(100u, 0xffffffffu, 1u, 1)); CHECK(klperf_due(5000u, 100u, 5000u, 1)); CHECK(!klperf_due(60000u, 99u, 5000u, 1));
     CHECK(!klperf_cache_ok(0, 1, 1, 0));
     CHECK(klperf_cache_ok(1, 1, 1, 100000u)); CHECK(!klperf_cache_ok(1, 1, 0, 0));
     CHECK(klperf_cache_ok(1, 0, 0, 49u)); CHECK(!klperf_cache_ok(1, 0, 1, 50u));

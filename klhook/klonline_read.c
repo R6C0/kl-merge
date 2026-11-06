@@ -94,10 +94,10 @@ static int klor_char(DWORD model)
 /* the AI heisters online: ZFFActors of team 2 (Ally) in the entity table, as klbotfill.c's census (GUESS: no human heister is team 2). Cached 3 s. -> n <= 8 */
 static int klor_bots(DWORD act[KLOR_NBOT])
 {
-    static DWORD last, cache[KLOR_NBOT]; static int n; DWORD now = GetTickCount(); int i;
-    if (!last || now - last > 3000) {
+    static DWORD last, cache[KLOR_NBOT]; static int n; static LONG lastFr; DWORD now = GetTickCount(); int i;
+    if (!last || klh_due(last, lastFr, 3001, now)) {
         DWORD p, tab, ii, blk[64 * 32];
-        last = now ? now : 1; n = 0;
+        last = now ? now : 1; lastFr = klh_game_ticks; n = 0;
         if ((p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) && (p = klh_rd32(p + 0xc)) && (tab = klh_rd32(p + 0xc)))
             for (ii = 0; ii < 0x10000 && n < KLOR_NBOT; ii += 64) {
                 DWORD k;

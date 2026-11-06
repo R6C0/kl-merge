@@ -3043,7 +3043,7 @@ static void klbf_ap_run(DWORD now)
 
 static void klbf_tick(int game_thread)
 {
-    static DWORD last, scan, told_sm; DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0, h, v, lo, hi, p, tab, i, blk[64 * 32]; BYTE cur = 0, mx = 0;
+    static DWORD last, scan, told_sm; static LONG scanFr; DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0, h, v, lo, hi, p, tab, i, blk[64 * 32]; BYTE cur = 0, mx = 0;
     int conn, target, n = 0, ally = 0, alive = 0, tact = 0, other = 0;
     static struct klbf_lkrec lk[64]; int lkn = 0;
     if (!(klbf_on || klbf_oh || klbf_ot || klbf_lk == 2 || klbf_ap) || !game_thread || !klh_exe_ok || now - last < 500) return;      /* OnlineHost alone only runs the census below (no lobby change: kllobby.c reads OnlineFill itself) */
@@ -3073,8 +3073,8 @@ static void klbf_tick(int game_thread)
         static DWORD sqlast; static int tries;
         if (now - sqlast >= 1000) { sqlast = now; if (klbf_squads(klbf_fill) > 0 || ++tries >= 8) { klbf_sq_done = sm; tries = 0; } }
     }
-    if (state < 0x13 || now - scan < 5000) return;
-    scan = now;
+    if (state < 0x13 || !klh_due(scan, scanFr, 5000, now)) return;
+    scan = now; scanFr = klh_game_ticks;
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
     for (i = 0; i < 0x10000 && n < 400; i += 64) {
         DWORD k;

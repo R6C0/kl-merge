@@ -271,7 +271,14 @@ static int klperf_on(int *cache, const char *key)
     if (*cache < 0) *cache = klh_ini[0] ? GetPrivateProfileIntA("Perf", key, 0, klh_ini) != 0 : 0;
     return *cache;
 }
-static volatile LONG klh_reads;              /* klh_rd calls (the perf line; approximate: a plain count from several threads) */
+static int klperf_smf = -1;                 /* ScanMinFrames (klh_due) */
+static volatile LONG klh_game_ticks;        /* defined with the tick state further down */
+/* [Perf] ScanMinFrames: the gate of a wall-clock-timed table walk: at = GetTickCount() of its last run (0 = never), fr = klh_game_ticks then (klperf_due) */
+static int klh_due(DWORD at, LONG fr, DWORD ms, DWORD now)
+{
+    return klperf_due(now - at, at ? (unsigned)(klh_game_ticks - fr) : 0xffffffffu, ms, klperf_on(&klperf_smf, "ScanMinFrames"));
+}
+static volatile LONG klh_reads;            /* klh_rd calls (the perf line; approximate: a plain count from several threads) */
 static volatile LONG klh_reads_fast;         /* of those, answered by the FastRead memcpy */
 #define KLPERF_NSEC 16
 static DWORD klperf_lo[KLPERF_NSEC], klperf_hi[KLPERF_NSEC]; static int klperf_nsec;   /* readable sections of the image, filled once by klperf_fast_init */
@@ -1774,7 +1781,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     img_lo = (DWORD)exe; img_hi = img_lo + nt->OptionalHeader.SizeOfImage;
     klh_exe_ok = img_lo == KL2_BASE && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;
     klperf_fast_init(exe, nt);
-    if (klperf_nsec) klog("perf: FastRead on for %d section(s) of kl2.exe; OsdBackoff %d, OnlineCache %d", klperf_nsec, klperf_on(&klperf_osd, "OsdBackoff"), klperf_on(&klperf_oc, "OnlineCache"));
+    klog("perf: FastRead %s (%d section(s) of kl2.exe); OsdBackoff %d, OnlineCache %d, OsdScanSlice %d, ScanMinFrames %d", klperf_nsec ? "on" : "off", klperf_nsec, klperf_on(&klperf_osd, "OsdBackoff"), klperf_on(&klperf_oc, "OnlineCache"), klperf_on(&klperf_oss, "OsdScanSlice"), klperf_on(&klperf_smf, "ScanMinFrames"));
     AddVectoredExceptionHandler(1, veh);
     klog("==== KLHook loaded (ContinueAsserts=%d MaxDumps=%d) kl2.exe %08lx-%08lx", continue_asserts, max_dumps, img_lo, img_hi);
     klog("build: %s, %s %s; exe %s; patch policy: %s",

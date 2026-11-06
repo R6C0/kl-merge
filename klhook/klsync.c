@@ -92,7 +92,7 @@ static DWORD ksp_orig; static int ksp_ready;
 struct ksp_e { DWORD o, slot, goalAt, since, lastLog, lastSnap, pass, tolSince, bestAt, prevAt, stepAt, nomove, trkAt; float goal[3], prev[3], d0, dlast, best, hspeed; volatile LONG calls, steered, mism, dead, stepped; };
 static struct ksp_e ksp_e[KSP_MAXE];
 static struct { DWORD o, until; } ksp_cool[16]; static int ksp_coolN;           /* cops released next to a human: not re-hooked for a while */
-static struct { int pup, cops, bots, diag, nlive, gate; float tol, snap, speed, prevAvg, snapDist; int team, mode; DWORD pass, roundAt, diagAt, pupAt, snapEvery, sumAt; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv, nstep, nsn2, nph, nref, nflt; } ksp;
+static struct { int pup, cops, bots, diag, nlive, gate; float tol, snap, speed, prevAvg, snapDist; int team, mode; DWORD pass, roundAt, diagAt, pupAt, snapEvery, sumAt; LONG pupFr; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv, nstep, nsn2, nph, nref, nflt; } ksp;
 /* PuppetMode 2: per-actor time of the last placement (the SnapEvery limit) and the host entries that look like placeholders (set each pass) */
 static struct { DWORD o, at; } ksp_sn[64]; static BYTE ksp_ph[KLSY_MAXP];
 /* [Sync] ParkSkip: per actor, was its node off (bit 10 of [[A+4]+0x3c]) when last seen; a 1 -> 0 change = woken, snapped at once */
@@ -111,7 +111,7 @@ static struct {
     int on, share, cmp, max, tol10, apply, applyHp, applyMax, applyTol, toldApply, toldRefuse, toldHum, applyRx;
     int inwin, agree, rxAnchored, srcSet, lim, nbad, humLogs, rxAge;
     unsigned long srcAddr;
-    DWORD every, shareMs, at, shAt, cmpAt, rxAt, rxT, applyAt, anchorNow, anchorT, bad[KLSY_NBAD];
+    DWORD every, shareMs, at, shAt, cmpAt, rxAt, rxT, applyAt, anchorNow, anchorT, bad[KLSY_NBAD]; LONG atFr, cmpFr, applyFr;   /* klh_game_ticks at at / cmpAt / applyAt ([Perf] ScanMinFrames) */
     UINT_PTR sock; int sockTried, toldMode;
     struct klsy_pe host[KLSY_MAXP]; int nhost;
     int (WINAPI *WSAStartup)(WORD, void *);
@@ -1071,8 +1071,8 @@ static void klsy_tick(int game_thread)
         }
         if (ksp.nlive && now - klsy.rxAt > 3000) ksp_release_all("host list stale");                 /* the host's packets stopped: give every vtable back */
         if (kpl.on && now - kpl.cmpAt >= 1000) kpl_compare(sm, now);                            /* PlayerProbe: remote bodies vs the host's places, once a second */
-        if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag) && klsy.nhost && now - klsy.cmpAt >= 1000) {            /* the Compare walk also gives Apply its trust: identity agreement */
-            struct klsy_cm c; int j, mx = 0, ag; klsy.cmpAt = now; memset(&c, 0, sizeof c); c.worst_s = -1;
+        if ((klsy.cmp || klsy.apply || ksp.pup || ksp.diag) && klsy.nhost && klh_due(klsy.cmpAt, klsy.cmpFr, 1000, now)) {            /* the Compare walk also gives Apply its trust: identity agreement */
+            struct klsy_cm c; int j, mx = 0, ag; klsy.cmpAt = now; klsy.cmpFr = klh_game_ticks; memset(&c, 0, sizeof c); c.worst_s = -1;
             for (j = 0; j < klsy.nhost; j++) if (klsy.host[j].slot > mx) mx = klsy.host[j].slot;
             klsy.lim = (mx | 63) + 1;
             klsy_walk(0, klsy_cmp, &c);
@@ -1089,9 +1089,9 @@ static void klsy_tick(int game_thread)
                      (unsigned long)(now - klsy.rxAt), klsy.nhost, c.idbad, c.parked, c.bad, klsy.tol10 / 10.0, c.hpbad, c.worst_s, c.worst, ld); }
         }
         /* Apply: only a System Link / online client (mode 4, even with Probe=2), a fresh list, the identity agreement, a known local player; at most 2 passes a second */
-        if (klsy.apply && mode == 4 && klsy.agree && klsy.applyRx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && now - klsy.applyAt >= 500) {
+        if (klsy.apply && mode == 4 && klsy.agree && klsy.applyRx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && klh_due(klsy.applyAt, klsy.applyFr, 500, now)) {
             struct klsy_ap *c = (struct klsy_ap *)calloc(1, sizeof *c); int j, mx = 0, nh;
-            klsy.applyRx = 0; klsy.applyAt = now;
+            klsy.applyRx = 0; klsy.applyAt = now; klsy.applyFr = klh_game_ticks;
             nh = klsy_humans();
             if (klsy.humLogs < 3) { klsy.humLogs++; klog("sync: apply: pass: %d local ZFFPlayer(s) in the list at gd+0x828 (does it hold remote humans? compare with the number of humans in the round)", nh); }
             if (!nh) { if (!klsy.toldHum) { klsy.toldHum = 1; klog("sync: apply: no local player found: pass skipped (fail closed)"); } }
@@ -1106,15 +1106,15 @@ static void klsy_tick(int game_thread)
             free(c);
         }
         /* Puppet / PuppetDiag: same trust as Apply (System Link / online client, fresh list, identity agreement), up to 4 passes a second */
-        if ((ksp.pup || ksp.diag) && mode == 4 && klsy.agree && ksp_rx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && now - ksp.pupAt >= 250) {
-            ksp_rx = 0; ksp.pupAt = now;
+        if ((ksp.pup || ksp.diag) && mode == 4 && klsy.agree && ksp_rx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && klh_due(ksp.pupAt, ksp.pupFr, 250, now)) {
+            ksp_rx = 0; ksp.pupAt = now; ksp.pupFr = klh_game_ticks;
             ksp_pass();
         }
         /* Track: every frame, same trust as the Puppet pass plus the open position gate and a fresh list */
         if (kst.on && ksp.pup && mode == 4 && klsy.agree && ksp.gate && ksp.nlive && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs) ksp_track(now);
     }
-    if (klsy.on && now - klsy.at >= klsy.every) {
-        struct klsy_pr c; klsy.at = now; c.n = 0; c.max = klsy.max; c.lines = 0;
+    if (klsy.on && klh_due(klsy.at, klsy.atFr, klsy.every, now)) {
+        struct klsy_pr c; klsy.at = now; klsy.atFr = klh_game_ticks; c.n = 0; c.max = klsy.max; c.lines = 0;
         klog("sync: list T=%I64u role %lu state 0x%lx", klsy_T(), (unsigned long)role, (unsigned long)state);
         klsy_walk(0, klsy_line, &c);
         klsy_walk(1, klsy_line, &c);
