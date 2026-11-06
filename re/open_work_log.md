@@ -1,3 +1,11 @@
+## 2026-11-06 ~18:30 [6b] PD2 guns 1106t LIVE on the 9 stock DD maps: MG42 item 42 + PAR item 40 + their shop cards (no crash involved)
+- Layer 1106t (93e38965) = the 1106f change on the 1106s stage. Card ids on DD01-09 are the same as on the DM maps (Pair08 = 3124, Pair11 = 3127).
+- Bench PD2S_DD05 PASS: 2 seats, round 2, 0 faults; page II rows 18/22 = items 42/40, rows 0/10/31 = 62/63/35, host + client.
+- D: at ~1 GB: install.py --link-from D:\kl_stage\pd2guns_1106s hard-links each backup to its md5-equal 1106s stage twin (0 bytes), --cleanup drops the 1106t stage of a verified map; the backup guard is skipped when nothing is copied.
+  Fix on the way: the layer verify walked every stage folder (a cleaned-up map has no zips) -> pd2_guns_multi.verify(only=maps).
+- Entries= DD01..DD09: 46377 40191 48349 51834 39134 52945 56636 48527 51988 (= 1106s + 59). Undo dry-run: all 9 maps ok.
+- Undo: UNDO ALL 1105.bat step 0t (before 0s). Order matters: 1106t before 1106s.
+
 ## 2026-11-06 ~17:40 [6b] PD2 guns: DM05A c+d+e+f and 1106f on the last four DM maps LIVE (no crash involved)
 - DM05A: 1106c/d/e/f staged with --base live on c9's chain 2c (e10ea488), installed in order. Bench pd2a_1106 (2 seats, kit from lcglass1106's online pair) PASS: round 2, 0 faults, items 40/42/45/47/62/63 logged on host + client.
   Live: zip 14c8d9dd, bots 909e9689, base.md5 c4cd6dde, KLJoin 3e29f738, KLGuns 5e2c7a36, Entries=54659.

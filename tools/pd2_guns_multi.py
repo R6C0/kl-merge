@@ -511,13 +511,13 @@ def previews(out, name, log=print):
 
 
 # ------------------------------------------------------------------ verify
-def verify(out, log=print, live_root=None):
+def verify(out, log=print, live_root=None, only=None):
     import zipfile
     import kl_chars as C, kl_guns
     ok = True
     for name in sorted(os.listdir(out)):
         d = os.path.join(out, name)
-        if not os.path.isfile(os.path.join(d, 'report.json')):
+        if not os.path.isfile(os.path.join(d, 'report.json')) or (only is not None and name not in only):     # only: the maps asked for (a cleaned-up map keeps report.json, not its zips)
             continue
         rep = json.load(open(os.path.join(d, 'report.json')))
         live = os.path.join(live_root or MAPROOT, name)      # live_root: a layer baked on an earlier layer's stage (pd2_guns_layer)

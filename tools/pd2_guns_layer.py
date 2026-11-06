@@ -360,7 +360,7 @@ def verify(out, maps, log=print):
             missing = sorted(set(KEYS) - set(row['specs'].split(',')))
             if missing:
                 log('       NOTE: %s has no template for %s (skipped on this map)' % (m, missing))
-    allok &= M.verify(out, log=lambda s: log('  [pd2_guns_multi.verify] ' + s), live_root=BASE)      # base verifier on the plain zips (also scans every <dir>/report.json)
+    allok &= M.verify(out, log=lambda s: log('  [pd2_guns_multi.verify] ' + s), live_root=BASE, only=maps)      # base verifier on the plain zips of the asked maps
     log('LAYER RESULT: %s' % ('PASS' if allok else 'FAIL'))
     return allok
 
@@ -617,7 +617,7 @@ if not undo and todo:
         probe = os.path.dirname(probe)
     free = shutil.disk_usage(probe).free
     print('backup drive: %s needed, %s free on %s' % (mb(need), mb(free), os.path.splitdrive(os.path.abspath(BACKUP))[0]))
-    if not dry and free < need + SPARE:
+    if not dry and need and free < need + SPARE:          # need 0 = every backup is a --link-from hard link (no data written)
         sys.exit('not enough space on the backup drive (want %s + %s spare); install with --maps for fewer maps' % (mb(need), mb(SPARE)))
 if dry:
     sys.exit()
