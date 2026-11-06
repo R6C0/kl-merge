@@ -98,7 +98,7 @@ import hashlib, os, shutil, subprocess, sys
 GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAP, TAG = 'DM05A', '.before-doors1106'
-LIVE_ZIP_MD5 = 'e6d2f73ef0c51bfdbaec56c9534a4c9a'      # the precheck: the live plain zip must still be exactly this
+LIVE_ZIP_MD5 = %(pin)r      # the precheck: the live plain zip must still be exactly this
 FILES = [   # name, live md5 before, staged md5 after
 %(files)s]
 
@@ -179,30 +179,36 @@ if __name__ == '__main__':
 '''
 
 
-def write_install(st, files, nchunks):
+def write_install(st, files, nchunks, pin=None):
     fl = ''.join("    (%r, %r, %r),\n" % (n, o, w) for n, (o, w) in files.items() if o != w)
-    txt = INSTALL % dict(files=fl, chunks=nchunks)
+    txt = INSTALL % dict(files=fl, chunks=nchunks, pin=pin or LIVE_PIN)
     compile(txt, 'install.py', 'exec')
     open(os.path.join(st, 'install.py'), 'w', newline='\n').write(txt)
     open(os.path.join(st, 'INSTALL last call doors 1106.bat'), 'w', newline='\r\n').write('@echo off\r\npython "%~dp0install.py"\r\npause\r\n')
     open(os.path.join(st, 'UNDO last call doors 1106.bat'), 'w', newline='\r\n').write('@echo off\r\npython "%~dp0install.py" --undo\r\npause\r\n')
 
 
-def stage(out, live_dir=MAPDIR, bots=True, log=print):
+def allowed(h, allow=()):
+    """True when md5 h is the pinned live zip or starts with one of `allow` (>= 8 hex digits each; the chain tool re-pins a changed live zip this way)."""
+    return h == LIVE_PIN or any(len(a) >= 8 and h.startswith(a.lower()) for a in allow)
+
+
+def stage(out, live_dir=MAPDIR, bots=True, log=print, allow=()):
     import kl_botsonline, kl_bots_kick_1025 as KK
     live_zip = os.path.join(live_dir, 'F01_Main.zip')
-    if md5(live_zip) != LIVE_PIN:
+    if not allowed(md5(live_zip), allow):
         raise ValueError('%s md5 %s is not the live Last Call zip %s: refusing (re-pin after the new live pass is understood)' % (live_zip, md5(live_zip), LIVE_PIN))
+    pin = md5(live_zip)
     inp, work = os.path.join(out, '_in'), os.path.join(out, '_work')
     for d in (inp, work):
         shutil.rmtree(d, ignore_errors=True)
         os.makedirs(d)
     src = os.path.join(inp, 'F01_Main.zip')
     shutil.copyfile(live_zip, src)                           # the live file is only ever READ, through this copy
-    if md5(src) != LIVE_PIN:
+    if md5(src) != pin:
         raise ValueError('the copy of the live zip changed while it was read (md5 %s): the game or another pass is writing it' % md5(src))
     g = os.path.join(work, 'grafted.zip')
-    rep = {'live_zip_md5': LIVE_PIN, 'doors': [[n, list(h), list(c)] for n, h, c in DOORS]}
+    rep = {'live_zip_md5': pin, 'doors': [[n, list(h), list(c)] for n, h, c in DOORS]}
     rep['graft'] = graft(src, g, log)
     final = os.path.join(out, 'F01_Main.zip')
     if bots:
@@ -224,7 +230,7 @@ def stage(out, live_dir=MAPDIR, bots=True, log=print):
     for n in ('F01_Main.zip', 'F01_Main.bots.zip', 'F01_Main.bots.base.md5') + INI_FILES:
         files[n] = (md5(os.path.join(live_dir, n)), md5(os.path.join(out, n)))
     rep['files'] = files
-    write_install(out, files, rep['chunks'])
+    write_install(out, files, rep['chunks'], pin)
     with open(os.path.join(out, 'build_report.json'), 'w') as fh:
         json.dump(rep, fh, indent=1, default=str)
     shutil.rmtree(work, ignore_errors=True)
@@ -234,7 +240,7 @@ def stage(out, live_dir=MAPDIR, bots=True, log=print):
 
 
 # ------------------------------------------------------------------ the offline self-check
-def check(out, live_dir=MAPDIR, log=print):
+def check(out, live_dir=MAPDIR, log=print, allow=()):
     """Diff the live zip against the staged one. Returns (faults list, facts dict). Reads the live zip through a scratch copy in out\\_chk."""
     import kl_fa_bots as KB, kl_octree as O, kl_prmgraph, kl_glass_conn as GC, kl_gms
     bad, facts = [], collections.OrderedDict()
@@ -251,7 +257,7 @@ def check(out, live_dir=MAPDIR, log=print):
         lz = os.path.join(scratch, 'live.zip')
         shutil.copyfile(os.path.join(live_dir, 'F01_Main.zip'), lz)
         sz = os.path.join(out, 'F01_Main.zip')
-        if md5(lz) != LIVE_PIN:
+        if not allowed(md5(lz), allow):
             fail('live zip md5 %s is not the pin %s' % (md5(lz), LIVE_PIN))
         ok('live md5', md5(lz)); ok('staged md5', md5(sz))
         # 1. members
@@ -407,9 +413,9 @@ def main():
         print(__doc__)
         return 2
     if a[0] == 'stage':
-        stage(opt('--out', OUT), opt('--live', MAPDIR), bots='--no-bots' not in a)
+        stage(opt('--out', OUT), opt('--live', MAPDIR), bots='--no-bots' not in a, allow=[opt('--allow-md5', '')])
         return 0
-    bad, _ = check(opt('--out', OUT), opt('--live', MAPDIR))
+    bad, _ = check(opt('--out', OUT), opt('--live', MAPDIR), allow=[opt('--allow-md5', '')])
     return 1 if bad else 0
 
 

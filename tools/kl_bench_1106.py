@@ -80,8 +80,14 @@ KITS = {
     'lcoutcam2b1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcoutcam2b_1106', tag='.before-outcam2b1106',
                            files={'F01_Main.zip': 'eb4e450f48e2e8e0995e33c4a4f40c5c', 'F01_Main.bots.zip': '9fbd2565', 'F01_Main.bots.base.md5': 'e664ba34'},
                            solo_secs=1500, parts=('solo',)),
+    # 6b's pd2guns_1106b went live on DM05A (1a97e186, Entries 54447): all four passes re-based on it in ONE chain by kl_lastcall_chain_1106
+    # (doors -> spawn2f -> outro -> helicam 2a), one install.py pinning the 5 live files; expect doors, 2nd-floor start, short outro, 2a camera
+    'lcchain2a1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2a_live_1a97e186', tag='.before-chain1106',
+                          files={'F01_Main.zip': 'f048f569be30795d9b4ac6b958aacd8b', 'F01_Main.bots.zip': '34d25023', 'F01_Main.bots.base.md5': '5f486ecf',
+                                 'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
+                          solo_secs=1500, parts=('solo',)),
 }
-LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106')
+LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106')
 
 
 def md5(p):
@@ -375,7 +381,7 @@ def verify(k, part, tagbase=None):
             i0 = next((i for i, l in enumerate(a) if re.search(r'session: state \S+ -> 0x1f', l)), len(a))
             eyes = [tuple(float(m.group(j)) for j in (1, 2, 3)) for l in a[i0:] if ' cam:' in l for m in [re.search(r'\beye (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)', l)] if m]
             hit = [e for e in eyes if near(e, eye, 150)]
-            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106'):
+            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106'):
                 # these stages move the eye on purpose (LookAtPos, f5/f6 offset from the heli): info only, the frames are judged by eye
                 chk('escape camera eye moved off (7093,2181,2727) (info)', True, '%d outro cam eyes, last %s' % (len(eyes), ('(%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
             else:

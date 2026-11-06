@@ -234,12 +234,12 @@ def write_install(st, files, keep):
     open(os.path.join(st, 'UNDO last call outro 1106.bat'), 'w', newline='\r\n').write('@echo off\r\npython "%~dp0install.py" --undo\r\npause\r\n')
 
 
-def stage(out=OUT, in_dir=MAPDIR, keep=KEEP, force=False, log=print):
+def stage(out=OUT, in_dir=MAPDIR, keep=KEEP, force=False, log=print, allow=()):
     import kl_botsonline
     names = ('F01_Main.zip', 'F01_Main.bots.zip', 'F01_Main.bots.base.md5')
     src = os.path.join(in_dir, 'F01_Main.zip')
     h = md5(src)
-    if not force and not any(h.startswith(k) for k in KNOWN_IN):
+    if not force and not any(h.startswith(k) for k in tuple(KNOWN_IN) + tuple(a.lower() for a in allow if len(a) >= 8)):
         raise ValueError('refusing: %s md5 %s is not one of %s (use --force after reading what changed)' % (src, h, KNOWN_IN))
     os.makedirs(out, exist_ok=True)
     cp = os.path.join(out, '_in.zip')
@@ -267,7 +267,7 @@ def main(a):
     if len(a) == 2 and a[0] == 'check':
         return check(a[1])
     if a and a[0] == 'stage':
-        stage(opt('--out', OUT), opt('--in-dir', MAPDIR), int(opt('--keep', KEEP)), '--force' in a)
+        stage(opt('--out', OUT), opt('--in-dir', MAPDIR), int(opt('--keep', KEEP)), '--force' in a, allow=[opt('--allow-md5', '')])
         return 0
     print(__doc__)
     return 2

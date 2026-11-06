@@ -3,7 +3,7 @@
 
   python tools/kl_club_helicam_1106.py stage [--in-dir <dir>] [--out <dir>] [--variant A|B] [--f5 N] [--f6 N] [--aim <path>] [--pin-live] [--tag .before-x]
   python tools/kl_club_helicam_1106.py check <zip> [--variant A|B]
-(no --force: the input md5 must be a pinned one; chain with --in-dir on another stage, e.g. C:\\kl_build_1024\\lcoutro_1106)
+(no --force: the input md5 must be a pinned one or --allow-md5 <8+ hex digits>; chain with --in-dir on another stage, e.g. C:\\kl_build_1024\\lcoutro_1106)
 
 Plan and reasoning: re/lastcall_helicam_plan_1106.md. Problem: EscCamera01 is eFMM_LookFromPos, a FIXED eye at CamPos01 (7093, 2181, 2727); once the
 heli leaves, the view toward it is unlit (all-black frame), also with the heli parked 17.8 m away (bench lcoutro1106), so distance is not the cause.
@@ -255,11 +255,11 @@ def write_install(st, files, tag=TAG):
     open(os.path.join(st, 'UNDO last call helicam 1106.bat'), 'w', newline='\r\n').write('@echo off\r\npython "%~dp0install.py" --undo\r\npause\r\n')
 
 
-def stage(out=OUT, in_dir=MAPDIR, variant='A', f5=None, f6=None, aim=None, log=print, pin_live=False, tag=TAG):
+def stage(out=OUT, in_dir=MAPDIR, variant='A', f5=None, f6=None, aim=None, log=print, pin_live=False, tag=TAG, allow=()):
     import kl_botsonline
     src = os.path.join(in_dir, 'F01_Main.zip')
     h = md5(src)
-    if not any(h.startswith(k) for k in KNOWN_IN):
+    if not any(h.startswith(k) for k in tuple(KNOWN_IN) + tuple(a.lower() for a in allow if len(a) >= 8)):
         raise ValueError('refusing: %s md5 %s is not one of %s' % (src, h, KNOWN_IN))
     os.makedirs(out, exist_ok=True)
     cp = os.path.join(out, '_in.zip')
@@ -289,7 +289,7 @@ def main(a):
     if a and a[0] == 'stage':
         f = lambda k: float(opt(k, None)) if k in a else None
         stage(opt('--out', OUT), opt('--in-dir', MAPDIR), opt('--variant', 'A'), f('--f5'), f('--f6'), opt('--aim', None),
-              pin_live='--pin-live' in a, tag=opt('--tag', TAG))
+              pin_live='--pin-live' in a, tag=opt('--tag', TAG), allow=[opt('--allow-md5', '')])
         return 0
     print(__doc__)
     return 2
