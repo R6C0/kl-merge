@@ -1480,10 +1480,14 @@ static void kla_script_load(void)
             c->op = C_ONFAIL; snprintf(c->text, sizeof c->text, "%s", a); c->n = 6; c->n2 = 0; sscanf(rest + strlen(a), "%lu", &c->n);
         }
         else if (!_stricmp(op, "firebot")) {            /* firebot [ms 6000] [maxm 30] [deg 4]: TEST rig, online HOST: turn to the nearest living Ally AI heister and hold fire (OnlineGrudge bench) */
+            long ps = 0;
             c->op = C_FIREBOT; c->n = 6000; c->f[0] = 30.0f; c->f[1] = 1.0f; c->f[2] = 4.0f; c->f[3] = 0.0f;
-            sscanf(rest, "%lu %f %f %f %f", &c->n, &c->f[0], &c->f[2], &c->f[3], &c->f[1]);   /* 4th = pulse ms (0 = hold the button; N = N ms down, 1.5 N up, for semi-auto weapons);
+            sscanf(rest, "%lu %f %f %f %f %ld", &c->n, &c->f[0], &c->f[2], &c->f[3], &c->f[1], &ps);   /* 4th = pulse ms (0 = hold the button; N = N ms down, 1.5 N up, for semi-auto weapons);
                                                                                     5th = aim (1 = hold mouse button 1 while a target is in range, 0 = no): grudge_1106 pass A
-                                                                                    showed the read heading stuck 21 deg off a still target for 5 s without it */
+                                                                                    showed the read heading stuck 21 deg off a still target for 5 s without it;
+                                                                                    6th = pitch steer sign (0 = no pitch, 1 / -1 = mouse y counts per degree of pitch error,
+                                                                                    GUESS which sign is 'up': run 4 spent 101 rounds with 0 slot-423 hits on the target) */
+            c->n2 = (DWORD)(ps > 0 ? 1 : ps < 0 ? 2 : 0);
             if (c->n < 500) c->n = 500;
             if (c->f[2] < 0.5f) c->f[2] = 0.5f;
         }
@@ -1776,11 +1780,13 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             static DWORD t0, lastv, lasthp, held_t, held_ms; static int pc0 = -1, nfire, ndown, nkill; static DWORD tact, ptog; static float hp_start, hp_last;
             static struct klb_snap fs; static char fwhy[200];
             static int fb_rprev, fb_drops, fb_fired, fb_dn, fb_clipok; static DWORD fb_wprev, fb_mask; static DWORD fb_hand;   /* firebot truth, sampled every poll */
-            int me = kla_local_player(), i, best = -1, end = 0, aimed = 0; float v[3], h = 0, bp[3], p[3], bd = 1e30f, dx, dz, err = 0, rate, hp, lim = c->f[0] * 100.0f; DWORD act;
+            static int fb_aimbit, fb_apok, fb_hdl, fb_steer; static LONG fb_h0, fb_w0;            /* aim truth: polls with the aim bit, a valid aim point, a non-zero aimed handle (button 0 held); slot-423 counts at start */
+            int me = kla_local_player(), i, best = -1, end = 0, aimed = 0, apok = 0; float v[3], h = 0, bp[3], p[3], ap[3], bd = 1e30f, dx, dz, err = 0, erh = 0, erp = 0, rate, hp, lim = c->f[0] * 100.0f; DWORD act, a20 = 0, ahd = 0;
             if (pc0 != kla_pc || t0 != kla_cmd_t) {
                 pc0 = kla_pc; t0 = kla_cmd_t; lastv = 0; lasthp = 0; held_t = 0; ptog = 0; held_ms = 0; nfire = ndown = nkill = 0; tact = 0; hp_start = hp_last = -1;
                 fb_rprev = -1; fb_drops = fb_fired = fb_dn = fb_clipok = 0; fb_wprev = 0; fb_mask = 0; fb_hand = 0;
-                kla_out(1, "script %d: firebot start: %lu ms, within %.0f m, aim window %.1f deg", kla_pc + 1, c->n, c->f[0], c->f[2]);
+                fb_aimbit = fb_apok = fb_hdl = fb_steer = 0; fb_h0 = klbdp_hit_n; fb_w0 = klbdp_watch_n; klbdp_watch = 0;
+                kla_out(1, "script %d: firebot start: %lu ms, within %.0f m, aim window %.1f deg, pitch steer %s", kla_pc + 1, c->n, c->f[0], c->f[2], c->n2 == 1 ? "+1" : c->n2 == 2 ? "-1" : "off");
             }
             if (now - lastv >= 100) {
                 lastv = now | 1; fwhy[0] = 0;
@@ -1808,6 +1814,11 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                 else { fb_rprev = -1; fb_wprev = 0; }
                 fb_mask = klh_rd32(P + 0xed0);
                 if (kla_m_btn[0]) { fb_dn++; if ((gd = klh_rd32((DWORD_PTR)KLH_VA(KLO_GAMEDATA))) && (inp = klo_input(gd, P)) && klh_rd(inp + 0x3c, &fd, 1) && fd) fb_fired++; }
+                /* aim truth (klcopsquad.c, static VERIFIED 10-26): aim bit 2 of [P+0x2720], aim point P+0x27b0 (written while that bit is set), aimed-actor handle [[P+0xbd4]+0x2ac] */
+                a20 = klh_rd32(P + 0x2720); if (a20 & 4) fb_aimbit++;
+                apok = (a20 & 4) && klh_rd(P + 0x27b0, ap, 12) && klb_finite(ap[0]) && klb_finite(ap[1]) && klb_finite(ap[2]) && (ap[0] - v[0]) * (ap[0] - v[0]) + (ap[2] - v[2]) * (ap[2] - v[2]) > 2500.0f;
+                if (apok) fb_apok++;
+                { DWORD ah = klh_rd32(P + 0xbd4); ahd = ah ? klh_rd32(ah + 0x2ac) : 0; if (ahd && kla_m_btn[0]) fb_hdl++; }
             }
             if (tact) {                                                     /* the old target: dead or gone from the census? */
                 int still = 0;
@@ -1828,10 +1839,19 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                     tact = act; hp_start = hp_last = hv;
                     kla_out(1, "script %d: firebot target rec %d actor %08lx at (%.0f, %.0f, %.0f), %.1f m from (%.0f, %.0f, %.0f), vertical delta %.0f cm (yaw-only aim), health %.1f", kla_pc + 1, best, (unsigned long)act, bp[0], bp[1], bp[2], sqrt(dx * dx + dz * dz) / 100.0, v[0], v[1], v[2], bp[1] - v[1], hv);
                 }
-                hp_last = hv;
-                err = (float)(atan2(dx, dz) * 57.29577951) - h; while (err > 180) err -= 360; while (err < -180) err += 360;
+                hp_last = hv; klbdp_watch = act;
+                erh = (float)(atan2(dx, dz) * 57.29577951) - h; while (erh > 180) erh -= 360; while (erh < -180) erh += 360;
+                err = erh;
+                if (apok) {   /* steer the CROSSHAIR, not the body: bearing of the target minus bearing of the aim point, both from the player (GUESS: the camera's
+                                 shoulder offset makes this off by a few degrees when the aim point is far behind the target) */
+                    float ea = (float)(atan2(ap[0] - v[0], ap[2] - v[2]) * 57.29577951), ta = (float)(atan2(dx, dz) * 57.29577951), da = (float)sqrt((ap[0] - v[0]) * (ap[0] - v[0]) + (ap[2] - v[2]) * (ap[2] - v[2])), dt = (float)sqrt(dx * dx + dz * dz);
+                    err = ta - ea; while (err > 180) err -= 360; while (err < -180) err += 360;
+                    erp = (float)((atan2(bp[1] + 120.0f - v[1] - 160.0f, dt) - atan2(ap[1] - v[1] - 160.0f, da)) * 57.29577951);   /* GUESS: torso 120 cm over the node, eye 160 cm over the player's */
+                    fb_steer++;
+                }
                 rate = err / kla_turn_deg * 5.0f; if (rate > 1800) rate = 1800; if (rate < -1800) rate = -1800;
                 kla_m_rate[0] = rate; kla_m_rate[1] = 0;
+                if (apok && c->n2) { float pr = erp / kla_turn_deg * 5.0f * (c->n2 == 1 ? 1.0f : -1.0f); if (pr > 900) pr = 900; if (pr < -900) pr = -900; kla_m_rate[1] = pr; }
                 if (c->f[1] > 0.0f) kla_m_btn[1] = 0x80;                    /* GUESS: button 1 = aim in Dog Days' default binds; aiming turns the body to the camera */
                 aimed = err < c->f[2] && err > -c->f[2];
                 if (aimed && !kla_m_btn[0] && (c->f[3] <= 0.0f || now - ptog >= (DWORD)(c->f[3] * 1.5f))) { kla_m_btn[0] = 0x80; held_t = now; ptog = now; ndown++; if (ndown <= 6) kla_out(1, "script %d: firebot fire DOWN #%d: rec %d actor %08lx, %.1f m, bearing error %.1f, health %.1f", kla_pc + 1, ndown, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, hv); }
@@ -1850,6 +1870,9 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                                 kla_pc + 1, (unsigned long)rl, (unsigned long)st5c, (unsigned long)st54, (unsigned long)a780, a576, (unsigned long)a774, a821, (unsigned long)P, (unsigned long)seat, s7c, p23, p29, (unsigned long)ff);
                         kla_out(1, "script %d: firebot truth: hand item [P+0x920] %lu, gun %08lx clip %d, clip drops so far %d (polls with a readable clip %d); FIRED byte set in %d of %d polls with button 0 held; input mask [P+0xed0] %08lx",
                                 kla_pc + 1, (unsigned long)fb_hand, (unsigned long)fb_wprev, fb_rprev, fb_drops, fb_clipok, fb_fired, fb_dn, (unsigned long)fb_mask);
+                        kla_out(1, "script %d: firebot aim: [P+0x2720] %08lx, aim point %s (%.0f, %.0f, %.0f), target node (%.0f, %.0f, %.0f), body heading error %.1f, crosshair yaw error %.1f, pitch error %.1f; aimed handle %08lx; slot-423 hits on the target %ld (all team-2 %ld) since start",
+                                kla_pc + 1, (unsigned long)a20, apok ? "ok" : "none", apok ? ap[0] : 0.0f, apok ? ap[1] : 0.0f, apok ? ap[2] : 0.0f, bp[0], bp[1], bp[2], erh, apok ? err : 0.0f, apok ? erp : 0.0f, (unsigned long)ahd,
+                                (long)(klbdp_watch_n - fb_w0), (long)(klbdp_hit_n - fb_h0));
                     } } }
             } else if (!end && c->f[0] <= 0.0f) {                         /* 'firebot <ms> 0' = the CONTROL: no target, no turn, button 0 held all along (does a scripted press fire at all?) */
                 kla_m_rate[0] = kla_m_rate[1] = 0;
@@ -1869,8 +1892,10 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             if (c->f[1] > 0.0f) kla_m_btn[1] = 0;
             if (kla_m_btn[0]) { kla_m_btn[0] = 0; held_ms += now - held_t; }
             hp = -1; if (tact) { DWORD hh = klh_rd32(tact + 0x5fc); if (hh && klh_rd32(hh + 0x24) == tact) klh_rd(hh + 4, &hp, 4); }
-            kla_out(1, "script %d: firebot over after %lu ms: fire held %lu ms in %d press(es), %d target(s) died; current target %08lx health now %.1f (at its start %.1f); truth: clip drops %d, FIRED in %d of %d held polls, hand item %lu, mask %08lx",
-                    kla_pc + 1, now - kla_cmd_t, held_ms, ndown, nkill, (unsigned long)tact, hp, hp_start, fb_drops, fb_fired, fb_dn, (unsigned long)fb_hand, (unsigned long)fb_mask);
+            kla_out(1, "script %d: firebot over after %lu ms: fire held %lu ms in %d press(es), %d target(s) died; current target %08lx health now %.1f (at its start %.1f); truth: clip drops %d, FIRED in %d of %d held polls, hand item %lu, mask %08lx; aim: bit set %d, aim point %d, crosshair-steered %d, aimed handle while firing %d polls; slot-423 hits on targets %ld of %ld team-2",
+                    kla_pc + 1, now - kla_cmd_t, held_ms, ndown, nkill, (unsigned long)tact, hp, hp_start, fb_drops, fb_fired, fb_dn, (unsigned long)fb_hand, (unsigned long)fb_mask,
+                    fb_aimbit, fb_apok, fb_steer, fb_hdl, (long)(klbdp_watch_n - fb_w0), (long)(klbdp_hit_n - fb_h0));
+            klbdp_watch = 0;
             pc0 = -1; next = 1; break; }
         case C_TELE: kla_tele(kla_pc + 1, c->f); next = 1; break;
         case C_ENTS: kla_ents(kla_pc + 1, c->text, (int)c->n); next = 1; break;

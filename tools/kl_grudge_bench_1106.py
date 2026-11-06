@@ -30,7 +30,7 @@ DD = N.DD
 SOLO = N.SOLO
 Q32 = 'C:/kl_build_1024/c9_1028/q32'
 TPL_HOST, TPL_JOIN = '%s/Q32_DD05_host.ini' % Q32, '%s/Q32_DD05_join.ini' % Q32
-TEST_DLL_DEFAULT = os.path.join(ROOT, 'klhook', 'out_ogb1106g_test', 'dinput8.dll')      # 11-06 04:18: + klbrain traitor-cap fix 410ab59d (both checked in one slot)
+TEST_DLL_DEFAULT = os.path.join(ROOT, 'klhook', 'out_ogb1106h_test', 'dinput8.dll')      # 11-06 12:10: + firebot crosshair / pitch steer, slot-423 target hit count      # 11-06 04:18: + klbrain traitor-cap fix 410ab59d (both checked in one slot)
 LIVE_SHIP_MD5 = '727a73bb'                               # the live SHIP the bench starts from and restores (sha1 dc41cc8f...)
 LIVE_SHIP_SHA1 = 'c8598902'
 LIVE_INI_SHA1 = 'a64a3996'
@@ -53,17 +53,19 @@ FIRE_BLOCK = ['waitstate 0x19 180000',
               # lines log clip drops / the FIRED byte / the input mask, so 'never fired' and 'fired and missed' tell apart.
               # This one sits in the ~8 s no-turn window after 0x19; the second one comes after it.
               'firebot 3000 0 15 0 0',
+              # Run 4: 101 rounds spent, 0 slot-423 hits on the target = the shots miss. The aimed steps now steer the CROSSHAIR (aim point
+              # P+0x27b0 while aim bit [P+0x2720]&4 is set) and try pitch steering with both signs (6th arg, which is 'up' is a GUESS).
               'pos g0',
-              'firebot 8000 40 15 60 1',
+              'firebot 8000 40 15 60 1 1',
               'pos g1',
               'tap R',
               'wait 2500',
-              'firebot 8000 40 15 60 1',
+              'firebot 8000 40 15 60 1 -1',
               'pos g2',
               'tap R',
               'wait 2500',
               'firebot 3000 0 15 0 0',
-              'firebot 25000 40 15 0 0',
+              'firebot 25000 40 15 0 1 0',
               'pos g3',
               'log GRUDGE1106 firebot phase over; waiting for the death logs',
               'wait 5000',
@@ -315,7 +317,7 @@ def validate():
                 v.ok(d.get('BotFill', {}).get('OnlineHealthMul') == '1', '%s: [BotFill] OnlineHealthMul=1 (bench only; live 5)' % nm)
                 v.ok(sum(1 for c in scr if c == 'tap RIGHT') == 6, '%s: 6 x tap RIGHT = slot F05' % nm)
                 fb = [c for c in scr if c.startswith('firebot')]
-                v.ok(len(fb) == 5 and all(re.match(r'^firebot \d+ \d+(\.\d+)? \d+(\.\d+)?( \d+( [01])?)?$', c) for c in fb), '%s: %d firebot lines, args ms maxm deg parse' % (nm, len(fb)))
+                v.ok(len(fb) == 5 and all(re.match(r'^firebot \d+ \d+(\.\d+)? \d+(\.\d+)?( \d+( [01]( -?1| 0)?)?)?$', c) for c in fb), '%s: %d firebot lines, args ms maxm deg parse' % (nm, len(fb)))
                 i0 = next((i for i, c in enumerate(scr) if c.startswith('waitstate 0x19')), 99999); i1 = next((i for i, c in enumerate(scr) if c.startswith('firebot')), -1)
                 v.ok(0 <= i0 < i1, '%s: firebot comes after waitstate 0x19' % nm)
                 ip = next((i for i, c in enumerate(scr) if c.startswith('pokeb 168e9e4+54+285 1')), -1)
@@ -460,6 +462,11 @@ def criteria(t, host, join):
     out.append(('fires', any(int(d) > 0 for d, _, _, _, _ in tr), 'scripted press fires (diagnostic): per firebot step (clip drops, FIRED polls / held polls, hand item, mask): %s. '
                 'drops 0 + FIRED 0 = the press never reaches the action (hand item 0 = holstered, mask bits 0x80/0x400); drops 0 + FIRED > 0 = trigger seen, no bullet; drops > 0 = it fires, the shots miss'
                 % ('; '.join('%s, %s/%s, %s, %s' % x for x in tr) or 'no truth lines (older dll?)')))
+    # do the shots reach the hit chain? (11-06 h dll: aim truth + klbotdeath.c's slot-423 count on the firebot's target)
+    ah = re.findall(r'firebot over after .*?aim: bit set (\d+), aim point (\d+), crosshair-steered (\d+), aimed handle while firing (\d+) polls; slot-423 hits on targets (\d+) of (\d+) team-2', host)
+    out.append(('aimhits', any(int(x[4]) > 0 for x in ah), 'shots reach slot 423 on the target (diagnostic): per firebot step (aim bit polls, aim point polls, crosshair-steered, '
+                'aimed handle while firing, 423 hits on target / all team-2): %s. 0 aim point polls = button 1 is not aim; aim point ok + 0 hits = still missing (pitch?); '
+                'hits > 0 and no slot 96 line = dropped between 423 and slot 96' % ('; '.join('%s, %s, %s, %s, %s/%s' % x for x in ah) or 'no aim lines (older dll?)')))
     return out
 
 

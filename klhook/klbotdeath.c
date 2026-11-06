@@ -54,6 +54,8 @@ static struct { int on, installed[KLBDP_NSITE], dead, act; DWORD maxl, maxs, n[K
 static klbdp_bot klbdp_b[KLBDP_NBOT];
 static klbdp_ev klbdp_ring[KLBDP_NRING];
 static DWORD klbdp_back[KLBDP_NSITE];
+static volatile DWORD klbdp_watch;                     /* klauto.c firebot: the actor it shoots at; slot 423 (0x61a980) hits on it are counted below, past the log's first 20 */
+static volatile LONG klbdp_watch_n, klbdp_hit_n;
 
 static const BYTE klbdp_x0[5] = { 0x51, 0x56, 0x8b, 0xf1, 0x57 };
 static const BYTE klbdp_x1[6] = { 0x81, 0xec, 0xd0, 0x00, 0x00, 0x00 };
@@ -119,6 +121,7 @@ static void __cdecl klbdp_pre(DWORD id, DWORD ecx, DWORD *sp, DWORD ebp)
             w[0] = klh_rd32(rec); w[1] = klh_rd32(rec + 4); w[2] = klh_rd32(rec + 8); w[3] = klh_rd32(rec + 0x18); w[4] = klh_rd32(rec + 0x1c); w[5] = klh_rd32(rec + 0x28);
         }
         klbdp_push(actor, id, r0, r1, f1, f2, cur, nw, mx, w);
+        if (id == 1) { InterlockedIncrement(&klbdp_hit_n); if (actor && actor == klbdp_watch) InterlockedIncrement(&klbdp_watch_n); }
         if (id == 0) logit = (nw <= 0 && cur > 0) || (mx > 0 && cur - nw >= 0.2f * mx); else if (id == 1) logit = klbdp.n[1] < 20 || klbdp_f(w[3]) >= 5.0f || klbdp_f(w[3]) <= -5.0f;   /* every hit is in the ring; the log keeps the first 20 and any big scale (point blank = 100) so ordinary bullets do not eat MaxLines */
         else logit = 1;
         if (!logit || klbdp.n[id] >= klbdp.maxl) return;
