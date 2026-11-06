@@ -67,15 +67,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
-2026-11-06 ~11:50 - [c9] LC ESCAPE WORKS ON LIVE DM05A (kit lclive1106, nothing installed): holding E in BoardingTrigger_Heli -> "0 you aboard g3",
-van 5, status6, outro eye = EscCamera01, heli pass 314 m, verify 4/4 PASS. Earlier "no escape screen" = the rig never held E. Glass live on all 11 DM maps
-(md5s in re/open_work_log.md). Rerun queued after f0 + db with D3dShotPost=1 + [ReShade] Bridge=1 (no shots last time) to judge the grey screen.
+2026-11-06 ~12:30 - [c9] LAST CALL: escape boarding works (hold E); the "grey screen" is real: after departure the fixed EscCamera01 eye follows the heli
+into dark sky, ~60 s black (two heli visits 20+40 s). Staged + reviewed, NOT installed, all pinned to live e6d2f73e (install one, restage the rest):
+lcoutro_1106 77a42f74 (spline 17->6 pts), lcdoors_1106 a24d7432, lcspawn2f_1106 88e23dd5; kits lcoutro1106/lcdoors1106/lcspawn2f1106.
+Found: every map's inis Entries 72 short (shop pics) -> gun looks + fed bodies refused live; 6b fixes with kl_entries_fix after f0's bench.
 
 2026-11-06 ~11:50 - [db] 9-SEAT PERF: n9_1106 sweep = one-PC contention (13-26 fps). Hook fixes, all [Perf] "(recommended on)", NOT installed (live 727a73bb):
 OsdScanSlice f62cfbe4, ScanMinFrames ce1dc86d+baa51a0e (bench OSS_DD09_SMF: 9/9 in round, no starved seat, all 20-22 fps), ShopPoolBlock 50916295 (kls_ammo 471 reads/frame -> 1).
 Current build TEST out_spb1106_test 4a3387ea / SHIP out_spb1106 58e710e6. Next: one DD09 9-seat bench of 4a3387ea, then offer the SHIP install.
-
-2026-11-06 ~09:00 - [esc] Last Call escape screen: static research only, re/lastcall_escape_screen_1106.md. Hook does not hide the stock camera/outro; cause unproven (degenerate EscCamera01 in live zip, or round-over never reached). Nothing staged; next: one Log Level=2 live run when owner says test.
 
 2026-11-06 ~10:00 - [shop] KLPic pictures now on 28 maps (stock F01-F09, DD01-09, all DM but DM05A); DD10 + DM05A get them in c9's slot_1106 step E. Bench pc7 DD05+DM07 PASS (2 seats, round 2, 0 faults).
 C: hit 274 MB free (bake refused, maps restored): 118 old backups moved to D:\kl_old_backups\dd_1106b. Earlier: pd2guns_1106 (11 maps + KLShopPage.ini), F2/F3 shop buttons (all maps), dll SHIP 727a73bb, ini e91096c7 (.before-pics1105 = 288fb016/abb2144f).
