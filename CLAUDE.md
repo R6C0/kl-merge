@@ -72,13 +72,13 @@ lcoutcam (eye rides heli at -9 m x) = flat grey. Workflow lc-heli-cam-2 picks li
 Benched PASS, NOT installed (all pinned live e6d2f73e): lcspawn2f_1106 88e23dd5 (start 2nd floor west, -4800,462,1000); lcdoors_1106 a24d7432 restaged
 after 6b's Entries fix, bench pending. Install DM05A stages together with 6b's held pd2guns layer.
 
-2026-11-06 ~12:40 - [db] 9-SEAT PERF: n9_1106 sweep = one-PC contention (13-26 fps). Hook fixes, all [Perf] "(recommended on)", NOT installed (live 727a73bb):
-OsdScanSlice f62cfbe4, ScanMinFrames ce1dc86d+baa51a0e, ShopPoolBlock 50916295 (kls_ammo 471 reads/frame -> 1). Bench OSS_DD09_SPB on TEST 4a3387ea: 9/9 in round,
-0 FAIL (9 HITCHY: max stop 1.5-2.8 s), seats 20.9-24.3 fps, summed 206 (SMF 189, old N9S 202 with 1 seat dead). klshop_tick left the top costs.
-Ready to offer: SHIP out_spb1106 58e710e6 + the 3 ini keys. Remaining hitches are the PC (9 games on one box), not the hook (~1-2 ms a frame).
+2026-11-06 ~14:10 - [db] PERF: [Perf] OsdScanSlice, ScanMinFrames, ShopPoolBlock and BotScanSlice (472ce8de: botfill memory walks sliced) are all "(recommended on)", NOT installed (live 727a73bb).
+Bench OSS_DD09_BSS_S3 (3 seats, TEST 1913d42d): SMOOTH on every seat, host 0 stalls, 29.8 fps, p95 103 ms (TPC_S3 before: host HITCHY, 6 stalls, p95 249).
+Bots still find the exit trigger (walks of 9-13 slices). 9-seat SPB: 9/9 in round; the hitches left there come from the one PC (9 games), not the hook (~1.5 ms a frame).
+Ready to offer: SHIP out_bss1106 e34d038b + the 4 ini keys.
 
-2026-11-06 ~13:10 - [shop] PD2 GUNS 1106b LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51); pinned install.py, md5s asserted. Not yet seen in game: 2-seat DM02 bench after f0.
-Staged, NOT installed: 1106c = R700 (49) + GL40/GAS/FLARE (52-54, HK69 far copy 190 -> body 191 GUESS) at D:\kl_stage\pd2guns_1106c (on top of 1106b; verify PASS 22 zips).
+2026-11-06 ~14:35 - [shop] PD2 GUNS 1106b + 1106c LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51), R700 (49), GL40/GAS/FLARE (52-54, HK69 far copy 190 -> body 191 GUESS).
+DM02 benches PASS for both layers (2 seats round 2, 0 faults, items in the shop pool). 1106c installer keeps backups OFF C: (D:\kl_stage\pd2guns_1106c_backup). DM05A: re-pin 1106c after c9's stages.
 Earlier: KLPic pictures on 28 maps; Entries regression (pics +72 chunks) fixed live 361a1d3e. C: at 976 MB after 1106b: 9 DD *.before-1026loot8m moved to D:\kl_old_backups\dd_1106c (3.3 GB free).
 Undo: <work>/build/UNDO ALL 1105.bat (0: pd2guns_1106c, then 7 steps: pd2guns_1106b -> c9 glass_all_1106 -> entries -> pics -> buttons -> pd2guns -> DM05A lastcall_glass_1106) -> restore dll/ini. Zombie kl2.exe (0 threads) block tasklist checks: --skip-run-check (+ --root "<DD>" for buttons/pics).
 

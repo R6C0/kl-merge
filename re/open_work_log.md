@@ -1,3 +1,9 @@
+## 2026-11-06 ~14:35 [6b] PD2 guns 1106c LIVE on 10 DM maps: R700 + GL40 x3 (no crash involved)
+- DM02 first (off-drive installer 880e47e7, backups on D:\kl_stage\pd2guns_1106c_backup), then bench pd2b_1106 DM02 PASS: 2 seats round 2, 0 asserts/faults/dumps, KLGuns/KLJoin accepted (Entries 59232).
+  Log: `osw: row 13 ... item 52 made`, `row 32 ... item 49 made`, `shopPage: row 11 item 54 / row 12 item 53 added to the pool`, ownpic mask fff0ffff ff. Live dll 727a73bb / ini e91096c7 unchanged.
+- Then DM01, DM01B, DM03, DM03A, DM06, DM06B, DM07, DM09, DM11B (dry run first, 0 skipped, 0 failed). Entries = staged chunk counts (DM01 50824 ... DM11B 60568). C: net ~0.
+- DM05A not done: re-pin 1106c on c9's DM05A stages. Undo: step 0 of `<work>/build/UNDO ALL 1105.bat`.
+
 ## 2026-11-06 ~14:10 [db] BotScanSlice bench SMOOTH: 3-seat DD09 host hitches gone (no crash involved)
 OSS_DD09_BSS_S3 (TEST 1913d42d, kit base spb + BotScanSlice=1): 3/3 IN ROUND, all SMOOTH, 0 asserts/faults/dumps. Live dll/ini unchanged.
 - Host inst1: 29.8 fps, 0 hitches/min, 0 stalls, p95 103 ms. Before (OSS_DD09_TPC_S3): HITCHY, 1.4/min, 6 stalls up to 262 ms, p95 249.
