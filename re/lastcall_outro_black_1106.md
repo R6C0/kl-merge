@@ -36,3 +36,12 @@ Rerun lclive (E held in BoardingTrigger_Heli) with `D3dShotPost=1`, ReShade Brid
 - Shots 19-21 should show the heli silhouette (like 17/18) instead of black. If still black: the sky/light cause is right, next step is
   a light node or the hook trim of visit 2 (shorter outro).
 - State sequence unchanged: veh1dc 5 -> 7 -> 0 -> 2 -> 4 -> 5 -> 7, session 0x1f about 60 s after departure, 0x20, fine score screen.
+
+## 11-06 ~12:15 bench lcoutro1106 (stage 77a42f74, spline 17->6 pts): PARTIAL
+- PASS 4/4, 0 faults, undo restored e6d2f73e. Player boarded 12:10:26, the vehicle left 12:11:07, session 0x1f at 12:11:30.
+  The outro is now ONE visit, ~23 s (was 60 s: two visits). The forced last-vehicle visit 2 did not happen.
+- The heli parks at zheli (6046, 2802, 4052), piv398 (5999, 2731, 4021): 17.8 m from the fixed eye (7093, 2181, 2727). The spline cut works as designed.
+- Shots: 21 (12:11:00) shows the heli silhouette at the hover point. 22 (12:11:20, heli parked 18 m away) is ALL BLACK. 23 is the score screen.
+  => distance was not the cause: from this eye, the view toward the parked heli is unlit (night sky / unlit heli).
+- Next: an in-heli LookAtPos camera like stock F06 CameraInVan_01 (eFMM_LookAtPos, in-heli focus point, OnlineEscCamTrigger),
+  or a light at the hover point. lcoutro_1106 is worth keeping either way (60 s -> ~20 s).

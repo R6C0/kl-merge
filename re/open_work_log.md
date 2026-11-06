@@ -33,6 +33,9 @@ lclive1106 run2 (shots via ReShade bridge): boarded again via E; after the heli 
 and follows the heli into the night sky: shots 11:30:09-11:30:49 black except HUD, ~60 s until round over. Score screen fine.
 Investigation + staged fix: workflow lastcall-black-outro. Game handed to f0 (grudge_1106).
 
+2026-11-06 ~12:20 - [c9] lcoutro1106 bench: PASS, 0 faults. The spline cut makes the outro one visit (~23 s, was 60 s), but the frame is still black once the heli parks 18 m from the eye (shot 22).
+So distance was not the cause; next: an F06-style in-heli LookAtPos camera. Details: re/lastcall_outro_black_1106.md. Live DM05A unchanged (e6d2f73e).
+
 2026-11-06 ~11:50 - [db] BENCH OSS_DD09_SMF (9 seats DD09, TEST a348dadb = ScanMinFrames + OsdScanSlice + TickProfile): 9/9 in round, NO starved seat (all 20-22 fps; OSS_DD09 had inst1-7 26-28 and inst8/9 2-3; N9S 8 seats ~25 + 1 killed).
 Sum of seat fps ~equal (189 / 200 / 202): the PC is the limit; ScanMinFrames shares it evenly, it does not create CPU. Rated 1 FAIL (inst1 host 3.1 s stop) + 8 HITCHY, max stops 1.5-3.1 s (OSS: 9-18 s on inst8/9).
 TickProfile: hook = ~1-2.5 ms a frame on a busy seat (5-10 %). Top: klsy_tick (bench-only [Sync] Probe), klshop_tick = kls_ammo, a flat 471 single reads EVERY frame on every seat (live too).
