@@ -55,6 +55,13 @@ SPECS = [
     # ---- batch 3 (2026-11-06)
     dict(item=62, template='HG_M-77B_Human_Shield', unit='payday2/weapons/wpn_npc_c45', mesh='g_body', tex='pistol_df.texture',
          key='C45', name='PD2 Chimano 88', kind='pistol'),
+    # ---- batch 4 (2026-11-06): both items <- PD2 HRL-7 body (wpn_third_rpg7_body.model g_body, 1304 tris, third_body_df). Hosts RPG_7V / RPG_7V_Hind each
+    # have their OWN Ground node but share root 4959 (parts 7 / 7 / 248, no bone-3 clip), so body only: the rocket (g_rocket, own texture, 2nd material) is not
+    # baked in (needs an atlas) and there is no clip part for the reload to take. fit DM02: cost 1.95 / 1.94, shift (7.0,-0.75) / (6.25,-0.5), muzzle 27.9 / 27.1 vs host 26.6, butt -67 vs -78.
+    dict(item=50, template='RPG_7V', unit='pd2_dlc_overkill_pack/weapons/wpn_third_rpg7_pts', model='wpn_third_rpg7_body.model', mesh='g_body',
+         tex='third_body_df.texture', key='HRL50', name='PD2 HRL-7', kind='rocket launcher'),
+    dict(item=51, template='RPG_7V_Hind', unit='pd2_dlc_overkill_pack/weapons/wpn_third_rpg7_pts', model='wpn_third_rpg7_body.model', mesh='g_body',
+         tex='third_body_df.texture', key='HRL51', name='PD2 HRL-7 HIND', kind='rocket launcher'),
 ]
 # Tried and dropped (fit on the MG hold leaves the stock 4 - 5 cm IN FRONT of the right hand): item 42 <- PD2 M4 (cost 3.30, butt +5.0),
 # item 43 <- PD2 AKMSU (cost 3.99, butt +3.8). A short rifle model does not suit the long MG hold; a PD2 LMG (M249: 9 materials) would.
@@ -80,7 +87,8 @@ def pd2_plate_of(spec, scale=1.0, shift=(0.0, 0.0, 0.0), deg=P.TURN_DEG):
     """pd2_gun.pd2_plate for any wpn_npc_* unit: axis map, turn about z, scale, shift. -> (Plate, DDS diffuse bytes)."""
     import pd2_model
     base = unit_dir(spec)
-    model = pd2_model.Model(os.path.join(base, os.path.basename(base) + '.model'))
+    # batch 4: spec['model'] names the .model file when it is not <unit dir name>.model (wpn_third_rpg7_pts holds wpn_third_rpg7_body.model)
+    model = pd2_model.Model(os.path.join(base, spec.get('model') or os.path.basename(base) + '.model'))
     obj = next((o for o in model.mesh_objects() if o.name == spec['mesh']), None)
     if obj is None:
         raise ValueError('no mesh object %s (have %s)' % (spec['mesh'], [o.name for o in model.mesh_objects()]))
@@ -166,10 +174,16 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
             # small type-1 object carries detail 24 (35 verts for Chimano's 596 = the low-detail copy). The new body takes 7|24 and
             # the stock low-detail copy is dropped, so the PD2 gun is drawn at every distance.
             lowd = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] == 24]
+            far = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] == 248]
+            if not lowd and len(far) == 1:
+                # GUESS (batch 4): a rocket launcher root (RPG_7V / RPG_7V_Hind: 2 type-1 parts detail 7 + one detail 248) has no detail-16
+                # box and no 24 copy; the detail-248 part (89 verts) is read as the far-LOD copy. The new body takes 7|248 (= 255) and the
+                # stock far copy and the second near part (127 verts, the rocket or the sight?) are dropped; there is no bone-3 clip part.
+                lowd = far
             if len(lowd) != 1:
                 raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
-            body_lod = mag_lod = 7 | 24
-        cands = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] not in (16, 24)]
+            body_lod = mag_lod = 7 | p.chunks[lowd[0]][0x0e]       # 31 on a pistol, 255 on a launcher
+        cands = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] not in (16, 24, 248)]
         if (len(hidden) != 1 and not lowd) or not cands or var != 0:
             raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
         body = max(cands, key=lambda o: nvs[o])
