@@ -72,7 +72,8 @@ Fix e6be5760: --sgd-from skips repeated path tails (M05_A has 8), refuses duplic
 
 2026-11-06 ~09:00 - [esc] Last Call escape screen: static research only, re/lastcall_escape_screen_1106.md. Hook does not hide the stock camera/outro; cause unproven (degenerate EscCamera01 in live zip, or round-over never reached). Nothing staged; next: one Log Level=2 live run when owner says test.
 
-2026-11-06 ~04:00 - [shop] LIVE: pd2guns_1106 (11 maps + KLShopPage.ini), F2/F3 shop buttons (all maps), KLPic pictures on DM01 only, dll SHIP 727a73bb, ini e91096c7 (.before-pics1105 = 288fb016/abb2144f).
+2026-11-06 ~10:00 - [shop] KLPic pictures now on 28 maps (stock F01-F09, DD01-09, all DM but DM05A); DD10 + DM05A get them in c9's slot_1106 step E. Bench pc7 DD05+DM07 PASS (2 seats, round 2, 0 faults).
+C: hit 274 MB free (bake refused, maps restored): 118 old backups moved to D:\kl_old_backups\dd_1106b. Earlier: pd2guns_1106 (11 maps + KLShopPage.ini), F2/F3 shop buttons (all maps), dll SHIP 727a73bb, ini e91096c7 (.before-pics1105 = 288fb016/abb2144f).
 Undo: shop_pics uninstall -> shop_buttons uninstall -> pd2guns_1106/install.py --undo -> restore dll/ini. Zombie kl2.exe (0 threads) block tasklist checks: --skip-run-check (+ --root "<DD>" for buttons/pics).
 Bench pc6 DM01 2 seats: IN ROUND, 0 faults, "ownpic: scan found own cards, mask fff0ffff ff". Next: other-maps pics bat; DM05A_glass variant staged for c9's glass fix. install.py retries WinError 32 + per-map rollback.
 

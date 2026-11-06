@@ -1,3 +1,8 @@
+2026-11-06 ~10:00 - [6b] SHOP PICS ON 27 MORE MAPS (stock F01-F09, DD01-DD09, DM01B DM02 DM03 DM03A DM06 DM06B DM07 DM09 DM11B; with DM01 = 28). DD10/DM05A are left to c9 slot_1106 step E (its buttons undo would be blocked by a pics layer).
+Offline rehearsal first (bake + check on scratch copies of all 29 unbaked live zips: 36/36 cards, 0 problems each). The first live pass refused all 9 DM maps ("less than ~400 MB free"; each map restored by kl_bake_siblings): C: had 274 MB.
+Moved 118 backups beyond the newest 3 per file (12.7 GB) to D:/kl_old_backups/dd_1106b (relative paths kept, DD10/DM05A excluded), then the DM pass installed. Every bots.base.md5 matches its plain zip; md5 list sent to c9 for the glass_all rebuild.
+Bench pc7 (TEST b6a69772, 2 seats) DD05 + DM07: PASS both, 0 faults/asserts, 0x19 entered twice per seat, "ownpic: scan found own cards, mask fff0ffff ff". Live dll/ini unchanged (727a73bb / e91096c7).
+
 2026-11-06 ~04:10 - [c9] GLASS ALL MAPS PREP (offline): kl_glass_conn compare = 2017/2017 shipped records equal on the 7 Dead Men levels that ship the section; built 10 maps into <work>/build/glass_all_1106 (manifest.json; DM11B out 15dc11d3), all HOLD until the DM05A bench passes.
 Fix e6be5760: --sgd-from skips repeated path tails (M05_A has 8), refuses duplicate REFs / >255 pieces; DM05A stage still 3f0018b3. Game queue: db n9_1106 (5-9 h) -> c9 slot_1106.py (DD10 slim + DM05A glass bench/install) -> f0 grudge.
 
