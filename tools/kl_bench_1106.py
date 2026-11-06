@@ -61,8 +61,13 @@ KITS = {
     'lcspawn2f1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcspawn2f_1106', tag='.before-spawn2f1106',
                           files={'F01_Main.zip': '88e23dd5896afc5ee471860a1a8c100c', 'F01_Main.bots.zip': '5e16c4a0'},
                           solo_secs=1500, parts=('solo',)),
+    # black escape outro (re/lastcall_outro_black_1106.md): the Escaping spline cut from 17 to 6 points (one .prp byte) so the heli parks
+    # ~31 m from the fixed EscCamera01 eye instead of flying out of the lit scene; expect shots after departure to show the heli
+    'lcoutro1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcoutro_1106', tag='.before-outro1106',
+                        files={'F01_Main.zip': '77a42f74a8d6853299612a63884b1b89', 'F01_Main.bots.zip': '2cef6d0b', 'F01_Main.bots.base.md5': '5115b51a'},
+                        solo_secs=1500, parts=('solo',)),
 }
-LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106')
+LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106')
 
 
 def md5(p):
