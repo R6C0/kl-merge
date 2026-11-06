@@ -1,3 +1,9 @@
+## 2026-11-06 ~19:40 [c9] DM CRACKED LENS INSTALLED (owner "install the cracked lens"; no crash involved)
+Kit build/lenscrack_dm_1106: KL_LensCrackDM.fx (57663e0c) -> reshade-shaders\Shaders, atlas KL_LensCrackDM.png (544a926e) -> reshade-shaders\Textures (both new, md5 = kit).
+KLHook.ini f59ba664 -> d16f91f3: [ReShade] TechCrack=KL_LensCrackDM@KL_LensCrackDM.fx + a comment line above it ("(recommended on)"; NOT an inline comment:
+TechCrack is read with GetPrivateProfileStringA, which keeps "; ..." in the value). LensCrack is on by default ([Graphics] has no key). dll unchanged (e88a6093 has the hook code).
+Not seen live this session (owner present, no runs); 03:33 log of an earlier test shows the DM technique loads. Undo: C:\kl_build_1024\lenscrack_dm_1106_install\UNDO lenscrack dm 1106.bat.
+
 ## 2026-11-06 ~18:40 [f0] ONLINE GRUDGE INSTALLED: [Bots] OnlineGrudge=1 (owner "install all", via c9; no crash involved)
 Live dll unchanged: db's SHIP e88a6093 (out_fcs1106, 85fdae39) already holds the OnlineGrudge code (= HEAD klhook source; own SHIP b3eb0dfe not needed).
 KLHook.ini c2910f30 -> f59ba664: one line under [Bots], "(recommended on)", db's 6 [Perf] keys kept. Backup + undo: C:\kl_build_1024\og_1106_install ("UNDO og 1106.bat" -> ini c2910f30 / dll e88a6093). Not yet seen in a played round with it on through the live ini; host only.
