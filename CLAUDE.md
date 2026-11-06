@@ -73,14 +73,9 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 -> <work>/build/INSTALL ALL 1105.bat (now pd2guns_1106; DM05A stock + _chain + _doors variants, picked by live md5) -> C:/kl_build_1024/pics_1105_hook/INSTALL pics 1105 hook.bat (SHIP 727a73bb). Undo in reverse.
 Bench pf1106 PASS (Perf keys incl. FastRead=1, BakedPics/OwnPics on unbaked maps, 2 seats DD05+DM01). Pics never loaded in game: check "ownpic:" in KLHook.log on DM01 before the other-maps bat.
 
-2026-11-05 ~19:45 - [c9] LAST CALL CHAIN STAGED (not installed, untested live): C:/kl_build_1024/lastcall_chain_1105/stage = life (crowd 9 looks/12 women, street emitters, music rooms)
--> fight (130/73: Rush, F2_Hold/Flank/Shot, loot guards, wave/roof chains) -> heli (Escape_Chopper unhidden 0x3244400->0x3244000, EscCamera01 LookFromPos, CamPos01 off the eye; re/lastcall_heli_1105.md).
-zip e9fab045 -> c8dd18ee, bots 42ed37ba; skeptic verify SAFE. DD10 slim staged (re/dd10_slim_1105.md, F07 376->264 MB). Kick doors: no door leaves in DM05A (--doors variant untested).
-
-2026-11-05 ~18:30 - [c9] Owner played Last Call: wants NPC variety (women in suits, club-goers, varied voices), street traffic noise, club music with no dead spots, 2nd-floor spawns, roof squad personality,
-front assault rushing to cover, guards before the loot room, kickable doors toward the exit. Offline agents: tools/kl_club_life_1105.py (crowd+sound), kl_club_fight_1105.py (combat), DD10 slim (re/dd10_slim_1105.md).
-FLAT RAID MENU FIXED: the 11-03 host-menu overlay had page 3 entry 6 = stock Title07 + H05 picture; live Patch01.zip ab86738f -> d00527ff ("Flat Raid", L05 picture; The Dig gets L06),
-backup .before-1105flatraid, UNDO in C:/kl_build_1024/flatraid_menu_1105. DM02 rear wall IS live (cover_fix_1026d built on edddbb67 -> 6589566e), never run on its own.
+2026-11-06 ~13:00 - [c9] LAST CALL CHAIN LIVE in DM05A (zip c8dd18ee, bots 42ed37ba, .before-1105chain; undo: lastcall_chain_1105/stage/install.py --undo). Bench lc1106: 130 actors, chopper flies in, round ends to the shop.
+ROUND-2 FREEZE = stripped .sgd HavokShatterGlassConnectivity (0x25 reset recomputes pane neighbours, 21-29 s per seat, host drops client). Fix staged: C:/kl_build_1024/lastcall_glass_1106/stage (zip 3f0018b3,
+tools/kl_glass_conn.py), needs an online bench, then 6b re-bakes pd2guns on it. DD10 slim bench PASS (free block 102-134 MB vs 14.4), not installed. Escape camera still unproven (bench boarding teleport missed).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

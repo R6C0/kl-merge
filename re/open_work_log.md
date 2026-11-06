@@ -1,3 +1,10 @@
+2026-11-06 ~13:00 - [c9] Last Call chain INSTALLED live (DM05A F01_Main.zip c8dd18ee, bots 42ed37ba, base.md5 7dd4a1c9, LS.SND b6fdd4c0; backups .before-1105chain). Bench lc1106 (TEST 5f52009d): 0 faults, 130 actors, ZHeli flies to the pad, round ends to the shop.
+Round-2 freeze root cause: the graft strips the .sgd section HavokShatterGlassConnectivity, so the round reset (0x837040 -> 0x4dfd60 -> 0x4a45a0, distance 0x6499b0, threshold 2.5 at 0xb89a20) rebuilds pane neighbours for 50 shard groups: DM05A 21-29 s per seat,
+seats in turn, host drops the client (DM02 2-5 s, DM03 ~3 s, DM09 ~0.7 s, DD maps 0.01 s). Cache lookup 0x4eccd0 on [0x153ab14], keyed by group REF label; section = u32 n, n x {u32 count, u32 key, count x 40-byte records}.
+Fix: tools/kl_glass_conn.py builds the section; stage C:/kl_build_1024/lastcall_glass_1106/stage (chain + glass, zip 3f0018b3, bots cb962a65, base 00cfe35a; LS.SND unchanged), NOT installed, needs a 2-seat online bench.
+pd2guns variants pin c8dd18ee/803a29c8: re-bake on 3f0018b3 after glass goes in. DD10 slim bench (dd10s1106): 0 faults, free block 102-134 MB vs stock 14.4 MB, 3 rounds; not installed yet. Escape camera: klcam 'cam:' lines are the follow camera;
+the bench 'tele' into the box missed, so boarding never happened: next run waits for 'you aboard' / van status 4. Bench check fixes in tools/kl_bench_1106.py (28a14ae1). Zombie kl2.exe 52560/47672 (44 K) unkillable: installs need --skip-run-check.
+
 2026-11-06 ~10:30 - [f0] ONLINE GRUDGE staged offline, NOT run live, default off: [Bots] OnlineGrudge=0 / OnlineGrudgeDry=0 (klhook/klgrudge.c, klogrudge_logic.h + 54-check test). Host only: a human who kills an AI heister becomes the traitor via rules slot 129 (killer, victim -1) + slot 105.
 Killer = the lethal blow seen in slot 15 (klud_w15), else a fresh human stamp at death. FA sub-mode 0 only; skips traitor/turned/non-Ally victims, undercover killers, the brain's shadow rules. Next: 2-seat DRY bench, grep "online grudge". Details re/online_grudge_1106.md.
 
