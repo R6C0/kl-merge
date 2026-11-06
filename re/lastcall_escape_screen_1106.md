@@ -62,3 +62,8 @@ Did the screen go black, show the sky, or show the map frozen? Did the round-ove
   rules 0x6c6c10: flag 0x20, record state 4; escaped flag 0x40 at departure). The bench never pressed E (as re/human_escape_online_1028.md
   already said). The bot point (7827, 2014, 3382) is the AI's box+500 x path (ZAllyEscapeBox 0x907a50), outside the human box.
   Bench now: tele, walk in from +x, 'tap E 3000' x2 + 'tap E 4000'. Facing for eIntDir_CtrlDir is a GUESS.
+
+## 11-06 ~11:50 result: boarding confirmed live
+lclive1106 (live DM05A): E held 3 s inside BoardingTrigger_Heli -> "0 you aboard g3" one second later, then van 5, status6, round over,
+outro camera eye = EscCamera01, heli closest pass 314 m. The escape flow works; the earlier missing escape screen was the bench never
+holding E. Picture still unchecked (no shots: ReShade owns Present); rerun with D3dShotPost=1 + Bridge=1.

@@ -1,3 +1,9 @@
+## 2026-11-06 ~11:50 [c9] Last Call escape: boarding works on the live map
+Kit lclive1106 (live DM05A e6d2f73e, nothing installed, folder byte-identical after). Timeline: 10:52:56 van 3; 10:53:05 in box (7406,1882,3162);
+10:53:06 tap key 0x12 (E held 3 s); 10:53:07 "0 you aboard g3"; 10:53:49 van 5; 10:54:09 status6; 0x1f 10:54:12 then 0x20. Verify 4/4 PASS:
+heli closest 314 m, outro eye (7093,2181,2727) = EscCamera01. So the rig, not the map, missed the escape. No KLShot files (ReShade owns Present,
+d3count 0): LC kits now set [Memory] D3dShotPost=1 + [ReShade] Bridge=1. Screenshot rerun after f0 and db.
+
 2026-11-06 ~11:20 - [db] ScanMinFrames committed ce1dc86d ([Perf] ScanMinFrames=1, recommended on; TEST 3c5fd2a4 / SHIP 885956c6, kl_tests 86 pass, NOT installed). klh_due gate = ms AND >= ms*20/1000 game frames on klsync Compare/Apply/Puppet/Probe, klor_bots 3 s, botfill census 5 s; unchanged at >= 20 fps. Startup "perf:" line now always lists every key.
 Bench next slot: python C:/kl_build_1024/oss_1106/run.py --smf (hook_smf + ScanMinFrames + TickProfile, tag OSS_DD09_SMF, compares vs N9S_DD09 and OSS_DD09). Install only after inst8/9 improve and inst1-7 stay >= OSS_DD09.
 

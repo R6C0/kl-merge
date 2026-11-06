@@ -67,9 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
-2026-11-06 ~11:30 - [c9] GLASS LIVE ON ALL 11 DM MAPS: DM05A e6d2f73e (bench lcglass1106: 0x25 dwell 0.1 s vs 28 s) + the other 10 (glass_all_1106/install.py,
-tag .before-glass1106, md5s in re/open_work_log.md). DD10 bc4d0bc3. LC escape: camera + chopper fine; the bench player never boarded because it never
-HELD E in BoardingTrigger_Heli (not a height miss). Running: kit lclive1106 (live DM05A, E holds). Queue after: f0, then db (DD09 --fr).
+2026-11-06 ~11:50 - [c9] LC ESCAPE WORKS ON LIVE DM05A (kit lclive1106, nothing installed): holding E in BoardingTrigger_Heli -> "0 you aboard g3",
+van 5, status6, outro eye = EscCamera01, heli pass 314 m, verify 4/4 PASS. Earlier "no escape screen" = the rig never held E. Glass live on all 11 DM maps
+(md5s in re/open_work_log.md). Rerun queued after f0 + db with D3dShotPost=1 + [ReShade] Bridge=1 (no shots last time) to judge the grey screen.
 
 2026-11-06 ~10:00 - [db] 9-SEAT SWEEP n9_1106: 1 SMOOTH / 6 HITCHY / 11 FAIL, all 9-seat runs 13-26 fps (one-PC contention). Hook bug: OSD scan 50-85 s in one call, watchdog killed 3 seats.
 Fix f62cfbe4 [Perf] OsdScanSlice=1: TEST out_oss1106_test 655ec675 / SHIP 2b3f2a22, not installed, not run. Next (game free): DD09 9 seats on it. Report C:/kl_build_1024/n9_1106/summary_1106.txt.

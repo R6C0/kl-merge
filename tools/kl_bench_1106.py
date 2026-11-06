@@ -128,7 +128,8 @@ AUTO = ['[Auto]', 'Enable=1', 'Hooks=0', 'Nodes=0', 'EndHooks=1', 'CmdDrop=Defau
 def probes(k):
     t = ['[Memory]', 'Log=1']
     if k in LC:
-        t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1']
+        # lclive1106 (11-06 10:52): 0 KLShot files, d3count 0 frames: ReShade owns Present here, so shots go through its bridge (as MT3B 11-02)
+        t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
     return t
 
 
