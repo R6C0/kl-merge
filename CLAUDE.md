@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-06 ~04:10 - [c9] GLASS ALL MAPS PREP (offline): kl_glass_conn compare = 2017/2017 shipped records equal on the 7 Dead Men levels that ship the section; built 10 maps into <work>/build/glass_all_1106 (manifest.json; DM11B out 15dc11d3), all HOLD until the DM05A bench passes.
+Fix e6be5760: --sgd-from skips repeated path tails (M05_A has 8), refuses duplicate REFs / >255 pieces; DM05A stage still 3f0018b3. Game queue: db n9_1106 (5-9 h) -> c9 slot_1106.py (DD10 slim + DM05A glass bench/install) -> f0 grudge.
+
 2026-11-06 ~09:00 - [esc] Last Call escape screen: static research only, re/lastcall_escape_screen_1106.md. Hook does not hide the stock camera/outro; cause unproven (degenerate EscCamera01 in live zip, or round-over never reached). Nothing staged; next: one Log Level=2 live run when owner says test.
 
 2026-11-06 ~04:00 - [shop] LIVE: pd2guns_1106 (11 maps + KLShopPage.ini), F2/F3 shop buttons (all maps), KLPic pictures on DM01 only, dll SHIP 727a73bb, ini e91096c7 (.before-pics1105 = 288fb016/abb2144f).

@@ -1,3 +1,6 @@
+2026-11-06 ~04:10 - [c9] GLASS ALL MAPS PREP (offline): kl_glass_conn compare = 2017/2017 shipped records equal on the 7 Dead Men levels that ship the section; built 10 maps into <work>/build/glass_all_1106 (manifest.json; DM11B out 15dc11d3), all HOLD until the DM05A bench passes.
+Fix e6be5760: --sgd-from skips repeated path tails (M05_A has 8), refuses duplicate REFs / >255 pieces; DM05A stage still 3f0018b3. Game queue: db n9_1106 (5-9 h) -> c9 slot_1106.py (DD10 slim + DM05A glass bench/install) -> f0 grudge.
+
 2026-11-06 ~04:00 - [6b] SHOP STACK LIVE: pd2guns_1106 on all 11 maps + KLShopPage.ini, shop buttons on all maps, shop pics on DM01 only, pics SHIP dll 727a73bb, ini e91096c7 (backups .before-pics1105: 288fb016 / abb2144f; old backups moved to D:/kl_old_backups/dd_root_1106).
 Install hit WinError 32 mid-map on DM01 and DM03 (a just-read zip stayed locked for seconds, cause GUESS: scanner). Both maps were rolled back by hand, then install.py got retry (30 x 2 s) + per-map rollback; tools/pd2_guns_stage.py now writes that loop (INSTALL_LOOP), and its output matches byte for byte.
 Zombie kl2.exe 52560/47672 (0 threads, taskkill denied) make every tasklist check refuse: ran the bat steps by hand with --skip-run-check (+ --root "<DD>" for kl_shop_buttons/kl_shop_pics).
