@@ -72,13 +72,13 @@ C:\kl_build_1024\lcchain_2a_live_1a97e186 (+ nocam fallback). Benches lcchain2a1
 339 s (~1 s before time-up; earlier runs 263-333 s): the bench player was left behind, so cam 2a was never seen. NOT installed. Workflow lc-heli-late checks
 whether the kick doors slow the bots' heli call and adds a fast-boarding kit lcchain2a1106b. Order agreed with 6b: chain first, then 6b re-pins 1106c.
 
-2026-11-06 ~15:05 - [db] PERF: [Perf] OsdScanSlice, ScanMinFrames, ShopPoolBlock, BotScanSlice, CensusSlice (a1cb61a4: shared AI census, 1/8 a frame) all "(recommended on)", NOT installed (live 727a73bb).
-Bench OSS_DD09_CEN_S3 (TEST 24306dec): SMOOTH on every seat, host 0 stalls, 29.8 fps, p95 81 ms (BSS_S3 103, TPC_S3 249 HITCHY). Hook ~1.2 ms a frame.
-Next costs: klu_tick 4.7 ms calls, klsy_tick/klbf_tick spikes. 9-seat hitches are the one PC (9 games), not the hook.
-Ready to offer: SHIP out_cen1106 9d096198 + the 5 ini keys.
+2026-11-06 ~14:30 - [db] PERF: [Perf] OsdScanSlice, ScanMinFrames, ShopPoolBlock, BotScanSlice, CensusSlice, FillCensusSlice (85fdae39) all "(recommended on)", NOT installed (live 727a73bb).
+Bench OSS_DD09_FCS_S3 (TEST a77e0546): SMOOTH on every seat, 0 hitches/stalls, host 29.9 fps, max frame 128 ms (CEN_S3 486), p95 87. Host klbf 13 ms windows 24/30 -> 0/18.
+klsy spikes are the kit's [Sync] Probe=1, not players. Left: ~5 ms whole-table walks (no hitch). 9-seat hitches are the one PC (9 games), not the hook.
+Ready to offer: SHIP out_fcs1106 e88a6093 + the 6 ini keys.
 
-2026-11-06 ~15:20 - [shop] PD2 GUNS 1106b+c+d LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51), R700 (49), GL40 x3 (52-54, GUESS 190->191), RPK on Minimi 45-48 (GUESS 62->63).
-DM02 benches PASS for each layer (2 seats round 2, 0 faults). Backups OFF C: (D:\kl_stage\pd2guns_1106c/d_backup). Staged, bench pending: 1106e Deagle on item 63 (d195c6fd, muzzle 7 cm long).
+2026-11-06 ~15:45 - [shop] PD2 GUNS 1106b+c+d+e LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51), R700 (49), GL40 x3 (52-54, GUESS 190->191), RPK on Minimi 45-48 (GUESS 62->63), Deagle 63.
+DM02 benches PASS for each layer (2 seats round 2, 0 faults; 1106e: item 63 in the page II pool host+client). Backups OFF C: (D:\kl_stage\pd2guns_1106c/d/e_backup). D: 6.7 GB free.
 DM05A: after c9's chain, re-stage c+d+e on top. UNDO ALL steps 0a (1106e), 0b (1106d), 0 (1106c) come first.
 Earlier: KLPic pictures on 28 maps; Entries regression (pics +72 chunks) fixed live 361a1d3e. C: at 976 MB after 1106b: 9 DD *.before-1026loot8m moved to D:\kl_old_backups\dd_1106c (3.3 GB free).
 Undo: <work>/build/UNDO ALL 1105.bat (0: pd2guns_1106c, then 7 steps: pd2guns_1106b -> c9 glass_all_1106 -> entries -> pics -> buttons -> pd2guns -> DM05A lastcall_glass_1106) -> restore dll/ini. Zombie kl2.exe (0 threads) block tasklist checks: --skip-run-check (+ --root "<DD>" for buttons/pics).

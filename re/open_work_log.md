@@ -1,3 +1,8 @@
+## 2026-11-06 ~15:45 [6b] PD2 guns 1106e LIVE: Deagle on item 63 (no crash involved)
+- Installed on DM02, bench pd2b_1106 DM02 PASS (2 seats round 2, 0 faults): `shopPage: row 10: 8 objects of item 63 added to the pool` on host + client; 45-48 sit on page II rows 17/25/23/27.
+- Client shows the known swap-row fallback `STOCK gun stays (net sub-object missing)` on rows 13/16/32/35 (re/onlineswap_bench_1028.md), not new.
+- Then the 9 other maps (0 skipped). Entries +7 (DM02 59267, DM01 50859 ... DM11B 60603). D: 6.7 GB free: next, hard-link d/e backups to the identical stage files below them (~7 GB), after db's 9-seat bench.
+
 ## 2026-11-06 ~15:20 [6b] PD2 guns 1106d LIVE (RPK on Minimi items 45-48); 1106e Deagle (item 63) staged (no crash involved)
 - 1106d (21ed0f02, agent; GUESS: Minimi root's detail-62 part = far copy, body 62|7 = 63) installed on DM02, then bench pd2b_1106 DM02 PASS: 2 seats round 2, 0 faults, `osw: row 35 (carrier item 39): 8 object(s) of item 47 made` on host + client.
   Then installed on the 9 other maps (0 skipped/failed). Entries +28 per map (DM02 59260, DM01 50852 ... DM11B 60596). Backups D:\kl_stage\pd2guns_1106d_backup.
