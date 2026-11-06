@@ -267,6 +267,29 @@ static int kvp_pickup_decide(int on, const char *nodeNm, const char *legacyNm, i
     return n ? kvp_pickup_box(on, n) : 0;
 }
 
+/* OnlineTriggersAttachParent (2026-11-06, note re/online_triggers_extra_1106.md; default 0). TP1/TP2 benches (DM03): the scene-node name [[box+0x24]+4]+0x6c of a Dead Men
+   money-box pick-up box is only its LEAF, 'Attach01' (census: 8 PC0500_M03_MoneyBox_NN/Attach01 on DM03), so kvp_pickup_box saw no pick-up word and OnlineTriggersSkipPickups
+   KEPT it: bots fired the box up to 3 times each (TP2A log: fire #1..#3 on 54b12810/54b128b0/54b12d70/54b13780...). The full path is in the parent node (node +0x50, the
+   parent link klmove.c klmv_frame walks), whose own name is the PCnnnn_ name. kvp_attach_leaf: 1 when nm is 'Attach' + optional digits (any case). kvp_join_parent writes
+   '<parent>/<child> with a backslash' into out (cap bytes, NUL-terminated, truncating from the child end) so kvp_pickup_box sees the PCnnnn_ segment. GUESS: parent node = [node+0x50], its name at +0x6c. */
+static int kvp_attach_leaf(const char *nm)
+{
+    int i = 0;
+    if (!nm) return 0;
+    if ((nm[0] | 32) != 'a' || (nm[1] | 32) != 't' || (nm[2] | 32) != 't' || (nm[3] | 32) != 'a' || (nm[4] | 32) != 'c' || (nm[5] | 32) != 'h') return 0;
+    for (i = 6; nm[i]; i++) if (nm[i] < '0' || nm[i] > '9') return 0;
+    return 1;
+}
+static void kvp_join_parent(char *out, int cap, const char *parent, const char *child)
+{
+    int i = 0, j = 0;
+    if (!out || cap < 1) return;
+    if (parent) for (; parent[i] && i < cap - 1; i++) out[i] = parent[i];
+    if (i < cap - 1) out[i++] = '\\';
+    if (child) for (; child[j] && i < cap - 1; j++, i++) out[i] = child[j];
+    out[i] = 0;
+}
+
 /* Box-name pick for klbf_ramp_name (2026-11-02; same wrong-object mistake as kvp_pickup_decide fixed): the scene-node name first (src 1), else the legacy [[box+4]+0x6c]
    read (src 2), else "" (src 0). Copies at most cap-1 chars into out (NUL-terminated). */
 static void kvp_name_pick(const char *nodeNm, const char *legacyNm, char *out, int cap, int *src)

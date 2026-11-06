@@ -264,7 +264,7 @@ static void klog(const char *fmt, ...)
 /* [Perf] (2026-11-05, read-only sweep + verify): three cheap-by-construction savings. Each key is read once; a MISSING key = 0 = the old behaviour
    exactly (the sample KLHook.ini sets them to 1 = recommended on). OsdBackoff: klhud.c klu_find_osd. OnlineCache: kl_online() per tick.
    FastRead: klh_rd of an address inside kl2.exe's own readable sections is a memcpy instead of ReadProcessMemory. */
-static int klperf_osd = -1, klperf_oc = -1, klperf_fr = -1;
+static int klperf_osd = -1, klperf_oc = -1, klperf_fr = -1, klperf_quiet = -1, klperf_tpc = -1;   /* quiet: QuietProbes (klbotdeath/klcoverdump/klcoverring/klmfprobe default); tpc: TickProfile */
 static int klperf_on(int *cache, const char *key)
 {
     if (*cache < 0) *cache = klh_ini[0] ? GetPrivateProfileIntA("Perf", key, 0, klh_ini) != 0 : 0;
@@ -916,6 +916,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kllootsync.c"                              /* kllootsync.c: [BotFill] OnlineLootSync=1 - the host sends the AI heisters' loot (KLSYB), every seat shows it on the announcement line (off unless set); AFTER klsync.c, klbotfill.c, klannounce.c */
 #include "klsteamprobe.c"                           /* klsteamprobe.c: [Net] SteamProbe=1 - log-only look at the Steam networking interface and the peer table (off unless set); AFTER klsync.c */
 #include "klcrewlook.c"                              /* klcrewlook.c: [BotFill] OnlineLooks=1 - the host draws each Ally bot's Arcade look, KLSYL carries it, every seat applies it (off unless OnlineLooks=1); AFTER klsync.c, klbotfill.c, klcrew.c, klcharonline.c */
+#include "klnamesprobe.c"                            /* klnamesprobe.c: [BotFill] OnlineNamesProbe - LOG ONLY digest of digit -> wardrobe character per seat (off unless 1); AFTER klcrewlook.c */
 #include "klbotvoice.c"                              /* klbotvoice.c: [BotFill] OnlineVoice - the host sends the AI heisters' event lines (KLSYV), every seat plays them (off unless 1 / 2); AFTER klsync.c, klbotfill.c, kltalk.c, klcrewlook.c */
 #include "klcoverring_sync.c"                        /* klcoverring_sync.c: [CoverRing] ClientRingSync - the host sends its cars' cover points (KLSYR), the client fills its spares (off unless 1); AFTER klsync.c, klcoverring.c */
 #include "klgetupbeacon.c"                              /* klgetupbeacon.c: [BotFill] OnlineGetUpBeacon - a downed machine tells the host (KLSYD) so the bots can come (off unless 1); AFTER klsync.c, klbotfill.c, klcharonline.c, klbotvoice.c */
@@ -1334,6 +1335,45 @@ static DWORD WINAPI klh_keywatch(LPVOID unused)
     }
 }
 
+/* [Perf] TickProfile (2026-11-06, default off, recommended on only for perf benches): which part's tick costs the game thread time. Every part call in klh_tick is
+   wrapped by KLPT(); with the key off that is one int test. On: QueryPerformanceCounter around each call on the game thread, summed per call site; every 10 s one
+   line 'core: tickprofile:' lists the 6 parts with the most time (ms a frame, memory reads a frame, slowest single call) and the 3 with the slowest single call, then resets.
+   Reads: the klh_reads counter is approximate across threads, so reads are indicative. Nothing else changes: the parts run exactly as before, in the same order. */
+#define KLPT_MAX 192
+static const char *klpt_name[KLPT_MAX]; static double klpt_ms[KLPT_MAX], klpt_max[KLPT_MAX]; static LONG klpt_rd[KLPT_MAX]; static int klpt_n, klpt_on, klpt_lost;
+static LONG klpt_frames; static LARGE_INTEGER klpt_f, klpt_t0;
+static void klpt_add(const char *name, LONGLONG ticks, LONG reads)
+{
+    int i; double ms = klpt_f.QuadPart ? (double)ticks * 1000.0 / (double)klpt_f.QuadPart : 0.0;
+    for (i = 0; i < klpt_n; i++) if (klpt_name[i] == name) break;
+    if (i == klpt_n) { if (klpt_n >= KLPT_MAX) { klpt_lost++; return; } klpt_name[klpt_n++] = name; }
+    klpt_ms[i] += ms; if (ms > klpt_max[i]) klpt_max[i] = ms; if (reads > 0) klpt_rd[i] += reads;
+}
+#define KLPT(call) do { if (klpt_on && game_thread) { LARGE_INTEGER q0_, q1_; LONG r0_ = klh_reads; QueryPerformanceCounter(&q0_); call; QueryPerformanceCounter(&q1_); klpt_add(#call, q1_.QuadPart - q0_.QuadPart, klh_reads - r0_); } else { call; } } while (0)
+static void klpt_frame(void)
+{   /* once a frame after the parts ran (game thread): count the frame, and every 10 s say and reset */
+    LARGE_INTEGER n; double secs; int i, k, o[6], m[3], nm;
+    if (!klpt_on) return;
+    klpt_frames++; QueryPerformanceCounter(&n);
+    if (!klpt_t0.QuadPart) { klpt_t0 = n; return; }
+    secs = (double)(n.QuadPart - klpt_t0.QuadPart) / (double)klpt_f.QuadPart;
+    if (secs < 10.0 || !klpt_frames) return;
+    {   char line[1100]; int w = 0; double rate[KLPT_MAX];
+        for (i = 0; i < klpt_n; i++) rate[i] = klpt_ms[i];
+        k = klperf_pick_top(rate, klpt_n, o, 6);
+        w += snprintf(line + w, sizeof line - w, "core: tickprofile: %ld frames in %.1f s; by time (ms a frame / reads a frame / slowest call ms):", (long)klpt_frames, secs);
+        for (i = 0; i < k && w < (int)sizeof line - 160; i++)
+            w += snprintf(line + w, sizeof line - w, " %s %.3f/%ld/%.1f;", klpt_name[o[i]], klpt_ms[o[i]] / klpt_frames, (long)(klpt_rd[o[i]] / klpt_frames), klpt_max[o[i]]);
+        nm = klperf_pick_top(klpt_max, klpt_n, m, 3);
+        w += snprintf(line + w, sizeof line - w, " | slowest single calls:");
+        for (i = 0; i < nm && w < (int)sizeof line - 100; i++) w += snprintf(line + w, sizeof line - w, " %s %.1f ms;", klpt_name[m[i]], klpt_max[m[i]]);
+        if (klpt_lost) w += snprintf(line + w, sizeof line - w, " (%d call sites over the table)", klpt_lost);
+        klog("%s", line);
+    }
+    for (i = 0; i < klpt_n; i++) { klpt_ms[i] = 0.0; klpt_max[i] = 0.0; klpt_rd[i] = 0; }
+    klpt_frames = 0; klpt_t0 = n; klpt_lost = 0;
+}
+
 static void klh_tick(int game_thread)
 {
     DWORD now = GetTickCount(); static DWORD armed;
@@ -1346,121 +1386,124 @@ static void klh_tick(int game_thread)
         if (told++ < 6) klog("tick: driven by %s", game_thread ? "the game's main loop (SteamAPI_RunCallbacks)" : "the fallback thread (no SteamAPI_RunCallbacks call for 500 ms)");
     }
     klh_ticks++;
+    if (game_thread && klperf_tpc < 0) { klpt_on = klperf_on(&klperf_tpc, "TickProfile"); if (klpt_on) { QueryPerformanceFrequency(&klpt_f); klog("core: tickprofile on ([Perf] TickProfile=1): one line every 10 s, the six parts that cost the game thread most"); } }
     if (now - armed >= 1000) { armed = now; klh_uef_arm(); }
     if (game_thread) klh_uia_tick();                  /* the game window refuses UI Automation (the hitch probe's finding, 2026-10-14) */
-    klf_tick();
-    kls_tick();
-    kllnm_tick(game_thread);                          /* kllocname.c: the LOC lookup wrapper (off unless [Names] Enable=1; game thread only) */
-    kpm_gun_tick();                                   /* klpm_gun.c: starting gun (off unless [Match] Enable=1 and KLMGun > 0) */
-    kpm_arc_tick();                                   /* klpm_arc.c: next Arcade map after a match (off unless [Match] Enable=1) */
-    klx_tick();
-    klj_tick();
-    kldc_tick(game_thread);                           /* kldoorclose.c: [KLHook] DoorCloseMs (idle when 0) */
+    KLPT(klf_tick());
+    KLPT(kls_tick());
+    KLPT(kllnm_tick(game_thread));                          /* kllocname.c: the LOC lookup wrapper (off unless [Names] Enable=1; game thread only) */
+    KLPT(kpm_gun_tick());                                   /* klpm_gun.c: starting gun (off unless [Match] Enable=1 and KLMGun > 0) */
+    KLPT(kpm_arc_tick());                                   /* klpm_arc.c: next Arcade map after a match (off unless [Match] Enable=1) */
+    KLPT(klx_tick());
+    KLPT(klj_tick());
+    KLPT(kldc_tick(game_thread));                           /* kldoorclose.c: [KLHook] DoorCloseMs (idle when 0) */
 #ifdef KLHOOK_TEST
-    klpr_tick();                                      /* klprobe.c: [Probe] DoorLeaves samples (reads only; idle unless a door proxy was accepted) */
+    KLPT(klpr_tick());                                      /* klprobe.c: [Probe] DoorLeaves samples (reads only; idle unless a door proxy was accepted) */
 #endif
-    klt_tick(game_thread);                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
-    klv_tick(game_thread);                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
-    kus_tick(game_thread);                            /* klunstick.c: stuck in cover -> back to the last free place (default ON; offline only) */
-    klfr_tick(game_thread);                           /* klfallrescue.c: left the level box / fell -> back to the last safe place (default ON) */
-    klfc_tick(game_thread);                           /* klfreeclimb.c: W + E at a ledge (OFF unless [Climb] Enable=1; gameplay call only) */
-    klq_tick(game_thread);                            /* klclimb.c: the player at the foot of a KLJoin.ini [Climb] edge climbs it (OFF unless [EdgeClimb] Enable=1) */
-    klrp_tick(game_thread);                           /* klrappel.c: the descent of the rappel cut */
-    klc_tick(game_thread);
-    klw_tick(game_thread);                            /* after klc_tick: the player's own body goes first */
-    klk_tick(game_thread);                            /* after klw_tick: it reads who wears whom */
-    kvo_tick(game_thread);                            /* klvoice.c: after klk_tick (OFF unless [Voice] Enable=1; data writes only) */
-    kltt_tick(game_thread);                            /* kltrait.c: record -> character -> trait factors (reads only; off unless [Traits] Enable=1) */
-    klb_tick(game_thread);
-    kle_tick(game_thread);                            /* klescort.c: after klb_tick; one game call per order, game thread only */
-    klmv_tick(game_thread);                           /* klmove.c: Restless / WaitForYou / BoardNear (all off unless set) */
-    klr_tick(game_thread);                            /* klbalance.c: one damage scale for player, police and crew */
-    klnm_tick(game_thread);
-    kly_tick(game_thread);                            /* klgrudge.c: the crew answers your bullets (off unless [Bots] Grudge) */
-    klgrd_tick(game_thread);                            /* klhud_grades.c: the local profile experience, once a second (game thread) */
-    klu_tick(game_thread);                            /* klhud.c: the crew list / money box texts (game thread only) */
-    klesc_tick(game_thread);                          /* klhud_escape.c: the escape-vehicle panel (off unless [HUD] Escape / Draft) */
-    klep_tick(game_thread);                           /* klescprobe.c: [Online] EscProbe (returns at once unless set) */
-    kltrk_tick(game_thread);                          /* klhud_tracker.c: the vehicle marker */
-    klbrd_tick(game_thread);                          /* klhud_board.c: the pre-round panel (off unless [HUD] Board=1) */
-    klsb_tick(game_thread);                           /* klhud_board2.c: the round-over scoreboard (off unless [HUD] Scoreboard=1) */
-    klsn_tick(game_thread);                           /* klhud_shopnames.c: [HUD] OnlineShopNames (returns at once unless set) */
-    klkf_tick(game_thread);                           /* klhud_kill.c: the kill / reward line under REWARDS (off unless [HUD] KillLine / Draft) */
-    klpu_tick(game_thread);                           /* klhud_popup.c: centre pop-ups + loot ring (after klu_tick; off unless [HUD] Popups / LootRing / Draft) */
-    klo_tick(game_thread);                            /* klshoulder.c: log only */
-    klcam_tick(game_thread);                          /* klcam.c: the camera rework (game thread, gameplay site only) */
-    klcamsmooth_tick(game_thread);                    /* klcamsmooth.c: [CamSmooth] after klcam_tick, same site */
-    klap_tick(game_thread);                           /* klanimprobe.c: [AnimProbe] gait-change watch (returns at once unless Enable=1) */
-    klhp_tick(game_thread);                           /* klheliprobe.c: read-only chopper probe (returns at once unless [Heli] Probe) */
-    klcn_tick(game_thread);                           /* klcensor.c: pre-arm the head-hit sum so a killing head shot censors */
-    klcs_tick(game_thread);                           /* klcensus.c: read-only actor list (returns at once unless [Census] Enable) */
-    klbdp_tick(game_thread);                           /* klbotdeath.c: [BotDeathProbe] 250 ms bot health samples (returns at once unless Enable) */
-    kcr_tick(game_thread);                            /* klcoverring.c: [CoverRing] cover count + car ring poll (returns at once unless Enable) */
-    kcvd_tick(game_thread);                           /* klcoverdump.c: [CoverDump] cover list dump (returns at once unless Enable) */
-    klcc_tick(game_thread);                           /* klclubcalm.c: read-only hand / shot log (returns at once unless [ClubCalm] Enable) */
-    klch_tick(game_thread);                           /* klclubholster.c: holster at the Last Call start, unlock at the loot, panic on the draw */
-    klvis_tick();                                  /* klvis.c: log only (the vision grid and its record 0xff) */
-    klnet_tick(game_thread);                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
-    klq2_tick(game_thread);                           /* klqol.c: [QoL] (off unless set) */
-    kqb_tick(game_thread);                            /* klqol2.c: [QoL2] (off unless set) */
-    klsv_tick(game_thread);                           /* klserver.c: [Server] (off unless Enable=1; game thread only) */
-    kllb_tick();                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
-    klho_tick(game_thread);                           /* klhostopt.c: [HostOpts] (off unless Enable=1) */
-    klco_tick(game_thread);                           /* klcharonline.c: [CharOnline] (off unless Enable=1) */
-    klsp_tick(game_thread);                           /* klsteamprobe.c: [Net] SteamProbe (log only) */
-    klsy_tick(game_thread);                           /* klsync.c: [Sync] probe / host list (off unless set) */
-    knc_tick(game_thread);                            /* klnetchan.c: the shared message channel (idle unless a module wants it) */
-    kluc_tick(game_thread);                           /* klucc.c: [Ucc] suspicion messages (off unless Pings=1 or Accuse=1) */
-    kllo_tick();                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
-    klbf_tick(game_thread);                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
-    klbr_tick(game_thread);                           /* klbrain.c: [Brain] Probe / Build (off unless set) */
-    klls_tick(game_thread);                            /* kllootsync.c: [BotFill] OnlineLootSync=1 collect / show (off unless set) */
-    klbv_tick(game_thread);                           /* klbotvoice.c: [BotFill] OnlineVoice send (off unless 1 / 2) */
-    klcl_tick(game_thread);                           /* klcrewlook.c: [BotFill] OnlineLooks=1 draw / apply (off unless set) */
-    klcq_tick(game_thread);                           /* klcopsquad.c: [CopSquad] (off unless Enable=1; host, C&R, game thread only) */
-    klsab_tick(game_thread);                          /* klsabotage.c: [Sabotage] VanHold (off unless VanHold=1; host, UCC rounds, game thread only) */
-    klnetfix_tick(game_thread);                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
-    knl_tick(game_thread);                            /* klnetload.c: [NetLoad] (off unless set) */
-    klinv_tick(game_thread);                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
-    klgrenade_tick(game_thread);                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
-    klmu_tick(game_thread);                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
-    klam_tick(game_thread);                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
-    klss_tick(game_thread);                           /* klshot2d.c: re-points the sound system at the private vtable (VTABLE route only) */
-    klst_tick(game_thread);                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
-    klnetsmooth_tick(game_thread);                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
-    klbk_tick(game_thread);                           /* klbench_down.c: [Bench] SelfDownAt (bench only, off unless set) */
-    klud_tick(game_thread);                           /* klucc_down.c: [Ucc] DownOnly (off unless set; game thread only) */
-    klucc_tick(game_thread);                          /* klucchide.c: [Ucc] Hide (off unless set; game thread only); AFTER klud_tick and kllo_tick (their rules vtable copies go first) */
-    klua_tick(game_thread);                           /* klucc_aim.c: [Ucc] PoliceAim (off unless set; game thread only); AFTER klucc_tick (patches slot 188 into whichever private rules vtable exists) */
-    klrigid_tick(game_thread);                        /* klrigid.c: [Rigid] 10 s summary line (Log=1) */
+    KLPT(klt_tick(game_thread));                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
+    KLPT(klv_tick(game_thread));                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
+    KLPT(kus_tick(game_thread));                            /* klunstick.c: stuck in cover -> back to the last free place (default ON; offline only) */
+    KLPT(klfr_tick(game_thread));                           /* klfallrescue.c: left the level box / fell -> back to the last safe place (default ON) */
+    KLPT(klfc_tick(game_thread));                           /* klfreeclimb.c: W + E at a ledge (OFF unless [Climb] Enable=1; gameplay call only) */
+    KLPT(klq_tick(game_thread));                            /* klclimb.c: the player at the foot of a KLJoin.ini [Climb] edge climbs it (OFF unless [EdgeClimb] Enable=1) */
+    KLPT(klrp_tick(game_thread));                           /* klrappel.c: the descent of the rappel cut */
+    KLPT(klc_tick(game_thread));
+    KLPT(klw_tick(game_thread));                            /* after klc_tick: the player's own body goes first */
+    KLPT(klk_tick(game_thread));                            /* after klw_tick: it reads who wears whom */
+    KLPT(kvo_tick(game_thread));                            /* klvoice.c: after klk_tick (OFF unless [Voice] Enable=1; data writes only) */
+    KLPT(kltt_tick(game_thread));                            /* kltrait.c: record -> character -> trait factors (reads only; off unless [Traits] Enable=1) */
+    KLPT(klb_tick(game_thread));
+    KLPT(kle_tick(game_thread));                            /* klescort.c: after klb_tick; one game call per order, game thread only */
+    KLPT(klmv_tick(game_thread));                           /* klmove.c: Restless / WaitForYou / BoardNear (all off unless set) */
+    KLPT(klr_tick(game_thread));                            /* klbalance.c: one damage scale for player, police and crew */
+    KLPT(klnm_tick(game_thread));
+    KLPT(kly_tick(game_thread));                            /* klgrudge.c: the crew answers your bullets (off unless [Bots] Grudge) */
+    KLPT(klgrd_tick(game_thread));                            /* klhud_grades.c: the local profile experience, once a second (game thread) */
+    KLPT(klu_tick(game_thread));                            /* klhud.c: the crew list / money box texts (game thread only) */
+    KLPT(klesc_tick(game_thread));                          /* klhud_escape.c: the escape-vehicle panel (off unless [HUD] Escape / Draft) */
+    KLPT(klep_tick(game_thread));                           /* klescprobe.c: [Online] EscProbe (returns at once unless set) */
+    KLPT(kltrk_tick(game_thread));                          /* klhud_tracker.c: the vehicle marker */
+    KLPT(klbrd_tick(game_thread));                          /* klhud_board.c: the pre-round panel (off unless [HUD] Board=1) */
+    KLPT(klsb_tick(game_thread));                           /* klhud_board2.c: the round-over scoreboard (off unless [HUD] Scoreboard=1) */
+    KLPT(klsn_tick(game_thread));                           /* klhud_shopnames.c: [HUD] OnlineShopNames (returns at once unless set) */
+    KLPT(klkf_tick(game_thread));                           /* klhud_kill.c: the kill / reward line under REWARDS (off unless [HUD] KillLine / Draft) */
+    KLPT(klpu_tick(game_thread));                           /* klhud_popup.c: centre pop-ups + loot ring (after klu_tick; off unless [HUD] Popups / LootRing / Draft) */
+    KLPT(klo_tick(game_thread));                            /* klshoulder.c: log only */
+    KLPT(klcam_tick(game_thread));                          /* klcam.c: the camera rework (game thread, gameplay site only) */
+    KLPT(klcamsmooth_tick(game_thread));                    /* klcamsmooth.c: [CamSmooth] after klcam_tick, same site */
+    KLPT(klap_tick(game_thread));                           /* klanimprobe.c: [AnimProbe] gait-change watch (returns at once unless Enable=1) */
+    KLPT(klhp_tick(game_thread));                           /* klheliprobe.c: read-only chopper probe (returns at once unless [Heli] Probe) */
+    KLPT(klcn_tick(game_thread));                           /* klcensor.c: pre-arm the head-hit sum so a killing head shot censors */
+    KLPT(klcs_tick(game_thread));                           /* klcensus.c: read-only actor list (returns at once unless [Census] Enable) */
+    KLPT(klbdp_tick(game_thread));                           /* klbotdeath.c: [BotDeathProbe] 250 ms bot health samples (returns at once unless Enable) */
+    KLPT(kcr_tick(game_thread));                            /* klcoverring.c: [CoverRing] cover count + car ring poll (returns at once unless Enable) */
+    KLPT(kcvd_tick(game_thread));                           /* klcoverdump.c: [CoverDump] cover list dump (returns at once unless Enable) */
+    KLPT(klcc_tick(game_thread));                           /* klclubcalm.c: read-only hand / shot log (returns at once unless [ClubCalm] Enable) */
+    KLPT(klch_tick(game_thread));                           /* klclubholster.c: holster at the Last Call start, unlock at the loot, panic on the draw */
+    KLPT(klvis_tick());                                  /* klvis.c: log only (the vision grid and its record 0xff) */
+    KLPT(klnet_tick(game_thread));                          /* klnet.c: multiplayer log / update numbers (off unless [Net]) */
+    KLPT(klq2_tick(game_thread));                           /* klqol.c: [QoL] (off unless set) */
+    KLPT(kqb_tick(game_thread));                            /* klqol2.c: [QoL2] (off unless set) */
+    KLPT(klsv_tick(game_thread));                           /* klserver.c: [Server] (off unless Enable=1; game thread only) */
+    KLPT(kllb_tick());                                      /* kllobby.c: [Lobby] MinPlayers (off unless set) */
+    KLPT(klho_tick(game_thread));                           /* klhostopt.c: [HostOpts] (off unless Enable=1) */
+    KLPT(klco_tick(game_thread));                           /* klcharonline.c: [CharOnline] (off unless Enable=1) */
+    KLPT(klsp_tick(game_thread));                           /* klsteamprobe.c: [Net] SteamProbe (log only) */
+    KLPT(klsy_tick(game_thread));                           /* klsync.c: [Sync] probe / host list (off unless set) */
+    KLPT(knc_tick(game_thread));                            /* klnetchan.c: the shared message channel (idle unless a module wants it) */
+    KLPT(kluc_tick(game_thread));                           /* klucc.c: [Ucc] suspicion messages (off unless Pings=1 or Accuse=1) */
+    KLPT(kllo_tick());                                      /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax (off unless set) */
+    KLPT(klbf_tick(game_thread));                           /* klbotfill.c: [Bots] OnlineFill plan + probe (off unless set) */
+    KLPT(klbr_tick(game_thread));                           /* klbrain.c: [Brain] Probe / Build (off unless set) */
+    KLPT(klls_tick(game_thread));                            /* kllootsync.c: [BotFill] OnlineLootSync=1 collect / show (off unless set) */
+    KLPT(klbv_tick(game_thread));                           /* klbotvoice.c: [BotFill] OnlineVoice send (off unless 1 / 2) */
+    KLPT(klcl_tick(game_thread));                           /* klcrewlook.c: [BotFill] OnlineLooks=1 draw / apply (off unless set) */
+    KLPT(klnp_tick(game_thread));                           /* klnamesprobe.c: [BotFill] OnlineNamesProbe log-only digest (off unless 1) */
+    KLPT(klcq_tick(game_thread));                           /* klcopsquad.c: [CopSquad] (off unless Enable=1; host, C&R, game thread only) */
+    KLPT(klsab_tick(game_thread));                          /* klsabotage.c: [Sabotage] VanHold (off unless VanHold=1; host, UCC rounds, game thread only) */
+    KLPT(klnetfix_tick(game_thread));                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
+    KLPT(knl_tick(game_thread));                            /* klnetload.c: [NetLoad] (off unless set) */
+    KLPT(klinv_tick(game_thread));                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
+    KLPT(klgrenade_tick(game_thread));                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
+    KLPT(klmu_tick(game_thread));                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
+    KLPT(klam_tick(game_thread));                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
+    KLPT(klss_tick(game_thread));                           /* klshot2d.c: re-points the sound system at the private vtable (VTABLE route only) */
+    KLPT(klst_tick(game_thread));                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
+    KLPT(klnetsmooth_tick(game_thread));                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
+    KLPT(klbk_tick(game_thread));                           /* klbench_down.c: [Bench] SelfDownAt (bench only, off unless set) */
+    KLPT(klud_tick(game_thread));                           /* klucc_down.c: [Ucc] DownOnly (off unless set; game thread only) */
+    KLPT(klucc_tick(game_thread));                          /* klucchide.c: [Ucc] Hide (off unless set; game thread only); AFTER klud_tick and kllo_tick (their rules vtable copies go first) */
+    KLPT(klua_tick(game_thread));                           /* klucc_aim.c: [Ucc] PoliceAim (off unless set; game thread only); AFTER klucc_tick (patches slot 188 into whichever private rules vtable exists) */
+    KLPT(klrigid_tick(game_thread));                        /* klrigid.c: [Rigid] 10 s summary line (Log=1) */
     khp_snap(game_thread);                            /* klhirepic.c: which heister the hire page shows (off unless [Hire] PagePics=1) */
-    klshoppage_tick(game_thread);                     /* klshoppage.c: page II of the weapon shop (off unless [ShopPage] Enable=1) */
-    klshop_tick(game_thread);                         /* klshop.c: [Shop] Swap= a shop row hands over another gun, Arcade only (off unless Enable=1) */
-    klp_tick(game_thread);                            /* klfed.c: come back as a fed (data writes only) */
-    klfk_tick(game_thread);                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
-    klbd_tick(game_thread);                           /* klbotdown.c: before kladren, which reads its down state */
-    klcd_tick(game_thread);                           /* klcardown.c: a car blast floors the AI and you */
-    klsh_tick(game_thread);                           /* klshield.c: the human shield covers you, the hostage goes down */
-    kldy_tick(game_thread);                           /* klcdying.c: almost dead = the game's revivable down (you) */
-    kad_tick(game_thread);                            /* kladren.c: raises the mash meter first */
-    kld_tick(game_thread);                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
-    kldm_tick(game_thread);                           /* kldown_mirror.c: the online flop mirror (off unless OnlineFlopMirror and an online round) */
-    klrs_tick(game_thread);                           /* klreshade.c: the numbers the shaders get (reads only; off unless [ReShade] Bridge=1) */
-    kset_tick(game_thread);                           /* klset.c: the menu manager's table count, a log line (reads only; off unless [Menu] TableLog=1) */
+    KLPT(klshoppage_tick(game_thread));                     /* klshoppage.c: page II of the weapon shop (off unless [ShopPage] Enable=1) */
+    KLPT(klshop_tick(game_thread));                         /* klshop.c: [Shop] Swap= a shop row hands over another gun, Arcade only (off unless Enable=1) */
+    KLPT(klp_tick(game_thread));                            /* klfed.c: come back as a fed (data writes only) */
+    KLPT(klfk_tick(game_thread));                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
+    KLPT(klbd_tick(game_thread));                           /* klbotdown.c: before kladren, which reads its down state */
+    KLPT(klcd_tick(game_thread));                           /* klcardown.c: a car blast floors the AI and you */
+    KLPT(klsh_tick(game_thread));                           /* klshield.c: the human shield covers you, the hostage goes down */
+    KLPT(kldy_tick(game_thread));                           /* klcdying.c: almost dead = the game's revivable down (you) */
+    KLPT(kad_tick(game_thread));                            /* kladren.c: raises the mash meter first */
+    KLPT(kld_tick(game_thread));                            /* kldown.c: the mash get-up (off unless [Down] Enable) */
+    KLPT(kldm_tick(game_thread));                           /* kldown_mirror.c: the online flop mirror (off unless OnlineFlopMirror and an online round) */
+    KLPT(klrs_tick(game_thread));                           /* klreshade.c: the numbers the shaders get (reads only; off unless [ReShade] Bridge=1) */
+    KLPT(kset_tick(game_thread));                           /* klset.c: the menu manager's table count, a log line (reads only; off unless [Menu] TableLog=1) */
 #ifdef KLHOOK_TEST
-    klso_tick(game_thread);                           /* klsolo.c: keeps an unfocused window running (off unless [Solo] Enable=1) */
+    KLPT(klso_tick(game_thread));                           /* klsolo.c: keeps an unfocused window running (off unless [Solo] Enable=1) */
 #endif
-    klg_tick();
-    klm_tick();
-    klvh_tick();                                      /* klhigh.c: the 10 s census of the listed modules' reservations (off unless [Memory] High) */
+    KLPT(klg_tick());
+    KLPT(klm_tick());
+    KLPT(klvh_tick());                                      /* klhigh.c: the 10 s census of the listed modules' reservations (off unless [Memory] High) */
 #ifdef KLHOOK_TEST
-    klva_tick();                                      /* klvalog.c: the per-caller table every 10 s (off unless [Memory] VaLog=1) */
+    KLPT(klva_tick());                                      /* klvalog.c: the per-caller table every 10 s (off unless [Memory] VaLog=1) */
 #endif
-    klarena_tick();                                   /* klarena.c: its 10 s line (off unless [Memory] DriverArena=1) */
-    klquad_tick();                                    /* klquad.c: wraps VB Lock once the first quad buffer exists, a 60 s line (off unless [Memory] QuadRing) */
+    KLPT(klarena_tick());                                   /* klarena.c: its 10 s line (off unless [Memory] DriverArena=1) */
+    KLPT(klquad_tick());                                    /* klquad.c: wraps VB Lock once the first quad buffer exists, a 60 s line (off unless [Memory] QuadRing) */
 #ifdef KLHOOK_TEST
-    kld3_tick();                                      /* kld3.c: its 10 s lines (off unless [Memory] D3dCount=1) */
+    KLPT(kld3_tick());                                      /* kld3.c: its 10 s lines (off unless [Memory] D3dCount=1) */
 #endif
+    if (game_thread) klpt_frame();
     InterlockedExchange(&klh_tick_busy, 0);
 }
 

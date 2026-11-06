@@ -15,6 +15,16 @@ int main(void)
     CHECK(klperf_in_range(0x400000, 4, 0x400000, 0x1734000)); CHECK(!klperf_in_range(0x3ffffc, 4, 0x400000, 0x1734000));
     CHECK(klperf_in_range(0x1733ffc, 4, 0x400000, 0x1734000)); CHECK(!klperf_in_range(0x1733ffd, 4, 0x400000, 0x1734000));
     CHECK(!klperf_in_range(0x500000, 0, 0x400000, 0x1734000)); CHECK(!klperf_in_range(0x500000, 0xffffffffUL, 0x400000, 0x1734000));
+    CHECK(klperf_probe_default(1, 0) == 1); CHECK(klperf_probe_default(1, 1) == 0);
+    CHECK(klperf_probe_default(0, 0) == 0); CHECK(klperf_probe_default(0, 1) == 0);
+    {   double v[6] = { 0.5, 3.0, 0.0, 3.0, 9.0, -1.0 }; int o[8], n;
+        n = klperf_pick_top(v, 6, o, 3); CHECK(n == 3 && o[0] == 4 && o[1] == 1 && o[2] == 3);
+        n = klperf_pick_top(v, 6, o, 8); CHECK(n == 4 && o[0] == 4 && o[1] == 1 && o[2] == 3 && o[3] == 0);
+        n = klperf_pick_top(v, 6, o, 1); CHECK(n == 1 && o[0] == 4);
+        n = klperf_pick_top(v, 0, o, 3); CHECK(n == 0);
+        { double z[3] = { 0.0, 0.0, 0.0 }; n = klperf_pick_top(z, 3, o, 3); CHECK(n == 0); }
+        { double a[5] = { 1, 2, 3, 4, 5 }; n = klperf_pick_top(a, 5, o, 2); CHECK(n == 2 && o[0] == 4 && o[1] == 3); }
+    }
     printf("%s: %d checks, %d fails\n", fails ? "FAIL" : "PASS", checks, fails);
     return fails != 0;
 }

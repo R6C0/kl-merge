@@ -184,7 +184,7 @@ static int klmf_site(int i, DWORD va, const BYTE *expect, int n, void *stub, con
 static void klmf_init(void)
 {
 #ifdef KLHOOK_TEST
-    int def = 1;
+    int def = klperf_probe_default(1, klperf_on(&klperf_quiet, "QuietProbes"));   /* [Perf] QuietProbes=1 (recommended on for perf benches): the TEST default becomes off; an explicit key still wins */
 #else
     int def = 0;
 #endif

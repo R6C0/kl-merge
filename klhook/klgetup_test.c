@@ -103,6 +103,16 @@ int main(void)
             CHECK(!kvp_pickup_decide(1, "ROOT\\Triggers!ArrivingCops_Squad_01_Trigger", "ROOT\\X\\PC0406_Cashbox", &src) && src == 1, "decide: a readable node name wins over the legacy one (cop box kept)");
             CHECK(!kvp_pickup_decide(1, "", "", &src) && src == 0 && !kvp_pickup_decide(1, 0, 0, 0), "decide: both empty -> kept, source 0; nulls safe");
             CHECK(!kvp_pickup_decide(0, "ROOT\\X\\PC0406_Cashbox", "", &src) && src == 1, "decide: key off skips nothing");
+            {   char j[200];   /* OnlineTriggersAttachParent (2026-11-06): TP2A DM03 kept the 'Attach01' money-box boxes and bots fired them 3 times each */
+                CHECK(!kvp_pickup_decide(1, "Attach01", "", &src), "attach: the bare leaf is kept (the bug)");
+                CHECK(kvp_attach_leaf("Attach01") && kvp_attach_leaf("attach") && kvp_attach_leaf("ATTACH12") && !kvp_attach_leaf("Attach01x") && !kvp_attach_leaf("Attachment") && !kvp_attach_leaf("") && !kvp_attach_leaf(0) && !kvp_attach_leaf("Att"), "attach leaf test");
+                kvp_join_parent(j, sizeof j, "PC0500_M03_MoneyBox_10", "Attach01");
+                CHECK(!strcmp(j, "PC0500_M03_MoneyBox_10\\Attach01") && kvp_pickup_decide(1, j, "", &src), "attach: joined with the parent it is a pick-up");
+                kvp_join_parent(j, sizeof j, "Triggers!GarageDoors", "Attach01");
+                CHECK(!kvp_pickup_decide(1, j, "", &src), "attach: a non-pick-up parent stays kept");
+                {   char t[10]; kvp_join_parent(t, sizeof t, "ABCDEFGHIJKLMN", "x"); CHECK(strlen(t) == 9, "join truncates, NUL-terminated");
+                    kvp_join_parent(t, 0, "a", "b"); kvp_join_parent(0, 5, "a", "b"); kvp_join_parent(t, sizeof t, 0, 0); CHECK(!strcmp(t, "\\"), "join: nulls safe"); }
+            }
         }
     }
     {   char o[8]; int src = -1; /* ramp / stack-box name pick */

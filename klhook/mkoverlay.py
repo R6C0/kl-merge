@@ -295,7 +295,7 @@ SET_ARCADE = False                                    # v26c: True (an Arcade bu
 SET_BARS = False                                      # v26c gave the two gun rows focus bars FocusBar_long#07/#08
 SET_ROWS = (('KLS_Look', 'Look', 'KLSLook', ['Off', 'KL', 'LiveLeak']),
             ('KLS_Cam', 'Camera FX', 'KLSCam', ['Off', 'Light', 'Medium', 'Strong', 'Raw']),
-            ('KLS_Glare', 'Lens glare', 'KLSGlare', ['Off', 'On']),
+            ('KLS_Glare', 'Lens glare / cracks (cracks: next start)', 'KLSLens', ['Off', 'Glare', 'Cracks', 'Glare + cracks']),   # 1106: Glare = bit 0 (live), LensCrack = bit 1 ([Graphics] LensCrack, next start; klset.c KLS_LENS); same 4 table entries as the old 2-value row
             ('KLS_AA', 'Anti-aliasing', 'KLSAA', ['Off', 'SMAA', 'FXAA']),
             ('KLS_Tex', 'Sharper textures (next start)', 'KLSTex', ['Off', 'On']),
             ('KLS_Neural', 'Neural (Uplift, next start)', 'KLSNeural', ['Off', 'On']),

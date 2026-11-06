@@ -161,6 +161,7 @@ static int klbf_trig;      /* [BotFill] OnlineTriggers: 0 off, 1 fire, 2 dry (kl
 static int klbf_unpl; static DWORD klbf_unpl_at;      /* [BotFill] OnlineUnplacedGuard (recommended off until benched): kvp_all_unplaced; _at = round start tick */
 static int klbf_vp_sane, klbf_trig_orig;    /* [BotFill] OnlineVanPosSane (recommended on), OnlineTriggerOriginSkip (recommended on): kvp_sane / kvp_origin_skip in klgetup_logic.h */
 static int klbf_trig_x;    /* [BotFill] OnlineTriggersExtra: ZTriggerBox2 / ZOnlineTriggerBox too, 0 off, 1 fire, 2 dry */
+static int klbf_trig_att;   /* [BotFill] OnlineTriggersAttachParent (2026-11-06, default 0, needs SkipPickups): a pick-up box whose scene-node name is only 'Attach01' is judged by its parent node's name too (kvp_join_parent) */
 static int klbf_trig_pk;    /* [BotFill] OnlineTriggersSkipPickups (wk-trigdm-1101, default 0): Extra leaves Dead Men's pick-up / character interact TriggerBox2 alone (kvp_pickup_box) */
 /* [BotFill] OnlineTriggersCensus (default 0, recommended off until benched; LOG ONLY, no game write): the enemy census after a bot-fired trigger box. klbf_cen_arm() at a "trig: FIRE" remembers the live cops (team 1, health > 0, the tactics scan's count)
    and the fire tick; klbf_cen_tick() (the once-a-second scan, host) reads the count again 10 s and 30 s later and logs one line. One census at a time: a fire while one runs is not counted (the next fire after it ends starts a new one). klbf_cen_live is
@@ -404,6 +405,7 @@ static void klbf_init(void)
     klbf_trig = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggers", 0, klh_ini); if (klbf_trig < 0 || klbf_trig > 2) klbf_trig = 0;      /* (recommended on once benched; 2 = dry, log only) */
     klbf_trig_x = (int)GetPrivateProfileIntA("BotFill", "OnlineTriggersExtra", 0, klh_ini); if (klbf_trig_x < 0 || klbf_trig_x > 2) klbf_trig_x = 0;      /* ZTriggerBox2 / ZOnlineTriggerBox: no stock cop wave uses them (money-stack pick-ups, location trackers), so off by default */
     klbf_trig_pk = GetPrivateProfileIntA("BotFill", "OnlineTriggersSkipPickups", 0, klh_ini) != 0;      /* (recommended off until benched) needs OnlineTriggersExtra */
+    klbf_trig_att = GetPrivateProfileIntA("BotFill", "OnlineTriggersAttachParent", 0, klh_ini) != 0;      /* (recommended off until benched) needs OnlineTriggersExtra + SkipPickups; re/online_triggers_extra_1106.md */
     klbf_cen_on = GetPrivateProfileIntA("BotFill", "OnlineTriggersCensus", 0, klh_ini) != 0;      /* (recommended off until benched) log only: live cops at an OnlineTriggers fire, +10 s, +30 s; needs OnlineTriggers=1 */
     if (klbf_cen_on) klog("botfill: trig: OnlineTriggersCensus=1 (recommended off until benched): a bot-fired box logs the live cops (team 1, health > 0) at the fire, +10 s and +30 s; log only%s", klbf_trig == 1 ? "" : " (OnlineTriggers is not 1: no box is fired, nothing to count)");
     klbf_vp_sane = GetPrivateProfileIntA("BotFill", "OnlineVanPosSane", 0, klh_ini) != 0;      /* (recommended on; not run live yet) a van place that is far outside the map is not used: exit trigger / escape box instead */
@@ -427,6 +429,7 @@ static void klbf_init(void)
     klbf_ot_rampdry = GetPrivateProfileIntA("BotFill", "OnlineRampDry", 0, klh_ini) != 0;      /* default 0 since BOS_DD08r (F08 TriggerBox_Guards fired live, 7/7 boarded); only maps with a [BotFillRamp_<SLOT>] section fire */
     if (klbf_ot) klog("botfill: OnlineVanPosSane=%d, OnlineTriggerOriginSkip=%d (both recommended on, not run live yet)", klbf_vp_sane, klbf_trig_orig);
     if (klbf_ot) klog("botfill: trig: OnlineTriggers=%d (0 off, 1 fire, 2 dry), OnlineTriggersExtra=%d, OnlineTacticsTake=%d (2 = the game's 0x4e3f40, recommended on once benched)", klbf_trig, klbf_trig_x, klbf_ot_take);
+    if (klbf_ot && klbf_trig_pk && klbf_trig_att) klog("botfill: trig: OnlineTriggersAttachParent=1 (recommended off until benched): a pick-up box named only 'AttachNN' is judged with its parent node's name");
     if (klbf_ot && klbf_trig_pk) klog("botfill: trig: OnlineTriggersSkipPickups=1 (recommended off until benched): TriggerBox2 pick-up / character interact boxes are left to the game");
     if (klbf_ot) klog("botfill: ramp: OnlineRampFire=%d (recommended on), OnlineRampDry=%d (log only; needs a [BotFillRamp_<SLOT>] section)", klbf_ot_ramp, klbf_ot_rampdry);
     klbf_ot_door = GetPrivateProfileIntA("BotFill", "OnlineSkipDoorStacks", 1, klh_ini) != 0;      /* (recommended on) BOS1: DD01's 58 vault cases sit behind kick doors; ordered straight at them the bots stalled and took 0 */
@@ -737,6 +740,11 @@ static void klbf_trig_scan(void)
                         /* name source 1 (bench CS1A fix): the entity's scene node [[box+0x24]+4] = `node` above, name pointer +0x6c (klauto.c 1332's read); source 2: the old [[box+4]+0x6c] (kept as a fallback) */
                         if ((ps = klh_rd32(node + 0x6c)) >= 0x10000) klh_rdstr(ps, pn, sizeof pn);      /* page-wise read (klhook.c), not byte by byte */
                         if ((bn = klh_rd32(at + 4)) && (ps = klh_rd32(bn + 0x6c)) >= 0x10000) klh_rdstr(ps, pl, sizeof pl);
+                        if (klbf_trig_att && kvp_attach_leaf(pn)) {      /* OnlineTriggersAttachParent: 'Attach01' under PC0500_M03_MoneyBox_NN (GUESS: parent node = [node+0x50], name at +0x6c) */
+                            char par[120], jn[200]; DWORD pnode = klh_rd32(node + 0x50), pps; par[0] = 0;
+                            if (pnode >= 0x10000 && (pps = klh_rd32(pnode + 0x6c)) >= 0x10000) klh_rdstr(pps, par, sizeof par);
+                            if (par[0]) { static int toldAtt; kvp_join_parent(jn, sizeof jn, par, pn); memcpy(pn, jn, sizeof pn); if (toldAtt < 3) { toldAtt++; klog("botfill: trig: ZTriggerBox2 %08lx name joined with its parent node: '%s'", (unsigned long)at, pn); } }
+                        }
                         lst = klh_rd32(at + 0x38);      /* the AITrigger target list pointer (0x45f5d0 reads [box+0x38]); logged only: its entries are handles, not names, so it is no name source */
                         if (kvp_pickup_decide(1, pn, pl, &src)) {
                             static int toldPk; klbf_tr.pk++; pk_scan++; klbf_trig_remember(at);

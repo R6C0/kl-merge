@@ -42,6 +42,8 @@ static const int kset_def[KLS_N] = { 1, 1, 1, 1, 1, 1, 1, 0 };
 static volatile LONG kset_v[KLS_N] = { 1, 1, 1, 1, 1, 1, 1, 0 };
 #define KLS_NEXT (KLS_N + 1)                              /* 1025: 'Textures / Neural (next start)' in ONE row (value = Textures | Neural << 1): pays for the host rows' table entries */
 #define KLS_HMAP (KLS_N + 2)                              /* 1025 klhostopt.c: host map set (0 Dog Days / 1 Dead Men / 2 mixed random) */
+#define KLS_LENS (KLS_N + 4)                              /* 1106 'Lens glare / cracks' in ONE row (value = Glare | LensCrack << 1; same table cost as the old Glare row) */
+static volatile LONG kset_crack = 1;                     /* [Graphics] LensCrack (klreshade.c reads the ini at start: a change here is kept for the NEXT start) */
 #define KLS_HOPT (KLS_N + 3)                              /* 1025 klhostopt.c: bit 0 AI heisters, bit 1 Solo start, bit 2 PD2 guns (next start) */
 static int klho_get(int which);                          /* klhostopt.c */
 static void klho_put(int which, int value);
@@ -59,12 +61,14 @@ static int kset_which(const char *name)
     if (!strcmp(n, "KLSNext")) return KLS_NEXT;
     if (!strcmp(n, "KLSHMap")) return KLS_HMAP;
     if (!strcmp(n, "KLSHOpt")) return KLS_HOPT;
+    if (!strcmp(n, "KLSLens")) return KLS_LENS;
     return -1;
 }
 
 static int kset_get(int i)
 {
     if (i == KLS_NEXT) return (kset_v[1] ? 1 : 0) | (kset_v[7] ? 2 : 0);
+    if (i == KLS_LENS) return (kset_v[5] ? 1 : 0) | (kset_crack ? 2 : 0);
     if (i == KLS_HMAP) return klho_get(0);
     if (i == KLS_HOPT) return klho_get(1);
     if (i == KLS_ADREN) return (kset_v[2] ? 1 : 0) | (kset_v[3] ? 2 : 0);
@@ -75,6 +79,16 @@ static void kset_put(int i, int value)
 {
     char v[16];
     if (i == KLS_NEXT) { if (value < 0) value = 0; if (value > 3) value = 3; kset_put(1, value & 1); kset_put(7, (value >> 1) & 1); return; }
+    if (i == KLS_LENS) {                                /* Glare half through row 5 (live); the crack half is an ini key read at start */
+        if (value < 0) value = 0;
+        if (value > 3) value = 3;
+        kset_put(5, value & 1);
+        if (InterlockedExchange(&kset_crack, (value >> 1) & 1) != ((value >> 1) & 1)) {
+            snprintf(v, sizeof v, "%d", (int)((value >> 1) & 1)); WritePrivateProfileStringA("Graphics", "LensCrack", v, klh_ini);
+            klog("settings: menu set KLSLens crack half = %d ([Graphics] LensCrack=%d in KLHook.ini; from the next start of the game, needs [ReShade] Bridge=1)", (int)((value >> 1) & 1), (int)((value >> 1) & 1));
+        }
+        return;
+    }
     if (i == KLS_HMAP) { klho_put(0, value); return; }
     if (i == KLS_HOPT) { klho_put(1, value); return; }
     if (i == KLS_ADREN) {                               /* the combined row: each half through its own row (its own ini key and log line) */
@@ -99,6 +113,7 @@ static void kset_init(void)
         int v = (int)GetPrivateProfileIntA(kset_sec[i], kset_key[i], kset_def[i], klh_ini);
         kset_v[i] = v < 0 ? 0 : v > kset_upper[i] ? kset_upper[i] : v;
     }
+    kset_crack = GetPrivateProfileIntA("Graphics", "LensCrack", 1, klh_ini) != 0;       /* klreshade.c's own default is 1 too */
     kset_table_log = (int)GetPrivateProfileIntA("Menu", "TableLog", 0, klh_ini);
     klog("settings: the menu's Mod settings rows read Look=%ld Textures=%ld Prompt=%ld NeedUse(E)=%ld CameraFX=%ld Glare=%ld AA=%ld Neural=%ld", kset_v[0], kset_v[1], kset_v[2], kset_v[3], kset_v[4], kset_v[5], kset_v[6], kset_v[7]);
 }

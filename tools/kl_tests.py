@@ -92,6 +92,7 @@ C_TESTS = {
     'klleaf_test.c': 'logic',          # klleaf_logic.h (leaf probe schedule + CarStall door gate)
     'kldoorclose_test.c': 'logic',     # kldoorclose_logic.h (DoorCloseMs open detection, timer, busy postpone, stale give-up, slots)
     'klbotvoice_test.c': 'logic',      # klbotvoice_logic.h
+    'klnamesprobe_test.c': 'logic',    # klnamesprobe_logic.h ([BotFill] OnlineNamesProbe digest / list / cadence)
     'klht_test.c': 'logic',            # klhud_tags_dist.h
     'klmappool_ov_test.c': 'logic',    # no windows.h
     'klhirepic_test.c': 'logic',       # no windows.h
