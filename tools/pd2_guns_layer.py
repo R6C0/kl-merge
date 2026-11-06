@@ -50,6 +50,16 @@ LAYERS = {
                   maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B'],      # NOT DM05A (c9's restage is pending)
                   title='1106e (item 63 M9 shield pistol: the spec DEAG63 = PD2 Deagle), staged on top of layer 1106d',
                   short='Deagle on the M9 shield', seeds=[r'D:\kl_stage\pd2b8_scratch\fits.json']),
+    # 1106s: ALL 19 spec keys on Dog Days' 9 stock FA maps (KLExpansion\Maps\DD01..DD09; NOT DD10 = slot F07 again, NOT Scenes\Locations), baked on the LIVE zips
+    # (base=None: pics yes, PD2 no). Fits frozen = the union of the 1106c / 1106d / 1106e fits.json (host roots 13812 ... 16134 are identical on DD02 and Scenes F02,
+    # re/pd2_guns_stock_maps.md). Plan and staged notes: re/pd2_guns_stock_maps.md.
+    '1106s': dict(keys=['SG417', 'G36', 'RPK', 'MK17', 'RPK40', 'RPK42', 'RPK43', 'C45', 'HRL50', 'HRL51', 'R700', 'GL40', 'GL40GAS', 'GL40FLR',
+                        'RPK45', 'RPK46', 'RPK47', 'RPK48', 'DEAG63'], tag='.before-pd2guns1106s', base=None,
+                  out=r'D:\kl_stage\pd2guns_1106s', backup=r'D:\kl_stage\pd2guns_1106s_backup',
+                  maps=['DD01', 'DD02', 'DD03', 'DD04', 'DD05', 'DD06', 'DD07', 'DD08', 'DD09'],
+                  title='1106s (all 19 PD2 gun specs, items 35-63, on the 9 stock Fragile Alliance maps DD01..DD09), staged on the live zips',
+                  short='PD2 guns on the stock FA maps',
+                  seeds=[r'D:\kl_stage\pd2guns_1106c\fits.json', r'D:\kl_stage\pd2guns_1106d\fits.json', r'D:\kl_stage\pd2guns_1106e\fits.json']),
 }
 KEYS = LAYERS['1106b']['keys']
 TAG = LAYERS['1106b']['tag']
@@ -60,7 +70,10 @@ FITS_SEEDS = [r'C:\Users\Henri\AppData\Local\Temp\claude\c--kl-merge-kl-merge\e2
 DETAIL = {'C45': 31, 'HRL50': 255, 'HRL51': 255,      # body detail byte (see build_level GUESS notes)
           'R700': 31, 'GL40': 191, 'GL40GAS': 191, 'GL40FLR': 191,      # R700 7|28 = 31, GL40 1|190 = 191 (pd2_guns_multi batch 5/6 commits)
           'RPK45': 63, 'RPK46': 63, 'RPK47': 63, 'RPK48': 63,
-          'DEAG63': 31}      # RPK: Minimi 62|7 = 63 (batch 7 GUESS: the detail-62 464-vert part is the far copy); DEAG63: pistol 7|24 = 31 (GUESS, as C45)
+          'DEAG63': 31,
+          # batch 1-2 rifles / MGs: hosts with the hidden detail-16 'box' part, so build_level leaves body_lod at its default 15 (derived from the code, the
+          # reports hold no detail byte; GUESS until verify passes, which compares the real byte)
+          'SG417': 15, 'G36': 15, 'RPK': 15, 'MK17': 15, 'RPK40': 15, 'RPK42': 15, 'RPK43': 15}      # RPK: Minimi 62|7 = 63 (batch 7 GUESS: the detail-62 464-vert part is the far copy); DEAG63: pistol 7|24 = 31 (GUESS, as C45)
 
 
 def configure(name):
@@ -622,7 +635,7 @@ def main(a):
     if '--out' in a:
         out = a[a.index('--out') + 1]; del a[a.index('--out'):a.index('--out') + 2]
     maps = list(LAYERS[LAYER].get('maps') or M.MAPS)
-    if LAYER in ('1106c', '1106e'):       # DM02 first: the fits of a new key are taken on the first baked map (the notes fit on DM02)
+    if LAYER in ('1106c', '1106e', '1106s'):       # DM02 first: the fits of a new key are taken on the first baked map (the notes fit on DM02)
         maps.sort(key=lambda m: m != 'DM02')
     if '--maps' in a:
         maps = a[a.index('--maps') + 1].split(','); del a[a.index('--maps'):a.index('--maps') + 2]

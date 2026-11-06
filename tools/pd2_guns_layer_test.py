@@ -32,6 +32,8 @@ seen = set()
 for name, lay in L.LAYERS.items():
     check(set(lay['keys']) <= spec_keys, '%s: keys are pd2_guns_multi SPECS' % name)
     check(set(lay['keys']) <= set(L.DETAIL), '%s: a body detail byte per key' % name)
+    if name == '1106s':      # the stock-map layer repeats every key by design (other maps, other base)
+        continue
     check(not (set(lay['keys']) & seen), '%s: keys disjoint from the other layers' % name)
     seen |= set(lay['keys'])
 check(len({l['tag'] for l in L.LAYERS.values()}) == len(L.LAYERS), 'distinct backup tags')
@@ -129,6 +131,17 @@ check(sp['DEAG63']['item'] == 63 and sp['DEAG63']['template'] == 'HG_M9Beretta_H
 check(set(L.KEYS).isdisjoint(L.LAYERS['1106d']['keys'] + L.LAYERS['1106c']['keys'] + L.LAYERS['1106b']['keys']), '1106e adds keys, repeats none')
 py_e = L.INSTALL_PY_OFFDRIVE.replace('@TITLE@', L.LAYERS['1106e']['title']).replace('@TAG@', L.TAG).replace('@BACKUP@', L.LAYERS['1106e']['backup'])
 check("TAG = '.before-pd2guns1106e'" in py_e and '@' not in py_e.replace('@echo', ''), '1106e installer text')
+L.configure('1106b')
+
+# 1106s: all 19 keys on the 9 stock DD maps, live zips as base, off-drive backup, no DD10 / Scenes
+L.configure('1106s')
+check(L.BASE is None and L.src_root() == M.MAPROOT and L.TAG == '.before-pd2guns1106s', '1106s is baked on the live zips')
+check(sorted(L.KEYS) == sorted(s['key'] for s in M.SPECS) and len(L.KEYS) == 19, '1106s keys = every spec')
+check(L.LAYERS['1106s']['maps'] == ['DD0%d' % i for i in range(1, 10)], '1106s: DD01..DD09, not DD10')
+check(L.default_out() == r'D:\kl_stage\pd2guns_1106s' and L.LAYERS['1106s']['backup'] == r'D:\kl_stage\pd2guns_1106s_backup', '1106s out / backup on D:')
+check(all(k in L.DETAIL for k in L.KEYS), '1106s: a DETAIL entry for every key')
+py_s = L.INSTALL_PY_OFFDRIVE.replace('@TITLE@', L.LAYERS['1106s']['title']).replace('@TAG@', L.TAG).replace('@BACKUP@', L.LAYERS['1106s']['backup'])
+check("TAG = '.before-pd2guns1106s'" in py_s and '@' not in py_s.replace('@echo', ''), '1106s installer text')
 L.configure('1106b')
 
 print('pd2_guns_layer_test: %d checks, %d FAIL' % (checks, fails))

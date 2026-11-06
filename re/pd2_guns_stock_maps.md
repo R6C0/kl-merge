@@ -68,3 +68,14 @@ only after phase 1 proves out, in two groups (F01-F04, F05-F09) if D: is short. 
 * Online: a peer on the old zip sees stock guns, and a KLGuns.ini whose Entries differs from the zip is ignored (looks fall back to what was built in), so install all
   9 DD maps together and keep the inis in step.
 * A zombie kl2.exe blocks the installers' run check: `--skip-run-check` (+ `--root`) as in the notes.
+
+## 6. Staged 2026-11-06 (layer 1106s, NOT installed, offline)
+`python tools/pd2_guns_layer.py build --layer 1106s` then `verify --layer 1106s`: `LAYER RESULT: PASS` (plain + bots, 9 maps, 19 guns each, 39 other Ground nodes unchanged,
+old_chunks_diff 0). Stage `D:\kl_stage\pd2guns_1106s` (log `D:\kl_stage\build1106s.log`, `verify1106s.log`), off-drive backup folder `D:\kl_stage\pd2guns_1106s_backup`
+(filled by install.py). Each map folder holds `F0n_Main.zip`, `F0n_Main.bots.zip`, `KLGuns.ini` only: no `*.bots.base.md5`, KLJoin.ini or Int16Ok.txt exist on DD01-09.
+Chunks before -> after (every map +203): DD01 46115 -> 46318, DD02 39929 -> 40132, DD03 48087 -> 48290, DD04 51572 -> 51775, DD05 38872 -> 39075, DD06 52683 -> 52886,
+DD07 56374 -> 56577, DD08 48265 -> 48468, DD09 51726 -> 51929; KLGuns.ini Entries = the new count. Fits = union of the 1106c / d / e fits.json (all 19 keys).
+Dry install: 9 maps, 0 skipped; backup drive needs 4114 MB. NOTE: C: net grows by +76..+96 MB a map (about +750 MB for the 9), not ~0 as section 3 assumed
+(the new zip is larger than the old one; the old one goes to D:). Host root ids differ per map (DD02 SG417 host 13812, DD05 2556), the templates and fits are the same.
+Body detail bytes of SG417 / G36 / RPK / MK17 / RPK40 / RPK42 / RPK43 = 15 (build_level default for hosts with the hidden detail-16 part; verify reads the real byte: PASS).
+Still to do: 2-seat bench on DD02 (items 35, 62, 49), Arcade DD05 / DD09, then install all 9 together (inis follow in step).
