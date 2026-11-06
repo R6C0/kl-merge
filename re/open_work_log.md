@@ -1,3 +1,10 @@
+## 2026-11-06 ~12:30 [db] bench "snaps / trk_err" = [Sync] cop puppet, bench-only (research wf_2d563861, read-only, no crash)
+snaps = klsync.c ksp_snap2 teleports of AI cops on a client (cop > SnapDist 300 from the host's place, max 1 per SnapEvery 2000 ms); trk_err = Track's
+pre-placement cop error (>= TrackTol 40). Humans are not covered. The kits turn it on (DD09_host.ini Share=1, DD09_join.ini Puppet=1 PuppetMode=2); the LIVE
+KLHook.ini has no Share/Puppet keys (both default 0), so live online never snaps. ~86% of SPB snaps have no >=1 s host stall nearby; rate x3 under more load.
+Parked fix ideas (all guesses, off-by-default) for when Puppet ships: SnapConfirm (2 checks / fresh list), AutoLead (leadMs = list age), PuppetBlend.
+TickProfile now splits wall vs cpu (946ab5ad, TEST a9987972); kit oss_1106 run.py gains --tpc and --seats N (host waitpeers edited in place).
+
 ## 2026-11-06 ~12:45 [f0] Grudge pass A run 4 (TEST 6def0e58, DD09 2 seats): the gun FIRES, still 0 human hits (no crash)
 Truth lines per firebot step (clip drops / FIRED byte in held polls / hand item): control inside the round-start window 0 / 0 of 689 / 29 (window blocks fire,
 not only turning); aimed steps 10, 30, 30, 31 rounds spent, FIRED 0 of 121..1019 (the byte is not "shot fired", ignore it). Bots walk 1.6 -> 8.4 m during the
