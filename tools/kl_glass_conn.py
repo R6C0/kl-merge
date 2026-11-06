@@ -248,9 +248,17 @@ def compare(zpath, report=None):
 
 def build_section(sc, prm, shipped=None):
     """[(REF, records)] for every shard group; shipped = {scene path tail: records} wins over the computation."""
-    out, W = [], worlds(sc)
-    for g in groups(sc):
-        recs = shipped.get(path(g).split('/', 3)[-1]) if shipped else None
+    out, W, gs = [], worlds(sc), groups(sc)
+    refs = [g.ref for g in gs]
+    if len(set(refs)) != len(refs):
+        raise SystemExit('duplicate shard group REFs: the section is keyed by REF, refusing to build')
+    big = [path(g) for g in gs if len(g.kids) > 255]
+    if big:
+        raise SystemExit('shard groups over 255 pieces (u8 neighbour ids would overflow): %s' % big[:3])
+    tails = [path(g).split('/', 3)[-1] for g in gs]
+    for g, tail in zip(gs, tails):
+        # a tail that names two groups here could take the other group's records: those are always computed
+        recs = shipped.get(tail) if shipped and tails.count(tail) == 1 else None
         if recs is None or len(recs) != len(g.kids):
             recs = [encode(nb) for nb in neighbours([world_vertices(prm, k, W[k]) for k in g.kids])]
         out.append((g.ref, recs))
@@ -285,7 +293,9 @@ def shipped_by_path(dm_zip):
         sc, prm, sgd = load(zf)
         have = section_of(zf, sgd) or []
         byref = {g.ref: g for g in groups(sc)}
-        return {path(byref[r]).split('/', 3)[-1]: recs for r, recs in have if r in byref}
+        tails = [path(byref[r]).split('/', 3)[-1] for r, _ in have if r in byref]
+        # path tails are not unique (M05_A has several): a tail shipped twice is dropped, so those groups are computed
+        return {t: recs for t, (r, recs) in zip(tails, [h for h in have if h[0] in byref]) if tails.count(t) == 1}
 
 
 def main(a):

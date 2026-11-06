@@ -48,6 +48,12 @@ if os.path.isfile(DM):
             have = G.section_of(zf, sgd)
         ok(have is not None and len(have) == len(items) == len(G.groups(sc)), 'built section covers every shard group (%d)' % len(items))
         ok(dict((a, b) for a, b in have) == dict((a, b) for a, b in items), 'section reads back as written')
+        # --sgd-from: path tails repeat in M05A; a repeated tail must not hand one group another's records
+        ship = G.shipped_by_path(DM)
+        tails = [G.path(g).split('/', 3)[-1] for g in G.groups(sc)]
+        dup = {t for t in tails if tails.count(t) > 1}
+        ok(not dup & set(ship), 'shipped_by_path drops the %d repeated path tail(s)' % len(dup))
+        ok(G.build_section(sc, prm, ship) == items, 'build with --sgd-from equals the computed build')
 else:
     print('skip M05A comparison: %s not on this machine' % DM)
 
