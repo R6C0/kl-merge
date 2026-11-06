@@ -1,3 +1,8 @@
+2026-11-06 ~11:50 - [db] BENCH OSS_DD09_SMF (9 seats DD09, TEST a348dadb = ScanMinFrames + OsdScanSlice + TickProfile): 9/9 in round, NO starved seat (all 20-22 fps; OSS_DD09 had inst1-7 26-28 and inst8/9 2-3; N9S 8 seats ~25 + 1 killed).
+Sum of seat fps ~equal (189 / 200 / 202): the PC is the limit; ScanMinFrames shares it evenly, it does not create CPU. Rated 1 FAIL (inst1 host 3.1 s stop) + 8 HITCHY, max stops 1.5-3.1 s (OSS: 9-18 s on inst8/9).
+TickProfile: hook = ~1-2.5 ms a frame on a busy seat (5-10 %). Top: klsy_tick (bench-only [Sync] Probe), klshop_tick = kls_ammo, a flat 471 single reads EVERY frame on every seat (live too).
+Fix [Perf] ShopPoolBlock=1 (recommended on): kls_ammo skips while no row is handed over, else one block read of the pool (fallback per entry). TEST 4a3387ea / SHIP 58e710e6, kl_tests 87 pass, not installed.
+
 ## 2026-11-06 ~12:10 [f0] OnlineGrudge pass A: why no human hit landed (stock gate G1)
 Run 2 (dll 8b9b18e3, 10:55-11:03): 13 fire presses, 3076 ms held, target health stayed 350.0, no human hit reached slot 96.
 RE (workflow, confirmed by a skeptic at about 65 %): ZFFActor slot 422 (0x8689c0), gate G1 0x868b11..0x868b49, drops a ZFFPlayer's hit on an Ally bot

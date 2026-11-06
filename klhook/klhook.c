@@ -1781,7 +1781,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     img_lo = (DWORD)exe; img_hi = img_lo + nt->OptionalHeader.SizeOfImage;
     klh_exe_ok = img_lo == KL2_BASE && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;
     klperf_fast_init(exe, nt);
-    klog("perf: FastRead %s (%d section(s) of kl2.exe); OsdBackoff %d, OnlineCache %d, OsdScanSlice %d, ScanMinFrames %d", klperf_nsec ? "on" : "off", klperf_nsec, klperf_on(&klperf_osd, "OsdBackoff"), klperf_on(&klperf_oc, "OnlineCache"), klperf_on(&klperf_oss, "OsdScanSlice"), klperf_on(&klperf_smf, "ScanMinFrames"));
+    klog("perf: FastRead %s (%d section(s) of kl2.exe); OsdBackoff %d, OnlineCache %d, OsdScanSlice %d, ScanMinFrames %d, ShopPoolBlock %d", klperf_nsec ? "on" : "off", klperf_nsec, klperf_on(&klperf_osd, "OsdBackoff"), klperf_on(&klperf_oc, "OnlineCache"), klperf_on(&klperf_oss, "OsdScanSlice"), klperf_on(&klperf_smf, "ScanMinFrames"), klperf_on(&klperf_spb, "ShopPoolBlock"));
     AddVectoredExceptionHandler(1, veh);
     klog("==== KLHook loaded (ContinueAsserts=%d MaxDumps=%d) kl2.exe %08lx-%08lx", continue_asserts, max_dumps, img_lo, img_hi);
     klog("build: %s, %s %s; exe %s; patch policy: %s",

@@ -146,13 +146,21 @@ static int kls_apply(int k)
    objects is TAKEN (entry byte +8 == 0) with reserve 0 and rounds >= the row's ammo, its reserve [obj+0xe0] := clips x rounds (KEY-XORed,
    as the game's setter 0x494180 writes it). Once per hand-over: the mark is cleared when the entry is free again (round reset).
    GUESS: 0x6020d0 (hashed) gets the same numbers right after and might keep its own copy - a reload in the game tells. */
+static int klperf_spb = -1;                 /* [Perf] ShopPoolBlock (kls_ammo) */
 static void kls_ammo(void)
 {
-    DWORD a, n = 0, ents, i; int k, m;
+    static DWORD pool[4096 * 3]; DWORD a, n = 0, ents, i; int k, m, blk = 0;
+    if (klperf_on(&klperf_spb, "ShopPoolBlock")) {                   /* [Perf] ShopPoolBlock: every frame on every seat this was ~470 single 12-byte reads (TickProfile OSS_DD09_SMF 11-06) */
+        for (k = 0; k < kls.n && !kls.applied[k]; k++) ;
+        if (k == kls.n) return;                                      /* no row handed over yet: the loop below would act on nothing */
+    }
     if (kls.clips <= 0 || !kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10))) return;
+    if (n && klperf_on(&klperf_spb, "ShopPoolBlock")) blk = klh_rd(ents, pool, 12 * n);      /* the whole pool in one read; a miss falls back to one read an entry */
     for (i = 0; i < n; i++) {
         DWORD e[3];
-        if (!klh_rd(ents + 12 * i, e, 12) || !e[0]) continue;
+        if (blk) memcpy(e, pool + 3 * i, 12);
+        else if (!klh_rd(ents + 12 * i, e, 12)) continue;
+        if (!e[0]) continue;
         for (k = 0; k < kls.n; k++) for (m = 0; m < KLS_PER; m++) if (kls.applied[k] && kls.made[k][m] == e[0]) {
             DWORD rounds, res, ammo, r;
             if (e[2] & 0xff) { if (!(e[2] & 0xff00)) kls.fixed[k][m] = 0; continue; }          /* free again: a later hand-over is fixed anew */
