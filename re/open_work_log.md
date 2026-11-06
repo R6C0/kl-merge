@@ -6,6 +6,15 @@
 - Backups D:\kl_stage\pd2guns_1106f_backup hard-linked to the byte-identical 1106e stage files (frees ~2.3 GB). UNDO ALL: new step 0f (before 1106e) and 0c = c9's DM05A chain 2c undo (between 1106c and 1106b).
 - Left: DM01B/DM03A/DM06B/DM11B not yet staged for 1106f; DM05A c+d+e+f re-stage on c9's e10ea488 running offline.
 
+## 2026-11-06 ~17:10 [c9] Last Call outro cam 2d benched, NOT installed (no crash involved)
+- 2d = EscCamera01 eFMM_LookFromPosFA (mode 4: eye = the box's own node, aim = field 9 re-read every frame, kl2.exe 0x4471a1), box node 11576 moved
+  (7800,2271,3500) -> (7093,2181,2727) in Roof box 7, field 9 = ROOT\EscapeSetup!EscapeChopper\Escape_Chopper (node 10807), floats 0,-270,-270,80,0,0 (stock
+  F02/F03/F08 outside cams; f1..f4 meaning GUESS), field 12 kept 1. Stage C:\kl_build_1024\lcchain_2d_safedoors_live_1a97e186 (zip 1c1fc5d4), kit lcchain2d1106d.
+- Bench PASS, undo byte-exact, player rides out. The cam log confirms the aim follows the heli (piv398 = heli park 8131,3814,4696). But in the shots, the heli is on the
+  pad in 11/12 and hidden after lift-off: 13-18 show the lit tower facade where the heli should be. The heli parks inside BuildingJ_01's render shell, which
+  the collision proxy does not contain, so the 2c route check missed it. Next: a route that ends above/outside BuildingJ by render bounds, on top of 6b's DM05A c-f.
+- Mode 3 (LookFromPos, used by 2c): eye = field 9, aim = owner player (+0x540); modes 3/4 ignore f1..f6 and node rotation.
+
 ## 2026-11-06 ~16:50 [c9] Last Call chain 2c LIVE on DM05A; grey outro cured (no crash involved)
 - Diagnosis (workflow lc-grey-outro): the grey frames had their eye outside every Roof .rmi box (box 7 = x 6676..8080, y 1460..2610, z 2594..4426), so the frame
   started from the Backdrop room alone (0 gates, skydome only). The old Escaping spline points 1-4 and the heli park (5965,2510,3929) lie inside BuildingF.

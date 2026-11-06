@@ -33,6 +33,9 @@ t('cam 2c = fixed eye CamPos01 (variant F) + the outro climb route', C.cam_param
   and len(O.ROUTE_2C) == 5)
 t('2c outro stage name differs from the plain outro stage', C.out_name('outro', '2c', 'a' * 32, C.MAPDIR) != C.out_name('outro', '2a', 'a' * 32, C.MAPDIR))
 t('2c chain name', C.out_name('chain', '2c', 'a' * 32, C.MAPDIR).startswith('lcchain_2c_live_aaaaaaaa'))
+t('cam 2d = variant D (LookFromPosFA, heli group) + the 2c climb route', C.cam_params('2d') == ('D', None, None, H.AIM_D) and '2d' in C.ROUTE_CAMS and '2c' in C.ROUTE_CAMS)
+t('2d outro/chain names', C.out_name('outro', '2d', 'a' * 32, C.MAPDIR) == 'lcoutro2d_live_aaaaaaaa' and C.out_name('chain', '2d', 'a' * 32, C.MAPDIR).startswith('lcchain_2d_live_'))
+t('2a/2b/2c unchanged', C.cam_params('2c') == ('F', None, None, H.AIM_F) and C.cam_params('2a')[0] == 'A' and '2a' not in C.ROUTE_CAMS)
 try:
     C.cam_params('3'); t('unknown cam refused', False)
 except ValueError:
@@ -125,6 +128,10 @@ with tempfile.TemporaryDirectory() as d:
     src = open(os.path.join(st, 'install.py')).read()
     t('install.py: tag, zip pin, ini pin, --undo, --skip-run-check', "'.before-chain1106'" in src and "LIVE_ZIP_MD5 = '" + files['F01_Main.zip'][0] in src
       and files['KLJoin.ini'][0] in src and files['KLGuns.ini'][0] not in src and '--undo' in src and '--skip-run-check' in src)
+    C.write_install(st, files, ['doors', 'outro', 'cam2d'], '.before-chain2d1106')
+    src2 = open(os.path.join(st, 'install.py')).read()
+    t('install.py takes a custom backup tag (2d)', "MAP, TAG = 'DM05A', '.before-chain2d1106'" in src2 and 'cam2d' in src2 and '.before-chain1106' not in src2.split('FILES = [')[0].split('MAP, TAG')[1])
+    C.write_install(st, files, ['doors', 'outro'])
     rc, out = run(st, '--game', os.path.join(d, 'nogame'), '--dry')
     t('install.py refuses a missing game folder', rc == 1 and 'REFUSED' in out)
     rc, out = run(st, '--game', game, '--dry')

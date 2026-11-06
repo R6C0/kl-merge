@@ -6,9 +6,9 @@ live DM05A files, every pass is stale. This tool reads the CURRENT md5 of the fi
 benches) or all four as one chain (live -> doors -> spawn2f -> outro -> helicam) with ONE install.py pinning the md5s it read.
 
   python tools/kl_lastcall_chain_1106.py status [--in-dir <dir>]
-  python tools/kl_lastcall_chain_1106.py single doors|spawn2f|outro|helicam [--cam 2a|2b|2c] [--in-dir <dir>] [--root <dir> | --out <dir>]
+  python tools/kl_lastcall_chain_1106.py single doors|spawn2f|outro|helicam [--cam 2a|2b|2c|2d] [--in-dir <dir>] [--root <dir> | --out <dir>]
         -> <root>\<name>_live_<first 8 of the zip md5>   (default root C:\kl_build_1024; name lcdoors / lcspawn2f / lcoutro / lcoutcam2a / lcoutcam2b)
-  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|2c|none] [--only doors,outro,...] [--doors B01,A02] [--in-dir <dir>] [--root <dir> | --out <dir>] [--keep-steps]
+  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|2c|2d|none] [--only doors,outro,...] [--doors B01,A02] [--in-dir <dir>] [--pin-dir <dir>] [--tag .before-x] [--root <dir> | --out <dir>] [--keep-steps]
         -> <root>\lcchain_<cam|nocam>_live_<8>   (one stage + install.py; helicam default = the lcoutcam2a set: f5 +700, f6 -500, aim the heli's ShatterGeom)
 --in-dir (default: the live DM05A folder) holds the 5 files F01_Main.zip F01_Main.bots.zip F01_Main.bots.base.md5 KLJoin.ini KLGuns.ini.
 It is only READ (each pass works on a copy). Nothing is ever written into the game folder (a stage under it is refused).
@@ -40,6 +40,7 @@ BIG3 = FILES5[:3]
 INIS = FILES5[3:]
 PASSES = ('doors', 'spawn2f', 'outro', 'helicam')       # the chain order
 TAG = '.before-chain1106'
+ROUTE_CAMS = ('2c', '2d')       # the cams that need the 5-point NE climb route (kl_club_outro_1106.ROUTE_2C)
 NAMES = {'doors': 'lcdoors', 'spawn2f': 'lcspawn2f', 'outro': 'lcoutro'}
 
 
@@ -77,7 +78,9 @@ def cam_params(cam):
         return ('A', -450.0, 100.0, H.AIM_A)           # eye f5 -450 / f6 +100, aimed at EscCameraLAST (hover/rise only)
     if cam == '2c':
         return ('F', None, None, H.AIM_F)              # fixed eye CamPos01 (LookFromPos, in Roof .rmi box 7) + the climb route of the outro pass
-    raise ValueError('--cam must be 2a, 2b, 2c or none')
+    if cam == '2d':
+        return ('D', None, None, H.AIM_D)              # stock outside camera (LookFromPosFA): eye = box node moved to the 2c eye, aim = the heli group; 2c's climb route
+    raise ValueError('--cam must be 2a, 2b, 2c, 2d or none')
 
 
 def out_name(name, cam, live_md5, in_dir, doors=None):
@@ -86,8 +89,8 @@ def out_name(name, cam, live_md5, in_dir, doors=None):
         return 'lcchain_%s%s_%s' % ('nocam' if cam == 'none' else cam, '_d' + '-'.join(d[0] for d in doors) if doors else '', tag)
     if name == 'helicam':
         return 'lcoutcam%s_%s' % (cam, tag)
-    if name == 'outro' and cam == '2c':
-        return 'lcoutro2c_%s' % tag                      # never the folder of the plain outro stage
+    if name == 'outro' and cam in ROUTE_CAMS:
+        return 'lcoutro%s_%s' % (cam, tag)                      # never the folder of the plain outro stage
     return '%s_%s' % (NAMES[name], tag)
 
 
@@ -120,7 +123,7 @@ def run_pass(name, in_dir, out, cam='2a', log=print, doors=None):
             files = BIG3
         elif name == 'outro':
             import kl_club_outro_1106 as O
-            O.stage(out, in_dir, O.KEEP, False, log, allow=allow, route=O.ROUTE_2C if cam == '2c' else None)
+            O.stage(out, in_dir, O.KEEP, False, log, allow=allow, route=O.ROUTE_2C if cam in ROUTE_CAMS else None)
             n = O.count_of(os.path.join(out, 'F01_Main.zip'))[4]
             if n > O.KEEP:
                 raise ValueError('outro self-check: the Escaping spline has %d points, want <= %d' % (n, O.KEEP))
@@ -134,7 +137,7 @@ def run_pass(name, in_dir, out, cam='2a', log=print, doors=None):
             H.stage(out, in_dir, variant, f5, f6, aim, log, allow=allow)
             v = H.state(os.path.join(out, 'F01_Main.zip'))[3]
             fl, ai = H.wanted(variant, f5, f6, aim)
-            if not H.done_state(v, fl, ai, H.MODES[variant]):
+            if not H.done_state(v, fl, ai, H.MODES[variant]) or not H.eye_done(*H.state(os.path.join(out, 'F01_Main.zip'))[:2], variant):
                 raise ValueError('helicam self-check: the camera box reads back as %r' % (v,))
             files = BIG3
         else:
@@ -170,7 +173,7 @@ import hashlib, os, shutil, subprocess, sys
 
 GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 HERE = os.path.dirname(os.path.abspath(__file__))
-MAP, TAG = 'DM05A', '.before-chain1106'
+MAP, TAG = 'DM05A', @@TAG@@
 LIVE_ZIP_MD5 = @@PIN@@      # the precheck: the live plain zip must still be exactly this
 FILES = [   # name, live md5 before, staged md5 after
 @@FILES@@]
@@ -253,12 +256,12 @@ if __name__ == '__main__':
 '''
 
 
-def write_install(st, files, passes):
+def write_install(st, files, passes, tag=TAG):
     """files {name: (live md5, staged md5)}; only the names whose md5 changes are installed. The zip is always pinned."""
     if 'F01_Main.zip' not in files:
         raise ValueError('the zip must be in files')
     fl = ''.join("    (%r, %r, %r),\n" % (n, o, w) for n, (o, w) in files.items() if o != w)
-    txt = INSTALL.replace('@@FILES@@', fl).replace('@@PIN@@', repr(files['F01_Main.zip'][0])).replace('@@PASSES@@', '+'.join(passes))
+    txt = INSTALL.replace('@@FILES@@', fl).replace('@@PIN@@', repr(files['F01_Main.zip'][0])).replace('@@PASSES@@', '+'.join(passes)).replace('@@TAG@@', repr(tag))
     compile(txt, 'install.py', 'exec')
     open(os.path.join(st, 'install.py'), 'w', newline='\n').write(txt)
     open(os.path.join(st, 'INSTALL last call chain 1106.bat'), 'w', newline='\r\n').write('@echo off\r\npython "%~dp0install.py"\r\npause\r\n')
@@ -283,8 +286,10 @@ def stage_single(name, in_dir=MAPDIR, out=None, root=ROOT, cam='2a', log=print):
     return out, live, got
 
 
-def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_steps=False, log=print, doors=None):
-    """live -> doors -> spawn2f -> outro -> helicam as ONE stage in out whose install.py pins the md5s of in_dir's files read first."""
+def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_steps=False, log=print, doors=None, pin_dir=None, tag=TAG):
+    """live -> doors -> spawn2f -> outro -> helicam as ONE stage in out whose install.py pins the md5s of in_dir's files read first.
+    pin_dir (default in_dir): the folder whose 5 files are pinned as the install's "before" (e.g. the LIVE folder when in_dir is the pre-chain base of an
+    earlier candidate, so the new stage installs directly over it); tag: the backup suffix of that install (default .before-chain1106)."""
     import kl_club_doors_1106 as D
     try:
         sel = D.select(doors) if doors else None                   # None = all four doors (the default, unchanged)
@@ -305,7 +310,7 @@ def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_st
     shutil.rmtree(out, ignore_errors=True)
     steps = os.path.join(out, '_steps')
     os.makedirs(steps)
-    cur, prev, report = in_dir, None, {'in_dir': in_dir, 'live': live, 'cam': cam, 'passes': todo, 'steps': []}
+    cur, prev, report = in_dir, None, {'in_dir': in_dir, 'pin_dir': pin_dir, 'tag': tag, 'live': live, 'cam': cam, 'passes': todo, 'steps': []}
     inis = {n: os.path.join(in_dir, n) for n in INIS}
     try:
         for i, p in enumerate(todo):
@@ -330,9 +335,10 @@ def stage_chain(in_dir=MAPDIR, out=None, root=ROOT, cam='2a', only=None, keep_st
         problems = verify_final(out, todo, cam, log)
         if problems:
             raise Refused('chain self-check failed: ' + '; '.join(problems))
-        files = {n: (live[n], md5(os.path.join(out, n))) for n in FILES5}
+        pins = read_live(pin_dir) if pin_dir else live
+        files = {n: (pins[n], md5(os.path.join(out, n))) for n in FILES5}
         report['files'] = files
-        write_install(out, files, todo + (['cam' + cam] if 'helicam' in todo else []))
+        write_install(out, files, todo + (['cam' + cam] if 'helicam' in todo else []), tag)
         with open(os.path.join(out, 'build_report.json'), 'w') as fh:
             json.dump(report, fh, indent=1, default=str)
     except BaseException:
@@ -356,18 +362,19 @@ def verify_final(out, todo, cam, log=print):
         log('  final: Escaping spline points %d' % n)
         if n > O.KEEP:
             bad.append('outro edit gone in the final zip (%d points)' % n)
-        if cam == '2c':
+        if cam in ROUTE_CAMS:
             B, k, _l, raw, _n = O.count_of(zp)
             R, T = O.frame_of(zp, k)
             if not O.route_done(O.world_points(raw, R, T), O.ROUTE_2C, 1.0):
-                bad.append('2c climb route gone in the final zip: %r' % (O.world_points(raw, R, T),))
+                bad.append('%s climb route gone in the final zip: %r' % (cam, O.world_points(raw, R, T),))
             else:
-                log('  final: Escaping spline is the 2c climb route (%d points)' % n)
+                log('  final: Escaping spline is the %s climb route (%d points)' % (cam, n))
     if 'helicam' in todo:
         import kl_club_helicam_1106 as H
         variant, f5, f6, aim = cam_params(cam)
         v = H.state(zp)[3]
-        if not H.done_state(v, *H.wanted(variant, f5, f6, aim), H.MODES[variant]):
+        B = H.state(zp)[0]
+        if not H.done_state(v, *H.wanted(variant, f5, f6, aim), H.MODES[variant]) or not H.eye_done(B, H.state(zp)[1], variant):
             bad.append('helicam edit gone in the final zip: %r' % (v,))
         else:
             log('  final: EscCamera01 %s f5/f6 %s,%s aim %s' % (v[11], v[5], v[6], v[9]))
@@ -410,7 +417,8 @@ def main(a):
             stage_single(a[1], in_dir, out, root, cam)
         else:
             only = opt('--only')
-            stage_chain(in_dir, out, root, cam, only.split(',') if only else None, '--keep-steps' in a, doors=opt('--doors'))
+            stage_chain(in_dir, out, root, cam, only.split(',') if only else None, '--keep-steps' in a, doors=opt('--doors'),
+                        pin_dir=opt('--pin-dir'), tag=opt('--tag', TAG))
     except Refused as e:
         print('REFUSED: %s' % e)
         return 1

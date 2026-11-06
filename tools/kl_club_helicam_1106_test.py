@@ -23,6 +23,13 @@ t('variant F = the stock LookFromPos floats, eye node CamPos01', fl == [0.0, 999
 vf = ['ECP_NotSet'] + fl + [0, 0, aim, 'eFMC_Unbreakable', 'eFMM_LookFromPos', 1]
 t('done_state F true in LookFromPos, false in LookAtPos', H.done_state(vf, fl, aim, 'eFMM_LookFromPos') and not H.done_state(vf, fl, aim)
   and not H.done_state(vf[:11] + ['eFMM_LookAtPos', 1], fl, aim, 'eFMM_LookFromPos'))
+fl, aim = H.wanted('D')
+t('variant D = stock outside camera: LookFromPosFA, floats 0 -270 -270 80 0 0, aim the heli group, eye = the 2c eye',
+  fl == [0.0, -270.0, -270.0, 80.0, 0.0, 0.0] and aim.endswith('EscapeChopper\\Escape_Chopper') and H.MODES['D'] == 'eFMM_LookFromPosFA'
+  and H.EYES['D'] == (7093.0, 2181.0, 2727.0) and 'F' not in H.EYES)
+vd = ['ECP_NotSet'] + fl + [0, 0, aim, 'eFMC_Unbreakable', 'eFMM_LookFromPosFA', 1]
+t('done_state D true in LookFromPosFA, false in 2c LookFromPos', H.done_state(vd, fl, aim, 'eFMM_LookFromPosFA') and not H.done_state(vd[:11] + ['eFMM_LookFromPos', 1], fl, aim, 'eFMM_LookFromPosFA'))
+t('done_state D false on an old floats set', not H.done_state(vd[:3] + [99999.0] + vd[4:], fl, aim, 'eFMM_LookFromPosFA'))
 try:
     H.wanted('C'); t('unknown variant refused', False)
 except ValueError:
@@ -54,5 +61,6 @@ with tempfile.TemporaryDirectory() as d:
     src = open(os.path.join(st, 'install.py')).read()
     t('install.py takes a custom tag and the live pin', "'.before-outcam2a1106'" in src and H.LIVE_PINS['F01_Main.zip'] in src
       and H.LIVE_PINS['F01_Main.zip'].startswith('e6d2f73e'))
+t('wanted() message names A, B, D, F', 'A, B, D or F' in open(H.__file__, encoding='utf-8').read())
 print('RESULT: %s' % ('FAIL %d' % len(fails) if fails else 'PASS'))
 sys.exit(1 if fails else 0)

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """kl_club_helicam_1106.py - Last Call (DM05A) pass helicam1106: the escape camera rides WITH the heli and looks back at the tower. OFFLINE, level data only.
 
-  python tools/kl_club_helicam_1106.py stage [--in-dir <dir>] [--out <dir>] [--variant A|B] [--f5 N] [--f6 N] [--aim <path>] [--pin-live] [--tag .before-x]
-  python tools/kl_club_helicam_1106.py check <zip> [--variant A|B]
+  python tools/kl_club_helicam_1106.py stage [--in-dir <dir>] [--out <dir>] [--variant A|B|D|F] [--f5 N] [--f6 N] [--aim <path>] [--pin-live] [--tag .before-x]
+  python tools/kl_club_helicam_1106.py check <zip> [--variant A|B|D|F]
 (no --force: the input md5 must be a pinned one or --allow-md5 <8+ hex digits>; chain with --in-dir on another stage, e.g. C:\\kl_build_1024\\lcoutro_1106)
 
 Plan and reasoning: re/lastcall_helicam_plan_1106.md. Problem: EscCamera01 is eFMM_LookFromPos, a FIXED eye at CamPos01 (7093, 2181, 2727); once the
@@ -49,7 +49,15 @@ STOCK_B = (0.0, -270.0, -270.0, 80.0, 0.0, -170.0)    # F06 CameraInVan_01 f1..f
 # climb route of kl_club_outro_1106.ROUTE_2C so the heli stays over open air, in view. f4 = 40 is probably a field of view (GUESS).
 AIM_F = 'ROOT\\EscCameraSetup!CamPos01'
 FLOATS_F = (0.0, 99999.0, 99999.0, 40.0, 0.0, 50.0)
-MODES = {'A': LOOK_AT, 'B': LOOK_AT, 'F': LOOK_FROM}
+# Variant D (candidate 2d, 11-06): the stock outside-camera of F02/F03/F06/F08 (kl2.exe 0x4471a1, mode eFMM_LookFromPosFA): eye = the camera box's OWN node,
+# aim = field 9 re-read every frame, so the eye stays fixed in Roof .rmi box 7 while the view follows the heli group. Node 11576 (parent 0 = a world place) moves
+# from (7800, 2271, 3500) to the 2c eye; prp ZGEOM[2] and the .gms trans change together (like kl_club_heli_1105 does for CamPos01); no entity is added.
+LOOK_FROM_FA = 'eFMM_LookFromPosFA'
+AIM_D = 'ROOT\\EscapeSetup!EscapeChopper\\Escape_Chopper'    # the heli group (ZGROUP with OnlineEscHavokCar), the analogue of stock F08 node 767
+FLOATS_D = (0.0, -270.0, -270.0, 80.0, 0.0, 0.0)               # the stock F02/F03/F08 outside cameras; GUESS: mode 4 ignores f1..f6 (kl2 0x447190 reads positions only)
+EYE_D = (7093.0, 2181.0, 2727.0)                               # = the 2c eye CamPos01, inside Roof .rmi box 7 (an eye outside every box gives a grey frame)
+MODES = {'A': LOOK_AT, 'B': LOOK_AT, 'F': LOOK_FROM, 'D': LOOK_FROM_FA}
+EYES = {'D': EYE_D}                                            # variants that also move the camera box node to this world place
 # live DM05A of 2026-11-06 (e6d2f73e), doors-1106 (a24d7432), outro-1106 (77a42f74), spawn2f-1106 (88e23dd5)
 KNOWN_IN = ('e6d2f73e', 'a24d7432', '77a42f74', '88e23dd5')
 TAG = '.before-helicam1106'
@@ -75,8 +83,10 @@ def wanted(variant, f5=None, f6=None, aim=None):
         fl, aim = list(STOCK_B), aim or AIM_B
     elif variant == 'F':
         fl, aim = list(FLOATS_F), aim or AIM_F
+    elif variant == 'D':
+        fl, aim = list(FLOATS_D), aim or AIM_D
     else:
-        raise ValueError('variant must be A, B or F')
+        raise ValueError('variant must be A, B, D or F')
     if f5 is not None:
         fl[4] = float(f5)
     if f6 is not None:
@@ -101,11 +111,31 @@ def done_state(v, fl, aim, mode=LOOK_AT):
             and all(fl[i] is None or abs(float(v[1 + i]) - fl[i]) < 1e-3 for i in range(6)))
 
 
+def eye_of(B, k):
+    """-> (prp ZGEOM[2] of the camera box node, .gms trans xyz) as float tuples."""
+    import kl_fa
+    import kl_prpjoin as J
+    lab = J.labels('dd', B.sc.cls(k))
+    z = tuple(float(x) for x in kl_fa.node_values(B.sc, k)[lab.index('ZGEOM[2]')])
+    return z, struct.unpack('<3f', B.ents[k - 1].trans[:12])
+
+
+def eye_done(B, k, variant):
+    """True when the variant moves no eye, or the box node (prp and .gms) sits at EYES[variant]."""
+    if variant not in EYES:
+        return True
+    z, t = eye_of(B, k)
+    return all(abs(z[i] - EYES[variant][i]) < 0.5 and abs(t[i] - EYES[variant][i]) < 0.5 for i in range(3))
+
+
 def check(zp, variant='A', log=print):
     B, k, ci, v = state(zp)
     log('%s (node %d): mode %s, field 9 %s, f1..f6 %s, message-only %s' % (CAMBOX, k, v[11], v[9], v[1:7], v[12]))
     fl, aim = wanted(variant)
-    log('RESULT: %s' % ('DONE' if done_state(v, fl, aim, MODES[variant]) else 'NOT DONE'))
+    ok = done_state(v, fl, aim, MODES[variant]) and eye_done(B, k, variant)
+    if variant in EYES:
+        log('box node place: prp %s, gms %s (want %s)' % (eye_of(B, k) + (EYES[variant],)))
+    log('RESULT: %s' % ('DONE' if ok else 'NOT DONE'))
     return 0
 
 
@@ -121,7 +151,8 @@ def build(src, dst, variant='A', f5=None, f6=None, aim=None, log=print):
     fl, aim = wanted(variant, f5, f6, aim)
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
     mode = MODES[variant]
-    if done_state(v, fl, aim, mode):
+    vals_done, eye_ok = done_state(v, fl, aim, mode), eye_done(B, k, variant)
+    if vals_done and eye_ok:
         shutil.copyfile(src, dst)
         log('already done: copied unchanged')
         return v
@@ -141,23 +172,40 @@ def build(src, dst, variant='A', f5=None, f6=None, aim=None, log=print):
             us[i] = [(0x0a, struct.pack('<f', fl[i - 1]))]
         us[9] = [(0x0c, struct.pack('<I', sc.p.key_index(aim)))]
         us[11] = [(0x0e, struct.pack('<I', sc.p.key_index(mode)))]
-    kl_fa.edit(sc, k, ci, fn)
+    if not vals_done:
+        kl_fa.edit(sc, k, ci, fn)
+    if not eye_ok:
+        if sc.parent[k] > 0:
+            raise ValueError('%s has a parent node: a world position is not its place (refusing)' % CAMBOX)
+        import kl_gms
+        import kl_prpjoin as J
+        import kl_fa_author as A
+        lab = J.labels('dd', sc.cls(k))
+        kl_fa.edit(sc, k, None, lambda us: A.setv(sc, us, lab.index('ZGEOM[2]'), [float(x) for x in EYES[variant]]))
+        e = B.ents[k - 1]
+        e.trans = struct.pack('<3f', *EYES[variant]) + e.trans[12:]
+        log('%s: place %s -> %s' % (CAMBOX, eye_of(B, k)[0], EYES[variant]))
     prp = sc.p.serialize()
     if Prp(prp).serialize() != prp:
         raise ValueError('the new .prp does not round-trip')
     new_files = dict(B.files)
     new_files[B.ext['.prp']] = prp
+    if not eye_ok:
+        gms, buf = B.scene.write()
+        new_files[B.ext['.gms']], new_files[B.ext['.buf']] = kl_gms.pack(gms), buf
     kl_graft.write_zip(dst, [(nm, new_files[nm]) for nm in B.order])
-    v2 = state(dst)[3]
+    B2, k2, _c2, v2 = state(dst)
     import zipfile
     with zipfile.ZipFile(src) as a, zipfile.ZipFile(dst) as b:
         if a.namelist() != b.namelist():
             raise ValueError('member list differs')
         diff = [x.filename for x in a.infolist() if a.read(x.filename) != b.read(x.filename)]
-    if not done_state(v2, fl, aim, mode) or len(diff) != 1 or not diff[0].lower().endswith('.prp'):
+    okd = (len(diff) == 1 and diff[0].lower().endswith('.prp')) or (not eye_ok and len(diff) <= 3 and all(
+        d.lower().rsplit('.', 1)[-1] in ('prp', 'gms', 'buf') for d in diff) and any(d.lower().endswith('.prp') for d in diff))
+    if not done_state(v2, fl, aim, mode) or not eye_done(B2, k2, variant) or not okd:
         raise ValueError('read-back failed: %r, members that differ %s' % (v2, diff))
-    log('%s: mode %s -> %s, field 9 %s -> %s, f5/f6 %s,%s -> %s,%s; only %s differs' % (
-        CAMBOX, v[11], v2[11], v[9], v2[9], v[5], v[6], v2[5], v2[6], diff[0]))
+    log('%s: mode %s -> %s, field 9 %s -> %s, f5/f6 %s,%s -> %s,%s; differs: %s' % (
+        CAMBOX, v[11], v2[11], v[9], v2[9], v[5], v[6], v2[5], v2[6], ', '.join(diff)))
     return v
 
 

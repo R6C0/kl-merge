@@ -119,11 +119,18 @@ KITS = {
                            files={'F01_Main.zip': 'e10ea4882161fe91d653d1c4f6e87abc', 'F01_Main.bots.zip': 'bffb9736', 'F01_Main.bots.base.md5': '369e91e3',
                                   'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
                            solo_secs=900, parts=('solo',), shots='400-556:4'),
+    # d2 (c9 11-06, candidate 2d): as 2c, but EscCamera01 is the stock outside camera (eFMM_LookFromPosFA): eye = the box node moved to the 2c eye
+    # (7093,2181,2727, Roof .rmi box 7), aim = the heli group (Escape_Chopper) re-read every frame, so the view follows the climb. Stage built from the
+    # pre-chain base D:/kl_stage/lc2c_base_1a97e186 (1a97e186) with --pin-dir = the live folder: installs DIRECTLY over live 2c (e10ea488), backups .before-chain2d1106.
+    # The eye check below stays active (the eye is fixed at CamPos01 again); the shots decide whether the heli is in view and lit.
+    'lcchain2d1106d': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2d_safedoors_live_1a97e186', tag='.before-chain2d1106',
+                           files={'F01_Main.zip': '1c1fc5d46dc60ce2a71319e8b56ece8b', 'F01_Main.bots.zip': '2718b4ca', 'F01_Main.bots.base.md5': 'a97a3f26'},
+                           solo_secs=900, parts=('solo',), shots='400-556:4'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
-      'lcchain2a1106n', 'lcchain2c1106d')
-FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d')          # boards at once at state 3
-LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
+      'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d')
+FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d')          # boards at once at state 3
+LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d', 'lcchain2d1106d')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
 
 
 def md5(p):
@@ -431,7 +438,7 @@ def verify(k, part, tagbase=None):
             if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n'):
                 # these stages move the eye on purpose (LookAtPos, f5/f6 offset from the heli): info only, the frames are judged by eye
                 chk('escape camera eye moved off (7093,2181,2727) (info)', True, '%d outro cam eyes, last %s' % (len(eyes), ('(%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
-            else:
+            else:   # includes lcchain2c1106d / lcchain2d1106d: the eye is FIXED at CamPos01 (2d: the box node itself), so it is still checked
               chk('escape camera eye about (7093,2181,2727) in the outro', bool(hit), '%d outro cam eyes, %s' % (len(eyes), ('e.g. (%.0f,%.0f,%.0f)' % hit[0]) if hit else ('last (%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
         st = [m.group(1) for l in a for m in [re.search(r'session: state \S+ -> (0x[0-9a-f]+)', l)] if m]
         chk('session reaches 0x1f then 0x20', '0x1f' in st and '0x20' in st[st.index('0x1f'):] if '0x1f' in st else False, 'states seen: %s' % ' '.join(st[-8:]))
