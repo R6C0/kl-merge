@@ -101,14 +101,12 @@ def solo_script(k, secs_total):
         # then wait for the round-over panel (0x1f) and the shop (0x20). Every wait goes on at its timeout so a dead chain still ends.
         s += ['wait 30000', 'pos at-60s', 'log BENCH1106 waiting for vehicle state 3', 'waitvan 3 600000', 'pos van3', 'wait 5000',
               'tele 7361 2014 3201', 'log BENCH1106 teleported into the escape box', 'wait 3000', 'pos teleported',
-              # run lc1106_solo 11-06: the tele landed (7361, 1882, 3201) but the record stayed in-play (a teleport does not seem to fire
-              # the box's enter test; GUESS) -> walk through it: toward the vehicle (7234, 3464, veh1dc=3 'at'), then back to the box node
-              'goto 7234 3464 60 8000', 'wait 2000', 'pos walk1', 'goto 7361 3201 60 8000', 'wait 2000', 'pos boarded',
-              # run lc1106 (11-06 02:43): 'pos boarded' was (7335, 1883, 3233), 130 under the box's 2014, and the player never went aboard,
-              # while a bot boarded from (7827, 2014, 3382). GUESS: the box's height test misses a body that fell to 1883 -> second try on the
-              # bot's floor point, walked into so the enter test runs
-              'tele 7827 2014 3382', 'wait 3000', 'pos bot-point', 'goto 7361 3201 60 8000', 'wait 2000', 'goto 7827 3382 60 8000', 'wait 2000',
-              'pos boarded2', 'waitvan 5 120000', 'pos van5',
+              # run lc1106 (11-06 02:43): the player stood in BoardingTrigger_Heli (centre 7361/2014/3201, half extents 400x200x300, so y 1814..2214;
+              # floor 1881) but never went aboard: a human boards only through PlayerAction 'EnterVehicle', i.e. HOLDING E there
+              # (re/human_escape_online_1028.md, live hold 2-5 s); the bench never pressed it. Walk from +x first: facing is a GUESS (eIntDir_CtrlDir)
+              'goto 7561 3201 60 8000', 'goto 7361 3201 60 8000', 'wait 1000', 'pos in-box',
+              'tap E 3000', 'wait 1000', 'pos try1', 'tap E 3000', 'wait 1000', 'pos try2', 'tap E 4000', 'wait 1000', 'pos boarded',
+              'waitvan 5 120000', 'pos van5',
               'wait 8000', 'pos after5', 'waitstate 0x1f 240000', 'pos s1f', 'wait 12000', 'waitstate 0x20 120000', 'log BENCH1106 LC solo done', 'wait 3000', 'pass 1000']
     else:
         for i in range(1, 11):

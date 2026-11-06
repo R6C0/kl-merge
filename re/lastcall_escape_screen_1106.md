@@ -56,3 +56,9 @@ Did the screen go black, show the sky, or show the map frozen? Did the round-ove
   camera on a player who did not escape, not a broken escape screen.
 - GUESS: the box's height test misses a body that fell to 1883 (the tele target is not floor). Next bench: second try on the bot's floor
   point (tools/kl_bench_1106.py LC script, 'pos bot-point' / 'pos boarded2'). Needs the game free.
+- CORRECTION (~11:00, workflow lc-boarding-test, adversarially checked): the height guess is WRONG. BoardingTrigger_Heli (node 11580,
+  PlayerAction EnterVehicle) is centred (7361, 2014, 3201) with half extents 400x200x300 (y 1814..2214); the floor is 1881, so the
+  player at 1883 was inside. A human boards only by HOLDING E in that box (0x40ddf0 eligibility -> OnlineGamePlayTrigger 0x8d2740 ->
+  rules 0x6c6c10: flag 0x20, record state 4; escaped flag 0x40 at departure). The bench never pressed E (as re/human_escape_online_1028.md
+  already said). The bot point (7827, 2014, 3382) is the AI's box+500 x path (ZAllyEscapeBox 0x907a50), outside the human box.
+  Bench now: tele, walk in from +x, 'tap E 3000' x2 + 'tap E 4000'. Facing for eIntDir_CtrlDir is a GUESS.
