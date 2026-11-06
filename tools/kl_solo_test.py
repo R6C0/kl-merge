@@ -118,6 +118,33 @@ def write_ini(path, secs):
     open(path, 'w', encoding='latin-1').write('\n'.join(lines) + '\n')
 
 
+def round_secs(lines):
+    """Seconds the seat spent in session state 0x19 (the round), from the 'session: state X -> Y' lines; None = never entered.
+    'SOLO match started' (what IN ROUND keys on) is the lobby launch, state 0x16: n9_1106 11-06 N9S_DM01 said IN ROUND on 9 seats
+    whose round lasted 0.7 s, and DD04 inst3 / DD08 inst2 never reached 0x19 at all. An open span runs to the last stamped line."""
+    def ts(l):
+        m = re.match(r'(\d\d):(\d\d):(\d\d)\.(\d{3}) ', l)
+        return int(m[1]) * 3600 + int(m[2]) * 60 + int(m[3]) + int(m[4]) / 1000 if m else None
+    total, start, last, seen = 0.0, None, None, False
+    for l in lines:
+        t = ts(l)
+        if t is None:
+            continue
+        if last is not None and t < last:
+            t += 86400                                    # past midnight
+        last = t
+        m = re.search(r'session: state (0x[0-9a-f]+) -> (0x[0-9a-f]+)', l)
+        if not m:
+            continue
+        if m[2] == '0x19' and start is None:
+            start, seen = t, True
+        elif m[1] == '0x19' and start is not None:
+            total += t - start; start = None
+    if start is not None:
+        total += last - start
+    return total if seen else None
+
+
 def solo_secs(n, total=2):
     # 2 instances: side by side 960x540; more: a grid of ceil(sqrt(total)) columns across 1920 px (9 -> 3x3 of 640x360)
     cols = 2 if total <= 2 else int(-(-total ** 0.5 // 1))
@@ -435,7 +462,12 @@ def main():
             if not lines:
                 v = 'NO LOG'
             elif any('SOLO match started' in l for l in lines):
-                v = 'IN ROUND'
+                v = 'IN ROUND'                            # = past the lobby launch (kept as is: kits match on it); the note says when no round was held
+                rs = round_secs(lines)
+                if rs is None:
+                    v += ' (lobby only: never in state 0x19)'
+                elif rs < 60:
+                    v += ' (round only %.1f s)' % rs
             else:
                 v = 'FAILED' if failed else 'not in round'
             verdict.append('inst%d %s' % (n, v))
