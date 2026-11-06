@@ -52,8 +52,17 @@ KITS = {
     # the map folder must be byte-identical after the run (escape boarding with E, re/lastcall_escape_screen_1106.md)
     'lclive1106': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': 'e6d2f73e'},
                        solo_secs=1500, parts=('solo',)),
+    # staged 11-06 on the live e6d2f73e (workflow lastcall-doors-spawns-stage, both reviewed ship_to_bench): kick doors (4 KL_Door groups,
+    # +187 entities, +20 .prm chunks, inis Entries=54446) and the 31 start nodes moved to the west end of floor 2
+    'lcdoors1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcdoors_1106', tag='.before-doors1106',
+                        files={'F01_Main.zip': 'a24d7432beae06204e9f98bf35f07ede', 'F01_Main.bots.zip': '997d5b3f', 'KLGuns.ini': 'e6f95d99',
+                               'KLJoin.ini': '520b0667'},
+                        solo_secs=1500, parts=('solo',)),
+    'lcspawn2f1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcspawn2f_1106', tag='.before-spawn2f1106',
+                          files={'F01_Main.zip': '88e23dd5896afc5ee471860a1a8c100c', 'F01_Main.bots.zip': '5e16c4a0'},
+                          solo_secs=1500, parts=('solo',)),
 }
-LC = ('lc1106', 'lcglass1106', 'lclive1106')
+LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106')
 
 
 def md5(p):
