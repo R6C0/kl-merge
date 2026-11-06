@@ -77,12 +77,10 @@ OsdScanSlice f62cfbe4, ScanMinFrames ce1dc86d+baa51a0e, ShopPoolBlock 50916295 (
 0 FAIL (9 HITCHY: max stop 1.5-2.8 s), seats 20.9-24.3 fps, summed 206 (SMF 189, old N9S 202 with 1 seat dead). klshop_tick left the top costs.
 Ready to offer: SHIP out_spb1106 58e710e6 + the 3 ini keys. Remaining hitches are the PC (9 games on one box), not the hook (~1-2 ms a frame).
 
-2026-11-06 ~10:00 - [shop] KLPic pictures now on 28 maps (stock F01-F09, DD01-09, all DM but DM05A); DD10 + DM05A get them in c9's slot_1106 step E. Bench pc7 DD05+DM07 PASS (2 seats, round 2, 0 faults).
-C: hit 274 MB free (bake refused, maps restored): 118 old backups moved to D:\kl_old_backups\dd_1106b. Earlier: pd2guns_1106 (11 maps + KLShopPage.ini), F2/F3 shop buttons (all maps), dll SHIP 727a73bb, ini e91096c7 (.before-pics1105 = 288fb016/abb2144f).
-11-06 ~12:30 REGRESSION: pics added 72 .prm chunks, KLGuns/KLJoin Entries= stale on 21 maps (hook ignored them: gun looks, fed bodies off). Fix 361a1d3e
-(kl_entries_fix.py --delta 72, dry 31 files 0 refused; --go after f0's bench), kl_shop_pics now syncs Entries itself.
-Undo: <work>/build/UNDO ALL 1105.bat (6 steps: c9 glass_all_1106 -> entries -> pics -> buttons -> pd2guns -> DM05A lastcall_glass_1106) -> restore dll/ini. Zombie kl2.exe (0 threads) block tasklist checks: --skip-run-check (+ --root "<DD>" for buttons/pics).
-Bench pc6 DM01 2 seats: IN ROUND, 0 faults, "ownpic: scan found own cards, mask fff0ffff ff". Next: other-maps pics bat; DM05A_glass variant staged for c9's glass fix. install.py retries WinError 32 + per-map rollback.
+2026-11-06 ~13:10 - [shop] PD2 GUNS 1106b LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51); pinned install.py, md5s asserted. Not yet seen in game: 2-seat DM02 bench after f0.
+Staged, NOT installed: 1106c = R700 (49) + GL40/GAS/FLARE (52-54, HK69 far copy 190 -> body 191 GUESS) at D:\kl_stage\pd2guns_1106c (on top of 1106b; verify PASS 22 zips).
+Earlier: KLPic pictures on 28 maps; Entries regression (pics +72 chunks) fixed live 361a1d3e. C: at 976 MB after 1106b: 9 DD *.before-1026loot8m moved to D:\kl_old_backups\dd_1106c (3.3 GB free).
+Undo: <work>/build/UNDO ALL 1105.bat (0: pd2guns_1106c, then 7 steps: pd2guns_1106b -> c9 glass_all_1106 -> entries -> pics -> buttons -> pd2guns -> DM05A lastcall_glass_1106) -> restore dll/ini. Zombie kl2.exe (0 threads) block tasklist checks: --skip-run-check (+ --root "<DD>" for buttons/pics).
 
 ## Owner's end goal (2026-10-09)
 An EXPANSION: Dog Days keeps everything it has and gains all of Dead Men's content. Additive, never

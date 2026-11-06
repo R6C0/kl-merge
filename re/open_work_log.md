@@ -1,3 +1,9 @@
+## 2026-11-06 ~13:10 [6b] PD2 GUNS 1106b INSTALLED (10 DM maps), 1106c STAGED (no crash involved)
+pd2guns_1106b live on DM01,DM01B,DM02,DM03,DM03A,DM06,DM06B,DM07,DM09,DM11B at ~12:58 (C45 item 62, HRL-7 items 50/51; 50 files, md5s asserted, backups
+.before-pd2guns1106b). DM05A held until c9's kits are done. 2c990e44: GL40 (M79) on items 52/53/54; HK69 root = detail-190 far copy -> body 191 (GUESS), host barrel/
+hammer dropped, fit 1.76. 18ea2c7a: pd2_guns_layer --layer; 1106c (R700 + GL40 x3) staged at D:\kl_stage\pd2guns_1106c on top of 1106b, verify PASS, rehearsed.
+UNDO ALL 1105.bat got step 0 (1106c, no-op until installed). C: fell to 976 MB: moved 9 DD *.before-1026loot8m (in no undo bat) to D:\kl_old_backups\dd_1106c -> 3.3 GB.
+
 ## 2026-11-06 ~12:25 [f0] GRUDGE PASS A: ALL GATES PASS (run 5, TEST 0bf88e4c, DD09 2 seats, no crash)
 First proof that a human's hit on an Ally AI heister ONLINE reaches OnlineGrudge: 15 human hits (attacker vtable 00bb45f4) on AI heisters 5/2/4, every one with a health
 drop (350 -> 284 ...), 2 lethal blows, heister 4 "died: lethal blow human -> killer found", "would call slot 129" (dry), 0 marks, 0 crashes. The run 4 misses were the rig:
