@@ -427,7 +427,7 @@ def criteria(t, host, join):
     dry = PASSES[t]['dry']
     R = lambda pat: re.findall(pat, host)
     out = []
-    on = R(r'grudge: OnlineGrudge on (\(dry log\))?: HOST only')
+    on = R(r'grudge: OnlineGrudge on( \(dry log\))?: HOST only')   # pass B run 1 (11-06): the old 'on (...)?:' wanted 'on :' and failed a1 on a live log
     tab = R(r'private ZSoldier table [0-9a-f]+ made')
     sub = R(r'online grudge: sub-mode \[0x168e59c\] = 0 \(Fragile Alliance\): on')
     off = R(r'the hit hook is OFF')

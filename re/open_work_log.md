@@ -1,3 +1,9 @@
+## 2026-11-06 ~13:25 [f0] ONLINE GRUDGE PASS B LIVE: a human who kills an AI heister is made traitor (no crash involved)
+grudge_1106 pass B (OnlineGrudgeDry=0, TEST 0bf88e4c, 2 seats DD09, 12:56): 16 human hits, 3 lethal blows, 1 "died ... killer found" (heister 1) ->
+"made traitor (slot 129 killer 0 victim -1, then slot 105), flags 00000000 -> 00000001", "traitors now: bots 0 human 1". 0 faults, 0 crashes.
+Summarizer a1 regex fixed ('on( \(dry log\))?:'); pass A + B both ALL GATES. Open: lethal blows with no "died" (down/revive?), client-seat victims,
+traitor cut in payout, online HUD marker. [Bots] OnlineGrudge stays default 0 until the owner OKs a SHIP build with "(recommended on)".
+
 ## 2026-11-06 ~13:20 [db] [Perf] BotScanSlice: the 3-seat host hitch is botfill's memory walks (no crash involved)
 TPC S3 (3 seats, TEST a9987972): all seats 30 fps, inst2/3 SMOOTH, host inst1 HITCHY (p95 249 ms). TickProfile: klbf_tick single calls 113-262 ms CPU at trig scan 1/2,
 the exit-trigger walk and 4 box looks (DD09 has no ZAllyEscapeBox) = 7 whole-memory walks a level load, each a hitch (log times match 1:1). 9-seat TPC: host 0.8 fps

@@ -330,7 +330,7 @@ static void kly_online_tick(int game_thread)
     }
 }
 
-/* [Bots] OnlineGrudge (default 0, NOT run live; re\online_grudge_1106.md): HOST only. A human who kills an AI heister of the host's round becomes the traitor, as stock does for
+/* [Bots] OnlineGrudge (default 0, bench-run live 11-06: grudge_1106 pass A + B PASS, 2 seats DD09; re\online_grudge_1106.md): HOST only. A human who kills an AI heister of the host's round becomes the traitor, as stock does for
    human on human: rules slot 129 (0x41d480, killer index, victim index) sets the traitor bit and sends RMCSetTraitor to the clients. Stock never reaches it for a bot (no ZFFPlayer record).
    RULES: s.rules of klbd_online_view is the SESSION object (the round key); the REAL rules object is [[0x168e9e4] + 0x54] (kog_rules), the one slot 129 / klud_flags / KLH_RULES_SV_OK want.
    KILLER, best first: (1) the LETHAL blow seen at the SOLDIER's hit handler (ZSoldier slot 96 = 0x8473a0, kog_w_hit below: attacker [hit+0], health before / after the original; rules slot 15 does
@@ -346,7 +346,7 @@ static int klbr_og_rules_busy(DWORD r);
 #define KOG_N KLB_NREC
 static struct { int on, dry, ndone, nfire, nlog, told_kind, told_sub, latch[KOG_N], lw[KOG_N]; DWORD rules, last, tid, actor[KOG_N], sol[KOG_N], vtold[KOG_N], lat_at[KOG_N], nh_at[KOG_N], lw_at[KOG_N]; unsigned long done[KGO_NDONE]; } kog_;
 
-/* THE HIT HOOK (fix 1106b; NOT run live). Rules slot 15 (klud_w15) is ZFFPlayer-only and never runs for an AI heister, so a human's kill of a bot was never seen there. The bot's own hit handler is
+/* THE HIT HOOK (fix 1106b; bench-run live 11-06, pass A + B PASS). Rules slot 15 (klud_w15) is ZFFPlayer-only and never runs for an AI heister, so a human's kill of a bot was never seen there. The bot's own hit handler is
    ZSoldier slot 96 = vtable 0xbd0954 + 0x180 = 0x8473a0 (thiscall: ecx soldier, one stack arg = hit record, ret 4; attacker actor [hit+0], hit type [hit+8]; actor = [soldier+0x40]; health [[actor+0x5fc]+4]).
    A SHIP build writes data only and the stock table is .rdata, so (as klbrain.c's klh_soldier_priv) a PRIVATE copy of the table (128 slots, the class has 118) carries slot 96 = kog_w_hit, and the
    hook points a TRACKED bot's soldier ([soldier+0], heap) at it (klh_svt maps it back to 0xbd0954: klh_soldier_og). Put back at a round's end / when the bot leaves the census. A soldier already on
@@ -794,7 +794,7 @@ static void kly_init(void)
     klyo.factor = kly_inif("OnlineCrewHealth", "0", 0.25f, 10, 0); if (klyo.factor == 1.0f) klyo.factor = 0;      /* own key: works without [Bots] Enable (online has no Arcade crew) */
     klyo.dry = klyo.factor > 0 && GetPrivateProfileIntA("Bots", "OnlineCrewHealthDry", 0, klh_ini) != 0;
     kog_.on = GetPrivateProfileIntA("Bots", "OnlineGrudge", 0, klh_ini) != 0; kog_.dry = kog_.on && GetPrivateProfileIntA("Bots", "OnlineGrudgeDry", 0, klh_ini) != 0;
-    if (kog_.on) klog("grudge: OnlineGrudge on%s: HOST only; a human who kills an AI heister becomes the traitor (rules slot 129; the kill is seen at the soldier's hit handler 0x8473a0 via a private ZSoldier table); NOT run live", kog_.dry ? " (dry log)" : "");
+    if (kog_.on) klog("grudge: OnlineGrudge on%s: HOST only; a human who kills an AI heister becomes the traitor (rules slot 129; the kill is seen at the soldier's hit handler 0x8473a0 via a private ZSoldier table); bench-run live 11-06 (grudge_1106 pass A + B)", kog_.dry ? " (dry log)" : "");
     kly.log = (int)GetPrivateProfileIntA("Bots", "Log", 1, klh_ini); if (kly.log < 0) kly.log = 0; if (kly.log > 2) kly.log = 2;
     if (klyo.factor > 0) klog("grudge: OnlineCrewHealth x %.2f%s: HOST only, online rounds, data writes only; acts when this machine hosts a round (GUESS: a client's hit is priced against the host's health object, not traced)", klyo.factor, klyo.dry ? " (dry log)" : "");
     if (!GetPrivateProfileIntA("Bots", "Enable", 0, klh_ini)) return;
