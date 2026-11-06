@@ -7,6 +7,7 @@ Bench kits for the two staged-but-never-run builds (2026-11-06). One command eac
                                                       Never launches the game, never writes into the game folder.
     python tools/kl_bench_1106.py run lc1106 [solo|online|all]
     python tools/kl_bench_1106.py run dd10s1106 [solo|long|all]
+    python tools/kl_bench_1106.py run lcglass1106 online       glass pass on the live chain: round-2 reset 0x25 time per seat
     python tools/kl_bench_1106.py verify lc1106|dd10s1106 [part]    re-read the logs of the last run (no game contact)
 
 Kits
@@ -33,7 +34,7 @@ HOOK_SRC = 'C:/kl_build_1024/week_1028/sm1105e/hook_test/dinput8.dll'    # TEST 
 HOOK_MD5 = '5f52009dd89f0e4d732a2addbed3d652'
 Q32 = 'C:/kl_build_1024/c9_1028/q32'
 COVER = ('AssertSoft', 'ClientBuild', 'ClientBuildHost', 'ClientRewrite', 'ClientRingSync')
-OPS = set('waitwin settle tapuntil tap wait windows sel expect msg waitload waitstate waitvan waitpeers tele pos ents peek log pass fail label jump onwin mouse'.split())
+OPS = set('waitwin settle tapuntil tap wait windows sel expect msg waitload waitstate waitvan waitpeers tele goto pos ents peek log pass fail label jump onwin mouse'.split())
 
 KITS = {
     'lc1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lastcall_chain_1105/stage', tag='.before-1105chain',
@@ -43,7 +44,12 @@ KITS = {
                       files={'F07_Main.zip': '66ec246da361ace049fc65e2762b4a9c', 'F07_Main.bots.zip': '3ccb580fc527638af2eb099394fc5369',
                              'F07_Main.WAV': '9fd304579b3dd40c577265a79f7c4e90', 'F07_Main.WHD': '3a260f8b542f4308f77e0a62840075a0'},
                       solo_secs=1500, parts=('solo', 'long')),
+    # glass pass on top of the LIVE chain (install.py pins c8dd18ee): the round-2 reset (0x25) must drop from 21-29 s per seat to seconds
+    'lcglass1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lastcall_glass_1106/stage', tag='.before-1106glass',
+                        files={'F01_Main.zip': '3f0018b38593d708ac830e53150fb814', 'F01_Main.bots.zip': 'cb962a65', 'F01_Main.bots.base.md5': '00cfe35a'},
+                        solo_secs=1500, parts=('online', 'solo')),
 }
+LC = ('lc1106', 'lcglass1106')
 
 
 def md5(p):
@@ -89,12 +95,15 @@ def solo_script(k, secs_total):
           'sel HeistLevel_P3 0xceceec %d' % c['entry'], 'wait 2500', 'expect 0xceceec %d' % c['entry'],
           'log BENCH1106 %s entry %d page 3 slot %s' % (c['map'], c['entry'], c['slot']), 'msg HeistLevel_P3 StartGame', 'waitload 300000',
           'log BENCH1106 level loaded: %s' % c['map'], 'wait 23000', 'peek 0x168e598+0x70 session-state-must-be-0x19', 'pos spawn']
-    if k == 'lc1106':
+    if k in LC:
         # Escape: the vehicle state machine is open-loop timers (re/lastcall_heli_1105.md). Wait for state 3 (van/chopper at the pad),
         # board by teleporting into the box (GUESS: the coordinates are the box from the doc, 7361/2014/3201; 'tele' is TEST-rig only),
         # then wait for the round-over panel (0x1f) and the shop (0x20). Every wait goes on at its timeout so a dead chain still ends.
         s += ['wait 30000', 'pos at-60s', 'log BENCH1106 waiting for vehicle state 3', 'waitvan 3 600000', 'pos van3', 'wait 5000',
-              'tele 7361 2014 3201', 'log BENCH1106 teleported into the escape box', 'wait 5000', 'pos boarded', 'waitvan 5 120000', 'pos van5',
+              'tele 7361 2014 3201', 'log BENCH1106 teleported into the escape box', 'wait 3000', 'pos teleported',
+              # run lc1106_solo 11-06: the tele landed (7361, 1882, 3201) but the record stayed in-play (a teleport does not seem to fire
+              # the box's enter test; GUESS) -> walk through it: toward the vehicle (7234, 3464, veh1dc=3 'at'), then back to the box node
+              'goto 7234 3464 60 8000', 'wait 2000', 'pos walk1', 'goto 7361 3201 60 8000', 'wait 2000', 'pos boarded', 'waitvan 5 120000', 'pos van5',
               'wait 8000', 'pos after5', 'waitstate 0x1f 240000', 'pos s1f', 'wait 12000', 'waitstate 0x20 120000', 'log BENCH1106 LC solo done', 'wait 3000', 'pass 1000']
     else:
         for i in range(1, 11):
@@ -111,7 +120,7 @@ AUTO = ['[Auto]', 'Enable=1', 'Hooks=0', 'Nodes=0', 'EndHooks=1', 'CmdDrop=Defau
 
 def probes(k):
     t = ['[Memory]', 'Log=1']
-    if k == 'lc1106':
+    if k in LC:
         t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1']
     return t
 
@@ -311,7 +320,7 @@ def verify(k, part, tagbase=None):
             if m and m.group(1) != '00000000':
                 hel.append((l[:12], tuple(float(m.group(i)) for i in (2, 3, 4))))
         pad = (7300, 2249, 3500)
-        if k == 'lc1106':
+        if k in LC:
             if hel:
                 d0 = sum((x - y) ** 2 for x, y in zip(hel[0][1], pad)) ** .5
                 d1 = min(sum((x - y) ** 2 for x, y in zip(h[1], pad)) ** .5 for h in hel)
@@ -328,7 +337,7 @@ def verify(k, part, tagbase=None):
         chk('session reaches 0x1f then 0x20', '0x1f' in st and '0x20' in st[st.index('0x1f'):] if '0x1f' in st else False, 'states seen: %s' % ' '.join(st[-8:]))
         van = [l[:140] for l in a if 'van card' in l or 'vehicle state' in l]
         print('  info vehicle lines: %d, last: %s' % (len(van), van[-1] if van else '-'))
-        if k == 'lc1106':
+        if k in LC:
             print('  info grey screen: LOOK at the shots (KLShot_inst1_NN.jpg in %s/%s); event times below' % (SOLO, tag))
             ev = [l[:12] + ' ' + l[13:100] for l in a if re.search(r'session: state \S+ -> 0x(1f|20)|BENCH1106|hud: van card.*state (3|5)', l)]
             for e in ev[:40]:
@@ -357,7 +366,13 @@ def verify(k, part, tagbase=None):
             want = 3 if part == 'long' else 2
             ends = sum(1 for i in range(1, len(st)) if st[i] == '0x1f' and st[i - 1] == '0x19')
             chk('inst%d rounds completed (>= %d round ends 0x19 -> 0x1f)' % (n, want), ends >= want, 'round ends %d, shops %d, match over %s' % (ends, st.count('0x20'), '0x28' in st))
-        if k == 'lc1106':
+        for n, lines in L.items():
+            # round reset dwell: the stripped HavokShatterGlassConnectivity made 0x25 last 21-29 s per seat on DM05A (DD maps ~0.01 s)
+            ts = [(l[:12], m.group(1), m.group(2)) for l in lines for m in [re.search(r'session: state (0x[0-9a-f]+) -> (0x[0-9a-f]+)', l)] if m]
+            sec = lambda t: int(t[0:2]) * 3600 + int(t[3:5]) * 60 + float(t[6:12])
+            dw = [sec(ts[i + 1][0]) - sec(ts[i][0]) for i in range(len(ts) - 1) if ts[i][2] == '0x25' and ts[i + 1][1] == '0x25']
+            chk('inst%d round reset 0x25 under 8 s' % n, bool(dw) and max(dw) < 8, '0x25 dwell s: %s' % (', '.join('%.1f' % x for x in dw) or 'never reached'))
+        if k in LC:
             rx = re.compile(r'botfill: round census: (\d+) ZFFActor')
             for n, lines in L.items():
                 c = sorted({int(m.group(1)) for l in lines for m in [rx.search(l)] if m})
@@ -409,7 +424,7 @@ def run(k, part):
         # unkillable kl2.exe left at ~44 K (Access denied to Stop-Process) hold no game: install.py's own tasklist check
         # would refuse forever, so skip it only when every kl2.exe is such a zombie
         print('  ignoring zombie kl2.exe (working set < 1 MB): %s' % z, flush=True)
-        if k == 'lc1106':
+        if k in LC:
             inst.append('--skip-run-check')
     print('INSTALLING the stage into the LIVE game folder (undone at the end): %s' % md, flush=True)
     rc_total = 0
@@ -427,7 +442,7 @@ def run(k, part):
             else:
                 secs = 2500 if p == 'long' else 1900
                 args = ['--n', '2', '--secs', str(secs), '--gap', '45', '--relaunch', '2', '--ini1', '%s/online_host.ini' % d, '--ini2', '%s/online_join.ini' % d]
-                if k == 'lc1106':
+                if k in LC:
                     args += ['--shots', '60-%d:60' % (secs - 60), '--d3shots']
             cmd = [sys.executable, 'tools/kl_solo_test.py', '--hook', '%s/hook_test' % d, '--tag', tag, '--base', '%s/KLHook_base.ini' % d, '--owner-away'] + args
             with open('%s/%s_run.txt' % (d, p), 'w') as out:
