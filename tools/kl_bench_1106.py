@@ -140,10 +140,13 @@ KITS = {
     'lcchain2f1106d': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2f_14c8d9dd', tag='.before-chain2f1106',
                            files={'F01_Main.zip': '1d3252991c7e5261e02adea9881c1c07', 'F01_Main.bots.zip': 'db375c5a', 'F01_Main.bots.base.md5': '4dce350a'},
                            solo_secs=900, parts=('solo',), shots='400-556:4'),
+    # the LIVE DM05A after the 2f install (11-06, owner's last test): nothing installed, live zip 1d325299 pinned, same ini tweaks and shots as lcchain2f1106d
+    'lclive2f1106': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': '1d325299'},
+                         solo_secs=900, parts=('solo',), shots='400-556:4'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
-      'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d')
-EYE_OF = {'lcchain2e1106d': (7400, 2500, 2800), 'lcchain2f1106d': (7400, 2500, 2800)}          # kits whose outro eye is not the 2c CamPos01 eye (7093,2181,2727)
+      'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106')
+EYE_OF = {'lcchain2e1106d': (7400, 2500, 2800), 'lcchain2f1106d': (7400, 2500, 2800), 'lclive2f1106': (7400, 2500, 2800)}          # kits whose outro eye is not the 2c CamPos01 eye (7093,2181,2727)
 FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d')          # boards at once at state 3
 LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
 
