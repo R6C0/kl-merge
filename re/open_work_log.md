@@ -1,3 +1,11 @@
+## 2026-11-06 ~18:10 [db] DD09 host 1.8 fps = intermittent Havok MOPP slowdown, NOT pd2guns 1106t (no crash involved)
+- OSS_DD09_FCS_S3_PD2T (3 seats, TEST a77e0546, right after 6b's 1106t install): the HOST ran at 1.8 fps for the whole round (~550 ms frames, limiter waiting 0 %,
+  hook 8-17 ms of each), 30 fps again after round end; clients 23 fps. Hitch probe (VA = 0x400000 + offset): Havok MOPP walker 0xa4dec0, sphere-triangle 0x9e5590
+  ("TtSphereTri"), collision dispatch 0x9f6f20, triangle math 0xa36a00/0xa373c0, MSVCR90 sqrt slow path (GUESS) = the 10-18 Vault NaN-cast signature (wf_4636ed46).
+- A/B with 6b: _PD2S2 (DD09 back on 1106s) host 29.9 fps SMOOTH; _PD2T2 (1106t re-installed, CRC-identical members) SMOOTH on all 3 seats, host 29.8 fps, p95 91 ms.
+  So 1106t stays live. The slow round is an open INTERMITTENT on the host (a non-finite cast origin: camera eye or a bot cast). The kit's KLHook_base_fcs.ini now has
+  [Camera] NanDump=1 (log only); neither A/B run logged a NanDump line. If it recurs, read that line + the hitch probe.
+
 ## 2026-11-06 ~18:30 [6b] PD2 guns 1106t LIVE on the 9 stock DD maps: MG42 item 42 + PAR item 40 + their shop cards (no crash involved)
 - Layer 1106t (93e38965) = the 1106f change on the 1106s stage. Card ids on DD01-09 are the same as on the DM maps (Pair08 = 3124, Pair11 = 3127).
 - Bench PD2S_DD05 PASS: 2 seats, round 2, 0 faults; page II rows 18/22 = items 42/40, rows 0/10/31 = 62/63/35, host + client.
