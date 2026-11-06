@@ -1,3 +1,10 @@
+## 2026-11-06 ~16:30 [6b] PD2 guns 1106s LIVE on the 9 stock DD maps (no crash involved)
+- Layer 1106s (all 19 PD2 gun keys, +203 chunks/map, live zips as base) installed on DD05 first, bench C:\kl_build_1024\pd2s_1106 (2 seats, stock DD05 slot F05,
+  PQQ_DD05 pair, TEST b6a69772) PASS: both seats round 2, 0 faults/asserts, "guns: level f0505_main has 6 gun(s) with 7 look(s)",
+  page II pool rows 0/10/31 = items 62/63/35 on host + client. Then DD01-04, DD06-09: Entries= 46318/40132/48290/51775/39075/52886/56577/48468/51929 (= staged), no .new.
+- Backups on D:\kl_stage\pd2guns_1106s_backup (md5 pins). UNDO ALL 1105.bat: new first step 0s (1106s --undo), dry run clean. C: 2.2 GB, D: 7.4 GB free.
+- Items 38/49 did not show in the 2-seat logs (no online swap row on stock maps in this script); not a fault.
+
 ## 2026-11-06 ~16:00 [c9] Last Call safe-doors chain bench lcchain2a1106d PASS; boarding works, outro still grey (no crash involved)
 - Kick doors cut to B01+A02 (`--doors`): chain benches had no bot past z 2145 before F03 (no AI kick step on the hook's exit orders); in 1106d 0 stalls there.
   LastVehicleLead=600 (kit only) called the heli at 300 s, before any bot reached stage 2, so the bots' own call time is still unmeasured.
