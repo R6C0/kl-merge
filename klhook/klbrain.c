@@ -150,6 +150,21 @@ static int klbr_marked_actor(DWORD actor)      /* klbotfill.c OnlineVanGatherSki
     for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && klbr_t[i].traitor && klbr_t[i].actor == actor) return 1;
     return 0;
 }
+static int klbr_was_traitor_actor(DWORD actor)      /* klgrudge.c OnlineGrudge (read only): 1 = this bot is or was a traitor THIS round: marked (e->traitor, any built state) or turned (klbr_tt keeps the actor after the team is restored) */
+{
+    int i;
+    if (!actor) return 0;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state && klbr_t[i].traitor && klbr_t[i].actor == actor) return 1;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_tt[i].actor == actor) return 1;
+    return 0;
+}
+static int klbr_traitor_bots(void)      /* klgrudge.c OnlineGrudge log only: bots that are traitors NOW this round (marked live, or turned and not yet restored) */
+{
+    int i, n = 0;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_t[i].state == 1 && klbr_t[i].traitor) n++;
+    for (i = 0; i < KLBR_MAX; i++) if (klbr_tt[i].on) n++;
+    return n;
+}
 static void klbr_nb_note(DWORD actor, int path, int phase)     /* a skip happened on 'path' (0..2); phase = the ledger phase (-1 untracked) */
 {
     int ix = klbr_nb_slot(actor);
@@ -283,6 +298,10 @@ static DWORD klbr_rrt[KLBR_RRT]; static BYTE klbr_rrc[KLBR_RRT]; static volatile
 static void (__cdecl *klbr_real_longjmp)(void *, int);
 static volatile LONG klbr_rr_sw;        /* 1 = the thunk has the shadow swapped in (game thread only) */
 static DWORD klbr_rr_G, klbr_rr_sm, klbr_rr_rules, klbr_rr_role;      /* what the thunk saved */
+static int klbr_og_rules_busy(DWORD r)      /* klgrudge.c OnlineGrudge (read only): 1 = r is the shadow rules block, or a swap frame / thunk slice has it swapped in now */
+{
+    return (r && r == klbr_shadow) || klbr_rr_sw || klbr_depth > 0;
+}
 static volatile LONG klbr_rr_in, klbr_rr_out, klbr_rr_leak, klbr_rr_veh, klbr_rr_mis, klbr_rr_foreign, klbr_rr_nested, klbr_rr_val[3], klbr_rr_told, klbr_rr_leak_told, klbr_rr_mode, klbr_rr_t10, klbr_rr_hand_ev, klbr_rr_hand_run;
 static struct { DWORD goal, ctx, val, snd, tid; int rec, cls; } klbr_rr_first[8];      /* the first swap-ins, logged by the tick */
 

@@ -58,6 +58,7 @@ C_TESTS = {
     'klcv_test.c': 'logic',            # klchar_voice.h
     'kldown_hold_test.c': 'logic',     # kldown_hold.h
     'klguard_test.c': 'logic',         # klguard_logic.h (OnlineGuardMode pure part)
+    'klogrudge_test.c': 'logic',       # klogrudge_logic.h ([Bots] OnlineGrudge pure part)
     'klgetup_test.c': 'logic',         # klgetup_logic.h (+ kldown_hold.h)
     'klgetupbeacon_test.c': 'logic',   # klgetupbeacon.h (OnlineGetUpBeacon pure part)
     'klway_test.c': 'logic',           # klway_logic.h (OnlineWayPerMap / OnlineLegHopDy pure part)
