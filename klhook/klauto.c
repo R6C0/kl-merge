@@ -1148,6 +1148,25 @@ static int kla_find_players(void)
     return kla_npl;
 }
 
+/* firebot truth (TEST rig): rounds in the clip of the gun in player P's hand, klreshade.c's read-only path ([P+0x920] item in hand, 0 = none /
+   holstered (GUESS); inventory [P+0xcec]: byte mode +4, 16-byte entries at +8, count +0xc; gun = entry dword 2; clip [w+0xdc] ^ 0xbeebbeeb when
+   vt+0x2fc is 0x511f50). -> rounds, or -1 = no gun in hand / unreadable. *wout = the gun object, *hout = [P+0x920]. */
+static int kla_fb_clip(DWORD P, DWORD *wout, DWORD *hout)
+{
+    DWORD hand = 0, inv, arr = 0, cnt = 0, w = 0, e[4], vt, raw; BYTE mode = 1;
+    *wout = 0; *hout = 0;
+    if (!klh_rd(P + 0x920, &hand, 4)) return -1;
+    *hout = hand;
+    if (!hand || hand >= 64 || !(inv = klh_rd32(P + 0xcec))) return -1;
+    if (!klh_rd(inv + 4, &mode, 1) || !klh_rd(inv + 8, &arr, 4) || !klh_rd(inv + 0xc, &cnt, 4) || !arr) return -1;
+    if (!mode) { if (klh_rd(arr + 16 * hand, e, sizeof e)) w = e[2]; }
+    else if (cnt <= 256) { DWORD i; for (i = 0; i < cnt; i++) if (klh_rd(arr + 16 * i, e, sizeof e) && e[0] == hand) { w = e[2]; break; } }
+    if (!w || !klh_rd(w, &vt, 4) || !klu_rdata_ptr(vt) || klh_rd32((DWORD_PTR)KLH_VA(vt + 0x2fc)) != 0x00511f50u) return -1;
+    if (!klh_rd(w + 0xdc, &raw, 4) || (raw ^= 0xbeebbeebu) > 9999) return -1;
+    *wout = w;
+    return (int)raw;
+}
+
 static int kla_local_player(void)
 {   /* the player the script moves: the game's own local player; when that pointer cannot be read, the one whose
        position has travelled furthest since the scan (the other fifteen stand still while nobody else plays;
@@ -1756,9 +1775,11 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                klgrudge's tick (it only reads); pitch is not aimed (bots on the host's level, torso height); a ZFFActor's team is [[actor+0x54]+4] == 2 for Ally (as klgrudge.c). */
             static DWORD t0, lastv, lasthp, held_t, held_ms; static int pc0 = -1, nfire, ndown, nkill; static DWORD tact, ptog; static float hp_start, hp_last;
             static struct klb_snap fs; static char fwhy[200];
+            static int fb_rprev, fb_drops, fb_fired, fb_dn, fb_clipok; static DWORD fb_wprev, fb_mask; static DWORD fb_hand;   /* firebot truth, sampled every poll */
             int me = kla_local_player(), i, best = -1, end = 0, aimed = 0; float v[3], h = 0, bp[3], p[3], bd = 1e30f, dx, dz, err = 0, rate, hp, lim = c->f[0] * 100.0f; DWORD act;
             if (pc0 != kla_pc || t0 != kla_cmd_t) {
                 pc0 = kla_pc; t0 = kla_cmd_t; lastv = 0; lasthp = 0; held_t = 0; ptog = 0; held_ms = 0; nfire = ndown = nkill = 0; tact = 0; hp_start = hp_last = -1;
+                fb_rprev = -1; fb_drops = fb_fired = fb_dn = fb_clipok = 0; fb_wprev = 0; fb_mask = 0; fb_hand = 0;
                 kla_out(1, "script %d: firebot start: %lu ms, within %.0f m, aim window %.1f deg", kla_pc + 1, c->n, c->f[0], c->f[2]);
             }
             if (now - lastv >= 100) {
@@ -1779,6 +1800,14 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                 if (!kle_node(klh_rd32(r->actor + 4), p, 0)) continue;
                 dx = p[0] - v[0]; dz = p[2] - v[2];
                 { float d = dx * dx + dz * dz; if (d > lim * lim) continue; if (r->actor == tact) d *= 0.25f; if (d < bd) { bd = d; best = i; memcpy(bp, p, 12); } }
+            }
+            if (!end) {   /* firebot truth, every poll (a 60 ms press falls between 1 s lines): clip drops of the gun in hand (a rise = reload, ignored), the input's
+                             FIRED byte [klo_input+0x3c] (klclubcalm.c) while button 0 is held, the input mask [P+0xed0] (GUESS: dword; 0x80 no buttons, 0x400 no fire, re/player_down.md) */
+                DWORD P = kla_pl[me], w = 0, gd, inp; int r = kla_fb_clip(P, &w, &fb_hand); BYTE fd = 0;
+                if (r >= 0) { fb_clipok++; if (w == fb_wprev && fb_rprev >= 0 && r < fb_rprev && fb_rprev - r <= 12) fb_drops += fb_rprev - r; fb_rprev = r; fb_wprev = w; }
+                else { fb_rprev = -1; fb_wprev = 0; }
+                fb_mask = klh_rd32(P + 0xed0);
+                if (kla_m_btn[0]) { fb_dn++; if ((gd = klh_rd32((DWORD_PTR)KLH_VA(KLO_GAMEDATA))) && (inp = klo_input(gd, P)) && klh_rd(inp + 0x3c, &fd, 1) && fd) fb_fired++; }
             }
             if (tact) {                                                     /* the old target: dead or gone from the census? */
                 int still = 0;
@@ -1819,7 +1848,15 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                         klh_rd(P + 0x2723, &p23, 1); klh_rd(P + 0x2729, &p29, 1); if (sm > 0xffff) { st5c = kla_rd32(sm + 0x5c); st54 = kla_rd32(sm + 0x54); }
                         kla_out(1, "script %d: firebot gates: rules %08lx; session type %lu role %lu; victim +0x780 %08lx +0x576 %d +0x774 %08lx +0x821 %d; me %08lx seat %08lx +0x7c %d, +0x2723 %d +0x2729 %d; [0xce8a44] %08lx",
                                 kla_pc + 1, (unsigned long)rl, (unsigned long)st5c, (unsigned long)st54, (unsigned long)a780, a576, (unsigned long)a774, a821, (unsigned long)P, (unsigned long)seat, s7c, p23, p29, (unsigned long)ff);
+                        kla_out(1, "script %d: firebot truth: hand item [P+0x920] %lu, gun %08lx clip %d, clip drops so far %d (polls with a readable clip %d); FIRED byte set in %d of %d polls with button 0 held; input mask [P+0xed0] %08lx",
+                                kla_pc + 1, (unsigned long)fb_hand, (unsigned long)fb_wprev, fb_rprev, fb_drops, fb_clipok, fb_fired, fb_dn, (unsigned long)fb_mask);
                     } } }
+            } else if (!end && c->f[0] <= 0.0f) {                         /* 'firebot <ms> 0' = the CONTROL: no target, no turn, button 0 held all along (does a scripted press fire at all?) */
+                kla_m_rate[0] = kla_m_rate[1] = 0;
+                if (!kla_m_btn[0]) { kla_m_btn[0] = 0x80; held_t = now; ndown++; }
+                if (now - lasthp >= 1000) { DWORD P = kla_pl[me]; lasthp = now | 1; nfire++;
+                    if (nfire <= 20) kla_out(1, "script %d: firebot control: button 0 held; firebot truth: hand item [P+0x920] %lu, gun %08lx clip %d, clip drops so far %d (polls with a readable clip %d); FIRED byte set in %d of %d polls with button 0 held; input mask [P+0xed0] %08lx (me %08lx)",
+                                            kla_pc + 1, (unsigned long)fb_hand, (unsigned long)fb_wprev, fb_rprev, fb_drops, fb_clipok, fb_fired, fb_dn, (unsigned long)fb_mask, (unsigned long)P); }
             } else if (!end) {
                 kla_m_rate[0] = kla_m_rate[1] = 0;
                 if (c->f[1] > 0.0f) kla_m_btn[1] = 0;
@@ -1832,8 +1869,8 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
             if (c->f[1] > 0.0f) kla_m_btn[1] = 0;
             if (kla_m_btn[0]) { kla_m_btn[0] = 0; held_ms += now - held_t; }
             hp = -1; if (tact) { DWORD hh = klh_rd32(tact + 0x5fc); if (hh && klh_rd32(hh + 0x24) == tact) klh_rd(hh + 4, &hp, 4); }
-            kla_out(1, "script %d: firebot over after %lu ms: fire held %lu ms in %d press(es), %d target(s) died; current target %08lx health now %.1f (at its start %.1f)",
-                    kla_pc + 1, now - kla_cmd_t, held_ms, ndown, nkill, (unsigned long)tact, hp, hp_start);
+            kla_out(1, "script %d: firebot over after %lu ms: fire held %lu ms in %d press(es), %d target(s) died; current target %08lx health now %.1f (at its start %.1f); truth: clip drops %d, FIRED in %d of %d held polls, hand item %lu, mask %08lx",
+                    kla_pc + 1, now - kla_cmd_t, held_ms, ndown, nkill, (unsigned long)tact, hp, hp_start, fb_drops, fb_fired, fb_dn, (unsigned long)fb_hand, (unsigned long)fb_mask);
             pc0 = -1; next = 1; break; }
         case C_TELE: kla_tele(kla_pc + 1, c->f); next = 1; break;
         case C_ENTS: kla_ents(kla_pc + 1, c->text, (int)c->n); next = 1; break;

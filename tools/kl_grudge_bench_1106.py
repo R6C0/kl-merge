@@ -30,7 +30,7 @@ DD = N.DD
 SOLO = N.SOLO
 Q32 = 'C:/kl_build_1024/c9_1028/q32'
 TPL_HOST, TPL_JOIN = '%s/Q32_DD05_host.ini' % Q32, '%s/Q32_DD05_join.ini' % Q32
-TEST_DLL_DEFAULT = os.path.join(ROOT, 'klhook', 'out_ogb1106f_test', 'dinput8.dll')      # 11-06 04:18: + klbrain traitor-cap fix 410ab59d (both checked in one slot)
+TEST_DLL_DEFAULT = os.path.join(ROOT, 'klhook', 'out_ogb1106g_test', 'dinput8.dll')      # 11-06 04:18: + klbrain traitor-cap fix 410ab59d (both checked in one slot)
 LIVE_SHIP_MD5 = '727a73bb'                               # the live SHIP the bench starts from and restores (sha1 dc41cc8f...)
 LIVE_SHIP_SHA1 = 'c8598902'
 LIVE_INI_SHA1 = 'a64a3996'
@@ -49,6 +49,10 @@ FIRE_BLOCK = ['waitstate 0x19 180000',
               # rules +0x285 ('looting started', set by the first loot, 0x5cac90) is 0 - pass A run 2 fired before any loot.
               # One byte = 1, as klfedkit.c's hunt does; the game clears it at the next round. firebot hp lines log it.
               'pokeb 168e9e4+54+285 1 GRUDGE1106 looting-started byte (G1) for the bench',
+              # CONTROL (run 3 had 0 human hits with G1 cleared): maxm 0 = no target, no turn, button 0 held; its 'firebot control'
+              # lines log clip drops / the FIRED byte / the input mask, so 'never fired' and 'fired and missed' tell apart.
+              # This one sits in the ~8 s no-turn window after 0x19; the second one comes after it.
+              'firebot 3000 0 15 0 0',
               'pos g0',
               'firebot 8000 40 15 60 1',
               'pos g1',
@@ -58,7 +62,8 @@ FIRE_BLOCK = ['waitstate 0x19 180000',
               'pos g2',
               'tap R',
               'wait 2500',
-              'firebot 25000 40 15 60 1',
+              'firebot 3000 0 15 0 0',
+              'firebot 25000 40 15 0 0',
               'pos g3',
               'log GRUDGE1106 firebot phase over; waiting for the death logs',
               'wait 5000',
@@ -310,7 +315,7 @@ def validate():
                 v.ok(d.get('BotFill', {}).get('OnlineHealthMul') == '1', '%s: [BotFill] OnlineHealthMul=1 (bench only; live 5)' % nm)
                 v.ok(sum(1 for c in scr if c == 'tap RIGHT') == 6, '%s: 6 x tap RIGHT = slot F05' % nm)
                 fb = [c for c in scr if c.startswith('firebot')]
-                v.ok(len(fb) == 3 and all(re.match(r'^firebot \d+ \d+(\.\d+)? \d+(\.\d+)?( \d+( [01])?)?$', c) for c in fb), '%s: %d firebot lines, args ms maxm deg parse' % (nm, len(fb)))
+                v.ok(len(fb) == 5 and all(re.match(r'^firebot \d+ \d+(\.\d+)? \d+(\.\d+)?( \d+( [01])?)?$', c) for c in fb), '%s: %d firebot lines, args ms maxm deg parse' % (nm, len(fb)))
                 i0 = next((i for i, c in enumerate(scr) if c.startswith('waitstate 0x19')), 99999); i1 = next((i for i, c in enumerate(scr) if c.startswith('firebot')), -1)
                 v.ok(0 <= i0 < i1, '%s: firebot comes after waitstate 0x19' % nm)
                 ip = next((i for i, c in enumerate(scr) if c.startswith('pokeb 168e9e4+54+285 1')), -1)
@@ -450,6 +455,11 @@ def criteria(t, host, join):
     out.append(('result', 'RESULT: inst1 IN ROUND' in rs or re.search(r'inst1 \| .*PASS', rs) is not None or 'RESULT PASS' in rs, 'bench output has RESULT PASS / IN ROUND (script reached pass)'))
     fb = R(r'firebot target rec'); fd = R(r'firebot fire DOWN'); fo = R(r'firebot over')
     out.append(('rig', bool(fb) and bool(fd) and bool(fo), 'rig sanity (diagnostic): firebot target %d, fire DOWN %d, firebot over %d' % (len(fb), len(fd), len(fo))))
+    # does a scripted press fire at all? the firebot 'over' lines carry the per-poll truth (klauto.c kla_fb_clip / FIRED byte / [P+0xed0])
+    tr = re.findall(r'firebot over after .*?truth: clip drops (\d+), FIRED in (\d+) of (\d+) held polls, hand item (\d+), mask ([0-9a-f]+)', host)
+    out.append(('fires', any(int(d) > 0 for d, _, _, _, _ in tr), 'scripted press fires (diagnostic): per firebot step (clip drops, FIRED polls / held polls, hand item, mask): %s. '
+                'drops 0 + FIRED 0 = the press never reaches the action (hand item 0 = holstered, mask bits 0x80/0x400); drops 0 + FIRED > 0 = trigger seen, no bullet; drops > 0 = it fires, the shots miss'
+                % ('; '.join('%s, %s/%s, %s, %s' % x for x in tr) or 'no truth lines (older dll?)')))
     return out
 
 

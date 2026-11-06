@@ -1,3 +1,9 @@
+## 2026-11-06 ~12:30 [f0] grudge bench: does a scripted press fire? (staged, not run)
+Workflow wf_db58f10f: nothing in the repo proves a scripted mouse button 0 fires a human's gun (re/playtest.md:104, :319). The bench also never read a shot.
+The ~8 s with no turning after 0x19 is real (firebot 1 stayed at -35 deg). TEST out_ogb1106g_test 6def0e58: the firebot samples, every poll, the clip of the gun in hand
+(klreshade path, [w+0xdc]^0xbeebbeeb), the FIRED byte [klo_input+0x3c] and the mask [P+0xed0]. 'firebot <ms> 0' = control hold with no target. Kit: 2 controls (in/after the window),
+last firebot holds continuously with no aim button. summarize prints 'fires'. Next slot after db.
+
 ## 2026-11-06 ~11:40 [f0] OnlineGrudge pass A run 3: G1 cleared, still no human hit
 TEST out_ogb1106f_test 11f8078a (pokeb + 'firebot gates' read-only line). pokeb wrote rules 309e6260 +0x285 0 -> 1, and it stayed 1 for the whole firebot.
 Gates were harmless: session type 4 role 2, victim +0x780 0 / +0x576 1 / +0x774 0, seat +0x7c 0 (gate A off). Still 77 presses, 8.3 s held, 0 human hits at slot 96, bot health 350.
