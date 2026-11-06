@@ -693,6 +693,8 @@ def main(a):
         fresh = [m for m in maps if not os.path.isfile(os.path.join(out, m, 'report.json'))]      # an already staged map is rewritten in place (peak ~ +460 MB for one map)
         need = (len(fresh) + (1 if len(fresh) < len(maps) else 0)) * 460 << 20
         spare = (2 << 30) if fresh else (600 << 20)
+        if '--spare-mb' in a:    # a tight D: (one map at a time, stage ~460 MB); default spare unchanged
+            spare = int(a[a.index('--spare-mb') + 1]) << 20; del a[a.index('--spare-mb'):a.index('--spare-mb') + 2]
         if shutil.disk_usage(out).free < need + spare:
             sys.exit('disk: want %d MB + %d MB spare on the stage drive' % (need >> 20, spare >> 20))
         stage(out, maps)
