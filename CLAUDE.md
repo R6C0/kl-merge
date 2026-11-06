@@ -71,8 +71,9 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 van 5, status6, outro eye = EscCamera01, heli pass 314 m, verify 4/4 PASS. Earlier "no escape screen" = the rig never held E. Glass live on all 11 DM maps
 (md5s in re/open_work_log.md). Rerun queued after f0 + db with D3dShotPost=1 + [ReShade] Bridge=1 (no shots last time) to judge the grey screen.
 
-2026-11-06 ~10:00 - [db] 9-SEAT SWEEP n9_1106: 1 SMOOTH / 6 HITCHY / 11 FAIL, all 9-seat runs 13-26 fps (one-PC contention). Hook bug: OSD scan 50-85 s in one call, watchdog killed 3 seats.
-Fix f62cfbe4 [Perf] OsdScanSlice=1: TEST out_oss1106_test 655ec675 / SHIP 2b3f2a22, not installed, not run. Next (game free): DD09 9 seats on it. Report C:/kl_build_1024/n9_1106/summary_1106.txt.
+2026-11-06 ~11:50 - [db] 9-SEAT PERF: n9_1106 sweep = one-PC contention (13-26 fps). Hook fixes, all [Perf] "(recommended on)", NOT installed (live 727a73bb):
+OsdScanSlice f62cfbe4, ScanMinFrames ce1dc86d+baa51a0e (bench OSS_DD09_SMF: 9/9 in round, no starved seat, all 20-22 fps), ShopPoolBlock 50916295 (kls_ammo 471 reads/frame -> 1).
+Current build TEST out_spb1106_test 4a3387ea / SHIP out_spb1106 58e710e6. Next: one DD09 9-seat bench of 4a3387ea, then offer the SHIP install.
 
 2026-11-06 ~09:00 - [esc] Last Call escape screen: static research only, re/lastcall_escape_screen_1106.md. Hook does not hide the stock camera/outro; cause unproven (degenerate EscCamera01 in live zip, or round-over never reached). Nothing staged; next: one Log Level=2 live run when owner says test.
 
