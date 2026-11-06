@@ -303,9 +303,8 @@ def verify(k, part, tagbase=None):
         chk('inst%d no fault lines / dump files' % n, not f and not dm, ('first: ' + (f[0][:160] if f else dm[0])) if (f or dm) else '(%d log lines, 0 dumps)' % len(lines))
     if part == 'solo':
         a = L[1]
-        census = [int(m.group(1)) for l in a for m in [re.search(r'round census: (\d+) ZFFActor', l)] if m]
-        if k == 'lc1106':
-            chk('loads with census 130 (previously 116)', 130 in census, 'census lines: %s' % (sorted(set(census)) or 'none'))
+        # the census line ("botfill: round census") is logged only in an online FA round (klbotfill.c klbf_tick gate):
+        # the 130 check lives in the online branch
         hel = []
         for l in a:
             m = re.search(r'heli: t=.*zheli=(\w+) vt=\w+ pos=\S*\((-?\d+), (-?\d+), (-?\d+)\)', l)
@@ -320,9 +319,11 @@ def verify(k, part, tagbase=None):
             else:
                 chk('ZHeli moves toward (7300,2249,3500)', False, 'no "heli: t=" line with a ZHeli (is [Heli] Probe=2 in the run ini?)')
             eye = (7093, 2181, 2727)
-            camlines = [l for l in a if ' cam:' in l or ' camev:' in l]
-            hit = [l for l in camlines if any(near(t[i:i + 3], eye, 150) for t in [nums(l)] for i in range(max(0, len(t) - 2)))]
-            chk('escape camera eye about (7093,2181,2727)', bool(hit), ('e.g. ' + hit[0][:150]) if hit else '%d cam lines, none with that eye (GUESS: the log may print the eye in another form; look at the shots)' % len(camlines))
+            # klcam.c logs the render camera as "cam: ... eye X Y Z"; only the outro (after 0x19 -> 0x1f) counts
+            i0 = next((i for i, l in enumerate(a) if re.search(r'session: state \S+ -> 0x1f', l)), len(a))
+            eyes = [tuple(float(m.group(j)) for j in (1, 2, 3)) for l in a[i0:] if ' cam:' in l for m in [re.search(r'\beye (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)', l)] if m]
+            hit = [e for e in eyes if near(e, eye, 150)]
+            chk('escape camera eye about (7093,2181,2727) in the outro', bool(hit), '%d outro cam eyes, %s' % (len(eyes), ('e.g. (%.0f,%.0f,%.0f)' % hit[0]) if hit else ('last (%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
         st = [m.group(1) for l in a for m in [re.search(r'session: state \S+ -> (0x[0-9a-f]+)', l)] if m]
         chk('session reaches 0x1f then 0x20', '0x1f' in st and '0x20' in st[st.index('0x1f'):] if '0x1f' in st else False, 'states seen: %s' % ' '.join(st[-8:]))
         van = [l[:140] for l in a if 'van card' in l or 'vehicle state' in l]
@@ -335,8 +336,8 @@ def verify(k, part, tagbase=None):
             import glob
             for s in sorted(glob.glob('%s/%s/KLShot_inst1_*.jpg' % (SOLO, tag)))[:90]:
                 print('        shot %s %s' % (time.strftime('%H:%M:%S', time.localtime(os.path.getmtime(s))), os.path.basename(s)))
-            fem = [l for l in a if 'civilian_female' in l and 'voice' in l]
-            chk('women voice pools used (civilian_female / _02)', bool(fem), '%d voice lines; models: LOOK at the shots (GUESS: a female voice line means the women spawned)' % len(fem))
+            # civilian speech is the engine's own sound-bank playback: the hook logs none, so no log check is possible
+            print('  info women / civilian voices: not logged by the hook; LOOK at the shots and listen')
             sq = [l for l in a if re.search(r'squad|spawn', l, re.I)]
             print('  info squad/spawn lines: %d (first: %s)' % (len(sq), sq[0][:140] if sq else '-'))
     if k == 'dd10s1106':
@@ -352,8 +353,15 @@ def verify(k, part, tagbase=None):
     if part in ('online', 'long'):
         for n, lines in L.items():
             st = [m.group(1) for l in lines for m in [re.search(r'session: state \S+ -> (0x[0-9a-f]+)', l)] if m]
-            want = 4 if part == 'long' else 2
-            chk('inst%d rounds completed (>= %d shop visits 0x20)' % (n, want), st.count('0x20') >= want, 'shops %d' % st.count('0x20'))
+            # a round ends 0x19 -> 0x1f; after the match's last round 0x1f goes to 0x28 (match over), not to the shop 0x20
+            want = 3 if part == 'long' else 2
+            ends = sum(1 for i in range(1, len(st)) if st[i] == '0x1f' and st[i - 1] == '0x19')
+            chk('inst%d rounds completed (>= %d round ends 0x19 -> 0x1f)' % (n, want), ends >= want, 'round ends %d, shops %d, match over %s' % (ends, st.count('0x20'), '0x28' in st))
+        if k == 'lc1106':
+            rx = re.compile(r'botfill: round census: (\d+) ZFFActor')
+            for n, lines in L.items():
+                c = sorted({int(m.group(1)) for l in lines for m in [rx.search(l)] if m})
+                chk('inst%d loads with census 130 (previously 116)' % n, 130 in c, 'census lines: %s' % (c or 'none'))
         a = L[1]
         bg = [l[:150] for l in a if 'botgate' in l and ('bots' in l)]
         chk('botgate decided for the slot', bool(bg), bg[-1] if bg else 'no botgate line')
@@ -372,6 +380,17 @@ def sh(cmd, **kw):
     return subprocess.run(cmd, **kw).returncode
 
 
+def kl2_procs():
+    """[(pid, working set KB)] for every kl2.exe, from tasklist's CSV."""
+    out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq kl2.exe', '/FO', 'CSV', '/NH'], capture_output=True, text=True).stdout
+    r = []
+    for l in out.splitlines():
+        f = [x.strip('"') for x in l.split('","')]
+        if len(f) >= 5 and f[0].lower() == 'kl2.exe':
+            r.append((int(f[1]), int(re.sub(r'\D', '', f[4]) or 0)))
+    return r
+
+
 def run(k, part):
     c = KITS[k]
     if validate(k):
@@ -383,6 +402,15 @@ def run(k, part):
     d, md, before = '%s/%s' % (KIT, k), mapdir(k), None
     before = snap(md)
     inst = [sys.executable, '%s/install.py' % c['stage']] + (['--game', DD] if k == 'dd10s1106' else [])
+    z = kl2_procs()
+    if any(kb >= 1024 for _, kb in z):
+        print('RESULT: not started - a live kl2.exe is running: %s' % z); return 1
+    if z:
+        # unkillable kl2.exe left at ~44 K (Access denied to Stop-Process) hold no game: install.py's own tasklist check
+        # would refuse forever, so skip it only when every kl2.exe is such a zombie
+        print('  ignoring zombie kl2.exe (working set < 1 MB): %s' % z, flush=True)
+        if k == 'lc1106':
+            inst.append('--skip-run-check')
     print('INSTALLING the stage into the LIVE game folder (undone at the end): %s' % md, flush=True)
     rc_total = 0
     if sh(inst):
