@@ -78,6 +78,7 @@ klsy spikes are the kit's [Sync] Probe=1, not players. Left: ~5 ms whole-table w
 Ready to offer: SHIP out_fcs1106 e88a6093 + the 6 ini keys.
 
 2026-11-06 ~18:30 - [shop] 1106t LIVE on the 9 stock DD maps: MG42 (item 42) + PAR (item 40) with their cards, like the DM maps. Bench PD2S_DD05 PASS (rows 18/22 = items 42/40 host+client). Entries = 1106s + 59 each. Backups hard-linked to the 1106s stage (install.py --link-from), stage dropped (--cleanup). UNDO ALL: new step 0t first.
+DD09 1.8 fps host (db OSS_DD09_FCS_S3_PD2T, Havok MOPP sphere-tri 0xa4dec0/0x9e5590) A/B'd: _PD2S2 (1106s) and _PD2T2 (1106t, rebuilt stage zip bc5da13a, same CRCs) both 29.8+ fps -> one-off, NOT 1106t; 1106t stays live. db tracks it as an intermittent (NanDump=1).
 2026-11-06 ~17:40 - [shop] PD2 guns on ALL 11 DM maps: DM05A got 1106c+d+e+f on c9's chain 2c (bench pd2a_1106 PASS, zip 14c8d9dd, Entries=54659); 1106f (MG42 item 42, PAR item 40 + cards) also on DM01B/DM03A/DM06B/DM11B. No free item id left. Backups on D: hard-linked (dedupe_backups). UNDO ALL order: 0s 0f 0a 0b 0 0c(c9 chain) 1..7.
 2026-11-06 ~16:30 - [shop] PD2 GUNS on the 9 STOCK DD maps too: layer 1106s (19 guns) LIVE DD01-09, bench PD2S_DD05 PASS (items 62/63/35 in page II pool host+client); UNDO ALL step 0s first.
 2026-11-06 ~15:45 - [shop] PD2 GUNS 1106b+c+d+e LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51), R700 (49), GL40 x3 (52-54, GUESS 190->191), RPK on Minimi 45-48 (GUESS 62->63), Deagle 63.
