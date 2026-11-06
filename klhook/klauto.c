@@ -1809,7 +1809,17 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                 else if (kla_m_btn[0] && c->f[3] > 0.0f && aimed && now - ptog >= (DWORD)c->f[3]) { kla_m_btn[0] = 0; held_ms += now - held_t; ptog = now; }
                 else if (kla_m_btn[0] && (err > c->f[2] * 3.0f || err < -c->f[2] * 3.0f)) { kla_m_btn[0] = 0; held_ms += now - held_t; if (ndown <= 6) kla_out(1, "script %d: firebot fire UP: bearing error %.1f", kla_pc + 1, err); }
                 if (now - lasthp >= 1000) { lasthp = now | 1; nfire++; if (nfire <= 20) { DWORD gs = kla_rd32((DWORD_PTR)VA(0x168e9e4)), rl = gs ? kla_rd32(gs + 0x54) : 0; BYTE b285 = 0xff; if (rl > 0xffff) kla_rd(rl + 0x285, &b285, 1);   /* G1 gate (0x868b11, ZFFActor slot 422): a human's hit on an Ally bot is dropped while it is 0; 255 = unreadable */
-                    kla_out(1, "script %d: firebot hp: rec %d actor %08lx %.1f m, bearing error %.1f, fire %s, health %.1f (target start %.1f), rules +0x285 %d", kla_pc + 1, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, kla_m_btn[0] ? "DOWN" : "up", hv, hp_start, b285); } }
+                    kla_out(1, "script %d: firebot hp: rec %d actor %08lx %.1f m, bearing error %.1f, fire %s, health %.1f (target start %.1f), rules +0x285 %d", kla_pc + 1, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, kla_m_btn[0] ? "DOWN" : "up", hv, hp_start, b285);
+                    {   /* read-only inputs of the other hit drops on the ZFFActor chain (static RE wf_4900792f, 11-06): gate A 0x868a37/0x868a44 = [victim+0x780] != 0 or dead
+                           ([victim+0x576] == 0) when the attacker's seat byte [[P+0x2748]+0x7c] is set; slot 96 0x8473c3 [actor+0x576] != 1 exits, 0x847534 [actor+0x774] holder;
+                           0x868ad2 (non-Ally path only) [0xce8a44] / [P+0x2723] / [P+0x2729]. Sizes: 0x780 / 0x774 / 0xce8a44 read as dwords, the rest as bytes (GUESS for 0xce8a44). */
+                        DWORD P = kla_pl[me], seat = klh_rd32(P + 0x2748), sm = kla_rd32((DWORD_PTR)VA(0x168e598)), a780 = klh_rd32(act + 0x780), a774 = klh_rd32(act + 0x774), ff = kla_rd32((DWORD_PTR)VA(0xce8a44)), st5c = 0, st54 = 0;
+                        BYTE a576 = 0xff, a821 = 0xff, s7c = 0xff, p23 = 0xff, p29 = 0xff;
+                        klh_rd(act + 0x576, &a576, 1); klh_rd(act + 0x821, &a821, 1); if (seat > 0xffff) klh_rd(seat + 0x7c, &s7c, 1);
+                        klh_rd(P + 0x2723, &p23, 1); klh_rd(P + 0x2729, &p29, 1); if (sm > 0xffff) { st5c = kla_rd32(sm + 0x5c); st54 = kla_rd32(sm + 0x54); }
+                        kla_out(1, "script %d: firebot gates: rules %08lx; session type %lu role %lu; victim +0x780 %08lx +0x576 %d +0x774 %08lx +0x821 %d; me %08lx seat %08lx +0x7c %d, +0x2723 %d +0x2729 %d; [0xce8a44] %08lx",
+                                kla_pc + 1, (unsigned long)rl, (unsigned long)st5c, (unsigned long)st54, (unsigned long)a780, a576, (unsigned long)a774, a821, (unsigned long)P, (unsigned long)seat, s7c, p23, p29, (unsigned long)ff);
+                    } } }
             } else if (!end) {
                 kla_m_rate[0] = kla_m_rate[1] = 0;
                 if (c->f[1] > 0.0f) kla_m_btn[1] = 0;

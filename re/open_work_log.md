@@ -1,3 +1,8 @@
+## 2026-11-06 ~11:40 [f0] OnlineGrudge pass A run 3: G1 cleared, still no human hit
+TEST out_ogb1106f_test 11f8078a (pokeb + 'firebot gates' read-only line). pokeb wrote rules 309e6260 +0x285 0 -> 1, and it stayed 1 for the whole firebot.
+Gates were harmless: session type 4 role 2, victim +0x780 0 / +0x576 1 / +0x774 0, seat +0x7c 0 (gate A off). Still 77 presses, 8.3 s held, 0 human hits at slot 96, bot health 350.
+AI hits are logged normally and bot health regenerates (344 -> 350). So the rig is the cause: the shots miss or never fire. Pass B skipped, game handed to db. Next: prove a scripted press fires (ammo/shot counter), then the aim.
+
 ## 2026-11-06 ~11:35 [c9] Last Call: the grey/black escape screen reproduced
 lclive1106 run2 (shots via ReShade bridge): boarded again via E; after the heli leaves (~11:29:59) the outro eye stays fixed on EscCamera01
 and follows the heli into the night sky: shots 11:30:09-11:30:49 black except HUD, ~60 s until round over. Score screen fine.
