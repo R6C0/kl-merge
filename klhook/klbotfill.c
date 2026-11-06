@@ -3124,12 +3124,15 @@ static void klbf_ap_run(DWORD now)
     }
 }
 
+#define KLBF_CS_BLOCKS 128u      /* [Perf] FillCensusSlice: blocks of 64 slots a frame (1 MB of the table: 8 frames a census) */
+static struct klbf_census { DWORD tab, i, sm, role; LONG gen0; int run, n, ally, alive, tact, other, lkn; struct klbf_lkrec lk[64]; } klbf_cs;
+static void klbf_cs_step(DWORD nblocks);
 static void klbf_tick(int game_thread)
 {
-    static DWORD last, scan, told_sm; static LONG scanFr; DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0, h, v, lo, hi, p, tab, i, blk[64 * 32]; BYTE cur = 0, mx = 0;
-    int conn, target, n = 0, ally = 0, alive = 0, tact = 0, other = 0;
-    static struct klbf_lkrec lk[64]; int lkn = 0;
+    static DWORD last, scan, told_sm; static LONG scanFr; DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0, h, v, lo, hi, p, tab; BYTE cur = 0, mx = 0;
+    int conn, target;
     if (game_thread && klh_exe_ok && klbf_walk_cur) klbf_walk_step(klbf_walk_cur, klbf_walk_slice());      /* [Perf] BotScanSlice: a running pass goes on every frame */
+    if (game_thread && klh_exe_ok && klbf_cs.run) klbf_cs_step(KLBF_CS_BLOCKS);      /* [Perf] FillCensusSlice: a running census goes on every frame (only ever running with the key on) */
     if (!(klbf_on || klbf_oh || klbf_ot || klbf_lk == 2 || klbf_ap) || !game_thread || !klh_exe_ok || now - last < 500) return;      /* OnlineHost alone only runs the census below (no lobby change: kllobby.c reads OnlineFill itself) */
     last = now;
     if (klbf_ap) klbf_ap_run(now);      /* ArcadeProbe: offline Arcade only (klb_read says no for a net role 2/3), log only */
@@ -3157,36 +3160,55 @@ static void klbf_tick(int game_thread)
         static DWORD sqlast; static int tries;
         if (now - sqlast >= 1000) { sqlast = now; if (klbf_squads(klbf_fill) > 0 || ++tries >= 8) { klbf_sq_done = sm; tries = 0; } }
     }
-    if (state < 0x13 || !klh_due(scan, scanFr, 5000, now)) return;
+    if (state < 0x13 || !klh_due(scan, scanFr, 5000, now) || klbf_cs.run) return;
     scan = now; scanFr = klh_game_ticks;
     if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return;
-    for (i = 0; i < 0x10000 && n < 400; i += 64) {
-        DWORD k;
-        if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) break;
+    memset(&klbf_cs, 0, sizeof klbf_cs);
+    klbf_cs.run = 1; klbf_cs.tab = tab; klbf_cs.sm = sm; klbf_cs.role = role; klbf_cs.gen0 = klmv_level_gen + klmv_scene_gen;
+    klbf_cs_step(klperf_on(&klperf_fcs, "FillCensusSlice") ? KLBF_CS_BLOCKS : 0x10000 / 64);      /* off: the whole table now, as before */
+}
+
+/* [Perf] FillCensusSlice (2026-11-06, OSS_DD09_CEN_S3 host TickProfile: klbf_tick 13 ms CPU once every 10 s window, this census of the 8 MB entity
+   table every 5 s, on every online host: live OnlineFill=1 / OnlineHost=1). With the key on, a census is walked KLBF_CS_BLOCKS blocks of 64 slots a
+   frame (klbf_tick pumps it, 8 frames, ~1.6 ms each); its lines are written when it ends. Same order, same 400 cap, same lines as the one-call walk;
+   a census is dropped (not resumed) when the table moves or a level archive opens / the scene changes. Off (key missing) = the whole table in one call. */
+static void klbf_cs_step(DWORD nblocks)
+{
+    static DWORD blk[64 * 32];
+    struct klbf_census *c = &klbf_cs; DWORD p, tab = 0, end;
+    if (!c->run) return;
+    if ((p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) && (p = klh_rd32(p + 0xc))) tab = klh_rd32(p + 0xc);
+    if (tab != c->tab || klmv_level_gen + klmv_scene_gen != c->gen0) { c->run = 0; return; }      /* another level's objects: no census line from a mix */
+    end = c->i + nblocks * 64 < 0x10000 ? c->i + nblocks * 64 : 0x10000;
+    for (; c->i < end && c->n < 400; c->i += 64) {
+        DWORD k, i = c->i;
+        if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) { c->i = 0x10000; break; }      /* a failed read ends the table (as the one-call walk's break) */
         for (k = 0; k < 64; k++) {
             DWORD o = blk[k * 32 + 0x60 / 4], pr, team = 99, snd, t0 = 0, t1 = 0, t2 = 0, hp = 0; float hv[2] = { 0, 0 };
             if (o < 0x10000 || klh_avt(o) != 0x00bb3bac) continue;       /* ZFFActor */
-            n++;
+            c->n++;
             if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4)) continue;
-            if (team != 2) { other++; continue; }
-            ally++;
-            if (klbf_lk == 2 && lkn < 64) klbf_lk_fill(&lk[lkn++], i + k, o, team);      /* OnlineLooks=2: read only */
+            if (team != 2) { c->other++; continue; }
+            c->ally++;
+            if (klbf_lk == 2 && c->lkn < 64) klbf_lk_fill(&c->lk[c->lkn++], i + k, o, team);      /* OnlineLooks=2: read only */
             hp = klh_rd32(o + 0x5fc);
-            if (hp && klh_rd(hp + 4, hv, 8) && hv[0] > 0) alive++;
+            if (hp && klh_rd(hp + 4, hv, 8) && hv[0] > 0) c->alive++;
             snd = klh_rd32(o + 0x77c);
             if (snd) { t0 = klh_rd32(snd + 0x5f0); t1 = klh_rd32(snd + 0x5f4); t2 = klh_rd32(snd + 0x5f8); }
-            if (t0 || t1 || t2) tact++;
-            if (ally <= 8) klog("botfill: Ally actor %08lx soldier %08lx tactics %08lx %08lx %08lx health %.1f", (unsigned long)o, (unsigned long)snd, (unsigned long)t0, (unsigned long)t1, (unsigned long)t2, hv[0]);
+            if (t0 || t1 || t2) c->tact++;
+            if (c->ally <= 8) klog("botfill: Ally actor %08lx soldier %08lx tactics %08lx %08lx %08lx health %.1f", (unsigned long)o, (unsigned long)snd, (unsigned long)t0, (unsigned long)t1, (unsigned long)t2, hv[0]);
         }
     }
+    if (c->i < 0x10000 && c->n < 400) return;      /* goes on next frame */
+    c->run = 0;
     if (klbf_lk == 2) {      /* once per session object, and again whenever (slot, actor, model, digit) of any bot changes */
         DWORD sig = 2166136261u; int q;
-        for (q = 0; q < lkn; q++) { sig = (sig ^ lk[q].slot) * 16777619u; sig = (sig ^ lk[q].actor) * 16777619u; sig = (sig ^ lk[q].model) * 16777619u; sig = (sig ^ (DWORD)(BYTE)lk[q].digit) * 16777619u; }
-        if (klbf_lk_sm != sm || klbf_lk_sig != sig) klbf_lk_log(lk, lkn, role, sm, sig);
+        for (q = 0; q < c->lkn; q++) { sig = (sig ^ c->lk[q].slot) * 16777619u; sig = (sig ^ c->lk[q].actor) * 16777619u; sig = (sig ^ c->lk[q].model) * 16777619u; sig = (sig ^ (DWORD)(BYTE)c->lk[q].digit) * 16777619u; }
+        if (klbf_lk_sm != c->sm || klbf_lk_sig != sig) klbf_lk_log(c->lk, c->lkn, c->role, c->sm, sig);
     }
-    klog("botfill: round census: %d ZFFActor, %d team Ally (%d alive, %d with tactics), %d other teams", n, ally, alive, tact, other);
-    if (klbf_oh) klog("botfill: OnlineHost %s: %d Ally bot(s) in this peer's world, %d alive; %s", role == 2 ? "HOST (authority, shares their places)" : "CLIENT (mirror only, steered toward the host's places)", ally, alive,
-                      role == 2 ? "their places go out as KLSY2 on UDP 27415" : "see 'sync: puppet:' lines with t=2 for the mirroring");
+    klog("botfill: round census: %d ZFFActor, %d team Ally (%d alive, %d with tactics), %d other teams", c->n, c->ally, c->alive, c->tact, c->other);
+    if (klbf_oh) klog("botfill: OnlineHost %s: %d Ally bot(s) in this peer's world, %d alive; %s", c->role == 2 ? "HOST (authority, shares their places)" : "CLIENT (mirror only, steered toward the host's places)", c->ally, c->alive,
+                      c->role == 2 ? "their places go out as KLSY2 on UDP 27415" : "see 'sync: puppet:' lines with t=2 for the mirroring");
 }
 
 #endif /* KLBOTFILL_C */
