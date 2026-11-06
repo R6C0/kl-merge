@@ -86,8 +86,14 @@ KITS = {
                           files={'F01_Main.zip': 'f048f569be30795d9b4ac6b958aacd8b', 'F01_Main.bots.zip': '34d25023', 'F01_Main.bots.base.md5': '5f486ecf',
                                  'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
                           solo_secs=1500, parts=('solo',)),
+    # lcchain2a1106 bench (11-06): PASS, but the outro is only 8 s (0x1f 450 s after launch) and fell between the 20 s shots: same stage, shots every
+    # 4 s over 380-540 s (41 shots) to see the 2a camera's frame
+    'lcchain2a1106s': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2a_live_1a97e186', tag='.before-chain1106',
+                           files={'F01_Main.zip': 'f048f569be30795d9b4ac6b958aacd8b', 'F01_Main.bots.zip': '34d25023', 'F01_Main.bots.base.md5': '5f486ecf',
+                                  'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
+                           solo_secs=900, parts=('solo',), shots='380-540:4'),
 }
-LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106')
+LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s')
 
 
 def md5(p):
@@ -381,7 +387,7 @@ def verify(k, part, tagbase=None):
             i0 = next((i for i, l in enumerate(a) if re.search(r'session: state \S+ -> 0x1f', l)), len(a))
             eyes = [tuple(float(m.group(j)) for j in (1, 2, 3)) for l in a[i0:] if ' cam:' in l for m in [re.search(r'\beye (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)', l)] if m]
             hit = [e for e in eyes if near(e, eye, 150)]
-            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106'):
+            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s'):
                 # these stages move the eye on purpose (LookAtPos, f5/f6 offset from the heli): info only, the frames are judged by eye
                 chk('escape camera eye moved off (7093,2181,2727) (info)', True, '%d outro cam eyes, last %s' % (len(eyes), ('(%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
             else:
@@ -498,7 +504,7 @@ def run(k, part):
                 import shutil
                 shutil.copy2('%s/KLShopPage.ini' % d, '%s/%s/inst%d/KLShopPage.ini' % (SOLO, tag, i))
             if p == 'solo':
-                args = ['--n', '1', '--secs', str(c['solo_secs']), '--ini1', '%s/solo.ini' % d, '--shots', '30-%d:20' % (c['solo_secs'] - 60), '--d3shots']
+                args = ['--n', '1', '--secs', str(c['solo_secs']), '--ini1', '%s/solo.ini' % d, '--shots', c.get('shots', '30-%d:20' % (c['solo_secs'] - 60)), '--d3shots']
             else:
                 secs = 2500 if p == 'long' else 1900
                 args = ['--n', '2', '--secs', str(secs), '--gap', '45', '--relaunch', '2', '--ini1', '%s/online_host.ini' % d, '--ini2', '%s/online_join.ini' % d]

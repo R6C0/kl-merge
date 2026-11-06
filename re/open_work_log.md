@@ -1,3 +1,9 @@
+## 2026-11-06 ~14:55 [c9] lcchain2a1106 bench PASS: all four Last Call passes on 6b's 1a97e186 in one install (no crash involved)
+kl_lastcall_chain_1106 (b8cd84d9) re-based doors + spawn2f + outro + cam 2a on live 1a97e186 (pd2guns 1106b), stage lcchain_2a_live_1a97e186 (zip f048f569, Entries 54467).
+Bench: 4/4 PASS, 0 faults, undo byte-exact; start (-4800,462,1000); outro 0x1f->0x20 now 8 s (was 60 s, then 23 s); 2a eye ~(7426,2043,3035) beside the pad,
+piv398 (7383,2043,3166). The 20 s shots missed the outro: rerun kit lcchain2a1106s (shots 380-540 s every 4 s). Fallback staged: lcchain_nocam_live_1a97e186 (zip 6a463da8).
+Order agreed with 6b: chain in first, then 6b re-pins only 1106c; UNDO ALL: 1106c -> chain -> 1106b.
+
 ## 2026-11-06 ~14:35 [6b] PD2 guns 1106c LIVE on 10 DM maps: R700 + GL40 x3 (no crash involved)
 - DM02 first (off-drive installer 880e47e7, backups on D:\kl_stage\pd2guns_1106c_backup), then bench pd2b_1106 DM02 PASS: 2 seats round 2, 0 asserts/faults/dumps, KLGuns/KLJoin accepted (Entries 59232).
   Log: `osw: row 13 ... item 52 made`, `row 32 ... item 49 made`, `shopPage: row 11 item 54 / row 12 item 53 added to the pool`, ownpic mask fff0ffff ff. Live dll 727a73bb / ini e91096c7 unchanged.
