@@ -100,7 +100,28 @@ SPECS = [
     # (no reload split; GUESS that the host's own bone-3 magazine object, dropped from the root like the other multi-part guns, is not missed). Pistol-root detail path as item 62 (GUESS batch 3).
     dict(item=63, template='HG_M9Beretta_Human_Shield', unit='pd2_dlc_usm2/weapons/wpn_npc_deagle', key='DEAG63', name='PD2 Deagle', kind='pistol',
          parts=[dict(model='wpn_npc_deagle.model', meshes=['g_base', 'g_mag', 'g_slide'], tex='wpn_npc_deagle_df.texture', mat='deagle')]),
+    # ---- batch 9 (2026-11-06, layer 1106f): three NEW looks on MG-hold items that already carry a PD2 RPK (no free item id is left, so each re-looks an RPK duplicate:
+    # the template's root is by then the PD2 RPK root of layer 1106b/d, which build_level reads like any root: hidden box kept, one body object, no bone-3 clip).
+    # item 42 <- PD2 MG42 (wpn_third_lmg_mg42_pts: receiver g_base + barrel g_barrel_mg42; the b_mg34 / b_vg38 barrels, nozzles and the bipod-less variants are not used).
+    dict(item=42, template='MG_GP_Type88_L09_Heli', unit='pd2_dlc_gage_historical/weapons/wpn_third_lmg_mg42_pts', key='MG42', name='PD2 MG42', kind='light machine gun', parts=[
+        dict(model='wpn_third_lmg_mg42_reciever.model', meshes=['g_base'], tex='wpn_third_lmg_mg42_reciever_df.texture', mat='rec'),
+        dict(model='wpn_third_lmg_mg42_b_mg42.model', meshes=['g_barrel_mg42'], tex='wpn_third_lmg_mg42_b_mg42_df.texture', mat='barrel')]),
+    # item 40 <- PD2 PAR (wpn_third_lmg_par_pts, the Svinet): body (g_body + cocking handle + carry handle + feed = 4 materials), upper receiver dust cover, standard barrel,
+    # magazine + bullet belt, standard stock. 9 materials. The short barrel and the plastic stock are not used.
+    dict(item=40, template='MG_GP_Type88', unit='pd2_dlc_par/weapons/wpn_third_lmg_par_pts', key='PAR40', name='PD2 PAR', kind='light machine gun', parts=[
+        dict(model='wpn_third_lmg_par_body_standard.model', meshes=['g_body'], tex='third_body_df.texture', mat='body'),
+        dict(model='wpn_third_lmg_par_body_standard.model', meshes=['g_cocking'], tex='third_cocking_df.texture', mat='cock'),
+        dict(model='wpn_third_lmg_par_body_standard.model', meshes=['g_carry'], tex='third_carry_df.texture', mat='carry'),
+        dict(model='wpn_third_lmg_par_body_standard.model', meshes=['g_feed'], tex='third_feed_df.texture', mat='feed'),
+        dict(model='wpn_third_lmg_par_upper_reciever.model', meshes=['g_dust'], tex='third_cover_df.texture', mat='cover'),
+        dict(model='wpn_third_lmg_par_b_standard.model', meshes=['g_b'], tex='third_b_df.texture', mat='barrel'),
+        dict(model='wpn_third_lmg_par_m_standard.model', meshes=['g_mag'], tex='third_mag_df.texture', mat='mag', mag=True),
+        dict(model='wpn_third_lmg_par_m_standard.model', meshes=['g_bullet'], tex='third_bullet_df.texture', mat='bullet'),
+        dict(model='wpn_third_lmg_par_s_standard.model', meshes=['g_stock'], tex='third_stock_df.texture', mat='stock')]),
 ]
+# Batch 9 tried and dropped (fit on DM02, 2026-11-06): item 43 <- PD2 minigun (wpn_npc_mini: g_body + g_barrel + g_handle + g_mag, textures of wpn_fps_lmg_m134_pts): cost 16.78, shift at the
+# grid edge (10.75, 10.0), butt -5.8, muzzle 106.3 vs 95.7. The gun hangs 52 cm below the hand (z -52..7), the fit only moves x / y, so the hold cannot be met: NOT used.
+# Batch 9 accepted: MG42 on item 42 cost 1.81 shift (12.5, -1.75) muzzle 100.3 (host 96.0) butt -20.8; PAR on item 40 cost 1.95 shift (1.0, 2.0) muzzle 94.1 (host 96.2) butt -29.7.
 # Tried and dropped (fit on the MG hold leaves the stock 4 - 5 cm IN FRONT of the right hand): item 42 <- PD2 M4 (cost 3.30, butt +5.0),
 # item 43 <- PD2 AKMSU (cost 3.99, butt +3.8). A short rifle model does not suit the long MG hold; a PD2 LMG (M249: 9 materials) would.
 # Batch 2 survey (2026-11-06, fit_one on DM02 hosts, true size): PD2 M249 (the KSP) on the Type 88 hold cost 3.53 / 3.48 (muzzle 83 vs 96, butt -5.9,

@@ -3,7 +3,7 @@
 pd2_guns_layer.py - stage the NEW pd2_guns_multi specs (batch 3 C45 / item 62, batch 4 HRL50 / HRL51 = items 50 / 51) as a layer ON TOP of the
 live Dead Men maps (2026-11-06, offline; writes only the stage folder, never the game).
 
-    python tools/pd2_guns_layer.py build  [--layer 1106b|1106c|1106d|1106e] [--out <dir>] [--maps DM01,DM02]   default out <work>/build/pd2guns_1106b (1106c: D:\\kl_stage\\pd2guns_1106c, on the 1106b stage)
+    python tools/pd2_guns_layer.py build  [--layer 1106b|1106c|1106d|1106e|1106f] [--out <dir>] [--maps DM01,DM02]   default out <work>/build/pd2guns_1106b (1106c: D:\\kl_stage\\pd2guns_1106c, on the 1106b stage)
     python tools/pd2_guns_layer.py verify [--out <dir>] [--maps ...]         per-map table (needs the live zips to be the ones staged on)
     python tools/pd2_guns_layer.py pin    [--out <dir>]                      redo the ini Entries fix + pins.json of a baked stage (no re-bake)
     python tools/pd2_guns_layer.py install-py [--out <dir>]                  rewrite install.py / INSTALL.bat / UNDO.bat from pins.json
@@ -50,6 +50,11 @@ LAYERS = {
                   maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B'],      # NOT DM05A (c9's restage is pending)
                   title='1106e (item 63 M9 shield pistol: the spec DEAG63 = PD2 Deagle), staged on top of layer 1106d',
                   short='Deagle on the M9 shield', seeds=[r'D:\kl_stage\pd2b8_scratch\fits.json']),
+    '1106f': dict(keys=['MG42', 'PAR40'], tag='.before-pd2guns1106f', base=r'D:\kl_stage\pd2guns_1106e',
+                  out=r'D:\kl_stage\pd2guns_1106f', backup=r'D:\kl_stage\pd2guns_1106f_backup',
+                  maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B'],      # NOT DM05A (c9's restage is pending)
+                  title='1106f (item 42 PD2 MG42, item 40 PD2 PAR: the specs MG42, PAR40 re-look two RPK duplicates), staged on top of layer 1106e',
+                  short='MG42 / PAR on items 42 / 40', seeds=[r'D:\kl_stage\pd2b9_scratch\fits.json']),
     # 1106s: ALL 19 spec keys on Dog Days' 9 stock FA maps (KLExpansion\Maps\DD01..DD09; NOT DD10 = slot F07 again, NOT Scenes\Locations), baked on the LIVE zips
     # (base=None: pics yes, PD2 no). Fits frozen = the union of the 1106c / 1106d / 1106e fits.json (host roots 13812 ... 16134 are identical on DD02 and Scenes F02,
     # re/pd2_guns_stock_maps.md). Plan and staged notes: re/pd2_guns_stock_maps.md.
@@ -71,6 +76,7 @@ DETAIL = {'C45': 31, 'HRL50': 255, 'HRL51': 255,      # body detail byte (see bu
           'R700': 31, 'GL40': 191, 'GL40GAS': 191, 'GL40FLR': 191,      # R700 7|28 = 31, GL40 1|190 = 191 (pd2_guns_multi batch 5/6 commits)
           'RPK45': 63, 'RPK46': 63, 'RPK47': 63, 'RPK48': 63,
           'DEAG63': 31,
+          'MG42': 15, 'PAR40': 15,      # re-look of an RPK root (hidden detail-16 box kept): body_lod stays 15; GUESS until verify compares the real byte
           # batch 1-2 rifles / MGs: hosts with the hidden detail-16 'box' part, so build_level leaves body_lod at its default 15 (derived from the code, the
           # reports hold no detail byte; GUESS until verify passes, which compares the real byte)
           'SG417': 15, 'G36': 15, 'RPK': 15, 'MK17': 15, 'RPK40': 15, 'RPK42': 15, 'RPK43': 15}      # RPK: Minimi 62|7 = 63 (batch 7 GUESS: the detail-62 464-vert part is the far copy); DEAG63: pistol 7|24 = 31 (GUESS, as C45)
@@ -268,7 +274,7 @@ def check_zip(live_zip, new_zip, rep):
     ok &= not diff and len(p1.chunks) == rep['chunks_after'] and n0 == rep['chunks_before']
     old_roots = 0                      # batch 1-2 roots explicitly (also by node: same root id, same bytes, same objects)
     for s in M.SPECS:
-        if s['key'] in KEYS:
+        if s['key'] in KEYS or s['template'] in tpl:      # a re-look (1106f) replaces the root of an earlier spec's template: that spec's root is gone by design
             continue
         try:
             k = kl_guns.gun_node(sc1, s['template'])
@@ -635,7 +641,7 @@ def main(a):
     if '--out' in a:
         out = a[a.index('--out') + 1]; del a[a.index('--out'):a.index('--out') + 2]
     maps = list(LAYERS[LAYER].get('maps') or M.MAPS)
-    if LAYER in ('1106c', '1106e', '1106s'):       # DM02 first: the fits of a new key are taken on the first baked map (the notes fit on DM02)
+    if LAYER in ('1106c', '1106e', '1106f', '1106s'):       # DM02 first: the fits of a new key are taken on the first baked map (the notes fit on DM02)
         maps.sort(key=lambda m: m != 'DM02')
     if '--maps' in a:
         maps = a[a.index('--maps') + 1].split(','); del a[a.index('--maps'):a.index('--maps') + 2]
