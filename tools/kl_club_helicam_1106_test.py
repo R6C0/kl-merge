@@ -45,5 +45,9 @@ with tempfile.TemporaryDirectory() as d:
       and '--undo' in src and '--skip-run-check' in src)
     r = subprocess.run([sys.executable, os.path.join(st, 'install.py'), '--dry', '--game', os.path.join(d, 'nogame')], capture_output=True, text=True)
     t('install.py --dry refuses a missing game folder', r.returncode == 1 and 'REFUSED' in r.stdout)
+    H.write_install(st, {'F01_Main.zip': (H.LIVE_PINS['F01_Main.zip'], 'b' * 32)}, '.before-outcam2a1106')
+    src = open(os.path.join(st, 'install.py')).read()
+    t('install.py takes a custom tag and the live pin', "'.before-outcam2a1106'" in src and H.LIVE_PINS['F01_Main.zip'] in src
+      and H.LIVE_PINS['F01_Main.zip'].startswith('e6d2f73e'))
 print('RESULT: %s' % ('FAIL %d' % len(fails) if fails else 'PASS'))
 sys.exit(1 if fails else 0)

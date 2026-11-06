@@ -71,8 +71,17 @@ KITS = {
     'lcoutcam1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcoutcam_1106', tag='.before-outcam1106',
                          files={'F01_Main.zip': '24576526f95507cbc8b9ffe61951b5c1', 'F01_Main.bots.zip': '2ae52345', 'F01_Main.bots.base.md5': 'd7116a6b'},
                          solo_secs=1500, parts=('solo',)),
+    # lcoutcam1106 bench: flat grey outro; re/lastcall_helicam_geometry_1106.md says the variant A park point is INSIDE BuildingF. Two candidates, all offsets GUESSes
+    # (both on lcoutro_1106, install.py live-pinned by kl_club_helicam_1106 stage --pin-live): 2a = eye east of F's face (f5 +700, f6 -500) aimed at the heli;
+    # 2b = small offset (f5 -450, f6 +100) aimed at EscCameraLAST, rise/hover only (park may still be inside F)
+    'lcoutcam2a1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcoutcam2a_1106', tag='.before-outcam2a1106',
+                           files={'F01_Main.zip': '2e882b7852dc066c379aa8b1552fdbc2', 'F01_Main.bots.zip': '3fa2437c', 'F01_Main.bots.base.md5': '8ed9edb3'},
+                           solo_secs=1500, parts=('solo',)),
+    'lcoutcam2b1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcoutcam2b_1106', tag='.before-outcam2b1106',
+                           files={'F01_Main.zip': 'eb4e450f48e2e8e0995e33c4a4f40c5c', 'F01_Main.bots.zip': '9fbd2565', 'F01_Main.bots.base.md5': 'e664ba34'},
+                           solo_secs=1500, parts=('solo',)),
 }
-LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106')
+LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106')
 
 
 def md5(p):
@@ -366,7 +375,11 @@ def verify(k, part, tagbase=None):
             i0 = next((i for i, l in enumerate(a) if re.search(r'session: state \S+ -> 0x1f', l)), len(a))
             eyes = [tuple(float(m.group(j)) for j in (1, 2, 3)) for l in a[i0:] if ' cam:' in l for m in [re.search(r'\beye (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)', l)] if m]
             hit = [e for e in eyes if near(e, eye, 150)]
-            chk('escape camera eye about (7093,2181,2727) in the outro', bool(hit), '%d outro cam eyes, %s' % (len(eyes), ('e.g. (%.0f,%.0f,%.0f)' % hit[0]) if hit else ('last (%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
+            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106'):
+                # these stages move the eye on purpose (LookAtPos, f5/f6 offset from the heli): info only, the frames are judged by eye
+                chk('escape camera eye moved off (7093,2181,2727) (info)', True, '%d outro cam eyes, last %s' % (len(eyes), ('(%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
+            else:
+              chk('escape camera eye about (7093,2181,2727) in the outro', bool(hit), '%d outro cam eyes, %s' % (len(eyes), ('e.g. (%.0f,%.0f,%.0f)' % hit[0]) if hit else ('last (%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
         st = [m.group(1) for l in a for m in [re.search(r'session: state \S+ -> (0x[0-9a-f]+)', l)] if m]
         chk('session reaches 0x1f then 0x20', '0x1f' in st and '0x20' in st[st.index('0x1f'):] if '0x1f' in st else False, 'states seen: %s' % ' '.join(st[-8:]))
         van = [l[:140] for l in a if 'van card' in l or 'vehicle state' in l]

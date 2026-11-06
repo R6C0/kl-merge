@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """kl_club_helicam_1106.py - Last Call (DM05A) pass helicam1106: the escape camera rides WITH the heli and looks back at the tower. OFFLINE, level data only.
 
-  python tools/kl_club_helicam_1106.py stage [--in-dir <dir>] [--out <dir>] [--variant A|B] [--f5 N] [--f6 N] [--aim <path>]
+  python tools/kl_club_helicam_1106.py stage [--in-dir <dir>] [--out <dir>] [--variant A|B] [--f5 N] [--f6 N] [--aim <path>] [--pin-live] [--tag .before-x]
   python tools/kl_club_helicam_1106.py check <zip> [--variant A|B]
 (no --force: the input md5 must be a pinned one; chain with --in-dir on another stage, e.g. C:\\kl_build_1024\\lcoutro_1106)
 
@@ -46,6 +46,9 @@ STOCK_B = (0.0, -270.0, -270.0, 80.0, 0.0, -170.0)    # F06 CameraInVan_01 f1..f
 # live DM05A of 2026-11-06 (e6d2f73e), doors-1106 (a24d7432), outro-1106 (77a42f74), spawn2f-1106 (88e23dd5)
 KNOWN_IN = ('e6d2f73e', 'a24d7432', '77a42f74', '88e23dd5')
 TAG = '.before-helicam1106'
+# --pin-live: the install.py "before" pins are the LIVE files (e6d2f73e), not the --in-dir stage (e.g. lcoutro_1106), so one install = in-dir changes + camera
+LIVE_PINS = {'F01_Main.zip': 'e6d2f73ef0c51bfdbaec56c9534a4c9a', 'F01_Main.bots.zip': '54cb9e269b7b38a24525ab5e671c400a',
+             'F01_Main.bots.base.md5': 'aa0e1580a147ed73134a71e03e6d597a'}
 NAMES = ('F01_Main.zip', 'F01_Main.bots.zip', 'F01_Main.bots.base.md5')
 
 
@@ -160,7 +163,7 @@ import hashlib, os, shutil, subprocess, sys
 
 GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 HERE = os.path.dirname(os.path.abspath(__file__))
-MAP, TAG = 'DM05A', '.before-helicam1106'
+MAP, TAG = 'DM05A', %(tag)r
 LIVE_ZIP_MD5 = %(pin)r      # the precheck: the live plain zip must still be exactly this
 FILES = [   # name, live md5 before, staged md5 after
 %(files)s]
@@ -242,17 +245,17 @@ if __name__ == '__main__':
 '''
 
 
-def write_install(st, files):
+def write_install(st, files, tag=TAG):
     pin = files['F01_Main.zip'][0]
     fl = ''.join("    (%r, %r, %r),\n" % (n, o, w) for n, (o, w) in files.items() if o != w)
-    txt = INSTALL % dict(files=fl, pin=pin)
+    txt = INSTALL % dict(files=fl, pin=pin, tag=tag)
     compile(txt, 'install.py', 'exec')
     open(os.path.join(st, 'install.py'), 'w', newline='\n').write(txt)
     open(os.path.join(st, 'INSTALL last call helicam 1106.bat'), 'w', newline='\r\n').write('@echo off\r\npython "%~dp0install.py"\r\npause\r\n')
     open(os.path.join(st, 'UNDO last call helicam 1106.bat'), 'w', newline='\r\n').write('@echo off\r\npython "%~dp0install.py" --undo\r\npause\r\n')
 
 
-def stage(out=OUT, in_dir=MAPDIR, variant='A', f5=None, f6=None, aim=None, log=print):
+def stage(out=OUT, in_dir=MAPDIR, variant='A', f5=None, f6=None, aim=None, log=print, pin_live=False, tag=TAG):
     import kl_botsonline
     src = os.path.join(in_dir, 'F01_Main.zip')
     h = md5(src)
@@ -269,8 +272,8 @@ def stage(out=OUT, in_dir=MAPDIR, variant='A', f5=None, f6=None, aim=None, log=p
     plain = md5(final)
     kl_botsonline.convert(final, os.path.join(out, 'F01_Main.bots.zip'), 'eAllTypes', log=lambda *a: None)
     open(os.path.join(out, 'F01_Main.bots.base.md5'), 'w', newline='\n').write(plain + '\n')
-    files = {nm: (md5(os.path.join(in_dir, nm)), md5(os.path.join(out, nm))) for nm in NAMES}
-    write_install(out, files)
+    files = {nm: (LIVE_PINS[nm] if pin_live else md5(os.path.join(in_dir, nm)), md5(os.path.join(out, nm))) for nm in NAMES}
+    write_install(out, files, tag)
     rep = {'in_dir': in_dir, 'in_md5': h, 'variant': variant, 'before': [str(x) for x in old[1:13]], 'files': files}
     with open(os.path.join(out, 'build_report.json'), 'w') as fh:
         json.dump(rep, fh, indent=1)
@@ -285,7 +288,8 @@ def main(a):
         return check(a[1], opt('--variant', 'A'))
     if a and a[0] == 'stage':
         f = lambda k: float(opt(k, None)) if k in a else None
-        stage(opt('--out', OUT), opt('--in-dir', MAPDIR), opt('--variant', 'A'), f('--f5'), f('--f6'), opt('--aim', None))
+        stage(opt('--out', OUT), opt('--in-dir', MAPDIR), opt('--variant', 'A'), f('--f5'), f('--f6'), opt('--aim', None),
+              pin_live='--pin-live' in a, tag=opt('--tag', TAG))
         return 0
     print(__doc__)
     return 2
