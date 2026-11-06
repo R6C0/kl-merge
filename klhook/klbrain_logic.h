@@ -394,6 +394,8 @@ static int kbr_tr_capped(int kills, int max) { return max > 0 && kills >= max; }
 
 /* optional hard cap on turns per round through [shadow+0x338] (0x43ffb0 tests `[rules+0x338] < tuning[R+0x6c]`): 0 = leave (cap off or still room), 0x7fff = block every further roll once `turned` reached `cap` */
 static unsigned long kbr_tr_cap_word(int turned, int cap) { return cap > 0 && turned >= cap ? 0x7ffful : 0ul; }
+/* cap hit for a NOT yet marked bot's evaluate (11-06 RV3A_DD05: Max=1 yet 2 marks): the word was written only by the ~1 s pump, so a 2nd mark 553 ms after the 1st got through. True = hold the evaluate at 0. */
+static int kbr_tr_cap_hit(int marks, int cap) { return cap > 0 && marks >= cap; }
 
 /* ArcadeDiag (read-only reference numbers from stock Arcade). The game's own money read, vt[0xe0] 0x6f86c0, answers -1 (0xffffffff) for an unused slot and the threshold compares are UNSIGNED (jae at 0x79b8e9..0x79b923,
    traitor_cap_1103.md refute item 6), so an unused slot scores own term 3 / other term 0. GUESS: the "unused" test is `free byte != 0 or slot >= count` as the shadow block assumes ([rules+0x34c] bytes, [rules+0x354] count) */

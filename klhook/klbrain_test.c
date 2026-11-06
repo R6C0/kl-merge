@@ -294,6 +294,7 @@ int main(void)
         d[3] = 4000; CHECK(kbr_tr_nearest(d, 4, 3000) == -1 && kbr_tr_nearest(d, 0, 3000) == -1, "nearest: none in range / empty");
         CHECK(!kbr_tr_capped(1, 2) && kbr_tr_capped(2, 2) && kbr_tr_capped(5, 2) && !kbr_tr_capped(9, 0), "cap: reached at max, never with max 0");
         CHECK(kbr_tr_cap_word(1, 2) == 0 && kbr_tr_cap_word(2, 2) == 0x7ffful && kbr_tr_cap_word(9, 0) == 0, "cap word: 0 below the cap or off, 0x7fff at the cap");
+        CHECK(!kbr_tr_cap_hit(0, 1) && kbr_tr_cap_hit(1, 1) && kbr_tr_cap_hit(2, 1) && !kbr_tr_cap_hit(9, 0), "cap hit (RV3A Max=1, 2nd mark): held from the cap on, never with max 0");
     }
     {   /* ArcadeDiag helpers */
         float st[4] = { 0, 0, 2, 3 };
