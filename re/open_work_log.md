@@ -19,6 +19,9 @@ Bench kit: C:/kl_build_1024/oss_1106/run.py --bss --seats 3, queued after f0 -> 
 pd2guns_1106b live on DM01,DM01B,DM02,DM03,DM03A,DM06,DM06B,DM07,DM09,DM11B at ~12:58 (C45 item 62, HRL-7 items 50/51; 50 files, md5s asserted, backups
 .before-pd2guns1106b). DM05A held until c9's kits are done. 2c990e44: GL40 (M79) on items 52/53/54; HK69 root = detail-190 far copy -> body 191 (GUESS), host barrel/
 hammer dropped, fit 1.76. 18ea2c7a: pd2_guns_layer --layer; 1106c (R700 + GL40 x3) staged at D:\kl_stage\pd2guns_1106c on top of 1106b, verify PASS, rehearsed.
+Bench pd2b_1106 DM02 (2 seats, TEST b6a69772, kit C:\kl_build_1024\pd2b_1106): PASS, round 2 both seats, 0 faults/asserts, KLGuns/KLJoin accepted (Entries 59134),
+shopPage rows: item 62 C45 + item 51 HRL-7 pooled, own pics mask fff0ffff ff in level. Live dll/ini back to 727a73bb / e91096c7.
+1106c install is blocked on C: space (needs ~4.3 GB of copies + 512 MB, C: has 2.6 GB): next = DM02 alone first, then free space.
 UNDO ALL 1105.bat got step 0 (1106c, no-op until installed). C: fell to 976 MB: moved 9 DD *.before-1026loot8m (in no undo bat) to D:\kl_old_backups\dd_1106c -> 3.3 GB.
 
 ## 2026-11-06 ~12:25 [f0] GRUDGE PASS A: ALL GATES PASS (run 5, TEST 0bf88e4c, DD09 2 seats, no crash)
