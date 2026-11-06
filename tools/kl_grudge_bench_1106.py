@@ -267,8 +267,8 @@ def validate():
         v.ok(sh1('%s/dinput8.dll' % DD).startswith(LIVE_SHIP_SHA1), 'live dinput8.dll sha1 %s = pinned %s' % (sh1('%s/dinput8.dll' % DD)[:8], LIVE_SHIP_SHA1), warn=True)
     base = '%s/KLHook_base.ini' % KIT
     if v.ok(os.path.isfile(base), 'base ini snapshot'):
-        v.ok(sh1(base).startswith(LIVE_INI_SHA1) and N.md5(base) == meta['base_ini_md5'], 'base ini = the pinned live ini (sha1 %s, md5 %s)' % (sh1(base)[:8], N.md5(base)[:8]))
-        v.ok(live['ini'] == meta['live_at_gen']['ini'], 'live KLHook.ini unchanged since gen (md5 %s vs %s; a newer live ini is NOT in the kit: rerun gen)' % ((live['ini'] or '-')[:8], (meta['live_at_gen']['ini'] or '-')[:8]), warn=True)
+        v.ok(sh1(base) == meta['live_at_gen']['ini_sha1'] and N.md5(base) == meta['base_ini_md5'], 'base ini = the live ini at gen (sha1 %s, md5 %s; LIVE_INI_SHA1 %s is only gen\'s default pin)' % (sh1(base)[:8], N.md5(base)[:8], LIVE_INI_SHA1))
+        v.ok(live['ini'] == meta['live_at_gen']['ini'], 'live KLHook.ini unchanged since gen (md5 %s vs %s; peers restore other inis: rerun gen --force-live right before the slot)' % ((live['ini'] or '-')[:8], (meta['live_at_gen']['ini'] or '-')[:8]))
         bt = N.load(base)
         for sec in ('Expansion', 'Lobby', 'Bots', 'Down', 'BotFill', 'Redirect'):
             v.ok('[%s]' % sec in bt, 'base ini has [%s]' % sec)
