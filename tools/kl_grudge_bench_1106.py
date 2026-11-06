@@ -30,7 +30,7 @@ DD = N.DD
 SOLO = N.SOLO
 Q32 = 'C:/kl_build_1024/c9_1028/q32'
 TPL_HOST, TPL_JOIN = '%s/Q32_DD05_host.ini' % Q32, '%s/Q32_DD05_join.ini' % Q32
-TEST_DLL_DEFAULT = os.path.join(ROOT, 'klhook', 'out_ogb1106d_test', 'dinput8.dll')      # 11-06 04:18: + klbrain traitor-cap fix 410ab59d (both checked in one slot)
+TEST_DLL_DEFAULT = os.path.join(ROOT, 'klhook', 'out_ogb1106e_test', 'dinput8.dll')      # 11-06 04:18: + klbrain traitor-cap fix 410ab59d (both checked in one slot)
 LIVE_SHIP_MD5 = '727a73bb'                               # the live SHIP the bench starts from and restores (sha1 dc41cc8f...)
 LIVE_SHIP_SHA1 = 'c8598902'
 LIVE_INI_SHA1 = 'a64a3996'
@@ -45,6 +45,10 @@ HOST_EXTRA = [('Bots', [('OnlineGrudge', '1')]),         # OnlineGrudgeDry is ad
 FIRE_BLOCK = ['waitstate 0x19 180000',
               'log GRUDGE1106 round running (state 0x19); bots hold at their spawn for ~25 s',
               'wait 2500',
+              # TEST rig: the stock gate G1 (ZFFActor slot 422, 0x868b11..0x868b49) drops a HUMAN's hit on an Ally bot while
+              # rules +0x285 ('looting started', set by the first loot, 0x5cac90) is 0 - pass A run 2 fired before any loot.
+              # One byte = 1, as klfedkit.c's hunt does; the game clears it at the next round. firebot hp lines log it.
+              'pokeb 168e9e4+54+285 1 GRUDGE1106 looting-started byte (G1) for the bench',
               'pos g0',
               'firebot 8000 40 15 60 1',
               'pos g1',
@@ -309,6 +313,8 @@ def validate():
                 v.ok(len(fb) == 3 and all(re.match(r'^firebot \d+ \d+(\.\d+)? \d+(\.\d+)?( \d+( [01])?)?$', c) for c in fb), '%s: %d firebot lines, args ms maxm deg parse' % (nm, len(fb)))
                 i0 = next((i for i, c in enumerate(scr) if c.startswith('waitstate 0x19')), 99999); i1 = next((i for i, c in enumerate(scr) if c.startswith('firebot')), -1)
                 v.ok(0 <= i0 < i1, '%s: firebot comes after waitstate 0x19' % nm)
+                ip = next((i for i, c in enumerate(scr) if c.startswith('pokeb 168e9e4+54+285 1')), -1)
+                v.ok(i0 < ip < i1, '%s: pokeb rules +0x285 = 1 sits between waitstate 0x19 and the first firebot' % nm)
                 v.ok(any(c.startswith('waitpeers 2') for c in scr), '%s: waitpeers 2' % nm)
                 v.ok(any(c.startswith('tap R') and c.split()[1] == 'R' for c in scr), '%s: tap R (reload; key name R is in klauto.c kla_key row QWERTYUIOP)' % nm)
             else:

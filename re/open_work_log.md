@@ -1,3 +1,10 @@
+## 2026-11-06 ~12:10 [f0] OnlineGrudge pass A: why no human hit landed (stock gate G1)
+Run 2 (dll 8b9b18e3, 10:55-11:03): 13 fire presses, 3076 ms held, target health stayed 350.0, no human hit reached slot 96.
+RE (workflow, confirmed by a skeptic at about 65 %): ZFFActor slot 422 (0x8689c0), gate G1 0x868b11..0x868b49, drops a ZFFPlayer's hit on an Ally bot
+while rules +0x285 ('looting started', 0x5cac90) is 0 (FA_NoFriendlyFire). So online, grudge can only fire after the first loot. Second suspect: 0x868a05 [victim+0x780].
+Bench fix: klauto 'pokeb' (one byte) sets [[[0x168e9e4]+0x54]+0x285]=1 after state 0x19, and the firebot hp lines log +0x285. klgrudge has its own 16-line budget for human hits.
+TEST out_ogb1106e_test fe5418e6, kit regenerated, validate OK. Next slot: run A --owner-away --again, then B. Camera-ray teleport rig on hold until G1 is ruled out.
+
 ## 2026-11-06 ~11:50 [c9] Last Call escape: boarding works on the live map
 Kit lclive1106 (live DM05A e6d2f73e, nothing installed, folder byte-identical after). Timeline: 10:52:56 van 3; 10:53:05 in box (7406,1882,3162);
 10:53:06 tap key 0x12 (E held 3 s); 10:53:07 "0 you aboard g3"; 10:53:49 van 5; 10:54:09 status6; 0x1f 10:54:12 then 0x20. Verify 4/4 PASS:

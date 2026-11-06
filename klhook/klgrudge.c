@@ -443,17 +443,18 @@ static void kly_og_agg(DWORD actor, struct kog_agg *a)
     if (kog_human(tgt, &a->idx, &a->rm, &a->why)) a->cls = 2;
 }
 
-static int nlog0;                                                                       /* separate small log budget for hits that took no health, so they cannot eat the real ones */
+static int nlog0, nlogh;                                                                /* separate small log budget for hits that took no health, so they cannot eat the real ones; and one for HUMAN
+                                                                                           attackers (grudge_1106 pass A: 8 AI/cop hits in 2 s filled the shared budget before the host's first shot) */
 static void kog_hit(int i, DWORD act, DWORD h, float hp0, DWORD *hit)
 {   /* AFTER the original handler, on the game thread, for a tracked bot: who hit him, did it take health, was it the last of it. READ ONLY. */
     float hp1 = hp0; DWORD att = klh_rd32((DWORD_PTR)hit), ty = klh_rd32((DWORD_PTR)hit + 8), now = GetTickCount(); int k = -1, rm = -2, hum, lethal, hurt; const char *why = "";
     if (klh_rd32(h + 0x24) == act) klh_rd(h + 4, &hp1, 4);                              /* the health object may be gone if the handler freed him: then hp1 = hp0 = no news */
     hurt = kgo_hurt(hp0, hp1); lethal = kgo_lethal(hp0, hp1);                           /* GUESS: the handler has applied the damage when it returns (0x84789d writes it through actor vt+0x670; synchronous?) */
-    if (hurt || kog_.nlog < 8 || nlog0 < 3) hum = att > 0xffff && kog_human(att, &k, &rm, &why); else hum = 0;
+    hum = att > 0xffff && kog_human(att, &k, &rm, &why);
     if (att <= 0xffff) why = "no aggressor";
-    if (hurt ? kog_.nlog < 8 : nlog0 < 3) {
-        if (hurt) kog_.nlog++; else nlog0++;
-        klog("grudge: online grudge%s: hit #%d on AI heister %d (actor %08lx): attacker %08lx vtable %08lx (%s), hit type %lu, health %.1f -> %.1f%s", kog_.dry ? " dry" : "", kog_.nlog, i, (unsigned long)act, (unsigned long)att,
+    if (hum ? nlogh < 16 : hurt ? kog_.nlog < 8 : nlog0 < 3) {
+        if (hum) nlogh++; else if (hurt) kog_.nlog++; else nlog0++;
+        klog("grudge: online grudge%s: hit #%d on AI heister %d (actor %08lx): attacker %08lx vtable %08lx (%s), hit type %lu, health %.1f -> %.1f%s", kog_.dry ? " dry" : "", hum ? nlogh : hurt ? kog_.nlog : nlog0, i, (unsigned long)act, (unsigned long)att,
              (unsigned long)(att > 0xffff ? klh_rd32(att) : 0), hum ? "HUMAN" : why, (unsigned long)ty, hp0, hp1, lethal ? " LETHAL" : hurt ? "" : " (no health taken: dead already, or completion not synchronous)");
     }
     if (!hurt) return;                                                                  /* a hit that took nothing says nothing */

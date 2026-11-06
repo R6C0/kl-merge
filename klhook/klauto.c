@@ -1487,9 +1487,9 @@ static void kla_script_load(void)
             if (plus) { kla_out(1, "script line %d: peek follows at most six pointers - script not loaded", i); kla_ncmd = 0; return; }
             snprintf(c->text, sizeof c->text, "%s", rest + strlen(a));
         }
-        else if (!_stricmp(op, "poke")) {              /* poke <addr>[+off...] <dword hex> <label>: peek's pointer path, then ONE dword written (TEST rig only) */
+        else if (!_stricmp(op, "poke") || !_stricmp(op, "pokeb")) {   /* poke <addr>[+off...] <dword hex> <label>: peek's pointer path, then ONE dword written (TEST rig only); pokeb writes ONE byte (rules +0x285 'looting started' without touching +0x286..) */
             char *plus = strchr(a, '+'); char *v = rest + strlen(a), *end = 0;
-            c->op = C_POKE; c->n = strtoul(a, 0, 16);
+            c->op = C_POKE; c->n = strtoul(a, 0, 16); c->key = (BYTE)(op[4] != 0);
             for (; plus && c->noff < 6; plus = strchr(plus + 1, '+')) c->off[c->noff++] = strtoul(plus + 1, 0, 16);
             if (plus) { kla_out(1, "script line %d: poke follows at most six pointers - script not loaded", i); kla_ncmd = 0; return; }
             while (*v == ' ' || *v == '\t') v++;
@@ -1808,7 +1808,8 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
                 if (aimed && !kla_m_btn[0] && (c->f[3] <= 0.0f || now - ptog >= (DWORD)(c->f[3] * 1.5f))) { kla_m_btn[0] = 0x80; held_t = now; ptog = now; ndown++; if (ndown <= 6) kla_out(1, "script %d: firebot fire DOWN #%d: rec %d actor %08lx, %.1f m, bearing error %.1f, health %.1f", kla_pc + 1, ndown, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, hv); }
                 else if (kla_m_btn[0] && c->f[3] > 0.0f && aimed && now - ptog >= (DWORD)c->f[3]) { kla_m_btn[0] = 0; held_ms += now - held_t; ptog = now; }
                 else if (kla_m_btn[0] && (err > c->f[2] * 3.0f || err < -c->f[2] * 3.0f)) { kla_m_btn[0] = 0; held_ms += now - held_t; if (ndown <= 6) kla_out(1, "script %d: firebot fire UP: bearing error %.1f", kla_pc + 1, err); }
-                if (now - lasthp >= 1000) { lasthp = now | 1; nfire++; if (nfire <= 20) kla_out(1, "script %d: firebot hp: rec %d actor %08lx %.1f m, bearing error %.1f, fire %s, health %.1f (target start %.1f)", kla_pc + 1, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, kla_m_btn[0] ? "DOWN" : "up", hv, hp_start); }
+                if (now - lasthp >= 1000) { lasthp = now | 1; nfire++; if (nfire <= 20) { DWORD gs = kla_rd32((DWORD_PTR)VA(0x168e9e4)), rl = gs ? kla_rd32(gs + 0x54) : 0; BYTE b285 = 0xff; if (rl > 0xffff) kla_rd(rl + 0x285, &b285, 1);   /* G1 gate (0x868b11, ZFFActor slot 422): a human's hit on an Ally bot is dropped while it is 0; 255 = unreadable */
+                    kla_out(1, "script %d: firebot hp: rec %d actor %08lx %.1f m, bearing error %.1f, fire %s, health %.1f (target start %.1f), rules +0x285 %d", kla_pc + 1, best, (unsigned long)act, sqrt(dx * dx + dz * dz) / 100.0, err, kla_m_btn[0] ? "DOWN" : "up", hv, hp_start, b285); } }
             } else if (!end) {
                 kla_m_rate[0] = kla_m_rate[1] = 0;
                 if (c->f[1] > 0.0f) kla_m_btn[1] = 0;
@@ -1894,8 +1895,9 @@ static void kla_script_step(DWORD *rg, DWORD *count, DWORD cap)
         case C_POKE: { DWORD v = 0, old = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int ok = 1, j; MEMORY_BASIC_INFORMATION mbi;
             for (j = 0; j < c->noff && ok; j++) { ok = kla_rd(at, &v, 4) && v > 0xffff; at = v + c->off[j]; }
             ok = ok && kla_rd(at, &old, 4) && VirtualQuery((void *)(DWORD_PTR)at, &mbi, sizeof mbi) && (mbi.Protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE));
-            if (ok) memcpy((void *)(DWORD_PTR)at, &c->n2, 4);
-            kla_out(1, "script %d: poke %08lx (%d pointer(s)) -> %08lx: %08lx -> %08lx %s%s", kla_pc + 1, c->n, c->noff, at, old, c->n2,
+            if (ok) memcpy((void *)(DWORD_PTR)at, &c->n2, c->key ? 1 : 4);
+            if (c->key) old &= 0xff;
+            kla_out(1, "script %d: poke%s %08lx (%d pointer(s)) -> %08lx: %08lx -> %08lx %s%s", kla_pc + 1, c->key ? "b" : "", c->n, c->noff, at, old, c->n2,
                     ok ? "" : "NOT WRITTEN (null pointer on the way or not writable) ", c->text); next = 1; break; }
         case C_REWRITE: {                               /* the same bytes written back: a data write that changes nothing */
             BYTE b[64]; DWORD v = 0, at = (DWORD)(DWORD_PTR)VA(c->n); int n = (int)c->f[0], ok = 1, j; char hex[3 * 16 + 1], txt[17];
