@@ -496,7 +496,8 @@ Disk: the game drive needs only the largest staged file + 512 MB spare per map (
 is restored and its md5 verified (they are then redundant and would make a re-install refuse with 'backup exists'; deleting after the check frees the D: space).
 --cleanup (space-tight stage drive): after a map is installed and every live md5 == the pinned new, that map's STAGED files are deleted (pins.json and the
 backups stay; --undo needs only those two, never the staged files).
-usage: python install.py [--dry] [--maps DM01,DM02] [--skip-run-check] [--backup DIR] [--game DIR] [--cleanup] | --undo [same options]   (run with the game closed)"""
+usage: python install.py [--dry] [--maps DM01,DM02] [--skip-run-check] [--backup DIR] [--game DIR] [--cleanup] [--link-from DIR] | --undo [same options]   (run with the game closed)
+--link-from DIR (space-tight backup drive): a backup whose DIR/<map>/<file> twin is md5 == the pinned old file and on the backup drive is a hard link of the twin (no copy)."""
 import hashlib, json, os, subprocess, shutil, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -532,7 +533,19 @@ MAPS = os.path.join(GAME, 'KLExpansion', 'Maps')
 want = arg('--maps') or list(pins)
 undo, dry = '--undo' in sys.argv, '--dry' in sys.argv
 CLEANUP = '--cleanup' in sys.argv
+LINK_FROM = arg('--link-from')[0] if arg('--link-from') else None     # a folder <map>/<file> holding byte-identical copies of the live files (the stage of the layer below)
 mb = lambda n: '%d MB' % (n >> 20)
+
+
+def link_src(m, f, o):
+    """The --link-from twin of a live file when it is md5 == pinned old and on the backup's drive: the backup becomes a hard link (0 bytes) instead of a copy.
+    Undo still md5-checks the backup, so a later change of the twin makes undo refuse, never restore wrong data."""
+    if not LINK_FROM:
+        return None
+    s = os.path.join(LINK_FROM, m, f)
+    if not os.path.isfile(s) or os.path.splitdrive(os.path.abspath(s))[0].lower() != os.path.splitdrive(os.path.abspath(BACKUP))[0].lower():
+        return None
+    return s if md5(s) == o else None
 
 
 def retry(fn, *a):
@@ -598,7 +611,7 @@ for m in todo:
     print('  %-6s game drive: %s transient (largest file + spare), net %+d MB%s' % (m, mb(big + SPARE), delta >> 20,
           '' if undo else ', backup drive: %s' % mb(sum(os.path.getsize(j[1]) for j in jobs[m]))))
 if not undo and todo:
-    need = sum(os.path.getsize(j[1]) for m in todo for j in jobs[m])
+    need = sum(os.path.getsize(j[1]) for m in todo for j in jobs[m] if not link_src(m, j[0], j[3]))
     probe = BACKUP
     while not os.path.isdir(probe) and os.path.dirname(probe) != probe:
         probe = os.path.dirname(probe)
@@ -655,8 +668,12 @@ for m in todo:
             print('  backups of %s deleted (verified restored)' % m)
         else:
             os.makedirs(os.path.join(BACKUP, m), exist_ok=True)
-            for f, live, new, o, n in jobs[m]:          # 1: copy every live file off the drive, md5 = pinned old
-                retry(shutil.copyfile, live, bk(m, f))
+            for f, live, new, o, n in jobs[m]:          # 1: copy every live file off the drive (or hard-link its --link-from twin), md5 = pinned old
+                s = link_src(m, f, o)
+                if s:
+                    os.link(s, bk(m, f)); print('  backup %s = hard link of %s' % (f, s))
+                else:
+                    retry(shutil.copyfile, live, bk(m, f))
                 if md5(bk(m, f)) != o:
                     raise IOError('backup copy of %s md5 != pinned old' % f)
             for f, live, new, o, n in jobs[m]:          # 2: staged -> <live>.new -> replace

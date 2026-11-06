@@ -203,6 +203,16 @@ try:
     rc, o = run('--undo', '--maps', 'DMA')
     check(rc == 0 and is_old('DMA') and 'restored DMA' in o, 'undo works with the staged files deleted (pins.json + backup only)')
     rc, o = run('--undo', '--maps', 'DMA', '--dry'); check(rc == 0, 'dry undo without staged files')
+    # --link-from: a twin md5 == pinned old becomes the backup as a hard link (0 bytes on the backup drive); a changed twin is ignored (plain copy)
+    twin = os.path.join(tmp, 'twin')
+    wr(os.path.join(twin, 'DMB', 'F01_Main.zip'), ('DMB' + 'F01_Main.zip' + 'old').encode() * 50)
+    wr(os.path.join(twin, 'DMB', 'KLGuns.ini'), b'not the live file')
+    rc, o = run('--maps', 'DMB', '--link-from', twin)
+    check(rc == 0 and is_new('DMB') and os.stat(os.path.join(bkp, 'DMB', 'F01_Main.zip')).st_ino == os.stat(os.path.join(twin, 'DMB', 'F01_Main.zip')).st_ino
+          and os.stat(os.path.join(bkp, 'DMB', 'KLGuns.ini')).st_ino != os.stat(os.path.join(twin, 'DMB', 'KLGuns.ini')).st_ino
+          and 'hard link' in o, 'link-from: an md5-equal twin is hard-linked as the backup, a changed twin is not')
+    rc, o = run('--undo', '--maps', 'DMB')
+    check(rc == 0 and is_old('DMB') and os.path.isfile(os.path.join(twin, 'DMB', 'F01_Main.zip')), 'undo of a linked backup restores the map and keeps the twin')
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 L.configure('1106b')
