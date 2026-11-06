@@ -1,6 +1,7 @@
 /* klogrudge_logic.h - [Bots] OnlineGrudge, the PURE decisions (no game memory, no clock of its own). Included by klgrudge.c and klogrudge_test.c.
    A HUMAN who kills an AI heister of the host's online round becomes the traitor, as stock FA does for human on human (rules slot 129 = 0x41d480, re\online_grudge_1106.md).
-   Attribution (review fixes 1106): the rules' damage hook (slot 15) sees every hit on a tracked bot; the LETHAL blow's attacker is the killer. Failing that, a fresh human
+   Attribution (fix 1106b): slot 15 of the rules NEVER runs for an AI heister (ZFFPlayer-only), so the hit is seen at the SOLDIER's hit handler 0x8473a0 (ZSoldier slot 96, klgrudge.c kog_w_hit):
+   health before / after the original; the LETHAL blow's attacker ([hit+0]) is the killer. Failing that, a fresh human
    stamp ([soldier+0x708], valid while clock < [soldier+0x70c]; it marks the FIRST tagger, not the killer) at the instant of death counts, unless a non-human hit the bot in the window. */
 #ifndef KLOGRUDGE_LOGIC_H
 #define KLOGRUDGE_LOGIC_H
@@ -54,6 +55,10 @@ static int kgo_after_hit(int lw, int human, int k, int lethal)
     if (!human && lw >= 0) return -1;
     return lw;
 }
+
+/* health before / after one run of the soldier's hit handler (completion synchronous = GUESS): finite numbers only. hurt = the hit took health; lethal = it took the last of it */
+static int kgo_hurt(float hp0, float hp1) { return hp0 == hp0 && hp1 == hp1 && hp0 < 1e9f && hp1 > -1e9f && hp1 < hp0; }
+static int kgo_lethal(float hp0, float hp1) { return kgo_hurt(hp0, hp1) && hp0 > 0.01f && hp1 <= 0.0f; }
 
 /* the hook only acts in Fragile Alliance proper: sub-mode [0x168e59c] 0 (1 Undercover Cop, 2 Cops and Robbers: stock never makes a traitor there) */
 static int kgo_submode_ok(long sub) { return sub == 0; }

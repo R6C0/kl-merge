@@ -770,7 +770,8 @@ static DWORD klh_avt(DWORD o) { DWORD v = klh_rd32(o); return ((klh_actor_priv &
 /* the vtable of a ZSoldier (0xbd0954) as the class tests mean it: klbrain.c [Brain] OnlineBrainTraitorArcade gives a bot the real Traitor tactic marked ONE shared private copy (slot 111 wrapped; 0 = none).
    Every "vtable == ZSoldier" test reads through this so such a bot is still a soldier for them. */
 static DWORD klh_soldier_priv;
-static DWORD klh_svt(DWORD o) { DWORD v = klh_rd32(o); return (klh_soldier_priv && v == klh_soldier_priv) ? 0x00bd0954u : v; }
+static DWORD klh_soldier_og;      /* klgrudge.c [Bots] OnlineGrudge: a second private copy (slot 96, the hit handler, wrapped); same rule */
+static DWORD klh_svt(DWORD o) { DWORD v = klh_rd32(o); return ((klh_soldier_priv && v == klh_soldier_priv) || (klh_soldier_og && v == klh_soldier_og)) ? 0x00bd0954u : v; }
 /* 2026-10-27 (bench BOSE5c): ONLINE, after my van escape / death the spectator camera follows a peer and the gamedata local-player slot
    [gd+0x898] -> [gd+0x828+4*sel] points at the PEER's body. klh_slot_player_mine() is that slot read for code that means 'MY body' (not the camera's):
    offline / Arcade (kl_online() == 0) it returns the slot exactly as before. Online it remembers the body the slot held while it was a master on this

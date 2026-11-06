@@ -65,6 +65,15 @@ int main(void)
         lw = kgo_after_hit(lw, 0, -1, 0);
         CHECK(kgo_decide(lw, 200, 2, 2, 50, &how) == -1 && how == 2, "cop kills after a human tag: no mark (how %d)", how);
     }
+    CHECK(kgo_lethal(100.0f, 0.0f) && kgo_lethal(10.0f, -5.0f), "health to 0 or below: lethal");
+    CHECK(!kgo_lethal(100.0f, 40.0f) && !kgo_lethal(100.0f, 0.01f), "survivor: not lethal");
+    CHECK(!kgo_lethal(0.0f, 0.0f) && !kgo_lethal(-3.0f, -9.0f) && !kgo_lethal(0.005f, 0.0f), "already dead / dying: not a fresh kill");
+    CHECK(!kgo_lethal(100.0f, 100.0f), "completion not synchronous (health unchanged): nothing");
+    CHECK(kgo_hurt(100.0f, 99.0f) && !kgo_hurt(100.0f, 100.0f) && !kgo_hurt(100.0f, 120.0f), "hurt = health went down");
+    {   volatile float z = 0.0f; float nan = z / z, inf = 1.0f / z;
+        CHECK(!kgo_hurt(nan, 0.0f) && !kgo_hurt(10.0f, nan) && !kgo_lethal(nan, nan) && !kgo_lethal(inf, 0.0f), "NaN / inf never count"); }
+    CHECK(kgo_after_hit(-1, 1, 3, kgo_lethal(50.0f, 0.0f)) == 3, "hit handler path: human lethal -> client index");
+    CHECK(kgo_after_hit(3, 0, -1, kgo_lethal(50.0f, 20.0f)) == -1, "hit handler path: later non-lethal cop hit clears a human's");
     CHECK(kgo_submode_ok(0), "FA sub-mode");
     CHECK(!kgo_submode_ok(1), "Undercover Cop: off");
     CHECK(!kgo_submode_ok(2), "Cops and Robbers: off");

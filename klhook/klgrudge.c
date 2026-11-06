@@ -333,8 +333,8 @@ static void kly_online_tick(int game_thread)
 /* [Bots] OnlineGrudge (default 0, NOT run live; re\online_grudge_1106.md): HOST only. A human who kills an AI heister of the host's round becomes the traitor, as stock does for
    human on human: rules slot 129 (0x41d480, killer index, victim index) sets the traitor bit and sends RMCSetTraitor to the clients. Stock never reaches it for a bot (no ZFFPlayer record).
    RULES: s.rules of klbd_online_view is the SESSION object (the round key); the REAL rules object is [[0x168e9e4] + 0x54] (kog_rules), the one slot 129 / klud_flags / KLH_RULES_SV_OK want.
-   KILLER, best first: (1) the LETHAL blow seen by the rules' damage hook (slot 15, kly_og_hit from klucc_down.c's klud_w15: attacker at the instant health reaches 0; GUESS that the hook's
-   victim is the AI heister's actor or soldier, the first event says which); (2) a fresh human stamp ([[actor+0x77c]+0x708], valid while clock [[0xdd2640]+0x48] < [soldier+0x70c]) at the instant of
+   KILLER, best first: (1) the LETHAL blow seen at the SOLDIER's hit handler (ZSoldier slot 96 = 0x8473a0, kog_w_hit below: attacker [hit+0], health before / after the original; rules slot 15 does
+   NOT work for this: it is ZFFPlayer-only, never runs for an AI heister); (2) a fresh human stamp ([[actor+0x77c]+0x708], valid while clock [[0xdd2640]+0x48] < [soldier+0x70c]) at the instant of
    death - that field marks the FIRST tagger, so it is refused when a non-human hit the bot in the window or the stamp changed since the last poll. Human = vtable ZFFPlayer AND the body is a used rules record's player
    (klbr_rec_member). Victim index -1 (GUESS: skips the announce, ok). Stock's tail after slot 129: only slot 105 (0x42e510, the killer's state refresh) is replayed, see the note. */
 static int klbr_rec_member(DWORD P, int *nused);
@@ -344,13 +344,61 @@ static int klbr_was_traitor_actor(DWORD actor);      /* klbrain.c (included afte
 static int klbr_traitor_bots(void);
 static int klbr_og_rules_busy(DWORD r);
 #define KOG_N KLB_NREC
-static struct { int on, dry, ndone, nfire, nunm, told_kind, told_sub, latch[KOG_N], lw[KOG_N]; DWORD rules, last, tid, actor[KOG_N], lat_at[KOG_N], nh_at[KOG_N], lw_at[KOG_N]; unsigned long done[KGO_NDONE]; } kog_;
+static struct { int on, dry, ndone, nfire, nlog, told_kind, told_sub, latch[KOG_N], lw[KOG_N]; DWORD rules, last, tid, actor[KOG_N], sol[KOG_N], vtold[KOG_N], lat_at[KOG_N], nh_at[KOG_N], lw_at[KOG_N]; unsigned long done[KGO_NDONE]; } kog_;
 
-static void kog_slot_clear(int i) { kog_.actor[i] = 0; kog_.latch[i] = -1; kog_.lw[i] = -1; kog_.lat_at[i] = kog_.nh_at[i] = kog_.lw_at[i] = 0; }
+/* THE HIT HOOK (fix 1106b; NOT run live). Rules slot 15 (klud_w15) is ZFFPlayer-only and never runs for an AI heister, so a human's kill of a bot was never seen there. The bot's own hit handler is
+   ZSoldier slot 96 = vtable 0xbd0954 + 0x180 = 0x8473a0 (thiscall: ecx soldier, one stack arg = hit record, ret 4; attacker actor [hit+0], hit type [hit+8]; actor = [soldier+0x40]; health [[actor+0x5fc]+4]).
+   A SHIP build writes data only and the stock table is .rdata, so (as klbrain.c's klh_soldier_priv) a PRIVATE copy of the table (128 slots, the class has 118) carries slot 96 = kog_w_hit, and the
+   hook points a TRACKED bot's soldier ([soldier+0], heap) at it (klh_svt maps it back to 0xbd0954: klh_soldier_og). Put back at a round's end / when the bot leaves the census. A soldier already on
+   klbrain.c's table is not touched (a traitor bot is no victim for this feature anyway); klbrain.c may take a soldier over from ours. kog_w_hit passes straight through unless the soldier is tracked. */
+#define KOG_SLOT 96
+#define KOG_ORG  0x008473a0
+#define KOG_NSLOT 128
+static DWORD kog_vt[1 + KOG_NSLOT];
+static int kog_vt_ok, kog_vt_try;
+static DWORD __fastcall kog_w_hit(void *self, void *edx, DWORD *hit);
+
+static int kog_vt_make(void)
+{
+    DWORD org[KOG_NSLOT], col = 0, va = (DWORD)(DWORD_PTR)KLH_VA(KLY_SOLDIER_VT);
+    if (kog_vt_ok) return 1;
+    if (kog_vt_try) return 0;
+    kog_vt_try = 1;
+    if (!klh_rd(va, org, sizeof org) || org[KOG_SLOT] != (DWORD)(DWORD_PTR)KLH_VA(KOG_ORG)) { klog("grudge: online grudge: ZSoldier slot %d reads %08lx, not 0x8473a0: the hit hook is OFF (no killer can be seen)", KOG_SLOT, (unsigned long)org[KOG_SLOT]); return 0; }
+    klh_rd(va - 4, &col, 4);                                                            /* slot -1 = the RTTI locator, copied like klbrain.c's tables */
+    kog_vt[0] = col; memcpy(kog_vt + 1, org, sizeof org); kog_vt[1 + KOG_SLOT] = (DWORD)(DWORD_PTR)kog_w_hit;
+    klh_soldier_og = (DWORD)(DWORD_PTR)(kog_vt + 1); kog_vt_ok = 1;
+    klog("grudge: online grudge: private ZSoldier table %08lx made (slot %d = the hit handler 0x8473a0 wrapped, %d slots copied)", (unsigned long)klh_soldier_og, KOG_SLOT, KOG_NSLOT);
+    return 1;
+}
+static void kog_svt_on(int i, DWORD act)
+{   /* a tracked, living bot: its soldier wears our table (once; only from the stock one) */
+    DWORD sol = klh_rd32(act + 0x77c), vt, stock = (DWORD)(DWORD_PTR)KLH_VA(KLY_SOLDIER_VT);
+    DWORD pr = klh_rd32(act + 0x54), team = 99;
+    if (pr > 0xffff) klh_rd(pr + 4, &team, 4);
+    if (team != 2) return;                                                              /* only Ally bots can be victims; retried every tick, so a later team change is caught */
+    if (!kog_vt_ok || sol < 0x10000 || klh_rd32(sol + 0x40) != act) return;
+    vt = klh_rd32(sol);
+    if (vt == klh_soldier_og) { kog_.sol[i] = sol; return; }
+    if (vt != stock) { if (!kog_.vtold[i]++) klog("grudge: online grudge: AI heister %d soldier %08lx has vtable %08lx (klbrain.c's private table?), not the stock one: its hits are NOT seen", i, (unsigned long)sol, (unsigned long)vt); return; }
+    if (!klh_data((void *)(DWORD_PTR)sol, &klh_soldier_og, 4, "ZSoldier vtable pointer (OnlineGrudge hit hook)")) { if (!kog_.vtold[i]++) klog("grudge: online grudge: AI heister %d: the vtable write was refused", i); return; }
+    kog_.sol[i] = sol;
+}
+static void kog_svt_back(int i)
+{   /* only where it is still ours and still that bot's soldier */
+    DWORD stock = (DWORD)(DWORD_PTR)KLH_VA(KLY_SOLDIER_VT);
+    if (kog_.sol[i] && kog_.actor[i] && klh_soldier_og && klh_rd32(kog_.sol[i]) == klh_soldier_og && klh_rd32(kog_.sol[i] + 0x40) == kog_.actor[i])
+        klh_data((void *)(DWORD_PTR)kog_.sol[i], &stock, 4, "ZSoldier vtable pointer back (OnlineGrudge hit hook)");
+    kog_.sol[i] = 0;
+}
+static void kog_svt_back_all(void) { int i; for (i = 0; i < KOG_N; i++) kog_svt_back(i); }
+
+static void kog_slot_clear(int i) { kog_.actor[i] = 0; kog_.sol[i] = 0; kog_.vtold[i] = 0; kog_.latch[i] = -1; kog_.lw[i] = -1; kog_.lat_at[i] = kog_.nh_at[i] = kog_.lw_at[i] = 0; }
 static void kog_reset(DWORD rules)
 {   /* a new round (or none): everything but the switches and the session counters */
-    int on = kog_.on, dry = kog_.dry, nf = kog_.nfire, nu = kog_.nunm, tk = kog_.told_kind, i;
-    memset(&kog_, 0, sizeof kog_); kog_.on = on; kog_.dry = dry; kog_.nfire = nf; kog_.nunm = nu; kog_.told_kind = tk; kog_.rules = rules;
+    int on = kog_.on, dry = kog_.dry, nf = kog_.nfire, nu = kog_.nlog, tk = kog_.told_kind, i;
+    kog_svt_back_all();                                                                 /* the stock soldier tables back BEFORE the round's memory is dropped */
+    memset(&kog_, 0, sizeof kog_); kog_.on = on; kog_.dry = dry; kog_.nfire = nf; kog_.nlog = nu; kog_.told_kind = tk; kog_.rules = rules;
     for (i = 0; i < KOG_N; i++) kog_slot_clear(i);
 }
 
@@ -395,27 +443,38 @@ static void kly_og_agg(DWORD actor, struct kog_agg *a)
     if (kog_human(tgt, &a->idx, &a->rm, &a->why)) a->cls = 2;
 }
 
-static void kly_og_hit(DWORD victim, float *pdelta, DWORD attacker)
-{   /* the rules' damage hook (slot 15, game thread, BEFORE the game subtracts): READ ONLY. Tracks who hits a tracked AI heister; a blow that takes his health to 0 is THE killer. */
-    float d = 0, hp = 0; DWORD act = 0, h, now = GetTickCount(), s2; int i, k = -1, rm = -2, hum, lethal; const char *why = "";
-    if (!kog_.on || !kog_.rules || !kog_.tid || GetCurrentThreadId() != kog_.tid || !pdelta || !klh_rd((DWORD_PTR)pdelta, &d, 4) || !(d < 0.0f) || d < -1e9f) return;      /* the tick's game thread only */
-    if (klh_avt(victim) == KLB_ACTOR_VT) act = victim;                                   /* GUESS 1: the hook's victim is the ZFFActor ... */
-    else if ((s2 = klh_rd32(victim + 0x40)) > 0xffff && klh_avt(s2) == KLB_ACTOR_VT && klh_rd32(s2 + 0x77c) == victim) act = s2;      /* GUESS 2: ... or his soldier (soldier+0x40 = actor) */
-    for (i = 0; act && i < KOG_N; i++) if (kog_.actor[i] == act) break;
-    if (!act || i >= KOG_N) {
-        if (!act && kog_.nunm < 3 && klh_pvt(victim) != 0x00bb45f4u) { kog_.nunm++; klog("grudge: online grudge: slot 15 victim %08lx (vtable %08lx) is neither a ZFFActor nor a soldier of one: not tracked (%d of 3 logged)", (unsigned long)victim, (unsigned long)klh_rd32(victim), kog_.nunm); }
-        return;
+static int nlog0;                                                                       /* separate small log budget for hits that took no health, so they cannot eat the real ones */
+static void kog_hit(int i, DWORD act, DWORD h, float hp0, DWORD *hit)
+{   /* AFTER the original handler, on the game thread, for a tracked bot: who hit him, did it take health, was it the last of it. READ ONLY. */
+    float hp1 = hp0; DWORD att = klh_rd32((DWORD_PTR)hit), ty = klh_rd32((DWORD_PTR)hit + 8), now = GetTickCount(); int k = -1, rm = -2, hum, lethal, hurt; const char *why = "";
+    if (klh_rd32(h + 0x24) == act) klh_rd(h + 4, &hp1, 4);                              /* the health object may be gone if the handler freed him: then hp1 = hp0 = no news */
+    hurt = kgo_hurt(hp0, hp1); lethal = kgo_lethal(hp0, hp1);                           /* GUESS: the handler has applied the damage when it returns (0x84789d writes it through actor vt+0x670; synchronous?) */
+    if (hurt || kog_.nlog < 8 || nlog0 < 3) hum = att > 0xffff && kog_human(att, &k, &rm, &why); else hum = 0;
+    if (att <= 0xffff) why = "no aggressor";
+    if (hurt ? kog_.nlog < 8 : nlog0 < 3) {
+        if (hurt) kog_.nlog++; else nlog0++;
+        klog("grudge: online grudge%s: hit #%d on AI heister %d (actor %08lx): attacker %08lx vtable %08lx (%s), hit type %lu, health %.1f -> %.1f%s", kog_.dry ? " dry" : "", kog_.nlog, i, (unsigned long)act, (unsigned long)att,
+             (unsigned long)(att > 0xffff ? klh_rd32(att) : 0), hum ? "HUMAN" : why, (unsigned long)ty, hp0, hp1, lethal ? " LETHAL" : hurt ? "" : " (no health taken: dead already, or completion not synchronous)");
     }
-    if (!kog_.told_kind) { kog_.told_kind = 1; klog("grudge: online grudge: the first damage hit on an AI heister: slot 15 victim is the %s", act == victim ? "ZFFActor" : "soldier"); }
-    if (!(h = klh_rd32(act + 0x5fc)) || klh_rd32(h + 0x24) != act || !klh_rd(h + 4, &hp, 4) || !(hp == hp)) return;
-    lethal = hp > 0.01f && hp + d <= 0.0f;
-    hum = kog_human(attacker, &k, &rm, &why);
+    if (!hurt) return;                                                                  /* a hit that took nothing says nothing */
     if (!hum) { kog_.nh_at[i] = now | 1; kog_.latch[i] = -1; }
     kog_.lw[i] = kgo_after_hit(kog_.lw[i], hum, k, lethal);                             /* a non-lethal non-human hit clears a human's predicted lethal blow */
     if (!lethal) return;
     kog_.lw_at[i] = now | 1;
-    klog("grudge: online grudge%s: lethal blow on AI heister %d (actor %08lx, health %.1f, hit %.1f): attacker %08lx vtable %08lx: %s",
-         kog_.dry ? " dry" : "", i, (unsigned long)act, hp, -d, (unsigned long)attacker, (unsigned long)klh_rd32(attacker), hum ? "HUMAN" : why);
+    klog("grudge: online grudge%s: lethal blow on AI heister %d (actor %08lx, health %.1f -> %.1f): attacker %08lx vtable %08lx: %s",
+         kog_.dry ? " dry" : "", i, (unsigned long)act, hp0, hp1, (unsigned long)att, (unsigned long)(att > 0xffff ? klh_rd32(att) : 0), hum ? "HUMAN" : why);
+}
+
+static DWORD __fastcall kog_w_hit(void *self, void *edx, DWORD *hit)
+{   /* ZSoldier slot 96 (0x8473a0), see the block above. Straight through unless this soldier is a tracked bot's and we are on the tick's game thread. */
+    DWORD act = 0, h = 0, r; float hp0 = 0; int i = KOG_N;
+    if (kog_.on && kog_.tid && hit && GetCurrentThreadId() == kog_.tid && (act = klh_rd32((DWORD_PTR)self + 0x40)) > 0xffff) {
+        for (i = 0; i < KOG_N; i++) if (kog_.actor[i] == act && kog_.sol[i] == (DWORD)(DWORD_PTR)self) break;
+        if (i < KOG_N && (!(h = klh_rd32(act + 0x5fc)) || klh_rd32(h + 0x24) != act || !klh_rd(h + 4, &hp0, 4) || !(hp0 == hp0))) i = KOG_N;
+    }
+    r = ((DWORD (__fastcall *)(void *, void *, DWORD *))(DWORD_PTR)KLH_VA(KOG_ORG))(self, edx, hit);      /* the original: thiscall, ret 4 */
+    if (i < KOG_N) kog_hit(i, act, h, hp0, hit);
+    return r;
 }
 
 static void kog_traitors(DWORD rules)
@@ -468,7 +527,7 @@ static void kly_og_tick(int game_thread)
 {
     struct klb_snap s; char why[200]; DWORD now = GetTickCount(), rules; int i, v; long sub = -1;
     if (!kog_.on || !game_thread || !klh_exe_ok) return;
-    kog_.tid = GetCurrentThreadId();                                                    /* kly_og_hit only acts on this thread */
+    kog_.tid = GetCurrentThreadId();                                                    /* kog_w_hit only acts on this thread */
     if (now - kog_.last < 250) return;
     kog_.last = now | 1;
     why[0] = 0; v = klbd_online_view(3, &s, why);
@@ -476,18 +535,19 @@ static void kly_og_tick(int game_thread)
     if (v == 0) { if (kog_.rules) kog_reset(0); return; }
     if (s.rules != kog_.rules) { kog_reset(s.rules); kog_.told_sub = 0; klog("grudge: online grudge: new round, %s", why); }
     klh_rd((DWORD_PTR)KLH_VA(0x168e59c), &sub, 4);
-    if (!kgo_submode_ok(sub)) {                                                         /* Undercover Cop / Cops and Robbers: stock never makes a traitor; the hit hook idles too (tid 0) */
+    if (!kgo_submode_ok(sub)) {                                                         /* Undercover Cop / Cops and Robbers: stock never makes a traitor; the stock tables go back, so the hit hook has nothing to see */
         if (!kog_.told_sub) { kog_.told_sub = 1; klog("grudge: online grudge: sub-mode [0x168e59c] = %ld, not Fragile Alliance (0): off this round", sub); }
-        kog_.tid = 0; return;
+        kog_.tid = 0; kog_svt_back_all(); return;
     }
     if (!kog_.told_sub) { kog_.told_sub = 1; klog("grudge: online grudge: sub-mode [0x168e59c] = 0 (Fragile Alliance): on"); }
     if (klbr_og_rules_busy(0)) return;                                                  /* a brain swap frame is open: poll again next time */
+    kog_vt_make();
     rules = kog_rules();                                                               /* the REAL rules object; s.rules (the session) is only the round key */
     for (i = 0; i < KOG_N; i++) {
         const struct klb_rec *r = i < s.n ? &s.r[i] : 0; DWORD act = (r && r->used) ? r->actor : 0; int first, st;
         if (kog_.actor[i] && kog_.actor[i] != act) {
             if (kog_.latch[i] >= 0 && !kgo_done_has(kog_.done, kog_.ndone, kog_.actor[i])) klog("grudge: online grudge: AI heister left the census with a human latch (record %d, actor %08lx, client %d)", i, (unsigned long)kog_.actor[i], kog_.latch[i]);
-            kog_slot_clear(i);
+            kog_svt_back(i); kog_slot_clear(i);
         }
         if (!act || klh_avt(act) != KLB_ACTOR_VT) continue;
         first = kog_.actor[i] != act;
@@ -495,6 +555,7 @@ static void kly_og_tick(int game_thread)
         st = kgo_step(r->status == 7, kgo_done_has(kog_.done, kog_.ndone, act), first);
         if (st == 1) {
             struct kog_agg ag; kly_og_agg(act, &ag);
+            kog_svt_on(i, act);
             if (ag.cls == 2) { kog_.latch[i] = ag.idx; kog_.lat_at[i] = now | 1; }
             else if (ag.cls == 1) { kog_.latch[i] = -1; kog_.nh_at[i] = now | 1; }      /* a fresh non-human aggressor: the latch is cleared, the window opens */
         } else if (st == 3) {
@@ -732,7 +793,7 @@ static void kly_init(void)
     klyo.factor = kly_inif("OnlineCrewHealth", "0", 0.25f, 10, 0); if (klyo.factor == 1.0f) klyo.factor = 0;      /* own key: works without [Bots] Enable (online has no Arcade crew) */
     klyo.dry = klyo.factor > 0 && GetPrivateProfileIntA("Bots", "OnlineCrewHealthDry", 0, klh_ini) != 0;
     kog_.on = GetPrivateProfileIntA("Bots", "OnlineGrudge", 0, klh_ini) != 0; kog_.dry = kog_.on && GetPrivateProfileIntA("Bots", "OnlineGrudgeDry", 0, klh_ini) != 0;
-    if (kog_.on) klog("grudge: OnlineGrudge on%s: HOST only; a human who kills an AI heister becomes the traitor (rules slot 129); NOT run live", kog_.dry ? " (dry log)" : "");
+    if (kog_.on) klog("grudge: OnlineGrudge on%s: HOST only; a human who kills an AI heister becomes the traitor (rules slot 129; the kill is seen at the soldier's hit handler 0x8473a0 via a private ZSoldier table); NOT run live", kog_.dry ? " (dry log)" : "");
     kly.log = (int)GetPrivateProfileIntA("Bots", "Log", 1, klh_ini); if (kly.log < 0) kly.log = 0; if (kly.log > 2) kly.log = 2;
     if (klyo.factor > 0) klog("grudge: OnlineCrewHealth x %.2f%s: HOST only, online rounds, data writes only; acts when this machine hosts a round (GUESS: a client's hit is priced against the host's health object, not traced)", klyo.factor, klyo.dry ? " (dry log)" : "");
     if (!GetPrivateProfileIntA("Bots", "Enable", 0, klh_ini)) return;

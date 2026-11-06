@@ -4482,7 +4482,7 @@ static void klbr_ta_pump(void)      /* game thread, depth 0, outside the AI walk
         if (!rok || e->state != 1 || !e->snd || e->rec <= 0) { klog("brain: traitor arcade: slot %d: the mark is not wrapped (round or tag gone)", i); continue; }
         if (!klbr_bot_pos(e->actor, pos, &alive) || !alive) { klog("brain: traitor arcade: slot %d: not wrapped (the bot is dead)", i); continue; }
         if (!klbr_ta_make()) { klbr_taon = 0; return; }
-        if (klh_rd32(e->snd) != KLBR_TA_SOLDIER_VT + (DWORD)klh_delta) { klog("brain: traitor arcade: slot %d soldier %08lx has vtable %08lx, not the stock ZSoldier one: not wrapped", i, (unsigned long)e->snd, (unsigned long)klh_rd32(e->snd)); continue; }
+        if (klh_rd32(e->snd) != KLBR_TA_SOLDIER_VT + (DWORD)klh_delta && !(klh_soldier_og && klh_rd32(e->snd) == klh_soldier_og)) {      /* klh_soldier_og: klgrudge.c OnlineGrudge's private table (a copy of the stock one): taking the bot over from it is fine, the stock table goes back at restore and klgrudge.c swaps again */ klog("brain: traitor arcade: slot %d soldier %08lx has vtable %08lx, not the stock ZSoldier one: not wrapped", i, (unsigned long)e->snd, (unsigned long)klh_rd32(e->snd)); continue; }
         if (!klh_data((void *)(DWORD_PTR)e->snd, &klh_soldier_priv, 4, "ZSoldier vtable pointer (OnlineBrainTraitorArcade)")) { klog("brain: traitor arcade: slot %d: the vtable write was refused", i); continue; }
         klbr_ta[i].snd = e->snd; klbr_ta[i].rec = e->rec;
         if (++klbr_ta_wlog <= 8) klog("brain: traitor arcade: bot %d wrapped (soldier %08lx, actor %08lx, rec %d): it may now target human players as in Arcade; team stays Ally", i, (unsigned long)e->snd, (unsigned long)e->actor, e->rec);
