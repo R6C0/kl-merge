@@ -9,6 +9,10 @@
 - 1106e (d195c6fd, agent): PD2 Deagle npc on item 63 (HG_M9Beretta_Human_Shield), cost 1.73, muzzle 35.5 vs host 28.5 (Deagle is longer). Only deagle/beretta92/c45 pistols are extracted. Dry install PASS on live. Bench pending.
 - UNDO ALL 1105.bat: new steps 0a (1106e) and 0b (1106d) before 0 (1106c); a skip-all undo exits 0. D: free fell to ~10.8 GB (layer backups ~3.7 GB each).
 
+## 2026-11-06 ~14:55 [db] 9-seat OSS_DD09_FCS: 9/9 in round, 0 asserts/faults/dumps; one-PC contention as before (no crash involved)
+- TEST a77e0546, all 6 [Perf] keys. Seats 1-5, 7-9 HITCHY at 21-23 fps (N9S ref 22.5); inst6 starved at 0.4 fps (frames 1.8-3.4 s, hook 0.3 % of frame time) = FAIL by freeze.
+- Host hook cost 0.23 ms a frame. 9 games on one PC is the limit; N9S also lost a seat (stall dump). The 3-seat runs are the hook's real measure (SMOOTH).
+
 ## 2026-11-06 ~14:30 [db] FillCensusSlice bench SMOOTH: OSS_DD09_FCS_S3 (no crash involved)
 - [Perf] FillCensusSlice=1 (85fdae39, TEST a77e0546, SHIP e88a6093): the online host's 'botfill: round census' (8 MB walk + log lines, 13 ms CPU every 5 s; live has OnlineFill=1/OnlineHost=1) walked 1/8 a frame.
 - Bench, 3 seats, cen ini + the key: all SMOOTH, 0 hitches, 0 stalls; host 29.9 fps, max frame 128 ms (CEN_S3 486), p95 87; 0 asserts/faults/dumps; live dll/ini unchanged.
