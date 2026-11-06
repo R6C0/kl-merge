@@ -89,6 +89,13 @@ static DWORD klh_svt(DWORD a) { return klh_rd32(a); }      /* klhook.c: maps the
 static int fake_census(DWORD *out, int max) { int i; for (i = 0; i < g_ncen && i < max; i++) out[i] = g_cen[i]; return g_ncen < max ? g_ncen : max; }
 static int fake_host(DWORD *rules, DWORD *state) { if (g_ohost <= 0) return g_ohost; *rules = 0x2222; *state = g_ostate; return 1; }
 #define KLBD_CENSUS(out, max) fake_census(out, max)
+/* [Perf] CensusSlice: the shared sliced census walks a fake entity table (g_tab, 0 = unreadable); a candidate = an actor of g_cen */
+static int g_cs_on, g_ncand_calls; static DWORD g_frame, g_tab;
+static int fake_cand_ok(DWORD o) { int i; g_ncand_calls++; if (o < 0x10000) return 0; for (i = 0; i < g_ncen; i++) if (g_cen[i] == o) return 1; return 0; }
+#define KLBD_ENT_TAB() g_tab
+#define KLBD_CAND_OK(o) fake_cand_ok(o)
+#define KLBD_CS_ON() g_cs_on
+#define KLBD_FRAME() g_frame
 #define KLBD_ONLINE_HOST(r, s) fake_host(r, s)
 #define KLBD_NOW() g_now
 #include "klbotdown.c"
@@ -137,9 +144,13 @@ static void world(void)
     klbd.attr = 1.5f; klbd.watch = 8; klbd.preshield = 0; g_btest = 1; g_nb = 0;
     memset(klbd_r, 0, sizeof klbd_r); memset(&klbd_g, 0, sizeof klbd_g);
     g_hum = 0; g_use = 0; g_kad_on = 1; g_needuse = 0; g_ohost = 0; g_ostate = 0x19; g_ncen = 0; g_now = 5000; klbd_online_reset(); g_accept = 1; g_ncalls = 0; g_goal_never = 0; g_code_ok = 1; nlog = 0; logbuf[0] = 0; nwrites = 0;
+    g_cs_on = 0; g_tab = 0; g_ncand_calls = 0; memset(&klbd_cs, 0, sizeof klbd_cs); memset(klbd_ovs, 0, sizeof klbd_ovs);
 }
 
-static void pass(int ms) { tick += ms * 1024 / 1000; W32(CLOCK + 0x48, tick); game_frame(); klbd_tick(1); }
+#define ETAB 0x01000000                     /* the fake entity table: 0x10000 slots of 0x80 bytes, the object at +0x60 */
+static void ent(int slot, DWORD o) { W32(ETAB + slot * 0x80 + 0x60, o); }
+
+static void pass(int ms) { tick += ms * 1024 / 1000; W32(CLOCK + 0x48, tick); game_frame(); g_frame++; klbd_tick(1); }
 static void run(int ms) { int t; for (t = 0; t < ms; t += 16) pass(16); }
 static int fails;
 #define CHECK(c, msg) do { if (!(c)) { printf("FAIL: %s  (line %d)\n", msg, __LINE__); fails++; } else printf("ok:   %s\n", msg); } while (0)
@@ -319,6 +330,46 @@ int main(void)
     CHECK(R32(ACT(1) + 0x64c) == 1 && has("log only") && R32(DND(1) + 0x14) == t0, "OnlineRevive=2: the line, the lie tick untouched"); }
     world(); klbd.orev = 1; g_hum = 1; g_hpos[0] = 6100; WF(HO(1) + 4, 20); run(300); run(3200);
     CHECK(R32(ACT(1) + 0x64c) == 1 && !has("adren-online"), "Arcade (not online): OnlineRevive does nothing (kladren.c's own adrenaline is the Arcade one)");
+
+    /* ---- 13: [Perf] CensusSlice: one census for every slot table, 128 blocks a frame, published only when the sweep is done */
+    printf("--- scenario 13: CensusSlice\n");
+    { struct klb_snap sa, sb; int k, steps = 0; DWORD i0;
+      world(); g_cs_on = 1; g_tab = ETAB; g_ncen = 2; g_cen[0] = ACT(1); g_cen[1] = ACT(2); ent(5000, ACT(1)); ent(60000, ACT(2)); ent(7000, ACT(3));
+      memset(&sa, 0, sizeof sa); sa.rules = 0x2222; sb = sa;
+      for (k = 0; k < 7; k++) { g_frame++; klbd_ov_fill(&klbd_ovs[1], &sa, g_now); steps++; }
+      CHECK(klbd_cs.at == 0 && klbd_ovs[1].ncand == 0 && sa.n == 0, "7 slices of 128 blocks: the sweep is not done, nothing published, no record yet");
+      i0 = klbd_cs.i; klbd_ov_fill(&klbd_ovs[2], &sb, g_now);
+      CHECK(klbd_cs.i == i0, "a second table in the same frame does not walk a second slice");
+      g_frame++; klbd_ov_fill(&klbd_ovs[1], &sa, g_now);
+      CHECK(klbd_cs.at == g_now && klbd_cs.n == 2 && sa.n == 2 && klbd_ovs[1].ncand == 2, "8th slice: the sweep is done, both Ally actors (slot 60000 too), ACT(3) not a candidate");
+      CHECK(g_ncand_calls == 0x10000, "one sweep = each of the 0x10000 slots tested once");
+      g_frame++; klbd_ov_fill(&klbd_ovs[2], &sb, g_now); klbd_ov_fill(&klbd_o, &sb, g_now);
+      CHECK(sb.n == 2 && klbd_ovs[2].ncand == 2 && klbd_o.ncand == 2 && g_ncand_calls == 0x10000, "the other tables take the same result: no second walk");
+      g_frame++; g_now += 500; klbd_ov_fill(&klbd_ovs[1], &sa, g_now);
+      CHECK(klbd_cs.run == 0 && g_ncand_calls == 0x10000, "0.5 s later: no new sweep (once a second)");
+      g_frame++; g_now += 600; klbd_ov_fill(&klbd_ovs[1], &sa, g_now);
+      CHECK(klbd_cs.run == 1 && klbd_cs.n == 2 && klbd_ovs[1].ncand == 2, "1.1 s: a new sweep runs; the last result stays published meanwhile");
+      memset(&klbd_ovs[3], 0, sizeof klbd_ovs[3]); sb.rules = 0x3333; g_frame++; klbd_ov_fill(&klbd_ovs[3], &sb, g_now);
+      CHECK(klbd_ovs[3].ncand == 0 && sb.n == 0, "another session key: the result of 0x2222 is not handed over");
+      world(); g_cs_on = 1; g_tab = ETAB; g_ncen = 1; g_cen[0] = ACT(1); ent(10, ACT(1)); memset(&sa, 0, sizeof sa); sa.rules = 0x2222;
+      for (k = 0; k < 8; k++) { g_frame++; klbd_ov_fill(&klbd_ovs[1], &sa, g_now); }
+      CHECK(sa.n == 1 && klbd_ovs[1].slot[0] == ACT(1), "one bot: in slot 0 after the 8th slice");
+      g_tab = 0; for (k = 0; k < 10; k++) { g_frame++; g_now += 300; memset(&sa, 0, sizeof sa); sa.rules = 0x2222; klbd_ov_fill(&klbd_ovs[1], &sa, g_now); }
+      CHECK(sa.n == 0 && klbd_ovs[1].slot[0] == 0, "table unreadable 3 s (a level load): the stale result is not used, the slot goes");
+      g_tab = ETAB; ent(10, 0); ent(20, ACT(1)); for (k = 0; k < 8; k++) { g_frame++; memset(&sa, 0, sizeof sa); sa.rules = 0x2222; klbd_ov_fill(&klbd_ovs[1], &sa, g_now); }
+      CHECK(sa.n == 1 && klbd_ovs[1].slot[0] == ACT(1), "the table is back: a fresh sweep finds him again");
+      world(); g_cs_on = 1; g_tab = ETAB; g_ncen = 1; g_cen[0] = ACT(1); ent(10, ACT(1)); memset(&sa, 0, sizeof sa); sa.rules = 0x2222;
+      for (k = 0; k < 4; k++) { g_frame++; klbd_ov_fill(&klbd_ovs[1], &sa, g_now); }
+      g_tab = ETAB + 0x80; for (k = 0; k < 4; k++) { g_frame++; klbd_ov_fill(&klbd_ovs[1], &sa, g_now); }
+      CHECK(klbd_cs.at == 0 && klbd_cs.run == 1, "the table moved mid-sweep: it starts over (4 slices are not a sweep)");
+      world(); g_cs_on = 1; g_tab = ETAB; g_ncen = 1; g_cen[0] = ACT(1); ent(10, ACT(1));
+      { int lost = 0; for (k = 0; k < 60; k++) { g_frame++; g_now += 250; memset(&sa, 0, sizeof sa); sa.rules = 0x2222; klbd_ov_fill(&klbd_ovs[1], &sa, g_now);
+          if (k >= 8 && klbd_ovs[1].slot[0] != ACT(1)) lost++; }
+        CHECK(lost == 0 && klbd_cs.at > 5000 + 8 * 250, "a lone caller every 250 ms (sweep 2 s, cycle 3 s > FRESH): the bot keeps slot 0 through 15 s of sweeps"); }
+      (void)steps; }
+    world(); g_snap.state = 0x10; klbd.arc = 0; klbd.oon = 1; g_ohost = 1; g_cs_on = 1; g_tab = ETAB; g_ncen = 2; g_cen[0] = ACT(1); g_cen[1] = ACT(2); ent(3, ACT(1)); ent(4, ACT(2));
+    WF(HO(1) + 4, 20); run(300);
+    CHECK(g_ncalls >= 1 && g_last_soldier == SOL(1) && has("IS DOWN"), "CensusSlice on: the online host's down works as with the one-call census");
 
     printf("\n%s (%d failure(s))\n", fails ? "FAILED" : "ALL PASS", fails);
     return fails ? 1 : 0;

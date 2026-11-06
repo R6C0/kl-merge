@@ -342,25 +342,38 @@ static void klbd_forget(void)
  * would have to reach the host as a message (Way 3 of re\downed_online.md, not built). The bot gets up by himself after his lie.
  */
 #ifndef KLBD_CENSUS
+/* the entity table (0x10000 slots of 0x80 bytes, the object at +0x60), 0 = unreadable */
+static DWORD klbd_ent_tab(void)
+{
+    DWORD p, tab;
+    if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return 0;
+    return tab;
+}
+/* one slot's object: a candidate = a ZFFActor of team Ally with a soldier */
+static int klbd_cand_ok(DWORD o)
+{
+    DWORD pr, team = 99, s;
+    if (o < 0x10000 || klh_avt(o) != KLB_ACTOR_VT) return 0;
+    if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4) || team != 2) return 0;
+    return klbd_bot_ok(o, &s);
+}
 /* up to `max` candidate actors; 0x10000 slots of 0x80 bytes walked 64 a read as klbotfill.c does (one pass a second, see klbd_online_fill) */
 static int klbd_census(DWORD *out, int max)
 {
-    DWORD p, tab, i, blk[64 * 32]; int n = 0;
-    if (!(p = klh_rd32((DWORD_PTR)KLH_VA(KLE_ENTS))) || !(p = klh_rd32(p + 0xc)) || !(tab = klh_rd32(p + 0xc))) return 0;
+    DWORD tab, i, blk[64 * 32]; int n = 0;
+    if (!(tab = klbd_ent_tab())) return 0;
     for (i = 0; i < 0x10000 && n < max; i += 64) {
         DWORD k;
         if (!klh_rd(tab + i * 0x80, blk, sizeof blk)) continue;      /* one unreadable block does not end the census (review fix 7) */
-        for (k = 0; k < 64 && n < max; k++) {
-            DWORD o = blk[k * 32 + 0x60 / 4], pr, team = 99, s;
-            if (o < 0x10000 || klh_avt(o) != KLB_ACTOR_VT) continue;
-            if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4) || team != 2) continue;
-            if (!klbd_bot_ok(o, &s)) continue;
-            out[n++] = o;
-        }
+        for (k = 0; k < 64 && n < max; k++) if (klbd_cand_ok(blk[k * 32 + 0x60 / 4])) out[n++] = blk[k * 32 + 0x60 / 4];
     }
     return n;
 }
 #define KLBD_CENSUS(out, max) klbd_census(out, max)
+#define KLBD_ENT_TAB() klbd_ent_tab()
+#define KLBD_CAND_OK(o) klbd_cand_ok(o)
+#define KLBD_CS_ON() klperf_on(&klperf_cen, "CensusSlice")
+#define KLBD_FRAME() klh_ticks
 #endif
 #ifndef KLBD_NOW
 #define KLBD_NOW() GetTickCount()
@@ -389,12 +402,50 @@ static void klbd_online_reset(void) { memset(&klbd_o, 0, sizeof klbd_o); }
 
 static int klbd_in(const DWORD *a, int n, DWORD v) { int i; for (i = 0; i < n; i++) if (a[i] == v) return 1; return 0; }
 
+/* [Perf] CensusSlice (11-06, bench OSS_DD09_BSS_S3): the census above is an 8 MB walk (1024 reads of 8 KB) of ~18 ms CPU, and each slot table
+   (klbd_o for klbd_tick, klbd_ovs[0] for klhop.c's klv_tick, [1..3] for klcardown / klshield / klgrudge+klauto) ran its own once a second on the
+   host's game thread: two 18 ms spikes a second in TickProfile. On: ONE census for all tables, walked KLBD_CS_BLOCKS blocks a frame (8 frames a
+   sweep, ~2.3 ms each), a new sweep once the last is 1 s old. A sweep is published only when it is done (a half list would drop live slots); the
+   tables take a result only while it is under KLBD_CS_FRESH ms old and of the same session key, so a level load (seconds without a sweep) never
+   hands a new table the last level's actors. Off: each table's one-call census, as before. */
+#define KLBD_CS_BLOCKS 128u
+#define KLBD_CS_FRESH  2500u
+static struct klbd_cs { DWORD cand[KLB_NREC], at, key; int n;      /* the last finished sweep: its actors, when (0 = none), its session key */
+                        DWORD stg[KLB_NREC], i, tab, skey, frame; int ns, run, stepped; } klbd_cs;
+static void klbd_cs_step(DWORD key, DWORD now)
+{
+    struct klbd_cs *c = &klbd_cs; DWORD tab, blk[64 * 32], b;
+    if (c->stepped && c->frame == (DWORD)KLBD_FRAME()) return;      /* one slice a frame, however many tables ask */
+    c->stepped = 1; c->frame = (DWORD)KLBD_FRAME();
+    if (!c->run) {
+        if (c->at && c->key == key && now - c->at < 1000u) return;
+        c->run = 1; c->i = 0; c->ns = 0; c->tab = 0; c->skey = key;
+    }
+    tab = KLBD_ENT_TAB();
+    if (!tab) { c->run = 0; return; }                               /* no table this instant: try again next frame */
+    if (tab != c->tab || key != c->skey) { c->tab = tab; c->skey = key; c->i = 0; c->ns = 0; }      /* the table moved or a new session: start over */
+    for (b = 0; b < KLBD_CS_BLOCKS && c->i < 0x10000 && c->ns < KLB_NREC; b++, c->i += 64) {
+        DWORD k;
+        if (!klh_rd(tab + c->i * 0x80, blk, sizeof blk)) continue;
+        for (k = 0; k < 64 && c->ns < KLB_NREC; k++) if (KLBD_CAND_OK(blk[k * 32 + 0x60 / 4])) c->stg[c->ns++] = blk[k * 32 + 0x60 / 4];
+    }
+    if (c->i < 0x10000 && c->ns < KLB_NREC) return;
+    memcpy(c->cand, c->stg, sizeof c->cand); c->n = c->ns; c->key = c->skey; c->at = now ? now : 1; c->run = 0;
+}
+
 /* the pseudo records of this pass: the census once a second, the slots kept while the actor stays in it, a new actor in the first free slot.
    A record is 'used' with flags 1 (a bot), status 0 in play / 7 dead (health 0). -> number of records, 0 = nothing to do */
 static int klbd_ov_fill(struct klbd_ov *o, struct klb_snap *sn, DWORD now)
 {
     int i, c, top = 0;
-    if (!o->at || now - o->at >= 1000u) { o->ncand = KLBD_CENSUS(o->cand, KLB_NREC); o->at = now ? now : 1; }
+    if (KLBD_CS_ON()) {
+        klbd_cs_step(sn->rules, now);
+        if (klbd_cs.at && klbd_cs.key == sn->rules && now - klbd_cs.at < KLBD_CS_FRESH && o->at != klbd_cs.at) {
+            memcpy(o->cand, klbd_cs.cand, sizeof o->cand); o->ncand = klbd_cs.n; o->at = klbd_cs.at;
+        } else if (o->at && now - o->at >= KLBD_CS_FRESH && !klbd_cs.run) o->ncand = 0;      /* no sweep can run (table unreadable): the slots go, as an empty one-call census
+            did; while one runs the last list stays (review 11-06: a lone 250 ms caller or a seat under ~5 fps takes > 1.5 s a sweep, and dropping then
+            renumbered every record each cycle) */
+    } else if (!o->at || now - o->at >= 1000u) { o->ncand = KLBD_CENSUS(o->cand, KLB_NREC); o->at = now ? now : 1; }
     for (i = 0; i < KLB_NREC; i++) if (o->slot[i] && !klbd_in(o->cand, o->ncand, o->slot[i])) o->slot[i] = 0;
     for (c = 0; c < o->ncand; c++) {
         if (klbd_in(o->slot, KLB_NREC, o->cand[c])) continue;
