@@ -1,3 +1,8 @@
+## 2026-11-06 ~18:35 [db] PERF INSTALLED (owner via c9: "install all the latest stuff on every one", installs only) (no crash involved)
+- Live dinput8.dll SHIP e88a6093 (klhook/out_fcs1106, commit 85fdae39, contains the pics hook cda03a57). KLHook.ini c2910f30 = e91096c7 + [Perf] OsdScanSlice,
+  ScanMinFrames, ShopPoolBlock, BotScanSlice, CensusSlice, FillCensusSlice = 1 (recommended on). Bench-only TickProfile/NanDump left out.
+- Backup + undo: C:\kl_build_1024\fcs_1106_install\ (backup\ dll 727a73bb, ini e91096c7; "UNDO fcs 1106.bat"). Not run live since (owner present). f0 installs next.
+
 ## 2026-11-06 ~18:45 [db] 3 more DD09 catch runs, then STOP (owner via c9: "do this last test then stop all") (no crash involved)
 - OSS_DD09_FCS_S3_PD2T3/4/5 (1106t live, NanDump=1): T3 and T5 SMOOTH (host 29.9 fps). T4: one 5.6 s host freeze at 18:00:57, the main thread waiting in ntdll
   through DINPUT8 ("Not Responding", another seat's window in front), not Havok and not the hook. The 1.8 fps round did NOT recur in 5 runs; no NanDump line.
