@@ -45,3 +45,9 @@ Rerun lclive (E held in BoardingTrigger_Heli) with `D3dShotPost=1`, ReShade Brid
   => distance was not the cause: from this eye, the view toward the parked heli is unlit (night sky / unlit heli).
 - Next: an in-heli LookAtPos camera like stock F06 CameraInVan_01 (eFMM_LookAtPos, in-heli focus point, OnlineEscCamTrigger),
   or a light at the hover point. lcoutro_1106 is worth keeping either way (60 s -> ~20 s).
+
+## 11-06 ~13:10 bench lcoutcam1106 (lcoutro + helicam variant A, zip 24576526): GREY
+- 0 faults, undo OK (DM05A back to e6d2f73e). The "eye fixed" kit check FAILs by design (the eye now moves).
+- The eye rides with the heli at piv398 + (-893..-911, +40..+56, ~0): f5 is world x, f6 is about world y (y is up). At hover: eye (6317,2567,3488). At park: (5089,2787,3950).
+- Shots 19-21 (12:54:26-12:55:06, from boarding to the score screen) are a UNIFORM FLAT GREY frame, matching the owner's "grey screen" report. Shot 22 is the score screen.
+- So -x of the heli is not open lit space (inside geometry, fog or skydome: unknown). Workflow lc-heli-cam-2 picks offsets from level geometry and stages 2 variants (kits lcoutcam2a1106 / lcoutcam2b1106).
