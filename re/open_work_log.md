@@ -1,3 +1,9 @@
+## 2026-11-06 ~15:20 [6b] PD2 guns 1106d LIVE (RPK on Minimi items 45-48); 1106e Deagle (item 63) staged (no crash involved)
+- 1106d (21ed0f02, agent; GUESS: Minimi root's detail-62 part = far copy, body 62|7 = 63) installed on DM02, then bench pd2b_1106 DM02 PASS: 2 seats round 2, 0 faults, `osw: row 35 (carrier item 39): 8 object(s) of item 47 made` on host + client.
+  Then installed on the 9 other maps (0 skipped/failed). Entries +28 per map (DM02 59260, DM01 50852 ... DM11B 60596). Backups D:\kl_stage\pd2guns_1106d_backup.
+- 1106e (d195c6fd, agent): PD2 Deagle npc on item 63 (HG_M9Beretta_Human_Shield), cost 1.73, muzzle 35.5 vs host 28.5 (Deagle is longer). Only deagle/beretta92/c45 pistols are extracted. Dry install PASS on live. Bench pending.
+- UNDO ALL 1105.bat: new steps 0a (1106e) and 0b (1106d) before 0 (1106c); a skip-all undo exits 0. D: free fell to ~10.8 GB (layer backups ~3.7 GB each).
+
 ## 2026-11-06 ~15:05 [db] CensusSlice bench SMOOTH: OSS_DD09_CEN_S3 (no crash involved)
 - [Perf] CensusSlice=1 (a1cb61a4, TEST 24306dec, SHIP out_cen1106 9d096198): the host's AI-heister census (8 MB walk, ~18 ms) is shared and walked 1/8 a frame.
 - Bench, 3 seats on the bss ini + CensusSlice=1: all SMOOTH, 0 hitches/min; host 29.8 fps, 0 stalls, p95 81 ms (BSS_S3 103 ms); 0 asserts/faults/dumps; live dll/ini unchanged.

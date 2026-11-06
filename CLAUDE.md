@@ -77,8 +77,9 @@ Bench OSS_DD09_CEN_S3 (TEST 24306dec): SMOOTH on every seat, host 0 stalls, 29.8
 Next costs: klu_tick 4.7 ms calls, klsy_tick/klbf_tick spikes. 9-seat hitches are the one PC (9 games), not the hook.
 Ready to offer: SHIP out_cen1106 9d096198 + the 5 ini keys.
 
-2026-11-06 ~14:35 - [shop] PD2 GUNS 1106b + 1106c LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51), R700 (49), GL40/GAS/FLARE (52-54, HK69 far copy 190 -> body 191 GUESS).
-DM02 benches PASS for both layers (2 seats round 2, 0 faults, items in the shop pool). 1106c installer keeps backups OFF C: (D:\kl_stage\pd2guns_1106c_backup). DM05A: re-pin 1106c after c9's stages.
+2026-11-06 ~15:20 - [shop] PD2 GUNS 1106b+c+d LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51), R700 (49), GL40 x3 (52-54, GUESS 190->191), RPK on Minimi 45-48 (GUESS 62->63).
+DM02 benches PASS for each layer (2 seats round 2, 0 faults). Backups OFF C: (D:\kl_stage\pd2guns_1106c/d_backup). Staged, bench pending: 1106e Deagle on item 63 (d195c6fd, muzzle 7 cm long).
+DM05A: after c9's chain, re-stage c+d+e on top. UNDO ALL steps 0a (1106e), 0b (1106d), 0 (1106c) come first.
 Earlier: KLPic pictures on 28 maps; Entries regression (pics +72 chunks) fixed live 361a1d3e. C: at 976 MB after 1106b: 9 DD *.before-1026loot8m moved to D:\kl_old_backups\dd_1106c (3.3 GB free).
 Undo: <work>/build/UNDO ALL 1105.bat (0: pd2guns_1106c, then 7 steps: pd2guns_1106b -> c9 glass_all_1106 -> entries -> pics -> buttons -> pd2guns -> DM05A lastcall_glass_1106) -> restore dll/ini. Zombie kl2.exe (0 threads) block tasklist checks: --skip-run-check (+ --root "<DD>" for buttons/pics).
 
