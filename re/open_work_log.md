@@ -1,3 +1,14 @@
+## 2026-11-06 ~16:50 [c9] Last Call chain 2c LIVE on DM05A; grey outro cured (no crash involved)
+- Diagnosis (workflow lc-grey-outro): the grey frames had their eye outside every Roof .rmi box (box 7 = x 6676..8080, y 1460..2610, z 2594..4426), so the frame
+  started from the Backdrop room alone (0 gates, skydome only). The old Escaping spline points 1-4 and the heli park (5965,2510,3929) lie inside BuildingF.
+- 2c: EscCamera01 back to eFMM_LookFromPos at CamPos01 (7093,2181,2727, in box 7), stock floats 0,99999,99999,40,0,50; Escaping spline = 5-pt NE climb
+  (7058,2271,3467)..(8800,4400,5600), 0 collision hits. Doors B01+A02 + 2nd-floor spawn as 2a-safedoors. Kit lcchain2c1106d: PASS, undo byte-exact.
+- Shots: heli visible at the pad while boarding (shot 07); the player rides out (feet 8093,3625,4622 at 0x1f); outro frames 14/15 draw the lit city behind the
+  scoreboard (no grey), the heli itself is out of view after lift-off. GUESS kept: the engine reads only x,y,z + count from spline points.
+- Installed 15:45: zip e10ea4882161fe91d653d1c4f6e87abc, bots bffb9736, base 369e91e3, KLJoin e1d6646a, KLGuns 70c39279; backups *.before-chain1106 beside them.
+  Undo: C:\kl_build_1024\lcchain_2c_safedoors_live_1a97e186\install.py --undo. 6b re-stages pd2guns c+d+e on DM05A on top. C: 2.0 GB free.
+- Kit lcchain2a1106n (no LastVehicleLead): bots called the heli themselves at ~293 s with B01+A02.
+
 ## 2026-11-06 ~16:45 [db] FillCensusSlice re-bench with pd2guns 1106s on DD09 (no crash involved)
 - OSS_DD09_FCS_S3_PD2S (TEST a77e0546, kit C:/kl_build_1024/oss_1106, run.py --fcs --seats 3 --suffix PD2S): SMOOTH on every seat, 0 hitches/stalls,
   fps 29.9/30.0/30.0, max frame 184 ms, p95 84-118 ms, 0 asserts/faults/dumps; live dll/ini restored byte-exact. 6b's +203-chunk layer costs no smoothness.
