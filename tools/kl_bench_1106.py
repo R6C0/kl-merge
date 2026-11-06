@@ -30,8 +30,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KIT = 'C:/kl_build_1024/bench_1106'
 DD = 'C:/Steam/steamapps/common/Kane & Lynch 2 - Dog Days'
 SOLO = 'G:/SteamLibrary/steamapps/common/Kane and Lynch Dead Men/KL_PortTools/build/klhook/solo'
-HOOK_SRC = 'C:/kl_build_1024/week_1028/sm1105e/hook_test/dinput8.dll'    # TEST twin 5f52009d of SHIP 288fb016 (c9_1105e)
-HOOK_MD5 = '5f52009dd89f0e4d732a2addbed3d652'
+HOOK_SRC = 'C:/kl_build_1024/n9_twins/727a73bb/dinput8.dll'    # TEST twin b6a69772 of SHIP 727a73bb (6b pics_1105_hook, live since 11-06)
+HOOK_MD5 = 'b6a697726b66ca7270921d6d4543005f'
 Q32 = 'C:/kl_build_1024/c9_1028/q32'
 COVER = ('AssertSoft', 'ClientBuild', 'ClientBuildHost', 'ClientRewrite', 'ClientRingSync')
 OPS = set('waitwin settle tapuntil tap wait windows sel expect msg waitload waitstate waitvan waitpeers tele goto pos ents peek log pass fail label jump onwin mouse'.split())
@@ -222,7 +222,7 @@ def validate(which):
         dll = '%s/hook_test/dinput8.dll' % d
         if v.ok(os.path.isfile(dll), 'bench dll %s' % dll):
             data = open(dll, 'rb').read()
-            v.ok(hashlib.md5(data).hexdigest() == HOOK_MD5, 'dll md5 %s = TEST twin 5f52009d' % hashlib.md5(data).hexdigest()[:8])
+            v.ok(hashlib.md5(data).hexdigest() == HOOK_MD5, 'dll md5 %s = TEST twin b6a69772' % hashlib.md5(data).hexdigest()[:8])
             v.ok(data.count(b'(TEST)') >= 3 and b"klauto's scripted keys" in data, 'dll carries the TEST markers ((TEST) x%d, klauto strings = build_auto.bat build; SHIP has 1)' % data.count(b'(TEST)'))
             v.ok(2_500_000 < len(data) < 2_700_000, 'dll size %.2f MB (about 2.59 MB expected)' % (len(data) / 1e6))
         live_dll = '%s/dinput8.dll' % DD
