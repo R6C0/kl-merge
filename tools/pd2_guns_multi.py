@@ -35,6 +35,11 @@ MAPS = ['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM05A', 'DM06', 'DM06B', 'DM0
 TAG = '1105pd2guns'
 MUZZLE_W = 0.15            # GUESS: weight of |PD2 muzzle x - host muzzle x| in the fit (the AKM fit used 0.3; the hands decide, not the muzzle)
 
+M79_PARTS = [
+    dict(model='wpn_third_gre_m79_barrel.model', meshes=['g_barrel'], tex='m79_third_barrel_df.texture', mat='barrel'),
+    dict(model='wpn_third_gre_m79_barrelcatch.model', meshes=['g_barrelcatch'], tex='m79_third_barrelcatch_df.texture', mat='catch'),
+    dict(model='wpn_third_gre_m79_sight_up.model', meshes=['g_sight'], tex='m79_third_sight_df.texture', mat='sight'),
+    dict(model='wpn_third_gre_m79_stock.model', meshes=['g_stock'], tex='m79_third_stock_df.texture', mat='stock')]
 # item -> (host template, PD2 unit dir under .../src/units, model/mesh/texture, short name for materials, shop name)
 SPECS = [
     dict(item=35, template='Rifle_Type88_L09_NPC', unit='pd2_dlc_chico/weapons/wpn_npc_sg417', mesh='g_body', tex='wpn_npc_sg417_df.texture',
@@ -74,6 +79,11 @@ SPECS = [
         dict(model='wpn_third_snp_r700_m_standard.model', meshes=['g_m'], tex='third_mag_df.texture', mat='mag', mag=True),
         dict(model='wpn_third_snp_r700_s_standard.model', meshes=['g_s'], tex='third_stock_standard_df.texture', mat='stock'),
         dict(model='wpn_third_snp_r700_o_rail.model', meshes=['g_rail'], tex='third_mount_df.texture', mat='mount')]),
+    # ---- batch 6 (2026-11-06): items 52 / 53 / 54 <- PD2 GL40 (the M79, wpn_fps_gre_m79_pts third-person parts): barrel, barrelcatch, sight_up, long stock; barrel_short /
+    # stock_short / grenade left out. Hosts Launcher_HK69A1_01 / ...TearGas / ...Flare share root 5001 (see build_level: detail-190 far copy, GUESS), each own Ground node.
+    dict(item=52, template='Launcher_HK69A1_01', unit='pd2_dlc_gage_assault/weapons/wpn_fps_gre_m79_pts', key='GL40', name='PD2 GL40', kind='grenade launcher', parts=M79_PARTS),
+    dict(item=53, template='Launcher_HK69A1_01TearGas', unit='pd2_dlc_gage_assault/weapons/wpn_fps_gre_m79_pts', key='GL40GAS', name='PD2 GL40 GAS', kind='grenade launcher', parts=M79_PARTS),
+    dict(item=54, template='Launcher_HK69A1_01Flare', unit='pd2_dlc_gage_assault/weapons/wpn_fps_gre_m79_pts', key='GL40FLR', name='PD2 GL40 FLARE', kind='grenade launcher', parts=M79_PARTS),
 ]
 # Tried and dropped (fit on the MG hold leaves the stock 4 - 5 cm IN FRONT of the right hand): item 42 <- PD2 M4 (cost 3.30, butt +5.0),
 # item 43 <- PD2 AKMSU (cost 3.99, butt +3.8). A short rifle model does not suit the long MG hold; a PD2 LMG (M249: 9 materials) would.
@@ -242,10 +252,18 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
                     # type-1 pair (detail 3 + its far copy 12, x 12.5 - 50) = the scope, kept as it is, the type-4 part = the bolt slide, dropped (the PD2 bolt is in the
                     # mesh). The new body takes 7|28 = 31 (every level), like the pistol.
                     lowd = far28
+            if not lowd:
+                far190 = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] == 190]
+                if len(far190) == 1:
+                    # GUESS (batch 6): a grenade launcher root (Launcher_HK69A1_01 / ...TearGas / ...Flare, shared root: type-1 detail 1 body on the near
+                    # side, type-3 detail 1 barrel on w_bone_pipe, type-1 detail 190 and type-2 detail 3 hammer; no detail 16 / 24 / 248 / 28) is read as:
+                    # the detail-190 type-1 part = the far copy, the detail-1 type-1 part = the body. The new body objects take 1|190 = 191 (the whole
+                    # M79 is in body objects, multi-part path); the host's type-3 barrel and type-2 hammer are dropped from the root (no clip to reload).
+                    lowd = far190
             if len(lowd) != 1:
                 raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
-            body_lod = mag_lod = 7 | p.chunks[lowd[0]][0x0e]       # 31 on a pistol, 255 on a launcher
-        cands = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] not in (16, 24, 248)]
+            body_lod = mag_lod = (p.chunks[lowd[0]][0x0e] | (1 if p.chunks[lowd[0]][0x0e] == 190 else 7))   # 31 on a pistol, 255 on a launcher, 191 on the HK69 (GUESS)
+        cands = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] not in (16, 24, 248) and not (lowd and o == lowd[0] and p.chunks[o][0x0e] == 190)]
         if (len(hidden) != 1 and not lowd) or not cands or var != 0:
             raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
         body = max(cands, key=lambda o: nvs[o])
