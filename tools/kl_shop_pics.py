@@ -7,7 +7,7 @@ RECURSION CUT). A picture the MENU draws needs no D3D hook: this bakes NEW pictu
 WHAT a bake does to a level zip (same pattern as kl_portraits.menu and kl_dm02_shops_1024):
   .gms/.prp  36 new ZWINGROUP+ZWINPIC pairs 'KLPic_Hire01..16' / 'KLPic_Pair00..19' next to FAStatus_WeaponBig#01 (same parent); slot ids move
   .oct .rmi .rmc  renumbered for the moved slot ids (kl_octree.remap_ids), nothing else listed there changes
-  .prm       +72 chunks (a sprite and a picture chunk per card)   .TEX  +36 DXT1 512x256 textures, ids 3100..3135 (copy of the stock big card's record)
+  .prm       +72 chunks (a sprite and a picture chunk per card; KLGuns.ini / KLJoin.ini Entries= follow, sync_entries)   .TEX  +36 DXT1 512x256 textures, ids 3100..3135 (copy of the stock big card's record)
   Menu/online.xml  after each 'FAStatus_WeaponBig#35' element of each WeaponBig group: 36 GuiElements (PlayerIndex 100..115 heisters, 120..139 pairs)
 The elements show nothing by themselves: klhook/klshoppage.c ([Hire] BakedPics=1, [ShopPage] OwnPics=1) gives the one that matches the highlighted
 row the shown row as PlayerIndex and hides the stock one (PlayerIndex 99). Constants are shared with klhook/klpicown_logic.h (test cross-checks).
@@ -27,6 +27,7 @@ import argparse, os, re, shutil, struct, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import kl_bake_siblings as BS
+import kl_entries_fix as EF
 
 # ---- shared with klhook/klpicown_logic.h (klpicown_test.c / kl_shop_pics_test.py compare them)
 HIRE_BASE, N_HIRE = 100, 16          # PlayerIndex of the baked heister element n (1..16) = HIRE_BASE + n - 1
@@ -576,6 +577,34 @@ def preview(cards, how, path):
     im.save(path)
 
 
+def sync_entries(zp, old, new, undo, log):
+    """KLGuns.ini [Guns] / KLJoin.ini [FedBody] Entries= must equal the .prm chunk count or the hook ignores the file (gun looks, fed bodies off;
+    found 2026-11-06: the bake added 72 chunks and left Entries stale on 20 maps). Install: Entries == old -> new, the ini moved to <ini>BAK first.
+    Undo: <ini>BAK back when there is one, else Entries == old -> new in place (a map that tools/kl_entries_fix.py had re-synced). Other values: left, logged."""
+    d = os.path.dirname(zp)
+    for f, sec in EF.FILES:
+        p = os.path.join(d, f)
+        if undo and os.path.isfile(p + BAK):
+            os.replace(p + BAK, p); log('  %-5s restored %s' % ('ini', f)); continue
+        if not os.path.isfile(p) or old == new:
+            continue
+        txt = open(p, 'rb').read().decode('latin-1')
+        se = EF.section_entries(txt, sec)
+        if not se:
+            continue
+        s, e, v = se
+        if v != old:
+            log('  WARNING: %s [%s] Entries=%d, .prm went %d -> %d: left as it was' % (f, sec, v, old, new)); continue
+        if not undo:
+            if os.path.exists(p + BAK):
+                raise OSError('%s exists already' % (p + BAK))
+            shutil.copy2(p, p + BAK)
+        with open(p + '.new', 'wb') as o:
+            o.write((txt[:s] + str(new) + txt[e:]).encode('latin-1'))
+        os.replace(p + '.new', p)
+        log('  %-5s %s [%s] Entries %d -> %d' % ('ini', f, sec, old, new))
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('mode', choices=['check', 'bake', 'stage', 'install', 'undo'])
@@ -608,7 +637,10 @@ def main(argv):
     for name, zp in tg.items():
         if a.mode == 'undo':
             try:
+                was = EF.prm_chunks(zp)
                 n = BS.undo_map(zp, BAK, lambda m: print('%-6s%s' % (name, m)))
+                if n:
+                    sync_entries(zp, was, EF.prm_chunks(zp), True, lambda m: print('%-6s%s' % (name, m)))
             except OSError as e:
                 print('%-6s FAIL undo (map restored to its state before the undo): %s' % (name, e)); bad += 1; continue
             if not n:
@@ -636,7 +668,10 @@ def main(argv):
                     if baked_state(src) == (True, True):
                         return False
                     return bake_zip(src, dst, cards) is not None
+                was = EF.prm_chunks(zp)
                 r = BS.install_map(zp, BAK, bake_one, lambda m: print('%-6s%s' % (name, m)))
+                if r == 'installed':
+                    sync_entries(zp, was, EF.prm_chunks(zp), False, lambda m: print('%-6s%s' % (name, m)))
                 print('%-6s %s %s%s' % (name, r, zp, ' (original: %s)' % os.path.basename(zp + BAK) if r == 'installed' else ''))
         except (ValueError, KeyError, OSError, zipfile.BadZipFile, SystemExit) as e:
             print('%-6s FAIL %s%s' % (name, e, ' (every file of the map restored)' if a.mode == 'install' else '')); bad += 1; lines.append('%s FAIL %s' % (name, e))
@@ -655,7 +690,7 @@ def modules():
     """the .py files a stage folder needs (closure of the imports of this tool)"""
     return ['kl_shop_pics.py', 'kl_shop_buttons.py', 'kl_menu_count.py', 'kl_portraits.py', 'kl_shop_cards.py', 'kl_shop_swap.py', 'kl_scene.py',
             'kl_prp.py', 'kl_gms.py', 'kl_texmat.py', 'kl_prmgraph.py', 'kl_octree.py', 'kl_gunpics.py', 'kl_hud_shop.py', 'kl_hud_menu.py',
-            'kl_port_check.py', 'kl_mat.py', 'kl_loc.py', 'kl_bake_siblings.py']   # review 11-05: kl_texmat imports kl_mat, kl_port_check imports kl_loc: the staged bats died with ModuleNotFoundError (found by running the staged copy alone)
+            'kl_port_check.py', 'kl_mat.py', 'kl_loc.py', 'kl_bake_siblings.py', 'kl_entries_fix.py']   # review 11-05: kl_texmat imports kl_mat, kl_port_check imports kl_loc: the staged bats died with ModuleNotFoundError (found by running the staged copy alone)
 
 
 def write_bats(out, maps):

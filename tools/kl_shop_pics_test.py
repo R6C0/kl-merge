@@ -128,6 +128,21 @@ def sibling_test():
         BS.install_map(plain, '.t', fake, lambda m: None)
         assert open(os.path.join(d, 'F04_Main.bots.base.md5')).read().strip() == 'f' * 32
         assert open(os.path.join(d, 'Int16Ok.txt')).read() == 'zip=999\nbots=125\n'
+    # Entries= of KLGuns.ini / KLJoin.ini follow the .prm count (2026-11-06 regression: +72 chunks, Entries stale, hook ignored the inis)
+    with tempfile.TemporaryDirectory() as d:
+        zp, log = os.path.join(d, 'F04_Main.zip'), []
+        g, j = os.path.join(d, 'KLGuns.ini'), os.path.join(d, 'KLJoin.ini')
+        open(g, 'wb').write(b'[Guns]\r\nEntries=100\r\nRoot0=5\r\n[Other]\r\nEntries=100\r\n')
+        open(j, 'wb').write(b'[FedBody]\r\nEntries=99\r\n')                         # already stale: left alone
+        P.sync_entries(zp, 100, 172, False, log.append)
+        assert open(g, 'rb').read() == b'[Guns]\r\nEntries=172\r\nRoot0=5\r\n[Other]\r\nEntries=100\r\n'
+        assert open(g + P.BAK, 'rb').read().startswith(b'[Guns]\r\nEntries=100') and open(j, 'rb').read() == b'[FedBody]\r\nEntries=99\r\n'
+        assert not os.path.exists(j + P.BAK) and any('WARNING' in m for m in log)
+        P.sync_entries(zp, 172, 100, True, log.append)                              # undo: the backup returns
+        assert open(g, 'rb').read().startswith(b'[Guns]\r\nEntries=100') and not os.path.exists(g + P.BAK)
+        open(g, 'wb').write(b'[Guns]\r\nEntries=172\r\n')                           # re-synced by kl_entries_fix, no .before-shoppics: in place
+        P.sync_entries(zp, 172, 100, True, log.append)
+        assert open(g, 'rb').read() == b'[Guns]\r\nEntries=100\r\n' and not os.path.exists(g + P.BAK)
 
 
 if __name__ == '__main__':
