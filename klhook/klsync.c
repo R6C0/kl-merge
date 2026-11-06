@@ -92,7 +92,7 @@ static DWORD ksp_orig; static int ksp_ready;
 struct ksp_e { DWORD o, slot, goalAt, since, lastLog, lastSnap, pass, tolSince, bestAt, prevAt, stepAt, nomove, trkAt; float goal[3], prev[3], d0, dlast, best, hspeed; volatile LONG calls, steered, mism, dead, stepped; };
 static struct ksp_e ksp_e[KSP_MAXE];
 static struct { DWORD o, until; } ksp_cool[16]; static int ksp_coolN;           /* cops released next to a human: not re-hooked for a while */
-static struct { int pup, cops, bots, diag, nlive, gate; float tol, snap, speed, prevAvg, snapDist; int team, mode; DWORD pass, roundAt, diagAt, pupAt, snapEvery, sumAt; LONG pupFr; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv, nstep, nsn2, nph, nref, nflt; } ksp;
+static struct { int pup, cops, bots, diag, nlive, gate; float tol, snap, speed, prevAvg, snapDist; int team, mode; DWORD pass, roundAt, diagAt, pupAt, snapEvery, sumAt; int faults, toldMism, toldNoCall; LONG nsteer, nsnap, nconv, nstep, nsn2, nph, nref, nflt; } ksp;
 /* PuppetMode 2: per-actor time of the last placement (the SnapEvery limit) and the host entries that look like placeholders (set each pass) */
 static struct { DWORD o, at; } ksp_sn[64]; static BYTE ksp_ph[KLSY_MAXP];
 /* [Sync] ParkSkip: per actor, was its node off (bit 10 of [[A+4]+0x3c]) when last seen; a 1 -> 0 change = woken, snapped at once */
@@ -1106,8 +1106,8 @@ static void klsy_tick(int game_thread)
             free(c);
         }
         /* Puppet / PuppetDiag: same trust as Apply (System Link / online client, fresh list, identity agreement), up to 4 passes a second */
-        if ((ksp.pup || ksp.diag) && mode == 4 && klsy.agree && ksp_rx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && klh_due(ksp.pupAt, ksp.pupFr, 250, now)) {
-            ksp_rx = 0; ksp.pupAt = now; ksp.pupFr = klh_game_ticks;
+        if ((ksp.pup || ksp.diag) && mode == 4 && klsy.agree && ksp_rx && klsy.nhost && now - klsy.rxAt <= 2 * klsy.shareMs && now - ksp.pupAt >= 250) {      /* NOT ScanMinFrames: already paced by ksp_rx (one pass per host list), and 5 frames would outlast the 1500 ms steer goal below ~3 fps (review 11-06) */
+            ksp_rx = 0; ksp.pupAt = now;
             ksp_pass();
         }
         /* Track: every frame, same trust as the Puppet pass plus the open position gate and a fresh list */

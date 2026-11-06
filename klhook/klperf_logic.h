@@ -18,7 +18,7 @@ static unsigned klperf_osd_slice_ms(int on)
     return on ? 24u : 0u;     /* klu_tick runs every 100 ms: ~25 % of the wall time while a pass runs (8 ms = ~10 %, review 11-06) */
 }
 
-/* [Perf] ScanMinFrames: may a wall-clock-timed table walk (klsync Compare / Apply / Puppet / Probe, klor_bots, botfill's census) run again? since_ms /
+/* [Perf] ScanMinFrames: may a wall-clock-timed table walk (klsync Compare / Apply / Probe, klor_bots, botfill's census) run again? since_ms /
    since_frames = wall time and game frames since its last run, ms = its interval. on=0: the old ms-only gate. on=1: it also waits ms*20/1000 frames
    (rounded up), so a seat at 20 fps or faster runs it exactly as before, and a starved seat (below ~2 fps every ms gate fired on EVERY frame, each a
    ~2-20k-read walk; study 11-06) runs it at most once per that many frames. */

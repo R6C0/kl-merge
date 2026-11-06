@@ -5,6 +5,7 @@ heli closest 314 m, outro eye (7093,2181,2727) = EscCamera01. So the rig, not th
 d3count 0): LC kits now set [Memory] D3dShotPost=1 + [ReShade] Bridge=1. Screenshot rerun after f0 and db.
 
 2026-11-06 ~11:20 - [db] ScanMinFrames committed ce1dc86d ([Perf] ScanMinFrames=1, recommended on; TEST 3c5fd2a4 / SHIP 885956c6, kl_tests 86 pass, NOT installed). klh_due gate = ms AND >= ms*20/1000 game frames on klsync Compare/Apply/Puppet/Probe, klor_bots 3 s, botfill census 5 s; unchanged at >= 20 fps. Startup "perf:" line now always lists every key.
+Review (2 lenses): no defect at >= 20 fps; Puppet dropped from the gate (already paced by host lists; 5 frames outlast the 1500 ms steer goal below ~3 fps) -> TEST a348dadb / SHIP 98ac2f73.
 Bench next slot: python C:/kl_build_1024/oss_1106/run.py --smf (hook_smf + ScanMinFrames + TickProfile, tag OSS_DD09_SMF, compares vs N9S_DD09 and OSS_DD09). Install only after inst8/9 improve and inst1-7 stay >= OSS_DD09.
 
 2026-11-06 ~11:30 - [c9] GLASS ON THE 10 OTHER DM MAPS LIVE (C:/kl_build_1024/glass_all_1106/install.py, tag .before-glass1106, --undo per map).
