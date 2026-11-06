@@ -1347,40 +1347,64 @@ static DWORD WINAPI klh_keywatch(LPVOID unused)
 /* [Perf] TickProfile (2026-11-06, default off, recommended on only for perf benches): which part's tick costs the game thread time. Every part call in klh_tick is
    wrapped by KLPT(); with the key off that is one int test. On: QueryPerformanceCounter around each call on the game thread, summed per call site; every 10 s one
    line 'core: tickprofile:' lists the 6 parts with the most time (ms a frame, memory reads a frame, slowest single call) and the 3 with the slowest single call, then resets.
-   Reads: the klh_reads counter is approximate across threads, so reads are indicative. Nothing else changes: the parts run exactly as before, in the same order. */
+   Reads: the klh_reads counter is approximate across threads, so reads are indicative. Nothing else changes: the parts run exactly as before, in the same order.
+   CPU (11-06): each call also takes QueryThreadCycleTime, so wall ms (includes time the OS gave other processes) and cpu ms (the hook's own work) part.
+   OSS_DD09_SPB (9 seats, one PC): trivial parts (klq2_tick p90 9.5 ms) had single calls of 390 ms, i.e. the wall figure is mostly preemption. Cycles -> ms
+   with the TSC rate measured over each 10 s window (__rdtsc vs QPC). GUESS, not documented: QueryThreadCycleTime counts TSC ticks while the thread runs (MSDN
+   says "do not convert to time"); true on invariant-TSC desktops, a VM may scale every cpu figure. The wall/cpu RATIO of one call is the useful part.
+   klpt_maxcy = the cpu of the wall-slowest call; klpt_topcy = the largest cpu of any single call (the 'busiest' list, review 11-06). */
 #define KLPT_MAX 192
-static const char *klpt_name[KLPT_MAX]; static double klpt_ms[KLPT_MAX], klpt_max[KLPT_MAX]; static LONG klpt_rd[KLPT_MAX]; static int klpt_n, klpt_on, klpt_lost;
-static LONG klpt_frames; static LARGE_INTEGER klpt_f, klpt_t0;
-static void klpt_add(const char *name, LONGLONG ticks, LONG reads)
+static const char *klpt_name[KLPT_MAX]; static double klpt_ms[KLPT_MAX], klpt_max[KLPT_MAX]; static ULONG64 klpt_cy[KLPT_MAX], klpt_maxcy[KLPT_MAX], klpt_topcy[KLPT_MAX];
+static LONG klpt_rd[KLPT_MAX]; static int klpt_n, klpt_on, klpt_lost;
+static LONG klpt_frames; static LARGE_INTEGER klpt_f, klpt_t0; static unsigned __int64 klpt_tsc0;
+static void klpt_add(const char *name, LONGLONG ticks, ULONG64 cycles, LONG reads)
 {
     int i; double ms = klpt_f.QuadPart ? (double)ticks * 1000.0 / (double)klpt_f.QuadPart : 0.0;
     for (i = 0; i < klpt_n; i++) if (klpt_name[i] == name) break;
     if (i == klpt_n) { if (klpt_n >= KLPT_MAX) { klpt_lost++; return; } klpt_name[klpt_n++] = name; }
-    klpt_ms[i] += ms; if (ms > klpt_max[i]) klpt_max[i] = ms; if (reads > 0) klpt_rd[i] += reads;
+    klpt_ms[i] += ms; klpt_cy[i] += cycles; if (ms > klpt_max[i]) { klpt_max[i] = ms; klpt_maxcy[i] = cycles; } if (cycles > klpt_topcy[i]) klpt_topcy[i] = cycles;
+    if (reads > 0) klpt_rd[i] += reads;
 }
-#define KLPT(call) do { if (klpt_on && game_thread) { LARGE_INTEGER q0_, q1_; LONG r0_ = klh_reads; QueryPerformanceCounter(&q0_); call; QueryPerformanceCounter(&q1_); klpt_add(#call, q1_.QuadPart - q0_.QuadPart, klh_reads - r0_); } else { call; } } while (0)
+static void klpt_cat(char *line, int *w, int size, const char *fmt, ...)
+{   /* bounded append: *w never passes size - 1, so 'size - *w' cannot wrap (review 11-06) */
+    va_list ap; int k;
+    if (*w >= size - 1) return;
+    va_start(ap, fmt); k = _vsnprintf(line + *w, size - *w, fmt, ap); va_end(ap);
+    if (k < 0 || k >= size - *w) { *w = size - 1; line[*w] = 0; } else *w += k;
+}
+#define KLPT(call) do { if (klpt_on && game_thread) { LARGE_INTEGER q0_, q1_; ULONG64 c0_ = 0, c1_ = 0; LONG r0_ = klh_reads; HANDLE th_ = GetCurrentThread(); \
+    QueryThreadCycleTime(th_, &c0_); QueryPerformanceCounter(&q0_); call; QueryPerformanceCounter(&q1_); QueryThreadCycleTime(th_, &c1_); \
+    klpt_add(#call, q1_.QuadPart - q0_.QuadPart, c1_ - c0_, klh_reads - r0_); } else { call; } } while (0)
 static void klpt_frame(void)
 {   /* once a frame after the parts ran (game thread): count the frame, and every 10 s say and reset */
     LARGE_INTEGER n; double secs; int i, k, o[6], m[3], nm;
     if (!klpt_on) return;
     klpt_frames++; QueryPerformanceCounter(&n);
-    if (!klpt_t0.QuadPart) { klpt_t0 = n; return; }
+    if (!klpt_t0.QuadPart) { klpt_t0 = n; klpt_tsc0 = __rdtsc(); return; }
     secs = (double)(n.QuadPart - klpt_t0.QuadPart) / (double)klpt_f.QuadPart;
     if (secs < 10.0 || !klpt_frames) return;
-    {   char line[1100]; int w = 0; double rate[KLPT_MAX];
-        for (i = 0; i < klpt_n; i++) rate[i] = klpt_ms[i];
+    {   char line[1400]; int w = 0; double rate[KLPT_MAX], cpms = (double)(__rdtsc() - klpt_tsc0) / (secs * 1000.0);   /* TSC ticks a ms */
+        double cms = 0.0, wms = 0.0;
+        if (!(cpms > 0.0)) cpms = 1.0;
+        for (i = 0; i < klpt_n; i++) { rate[i] = klpt_ms[i]; wms += klpt_ms[i]; cms += (double)klpt_cy[i] / cpms; }
         k = klperf_pick_top(rate, klpt_n, o, 6);
-        w += snprintf(line + w, sizeof line - w, "core: tickprofile: %ld frames in %.1f s; by time (ms a frame / reads a frame / slowest call ms):", (long)klpt_frames, secs);
-        for (i = 0; i < k && w < (int)sizeof line - 160; i++)
-            w += snprintf(line + w, sizeof line - w, " %s %.3f/%ld/%.1f;", klpt_name[o[i]], klpt_ms[o[i]] / klpt_frames, (long)(klpt_rd[o[i]] / klpt_frames), klpt_max[o[i]]);
+        klpt_cat(line, &w, sizeof line, "core: tickprofile: %ld frames in %.1f s; hook %.3f ms a frame wall / %.3f cpu; by time (ms a frame wall/cpu / reads a frame / slowest call ms wall/cpu):",
+                 (long)klpt_frames, secs, wms / klpt_frames, cms / klpt_frames);
+        for (i = 0; i < k; i++)
+            klpt_cat(line, &w, sizeof line, " %s %.3f/%.3f/%ld/%.1f/%.1f;", klpt_name[o[i]], klpt_ms[o[i]] / klpt_frames, (double)klpt_cy[o[i]] / cpms / klpt_frames,
+                     (long)(klpt_rd[o[i]] / klpt_frames), klpt_max[o[i]], (double)klpt_maxcy[o[i]] / cpms);
         nm = klperf_pick_top(klpt_max, klpt_n, m, 3);
-        w += snprintf(line + w, sizeof line - w, " | slowest single calls:");
-        for (i = 0; i < nm && w < (int)sizeof line - 100; i++) w += snprintf(line + w, sizeof line - w, " %s %.1f ms;", klpt_name[m[i]], klpt_max[m[i]]);
-        if (klpt_lost) w += snprintf(line + w, sizeof line - w, " (%d call sites over the table)", klpt_lost);
+        klpt_cat(line, &w, sizeof line, " | slowest single calls (wall/cpu):");
+        for (i = 0; i < nm; i++) klpt_cat(line, &w, sizeof line, " %s %.1f/%.1f ms;", klpt_name[m[i]], klpt_max[m[i]], (double)klpt_maxcy[m[i]] / cpms);
+        for (i = 0; i < klpt_n; i++) rate[i] = (double)klpt_topcy[i];
+        nm = klperf_pick_top(rate, klpt_n, m, 3);
+        klpt_cat(line, &w, sizeof line, " | busiest single calls (cpu):");
+        for (i = 0; i < nm; i++) klpt_cat(line, &w, sizeof line, " %s %.1f ms;", klpt_name[m[i]], (double)klpt_topcy[m[i]] / cpms);
+        if (klpt_lost) klpt_cat(line, &w, sizeof line, " (%d call sites over the table)", klpt_lost);
         klog("%s", line);
     }
-    for (i = 0; i < klpt_n; i++) { klpt_ms[i] = 0.0; klpt_max[i] = 0.0; klpt_rd[i] = 0; }
-    klpt_frames = 0; klpt_t0 = n; klpt_lost = 0;
+    for (i = 0; i < klpt_n; i++) { klpt_ms[i] = 0.0; klpt_max[i] = 0.0; klpt_rd[i] = 0; klpt_cy[i] = 0; klpt_maxcy[i] = 0; klpt_topcy[i] = 0; }
+    klpt_frames = 0; klpt_t0 = n; klpt_tsc0 = __rdtsc(); klpt_lost = 0;
 }
 
 static void klh_tick(int game_thread)
