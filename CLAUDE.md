@@ -67,15 +67,15 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
-2026-11-06 ~13:45 - [c9] LAST CALL: escape boarding works (hold E). Outro still dark: lcoutro (spline 17->6) cuts it 60 s -> ~23 s but stays black;
-lcoutcam (eye rides heli at -9 m x) = flat grey. Workflow lc-heli-cam-2 picks lit offsets from geometry (kits lcoutcam2a/2b1106).
-Benched PASS, NOT installed (all pinned live e6d2f73e): lcspawn2f_1106 88e23dd5 (start 2nd floor west, -4800,462,1000); lcdoors_1106 a24d7432 restaged
-after 6b's Entries fix, bench pending. Install DM05A stages together with 6b's held pd2guns layer.
+2026-11-06 ~15:20 - [c9] LAST CALL CHAIN (doors+spawn2f+outro+cam 2a) staged on live 1a97e186 (= pd2guns 1106b): tools/kl_lastcall_chain_1106.py,
+C:\kl_build_1024\lcchain_2a_live_1a97e186 (+ nocam fallback). Benches lcchain2a1106(s) PASS 4/4, undo byte-exact, 2nd-floor start OK, but the heli came at
+339 s (~1 s before time-up; earlier runs 263-333 s): the bench player was left behind, so cam 2a was never seen. NOT installed. Workflow lc-heli-late checks
+whether the kick doors slow the bots' heli call and adds a fast-boarding kit lcchain2a1106b. Order agreed with 6b: chain first, then 6b re-pins 1106c.
 
-2026-11-06 ~14:10 - [db] PERF: [Perf] OsdScanSlice, ScanMinFrames, ShopPoolBlock and BotScanSlice (472ce8de: botfill memory walks sliced) are all "(recommended on)", NOT installed (live 727a73bb).
-Bench OSS_DD09_BSS_S3 (3 seats, TEST 1913d42d): SMOOTH on every seat, host 0 stalls, 29.8 fps, p95 103 ms (TPC_S3 before: host HITCHY, 6 stalls, p95 249).
-Bots still find the exit trigger (walks of 9-13 slices). 9-seat SPB: 9/9 in round; the hitches left there come from the one PC (9 games), not the hook (~1.5 ms a frame).
-Ready to offer: SHIP out_bss1106 e34d038b + the 4 ini keys.
+2026-11-06 ~15:05 - [db] PERF: [Perf] OsdScanSlice, ScanMinFrames, ShopPoolBlock, BotScanSlice, CensusSlice (a1cb61a4: shared AI census, 1/8 a frame) all "(recommended on)", NOT installed (live 727a73bb).
+Bench OSS_DD09_CEN_S3 (TEST 24306dec): SMOOTH on every seat, host 0 stalls, 29.8 fps, p95 81 ms (BSS_S3 103, TPC_S3 249 HITCHY). Hook ~1.2 ms a frame.
+Next costs: klu_tick 4.7 ms calls, klsy_tick/klbf_tick spikes. 9-seat hitches are the one PC (9 games), not the hook.
+Ready to offer: SHIP out_cen1106 9d096198 + the 5 ini keys.
 
 2026-11-06 ~14:35 - [shop] PD2 GUNS 1106b + 1106c LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51), R700 (49), GL40/GAS/FLARE (52-54, HK69 far copy 190 -> body 191 GUESS).
 DM02 benches PASS for both layers (2 seats round 2, 0 faults, items in the shop pool). 1106c installer keeps backups OFF C: (D:\kl_stage\pd2guns_1106c_backup). DM05A: re-pin 1106c after c9's stages.
