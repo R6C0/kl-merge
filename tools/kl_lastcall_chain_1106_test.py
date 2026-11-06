@@ -29,6 +29,10 @@ def run(st, *args):
 t('cam none = no helicam', C.cam_params('none') is None)
 t('cam 2a = f5 700, f6 -500, heli ShatterGeom', C.cam_params('2a') == ('A', 700.0, -500.0, H.AIM_B) and 'ShatterGeom' in H.AIM_B)
 t('cam 2b = f5 -450, f6 100, EscCameraLAST', C.cam_params('2b') == ('A', -450.0, 100.0, H.AIM_A))
+t('cam 2c = fixed eye CamPos01 (variant F) + the outro climb route', C.cam_params('2c') == ('F', None, None, H.AIM_F) and H.AIM_F.endswith('!CamPos01')
+  and len(O.ROUTE_2C) == 5)
+t('2c outro stage name differs from the plain outro stage', C.out_name('outro', '2c', 'a' * 32, C.MAPDIR) != C.out_name('outro', '2a', 'a' * 32, C.MAPDIR))
+t('2c chain name', C.out_name('chain', '2c', 'a' * 32, C.MAPDIR).startswith('lcchain_2c_live_aaaaaaaa'))
 try:
     C.cam_params('3'); t('unknown cam refused', False)
 except ValueError:

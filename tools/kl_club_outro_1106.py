@@ -44,6 +44,11 @@ SPLINE = 'EscapeSetup!EscapeChopper\\Escaping\\Spline'
 KEEP = 6
 KNOWN_IN = ('e6d2f73e', 'a24d7432')        # live DM05A of 2026-11-06 11:30; the doors-1106 stage
 TAG = '.before-outro1106'
+# ROUTE_2C (candidate 2c, --cam 2c of kl_lastcall_chain_1106): the Escaping spline REPLACED by a climb to the north-east that stays over open air,
+# world cm. Diagnosis 11-06: the default route (and its 6-point cut) ends inside SO0004_M05_BuildingF, where no Roof .rmi box holds the eye or the heli,
+# so the camera frame starts from the Backdrop room alone (skydome = uniform grey). Point 0 is the pad point of the stock route; checked offline
+# against the collision proxy: no triangle crosses any segment and the eye-to-heli line of sight from CamPos01 has 0 hits.
+ROUTE_2C = ((7058.0, 2271.0, 3467.0), (7250.0, 2500.0, 3650.0), (7600.0, 3000.0, 4000.0), (8100.0, 3700.0, 4600.0), (8800.0, 4400.0, 5600.0))
 HDR = 12                                   # raw: tag, point count, 1, then 24 bytes a point
 POINT = 24
 
@@ -68,6 +73,46 @@ def cut_raw(raw, keep):
     return raw[:4] + struct.pack('<I', keep) + raw[8:], n
 
 
+def route_raw(raw, route, R, T):
+    """The spline's raw field with its first len(route) points REPLACED by `route` (WORLD cm; R, T = the node's frame, world = T + R . local, R a rotation),
+    the count set to len(route); same length. Per point the 12 bytes after x,y,z (an editor angle, 10.0, 0xcdcdcdcd) are kept from the old point i
+    (GUESS: the engine reads only x,y,z and the count, as for the cut). -> (new raw, old count)."""
+    n = struct.unpack_from('<I', raw, 4)[0]
+    if HDR + POINT * n > len(raw):
+        raise ValueError('%d points do not fit %d bytes' % (n, len(raw)))
+    if not 2 <= len(route) <= n:
+        raise ValueError('a route of %d points does not fit the %d point field (2..%d)' % (len(route), n, n))
+    for a in range(3):            # R must be a rotation: its transpose is its inverse
+        for b in range(3):
+            if abs(sum(R[a][c] * R[b][c] for c in range(3)) - (1.0 if a == b else 0.0)) > 1e-3:
+                raise ValueError('the spline frame is not a rotation')
+    out = bytearray(raw)
+    struct.pack_into('<I', out, 4, len(route))
+    for i, w in enumerate(route):
+        d = [w[a] - T[a] for a in range(3)]
+        loc = [sum(R[a][b] * d[a] for a in range(3)) for b in range(3)]      # R^T . d
+        struct.pack_into('<3f', out, HDR + POINT * i, *loc)
+    return bytes(out), n
+
+
+def world_points(raw, R, T):
+    n = struct.unpack_from('<I', raw, 4)[0]
+    pts = []
+    for i in range(n):
+        p = struct.unpack_from('<3f', raw, HDR + POINT * i)
+        pts.append(tuple(T[a] + sum(R[a][b] * p[b] for b in range(3)) for a in range(3)))
+    return pts
+
+
+def route_done(pts, route, tol=0.5):
+    return len(pts) == len(route) and all(abs(a - b) <= tol for p, q in zip(pts, route) for a, b in zip(p, q))
+
+
+def frame_of(zp, k):
+    import kl_map_escape as ME
+    return ME.Level(zp).frame(k)
+
+
 def count_of(zp):
     import kl_fa
     import kl_fa_bots as F
@@ -89,8 +134,9 @@ def check(zp, keep=KEEP, log=print):
     return 0
 
 
-def build(src, dst, keep=KEEP, log=print):
-    """plain zip -> plain zip, only the .prp changes. Idempotent (a zip with <= keep points is copied unchanged)."""
+def build(src, dst, keep=KEEP, log=print, route=None):
+    """plain zip -> plain zip, only the .prp changes. Idempotent (a zip with <= keep points is copied unchanged).
+    route (a tuple of WORLD points, e.g. ROUTE_2C): the spline is replaced by it instead of cut (keep is then ignored)."""
     import kl_fa
     import kl_gms
     import kl_graft
@@ -99,6 +145,38 @@ def build(src, dst, keep=KEEP, log=print):
         raise ValueError('the output is the input')
     B, k, lab, raw, n = count_of(src)
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+    if route:
+        R, T = frame_of(src, k)
+        if route_done(world_points(raw, R, T), route):
+            shutil.copyfile(src, dst)
+            log('route already done: copied unchanged')
+            return n
+        sc = B.sc
+        new, _ = route_raw(raw, route, R, T)
+
+        def fnr(us):
+            u = us[lab.index('ZEditorSpline[0]')]
+            if u[1][0] != 0x0d or u[1][1][4:] != raw:
+                raise ValueError('%s: the raw field is not where it was read' % SPLINE)
+            u[1] = (0x0d, u[1][1][:4] + new)
+        kl_fa.edit(sc, k, None, fnr)
+        prp = sc.p.serialize()
+        if Prp(prp).serialize() != prp:
+            raise ValueError('the new .prp does not round-trip')
+        new_files = dict(B.files)
+        new_files[B.ext['.prp']] = prp
+        kl_graft.write_zip(dst, [(nm, new_files[nm]) for nm in B.order])
+        B2, k2, _l, raw2, n2 = count_of(dst)
+        R2, T2 = frame_of(dst, k2)
+        import zipfile
+        with zipfile.ZipFile(src) as a, zipfile.ZipFile(dst) as b:
+            if a.namelist() != b.namelist():
+                raise ValueError('member list differs')
+            diff = [x.filename for x in a.infolist() if a.read(x.filename) != b.read(x.filename)]
+        if not route_done(world_points(raw2, R2, T2), route, 1.0) or len(diff) != 1 or not diff[0].lower().endswith('.prp'):
+            raise ValueError('read-back failed: %d points, members that differ %s' % (n2, diff))
+        log('spline points %d -> route of %d points; only %s differs' % (n, n2, diff[0]))
+        return n
     if n <= keep:
         shutil.copyfile(src, dst)
         log('already done (%d points): copied unchanged' % n)
@@ -234,7 +312,7 @@ def write_install(st, files, keep):
     open(os.path.join(st, 'UNDO last call outro 1106.bat'), 'w', newline='\r\n').write('@echo off\r\npython "%~dp0install.py" --undo\r\npause\r\n')
 
 
-def stage(out=OUT, in_dir=MAPDIR, keep=KEEP, force=False, log=print, allow=()):
+def stage(out=OUT, in_dir=MAPDIR, keep=KEEP, force=False, log=print, allow=(), route=None):
     import kl_botsonline
     names = ('F01_Main.zip', 'F01_Main.bots.zip', 'F01_Main.bots.base.md5')
     src = os.path.join(in_dir, 'F01_Main.zip')
@@ -247,7 +325,7 @@ def stage(out=OUT, in_dir=MAPDIR, keep=KEEP, force=False, log=print, allow=()):
     if md5(cp) != h:
         raise ValueError('the input changed while it was copied')
     final = os.path.join(out, 'F01_Main.zip')
-    n = build(cp, final, keep, log)
+    n = build(cp, final, keep, log, route)
     os.remove(cp)
     plain = md5(final)
     kl_botsonline.convert(final, os.path.join(out, 'F01_Main.bots.zip'), 'eAllTypes', log=lambda *a: None)

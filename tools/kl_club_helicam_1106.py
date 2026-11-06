@@ -39,10 +39,17 @@ MAPDIR = os.path.join(GAME, 'KLExpansion', 'Maps', 'DM05A')
 OUT = r'C:\kl_build_1024\lchelicam_1106'
 CAMBOX = 'EscCameraSetup!EscCamera01'
 LOOK_AT = 'eFMM_LookAtPos'
+LOOK_FROM = 'eFMM_LookFromPos'
 AIM_A = 'ROOT\\EscCameraSetup!EscCameraLAST'
 AIM_B = 'ROOT\\EscapeSetup!EscapeChopper\\Escape_Chopper\\ShatterGeom'
 F5_A, F6_A = -900.0, 200.0                            # GUESS (sign/axis); plan range f5 -750..-1000, f6 +150..+300
 STOCK_B = (0.0, -270.0, -270.0, 80.0, 0.0, -170.0)    # F06 CameraInVan_01 f1..f6; GUESS on the meaning of f1..f4
+# Variant F (candidate 2c, re/lastcall diagnosis 11-06 "room culling"): a FIXED eye again (stock mode), the eye node CamPos01 (7093, 2181, 2727) lies inside the
+# Roof room's .rmi box 7 so the frame starts from the Roof room; the stock LookFromPos floats of F04/F05/F07/F09 (0, 99999, 99999, 40, 0, 50). It needs the
+# climb route of kl_club_outro_1106.ROUTE_2C so the heli stays over open air, in view. f4 = 40 is probably a field of view (GUESS).
+AIM_F = 'ROOT\\EscCameraSetup!CamPos01'
+FLOATS_F = (0.0, 99999.0, 99999.0, 40.0, 0.0, 50.0)
+MODES = {'A': LOOK_AT, 'B': LOOK_AT, 'F': LOOK_FROM}
 # live DM05A of 2026-11-06 (e6d2f73e), doors-1106 (a24d7432), outro-1106 (77a42f74), spawn2f-1106 (88e23dd5)
 KNOWN_IN = ('e6d2f73e', 'a24d7432', '77a42f74', '88e23dd5')
 TAG = '.before-helicam1106'
@@ -66,8 +73,10 @@ def wanted(variant, f5=None, f6=None, aim=None):
         fl, aim = [None] * 4 + [F5_A, F6_A], aim or AIM_A
     elif variant == 'B':
         fl, aim = list(STOCK_B), aim or AIM_B
+    elif variant == 'F':
+        fl, aim = list(FLOATS_F), aim or AIM_F
     else:
-        raise ValueError('variant must be A or B')
+        raise ValueError('variant must be A, B or F')
     if f5 is not None:
         fl[4] = float(f5)
     if f6 is not None:
@@ -87,8 +96,8 @@ def state(zp):
     return B, k, ci, v
 
 
-def done_state(v, fl, aim):
-    return (v[11] == LOOK_AT and v[9] == aim and v[12] == 1
+def done_state(v, fl, aim, mode=LOOK_AT):
+    return (v[11] == mode and v[9] == aim and v[12] == 1
             and all(fl[i] is None or abs(float(v[1 + i]) - fl[i]) < 1e-3 for i in range(6)))
 
 
@@ -96,7 +105,7 @@ def check(zp, variant='A', log=print):
     B, k, ci, v = state(zp)
     log('%s (node %d): mode %s, field 9 %s, f1..f6 %s, message-only %s' % (CAMBOX, k, v[11], v[9], v[1:7], v[12]))
     fl, aim = wanted(variant)
-    log('RESULT: %s' % ('DONE' if done_state(v, fl, aim) else 'NOT DONE'))
+    log('RESULT: %s' % ('DONE' if done_state(v, fl, aim, MODES[variant]) else 'NOT DONE'))
     return 0
 
 
@@ -111,7 +120,8 @@ def build(src, dst, variant='A', f5=None, f6=None, aim=None, log=print):
     sc = B.sc
     fl, aim = wanted(variant, f5, f6, aim)
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
-    if done_state(v, fl, aim):
+    mode = MODES[variant]
+    if done_state(v, fl, aim, mode):
         shutil.copyfile(src, dst)
         log('already done: copied unchanged')
         return v
@@ -130,7 +140,7 @@ def build(src, dst, variant='A', f5=None, f6=None, aim=None, log=print):
                 raise ValueError('CCameraBox field %d is not a float' % i)
             us[i] = [(0x0a, struct.pack('<f', fl[i - 1]))]
         us[9] = [(0x0c, struct.pack('<I', sc.p.key_index(aim)))]
-        us[11] = [(0x0e, struct.pack('<I', sc.p.key_index(LOOK_AT)))]
+        us[11] = [(0x0e, struct.pack('<I', sc.p.key_index(mode)))]
     kl_fa.edit(sc, k, ci, fn)
     prp = sc.p.serialize()
     if Prp(prp).serialize() != prp:
@@ -144,7 +154,7 @@ def build(src, dst, variant='A', f5=None, f6=None, aim=None, log=print):
         if a.namelist() != b.namelist():
             raise ValueError('member list differs')
         diff = [x.filename for x in a.infolist() if a.read(x.filename) != b.read(x.filename)]
-    if not done_state(v2, fl, aim) or len(diff) != 1 or not diff[0].lower().endswith('.prp'):
+    if not done_state(v2, fl, aim, mode) or len(diff) != 1 or not diff[0].lower().endswith('.prp'):
         raise ValueError('read-back failed: %r, members that differ %s' % (v2, diff))
     log('%s: mode %s -> %s, field 9 %s -> %s, f5/f6 %s,%s -> %s,%s; only %s differs' % (
         CAMBOX, v[11], v2[11], v[9], v2[9], v[5], v[6], v2[5], v2[6], diff[0]))

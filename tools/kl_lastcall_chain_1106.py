@@ -6,9 +6,9 @@ live DM05A files, every pass is stale. This tool reads the CURRENT md5 of the fi
 benches) or all four as one chain (live -> doors -> spawn2f -> outro -> helicam) with ONE install.py pinning the md5s it read.
 
   python tools/kl_lastcall_chain_1106.py status [--in-dir <dir>]
-  python tools/kl_lastcall_chain_1106.py single doors|spawn2f|outro|helicam [--cam 2a|2b] [--in-dir <dir>] [--root <dir> | --out <dir>]
+  python tools/kl_lastcall_chain_1106.py single doors|spawn2f|outro|helicam [--cam 2a|2b|2c] [--in-dir <dir>] [--root <dir> | --out <dir>]
         -> <root>\<name>_live_<first 8 of the zip md5>   (default root C:\kl_build_1024; name lcdoors / lcspawn2f / lcoutro / lcoutcam2a / lcoutcam2b)
-  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|none] [--only doors,outro,...] [--doors B01,A02] [--in-dir <dir>] [--root <dir> | --out <dir>] [--keep-steps]
+  python tools/kl_lastcall_chain_1106.py chain [--cam 2a|2b|2c|none] [--only doors,outro,...] [--doors B01,A02] [--in-dir <dir>] [--root <dir> | --out <dir>] [--keep-steps]
         -> <root>\lcchain_<cam|nocam>_live_<8>   (one stage + install.py; helicam default = the lcoutcam2a set: f5 +700, f6 -500, aim the heli's ShatterGeom)
 --in-dir (default: the live DM05A folder) holds the 5 files F01_Main.zip F01_Main.bots.zip F01_Main.bots.base.md5 KLJoin.ini KLGuns.ini.
 It is only READ (each pass works on a copy). Nothing is ever written into the game folder (a stage under it is refused).
@@ -75,7 +75,9 @@ def cam_params(cam):
         return ('A', 700.0, -500.0, H.AIM_B)           # eye f5 +700 / f6 -500, aimed at the heli's ShatterGeom
     if cam == '2b':
         return ('A', -450.0, 100.0, H.AIM_A)           # eye f5 -450 / f6 +100, aimed at EscCameraLAST (hover/rise only)
-    raise ValueError('--cam must be 2a, 2b or none')
+    if cam == '2c':
+        return ('F', None, None, H.AIM_F)              # fixed eye CamPos01 (LookFromPos, in Roof .rmi box 7) + the climb route of the outro pass
+    raise ValueError('--cam must be 2a, 2b, 2c or none')
 
 
 def out_name(name, cam, live_md5, in_dir, doors=None):
@@ -84,6 +86,8 @@ def out_name(name, cam, live_md5, in_dir, doors=None):
         return 'lcchain_%s%s_%s' % ('nocam' if cam == 'none' else cam, '_d' + '-'.join(d[0] for d in doors) if doors else '', tag)
     if name == 'helicam':
         return 'lcoutcam%s_%s' % (cam, tag)
+    if name == 'outro' and cam == '2c':
+        return 'lcoutro2c_%s' % tag                      # never the folder of the plain outro stage
     return '%s_%s' % (NAMES[name], tag)
 
 
@@ -116,7 +120,7 @@ def run_pass(name, in_dir, out, cam='2a', log=print, doors=None):
             files = BIG3
         elif name == 'outro':
             import kl_club_outro_1106 as O
-            O.stage(out, in_dir, O.KEEP, False, log, allow=allow)
+            O.stage(out, in_dir, O.KEEP, False, log, allow=allow, route=O.ROUTE_2C if cam == '2c' else None)
             n = O.count_of(os.path.join(out, 'F01_Main.zip'))[4]
             if n > O.KEEP:
                 raise ValueError('outro self-check: the Escaping spline has %d points, want <= %d' % (n, O.KEEP))
@@ -125,12 +129,12 @@ def run_pass(name, in_dir, out, cam='2a', log=print, doors=None):
             import kl_club_helicam_1106 as H
             cp = cam_params(cam)
             if cp is None:
-                raise ValueError('helicam needs --cam 2a or 2b')
+                raise ValueError('helicam needs --cam 2a, 2b or 2c')
             variant, f5, f6, aim = cp
             H.stage(out, in_dir, variant, f5, f6, aim, log, allow=allow)
             v = H.state(os.path.join(out, 'F01_Main.zip'))[3]
             fl, ai = H.wanted(variant, f5, f6, aim)
-            if not H.done_state(v, fl, ai):
+            if not H.done_state(v, fl, ai, H.MODES[variant]):
                 raise ValueError('helicam self-check: the camera box reads back as %r' % (v,))
             files = BIG3
         else:
@@ -352,11 +356,18 @@ def verify_final(out, todo, cam, log=print):
         log('  final: Escaping spline points %d' % n)
         if n > O.KEEP:
             bad.append('outro edit gone in the final zip (%d points)' % n)
+        if cam == '2c':
+            B, k, _l, raw, _n = O.count_of(zp)
+            R, T = O.frame_of(zp, k)
+            if not O.route_done(O.world_points(raw, R, T), O.ROUTE_2C, 1.0):
+                bad.append('2c climb route gone in the final zip: %r' % (O.world_points(raw, R, T),))
+            else:
+                log('  final: Escaping spline is the 2c climb route (%d points)' % n)
     if 'helicam' in todo:
         import kl_club_helicam_1106 as H
         variant, f5, f6, aim = cam_params(cam)
         v = H.state(zp)[3]
-        if not H.done_state(v, *H.wanted(variant, f5, f6, aim)):
+        if not H.done_state(v, *H.wanted(variant, f5, f6, aim), H.MODES[variant]):
             bad.append('helicam edit gone in the final zip: %r' % (v,))
         else:
             log('  final: EscCamera01 %s f5/f6 %s,%s aim %s' % (v[11], v[5], v[6], v[9]))

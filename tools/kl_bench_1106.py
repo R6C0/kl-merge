@@ -106,9 +106,24 @@ KITS = {
                            files={'F01_Main.zip': 'f4e801bda084228b4aee09ce4c86a14c', 'F01_Main.bots.zip': '6a552f8d', 'F01_Main.bots.base.md5': 'e9b020ca',
                                   'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
                            solo_secs=900, parts=('solo',), shots='400-556:4'),
+    # n (c9 11-06): as d WITHOUT LastVehicleLead: in d the 60 s clock call came at 300 s before any bot reached stage 2, so this one measures
+    # when the bots call the heli themselves with only B01+A02 (door-less runs: first stage 1->2 at 281-346 s; 4-door chain: none by 358 s)
+    'lcchain2a1106n': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2a_safedoors_live_1a97e186', tag='.before-chain1106',
+                           files={'F01_Main.zip': 'f4e801bda084228b4aee09ce4c86a14c', 'F01_Main.bots.zip': '6a552f8d', 'F01_Main.bots.base.md5': 'e9b020ca',
+                                  'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
+                           solo_secs=900, parts=('solo',), shots='400-556:6'),
+    # c (c9 11-06, candidate 2c): as d, but the camera is a FIXED eye again (EscCamera01 = LookFromPos at CamPos01, inside the Roof .rmi box 7) and the
+    # Escaping spline is a 5-point climb to the north-east over open air (kl_lastcall_chain_1106.py chain --cam 2c --doors B01,A02 on the pre-chain
+    # live 1a97e186): room-culling diagnosis, the 2a/stock frames were uniform grey because eye and heli sat outside every Roof box.
+    'lcchain2c1106d': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcchain_2c_safedoors_live_1a97e186', tag='.before-chain1106',
+                           files={'F01_Main.zip': 'e10ea4882161fe91d653d1c4f6e87abc', 'F01_Main.bots.zip': 'bffb9736', 'F01_Main.bots.base.md5': '369e91e3',
+                                  'KLGuns.ini': '70c39279', 'KLJoin.ini': 'e1d6646a'},
+                           solo_secs=900, parts=('solo',), shots='400-556:4'),
 }
-LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d')
-FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d')          # LastVehicleLead=600 in solo.ini + boards at once at state 3
+LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
+      'lcchain2a1106n', 'lcchain2c1106d')
+FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d')          # boards at once at state 3
+LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
 
 
 def md5(p):
@@ -257,7 +272,7 @@ def gen():
              '; the seat stands still; cops hurt it 0.001 x so its death does not end the round (as ARC1)',
              '[Balance]', 'CopToYou=0.001', 'PointBlankToYou=0.0'] + probes(k)
         n = c['solo_secs']
-        if k in FASTBOARD:
+        if k in LEAD60:
             t += ['[Bots]', 'LastVehicleLead=600']
         t += [l.replace('{x}', str(n - 60)).replace('{m}', str((n - 70) * 1000)) for l in AUTO]
         t += ['[Script]'] + renumber(solo_script(k, n))
@@ -413,7 +428,7 @@ def verify(k, part, tagbase=None):
             i0 = next((i for i, l in enumerate(a) if re.search(r'session: state \S+ -> 0x1f', l)), len(a))
             eyes = [tuple(float(m.group(j)) for j in (1, 2, 3)) for l in a[i0:] if ' cam:' in l for m in [re.search(r'\beye (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)', l)] if m]
             hit = [e for e in eyes if near(e, eye, 150)]
-            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d'):
+            if k in ('lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n'):
                 # these stages move the eye on purpose (LookAtPos, f5/f6 offset from the heli): info only, the frames are judged by eye
                 chk('escape camera eye moved off (7093,2181,2727) (info)', True, '%d outro cam eyes, last %s' % (len(eyes), ('(%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
             else:

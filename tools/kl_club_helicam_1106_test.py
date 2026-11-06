@@ -18,6 +18,11 @@ fl, aim = H.wanted('B')
 t('variant B is the stock F06 floats with a heli sibling', fl == [0.0, -270.0, -270.0, 80.0, 0.0, -170.0] and 'EscapeChopper' in aim)
 fl, aim = H.wanted('A', f5=-800, f6=150, aim='ROOT\\x')
 t('overrides apply', fl[4:] == [-800.0, 150.0] and aim == 'ROOT\\x')
+fl, aim = H.wanted('F')
+t('variant F = the stock LookFromPos floats, eye node CamPos01', fl == [0.0, 99999.0, 99999.0, 40.0, 0.0, 50.0] and aim.endswith('!CamPos01') and H.MODES['F'] == 'eFMM_LookFromPos')
+vf = ['ECP_NotSet'] + fl + [0, 0, aim, 'eFMC_Unbreakable', 'eFMM_LookFromPos', 1]
+t('done_state F true in LookFromPos, false in LookAtPos', H.done_state(vf, fl, aim, 'eFMM_LookFromPos') and not H.done_state(vf, fl, aim)
+  and not H.done_state(vf[:11] + ['eFMM_LookAtPos', 1], fl, aim, 'eFMM_LookFromPos'))
 try:
     H.wanted('C'); t('unknown variant refused', False)
 except ValueError:

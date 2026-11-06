@@ -27,6 +27,24 @@ try:
     O.cut_raw(raw[:100], 6); t('cut_raw refuses a count that does not fit', False)
 except ValueError:
     t('cut_raw refuses a count that does not fit', True)
+# route replacement (candidate 2c): the frame of the real spline node, a rotation about y by 0.4 rad plus an offset, and 17 old points
+import math
+c, sn = math.cos(0.4), math.sin(0.4)
+R = [[c, 0.0, -sn], [0.0, 1.0, 0.0], [sn, 0.0, c]]
+T = (15871.5, 4699.5, -18602.9)
+rr = b'1PW1' + struct.pack('<II', 17, 1) + b''.join(struct.pack('<3f', i, i, i) + struct.pack('<ff', 1.5 + i, 10.0) + b'\xcd' * 4 for i in range(17)) + b'\xcd' * 556
+nr, n0 = O.route_raw(rr, O.ROUTE_2C, R, T)
+t('route_raw: count 5, length and the bytes after the points kept', n0 == 17 and len(nr) == len(rr) and struct.unpack_from('<I', nr, 4)[0] == 5 and nr[12 + 24 * 17:] == rr[12 + 24 * 17:])
+t('route_raw: world points read back to the route', O.route_done(O.world_points(nr, R, T), O.ROUTE_2C, 0.5))
+t('route_raw: angle/10.0/cd bytes of point i kept', all(nr[12 + 24 * i + 12:12 + 24 * i + 24] == rr[12 + 24 * i + 12:12 + 24 * i + 24] for i in range(5)))
+t('route_raw is idempotent', O.route_raw(nr, O.ROUTE_2C, R, T)[0] == nr)
+t('route_done false for another route', not O.route_done(O.world_points(nr, R, T), O.ROUTE_2C[:4]) and not O.route_done(O.world_points(rr, R, T), O.ROUTE_2C))
+for nm, rt, RR in (('one point', O.ROUTE_2C[:1], R), ('more than the field', O.ROUTE_2C * 4, R), ('a non-rotation frame', O.ROUTE_2C, [[2, 0, 0], [0, 1, 0], [0, 0, 1]])):
+    try:
+        O.route_raw(rr, rt, RR, T); t('route_raw refuses %s' % nm, False)
+    except ValueError:
+        t('route_raw refuses %s' % nm, True)
+t('ROUTE_2C starts at the pad point and climbs north-east', O.ROUTE_2C[0] == (7058.0, 2271.0, 3467.0) and all(a[1] < b[1] and a[0] < b[0] for a, b in zip(O.ROUTE_2C, O.ROUTE_2C[1:])))
 with tempfile.TemporaryDirectory() as d:
     os.makedirs(os.path.join(d, 'in'))
     open(os.path.join(d, 'in', 'F01_Main.zip'), 'wb').write(b'not the live zip')
