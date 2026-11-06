@@ -2,7 +2,7 @@
 """
 n9_1106: the 9-player SMOOTHNESS bench kit (2026-11-06). One command per step; the live run waits for c9's "game free / n9 go".
 
-    python tools/kl_n9_1106.py gen                      write/refresh the kit C:/kl_build_1024/n9_1106 (reads the live KLHook.ini + zips, no game contact)
+    python tools/kl_n9_1106.py gen [--ship PREFIX]      (TEST twin of the live SHIP, see TWINS) write/refresh the kit C:/kl_build_1024/n9_1106 (reads the live KLHook.ini + zips, no game contact)
     python tools/kl_n9_1106.py validate                 DRY RUN: files, dll md5 + TEST markers, ini sections, script ops, live zip md5s vs gen. No launch.
     python tools/kl_n9_1106.py plan                     the map order (never-at-9 first) and the wall-time estimate
     python tools/kl_n9_1106.py run [MAP ...|all|arc] [--owner-away] [--again] [--secs N] [--allow-live-dll MD5PREFIX]
@@ -38,9 +38,12 @@ KIT = 'C:/kl_build_1024/n9_1106'
 DD = 'C:/Steam/steamapps/common/Kane & Lynch 2 - Dog Days'
 SOLO = 'G:/SteamLibrary/steamapps/common/Kane and Lynch Dead Men/KL_PortTools/build/klhook/solo'
 TPL = 'C:/kl_build_1024/maps9_1026e'                       # M_DM01_host.ini / M_DM01_join.ini = the proven 9-seat pair
-HOOK_SRC = 'C:/kl_build_1024/week_1028/sm1105e/hook_test/dinput8.dll'
-HOOK_MD5 = '5f52009dd89f0e4d732a2addbed3d652'
-ACCEPT_LIVE = {'288fb016': 'SHIP c9_1105e_install (TEST twin 5f52009d)'}
+# live SHIP md5 prefix -> (its build_auto TEST twin, twin md5, label). gen picks the twin of the SHIP that is live (or --ship PREFIX).
+TWINS = {'288fb016': ('C:/kl_build_1024/week_1028/sm1105e/hook_test/dinput8.dll', '5f52009dd89f0e4d732a2addbed3d652', 'SHIP c9_1105e_install (TEST twin 5f52009d)'),
+         '727a73bb': ('C:/kl_build_1024/n9_twins/727a73bb/dinput8.dll', 'b6a697726b66ca7270921d6d4543005f',   # 6b's pf1106 hook_test (copied 11-06; 6b: 2-seat DD05+DM01 PASS)
+                      'SHIP cda03a57 pics/perf (6b, 11-06; TEST twin b6a69772)')}
+ACCEPT_LIVE = {k: v[2] for k, v in TWINS.items()}
+HOOK_SRC, HOOK_MD5 = TWINS['288fb016'][:2]               # default when the live dll is no known SHIP (a bench is live): gen --ship picks another
 SLOT_POS = {'F01': 0, 'F02': 1, 'F03': 2, 'F04': 3, 'F06': 4, 'F07': 5, 'F05': 6, 'F08': 7, 'F09': 8}
 # (map, slot, page): same table as tools/kl_maps9_1026.py
 MAPS = [('DD%02d' % i, 'F%02d' % i, 0) for i in range(1, 10)]
@@ -290,10 +293,16 @@ def idle_s():
 
 
 # ---------------------------------------------------------------- gen
-def gen():
+def gen(ship=None):
     import shutil
+    ld = live_state()['dll'] or ''
+    ship = ship or next((k for k in TWINS if ld.startswith(k)), None)
+    if ship not in TWINS:
+        raise SystemExit('gen: live dll %s is no known SHIP (%s): pass --ship PREFIX' % (ld[:8], ', '.join(TWINS)))
+    src, _, label = TWINS[ship]
     os.makedirs('%s/hook_test' % KIT, exist_ok=True)
-    shutil.copy2(HOOK_SRC, '%s/hook_test/dinput8.dll' % KIT)
+    shutil.copy2(src, '%s/hook_test/dinput8.dll' % KIT)
+    print('gen: SHIP %s -> %s' % (ship, label))
     shutil.copy2('%s/KLHook.ini' % DD, '%s/KLHook_base.ini' % KIT)          # snapshot of the CURRENT live ini, taken now
     shutil.copy2('%s/KLShopPage.ini' % DD, '%s/KLShopPage.ini' % KIT)
     th, tj = load('%s/M_DM01_host.ini' % TPL), load('%s/M_DM01_join.ini' % TPL)
@@ -306,7 +315,7 @@ def gen():
         write('%s/%s_join.ini' % (KIT, m), build(tj, 'join', m, s, p))
         zips[m] = zip_md5s(m, s)
     write('%s/arc_ref.ini' % KIT, arc_ini())
-    meta = {'made': time.strftime('%Y-%m-%d %H:%M:%S'), 'hook_md5': md5('%s/hook_test/dinput8.dll' % KIT), 'base_ini_md5': md5('%s/KLHook_base.ini' % KIT),
+    meta = {'made': time.strftime('%Y-%m-%d %H:%M:%S'), 'ship': ship, 'hook_md5': md5('%s/hook_test/dinput8.dll' % KIT), 'base_ini_md5': md5('%s/KLHook_base.ini' % KIT),
             'live_at_gen': live_state(), 'order': [dict(map=m, slot=s, page=p, ran_at_9=r) for m, s, p, r in ml], 'zips': zips,
             'ran_at_9': sorted(maps_at_9())}
     write('%s/kit.json' % KIT, json.dumps(meta, indent=1))
@@ -350,7 +359,8 @@ def validate(quiet_run=False):
     dll = '%s/hook_test/dinput8.dll' % KIT
     if v.ok(os.path.isfile(dll), 'bench dll'):
         data = open(dll, 'rb').read()
-        v.ok(hashlib.md5(data).hexdigest() == HOOK_MD5, 'dll md5 %s = TEST twin 5f52009d' % hashlib.md5(data).hexdigest()[:8])
+        ship = meta.get('ship', '288fb016'); want = TWINS.get(ship, TWINS['288fb016'])[1]
+        v.ok(hashlib.md5(data).hexdigest() == want, 'dll md5 %s = TEST twin %s of SHIP %s' % (hashlib.md5(data).hexdigest()[:8], want[:8], ship))
         v.ok(data.count(b'(TEST)') >= 3 and b"klauto's scripted keys" in data, 'dll carries the TEST markers ((TEST) x%d + klauto strings)' % data.count(b'(TEST)'))
         v.ok(2_500_000 < len(data) < 2_700_000, 'dll size %.2f MB (about 2.59 MB)' % (len(data) / 1e6))
     live = live_state()
@@ -539,7 +549,7 @@ def main(argv=None):
         print(__doc__); return 0
     c, rest = a[0], a[1:]
     if c == 'gen':
-        return gen()
+        return gen(sys.argv[sys.argv.index('--ship') + 1] if '--ship' in sys.argv else None)
     if c == 'validate':
         return validate()
     if c == 'plan':
