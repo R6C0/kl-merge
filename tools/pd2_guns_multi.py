@@ -63,6 +63,17 @@ SPECS = [
          tex='third_body_df.texture', key='HRL50', name='PD2 HRL-7', kind='rocket launcher'),
     dict(item=51, template='RPG_7V_Hind', unit='pd2_dlc_overkill_pack/weapons/wpn_third_rpg7_pts', model='wpn_third_rpg7_body.model', mesh='g_body',
          tex='third_body_df.texture', key='HRL51', name='PD2 HRL-7 HIND', kind='rocket launcher'),
+    # ---- batch 5 (2026-11-06): item 49 <- PD2 R700 from the third-person parts unit wpn_fps_snp_r700_pts (the fps unit's model is a bare locator; wpn_fps_snp_r700_npc.unit
+    # points at it). 6 materials: receiver (body_standard g_rec + g_release), bolt (g_bolt / g_handle / g_pin), long barrel (b_standard g_b), magazine (m_standard g_m,
+    # the part flagged mag), standard stock (s_standard g_s), scope mount (o_rail g_rail). No scope exists in the unit; the suppressor, the b_short/b_medium barrels,
+    # the military / tactical stocks and the fl_rail are not used. See pd2_parts_of.
+    dict(item=49, template='Sn_Rem700', unit='pd2_dlc_atw/weapons/wpn_fps_snp_r700_pts', key='R700', name='PD2 R700', kind='sniper rifle', parts=[
+        dict(model='wpn_third_snp_r700_body_standard.model', meshes=['g_rec', 'g_release'], tex='third_body_df.texture', mat='body'),
+        dict(model='wpn_third_snp_r700_bolt_standard.model', meshes=['g_bolt', 'g_handle', 'g_pin'], tex='third_bolt_df.texture', mat='bolt'),
+        dict(model='wpn_third_snp_r700_b_standard.model', meshes=['g_b'], tex='third_barrel_df.texture', mat='barrel'),
+        dict(model='wpn_third_snp_r700_m_standard.model', meshes=['g_m'], tex='third_mag_df.texture', mat='mag', mag=True),
+        dict(model='wpn_third_snp_r700_s_standard.model', meshes=['g_s'], tex='third_stock_standard_df.texture', mat='stock'),
+        dict(model='wpn_third_snp_r700_o_rail.model', meshes=['g_rail'], tex='third_mount_df.texture', mat='mount')]),
 ]
 # Tried and dropped (fit on the MG hold leaves the stock 4 - 5 cm IN FRONT of the right hand): item 42 <- PD2 M4 (cost 3.30, butt +5.0),
 # item 43 <- PD2 AKMSU (cost 3.99, butt +3.8). A short rifle model does not suit the long MG hold; a PD2 LMG (M249: 9 materials) would.
@@ -84,15 +95,12 @@ def unit_dir(spec):
     return os.path.join(work(), 'pd2', 'guns', 'src', 'units', spec['unit'].replace('/', os.sep))
 
 
-def pd2_plate_of(spec, scale=1.0, shift=(0.0, 0.0, 0.0), deg=P.TURN_DEG):
-    """pd2_gun.pd2_plate for any wpn_npc_* unit: axis map, turn about z, scale, shift. -> (Plate, DDS diffuse bytes)."""
+def _mesh_of(model, name, scale, shift, deg):
+    """One named mesh object of a PD2 model in KL space: axis map, turn about z, scale, shift. -> (pos, nrm, uv, tris)."""
     import pd2_model
-    base = unit_dir(spec)
-    # batch 4: spec['model'] names the .model file when it is not <unit dir name>.model (wpn_third_rpg7_pts holds wpn_third_rpg7_body.model)
-    model = pd2_model.Model(os.path.join(base, spec.get('model') or os.path.basename(base) + '.model'))
-    obj = next((o for o in model.mesh_objects() if o.name == spec['mesh']), None)
+    obj = next((o for o in model.mesh_objects() if o.name == name), None)
     if obj is None:
-        raise ValueError('no mesh object %s (have %s)' % (spec['mesh'], [o.name for o in model.mesh_objects()]))
+        raise ValueError('no mesh object %s (have %s)' % (name, [o.name for o in model.mesh_objects()]))
     m = model.world_mesh(obj)
     c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
     turn = lambda v: (c * v[0] - s * v[1], s * v[0] + c * v[1], v[2])
@@ -101,7 +109,52 @@ def pd2_plate_of(spec, scale=1.0, shift=(0.0, 0.0, 0.0), deg=P.TURN_DEG):
     nrm = [PM._norm(turn((n[1], n[2], -n[0]))) for n in m['nrm']]
     uv = [(u, 1.0 + v) for u, v in m['uv']]
     tris = [(a, c_, b) for a, b, c_ in (tuple(t) for t in m['tris'])]
+    return pos, nrm, uv, tris
+
+
+def _merge(meshes, name):
+    """Several (pos, nrm, uv, tris) -> one Plate (vertex lists appended, indices offset)."""
+    pos, nrm, uv, tris = [], [], [], []
+    for p_, n_, u_, t_ in meshes:
+        o = len(pos)
+        pos += p_; nrm += n_; uv += u_; tris += [(a + o, b + o, c + o) for a, b, c in t_]
+    return PM.Plate(pos, nrm, uv, tris, name)
+
+
+def pd2_plate_of(spec, scale=1.0, shift=(0.0, 0.0, 0.0), deg=P.TURN_DEG):
+    """pd2_gun.pd2_plate for any wpn_npc_* unit: axis map, turn about z, scale, shift. -> (Plate, DDS diffuse bytes).
+    A spec with 'parts' (batch 5, see pd2_parts_of) gives the WHOLE gun as one Plate (the fit, silhouettes, previews use it) and the first part's DDS."""
+    import pd2_model
+    if spec.get('parts'):
+        groups = pd2_parts_of(spec, scale, shift, deg)
+        return _merge([(g['plate'].pos, g['plate'].nrm, g['plate'].uv, g['plate'].tris) for g in groups], 'pd2_' + spec['key'].lower()), groups[0]['dds']
+    base = unit_dir(spec)
+    # batch 4: spec['model'] names the .model file when it is not <unit dir name>.model (wpn_third_rpg7_pts holds wpn_third_rpg7_body.model)
+    model = pd2_model.Model(os.path.join(base, spec.get('model') or os.path.basename(base) + '.model'))
+    pos, nrm, uv, tris = _mesh_of(model, spec['mesh'], scale, shift, deg)
     return PM.Plate(pos, nrm, uv, tris, 'pd2_' + spec['key'].lower()), open(os.path.join(base, spec['tex']), 'rb').read()
+
+
+def pd2_parts_of(spec, scale=1.0, shift=(0.0, 0.0, 0.0), deg=P.TURN_DEG):
+    """Batch 5: N parts, M materials. spec['parts'] = [dict(model=<.model file in the unit dir>, meshes=[mesh names], tex=<diffuse .texture>, mat=<short
+    material name>, mag=True on the magazine part)]. Parts with the same 'mat' become ONE Plate (one object per material).
+    -> [dict(mat, plate, dds, mag)] in first-use order. The parts of an assembled PD2 gun share one origin (the R700's receiver, barrel and stock
+    ranges join without a transform), so no per-part offset is applied. GUESS: that holds for every part model of a *_pts unit."""
+    import pd2_model
+    base = unit_dir(spec)
+    order, by = [], {}
+    for pt in spec['parts']:
+        model = pd2_model.Model(os.path.join(base, pt['model']))
+        g = by.get(pt['mat'])
+        if g is None:
+            g = by[pt['mat']] = dict(mat=pt['mat'], meshes=[], tex=pt['tex'], mag=bool(pt.get('mag')))
+            order.append(g)
+        elif g['tex'] != pt['tex']:
+            raise ValueError('%s: material %s has two diffuse textures' % (spec['key'], pt['mat']))
+        for nm in pt['meshes']:
+            g['meshes'].append(_mesh_of(model, nm, scale, shift, deg))
+    return [dict(mat=g['mat'], plate=_merge(g['meshes'], 'pd2_%s_%s' % (spec['key'].lower(), g['mat'])), dds=open(os.path.join(base, g['tex']), 'rb').read(), mag=g['mag'])
+            for g in order]
 
 
 # ------------------------------------------------------------------ fit against the host
@@ -181,6 +234,14 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
                 # box and no 24 copy; the detail-248 part (89 verts) is read as the far-LOD copy. The new body takes 7|248 (= 255) and the
                 # stock far copy and the second near part (127 verts, the rocket or the sight?) are dropped; there is no bone-3 clip part.
                 lowd = far
+            if not lowd:
+                far28 = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] == 28]
+                if len(far28) == 1:
+                    # GUESS (batch 5): a sniper root (Sn_Rem700: type-1 detail 3 / 28 / 3 / 12 plus one type-4 detail 3 on bone w_bone_slide, no detail 16 / 24 / 248)
+                    # is read as: 28 = far copy of the receiver+barrel+stock, the detail-3 type-1 part whose x extent matches it = the body, the other
+                    # type-1 pair (detail 3 + its far copy 12, x 12.5 - 50) = the scope, kept as it is, the type-4 part = the bolt slide, dropped (the PD2 bolt is in the
+                    # mesh). The new body takes 7|28 = 31 (every level), like the pistol.
+                    lowd = far28
             if len(lowd) != 1:
                 raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
             body_lod = mag_lod = 7 | p.chunks[lowd[0]][0x0e]       # 31 on a pistol, 255 on a launcher
@@ -188,6 +249,12 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
         if (len(hidden) != 1 and not lowd) or not cands or var != 0:
             raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
         body = max(cands, key=lambda o: nvs[o])
+        keep = []
+        if not hidden and lowd and lowd[0] in cands and p.chunks[lowd[0]][0x0e] == 28:
+            ext = lambda o: (lambda a: (a[:, 0].min(), a[:, 0].max()))(np.array(V.part_mesh(p, o)[0]))
+            fe = ext(lowd[0])
+            body = min((o for o in cands if p.chunks[o][0x0e] == 3), key=lambda o: sum(abs(x - y) for x, y in zip(ext(o), fe)))
+            keep = [o for o in cands if o not in (body, lowd[0])]          # the scope pair (GUESS above)
         mags = [o for o in objs if p.u32(o, 0x3c) == 3 and p.chunks[o][0x0e] == (15 if hidden else 7)]
         cached = bool((fits or {}).get(spec['key']))
         shift, frep = (fits or {}).get(spec['key']) or fit_one(spec, _host(p, old, C, MG, V, rng, F.sample))
@@ -195,34 +262,65 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
         share = PM.outward_share(plate)
         if share < 0.95:
             raise ValueError('%s: only %.1f %% of the PD2 triangles face outward' % (spec['key'], 100 * share))
-        whole, magp = plate, None
-        if mags:
-            try:
-                plate, magp = P.split_magazine(whole)
-            except ValueError as e:
-                log('  %s: no magazine split (%s)' % (spec['key'], e))
-                plate = whole
+        whole = plate
         src_slot = p.u16(body, 0x12)
         stage = {s: n[3] for s, n in T.texture_stages(mat.insts[src_slot])}
         grp = lambda st: tex.tex[stage[st]].group if st in stage and stage[st] in tex.tex else tex.tex[stage['mapDiffuse']].group
-        fourcc, w, h, mips = PM.dds_mips(df_dds)
-        if fourcc == b'DXT5':
-            mips, fourcc = P.dxt5_to_dxt1(mips), b'DXT1'
-        key = spec['key']
-        df = PM.add_texture(tex, 'tex:Weapons/PD2_%s#Diffuse_a' % key, P.dds_bytes(fourcc, w, h, mips), group=grp('mapDiffuse'))
-        nm = PM.add_texture(tex, 'tex:Weapons/PD2_%s#Normal_a' % key, P.flat_normal_dds(), normal_map=True, group=grp('mapNormal'))
-        sp = PM.add_texture(tex, 'tex:Weapons/PD2_%s#Specular_a' % key, P.grey_spec_dds(), group=grp('mapSpecularMask'))
-        slot = P.clone_material(mat, src_slot, 'Weapons/W_PD2_%s_01' % key, df, nm, sp)
-        v = G.new_chunk(p, P.vertex_chunk(plate, flip=True)); i = G.new_chunk(p, PM.index_chunk(plate.tris, flip=True))
-        d = G.new_chunk(p, PM.descriptor(len(plate.pos), v, i, 0)); sub = G.new_chunk(p, PM.subtab(d))
-        new_body = G.new_chunk(p, P.rigid_object(p.chunks[body], body_lod, p.chunks[body][0x0f], slot, sub), p.refs[body])
-        parts = [new_body]
-        if magp is not None:
-            mv = G.new_chunk(p, P.vertex_chunk(magp, flip=True)); mi = G.new_chunk(p, PM.index_chunk(magp.tris, flip=True))
-            md = G.new_chunk(p, PM.descriptor(len(magp.pos), mv, mi, 0)); msub = G.new_chunk(p, PM.subtab(md))
-            parts.append(G.new_chunk(p, P.rigid_object(p.chunks[mags[0]], mag_lod, p.chunks[mags[0]][0x0f], slot, msub), p.refs[mags[0]]))
+        if spec.get('parts'):
+            # batch 5: N parts / M materials = one rigid object per material (each a copy of the host body object, its own material slot,
+            # lod = body_lod); the part flagged mag takes the magazine object's place when the host has one (the reload hides it), else it is a
+            # body part. Normal and specular maps are one flat pair shared by all the spec's materials.
+            groups = pd2_parts_of(spec, 1.0, shift)
+            key = spec['key']; magp = None; parts = []; slots = []; dfs = []
+            fl_nm = fl_sp = None
+            for g in groups:
+                fourcc, w, h, mips = PM.dds_mips(g['dds'])
+                if fourcc == b'DXT5':
+                    mips, fourcc = P.dxt5_to_dxt1(mips), b'DXT1'
+                nmk = '%s_%s' % (key, g['mat'])
+                df = PM.add_texture(tex, 'tex:Weapons/PD2_%s#Diffuse_a' % nmk, P.dds_bytes(fourcc, w, h, mips), group=grp('mapDiffuse'))
+                if fl_nm is None:
+                    fl_nm = PM.add_texture(tex, 'tex:Weapons/PD2_%s#Normal_a' % key, P.flat_normal_dds(), normal_map=True, group=grp('mapNormal'))
+                    fl_sp = PM.add_texture(tex, 'tex:Weapons/PD2_%s#Specular_a' % key, P.grey_spec_dds(), group=grp('mapSpecularMask'))
+                gslot = P.clone_material(mat, src_slot, 'Weapons/W_PD2_%s_01' % nmk, df, fl_nm, fl_sp)
+                gp = g['plate']
+                v = G.new_chunk(p, P.vertex_chunk(gp, flip=True)); i = G.new_chunk(p, PM.index_chunk(gp.tris, flip=True))
+                d = G.new_chunk(p, PM.descriptor(len(gp.pos), v, i, 0)); sub = G.new_chunk(p, PM.subtab(d))
+                if g['mag'] and mags and magp is None:
+                    magp = gp; tpl = mags[0]; lod_ = mag_lod
+                else:
+                    tpl = body; lod_ = body_lod
+                parts.append(G.new_chunk(p, P.rigid_object(p.chunks[tpl], lod_, p.chunks[tpl][0x0f], gslot, sub), p.refs[tpl]))
+                slots.append(gslot); dfs.append(df)
+            df, nm, sp, slot = dfs, fl_nm, fl_sp, slots
+            plate = whole
+            new_body = parts[0]
+        else:
+            whole, magp = plate, None
+            if mags:
+                try:
+                    plate, magp = P.split_magazine(whole)
+                except ValueError as e:
+                    log('  %s: no magazine split (%s)' % (spec['key'], e))
+                    plate = whole
+            fourcc, w, h, mips = PM.dds_mips(df_dds)
+            if fourcc == b'DXT5':
+                mips, fourcc = P.dxt5_to_dxt1(mips), b'DXT1'
+            key = spec['key']
+            df = PM.add_texture(tex, 'tex:Weapons/PD2_%s#Diffuse_a' % key, P.dds_bytes(fourcc, w, h, mips), group=grp('mapDiffuse'))
+            nm = PM.add_texture(tex, 'tex:Weapons/PD2_%s#Normal_a' % key, P.flat_normal_dds(), normal_map=True, group=grp('mapNormal'))
+            sp = PM.add_texture(tex, 'tex:Weapons/PD2_%s#Specular_a' % key, P.grey_spec_dds(), group=grp('mapSpecularMask'))
+            slot = P.clone_material(mat, src_slot, 'Weapons/W_PD2_%s_01' % key, df, nm, sp)
+            v = G.new_chunk(p, P.vertex_chunk(plate, flip=True)); i = G.new_chunk(p, PM.index_chunk(plate.tris, flip=True))
+            d = G.new_chunk(p, PM.descriptor(len(plate.pos), v, i, 0)); sub = G.new_chunk(p, PM.subtab(d))
+            new_body = G.new_chunk(p, P.rigid_object(p.chunks[body], body_lod, p.chunks[body][0x0f], slot, sub), p.refs[body])
+            parts = [new_body]
+            if magp is not None:
+                mv = G.new_chunk(p, P.vertex_chunk(magp, flip=True)); mi = G.new_chunk(p, PM.index_chunk(magp.tris, flip=True))
+                md = G.new_chunk(p, PM.descriptor(len(magp.pos), mv, mi, 0)); msub = G.new_chunk(p, PM.subtab(md))
+                parts.append(G.new_chunk(p, P.rigid_object(p.chunks[mags[0]], mag_lod, p.chunks[mags[0]][0x0f], slot, msub), p.refs[mags[0]]))
         root = C._new(p, p.chunks[old]); p.refs[root] = 1
-        C._set_objects(p, root, parts + hidden)
+        C._set_objects(p, root, parts + keep + hidden)
         PM.widen_root(p, root, whole.box())
         ref = p.u32(old, 0x1c)
         if ref:
@@ -242,7 +340,7 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
                             body_vertices=len(plate.pos), body_triangles=len(plate.tris), magazine=bool(magp), outward_share=round(share, 4),
                             material_slot=slot, textures=[df, nm, sp], shift=list(shift), fit=None if cached else frep,
                             box=[[round(x, 2) for x in box[0]], [round(x, 2) for x in box[1]]])
-        log('  item %d %s -> %s: root %d -> %d, %d verts / %d tris%s, material %d' % (
+        log('  item %d %s -> %s: root %d -> %d, %d verts / %d tris%s, material %s' % (
             spec['item'], spec['template'], key, old, root, len(plate.pos), len(plate.tris), ' + magazine' if magp else '', slot))
     prm = G.write(p)
     mat.refs = T.material_refs(prm)
