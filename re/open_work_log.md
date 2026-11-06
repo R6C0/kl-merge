@@ -1,3 +1,13 @@
+## 2026-11-06 ~19:20 [c9] Escape-vehicle vs .rmi box audit, all DM maps (read-only, no crash involved)
+- Method: test every escape path point and fixed eye against the non-Backdrop .rmi boxes (kl_map_escape, kl_fa_bots.van_drives, kl_octree.RoomIndex).
+- Van maps (DM01/01B/02/03/03A/06B/07) are all covered, and every fixed eye is covered.
+- DM06 heli: escaping points 15-16 (x -16258/-19324) and incoming 0-1 (x 13801/9495) are outside room 836's box 1. These are far ends, 160 m+ out. Low priority.
+- DM11B heli: escaping 14-16 lie outside room 3498 but inside whole-map room 3496, so this is not the Backdrop-only case.
+- DM09 vans 2/3: their keys sit at y -60040, below the map. Possibly unused or moved at runtime; check in a bench before adding a box.
+- DM05A after 2f: the incoming heli points 0-7 are Backdrop-only, so the heli pops in at about 6 m.
+- Backdrop-not-drawn question: both box callbacks skip a room whose virtual 0x2e8 (0x4d43b0, flag [room+0x118]) has bit 0 set. ZROOM's constructor 0x545150 clears it;
+  ZBackdrop's 0x8987c0 leaves it. Next: disassemble 0x47a5b0/0x495ef0 for a Backdrop skip. Scripts f.py and e.py are in the c9 session scratchpad.
+
 ## 2026-11-06 ~18:45 [c9] Last Call chain 2f LIVE on DM05A: the heli is now drawn after lift-off (no crash involved)
 - Why it vanished: in kl2.exe a moving entity (flag 0x4000) gets its rooms from the .rmi box query (point callback 0x927b30, box 0x927c70, up to 6 rooms);
   render collects only the items of rooms stamped visible (0x47a5b0 -> 0x495ef0/0x83dca0). Every Roof box tops out at y <= 2640, so the climbing heli left
