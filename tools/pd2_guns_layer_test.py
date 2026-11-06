@@ -110,7 +110,7 @@ L.configure('1106d')
 check(L.KEYS == ['RPK45', 'RPK46', 'RPK47', 'RPK48'] and L.TAG == '.before-pd2guns1106d', '1106d keys / tag')
 check(L.BASE == r'D:\kl_stage\pd2guns_1106c' and L.src_root() == L.BASE, '1106d is staged on the 1106c stage')
 check(L.default_out() == r'D:\kl_stage\pd2guns_1106d' and L.LAYERS['1106d']['backup'] == r'D:\kl_stage\pd2guns_1106d_backup', '1106d out / backup on D:')
-check('DM05A' not in L.LAYERS['1106d']['maps'] and len(L.LAYERS['1106d']['maps']) == 10, '1106d: 10 maps, not DM05A')
+check('DM05A' in L.LAYERS['1106d']['maps'] and len(L.LAYERS['1106d']['maps']) == 11 and len(set(L.LAYERS['1106d']['maps'])) == 11 and 'DM01' in L.LAYERS['1106d']['maps'], '1106d: 11 maps (the 10 installed + DM05A)')
 check(all(L.DETAIL[k] == 63 for k in L.KEYS), '1106d body detail 62|7 = 63')
 sp = {s['key']: s for s in M.SPECS}
 check([sp[k]['item'] for k in L.KEYS] == [45, 46, 47, 48] and all(sp[k]['unit'].endswith('wpn_npc_rpk') for k in L.KEYS), '1106d specs = items 45-48 on the PD2 RPK')
@@ -149,7 +149,7 @@ L.configure('1106f')
 check(L.KEYS == ['MG42', 'PAR40'] and L.TAG == '.before-pd2guns1106f', '1106f keys / tag')
 check(L.BASE == r'D:\kl_stage\pd2guns_1106e' and L.src_root() == L.BASE, '1106f is staged on the 1106e stage')
 check(L.default_out() == r'D:\kl_stage\pd2guns_1106f' and L.LAYERS['1106f']['backup'] == r'D:\kl_stage\pd2guns_1106f_backup', '1106f out / backup on D:')
-check(L.LAYERS['1106f']['maps'] == L.LAYERS['1106e']['maps'] and 'DM05A' not in L.LAYERS['1106f']['maps'], '1106f: the same 10 maps, not DM05A')
+check(L.LAYERS['1106f']['maps'] == L.LAYERS['1106e']['maps'] and 'DM05A' in L.LAYERS['1106f']['maps'], '1106f: the same 11 maps as 1106e, with DM05A')
 sp = {s['key']: s for s in M.SPECS}
 check(sp['MG42']['item'] == 42 and sp['PAR40']['item'] == 40 and sp['MG42']['template'] == sp['RPK42']['template'] and sp['PAR40']['template'] == sp['RPK40']['template'],
       '1106f re-looks the templates of RPK42 / RPK40')

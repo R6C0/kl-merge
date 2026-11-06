@@ -42,17 +42,17 @@ LAYERS = {
                                               os.path.join(WORK_BUILD, 'pd2b6_scratch', 'fits.json')]),
     '1106d': dict(keys=['RPK45', 'RPK46', 'RPK47', 'RPK48'], tag='.before-pd2guns1106d', base=r'D:\kl_stage\pd2guns_1106c',
                   out=r'D:\kl_stage\pd2guns_1106d', backup=r'D:\kl_stage\pd2guns_1106d_backup',
-                  maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B'],      # NOT DM05A (c9's restage is pending)
+                  maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B', 'DM05A'],      # DM05A restaged 11-06 on c9's chain (--base live for c)
                   title='1106d (items 45 / 46 / 47 / 48 Minimi: the specs RPK45, RPK46, RPK47, RPK48 = PD2 RPK), staged on top of layer 1106c',
                   short='RPK on the Minimi items', seeds=[r'D:\kl_stage\pd2b7_scratch\fits.json']),
     '1106e': dict(keys=['DEAG63'], tag='.before-pd2guns1106e', base=r'D:\kl_stage\pd2guns_1106d',
                   out=r'D:\kl_stage\pd2guns_1106e', backup=r'D:\kl_stage\pd2guns_1106e_backup',
-                  maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B'],      # NOT DM05A (c9's restage is pending)
+                  maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B', 'DM05A'],      # DM05A restaged 11-06 on c9's chain (--base live for c)
                   title='1106e (item 63 M9 shield pistol: the spec DEAG63 = PD2 Deagle), staged on top of layer 1106d',
                   short='Deagle on the M9 shield', seeds=[r'D:\kl_stage\pd2b8_scratch\fits.json']),
     '1106f': dict(keys=['MG42', 'PAR40'], tag='.before-pd2guns1106f', base=r'D:\kl_stage\pd2guns_1106e',
                   out=r'D:\kl_stage\pd2guns_1106f', backup=r'D:\kl_stage\pd2guns_1106f_backup',
-                  maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B'],      # NOT DM05A (c9's restage is pending)
+                  maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B', 'DM05A'],      # DM05A restaged 11-06 on c9's chain (--base live for c)
                   pic_items=[40, 42],      # shop items whose Page II card (KLPic_PairNN, tools/kl_shop_pics.py) is re-pictured from <out>/pics/item_NN.png in the SAME zips
                   title='1106f (item 42 PD2 MG42, item 40 PD2 PAR: the specs MG42, PAR40 re-look two RPK duplicates), staged on top of layer 1106e',
                   short='MG42 / PAR on items 42 / 40', seeds=[r'D:\kl_stage\pd2b9_scratch\fits.json']),
@@ -246,7 +246,8 @@ def pin(out, maps, log=print):
     pp = os.path.join(out, 'pins.json')
     allp = json.load(open(pp))['maps'] if os.path.isfile(pp) else {}
     allp.update(pins)
-    json.dump(dict(maps=allp, tag=TAG, keys=KEYS, base=BASE), open(pp, 'w'), indent=1)
+    old_base = json.load(open(pp)).get('base', BASE) if os.path.isfile(pp) else BASE      # keep the recorded base of an existing stage (a later --base live restage of one map must not rewrite it)
+    json.dump(dict(maps=allp, tag=TAG, keys=KEYS, base=old_base), open(pp, 'w'), indent=1)
     return pins
 
 
@@ -675,6 +676,9 @@ def write_installer(out):
 def main(a):
     if '--layer' in a:
         configure(a[a.index('--layer') + 1]); del a[a.index('--layer'):a.index('--layer') + 2]
+    if '--base' in a:      # 'live' = bake on the live map folders (a map whose earlier layers are already installed), else a stage folder
+        global BASE
+        BASE = None if a[a.index('--base') + 1] == 'live' else a[a.index('--base') + 1]; del a[a.index('--base'):a.index('--base') + 2]
     out = default_out()
     if '--out' in a:
         out = a[a.index('--out') + 1]; del a[a.index('--out'):a.index('--out') + 2]
