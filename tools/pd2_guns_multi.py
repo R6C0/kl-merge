@@ -466,7 +466,7 @@ def previews(out, name, log=print):
 
 
 # ------------------------------------------------------------------ verify
-def verify(out, log=print):
+def verify(out, log=print, live_root=None):
     import zipfile
     import kl_chars as C, kl_guns
     ok = True
@@ -475,7 +475,7 @@ def verify(out, log=print):
         if not os.path.isfile(os.path.join(d, 'report.json')):
             continue
         rep = json.load(open(os.path.join(d, 'report.json')))
-        live = os.path.join(MAPROOT, name)
+        live = os.path.join(live_root or MAPROOT, name)      # live_root: a layer baked on an earlier layer's stage (pd2_guns_layer)
         if name.endswith('_chain') and not os.path.isdir(live):      # variant on the Last Call chain stage (pd2_guns_stage.CHAIN)
             live = CHAIN
         elif name.endswith('_doors') and not os.path.isdir(live):    # variant on the Last Call chain + doors stage (pd2_guns_stage.DOORS)

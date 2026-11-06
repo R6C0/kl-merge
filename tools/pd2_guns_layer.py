@@ -3,7 +3,7 @@
 pd2_guns_layer.py - stage the NEW pd2_guns_multi specs (batch 3 C45 / item 62, batch 4 HRL50 / HRL51 = items 50 / 51) as a layer ON TOP of the
 live Dead Men maps (2026-11-06, offline; writes only the stage folder, never the game).
 
-    python tools/pd2_guns_layer.py build  [--out <dir>] [--maps DM01,DM02]   default out <work>/build/pd2guns_1106b
+    python tools/pd2_guns_layer.py build  [--layer 1106b|1106c] [--out <dir>] [--maps DM01,DM02]   default out <work>/build/pd2guns_1106b (1106c: D:\\kl_stage\\pd2guns_1106c, on the 1106b stage)
     python tools/pd2_guns_layer.py verify [--out <dir>] [--maps ...]         per-map table (needs the live zips to be the ones staged on)
     python tools/pd2_guns_layer.py pin    [--out <dir>]                      redo the ini Entries fix + pins.json of a baked stage (no re-bake)
     python tools/pd2_guns_layer.py install-py [--out <dir>]                  rewrite install.py / INSTALL.bat / UNDO.bat from pins.json
@@ -27,11 +27,39 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import pd2_guns_multi as M
 
-KEYS = ['C45', 'HRL50', 'HRL51']
-TAG = '.before-pd2guns1106b'
+# A layer = which SPECS keys it bakes, the backup tag, the folder it is staged on (BASE: None = the live map folders, else a folder of per-map
+# folders = an earlier layer's STAGE, so a later layer goes on top of an earlier one that is not installed yet), and the default out folder.
+# Select with `--layer NAME` (default 1106b, behaving exactly as before); configure() sets the module globals the functions below read.
+WORK_BUILD = os.path.join(M.work(), 'build')
+LAYERS = {
+    '1106b': dict(keys=['C45', 'HRL50', 'HRL51'], tag='.before-pd2guns1106b', base=None, out=os.path.join(WORK_BUILD, 'pd2guns_1106b'),
+                  title='1106b (items 62 C45 pistol, 50 / 51 HRL-7 launchers: the specs C45, HRL50, HRL51)', short='C45 / HRL-7',
+                  seeds=[]),
+    '1106c': dict(keys=['R700', 'GL40', 'GL40GAS', 'GL40FLR'], tag='.before-pd2guns1106c', base=os.path.join(WORK_BUILD, 'pd2guns_1106b'),
+                  out=r'D:\kl_stage\pd2guns_1106c',
+                  title='1106c (items 49 R700 sniper, 52 / 53 / 54 GL40 grenade launchers: the specs R700, GL40, GL40GAS, GL40FLR), staged on top of layer 1106b',
+                  short='R700 / GL40', seeds=[os.path.join(WORK_BUILD, 'pd2b5_scratch', 'r700_out', 'fits.json'),
+                                              os.path.join(WORK_BUILD, 'pd2b6_scratch', 'fits.json')]),
+}
+KEYS = LAYERS['1106b']['keys']
+TAG = LAYERS['1106b']['tag']
+BASE = LAYERS['1106b']['base']
+LAYER = '1106b'
 ALLOWED = {'.prm', '.MAT', '.TEX', '.oct', '.gms', '.prp'}
 FITS_SEEDS = [r'C:\Users\Henri\AppData\Local\Temp\claude\c--kl-merge-kl-merge\e2de9ad7-9c8b-45d5-9019-f852ea50154f\scratchpad\pd2b4\fits.json']
-DETAIL = {'C45': 31, 'HRL50': 255, 'HRL51': 255}      # body detail byte (see build_level GUESS notes)
+DETAIL = {'C45': 31, 'HRL50': 255, 'HRL51': 255,      # body detail byte (see build_level GUESS notes)
+          'R700': 31, 'GL40': 191, 'GL40GAS': 191, 'GL40FLR': 191}      # R700 7|28 = 31, GL40 1|190 = 191 (pd2_guns_multi batch 5/6 commits)
+
+
+def configure(name):
+    global KEYS, TAG, BASE, LAYER
+    L = LAYERS[name]
+    KEYS, TAG, BASE, LAYER = list(L['keys']), L['tag'], L['base'], name
+
+
+def src_root():
+    """Folder holding the per-map folders this layer is baked on: the base stage, else the live maps."""
+    return BASE or M.MAPROOT
 
 
 def md5(p):
@@ -43,7 +71,7 @@ def md5(p):
 
 
 def default_out():
-    return os.path.join(M.work(), 'build', 'pd2guns_1106b')
+    return LAYERS[LAYER]['out']
 
 
 def seed_fits(out):
@@ -52,7 +80,7 @@ def seed_fits(out):
     if os.path.isfile(fp):
         return fp
     d = {}
-    for src in [os.path.join(M.work(), 'build', 'pd2guns_1106', 'fits.json')] + FITS_SEEDS:
+    for src in [os.path.join(M.work(), 'build', 'pd2guns_1106', 'fits.json')] + FITS_SEEDS + LAYERS[LAYER]['seeds']:
         if os.path.isfile(src):
             d.update(json.load(open(src)))
     miss = [k for k in KEYS if k not in d]
@@ -70,11 +98,11 @@ def stage(out, maps, log=print):
     pins = {}
     t0 = time.time()
     for m in maps:
-        live = os.path.join(M.MAPROOT, m)
-        rep = M.stage_map(m, out, only=KEYS, log=log)
+        live = os.path.join(src_root(), m)
+        rep = M.stage_map(m, out, only=KEYS, log=log, src=live)
         slot, d = rep['slot'], os.path.join(out, m)
         lp = BS.paths(os.path.join(live, slot + '_Main.zip'))
-        # bots sibling: the same bake on the live bots zip (scratch folder = bots zip as the folder's only *_Main.zip + the live inis)
+        # bots sibling: the same bake on the live (or base-stage) bots zip (scratch folder = bots zip as the folder's only *_Main.zip + the live inis)
         bots_new = None
         if os.path.isfile(lp['bots']):
             scr = os.path.join(out, '_botsrc')
@@ -119,7 +147,7 @@ def fix_inis(out, m, rep, log=print):
     re-synced by tools/kl_entries_fix.py, after which `pin` must be re-run so the pins hold the fixed inis); stage_map only rewrites a value that equals the live chunk count, so it wrote nothing. A file with exactly ONE Entries
     line gets the new count whatever it held (the stale case is logged); with several lines only those equal to the live chunk count change."""
     import re
-    live, d = os.path.join(M.MAPROOT, m), os.path.join(out, m)
+    live, d = os.path.join(src_root(), m), os.path.join(out, m)
     for f in sorted(os.listdir(live)):
         if not f.lower().endswith('.ini'):
             continue
@@ -149,14 +177,18 @@ def pin(out, maps, log=print):
         for f in sorted(os.listdir(d)):
             if f == 'report.json':
                 continue
-            lf = os.path.join(M.MAPROOT, m, f)
+            lf = os.path.join(src_root(), m, f)
             if not os.path.isfile(lf):
-                raise SystemExit('%s: no live %s to pin' % (m, f))
+                raise SystemExit('%s: no %s %s to pin' % (m, 'base-stage' if BASE else 'live', f))
             pins[m][f] = dict(old=md5(lf), new=md5(os.path.join(d, f)), size=os.path.getsize(os.path.join(d, f)))
+            if BASE:           # old = what the base layer installs = its pinned 'new' (the base stage file itself must still be that)
+                bp = json.load(open(os.path.join(BASE, 'pins.json')))['maps'][m].get(f)
+                if bp and bp['new'] != pins[m][f]['old']:
+                    raise SystemExit('%s: base stage %s md5 %s != base pins.json new %s' % (m, f, pins[m][f]['old'], bp['new']))
     pp = os.path.join(out, 'pins.json')
     allp = json.load(open(pp))['maps'] if os.path.isfile(pp) else {}
     allp.update(pins)
-    json.dump(dict(maps=allp, tag=TAG, keys=KEYS), open(pp, 'w'), indent=1)
+    json.dump(dict(maps=allp, tag=TAG, keys=KEYS, base=BASE), open(pp, 'w'), indent=1)
     return pins
 
 
@@ -231,7 +263,7 @@ def verify(out, maps, log=print):
         d = os.path.join(out, m)
         rep = json.load(open(os.path.join(d, 'report.json')))
         slot = rep['slot']
-        lp = BS.paths(os.path.join(M.MAPROOT, m, slot + '_Main.zip'))
+        lp = BS.paths(os.path.join(src_root(), m, slot + '_Main.zip'))
         for kind, lz, nz in (('plain', lp['plain'], os.path.join(d, slot + '_Main.zip')), ('bots', lp['bots'], os.path.join(d, slot + '_Main.bots.zip'))):
             if not os.path.isfile(lz):
                 log('%-6s %-5s no such live file' % (m, kind)); continue
@@ -243,14 +275,14 @@ def verify(out, maps, log=print):
             missing = sorted(set(KEYS) - set(row['specs'].split(',')))
             if missing:
                 log('       NOTE: %s has no template for %s (skipped on this map)' % (m, missing))
-    allok &= M.verify(out, log=lambda s: log('  [pd2_guns_multi.verify] ' + s))      # base verifier on the plain zips (also scans every <dir>/report.json)
+    allok &= M.verify(out, log=lambda s: log('  [pd2_guns_multi.verify] ' + s), live_root=BASE)      # base verifier on the plain zips (also scans every <dir>/report.json)
     log('LAYER RESULT: %s' % ('PASS' if allok else 'FAIL'))
     return allok
 
 
 # ------------------------------------------------------------------ installer
-INSTALL_PY = r'''"""PD2 guns 1106b (items 62 C45 pistol, 50 / 51 HRL-7 launchers: the specs C45, HRL50, HRL51) as a layer ON TOP of the live Dead Men maps.
-Per map: <slot>_Main.zip, <slot>_Main.bots.zip, <slot>_Main.bots.base.md5, KLGuns.ini, KLJoin.ini (and DM11B's Int16Ok.txt) are RENAMED to <name>.before-pd2guns1106b
+INSTALL_PY = r'''"""PD2 guns @TITLE@ as a layer ON TOP of the live Dead Men maps.
+Per map: <slot>_Main.zip, <slot>_Main.bots.zip, <slot>_Main.bots.base.md5, KLGuns.ini, KLJoin.ini (and DM11B's Int16Ok.txt) are RENAMED to <name>@TAG@
 (never written through, never deleted) and the staged file copied in. Every live file's md5 is pinned (pins.json, taken when this was staged): a map whose
 live file changed since (any other layer installed or undone) is refused, the others still install. --undo only restores a map whose live files are exactly
 the ones this installer wrote and whose backups are the pinned originals (undo the layers above first: glass, shop pics, shop buttons).
@@ -260,7 +292,7 @@ import hashlib, json, os, subprocess, shutil, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 MAPS = os.path.join(GAME, 'KLExpansion', 'Maps')
-TAG = '.before-pd2guns1106b'
+TAG = '@TAG@'
 pins = json.load(open(os.path.join(HERE, 'pins.json')))['maps']
 
 
@@ -369,20 +401,26 @@ if failed:
 
 
 def write_installer(out):
-    open(os.path.join(out, 'install.py'), 'w', encoding='utf-8', newline='').write(INSTALL_PY.replace('\n', '\r\n'))
+    L = LAYERS[LAYER]
+    py = INSTALL_PY.replace('@TITLE@', L['title']).replace('@TAG@', TAG)
+    open(os.path.join(out, 'install.py'), 'w', encoding='utf-8', newline='').write(py.replace('\n', '\r\n'))
     open(os.path.join(out, 'INSTALL.bat'), 'w', encoding='utf-8', newline='').write(
-        '@echo off\r\nrem PD2 guns 1106b (C45 / HRL-7): install ON TOP of the live maps (game closed). Add --dry to only check, --maps DM01,DM02 for some maps.\r\n'
+        '@echo off\r\nrem PD2 guns ' + LAYER + ' (' + LAYERS[LAYER]['short'] + '): install ON TOP of the live maps (game closed). Add --dry to only check, --maps DM01,DM02 for some maps.\r\n'
         'python "%~dp0install.py" %*\r\npause\r\n')
     open(os.path.join(out, 'UNDO.bat'), 'w', encoding='utf-8', newline='').write(
-        '@echo off\r\nrem PD2 guns 1106b: undo. Layers installed ABOVE this one (glass, shop pics, shop buttons) must be undone BEFORE this.\r\n'
+        '@echo off\r\nrem PD2 guns ' + LAYER + ': undo. Layers installed ABOVE this one (glass, shop pics, shop buttons) must be undone BEFORE this.\r\n'
         'python "%~dp0install.py" --undo %*\r\npause\r\n')
 
 
 def main(a):
+    if '--layer' in a:
+        configure(a[a.index('--layer') + 1]); del a[a.index('--layer'):a.index('--layer') + 2]
     out = default_out()
     if '--out' in a:
         out = a[a.index('--out') + 1]; del a[a.index('--out'):a.index('--out') + 2]
     maps = list(M.MAPS)
+    if LAYER == '1106c':       # DM02 first: the fits of a new key are taken on the first baked map (the notes fit on DM02)
+        maps.sort(key=lambda m: m != 'DM02')
     if '--maps' in a:
         maps = a[a.index('--maps') + 1].split(','); del a[a.index('--maps'):a.index('--maps') + 2]
     cmd = (a[:1] or [''])[0]
