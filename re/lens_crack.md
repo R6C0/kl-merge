@@ -56,3 +56,21 @@ present" in KLHook.log and no "wanted but not among" line; a crack after a burst
 Every number in the trigger rule, the crack placement, the 120 ms spread, the look constants (widths, strengths); that ReShade accepts a
 `source=` annotation on a float4 and a count-4 set on it (the scalar path is proven in the game, the vector path is not); the shader never
 seen rendered (only compiled with fxc, not with ReShade's own compiler); the 25 % jump clear; 1 % of max as the hit threshold.
+
+## 2026-11-06 - Dead Men texture variant (owner: the procedural crack looks "like just a fake effect")
+OFFLINE ONLY, nothing installed, never seen in the game. Kit: `<work>\build\lenscrack_dm_1106\kit\` (shader, atlas, INSTALL/UNDO bats, README,
+`PREVIEW_dm_crack.png` = numpy port of the shader over a real frame, `tools/kl_lenscrack_dm.py atlas|preview`).
+- Texture search (every TEX in all DM and DD level zips, list in `<work>\build\lenscrack_dm_1106\all_names.txt`, 57 564 records). Real cracked glass:
+  `Effects/BulletHoles/FX_Bullet_Hole_Glass_03` and `_04` (256x256 DXT5, white fracture star on black, alpha 255; DM has one image each in M01A_Main,
+  DD has a-d variants in every F0x_Main). Also: `Effects/Glass/Glass_Shatter_02/03` (512x256 DXT3, full-pane shatter with a hole), `Glass_Shatter_01_M01`
+  (512x512 DXT1), `Glass_Smashed_01` (256x128, window-shaped hole mask), `GlassShards_01`/`Glass_Projected_01` (debris/projection, not cracks),
+  `Dirt_Cracks_01_M01` (dirt). Chosen: the Bullet_Hole_Glass pair (DM 03, DM 04 + DD 03_c, 04_c) = a 2x2 atlas `KL_LensCrackDM.png`.
+  The shatter-pane textures are tiling "all-broken" glass; a candidate for a later heavy-damage full-screen stage, not used.
+- `reshade/KL_LensCrackDM.fx` (technique `KL_LensCrackDM`, same uniforms KL_CrackN / KL_Crack0..2, no klreshade.c change): per crack a hash of x,y picks the
+  atlas cell, mirror and rotation; the texture edge = 1.0 reach (grows with the hook's 120 ms spread); 9 mask taps (centre, +-1.5 texel gradient,
+  +-5 texel halo and wide gradient) bend the picture (3 px fine + 4 px wide, GUESS) and give a glass-white crack plus a faint dark halo; crosshair
+  clear 0.10..0.20. fxc ps_3_0: ~916 slots (58 tex, 858 arith), no loops; the procedural one is ~1410.
+- Switch: `[ReShade] TechCrack=KL_LensCrackDM@KL_LensCrackDM.fx` (klreshade.c reads TechCrack as a free string, no code change); procedural stays the
+  default (toggle rule). Uses `source=` texture in `reshade-shaders\Textures`; no fmod (not a ReShade intrinsic).
+- GUESS: all look constants; recentre by centroid of luminance > 0.85; DM 03/04 vs DD 03_c/04_c choice by eye; that ReShade's own compiler takes the
+  texture/sampler declarations (standard syntax, fxc cannot check it); the preview hash matches the HLSL one but the numpy port is not bit-exact.

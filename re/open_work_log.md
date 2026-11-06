@@ -1,3 +1,6 @@
+2026-11-06 ~03:10 - [f0] LENS CRACK, DEAD MEN LOOK staged, NOT installed, never seen in game: reshade/KL_LensCrackDM.fx (~916 slots ps_3_0, no loops) stamps the games' own FX_Bullet_Hole_Glass_03/_04 decals (2x2 atlas KL_LensCrackDM.png, tools/kl_lenscrack_dm.py), same uniforms as KL_LensCrack.
+Switch: [ReShade] TechCrack=KL_LensCrackDM@KL_LensCrackDM.fx (default stays procedural). Kit + offline preview: <work>/build/lenscrack_dm_1106/kit (INSTALL/UNDO bats, .before-1106lcdm). Live solo run queued after c9 dd10s1106. Details: re/lens_crack.md.
+
 2026-11-06 ~02:30 - [doors] Last Call kick doors staged on top of the chain (tools/kl_club_doors_1106.py): C:/kl_build_1024/lastcall_chain_doors_1106/stage, plain 803a29c8 (4 virtual doors: daughter doors A+B, storage + roof Firedoor; heister kick steps; Entries 54378), INSTEAD of the chain stage, NOT installed. Details + risks: re/club_fight_1105.md 'Kick doors, doors variant'.
 
 2026-11-06 ~09:00 - [esc] Last Call escape screen: static research only, re/lastcall_escape_screen_1106.md. Hook does not hide the stock camera/outro; cause unproven (degenerate EscCamera01 in live zip, or round-over never reached). Nothing staged; next: one Log Level=2 live run when owner says test.

@@ -8,6 +8,7 @@ Files in this folder:
 | `KL_Glare.fx` | `reshade-shaders\Shaders\` (new) | Stable anamorphic glare on light sources only. |
 | `KL_CameraFX.fx` | `reshade-shaders\Shaders\` (new) | The raw handheld-camera layer, driven by the hook. |
 | `KL_LensCrack.fx` | `reshade-shaders\Shaders\` (new) | The cracked camera lens (up to 3 impact cracks when shot a lot), driven by the hook (needs `[ReShade] Bridge=1`; see `re\lens_crack.md`). |
+| `KL_LensCrackDM.fx` | `reshade-shaders\Shaders\` + `KL_LensCrackDM.png` in `reshade-shaders\Textures\` (kit `lenscrack_dm_1106`) | The cracked lens with the real Dead Men glass decals; select with `[ReShade] TechCrack=KL_LensCrackDM@KL_LensCrackDM.fx`. |
 | `KL_Camcorder.fx` | `reshade-shaders\Shaders\` (replaces the installed one) | **Bug fix**: the installed file does not compile (see below). |
 | `ReShadePreset_KL.ini` | game folder (back up the old one as `.before-fx`) | SMAA, Uplift, KL_Look, KL_Glare, KL_CameraFX. |
 | `ReShadePreset_LiveLeak.ini` | game folder (back up the old one as `.before-fx`) | SMAA, Uplift, KL_Camcorder, KL_CameraFX (KL_Glare listed but off). |
