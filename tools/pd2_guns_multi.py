@@ -41,9 +41,21 @@ SPECS = [
          key='RPK', name='PD2 RPK', kind='light machine gun'),
     dict(item=44, template='MG_GP_Type88_L10_Heli', unit='payday2/weapons/wpn_npc_scar_murkywater', mesh='g_body_lod0', tex='mk17_df.texture',
          key='MK17', name='PD2 MK17', kind='battle rifle'),
+    # ---- batch 2 (2026-11-06): the same PD2 RPK on the other Type 88 MG items (same hold, same model root 2823 as item 41, so the fit is
+    # near item 41's but fitted per item, see fits.json: shifts 40=(16.0,0.75) 41=42=(15.75,1.0) 43=(15.5,1.0); cost 1.2 - 1.3, muzzle 95.7 - 96.2 vs host 96.1). Own key per item = own texture / material, own Ground node retargeted.
+    dict(item=40, template='MG_GP_Type88', unit='pd2_dlc_mad/weapons/wpn_npc_rpk', mesh='g_body', tex='wpn_npc_rpk_df.texture',
+         key='RPK40', name='PD2 RPK', kind='light machine gun'),
+    dict(item=42, template='MG_GP_Type88_L09_Heli', unit='pd2_dlc_mad/weapons/wpn_npc_rpk', mesh='g_body', tex='wpn_npc_rpk_df.texture',
+         key='RPK42', name='PD2 RPK', kind='light machine gun'),
+    dict(item=43, template='MG_GP_Type88_L09_Heli_Player', unit='pd2_dlc_mad/weapons/wpn_npc_rpk', mesh='g_body', tex='wpn_npc_rpk_df.texture',
+         key='RPK43', name='PD2 RPK', kind='light machine gun'),
 ]
 # Tried and dropped (fit on the MG hold leaves the stock 4 - 5 cm IN FRONT of the right hand): item 42 <- PD2 M4 (cost 3.30, butt +5.0),
 # item 43 <- PD2 AKMSU (cost 3.99, butt +3.8). A short rifle model does not suit the long MG hold; a PD2 LMG (M249: 9 materials) would.
+# Batch 2 survey (2026-11-06, fit_one on DM02 hosts, true size): PD2 M249 (the KSP) on the Type 88 hold cost 3.53 / 3.48 (muzzle 83 vs 96, butt -5.9,
+# as bad as the dropped M4) and on the Minimi holds 3.77 / 3.46 (scaled x1.2 it reaches 1.95 - 2.39 but is then a 130 cm gun: rejected, and it needs
+# a 9-material writer). So items 45 - 48 (Minimi holds, names KSP*) stay on their Dead Men model. PD2 RPK on the Minimi holds: cost 1.99 / 1.89,
+# muzzle 83.2 / 82.7 (host 81.9 / 80.4) but there is no free RPK name left for them, so also not used.
 
 
 def work():
@@ -143,6 +155,7 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
             raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
         body = max(cands, key=lambda o: nvs[o])
         mags = [o for o in objs if p.u32(o, 0x3c) == 3 and p.chunks[o][0x0e] == 15]
+        cached = bool((fits or {}).get(spec['key']))
         shift, frep = (fits or {}).get(spec['key']) or fit_one(spec, _host(p, old, C, MG, V, rng, F.sample))
         plate, df_dds = pd2_plate_of(spec, 1.0, shift)
         share = PM.outward_share(plate)
@@ -193,7 +206,7 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
         box = whole.box()
         reports[key] = dict(item=spec['item'], template=spec['template'], stock_root=old, root=root, body_object=new_body, parts=len(parts),
                             body_vertices=len(plate.pos), body_triangles=len(plate.tris), magazine=bool(magp), outward_share=round(share, 4),
-                            material_slot=slot, textures=[df, nm, sp], shift=list(shift), fit=frep if not fits else None,
+                            material_slot=slot, textures=[df, nm, sp], shift=list(shift), fit=None if cached else frep,
                             box=[[round(x, 2) for x in box[0]], [round(x, 2) for x in box[1]]])
         log('  item %d %s -> %s: root %d -> %d, %d verts / %d tris%s, material %d' % (
             spec['item'], spec['template'], key, old, root, len(plate.pos), len(plate.tris), ' + magazine' if magp else '', slot))
@@ -204,21 +217,25 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
     return reports, len(G.read(prm, 'dd').chunks)
 
 
-def stage_map(name, out, fits=None, log=print):
+def stage_map(name, out, fits=None, log=print, src=None, dirname=None):
+    """src: another folder to start from (default the live map folder), dirname: the staged folder name (default the map name)."""
     import kl_chars as C
     fp = os.path.join(out, 'fits.json')
     if fits is None and os.path.isfile(fp):
         fits = {k: (tuple(v[0]), v[1]) for k, v in json.load(open(fp)).items()}
-    src = os.path.join(MAPROOT, name)
+    src = src or os.path.join(MAPROOT, name)
     lv = C.Lv(src); lv.beside, lv.side = {}, {}
     slot = lv.name
     old_n = len(G.read(lv['.prm'], 'dd').chunks)
     t0 = time.time()
     reps, new_n = build_level(lv, fits=fits, log=log)
-    d = os.path.join(out, name)
-    if not os.path.isfile(fp):
+    d = os.path.join(out, dirname or name)
+    new_fits = {k: [g['shift'], g['fit']] for k, g in reps.items() if g['fit']}
+    if new_fits:          # first map of a stage, or keys a fits.json made earlier does not hold yet (batch 2): the later maps reuse them
         os.makedirs(out, exist_ok=True)
-        json.dump({k: [g['shift'], g['fit']] for k, g in reps.items()}, open(fp, 'w'), indent=1)
+        old = json.load(open(fp)) if os.path.isfile(fp) else {}
+        old.update({k: v for k, v in new_fits.items() if k not in old})
+        json.dump(old, open(fp, 'w'), indent=1)
     lv.write(d, slot)
     ini = {}
     for f in sorted(os.listdir(src)):
@@ -306,6 +323,9 @@ def verify(out, log=print):
             continue
         rep = json.load(open(os.path.join(d, 'report.json')))
         live = os.path.join(MAPROOT, name)
+        if name.endswith('_chain') and not os.path.isdir(live):      # variant on the Last Call chain stage (pd2_guns_stage.CHAIN)
+            live = r'C:\kl_build_1024\lastcall_chain_1105\stage'
+            lv_slot = rep['slot']
         zp = os.path.join(d, rep['slot'] + '_Main.zip')
         a, b = zipfile.ZipFile(os.path.join(live, rep['slot'] + '_Main.zip')), zipfile.ZipFile(zp)
         same_list = a.namelist() == b.namelist()

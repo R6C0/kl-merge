@@ -141,7 +141,7 @@ def heister_card(n, portraits):
 
 def pair_source(tex, pair, pd2_dir=None):
     """-> (shade or None, alpha float (H, W), how) of one Page II pair (slot, item, picRow, name), or None.
-    Order: PD2 render (pd2guns_1105/pics/item_NN.png, its alpha = the shape) > model silhouette of the item > HUD picture of the item
+    Order: PD2 render (pd2guns_1106/pics, else pd2guns_1105/pics: item_NN.png, its alpha = the shape) > model silhouette of the item > HUD picture of the item
     (HUD_OF_ITEM, GUESS names) > the silhouette of the picRow's own gun (a look-alike, the same picture Page II showed before)."""
     np = _np()
     import kl_shop_cards as C
@@ -533,7 +533,8 @@ def cards_for(zpath, outdir, log=print, dd=None):
     import kl_texmat as T
     w = work()
     portraits = os.path.join(w, 'build', 'portraits')
-    pd2 = os.path.join(w, 'build', 'pd2guns_1105', 'pics')
+    pd2 = next((q for q in (os.path.join(w, 'build', 'pd2guns_1106', 'pics'), os.path.join(w, 'build', 'pd2guns_1105', 'pics')) if os.path.isdir(q)),
+               os.path.join(w, 'build', 'pd2guns_1105', 'pics'))      # batch 2 (1106) first, the batch 1 stage as the fallback
     z = zipfile.ZipFile(zpath)
     names, stem = _members(z)
     tex = T.read_tex(z.read(names[(stem + '.TEX').lower()]))

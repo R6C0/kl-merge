@@ -35,6 +35,9 @@ for it, (n, s, f) in k.PD2.items():
     check(s.split()[0] in ('VERIFIED', 'GUESS'), 'status for %d' % it)
 check(len({n for n, s, f in k.PD2.values()}) == len(k.PD2), 'names distinct')
 check(k.PD2[33][0] == 'AK.762', 'Type 81 is the AK.762')
+# batch 2 (2026-11-06): the PD2 RPK model sits on the Type 88 MG items 40-43; each keeps its own distinct RPK name
+check([k.PD2[i][0] for i in (40, 41, 42, 43)] == ['RPK', 'RPK L09', 'RPK HELI', 'RPK HELI P'], 'RPK names of items 40-43')
+check(all('PD2' in k.PD2[i][1] and 'model' in k.PD2[i][1] for i in (38, 40, 41, 42, 43, 44)), 'status of every PD2-model item says so')
 with tempfile.TemporaryDirectory() as d:
     live = os.path.join(d, 'live.ini')
     open(live, 'w', newline='').write(SAMPLE)

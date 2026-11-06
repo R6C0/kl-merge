@@ -1,3 +1,6 @@
+2026-11-06 ~02:40 - [shop] Bench pf1106 PASS (2 seats, DD05 F05 + DM01 F01, TEST b6a69772 = cda03a57): [Perf] OsdBackoff/OnlineCache/FastRead=1 plus [Hire] BakedPics/[ShopPage] OwnPics=1 on UNBAKED maps: both seats entered round 2 after the shop, 0 faults, 0 asserts.
+FastRead serves 200-1400 of ~2500-6000 reads a frame; the hook tick is 0.3-0.7 ms in round (1.2-2.3 ms at the round-2 load). No ownpic/bakedpic lines: the fallback on unbaked maps is silent, so pictures still need a DM01 run after INSTALL ALL 1105. Live dll 288fb016 / ini abb2144f restored.
+
 2026-11-06 ~03:10 - [f0] LENS CRACK, DEAD MEN LOOK staged, NOT installed, never seen in game: reshade/KL_LensCrackDM.fx (~916 slots ps_3_0, no loops) stamps the games' own FX_Bullet_Hole_Glass_03/_04 decals (2x2 atlas KL_LensCrackDM.png, tools/kl_lenscrack_dm.py), same uniforms as KL_LensCrack.
 Switch: [ReShade] TechCrack=KL_LensCrackDM@KL_LensCrackDM.fx (default stays procedural). Kit + offline preview: <work>/build/lenscrack_dm_1106/kit (INSTALL/UNDO bats, .before-1106lcdm). Live solo run queued after c9 dd10s1106. Details: re/lens_crack.md.
 
