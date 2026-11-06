@@ -67,10 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
-2026-11-06 ~15:45 - [c9] LAST CALL CHAIN 2c LIVE on DM05A (zip e10ea488, bots bffb9736): doors B01+A02 only (4 doors held the bots; with 2 they call the heli
-at ~293 s), 2nd-floor spawn, EscCamera01 fixed eye CamPos01 + 5-pt NE climb spline. Grey outro = eye/heli outside every Roof .rmi box (Backdrop-only start room).
-Bench lcchain2c1106d PASS, undo byte-exact, player rides out, outro draws the city (heli not in view after lift-off). Undo: C:\kl_build_1024\lcchain_2c_safedoors_live_1a97e186\install.py --undo.
-Handed to 6b: re-stage pd2guns c+d+e on DM05A on top of e10ea488 and add the undo step to UNDO ALL 1105.bat.
+2026-11-06 ~18:45 - [c9] LAST CALL CHAIN 2f LIVE on DM05A (zip 1d325299, bots db375c5a, base 4dce350a), on top of 6b's pd2guns c-f on 2c: the heli is drawn after lift-off.
+A moving entity is drawn only while an .rmi box of a visible room holds it, and every Roof box stopped at y 2640. Fix: Roof box 7 enlarged to y 6600 (tools/kl_club_rmi_1106.py) + the 2e cam/route.
+Bench lcchain2f1106d PASS, undo byte-exact. Undo: UNDO ALL 1105.bat step 0u (first). Any DM05A re-stage: --base live 1d325299.
 
 2026-11-06 ~14:30 - [db] PERF: [Perf] OsdScanSlice, ScanMinFrames, ShopPoolBlock, BotScanSlice, CensusSlice, FillCensusSlice (85fdae39) all "(recommended on)", NOT installed (live 727a73bb).
 Bench OSS_DD09_FCS_S3 (TEST a77e0546): SMOOTH on every seat, 0 hitches/stalls, host 29.9 fps, max frame 128 ms (CEN_S3 486), p95 87. Host klbf 13 ms windows 24/30 -> 0/18.

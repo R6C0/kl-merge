@@ -1,3 +1,13 @@
+## 2026-11-06 ~18:45 [c9] Last Call chain 2f LIVE on DM05A: the heli is now drawn after lift-off (no crash involved)
+- Why it vanished: in kl2.exe a moving entity (flag 0x4000) gets its rooms from the .rmi box query (point callback 0x927b30, box 0x927c70, up to 6 rooms);
+  render collects only the items of rooms stamped visible (0x47a5b0 -> 0x495ef0/0x83dca0). Every Roof box tops out at y <= 2640, so the climbing heli left
+  Roof. Open question: Backdrop box 59 covers the whole map, so why was the heli not drawn through it? (GUESS: Backdrop items are not collected.)
+- Fix: tools/kl_club_rmi_1106.py enlarges Roof box 7 (slot 4085) to x 6676..9266, y 1460..6600, z 2594..4426. Only that .rmi record and its tree item change;
+  the box count stays 60 and no other room overlaps. 2f = the 2e cam/route (eye 7400,2500,2800, LookFromPosFA aimed at the heli group, ROUTE_2E) + this box.
+- Bench lcchain2f1106d PASS 4/4, undo byte-exact; shots 14-16 show the heli in the sky. Installed on live 14c8d9dd (6b's pd2guns c-f on 2c).
+  DM05A now: zip 1d325299, bots db375c5a, base 4dce350a, KLJoin 3e29f738, KLGuns 5e2c7a36 unchanged.
+- Undo: UNDO ALL 1105.bat step 0u (above 0t) = C:\kl_build_1024\lcchain_2f_14c8d9dd\install.py --undo (tag .before-chain2f1106). Any DM05A re-stage goes on --base live 1d325299.
+
 ## 2026-11-06 ~18:10 [db] DD09 host 1.8 fps = intermittent Havok MOPP slowdown, NOT pd2guns 1106t (no crash involved)
 - OSS_DD09_FCS_S3_PD2T (3 seats, TEST a77e0546, right after 6b's 1106t install): the HOST ran at 1.8 fps for the whole round (~550 ms frames, limiter waiting 0 %,
   hook 8-17 ms of each), 30 fps again after round end; clients 23 fps. Hitch probe (VA = 0x400000 + offset): Havok MOPP walker 0xa4dec0, sphere-triangle 0x9e5590
