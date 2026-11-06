@@ -1,3 +1,9 @@
+## 2026-11-06 ~12:30 [6b] REGRESSION: KLGuns/KLJoin Entries= stale after the shop pics bake (no crash)
+kl_shop_pics adds 72 .prm chunks per map (36 cards x sprite + picture) and never rewrote Entries=, so the hook ignored KLGuns.ini / KLJoin.ini on 21 maps (31 files):
+PD2/DM gun looks and fed bodies off. Chunks are appended, so Root indexes stay valid. Fix 361a1d3e: tools/kl_entries_fix.py --delta 72 (dry: 31 files, 0 refused, DM05A
+54354 -> 54426), backup .before-entries1106, --undo; kl_shop_pics install/undo now syncs Entries (sync_entries). UNDO ALL 1105.bat = 6 steps (entries before pics).
+--go waits for f0 "game free"; then md5s of DM05A inis to c9. pd2guns_1106b staging (wfo22un8k) must be rebased on the fixed inis.
+
 ## 2026-11-06 ~12:30 [f0] grudge bench: does a scripted press fire? (staged, not run)
 Workflow wf_db58f10f: nothing in the repo proves a scripted mouse button 0 fires a human's gun (re/playtest.md:104, :319). The bench also never read a shot.
 The ~8 s with no turning after 0x19 is real (firebot 1 stayed at -35 deg). TEST out_ogb1106g_test 6def0e58: the firebot samples, every poll, the clip of the gun in hand
