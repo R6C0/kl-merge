@@ -1,3 +1,11 @@
+## 2026-11-06 ~16:55 [6b] PD2 guns 1106f LIVE on 6 DM maps: MG42 (item 42), PAR (item 40) + their shop pictures (no crash involved)
+- No free item id is left (33/35/38/40-54/62/63 PD2, 55-59 grenades), so 1106f re-looks two of the eight RPK duplicates on the MG hold (Type88). Minigun rejected (fit cost 16.8, hangs 52 cm under the hand).
+  Shotgun/SMG/pistol PD2 guns would have to change page I stock looks (and the AI's guns): needs the owner's OK, not done.
+- Shop cards: the stage rewrites the KLPic textures 3124/3127 (Pair08/Pair11, same size and id, Entries= unchanged), so one install/undo carries gun + picture.
+- Bench pd2b_1106 DM02 PASS (2 seats round 2, 0 faults): page II rows 18/22 = items 42/40 on host + client. Then DM01 DM03 DM06 DM07 DM09; Entries= 50918/59326/63226/48134/50464/65833 (KLGuns = KLJoin).
+- Backups D:\kl_stage\pd2guns_1106f_backup hard-linked to the byte-identical 1106e stage files (frees ~2.3 GB). UNDO ALL: new step 0f (before 1106e) and 0c = c9's DM05A chain 2c undo (between 1106c and 1106b).
+- Left: DM01B/DM03A/DM06B/DM11B not yet staged for 1106f; DM05A c+d+e+f re-stage on c9's e10ea488 running offline.
+
 ## 2026-11-06 ~16:50 [c9] Last Call chain 2c LIVE on DM05A; grey outro cured (no crash involved)
 - Diagnosis (workflow lc-grey-outro): the grey frames had their eye outside every Roof .rmi box (box 7 = x 6676..8080, y 1460..2610, z 2594..4426), so the frame
   started from the Backdrop room alone (0 gates, skydome only). The old Escaping spline points 1-4 and the heli park (5965,2510,3929) lie inside BuildingF.
