@@ -48,8 +48,12 @@ KITS = {
     'lcglass1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lastcall_glass_1106/stage', tag='.before-1106glass',
                         files={'F01_Main.zip': '3f0018b38593d708ac830e53150fb814', 'F01_Main.bots.zip': 'cb962a65', 'F01_Main.bots.base.md5': '00cfe35a'},
                         solo_secs=1500, parts=('online', 'solo')),
+    # the LIVE DM05A as it is (chain + glass + pd2guns + buttons + pics, 11-06): stage None = nothing installed, the live zip is pinned and
+    # the map folder must be byte-identical after the run (escape boarding with E, re/lastcall_escape_screen_1106.md)
+    'lclive1106': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': 'e6d2f73e'},
+                       solo_secs=1500, parts=('solo',)),
 }
-LC = ('lc1106', 'lcglass1106')
+LC = ('lc1106', 'lcglass1106', 'lclive1106')
 
 
 def md5(p):
@@ -250,6 +254,13 @@ def validate(which):
                 v.ok(sum(1 for l in re.findall(r'^\[Script\]', open(p, encoding='latin-1').read(), re.M)) == 1, '%s: exactly one [Script] section' % f)
                 v.ok(any(l.startswith('pass') for l in scr), '%s: ends with pass' % f)
         st = c['stage']
+        if st is None:
+            for n, want in c['live'].items():
+                p = '%s/%s' % (mapdir(k), n)
+                v.ok(os.path.isfile(p) and md5(p).startswith(want), 'live %s md5 %s = pin %s (nothing is installed)' % (n, md5(p)[:8] if os.path.isfile(p) else '-', want))
+            for part in c['parts']:
+                print('  command: python tools/kl_bench_1106.py run %s %s' % (k, part))
+            continue
         inst = '%s/install.py' % st
         v.ok(os.path.isfile(inst), 'stage install.py (md5 %s)' % (md5(inst)[:8] if os.path.isfile(inst) else '-'))
         for n, want in c['files'].items():
@@ -423,7 +434,7 @@ def run(k, part):
             print('RESULT: not started - %s has parts %s' % (k, c['parts'])); return 1
     d, md, before = '%s/%s' % (KIT, k), mapdir(k), None
     before = snap(md)
-    inst = [sys.executable, '%s/install.py' % c['stage']] + (['--game', DD] if k == 'dd10s1106' else [])
+    inst = [sys.executable, '%s/install.py' % c['stage']] + (['--game', DD] if k == 'dd10s1106' else []) if c['stage'] else None
     z = kl2_procs()
     if any(kb >= 1024 for _, kb in z):
         print('RESULT: not started - a live kl2.exe is running: %s' % z); return 1
@@ -431,12 +442,15 @@ def run(k, part):
         # unkillable kl2.exe left at ~44 K (Access denied to Stop-Process) hold no game: install.py's own tasklist check
         # would refuse forever, so skip it only when every kl2.exe is such a zombie
         print('  ignoring zombie kl2.exe (working set < 1 MB): %s' % z, flush=True)
-        if k in LC:
+        if k in LC and inst:
             inst.append('--skip-run-check')
-    print('INSTALLING the stage into the LIVE game folder (undone at the end): %s' % md, flush=True)
     rc_total = 0
-    if sh(inst):
-        print('RESULT: not started - install.py refused (nothing changed)'); return 1
+    if inst:
+        print('INSTALLING the stage into the LIVE game folder (undone at the end): %s' % md, flush=True)
+        if sh(inst):
+            print('RESULT: not started - install.py refused (nothing changed)'); return 1
+    else:
+        print('nothing installed: the bench runs on the live %s as it is' % md, flush=True)
     try:
         for p in parts:
             tag = '%s_%s' % (k, p)
@@ -458,11 +472,16 @@ def run(k, part):
             print('  bench exit %d' % rc, flush=True)
             rc_total |= verify(k, p)
     finally:
-        print('UNDOING the stage (install.py --undo)', flush=True)
-        r = sh(inst + ['--undo'])
+        if inst:
+            print('UNDOING the stage (install.py --undo)', flush=True)
+            r = sh(inst + ['--undo'])
+        else:
+            r = 0
         after = snap(md)
-        same = {n: m for n, m in after.items() if not n.endswith(c['tag'])} == {n: m for n, m in before.items()}
-        if r or not same:
+        same = {n: m for n, m in after.items() if not (c['tag'] and n.endswith(c['tag']))} == {n: m for n, m in before.items()}
+        if not inst and not same:
+            print('MAP FOLDER CHANGED during the run (nothing was installed): compare with the md5s above'); rc_total = 1
+        elif r or not same:
             print('UNDO FAILED - run by hand: python "%s/install.py" --undo%s ; then compare with the md5s above' % (c['stage'], (' --game "%s"' % DD) if k == 'dd10s1106' else ''))
             rc_total = 1
         else:

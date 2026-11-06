@@ -1,3 +1,8 @@
+2026-11-06 ~11:30 - [c9] GLASS ON THE 10 OTHER DM MAPS LIVE (C:/kl_build_1024/glass_all_1106/install.py, tag .before-glass1106, --undo per map).
+HavokShatterGlassConnectivity in plain + bots zip; only the .sgd changed. Plain/bots: DM01 96a62cad/29c384ec, DM01B ef3a0356/9bf4c5b9, DM02 43fb7144/b84968d8,
+DM03 561d22e2/0e3e7368, DM03A 9e58adb3/26a8c2ee, DM06 92566b96/0ed54689, DM06B c02d9208/c212280d, DM07 8a499536/02133bcb, DM09 6dac2a09/53d0242a, DM11B 7ffebce8/f6b625c8.
+Stale backups (2 GB) moved to D:/kl_old_backups/dd_1106d. LC escape: the bench never held E (not a height miss); kit lclive1106 runs the live DM05A with E holds.
+
 2026-11-06 ~11:00 - [db] BENCH OSS_DD09 (9 seats, TEST 655ec675 = f62cfbe4 OsdScanSlice=1, DD09 now with 6b's pics layer): 9/9 reached the round (ref N9S_DD09 8/9, inst9 killed by a 50 657 ms one-call scan). The sliced scan ran on inst1-7: 328-1297 ms over 4-8 slices, no kill. Live dll/ini restored (727a73bb / e91096c7).
 Rater: inst1-7 HITCHY (fps 26-28 vs 25 in the ref, hitches/min 19-28 vs 29-33), inst8+inst9 FAIL: 0.2-2 fps the whole round, 9-18 s stops. Those two (launched last, +405/+465 s) needed no scan (OSD direct); their stall stacks go through klh_rd from klsy_walk / klor_bots / kla_find_players (map relink of 655ec675), and on starved frames the hook does 32-96k reads a frame (vs 5-14k on healthy seats) = per-tick work catching up; the hook share was 0.5-43 % of those frames, so the starvation is mostly game/OS side (GUESS: the i7-14700KF hybrid cores / unfocused-window scheduling, no affinity or priority is set by kl_solo_test).
 Next: run.py --fr (FastRead=1 + TickProfile=1) to name the parts that blow up on starved seats; then a harness experiment (priority / power throttling off for the bench processes).

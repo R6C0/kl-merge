@@ -536,8 +536,12 @@ def main(argv):
     global SHIFT_MAG
     SHIFT_MAG = max(abs(v) for v in t)
     src = a[0] if a else os.path.join(DD11B, 'F04_Main.zip')
+    # 11-06: glass_all_1106 moved the stale .before-dm11s backup (md5-verified) to D:\kl_old_backups\dd_1106d\DM11B; the real DM11B is read there then
+    old = os.path.join(r'D:\kl_old_backups\dd_1106d\DM11B', 'F04_Main.zip.before-dm11s')
     if not a and os.path.exists(os.path.join(DD11B, 'Int16Ok.txt')) and os.path.exists(src + '.before-dm11s'):
         src += '.before-dm11s'      # SHIP_DM11S.bat (10-28) installed DM11S there; the real DM11B is kept beside it
+    elif not a and os.path.exists(os.path.join(DD11B, 'Int16Ok.txt')) and os.path.exists(old):
+        src = old
     if not a:
         # 11-02: src is the live DM11B build (benches / stagers rewrite it) and dst was a fixed path under shift_1028, shared by every run of this test
         # (two kl_tests.py runs at once overwrote each other's dst: EOFError in patch_zip). Both now live in this run's own temp dir.
