@@ -8,6 +8,7 @@ Extends pd2_gun.py (the AKM on Rifle_Type81 / item 33) to other host templates o
     python tools/pd2_guns_multi.py all                 every map in MAPS
     python tools/pd2_guns_multi.py verify <out>        re-read every staged map
     python tools/pd2_guns_multi.py pics                silhouettes -> <out>/pics/item_NN.png
+    build / all / pics accept  --only KEY,KEY  (bake or draw just those SPECS keys; tools/pd2_guns_layer.py uses it for the 1106b layer)
 
 WHAT IS DIFFERENT FROM pd2_gun.build_model
   * only the template's OWN Ground node is retargeted (kl_guns.gun_node: exactly one per template). The AKM code moved every
@@ -250,8 +251,9 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
     return reports, len(G.read(prm, 'dd').chunks)
 
 
-def stage_map(name, out, fits=None, log=print, src=None, dirname=None):
-    """src: another folder to start from (default the live map folder), dirname: the staged folder name (default the map name)."""
+def stage_map(name, out, fits=None, log=print, src=None, dirname=None, only=None):
+    """src: another folder to start from (default the live map folder), dirname: the staged folder name (default the map name),
+    only: bake just these SPECS keys (a later layer on a live zip that already holds the earlier specs)."""
     import kl_chars as C
     fp = os.path.join(out, 'fits.json')
     if fits is None and os.path.isfile(fp):
@@ -261,7 +263,7 @@ def stage_map(name, out, fits=None, log=print, src=None, dirname=None):
     slot = lv.name
     old_n = len(G.read(lv['.prm'], 'dd').chunks)
     t0 = time.time()
-    reps, new_n = build_level(lv, fits=fits, log=log)
+    reps, new_n = build_level(lv, specs=[s for s in SPECS if only is None or s['key'] in only], fits=fits, log=log)
     d = os.path.join(out, dirname or name)
     new_fits = {k: [g['shift'], g['fit']] for k, g in reps.items() if g['fit']}
     if new_fits:          # first map of a stage, or keys a fits.json made earlier does not hold yet (batch 2): the later maps reuse them
@@ -308,10 +310,12 @@ def silhouette(spec, size=128, ss=4, px_per_cm=1.09):
     return out
 
 
-def write_pics(out, log=print):
+def write_pics(out, log=print, only=None):
     from PIL import Image
     d = os.path.join(out, 'pics'); os.makedirs(d, exist_ok=True)
     for spec in SPECS:
+        if only is not None and spec['key'] not in only:
+            continue
         a = silhouette(spec)
         Image.fromarray(a, 'RGBA').save(os.path.join(d, 'item_%d.png' % spec['item']))
         ys, xs = (a[:, :, 3] > 0).nonzero()
@@ -413,6 +417,9 @@ def main(a):
     out = os.path.join(work(), 'build', 'pd2guns_1105')
     if '--out' in a:
         out = a[a.index('--out') + 1]; del a[a.index('--out'):a.index('--out') + 2]
+    only = None
+    if '--only' in a:          # SPECS keys, e.g. --only C45,HRL50,HRL51 (build / all / pics)
+        only = a[a.index('--only') + 1].split(','); del a[a.index('--only'):a.index('--only') + 2]
     if a[:1] == ['fit']:
         import numpy as np
         import kl_chars as C, kl_guns, kl_map_guns as MG, pd2_gun_preview as V, pd2_gun_fit as F
@@ -423,16 +430,16 @@ def main(a):
             fit_one(s, _host(p, root, C, MG, V, rng, F.sample))
     elif a[:1] == ['build']:
         for m in a[1:]:
-            stage_map(m, out)
+            stage_map(m, out, only=only)
     elif a[:1] == ['all']:
         for m in MAPS:
-            stage_map(m, out)
+            stage_map(m, out, only=only)
     elif a[:1] == ['verify']:
         sys.exit(0 if verify(a[1] if len(a) > 1 else out) else 1)
     elif a[:1] == ['preview']:
         previews(out, a[1])
     elif a[:1] == ['pics']:
-        write_pics(out)
+        write_pics(out, only=only)
     else:
         print(__doc__)
 
