@@ -1,3 +1,7 @@
+## 2026-11-06 ~18:40 [f0] ONLINE GRUDGE INSTALLED: [Bots] OnlineGrudge=1 (owner "install all", via c9; no crash involved)
+Live dll unchanged: db's SHIP e88a6093 (out_fcs1106, 85fdae39) already holds the OnlineGrudge code (= HEAD klhook source; own SHIP b3eb0dfe not needed).
+KLHook.ini c2910f30 -> f59ba664: one line under [Bots], "(recommended on)", db's 6 [Perf] keys kept. Backup + undo: C:\kl_build_1024\og_1106_install ("UNDO og 1106.bat" -> ini c2910f30 / dll e88a6093). Not yet seen in a played round with it on through the live ini; host only.
+
 ## 2026-11-06 ~18:35 [db] PERF INSTALLED (owner via c9: "install all the latest stuff on every one", installs only) (no crash involved)
 - Live dinput8.dll SHIP e88a6093 (klhook/out_fcs1106, commit 85fdae39, contains the pics hook cda03a57). KLHook.ini c2910f30 = e91096c7 + [Perf] OsdScanSlice,
   ScanMinFrames, ShopPoolBlock, BotScanSlice, CensusSlice, FillCensusSlice = 1 (recommended on). Bench-only TickProfile/NanDump left out.
@@ -161,7 +165,7 @@ OSS_DD09_BSS_S3 (TEST 1913d42d, kit base spb + BotScanSlice=1): 3/3 IN ROUND, al
 lcspawn2f1106 (DM05A solo, lcspawn2f_1106 88e23dd5 via install/undo): PASS 4/4, 0 faults, undo md5s OK.
 `pos spawn: me #14 (-4800, 462, 1000)` = 2nd floor (y ~460) west end; shot 02 shows the heisters standing indoors at the round-1 card. Not installed (pinned e6d2f73e; install with the other DM05A stages after 6b's pd2guns layer).
 
-## 2026-11-06 ~13:25 [f0] ONLINE GRUDGE PASS B LIVE: a human who kills an AI heister is made traitor (no crash involved)
+## 2026-11-06 ~13:25 [f0] ONLINE GRUDGE PASS B (bench, TEST dll): a human who kills an AI heister is made traitor (no crash involved)
 grudge_1106 pass B (OnlineGrudgeDry=0, TEST 0bf88e4c, 2 seats DD09, 12:56): 16 human hits, 3 lethal blows, 1 "died ... killer found" (heister 1) ->
 "made traitor (slot 129 killer 0 victim -1, then slot 105), flags 00000000 -> 00000001", "traitors now: bots 0 human 1". 0 faults, 0 crashes.
 Summarizer a1 regex fixed ('on( \(dry log\))?:'); pass A + B both ALL GATES. Open: lethal blows with no "died" (down/revive?), client-seat victims,
