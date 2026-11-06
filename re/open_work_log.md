@@ -1,3 +1,8 @@
+## 2026-11-06 ~18:45 [db] 3 more DD09 catch runs, then STOP (owner via c9: "do this last test then stop all") (no crash involved)
+- OSS_DD09_FCS_S3_PD2T3/4/5 (1106t live, NanDump=1): T3 and T5 SMOOTH (host 29.9 fps). T4: one 5.6 s host freeze at 18:00:57, the main thread waiting in ntdll
+  through DINPUT8 ("Not Responding", another seat's window in front), not Havok and not the hook. The 1.8 fps round did NOT recur in 5 runs; no NanDump line.
+- Kit blocked: C:/kl_build_1024/oss_1106/STOP (run.py refuses to start; delete it to bench again). Live dll/ini restored byte-exact after every run.
+
 ## 2026-11-06 ~19:20 [c9] Escape-vehicle vs .rmi box audit, all DM maps (read-only, no crash involved)
 - Method: test every escape path point and fixed eye against the non-Backdrop .rmi boxes (kl_map_escape, kl_fa_bots.van_drives, kl_octree.RoomIndex).
 - Van maps (DM01/01B/02/03/03A/06B/07) are all covered, and every fixed eye is covered.
