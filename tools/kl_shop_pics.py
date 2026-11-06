@@ -383,6 +383,63 @@ def bake_zip(src, dst, cards, log=print):
     return res
 
 
+def card_tids(z):
+    """-> {card entity name: texture id} of a baked level zip (entity -> picture chunk -> sprite chunk -> texture id, the walk check() does)."""
+    import kl_scene, kl_prp, kl_texmat as T, kl_prmgraph as G
+    names, stem = _members(z)
+    rd = lambda ext: z.read(names[(stem + ext).lower()])
+    sc = kl_scene.read(z, stem); prp = kl_prp.Prp(rd('.prp'))
+    ents = list(sc.entities()); nodes = prp.nodes()
+    if len(nodes) != len(ents) + 1:
+        raise ValueError('.prp nodes and .gms entities do not line up')
+    prm = G.read(rd('.prm'), 'dd')
+    out = {}
+    for i, e in enumerate(ents):
+        if e.tid != ZWINPIC or not e.parent or not e.parent.name.startswith(b'KLPic_'):
+            continue
+        c = [struct.unpack('<I', pl)[0] for op, pl in nodes[i + 1]['props'] if op in (4, 9)][-1]
+        d = prm.chunks[c]; n = struct.unpack_from('<I', d, 0)[0]
+        s = struct.unpack_from('<I', d, 8 + 40 * n)[0]
+        out[e.parent.name.decode('latin1')] = prm.u32(s, 4)
+    return out
+
+
+def replace_cards(src, dst, cards, log=print):
+    """Re-picture cards of an ALREADY baked zip: {entity name: RGBA 512x256} -> only the .TEX member changes (each card's own texture record gets the new
+    DXT1 mip 0; same record length, same ids, so no .prm / .prp / .gms / online.xml change and the chunk count (Entries=) stays). Returns {name: tid}."""
+    import kl_texmat as T
+    if os.path.abspath(src) == os.path.abspath(dst):
+        raise SystemExit('refusing to write over the input')
+    z = zipfile.ZipFile(src)
+    names, stem = _members(z)
+    key = names[(stem + '.TEX').lower()]
+    tex = T.read_tex(z.read(key))
+    tids = card_tids(z)
+    miss = [n for n in cards if n not in tids]
+    if miss:
+        raise ValueError('%s has no card %s' % (src, miss))
+    for n, rgba in cards.items():
+        t = tids[n]
+        if t < TEX_BASE:
+            raise ValueError('%s: texture %d is a stock one, not a card of its own' % (n, t))
+        tex.tex[t] = T.Texture(card_record(tex.tex[t].entry, t, dxt1(rgba, 512, 256)))
+    _write_zip(src, dst, {key: T.write_tex(tex)})
+    log('  %s: %d card texture(s) replaced (%s)' % (os.path.basename(dst), len(cards), ', '.join('%s=%d' % (n, tids[n]) for n in sorted(cards))))
+    return {n: tids[n] for n in cards}
+
+
+def cards_of_items(items, pd2_dir, tex, ini, log=print):
+    """-> {pair entity name: RGBA card} of the Page II pairs whose item is in items (KLShopPage.ini [Pairs], else the defaults), pictures from pd2_dir/item_NN.png."""
+    out = {}
+    for slot, item, row, name in read_pairs(ini):
+        if item in items and 0 <= slot < N_PAIR:
+            c, how = pair_card(tex, (slot, item, row, name), pd2_dir)
+            if c is None:
+                raise ValueError('no picture for pair %d item %d' % (slot, item))
+            log('  card %s (item %d %s): %s' % (pair_name(slot), item, name, how)); out[pair_name(slot)] = c
+    return out
+
+
 def _write_zip(src, dst, new):
     import kl_shop_swap as W
     try:

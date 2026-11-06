@@ -159,6 +159,20 @@ check(L.DETAIL['MG42'] == 15 and L.DETAIL['PAR40'] == 15, '1106f body detail 15'
 check(set(L.KEYS).isdisjoint(L.LAYERS['1106e']['keys'] + L.LAYERS['1106d']['keys'] + L.LAYERS['1106c']['keys'] + L.LAYERS['1106b']['keys']), '1106f adds keys, repeats none')
 py_f = L.INSTALL_PY_OFFDRIVE.replace('@TITLE@', L.LAYERS['1106f']['title']).replace('@TAG@', L.TAG).replace('@BACKUP@', L.LAYERS['1106f']['backup'])
 check("TAG = '.before-pd2guns1106f'" in py_f and '@' not in py_f.replace('@echo', ''), '1106f installer text')
+check(L.LAYERS['1106f']['pic_items'] == [40, 42] and not any(L.LAYERS[k].get('pic_items') for k in ('1106b', '1106c', '1106d', '1106e', '1106s')), '1106f re-pictures cards of items 40 / 42, no other layer does')
+# the card step: pairs of the picture items only, cards from <out>/pics/item_NN.png (synthetic pictures, default pair table), the texture replaced in place
+import tempfile, kl_shop_pics as P
+try:
+    from PIL import Image
+    td = tempfile.mkdtemp(prefix='pd2layer_pics_')
+    for it in (40, 42):
+        Image.new('RGBA', (445, 210), (200, 200, 200, 255)).save(os.path.join(td, 'item_%d.png' % it))
+    cs = P.cards_of_items([40, 42], td, None, None, lambda x: None)
+    check(sorted(cs) == ['KLPic_Pair08', 'KLPic_Pair11'] and all(len(v) == 512 * 256 * 4 for v in cs.values()), 'cards_of_items: item 42 -> Pair08, item 40 -> Pair11, 512x256 RGBA')
+    check(P.cards_of_items([99], td, None, None, lambda x: None) == {}, 'cards_of_items: no pair for an unknown item')
+    shutil.rmtree(td, ignore_errors=True)
+except ImportError:
+    pass
 L.configure('1106b')
 
 print('pd2_guns_layer_test: %d checks, %d FAIL' % (checks, fails))

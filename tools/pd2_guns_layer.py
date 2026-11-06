@@ -53,6 +53,7 @@ LAYERS = {
     '1106f': dict(keys=['MG42', 'PAR40'], tag='.before-pd2guns1106f', base=r'D:\kl_stage\pd2guns_1106e',
                   out=r'D:\kl_stage\pd2guns_1106f', backup=r'D:\kl_stage\pd2guns_1106f_backup',
                   maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B'],      # NOT DM05A (c9's restage is pending)
+                  pic_items=[40, 42],      # shop items whose Page II card (KLPic_PairNN, tools/kl_shop_pics.py) is re-pictured from <out>/pics/item_NN.png in the SAME zips
                   title='1106f (item 42 PD2 MG42, item 40 PD2 PAR: the specs MG42, PAR40 re-look two RPK duplicates), staged on top of layer 1106e',
                   short='MG42 / PAR on items 42 / 40', seeds=[r'D:\kl_stage\pd2b9_scratch\fits.json']),
     # 1106s: ALL 19 spec keys on Dog Days' 9 stock FA maps (KLExpansion\Maps\DD01..DD09; NOT DD10 = slot F07 again, NOT Scenes\Locations), baked on the LIVE zips
@@ -154,6 +155,7 @@ def stage(out, maps, log=print):
             os.replace(bots_new, os.path.join(d, slot + '_Main.bots.zip'))
             shutil.rmtree(os.path.join(out, '_botsout'), ignore_errors=True)
         newp, newb = os.path.join(d, slot + '_Main.zip'), os.path.join(d, slot + '_Main.bots.zip')
+        repic(out, d, newp, newb, log)
         if os.path.isfile(lp['md5']):
             cur = open(lp['md5']).read().strip()
             if cur == md5(lp['plain']):
@@ -170,6 +172,31 @@ def stage(out, maps, log=print):
                 open(os.path.join(d, 'Int16Ok.txt'), 'wb').write(fixed)
         log('%s baked (%.0f s)' % (m, time.time() - t0))
     return pin(out, maps, log)
+
+
+def repic(out, d, newp, newb, log=print):
+    """A layer with pic_items re-looks guns whose shop card (Page II picture, baked by tools/kl_shop_pics.py into the zips) would keep showing the old gun:
+    the card textures of those items are replaced in the staged plain AND bots zip (only the .TEX member changes; same record length and ids, so .prm chunk
+    count / Entries= / online.xml stay). Pictures = <out>/pics/item_NN.png (pd2_guns_multi write_pics, run first); the pair -> item map = the DD KLShopPage.ini
+    (read only). An install writes the zips, an undo restores them: the pictures follow the guns."""
+    items = LAYERS[LAYER].get('pic_items')
+    if not items:
+        return
+    import kl_shop_pics as P, kl_texmat as T
+    pics = os.path.join(out, 'pics')
+    if not all(os.path.isfile(os.path.join(pics, 'item_%d.png' % i)) for i in items):
+        M.write_pics(out, only=KEYS, log=lambda s: None)
+    for f in (newp, newb):
+        if not os.path.isfile(f):
+            continue
+        z = zipfile.ZipFile(f)
+        names, stem = P._members(z)
+        tex = T.read_tex(z.read(names[(stem + '.TEX').lower()]))
+        z.close()
+        cards = P.cards_of_items(items, pics, tex, os.path.join(P.DD, 'KLShopPage.ini'), log)
+        tmp = f + '.repic'
+        P.replace_cards(f, tmp, cards, log)
+        os.replace(tmp, f)
 
 
 def fix_inis(out, m, rep, log=print):
@@ -284,6 +311,17 @@ def check_zip(live_zip, new_zip, rep):
         ok &= r1 == r0 and p1.chunks[r1] == p0.chunks[r0] and all(p1.chunks[o] == p0.chunks[o] for o in C.objects(p0, r0))
         old_roots += 1
     row['b12_roots_checked'] = old_roots
+    items = LAYERS[LAYER].get('pic_items')
+    if items:           # re-pictured cards: exactly the pairs of pic_items changed their texture record, every other texture is byte-equal
+        import kl_shop_pics as P, kl_texmat as T
+        nm = lambda z: P._members(z)
+        n0, s0 = nm(a); n1, s1 = nm(b)
+        t0, t1 = T.read_tex(a.read(n0[(s0 + '.TEX').lower()])), T.read_tex(b.read(n1[(s1 + '.TEX').lower()]))
+        ids = P.card_tids(b)
+        want = {ids[n] for n in P.cards_of_items(items, os.path.join(os.path.dirname(new_zip), '..', 'pics'), None, os.path.join(P.DD, 'KLShopPage.ini'), lambda s: None)}
+        diff = {k for k in t0.tex if t0.tex[k].entry != t1.tex.get(k, t0.tex[k]).entry}      # textures that existed before the layer and now differ (the layer's own new gun textures are additions)
+        row['cards_changed'] = ','.join(str(x) for x in sorted(diff))
+        ok &= diff == want and set(t0.tex) <= set(t1.tex)
     return row, bool(ok)
 
 
@@ -300,9 +338,9 @@ def verify(out, maps, log=print):
                 log('%-6s %-5s no such live file' % (m, kind)); continue
             row, ok = check_zip(lz, nz, rep)
             allok &= ok
-            log('%-6s %-5s %-4s members[%s] list_same=%s specs[%s] retargeted=%d others_unchanged=%d detail[%s] old_chunks_diff=%d b12_roots=%d' % (
+            log('%-6s %-5s %-4s members[%s] list_same=%s specs[%s] retargeted=%d others_unchanged=%d detail[%s] old_chunks_diff=%d b12_roots=%d cards[%s]' % (
                 m, kind, 'ok' if ok else 'FAIL', row['members'], row['list_same'], row['specs'], row['retargeted'], row['others_same'],
-                row['detail'], row['old_chunks_diff'], row['b12_roots_checked']))
+                row['detail'], row['old_chunks_diff'], row['b12_roots_checked'], row.get('cards_changed', '-')))
             missing = sorted(set(KEYS) - set(row['specs'].split(',')))
             if missing:
                 log('       NOTE: %s has no template for %s (skipped on this map)' % (m, missing))
@@ -648,9 +686,11 @@ def main(a):
     cmd = (a[:1] or [''])[0]
     if cmd in ('build', 'all'):
         os.makedirs(out, exist_ok=True)
-        need = len(maps) * 460 << 20
-        if shutil.disk_usage(out).free < need + (2 << 30):
-            sys.exit('disk: want %d MB + 2 GB spare on the stage drive' % (need >> 20))
+        fresh = [m for m in maps if not os.path.isfile(os.path.join(out, m, 'report.json'))]      # an already staged map is rewritten in place (peak ~ +460 MB for one map)
+        need = (len(fresh) + (1 if len(fresh) < len(maps) else 0)) * 460 << 20
+        spare = (2 << 30) if fresh else (600 << 20)
+        if shutil.disk_usage(out).free < need + spare:
+            sys.exit('disk: want %d MB + %d MB spare on the stage drive' % (need >> 20, spare >> 20))
         stage(out, maps)
     if cmd == 'pin':             # ini Entries + pins of an already baked stage
         pin(out, maps)
