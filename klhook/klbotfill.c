@@ -702,6 +702,58 @@ static void klbf_ramp_tick(DWORD now, float bp[][3], int nb)
    ZTriggerBox2 / ZOnlineTriggerBox: scanned too, see klbf_trig_other below (layouts read from kl2.exe 2026-10-28). Host only, fire is host-side + the box's own sync object. Log prefix 'botfill: trig:'. */
 #define KLBF_TRIG_CAP 3          /* fires of one box a round (re-armable boxes) */
 #define KLBF_TRIG_MAX 512        /* CS1A DM03 had 365 trigger-box hits (13 ZTriggerBox, 239 ZTriggerBox2, 4 ZOnlineTriggerBox + repeats); 256 dropped the rest in scan order */
+/* [Perf] BotScanSlice (2026-11-06, OSS_DD09_TPC_S3: 3 seats on one PC, host DD09): the host's TickProfile had klbf_tick single calls of 113 - 262 ms CPU, a hitch
+   each, at trig scan 1 / 2, the exit trigger walk and the four box looks (7 a level load on a box-less map), every one a walk of ALL committed private memory in
+   one call. With the key on, a walk is a pass sliced over the frames (klbf_tick pumps it every frame: ~24 ms a call, at least one 64 KB piece a call, as klhud.c
+   OsdScanSlice). One pass at a time (a second waits for the next tick); a pass is dropped, never resumed, when a level archive opens or the scene changes
+   (klmv_level_gen + klmv_scene_gen), and by its owner's reset (klbf_trig_load, the tactics' round start / summary). Off (key missing) = slice 0 = the same
+   walk, same order, in one call, as before. A pass sees an object allocated behind its cursor only in the next pass: the retries (6 trigger, 4 box looks) cover it. */
+struct klbf_walk { BYTE *at; DWORD t0; int parts, stop, nvt; LONG gen0; DWORD vt[3]; void (*hit)(DWORD at, DWORD v); void (*end)(DWORD ms, int parts); };
+static struct klbf_walk *klbf_walk_cur;      /* the pass running (0 = none) */
+static unsigned klbf_walk_slice(void) { return klperf_osd_slice_ms(klperf_on(&klperf_bss, "BotScanSlice")); }      /* 24 ms on, 0 = one call */
+static void klbf_walk_drop(struct klbf_walk *w) { if (klbf_walk_cur == w) klbf_walk_cur = 0; w->at = 0; }
+static int klbf_walk_start(struct klbf_walk *w)
+{
+    if (klbf_walk_cur) return 0;
+    w->at = (BYTE *)0x10000; w->t0 = GetTickCount(); w->parts = 0; w->stop = 0; w->gen0 = klmv_level_gen + klmv_scene_gen; klbf_walk_cur = w;
+    return 1;
+}
+/* one slice of the running pass w; at its end w->end(ms, slices) is called and 1 returned; 0 = it goes on next frame (or was dropped: w->at = 0) */
+static int klbf_walk_step(struct klbf_walk *w, unsigned slice)
+{
+    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = w->at; DWORD t0 = GetTickCount(); int done = 0;
+    if (!a) return 0;
+    if (klmv_level_gen + klmv_scene_gen != w->gen0) { klbf_walk_drop(w); return 0; }      /* the objects it found so far may be the old level's */
+    while (!w->stop && (DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
+        if (done && klperf_slice_over(slice, GetTickCount() - t0)) { w->at = (BYTE *)mbi.BaseAddress; w->parts++; return 0; }
+        if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
+            SIZE_T o, j; int k;
+            for (o = 0; o < mbi.RegionSize && !w->stop; o += sizeof buf) {
+                SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
+                if (done && klperf_slice_over(slice, GetTickCount() - t0)) { w->at = (BYTE *)mbi.BaseAddress + o; w->parts++; return 0; }
+                done = 1;
+                if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
+                for (j = 0; j + 4 <= n && !w->stop; j += 4) {
+                    DWORD v = *(DWORD *)(buf + j);
+                    for (k = 0; k < w->nvt; k++) if (v == w->vt[k]) { w->hit((DWORD)((DWORD_PTR)mbi.BaseAddress + o + j), v); break; }
+                }
+            }
+        }
+        a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+    }
+    klbf_walk_drop(w);
+    w->end(GetTickCount() - w->t0, w->parts + 1);
+    return 1;
+}
+/* start w and run its first slice (with the key off: the whole walk, now); 0 = another pass is running, try again later */
+static int klbf_walk_run(struct klbf_walk *w)
+{
+    if (!klbf_walk_start(w)) return 0;
+    klbf_walk_step(w, klbf_walk_slice());
+    return 1;
+}
+static const char *klbf_walk_parts(int parts) { static char s[24]; if (parts > 1) _snprintf(s, sizeof s - 1, " (%d slices)", parts); else s[0] = 0; return s; }
+
 #define KLBF_TRIG_SCAN1 7000      /* ms after the round's first tick */
 #define KLBF_TRIG_SCAN2 30000
 static DWORD klbf_ot_trig;      /* tentative: defined with the tactics state below (the exit trigger, never fired from here) */
@@ -711,24 +763,27 @@ static struct klbf_tb { DWORD obj; BYTE in, dead, nfire, kind, logged; } klbf_tb
 static struct { int n, scans, started; DWORD t0, fired, skipped; int kn[3]; int pk; } klbf_tr;
 #define KLBF_SKIP_MAX 1024
 static DWORD klbf_skip[KLBF_SKIP_MAX]; static int klbf_nskip;      /* boxes the scan decided to leave alone (ramp box, stack pick-up, SkipPickups): remembered so each is read and counted once, not again on every scan */
-static void klbf_trig_load(void) { memset(klbf_tbs, 0, sizeof klbf_tbs); memset(&klbf_tr, 0, sizeof klbf_tr); memset(klbf_skip, 0, sizeof klbf_skip); klbf_nskip = 0; }
+static void klbf_trig_hit(DWORD at, DWORD vv); static void klbf_trig_end(DWORD ms, int parts);
+static struct klbf_walk klbf_trw = { 0, 0, 0, 0, 3, 0, { (DWORD)KLBF_RAMP_VT, KLBF_TB2_VT, KLBF_OTB_VT }, klbf_trig_hit, klbf_trig_end };      /* [Perf] BotScanSlice: the trigger-box pass */
+static DWORD klbf_trs_hits, klbf_trs_added, klbf_trs_ramp; static int klbf_trs_pk;      /* the running scan's counts (its log line) */
+static void klbf_trig_load(void) { klbf_walk_drop(&klbf_trw); memset(klbf_tbs, 0, sizeof klbf_tbs); memset(&klbf_tr, 0, sizeof klbf_tr); memset(klbf_skip, 0, sizeof klbf_skip); klbf_nskip = 0; }
 static void klbf_trig_remember(DWORD at) { if (klbf_nskip < KLBF_SKIP_MAX) klbf_skip[klbf_nskip++] = at; }
 static int klbf_trig_known(DWORD at) { int i; for (i = 0; i < klbf_tr.n; i++) if (klbf_tbs[i].obj == at) return 1; for (i = 0; i < klbf_nskip; i++) if (klbf_skip[i] == at) return 1; return 0; }
 static void klbf_trig_scan(void)
 {
-    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD hits = 0, added = 0, ramp = 0, t0 = GetTickCount(); int kind, pk_scan = 0;
-    klbf_tr.scans++;
-    while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
-        if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
-            SIZE_T o, j;
-            for (o = 0; o < mbi.RegionSize; o += sizeof buf) {
-                SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
-                if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
-                for (j = 0; j + 4 <= n; j += 4) {
-                    DWORD at, ent, evt, node, vv = *(DWORD *)(buf + j); float np[3] = { 0, 0, 0 }; char nm[40];
+    if (!klbf_walk_start(&klbf_trw)) return;      /* another pass is running: the gate fires again next tick */
+    klbf_tr.scans++; klbf_trs_hits = klbf_trs_added = klbf_trs_ramp = 0; klbf_trs_pk = 0;
+    klbf_walk_step(&klbf_trw, klbf_walk_slice());
+}
+/* one trigger-box vtable hit at `at` (the walk's loop body before BotScanSlice; `continue` leaves the do-while = the next hit) */
+static void klbf_trig_hit(DWORD at, DWORD vv)
+{
+    DWORD hits = 0, added = 0, ramp = 0; int kind, pk_scan = 0;
+    do {
+                    DWORD ent, evt, node; float np[3] = { 0, 0, 0 }; char nm[40];
                     kind = vv == (DWORD)KLBF_RAMP_VT ? 0 : vv == KLBF_TB2_VT ? 1 : vv == KLBF_OTB_VT ? 2 : -1;
                     if (kind < 0 || (kind && !klbf_trig_x)) continue;
-                    at = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + j); hits++;
+                    hits++;
                     if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi || !(node = klh_rd32(ent + 4)) || klbf_trig_known(at)) continue;
                     if (kind == 0 && klbf_rp.have) {      /* the ramp box is OnlineRampFire's: same name / centre test as klbf_ramp_probe */
                         klbf_ramp_name(at, nm);
@@ -755,13 +810,14 @@ static void klbf_trig_scan(void)
                     }
                     if (klbf_tr.n < KLBF_TRIG_MAX) { klbf_tbs[klbf_tr.n].obj = at; klbf_tbs[klbf_tr.n].kind = (BYTE)kind; klbf_tr.kn[kind]++; klbf_tr.n++; added++; }
                     else { static int toldFull; if (!toldFull) { toldFull = 1; klog("botfill: trig: table full (%d boxes): %s box %08lx and later ones are NOT evaluated", KLBF_TRIG_MAX, kind == 0 ? "ZTriggerBox" : kind == 1 ? "ZTriggerBox2" : "ZOnlineTriggerBox", (unsigned long)at); } }
-                }
-            }
-        }
-        a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
-    }
+    } while (0);
+    klbf_trs_hits += hits; klbf_trs_added += added; klbf_trs_ramp += ramp; klbf_trs_pk += pk_scan;
+}
+static void klbf_trig_end(DWORD ms, int parts)
+{
+    DWORD hits = klbf_trs_hits, added = klbf_trs_added, ramp = klbf_trs_ramp; int pk_scan = klbf_trs_pk;
     if (!klbf_tr.started) { klbf_tr.started = 1; klog("botfill: trig: on (host, %d boxes)%s", klbf_tr.n, klbf_trig == 2 ? ", DRY (log only)" : ""); }
-    klog("botfill: trig: scan %d: %lu trigger-box vtable hit(s), %lu new, %lu ramp box(es) left to OnlineRampFire, %d new pick-up/interact box(es) left to the game this scan (%d in all), %d tracked (ZTriggerBox %d, ZTriggerBox2 %d, ZOnlineTriggerBox %d), %lu ms", klbf_tr.scans, (unsigned long)hits, (unsigned long)added, (unsigned long)ramp, pk_scan, klbf_tr.pk, klbf_tr.n, klbf_tr.kn[0], klbf_tr.kn[1], klbf_tr.kn[2], (unsigned long)(GetTickCount() - t0));
+    klog("botfill: trig: scan %d: %lu trigger-box vtable hit(s), %lu new, %lu ramp box(es) left to OnlineRampFire, %d new pick-up/interact box(es) left to the game this scan (%d in all), %d tracked (ZTriggerBox %d, ZTriggerBox2 %d, ZOnlineTriggerBox %d), %lu ms%s", klbf_tr.scans, (unsigned long)hits, (unsigned long)added, (unsigned long)ramp, pk_scan, klbf_tr.pk, klbf_tr.n, klbf_tr.kn[0], klbf_tr.kn[1], klbf_tr.kn[2], (unsigned long)ms, klbf_walk_parts(parts));
 }
 
 /* OnlineTriggers, the other two box classes (2026-10-28, wk-bots2, read from kl2.exe; re/bots_trigger_cops_1028.md section 7). Both keep the rules above: no write to a field the update recomputes,
@@ -838,7 +894,7 @@ static void klbf_trig_tick(DWORD now, const DWORD *act, int nb)
     int i, b, fired = 0; DWORD sm, gt;
     if (!klbf_trig) return;
     if (!klbf_tr.t0) klbf_tr.t0 = now;
-    if ((klbf_tr.scans == 0 && now - klbf_tr.t0 >= KLBF_TRIG_SCAN1) || (klbf_tr.scans == 1 && now - klbf_tr.t0 >= KLBF_TRIG_SCAN2)) klbf_trig_scan();
+    if (!klbf_trw.at && ((klbf_tr.scans == 0 && now - klbf_tr.t0 >= KLBF_TRIG_SCAN1) || (klbf_tr.scans == 1 && now - klbf_tr.t0 >= KLBF_TRIG_SCAN2))) klbf_trig_scan();      /* BotScanSlice: not while its pass runs */
     if (!klbf_tr.n || nb <= 0) return;
     sm = klh_rd32((DWORD_PTR)KLH_VA(0x0168e598)); gt = klh_rd32(klh_rd32((DWORD_PTR)KLH_VA(0x00dd2640)) + 0x48);
     if (!sm || !gt) return;
@@ -959,27 +1015,27 @@ static int klbf_ot_box_frame(int i, struct klmv_fr *f)
     if (i < 0 || i >= klbf_ot_nbx || !klbf_bx[i].at || klh_rd32(klbf_bx[i].at) != KLMV_ALLY_VT || klh_rd32(klbf_bx[i].at + 0x24) != klbf_bx[i].ent) return 0;
     return klmv_frame(klbf_bx[i].ent, f);
 }
+/* [Perf] BotScanSlice: the box look is a klbf_walk pass; the boxes it meets are gathered aside and become klbf_bx only when the pass ends (no half list meanwhile) */
+static struct { DWORD at, ent; } klbf_bxn[KLBF_BX_MAX]; static int klbf_bxn_n;
+static void klbf_ot_box_hit(DWORD at, DWORD v)
+{
+    DWORD ent, evt, node; float p[3]; (void)v;
+    if (klbf_bxn_n >= KLBF_BX_MAX) return;
+    if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi || !(node = klh_rd32(ent + 4)) || !kle_node(node, p, 0)) return;      /* as klmv_scan: a real one has its entity at +0x24 */
+    klbf_bxn[klbf_bxn_n].at = at; klbf_bxn[klbf_bxn_n].ent = ent; klbf_bxn_n++;
+}
+static void klbf_ot_box_end(DWORD ms, int parts);
+static struct klbf_walk klbf_bxw = { 0, 0, 0, 0, 1, 0, { KLMV_ALLY_VT }, klbf_ot_box_hit, klbf_ot_box_end };
 static void klbf_ot_boxscan(DWORD now)
 {
-    static BYTE buf[0x10000]; MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; DWORD t0 = GetTickCount(); int i; float bd = 1e30f; LONG gen0 = klmv_level_gen + klmv_scene_gen;
-    klbf_ot_bxAt = now; klbf_ot_bxlooks++; klbf_ot_nbx = 0; klbf_ot_bxbest = -1;
-    while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
-        if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
-            SIZE_T o, j;
-            for (o = 0; o < mbi.RegionSize; o += sizeof buf) {
-                SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
-                if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
-                for (j = 0; j + 4 <= n; j += 4) {
-                    DWORD at, ent, evt, node; float p[3];
-                    if (*(DWORD *)(buf + j) != KLMV_ALLY_VT || klbf_ot_nbx >= KLBF_BX_MAX) continue;
-                    at = (DWORD)((DWORD_PTR)mbi.BaseAddress + o + j);
-                    if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi || !(node = klh_rd32(ent + 4)) || !kle_node(node, p, 0)) continue;      /* as klmv_scan: a real one has its entity at +0x24 */
-                    klbf_bx[klbf_ot_nbx].at = at; klbf_bx[klbf_ot_nbx].ent = ent; klbf_ot_nbx++;
-                }
-            }
-        }
-        a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
-    }
+    if (!klbf_walk_start(&klbf_bxw)) return;      /* another pass is running: the gate fires again next second */
+    klbf_ot_bxAt = now; klbf_ot_bxlooks++; klbf_bxn_n = 0;
+    klbf_walk_step(&klbf_bxw, klbf_walk_slice());
+}
+static void klbf_ot_box_end(DWORD ms, int parts)
+{
+    int i; float bd = 1e30f; LONG gen0 = klbf_bxw.gen0;
+    memcpy(klbf_bx, klbf_bxn, sizeof klbf_bx); klbf_ot_nbx = klbf_bxn_n; klbf_ot_bxbest = -1;
     for (i = 0; i < klbf_ot_nbx; i++) {      /* the box the bots walk to: the one nearest the exit trigger (GUESS: the van's boarding box is beside the trigger; any box takes a bot aboard in the stock rule) */
         struct klmv_fr f; float d;
         if (!klbf_ot_box_frame(i, &f)) continue;
@@ -988,8 +1044,43 @@ static void klbf_ot_boxscan(DWORD now)
         if (d < bd) { bd = d; klbf_ot_bxbest = i; }
     }
     if (!klbf_ot_nbx && klbf_ot_bxlooks >= 4 && !klbf_ot_scan_always) klbf_ot_nobox_gen = gen0;      /* a box-less level: the later rounds of this load do not scan for boxes (klbf_ot_kept) */
-    klog("botfill: tactics: box scan: %d ZAllyEscapeBox object(s) in %lu ms, bots will walk to box %d%s", klbf_ot_nbx, GetTickCount() - t0, klbf_ot_bxbest,
+    klog("botfill: tactics: box scan: %d ZAllyEscapeBox object(s) in %lu ms%s, bots will walk to box %d%s", klbf_ot_nbx, (unsigned long)ms, klbf_walk_parts(parts), klbf_ot_bxbest,
          klbf_ot_nbx ? "" : klbf_ot_bxlooks >= 4 ? " (none in 4 looks: the bots stay at the exit trigger; the later rounds of this level load skip the box scan)" : " (none: the bots stay at the exit trigger as before; retried 3 more times)");
+}
+/* [Perf] BotScanSlice: the exit trigger walk (klmove.c klmv_exit_vehicle2(trig, 1) as a klbf_walk pass: the first hit with a vehicle field and a sane non-zero
+   place ends it, the first hit without such a place is the fallback) */
+static DWORD klbf_ov_trig, klbf_ov_veh, klbf_ov_ftrig, klbf_ov_fveh, klbf_ov_rules;      /* the hits; the rules object the look began with (its vehicle kind, logged) */
+static void klbf_ot_trig_hit(DWORD at, DWORD v);
+static void klbf_ot_trig_end(DWORD ms, int parts);
+static struct klbf_walk klbf_vaw = { 0, 0, 0, 0, 1, 0, { 0 }, klbf_ot_trig_hit, klbf_ot_trig_end };
+static void klbf_ot_trig_hit(DWORD at, DWORD v)
+{
+    DWORD ent, evt, node, vv[4]; float tp[3] = { 0, 0, 0 }; int k; (void)v;
+    if (!(ent = klh_rd32(at + 0x24)) || !(evt = klh_rd32(ent)) || evt < img_lo || evt >= img_hi) return;      /* an object of the game with an entity */
+    if (!klh_rd(at + 0x48, vv, sizeof vv)) return;
+    for (k = 0; k < 4 && !vv[k]; k++) ;
+    if (k == 4) return;
+    node = klh_rd32(ent + 4);
+    if (!node || !kle_node(node, tp, 0) || !kle_ok3(tp) || (fabsf(tp[0]) <= 1 && fabsf(tp[1]) <= 1 && fabsf(tp[2]) <= 1)) { if (!klbf_ov_ftrig) { klbf_ov_ftrig = at; klbf_ov_fveh = vv[k]; } return; }
+    klbf_ov_trig = at; klbf_ov_veh = vv[k]; klbf_vaw.stop = 1;
+}
+static void klbf_ot_trig_look(DWORD rules)
+{
+    if (!klbf_walk_start(&klbf_vaw)) return;
+    klbf_vaw.vt[0] = (DWORD)(DWORD_PTR)KLH_VA(KLMV_EXIT_VT); klbf_ov_rules = rules; klbf_ov_trig = klbf_ov_veh = klbf_ov_ftrig = klbf_ov_fveh = 0;
+    klbf_ot_lookAt = GetTickCount(); klbf_ot_looks++;
+    klbf_walk_step(&klbf_vaw, klbf_walk_slice());
+}
+static void klbf_ot_trig_end(DWORD ms, int parts)
+{
+    DWORD ent, node; LONG gen0 = klbf_vaw.gen0;      /* the gen BEFORE the walk (as klmove.c's near cache): a pass across an archive open was dropped, so a kept hit is never stale */
+    if (klbf_ov_trig) { klbf_ot_trig = klbf_ov_trig; klbf_ot_vh = klbf_ov_veh; } else { klbf_ot_trig = klbf_ov_ftrig; klbf_ot_vh = klbf_ov_fveh; }
+    klbf_ot_tvt = klbf_ot_trig ? klh_rd32(klbf_ot_trig) : 0;
+    if (klbf_ot_vh && (!(ent = klh_rd32(klbf_ot_trig + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, klbf_ot_tpos, 0) || !kle_ok3(klbf_ot_tpos)
+        || (fabsf(klbf_ot_tpos[0]) <= 1 && fabsf(klbf_ot_tpos[1]) <= 1 && fabsf(klbf_ot_tpos[2]) <= 1))) klbf_ot_vh = 0;      /* review wf_1d705c3d: the fallback may still be a husk at (0, 0, 0): not found, retried in 20 s */
+    klog("botfill: tactics: van: exit trigger %08lx, vehicle field %08lx (kind %u), its place (%.0f, %.0f, %.0f) - found in %lu ms%s%s", klbf_ot_trig, klbf_ot_vh, klh_rd32(klbf_ov_rules + 0x1ec) & 0xff,
+         klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], (unsigned long)ms, klbf_walk_parts(parts), klbf_ot_vh ? "" : ": none usable yet, looked again in 20 s");
+    if (klbf_ot_vh) { klbf_ot_trig_looked = 1; klbf_ot_keep_gen = gen0; }      /* kept for this level load's later rounds (klbf_ot_kept); gen0 = the gen before the walk */
 }
 /* 2026-10-30 (scheduled check-in, from the owner's 10-27 20:27 - 20:41 online rounds, F06 host, SHIP 1027): the moment the first bot carried money the game
    stood still 220 - 280 ms, EVERY round (KLHook.log 20:30:07, 20:34:05, 20:38:37; the hitch probe had the main thread in ntdll under KERNEL32+0x22640 <- this dll,
@@ -1373,6 +1464,7 @@ static void klbf_vm_pass(DWORD rules, int vstate, float left, DWORD now, const D
 static void klbf_ot_summary(void)
 {
     int i, bots = 0, tot = 0, boarded = 0;
+    klbf_walk_drop(&klbf_vaw); klbf_walk_drop(&klbf_bxw);      /* [Perf] BotScanSlice: the round's unfinished looks end with it */
     klbf_vh_off("round summary", GetTickCount());
     klls_summary();      /* OnlineLootSync: final list + its total in the log, before anything is cleared */
     for (i = 0; i < KLBF_OT_BOTS; i++) if (klbf_ob[i].actor) { bots++; tot += klbf_ob[i].tally; if (klbf_ob[i].phase == 3) boarded++; }
@@ -2180,6 +2272,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klbf_lp && klbf_lp_nok + klbf_lp_nbad) klog("botfill: lootparts: last round: %d stack reads plausible, %d implausible (lump fallback)", klbf_lp_nok, klbf_lp_nbad); klbf_lp_nok = klbf_lp_nbad = klbf_lp_nw = 0; memset(klbf_lp_warned, 0, sizeof klbf_lp_warned);
         memset(klbf_ob, 0, sizeof klbf_ob); klbf_ot_nclaim = klbf_ot_nbad = 0; klbf_gc_said = 0; klbf_ot_vidle = 0; klbf_ot_sm = (int)sm; klbf_ot_in = 1; klbf_ot_rounds++; klbf_ot_t0 = now; klbf_cen.st = 0; klbf_cen_live = 0; kcs_clear(&klbf_cen_cur); kcs_clear(&klbf_cen_base); kcs_tally_clear(&klbf_cen_tl);      /* review 1102: a census armed at a round end must not block / mix into the next round */
         klbf_ot_lookAt = 0; klbf_wv_hc = klbf_wv_novh = 0; klbf_ot_called = klbf_ot_looks = 0; klbf_ot_calledAt = 0; klbf_eo_at = 0; klbf_ot_bxlooks = 0; klbf_ot_bxAt = 0;
+        klbf_walk_drop(&klbf_vaw); klbf_walk_drop(&klbf_bxw);      /* [Perf] BotScanSlice: a look of the last round is not finished into this one */
         if (klbf_ot_kept()) klbf_ot_trig_looked = 1;      /* the last round's exit trigger and boxes still stand (same level load): no scan this round */
         else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; klbf_ot_nobox_gen = -1; }
         klbf_gm_logged = 0; klbf_gm_last = 0; klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; memset(klbf_gts_told, 0, sizeof klbf_gts_told); klbf_cf_pend = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; klbf_bo_ok = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
@@ -2298,22 +2391,12 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         struct kle_veh v; float vp[3];
         if (kle_veh_read(rules, &v) == 1 && kle_node(klh_rd32(v.obj + 4), vp, 0) && (fabs(vp[0]) > 1 || fabs(vp[1]) > 1 || fabs(vp[2]) > 1) && klbf_van_ok(vp, 1)) { van = v.obj; memcpy(vpos, vp, 12); }
     }
-    if (kvt_lookup_ok(klbf_vtm_al, van != 0) && klbf_ot_van && rules && !klbf_ot_trig_looked && klbf_ot_looks < 6 && (!klbf_ot_lookAt || now - klbf_ot_lookAt >= 20000)) {      /* the exit trigger: when the first bot carries money (a private-memory scan, klmove.c); a miss is retried every 20 s, 6 times a round */
+    if (kvt_lookup_ok(klbf_vtm_al, van != 0) && klbf_ot_van && rules && !klbf_ot_trig_looked && !klbf_vaw.at && klbf_ot_looks < 6 &&(!klbf_ot_lookAt || now - klbf_ot_lookAt >= 20000)) {      /* the exit trigger: when the first bot carries money (a private-memory scan, klmove.c); a miss is retried every 20 s, 6 times a round */
         int q; for (q = 0; q < KLBF_OT_BOTS && !(klbf_ob[q].actor && klbf_ob[q].tally > 0); q++) ;
         if (q == KLBF_OT_BOTS && klbf_ot_idlevan && klbf_ot_vidle) q = 0;      /* OnlineIdleVan: a bot with nothing left to do needs the trigger too */
-        if (q < KLBF_OT_BOTS) {
-            DWORD t0 = GetTickCount(), ent, node; LONG gen0 = klmv_level_gen + klmv_scene_gen;      /* read BEFORE the walk (as klmove.c's near cache): an archive opened during the 110-156 ms walk makes the hit stale, and a stale hit must not be kept (review 10-30) */
-            klbf_ot_lookAt = now; klbf_ot_looks++;
-            klbf_ot_vh = klmv_exit_vehicle2(&klbf_ot_trig, 1);      /* BOS_DD02x: skip husk triggers whose node reads (0, 0, 0) */
-            klbf_ot_tvt = klbf_ot_trig ? klh_rd32(klbf_ot_trig) : 0;
-            if (klbf_ot_vh && (!(ent = klh_rd32(klbf_ot_trig + 0x24)) || !(node = klh_rd32(ent + 4)) || !kle_node(node, klbf_ot_tpos, 0) || !kle_ok3(klbf_ot_tpos)
-                || (fabsf(klbf_ot_tpos[0]) <= 1 && fabsf(klbf_ot_tpos[1]) <= 1 && fabsf(klbf_ot_tpos[2]) <= 1))) klbf_ot_vh = 0;      /* review wf_1d705c3d: klmv_exit_vehicle2's fallback may still be a husk at (0, 0, 0): not found, retried in 20 s */
-            klog("botfill: tactics: van: exit trigger %08lx, vehicle field %08lx (kind %u), its place (%.0f, %.0f, %.0f) - found in %lu ms%s", klbf_ot_trig, klbf_ot_vh, klh_rd32(rules + 0x1ec) & 0xff,
-                 klbf_ot_tpos[0], klbf_ot_tpos[1], klbf_ot_tpos[2], GetTickCount() - t0, klbf_ot_vh ? "" : ": none usable yet, looked again in 20 s");
-            if (klbf_ot_vh) { klbf_ot_trig_looked = 1; klbf_ot_keep_gen = gen0; }      /* kept for this level load's later rounds (klbf_ot_kept); gen0 = the gen before the walk */
-        }
+        if (q < KLBF_OT_BOTS) klbf_ot_trig_look(rules);      /* klbf_ot_trig_end: BOS_DD02x husk skip, the log line, kept for the later rounds; [Perf] BotScanSlice: over the next frames */
     }
-    if (klbf_ot_bwalk && klbf_ot_vh && !klbf_ot_nbx && klbf_ot_bxlooks < 4 && (!klbf_ot_bxAt || now - klbf_ot_bxAt >= 20000)) klbf_ot_boxscan(now);      /* once the trigger is known (a bot carries money), the boxes; a miss is retried every 20 s, 4 looks a round */
+    if (klbf_ot_bwalk && klbf_ot_vh && !klbf_bxw.at && !klbf_ot_nbx && klbf_ot_bxlooks < 4 && (!klbf_ot_bxAt || now - klbf_ot_bxAt >= 20000)) klbf_ot_boxscan(now);      /* once the trigger is known (a bot carries money), the boxes; a miss is retried every 20 s, 4 looks a round */
     {   /* once per round, and again whenever the bot count changes: what the scan saw (BO2 gave no order and no clue why) */
         static int seen_round, seen_nb = -1, seen_nm = -1, seen_nd = -1; static DWORD seen_van = 1;
         if (seen_round != klbf_ot_rounds || seen_nb != nb || seen_nm != nm || seen_van != van || seen_nd != ndoor) { seen_round = klbf_ot_rounds; seen_nb = nb; seen_nm = nm; seen_van = van; seen_nd = ndoor; klog("botfill: tactics: scan: %d objects, %d live Ally bot(s), %d armed stack(s) (+%d behind a shut door) of %d money object(s), van %08lx (%d vehicle(s); one at the origin = not here yet)", n, nb, nm, ndoor, nmoney, van, nvan); }
@@ -3046,6 +3129,7 @@ static void klbf_tick(int game_thread)
     static DWORD last, scan, told_sm; static LONG scanFr; DWORD now = GetTickCount(), sm, role = 0, mode = 0, state = 0, h, v, lo, hi, p, tab, i, blk[64 * 32]; BYTE cur = 0, mx = 0;
     int conn, target, n = 0, ally = 0, alive = 0, tact = 0, other = 0;
     static struct klbf_lkrec lk[64]; int lkn = 0;
+    if (game_thread && klh_exe_ok && klbf_walk_cur) klbf_walk_step(klbf_walk_cur, klbf_walk_slice());      /* [Perf] BotScanSlice: a running pass goes on every frame */
     if (!(klbf_on || klbf_oh || klbf_ot || klbf_lk == 2 || klbf_ap) || !game_thread || !klh_exe_ok || now - last < 500) return;      /* OnlineHost alone only runs the census below (no lobby change: kllobby.c reads OnlineFill itself) */
     last = now;
     if (klbf_ap) klbf_ap_run(now);      /* ArcadeProbe: offline Arcade only (klb_read says no for a net role 2/3), log only */

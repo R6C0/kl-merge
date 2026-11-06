@@ -1,3 +1,10 @@
+## 2026-11-06 ~13:20 [db] [Perf] BotScanSlice: the 3-seat host hitch is botfill's memory walks (no crash involved)
+TPC S3 (3 seats, TEST a9987972): all seats 30 fps, inst2/3 SMOOTH, host inst1 HITCHY (p95 249 ms). TickProfile: klbf_tick single calls 113-262 ms CPU at trig scan 1/2,
+the exit-trigger walk and 4 box looks (DD09 has no ZAllyEscapeBox) = 7 whole-memory walks a level load, each a hitch (log times match 1:1). 9-seat TPC: host 0.8 fps
+with the hook at ~20 ms CPU of a 1500 ms frame = PC contention, not the hook. Fix: one sliced walker (klbf_walk, ~24 ms a frame, dropped on level/scene/round change),
+[Perf] BotScanSlice=1 (recommended on); off = the old one-call walks. TEST out_bss1106_test 1913d42d, SHIP out_bss1106 e34d038b; kl_tests 91/0; review (3 lenses) 0 findings.
+Bench kit: C:/kl_build_1024/oss_1106/run.py --bss --seats 3, queued after f0 -> 6b -> c9. NOT installed (live 727a73bb).
+
 ## 2026-11-06 ~13:10 [6b] PD2 GUNS 1106b INSTALLED (10 DM maps), 1106c STAGED (no crash involved)
 pd2guns_1106b live on DM01,DM01B,DM02,DM03,DM03A,DM06,DM06B,DM07,DM09,DM11B at ~12:58 (C45 item 62, HRL-7 items 50/51; 50 files, md5s asserted, backups
 .before-pd2guns1106b). DM05A held until c9's kits are done. 2c990e44: GL40 (M79) on items 52/53/54; HK69 root = detail-190 far copy -> body 191 (GUESS), host barrel/
