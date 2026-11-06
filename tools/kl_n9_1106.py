@@ -204,6 +204,9 @@ def auto_section(secs_total):
             'LoadedMs=0', 'Unfocused=1', 'BlockReal=1', 'FirstChance=1', 'PosLogMs=5000']
 
 
+PROBES_OFF = ('BotDeathProbe', 'CoverDump', 'CoverRing', 'MFProbe')
+
+
 def build(tpl_text, who, name, slot, page, secs_total=SECS):
     """Per-map overlay: merged template sections, one [Auto], Page=, retargeted host script. A joiner gets [Script] unchanged."""
     pre, secs = parse_ini(tpl_text)
@@ -225,7 +228,10 @@ def build(tpl_text, who, name, slot, page, secs_total=SECS):
         out += ['[FrameLimit]', 'Enable=1', 'SwapChain=1', 'Fps=30']
     if 'Auto' not in have:
         out += ['[Auto]'] + auto_section(secs_total)
-    scr = [l for sec, ls in secs if sec == 'Script' for l in script_lines(ls)]
+    for sec in PROBES_OFF:                                  # TEST-only probes default on; SHIP has them off (re/mp_smooth_audit_1106.md: CoverDump's
+        if sec not in have:                                 # round-start burst = the 300 ms spikes), so 9-seat numbers match what players get
+            out += ['[%s]' % sec, 'Enable=0']
+    scr =[l for sec, ls in secs if sec == 'Script' for l in script_lines(ls)]
     if who == 'host':
         scr = retarget_host(scr, name, slot, page)
     out += ['[Script]'] + number(scr)
@@ -269,8 +275,10 @@ def live_state():
 
 
 def kl2_running():
-    r = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq kl2.exe'], capture_output=True, text=True).stdout
-    return r.lower().count('kl2.exe')
+    """kl2.exe that really run: thread-less lingering entries (killed benches, cleared by a reboot) do not count (kl_autotest.running)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import kl_autotest
+    return len(kl_autotest.running())
 
 
 def idle_s():
