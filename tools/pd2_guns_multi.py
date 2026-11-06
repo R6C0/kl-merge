@@ -335,7 +335,8 @@ def verify(out, log=print):
         zp = os.path.join(d, rep['slot'] + '_Main.zip')
         a, b = zipfile.ZipFile(os.path.join(live, rep['slot'] + '_Main.zip')), zipfile.ZipFile(zp)
         same_list = a.namelist() == b.namelist()
-        changed = sorted(n.rsplit('_Main', 1)[1] for n in a.namelist() if a.read(n) != b.read(n))
+        changed = sorted(n.rsplit('_Main', 1)[-1] if '_Main' in n else n    # a changed non-_Main member (Menu/online.xml) fails the check below
+                         for n in a.namelist() if a.read(n) != b.read(n))
         ok &= same_list and set(changed) <= {'.prm', '.MAT', '.TEX', '.oct', '.gms', '.prp'}
         lv = C.Lv(d); lv.beside, lv.side = {}, {}
         p, mat, tex = G.read(lv['.prm'], 'dd'), T.read_mat(lv['.MAT']), T.read_tex(lv['.TEX'])
