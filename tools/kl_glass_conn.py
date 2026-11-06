@@ -246,6 +246,12 @@ def compare(zpath, report=None):
         return len(have), tot, eq, peq, bad
 
 
+def sane(recs):
+    """kl2.exe trusts the table on a key hit (0x4eccd0 -> 0x4dfd60, no recompute): 0x63f190 / 0x78ab50 index it by piece and
+    neighbour id with no bound against its count, 0x78ab50 writes at j*40+4. So: 40-byte records, <= 16 neighbours, ids < count."""
+    return all(len(r) == 40 and r[0] <= 16 and all(j < len(recs) for j in decode(r)[2]) for r in recs)
+
+
 def build_section(sc, prm, shipped=None):
     """[(REF, records)] for every shard group; shipped = {scene path tail: records} wins over the computation."""
     out, W, gs = [], worlds(sc), groups(sc)
@@ -259,8 +265,10 @@ def build_section(sc, prm, shipped=None):
     for g, tail in zip(gs, tails):
         # a tail that names two groups here could take the other group's records: those are always computed
         recs = shipped.get(tail) if shipped and tails.count(tail) == 1 else None
-        if recs is None or len(recs) != len(g.kids):
+        if recs is None or len(recs) != len(g.kids) or not sane(recs):
             recs = [encode(nb) for nb in neighbours([world_vertices(prm, k, W[k]) for k in g.kids])]
+        if not sane(recs):
+            raise SystemExit('records of %s break the table invariant, refusing to build' % path(g))
         out.append((g.ref, recs))
     return out
 
