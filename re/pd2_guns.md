@@ -354,3 +354,9 @@ Page I shop rows 0-35 are stock rows (not retargeted on purpose). Best fits: the
 46 1.75 (2.0, 3.75) 82.2; 47 2.07 (3.0, 5.5) 83.2 vs 81.9; 48 1.68 (2.5, 3.75) 82.7. Not chosen: item 63 (the PD2 Beretta cost 2.84, the Deagle is a multi-part unit, untried);
 M249 on the Minimi 3.5+. Hosts: roots 2739 (45 / 46 / 48) and 4626 (47). GUESS (build_level batch 7): the Minimi root has a 2114-vert detail-1 body, a 34-vert detail-1 small part and their
 detail-62 copies; the 464-vert detail-62 part is read as the body's far copy, the small pair is dropped, the new body takes detail 62|7 = 63. Layer: `pd2_guns_layer.py build --layer 1106d` (base = the 1106c stage, 10 maps, no DM05A, backup D:\kl_stage\pd2guns_1106d_backup).
+
+## Layer 1106e (2026-11-06, staged only, NOT installed): PD2 Deagle on item 63 (M9 shield pistol)
+Host HG_M9Beretta_Human_Shield. Fits on DM02 (host muzzle 28.5): PD2 Deagle npc (pd2_dlc_usm2 wpn_npc_deagle, g_base + g_mag + g_slide, one diffuse) cost 1.73 shift (11.5, 4.0) muzzle 35.5 butt 3.6;
+third-person Deagle parts (wpn_third_pis_deagle_pts, 5 materials) 2.07 muzzle 32.6; Beretta 92 2.86 (as before). Chosen: the npc Deagle (spec DEAG63; 7 cm longer than the M9, the gun is just bigger).
+No Glock / P226 / USP / Bronco exists in the extracted PD2 data (only deagle, beretta92, c45). One part, no magazine split (GUESS: same pistol-root detail path 7|24 = 31 as C45).
+Layer: `pd2_guns_layer.py all --layer 1106e` (base = 1106d stage, out D:\kl_stage\pd2guns_1106e, backup D:\kl_stage\pd2guns_1106e_backup, 10 maps, no DM05A); fit seed D:\kl_stage\pd2b8_scratch\fits.json.

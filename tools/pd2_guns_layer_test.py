@@ -118,5 +118,18 @@ py_d = L.INSTALL_PY_OFFDRIVE.replace('@TITLE@', L.LAYERS['1106d']['title']).repl
 check("TAG = '.before-pd2guns1106d'" in py_d and '@' not in py_d.replace('@echo', ''), '1106d installer text')
 L.configure('1106b')
 
+# 1106e: the Deagle on item 63, staged on the 1106d stage, same 10 maps, off-drive backup, pistol body detail 31
+L.configure('1106e')
+check(L.KEYS == ['DEAG63'] and L.TAG == '.before-pd2guns1106e', '1106e keys / tag')
+check(L.BASE == r'D:\kl_stage\pd2guns_1106d' and L.src_root() == L.BASE, '1106e is staged on the 1106d stage')
+check(L.default_out() == r'D:\kl_stage\pd2guns_1106e' and L.LAYERS['1106e']['backup'] == r'D:\kl_stage\pd2guns_1106e_backup', '1106e out / backup on D:')
+check(L.LAYERS['1106e']['maps'] == L.LAYERS['1106d']['maps'] and L.DETAIL['DEAG63'] == 31, '1106e: same 10 maps as 1106d, pistol detail 31')
+sp = {s['key']: s for s in M.SPECS}
+check(sp['DEAG63']['item'] == 63 and sp['DEAG63']['template'] == 'HG_M9Beretta_Human_Shield' and sp['DEAG63']['unit'].endswith('wpn_npc_deagle'), '1106e spec = item 63 on the PD2 Deagle')
+check(set(L.KEYS).isdisjoint(L.LAYERS['1106d']['keys'] + L.LAYERS['1106c']['keys'] + L.LAYERS['1106b']['keys']), '1106e adds keys, repeats none')
+py_e = L.INSTALL_PY_OFFDRIVE.replace('@TITLE@', L.LAYERS['1106e']['title']).replace('@TAG@', L.TAG).replace('@BACKUP@', L.LAYERS['1106e']['backup'])
+check("TAG = '.before-pd2guns1106e'" in py_e and '@' not in py_e.replace('@echo', ''), '1106e installer text')
+L.configure('1106b')
+
 print('pd2_guns_layer_test: %d checks, %d FAIL' % (checks, fails))
 sys.exit(1 if fails else 0)

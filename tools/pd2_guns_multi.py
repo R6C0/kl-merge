@@ -95,6 +95,11 @@ SPECS = [
          key='RPK47', name='PD2 RPK', kind='light machine gun'),
     dict(item=48, template='Mg_Minimi_SPW_Heli', unit='pd2_dlc_mad/weapons/wpn_npc_rpk', mesh='g_body', tex='wpn_npc_rpk_df.texture',
          key='RPK48', name='PD2 RPK', kind='light machine gun'),
+    # ---- batch 8 (2026-11-06): item 63 (host HG_M9Beretta_Human_Shield, the M9 shield pistol) <- PD2 Deagle (pd2_dlc_usm2 wpn_npc_deagle: g_base + g_mag + g_slide, ONE diffuse wpn_npc_deagle_df).
+    # Fit on DM02: cost 1.73, shift (11.5, 4.0), muzzle 35.5 vs host 28.5 (the Deagle is 7 cm longer than the M9), butt 3.6. One part, mag=False: the magazine is part of the single material
+    # (no reload split; GUESS that the host's own bone-3 magazine object, dropped from the root like the other multi-part guns, is not missed). Pistol-root detail path as item 62 (GUESS batch 3).
+    dict(item=63, template='HG_M9Beretta_Human_Shield', unit='pd2_dlc_usm2/weapons/wpn_npc_deagle', key='DEAG63', name='PD2 Deagle', kind='pistol',
+         parts=[dict(model='wpn_npc_deagle.model', meshes=['g_base', 'g_mag', 'g_slide'], tex='wpn_npc_deagle_df.texture', mat='deagle')]),
 ]
 # Tried and dropped (fit on the MG hold leaves the stock 4 - 5 cm IN FRONT of the right hand): item 42 <- PD2 M4 (cost 3.30, butt +5.0),
 # item 43 <- PD2 AKMSU (cost 3.99, butt +3.8). A short rifle model does not suit the long MG hold; a PD2 LMG (M249: 9 materials) would.
@@ -103,7 +108,7 @@ SPECS = [
 # a 9-material writer). So items 45 - 48 (Minimi holds, names KSP*) stay on their Dead Men model. PD2 RPK on the Minimi holds: cost 1.99 / 1.89,
 # muzzle 83.2 / 82.7 (host 81.9 / 80.4) but there is no free RPK name left for them, so also not used.
 # Batch 3 (2026-11-06, fit on DM02): item 62 <- PD2 C45 (Chimano 88) accepted: cost 1.17 (1.11 with another host sample), shift (10.0, 4.0), muzzle 28.2 vs
-# host 25.6, butt 1.5 vs host 2.9, 148 tris, no magazine split. Item 63 <- PD2 Beretta 92 (Bernetti 9) dropped: cost 2.84 - 2.86, shift at the grid edge (-6),
+# host 25.6, butt 1.5 vs host 2.9, 148 tris, no magazine split. Item 63 (batch 8, DM02 fits, host muzzle 28.5): PD2 Deagle npc 1.73 (muzzle 35.5) ACCEPTED, third-person Deagle parts 2.07 (32.6), Beretta 92 (Bernetti 9) dropped: cost 2.84 - 2.86, shift at the grid edge (-6),
 # muzzle 31.9 vs 28.5, butt -11.5; the PD2 mesh is 43.5 cm long (-5.5 .. 37.9, a long barrel / suppressor) against the 25.9 cm host.
 
 
