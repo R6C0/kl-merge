@@ -103,5 +103,20 @@ finally:
     shutil.rmtree(tmp, ignore_errors=True)
 L.configure('1106b')
 
+# 1106d: four RPK keys on the Minimi items, staged on the 1106c stage, 10 maps without DM05A, off-drive backup, body detail 63 (62|7)
+L.configure('1106d')
+check(L.KEYS == ['RPK45', 'RPK46', 'RPK47', 'RPK48'] and L.TAG == '.before-pd2guns1106d', '1106d keys / tag')
+check(L.BASE == r'D:\kl_stage\pd2guns_1106c' and L.src_root() == L.BASE, '1106d is staged on the 1106c stage')
+check(L.default_out() == r'D:\kl_stage\pd2guns_1106d' and L.LAYERS['1106d']['backup'] == r'D:\kl_stage\pd2guns_1106d_backup', '1106d out / backup on D:')
+check('DM05A' not in L.LAYERS['1106d']['maps'] and len(L.LAYERS['1106d']['maps']) == 10, '1106d: 10 maps, not DM05A')
+check(all(L.DETAIL[k] == 63 for k in L.KEYS), '1106d body detail 62|7 = 63')
+sp = {s['key']: s for s in M.SPECS}
+check([sp[k]['item'] for k in L.KEYS] == [45, 46, 47, 48] and all(sp[k]['unit'].endswith('wpn_npc_rpk') for k in L.KEYS), '1106d specs = items 45-48 on the PD2 RPK')
+check(sp['RPK47']['template'] == 'Mg_Minimi_SPW' and sp['RPK45']['template'].endswith('Heli_Player'), '1106d Minimi templates')
+check(set(L.KEYS).isdisjoint(L.LAYERS['1106c']['keys']) and set(L.KEYS).isdisjoint(L.LAYERS['1106b']['keys']), '1106d adds keys, repeats none')
+py_d = L.INSTALL_PY_OFFDRIVE.replace('@TITLE@', L.LAYERS['1106d']['title']).replace('@TAG@', L.TAG).replace('@BACKUP@', L.LAYERS['1106d']['backup'])
+check("TAG = '.before-pd2guns1106d'" in py_d and '@' not in py_d.replace('@echo', ''), '1106d installer text')
+L.configure('1106b')
+
 print('pd2_guns_layer_test: %d checks, %d FAIL' % (checks, fails))
 sys.exit(1 if fails else 0)

@@ -347,3 +347,10 @@ Unknowns, in order of risk:
 - `<work>\pd2\guns\png\npc_*.png`: renders. `<work>\pd2\guns\dd_guns_F01.txt`: the Dog Days survey.
 - Scratch survey script: the session scratchpad `ddguns.py` (uses `kl_chars.Lv('F01')`, `C.objects`,
   `C.skeleton`, `C.bone_names`; reproduce from section 3's description if needed).
+
+## Layer 1106d (2026-11-06, staged only, NOT installed): PD2 RPK on the four Minimi items (45 / 46 / 47 / 48)
+Survey of what still shows a Dog Days look among the non-shop items (33 35 38 40-59 62 63): 45-48 (Minimi, names KSP*), 63 (M9 shield), 55-59 (grenades: no PD2 match).
+Page I shop rows 0-35 are stock rows (not retargeted on purpose). Best fits: the PD2 RPK (wpn_npc_rpk g_body) on the Minimi holds, fit DM02: 45 cost 1.80 shift (2.5, 4.0) muzzle 82.7 vs host 80.4;
+46 1.75 (2.0, 3.75) 82.2; 47 2.07 (3.0, 5.5) 83.2 vs 81.9; 48 1.68 (2.5, 3.75) 82.7. Not chosen: item 63 (the PD2 Beretta cost 2.84, the Deagle is a multi-part unit, untried);
+M249 on the Minimi 3.5+. Hosts: roots 2739 (45 / 46 / 48) and 4626 (47). GUESS (build_level batch 7): the Minimi root has a 2114-vert detail-1 body, a 34-vert detail-1 small part and their
+detail-62 copies; the 464-vert detail-62 part is read as the body's far copy, the small pair is dropped, the new body takes detail 62|7 = 63. Layer: `pd2_guns_layer.py build --layer 1106d` (base = the 1106c stage, 10 maps, no DM05A, backup D:\kl_stage\pd2guns_1106d_backup).

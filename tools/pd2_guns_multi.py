@@ -84,6 +84,17 @@ SPECS = [
     dict(item=52, template='Launcher_HK69A1_01', unit='pd2_dlc_gage_assault/weapons/wpn_fps_gre_m79_pts', key='GL40', name='PD2 GL40', kind='grenade launcher', parts=M79_PARTS),
     dict(item=53, template='Launcher_HK69A1_01TearGas', unit='pd2_dlc_gage_assault/weapons/wpn_fps_gre_m79_pts', key='GL40GAS', name='PD2 GL40 GAS', kind='grenade launcher', parts=M79_PARTS),
     dict(item=54, template='Launcher_HK69A1_01Flare', unit='pd2_dlc_gage_assault/weapons/wpn_fps_gre_m79_pts', key='GL40FLR', name='PD2 GL40 FLARE', kind='grenade launcher', parts=M79_PARTS),
+    # ---- batch 7 (2026-11-06): items 45 / 46 / 47 / 48 (the four Minimi items, names KSP*) <- PD2 RPK (wpn_npc_rpk, 'g_body'), same gun as items 40 - 43. Hosts Mg_Minimi_SPW_L09_Heli_Player /
+    # _L10_Heli / Mg_Minimi_SPW / Mg_Minimi_SPW_Heli: roots 2739 (45 / 46 / 48 share it) and 4626 (47), each template its OWN Ground node. Fit on DM02 (frozen in fits.json): see the
+    # layer notes in re/pd2_guns.md. Earlier survey: the RPK is the PD2 LMG that fits the Minimi holds (cost 1.8 - 2.0, muzzle 82.7 - 83.2 vs host 80.4 - 81.9); the M249 does not (3.5+).
+    dict(item=45, template='Mg_Minimi_SPW_L09_Heli_Player', unit='pd2_dlc_mad/weapons/wpn_npc_rpk', mesh='g_body', tex='wpn_npc_rpk_df.texture',
+         key='RPK45', name='PD2 RPK', kind='light machine gun'),
+    dict(item=46, template='Mg_Minimi_SPW_L10_Heli', unit='pd2_dlc_mad/weapons/wpn_npc_rpk', mesh='g_body', tex='wpn_npc_rpk_df.texture',
+         key='RPK46', name='PD2 RPK', kind='light machine gun'),
+    dict(item=47, template='Mg_Minimi_SPW', unit='pd2_dlc_mad/weapons/wpn_npc_rpk', mesh='g_body', tex='wpn_npc_rpk_df.texture',
+         key='RPK47', name='PD2 RPK', kind='light machine gun'),
+    dict(item=48, template='Mg_Minimi_SPW_Heli', unit='pd2_dlc_mad/weapons/wpn_npc_rpk', mesh='g_body', tex='wpn_npc_rpk_df.texture',
+         key='RPK48', name='PD2 RPK', kind='light machine gun'),
 ]
 # Tried and dropped (fit on the MG hold leaves the stock 4 - 5 cm IN FRONT of the right hand): item 42 <- PD2 M4 (cost 3.30, butt +5.0),
 # item 43 <- PD2 AKMSU (cost 3.99, butt +3.8). A short rifle model does not suit the long MG hold; a PD2 LMG (M249: 9 materials) would.
@@ -260,6 +271,14 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
                     # the detail-190 type-1 part = the far copy, the detail-1 type-1 part = the body. The new body objects take 1|190 = 191 (the whole
                     # M79 is in body objects, multi-part path); the host's type-3 barrel and type-2 hammer are dropped from the root (no clip to reload).
                     lowd = far190
+            if not lowd:
+                far62 = [o for o in objs if p.u32(o, 0x3c) == 1 and p.chunks[o][0x0e] == 62]
+                if len(far62) == 2:
+                    # GUESS (batch 7): a Minimi root (Mg_Minimi_SPW*: type-1 detail 1 body 2114 verts + type-1 detail 1 small part 34 verts (x 17 - 28, own material,
+                    # a sight or the ammo box?) and their detail-62 copies 464 / 28 verts; no detail 16 / 24 / 248 / 28 / 190, no bone-3 clip) is read as: the larger
+                    # detail-62 part = the far copy of the body, the larger detail-1 part = the body. The new body takes 62|7 = 63 (every distance); the small part
+                    # and its far copy are dropped (the PD2 RPK carries its own bipod / sight in the mesh).
+                    lowd = [max(far62, key=lambda o: nvs[o])]
             if len(lowd) != 1:
                 raise ValueError('%s: unexpected parts %s' % (spec['template'], [(o, p.u32(o, 0x3c), p.chunks[o][0x0e]) for o in objs]))
             body_lod = mag_lod = (p.chunks[lowd[0]][0x0e] | (1 if p.chunks[lowd[0]][0x0e] == 190 else 7))   # 31 on a pistol, 255 on a launcher, 191 on the HK69 (GUESS)

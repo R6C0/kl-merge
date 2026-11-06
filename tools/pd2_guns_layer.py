@@ -3,7 +3,7 @@
 pd2_guns_layer.py - stage the NEW pd2_guns_multi specs (batch 3 C45 / item 62, batch 4 HRL50 / HRL51 = items 50 / 51) as a layer ON TOP of the
 live Dead Men maps (2026-11-06, offline; writes only the stage folder, never the game).
 
-    python tools/pd2_guns_layer.py build  [--layer 1106b|1106c] [--out <dir>] [--maps DM01,DM02]   default out <work>/build/pd2guns_1106b (1106c: D:\\kl_stage\\pd2guns_1106c, on the 1106b stage)
+    python tools/pd2_guns_layer.py build  [--layer 1106b|1106c|1106d] [--out <dir>] [--maps DM01,DM02]   default out <work>/build/pd2guns_1106b (1106c: D:\\kl_stage\\pd2guns_1106c, on the 1106b stage)
     python tools/pd2_guns_layer.py verify [--out <dir>] [--maps ...]         per-map table (needs the live zips to be the ones staged on)
     python tools/pd2_guns_layer.py pin    [--out <dir>]                      redo the ini Entries fix + pins.json of a baked stage (no re-bake)
     python tools/pd2_guns_layer.py install-py [--out <dir>]                  rewrite install.py / INSTALL.bat / UNDO.bat from pins.json
@@ -40,6 +40,11 @@ LAYERS = {
                   title='1106c (items 49 R700 sniper, 52 / 53 / 54 GL40 grenade launchers: the specs R700, GL40, GL40GAS, GL40FLR), staged on top of layer 1106b',
                   short='R700 / GL40', seeds=[os.path.join(WORK_BUILD, 'pd2b5_scratch', 'r700_out', 'fits.json'),
                                               os.path.join(WORK_BUILD, 'pd2b6_scratch', 'fits.json')]),
+    '1106d': dict(keys=['RPK45', 'RPK46', 'RPK47', 'RPK48'], tag='.before-pd2guns1106d', base=r'D:\kl_stage\pd2guns_1106c',
+                  out=r'D:\kl_stage\pd2guns_1106d', backup=r'D:\kl_stage\pd2guns_1106d_backup',
+                  maps=['DM01', 'DM01B', 'DM02', 'DM03', 'DM03A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B'],      # NOT DM05A (c9's restage is pending)
+                  title='1106d (items 45 / 46 / 47 / 48 Minimi: the specs RPK45, RPK46, RPK47, RPK48 = PD2 RPK), staged on top of layer 1106c',
+                  short='RPK on the Minimi items', seeds=[r'D:\kl_stage\pd2b7_scratch\fits.json']),
 }
 KEYS = LAYERS['1106b']['keys']
 TAG = LAYERS['1106b']['tag']
@@ -48,7 +53,8 @@ LAYER = '1106b'
 ALLOWED = {'.prm', '.MAT', '.TEX', '.oct', '.gms', '.prp'}
 FITS_SEEDS = [r'C:\Users\Henri\AppData\Local\Temp\claude\c--kl-merge-kl-merge\e2de9ad7-9c8b-45d5-9019-f852ea50154f\scratchpad\pd2b4\fits.json']
 DETAIL = {'C45': 31, 'HRL50': 255, 'HRL51': 255,      # body detail byte (see build_level GUESS notes)
-          'R700': 31, 'GL40': 191, 'GL40GAS': 191, 'GL40FLR': 191}      # R700 7|28 = 31, GL40 1|190 = 191 (pd2_guns_multi batch 5/6 commits)
+          'R700': 31, 'GL40': 191, 'GL40GAS': 191, 'GL40FLR': 191,      # R700 7|28 = 31, GL40 1|190 = 191 (pd2_guns_multi batch 5/6 commits)
+          'RPK45': 63, 'RPK46': 63, 'RPK47': 63, 'RPK48': 63}      # Minimi 62|7 = 63 (batch 7 GUESS: the detail-62 464-vert part is the far copy)
 
 
 def configure(name):
@@ -609,7 +615,7 @@ def main(a):
     out = default_out()
     if '--out' in a:
         out = a[a.index('--out') + 1]; del a[a.index('--out'):a.index('--out') + 2]
-    maps = list(M.MAPS)
+    maps = list(LAYERS[LAYER].get('maps') or M.MAPS)
     if LAYER == '1106c':       # DM02 first: the fits of a new key are taken on the first baked map (the notes fit on DM02)
         maps.sort(key=lambda m: m != 'DM02')
     if '--maps' in a:
