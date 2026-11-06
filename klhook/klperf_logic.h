@@ -10,6 +10,20 @@ static unsigned klperf_osd_interval(int fails, int on)
     return fails < 3 ? 2000u : fails < 6 ? 15000u : 60000u;
 }
 
+/* klhud.c klu_find_osd, [Perf] OsdScanSlice: ms one call may scan before it stops and resumes on the next tick; 0 = the whole
+   address space in one call (the old way). n9_1106 11-06: 9 seats on one PC, one-call scans of 50 657 / 84 719 ms after the round
+   load, the [Auto] watchdog killed 3 seats at 120 s (DD09 inst9, DM03 inst3, DM01B inst4). */
+static unsigned klperf_osd_slice_ms(int on)
+{
+    return on ? 24u : 0u;     /* klu_tick runs every 100 ms: ~25 % of the wall time while a pass runs (8 ms = ~10 %, review 11-06) */
+}
+
+/* has a sliced scan used up its budget? slice 0 never stops; elapsed = GetTickCount() - the call's start (unsigned, wraps fine) */
+static int klperf_slice_over(unsigned slice, unsigned elapsed)
+{
+    return slice != 0 && elapsed >= slice;
+}
+
 /* kl_online() cache: may the last answer be reused? have = a value is cached; game_thread = caller is the main loop's thread;
    same_tick = klh_ticks has not changed since it was stored; age_ms = GetTickCount() - stored time (unsigned, wraps fine). */
 static int klperf_cache_ok(int have, int game_thread, int same_tick, unsigned age_ms)

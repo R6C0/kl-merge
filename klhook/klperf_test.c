@@ -9,6 +9,8 @@ int main(void)
     CHECK(klperf_osd_interval(3, 1) == 15000u); CHECK(klperf_osd_interval(5, 1) == 15000u);
     CHECK(klperf_osd_interval(6, 1) == 60000u); CHECK(klperf_osd_interval(99, 1) == 60000u);
     CHECK(klperf_osd_interval(5, 0) == 15000u); CHECK(klperf_osd_interval(99, 0) == 15000u); CHECK(klperf_osd_interval(1, 0) == 2000u);
+    CHECK(klperf_osd_slice_ms(0) == 0u); CHECK(klperf_osd_slice_ms(1) == 24u);
+    CHECK(!klperf_slice_over(0, 0xffffffffu)); CHECK(!klperf_slice_over(8u, 7u)); CHECK(klperf_slice_over(8u, 8u)); CHECK(klperf_slice_over(8u, 84719u));
     CHECK(!klperf_cache_ok(0, 1, 1, 0));
     CHECK(klperf_cache_ok(1, 1, 1, 100000u)); CHECK(!klperf_cache_ok(1, 1, 0, 0));
     CHECK(klperf_cache_ok(1, 0, 0, 49u)); CHECK(!klperf_cache_ok(1, 0, 1, 50u));

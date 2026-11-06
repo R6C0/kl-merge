@@ -264,6 +264,7 @@ static void klog(const char *fmt, ...)
 /* [Perf] (2026-11-05, read-only sweep + verify): three cheap-by-construction savings. Each key is read once; a MISSING key = 0 = the old behaviour
    exactly (the sample KLHook.ini sets them to 1 = recommended on). OsdBackoff: klhud.c klu_find_osd. OnlineCache: kl_online() per tick.
    FastRead: klh_rd of an address inside kl2.exe's own readable sections is a memcpy instead of ReadProcessMemory. */
+static int klperf_oss = -1;                 /* OsdScanSlice (klhud.c klu_find_osd) */
 static int klperf_osd = -1, klperf_oc = -1, klperf_fr = -1, klperf_quiet = -1, klperf_tpc = -1;   /* quiet: QuietProbes (klbotdeath/klcoverdump/klcoverring/klmfprobe default); tpc: TickProfile */
 static int klperf_on(int *cache, const char *key)
 {

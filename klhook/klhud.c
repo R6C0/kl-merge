@@ -1764,9 +1764,10 @@ static void klu_reset(const char *why, DWORD osd)
 
 /* ---------------------------------------------------------------- finding the OSD (main thread) */
 static DWORD klu_cand[4]; static int klu_ncand, klu_scan_fails; static DWORD klu_scan_t, klu_wait_t;
+static BYTE *klu_scan_at; static DWORD klu_scan_t0; static int klu_scan_parts;   /* [Perf] OsdScanSlice: where an unfinished scan resumes (0 = none running), when it began, slices so far */
 #ifndef KLPERF_HAVE                           /* an off-game test that includes this file without klhook.c: [Perf] is off there */
 #include "klperf_logic.h"
-static int klperf_osd = -1;
+static int klperf_osd = -1, klperf_oss = -1;
 static int klperf_on(int *cache, const char *key) { (void)cache; (void)key; return 0; }
 #endif
 
@@ -1793,15 +1794,32 @@ static DWORD klu_osd_direct(int *pending)
 
 static int klu_find_osd(void)
 {   /* the fall-back: every ZOnScreenDisplay2 in the committed private read-write memory (0.1 - 0.3 s on the main thread:
-       only in an Arcade session's round states, at most every 2 s, every 15 s after three empty scans of a scene) */
-    MEMORY_BASIC_INFORMATION mbi; BYTE *a = (BYTE *)0x10000; static BYTE buf[0x10000]; DWORD t0 = GetTickCount();
-    if (klu_scan_t && t0 - klu_scan_t < klperf_osd_interval(klu_scan_fails, klperf_on(&klperf_osd, "OsdBackoff"))) return klu_ncand;     /* [Perf] OsdBackoff: 2 s, 15 s after 3 empty scans, 60 s after 6 (default off = 2 s / 15 s) */
-    klu_ncand = 0;
+       only in an Arcade session's round states, at most every 2 s, every 15 s after three empty scans of a scene).
+       [Perf] OsdScanSlice: one call scans for at most ~24 ms (GetTickCount steps of 15.6 ms: 24-31 ms in practice; at least one 64 KB piece a call) and returns -1; the next
+       tick resumes at the next 64 KB piece (VirtualQuery of an address inside a region answers from that page on). n9_1106 11-06:
+       9 seats on one PC, one-call scans of 50 / 85 s after the round load, the [Auto] watchdog killed the seat at 120 s. */
+    MEMORY_BASIC_INFORMATION mbi; BYTE *a; static BYTE buf[0x10000]; DWORD t0 = GetTickCount(); int done = 0;
+    unsigned slice = klperf_osd_slice_ms(klperf_on(&klperf_oss, "OsdScanSlice"));
+    if (!klu_scan_at) {
+        if (klu_scan_t && t0 - klu_scan_t < klperf_osd_interval(klu_scan_fails, klperf_on(&klperf_osd, "OsdBackoff"))) return klu_ncand;     /* [Perf] OsdBackoff: 2 s, 15 s after 3 empty scans, 60 s after 6 (default off = 2 s / 15 s) */
+        klu_ncand = 0; klu_scan_at = (BYTE *)0x10000; klu_scan_t0 = t0; klu_scan_parts = 0;
+    }
+    a = klu_scan_at;
     while ((DWORD_PTR)a < 0x7ffe0000 && VirtualQuery(a, &mbi, sizeof mbi)) {
+        if (done && klperf_slice_over(slice, GetTickCount() - t0)) {             /* also between regions that are not scanned */
+            klu_scan_at = (BYTE *)mbi.BaseAddress; klu_scan_parts++;
+            return -1;
+        }
         if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
             SIZE_T o, k;
             for (o = 0; o < mbi.RegionSize; o += sizeof buf) {
                 SIZE_T n = mbi.RegionSize - o < sizeof buf ? mbi.RegionSize - o : sizeof buf;
+                if (done && klperf_slice_over(slice, GetTickCount() - t0)) {     /* resume here on the next tick; done: at least one piece a call, so a
+                                                                                    GetTickCount step (15.6 ms) at the call's start cannot stall the pass */
+                    klu_scan_at = (BYTE *)mbi.BaseAddress + o; klu_scan_parts++;
+                    return -1;
+                }
+                done = 1;
                 if (!klh_rd((DWORD_PTR)mbi.BaseAddress + o, buf, n)) continue;
                 for (k = 0; k + 4 <= n; k += 8) {
                     DWORD v = *(DWORD *)(buf + k);
@@ -1811,17 +1829,20 @@ static int klu_find_osd(void)
         }
         a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
     }
+    klu_scan_at = 0;
     klu_scan_t = GetTickCount();
-    if (klu.log > 1 || (klu.log && klu_ncand)) klog("hud: %d ZOnScreenDisplay2 object(s) found by the scan in %lu ms", klu_ncand, klu_scan_t - t0);
+    if (klu.log > 1 || (klu.log && klu_ncand)) klog("hud: %d ZOnScreenDisplay2 object(s) found by the scan in %lu ms (%d slice(s))", klu_ncand, klu_scan_t - klu_scan_t0, klu_scan_parts + 1);
     return klu_ncand;
 }
 
 static DWORD klu_current_osd(int may_scan)
 {
     DWORD vt, osd; int i, pending;
-    if (klu_r.osd && klh_rd(klu_r.osd, &vt, 4) && vt == KLU_OSD_VT) return klu_r.osd;
-    if (!may_scan) return 0;                   /* only in an Arcade session's round states */
-    if ((osd = klu_osd_direct(&pending)) != 0) { klu_wait_t = 0; return osd; }
+    /* [Perf] OsdScanSlice, review 11-06: a pass that is no longer wanted is dropped, never resumed later from its old cursor (a new
+       round's OSD below the cursor would be missed and the pass booked as empty) */
+    if (klu_r.osd && klh_rd(klu_r.osd, &vt, 4) && vt == KLU_OSD_VT) { klu_scan_at = 0; return klu_r.osd; }
+    if (!may_scan) { klu_scan_at = 0; return 0; }   /* only in an Arcade session's round states */
+    if ((osd = klu_osd_direct(&pending)) != 0) { klu_wait_t = 0; klu_scan_at = 0; return osd; }
     if (pending) {
         /* the game's own OSD is there and not ready: wait for it, no scan (the scan is 0.1 - 0.3 s on the main thread,
            in the countdown). Only when it has not become ready in 10 s does the scan run, as before. */
@@ -1829,7 +1850,8 @@ static DWORD klu_current_osd(int may_scan)
         if (!klu_wait_t) { klu_wait_t = now | 1; if (klu.log > 1) klog("hud: the game's OSD is there and not ready yet (no FA player list or its transform not written): waiting, no scan"); }
         if ((int)(now - klu_wait_t) < 10000) return 0;      /* signed: now | 1 is 1 ms ahead in the same tick (pq2 11-03) */
     }
-    if (!klu_find_osd()) { klu_scan_fails++; return 0; }
+    if ((i = klu_find_osd()) < 0) return 0;           /* [Perf] OsdScanSlice: the scan goes on next tick */
+    if (!i) { klu_scan_fails++; return 0; }
     for (i = 0; i < klu_ncand; i++) if (klu_osd_ok(klu_cand[i])) { klu_scan_fails = 0; return klu_cand[i]; }
     klu_scan_fails++;
     return 0;
@@ -1857,6 +1879,7 @@ static void klu_tick(int game_thread)
         klu_reset("the scene changed", 0);
         snprintf(klu_r.scene, sizeof klu_r.scene, "%s", scene);
         klu_scan_fails = 0; klu_scan_t = 0; klu_wait_t = 0;
+        klu_scan_at = 0; klu_ncand = 0;               /* [Perf] OsdScanSlice: a pass begun in the old level starts over */
         klu_inset_back();
     }
     have = klb_read_hud(&pre);                /* klbot.c 1: an Arcade session with its rules object, whatever the state ([HUD] Online: or an online one) */
@@ -1870,6 +1893,7 @@ static void klu_tick(int game_thread)
         klu_reset(pre.state < 0x16 ? "the session state is below 0x16" : "the Arcade rules object changed", 0);
         snprintf(klu_r.scene, sizeof klu_r.scene, "%s", scene);
         if (klperf_on(&klperf_osd, "OsdBackoff")) { klu_scan_fails = 0; klu_scan_t = 0; klu_wait_t = 0; }     /* [Perf] OsdBackoff: a new round under the same scene still gets a prompt scan */
+        klu_scan_at = 0; klu_ncand = 0;               /* [Perf] OsdScanSlice: a pass begun in the old round starts over */
     }
     /* [Perf] OsdBackoff, review 11-05: a round that never found an OSD leaves the scans 60 s apart, and the block above needs a
        held OSD. A new rules object (a new round) clears the back-off on its own, once per rules object. */
@@ -1878,6 +1902,7 @@ static void klu_tick(int game_thread)
         if (have && pre.rules && pre.rules != perf_rules && klperf_on(&klperf_osd, "OsdBackoff")) {
             perf_rules = pre.rules;
             if (klu_scan_fails) { klu_scan_fails = 0; klu_scan_t = 0; klu_wait_t = 0; }
+            klu_scan_at = 0;                          /* [Perf] OsdScanSlice: same */
         }
     }
     /* section 4 / 6: a level that is not stock, or any level with Stock=1 */
