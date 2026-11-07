@@ -897,6 +897,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klucc_down.c"                                   /* klucc_down.c: [Ucc] DownOnly - a hidden UCC's hits only down a heister (off unless set); AFTER klroundkeep.c, klnetsmooth.c */
 #include "klmusic.c"                                      /* klmusic.c: [Music] a winmm MCI jukebox for the FA round (off unless Enable=1); AFTER klmove.c / klbot.c */
 #include "klambience.c"                                  /* klambience.c: [Ambience] a looping bed + timed one-shots (radio, alarm, heli, distant) over winmm MCI (off unless Enable=1); AFTER klmusic.c */
+#include "klecho.c"                                      /* klecho.c: [Echo] room reverb follows the place (wraps the alEffectf data slot; off unless Enable=1); AFTER klambience.c */
 #include "klshop.c"
 #include "klshoppage.c"                           /* AFTER klshop.c: [ShopPage] page II of the weapon shop (key flips set A / B) */
 #include "klfed.c"
@@ -1503,6 +1504,7 @@ static void klh_tick(int game_thread)
     KLPT(klgrenade_tick(game_thread));                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
     KLPT(klmu_tick(game_thread));                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
     KLPT(klam_tick(game_thread));                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
+    KLPT(klecho_tick(game_thread));                         /* klecho.c: [Echo] wraps the reverb slot (data write; off unless Enable=1) */
     KLPT(klss_tick(game_thread));                           /* klshot2d.c: re-points the sound system at the private vtable (VTABLE route only) */
     KLPT(klst_tick(game_thread));                           /* klstinger.c: event stingers (reads only; off unless [Stinger] Enable=1) */
     KLPT(klnetsmooth_tick(game_thread));                    /* klnetsmooth.c: [NetSmooth] remote players turn smoothly (off unless Enable=1) */
@@ -1947,6 +1949,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klud_init();                                      /* klucc_down.c: reads [Ucc] DownOnly */
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
     klam_init();                                     /* klambience.c: [Ambience] (default off) */
+    klecho_init();                                    /* klecho.c: [Echo] (default off) */
     klss_init();                                      /* klshot2d.c: [Sound] RemoteShot2D (default off) */
     klst_init();                                      /* klstinger.c: [Stinger] (default off) */
     klrigid_init();

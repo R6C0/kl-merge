@@ -1,3 +1,15 @@
+## 2026-11-07 ~03:30 [db] RAW + ECHO gun sound STAGED (offline, nothing installed; no crash involved)
+RAW: C:\kl_build_1024\gunraw_1107 (42 banks, 2161 records, verify PASS, INSTALL/UNDO bat pair, backups *.before-1107gunraw). ECHO: [Echo] Enable=0 hook (wraps the alEffectf data slot 0x14f356c), TEST/SHIP in klhook/out_echo1107(_test). Details, md5s, GUESS list: re/gun_sounds_1107.md. Needs one owner-present A/B (do gun voices carry the aux send?).
+
+## 2026-11-07 ~02:30 [c9] OWNER FEEDBACK 11-07 ROUTED + c9 STAGES (offline, nothing installed; no crash involved)
+Routed: 6b shop/wardrobe UI + PD2 guns re-based on own-type templates (no *_Heli; HeliGuns key) + no-PD2 fallback; f0 Arcade round-1 pick (STAGED pick_1107, [Hire] PickDefault=1) + lens immersion; db gun echo/raw sound.
+c9 stages (C:\kl_build_1024, all pinned to live, install.py + undo, none installed):
+- lcmusic_1107: DM05A club music boost (.SND only, Ambient gain 0.5->1, layer vols/radius; meanings GUESS), base 1d325299. Cause of silent rooms NOT proven (data + room coverage intact; likely too quiet).
+- arrival_1107/lcarr_2h: DM05A heli ROUTE_2H, 7 pts from the east, ends hovering over the pad's east edge, swept-hull (R 990) clearance >=156 cm; Roof box 7 x 6676..16300. Unknown: boarding from 8.2 m hover, TriggerDelay2 timing (flight 54% shorter). Same base as lcmusic: chain one on the other.
+- vans_1107/stage_dd10: Flat Raid van group unhidden at load + round-start DeactivateGeom emptied (GUESS, no log evidence). DM09: log shows the waiting EMPTY van shot dead in 2-4.5 s with no shield (FakeTarget + RelayAnimatedVehicleHit on Body_Main); TEST dll klhook/out_vans1107 fe119fba ([VanBlow] ShieldUntilBoarded/HealFloor, default 0) is weak; better fix = shield from state 3 or drop the FakeTarget while waiting.
+- Skyline: DM05A graft dropped Rooftops_END Buildings_MidRange + lights/traffic; also DM03/DM03A/DM06/DM06B drop outside buildings + traffic. Placement not solid yet, no stage.
+BLOCKER: C: 1.0 GB, D: 0.5 GB free; stages need ~1 GB free each to install.
+
 ## 2026-11-07 ~[f0] ARCADE PICK HOLDS FROM ROUND 1: [Hire] PickDefault STAGED, NOT installed (owner: "my character is random on the first round"; no crash involved)
 Why: the 10-24 rule (re/shop_hire.md) made every UNHIRED round a random default under [Hire] Enable=1; round 1 is never hired (bank $0), so the
 Heister page pick never showed. klco_init also zeroed the saved Char at start ([Hire] OnlineIgnoreChar, offline too). Fix 7cba726f (klhire_pick.h,

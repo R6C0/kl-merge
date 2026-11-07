@@ -22,6 +22,7 @@ Differences:
     python kl_gunsnd_all.py pin    [--groups ...]                           accept the CURRENT live md5s as valid inputs
     python kl_gunsnd_all.py build <outdir> [--groups ...] [--force]         spans + manifest + report + INSTALL / UNDO scripts
     python kl_gunsnd_all.py verify <outdir>                                 independent re-check (apply, re-decode, undo)
+    python kl_gunsnd_all.py build <outdir> --body [--groups ...] [--force]  RAW BODY pass (owner 11-07, re/gun_raw_1107.md): see BODY below
 
 Not covered on purpose (reported, not changed): RocketLauncher_RPG7 launch (head -5), Rpg_Loop, explosions, reload / cock /
 dry-fire clips, the npc (0.35) vs player (0.70) group volumes in the .SND (a design choice, not a sample level).
@@ -44,6 +45,68 @@ RAW = False                # --raw (owner 10-25): 'gun' records also get the MP4
 PINS = os.path.join(HERE, 'kl_gunsnd_all.pins.json')
 TAG = '1024gunsnd2'
 GROUPS = ('maps', 'stock', 'story')
+
+# --body (owner 2026-11-07 "they all just sound like vanilla ... i want them to sound raw"; audit re/gun_raw_1107.md): the 10-24/10-25
+# passes changed only LEVEL and clipping; timbre, tail and space were never touched. --body (implies --raw) rebuilds every gun-shot /
+# distant / silenced record from its PRE-RAW source (the bank's .before-1025gunraw copy: same offsets, one ADPCM generation, never
+# re-encode the live clip) with: (1) body EQ = low shelf at 120 Hz + 2.5 kHz crack + box cut + sub cut (kl_gunsnd.heat's EQ), (2) tanh
+# saturation, (3) an echo tail synthesised INSIDE the record's stock length (kl_gunsnd.synth_ir convolution, high-cut, mixed under the
+# dry shot: street tail for pistols / shotguns / distant, shorter indoor-style tail for rifles / SMGs / MGs so full auto does not stack
+# a wall of overlapping voices), then (4) the existing hard clip to the MP45 head level + flat-top share (drive_raw; distant and
+# silenced keep the knee clipper at the reference minus 3.7 dB). Record sizes are unchanged, so .WHD / .SND / zips stay byte-identical
+# and the md5-chained span installer works as before. The Deagle (= MP45) clips are untouched (the reference).
+# GUESS: every number in PROFILE (shelf dB, tail gain, tail style per class) is a starting taste, nobody has listened yet; the
+# preview wavs under <outdir>\preview are there to audition BEFORE installing.
+BODY = False
+PREVIEW = ('stock/F02', 'maps/DM02')   # --body: these banks also get before/after .wav pairs under <outdir>/preview (audition before installing)
+BODY_BAK = '.before-1025gunraw'      # the pre-raw copy of every bank (kept by the 1025 installer)
+BODY_CORR = 0.5                      # live vs backup normalised-waveform correlation under this: a later pass replaced the clip -> use the live one
+PROFILE = {      # class -> low shelf dB @120 Hz, crack dB @2.5 kHz, tanh drive, wet gain (x dry peak), IR style, IR tail s
+    'pistol':   dict(low=5.0, crack=3.0, drive=2.2, wet=0.50, style='street', tail=0.80),
+    'shotgun':  dict(low=6.0, crack=2.0, drive=2.2, wet=0.55, style='street', tail=0.90),
+    'rifle':    dict(low=5.0, crack=3.0, drive=2.2, wet=0.38, style='street', tail=1.00),
+    'smg':      dict(low=4.0, crack=3.0, drive=2.0, wet=0.28, style='indoor', tail=0.60),
+    'mg':       dict(low=5.0, crack=2.0, drive=2.0, wet=0.28, style='indoor', tail=0.70),
+    'distant':  dict(low=3.0, crack=0.0, drive=1.6, wet=0.75, style='street', tail=1.50),
+    'silenced': dict(low=2.0, crack=0.0, drive=1.4, wet=0.15, style='indoor', tail=0.40),
+}
+CLASS_RX = [(re.compile(r'distant_shot', re.I), 'distant'), (re.compile(r'silenced', re.I), 'silenced'),
+            (re.compile(r'/(HG_|Pistol|Revolver)', re.I), 'pistol'), (re.compile(r'shotgun', re.I), 'shotgun'),
+            (re.compile(r'/(MG_|Machine|MiniMi)', re.I), 'mg'), (re.compile(r'/(SMG_|Sub)', re.I), 'smg')]
+LIGHT = re.compile(r'(M9Beretta|TaurusJudge|Shotgun_TPS|Type88)', re.I)   # already raw in stock (audit table 2): milder EQ
+
+
+def gun_class(name):
+    for rx, c in CLASS_RX:
+        if rx.search(name): return c
+    return 'rifle'
+
+
+def body(x, cls, light=False):
+    """float clip -> body EQ + saturation + in-length echo tail (see BODY). Same length as x; peak ~0.94 before the clip stage."""
+    p = PROFILE[cls]; f = 0.6 if light else 1.0; r = M.R
+    x = x - x.mean(); x = x / (np.abs(x).max() + 1e-9)
+    y = G._fft_filter(x[:, None], r, lambda fr: G._shelf(fr, 120, p['low'] * f) + G._peak(fr, 2500, p['crack'] * f, 1) + G._peak(fr, 450, -2, 1.2)
+                      - 24 * (1 / (1 + (fr / 30) ** 4)))[:, 0]
+    y = np.tanh(p['drive'] * y / max(1e-9, np.abs(y).max())) / np.tanh(p['drive'])
+    ir = G.synth_ir(r, p['style'], tail=min(p['tail'], len(x) / r))
+    n = 1 << int(np.ceil(np.log2(len(y) + len(ir))))
+    wet = np.fft.irfft(np.fft.rfft(y, n) * np.fft.rfft(ir, n), n)[:len(y)]
+    wet = G._fft_filter(wet[:, None], r, lambda fr: -18 * (1 - 1 / (1 + (fr / 3500) ** 2)))[:, 0]
+    wet = wet * (p['wet'] * np.abs(y).max() / max(1e-9, np.abs(wet).max()))
+    z = y + wet
+    fd = min(len(z), int(0.08 * r)); z[-fd:] *= np.linspace(1, 0, fd)       # the tail ends inside the record: 80 ms fade, no cut
+    return z / (np.abs(z).max() + 1e-9) * 0.94
+
+
+def timbre(x):
+    """centroid Hz of the head, % energy under 200 Hz, tail dB (RMS 0.4-0.8 s vs head), seconds above -50 dBFS: the audit's columns"""
+    r = M.R; i = M.onset(x); h = x[i:i + int(0.25 * r)]; X = np.abs(np.fft.rfft(h * np.hanning(len(h)))) ** 2; fr = np.fft.rfftfreq(len(h), 1 / r)
+    t = x[i + int(0.4 * r):i + int(0.8 * r)]
+    th = float(20 * np.log10(np.sqrt((t ** 2).mean()) + 1e-9) - M.head_db(x)) if len(t) > 100 else -99.0
+    env = np.abs(x); d = np.nonzero(env > 10 ** (-50 / 20))[0]
+    return dict(centroid=round(float((fr * X).sum() / (X.sum() + 1e-12))), lf=round(float(100 * X[fr < 200].sum() / (X.sum() + 1e-12)), 1),
+                tail_db=round(th, 1), dur=round(float((d[-1] - i) / r) if len(d) else 0.0, 2))
 
 
 def md5(b): return hashlib.md5(b).hexdigest()
@@ -146,11 +209,26 @@ def build_bank(b, out, force, log):
     # reference ("mp45 was perfect"), so it stays untouched everywhere
     rf = FALLBACK_FLAT if RAW else None
     ws = {w.rec_off: w for w in G.waves(whd)}; repl = {}; rep = []; offs = {}; short = []
+    bak = bakwav = None; nsrc = [0, 0]                      # --body: [records taken from the pre-raw copy, records kept on the live clip]
+    if BODY:
+        bp = b.base + '.WAV' + BODY_BAK
+        if os.path.exists(bp):
+            bakwav = open(bp, 'rb').read()
+            if len(bakwav) != len(wav): bakwav = None       # a different layout: never mix offsets
     for w, k, h, t in rows:
         assert w.codec == 0x11 and w.get('rate') == M.R and w.get('ch') == 1 and not w.streamed, w.name
         o = w.get('off'); assert o not in offs, 'two records share data %s / %s' % (offs[o], w.name); offs[o] = w.name
-        x = G.decode_wave(wav, w)[:, 0]; raw = RAW and k == 'gun'; fl = M.flat_pct(x)
-        if raw:
+        x = G.decode_wave(wav, w)[:, 0]; raw = RAW and k == 'gun'; fl = M.flat_pct(x); tb0 = timbre(x) if BODY else None
+        if BODY:                                            # every record is rebuilt: no 'already on target' skip
+            src = x
+            if bakwav is not None:
+                xb = G.decode_wave(bakwav, w)[:, 0]; n = min(len(xb), len(x))
+                c = float(np.corrcoef(xb[:n] / (np.abs(xb).max() + 1e-9), x[:n] / (np.abs(x).max() + 1e-9))[0, 1])
+                if c >= BODY_CORR: src = xb; nsrc[0] += 1
+                else: nsrc[1] += 1
+            else: nsrc[1] += 1
+            x = body(src, gun_class(w.name), bool(LIGHT.search(w.name)))
+        elif raw:
             if fl >= rf - FLAT_TOL and t - TOL <= h <= t + M.RAW_OVER + 0.1: continue
         elif abs(h - t) <= TOL: continue
         if raw: y, g, ach, _ = M.drive_raw(x, t, rf)
@@ -159,10 +237,11 @@ def build_bank(b, out, force, log):
         assert ns == w.get('samples') and len(data) == w.get('size'), (w.name, ns, len(data))
         repl[w.rec_off] = (data, ns, pcmb, ns / M.R)
         rep.append(dict(record=w.name, kind=k, before_head=round(h, 2), target_head=round(t, 2), gain_db=round(g, 2), raw=raw,
-                        before_flat=round(fl, 1), target_flat=None if rf is None else round(rf, 1), _y=y, _w=w.rec_off))
+                        before_flat=round(fl, 1), target_flat=None if rf is None else round(rf, 1), _y=y, _w=w.rec_off,
+                        cls=gun_class(w.name) if BODY else None, before_timbre=tb0))
         if ach < t - SHORT: short.append((w.name, round(ach, 2), round(t, 2)))
     man = dict(key=b.key, group=b.group, id=b.id, file=b.rel, ref_head=round(ref, 2), ref_from=how, clips=len(rows), changed=len(repl),
-               live_md5=m5, short_of_target=short)
+               live_md5=m5, short_of_target=short, body_src_backup=nsrc[0], body_src_live=nsrc[1])
     if not repl:
         log('%-14s ref %.2f (%s): %d clips, all within %.2f dB, nothing to change' % (b.key, ref, how, len(rows), TOL)); man['unchanged'] = True
         return man, None
@@ -176,7 +255,14 @@ def build_bank(b, out, force, log):
     nws = {w.rec_off: w for w in G.waves(nwhd)}; mins = []
     for e in rep:
         d = G.decode_wave(nwav, nws[e['_w']])[:, 0]; c = float(np.corrcoef(d, e['_y'])[0, 1]); mins.append(c); assert c > 0.95, (e['record'], c)
-        e['after_head'] = round(M.head_db(d), 2); e['after_flat'] = round(M.flat_pct(d), 1); del e['_y'], e['_w']
+        e['after_head'] = round(M.head_db(d), 2); e['after_flat'] = round(M.flat_pct(d), 1)
+        if BODY:
+            e['after_timbre'] = timbre(d)
+            if b.key in PREVIEW:
+                pd = os.path.join(out, 'preview', b.key.replace('/', '_')); os.makedirs(pd, exist_ok=True); nm = e['record'].split('/')[-1][:-4]
+                G.write_wav(os.path.join(pd, nm + '_live.wav'), G.to_i16(G.decode_wave(wav, ws[e['_w']])), M.R)
+                G.write_wav(os.path.join(pd, nm + '_raw1107.wav'), G.to_i16(G.decode_wave(nwav, nws[e['_w']])), M.R)
+        del e['_y'], e['_w']
     spans = [(a, c - a) for a, c in olds]
     d = os.path.join(out, 'Banks', b.group); os.makedirs(d, exist_ok=True)
     open(os.path.join(d, b.id + '.new'), 'wb').write(b''.join(nwav[a:a + n] for a, n in spans))
@@ -188,14 +274,15 @@ def build_bank(b, out, force, log):
 
 
 def cmd_build(a):
-    global RAW, TAG
+    global RAW, TAG, BODY
     force = '--force' in a
     if force: a.remove('--force')
     if '--raw' in a: a.remove('--raw'); RAW = True; TAG = '1025gunraw'
+    if '--body' in a: a.remove('--body'); RAW = BODY = True; TAG = '1107gunraw'
     groups = split_groups(a); out = a[0]; os.makedirs(out, exist_ok=True); res = []
     for b in banks(groups): res.append(build_bank(b, out, force, print)[0])
     changed = [m for m in res if not m.get('unchanged')]
-    json.dump(dict(tag=TAG, raw=RAW, banks=res), open(os.path.join(out, 'report.json'), 'w'), indent=1)
+    json.dump(dict(tag=TAG, raw=RAW, body=BODY, banks=res), open(os.path.join(out, 'report.json'), 'w'), indent=1)
     mf = {m['key']: dict(file=m['file'], input_md5=m['live_md5'], output_md5=m['output_md5'], spans=m['spans'], group=m['group'], id=m['id']) for m in changed}
     json.dump(dict(tag=TAG, banks=mf), open(os.path.join(out, 'manifest.json'), 'w'), indent=1)
     pins = json.load(open(PINS)) if os.path.exists(PINS) else {}
@@ -209,7 +296,8 @@ def cmd_build(a):
             for e in m['detail']:
                 f.write('%-14s %-44s %-8s %7.2f %7.2f %6.2f %7.2f %6.1f %6s %6.1f\n' % (m['key'], e['record'].split('/')[-1][:44], e['kind'], e['before_head'], e['target_head'],
                         e['gain_db'], e['after_head'], e['before_flat'], '-' if not e['raw'] else '%.1f' % e['target_flat'], e['after_flat']))
-    write_installer(out)
+    if BODY: write_installer(out, what='raw gun sounds', blurb='RAW gun sounds 1107 (recommended on): body EQ + saturation + echo tail + MP45 hard clip on every gun / distant / silenced shot, KLExpansion maps + the 9 stock FA maps + story levels')
+    else: write_installer(out)
     print('built: %d banks checked, %d need changes, %d records, %.1f MB of new spans' % (len(res), len(changed), sum(m['changed'] for m in changed),
           sum(os.path.getsize(os.path.join(out, 'Banks', m['group'], m['id'] + '.new')) for m in changed) / 1e6))
     return 0
@@ -297,11 +385,11 @@ if ($Undo) { "banks restored: $($todo.Count)" } else { "banks updated: $($todo.C
     ps = ps.replace('before-1024gunsnd2', 'before-' + tag)        # --raw / kl_fxsnd builds back up under their own tag
     if what != 'gun sounds':                                       # kl_fxsnd.py: same installer, other wording
         ps = ps.replace('the new gun sounds', 'the new ' + what).replace('UNDO gun sounds all maps.bat', 'UNDO %s all maps.bat' % what)
-        ps = ps.replace('# Gun sounds at ONE loudness on every map (tools/kl_gunsnd_all.py)', '# %s (tools/kl_fxsnd.py on kl_gunsnd_all)' % what)
+        ps = ps.replace('# Gun sounds at ONE loudness on every map (tools/kl_gunsnd_all.py)', '# %s (%s)' % (what, 'tools/kl_gunsnd_all.py build --body, re/gun_sounds_1107.md' if BODY else 'tools/kl_fxsnd.py on kl_gunsnd_all'))
     blurb = blurb or ('Every gun-shot sample at the S&W MP45 loudness%s: KLExpansion maps, the 9 stock FA maps, the story levels' % (' and hard clip' if RAW else ''))
     open(os.path.join(out, 'install_gunsnd2.ps1'), 'w', newline='\r\n').write(ps)
     open(os.path.join(out, 'INSTALL %s all maps.bat' % what), 'w', newline='\r\n').write(
-        '@echo off\r\nrem %s (md5-checked; copies kept as .before-%s).\r\n' % (blurb, tag) +
+        '@echo off\r\nrem %s (md5-checked; copies kept as .before-%s).\r\n' % (blurb, tag) + ('echo %s\r\n' % blurb.split(':')[0] if BODY else '') +
         'powershell -ExecutionPolicy Bypass -File "%~dp0install_gunsnd2.ps1"\r\npause\r\n')
     open(os.path.join(out, 'UNDO %s all maps.bat' % what), 'w', newline='\r\n').write(
         '@echo off\r\nrem Puts the previous %s back (md5-checked).\r\npowershell -ExecutionPolicy Bypass -File "%%~dp0install_gunsnd2.ps1" -Undo\r\npause\r\n' % what)
