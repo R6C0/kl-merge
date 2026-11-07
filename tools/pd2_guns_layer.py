@@ -355,7 +355,14 @@ def pin(out, maps, log=print):
     allp = json.load(open(pp))['maps'] if os.path.isfile(pp) else {}
     allp.update(pins)
     old_base = json.load(open(pp)).get('base', BASE) if os.path.isfile(pp) else BASE      # keep the recorded base of an existing stage (a later --base live restage of one map must not rewrite it)
-    json.dump(dict(maps=allp, tag=TAG, keys=KEYS, base=old_base), open(pp, 'w'), indent=1)
+    root = dict(json.load(open(pp)).get('root') or {}) if os.path.isfile(pp) else {}      # review 11-07: a re-pin after the install (live == staged) keeps the recorded entry
+    ini = os.path.join(out, 'KLShopPage.ini')          # stage_ini's game-root ini (1107r re-indexes every pair card): installed with the maps, never alone
+    if os.path.isfile(ini):
+        import kl_shop_pics as P
+        old, new = md5(os.path.join(P.DD, 'KLShopPage.ini')), md5(ini)
+        if old != new:
+            root['KLShopPage.ini'] = dict(old=old, new=new, size=os.path.getsize(ini))
+    json.dump(dict(maps=allp, tag=TAG, keys=KEYS, base=old_base, root=root), open(pp, 'w'), indent=1)
     return pins
 
 
@@ -598,7 +605,9 @@ is restored and its md5 verified (they are then redundant and would make a re-in
 --cleanup (space-tight stage drive): after a map is installed and every live md5 == the pinned new, that map's STAGED files are deleted (pins.json and the
 backups stay; --undo needs only those two, never the staged files).
 usage: python install.py [--dry] [--maps DM01,DM02] [--skip-run-check] [--backup DIR] [--game DIR] [--cleanup] [--link-from DIR] | --undo [same options]   (run with the game closed)
---link-from DIR (space-tight backup drive): a backup whose DIR/<map>/<file> twin is md5 == the pinned old file and on the backup drive is a hard link of the twin (no copy)."""
+--link-from DIR (space-tight backup drive): a backup whose DIR/<map>/<file> twin is md5 == the pinned old file and on the backup drive is a hard link of the twin (no copy).
+Game-root files (pins.json 'root', e.g. KLShopPage.ini whose pair table every map's cards follow): swapped in (backup <backup>/_root/<file>) only once EVERY
+pinned map is on its new files (a run with --maps installs the ini on the run that completes the set); --undo restores them FIRST, whatever --maps says."""
 import hashlib, json, os, subprocess, shutil, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -607,6 +616,7 @@ BACKUP = r'@BACKUP@'
 TAG = '@TAG@'                              # the in-place rename tag of the older installer; unused here, kept so layer tags stay greppable
 SPARE = 512 << 20                          # transient headroom kept free on the game drive
 pins = json.load(open(os.path.join(HERE, 'pins.json')))['maps']
+ROOT = json.load(open(os.path.join(HERE, 'pins.json'))).get('root', {})       # {file: {old, new, size}} in the game folder itself
 
 
 def md5(p):
@@ -703,8 +713,26 @@ for m, js in jobs.items():
         if why:
             print('SKIP %s: %s' % (m, why)); bad[m] = why
             break
+jobs['_root'] = [(f, os.path.join(GAME, f), os.path.join(HERE, f), p['old'], p['new']) for f, p in ROOT.items()]
+for f, live, new, o, n in jobs['_root']:      # a root file neither old nor new would leave the maps' cards on a pair table nobody staged: refuse the whole run
+    lm = md5(live) if os.path.exists(live) else None
+    if lm not in (o, n) and undo:        # review 11-07: a drifted ini must not block the maps' undo; it is left alone (the undo block acts only on == new)
+        print('NOTE: %s is neither the pinned old nor new file (%s): left alone, the maps are still undone' % (f, (lm or 'missing')[:8]))
+        continue
+    if lm not in (o, n):
+        sys.exit('%s changed since staging (md5 %s, pinned old %s / new %s): nothing done (re-stage: pd2_guns_layer.py pin)' % (f, (lm or 'missing')[:8], o[:8], n[:8]))
+    if lm == n and not (os.path.exists(bk('_root', f)) and md5(bk('_root', f)) == o):
+        sys.exit('%s is the staged file but its backup %s is missing or changed: nothing done' % (f, bk('_root', f)))
+    if not undo and lm == o and os.path.exists(bk('_root', f)):       # (undo: an old file with a leftover backup is simply left alone)
+        sys.exit('backup exists %s while %s is still the old file: nothing done' % (bk('_root', f), f))
+    if not undo and lm == o and (not os.path.exists(new) or md5(new) != n):
+        sys.exit('staged %s missing or md5 != pinned: nothing done' % f)
 todo = [m for m in want if m not in bad]
 print('%s maps %s (skipped: %s)' % ('dry:' if dry else ('undo' if undo else 'install'), todo, sorted(bad) or 'none'))
+for f, live, new, o, n in jobs['_root']:
+    lm = md5(live) if os.path.exists(live) else None
+    print('  game root %s: %s' % (f, 'staged file' if lm == n else 'old file' if lm == o else 'neither (left alone)') + (' (restored first)' if undo and lm == n else
+          ' (installed once every pinned map is on its new files)' if not undo and lm == o else ''))
 for m in todo:
     big = max(os.path.getsize(j[1]) if undo else os.path.getsize(j[2]) for j in jobs[m])
     ssz = lambda j: os.path.getsize(j[2]) if os.path.exists(j[2]) else pins[m][j[0]]['size']      # a cleaned-up stage: the pinned size
@@ -751,6 +779,18 @@ def roll_back(m):
 
 
 failed = []
+if undo:                                  # the game-root files first: a map undone under the new pair table would show the wrong cards
+    try:
+        for f, live, new, o, n in jobs['_root']:
+            if os.path.exists(live) and md5(live) == n:
+                swap_in(bk('_root', f), live, o)          # md5-verified == pinned old, so the backup is redundant now
+                retry(os.remove, bk('_root', f))
+                print('restored game root', f, o[:8])
+        d = os.path.join(BACKUP, '_root')
+        if os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d)
+    except Exception as e:
+        sys.exit('FAILED game root: %s (no map touched; backups kept in %s)' % (e, os.path.join(BACKUP, '_root')))
 for m in todo:
     swapped = 0
     try:
@@ -794,6 +834,25 @@ for m in todo:
         print('FAILED %s: %s' % (m, e)); failed.append(m)
         if not undo and not roll_back(m):
             failed.append(m + '(ROLLBACK INCOMPLETE, backups kept)')
+if not undo and jobs['_root'] and any(md5(j[1]) != j[4] for j in jobs['_root']):
+    left = [m for m in pins if any(not os.path.exists(os.path.join(MAPS, m, f)) or md5(os.path.join(MAPS, m, f)) != p['new'] for f, p in pins[m].items())]
+    if left:
+        print('NOTE: game root %s NOT installed yet, maps still on their old files: %s (install them; the ini follows on that run)'
+              % (', '.join(j[0] for j in jobs['_root']), ' '.join(left)))
+    else:
+        try:
+            os.makedirs(os.path.join(BACKUP, '_root'), exist_ok=True)
+            for f, live, new, o, n in jobs['_root']:
+                retry(shutil.copyfile, live, bk('_root', f))
+                if md5(bk('_root', f)) != o:
+                    raise IOError('backup copy of %s md5 != pinned old' % f)
+            for f, live, new, o, n in jobs['_root']:
+                swap_in(new, live, n)
+                print('installed game root', f, n[:8], '| backup', o[:8], 'in', bk('_root', f))
+        except Exception as e:
+            print('FAILED game root: %s' % e); failed.append('_root')
+            if not roll_back('_root'):
+                failed.append('_root(ROLLBACK INCOMPLETE, backups kept)')
 if failed:
     sys.exit('failed: %s' % ' '.join(failed))
 '''
@@ -807,6 +866,9 @@ def write_installer(out):
             'PD2 guns %s: install.py keeps its backups OFF the game drive, in %s/<map>/<file> (copied and md5-checked before the live file is replaced;\r\n'
             'deleted by --undo only after the restored files are md5-verified). Nothing is renamed beside the live files.\r\n' % (LAYER, L['backup']))
     else:
+        pp = os.path.join(out, 'pins.json')
+        if os.path.isfile(pp) and json.load(open(pp)).get('root'):
+            raise SystemExit('pins.json has game-root files: only the off-drive installer handles them (set the layer backup)')
         py = INSTALL_PY.replace('@TITLE@', L['title']).replace('@TAG@', TAG)
     open(os.path.join(out, 'install.py'), 'w', encoding='utf-8', newline='').write(py.replace('\n', '\r\n'))
     open(os.path.join(out, 'INSTALL.bat'), 'w', encoding='utf-8', newline='').write(

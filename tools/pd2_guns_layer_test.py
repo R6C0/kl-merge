@@ -217,5 +217,68 @@ finally:
     shutil.rmtree(tmp, ignore_errors=True)
 L.configure('1106b')
 
+# 1107r game-root ini (KLShopPage.ini re-indexes every pair card): installed only on the run that puts the LAST pinned map on its new files, undone first
+L.configure('1107r')
+tmp = tempfile.mkdtemp(prefix='pd2gl_')
+try:
+    stage, game, bkp = [os.path.join(tmp, x) for x in ('stage', 'game', 'bk')]
+    pins = {}
+    for m in ('DMA', 'DMB'):
+        pins[m] = {}
+        for f in ('F01_Main.zip', 'KLGuns.ini'):
+            old, new = (m + f + 'old').encode() * 50, (m + f + 'NEW').encode() * 60
+            wr(os.path.join(game, 'KLExpansion', 'Maps', m, f), old); wr(os.path.join(stage, m, f), new)
+            pins[m][f] = dict(old=hashlib.md5(old).hexdigest(), new=hashlib.md5(new).hexdigest(), size=len(new))
+    iold, inew = b'[Pairs]\r\nP0=old\r\n', b'[Pairs]\r\nP0=new\r\n'
+    wr(os.path.join(game, 'KLShopPage.ini'), iold); wr(os.path.join(stage, 'KLShopPage.ini'), inew)
+    root = {'KLShopPage.ini': dict(old=hashlib.md5(iold).hexdigest(), new=hashlib.md5(inew).hexdigest(), size=len(inew))}
+    json.dump(dict(maps=pins, root=root), open(os.path.join(stage, 'pins.json'), 'w'))
+    L.write_installer(stage)
+    ini = lambda: open(os.path.join(game, 'KLShopPage.ini'), 'rb').read()
+    rc, o = run('--dry'); check(rc == 0 and ini() == iold and 'game root KLShopPage.ini: old file' in o, 'root dry: reported, nothing written')
+    rc, o = run('--maps', 'DMA', '--cleanup')
+    check(rc == 0 and is_new('DMA') and is_old('DMB') and ini() == iold and 'NOT installed yet' in o and 'DMB' in o.split('NOT installed yet')[1], 'root: a partial run leaves the ini old and names the maps left')
+    check(os.path.isfile(os.path.join(stage, 'KLShopPage.ini')), 'root: --cleanup keeps the staged root ini')
+    rc, o = run('--maps', 'DMB')
+    check(rc == 0 and is_new('DMB') and ini() == inew and open(os.path.join(bkp, '_root', 'KLShopPage.ini'), 'rb').read() == iold, 'root: the run completing the set installs the ini, backup = old')
+    rc, o = run('--maps', 'DMB'); check(ini() == inew and 'installed game root' not in o, 'root: a re-run does not touch the installed ini')
+    rc, o = run('--undo', '--maps', 'DMB')
+    check(rc == 0 and ini() == iold and is_old('DMB') and is_new('DMA') and not os.path.exists(os.path.join(bkp, '_root')), 'root: any undo restores the ini first, its backup goes')
+    wr(os.path.join(game, 'KLShopPage.ini'), b'edited by hand')
+    rc, o = run('--maps', 'DMB'); check(rc != 0 and 'changed since staging' in o and is_old('DMB'), 'root: a drifted ini refuses the whole run, no map touched')
+    wr(os.path.join(game, 'KLShopPage.ini'), iold)
+    rc, o = run('--maps', 'DMB', '--fail-after', '1'); check(rc != 0 and is_old('DMB') and ini() == iold, 'root: a failed map leaves the ini old')
+    rc, o = run('--maps', 'DMB'); check(rc == 0 and ini() == inew, 'root: installs after the failed run')
+    rc, o = run('--undo'); check(rc == 0 and ini() == iold and is_old('DMA') and is_old('DMB'), 'root: full undo')
+    # review 11-07: a drifted ini does not block the maps' undo; a missing live map file gives a NOTE, not a traceback
+    for f in pins['DMA']:          # DMA's staged files went with --cleanup above: stage them again
+        wr(os.path.join(stage, 'DMA', f), (('DMA' + f + 'NEW').encode()) * 60)
+    rc, o = run(); check(rc == 0 and ini() == inew and is_new('DMA') and is_new('DMB'), 'root: reinstall all')
+    wr(os.path.join(game, 'KLShopPage.ini'), b'edited by hand')
+    rc, o = run('--undo'); check(rc == 0 and is_old('DMA') and is_old('DMB') and ini() == b'edited by hand' and 'left alone' in o, 'root: drifted ini left alone, maps still undone')
+    wr(os.path.join(game, 'KLShopPage.ini'), iold); shutil.rmtree(os.path.join(bkp, '_root'), ignore_errors=True)
+    os.remove(os.path.join(game, 'KLExpansion', 'Maps', 'DMB', 'KLGuns.ini'))
+    rc, o = run('--maps', 'DMA'); check(rc == 0 and is_new('DMA') and ini() == iold and 'NOT installed yet' in o and 'Traceback' not in o, 'root: a missing live map file -> NOTE, no traceback')
+finally:
+    shutil.rmtree(tmp, ignore_errors=True)
+# review 11-07: pin() after the install (live ini == staged) or without the staged ini keeps the recorded root entry
+import kl_shop_pics as P
+tmp = tempfile.mkdtemp(prefix='pd2gl_')
+dd0 = P.DD
+try:
+    P.DD = os.path.join(tmp, 'dd'); out = os.path.join(tmp, 'out')
+    wr(os.path.join(P.DD, 'KLShopPage.ini'), b'old ini'); wr(os.path.join(out, 'KLShopPage.ini'), b'new ini')
+    rt = lambda: json.load(open(os.path.join(out, 'pins.json')))['root']
+    L.pin(out, [], log=lambda s: None); r1 = rt()
+    check(r1['KLShopPage.ini']['old'] == hashlib.md5(b'old ini').hexdigest() and r1['KLShopPage.ini']['new'] == hashlib.md5(b'new ini').hexdigest(), 'pin: root entry old/new')
+    wr(os.path.join(P.DD, 'KLShopPage.ini'), b'new ini'); L.pin(out, [], log=lambda s: None)
+    check(rt() == r1, 'pin: a re-pin after the install keeps the root entry')
+    os.remove(os.path.join(out, 'KLShopPage.ini')); L.pin(out, [], log=lambda s: None)
+    check(rt() == r1, 'pin: a re-pin without the staged ini keeps the root entry')
+finally:
+    P.DD = dd0
+    shutil.rmtree(tmp, ignore_errors=True)
+L.configure('1106b')
+
 print('pd2_guns_layer_test: %d checks, %d FAIL' % (checks, fails))
 sys.exit(1 if fails else 0)
