@@ -67,9 +67,14 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
-2026-11-07 - [f0] ARCADE PICK: [Hire] PickDefault=1 "(recommended on)" (7cba726f): the Heister page pick holds from round 1 (Arcade + online);
-Kane/Lynch stay hire-only. STAGED, NOT installed: C:\kl_build_1024\pick_1107_install (SHIP B5B350D3 = live e88a6093 + this; INSTALL/UNDO bats).
-Next [f0]: lens-crack immersion (klreshade.c + KL_LensCrackDM.fx only).
+2026-11-07 ~02:00 - [shop] STAGED, nothing installed: UI 1107 C:\kl_build_1024\ui_1107 (SHIP d8826c4e from 0bbe8dc5 + TEST, overlay = live + KLHeister only, install.py sets 10 recommended-on keys, undo md5-pinned):
+F2/F3 always open the shop ([ShopPage] PageIntent/QueueDebounce/IntentFallbackHint/IntentLog), one tidy caption ([Keys] CaptionTidy/RowFit), wardrobe labels "10/17  DEAD MEN: Kane" + Shift back + Ctrl+F9/Alt+F11 group jumps ([CharOnline] HudLabels/ShiftBack/GroupKeys/HintFix).
+PD2 rebase 1107r (9ef0210a): own-type templates, no heli looks/pairs (HeliGuns=0), MG42 on 41 (Type 88 host, fit 1.28), AKM 33; DM02 proof C:\kl_build_1024\pd2rebase_1107 PASS; the 20-map stage waits for D: room (prune map sent to c9, nothing deleted).
+
+2026-11-07 ~02:00 - [f0] LENS CRACK IMMERSION + ARCADE PICK, STAGED, NOT installed: C:\kl_build_1024\lens_pick_1107_install (SHIP md5 521AEE29 =
+live e88a6093 + PickDefault + lens; bench_TEST\ 75A251DC; INSTALL/UNDO bats; supersedes pick_1107_install). [Graphics] LensCrackHealFade=0.5 /
+Flash / Glint / Haze=1, all "(recommended on)": new-crack flash + 1.5 px jolt, edge glint, milky haze, cracks fade to half as health returns.
+[Hire] PickDefault=1: the Heister pick holds from round 1. Not seen in game (previews only); deferred: a glass tick sound, hit direction.
 
 2026-11-06 ~18:45 - [c9] LAST CALL CHAIN 2f LIVE on DM05A (zip 1d325299, bots db375c5a, base 4dce350a), on top of 6b's pd2guns c-f on 2c: the heli is drawn after lift-off.
 A moving entity is drawn only while an .rmi box of a visible room holds it, and every Roof box stopped at y 2640. Fix: Roof box 7 enlarged to y 6600 (tools/kl_club_rmi_1106.py) + the 2e cam/route.
@@ -83,11 +88,6 @@ Ready to offer: SHIP out_fcs1106 e88a6093 + the 6 ini keys.
 2026-11-06 ~18:30 - [shop] 1106t LIVE on the 9 stock DD maps: MG42 (item 42) + PAR (item 40) with their cards, like the DM maps. Bench PD2S_DD05 PASS (rows 18/22 = items 42/40 host+client). Entries = 1106s + 59 each. Backups hard-linked to the 1106s stage (install.py --link-from), stage dropped (--cleanup). UNDO ALL: new step 0t first.
 DD09 1.8 fps host (db OSS_DD09_FCS_S3_PD2T, Havok MOPP sphere-tri 0xa4dec0/0x9e5590) A/B'd: _PD2S2 (1106s) and _PD2T2 (1106t, rebuilt stage zip bc5da13a, same CRCs) both 29.8+ fps -> one-off, NOT 1106t; 1106t stays live. db tracks it as an intermittent (NanDump=1).
 2026-11-06 ~17:40 - [shop] PD2 guns on ALL 11 DM maps: DM05A got 1106c+d+e+f on c9's chain 2c (bench pd2a_1106 PASS, zip 14c8d9dd, Entries=54659); 1106f (MG42 item 42, PAR item 40 + cards) also on DM01B/DM03A/DM06B/DM11B. No free item id left. Backups on D: hard-linked (dedupe_backups). UNDO ALL order: 0s 0f 0a 0b 0 0c(c9 chain) 1..7.
-2026-11-06 ~16:30 - [shop] PD2 GUNS on the 9 STOCK DD maps too: layer 1106s (19 guns) LIVE DD01-09, bench PD2S_DD05 PASS (items 62/63/35 in page II pool host+client); UNDO ALL step 0s first.
-2026-11-06 ~15:45 - [shop] PD2 GUNS 1106b+c+d+e LIVE on 10 DM maps (not DM05A, held for c9): C45 (62), HRL-7 (50/51), R700 (49), GL40 x3 (52-54, GUESS 190->191), RPK on Minimi 45-48 (GUESS 62->63), Deagle 63.
-DM02 benches PASS for each layer (2 seats round 2, 0 faults; 1106e: item 63 in the page II pool host+client). Backups OFF C: (D:\kl_stage\pd2guns_1106c/d/e/s_backup). C: 2.2 GB, D: 7.4 GB free.
-DM05A: after c9's chain, re-stage c+d+e on top. UNDO ALL steps 0a (1106e), 0b (1106d), 0 (1106c) come first.
-Earlier: KLPic pictures on 28 maps; Entries regression (pics +72 chunks) fixed live 361a1d3e. C: at 976 MB after 1106b: 9 DD *.before-1026loot8m moved to D:\kl_old_backups\dd_1106c (3.3 GB free).
 Undo: <work>/build/UNDO ALL 1105.bat (0: pd2guns_1106c, then 7 steps: pd2guns_1106b -> c9 glass_all_1106 -> entries -> pics -> buttons -> pd2guns -> DM05A lastcall_glass_1106) -> restore dll/ini. Zombie kl2.exe (0 threads) block tasklist checks: --skip-run-check (+ --root "<DD>" for buttons/pics).
 
 ## Owner's end goal (2026-10-09)
