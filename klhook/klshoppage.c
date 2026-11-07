@@ -260,7 +260,7 @@ static void kspg_cap_build(char *o, size_t cap, const char *base, int page)
 {
     char cyc[24], p2[24], hk[24], tag[32]; int p, pos = 0, n = 0;
     cyc[0] = p2[0] = hk[0] = tag[0] = 0;
-    for (p = 0; p < KFIT_NPAGE; p++) if (kspg_avail(p)) { n++; if (p <= page) pos++; }
+    for (p = 0; p < KFIT_NPAGE; p++) if (kspg_avail(p) || p == page) { n++; if (p <= page) pos++; }   /* review 11-07: the shown page counts even when unavailable, else "PAGE n/N" named the one before */
     if (kspg.ctlOn) kspg_h_keyname(kspg.ctlKey, cyc, sizeof cyc);
     if (kspg.active && kspg.hint) kspg_h_keyname(kspg.key, p2, sizeof p2);
     if (kspg.hireOn) kspg_h_keyname(kspg.hireKey, hk, sizeof hk);
