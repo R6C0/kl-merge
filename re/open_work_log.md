@@ -1,3 +1,11 @@
+## 2026-11-07 ~[f0] ARCADE PICK HOLDS FROM ROUND 1: [Hire] PickDefault STAGED, NOT installed (owner: "my character is random on the first round"; no crash involved)
+Why: the 10-24 rule (re/shop_hire.md) made every UNHIRED round a random default under [Hire] Enable=1; round 1 is never hired (bank $0), so the
+Heister page pick never showed. klco_init also zeroed the saved Char at start ([Hire] OnlineIgnoreChar, offline too). Fix 7cba726f (klhire_pick.h,
+46-check klhirepick_test.c): PickDefault=1 "(recommended on)" = the pick in every unhired round, Arcade + online; 2 = round 1 only (Arcade; online acts as 1).
+Kane/Lynch stay hire-only (klc_set refuses them while on); a Dead Men pick on a stock DD map (no wardrobe) falls back to random (Arcade) / stock body (online).
+Review wf pickdefault-review: 2 online findings fixed (Kane via Heister page; mode 2 online documented). kl_tests 94/0.
+Kit C:\kl_build_1024\pick_1107_install: SHIP B5B350D3 (= live e88a6093 + this only), INSTALL/UNDO bats, ini line inserted after [Hire]. TEST out_pick1107b 859FB040.
+
 ## 2026-11-06 ~19:40 [c9] DM CRACKED LENS INSTALLED (owner "install the cracked lens"; no crash involved)
 Kit build/lenscrack_dm_1106: KL_LensCrackDM.fx (57663e0c) -> reshade-shaders\Shaders, atlas KL_LensCrackDM.png (544a926e) -> reshade-shaders\Textures (both new, md5 = kit).
 KLHook.ini f59ba664 -> d16f91f3: [ReShade] TechCrack=KL_LensCrackDM@KL_LensCrackDM.fx + a comment line above it ("(recommended on)"; NOT an inline comment:

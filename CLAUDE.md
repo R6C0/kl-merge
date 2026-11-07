@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-07 - [f0] ARCADE PICK: [Hire] PickDefault=1 "(recommended on)" (7cba726f): the Heister page pick holds from round 1 (Arcade + online);
+Kane/Lynch stay hire-only. STAGED, NOT installed: C:\kl_build_1024\pick_1107_install (SHIP B5B350D3 = live e88a6093 + this; INSTALL/UNDO bats).
+Next [f0]: lens-crack immersion (klreshade.c + KL_LensCrackDM.fx only).
+
 2026-11-06 ~18:45 - [c9] LAST CALL CHAIN 2f LIVE on DM05A (zip 1d325299, bots db375c5a, base 4dce350a), on top of 6b's pd2guns c-f on 2c: the heli is drawn after lift-off.
 A moving entity is drawn only while an .rmi box of a visible room holds it, and every Roof box stopped at y 2640. Fix: Roof box 7 enlarged to y 6600 (tools/kl_club_rmi_1106.py) + the 2e cam/route.
 Bench lcchain2f1106d PASS, undo byte-exact. Undo: UNDO ALL 1105.bat step 0u (first). Any DM05A re-stage: --base live 1d325299.
