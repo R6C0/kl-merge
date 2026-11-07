@@ -564,7 +564,7 @@ feat('shopintent', G_EXP, 'Shop opens every time you press the key (recommended 
      'press the shop key again later and it opens again; says PRESS BUY WEAPONS if it cannot; a double press is ignored. Needs the page key and auto-open on', [('ShopPage', 'PageIntent', 1, 0, 0), ('ShopPage', 'QueueDebounce', 1, 0, 0), ('ShopPage', 'IntentFallbackHint', 1, 0, 0), ('ShopPage', 'IntentLog', 1, 0, 0)])
 feat('shopanycat', G_EXP, 'Shop key also works with a rifle / shotgun category open (not tested in the game yet; recommended off)', 'off', 'start',
      'the auto-open steps carry on from any category instead of only pistols (GUESS that every category is safe); needs auto-open steps on', [('ShopPage', 'IntentAnyCategory', 1, 0, 0)])
-feat('wardrobelabels', G_EXP, 'Heister / mask keys say where you are, e.g. HEISTER 10/17 DEAD MEN > Kane (recommended on)', 'on', 'start',
+feat('wardrobelabels', G_EXP, 'Heister / mask keys say where you are, e.g. HEISTER 10/17 DEAD MEN: Kane (recommended on)', 'on', 'start',
      'F9/F11 name the group (DOG DAYS / DEAD MEN / PAYDAY 2) and the count; Shift+F11 goes back; Ctrl+F9 / Alt+F11 jump to the next group; the round hint drops F9 when hire hides it. Online only', [('CharOnline', 'HudLabels', 1, 0, 0), ('CharOnline', 'ShiftBack', 1, 0, 0), ('CharOnline', 'GroupKeys', 1, 0, 0), ('CharOnline', 'HintFix', 1, 0, 0)])
 feat('shopfit', G_EXP, 'Tidy shop text (recommended on)', 'on', 'start',
      'one short shop title (BUY WEAPONS  PAGE 2/4  PD2 GUNS  [F2] next: HIRE), names cut to one width, so nothing overlaps', [('Keys', 'CaptionTidy', 1, 0, 0), ('Keys', 'RowFit', 1, 0, 0)])
