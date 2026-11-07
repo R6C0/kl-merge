@@ -136,7 +136,7 @@ L.configure('1106b')
 # 1106s: all 19 keys on the 9 stock DD maps, live zips as base, off-drive backup, no DD10 / Scenes
 L.configure('1106s')
 check(L.BASE is None and L.src_root() == M.MAPROOT and L.TAG == '.before-pd2guns1106s', '1106s is baked on the live zips')
-check(sorted(L.KEYS + L.LAYERS['1106f']['keys']) == sorted(s['key'] for s in M.SPECS) and len(L.KEYS) == 19, '1106s keys = every spec except the 1106f re-looks')
+check(sorted(L.KEYS + L.LAYERS['1106f']['keys'] + L.LAYERS['1107r']['keys']) == sorted(s['key'] for s in M.SPECS) and len(L.KEYS) == 19, '1106s keys = every spec except the 1106f re-looks')
 check(L.LAYERS['1106s']['maps'] == ['DD0%d' % i for i in range(1, 10)], '1106s: DD01..DD09, not DD10')
 check(L.default_out() == r'D:\kl_stage\pd2guns_1106s' and L.LAYERS['1106s']['backup'] == r'D:\kl_stage\pd2guns_1106s_backup', '1106s out / backup on D:')
 check(all(k in L.DETAIL for k in L.KEYS), '1106s: a DETAIL entry for every key')
@@ -154,7 +154,7 @@ sp = {s['key']: s for s in M.SPECS}
 check(sp['MG42']['item'] == 42 and sp['PAR40']['item'] == 40 and sp['MG42']['template'] == sp['RPK42']['template'] and sp['PAR40']['template'] == sp['RPK40']['template'],
       '1106f re-looks the templates of RPK42 / RPK40')
 check(sp['MG42']['unit'].endswith('wpn_third_lmg_mg42_pts') and sp['PAR40']['unit'].endswith('wpn_third_lmg_par_pts') and len(sp['PAR40']['parts']) == 9, '1106f units / PAR 9 materials')
-check(len(M.SPECS) == 21 and 'MINI43' not in sp, 'no minigun spec (fit cost 16.8, rejected)')
+check(len(M.SPECS) == 23 and 'MINI43' not in sp, 'no minigun spec (fit cost 16.8, rejected)')
 check(L.DETAIL['MG42'] == 15 and L.DETAIL['PAR40'] == 15, '1106f body detail 15')
 check(set(L.KEYS).isdisjoint(L.LAYERS['1106e']['keys'] + L.LAYERS['1106d']['keys'] + L.LAYERS['1106c']['keys'] + L.LAYERS['1106b']['keys']), '1106f adds keys, repeats none')
 py_f = L.INSTALL_PY_OFFDRIVE.replace('@TITLE@', L.LAYERS['1106f']['title']).replace('@TAG@', L.TAG).replace('@BACKUP@', L.LAYERS['1106f']['backup'])

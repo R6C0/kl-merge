@@ -133,6 +133,104 @@ SPECS = [
 # muzzle 31.9 vs 28.5, butt -11.5; the PD2 mesh is 43.5 cm long (-5.5 .. 37.9, a long barrel / suppressor) against the 25.9 cm host.
 
 
+# ------------------------------------------------------------------ 2026-11-07: weapon class + template picker (owner: "guns are based off the helis ... fix those to fit to their respected weapon type")
+# The PD2 looks of 1105 / 1106 sit on duplicate items whose templates are the helicopter door guns (_Heli / _Heli_Player / _Hind): they carry heli stats (heli-only damage rows, a 900000
+# clip on item 48, no handling folder on item 51). A gun now goes on a template of its OWN weapon class (WT_ enum of the level's equipment), never a heli / hind / player one.
+CLASS_OF_KIND = {'pistol': 'pistol', 'light machine gun': 'mg', 'sniper rifle': 'sniper', 'rocket launcher': 'rocket', 'grenade launcher': 'grenade',
+                 'marksman rifle': 'rifle', 'assault rifle': 'rifle', 'battle rifle': 'rifle'}
+CLASS_WT = {'pistol': {'WT_PISTOL'}, 'mg': {'WT_MACHINEGUN'}, 'sniper': {'WT_SNIPERRIFLE'}, 'rocket': {'WT_ROCKETLAUNCHER'}, 'grenade': {'WT_GRENADELAUNCHER'},
+            'rifle': {'WT_RIFLE', 'WT_RIFLETYPE95', 'WT_RIFLETYPE88'}}
+# "shop" = the stock page-I shop. The non-shop items (kl_shop_sets docstring: 33 35 38 40-59 62 63; 55-59 are grenades, 60 / 61 have no template) are the pool a page-II gun may take.
+POOL_ITEMS = frozenset([33, 35, 38] + list(range(40, 55)) + [62, 63])
+HELI_RE = re.compile(r'_heli|_hind|_player', re.I)          # templates with helicopter / player-seat stats: never a host, unless a spec pins one with allow_heli=True
+NPC_RE = re.compile(r'_l\d\d_npc$', re.I)
+SHIELD_RE = re.compile(r'human_shield', re.I)
+FIT_MAX = 2.1               # accepted fits so far cost 1.2 - 2.07 (see the batch notes above)
+# Specs of the layers already installed (1106b..1106t) whose pinned host is a heli / hind template. They stay buildable so the live layers reproduce; a NEW spec that pins one is refused.
+LEGACY_HELI = ('MK17', 'RPK42', 'RPK43', 'HRL51', 'RPK45', 'RPK46', 'RPK48', 'MG42')
+
+
+for _s in SPECS:             # the specs of layers 1105 - 1106t keep their pinned heli hosts so those layers still rebuild byte for byte (layer 1107r restores their stock look)
+    if HELI_RE.search(_s['template']):
+        _s['allow_heli'] = True
+        assert _s['key'] in LEGACY_HELI, _s['key']
+_MG42 = next(_s for _s in SPECS if _s['key'] == 'MG42')
+SPECS += [
+    # 2026-11-07 (layer 1107r): the MG42 moves from the heli door gun item 42 onto item 41 (MG_GP_Type88_L09_NPC, a plain NPC machine gun: no heli stats). Same PD2 parts as MG42;
+    # a fresh fit on the new host (the hold is the Type 88 hold of both, but the fit is made, not assumed).
+    dict(item=41, template='MG_GP_Type88_L09_NPC', unit=_MG42['unit'], key='MG42_41', name='PD2 MG42', kind='light machine gun', parts=_MG42['parts']),
+    # the AKM (pd2_gun's look) on item 33 (Rifle_Type81), for maps that do not carry it yet: baked ONLY when the fit on that map's host costs <= FIT_MAX (max_cost), and not when
+    # the map already holds the pd2_gun AKM (skip_if_akm). pd2_gun used its own scale / shift; here the generic fit at scale 1.0 decides (GUESS: the AKM model is true size).
+    dict(item=33, template='Rifle_Type81', unit='payday2/weapons/wpn_npc_ak47', mesh='g_body', tex='ak_df.texture', key='AKM33', name='PD2 AKM', kind='assault rifle',
+         max_cost=FIT_MAX, skip_if_akm=True),
+]
+
+def spec_class(spec):
+    return spec.get('cls') or CLASS_OF_KIND[spec['kind']]
+
+
+def tier_of(template, cls):
+    """0 plain, 1 _L<nn>_NPC, 2 human shield (pistols only: there a shield variant is the only non-shop template), None = never."""
+    if HELI_RE.search(template):
+        return None
+    if SHIELD_RE.search(template):
+        return 2 if cls == 'pistol' else None
+    return 1 if NPC_RE.search(template) else 0
+
+
+def check_override(spec):
+    """A pinned template= of a heli / hind / player kind is refused unless the spec says allow_heli=True."""
+    t = spec.get('template')
+    if t and HELI_RE.search(t) and not spec.get('allow_heli'):
+        raise ValueError('%s: template %s is a heli / hind / player template (stats of a door gun); pin it only with allow_heli=True' % (spec.get('key'), t))
+    return t
+
+
+def with_itemno(eq):
+    """kl_arms.equipment rows + 'itemno' (the eFF2Item enum name -> its number, tools/dd_enums.json)."""
+    with open(os.path.join(HERE, 'dd_enums.json')) as f:
+        num = {n: v for e in json.load(f) for v, n in e if isinstance(n, str) and n.startswith('eFF2Item')}
+    return {k: dict(e, itemno=num.get(e.get('item'))) for k, e in eq.items()}
+
+
+def candidates(spec, rows, taken=(), pool=POOL_ITEMS):
+    """Pure. rows = equipment rows (dicts with name, wt, folder, itemno). -> template names, best tier first: same weapon class, a pool (non-shop) item,
+    a non-empty handling folder, not in taken (lower case names), tier 0 plain > 1 _L<nn>_NPC > 2 human shield (pistols), never heli / hind / player.
+    A spec with an 'item' only takes templates carrying that item (the pair of the shop row stays)."""
+    cls = spec_class(spec)
+    taken = {t.lower() for t in taken}
+    out = []
+    for r in rows:
+        t = r['name']
+        tier = tier_of(t, cls)
+        if (tier is None or r.get('wt') not in CLASS_WT[cls] or r.get('itemno') not in pool or not r.get('folder') or t.lower() in taken
+                or (spec.get('item') is not None and r.get('itemno') != spec['item'])):
+            continue
+        out.append((tier, t))
+    return [t for _tier, t in sorted(out)]
+
+
+def pick_template(sc, spec, taken=(), cost_fn=None, threshold=FIT_MAX, eq=None, log=print):
+    """The best host template for a spec that pins none. sc = the level's scene (kl_arms.equipment reads it; eq = rows instead, for tests).
+    cost_fn(spec, template) -> fit cost (None = unfittable); default none = first candidate by tier. Each candidate of the best tiers is costed in order; the cheapest
+    under threshold wins (ties: the earlier tier). -> (template or None, note, [(template, cost)]). Nothing under the threshold: (None, 'skipped: no <class> template', tried)."""
+    cls = spec_class(spec)
+    if eq is None:
+        import kl_arms
+        eq = with_itemno(kl_arms.equipment(sc))
+    cands = candidates(spec, list(eq.values()), taken)
+    tried = []
+    for t in cands:
+        c = 0.0 if cost_fn is None else cost_fn(spec, t)
+        tried.append((t, c))
+        log('  pick %s: %s cost %s' % (spec.get('key'), t, c))
+    fits = [(c, i, t) for i, (t, c) in enumerate(tried) if c is not None and c <= threshold]
+    if not fits:
+        return None, 'skipped: no %s template' % cls, tried
+    c, _i, t = min(fits)
+    return t, 'picked %s (cost %s)' % (t, c), tried
+
+
 def work():
     import kl_port_check
     return kl_port_check.workdir()
@@ -263,7 +361,27 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
     oct_s = O.Oct.parse(lv['.oct'])
     reports = {}
     rng = np.random.default_rng(1)
+    taken = {s['template'].lower() for s in specs if s.get('template')}
+    baked_akm = any(b'PD2_AKM' in getattr(t, 'entry', b'') for t in tex.tex.values())
     for spec in specs:
+        spec = dict(spec)
+        if spec.get('template'):
+            check_override(spec)
+        else:
+            # 2026-11-07: no pinned host -> the best template of the gun's own weapon class (never heli / hind / player), costed by fit_one
+            def _cost(sp, t):
+                kk = kl_guns.gun_node(sc, t)
+                return fit_one(sp, _host(p, C.person(sc, kk)[0], C, MG, V, rng, F.sample), log=lambda *a: None)[1]['cost']
+            t, note, tried = pick_template(sc, spec, taken, cost_fn=_cost, log=log)
+            if t is None:
+                reports[spec['key']] = dict(item=spec['item'], skipped=note, tried=tried)
+                log('  %s: %s' % (spec['key'], note))
+                continue
+            spec['template'] = t; taken.add(t.lower())
+        if spec.get('skip_if_akm') and baked_akm:
+            reports[spec['key']] = dict(item=spec['item'], template=spec['template'], skipped='skipped: this map already carries the PD2 AKM (pd2_gun)')
+            log('  %s: %s' % (spec['key'], reports[spec['key']]['skipped']))
+            continue
         k = kl_guns.gun_node(sc, spec['template'])
         old, var, _aset = C.person(sc, k)
         objs = C.objects(p, old)
@@ -321,6 +439,10 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
         mags = [o for o in objs if p.u32(o, 0x3c) == 3 and p.chunks[o][0x0e] == (15 if hidden else 7)]
         cached = bool((fits or {}).get(spec['key']))
         shift, frep = (fits or {}).get(spec['key']) or fit_one(spec, _host(p, old, C, MG, V, rng, F.sample))
+        if spec.get('max_cost') is not None and frep['cost'] > spec['max_cost']:
+            reports[spec['key']] = dict(item=spec['item'], template=spec['template'], skipped='skipped: fit cost %s over %s' % (frep['cost'], spec['max_cost']), fit=frep)
+            log('  %s: %s' % (spec['key'], reports[spec['key']]['skipped']))
+            continue
         plate, df_dds = pd2_plate_of(spec, 1.0, shift)
         share = PM.outward_share(plate)
         if share < 0.95:
@@ -412,9 +534,63 @@ def build_level(lv, specs=SPECS, log=print, fits=None):
     return reports, len(G.read(prm, 'dd').chunks)
 
 
-def stage_map(name, out, fits=None, log=print, src=None, dirname=None, only=None):
+# ------------------------------------------------------------------ restore: a template goes back to its stock model root (2026-11-07)
+def stock_roots(name, templates, dirs=None):
+    """{template: stock root} of one map: the smallest chunks_before of the reports (every earlier PD2 layer wrote one) that name the template holds the
+    ORIGINAL root as its 'stock_root' (a later report's stock_root is an earlier PD2 root). -> {template: (stock_root, chunks_before, report path)}."""
+    import glob
+    dirs = dirs or [os.path.join(work(), 'build', 'pd2guns_*'), os.path.join('D:' + os.sep, 'kl_stage', 'pd2guns_*'),
+                    os.path.join('C:' + os.sep, 'kl_build_1024', 'pd2guns_*')]
+    best, built = {}, set()
+    for pat in dirs:
+        for f in glob.glob(os.path.join(pat, name, 'report.json')):
+            try:
+                r = json.load(open(f))
+            except Exception:
+                continue
+            for g in r.get('guns', {}).values():
+                if g.get('root') is not None:
+                    built.add(g['root'])
+                t = g.get('template'); sr = g.get('stock_root')
+                if t in templates and sr is not None and (t not in best or r['chunks_before'] < best[t][1]):
+                    best[t] = (sr, r['chunks_before'], f)
+    # review 11-07: a PD2-built root (any report's 'root') or one at/after the first PD2 chunk is never a stock root (the earliest report is missing).
+    # Limit: a layer whose report is gone entirely is invisible here; restore_level's guard is the last check.
+    first = min(built) if built else None
+    for t, (sr, _b, f) in best.items():
+        if sr in built or (first is not None and sr >= first):
+            raise ValueError('%s: stock root %s of %s (from %s) is a PD2-built root: the earliest layer report is missing' % (name, sr, t, f))
+    return best
+
+
+def restore_level(lv, restores, name, log=print, roots=None):
+    """lv (kl_chars.Lv, edited in place): every (key, item, template) of `restores` goes back to the stock model root (only its own Ground node, like build_level).
+    No .prm / .oct change: layers only append chunks, so the stock root chunk is still there. -> {key: dict(item, template, from_root, stock_root)}."""
+    import kl_chars as C, kl_guns, kl_gms
+    sc, raw = lv.scene(); raw = bytearray(raw)
+    p = G.read(lv['.prm'], 'dd')
+    roots = roots or stock_roots(name, {t for _k, _i, t in restores})
+    out = {}
+    for key, item, t in restores:
+        if t not in roots:
+            raise ValueError('%s: no earlier report names a stock root for %s on %s' % (key, t, name))
+        stock, before, src = roots[t]
+        k = kl_guns.gun_node(sc, t)
+        cur = C.person(sc, k)[0]
+        if not (stock < before and stock < len(p.chunks) and C.objects(p, stock)):
+            raise ValueError('%s: stock root %s of %s is not a model root of this .prm' % (key, stock, t))
+        if cur != stock:
+            kl_guns._retarget(sc, raw, C.gms_models(raw), k, stock)
+        out[key] = dict(item=item, template=t, from_root=cur, stock_root=stock)
+        log('  restore item %d %s: root %d -> %d (stock, %s)' % (item, t, cur, stock, os.path.basename(os.path.dirname(os.path.dirname(src)))))
+    lv['.gms'], lv['.prp'] = kl_gms.pack(bytes(raw)), sc.p.serialize()
+    return out
+
+
+def stage_map(name, out, fits=None, log=print, src=None, dirname=None, only=None, restore=None):
     """src: another folder to start from (default the live map folder), dirname: the staged folder name (default the map name),
-    only: bake just these SPECS keys (a later layer on a live zip that already holds the earlier specs)."""
+    only: bake just these SPECS keys (a later layer on a live zip that already holds the earlier specs).
+    restore: [(key, item, template)] sent back to their stock model root BEFORE the bake (report.json 'restored')."""
     import kl_chars as C
     fp = os.path.join(out, 'fits.json')
     if fits is None and os.path.isfile(fp):
@@ -424,9 +600,10 @@ def stage_map(name, out, fits=None, log=print, src=None, dirname=None, only=None
     slot = lv.name
     old_n = len(G.read(lv['.prm'], 'dd').chunks)
     t0 = time.time()
+    restored = restore_level(lv, restore, name, log=log) if restore else {}
     reps, new_n = build_level(lv, specs=[s for s in SPECS if only is None or s['key'] in only], fits=fits, log=log)
     d = os.path.join(out, dirname or name)
-    new_fits = {k: [g['shift'], g['fit']] for k, g in reps.items() if g['fit']}
+    new_fits = {k: [g['shift'], g['fit']] for k, g in reps.items() if g.get('fit') and 'shift' in g}
     if new_fits:          # first map of a stage, or keys a fits.json made earlier does not hold yet (batch 2): the later maps reuse them
         os.makedirs(out, exist_ok=True)
         old = json.load(open(fp)) if os.path.isfile(fp) else {}
@@ -442,7 +619,7 @@ def stage_map(name, out, fits=None, log=print, src=None, dirname=None, only=None
                 open(os.path.join(d, f), 'w', encoding='latin-1', newline='').write(new)
                 ini[f] = n
     zp = os.path.join(d, slot + '_Main.zip')
-    rep = dict(map=name, slot=slot, chunks_before=old_n, chunks_after=new_n, ini_entries=ini, guns=reps,
+    rep = dict(map=name, slot=slot, chunks_before=old_n, chunks_after=new_n, ini_entries=ini, guns=reps, restored=restored,
                md5={os.path.basename(zp): hashlib.md5(open(zp, 'rb').read()).hexdigest(), **{f: hashlib.md5(open(os.path.join(d, f), 'rb').read()).hexdigest() for f in ini}},
                live_md5={f: hashlib.md5(open(os.path.join(src, f), 'rb').read()).hexdigest() for f in [slot + '_Main.zip'] + list(ini)},
                seconds=round(time.time() - t0, 1))
@@ -541,7 +718,15 @@ def verify(out, log=print, live_root=None, only=None):
         good = len(p.chunks) == rep['chunks_after']
         specs = {s['key']: s for s in SPECS}
         tpl_new = {}
+        baked = {g['template'] for g in rep['guns'].values() if 'skipped' not in g}
+        for key, g in rep['restored'].items() if rep.get('restored') else ():       # 1107r: back on the stock root
+            if g['template'] in baked:          # restored only as the host of a new look (MG42 on item 41): the guns loop checks it
+                continue
+            tpl_new[g['template']] = g['stock_root']
+            good &= C.person(sc, kl_guns.gun_node(sc, g['template']))[0] == g['stock_root'] and C.objects(p, g['stock_root']) != []
         for key, g in rep['guns'].items():
+            if 'skipped' in g:
+                continue
             tpl_new[g['template']] = g['root']
             root = C.person(sc, kl_guns.gun_node(sc, g['template']))[0]
             good &= root == g['root']
@@ -568,7 +753,7 @@ def verify(out, log=print, live_root=None, only=None):
                 else:
                     good &= r1 == r0; others += 1
         good &= mat.refs == T.material_refs(G.write(p))
-        log('%s: %s zip members changed %s; %d guns; %d other Ground nodes unchanged -> %s' % (name, rep['slot'], changed, len(rep['guns']), others, 'ok' if good else 'FAIL'))
+        log('%s: %s zip members changed %s; %d guns (%d skipped, %d restored); %d other Ground nodes unchanged -> %s' % (name, rep['slot'], changed, len(rep['guns']), sum('skipped' in g for g in rep['guns'].values()), len(rep.get('restored') or {}), others, 'ok' if good else 'FAIL'))
         ok &= good
     log('RESULT: %s' % ('PASS' if ok else 'FAIL'))
     return ok

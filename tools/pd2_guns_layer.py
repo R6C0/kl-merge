@@ -68,6 +68,23 @@ LAYERS = {
     # 1106s: ALL 19 spec keys on Dog Days' 9 stock FA maps (KLExpansion\Maps\DD01..DD09; NOT DD10 = slot F07 again, NOT Scenes\Locations), baked on the LIVE zips
     # (base=None: pics yes, PD2 no). Fits frozen = the union of the 1106c / 1106d / 1106e fits.json (host roots 13812 ... 16134 are identical on DD02 and Scenes F02,
     # re/pd2_guns_stock_maps.md). Plan and staged notes: re/pd2_guns_stock_maps.md.
+    # 1107r (2026-11-07, owner: "guns are based off the helis ... fix those to fit to their respected weapon type"): the REBASE layer on the LIVE zips (1106f / 1106t carry the
+    # heli-based looks). MG42 moves to item 41 (MG_GP_Type88_L09_NPC, a plain NPC machine gun), RPK stays only on 47 (Mg_Minimi_SPW), the PD2 look is taken OFF the heli / hind
+    # items 42 43 44 45 46 48 51 (stock model root restored: only the Ground node, no chunk change), AKM on item 33 where the map lacks it and the fit is under FIT_MAX.
+    # Shop cards: the pair table of the NEW ini (KLShopPage.ini staged in out/: heli items dropped, HeliGuns=0) is re-pictured in full, pair indexes shifted.
+    # The ini itself is NOT a per-map file: install it together with the zips (same pair table on every peer).
+    '1107r': dict(keys=['MG42_41', 'AKM33'], tag='.before-pd2rebase1107', base=None,
+                  restore=[('RPK42', 42, 'MG_GP_Type88_L09_Heli'), ('RPK43', 43, 'MG_GP_Type88_L09_Heli_Player'), ('MK17', 44, 'MG_GP_Type88_L10_Heli'),
+                           ('RPK45', 45, 'Mg_Minimi_SPW_L09_Heli_Player'), ('RPK46', 46, 'Mg_Minimi_SPW_L10_Heli'), ('RPK48', 48, 'Mg_Minimi_SPW_Heli'),
+                           ('HRL51', 51, 'RPG_7V_Hind'),
+                           ('RPK41', 41, 'MG_GP_Type88_L09_NPC')],      # review 11-07: item 41 carries the old PD2 RPK look; back to stock first so MG42_41 fits the Type 88 host
+                  fit_new=True, repic_all=True, heli_mode=0,
+                  pic_keys=['SG417', 'G36', 'PAR40', 'MG42_41', 'RPK47', 'R700', 'HRL50', 'GL40', 'GL40GAS', 'GL40FLR', 'C45', 'DEAG63', 'AKM33'],
+                  out=r'C:\kl_build_1024\pd2rebase_1107', backup=r'D:\kl_stage\pd2rebase_1107_backup',
+                  maps=['DM02', 'DM01', 'DM01B', 'DM03', 'DM03A', 'DM05A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B',
+                        'DD01', 'DD02', 'DD03', 'DD04', 'DD05', 'DD06', 'DD07', 'DD08', 'DD09'],
+                  title='1107r (rebase: MG42 on item 41, PD2 looks off the heli items 42 43 44 45 46 48 51, AKM on item 33 where it fits), staged on the live zips',
+                  short='PD2 guns rebased off the heli items', seeds=[]),
     '1106s': dict(keys=['SG417', 'G36', 'RPK', 'MK17', 'RPK40', 'RPK42', 'RPK43', 'C45', 'HRL50', 'HRL51', 'R700', 'GL40', 'GL40GAS', 'GL40FLR',
                         'RPK45', 'RPK46', 'RPK47', 'RPK48', 'DEAG63'], tag='.before-pd2guns1106s', base=None,
                   out=r'D:\kl_stage\pd2guns_1106s', backup=r'D:\kl_stage\pd2guns_1106s_backup',
@@ -86,6 +103,7 @@ DETAIL = {'C45': 31, 'HRL50': 255, 'HRL51': 255,      # body detail byte (see bu
           'R700': 31, 'GL40': 191, 'GL40GAS': 191, 'GL40FLR': 191,      # R700 7|28 = 31, GL40 1|190 = 191 (pd2_guns_multi batch 5/6 commits)
           'RPK45': 63, 'RPK46': 63, 'RPK47': 63, 'RPK48': 63,
           'DEAG63': 31,
+          'MG42_41': 15, 'AKM33': 15,      # 1107r: MG42 on a plain NPC MG (hidden box kept) = 15; AKM33 on Rifle_Type81 (GUESS 15: rifle root with the hidden box; verify compares the real byte)
           'MG42': 15, 'PAR40': 15,      # re-look of an RPK root (hidden detail-16 box kept): body_lod stays 15; GUESS until verify compares the real byte
           # batch 1-2 rifles / MGs: hosts with the hidden detail-16 'box' part, so build_level leaves body_lod at its default 15 (derived from the code, the
           # reports hold no detail byte; GUESS until verify passes, which compares the real byte)
@@ -125,6 +143,8 @@ def seed_fits(out):
         if os.path.isfile(src):
             d.update(json.load(open(src)))
     miss = [k for k in KEYS if k not in d]
+    if miss and LAYERS[LAYER].get('fit_new'):      # 1107r: new keys are fitted on the first baked map (stage_map writes fits.json), the later maps reuse them
+        miss = []
     if miss:
         raise SystemExit('no fit for %s in the seeds' % miss)
     json.dump(d, open(fp, 'w'), indent=1)
@@ -140,7 +160,7 @@ def stage(out, maps, log=print):
     t0 = time.time()
     for m in maps:
         live = os.path.join(src_root(), m)
-        rep = M.stage_map(m, out, only=KEYS, log=log, src=live)
+        rep = M.stage_map(m, out, only=KEYS, log=log, src=live, restore=LAYERS[LAYER].get('restore'))
         slot, d = rep['slot'], os.path.join(out, m)
         lp = BS.paths(os.path.join(live, slot + '_Main.zip'))
         # bots sibling: the same bake on the live (or base-stage) bots zip (scratch folder = bots zip as the folder's only *_Main.zip + the live inis)
@@ -152,14 +172,16 @@ def stage(out, maps, log=print):
             for f in os.listdir(live):
                 if f.lower().endswith('.ini'):
                     shutil.copyfile(os.path.join(live, f), os.path.join(scr, f))
-            brep = M.stage_map(m, out, src=scr, dirname='_botsout', only=KEYS, log=log)
+            brep = M.stage_map(m, out, src=scr, dirname='_botsout', only=KEYS, log=log, restore=LAYERS[LAYER].get('restore'))
             shutil.rmtree(scr, ignore_errors=True)
             if brep['chunks_after'] != rep['chunks_after'] or brep['chunks_before'] != rep['chunks_before']:
                 raise SystemExit('%s: bots prm chunks %d -> %d differ from plain %d -> %d' % (
                     m, brep['chunks_before'], brep['chunks_after'], rep['chunks_before'], rep['chunks_after']))
             for k in KEYS:
-                if rep['guns'].get(k, {}).get('root') != brep['guns'].get(k, {}).get('root'):
+                if rep['guns'].get(k, {}).get('root') != brep['guns'].get(k, {}).get('root') or rep['guns'].get(k, {}).get('skipped') != brep['guns'].get(k, {}).get('skipped'):
                     raise SystemExit('%s: %s root differs plain/bots' % (m, k))
+            if rep['restored'] != brep['restored']:
+                raise SystemExit('%s: restored roots differ plain/bots' % m)
             bots_new = os.path.join(out, '_botsout', slot + '_Main.zip')
             os.replace(bots_new, os.path.join(d, slot + '_Main.bots.zip'))
             shutil.rmtree(os.path.join(out, '_botsout'), ignore_errors=True)
@@ -188,6 +210,8 @@ def repic(out, d, newp, newb, log=print):
     the card textures of those items are replaced in the staged plain AND bots zip (only the .TEX member changes; same record length and ids, so .prm chunk
     count / Entries= / online.xml stay). Pictures = <out>/pics/item_NN.png (pd2_guns_multi write_pics, run first); the pair -> item map = the DD KLShopPage.ini
     (read only). An install writes the zips, an undo restores them: the pictures follow the guns."""
+    if LAYERS[LAYER].get('repic_all'):
+        return repic_all(out, newp, newb, log)
     items = LAYERS[LAYER].get('pic_items')
     if not items:
         return
@@ -212,6 +236,75 @@ def repic(out, d, newp, newb, log=print):
         tmp = f + '.repic'
         P.replace_cards(f, tmp, cards, log)
         os.replace(tmp, f)
+
+
+def stage_ini(out, log=print):
+    """<out>/KLShopPage.ini = the live Dog Days ini with HeliGuns=<layer heli_mode> (kl_shop_sets.heli_rewrite) and the names / descriptions of kl_pd2names.rewrite.
+    Staged once per out folder (the pair table is the same for every map). -> its path. The live ini is only read."""
+    import kl_shop_sets as SS, kl_pd2names as N, kl_shop_pics as P
+    fp = os.path.join(out, 'KLShopPage.ini')
+    if os.path.isfile(fp):
+        return fp
+    txt = open(os.path.join(P.DD, 'KLShopPage.ini'), encoding='latin-1', newline='').read()
+    txt = SS.heli_rewrite(txt, LAYERS[LAYER].get('heli_mode', SS.HELI_DEFAULT))
+    txt, _chg = N.rewrite(txt)
+    bad = N.problems(txt)
+    if bad:
+        raise SystemExit('staged KLShopPage.ini has problems: %s' % bad)
+    open(fp, 'w', encoding='latin-1', newline='').write(txt)
+    log('  staged %s (%d pairs)' % (fp, len(P.read_pairs(fp))))
+    return fp
+
+
+def pics_for(out, tex_has_akm):
+    """The pictures folder of one zip: out/pics, without item_33.png (the AKM) when that zip carries no PD2 AKM (then the card keeps the Dead Men Type 81 silhouette).
+    -> (folder, temp folder to delete or None)."""
+    src = os.path.join(out, 'pics')
+    if tex_has_akm:
+        return src, None
+    tmp = os.path.join(out, '_pics_noakm')
+    shutil.rmtree(tmp, ignore_errors=True); shutil.copytree(src, tmp)
+    if os.path.isfile(os.path.join(tmp, 'item_33.png')):
+        os.remove(os.path.join(tmp, 'item_33.png'))
+    return tmp, tmp
+
+
+def has_akm(tex):
+    """True when a .TEX holds a PD2 AKM diffuse (pd2_gun's 'PD2_AKM' or this module's 'PD2_AKM33')."""
+    return any(b'PD2_AKM' in getattr(t, 'entry', b'') for t in tex.tex.values())
+
+
+def repic_all(out, newp, newb, log=print):
+    """1107r: dropping the heli pairs shifts every Page II pair index, so EVERY pair card (KLPic_Pair00..) is re-pictured from the staged ini
+    (out/KLShopPage.ini): same texture records and ids, only the .TEX member changes (replace_cards)."""
+    import kl_shop_pics as P, kl_texmat as T
+    ini = stage_ini(out, log)
+    pics = os.path.join(out, 'pics')
+    keys = LAYERS[LAYER]['pic_keys']
+    if not all(os.path.isfile(os.path.join(pics, 'item_%d.png' % s['item'])) for s in M.SPECS if s['key'] in keys):
+        M.write_pics(out, only=keys, log=lambda s: None)
+    items = {it for _slot, it, _row, _nm in P.read_pairs(ini)}
+    for f in (newp, newb):
+        if not os.path.isfile(f):
+            continue
+        z = zipfile.ZipFile(f)
+        names, stem = P._members(z)
+        tex = T.read_tex(z.read(names[(stem + '.TEX').lower()]))
+        z.close()
+        pd, tmp = pics_for(out, has_akm(tex))
+        try:
+            cards = P.cards_of_items(items, pd, tex, ini, log)
+        finally:
+            if tmp:
+                shutil.rmtree(tmp, ignore_errors=True)
+        have = P.card_tids(zipfile.ZipFile(f))
+        for n in sorted(set(cards) - set(have)):
+            log('  NOTE %s: no card %s in this zip: skipped' % (os.path.basename(f), n))
+            del cards[n]
+        if cards:
+            t = f + '.repic'
+            P.replace_cards(f, t, cards, log)
+            os.replace(t, f)
 
 
 def fix_inis(out, m, rep, log=print):
@@ -288,7 +381,8 @@ def check_zip(live_zip, new_zip, rep):
     lv0, lv1 = lv_of(live_zip), lv_of(new_zip)
     sc0, _ = lv0.scene(); sc1, _ = lv1.scene()
     p0, p1 = G.read(lv0['.prm'], 'dd'), G.read(lv1['.prm'], 'dd')
-    tpl = {rep['guns'][k]['template']: k for k in KEYS if k in rep['guns']}
+    tpl = {rep['guns'][k]['template']: k for k in KEYS if k in rep['guns'] and 'skipped' not in rep['guns'][k]}
+    restored = {g['template']: g for g in (rep.get('restored') or {}).values()}
     row['specs'] = ','.join(sorted(tpl.values()))
     changed_nodes, same_nodes = [], 0
     for k in range(1, len(sc1.nodes)):
@@ -303,7 +397,8 @@ def check_zip(live_zip, new_zip, rep):
                 changed_nodes.append(t)
             else:
                 same_nodes += 1
-    ok &= sorted(changed_nodes) == sorted(tpl)
+    ok &= sorted(changed_nodes) == sorted(set(tpl) | {t for t, g in restored.items() if g['from_root'] != g['stock_root']})
+    row['restored'] = len(restored)
     row['retargeted'] = len(changed_nodes); row['others_same'] = same_nodes
     det = {}
     for t, key in tpl.items():
@@ -317,7 +412,7 @@ def check_zip(live_zip, new_zip, rep):
     ok &= not diff and len(p1.chunks) == rep['chunks_after'] and n0 == rep['chunks_before']
     old_roots = 0                      # batch 1-2 roots explicitly (also by node: same root id, same bytes, same objects)
     for s in M.SPECS:
-        if s['key'] in KEYS or s['template'] in tpl:      # a re-look (1106f) replaces the root of an earlier spec's template: that spec's root is gone by design
+        if s['key'] in KEYS or s['template'] in tpl or s['template'] in restored:      # a re-look (1106f) replaces the root of an earlier spec's template: that spec's root is gone by design
             continue
         try:
             k = kl_guns.gun_node(sc1, s['template'])
@@ -328,16 +423,22 @@ def check_zip(live_zip, new_zip, rep):
         old_roots += 1
     row['b12_roots_checked'] = old_roots
     items = LAYERS[LAYER].get('pic_items')
-    if items:           # re-pictured cards: exactly the pairs of pic_items changed their texture record, every other texture is byte-equal
+    if items or LAYERS[LAYER].get('repic_all'):           # re-pictured cards: exactly the pairs of pic_items changed their texture record, every other texture is byte-equal
         import kl_shop_pics as P, kl_texmat as T
         nm = lambda z: P._members(z)
         n0, s0 = nm(a); n1, s1 = nm(b)
         t0, t1 = T.read_tex(a.read(n0[(s0 + '.TEX').lower()])), T.read_tex(b.read(n1[(s1 + '.TEX').lower()]))
         ids = P.card_tids(b)
-        want = {ids[n] for n in P.cards_of_items(items, os.path.join(os.path.dirname(new_zip), '..', 'pics'), None, os.path.join(P.DD, 'KLShopPage.ini'), lambda s: None) if n in ids}      # a card the map lacks is skipped by repic
+        if LAYERS[LAYER].get('repic_all'):      # every card of the staged ini may change (indexes shift): the changed textures are a subset of the pair cards
+            ini = os.path.join(os.path.dirname(new_zip), '..', 'KLShopPage.ini')
+            want = {ids[P.pair_name(sl)] for sl, _it, _r, _n in P.read_pairs(ini) if P.pair_name(sl) in ids}
+            cmp_ = lambda diff: diff <= want
+        else:
+            want = {ids[n] for n in P.cards_of_items(items, os.path.join(os.path.dirname(new_zip), '..', 'pics'), None, os.path.join(P.DD, 'KLShopPage.ini'), lambda s: None) if n in ids}      # a card the map lacks is skipped by repic
+            cmp_ = lambda diff: diff == want
         diff = {k for k in t0.tex if t0.tex[k].entry != t1.tex.get(k, t0.tex[k]).entry}      # textures that existed before the layer and now differ (the layer's own new gun textures are additions)
         row['cards_changed'] = ','.join(str(x) for x in sorted(diff))
-        ok &= diff == want and set(t0.tex) <= set(t1.tex)
+        ok &= cmp_(diff) and set(t0.tex) <= set(t1.tex)
     return row, bool(ok)
 
 
@@ -726,7 +827,7 @@ def main(a):
     if '--out' in a:
         out = a[a.index('--out') + 1]; del a[a.index('--out'):a.index('--out') + 2]
     maps = list(LAYERS[LAYER].get('maps') or M.MAPS)
-    if LAYER in ('1106c', '1106e', '1106f', '1106s'):       # DM02 first: the fits of a new key are taken on the first baked map (the notes fit on DM02)
+    if LAYER in ('1106c', '1106e', '1106f', '1106s', '1107r'):       # DM02 first: the fits of a new key are taken on the first baked map (the notes fit on DM02)
         maps.sort(key=lambda m: m != 'DM02')
     if '--maps' in a:
         maps = a[a.index('--maps') + 1].split(','); del a[a.index('--maps'):a.index('--maps') + 2]

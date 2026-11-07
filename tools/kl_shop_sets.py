@@ -28,15 +28,15 @@ ITEMS = {
     54: ('HK69 FLARE', 'Flare launcher. Origin: German. Lights the sky, burns a little.', 14),
     53: ('HK69 GAS', 'Grenade launcher. Origin: German. Gas rounds.', 14),
     52: ('HK69', 'Grenade launcher. Origin: German. One 40 mm grenade at a time.', 14),
-    51: ('RPG-7 HIND', 'Rocket launcher. Origin: Russian. The helicopter pod version.', 14),
+    51: ('RPG-7 II', 'Rocket launcher. Origin: Russian. A second launcher from the stores.', 14),
     50: ('RPG-7', 'Rocket launcher. Origin: Russian. Not for the faint-hearted.', 14),
     41: ('TYPE 88 MG L09', 'Light machine gun. Origin: Chinese. Warehouse stock.', 31),
-    42: ('TYPE 88 MG HELI', 'Light machine gun. Origin: Chinese. Door-mounted, taken off its mount.', 31),
-    43: ('TYPE 88 MG HELI P', 'Light machine gun. Origin: Chinese. Door-mounted, taken off its mount.', 31),
+    42: ('TYPE 88 MG II', 'Light machine gun. Origin: Chinese. A second belt-fed gun from the stores.', 31),
+    43: ('TYPE 88 MG III', 'Light machine gun. Origin: Chinese. A third belt-fed gun from the stores.', 31),
     44: ('TYPE 88 MG L10', 'Light machine gun. Origin: Chinese. Rooftop stock.', 31),
-    45: ('MINIMI HELI P', 'Light machine gun. Origin: Belgian. Door-mounted, taken off its mount.', 32),
+    45: ('MINIMI III', 'Light machine gun. Origin: Belgian. A third one from the stores.', 32),
     46: ('MINIMI L10', 'Light machine gun. Origin: Belgian. Rooftop stock.', 32),
-    48: ('MINIMI HELI', 'Light machine gun. Origin: Belgian. Door-mounted, taken off its mount.', 32),
+    48: ('MINIMI II', 'Light machine gun. Origin: Belgian. A second one from the stores.', 32),
     40: ('TYPE 88 MG', 'Light machine gun. Origin: Chinese. Belt-fed and heavy.', 31),
     47: ('MINIMI', 'Light machine gun. Origin: Belgian. Lifted from an army depot.', 32),
     33: ('TYPE 81', 'Assault rifle. Origin: Chinese. Plain, rugged and everywhere.', 30),
@@ -61,6 +61,23 @@ ORDER = {
 NATIVE = {13: 52, 28: 33, 32: 49, 34: 47}
 GRENADES = [55, 56, 57, 58, 59]            # opt-in: [4, 6, 8, 10, ...] pistol rows get them (thrown items in a gun slot are untried)
 
+# HeliGuns (owner 2026-11-07: the page-II guns were "based off the helis"; "nothing too rash like the heli mounted, or if it is make it hella expensive").
+# Items 42 43 44 45 46 48 51 sit on templates named _Heli / _Heli_Player / _Hind, i.e. they carry the helicopter door-gun stats (48 has a 900000-round clip).
+# A build-time DATA choice written into KLShopPage.ini: every peer reads the same file, so the pair table (order and count) is the same everywhere (pair card pictures
+# are baked per pair index, so a change of table needs the cards re-pictured from the new ini: pd2_guns_layer layer 1107r does that).
+#   0 = (recommended) heli / hind items are NOT in [Pairs]
+#   2 = kept, but only on the priciest carrier rows (HELI_ROWS, dearest first), never item 48
+HELI_ITEMS = (42, 43, 44, 45, 46, 48, 51)
+HELI_NEVER = (48,)                       # 900000 clip: never on page II, in any mode
+HELI_DEFAULT = 0
+# Mode 2 rows, dearest carrier first (price from the exe table at 0xbd1f68): 34 240000 (free), 33 180000 (dlc 2), 15 170000 (dlc 3), 29 145000 (dlc 1), 30 135000 (free), 14 120000 (free).
+# GUESS (a balance call): the task named rows 16 / 32 / 34 / 35, but 16 / 32 / 35 carry the kept guns 50 / 38 / 49, so only row 34 of that list is free; the rest are the next dearest free rows.
+HELI_ROWS = (34, 33, 15, 29, 30, 14)
+HELI_PICK = (51, 45, 43, 42, 44, 46)     # heaviest first (rocket pod, Minimi, Type 88 MGs, battle-rifle-sized MG L10, Minimi L10); GUESS
+# The surviving LMGs: 41 sat on the cheapest SMG row (21, 24000, rank 0). Moved to row 25 (50000, rank 5, no DLC lock, the row the dropped 46 held). GUESS (balance): the research
+# proposed row 27 (55000) but that row has dlc 0, so a player without that DLC could not buy it.
+HELI_REPAIR = {41: 25}
+
 
 def rows(path=EXE):
     import kl_exe
@@ -73,8 +90,31 @@ def names():
     return [r[1] for r in S.ROWS]
 
 
-def pairs(grenades=False, path=EXE, native=False):
-    """-> {row: (item, name, desc, picrow)}"""
+def desc_of(it, row, nm):
+    name, kind, pic = ITEMS[it]
+    return 'Police reg.: 2%03d-II%02d\n%s Page II: sold in the %s row, same price, same rank.' % (it, it, kind, nm[row])
+
+
+def heli_apply(res, mode, nm):
+    """{row: (item, name, desc, picrow)} -> the same without / with the heli items (see HELI_*). Pure: the dict is copied."""
+    if mode not in (0, 2):
+        raise ValueError('HeliGuns must be 0 or 2, not %r' % (mode,))
+    res = {r: v for r, v in res.items() if v[0] not in HELI_ITEMS}
+    for it, row in HELI_REPAIR.items():
+        cur = [r for r, v in res.items() if v[0] == it]
+        if cur and (row not in res or row == cur[0]):
+            v = res.pop(cur[0])
+            res[row] = (it, v[1], desc_of(it, row, nm), v[3])
+    if mode == 2:
+        free = [r for r in HELI_ROWS if r not in res]
+        for it, row in zip([x for x in HELI_PICK if x not in HELI_NEVER], free):
+            name, kind, pic = ITEMS[it]
+            res[row] = (it, name, desc_of(it, row, nm), pic)
+    return dict(sorted(res.items()))
+
+
+def pairs(grenades=False, path=EXE, native=False, heli=None):
+    """-> {row: (item, name, desc, picrow)}; heli None = the table as generated (the 20 pairs of 2026-11-05), 0 / 2 = HeliGuns mode (heli_apply)."""
     tab, nm = rows(path), names()
     out = {}
     for cat, items in ({} if native else ORDER).items():
@@ -103,18 +143,56 @@ def pairs(grenades=False, path=EXE, native=False):
         name, kind, pic = ITEMS[it]
         desc = ('Police reg.: 2%03d-II%02d\n%s Page II: sold in the %s row, same price, same rank.' % (it, it, kind, nm[r]))
         res[r] = (it, name, desc, pic)
-    return res
+    return res if heli is None else heli_apply(res, heli, nm)
 
 
-def ini_text(grenades=False, path=EXE, native=False):
-    p = pairs(grenades, path, native)
-    L = ['; KLShopPage.ini - written by tools/kl_shop_sets.py; read by klhook/klshoppage.c (beside KLHook.ini). row|item|picture row|name', '[Pairs]', 'Count=%d' % len(p)]
-    for i, (r, (it, name, desc, pic)) in enumerate(p.items()):
+def heli_comment(mode):
+    return ('; HeliGuns=%d%s: %s Build-time choice, the same file on every peer (pair cards are baked per pair index: re-picture them from this ini). Items 42 43 44 45 46 48 51 = heli / hind templates; item 48 (900000 clip) is never on page II.'
+            % (mode, ' (recommended)' if mode == 0 else '', 'the helicopter door-gun items are NOT in [Pairs].' if mode == 0 else
+               'the heli items are kept but only on the dearest carrier rows %s.' % (list(HELI_ROWS),)))
+
+
+def render(res, mode, header=None):
+    """{row: (item, name, desc, picrow)} -> KLShopPage.ini text (CRLF)."""
+    L = [header or '; KLShopPage.ini - written by tools/kl_shop_sets.py; read by klhook/klshoppage.c (beside KLHook.ini). row|item|picture row|name']
+    if mode is not None:
+        L.append(heli_comment(mode))
+    L += ['[Pairs]', 'Count=%d' % len(res)]
+    for i, (r, (it, name, desc, pic)) in enumerate(res.items()):
         L.append('P%d=%d|%d|%d|%s' % (i, r, it, pic, name))
     L.append('[Desc]')
-    for i, (r, (it, name, desc, pic)) in enumerate(p.items()):
+    for i, (r, (it, name, desc, pic)) in enumerate(res.items()):
         L.append('D%d=%s' % (i, desc.replace('\n', '\\n')))
     return '\r\n'.join(L) + '\r\n'
+
+
+def ini_text(grenades=False, path=EXE, native=False, heli=HELI_DEFAULT):
+    return render(pairs(grenades, path, native, heli), heli)
+
+
+def parse_ini(text):
+    """KLShopPage.ini text -> {row: (item, name, desc with real newlines, picrow)}, header line."""
+    import re
+    P, D = {}, {}
+    header = None
+    for ln in text.splitlines():
+        if header is None and ln.startswith(';'):
+            header = ln
+        m = re.match(r'^P(\d+)=(\d+)\|(\d+)\|(\d+)\|(.*)$', ln)
+        if m:
+            P[int(m.group(1))] = (int(m.group(2)), int(m.group(3)), int(m.group(4)), m.group(5))
+        m = re.match(r'^D(\d+)=(.*)$', ln)
+        if m:
+            D[int(m.group(1))] = m.group(2).replace('\\n', '\n')
+    return {row: (it, name, D.get(i, ''), pic) for i, (row, it, pic, name) in sorted(P.items())}, header
+
+
+def heli_rewrite(text, mode, path=EXE):
+    """A live KLShopPage.ini text -> the same table under HeliGuns mode (0 or 2): heli items dropped / re-placed, 41 re-paired, pairs renumbered, Count updated.
+    Names and descriptions of the surviving rows are kept (kl_pd2names.rewrite restores the stock text of re-placed heli items)."""
+    res, header = parse_ini(text)
+    res = heli_apply(res, mode, names())
+    return render(res, mode, header)
 
 
 def show(grenades, path):
@@ -230,11 +308,19 @@ def main():
     native = '--native' in a
     dll = next((x[6:] for x in a if x.startswith('--dll=')), None)
     game = next((x[7:] for x in a if x.startswith('--game=')), GAME)
+    heli = next((int(x[7:]) for x in a if x.startswith('--heli=')), HELI_DEFAULT)
     a = [x for x in a if not x.startswith('--')]
+    if len(a) >= 3 and a[0] == 'heli':          # heli <in.ini> <mode> [out.ini]
+        t = heli_rewrite(open(a[1], encoding='latin-1', newline='').read(), int(a[2]))
+        if len(a) > 3:
+            open(a[3], 'w', newline='').write(t)
+        else:
+            sys.stdout.write(t)
+        return 0
     if a and a[0] == 'show':
         show(gren, a[1] if len(a) > 1 else EXE); return 0
     if a and a[0] == 'ini':
-        t = ini_text(gren, native=native)
+        t = ini_text(gren, native=native, heli=heli)
         if len(a) > 1:
             open(a[1], 'w', newline='').write(t)
         else:

@@ -34,25 +34,24 @@ PD2 = {
     54: ('GL40 FLARE', 'VERIFIED name, FLARE suffix ours', 'Payday 2 launcher: the GL40, loaded with a flare. Lights the sky, burns a little.'),
     53: ('GL40 GAS', 'VERIFIED name, GAS suffix ours', 'Payday 2 launcher: the GL40, loaded with gas. Clears a room.'),
     52: ('GL40', 'VERIFIED', 'Payday 2 launcher: the GL40 grenade launcher. One 40 mm grenade at a time.'),
-    51: ('HRL-7 HIND', 'VERIFIED name, HIND suffix ours', 'Payday 2 rocket launcher: the HRL-7, helicopter pod version.'),
     50: ('HRL-7', 'VERIFIED', 'Payday 2 rocket launcher: the HRL-7. Not for the faint-hearted.'),
-    45: ('KSP HELI P', 'VERIFIED name, suffix ours; Minimi model kept (PD2 M249 = KSP fits at true size with cost 3.5+, rejected)', 'Payday 2 light machine gun: the KSP, door-mounted, taken off its mount.'),
-    47: ('KSP', 'VERIFIED', 'Payday 2 light machine gun: the KSP, lifted from an army depot.'),
-    46: ('KSP L10', 'VERIFIED name, suffix ours', 'Payday 2 light machine gun: the KSP, rooftop stock.'),
-    48: ('KSP HELI', 'VERIFIED name, suffix ours', 'Payday 2 light machine gun: the KSP, door-mounted, taken off its mount.'),
-    42: ('RPK HELI', 'VERIFIED name, pairing GUESS; PD2 RPK model on the DM maps (pd2guns_1106)', 'Payday 2 light machine gun: the RPK, door-mounted, taken off its mount.'),
-    43: ('RPK HELI P', 'VERIFIED name, pairing GUESS; PD2 RPK model on the DM maps (pd2guns_1106)', 'Payday 2 light machine gun: the RPK, door-mounted, taken off its mount.'),
-    41: ('RPK L09', 'VERIFIED name, pairing GUESS; PD2 RPK model on the DM maps (pd2guns_1105)', 'Payday 2 light machine gun: the RPK. Belt of lead from a long barrel.'),
-    40: ('RPK', 'VERIFIED name, pairing GUESS; PD2 RPK model on the DM maps (pd2guns_1106)', 'Payday 2 light machine gun: the RPK, belt-fed and heavy.'),
-    44: ('EAGLE HEAVY', 'VERIFIED name (PD2 SCAR-H = MK17 model on the DM maps, pd2guns_1105)', 'Payday 2 battle rifle: the Eagle Heavy. Heavy rounds, held like a machine gun.'),
+    # 2026-11-07 (owner: the guns were based off the helis): the PD2 look stays only on non-heli items. 41 = MG42, 40 = PAR (both on Type 88 MG templates), 47 = RPK
+    # (Minimi template). Items 42 43 44 45 46 48 51 are back on their stock look (STOCK below): no PD2 name, the stock name of kl_shop_sets.ITEMS.
+    47: ('RPK', 'VERIFIED name (PD2 RPK model on the Minimi item 47, pd2guns_1106d)', 'Payday 2 light machine gun: the RPK. Belt of lead from a long barrel.'),
+    41: ('MG42', 'GUESS name: the model is the PD2 MG42 (pd2guns_1107r), its shop name (Buzzsaw 42?) was not looked up', 'Payday 2 light machine gun: the MG42. Fast, loud and hungry.'),
+    40: ('PAR', 'GUESS name: the model is the PD2 PAR (pd2guns_1106f), its shop name was not looked up', 'Payday 2 light machine gun: the PAR, belt-fed and heavy.'),
     33: ('AK.762', 'VERIFIED (the AKM; owner asked for "the ak from payday")', 'Payday 2 assault rifle: the AK.762. Plain, rugged and everywhere.'),
     35: ('LITTLE FRIEND 7.62', 'VERIFIED name; GUESS that the chico NPC sg417 model on the DM maps (pd2guns_1105) is this rifle', 'Payday 2 rifle: the Little Friend 7.62, long barrel, long reach.'),
     38: ('JP36', 'VERIFIED name (PD2 G36 model on the DM maps, pd2guns_1105)', 'Payday 2 assault rifle: the JP36. Compact, light and quick.'),
     49: ('R700', 'VERIFIED', 'Payday 2 sniper rifle: the R700. A hunting rifle with a long reach.'),
 }
 
+# items whose Page II name / description go BACK to the stock text (kl_shop_sets.ITEMS) when a live ini still holds an older PD2 one (HeliGuns mode 2 keeps them)
+STOCK = (42, 43, 44, 45, 46, 48, 51)
+
 TAIL = re.compile(r'(Page II: sold in the .+? row, same price, same rank\.)$')
 HEAD = re.compile(r'^(Police reg\.: [^\\]+?)\\n(.*?)\. Origin: ([A-Za-z]+)\. ')
+HEAD2 = re.compile(r'^(Police reg\.: [^\\]+?)\\n([^.]*)\. Payday 2 ')
 PAIR = re.compile(r'^(P(\d+))=(\d+)\|(\d+)\|(\d+)\|(.*)$')
 
 
@@ -78,19 +77,32 @@ def rewrite(text):
         m = PAIR.match(ln)
         if m:
             items[int(m.group(2))] = int(m.group(4))
+    import kl_shop_sets as SS
     for ln in lines:
         m = PAIR.match(ln)
+        if m and int(m.group(4)) in STOCK and int(m.group(4)) in SS.ITEMS:       # back to the stock name
+            it = int(m.group(4))
+            out.append('%s=%s|%d|%s|%s' % (m.group(1), m.group(3), it, m.group(5), SS.ITEMS[it][0]))
+            if m.group(6) != SS.ITEMS[it][0]:
+                log.append((it, m.group(6), SS.ITEMS[it][0]))
+            continue
         if m and int(m.group(4)) in PD2:
             it = int(m.group(4))
             out.append('%s=%s|%d|%s|%s' % (m.group(1), m.group(3), it, m.group(5), PD2[it][0]))
             log.append((it, m.group(6), PD2[it][0]))
             continue
         d = re.match(r'^D(\d+)=(.*)$', ln)
+        if d and items.get(int(d.group(1))) in STOCK and items[int(d.group(1))] in SS.ITEMS:
+            it = items[int(d.group(1))]; body = d.group(2); t = TAIL.search(body)
+            if not t or '\\n' not in body:
+                raise ValueError('description D%s has an unexpected shape: %r' % (d.group(1), body[:60]))
+            out.append('D%s=%s\\n%s %s' % (d.group(1), body.split('\\n')[0], SS.ITEMS[it][1], t.group(1)))
+            continue
         if d and items.get(int(d.group(1))) in PD2:
             it = items[int(d.group(1))]
             body = d.group(2)
             t = TAIL.search(body)
-            h = HEAD.match(body)
+            h = HEAD.match(body) or HEAD2.match(body)      # a stock text, or one this tool wrote before (a re-run after a re-pairing: 40 / 41 / 47 changed gun)
             if t and h:
                 kind = h.group(2)
                 body = '%s\\n%s. %s %s' % (h.group(1), kind, PD2[it][2], t.group(1))
