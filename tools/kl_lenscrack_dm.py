@@ -98,7 +98,8 @@ def _bilin(A, u, v):
     return (A[v0, u0] * (1 - fu) * (1 - fv) + A[v0, u0 + 1] * fu * (1 - fv) + A[v0 + 1, u0] * (1 - fu) * fv + A[v0 + 1, u0 + 1] * fu * fv)
 
 
-def preview(outdir, shot, cracks=None, name='preview'):
+def preview(outdir, shot, cracks=None, name='preview', fx=(0.0, 0, 0, 0), la=2.4):
+    """fx = KL_CrackFX (1 + newest age s or 0, Flash, Glint, Haze); la = the glint light angle (shader: timer * 0.00025 + 2.4)."""
     img = np.asarray(Image.open(shot).convert('RGB'), np.float32) / 255.0
     H, W, _ = img.shape
     asp = W / H
@@ -107,7 +108,13 @@ def preview(outdir, shot, cracks=None, name='preview'):
     yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
     uvx, uvy = (xx + 0.5) / W, (yy + 0.5) / H
     offx = np.zeros((H, W), np.float32); offy = np.zeros_like(offx); shine = np.zeros_like(offx); dark = np.zeros_like(offx)
-    for (cx, cy, reach, inten) in cracks:
+    glint = np.zeros_like(offx); haze = np.zeros_like(offx)
+    age = fx[0] - 1.0
+    pop = float(np.exp(-age * 18.0)) if fx[0] > 0.5 and fx[1] > 0.5 else 0.0
+    jolt = float(np.exp(-age * 12.0)) * 1.5 if fx[0] > 0.5 and fx[1] > 0.5 else 0.0
+    ld = (np.cos(la), np.sin(la)) if fx[2] > 0.5 else (0.0, 0.0)
+    for ci, (cx, cy, reach, inten) in enumerate(cracks):
+        cpop = pop if ci == len(cracks) - 1 else 0.0           # the newest crack is the last one
         px = (uvx - cx) * asp / reach
         py = (uvy - cy) / reach
         r = np.hypot(px, py)
@@ -131,23 +138,32 @@ def preview(outdir, shot, cracks=None, name='preview'):
         m = mask(0, 0)
         gx = mask(t, 0) - mask(-t, 0)
         gy = mask(0, t) - mask(0, -t)
-        halo = 0.25 * (mask(wd, 0) + mask(-wd, 0) + mask(0, wd) + mask(0, -wd))
-        wgx = mask(wd * 2, 0) - mask(-wd * 2, 0)
-        wgy = mask(0, wd * 2) - mask(0, -wd * 2)
+        hx1, hx2, hy1, hy2 = mask(wd, 0), mask(-wd, 0), mask(0, wd), mask(0, -wd)
+        halo = 0.25 * (hx1 + hx2 + hy1 + hy2)
+        wgx, wgy = hx1 - hx2, hy1 - hy2                         # as the shader (11-07: was +-2 wd here)
         w = inten * 1.0
         env = (1.0 - np.clip((r - 0.85) / 0.35, 0, 1)) * (r < 1.2)
         offx += (gx * 3.0 + wgx * 4.0) * w * env
         offy += (gy * 3.0 + wgy * 4.0) * w * env
         shine += (m * 0.85 + halo * 0.10) * w * env
         dark += np.clip(halo - m * 0.5, 0, 1) * 0.55 * w * env
+        shine += m * cpop * 0.8 * env + (1.0 - np.clip(r / 0.9, 0, 1) ** 2 * (3 - 2 * np.clip(r / 0.9, 0, 1))) * cpop * 0.12
+        gl = np.hypot(gx, gy)
+        glint += np.clip(gl * 3.0, 0, 1) * np.clip((gx * ld[0] + gy * ld[1]) / (gl + 1e-4), 0, 1) ** 6 * w * env
+        haze += np.clip(1.0 - r, 0, 1) ** 1.5 * w
     mx, my = (uvx - 0.5) * asp, uvy - 0.5
     keep = np.clip((np.hypot(mx, my) - 0.10) / 0.10, 0, 1)
     keep = keep * keep * (3 - 2 * keep)
-    offx *= keep; offy *= keep; shine *= keep; dark *= keep
+    offx *= keep; offy *= keep; shine *= keep; dark *= keep; glint *= keep; haze *= keep * (1.0 if fx[3] > 0.5 else 0.0)
+    offx += np.sin(age * 55.0) * jolt; offy += np.cos(age * 47.0) * jolt     # x CrackRefract in the shader (1 = default, as here)
     sx = np.clip(xx + offx, 0, W - 1.001); sy = np.clip(yy + offy, 0, H - 1.001)
     out = np.dstack([_bilin(img[:, :, c], sx, sy) for c in range(3)])
+    lum = (out * np.array([0.299, 0.587, 0.114])).sum(2)
+    hz = np.clip(haze, 0, 1)[:, :, None] * 0.16
+    out = out * (1 - hz) + (lum * 0.85 + 0.10)[:, :, None] * hz
     out *= (1 - np.minimum(np.clip(dark, 0, 1), 0.6))[:, :, None]
     out += np.clip(shine, 0, 1)[:, :, None] * np.array([0.92, 0.95, 1.0]) * 0.7
+    out += (np.clip(glint, 0, 1) * (0.15 + 0.6 * lum))[:, :, None] * np.array([1.0, 0.98, 0.94]) * 0.9
     Image.fromarray((np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8)).save(os.path.join(outdir, name + '.png'))
     print('wrote', os.path.join(outdir, name + '.png'))
 
@@ -156,4 +172,7 @@ if __name__ == '__main__':
     if sys.argv[1] == 'atlas':
         atlas(sys.argv[2])
     elif sys.argv[1] == 'preview':
-        preview(sys.argv[2], sys.argv[3])
+        # preview <outdir> <shot> [age_s Flash Glint Haze [light_angle]]: e.g. 0.05 1 1 1 = 50 ms after a birth, everything on
+        a = [float(v) for v in sys.argv[4:]]
+        fx = (1.0 + a[0], a[1], a[2], a[3]) if len(a) >= 4 else (0.0, 0, 0, 0)
+        preview(sys.argv[2], sys.argv[3], fx=fx, la=a[4] if len(a) >= 5 else 2.4, name='preview' if len(a) < 4 else 'preview_fx_%g' % a[0])

@@ -12,6 +12,12 @@
  * Cost: idle one tap; per crack within its reach 9 mask taps + 3 picture taps, no loops (ps_3_0: tex2Dlod only, no gradient ops in branches).
  * Preview: PreviewCracks = 1 shows three cracks without the hook.
  * GUESS: every look constant (3.0 / 4.0 px bend, 0.85 shine, 0.55 dark) is tuned by eye on the offline preview, not seen in the game.
+ *
+ * 2026-11-07 immersion (owner: "a bit more immersive ... not too crazy"; klreshade.c 6b): KL_CrackFX = (1 + the newest crack's age in s,
+ * 0 = none / an older dll; Flash, Glint, Haze flags from [Graphics] LensCrackFlash / Glint / Haze). Flash: the newest crack pops bright for
+ * ~0.15 s with a 1.5 px picture jolt dying in ~0.3 s. Glint: the crack edges catch a slowly turning light, more in bright scenes. Haze: a
+ * faint milky glass dust round each crack. No extra taps (all from the 9 mask taps + the 3 picture taps). With every flag 0 = the 11-06 look.
+ * GUESS: the flash / jolt / glint / haze strengths are by eye, not seen in the game.
  */
 #include "ReShade.fxh"
 
@@ -19,6 +25,8 @@ uniform float  KL_CrackN < source = "KL_CrackN"; hidden = 1; nosave = 1; >;
 uniform float4 KL_Crack0 < source = "KL_Crack0"; hidden = 1; nosave = 1; >;
 uniform float4 KL_Crack1 < source = "KL_Crack1"; hidden = 1; nosave = 1; >;
 uniform float4 KL_Crack2 < source = "KL_Crack2"; hidden = 1; nosave = 1; >;
+uniform float4 KL_CrackFX < source = "KL_CrackFX"; hidden = 1; nosave = 1; >;
+uniform float  KLCD_Timer < source = "timer"; >;
 
 uniform float CrackAmount  < ui_type = "slider"; ui_min = 0.0; ui_max = 2.0; ui_step = 0.01; ui_label = "Crack strength"; > = 1.0;
 uniform float CrackRefract < ui_type = "slider"; ui_min = 0.0; ui_max = 3.0; ui_step = 0.01; ui_category = "Parts"; ui_label = "Bend of the picture along the cracks"; > = 1.0;
@@ -53,8 +61,9 @@ float KLCD_Mask(float2 q, float2 cs, float fl, float2 org)
 	return tex2Dlod(KLCD_Atlas, float4(a, 0, 0)).r * em;
 }
 
-/* one crack: cr = (x, y, reach, intensity). off in pixels, shine / dark 0.. */
-void KLCD_Crack(float4 cr, float2 uv, inout float2 off, inout float shine, inout float dark)
+/* one crack: cr = (x, y, reach, intensity). off in pixels, shine / dark / glint / haze 0..; pop = the birth flash 0..1 (newest only),
+   ld = the glint's light direction (0 = no glint) */
+void KLCD_Crack(float4 cr, float2 uv, float pop, float2 ld, inout float2 off, inout float shine, inout float dark, inout float glint, inout float haze)
 {
 	[branch] if (cr.z > 0.004 && cr.w > 0.0)
 	{
@@ -85,6 +94,11 @@ void KLCD_Crack(float4 cr, float2 uv, inout float2 off, inout float shine, inout
 			off += (float2(gx, gy) * 3.0 + wg * 4.0) * w * env;       /* 3 / 4 px: GUESS */
 			shine += (m * 0.85 + halo * 0.10) * w * env;
 			dark += saturate(halo - m * 0.5) * 0.55 * w * env;
+			shine += m * pop * 0.8 * env + (1.0 - smoothstep(0.0, 0.9, r)) * pop * 0.12;   /* the birth flash: the lines + a soft glow */
+			float2 g = float2(gx, gy);
+			float gl = length(g);
+			glint += saturate(gl * 3.0) * pow(saturate(dot(g / (gl + 1e-4), ld)), 6.0) * w * env;
+			haze += pow(saturate(1.0 - r), 1.5) * w;
 		}
 	}
 }
@@ -101,19 +115,32 @@ float3 PS_KLCD_Crack(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 	c1.w *= step(1.5, n);
 	c2.w *= step(2.5, n);
 
-	float2 off = 0.0; float shine = 0.0, dark = 0.0;
-	KLCD_Crack(c0, uv, off, shine, dark);
-	KLCD_Crack(c1, uv, off, shine, dark);
-	KLCD_Crack(c2, uv, off, shine, dark);
+	/* immersion (KL_CrackFX); the preview loops a birth every 3 s */
+	float4 fx = PreviewCracks > 0.5 ? float4(1.0 + frac(KLCD_Timer / 3000.0) * 3.0, 1.0, 1.0, 1.0) : KL_CrackFX;
+	float age = fx.x - 1.0;
+	float pop = fx.x > 0.5 && fx.y > 0.5 ? exp(-age * 18.0) : 0.0;
+	float jolt = fx.x > 0.5 && fx.y > 0.5 ? exp(-age * 12.0) * 1.5 : 0.0;      /* px */
+	float la = KLCD_Timer * 0.00025 + 2.4;                                     /* ~25 s a turn, starts from the upper left */
+	float2 ld = fx.z > 0.5 ? float2(cos(la), sin(la)) : float2(0.0, 0.0);
+	float p0 = n < 1.5 ? pop : 0.0, p1 = n >= 1.5 && n < 2.5 ? pop : 0.0, p2 = n >= 2.5 ? pop : 0.0;   /* the newest crack is the last one */
+
+	float2 off = 0.0; float shine = 0.0, dark = 0.0, glint = 0.0, haze = 0.0;
+	KLCD_Crack(c0, uv, p0, ld, off, shine, dark, glint, haze);
+	KLCD_Crack(c1, uv, p1, ld, off, shine, dark, glint, haze);
+	KLCD_Crack(c2, uv, p2, ld, off, shine, dark, glint, haze);
 
 	/* the crosshair stays clear: nothing within ~0.1 of the screen's height of the middle, a soft rim up to 0.2 */
 	float2 m = (uv - 0.5) * float2(BUFFER_ASPECT_RATIO, 1.0);
 	float keep = smoothstep(0.10, 0.20, length(m));
-	off *= keep * CrackRefract; shine *= keep * CrackShine; dark *= keep * CrackShadow;
+	off *= keep * CrackRefract; shine *= keep * CrackShine; dark *= keep * CrackShadow; glint *= keep; haze *= keep * (fx.w > 0.5 ? 1.0 : 0.0);
+	off += float2(sin(age * 55.0), cos(age * 47.0)) * jolt * CrackRefract;     /* the whole picture shakes (also the middle); CrackRefract 0 = none */
 
 	float3 c = KLCD_Fetch(uv + off * BUFFER_PIXEL_SIZE);
+	float lum = dot(c, float3(0.299, 0.587, 0.114));
+	c = lerp(c, lum * 0.85 + 0.10, saturate(haze) * 0.16);                   /* milky glass dust */
 	c *= 1.0 - min(saturate(dark), 0.6);
 	c += saturate(shine) * float3(0.92, 0.95, 1.0) * 0.7;
+	c += saturate(glint) * (0.15 + 0.6 * lum) * float3(1.0, 0.98, 0.94) * 0.9 * CrackShine;
 	return saturate(c);
 }
 

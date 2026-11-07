@@ -120,6 +120,11 @@
  *    LensCrackChance (35), LensCrackMax (3, 1..3), LensCrackCooldown (8), LensCrackHealth (0.35). The technique is [ReShade] TechCrack
  *    (default KL_LensCrack@KL_LensCrack.fx), wanted while LensCrack=1; ini only, there is no Mod settings row. Everything above is GUESS
  *    except the health reading (shared with KL_Hurt).
+ * 6b. IMMERSION (2026-11-07, owner: "just need it to feel a bit more immersive ... i love the effect"). [Graphics], each "(recommended on)":
+ *    LensCrackHealFade (0.5; 0..1): a crack's intensity falls by that share as the health comes back to full (klcrackfx_logic.h; never
+ *    to 0 at 0.5, so it still lives until the clears above). LensCrackFlash / LensCrackGlint / LensCrackHaze (1): flags the shader gets in
+ *    float4 KL_CrackFX = (1 + the newest crack's age in s or 0, Flash, Glint, Haze); KL_LensCrackDM.fx draws the birth flash + small jolt,
+ *    the light catching the cracks, the milky glass dust. An effect without KL_CrackFX, or an older dll (uniform left 0), looks as before.
  *
  * NOT RUN IN THE GAME. Compiled only (agent build); the ABI is checked against the 6.8.0 headers, not against the running DLL.
  */
@@ -169,6 +174,8 @@ static volatile float klrs_val[KLRS_NU] = { 0, 0, 0, 0, 1, 0, 0, 0, 0 };
 #define KLRS_NCRACK 3
 #define KLRS_CRACK_SPREAD_MS 120            /* GUESS: how long a new crack takes to reach its full size */
 static const char *const klrs_cname[KLRS_NCRACK] = { "KL_Crack0", "KL_Crack1", "KL_Crack2" };
+#define KLRS_CRACKFX (KLRS_NU + KLRS_NCRACK)        /* handle kind of the float4 KL_CrackFX (6b) */
+#include "klcrackfx_logic.h"
 
 enum { KLRS_T_FXAA, KLRS_T_SMAA, KLRS_T_UPLIFT, KLRS_T_KL, KLRS_T_LL, KLRS_T_GLARE, KLRS_T_CAMFX, KLRS_T_CRACK, KLRS_NT };
 static const char *const klrs_tkey[KLRS_NT] = { "TechFXAA", "TechSMAA", "TechUplift", "TechKL", "TechLiveLeak", "TechGlare", "TechCamFX", "TechCrack" };
@@ -195,7 +202,9 @@ static struct {
     int reload_on; float reload_lvl, reload_hold, reload_tail;   /* k39 [ReShade] ReloadFx / ReloadFxLevel / ReloadFxHold / ReloadFxTail */
     /* the cracked lens (6): settings, then the state (the game thread writes, the present thread reads) */
     int crack_on, crack_hits, crack_max; float crack_win, crack_chance, crack_cool, crack_hp;
-    struct { float x, y, size, inten; DWORD birth; } crack[KLRS_NCRACK];
+    struct { float x, y, size, inten, h0; DWORD birth; } crack[KLRS_NCRACK];  /* h0 = the health share when it was made (6b heal fade) */
+    float crack_heal; int crack_flash, crack_glint, crack_haze;           /* 6b: LensCrackHealFade / Flash / Glint / Haze */
+    volatile LONG crack_hok;                                              /* 6b: 1 = the last tick read the health (else no heal fade) */
     volatile LONG crack_n;
     DWORD hit_t[32]; int nhit; DWORD crack_last; unsigned rng;
 } klrs = { 0 };
@@ -323,6 +332,11 @@ static const char *klrs_prepare(int look)
     klrs.crack_max = (int)klrs_inig("LensCrackMax", 3); if (klrs.crack_max < 1) klrs.crack_max = 1; if (klrs.crack_max > KLRS_NCRACK) klrs.crack_max = KLRS_NCRACK;
     klrs.crack_cool = klrs_inig("LensCrackCooldown", 8.0f); if (klrs.crack_cool < 0) klrs.crack_cool = 0;
     klrs.crack_hp = klrs_inig("LensCrackHealth", 0.35f);
+    /* 6b (owner 11-07 "a bit more immersive", "not too crazy"): each (recommended on); 0 = the 11-06 look exactly */
+    klrs.crack_heal = klrs_inig("LensCrackHealFade", 0.5f); if (klrs.crack_heal < 0) klrs.crack_heal = 0; if (klrs.crack_heal > 1) klrs.crack_heal = 1;
+    klrs.crack_flash = klrs_inig("LensCrackFlash", 1) != 0;
+    klrs.crack_glint = klrs_inig("LensCrackGlint", 1) != 0;
+    klrs.crack_haze = klrs_inig("LensCrackHaze", 1) != 0;
     klrs.rng = GetTickCount() * 2654435761u | 1u;
     klrs.slowdone = -1;
     if (!klrs_write_live(look ? look : 1)) { klrs.want = 0; return 0; }
@@ -357,6 +371,7 @@ static void __cdecl klrs_cb_uni(void *rt, klrs_h h, void *user)
     if (n[0] != 'K' || n[1] != 'L' || n[2] != '_') return;
     for (k = 0; k < KLRS_NU; k++) if (!strcmp(n, klrs_uname[k])) { klrs.u[klrs.nu].h = h; klrs.u[klrs.nu].k = k; klrs.nu++; return; }
     for (k = 0; k < KLRS_NCRACK; k++) if (!strcmp(n, klrs_cname[k])) { klrs.u[klrs.nu].h = h; klrs.u[klrs.nu].k = KLRS_NU + k; klrs.nu++; return; }
+    if (!strcmp(n, "KL_CrackFX")) { klrs.u[klrs.nu].h = h; klrs.u[klrs.nu].k = KLRS_CRACKFX; klrs.nu++; return; }
 }
 
 static void __cdecl klrs_cb_tech(void *rt, klrs_h h, void *user)
@@ -379,7 +394,7 @@ static void klrs_scan(void *rt)
     if (!klrs.nu && !klrs.nt && ++klrs.scantries < 60) { klrs.scanat = klrs.frames; return; }      /* still loading: again in 10 frames (60 x = ~10 s) */
     klrs.scan = 0;
     if (!klrs.nu && klrs.log && !klrs.nouni++)
-        klog("reshade: no effect declares a KL_ uniform the API can see (KL_Fire, KL_Hurt, KL_Down, KL_Speed, KL_Health, KL_Look, KL_CamFX, KL_Glare, KL_CrackN, KL_Crack0..2): with PerformanceMode=1 they need < source = \"KL_Fire\"; > etc. (klreshade.c 4)");
+        klog("reshade: no effect declares a KL_ uniform the API can see (KL_Fire, KL_Hurt, KL_Down, KL_Speed, KL_Health, KL_Look, KL_CamFX, KL_Glare, KL_CrackN, KL_Crack0..2, KL_CrackFX): with PerformanceMode=1 they need < source = \"KL_Fire\"; > etc. (klreshade.c 4)");
     if (klrs.log) {
         char s[400]; int i; s[0] = 0;
         for (i = 0; i < klrs.nt; i++) klrs_cat(s, sizeof s, klrs.tech[klrs.t[i].k]);
@@ -498,12 +513,18 @@ static void __cdecl klrs_ev_begin(void *rt, void *cmd, klrs_h rtv, klrs_h rtv_sr
     for (i = 0; i < klrs.nu; i++) {
         int k = klrs.u[i].k;
         if (k < KLRS_NU) ((klrs_setf_t)KLRS_FN(rt, KLRS_V_SET_FLOAT))(rt, 0, klrs.u[i].h, &v[k], 1, 0);
-        else {                                           /* KL_Crack<j>: x, y, size (grown over the spread time), intensity */
+        else if (k == KLRS_CRACKFX) {                    /* 6b: 1 + the newest crack's age in s (0 = none), Flash, Glint, Haze */
+            float c[4]; LONG n = klrs.crack_n;
+            c[0] = n > 0 && n <= KLRS_NCRACK ? klcf_age(GetTickCount(), klrs.crack[n - 1].birth, (int)n) : 0.0f;
+            c[1] = (float)klrs.crack_flash; c[2] = (float)klrs.crack_glint; c[3] = (float)klrs.crack_haze;
+            ((klrs_setf_t)KLRS_FN(rt, KLRS_V_SET_FLOAT))(rt, 0, klrs.u[i].h, c, 4, 0);
+        }
+        else {                                           /* KL_Crack<j>: x, y, size (grown over the spread time), intensity (6b: faded as health comes back) */
             float c[4], t, e; int j = k - KLRS_NU; DWORD age = GetTickCount() - klrs.crack[j].birth;
             t = age >= KLRS_CRACK_SPREAD_MS ? 1.0f : (float)age / KLRS_CRACK_SPREAD_MS; e = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
             c[0] = klrs.crack[j].x; c[1] = klrs.crack[j].y;
             c[2] = j < klrs.crack_n ? klrs.crack[j].size * e : 0.0f;
-            c[3] = j < klrs.crack_n ? klrs.crack[j].inten : 0.0f;
+            c[3] = j < klrs.crack_n ? klcf_heal(klrs.crack[j].inten, klrs.crack[j].h0, klrs.crack_hok ? v[KLRS_U_HEALTH] : klrs.crack[j].h0, klrs.crack_heal) : 0.0f;
             ((klrs_setf_t)KLRS_FN(rt, KLRS_V_SET_FLOAT))(rt, 0, klrs.u[i].h, c, 4, 0);
         }
     }
@@ -592,6 +613,7 @@ static void klrs_crack_tick(DWORD now, int hit, float health, int clear)
         klrs.crack[n].x = x; klrs.crack[n].y = y;
         klrs.crack[n].size = 0.17f + 0.14f * klrs_rnd();
         klrs.crack[n].inten = 0.75f + 0.25f * klrs_rnd();
+        klrs.crack[n].h0 = health;
         klrs.crack[n].birth = now;
         klrs.crack_last = now;
         klrs.crack_n = n + 1;                            /* published last */
@@ -606,7 +628,7 @@ static void klrs_tick(int game_thread)
     static DWORD last, lastpl, lastw, lasth; static float hp0 = -1, mx0 = -1, pos0[3]; static int rounds0 = -1, havepos;
     static DWORD logat, lastshot, reload_until; static int reloaded;
     DWORD now, gd, pl = 0, h, d, inv, vt, ds = 0, hand = 0, arr = 0, cnt = 0, e[4], w = 0, raw; BYTE idx = 0xff, mode = 0;
-    float dt, fire, hurt, speed, health = 1.0f, pos[3], cur, mx; int hit = 0, clear = 0;
+    float dt, fire, hurt, speed, health = 1.0f, pos[3], cur, mx; int hit = 0, clear = 0, hok = 0;
     if (!klrs.on || !game_thread || !klh_exe_ok) return;
     now = GetTickCount();
     dt = last ? (now - last) / 1000.0f : 0.0f; last = now;
@@ -627,8 +649,9 @@ static void klrs_tick(int game_thread)
             if (h != lasth || cur <= 0 || (hp0 >= 0 && mx == mx0 && cur > hp0 + 0.25f * mx)) clear = 1;   /* a jump, not regen: a respawn or new round on a reused object */
             hp0 = cur; mx0 = mx; lasth = h;
             health = cur <= 0 ? 0 : cur >= mx ? 1 : cur / mx;
+            hok = 1;
         }
-        klrs_val[KLRS_U_HEALTH] = health;
+        klrs_val[KLRS_U_HEALTH] = health; klrs.crack_hok = hok;
         /* down: [[player+0x2948]+4] (kldown.c) */
         if ((d = klh_rd32(pl + 0x2948)) != 0 && klh_rd32(d) == pl) klh_rd(d + 4, &ds, 4);
         klrs_val[KLRS_U_DOWN] = ds ? 1.0f : 0.0f;
