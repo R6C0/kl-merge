@@ -97,6 +97,7 @@ C_TESTS = {
     'klht_test.c': 'logic',            # klhud_tags_dist.h
     'klmappool_ov_test.c': 'logic',    # no windows.h
     'klhirepic_test.c': 'logic',       # no windows.h
+    'klhirepick_test.c': 'logic',      # klhire_pick.h ([Hire] PickDefault)
     'klnc_test.c': 'logic',            # klnetchan_logic.h + klucc_logic.h
     'klonline_read_test.c': 'logic',   # klonline_read.h
     'klsteamside_test.c': 'logic',     # klsteamside.h ([Net] SideChannelSteam probe: version order, peer parse, log budget)

@@ -474,7 +474,10 @@ static void klco_init(void)
        Online used to apply the saved Char anyway (owner log 10-27: Standen by F9 with hire on). Zero the IN-MEMORY choice only (the ini is not
        touched); klhire_online.c then saves 0 and gives 0 back after a hired round, so HRF2/HRP2 (hired body worn in round 2) are unchanged. Off = old behaviour. */
     klco.ignoreChar = klhr_on && GetPrivateProfileIntA("Hire", "OnlineIgnoreChar", 1, klh_ini) != 0;
-    if (klco.ignoreChar && klc_char) { klog("charonline: hire on: the saved Char=%ld is ignored online, as in Arcade ([Hire] OnlineIgnoreChar=0 restores it)", (long)klc_char); klc_char = 0; }
+    /* [Hire] PickDefault (owner 11-07, klhire_pick.h): Arcade now honours the menu pick as the unhired round's body, so online keeps the
+       saved Char too (only Kane / Lynch, hire-only, are still zeroed); F9 stays ignored mid-session (ignoreChar), as Arcade changes no body mid-round. */
+    if (klco.ignoreChar && klc_char && !klhp_online_zero(klhr_on, klco.ignoreChar, klhr_pickdef, (int)klc_char)) klog("charonline: hire on, [Hire] PickDefault=%d: the saved Char=%ld %s stays the online body in unhired rounds, where the level has it (online has no random default; PickDefault=2 acts as 1 here)", klhr_pickdef, (long)klc_char, klco_nm((int)klc_char));
+    else if (klco.ignoreChar && klc_char) { klog("charonline: hire on: the saved Char=%ld is ignored online, as in Arcade ([Hire] OnlineIgnoreChar=0 restores it)", (long)klc_char); klc_char = 0; }
     klco.keyChar = klkeys_vk(KK_CHAR) & 0xff;
     klco.keyMask = klkeys_vk(KK_MASK) & 0xff;
     if (klco.settle < 0 || klco.settle > 20000) klco.settle = 1500;

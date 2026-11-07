@@ -151,6 +151,8 @@ static void __fastcall klc_set(void *self, void *edx, const char *name, int valu
         char v[16];
         if (value < 0) value = 0;
         if (value > klc_upper[i]) value = klc_upper[i];
+        /* [Hire] PickDefault (klhire_pick.h): the pick is now worn (Arcade + online), so Kane / Lynch stay hire-only by refusing them here (review 11-07: online read klc_char directly) */
+        if (i == 0 && klhr_on && klhr_pickdef && (value == 9 || value == 10)) { if (klc_log) klog("character: menu pick %d refused: Kane / Lynch are hire-only ([Hire] PickDefault=%d); Char stays %ld", value, klhr_pickdef, (long)klc_char); return; }
         if (InterlockedExchange(klc_value[i], value) != value) {
             snprintf(v, sizeof v, "%d", value); WritePrivateProfileStringA("Character", klc_keys[i], v, klh_ini);
             if (klc_log) klog("character: menu set %s = %d", klc_names[i], value);
@@ -336,7 +338,7 @@ static void klc_level_tick(int game_thread)
     int ch = (int)klc_char, mask = (int)klc_mask, outfit = (int)klc_outfit, i, slot = -1, wardrobe, v;
     char key[64], scene[160];
     { static LONG gen0; LONG g = klhr_gen; if (g != gen0) { gen0 = g; tries = 0; lastv = lastbody = -1; } }     /* klhire.c: a new round drew a new body */
-    if (klhr_on) { static int toldwish; ch = (int)klhr_body; if (klc_char && !toldwish++) klog("hire: [Hire] Enable=1: the Heister page's Char=%ld is ignored (the body is the random default or the hired one)", klc_char); }
+    if (klhr_on) { static int toldwish; ch = (int)klhr_body; if (klc_char && !klhr_pickdef && !toldwish++) klog("hire: [Hire] Enable=1: the Heister page's Char=%ld is ignored (the body is the random default or the hired one)", klc_char); }
     if (!ch && !mask && !outfit) return;
     if (kl_online()) {                                                      /* local-only look: peers see the stock model; harmless, so it is NOT stopped here (re/netcode_plan.md 2.1), only said once */
         static int toldnet;

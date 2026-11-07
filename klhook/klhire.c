@@ -59,7 +59,8 @@
 #define KLHR_S_SCORE    0x5f8                  /* rules: the score object (klfedkit.c KLFK_SCORE) */
 #define KLHR_S_TOTAL    0x38                   /* score: the banked total the shop buys from */
 
-static int klhr_on, klhr_log = 1, klhr_rankgate = 1, klhr_bots;
+#include "klhire_pick.h"                       /* [Hire] PickDefault: an unhired round starts as the Heister page pick (owner 11-07) */
+static int klhr_on, klhr_log = 1, klhr_rankgate = 1, klhr_bots, klhr_pickdef;
 static int klhr_price[KLHR_N + 1], klhr_need[KLHR_N + 1];
 static const char *const klhr_name[KLHR_N + 1] = { "", "J.C.", "Tommy", "Pierre", "Liam", "Jean", "Elwood", "Bud", "Mitchel",
                                                    "Kane", "Lynch", "Ashkanan", "Meldal", "Red", "Parker", "Standen", "Hutchison" };
@@ -202,9 +203,15 @@ static void klhr_tick(void)
     if (phase == 1 && klhr_phase0 != 1) {
         hired = (int)klhr_next;
         if (hired && !klhr_avail(hired)) hired = 0;                                  /* paid on another level: no body here (his money stays spent; said) */
-        body = hired ? hired : klhr_roll();
-        klhr_next = 0; klhr_body = body; klhr_gen++; klhr_round++;
-        if (klhr_log) klog("hire: round %d starts (state 0x%lx): body %d %s = %s", klhr_round, st, body, klhr_name[body], hired ? "HIRED" : "random default");
+        {
+            int pick = (int)klc_char, why = KLHP_OFF, def = 0;                       /* klchar.c: the Heister page's KLChar (menu pick, [Character] Char=) */
+            if (!hired) def = klhp_default(klhr_pickdef, klhr_round + 1, pick, pick >= 1 && pick <= KLHR_N && klhr_avail(pick), &why);
+            body = hired ? hired : def ? def : klhr_roll();
+            klhr_next = 0; klhr_body = body; klhr_gen++; klhr_round++;
+            if (klhr_log) klog("hire: round %d starts (state 0x%lx): body %d %s = %s%s%s", klhr_round, st, body, klhr_name[body],
+                               hired ? "HIRED" : def ? "the menu pick" : "random default",
+                               (!hired && !def && klhr_pickdef && why != KLHP_NONE) ? "; menu pick not used: " : "", (!hired && !def && klhr_pickdef && why != KLHP_NONE) ? klhp_why[why] : "");
+        }
     }
     klhr_phase0 = phase;
 }
@@ -222,13 +229,16 @@ static void klhr_init(void)
     klhr_log = GetPrivateProfileIntA("Hire", "Log", 1, klh_ini);
     klhr_rankgate = GetPrivateProfileIntA("Hire", "Rank", 1, klh_ini) != 0;
     klhr_bots = GetPrivateProfileIntA("Hire", "Bots", 0, klh_ini);
+    klhr_pickdef = (int)GetPrivateProfileIntA("Hire", "PickDefault", 0, klh_ini);   /* (recommended on: 1) klhire_pick.h; 0 = every unhired round random (10-24 rule) */
+    if (klhr_pickdef < 0 || klhr_pickdef > 2) klhr_pickdef = 0;
     for (i = 1; i <= KLHR_N; i++) {
         snprintf(k, sizeof k, "Price%d", i); klhr_price[i] = (int)GetPrivateProfileIntA("Hire", k, klhr_defp[i], klh_ini);
         snprintf(k, sizeof k, "Rank%d", i);  klhr_need[i] = (int)GetPrivateProfileIntA("Hire", k, klhr_defr[i], klh_ini);
         if (klhr_price[i] < 0) klhr_price[i] = 0;
     }
     if (klhr_on) {
-        klog("hire: on (Rank gate %d, Log %d). The Heister page's Char= is ignored while this is on; the body is a random default (never Kane / Lynch) or what you hired, one round. NOT RUN IN THE GAME", klhr_rankgate, klhr_log);
+        if (klhr_pickdef) klog("hire: on (Rank gate %d, Log %d, PickDefault %d). An unhired round starts as the Heister page pick (%s; never Kane / Lynch, else a random default), a hire replaces it for one round", klhr_rankgate, klhr_log, klhr_pickdef, klhr_pickdef == 2 ? "round 1 only" : "every unhired round");
+        else klog("hire: on (Rank gate %d, Log %d). The Heister page's Char= is ignored while this is on; the body is a random default (never Kane / Lynch) or what you hired, one round. NOT RUN IN THE GAME", klhr_rankgate, klhr_log);
         if (klhr_bots) klog("hire: [Hire] Bots=1 is not built in this pass (re\\shop_hire.md 6): bots keep their bodies");
     }
 }
