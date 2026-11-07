@@ -71,10 +71,10 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 F2/F3 always open the shop ([ShopPage] PageIntent/QueueDebounce/IntentFallbackHint/IntentLog), one tidy caption ([Keys] CaptionTidy/RowFit), wardrobe labels "10/17  DEAD MEN: Kane" + Shift back + Ctrl+F9/Alt+F11 group jumps ([CharOnline] HudLabels/ShiftBack/GroupKeys/HintFix).
 PD2 rebase 1107r (9ef0210a): own-type templates, no heli looks/pairs (HeliGuns=0), MG42 on 41 (Type 88 host, fit 1.28), AKM 33; DM02 proof C:\kl_build_1024\pd2rebase_1107 PASS; the 20-map stage waits for D: room (prune map sent to c9, nothing deleted).
 
-2026-11-07 ~02:00 - [f0] LENS CRACK IMMERSION + ARCADE PICK, STAGED, NOT installed: C:\kl_build_1024\lens_pick_1107_install (SHIP md5 521AEE29 =
-live e88a6093 + PickDefault + lens; bench_TEST\ 75A251DC; INSTALL/UNDO bats; supersedes pick_1107_install). [Graphics] LensCrackHealFade=0.5 /
-Flash / Glint / Haze=1, all "(recommended on)": new-crack flash + 1.5 px jolt, edge glint, milky haze, cracks fade to half as health returns.
-[Hire] PickDefault=1: the Heister pick holds from round 1. Not seen in game (previews only); deferred: a glass tick sound, hit direction.
+2026-11-07 - [f0] MERGED 1107 KIT (for c9), STAGED, NOT installed, not run in game: C:\kl_build_1024\merged_1107 = ONE dll from b628e16f (clean worktree):
+lens + PickDefault + 6b ui_1107 + db [Echo] (0) + c9 [VanBlow] ShieldUntilBoarded (0). SHIP 502677ee, TEST 39e79011, overlay df16480f (= ui_1107's), fx bc25a53f.
+install.py: refuses unless live dll e88a6093 / ovl d00527ff / fx 57663e0c; 15 ini lines (ini 97f8e972 -> 6a17a145); backups *.before-merged1107; undo byte-exact,
+keeps in-game ini edits. 17 scratch checks + kl_tests 100/0 + 3-lens review. Supersedes ui_1107, lens_pick_1107_install, pick_1107_install.
 
 2026-11-06 ~18:45 - [c9] LAST CALL CHAIN 2f LIVE on DM05A (zip 1d325299, bots db375c5a, base 4dce350a), on top of 6b's pd2guns c-f on 2c: the heli is drawn after lift-off.
 A moving entity is drawn only while an .rmi box of a visible room holds it, and every Roof box stopped at y 2640. Fix: Roof box 7 enlarged to y 6600 (tools/kl_club_rmi_1106.py) + the 2e cam/route.
