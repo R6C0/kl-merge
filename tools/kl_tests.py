@@ -81,6 +81,8 @@ C_TESTS = {
     'klhud_boardbots_test.c': 'logic', # klhud_boardbots_logic.h ([HUD] OnlineBoardBots: AI heister rows of the online round-over card)
     'klperf_test.c': 'logic',          # klperf_logic.h ([Perf] OsdBackoff / OnlineCache / FastRead pure parts)
     'klhud_codeguard_test.c': 'logic', # klhud_codeguard_logic.h ([HUD] ProbeJmp: the code-bytes guard accepts a forwarding jmp)
+    'klwlabel_test.c': 'logic',        # klwlabel_logic.h (wardrobe group tags, "n/N  GROUP > Name" labels, group jumps, no windows.h)
+    'klfit_test.c': 'logic',          # klfit_logic.h ([Keys] CaptionTidy / CaptionMax / RowFit: caption + row fitting, no windows.h)
     'klecho_test.c': 'logic',          # klecho_logic.h ([Echo] per room kind AL reverb parameter changes, no windows.h)
     'klcoverring_test.c': 'logic',     # klcoverring_logic.h ([CoverRing] schedule / change detection, no windows.h)
     'kldown_mirror_test.c': 'logic',   # kldown_mirror_logic.h (no windows.h at all)

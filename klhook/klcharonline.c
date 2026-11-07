@@ -40,6 +40,7 @@
  *   [CharOnline]
  *   Enable=0   (recommended on after the live test)   Unique=1 (recommended on: a character is worn once, lower entity wins)   StockHero=1 (recommended on: Dog Days heisters 1..8 get their stock body from the rules hero table on a level without a wardrobe)   ForgetMs=0 (0 = keep a peer's last look)   OwnDiag=1   Steam=1   Udp=1   Keys=1   KeyChar=0x78 (F9)   KeyMask=0x7A (F11, Ctrl = outfit)
  *   Settle=1500  ms the table must have stood still before a body is changed        Tries=3  calls per entity per 10 s     Log=1
+ *   Wardrobe labels (11-07, default 0 each, NOT RUN IN THE GAME; klwlabel_logic.h): HudLabels=0 (recommended on) ShiftBack=0 (recommended on) GroupKeys=0 (recommended on: Ctrl+F9 / Alt+F11 jump a group) HintFix=0 (recommended on) OfflineKeys=0 (recommended off until a live check)
  *   TEST build only: TestPeer=<idx>  TestChar=<c> TestMask=<m> TestOutfit=<o>   pretends peer <idx> announced that (proves the apply on another body)
  */
 #ifndef KLCHARONLINE_C
@@ -306,13 +307,31 @@ static void klco_look(DWORD ent, int idx, int ch, int mask, int outfit, int gt, 
     if (InterlockedExchange(&klco.lastv[idx], v) != v) klog("charonline: applied to body: %s on entity %d: variant %lu -> %d (mask %d, outfit %d) on model %lu", who, idx, cur, v, mask, outfit, model);
 }
 
+/* ---- wardrobe labels (patch "wardrobe", owner 11-07: 'label the outfit categories more clearly bc if they want to find dead men its not too obvious on how to get there';
+   NOT RUN IN THE GAME). klwlabel_logic.h is the pure part. Every key default 0 in code; read lazily (klco_init is not touched). ---- */
+#include "klwlabel_logic.h"
+static struct { int init, hudLabels, shiftBack, groupKeys, hintFix, offKeys; } klcow;
+static void klcow_init(void)
+{
+    if (klcow.init) return;
+    klcow.init = 1;
+    klcow.hudLabels = GetPrivateProfileIntA("CharOnline", "HudLabels", 0, klh_ini) != 0;    /* (recommended on) the F9 / F11 announce shows "HEISTER 10/17  DEAD MEN > Kane" instead of a bare number */
+    klcow.shiftBack = GetPrivateProfileIntA("CharOnline", "ShiftBack", 0, klh_ini) != 0;    /* (recommended on) Shift+F11 / Ctrl+Shift+F11 go back, like Shift+F9 (klkeys.c already promises it) */
+    klcow.groupKeys = GetPrivateProfileIntA("CharOnline", "GroupKeys", 0, klh_ini) != 0;    /* (recommended on) Ctrl+F9 = next heister group (DEFAULT / DOG DAYS / DEAD MEN), Alt+F11 = next mask group; Shift = back. Ctrl+F11 stays OUTFIT. GUESS: Alt+F-key arrives without side effects (GetAsyncKeyState poll; needs one live look) */
+    klcow.hintFix = GetPrivateProfileIntA("CharOnline", "HintFix", 0, klh_ini) != 0;        /* (recommended on) the round hint stops saying "F9 heister" while hire hides the Character row */
+    klcow.offKeys = GetPrivateProfileIntA("CharOnline", "OfflineKeys", 0, klh_ini) != 0;    /* (recommended off until a live check) F9 / F11 also in Arcade: NOT PROVEN that a mid-round variant change is clean there */
+}
+/* klshoppage.c's round hint: 0 = leave "heister" out (F9 does nothing: hire on and OnlineIgnoreChar) */
+static int klcow_hint_char_ok(void) { klcow_init(); return !(klcow.hintFix && (klco.ignoreChar || !klco.on || !klco.keys)); }   /* review 11-07: also no F9 hint when [CharOnline] Enable=0 / Keys=0 */
+
 /* ---- hotkeys: the choice, in the lobby and in the match ---- */
 static void klco_keys(DWORD now)
 {
     static DWORD keyAt; static int dC, dM;
     static SHORT (WINAPI *gaks)(int); static HWND (WINAPI *fgw)(void); static DWORD (WINAPI *wtp)(HWND, LPDWORD); static BOOL (WINAPI *bp)(DWORD, DWORD); static int looked;
-    DWORD pid = 0; HWND f; int c, m, shift, ctrl;
+    DWORD pid = 0; HWND f; int c, m, shift, ctrl, alt;
     if (now - keyAt < 30) return;
+    klcow_init();
     keyAt = now;
     if (!looked) {
         HMODULE u = GetModuleHandleA("user32.dll"), k = GetModuleHandleA("kernel32.dll"); looked = 1;
@@ -322,14 +341,18 @@ static void klco_keys(DWORD now)
     if (!gaks || !fgw || !wtp) return;
     f = fgw(); if (f) wtp(f, &pid);
     c = klco.keyChar && (gaks(klco.keyChar) & 0x8000) != 0; m = klco.keyMask && (gaks(klco.keyMask) & 0x8000) != 0;
-    shift = (gaks(0x10) & 0x8000) != 0; ctrl = (gaks(0x11) & 0x8000) != 0;
+    shift = (gaks(0x10) & 0x8000) != 0; ctrl = (gaks(0x11) & 0x8000) != 0; alt = (gaks(0x12) & 0x8000) != 0;
     if (pid == GetCurrentProcessId()) {
-        int which = -1, step = 1;
-        if (c && !dC) { which = 0; step = shift ? -1 : 1; }
-        else if (m && !dM) which = ctrl ? 2 : 1;
+        int which = -1, step = 1, grp = 0;
+        if (c && !dC) { which = 0; step = shift ? -1 : 1; grp = klcow.groupKeys && ctrl; }
+        else if (m && !dM) {
+            which = ctrl ? 2 : 1;
+            if (klcow.shiftBack && shift) step = -1;                                  /* [CharOnline] ShiftBack */
+            if (klcow.groupKeys && alt && !ctrl) grp = 1;                             /* [CharOnline] GroupKeys: Alt+F11 = next mask group */
+        }
         if (which >= 0) {
             int span = which == 0 ? KLC_NCHAR + 1 : which == 1 ? KLC_MASKS + 2 : KLC_OUTFITS;
-            int v = (int)*klc_value[which] + step; char s[16];
+            int v = grp ? kwl_next_group(which, (int)*klc_value[which], step) : (int)*klc_value[which] + step; char s[16];
             if (which == 0 && klco.ignoreChar) { static int told; if (!told++ || klco.log) klog("charonline: hire on: F9 (heister) ignored, as in Arcade; the body is the game's own or the hired one (F11 mask / Ctrl+F11 outfit still work)"); dC = c; dM = m; return; }
             v = ((v % span) + span) % span;
             InterlockedExchange(klc_value[which], v);
@@ -338,7 +361,7 @@ static void klco_keys(DWORD now)
             if (which == 0) klog("charonline: I chose heister %s", klco_nm(v));
             if (bp) bp(500 + 40 * (which * 6 + v), 40);
             if (klkeys_roundhints_on()) {   /* wk-modestab-1102 (NOT RUN IN THE GAME): the choice on the announcement line, next to the beep; dropped when no FA element is up */
-                char t[64]; if (which == 0) snprintf(t, sizeof t, "HEISTER: %s", klco_nm(v)); else snprintf(t, sizeof t, which == 1 ? "MASK %d  (Ctrl+key: outfit)" : "OUTFIT %d  (key: mask)", v);
+                char t[128]; if (klcow.hudLabels) kwl_hud(which, v, t, sizeof t); else if (which == 0) snprintf(t, sizeof t, "HEISTER: %s", klco_nm(v)); else snprintf(t, sizeof t, which == 1 ? "MASK %d  (Ctrl+key: outfit)" : "OUTFIT %d  (key: mask)", v);
                 klan_show(t, 3.0f, 0);
             }
         }
@@ -351,7 +374,8 @@ static void klco_tick(int game_thread)
     DWORD now = GetTickCount(), sm, ents = 0, role = 0; int n = 0, i, online;
     if (!klco.on || !klc_on || !game_thread || !klh_exe_ok) return;
     online = kls_online_cached();
-    if (online && klco.keys) klco_keys(now);
+    klcow_init();
+    if ((online || klcow.offKeys) && klco.keys) klco_keys(now);
     if (now - klco.tick < 250) return;
     klco.tick = now;
     if (!online) {

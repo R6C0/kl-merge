@@ -109,6 +109,68 @@ int main(void)
     CHECK(kpq_inshop_start(KPQ_TOP_OTHER, 0) == -1 && kpq_inshop_start(KPQ_TOP_WPN, 2) == -1 && kpq_inshop_start(KPQ_TOP_CAT, 0) == -1 && kpq_inshop_start(KPQ_TOP_NEW, 1) == -1, "not in the shop / list open / mode lags: send path");
     CHECK(kpq_aostep(1, KPQ_TOP_CAT, 1, -6, -4, 0, 400, 400) == KPQ_AS_OPENWPN && kpq_aostep(1, KPQ_TOP_CAT, 1, -6, -2, 0, 400, 400) == KPQ_AS_ABORT, "start at 1: pistols opens the list, another category stops");
 
+
+    /* ===== [ShopPage] PageIntent family (2026-11-07) ===== */
+    /* regression guard: with every new flag at 0 the new functions give exactly today's answers */
+    {
+        int st, mode, top, step, slot, cat, busy, sent, seen, cycles, a, b;
+        unsigned int age, tms;
+        const int sts[] = { 0x16, 0x18, 0x19, 0x1f, 0x20, 0x23 }, cats[] = { -6, -4, -3, -2, -1, 0 }, tops[] = { KPQ_TOP_OTHER, KPQ_TOP_NEW, KPQ_TOP_CAT, KPQ_TOP_WPN };
+        const unsigned int ages[] = { 0u, 299u, 400u, 2501u, 5001u, 70000u };
+        int ok = 1;
+        for (step = 0; step < 4 && ok; step++) for (top = 0; top < 4; top++) for (mode = 0; mode < 3; mode++) for (slot = -6; slot <= -5; slot++) for (cat = 0; cat < 6; cat++) for (busy = 0; busy < 2; busy++)
+            for (a = 0; a < 6; a++) for (b = 0; b < 3; b++) {
+                age = ages[a]; tms = ages[b + 1];
+                if (kpq_aostep_x(0, step, tops[top], mode, slot, cats[cat], busy, age, tms) != kpq_aostep(step, tops[top], mode, slot, cats[cat], busy, age, tms)) ok = 0;
+            }
+        CHECK(ok, "IntentAnyCategory off: kpq_aostep_x(0, ...) equals kpq_aostep on the whole grid");
+        for (sent = 0; sent < 2; sent++) for (seen = 0; seen < 2; seen++) CHECK(kpq_ao_hold(0, sent, seen) == (sent || seen), "PageIntent off: the old 'sent or seen' return (sent %d seen %d)", sent, seen);
+        ok = 1;
+        for (sent = 0; sent < 2; sent++) for (top = 0; top < 4; top++) for (mode = 0; mode < 3; mode++) for (a = 0; a < 6; a++) for (cycles = 0; cycles < 5; cycles++)
+            if (kpq_intent_resend(0, sent, tops[top], mode, ages[a], cycles, 0)) ok = 0;
+        CHECK(ok, "PageIntent off: never a re-armed send");
+        ok = 1;
+        for (st = 0; st < 6; st++) for (mode = 0; mode < 3; mode++) for (sent = 0; sent < 2; sent++) for (a = 0; a < 6; a++) {
+            if (kpq_debounced(0, sts[st], mode, 1, 1, ages[a])) ok = 0;
+            if (kpq_hint_wanted(0, sts[st])) ok = 0;
+        }
+        CHECK(ok, "QueueDebounce / IntentFallbackHint off: never ignore a repeat, never a hint (kpq_cancels is the old rule, untouched)");
+        CHECK(kpq_cancels(1, 0x20, 0, 1, 1) == 1 && kpq_should_queue(1, 0x16, 0, 0) == 0 && kpq_should_queue(1, 0x18, 0, 0) == 0, "kpq_cancels / kpq_should_queue unchanged (IntentPreRound is not implemented: 0x16 / 0x18 never queue)");
+    }
+    /* PageIntent: the list seen earlier no longer blocks; a send in flight still does */
+    CHECK(kpq_ao_hold(1, 0, 1) == 0 && kpq_ao_hold(1, 0, 0) == 0 && kpq_ao_hold(1, 1, 0) == 1 && kpq_ao_hold(1, 1, 1) == 1, "PageIntent: only a send in flight holds (shop opened, closed, press again: Ready is re-sent)");
+    CHECK(kpq_autoopen_due(1, 1, 1, 0x20, 0, 5000, 0, 0) == 1, "...and the send itself is due again (list closed, queued, settled)");
+    /* PageIntent: the send worked but no FABuyWeaponsNew window shows within 5 s: re-armed, max 3 cycles */
+    CHECK(kpq_intent_resend(1, 1, KPQ_TOP_OTHER, 0, 5000, 0, 0) == 0 && kpq_intent_resend(1, 1, KPQ_TOP_OTHER, 0, 5001, 0, 0) == 1, "no shop window: re-armed after 5 s, not before");
+    CHECK(kpq_intent_resend(1, 1, KPQ_TOP_OTHER, 0, 9000, 2, 0) == 1 && kpq_intent_resend(1, 1, KPQ_TOP_OTHER, 0, 9000, 3, 0) == 0, "3 cycles at most");
+    CHECK(kpq_intent_resend(1, 1, KPQ_TOP_NEW, 0, 9000, 0, 0) == 0 && kpq_intent_resend(1, 1, KPQ_TOP_CAT, 1, 9000, 0, 0) == 0 && kpq_intent_resend(1, 1, KPQ_TOP_OTHER, 2, 9000, 0, 0) == 0, "a shop window up, or the list open: no re-send");
+    CHECK(kpq_intent_resend(1, 0, KPQ_TOP_OTHER, 0, 9000, 0, 0) == 0, "no send made yet: nothing to re-arm");
+    CHECK(kpq_intent_resend(1, 1, KPQ_TOP_OTHER, 0, 9000, 0, 1) == 0 && kpq_intent_resend(0, 1, KPQ_TOP_OTHER, 0, 9000, 0, 1) == 0, "the shop came up after the send and the player backed out: no re-send without a new press");
+    /* IntentAnyCategory: the step 1 abort at category -1 / -2 / -3 */
+    CHECK(kpq_aostep_x(0, 1, KPQ_TOP_CAT, 1, -6, -1, 0, 400, 400) == KPQ_AS_ABORT && kpq_aostep_x(0, 1, KPQ_TOP_CAT, 1, -6, -2, 0, 400, 400) == KPQ_AS_ABORT && kpq_aostep_x(0, 1, KPQ_TOP_CAT, 1, -6, -3, 0, 400, 400) == KPQ_AS_ABORT, "any-category off: -1 / -2 / -3 abort (the 11-07 log)");
+    CHECK(kpq_aostep_x(1, 1, KPQ_TOP_CAT, 1, -6, -1, 0, 400, 400) == KPQ_AS_OPENWPN && kpq_aostep_x(1, 1, KPQ_TOP_CAT, 1, -6, -2, 0, 400, 400) == KPQ_AS_OPENWPN &&
+          kpq_aostep_x(1, 1, KPQ_TOP_CAT, 1, -6, -3, 0, 400, 400) == KPQ_AS_OPENWPN && kpq_aostep_x(1, 1, KPQ_TOP_CAT, 1, -6, -4, 0, 400, 400) == KPQ_AS_OPENWPN, "any-category on: -4..-1 open the Weapon window");
+    CHECK(kpq_aostep_x(1, 1, KPQ_TOP_CAT, 1, -6, -6, 0, 400, 400) == KPQ_AS_ABORT && kpq_aostep_x(1, 1, KPQ_TOP_CAT, 1, -6, 0, 0, 400, 400) == KPQ_AS_ABORT, "any-category on: a value outside -4..-1 (a rewritten category) still aborts");
+    CHECK(kpq_aostep_x(1, 1, KPQ_TOP_CAT, 1, -6, -2, 0, 2501, 400) == KPQ_AS_ABORT && kpq_aostep_x(1, 1, KPQ_TOP_CAT, 1, -6, -2, 1, 400, 400) == KPQ_AS_WAIT && kpq_aostep_x(1, 1, KPQ_TOP_CAT, 1, -6, -2, 0, 400, 100) == KPQ_AS_WAIT, "any-category on: timeout / busy / settle rules stay");
+    /* QueueDebounce */
+    CHECK(kpq_debounced(1, 0x20, 0, 1, 1, 0) == 1 && kpq_debounced(1, 0x20, 0, 1, 1, 1999) == 1 && kpq_debounced(1, 0x20, 0, 1, 1, 2000) == 0, "a repeat inside 2 s is ignored, after it the cancel rule takes over");
+    CHECK(kpq_debounced(1, 0x1f, 0, 1, 1, 100) == 1, "also on the scoreboard");
+    CHECK(kpq_debounced(1, 0x20, 0, 0, 0, 100) == 0 && kpq_debounced(1, 0x20, 0, 1, 0, 100) == 0 && kpq_debounced(1, 0x20, 2, 1, 1, 100) == 0 && kpq_debounced(1, 0x19, 0, 1, 1, 100) == 0, "nothing queued / early press / list open / wrong state: not a debounce");
+    CHECK(kpq_cancels(1, 0x20, 0, 1, 1) == 1 && kpq_debounced(1, 0x20, 0, 1, 1, 2500) == 0, "after the window a second press still cancels");
+    /* IntentFallbackHint */
+    CHECK(kpq_hint_wanted(1, 0x20) == 1 && kpq_hint_wanted(1, 0x1f) == 1 && kpq_hint_wanted(1, 0x23) == 0 && kpq_hint_wanted(1, 0x19) == 0, "hint only while Buy Weapons can still be pressed");
+    CHECK(kpq_fallback_hint(t, sizeof t, "F3") == 1 && !strcmp(t, "PRESS BUY WEAPONS, THEN [F3]"), "'%s'", t);
+    CHECK(kpq_fallback_hint(t, sizeof t, "ctrl+delete") == 1 && !strcmp(t, "PRESS BUY WEAPONS, THEN [CTRL+DELETE]"), "key name upper-cased: '%s'", t);
+    strcpy(t, "junk"); CHECK(kpq_fallback_hint(t, sizeof t, "") == 0 && t[0] == 0 && kpq_fallback_hint(t, sizeof t, 0) == 0, "no key name: no hint, buffer emptied");
+    CHECK(kpq_fallback_hint(t, 20, "F3") == 0 && kpq_fallback_hint(0, 96, "F3") == 0 && kpq_fallback_hint(t, 8, "F3") == 0, "buffer too small / bad");
+    /* IntentLog */
+    CHECK(kpq_reject_why(0, 1, 1) == KPQ_REJ_GATE && kpq_reject_why(0, 0, 0) == KPQ_REJ_GATE, "gate first");
+    CHECK(kpq_reject_why(1, 0, 0) == KPQ_REJ_DEBOUNCE && kpq_reject_why(1, 1, 0) == KPQ_REJ_FOREGROUND && kpq_reject_why(1, 1, 1) == KPQ_REJ_NONE, "then debounce, then foreground, else none");
+    CHECK(strcmp(kpq_reject_name(KPQ_REJ_GATE), "gate shut") == 0 && strcmp(kpq_reject_name(KPQ_REJ_NONE), "none") == 0, "reject names");
+    CHECK(kpq_log_due(1000, 0, 2000) == 1 && kpq_log_due(2999, 1001, 2000) == 0 && kpq_log_due(3001, 1001, 2000) == 1, "log at most once per 2 s");
+    /* the 60 s timeout is still a lapse, and with a reason the caller can name (the hold's cap) */
+    CHECK(kpq_step(1, 1, 0x20, 0, 0, 60001) == KPQ_LAPSE, "60 s: the queued press lapses (kspg_fb_show then asks kpq_hint_wanted)");
+
     printf("klpagequeue_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

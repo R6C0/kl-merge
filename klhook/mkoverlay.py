@@ -196,11 +196,45 @@ HEISTER_ROWS = (('KLH_Char', 'Character', 'KLChar', CHARACTERS), ('KLH_Mask', 'M
 # Character focus bar (run PV1, 2026-10-09 23:55, picture research\shots\PV1_62s.png).
 HEISTER_PICS = (('KLH_Char', 'KLChar', ['KLPic_None1'] + ['KLPic_Char%02d' % n for n in range(1, 17)], -117, 36),
                 ('KLH_Mask', 'KLMask', ['KLPic_None2', 'KLPic_None3'] + ['KLPic_Mask%d' % n for n in range(1, len(MASKS) - 1)], 157, 84))
+# --labels (patch "wardrobe", owner 11-07: 'label the outfit categories more clearly bc if they want to find dead men its not too obvious on how to get there'):
+# the Heister page entries get a counter and a group tag, the rows a caption that says who the row is for, and the side note the real keys. Default OFF: without
+# --labels the page is byte-identical to before. Entry COUNTS never change (the checks and klchar.c's ranges stay true). klhook\klwlabel_logic.h builds the SAME
+# strings for the F9 / F11 announce line (kwl_label); wardrobe_labels() below is its twin - compare:  python mkoverlay.py --print-labels  against klwlabel_test.c.
+# GUESS: how a longer text fits between the arrows is NOT SEEN (the longest outfit entry is ~62 characters, the stock ones 43); re\wardrobe.md 117.
+LABELS = False
+ROW_CAPTIONS = {'KLChar': 'Character', 'KLMask': 'Mask (Dog Days / Payday 2)', 'KLOutfit': 'Outfit (Dead Men heisters only)'}
+LABEL_NOTE = ('Dead Men heisters start at 10/17 (Kane). Online matches: F9 next heister, F11 mask, Ctrl+F11 outfit (group jumps and Shift back: Mod Options). '
+              'With hire on, hire Dead Men heisters with F3 in the shop. Outfits are for Dead Men bodies only.')
+
+
+def wardrobe_labels():
+    """{option: [text of entry k]} - 'n/N  GROUP > Name' as klwlabel_logic.h kwl_label (the DEFAULT group has no tag)."""
+    chars = [c.replace(' (Dead Men)', '') for c in CHARACTERS]
+    cg = ['DEFAULT'] + ['DOG DAYS'] * 8 + ['DEAD MEN'] * 8                                # KLChar 0 | 1..8 | 9..16 (Kane and Lynch are Dead Men bodies)
+    masks = ['Game option', 'No mask'] + ['%s (%s)' % (m, c) for m, c in zip(MASK_LOOKS, chars[1:9])] + [m.replace(' (Payday 2)', '') for m in PD2_MASKS]
+    mg = ['DEFAULT'] * 2 + ['DOG DAYS'] * 8 + ['PAYDAY 2'] * 4                           # KLMask 0..1 | 2..9 | 10..13
+    og = ['DEAD MEN'] * len(OUTFITS)
+
+    def lab(names, groups):
+        return ['%d/%d  %s%s' % (k + 1, len(names), '' if g == 'DEFAULT' else g + ' > ', n) for k, (n, g) in enumerate(zip(names, groups))]
+    return {'KLChar': lab(chars, cg), 'KLMask': lab(masks, mg), 'KLOutfit': lab(OUTFITS, og)}
+
+
+def heister_rows():
+    """HEISTER_ROWS, or the labelled version under --labels (same names, same options, same entry counts)."""
+    if not LABELS:
+        return HEISTER_ROWS
+    lab = wardrobe_labels()
+    return tuple((name, ROW_CAPTIONS[opt], opt, lab[opt]) for name, label, opt, vals in HEISTER_ROWS)
+
+
 HEISTER_NOTE = 'Arcade Mode. Dead Men bodies, their outfits and the masks of other heisters need a map built with the wardrobe. Outfits are for Dead Men bodies; the balaclava shades show on the six masked men.'
 
 
 def heister_window(nl, pictures=False):
     """The window KLHeister: three option rows in the layout of the story map page's rows (PlayMenu)."""
+    rows = heister_rows()
+    note = LABEL_NOTE if LABELS else HEISTER_NOTE
     L = ['  <!-- KLExpansion: the heister page (mkoverlay.py; options answered by klchar.c) -->',
          '  <Window Name="%s" LocaleBasePath="AllLevels/Menu/Heist" Template="WindowDefault">' % HEISTER,
          '    <GuiElement Template="BackgroundTemplate"/>',
@@ -211,13 +245,13 @@ def heister_window(nl, pictures=False):
          '    </GuiElement>',
          '    <GuiElement Type="GUIGroup" Template="ScreenBaseSize">',
          '      <GuiElement Template="ChapterBackgroundTemplate"/>',
-         '      <GuiElement Type="TextBlock" Name="KLH_Note" Text="%%%s" Font="Text" LineSpace="26" FadeInDelay="0.10" FadeInTime="0.2" AlphaMax="192" X="450" Y="64" AlignH="Left" TextWidth="430" W="300" H="400" />' % esc(HEISTER_NOTE),
+         '      <GuiElement Type="TextBlock" Name="KLH_Note" Text="%%%s" Font="Text" LineSpace="26" FadeInDelay="0.10" FadeInTime="0.2" AlphaMax="192" X="450" Y="64" AlignH="Left" TextWidth="430" W="300" H="400" />' % esc(note),
          '      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLH_CenterBox" AlignH="Right" X="-100" Y="-80" W="384" H="576">']
     if pictures:                                      # before the rows: a <Graphic> child is looked up by name when it is added
         L = L[:-1]
         for name, opt, ents, x, y in HEISTER_PICS:
-            if len(ents) != len(dict((r[0], r[3]) for r in HEISTER_ROWS)[name]):
-                raise SystemExit('%s: %d pictures for %d entries' % (name, len(ents), len(dict((r[0], r[3]) for r in HEISTER_ROWS)[name])))
+            if len(ents) != len(dict((r[0], r[3]) for r in rows)[name]):
+                raise SystemExit('%s: %d pictures for %d entries' % (name, len(ents), len(dict((r[0], r[3]) for r in rows)[name])))
             L.append('      <GuiElement Type="GUIGroup" Template="LevelPictureGroup_T">')
             L += ['        <GuiElement Type="Graphic" Name="%sPic%02d" Template="LevelPicture_T" X="%d" Y="%d" Graphic="%s" />' % (name, k, x, y, e) for k, e in enumerate(ents)]
             L.append('      </GuiElement>')
@@ -226,17 +260,17 @@ def heister_window(nl, pictures=False):
             L.append('      </GuiElement>')
         L.append('      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLH_CenterBox" AlignH="Right" X="-100" Y="-80" W="384" H="576">')
     ys = (358, 392, 425)                              # PlayMenu's two rows are at 392 and 425
-    for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
+    for k, (name, label, opt, vals) in enumerate(rows):
         L.append('        <GuiElement Type="TextBlock" FadeInDelay="%.2f" FadeInTime="0.2" Text="" Name="%s_Data" Y="%d" AlignH="Center" />' % (0.05 + 0.05 * k, name, ys[k] + 80 + (1 if k == 2 else 0)))
     L += ['      </GuiElement>',
           '      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLH_CenterBoxArrows" X="484" Y="-80" W="384" H="576" GeomSpace="2">']
     for msg, tpl in (('Decrease', 'OptionsArrowL_T'), ('Increase', 'OptionsArrowR_T')):
-        for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
+        for k, (name, label, opt, vals) in enumerate(rows):
             L.append('        <GuiElement Template="%s" X="0" Message="%s" FocusParent="%s" Receiver="%s" Y="%d"/>' % (tpl, msg, name, name, 430 + ROW * k))
     L.append('      </GuiElement>')
-    for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
+    for k, (name, label, opt, vals) in enumerate(rows):
         L.append('      <GuiElement Name="KLHfb#%02d" Graphic="FocusBar_long#%02d" Y="%d" X="-122" AlignH="Left" Template="FocusBar" />' % (k + 1, k + 4, 349 + ROW * k))
-    for k, (name, label, opt, vals) in enumerate(HEISTER_ROWS):
+    for k, (name, label, opt, vals) in enumerate(rows):
         L += ['      <GuiElement Type="ToggleText" Text="%%%s" X="-100" Y="%d" Option="%s" FocusGraphic="KLHfb#%02d"' % (esc(label), ys[k], opt, k + 1),
               '          TextReceiver="%s_Data" UseTextReceiverAsFocus="True"%s' % (name, ' ToggleReceivers="%sPics"' % name if pictures and name in [r[0] for r in HEISTER_PICS] else ''),
               '          RecCSFocus="OnFocus" RecCSDefault="Default" FadeInDelay="%.2f" FadeInTime="0.2" Name="%s"' % (0.05 + 0.05 * k, name),
@@ -682,7 +716,7 @@ def check(stock, res, pgs, heister=True):
             for r in sorted(set(refs)):
                 if r not in own and r != 'HelpPlay':         # HelpPlay: named by the stock pages too, defined by none
                     bad.append('%s refers to %s, which the page does not define' % (HEISTER, r))
-            for name, label, opt, vals in HEISTER_ROWS:
+            for name, label, opt, vals in heister_rows():
                 t = re.search(r'<GuiElement Type="ToggleText"[^>]*Option="%s"[^>]*>(.*?)</GuiElement>' % opt, w, re.S)
                 if not t or len(re.findall(r'<Text Text=', t.group(1))) != len(vals):
                     bad.append('%s: the row of option %s does not have %d entries' % (HEISTER, opt, len(vals)))
@@ -839,7 +873,15 @@ def main():
     if '--scene' in args:
         i = args.index('--scene'); scene = args[i + 1]; del args[i:i + 2]
     force_pics, no_pics, no_trim = '--pictures' in args, '--no-pictures' in args, '--no-trim' in args
-    args = [a for a in args if a not in ('--pictures', '--no-pictures', '--no-trim')]
+    global LABELS
+    LABELS = '--labels' in args                          # labelled Heister page (see LABELS); default off = the old page, byte for byte
+    if '--print-labels' in args:                         # the strings of every entry, for the comparison with klwlabel_logic.h
+        LABELS = True
+        for opt, v in wardrobe_labels().items():
+            for t in v:
+                print('%s\t%s' % (opt, t))
+        return
+    args = [a for a in args if a not in ('--pictures', '--no-pictures', '--no-trim', '--labels')]
     if len(args) != 3 or (force_pics and no_pics):
         raise SystemExit(__doc__)
     ini, stock, out = args
@@ -915,7 +957,7 @@ def main():
     if heister:
         if pictures:
             print(r'  heister page: WITH PICTURES - needs Overlay\Scenes\kaneandlynch.zip of tools\kl_portraits.py beside it (%s)' % ', '.join('%d for %s' % (len(r[2]), r[1]) for r in HEISTER_PICS))
-        print('  heister page: Arcade button 6 (icon %s) -> window %s; rows %s' % (ICONS[0], HEISTER, ', '.join('%s (%s, %d entries)' % (r[1], r[2], len(r[3])) for r in HEISTER_ROWS)))
+        print('  heister page: Arcade button 6 (icon %s) -> window %s; rows %s' % (ICONS[0], HEISTER, ', '.join('%s (%s, %d entries)' % (r[1], r[2], len(r[3])) for r in heister_rows())))
     for k, (n, title, ent, pg) in enumerate(pgs):
         mode = pg.get('Pictures', 'story').strip().lower()
         print('  page %d "%s": Arcade button %d (icon %s) -> window HeistPlayMenu%d; selector HeistLevel_P%d; Dummy = %d' % (n, title, 6 + h + k, pg.get('Icon', icons_for(heister)[h + k]).strip(), n, n, n))

@@ -117,7 +117,7 @@ static int kpq_top_kind(const char *n)
 
 /* one tick of the steps. step 0 = waiting for FABuyWeaponsNew (age = ms since the AutoOpen send), 1 = Category asked, 2 = Weapon asked (age = ms since that call).
    top = kpq_top_kind of the top window, topMs = ms it has been on top, slot / cat = 0xced63c / 0xced640, busy = the window system's +0x4bc byte */
-static int kpq_aostep(int step, int top, int mode, int slot, int cat, int busy, unsigned int age, unsigned int topMs)
+static int kpq_aostep_x(int anyCat, int step, int top, int mode, int slot, int cat, int busy, unsigned int age, unsigned int topMs)
 {
     if (mode == KPQ_MODE_LIST) return KPQ_AS_DONE;                   /* the list is open (by us or the player): the queued press applies */
     if (step == 0) {
@@ -131,10 +131,15 @@ static int kpq_aostep(int step, int top, int mode, int slot, int cat, int busy, 
         if (top == KPQ_TOP_NEW) return KPQ_AS_WAIT;                   /* the request is still queued */
         if (top != KPQ_TOP_CAT) return KPQ_AS_ABORT;
         if (mode != 1 || busy || topMs < KPQ_AS_SETTLE_MS) return KPQ_AS_WAIT;
+        if (anyCat) return (cat >= -4 && cat <= -1) ? KPQ_AS_OPENWPN : KPQ_AS_ABORT;   /* [ShopPage] IntentAnyCategory (GUESS: every category -4..-1 is a valid list to open the Weapon window on; the 11-07 log had 4 aborts at -1/-2/-3) */
         return cat == KPQ_CAT_PISTOLS ? KPQ_AS_OPENWPN : KPQ_AS_ABORT;   /* research: a lower selector's update could rewrite the category; abort rather than open a bad list */
     }
     if (step == 2) return (top == KPQ_TOP_CAT || top == KPQ_TOP_WPN) ? KPQ_AS_WAIT : KPQ_AS_ABORT;
     return KPQ_AS_ABORT;
+}
+static int kpq_aostep(int step, int top, int mode, int slot, int cat, int busy, unsigned int age, unsigned int topMs)
+{
+    return kpq_aostep_x(0, step, top, mode, slot, cat, busy, age, topMs);      /* IntentAnyCategory off: the old rule */
 }
 
 /* [ShopPage] InShopSteps (2026-11-04, NOT RUN IN THE GAME): a queued press made while the shop is already open needs no Buy Weapons send (the MercsFAStatusReady element may be
@@ -177,6 +182,71 @@ static int kpq_board_hint(char *out, size_t cap, int queueOn, const char *cycleK
     }
     if (!n) { out[0] = 0; return 0; }
     return 1;
+}
+
+/* ===== [ShopPage] PageIntent family (2026-11-07, NOT RUN IN THE GAME; owner 11-07: 'not always consistent on putting you automatically there so u need to press buy shop sometimes').
+   Every function below is a new decision behind its own ini toggle (all default 0, 'recommended on'); with the toggle at 0 each returns what the code did before. ===== */
+
+/* PageIntent: should the AutoOpen tick stop here because a Buy Weapons send is final / the player has had the list? Old rule: a send that worked OR a list seen in this 0x20 phase
+   blocks everything until the phase ends (the 'ESC back to the page, press F3, nothing opens' case). With PageIntent only a send in flight blocks (it is re-armed by kpq_intent_resend). */
+static int kpq_ao_hold(int intentOn, int sentOk, int shopSeen)
+{
+    return intentOn ? (sentOk != 0) : (sentOk || shopSeen);
+}
+
+#define KPQ_INTENT_CYCLES 3            /* PageIntent: at most this many re-armed send cycles per press */
+/* PageIntent: the send worked (sentOk) but no FABuyWeaponsNew window showed within KPQ_AS_FIRST_MS and the list is not open: re-arm the send (1) for another cycle, max KPQ_INTENT_CYCLES.
+   openedSince = a shop window (or the list) was seen after this send: the player opened it and backed out, so no re-send (review 11-07: no shop reopened without a new press). */
+static int kpq_intent_resend(int intentOn, int sentOk, int top, int mode, unsigned int sinceSendMs, int cycles, int openedSince)
+{
+    if (!intentOn || !sentOk || openedSince || cycles >= KPQ_INTENT_CYCLES) return 0;
+    if (mode == KPQ_MODE_LIST || top != KPQ_TOP_OTHER) return 0;               /* the shop (or a window of it) is up: the steps / apply path owns it */
+    return sinceSendMs > KPQ_AS_FIRST_MS;
+}
+
+/* QueueDebounce: a repeat of the SAME key within KPQ_DEBOUNCE_MS of queuing it is a mash, not a cancel (owner log 11-06: 7 'cancelled by a second press', an even number of presses cancels).
+   1 = ignore the press (the queue stays). sinceMs = ms since the press was queued. Evaluated before kpq_cancels. */
+#define KPQ_DEBOUNCE_MS 2000u          /* GUESS: a deliberate cancel takes longer than a mash; 2 s is above the 1.5 s the page takes to open */
+static int kpq_debounced(int debounceOn, int st, int mode, int pending, int queued, unsigned int sinceMs)
+{
+    return debounceOn && pending && queued && kpq_qstate(st) && mode != KPQ_MODE_LIST && sinceMs < KPQ_DEBOUNCE_MS;
+}
+
+/* IntentFallbackHint: show the on-screen hint only while the shop is still a state where Buy Weapons can be pressed (a lapse because the state ended needs none) */
+static int kpq_hint_wanted(int hintOn, int st)
+{
+    return hintOn && kpq_qstate(st);
+}
+/* 'PRESS BUY WEAPONS, THEN [F3]' (key name as configured, upper case). 1 = built */
+static int kpq_fallback_hint(char *out, size_t cap, const char *keyName)
+{
+    size_t l; char *p;
+    if (!out || cap < 16) return 0;
+    out[0] = 0;
+    if (!keyName || !keyName[0]) return 0;
+    l = (size_t)snprintf(out, cap, "PRESS BUY WEAPONS, THEN [%s]", keyName);
+    if (l >= cap) { out[0] = 0; return 0; }
+    for (p = out; *p; p++) if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 'a' + 'A');
+    return 1;
+}
+
+/* IntentLog: why a key edge was dropped without a word. 0 = not dropped (it is handled), else the first failing test in the order the code applies them */
+enum { KPQ_REJ_NONE = 0, KPQ_REJ_GATE = 1, KPQ_REJ_DEBOUNCE = 2, KPQ_REJ_FOREGROUND = 3 };
+static int kpq_reject_why(int gateOk, int sinceOk, int fgOk)
+{
+    if (!gateOk) return KPQ_REJ_GATE;
+    if (!sinceOk) return KPQ_REJ_DEBOUNCE;
+    if (!fgOk) return KPQ_REJ_FOREGROUND;
+    return KPQ_REJ_NONE;
+}
+static const char *kpq_reject_name(int why)
+{
+    return why == KPQ_REJ_GATE ? "gate shut" : why == KPQ_REJ_DEBOUNCE ? "500 ms debounce" : why == KPQ_REJ_FOREGROUND ? "game window not in front" : "none";
+}
+/* rate limit for the IntentLog line: 1 = may log now (lastAt 0 = never logged) */
+static int kpq_log_due(unsigned int now, unsigned int lastAt, unsigned int gapMs)
+{
+    return !lastAt || kpq_age(now, lastAt) >= gapMs;
 }
 
 #endif /* KLPAGEQUEUE_LOGIC_H */
