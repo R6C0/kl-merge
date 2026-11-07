@@ -208,7 +208,7 @@ LABEL_NOTE = ('Dead Men heisters start at 10/17 (Kane). Online matches: F9 next 
 
 
 def wardrobe_labels():
-    """{option: [text of entry k]} - 'n/N  GROUP > Name' as klwlabel_logic.h kwl_label (the DEFAULT group has no tag)."""
+    """{option: [text of entry k]} - 'n/N  GROUP: Name' as klwlabel_logic.h kwl_label (the DEFAULT group has no tag)."""
     chars = [c.replace(' (Dead Men)', '') for c in CHARACTERS]
     cg = ['DEFAULT'] + ['DOG DAYS'] * 8 + ['DEAD MEN'] * 8                                # KLChar 0 | 1..8 | 9..16 (Kane and Lynch are Dead Men bodies)
     masks = ['Game option', 'No mask'] + ['%s (%s)' % (m, c) for m, c in zip(MASK_LOOKS, chars[1:9])] + [m.replace(' (Payday 2)', '') for m in PD2_MASKS]
@@ -216,7 +216,7 @@ def wardrobe_labels():
     og = ['DEAD MEN'] * len(OUTFITS)
 
     def lab(names, groups):
-        return ['%d/%d  %s%s' % (k + 1, len(names), '' if g == 'DEFAULT' else g + ' > ', n) for k, (n, g) in enumerate(zip(names, groups))]
+        return ['%d/%d  %s%s' % (k + 1, len(names), '' if g == 'DEFAULT' else g + ': ', n) for k, (n, g) in enumerate(zip(names, groups))]
     return {'KLChar': lab(chars, cg), 'KLMask': lab(masks, mg), 'KLOutfit': lab(OUTFITS, og)}
 
 

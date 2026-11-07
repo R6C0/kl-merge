@@ -315,7 +315,7 @@ static void klcow_init(void)
 {
     if (klcow.init) return;
     klcow.init = 1;
-    klcow.hudLabels = GetPrivateProfileIntA("CharOnline", "HudLabels", 0, klh_ini) != 0;    /* (recommended on) the F9 / F11 announce shows "HEISTER 10/17  DEAD MEN > Kane" instead of a bare number */
+    klcow.hudLabels = GetPrivateProfileIntA("CharOnline", "HudLabels", 0, klh_ini) != 0;    /* (recommended on) the F9 / F11 announce shows "HEISTER 10/17  DEAD MEN: Kane" instead of a bare number */
     klcow.shiftBack = GetPrivateProfileIntA("CharOnline", "ShiftBack", 0, klh_ini) != 0;    /* (recommended on) Shift+F11 / Ctrl+Shift+F11 go back, like Shift+F9 (klkeys.c already promises it) */
     klcow.groupKeys = GetPrivateProfileIntA("CharOnline", "GroupKeys", 0, klh_ini) != 0;    /* (recommended on) Ctrl+F9 = next heister group (DEFAULT / DOG DAYS / DEAD MEN), Alt+F11 = next mask group; Shift = back. Ctrl+F11 stays OUTFIT. GUESS: Alt+F-key arrives without side effects (GetAsyncKeyState poll; needs one live look) */
     klcow.hintFix = GetPrivateProfileIntA("CharOnline", "HintFix", 0, klh_ini) != 0;        /* (recommended on) the round hint stops saying "F9 heister" while hire hides the Character row */
