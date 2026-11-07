@@ -80,7 +80,7 @@ LAYERS = {
                            ('RPK41', 41, 'MG_GP_Type88_L09_NPC')],      # review 11-07: item 41 carries the old PD2 RPK look; back to stock first so MG42_41 fits the Type 88 host
                   fit_new=True, repic_all=True, heli_mode=0,
                   pic_keys=['SG417', 'G36', 'PAR40', 'MG42_41', 'RPK47', 'R700', 'HRL50', 'GL40', 'GL40GAS', 'GL40FLR', 'C45', 'DEAG63', 'AKM33'],
-                  out=r'C:\kl_build_1024\pd2rebase_1107', backup=r'D:\kl_stage\pd2rebase_1107_backup',
+                  out=r'C:\kl_build_1024\pd2rebase_1107', backup=r'C:\kl_build_1024\pd2rebase_1107_backup',      # C: since 11-07 (c9 freed 62 GB; D: had 3.5 GB for 8.2 GB of backups)
                   maps=['DM02', 'DM01', 'DM01B', 'DM03', 'DM03A', 'DM05A', 'DM06', 'DM06B', 'DM07', 'DM09', 'DM11B',
                         'DD01', 'DD02', 'DD03', 'DD04', 'DD05', 'DD06', 'DD07', 'DD08', 'DD09'],
                   title='1107r (rebase: MG42 on item 41, PD2 looks off the heli items 42 43 44 45 46 48 51, AKM on item 33 where it fits), staged on the live zips',

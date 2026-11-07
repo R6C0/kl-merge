@@ -70,7 +70,7 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 2026-11-07 ~02:00 - [shop] STAGED, nothing installed: UI 1107 C:\kl_build_1024\ui_1107 (SHIP d8826c4e from 0bbe8dc5 + TEST, overlay = live + KLHeister only, install.py sets 10 recommended-on keys, undo md5-pinned):
 F2/F3 always open the shop ([ShopPage] PageIntent/QueueDebounce/IntentFallbackHint/IntentLog), one tidy caption ([Keys] CaptionTidy/RowFit), wardrobe labels "10/17  DEAD MEN: Kane" + Shift back + Ctrl+F9/Alt+F11 group jumps ([CharOnline] HudLabels/ShiftBack/GroupKeys/HintFix).
 PD2 rebase 1107r: ALL 20 maps STAGED, LAYER RESULT PASS, D:\kl_stage\pd2rebase_1107 (not installed). install.py now also swaps <DD>\KLShopPage.ini (pinned 1399238b -> 4bc8845a) on the run where every map is new; undo restores it first.
-Blocked: backups want 8.2 GB on D: (3.5 GB free, no hard-link twin). Owner picks: (a) batches with --cleanup (c9 recommends) or (b) free D: (the 1106c/d/e installers read staged sizes on --undo: patch them first).
+Backups (8.2 GB) now default to C:/kl_build_1024/pd2rebase_1107_backup (c9 freed C: to 62 GB; dry run fits). Install = the owner's call; with f0's dll or alone, the maps + ini do not need it.
 
 2026-11-07 - [f0] MERGED 1107 KIT (for c9), STAGED, NOT installed, not run in game: C:\kl_build_1024\merged_1107 = ONE dll from b628e16f (clean worktree):
 lens + PickDefault + 6b ui_1107 + db [Echo] (0) + c9 [VanBlow] ShieldUntilBoarded (0). SHIP 502677ee, TEST 39e79011, overlay df16480f (= ui_1107's), fx bc25a53f.
