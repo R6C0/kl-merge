@@ -420,7 +420,7 @@ static struct {
     int fo, fo_dry, fo_order, fo_spare, fo_shield, fo_crew_money; DWORD fo_after, fo_every, fo_money; float fo_hold;      /* FollowOut..: After / Every in ms, Hold in s; Shield 0 / 1 / 2 */
     int fo_unshielded;      /* FollowOutHoldUnshielded (default 1): hold a vehicle that has no health object to shield */
     int fo_hold_alone, fo_stop, fo_come_moved; float fo_hold_alone_m;      /* FollowOutHoldAlone (+ ..Range in m), FollowOutStopPlace (2026-10-18, Vault run N1018_L22) */
-    int vb, vb_dry, vb_log; DWORD vb_delay; float vb_hp;                   /* [VanBlow] Enable / Dry / Log / EmptyDelay (ms) / HealthMax (2026-10-24) */
+    int vb_sub, vb_heal; DWORD vb_sub_cap; int vb, vb_dry, vb_log; DWORD vb_delay; float vb_hp;                   /* [VanBlow] Enable / Dry / Log / EmptyDelay (ms) / HealthMax (2026-10-24) */
 } kle;
 
 /* [VanBlow] (owner 2026-10-24: 'they never blow up, they are always on fire from when the cops shoot it but never see it explode').
@@ -440,7 +440,8 @@ static struct {
    it (ZAnimatedVehicle +0x14 health, +0x18 = max / 4, both read by kle_veh_read; the write is a GUESS that the damage-effect thresholds
    - half / quarter / 0 of max, slot 87 - read +0x18 and not a cached copy). Dry=1: everything is only logged ('WOULD ...').
    Stock levels: this file acts on no stock level (klb_level), so Dog Days' own FA maps keep the game's rule (nothing is shielded there). */
-static struct { DWORD rules, empty_at; int open, aboard, hp_done; } kle_vb;
+#include "klvanshield_logic.h"      /* 2026-11-07: [VanBlow] ShieldUntilBoarded / HealFloor decisions (klvanshield_test.c) */
+static struct { DWORD rules, empty_at, wait_at; int open, aboard, hp_done, can, sub_said; } kle_vb;
 static volatile int kle_vh_hold;      /* klbotfill.c OnlineVanHold sets it while it holds the online van for walking bots: the VanBlow empty-delay clock is then not run (the van is not blown on purpose) */
 static int kle_vb_aboard(const struct klb_snap *s)
 {
@@ -1013,6 +1014,22 @@ static void kle_vb_pass(const struct klb_snap *s, DWORD now, int edge)
             else klog("vanblow: HealthMax=%.0f: the health of %08lx could NOT be written", kle.vb_hp, v.obj);
         }
     }
+    {   /* 2026-11-07 ShieldUntilBoarded / HealFloor (both default 0; GUESS-grade, never live: DM09 vans arrived at 68..1215 of 3000 and blew 2-4 s into an empty wait) */
+        int i, can = 0;
+        for (i = 0; i < s->n && i < KLB_NREC; i++) can += kvs_rec_can(s->r[i].used, s->r[i].status, s->r[i].flags);
+        kle_vb.can = can;
+        if (edge || !kle_vb.wait_at) kle_vb.wait_at = t;
+        if (kle.vb_heal > 0 && !kle.vb_dry && s->veh <= 4 && !n && kle_veh_read(s->rules, &v) > 0 && kvs_heal(kle.vb_heal, v.hp, v.max)) {
+            float full = v.max;
+            if (klh_data((void *)(DWORD_PTR)(v.obj + 0x14), &full, 4, "escape vehicle: health restored (VanBlow HealFloor)"))
+                klog("vanblow: HealFloor=%d%%: the vehicle's health %.0f of %.0f restored to %.0f (nobody aboard yet, %d could board; the +0x14 write is a GUESS)", kle.vb_heal, v.hp, v.max, full, can);
+        }
+        if (kvs_keep(kle.vb_sub, n, can, t - kle_vb.wait_at, kle.vb_sub_cap)) {
+            kle_vb.empty_at = 0;
+            if (!kle_vb.sub_said++ && kle.vb_log) klog("vanblow: ShieldUntilBoarded: nobody aboard but %d could still board (state %u): the empty clock is held (cap %u ms)", can, s->veh, (unsigned)kle.vb_sub_cap);
+            return;
+        }
+    }
     if (n) {
         kle_vb.empty_at = 0;
         if (kle_vb.open) { kle_vb.open = 0; if (kle.vb_log) klog("vanblow: %d aboard again (state %u): the vehicle may be shielded again", n, s->veh); }
@@ -1541,6 +1558,9 @@ static void kle_init(void)
     kle.vb_dry = GetPrivateProfileIntA("VanBlow", "Dry", 0, klh_ini) != 0;
     kle.vb_log = GetPrivateProfileIntA("VanBlow", "Log", 1, klh_ini) != 0;
     kle.vb_delay = (DWORD)GetPrivateProfileIntA("VanBlow", "EmptyDelay", 1500, klh_ini); if (kle.vb_delay > 60000) kle.vb_delay = 60000;
+    kle.vb_sub = GetPrivateProfileIntA("VanBlow", "ShieldUntilBoarded", 0, klh_ini) != 0;      /* 2026-11-07, default 0 */
+    kle.vb_sub_cap = (DWORD)GetPrivateProfileIntA("VanBlow", "ShieldUntilBoardedCapMs", 20000, klh_ini); if (kle.vb_sub_cap > 120000) kle.vb_sub_cap = 120000;
+    kle.vb_heal = GetPrivateProfileIntA("VanBlow", "HealFloor", 0, klh_ini); if (kle.vb_heal < 0) kle.vb_heal = 0; if (kle.vb_heal > 100) kle.vb_heal = 100;      /* percent of max, 0 = off */
     kle.vb_hp = (float)GetPrivateProfileIntA("VanBlow", "HealthMax", 0, klh_ini); if (kle.vb_hp < 0) kle.vb_hp = 0; if (kle.vb_hp > 100000) kle.vb_hp = 100000;
     if (kle.vb && kle.fo_shield) klog("vanblow: Enable=1%s: the escape vehicle's shield (FollowOutShield=%d) is taken off while NOBODY is aboard (for %u ms), so the vehicle can be shot to 0 and blow up; with anybody aboard it stays shielded (state 6 would kill them). HealthMax=%.0f (0 = the file's own). Acts on non-stock levels only; Dog Days' own FA maps are never shielded", kle.vb_dry ? " (DRY RUN: only logged)" : "", kle.fo_shield, (unsigned)kle.vb_delay, kle.vb_hp);
     kle.fo_unshielded = GetPrivateProfileIntA("Bots", "FollowOutHoldUnshielded", 1, klh_ini) != 0;      /* DEFAULT 1 = the old behaviour: hold all the same; 0 = an unshieldable vehicle is not held (2026-10-19: Hasta loss still under investigation) */
