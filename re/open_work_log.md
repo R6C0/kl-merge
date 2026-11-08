@@ -1,3 +1,7 @@
+## 2026-11-08 ~09:10 [db] LAST CALL CLUB MUSIC still silent (owner): read-only investigation, cause NOT proven (no crash involved)
+- Ruled out: missing streams (every club SND -> WHD record -> PC_Def.str block resolves), Specials!KillMusic (absent in graft), hook ([Music] off, DM05A in EngineMaps/BedSkip; Echo adds only an aux send).
+- Top GUESS: club layers (ZSNDOBJ Inside!Music!*, SoundLimiterFade ROOM on-lists, "play from load" ASSUMPTION kl_fa_club.py:1083) never open in FA mode; stock DD FA maps never use room-only on-lists. 2nd: 4-layer mixed-channel streamed PCM16 set never heard in DD.
+- Retomoto works via explicit ZPlayMusic start. Next (d0's lane): diagnostic log of club ZSNDOBJ starts + player room, then box-form SoundLimiterFade or a ZPlayMusic start as a toggle.
 ## 2026-11-08 ~08:40 [db] GUN SOUNDS + ROOM ECHO INSTALLED (owner "install all ... but no testing"; no crash involved)
 - gunraw_1107: install_gunsnd2.ps1 patched 42 banks (2161 records; maps, stock, story; md5-chained). Backups *.WAV.before-1107gunraw; undo "UNDO raw gun sounds all maps.bat".
 - echo_1108: live KLHook.ini 6ddd03de -> 449e3c7a (+[Echo] Enable=1, RoomBoxes=1, both "(recommended on)"), <DD>\KLReverbBoxes.ini = roomboxes_1108 _dm table (5d8a3a48). dll unchanged 246c643d.
