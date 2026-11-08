@@ -53,7 +53,7 @@ TAG = '.before-dm02door_1108'
 PARTS = ('door', 'remains')
 DEFAULT_PARTS = ('door',)
 # the dm02fix_1108 stage (the input of this pass)
-FIX_ZIP, FIX_BOTS, FIX_BASE = 'b3dcebd35d1406016f338886d09b2c93', '8f795fcf', 'b89c86c9'
+FIX_ZIP, FIX_BOTS, FIX_BASE = 'e1795e1fb280160fb252c4df3d8b0813', 'f59269aa', '2c1ad81d'
 DOOR_REFS = {1: 34403, 2: 34426, 3: 34449, 4: 34472, 5: 34495, 6: 34518}   # KL_Door_N\Door leaf REFs
 DEFAULT_DOORS = (1, 2, 5)
 LEAF_ROOT, LEAF_COLL, LEAF_PROP = 58372, 58365, 58353
@@ -381,13 +381,13 @@ def _kit_template():
     rep = [
         ('Installs / undoes the DM02 FIX 1108 (cover boxes off the atrium columns, co-op shutters back, doubled watch-store glass door hidden).',
          'Installs / undoes the DM02 DOOR pass 1108 (glass kick doors in place of the white metal leaves; optional: hide the 15 shattered-glass twins).\nNeeds the dm02fix_1108 layer installed FIRST (this pins its files).'),
-        ('python install.py --parts cover,coop build the chosen parts first', 'python install.py --parts door,remains --doors 1,2,5 build the chosen parts first'),
-        ("parts = a[a.index('--parts') + 1].split(',') if '--parts' in a else ['cover', 'coop', 'vault']",
+        ('python install.py --parts cover,vault,coop build the chosen parts first', 'python install.py --parts door,remains --doors 1,2,5 build the chosen parts first'),
+        ("parts = a[a.index('--parts') + 1].split(',') if '--parts' in a else ['cover', 'vault']",
          "parts = a[a.index('--parts') + 1].split(',') if '--parts' in a else ['door']\n    doors = a[a.index('--doors') + 1] if '--doors' in a else '1,2,5'"),
         ("if any(p not in ('cover', 'coop', 'vault') for p in parts):", "if any(p not in ('door', 'remains') for p in parts) or any(x not in '123456,' for x in doors):"),
         ("--parts takes cover, coop, vault", "--parts takes door, remains; --doors a list of 1..6"),
         ("parts = [p for p in ('cover', 'coop', 'vault') if p in parts]", "parts = [p for p in ('door', 'remains') if p in parts]"),
-        ("if parts != ['cover', 'coop', 'vault']:\n        src = os.path.join(HERE, 'parts_' + '_'.join(parts))",
+        ("if parts != ['cover', 'vault']:\n        src = os.path.join(HERE, 'parts_' + '_'.join(parts))",
          "if parts != ['door'] or doors != '1,2,5':\n        src = os.path.join(HERE, 'parts_' + '_'.join(parts) + '_d' + doors.replace(',', ''))"),
         ("'--parts', ','.join(parts), '--out', src,", "'--parts', ','.join(parts), '--doors', doors, '--out', src,"),
         ("another layer changed it: re-stage on --base live", "install dm02fix_1108 first, or re-stage on --base live"),

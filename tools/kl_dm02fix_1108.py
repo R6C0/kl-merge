@@ -2,7 +2,7 @@ r"""kl_dm02fix_1108.py - ONE combined DM02 (Late Night Opening, slot F02) fix st
 
 OWNER (2026-11-08): "when i got into cover i get stuck inside the pillar still on DM02, wheres the co-op doors and why is one of the heist rooms
 already got their glass blown up with a door to kick down? get rid of the door or make the whole shop more prettier with a better door".
-Three parts, each switchable (install.py --parts cover,coop,vault; every feature a toggle, all "(recommended on)"):
+Three parts, each switchable (install.py --parts cover,vault[,coop]; coop is OFF by default, see its verdict):
 
  cover  The atrium columns' own Dead Men cover boxes (AtriumColumnShatter_01..08 CoverBoxH_03 / _04, 3 floors = 48 entities), the VendingMachine_A
         CoverBoxH_02 boxes (4) and CoverBoxH_K6_15 / CoverBoxM_KM_15 stand ON the column / wall collision: kl_cover_vet on the live zip says 1..4 of
@@ -21,9 +21,12 @@ Three parts, each switchable (install.py --parts cover,coop,vault; every feature
             (verts / idx identical to REF 26082's, other model), placement = entity pos * 0.01 + its 3x3 rotation, MOPP code = 24709's code with the
             offset recomputed (world bb min - 0.01; the same formula reproduces the offsets of 24709 and 26082 byte for byte, asserted). The static
             count is unchanged, so the list codes stay valid. Online they open with the co-op boxes (CoopAirlock Controller), solo with the lift.
-        GUESSES: the three shutter models have the same 640 x 310 plane as REF 24709 (checked only for 26082); the SoloLift never opened a shutter in two
-        live runs (1dd14609, 0426cf23) and the 'lift' box fix was never run live; DeactivateGeom drops the placement from the Havok world.
-        RISK: the shops behind the shutters hold ~1,060,000 of loot: if the lift fails live, turn this part off (UNDO / --parts without coop).
+        VERDICT 2026-11-08 (static reading of kl2.exe): the restored planes are STATIC type-1 placements (REF 24709 / 26082 are type 1, asserted) and
+        DeactivateGeom / the 0x400 flag (0x6edd50 -> 0x440290) only change the node flag word and render handles: a static placement is built into the
+        world-space list shape + MOPP at load with no node pointer kept, so NOTHING opens it. Opening the shutter would not make it passable: ~1,060,000
+        of loot would be locked behind it. No proven route exists, so this part is OFF BY DEFAULT (DEFAULT_PARTS = cover, vault): live keeps the planes
+        cut and the shutters open from round start. Only --parts cover,coop,vault builds it, for research. (Unproven alternative: a key-framed type-2/4
+        body under the shutter node that the lift hides; never built.) Also unchecked: the three shutter models have the same plane as REF 24709.
  vault  The two WATCH-store corridor doors (KL_Door_1 / _2 at (-1000,500,2560), (-1440,500,1700)) each stand in a frame that already holds a Dead Men
         glass door, Door_Shatter_Glass_01!Whole04 (REF 23182 / 24258, model 0x9027, flags 0x2201e6) within ~40 cm: a doubled, clashing door. Sets flag
         0x400 (hidden / deactivated, as the game's own Remains04 twins carry) on those two Whole04 entities only (.gms flag word; slot ids, .buf and the
@@ -31,7 +34,9 @@ Three parts, each switchable (install.py --parts cover,coop,vault; every feature
         from their Whole04 = not the same frame: NOT touched. D3 / D4 (jewel store) have no glass door.
         NOT done: a prettier leaf model (needs a look), and any change to the 39 Remains_01 pieces without 0x400 (the "already blown up" glass may be
         those; unproven, needs a screenshot at the jewel east windows first).
-        GUESS: 0x400 on a Whole04 also drops its collision (DeactivateGeom -> 0x6edd50 sets the same flag).
+        Collision: 0x400 hides the render only (see the coop verdict: static type-1 collision stays), so the two REFs' static placements are ALSO cut
+        from the .HVK (kl_escape.cut_collision: a filler placement keeps the static list order and MOPP codes valid); asserted: one static placement each.
+        check() proves with kl_doors_clear_1108.hvk_equal that only those two REFs left (every other shape / MOPP / static position identical).
 
 usage (from tools/):
   python kl_dm02fix_1108.py build --parts cover,coop,vault --out <dir> [--live <F02_Main.zip>]   one zip + bots zip + md5 sidecar
@@ -42,7 +47,7 @@ import collections, hashlib, json, os, re, shutil, struct, sys, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import kl_fa, kl_gms, kl_graft, kl_hvk
+import kl_fa, kl_gms, kl_graft, kl_hvk, kl_escape
 import kl_fa_bots as F
 import kl_fa_cover as C
 import kl_botsonline
@@ -52,6 +57,7 @@ MAPDIR = os.path.join(GAME, 'KLExpansion', 'Maps', 'DM02')
 OUT = r'C:\kl_build_1024\dm02fix_1108'
 TAG = '.before-dm02fix1108'
 PARTS = ('cover', 'coop', 'vault')
+DEFAULT_PARTS = ('cover', 'vault')                        # coop is OFF by default (module doc, coop: no proven way to drop the shutter collision)
 LIVE_PIN = '7adcb2351ba3df043e65f3bed3f71104'            # live F02_Main.zip 2026-11-08 02:31 (PD2 rebase 1107r)
 LIVE_BOTS_PIN = '1103c6923a45e015ee1325003b9f69c2'      # live F02_Main.bots.zip (members identical to a kl_botsonline eAllTypes rebuild, asserted)
 LIVE_BASE_PIN = '7adcb2351ba3df043e65f3bed3f71104'      # F02_Main.bots.base.md5 holds the md5 of the plain zip
@@ -280,7 +286,19 @@ def part_vault(B, files, rep):
     if len(done) != len(GLASS_DOORS):
         raise ValueError('vault: %d of %d glass doors found' % (len(done), len(GLASS_DOORS)))
     files[B.ext['.gms']] = kl_gms.pack(bytes(raw))
-    rep['vault'] = collections.OrderedDict(hidden_whole04=done)
+    # 0x400 only hides the render (static type-1 placements keep their collision: kl2 0x6edd50 -> 0x440290 touch the node flag word and render handles
+    # only; the static list shape + MOPP are built at load with no node pointer): so the REF's placement is cut out of the .HVK as well.
+    h = kl_hvk.Hvk(files[B.ext['.HVK']])
+    for r in GLASS_DOORS:
+        got = [s.type for s in h.shapes for i in s.inst if kl_hvk.ref(i) == r]
+        if got != [kl_hvk.STATIC]:
+            raise ValueError('vault: REF %d has placements of types %s in the .HVK (want exactly one static)' % (r, got))
+    kl_escape.cut_collision(h, set(GLASS_DOORS), lambda *a: None)
+    left = [r for r in GLASS_DOORS if any(kl_hvk.ref(i) == r for s in h.shapes for i in s.inst)]
+    if left:
+        raise ValueError('vault: REF %s still placed after the cut' % left)
+    files[B.ext['.HVK']] = h.serialize()
+    rep['vault'] = collections.OrderedDict(hidden_whole04=done, hvk_cut=sorted(GLASS_DOORS))
 
 
 # ---------------------------------------------------------------- build
@@ -312,7 +330,7 @@ def build(live, outdir, parts, log=print):
         diff = sorted(n.rsplit('/', 1)[-1] for n in a.namelist() if a.read(n) != b.read(n))
         if a.namelist() != b.namelist():
             raise ValueError('member list changed')
-    want = {'cover': {'F02_Main.buf', 'F02_Main.prp'}, 'coop': {'F02_Main.prp', 'F02_Main.HVK'}, 'vault': {'F02_Main.gms'}}
+    want = {'cover': {'F02_Main.buf', 'F02_Main.prp'}, 'coop': {'F02_Main.prp', 'F02_Main.HVK'}, 'vault': {'F02_Main.gms', 'F02_Main.HVK'}}
     allowed = set().union(*[want[p] for p in parts])
     if not set(diff) <= allowed:
         raise ValueError('members changed %s outside %s' % (diff, sorted(allowed)))
@@ -324,6 +342,51 @@ def build(live, outdir, parts, log=print):
     rep['bots_md5'] = md5(os.path.join(outdir, 'F02_Main.bots.zip'))
     log('dm02fix_1108 parts=%s -> %s (%s) members %s' % (','.join(parts), plain, rep['out_md5'], diff))
     return rep
+
+
+def hvk_only_gone(zp_in, zp_out, gone_refs):
+    """Shape-by-shape proof that the .HVK differs only by `gone_refs` having left: every other REF keeps its placements, shape records and MOPP code
+    (the filler REF, here 20069 which the earlier cuts already use with several variants, may only GAIN len(gone) copies of a variant it already has),
+    static positions keep their place, non-static shapes and the box are identical. (kl_doors_clear_1108.hvk_equal wants ONE filler variant: not true of this live.) -> problems."""
+    def load(zp):
+        with zipfile.ZipFile(zp) as z:
+            return kl_hvk.Hvk(z.read([n for n in z.namelist() if n.lower().endswith('.hvk')][0]))
+
+    def sig(s):
+        return (s.type, s.flags, s.convex, s.vstride, s.verts, s.planes if s.convex else s.idx, tuple(s.sub))
+
+    def pl(h):
+        d = collections.defaultdict(list)
+        for s in h.shapes:
+            for j, i in enumerate(s.inst):
+                d[kl_hvk.ref(i)].append((s.type, sig(s), bytes(i), s.mopp[j][1] if s.mopp else None))
+        return d
+    a, b = load(zp_in), load(zp_out)
+    pa, pb = pl(a), pl(b)
+    bad = []
+    if set(pa) - set(pb) != set(gone_refs) or set(pb) - set(pa):
+        bad.append('refs gone %s / new %s, expected only %s gone' % (sorted(set(pa) - set(pb)), sorted(set(pb) - set(pa)), sorted(gone_refs)))
+    diff = [r for r in pa if r in pb and pa[r] != pb[r]]
+    for r in diff:
+        ca, cb = collections.Counter(pa[r]), collections.Counter(pb[r])
+        extra = cb - ca
+        if ca - cb or sum(extra.values()) != len(gone_refs) or len(extra) != 1 or next(iter(extra)) not in ca or any(x[0] != 1 for x in pa[r]):
+            bad.append('REF %d changed beyond gaining %d filler copies of an existing variant' % (r, len(gone_refs)))
+    if len(diff) > 1:
+        bad.append('more than one ref changed: %s' % diff)
+    if a.static_count() != b.static_count():
+        bad.append('static count %d -> %d' % (a.static_count(), b.static_count()))
+    gset = set(gone_refs)
+    sa = [kl_hvk.ref(i) for s in a.shapes if s.type == 1 for i in s.inst]
+    sb = [kl_hvk.ref(i) for s in b.shapes if s.type == 1 for i in s.inst]
+    if len(sa) != len(sb) or any(x != y and not (x in gset and y in diff) for x, y in zip(sa, sb)):
+        bad.append('static list order changed')
+    ns = lambda h: [(s.type, sig(s), tuple(bytes(i) for i in s.inst)) for s in h.shapes if s.type != 1]
+    if ns(a) != ns(b):
+        bad.append('a non-static shape changed')
+    if a.box != b.box:
+        bad.append('the .HVK box changed')
+    return bad
 
 
 def check(plain, live, parts, log=print):
@@ -371,6 +434,12 @@ def check(plain, live, parts, log=print):
         diff = [k for k, (a, b) in enumerate(zip(A.ents, Bn.ents)) if a.flags != b.flags]
         if sorted(Bn.ents[k].ref for k in diff) != sorted(GLASS_DOORS):
             bad.append('vault: flags changed on %s' % [Bn.ents[k].ref for k in diff])
+        if 'coop' not in parts:        # shape-by-shape: only the two glass placements left (static order kept, filler copies only)
+            bad += ['vault hvk: ' + x for x in hvk_only_gone(live, plain, sorted(GLASS_DOORS))]
+        else:
+            h = kl_hvk.Hvk(Bn['.HVK'])
+            if any(kl_hvk.ref(i) in GLASS_DOORS for s in h.shapes for i in s.inst):
+                bad.append('vault: glass door collision still in the .HVK')
     else:
         if any(a.flags != b.flags for a, b in zip(A.ents, Bn.ents)):
             bad.append('vault off but flags changed')
@@ -379,8 +448,8 @@ def check(plain, live, parts, log=print):
 
 # ---------------------------------------------------------------- install.py / stage
 INSTALL_PY = r'''r"""Installs / undoes the DM02 FIX 1108 (cover boxes off the atrium columns, co-op shutters back, doubled watch-store glass door hidden).
-  python install.py                    install ALL parts from the staged files (originals -> <name>%(tag)s; an existing backup is NEVER overwritten)
-  python install.py --parts cover,coop build the chosen parts first (needs the repo tools: %(tool)s) from the LIVE zip, then install those
+  python install.py                    install the DEFAULT parts (cover, vault; coop is OFF, see below) from the staged files (originals -> <name>%(tag)s; an existing backup is NEVER overwritten)
+  python install.py --parts cover,vault,coop build the chosen parts first (needs the repo tools: %(tool)s) from the LIVE zip, then install those
   python install.py --undo             put the originals back byte for byte (only when each live file is exactly what an install wrote)
   python install.py --dry              read-only: print every pin and what would happen (also with --undo)
   --game <dir>  other Dog Days folder (rehearsals); --skip-run-check for those only
@@ -425,7 +494,7 @@ def base_text(p):
 def main(a):
     undo, dry = '--undo' in a, '--dry' in a
     game = a[a.index('--game') + 1] if '--game' in a else GAME
-    parts = a[a.index('--parts') + 1].split(',') if '--parts' in a else ['cover', 'coop', 'vault']
+    parts = a[a.index('--parts') + 1].split(',') if '--parts' in a else ['cover', 'vault']
     if any(p not in ('cover', 'coop', 'vault') for p in parts):
         print('REFUSED: --parts takes cover, coop, vault'); return 1
     parts = [p for p in ('cover', 'coop', 'vault') if p in parts]
@@ -467,7 +536,7 @@ def main(a):
         if os.path.exists(bak[n]):
             print('REFUSED: backup %%s exists already (never overwritten); move it away yourself' %% bak[n]); return 1
     src = HERE
-    if parts != ['cover', 'coop', 'vault']:
+    if parts != ['cover', 'vault']:
         src = os.path.join(HERE, 'parts_' + '_'.join(parts))
         if dry:
             print('would build parts %%s into %%s with %%s' %% (parts, src, TOOL))
@@ -519,8 +588,8 @@ def stage(live_dir, out, log=print):
         p = os.path.join(out, n)
         if n != 'work':
             shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
-    rep = build(live, out, PARTS, log)
-    bad = check(os.path.join(out, 'F02_Main.zip'), live, PARTS, log)
+    rep = build(live, out, DEFAULT_PARTS, log)
+    bad = check(os.path.join(out, 'F02_Main.zip'), live, DEFAULT_PARTS, log)
     if bad:
         raise SystemExit('check failed: %s' % bad)
     staged = {n: md5(os.path.join(out, n)) for n in ('F02_Main.zip', 'F02_Main.bots.zip', 'F02_Main.bots.base.md5')}
@@ -541,7 +610,7 @@ def stage(live_dir, out, log=print):
 def main(a):
     opt = lambda k, d: a[a.index(k) + 1] if k in a else d
     if a and a[0] == 'build':
-        parts = opt('--parts', ','.join(PARTS)).split(',')
+        parts = opt('--parts', ','.join(DEFAULT_PARTS)).split(',')
         rep = build(opt('--live', os.path.join(MAPDIR, 'F02_Main.zip')), opt('--out', OUT), parts)
         bad = check(os.path.join(opt('--out', OUT), 'F02_Main.zip'), opt('--live', os.path.join(MAPDIR, 'F02_Main.zip')), rep['parts'])
         if bad:
@@ -551,7 +620,7 @@ def main(a):
         stage(opt('--live', MAPDIR), opt('--out', OUT))
         return 0
     if len(a) >= 2 and a[0] == 'check':
-        bad = check(a[1], opt('--live', os.path.join(MAPDIR, 'F02_Main.zip')), opt('--parts', ','.join(PARTS)).split(','))
+        bad = check(a[1], opt('--live', os.path.join(MAPDIR, 'F02_Main.zip')), opt('--parts', ','.join(DEFAULT_PARTS)).split(','))
         print('problems: %d' % len(bad), *bad, sep='\n')
         return 1 if bad else 0
     sys.exit(__doc__)
