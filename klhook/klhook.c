@@ -944,6 +944,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klauto.c"
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
 #include "klprobe.c"                                      /* klprobe.c: [Probe] DoorProxy - escape-lift door chain log; TEST only, off unless DoorProxy=1 */
+#include "klclubdiag.c"                                  /* klclubdiag.c: [Probe] ClubMusic - read-only log of the SoundLimiterFade objects + listener room (Last Call club music); TEST only, off unless ClubMusic=1 */
 #endif
 
 /* ---------------------------------------------------------------- the tick
@@ -1435,6 +1436,7 @@ static void klh_tick(int game_thread)
     KLPT(klj_tick());
     KLPT(kldc_tick(game_thread));                           /* kldoorclose.c: [KLHook] DoorCloseMs (idle when 0) */
 #ifdef KLHOOK_TEST
+    KLPT(klcm_tick());                                      /* klclubdiag.c: [Probe] ClubMusic (reads only; one compare when off) */
     KLPT(klpr_tick());                                      /* klprobe.c: [Probe] DoorLeaves samples (reads only; idle unless a door proxy was accepted) */
 #endif
     KLPT(klt_tick(game_thread));                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
@@ -1983,6 +1985,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kllnm_init();                                     /* kllocname.c: after kls_init (it reads the rule table) */
 #ifdef KLHOOK_TEST
     kla_init(inst);
+    klcm_init();                                  /* klclubdiag.c: reads [Probe] ClubMusic, installs nothing */
     klpr_init_all();                              /* klprobe.c: reads [Probe] DoorProxy, installs nothing when 0 */
     klh_uef_on = !kla_on;                         /* with [Auto] Enable=1 the test rig's own filter gives the verdict */
 #else
