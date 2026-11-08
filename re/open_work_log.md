@@ -1,3 +1,7 @@
+## 2026-11-08 ~06:30 [db] [Echo] RoomBoxes ear-height fix 75c1e3a1 after RB_DM02 pushed nothing (no crash involved)
+- RB_DM02 (TEST 8ed080d7): PASS, 0 faults, but no push: the hero's feet stand on the floor of the Dead Men .rmi room boxes, and the 30 cm enter margin never lets them in.
+- Fix: test at the feet + [Echo] RoomBoxEarCm (100). Offline coverage at the hook's margin: dm05a 4 -> 63/63, dd10 29 -> 63, nothing lost. TEST 530c9920; RB_DM02_2 after d0's vanwait09m.
+
 ## 2026-11-08 ~06:10 [d0] RETOMOTO VAN FIXED ON BENCH: [VanBlow] ShieldDriveIn (no crash involved)
 - Cause (vanwait09_1108): the cops hit the DM09 escape bus WHILE IT DRIVES IN (state 2); ShieldWhileWaiting starts at 3/4, so it parked at 1245/3000 burning = the "always on fire" vehicle.
 - Fix be08398f + 76b4ca0a: ShieldDriveIn holds the Invulnerable byte from the call (state 2) and hands it to the wait shield. Default 0; 3-lens review (1 log-text nit, fixed); kl_tests 107/0.

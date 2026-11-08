@@ -87,3 +87,10 @@ TEST 8ed080d7 (4dad706e, echo-room on change), same ini/table as RB_S2; 2 seats 
 Both seats: pushed box 6 (key 00004b06, prio 40) at 05:08:09; echo-stack count 0 -> 1, top -> the effect ~110 ms later;
 echo-room #2 ~1.1 s after the push: roof engine decay 1.49 refl 0.000 late 0.000 delay 0.011 -> decay 2.00 refl 0.052 late 0.056 delay 0.100 (sent = engine, Enable=0).
 So the engine's own reverb path picks up the hook's pushed box: stock FA reverb goes from the flat default to the room's effect. Still not exercised: switching between boxes (seats stay in box 6).
+
+## Bench RB_DM02 (2026-11-08 06:08-06:16, db): DM02 table loads, NO push -> ear-height fix 75c1e3a1
+TEST 8ed080d7, KLReverbBoxes_dm.ini, PD2R_DM02 pair; PASS 0 asserts/faults, live dll/ini unchanged. Both seats: `map dm02: 42 box(es)`, 42/42 with a roomeffect, then nothing.
+Cause: the hero node is the FEET (escort lines: humans at y 1002); the Dead Men .rmi room boxes start at the floor (KR014 Atrium_301a y 1000..1500) and the enter test
+shrinks a box by RoomBoxMargin 30 -> the feet are never inside. The offline check missed it (margin 0, spawn origins). Fix: klrb_ear raises the point by
+[Echo] RoomBoxEarCm (default 100, 0..300); spawn_coverage(ear, margin) now tests like the hook: at margin -30 the feet cover dm05a 4/63, dd10 29/63, dm03a 51/63,
+dm09 45/63, dm01b 59/63; at ear 100 all 63, nothing lost on any map. DD09 box 6 was tall enough either way. TEST 530c9920 (75c1e3a1); rerun RB_DM02_2 queued.
