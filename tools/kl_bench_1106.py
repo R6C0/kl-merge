@@ -176,6 +176,15 @@ KITS = {
                            hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
                            solo_secs=480, parts=('solo',), shots='60-240:3'),
     # DM05A glow + far trial (bench only): skyfog_1108 (Far 80000, FogFull 1.5) with StreetGLOW vertex alpha x 0.25 (kl_streetglow_1108.py --alpha 0.25)
+    # DM05A club music silent (11-08): kl_lc_music_fix_1108.py stage a (7 clean limiters always on) / b (settings f157+f158 = club_clean), bench only; no look step
+    'lcmusica1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcmusic_a_1108', tag='.before-lcmusica1108',
+                          files={'F01_Main.zip': '74a8c1f8', 'F01_Main.bots.zip': '3a7ac8d6', 'F01_Main.bots.base.md5': '9d15b6cf', 'KLGuns.ini': '33432bb9'},
+                          hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
+                          solo_secs=480, parts=('solo',)),
+    'lcmusicb1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcmusic_b_1108', tag='.before-lcmusicb1108',
+                          files={'F01_Main.zip': '530a2078', 'F01_Main.bots.zip': '7cf28cba', 'F01_Main.bots.base.md5': '02b17843', 'KLGuns.ini': '33432bb9'},
+                          hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
+                          solo_secs=480, parts=('solo',)),
     'glowfar1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/glowfar_1108', tag='.before-glowfar1108', look=(60000, -4000),
                         files={'F01_Main.zip': 'cf7e32ff', 'F01_Main.bots.zip': '11f8a4eb', 'F01_Main.bots.base.md5': '7b302adc', 'KLGuns.ini': '33432bb9'},
                         hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),

@@ -1,3 +1,10 @@
+## 2026-11-08 ~09:30 [d0] LAST CALL CLUB MUSIC: two field-only fixes STAGED, not installed, not run (owner: "last call music in the club still doesnt work"; no crash involved)
+- Cause (read-only, GUESS): every club music layer (10 ZSNDOBJ under STREAMS!Inside!Music!*) sits behind a SoundLimiterFade with ROOM-only on-lists (Dance_Floor x3, Entrance, Wardrobe...). The owner hears only a faint muffled layer at the entrance, so the Dance_Floor rooms likely never become the listener room in the graft. Alternative: the 4-layer PCM16 stream sets fail silently. Ruled out: streams missing, KillMusic (absent), hook [Music] (off). Stock DD f5=0 on all 386 limiters; the club's is 1 (meaning unknown).
+- tools/kl_lc_music_fix_1108.py stage/check a|b, base live 80b5547c, only the .prp changes (plain + bots), no nodes/slots/REFs:
+  A C:/kl_build_1024/lcmusic_a_1108 (zip 74a8c1f8, bots 3a7ac8d6, base 9d15b6cf): 7 clean limiters' on/off lists emptied = always active (kl2.exe 0x7e49f8 confirms empty/empty -> active). Both club tracks then play map-wide; muffled layers still room-gated.
+  B C:/kl_build_1024/lcmusic_b_1108 (zip 530a2078, bots 7cf28cba, base 02b17843): settings f157+f158 = club_clean 0x23ae60 (one 2-D track; whether FA starts f157 is unproven).
+- Review: crash-safe and undo-safe on both, audibility unproven. Kits lcmusica1108/lcmusicb1108 validate OK (bench = faults only, needs an ear). Next: db's diagnostic log line (club starts + listener room), then one bench.
+
 ## 2026-11-08 ~09:10 [db] LAST CALL CLUB MUSIC still silent (owner): read-only investigation, cause NOT proven (no crash involved)
 - Ruled out: missing streams (every club SND -> WHD record -> PC_Def.str block resolves), Specials!KillMusic (absent in graft), hook ([Music] off, DM05A in EngineMaps/BedSkip; Echo adds only an aux send).
 - Top GUESS: club layers (ZSNDOBJ Inside!Music!*, SoundLimiterFade ROOM on-lists, "play from load" ASSUMPTION kl_fa_club.py:1083) never open in FA mode; stock DD FA maps never use room-only on-lists. 2nd: 4-layer mixed-channel streamed PCM16 set never heard in DD.
