@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-08 ~17:30 - [d0] DM05A HELI DEPARTURE staged, NOT installed: stage C:/kl_build_1024/lcdepart_1108 (zip fbaf450d, pinned live 80b5547c), Escaping key 0 moved out of BuildingF/H to the ROUTE_2H hover; hull 156 cm, audit 0 pierces, review PASS.
+DD10 van drives through the closed gate (fence + pillars, ours: stock L05 has no van): fix staging. Club music A/B staged, waits for db's clubdiag. Owner playing: no benches.
 2026-11-08 ~16:00 - [doors] KICK DOORS with the map's OWN leaf models staged, NOT installed: tools/kl_doors_1108.py, stage C:/kl_build_1024/doors_1108/{DM01,DM03A,DM03} (2/2/5 doors).
 DM03 chains on dm03cops_1108 (install it first). Undo byte-exact in scratch. GUESS: own model draws + DD kick sound plays. Bench needs ClientBuild* cover lines. Not benched (owner playing).
 2026-11-08 ~09:00 - [dm03] DM03 COPS PASS staged, NOT installed: tools/kl_dm03cops_1108.py, stage C:/kl_build_1024/dm03cops_1108 (zip 2806a075, bots 1759a5fa, base 72f4c704; pinned live 802fd1f7 / 19adc63d). --parts carexit,garage,ramp,frontcops.
