@@ -75,3 +75,9 @@ Read-only probe `echo-stack` (klecho_stack_probe: AUD, count AUD+0x68fc, top AUD
 - OSS_DD09_ECHO_S2_3 (stock DD09, 2 seats online, SMOOTH both, 0 asserts/faults/dumps): host and client count 0 for the whole round, changes 1 (the first read), gate 1.
 - ECHOSTACK_F01 (kl_autotest 300 s, direct boot into the F01 slot): count 0 for 5 minutes, gate 1. RESULT "hung" = the 300 s run outlived AutoExit and was killed, not a fault. Live dll 19611c16 / ini cd431998 restored.
 Conclusion: no stock Audio_ReverbActivater fires in FA online OR in the direct boot; the engine sends the EFX default every frame on every map. Matches the CheckInside init-time-hero cause above. Fix (b) RoomBoxes is the way; expect key 00004bxx entries in `echo-stack` on its bench.
+
+## Bench OSS_DD09_RB_S2 (2026-11-08 04:47-04:58, db): RoomBoxes pushes, stack side PASS
+TEST ec43cbd4 (f77dcb05), [Echo] Enable=0 Log=1 Probe=1 RoomBoxes=1, KLReverbBoxes.ini staged beside each seat's KLHook.ini; 2 seats SMOOTH, 0 asserts/faults/dumps, live dll/ini restored.
+Both seats: `echo-rb: map dd09: 16 box(es)`, 16/16 with a roomeffect, `pushed box 6 (key 00004b06, prio 40)` = Audio!BOX!001_Outside_A_LargeHall at the hero's spawn;
+echo-stack count 0 -> 1, top 0 -> that effect ~100 ms later (the read-side debounce). No refused Push, no removes (the scripted seats stay in that hall).
+NOT SHOWN: the alEffectf values after the push. Probe's echo-room logged every per-frame call, so its 300 lines ran out 2 min before the push; fixed in 4dad706e (log on change, TEST 8ed080d7), rerun queued.

@@ -1,3 +1,7 @@
+## 2026-11-08 ~05:05 [db] [Echo] RoomBoxes committed (f77dcb05, mod-options row 5c6f3f41, DM table d11cc6e8); DD09 bench pushes (no crash involved)
+- OSS_DD09_RB_S2: both seats push box 6 (LargeHall), stack 0 -> 1, top = its effect, SMOOTH, 0 faults. Whether the sent reverb changed is not logged yet (probe log budget); rerun with TEST 8ed080d7 queued after d0.
+- DM maps: tools/kl_reverb_boxes.py --dm emits 361 boxes from the DM .rmi rooms (dm06/dm06b uncovered). Table C:/kl_build_1024/roomboxes_1108/KLReverbBoxes_dm.ini. Installing (dll + table) waits for the owner to listen.
+
 ## 2026-11-08 ~05:45 [d0] DM05A SKYLINE NOT INSTALLED: fog hides it (no crash involved)
 - Bench skyeast1108 (merged_1107 TEST 39e79011, look kit, faces east from the pad): 0 faults, undo byte-exact. Its verify FAIL "0x1f then 0x20" is only because a look kit does not play to round end.
 - Shots 12-16 (heading 95, reached at 04:45:37): fog closes past ~100 m and the stock towers fade too, so nothing at (60000,1884,-4000), ~530 m out, can show. Stage skyline_1108 is kept, not installed.
