@@ -4,7 +4,7 @@ r"""kl_dm03cops_1108.py - DM03 (Withdrawal, F03 slot) cops pass, 2026-11-08. STA
 Owner (11-08): "some cops in withdrawal DM03 stay in the cars", "more cops at the back in the garage", "the ramp outside that goes to where the cops wait outside
 the garage: make them come through there, more chaos", "no swat cops at the front of the store, just the normal cops".
 
-Four switchable parts (--parts carexit,garage,ramp,frontcops; default all):
+Five switchable parts (--parts carexit,garage,ramp,frontcops,allpolice; default all):
   carexit    the 4 VehicleExitBehaviourRout controllers kl_convert dropped (kl_rtp has no kind for field 2) put back from M03_FA_A (kl_map_ai.cars restore=True).
              PROVEN cause: live DM03 has the 4 VehicleExitBehaviour nodes (EscSquad, ArrivingCops_Squad_01 / _02, ParkingLotSWAT_01) WITHOUT their controller, so nothing takes
              a seated cop out of his car. GUESS: that DD's ZVehicleExitBehaviourRout then runs (no stock level stores it; DM01 carries it live since 10-25, no load crash).
@@ -15,6 +15,9 @@ Four switchable parts (--parts carexit,garage,ramp,frontcops; default all):
   frontcops  the 3 ParkingLotSWAT_01 men and the 2 ArrivingCops_Squad_02 men (front street) get the normal police form: ZFFActor model 59361 (entity + field 4), anmcol #Police,
              weapon SMG_Type79 / Shotgun_Hawk_Bullpup, ZSoldier controller of the BankMain police (eGuard, 125 hp). GUESS: the Police animation set works for the squads' rout
              animations (BankMain police use it with Defend / Hunt, so likely). ArrivingCops_Squad_01 and EscSquad (arrive off-mesh, from the back) are NOT touched.
+  allpolice  the remaining Army-form (model 59891) men of KL_Cover!Squad_01..03 (6 cops, z -7300..-9990 = the garage / back area) get the same police form as frontcops, so the
+             garage is not a mix of Army and police. EscSquad and ArrivingCops_Squad_01 stay Army (they arrive off-mesh from the back with their own rout animations; their model
+             swap is NOT proven safe). Weapons: cop_#01 SMG_Type79, cop_#02 Shotgun_Hawk_Bullpup. Same GUESS as frontcops (Police animation set works for these squads' routs).
 One new squad = 1 squad script; budget measured by census (live 33 actors / 27 squads, engine-proven cap 99 / 55).
 
   python tools/kl_dm03cops_1108.py stage [--parts a,b] [--in-dir <DM03 dir>] [--out <dir>]
@@ -43,7 +46,7 @@ TAG = '.before-dm03cops_1108'
 LIVE_ZIP_MD5 = '802fd1f7c644f6baa2be43b63f7e7270'
 LIVE_BOTS_MD5 = '19adc63d632c27c83197223887c1ff69'
 FILES = ('F03_Main.zip', 'F03_Main.bots.zip', 'F03_Main.bots.base.md5')
-PARTS = ('carexit', 'garage', 'ramp', 'frontcops')
+PARTS = ('carexit', 'garage', 'ramp', 'frontcops', 'allpolice')
 ENGINE_ACTORS, ENGINE_SQUADS = 99, 55
 LEVEL = 'M03_FA_A'
 CLOCK, GARAGE, RAMP = 'KL_Squads!Clock', 'KL_Garage!Back', 'KL_Ramp!Wave'
@@ -76,30 +79,59 @@ def one(sc, name):
 
 
 # ---------------------------------------------------------------- part carexit (prp only)
+def _check_inproc(path):
+    """Run in a FRESH process only (python kl_dm03cops_1108.py _check <zip>): kl_map_ai.cars(restore=True) registers the exit-rout field kinds in this process, after which
+    J.check reports none of them. Prints one JSON line: round trip, misfits (path, text), unresolved path count."""
+    _o, f, e, sc2, _l, _h = kl_graft.open_built(path)
+    d2, bad, p, _ = J.check(sc2, log=lambda *_a: None)
+    print(json.dumps(dict(rt=d2 == f[e['.prp']], bad=[(sc2.path[b[0]], str(b[2])) for b in bad], unres=len(p))))
+
+
+def check_zip(path, allowed, n_unres0, log, what, exact=False):
+    """J.check the written zip in a fresh process: every misfit must be a 'ZVehicleExitBehaviourRout field 2 expected None' on one of the `allowed` restored exit routs
+    (exact: all of them must be reported), no new unresolved path. Deletes `path` and raises otherwise. kl_rtp has no kind for field 2, so the restored routs show as
+    misfits exactly as on live DM01 (by design); measured: 0 right after carexit's own serialise, 4 once the zip is re-read."""
+    import subprocess
+    r = subprocess.run([sys.executable, os.path.abspath(__file__), '_check', path], capture_output=True, text=True)
+    if r.returncode:
+        os.remove(path); raise ValueError('%s: misfit check process failed: %s' % (what, r.stderr[-300:]))
+    j = json.loads(r.stdout.strip().splitlines()[-1])
+    got = {p for p, t in j['bad'] if 'ZVehicleExitBehaviourRout' in t and 'expected None' in t}
+    other = [(p, t[:80]) for p, t in j['bad'] if p not in allowed or 'ZVehicleExitBehaviourRout' not in t or 'expected None' not in t]
+    if not j['rt'] or other or j['unres'] > n_unres0 or (exact and got != allowed):
+        os.remove(path)
+        raise ValueError('%s: misfit guard: unexpected misfits %s, unresolved %d (before %d), reported exit routs %d of %d allowed, round trip %s'
+                         % (what, other[:5], j['unres'], n_unres0, len(got), len(allowed), j['rt']))
+    log('  %s: J.check %d misfits = %d allowed restored VehicleExitBehaviour routs (field 2 expected None), 0 other, %d unresolved paths' % (what, len(j['bad']), len(got), j['unres']))
+    return len(j['bad'])
+
+
 def carexit(src, dst, log):
     import kl_map_ai as MA
     order, files, ext, sc, _l, _h = kl_graft.open_built(src)
-    d0, bad0, p0, _ = J.check(sc, log=lambda *_a: None)
+    d0, bad0, p0, _ = J.check(sc, log=lambda *_a: None)      # BEFORE kl_map_ai touches the schema (see _check_inproc)
     if d0 != files[ext['.prp']]:
         raise ValueError('the .prp does not re-serialise byte for byte')
     lost = MA.lost_exits(sc, LEVEL)
     if not lost:
         shutil.copyfile(src, dst); return {'restored': []}
-    rep = MA.cars(sc, LEVEL, restore=True, log=lambda *_a: None)
-    d, bad, p, _ = J.check(sc, log=lambda *_a: None)
-    if len(bad) > len(bad0) or len(p) > len(p0):
-        raise ValueError('after carexit %d misfits (%d before), %d unresolved paths (%d before)' % (len(bad), len(bad0), len(p), len(p0)))
+    if bad0 or p0:
+        raise ValueError('live scene already has %d misfits / %d unresolved paths' % (len(bad0), len(p0)))
+    MA.cars(sc, LEVEL, restore=True, log=lambda *_a: None)
     if MA.faults(sc) or MA.lost_exits(sc, LEVEL):
         raise ValueError('carexit: reference lists at fault or exit routs still missing')
+    d = sc.p.serialize()
     new = dict(files)
     new[ext['.prp']] = d
     kl_graft.write_zip(dst, [(n, new[n]) for n in order])
+    # Misfit guard (check_zip, fresh process): allowed = only the restored routs; any other misfit or unresolved path raises.
+    check_zip(dst, {sc.path[x[0]] for x in lost}, 0, log, 'carexit')
     log('  carexit: %d exit routs restored (%s), .prp %d -> %d bytes' % (len(lost), ', '.join(sc.names[x[0]] for x in lost), len(files[ext['.prp']]), len(d)))
     return {'restored': [sc.path[x[0]] for x in lost], 'prp_bytes': [len(files[ext['.prp']]), len(d)]}
 
 
 # ---------------------------------------------------------------- part frontcops (in place: props + ZSoldier + entity model)
-def front_edit(B, log):
+def front_edit(B, log, men=None, label='frontcops'):
     sc = B.sc
     tp = kl_fa.node_values(sc, POLICE_TMPL)
     zs_t = [(nm, body) for nm, body in sc.nodes[POLICE_TMPL]['ctrls'] if sc.p.key(nm) == 'ZSoldier']
@@ -110,7 +142,7 @@ def front_edit(B, log):
         raise ValueError('shotgun template: %s' % shot)
     model = tp[4]
     done = []
-    for k, w in FRONT_MEN.items():
+    for k, w in (FRONT_MEN if men is None else men).items():
         if sc.cls(k) != 'ZFFActor' or kl_fa.node_values(sc, k)[4] != 59891:
             raise ValueError('node %d is not an Army ZFFActor (model 59891)' % k)
         us0 = [list(u) for u in kl_fa.units(sc.nodes[k]['props'][1:-1])]
@@ -126,7 +158,7 @@ def front_edit(B, log):
                 sc.nodes[k]['ctrls'][i] = (nm, list(zs_t[0][1]))
         B.ents[k - 1].model = model
         done.append(sc.path[k][len(R):])
-    log('  frontcops: %d men -> police form (model %d, #Police, eGuard 125 hp)' % (len(done), model))
+    log('  %s: %d men -> police form (model %d, #Police, eGuard 125 hp)' % (label, len(done), model))
     return done
 
 
@@ -237,6 +269,18 @@ def rebuild(src, dst, parts, log):
         rep['ramp_walk_cm'] = round(r[1])
     if 'frontcops' in parts:
         rep['frontcops'] = front_edit(B, log)
+    if 'allpolice' in parts:
+        men = {}
+        for k in range(1, len(sc.nodes)):
+            pa = sc.path[k]
+            if sc.cls(k) == 'ZFFActor' and pa.startswith(R + 'KL_Cover!Squad_') and kl_fa.node_values(sc, k)[4] == 59891 and k not in FRONT_MEN:
+                z = struct.unpack('<4f', B.ents[k - 1].parent.trans)[2]      # the cop_# group's world position: x, y(up), z, w (the Ground actor itself sits at 0)
+                if not -10000.0 <= z <= -7290.0:        # the garage / back band; a cop outside it stays Army
+                    continue
+                men[k] = 'SHOTGUN' if pa.split(BS)[-2].endswith('#02') else 'SMG'
+        if len(men) != 6:
+            raise ValueError('allpolice: expected the 6 KL_Cover cops, found %d' % len(men))
+        rep['allpolice'] = front_edit(B, log, men, 'allpolice')
     tops, n_men, gos = [], 0, []
     if squads:
         M, tops, gos, n_men = make_nodes(B, parts)
@@ -357,10 +401,13 @@ def apply(src, dst, parts, log=print):
             mid = os.path.join(tmp, os.path.basename(dst))
             rep['carexit'] = carexit(cur, mid, log)
             cur = mid
-        if any(p in parts for p in ('garage', 'ramp', 'frontcops')):
+        if any(p in parts for p in ('garage', 'ramp', 'frontcops', 'allpolice')):
             rep['rebuild'] = rebuild(cur, dst, parts, log)
         else:
             shutil.copyfile(cur, dst)
+        if 'carexit' in parts:
+            # the final file: exactly the 4 restored routs are reported once a rebuild pass re-joined the scene (measured), none otherwise
+            rep['final_check'] = check_zip(dst, set(rep['carexit']['restored']), 0, log, 'final', exact=any(p in parts for p in ('garage', 'ramp', 'frontcops', 'allpolice')))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return rep
@@ -498,6 +545,8 @@ def stage(parts, in_dir=MAPDIR, out=OUT, log=print):
 
 
 def main(a):
+    if a and a[0] == '_check':
+        _check_inproc(a[1]); return 0
     if not a or a[0] != 'stage':
         print(__doc__); return 2
     opt = lambda k, d=None: a[a.index(k) + 1] if k in a else d
