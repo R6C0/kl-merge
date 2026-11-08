@@ -72,7 +72,7 @@ static struct {
     int apply;                                   /* [ShopPage] OnlineApply (default 0, recommended off until benched): step 4, an approved page II buy is really applied online (klshoppage_online.c) */
     int probe;                                   /* [ShopPage] OnlineProbe (default 0, recommended off until benched): klshoppage_probe.c, LOG ONLY */
     int online;                                  /* [ShopPage] OnlineLook (default 0): page II LOOK online, buying it LOCKED (2026-10-26, see below) */
-    int on, grenades, trick, key, log, clips, hint, keyDown, txtSeen, togglePend, premake, preDone, preTry, sane, st;
+    int on, grenades, trick, key, log, clips, hint, keyDown, txtSeen, togglePend, premake, fedkeep, preDone, preTry, sane, st;
     volatile int active, pre, shownB;                 /* active: gate open and wrappers may act; shownB: set B on screen */
     int own[2];                                  /* 0/1: the gun carried in the primary / secondary slot came from set B */
     int carried[2];                              /* last seen carried rows */
@@ -1211,6 +1211,41 @@ static int kspg_repark(void)
     return k;
 }
 
+/* FedKeep (crash 2026-11-08 14:22:43, Hasta / DM11B, owner died and came back as police): kspg_repark / kspg_enforce park EVERY free stock object of a
+ * carrier whose gun a slot carries from set B, and only the next shop unparks them. The police respawn 0x4b28d0 -> 0x410710 gives the player row 0 (pistol,
+ * item 6) and row 0x1c (Zastava, item 29) of the shop table from the SAME pool: when the owner had bought page II guns in those two rows (log: 'slot 0 now
+ * carries row 0 from set B', 'slot 1 ... row 28 from set B', 88 guns parked at the next round start) no free object of the item was left, 0x55bee0 and
+ * 0x53abc0 gave -1 and the game ran into the int3 at 0x538f02 (eax = -1, esi = 0x1d), then read [0 + ...] at 0x538f47. The hand-over of the round's guns is done
+ * once the round runs, so 5 s after it started this puts back (byte +8 = 1) up to 2 of OUR parked stock objects of those two items when fewer than 2 are
+ * free. Never touches an object that has an owner, a dropped one, or one of our page II objects; the next shop's kspg_enforce parks them again.
+ * EXE (read) 0x538ec0..0x538f47 and the pool layout of reed_kit.md 4.1; the cause is proven by the log and the code, the pool itself is not in the dump. */
+static void kspg_fedkeep(DWORD now)
+{
+    static DWORD since, tab[4096 * 3]; static int lastSt = -1, told;
+    DWORD a, n = 0, ents, item[2], i; int k, row, fr[2] = { 0, 0 }, back = 0;
+    if (!kspg.fedkeep) return;
+    if (kspg.st != lastSt || !since) { lastSt = kspg.st; since = now; return; }
+    if (kspg.st != 0x19 || now - since < 5000) return;
+    if (kl_online() && !kspg.apply) return;
+    item[0] = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP)); item[1] = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * 28);
+    if (!item[0] || item[0] > 63 || !item[1] || item[1] > 63) return;
+    if (!kls_vec(&a) || !klh_rd(a + 4, &n, 4) || n > 4096 || !(ents = klh_rd32(a + 0x10)) || !klh_rd(ents, tab, 12 * (SIZE_T)n)) return;
+    for (i = 0; i < n; i++) {
+        DWORD *e = tab + 3 * i, owner = 1;
+        for (k = 0; k < 2; k++) if (e[0] && e[1] == item[k] && (e[2] & 0xff) && !(e[2] & 0xff00) && klh_rd(e[0] + 0x5c, &owner, 4) && !owner) fr[k]++;
+    }
+    for (k = 0; k < 2; k++) {
+        for (i = 0; i < n && fr[k] < 2; i++) {
+            DWORD *e = tab + 3 * i, owner = 1; BYTE v = 1; int ours = 0;
+            if (!e[0] || e[1] != item[k] || (e[2] & 0xff) || (e[2] & 0xff00) || !kspg_isparked(e[0])) continue;
+            for (row = 0; row < KSPG_ROWS && !ours; row++) ours = kspg_ours(row, e[0]);
+            if (ours || !klh_rd(e[0] + 0x5c, &owner, 4) || owner) continue;
+            if (klh_data((void *)(DWORD_PTR)(ents + 12 * i + 8), &v, 1, "KLShopPage: FedKeep unpark")) { kspg_unpark(kspg_isparked(e[0])); fr[k]++; back++; }
+        }
+    }
+    if (back && kspg.log && told < 6) { told++; klog("shopPage: FedKeep: the round runs and the parked stock guns of the fed's loadout (items %lu / %lu) left fewer than 2 free: %d put back (now %d / %d free)", item[0], item[1], back, fr[0], fr[1]); }
+}
+
 /* hire != 0: the HIRE PAGE's gate (2: the MOD CONTROLS page's, open online without [Hire] Online). Same states; online it opens when [Hire] Online is on (klhro_enabled) even with [ShopPage] OnlineLook=0, so page II keeps its own online gate */
 static int kspg_gate_x(int hire)
 {
@@ -1416,6 +1451,7 @@ static void kspg_init(void)
     kspg.log = GetPrivateProfileIntA("ShopPage", "Log", 1, klh_ini) != 0;
     kspg.hint = GetPrivateProfileIntA("ShopPage", "Hint", 1, klh_ini) != 0;
     kspg.clips = GetPrivateProfileIntA("ShopPage", "ReserveClips", 2, klh_ini);
+    kspg.fedkeep = GetPrivateProfileIntA("ShopPage", "FedKeep", 1, klh_ini) != 0;       /* 2026-11-08 (recommended on): a round that runs keeps 2 free stock objects of the police loadout's pistol / rifle items (see kspg_fedkeep) */
     kspg.premake = GetPrivateProfileIntA("ShopPage", "PreMake", 1, klh_ini) != 0;       /* k43 (recommended on): make the page B guns in the first shop */
     kspg.tabNames = GetPrivateProfileIntA("ShopPage", "TabNames", 1, klh_ini) != 0;       /* (recommended on): [Tabs] in KLShopPage.ini names the page II headlines; empty key = old " II" append */
     kspg.online = GetPrivateProfileIntA("ShopPage", "OnlineLook", 0, klh_ini) != 0;      /* 2026-10-26 (recommended off until benched): page II names / descriptions online, VIEW ONLY */
@@ -2104,6 +2140,7 @@ static void klshoppage_tick(int game_thread)
     }
     kspg.active = 1;
     if (now - lastfull > 1500) { lastfull = now; kspg_scan(); }
+    if (g == 2) kspg_fedkeep(now);
     if (g == 1) { kspg_check_pool(); if (kspg.st < 0x19) kspg_premake(); kspg_enforce(); }
     kspg_ammo();
     if (kspg.tbn && g == 1) kspg_testbuy();
