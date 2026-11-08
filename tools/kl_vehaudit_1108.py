@@ -318,6 +318,59 @@ def stop_of(pts):
 
 
 # ------------------------------------------------------------------------------------------- one map
+FPS = 25.0                    # GUESS from re/map_escape.md 19.2: 7.32 s = frame 456 of the leave leg that starts at frame 273 (183 frames)
+
+
+def gate_info(zp, L, B, ME, kl_graft):
+    """A van that RAMS a gate by design (kl_map_escape.gate_read: a timer on the van's leave message throws the fence piece and switches the closed piece off):
+    -> {'names': {fence piece names}, 'sample': route sample of leg 0 at which the timer fires} or None. Before that sample the pieces stand (a hit is real),
+    from it on the closed piece has no collision and the animated one is thrown (a hit of the STATIC drawn mesh is the design, not a clip). GUESS: 25 frames/s."""
+    sc = B.sc
+    van = next((k for k in range(1, len(B.ents) + 1) if sc.names[k] == 'V_Van_00' and 'Reflection' not in sc.path[k]), None)
+    if van is None:
+        return None
+    top = next((k for k in range(1, len(sc.nodes)) if not sc.parent[k] and k <= van < sc.end[k]), None)
+    try:
+        g = ME.gate_read(L, top)
+    except (ValueError, StopIteration, KeyError, IndexError):
+        return None
+    if not g or g['faults'] or not g['names']:
+        return None
+    ends = sorted({o for e in B.ents if e.raw for _p, oo in kl_graft.keys_tracks(e.raw) for o in oo} | {len(B.scene.head)})
+    K = ME.VanKeys(B.scene.head, B.ents[van - 1].raw, ends, kl_graft.keys_tracks)
+    k0 = next(k for k in range(top, sc.end[top]) if sc.names[k] == 'F07_Escape_Vehicle_01')
+    leave = ME._leg_frames(sc, k0)['Activate_Exit'][0]
+    key = K.f2p[min(len(K.f2p) - 1, int(leave + round(g['delay'] * FPS)))]
+    pts = [q for q in K.pos[:K.drive()]]
+    sample = sum(max(1, int(math.dist(a, b) / STEP)) for a, b in zip(pts[:key], pts[1:key + 1]))
+    return {'names': set(g['names']), 'sample': sample, 'key': key, 'delay': g['delay']}
+
+
+def check_legs(M, kind, legs, step, gate=None):
+    """check_route per leg, merged to the same numbering as one call over all legs. With `gate`, a pierce of a gate piece in leg 0 at or after the timer's
+    sample goes to the 'gated' dict instead (the design: the van rams the gate that its own message opens)."""
+    pierce, tight, gated, off = {}, {}, {}, 0
+    for li, leg in enumerate(legs):
+        pi, ti, ns = check_route(M, kind, [leg], False, step)
+        for src, dst in ((pi, pierce), (ti, tight)):
+            for ow, x in src.items():
+                x = [x[0] + off, x[1] + off] + list(x[2:])
+                if gate and li == 0 and src is pi and any(ow == n[:60] for n in gate['names']) and x[0] >= gate['sample']:
+                    gated[ow] = x
+                    continue
+                if ow in dst:
+                    d = dst[ow]
+                    d[0], d[1] = min(d[0], x[0]), max(d[1], x[1])
+                    if src is pi:
+                        d[2] += x[2]
+                    else:
+                        d[2] = min(d[2], x[2])
+                else:
+                    dst[ow] = x
+        off += ns
+    return pierce, tight, gated
+
+
 def audit_map(mid, maps=MAPS, log=print):
     import kl_arrival_1107 as A
     import kl_fa_bots as F
@@ -347,6 +400,13 @@ def audit_map(mid, maps=MAPS, log=print):
     t, o = t[ok], o[ok]
     M = corridor_mesh(t, o, n, paths, viewers, log)
     del t, o
+    try:
+        gate = gate_info(zp, L, B, ME, kl_graft)
+    except Exception as e:                      # the audit stays usable on a level whose gate wiring cannot be read
+        gate = None
+        log('  gate: not read (%s)' % e)
+    if gate:
+        log('  gate: the van rams %s by design (timer %.2f s -> key %d, route sample %d)' % (', '.join(sorted(gate['names'])), gate['delay'], gate['key'], gate['sample']))
     for r in rows:
         v = dict(name=r['name'], kind=r['kind'], note=r['note'])
         if not r['legs']:
@@ -381,8 +441,12 @@ def audit_map(mid, maps=MAPS, log=print):
         if r['kind'] in ('HELI', 'CARROUTE', 'TRAFFIC'):
             variants.append(('catmull', [catmull(l) for l in legs]))
         v['pierce'], v['tight'] = {}, {}
+        v['gated'] = {}
         for vn, lg in variants:
-            pierce, tight, ns = check_route(M, 'HELI' if r['kind'] == 'HELI' else 'CAR', lg, False, 300.0 if r['kind'] in ('HELI', 'TRAFFIC') else STEP)
+            gt = gate if r['kind'] == 'KEYED' and r['name'].endswith('V_Van_00') and vn == 'linear' else None
+            pierce, tight, gated = check_legs(M, 'HELI' if r['kind'] == 'HELI' else 'CAR', lg, 300.0 if r['kind'] in ('HELI', 'TRAFFIC') else STEP, gt)
+            for ow, x in gated.items():
+                v['gated'][ow] = dict(first=x[0], last=x[1], n=x[2], at=x[3])
             for ow, x in pierce.items():
                 v['pierce'].setdefault(ow, dict(x=x, how=vn))
             for ow, x in tight.items():
@@ -397,6 +461,8 @@ def audit_map(mid, maps=MAPS, log=print):
 
 def summary(v):
     s = 'len %s start %s [%s] end %s [%s] seen %.0f%%' % (v.get('length'), v.get('start'), v.get('start_state'), v.get('end'), v.get('end_state'), v.get('seen_pct', 0))
+    if v.get('gated'):
+        s += ' [gate rammed by design: %s]' % ', '.join(sorted(v['gated']))
     if v.get('pierce'):
         s += ' PIERCES ' + ', '.join('%s keys %d..%d x%d at %s (%s)' % (k, d['first'], d['last'], d['n'], d['at'], d['how']) for k, d in list(v['pierce'].items())[:4])
     return s
