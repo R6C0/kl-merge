@@ -88,13 +88,53 @@ cl = C.clusters([a1, a3, a2], 5.0)
 t('clusters split', sorted(len(x) for x in cl) == [1, 2] and len(C.clusters([a1, a3, a2], 5000.0)) == 1)
 
 # classification
-t('classify room', C.classify('M06_A_Out_Part_01a', 'SO0301_Foo', 0x200002, []) == 'room')
+t('classify room', C.classify('M09_A_Out_CityScapeFront', 'SO0301_Foo', 0x200002, []) == 'room')
 t('classify backdrop room', C.classify('M09_Backdrop_A_00', 'x', 0x200002, []) == 'room')
+t('classify skyscraper room', C.classify('M09_B_Skyscrabers_01a', 'Foo', 0x200002, []) == 'room')
 t('classify name', C.classify('M05_A_Inside_Lounge', 'SO0501_Building_09_01', 0x200002, []) == 'name')
-t('classify traffic group', C.classify('M05_A_Inside', 'Wheel', 0x200002, ['Traffic!Cars!A']) == 'traffic')
-t('classify car', C.classify(None, 'Car', 0x200006, []) == 'traffic')
+# (fix 1) traffic by NAME, not by tid
+t('traffic by group', C.classify('M05_A_Inside', 'Wheel', 0x200002, ['Traffic!Cars!A']) == 'traffic')
+t('traffic by spline group', C.classify(None, 'Car_01', 0x200002, ['TrafficSplines!Vehicles!']) == 'traffic')
+t('traffic by KL_ group', C.classify(None, 'KL_Bus', 0x200006, ['KL_Traffic!']) == 'traffic')
+t('traffic by template name', C.classify(None, 'Ground_JPN_Civilian_A_00', 0x200006, []) == 'traffic')
+t('tid 0x200006 Ground tile is NOT traffic', C.classify('M03_FAA_Outside_04_Buildings', 'Ground_12', 0x200006, []) == 'room')
+t('tid 0x200006 elsewhere is placeholder', C.classify(None, 'Car', 0x200006, []) == 'placeholder'
+  and C.classify(None, 'WindowBlowup!BombWindow03', 0x200006, []) == 'placeholder')
+t('tid 0x200002 unknown is not placeholder', C.classify(None, 'Car', 0x200002, []) is None)
 t('classify skips glow / non-draw / interior', C.classify('Out_X', 'Glow01', 0x200002, []) is None and C.classify('Out_X', 'Building', 0x2000e1, []) is None
   and C.classify('M05_A_Inside_Lounge', 'Table', 0x200002, []) is None)
+# (fix 2) play rooms: only the entity's own sky / building name counts
+for nm in ('Debris_03', 'Object_12', 'Railing_A', 'Tree_edge_04', 'SO0100_M06_Ground_Border_A_38', 'PC0100_M06_GrassTall_A_11'):
+    t('play room drops ' + nm, C.classify('M06_FAA_Out_Part_02a', nm, 0x200002, []) is None)
+t('play room keeps Skyscraper', C.classify('M06_FAA_Out_Part_02a', 'Skyscraper_Small_D02', 0x200002, []) == 'name')
+t('play room keeps far Building', C.classify('M06_A_Out_Part_01a', 'SO0501_Building_13_02', 0x200002, []) == 'name')
+t('play room keeps Antenna', C.classify('M06_A_Out_Part_01a', 'SO0501_Antenna_01_02', 0x200002, []) == 'name')
+t('non-play Out room keeps debris', C.classify('M09_A_Out_CityScapeFront', 'Debris_03', 0x200002, []) == 'room')
+t('RE_PLAY rooms', all(C.RE_PLAY.search(r) for r in ('M06_A_Out_Part_01a', 'M09_B_Bus_Terminal_01a', 'M09_B_Overpass_01a', 'M09_B_Retomoto_Square_01a', 'M09_B_Street_01a',
+                                                     'M09_B_Hotel_Street_01a', 'M03_FAA_Outside_01A', 'M09_A_Out_Roof_401')))
+t('RE_PLAY not backdrop rooms', not any(C.RE_PLAY.search(r) for r in ('M09_A_Out_CityScapeFront', 'M03_FAA_Outside_04_Buildings', 'M06_A_Out_Visible_01a', 'M09_Backdrop_A_00')))
+# (d) DM09 street rooms: facades, billboards, collapse groups are street props, not skyline; a skyline name still counts
+for nm in ('SO0200_JPN_Facade_O_Front_A', 'PC0100_JPN_Glass_Ad_Billboard_03', 'CollapseGroup_Buildings_01', 'Collapse_FacadeA_01', 'SO0500_JPN_Office_Building_01', 'SO1200_JPN_CornerBuilding_02'):
+    t('DM09 street drops ' + nm, C.classify('M09_B_Street_01a', nm, 0x200002, []) is None and C.classify('M09_B_Bus_Terminal_01a', nm, 0x200002, []) is None)
+t('DM09 street keeps SkyL', C.classify('M09_B_Retomoto_Square_01a', 'SO0301_SkyL1_14', 0x200002, []) == 'name')
+# (fix c) 'light' skip must not drop skylight / highlight
+t('skip light', all(C.RE_SKIP.search(x) for x in ('Streetlight_01', 'Light_A', 'SpotLight', 'Flashlight', 'Lamp_3', 'glow', 'Particles')))
+t('skylight / highlight survive skip', not C.RE_SKIP.search('Skylight_Big') and not C.RE_SKIP.search('SO0301_SkyLight_02') and not C.RE_SKIP.search('Highlight_Wall'))
+t('skylight classified (not dropped)', C.classify('M09_A_Out_CityScapeFront', 'Skylight_Big', 0x200002, []) == 'room')
+
+# (fix a) origin test vs overlap test differ: a box that touches the bounds but does not hold the origin
+bb = box((0.0, 0.0, 0.0), (10.0, 10.0, 10.0))
+tb = C.corners((8.0, -1.0, -1.0), (30.0, 1.0, 1.0))            # bounds reach into the box, origin (20,0,0) is outside it
+t('overlap yes, origin no', bb.relation(tb) == 'PART' and not bb.holds((20.0, 0.0, 0.0)))
+t('visibility nearer / bigger scores higher', C.visibility({'lo': (0, 0, 0), 'hi': (5000, 5000, 5000)}, [(10000, 0, 0)]) > C.visibility({'lo': (0, 0, 0), 'hi': (500, 500, 500)}, [(10000, 0, 0)])
+  and C.visibility({'lo': (0, 0, 0), 'hi': (500, 500, 500)}, [(2000, 0, 0)]) > C.visibility({'lo': (0, 0, 0), 'hi': (500, 500, 500)}, [(20000, 0, 0)]))
+fake = {'ents': [{'why': 'room', 'dyn': False, 'status': 'NONE', 'ostatus': 'OUT', 'bd_only': False, 'car': False},
+                 {'why': 'room', 'dyn': False, 'status': 'PART', 'ostatus': 'OUT', 'bd_only': False, 'car': False},
+                 {'why': 'traffic', 'dyn': True, 'status': 'FULL', 'ostatus': 'IN', 'bd_only': False, 'car': True},
+                 {'why': 'placeholder', 'dyn': False, 'status': 'NONE', 'ostatus': 'OUT', 'bd_only': False, 'car': False}]}
+cn = C.counts(fake)
+t('counts: placeholder apart, both tests', cn['sky'] == 2 and cn['sky_ov'] == 1 and cn['sky_or'] == 2 and cn['sky_any'] == 2 and cn['trf'] == 1 and cn['trf_ov'] == 0
+  and cn['ph'] == 1 and cn['ph_ov'] == 1)
 
 print('%s: %d failed' % ('FAIL' if fails else 'ALL PASS', len(fails)))
 sys.exit(1 if fails else 0)

@@ -2,19 +2,27 @@
 """kl_rmi_cover_1108.py - are the kept OUTSIDE entities (skyline / buildings / backdrop meshes / traffic) held by an .rmi box of a room that is
 drawn?  OFFLINE, READ ONLY (reads the live zips, writes nothing but the report you redirect).
 
-  python tools/kl_rmi_cover_1108.py [MAP ...] [--zip <zip>] [--report <file>] [-v]
+  python tools/kl_rmi_cover_1108.py [MAP ...] [--zip <zip>] [--report <file>] [--summary <md file>] [-v]
   (no MAP: DM03 DM06 DM03A DM06B DM01B DM07 DM09; each map's slot zip is found as <DD>\\KLExpansion\\Maps\\<MAP>\\F??_Main.zip)
 
 WHY (research 11-06 on DM05A, kl2.exe read-only, see kl_club_rmi_1106.py): a moving entity (flag 0x4000) is drawn only while an .rmi box of a
 visible room holds it.  This script measures, per map, which kept outside entities are held by no box of their parent room nor of the rooms
 that hold a player eye.  The answer decides whether the box-enlarge precedent (kl_club_rmi_1106.py: one record, same count) is needed.
 
-CLASSIFICATION of "outside" (GUESS: a heuristic, nothing in the format says it).  An entity is kept-outside when ALL of
-  - it is a drawable class: 0x200002 (std object), 0x2000ff, 0x200012, 0x200006 (traffic car), has a model (model > 0), is not hidden at load
-    (flag 0x400), is not under a CloneGroup* root, and its name has no glow / particle / light part;
-  - AND one of: reason 'room'    its parent room's name says outside (Out, Outside, Backdrop, Rooftop, Skyline, Skydome, Street, Distance);
-                reason 'traffic' it sits under a group named Traffic* or is a 0x200006;
-                reason 'name'    its own name says build / facade / skyline / billboard / skydome / backdrop / distan / tower.
+CLASSIFICATION of "outside" (GUESS: a heuristic, nothing in the format says it).  An entity is kept when ALL of
+  - it is a drawable class: 0x200002 (std object), 0x2000ff, 0x200012, 0x200006, has a model (model > 0), is not hidden at load
+    (flag 0x400; real traffic is kept even if hidden), is not under a CloneGroup* root, and its name has no glow / particle / lamp / light part
+    ('light' does not drop skylight / highlight);
+  - AND one of, in this order:
+      'traffic'     REAL traffic, by NAME (never by tid: 0x200006 is mostly Ground_NN tiles, blood, projectiles, lanterns ... on these maps): an ancestor named
+                    Traffic!... / TrafficSplines!... (also KL_Traffic!) or its own name is a Ground_JPN_Civilian / Bus / Police / Taxi template;
+      play room     (DM06 / DM06B Out_Part_NN, DM09 Out_Roof / Street / Bus_Terminal / Overpass / Retomoto_Square, DM03 Outside_NNA) the entity counts as outside
+                    only by its OWN name ('name' below, plus skyscraper / antenna / cloud / SkyX1 names), minus street-side props (facade, collapse, billboard, sign,
+                    office, business, corner); so debris, Object_, railing, Tree_edge are not skyline there;
+      'room'        its parent room's name says outside (Out, Outside, Backdrop, Rooftop, Skyline, Skydome, Skyscrab, Street, Distance);
+      'name'        its own name says build / facade / skyline / billboard / skydome / backdrop / distan / tower;
+      'placeholder' a tid 0x200006 that is none of the above: reported apart, never counted as skyline or traffic.
+TWO TESTS are reported side by side, both GUESS (the engine test is unknown): OVERLAP (bounds touch a box) and ORIGIN (the origin lies in a box).
 PARENT ROOM = nearest ancestor of tid 0x100021 / 0x10003f.  Its .rmi id is its SLOT (kl_scene.slots) + 2, not its REF label (graft_formats.md).
   MEASURED 11-08: with +2 every box id of DM05A (Roof 4085 = slot 4083), DM06B and DM07 names a room entity; without it 6 of 20 / 4 of 6 / 4 of 4 name an
   effect group.  Why +2 is not known (GUESS: the loader's room id space starts two above kl_scene's slots).
@@ -54,9 +62,21 @@ RMI_BIAS = 2                        # .rmi room id = kl_scene slot + 2: 100 % of
 GAP_CM = 5000.0                     # uncovered entities closer than this (single linkage) are one group for the enlargement
 EYE_UP = 170.0                      # GUESS: stand eye height above the spawn origin, cm
 C_OFF, M_OFF, H_OFF, ROOM_OFF = 0x28, 0x04, 0x40, 0x4c
-RE_ROOM = re.compile(r'(^|_)(out|outside|backdrop|rooftops?|skyline|skydome|street|distance)', re.I)
+RE_ROOM = re.compile(r'(^|_)(out|outside|backdrop|rooftops?|skyline|skydome|skyscrab|street|distance)', re.I)
 RE_NAME = re.compile(r'build|facade|skyline|billboard|skydome|backdrop|distan|tower', re.I)
-RE_SKIP = re.compile(r'glow|particl|light|lamp', re.I)
+# 'light' drops lamps / spot / street / flash lights but NOT 'skylight' / 'highlight' (11-08 fix c); glow / particle / lamp as before
+RE_SKIP = re.compile(r'glow|particl|lamp|(?<!sky)(?<!high)light', re.I)
+# REAL traffic = under a Traffic!... / TrafficSplines!... group (the converted-in KL_Traffic! group too) or a named M06 car template; NOT the tid (11-08 fix: tid 0x200006
+# is mostly Ground_NN tiles, Character_*Blood, Projectile, lanterns, a chandelier, WindowBlowup!BombWindow03 on DM03/DM06B/DM09/DM01B)
+RE_TRAFFIC_PATH = re.compile(r'^(KL_)?Traffic(Splines)?!', re.I)
+RE_TRAFFIC_NAME = re.compile(r'^(KL_)?Ground_JPN_(Civilian|Bus|Police|Taxi)', re.I)
+# PLAY rooms (the area the heisters walk: DM06 / DM06B Out_Part_NN, DM09 roof + street level rooms, DM03 Outside_NNA).  GUESS: a heuristic by room name.
+# In a play room only an entity whose OWN name says skyline / building / backdrop counts as outside, so debris, Object_, railing, Tree_edge do not.
+RE_PLAY = re.compile(r'Out_Part_\d|Out_Roof|(Street|Bus_Terminal|Overpass|Retomoto_Square)_\d|Outside_\d+[a-z]$', re.I)
+RE_SKY = re.compile(RE_NAME.pattern + r'|skyscr|antenna|cloud|sky[a-z]?\d', re.I)
+# street-side props that name a building part but belong to the street the player walks (DM09 Hotel_Street / Bus_Terminal / Overpass / Street / Retomoto_Square:
+# Facade_*, Collapse_Facade*, CollapseGroup_Buildings, billboards, signs, office / business / corner buildings): NOT skyline in a play room (GUESS: by name)
+RE_STREET_PROP = re.compile(r'facade|collapse|billboard|sign|office|business|corner', re.I)
 RE_BACKDROP = re.compile(r'backdrop', re.I)
 
 
@@ -163,15 +183,19 @@ def best_enlarge(boxes, pts):
 
 
 def classify(room_name, name, tid, path_names):
-    """-> 'room' | 'traffic' | 'name' | None (not outside).  path_names: names of the ancestors."""
+    """-> 'room' | 'name' (static outside) | 'traffic' (REAL, by name) | 'placeholder' (tid 0x200006 only) | None.  path_names: names of the ancestors."""
     if tid not in DRAW_TIDS or RE_SKIP.search(name):
         return None
-    if tid == CAR_TID or any(n.startswith('Traffic') for n in path_names):
+    if RE_TRAFFIC_NAME.search(name) or any(RE_TRAFFIC_PATH.search(n) for n in path_names):
         return 'traffic'
+    if room_name and RE_PLAY.search(room_name):
+        return 'name' if RE_SKY.search(name) and not RE_STREET_PROP.search(name) else None
     if room_name and RE_ROOM.search(room_name):
         return 'room'
     if RE_NAME.search(name):
         return 'name'
+    if tid == CAR_TID:
+        return 'placeholder'                 # tid 0x200006 that is neither real traffic nor classed outside: reported apart, never counted as skyline
     return None
 
 
@@ -233,12 +257,12 @@ def analyse(zp, log=lambda *a: None):
             spawns.append(fr[e][1])
         hid = bool(e.flags & HIDDEN)
         why = None if e.model <= 0 else classify(room.name.decode('latin1') if room else None, n, e.tid, path)
-        if hid and e.tid != CAR_TID:
-            why = None                              # hidden at load: not drawn (a hidden traffic CAR is kept: a spawner shows it later)
+        if hid and why != 'traffic':
+            why = None                              # hidden at load: not drawn (a hidden REAL traffic car is kept: a spawner shows it later)
         if why:
             R, T = fr[e]
             mb = model_bounds(As, e.model, cache)
-            if mb is None and e.tid != CAR_TID:
+            if mb is None and why != 'traffic':
                 nomesh[0] += 1                      # no drawn mesh (cover boxes, hulls): nothing for a box to cull
                 why = None
         if why:
@@ -247,7 +271,7 @@ def analyse(zp, log=lambda *a: None):
             else:
                 lo = hi = tuple(T)
                 pts = [tuple(T)]
-            ents.append({'name': n, 'why': why, 'dyn': bool(e.flags & DYNAMIC), 'car': e.tid == CAR_TID, 'hid': hid,
+            ents.append({'name': n, 'why': why, 'dyn': bool(e.flags & DYNAMIC), 'car': why == 'traffic', 'hid': hid,
                          'room': slots[room] + RMI_BIAS if room else None,
                          'room_name': room.name.decode('latin1') if room else '-', 'lo': lo, 'hi': hi, 'pts': pts, 'T': tuple(T),
                          'pt': mb is None, 'tid': e.tid, 'slot': slots[e]})
@@ -275,6 +299,7 @@ def analyse(zp, log=lambda *a: None):
         e['origin_in'] = sorted({b.room for b in boxes if b.holds(e['T'])})
         got = [b for b in own + eyeb]
         e['status'] = best_relation([b.relation(e['pts']) for b in got])
+        e['ostatus'] = 'IN' if any(b.holds(e['T']) for b in got) else 'OUT'   # origin test (GUESS: the engine may test the origin only)
         e['bd_only'] = e['status'] != 'NONE' and all(b.room in bd for b in got if b.relation(e['pts']) != 'NONE')
     return {'zip': zp, 'boxes': boxes, 'rooms': rooms, 'ents': ents, 'eye_rooms': sorted(eye), 'spawns': spawns, 'backdrops': sorted(bd), 'nomesh': nomesh[0], 'roomtid': roomtid,
             'by_room': by_room}
@@ -285,87 +310,202 @@ def f3(p):
     return '(%.0f,%.0f,%.0f)' % tuple(p)
 
 
-def report(m, d, verbose=False):
-    out = []
-    ents = d['ents']
+def is_sky(e):
+    return e['why'] in ('room', 'name')
+
+
+def unc_ov(e):
+    return e['status'] == 'NONE'
+
+
+def unc_or(e):
+    return e['ostatus'] == 'OUT'
+
+
+def visibility(e, spawns):
+    """GUESS: apparent size seen from the nearest spawn, (largest bounds extent / distance)^2, distance floored at 10 m."""
+    size = max(e['hi'][i] - e['lo'][i] for i in range(3))
+    mid = [(e['lo'][i] + e['hi'][i]) / 2.0 for i in range(3)]
+    dist = min([sum((mid[i] - p[i]) ** 2 for i in range(3)) ** 0.5 for p in spawns] or [1000.0])
+    return (size / max(dist, 1000.0)) ** 2
+
+
+def cluster_info(d):
+    """Clusters of the entities uncovered under EITHER test (sky + real traffic, per parent room, single linkage GAP_CM), ranked by visibility.
+    -> list of dicts; 'opts' = enlargement options (parent room box / eye room box), each holding every corner AND the origin of the cluster."""
     rn = d['rooms']
-    unc = [e for e in ents if e['status'] == 'NONE']
-    out.append('=== %s  %s' % (m, d['zip']))
-    out.append('boxes %d (flag1 %d, flag0 %d), rooms %d, spawns %d, eye rooms %s, backdrop rooms %s' % (
-        len(d['boxes']), sum(b.flag == 1 for b in d['boxes']), sum(b.flag == 0 for b in d['boxes']), len(rn), len(d['spawns']),
-        [(r, rn.get(r, '?')) for r in d['eye_rooms']], [(r, rn[r]) for r in d['backdrops']]))
-    c = Counter((e['why'], 'car' if e['car'] else ('dyn' if e['dyn'] else 'static')) for e in ents)
-    bad = sorted((r, v) for r, v in d['roomtid'].items() if v is None or v[0] not in ROOM_TIDS)
-    out.append('boxes whose room SLOT is not a room entity in this scene: %s' % (bad or 'none'))
-    out.append('KEPT %d  UNCOVERED %d (of which dynamic flag 0x4000 or car: %d; the rest are static, which the .oct room trees hold, not the .rmi: GUESS)   by kind %s' % (
-        len(ents), len(unc), sum(e['dyn'] or e['car'] for e in unc), dict(c)))
-    out.append('  status FULL %d PART %d NONE %d | bd-only (held only by a backdrop box) %d | origin outside every box %d | no mesh bounds (pt, cars only) %d | excluded: no drawn mesh %d' % (
-        sum(e['status'] == 'FULL' for e in ents), sum(e['status'] == 'PART' for e in ents), len(unc), sum(e['bd_only'] for e in ents),
-        sum(not e['origin_in'] for e in ents), sum(e['pt'] for e in ents), d['nomesh']))
-    out.append('  by parent room (kept / uncovered / dynamic):')
-    rr = OrderedDict()
-    for e in ents:
-        a = rr.setdefault(e['room'], [0, 0, 0])
-        a[0] += 1
-        a[1] += e['status'] == 'NONE'
-        a[2] += e['dyn'] or e['car']
-    for r, (k, u, dy) in rr.items():
-        out.append('    room %-6s %-34s kept %5d  uncovered %5d  dynamic/car %5d  boxes %d' % (r, rn.get(r, '-'), k, u, dy, len(d['by_room'].get(r, []))))
-    if not unc:
-        out.append('  uncovered list: none')
-        return out
-    out.append('  UNCOVERED list (room, name, kind, dyn/static, world bounds, held by rooms):')
-    shown = unc if verbose else unc[:60]
-    for e in shown:
-        out.append('    [%s] %-44s %-7s %-6s %s..%s  held_by %s' % (e['room_name'][:24], e['name'][:44], e['why'], 'dyn' if e['dyn'] else 'static',
-                                                                    f3(e['lo']), f3(e['hi']), e['held_by'][:6]))
-    if len(unc) > len(shown):
-        out.append('    ... %d more (-v lists all)' % (len(unc) - len(shown)))
-    out.append('  SMALLEST ENLARGEMENT per uncovered cluster (parent room, then single linkage gap %.0f cm); options: a box of the parent room / a box of an eye room:' % GAP_CM)
+    unc = [e for e in d['ents'] if e['why'] != 'placeholder' and (unc_ov(e) or unc_or(e))]
     grp = OrderedDict()
     for e in unc:
         grp.setdefault(e['room'], []).append(e)
     eyeboxes = [b for r in d['eye_rooms'] for b in d['by_room'].get(r, [])]
+    out = []
     for r, es in grp.items():
         for cl in clusters(es, GAP_CM):
-            pts = [p for e in cl for p in e['pts']]
+            pts = [p for e in cl for p in e['pts']] + [e['T'] for e in cl]
             lo = tuple(min(p[i] for p in pts) for i in range(3))
             hi = tuple(max(p[i] for p in pts) for i in range(3))
-            out.append('    room %s %s: %d entities (%d dynamic or car), union %s..%s  e.g. %s' % (
-                r, rn.get(r, '-'), len(cl), sum(e['dyn'] or e['car'] for e in cl), f3(lo), f3(hi), cl[0]['name'][:40]))
+            c = {'room': r, 'room_name': rn.get(r, '-'), 'n': len(cl), 'n_ov': sum(unc_ov(e) for e in cl), 'n_or': sum(unc_or(e) for e in cl),
+                 'n_dyn': sum(e['dyn'] for e in cl), 'n_traffic': sum(e['car'] for e in cl), 'lo': lo, 'hi': hi, 'e_g': cl[0]['name'],
+                 'score': sum(visibility(e, d['spawns']) for e in cl), 'opts': []}
             for label, bs in (('parent room box', d['by_room'].get(r, [])), ('eye room box', [x for x in eyeboxes if x.room != r])):
                 be = best_enlarge(bs, pts)
                 if not be:
-                    if bs or label.startswith('parent'):
-                        out.append('      %s: none (a box record would have to be appended)' % label)
+                    c['opts'].append({'label': label, 'none': bool(bs or label.startswith('parent'))})
                     continue
                 b = bs[[x.index for x in bs].index(be['box'])]
                 nlo, nhi = box_extent(be['new_c'], be['new_h'], b)
                 olo, ohi = box_extent(b.c, b.h, b)
                 hit = sorted({(x.index, x.room, rn.get(x.room, '?')) for x in d['boxes']
                               if x.room not in (b.room, *d['backdrops']) and x.relation(corners(nlo, nhi)) != 'NONE' and x.relation(corners(olo, ohi)) == 'NONE'})
-                out.append('      %s %d (room %s, flag %d): centre %s half %s -> centre %s half %s (half +%.0f/+%.0f/+%.0f, +%.3g cm3); world %s..%s -> %s..%s; newly overlaps other rooms: %s' % (
-                    label, be['box'], b.room, be['flag'], f3(be['old_c']), f3(be['old_h']), f3(be['new_c']), f3(be['new_h']), *be['grow'], be['added'],
-                    f3(olo), f3(ohi), f3(nlo), f3(nhi), sorted({h[1] for h in hit}) or 'none'))
+                c['opts'].append({'label': label, 'be': be, 'room': b.room, 'olo': olo, 'ohi': ohi, 'nlo': nlo, 'nhi': nhi, 'hit': hit, 'none': False})
+            out.append(c)
+    out.sort(key=lambda c: -c['score'])
     return out
+
+
+def best_opt(c):
+    """The option with the least added volume (None when no box exists)."""
+    o = [x for x in c['opts'] if x.get('be')]
+    return min(o, key=lambda x: x['be']['added']) if o else None
+
+
+def counts(d):
+    ents = d['ents']
+    sky = [e for e in ents if is_sky(e)]
+    trf = [e for e in ents if e['why'] == 'traffic']
+    ph = [e for e in ents if e['why'] == 'placeholder']
+    f = lambda L, t: sum(t(e) for e in L)
+    both = lambda e: unc_ov(e) or unc_or(e)
+    return {'sky': len(sky), 'sky_static': sum(not e['dyn'] for e in sky), 'sky_ov': f(sky, unc_ov), 'sky_or': f(sky, unc_or), 'sky_any': f(sky, both),
+            'sky_static_ov': f([e for e in sky if not e['dyn']], unc_ov), 'sky_static_or': f([e for e in sky if not e['dyn']], unc_or),
+            'trf': len(trf), 'trf_ov': f(trf, unc_ov), 'trf_or': f(trf, unc_or), 'ph': len(ph), 'ph_ov': f(ph, unc_ov), 'ph_or': f(ph, unc_or),
+            'sky_bd_only': f(sky, lambda e: e['bd_only'])}
+
+
+def report(m, d, verbose=False):
+    out = []
+    ents = d['ents']
+    rn = d['rooms']
+    n = counts(d)
+    unc = [e for e in ents if e['why'] != 'placeholder' and (unc_ov(e) or unc_or(e))]
+    out.append('=== %s  %s' % (m, d['zip']))
+    out.append('boxes %d (flag1 %d, flag0 %d), rooms %d, spawns %d, eye rooms %s, backdrop rooms %s' % (
+        len(d['boxes']), sum(b.flag == 1 for b in d['boxes']), sum(b.flag == 0 for b in d['boxes']), len(rn), len(d['spawns']),
+        [(r, rn.get(r, '?')) for r in d['eye_rooms']], [(r, rn[r]) for r in d['backdrops']]))
+    bad = sorted((r, v) for r, v in d['roomtid'].items() if v is None or v[0] not in ROOM_TIDS)
+    out.append('boxes whose room SLOT is not a room entity in this scene: %s' % (bad or 'none'))
+    out.append('SKYLINE (outside by room / name; play rooms by own name only) kept %d (static %d, dynamic 0x4000 %d): uncovered by bounds-OVERLAP test %d, by ORIGIN test %d, either %d '
+               '(static only: overlap %d, origin %d); bd-only %d.  [both tests GUESS: the engine test is unknown; the static ones are held by the .oct room trees, not the .rmi: GUESS]' % (
+                   n['sky'], n['sky_static'], n['sky'] - n['sky_static'], n['sky_ov'], n['sky_or'], n['sky_any'], n['sky_static_ov'], n['sky_static_or'], n['sky_bd_only']))
+    out.append('REAL TRAFFIC (by name: Traffic!/TrafficSplines! group or a Ground_JPN_Civilian/Bus/Police/Taxi template) kept %d: uncovered overlap %d, origin %d' % (n['trf'], n['trf_ov'], n['trf_or']))
+    out.append('PLACEHOLDER class (tid 0x200006 that is neither real traffic nor classed outside: Ground tiles, blood, projectiles, lanterns ... NOT cars; NOT in the skyline or traffic counts) '
+               'kept %d: uncovered overlap %d, origin %d' % (n['ph'], n['ph_ov'], n['ph_or']))
+    out.append('  all kept: status FULL %d PART %d NONE %d | origin outside own+eye boxes %d | no mesh bounds (pt, real traffic only) %d | excluded: no drawn mesh %d' % (
+        sum(e['status'] == 'FULL' for e in ents), sum(e['status'] == 'PART' for e in ents), sum(e['status'] == 'NONE' for e in ents),
+        sum(unc_or(e) for e in ents), sum(e['pt'] for e in ents), d['nomesh']))
+    out.append('  by parent room, skyline + real traffic only (kept / uncovered overlap / uncovered origin / dynamic or traffic):')
+    rr = OrderedDict()
+    for e in ents:
+        if e['why'] == 'placeholder':
+            continue
+        a = rr.setdefault(e['room'], [0, 0, 0, 0])
+        a[0] += 1
+        a[1] += unc_ov(e)
+        a[2] += unc_or(e)
+        a[3] += e['dyn'] or e['car']
+    for r, (k, u, uo, dy) in rr.items():
+        out.append('    room %-6s %-34s kept %5d  unc-overlap %5d  unc-origin %5d  dynamic/traffic %5d  boxes %d' % (r, rn.get(r, '-'), k, u, uo, dy, len(d['by_room'].get(r, []))))
+    if not unc:
+        out.append('  uncovered list: none')
+        return out
+    out.append('  UNCOVERED list (room, name, kind, dyn/static, tests failed, world bounds, held by rooms):')
+    shown = unc if verbose else sorted(unc, key=lambda e: (e['why'] != 'traffic', -visibility(e, d['spawns'])))[:60]
+    for e in shown:
+        out.append('    [%s] %-44s %-7s %-6s %-6s %s..%s  held_by %s' % (e['room_name'][:24], e['name'][:44], e['why'], 'dyn' if e['dyn'] else 'static',
+                                                                       ('ov+or' if unc_ov(e) and unc_or(e) else 'ov' if unc_ov(e) else 'or'),
+                                                                       f3(e['lo']), f3(e['hi']), e['held_by'][:6]))
+    if len(unc) > len(shown):
+        out.append('    ... %d more (-v lists all; the shown ones are real traffic first, then by visibility)' % (len(unc) - len(shown)))
+    out.append('  CLUSTERS of uncovered (either test), ranked by visibility score (GUESS: sum of (extent / distance to the nearest spawn)^2); '
+               'smallest enlargement per cluster (parent room box / eye room box; the grown box holds every corner AND the origin; gap %.0f cm):' % GAP_CM)
+    for k, c in enumerate(cluster_info(d), 1):
+        out.append('    #%d room %s %s: %d entities (overlap-uncovered %d, origin-uncovered %d, dynamic %d, real traffic %d), score %.4g, union %s..%s  e.g. %s' % (
+            k, c['room'], c['room_name'], c['n'], c['n_ov'], c['n_or'], c['n_dyn'], c['n_traffic'], c['score'], f3(c['lo']), f3(c['hi']), c['e_g'][:40]))
+        for o in c['opts']:
+            if not o.get('be'):
+                if o['none']:
+                    out.append('      %s: none (a box record would have to be appended)' % o['label'])
+                continue
+            be = o['be']
+            out.append('      %s %d (room %s, flag %d): centre %s half %s -> centre %s half %s (half +%.0f/+%.0f/+%.0f, +%.3g cm3); world %s..%s -> %s..%s; newly overlaps other rooms: %s' % (
+                o['label'], be['box'], o['room'], be['flag'], f3(be['old_c']), f3(be['old_h']), f3(be['new_c']), f3(be['new_h']), *be['grow'], be['added'],
+                f3(o['olo']), f3(o['ohi']), f3(o['nlo']), f3(o['nhi']), sorted({h[1] for h in o['hit']}) or 'none'))
+    return out
+
+
+def summary(results):
+    """results: [(map, d)] -> markdown text."""
+    L = ['# rmi cover summary (kl_rmi_cover_1108.py, offline, read only)', '',
+         'Tests are GUESS (the engine test is unknown): OVERLAP = the entity bounds touch a box of its parent room or of an eye room; ORIGIN = the entity origin is inside one. '
+         'Skyline = kept outside entities by room / name (play rooms by own name only). Real traffic is classified by NAME, not by tid 0x200006 '
+         '(that tid is mostly Ground tiles etc.; those are reported as the placeholder class and not counted here).', '',
+         '| map | skyline kept | uncovered static skyline: overlap | origin | real traffic kept | real traffic uncovered | placeholder tid-0x200006 (not cars) uncovered |',
+         '|---|---|---|---|---|---|---|']
+    for m, d in results:
+        n = counts(d)
+        L.append('| %s | %d | %d | %d | %d | %s | %d of %d |' % (m, n['sky'], n['sky_static_ov'], n['sky_static_or'], n['trf'],
+                                                                 'NONE' if not (n['trf_ov'] or n['trf_or']) else 'YES %d / %d' % (n['trf_ov'], n['trf_or']), n['ph_ov'], n['ph']))
+    none = [m for m, d in results if not counts(d)['trf']]
+    L += ['', 'No real traffic entity is kept on: %s (none in the live zip under a Traffic!/TrafficSplines! group or as a car template, so nothing to cover; the 7 DM06B car templates exist only in the staged, not installed, kl_dm06b_traffic_1108.py).' % ', '.join(none)]
+    for m, d in results:
+        n = counts(d)
+        L += ['', '## %s' % m, '', 'Static skyline uncovered: %d by overlap, %d by origin (of %d kept skyline, %d static). Real traffic uncovered: %s.' % (
+            n['sky_static_ov'], n['sky_static_or'], n['sky'], n['sky_static'],
+            'none (%d kept)' % n['trf'] if not (n['trf_ov'] or n['trf_or']) else '%d by overlap, %d by origin of %d kept' % (n['trf_ov'], n['trf_or'], n['trf']))]
+        cs = cluster_info(d)[:3]
+        if not cs:
+            L.append('No uncovered cluster.')
+            continue
+        L.append('')
+        L.append('Top clusters by visibility (GUESS score = sum of (extent / distance to nearest spawn)^2):')
+        for k, c in enumerate(cs, 1):
+            o = best_opt(c)
+            L.append('%d. room %s %s: %d entities (overlap-unc %d, origin-unc %d, real traffic %d), score %.3g, union %s..%s, e.g. %s' % (
+                k, c['room'], c['room_name'], c['n'], c['n_ov'], c['n_or'], c['n_traffic'], c['score'], f3(c['lo']), f3(c['hi']), c['e_g'][:36]))
+            if not o:
+                L.append('   - no box in the parent or eye rooms: a box record would have to be appended.')
+                continue
+            be = o['be']
+            L.append('   - smallest enlargement: %s %d (room %s, flag %d), half %s -> %s (+%.0f/+%.0f/+%.0f), world %s..%s -> %s..%s; newly overlaps rooms: %s' % (
+                o['label'], be['box'], o['room'], be['flag'], f3(be['old_h']), f3(be['new_h']), *be['grow'], f3(o['olo']), f3(o['ohi']), f3(o['nlo']), f3(o['nhi']),
+                ', '.join('%s %s' % h for h in sorted({(h[1], h[2]) for h in o['hit']})) or 'none'))
+    return '\n'.join(L) + '\n'
 
 
 def main(a):
     verbose = '-v' in a
     rep = a[a.index('--report') + 1] if '--report' in a else None
+    summ = a[a.index('--summary') + 1] if '--summary' in a else None
     one = a[a.index('--zip') + 1] if '--zip' in a else None
-    skip = {a[i + 1] for i, x in enumerate(a) if x in ('--zip', '--report')}
+    skip = {a[i + 1] for i, x in enumerate(a) if x in ('--zip', '--report', '--summary')}
     maps = [x for x in a if not x.startswith('-') and x not in skip] or list(MAPS)
+    results = []
     lines = ['kl_rmi_cover_1108 - read-only; see the module docstring for the classification and what is GUESS']
     for m in maps:
         zp = one or slot_zip(m)
-        lines += report(m, analyse(zp), verbose)
+        d = analyse(zp)
+        results.append((m, d))
+        lines += report(m, d, verbose)
         lines.append('')
     text = '\n'.join(lines)
     print(text)
     if rep:
         with open(rep, 'w', encoding='utf-8', newline='\n') as fh:
             fh.write(text + '\n')
+    if summ:
+        with open(summ, 'w', encoding='utf-8', newline='\n') as fh:
+            fh.write(summary(results))
     return 0
 
 
