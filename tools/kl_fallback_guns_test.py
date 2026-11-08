@@ -396,5 +396,32 @@ if os.path.isfile(rp):
 else:
     print('  (no out_set bake: end-to-end checks skipped)')
 
+# ---- set_hash: the SHPH set check twin of klhook/klshopset.h (same golden vectors as klshopset_test.c)
+def _ini(rows, name=None, count=None):
+    L = ['[Pairs]', 'Count=%d' % (len(rows) if count is None else count)]
+    for i, (r, (it, pc)) in enumerate(sorted(rows.items())):
+        L.append('P%d=%d|%d|%d|NAME %d' % (i, r, it, pc, r))
+    if name is not None:
+        L += ['[Set]', 'Name=' + name]
+    return chr(10).join(L) + chr(10)
+check(F.fnv1a32(b'') == 0x811c9dc5 and F.fnv1a32(b'a') == 0xe40c292c and F.fnv1a32(b'foobar') == 0xbf9cf968, 'fnv1a32 golden vectors')
+_g = {0: (62, 3), 10: (63, 5)}
+check(F.set_hash(_ini(_g, 'dm')) == 0x6fde7f5c, 'set_hash golden: rows {0:(62,3),10:(63,5)} name dm')
+check(F.set_hash(_ini(_g, 'pd2')) == 0x94f99dd5, 'set_hash golden: same rows name pd2')
+check(F.set_hash(_ini(_g)) == 0x94f99dd5, 'set_hash: no [Set] = pd2')
+check(F.set_hash(_ini(_g, 'PD2 ; comment')) == 0x94f99dd5, 'set_hash: name normalised (case, trailing comment)')
+check(F.set_hash(_ini({0: (40, 7), 10: (63, 5)}, 'pd2')) == 0xd8103e59, 'set_hash golden: other pairs, pd2')
+check(F.set_hash(_ini({}, 'pd2')) == 0x9b4c41d5, 'set_hash golden: empty rows, pd2')
+check(F.set_hash(_ini(_g, '"dm"')) == F.set_hash(_ini(_g, 'dm')) and F.set_hash(_ini(_g, "'dm'")) == 0x6fde7f5c, 'set_hash: surrounding quotes stripped like GetPrivateProfileString')
+check(F.set_name('"PD2"') == 'pd2' and F.set_name(" 'dm' ") == 'dm' and F.set_name('"dm') == 'pd2' and F.set_name('""') == 'pd2' and F.set_name('"') == 'pd2', 'set_name quote handling')
+_ext = F.set_hash(_ini({0: (62, -2147483648), 10: (63, 2147483647)}, 'dm'))
+check(_ext == F.set_hash(_ini({0: (62, -99999), 10: (63, 99999)}, 'dm')), 'set_hash: pic clamped to +-99999 (INT_MIN / INT_MAX)')
+print('  extreme-pic hash %08x' % _ext)
+check(F.set_hash(_ini({0: (62, 3)}, 'dm', count=99)) == F.set_hash(_ini({}, 'dm')), 'set_hash: Count > 36 -> no rows (kspg_load)')
+for _p, _h, _lbl in (('C:/Steam/steamapps/common/Kane & Lynch 2 - Dog Days/KLShopPage.ini', 0x4555f77f, 'live DD ini'),
+                     ('C:/kl_build_1024/nopd2_spike/out_set/KLShopPage.ini', 0x7d31cb86, 'out_set ini')):
+    if os.path.isfile(_p):
+        check(F.set_hash(open(_p, encoding='latin-1').read()) == _h, 'set_hash %s agrees with the C hash (%08x)' % (_lbl, _h))
+
 print('kl_fallback_guns_test: %d checks, %d FAIL' % (checks, fails))
 sys.exit(1 if fails else 0)

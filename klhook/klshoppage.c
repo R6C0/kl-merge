@@ -264,7 +264,7 @@ static void kspg_cap_build(char *o, size_t cap, const char *base, int page)
     if (kspg.ctlOn) kspg_h_keyname(kspg.ctlKey, cyc, sizeof cyc);
     if (kspg.active && kspg.hint) kspg_h_keyname(kspg.key, p2, sizeof p2);
     if (kspg.hireOn) kspg_h_keyname(kspg.hireKey, hk, sizeof hk);
-    if (page == 1 && kl_online()) snprintf(tag, sizeof tag, "%s", kspg.apply ? "" : kspg.online2 ? "(STOCK GUN)" : "(VIEW ONLY)");   /* the old '(stock gun online)' / '(view only)' */
+    if (page == 1 && kl_online()) snprintf(tag, sizeof tag, "%s", kspo_set_warn() ? "(SET DIFFERS)" : kspg.apply ? "" : kspg.online2 ? "(STOCK GUN)" : "(VIEW ONLY)");   /* the old '(stock gun online)' / '(view only)' */
     kfit_caption(o, cap, base, page, pos, n, tag, cyc, kspg.ctlOn ? kspg_next(page) : -1, p2, hk, kfit_budget(kspg.capMax, strlen(base)));
 }
 
@@ -1323,6 +1323,7 @@ static int kspg_load(void)
         strncpy(kspg.p[row].desc, buf, 479); kspg.p[row].desc[479] = 0;
         kspg.p[row].slot = i; kspg.p[row].row = row; kspg.p[row].item = item; kspg.p[row].pic = pic; kspg.p[row].ok = kspg.p[row].cfg = 1; ok++;
     }
+    GetPrivateProfileStringA("Set", "Name", "", kspo.rawName, sizeof kspo.rawName, file);       /* the set label of the baked pairs (klshopset.h: part of the SHPH hash); absent = pd2 */
     return ok;
 }
 
@@ -1438,6 +1439,7 @@ static void kspg_init(void)
         return;
     }
     kspg.carried[0] = kspg.carried[1] = -1;
+    kspo_set_prepare();                                                                   /* [ShopPage] SetCheck: hash of these pairs for the SHPH announce */
     klog("shopPage: on; %d pairs from KLShopPage.ini; key 0x%02x flips the shop between set A and set B (Arcade offline only)", kspg.have, kspg.key);
 }
 
@@ -1990,6 +1992,7 @@ static void klshoppage_tick(int game_thread)
     if (kspg.probe && game_thread && klh_exe_ok) kspp_tick();
     if (kspg_hlp && game_thread && klh_exe_ok) kspg_hlp_tick();
     if (kspo.on && game_thread && klh_exe_ok) kspo_tick();
+    if (kspo.scOn && game_thread && klh_exe_ok) kspo_set_tick();                          /* SetCheck: SHPH announce, independent of OnlineSend */
     if ((kspg_swt || kspg_swtpic) && game_thread && klh_exe_ok) kspg_swt_tick();
     if (kspg.swapArm && !kspg.on && game_thread && klh_exe_ok) {          /* [Shop] OnlineSwapArm: only the early-make hook, for the swap (page II is off) */
         if (!kspg.earlyTried) kspg_early_patch();

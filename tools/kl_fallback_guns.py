@@ -962,6 +962,78 @@ def shop_ini_text(live_text, specs, modes):
     return '\r\n'.join(out)
 
 
+# ------------------------------------------------------------------ the set hash (twin of klhook/klshopset.h)
+SET_ROWS = 36
+SET_PIC_MAX = 99999     # klshopset.h KSS_PIC_MAX: a picture row is clamped to +-this in the canonical string
+
+
+def _ini_values(text):
+    """{(section lower, key lower): value} the way GetPrivateProfileString sees an ini: ';' lines are comments, the FIRST occurrence of a key wins, the value is trimmed
+    (an inline '; comment' stays in the value, like the Windows API)."""
+    out, sec = {}, ''
+    for ln in text.replace('\r\n', '\n').replace('\r', '\n').split('\n'):
+        s = ln.strip()
+        if not s or s.startswith(';'):
+            continue
+        if s.startswith('['):
+            e = s.find(']')
+            sec = s[1:e].strip().lower() if e > 0 else sec
+            continue
+        if '=' in s:
+            k, v = s.split('=', 1)
+            out.setdefault((sec, k.strip().lower()), v.strip())
+    return out
+
+
+def set_name(raw):
+    """klshopset.h kss_name: leading token of [A-Za-z0-9_-], lower case, 15 chars; empty / absent = 'pd2'."""
+    raw = (raw or '').strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in '"\'':
+        raw = raw[1:-1]     # GetPrivateProfileString drops one pair of surrounding quotes (the hook never sees them)
+    raw = raw.lstrip(' \t')
+    m = re.match(r'[A-Za-z0-9_-]*', raw)
+    return m.group(0).lower()[:15] or 'pd2'
+
+
+def set_rows(ini_text):
+    """{row: (item, picrow)} the way klshoppage.c kspg_load keeps them: Pn for n < Count (Count 0..36 else 0), 'row|item|pic|' (sscanf %d skips blanks), row 0..35, item 1..63,
+    a later Pn of the same row replaces the earlier one."""
+    v = _ini_values(ini_text)
+    m = re.match(r'\s*[-+]?\d+', v.get(('pairs', 'count'), ''))
+    n = int(m.group(0)) if m else 0
+    if n < 0 or n > SET_ROWS:
+        n = 0
+    rows = {}
+    for i in range(n):
+        pm = re.match(r'\s*([-+]?\d+)\|\s*([-+]?\d+)\|\s*([-+]?\d+)\|', v.get(('pairs', 'p%d' % i), ''))
+        if not pm:
+            continue
+        row, item, pic = int(pm.group(1)), int(pm.group(2)), int(pm.group(3))
+        if 0 <= row < SET_ROWS and 1 <= item <= 63:
+            rows[row] = (item, max(-SET_PIC_MAX, min(SET_PIC_MAX, pic)))
+    return rows
+
+
+def set_canon(ini_text):
+    """The canonical string the hash covers (klshopset.h kss_canon)."""
+    rows = set_rows(ini_text)
+    name = set_name(_ini_values(ini_text).get(('set', 'name'), ''))
+    return 'KLSET1\n' + ''.join('%d|%d|%d\n' % (r, rows[r][0], rows[r][1]) for r in sorted(rows)) + 'S=%s\n' % name
+
+
+def fnv1a32(data):
+    h = 2166136261
+    for b in data:
+        h = ((h ^ b) * 16777619) & 0xffffffff
+    return h
+
+
+def set_hash(ini_text):
+    """FNV-1a 32 of set_canon(ini_text): what the hook announces as SHPH h<8 hex> and compares ([ShopPage] SetCheck). Names, descriptions and [Tabs] are not in it.
+    Bytes are latin-1, like the hook's ANSI reads."""
+    return fnv1a32(set_canon(ini_text).encode('latin-1', 'replace'))
+
+
 def write_shop_ini(out, specs, modes, live=LIVE_INI):
     require_out(out)
     txt = open(live, encoding='latin-1', newline='').read()

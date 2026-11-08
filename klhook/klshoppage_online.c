@@ -16,6 +16,7 @@
  *   m2 bad seat         seat is not a human seat in use, or the host's own seat in a REMOTE request
  *   m3 bad row          row outside the loaded pairs (kspg.p[row].ok == 0)
  *   m4 item differs     the client's carrier item is not the host's carrier item of that row (the tables differ)
+ *   m10 set differs     (SetCheckStrict=1 only) the seat's page II set (SHPH hash, klshopset.h) differs from the host's / is unknown. m5 and m9 were taken; 10 is the first free code
  *   m5 one per round    this seat already had a page II gun accepted in this round (bookkeeping only; kept per round number)
  *   m6 money            the seat's SHOP money (the stock getters 0x622e10 TotalLootMoney + 0x639c10 TotalRewardMoney on S = [rules+0x2c], re/shop_hire.md 8.2; NOT klor's
  *                       on_money, which is the in-round carried money) is below the row's price (kspg_price; 0 = unknown = not checked)
@@ -53,6 +54,7 @@
 #ifndef KLSHOPPAGE_ONLINE_C
 #define KLSHOPPAGE_ONLINE_C
 
+#include "klshopset.h"                                           /* the set check's pure part: hash, SHPH payload, decision table (klshopset_test.c) */
 #include "klnetchan_logic.h"                                     /* struct knc_msg (klnetchan.c, included later, includes the same guarded header) */
 static unsigned knc_send(const char *type, const char *payload, int ent);
 static int knc_want(const char *who);
@@ -64,7 +66,7 @@ static int kspg_price(int row);                                /* klshoppage.c, 
 #define KSPO_SEATS 16
 #define KSPO_MONEYSEATS 12                          /* the shop money getters cover seats 0..11 only */
 
-enum { KSPO_OK = 0, KSPO_PHASE = 1, KSPO_SEAT = 2, KSPO_ROW = 3, KSPO_ITEM = 4, KSPO_ONCE = 5, KSPO_MONEY = 6, KSPO_MONEYX = 7, KSPO_NOTREADY = 8, KSPO_CARRIED = 9 };
+enum { KSPO_OK = 0, KSPO_PHASE = 1, KSPO_SEAT = 2, KSPO_ROW = 3, KSPO_ITEM = 4, KSPO_ONCE = 5, KSPO_MONEY = 6, KSPO_MONEYX = 7, KSPO_NOTREADY = 8, KSPO_CARRIED = 9, KSPO_SETDIFF = 10 };
 
 #define KSPO_BOOKMS 30000                         /* STEP 4: a booked buy that never shows in the rules is dropped after this */
 
@@ -78,6 +80,9 @@ static struct {
     int okRow; DWORD okAt;                        /* row + 1 whose stock buy may pass kspg_sel's gate (approved; consumed by the BuyWeapon) */
     DWORD bmN, bmAt, bmSeats; int bmDone;         /* [Bench] ShopMoney: target, stay entry, seats topped up this stay (bit each), code guard failed this stay */
     int doRow; DWORD doAt;                        /* client: row + 1 approved by the host, the stock buy is fired from the tick */
+    /* SET CHECK ([ShopPage] SetCheck / SetCheckStrict, klshopset.h): independent of OnlineSend (own knc_want + SHPH handler, registered in kspo_init) */
+    int scOn, scStrict, myHave, myType, myPairs, sentN, resend, badN, lastWarn; unsigned myH; char rawName[48]; DWORD sentAt, ansAt[KSPO_SEATS], ansAll, watchAt;
+    struct kss_peers sp;
 } kspo;
 
 static int kspg_applybuy(int row);                             /* klshoppage.c, after this include: fires the stock buy of the carrier row */
@@ -88,7 +93,8 @@ static const char *kspo_why(int c)
     case KSPO_OK: return "ok"; case KSPO_PHASE: return "not the shop phase"; case KSPO_SEAT: return "no such seat (or the host's own in a remote request)";
     case KSPO_ROW: return "no such page II row"; case KSPO_ITEM: return "carrier item differs (tables differ)"; case KSPO_ONCE: return "one page II gun per seat per round";
     case KSPO_MONEY: return "not enough money"; case KSPO_MONEYX: return "money unreadable (shop money getters / score object not as known)"; case KSPO_NOTREADY: return "host not ready";
-    case KSPO_CARRIED: return "the seat already carries that row (or has a page II buy still pending)"; }
+    case KSPO_CARRIED: return "the seat already carries that row (or has a page II buy still pending)";
+    case KSPO_SETDIFF: return "page II set differs from the host's (or unknown): SetCheckStrict"; }
     return "?";
 }
 
@@ -206,6 +212,107 @@ static void kspo_benchmoney(void)
     }
 }
 
+/* ---- SET CHECK (2026-11-08, NOT RUN IN THE GAME): which page II set each peer runs, announced as SHPH over klnetchan (klshopset.h has the hash, the payload and the decision table).
+ * [ShopPage] SetCheck=1  announce my set; warn in the log / shop caption when a peer's differs. Never refuses.
+ * [ShopPage] SetCheckStrict=1  (needs SetCheck=1) a page II press from a seat whose set differs / is unknown is refused with m10 (host judge; a client also refuses its own
+ *   press when the host's set differs / is unknown). Page I and everything else is untouched. The strict refusal lives in the host's judge, so it acts only with OnlineSend=1 +
+ *   OnlineApply=1; with them off a page II press online is already swallowed / stock, so strict is inert there. The ANNOUNCE and the warning do not need OnlineSend.
+ * Old builds have no SHPH handler: their seat stays UNKNOWN. A seat's entry is last-writer-wins and is dropped when the session ends; a seat whose player changes (the reader's client record
+ * of the seat, polled every 0.5 s on the host) is dropped at once, so an older build taking the seat is UNKNOWN (GUESS: the record changes per player). No gameplay state reads the hash.
+ * The host answers EVERY SHPH it hears (a rejoin included), at most once per 5 s per seat; everyone re-announces every 60 s after the first burst (GUESS interval). */
+static int kspo_myseat(void);
+static void kspo_set_prepare(void)                                /* after kspg_load (kspg_init): hash of the loaded pairs + [Set] Name */
+{
+    struct kss_row rows[KSS_ROWS]; int r;
+    kspo.myHave = 0;
+    if (!kspo.scOn || !kspg.have) return;
+    memset(rows, 0, sizeof rows);
+    for (r = 0; r < KSS_ROWS && r < KSPG_ROWS; r++) if (kspg.p[r].ok) { rows[r].ok = 1; rows[r].item = kspg.p[r].item; rows[r].pic = kspg.p[r].pic; }
+    kspo.myH = kss_hash(rows, kspo.rawName); kspo.myPairs = kss_count(rows); kspo.myType = kss_type(kspo.rawName); kspo.myHave = 1;
+    klog("shph: set check on (SetCheck=1, SetCheckStrict=%d): my page II set '%s' (type %d), %d pairs, hash %08x", kspo.scStrict, kspo.rawName[0] ? kspo.rawName : "(none: pd2)", kspo.myType, kspo.myPairs, kspo.myH);
+}
+
+static int kspo_set_state_seat(int seat) { return kss_state_seat(&kspo.sp, seat, kspo.myHave, kspo.myH); }
+static int kspo_set_state_host(void) { return kss_state_host(&kspo.sp, kspo.myHave, kspo.myH); }
+
+/* host judge: 1 = refuse this remote seat (strict only); a non-strict mismatch / unknown only logs once per change */
+static int kspo_set_refuse(int seat)
+{
+    int st, d;
+    if (!kspo.scOn) return 0;
+    st = kspo_set_state_seat(seat); d = kss_decide(kspo.scOn, kspo.scStrict, st);
+    if (d == KSS_ALLOW_WARN && kspo.lastWarn != 100 + seat * 4 + st) { kspo.lastWarn = 100 + seat * 4 + st; klog("shph: seat %d page II set is %s: allowed (SetCheckStrict=0)", seat, st == KSS_MISMATCH ? "DIFFERENT" : "unknown (no SHPH heard: an older build?)"); }
+    return d == KSS_REFUSE;
+}
+
+/* the shop caption tag: 1 when a peer's page II set is known to differ (client: the host's; host: any seat's) */
+static int kspo_set_warn(void)
+{
+    int s;
+    if (!kspo.scOn || !kspo.myHave || !kl_online()) return 0;
+    if (kspo_role() == 3) return kspo_set_state_host() == KSS_MISMATCH;
+    for (s = 0; s < KSPO_SEATS; s++) if (kspo_set_state_seat(s) == KSS_MISMATCH) return 1;
+    return 0;
+}
+
+static void kspo_on_shph(const struct knc_msg *m, int src)
+{
+    struct kss_msg v; int role = kspo_role(), st, ch;
+    (void)src;
+    if (!kspo.scOn || !m || (role != 2 && role != 3)) return;
+    if (!kss_parse(m->payload, &v)) { if (kspo.badN++ < 4) klog("shph: dropped a malformed SHPH from role %d", m->role); return; }
+    if (role == 3 && m->role != 2) return;                              /* a client only needs the host's; other clients' announces are not its business */
+    if (role == 2 && m->role != 3) return;
+    ch = kss_note_from(&kspo.sp, m->role, &v, m->sid, GetTickCount());   /* sid: a second sender for a seat before the watch sees the seat change is the next occupant */
+    st = m->role == 2 ? kspo_set_state_host() : kspo_set_state_seat(v.seat);
+    if (ch) {
+        klog("shph: %s %d announced page II set hash %08x (%d pairs, type %d); mine %08x: %s", m->role == 2 ? "host (seat" : "seat", m->role == 2 ? v.seat : v.seat, v.hash, v.pairs, v.type, kspo.myH,
+             st == KSS_MATCH ? "SHPH match" : st == KSS_MISMATCH ? "SHPH mismatch: the page II guns / cards may differ between you (SetCheckStrict=1 would refuse the page II buy)" : "SHPH unknown (my own set is not loaded)");
+    }
+    if (role == 2) {                                                    /* host: answer EVERY announce (a rejoin repeats the same hash), at most once per 5 s per seat and once per 1 s overall
+                                                                           (the seat is what the sender wrote, so the per-seat limit alone could be dodged) */
+        DWORD now = GetTickCount();
+        if ((!kspo.ansAt[v.seat] || now - kspo.ansAt[v.seat] >= 5000) && (!kspo.ansAll || now - kspo.ansAll >= 1000)) { kspo.ansAt[v.seat] = kspo.ansAll = now ? now : 1; kspo.resend = 1; }
+    }
+}
+
+/* host, every 0.5 s: drop a seat's entry when its player changed (empty seat = ident 0; the reader's client record pointer identifies the occupant) */
+static void kspo_set_watch(DWORD now)
+{
+    static struct klor_snap sn; int i, s, seen[KSPO_SEATS];
+    if (now - kspo.watchAt < 500) return;
+    kspo.watchAt = now ? now : 1;
+    memset(seen, 0, sizeof seen);
+    __try {
+        klor_noev = 1;
+        if (klor_read(&sn, kspp_loc()) && sn.ok) {
+            for (i = 0; i < sn.n && i < KLOR_MAX; i++) if (sn.r[i].used && !sn.r[i].bot && sn.r[i].seat >= 0 && sn.r[i].seat < KSPO_SEATS && sn.r[i].rec && klh_rd32(sn.r[i].rec) >= 0x10000) {
+                s = sn.r[i].seat; seen[s] = 1;   /* ident = [rec] = the client struct pointer (the record is a fixed array slot and would not change with the player; GUESS: a new player = a new client struct) */
+                if (kss_seat_ident(&kspo.sp, s, (unsigned)klh_rd32(sn.r[i].rec), now)) { kspo.ansAt[s] = 0; klog("shph: seat %d changed player: its set is unknown again until it announces", s); }
+            }
+            for (s = 0; s < KSPO_SEATS; s++) if (!seen[s] && kss_seat_ident(&kspo.sp, s, 0, now)) { kspo.ansAt[s] = 0; klog("shph: seat %d left: its set entry dropped", s); }
+        }
+        klor_noev = 0;
+    } __except (1) { klor_noev = 0; }
+}
+
+/* game thread, from klshoppage_tick: announce once per session start, then 4 more times 15 s apart (the channel is lossy), then every 60 s; the host answers every announce */
+static void kspo_set_tick(void)
+{
+    DWORD now = GetTickCount(); int role, seat; char pay[KSS_PAY_MAX + 8];
+    if (!kspo.scOn) return;
+    if (!kl_online()) { if (kspo.sentN || kspo.sp.hostHave) { kss_reset(&kspo.sp); kspo.sentN = 0; kspo.resend = 0; kspo.lastWarn = 0; memset(kspo.ansAt, 0, sizeof kspo.ansAt); kspo.ansAll = 0; } return; }
+    role = kspo_role();
+    if (!kspo.myHave || (role != 2 && role != 3)) return;
+    if (role == 2) kspo_set_watch(now);
+    if (!kspo.resend && kspo.sentN && now - kspo.sentAt < (kspo.sentN >= 5 ? 60000u : 15000u)) return;   /* burst: 5 sends 15 s apart, then one every 60 s */
+    seat = kspo_myseat();
+    if (seat < 0) return;                                               /* own seat not known yet: try again next tick */
+    if (!kss_encode(pay, sizeof pay, seat, kspo.myH, kspo.myPairs, kspo.myType)) return;
+    if (!knc_send("SHPH", pay, -1)) return;                             /* channel not open yet / no session: nothing counted */
+    if (kspo.sentN < 1000) kspo.sentN++; kspo.sentAt = now ? now : 1; kspo.resend = 0;
+}
+
 /* the host's verdict on (seat, row, item, round). remote = the request came over the wire. Returns a KSPO_ reason. NO game write. */
 static int kspo_judge(int seat, int row, int item, int round, int remote, int record)
 {
@@ -221,6 +328,7 @@ static int kspo_judge(int seat, int row, int item, int round, int remote, int re
         if (!found || (remote && seat == sn.local)) { c = KSPO_SEAT; goto done; }
         if (row < 0 || row >= KSPG_ROWS || !kspg.p[row].ok) { c = KSPO_ROW; goto done; }
         if (item != kspo_item_of(row)) { c = KSPO_ITEM; goto done; }
+        if (remote && kspo_set_refuse(seat)) { c = KSPO_SETDIFF; goto done; }                    /* SetCheckStrict: the asking seat runs another page II set (or none we know of) */
         if (kspg.apply) {   /* STEP 4: Arcade lets the player buy again, so no per-round limit; but one buy in flight per seat, and nothing to buy when the row is carried */
             int c0, c1;
             if (kspo.bk[seat] && !kspo.bkSeen[seat] && GetTickCount() - kspo.bkAt[seat] < KSPO_BOOKMS) { c = KSPO_CARRIED; goto done; }
@@ -317,7 +425,7 @@ static void kspo_on_answer(const struct knc_msg *m)
     int seat = -1, row = -1, item = -1, round = -1, ok = 0, why = 0;
     if (kspo_role() != 3 || m->role != 2) return;
     if (sscanf(m->payload + 1, "s%dr%di%dn%do%dm%d", &seat, &row, &item, &round, &ok, &why) < 6) return;
-    if (seat < 0 || seat >= KSPO_SEATS || row < 0 || row >= KSPG_ROWS || item < 0 || item > 63 || why < 0 || why > 9) return;
+    if (seat < 0 || seat >= KSPO_SEATS || row < 0 || row >= KSPG_ROWS || item < 0 || item > 63 || why < 0 || why > KSPO_SETDIFF) return;
     if (ok && why == 0) kspo_book_add(seat, row);                      /* STEP 4: every peer books an approved buy (seats other than mine too) */
     if (seat != kspo_myseat()) return;
     if (!kspo.pend || kspo.pendRow != row) return;                     /* late or not asked: a judgement with nothing waiting is ignored */
@@ -382,6 +490,7 @@ static void kspo_press(int row)
         return;
     }
     if (role != 3) { klog("shopg: refused: no client / host role (%d)", role); return; }
+    if (kss_decide(kspo.scOn, kspo.scStrict, kspo_set_state_host()) == KSS_REFUSE) { klog("shopg: refused m%d locally: %s (host's set %s)", KSPO_SETDIFF, kspo_why(KSPO_SETDIFF), kspo_set_state_host() == KSS_MISMATCH ? "differs" : "unknown"); return; }
     if (kspo.pend && now - kspo.pendAt < KSPO_ASKMS) { klog("shopg: refused: still waiting for the host's answer about row %d", kspo.pendRow); return; }
     snprintf(pay, sizeof pay, "Qs%dr%di%dn%d", seat, row, item, round);
     if (!knc_send("SHOPG", pay, -1)) { klog("shopg: refused: the message channel is not open (no session / [NetChan] off), nothing sent"); return; }
@@ -407,6 +516,12 @@ static void kspo_init(void)
     kspo.on = GetPrivateProfileIntA("ShopPage", "OnlineSend", 0, klh_ini) != 0;
     { int v = (int)GetPrivateProfileIntA("Bench", "ShopMoney", 0, klh_ini); kspo.bmN = v < 0 ? 0 : v > 99999999 ? 99999999 : (DWORD)v;
       if (kspo.bmN) klog("bench: [Bench] ShopMoney=%lu (bench only, recommended off): once per shop stay the HOST raises every seat's shop money to that, through the game's AddLootMoney 0x6cfdb0", (unsigned long)kspo.bmN); }
+    kspo.scOn = kspg.on && GetPrivateProfileIntA("ShopPage", "SetCheck", 1, klh_ini) != 0;       /* (recommended on) announce + warn, never refuse; default 1 */
+    kspo.scStrict = kspo.scOn && GetPrivateProfileIntA("ShopPage", "SetCheckStrict", 0, klh_ini) != 0;   /* (recommended off) refuse page II presses of a differing / unknown set (m10) */
+    if (kspo.scOn) {   /* independent of OnlineSend: own wanted channel + handler (the handler table has room: 9 of 16 used before SHPH) */
+        knc_want("shph");
+        if (!knc_on("SHPH", kspo_on_shph)) { klog("shph: the SHPH handler could not be registered (handler table full?): set check off"); kspo.scOn = kspo.scStrict = 0; }
+    }
     if (!kspo.on) return;
     knc_want("shopg");
     knc_on("SHOPG", kspo_on_msg);
