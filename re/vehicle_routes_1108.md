@@ -40,3 +40,12 @@ van really drives, from the west, stopping at x~4458; a 125 curb is crossed) or 
    speed profile accelerates to ~150/key; check it does not look absurd).
 3. An EMPTY van that is shot to 0 (crash keys) lands no deeper west than x=-350 (not in the Donut Factory).
 4. Cops/AI can still see and shoot it all the way (FakeTarget unchanged).
+
+## 2026-11-08 DM01B literal version (street stage, staged only, NOT installed)
+Tool `tools/kl_vehroutes_street_1108.py`; stage `C:\kl_build_1024\vehroutes_1108\DM01B_street` (zip dcae5e6e, bots 02cf84fc, base 0377d541; pinned to live 74d37233 / 73583df1 / c3535e34;
+only ONE of the two DM01B stages can be installed, the other then refuses). Dead Men source (M01A_Main.zip `05_EscapeVehicle` spline): (-4998,31412) -> (-4322,31981) -> (-1668,31933) -> (4458,31907).
+Van drive = old drive turned rigidly 180 degrees about the new stop (arrives from the west along z 31907, leaves east to x 7518, street ends ~7600); crash keys clamped z>=31907 (planter bushes).
+Render check: 0 close samples. 29 nodes moved (van, blocker, boarding box, camera triggers/cams, exit/POI triggers, jump point, ally box, 14 merc Pos).
+NOT REACHABLE ON FOOT as staged: bounded collision walk alley -> stop is free only after opening exactly two objects: `InvisibleBlocker_06` (ref 22709) and the planter strip
+`SO1103_M01_DonutShop_PlantD_01` (ref 23079, 125 high, x 2000..8000). Nav mesh also has the street only as a 5-polygon island (part 17), no link to the alley. Needs: planter gap
+(render + collision), blocker removal, a nav link. Alternative that works today: the reverse-out stage.
