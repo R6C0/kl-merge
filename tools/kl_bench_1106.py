@@ -186,6 +186,17 @@ KITS = {
                          files={'F01_Main.zip': 'fbaf450d', 'F01_Main.bots.zip': 'a04c54d7', 'F01_Main.bots.base.md5': '1859185b', 'KLGuns.ini': '33432bb9'},
                          hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
                          solo_secs=480, parts=('solo',)),
+    # DM05A club music LEVEL + OUTSIDE (11-08, kl_lc_music_level_1108.py): 2-D clean layers off outside, muffled on outside, clean b1 100->28, muffled 70->20, 3-D radius stock. VALIDATE ONLY until the owner says test.
+    'lcmusiclevel1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcmusiclevel_1108', tag='.before-lcmusiclevel1108',
+                             files={'F01_Main.zip': '9911364f', 'F01_Main.bots.zip': '636ded7b', 'F01_Main.bots.base.md5': '552c7679', 'KLGuns.ini': '33432bb9'},
+                             hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
+                             solo_secs=480, parts=('solo',)),
+    # DM05A club music LEVEL variant B (11-08, kl_lc_music_level_1108.py --variant b): NO room gate on the clean layers (fix A kept), group Ambient 1.0 -> 0.5, 2-D clean b1 12,
+    # 3-D clean 48 / 30, muffled 39 (stock) + Outside rooms on their on-lists, 3-D radius stock. VALIDATE ONLY until the owner says test.
+    'lcmusiclevelb1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcmusiclevel_1108b', tag='.before-lcmusiclevelb1108',
+                              files={'F01_Main.zip': '0ff298a6', 'F01_Main.bots.zip': '72259e27', 'F01_Main.bots.base.md5': '6cd71dd7', 'KLGuns.ini': '33432bb9'},
+                              hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
+                              solo_secs=480, parts=('solo',)),
     'lcmusicb1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcmusic_b_1108', tag='.before-lcmusicb1108',
                           files={'F01_Main.zip': '530a2078', 'F01_Main.bots.zip': '7cf28cba', 'F01_Main.bots.base.md5': '02b17843', 'KLGuns.ini': '33432bb9'},
                           hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
@@ -217,6 +228,13 @@ KITS = {
                             hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
                             ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
                             solo_secs=900, parts=('solo',), shots='300-840:30'),
+    # DD10 FLATS (11-08, tools/kl_dd10_flats_1108.py, stage C:/kl_build_1024/dd10flats_1108, pinned to the LIVE DD10 5d76d91a = vanlane installed): 3 stacks to the y 1600 flats, the 2 scripted
+    # cop-thrown cans lowered + 6 new cans, 21 kick doors (white DD leaf). VALIDATE ONLY until the owner says test. Same script as dd10vanlane1108 (nobody boards, shots decide).
+    'dd10flats1108': dict(map='DD10', slot='F07', entry=5, stage='C:/kl_build_1024/dd10flats_1108', tag='.before-dd10flats1108', van=True,
+                          files={'F07_Main.zip': '13bc6388', 'F07_Main.bots.zip': '488872aa', 'F07_Main.bots.base.md5': '2d73022b'},
+                          hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
+                          ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
+                          solo_secs=900, parts=('solo',), shots='300-840:30'),
     # Retomoto van empty-wait (11-08): owner 'the vehicle on fire is the same occurance for retomoto tower'. The LIVE DM09 (nothing installed; slot F06, page 2 entry 4
     # = kl_arc2_kit's verified place) on the TEST twin of the live SHIP dll, [VanBlow] ShieldWhileWaiting=1 as live; nobody boards, the log decides (as vanwait1108).
     'vanwait09_1108': dict(map='DM09', slot='F06', page=2, entry=4, stage=None, tag=None, live={'F06_Main.zip': 'afee8967'}, van=True,
