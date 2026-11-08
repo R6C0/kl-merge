@@ -11,7 +11,7 @@ GUESS (nothing here is run in the game): (1) a model-less keyed ZSTDOBJ moves it
 the pool-group-2 leaf is drawn; (3) the slab size (median host width x height over the map's hosts) fits each own leaf; (4) the DD kick sound plays with
 the own leaf; (5) the own leaf's hinge end is the one nearest its origin (door_hosts' rule).
 
-  python tools/kl_doors_1108.py stage [--maps DM01,DM03A,DM03] [--out <dir>] [--in-dir MAP=<dir>] [--no-own]
+  python tools/kl_doors_1108.py stage [--maps DM01,DM03A,DM03] [--out <dir>] [--in-dir MAP=<dir>] [--no-own] [--hosts MAP=k,k,..] [--no-clear]
 --no-own stages the same hosts with the white leaf (control). Per map: F0x_Main.zip, .bots.zip, .bots.base.md5, KLJoin.ini + KLGuns.ini (Entries= = new .prm
 chunk count), install.py (+ INSTALL / UNDO bats), bench_cover_lines.txt, build_report.json.
 DM03 sits ON TOP of the dm03cops_1108 stage (its zips are the input and their md5s the pins): INSTALL DM03 COPS FIRST, install.py refuses otherwise.
@@ -31,14 +31,20 @@ MAPS = {
     'DM01': dict(slot='F01', dir=os.path.join(GAME, 'KLExpansion', 'Maps', 'DM01'), top='KL_Interact!2', base=7,
                  pins=('9ce9f34d0294f0a6a3e76eea6ec92f46', '975ad3c3bc1e1ca83d68baf41e9f0d06', '5d48fb624ae6f916950b13f69a3b3966'),
                  hosts=[957, 2569]),
-    'DM03A': dict(slot='F07', dir=os.path.join(GAME, 'KLExpansion', 'Maps', 'DM03A'), top='KL_Interact!2', base=5,
+    'DM03A': dict(slot='F07', dir=os.path.join(GAME, 'KLExpansion', 'Maps', 'DM03A'), top='KL_Interact!3', base=5,
                   pins=('3371303dd338a837aaba2e33e00fe40b', '16ae8673f69e1b9092e89a9ab01f28d2', '24618ef2e64d68f2d6f36184b12e4382'),
-                  hosts=[6516, 6770]),
+                  hosts=[6516]),
     # DM03: input = the dm03cops stage (md5s of its F03_Main.zip / .bots.zip / .bots.base.md5), inis from the live DM03 folder
     'DM03': dict(slot='F03', dir=COPS, ini_dir=os.path.join(GAME, 'KLExpansion', 'Maps', 'DM03'), top='KL_Interact!1', base=0,
                  pins=('da7b36420dd353bdfb7741bd6cabf026', '0b90ab321c9b1d3504c9f9d0fe441719', 'fedcd656dcfe300e65e20da373f3a636'),
-                 hosts=[176, 64, 546, 1076, 1255]),
+                 hosts=[176, 64, 546, 1255]),
 }
+# DM03 host 1076 (SecurityHall_01a DoorSteel_B_01) is NOT in the default set (review 2026-11-08, tools/kl_doors_clear_1108.py): swung -90 / -120 degrees its leaf cuts off 41..456
+# cells of the walk graph from every SpawnPoint_Dead_NN (a corridor), and the hinge stands 60 cm from Triggers!ExitBankTrigger_02. Still selectable: --hosts DM03=176,64,546,1076,1255
+# Hosts 176 / 64 (198 / 276 cm from 'a spawn' in the first report) are kept: those two points were Triggers!Respawn_Trigger (a box 48 x 122 x 124 half extents, no swung leaf touches it)
+# and a NoCovers marker; the real ZSpawnPoints (SpawnPoint_Dead_NN) are 506..1095 away and no swung leaf (90 / 120 degrees, both ways) cuts off a cell or stands on them.
+# DM03A host 6770 (SI0201_M03_DoorSteel_A_HandleB_01) is NOT in the default set (review 2026-11-08): swung +90 / +120 degrees its leaf cuts a 42..55 cell room off from every
+# start spawn (38 starts within 4000). Host 6516 loses 3 cells for one cop respawn (below MIN_CUT, a nook). Still selectable: --hosts DM03A=6516,6770
 INIS = ('KLJoin.ini', 'KLGuns.ini')
 CHANGED_OK = ('.prp', '.gms', '.buf', '.oct', '.rmi', '.rmc', '.prm', '.MAT', '.TEX', '.HVK', '.hrd')
 
@@ -65,24 +71,18 @@ def patch_entries(path_in, n):
 
 
 def safety(zp, hosts, log):
-    """Offline checks on the INPUT zip's hosts: distance of each door hinge from the spawn points and the exit icon (a door is a solid slab: it must not
-    stand on a spawn or the escape), and how many of its two sides lie on the main walk part (bots can only meet a door with both). The leaf stays where it
-    stands today, so bot routes do not change. Returns [(k, spawn dist, exit dist, main-part sides)]."""
-    import kl_fa_bots as F, kl_interact_graft as IG
+    """Offline checks on the INPUT zip's hosts: distance of each door hinge from the REAL spawn points (ZSpawnPoint nodes; 2026-11-08 review: the first version also took
+    Triggers!Respawn_Trigger and NoCover markers named '...spawn...' for spawns) and from the escape (a mapiconexit icon, else the escape boxes: otrExitLevel,
+    OnlineExitLevelTrigger, BoardingTrigger, AllyEscapeBox, PathBlockerVan: the shut and swung leaf footprints must not touch one), and how many of its two sides lie on the
+    main walk part (bots can only meet a door with both). The leaf stays where it stands today, so bot routes do not change. Returns [(k, spawn dist, exit dist, main-part sides)]."""
+    import kl_fa_bots as F, kl_interact_graft as IG, kl_doors_clear_1108 as DC
     B = F.Built(zp)
     nav = F.Nav(B.scene.nav)
     main = IG.main_part(nav)
     allh = {h['k']: h for h in IG.door_hosts(B, nav)}
-    pts = {'spawn': [], 'exit': []}
-    for k, p in enumerate(B.sc.path):
-        if not p or k == 0 or k > len(B.ents):
-            continue
-        last = p.rsplit(BS, 1)[-1].lower()
-        pos = B.fr[B.ents[k - 1]][1]
-        if last.endswith('mapiconexit'):
-            pts['exit'].append(pos)
-        elif 'spawn' in last or 'playerstart' in last:
-            pts['spawn'].append(pos)
+    spawns = [p for _k, _n, p in DC.spawn_points(B)]
+    things = DC.escape_things(B)
+    icons = [t[2] for t in things if t[1].lower().endswith('mapiconexit')]
     out = []
     for k in hosts:
         if k not in allh:
@@ -91,10 +91,15 @@ def safety(zp, hosts, log):
         P = h['hinge']
         dm = lambda L: min([math.hypot(P[0] - q[0], P[2] - q[2]) for q in L] or [1e9])
         sides = sum(1 for x in IG.door_stand(nav, h) if x and x[1] == main)
-        out.append((k, round(dm(pts['spawn'])), round(dm(pts['exit'])), sides))
-        log('  host %d %s: spawn %.0f cm (of %d), exit %.0f cm, main-part sides %d' % (k, h['name'][-34:], dm(pts['spawn']), len(pts['spawn']), dm(pts['exit']), sides))
-        if dm(pts['spawn']) < 150 or dm(pts['exit']) < 300:
+        ex = dm(icons) if icons else dm([t[2] for t in things])
+        out.append((k, round(dm(spawns)), round(ex), sides))
+        log('  host %d %s: spawn %.0f cm (of %d), escape %.0f cm (%s), main-part sides %d' % (k, h['name'][-34:], dm(spawns), len(spawns), ex, 'icon' if icons else '%d escape nodes' % len(things), sides))
+        if dm(spawns) < 150 or (icons and dm(icons) < 300):
             raise ValueError('door host %d stands on a spawn or the exit' % k)
+        for lab, a, b in DC.footprints(h):
+            for t in things:
+                if t[3] and DC.seg_hits_box(a, b, t[2], t[3], t[4]):
+                    raise ValueError('door host %d: the leaf (%s) touches the escape box %s' % (k, lab, t[1]))
     return out
 
 
@@ -206,8 +211,10 @@ if __name__ == '__main__':
 '''
 
 
-def stage_map(name, out, in_dir=None, own=True, log=print):
-    cfg = MAPS[name]
+def stage_map(name, out, in_dir=None, own=True, log=print, hosts=None, clear=True):
+    cfg = dict(MAPS[name])
+    if hosts:
+        cfg['hosts'] = list(hosts)
     slot = cfg['slot']
     src_dir = in_dir or cfg['dir']
     ini_dir = cfg.get('ini_dir', src_dir)
@@ -240,6 +247,27 @@ def stage_map(name, out, in_dir=None, own=True, log=print):
             diff = [m for m in a.namelist() if a.read(m) != b.read(m)]
             if any(not m.lower().endswith('.prp') for m in diff):
                 raise ValueError('plain and bots zips differ outside the .prp: %s' % diff)
+        # review 2026-11-08: (1) the top group is whatever free_top finds, and the config's name must agree; (2) the .HVK differs from the input ONLY by the cut leaf
+        # placements (taken as filler copies) and one new key-framed slab per door; (3) the doors do not stand in a spawn's exit or the escape (kl_doors_clear_1108)
+        import kl_fa_bots as F, kl_interact_graft as IG, kl_doors_clear_1108 as DC
+        top, base = free_top(os.path.join(src_dir, zn))
+        if top != cfg['top'] or base != cfg['base']:
+            raise ValueError('%s: the zip says top %s / %d doors present, the config %s / %d: update MAPS' % (name, top, base, cfg['top'], cfg['base']))
+        B0 = F.Built(os.path.join(src_dir, zn))
+        allh = {h['k']: h for h in IG.door_hosts(B0, F.Nav(B0.scene.nav))}
+        gone = {allh[k]['ref'] for k in cfg['hosts']}
+        bad = DC.hvk_equal(os.path.join(src_dir, zn), res[zn], gone_refs=gone)
+        rep['hvk_equal'] = bad or 'only the %d door leaves changed (shape by shape, MOPP, static order)' % len(gone)
+        log('  .HVK: %s' % rep['hvk_equal'])
+        if bad:
+            raise ValueError('%s: .HVK changed beyond the doors: %s' % (name, bad))
+        rep['top'] = top
+        if clear:
+            cc = DC.check_map(os.path.join(src_dir, zn), res[zn], cfg['hosts'], top, base, log=log)
+            rep['clear'] = {str(k): v['problems'] for k, v in cc.items()}
+            probs = [(k, p) for k, v in cc.items() for p in v['problems']]
+            if probs:
+                raise ValueError('%s: doors in the way: %s (drop the host from MAPS or pass --no-clear)' % (name, probs[:6]))
         plain = fmd5(res[zn])
         rep['chunks'] = chunks(res[zn])
         for n in (zn, bn):
@@ -263,7 +291,7 @@ def stage_map(name, out, in_dir=None, own=True, log=print):
     ini = os.path.join(GAME, 'KLHook.ini')
     cover = [ln.rstrip('\r\n') for ln in open(ini, encoding='latin1') if ln.split('=')[0].strip() in ('AssertSoft', 'ClientBuild', 'ClientBuildHost', 'ClientBuildMaps', 'ClientRewrite', 'ClientRingSync')]
     open(os.path.join(mo, 'bench_cover_lines.txt'), 'w').write('\n'.join(cover) + '\n')
-    rep.update(files=files, own=own, hosts=cfg['hosts'], top=cfg['top'], door_base=cfg['base'])
+    rep.update(files=files, own=own, hosts=cfg['hosts'], door_base=cfg['base'])
     json.dump(rep, open(os.path.join(mo, 'build_report.json'), 'w'), indent=1, default=str)
     return files
 
@@ -281,8 +309,13 @@ def main(a):
         if x == '--in-dir':
             k, v = a[i + 1].split('=', 1)
             ind[k] = v
+    hs = {}
+    for i, x in enumerate(a):
+        if x == '--hosts':
+            k, v = a[i + 1].split('=', 1)
+            hs[k] = [int(t) for t in v.split(',')]
     for m in maps:
-        for n, o, w in stage_map(m, opt('--out', OUT), ind.get(m), own='--no-own' not in a):
+        for n, o, w in stage_map(m, opt('--out', OUT), ind.get(m), own='--no-own' not in a, hosts=hs.get(m), clear='--no-clear' not in a):
             print('%-6s %-26s %s -> %s' % (m, n, o, w))
     return 0
 
