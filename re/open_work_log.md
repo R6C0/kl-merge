@@ -1,3 +1,7 @@
+## 2026-11-08 ~08:40 [db] GUN SOUNDS + ROOM ECHO INSTALLED (owner "install all ... but no testing"; no crash involved)
+- gunraw_1107: install_gunsnd2.ps1 patched 42 banks (2161 records; maps, stock, story; md5-chained). Backups *.WAV.before-1107gunraw; undo "UNDO raw gun sounds all maps.bat".
+- echo_1108: live KLHook.ini 6ddd03de -> 449e3c7a (+[Echo] Enable=1, RoomBoxes=1, both "(recommended on)"), <DD>\KLReverbBoxes.ini = roomboxes_1108 _dm table (5d8a3a48). dll unchanged 246c643d.
+  Undo C:/kl_build_1024/echo_1108/UNDO.bat (removes only the marked block + table; round trip byte-exact rehearsed). [Perf] 6 keys were already live (fcs_1106). Not heard live (owner present, no runs).
 ## 2026-11-08 ~08:20 [d0] DM05A CITY VIEW INSTALLED (owner "install all ... but no testing"; no crash involved)
 - C:/kl_build_1024/citylights_1108/install.py --skip-run-check (2 zombie kl2.exe, 0 threads): zip 651a7492 -> 80b5547c, bots ba98c0a6 -> 1e02dbe5, base 1d89ea85 -> c009e5af, KLGuns a7c85b7a -> 33432bb9 (md5 checked).
 - Content = skyline model (unseen) + scene fog Far 80000 + StreetGLOW vertex alpha x 0.25 + 9 backdrop tower objects on lit-window materials; every layer benched PASS, 0 faults.
