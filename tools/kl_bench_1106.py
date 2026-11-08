@@ -209,6 +209,14 @@ KITS = {
                         hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
                         ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
                         solo_secs=900, parts=('solo',), shots='300-840:30'),
+    # DD10 van LANE (11-08, tools/kl_dd10_vanlane_1108.py, stage C:/kl_build_1024/dd10vanlane_1108, pinned to the LIVE DD10 bc4d0bc3): the escape van drove on z 1100 through
+    # BigFence_A_02, both pillar pairs and the Exit_01 sign; lane z 1030 from x 7500 on, fence hidden (render only), stop + 5 nodes -70. Same script as vanwait1108 (nobody boards:
+    # the van waits at state 4, drives out at 7); shots decide how the gate looks. VALIDATE ONLY until the owner says test.
+    'dd10vanlane1108': dict(map='DD10', slot='F07', entry=5, stage='C:/kl_build_1024/dd10vanlane_1108', tag='.before-dd10vanlane1108', van=True,
+                            files={'F07_Main.zip': '5d76d91a', 'F07_Main.bots.zip': '069f4402', 'F07_Main.bots.base.md5': '3dcfc1d3'},
+                            hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
+                            ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
+                            solo_secs=900, parts=('solo',), shots='300-840:30'),
     # Retomoto van empty-wait (11-08): owner 'the vehicle on fire is the same occurance for retomoto tower'. The LIVE DM09 (nothing installed; slot F06, page 2 entry 4
     # = kl_arc2_kit's verified place) on the TEST twin of the live SHIP dll, [VanBlow] ShieldWhileWaiting=1 as live; nobody boards, the log decides (as vanwait1108).
     'vanwait09_1108': dict(map='DM09', slot='F06', page=2, entry=4, stage=None, tag=None, live={'F06_Main.zip': 'afee8967'}, van=True,
