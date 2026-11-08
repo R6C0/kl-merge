@@ -109,5 +109,21 @@ Stage C:\kl_build_1024\gunpunch_1108: `install.py` (`--check`, `--undo`, `--root
 free-space check), `UNDO.bat`, `INSTALL punchy gun sounds all maps.bat` + `UNDO punchy gun sounds all maps.bat` (PowerShell twin), preview wav pairs (`preview\stock_F02`, `preview\maps_DM02`:
 `*_live.wav` = gunraw now, `*_punch1108.wav` = punchy). Undo order: THIS kit first, then gunraw_1107 (out of order refuses). Checks done: build 42 banks, `kl_gunpunch.py verify` 42 PASS
 (apply+undo reproduce the md5s, worst residual 0.58 dB), scratch round trip on 3 banks (F02, DM02, L00) install + undo byte-exact, `install.py --check` on the live game folder OK (42 banks).
-md5: manifest 16f2ab34, report f6fcc3e6, install.py a9aa0eb9, install_gunsnd2.ps1 e3ebe491, UNDO.bat 473f956c.
+md5 (before the 11-08 peak fix, superseded by section 7): manifest 16f2ab34, report f6fcc3e6.
 Needs one owner A/B (listen to the preview pairs first).
+
+## 7. Peak fix 2026-11-08 (review: every staged clip decoded at 0.0 dBFS)
+Cause: hard clip at full scale + ADPCM re-encode put samples on the rail (60/61 already did in gunraw_1107). Fix in `tools/kl_gunpunch.py` only (gunraw untouched):
+hard clip ceiling `CEIL` 0.88 (-1.1 dBFS; head target still solved, so the cost is flat-top share, not head level) and `limited_encode_for`: encode, DECODE the bytes,
+pull in only the samples over `LIMIT_INT` 31600 (-0.32 dBFS) and re-encode until none is (global scale = last resort, never reached). `peaks <outdir>` / `verify`
+decode every staged record from the staged spans: 2161 records PASS, worst true peak -0.315 dBFS (limit -0.3). kl_gunpunch_test.py asserts it on synthetic clips
+and a full-scale square wave.
+Level cost (1796 gun records vs the MP45 head target; before = full-scale build): head error mean 0.00 -> -0.29 dB (min -1.07, max +0.01); flat-top share 20.9 % -> 0.2 %
+(the MP45's own 20 % flat tops decode at 32767 and cannot exist under -0.3 dBFS; the hard-clip LOOK is gone, the crack/front/tail shaping is unchanged);
+clips short of target at the 18 dB gain cap 30 -> 58 (of 2161). ceiling trials on DM02 (head err mean): 0.955 -1.20, 0.90 -0.48, 0.88 -0.27, 0.85 -0.24 (more shorts), 0.84 breaks ADPCM corr. All GUESS taste values.
+Installer `install.py` (source `tools/kl_gunpunch_install.py`, copied by `kl_gunpunch.py kit <stage>`) is now ALL-OR-NOTHING: a write error or md5 mismatch part-way rolls back
+every bank touched in that run from the kit's own span files (rc 5 rolled back, rc 8 incomplete + backups named). The PowerShell twin was dropped (no roll back): both INSTALL/UNDO bats call install.py.
+Tests: kl_gunpunch_test.py 44 checks (fake 4-bank folder: read-only bank mid-loop, corrupt span file, clean install, no-op, byte-exact undo, foreign bank refused);
+real kit on a scratch copy of 4 banks (DM02, F02, L00, F04): read-only last bank -> rolled back identical, install, undo byte-exact; `install.py --check` on the live folder: 42 banks would change.
+Pins unchanged semantics (inputs = gunraw_1107 live output). NOTE: INSTALL writes over stock Dog Days sound banks IN PLACE (backups *.WAV.before-1108gunpunch), needs the owner OK, like gunraw_1107.
+Rebuilt stage md5: manifest 3f8b0b84, report 6f866838, install.py 3f292a0e, UNDO.bat 9241e550. Preview pairs regenerated (preview\stock_F02, preview\maps_DM02).

@@ -16,11 +16,18 @@ WHAT THIS PASS DOES (data only, same records, same sizes, WHD / .SND / zips unto
   4. tanh saturation, then (outside body(): drive_raw) the same hard clip to the MP45 head level and flat-top share as gunraw;
   5. tail duck AFTER the clip: from 120 ms the clip falls to a per-class floor by 450 ms, so the loud tail the clip drive lifted goes
      back toward the MP45's dry decay. Rooms are the hook's job ([Echo]); distant and silenced layers keep their tails.
+  6. TRUE-PEAK CEILING (review 2026-11-08: every staged clip decoded at 0.0 dBFS, the hard clip + ADPCM re-encode put samples on the rail):
+     the hard clip is at CEIL (0.88 = -1.1 dBFS) instead of full scale, the head level is still solved to the MP45 target (so a lower
+     ceiling costs flat-top share, not head level), and the ENCODER is wrapped: encode, decode the bytes, and while the decoded peak
+     is over LIMIT_INT (31600 = -0.32 dBFS) pull in only the over-limit samples and encode again (global scale = last resort). Nothing is staged that decodes above -0.3 dBFS
+     (`peaks <outdir>` re-checks the staged spans, `verify` runs it too, kl_gunpunch_test.py asserts it).
 Toggle = INSTALL / UNDO .bat (data). Undo restores exactly the gunraw_1107 banks (md5-checked, backups *.WAV.before-1108gunpunch).
 Every number in PUNCH is a starting taste and a GUESS: nobody has listened. `preview` writes before/after wavs.
 
     python kl_gunpunch.py build <outdir> [--groups maps,stock,story] [--force]
     python kl_gunpunch.py verify <outdir>
+    python kl_gunpunch.py peaks <outdir>    decode every staged record, assert true peak <= -0.3 dBFS (read-only)
+    python kl_gunpunch.py kit <outdir>      write install.py (all-or-nothing, tools/kl_gunpunch_install.py) + UNDO.bat + INSTALL/UNDO bats
     python kl_gunpunch.py measure [bank base path]        read-only: the MP45 vs every gun table of a live bank (re/gunfeel_1108.md)
 """
 import os, sys
@@ -45,7 +52,11 @@ PUNCH = {
     'distant':  dict(cut=40, low=2.0, body=0.0, crack=0.0, air=0.0, tr=0.0, drive=1.6, wet=0.75, tail=1.50, tgt=0, floor=0.0, d0=0, d1=0),
     'silenced': dict(cut=60, low=1.0, body=1.0, crack=0.0, air=0.0, tr=0.0, drive=1.4, wet=0.12, tail=0.40, tgt=0, floor=0.0, d0=0, d1=0),
 }
-FLOOR_ON = True      # tail duck after the clip (module toggle, tests)
+CEIL = 0.88           # hard clip ceiling (float, -1.1 dBFS): picked on DM02 (head error mean -0.27 dB at 0.88; 0.955 = -1.2 dB, 0.85 = -0.24 but more gain-cap shorts, 0.84 breaks ADPCM corr); GUESS; the wrapper below does the exact fit after ADPCM
+LIMIT_DB = -0.3       # required true peak of every staged clip AFTER the ADPCM encode
+LIMIT_INT = 31600     # = 32768 * 10^(-0.32/20): int16 peak the wrapper accepts (a little under LIMIT_DB for margin)
+_enc0 = G.encode_for
+FLOOR_ON = True     # tail duck after the clip (module toggle, tests)
 CLS = {}             # record name -> class, filled by punch_body so punch_drive_raw knows which duck to apply (same call order as build_bank)
 _LAST = [None]
 
@@ -109,8 +120,33 @@ def punch_drive_raw(x, target_db, target_flat):
 _drive_raw0 = M.drive_raw
 
 
+def peak_db(pcm):
+    return 20 * np.log10(max(1, int(np.abs(np.asarray(pcm, np.int32)).max())) / 32768.0)
+
+
+def limited_encode_for(w, x, rate, rail=False):
+    """G.encode_for, then DECODE the bytes: while the decoded int16 peak is over LIMIT_INT scale the clip down by the overshoot (+0.1 %) and
+    encode again (ADPCM overshoot is a few percent, so this settles in 1-3 rounds). Non-ADPCM records pass through."""
+    r = _enc0(w, x, rate, rail)
+    if w.codec != 0x11: return r
+    x = np.array(x, dtype=np.float64)                    # [frames, ch] float; same rate as the record, so decoded index == input index
+    sc = 1.0
+    for it in range(40):
+        dec = G.ima_decode(r[0], w.get('ch'), w.get('block'), w.get('spb'), r[1]).astype(np.int32)
+        pk = int(np.abs(dec).max())
+        if pk <= LIMIT_INT: return r
+        if it < 25 and dec.shape == x.shape:             # LOCAL fix first: pull in only the samples whose decoded value is over (a few per clip), so the
+            ex = np.maximum(np.abs(dec) - LIMIT_INT, 0) / 32768.0       # head level of the clip is not paid for a handful of ADPCM overshoots
+            x = np.sign(x) * np.maximum(np.abs(x) - ex * 1.5 - (ex > 0) * 0.002, 0)   # 1.5x the excess + a small step: the quantiser follows the clip
+        else:                                            # then (never reached on the staged banks, GUESS) a global scale as the last resort
+            sc *= LIMIT_INT / pk * 0.999; x = x * (LIMIT_INT / pk * 0.999)
+        r = _enc0(w, x, rate, rail)
+    raise RuntimeError('%s: decoded peak never fit under %d' % (getattr(w, 'name', '?'), LIMIT_INT))
+
+
 def install():
     """swap the three hooks of kl_gunsnd_all (module state of THIS process only)"""
+    M.RAW_CEIL = CEIL; G.encode_for = limited_encode_for
     A.body = lambda x, cls, light=False: punch_body(x, cls, light)
     M.drive_raw = punch_drive_raw
     A.RAW = A.BODY = True
@@ -127,7 +163,9 @@ def main(a):
     c, r = a[0], list(a[1:])
     install()
     if c == 'build': return A.cmd_build_punch(r) if hasattr(A, 'cmd_build_punch') else _build(r)
-    if c == 'verify': return A.cmd_verify(r)
+    if c == 'verify': return A.cmd_verify(r) or cmd_peaks(r)
+    if c == 'peaks': return cmd_peaks(r)
+    if c == 'kit': return cmd_kit(r)
     if c == 'measure': return _measure(r)
     print(__doc__); return 1
 
@@ -139,6 +177,40 @@ def _build(r):
     args = [out, '--groups', ','.join(groups)] + (['--force'] if force else [])
     # cmd_build would reset TAG / flags only when --raw / --body are given; we give neither, our flags are already set by install()
     return A.cmd_build(args)
+
+
+def cmd_peaks(r):
+    """apply every staged .new span set to its live bank IN MEMORY, decode every changed record, assert peak <= LIMIT_DB (read-only)"""
+    import json
+    out = r[0]; rep = json.load(open(os.path.join(out, 'report.json'))); n = 0; worst = -99.0; worst_name = ''
+    for m in rep['banks']:
+        if m.get('unchanged'): continue
+        b = [x for x in A.banks((m['group'],)) if x.key == m['key']][0]; whd, wav = b.load()
+        new = open(os.path.join(out, 'Banks', m['group'], m['id'] + '.new'), 'rb').read(); nv = bytearray(wav); p = 0; sp = m['spans']
+        for i in range(0, len(sp), 2): nv[sp[i]:sp[i] + sp[i + 1]] = new[p:p + sp[i + 1]]; p += sp[i + 1]
+        ws = {w.name: w for w in G.waves(whd)}
+        for e in m['detail']:
+            w = ws[e['record']]
+            d = G.ima_decode(bytes(nv[w.get('off'):w.get('off') + w.get('size')]), w.get('ch'), w.get('block'), w.get('spb'), w.get('samples'))
+            pk = peak_db(d); n += 1
+            if pk > worst: worst, worst_name = pk, m['key'] + ' ' + e['record']
+            assert pk <= LIMIT_DB, 'decoded peak %.3f dBFS > %.1f: %s %s' % (pk, LIMIT_DB, m['key'], e['record'])
+    print('peaks: %d records PASS, worst decoded true peak %.3f dBFS (limit %.1f) at %s' % (n, worst, LIMIT_DB, worst_name)); return 0
+
+
+def cmd_kit(r):
+    """kit files next to a built stage: install.py (the all-or-nothing installer), UNDO.bat, INSTALL/UNDO .bat (python; the PowerShell twin had no roll back)"""
+    import shutil
+    out = r[0]; shutil.copyfile(os.path.join(HERE, 'kl_gunpunch_install.py'), os.path.join(out, 'install.py'))
+    for f in ('install_gunsnd2.ps1', 'INSTALL punchy gun sounds all maps.bat', 'UNDO punchy gun sounds all maps.bat'):
+        if os.path.exists(os.path.join(out, f)): os.remove(os.path.join(out, f))
+    nl = chr(13) + chr(10)
+    und = ['@echo off', 'rem Puts the gunraw_1107 gun sounds back (md5-checked, all-or-nothing). Run BEFORE the gunraw_1107 undo.', 'python "%~dp0install.py" --undo', 'pause']
+    ins = ['@echo off', 'rem PUNCHY gun sounds 1108 (recommended on), on top of gunraw_1107. WRITES OVER the stock Dog Days sound banks in place (needs the owner OK);',
+           'rem md5-checked, all-or-nothing, copies kept as .WAV.before-1108gunpunch.', 'python "%~dp0install.py"', 'pause']
+    for n, t in (('INSTALL punchy gun sounds all maps.bat', ins), ('UNDO punchy gun sounds all maps.bat', und), ('UNDO.bat', und)):
+        with open(os.path.join(out, n), 'w', newline='') as f: f.write(nl.join(t) + nl)
+    print('kit written in', out); return 0
 
 
 def _measure(r):
