@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-08 ~17:20 - [veh] DM01B street2 van from/to unseen pockets, staged NOT installed (zip 778b075c, bots dccc9250, base 6616525a; pinned live 74d37233 / 73583df1 / c3535e34): waits west (-8000,30500), leaves east (17400,30400).
+Seen by 0 of 385 reachable-floor viewers at both, 0 pierces, planter ground ok. Kit needs ~940 MB (--min-free-mb 300). re/vehicle_routes_1108.md. Not benched.
 2026-11-08 ~15:05 - [f0] MERGED 1108e STAGED, NOT INSTALLED, NOT BENCHED (owner present: no tests; waits for the owners word): C:\kl_build_1024\merged_1108e, one dll from 9074ee06
 = db FedRide=3 (Retomoto lift for cops) + FoeNoSwapWhileFed (traitors red to a fed) + FedKeep (fed respawn crash 0x538f02/0x538f47). SHIP f0ca0dd8 / TEST 5a526510; writes dll 246c643d -> f0ca0dd8
 + DM09 KLJoin.ini FedRide 2 -> 3 (009fa8fa -> 2094d83a), never KLHook.ini. kl_tests 108/0, 25 scratch checks. Supersedes merged_1108d. Undo: its UNDO.bat first.
