@@ -1,3 +1,9 @@
+## 2026-11-08 ~03:00 [f0] MERGED 1107 benched + SHIP INSTALLED (no crash involved)
+Bench M1107_DD05 (C:\kl_build_1024\merged_1107_bench\run.py; kit installed --test, TEST dll 39e79011, pd2s_1106 script pair on DD05, joiner Char=9): PASS.
+Both seats IN ROUND, round 2 reached, asserts 0, faults 0, no dumps. Log evidence: hire PickDefault 1, charonline Red applied on both sides, 'fit: caption PAGE 1/5 STOCK [F2] next: PD2 GUNS', shop opened with F3/F2 and no RETURN, pool rows 0/10/18/22/31 = items 62/63/42/40/35 on host and client.
+Then undo (byte-exact back to e88a6093/97f8e972/d00527ff/57663e0c) and SHIP install: live dll 502677ee, KLHook.ini 6a17a145, overlay df16480f, KL_LensCrackDM.fx bc25a53f. Undo: merged_1107\UNDO.bat.
+Peers told: pd2rebase_1107's pins must be checked against the new live ini/overlay before its install.
+
 ## 2026-11-07 ~04:00 [shop] PD2 rebase 1107r: ALL 20 MAPS STAGED (offline, nothing installed; no crash involved)
 D:\kl_stage\pd2rebase_1107 (--base live, fits.json from the DM02 proof): 11 DM + 9 DD maps, every map plain+bots ok, pd2_guns_multi.verify RESULT PASS, LAYER RESULT PASS. 13 pairs (HeliGuns=0); MG42_41 + AKM33 baked, 8 heli items restored to stock roots; DM01 skips AKM33 by design (PD2 AKM on item 33 since 10-25).
 Defect found + fixed: the stage's install.py never installed the shared <DD>\KLShopPage.ini (re-indexes every card). pins.json 'root' now pins it (1399238b -> 4bc8845a); INSTALL_PY_OFFDRIVE swaps it in (backup <backup>\_root) only on the run where EVERY pinned map is new, --undo restores it first. 3-lens review fixes: a drifted ini no longer blocks --undo (left alone + NOTE), missing live map file -> NOTE not traceback, a re-pin keeps the recorded root entry. pd2_guns_layer_test 112/0, kl_tests 100/0. Map pins unchanged by the re-pin.

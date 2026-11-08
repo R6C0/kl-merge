@@ -72,7 +72,8 @@ F2/F3 always open the shop ([ShopPage] PageIntent/QueueDebounce/IntentFallbackHi
 PD2 rebase 1107r: ALL 20 maps STAGED, LAYER RESULT PASS, D:\kl_stage\pd2rebase_1107 (not installed). install.py now also swaps <DD>\KLShopPage.ini (pinned 1399238b -> 4bc8845a) on the run where every map is new; undo restores it first.
 Backups (8.2 GB) now default to C:/kl_build_1024/pd2rebase_1107_backup (c9 freed C: to 62 GB; dry run fits). Install = the owner's call; with f0's dll or alone, the maps + ini do not need it.
 
-2026-11-07 - [f0] MERGED 1107 KIT (for c9), STAGED, NOT installed, not run in game: C:\kl_build_1024\merged_1107 = ONE dll from b628e16f (clean worktree):
+2026-11-08 ~03:00 - [f0] MERGED 1107 LIVE (SHIP 502677ee, ini 6a17a145, ovl df16480f, fx bc25a53f) after bench M1107_DD05 PASS (TEST 39e79011, 2 seats, round 2, 0 asserts/faults/dumps, shop rows ok). Undo: C:\kl_build_1024\merged_1107\UNDO.bat.
+2026-11-07 - [f0] MERGED 1107 KIT (for c9): C:\kl_build_1024\merged_1107 = ONE dll from b628e16f (clean worktree):
 lens + PickDefault + 6b ui_1107 + db [Echo] (0) + c9 [VanBlow] ShieldUntilBoarded (0). SHIP 502677ee, TEST 39e79011, overlay df16480f (= ui_1107's), fx bc25a53f.
 install.py: refuses unless live dll e88a6093 / ovl d00527ff / fx 57663e0c; 15 ini lines (ini 97f8e972 -> 6a17a145); backups *.before-merged1107; undo byte-exact,
 keeps in-game ini edits. 17 scratch checks + kl_tests 100/0 + 3-lens review. Supersedes ui_1107, lens_pick_1107_install, pick_1107_install.
