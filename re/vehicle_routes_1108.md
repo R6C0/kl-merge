@@ -85,3 +85,9 @@ No solid pierce: DM02, DM03A, DM06B (d0 van, SEEN both ends), DM11B (cops and ch
 ### Caveats (guesses)
 Viewers = ZSpawnPoint standing in for players (guess); linear + Catmull both tested (engine spline kind unknown); foliage and glass count as blockers in the raw JSON but not in the SOLID table; DD10 geometry partly stubbed;
 cop-car KL_Cars activation unproven; hull sizes (car lines +-100, heli radius 800) are estimates, so keys at a range edge (1..2 keys) are noise. No live run was made.
+
+### Review addendum (2026-11-08, re-run of DM07 / DM01B / DD10 reproduced the numbers above)
+Omitted from the real-clips table above: DD10 Flat Raid (d0) escape van V_Van_00 PIERCES SO0010_L05_Pillar_A_02 keys 90..395 x87 at (7890,11,1100), SO0700_ALL_BigFence_A_02 key 94 at (7962,10,1100),
+PC1201_L05_Exit_01 keys 271..277 at (9391,2,1100) and Plane01 keys 58..65 (likely a helper plane, not solid); seen 21%, start HIDDEN, end seen by 2 of 10. DD10 geometry is partly stubbed, so the pillar
+may be real stock behaviour (DD04/DD10 stock vans also pass such pieces); owner d0, check the pillar and fence against the stock zip before cutting keys. Also stale above: the first table's rows
+"DD10 check failed", "DM06 / DM11B not measured" are superseded by the audit section (DM06 and DM11B measured, no solid pierce).
