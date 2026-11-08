@@ -170,6 +170,11 @@ KITS = {
                            files={'F01_Main.zip': '45bf2694', 'F01_Main.bots.zip': '8a473f98', 'F01_Main.bots.base.md5': '2a35c784', 'KLGuns.ini': '33432bb9'},
                            hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
                            solo_secs=480, parts=('solo',), shots='60-240:3'),
+    # DM05A city lights trial (bench only): glowfar_1108 with the dark 01d backdrop towers on their lit 01i material twin (tools/kl_citylights_1108.py)
+    'citylights1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/citylights_1108', tag='.before-citylights1108', look=(60000, -4000),
+                           files={'F01_Main.zip': '80b5547c', 'F01_Main.bots.zip': '1e02dbe5', 'F01_Main.bots.base.md5': 'c009e5af', 'KLGuns.ini': '33432bb9'},
+                           hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
+                           solo_secs=480, parts=('solo',), shots='60-240:3'),
     # DM05A glow + far trial (bench only): skyfog_1108 (Far 80000, FogFull 1.5) with StreetGLOW vertex alpha x 0.25 (kl_streetglow_1108.py --alpha 0.25)
     'glowfar1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/glowfar_1108', tag='.before-glowfar1108', look=(60000, -4000),
                         files={'F01_Main.zip': 'cf7e32ff', 'F01_Main.bots.zip': '11f8a4eb', 'F01_Main.bots.base.md5': '7b302adc', 'KLGuns.ini': '33432bb9'},
