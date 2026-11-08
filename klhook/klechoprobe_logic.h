@@ -82,6 +82,47 @@ static int kpr_name_from(const unsigned char *buf, int n, char *out, int cap)
     return i;
 }
 
+/* The wave descriptor (voice+0x60) is NOT a struct with a name pointer: it is a .WHD record minus 4 (the wave object's "WHD offset"), inside the
+   loaded .WHD image. Proof: kl2.exe 0x4465f0 stores arg1 at voice+0x60, then reads [d+0xa] bit 0x80 (format 0x00800000 = streamed, so d+8 is
+   record dword 1), [d+0xc] sample rate (mul at 0x446677/0x4466a1), [d+0x14], [d+0x1c], [d+0x34] (lip-sync word). Record dword 0 (= d+4) is the
+   NAME OFFSET inside the .WHD file, not a pointer. Live dump (OSS_DD09_ECHO_S2): d = 00000000 000064d0 00000011 00007d00 00000004 00002b06 ...
+   and kaneandlynch.WHD has name 0x64d0 = "SFX/OSD/Up_Down.wav", record at 0x64f4 (d = 0x64f0). The name sits 16-aligned just BEFORE the record:
+   (re/audio.md section 3: a name takes len+1 bytes padded to 16, the record starts 16n+4; two names in a row take len+2). So the name is the
+   16-aligned string before d. 'before' = the n bytes at [d - n, d), last byte = d-1; n a multiple of 16. Returns the name length or 0.
+   GUESS (not proven by a dump of the names in memory): the loaded image keeps the file's name/record layout; the 0x64d0 check below only
+   tests the descriptor shape (name offset 16-aligned, format dword plausible). */
+static int kpr_name_before(const unsigned char *before, int n, char *out, int cap)
+{
+    int k;
+    for (k = 1; k * 16 <= n; k++) {
+        const unsigned char *a = before + n - 16 * k;
+        int i, len = 0, letters = 0, ext = 0;
+        if (!a[0]) continue;                               /* padding / zero lead-in */
+        for (i = 0; i < 16 * k && a[i]; i++) {
+            unsigned char c = a[i];
+            if (c < 0x20 || c > 0x7e) { len = -1; break; }
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) letters++;
+            if (c == '.' || c == '/') ext = 1;
+            len++;
+        }
+        if (len < 4 || !letters || i >= 16 * k) {          /* binary, too short, or no NUL before d: this is not a name start */
+            if (len < 0) return 0;                         /* a binary record body: we passed the name */
+            continue;
+        }
+        if (((len + 1 + 15) & ~15) > 16 * k + 16) continue;   /* does not fit (alias pair pads by one more) */
+        if (!ext) continue;                                /* wave names are paths with an extension */
+        if (16 * k + 16 <= n) {                            /* the block before: all printable, no NUL = this is the tail of a longer name */
+            const unsigned char *pb = a - 16; int j, cont = 1;
+            for (j = 0; j < 16; j++) if (pb[j] < 0x20 || pb[j] > 0x7e) { cont = 0; break; }
+            if (cont) continue;
+        }
+        if (len > cap - 1) len = cap - 1;
+        memcpy(out, a, (size_t)len); out[len] = 0;
+        return len;
+    }
+    return 0;
+}
+
 /* prefer a candidate that looks like a path / file / audio: score for picking among several string-looking pointers */
 static int kpr_name_score(const char *s)
 {

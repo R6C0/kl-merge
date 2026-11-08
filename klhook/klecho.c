@@ -88,13 +88,28 @@ static void __cdecl klecho_wrap(unsigned eff, int param, float v)
  *     callers: 0x43d3bb, 0x4893ca). The send is read back with alGetSource3i(src, 0x20006) before the real Play. GUESS: OpenAL32.dll
  *     exports alGetSource3i (AL 1.1 core); if not, the state is predicted from the voice flags and the log line says so.
  *   - alSource3i wrapper: sees the late attach (Play attaches the send AFTER alSourcePlay for relative / 2D voices) and marks the pending play.
- *   - the sound's name: GUESS. The wave descriptor (voice+0x60) layout is not decoded; the best-scoring printable string behind a pointer field of
- *     the descriptor (+0..+0x3c), else of the voice (+0x18..+0x7c), is the name. The first 12 plays log a hex dump of both so the layout can be
+ *   - the sound's name: the descriptor at voice+0x60 is a .WHD record minus 4 (decoded 2026-11-08, re/gun_echo_1107.md section 8); the wave file name
+ *     is the 16-aligned string before it (kpr_name_before; GUESS that the loaded image keeps the file layout). Fallbacks: the best-scoring printable
+ *     string behind a pointer field of the descriptor (+0..+0x3c), else of the voice (+0x18..+0x7c). The first 12 plays log a hex dump of both so the layout can be
  *     decoded from the log if the guess fails.
  * Log lines: "echo-probe play ..." (budgeted by kpr_log), "echo-probe 10s: ..." / "total: ..." every 10 s while plays happen, "echo-room ..." per SetReverb. */
 #define KLECHO_PLAY_RET 0x5dbe18u                            /* return address inside ZSoundBufferOpenAL::Play after alSourcePlay */
 #define KLECHO_VT_VOICE 0xb9ad5cu                            /* ZSoundBufferOpenAL vtable */
 typedef void (__cdecl *klecho_play_fn)(unsigned);
+/* The descriptor at voice+0x60 is a .WHD record minus 4 (see kpr_name_before): its wave file name ("SFX/.../x.wav") is the 16-aligned string just
+   before it in the loaded .WHD image. Reads 0x100 bytes before the descriptor, guarded (shorter windows near a page start); 0 = not found. */
+static int klecho_wave_name(DWORD_PTR d, char *out, int cap)
+{
+    unsigned char buf[0x100]; int n;
+    out[0] = 0;
+    if (d < 0x10000u || (d & 3) || d >= 0x7fff0000u) return 0;
+    for (n = 0x100; n >= 0x40; n -= 0x40) {
+        memset(buf, 0, sizeof buf);
+        if (klh_rd(d - (DWORD_PTR)n, buf, (SIZE_T)n)) return kpr_name_before(buf, n, out, cap);
+    }
+    return 0;
+}
+
 static void __cdecl klecho_play_wrap2(unsigned src, DWORD esi_in, DWORD ret);
 typedef void (__cdecl *klecho_s3i_fn)(unsigned, int, int, int, int);
 typedef void (__cdecl *klecho_gs3i_fn)(unsigned, int, int *, int *, int *);
@@ -158,7 +173,7 @@ static void __cdecl klecho_play_wrap2(unsigned src, DWORD esi_in, DWORD ret)
             klh_rd(voice + 0x10, &b10, 1); klh_rd(voice + 0x11, &b11, 1); klh_rd(voice + 0x54, &r54, 4); klh_rd(voice + 0x78, &k78, 4);
             klh_rd(voice + 0x5c, &g, 4); klh_rd(voice + 0x60, &wave, 4);
             rel = r54 != 0; s3d = b10 != 0; s2d = b11 != 0; kind = (int)k78; memcpy(&gain, &g, 4);
-            if (!klecho_find_name(wave, 0x3c, name, sizeof name)) klecho_find_name(voice + 0x18, 0x64, name, sizeof name);
+            if (!klecho_wave_name(wave, name, sizeof name) && !klecho_find_name(wave, 0x3c, name, sizeof name)) klecho_find_name(voice + 0x18, 0x64, name, sizeof name);
             if (!name[0]) snprintf(name, sizeof name, "(unnamed k%d)", kind);
         } else snprintf(name, sizeof name, "(foreign ret %06lx)", (unsigned long)(ret - (DWORD)klh_delta));
     }

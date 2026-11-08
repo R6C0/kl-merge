@@ -46,6 +46,22 @@ int main(void)
     CHECK(strstr(out, "Weapons/smg_shot.wav x3 [gun-like]") != 0 && strstr(out, "Dialog/x.wav x2") != 0);
     CHECK(strstr(out, "Dialog/x.wav x2 [gun") == 0);
     /* nothing without a send */
+    /* wave name before a .WHD record (descriptor d = record - 4): real layout from kaneandlynch.WHD, name 0x64d0 "SFX/OSD/Up_Down.wav" (19 chars -> 32 bytes) */
+    { unsigned char w[0x100]; const char *nmA = "SFX/OSD/Up_Down.wav", *nmB = "Weapons/AK47/AK47_Shot_Player_Loud_01.wav", *nmC = "SFX/Weapons/Pistol/Pistol_Shot_Distant_A.wav";
+      memset(w, 0, sizeof w); memset(w, 0xaa, 0x60);                       /* previous record body: binary */
+      memcpy(w + 0xe0, nmA, strlen(nmA));                                   /* name at d-0x20 (d = w + 0x100) */
+      CHECK(kpr_name_before(w, 0x100, nm, sizeof nm) == 19 && !strcmp(nm, nmA));
+      memset(w, 0, sizeof w); memset(w, 0x11, 0x40); memcpy(w + 0xd0, nmB, strlen(nmB));   /* 41 chars -> 48 bytes: name at d-0x30; the tail block is printable */
+      CHECK(kpr_name_before(w, 0x100, nm, sizeof nm) == (int)strlen(nmB) && !strcmp(nm, nmB));
+      memset(w, 0, sizeof w); memset(w, 0x7f, 0x40); memcpy(w + 0xd0, nmC, strlen(nmC));   /* 44 chars -> 48 bytes */
+      CHECK(kpr_name_before(w, 0x100, nm, sizeof nm) == (int)strlen(nmC) && !strcmp(nm, nmC));
+      CHECK(kpr_gunish(nm));
+      memset(w, 0, sizeof w); CHECK(kpr_name_before(w, 0x100, nm, sizeof nm) == 0);                  /* nothing but zeros */
+      memset(w, 0xaa, sizeof w); CHECK(kpr_name_before(w, 0x100, nm, sizeof nm) == 0);               /* binary only */
+      memset(w, 0, sizeof w); memcpy(w + 0xf0, "abcd", 4); CHECK(kpr_name_before(w, 0x100, nm, sizeof nm) == 0);   /* no extension / path: not a wave name */
+      memset(w, 0, sizeof w); memcpy(w + 0xe0, nmA, strlen(nmA)); CHECK(kpr_name_before(w, 0x100, nm, 10) == 9 && strlen(nm) == 9);   /* cap truncates */
+      memset(w, 0, sizeof w); memcpy(w + 0xe0, nmA, strlen(nmA)); CHECK(kpr_name_before(w + 0xc0, 0x40, nm, sizeof nm) == 19);   /* a short window still works */
+    }
     kpr_init(&s); kpr_add(&s, "a_shot", 1, 0, 0); kpr_summary(&s, "all", out, sizeof out, 3); CHECK(strstr(out, "(none)") != 0);
     /* a tiny buffer never overruns and is terminated */
     kpr_summary(&s, "all", out, 20, 3); CHECK(strlen(out) < 20);

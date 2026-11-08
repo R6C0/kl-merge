@@ -99,3 +99,17 @@ How to judge:
 - `(foreign ret XXXXXX)` lines are alSourcePlay calls from other sites (not the voice Play): counted, named by return address.
 - If the names are junk or `(unnamed)`, decode the wave descriptor from the dump lines (the name layout is a GUESS: best printable string behind a pointer of voice+0x60 / voice+0x18).
 Cost: two import-slot swaps, one alGetSource3i + alGetError per played source (same thread as the engine's call), a spinlock; no files, no code bytes. Not run in the game.
+
+## 8. Voice name decode (2026-11-08, static + the OSS_DD09_ECHO_S2 dump lines; TEST build klhook/out_echoname1108_test, not yet run)
+Why "(unnamed k1)": voice+0x60 is NOT a descriptor with a name pointer. It is a **.WHD record minus 4** (the wave object's "WHD offset", re/audio.md 2.3) inside the loaded .WHD image.
+- Proof in kl2.exe: voice init 0x4465f0 stores its arg1 at `mov [esi+0x60], edi` (0x44663b), then `test byte [edi+0xa], 0x80` (0x446641, format 0x00800000 = streamed: d+8 = record dword 1),
+  `mul [edi+0xc]` (0x446677 / 0x4466a1, sample rate: the DM11S div-by-zero), `[edi+0x14]` (0x4466c1, size as PCM), `[edi+0x1c]` (0x446694, channels), `cmp word [edi+0x34]` (0x44664e, lip-sync word).
+  The creator 0x658340 passes its args straight to 0x4465f0 (call at 0x658373); the ctors (0x71d480 from 0x843787, 0x747850) only set the vtable and zero +0x43bc/c0/c4: no name is stored in the voice.
+- Record dword 0 (= desc+4) is the **name offset inside the .WHD file**, not a pointer. Dump `00000000 000064d0 00000011 00007d00 00000004 00002b06 00000c00 00000001 0016bc10 ...`
+  = kaneandlynch.WHD record at 0x64f4 (name 0x64d0 = "SFX/OSD/Up_Down.wav", rate 0x7d00, size 0x2b06; checked with tools/kl_whd.py read-only). Name sits 16-aligned just before the record: desc = name + pad16(len+1).
+  The two dumped descriptors differ by 0x70 and so do their name offsets (0x64d0 / 0x6460): the in-memory image keeps the file layout (offsets are base-relative). Both were k1 UI sounds (Menu / Up_Down), rel 1.
+- Decode now: klecho_wave_name (klecho.c) reads 0x100 bytes before voice+0x60 (guarded klh_rd) and kpr_name_before (klechoprobe_logic.h) takes the nearest 16-aligned printable string with a "." or "/" that fits
+  the padding and is not the tail of a longer name. Fallback: the old pointer scan. The name is the WAVE FILE name ("SFX/.../x.wav"), not the .SND `*_shot_*` sound name (nothing in the voice leads to it).
+  GUESS: that the loaded image has the name bytes in memory right before the record (the offsets match the file layout, not verified by a name dump); if names stay "(unnamed)" the dump line
+  `echo-probe dump voice ... wave W` still has the name offset (dword 1): map offline with tools/kl_whd.py (parse('dd', bytes of the level / kaneandlynch .WHD): name at that offset).
+- Stable id fallback: (desc dword 1 = name offset, dword 8 = data offset) pair; which .WHD (level or global) is not in the voice.
