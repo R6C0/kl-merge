@@ -243,14 +243,15 @@ def solo_script(k, secs_total):
               'waitvan 5 120000', 'pos van5',
               'wait 8000', 'pos after5', 'waitstate 0x1f 240000', 'pos s1f', 'wait 12000', 'waitstate 0x20 120000', 'log BENCH1106 LC solo done', 'wait 3000', 'pass 1000']
     elif c.get('cars'):
-        # one station per car: 700 upstream (against the spline heading) and 40 up, facing the car; 'tele' is TEST-rig only, the placement guard may refuse (the log says)
+        # one station per car: 1200 upstream (against the spline heading) and 150 up (the road climbs ~0.06/unit upstream, +40 could land under it), then
+        # WALK toward the car (goto holds W: 'face' does not turn a standing player, klauto.c) and stop 500 short; 'tele' is TEST-rig only, the guard may refuse (the log says)
         import json
         rep = json.load(open('%s/build_report.json' % c['stage']))['reports']['F02_Main.zip']
         s += ['wait 8000', 'pos before-cars']
         for i, (sp, hd) in enumerate(zip(rep['spots'], rep['headings'])):
             (x, y, z), n = sp[0], math.hypot(hd[0], hd[1]) or 1.0
-            ux, uz = x - 700 * hd[0] / n, z - 700 * hd[1] / n
-            s += ['tele %d %d %d' % (ux, y + 40, uz), 'wait 1500', 'face %d %d 60 6000' % (x, z), 'log BENCH1106 car %d station' % (i + 1), 'wait 9000', 'pos car-%d' % (i + 1)]
+            ux, uz = x - 1200 * hd[0] / n, z - 1200 * hd[1] / n
+            s += ['tele %d %d %d' % (ux, y + 150, uz), 'wait 1500', 'goto %d %d 500 5000' % (x, z), 'log BENCH1106 car %d station' % (i + 1), 'wait 9000', 'pos car-%d' % (i + 1)]
         s += ['log BENCH1106 cars done', 'pass 1000']
     elif c.get('van'):
         # empty-wait van (11-08, [VanBlow] ShieldWhileWaiting): nobody boards; the seat stands at spawn while the van waits at the pickup.
