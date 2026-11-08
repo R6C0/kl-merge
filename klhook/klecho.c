@@ -25,7 +25,8 @@
  *   IndoorPct=100  StreetPct=100  RoofPct=100  HallPct=100
  *   Log=1
  *   ; Bench probe, logs only, changes no sound (recommended off): per played source, is the EFX aux send attached, and which sound is it
- *   ; (gunshots vs the rest); every SetReverb room change. Works with Enable=0 or 1. Recipe: re/gun_echo_1107.md section 7.
+ *   ; (gunshots vs the rest); every SetReverb room change; the reverb-box stack ('echo-stack', re/reverb_path_1108.md). Works with Enable=0 or 1.
+ *   ; Recipe: re/gun_echo_1107.md section 7.
  *   Probe=0
  */
 #ifndef KLECHO_C
@@ -35,6 +36,14 @@
 #include "klechoprobe_logic.h"
 
 #define KLECHO_SLOT 0x14f356cu                               /* alEffectf pointer (kl2.exe .data) */
+/* Reverb stack of the audio manager (re/reverb_path_1108.md, static reading 2026-11-08; read only, Probe=1 only). AUD = [[0xdd2640]+0xb00];
+ * Audio_ReverbActivater's Enter (0x8cfe30 -> Push 0x765c70) is the ONLY writer; empty stack = the I3DL2 default every frame (decay 1.49). */
+#define KLECHO_GAME     0xdd2640u
+#define KLECHO_AUD      0xb00u
+#define KLECHO_STK_N    0x68fcu                              /* count, max 20 */
+#define KLECHO_STK_E    0x680cu                              /* entries {effect ptr, key, priority float}, stride 12 */
+#define KLECHO_STK_TOP  0x6900u                              /* cached top = effect ptr of entry n-1 (getter 0x429b60; sorted by priority, n-1 drives the reverb) */
+#define KLECHO_GATE     0xcdd93cu                            /* listener reverb update runs only when this is 1 (0x4a2d5e) */
 
 static struct klecho_cfg klecho_c = { 100, { 100, 100, 100, 100, 100 } };
 static struct klecho_st klecho_s;
@@ -233,9 +242,42 @@ static void __cdecl klecho_s3i_wrap(unsigned src, int param, int a, int b, int c
     if (klecho_real_s3i) klecho_real_s3i(src, param, a, b, c);
 }
 
+/* Probe: does any Audio_ReverbActivater ever push onto the stack? Logs each change of (count, top), capped, plus a 10 s state line. */
+/* A count that stays 0 means no Push survived to a tick (a Push + Remove inside one frame is missed); AUD rebuilt on a map load is logged. */
+static DWORD klecho_stk_n = 0xffffffffu, klecho_stk_top, klecho_stk_aud, klecho_stk_t10; static int klecho_stk_lines; static LONG klecho_stk_changes;
+static void klecho_stack_probe(DWORD now)
+{
+    DWORD game = klh_rd32((DWORD_PTR)KLH_VA(KLECHO_GAME)), aud = game ? klh_rd32(game + KLECHO_AUD) : 0, n, top;
+    if (!aud) return;                                        /* audio manager not up yet */
+    if (aud != klecho_stk_aud) {
+        klog("echo-stack: audio manager %08lx -> %08lx", (unsigned long)klecho_stk_aud, (unsigned long)aud);
+        klecho_stk_aud = aud;
+    }
+    n = klh_rd32(aud + KLECHO_STK_N); top = klh_rd32(aud + KLECHO_STK_TOP);
+    if (n != klecho_stk_n || top != klecho_stk_top) {
+        klecho_stk_changes++;
+        if (klecho_stk_lines < 200) {
+            DWORD_PTR e = aud + KLECHO_STK_E + 12 * (n ? (n > 20 ? 19 : n - 1) : 0);      /* the active (highest) entry; max 20 */
+            DWORD ef = n ? klh_rd32(e) : 0, ky = n ? klh_rd32(e + 4) : 0, pr = n ? klh_rd32(e + 8) : 0;
+            float pf; memcpy(&pf, &pr, 4);
+            klecho_stk_lines++;
+            klog("echo-stack #%ld t %lu: count %lu -> %lu, top %08lx -> %08lx; active entry effect %08lx key %08lx prio %.1f",
+                 (long)klecho_stk_changes, (unsigned long)now, (unsigned long)(klecho_stk_n == 0xffffffffu ? 0 : klecho_stk_n), (unsigned long)n,
+                 (unsigned long)klecho_stk_top, (unsigned long)top, (unsigned long)ef, (unsigned long)ky, pf);
+        }
+        klecho_stk_n = n; klecho_stk_top = top;
+    }
+    if (now - klecho_stk_t10 >= 10000u) {
+        klecho_stk_t10 = now;
+        klog("echo-stack: count %lu top %08lx, changes %ld, gate [%08lx]=%lu (1 = listener reverb update on)", (unsigned long)n, (unsigned long)top,
+             (long)klecho_stk_changes, (unsigned long)KLECHO_GATE, (unsigned long)klh_rd32((DWORD_PTR)KLH_VA(KLECHO_GATE)));
+    }
+}
+
 static void klecho_probe_tick(void)
 {
     DWORD now = GetTickCount();
+    klecho_stack_probe(now);
     if (!klecho_probe_ok) {
         HMODULE al = GetModuleHandleA("OpenAL32.dll");
         if (!al) return;
