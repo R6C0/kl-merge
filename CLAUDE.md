@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-08 ~17:40 - [shop] SHOP UI TIDY built, NOT installed (owner: page II + hire page 'still look somewhat bad to navigate'): [ShopPage] TidyPage2 + [Hire] TidyPage, both default 0, '(recommended on)'.
+Page II: rows 'PD2 PAR', desc line 1 'PD2 GUN: price + rank of the stock gun' (Police reg. last), caption 'PD2 GUNS (13 NEW)', PD2 tabs PISTOLS+SHIELD.. (GUESS: may not redraw). Hire: line 1 '$45,000 - BUY twice to hire' / HIRED / RANK TOO LOW / NOT ON THIS MAP,
+rows 'Pierre  $45K' / HIRED / n/a, no stars without a rank gate, no gun lock. klshopui_logic.h + klshopui_test.c, kl_tests 112/0. SHIP 027cd72d / TEST 9eeedf81 in C:\kl_build_1024\shopui_1108. Needs a look bench (widths are GUESSes) when testing is allowed.
 2026-11-08 ~17:20 - [veh] DM01B street2 van from/to unseen pockets, staged NOT installed (zip 778b075c, bots dccc9250, base 6616525a; pinned live 74d37233 / 73583df1 / c3535e34): waits west (-8000,30500), leaves east (17400,30400).
 Seen by 0 of 385 reachable-floor viewers at both, 0 pierces, planter ground ok. Kit needs ~940 MB (--min-free-mb 300). re/vehicle_routes_1108.md. Not benched.
 2026-11-08 ~15:05 - [f0] MERGED 1108e STAGED, NOT INSTALLED, NOT BENCHED (owner present: no tests; waits for the owners word): C:\kl_build_1024\merged_1108e, one dll from 9074ee06
