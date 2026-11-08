@@ -1,3 +1,5 @@
+2026-11-08 ~18:30 - [d0] INSTALLED for owner testing ("install and tell me"), NOT benched: DM05A heli departure (lcdepart) + club music A rebased on it (stage C:/kl_build_1024/ondepart_1108/lcmusic_a_1108): zip 0c0980c4, bots 2f719e08, base 0344d4c9.
+DD10 van lane z 1030 + gate fence render hidden (collision kept): F07 5d76d91a, bots 069f4402, base 3dcfc1d3; thin margins (pillar 7 cm, dustbin ~1 cm), crash legs still clip. Undo: UNDO ALL 1105.bat steps 0v, 0m, 0e (top). Re-stage DM05A on 0c0980c4, DD10 on 5d76d91a.
 2026-11-08 ~17:40 - [shop] SHOP UI TIDY built, NOT installed (owner: page II + hire page 'still look somewhat bad to navigate'): [ShopPage] TidyPage2 + [Hire] TidyPage, both default 0, '(recommended on)'.
 Page II: rows 'PD2 PAR', desc line 1 'PD2 GUN: price + rank of the stock gun' (Police reg. last), caption 'PD2 GUNS (13 NEW)', PD2 tabs PISTOLS+SHIELD.. (GUESS: may not redraw). Hire: line 1 '$45,000 - BUY twice to hire' / HIRED / RANK TOO LOW / NOT ON THIS MAP,
 rows 'Pierre  $45K' / HIRED / n/a, no stars without a rank gate, no gun lock. klshopui_logic.h + klshopui_test.c, kl_tests 112/0. SHIP 027cd72d / TEST 9eeedf81 in C:\kl_build_1024\shopui_1108. Needs a look bench (widths are GUESSes) when testing is allowed.
@@ -29,6 +31,13 @@ carexit guard fixed: J.check reports 0 misfits in-process (kl_map_ai.cars regist
 Cause of cops staying in cars PROVEN: 4 VehicleExitBehaviour nodes had no controller (restored from M03_FA_A; that DD then runs it is a GUESS). garage = 6 police, ramp = 5 police + 45 s Hunt into the garage (GUESS ramp = Ramp_01 beside the lot), frontcops = lot SWAT x3 + ArrivingCops_Squad_02 x2 -> police form. Census 33/27 -> 44/29.
 Undo rehearsed byte-exact in scratch; bench needs ClientBuild*/ClientRewrite/ClientRingSync/AssertSoft lines (bench_cover_lines.txt). Not benched (owner playing).
 2026-11-08 ~10:30 - [vehroutes] DM01B van drive-away went through the Donut Factory wall (x=-496; render check, old lane check was collision-only). STAGED NOT INSTALLED C:/kl_build_1024/vehroutes_1108/DM01B (zip edd349a1, bots a51181be, base b2f37f42; live pins 74d37233 / 73583df1 / c3535e34): van backs out along its arrival lane, crash keys clamped x>=-350. Audit + other maps: re/vehicle_routes_1108.md (DM07 needs a fix, DM03 traffic on the lane, report only). tools/kl_vehroutes_1108.py.
+## 2026-11-08 ~18:30 [f0] MERGED 1108f staged, not installed (no crash involved)
+- fc pushed the page II / hire page tidy (cb0b2e8a + 4a4c1ca7, e206e0aa). merged_1108f = one dll from e206e0aa: db FedRide=3 + FoeNoSwapWhileFed + FedKeep
+  + fc TidyPage2 / Hire TidyPage. C:\kl_build_1024\merged_1108f: SHIP 729f7512, TEST 40d00164. Supersedes merged_1108e (never installed) and 1108d.
+- Writes dll 246c643d -> 729f7512, DM09 KLJoin.ini FedRide 2 -> 3 (pinned 009fa8fa), KLHook.ini + TidyPage2=1 [ShopPage] / TidyPage=1 [Hire] (unpinned,
+  undo strips only those lines if the game rewrote the ini). kl_tests 113/0/5, 26 scratch checks.
+- Not installed: the owner's "install and tell me" came only via d0's relay, and kl2.exe was running (pid 82416, 17:41), which the kit refuses anyway.
+
 ## 2026-11-08 ~15:05 [f0] MERGED 1108d / 1108e staged, not installed (no crash involved)
 - Owner present ("install all ... but no testing"): no benches. merged_1108d (80cbcb30: db FedRide=3 + FoeNoSwapWhileFed) built, then superseded by
   merged_1108e (9074ee06: + FedKeep after db's two-lens review fixes 202859ac/9074ee06). C:\kl_build_1024\merged_1108e: SHIP f0ca0dd8, TEST 5a526510.
