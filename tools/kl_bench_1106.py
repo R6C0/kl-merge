@@ -180,8 +180,9 @@ KITS = {
     # (TEST rig) 13 m in front of the boarding box (-1852, 121, 10459) at state 3 so the shots show whether the fire goes out with the health.
     'vanwait09h_1108': dict(map='DM09', slot='F06', page=2, entry=4, stage=None, tag=None, live={'F06_Main.zip': 'afee8967'}, van=True,
                             vanlook=(-1852, 200, 9159),
-                            hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
-                            ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'HealFloor=95', 'Log=1'],
+                            # TEST 988a279b = be08398f (ShieldDriveIn): the drive-in shield keeps the van whole, HealFloor=95 mends what still gets through
+                            hook=('C:/kl-merge/kl-merge/klhook/out_drivein1108/dinput8.dll', '988a279ba3eababaf2cb832cee3c9409'),
+                            ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'HealFloor=95', 'Log=1'],
                             solo_secs=1100, parts=('solo',), shots='330-500:3'),
     # DM06B traffic cars (11-08, tools/kl_dm06b_traffic_1108.py, stage C:/kl_build_1024/dm06b_traffic_1108, pinned to the LIVE DM06B a6c0aef1): 7 static TRAFFIC! cars on the
     # ramp road (Curvedroad waypoints 9..21). Offline Arcade, 1 seat on the merged_1107 TEST dll; the script teleports (TEST rig) 700 upstream of each car and faces it, shots
