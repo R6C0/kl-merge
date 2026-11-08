@@ -594,7 +594,7 @@ def snap_host(h, cx, hinge_z=None):
     cx = tuple(float(v) for v in cx)
     cy = (0.0, 1.0, 0.0)
     hinge = h['hinge'] if hinge_z is None else (h['hinge'][0], h['hinge'][1], float(hinge_z))     # hinge_z: the wall's middle (read off the wall model's thin face), a guess of a few cm
-    return dict(h, R=(cx, cy, _cross(cx, cy)), hinge=hinge, snapped=True)
+    return dict(h, R=(cx, cy, _cross(cx, cy)), hinge=hinge, snapped=True, R0=h.get('R0', h['R']), hinge0=h.get('hinge0', h['hinge']))
 
 
 def resolve_doors(B, nav, doors):
@@ -661,7 +661,22 @@ def scaled_door_prm(don, sx, sy):
     return p
 
 
-def make_door(M, B, don, n, host, tmpl_ok):
+def own_host(B, h):
+    """Door host h (door_hosts) -> the host dict for an OWN-LEAF kick door: the group stands in the own entity's frame at its origin. Refuses a leaf whose width
+    does not run along local x or whose origin is more than 15 cm from the leaf's edge (it would swing about a wrong pivot)."""
+    bb = h['bb']
+    if not (110.0 <= bb[3] - bb[0] <= 126.0):
+        raise ValueError('own leaf %s: width is not along local x (bb %s)' % (h['k'], [round(v) for v in bb]))
+    lo, hi = bb[0], bb[3]
+    if min(abs(lo), abs(hi)) > 15.0 or abs(bb[1]) > 10.0:
+        raise ValueError('own leaf %s: origin is not at a leaf edge / the base (bb %s)' % (h['k'], [round(v) for v in bb]))
+    R, P = B.fr[B.ents[h['k'] - 1]]
+    cols = [tuple(R[r][j] for r in range(3)) for j in range(3)]
+    mirror = abs(lo) < abs(hi)                  # the leaf runs along +x of its own frame (the DD leaf runs along -x)
+    return dict(h, R=(cols[0], cols[1], _cross(cols[0], cols[1])), hinge=tuple(P), own=True, mirror=mirror)
+
+
+def make_door(M, B, don, n, host, tmpl_ok, top_path=None, own_leaf=False):
     """One kick door -> (group Node, {donor node number: Node}, names of the dropped nodes). The group stands at the host leaf's hinge with
     its frame (local x from the free end to the hinge, as the stock group's: the leaf extends along local -x); the stock kids keep their
     local places. Emitters whose particle template the map lacks are dropped (the lists naming them are filtered later: drop_names)."""
@@ -683,7 +698,7 @@ def make_door(M, B, don, n, host, tmpl_ok):
     # 0x2201f2). GUESS: the engine reads the pool group, not the model, to decide the draw list; ZSTDOBJ + MatPosAnim + keyed HVK body
     # do not care which pool the entity sits in. LEAF_G2 = False gives the stock-exact leaf (group 0) back.
     M.place(grp, host['hinge'], stored_rot(*host['R']))
-    newp = TOP_PATH + BS + grp.name + BS
+    newp = (top_path or TOP_PATH) + BS + grp.name + BS
     old = DOOR_PARENT + BS
     rn = lambda s: (newp + s[len(old):]) if s.lower().startswith(old.lower()) else s
     byk = {}
@@ -694,6 +709,25 @@ def make_door(M, B, don, n, host, tmpl_ok):
             nd.group, nd.flags = 2, nd.flags | LEAF_G2_BITS
         par = don.sc.parent[k]
         (byk[par] if par in byk else grp).add(nd)
+    if own_leaf and host.get('own'):
+        # OWN LEAF (2026-11-08, owner: "stop reusing the same plain white door"). A ZSTDOBJ cannot have kids (kl_scene.check), so the keyed DD leaf
+        # itself takes the MAP's own leaf model chunk (no vertex edit, no .prm chunk added for it) and the group stands in the OWN leaf's frame
+        # (host R = the own entity's axes, hinge = its origin; own_host checks the width runs along local x and the origin sits at a leaf edge).
+        # The DD kids assume the leaf runs along local -x from the hinge; when the own leaf runs along +x (mirror) their x positions are negated.
+        # GUESS: the leaf's key animation turns the own model about its origin like the stock one; GUESS: an unlisted own-model leaf draws like the white one.
+        leaf = byk[DOOR_LEAF]
+        leaf.model, leaf.donor = host['model'], None
+        M.set(leaf, None, {'ZGEOM[4]': host['model']})
+        e = B.ents[host['k'] - 1]
+        leaf.links = None if e.links is None else list(e.links)
+        if host['mirror']:
+            for k in DOOR_KIDS:
+                if don.sc.parent[k] == DOOR_GRP and k != DOOR_LEAF:
+                    nd = byk[k]
+                    q = struct.unpack_from('<3f', nd.trans)
+                    M.set(nd, None, {'ZGEOM[2]': [-q[0], q[1], q[2]]})
+                    nd.pos = (-q[0], q[1], q[2])
+                    nd.trans = struct.pack('<3f', *nd.pos) + nd.trans[12:]
     gone = []
     for k in list(byk):
         nd = byk[k]
@@ -727,7 +761,8 @@ def drop_names(M, grp, newp, dropped):
 
 
 # ------------------------------------------------------------------ build
-def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, extra_drop=(), spots_near=None, ext_doors=0, necks=0, ext_lift=0.0):
+def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, extra_drop=(), spots_near=None, ext_doors=0, necks=0, ext_lift=0.0,
+          top=TOP, door_base=0, own_leaf=False):
     import statistics
     import kl_fa_bots as F, kl_fa_cover as CV, kl_fa_climb2 as C2, kl_graft, kl_light, kl_escape
     data = open(src_zip, 'rb').read()
@@ -735,8 +770,9 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
         raise ValueError('%s: md5 %s is not the pinned %s (use --force)' % (src_zip, md5(data), pin))
     B = F.Built(src_zip)
     sc = B.sc
-    if sc.resolve(F.R_ + TOP):
-        log('already grafted (%s present): written unchanged' % TOP)
+    top_path = 'ROOT' + BS + top
+    if sc.resolve(F.R_ + top):
+        log('already grafted (%s present): written unchanged' % top)
         open(dst_zip, 'wb').write(data)
         return dict(unchanged=True)
     lines = []
@@ -746,6 +782,8 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
     say('kl_interact_graft: %s (%s) -> %s' % (src_zip, md5(data), dst_zip))
     nav = F.Nav(B.scene.nav)
     hosts = resolve_doors(B, nav, doors) if doors else []
+    if own_leaf:
+        hosts = [own_host(B, h) for h in hosts]
     if spots is None and (ext_doors or necks):
         # owner 2026-10-25: cans "next to door exits on the wall". Beside the kick doors (door_ext_spots) or, on a map with no door leaves,
         # beside the doorways the walk mesh shows (neck_targets -> nearest wall edge), then the rest from spots_near / ext_spots.
@@ -787,7 +825,7 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
     tmpl_ok = {sc.names[k].lower() for k in range(1, len(sc.nodes)) if sc.cls(k) == 'ZParticleTemplate'}
     M = F.Maker()
     gk = CV.group_form(B)
-    topg = CV._node(M, B, gk, TOP)
+    topg = CV._node(M, B, gk, top)
     M.place(topg, (0.0, 0.0, 0.0))
     insts = []
     can0 = don.ent(EXT_CAN)
@@ -808,10 +846,11 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
     if hosts:
         dd = Donor.get(DOOR_DONOR)
         for n, h in enumerate(hosts, 1):
-            grp, byk, gone, newp = make_door(M, B, dd, n, h, tmpl_ok)
+            grp, byk, gone, newp = make_door(M, B, dd, n + door_base, h, tmpl_ok, top_path, own_leaf)
             cut = drop_names(M, grp, newp, gone)
             topg.add(grp)
             dinsts.append(dict(group=grp, byk=byk, at=h['hinge'], host=h, door=byk[DOOR_LEAF]))
+            n += door_base
             say('  KL_Door_%d at %s on host leaf %s (%s): %d nodes, dropped %s, %d list entries cut' % (
                 n, tuple(round(v) for v in h['hinge']), h['k'], h['name'][-40:], len(list(grp.walk())) - 1, gone, cut))
     # ---- models: roots of every cloned node that has one; one leg per donor level, in order (the numbering of a leg
@@ -983,9 +1022,25 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
             struct.pack_into('<9f', i, 12, *(col[r] for r in range(3) for col in (cx, cy, cz)))      # row-major, columns = the leaf's axes
             struct.pack_into('<I', i, 0x30, made[id(it['door'])].ref)
             dnews.append(bytes(i))
-        sh = ds.clone(dnews, [])
-        sh.verts = struct.pack('<%df' % len(v), *v)
-        hvk.shapes.append(sh)
+        if own_leaf:
+            # one slab per own leaf from its model box (metres, node frame): x bb, y bb, z the box centre +- 3 cm (GUESS: a 6 cm slab; the stock one is 4 cm)
+            for it, di2 in zip(dinsts, dnews):
+                bb = it['host']['bb']
+                zc = (bb[2] + bb[5]) / 200.0
+                x0, x1, y0, y1 = bb[0] / 100.0, bb[3] / 100.0, bb[1] / 100.0, bb[4] / 100.0
+                zp, zm = zc + 0.03, zc - 0.03
+                vv = []                                  # the donor slab's vertex ORDER (xmax = bb max, as the stock x 0 end)
+                for xx, yy, zz in ((x1, y1, zp), (x0, y1, zp), (x0, y1, zm), (x1, y1, zm), (x1, y0, zp), (x1, y0, zm), (x0, y0, zm), (x0, y0, zp)):
+                    vv += [xx, yy, zz]
+                if len(vv) != len(v):
+                    raise ValueError('slab vertex count %d != donor %d' % (len(vv), len(v)))
+                sh = ds.clone([di2], [])
+                sh.verts = struct.pack('<%df' % len(vv), *vv)
+                hvk.shapes.append(sh)
+        else:
+            sh = ds.clone(dnews, [])
+            sh.verts = struct.pack('<%df' % len(v), *v)
+            hvk.shapes.append(sh)
     hvk_bytes = hvk.serialize()
     if kl_hvk.Hvk(hvk_bytes).serialize() != hvk_bytes:
         raise ValueError('.HVK does not round-trip')
