@@ -80,7 +80,8 @@ skyline1108 (DM05A) bench PASS + undo byte-exact but no shot faces east: draw st
 Bench vanwait1108 (DD10 Flat Raid, TEST 76bd4a9c, nobody boards): PASS, 0 faults; shield on at state 4 for 54.5 s, health 9600/9600 (the game's scripted hits would have taken it to a tenth = the "always on fire" van), drove out at state 7 undamaged. No screenshots (ReShade bridge wrote none).
 Kit C:\kl_build_1024\vanwait_1108 (install.py pins live dll+ini, scratch round trip byte-exact). Undo: its UNDO.bat, BEFORE merged_1107\UNDO.bat. Peers told (db oss_1106 ACCEPT list, 6b pd2r run.py).
 2026-11-08 ~06:10 - [d0] RETOMOTO VAN: cause = cops hit it in the DRIVE-IN (state 2). [VanBlow] ShieldDriveIn (6f3df179) bench vanwait09h_1108 PASS: bus 3000/3000, no fire.
-Ship via f0's merged_1108b (HEAD dll pinned on live 319aefc4, + ShieldDriveIn=1 recommended on). HealFloor unproven, not shipped.
+06:37 LIVE: merged_1108b SHIP dll 319aefc4 -> 3f8bc902, ini 2f67d4bc -> 6ddd03de (+ShieldDriveIn=1) after bench vanwait09m_1108 PASS (TEST 64701f02, installed line only, 3000/3000).
+Undo: C:\kl_build_1024\merged_1108b\UNDO.bat FIRST, then merged_1108, vanwait_1108, merged_1107. HealFloor unproven, not shipped. Untested: boarding a drive-in-shielded van.
 
 2026-11-08 ~04:30 - [sky] DM05A SKYLINE staged, NOT installed: Dead Men M05_A Buildings_MidRange (1 model, 156 tris, 5 mats, 6 tex) at (60000,1884,-4000) rot 0 east of the pad,
 held by Backdrop .rmi box 59 only (GUESS: may not draw). Stage C:\kl_build_1024\skyline_1108 (zip cdd98872, bots 464adc61, base fdb74c80, KLGuns 33432bb9), pinned to live 651a7492; CHECK PASS,

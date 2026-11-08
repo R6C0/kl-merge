@@ -184,6 +184,13 @@ KITS = {
                             hook=('C:/kl-merge/kl-merge/klhook/out_drivein1108/dinput8.dll', '988a279ba3eababaf2cb832cee3c9409'),
                             ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'HealFloor=95', 'Log=1'],
                             solo_secs=1100, parts=('solo',), shots='330-500:3'),
+    # f0's merged_1108b kit (6f3df179): gen AFTER 'install.py --test' so KLHook_base.ini is the installed 6ddd03de with its own
+    # '[VanBlow] ShieldDriveIn=1' line; this kit adds no ShieldDriveIn / HealFloor of its own, so the shipped line is what is tested
+    'vanwait09m_1108': dict(map='DM09', slot='F06', page=2, entry=4, stage=None, tag=None, live={'F06_Main.zip': 'afee8967'}, van=True,
+                            vanlook=(-1852, 200, 9159),
+                            hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
+                            ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'Log=1'],
+                            solo_secs=1100, parts=('solo',), shots='330-500:3'),
     # DM06B traffic cars (11-08, tools/kl_dm06b_traffic_1108.py, stage C:/kl_build_1024/dm06b_traffic_1108, pinned to the LIVE DM06B a6c0aef1): 7 static TRAFFIC! cars on the
     # ramp road (Curvedroad waypoints 9..21). Offline Arcade, 1 seat on the merged_1107 TEST dll; the script teleports (TEST rig) 700 upstream of each car and faces it, shots
     # every 5 s. LOOK at the shots: cars drawn? (skinned models as static ZLNKOBJ = the open question), headlight glows rebuilt as Standard (GUESS), car heading/height.

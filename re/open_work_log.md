@@ -1,3 +1,9 @@
+## 2026-11-08 ~06:37 [d0] SHIELDDRIVEIN LIVE: merged_1108b (no crash involved)
+- f0's kit C:\kl_build_1024\merged_1108b (from 6f3df179): SHIP 3f8bc902 / TEST 64701f02; ini +1 line in [VanBlow] "ShieldDriveIn=1 ; (recommended on)".
+- Bench vanwait09m_1108 (DM09, install.py --test, kit ini without ShieldDriveIn so the installed line is what ran): PASS, 0 asserts/faults; shield on at state 2, 3000/3000 to drive-out.
+- Then install.py --undo (clean) and SHIP install: dll 319aefc4 -> 3f8bc902, ini 2f67d4bc -> 6ddd03de (md5 checked). Undo order: merged_1108b -> merged_1108 -> vanwait_1108 -> merged_1107.
+- Open: a boarding run with the drive-in shield (nobody boarded in either bench); HealFloor unproven.
+
 ## 2026-11-08 ~06:30 [db] [Echo] RoomBoxes ear-height fix 75c1e3a1 after RB_DM02 pushed nothing (no crash involved)
 - RB_DM02 (TEST 8ed080d7): PASS, 0 faults, but no push: the hero's feet stand on the floor of the Dead Men .rmi room boxes, and the 30 cm enter margin never lets them in.
 - Fix: test at the feet + [Echo] RoomBoxEarCm (100). Offline coverage at the hook's margin: dm05a 4 -> 63/63, dd10 29 -> 63, nothing lost. TEST 530c9920; RB_DM02_2 after d0's vanwait09m.
