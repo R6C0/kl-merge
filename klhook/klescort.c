@@ -1081,7 +1081,7 @@ static void kle_veh_pass(const struct klb_snap *s, DWORD now)
     if (kle_sh.obj) {
         if (s->rules != kle_sh.rules) kle_shield_off("another round object", now);
         else if (!(di || s->veh == 3 || s->veh == 4 || (s->veh == 5 && kle.fo_shield != 1)))
-            kle_shield_off(s->veh == 5 ? "it drives out, and FollowOutShield=1 leaves the drive-out to the game" : s->veh == 6 ? "the vehicle is destroyed" : s->veh == 2 ? "it drives in (ShieldDriveIn is off)" : "the vehicle is gone", now);
+            kle_shield_off(s->veh == 5 ? "it drives out, and FollowOutShield=1 leaves the drive-out to the game" : s->veh == 6 ? "the vehicle is destroyed" : s->veh == 2 && kle.vb && kle.vb_di ? "it drives in (ShieldDriveIn inactive: FollowOutShield 0 or a Dry key)" : "the vehicle is gone", now);
         else if (klh_rd32(kle_sh.obj) != KLE_VEH_VT || !klh_rd(kle_sh.obj + KLE_VEH_INV, &b, 1)) kle_shield_off("its health object can no longer be read", now);
         else if (!b) {                        /* the level sent 'Vulnerable' meanwhile: ours again while the hold's reason lasts */
             k = klb_put8(kle_sh.obj + KLE_VEH_INV, 1, "escape vehicle: Invulnerable while the driver is held (set again)");
