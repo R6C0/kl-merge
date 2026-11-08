@@ -181,6 +181,11 @@ KITS = {
                           files={'F01_Main.zip': '74a8c1f8', 'F01_Main.bots.zip': '3a7ac8d6', 'F01_Main.bots.base.md5': '9d15b6cf', 'KLGuns.ini': '33432bb9'},
                           hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
                           solo_secs=480, parts=('solo',)),
+    # DM05A heli DEPARTURE (11-08): Escaping key 0 = Incomming's hover end (kl_lc_depart_1108.py), 5 keys in place; bench only, no look step. VALIDATE ONLY until the owner says test.
+    'lcdepart1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcdepart_1108', tag='.before-lcdepart1108',
+                         files={'F01_Main.zip': 'fbaf450d', 'F01_Main.bots.zip': 'a04c54d7', 'F01_Main.bots.base.md5': '1859185b', 'KLGuns.ini': '33432bb9'},
+                         hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
+                         solo_secs=480, parts=('solo',)),
     'lcmusicb1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lcmusic_b_1108', tag='.before-lcmusicb1108',
                           files={'F01_Main.zip': '530a2078', 'F01_Main.bots.zip': '7cf28cba', 'F01_Main.bots.base.md5': '02b17843', 'KLGuns.ini': '33432bb9'},
                           hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
