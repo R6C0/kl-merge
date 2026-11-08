@@ -1,3 +1,7 @@
+## 2026-11-08 ~04:25 [db] REVERB STACK EMPTY on DD09 online and F01 direct boot (no crash involved)
+- Probe `echo-stack` (TEST ee1ce53c): OSS_DD09_ECHO_S2_3 (2 seats SMOOTH, 0 faults) and ECHOSTACK_F01 (300 s) both show count 0, gate 1: no stock reverb box ever fires, every map plays the EFX default.
+- Fix (b) [Echo] RoomBoxes (klhook AABB + Push/Remove, default 0) is being built in kit C:\kl_build_1024\roomboxes_1108; next its DD09 bench. Details: re/reverb_path_1108.md.
+
 ## 2026-11-08 ~04:15 [shop] SHPH page II set check committed (cebf667c), staged, NOT run live (no crash involved)
 - [ShopPage] SetCheck=1 "(recommended on)" warns when a peer's page II set differs (log "SHPH mismatch", caption "(SET DIFFERS)"). SetCheckStrict=0 "(recommended off)" has the host refuse with m10.
   FNV-1a over row|item|picrow + [Set] Name, over klnetchan "shph" (independent of OnlineSend). Pure header klhook/klshopset.h + klshopset_test.c; Python twin kl_fallback_guns.set_hash.
