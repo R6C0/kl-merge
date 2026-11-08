@@ -18,7 +18,7 @@
 #define KFIT_NPAGE           5
 
 /* the ONE page-name table, in the cycle key's page ids (kspg_cur): 0 stock / set A, 1 page II (set B), 2 hire, 3 controls, 4 bots and modes */
-static const char *kfit_pname[KFIT_NPAGE]   /* not const: klshoppage.c TidyPage2 swaps entry 1 for the set label around one caption build */ = { "STOCK", "PD2 GUNS", "HIRE", "CONTROLS", "MODES" };
+static const char *kfit_pname[KFIT_NPAGE]   /* not const: klshoppage.c TidyPage2 sets entry 1 to the loaded set's label */ = { "STOCK", "PD2 GUNS", "HIRE", "CONTROLS", "MODES" };
 
 /* cut buf to at most maxch characters at a whole word, '..' appended ONLY when something was cut (so the result never exceeds maxch and a second cut changes nothing).
    A single word longer than maxch is cut hard. maxch < 3 cuts hard without dots. cap = the buffer size. -> 1 = cut, 0 = untouched */

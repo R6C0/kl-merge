@@ -77,7 +77,7 @@ static void ksu_p2_desc(char *out, size_t cap, const char *desc, int type)
     if (!cap) return;
     rest = ksu_line1(desc, l1, sizeof l1);
     if (!ksu_starts_ci(l1, "police reg")) { snprintf(out, cap, "%s", desc); return; }
-    snprintf(out, cap, "%s: same price and rank%s%s%s%s", type == 0 ? "PD2 GUN" : type == 1 ? "DEAD MEN GUN" : "NEW GUN",
+    snprintf(out, cap, "%s: price + rank of the stock gun%s%s%s%s", type == 0 ? "PD2 GUN" : type == 1 ? "DM GUN" : "NEW GUN",
              *rest ? "\n" : "", rest, "\n", l1);
 }
 
@@ -126,7 +126,10 @@ static void ksu_hire_row(char *out, size_t cap, const char *name, long price, in
     snprintf(t, sizeof t, "%s%s%s", name, w[0] ? "  " : "", w);
     if (strlen(t) > maxch) snprintf(t, sizeof t, "%s%s%s", name, w[0] ? " " : "", w);
     if (strlen(t) > maxch && state == KSU_ROW_PRICE) snprintf(t, sizeof t, "%s", name);
-    if (strlen(t) > maxch && state == KSU_ROW_HIRED) snprintf(t, sizeof t, "%s *", name);
+    if (strlen(t) > maxch && state != KSU_ROW_PRICE && maxch > strlen(w) + 3) {   /* keep the state word: cut the name, then ' HIRED' / ' n/a' */
+        char nm[96]; snprintf(nm, sizeof nm, "%s", name); kfit_cut(nm, sizeof nm, maxch - strlen(w) - 1);
+        snprintf(t, sizeof t, "%s %s", nm, w);
+    }
     kfit_cut(t, sizeof t, maxch);
     snprintf(out, cap, "%s", t);
 }

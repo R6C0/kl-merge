@@ -267,13 +267,11 @@ static void kspg_cap_build(char *o, size_t cap, const char *base, int page)
     if (kspg.active && kspg.hint) kspg_h_keyname(kspg.key, p2, sizeof p2);
     if (kspg.hireOn) kspg_h_keyname(kspg.hireKey, hk, sizeof hk);
     if (page == 1 && kl_online()) snprintf(tag, sizeof tag, "%s", kspo_set_warn() ? "(SET DIFFERS)" : kspg.apply ? "" : kspg.online2 ? "(STOCK GUN)" : "(VIEW ONLY)");   /* the old '(stock gun online)' / '(view only)' */
-    if (page == 1 && kspg.tidyP2) {   /* [ShopPage] TidyPage2: the page II name follows the set label, offline the tag says how many guns are new ('PD2 GUNS (13 NEW)') */
-        int i, cnt = 0; const char *save = kfit_pname[1];
-        if (!kl_online()) { for (i = 0; i < KSPG_ROWS; i++) cnt += kspg.p[i].ok != 0; ksu_p2_tag(tag, sizeof tag, cnt); }
-        kfit_pname[1] = ksu_set_caption(kss_type(kspo.rawName));
-        kfit_caption(o, cap, base, page, pos, n, tag, cyc, kspg.ctlOn ? kspg_next(page) : -1, p2, hk, kfit_budget(kspg.capMax, strlen(base)));
-        kfit_pname[1] = save;
-        return;
+    if (kspg.tidyP2) kfit_pname[1] = ksu_set_caption(kss_type(kspo.rawName));   /* [ShopPage] TidyPage2: page II is named for the loaded set in every caption ('next: DEAD MEN GUNS' too) */
+    if (page == 1 && kspg.tidyP2 && !kl_online()) {   /* TidyPage2 offline: the tag says how many guns are new ('PD2 GUNS (13 NEW)') */
+        int i, cnt = 0;
+        for (i = 0; i < KSPG_ROWS; i++) cnt += kspg.p[i].ok != 0;
+        ksu_p2_tag(tag, sizeof tag, cnt);
     }
     kfit_caption(o, cap, base, page, pos, n, tag, cyc, kspg.ctlOn ? kspg_next(page) : -1, p2, hk, kfit_budget(kspg.capMax, strlen(base)));
 }
@@ -515,7 +513,8 @@ static char *kspg_text_p2(int c, void *self, const char *key, char *res)
         if (!*p) { o = kspg_ring(); strncpy(o, kspg.p[row].name, 519); o[519] = 0; if (kspg.tidyP2) ksu_p2_name(o, 520, kspg.p[row].name, kss_type(kspo.rawName), KFIT_ROW_MAX); else if (kspg.rowFit) kfit_cut(o, 520, KFIT_ROW_MAX); return o; }
         if (!strcmp(p, "Desc")) {
             o = kspg_ring();
-            if (kl_online() && kspg.apply) { strncpy(o, kspg.p[row].desc, 519); o[519] = 0; }   /* OnlineApply: the host approves, the gun arrives next round, as in Arcade (price / rank are the carrier's) */
+            if (kl_online() && kspg.apply && kspg.tidyP2) ksu_p2_desc(o, 520, kspg.p[row].desc, kss_type(kspo.rawName));   /* TidyPage2: the same tidy line online */
+            else if (kl_online() && kspg.apply) { strncpy(o, kspg.p[row].desc, 519); o[519] = 0; }   /* OnlineApply: the host approves, the gun arrives next round, as in Arcade (price / rank are the carrier's) */
             else if (kl_online() && kspg.online2 && kspg.tidyP2) ksu_online_desc(o, 520, res, "ONLINE: buys this row's stock gun.");   /* TidyPage2: the stock gun's line first */
             else if (kl_online() && kspg.online2) snprintf(o, 520, "ONLINE: the host's shop has no such gun. Buying this row buys the stock gun of this row (its price, its rank), the same as page I.\n%s", res);   /* OnlinePage2: res = the stock (carrier) description */
             else if (kl_online() && kspg.tidyP2) { char d2[520]; ksu_p2_desc(d2, sizeof d2, kspg.p[row].desc, kss_type(kspo.rawName)); ksu_online_desc(o, 520, d2, "VIEW ONLY online: buy it in Arcade."); }   /* TidyPage2: the gun first, the lock note second */

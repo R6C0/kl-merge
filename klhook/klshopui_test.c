@@ -65,11 +65,11 @@ int main(void)
 
     /* page II descriptions */
     ksu_p2_desc(o, sizeof o, "Police reg.: 2040-II40\nLight machine gun. PD2 PAR. Page II: sold in the TYPE 05 row, same price, same rank.", 0);
-    CHECK(!strncmp(o, "PD2 GUN: same price and rank\n", 29), "line 1 useful: '%s'", o);
+    CHECK(!strncmp(o, "PD2 GUN: price + rank of the stock gun\n", 39), "line 1 useful: '%s'", o);
     CHECK(l1len(o) <= KSU_LINE1_MAX, "line 1 %u", (unsigned)l1len(o));
     CHECK(strstr(o, "Light machine gun") && strstr(o, "Police reg.: 2040-II40") && strstr(o, "TYPE 05"), "nothing lost: '%s'", o);
     CHECK(strstr(o, "Police reg") > strstr(o, "TYPE 05"), "reg line moved to the end");
-    ksu_p2_desc(o, sizeof o, "Police reg.: 1", 1); CHECK(!strcmp(o, "DEAD MEN GUN: same price and rank\nPolice reg.: 1") && l1len(o) <= KSU_LINE1_MAX, "reg only: '%s'", o);
+    ksu_p2_desc(o, sizeof o, "Police reg.: 1", 1); CHECK(!strcmp(o, "DM GUN: price + rank of the stock gun\nPolice reg.: 1") && l1len(o) <= KSU_LINE1_MAX, "reg only: '%s'", o);
     ksu_p2_desc(o, sizeof o, "POLICE REG.: 1\nbody", 2); CHECK(!strncmp(o, "NEW GUN:", 8), "case-insensitive: '%s'", o);
     ksu_p2_desc(o, sizeof o, "A real first line\nmore", 0); CHECK(!strcmp(o, "A real first line\nmore"), "author's own line 1 kept: '%s'", o);
     ksu_p2_desc(o, 20, "Police reg.: 2040-II40\nLight machine gun. PD2 PAR.", 0); CHECK(strlen(o) < 20, "small buffer cut, terminated");
@@ -93,7 +93,8 @@ int main(void)
     ksu_hire_row(o, sizeof o, "Hutchison", 270000, KSU_ROW_HIRED, KFIT_ROW_MAX); CHECK(!strcmp(o, "Hutchison  HIRED"), "'%s'", o);
     ksu_hire_row(o, sizeof o, "Liam", 45000, KSU_ROW_NA, KFIT_ROW_MAX); CHECK(!strcmp(o, "Liam  n/a"), "'%s'", o);
     ksu_hire_row(o, sizeof o, "Lynch", -1, KSU_ROW_PRICE, KFIT_ROW_MAX); CHECK(!strcmp(o, "Lynch"), "no price: '%s'", o);
-    ksu_hire_row(o, sizeof o, "Zoran Bogdanovic", 45000, KSU_ROW_HIRED, KFIT_ROW_MAX); CHECK(strlen(o) <= KFIT_ROW_MAX, "long name hired: '%s'", o);
+    ksu_hire_row(o, sizeof o, "Zoran Bogdanovic", 45000, KSU_ROW_HIRED, KFIT_ROW_MAX); CHECK(strlen(o) <= KFIT_ROW_MAX && strstr(o, "HIRED"), "long name hired keeps HIRED: '%s'", o);
+    ksu_hire_row(o, sizeof o, "Zoran Bogdanovic", 45000, KSU_ROW_NA, KFIT_ROW_MAX); CHECK(strlen(o) <= KFIT_ROW_MAX && strstr(o, "n/a"), "long name n/a keeps n/a: '%s'", o);
 
     /* hire line 1: every state, with and without gate / confirm, at the largest price and rank */
     for (st = KSU_H_READY; st <= KSU_H_LOWRANK; st++)
