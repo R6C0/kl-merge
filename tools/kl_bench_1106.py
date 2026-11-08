@@ -24,7 +24,7 @@ dinput8.dll in and the live one back), (4) ALWAYS runs install.py --undo in a fi
 fails the tool prints UNDO FAILED and the exact command to run by hand. It touches nothing but KLExpansion/Maps/<MAP> and dinput8.dll
 (swapped by kl_solo_test). KL_PortBackup is never touched. The launch options are never changed (the bench starts kl2.exe directly).
 """
-import hashlib, os, re, subprocess, sys, time
+import math, hashlib, os, re, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KIT = 'C:/kl_build_1024/bench_1106'
@@ -34,7 +34,7 @@ HOOK_SRC = 'C:/kl_build_1024/n9_twins/727a73bb/dinput8.dll'    # TEST twin b6a69
 HOOK_MD5 = 'b6a697726b66ca7270921d6d4543005f'
 Q32 = 'C:/kl_build_1024/c9_1028/q32'
 COVER = ('AssertSoft', 'ClientBuild', 'ClientBuildHost', 'ClientRewrite', 'ClientRingSync')
-OPS = set('waitwin settle tapuntil tap wait windows sel expect msg waitload waitstate waitvan waitpeers tele goto pos ents peek log pass fail label jump onwin mouse'.split())
+OPS = set('waitwin settle tapuntil tap wait windows sel expect msg waitload waitstate waitvan waitpeers tele goto face pos ents peek log pass fail label jump onwin mouse'.split())
 
 KITS = {
     'lc1106': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/lastcall_chain_1105/stage', tag='.before-1105chain',
@@ -155,6 +155,13 @@ KITS = {
                         hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
                         ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
                         solo_secs=900, parts=('solo',), shots='300-840:30'),
+    # DM06B traffic cars (11-08, tools/kl_dm06b_traffic_1108.py, stage C:/kl_build_1024/dm06b_traffic_1108, pinned to the LIVE DM06B a6c0aef1): 7 static TRAFFIC! cars on the
+    # ramp road (Curvedroad waypoints 9..21). Offline Arcade, 1 seat on the merged_1107 TEST dll; the script teleports (TEST rig) 700 upstream of each car and faces it, shots
+    # every 5 s. LOOK at the shots: cars drawn? (skinned models as static ZLNKOBJ = the open question), headlight glows rebuilt as Standard (GUESS), car heading/height.
+    'dm06btraffic1108': dict(map='DM06B', slot='F02', entry=1, stage='C:/kl_build_1024/dm06b_traffic_1108', tag='.before-dm06btraffic1108', cars=True,
+                             files={'F02_Main.zip': '7cee043dda5d62eeb6c48329b40fcda8', 'F02_Main.bots.zip': 'ec42c5e4', 'F02_Main.bots.base.md5': '171f7443', 'KLGuns.ini': '483f7450'},
+                             hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
+                             solo_secs=600, parts=('solo',), shots='150-420:5'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
       'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108')
@@ -228,6 +235,16 @@ def solo_script(k, secs_total):
               'tap E 3000', 'wait 1000', 'pos try1', 'tap E 3000', 'wait 1000', 'pos try2', 'tap E 4000', 'wait 1000', 'pos boarded',
               'waitvan 5 120000', 'pos van5',
               'wait 8000', 'pos after5', 'waitstate 0x1f 240000', 'pos s1f', 'wait 12000', 'waitstate 0x20 120000', 'log BENCH1106 LC solo done', 'wait 3000', 'pass 1000']
+    elif c.get('cars'):
+        # one station per car: 700 upstream (against the spline heading) and 40 up, facing the car; 'tele' is TEST-rig only, the placement guard may refuse (the log says)
+        import json
+        rep = json.load(open('%s/build_report.json' % c['stage']))['reports']['F02_Main.zip']
+        s += ['wait 8000', 'pos before-cars']
+        for i, (sp, hd) in enumerate(zip(rep['spots'], rep['headings'])):
+            (x, y, z), n = sp[0], math.hypot(hd[0], hd[1]) or 1.0
+            ux, uz = x - 700 * hd[0] / n, z - 700 * hd[1] / n
+            s += ['tele %d %d %d' % (ux, y + 40, uz), 'wait 1500', 'face %d %d 60 6000' % (x, z), 'log BENCH1106 car %d station' % (i + 1), 'wait 9000', 'pos car-%d' % (i + 1)]
+        s += ['log BENCH1106 cars done', 'pass 1000']
     elif c.get('van'):
         # empty-wait van (11-08, [VanBlow] ShieldWhileWaiting): nobody boards; the seat stands at spawn while the van waits at the pickup.
         # The log then shows whether the van was shielded ('vanblow: ShieldWhileWaiting', 'follow: shield') and whether it reached 6 (destroyed).
@@ -482,7 +499,8 @@ def verify(k, part, tagbase=None):
             else:   # includes lcchain2c1106d / lcchain2d1106d: the eye is FIXED at CamPos01 (2d: the box node itself), so it is still checked
               chk('escape camera eye about (%d,%d,%d) in the outro' % eye, bool(hit), '%d outro cam eyes, %s' % (len(eyes), ('e.g. (%.0f,%.0f,%.0f)' % hit[0]) if hit else ('last (%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
         st = [m.group(1) for l in a for m in [re.search(r'session: state \S+ -> (0x[0-9a-f]+)', l)] if m]
-        chk('session reaches 0x1f then 0x20', '0x1f' in st and '0x20' in st[st.index('0x1f'):] if '0x1f' in st else False, 'states seen: %s' % ' '.join(st[-8:]))
+        if not KITS[k].get('cars'):
+          chk('session reaches 0x1f then 0x20', '0x1f' in st and '0x20' in st[st.index('0x1f'):] if '0x1f' in st else False, 'states seen: %s' % ' '.join(st[-8:]))
         van = [l[:140] for l in a if 'van card' in l or 'vehicle state' in l]
         print('  info vehicle lines: %d, last: %s' % (len(van), van[-1] if van else '-'))
         if k in LC:

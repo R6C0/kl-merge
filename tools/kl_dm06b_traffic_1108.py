@@ -116,6 +116,23 @@ def spots(wps, boxes, roots):
     return out
 
 
+TWIN_GLOW = True
+TEX_LEVEL = 6      # MEASURED 11-08: the live DM06B zip holds .TEX at deflate level 6 (recompressing the live .TEX at 6 gives 102517856 vs 102517779 in the zip, level 1 gives 121 MB)
+                   # and every other member at level 1 (.prm matches to the byte); kl_graft.write_zip packs all at 1, which grew the zip 19.7 MB.
+
+
+def write_zip(path, members):
+    """kl_graft.write_zip (same stamp, attrs, order) with the live level per member: .TEX at TEX_LEVEL, the rest as load_options() says."""
+    import kl_graft, zipfile as zf
+    opt = kl_graft.load_options()
+    with zf.ZipFile(path, 'w', zf.ZIP_DEFLATED, compresslevel=opt['level']) as z:
+        for name, data in members:
+            zi = zf.ZipInfo(name, kl_graft.STAMP)
+            zi.external_attr = 0o600 << 16
+            z.writestr(zi, data, zf.ZIP_DEFLATED, TEX_LEVEL if name.endswith('.TEX') else opt['level'])
+    return path
+
+
 def stage_zip(zp, out_zp, M, log):
     """One zip: the 7 cars added -> report dict. Refuses unless the zip's members are what the live DM06B was."""
     import kl_fa_bots as F, kl_fa_cover as CV, kl_fa_climb2 as C2, kl_graft, kl_light
@@ -149,8 +166,26 @@ def stage_zip(zp, out_zp, M, log):
             c = bytearray(c); struct.pack_into('<I', c, 0x1c, 0); prm.chunks[cmap[old]] = bytes(c); zeroed += 1
     say('  .prm: %d chunks appended (%d roots -> %s), %d .oct record refs zeroed; materials %d, textures %d' % (
         len(kinds), len(roots), [cmap[r] for r in roots], zeroed, len(slots), len(want)))
-    lack = kl_light.missing_shaders(mat, B['.fxc'], [mmap[s] for s in slots])
-    say('  shaders the car materials need that the build\'s .fxc lacks: %s' % (lack or 'none'))
+    # SHADER FIT (1108 review): a material without a compiled shader is NOT drawn (kl_fa_loot.dress), so fit like kl_fa_bank / kl_fa_club do:
+    # kl_light.fit_shaders switches features off (or rebuilds as Standard/Standard) until every effect the material asks for is in the build's .fxc.
+    new_slots = sorted(mmap[s] for s in slots)
+    # GUESS: the 5 glow materials (headlight flare / beam / lamp, Standard/Glow, skinned) have no MESH_WEIGHTED variant in any .fxc we have, so they are rebuilt as
+    # Standard/Standard (kl_light.plain_twin, blend state kept): a lit blended quad instead of a glow. kl_light.TWIN_CLASSES lists SkinCloth only because a glow
+    # drawn lit 'may look worse than one that is missing' - the bench screenshots decide; set TWIN_GLOW = False to leave them undrawn (then check() fails on purpose).
+    old_twin = kl_light.TWIN_CLASSES
+    if TWIN_GLOW:
+        kl_light.TWIN_CLASSES = old_twin + (('Standard', 'Glow'),)
+    try:
+        fit = kl_light.fit_shaders(mat, B['.fxc'], slots=new_slots, log=say, twin_on=('SPECULARENABLED', 'STDSAMPLERSTATE'))   # GUESS: the compiled skinned+blend Standard permutations are {BLEND, SPECULAR, STDSAMPLERSTATE}
+    finally:
+        kl_light.TWIN_CLASSES = old_twin
+    if fit['unresolved']:
+        raise ValueError('no compiled shader for %s' % [v[0] for v in fit['unresolved'].values()])
+    lack = kl_light.missing_shaders(mat, B['.fxc'], new_slots)
+    if lack:
+        raise ValueError('shaders still missing after fit_shaders: %s' % lack)
+    say('  shaders: every one of the %d car materials resolves to a compiled shader (fixed: %s)' % (
+        len(new_slots), {s: v for s, v in fit['fixed'].items()} or 'none'))
     # ---- nodes
     gk = CV.group_form(B)
     topg = CV._node(mk, B, gk, GROUP)
@@ -235,11 +270,11 @@ def stage_zip(zp, out_zp, M, log):
     if lost:
         raise ValueError('materials name textures the .TEX lacks: %s' % sorted(lost)[:5])
     changed = sorted(e for e, nm in B.ext.items() if new[nm] != B.files[nm])
-    kl_graft.write_zip(out_zp, [(nm, new[nm]) for nm in B.order])
+    write_zip(out_zp, [(nm, new[nm]) for nm in B.order])
     say('written %s: %d entities added, members changed: %s; %d .prm roots re-pointed; chunks %d -> %d' % (
         out_zp, len(order), ' '.join(changed), repointed, len(pD.chunks), len(p2.chunks)))
-    return dict(changed=changed, chunks=len(p2.chunks), roots=[cmap[r] for r in roots], spots=[[list(s[0]), s[3]] for s in sp],
-                shaders_missing={str(k): [str(x) for x in v] for k, v in lack.items()}, order=B.order)
+    return dict(changed=changed, chunks=len(p2.chunks), roots=[cmap[r] for r in roots], spots=[[list(s[0]), s[3]] for s in sp], headings=[list(s[2]) for s in sp],
+                shaders_fixed={str(k): [v[0], [str(x) for x in v[1]]] for k, v in fit['fixed'].items()}, order=B.order)
 
 
 def stage(in_dir=MAPDIR, out=OUT, log=print):
@@ -303,12 +338,17 @@ def check(out, in_dir=MAPDIR, log=print):
         cars = [e for e in B.ents if e.name.decode('latin1') in ['KL_' + c for c in CARS]]
         if len(cars) != 7:
             bad.append('%s: %d car entities, not 7' % (name, len(cars)))
+        import kl_light
+        fxc_have = kl_light.shader_cache(B['.fxc'])
         rmi = O.RoomIndex.parse(B['.rmi'])
         for e in cars:
             kinds, _a = G.walk(p, [e.model])
             sl = {p.u16(i, 0x12) for i, k in kinds.items() if k in ('mesh', 'scatter', 'water')}
             if not sl or any(s not in mat.insts for s in sl):
                 bad.append('%s: %s material slot unresolved' % (name, e.name))
+            nolack = kl_light.missing_shaders(mat, fxc_have, sorted(sl))
+            if nolack:
+                bad.append('%s: %s materials without a compiled shader: %s' % (name, e.name, nolack))
             if T.used_textures(mat, sl) - set(tex.tex):
                 bad.append('%s: %s texture missing' % (name, e.name))
             c = p.chunks[e.model]

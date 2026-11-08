@@ -497,7 +497,7 @@ def slim_cache(mat, fxc, log=print):
     return new, rep
 
 
-def fit_shaders(mat, fxc, slots=None, log=print):
+def fit_shaders(mat, fxc, slots=None, log=print, twin_on=()):
     """Give every material instance (kl_texmat.Mat, edited in place) a shader permutation the
     cache `fxc` (bytes of the .fxc the level ships) holds: where an instance asks for an effect
     no entry has, the cheapest set of its feature switches (SWITCH_COST) is turned off (BOOL
@@ -520,7 +520,7 @@ def fit_shaders(mat, fxc, slots=None, log=print):
                     if best is None or cost < best:
                         best = cost
         if best is None:
-            twin = plain_twin(mat, e, have)
+            twin = plain_twin(mat, e, have, enable=twin_on)
             if twin is None:
                 rep['unresolved'][s] = (e.name, lack); continue
             was = '%s/%s' % kl_mat.class_key(mat, e)
@@ -552,7 +552,7 @@ PLAIN = ('Standard', 'Standard')            # the class every mesh kind has comp
 TWIN_CLASSES = (('Standard', 'SkinCloth'),)
 
 
-def plain_twin(mat, entry, have, ref=None):
+def plain_twin(mat, entry, have, ref=None, enable=()):
     """A material instance that fit_shaders() cannot fit, rebuilt as an instance of Standard/Standard
     the way kl_mat.convert_mat_full builds one: the properties of that class in Dog Days' order, the
     instance's own node where it has a property of that name, Dog Days' most common node for one every
@@ -586,6 +586,13 @@ def plain_twin(mat, entry, have, ref=None):
     f[1] = slot
     twin = TM.Entry(PLAIN[0].encode('latin1'), f, [entry.root[0], entry.root[1], 2, [
         kl_mat._thaw(kl_mat._freeze(_kid(entry.root, 'NAME'))), ['BIND', TM.LIST, len(bind), bind]]])
+    for k in enable:                                    # opt-in (kl_dm06b_traffic_1108): switches the CALLER wants ON in the twin, e.g. SPECULARENABLED, because the
+        n = _bools(twin).get(k)                         # only compiled MESH_WEIGHTED + BLENDENABLED Standard permutations have it; a name the twin lacks is ignored
+        if n:
+            _kid(n[0], 'VALU')[3] = 1
+            e_ = _kid(n[0], 'ENAB')
+            if e_:
+                e_[3] = 1
     on = sorted(k for k, (_n, v) in _bools(twin).items() if v and k not in EXCLUDED)
     best = None
     for r in range(0, len(on) + 1):
