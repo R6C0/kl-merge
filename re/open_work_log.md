@@ -1,3 +1,10 @@
+## 2026-11-08 ~05:00 [d0] VAN SHIELD INSTALLED (no crash involved)
+2026-11-08 ~05:00 - [d0] VAN SHIELD LIVE: dll 502677ee -> 19611c16 (SHIP c7b7f1db = merged_1107 + db Echo fix (off) + [VanBlow] ShieldWhileWaiting), ini 6a17a145 -> cd431998 (+ [VanBlow] ShieldWhileWaiting=1 "(recommended on)").
+Bench vanwait1108 (DD10 Flat Raid, TEST 76bd4a9c, nobody boards): PASS, 0 faults; shield on at state 4 for 54.5 s, health 9600/9600 (the game's scripted hits would have taken it to a tenth = the "always on fire" van), drove out at state 7 undamaged. No screenshots (ReShade bridge wrote none).
+Kit C:\kl_build_1024\vanwait_1108 (install.py pins live dll+ini, scratch round trip byte-exact). Undo: its UNDO.bat, BEFORE merged_1107\UNDO.bat. Peers told (db oss_1106 ACCEPT list, 6b pd2r run.py).
+Open: boarding test of a van that is not shielded at drive-in (state 2), Retomoto van (same cause expected).
+Cause: during the wait the game's scripted hits take the escape vehicle to a tenth of its health, so it sits burning before anyone boards. Shield = Invulnerable byte +0x21 while state 3/4, dropped at state 5 when nobody is aboard.
+
 ## 2026-11-08 ~04:30 [sky] DM05A SKYLINE STAGED (not installed, no crash involved)
 - tools/kl_skyline_1108.py (plan / search / stage / check / plot). Source: Dead Men M05_A node 9286 Buildings_MidRange (ZLNKOBJ 0x200002), model root 23169, 33 prm chunks, 156 triangles, materials 155/164/682/683/684, textures 378/392/1078-1081 (ids clash with live: merge_tex remaps).
 - Form = the rope/traffic form: new top group KL_Skyline! (root tree 3), entity KL_Skyline_MidRange group 2 flags 0x264182, no room tree, .oct record zeroed (no collision), light list of the nearest ZSTDOBJ with links (GUESS).
