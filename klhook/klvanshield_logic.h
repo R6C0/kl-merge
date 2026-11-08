@@ -37,4 +37,13 @@ static int kvs_wait_shield(int on, int veh, int aboard, int round_over, unsigned
     if (veh != 3 && veh != 4) return 0;
     return cap_ms == 0 || waited_ms < cap_ms;
 }
+
+/* ShieldDriveIn (2026-11-08): shield the vehicle while it drives in? vanwait09_1108 (DM09, nobody boards): called at 05:02:19 (state 2),
+   waiting at 05:02:26 (state 4) with 1245 of 3000 already gone, so ShieldWhileWaiting froze a burning van. on = key; veh = rules state
+   byte; 2 = driving in (seen in that log: 'state now 2' at the call, 4 seven seconds later; GUESS that 1 is never a moving vehicle, so 1
+   is left out). */
+static int kvs_drivein_shield(int on, int veh)
+{
+    return on && veh == 2;
+}
 #endif
