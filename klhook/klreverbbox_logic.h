@@ -112,6 +112,11 @@ static int klrb_inside(const struct klrb_box *b, const float p[3], float margin)
     return 1;
 }
 
+/* The point a box is tested at: the hero's node (the feet) raised by ear_cm along world y (y is up: spawns and feet sit at the floor's y).
+   Dead Men room boxes (.rmi AABBs) start exactly at the floor, so the feet themselves are never inside the box shrunk by the enter margin
+   (RB_DM02 2026-11-08: feet y 1002, box floor 1000, margin 30 -> no push). GUESS: 100 cm is inside every room box (the lowest DM box is 420 cm tall). */
+static void klrb_ear(const float feet[3], float ear_cm, float out[3]) { out[0] = feet[0]; out[1] = feet[1] + ear_cm; out[2] = feet[2]; }
+
 struct klrb_st { unsigned char in[KLRB_MAX], tog[KLRB_MAX]; unsigned long chg[KLRB_MAX]; int cur; };
 
 static void klrb_reset(struct klrb_st *s) { memset(s, 0, sizeof *s); s->cur = -1; }

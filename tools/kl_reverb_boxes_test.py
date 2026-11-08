@@ -144,6 +144,8 @@ def main():
     db = R.dm_boxes_from_plan(P)
     check(db[1]['prio'] > db[0]['prio'] and db[0]['snd'] == 100 and db[0]['q'] == [1, 0, 0, 0, 1, 0, 0, 0, 1], 'plan -> boxes: identity q, snd = ref, small wins')
     check(R.inside(db[0], [49, 0, 49]) and not R.inside(db[0], [51, 0, 0]), 'plan box tests like an AABB')
+    fl = {'c': [0, 1250, -2500], 'h': [2000, 250, 500], 'q': [1, 0, 0, 0, 1, 0, 0, 0, 1]}   # dm02 KR014: floor at y 1000, as the .rmi room boxes
+    check(not R.inside(fl, [1694, 1002, -2967], -30) and R.inside(fl, [1694, 1102, -2967], -30), 'feet on a box floor fail the enter margin, ear height (+100) passes (RB_DM02)')
     dm_live_checks()
 
     print('%s: %d checks, %d fails' % ('FAIL' if fails else 'PASS', checks, fails))

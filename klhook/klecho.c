@@ -341,7 +341,7 @@ static void klecho_probe_tick(void)
 typedef DWORD (__fastcall *klecho_get_fn)(DWORD aud, DWORD edx, DWORD off);
 typedef void (__fastcall *klecho_stk_fn)(DWORD aud, DWORD edx, DWORD effect, DWORD key, float prio);
 
-static int klecho_rb_on, klecho_rb_margin = 30, klecho_rb_hold = 250;
+static int klecho_rb_on, klecho_rb_margin = 30, klecho_rb_hold = 250, klecho_rb_ear = 100;
 static char klecho_rb_open_key[64], klecho_rb_open_path[MAX_PATH]; static volatile LONG klecho_rb_open_gen, klecho_rb_lock;
 static struct klrb_box klecho_rb_box[KLRB_MAX]; static unsigned char klecho_rb_use[KLRB_MAX]; static int klecho_rb_n;
 static struct klrb_st klecho_rb_st;
@@ -483,6 +483,7 @@ static void klecho_rb_tick(void)
         for (i = 0, hit = 0; i < klecho_rb_n; i++) { klecho_rb_use[i] = klecho_rb_box[i].snd != 0 && klecho_rb_box[i].snd < slen && klecho_rb_getter(aud, klecho_rb_box[i].snd) != 0; hit += klecho_rb_use[i]; }
         klog("echo-rb: map %s: %d of %d box(es) have a roomeffect in this .SND (base %08lx)", id, hit, klecho_rb_n, (unsigned long)base);
     }
+    klrb_ear(np, (float)klecho_rb_ear, np);                   /* the feet sit on the box floor: test at ear height */
     w = klrb_update(&klecho_rb_st, klecho_rb_box, klecho_rb_n, np, now, (float)klecho_rb_margin, (unsigned long)klecho_rb_hold, klecho_rb_use);
     if (klecho_rb_p.valid && w == klecho_rb_p.idx && klecho_rb_getter(aud, klecho_rb_box[w].snd) == klecho_rb_p.eff) return;   /* the right one is up */
     if (klecho_rb_p.valid) klecho_rb_release(aud, w < 0 ? "the hero left the box" : "another box wins");
@@ -530,7 +531,10 @@ static void klecho_init(void)
     if (klecho_rb_margin > 500) klecho_rb_margin = 500;
     if (klecho_rb_hold < 0) klecho_rb_hold = 0;
     if (klecho_rb_hold > 5000) klecho_rb_hold = 5000;
-    if (klecho_rb_on) klog("echo: RoomBoxes on ([Echo] RoomBoxes=1): the local hero is tested against KLReverbBoxes.ini, margin %d, hold %d ms", klecho_rb_margin, klecho_rb_hold);
+    klecho_rb_ear = GetPrivateProfileIntA("Echo", "RoomBoxEarCm", 100, klh_ini);
+    if (klecho_rb_ear < 0) klecho_rb_ear = 0;
+    if (klecho_rb_ear > 300) klecho_rb_ear = 300;
+    if (klecho_rb_on) klog("echo: RoomBoxes on ([Echo] RoomBoxes=1): the local hero is tested against KLReverbBoxes.ini, margin %d, hold %d ms, %d cm above the feet", klecho_rb_margin, klecho_rb_hold, klecho_rb_ear);
     if (!klecho_on && !klecho_probe) return;
     klecho_log = GetPrivateProfileIntA("Echo", "Log", 1, klh_ini) != 0;
     klecho_c.strength = GetPrivateProfileIntA("Echo", "Strength", 100, klh_ini);

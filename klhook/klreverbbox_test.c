@@ -110,6 +110,12 @@ int main(void)
       CHECK(!klrb_map_id("C:\\Steam\\Dog Days\\Scenes\\Locations\\F02\\F02_Main.zip", id, sizeof id) && id[0] == 0);
       CHECK(!klrb_map_id("F02_Main.zip", id, sizeof id)); CHECK(!klrb_map_id("a\\Maps\\F02_Main.zip", id, sizeof id));
       CHECK(!klrb_map_id("x\\Maps\\toolongfolder\\F02_Main.zip", id, 8)); }
+    /* ear height: a room box whose floor is the floor (Dead Men .rmi, RB_DM02) holds the raised point, never the feet, once the enter margin shrinks it */
+    { struct klrb_box r; float f[3] = { 1694, 1002, -2967 }, ear[3];
+      memset(&r, 0, sizeof r); r.q[0] = r.q[4] = r.q[8] = 1; r.c[0] = 0; r.c[1] = 1250; r.c[2] = -2500; r.h[0] = 2000; r.h[1] = 250; r.h[2] = 500;   /* dm02 KR014 Atrium_301a */
+      CHECK(!klrb_inside(&r, f, -30.0f));
+      klrb_ear(f, 100.0f, ear); CHECK(ear[0] == 1694 && ear[1] == 1102 && ear[2] == -2967); CHECK(klrb_inside(&r, ear, -30.0f));
+      klrb_ear(f, 100.0f, f); CHECK(f[1] == 1102 && f[0] == 1694); }                                          /* in place, as klecho.c calls it */
     /* keys are never a pointer */
     CHECK(KLRB_KEY + KLRB_MAX < 0x10000u);
     printf("%s: %d checks, %d fails\n", fails ? "FAIL" : "PASS", checks, fails);

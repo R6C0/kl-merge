@@ -221,8 +221,9 @@ def spawn_report(zp):
     return cnt
 
 
-def spawn_coverage(zp, boxes):
-    """(spawns inside at least one of boxes, all spawns) of a map zip: do the boxes land on the playable area?"""
+def spawn_coverage(zp, boxes, ear=0.0, margin=0.0):
+    """(spawns inside at least one of boxes, all spawns) of a map zip: do the boxes land on the playable area?
+    ear / margin as the hook tests the hero (klrb_ear + the enter margin, i.e. margin=-RoomBoxMargin): spawn y raised by ear, boxes shrunk."""
     import kl_fa_bots as F
     B = F.Built(zp)
     n = hit = 0
@@ -230,7 +231,8 @@ def spawn_coverage(zp, boxes):
         if B.sc.cls(s) == 'ZSpawnPoint':
             n += 1
             p = B.world(s, (0.0, 0.0, 0.0))
-            hit += any(inside(b, p) for b in boxes)
+            p = (p[0], p[1] + ear, p[2])
+            hit += any(inside(b, p, margin) for b in boxes)
     return hit, n
 
 
