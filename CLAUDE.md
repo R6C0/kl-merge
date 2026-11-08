@@ -77,9 +77,9 @@ lens + PickDefault + 6b ui_1107 + db [Echo] (0) + c9 [VanBlow] ShieldUntilBoarde
 install.py: refuses unless live dll e88a6093 / ovl d00527ff / fx 57663e0c; 15 ini lines (ini 97f8e972 -> 6a17a145); backups *.before-merged1107; undo byte-exact,
 keeps in-game ini edits. 17 scratch checks + kl_tests 100/0 + 3-lens review. Supersedes ui_1107, lens_pick_1107_install, pick_1107_install.
 
-2026-11-06 ~18:45 - [c9] LAST CALL CHAIN 2f LIVE on DM05A (zip 1d325299, bots db375c5a, base 4dce350a), on top of 6b's pd2guns c-f on 2c: the heli is drawn after lift-off.
-A moving entity is drawn only while an .rmi box of a visible room holds it, and every Roof box stopped at y 2640. Fix: Roof box 7 enlarged to y 6600 (tools/kl_club_rmi_1106.py) + the 2e cam/route.
-Bench lcchain2f1106d PASS, undo byte-exact. Undo: UNDO ALL 1105.bat step 0u (first). Any DM05A re-stage: --base live 1d325299.
+2026-11-08 ~04:00 - [d0] DM05A LCARR 2h + CLUB MUSIC LIVE (zip 651a7492, bots ba98c0a6, base 1d89ea85) on top of 1107r: heli ROUTE_2H from the east, no building clip, club .SND boost.
+Bench lcarr2h1108 PASS (TEST 39e79011, 0 faults/dumps, heli closest 1093, boarded at state 3, vehicle state 5 with player aboard, heli drawn in outro). Stage C:\kl_build_1024\arrival_1107\lcarr_2h_music_r.
+Undo: UNDO ALL 1105.bat step 0h (above 0r). Any DM05A re-stage: --base live 651a7492. Next: vanwait1108 bench (DD10, [VanBlow] ShieldWhileWaiting, TEST 76bd4a9c) after db's [Echo] bench.
 
 2026-11-06 ~14:30 - [db] PERF: [Perf] OsdScanSlice, ScanMinFrames, ShopPoolBlock, BotScanSlice, CensusSlice, FillCensusSlice (85fdae39) all "(recommended on)", NOT installed (live 727a73bb).
 Bench OSS_DD09_FCS_S3 (TEST a77e0546): SMOOTH on every seat, 0 hitches/stalls, host 29.9 fps, max frame 128 ms (CEN_S3 486), p95 87. Host klbf 13 ms windows 24/30 -> 0/18.

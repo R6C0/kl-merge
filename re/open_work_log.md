@@ -1,3 +1,12 @@
+## 2026-11-08 ~04:00 [d0] DM05A lcarr 2h + club music INSTALLED (no crash involved)
+Stage C:\kl_build_1024\arrival_1107\lcarr_2h_music_r (scratch chain_music_2h.py: c9's lcarr_2h_r + kl_lc_music_1107 on live d65e8437, CHECK PASS).
+Bench kit lcarr2h1108 (tools/kl_bench_1106.py, TEST 39e79011, 900 s solo): PASS. 0 faults/dumps; ZHeli closest 1093; player boarded at state 3 (fed status 0->4), bots aboard, vehicle state 5;
+outro eye (7400,2500,2800) shots 05/09 show the heli drawn over the roof against the RETOMOTO/SHIIUTEN skyline. Bench undo byte-exact, then the real install --skip-run-check:
+live zip 651a7492 / bots ba98c0a6 / base 1d89ea85, backups *.before-lcarr2hmusic1107. Undo: UNDO ALL 1105.bat step 0h (above 0r), dry run clean.
+Music: whether the rooms are now audible (owner's "last call music doesn't play") still needs the owner's ear; the boost's field meanings are a GUESS.
+Also 11-08: [VanBlow] ShieldWhileWaiting (e184fd31 + review fix c7b7f1db) and kit vanwait1108 (DD10, TEST klhook/out_vanwait1108b 76bd4a9c), waiting for the game after db's [Echo] bench.
+Correction to the 11-07 note below: of the DM graft maps only DM06B drops traffic (7 cars); DM03/DM03A/DM06 drop outside buildings, not traffic (city1108 survey).
+
 ## 2026-11-08 ~03:00 [shop] PD2 rebase 1107r INSTALLED on all 20 maps + KLShopPage.ini (no crash involved)
 Owner 11-08 "continue all and do tests free til the afternoon"; order agreed with d0 (merged_1107 first, then 1107r, then d0's DM05A 2h chained on 1107r).
 D:\kl_stage\pd2rebase_1107\install.py --skip-run-check (2 zombie kl2.exe, 0 threads): dry run all pins matched on the new live ini/overlay (1107r pins only map files + KLShopPage.ini), exit 0, KLShopPage.ini 1399238b -> 4bc8845a installed last.
