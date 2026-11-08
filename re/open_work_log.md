@@ -1,3 +1,10 @@
+## 2026-11-08 ~07:05 [d0] DM05A FOG WALL: next suspect = Dead Men colour grade (no crash involved)
+- Research wf_5acf84d5-df8 ranks first: the 20 PostFilterBoxes (scene block -> .prm chunk 53850, 20 x 88 B, set chunk id at +0x30) point at Dead Men sets 53844..53849
+  (boxes 0-4 = 53844, 5-11/14/16-18 = 53845, 12 = 53846, 13 = 53847, 15 = 53848, 19 = 53849); their floats 21..24 are bluish (53845 = 0.34 0.34 0.51 0.61).
+  The same .prm holds DD's neutral set 33189 (float 17 = 1, floats 21..24 = 0, identity curves). Skydome textures are dark teal (probably not it); ReShade ruled out.
+- tools/kl_postneutral_1108.py (aed8eeab): stage C:\kl_build_1024\postneutral_1108 = skyline_1108 with all 20 boxes -> 33189 (zip 5fce044f, bots 01119fdf, base 32330624). Kit postneutral1108, NOT run yet (queued after f0's merged_1108c; gen after "game free").
+  Wall gone -> bisect the sets (53845 first); unchanged -> FogMax 0 + a raw pre-ReShade shot.
+
 ## 2026-11-08 ~06:50 [d0] DM05A FOG WALL: scene fog floats are NOT the cause (no crash involved)
 - skyeast1108 (04:45, shots 12/20): from the roof pad facing east (heading 95) a flat cyan fog wall ~100 m out; only the two nearest towers show. The skyline at 60000 can never be seen through it.
 - skyfog1108 (tools/kl_skyfog_1108.py, stage C:\kl_build_1024\skyfog_1108, bench only): CameraFar 30000 -> 80000, CameraFogFull 0.95 -> 1.5 in both zips' .prp. 0 faults, 465-532 fps (control 366-420), undo byte-exact 651a7492.
