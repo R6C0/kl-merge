@@ -1,3 +1,7 @@
+## 2026-11-08 ~06:47 [db] RB_DM02_2 PASS: RoomBoxes push on a Dead Men map (no crash involved)
+- TEST 530c9920 (75c1e3a1, ear height 100), 2 seats DM02, PD2R host/join: both seats "pushed box 40" (hero y 1102), stack 0 -> 1, sent reverb 1.49/0/0 -> 1.10/0.363/1.000 (DM02's own effect). 0 asserts/faults, live dll/ini unchanged.
+- Not seen: a switch between boxes (both stayed in box 40). RoomBoxes stays off until the owner says (it changes how the maps sound).
+
 ## 2026-11-08 ~06:37 [d0] SHIELDDRIVEIN LIVE: merged_1108b (no crash involved)
 - f0's kit C:\kl_build_1024\merged_1108b (from 6f3df179): SHIP 3f8bc902 / TEST 64701f02; ini +1 line in [VanBlow] "ShieldDriveIn=1 ; (recommended on)".
 - Bench vanwait09m_1108 (DM09, install.py --test, kit ini without ShieldDriveIn so the installed line is what ran): PASS, 0 asserts/faults; shield on at state 2, 3000/3000 to drive-out.

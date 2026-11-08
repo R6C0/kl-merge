@@ -94,3 +94,8 @@ Cause: the hero node is the FEET (escort lines: humans at y 1002); the Dead Men 
 shrinks a box by RoomBoxMargin 30 -> the feet are never inside. The offline check missed it (margin 0, spawn origins). Fix: klrb_ear raises the point by
 [Echo] RoomBoxEarCm (default 100, 0..300); spawn_coverage(ear, margin) now tests like the hook: at margin -30 the feet cover dm05a 4/63, dd10 29/63, dm03a 51/63,
 dm09 45/63, dm01b 59/63; at ear 100 all 63, nothing lost on any map. DD09 box 6 was tall enough either way. TEST 530c9920 (75c1e3a1); rerun RB_DM02_2 queued.
+
+## Bench RB_DM02_2 (2026-11-08 06:38-06:47, db): PASS, push on DM02
+TEST 530c9920 (75c1e3a1). Both seats: "echo-rb: pushed box 40 (key 00004b28, prio 80)" at hero (1300,1102,-3521) / (1309,1102,-2917);
+echo-stack count 0 -> 1; echo-room roof 1.49/0/0/0.011 -> street 1.10/0.363/1.000/0.017 about 1 s later. 0 asserts/faults, live dll 3f8bc902 / ini 6ddd03de unchanged.
+The ear-height fix is proven. Still open: switching between boxes (both seats stayed in box 40), dm06/dm06b have no box under the play area.
