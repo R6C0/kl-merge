@@ -98,7 +98,8 @@ static struct {
     int ctlOn, ctlKey, ctlKeyDown, hPendPg, hintDone, ctlTold; DWORD ctlLastKey;   /* config (the page-cycle key), edge, the early press's target (0 hire / 1 controls), the once-per-session hint, presses logged */
     volatile int ctl;                            /* the controls page is on screen (never together with hire / shownB) */
     int queueOn, hQueued, hintEvery, hscore, pscore, autoOn, aoSends, aoSentOk, aoShopSeen; DWORD pq2At, aoUpAt, aoLast;
-    int capTidy, capMax, rowFit;                 /* [Keys] CaptionTidy / CaptionMax / RowFit (2026-11-07, klfit_logic.h) */
+    int tidyP2, tidyHire;                        /* [ShopPage] TidyPage2 / [Hire] TidyPage (2026-11-08, klshopui_logic.h): readable page II + hire page text */
+    int capTidy, capMax, rowFit;                /* [Keys] CaptionTidy / CaptionMax / RowFit (2026-11-07, klfit_logic.h) */
     int intentOn, intentAny, debounceOn, fbHint, intentLog, intentProbe, aoCycles, aoHinted, fbKey, fbLast, aoOpened; DWORD fbAt, rejAt, probeAt; int probeN;   /* [ShopPage] PageIntent / IntentAnyCategory / QueueDebounce / IntentFallbackHint / IntentLog / IntentProbe (2026-11-07, klpagequeue_logic.h): flags, re-armed send cycles of this press, 'hint shown for this press', the key a pending fallback hint names (1 hire, 2 cycle, 3 page II) + its stamp, the last IntentLog stamp, the probe's stamp / lines */
     int aoSteps, aoStep, aoTopK, inShop; DWORD aoStepAt, aoTopAt;   /* [ShopPage] AutoOpenSteps: step 0..2 (9 = finished / aborted for this press), its stamp, the top window kind and since when */   /* [ShopPage] PageQueue / HintEveryShop (2026-11-02, klpagequeue_logic.h): hQueued = the pending hPendAt press is a QUEUED one (round-over page, list not open yet); pq2At = a queued page II press (tick, 0 = none); hscore / pscore = the hire / page II gate says 'no shop' because the scoreboard (0x1f) is up: PageQueue reads the keys there too */
 } kspg;
@@ -119,6 +120,7 @@ static void kspg_link_check(const char *when);                   /* log-only lin
 #include "klpicown_logic.h"                             /* [Hire] BakedPics / [ShopPage] OwnPics: baked own big pictures, pure decision (klpicown_test.c) */
 #include "klpagequeue_logic.h"                          /* [ShopPage] PageQueue / HintEveryShop, [HUD] ScoreboardNextHint: pure decisions (klpagequeue_test.c) */
 #include "klfit_logic.h"                                /* [Keys] CaptionTidy / CaptionMax / RowFit: caption + row text fitting, pure (klfit_test.c) */
+#include "klshopui_logic.h"                             /* [ShopPage] TidyPage2 / [Hire] TidyPage: page II + hire page wording, pure (klshopui_test.c) */
 #include "klshoppage_online.c"                             /* [ShopPage] OnlineSend: page II press sent to the host (SHOPG), host judges + logs, no writes */
 
 static int kspg_role_slot(DWORD obj)
@@ -265,6 +267,14 @@ static void kspg_cap_build(char *o, size_t cap, const char *base, int page)
     if (kspg.active && kspg.hint) kspg_h_keyname(kspg.key, p2, sizeof p2);
     if (kspg.hireOn) kspg_h_keyname(kspg.hireKey, hk, sizeof hk);
     if (page == 1 && kl_online()) snprintf(tag, sizeof tag, "%s", kspo_set_warn() ? "(SET DIFFERS)" : kspg.apply ? "" : kspg.online2 ? "(STOCK GUN)" : "(VIEW ONLY)");   /* the old '(stock gun online)' / '(view only)' */
+    if (page == 1 && kspg.tidyP2) {   /* [ShopPage] TidyPage2: the page II name follows the set label, offline the tag says how many guns are new ('PD2 GUNS (13 NEW)') */
+        int i, cnt = 0; const char *save = kfit_pname[1];
+        if (!kl_online()) { for (i = 0; i < KSPG_ROWS; i++) cnt += kspg.p[i].ok != 0; ksu_p2_tag(tag, sizeof tag, cnt); }
+        kfit_pname[1] = ksu_set_caption(kss_type(kspo.rawName));
+        kfit_caption(o, cap, base, page, pos, n, tag, cyc, kspg.ctlOn ? kspg_next(page) : -1, p2, hk, kfit_budget(kspg.capMax, strlen(base)));
+        kfit_pname[1] = save;
+        return;
+    }
     kfit_caption(o, cap, base, page, pos, n, tag, cyc, kspg.ctlOn ? kspg_next(page) : -1, p2, hk, kfit_budget(kspg.capMax, strlen(base)));
 }
 
@@ -289,6 +299,14 @@ static void kspg_h_desc(int ch, char *o, size_t cap)
     else if (have && rank < klhr_need[ch]) snprintf(st, sizeof st, "Your rank is too low for him.");
     else snprintf(st, sizeof st, kspg.hireConfirm ? "Press BUY, then BUY again, to hire him for the next round." : "Press BUY to hire him for the next round.");
     if (have) snprintf(rk, sizeof rk, "your rank %d", rank); else snprintf(rk, sizeof rk, klhr_rankgate ? "your rank unknown" : "no rank gate");
+    if (kspg.tidyHire) {   /* [Hire] TidyPage: line 1 = the state + price (the pane shows one line), then the bio and the facts; no stock-gun remarks */
+        int stc = klhr_next == ch ? KSU_H_HIRED : klhr_next ? KSU_H_OTHER : !klhr_avail(ch) ? KSU_H_NOMAP : (kl_online() && klhro_waiting() == ch) ? KSU_H_WAIT
+                : (kspg.hArm == ch && now - kspg.hArmAt < 4000) ? KSU_H_ARM : (klhr_lastrow == ch && klhr_lastat && now - klhr_lastat < 20000 && strcmp(klhr_lastmsg, "hired")) ? KSU_H_REFUSED
+                : (have && rank < klhr_need[ch]) ? KSU_H_LOWRANK : KSU_H_READY;
+        char l1[96]; ksu_hire_line1(l1, sizeof l1, stc, klhr_price[ch], klhr_need[ch], klhr_rankgate, kspg.hireConfirm, klhr_next ? klhr_name[klhr_next] : "", klhr_lastmsg);
+        ksu_hire_desc(o, cap, l1, kspg_h_bio[ch], klhr_price[ch], klhr_need[ch], rk);
+        return;
+    }
     if (kspg.rowFit) { snprintf(o, cap, "%s\nHire $%d, rank %d needed (%s).\n%s\nGun price and lock shown here: the stock gun's, not used.", st, klhr_price[ch], klhr_need[ch], rk, kspg_h_bio[ch]); return; }   /* RowFit: the status first */
     snprintf(o, cap, "%s\nHire $%d, rank %d needed (%s).\n%s\nThe gun price and lock shown here are the stock gun's: not used.", kspg_h_bio[ch], klhr_price[ch], klhr_need[ch], rk, st);
 }
@@ -338,7 +356,8 @@ static char *kspg_text_hire(void *self, const char *key, char *res)
             if (!ch) strcpy(o, "-");
             else {   /* [Hire] PagePrice: the hire price rides on the name line (the stock price element is blanked by kspg_info_upd) */
                 char pr[32]; pr[0] = 0; if (kspg.hirePrice) { pr[0] = ' '; pr[1] = ' '; kspg_h_money(pr + 2, sizeof pr - 2, klhr_price[ch]); }
-                if (kspg.rowFit) kfit_hire_row(o, 520, klhr_name[ch], kspg.hirePrice ? (long)klhr_price[ch] : -1L, klhr_next == ch, KFIT_ROW_MAX);   /* RowFit: one width; ' [HIRED]' becomes a '*' when it does not fit */
+                if (kspg.tidyHire) ksu_hire_row(o, 520, klhr_name[ch], kspg.hirePrice ? (long)klhr_price[ch] : -1L, klhr_next == ch ? KSU_ROW_HIRED : !klhr_avail(ch) ? KSU_ROW_NA : KSU_ROW_PRICE, KFIT_ROW_MAX);   /* [Hire] TidyPage: '$45K', HIRED, n/a */
+                else if (kspg.rowFit) kfit_hire_row(o, 520, klhr_name[ch], kspg.hirePrice ? (long)klhr_price[ch] : -1L, klhr_next == ch, KFIT_ROW_MAX);   /* RowFit: one width; ' [HIRED]' becomes a '*' when it does not fit */
                 else snprintf(o, 519, "%s%s%s", klhr_name[ch], pr, klhr_next == ch ? "  [HIRED]" : "");
             }
             if (kspg.hireLog && ch && !(kspg.hLogN & (1u << ch))) { kspg.hLogN |= 1u << ch; klog("hirepage: served name row %d = '%s'", row, o); }
@@ -493,13 +512,16 @@ static char *kspg_text_p2(int c, void *self, const char *key, char *res)
         role = kspg_role_of(self);
         if (kspg.togglePend && !kspg.txtSeen) { kspg.txtSeen = 1; if (kspg.log) klog("shopPage: first text request after the toggle: key '%s', row %d, role %d, served from set %c", key, row, role, kspg_useB(role) ? 'B' : 'A'); }
         if (!kspg_useB(role)) return res;
-        if (!*p) { o = kspg_ring(); strncpy(o, kspg.p[row].name, 519); o[519] = 0; if (kspg.rowFit) kfit_cut(o, 520, KFIT_ROW_MAX); return o; }
+        if (!*p) { o = kspg_ring(); strncpy(o, kspg.p[row].name, 519); o[519] = 0; if (kspg.tidyP2) ksu_p2_name(o, 520, kspg.p[row].name, kss_type(kspo.rawName), KFIT_ROW_MAX); else if (kspg.rowFit) kfit_cut(o, 520, KFIT_ROW_MAX); return o; }
         if (!strcmp(p, "Desc")) {
             o = kspg_ring();
             if (kl_online() && kspg.apply) { strncpy(o, kspg.p[row].desc, 519); o[519] = 0; }   /* OnlineApply: the host approves, the gun arrives next round, as in Arcade (price / rank are the carrier's) */
+            else if (kl_online() && kspg.online2 && kspg.tidyP2) ksu_online_desc(o, 520, res, "ONLINE: buys this row's stock gun.");   /* TidyPage2: the stock gun's line first */
             else if (kl_online() && kspg.online2) snprintf(o, 520, "ONLINE: the host's shop has no such gun. Buying this row buys the stock gun of this row (its price, its rank), the same as page I.\n%s", res);   /* OnlinePage2: res = the stock (carrier) description */
+            else if (kl_online() && kspg.tidyP2) { char d2[520]; ksu_p2_desc(d2, sizeof d2, kspg.p[row].desc, kss_type(kspo.rawName)); ksu_online_desc(o, 520, d2, "VIEW ONLY online: buy it in Arcade."); }   /* TidyPage2: the gun first, the lock note second */
             else if (kl_online() && kspg.rowFit) snprintf(o, 520, "LOCKED ONLINE: not in the host's shop. Buy it in Arcade.\n%s", kspg.p[row].desc);   /* RowFit: the short prefix */
             else if (kl_online()) snprintf(o, 520, "LOCKED ONLINE: this gun is not in the shared shop table, so the host cannot hand it over. Buy it in Arcade; online the stock page I guns are for sale.\n%s", kspg.p[row].desc);   /* OnlineLook: shown, not buyable (kspg_sel swallows the buy) */
+            else if (kspg.tidyP2) ksu_p2_desc(o, 520, kspg.p[row].desc, kss_type(kspo.rawName));   /* TidyPage2: the fake 'Police reg.' line moves to the end */
             else { strncpy(o, kspg.p[row].desc, 519); o[519] = 0; }
             return o;
         }
@@ -521,6 +543,7 @@ static char *kspg_text_p2(int c, void *self, const char *key, char *res)
         if (t < 4) {
             size_t n = strlen(res); o = kspg_ring();
             if (kspg.tabNames && kspg.tab[t][0]) { strncpy(o, kspg.tab[t], 519); o[519] = 0; if (kspg.rowFit) kfit_cut(o, 520, KFIT_TAB_MAX); return o; }   /* [Tabs] full replacement text */
+            if (kspg.tidyP2 && kspg.tabNames && ksu_tab_default(kss_type(kspo.rawName), t)[0]) { snprintf(o, 520, "%s", ksu_tab_default(kss_type(kspo.rawName), t)); return o; }   /* TidyPage2: names for the content (GUESS: re-asked after the toggle) */
             if (n > 500) return res;
             memcpy(o, res, n); memcpy(o + n, " II", 4);
             return o;
@@ -637,11 +660,11 @@ static void __fastcall kspg_gfx(void *self, void *edx)
            written in the description either way). Same element-private swap-and-restore as the page II picture. */
         int hr = kspg_role_of(self);
         /* SHOTS1 fix: the lock icons are the CARRIER gun's rank locks. The controls page has no guns, and with [Hire] Rank=0 nothing is gated: no lock is drawn (index 99 = no row, GUESS as the picture's). */
-        if (hr == KR_BIG || hr == KR_STAR || (hr == KR_LOCK && (kspg.ctl || !klhr_rankgate))) {
+        if (hr == KR_BIG || hr == KR_STAR || (hr == KR_LOCK && ksu_lock_hidden(kspg.tidyHire, kspg.ctl, klhr_rankgate))) {   /* [Hire] TidyPage: the gun lock is never drawn on the hire page */
             idx = klh_rd32((DWORD_PTR)self + 0xc4);
             if (hr == KR_BIG || hr == KR_LOCK) nidx = 99;
             else if (kspg.ctl) nidx = 99;                                                  /* the controls page: no picture, no stars */
-            else { int ch = kspg_h_ch((int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW))), need = ch ? klhr_need[ch] : 0; nidx = ((int)idx >= 0 && (int)idx < need) ? (DWORD)-1 : 99u; }
+            else { int ch = kspg_h_ch((int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_SHOWN_ROW))), need = ch ? klhr_need[ch] : 0; nidx = (DWORD)ksu_star_idx(kspg.tidyHire, klhr_rankgate, (long)(int)idx, need); }   /* TidyPage: no rank gate = no stars */
             if (nidx != idx && klh_data((void *)((DWORD_PTR)self + 0xc4), &nidx, 4, "KLShopPage: hire page picture index (swapped for one update)")) {
                 ((kspg_gfx_t)(DWORD_PTR)kspg_tab[2].orig)(self, 0);
                 klh_data((void *)((DWORD_PTR)self + 0xc4), &idx, 4, "KLShopPage: hire page picture index restored");
@@ -1393,7 +1416,8 @@ static void kspg_init(void)
         kspg.hireKey = klkeys_vk(KK_HIRE) & 0xff;                                            /* [Hire] PageKey / [Keys] HirePage (klkeys.c) */
         if (kspg.hireKey < 1 || kspg.hireKey > 0xfe) kspg.hireKey = 0x72;   /* F3 (was F12 = Steam's screenshot key) */
         kspg.hireConfirm = GetPrivateProfileIntA("Hire", "PageConfirm", 1, klh_ini) != 0;
-        kspg.hirePrice = GetPrivateProfileIntA("Hire", "PagePrice", 1, klh_ini) != 0;       /* (recommended on) the hire price on the name line, the stock gun price blanked */
+        kspg.tidyHire = GetPrivateProfileIntA("Hire", "TidyPage", 0, klh_ini) != 0;         /* 2026-11-08, default 0 (recommended on): state + price first, '$45K' rows, HIRED / n/a, no stars without a rank gate, no gun lock; NOT run live */
+        kspg.hirePrice = GetPrivateProfileIntA("Hire", "PagePrice", 1, klh_ini) != 0;      /* (recommended on) the hire price on the name line, the stock gun price blanked */
         kspg.hireLog = GetPrivateProfileIntA("Hire", "PageLog", 1, klh_ini) != 0;
         if (kspg.on && kspg.hireKey == (klkeys_vk(KK_PAGE2) & 0xff)) { klog("hirepage: [Hire] PageKey 0x%02x is the [ShopPage] Key: the hire page stays OFF", kspg.hireKey); }
         else { kspg.hireOn = 1; klog("hirepage: on ([Hire] Page=1, recommended off until benched): key 0x%02x opens the HIRE page of the Buy Weapons shop, confirm=%d (NOT RUN IN THE GAME)", kspg.hireKey, kspg.hireConfirm); }
@@ -1417,6 +1441,7 @@ static void kspg_init(void)
     kspg.capTidy = GetPrivateProfileIntA("Keys", "CaptionTidy", 0, klh_ini) != 0;       /* 2026-11-07, default 0 (recommended on): ONE caption 'BUY WEAPONS  PAGE 2/4  PD2 GUNS  [F2] next: HIRE', one page-name table, no overlap with the game's ' | RANK n' */
     kspg.capMax = GetPrivateProfileIntA("Keys", "CaptionMax", KFIT_CAPTION_DEFAULT, klh_ini);   /* 2026-11-07, 40 (GUESS: about 40 to 45 characters fit beside the game's ' | RANK n: NAME'; verify live): most characters our caption adds */
     if (kspg.capMax < 8) kspg.capMax = 8; if (kspg.capMax > 120) kspg.capMax = 120;
+    kspg.tidyP2 = GetPrivateProfileIntA("ShopPage", "TidyPage2", 0, klh_ini) != 0;       /* 2026-11-08, default 0 (recommended on): page II row names say PD2, useful first description line, set-named caption + tabs; NOT run live */
     kspg.rowFit = GetPrivateProfileIntA("Keys", "RowFit", 0, klh_ini) != 0;             /* 2026-11-07, default 0 (recommended on): hire rows, page II names / tabs, controls rows cut to one width; descriptions start with the key and 'Now:' */
     kspg.intentOn = GetPrivateProfileIntA("ShopPage", "PageIntent", 0, klh_ini) != 0;        /* 2026-11-07, default 0 (recommended on): the auto-open re-arms after the player has seen the shop (needs AutoOpen=1, PageQueue=1) */
     kspg.intentAny = GetPrivateProfileIntA("ShopPage", "IntentAnyCategory", 0, klh_ini) != 0;  /* 2026-11-07, default 0 (recommended on): the steps accept any category -4..-1 (GUESS: any is valid) */
