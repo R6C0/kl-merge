@@ -1,3 +1,9 @@
+## 2026-11-08 ~04:50 [shop] SHPH benches SC_A + SC_B PASS (no crash involved)
+- SC_A_DD05 (SetCheck=1, strict 0; host live pd2 KLShopPage.ini, client nopd2 out_set): both seats "SHPH mismatch" (host 4555f77f, client 7d31cb86 = the Python twin's hashes), no refusal, 0 asserts/faults/dumps, round 2.
+- SC_B_DD05 (strict 1, client OnlineTestBuy=b0): "shopg: refused m10 locally ... (host's set differs)", nothing sent to the host, 0 asserts/faults/dumps.
+- Benched TEST 63a2e50e (cebf667c). Log fix ("host (seat" -> "host seat") rebuilt: kit shopset_1108 SHIP 3e948da1 / TEST ee6da004. Checker C:\kl_build_1024\shopset_1108\bench\summarize.py.
+- Not run: same set (C), SetCheck=0 (D), rejoin, an old build on one seat. Not installed: an install would ride the next merged dll (SetCheck default 1 = warn only).
+
 ## 2026-11-08 ~05:05 [db] [Echo] RoomBoxes committed (f77dcb05, mod-options row 5c6f3f41, DM table d11cc6e8); DD09 bench pushes (no crash involved)
 - OSS_DD09_RB_S2: both seats push box 6 (LargeHall), stack 0 -> 1, top = its effect, SMOOTH, 0 faults. Whether the sent reverb changed is not logged yet (probe log budget); rerun with TEST 8ed080d7 queued after d0.
 - DM maps: tools/kl_reverb_boxes.py --dm emits 361 boxes from the DM .rmi rooms (dm06/dm06b uncovered). Table C:/kl_build_1024/roomboxes_1108/KLReverbBoxes_dm.ini. Installing (dll + table) waits for the owner to listen.

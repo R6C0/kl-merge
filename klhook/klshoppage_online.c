@@ -266,7 +266,7 @@ static void kspo_on_shph(const struct knc_msg *m, int src)
     ch = kss_note_from(&kspo.sp, m->role, &v, m->sid, GetTickCount());   /* sid: a second sender for a seat before the watch sees the seat change is the next occupant */
     st = m->role == 2 ? kspo_set_state_host() : kspo_set_state_seat(v.seat);
     if (ch) {
-        klog("shph: %s %d announced page II set hash %08x (%d pairs, type %d); mine %08x: %s", m->role == 2 ? "host (seat" : "seat", m->role == 2 ? v.seat : v.seat, v.hash, v.pairs, v.type, kspo.myH,
+        klog("shph: %s %d announced page II set hash %08x (%d pairs, type %d); mine %08x: %s", m->role == 2 ? "host seat" : "seat", v.seat, v.hash, v.pairs, v.type, kspo.myH,
              st == KSS_MATCH ? "SHPH match" : st == KSS_MISMATCH ? "SHPH mismatch: the page II guns / cards may differ between you (SetCheckStrict=1 would refuse the page II buy)" : "SHPH unknown (my own set is not loaded)");
     }
     if (role == 2) {                                                    /* host: answer EVERY announce (a rejoin repeats the same hash), at most once per 5 s per seat and once per 1 s overall

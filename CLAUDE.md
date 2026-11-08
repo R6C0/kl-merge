@@ -67,8 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
-2026-11-08 ~04:15 - [shop] SHPH set check (cebf667c) STAGED, not live: [ShopPage] SetCheck=1 (recommended on, warn only) / SetCheckStrict=0 (recommended off, m10).
-Kit C:\kl_build_1024\shopset_1108 SHIP 8d9ebcaf / TEST 63a2e50e; bench pd2 host vs nopd2 client pending a free game.
+2026-11-08 ~04:50 - [shop] SHPH set check BENCHED, not live: SC_A_DD05 (warn) + SC_B_DD05 (strict, m10 on a page II test buy) PASS, 0 faults, pd2 host vs nopd2 client.
+[ShopPage] SetCheck=1 (recommended on, warn only) / SetCheckStrict=0 (recommended off). Kit C:\kl_build_1024\shopset_1108 SHIP 3e948da1 / TEST ee6da004 (benched 63a2e50e). Install rides the next merged dll.
 2026-11-08 ~04:15 - [d0] DM06B TRAFFIC LIVE: zip a6c0aef1 -> 7cee043d, bots ec42c5e4, base 171f7443, KLGuns 483f7450 (stage C:\kl_build_1024\dm06b_traffic_1108).
 Bench dm06btraffic1108 run 3 PASS (0 faults, undo byte-exact): all 7 cars drawn, glow headlights fine (shots 08/12/20/28). Undo: UNDO ALL 1105.bat step 0d (top). Any DM06B re-stage: --base live 7cee043d.
 skyline1108 (DM05A) bench PASS + undo byte-exact but no shot faces east: draw still unproven, stays staged NOT installed. Next: a look-east step in the kit.
