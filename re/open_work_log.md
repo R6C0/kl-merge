@@ -17,6 +17,13 @@
 - Host teleports in round 1 (klauto tele, TEST 530c9920): box 40 -> 35 -> 40 each logged "removed box N: another box wins" + "pushed box M", stack stays 1 deep. 0 asserts/faults, live dll/ini unchanged.
 - Rough edges: tele 1 refused (before state 0x19), tele to 35 MISSED (body stayed, node moved); 35/39/40 share snd 509872 (DM02 has 3 effects), so the sent reverb did not change. RB_DM02_SW2 (atrium 13 -> parking 3 -> 40, three effects) queued after f0 + d0.
 
+## 2026-11-08 ~07:40 [d0] DM05A FOG WALL FOUND: the StreetGLOW curtain (no crash involved)
+- Research wf_933101f3-991: from the pad a ray first hits the StreetGLOW curtain at 33-39 m (REF 25478, node 3851, vertex chunk 38553 = 85 x 40 B + 8 trailing,
+  MAT 891: flat white 2x2 texture, SCREEN blend, colour 0.702/0.996/1.0; vertex colour +16: ffffffff at y 0 = the hard bottom edge, ffffff99 at 2256, ffffff00 at 6526..9067).
+- streetglow1108 (tools/kl_streetglow_1108.py, stage C:\kl_build_1024\streetglow_1108, all 85 vertex colours -> 0) run 07:29: PASS, 0 faults/dumps, undo byte-exact 651a7492.
+  Shots 12/20: the pale cyan wall is GONE; dark-teal night sky (skydome) between the two towers, pure black below the horizon (no city lights); skyline model at 60000 still not seen.
+- Next: keep the street glow but fade it with distance like DD (MAT 891 gm_vAlphaFadeDistScaleOffset z -0.053 vs DD stock -1.105, GUESS), or ship a weaker alpha; then the skyline draw question.
+
 ## 2026-11-08 ~07:25 [d0] DM05A FOG WALL: colour grade is NOT the cause either (no crash involved)
 - postneutral1108 run 07:14 (TEST 64701f02): KLHook.result PASS, 0 faults/dumps, undo byte-exact 651a7492 (verify's "0x1f then 0x20" FAIL = look kit by design).
 - Shots 12/20 (640x480): with all 20 boxes on DD neutral 33189 the wall is still flat cyan. The framing shows it has a HARD bottom edge (~y 435) and a hard
