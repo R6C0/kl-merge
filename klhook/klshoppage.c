@@ -1219,13 +1219,15 @@ static int kspg_repark(void)
  * once the round runs, so 5 s after it started this puts back (byte +8 = 1) up to 2 of OUR parked stock objects of those two items when fewer than 2 are
  * free. Never touches an object that has an owner, a dropped one, or one of our page II objects; the next shop's kspg_enforce parks them again.
  * EXE (read) 0x538ec0..0x538f47 and the pool layout of reed_kit.md 4.1; the cause is proven by the log and the code, the pool itself is not in the dump. */
+static DWORD kspg_fk_since; static int kspg_fk_st = -1;  /* the 5 s wait; klshoppage_tick clears both whenever the gate is not 2 (review 11-08: a round that died without a
+                                                         * g == 2 tick in another state left 0x19 here, and the next round's first 0x19 tick skipped the wait) */
 static void kspg_fedkeep(DWORD now)
 {
-    static DWORD since, tab[4096 * 3]; static int lastSt = -1, told;
+    static DWORD tab[4096 * 3]; static int told;
     DWORD a, n = 0, ents, item[2], i; int k, row, fr[2] = { 0, 0 }, back = 0;
     if (!kspg.fedkeep) return;
-    if (kspg.st != lastSt || !since) { lastSt = kspg.st; since = now; return; }
-    if (kspg.st != 0x19 || now - since < 5000) return;
+    if (kspg.st != kspg_fk_st || !kspg_fk_since) { kspg_fk_st = kspg.st; kspg_fk_since = now ? now : 1; return; }
+    if (kspg.st != 0x19 || now - kspg_fk_since < 5000) return;
     if (kl_online() && !kspg.apply) return;
     item[0] = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP)); item[1] = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * 28);
     if (!item[0] || item[0] > 63 || !item[1] || item[1] > 63) return;
@@ -2118,6 +2120,7 @@ static void klshoppage_tick(int game_thread)
     kspg.lastScan = now; kspg.sane = 0;
     g = kspg_gate();
     kspg.pre = (g == 1); kspg.pscore = (g == 2 && kspg.st == KPQ_ST_SCORE);
+    if (g != 2) { kspg_fk_since = 0; kspg_fk_st = -1; }                     /* FedKeep: every round waits its own 5 s */
     if (g != 1) { kspg.tbAt = 0; kspg.tbLast = 0; kspg.tbDone = 0; kspg.selobj = 0; kspo.bmDone = 0; kspo.bmAt = 0; kspo.bmSeats = 0; }                      /* OnlineTestBuy: a new shop stay presses again */
     if (!g) { kspg.active = 0; kspg.shownB = 0; return; }
     if (g == 2 && kspg.shownB) { kspg.shownB = 0; if (kspg.log) klog("shopPage: the round runs: page back to set A"); }
