@@ -168,7 +168,7 @@ KITS = {
     'dm06btraffic1108': dict(map='DM06B', slot='F02', entry=1, stage='C:/kl_build_1024/dm06b_traffic_1108', tag='.before-dm06btraffic1108', cars=True,
                              files={'F02_Main.zip': '7cee043dda5d62eeb6c48329b40fcda8', 'F02_Main.bots.zip': 'ec42c5e4', 'F02_Main.bots.base.md5': '171f7443', 'KLGuns.ini': '483f7450'},
                              hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
-                             solo_secs=600, parts=('solo',), shots='150-420:5'),
+                             solo_secs=600, parts=('solo',), shots='60-200:3'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
       'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108', 'skyline1108')
@@ -244,14 +244,14 @@ def solo_script(k, secs_total):
               'wait 8000', 'pos after5', 'waitstate 0x1f 240000', 'pos s1f', 'wait 12000', 'waitstate 0x20 120000', 'log BENCH1106 LC solo done', 'wait 3000', 'pass 1000']
     elif c.get('cars'):
         # one station per car: 1200 upstream (against the spline heading) and 150 up (the road climbs ~0.06/unit upstream, +40 could land under it), then
-        # WALK toward the car (goto holds W: 'face' does not turn a standing player, klauto.c) and stop 500 short; 'tele' is TEST-rig only, the guard may refuse (the log says)
+        # WALK toward the car (goto holds W: 'face' does not turn a standing player, klauto.c) and stop 1000 short (500 hid the car behind the body, 11-08 shots); 'tele' is TEST-rig only, the guard may refuse (the log says)
         import json
         rep = json.load(open('%s/build_report.json' % c['stage']))['reports']['F02_Main.zip']
         s += ['wait 8000', 'pos before-cars']
         for i, (sp, hd) in enumerate(zip(rep['spots'], rep['headings'])):
             (x, y, z), n = sp[0], math.hypot(hd[0], hd[1]) or 1.0
             ux, uz = x - 1200 * hd[0] / n, z - 1200 * hd[1] / n
-            s += ['tele %d %d %d' % (ux, y + 150, uz), 'wait 1500', 'goto %d %d 500 5000' % (x, z), 'log BENCH1106 car %d station' % (i + 1), 'wait 9000', 'pos car-%d' % (i + 1)]
+            s += ['tele %d %d %d' % (ux, y + 150, uz), 'wait 1500', 'goto %d %d 1000 5000' % (x, z), 'log BENCH1106 car %d station' % (i + 1), 'wait 9000', 'pos car-%d' % (i + 1)]
         s += ['log BENCH1106 cars done', 'pass 1000']
     elif c.get('van'):
         # empty-wait van (11-08, [VanBlow] ShieldWhileWaiting): nobody boards; the seat stands at spawn while the van waits at the pickup.
@@ -278,6 +278,9 @@ def probes(k):
     if k in LC:
         # lclive1106 (11-06 10:52): 0 KLShot files, d3count 0 frames: ReShade owns Present here, so shots go through its bridge (as MT3B 11-02)
         t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
+    elif KITS[k].get('cars') or KITS[k].get('van'):
+        # dm06btraffic1108 / vanwait1108 (11-08): 0 KLShot files, these kits had no ReShade bridge lines (only LC kits did)
+        t = ['[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
     return t
 
 
