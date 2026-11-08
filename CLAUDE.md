@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-08 ~04:15 - [d0] DM06B TRAFFIC LIVE: zip a6c0aef1 -> 7cee043d, bots ec42c5e4, base 171f7443, KLGuns 483f7450 (stage C:\kl_build_1024\dm06b_traffic_1108).
+Bench dm06btraffic1108 run 3 PASS (0 faults, undo byte-exact): all 7 cars drawn, glow headlights fine (shots 08/12/20/28). Undo: UNDO ALL 1105.bat step 0d (top). Any DM06B re-stage: --base live 7cee043d.
+skyline1108 (DM05A) bench PASS + undo byte-exact but no shot faces east: draw still unproven, stays staged NOT installed. Next: a look-east step in the kit.
 2026-11-08 ~05:00 - [d0] VAN SHIELD LIVE: dll 502677ee -> 19611c16 (SHIP c7b7f1db = merged_1107 + db Echo fix (off) + [VanBlow] ShieldWhileWaiting), ini 6a17a145 -> cd431998 (+ [VanBlow] ShieldWhileWaiting=1 "(recommended on)").
 Bench vanwait1108 (DD10 Flat Raid, TEST 76bd4a9c, nobody boards): PASS, 0 faults; shield on at state 4 for 54.5 s, health 9600/9600 (the game's scripted hits would have taken it to a tenth = the "always on fire" van), drove out at state 7 undamaged. No screenshots (ReShade bridge wrote none).
 Kit C:\kl_build_1024\vanwait_1108 (install.py pins live dll+ini, scratch round trip byte-exact). Undo: its UNDO.bat, BEFORE merged_1107\UNDO.bat. Peers told (db oss_1106 ACCEPT list, 6b pd2r run.py).

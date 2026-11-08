@@ -1,3 +1,10 @@
+## 2026-11-08 ~05:30 [d0] DM06B TRAFFIC INSTALLED; skyline bench inconclusive (no crash involved)
+- dm06btraffic1108 run 3 PASS (0 faults, undo byte-exact). The skinned static cars DO draw: all 7 cars seen (shots 08 sedan with glow headlights, 12 bus "815", 20 red and dark cars, 28 dark car).
+  Runs 1-2 lacked shots: non-LC kits had no [Memory] D3dShotPost / [ReShade] Bridge lines (fixed in probes(), 5faec4c5), and 500 short hid the car behind the body (now 1000).
+- Installed: F02_Main.zip a6c0aef1 -> 7cee043d, bots e1ca6d93 -> ec42c5e4, base 97990df6 -> 171f7443, KLGuns 8854e816 -> 483f7450. Undo: UNDO ALL 1105.bat step 0d (top of the chain).
+- skyline1108 (DM05A) PASS, 0 faults, undo byte-exact, heli drawn, no clip; shots are the escape box + outro, none faces east (60000,1884,-4000): draw unproven, fog may hide it. NOT installed.
+- kl_tests: 104/1 - the 1 is kl_mod_options_test ([ShopPage] SetCheck/SetCheckStrict rows not in klhook/KLHook.ini), a peer's uncommitted shop work, not d0's.
+
 ## 2026-11-08 ~05:20 [db] DMREV_DM02 bench: PASS, but no room reverb change seen (no crash involved)
 - Stage C:\kl_build_1024\dmreverb_1108 installed for the bench only (kit dmrev_1108), 2 seats round 2, 0 asserts/faults, undo byte-exact (7adcb235), live dll/ini restored.
 - Both seats logged one EFX set only: decay 1.49 / late delay 0.011 (EFX generic default), not stairs 1.10 / alley 1.30. DD09 (stock boxes) showed the same: unproven that
