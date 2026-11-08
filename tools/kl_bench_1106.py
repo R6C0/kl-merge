@@ -156,6 +156,12 @@ KITS = {
                         files={'F01_Main.zip': 'cdd988728444fa618fd3f55ce524abdb', 'F01_Main.bots.zip': '464adc61', 'F01_Main.bots.base.md5': 'fdb74c80', 'KLGuns.ini': '33432bb9'},
                         hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
                         solo_secs=900, parts=('solo',), shots='400-556:4'),
+    # skyline look-east (11-08): skyline1108 PASS but its shots (escape box + outro) never faced east, so the draw stayed unproven. Same stage; no vehicle wait:
+    # the player is teleported onto the pad and walks a few metres toward the skyline (60000,1884,-4000) so the chase camera looks at it, shots every 3 s.
+    'skyeast1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/skyline_1108', tag='.before-skyline1108', look=(60000, -4000),
+                        files={'F01_Main.zip': 'cdd988728444fa618fd3f55ce524abdb', 'F01_Main.bots.zip': '464adc61', 'F01_Main.bots.base.md5': 'fdb74c80', 'KLGuns.ini': '33432bb9'},
+                        hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
+                        solo_secs=480, parts=('solo',), shots='60-240:3'),
     # van empty-wait (11-08): owner 'flat raid vehicle ... always on fire but it doesnt pick you up'. The LIVE DD10 (nothing installed) on the
     # vanwait TEST dll (merged_1107 + [Echo] Probe code (0) + e184fd31 + review fix) with [VanBlow] ShieldWhileWaiting=1; nobody boards, the log decides.
     'vanwait1108': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': 'bc4d0bc3'}, van=True,
@@ -253,6 +259,15 @@ def solo_script(k, secs_total):
             ux, uz = x - 1200 * hd[0] / n, z - 1200 * hd[1] / n
             s += ['tele %d %d %d' % (ux, y + 150, uz), 'wait 1500', 'goto %d %d 1000 5000' % (x, z), 'log BENCH1106 car %d station' % (i + 1), 'wait 9000', 'pos car-%d' % (i + 1)]
         s += ['log BENCH1106 cars done', 'pass 1000']
+    elif c.get('look'):
+        # stand on the pad (the escape box, 7361/2014/3201) and walk toward the look point in short legs: goto holds W, so the chase camera ends up
+        # facing it; legs of 150 / 300 stay on the pad (box half extent 400 in x)
+        (lx, lz), (bx, bz) = c['look'], (7361, 3201)
+        n = math.hypot(lx - bx, lz - bz)
+        s += ['wait 5000', 'tele %d 2014 %d' % (bx, bz), 'wait 2000', 'log BENCH1106 on the pad']
+        for d in (150, 300):
+            s += ['goto %d %d 40 4000' % (bx + d * (lx - bx) / n, bz + d * (lz - bz) / n), 'log BENCH1106 facing look point (%d)' % d, 'wait 12000', 'pos look-%d' % d]
+        s += ['wait 30000', 'pos look-end', 'log BENCH1106 look done', 'pass 1000']
     elif c.get('van'):
         # empty-wait van (11-08, [VanBlow] ShieldWhileWaiting): nobody boards; the seat stands at spawn while the van waits at the pickup.
         # The log then shows whether the van was shielded ('vanblow: ShieldWhileWaiting', 'follow: shield') and whether it reached 6 (destroyed).
@@ -278,7 +293,7 @@ def probes(k):
     if k in LC:
         # lclive1106 (11-06 10:52): 0 KLShot files, d3count 0 frames: ReShade owns Present here, so shots go through its bridge (as MT3B 11-02)
         t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
-    elif KITS[k].get('cars') or KITS[k].get('van'):
+    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look'):
         # dm06btraffic1108 / vanwait1108 (11-08): 0 KLShot files, these kits had no ReShade bridge lines (only LC kits did)
         t = ['[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
     return t
