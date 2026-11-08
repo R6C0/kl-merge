@@ -1223,11 +1223,13 @@ static DWORD kspg_fk_since; static int kspg_fk_st = -1;  /* the 5 s wait; klshop
                                                          * g == 2 tick in another state left 0x19 here, and the next round's first 0x19 tick skipped the wait) */
 static void kspg_fedkeep(DWORD now)
 {
-    static DWORD tab[4096 * 3]; static int told;
+    static DWORD tab[4096 * 3], last; static int told;
     DWORD a, n = 0, ents, item[2], i; int k, row, fr[2] = { 0, 0 }, back = 0;
     if (!kspg.fedkeep) return;
     if (kspg.st != kspg_fk_st || !kspg_fk_since) { kspg_fk_st = kspg.st; kspg_fk_since = now ? now : 1; return; }
     if (kspg.st != 0x19 || now - kspg_fk_since < 5000) return;
+    if (now - last < 1000) return;                                         /* [Perf]: the 48 KB pool copy once a second, not every 250 ms tick */
+    last = now;
     if (kl_online() && !kspg.apply) return;
     item[0] = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP)); item[1] = klh_rd32((DWORD_PTR)KLH_VA(KLS_SHOP) + 24 * 28);
     if (!item[0] || item[0] > 63 || !item[1] || item[1] > 63) return;
