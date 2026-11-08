@@ -82,8 +82,8 @@ static void __cdecl klecho_wrap(unsigned eff, int param, float v)
  * Wraps two OpenAL IMPORT slots of kl2.exe (alSourcePlay, alSource3i; klh_iat: an import slot, no code byte) and logs per played source
  * whether the EFX aux send (AL_AUXILIARY_SEND_FILTER 0x20006) is attached, with the sound's name when the voice object can give one
  * (klechoprobe_logic.h has the voice layout read from kl2.exe). Nothing here changes a sound.
- *   - alSourcePlay wrapper: the caller is ZSoundBufferOpenAL::Play 0x5dbd50 (return address 0x5dbe18); that function pushed edi then esi
- *     (esi = the voice) before the call, so the voice sits at fr[3] of the wrapper's frame (fr[0] ret, fr[1] src, fr[2] edi, fr[3] esi).
+ *   - alSourcePlay wrapper: the caller is ZSoundBufferOpenAL::Play 0x5dbd50 (return address 0x5dbe18); that function keeps the voice in esi
+ *     (mov esi,ecx) across the call, so the voice is read from ESI by a naked stub (it is not on the stack: fr[3] is the caller's saved esi).
  *     Validated: vtable 0xb9ad5c and voice+0x43bc == the source id, else the play is logged "(foreign ret ...)" (other alSourcePlay
  *     callers: 0x43d3bb, 0x4893ca). The send is read back with alGetSource3i(src, 0x20006) before the real Play. GUESS: OpenAL32.dll
  *     exports alGetSource3i (AL 1.1 core); if not, the state is predicted from the voice flags and the log line says so.
@@ -95,6 +95,7 @@ static void __cdecl klecho_wrap(unsigned eff, int param, float v)
 #define KLECHO_PLAY_RET 0x5dbe18u                            /* return address inside ZSoundBufferOpenAL::Play after alSourcePlay */
 #define KLECHO_VT_VOICE 0xb9ad5cu                            /* ZSoundBufferOpenAL vtable */
 typedef void (__cdecl *klecho_play_fn)(unsigned);
+static void __cdecl klecho_play_wrap2(unsigned src, DWORD esi_in, DWORD ret);
 typedef void (__cdecl *klecho_s3i_fn)(unsigned, int, int, int, int);
 typedef void (__cdecl *klecho_gs3i_fn)(unsigned, int, int *, int *, int *);
 typedef int (__cdecl *klecho_err_fn)(void);
@@ -142,14 +143,13 @@ static int klecho_find_name(DWORD_PTR p, int len, char *out, int cap)
     return best;
 }
 
-static void __cdecl klecho_play_wrap(unsigned src)
+static void __cdecl klecho_play_wrap2(unsigned src, DWORD esi_in, DWORD ret)
 {
-    DWORD *fr = (DWORD *)_AddressOfReturnAddress();
-    DWORD ret = fr[0], voice = 0, wave = 0; int sent = -1, pred = 0, rel = -1, s3d = -1, s2d = -1, kind = -1, state, late = 0, unknown = 0;
+    DWORD voice = 0, wave = 0; int sent = -1, pred = 0, rel = -1, s3d = -1, s2d = -1, kind = -1, state, late = 0, unknown = 0;
     float gain = -1.0f; char name[KPR_NAMELEN] = "(unreadable)";
     if (klecho_probe_ok && klh_exe_ok) {
         if (ret == (DWORD)(DWORD_PTR)KLH_VA(KLECHO_PLAY_RET)) {
-            DWORD cand = fr[3], vt = 0, id = 0;
+            DWORD cand = esi_in, vt = 0, id = 0;
             klh_rd(cand, &vt, 4); klh_rd(cand + 0x43bc, &id, 4);
             if (vt == (DWORD)(DWORD_PTR)KLH_VA(KLECHO_VT_VOICE) && id == src) voice = cand;
         }
@@ -164,8 +164,8 @@ static void __cdecl klecho_play_wrap(unsigned src)
     }
     if (klecho_gs3i && klecho_probe_ok) {                        /* what is attached right now: 3D voices got it at creation, relative ones get it right after this call */
         int a = 0, b = 0, c = 0; klecho_gs3i(src, 0x20006, &a, &b, &c);
-        if (klecho_gerr) klecho_gerr();                          /* our query must not leave an AL error for the engine's next alGetError */
         sent = a != 0;
+        if (klecho_gerr && klecho_gerr()) sent = -1;             /* our query must not leave an AL error for the engine's next alGetError; an error = the readback is not trustworthy (a=0 would read as NO SEND) */
     }
     pred = voice ? kpr_predict(rel, s3d, s2d, 1) : 0;            /* efx listener assumed present: the aux slot exists once SetReverb ran */
     if (sent < 0) { unknown = 1; sent = pred == 1; }
@@ -190,6 +190,21 @@ static void __cdecl klecho_play_wrap(unsigned src)
     }
     klecho_unlock();
     if (klecho_real_play) klecho_real_play(src);
+}
+
+/* The voice is NOT on the stack: Play (0x5dbd50) does push esi / mov esi,ecx, so [esp+0xc] in the wrapper is the CALLER's saved esi.
+ * (Review 2026-11-08 fixed the first version, which read fr[3].) The voice is still live in ESI when Play calls alSourcePlay, and ESI is
+ * untouched on entry here, so a naked stub passes (src, esi, return address) on to klecho_play_wrap2. */
+static void __declspec(naked) klecho_play_wrap(void)
+{
+    __asm {
+        push dword ptr [esp]            ; return address
+        push esi                        ; the voice (ZSoundBufferOpenAL this) when the caller is Play
+        push dword ptr [esp+12]         ; src
+        call klecho_play_wrap2
+        add esp, 12
+        ret
+    }
 }
 
 static void __cdecl klecho_s3i_wrap(unsigned src, int param, int a, int b, int c)
