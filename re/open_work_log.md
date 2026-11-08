@@ -1,3 +1,9 @@
+## 2026-11-08 ~06:10 [d0] RETOMOTO VAN FIXED ON BENCH: [VanBlow] ShieldDriveIn (no crash involved)
+- Cause (vanwait09_1108): the cops hit the DM09 escape bus WHILE IT DRIVES IN (state 2); ShieldWhileWaiting starts at 3/4, so it parked at 1245/3000 burning = the "always on fire" vehicle.
+- Fix be08398f + 76b4ca0a: ShieldDriveIn holds the Invulnerable byte from the call (state 2) and hands it to the wait shield. Default 0; 3-lens review (1 log-text nit, fixed); kl_tests 107/0.
+- Bench vanwait09h_1108 (TEST 988a279b, ShieldDriveIn=1 + HealFloor=95): PASS, 0 asserts/faults; 3000/3000 at drive-in, wait and drive-out; shots 18/30 at the look point: bus clean, no fire. HealFloor never fired (unproven, not shipped).
+- Ship: f0 builds merged_1108b (one dll from HEAD, pinned on live 319aefc4, + "[VanBlow] ShieldDriveIn=1 ; (recommended on)"). Mod Options row 'vandrivein'.
+
 ## 2026-11-08 ~05:58 [shop] SHPH bench SC_E PASS: strict host vs a seat with no SHPH (TEST ee6da004; no crash involved)
 - SC_E_DD05: host live pd2 set, SetCheck=1 SetCheckStrict=1; client SetCheck=0 + OnlineTestBuy=b0 (the old-build stand-in: no SHPH handler, never announces).
 - Host: "set check on ... hash 4555f77f", no SHPH heard from seat 1; "shopg: seat 1 asked row 0 item 6: refused page II set differs from the host's (or unknown): SetCheckStrict".
