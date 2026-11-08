@@ -1,3 +1,8 @@
+## 2026-11-08 ~05:20 [db] DMREV_DM02 bench: PASS, but no room reverb change seen (no crash involved)
+- Stage C:\kl_build_1024\dmreverb_1108 installed for the bench only (kit dmrev_1108), 2 seats round 2, 0 asserts/faults, undo byte-exact (7adcb235), live dll/ini restored.
+- Both seats logged one EFX set only: decay 1.49 / late delay 0.011 (EFX generic default), not stairs 1.10 / alley 1.30. DD09 (stock boxes) showed the same: unproven that
+  Audio_ReverbActivater reaches the wrapped slot in MP, or the seats never stood in a box. Next: F01 stock bench with [Echo] Probe=1 + a walk into a known box. Details re/dm_reverb_1108.md.
+
 ## 2026-11-08 ~05:00 [d0] VAN SHIELD INSTALLED (no crash involved)
 2026-11-08 ~05:00 - [d0] VAN SHIELD LIVE: dll 502677ee -> 19611c16 (SHIP c7b7f1db = merged_1107 + db Echo fix (off) + [VanBlow] ShieldWhileWaiting), ini 6a17a145 -> cd431998 (+ [VanBlow] ShieldWhileWaiting=1 "(recommended on)").
 Bench vanwait1108 (DD10 Flat Raid, TEST 76bd4a9c, nobody boards): PASS, 0 faults; shield on at state 4 for 54.5 s, health 9600/9600 (the game's scripted hits would have taken it to a tenth = the "always on fire" van), drove out at state 7 undamaged. No screenshots (ReShade bridge wrote none).

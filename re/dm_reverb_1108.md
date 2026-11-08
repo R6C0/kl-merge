@@ -44,7 +44,16 @@ Read-back `check`: 54 PASS / 0 FAIL on both zips; test 18 checks 0 fail.
 - Whether CheckInside fires online (clients) is unproven.
 - Any later DM02 rewrite by a peer invalidates the pins (re-stage).
 
-## Live bench checklist (not done)
+## Bench DMREV_DM02 (2026-11-08 03:28-03:38, db): items 1 and 4 PASS, item 2 NOT SHOWN
+Kit C:\kl_build_1024\dmrev_1108\run.py (TEST 76bd4a9c, live ini + [Echo] Enable=1 Log=1, PD2R_DM02 host/join scripts, install -> bench -> undo in finally).
+PASS: 2 seats in round 2, asserts 0, faults 0, loads 2; undo byte-exact (zip 7adcb235), live dll 19611c16 / ini cd431998 restored.
+Reverb: each seat logged ONE distinct EFX set, decay 1.49 / late delay 0.011 = the EFX generic default, none of the three effects used
+(inside_stairs 1.10, outside_alley 1.30, inside_loadingbay 1.49 with reflections -370 mB). [Echo] Log=1 dedupes on (kind, decay, refl), so a box that fired
+would have logged a second line: no KL_Reverb! box switched the reverb. The DD09 echo bench (stock map, stock boxes) also showed only that default, so it is open
+whether ANY Audio_ReverbActivater reaches this alEffectf slot in multiplayer, or whether the scripted seats never stood in a box.
+Next: stock F01 bench with [Echo] Probe=1 (every SetReverb logged, not deduped) and a seat that walks into 'Audio!BOX!010_Inside_DL10_Platform'. If stock fires, re-bench DM02 with a walk.
+
+## Live bench checklist
 1. Load DM02 offline and online (host + client): no crash, no assert, bots still run.
 2. Walk atrium, corridor, store, stairs, alley and parking lot: the reverb changes at room borders, no stuck state after leaving a room.
 3. Compare with the same walk before install (flat reverb).
