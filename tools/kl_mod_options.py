@@ -220,7 +220,7 @@ feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on',
 feat('vanblow', G_EXP, 'Escape vehicle can blow up when nobody is aboard', 'on', 'start',
      'klescort.c [VanBlow] (k33): the van shield stays only while somebody is aboard; an empty van shot to 0 burns, then explodes. Dry=1 = log only; HealthMax lowers a big health (GUESS)', [('VanBlow', 'Enable', 1, 0, 1)])
 feat('vanwait', G_EXP, 'Escape vehicle takes no hit while it waits empty (recommended on)', 'on', 'start',
-     'klescort.c [VanBlow] ShieldWhileWaiting: DM09 / Flat Raid van is shot by the cops before anyone boards; the Invulnerable byte is held while it waits with nobody aboard, ends on boarding / leaving / ShieldWhileWaitingCapMs. NOT RUN IN THE GAME', [('VanBlow', 'ShieldWhileWaiting', 1, 0, 0)])
+     'klescort.c [VanBlow] ShieldWhileWaiting: DM09 / Flat Raid van is shot by the cops before anyone boards; the Invulnerable byte is held while it waits with nobody aboard, ends on boarding / leaving / ShieldWhileWaitingCapMs. Needs [Bots] FollowOut=1 and FollowOutShield 1..3 (inert with 0 or [VanBlow] Dry=1). NOT RUN IN THE GAME', [('VanBlow', 'ShieldWhileWaiting', 1, 0, 0)])
 feat('clubcalm', G_EXP, 'Last Call probe: log the hand item and shots (read-only)', 'off', 'start',
      'klclubcalm.c: data for the calm-until-the-gun-is-drawn switch', [('ClubCalm', 'Enable', 1, 0, 0)])
 feat('clubholster', G_EXP, 'Last Call: start with guns holstered, the crowd panics when you draw (recommended off until live-tested)', 'off', 'start',

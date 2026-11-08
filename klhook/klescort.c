@@ -1028,7 +1028,8 @@ static void kle_vb_pass(const struct klb_snap *s, DWORD now, int edge)
            shield (which needs a held driver) never covers it and the cops' FakeTarget + RelayAnimatedVehicleHit take Body_Main's 3000 hp.
            While state 3 / 4 has nobody aboard (and the cap, if any, is not over) the empty clock is held, VanBlow does not open, and
            kle_veh_pass sets the vehicle's own 'Invulnerable' byte (+0x21, the same one FollowOutShield uses) with kle_hold_guard. */
-        if (kvs_wait_shield(kle.vb_ws, s->veh, n, s->veh >= 6, t - kle_vb.wait_at, kle.vb_ws_cap)) {
+        /* review fix 11-08: only with a shield that is really written (FollowOutShield != 0, not Dry); else VanBlow's open was held for nothing */
+        if (kvs_wait_shield(kle.vb_ws && kle.fo_shield && !kle.vb_dry && !kle.fo_dry, s->veh, n, s->veh >= 6, t - kle_vb.wait_at, kle.vb_ws_cap)) {
             kle_vb.empty_at = 0; kle_vb.open = 0; kle_vb.wshield = 1;
             if (!kle_vb.ws_said++ && kle.vb_log) klog("vanblow: ShieldWhileWaiting: the vehicle waits empty (state %u): shielded until somebody boards, it leaves or the cap (%u ms, 0 = none) is over%s", s->veh, (unsigned)kle.vb_ws_cap, kle.vb_dry ? " (DRY RUN: nothing written)" : "");
             return;

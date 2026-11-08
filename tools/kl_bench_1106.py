@@ -149,6 +149,12 @@ KITS = {
                         files={'F01_Main.zip': '651a749259f54211c20eb67eff90ee65', 'F01_Main.bots.zip': 'ba98c0a6', 'F01_Main.bots.base.md5': '1d89ea85'},
                         hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
                         solo_secs=900, parts=('solo',), shots='400-556:4'),
+    # van empty-wait (11-08): owner 'flat raid vehicle ... always on fire but it doesnt pick you up'. The LIVE DD10 (nothing installed) on the
+    # vanwait TEST dll (merged_1107 + [Echo] Probe code (0) + e184fd31 + review fix) with [VanBlow] ShieldWhileWaiting=1; nobody boards, the log decides.
+    'vanwait1108': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': 'bc4d0bc3'}, van=True,
+                        hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
+                        ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
+                        solo_secs=900, parts=('solo',), shots='300-840:30'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
       'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108')
@@ -222,6 +228,13 @@ def solo_script(k, secs_total):
               'tap E 3000', 'wait 1000', 'pos try1', 'tap E 3000', 'wait 1000', 'pos try2', 'tap E 4000', 'wait 1000', 'pos boarded',
               'waitvan 5 120000', 'pos van5',
               'wait 8000', 'pos after5', 'waitstate 0x1f 240000', 'pos s1f', 'wait 12000', 'waitstate 0x20 120000', 'log BENCH1106 LC solo done', 'wait 3000', 'pass 1000']
+    elif c.get('van'):
+        # empty-wait van (11-08, [VanBlow] ShieldWhileWaiting): nobody boards; the seat stands at spawn while the van waits at the pickup.
+        # The log then shows whether the van was shielded ('vanblow: ShieldWhileWaiting', 'follow: shield') and whether it reached 6 (destroyed).
+        s += ['wait 30000', 'pos at-60s', 'log BENCH1106 waiting for vehicle state 3', 'waitvan 3 600000', 'pos van3']
+        for i in range(1, 9):
+            s += ['wait 15000', 'pos wait-%ds' % (15 * i)]
+        s += ['log BENCH1106 van empty-wait done', 'pass 1000']
     else:
         for i in range(1, 11):
             s += ['wait 30000', 'pos at-%ds' % (60 + 30 * i)]
@@ -307,6 +320,7 @@ def gen(which='all'):
         n = c['solo_secs']
         if k in LEAD60:
             t += ['[Bots]', 'LastVehicleLead=600']
+        t += c.get('ini', [])
         t += [l.replace('{x}', str(n - 60)).replace('{m}', str((n - 70) * 1000)) for l in AUTO]
         t += ['[Script]'] + renumber(solo_script(k, n))
         write('%s/solo.ini' % d, '\n'.join(t) + '\n')
