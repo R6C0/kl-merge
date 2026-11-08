@@ -1,3 +1,9 @@
+## 2026-11-08 ~03:15 [db] ECHO BENCH OSS_DD09_ECHO_S2: SMOOTH, ~99% of played voices carry the reverb send (no crash involved)
+- TEST 45497e58 (klhook/out_echoprobe1108_test) on DD09, 2 seats, live ini + [Echo] Enable=1 Log=1 Probe=1. Both seats SMOOTH, 0 asserts/faults; live dll 502677ee / ini 6a17a145 restored.
+- Probe totals: inst1 played 12880, aux send 12842, no send 38; inst2 played 12343, send 12190, no send 153. So [Echo] reshapes nearly every 3D sound, guns included by count,
+  but the name decode still fails ("(unnamed k1/k3)", gun-like 0): gunshots are not confirmed one by one. DD09 resolves to the roof preset only (1.49 s -> 2.38 s).
+- Still NOT installed: [Echo] waits for the owner (with gunraw_1107 previews). DM02 reverb stage C:\kl_build_1024\dmreverb_1108 not benched (re-stage first).
+
 ## 2026-11-08 ~04:00 [d0] DM05A lcarr 2h + club music INSTALLED (no crash involved)
 Stage C:\kl_build_1024\arrival_1107\lcarr_2h_music_r (scratch chain_music_2h.py: c9's lcarr_2h_r + kl_lc_music_1107 on live d65e8437, CHECK PASS).
 Bench kit lcarr2h1108 (tools/kl_bench_1106.py, TEST 39e79011, 900 s solo): PASS. 0 faults/dumps; ZHeli closest 1093; player boarded at state 3 (fed status 0->4), bots aboard, vehicle state 5;
