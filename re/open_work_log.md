@@ -1,3 +1,8 @@
+## 2026-11-08 ~06:50 [d0] DM05A FOG WALL: scene fog floats are NOT the cause (no crash involved)
+- skyeast1108 (04:45, shots 12/20): from the roof pad facing east (heading 95) a flat cyan fog wall ~100 m out; only the two nearest towers show. The skyline at 60000 can never be seen through it.
+- skyfog1108 (tools/kl_skyfog_1108.py, stage C:\kl_build_1024\skyfog_1108, bench only): CameraFar 30000 -> 80000, CameraFogFull 0.95 -> 1.5 in both zips' .prp. 0 faults, 465-532 fps (control 366-420), undo byte-exact 651a7492.
+  Shots 12/20 (640x480, monitor off): wall unchanged, right tower slightly clearer. Read-only research wf_5acf84d5-df8 looks for the real source (fog entities, post effect, materials).
+
 ## 2026-11-08 ~06:47 [db] RB_DM02_2 PASS: RoomBoxes push on a Dead Men map (no crash involved)
 - TEST 530c9920 (75c1e3a1, ear height 100), 2 seats DM02, PD2R host/join: both seats "pushed box 40" (hero y 1102), stack 0 -> 1, sent reverb 1.49/0/0 -> 1.10/0.363/1.000 (DM02's own effect). 0 asserts/faults, live dll/ini unchanged.
 - Not seen: a switch between boxes (both stayed in box 40). RoomBoxes stays off until the owner says (it changes how the maps sound).
