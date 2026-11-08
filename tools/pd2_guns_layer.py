@@ -863,7 +863,7 @@ def write_installer(out):
     if L.get('backup'):            # off-drive backup mode: the live drive keeps no backup files
         py = INSTALL_PY_OFFDRIVE.replace('@TITLE@', L['title']).replace('@TAG@', TAG).replace('@BACKUP@', L['backup'])
         open(os.path.join(out, 'README.txt'), 'w', encoding='utf-8', newline='').write(
-            'PD2 guns %s: install.py keeps its backups OFF the game drive, in %s/<map>/<file> (copied and md5-checked before the live file is replaced;\r\n'
+            'PD2 guns %s: install.py keeps its backups in %s/<map>/<file> (copied and md5-checked before the live file is replaced;\r\n'
             'deleted by --undo only after the restored files are md5-verified). Nothing is renamed beside the live files.\r\n' % (LAYER, L['backup']))
     else:
         pp = os.path.join(out, 'pins.json')

@@ -76,7 +76,7 @@ try:
     inst = open(os.path.join(stage, 'install.py'), encoding='utf-8').read()
     check('@' not in inst.replace('@echo', '') and compile(inst, 'install.py', 'exec') is not None, 'offdrive installer text: no placeholder left, compiles')
     check(r"BACKUP = r'D:\kl_stage\pd2guns_1106c_backup'" in inst and 'os.rename' not in inst, 'offdrive installer: backup on D:, no in-place rename')
-    check(os.path.isfile(os.path.join(stage, 'README.txt')) and 'OFF the game drive' in open(os.path.join(stage, 'README.txt')).read(), 'README names the backup place')
+    check(os.path.isfile(os.path.join(stage, 'README.txt')) and r'keeps its backups in D:\kl_stage' in open(os.path.join(stage, 'README.txt')).read(), 'README names the backup place')
     def run(*a):
         r = subprocess.run([sys.executable, os.path.join(stage, 'install.py'), '--skip-run-check', '--game', game, '--backup', bkp, '--spare-mb', '0'] + list(a),
                            capture_output=True, text=True)
