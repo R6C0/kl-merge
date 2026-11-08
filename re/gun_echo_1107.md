@@ -51,3 +51,51 @@ Nothing was launched, nothing written into the game folder. Items marked GUESS o
    (fixed tail), but does not depend on the engine send. Online banks (bots.zip) must be baked identically.
 
 Suggested order: one live A/B to settle the aux-send question, then 1, then 2 for DM maps, 3 as the fallback for "raw" timbre.
+
+## 6. Aux send: what the engine does per voice (static, 2026-11-08, kl2.exe read with debug/dasm.py; NOT yet seen in a run)
+Corrects section 1 ("no per-source send gain, default full send") and the OPEN item about +0x54: the send is conditional, per voice, and +0x54 is NOT a send field.
+- OpenAL is imported statically: alSourcei IAT 0xb104fc, alSource3i 0xb10504, alSourcef 0xb10508, alSourcePlay 0xb10518, alSourceStop 0xb10500, alGenSources 0xb10510
+  (only alEffectf and the EFX calls go through alGetProcAddress pointers). So the aux send is observable by wrapping two IMPORT slots (no code byte, allowed in SHIP).
+- Voice = ZSoundBufferOpenAL (vtable 0xb9ad5c, base voice vtable 0xb9a89c; ctor 0x71d480 / 0x74785x; size 0x43d0). Slots: +4 create 0x658340, +0x10 play 0x5dbd50.
+  Fields: +0x10 byte send3d, +0x11 byte send2d, +0x54 dword relative (arg 2 of the init), +0x5c gain (1.0), +0x60 wave descriptor ptr (its +0xa bit 0x80 = streamed,
+  +0xc / +0x14 / +0x1c sizes), +0x78 kind (1 in-memory, 3 streamed), +0x43bc AL source id, +0x7d/+0x7e play bookkeeping.
+- Voice init 0x4465f0 (called by create): its 3rd argument is the sound's flag byte: send3d = !(flags >> 5 & 1), send2d = (flags >> 6) & 1. Arg 2 -> +0x54.
+- Create 0x658340: alGenSources, then alSourcei(src, AL_SOURCE_RELATIVE 0x202, +0x54 != 0). Then, iff the listener says EFX is on (listener vtable +0xd8)
+  AND +0x54 == 0 AND +0x10 != 0: alSource3i(src, 0x20006 = AL_AUXILIARY_SEND_FILTER, [listener + 0x23c18] = the aux slot, 0, 0). (site 0x6584a7)
+- Play 0x5dbd50: alSourceStop, set AL_LOOPING (0x1007), alSourcePlay (site 0x5dbe12, return address 0x5dbe18), THEN iff +0x54 != 0 AND +0x11 != 0:
+  alSource3i(src, 0x20006, [[voice+4] + 0x23c18], 0, 0) (site 0x5dbe49). So a relative (2D) voice only gets the send after it started playing.
+- => gunshots: a world voice (3D) has the send unless its sound flag bit 5 is set. A gun voice played relative to the listener (the player's own gun?) has it only with bit 6.
+  OPEN: which flag bits the gun sounds (.SND sound, the 4 flag bytes after the cone fields, audio.md 2.2) carry, and whether player shots are played relative.
+  The 4 flag bytes of `*_shot_player#sound` vs `*_shot_npc#sound` in the .SND (tools/kl_snd.py) would answer it offline: not done here.
+- No per-source send gain/filter is ever set (alSource3i's last two args are 0 = no filter): a voice with a send gets the full wet signal of the one global slot.
+- Other alSourcePlay callers (not Play): 0x43d3bb (vtable slot 0xb9ada8, probably resume), 0x4893ca (a second voice class). alSourceStop callers 0x4e65de, 0x74d01b.
+
+## 7. [Echo] Probe=1: the one live A/B (TEST build; logs only, changes no sound)
+Build: klhook/out_echoprobe1108_test (TEST, has klauto, for the bench) and out_echoprobe1108 (SHIP: the probe works there too, import slots only). Source: klecho.c, klechoprobe_logic.h
+(klechoprobe_test.c, 40+ checks in tools/kl_tests.py). Needs the game folder's KLHook.ini or the bench inst ini to carry:
+```
+[Echo]
+Enable=1
+Log=1
+Probe=1
+```
+(Enable=0 + Probe=1 also works: the room lines then show the engine's values unchanged, which is the right A/B baseline for a sound comparison.)
+Maps: (1) Dog Days stock DD09 (the usual bench map, many shots, bots) and (2) one Dead Men map with gunfights, e.g. DM05A or DM01B; run each as a normal 2-seat FA round
+(kl_solo_test.py --hook klhook/out_echoprobe1108_test --tag EP_DD09 ... with the ini above in --ini1/--ini2), 300 s is enough once the bots shoot. Owner not playing (live run).
+Grep the instance KLHook.log:
+- `echo-probe: wrapped alSourcePlay + alSource3i` once (and whether alGetSource3i was found; MISSING = states are predicted from the flags, the lines say "predicted").
+- `echo-probe play src N voice: <name> [gun-like] | rel R send3d A send2d B kind K gain G pred P | SEND ATTACHED / NO SEND / send expected right after play`
+  (budget: the first 40 plays, then one line per new (name, state); max 500). `echo-probe dump voice ...` (12 lines): hex of the wave descriptor and voice fields,
+  to decode the name layout if names show as `(unnamed kK)`.
+- `echo-probe 10s: played N, send A (late L), no send B, unknown U | gun-like: send X, no send Y | no-send top: <name> xN ...` every 10 s, and `echo-probe total: ...`.
+  `send attaches seen` = alSource3i(0x20006) calls observed (null slot = a detach).
+- `echo-room #n t T: <kind> engine decay D refl R late L delay d -> sent ...` for EVERY SetReverb room change (DD09 should show changes as the bots move between rooms;
+  a DM map should show none or one: no activaters, section 2).
+How to judge:
+- Gun-like plays WITH send (X large, Y ~0, the `*_shot_*` names SEND ATTACHED): the global reverb reaches guns; [Echo] Enable=1 (klecho_logic.h) will change gun tails. Next: owner listens.
+- Gun-like plays WITHOUT send (Y large, `NO SEND` on shot names, rel 0 send3d 0 = flag bit 5 set; or rel 1 send2d 0): guns bypass the reverb. Then [Echo] cannot make them echoey: the options are
+  re/gun_echo_1107.md section 5 item 3 (baked tails in the banks) or setting the send at Play (a code patch of the flag byte, TEST only first; flag bits: send3d = !(flags>>5&1), send2d = flags>>6&1).
+- Mixed: compare the names. `rel 1` player guns without send but npc guns with send would explain "my gun is dry".
+- `(foreign ret XXXXXX)` lines are alSourcePlay calls from other sites (not the voice Play): counted, named by return address.
+- If the names are junk or `(unnamed)`, decode the wave descriptor from the dump lines (the name layout is a GUESS: best printable string behind a pointer of voice+0x60 / voice+0x18).
+Cost: two import-slot swaps, one alGetSource3i + alGetError per played source (same thread as the engine's call), a spinlock; no files, no code bytes. Not run in the game.
