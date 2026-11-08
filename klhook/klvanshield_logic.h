@@ -26,4 +26,15 @@ static int kvs_heal(int floor_pct, float hp, float max)
     if (floor_pct <= 0 || !(max > 0.0f) || !(hp > 0.0f)) return 0;
     return hp < max * (float)floor_pct / 100.0f;
 }
+
+/* ShieldWhileWaiting (2026-11-08): shield an EMPTY waiting vehicle? on = key; veh = rules state byte (3 = waits at the pickup, 4 = also a
+   wait; GUESS: 4 is the second wait state, see klescort.c kle_veh_pass); aboard = records with status 4; round_over = the vehicle is
+   destroyed / gone (state >= 6, a proxy: no separate round-end flag is read here); waited_ms = since the wait began; cap_ms 0 = no cap.
+   Boarding (aboard > 0) ends it (the old rule shields a held van then), so does the vehicle leaving (state 5) or the cap. */
+static int kvs_wait_shield(int on, int veh, int aboard, int round_over, unsigned waited_ms, unsigned cap_ms)
+{
+    if (!on || round_over || aboard > 0) return 0;
+    if (veh != 3 && veh != 4) return 0;
+    return cap_ms == 0 || waited_ms < cap_ms;
+}
 #endif

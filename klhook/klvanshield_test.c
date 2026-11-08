@@ -22,6 +22,16 @@ int main(void)
     CHECK(kvs_heal(90, 2800, 3000) == 0, "93 pct not healed");
     CHECK(kvs_heal(90, 0, 3000) == 0, "dead not raised");
     CHECK(kvs_heal(90, 100, 0) == 0, "no max");
+    CHECK(kvs_wait_shield(1, 3, 0, 0, 0, 0) == 1, "waiting, no driver: shielded");
+    CHECK(kvs_wait_shield(1, 4, 0, 0, 9000, 0) == 1, "state 4 empty, no cap: shielded");
+    CHECK(kvs_wait_shield(1, 3, 1, 0, 100, 0) == 0, "boarded: ends");
+    CHECK(kvs_wait_shield(1, 5, 0, 0, 100, 0) == 0, "leaving: ends");
+    CHECK(kvs_wait_shield(1, 2, 0, 0, 100, 0) == 0, "still driving in: not this key");
+    CHECK(kvs_wait_shield(1, 3, 0, 0, 19999, 20000) == 1, "just under cap");
+    CHECK(kvs_wait_shield(1, 3, 0, 0, 20000, 20000) == 0, "cap expiry");
+    CHECK(kvs_wait_shield(0, 3, 0, 0, 0, 0) == 0, "toggle off: no change");
+    CHECK(kvs_wait_shield(1, 3, 0, 1, 0, 0) == 0, "round over");
+    CHECK(kvs_wait_shield(1, 6, 0, 1, 0, 0) == 0, "destroyed");
     printf("%s: %d checks, %d failed\n", fails ? "FAIL" : "PASS", checks, fails);
     return fails != 0;
 }

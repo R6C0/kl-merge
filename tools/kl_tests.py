@@ -102,6 +102,7 @@ C_TESTS = {
     'klmappool_ov_test.c': 'logic',    # no windows.h
     'klhirepic_test.c': 'logic',       # no windows.h
     'klhirepick_test.c': 'logic',      # klhire_pick.h ([Hire] PickDefault)
+    'klvanshield_test.c': 'logic',     # klvanshield_logic.h ([VanBlow] ShieldUntilBoarded / HealFloor / ShieldWhileWaiting)
     'klcrackfx_test.c': 'logic',       # klcrackfx_logic.h (lens crack heal fade + KL_CrackFX age)
     'klnc_test.c': 'logic',            # klnetchan_logic.h + klucc_logic.h
     'klonline_read_test.c': 'logic',   # klonline_read.h
