@@ -288,6 +288,7 @@ static void klh_level_open(const char *asked, const char *opened)
     klc_level_open(key, opened);
     klg_level_open(key, opened);
     klshop_level_open(key, opened);
+    klecho_level_open(key, opened);                           /* klecho.c: [Echo] RoomBoxes names the map by its expansion folder */
     SetLastError(err);
 }
 

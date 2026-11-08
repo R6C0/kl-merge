@@ -85,6 +85,7 @@ C_TESTS = {
     'klfit_test.c': 'logic',          # klfit_logic.h ([Keys] CaptionTidy / CaptionMax / RowFit: caption + row fitting, no windows.h)
     'klecho_test.c': 'logic',          # klecho_logic.h ([Echo] per room kind AL reverb parameter changes, no windows.h)
     'klechoprobe_test.c': 'logic',     # klechoprobe_logic.h ([Echo] Probe: which voices carry the aux send, names, summary, log budget)
+    'klreverbbox_test.c': 'logic',     # klreverbbox_logic.h ([Echo] RoomBoxes table parse, oriented box, hysteresis, winner)
     'klcoverring_test.c': 'logic',     # klcoverring_logic.h ([CoverRing] schedule / change detection, no windows.h)
     'kldown_mirror_test.c': 'logic',   # kldown_mirror_logic.h (no windows.h at all)
     'klgrades_test.c': 'logic',        # klgrades.h (uses _snprintf: -D_snprintf=snprintf)

@@ -28,12 +28,22 @@
  *   ; (gunshots vs the rest); every SetReverb room change; the reverb-box stack ('echo-stack', re/reverb_path_1108.md). Works with Enable=0 or 1.
  *   ; Recipe: re/gun_echo_1107.md section 7.
  *   Probe=0
+ *   ; Room boxes (re/reverb_path_1108.md): in Fragile Alliance the engine's own reverb boxes end at load, so the reverb stack stays empty. This tests the
+ *   ; local hero against KLReverbBoxes.ini (beside KLHook.ini, else beside kl2.exe; tools/kl_reverb_boxes.py) and pushes / removes the engine's own stack entry. Needs no other
+ *   ; [Echo] key; with Enable=1 the longer decay applies on top of the room's effect. A map whose stack already holds the engine's own entries is left alone.
+ *   ; Room reverb boxes: the room's real reverb in Fragile Alliance (recommended on once the owner has listened)
+ *   RoomBoxes=0
+ *   ; world units: a box is entered this far inside its wall and left this far outside it (no flapping at a wall), 0..500
+ *   RoomBoxMargin=30
+ *   ; ms a box holds its state after a change, 0..5000
+ *   RoomBoxHoldMs=250
  */
 #ifndef KLECHO_C
 #define KLECHO_C
 
 #include "klecho_logic.h"
 #include "klechoprobe_logic.h"
+#include "klreverbbox_logic.h"                               /* [Echo] RoomBoxes: table reader, oriented box test, winner (klreverbbox_test.c) */
 
 #define KLECHO_SLOT 0x14f356cu                               /* alEffectf pointer (kl2.exe .data) */
 /* Reverb stack of the audio manager (re/reverb_path_1108.md, static reading 2026-11-08; read only, Probe=1 only). AUD = [[0xdd2640]+0xb00];
@@ -307,10 +317,193 @@ static void klecho_probe_tick(void)
     }
 }
 
+/* ---- [Echo] RoomBoxes (2026-11-08, re/reverb_path_1108.md section "RoomBoxes"): the reverb boxes the engine's own CCheckInside lost ----
+ * In Fragile Alliance every stock Audio_ReverbActivater box ends itself at load (hero absent at init), so the reverb stack stays empty. Here the LOCAL hero's
+ * place is tested against a per-map table (KLReverbBoxes.ini beside KLHook.ini (else kl2.exe), tools/kl_reverb_boxes.py; reader and decisions in klreverbbox_logic.h) and ONE
+ * entry (the highest-priority box the hero is in) is pushed onto the stack through the engine's own functions, from the game thread:
+ *   getter 0x54dca0  thiscall(ecx=AUD, off) ret 4: SND offset -> effect pointer ([AUD+0x6a7c] + off; 0 when off == 0, no SND, off > [AUD+0x6a80] or the object is not a roomeffect)
+ *   Push   0x765c70  thiscall(ecx=AUD, effect, key, float prio) ret 0xc: refuses at 20 entries, ignores an identical (effect, key), inserts sorted by priority
+ *   Remove 0x622250  thiscall(ecx=AUD, effect, key, float prio) ret 0xc: matches (effect, key) only, no-op when absent
+ * (all three read from kl2.exe 2026-11-08; Enter 0x8cfe30 builds exactly these calls with key = the box object pointer). The 0x66 ms debounce is a delay of the
+ * READ side (top getter 0x429b60), not a limit on pushers. Our key is KLRB_KEY + box index (< 0x10000: never a real object pointer = never one of the engine's).
+ * Rules: never a second Push without the Remove of the first; nothing is pushed while a FOREIGN entry (key outside our range) with a live effect pointer sits
+ * in the stack (the engine's own boxes work: offline Arcade / SP) - ours is removed and the map is left alone; a map change, an Enable drop or a vanished
+ * stack leaves nothing behind (Remove by the stored values: it compares values only, a stale pointer is harmless); a refused Push backs off 2 s. */
+#define KLECHO_RB_GETTER  0x54dca0u
+#define KLECHO_RB_PUSH    0x765c70u
+#define KLECHO_RB_REMOVE  0x622250u
+#define KLECHO_SND_BASE   0x6a7cu                            /* [AUD+..] loaded .SND image base (read from 0x54dca0: the getter adds the offset to it) */
+#define KLECHO_SND_LEN    0x6a80u
+#define KLECHO_STK_MAX    20u
+typedef DWORD (__fastcall *klecho_get_fn)(DWORD aud, DWORD edx, DWORD off);
+typedef void (__fastcall *klecho_stk_fn)(DWORD aud, DWORD edx, DWORD effect, DWORD key, float prio);
+
+static int klecho_rb_on, klecho_rb_margin = 30, klecho_rb_hold = 250;
+static char klecho_rb_open_key[64], klecho_rb_open_path[MAX_PATH]; static volatile LONG klecho_rb_open_gen, klecho_rb_lock;
+static struct klrb_box klecho_rb_box[KLRB_MAX]; static unsigned char klecho_rb_use[KLRB_MAX]; static int klecho_rb_n;
+static struct klrb_st klecho_rb_st;
+static char klecho_rb_map[80]; static int klecho_rb_stockok, klecho_rb_lines;
+static DWORD klecho_rb_sndbase = 0xffffffffu, klecho_rb_t, klecho_rb_backoff;
+static struct { int valid, idx; DWORD aud, eff, key; float prio; } klecho_rb_p;
+
+/* From klsteam.c's klh_level_open (any thread): the archive <key> ("f02\f02_main.zip") is opened from <opened>. Only <folder>_main.zip counts. */
+static void klecho_level_open(const char *key, const char *opened)
+{
+    size_t l = key ? strlen(key) : 0;
+    if (!klecho_rb_on || !opened || l < 10 || _stricmp(key + l - 9, "_main.zip") || l >= sizeof klecho_rb_open_key || strlen(opened) >= MAX_PATH) return;
+    while (InterlockedCompareExchange(&klecho_rb_lock, 1, 0)) Sleep(0);
+    strcpy(klecho_rb_open_key, key); strcpy(klecho_rb_open_path, opened);
+    InterlockedIncrement(&klecho_rb_open_gen);
+    InterlockedExchange(&klecho_rb_lock, 0);
+}
+
+static DWORD klecho_rb_getter(DWORD aud, DWORD off)
+{
+    DWORD r = 0;
+    __try { r = ((klecho_get_fn)(DWORD_PTR)KLH_VA(KLECHO_RB_GETTER))(aud, 0, off); } __except (EXCEPTION_EXECUTE_HANDLER) { r = 0; }
+    return r;
+}
+static int klecho_rb_call(DWORD va, DWORD aud, DWORD eff, DWORD key, float prio)
+{
+    int ok = 1;
+    __try { ((klecho_stk_fn)(DWORD_PTR)KLH_VA(va))(aud, 0, eff, key, prio); } __except (EXCEPTION_EXECUTE_HANDLER) { ok = 0; }
+    return ok;
+}
+
+/* the stack's count (0..20), -1 = not a stack we know */
+static int klecho_rb_count(DWORD aud) { DWORD n = klh_rd32(aud + KLECHO_STK_N); return n > KLECHO_STK_MAX ? -1 : (int)n; }
+
+static void klecho_rb_log(const char *what, int a, DWORD key, const char *why)
+{
+    if (klecho_rb_lines >= 120) return;
+    klecho_rb_lines++;
+    klog("echo-rb: %s box %d (key %08lx): %s", what, a, (unsigned long)key, why);
+}
+
+/* Remove what we pushed (when the manager is still the same one), forget it. */
+static void klecho_rb_release(DWORD aud, const char *why)
+{
+    if (!klecho_rb_p.valid) return;
+    if (aud && aud == klecho_rb_p.aud) klecho_rb_call(KLECHO_RB_REMOVE, aud, klecho_rb_p.eff, klecho_rb_p.key, klecho_rb_p.prio);
+    klecho_rb_log("removed", klecho_rb_p.idx, klecho_rb_p.key, why);
+    klecho_rb_p.valid = 0;
+}
+
+/* The map identity: an expansion folder (KLExpansion\Maps\DM02\ -> "dm02") when the level archive just opened is one, else the stock scene key. */
+static int klecho_rb_mapid(char *id, int cap)
+{
+    char scene[200], skey[80], ok[64], opened[MAX_PATH], mid[40]; LONG gen;
+    if (!klh_scene(scene, sizeof scene) || !klh_level_key(scene, skey, sizeof skey)) return 0;
+    while (InterlockedCompareExchange(&klecho_rb_lock, 1, 0)) Sleep(0);
+    gen = klecho_rb_open_gen; strcpy(ok, klecho_rb_open_key); strcpy(opened, klecho_rb_open_path);
+    InterlockedExchange(&klecho_rb_lock, 0);
+    snprintf(id, (size_t)cap, "%s", skey);
+    if (gen) {      /* GUESS: the last '<folder>_main.zip' opened is the level now running when its name equals the scene's (f02\f02_main.zip vs f02\f02_main) */
+        size_t l = strlen(ok);
+        if (l > 4 && strlen(skey) == l - 4 && !_strnicmp(ok, skey, l - 4) && klrb_map_id(opened, mid, sizeof mid)) snprintf(id, (size_t)cap, "%s", mid);
+        /* KNOWN LIMIT: a converted Dead Men zip installed over a stock slot (F01 test slot) is opened from the same path as the stock map, so it gets the
+         * stock table's boxes, whose SND offsets belong to the stock .SND. The getter only checks off <= length and type < 0x19, so they could give a wrong
+         * (in-image, crash-free) effect. Leave RoomBoxes=0 while testing converted maps in a stock slot; expansion maps (Maps\<folder>) are unaffected. */
+    }
+    return 1;
+}
+
+static void klecho_rb_loadmap(const char *id)
+{
+    char file[MAX_PATH], *text; HANDLE h; DWORD sz, got = 0; int found = 0, bad = 0;
+    klecho_rb_n = 0; memset(klecho_rb_use, 0, sizeof klecho_rb_use); klrb_reset(&klecho_rb_st); klecho_rb_stockok = 0; klecho_rb_sndbase = 0xffffffffu;
+    klecho_rb_lines = 0; klecho_rb_backoff = 0;                /* the log budget (120 lines) is per map */
+    /* beside KLHook.ini first (a bench kit moves it with KLHOOK_DIR, as the other side-inis), else beside kl2.exe */
+    snprintf(file, sizeof file, "%s", klh_ini);
+    { char *sl = strrchr(file, '\\'); if (sl) strcpy(sl + 1, "KLReverbBoxes.ini"); else snprintf(file, sizeof file, "%s\\KLReverbBoxes.ini", dir); }
+    h = CreateFileA(file, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    if (h == INVALID_HANDLE_VALUE) {
+        snprintf(file, sizeof file, "%s\\KLReverbBoxes.ini", dir);
+        h = CreateFileA(file, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    }
+    if (h == INVALID_HANDLE_VALUE) { klog("echo-rb: map %s: no %s (nothing is pushed)", id, file); return; }
+    sz = GetFileSize(h, 0);
+    if (sz != INVALID_FILE_SIZE && sz < (8u << 20) && (text = (char *)malloc(sz + 1)) != 0) {
+        if (!ReadFile(h, text, sz, &got, 0)) got = 0;
+        text[got] = 0;
+        klecho_rb_n = klrb_load(text, id, klecho_rb_box, KLRB_MAX, &found, &bad);
+        free(text);
+    }
+    CloseHandle(h);
+    klog("echo-rb: map %s: %d box(es)%s%s", id, klecho_rb_n, found ? "" : " (no section for this map: nothing is pushed)", bad ? ", some lines did not parse" : "");
+}
+
+static void klecho_rb_tick(void)
+{
+    DWORD now = GetTickCount(), game, aud, pl = 0, base, slen, oe = 0, ok = 0, op = 0, eff, cnt; char id[80]; float feet[3], np[3], pr, prio; int i, n, w, hit, foreign = 0, ours = -1;
+    if (now - klecho_rb_t < 50u) return;
+    klecho_rb_t = now;
+    game = klh_rd32((DWORD_PTR)KLH_VA(KLECHO_GAME)); aud = game ? klh_rd32(game + KLECHO_AUD) : 0;
+    if (!klecho_rb_on) { klecho_rb_release(aud, "[Echo] RoomBoxes is off"); return; }
+    if (!klecho_rb_mapid(id, sizeof id)) { klecho_rb_release(aud, "no level"); return; }
+    if (strcmp(id, klecho_rb_map)) {
+        klecho_rb_release(aud, "map change");
+        snprintf(klecho_rb_map, sizeof klecho_rb_map, "%s", id);
+        klecho_rb_loadmap(id);
+    }
+    if (!aud) { klecho_rb_p.valid = 0; return; }              /* audio manager not up: nothing of ours can be in it */
+    if (klecho_rb_p.valid && klecho_rb_p.aud != aud) { klecho_rb_p.valid = 0; klrb_reset(&klecho_rb_st); klecho_rb_sndbase = 0xffffffffu; }   /* a rebuilt manager has an empty stack */
+    if (klecho_rb_stockok) { klecho_rb_release(aud, "the engine's own boxes work on this map"); return; }
+    if (klecho_rb_n <= 0) return;
+    n = klecho_rb_count(aud);
+    if (n < 0) return;                                        /* not a stack we know: touch nothing */
+    base = klh_rd32(aud + KLECHO_SND_BASE); slen = klh_rd32(aud + KLECHO_SND_LEN);
+    for (i = 0; i < n; i++) {
+        DWORD_PTR e = aud + KLECHO_STK_E + 12u * (DWORD)i; DWORD ef = klh_rd32(e), ky = klh_rd32(e + 4), p2 = 0;
+        klh_rd(e + 8, &p2, 4);
+        if (ky >= KLRB_KEY && ky < KLRB_KEY + KLRB_MAX) {
+            if (ours < 0) { ours = i; oe = ef; ok = ky; op = p2; }
+            else {                                            /* a second entry of ours: never allowed, take it out */
+                memcpy(&pr, &p2, 4);
+                if (klecho_rb_call(KLECHO_RB_REMOVE, aud, ef, ky, pr)) klecho_rb_log("removed a stray entry", (int)(ky - KLRB_KEY), ky, "two entries of ours");
+                return;                                       /* the stack moved: look again next tick */
+            }
+        } else if (base && ef >= base && ef <= base + slen) foreign++;   /* GUESS: a live effect pointer inside this map's .SND image = the engine's own box pushed it */
+    }
+    if (foreign) {                                            /* the engine's boxes work here: ours must go, and the map is left alone */
+        klecho_rb_stockok = 1;
+        if (ours >= 0) { memcpy(&pr, &op, 4); klecho_rb_call(KLECHO_RB_REMOVE, aud, oe, ok, pr); }
+        klecho_rb_p.valid = 0;
+        klog("echo-rb: map %s: the stack holds %d entr%s of the engine's own - RoomBoxes leaves this map alone", id, foreign, foreign == 1 ? "y" : "ies");
+        return;
+    }
+    if (klecho_rb_p.valid && ours < 0) klecho_rb_p.valid = 0;                                 /* the stack was reset under us */
+    if (!klecho_rb_p.valid && ours >= 0) { memcpy(&pr, &op, 4); klecho_rb_call(KLECHO_RB_REMOVE, aud, oe, ok, pr); return; }   /* an entry we no longer know: never leave it */
+    if (!kle_human(&pl, feet, np)) return;                    /* no local hero (dead, between rounds): keep what is there */
+    if (base != klecho_rb_sndbase) {                          /* (re)derive which boxes have an effect now: the .SND is per map */
+        klecho_rb_sndbase = base;
+        for (i = 0, hit = 0; i < klecho_rb_n; i++) { klecho_rb_use[i] = klecho_rb_box[i].snd != 0 && klecho_rb_box[i].snd < slen && klecho_rb_getter(aud, klecho_rb_box[i].snd) != 0; hit += klecho_rb_use[i]; }
+        klog("echo-rb: map %s: %d of %d box(es) have a roomeffect in this .SND (base %08lx)", id, hit, klecho_rb_n, (unsigned long)base);
+    }
+    w = klrb_update(&klecho_rb_st, klecho_rb_box, klecho_rb_n, np, now, (float)klecho_rb_margin, (unsigned long)klecho_rb_hold, klecho_rb_use);
+    if (klecho_rb_p.valid && w == klecho_rb_p.idx && klecho_rb_getter(aud, klecho_rb_box[w].snd) == klecho_rb_p.eff) return;   /* the right one is up */
+    if (klecho_rb_p.valid) klecho_rb_release(aud, w < 0 ? "the hero left the box" : "another box wins");
+    if (w < 0 || (klecho_rb_backoff && (int)(now - klecho_rb_backoff) < 0)) return;
+    n = klecho_rb_count(aud);
+    if (n < 0 || n >= (int)KLECHO_STK_MAX) return;
+    eff = klecho_rb_getter(aud, klecho_rb_box[w].snd); prio = klecho_rb_box[w].prio;
+    if (!eff) { klecho_rb_use[w] = 0; return; }
+    cnt = (DWORD)n;
+    if (!klecho_rb_call(KLECHO_RB_PUSH, aud, eff, KLRB_KEY + (DWORD)w, prio) || klecho_rb_count(aud) != (int)cnt + 1) {
+        klecho_rb_backoff = (now + 2000u) | 1u;                /* never 0: 0 = no back-off (uptime past 2^31 ms made the unset value look like the future) */
+        if (klecho_rb_lines < 120) { klecho_rb_lines++; klog("echo-rb: Push of box %d refused or faulted (count %lu -> %d), retry in 2 s", w, (unsigned long)cnt, klecho_rb_count(aud)); }
+        return;
+    }
+    klecho_rb_p.valid = 1; klecho_rb_p.idx = w; klecho_rb_p.aud = aud; klecho_rb_p.eff = eff; klecho_rb_p.key = KLRB_KEY + (DWORD)w; klecho_rb_p.prio = prio;
+    if (klecho_rb_lines < 120) { klecho_rb_lines++; klog("echo-rb: pushed box %d (key %08lx, prio %.0f, effect %08lx) at hero %.0f %.0f %.0f", w, (unsigned long)klecho_rb_p.key, prio, (unsigned long)eff, np[0], np[1], np[2]); }
+}
+
 static void klecho_tick(int game_thread)
 {
     BYTE *slot; DWORD cur, mine = (DWORD)(DWORD_PTR)klecho_wrap;
-    if (!(klecho_on || klecho_probe) || !game_thread || !klh_exe_ok) return;
+    if (!(klecho_on || klecho_probe || klecho_rb_on) || !game_thread || !klh_exe_ok) return;
+    if (klecho_rb_on || klecho_rb_p.valid) klecho_rb_tick();
+    if (!(klecho_on || klecho_probe)) return;                /* RoomBoxes only: the alEffectf slot stays the engine's */
     if (klecho_probe) klecho_probe_tick();
     slot = KLH_VA(KLECHO_SLOT);
     cur = klh_rd32((DWORD_PTR)slot);
@@ -327,6 +520,14 @@ static void klecho_init(void)
 {
     klecho_on = GetPrivateProfileIntA("Echo", "Enable", 0, klh_ini) != 0;
     klecho_probe = GetPrivateProfileIntA("Echo", "Probe", 0, klh_ini) != 0;
+    klecho_rb_on = GetPrivateProfileIntA("Echo", "RoomBoxes", 0, klh_ini) != 0;
+    klecho_rb_margin = GetPrivateProfileIntA("Echo", "RoomBoxMargin", 30, klh_ini);
+    klecho_rb_hold = GetPrivateProfileIntA("Echo", "RoomBoxHoldMs", 250, klh_ini);
+    if (klecho_rb_margin < 0) klecho_rb_margin = 0;
+    if (klecho_rb_margin > 500) klecho_rb_margin = 500;
+    if (klecho_rb_hold < 0) klecho_rb_hold = 0;
+    if (klecho_rb_hold > 5000) klecho_rb_hold = 5000;
+    if (klecho_rb_on) klog("echo: RoomBoxes on ([Echo] RoomBoxes=1): the local hero is tested against KLReverbBoxes.ini, margin %d, hold %d ms", klecho_rb_margin, klecho_rb_hold);
     if (!klecho_on && !klecho_probe) return;
     klecho_log = GetPrivateProfileIntA("Echo", "Log", 1, klh_ini) != 0;
     klecho_c.strength = GetPrivateProfileIntA("Echo", "Strength", 100, klh_ini);
