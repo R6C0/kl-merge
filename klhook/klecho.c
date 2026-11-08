@@ -63,7 +63,7 @@ static float klecho_o[3], klecho_n[3];                       /* decay, reflectio
 static float klecho_seen[24][2]; static int klecho_nseen;    /* dedupe of the log: (kind, decay) */
 typedef void (__cdecl *klecho_al_fn)(unsigned, int, float);
 static klecho_al_fn klecho_real;
-static int klecho_room_lines; static LONG klecho_room_n;
+static int klecho_room_lines; static LONG klecho_room_n; static float klecho_last[4];
 
 static void __cdecl klecho_wrap(unsigned eff, int param, float v)
 {
@@ -75,8 +75,11 @@ static void __cdecl klecho_wrap(unsigned eff, int param, float v)
         if (param == 5) { klecho_o[0] = v; klecho_n[0] = nv; }
         if (param == 7) { klecho_o[1] = v; klecho_n[1] = nv; }
         if (param == 9) { klecho_o[2] = v; klecho_n[2] = nv; }
-        if (param == 10 && klecho_probe && klecho_room_lines < 300) {   /* every room change, not deduped: when the room changes matters next to the plays */
+        if (param == 10 && klecho_probe && klecho_room_lines < 300 && (klecho_room_lines == 0 || klecho_o[0] != klecho_last[0] || klecho_o[1] != klecho_last[1]
+                                                                       || klecho_o[2] != klecho_last[2] || v != klecho_last[3])) {
+            /* each CHANGE of the room effect, not deduped against older rooms (the engine sends the set every frame: logging each call spent the budget in 10 s) */
             static const char *nm[5] = { "none", "indoor", "street", "roof", "hall" };
+            klecho_last[0] = klecho_o[0]; klecho_last[1] = klecho_o[1]; klecho_last[2] = klecho_o[2]; klecho_last[3] = v;
             klecho_room_lines++;
             klog("echo-room #%ld t %lu: %s engine decay %.2f refl %.3f late %.3f delay %.3f -> sent decay %.2f refl %.3f late %.3f delay %.3f%s",
                  InterlockedIncrement(&klecho_room_n), (unsigned long)GetTickCount(), nm[klecho_s.kind > 4 ? 0 : klecho_s.kind],
