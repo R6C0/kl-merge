@@ -74,7 +74,7 @@ Undo order: merged_1108c -> merged_1108b -> merged_1108 -> vanwait_1108 -> merge
 postneutral1108 (07:14, all 20 PostFilterBoxes -> DD neutral 33189) PASS 0 faults: wall unchanged, so the colour grade is ruled out too.
 FOUND: the StreetGLOW curtain (REF 25478, vertex chunk 38553, MAT 891 SCREEN). streetglow1108 (vertex colours 0) PASS: wall gone, dark sky, black below the horizon.
 glowfar1108 (alpha x 0.25 + Far 80000, stage C:\kl_build_1024\glowfar_1108) PASS: soft haze, towers clear. Staged, NOT installed (owner's taste call).
-Skyline model still unseen with Far 80000: next suspect = Backdrop .rmi box 59 / room visibility.
+Skyline model can't be used: it sits behind the Distance shell, and moving it inside clips the map. citylights1108 (08:00, 9 dark 01d tower objects -> lit 01i, stage C:\kl_build_1024\citylights_1108) PASS 0 faults: right tower now a pale facade with a window grid. Both are staged taste calls, NOT installed.
 2026-11-08 ~05:46 - [f0] MERGED 1108 LIVE (SHIP 319aefc4, ini cd431998 -> 2f67d4bc = + [ShopPage] SetCheck=1) on top of d0s vanwait 19611c16: one dll from 9b74caf9 = fc SHPH set check + db [Echo] (dormant).
 Bench M1108_DD05 PASS (TEST 337ecc4d, 2 seats, round 2, 0 asserts/faults/dumps, both seats "SHPH match" hash 4555f77f, no m10). Kit C:\kl_build_1024\merged_1108 (21 scratch checks, kl_tests 107/0, 3-lens review).
 Undo order: merged_1108\UNDO.bat, then vanwait_1108\UNDO.bat, then merged_1107\UNDO.bat (out of order refuses, restores nothing).

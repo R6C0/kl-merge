@@ -1,3 +1,9 @@
+## 2026-11-08 ~08:00 [d0] DM05A citylights1108 PASS (no crash involved)
+- Stage C:/kl_build_1024/citylights_1108 = glowfar_1108 with 9 Distance-shell objects re-pointed from dark 01d (MAT 855/856/876) to lit 01i (857/877) twins (tools/kl_citylights_1108.py; zip 80b5547c, bots 1e02dbe5, base c009e5af).
+- Bench (TEST 64701f02): KLHook.result PASS, 0 asserts/faults/dumps, undo byte-exact. Zero-ref materials 855/856/876 are fine.
+- Shots 12/20 vs glowfar 12: the right tower is now a pale facade with a window grid instead of near black. The change is modest; the haze still dominates.
+- The skyline model is dropped (behind the shell; in-shell placement clips). glowfar and citylights are both staged taste calls, NOT installed.
+
 ## 2026-11-08 ~07:28 [db] RB_DM02_SW2 PASS: RoomBoxes switches between three different room effects (no crash involved)
 - TEST 530c9920, host teleports after state 0x19: box 40 -> atrium 13 -> parking 3 -> 40, each "removed ... another box wins" + push, stack 1 deep, top effect 36dee7e0 -> 5e0 -> 9e0 -> 7e0.
 - The engine cross-fades each change in ~1 s: 1.10/0.363 -> 1.47/0.59 (atrium) -> 1.32/0.05 (parking) -> exactly 1.10/0.363/1.000 again. 0 asserts/faults, live dll 246c643d / ini 6ddd03de unchanged.
