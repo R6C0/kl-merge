@@ -358,7 +358,7 @@ class Assets:
         p = self.p
         d = p.u32(p.u32(o, 0x28), 0)
         nv, v = p.u32(d, 0), p.chunks[p.u32(d, 4)]
-        if len(v) < VSTRIDE * nv:
+        if v is None or len(v) < VSTRIDE * nv or p.chunks[p.u32(d, 0x18)] is None:      # 11-08: DD10's slim build leaves a dead (None) chunk
             return [], [], []                           # a stub (kl_graft's emptied dead chunks)
         pos = [struct.unpack_from('<3f', v, VSTRIDE * k) for k in range(nv)]
         uv = [struct.unpack_from('<2f', v, VSTRIDE * k + 20) for k in range(nv)]
