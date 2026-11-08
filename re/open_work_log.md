@@ -1,3 +1,11 @@
+## 2026-11-08 ~05:46 [f0] MERGED 1108 benched + SHIP INSTALLED (no crash involved)
+Kit C:\kl_build_1024\merged_1108: one dll from rtp-schemas 9b74caf9 (clean worktree) = live vanwait c7b7f1db + fc [ShopPage] SetCheck (SHPH) + db [Echo] work (dormant: no [Echo] section, no KLReverbBoxes.ini).
+install.py pins the live dll 19611c16 (ini deliberately unpinned), writes one line [ShopPage] SetCheck=1 (recommended on; code default 1 too); SetCheckStrict absent (0, no m10).
+Offline: kl_tests 107/0 at 9b74caf9, 21 scratch install/undo checks, 3-lens review (inert Echo, SetCheck with old peers, installer + stacking): no blocker.
+Bench M1108_DD05 (C:\kl_build_1024\merged_1108_bench\run.py, kit --test, TEST 337ecc4d, pd2s pair on DD05, joiner Char=9): PASS, both seats IN ROUND, round 2, 0 asserts/faults/dumps,
+shop rows 0/10/22/31 = items 62/63/40/35 both sides, both seats "shph: set check on ... hash 4555f77f" + "SHPH match", no mismatch, no m10; game files restored.
+Then undo --test (byte-exact) and SHIP: live dll 319aefc4, KLHook.ini 2f67d4bc, KLShopPage 4bc8845a. Undo order: merged_1108 -> vanwait_1108 -> merged_1107.
+
 ## 2026-11-08 ~05:36 [shop] SHPH benches SC_C + SC_D PASS (TEST ee6da004 = 9b74caf9; no crash involved)
 - SC_C_DD05 (both seats live pd2 set, strict 1): "SHPH match" both seats, no m10; the client's page II test buy went to the host (the host refused it: "seat already carries that row", the existing carry rule).
 - SC_D_DD05 (SetCheck=0, pd2 host vs nopd2 client): no shph lines at all; same host carry-rule refusal as C (so not SHPH). 0 asserts/faults/dumps both runs, live dll/ini restored.

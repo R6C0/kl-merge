@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-08 ~05:46 - [f0] MERGED 1108 LIVE (SHIP 319aefc4, ini cd431998 -> 2f67d4bc = + [ShopPage] SetCheck=1) on top of d0s vanwait 19611c16: one dll from 9b74caf9 = fc SHPH set check + db [Echo] (dormant).
+Bench M1108_DD05 PASS (TEST 337ecc4d, 2 seats, round 2, 0 asserts/faults/dumps, both seats "SHPH match" hash 4555f77f, no m10). Kit C:\kl_build_1024\merged_1108 (21 scratch checks, kl_tests 107/0, 3-lens review).
+Undo order: merged_1108\UNDO.bat, then vanwait_1108\UNDO.bat, then merged_1107\UNDO.bat (out of order refuses, restores nothing).
 2026-11-08 ~05:36 - [shop] SHPH set check BENCHED A-D, not live: SC_A (warn) + SC_B (strict, m10 on a page II test buy) + SC_C (same set: match, ask reaches host) + SC_D (off: silent) PASS, 0 faults. f0 merges it in merged_1108.
 [ShopPage] SetCheck=1 (recommended on, warn only) / SetCheckStrict=0 (recommended off). Kit C:\kl_build_1024\shopset_1108 SHIP 3e948da1 / TEST ee6da004 (benched 63a2e50e). Install rides the next merged dll.
 2026-11-08 ~04:15 - [d0] DM06B TRAFFIC LIVE: zip a6c0aef1 -> 7cee043d, bots ec42c5e4, base 171f7443, KLGuns 483f7450 (stage C:\kl_build_1024\dm06b_traffic_1108).
