@@ -168,6 +168,12 @@ KITS = {
                         hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
                         ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
                         solo_secs=900, parts=('solo',), shots='300-840:30'),
+    # Retomoto van empty-wait (11-08): owner 'the vehicle on fire is the same occurance for retomoto tower'. The LIVE DM09 (nothing installed; slot F06, page 2 entry 4
+    # = kl_arc2_kit's verified place) on the TEST twin of the live SHIP dll, [VanBlow] ShieldWhileWaiting=1 as live; nobody boards, the log decides (as vanwait1108).
+    'vanwait09_1108': dict(map='DM09', slot='F06', page=2, entry=4, stage=None, tag=None, live={'F06_Main.zip': 'afee8967'}, van=True,
+                           hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
+                           ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
+                           solo_secs=1100, parts=('solo',), shots='300-1040:30'),
     # DM06B traffic cars (11-08, tools/kl_dm06b_traffic_1108.py, stage C:/kl_build_1024/dm06b_traffic_1108, pinned to the LIVE DM06B a6c0aef1): 7 static TRAFFIC! cars on the
     # ramp road (Curvedroad waypoints 9..21). Offline Arcade, 1 seat on the merged_1107 TEST dll; the script teleports (TEST rig) 700 upstream of each car and faces it, shots
     # every 5 s. LOOK at the shots: cars drawn? (skinned models as static ZLNKOBJ = the open question), headlight glows rebuilt as Standard (GUESS), car heading/height.
@@ -220,11 +226,12 @@ def solo_script(k, secs_total):
     c = KITS[k]
     s = ['waitwin CampaignMenu 180000', 'settle 15 150 60000', 'tapuntil ESCAPE MainMenu 10000 3', 'settle 8 150 30000', 'wait 1500', 'tap DOWN', 'wait 1200',
          'tapuntil RETURN HeistModeMenu 15000 2', 'settle 8 150 30000', 'wait 3000', 'windows']
-    for _ in range(7):
+    pg = c.get('page', 3)          # page 2 = 6 x DOWN on HeistModeMenu, page 3 = 7 x DOWN (kl_arc2_kit.py, verified live_1026 smoke inis)
+    for _ in range({2: 6, 3: 7}[pg]):
         s += ['tap DOWN', 'wait 500']
-    s += ['wait 2500', 'windows', 'tap RETURN', 'waitwin HeistPlayMenu3 8000', 'wait 3000', 'windows',
-          'sel HeistLevel_P3 0xceceec %d' % c['entry'], 'wait 2500', 'expect 0xceceec %d' % c['entry'],
-          'log BENCH1106 %s entry %d page 3 slot %s' % (c['map'], c['entry'], c['slot']), 'msg HeistLevel_P3 StartGame', 'waitload 300000',
+    s += ['wait 2500', 'windows', 'tap RETURN', 'waitwin HeistPlayMenu%d 8000' % pg, 'wait 3000', 'windows',
+          'sel HeistLevel_P%d 0xceceec %d' % (pg, c['entry']), 'wait 2500', 'expect 0xceceec %d' % c['entry'],
+          'log BENCH1106 %s entry %d page %d slot %s' % (c['map'], c['entry'], pg, c['slot']), 'msg HeistLevel_P%d StartGame' % pg, 'waitload 300000',
           'log BENCH1106 level loaded: %s' % c['map'], 'wait 23000', 'peek 0x168e598+0x70 session-state-must-be-0x19', 'pos spawn']
     if k in LC:
         # Escape: the vehicle state machine is open-loop timers (re/lastcall_heli_1105.md). Wait for state 3 (van/chopper at the pad),
