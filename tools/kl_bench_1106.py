@@ -174,6 +174,15 @@ KITS = {
                            hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
                            ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
                            solo_secs=1100, parts=('solo',), shots='300-1040:30'),
+    # vanwait09_1108 PASS (05:04) but the van ARRIVED at 1245 of 3000 (41 %): the cops hit it in the drive-in (state 2), before ShieldWhileWaiting
+    # starts at 3/4, and the shield then froze it at 41 % (= burning). Same run + [VanBlow] HealFloor=95 (in the live dll since merged_1107, never run):
+    # at the first empty pass of the wait the health goes back to max (+0x14 write, GUESS), then the shield holds it. vanlook: the seat is teleported
+    # (TEST rig) 13 m in front of the boarding box (-1852, 121, 10459) at state 3 so the shots show whether the fire goes out with the health.
+    'vanwait09h_1108': dict(map='DM09', slot='F06', page=2, entry=4, stage=None, tag=None, live={'F06_Main.zip': 'afee8967'}, van=True,
+                            vanlook=(-1852, 200, 9159),
+                            hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
+                            ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'HealFloor=95', 'Log=1'],
+                            solo_secs=1100, parts=('solo',), shots='330-500:3'),
     # DM06B traffic cars (11-08, tools/kl_dm06b_traffic_1108.py, stage C:/kl_build_1024/dm06b_traffic_1108, pinned to the LIVE DM06B a6c0aef1): 7 static TRAFFIC! cars on the
     # ramp road (Curvedroad waypoints 9..21). Offline Arcade, 1 seat on the merged_1107 TEST dll; the script teleports (TEST rig) 700 upstream of each car and faces it, shots
     # every 5 s. LOOK at the shots: cars drawn? (skinned models as static ZLNKOBJ = the open question), headlight glows rebuilt as Standard (GUESS), car heading/height.
@@ -279,6 +288,8 @@ def solo_script(k, secs_total):
         # empty-wait van (11-08, [VanBlow] ShieldWhileWaiting): nobody boards; the seat stands at spawn while the van waits at the pickup.
         # The log then shows whether the van was shielded ('vanblow: ShieldWhileWaiting', 'follow: shield') and whether it reached 6 (destroyed).
         s += ['wait 30000', 'pos at-60s', 'log BENCH1106 waiting for vehicle state 3', 'waitvan 3 600000', 'pos van3']
+        if c.get('vanlook'):           # vanwait09_1108 had the seat in the tower: no shot showed the van. TEST rig tele to a point facing the doors
+            s += ['tele %d %d %d' % c['vanlook'], 'wait 1500', 'log BENCH1106 at the van look point', 'pos vanlook']
         for i in range(1, 9):
             s += ['wait 15000', 'pos wait-%ds' % (15 * i)]
         s += ['log BENCH1106 van empty-wait done', 'pass 1000']
