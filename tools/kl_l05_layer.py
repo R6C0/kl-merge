@@ -173,7 +173,13 @@ BODIES = [(10050.0, 1600.0, 2564.0), (9488.0, 1600.0, 2143.0), (10084.0, 1600.0,
           (9450.0, 1600.0, 2000.0), (10178.0, 1600.0, 2855.0), (10153.0, 1600.0, 3080.0)]
 FACE_NORTH = (0.0, -1.0)                # facing: into the tower (z falls towards the entrance; GUESS)
 SOUTH = (0.0, 1.0)
-BOARD_AT = (8300.0, 0.0, 1100.0)        # the van's boarding place (MEASURED in the plan; prepare_host takes PLAN['board'] once there is a plan)
+# 11-08 VAN LANE (tools/kl_dd10_vanlane_1108.py, staged on the live build, NOT rebuilt here): the audit found the van's line z 1100 piercing BigFence_A_02, both pillar pairs and
+# the Exit_01 sign; the pillar gaps and the street are centred on z ~1000. The drive keeps z 1100 up to x VAN_LANE_FROM, bends (smoothstep) to VAN_LANE_Z by x VAN_LANE_TO, and
+# stays there; the stop is on VAN_LANE_Z. MEASURED with the swept box of the staging tool (half width 100, collision triangles): pillar A_02 7 cm, dustbin B_03 2 cm, sign 67 cm.
+# 1000 would clear the pillars better but runs into the dustbins; 1100 cannot clear the pillars. GUESS: ESC.van_plan_points accepts the bent road (the stage patches the
+# keys in place instead; a rebuild from ROAD is untested).
+VAN_LANE_Z, VAN_LANE_FROM, VAN_LANE_TO = 1030.0, 6500.0, 7500.0
+BOARD_AT = (8300.0, 0.0, VAN_LANE_Z)    # the van's boarding place (MEASURED in the plan; prepare_host takes PLAN['board'] once there is a plan)
 
 
 def _spawn():
@@ -292,7 +298,7 @@ START_FIELDS = {12: 'FA', 13: 'FA', 14: 'Team_B', 15: 'UCC'}
 # ------------------------------------------------------------------ the van in the street (MEASURED plan, zero faults: kl_map_escape.van_plan_points)
 VAN = 'Animation/F07/F07_Escape_Vehicle_01.zip'
 VAN_GROUP = 'EscapeVehicle_Animation_F07'
-STOP = (8300.0, 0.0, 1100.0)
+STOP = (8300.0, 0.0, VAN_LANE_Z)
 CLEAR_NAMES = ['PC1201_L05_Dustbinbasket_03', 'PC1201_L05_Dustbinbasket_02', 'PC1201_L05_Dustbinbasket_A_01', 'PC1201_L05_Dustbinbasket_01',
                'PC0302_L05_BlackGarbageBag_A_02', 'SO0700_ALL_FenceBlock_A_10', 'SO0700_ALL_FenceBlock_A_11', 'PC0900_ALL_Scaffold_A_01']
 # REF ids of those objects' entities (MEASURED on the base build; one name can have several entities). The layer takes them out of the van's way:
@@ -336,6 +342,12 @@ CLEAR_WHAT = collections.OrderedDict([
 SHOW_WHAT = collections.OrderedDict([
     (30709, ('Wall_StateC', (0, 0, 0))), (30710, ('SI0100_L05_Wall_Break_Post_00', (11800, 1600, 3600))),
 ])
+# HIDE_WHAT: REF -> (the last part of the object's scene path, its world position): HIDDEN (flag 0x400 + ZGEOM[3]) but its collision STAYS (not in CLEAR_REFS, so the join does not
+# cut it). The closed gate's fence: the van's key route drives through it (the audit), players keep the wall they had (ColiObj_HERO_Plane01 stands there as well).
+# GUESS: the engine keeps the Havok static of a hidden node (the same as the wall break's PrePost frame above, MEASURED there).
+HIDE_WHAT = collections.OrderedDict([
+    (31255, ('SO0700_ALL_BigFence_A_02', (8007, 0, 996))),
+])
 WALL_FRAME = 30781                      # SI0100_L05_Wall_Break_Post_00\MainFrame01: the broken wall, its collision stays
 # round 4 (DD10): the apartment A WALL BREAK, opened STATICALLY to the campaign's own end state. The campaign's controllers (Special!Geom_Controllers!B3 / B4, MEASURED
 # on 1025d) go: State3 = ActivateGeom Wall_StateB + DeactivateGeom Wall_StateA; State4 = ActivateGeom Wall_StateC + DeactivateGeom Wall_StateB\PrePost_Frame_00. NOTHING in
@@ -348,8 +360,8 @@ WALL_FRAME = 30781                      # SI0100_L05_Wall_Break_Post_00\MainFram
 # (the children have their own 0x400 flag, MEASURED), and that MainFrame01's MESH has the hole its collision has (not seen; only the collision was measured).
 CLEAR_REFS = set(CLEAR_WHAT)
 COOP_BLOCKERS = 3                       # the CoopAirLock_Pathblocker_00 nodes of the campaign map (MEASURED on 1025a: eBlocking, empty list, named by no controller)
-ROAD = dict(arrive=[(5300.0, 0.0, 1100.0), (6300.0, 0.0, 1100.0), (7300.0, 0.0, 1100.0)], stop=STOP,
-            leave=[(9300.0, 0.0, 1100.0), (10300.0, 0.0, 1100.0), (12400.0, 0.0, 1100.0)], at='box', heading=90.0, cam=[10450.0, 350.0, 1100.0], clear=list(CLEAR_NAMES))
+ROAD = dict(arrive=[(5300.0, 0.0, 1100.0), (6500.0, 0.0, 1100.0), (7500.0, 0.0, VAN_LANE_Z)], stop=STOP,
+            leave=[(9300.0, 0.0, VAN_LANE_Z), (10300.0, 0.0, VAN_LANE_Z), (12400.0, 0.0, VAN_LANE_Z)], at='box', heading=90.0, cam=[10450.0, 350.0, 1100.0], clear=list(CLEAR_NAMES))
 PLAN = None
 NO_PLAN = 'kl_l05_layer: the van has no plan: build with \'kl_l05_layer.py test <out>\' or kl_l05_layer.build()'
 LANE_CLEAR = 250.0                      # no spawn point, man, cover point or the marker nearer than this to the van's drive (street floor only). GUESS
@@ -741,6 +753,17 @@ def finish(folder, log=print):
     if len(hid) != len(CLEAR_REFS):
         bad.append('the van\'s way: %d of the %d props to clear are in the level' % (len(hid), len(CLEAR_REFS)))
     log('  kl_l05_layer: %d street props hidden (the van\'s way)' % len(hid))
+    # 11-08: the gate fence is hidden only (collision kept, see HIDE_WHAT)
+    bad += clear_proof(sc, E.ents, lambda i, e: E.at(i + 1), HIDE_WHAT)
+    if not bad:
+        import kl_prpjoin as J3
+        for i, e in enumerate(E.ents):
+            if e.ref in HIDE_WHAT:
+                k = i + 1
+                lab = J3.labels('dd', sc.cls(k))
+                kl_graft.edit(sc.nodes[k], 'props', lambda us, lab=lab: A.setv(sc, us, lab.index('ZGEOM[3]'), 1))
+                e.flags = e.flags | HIDDEN
+        log('  kl_l05_layer: %d gate fence hidden, collision kept' % len(HIDE_WHAT))
     # round 4: the broken state of the apartment A wall is SHOWN (SHOW_WHAT): .gms flag 0x400 off and ZGEOM[3] 0, the reverse of the hiding above
     import kl_prpjoin as J2
     shown = []
@@ -1236,6 +1259,14 @@ def check(folder, log=print, problems=None):
     shown = sorted(r for r in CLEAR_REFS if r in refs and not refs[r].flags & HIDDEN)
     if shown:
         fail('the street props to clear are not hidden: REF %s' % shown)
+    for x in clear_proof(sc, ents, lambda i, e: pos[e], HIDE_WHAT):
+        fail(x)
+    unhid = sorted(r for r in HIDE_WHAT if r in refs and not refs[r].flags & HIDDEN)
+    if unhid:
+        fail('the van\'s gate fence is not hidden: REF %s' % unhid)
+    lost = sorted(set(HIDE_WHAT) - {kl_hvk.ref(i) for s_ in hvk.shapes for i in s_.inst})
+    if lost:
+        fail('the van\'s gate fence lost its collision (hide only): REF %s' % lost)
     cut = sorted({kl_hvk.ref(i) for s in hvk.shapes for i in s.inst} & CLEAR_REFS)
     if cut:
         fail('the street props to clear still have collision: REF %s' % cut)
@@ -1396,10 +1427,10 @@ def flags_of():
     return collections.OrderedDict(SQUADS_AWAKE=SQUADS_AWAKE, NO_AI=NO_AI, POLICE_ARRIVE=POLICE_ARRIVE, START_AT=START_AT, BACKSTOP_AT=BACKSTOP_AT, VAN_DELAY=VAN_DELAY)
 
 
-BOT_OPT = {'stops': 4, 'cases': 'off', 'lane': True, 'window': True, 'loot_seconds': 20, 'park': (8414.0, 0.0, 900.0)}
+BOT_OPT = {'stops': 4, 'cases': 'off', 'lane': True, 'window': True, 'loot_seconds': 20, 'park': (8414.0, 0.0, 900.0)}   # 11-08: the line is now z 1030 (130 off the park, 20 outside the van's half width 110)
 # round 4: park was (8414, 0, 969), 131 off the van's line ('the widest place': measured on a mesh that is not this one). MEASURED on 1025d: the strip's south edge is z 840
 # (line z 1100), so z 900 keeps CLEAR (60) from the edge and is 200 from the line. GUESS: the park box (AllyEscapeBox) built round it still holds 7 places >= BOT_LANE_CLEAR off.
-BOT_LANE_CLEAR = 200.0                  # round 4: kl_fa_bots.LANE_CLEAR (250) while the bots are built: the strip south of the van's line is only 260 wide, 200 is the most it gives (FAIL is below 160)
+BOT_LANE_CLEAR = 125.0                  # 11-08: 125 (was 200): the lane moved 70 south towards the park strip (z 900 is 130 off z 1030). Was: round 4: kl_fa_bots.LANE_CLEAR (250) while the bots are built: the strip south of the van's line is only 260 wide, 200 is the most it gives (FAIL is below 160)
 # GUESS (the dig's): briefcases only, up to 4 stops, a loot wait of 20 s; the plan puts the van's AllyEscapeBox PARK_SIDE from the key-framed van line.
 
 
@@ -1531,6 +1562,20 @@ def main():
         sys.exit(1 if bad else 0)
     else:
         sys.exit(__doc__)
+
+
+def lane_proof(zp, log=print):
+    """11-08: the swept-box lane check of the staged van (tools/kl_dd10_vanlane_1108.py): an oriented box of the van's half width (100), 340 behind / 260 before its origin, 25 .. 250
+    high, swept along every key of the main drive and its midpoints against the level's COLLISION triangles. The hidden gate fence and ColiObj_HERO_Plane01 stay solid by design (players
+    keep that wall; the van is key-framed and not stopped by them) and are exempt. -> [problems]. Not called by check() (it needs the zip): run after build on <out>/F07_Main.zip."""
+    import kl_dd10_vanlane_1108 as VL
+    res = VL.swept(zp, hws=(VL.HALF_AUDIT,), log=log)[VL.HALF_AUDIT]
+    bad = []
+    for pat, lim in VL.MIN_CLEAR.items():
+        for n, v in res.items():
+            if n.startswith(pat) and v[0] < lim:
+                bad.append('van lane: %s is %.0f cm from the swept box at key %d (origin %d, %d), %d wanted' % (n, v[0], v[1], v[2], v[3], lim))
+    return bad
 
 
 if __name__ == '__main__':
