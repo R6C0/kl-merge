@@ -1,3 +1,7 @@
+## 2026-11-08 ~05:20 [db] [Echo] RoomBoxes PROVEN on DD09 (no crash involved)
+- OSS_DD09_RB_S2_2 (TEST 8ed080d7): SMOOTH, 0 faults; ~1 s after the push the sent reverb goes from the flat default (decay 1.49, refl 0) to box 6's effect (decay 2.00, refl 0.052, late 0.056, delay 0.100) on both seats.
+- Not live: RoomBoxes stays "(recommended off until listened)", no ini line in f0's merged_1108. Install = the KLReverbBoxes.ini table + RoomBoxes=1, after the owner listens. Next: a box-switching bench, a DM02 bench with KLReverbBoxes_dm.ini.
+
 ## 2026-11-08 ~04:50 [shop] SHPH benches SC_A + SC_B PASS (no crash involved)
 - SC_A_DD05 (SetCheck=1, strict 0; host live pd2 KLShopPage.ini, client nopd2 out_set): both seats "SHPH mismatch" (host 4555f77f, client 7d31cb86 = the Python twin's hashes), no refusal, 0 asserts/faults/dumps, round 2.
 - SC_B_DD05 (strict 1, client OnlineTestBuy=b0): "shopg: refused m10 locally ... (host's set differs)", nothing sent to the host, 0 asserts/faults/dumps.

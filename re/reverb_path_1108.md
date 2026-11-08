@@ -81,3 +81,9 @@ TEST ec43cbd4 (f77dcb05), [Echo] Enable=0 Log=1 Probe=1 RoomBoxes=1, KLReverbBox
 Both seats: `echo-rb: map dd09: 16 box(es)`, 16/16 with a roomeffect, `pushed box 6 (key 00004b06, prio 40)` = Audio!BOX!001_Outside_A_LargeHall at the hero's spawn;
 echo-stack count 0 -> 1, top 0 -> that effect ~100 ms later (the read-side debounce). No refused Push, no removes (the scripted seats stay in that hall).
 NOT SHOWN: the alEffectf values after the push. Probe's echo-room logged every per-frame call, so its 300 lines ran out 2 min before the push; fixed in 4dad706e (log on change, TEST 8ed080d7), rerun queued.
+
+## Bench OSS_DD09_RB_S2_2 (2026-11-08 05:05-05:15, db): RoomBoxes changes the SENT reverb, PASS
+TEST 8ed080d7 (4dad706e, echo-room on change), same ini/table as RB_S2; 2 seats SMOOTH (29.9/30.0 fps, 0 hitches, 0 asserts/faults/dumps), live dll/ini unchanged.
+Both seats: pushed box 6 (key 00004b06, prio 40) at 05:08:09; echo-stack count 0 -> 1, top -> the effect ~110 ms later;
+echo-room #2 ~1.1 s after the push: roof engine decay 1.49 refl 0.000 late 0.000 delay 0.011 -> decay 2.00 refl 0.052 late 0.056 delay 0.100 (sent = engine, Enable=0).
+So the engine's own reverb path picks up the hook's pushed box: stock FA reverb goes from the flat default to the room's effect. Still not exercised: switching between boxes (seats stay in box 6).
