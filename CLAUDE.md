@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-08 ~07:13 - [f0] MERGED 1108c LIVE: dll 246c643d (from 96ddcf7d = merged_1108b 3f8bc902 [d0 ShieldDriveIn] + db [Echo] RoomBoxes ear height, dormant), ini unchanged 6ddd03de.
+Bench M1108C_DD05 PASS (TEST 09a02a2c, 2 seats, round 2, 0 asserts/faults/dumps, SHPH match). Kit C:\kl_build_1024\merged_1108c: dll only, 20 scratch checks, kl_tests 107/0.
+Undo order: merged_1108c -> merged_1108b -> merged_1108 -> vanwait_1108 -> merged_1107 (each UNDO.bat in C:\kl_build_1024\<kit>; out of order refuses).
 2026-11-08 ~07:05 - [d0] DM05A FOG WALL east of the roof pad hides the skyline: scene fog floats ruled out (skyfog1108: Far 80000 / FogFull 1.5, wall unchanged).
 Next: kit postneutral1108 (tools/kl_postneutral_1108.py, bench only) points all 20 PostFilterBoxes from Dead Men sets 53844..53849 to DD neutral 33189. Not run yet.
 2026-11-08 ~05:46 - [f0] MERGED 1108 LIVE (SHIP 319aefc4, ini cd431998 -> 2f67d4bc = + [ShopPage] SetCheck=1) on top of d0s vanwait 19611c16: one dll from 9b74caf9 = fc SHPH set check + db [Echo] (dormant).

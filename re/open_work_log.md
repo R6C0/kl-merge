@@ -1,3 +1,13 @@
+## 2026-11-08 ~07:13 [f0] MERGED 1108b + 1108c (no crash involved)
+- merged_1108b (for d0): one dll from 6f3df179 on top of merged_1108 319aefc4 = d0's [VanBlow] ShieldDriveIn (be08398f + 76b4ca0a). install.py writes one line in [VanBlow]
+  "ShieldDriveIn=1 (recommended on)" (HealFloor stays absent: never fired, unproven). SHIP 3f8bc902 / TEST 64701f02, ini 2f67d4bc -> 6ddd03de; 21 scratch checks.
+  d0 benched it (vanwait09m_1108, DM09: shield on at state 2, bus 3000/3000 through drive-out, 0 faults) and installed SHIP 06:37.
+- merged_1108c (for db): one dll from 96ddcf7d on top of 3f8bc902 = db's [Echo] RoomBoxes ear-height test (75c1e3a1; eb39e5e2 is a commented repo-ini line).
+  Dormant while RoomBoxes is off (live: no [Echo]); only a start-up read of RoomBoxEarCm runs. Kit swaps the DLL ONLY (KEYS empty, KLHook.ini never written).
+  SHIP 246c643d / TEST 09a02a2c; kl_tests 107/0; 20 scratch checks. Bench M1108C_DD05 (C:\kl_build_1024\merged_1108c_bench\run.py): PASS, 2 seats, round 2,
+  0 asserts/faults/dumps, SHPH match both seats, files restored. SHIP installed 07:13: live dll 246c643d, ini 6ddd03de.
+- Undo order: merged_1108c -> merged_1108b -> merged_1108 -> vanwait_1108 -> merged_1107.
+
 ## 2026-11-08 ~07:03 [db] RB_DM02_SW: RoomBoxes switches boxes (no crash involved)
 - Host teleports in round 1 (klauto tele, TEST 530c9920): box 40 -> 35 -> 40 each logged "removed box N: another box wins" + "pushed box M", stack stays 1 deep. 0 asserts/faults, live dll/ini unchanged.
 - Rough edges: tele 1 refused (before state 0x19), tele to 35 MISSED (body stayed, node moved); 35/39/40 share snd 509872 (DM02 has 3 effects), so the sent reverb did not change. RB_DM02_SW2 (atrium 13 -> parking 3 -> 40, three effects) queued after f0 + d0.
