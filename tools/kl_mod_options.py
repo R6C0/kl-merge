@@ -292,6 +292,8 @@ feat('ambience', G_AV, 'Ambience bed and timed one-shot sounds', 'on', 'start',
      'MCI mp3 worker; the owner kept it when the stutter was found to be the Payday 2 jukebox', [('Ambience', 'Enable', 1, 0, 0)])
 feat('echo', G_AV, 'Room reverb follows the place: guns, steps and voices echo by room kind (recommended off until listened)', 'off', 'start',
      'klecho.c wraps the alEffectf data slot 0x14f356c (no code byte); whether gun voices carry the aux send is a GUESS, NOT RUN IN THE GAME; tune Strength / IndoorPct / StreetPct / RoofPct / HallPct, Log=1', [('Echo', 'Enable', 1, 0, 0)])
+feat('roomboxes', G_AV, 'Room reverb boxes: each room gets its own reverb again in Fragile Alliance (recommended off until listened)', 'off', 'start',
+     'klecho.c [Echo] RoomBoxes: the stock boxes end at FA load (re/reverb_path_1108.md); the hook tests the local hero against KLReverbBoxes.ini (tools/kl_reverb_boxes.py) and pushes one entry with the engine\'s own Push/Remove; NOT RUN IN THE GAME; tune RoomBoxMargin / RoomBoxHoldMs', [('Echo', 'RoomBoxes', 1, 0, 0)])
 feat('stinger', G_AV, 'Event stingers (cues when the heist goes loud, a betrayal ...)', 'on', 'start',
      'short one-shots; the Payday 2 clips are out of the live lists', [('Stinger', 'Enable', 1, 0, 0)])
 feat('voice', G_AV, 'Dead Men voice lines for the Dead Men heisters', 'on', 'start',
