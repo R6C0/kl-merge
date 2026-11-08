@@ -67,10 +67,18 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-08 ~17:20 - [veh] DM01B street2 van from/to unseen pockets, staged NOT installed (zip 778b075c, bots dccc9250, base 6616525a; pinned live 74d37233 / 73583df1 / c3535e34): waits west (-8000,30500), leaves east (17400,30400).
+Seen by 0 of 385 reachable-floor viewers at both, 0 pierces, planter ground ok. Kit needs ~940 MB (--min-free-mb 300). re/vehicle_routes_1108.md. Not benched.
+2026-11-08 ~15:05 - [f0] MERGED 1108e STAGED, NOT INSTALLED, NOT BENCHED (owner present: no tests; waits for the owners word): C:\kl_build_1024\merged_1108e, one dll from 9074ee06
+= db FedRide=3 (Retomoto lift for cops) + FoeNoSwapWhileFed (traitors red to a fed) + FedKeep (fed respawn crash 0x538f02/0x538f47). SHIP f0ca0dd8 / TEST 5a526510; writes dll 246c643d -> f0ca0dd8
++ DM09 KLJoin.ini FedRide 2 -> 3 (009fa8fa -> 2094d83a), never KLHook.ini. kl_tests 108/0, 25 scratch checks. Supersedes merged_1108d. Undo: its UNDO.bat first.
+2026-11-08 ~18:00 - [veh] DM07 VAN RE-STAGED, NOT installed: C:/kl_build_1024/vehroutes_1108/DM07 (zip f35e4133, bots 1f514d51, base 08478b6e; pinned live e0a9e326 / 7e897565 / f6259849).
+Far start/end in the unreachable mud pocket (x -9300), gate = hidden fence panels (0x400 hides render only, static collision stays), reverse out, crash keys on the floor. Seen by 29 of 639 reachable-floor viewers (gate corridor only). Undo byte-exact in scratch; install needs ~1.4 GB free on C:.
 2026-11-08 ~17:30 - [d0] DM05A HELI DEPARTURE staged, NOT installed: stage C:/kl_build_1024/lcdepart_1108 (zip fbaf450d, pinned live 80b5547c), Escaping key 0 moved out of BuildingF/H to the ROUTE_2H hover; hull 156 cm, audit 0 pierces, review PASS.
 DD10 van drives through the closed gate (fence + pillars, ours: stock L05 has no van): fix staging. Club music A/B staged, waits for db's clubdiag. Owner playing: no benches.
-2026-11-08 ~16:00 - [doors] KICK DOORS with the map's OWN leaf models staged, NOT installed: tools/kl_doors_1108.py, stage C:/kl_build_1024/doors_1108/{DM01,DM03A,DM03} (2/2/5 doors).
-DM03 chains on dm03cops_1108 (install it first). Undo byte-exact in scratch. GUESS: own model draws + DD kick sound plays. Bench needs ClientBuild* cover lines. Not benched (owner playing).
+2026-11-08 ~18:00 - [doors] KICK DOORS (own leaf models) REVIEWED + restaged, NOT installed: tools/kl_doors_1108.py + tools/kl_doors_clear_1108.py, stage C:/kl_build_1024/doors_1108/{DM01,DM03A,DM03} (2/1/4 doors).
+Review fixes: clearance walk from every real ZSpawnPoint + escape boxes (leaf shut and swung 90/120 both ways) dropped DM03 host 1076 and DM03A host 6770 (they cut a corridor / room off); .HVK proven shape by shape (only the door slabs change, static order kept); report top name fixed (DM03A KL_Interact!3).
+Pins: DM01 444a3ed6 / f3ed6155 / 8b34977b (unchanged), DM03A aa79d66d / d1a8dd0c / d700472e, DM03 33d1fa5f / 2971ec6d / a14e0134 (input = dm03cops stage, install it first). Undo byte-exact in scratch x3. GUESS: own model draws + DD kick sound plays; MIN_CUT 8 cells. Not benched (owner playing).
 2026-11-08 ~09:00 - [dm03] DM03 COPS PASS staged, NOT installed: tools/kl_dm03cops_1108.py, stage C:/kl_build_1024/dm03cops_1108 (zip 2806a075, bots 1759a5fa, base 72f4c704; pinned live 802fd1f7 / 19adc63d). --parts carexit,garage,ramp,frontcops.
 Cause of cops staying in cars PROVEN: 4 VehicleExitBehaviour nodes had no controller (restored from M03_FA_A; that DD then runs it is a GUESS). garage = 6 police, ramp = 5 police + 45 s Hunt into the garage (GUESS ramp = Ramp_01 beside the lot), frontcops = lot SWAT x3 + ArrivingCops_Squad_02 x2 -> police form. Census 33/27 -> 44/29.
 Undo rehearsed byte-exact in scratch; bench needs ClientBuild*/ClientRewrite/ClientRingSync/AssertSoft lines (bench_cover_lines.txt). Not benched (owner playing).

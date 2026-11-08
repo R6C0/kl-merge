@@ -39,4 +39,13 @@ try:
     chk('a moved pinned edge is refused', False)
 except ValueError:
     chk('a moved pinned edge is refused', True)
+
+# the van's approach and exit (pockets nobody can see or stand in)
+A, D = T.arrival_path(), T.departure_path()
+chk('arrival starts in the west pocket', A.at(0)[0] == T.WAIT_W[0])
+chk('arrival ends on the stop', abs(A.at(A.L)[0][0] - T.STOP_KEY_X) < 1 and abs(A.at(A.L)[0][1] - 31907.0) < 1)
+chk('arrival leaves the pocket heading north (yaw 0) and joins the street heading east (yaw 90)', abs(A.at(1)[1]) < 1 and abs(A.at(A.L - 1)[1] - 90) < 1)
+chk('departure ends in the east pocket heading south (yaw 180)', D.at(D.L)[0] == T.END_E and abs(abs(D.at(D.L - 1)[1]) - 180) < 1)
+chk('both pockets lie outside the walkable flood x -410..10590', T.WAIT_W[0][0] < -500 and T.END_E[0] > 10700)
+chk('Path arc length is monotone and equals the straight length', abs(T.Path([(0, 0), (300, 400)]).L - 500) < 1e-6)
 sys.exit(0 if ok else 1)
