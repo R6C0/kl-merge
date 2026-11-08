@@ -70,8 +70,9 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 2026-11-08 ~05:46 - [f0] MERGED 1108 LIVE (SHIP 319aefc4, ini cd431998 -> 2f67d4bc = + [ShopPage] SetCheck=1) on top of d0s vanwait 19611c16: one dll from 9b74caf9 = fc SHPH set check + db [Echo] (dormant).
 Bench M1108_DD05 PASS (TEST 337ecc4d, 2 seats, round 2, 0 asserts/faults/dumps, both seats "SHPH match" hash 4555f77f, no m10). Kit C:\kl_build_1024\merged_1108 (21 scratch checks, kl_tests 107/0, 3-lens review).
 Undo order: merged_1108\UNDO.bat, then vanwait_1108\UNDO.bat, then merged_1107\UNDO.bat (out of order refuses, restores nothing).
-2026-11-08 ~05:36 - [shop] SHPH set check BENCHED A-D, not live: SC_A (warn) + SC_B (strict, m10 on a page II test buy) + SC_C (same set: match, ask reaches host) + SC_D (off: silent) PASS, 0 faults. f0 merges it in merged_1108.
-[ShopPage] SetCheck=1 (recommended on, warn only) / SetCheckStrict=0 (recommended off). Kit C:\kl_build_1024\shopset_1108 SHIP 3e948da1 / TEST ee6da004 (benched 63a2e50e). Install rides the next merged dll.
+2026-11-08 ~05:58 - [shop] SHPH set check LIVE via merged_1108 (dll 319aefc4, ini 2f67d4bc: SetCheck=1 warn only, SetCheckStrict absent = 0). Benches A-E all PASS, 0 faults (C:\kl_build_1024\shopset_1108, TEST ee6da004):
+A warn mismatch, B strict client m10, C same set match, D off silent, E strict host vs a client with SetCheck=0 (old-build stand-in): host "unknown" -> host judge refuses page II buy with m10.
+Untested: rejoin. Strict stays "(recommended off)" (it would refuse buys from every older-build player).
 2026-11-08 ~04:15 - [d0] DM06B TRAFFIC LIVE: zip a6c0aef1 -> 7cee043d, bots ec42c5e4, base 171f7443, KLGuns 483f7450 (stage C:\kl_build_1024\dm06b_traffic_1108).
 Bench dm06btraffic1108 run 3 PASS (0 faults, undo byte-exact): all 7 cars drawn, glow headlights fine (shots 08/12/20/28). Undo: UNDO ALL 1105.bat step 0d (top). Any DM06B re-stage: --base live 7cee043d.
 skyline1108 (DM05A) bench PASS + undo byte-exact but no shot faces east: draw still unproven, stays staged NOT installed. Next: a look-east step in the kit.

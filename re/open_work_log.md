@@ -1,3 +1,9 @@
+## 2026-11-08 ~05:58 [shop] SHPH bench SC_E PASS: strict host vs a seat with no SHPH (TEST ee6da004; no crash involved)
+- SC_E_DD05: host live pd2 set, SetCheck=1 SetCheckStrict=1; client SetCheck=0 + OnlineTestBuy=b0 (the old-build stand-in: no SHPH handler, never announces).
+- Host: "set check on ... hash 4555f77f", no SHPH heard from seat 1; "shopg: seat 1 asked row 0 item 6: refused page II set differs from the host's (or unknown): SetCheckStrict".
+  Client: "host judged seat 1 row 0 item 6: refused ... SetCheckStrict"; it heard the host's SHPH as "no handler". Both IN ROUND, round 2, 0 asserts/faults/dumps; live dll 319aefc4 / ini 2f67d4bc restored.
+- Cases A-E all PASS; SetCheck is live (merged_1108, warn only). Untested: rejoin. summarize.py now has an E branch.
+
 ## 2026-11-08 ~05:46 [f0] MERGED 1108 benched + SHIP INSTALLED (no crash involved)
 Kit C:\kl_build_1024\merged_1108: one dll from rtp-schemas 9b74caf9 (clean worktree) = live vanwait c7b7f1db + fc [ShopPage] SetCheck (SHPH) + db [Echo] work (dormant: no [Echo] section, no KLReverbBoxes.ini).
 install.py pins the live dll 19611c16 (ini deliberately unpinned), writes one line [ShopPage] SetCheck=1 (recommended on; code default 1 too); SetCheckStrict absent (0, no m10).
