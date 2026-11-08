@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-08 ~09:00 - [guns] GUNPUNCH staged, NOT installed: gunraw gave every gun the MP45's level/flat-top but not its shape (MP45 tail -20.5 dB, front +3 dB, 4% under 120 Hz; others tail -5..-15, front 0-2, 30-80% sub).
+Stage C:\kl_build_1024\gunpunch_1108 (42 banks, install.py pins gunraw md5s, UNDO.bat, scratch round trip byte-exact; undo BEFORE gunraw_1107). Numbers + GUESS list: re/gunfeel_1108.md. Needs an owner A/B (preview pairs). Recoil/shake: none found, deferred.
 2026-11-08 ~07:13 - [f0] MERGED 1108c LIVE: dll 246c643d (from 96ddcf7d = merged_1108b 3f8bc902 [d0 ShieldDriveIn] + db [Echo] RoomBoxes ear height, dormant), ini unchanged 6ddd03de.
 Bench M1108C_DD05 PASS (TEST 09a02a2c, 2 seats, round 2, 0 asserts/faults/dumps, SHPH match). Kit C:\kl_build_1024\merged_1108c: dll only, 20 scratch checks, kl_tests 107/0.
 Undo order: merged_1108c -> merged_1108b -> merged_1108 -> vanwait_1108 -> merged_1107 (each UNDO.bat in C:\kl_build_1024\<kit>; out of order refuses).

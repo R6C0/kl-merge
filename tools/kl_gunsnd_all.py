@@ -60,6 +60,10 @@ GROUPS = ('maps', 'stock', 'story')
 BODY = False
 PREVIEW = ('stock/F02', 'maps/DM02')   # --body: these banks also get before/after .wav pairs under <outdir>/preview (audition before installing)
 BODY_BAK = '.before-1025gunraw'      # the pre-raw copy of every bank (kept by the 1025 installer)
+BODY_REF = None                      # kl_gunpunch (1108): bank suffix whose clips the correlation check compares against (None = the live bank)
+BODY_FALLBACK = None                 # kl_gunpunch: bank suffix used as the source when the BODY_BAK clip fails the check (None = keep the live clip)
+PREVIEW_NAME = 'raw1107'             # suffix of the 'after' preview wavs
+INST_WHAT, INST_BLURB = 'raw gun sounds', 'RAW gun sounds 1107 (recommended on): body EQ + saturation + echo tail + MP45 hard clip on every gun / distant / silenced shot, KLExpansion maps + the 9 stock FA maps + story levels'
 BODY_CORR = 0.5                      # live vs backup normalised-waveform correlation under this: a later pass replaced the clip -> use the live one
 PROFILE = {      # class -> low shelf dB @120 Hz, crack dB @2.5 kHz, tanh drive, wet gain (x dry peak), IR style, IR tail s
     'pistol':   dict(low=5.0, crack=3.0, drive=2.2, wet=0.50, style='street', tail=0.80),
@@ -210,18 +214,38 @@ def build_bank(b, out, force, log):
     rf = FALLBACK_FLAT if RAW else None
     ws = {w.rec_off: w for w in G.waves(whd)}; repl = {}; rep = []; offs = {}; short = []
     bak = bakwav = None; nsrc = [0, 0]                      # --body: [records taken from the pre-raw copy, records kept on the live clip]
+    refwav = fbwav = None
     if BODY:
         bp = b.base + '.WAV' + BODY_BAK
         if os.path.exists(bp):
             bakwav = open(bp, 'rb').read()
             if len(bakwav) != len(wav): bakwav = None       # a different layout: never mix offsets
+        if BODY_REF:                                         # live = an earlier pass's OUTPUT: compare against and fall back to its input
+            for suf, nm in ((BODY_REF, 'ref'), (BODY_FALLBACK, 'fb')):
+                q = b.base + '.WAV' + suf if suf else None
+                if q and os.path.exists(q):
+                    z = open(q, 'rb').read()
+                    if len(z) == len(wav):
+                        if nm == 'ref': refwav = z
+                        else: fbwav = z
     for w, k, h, t in rows:
         assert w.codec == 0x11 and w.get('rate') == M.R and w.get('ch') == 1 and not w.streamed, w.name
         o = w.get('off'); assert o not in offs, 'two records share data %s / %s' % (offs[o], w.name); offs[o] = w.name
         x = G.decode_wave(wav, w)[:, 0]; raw = RAW and k == 'gun'; fl = M.flat_pct(x); tb0 = timbre(x) if BODY else None
         if BODY:                                            # every record is rebuilt: no 'already on target' skip
             src = x
-            if bakwav is not None:
+            if refwav is not None or fbwav is not None:     # chained pass: x is an earlier output; source = its pre-raw clip, else its own input
+                xr = G.decode_wave(refwav, w)[:, 0] if refwav is not None else None
+                cand = G.decode_wave(bakwav, w)[:, 0] if bakwav is not None else None
+                if cand is not None and xr is not None:
+                    n = min(len(cand), len(xr))
+                    c = float(np.corrcoef(cand[:n] / (np.abs(cand).max() + 1e-9), xr[:n] / (np.abs(xr).max() + 1e-9))[0, 1])
+                    if c >= BODY_CORR: src = cand; nsrc[0] += 1
+                    elif fbwav is not None: src = G.decode_wave(fbwav, w)[:, 0]; nsrc[1] += 1
+                    else: nsrc[1] += 1
+                elif fbwav is not None: src = G.decode_wave(fbwav, w)[:, 0]; nsrc[1] += 1
+                else: nsrc[1] += 1
+            elif bakwav is not None:
                 xb = G.decode_wave(bakwav, w)[:, 0]; n = min(len(xb), len(x))
                 c = float(np.corrcoef(xb[:n] / (np.abs(xb).max() + 1e-9), x[:n] / (np.abs(x).max() + 1e-9))[0, 1])
                 if c >= BODY_CORR: src = xb; nsrc[0] += 1
@@ -261,7 +285,7 @@ def build_bank(b, out, force, log):
             if b.key in PREVIEW:
                 pd = os.path.join(out, 'preview', b.key.replace('/', '_')); os.makedirs(pd, exist_ok=True); nm = e['record'].split('/')[-1][:-4]
                 G.write_wav(os.path.join(pd, nm + '_live.wav'), G.to_i16(G.decode_wave(wav, ws[e['_w']])), M.R)
-                G.write_wav(os.path.join(pd, nm + '_raw1107.wav'), G.to_i16(G.decode_wave(nwav, nws[e['_w']])), M.R)
+                G.write_wav(os.path.join(pd, nm + '_' + PREVIEW_NAME + '.wav'), G.to_i16(G.decode_wave(nwav, nws[e['_w']])), M.R)
         del e['_y'], e['_w']
     spans = [(a, c - a) for a, c in olds]
     d = os.path.join(out, 'Banks', b.group); os.makedirs(d, exist_ok=True)
@@ -296,7 +320,7 @@ def cmd_build(a):
             for e in m['detail']:
                 f.write('%-14s %-44s %-8s %7.2f %7.2f %6.2f %7.2f %6.1f %6s %6.1f\n' % (m['key'], e['record'].split('/')[-1][:44], e['kind'], e['before_head'], e['target_head'],
                         e['gain_db'], e['after_head'], e['before_flat'], '-' if not e['raw'] else '%.1f' % e['target_flat'], e['after_flat']))
-    if BODY: write_installer(out, what='raw gun sounds', blurb='RAW gun sounds 1107 (recommended on): body EQ + saturation + echo tail + MP45 hard clip on every gun / distant / silenced shot, KLExpansion maps + the 9 stock FA maps + story levels')
+    if BODY: write_installer(out, what=INST_WHAT, blurb=INST_BLURB)
     else: write_installer(out)
     print('built: %d banks checked, %d need changes, %d records, %.1f MB of new spans' % (len(res), len(changed), sum(m['changed'] for m in changed),
           sum(os.path.getsize(os.path.join(out, 'Banks', m['group'], m['id'] + '.new')) for m in changed) / 1e6))

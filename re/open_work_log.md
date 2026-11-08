@@ -157,6 +157,8 @@ Then undo --test (byte-exact) and SHIP: live dll 319aefc4, KLHook.ini 2f67d4bc, 
   Audio_ReverbActivater reaches the wrapped slot in MP, or the seats never stood in a box. Next: F01 stock bench with [Echo] Probe=1 + a walk into a known box. Details re/dm_reverb_1108.md.
 
 ## 2026-11-08 ~05:00 [d0] VAN SHIELD INSTALLED (no crash involved)
+2026-11-08 ~09:00 - [guns] GUNPUNCH staged, NOT installed: gunraw gave every gun the MP45's level/flat-top but not its shape (MP45 tail -20.5 dB, front +3 dB, 4% under 120 Hz; others tail -5..-15, front 0-2, 30-80% sub).
+Stage C:\kl_build_1024\gunpunch_1108 (42 banks, install.py pins gunraw md5s, UNDO.bat, scratch round trip byte-exact; undo BEFORE gunraw_1107). Numbers + GUESS list: re/gunfeel_1108.md. Needs an owner A/B (preview pairs). Recoil/shake: none found, deferred.
 2026-11-08 - [hl] DM11B (Hasta) look fix STAGED, NOT installed (owner playing, no bench): C:\kl_build_1024\hastalook_1108 (zip ac175c71, bots cf1ebbae, base 587c73d1, KLGuns unchanged f38d5fe3; pins live b755b505 / 8f61f77a / ea98a122). tools/kl_hastalook_1108.py. Undo: its UNDO.bat (scratch round trip byte-exact).
 GLARE: three ADD volumes in End Room/Corridor are huge (MAT 804 mesh 24214 chunk 24211 14390x14668x10859; MAT 804 mesh 24218 chunk 24215; MAT 818 mesh 24210 chunk 24207 11581x6716x8803) vs ~1000 tall rooms: vertex colours zeroed (--glow). PROVEN size/blend, GUESS that they are the in-game glare.
 GREEN: CameraBackgroundColor d2faff00 (pale cyan, stock DD maps dark/grey) -> DD F04 c7c1b000 (--fog). PROVEN value, GUESS it is the outside cast. Grade ruled out (box -> DD neutral 56696); 28 mint Omni_Right_Side lights are all inside.
