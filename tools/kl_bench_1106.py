@@ -162,6 +162,13 @@ KITS = {
                         files={'F01_Main.zip': 'cdd988728444fa618fd3f55ce524abdb', 'F01_Main.bots.zip': '464adc61', 'F01_Main.bots.base.md5': 'fdb74c80', 'KLGuns.ini': '33432bb9'},
                         hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
                         solo_secs=480, parts=('solo',), shots='60-240:3'),
+    # skyline fog trial (11-08): skyeast1108 shots 12/20 face east from the pad into a cyan fog wall ~100 m out. Same walk on a copy of that stage
+    # with the scene fog pushed out (tools/kl_skyfog_1108.py: CameraFar 30000 -> 80000, FogFull 0.95 -> 1.5, Begin 0.65 kept; GUESS fractions of Far).
+    # LOOK: shots vs skyeast1108's (the control): more city visible? the far towers drawn? fps (frame log) vs the control. Bench only, never installed.
+    'skyfog1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/skyfog_1108', tag='.before-skyfog1108', look=(60000, -4000),
+                       files={'F01_Main.zip': '6686afe8', 'F01_Main.bots.zip': '708712b3', 'F01_Main.bots.base.md5': '9ae0f25b', 'KLGuns.ini': '33432bb9'},
+                       hook=('C:/kl_build_1024/merged_1108b/dll_test/dinput8.dll', '64701f02533659738f0672b5efa3b5e9'),
+                       solo_secs=480, parts=('solo',), shots='60-240:3'),
     # van empty-wait (11-08): owner 'flat raid vehicle ... always on fire but it doesnt pick you up'. The LIVE DD10 (nothing installed) on the
     # vanwait TEST dll (merged_1107 + [Echo] Probe code (0) + e184fd31 + review fix) with [VanBlow] ShieldWhileWaiting=1; nobody boards, the log decides.
     'vanwait1108': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': 'bc4d0bc3'}, van=True,
