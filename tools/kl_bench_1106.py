@@ -235,6 +235,14 @@ KITS = {
                           hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
                           ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
                           solo_secs=900, parts=('solo',), shots='300-840:30'),
+    # DD10 VANCALL (11-08, tools/kl_dd10_vancall_1108.py, stage C:/kl_build_1024/dd10vancall_1108, pinned to the LIVE DD10 13bc6388 = flats installed): the van is shown by an approach box
+    # (dead node 22127 repurposed) instead of the van timer, the escape POI is fired from the alarm, KLJoin [Join.3] lands at 8500 0 1180 (was inside the van). VALIDATE ONLY until the owner
+    # says test. Same script as dd10flats1108 (nobody boards, shots decide: the van must be absent before a heister enters the street). KLJoin.ini is part of the stage.
+    'dd10vancall1108': dict(map='DD10', slot='F07', entry=5, stage='C:/kl_build_1024/dd10vancall_1108', tag='.before-dd10vancall1108', van=True,
+                            files={'F07_Main.zip': 'ad64cd0a', 'F07_Main.bots.zip': '47c8f4eb', 'F07_Main.bots.base.md5': 'cb2ee42a', 'KLJoin.ini': 'ebdf1472'},
+                            hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
+                            ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
+                            solo_secs=900, parts=('solo',), shots='300-840:30'),
     # Retomoto van empty-wait (11-08): owner 'the vehicle on fire is the same occurance for retomoto tower'. The LIVE DM09 (nothing installed; slot F06, page 2 entry 4
     # = kl_arc2_kit's verified place) on the TEST twin of the live SHIP dll, [VanBlow] ShieldWhileWaiting=1 as live; nobody boards, the log decides (as vanwait1108).
     'vanwait09_1108': dict(map='DM09', slot='F06', page=2, entry=4, stage=None, tag=None, live={'F06_Main.zip': 'afee8967'}, van=True,
