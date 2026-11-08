@@ -1,3 +1,8 @@
+## 2026-11-08 ~08:20 [d0] DM05A CITY VIEW INSTALLED (owner "install all ... but no testing"; no crash involved)
+- C:/kl_build_1024/citylights_1108/install.py --skip-run-check (2 zombie kl2.exe, 0 threads): zip 651a7492 -> 80b5547c, bots ba98c0a6 -> 1e02dbe5, base 1d89ea85 -> c009e5af, KLGuns a7c85b7a -> 33432bb9 (md5 checked).
+- Content = skyline model (unseen) + scene fog Far 80000 + StreetGLOW vertex alpha x 0.25 + 9 backdrop tower objects on lit-window materials; every layer benched PASS, 0 faults.
+- Undo: UNDO ALL 1105.bat new top step 0k. Any DM05A re-stage: --base live 80b5547c. Not seen live with the real dll (owner present, no runs).
+
 ## 2026-11-08 ~08:00 [d0] DM05A citylights1108 PASS (no crash involved)
 - Stage C:/kl_build_1024/citylights_1108 = glowfar_1108 with 9 Distance-shell objects re-pointed from dark 01d (MAT 855/856/876) to lit 01i (857/877) twins (tools/kl_citylights_1108.py; zip 80b5547c, bots 1e02dbe5, base c009e5af).
 - Bench (TEST 64701f02): KLHook.result PASS, 0 asserts/faults/dumps, undo byte-exact. Zero-ref materials 855/856/876 are fine.
