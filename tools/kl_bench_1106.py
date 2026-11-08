@@ -149,6 +149,13 @@ KITS = {
                         files={'F01_Main.zip': '651a749259f54211c20eb67eff90ee65', 'F01_Main.bots.zip': 'ba98c0a6', 'F01_Main.bots.base.md5': '1d89ea85'},
                         hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
                         solo_secs=900, parts=('solo',), shots='400-556:4'),
+    # DM05A skyline (11-08, tools/kl_skyline_1108.py, stage C:/kl_build_1024/skyline_1108, pinned to the LIVE 2h DM05A 651a7492): Dead Men M05_A Buildings_MidRange as a static far
+    # skyline EAST of the pad (T 60000,1884,-4000, held by Backdrop .rmi box 59 only = GUESS). Same run as lcarr2h1108 (the 2h heli comes from the east, the outro eye looks at it):
+    # LOOK at the shots: is the skyline drawn behind the heli (box 59 alone)? does it hide the heli? lit / textured / right height? any hitch from the extra 33 .prm chunks?
+    'skyline1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/skyline_1108', tag='.before-skyline1108',
+                        files={'F01_Main.zip': 'cdd988728444fa618fd3f55ce524abdb', 'F01_Main.bots.zip': '464adc61', 'F01_Main.bots.base.md5': 'fdb74c80', 'KLGuns.ini': '33432bb9'},
+                        hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
+                        solo_secs=900, parts=('solo',), shots='400-556:4'),
     # van empty-wait (11-08): owner 'flat raid vehicle ... always on fire but it doesnt pick you up'. The LIVE DD10 (nothing installed) on the
     # vanwait TEST dll (merged_1107 + [Echo] Probe code (0) + e184fd31 + review fix) with [VanBlow] ShieldWhileWaiting=1; nobody boards, the log decides.
     'vanwait1108': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': 'bc4d0bc3'}, van=True,
@@ -164,10 +171,10 @@ KITS = {
                              solo_secs=600, parts=('solo',), shots='150-420:5'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
-      'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108')
-EYE_OF = {'lcchain2e1106d': (7400, 2500, 2800), 'lcchain2f1106d': (7400, 2500, 2800), 'lclive2f1106': (7400, 2500, 2800), 'lcarr2h1108': (7400, 2500, 2800)}          # kits whose outro eye is not the 2c CamPos01 eye (7093,2181,2727)
-FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lcarr2h1108')          # boards at once at state 3
-LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lcarr2h1108')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
+      'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108', 'skyline1108')
+EYE_OF = {'lcchain2e1106d': (7400, 2500, 2800), 'lcchain2f1106d': (7400, 2500, 2800), 'lclive2f1106': (7400, 2500, 2800), 'lcarr2h1108': (7400, 2500, 2800), 'skyline1108': (7400, 2500, 2800)}          # kits whose outro eye is not the 2c CamPos01 eye (7093,2181,2727)
+FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lcarr2h1108', 'skyline1108')          # boards at once at state 3
+LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lcarr2h1108', 'skyline1108')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
 
 
 def md5(p):
@@ -594,7 +601,8 @@ def run(k, part):
         # unkillable kl2.exe left at ~44 K (Access denied to Stop-Process) hold no game: install.py's own tasklist check
         # would refuse forever, so skip it only when every kl2.exe is such a zombie
         print('  ignoring zombie kl2.exe (working set < 1 MB): %s' % z, flush=True)
-        if k in LC and inst:
+        # any stage whose install.py knows the flag (dm06btraffic1108 11-08 was refused: only LC kits got it)
+        if inst and '--skip-run-check' in open('%s/install.py' % c['stage'], encoding='utf-8', errors='replace').read():
             inst.append('--skip-run-check')
     rc_total = 0
     if inst:

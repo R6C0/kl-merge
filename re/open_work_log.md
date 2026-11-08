@@ -1,3 +1,10 @@
+## 2026-11-08 ~04:30 [sky] DM05A SKYLINE STAGED (not installed, no crash involved)
+- tools/kl_skyline_1108.py (plan / search / stage / check / plot). Source: Dead Men M05_A node 9286 Buildings_MidRange (ZLNKOBJ 0x200002), model root 23169, 33 prm chunks, 156 triangles, materials 155/164/682/683/684, textures 378/392/1078-1081 (ids clash with live: merge_tex remaps).
+- Form = the rope/traffic form: new top group KL_Skyline! (root tree 3), entity KL_Skyline_MidRange group 2 flags 0x264182, no room tree, .oct record zeroed (no collision), light list of the nearest ZSTDOBJ with links (GUESS).
+- Placement: rot 0, T (60000,1884,-4000): world box x 15664..59696, y -2640..22229, z -33644..44749, centre (37661,8815,-340), bearing -6 deg from the outro eye. Clearances: >= 3000 from every existing render triangle (glow/Distance/skydome excluded), 19555 from ROUTE_2H (need 9800), 0 eye->route segments blocked, eye not inside. All vertices inside Backdrop .rmi box 59 (room id 2).
+- GUESSES: y 1884, rotation/east side taste, box 59 alone draws it (c9's heli vanished above the Roof boxes), light list. Stage C:\kl_build_1024\skyline_1108, zip cdd98872 / bots 464adc61 / base fdb74c80 / KLGuns 33432bb9, pinned to live 651a7492 / ba98c0a6 / 1d89ea85. CHECK PASS, debug/check.py clean (the one octree-leaf warning is on the live zip too), install+undo rehearsed byte-exact on a copy.
+- Bench kit skyline1108 in tools/kl_bench_1106.py (validate OK, NOT run). Top-down picture: scratchpad city1108/skyline_topdown.png.
+
 ## 2026-11-08 ~03:15 [db] ECHO BENCH OSS_DD09_ECHO_S2: SMOOTH, ~99% of played voices carry the reverb send (no crash involved)
 - TEST 45497e58 (klhook/out_echoprobe1108_test) on DD09, 2 seats, live ini + [Echo] Enable=1 Log=1 Probe=1. Both seats SMOOTH, 0 asserts/faults; live dll 502677ee / ini 6a17a145 restored.
 - Probe totals: inst1 played 12880, aux send 12842, no send 38; inst2 played 12343, send 12190, no send 153. So [Echo] reshapes nearly every 3D sound, guns included by count,

@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-08 ~04:30 - [sky] DM05A SKYLINE staged, NOT installed: Dead Men M05_A Buildings_MidRange (1 model, 156 tris, 5 mats, 6 tex) at (60000,1884,-4000) rot 0 east of the pad,
+held by Backdrop .rmi box 59 only (GUESS: may not draw). Stage C:\kl_build_1024\skyline_1108 (zip cdd98872, bots 464adc61, base fdb74c80, KLGuns 33432bb9), pinned to live 651a7492; CHECK PASS,
+route clearance 195 m (>= 98), outro-eye LOS 0 hits. tools/kl_skyline_1108.py; bench kit skyline1108 (validate OK, not run). Undo rehearsed byte-exact.
 2026-11-08 ~03:30 - [shop] PD2 REBASE 1107r LIVE on all 20 maps + KLShopPage.ini 4bc8845a (13 pairs, HeliGuns=0, every PD2 gun on its own type). Benches PD2R_DM02 + PD2R_DD05 PASS
 (C:\kl_build_1024\pd2r_1107, TEST 39e79011, 2 seats round 2, 0 asserts/faults/dumps). DM05A d65e8437 / bots 72e4c5b5 / base 388b40ec. Backups C:\kl_build_1024\pd2rebase_1107_backup.
 Undo: UNDO ALL 1105.bat step 0r (a later layer adds its step above). Next: no-PD2 fallback set from Dead Men guns (tools/kl_fallback_guns.py, offline).
