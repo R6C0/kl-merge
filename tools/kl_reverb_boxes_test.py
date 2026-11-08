@@ -25,6 +25,61 @@ def rot_y(deg):
     return [[c, 0, s], [0, 1, 0], [-s, 0, c]]            # a node frame R: world = R * local + T
 
 
+DD = R.DD_DEFAULT
+KNOWN_UNCOVERED = ('dm06', 'dm06b')
+STOCK_TABLE = r'C:\kl_build_1024\roomboxes_1108\KLReverbBoxes.ini'
+DM_TABLE = r'C:\kl_build_1024\roomboxes_1108\KLReverbBoxes_dm.ini'
+
+
+def dm_live_checks():
+    """Against the live Dog Days folder (read only; SKIPPED when it is not there): every Dead Men expansion map's boxes, snd offsets inside THAT map's .SND."""
+    import struct
+    import zipfile
+    maps = [(k, z) for k, z in R.expansion_maps(DD) if k.startswith('dm')] if os.path.isdir(DD) else []
+    if not maps:
+        print('SKIP live Dead Men checks (no Dog Days folder)')
+        return
+    import kl_snd
+    total = 0
+    for key, zp in maps:
+        boxes = R.dm_collect(zp, log=lambda *_: None)
+        with zipfile.ZipFile(zp) as z:
+            snd = kl_snd.Snd('dd', z.read(next(m for m in z.namelist() if m.endswith('_Main.SND')))).walk()
+        offs = set(snd.tables.get(7, []))
+        total += len(boxes)
+        check(all(struct.unpack_from('<I', snd.b, b['snd'])[0] == 7 and b['snd'] in offs for b in boxes), '%s: every snd offset is a roomeffect (dword 7) of its own .SND' % key)
+        check(all(min(b['h']) >= 1.0 and all(math.isfinite(x) for x in b['c'] + b['h']) for b in boxes), '%s: boxes non-degenerate' % key)
+        check(all(30.0 <= b['prio'] <= 100.0 for b in boxes) and len({b['name'] for b in boxes}) == len(boxes), '%s: priorities 30..100, unique names' % key)
+        back = R.parse(R.emit([(key, boxes)]))[key]
+        check(len(back) == len(boxes) and [b['snd'] for b in back] == [b['snd'] for b in boxes], '%s: emit/parse round trip' % key)
+        # an equal-priority overlap of two DIFFERENT effects would fall to the hook's order-dependent tie-break; same effect or disjoint boxes tie harmlessly
+        bad = [(a['name'], b['name']) for i, a in enumerate(boxes) for b in boxes[i + 1:]
+               if a['prio'] == b['prio'] and a['snd'] != b['snd'] and all(abs(a['c'][k] - b['c'][k]) < a['h'][k] + b['h'][k] for k in range(3))]
+        check(not bad, '%s: no equal-priority overlap of different effects %s' % (key, bad[:2]))
+        hit, n = R.spawn_coverage(zp, boxes)
+        # dm06/dm06b: their only room box (M06FAA_Out_Part_03a) lies outside the graft's play area (0 of 18/63 spawns): known, documented, the engine default plays
+        if key in KNOWN_UNCOVERED:
+            check(n > 0, '%s: known uncovered map (%d of %d spawns inside a box)' % (key, hit, n))
+        else:
+            check(n > 0 and hit * 100 >= n * 90, '%s: >= 90%% of spawns inside a box (%d of %d)' % (key, hit, n))
+        print('  live %-6s %2d boxes, %d effects, prio %s..%s, spawns covered %d/%d' % (key, len(boxes), len({b['snd'] for b in boxes}),
+              min([b['prio'] for b in boxes] or [0]), max([b['prio'] for b in boxes] or [0]), hit, n))
+    check(len(maps) == 11, '11 Dead Men expansion maps found (%d)' % len(maps))
+    # stock/dd sections must stay byte-identical: the head of the generated _dm table (before the first dm section) equals the committed table's head
+    if os.path.isfile(STOCK_TABLE) and os.path.isfile(DM_TABLE):
+        def head(p):
+            t = open(p, 'rb').read()
+            i = t.find(b'[dm01]')
+            return t[:i] if i >= 0 else None
+        a, b = head(STOCK_TABLE), head(DM_TABLE)
+        check(a is not None and a == b, 'stock/dd sections of the _dm table byte-identical to KLReverbBoxes.ini')
+    # DM09 grafts two levels: the '+' source detection
+    z9 = dict(maps).get('dm09')
+    if z9:
+        check('+' in R.dm_source(z9), 'dm09 source is a two-level graft (%s)' % R.dm_source(z9))
+    check(total > 0, 'boxes emitted: %d' % total)
+
+
 def main():
     # a frame turned 90 degrees about y: local x -> world -z... derive Q = R^T and test with the same arithmetic the game side does
     Rm = rot_y(90)
@@ -77,6 +132,19 @@ def main():
         check(True, 'negative half extent raises')
     check(R.parse('; c\n# c\n\n[x]\r\nbox 0 0 0 1 1 1 1 0 0 0 1 0 0 0 1 5 5\r\n') == {'x': [{'name': '', 'c': [0, 0, 0], 'h': [1, 1, 1], 'q': [1, 0, 0, 0, 1, 0, 0, 0, 1], 'snd': 5, 'prio': 5.0}]}, 'comments, blank lines, CRLF')
     check(R.fmt(-0.00001) == '0' and R.fmt(2.50) == '2.5' and R.fmt(-3.0) == '-3', 'number format')
+
+    # dm_prios: smaller volume -> higher priority, inside 30..100, one volume -> top
+    pr = R.dm_prios([1000.0, 10.0, 100000.0, 1000.0])
+    check(pr[1] > pr[0] > pr[2] and abs(pr[0] - pr[3]) < 0.1 and pr[0] != pr[3], 'prio: nested smaller room above the enclosing one, equal volumes within 0.1 but distinct')
+    check(99.9 <= max(pr) <= 100.0 and min(pr) == 30.0, 'prio spans 30..100')
+    pd = R.dm_prios([500.0, 400.0, 300.0, 200.0, 100.0])
+    check(len(set(pd)) == 5 and pd == sorted(pd), 'prio: distinct volumes get distinct, ordered priorities')
+    check(R.dm_prios([5.0, 5.0]) == [100.0, 100.0] and R.dm_prios([]) == [], 'prio: degenerate inputs')
+    P = {'boxes': [{'name': 'big', 'center': [0, 0, 0], 'half': [50, 5, 50], 'ref': 100}, {'name': 'small', 'center': [1, 0, 0], 'half': [5, 5, 5], 'ref': 200}]}
+    db = R.dm_boxes_from_plan(P)
+    check(db[1]['prio'] > db[0]['prio'] and db[0]['snd'] == 100 and db[0]['q'] == [1, 0, 0, 0, 1, 0, 0, 0, 1], 'plan -> boxes: identity q, snd = ref, small wins')
+    check(R.inside(db[0], [49, 0, 49]) and not R.inside(db[0], [51, 0, 0]), 'plan box tests like an AABB')
+    dm_live_checks()
 
     print('%s: %d checks, %d fails' % ('FAIL' if fails else 'PASS', checks, fails))
     return 1 if fails else 0

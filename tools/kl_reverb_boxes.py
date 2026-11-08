@@ -22,6 +22,7 @@ A map without any box has its section and no box line (it is KNOWN to have none;
 GUESSES (also marked where used):
   * the node origin is the box centre (the stock boxes are authored that way: spawns land inside the boxes named after their room, see spawn_report()).
   * a node frame has no scale (the tool warns when a column of R is not unit length; the table then holds the unit-length rotation of the normalised axes).
+  * --dm: Dead Men boxes are axis-aligned (identity q), centre/half = the .rmi flag-1 box; priority = smaller volume wins (dm_prios, a guess).
   * one ZBoxPrimitive may carry two Audio_ReverbActivater controllers (none seen): each becomes its own line.
 """
 import argparse
@@ -135,6 +136,76 @@ def collect(zp, log=print):
     return out
 
 
+MIN_HALF = 60.0                       # priority-volume floor per half extent (see dm_boxes_from_plan)
+PRIO_LO, PRIO_HI = 30.0, 100.0       # the stock Audio_ReverbActivater field 3 spans 30..100; the DM boxes use the same span
+
+
+def dm_prios(volumes, tie=None):
+    """Priority per box from its volume: the SMALLER the box, the HIGHER the priority, so a nested room beats the big room around it (klhook: the highest
+    priority the hero is in wins, ties = the smaller box). GUESS: log-volume scaled linearly onto 30..100 per map (stock boxes have no such rule: their
+    field 3 is a per-effect value, not a nesting order); a map with one volume gets PRIO_HI. Equal-priority overlaps would fall to the hook's order-dependent
+    tie-break, so a tiny rank term (0.1 spread over the map, biggest volume lowest) makes every priority distinct; identical volumes are split by list order."""
+    lv = [math.log(max(v, 1.0)) for v in volumes]
+    lo, hi = (min(lv), max(lv)) if lv else (0.0, 0.0)
+    n = len(lv)
+    if hi - lo < 1e-9 and (not tie or max(tie) - min(tie) < 1e-9):
+        return [PRIO_HI for _ in lv]
+    tie = tie or [0.0] * n                                        # secondary key (the true volumes when the primary ones are floored)
+    key = lambda i: (-lv[i], -tie[i])
+    order = sorted(range(n), key=lambda i: key(i) + (i,))         # biggest first
+    rank = {i: r for r, i in enumerate(order)}                    # identical boxes too: deterministic by list order, never an order-dependent tie
+    return [round(PRIO_LO + (PRIO_HI - 0.1 - PRIO_LO) * (1.0 - ((x - lo) / (hi - lo) if hi - lo >= 1e-9 else 1.0)) + 0.1 * rank[i] / n, 4) for i, x in enumerate(lv)]
+
+
+def dm_boxes_from_plan(P):
+    """kl_dm_reverb plan -> [box dict]: the room boxes as axis-aligned (identity rotation) boxes, snd = the chosen roomeffect's offset in the map's own .SND."""
+    bs = P['boxes']
+    # A thin sliver (half extent 5..50: a corridor exit, a stair landing) would get the top priority and override the room around it. GUESS: floor each half
+    # extent at MIN_HALF for the PRIORITY volume only (the box itself keeps its true size).
+    pr = dm_prios([8.0 * max(b['half'][0], MIN_HALF) * max(b['half'][1], MIN_HALF) * max(b['half'][2], MIN_HALF) for b in bs],
+                  tie=[8.0 * b['half'][0] * b['half'][1] * b['half'][2] for b in bs])
+    return [{'name': b['name'], 'c': [float(x) for x in b['center']], 'h': [float(x) for x in b['half']], 'q': [1, 0, 0, 0, 1, 0, 0, 0, 1],
+             'snd': int(b['ref']), 'prio': p} for b, p in zip(bs, pr)]
+
+
+def dm_source(zp, log=None):
+    """The Dead Men source level of an expansion map ('M01_A', 'M02_FA_A'): the most common 'Locations/<M..>/' in the scene paths, the clone groups included
+    (kl_dm_reverb.source_level only sees the plain Locations/ form, which the campaign-level grafts DM01B/DM03A/DM05A/DM06B/DM07/DM09/DM11B do not have)."""
+    import collections
+    import kl_cover_add as CA
+    import kl_fa_bots as F
+    CA.use_slot(zp)
+    cnt = collections.Counter()
+    for p in F.Built(zp).sc.path:
+        m = re.search(r'Locations/(M\d\d_(?:FA_)?[A-Z])/', p)
+        if m:
+            cnt[m.group(1)] += 1
+    if not cnt:
+        raise ValueError('%s: no Dead Men source level in the scene paths' % zp)
+    top = cnt.most_common(1)[0][1]
+    # DM09 grafts two campaign levels (M09_A + M09_B): every source that holds >= 10% of the top one's paths counts ('+' joined, kl_dm_reverb.dm_effects splits);
+    # the 38..69 stray paths of DM03A/DM05A/DM11B (clone groups of other levels) are not sources of rooms.
+    if log:
+        for k, v in sorted(cnt.items()):
+            if v * 10 < top:
+                log('  %s: source %s dropped as a stray (%d of %d paths)' % (os.path.basename(zp), k, v, top))
+    return '+'.join(sorted(k for k, v in cnt.items() if v * 10 >= top))
+
+
+def dm_collect(zp, log=print):
+    """[box dict] of a Dead Men expansion map WITHOUT in-zip KL_Reverb! boxes, straight from the map's Dead Men room boxes (.rmi flag-1 AABBs) and the Dog Days
+    roomeffect tools/kl_dm_reverb.py picks per room. A zip that already carries the KL_Reverb! group (installed) is read by collect() instead."""
+    import kl_dm_reverb as D
+    try:
+        _B, P = D.plan(zp, src=dm_source(zp, log), log=lambda *_: None)
+    except ValueError as e:
+        if 'already has' in str(e):
+            return collect(zp, log)
+        raise
+    log('  %s: %d rooms planned, skipped %d' % (os.path.basename(zp), len({b['room'] for b in P['boxes']}), len(P['skipped'])))
+    return dm_boxes_from_plan(P)
+
+
 def spawn_report(zp):
     """{box name: spawns inside} of a map: a check that centre + half extents + rotation describe real rooms (needs the game's zip)."""
     import kl_fa_bots as F
@@ -148,6 +219,19 @@ def spawn_report(zp):
                 if inside(b, p):
                     cnt[b['name']] = cnt.get(b['name'], 0) + 1
     return cnt
+
+
+def spawn_coverage(zp, boxes):
+    """(spawns inside at least one of boxes, all spawns) of a map zip: do the boxes land on the playable area?"""
+    import kl_fa_bots as F
+    B = F.Built(zp)
+    n = hit = 0
+    for s in range(1, len(B.sc.names)):
+        if B.sc.cls(s) == 'ZSpawnPoint':
+            n += 1
+            p = B.world(s, (0.0, 0.0, 0.0))
+            hit += any(inside(b, p) for b in boxes)
+    return hit, n
 
 
 def stock_maps(dd):
@@ -171,6 +255,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--out', required=True, help='the table file to write (never the game folder from here; the install step copies it)')
     ap.add_argument('--dd', default=DD_DEFAULT, help='Dog Days folder (read only)')
+    ap.add_argument('--dm', action='store_true', help="Dead Men maps (section dm*): boxes from the map's own .rmi room boxes + kl_dm_reverb's roomeffect choice")
     ap.add_argument('--no-stock', action='store_true')
     ap.add_argument('--no-expansion', action='store_true')
     ap.add_argument('--map', action='append', default=[], metavar='KEY=ZIP', help='one more section (KEY as the file wants it)')
@@ -188,7 +273,7 @@ def main(argv=None):
         if not os.path.isfile(zp):
             print('%-14s MISSING %s' % (key, zp))
             continue
-        boxes = collect(zp)
+        boxes = dm_collect(zp) if (a.dm and key.lower().startswith('dm')) else collect(zp)
         sections.append((key, boxes))
         report.append((key, len(boxes), len({b['snd'] for b in boxes})))
         print('%-14s %2d boxes, %d distinct effects  (%s)' % (key, len(boxes), len({b['snd'] for b in boxes}), zp))

@@ -145,13 +145,15 @@ def zip_effects(zp):
 
 
 def dm_effects(src):
-    """{room name lower: dm params} of the Dead Men source level's roomeffects ('...<room lower>#roomeffect')."""
-    snd = kl_snd.bank(src)
+    """{room name lower: dm params} of the Dead Men source level's roomeffects ('...<room lower>#roomeffect'). src may name several levels joined by '+'
+    (a map grafted from two campaign levels, DM09 = M09_A+M09_B; room names carry the level, so the dicts do not clash)."""
     out = {}
-    for o in snd.tables.get(EFFECT_TABLE, []):
-        nm = snd.name(o)
-        nm = nm.decode('latin1') if isinstance(nm, bytes) else nm
-        out[nm.lower().rsplit('/', 1)[-1].split('#')[0]] = dm_params(snd.b, o)
+    for one in src.split('+'):
+        snd = kl_snd.bank(one)
+        for o in snd.tables.get(EFFECT_TABLE, []):
+            nm = snd.name(o)
+            nm = nm.decode('latin1') if isinstance(nm, bytes) else nm
+            out[nm.lower().rsplit('/', 1)[-1].split('#')[0]] = dm_params(snd.b, o)
     return out
 
 
