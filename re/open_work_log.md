@@ -1,3 +1,8 @@
+## 2026-11-08 ~05:45 [d0] DM05A SKYLINE NOT INSTALLED: fog hides it (no crash involved)
+- Bench skyeast1108 (merged_1107 TEST 39e79011, look kit, faces east from the pad): 0 faults, undo byte-exact. Its verify FAIL "0x1f then 0x20" is only because a look kit does not play to round end.
+- Shots 12-16 (heading 95, reached at 04:45:37): fog closes past ~100 m and the stock towers fade too, so nothing at (60000,1884,-4000), ~530 m out, can show. Stage skyline_1108 is kept, not installed.
+- To make it visible: put the backdrop inside the fog distance (<~150 m from the pad, clear of the heli route) or thin DM05A's fog. Next: vanwait09_1108 (Retomoto van) after db's OSS_DD09_RB.
+
 ## 2026-11-08 ~04:25 [db] REVERB STACK EMPTY on DD09 online and F01 direct boot (no crash involved)
 - Probe `echo-stack` (TEST ee1ce53c): OSS_DD09_ECHO_S2_3 (2 seats SMOOTH, 0 faults) and ECHOSTACK_F01 (300 s) both show count 0, gate 1: no stock reverb box ever fires, every map plays the EFX default.
 - Fix (b) [Echo] RoomBoxes (klhook AABB + Push/Remove, default 0) is being built in kit C:\kl_build_1024\roomboxes_1108; next its DD09 bench. Details: re/reverb_path_1108.md.
