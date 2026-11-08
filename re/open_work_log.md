@@ -17,6 +17,12 @@
 - Host teleports in round 1 (klauto tele, TEST 530c9920): box 40 -> 35 -> 40 each logged "removed box N: another box wins" + "pushed box M", stack stays 1 deep. 0 asserts/faults, live dll/ini unchanged.
 - Rough edges: tele 1 refused (before state 0x19), tele to 35 MISSED (body stayed, node moved); 35/39/40 share snd 509872 (DM02 has 3 effects), so the sent reverb did not change. RB_DM02_SW2 (atrium 13 -> parking 3 -> 40, three effects) queued after f0 + d0.
 
+## 2026-11-08 ~07:58 [d0] DM05A GLOWFAR: quarter-alpha StreetGLOW + Far 80000 = soft haze, wall gone; skyline still unseen (no crash involved)
+- glowfar1108 (stage C:\kl_build_1024\glowfar_1108 = skyfog_1108 + StreetGLOW vertex alpha x 0.25 via kl_streetglow_1108.py --alpha 0.25; zip cf7e32ff, bots 11f8a4eb, base 7b302adc)
+  run 07:45: PASS, 0 faults/dumps, undo byte-exact 651a7492. So the shader DOES honour the vertex alpha.
+- Shots 12/20: a faint teal haze instead of the opaque wall, both near towers clear with window detail, the street ramp visible. No skyline model at 60000 (Far 80000 rules out the clip plane, so the
+  Backdrop .rmi box 59 / room visibility is the next suspect). Taste call for the owner: staged only, NOT installed. Candidate ship = alpha x 0.25 (+ Far 80000 only if the skyline is made to draw).
+
 ## 2026-11-08 ~07:40 [d0] DM05A FOG WALL FOUND: the StreetGLOW curtain (no crash involved)
 - Research wf_933101f3-991: from the pad a ray first hits the StreetGLOW curtain at 33-39 m (REF 25478, node 3851, vertex chunk 38553 = 85 x 40 B + 8 trailing,
   MAT 891: flat white 2x2 texture, SCREEN blend, colour 0.702/0.996/1.0; vertex colour +16: ffffffff at y 0 = the hard bottom edge, ffffff99 at 2256, ffffff00 at 6526..9067).
