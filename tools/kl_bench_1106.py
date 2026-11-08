@@ -143,12 +143,18 @@ KITS = {
     # the LIVE DM05A after the 2f install (11-06, owner's last test): nothing installed, live zip 1d325299 pinned, same ini tweaks and shots as lcchain2f1106d
     'lclive2f1106': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': '1d325299'},
                          solo_secs=900, parts=('solo',), shots='400-556:4'),
+    # 2h (11-08): heli arrival route (kl_arrival_1107.py stage --expect-base d65e8437) + Roof box 7 + club music boost (kl_lc_music_1107), on 6b's LIVE 1107r
+    # DM05A d65e8437 (bots 72e4c5b5, base 388b40ec). Bench on the merged_1107 TEST dll (live SHIP 502677ee).
+    'lcarr2h1108': dict(map='DM05A', slot='F01', entry=0, stage='C:/kl_build_1024/arrival_1107/lcarr_2h_music_r', tag='.before-lcarr2hmusic1107',
+                        files={'F01_Main.zip': '651a749259f54211c20eb67eff90ee65', 'F01_Main.bots.zip': 'ba98c0a6', 'F01_Main.bots.base.md5': '1d89ea85'},
+                        hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
+                        solo_secs=900, parts=('solo',), shots='400-556:4'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
-      'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106')
-EYE_OF = {'lcchain2e1106d': (7400, 2500, 2800), 'lcchain2f1106d': (7400, 2500, 2800), 'lclive2f1106': (7400, 2500, 2800)}          # kits whose outro eye is not the 2c CamPos01 eye (7093,2181,2727)
-FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d')          # boards at once at state 3
-LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
+      'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108')
+EYE_OF = {'lcchain2e1106d': (7400, 2500, 2800), 'lcchain2f1106d': (7400, 2500, 2800), 'lclive2f1106': (7400, 2500, 2800), 'lcarr2h1108': (7400, 2500, 2800)}          # kits whose outro eye is not the 2c CamPos01 eye (7093,2181,2727)
+FASTBOARD = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lcarr2h1108')          # boards at once at state 3
+LEAD60 = ('lcchain2a1106b', 'lcchain2a1106d', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lcarr2h1108')          # + LastVehicleLead=600 in solo.ini (the clock call 60 s before the end)
 
 
 def md5(p):
@@ -283,14 +289,16 @@ def pair(k, who, long_rounds):
     return '\n'.join(secs_t) + '\n'
 
 
-def gen():
+def gen(which='all'):
     import shutil
     os.makedirs(KIT, exist_ok=True)
     live = '%s/KLHook.ini' % DD
     for k, c in KITS.items():
+        if which != 'all' and k != which:
+            continue
         d = '%s/%s' % (KIT, k)
         os.makedirs('%s/hook_test' % d, exist_ok=True)
-        shutil.copy2(HOOK_SRC, '%s/hook_test/dinput8.dll' % d)
+        shutil.copy2(c.get('hook', (HOOK_SRC,))[0], '%s/hook_test/dinput8.dll' % d)
         shutil.copy2(live, '%s/KLHook_base.ini' % d)       # snapshot of the live ini (cover lines etc.); a later live edit does not change a kit
         shutil.copy2('%s/KLShopPage.ini' % DD, '%s/KLShopPage.ini' % d)
         t = ['; bench_1106 %s solo: OFFLINE Arcade, 1 seat, %s slot %s page 3 entry %d' % (k, c['map'], c['slot'], c['entry']),
@@ -336,9 +344,10 @@ def validate(which):
         dll = '%s/hook_test/dinput8.dll' % d
         if v.ok(os.path.isfile(dll), 'bench dll %s' % dll):
             data = open(dll, 'rb').read()
-            v.ok(hashlib.md5(data).hexdigest() == HOOK_MD5, 'dll md5 %s = TEST twin b6a69772' % hashlib.md5(data).hexdigest()[:8])
+            want = c.get('hook', (HOOK_SRC, HOOK_MD5))[1]
+            v.ok(hashlib.md5(data).hexdigest() == want, 'dll md5 %s = TEST twin %s' % (hashlib.md5(data).hexdigest()[:8], want[:8]))
             v.ok(data.count(b'(TEST)') >= 3 and b"klauto's scripted keys" in data, 'dll carries the TEST markers ((TEST) x%d, klauto strings = build_auto.bat build; SHIP has 1)' % data.count(b'(TEST)'))
-            v.ok(2_500_000 < len(data) < 2_700_000, 'dll size %.2f MB (about 2.59 MB expected)' % (len(data) / 1e6))
+            v.ok(2_500_000 < len(data) < 3_000_000, 'dll size %.2f MB (TEST builds: 2.59 MB in 1106, 2.71 MB for merged_1107)' % (len(data) / 1e6))
         live_dll = '%s/dinput8.dll' % DD
         if os.path.isfile(live_dll):
             v.ok(b"klauto's scripted keys" not in open(live_dll, 'rb').read(), 'live dll is the SHIP build, no klauto (md5 %s; kl_solo_test swaps the TEST dll in and back)' % md5(live_dll)[:8], warn=True)
@@ -607,7 +616,7 @@ def main():
         print(__doc__); return 2
     cmd = a[0]
     if cmd == 'gen':
-        gen(); return 0
+        gen(a[1] if len(a) > 1 else 'all'); return 0
     if cmd == 'validate':
         return validate(a[1] if len(a) > 1 else 'all')
     if cmd == 'run' and len(a) > 1 and a[1] in KITS:
