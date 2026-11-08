@@ -1,3 +1,11 @@
+## 2026-11-08 ~03:00 [shop] PD2 rebase 1107r INSTALLED on all 20 maps + KLShopPage.ini (no crash involved)
+Owner 11-08 "continue all and do tests free til the afternoon"; order agreed with d0 (merged_1107 first, then 1107r, then d0's DM05A 2h chained on 1107r).
+D:\kl_stage\pd2rebase_1107\install.py --skip-run-check (2 zombie kl2.exe, 0 threads): dry run all pins matched on the new live ini/overlay (1107r pins only map files + KLShopPage.ini), exit 0, KLShopPage.ini 1399238b -> 4bc8845a installed last.
+DM05A now d65e8437 / bots 72e4c5b5 / base 388b40ec / KLGuns a7c85b7a / KLJoin 095e046f (d0 re-stages 2h on these). Backups C:\kl_build_1024\pd2rebase_1107_backup (8.2 GB; C: 11 GB free after).
+Undo: D:\kl_stage\pd2rebase_1107\UNDO.bat = step 0r, FIRST in UNDO ALL 1105.bat (a later layer on top of 1107r must add its step above 0r).
+Bench kit C:\kl_build_1024\pd2r_1107\run.py (PD2R_DM02 + PD2R_DD05, TEST 39e79011, pd2b/pd2s script pairs, summarize.py adds the '13 pairs' check): BOTH PASS. Both seats round 2, 0 asserts/faults/dumps, KLGuns accepted, "13 pairs" on host+joiner; pool rows 0/10/22/25/28 = items 62/63/40/41/33 (rows 13/16 stay [Shop] Swap's, as before). Game handed to d0 (lcarr2h1108).
+Next (offline): no-PD2 fallback set from Dead Men guns (tools/kl_fallback_guns.py, spike SG552 on item 33 PASS; workflow fixing the spike's defects + bake-set on DD05).
+
 ## 2026-11-08 ~03:00 [f0] MERGED 1107 benched + SHIP INSTALLED (no crash involved)
 Bench M1107_DD05 (C:\kl_build_1024\merged_1107_bench\run.py; kit installed --test, TEST dll 39e79011, pd2s_1106 script pair on DD05, joiner Char=9): PASS.
 Both seats IN ROUND, round 2 reached, asserts 0, faults 0, no dumps. Log evidence: hire PickDefault 1, charonline Red applied on both sides, 'fit: caption PAGE 1/5 STOCK [F2] next: PD2 GUNS', shop opened with F3/F2 and no RETURN, pool rows 0/10/18/22/31 = items 62/63/42/40/35 on host and client.
