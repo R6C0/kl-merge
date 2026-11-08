@@ -1,3 +1,10 @@
+## 2026-11-08 ~04:15 [shop] SHPH page II set check committed (cebf667c), staged, NOT run live (no crash involved)
+- [ShopPage] SetCheck=1 "(recommended on)" warns when a peer's page II set differs (log "SHPH mismatch", caption "(SET DIFFERS)"). SetCheckStrict=0 "(recommended off)" has the host refuse with m10.
+  FNV-1a over row|item|picrow + [Set] Name, over klnetchan "shph" (independent of OnlineSend). Pure header klhook/klshopset.h + klshopset_test.c; Python twin kl_fallback_guns.set_hash.
+- Review fixes: a fresh announce survives a seat-ident change (3 s, GUESS); host answers limited to 5 s per seat + 1 s globally; netchan senders are unauthenticated (consistency aid, not anti-cheat).
+- Kit C:\kl_build_1024\shopset_1108 (README = bench recipe A-D): SHIP 8d9ebcaf, TEST 63a2e50e. kl_tests 106/0 (the mod_options FAIL d0 saw is fixed: keys now in KLHook.ini).
+- Next: 2-seat bench, host pd2 ini vs client nopd2 out_set ini (26b3234f), when the game is free.
+
 ## 2026-11-08 ~05:30 [d0] DM06B TRAFFIC INSTALLED; skyline bench inconclusive (no crash involved)
 - dm06btraffic1108 run 3 PASS (0 faults, undo byte-exact). The skinned static cars DO draw: all 7 cars seen (shots 08 sedan with glow headlights, 12 bus "815", 20 red and dark cars, 28 dark car).
   Runs 1-2 lacked shots: non-LC kits had no [Memory] D3dShotPost / [ReShade] Bridge lines (fixed in probes(), 5faec4c5), and 500 short hid the car behind the body (now 1000).
