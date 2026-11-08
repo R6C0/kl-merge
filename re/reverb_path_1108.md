@@ -105,3 +105,10 @@ Host script: klauto tele after "match started". 06:54:32 tele to box 39 REFUSED 
 4454,186,-2601: "removed box 40 (key 4b28): another box wins" + "pushed box 35 (key 4b23, prio 77)". 06:54:44 tele back: "removed box 35" + "pushed box 40". 0 asserts/faults.
 DM02 has only 3 roomeffects: snd 510384 (parking boxes 0-4), 509360 (atrium 13-15), 509872 (all other rooms). 35/40 share 509872, so echo-room stayed 1.10/0.363/1.000.
 Next RB_DM02_SW2 (run.py --sw2): waitstate 0x19, then atrium (0,1090,-2400) box 13 -> parking (4500,91,-4300) box 3 -> start (1300,1090,-3521) box 40.
+
+## Bench RB_DM02_SW2 (2026-11-08 07:16-07:27, db): PASS, three effects
+waitstate 0x19 + 8 s, then: 07:19:21 tele atrium (lands): removed 40, pushed box 13 (key 4b0d, prio 72, effect ..5e0); echo-stack #4 top 7e0 -> 5e0.
+07:19:27 tele parking MISSED (body 264,1000,-2566) but the node read 4500,191,-4300: removed 13, pushed box 3 (key 4b03, prio 55, effect ..9e0).
+07:19:33 tele start (lands): removed 3, pushed box 40 (effect ..7e0). The sent reverb cross-fades over ~1 s per change (Probe=1 logs every step, 279 echo-room lines):
+1.10/0.363 -> 1.47/0.59 (atrium) -> 1.32/0.049 (parking, "roof" class) -> 1.10/0.363/1.000/0.017 exactly. 0 asserts/faults, live dll 246c643d / ini 6ddd03de unchanged.
+RoomBoxes is complete on bench: load, push, switch between effects, return. Turning it on is the owner's call.

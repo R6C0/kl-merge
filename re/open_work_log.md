@@ -1,3 +1,8 @@
+## 2026-11-08 ~07:28 [db] RB_DM02_SW2 PASS: RoomBoxes switches between three different room effects (no crash involved)
+- TEST 530c9920, host teleports after state 0x19: box 40 -> atrium 13 -> parking 3 -> 40, each "removed ... another box wins" + push, stack 1 deep, top effect 36dee7e0 -> 5e0 -> 9e0 -> 7e0.
+- The engine cross-fades each change in ~1 s: 1.10/0.363 -> 1.47/0.59 (atrium) -> 1.32/0.05 (parking) -> exactly 1.10/0.363/1.000 again. 0 asserts/faults, live dll 246c643d / ini 6ddd03de unchanged.
+- RoomBoxes is done on bench (DD09 + DM02, push, switch, return). Waits for the owner's OK to turn on. Open: dm06/dm06b have no box under the play area.
+
 ## 2026-11-08 ~07:13 [f0] MERGED 1108b + 1108c (no crash involved)
 - merged_1108b (for d0): one dll from 6f3df179 on top of merged_1108 319aefc4 = d0's [VanBlow] ShieldDriveIn (be08398f + 76b4ca0a). install.py writes one line in [VanBlow]
   "ShieldDriveIn=1 (recommended on)" (HealFloor stays absent: never fired, unproven). SHIP 3f8bc902 / TEST 64701f02, ini 2f67d4bc -> 6ddd03de; 21 scratch checks.
