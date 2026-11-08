@@ -327,7 +327,7 @@ static struct {
     int bribe, br_money, br_delay;
     int leave, lv_delay; float lv_dist;
     int van, van_chance, van_delay, van_left;
-    int foe, foe_fed, bs_crew; float bs_crew_near;     /* section 3 f / g: TraitorFoe, BackstabCrew, BackstabCrewNear */
+    int foe, foe_fed, foe_nofed, bs_crew; float bs_crew_near;     /* section 3 f / g: TraitorFoe, BackstabCrew, BackstabCrewNear */
 } klb;
 
 struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; float hit; };
@@ -781,6 +781,7 @@ static struct {                               /* what TraitorFoe wrote, per reco
     DWORD rules;
     DWORD actor[KLB_NREC], info[KLB_NREC], team0[KLB_NREC];
     char swapped[KLB_NREC], was[KLB_NREC], marked[KLB_NREC], refused[KLB_NREC]; BYTE st[KLB_NREC];
+    int nofed_told;                               /* FoeNoSwapWhileFed: the once-per-round line was written */
     int fed_told;                                 /* FoeSkipWhileFed: the once-per-round line was written (cleared with the rest when the rules object changes) */
     int kills[KLB_NREC]; char spared[KLB_NREC];   /* section 3 h: crew deaths booked to a team-Enemy traitor; 1 = he is back on team Ally for good (this mask) */
 } klb_f;
@@ -851,7 +852,7 @@ static void klb_foe_swap(const struct klb_snap *s, int i)
 /* game thread only; every pass while an Arcade round object is up. act: the level may be changed (section 0). */
 static void klb_foe_tick(const struct klb_snap *s, int act)
 {
-    int i, j, round = act && s->state == KLB_ROUND, fed = klb.foe_fed && round && klb_human_fed();
+    int i, j, round = act && s->state == KLB_ROUND, fedany = (klb.foe_fed || klb.foe_nofed) && round && klb_human_fed(), fed = klb.foe_fed && fedany, nofed = klb.foe_nofed && fedany;
     if (s->rules != klb_f.rules) { memset(&klb_f, 0, sizeof klb_f); klb_f.rules = s->rules; memset(klb_f.st, 0xff, sizeof klb_f.st); }
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; DWORD fl = 0, at = s->score + KLB_SCORE_FL + 4 * i;
@@ -879,12 +880,14 @@ static void klb_foe_tick(const struct klb_snap *s, int act)
         }
         klb_f.st[i] = r->used ? r->status : 0xff;
         /* the team */
+        if (nofed && !klb_f.nofed_told) { klb_f.nofed_told = 1; klog("bots: FOE: you are a fed: a traitor stays team Ally (crew) so your crosshair paints him RED, not the police's green (FoeNoSwapWhileFed=1; said once a round)"); }
         if (klb_f.swapped[i]) {
-            if (!round) klb_foe_back(s, i, "the round is not running");
+            if (nofed) klb_foe_back(s, i, "you are a fed: team Enemy would paint him green on your crosshair (0x8e9e2c)");
+            else if (!round) klb_foe_back(s, i, "the round is not running");
             else if (!r->used || r->actor != klb_f.actor[i]) klb_foe_back(s, i, "the record changed");
             else if (!(r->flags & 2)) klb_foe_back(s, i, "the traitor flag is gone");
             else if (r->status != 0) klb_foe_back(s, i, r->status == 7 ? "he is dead" : r->status == 4 ? "he is aboard" : "he is out of play");
-        } else if (klb.foe && round && r->used && (r->flags & 3) == 3 && r->status == 0 && r->actor && !klb_f.refused[i]) klb_foe_swap(s, i);
+        } else if (klb.foe && round && r->used && (r->flags & 3) == 3 && r->status == 0 && r->actor && !klb_f.refused[i] && !nofed) klb_foe_swap(s, i);
         /* the score table's traitor bit: on from the swap until the mask goes (the kill bookkeeping, 3 f) */
         if (!r->used || !(r->flags & 2)) {
             klb_f.refused[i] = klb_f.was[i] = 0; klb_f.kills[i] = 0; klb_f.spared[i] = 0;
@@ -1138,6 +1141,7 @@ static void klb_init(void)
              klb.tr_max, klb.bs_near, klb.bs_behind, klb.bs_busy, klb.bs_wait);
     /* section 3 f / g (only said when set, as above) */
     klb.foe = GetPrivateProfileIntA("Bots", "TraitorFoe", 0, klh_ini) != 0;
+    klb.foe_nofed = GetPrivateProfileIntA("Bots", "FoeNoSwapWhileFed", 1, klh_ini) != 0;   /* (recommended on) a human fed's crosshair paints team 1 green: keep a traitor team Ally while one plays */
     klb.foe_fed = GetPrivateProfileIntA("Bots", "FoeSkipWhileFed", 0, klh_ini) != 0;      /* opt-in: 0 = as before */
     klb.bs_crew = klb_pct("BackstabCrew");
     klb.bs_crew_near = klb_inif("BackstabCrewNear", "1500"); if (!klb_finite(klb.bs_crew_near) || klb.bs_crew_near <= 0) klb.bs_crew_near = 1500;
