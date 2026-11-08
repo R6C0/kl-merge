@@ -71,6 +71,8 @@
  *   FedRide=2              (2026-10-27) a human FED (police) in the box: 1 = rides like a heister (default), 0 = never rides, 2 = rides only
  *                      when no in-play AI heister is above FedCrewY=10000 (GUESS: street < 10000 < tower floors), and then without the
  *                      car-box wait. 2 is recommended on for Retomoto (the fed was thrown to the street while the crew was upstairs).
+ *                      3 (2026-11-08) = a fed always rides (no car-box wait) except within FedGraceMs=6000 of becoming police; a fed refused
+ *                      by the grace must leave the box and come back (a respawn at the box edge never throws him to the street).
  *   Scene=F01              KLHook.ini only
  *   klhook\KLJoin.retomoto.ini is the file for Retomoto Tower (box = kl_fa_author.JOIN_BOX).
  *
@@ -108,7 +110,9 @@ static struct {
     char inside[2], fedsaid[2];
     int carstall_after_ms;                   /* CarStallAfterDoorMs= (2026-10-28, see klj_ride_step)  */
     int fedride; float fedy;                 /* FedRide= / FedCrewY= (2026-10-27, see klj_read) */
+    int fedgrace_ms;                         /* FedGraceMs= (2026-11-08, FedRide=3) */
 } klj_box[KLJ_NBOX];
+static DWORD klj_fed_pl[2], klj_fed_at[2];   /* FedRide=3: the player object each local slot was first seen as police, and when */
 static int klj_any, klj_tick_on = 1;
 /* 2026-10-28 door-aware CarStall (klleaf_logic.h): tick of the last accepted lift-door proxy, written by klprobe.c (TEST build, [Probe] DoorProxy=1);
    0 = never seen, which is the case in the SHIP build and with DoorProxy off. */
@@ -182,7 +186,11 @@ static int klj_read(const char *file, int base, int from_map)
            the last lift-proxy accept that klprobe.c saw (TEST build with [Probe] DoorProxy=1). With no accept seen (the SHIP build, probe off) nothing
            is gated and CarStall acts as before (klleaf_logic.h). */
         { int ad = (int)GetPrivateProfileIntA(sec, "CarStallAfterDoorMs", 5000, file); klj_box[base + i].carstall_after_ms = ad < 0 || ad > 60000 ? 5000 : ad; }
-        { int fr = (int)GetPrivateProfileIntA(sec, "FedRide", 1, file); klj_box[base + i].fedride = fr < 0 || fr > 2 ? 1 : fr; }
+        /* 2026-11-08 FedRide=3 (owner: 'u broke the lift again for the cops'; log 14:15:20: a fed in box 9 refused 28 s by FedRide=2 while 2 AI
+           heisters were upstairs - at 00:51 the night before the crew was already down, so it rode at once): a fed rides whenever he enters,
+           only not within FedGraceMs (default 6000) of becoming police, and a grace refusal holds until he leaves the box (the 10-27 case). */
+        { int fr = (int)GetPrivateProfileIntA(sec, "FedRide", 1, file); klj_box[base + i].fedride = fr < 0 || fr > 3 ? 1 : fr; }
+        { int g = (int)GetPrivateProfileIntA(sec, "FedGraceMs", 6000, file); klj_box[base + i].fedgrace_ms = g < 0 || g > 60000 ? 6000 : g; }
         GetPrivateProfileStringA(sec, "FedCrewY", "10000", t, sizeof t, file); { double d = atof(t); klj_box[base + i].fedy = d > -100000 && d < 100000 ? (float)d : 10000.0f; }
         klj_box[base + i].carfall = GetPrivateProfileIntA(sec, "CarFallback", 1, file) != 0;      /* 1 (default): after CarWait the jump comes anyway, so a shut door cannot strand the player */
         { float ca[3], cb[3];
@@ -407,6 +415,7 @@ static void klj_tick(void)
     if (klj_ride.on) { if (act && count) klj_ride_step(gd, lo, count, sel, now); else { klj_ride.on = 0; klog("join: ride CANCELLED: no active box or jump list (or a network session)"); } }
     for (i = 0; act && count && i < 2; i++) {
         if (sel[i] == 0xff || sel[i] >= 28 || !(pl = klh_rd32(gd + 0x828 + 4 * sel[i])) || !klj_feet(pl, feet)) { for (b = 0; b < KLJ_NBOX; b++) klj_box[b].inside[i] = 0; continue; }
+        if (!klj_is_fed(pl)) klj_fed_pl[i] = 0; else if (klj_fed_pl[i] != pl) { klj_fed_pl[i] = pl; klj_fed_at[i] = now; }
         for (b = 0; b < KLJ_NBOX; b++) {
             int in;
             if (!klj_box[b].wasactive) continue;
@@ -414,7 +423,15 @@ static void klj_tick(void)
             in = k == 3;
             if (!in) klj_box[b].fedsaid[i] = 0;
             if (!in || klj_box[b].inside[i]) { klj_box[b].inside[i] = (char)in; continue; }
-            if (klj_box[b].fedride != 1 && klj_is_fed(pl)) {      /* 2026-10-27 FedRide: see klj_read. inside[] stays 0, so he is judged again every tick */
+            if (klj_box[b].fedride == 3 && klj_is_fed(pl)) {      /* 2026-11-08 FedRide=3: see klj_read */
+                DWORD since = now - klj_fed_at[i];
+                if (since < (DWORD)klj_box[b].fedgrace_ms) {
+                    klj_box[b].inside[i] = 1;                       /* held until he leaves the box */
+                    klog("join: player %d (FED) in box %d %lu ms after becoming police: no ride (FedRide=3, FedGraceMs %d) - leave the box and come back", i, b + 1, since, klj_box[b].fedgrace_ms);
+                    continue;
+                }
+                klog("join: player %d (FED) in box %d: the ride starts (FedRide=3), without the car-box wait", i, b + 1);
+            } else if (klj_box[b].fedride != 1 && klj_is_fed(pl)) {      /* 2026-10-27 FedRide: see klj_read. inside[] stays 0, so he is judged again every tick */
                 int above = klj_box[b].fedride == 0 ? 1 : klt_crew_above(klj_box[b].fedy);
                 if (above != 0) {
                     if (!klj_box[b].fedsaid[i]) { klj_box[b].fedsaid[i] = 1;
