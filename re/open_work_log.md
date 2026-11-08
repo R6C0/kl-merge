@@ -1,3 +1,7 @@
+## 2026-11-08 ~07:03 [db] RB_DM02_SW: RoomBoxes switches boxes (no crash involved)
+- Host teleports in round 1 (klauto tele, TEST 530c9920): box 40 -> 35 -> 40 each logged "removed box N: another box wins" + "pushed box M", stack stays 1 deep. 0 asserts/faults, live dll/ini unchanged.
+- Rough edges: tele 1 refused (before state 0x19), tele to 35 MISSED (body stayed, node moved); 35/39/40 share snd 509872 (DM02 has 3 effects), so the sent reverb did not change. RB_DM02_SW2 (atrium 13 -> parking 3 -> 40, three effects) queued after f0 + d0.
+
 ## 2026-11-08 ~07:05 [d0] DM05A FOG WALL: next suspect = Dead Men colour grade (no crash involved)
 - Research wf_5acf84d5-df8 ranks first: the 20 PostFilterBoxes (scene block -> .prm chunk 53850, 20 x 88 B, set chunk id at +0x30) point at Dead Men sets 53844..53849
   (boxes 0-4 = 53844, 5-11/14/16-18 = 53845, 12 = 53846, 13 = 53847, 15 = 53848, 19 = 53849); their floats 21..24 are bluish (53845 = 0.34 0.34 0.51 0.61).

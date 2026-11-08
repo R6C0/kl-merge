@@ -99,3 +99,9 @@ dm09 45/63, dm01b 59/63; at ear 100 all 63, nothing lost on any map. DD09 box 6 
 TEST 530c9920 (75c1e3a1). Both seats: "echo-rb: pushed box 40 (key 00004b28, prio 80)" at hero (1300,1102,-3521) / (1309,1102,-2917);
 echo-stack count 0 -> 1; echo-room roof 1.49/0/0/0.011 -> street 1.10/0.363/1.000/0.017 about 1 s later. 0 asserts/faults, live dll 3f8bc902 / ini 6ddd03de unchanged.
 The ear-height fix is proven. Still open: switching between boxes (both seats stayed in box 40), dm06/dm06b have no box under the play area.
+
+## Bench RB_DM02_SW (2026-11-08 06:52-07:02, db): box switching
+Host script: klauto tele after "match started". 06:54:32 tele to box 39 REFUSED (state not 0x19 yet). 06:54:38 tele to 35 MISSED (body 1825,1000,-3253) but the hero node read
+4454,186,-2601: "removed box 40 (key 4b28): another box wins" + "pushed box 35 (key 4b23, prio 77)". 06:54:44 tele back: "removed box 35" + "pushed box 40". 0 asserts/faults.
+DM02 has only 3 roomeffects: snd 510384 (parking boxes 0-4), 509360 (atrium 13-15), 509872 (all other rooms). 35/40 share 509872, so echo-room stayed 1.10/0.363/1.000.
+Next RB_DM02_SW2 (run.py --sw2): waitstate 0x19, then atrium (0,1090,-2400) box 13 -> parking (4500,91,-4300) box 3 -> start (1300,1090,-3521) box 40.
