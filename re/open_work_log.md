@@ -156,6 +156,11 @@ Then undo --test (byte-exact) and SHIP: live dll 319aefc4, KLHook.ini 2f67d4bc, 
   Audio_ReverbActivater reaches the wrapped slot in MP, or the seats never stood in a box. Next: F01 stock bench with [Echo] Probe=1 + a walk into a known box. Details re/dm_reverb_1108.md.
 
 ## 2026-11-08 ~05:00 [d0] VAN SHIELD INSTALLED (no crash involved)
+2026-11-08 - [hl] DM11B (Hasta) look fix STAGED, NOT installed (owner playing, no bench): C:\kl_build_1024\hastalook_1108 (zip ac175c71, bots cf1ebbae, base 587c73d1, KLGuns unchanged f38d5fe3; pins live b755b505 / 8f61f77a / ea98a122). tools/kl_hastalook_1108.py. Undo: its UNDO.bat (scratch round trip byte-exact).
+GLARE: three ADD volumes in End Room/Corridor are huge (MAT 804 mesh 24214 chunk 24211 14390x14668x10859; MAT 804 mesh 24218 chunk 24215; MAT 818 mesh 24210 chunk 24207 11581x6716x8803) vs ~1000 tall rooms: vertex colours zeroed (--glow). PROVEN size/blend, GUESS that they are the in-game glare.
+GREEN: CameraBackgroundColor d2faff00 (pale cyan, stock DD maps dark/grey) -> DD F04 c7c1b000 (--fog). PROVEN value, GUESS it is the outside cast. Grade ruled out (box -> DD neutral 56696); 28 mint Omni_Right_Side lights are all inside.
+CHAIN with hastavault_1108 and d0's DM edits: re-stage the later one on this output.
+
 2026-11-08 ~05:00 - [d0] VAN SHIELD LIVE: dll 502677ee -> 19611c16 (SHIP c7b7f1db = merged_1107 + db Echo fix (off) + [VanBlow] ShieldWhileWaiting), ini 6a17a145 -> cd431998 (+ [VanBlow] ShieldWhileWaiting=1 "(recommended on)").
 Bench vanwait1108 (DD10 Flat Raid, TEST 76bd4a9c, nobody boards): PASS, 0 faults; shield on at state 4 for 54.5 s, health 9600/9600 (the game's scripted hits would have taken it to a tenth = the "always on fire" van), drove out at state 7 undamaged. No screenshots (ReShade bridge wrote none).
 Kit C:\kl_build_1024\vanwait_1108 (install.py pins live dll+ini, scratch round trip byte-exact). Undo: its UNDO.bat, BEFORE merged_1107\UNDO.bat. Peers told (db oss_1106 ACCEPT list, 6b pd2r run.py).
