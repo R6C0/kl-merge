@@ -1,3 +1,8 @@
+## 2026-11-08 ~05:36 [shop] SHPH benches SC_C + SC_D PASS (TEST ee6da004 = 9b74caf9; no crash involved)
+- SC_C_DD05 (both seats live pd2 set, strict 1): "SHPH match" both seats, no m10; the client's page II test buy went to the host (the host refused it: "seat already carries that row", the existing carry rule).
+- SC_D_DD05 (SetCheck=0, pd2 host vs nopd2 client): no shph lines at all; same host carry-rule refusal as C (so not SHPH). 0 asserts/faults/dumps both runs, live dll/ini restored.
+- All four cases A-D PASS. f0 builds merged_1108 from HEAD with SetCheck=1 / SetCheckStrict=0. Untested: rejoin and an old build on one seat.
+
 ## 2026-11-08 ~05:20 [db] [Echo] RoomBoxes PROVEN on DD09 (no crash involved)
 - OSS_DD09_RB_S2_2 (TEST 8ed080d7): SMOOTH, 0 faults; ~1 s after the push the sent reverb goes from the flat default (decay 1.49, refl 0) to box 6's effect (decay 2.00, refl 0.052, late 0.056, delay 0.100) on both seats.
 - Not live: RoomBoxes stays "(recommended off until listened)", no ini line in f0's merged_1108. Install = the KLReverbBoxes.ini table + RoomBoxes=1, after the owner listens. Next: a box-switching bench, a DM02 bench with KLReverbBoxes_dm.ini.
