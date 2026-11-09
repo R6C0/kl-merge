@@ -118,7 +118,10 @@ def kick_probe(lbl, when, n=4):
     """Read-only peeks of the human kick registry (static RE 0x55e600/0x46b330, workflow wywe974am): count at [[0xdd265c]+0xaa4],
     pointers from +0xaa8; per controller +0x58 character gate (-1 = never), +0x5c state (1 = kickable, 3 = kicked), +0x34, +0x60/+0x64 box nodes.
     A grafted door missing from the registry (count 0) can never offer the kick prompt."""
-    s = ['peek 0xdd265c+0xaa4 %s-%s-kickreg-count' % (lbl, when)]
+    # player slot 0 = [gd+0x828]: +0xd00 best prompt, +0xcfc active prompt; 0x12 = the kick/use prompt is offered (no key needed to show it)
+    s = ['peek 0xdd265c+0xaa4 %s-%s-kickreg-count' % (lbl, when),
+         'peek 0xdd265c+0x828+0xd00 %s-%s-prompt-best' % (lbl, when),
+         'peek 0xdd265c+0x828+0xcfc %s-%s-prompt-active' % (lbl, when)]
     for i in range(n):
         o = 0xaa8 + 4 * i
         s += ['peek 0xdd265c+0x%x+0x%x %s-%s-ctrl%d-%s' % (o, f, lbl, when, i, nm) for f, nm in ((0x58, 'gate'), (0x5c, 'state'), (0x34, 'p34'), (0x60, 'box60'), (0x64, 'box64'))]
@@ -138,7 +141,7 @@ def door_seg(d, lbl):
     # waitstate 0x19 first: DM02_1109's first tele came 5 s after 'level loaded', before the round ran (session state not 0x19), and was refused
     s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0], a[1] + 150, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
          'ents KL_Door 20', 'ents Door 200'] + kick_probe(lbl, 'stand') + [
-         'face %d %d' % c, 'goto %d %d 70 6000' % c, 'face %d %d' % f, 'pos %s-at-leaf' % lbl,
+         'face %d %d' % c, 'goto %d %d 70 6000' % c, 'face %d %d' % f, 'pos %s-at-leaf' % lbl, 'wait 500'] + kick_probe(lbl, 'atleaf') + [
          'tap E 700', 'wait 600', 'tap E 700', 'wait 3500', 'log BENCH1109 %s door %s: kicked (E x2, GUESS key)' % (lbl, d['host']), 'pos %s-kicked' % lbl,
          'ents KL_Door 20', 'ents Door 200'] + kick_probe(lbl, 'kicked')
     if b:
