@@ -27,11 +27,13 @@ import kl_bench_1106 as B
 KIT = 'C:/kl_build_1024/bench_1109'
 DD = B.DD
 MAPS = DD + '/KLExpansion/Maps'
-# live = f0's merged_1108f: SHIP 729f7512 (built from e206e0aa), its TEST twin (build_auto.bat, klauto) 40d00164, live KLHook.ini f7f11dcc.
+# live = f0's merged_1108g: SHIP d1145cbe (built from b5465f50), its TEST twin (build_auto.bat, klauto) 95de3af2; KLHook.ini f7f11dcc is still the one
+# merged_1108f wrote (1108g is dll only), so the base ini fallback stays on INI_KIT's install.py + backup.
 # The live dinput8.dll can be a peer's TEST dll swapped in by a bench, so the kit takes the twin from the merged kit folder, never from the live file.
-MERGED = 'C:/kl_build_1024/merged_1108f'
-SHIP_MD5 = '729f7512f92ed2892d64330b3a2ff734'
-TEST_MD5 = '40d00164001576eea78bf8e5e9720e51'
+MERGED = 'C:/kl_build_1024/merged_1108g'
+INI_KIT = 'C:/kl_build_1024/merged_1108f'
+SHIP_MD5 = 'd1145cbef96b405f4bbba13e7c555ed4'
+TEST_MD5 = '95de3af20ff3fab80526460de5c37bee'
 INI_MD5 = 'f7f11dccac532b7ffcb283526eb3ca73'
 HOOK = (MERGED + '/dll_test/dinput8.dll', TEST_MD5)
 INI_KEYS = (('ShopPage', 'TidyPage2'), ('Hire', 'TidyPage'))      # fc's keys merged_1108f writes (=1)
@@ -265,7 +267,7 @@ def base_ini():
     if md5_of(live) == INI_MD5:
         return live, 'live KLHook.ini'
     import importlib.util
-    sp = importlib.util.spec_from_file_location('merged1108f_install', MERGED + '/install.py')
+    sp = importlib.util.spec_from_file_location('merged1108f_install', INI_KIT + '/install.py')
     m = importlib.util.module_from_spec(sp)
     sp.loader.exec_module(m)
     bak = '%s/KLHook.ini.before-merged1108f' % DD
@@ -276,7 +278,7 @@ def base_ini():
 
 
 def stamp(k):
-    """Pin the kit to merged_1108f: the TEST twin dll from its folder and the base ini; record both (and the SHIP they twin) in kit.json."""
+    """Pin the kit to MERGED (merged_1108g): the TEST twin dll from its folder and the base ini; record both (and the SHIP they twin) in kit.json."""
     import shutil
     d = kd(k)
     src = MERGED + '/dll_test/dinput8.dll'
@@ -285,7 +287,7 @@ def stamp(k):
     shutil.copy2(src, '%s/hook_test/dinput8.dll' % d)
     ini, how = base_ini()
     open('%s/KLHook_base.ini' % d, 'wb').write(ini)
-    B.write('%s/kit.json' % d, json.dumps(dict(ship=SHIP_MD5, test=TEST_MD5, ini=md5_of(ini), ini_source=how, merged=MERGED, built_from='e206e0aa'), indent=1))
+    B.write('%s/kit.json' % d, json.dumps(dict(ship=SHIP_MD5, test=TEST_MD5, ini=md5_of(ini), ini_source=how, merged=MERGED, built_from='b5465f50'), indent=1))
 
 
 def gen(which='all'):
@@ -345,13 +347,13 @@ def validate(which):
         pj = MERGED + '/pins.json'
         pins = json.load(open(pj)) if os.path.isfile(pj) else {}
         news = {x.get('new') for n_, x in pins.items() if n_.lower().endswith('dinput8.dll')}
-        v.ok(SHIP_MD5 in news, "merged_1108f's own pins.json installs SHIP %s (the SHIP this kit twins)" % SHIP_MD5[:8])
+        v.ok(SHIP_MD5 in news, "the merged kit's own pins.json installs SHIP %s (the SHIP this kit twins)" % SHIP_MD5[:8])
         tw = MERGED + '/dll_test/dinput8.dll'
-        v.ok(os.path.isfile(tw) and md5_of(open(tw, 'rb').read()) == TEST_MD5, 'merged_1108f dll_test twin %s is still %s' % (md5_of(open(tw, 'rb').read())[:8] if os.path.isfile(tw) else '-', TEST_MD5[:8]))
+        v.ok(os.path.isfile(tw) and md5_of(open(tw, 'rb').read()) == TEST_MD5, 'merged kit dll_test twin %s is still %s' % (md5_of(open(tw, 'rb').read())[:8] if os.path.isfile(tw) else '-', TEST_MD5[:8]))
         ld = '%s/dinput8.dll' % DD
         lm = md5_of(open(ld, 'rb').read()) if os.path.isfile(ld) else '-'
         if lm in (SHIP_MD5, TEST_MD5):
-            v.ok(True, 'live dinput8.dll %s is merged_1108f (%s)' % (lm[:8], 'SHIP' if lm == SHIP_MD5 else "the TEST twin: a bench has swapped it in"))
+            v.ok(True, 'live dinput8.dll %s is the merged kit SHIP or twin (%s)' % (lm[:8], 'SHIP' if lm == SHIP_MD5 else "the TEST twin: a bench has swapped it in"))
         else:
             swapped = os.path.isfile(ld) and b"klauto's scripted keys" in open(ld, 'rb').read()
             v.ok(False, 'live dinput8.dll %s is neither SHIP %s nor the twin %s: %s' % (lm[:8], SHIP_MD5[:8], TEST_MD5[:8],
@@ -606,7 +608,7 @@ def run(k):
 
 def order():
     t = ['bench_1109 RUN ORDER (written by tools/kl_bench_1109.py order). ONE bench at a time; each needs the game free.',
-         'Before EACH: tasklist | findstr /i kl2.exe  must show nothing (a zombie with 0 threads is fine). Peers (f0 merged_1108f, fc shop, d0) bench too:',
+         'Before EACH: tasklist | findstr /i kl2.exe  must show nothing (a zombie with 0 threads is fine). Peers (f0 merged_1108g, fc shop, d0) bench too:',
          'wait for their "done, game free". Nothing is installed by any of these; every kit pins the live md5s and compares the map folder after.',
          'Pre-flight for all (read only, no game launch):   cd C:\\kl-merge\\kl-merge ; python tools/kl_bench_1109.py validate all',
          'Disk: each run writes a few hundred MB of shots/logs under the solo work folder; keep C: above 2 GB free.',
