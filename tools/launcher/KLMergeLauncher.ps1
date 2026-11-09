@@ -413,7 +413,7 @@ $xaml = @'
     <SolidColorBrush x:Key="ChalkDim" Color="#CFCAC2"/>
     <SolidColorBrush x:Key="Coral" Color="#F0475A"/>
     <SolidColorBrush x:Key="CoralHi" Color="#FF7384"/>
-    <SolidColorBrush x:Key="Key" Color="#B8B3AA"/>
+    <SolidColorBrush x:Key="KeyInk" Color="#B8B3AA"/>
     <SolidColorBrush x:Key="Grey" Color="#9A968F"/>
     <SolidColorBrush x:Key="Off" Color="#6E6A64"/>
     <SolidColorBrush x:Key="Amber" Color="#E0962E"/>
@@ -559,7 +559,7 @@ $xaml = @'
     <Style x:Key="Key" TargetType="TextBlock">
       <Setter Property="FontFamily" Value="{StaticResource Head}"/>
       <Setter Property="FontSize" Value="15"/>
-      <Setter Property="Foreground" Value="{StaticResource Key}"/>
+      <Setter Property="Foreground" Value="{StaticResource KeyInk}"/>
       <Setter Property="Margin" Value="0,0,14,6"/>
       <Setter Property="VerticalAlignment" Value="Top"/>
       <Setter Property="Tag" Value="track"/>
