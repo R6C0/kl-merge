@@ -1,3 +1,8 @@
+2026-11-09 ~08:50 - [06] DM02_1109 run d ALL PASS: kick door 1 kicked 1st try (ctrl 0 1 -> 3) + walk-through; stands now = each group's KickDoor_ArrowBack/Front (door 1's leaf hangs from its hinge END,
+hinge +-130 sat on the jamb edge 16-46 cm outside the kick box). Kick doors proven: DM01 x2, DM03, DM03A, DM02 x2. DD10GATE_1109 ALL PASS: 3 walks west stop at x 8059 = stock collision-only ColiObj_HERO_Plane01 (x 8017),
+so DD10's hidden gate does NOT leak. DM07CURTAIN_1109 FAIL: KillBox curtain inert (cur11b walked through alive); workflow: data identical to stock F08/F02 KillBoxes, no KillBox ever proven to kill -> drop KillBoxes.
+DM07 options: (1) un-hide 4m_01+4m_11 (blocks; van clips ~1 s, owner taste), (2) DM07BURY_1109 staged D:/kl_build_1024/dm07bury_1109 (un-hidden, render y -500, HVK same; zip 9b61e106, NOT benched: C: 336 MB free),
+(3) clone a HERO plane (workflow running). Owner: delete D:/scratch_bury_game, D:/kl_scratch_dm07sink_rehearse, D:/kl_scratch_dm07sink_review2 (~1.1 GB, rm refused by the safety check).
 2026-11-09 ~07:30 - [06] KICK DOORS WORK in the engine (benches, nothing installed): DOORS_1109_DM03A ALL PASS (door 6516, ctrl 4+5 1 -> 3); DOORS_1109_DM01R run c ALL PASS (2569 1st try, 957 2nd):
 fix was tele 70 cm behind the stand + goto it ('face' cannot turn a standing player; 957 had stood at bearing error 121). DM07SINK_1109 (13 slabs sunk, hard-link stage, undo byte-exact): z 10334 + 10420
 still THROUGH, 10700 + 10850 BLOCKED at x -4503 -> the slabs are not what blocks; workflow finding the real blocker + a fix. DM02_1109 + DM03_1109 door re-runs queued.
