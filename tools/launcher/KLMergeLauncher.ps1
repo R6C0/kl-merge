@@ -1,7 +1,9 @@
-# KLMergeLauncher.ps1 - the KL Merge launcher window (WPF, Windows PowerShell 5.1 or newer, no third-party parts).
+# KLMergeLauncher.ps1 - the KL: Dead Men Rising launcher window (the project is still called KL Merge inside: file names stay KLMerge*) (WPF, Windows PowerShell 5.1 or newer, no third-party parts).
 #
-# Start it through KLMerge.bat (which passes -ExecutionPolicy Bypass -STA). "KLMerge Setup.bat" fetches the release
-# package first; this window never downloads anything.
+# Start it through "KL Dead Men Rising.exe" (exe\DeadMenRising.cs: runs this script in-process on an STA thread with
+# execution policy Bypass, no console window; KLMerge.bat is gone since 2026-11-09). "KL Dead Men Rising Setup.bat" fetches
+# the release package first; this window never downloads anything.
+# GAME WATCH: after PLAY the window hides once kl2.exe has a window and comes back when the game exits or crashes.
 #
 # What it does
 #   PLAY DOG DAYS     the stock game: the hook DLL is set aside (dinput8.dll -> dinput8.dll.klmerge-off, a RENAME, never a
@@ -9,7 +11,7 @@
 #                     play work as usual. The mod's other files stay on disk but nothing loads them without the hook
 #                     (exception: the few replaced stock sound files and PC_Def.str of the package groups 'stockwav' /
 #                     'pcdef', if the package has them - UNINSTALL puts those back byte for byte).
-#   PLAY KL MERGE     the modded game: the hook DLL gets its name back (dinput8.dll.klmerge-off -> dinput8.dll), Steam starts
+#   PLAY DEAD MEN RISING  the modded game: the hook DLL gets its name back (dinput8.dll.klmerge-off -> dinput8.dll), Steam starts
 #                     the game. WHY A RENAME: klhook/klhook.c DllMain reads [KLHook] ContinueAsserts / MaxDumps / MaxAsserts /
 #                     AssertSoft / EndOnFatal / FastExit / Stall* / ExitLog / Tick and nothing like a global Enable key, so the
 #                     only clean 'off' is for kl2.exe not to find a dinput8.dll beside it (Windows then loads the system one).
@@ -20,7 +22,7 @@
 #   The hook is switched ON before each of the three so kl_release.py sees the real dinput8.dll (otherwise an install
 #   would write a second copy and leave the .klmerge-off one behind).
 #   COLLECT LOGS      zips <DD>\KLHook.log, KLHook_*.dmp, kl2_490_crash_*.mdmp, KLMergeInstall.json and this launcher's
-#                     log into KLMerge_logs_<stamp>.zip beside the launcher - the file to send to Josh after a crash.
+#                     log into DeadMenRising_logs_<stamp>.zip beside the launcher - the file to send to Josh after a crash.
 #   MUSIC             a Dead Men music clip plays quietly (System.Windows.Media.MediaPlayer, volume 0.22, looped) from
 #                     <launcher folder>\music\deadmen_riff.wav. THAT FILE IS NEVER SHIPPED: the launcher makes it on the
 #                     tester's PC from the tester's OWN Dead Men PC_Def.str ("python kl_launcher_music.py extract", run once
@@ -68,9 +70,9 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
 # Setup starts this script with -WindowStyle Hidden: an error that escapes would end it without a word. Last net: say it.
 trap {
-    $msg = 'The KL Merge launcher stopped: ' + $_.Exception.Message + ' (KLMergeLauncher.ps1 line ' + $_.InvocationInfo.ScriptLineNumber + ')'
+    $msg = 'The KL: Dead Men Rising launcher stopped: ' + $_.Exception.Message + ' (KLMergeLauncher.ps1 line ' + $_.InvocationInfo.ScriptLineNumber + ')'
     try { Add-Content -LiteralPath (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'KLMergeLauncher.log') -Value $msg -Encoding UTF8 } catch { }
-    try { [void][System.Windows.MessageBox]::Show($msg + "`r`n`r`nPlease send KLMergeLauncher.log (beside the launcher) to Josh.", 'KL MERGE', 'OK', 'Error') } catch { }
+    try { [void][System.Windows.MessageBox]::Show($msg + "`r`n`r`nPlease send KLMergeLauncher.log (beside the launcher) to Josh.", 'KL: DEAD MEN RISING', 'OK', 'Error') } catch { }
     exit 1
 }
 
@@ -273,13 +275,68 @@ function Hook-Set([bool]$want) {
         }
         Rename-Item -LiteralPath $dll -NewName $script:HookOffName
     } catch { Log ('could not switch the hook OFF: ' + $_.Exception.Message + ' (antivirus or another program holding the file? close it and try again)'); return $false }
-    Log 'hook OFF: dinput8.dll -> dinput8.dll.klmerge-off (stock game; PLAY KL MERGE or HOOK ON switches it back)'
+    Log 'hook OFF: dinput8.dll -> dinput8.dll.klmerge-off (stock game; PLAY DEAD MEN RISING or HOOK ON switches it back)'
     return $true
 }
 
 function Launch-Game {
     Log ('starting the game through Steam (steam://rungameid/' + $script:AppId + ') ...')
     Start-Process ('steam://rungameid/' + $script:AppId) | Out-Null
+    $script:GameWatch = @{ Since = Get-Date; Seen = $false }
+}
+
+# GAME WATCH (owner, 2026-11-09: "closes once the game actually boots up, if the game crashes or exits you get that menu
+# pop up again"): after PLAY the timer looks for kl2.exe once a second. 'Booted' = kl2.exe has a main window (Steam's
+# own start-up and the hook's load come before that). Then the launcher hides (music paused) and waits; when kl2.exe is
+# gone it comes back to the front and says whether a crash dump appeared since PLAY. No game within GameWaitS: the
+# launcher stays as it is (Steam sign-in window, Steam update, a refused start).
+$script:GameWatch = $null    # @{ Since = <PLAY time>; Seen = $true once the game window was up }
+$script:GameWaitS = 180      # GUESS: a cold Steam start + the game's own first start fit in 3 minutes
+$script:WatchTick = 0
+function Game-Window {
+    try {
+        foreach ($p in @(Get-Process -Name kl2 -ErrorAction SilentlyContinue)) { if ($p.MainWindowHandle -ne [IntPtr]::Zero) { return $true } }
+    } catch { }
+    return $false
+}
+function Crash-Files([DateTime]$since) {
+    $dd = $script:Settings.DD
+    if (-not $dd) { return @() }
+    $hits = @()
+    foreach ($pat in @('KLHook_*.dmp', 'kl2_490_crash_*.mdmp')) {
+        $hits += @(Get-ChildItem -LiteralPath $dd -Filter $pat -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $since.AddSeconds(-2) })
+    }
+    return $hits
+}
+function Game-Watch {
+    $w = $script:GameWatch
+    if (-not $w) { return }
+    if (-not $w.Seen) {
+        if (Game-Window) {
+            $w.Seen = $true
+            Log 'the game is up: the launcher hides and comes back when the game closes'
+            try { if ($script:Player) { $script:Player.Pause() } } catch { }
+            $script:Win.Hide()
+        } elseif (((Get-Date) - $w.Since).TotalSeconds -gt $script:GameWaitS) {
+            $script:GameWatch = $null
+            Log ('no game window within ' + $script:GameWaitS + ' s (Steam sign-in or update window?): the launcher stays open')
+        }
+        return
+    }
+    if (Game-Running) { return }
+    $script:GameWatch = $null
+    $crash = @(Crash-Files $w.Since)
+    $mins = [Math]::Round(((Get-Date) - $w.Since).TotalMinutes, 1)
+    if ($crash.Count) {
+        Log ('the game CRASHED after ' + $mins + ' min (' + (($crash | ForEach-Object { $_.Name }) -join ', ') + '): COLLECT LOGS and send the zip to Josh')
+    } else {
+        Log ('the game closed after ' + $mins + ' min')
+    }
+    $script:Win.Show()
+    if ($script:Win.WindowState -eq 'Minimized') { $script:Win.WindowState = 'Normal' }
+    [void]$script:Win.Activate()
+    Music-Apply
+    Refresh-Status
 }
 
 # ------------------------------------------------------------------------------------------------ the window
@@ -368,7 +425,7 @@ $smearLog = Smear-Path 12 6 22              # log plate: flatter, so its top and
 $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="KL MERGE" Width="1040" Height="720" MinWidth="860" MinHeight="580"
+        Title="KL: Dead Men Rising" Width="1040" Height="720" MinWidth="860" MinHeight="580"
         Background="#0C0C0D" Foreground="#F3F0EA" WindowStartupLocation="CenterScreen"
         FontFamily="Bahnschrift SemiCondensed, Segoe UI" FontSize="13" UseLayoutRounding="True" SnapsToDevicePixels="True">
   <Window.Resources>
@@ -623,8 +680,8 @@ $xaml = @'
       <Grid Grid.Row="0">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" RenderTransformOrigin="0,1">
           <StackPanel.RenderTransform><RotateTransform Angle="-0.6"/></StackPanel.RenderTransform>
-          <TextBlock FontFamily="{StaticResource Head}" FontSize="54" Foreground="{StaticResource Chalk}" VerticalAlignment="Bottom" Tag="notrack" OpacityMask="{StaticResource Chip}"><Run Text="KL "/><Run Text="MERGE" Foreground="{StaticResource Coral}"/></TextBlock>
-          <TextBlock Text="DEAD MEN INSIDE DOG DAYS" FontFamily="{StaticResource Head}" FontSize="17" Foreground="{StaticResource Grey}" Margin="18,0,0,8" VerticalAlignment="Bottom" Tag="track" OpacityMask="{StaticResource ChipLight}"/>
+          <TextBlock FontFamily="{StaticResource Head}" FontSize="54" Foreground="{StaticResource Chalk}" VerticalAlignment="Bottom" Tag="notrack" OpacityMask="{StaticResource Chip}"><Run Text="KL: "/><Run Text="DEAD MEN RISING" Foreground="{StaticResource Coral}"/></TextBlock>
+          <TextBlock Text="A DOG DAYS EXPANSION" FontFamily="{StaticResource Head}" FontSize="17" Foreground="{StaticResource Grey}" Margin="18,0,0,8" VerticalAlignment="Bottom" Tag="track" OpacityMask="{StaticResource ChipLight}"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,8">
           <TextBlock x:Name="LblMusic" Text="&#9834; MUSIC" FontFamily="{StaticResource Head}" FontSize="14" Foreground="{StaticResource Grey}" VerticalAlignment="Center" Margin="0,0,12,0" Tag="track" OpacityMask="{StaticResource ChipLight}"/>
@@ -650,7 +707,7 @@ $xaml = @'
         </Grid.ColumnDefinitions>
         <!-- buttons -->
         <StackPanel Grid.Column="0">
-          <Button x:Name="BtnPlayMod" Style="{StaticResource KLPrimary}" Content="PLAY KL MERGE"/>
+          <Button x:Name="BtnPlayMod" Style="{StaticResource KLPrimary}" Content="PLAY DEAD MEN RISING"/>
           <Button x:Name="BtnPlayStock" Style="{StaticResource KLButton}"><TextBlock Tag="track"><Run Text="PLAY DOG DAYS"/><Run Text="  (STOCK)" FontSize="14" Foreground="{StaticResource Grey}"/></TextBlock></Button>
           <TextBlock x:Name="LblHookNote" Text="" Foreground="{StaticResource Grey}" FontSize="11.5" Margin="22,-2,0,10" TextWrapping="Wrap"/>
           <Button x:Name="BtnInstall" Style="{StaticResource KLDim}" Content="INSTALL / UPDATE"/>
@@ -793,7 +850,7 @@ function Guard([scriptblock]$body) {
     try { & $body } catch {
         $m = $_.Exception.Message + ' (line ' + $_.InvocationInfo.ScriptLineNumber + ')'
         try { Log ('ERROR: ' + $m) } catch { }
-        try { [void][System.Windows.MessageBox]::Show($m + "`r`n`r`nThe launcher keeps running. COLLECT LOGS and send the zip to Josh if this repeats.", 'KL MERGE', 'OK', 'Warning') } catch { }
+        try { [void][System.Windows.MessageBox]::Show($m + "`r`n`r`nThe launcher keeps running. COLLECT LOGS and send the zip to Josh if this repeats.", 'KL: DEAD MEN RISING', 'OK', 'Warning') } catch { }
     }
 }
 
@@ -819,7 +876,7 @@ function Refresh-Status {
         Set-Val $ui.LblPkg ('v' + $script:Manifest.version + ', ' + $n + ' files  -  ' + $script:PackageDir) 'plain'
         $ui.LblVersion.Text = Track ('TESTER BUILD  v' + $script:Manifest.version)
     } else {
-        Set-Val $ui.LblPkg 'NO PACKAGE: run "KLMerge Setup.bat" first (it downloads and unpacks it)' 'bad'
+        Set-Val $ui.LblPkg 'NO PACKAGE: run "KL Dead Men Rising Setup.bat" first (it downloads and unpacks it)' 'bad'
         $ui.LblVersion.Text = Track 'TESTER BUILD'
     }
 
@@ -828,7 +885,7 @@ function Refresh-Status {
     } else {
         if (-not $script:Python) { $script:Python = Find-Python }
         if ($script:Python) { Set-Val $ui.LblPy ($script:Python.Version + '  (' + $script:Python.Cmd + ', zstandard ok)') 'plain' }
-        else { Set-Val $ui.LblPy 'NOT FOUND - run "KLMerge Setup.bat" (it fetches an embedded Python 3 + zstandard)' 'bad' }
+        else { Set-Val $ui.LblPy 'NOT FOUND - run "KL Dead Men Rising Setup.bat" (it fetches an embedded Python 3 + zstandard)' 'bad' }
     }
 
     if ($s.DD) {
@@ -850,7 +907,7 @@ function Refresh-Status {
         $onTone = $(if ($sha -and $pk -and $sha -ne $pk) { 'warn' } else { 'ok' })
         switch ($st) {
             'on'   { Set-Val $ui.LblHook ('ON  (dinput8.dll, sha1 ' + (Short $sha) + $cmp + ')') $onTone; $ui.LblHookNote.Text = '' }
-            'off'  { Set-Val $ui.LblHook ('OFF  (set aside as ' + $script:HookOffName + ', sha1 ' + (Short $sha) + $cmp + ')') 'warn'; $ui.LblHookNote.Text = 'The hook is OFF: the game runs stock. PLAY KL MERGE or HOOK ON / OFF switches it back.' }
+            'off'  { Set-Val $ui.LblHook ('OFF  (set aside as ' + $script:HookOffName + ', sha1 ' + (Short $sha) + $cmp + ')') 'warn'; $ui.LblHookNote.Text = 'The hook is OFF: the game runs stock. PLAY DEAD MEN RISING or HOOK ON / OFF switches it back.' }
             'both' { Set-Val $ui.LblHook ('ON, plus a stray ' + $script:HookOffName + ' (left alone)') 'warn'; $ui.LblHookNote.Text = '' }
             default { Set-Val $ui.LblHook 'no hook file (mod not installed)' 'dim'; $ui.LblHookNote.Text = '' }
         }
@@ -882,7 +939,7 @@ function Quote([string]$s) { return '"' + ($s -replace '(\\+)$', '$1$1') + '"' }
 
 function Start-Tool([string]$verb, [string[]]$extra) {
     if ($script:Proc) { Log 'a job is still running - wait for it to finish.'; return }
-    if (-not $script:PackageDir) { Log 'no package: run "KLMerge Setup.bat" first.'; return }
+    if (-not $script:PackageDir) { Log 'no package: run "KL Dead Men Rising Setup.bat" first.'; return }
     $s = $script:Settings
     if (-not $s.DD) { Log 'no Dog Days folder: pick it with the ... button.'; return }
     if (Game-Running) { Log 'REFUSED: kl2.exe is running - close the game first.'; return }
@@ -898,7 +955,7 @@ function Start-Tool([string]$verb, [string[]]$extra) {
         $file = $exe
     } else {
         if (-not $script:Python) { $script:Python = Find-Python }
-        if (-not $script:Python) { Log 'no Python 3 with zstandard: run "KLMerge Setup.bat" again.'; return }
+        if (-not $script:Python) { Log 'no Python 3 with zstandard: run "KL Dead Men Rising Setup.bat" again.'; return }
         $file = $script:Python.Exe
         $argv = @($script:Python.Pre) + @('-u', (Quote (Join-Path $script:PackageDir 'kl_release.py'))) + $argv
     }
@@ -914,7 +971,7 @@ function Start-Tool([string]$verb, [string[]]$extra) {
     }
     Log ('> ' + $file + ' ' + ($argv -join ' '))
     try {
-        $script:Proc = Start-Process -FilePath $file -ArgumentList $argv -WorkingDirectory $script:PackageDir -RedirectStandardOutput $script:OutFile -RedirectStandardError $script:ErrFile -NoNewWindow -PassThru
+        $script:Proc = Start-Process -FilePath $file -ArgumentList $argv -WorkingDirectory $script:PackageDir -RedirectStandardOutput $script:OutFile -RedirectStandardError $script:ErrFile -WindowStyle Hidden -PassThru   # Hidden, not -NoNewWindow: the .exe host has no console, so a console child would open its own window
         $null = $script:Proc.Handle   # keeps the process handle open, else .ExitCode reads empty after exit (Start-Process -PassThru quirk)
     } catch {
         Log ('could not start: ' + $_.Exception.Message); $script:Proc = $null
@@ -929,6 +986,14 @@ $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
 $script:Timer.Interval = [TimeSpan]::FromMilliseconds(300)
 $script:Timer.Add_Tick({
     try { Music-Poll } catch { }
+    $script:WatchTick++
+    if ($script:GameWatch -and ($script:WatchTick % 3) -eq 0) {           # about once a second
+        try { Game-Watch } catch {
+            $script:GameWatch = $null
+            try { Log ('game watch: ' + $_.Exception.Message) } catch { }
+            try { $script:Win.Show() } catch { }
+        }
+    }
     if (-not $script:Proc) { return }
     try {
         $o = Read-New $script:OutFile ([ref]$script:OutPos); if ($o) { Log-Raw $o }
@@ -975,7 +1040,7 @@ function Collect-Logs {
     $files = @($files | Select-Object -Unique)
     if ($files.Count -eq 0) { Log 'nothing to collect (no KLHook.log or dumps in the game folder)'; return }
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $zip = Join-Path $script:Here ('KLMerge_logs_' + $stamp + '.zip')
+    $zip = Join-Path $script:Here ('DeadMenRising_logs_' + $stamp + '.zip')
     # copied first with FileShare ReadWrite: the running game keeps KLHook.log open and Compress-Archive refuses such a file
     $tmp = Join-Path $env:TEMP ('klmerge_logs_' + $stamp)
     try {
@@ -1078,7 +1143,7 @@ function Music-Extract([bool]$again = $false) {
     $tool = Find-MusicTool
     if (-not $tool) { Log ('music: ' + $script:MusicToolName + ' not found beside the launcher - no launcher music (the package needs launcher\' + $script:MusicToolName + ')'); Music-Label; return }
     if (-not $script:Python) { $script:Python = Find-Python }
-    if (-not $script:Python) { Log 'music: no Python 3 found - no launcher music (run "KLMerge Setup.bat" once)'; Music-Label; return }
+    if (-not $script:Python) { Log 'music: no Python 3 found - no launcher music (run "KL Dead Men Rising Setup.bat" once)'; Music-Label; return }
     $argv = @($script:Python.Pre) + @('-u', (Quote $tool), 'extract', '--dm', (Quote $dm), '--out', (Quote $script:MusicPath))
     if ($script:Settings.MusicClip) { $argv += '--clip'; $argv += (Quote $script:Settings.MusicClip) }
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -1088,7 +1153,7 @@ function Music-Extract([bool]$again = $false) {
         $dir = Split-Path -Parent $script:MusicPath
         if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
         Log ('music: reading a Dead Men clip from your own ' + (Join-Path $dm 'PC_Def.str') + ' (a few seconds, in the background) ...')
-        $script:MusicProc = Start-Process -FilePath $script:Python.Exe -ArgumentList $argv -WorkingDirectory $script:Here -RedirectStandardOutput $script:MusicOut -RedirectStandardError $script:MusicErr -NoNewWindow -PassThru
+        $script:MusicProc = Start-Process -FilePath $script:Python.Exe -ArgumentList $argv -WorkingDirectory $script:Here -RedirectStandardOutput $script:MusicOut -RedirectStandardError $script:MusicErr -WindowStyle Hidden -PassThru   # Hidden, not -NoNewWindow: the .exe host has no console, so a console child would open its own window
         $null = $script:MusicProc.Handle   # as for $script:Proc: without it .ExitCode is empty and exit 2 (silence) can't be told apart
     } catch {
         $script:MusicProc = $null
@@ -1161,14 +1226,16 @@ $ui.BtnMute.Add_Click({ Guard {
 } })
 $ui.BtnPlayMod.Add_Click({ Guard {
     if ($script:Proc) { Log 'a job is still running'; return }
+    if ($script:GameWatch) { Log 'the game is already starting'; return }
     if (Hook-Set $true) { Launch-Game }
     Refresh-Status
 } })
 $ui.BtnPlayStock.Add_Click({ Guard {
     if ($script:Proc) { Log 'a job is still running'; return }
+    if ($script:GameWatch) { Log 'the game is already starting'; return }
     if (Hook-Set $false) {
         Launch-Game
-        Log 'stock game started. The mod stays installed; PLAY KL MERGE puts the hook back.'
+        Log 'stock game started. The mod stays installed; PLAY DEAD MEN RISING puts the hook back.'
     }
     Refresh-Status
 } })
@@ -1176,7 +1243,7 @@ $ui.BtnPlayStock.Add_Click({ Guard {
 $ui.BtnInstall.Add_Click({ Guard { Start-Tool 'install' @('--yes') } })
 $ui.BtnVerify.Add_Click({ Guard { Start-Tool 'verify' @() } })
 $ui.BtnUninstall.Add_Click({ Guard {
-    $r = [System.Windows.MessageBox]::Show('Remove the KL Merge files and put the stock Dog Days files back from KL_PortBackup?', 'KL MERGE - UNINSTALL', 'YesNo', 'Warning')
+    $r = [System.Windows.MessageBox]::Show('Remove the Dead Men Rising files and put the stock Dog Days files back from KL_PortBackup?', 'KL: DEAD MEN RISING - UNINSTALL', 'YesNo', 'Warning')
     if ($r -ne 'Yes') { Log 'uninstall cancelled'; return }
     Start-Tool 'uninstall' @('--yes')
 } })
@@ -1214,7 +1281,7 @@ $script:Win.Add_Closing({
 
 # ------------------------------------------------------------------------------------------------ go
 Load-Settings
-Log ('KL Merge launcher started in ' + $script:Here)
+Log ('KL: Dead Men Rising launcher started in ' + $script:Here)
 Refresh-Status
 if (-not $script:Settings.DD) { Log 'Dog Days was not found in any Steam library: use the ... button next to DOG DAYS.' }
 try { Bg-Init } catch { Log ('background: ' + $_.Exception.Message + ' - using the drawn fallback') }
@@ -1227,5 +1294,9 @@ try {
         if (-not $script:Settings.Muted) { Music-Extract }
     }
 } catch { Log ('music: ' + $_.Exception.Message + ' - silent') }
-[void]$script:Win.ShowDialog()
+# not ShowDialog: hiding a ShowDialog window ends it (tried 2026-11-09), and the game watch hides the window while the game runs
+$script:Frame = New-Object System.Windows.Threading.DispatcherFrame
+$script:Win.Add_Closed({ $script:Frame.Continue = $false })
+$script:Win.Show()
+[System.Windows.Threading.Dispatcher]::PushFrame($script:Frame)
 try { if ($script:Player) { $script:Player.Stop(); $script:Player.Close() } } catch { }

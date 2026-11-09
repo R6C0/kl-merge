@@ -1,4 +1,4 @@
-# KL Merge - owner release steps (Josh / the local sessions), tester download Tue 2026-11-10, play Wed 2026-11-11
+# KL: Dead Men Rising - owner release steps (Josh / the local sessions), tester download Tue 2026-11-10, play Wed 2026-11-11
 
 Written offline in the cloud on 2026-11-09. **Everything under `tools/launcher/` is UNTESTED on a Windows PC**: the
 scripts were written against the documented behaviour of cmd / Windows PowerShell 5.1 / WPF and against
@@ -8,9 +8,9 @@ verbs vs kl_release's argparse, XAML well-formed, bracket balance) and, on a PC 
 
 ## 0. What the tester receives, and why it carries no game data
 
-- `KLMerge Setup.bat` (one file; RELEASE_URL inside it) -> downloads `KLMerge_package_v<ver>.zip` -> unpacks:
-  `manifest.json`, `patches\*.klp`, `kl_release.py`, optionally `KLMergeSetup.exe`, and `launcher\` (the .ps1, the
-  wrappers, the tester README; Setup copies them up beside itself, so re-running Setup updates the launcher too).
+- `KL Dead Men Rising Setup.bat` (one file; RELEASE_URL inside it) -> downloads `KLMerge_package_v<ver>.zip` -> unpacks:
+  `manifest.json`, `patches\*.klp`, `kl_release.py`, optionally `KLMergeSetup.exe`, and `launcher\` (the .ps1,
+  `KL Dead Men Rising.exe`, the tester README; Setup copies them up beside itself, so re-running Setup updates the launcher too).
 - `kl_release.py make` ships ONLY: our own files as literal bytes (`dinput8.dll`, `KLHook.ini`, `KLShopPage.ini`,
   `KL_MOD_SETTINGS.txt`, `KLExpansion\KLHook.expansion.ini`, the Ambience / Stinger clips except anything with `pd2` in
   the name, overlay .ini files) and PATCHES whose copy operations point into the player's own stock Dog Days / Dead Men /
@@ -95,15 +95,18 @@ pyinstaller --onefile --name KLMergeSetup --hidden-import zstandard --hidden-imp
 -> `dist\KLMergeSetup.exe` (hidden-import names are a GUESS; test `dist\KLMergeSetup.exe verify "<DD>" --pkg <pkg>` on
 your PC: it must print the same `verify:` line as the python run). The launcher uses the exe when
 `<package>\KLMergeSetup.exe` exists, else `python -u kl_release.py`. Skip the freeze if PyInstaller is not installed:
-`KLMerge Setup.bat` then fetches the embeddable Python 3.12 into `<launcher>\python\` and pip-installs `zstandard`
+`KL Dead Men Rising Setup.bat` then fetches the embeddable Python 3.12 into `<launcher>\python\` and pip-installs `zstandard`
 (needs internet to python.org and pypi.org on the tester's PC; URLs are GUESS-marked in the .bat).
 SmartScreen will warn about an unsigned exe either way (the .bat too); the README tells testers to click through.
 Defender (2026-11-09): your helper .bat was flagged Trojan:Win32/Ceprolad.A (heuristic: powershell -WindowStyle Hidden +
--ExecutionPolicy Bypass from a .bat). KLMerge.bat and the Setup now start the launcher MINIMIZED (`start /min`) instead of
-hidden, and README_TESTERS has a "If Windows Defender / SmartScreen complains" section (plain-text scripts, Protection
+-ExecutionPolicy Bypass from a .bat). The Setup now starts `KL Dead Men Rising.exe` (no console at all: it hosts the .ps1
+in-process; KLMerge.bat is gone) and falls back to a MINIMIZED powershell (`start /min`), never hidden, and README_TESTERS has a "If Windows Defender / SmartScreen complains" section (plain-text scripts, Protection
 history > Restore, Properties > Unblock, signed exe planned). Before the upload: scan the packed zip with Defender once.
 
 ## 4. Pack and upload (UNTESTED here)
+
+First build the launcher exe (after any change to `exe\DeadMenRising.cs` or the icon): `tools\launcher\exe\build.bat`
+-> `tools\launcher\KL Dead Men Rising.exe` (unsigned; pack_release prints a note when it is missing).
 
 ```bat
 powershell -ExecutionPolicy Bypass -File tools\launcher\pack_release.ps1 -Out D:\kl_release\pkg_1110 [-Exe dist\KLMergeSetup.exe]
@@ -120,7 +123,7 @@ Where to host - **decision for Josh**:
   2 GB per asset), or use any plain https host (Dropbox link with `?dl=1`; avoid Google Drive: large files hit the
   virus-scan page and `curl` gets HTML).
 - Copy the asset's download URL (`https://github.com/<user>/klmerge-release/releases/download/v<ver>/KLMerge_package_v<ver>.zip`)
-  into the ONE `set "RELEASE_URL=..."` line of `tools\launcher\KLMerge Setup.bat`. Hand out that .bat (and the
+  into the ONE `set "RELEASE_URL=..."` line of `tools\launcher\KL Dead Men Rising Setup.bat`. Hand out that .bat (and the
   README) only; everything else comes through the URL. Keep the .bat out of this private repo's Releases.
 - `curl -z` makes a re-run download only when the server copy is newer (GitHub assets send Last-Modified: GUESS that
   the redirect target does too; if not, re-runs re-download - annoying, not harmful).
@@ -128,14 +131,15 @@ Where to host - **decision for Josh**:
 ## 5. Rehearsal on a clean PC (do this before Tuesday; all UNTESTED)
 
 A second PC, or a new Windows user on yours, with Steam + Dog Days + Dead Men installed and nothing of the mod:
-1. Put `KLMerge Setup.bat` in `C:\KLMerge`, run it: download, unpack, python, launcher window. Note the download
+1. Put `KL Dead Men Rising Setup.bat` in `C:\DeadMenRising`, run it: download, unpack, python, launcher window. Note the download
    size and time.
 2. STATUS finds DOG DAYS and DEAD MEN (and PAYDAY 2 if installed). If not: the `...` pickers.
 3. INSTALL / UPDATE: watch for `CANNOT INSTALL` (a non-stock source) vs `Done.`; time it.
 4. VERIFY -> `0 problems`.
-5. PLAY KL MERGE -> a Dead Men map round from the Arcade pages. Check `<DD>\KLHook.log` starts with
+5. PLAY DEAD MEN RISING -> the launcher hides once the game window is up and comes back when the game
+   closes (or crashes: noted in its LOG). A Dead Men map round from the Arcade pages. Check `<DD>\KLHook.log` starts with
    `==== KLHook loaded` and `build: SHIP`.
-6. PLAY DOG DAYS -> the stock game; `dinput8.dll.klmerge-off` exists, `dinput8.dll` does not. PLAY KL MERGE -> back.
+6. PLAY DOG DAYS -> the stock game; `dinput8.dll.klmerge-off` exists, `dinput8.dll` does not. PLAY DEAD MEN RISING -> back.
 7. UNINSTALL -> then Steam > Verify integrity must find **0 files to re-acquire** (byte-exact restore). Then INSTALL again.
 8. COLLECT LOGS -> the zip opens in Explorer.
 On YOUR PC the PLAY buttons will not behave: your Steam launch options (`-dx10 -o DefaultScene=Locations/F01/F01_Main.gms

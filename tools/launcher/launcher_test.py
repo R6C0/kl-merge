@@ -4,7 +4,7 @@ launcher_test.py - off-game self-test of tools/launcher/ (the tester bootstrap +
 
 Checks
   1. the files exist and are plain ASCII (cmd.exe and the ini-reading hook choke on smart quotes / UTF-8 BOMs)
-  2. KLMerge Setup.bat: RELEASE_URL is defined in ONE place at the top, the committed default is the placeholder, and
+  2. KL Dead Men Rising Setup.bat (was KLMerge Setup.bat): RELEASE_URL is defined in ONE place at the top, the committed default is the placeholder, and
      the script refuses to run with the placeholder (findstr example.invalid); every 'goto :label' has its label
   3. KLMergeLauncher.ps1: brace / bracket / parenthesis balance outside strings and comments; the XAML here-string is
      well-formed XML; every kl_release.py verb and option the launcher passes exists in kl_release.py's argparse;
@@ -20,6 +20,11 @@ Checks
   3d. Defender (2026-11-09): no "-WindowStyle Hidden" in either .bat (the heuristic Trojan:Win32/Ceprolad.A fired on
      that + Bypass), the launcher is started minimized, the Setup .bat deletes nothing (no del / rmdir / Remove-Item;
      robocopy /MOVE is the one move and is commented), and README_TESTERS has the Defender / SmartScreen section
+  3e. exe + game watch (owner 2026-11-09: production look, no console; hide while the game runs, back on exit/crash):
+     exe/DeadMenRising.cs is a winexe that hosts the .ps1 in-process (STA, Bypass, no powershell.exe), build.bat
+     passes icon + manifest, the Setup starts the exe; the visible name is KL: Dead Men Rising (no 'KL Merge' left in
+     what a tester reads); the window runs in a DispatcherFrame (Hide() would end ShowDialog), Game-Watch hides on the
+     game window and shows again when kl2.exe is gone, child jobs start -WindowStyle Hidden (no -NoNewWindow)
   4. when pwsh (PowerShell 7) is on the PATH, the script is parsed with System.Management.Automation.Language.Parser
      and must give 0 errors (else SKIPPED with a note, never a FAIL)
   5. README_TESTERS.md names the log / dump files a tester must send, and OWNER_RELEASE_STEPS.md has the make command
@@ -31,8 +36,9 @@ import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)
-BAT = os.path.join(HERE, 'KLMerge Setup.bat')
-WRAP = os.path.join(HERE, 'KLMerge.bat')
+BAT = os.path.join(HERE, 'KL Dead Men Rising Setup.bat')
+EXE_SRC = os.path.join(HERE, 'exe', 'DeadMenRising.cs')
+EXE_BUILD = os.path.join(HERE, 'exe', 'build.bat')
 PS1 = os.path.join(HERE, 'KLMergeLauncher.ps1')
 PACK = os.path.join(HERE, 'pack_release.ps1')
 README = os.path.join(HERE, 'README_TESTERS.md')
@@ -147,9 +153,9 @@ def xaml_parse_check(pwsh, ps):
 def main():
     print('launcher_test: ' + HERE)
     # 1. files + ascii
-    for p in (BAT, WRAP, PS1, PACK, README, OWNER):
+    for p in (BAT, EXE_SRC, EXE_BUILD, PS1, PACK, README, OWNER):
         check(os.path.exists(p), 'exists: ' + os.path.basename(p))
-    for p in (BAT, WRAP, PS1, PACK):
+    for p in (BAT, EXE_SRC, EXE_BUILD, PS1, PACK):
         if os.path.exists(p):
             ok, why = ascii_only(p)
             check(ok, 'ascii only: %s %s' % (os.path.basename(p), why))
@@ -169,17 +175,26 @@ def main():
     check('rem GUESS' in bat or 'GUESS:' in bat, 'the bat marks its guessed URLs with GUESS')
     for word in ('KL_PortBackup', 'KLMergeInstall.json', 'steam launch', 'Steam launch'):
         pass  # (the bat does not touch the game folder itself; nothing to check here)
-    wrap = read(WRAP).decode('ascii', 'replace')
-    check('-ExecutionPolicy Bypass -STA' in wrap and 'KLMergeLauncher.ps1' in wrap, 'KLMerge.bat wraps the ps1 with -ExecutionPolicy Bypass -STA')
-    # 3d. Defender: the hidden-window form of the powershell start is the heuristic trigger; minimized is fine
-    for name, txt in (('KLMerge.bat', wrap), ('KLMerge Setup.bat', bat)):
-        code = '\n'.join(l for l in txt.splitlines() if not l.strip().lower().startswith('rem'))
-        check('-WindowStyle Hidden' not in code, name + ' does not start powershell with -WindowStyle Hidden (Defender heuristic)')
-        check(re.search(r'^start\s+"[^"]*"\s+/min\s+powershell', code, re.M | re.I) is not None, name + ' starts the launcher minimized (start /min)')
-    check('defender' in wrap.lower() and 'Ceprolad' in wrap, 'KLMerge.bat says why it is not hidden')
+    # 3d. Defender: the hidden-window form of the powershell start is the heuristic trigger; the Setup's fallback is minimized
+    code = '\n'.join(l for l in bat.splitlines() if not l.strip().lower().startswith('rem'))
+    check('-WindowStyle Hidden' not in code, 'the Setup .bat does not start powershell with -WindowStyle Hidden (Defender heuristic)')
+    check(re.search(r'^start\s+"[^"]*"\s+/min\s+powershell', code, re.M | re.I) is not None, 'the Setup .bat falls back to a minimized powershell start (old package, no exe)')
+    check('Ceprolad' in bat, 'the Setup .bat says why its fallback is not hidden')
+    # 3e. the exe
+    check(re.search(r'^\s*start ""\s+"%HERE%KL Dead Men Rising\.exe"', code, re.M) is not None, 'the Setup .bat starts KL Dead Men Rising.exe when it is there')
+    check(r'copy /Y "%PKG%\launcher\KL Dead Men Rising.exe"' in bat, 'the Setup .bat copies the exe up from the package')
+    cs = read(EXE_SRC).decode('ascii', 'replace')
+    check('[STAThread]' in cs and 'ApartmentState.STA' in cs and 'PSThreadOptions.UseCurrentThread' in cs, 'exe: STA, the runspace runs on the STA thread (WPF)')
+    check('ExecutionPolicy.Bypass' in cs and 'Process.Start' not in cs and 'powershell.exe' not in cs.split('using System;')[1], 'exe: Bypass in its own runspace, no powershell.exe child')
+    check('AddCommand(ps1)' in cs and '"KLMergeLauncher.ps1"' in cs, 'exe: runs KLMergeLauncher.ps1 as a script file (keeps $MyInvocation)')
+    check('Mutex' in cs and 'SetForegroundWindow' in cs, 'exe: one launcher at a time (a second start fronts the first)')
+    check('AssemblyProduct("KL: Dead Men Rising")' in cs and 'AssemblyFileVersion' in cs, 'exe: version info names KL: Dead Men Rising')
+    bb = read(EXE_BUILD).decode('ascii', 'replace')
+    check('/target:winexe' in bb and '/win32icon:dmr.ico' in bb and '/win32manifest:app.manifest' in bb, 'exe build: winexe (no console) + icon + manifest')
+    check(os.path.exists(os.path.join(HERE, 'exe', 'dmr.ico')) and os.path.exists(os.path.join(HERE, 'exe', 'app.manifest')), 'exe: dmr.ico and app.manifest exist')
     bat_code = '\n'.join(l for l in bat.splitlines() if not l.strip().lower().startswith('rem'))
     check(re.search(r'(?im)^\s*(del|erase|rmdir|rd)\b', bat_code) is None and 'Remove-Item' not in bat_code and '-Recurse' not in bat_code,
-          'KLMerge Setup.bat has no del / erase / rmdir / Remove-Item')
+          'the Setup .bat has no del / erase / rmdir / Remove-Item')
     check('/MOVE' in bat and re.search(r'rem .*?/MOVE is a MOVE', bat) is not None, 'the one robocopy /MOVE in the Setup .bat is commented as a move')
 
     # 3. the launcher script
@@ -254,6 +269,20 @@ def main():
     check('launch options' in ps.lower() and 'Set-ItemProperty' not in ps, 'ps1: never writes Steam launch options')
     check('GUESS' in ps, 'ps1: has a GUESS list')
 
+    # 3e. visible name + game watch (owner 2026-11-09)
+    if ps:
+        shown = [m for m in re.findall(r"(?:Text|Content|Title)=\"([^\"]*)\"", xaml)] + re.findall(r"(?:Log|Show)\s*\(?\s*'([^']*)'", ps)
+        check(not [t for t in shown if re.search(r'KL MERGE|KLMerge Setup', t, re.I)], 'name: no KL Merge in the window texts, titles, logs or message boxes')
+        check('Title="KL: Dead Men Rising"' in xaml and 'PLAY DEAD MEN RISING' in xaml, 'name: window title KL: Dead Men Rising, button PLAY DEAD MEN RISING')
+        check('.ShowDialog()' not in ps.replace('$d.ShowDialog()', '') and 'Dispatcher]::PushFrame($script:Frame)' in ps and '$script:Frame.Continue = $false' in ps,
+              'watch: the window runs in a DispatcherFrame, not ShowDialog (Hide() would end ShowDialog)')
+        gw = ps[ps.find('function Game-Watch'):]
+        gw = gw[:gw.find('\n}\n') + 3]
+        check('$script:Win.Hide()' in gw and '$script:Win.Show()' in gw and 'Game-Window' in gw and 'Game-Running' in gw and 'Crash-Files' in gw,
+              'watch: Game-Watch hides on the game window, shows again when kl2.exe is gone and reports crash dumps')
+        check('MainWindowHandle' in ps and re.search(r'\$script:GameWaitS = \d+\s+# GUESS', ps) is not None, "watch: 'booted' = kl2 has a main window; the wait limit is marked GUESS")
+        check('$script:GameWatch = @{' in ps[ps.find('function Launch-Game'):ps.find('function Launch-Game') + 400], 'watch: Launch-Game arms the watch')
+        check('-NoNewWindow -PassThru' not in ps and ps.count('-WindowStyle Hidden -PassThru') >= 2, 'child jobs: -WindowStyle Hidden, not -NoNewWindow (the exe host has no console to share)')
     # 3b. music + background (2026-11-09, owner: quiet Dead Men music with a mute switch, a two-game background)
     check('System.Windows.Media.MediaPlayer' in ps, 'ps1: music through System.Windows.Media.MediaPlayer')
     mv = re.search(r"\$script:DefaultVolume = ([0-9.]+)", ps)
@@ -316,8 +345,8 @@ def main():
         val_style = res[res.find('x:Key="Val"'):]
         val_style = val_style[:val_style.find('</Style>')]
         check('OpacityMask' not in val_style and 'OpacityMask' not in xaml[xaml.find('x:Name="TxtLog"'):xaml.find('x:Name="TxtLog"') + 500], 'look: values and the log are NOT chipped')
-        check('OpacityMask="{StaticResource Chip}"' in xaml[xaml.find('<!-- header'):xaml.find('<!-- body -->')] and '<Run Text="MERGE" Foreground="{StaticResource Coral}"/>' in xaml,
-              'look: the title KL MERGE is chipped, MERGE in CORAL')
+        check('OpacityMask="{StaticResource Chip}"' in xaml[xaml.find('<!-- header'):xaml.find('<!-- body -->')] and '<Run Text="DEAD MEN RISING" Foreground="{StaticResource Coral}"/>' in xaml,
+              'look: the title KL: DEAD MEN RISING is chipped, DEAD MEN RISING in CORAL')
         check('RotateTransform Angle="-0.6"' in xaml, 'look: the title block leans -0.6 degrees')
         # buttons: a brush bar with a break + the word; nothing filled, nothing bordered
         tpl = res[res.find('x:Key="KLButton"'):]

@@ -5,7 +5,8 @@
 # Takes from <Out>:  manifest.json, patches\*.klp          (the package: our code/config as literal patches + binary patches
 #                                                            whose SOURCE is the player's own stock DD / DM / PD2 files)
 # Adds:              tools\kl_release.py                    (the installer half; needs python + zstandard on the tester's PC)
-#                    tools\launcher\ (as launcher\)          KLMergeLauncher.ps1, KLMerge.bat, README_TESTERS.md, KLMerge Setup.bat
+#                    tools\launcher\ (as launcher\)          KLMergeLauncher.ps1, KL Dead Men Rising.exe (exe\build.bat), README_TESTERS.md,
+#                                                            KL Dead Men Rising Setup.bat
 #                    tools\kl_launcher_music.py (as launcher\)  reads the launcher's music clip from the TESTER'S OWN Dead Men file
 #                    tools\launcher\bin\kl_oggdec.exe (as launcher\bin\)  decodes the Ogg Vorbis menu loop (stb_vorbis, public domain)
 #                    tools\launcher\bg\*.jpg (as launcher\bg\)  Josh's two background screenshots (dead_men.jpg, dog_days.jpg)
@@ -34,9 +35,10 @@ New-Item -ItemType Directory -Path (Join-Path $stage 'launcher') | Out-Null
 Copy-Item -LiteralPath (Join-Path $Out 'manifest.json') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $Out 'patches') -Destination (Join-Path $stage 'patches') -Recurse
 Copy-Item -LiteralPath (Join-Path $tools 'kl_release.py') -Destination $stage
-foreach ($f in @('KLMergeLauncher.ps1', 'KLMerge.bat', 'README_TESTERS.md', 'KLMerge Setup.bat')) {
+foreach ($f in @('KLMergeLauncher.ps1', 'KL Dead Men Rising.exe', 'README_TESTERS.md', 'KL Dead Men Rising Setup.bat')) {
     $p = Join-Path $here $f
     if (Test-Path -LiteralPath $p) { Copy-Item -LiteralPath $p -Destination (Join-Path $stage 'launcher') }
+    elseif ($f -like '*.exe') { Write-Host 'note: "KL Dead Men Rising.exe" is missing (run tools\launcher\exe\build.bat) - the Setup then starts the launcher through a minimized powershell' }
 }
 # the launcher's music tool (reads the clip from the tester's own Dead Men PC_Def.str at run time; no audio travels)
 Copy-Item -LiteralPath (Join-Path $tools 'kl_launcher_music.py') -Destination (Join-Path $stage 'launcher')
@@ -85,4 +87,4 @@ $sha = (Get-FileHash -LiteralPath $Zip -Algorithm SHA1).Hash.ToLower()
 Set-Content -LiteralPath ($Zip + '.sha1') -Value ($sha + '  ' + (Split-Path -Leaf $Zip)) -Encoding ASCII
 Write-Host ('zip: {0:N1} MB, sha1 {1}' -f ((Get-Item -LiteralPath $Zip).Length / 1MB), $sha)
 Remove-Item -LiteralPath $stage -Recurse -Force
-Write-Host 'Upload the zip, set RELEASE_URL in "KLMerge Setup.bat" to its download link, and hand out that .bat only.'
+Write-Host 'Upload the zip, set RELEASE_URL in "KL Dead Men Rising Setup.bat" to its download link, and hand out that .bat only.'

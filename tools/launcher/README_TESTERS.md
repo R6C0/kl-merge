@@ -1,6 +1,6 @@
-# KL Merge - tester guide
+# KL: Dead Men Rising - tester guide
 
-KL Merge puts Kane & Lynch: Dead Men content (its Fragile Alliance maps, player models, voices, more) inside
+KL: Dead Men Rising puts Kane & Lynch: Dead Men content (its Fragile Alliance maps, player models, voices, more) inside
 Kane & Lynch 2: Dog Days on PC (Steam). It is a tester build: expect rough edges, and please send logs when it breaks.
 
 Nothing you download contains game files. The package holds the mod's own code plus small binary "patches"; the
@@ -12,7 +12,7 @@ never deleted, so UNINSTALL puts everything back exactly.
 
 | | |
 |---|---|
-| Windows 10 or 11, 64-bit | the launcher is a PowerShell window (built in); no admin rights needed |
+| Windows 10 or 11, 64-bit | the launcher is `KL Dead Men Rising.exe` (it runs the readable `KLMergeLauncher.ps1` beside it on Windows' own PowerShell engine); no admin rights needed |
 | **Kane & Lynch 2: Dog Days** on Steam | stock, unmodified. The installer checks `kl2.exe`; if it says the sha1 differs, run Steam > Properties > Installed Files > Verify integrity first |
 | **Kane & Lynch: Dead Men** on Steam | **required.** The Dead Men maps, models and voices are rebuilt from YOUR Dead Men files. Without it the installer stops with "Dead Men was not found" and writes nothing |
 | Payday 2 on Steam | optional. The Payday 2 guns / masks pieces are skipped when it is not installed (the installer says how many files it skipped); everything else works |
@@ -22,15 +22,18 @@ never deleted, so UNINSTALL puts everything back exactly.
 
 ## Install
 
-1. Make a folder for the mod tools, e.g. `C:\KLMerge` (NOT inside the Dog Days folder), and put **`KLMerge Setup.bat`** in it.
-2. Double-click `KLMerge Setup.bat`. (Windows SmartScreen may show "Windows protected your PC": More info > Run anyway.)
+1. Make a folder for the mod tools, e.g. `C:\DeadMenRising` (NOT inside the Dog Days folder), and put **`KL Dead Men Rising Setup.bat`** in it.
+2. Double-click `KL Dead Men Rising Setup.bat`. (Windows SmartScreen may show "Windows protected your PC": More info > Run anyway.)
    It downloads the package into `download\`, unpacks it into `package\`, finds or fetches Python, and opens the launcher.
+   From then on start the launcher with **`KL Dead Men Rising.exe`** in the same folder (no console window).
    Run the same file again any time to **update** (it only downloads when the server copy is newer).
 3. In the launcher check the STATUS panel: DOG DAYS and DEAD MEN must show a folder (use the `...` buttons if not;
    Steam libraries on other drives are found automatically).
 4. Click **INSTALL / UPDATE**. Watch the LOG pane. It ends with `finished, exit code 0 (OK)`.
    Exit code 2 means it refused BEFORE writing anything; the lines above say why (a source file missing or not stock).
-5. Click **PLAY KL MERGE**. The game starts through Steam as usual (overlay and online work).
+5. Click **PLAY DEAD MEN RISING**. The game starts through Steam as usual (overlay and online work).
+   The launcher hides itself once the game window is up, and comes back when the game closes or crashes
+   (a crash is noted in its LOG pane: send the files listed under "When it crashes").
    In the game: Arcade Mode / Fragile Alliance - the Dead Men maps are on their own pages below the stock map button.
 
 The launcher remembers your folders in `KLMergeLauncher.settings.json` beside it, and everything it prints in `KLMergeLauncher.log`.
@@ -38,16 +41,18 @@ The launcher remembers your folders in `KLMergeLauncher.settings.json` beside it
 ## If Windows Defender / SmartScreen complains
 
 - **SmartScreen** ("Windows protected your PC") shows for any downloaded .bat or unsigned .exe: More info > Run anyway.
-- **Windows Defender** may flag `KLMerge Setup.bat` or `KLMerge.bat` with a heuristic name such as
+  `KL Dead Men Rising.exe` is not code-signed yet, so expect this once per download.
+- **Windows Defender** may flag `KL Dead Men Rising Setup.bat` with a heuristic name such as
   `Trojan:Win32/Ceprolad.A`. That heuristic fires on the *shape* of the script (a batch file that starts PowerShell with
-  a lowered execution policy and downloads a file), not on anything it found inside. Both .bat files and
+  a lowered execution policy and downloads a file), not on anything it found inside. The .bat file and
   `KLMergeLauncher.ps1` are **plain text**: open them in Notepad and read what they do. They download the package from
   the one URL at the top of the Setup file, unpack it, start the launcher, and never delete anything (the only move is
   the unpacked package into `package\`).
 - If Defender quarantined a file: Windows Security > Virus & threat protection > Protection history > the entry >
   Actions > Restore (or Allow). Then right-click the file > Properties > tick **Unblock** > OK, so the "downloaded from
   the internet" mark is gone, and run it again.
-- A signed `KLMergeSetup.exe` that replaces the batch files is planned; until then the scripts stay readable on purpose.
+- The exe is a small starter (its source is `exe\DeadMenRising.cs` in the mod's repo): it only runs `KLMergeLauncher.ps1`.
+  A code-signed build is planned; until then the scripts stay readable on purpose.
 
 ## Music and the background
 
@@ -73,7 +78,7 @@ beside `kl2.exe`; without it the game is stock. The hook has no on/off switch in
 
 - **PLAY DOG DAYS** renames `dinput8.dll` to `dinput8.dll.klmerge-off`, then starts the game: stock game, stock menus.
   The mod's map folders stay on disk but nothing loads them.
-- **PLAY KL MERGE** renames it back and starts the game.
+- **PLAY DEAD MEN RISING** renames it back and starts the game.
 - **HOOK ON / OFF** does the rename without starting anything.
 
 Both refuse while `kl2.exe` is running - close the game first. One honesty note: the package may also replace a few
@@ -90,7 +95,7 @@ VERIFY until it reports 0 problems.
 - **VERIFY** checks every installed file against the package (size + sha1) and prints `verify: N files checked, 0 problems`.
   `edited KLHook.ini (yours)` is fine: your own `KLHook.ini` / `KLShopPage.ini` are never overwritten by an update; the
   new defaults land beside them as `KLHook.ini.new-<version>`.
-- **Update**: run `KLMerge Setup.bat` again (new package), then INSTALL / UPDATE. Only changed files are rebuilt.
+- **Update**: run `KL Dead Men Rising Setup.bat` again (new package), then INSTALL / UPDATE. Only changed files are rebuilt.
   **Everybody in an online session must be on the same package version** - the game's own version check does not know
   about the mod's files, and a map built from another version desyncs or crashes the others.
 - **UNINSTALL (RESTORE STOCK)** removes the mod's files and moves the stock files back from `KL_PortBackup` (journal
@@ -122,7 +127,7 @@ Files to send (all in the Dog Days folder):
 - `kl2_490_crash_*.mdmp` - the game's own crash dumps
 - `KLMergeInstall.json` - what is installed (useful when the install itself misbehaves)
 
-The launcher's **COLLECT LOGS** button zips all of them (plus `KLMergeLauncher.log`) into `KLMerge_logs_<date>.zip`
+The launcher's **COLLECT LOGS** button zips all of them (plus `KLMergeLauncher.log`) into `DeadMenRising_logs_<date>.zip`
 beside the launcher and opens the folder: send that file, with one line on what you were doing (map, mode, how many
 players, what you pressed). If the game hangs instead of crashing, note the time and send the same files.
 

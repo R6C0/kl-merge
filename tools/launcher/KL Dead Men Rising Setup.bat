@@ -1,17 +1,18 @@
 @echo off
 setlocal EnableExtensions
 rem ===========================================================================================
-rem  KLMerge Setup.bat - the one file a tester double-clicks.
+rem  KL Dead Men Rising Setup.bat - the one file a tester double-clicks (was "KLMerge Setup.bat"; inside, the
+rem  project's files keep their KLMerge* names).
 rem
 rem  What it does, every time it runs (re-running = updating; nothing here needs admin rights):
-rem    1. downloads the KL Merge release package (a zip) from RELEASE_URL into .\download\
+rem    1. downloads the KL: Dead Men Rising release package (a zip) from RELEASE_URL into .\download\
 rem       (only when the server copy is newer than what is already here),
 rem    2. unpacks it into .\package\  (manifest.json, patches\*.klp, kl_release.py, optionally
 rem       KLMergeSetup.exe, and launcher\ with the launcher files, which are copied up beside this .bat),
 rem    3. makes sure a Python 3 with the 'zstandard' module is available when the package has no
 rem       KLMergeSetup.exe: your own 'py' / 'python' if you have one, else the official embeddable
 rem       Python from python.org is downloaded into .\python\ (nothing is installed system-wide),
-rem    4. starts the launcher (KLMergeLauncher.ps1: PLAY DOG DAYS / PLAY KL MERGE / INSTALL / VERIFY / UNINSTALL).
+rem    4. starts the launcher (KLMergeLauncher.ps1: PLAY DOG DAYS / PLAY DEAD MEN RISING / INSTALL / VERIFY / UNINSTALL).
 rem
 rem  The package holds ONLY the mod's own code and config plus binary patches; the game files are
 rem  rebuilt on your PC from YOUR OWN Dog Days / Dead Men / Payday 2 installs (see README_TESTERS.md).
@@ -41,7 +42,7 @@ set "PYEXE="
 set "PYARG="
 
 echo.
-echo  ===== KL MERGE SETUP =====
+echo  ===== KL: DEAD MEN RISING - SETUP =====
 echo  folder: "%HERE%"
 echo  log:    "%LOG%"
 echo.
@@ -160,7 +161,7 @@ if not exist "%PKG%\manifest.json" (
     )
 )
 if not exist "%PKG%\manifest.json" (
-    echo  ERROR: the package has no manifest.json ^(not a KL Merge release package^).
+    echo  ERROR: the package has no manifest.json ^(not a Dead Men Rising release package^).
     echo [%date% %time%] no manifest.json after unpack >> "%LOG%"
     move /y "%ZIP%" "%ZIP%.bad" >nul 2>nul
     goto :fail
@@ -172,7 +173,8 @@ echo [%date% %time%] unpacked >> "%LOG%"
 rem ---- 2b. the launcher files travel inside the package (launcher\) so that re-running updates them too
 if exist "%PKG%\launcher\KLMergeLauncher.ps1" (
     copy /Y "%PKG%\launcher\KLMergeLauncher.ps1" "%HERE%" >nul
-    if exist "%PKG%\launcher\KLMerge.bat" copy /Y "%PKG%\launcher\KLMerge.bat" "%HERE%" >nul
+    rem the launcher start: a small exe (no console window; built from tools\launcher\exe\DeadMenRising.cs)
+    if exist "%PKG%\launcher\KL Dead Men Rising.exe" copy /Y "%PKG%\launcher\KL Dead Men Rising.exe" "%HERE%" >nul
     if exist "%PKG%\launcher\README_TESTERS.md" copy /Y "%PKG%\launcher\README_TESTERS.md" "%HERE%" >nul
     rem the launcher's music tool (makes music\deadmen_riff.wav from YOUR Dead Men files; no audio is downloaded)
     if exist "%PKG%\launcher\kl_launcher_music.py" copy /Y "%PKG%\launcher\kl_launcher_music.py" "%HERE%" >nul
@@ -276,8 +278,15 @@ rem ---- 4. launcher -----------------------------------------------------------
 echo.
 echo  Starting the launcher ...
 echo [%date% %time%] launcher started >> "%LOG%"
-rem minimized, not -WindowStyle Hidden: the hidden form trips Defender's heuristic (see KLMerge.bat)
-start "KL Merge" /min powershell -NoProfile -ExecutionPolicy Bypass -STA -File "%HERE%KLMergeLauncher.ps1"
+rem the exe runs KLMergeLauncher.ps1 in its own process: no console window stays behind
+if exist "%HERE%KL Dead Men Rising.exe" (
+    start "" "%HERE%KL Dead Men Rising.exe"
+    endlocal
+    exit /b 0
+)
+rem no exe (an old package): minimized, not -WindowStyle Hidden: the hidden form trips Defender's heuristic
+rem (Trojan:Win32/Ceprolad.A fired on a .bat with that line + Bypass)
+start "KL Dead Men Rising" /min powershell -NoProfile -ExecutionPolicy Bypass -STA -File "%HERE%KLMergeLauncher.ps1"
 endlocal
 exit /b 0
 
