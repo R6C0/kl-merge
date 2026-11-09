@@ -41,9 +41,10 @@ static int kvs_wait_shield(int on, int veh, int aboard, int round_over, unsigned
 /* ShieldDriveIn (2026-11-08): shield the vehicle while it drives in? vanwait09_1108 (DM09, nobody boards): called at 05:02:19 (state 2),
    waiting at 05:02:26 (state 4) with 1245 of 3000 already gone, so ShieldWhileWaiting froze a burning van. on = key; veh = rules state
    byte; 2 = driving in (seen in that log: 'state now 2' at the call, 4 seven seconds later; GUESS that 1 is never a moving vehicle, so 1
-   is left out). */
-static int kvs_drivein_shield(int on, int veh)
+   is left out). ShieldCalled (2026-11-09, dd10side1109): DISPROVEN for DD10's heister call: the state went 0 -> 1 (timer 11 s) -> 3 with
+   no 2, and the van reached the wait at 3600 of 9600, so the drive-in ran in state 1 there. called = that key: state 1 is shielded too. */
+static int kvs_drivein_shield(int on, int called, int veh)
 {
-    return on && veh == 2;
+    return (on && veh == 2) || (called && veh == 1);
 }
 #endif

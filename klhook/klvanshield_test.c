@@ -32,12 +32,19 @@ int main(void)
     CHECK(kvs_wait_shield(0, 3, 0, 0, 0, 0) == 0, "toggle off: no change");
     CHECK(kvs_wait_shield(1, 3, 0, 1, 0, 0) == 0, "round over");
     CHECK(kvs_wait_shield(1, 6, 0, 1, 0, 0) == 0, "destroyed");
-    CHECK(kvs_drivein_shield(1, 2) == 1, "driving in: shielded");
-    CHECK(kvs_drivein_shield(0, 2) == 0, "drive-in key off");
-    CHECK(kvs_drivein_shield(1, 0) == 0, "no vehicle called");
-    CHECK(kvs_drivein_shield(1, 1) == 0, "state 1 left out (GUESS)");
-    CHECK(kvs_drivein_shield(1, 3) == 0, "waiting: the wait keys' business");
-    CHECK(kvs_drivein_shield(1, 6) == 0, "destroyed");
+    CHECK(kvs_drivein_shield(1, 0, 2) == 1, "driving in: shielded");
+    CHECK(kvs_drivein_shield(0, 0, 2) == 0, "drive-in key off");
+    CHECK(kvs_drivein_shield(1, 0, 0) == 0, "no vehicle called");
+    CHECK(kvs_drivein_shield(1, 0, 1) == 0, "state 1 left out without ShieldCalled");
+    CHECK(kvs_drivein_shield(1, 0, 3) == 0, "waiting: the wait keys' business");
+    CHECK(kvs_drivein_shield(1, 0, 6) == 0, "destroyed");
+    CHECK(kvs_drivein_shield(0, 1, 1) == 1, "ShieldCalled: state 1 (DD10 drive-in) shielded");
+    CHECK(kvs_drivein_shield(1, 1, 1) == 1, "both keys: state 1 shielded");
+    CHECK(kvs_drivein_shield(1, 1, 2) == 1, "both keys: state 2 shielded");
+    CHECK(kvs_drivein_shield(0, 1, 2) == 0, "ShieldCalled alone: state 2 is ShieldDriveIn's");
+    CHECK(kvs_drivein_shield(0, 1, 0) == 0, "ShieldCalled: not called");
+    CHECK(kvs_drivein_shield(0, 1, 3) == 0, "ShieldCalled: waiting is the wait keys'");
+    CHECK(kvs_drivein_shield(0, 1, 6) == 0, "ShieldCalled: destroyed");
     printf("%s: %d checks, %d failed\n", fails ? "FAIL" : "PASS", checks, fails);
     return fails != 0;
 }
