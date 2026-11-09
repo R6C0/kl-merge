@@ -34,7 +34,7 @@ on both games' files; this module re-implements the read so the shipped launcher
 
 WHAT IS PROVEN / GUESSED
   - PCM and the 2-layer PCM sets of the Retomoto music: PROVEN layout (re/retomoto_audio.md 4.1: TokyoAction1 =
-    TakyoAction_V3_44_Layer1_Loop + TakyoAction_Layer2_TAmbient_Loop, 2 x stereo 32 kHz, 211.2 s; the merged
+    TakyoAction_V3_44_Layer1_Loop + TakyoAction_Layer2_TAmbient_Loop, 2 x stereo 32 kHz, 105.6 s (index 'samples' / channels); the merged
     stream file carries those blocks and the game plays them).
   - IMA ADPCM: mono blocks decoded as kl_audio.ima_to_pcm does (the same tables); a STEREO ADPCM clip is refused
     (GUESS: its block layout was never looked at; no music clip is ADPCM in the notes).
@@ -65,13 +65,13 @@ CANDIDATES = (
     ('SFX/UserInterface/MenuLoop_01.wav',
      'Dead Men main menu loop, SFX/UserInterface, Vorbis; the index says 154 s but it decodes to 77.0 s (found by 06: codec 4, 32000 Hz stereo, a plain Ogg stream; the only long clip under SFX/UserInterface)'),
     ('Music/InHouse/FA_Slash/FA_SlashMixPrison.wav',
-     "Dead Men's own Fragile Alliance theme (251.6 s, settings field 150 of every FA level). GUESS: its codec is not in the notes; a Vorbis clip is skipped"),
+     "Dead Men's own Fragile Alliance theme (125.8 s, settings field 150 of every FA level). GUESS: its codec is not in the notes; a Vorbis clip is skipped"),
     ('Music/InHouse/Japan/M09_A/TakyoAction_Layer2_TAmbient_Loop.wav',
-     'Retomoto Tower tension bed: layer 2 of the PCM set TokyoAction1 (PROVEN 2 x stereo 32 kHz PCM, 211.2 s)'),
+     'Retomoto Tower tension bed: layer 2 of the PCM set TokyoAction1 (PROVEN 2 x stereo 32 kHz PCM, 105.6 s)'),
     ('Music/InHouse/M03A/BO_Sus_Layer1_Ambient_LOOP.wav',
-     'bank break-in suspense bed: layer 1 of the 4-layer PCM set BO_Sus_LOOP (interleaved PCM, 144 s)'),
+     'bank break-in suspense bed: layer 1 of the 4-layer PCM set BO_Sus_LOOP (interleaved PCM, 72 s)'),
     ('Music/InHouse/Japan/M09_A/Rooftop_Layer2_TAmbient_Loop.wav',
-     'Retomoto roof bed: layer 2 of the PCM set M09A_Rooftop (PCM set, 220.7 s)'),
+     'Retomoto roof bed: layer 2 of the PCM set M09A_Rooftop (PCM set, 110.4 s)'),
 )
 
 u32 = lambda b, o: struct.unpack_from('<I', b, o)[0]
@@ -90,9 +90,11 @@ class Clip(object):
                                                                  self.seconds(), self.layer, self.offset, self.size, self.name)
 
     def seconds(self):
-        # GUESS (MEASURED on MenuLoop_01 only): for Vorbis the index 'samples' counts samples of ALL channels (4928626 for a
-        # clip that ffmpeg and kl_oggdec both decode to 2464313 frames = 77.0 s at 32 kHz stereo), so divide by channels.
-        n = float(self.samples) / (self.channels if self.codec == VORBIS and self.channels else 1)
+        # The index 'samples' counts samples of ALL channels: MEASURED on Vorbis MenuLoop_01 (4928626 for a clip that ffmpeg
+        # and kl_oggdec both decode to 2464313 frames = 77.0 s at 32 kHz stereo) and on stereo PCM (size = 2 * samples bytes
+        # on Kane_Family_Theme, FA_SlashMixPrison, M13B_Kane_Drive_Loop, TakyoAction_V3: 102.3 / 125.8 / 96.0 / 105.6 s,
+        # half the lengths re/ notes quoted before 11-09). So divide by channels for every codec.
+        n = float(self.samples) / (self.channels or 1)
         return n / self.rate if self.rate else 0.0
 
 
