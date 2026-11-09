@@ -195,7 +195,7 @@ def _intern(tokens, keys, table, order, rename=None):
     return out
 
 
-def join(base, picks, label='join', rename=None, take=None, skip=(), adopt=None):
+def join(base, picks, label='join', rename=None, take=None, skip=(), adopt=None, insert=None):
     """One Scene from `base`'s header, scene property block and ROOT node, and the top-level
     subtrees `picks` = [(scene, top-level node index), ...] in that order under it. Every key is
     re-interned into one table in order of first use (the order the games' own files have), the
@@ -207,6 +207,9 @@ def join(base, picks, label='join', rename=None, take=None, skip=(), adopt=None)
     `skip` = node indices of `base` (with their subtrees) left out of the copy (kl_interact_graft: a static door leaf that a kick door replaces).
     `adopt` = {top-level node index of `base`: [(scene, top-level node index), ..]}: subtrees of other scenes added as the LAST children of that
     picked top (kl_bots_kick_1025: a kick step under a squad top, which stays the same node so every reference to it keeps working).
+    `insert` = {base node index k: [(parent node index of base, scene, node index), ..]}: before base node k is copied (also when k is skipped), the single nodes
+    of other scenes (no children) are added as the LAST children so far of that parent; k = end[top] is taken after that top's last node (kl_dm01b_undoor_1109: a plain
+    door leaf back into its old room group, behind the sibling it followed).
     Returns the Scene; scene.origin[k] = (source scene, source node index) of node k - the order
     the joined .gms must list its entities in."""
     table, order = {}, []
@@ -231,17 +234,29 @@ def join(base, picks, label='join', rename=None, take=None, skip=(), adopt=None)
         return {'props': props, 'ctrls': ctrls, 'children': []}
 
     new.root = copy(base, 0)
+    ins = {k: list(v) for k, v in (insert or {}).items()}
+
+    def put(k, made):
+        for par, sc2, k2 in ins.pop(k, ()):
+            made[('ins', sc2.label, k2)] = c = copy(sc2, k2)
+            made[par]['children'].append(c)
+            names.append(sc2.names[k2]); tids.append(sc2.tids[k2]); origin.append((sc2, k2))
+
     for sc, t in picks:
         if sc.parent[t] != 0:
             raise ValueError('%s node %d (%s) is not a top-level subtree' % (sc.label, t, sc.names[t]))
         made, dead = {}, set()
         for k in range(t, sc.end[t]):                     # preorder: a parent comes before its children
+            if sc is base:
+                put(k, made)
             if sc is base and (k in skip or sc.parent[k] in dead):
                 dead.add(k)
                 continue
             made[k] = copy(sc, k)
             (new.root if k == t else made[sc.parent[k]])['children'].append(made[k])
             names.append(sc.names[k]); tids.append(sc.tids[k]); origin.append((sc, k))
+        if sc is base:
+            put(sc.end[t], made)
         for sc2, t2 in ((adopt or {}).get(t, ()) if sc is base else ()):
             if sc2.parent[t2] != 0:
                 raise ValueError('%s node %d (%s) is not a top-level subtree' % (sc2.label, t2, sc2.names[t2]))
