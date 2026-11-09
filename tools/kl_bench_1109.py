@@ -204,9 +204,11 @@ def dm07_control():
 
 
 def dm07_seg(who):
-    s = ['ents Chainlink_Fence 8', 'log BENCH1109 dm07 fence panels read']
-    s += vans_seg(who, 0, 'dm07')
+    # the two gate panels by name: DM07_1109 run 1 'ents Chainlink_Fence 8' listed 8 other fence pieces (EntranceSide_1m_*, Small_4m_1*) first
+    s = ['ents Chainlink_Fence_4m_01 4', 'ents Chainlink_Fence_4m_11 4', 'log BENCH1109 dm07 fence panels read']
+    # the walk BEFORE the van: run 1 walked after state 7 (round over, outro) and the player never moved (both gotos stuck at the tele point)
     if who == 'host':
+        s += ['waitstate 0x19 90000']
         # players cannot walk out through the gap: stand east of the fence (floor from the mesh + 150), walk west through z 10400 toward x -6000.
         # CONTROL: from the same start, the same length through open mesh must be reached, else a blocked goto proves nothing (kit file dm07.json).
         p = '%s/dm07.json' % kd('DM07_1109')
@@ -214,6 +216,7 @@ def dm07_seg(who):
         s += ['tele %d %d %d' % tuple(c['start']), 'wait 2500', 'pos dm07-east-of-fence', 'goto -6000 10400 200 15000', 'pos dm07-after-walk', 'log BENCH1109 dm07 walk west done']
         if c.get('control'):
             s += ['tele %d %d %d' % tuple(c['start']), 'wait 2500', 'goto %d %d 200 15000' % tuple(c['control']), 'pos dm07-after-control', 'log BENCH1109 dm07 control walk done']
+    s += vans_seg(who, 0, 'dm07')
     return s
 
 
@@ -469,7 +472,9 @@ STOP_DM01B = (4454, 31907)
 # x, z of each staged route's unseen START / END pocket (re/vehicle_routes_1108.md: DM01B waits (-8000, 30500), ends (17400, 30400), seen by 0
 # viewers at both; DM07 waits and ends in the floorless mud pocket (-9300, 10400)). A jump from the END pocket to the START pocket is the
 # vehicle's reset at the drive-out end (DM01B_1109 run 2: 17365, 31663 -> -8000, 30500 a second before state 7), not a pop on screen.
-POCKETS = {'DM01B_1109': ((-8000, 30500), (17400, 30400)), 'DM07_1109': ((-9300, 10400), (-9300, 10400))}
+# DM07: the reset goes to the van NODE's own place (-6000, 397, 10400; hidden there at load), not to the staged key-0 pocket -9300
+# (DM07_1109 run 1: reversed 700 -> -5384 in 8 s, then sat at -6000 from 1 s later to the end). GUESS: DM01B's node sits in its start pocket.
+POCKETS = {'DM01B_1109': ((-8000, 30500), (17400, 30400)), 'DM07_1109': ((-6000, 10400), (-9300, 10400))}
 
 
 def item_checks(k, a, dd=(), ctrl=None):
