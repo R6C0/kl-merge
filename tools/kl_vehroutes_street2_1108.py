@@ -1,4 +1,5 @@
-r"""kl_vehroutes_street2_1108.py - DM01B (Hot Coffee II, slot F03): the escape van on the MAIN STREET (kl_vehroutes_street_1108's drive) AND a way there on foot and for bots.
+r"""SUPERSEDED IN PART (2026-11-09): this stage is INSTALLED (live 778b075c); its van TURNS (radius 407 / 400) were too tight and are replaced by tools/kl_vehroutes_street3_1108.py (follow-up on the live files). stage() here refuses now (the live files are no longer the pre-install pins).
+kl_vehroutes_street2_1108.py - DM01B (Hot Coffee II, slot F03): the escape van on the MAIN STREET (kl_vehroutes_street_1108's drive) AND a way there on foot and for bots.
 Written 2026-11-08, OFFLINE: reads the live DM01B zip, writes NEW files (never the live ones). Replaces the stage DM01B_street (same live pins) and the reverse-out stage
 (kl_vehroutes_1108): install ONE.
 

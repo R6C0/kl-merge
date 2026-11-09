@@ -13,12 +13,12 @@ import hashlib, os, shutil, subprocess, sys
 GAME = r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days'
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAP, TAG = 'DM01B', '.before-vehroutes1108street2'
-LIVE_ZIP_MD5 = '74d3723323dc1aa03d3166b522ae5448'
 FILES = [   # name, live md5 before, staged md5 after
     ('F03_Main.zip', '74d3723323dc1aa03d3166b522ae5448', '1d68eadef23caf9fecbbfeadab68c7f3'),
     ('F03_Main.bots.zip', '73583df1aa6b251d3c4aca7d86cebaa6', 'd84ed4104336f8e587cc9ada2b3f2087'),
     ('F03_Main.bots.base.md5', 'c3535e34052721460900c50dae9e0811', 'fcac2fd26f699838929441ade96c4219'),
 ]
+LIVE_ZIP_MD5 = FILES[0][1]      # derived from FILES (stage fills FILES; a hard-coded copy went stale once)
 
 
 def md5(p):
