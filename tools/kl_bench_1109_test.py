@@ -113,6 +113,13 @@ def gate(mut=None):
         g.ent(n, (-4580, 470, 10000), hidden=(n[-2:] != '02' and mut != 'fence'))
     for lbl, st in M.GATE_WALKS:
         xs = [st[0]] + [max(x, -4560) if lbl != 'gateH' else x for x in M.GATE_XS]
+        if mut == 'frozen' and lbl == 'gateB':
+            xs = [st[0]] * len(xs)
+        if mut in ('deadbefore', 'respawn') and lbl == 'gateA':
+            # run 2: died 2 s before gateA-0, A and B then ran on the corpse
+            g.raw("hud: ONLINE skulls state: row 0 'R5 J.C.' kind 3 deaths 1 -> lives 2 (drawn)")
+            if mut == 'respawn':
+                g.raw("hud: ONLINE skulls state: row 0 'R5 J.C.' kind 1 deaths 1 -> lives 2 (drawn)")
         for i, x in enumerate(xs):
             if mut == 'nopos' and lbl == 'gateB' and i == 3:
                 continue
@@ -203,7 +210,15 @@ def main():
     ok(any('A (visible 4m_02) BLOCKED, B (visible 4m_03) BLOCKED, H (hidden 4m_01) THROUGH' in x for x in inf), 'DM07GATE: verdict line reads the crossings %s' % [x for x in inf if 'verdict' in x])
     # a host death inside a crossing voids its BLOCKED (WARN, verdict DEAD)
     r, inf = M.item_checks('DM07GATE_1109', gate('dead'), [], None)
-    ok(any('A (visible 4m_02) DEAD' in x for x in inf) and any(x[0] == 'WARN' and 'death' in x[1] for x in r), 'DM07GATE: a death in crossing A reads DEAD + WARN')
+    ok(any('A (visible 4m_02) DEAD, B (visible 4m_03) DEAD' in x for x in inf) and any(x[0] == 'WARN' and 'death' in x[1] for x in r), 'DM07GATE: a death in crossing A reads DEAD + WARN')
+    # run 2: a death BEFORE crossing A (no respawn) voids A and B; a kind-1 row in between keeps them
+    inf = M.item_checks('DM07GATE_1109', gate('deadbefore'), [], None)[1]
+    ok(any('A (visible 4m_02) DEAD, B (visible 4m_03) DEAD, H (hidden 4m_01) THROUGH' in x for x in inf), 'DM07GATE: a death before A voids A and B')
+    inf = M.item_checks('DM07GATE_1109', gate('respawn'), [], None)[1]
+    ok(any('A (visible 4m_02) BLOCKED, B (visible 4m_03) BLOCKED' in x for x in inf), 'DM07GATE: a respawn before A keeps the verdicts')
+    # never leaving the tele point is FROZEN, not BLOCKED
+    r, inf = M.item_checks('DM07GATE_1109', gate('frozen'), [], None)
+    ok(any('B (visible 4m_03) FROZEN' in x for x in inf) and any(x[0] == 'WARN' and 'freeze' in x[1] for x in r), 'DM07GATE: a frozen B reads FROZEN + WARN')
     # pos parsed by name: the label decides, not the position in the line
     ok(M.pos_of(['01:00:00.000 script 3: pos x-label: me #0 (-4300, 550, 10400) heading 12'], 'x-label') == (-4300, 550, 10400), 'pos_of parses the named x')
     ok(M.pos_of(['01:00:00.000 script 3: pos other: me #0 (1, 2, 3) heading 12'], 'x-label') is None, 'pos_of: other label is None')

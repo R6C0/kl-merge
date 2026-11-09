@@ -248,7 +248,8 @@ def dm07_seg(who):
 # fence bottom y 471.5 over floor 393..413. A = 4m_02 (visible, 29 cm gap), B = 4m_03 (visible), H = 4m_01 (hidden, 58..79 cm gap; DM07_1109 run 2
 # walked through here). 4m_09 / 4m_10 skipped (Pillar_F_07, ConcetePipe_19 nearby). Floors are GUESSes from the static read (tele snaps to ground).
 # Order H first: DM07GATE_1109 run 1 (A, B, H) lost B and H to a police kill 18 s into the round (06:03:06, A stopped at x -4549 alive just before);
-# DM07_1109 run 2 walked H first at round start and lived. The south walk follows H so it starts from the pocket when H gets through.
+# DM07_1109 run 2 walked H first at round start and lived. The south walk goes LAST: in run 2 it ended at y 2 (-6897, 6593), the player died 4 s later
+# (06:13:10) and A and B ran on the corpse.
 GATE_WALKS = (('gateH', (-4000, 550, 10334)), ('gateA', (-4000, 562, 9793)), ('gateB', (-4000, 560, 9393)))
 GATE_XS = (-4400, -4520, -4620, -4750, -5000)   # goto steps: one pos per step, so the crossing is read without a mid-goto sample
 
@@ -265,9 +266,8 @@ def gate_seg(who):
         for i, x in enumerate(GATE_XS):
             s += ['goto %d %d 60 %d' % (x, st[2], 3000 if i < len(GATE_XS) - 1 else 5000), 'pos %s-%d' % (lbl, i + 1)]
         s += ['log BENCH1109 gate %s done' % lbl]
-        if lbl == 'gateH':
-            # in the pocket (if H got through): does its south slope lead off the map? (static read: mud floor x -11000..-4600, outside every LevelBound)
-            s += ['goto -6900 8100 100 9000', 'pos gateS-1', 'goto -6900 6500 100 9000', 'pos gateS-2', 'log BENCH1109 gate south done']
+    # from the pocket (H gets through): does its south slope lead off the map? (static read: mud floor x -11000..-4600, outside every LevelBound)
+    s += ['tele -4944 450 10333', 'wait 2000', 'goto -6900 8100 100 9000', 'pos gateS-1', 'goto -6900 6500 100 9000', 'pos gateS-2', 'log BENCH1109 gate south done']
     return s
 
 
@@ -624,6 +624,8 @@ def item_checks(k, a, dd=(), ctrl=None):
         verdict = {}
         # the host's own seat: 'hud: ONLINE skulls state: row 0 ... kind 3 deaths N' (kind 3 = just died, run 1 at 06:03:06 with FA_DieFromPolice)
         deaths = [l for l in a if 'skulls state: row 0' in l and 'kind 3' in l]
+        # kind 1 on row 0 = alive again (run 2: died 06:13:10, back at 06:16:41 = next round)
+        lives = [l for l in a if 'skulls state: row 0' in l and 'kind 1' in l]
         for lbl, st in GATE_WALKS:
             ps = [pos_of(a, '%s-%d' % (lbl, i)) for i in range(len(GATE_XS) + 1)]
             got = [p for p in ps if p]
@@ -635,16 +637,22 @@ def item_checks(k, a, dd=(), ctrl=None):
                 # a host death inside the crossing voids a BLOCKED (DM07GATE_1109 run 1: police kill at 06:03:06, then B and H never left the tele point)
                 t0 = next((secs_of(l) for l in a if 'pos %s-0:' % lbl in l), None)
                 t1 = next((secs_of(l) for l in a if 'pos %s-%d:' % (lbl, len(GATE_XS)) in l), None)
-                dead = [l[:12] for l in deaths if t0 is not None and t1 is not None and t0 - 1 <= secs_of(l) <= t1]
+                # dead at the crossing = a death before its end with no kind-1 row in between (run 2: the death 2 s before gateA-0 was missed by a t0-1 window)
+                dead = [l[:12] for l in deaths if t0 is not None and t1 is not None and secs_of(l) <= t1
+                        and not any(secs_of(l) < secs_of(v) <= t0 for v in lives)]
                 if dead and verdict[lbl] != 'THROUGH':
                     verdict[lbl] = 'DEAD'
-                    info.append('%s: the host died at %s inside the crossing: no verdict' % (lbl, dead[0]))
+                    info.append('%s: the host died at %s, before or inside the crossing: no verdict' % (lbl, dead[-1]))
+                elif verdict[lbl] == 'BLOCKED' and max(abs(p[0] - got[0][0]) for p in got) < 30:
+                    # a real block walks up to the panel (run 1: A to x -4549); never leaving the tele point = frozen, not the fence
+                    verdict[lbl] = 'FROZEN'
+                    info.append('%s: never left x %d: frozen, not blocked' % (lbl, got[0][0]))
                 low = min((p[1] for p in got if -4700 < p[0] < -4450), default=None)
                 info.append('%s: %s, end x %d (z %d), lowest y near the fence line %s' % (lbl, verdict[lbl], end[0], end[2], low))
         info.append('gate verdict: A (visible 4m_02) %s, B (visible 4m_03) %s, H (hidden 4m_01) %s. A/B BLOCKED + H THROUGH = the hidden panels pass players '
                     '(un-hide fixes it, or the gap); all THROUGH = the fence never blocks players (filter or gap): re-route the van or add a blocker'
                     % (verdict.get('gateA', '?'), verdict.get('gateB', '?'), verdict.get('gateH', '?')))
-        chk('no crossing voided by a host death', not [v for v in verdict.values() if v == 'DEAD'], ', '.join('%s %s' % kv for kv in sorted(verdict.items())), warn=True)
+        chk('no crossing voided by a host death or a freeze', not [v for v in verdict.values() if v in ('DEAD', 'FROZEN')], ', '.join('%s %s' % kv for kv in sorted(verdict.items())), warn=True)
         for n in ('gateS-1', 'gateS-2'):
             p = pos_of(a, n)
             info.append('%s (pocket south slope): %s' % (n, p and tuple(round(c) for c in p)))
