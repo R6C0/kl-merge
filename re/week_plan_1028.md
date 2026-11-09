@@ -49,6 +49,10 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
     (b) if it is not in PC_Def.str, look in Dead Men's gamemenu.zip / front-end scene banks (.SND/.WHD/.WAV, kl_snd.bank) and extend kl_launcher_music.py to read a
     bank-streamed or in-bank clip (keep the synthetic test green); (c) `extract --clip <name> --out C:\kl_build_1024\launcher_1109\music\deadmen_launcher.wav`, listen,
     then make it CANDIDATES[0] in tools/kl_launcher_music.py and note the name here. Until then the launcher's `MusicClip` setting in KLMergeLauncher.settings.json picks it.
+  - 11-09 18:40 cloud: OWNER on the launcher music: MenuLoop_01 is "the main menu" but he wants THE KANE & LYNCH MAIN THEME (YouTube "Kane & Lynch theme EXTENDED",
+    Jesper Kyd's title theme: the one over the title / campaign intro / credits), not the menu loop. LOCAL SESSION: `kl_launcher_music.py list --dm "<DM>"` for names
+    with Theme / Title / Main / Credits / Intro / Outro / KL_ (SFX/UserInterface and Music/ both); if it is only inside a Bink movie (Movies\*.bik intro) say so and
+    we decide (a .bik audio track would need a decoder). Make the found clip CANDIDATES[0], keep MenuLoop_01 as [1]; extract, listen, note the name here.
   Owner: pick the public release host (a private repo's release assets need a token) and set RELEASE_URL in "KLMerge Setup.bat"; tell testers Dead Men must be installed.
 
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")

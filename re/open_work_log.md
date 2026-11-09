@@ -1,3 +1,4 @@
+2026-11-09 ~18:40 - OWNER (live): launcher music = the Kane & Lynch MAIN THEME (YouTube kFHP2_jG1Us 'Kane & Lynch theme EXTENDED'), not MenuLoop_01. Local session: find the clip (list Theme/Title/Credits/Intro names; may be in a .bik), make it CANDIDATES[0]. Week plan T0.
 2026-11-09 ~18:30 - [d0, offline] DM09 COVER STAGE built, NOT installed: tools/kl_cover_dm09_1110.py (+_test 24/0), stage C:\kl_build_1024\dm09cover_1110: +11 boxes (KL_CoverStreet!: 8 wall tiles, 2 static wreck copies
 on V_JPN_Civilian_B2_A_Group_00#08; 1 unreachable prop box pruned by a floornav re-check). Pins live afee8967/90e9046d/bdd4dc08 -> zip 3a981a70, bots 2ede91ed, base 0126d412; undo rehearsed byte-exact, 2-lens review.
 Finding: KL_CoverMore! already gave all 68 street vehicles static (explosion-proof) cover copies; only these 2 were missing. GUESS: the blast leaves static copies alone, NoCoverBox edge test. Needs a bench.
