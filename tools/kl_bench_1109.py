@@ -27,7 +27,14 @@ import kl_bench_1106 as B
 KIT = 'C:/kl_build_1024/bench_1109'
 DD = B.DD
 MAPS = DD + '/KLExpansion/Maps'
-HOOK = ('C:/kl_build_1024/merged_1108c/dll_test/dinput8.dll', '09a02a2cbcbeebb3eb3f01310c8b0cf8')   # TEST twin 09a02a2c of the live SHIP 246c643d
+# live = f0's merged_1108f: SHIP 729f7512 (built from e206e0aa), its TEST twin (build_auto.bat, klauto) 40d00164, live KLHook.ini f7f11dcc.
+# The live dinput8.dll can be a peer's TEST dll swapped in by a bench, so the kit takes the twin from the merged kit folder, never from the live file.
+MERGED = 'C:/kl_build_1024/merged_1108f'
+SHIP_MD5 = '729f7512f92ed2892d64330b3a2ff734'
+TEST_MD5 = '40d00164001576eea78bf8e5e9720e51'
+INI_MD5 = 'f7f11dccac532b7ffcb283526eb3ca73'
+HOOK = (MERGED + '/dll_test/dinput8.dll', TEST_MD5)
+INI_KEYS = (('ShopPage', 'TidyPage2'), ('Hire', 'TidyPage'))      # fc's keys merged_1108f writes (=1)
 BS = chr(92)
 
 # kit -> map, slot, live pins (md5 prefixes of the files the bench must find), shot windows (seconds since the launch, 'a-b:step', comma list)
@@ -121,7 +128,7 @@ def door_seg(d, lbl):
 def hasta_seg(who):
     s = ['wait 6000']
     for i in range(14):
-        s += ['ents BarricadeB_ 8', 'ents OYCHECK 8', 'ents Roadblock_01 4', 'log BENCH1109 hasta sample %d' % i, 'wait 9000']
+        s += ['ents BarricadeB_ 8', 'ents OYCHECK 8', 'ents Roadblock_01 4', 'ents Broken01 4', 'log BENCH1109 hasta sample %d' % i, 'wait 9000']
     s += ['pos hasta-end']
     return s
 
@@ -139,12 +146,46 @@ def vans_seg(who, lead, lbl):
     return s
 
 
+def dm07_control():
+    """Control for the walk-out test, from the live DM07 walk mesh (read-only): the same tele start (-3900, 10400; floor from the mesh, GUESS 402 when
+    the mesh has nothing there) and a goto of the SAME length (2100) through open mesh, every 60 units of the line on the mesh, away from the -x gap.
+    -> dict(start=[x, y, z], blocked=[-6000, 10400], control=[x, z], length) or None."""
+    import kl_fa_bots as F
+    nav = F.Nav(F.Built('%s/DM07/F06_Main.zip' % MAPS).scene.nav)
+    sx, sz, L = -3900.0, 10400.0, 2100.0
+    a = nav.at(sx, 402.0, sz, dy=300.0)
+    if a is None:
+        return None
+    y0 = a[1]
+    best = None
+    for deg in range(0, 360, 15):
+        dx, dz = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+        if dx < -0.2:                                    # not toward the gap / the blocked line
+            continue
+        ok, y = True, y0
+        for i in range(1, int(L // 60) + 1):
+            h = nav.at(sx + dx * 60 * i, y, sz + dz * 60 * i, dy=60.0)
+            if h is None or nav.clearance(sx + dx * 60 * i, h[1], sz + dz * 60 * i, 60.0) < 25.0:
+                ok = False; break
+            y = h[1]
+        if ok:
+            best = (deg, round(sx + dx * L), round(sz + dz * L)); break
+    if best is None:
+        return None
+    return dict(start=[round(sx), round(y0 + 150), round(sz)], blocked=[-6000, 10400], control=[best[1], best[2]], length=L, deg=best[0])
+
+
 def dm07_seg(who):
     s = ['ents Chainlink_Fence 8', 'log BENCH1109 dm07 fence panels read']
     s += vans_seg(who, 0, 'dm07')
     if who == 'host':
-        # players cannot walk out through the gap: stand east of the fence (x -3900, floor y GUESS 402 + 150), walk west through z 10400 toward x -6000
-        s += ['tele -3900 552 10400', 'wait 2500', 'pos dm07-east-of-fence', 'goto -6000 10400 200 15000', 'pos dm07-after-walk', 'log BENCH1109 dm07 walk west done']
+        # players cannot walk out through the gap: stand east of the fence (floor from the mesh + 150), walk west through z 10400 toward x -6000.
+        # CONTROL: from the same start, the same length through open mesh must be reached, else a blocked goto proves nothing (kit file dm07.json).
+        p = '%s/dm07.json' % kd('DM07_1109')
+        c = json.load(open(p)) if os.path.isfile(p) else dict(start=[-3900, 552, 10400], control=None)
+        s += ['tele %d %d %d' % tuple(c['start']), 'wait 2500', 'pos dm07-east-of-fence', 'goto -6000 10400 200 15000', 'pos dm07-after-walk', 'log BENCH1109 dm07 walk west done']
+        if c.get('control'):
+            s += ['tele %d %d %d' % tuple(c['start']), 'wait 2500', 'goto %d %d 200 15000' % tuple(c['control']), 'pos dm07-after-control', 'log BENCH1109 dm07 control walk done']
     return s
 
 
@@ -212,12 +253,52 @@ def pair(k, who):
     return '\n'.join(t) + '\n'
 
 
+def md5_of(b):
+    import hashlib
+    return hashlib.md5(b).hexdigest()
+
+
+def base_ini():
+    """-> (bytes, source). The live KLHook.ini when it is f0's merged_1108f one (f7f11dcc, read only); else (a bench is running and has swapped its own ini in)
+    the ini merged_1108f's install.py would write: its .before-merged1108f backup + the two Tidy keys, accepted only when that md5 is f7f11dcc."""
+    live = open('%s/KLHook.ini' % DD, 'rb').read()
+    if md5_of(live) == INI_MD5:
+        return live, 'live KLHook.ini'
+    import importlib.util
+    sp = importlib.util.spec_from_file_location('merged1108f_install', MERGED + '/install.py')
+    m = importlib.util.module_from_spec(sp)
+    sp.loader.exec_module(m)
+    bak = '%s/KLHook.ini.before-merged1108f' % DD
+    out = m.set_keys(open(bak, 'rb').read().decode('latin1'), m.KEYS).encode('latin1')
+    if md5_of(out) != INI_MD5:
+        raise SystemExit('gen: live KLHook.ini is %s (not %s) and %s + merged_1108f keys gives %s: no base ini, stop' % (md5_of(live)[:8], INI_MD5[:8], bak, md5_of(out)[:8]))
+    return out, 'merged_1108f install.py set_keys on KLHook.ini.before-merged1108f (live differed: %s)' % md5_of(live)[:8]
+
+
+def stamp(k):
+    """Pin the kit to merged_1108f: the TEST twin dll from its folder and the base ini; record both (and the SHIP they twin) in kit.json."""
+    import shutil
+    d = kd(k)
+    src = MERGED + '/dll_test/dinput8.dll'
+    if md5_of(open(src, 'rb').read()) != TEST_MD5:
+        raise SystemExit('gen: %s is not the TEST twin %s' % (src, TEST_MD5[:8]))
+    shutil.copy2(src, '%s/hook_test/dinput8.dll' % d)
+    ini, how = base_ini()
+    open('%s/KLHook_base.ini' % d, 'wb').write(ini)
+    B.write('%s/kit.json' % d, json.dumps(dict(ship=SHIP_MD5, test=TEST_MD5, ini=md5_of(ini), ini_source=how, merged=MERGED, built_from='e206e0aa'), indent=1))
+
+
 def gen(which='all'):
     for k in ORDER:
         if which not in ('all', k) and not (which == 'DOORS_1109' and k.startswith('DOORS_1109_')):
             continue
         B.gen(k)
+        stamp(k)
         d = kd(k)
+        if k == 'DM07_1109':
+            c = dm07_control()
+            B.write('%s/dm07.json' % d, json.dumps(c or dict(start=[-3900, 552, 10400], control=None), indent=1))
+            print('  DM07 walk control: %s' % (c or 'NONE FOUND (validate will FAIL)'))
         if 'doors' in K[k] or 'doors2' in K[k]:
             dd = door_data(k)
             B.write('%s/doors.json' % d, json.dumps(dd, indent=1))
@@ -254,6 +335,45 @@ def validate(which):
                 dd = json.load(open(dj)) if os.path.isfile(dj) else []
                 v.ok(bool(dd), 'doors.json: %d doors, stand points %s' % (len(dd), [bool(x['front'] or x['back']) for x in dd]))
                 v.ok(any('tele' in l for l in scr) and any(l.startswith('goto') for l in scr), 'host script teleports to the stand and walks to the leaf')
+        kj = '%s/kit.json' % d
+        rec = json.load(open(kj)) if os.path.isfile(kj) else {}
+        v.ok(bool(rec), 'kit.json (the SHIP / TEST twin / ini this kit was built against)')
+        dll = '%s/hook_test/dinput8.dll' % d
+        dm = md5_of(open(dll, 'rb').read()) if os.path.isfile(dll) else '-'
+        v.ok(rec.get('test') == TEST_MD5 and rec.get('ship') == SHIP_MD5 and dm == TEST_MD5,
+             'kit dll %s = recorded TEST twin %s of SHIP %s (module pins %s / %s)' % (dm[:8], str(rec.get('test'))[:8], str(rec.get('ship'))[:8], TEST_MD5[:8], SHIP_MD5[:8]))
+        pj = MERGED + '/pins.json'
+        pins = json.load(open(pj)) if os.path.isfile(pj) else {}
+        news = {x.get('new') for n_, x in pins.items() if n_.lower().endswith('dinput8.dll')}
+        v.ok(SHIP_MD5 in news, "merged_1108f's own pins.json installs SHIP %s (the SHIP this kit twins)" % SHIP_MD5[:8])
+        tw = MERGED + '/dll_test/dinput8.dll'
+        v.ok(os.path.isfile(tw) and md5_of(open(tw, 'rb').read()) == TEST_MD5, 'merged_1108f dll_test twin %s is still %s' % (md5_of(open(tw, 'rb').read())[:8] if os.path.isfile(tw) else '-', TEST_MD5[:8]))
+        ld = '%s/dinput8.dll' % DD
+        lm = md5_of(open(ld, 'rb').read()) if os.path.isfile(ld) else '-'
+        if lm in (SHIP_MD5, TEST_MD5):
+            v.ok(True, 'live dinput8.dll %s is merged_1108f (%s)' % (lm[:8], 'SHIP' if lm == SHIP_MD5 else "the TEST twin: a bench has swapped it in"))
+        else:
+            swapped = os.path.isfile(ld) and b"klauto's scripted keys" in open(ld, 'rb').read()
+            v.ok(False, 'live dinput8.dll %s is neither SHIP %s nor the twin %s: %s' % (lm[:8], SHIP_MD5[:8], TEST_MD5[:8],
+                 "it carries klauto (a peer's TEST dll swapped in by a bench): cannot say which SHIP is live, re-run validate when the game is free" if swapped else 'a newer SHIP is live, this kit is STALE: gen it again from that kit\'s TEST twin'),
+                 warn=swapped)
+        bi = '%s/KLHook_base.ini' % d
+        if os.path.isfile(bi):
+            raw = open(bi, 'rb').read()
+            v.ok(md5_of(raw) == INI_MD5 and rec.get('ini') == INI_MD5, 'base ini md5 %s = recorded %s = merged_1108f live ini %s (%s)' % (md5_of(raw)[:8], str(rec.get('ini'))[:8], INI_MD5[:8], rec.get('ini_source', '?')))
+            sec, got = None, set()
+            for l in raw.decode('latin1').splitlines():
+                m_ = re.match(r'\s*\[([^\]]+)\]', l)
+                if m_:
+                    sec = m_.group(1).lower()
+                elif sec and re.match(r'\s*(\w+)\s*=\s*1\b', l) and (sec, re.match(r'\s*(\w+)', l).group(1).lower()) in {(s_.lower(), k_.lower()) for s_, k_ in INI_KEYS}:
+                    got.add((sec, re.match(r'\s*(\w+)', l).group(1).lower()))
+            v.ok(len(got) == len(INI_KEYS), 'base ini carries fc TidyPage2=1 under [ShopPage] and TidyPage=1 under [Hire] (%d of %d)' % (len(got), len(INI_KEYS)))
+        if k == 'DM07_1109':
+            cj = '%s/dm07.json' % d
+            cc = json.load(open(cj)) if os.path.isfile(cj) else {}
+            v.ok(bool(cc.get('control')), 'dm07.json: walk control (same start, length %s) %s' % (cc.get('length', '?'), cc.get('control')))
+            v.ok(any('goto %d %d' % tuple(cc['control']) in l for l in (B.script_of('%s/online_host.ini' % d))) if cc.get('control') else False, 'host script runs the control goto')
         base = '%s/KLHook_base.ini' % d
         if os.path.isfile(base):
             txt = open(base, encoding='latin-1').read()
@@ -265,17 +385,28 @@ def validate(which):
 
 
 # ------------------------------------------------------------------ verify
-ENT = re.compile(r"ents #\d+ slot \d+ obj \w+ name '([^']*)' .*?\(flags ([0-9a-fA-F]+)\) pos [^(]*\((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\)")
+# slot, name, flags, position of one `ents` row (klauto.c: "script N: ents #i slot S obj O name 'NAME' class C ... (flags F) pos (x, y, z)")
+ENT = re.compile(r"ents #\d+ slot (\d+) obj \w+ name '([^']*)' .*?\(flags ([0-9a-fA-F]+)\) pos [^(]*\((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\)")
+# "pos <label>: me #N (x, y, z) heading H" (klauto.c kla_log_pos): the label and the coordinates by NAME
+POSL = re.compile(r"\bpos (\S+): me #\d+ \((-?\d+), (-?\d+), (-?\d+)\) heading")
 
 
 def ents(lines, sub):
-    """-> [(time, name, hidden, (x, y, z))] for every ents row whose name contains sub."""
+    """-> [(time, name, hidden, (x, y, z), slot, line index)] for every ents row whose name contains sub."""
     out = []
-    for l in lines:
+    for i, l in enumerate(lines):
         m = ENT.search(l)
-        if m and sub.lower() in m.group(1).lower():
-            out.append((l[:12], m.group(1), bool(int(m.group(2), 16) & 0x400), tuple(float(m.group(i)) for i in (3, 4, 5))))
+        if m and sub.lower() in m.group(2).lower():
+            out.append((l[:12], m.group(2), bool(int(m.group(3), 16) & 0x400), tuple(float(m.group(j)) for j in (4, 5, 6)), int(m.group(1)), i))
     return out
+
+
+def by_entity(rows):
+    """rows -> {(slot, full name): [rows in log order]}: one entry per entity, never per name fragment."""
+    g = {}
+    for r in rows:
+        g.setdefault((r[4], r[1]), []).append(r)
+    return g
 
 
 def secs_of(t):
@@ -286,106 +417,157 @@ def goto_lines(lines, x, z):
     return [l for l in lines if re.search(r'script \d+: goto \(%d, %d\) ' % (x, z), l)]
 
 
+def reached(g):
+    """The last goto line of g says 'reached' (and not 'NOT reached')."""
+    return bool(g) and ' reached ' in g[-1] and 'NOT reached' not in g[-1]
+
+
+def pos_of(lines, label):
+    """(x, y, z) of the LAST `pos <label>:` line, or None."""
+    r = [tuple(int(m.group(j)) for j in (2, 3, 4)) for m in (POSL.search(l) for l in lines) if m and m.group(1) == label]
+    return r[-1] if r else None
+
+
+def door_lbl(k, i):
+    return 'dm03door' if k == 'DM03_1109' else 'dm02door%d' % (i + 1) if k == 'DM02_1109' else 'door%d' % (i + 1)
+
+
+STOP_DM01B = (4454, 31907)
+
+
+def item_checks(k, a, dd=(), ctrl=None):
+    """The map-specific checks over the host log `a` (list of lines). -> (checks, infos); a check is (status, name, detail), status PASS / FAIL / WARN.
+    No vacuous PASS: an empty log, a missing sample or a missing row is a FAIL for every kit (tools/kl_bench_1109_test.py runs this on synthetic logs).
+    dd = doors.json rows, ctrl = dm07.json."""
+    res, info = [], []
+
+    def chk(name, cond, detail='', warn=False):
+        res.append(('PASS' if cond else ('WARN' if warn else 'FAIL'), name, detail))
+    chk('item segment ran on the host (level loaded ... segment done)', any('BENCH1109 %s host level loaded' % k in l for l in a) and any('BENCH1109 %s host segment done' % k in l for l in a),
+        '%d host log lines' % len(a))
+    if k == 'HASTA1109':
+        for pat, before in (('OYCHECK_BEFORE01', True), ('BarricadeB_01', True), ('Roadblock_01', True), ('Broken01', False), ('OYCHECK_AFTER01', False)):
+            g = by_entity(ents(a, pat))
+            bad = []
+            for (slot, name), r in sorted(g.items()):
+                first, last = r[0][2], r[-1][2]
+                if len(r) < 2 or not ((not first and last) if before else (first and not last)):
+                    bad.append('%s (%d rows, first hidden=%s, last hidden=%s)' % (name, len(r), first, last))
+            chk('%s: every entity %s' % (pat, 'visible at load, hidden by the beat' if before else 'hidden at load, shown after the beat (30 s backstop opens it)'),
+                bool(g) and not bad, '%d entities%s' % (len(g), ('; WRONG: ' + ' | '.join(bad)) if bad else ('' if g else ' (no ents row: not sampled)')))
+        info.append('boom / camera shake / glare: not logged; LOOK at KLShot_inst1_*.jpg around the beat (timestamps of the hasta sample lines)')
+        info += [l[:12] + ' ' + l[13:90] for l in a if 'BENCH1109 hasta sample' in l]
+    if k in ('DM01B_1109', 'DM07_1109'):
+        van = ents(a, 'V_Van')
+        s3 = next((l for l in a if 'BENCH1109' in l and 'van at state 3' in l), None)
+        s7 = next((l for l in a if 'BENCH1109' in l and 'van at state 7' in l), None)
+        chk('van entity sampled', bool(van), '%d rows' % len(van))
+        chk('vehicle state 3 reached (van waits)', s3 is not None, s3[:12] if s3 else 'waitvan 3 timed out (the van never waited within 300 s)')
+        chk('vehicle state 7 reached (van leaves)', s7 is not None, s7[:12] if s7 else 'waitvan 7 timed out')
+        t3 = secs_of(s3) if s3 else None
+        t7 = secs_of(s7) if s7 else None
+        at3 = sorted((v for v in van if t3 is not None and abs(secs_of(v[0]) - t3) < 4), key=lambda v: abs(secs_of(v[0]) - t3)) if van else []
+        late = [v for v in van if t7 is not None and secs_of(v[0]) > t7 + 15]
+        chk('van sampled at state 3 (within 4 s)', bool(at3), '%d rows' % len(at3))
+        chk('van sampled 15+ s after state 7', bool(late), '%d rows' % len(late))
+        if k == 'DM01B_1109':
+            stop = STOP_DM01B
+            n = at3[0] if at3 else None                                       # the sample nearest the state-3 line: x and z of the SAME row
+            chk('van waits near the stop (4454, 31907)', n is not None and math.hypot(n[3][0] - stop[0], n[3][2] - stop[1]) < 2500,
+                'at state 3: %s' % (str(n[3]) if n else 'no sample'))
+            chk('van starts west (x < stop - 3000) at the first sample', bool(van) and van[0][3][0] < stop[0] - 3000, 'first %s' % (str(van[0][3]) if van else 'no sample'))
+            chk('van left EAST of the stop', bool(late and at3) and late[-1][3][0] > at3[0][3][0] + 1000,
+                'stop x %s, last x %s' % ('%.0f' % at3[0][3][0] if at3 else '-', '%.0f' % late[-1][3][0] if late else '-'))
+        else:
+            chk('van reversed out WEST (x decreasing after state 7)', bool(late and at3) and late[-1][3][0] < at3[0][3][0] - 500,
+                'stop x %s, last x %s' % ('%.0f' % at3[0][3][0] if at3 else '-', '%.0f' % late[-1][3][0] if late else '-'))
+        if s7:
+            seq = [v for v in van if secs_of(v[0]) > t7]
+            steps = [math.dist(x[3], y[3]) / max(0.1, secs_of(y[0]) - secs_of(x[0])) for x, y in zip(seq, seq[1:])]
+            info.append('leave speeds (cm/s between samples, a pop would be one outlier): %s' % ' '.join('%.0f' % s for s in steps[:12]))
+        info.append('no-pop: 3 s samples cannot show a one-frame jump; LOOK at the shots around state 7 and the arrival')
+    if k == 'DM07_1109':
+        pan = [r for r in ents(a, 'Chainlink_Fence_4m') if r[1].endswith('4m_01') or r[1].endswith('4m_11')]
+        names = {r[1][-5:] for r in pan}
+        chk('fence panels 4m_01 AND 4m_11 hidden (gate)', names >= {'4m_01', '4m_11'} and all(r[2] for r in pan), '%d rows: %s' % (len(pan), sorted({(r[1][-5:], r[2]) for r in pan})))
+        c = ctrl or {}
+        cg = goto_lines(a, *c['control']) if c.get('control') else []
+        chk('control walk (same start, same length %s through open mesh) is reached' % c.get('length', '?'), reached(cg),
+            (cg[-1][cg[-1].find('goto'):][:110] if cg else 'no control goto line (dm07.json has no control, or the walk never ran)'))
+        g = goto_lines(a, -6000, 10400)
+        tp = [l for l in a if 'tele' in l and ('REFUSED' in l or 'MISSED' in l or 'FAULTED' in l) and '-3900' in l]
+        xp = pos_of(a, 'dm07-after-walk')
+        xs = xp[0] if xp else None
+        chk('walk-out goto ran', bool(g), g[0][g[0].find('goto'):][:110] if g else 'no goto line%s' % (' (tele refused: %s)' % tp[0][:100] if tp else ''))
+        chk('player does NOT walk out through the gap (blocked, control walks)', bool(g) and 'NOT reached' in g[0] and xs is not None and xs > -4700 and reached(cg),
+            'goto: %s | pos dm07-after-walk x=%s | control reached=%s' % (g[0][g[0].find('goto'):][:90] if g else 'none', xs, reached(cg)))
+    if k in ('DM03_1109', 'DM02_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A'):
+        use = list(dd)[:1] if k == 'DM03_1109' else list(dd)
+        chk('doors.json lists the kit doors', bool(use), '%d doors' % len(use))
+        tp = [l for l in a if 'tele' in l and ('REFUSED' in l or 'MISSED' in l or 'FAULTED' in l)]
+        for i, d in enumerate(use):
+            h = d['hinge']
+            lbl = door_lbl(k, i)
+            kick = next((j for j, l in enumerate(a) if 'BENCH1109 %s door %s: kicked' % (lbl, d['host']) in l), None)
+            leaf = [r for r in ents(a, 'Door') if math.hypot(r[3][0] - h[0], r[3][2] - h[2]) < 150 and abs(r[3][1] - h[1]) < 200]
+            bef = [r for r in leaf if kick is not None and r[5] < kick]
+            aft = [r for r in leaf if kick is not None and r[5] > kick]
+            chk('door %s: kick happened (log line)' % d['host'], kick is not None, 'no "%s door %s: kicked" line' % (lbl, d['host']) if kick is None else 'line %d' % kick)
+            chk('door %s: leaf entity sampled near its hinge before AND after the kick' % d['host'], bool(bef) and bool(aft), '%d rows before, %d after' % (len(bef), len(aft)))
+
+            def sig(rows):
+                return {(r[1], r[2], tuple(round(v) for v in r[3])) for r in rows}
+            changed = bool(bef and aft) and sig(bef) != sig(aft)
+            chk('door %s: leaf state changed by the kick (position or hidden flag)' % d['host'], changed,
+                ' | '.join('%s %s hidden=%s' % (r[0][:8], r[1][-18:], r[2]) for r in (bef[:2] + aft[:2])) or 'no leaf rows',
+                warn=(k != 'DM03_1109'))                    # DM03 host 176 must move (owner's rule); the others: the leaf origin may stay on the hinge while it swings (not logged)
+            b = d['back'] if d['front'] and d['back'] else None
+            if b:
+                g = goto_lines(a, b[0], b[2])
+                chk('door %s: player walks through after the kick' % d['host'], reached(g), g[-1][g[-1].find('goto'):][:120] if g else 'no goto line (tele refused?)')
+            else:
+                info.append('door %s is one-sided on the mesh: no walk-through check, kick + shot only' % d['host'])
+        if tp:
+            info.append('tele problem: %s' % tp[0][:160])
+        info.append('kick sound / swing: not logged; LOOK at the shots and listen. Kick key E is a GUESS (boarding uses E)')
+    if k == 'DM03_1109':
+        cars = ('car', 'van', 'truck', 'heli')
+        mv = []
+        for pat in ('ArrivingCops', 'VehicleExit'):
+            for (slot, name), r in by_entity(ents(a, pat)).items():
+                if any(c in name.lower().replace('vehicleexit', '') for c in cars):
+                    continue
+                if len(r) >= 2 and max(math.dist(r[0][3], x[3]) for x in r[1:]) >= 300:
+                    mv.append('%s moved %.0f' % (name[-30:], max(math.dist(r[0][3], x[3]) for x in r[1:])))
+        chk('a VehicleExit / ArrivingCops (non-car) entity left its first position (>= 300; GUESS: leaving the car moves it)', bool(mv), '; '.join(mv[:3]) or 'none moved (or no rows)')
+        pol = by_entity(ents(a, 'Police'))
+        chk('police rows present', bool(pol), '%d police entities, e.g. %s' % (len(pol), sorted(n for _, n in pol)[:3]))
+        for pat in ('ArrivingCops', 'Garage', 'Ramp', 'VehicleExit'):
+            r = ents(a, pat)
+            info.append('%-13s rows %d, names %s' % (pat, len(r), sorted({x[1][-26:] for x in r})[:6]))
+        cen = sorted({int(m.group(1)) for l in a for m in [re.search(r'botfill: round census: (\d+) ZFFActor', l)] if m})
+        chk('census logged (44/29 expected after the cops pass; 33/27 before)', bool(cen), 'census lines %s' % (cen or 'none'), warn=True)
+        info.append('police vs SWAT at the front / garage + ramp arrival: names above; LOOK at the shots')
+    return res, info
+
+
 def verify(k, part='online'):
     rc = B.verify(k, 'online')
     L = B.logs('%s_online' % k)
     if 1 not in L:
         return 1
     a = L[1]
-    res = []
 
-    def chk(name, cond, detail='', warn=False):
-        res.append(cond or warn)
-        print('  %s %s %s' % ('PASS' if cond else ('WARN' if warn else 'FAIL'), name, detail))
+    def rd(n):
+        p = '%s/%s' % (kd(k), n)
+        return json.load(open(p)) if os.path.isfile(p) else None
+    res, info = item_checks(k, a, rd('doors.json') or [], rd('dm07.json'))
     print('item checks %s (host log, %d lines)' % (k, len(a)))
-    if k == 'HASTA1109':
-        for pat in ('OYCHECK_BEFORE01', 'BarricadeB_01', 'Roadblock_01'):
-            r = ents(a, pat)
-            if r:
-                chk('%s hidden by the beat' % pat, (not r[0][2]) and r[-1][2], 'first %s hidden=%s, last %s hidden=%s (%d samples)' % (r[0][0], r[0][2], r[-1][0], r[-1][2], len(r)), warn=not r[-1][2] and not r[0][2] and False)
-            else:
-                chk('%s sampled' % pat, False, 'no ents row (name not in the table?)', warn=True)
-        for pat in ('Broken01', 'OYCHECK_AFTER01'):
-            r = ents(a, pat)
-            if r:
-                chk('%s hidden at load, shown after the beat' % pat, r[0][2] and not r[-1][2], 'first hidden=%s, last hidden=%s (%d samples; 30 s backstop opens it)' % (r[0][2], r[-1][2], len(r)))
-            else:
-                chk('%s sampled' % pat, False, 'no ents row', warn=True)
-        print('  info boom / camera shake / glare: not logged; LOOK at KLShot_inst1_*.jpg around the beat (timestamps of the hasta sample lines below)')
-        for l in a:
-            if 'BENCH1109 hasta sample' in l:
-                print('       ', l[:12], l[13:90])
-    if k in ('DM01B_1109', 'DM07_1109'):
-        van = ents(a, 'V_Van')
-        stl = [(l[:12], re.search(r'state (\d)', l)) for l in a if 'BENCH1109' in l and 'van at state' in l]
-        chk('van entity sampled', bool(van), '%d rows' % len(van))
-        s3 = next((l for l in a if 'BENCH1109' in l and 'van at state 3' in l), None)
-        s7 = next((l for l in a if 'BENCH1109' in l and 'van at state 7' in l), None)
-        chk('vehicle state 3 reached (van waits)', s3 is not None, s3[:12] if s3 else 'waitvan 3 timed out (the van never waited within 300 s)')
-        chk('vehicle state 7 reached (van leaves)', s7 is not None, s7[:12] if s7 else 'waitvan 7 timed out')
-        if van and s3 and s7:
-            t3, t7 = secs_of(s3), secs_of(s7)
-            at3 = [v for v in van if abs(secs_of(v[0]) - t3) < 4]
-            late = [v for v in van if secs_of(v[0]) > t7 + 15]
-            first = van[0][3]
-            if k == 'DM01B_1109':
-                stop = (4454, 31907)
-                if at3:
-                    chk('van waits near the stop (4454, 31907)', math.hypot(at3[0][3][0] - stop[0], at3[0][3][2] - stop[1]) < 2500 or math.hypot(at3[0][3][0] - stop[0], at3[1 if len(at3) > 1 else 0][3][2] - stop[1]) < 2500, 'at state 3: %s' % (at3[0][3],))
-                chk('van starts west (x < stop - 3000) at the first sample', first[0] < stop[0] - 3000, 'first %s' % (first,), warn=True)
-                if late and at3:
-                    chk('van left EAST of the stop', late[-1][3][0] > at3[0][3][0] + 1000, 'stop x %.0f, last x %.0f' % (at3[0][3][0], late[-1][3][0]))
-            else:
-                if late and at3:
-                    chk('van reversed out WEST (x decreasing after state 7)', late[-1][3][0] < at3[0][3][0] - 500, 'stop x %.0f, last x %.0f' % (at3[0][3][0], late[-1][3][0]))
-            seq = [v for v in van if secs_of(v[0]) > t7]
-            steps = [math.dist(x[3], y[3]) / max(0.1, secs_of(y[0]) - secs_of(x[0])) for x, y in zip(seq, seq[1:])]
-            print('  info leave speeds (cm/s between samples, a pop would be one outlier): %s' % ' '.join('%.0f' % s for s in steps[:12]))
-        print('  info no-pop: 3 s samples cannot show a one-frame jump; LOOK at the shots around state 7 and the arrival')
-    if k == 'DM07_1109':
-        fe = ents(a, 'Chainlink_Fence_4m')
-        pan = [r for r in fe if r[1].endswith('4m_01') or r[1].endswith('4m_11')]
-        chk('fence panels 4m_01 / 4m_11 hidden (gate)', bool(pan) and all(r[2] for r in pan), '%d rows: %s' % (len(pan), sorted({(r[1][-5:], r[2]) for r in pan})))
-        g = goto_lines(a, -6000, 10400)
-        tp = [l for l in a if 'tele' in l and ('REFUSED' in l or 'MISSED' in l or 'FAULTED' in l) and '-3900' in l]
-        if g:
-            blocked = any('NOT reached' in l for l in g)
-            pos = [nums_ for nums_ in [B.nums(l) for l in a if 'pos dm07-after-walk' in l]]
-            xs = pos[0][-4] if pos and len(pos[0]) >= 4 else None
-            chk('player does NOT walk out through the gap', blocked and (xs is None or xs > -4700), 'goto: %s | after-walk pos line %s' % (g[0][g[0].find('goto'):][:110], 'x=%s' % xs), warn=bool(tp))
-        else:
-            chk('walk-out goto ran', False, 'no goto line%s' % (' (tele refused: %s)' % tp[0][:100] if tp else ''), warn=True)
-    if k in ('DM03_1109', 'DM02_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A'):
-        dj = '%s/doors.json' % kd(k)
-        dd = json.load(open(dj)) if os.path.isfile(dj) else []
-        use = dd[:1] if k == 'DM03_1109' else dd
-        for d in use:
-            h = d['hinge']
-            leaf = [r for r in ents(a, 'Door') if math.hypot(r[3][0] - h[0], r[3][2] - h[2]) < 150 and abs(r[3][1] - h[1]) < 200]
-            chk('door %s leaf entity found near its hinge' % d['host'], bool(leaf), '%d rows (before + after); %s' % (len(leaf), ' | '.join('%s %s hidden=%s' % (r[0][:8], r[1][-18:], r[2]) for r in leaf[:4])), warn=True)
-            b = d['back'] if d['front'] and d['back'] else None
-            if b:
-                g = goto_lines(a, b[0], b[2])
-                chk('door %s: player walks through after the kick' % d['host'], bool(g) and 'NOT reached' not in g[-1] and ' reached ' in g[-1], g[-1][g[-1].find('goto'):][:120] if g else 'no goto line (tele refused?)',
-                    warn=not g)
-            else:
-                print('  info door %s is one-sided on the mesh: no walk-through check, kick + shot only' % d['host'])
-            tp = [l for l in a if 'tele' in l and ('REFUSED' in l or 'MISSED' in l or 'FAULTED' in l)]
-            if tp:
-                print('  info tele problem: %s' % tp[0][:160])
-        print('  info kick sound / swing: not logged; LOOK at the shots and listen. Kick key E is a GUESS (boarding uses E)')
-    if k == 'DM03_1109':
-        for pat in ('ArrivingCops', 'Garage', 'Ramp', 'VehicleExit'):
-            r = ents(a, pat)
-            print('  info %-13s rows %d, names %s' % (pat, len(r), sorted({x[1][-26:] for x in r})[:6]))
-        for pat in ('Cop', 'Police'):
-            r = ents(a, pat)
-            s1 = [x for x in r if secs_of(x[0]) - secs_of(r[0][0]) < 20]
-            print('  info %-13s rows %d (first sample %d)' % (pat, len(r), len(s1)))
-        cen = sorted({int(m.group(1)) for l in a for m in [re.search(r'botfill: round census: (\d+) ZFFActor', l)] if m})
-        chk('census logged (44/29 expected after the cops pass; 33/27 before)', bool(cen), 'census lines %s' % (cen or 'none'), warn=True)
-        print('  info police vs SWAT at the front / garage + ramp arrival: names above; LOOK at the shots')
-    bad = res.count(False)
+    for st, name, det in res:
+        print('  %s %s %s' % (st, name, det))
+    for i in info:
+        print('  info', i)
+    bad = sum(1 for r in res if r[0] == 'FAIL')
     print('RESULT: %s items %s (%d checks, %d FAIL)' % (k, 'PASS' if not bad else 'FAIL', len(res), bad))
     return 1 if (bad or rc) else 0
 
