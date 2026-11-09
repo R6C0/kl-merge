@@ -114,7 +114,7 @@ def door_data(k):
     return out
 
 
-def kick_probe(lbl, when, n=4):
+def kick_probe(lbl, when, n=10):
     """Read-only peeks of the human kick registry (static RE 0x55e600/0x46b330, workflow wywe974am): count at [[0xdd265c]+0xaa4],
     pointers from +0xaa8; per controller +0x58 character gate (-1 = never), +0x5c state (1 = kickable, 3 = kicked), +0x34, +0x60/+0x64 box nodes.
     A grafted door missing from the registry (count 0) can never offer the kick prompt."""
@@ -124,12 +124,15 @@ def kick_probe(lbl, when, n=4):
          'peek 0xdd265c+0x828+0xcfc %s-%s-prompt-active' % (lbl, when)]
     for i in range(n):
         o = 0xaa8 + 4 * i
+        # the pointer itself = the controller object, the same 'obj' 'ents KickDoor_Action' prints: ties a registry slot to a door.
+        # DOORS_1109_DM01 run 1: 9 registered (all gate 2 state 1); only slots 0..3 were read, so the kicked door's slot was unseen.
+        s += ['peek 0xdd265c+0x%x %s-%s-ctrl%d-ptr' % (o, lbl, when, i)]
         s += ['peek 0xdd265c+0x%x+0x%x %s-%s-ctrl%d-%s' % (o, f, lbl, when, i, nm) for f, nm in ((0x58, 'gate'), (0x5c, 'state'), (0x34, 'p34'), (0x60, 'box60'), (0x64, 'box64'))]
     return s
 
 
 def door_seg(d, lbl):
-    """Walk to the leaf from the mesh side, kick (2 taps of E, GUESS key), look at the leaf before/after, walk through when both sides are on the mesh."""
+    """Kick from the stand point (inside the kick box) facing the doorway (2 taps of E), look at the leaf before/after, walk through when both sides are on the mesh."""
     h = d['hinge']
     a = d['front'] or d['back']
     b = d['back'] if d['front'] and d['back'] else None
@@ -140,12 +143,14 @@ def door_seg(d, lbl):
     f = (b[0], b[2]) if b else (h[0], h[2])
     # waitstate 0x19 first: DM02_1109's first tele came 5 s after 'level loaded', before the round ran (session state not 0x19), and was refused
     s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0], a[1] + 150, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
-         'ents KL_Door 20', 'ents Door 200'] + kick_probe(lbl, 'stand') + [
-         'face %d %d' % c, 'goto %d %d 70 6000' % c, 'face %d %d' % f, 'pos %s-at-leaf' % lbl, 'wait 500'] + kick_probe(lbl, 'atleaf') + [
-         'tap E 700', 'wait 600', 'tap E 700', 'wait 3500', 'log BENCH1109 %s door %s: kicked (E x2, GUESS key)' % (lbl, d['host']), 'pos %s-kicked' % lbl,
+         'ents KL_Door 20', 'ents Door 200', 'ents KickDoor_Action 20'] + kick_probe(lbl, 'stand') + [
+         # kick from the stand, no walk first: DOORS_1109_DM01 run 1 door 2 had the kick prompt (0x12) at the stand and lost it (0) after the goto to
+         # the hinge (out of the box), so E did nothing; door 1 kept 0x12 at the leaf and E snapped the player 55 cm / 60 deg (kick animation, GUESS).
+         'face %d %d' % c, 'wait 700', 'pos %s-at-leaf' % lbl] + kick_probe(lbl, 'atleaf') + [
+         'tap E 700', 'wait 600', 'tap E 700', 'wait 3500', 'log BENCH1109 %s door %s: kicked (E x2)' % (lbl, d['host']), 'pos %s-kicked' % lbl,
          'ents KL_Door 20', 'ents Door 200'] + kick_probe(lbl, 'kicked')
     if b:
-        s += ['goto %d %d 70 9000' % (b[0], b[2]), 'pos %s-through' % lbl, 'log BENCH1109 %s door %s: through goto done' % (lbl, d['host'])]
+        s += ['goto %d %d 70 6000' % c, 'face %d %d' % f, 'goto %d %d 70 9000' % (b[0], b[2]), 'pos %s-through' % lbl, 'log BENCH1109 %s door %s: through goto done' % (lbl, d['host'])]
     return s
 
 
@@ -368,7 +373,8 @@ def validate(which):
                 dj = '%s/doors.json' % d
                 dd = json.load(open(dj)) if os.path.isfile(dj) else []
                 v.ok(bool(dd), 'doors.json: %d doors, stand points %s' % (len(dd), [bool(x['front'] or x['back']) for x in dd]))
-                v.ok(any('tele' in l for l in scr) and any(l.startswith('goto') for l in scr), 'host script teleports to the stand and walks to the leaf')
+                # one-sided doors kick from the stand and no longer walk (DOORS_1109_DM01 run 1: the walk to the hinge left the kick box)
+                v.ok(any('tele' in l for l in scr) and any(l.startswith('tap E') for l in scr), 'host script teleports to the stand and kicks there (tap E)')
         kj = '%s/kit.json' % d
         rec = json.load(open(kj)) if os.path.isfile(kj) else {}
         v.ok(bool(rec), 'kit.json (the SHIP / TEST twin / ini this kit was built against)')

@@ -130,7 +130,7 @@ def doors(k, mut=None):
             g.ent('KL_Door_Leaf', (h[0] + 5, h[1] + 10, h[2] - 5))
         g.say('BENCH1109 %s door %s: before' % (lbl, d['host']))
         if mut != 'nokick':
-            g.say('BENCH1109 %s door %s: kicked (E x2, GUESS key)' % (lbl, d['host']))
+            g.say('BENCH1109 %s door %s: kicked (E x2)' % (lbl, d['host']))
         if mut != 'noleaf':
             g.ent('KL_Door_Leaf', (h[0] + 5, h[1] + 10, h[2] - 5) if mut == 'static' else (h[0] + 60, h[1] + 10, h[2] - 5))
         b = d['back'] if d['front'] and d['back'] else None
