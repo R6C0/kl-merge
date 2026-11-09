@@ -1,3 +1,6 @@
+2026-11-09 ~05:30 - [shop] SHOP LOOK BENCH (live tidy, merged_1108f): C:\kl_build_1024\shoplook_1109 ON + OFF both PASS (TEST 40d00164, DD05, 2 seats, 0 asserts/faults), 130 shots each.
+ON vs OFF: hire rows 'JEAN  $90K' vs '$90,000'; hire desc 3 lines vs 6 (OFF ran into the stars); page II caption 'PD2 GUNS', rows 'PD2 PAR'. Still stock: tab names (no redraw, as guessed), dim star outlines (idx 99 = dim, not hidden), selected-row text under the bar (page I too).
+Fix b5465f50 (not in a dll yet, given to 81): TidyPage hire desc drops 'Price $X, rank N needed (no rank gate)'; with a gate 'Needs rank N (your rank R)'. Shots: <work>\build\klhook\solo\SHOPLOOK_{ON,OFF}_DD05 (inst1_44, inst1_263).
 2026-11-09 ~03:10 - [d0] BENCHES on the INSTALLED DD10 + DM05A (TEST 09a02a2c, nothing installed, undo byte-exact each): dd10live1109 PASS: 'last:' called the van (59.8 s left), ShieldDriveIn+ShieldWhileWaiting
 kept it 9600/9600 in, waiting and out (no fire). dd10call1109 ALL PASS: a heister in otrExitLevel with $0 calls it (state 3 after 4.4 s), but the seat at the box centre (8300,1100) died ~4 s in while the van
 parked on it (GUESS run over, KILLED BY RED); the box overlaps the van stop (8640,1030). lcmusicblive1109 (DM05A music B 0ff298a6): 290 s, 0 faults, round end unseen (kit 480 s too short -> 600). tools/kl_bench_1106.py.
