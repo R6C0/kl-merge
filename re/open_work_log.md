@@ -1,3 +1,7 @@
+2026-11-09 ~19:40 - [d0, offline] DM09 TERMINAL VARIANT staged, NOT installed (optional, recommended off until benched): tools/kl_dm09_terminal_1110.py (+_test PASS), stage C:\kl_build_1024\dm09terminal_1110 on top of dm09cover
+(pins 3a981a70/2ede91ed/0126d412 -> zip 17f981ed, bots 2293dec7): van group + otrExitLevel + run boxes moved to the terminal lane x -25500 (stop z 8100), west slab opened z 7088..11114, pen bounds parked,
+InvisibleBarricade REF 23098 cut from the .HVK (it sealed the pen; collision flood now reaches the lane). Open before a bench: NO bounds around the terminal (walkable 50 m+ west); online bots read the van node at the
+moved group (-23647,-2700) (klbotfill.c:2296/2392, needs a rest-position guard); KLBF_WAY_MAX 8 -> 16 for the full route (ini_fragment.txt); clock proposal 8 min / TimeMax 10.
 2026-11-09 ~19:30 - [6b, offline] KL_PYBINK pushed 4873a377 (tools/kl_pybink.py + _test 23/0): pure-Python Bink 1 audio, DCT bit-exact vs ffmpeg on Trailer.bik (2463360 frames) except
 11 SOURCE BURST blocks (33.68, 33.72, 34.36-34.44, 36.32, 36.64, 37.52, 44.68 s; peaks 9e4-3e5 x full scale, ffmpeg decodes them too = ~43 ms full-scale pops, 8 inside the riff window).
 Opt-in burst_limit=4.0 repairs them (previews 11 as-is / 12 repaired). No-ffmpeg launcher path PASS (5.3 s); ffmpeg vs pybink riff identical up to the first burst. Open: owner/06 decide repair on both paths.

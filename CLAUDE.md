@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~19:40 - [d0, offline] DM09 TERMINAL VARIANT staged, NOT installed (optional, recommended off until benched): tools/kl_dm09_terminal_1110.py (+_test PASS), stage C:\kl_build_1024\dm09terminal_1110 on top of dm09cover
+(pins 3a981a70/2ede91ed/0126d412 -> zip 17f981ed, bots 2293dec7): van group + otrExitLevel + run boxes moved to the terminal lane x -25500 (stop z 8100), west slab opened z 7088..11114, pen bounds parked,
+InvisibleBarricade REF 23098 cut from the .HVK (it sealed the pen; collision flood now reaches the lane). Open before a bench: NO bounds around the terminal (walkable 50 m+ west); online bots read the van node at the
+moved group (-23647,-2700) (klbotfill.c:2296/2392, needs a rest-position guard); KLBF_WAY_MAX 8 -> 16 for the full route (ini_fragment.txt); clock proposal 8 min / TimeMax 10.
 2026-11-09 ~19:10 - [06, offline] LAUNCHER MUSIC = OWNER'S FINAL PICK pushed 941ef598: Trailer.bik guitar riff 24.43-41.05 s (measured: starts on the first attack, seam cosine 0.92) x2,
 4 s equal-power xfade into MenuLoop_01, fade to 0, loops -> music\deadmen_riff.wav (106 s 48 kHz, riff x0.34, menu x2.0, no clip; 3.4 s to make). Supersedes the 18:40 main-theme ask.
 Trailer decoded by ffmpeg, else tools/kl_pybink.py (6b writing it; packed + copied when present). Without both: MenuLoop_01 alone. Self-test 87, kl_tests --py 57/0/1.
