@@ -252,6 +252,19 @@ def doors(k, mut=None):
     return g.done(), dd
 
 
+def dd10gate(mut=None):
+    """DD10GATE_1109 host log. mut: through (walks out west), stuck (never moves, control too), dead (a death row in every walk)"""
+    xs, cx = {'through': ((8050, 7950, 7850, 7700, 7500), 8400), 'stuck': ((8150,) * 5, 8160)}.get(mut, ((8100, 8060, 8058, 8058, 8058), 8400))
+    a, t = ['01:00:00.000 BENCH1109 DD10GATE_1109 host level loaded', '01:00:00.500 BENCH1109 dd10gate van parked'], 1
+    for lbl, st in M.DD10_GATE_WALKS:
+        for n, x in [('t', 8150)] + [(str(i + 1), x) for i, x in enumerate(xs)] + [('ct', 8150), ('c', cx)]:
+            a.append('01:00:%06.3f script 3: pos %s-%s: me #0 (%d, 60, %d) heading 90' % (t, lbl, n, x, st[2]))
+            t += 1
+            if mut == 'dead' and n == '2':
+                a.append('01:00:%06.3f hud: ONLINE skulls state: row 0 kind 3 deaths 1' % (t - 0.5))
+    return a + ['01:00:59.000 BENCH1109 DD10GATE_1109 host segment done']
+
+
 def log_for(k, mut=None):
     if k == 'HASTA1109':
         return hasta(mut), [], None
@@ -265,6 +278,8 @@ def log_for(k, mut=None):
         return sink(mut), [], None
     if k == 'DM07CURTAIN_1109':
         return curtain(mut), [], None
+    if k == 'DD10GATE_1109':
+        return dd10gate(mut), [], None
     a, dd = doors(k, mut)
     return a, dd, None
 
@@ -288,6 +303,7 @@ def main():
             'DM07GATE_1109': ['fence', 'nopos'],
             'DM07UNHIDE_1109': ['hidden01', 'nopos'],
             'DM07CURTAIN_1109': ['through', 'inside', 'allvoid', 'latedeath', 'controlthrough', 'nosample', 'novan', 'nostate7'],
+            'DD10GATE_1109': ['through', 'stuck'],
             'DM03_1109': ['nohits', 'nopolice','noleaf', 'nokick', 'static', 'nogoto'],
             'DM02_1109': ['noleaf', 'nokick', 'nogoto'],
             'DOORS_1109_DM01': ['noleaf', 'nokick'],
@@ -367,6 +383,15 @@ def main():
     # pos parsed by name: the label decides, not the position in the line
     ok(M.pos_of(['01:00:00.000 script 3: pos x-label: me #0 (-4300, 550, 10400) heading 12'], 'x-label') == (-4300, 550, 10400), 'pos_of parses the named x')
     ok(M.pos_of(['01:00:00.000 script 3: pos other: me #0 (1, 2, 3) heading 12'], 'x-label') is None, 'pos_of: other label is None')
+    r, inf = M.item_checks('DD10GATE_1109', dd10gate())
+    ok(not [x for x in r if x[0] != 'PASS'] and any('BLOCKED' in i_ for i_ in inf), 'DD10GATE: stopped east of the gate = PASS')
+    ok(any('stops the player' in x[1] for x in fails('DD10GATE_1109', 'through')), 'DD10GATE: alive west of the gate FAILs')
+    r, _ = M.item_checks('DD10GATE_1109', dd10gate('stuck'))
+    ok(any(x[0] == 'WARN' for x in r) and any(x[0] == 'FAIL' and 'at least 2' in x[1] for x in r), 'DD10GATE: a stuck start is VOID (WARN), all VOID FAILs')
+    r, inf = M.item_checks('DD10GATE_1109', dd10gate('dead'))
+    ok(any('DIED' in i_ for i_ in inf), 'DD10GATE: a death in the walk is DIED')
+    ok('DD10GATE_1109' in M.ORDER and M.K['DD10GATE_1109']['stage'] is None and M.dd10gate_seg('host').index('waitvan 3 60000') < M.dd10gate_seg('host').index('tele 8150 60 900'),
+       'DD10GATE kit: live, in ORDER, van parked before the walks')
     print('RESULT: kl_bench_1109_test %s (%d pass, %d fail)' % ('PASS' if not FAIL else 'FAIL', PASS, FAIL))
     return 1 if FAIL else 0
 

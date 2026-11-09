@@ -14,7 +14,7 @@ A per-kit item segment is spliced into BOTH seats' scripts right after the first
     python tools/kl_bench_1109.py verify <kit>        re-read the logs of the last run (no game contact)
     python tools/kl_bench_1109.py order               (re)write C:/kl_build_1024/bench_1109/RUN_ORDER.txt
 
-Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DM07GATE_1109 DM07UNHIDE_1109 (stage kit) DM07SINK_1109 (stage kit) DM07CURTAIN_1109 (stage kit, KeepAlive off) DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
+Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DM07GATE_1109 DM07UNHIDE_1109 (stage kit) DM07SINK_1109 (stage kit) DM07CURTAIN_1109 (stage kit, KeepAlive off) DD10GATE_1109 (live DD10 gate leak) DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
 What the log CAN decide: faults/dumps, round 2 reached, 0x25 dwell, botgate, entity hidden flags and positions (`ents`), vehicle state
 (`waitvan`), goto reached / NOT reached. What it CANNOT: boom, camera shake, glare, kick sound, pop (a 1-frame jump), cover pillars: those
 need the screenshots (ReShade bridge D3dShotPost, KLShot_inst1_NN.jpg in the run folder) and an ear/eye.
@@ -79,6 +79,11 @@ K = {
                              files={'F06_Main.zip': '2529fb77e18a62e101a6bc544956b8e9', 'F06_Main.bots.zip': 'da69d8b3ad2ff9abf1b9925e9fdecbd6',
                                     'F06_Main.bots.base.md5': '8ee12031c0e0da6af2a94304892b8b6e'},
                              keepalive=0),
+    # LEAK TEST on the LIVE DD10 (nothing installed): BigFence_A_02 (REF 31255, x 7999..8014, z 845..1145) is hidden by kl_dd10_vanlane_1108.py with the same
+    # 0x400 flag that the DM07 benches proved loses player collision; the collision-only ColiObj_HERO_Plane01 (x 8017, z 652..1349) should still block (GUESS).
+    # The van is called first (the tele lands in otrExitLevel) and parks at x 8640 east of the gate, then three walks west through the pillar gap (z 848..1142).
+    'DD10GATE_1109': dict(map='DD10', slot='F07', entry=5, live={'F07_Main.zip': '1a0d94b0', 'F07_Main.bots.zip': '27c9fae8', 'KLJoin.ini': 'ebdf1472'},
+                          shots='60-400:10'),
     'DOORS_1109_DM01': dict(map='DM01', slot='F01', live={'F01_Main.zip': '444a3ed6', 'F01_Main.bots.zip': 'f3ed6155', 'KLJoin.ini': 'db4516c6'}, shots='60-700:20',
                             doors=('DM01', 'F01', (957, 2569))),
     # door 2569 first: runs 2 and 3 lost door 2 to a police kill ~19 s into the round (05:53:28, 06:22:36), always after door 1
@@ -87,7 +92,7 @@ K = {
     'DOORS_1109_DM03A': dict(map='DM03A', slot='F07', live={'F07_Main.zip': 'aa79d66d', 'F07_Main.bots.zip': 'd1a8dd0c', 'KLJoin.ini': '958c24b6'}, shots='60-700:20',
                              doors=('DM03A', 'F07', (6516,))),
 }
-ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109', 'DM07CURTAIN_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A']
+ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109', 'DM07CURTAIN_1109', 'DD10GATE_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A']
 for _k, _c in K.items():
     for _a, _b in dict(entry=0, stage=None, tag=None, hook=HOOK, solo_secs=600, parts=('online',), keepalive=1).items():
         _c.setdefault(_a, _b)
@@ -186,9 +191,14 @@ def door_seg(d, lbl):
     # tele 70 cm BEHIND the stand (away from c) and walk onto it: 'face' cannot turn a standing player, a goto does, so the body arrives facing c.
     # DOORS_1109_DM01R door 957 stood at bearing error 121 the whole time with prompt 6 (never 0x12) and E did nothing; door 2569 at -59 kicked on
     # the 2nd pair. GUESS: the back-off point is open floor (not checked on the mesh; the stand points are)
+    # 40 cm, not 70, then a short step PAST the stand toward c: DM02_1109 door 1 never left its 70 cm back-off point (-800, 2560) (bearing error 173,
+    # prompt 6): GUESS the back-off sat against a wall. The 2nd goto (20 cm toward c, 15 cm tolerance) turns the body toward c even if the 1st one stalled.
     v = (a[0] - c[0], a[2] - c[1])
-    k = 70.0 / max(1.0, (v[0] ** 2 + v[1] ** 2) ** 0.5)
-    s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0] + v[0] * k, a[1] + 60, a[2] + v[1] * k), 'wait 2500', 'goto %d %d 25 5000' % (a[0], a[2]), 'wait 500',
+    n = max(1.0, (v[0] ** 2 + v[1] ** 2) ** 0.5)
+    k = 40.0 / n
+    p = (a[0] - v[0] * 20.0 / n, a[2] - v[1] * 20.0 / n)
+    s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0] + v[0] * k, a[1] + 60, a[2] + v[1] * k), 'wait 2500', 'goto %d %d 25 5000' % (a[0], a[2]),
+         'goto %d %d 15 3000' % p, 'wait 500',
          'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
          'ents KL_Door 20', 'ents KickDoor_Action 20'] + kick_probe(lbl, 'stand') + [
          # kick from the stand, no walk first: DOORS_1109_DM01 run 1 door 2 had the kick prompt (0x12) at the stand and lost it (0) after the goto to
@@ -301,6 +311,49 @@ CURTAIN_THROUGH = -4700     # alive west of this = through the gate
 CURTAIN_MOVED = 300         # a walk counts only when the player moved this far in total from the settle point, else VOID
 CURTAIN_RESPAWN_MS = 8000   # after a kill walk: wait (GUESS: a dead heister is back as police within that; else the next walks read DEAD-BEFORE = WARN)
 
+# DD10GATE_1109: (label, tele start). Starts 135 cm east of the fence, south of the parked van's line (the van stops at z 1030, half width 110).
+DD10_GATE_WALKS = (('dg900', (8150, 60, 900)), ('dg1000', (8150, 60, 1000)), ('dg1100', (8150, 60, 1100)))
+DD10_GATE_XS = (8050, 7950, 7850, 7700, 7500)
+DD10_THROUGH = 7960         # alive west of this = through the gate (fence x 7999..8014, plane x 8017; a blocked capsule stands ~40 cm east of it)
+DD10_CTRL_MOVED = 150       # the control (goto east from the same tele) must move this far, else the start was stuck and the walk proves nothing
+
+
+def dd10gate_seg(who):
+    s = ['ents BigFence 4', 'ents Plane01 4', 'log BENCH1109 dd10 gate panels read']
+    if who != 'host':
+        return s + ['wait 60000']
+    # call the van first (a heister in otrExitLevel with $0 calls it, dd10call1109) and let it park, so its drive-in cannot run over a walk
+    s += ['waitstate 0x19 90000', 'tele 8300 50 800', 'wait 1000', 'waitvan 3 60000', 'ents V_Van 3', 'log BENCH1109 dd10gate van parked']
+    for lbl, st in DD10_GATE_WALKS:
+        s += ['tele %d %d %d' % st, 'wait 2000', 'pos %s-t' % lbl]
+        for i, x in enumerate(DD10_GATE_XS):
+            s += ['goto %d %d 60 %d' % (x, st[2], 3000 if i < len(DD10_GATE_XS) - 1 else 5000), 'pos %s-%d' % (lbl, i + 1)]
+        s += ['tele %d %d %d' % st, 'wait 1500', 'pos %s-ct' % lbl, 'goto %d %d 40 3000' % (st[0] + 250, st[2]), 'pos %s-c' % lbl, 'log BENCH1109 dd10gate %s done' % lbl]
+    return s
+
+
+def dd10gate_walk(a, lbl, deaths):
+    """-> (verdict, note): NOSAMPLE | DIED (a kind-3 row in the walk: no verdict) | THROUGH (alive west of DD10_THROUGH) | VOID (the control goto east from the same
+    tele moved < DD10_CTRL_MOVED: stuck start) | BLOCKED."""
+    names = ['t'] + [str(i) for i in range(1, len(DD10_GATE_XS) + 1)] + ['ct', 'c']
+    ps = [pos_of(a, '%s-%s' % (lbl, n)) for n in names]
+    miss = [n for n, p in zip(names, ps) if p is None]
+    if miss:
+        return 'NOSAMPLE', 'no pos line for %s' % ', '.join('%s-%s' % (lbl, n) for n in miss)
+    t0 = next((secs_of(l) for l in a if 'pos %s-t:' % lbl in l), None)
+    t1 = next((secs_of(l) for l in a if 'pos %s-c:' % lbl in l), None)
+    walk, ct, c = ps[:-2], ps[-2], ps[-1]
+    minx = min(p[0] for p in walk)
+    path = ' '.join('(%d,%d,%d)' % p for p in walk)
+    if t0 is not None and t1 is not None and [l for l in deaths if t0 < secs_of(l) <= t1 + 2]:
+        return 'DIED', 'death row inside the walk; min x %d; %s' % (minx, path)
+    if minx < DD10_THROUGH:
+        return 'THROUGH', 'ALIVE at x %d (< %d): the hidden gate lets players out; %s' % (minx, DD10_THROUGH, path)
+    cm = math.hypot(c[0] - ct[0], c[2] - ct[2])
+    if cm < DD10_CTRL_MOVED:
+        return 'VOID', 'control goto east moved only %.0f cm (< %d): stuck start; %s' % (cm, DD10_CTRL_MOVED, path)
+    return 'BLOCKED', 'min x %d, control moved %.0f; %s' % (minx, cm, path)
+
 
 def gate_seg(who, walks=None, south=True):
     # 4m_11 by its full name: run 1's 'ents Chainlink_Fence_4m_1 6' showed 6 of 8 (_19.._12) and missed it
@@ -379,6 +432,8 @@ def segment(k, who):
         return gate_seg(who, GATE_WALKS_UNHIDE, south=False)
     if k == 'DM07SINK_1109':
         return gate_seg(who, GATE_WALKS_SINK, south=False) + vans_seg(who, 0, 'dm07')
+    if k == 'DD10GATE_1109':
+        return dd10gate_seg(who)
     if k == 'DM07CURTAIN_1109':
         # van first: the walks + respawn waits take ~150 s and DM07_1109 saw state 3 at ~90 s; waitvan matches 3/4 only, so a van already at 5/7
         # after the walks would time out (300 s + 150 s). The walks then run in round 2 (curtain_seg starts with waitstate 0x19).
@@ -775,6 +830,21 @@ def item_checks(k, a, dd=(), ctrl=None):
         info.append('curtain verdict: %s. KILLED = the KillBox kills a player in the gate; BLOCKED = something else stopped him (the curtain is then unproven); THROUGH / INSIDE = open'
                     % ', '.join('%s %s' % (l_, verdict.get(l_, '?')) for l_, _, _ in CURTAIN_WALKS))
         info.append('KeepAlive is OFF for this kit (K keepalive=0): a police kill east of the fence reads DIED-EAST (WARN, rerun)')
+    if k == 'DD10GATE_1109':
+        pk = next((l for l in a if 'BENCH1109 dd10gate van parked' in l), None)
+        info.append('van before the walks: %s' % (pk[:12] if pk else 'no parked line'))
+        deaths = [l for l in a if 'skulls state: row 0' in l and 'kind 3' in l]
+        vs = {}
+        for lbl, st in DD10_GATE_WALKS:
+            v, note = dd10gate_walk(a, lbl, deaths)
+            vs[lbl] = v
+            info.append('%s (z %d): %s - %s' % (lbl, st[2], v, note))
+            if v == 'NOSAMPLE':
+                chk('%s: walk sampled' % lbl, False, note)
+            else:
+                chk('%s: the hidden DD10 gate stops the player (never alive west of x %d)' % (lbl, DD10_THROUGH), v == 'BLOCKED', '%s - %s' % (v, note), warn=v in ('VOID', 'DIED'))
+        chk('at least 2 of the %d gate walks gave a verdict' % len(DD10_GATE_WALKS), sum(1 for v in vs.values() if v in ('BLOCKED', 'THROUGH')) >= 2,
+            ', '.join('%s %s' % kv for kv in vs.items()))
     if k in ('DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109'):
         unhide = k in ('DM07UNHIDE_1109', 'DM07SINK_1109')      # no south walk, own verdict line
         sink = k == 'DM07SINK_1109'
