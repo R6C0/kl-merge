@@ -243,6 +243,26 @@ KITS = {
                             hook=('C:/kl-merge/kl-merge/klhook/out_vanwait1108b/dinput8.dll', '76bd4a9cfe325b750ab76546599c3518'),
                             ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'Log=1'],
                             solo_secs=900, parts=('solo',), shots='300-840:30'),
+    # DD10 LIVE (11-09): flatledge + flats + vancall are all INSTALLED (owner testing), so no stage: the live map on the TEST twin of the live SHIP 246c643d
+    # (merged_1108c TEST 09a02a2c), the live [VanBlow] lines. Nobody boards; the log decides (van called? shown? state 4 then 7 undamaged? faults 0).
+    'dd10live1109': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '1a0d94b0', 'KLJoin.ini': 'ebdf1472'}, van=True,
+                         hook=('C:/kl_build_1024/merged_1108c/dll_test/dinput8.dll', '09a02a2cbcbeebb3eb3f01310c8b0cf8'),
+                         ini=['[Bots]', 'LastVehicleLead=600', '[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'Log=1'],
+                         solo_secs=900, parts=('solo',), shots='300-840:30'),
+    # 11-09: dd10live1109 PASS but the van came from 'last:' (59.8 s left), nobody stood in the exit box. This one walks the heister-call path:
+    # approach box only (8950 = exit x + 650: inside the approach half 800, outside the exit half 450), then the exit box (8300, 1100); floor y ~0 (bots at y 0)
+    # rerun 11-09 02:54 (exit box only) ALL PASS: heister at stage 3 with $0 called the van (van 1, state 3 after 4.4 s); the seat died at the box centre ~4 s in
+    # while the van drove into the same spot (GUESS: run over, 'KILLED BY RED'), so nobody boarded and it left after 8 s
+    'dd10call1109': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '1a0d94b0', 'KLJoin.ini': 'ebdf1472'},
+                         vancall=((None, None, None), (8300, 50, 1100)),
+                         hook=('C:/kl_build_1024/merged_1108c/dll_test/dinput8.dll', '09a02a2cbcbeebb3eb3f01310c8b0cf8'),
+                         ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'Log=1'], keepalive=True,
+                         solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # 11-09: the INSTALLED DM05A club music level B (0ff298a6, stage already in): load + faults + shots, nothing installed
+    # run 11-09 03:03: 0 asserts/faults/dumps over 290 s of play, but the round had 78 s left when the script passed (0x1f/0x20 unseen): 480 -> 600
+    'lcmusicblive1109': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': '0ff298a6', 'KLGuns.ini': '33432bb9'},
+                             hook=('C:/kl_build_1024/merged_1108c/dll_test/dinput8.dll', '09a02a2cbcbeebb3eb3f01310c8b0cf8'),
+                             solo_secs=600, parts=('solo',), shots='60-420:30'),
     # Retomoto van empty-wait (11-08): owner 'the vehicle on fire is the same occurance for retomoto tower'. The LIVE DM09 (nothing installed; slot F06, page 2 entry 4
     # = kl_arc2_kit's verified place) on the TEST twin of the live SHIP dll, [VanBlow] ShieldWhileWaiting=1 as live; nobody boards, the log decides (as vanwait1108).
     'vanwait09_1108': dict(map='DM09', slot='F06', page=2, entry=4, stage=None, tag=None, live={'F06_Main.zip': 'afee8967'}, van=True,
@@ -367,6 +387,17 @@ def solo_script(k, secs_total):
         for d in (150, 300):
             s += ['goto %d %d 40 4000' % (bx + d * (lx - bx) / n, bz + d * (lz - bz) / n), 'log BENCH1106 facing look point (%d)' % d, 'wait 12000', 'pos look-%d' % d]
         s += ['wait 30000', 'pos look-end', 'log BENCH1106 look done', 'pass 1000']
+    elif c.get('vancall'):
+        # DD10 van call (11-09, tools/kl_dd10_vancall_1108.py): the van is called ONLY by a heister in otrExitLevel. TEST rig tele first into the
+        # approach box (node 22127, shows the van) outside the exit box, then into the exit box; the log says who called it ('last:' = the fallback, not this)
+        (ax, ay, az), (ex, ey, ez) = c['vancall']
+        s += ['wait 10000', 'pos before-call']
+        if ax is not None:              # dd10call1109 run 1: tele to (8950, 50, 1100) killed the seat in 60 ms (fed after 5 s): the exit box lies inside the approach box anyway
+            s += ['tele %d %d %d' % (ax, ay, az), 'wait 6000', 'pos in-approach']
+        s += ['tele %d %d %d' % (ex, ey, ez), 'wait 3000', 'pos in-exit', 'log BENCH1106 in the exit box', 'waitvan 3 240000', 'pos van3']
+        for i in range(1, 7):
+            s += ['wait 15000', 'pos wait-%ds' % (15 * i)]
+        s += ['log BENCH1106 van call done', 'pass 1000']
     elif c.get('van'):
         # empty-wait van (11-08, [VanBlow] ShieldWhileWaiting): nobody boards; the seat stands at spawn while the van waits at the pickup.
         # The log then shows whether the van was shielded ('vanblow: ShieldWhileWaiting', 'follow: shield') and whether it reached 6 (destroyed).
@@ -394,7 +425,7 @@ def probes(k):
     if k in LC:
         # lclive1106 (11-06 10:52): 0 KLShot files, d3count 0 frames: ReShade owns Present here, so shots go through its bridge (as MT3B 11-02)
         t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
-    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look'):
+    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look') or KITS[k].get('vancall'):
         # dm06btraffic1108 / vanwait1108 (11-08): 0 KLShot files, these kits had no ReShade bridge lines (only LC kits did)
         t = ['[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
     return t
@@ -466,6 +497,8 @@ def gen(which='all'):
             t += ['[Bots]', 'LastVehicleLead=600']
         t += c.get('ini', [])
         t += [l.replace('{x}', str(n - 60)).replace('{m}', str((n - 70) * 1000)) for l in AUTO]
+        if c.get('keepalive'):         # inside the one [Auto] block: a second [Auto] header in 'ini' could shadow this one
+            t.append('KeepAlive=1')
         t += ['[Script]'] + renumber(solo_script(k, n))
         write('%s/solo.ini' % d, '\n'.join(t) + '\n')
         lr = 2 if k == 'dd10s1106' else 0
@@ -700,6 +733,15 @@ def kl2_procs():
         f = [x.strip('"') for x in l.split('","')]
         if len(f) >= 5 and f[0].lower() == 'kl2.exe':
             r.append((int(f[1]), int(re.sub(r'\D', '', f[4]) or 0)))
+    # 11-09: zombies can also sit at ~56 MB with 0 threads (no game); report those as working set 0 so run() skips them
+    try:
+        out = subprocess.run(['powershell', '-NoProfile', '-Command',
+                              "Get-CimInstance Win32_Process -Filter \"Name='kl2.exe'\" | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.ThreadCount }"],
+                             capture_output=True, text=True, timeout=30).stdout
+        dead = {int(a) for a, b in (l.split() for l in out.splitlines() if len(l.split()) == 2) if b == '0'}
+        r = [(pid, 0 if pid in dead else kb) for pid, kb in r]
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
     return r
 
 
