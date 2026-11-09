@@ -157,11 +157,12 @@ static void ksu_hire_line1(char *out, size_t cap, int state, long price, int nee
     snprintf(out, cap, "%s", t);
 }
 
-/* the whole hire description: line 1, the bio, the price / rank facts. rankText = 'your rank 2' / 'no rank gate' */
-static void ksu_hire_desc(char *out, size_t cap, const char *line1, const char *bio, long price, int need, const char *rankText)
+/* the whole hire description: line 1, the bio, then the rank facts only with a rank gate (line 1 already carries the price;
+   the 11-09 look bench showed 'Price $90,000, rank 2 needed (no rank gate)' repeating it). rankText = 'your rank 2' / 'your rank unknown' */
+static void ksu_hire_desc(char *out, size_t cap, const char *line1, const char *bio, int need, int gate, const char *rankText)
 {
-    char m[24]; ksu_money_full(m, sizeof m, price);
-    snprintf(out, cap, "%s\n%s\nPrice %s, rank %d needed (%s).", line1, bio, m, need, rankText);
+    if (gate) snprintf(out, cap, "%s\n%s\nNeeds rank %d (%s).", line1, bio, need, rankText);
+    else snprintf(out, cap, "%s\n%s", line1, bio);
 }
 
 /* the stars of a hire row: with no rank gate they would show a rank need that is not enforced: hidden (idx 99). Gate on: the need (-1 lit / 99 dim), as before.

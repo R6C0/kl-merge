@@ -115,9 +115,12 @@ int main(void)
 
     /* the whole hire description */
     ksu_hire_line1(b, sizeof b, KSU_H_READY, 45000, 1, 0, 1, "", "");
-    ksu_hire_desc(o, sizeof o, b, "Dog Days crew. Hired for one round.", 45000, 1, "no rank gate");
-    CHECK(!strncmp(o, "$45,000 - BUY twice to hire\nDog Days crew.", 40) && l1len(o) <= KSU_LINE1_MAX && strstr(o, "Price $45,000, rank 1 needed (no rank gate)."), "desc: '%s'", o);
+    ksu_hire_desc(o, sizeof o, b, "Dog Days crew. Hired for one round.", 1, 0, "no rank gate");
+    CHECK(!strcmp(o, "$45,000 - BUY twice to hire\nDog Days crew. Hired for one round.") && l1len(o) <= KSU_LINE1_MAX, "desc, no gate: no facts line: '%s'", o);
     CHECK(!strstr(o, "stock gun") && !strstr(o, "lock shown"), "no stock-gun remarks");
+    ksu_hire_line1(b, sizeof b, KSU_H_READY, 45000, 3, 1, 1, "", "");
+    ksu_hire_desc(o, sizeof o, b, "Dog Days crew.", 3, 1, "your rank 8");
+    CHECK(!strcmp(o, "$45,000, rank 3 - BUY twice\nDog Days crew.\nNeeds rank 3 (your rank 8).") && !strstr(o + 30, "$"), "desc, gate: rank facts, price once: '%s'", o);
 
     /* stars / lock */
     CHECK(ksu_star_idx(1, 0, 0, 3) == 99 && ksu_star_idx(1, 0, 5, 3) == 99, "no gate + tidy: stars hidden");

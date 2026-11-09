@@ -302,7 +302,7 @@ static void kspg_h_desc(int ch, char *o, size_t cap)
                 : (kspg.hArm == ch && now - kspg.hArmAt < 4000) ? KSU_H_ARM : (klhr_lastrow == ch && klhr_lastat && now - klhr_lastat < 20000 && strcmp(klhr_lastmsg, "hired")) ? KSU_H_REFUSED
                 : (have && rank < klhr_need[ch]) ? KSU_H_LOWRANK : KSU_H_READY;
         char l1[96]; ksu_hire_line1(l1, sizeof l1, stc, klhr_price[ch], klhr_need[ch], klhr_rankgate, kspg.hireConfirm, klhr_next ? klhr_name[klhr_next] : "", klhr_lastmsg);
-        ksu_hire_desc(o, cap, l1, kspg_h_bio[ch], klhr_price[ch], klhr_need[ch], rk);
+        ksu_hire_desc(o, cap, l1, kspg_h_bio[ch], klhr_need[ch], klhr_rankgate, rk);
         return;
     }
     if (kspg.rowFit) { snprintf(o, cap, "%s\nHire $%d, rank %d needed (%s).\n%s\nGun price and lock shown here: the stock gun's, not used.", st, klhr_price[ch], klhr_need[ch], rk, kspg_h_bio[ch]); return; }   /* RowFit: the status first */
