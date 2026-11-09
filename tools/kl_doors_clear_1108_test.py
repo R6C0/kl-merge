@@ -28,7 +28,7 @@ t('a 3-cell pocket is a nook (< MIN_CUT), a 42-cell room is not', 3 < C.MIN_CUT 
 t('escape names include the exit icon and the van boarding box', 'mapiconexit' in C.ESCAPE_NAMES and 'boardingtrigger' in C.ESCAPE_NAMES)
 try:
     import kl_doors_1108 as D
-    t('DM03 default hosts exclude 1076 (cuts a corridor off), keep 176/64/546/1255', D.MAPS['DM03']['hosts'] == [176, 64, 546, 1255])
+    t('DM03 default hosts exclude 1076 (cuts a corridor off) and the one-sided 546/1255, keep 176/64', D.MAPS['DM03']['hosts'] == [176, 64])
     t('DM03A default hosts exclude 6770 (cuts a room off)', D.MAPS['DM03A']['hosts'] == [6516] and D.MAPS['DM03A']['top'] == 'KL_Interact!3')
 except ImportError as e:
     t('kl_doors_1108 imports (%s)' % e, False)
