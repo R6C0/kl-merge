@@ -59,6 +59,10 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
     Jesper Kyd's title theme: the one over the title / campaign intro / credits), not the menu loop. LOCAL SESSION: `kl_launcher_music.py list --dm "<DM>"` for names
     with Theme / Title / Main / Credits / Intro / Outro / KL_ (SFX/UserInterface and Music/ both); if it is only inside a Bink movie (Movies\*.bik intro) say so and
     we decide (a .bik audio track would need a decoder). Make the found clip CANDIDATES[0], keep MenuLoop_01 as [1]; extract, listen, note the name here.
+  - 11-09 ~16:10 06: NO clip named Theme/Title/Credits/Intro in PC_Def.str besides M01_Loading_Kane_Family_Theme (102.3 s PCM). Owner to LISTEN
+    and pick from C:\kl_build_1024\launcher_1109\theme_candidates: M01_Loading_Kane_Family_Theme, M14_Kill_Start, M14_End, M13B_Kane_Drive_Loop,
+    FA_SlashMixPrison (str clips) + movie_M00_Intro / movie_Trailer / movie_Attract01 (Bink audio, ffmpeg-decoded). A str clip -> CANDIDATES[0];
+    a movie-only theme needs a Bink audio path (ffmpeg only, or a decoder) -> owner decides. Side fix bceab0fc: listed PCM lengths were double.
   Owner: pick the public release host (a private repo's release assets need a token) and set RELEASE_URL in "KLMerge Setup.bat"; tell testers Dead Men must be installed.
 
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
