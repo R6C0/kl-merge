@@ -139,3 +139,10 @@ Tool tools/kl_vehroutes_street3_1108.py (+ _test.py), stage C:/kl_build_1024/veh
 - Viewshed, strict (tool viewshed2): viewers = every reachable floor cell in 200-unit blocks, range 30000, eye +300, point +250, EVERY drive key (early exit per key; exact counts for the first / last 40 unique positions), solid and soft occluder sets. RESULT (final stage, PROBLEMS: 0 twice): 1249 viewers; keys 0..15 seen by 0 (solid and soft), key 16 soft 1 (the van is already on the arc), keys 17..374 seen (the street drive, 94 solid / 120 soft at key 17), keys 375..390 seen by 0 (end 17400,30400 seen by 0). Yaw max 4.69 deg/frame arrival, 4.06 departure.
 - Kit: install.py pins live 778b075c / dccc9250 / 6616525a, refuses a running kl2.exe, --dry, --undo (needs each file to be exactly what this wrote), --min-free-mb 300 (backups 408 MB + .tmp 206 MB + 300). Rehearsed on scratch hard links (C:/kl_build_1024/_scratch_street3/game): dry, install, second install refused, min-free refusal, undo = all three md5s back byte-exact. Install template fixed: LIVE_ZIP_MD5 now derives from FILES (the hard-coded 74d37233 was stale).
 
+## CORRECTION 2026-11-09 (live benches DM07GATE/UNHIDE/SINK_1109)
+The 0x400 "render only, collision stays" verdict above is WRONG at runtime for these panels: every live walk that crossed went under a HIDDEN panel
+(4m_01 / 4m_11, entity en? bit 0, flags 090285e6), and with 4m_01 un-hidden the walk at z 10334 stopped at its east face (x -4549); the sunk-slab
+variant (13 slabs lowered to the mud) changed nothing because the crossings were still under the hidden pair. So the DM07 gate is a hole for players
+too. Fix in progress: a KillBox curtain just west of the gate (tools/kl_dm07curtain_1109.py, DM11B recipe). SAME RISK on the live DD10 gate
+(BigFence_A_02, REF 31255, hidden by tools/kl_dd10_vanlane_1108.py): needs a walk bench. Pillar 21329 blocks DM07 only for z 10636..12886.
+
