@@ -2,7 +2,7 @@
 
 Owner's words (11-09 ~14:20, live), DM09 Retomoto: "extend it to the original mission where you gotta go down the steps to the van all the way down, if it's not
 too much of an issue; more SWAT down there with vans and cars dropping them off; more cover accessible all around; make sure you can go into cover from blown up vehicles
-[reading: wrecks as cover, confirm]; make sure the AI can't just collide into them; and collision so you can't go inside other people - player models have their own physics."
+[CONFIRMED by the owner 11-09 ~15:00: "yes work as cover when theyre wrecks yes after the explosion"]; make sure the AI can't just collide into them; and collision so you can't go inside other people - player models have their own physics."
 
 Owner's words (11-09 ~14:00, live), DM03 Withdrawal: "more SWAT at the back, even where the van spawns" (the front stays normal police as he said 11-08; the 1108 frontcops part stands). "Add more loot rooms. The door just before
 the garage is two doors in the original game, like a vault in the campaign FA: make that a door you can blow up, with a good bit of loot behind it. More doors you can
