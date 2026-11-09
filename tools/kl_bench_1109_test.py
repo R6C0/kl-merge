@@ -95,7 +95,8 @@ def van(k, mut=None):
         g.ent('V_Van', (17365, 0, 31663))                                    # reaches the END pocket, then resets to START: not a pop
         g.wait(1)
         g.ent('V_Van', (M.POCKETS[k][0][0], 0, M.POCKETS[k][0][1]))
-    g.say('BENCH1109 van at state 7 (leaving)')
+    if mut != 'nostate7':
+        g.say('BENCH1109 van at state 7 (leaving)')
     for i in range(4):
         g.wait(3)
         g.ent('V_Van', (first[0], 0, first[2]))                             # reset to the start pocket after 7: not a pop
@@ -164,6 +165,48 @@ def sink(mut=None):
     return g.lines + (van('DM07SINK_1109') if mut != 'novan' else [])
 
 
+def curtain(mut=None):
+    """DM07CURTAIN_1109: controls curA / curB walk up to the fence (BLOCKED), the four gate crossings die in the curtain box (KILLED), then the van round.
+    mut: through (cur11a walks through alive), inside (cur11b stops alive inside the box), frozen (cur01 never moves), allvoid (every gate walk frozen),
+    policeeast (cur11c dies east of the fence), latedeath (cur11a passes the box, dies at -5000), deadbefore (dead before cur01, no respawn), controlthrough (curA walks through),
+    nosample (cur11b-3 missing), novan, nostate7 (van never leaves)"""
+    g = Log('DM07CURTAIN_1109')
+    g.t -= 400                                                       # the crossings come before the van log below
+    kill = lambda: g.raw("hud: ONLINE skulls state: row 0 'R5 J.C.' kind 3 deaths 1 -> lives 2 (drawn)")
+    for lbl, st, exp in M.CURTAIN_WALKS:
+        if mut == 'deadbefore' and lbl == 'cur01':
+            kill()
+        if exp == 'BLOCKED':
+            xs = [max(x, -4549) for x in M.GATE_XS] if not (mut == 'controlthrough' and lbl == 'curA') else list(M.GATE_XS)
+            dies = None
+        else:
+            xs = [-4400, -4520, -4600, -4600, -4600]                 # a corpse in the box (-4720..-4560)
+            dies = 2
+            if mut == 'through' and lbl == 'cur11a':
+                xs, dies = list(M.GATE_XS), None
+            if mut == 'inside' and lbl == 'cur11b':
+                xs, dies = [-4400, -4520, -4620, -4620, -4620], None
+            if (mut == 'frozen' and lbl == 'cur01') or mut == 'allvoid':
+                xs, dies = [st[0] + 150] * 5, None
+            if mut == 'policeeast' and lbl == 'cur11c':
+                xs, dies = [-4300, -4300, -4300, -4300, -4300], 1
+            if mut == 'latedeath' and lbl == 'cur11a':
+                xs, dies = list(M.GATE_XS), 4
+        g.say('pos %s-t: me #0 (%d, 410, %d) heading 270' % (lbl, st[0] + 60, st[2]))
+        g.say('pos %s-s: me #0 (%d, 410, %d) heading 90' % (lbl, st[0] + 150, st[2]))
+        for i, x in enumerate(xs):
+            if mut == 'nosample' and lbl == 'cur11b' and i == 2:
+                continue
+            g.say('pos %s-%d: me #0 (%d, 410, %d) heading 270' % (lbl, i + 1, x, st[2]))
+            if dies == i + 1:
+                kill()
+        g.say('BENCH1109 curtain %s done' % lbl)
+        g.wait(12)                                                  # a real walk is ~20 s: the next walk's own death must not fall in this one's window
+        if exp == 'KILL' and mut != 'deadbefore':
+            g.raw("hud: ONLINE skulls state: row 0 'R5 J.C.' kind 1 deaths 1 -> lives 2 (drawn)", 6)   # back as police after the 8 s wait
+    return g.lines + (van('DM07CURTAIN_1109', 'nostate7' if mut == 'nostate7' else None) if mut != 'novan' else [])
+
+
 def doors(k, mut=None):
     dd = [dict(host=176, name='x', hinge=[-3708, 300, -3217], front=[-3772, 300, -3125], back=[-3767, 300, -3316])]
     if k == 'DM02_1109':
@@ -220,6 +263,8 @@ def log_for(k, mut=None):
         return unhide(mut), [], None
     if k == 'DM07SINK_1109':
         return sink(mut), [], None
+    if k == 'DM07CURTAIN_1109':
+        return curtain(mut), [], None
     a, dd = doors(k, mut)
     return a, dd, None
 
@@ -242,6 +287,7 @@ def main():
             'DM07_1109': ['fence', 'nolate', 'nocontrol', 'walkedout', 'nopos', 'farpos', 'nostate3', 'stuck'],
             'DM07GATE_1109': ['fence', 'nopos'],
             'DM07UNHIDE_1109': ['hidden01', 'nopos'],
+            'DM07CURTAIN_1109': ['through', 'inside', 'allvoid', 'latedeath', 'controlthrough', 'nosample', 'novan', 'nostate7'],
             'DM03_1109': ['nohits', 'nopolice','noleaf', 'nokick', 'static', 'nogoto'],
             'DM02_1109': ['noleaf', 'nokick', 'nogoto'],
             'DOORS_1109_DM01': ['noleaf', 'nokick'],
@@ -296,6 +342,28 @@ def main():
     ok(not any('gateS' in l or 'gateB' in l for l in M.gate_seg('host', M.GATE_WALKS_UNHIDE, south=False))
        and any('gateH' in l for l in M.gate_seg('host', M.GATE_WALKS_UNHIDE, south=False)) and any('gateS' in l for l in M.gate_seg('host')), 'UNHIDE script: H + A only, no south walk; the GATE kit keeps all of it')
     ok(M.K['DM07UNHIDE_1109']['stage'] and M.K['DM07UNHIDE_1109']['tag'] == '.before-dm07unhide1109' and M.K['DM07GATE_1109']['stage'] is None, 'UNHIDE is a stage kit (stage+tag kept by the defaults loop), GATE is not')
+    # DM07CURTAIN_1109: KILLED / BLOCKED pass, alive west of the fence FAILs, void walks are WARN, KeepAlive is off, van state 7 is required
+    r, inf = M.item_checks('DM07CURTAIN_1109', curtain(), [], None)
+    ok(not [x for x in r if x[0] != 'PASS'] and any('curtain verdict: curA BLOCKED, curB BLOCKED, cur01 KILLED, cur11a KILLED, cur11b KILLED, cur11c KILLED' in i_ for i_ in inf),
+       'CURTAIN: good log = all PASS, verdict line %s %s' % ([x for x in r if x[0] != 'PASS'], [i_ for i_ in inf if 'verdict' in i_]))
+    ok(any('cur11a' in x[1] for x in fails('DM07CURTAIN_1109', 'through')), 'CURTAIN: a gate crossing alive west of -4700 FAILs')
+    ok(any('cur11b' in x[1] and 'never alive' in x[1] for x in fails('DM07CURTAIN_1109', 'inside')), 'CURTAIN: alive inside the box (not killed) FAILs')
+    ok(any('cur11a' in x[1] for x in fails('DM07CURTAIN_1109', 'latedeath')), 'CURTAIN: a death only after passing the box is THROUGH, FAIL')
+    ok(any('curA' in x[1] for x in fails('DM07CURTAIN_1109', 'controlthrough')), 'CURTAIN: a control that walks through FAILs')
+    ok(any('van reaches state 7' in x[1] for x in fails('DM07CURTAIN_1109', 'nostate7')), 'CURTAIN: no state 7 FAILs (driver killed?)')
+    r, inf = M.item_checks('DM07CURTAIN_1109', curtain('frozen'), [], None)
+    ok(not [x for x in r if x[0] == 'FAIL'] and any(x[0] == 'WARN' and 'cur01' in x[1] for x in r) and any('cur01 (z 10334, expect KILL): VOID' in i_ for i_ in inf), 'CURTAIN: a frozen walk is VOID = WARN, not FAIL')
+    ok(any('at least 2' in x[1] for x in fails('DM07CURTAIN_1109', 'allvoid')), 'CURTAIN: every gate walk VOID FAILs (no vacuous PASS)')
+    r, inf = M.item_checks('DM07CURTAIN_1109', curtain('policeeast'), [], None)
+    ok(not [x for x in r if x[0] == 'FAIL'] and any('cur11c (z 10700, expect KILL): DIED-EAST' in i_ for i_ in inf), 'CURTAIN: a death east of the fence is DIED-EAST, WARN')
+    r, inf = M.item_checks('DM07CURTAIN_1109', curtain('deadbefore'), [], None)
+    ok(any('cur01 (z 10334, expect KILL): DEAD-BEFORE' in i_ for i_ in inf), 'CURTAIN: a corpse at the tele is DEAD-BEFORE')
+    ok(any('crossing sampled' in x[1] for x in fails('DM07CURTAIN_1109', 'nosample')), 'CURTAIN: a missing pos line FAILs')
+    sc = M.curtain_seg('host')
+    ok(sum(1 for l in sc if l.startswith('tele')) == 6 and all(sc[i + 1] == 'wait 2000' and sc[i + 2].startswith('pos ') and sc[i + 3].startswith('goto -3850') for i, l in enumerate(sc) if l.startswith('tele')),
+       'CURTAIN script: each walk = tele, wait, pos, settle goto 150 east')
+    ok(M.K['DM07CURTAIN_1109']['keepalive'] == 0 and M.K['DM07SINK_1109']['keepalive'] == 1 and M.K['DM07CURTAIN_1109']['tag'] == '.before-dm07curtain1109' and 'DM07CURTAIN_1109' in M.ORDER, 'CURTAIN kit: stage + tag + keepalive 0 only here, in ORDER')
+    ok([c[0] for c in M.CURTAIN_WALKS][:2] == ['curA', 'curB'] and [c[1][2] for c in M.CURTAIN_WALKS] == [9800, 10850, 10334, 10420, 10600, 10700], 'CURTAIN walks: controls first, z 9800 10850 10334 10420 10600 10700')
     # pos parsed by name: the label decides, not the position in the line
     ok(M.pos_of(['01:00:00.000 script 3: pos x-label: me #0 (-4300, 550, 10400) heading 12'], 'x-label') == (-4300, 550, 10400), 'pos_of parses the named x')
     ok(M.pos_of(['01:00:00.000 script 3: pos other: me #0 (1, 2, 3) heading 12'], 'x-label') is None, 'pos_of: other label is None')

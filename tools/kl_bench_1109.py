@@ -14,7 +14,7 @@ A per-kit item segment is spliced into BOTH seats' scripts right after the first
     python tools/kl_bench_1109.py verify <kit>        re-read the logs of the last run (no game contact)
     python tools/kl_bench_1109.py order               (re)write C:/kl_build_1024/bench_1109/RUN_ORDER.txt
 
-Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DM07GATE_1109 DM07UNHIDE_1109 (stage kit) DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
+Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DM07GATE_1109 DM07UNHIDE_1109 (stage kit) DM07SINK_1109 (stage kit) DM07CURTAIN_1109 (stage kit, KeepAlive off) DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
 What the log CAN decide: faults/dumps, round 2 reached, 0x25 dwell, botgate, entity hidden flags and positions (`ents`), vehicle state
 (`waitvan`), goto reached / NOT reached. What it CANNOT: boom, camera shake, glare, kick sound, pop (a 1-frame jump), cover pillars: those
 need the screenshots (ReShade bridge D3dShotPost, KLShot_inst1_NN.jpg in the run folder) and an ear/eye.
@@ -68,6 +68,17 @@ K = {
                           stage='C:/kl_build_1024/dm07sink_1109', tag='.before-dm07sink1109',
                           files={'F06_Main.zip': 'a98e1f7562f031c7c4d590106c07212e', 'F06_Main.bots.zip': '0a80cfef9ab72d0c4aeae39d152ec811',
                                  'F06_Main.bots.base.md5': '0ee0ef216ecb3a16628ad291c7caa3b7'}),
+    # FIX TEST (stage kit): a KillBox "curtain" box (cm) x -4720..-4560, y 300..1100, z 9990..10800 just west of the gate (tools/kl_dm07curtain_1109.py, the DM11B
+    # donor_kill recipe: an inert *NoCover* box + the stock KillBox controller). Walks: controls first (z 9800 = visible 4m_02, z 10850 = 4m_10: BLOCKED), then four
+    # through the gate (z 10334, 10420, 10600, 10700): each must end KILLED (dead inside the curtain) or BLOCKED east of x -4565; alive west of -4700 = THROUGH = FAIL.
+    # Then the van round: the van must still reach state 7 (GUESS: a KillBox ignores a vehicle; if it kills the driver the van never leaves = FAIL).
+    # keepalive=0: KeepAlive refills the local player's health every poll while health > 0 (klauto.c kla_keep_alive); a KillBox that kills through damage (not by
+    # setting health to 0 in one step) could be undone by it, so this kit runs without it (police kills before the fence then read DIED-EAST = WARN, rerun).
+    'DM07CURTAIN_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-900:15',
+                             stage='C:/kl_build_1024/dm07curtain_1109', tag='.before-dm07curtain1109',
+                             files={'F06_Main.zip': '2529fb77e18a62e101a6bc544956b8e9', 'F06_Main.bots.zip': 'da69d8b3ad2ff9abf1b9925e9fdecbd6',
+                                    'F06_Main.bots.base.md5': '8ee12031c0e0da6af2a94304892b8b6e'},
+                             keepalive=0),
     'DOORS_1109_DM01': dict(map='DM01', slot='F01', live={'F01_Main.zip': '444a3ed6', 'F01_Main.bots.zip': 'f3ed6155', 'KLJoin.ini': 'db4516c6'}, shots='60-700:20',
                             doors=('DM01', 'F01', (957, 2569))),
     # door 2569 first: runs 2 and 3 lost door 2 to a police kill ~19 s into the round (05:53:28, 06:22:36), always after door 1
@@ -76,9 +87,9 @@ K = {
     'DOORS_1109_DM03A': dict(map='DM03A', slot='F07', live={'F07_Main.zip': 'aa79d66d', 'F07_Main.bots.zip': 'd1a8dd0c', 'KLJoin.ini': '958c24b6'}, shots='60-700:20',
                              doors=('DM03A', 'F07', (6516,))),
 }
-ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A']
+ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109', 'DM07CURTAIN_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A']
 for _k, _c in K.items():
-    for _a, _b in dict(entry=0, stage=None, tag=None, hook=HOOK, solo_secs=600, parts=('online',)).items():
+    for _a, _b in dict(entry=0, stage=None, tag=None, hook=HOOK, solo_secs=600, parts=('online',), keepalive=1).items():
         _c.setdefault(_a, _b)
     if _k not in B.KITS:
         pass
@@ -280,6 +291,15 @@ GATE_WALKS = (('gateH', (-4000, 550, 10334)), ('gateA', (-4000, 562, 9793)), ('g
 GATE_WALKS_UNHIDE = GATE_WALKS[:2]              # DM07UNHIDE_1109: H (4m_01, un-hidden there) first, then the A control (4m_02, visible)
 GATE_WALKS_SINK = (('sink01', (-4000, 550, 10334)), ('sink11a', (-4000, 550, 10420)), ('sink11b', (-4000, 550, 10700)), ('sink10', (-4000, 550, 10850)))
 GATE_XS = (-4400, -4520, -4620, -4750, -5000)   # goto steps: one pos per step, so the crossing is read without a mid-goto sample
+# DM07CURTAIN_1109: (label, tele start, expect). Controls first (they do not die, and show the method discriminates), then the four gate crossings.
+# 4m_01 z 9993..10393 (10334, 10420 = under 4m_11), 4m_11 z 10395..10795 (10600, 10700); z 9800 = visible 4m_02; z 10850 = 4m_10 (visible, past the curtain box z 10800).
+CURTAIN_WALKS = (('curA', (-4000, 550, 9800), 'BLOCKED'), ('curB', (-4000, 550, 10850), 'BLOCKED'),
+                 ('cur01', (-4000, 550, 10334), 'KILL'), ('cur11a', (-4000, 550, 10420), 'KILL'), ('cur11b', (-4000, 550, 10600), 'KILL'), ('cur11c', (-4000, 550, 10700), 'KILL'))
+CURTAIN_X = -4560           # east edge of the curtain box: a corpse west of it died inside the box; a body blocked at the fence stands at -4549 / -4503 or east
+CURTAIN_BOX_W = -4720       # west edge of the curtain box
+CURTAIN_THROUGH = -4700     # alive west of this = through the gate
+CURTAIN_MOVED = 300         # a walk counts only when the player moved this far in total from the settle point, else VOID
+CURTAIN_RESPAWN_MS = 8000   # after a kill walk: wait (GUESS: a dead heister is back as police within that; else the next walks read DEAD-BEFORE = WARN)
 
 
 def gate_seg(who, walks=None, south=True):
@@ -298,6 +318,24 @@ def gate_seg(who, walks=None, south=True):
         return s
     # from the pocket (H gets through): does its south slope lead off the map? (static read: mud floor x -11000..-4600, outside every LevelBound)
     s += ['tele -4944 450 10333', 'wait 2000', 'goto -6900 8100 100 9000', 'pos gateS-1', 'goto -6900 6500 100 9000', 'pos gateS-2', 'log BENCH1109 gate south done']
+    return s
+
+
+def curtain_seg(who):
+    """DM07CURTAIN_1109 crossings. Fixes the control bugs of GATE/UNHIDE (their walks never moved: a tele start landed stuck, z-10334 walks began at
+    (-4009, 403, 10236), ~100 cm off the tele): tele, wait, then a short SETTLE goto 150 cm east (open ground) and a pos read before the walk; the verdict
+    only counts a walk that moved >= CURTAIN_MOVED cm in total from the settle point. Labels: <lbl>-t tele, <lbl>-s settled, <lbl>-1..5 the goto steps."""
+    s = ['ents Chainlink_Fence_4m_0 12', 'ents Chainlink_Fence_4m_11 2', 'ents NoCover 10', 'log BENCH1109 curtain fence panels read']
+    if who != 'host':
+        return s + ['wait 60000']
+    s += ['waitstate 0x19 90000']
+    for lbl, st, exp in CURTAIN_WALKS:
+        s += ['tele %d %d %d' % st, 'wait 2000', 'pos %s-t' % lbl, 'goto %d %d 60 2500' % (st[0] + 150, st[2]), 'pos %s-s' % lbl, 'face -5000 %d' % st[2]]
+        for i, x in enumerate(GATE_XS):
+            s += ['goto %d %d 60 %d' % (x, st[2], 3000 if i < len(GATE_XS) - 1 else 5000), 'pos %s-%d' % (lbl, i + 1)]
+        s += ['log BENCH1109 curtain %s done' % lbl]
+        if exp == 'KILL':
+            s += ['wait %d' % CURTAIN_RESPAWN_MS]
     return s
 
 
@@ -341,6 +379,10 @@ def segment(k, who):
         return gate_seg(who, GATE_WALKS_UNHIDE, south=False)
     if k == 'DM07SINK_1109':
         return gate_seg(who, GATE_WALKS_SINK, south=False) + vans_seg(who, 0, 'dm07')
+    if k == 'DM07CURTAIN_1109':
+        # van first: the walks + respawn waits take ~150 s and DM07_1109 saw state 3 at ~90 s; waitvan matches 3/4 only, so a van already at 5/7
+        # after the walks would time out (300 s + 150 s). The walks then run in round 2 (curtain_seg starts with waitstate 0x19).
+        return vans_seg(who, 0, 'dm07') + ['wait 15000'] + curtain_seg(who)
     return doors_seg(who, doors, 'door')
 
 
@@ -366,7 +408,9 @@ def pair(k, who):
         if name == 'Auto':
             # KeepAlive=1 (klauto.c kla_keep_alive, TEST rig only): refills the local player's health every poll. Police killed the host ~19 s
             # into the round on DOORS_1109_DM01 runs 2/3, DM07GATE runs 1/2 and DM07UNHIDE (control A), voiding the verdicts; both seats
-            kv = [(a, b) for a, b in kv if a not in ('CmdAdd', 'MaxRunMs', 'KeepAlive')] + [('CmdAdd', '-o DisableSplashScreens -o AutoExit=%d' % total), ('MaxRunMs', str((total - 10) * 1000)), ('KeepAlive', '1')]
+            # K[k]['keepalive'] = 0 (DM07CURTAIN_1109 only): written as KeepAlive=0 so a KillBox death cannot be refilled
+            kv = [(a, b) for a, b in kv if a not in ('CmdAdd', 'MaxRunMs', 'KeepAlive')] + [('CmdAdd', '-o DisableSplashScreens -o AutoExit=%d' % total), ('MaxRunMs', str((total - 10) * 1000)),
+                                                                                           ('KeepAlive', '1' if K[k]['keepalive'] else '0')]
         t.append('[%s]' % name)
         t += ['%s=%s' % kv_ for kv_ in kv]
     t += probes(k) + ['[Script]'] + B.renumber(scr)
@@ -450,6 +494,8 @@ def validate(which):
             iw = next((j for j, l in enumerate(scr) if l.startswith('waitload')), -1)
             v.ok(iw >= 0 and scr[iw + 1].startswith('log BENCH1109'), '%s: segment sits right after waitload' % who)
             v.ok(any('Bridge=1' in x for x in open(p, encoding='latin-1').read().splitlines()), '%s: ReShade bridge + D3dShotPost probes' % who)
+            ka = [x.strip() for x in open(p, encoding='latin-1').read().splitlines() if x.strip().lower().startswith('keepalive=')]
+            v.ok(ka == ['KeepAlive=%d' % K[k]['keepalive']], '%s: [Auto] %s (K keepalive=%d%s)' % (who, ka, K[k]['keepalive'], ': OFF for this kit, a KillBox death must not be refilled' if not K[k]['keepalive'] else ''))
             if who == 'host' and (K[k].get('doors') or K[k].get('doors2')):
                 dj = '%s/doors.json' % d
                 dd = json.load(open(dj)) if os.path.isfile(dj) else []
@@ -577,6 +623,48 @@ STOP_DM01B = (4454, 31907)
 POCKETS = {'DM01B_1109': ((-8000, 30500), (17400, 30400)), 'DM07_1109': ((-6000, 10400), (-9300, 10400))}
 
 
+CURTAIN_VOID = ('VOID', 'DIED-EAST', 'DEAD-BEFORE')       # no verdict: WARN, rerun
+
+
+def curtain_walk(a, lbl, deaths, lives):
+    """One DM07CURTAIN_1109 crossing from the host log -> (verdict, note). Samples <lbl>-t (tele), -s (settled), -1..-5 (goto steps).
+    NOSAMPLE (a pos line missing) | DEAD-BEFORE (dead at the tele, no kind-1 row since) | VOID (moved < CURTAIN_MOVED cm in total from the settle point: stuck / frozen,
+    the GATE/UNHIDE walks never moved that way) | THROUGH (alive, x < CURTAIN_THROUGH) | INSIDE (alive, CURTAIN_THROUGH <= x < CURTAIN_X: in the box, not killed)
+    | KILLED (a kind-3 row inside the walk and a sample west of CURTAIN_X: died in the curtain box; GUESS: FA_DieFromSelf logs kind 3 like FA_DieFromPolice)
+    | DIED-EAST (a kind-3 row but never west of CURTAIN_X: police or other, no verdict) | BLOCKED (alive, never west of CURTAIN_X)."""
+    names = ['t', 's'] + [str(i) for i in range(1, len(GATE_XS) + 1)]
+    ps = [pos_of(a, '%s-%s' % (lbl, n)) for n in names]
+    miss = [n for n, p in zip(names, ps) if p is None]
+    if miss:
+        return 'NOSAMPLE', 'no pos line for %s' % ', '.join('%s-%s' % (lbl, n) for n in miss)
+    walk = ps[1:]
+    moved = sum(math.hypot(p[0] - q[0], p[2] - q[2]) for p, q in zip(walk, walk[1:]))
+    t0 = next((secs_of(l) for l in a if 'pos %s-t:' % lbl in l), None)
+    t1 = next((secs_of(l) for l in a if 'pos %s-%d:' % (lbl, len(GATE_XS)) in l), None)
+    if t0 is None or t1 is None:
+        return 'NOSAMPLE', 'no timestamps for %s' % lbl
+    # a death before the tele with no kind-1 row since: the player is a corpse (or not yet back) for the whole walk
+    before = [secs_of(l) for l in deaths if secs_of(l) <= t0]
+    if before and not any(before[-1] < secs_of(v) <= t0 for v in lives):
+        return 'DEAD-BEFORE', 'dead at %.1f s before the tele, no respawn row since' % (t0 - before[-1])
+    died = [l[:12] for l in deaths if t0 < secs_of(l) <= t1 + 2]
+    minx = min(p[0] for p in walk)
+    path = ' '.join('(%d,%d,%d)' % p for p in ps)
+    if died:
+        if minx < CURTAIN_BOX_W:
+            return 'THROUGH', 'death row at %s but a sample at x %d is WEST of the box (%d): passed the curtain first; %s' % (died[0], minx, CURTAIN_BOX_W, path)
+        if minx < CURTAIN_X:
+            return 'KILLED', 'death row at %s, west of x %d (min x %d); moved %.0f; %s' % (died[0], CURTAIN_X, minx, moved, path)
+        return 'DIED-EAST', 'death row at %s, never west of x %d (min x %d): not the curtain; %s' % (died[0], CURTAIN_X, minx, path)
+    if minx < CURTAIN_THROUGH:
+        return 'THROUGH', 'ALIVE at x %d (< %d); moved %.0f; %s' % (minx, CURTAIN_THROUGH, moved, path)
+    if moved < CURTAIN_MOVED:
+        return 'VOID', 'moved only %.0f cm from the settle point (< %d): stuck, no verdict; %s' % (moved, CURTAIN_MOVED, path)
+    if minx < CURTAIN_X:
+        return 'INSIDE', 'ALIVE at x %d inside the curtain box (%d..%d): the KillBox did not kill; moved %.0f; %s' % (minx, CURTAIN_THROUGH, CURTAIN_X, moved, path)
+    return 'BLOCKED', 'end x %d, min x %d, moved %.0f; %s' % (walk[-1][0], minx, moved, path)
+
+
 def item_checks(k, a, dd=(), ctrl=None):
     """The map-specific checks over the host log `a` (list of lines). -> (checks, infos); a check is (status, name, detail), status PASS / FAIL / WARN.
     No vacuous PASS: an empty log, a missing sample or a missing row is a FAIL for every kit (tools/kl_bench_1109_test.py runs this on synthetic logs).
@@ -600,7 +688,7 @@ def item_checks(k, a, dd=(), ctrl=None):
                 bool(g) and not bad, '%d entities%s' % (len(g), ('; WRONG: ' + ' | '.join(bad)) if bad else ('' if g else ' (no ents row: not sampled)')))
         info.append('boom / camera shake / glare: not logged; LOOK at KLShot_inst1_*.jpg around the beat (timestamps of the hasta sample lines)')
         info += [l[:12] + ' ' + l[13:90] for l in a if 'BENCH1109 hasta sample' in l]
-    if k in ('DM01B_1109', 'DM07_1109', 'DM07SINK_1109'):
+    if k in ('DM01B_1109', 'DM07_1109', 'DM07SINK_1109', 'DM07CURTAIN_1109'):
         # the van body only: DM01B_1109 run 1 matched 'V_Van_Reflection' (a ZGROUP parked at y -60000) first and judged its position
         van = [r for r in ents(a, 'V_Van') if 'reflection' not in r[1].lower() and r[3][1] > -50000]
         s3 = next((l for l in a if 'BENCH1109' in l and 'van at state 3' in l), None)
@@ -641,7 +729,7 @@ def item_checks(k, a, dd=(), ctrl=None):
             # a jump > 5000 cm between samples <= 6 s apart from state 3 on: DM01B_1109 run 1 drove east to x 5729, then at state 7 sat at the
             # start pocket (-8000, 30500) for the rest of the run (13700 cm in 6.5 s, no drive)
             seq = [v for v in van if secs_of(v[0]) >= t3 - 4 and (t7 is None or secs_of(v[0]) <= t7)]
-            st, en = POCKETS['DM07_1109' if k == 'DM07SINK_1109' else k]
+            st, en = POCKETS['DM07_1109' if k in ('DM07SINK_1109', 'DM07CURTAIN_1109') else k]
             jumps = [(x, y) for x, y in zip(seq, seq[1:]) if secs_of(y[0]) - secs_of(x[0]) <= 6.5 and math.dist(x[3], y[3]) > 5000]
             reset = [(x, y) for x, y in jumps if math.hypot(x[3][0] - en[0], x[3][2] - en[1]) < 2500 and math.hypot(y[3][0] - st[0], y[3][2] - st[1]) < 1000]
             for x, y in reset:
@@ -664,6 +752,29 @@ def item_checks(k, a, dd=(), ctrl=None):
         chk('walk-out goto ran', bool(g), g[0][g[0].find('goto'):][:110] if g else 'no goto line%s' % (' (tele refused: %s)' % tp[0][:100] if tp else ''))
         chk('player does NOT walk out through the gap (blocked, control walks)', bool(g) and 'NOT reached' in g[0] and xs is not None and xs > -4700 and reached(cg),
             'goto: %s | pos dm07-after-walk x=%s | control reached=%s' % (g[0][g[0].find('goto'):][:90] if g else 'none', xs, reached(cg)))
+    if k == 'DM07CURTAIN_1109':
+        s7c = next((l for l in a if 'BENCH1109' in l and 'van at state 7' in l), None)
+        chk('van reaches state 7 (leaves): the curtain did not kill the driver (GUESS: a KillBox ignores a vehicle)', s7c is not None,
+            s7c[:12] if s7c else 'waitvan 7 timed out: if the walks above read KILLED, suspect the driver died in the curtain box')
+        deaths = [l for l in a if 'skulls state: row 0' in l and 'kind 3' in l]
+        lives = [l for l in a if 'skulls state: row 0' in l and 'kind 1' in l]
+        verdict = {}
+        for lbl, st, exp in CURTAIN_WALKS:
+            v, note = curtain_walk(a, lbl, deaths, lives)
+            verdict[lbl] = v
+            info.append('%s (z %d, expect %s): %s - %s' % (lbl, st[2], exp, v, note))
+            if v == 'NOSAMPLE':
+                chk('%s: crossing sampled (tele, settle, %d steps)' % (lbl, len(GATE_XS)), False, note)
+            elif exp == 'BLOCKED':
+                chk('%s: control reads BLOCKED (the method discriminates)' % lbl, v == 'BLOCKED', '%s - %s' % (v, note), warn=v in CURTAIN_VOID)
+            else:
+                chk('%s: the gate crossing ends KILLED or BLOCKED, never alive west of x %d' % (lbl, CURTAIN_THROUGH), v in ('KILLED', 'BLOCKED'), '%s - %s' % (v, note), warn=v in CURTAIN_VOID)
+        kw = [l_ for l_, _, e_ in CURTAIN_WALKS if e_ == 'KILL']
+        good = [l_ for l_ in kw if verdict.get(l_) in ('KILLED', 'BLOCKED')]
+        chk('at least 2 of the %d gate crossings gave a valid verdict (not VOID)' % len(kw), len(good) >= 2, ', '.join('%s %s' % (l_, verdict.get(l_, '?')) for l_ in kw))
+        info.append('curtain verdict: %s. KILLED = the KillBox kills a player in the gate; BLOCKED = something else stopped him (the curtain is then unproven); THROUGH / INSIDE = open'
+                    % ', '.join('%s %s' % (l_, verdict.get(l_, '?')) for l_, _, _ in CURTAIN_WALKS))
+        info.append('KeepAlive is OFF for this kit (K keepalive=0): a police kill east of the fence reads DIED-EAST (WARN, rerun)')
     if k in ('DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109'):
         unhide = k in ('DM07UNHIDE_1109', 'DM07SINK_1109')      # no south walk, own verdict line
         sink = k == 'DM07SINK_1109'

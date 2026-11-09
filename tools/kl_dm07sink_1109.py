@@ -284,7 +284,17 @@ def main(a):
     except OSError as e:
         if not undo:
             for live, bak in reversed(done):
-                os.replace(bak, live)
+                try:
+                    os.replace(bak, live)
+                except OSError as e2:
+                    print('ROLLBACK of %s failed (%s): restore it by hand from %s' % (live, e2, bak))
+            # a half-written copy-fallback backup / .tmp would make the next run refuse ("backup exists"): drop only what this run made and did not finish
+            kept = set(b for _l, b in done)
+            for n, live, bak, src in plan:
+                for junk in (live + '.tmp', bak):
+                    if junk not in kept and os.path.exists(junk):
+                        try: os.remove(junk)
+                        except OSError: pass
         print('FAILED (%s); %s' % (e, 'originals put back' if not undo else 'PARTIAL undo: a rerun is refused for files already restored; restore the rest by hand from the .before-dm07sink1109 files')); return 2
     return 0
 
