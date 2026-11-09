@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~17:30 - [music] DM LEVEL MUSIC ROUND 2+ (owner: 'music not coming in for the round after'): CAUSE proven from the exe: the music of DM01/DM02/DM03/DM06 is settings field 157, played ONCE by the settings Init (0x88d780 -> 0x8736d0 stores it at [[0x168e958]+0x944], 0x8ce720 plays it); later rounds reuse the level and nothing calls it again (only Backstab plays field 158). DM05A/DD01-09 have none; PlayMusic maps (DM03A/DM06B/DM07/DM09) are trigger-driven.
+FIX built, NOT installed: klhook/kllevelmusic.c ([LevelMusic] Restart=0, Delay=2000, Online=0, Log=1; calls 0x8ce720 once per round 2+), logic + test kllevelmusic_test.c PASS. SHIP out_levelmusic1109 e80d80df, TEST out_levelmusic1109_test 38ecc430. No ini/feat row yet (KLHook.ini peer-dirty). GUESS: Init-time call context still valid in round 2. Bench: DM03 round 1 then 2, log 'levelmusic: round 2 ... restarted'.
 2026-11-09 ~17:05 - [d0, offline] OWNER live: DM03 crash 0x4f8a8e at the police respawn (list record id 0; debug/notes/2026-11-09-dm03-fedrespawn-crash.md), DM03 kick doors 546/1255 one-sided (agent restaging on live c586d445),
 no music in round 2 (agent). DM09 terminal bounds + OnlineVanRest pushed 0a8edd21 (stage 7ac5c209, dll SHIP d9239eef, NOT installed).
 2026-11-09 ~19:40 - [06, offline] LAUNCHER RIFF POPS FIXED, pushed e07101e5: kl_pybink now decodes FIRST with burst_limit 4.0 (9 overloaded Bink blocks = the trailer's own
