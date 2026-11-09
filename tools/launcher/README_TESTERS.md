@@ -35,6 +35,19 @@ never deleted, so UNINSTALL puts everything back exactly.
 
 The launcher remembers your folders in `KLMergeLauncher.settings.json` beside it, and everything it prints in `KLMergeLauncher.log`.
 
+## Music and the background
+
+The launcher plays a Dead Men music clip quietly. **That clip is not part of the download**: when the launcher knows
+your Dead Men folder it reads one piece of music out of **your own** Dead Men files (`PC_Def.str`) once, into
+`music\deadmen_launcher.wav` beside the launcher (about 11 MB, 90 seconds). Until then, or when your Dead Men
+install has no readable clip, it simply stays silent - nothing else depends on it.
+
+- **MUTE / UNMUTE** is in the top right, next to the `♪` state text (`♪ DEAD MEN 22%` playing, `♪ MUTED`, `♪ NO MUSIC`).
+  The choice is remembered. `Volume` in `KLMergeLauncher.settings.json` sets how loud (0 to 1, default 0.22), and
+  `MusicClip` lets you name another Dead Men clip (`python kl_launcher_music.py list --dm "<Dead Men folder>" Music` lists them).
+- The background is two pictures, `bg\dead_men.jpg` and `bg\dog_days.jpg`, blended down the middle; if they are missing
+  the launcher draws a plain one instead. Nothing of it touches the games.
+
 ## Stock game or modded game
 
 The whole mod hangs on one file, `dinput8.dll` in the Dog Days folder (the "hook"). The game loads it because it sits

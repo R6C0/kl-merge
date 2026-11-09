@@ -17,3 +17,8 @@ tools/converted/
 tools/audio/
 tools/report/
 klhook/out/
+
+# tester launcher: the owner's own background screenshots and the Dead Men clip decoded on this PC (never committed, music never packed)
+tools/launcher/bg/*
+!tools/launcher/bg/README.txt
+tools/launcher/music/

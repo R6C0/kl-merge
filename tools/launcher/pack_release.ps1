@@ -5,10 +5,13 @@
 # Takes from <Out>:  manifest.json, patches\*.klp          (the package: our code/config as literal patches + binary patches
 #                                                            whose SOURCE is the player's own stock DD / DM / PD2 files)
 # Adds:              tools\kl_release.py                    (the installer half; needs python + zstandard on the tester's PC)
-#                    tools\launcher\ (as launcher\)          KLMergeLauncher.ps1, KLMerge.bat, README_TESTERS.md
+#                    tools\launcher\ (as launcher\)          KLMergeLauncher.ps1, KLMerge.bat, README_TESTERS.md, KLMerge Setup.bat
+#                    tools\kl_launcher_music.py (as launcher\)  reads the launcher's music clip from the TESTER'S OWN Dead Men file
+#                    tools\launcher\bg\*.jpg (as launcher\bg\)  Josh's two background screenshots (dead_men.jpg, dog_days.jpg)
 #                    -Exe <KLMergeSetup.exe>  (optional)     the frozen installer; with it the tester needs no Python at all
 # Leaves out (maker only): parts\, _snap\, sha1cache.json, *.tmp*.   Never any game file: the make output holds none,
 # and this script copies only the names above - it refuses to zip anything with a game extension as a belt and braces.
+# NEVER packed: tools\launcher\music\ (the decoded Dead Men clip of THIS PC: a game asset; every tester makes their own).
 #
 # UNTESTED on Windows when written (cloud, Linux): syntax by inspection + launcher_test.py's parser pass only.
 param(
@@ -34,6 +37,23 @@ foreach ($f in @('KLMergeLauncher.ps1', 'KLMerge.bat', 'README_TESTERS.md', 'KLM
     $p = Join-Path $here $f
     if (Test-Path -LiteralPath $p) { Copy-Item -LiteralPath $p -Destination (Join-Path $stage 'launcher') }
 }
+# the launcher's music tool (reads the clip from the tester's own Dead Men PC_Def.str at run time; no audio travels)
+Copy-Item -LiteralPath (Join-Path $tools 'kl_launcher_music.py') -Destination (Join-Path $stage 'launcher')
+# the background pictures: only launcher\bg\*.jpg, nothing else of bg\
+$bg = Join-Path $here 'bg'
+$jpgs = @()
+if (Test-Path -LiteralPath $bg) { $jpgs = @(Get-ChildItem -LiteralPath $bg -Filter '*.jpg' -File -ErrorAction SilentlyContinue) }
+if ($jpgs.Count -gt 0) {
+    New-Item -ItemType Directory -Path (Join-Path $stage 'launcher\bg') | Out-Null
+    foreach ($j in $jpgs) { Copy-Item -LiteralPath $j.FullName -Destination (Join-Path $stage 'launcher\bg') }
+    foreach ($want in @('dead_men.jpg', 'dog_days.jpg')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $bg $want))) { Write-Host ('note: launcher\bg\' + $want + ' is missing - the launcher draws its fallback for that side') }
+    }
+} else {
+    Write-Host 'note: no tools\launcher\bg\*.jpg - the launcher draws its procedural background (OWNER_RELEASE_STEPS.md section 2b)'
+}
+# launcher\music\ is NEVER staged (a decoded game clip); the extension check below would refuse a .wav anyway
+if (Test-Path -LiteralPath (Join-Path $stage 'launcher\music')) { Write-Host 'REFUSED: launcher\music\ in the staging folder'; exit 1 }
 if ($Exe) {
     if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "REFUSED: $Exe not found"; exit 1 }
     Copy-Item -LiteralPath $Exe -Destination (Join-Path $stage 'KLMergeSetup.exe')

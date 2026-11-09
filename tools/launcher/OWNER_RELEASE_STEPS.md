@@ -17,6 +17,11 @@ verbs vs kl_release's argparse, XAML well-formed, bracket balance) and, on a PC 
   Payday 2 files. A map zip is shipped as its zip skeleton + per-member copy ops + the literal bytes no source has.
   (kl_release.py header; re/release_size.md: delta estimate 560 to 640 MB.)
 - The tester needs Dead Men installed (the installer stops without it) and gets Payday 2 bits only when Payday 2 is there.
+- The launcher's MUSIC is not in the package either: `launcher\kl_launcher_music.py` (= `tools\kl_launcher_music.py`) runs on
+  the tester's PC and decodes one clip of THEIR Dead Men `PC_Def.str` into `music\deadmen_launcher.wav` beside the launcher
+  (first start with a known Dead Men folder, after INSTALL, or on UNMUTE). Your own `tools\launcher\music\` is never
+  packed (`pack_release.ps1` refuses it; a `.wav` in the staging folder is refused by the extension check too).
+- The launcher's BACKGROUND pictures `launcher\bg\dead_men.jpg` and `bg\dog_days.jpg` ARE packed - they are yours (section 2b).
 
 ## 1. Before `make`: the live Dog Days folder IS the release content
 
@@ -57,6 +62,26 @@ python tools\kl_release.py make D:\kl_release\pkg_1110 --dd "C:\Steam\steamapps\
   kept `KLHook.ini` gets the new default as `KLHook.ini.new-<VERSION>`; `--pkg` folders with different versions must
   not be mixed).
 
+## 2b. The launcher's two background pictures (yours; before `pack_release.ps1`)
+
+The window blends two images at a soft diagonal seam: **left = Dead Men, right = Dog Days**. Put your OWN screenshots in
+`tools\launcher\bg\` (the folder is git-ignored except for its README; nothing of it is committed):
+
+- `tools\launcher\bg\dead_men.jpg` - a Dead Men screenshot (the grainy 2007 look; a wide shot without HUD reads best)
+- `tools\launcher\bg\dog_days.jpg` - a Dog Days screenshot (the camcorder look)
+
+Rules of thumb: JPEG, 16:9 or wider, 1600 px wide or more (the window is 960 x 680 by default and can be resized;
+`UniformToFill` crops, never stretches), darker pictures work better (the launcher dims them to about 40 % and puts its
+grain and vignette on top so the text stays readable). No third-party art: your screenshots of the two games only.
+`pack_release.ps1` copies `launcher\bg\*.jpg` into the package; Setup copies them up beside the launcher on the tester's PC.
+With one or both missing the launcher draws its fallback (grey film grain left, dark teal video blocks right) and logs one line.
+
+To hear the music on YOUR PC before packing: `python tools\kl_launcher_music.py extract --dm "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men" --out tools\launcher\music\deadmen_launcher.wav`
+(exit 0 and a `wrote ...` line; exit 2 = no decodable clip, say so). `--list` prints the Music/ clips with their codec, `--clip NAME`
+picks another one; the default order is in the tool's `CANDIDATES` (Dead Men's FA theme `FA_SlashMixPrison` if it is PCM, else the
+Retomoto tension bed `TakyoAction_Layer2_TAmbient_Loop`, then the bank break-in bed). A tester can set `MusicClip` in the settings file.
+The written `.wav` stays on your PC (`tools\launcher\music\` is git-ignored and never packed).
+
 ## 3. Freeze KLMergeSetup.exe (optional, UNTESTED here) - or skip it
 
 With the frozen exe in the package the tester needs no Python at all and Setup skips the python.org / PyPI downloads.
@@ -77,8 +102,9 @@ SmartScreen will warn about an unsigned exe either way (the .bat too); the READM
 powershell -ExecutionPolicy Bypass -File tools\launcher\pack_release.ps1 -Out D:\kl_release\pkg_1110 [-Exe dist\KLMergeSetup.exe]
 ```
 -> `D:\kl_release\KLMerge_package_v<ver>.zip` + `.sha1`. It copies only manifest.json, patches\, kl_release.py, the
-launcher files and the optional exe (never `_snap`, `parts`, `sha1cache.json`) and refuses if anything with a game
-extension slipped into the staging folder.
+launcher files (+ `launcher\kl_launcher_music.py` and your `launcher\bg\*.jpg`, section 2b) and the optional exe (never
+`_snap`, `parts`, `sha1cache.json`, never `launcher\music\`) and refuses if anything with a game extension slipped into
+the staging folder.
 
 Where to host - **decision for Josh**:
 - A PRIVATE GitHub repo's release assets need a token: `curl` from the tester's PC gets 404. So either make a
@@ -122,6 +148,8 @@ The launcher never reads or writes launch options.
    Payday 2 install. Say so in the release post (README does).
 7. Firewall: README tells testers to allow `kl2.exe` in Windows Firewall (the game checks its own path, kl2 0x8945d0)
    and names UDP 27413-27416 for the hook's peer channel. Whether router port forwarding is ever needed is unknown.
+8. **Launcher music and pictures** (section 2b): which Dead Men clip (the default list is a GUESS of taste: FA theme, else the
+   Retomoto bed), the volume (0.22 = "slightly", `Volume` in the settings file), and your two screenshots in `bg\`.
 
 ## 7. What is untested / GUESS (collected)
 
@@ -131,3 +159,10 @@ The launcher never reads or writes launch options.
 - PyInstaller hidden-import names; whether the frozen exe flushes stdout line by line (python runs with `-u`).
 - The Payday 2 Steam folder name `PAYDAY 2` (taken from kl_release.py).
 - Sizes and times in README_TESTERS.md are estimates until the rehearsal.
+- Music: `System.Windows.Media.MediaPlayer` looping a .wav through MediaEnded + Position = 0 (a gap at the seam is possible; the
+  clip is faded in and out so a gap is quiet), volume 0.22, `Start-Process` of the python tool from the window. The
+  decoder itself (`tools/kl_launcher_music.py`) is proven on synthetic data only (`kl_launcher_music_test.py`, 48 checks: PCM,
+  2-layer interleaved PCM sets behind a LIP block, unequal-rate sets, mono IMA ADPCM, Vorbis refused); the Dead Men file
+  layout it reads is the one `tools/kl_str.py` measured on the real file. The codec of `FA_SlashMixPrison` is unknown
+  (skipped if Vorbis); the Retomoto set `TokyoAction1` is PCM 2 x stereo 32 kHz (re/retomoto_audio.md 4.1).
+- Background: WPF JPEG decode of your screenshots, `OpacityMask` on a Grid for the seam, the seam's angle (relative gradient points).

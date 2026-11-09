@@ -21,20 +21,37 @@
 #   would write a second copy and leave the .klmerge-off one behind).
 #   COLLECT LOGS      zips <DD>\KLHook.log, KLHook_*.dmp, kl2_490_crash_*.mdmp, KLMergeInstall.json and this launcher's
 #                     log into KLMerge_logs_<stamp>.zip beside the launcher - the file to send to Josh after a crash.
+#   MUSIC             a Dead Men music clip plays quietly (System.Windows.Media.MediaPlayer, volume 0.22, looped) from
+#                     <launcher folder>\music\deadmen_launcher.wav. THAT FILE IS NEVER SHIPPED: the launcher makes it on the
+#                     tester's PC from the tester's OWN Dead Men PC_Def.str ("python kl_launcher_music.py extract", run once
+#                     when the Dead Men folder is known - at start, after INSTALL, or on UNMUTE). No Dead Men, no python, or
+#                     a clip that cannot be decoded (exit 2) = silence, never an error. MUTE / UNMUTE in the header; the
+#                     mute state and the volume are remembered in the settings file (Muted, Volume, MusicClip).
+#   BACKGROUND        <launcher folder>\bg\dead_men.jpg (left) and bg\dog_days.jpg (right), Josh's own screenshots (not in
+#                     the repo), each ImageBrush UniformToFill, blended at a soft diagonal seam (OpacityMask), dimmed, under
+#                     the grain and the vignette. Missing images = a procedural fallback: left a desaturated grey film-grain
+#                     gradient (Dead Men's 2007 documentary grime), right a cooler dark teal with blocky 'compressed video'
+#                     noise and scan lines (Dog Days' camcorder look). No art, logos or characters are drawn by this script.
 #
 # Where things are
 #   package        <launcher folder>\package (manifest.json + patches\ + kl_release.py, optionally KLMergeSetup.exe),
 #                  or the launcher folder itself when manifest.json lies there, or -Package <folder> / the settings file.
-#   settings       KLMergeLauncher.settings.json beside this file: DD, DM, PD2, Python, Package (plain json, edit by hand if needed).
+#   settings       KLMergeLauncher.settings.json beside this file: DD, DM, PD2, Python, Package, MusicClip, Muted, Volume
+#                  (plain json, edit by hand if needed; MusicClip = a clip name for kl_launcher_music.py --clip, empty = its default list).
 #   log            KLMergeLauncher.log beside this file (everything the log pane shows).
 #   python         python_cmd.txt (written by Setup), .\python\python.exe (embedded), 'py -3', 'python' - first one that
-#                  imports zstandard. Not needed when the package carries KLMergeSetup.exe.
+#                  imports zstandard. Not needed when the package carries KLMergeSetup.exe (except for the music clip).
+#   music tool     kl_launcher_music.py beside this file (Setup copies it up), or <package>\launcher\, or ..\ (the repo's tools\).
+#   bg images      bg\ beside this file (Setup copies it up), or <package>\launcher\bg\.
 #
 # Steam launch options of the player are NEVER read or written. (Josh: your own options -o DefaultScene=... AutoExit=120
 # are your test setup; with them this launcher would boot straight into F01 and quit after 120 s on YOUR PC only.)
 #
 # GUESS list (not run on a Windows PC when written): the WPF font fallback list, the Payday 2 folder name 'PAYDAY 2'
-# (same as kl_release.py), that PyInstaller's frozen exe flushes stdout line by line (python gets -u, the exe cannot).
+# (same as kl_release.py), that PyInstaller's frozen exe flushes stdout line by line (python gets -u, the exe cannot);
+# music: volume 0.22 as 'slightly', that MediaPlayer.MediaEnded + Position = 0 loops a .wav without a gap, that the WPF
+# JPEG decoder takes the owner's screenshots as they are; the seam's gradient points (relative to the window, so the seam
+# angle changes with the window's shape).
 param([string]$Package = '')
 
 $ErrorActionPreference = 'Stop'
@@ -47,21 +64,38 @@ $script:HookOffName = 'dinput8.dll.klmerge-off'
 $script:Journal = 'KLMergeInstall.json'
 $script:SettingsPath = Join-Path $Here 'KLMergeLauncher.settings.json'
 $script:LogPath = Join-Path $Here 'KLMergeLauncher.log'
-$script:Settings = @{ DD = ''; DM = ''; PD2 = ''; Python = ''; Package = '' }
+$script:Settings = @{ DD = ''; DM = ''; PD2 = ''; Python = ''; Package = ''; MusicClip = ''; Muted = $false; Volume = 0.22 }
+$script:StringKeys = @('DD', 'DM', 'PD2', 'Python', 'Package', 'MusicClip')
+$script:DefaultVolume = 0.22                           # GUESS: 'slightly' (0 .. 1, MediaPlayer.Volume)
 $script:Proc = $null
 $script:OutFile = ''; $script:ErrFile = ''; $script:OutPos = 0; $script:ErrPos = 0
 $script:PackageDir = ''
 $script:Manifest = $null
 $script:Python = $null       # @{ Exe = 'py'; Pre = @('-3'); Version = '3.12.7' } or $null
+$script:MusicName = 'deadmen_launcher.wav'
+$script:MusicPath = Join-Path $Here ('music\' + $script:MusicName)
+$script:MusicToolName = 'kl_launcher_music.py'
+$script:Player = $null       # System.Windows.Media.MediaPlayer, or $null when audio is unavailable
+$script:MusicLoaded = $false
+$script:MusicProc = $null; $script:MusicOut = ''; $script:MusicErr = ''
+$script:MusicTried = $false  # one extract attempt per start (a second one on UNMUTE / after INSTALL)
+$script:Note = [string][char]0x266A   # the music note shown in the header state text
 
 # ------------------------------------------------------------------------------------------------ settings
 function Load-Settings {
     if (Test-Path -LiteralPath $script:SettingsPath) {
         try {
             $j = Get-Content -LiteralPath $script:SettingsPath -Raw | ConvertFrom-Json
-            foreach ($k in @('DD', 'DM', 'PD2', 'Python', 'Package')) {
+            foreach ($k in $script:StringKeys) {
                 $v = $j.PSObject.Properties[$k]
                 if ($v -and $v.Value) { $script:Settings[$k] = [string]$v.Value }
+            }
+            $v = $j.PSObject.Properties['Muted']
+            if ($v) { $script:Settings.Muted = [bool]$v.Value }
+            $v = $j.PSObject.Properties['Volume']
+            if ($v -and $v.Value -ne $null) {
+                $vol = [double]$v.Value
+                if ($vol -ge 0 -and $vol -le 1) { $script:Settings.Volume = $vol }
             }
         } catch { }
     }
@@ -70,7 +104,9 @@ function Load-Settings {
 function Save-Settings {
     try {
         $o = New-Object PSObject
-        foreach ($k in @('DD', 'DM', 'PD2', 'Python', 'Package')) { $o | Add-Member NoteProperty $k $script:Settings[$k] }
+        foreach ($k in $script:StringKeys) { $o | Add-Member NoteProperty $k $script:Settings[$k] }
+        $o | Add-Member NoteProperty Muted ([bool]$script:Settings.Muted)
+        $o | Add-Member NoteProperty Volume ([double]$script:Settings.Volume)
         $o | ConvertTo-Json | Set-Content -LiteralPath $script:SettingsPath -Encoding ASCII
     } catch { }
 }
@@ -228,16 +264,23 @@ function Launch-Game {
 
 # ------------------------------------------------------------------------------------------------ the window
 $grainSeed = New-Object System.Random 1313
-function Grain-Rects([int]$n, [int]$size) {
+function Grain-Rects([int]$n, [int]$size, [int]$dot = 1, [int]$snap = 1) {
+    # $n random $dot x $dot squares in a $size x $size tile; $snap > 1 puts them on a grid (the 'macroblock' look)
     $sb = New-Object System.Text.StringBuilder
     for ($i = 0; $i -lt $n; $i++) {
         $x = $grainSeed.Next(0, $size); $y = $grainSeed.Next(0, $size)
-        [void]$sb.Append('<RectangleGeometry Rect="' + $x + ',' + $y + ',1,1"/>')
+        if ($snap -gt 1) { $x = $x - ($x % $snap); $y = $y - ($y % $snap) }
+        [void]$sb.Append('<RectangleGeometry Rect="' + $x + ',' + $y + ',' + $dot + ',' + $dot + '"/>')
     }
     return $sb.ToString()
 }
 $grainLight = Grain-Rects 90 96
 $grainDark = Grain-Rects 70 96
+$filmLight = Grain-Rects 60 64 2            # left fallback: coarse film grain (Dead Men's grime)
+$filmDark = Grain-Rects 80 64 2
+$blocksLight = Grain-Rects 22 128 8 8       # right fallback: 8 px macroblocks (Dog Days' compressed video)
+$blocksTint = Grain-Rects 14 128 8 8
+$blocksDark = Grain-Rects 26 128 8 8
 
 $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -264,6 +307,51 @@ $xaml = @'
             <GeometryDrawing.Geometry><GeometryGroup><!--GRAIN_DARK--></GeometryGroup></GeometryDrawing.Geometry>
           </GeometryDrawing>
         </DrawingGroup>
+      </DrawingBrush.Drawing>
+    </DrawingBrush>
+    <!-- background fallbacks (used when bg\dead_men.jpg / bg\dog_days.jpg are missing): no art, only gradients and noise -->
+    <LinearGradientBrush x:Key="FilmGrad" StartPoint="0,0" EndPoint="1,1">
+      <GradientStop Color="#FF3B3936" Offset="0.0"/>
+      <GradientStop Color="#FF2A2927" Offset="0.45"/>
+      <GradientStop Color="#FF171615" Offset="1.0"/>
+    </LinearGradientBrush>
+    <DrawingBrush x:Key="FilmGrain" TileMode="Tile" Viewport="0,0,64,64" ViewportUnits="Absolute" Opacity="0.9">
+      <DrawingBrush.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#1EFFFFFF">
+            <GeometryDrawing.Geometry><GeometryGroup><!--FILM_LIGHT--></GeometryGroup></GeometryDrawing.Geometry>
+          </GeometryDrawing>
+          <GeometryDrawing Brush="#3C000000">
+            <GeometryDrawing.Geometry><GeometryGroup><!--FILM_DARK--></GeometryGroup></GeometryDrawing.Geometry>
+          </GeometryDrawing>
+        </DrawingGroup>
+      </DrawingBrush.Drawing>
+    </DrawingBrush>
+    <LinearGradientBrush x:Key="VideoGrad" StartPoint="1,0" EndPoint="0,1">
+      <GradientStop Color="#FF10303A" Offset="0.0"/>
+      <GradientStop Color="#FF0B1C23" Offset="0.5"/>
+      <GradientStop Color="#FF070D12" Offset="1.0"/>
+    </LinearGradientBrush>
+    <DrawingBrush x:Key="VideoBlocks" TileMode="Tile" Viewport="0,0,128,128" ViewportUnits="Absolute" Opacity="0.8">
+      <DrawingBrush.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#12FFFFFF">
+            <GeometryDrawing.Geometry><GeometryGroup><!--BLOCKS_LIGHT--></GeometryGroup></GeometryDrawing.Geometry>
+          </GeometryDrawing>
+          <GeometryDrawing Brush="#1A3FA8B8">
+            <GeometryDrawing.Geometry><GeometryGroup><!--BLOCKS_TINT--></GeometryGroup></GeometryDrawing.Geometry>
+          </GeometryDrawing>
+          <GeometryDrawing Brush="#26000000">
+            <GeometryDrawing.Geometry><GeometryGroup><!--BLOCKS_DARK--></GeometryGroup></GeometryDrawing.Geometry>
+          </GeometryDrawing>
+        </DrawingGroup>
+      </DrawingBrush.Drawing>
+    </DrawingBrush>
+    <DrawingBrush x:Key="ScanLines" TileMode="Tile" Viewport="0,0,4,3" ViewportUnits="Absolute" Opacity="0.5">
+      <DrawingBrush.Drawing>
+        <GeometryDrawing Brush="#14000000">
+          <GeometryDrawing.Geometry><RectangleGeometry Rect="0,0,4,1"/></GeometryDrawing.Geometry>
+        </GeometryDrawing>
       </DrawingBrush.Drawing>
     </DrawingBrush>
     <Style x:Key="KLButton" TargetType="Button">
@@ -336,6 +424,29 @@ $xaml = @'
     </Style>
   </Window.Resources>
   <Grid>
+    <!-- background: right = Dog Days (whole window), left = Dead Men on top of it, faded out along a diagonal seam -->
+    <Grid x:Name="BgRight" IsHitTestVisible="False">
+      <Rectangle Fill="{StaticResource VideoGrad}"/>
+      <Rectangle Fill="{StaticResource VideoBlocks}"/>
+      <Rectangle Fill="{StaticResource ScanLines}"/>
+      <Rectangle x:Name="BgRightImg" Fill="Transparent"/>
+    </Grid>
+    <Grid x:Name="BgLeft" IsHitTestVisible="False">
+      <Grid.OpacityMask>
+        <!-- GUESS: the gradient runs from (0, 0.325) to (1, 0.675) of the window, so the seam leans about 20 degrees
+             and sits at the middle; opaque up to 0.44, gone from 0.56: a soft band, not a hard cut -->
+        <LinearGradientBrush StartPoint="0,0.325" EndPoint="1,0.675">
+          <GradientStop Color="#FF000000" Offset="0.0"/>
+          <GradientStop Color="#FF000000" Offset="0.44"/>
+          <GradientStop Color="#00000000" Offset="0.56"/>
+          <GradientStop Color="#00000000" Offset="1.0"/>
+        </LinearGradientBrush>
+      </Grid.OpacityMask>
+      <Rectangle Fill="{StaticResource FilmGrad}"/>
+      <Rectangle Fill="{StaticResource FilmGrain}"/>
+      <Rectangle x:Name="BgLeftImg" Fill="Transparent"/>
+    </Grid>
+    <Rectangle x:Name="BgDim" Fill="#55000000" IsHitTestVisible="False"/>
     <Rectangle Fill="{StaticResource Grain}" IsHitTestVisible="False"/>
     <Rectangle IsHitTestVisible="False">
       <Rectangle.Fill>
@@ -361,7 +472,11 @@ $xaml = @'
           <TextBlock Text="KL MERGE" FontFamily="{StaticResource Head}" FontSize="46" Foreground="#E8E8E8" VerticalAlignment="Bottom"/>
           <TextBlock Text="DEAD MEN INSIDE DOG DAYS" FontFamily="{StaticResource Head}" FontSize="15" Foreground="{StaticResource Grey}" Margin="18,0,0,11" VerticalAlignment="Bottom"/>
         </StackPanel>
-        <TextBlock x:Name="LblVersion" Text="TESTER BUILD" FontFamily="{StaticResource Head}" FontSize="14" Foreground="{StaticResource Grey}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,10"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,8">
+          <TextBlock x:Name="LblMusic" Text="&#9834; MUSIC" FontFamily="{StaticResource Head}" FontSize="13" Foreground="{StaticResource Grey}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <Button x:Name="BtnMute" Style="{StaticResource Pick}" Content="MUTE" Margin="0,0,22,0" VerticalAlignment="Center" ToolTip="Mute / unmute the launcher music (a Dead Men clip read from your own Dead Men files)"/>
+          <TextBlock x:Name="LblVersion" Text="TESTER BUILD" FontFamily="{StaticResource Head}" FontSize="14" Foreground="{StaticResource Grey}" VerticalAlignment="Center" Margin="0,0,0,2"/>
+        </StackPanel>
       </Grid>
       <Rectangle Grid.Row="1" Height="1" Fill="{StaticResource Rule}" Margin="0,10,0,14"/>
       <!-- body -->
@@ -437,11 +552,14 @@ $xaml = @'
 </Window>
 '@
 $xaml = $xaml.Replace('<!--GRAIN_LIGHT-->', $grainLight).Replace('<!--GRAIN_DARK-->', $grainDark)
+$xaml = $xaml.Replace('<!--FILM_LIGHT-->', $filmLight).Replace('<!--FILM_DARK-->', $filmDark)
+$xaml = $xaml.Replace('<!--BLOCKS_LIGHT-->', $blocksLight).Replace('<!--BLOCKS_TINT-->', $blocksTint).Replace('<!--BLOCKS_DARK-->', $blocksDark)
 
 $script:Win = [Windows.Markup.XamlReader]::Parse($xaml)
 $ui = @{}
 foreach ($n in @('LblVersion', 'BtnPlayMod', 'BtnPlayStock', 'LblHookNote', 'BtnInstall', 'BtnVerify', 'BtnUninstall', 'BtnHook', 'BtnLogs', 'BtnOpen', 'BtnRefresh',
-                 'LblDD', 'BtnPickDD', 'LblDM', 'BtnPickDM', 'LblPD2', 'BtnPickPD2', 'LblMod', 'LblHook', 'LblPkg', 'LblPy', 'LblGame', 'TxtLog')) {
+                 'LblDD', 'BtnPickDD', 'LblDM', 'BtnPickDM', 'LblPD2', 'BtnPickPD2', 'LblMod', 'LblHook', 'LblPkg', 'LblPy', 'LblGame', 'TxtLog',
+                 'LblMusic', 'BtnMute', 'BgLeft', 'BgRight', 'BgLeftImg', 'BgRightImg', 'BgDim')) {
     $ui[$n] = $script:Win.FindName($n)
 }
 
@@ -578,6 +696,7 @@ function Start-Tool([string]$verb, [string[]]$extra) {
 $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
 $script:Timer.Interval = [TimeSpan]::FromMilliseconds(300)
 $script:Timer.Add_Tick({
+    try { Music-Poll } catch { }
     if (-not $script:Proc) { return }
     $o = Read-New $script:OutFile ([ref]$script:OutPos); if ($o) { Log-Raw $o }
     $e = Read-New $script:ErrFile ([ref]$script:ErrPos); if ($e) { Log-Raw $e }
@@ -591,6 +710,7 @@ $script:Timer.Add_Tick({
         Set-Buttons $true
         $ui.BtnRefresh.IsEnabled = $true
         Refresh-Status
+        if ($code -eq 0 -and -not $script:MusicLoaded) { try { Music-Extract $true } catch { } }   # INSTALL done: the Dead Men folder is known now
     }
 })
 $script:Timer.Start()
@@ -623,7 +743,164 @@ function Collect-Logs {
     } catch { Log ('could not zip the logs: ' + $_.Exception.Message) }
 }
 
+# ------------------------------------------------------------------------------------------------ music
+# Everything here is best effort: an exception anywhere leaves the window working and writes one log line.
+function Music-Label {
+    $n = $script:Note
+    if ($script:Settings.Muted) {
+        $ui.LblMusic.Text = $n + ' MUTED'; $ui.BtnMute.Content = 'UNMUTE'
+    } elseif ($script:MusicLoaded) {
+        $ui.LblMusic.Text = $n + ' DEAD MEN  ' + [int]([double]$script:Settings.Volume * 100) + '%'; $ui.BtnMute.Content = 'MUTE'
+    } elseif ($script:MusicProc) {
+        $ui.LblMusic.Text = $n + ' READING YOUR DEAD MEN MUSIC ...'; $ui.BtnMute.Content = 'MUTE'
+    } else {
+        $ui.LblMusic.Text = $n + ' NO MUSIC'; $ui.BtnMute.Content = 'MUTE'
+    }
+}
+
+function Music-Init {
+    try {
+        $script:Player = New-Object System.Windows.Media.MediaPlayer
+        $script:Player.add_MediaEnded({ try { $script:Player.Position = [TimeSpan]::Zero; $script:Player.Play() } catch { } })
+        $script:Player.add_MediaFailed({ param($s, $e)
+            try { $script:MusicLoaded = $false; Log ('music: playback failed (' + $e.ErrorException.Message + ') - silent'); Music-Label } catch { } })
+    } catch {
+        $script:Player = $null
+        Log ('music: no MediaPlayer on this PC (' + $_.Exception.Message + ') - silent')
+    }
+}
+
+function Music-Apply {
+    # pushes Muted / Volume to the player
+    if (-not $script:Player) { Music-Label; return }
+    try {
+        $script:Player.Volume = [double]$script:Settings.Volume
+        $script:Player.IsMuted = [bool]$script:Settings.Muted
+        if ($script:MusicLoaded) {
+            if ($script:Settings.Muted) { $script:Player.Pause() } else { $script:Player.Play() }
+        }
+    } catch { Log ('music: ' + $_.Exception.Message) }
+    Music-Label
+}
+
+function Music-Load {
+    # opens music\deadmen_launcher.wav when it exists; starts muted when it does not (nothing to play)
+    $script:MusicLoaded = $false
+    if (-not $script:Player) { Music-Label; return }
+    if (-not (Test-Path -LiteralPath $script:MusicPath)) { Music-Label; return }
+    try {
+        $script:Player.Open((New-Object System.Uri($script:MusicPath)))
+        $script:MusicLoaded = $true
+        Music-Apply
+        if (-not $script:Settings.Muted) { Log ('music: playing ' + $script:MusicPath + ' at ' + [int]([double]$script:Settings.Volume * 100) + '% (MUTE in the header turns it off)') }
+    } catch {
+        $script:MusicLoaded = $false
+        Log ('music: could not open ' + $script:MusicPath + ' (' + $_.Exception.Message + ') - silent')
+        Music-Label
+    }
+}
+
+function Find-MusicTool {
+    foreach ($c in @((Join-Path $script:Here $script:MusicToolName),
+                     $(if ($script:PackageDir) { Join-Path $script:PackageDir ('launcher\' + $script:MusicToolName) } else { '' }),
+                     (Join-Path (Split-Path -Parent $script:Here) $script:MusicToolName))) {
+        if ($c -and (Test-Path -LiteralPath $c)) { return $c }
+    }
+    return ''
+}
+
+function Music-Extract([bool]$again = $false) {
+    # makes music\deadmen_launcher.wav from the tester's OWN Dead Men PC_Def.str in the background (python kl_launcher_music.py
+    # extract). Nothing of it ships. Silent when Dead Men / python / the tool are missing; exit 2 = no decodable clip.
+    if ($script:MusicProc) { return }
+    if ($script:MusicTried -and -not $again) { return }
+    if (Test-Path -LiteralPath $script:MusicPath) { Music-Load; return }
+    $dm = $script:Settings.DM
+    if (-not $dm -or -not (Test-Path -LiteralPath (Join-Path $dm 'PC_Def.str'))) { Music-Label; return }
+    $script:MusicTried = $true
+    $tool = Find-MusicTool
+    if (-not $tool) { Log ('music: ' + $script:MusicToolName + ' not found beside the launcher - no launcher music (the package needs launcher\' + $script:MusicToolName + ')'); Music-Label; return }
+    if (-not $script:Python) { $script:Python = Find-Python }
+    if (-not $script:Python) { Log 'music: no Python 3 found - no launcher music (run "KLMerge Setup.bat" once)'; Music-Label; return }
+    $argv = @($script:Python.Pre) + @('-u', (Quote $tool), 'extract', '--dm', (Quote $dm), '--out', (Quote $script:MusicPath))
+    if ($script:Settings.MusicClip) { $argv += '--clip'; $argv += (Quote $script:Settings.MusicClip) }
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $script:MusicOut = Join-Path $env:TEMP ('klmerge_music_' + $stamp + '.out.txt')
+    $script:MusicErr = Join-Path $env:TEMP ('klmerge_music_' + $stamp + '.err.txt')
+    try {
+        $dir = Split-Path -Parent $script:MusicPath
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+        Log ('music: reading a Dead Men clip from your own ' + (Join-Path $dm 'PC_Def.str') + ' (a few seconds, in the background) ...')
+        $script:MusicProc = Start-Process -FilePath $script:Python.Exe -ArgumentList $argv -WorkingDirectory $script:Here -RedirectStandardOutput $script:MusicOut -RedirectStandardError $script:MusicErr -NoNewWindow -PassThru
+    } catch {
+        $script:MusicProc = $null
+        Log ('music: could not start ' + $script:MusicToolName + ' (' + $_.Exception.Message + ') - silent')
+    }
+    Music-Label
+}
+
+function Music-Poll {
+    # called from the timer: picks up the finished extract
+    if (-not $script:MusicProc) { return }
+    if (-not $script:MusicProc.HasExited) { return }
+    $code = $script:MusicProc.ExitCode
+    $script:MusicProc = $null
+    $pos = 0
+    $txt = (Read-New $script:MusicOut ([ref]$pos)); $pos = 0; $txt += (Read-New $script:MusicErr ([ref]$pos))
+    if ($code -eq 0 -and (Test-Path -LiteralPath $script:MusicPath)) {
+        $line = @($txt -split "`n" | Where-Object { $_ -like 'wrote *' }) | Select-Object -Last 1
+        Log ('music: ' + $(if ($line) { $line.Trim() } else { 'clip written' }))
+        Music-Load
+    } else {
+        $why = @($txt -split "`n" | Where-Object { $_ -like 'NO MUSIC*' -or $_ -like '*Error*' -or $_ -like '*Traceback*' }) | Select-Object -Last 1
+        Log ('music: none (exit ' + $code + $(if ($why) { ': ' + $why.Trim() } else { '' }) + ') - the launcher stays silent; the mod is not affected')
+        Music-Label
+    }
+}
+
+# ------------------------------------------------------------------------------------------------ background images
+function Bg-Brush([string]$path) {
+    $bi = New-Object System.Windows.Media.Imaging.BitmapImage
+    $bi.BeginInit()
+    $bi.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad      # read once; the file is not kept open
+    $bi.UriSource = New-Object System.Uri($path)
+    $bi.EndInit()
+    $bi.Freeze()
+    $b = New-Object System.Windows.Media.ImageBrush($bi)
+    $b.Stretch = [System.Windows.Media.Stretch]::UniformToFill
+    $b.AlignmentX = [System.Windows.Media.AlignmentX]::Center
+    $b.AlignmentY = [System.Windows.Media.AlignmentY]::Center
+    $b.Freeze()
+    return $b
+}
+
+function Bg-Init {
+    # bg\dead_men.jpg (left) + bg\dog_days.jpg (right) beside the launcher or in <package>\launcher\bg; else the procedural fallback
+    $dirs = @((Join-Path $script:Here 'bg'))
+    if ($script:PackageDir) { $dirs += (Join-Path $script:PackageDir 'launcher\bg') }
+    $got = 0
+    foreach ($pair in @(@('dead_men.jpg', 'BgLeftImg'), @('dog_days.jpg', 'BgRightImg'))) {
+        foreach ($d in $dirs) {
+            $p = Join-Path $d $pair[0]
+            if (-not (Test-Path -LiteralPath $p)) { continue }
+            try { $ui[$pair[1]].Fill = Bg-Brush $p; $got++ } catch { Log ('background: ' + $pair[0] + ' not usable (' + $_.Exception.Message + ')') }
+            break
+        }
+    }
+    try {
+        # with photos behind the text a stronger dim keeps it readable; the fallback is dark already
+        if ($got -gt 0) { $ui.BgDim.Fill = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromArgb(0x9E, 0, 0, 0)) }
+    } catch { }
+    if ($got -eq 0) { Log 'background: no bg\dead_men.jpg / bg\dog_days.jpg beside the launcher - using the drawn fallback' }
+}
+
 # ------------------------------------------------------------------------------------------------ wiring
+$ui.BtnMute.Add_Click({
+    $script:Settings.Muted = -not [bool]$script:Settings.Muted
+    Save-Settings
+    Music-Apply
+    if (-not $script:Settings.Muted -and -not $script:MusicLoaded) { Music-Extract $true }
+})
 $ui.BtnPlayMod.Add_Click({
     if ($script:Proc) { Log 'a job is still running'; return }
     if (Hook-Set $true) { Launch-Game }
@@ -691,4 +968,15 @@ Load-Settings
 Log ('KL Merge launcher started in ' + $script:Here)
 Refresh-Status
 if (-not $script:Settings.DD) { Log 'Dog Days was not found in any Steam library: use the ... button next to DOG DAYS.' }
+try { Bg-Init } catch { Log ('background: ' + $_.Exception.Message + ' - using the drawn fallback') }
+try {
+    Music-Init
+    Music-Load                      # plays when music\deadmen_launcher.wav exists and Muted is off
+    if (-not $script:MusicLoaded) {
+        # no file yet: silent (as good as muted) until the clip has been read from the tester's own Dead Men files
+        Music-Label
+        if (-not $script:Settings.Muted) { Music-Extract }
+    }
+} catch { Log ('music: ' + $_.Exception.Message + ' - silent') }
 [void]$script:Win.ShowDialog()
+try { if ($script:Player) { $script:Player.Stop(); $script:Player.Close() } } catch { }

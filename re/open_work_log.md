@@ -1,3 +1,12 @@
+2026-11-09 ~17:30 - [cloud, offline] LAUNCHER MUSIC + BACKGROUND (owner: "Dead Men music to play slightly, mutable in the setup, a background for both games"),
+UNTESTED on Windows: tools/kl_launcher_music.py (standalone reader of the TESTER'S OWN Dead Men PC_Def.str, kl_str.py layout: PCM, interleaved PCM sets
+de-interleaved L1 R1 L2 R2, mono IMA ADPCM; Vorbis refused -> exit 2 = silence; trims to 90 s, 1 s / 3 s fades, 16-bit WAV) + kl_launcher_music_test.py (48 checks on a
+synthetic stream, PASS). Default clip order (GUESS of taste): FA_SlashMixPrison (FA theme, codec unknown) -> Retomoto TakyoAction_Layer2_TAmbient_Loop (PROVEN PCM set)
+-> BO_Sus_Layer1_Ambient_LOOP -> Rooftop_Layer2. KLMergeLauncher.ps1: MediaPlayer loop at 0.22, MUTE/UNMUTE + note text in the header, Muted/Volume/MusicClip in the
+settings json, the clip made in the background by the tool (start / after INSTALL / on UNMUTE), silent on any failure; background = bg\dead_men.jpg (left) +
+bg\dog_days.jpg (right) ImageBrush UniformToFill blended by an OpacityMask diagonal seam under dim + grain + vignette, procedural fallback (grey film grain / teal video
+blocks + scan lines). pack_release.ps1 packs launcher\kl_launcher_music.py + launcher\bg\*.jpg, refuses launcher\music\; Setup.bat copies both up; .gitignore keeps bg/*.jpg
+and music/ out. README_TESTERS + OWNER_RELEASE_STEPS (2b: Josh's two screenshots) updated; launcher_test PASS (no pwsh in the cloud: parser pass still owed on Windows).
 2026-11-09 ~16:10 - [cloud, offline] DM03 WITHDRAWAL design + tools, nothing staged or run on the game: re/dm03_vault_swat_1109.md (SWAT form = DM03's own Dead Men
 SWAT body 59891 + ZSoldier of ArrivingCops_Squad_01/EscSquad men = the reverse of the proven frontcops swap; vault double door candidates A VaultLobby_01a SI0201_M03_DoorSteel_A_01/_02
 or B kick host 1076 + Garage_Wall_3xM_Door_02/_03; breach = own-leaf slabs without kick controller + KL_Vault!1 Arm TriggerBox -> 3 s Fuse -> Boom (Hasta blast clone) + proxies,

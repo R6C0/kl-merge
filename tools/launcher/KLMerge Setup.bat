@@ -145,6 +145,13 @@ if exist "%PKG%\launcher\KLMergeLauncher.ps1" (
     copy /Y "%PKG%\launcher\KLMergeLauncher.ps1" "%HERE%" >nul
     if exist "%PKG%\launcher\KLMerge.bat" copy /Y "%PKG%\launcher\KLMerge.bat" "%HERE%" >nul
     if exist "%PKG%\launcher\README_TESTERS.md" copy /Y "%PKG%\launcher\README_TESTERS.md" "%HERE%" >nul
+    rem the launcher's music tool (makes music\deadmen_launcher.wav from YOUR Dead Men files; no audio is downloaded)
+    if exist "%PKG%\launcher\kl_launcher_music.py" copy /Y "%PKG%\launcher\kl_launcher_music.py" "%HERE%" >nul
+    rem the two background pictures (bg\dead_men.jpg, bg\dog_days.jpg); the launcher also looks in package\launcher\bg itself
+    if exist "%PKG%\launcher\bg\*.jpg" (
+        if not exist "%HERE%bg" mkdir "%HERE%bg"
+        copy /Y "%PKG%\launcher\bg\*.jpg" "%HERE%bg\" >nul
+    )
 )
 if not exist "%HERE%KLMergeLauncher.ps1" (
     echo  ERROR: KLMergeLauncher.ps1 is neither beside this file nor in the package's launcher\ folder.

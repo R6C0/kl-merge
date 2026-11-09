@@ -9,6 +9,10 @@ Checks
   3. KLMergeLauncher.ps1: brace / bracket / parenthesis balance outside strings and comments; the XAML here-string is
      well-formed XML; every kl_release.py verb and option the launcher passes exists in kl_release.py's argparse;
      the Steam app id equals tools/kl_autotest.py APP; the hook-off file name is the same in the script and the READMEs
+  3b. music + background (2026-11-09): MediaPlayer with loop + MediaFailed handling, quiet default volume, the music file and
+     tool names, Muted / Volume / MusicClip in the settings, the ASCII-escaped note sign, try/catch around audio and images,
+     the two ImageBrush sides with an OpacityMask seam under dim / grain / vignette, the procedural fallback brushes, and that
+     the bat / pack_release.ps1 / READMEs carry the tool, bg\*.jpg and the music\ exclusion
   4. when pwsh (PowerShell 7) is on the PATH, the script is parsed with System.Management.Automation.Language.Parser
      and must give 0 errors (else SKIPPED with a note, never a FAIL)
   5. README_TESTERS.md names the log / dump files a tester must send, and OWNER_RELEASE_STEPS.md has the make command
@@ -187,6 +191,42 @@ def main():
     check('launch options' in ps.lower() and 'Set-ItemProperty' not in ps, 'ps1: never writes Steam launch options')
     check('GUESS' in ps, 'ps1: has a GUESS list')
 
+    # 3b. music + background (2026-11-09, owner: quiet Dead Men music with a mute switch, a two-game background)
+    check('System.Windows.Media.MediaPlayer' in ps, 'ps1: music through System.Windows.Media.MediaPlayer')
+    mv = re.search(r"\$script:DefaultVolume = ([0-9.]+)", ps)
+    check(mv and 0 < float(mv.group(1)) <= 0.3, 'ps1: default music volume is quiet (%s)' % (mv and mv.group(1)))
+    check("Volume = 0.22" in ps, 'ps1: the settings default Volume is 0.22')
+    check('MediaEnded' in ps and '[TimeSpan]::Zero' in ps, 'ps1: the clip loops (MediaEnded -> Position 0 -> Play)')
+    check('MediaFailed' in ps, 'ps1: a playback failure is caught (MediaFailed handler)')
+    check("$script:MusicName = 'deadmen_launcher.wav'" in ps and "'music\\' + $script:MusicName" in ps, 'ps1: music file is <launcher>\\music\\deadmen_launcher.wav')
+    check("$script:MusicToolName = 'kl_launcher_music.py'" in ps and "'extract', '--dm'" in ps and "'--out'" in ps, 'ps1: makes the clip with kl_launcher_music.py extract --dm --out')
+    check("'--clip'" in ps and 'MusicClip' in ps, 'ps1: MusicClip setting -> --clip')
+    for k in ('Muted', 'Volume', 'MusicClip'):
+        check(("'%s'" % k in ps) or ("NoteProperty %s" % k in ps), 'ps1: settings file carries ' + k)
+    check("[char]0x266A" in ps and '&#9834;' in ps, 'ps1: the music note is written as an ASCII escape (code + XAML entity), not as a UTF-8 char')
+    check('function Music-Poll' in ps and 'Music-Poll' in ps[ps.find('$script:Timer.Add_Tick'):ps.find('$script:Timer.Start()')], 'ps1: the timer polls the background extract')
+    check("Music-Extract $true" in ps[ps.find('$script:Timer.Add_Tick'):ps.find('$script:Timer.Start()')], 'ps1: a finished INSTALL (exit 0) triggers the extract')
+    check('if (-not $script:MusicLoaded) {' in ps and 'if (-not $script:Settings.Muted) { Music-Extract }' in ps, 'ps1: no music file at start = silent, extract only when not muted')
+    check('BtnMute.Add_Click' in ps and 'Settings.Muted = -not' in ps, 'ps1: MUTE / UNMUTE toggles and remembers the state')
+    check('exit 2' in ps or '2 = no decodable clip' in ps, 'ps1: documents the tool exit code 2 = silence')
+    for fn in ('Music-Init', 'Music-Load', 'Music-Extract', 'Bg-Init'):
+        body = ps[ps.find('function ' + fn):]
+        body = body[:body.find('\nfunction ', 1) if body.find('\nfunction ', 1) > 0 else len(body)]
+        check('try {' in body and 'catch' in body, 'ps1: %s has try/catch (audio / images never crash the window)' % fn)
+    check('ImageBrush' in ps and 'UniformToFill' in ps and "'dead_men.jpg'" in ps and "'dog_days.jpg'" in ps, 'ps1: background = bg\\dead_men.jpg + bg\\dog_days.jpg as ImageBrush UniformToFill')
+    check('<Grid.OpacityMask>' in ps and 'LinearGradientBrush' in ps[ps.find('<Grid.OpacityMask>'):ps.find('</Grid.OpacityMask>')], 'ps1: the two sides blend through an OpacityMask gradient (soft seam)')
+    check('BitmapCacheOption]::OnLoad' in ps, 'ps1: images are read once (OnLoad), the files are not kept open')
+    check('FilmGrain' in ps and 'VideoBlocks' in ps and 'ScanLines' in ps, 'ps1: procedural fallback brushes exist (film grain left, video blocks + scan lines right)')
+    if m:
+        bg_order = [xaml.find(s) for s in ('x:Name="BgRight"', 'x:Name="BgLeft"', 'x:Name="BgDim"', 'StaticResource Grain}', 'RadialGradientBrush', 'Margin="30,22,30,22"')]
+        check(all(i >= 0 for i in bg_order) and bg_order == sorted(bg_order), 'ps1: background layers lie under dim, grain, vignette and the content (XAML order)')
+        check('x:Name="BtnMute"' in xaml and 'x:Name="LblMusic"' in xaml and xaml.find('x:Name="BtnMute"') < xaml.find('<!-- body -->'), 'ps1: MUTE button and state text are in the header')
+    check('Remove-Item' not in ps, 'ps1: the music code never deletes either')
+    check(os.path.exists(os.path.join(TOOLS, 'kl_launcher_music.py')) and os.path.exists(os.path.join(TOOLS, 'kl_launcher_music_test.py')), 'tools/kl_launcher_music.py + its self-test exist')
+    gi = read(os.path.join(os.path.dirname(TOOLS), '.gitignore')).decode('utf-8', 'replace')
+    check('tools/launcher/music/' in gi and 'tools/launcher/bg/*' in gi, '.gitignore keeps the decoded clip and the owner pictures out of the repo')
+    check('kl_launcher_music.py' in bat and 'launcher\\bg\\*.jpg' in bat, 'the bat copies the music tool and bg\\*.jpg up beside the launcher')
+
     # 4. pwsh parse when available
     pwsh = shutil.which('pwsh') or shutil.which('powershell')
     if pwsh:
@@ -212,6 +252,14 @@ def main():
     pk = read(PACK).decode('ascii', 'replace')
     check('manifest.json' in pk and 'patches' in pk and 'kl_release.py' in pk and 'launcher' in pk, 'pack_release.ps1 bundles manifest + patches + kl_release.py + launcher')
     check('_snap' in pk and 'sha1cache' in pk, 'pack_release.ps1 knows the maker-only folders it must leave out')
+    check("'kl_launcher_music.py'" in pk, 'pack_release.ps1 packs launcher\\kl_launcher_music.py')
+    check("-Filter '*.jpg'" in pk and "'launcher\\bg'" in pk, 'pack_release.ps1 packs launcher\\bg\\*.jpg')
+    check("'launcher\\music'" in pk and 'REFUSED' in pk[pk.find("'launcher\\music'") - 200:pk.find("'launcher\\music'") + 200] and '|wav|' in pk, 'pack_release.ps1 refuses launcher\\music\\ (and any .wav)')
+    for word in ('MUTE', 'own', 'PC_Def.str', 'deadmen_launcher.wav', 'bg\\dead_men.jpg'):
+        check(word in rd, 'README_TESTERS mentions ' + word + ' (music from the tester\'s own Dead Men files, mute button, background)')
+    for word in ('bg\\dead_men.jpg', 'bg\\dog_days.jpg', 'kl_launcher_music.py', 'launcher\\music\\', 'FA_SlashMixPrison', 'TakyoAction_Layer2_TAmbient_Loop'):
+        check(word in ow, 'OWNER_RELEASE_STEPS mentions ' + word)
+    check(os.path.exists(os.path.join(HERE, 'bg', 'README.txt')), 'tools/launcher/bg/README.txt tells where the pictures go')
 
     for n in notes:
         print('  note ' + n)

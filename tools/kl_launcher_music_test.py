@@ -1,0 +1,324 @@
+#!/usr/bin/env python3
+"""
+kl_launcher_music_test.py - self-test of tools/kl_launcher_music.py on SYNTHETIC data: no game file, no network.
+
+A fake Dead Men-layout 'IOISNDSTREAM' file is written into a temp folder with
+  - a lone PCM stereo clip,
+  - a 2-layer interleaved PCM set (L1 R1 L2 R2) behind a 'LIP ' block, named like the Retomoto action theme,
+  - a 2-layer set of unequal rates (stereo 8 kHz + stereo 4 kHz: L R L R l r),
+  - a mono IMA ADPCM clip encoded here (the decoder must give the encoder's own reconstruction, sample-exact),
+  - a Vorbis clip under the first candidate's name (must be SKIPPED by the default pick),
+  - a stereo ADPCM clip (must be refused),
+and the module's read, de-interleave, decode, trim, fade and .wav output are checked against the known samples.
+exit 0 = all pass, 1 = a FAIL. Discovered by tools/kl_tests.py.
+"""
+import array, io, math, os, shutil, struct, sys, tempfile, wave
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import kl_launcher_music as M
+
+fails = []
+NCHECK = [0]
+
+
+def check(cond, what):
+    NCHECK[0] += 1
+    if cond:
+        print('  ok   ' + what)
+    else:
+        print('  FAIL ' + what)
+        fails.append(what)
+
+
+def name_key(name):
+    h = 0
+    for b in name.encode('latin1'):
+        h = (h * 5 + b) & 0xffffffff
+    return h
+
+
+def tone(n, freq, rate, amp=12000, phase=0.0):
+    return array.array('h', [int(amp * math.sin(2 * math.pi * freq * i / rate + phase)) for i in range(n)])
+
+
+def stereo(l, r):
+    out = array.array('h', bytes(4 * len(l)))
+    out[0::2] = l
+    out[1::2] = r
+    return out
+
+
+def ima_encode(samples, block=0x400):
+    """Mono IMA ADPCM, MS block layout -> (bytes, reconstruction array('h')) ; the reconstruction is what a
+    matching decoder must give."""
+    spb = (block - 4) * 2 + 1
+    out, recon = bytearray(), array.array('h')
+    idx = 0
+    for b in range(0, len(samples), spb):
+        chunk = samples[b:b + spb]
+        pred = chunk[0]
+        out += struct.pack('<hBB', pred, idx, 0)
+        recon.append(pred)
+        nibbles = []
+        for s in chunk[1:]:
+            step = M._STEP[idx]
+            diff = s - pred
+            sign = 8 if diff < 0 else 0
+            diff = abs(diff)
+            delta, vp = 0, step >> 3
+            if diff >= step:
+                delta |= 4; diff -= step; vp += step
+            step >>= 1
+            if diff >= step:
+                delta |= 2; diff -= step; vp += step
+            step >>= 1
+            if diff >= step:
+                delta |= 1; vp += step
+            pred = pred - vp if sign else pred + vp
+            pred = max(-32768, min(32767, pred))
+            recon.append(pred)
+            idx = max(0, min(88, idx + M._IDX[delta]))
+            nibbles.append(delta | sign)
+        while len(nibbles) < (block - 4) * 2:
+            nibbles.append(0)
+        for i in range(0, len(nibbles), 2):
+            out.append(nibbles[i] | (nibbles[i + 1] << 4))
+    return bytes(out), recon
+
+
+class Fake:
+    """Builds a Dead Men-layout stream file."""
+
+    def __init__(self):
+        self.blocks = []            # (lip bool, audio bytes, [entries]) ; entry = dict(name, codec, samples, channels, rate, bits, size, layer, extra)
+
+    def add(self, audio, entries, lip=False):
+        self.blocks.append((lip, audio, entries))
+
+    def write(self, path):
+        f = io.BytesIO()
+        f.write(b'IOISNDSTREAM' + struct.pack('<I', 9) + struct.pack('<Q', 0x46e11c9f))
+        f.write(b'\0' * (0x100 - f.tell()))
+        recs = []
+        for lip, audio, entries in self.blocks:
+            off = f.tell()
+            if lip:
+                f.write(b'LIP ' + struct.pack('<I', 16) + b'x' * 16 + b'\0' * (M.LIP - 24))
+            f.write(audio)
+            f.write(b'\0' * ((-f.tell()) % 0x100))
+            for e in entries:
+                recs.append((off, e))
+        fmts = []
+        for off, e in recs:
+            fmt = struct.pack('<5I', e['codec'], e['samples'], e['channels'], e['rate'], e['bits']) + b'junkjunk' + e.get('extra', b'')
+            fmts.append(fmt)
+        fmt_at = []
+        for fmt in fmts:
+            fmt_at.append(f.tell()); f.write(fmt)
+        name_at = []
+        for off, e in recs:
+            name_at.append(f.tell()); f.write(e['name'].encode('latin1') + b'\0')
+        f.write(b'\0' * ((-f.tell()) % 4))
+        index = f.tell()
+        rows = []
+        for i, (off, e) in enumerate(recs):
+            key = name_key(e['name'])
+            rows.append((key, struct.pack('<4Q2I4Q', i, off, e['size'], fmt_at[i], len(fmts[i]), key, len(e['name']), name_at[i],
+                                          4 if e.get('lip') else 0, e['layer'])))
+        rows.sort(key=lambda r: r[0])
+        for _, r in rows:
+            f.write(r)
+        data = f.getvalue()
+        data = data[:0x18] + struct.pack('<IIIIIH', index, len(recs), 0x100, 0, 1, 0x38) + data[0x18 + 22:]
+        with open(path, 'wb') as out:
+            out.write(data)
+        return len(recs)
+
+
+def read_wav(path):
+    with wave.open(path, 'rb') as w:
+        ch, width, rate, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
+        s = array.array('h'); s.frombytes(w.readframes(n))
+        if sys.byteorder != 'little':
+            s.byteswap()
+    return ch, width, rate, n, s
+
+
+def main():
+    tmp = tempfile.mkdtemp(prefix='klmusic_test_')
+    try:
+        return run(tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def run(tmp):
+    print('kl_launcher_music_test: synthetic stream in ' + tmp)
+    rate, lo = 8000, 4000
+    secs = 6
+    n = rate * secs
+    pcm_extra = struct.pack('<I', 4)
+    fk = Fake()
+    # 1. lone stereo PCM
+    solo_l, solo_r = tone(n, 220, rate), tone(n, 330, rate, phase=1.0)
+    solo = stereo(solo_l, solo_r)
+    fk.add(solo.tobytes(), [dict(name='Music/InHouse/Test/Solo.wav', codec=M.PCM, samples=n, channels=2, rate=rate, bits=16, size=4 * n, layer=0, extra=pcm_extra)])
+    # 2. 2-layer stereo set behind a LIP block (L1 R1 L2 R2)
+    l1 = stereo(tone(n, 110, rate), tone(n, 165, rate, phase=0.5))
+    l2 = stereo(tone(n, 440, rate, amp=6000), tone(n, 660, rate, amp=6000, phase=2.0))
+    inter = array.array('h', bytes(8 * n))
+    inter[0::4] = l1[0::2]; inter[1::4] = l1[1::2]; inter[2::4] = l2[0::2]; inter[3::4] = l2[1::2]
+    L1 = 'Music/InHouse/Japan/M09_A/TakyoAction_V3_44_Layer1_Loop.wav'
+    L2 = 'Music/InHouse/Japan/M09_A/TakyoAction_Layer2_TAmbient_Loop.wav'
+    SETN = 'LevelSetup/Level/M09_A/Music/TokyoAction1'
+    fk.add(inter.tobytes(), [dict(name=L1, codec=M.PCM, samples=n, channels=2, rate=rate, bits=16, size=4 * n, layer=1, extra=pcm_extra),
+                             dict(name=L2, codec=M.PCM, samples=n, channels=2, rate=rate, bits=16, size=4 * n, layer=2, extra=pcm_extra),
+                             dict(name=SETN, codec=M.SET, samples=n, channels=2, rate=rate, bits=16, size=8 * n, layer=2, extra=struct.pack('<I', 2), lip=True)],
+           lip=True)
+    # 3. unequal-rate set: stereo 8 kHz + stereo 4 kHz -> L R L R l r per period (2 frames of the fast layer, 1 of the slow)
+    hi = stereo(tone(n, 200, rate), tone(n, 300, rate))
+    slow_n = n // 2
+    sl = stereo(tone(slow_n, 50, lo, amp=3000), tone(slow_n, 75, lo, amp=3000))
+    mix = array.array('h')
+    for p in range(slow_n):
+        mix.extend(hi[4 * p:4 * p + 4]); mix.extend(sl[2 * p:2 * p + 2])
+    fk.add(mix.tobytes(), [dict(name='Music/InHouse/Test/Fast.wav', codec=M.PCM, samples=n, channels=2, rate=rate, bits=16, size=4 * n, layer=1, extra=pcm_extra),
+                           dict(name='Music/InHouse/Test/Slow.wav', codec=M.PCM, samples=slow_n, channels=2, rate=lo, bits=16, size=4 * slow_n, layer=2, extra=pcm_extra),
+                           dict(name='LevelSetup/Level/Test/Music/Mixed', codec=M.SET, samples=n, channels=2, rate=rate, bits=16, size=6 * n, layer=2, extra=struct.pack('<I', 2))])
+    # 4. mono IMA ADPCM
+    mono = tone(n, 180, rate, amp=9000)
+    adp, recon = ima_encode(mono)
+    fk.add(adp, [dict(name='Music/InHouse/Test/Adpcm.wav', codec=M.ADPCM, samples=n, channels=1, rate=rate, bits=4, size=len(adp), layer=0, extra=struct.pack('<II', 0x400, 0x7f9))])
+    # 5. Vorbis under the FIRST candidate's name, and a stereo ADPCM clip
+    fk.add(b'OggS' + b'\x55' * 3000, [dict(name='Music/InHouse/FA_Slash/FA_SlashMixPrison.wav', codec=M.VORBIS, samples=rate * 251, channels=2, rate=rate, bits=0, size=3004, layer=0)])
+    fk.add(b'\x11' * 2048, [dict(name='Music/InHouse/Test/StereoAdpcm.wav', codec=M.ADPCM, samples=2000, channels=2, rate=rate, bits=4, size=2048, layer=0, extra=struct.pack('<II', 0x400, 0x7f9))])
+    path = os.path.join(tmp, 'PC_Def.str')
+    count = fk.write(path)
+
+    # ---- read
+    st = M.Stream(path)
+    check(st.game == 'dm' and st.count == count == 10, 'reads the Dead Men header and %d index records' % count)
+    check(st.find('Music/InHouse/Test/Solo.wav').codec == M.PCM, 'find() exact name')
+    check(st.find('music/inhouse/test/solo') is not None, 'find() case-insensitive, .wav optional')
+    check(st.find('TakyoAction_Layer2_TAmbient_Loop') is not None, 'find() by unique suffix')
+    check(st.find('nothing_here') is None, 'find() unknown -> None')
+    c2 = st.find(L2)
+    check([x.name for x in st.layers(c2)] == [L1, L2], 'layers() gives the set parts in layer order without the set entry')
+    check(st.has_lip(c2.offset), 'the set block carries a LIP block')
+    check(st.find(SETN).nclips == 2, 'set entry: number of clips read from the format')
+    ad = st.find('Music/InHouse/Test/Adpcm.wav')
+    check((ad.block, ad.spb) == (0x400, 0x7f9), 'ADPCM block / samples-per-block read from the format')
+
+    # ---- decode: lone PCM, full length (no trim)
+    s, ch, r = M.decode(st, st.find('Music/InHouse/Test/Solo.wav'), 60)
+    check((ch, r, len(s)) == (2, rate, 2 * n) and s == solo, 'lone PCM decodes sample-exact')
+    # trim
+    s, ch, r = M.decode(st, st.find('Music/InHouse/Test/Solo.wav'), 2.5)
+    check(len(s) == 2 * int(2.5 * rate) and s == solo[:2 * int(2.5 * rate)], 'trim to 2.5 s keeps the first frames exactly')
+    # set layers (behind the LIP block)
+    s1, ch, r = M.decode(st, st.find(L1), 60)
+    s2, ch2, r2 = M.decode(st, c2, 60)
+    check(s1 == l1 and (ch, r) == (2, rate), 'set layer 1 de-interleaved sample-exact')
+    check(s2 == l2 and (ch2, r2) == (2, rate), 'set layer 2 de-interleaved sample-exact (LIP block skipped)')
+    s3, ch3, r3 = M.decode(st, st.find(SETN), 60)
+    check(s3 == l1, 'the set entry itself decodes to layer 1 (the driving layer)')
+    s2t, _, _ = M.decode(st, c2, 1.25)
+    check(len(s2t) == 2 * int(1.25 * rate) and s2t == l2[:len(s2t)], 'set layer trim to 1.25 s exact')
+    # unequal rates
+    sf, chf, rf = M.decode(st, st.find('Music/InHouse/Test/Fast.wav'), 60)
+    ss, chs, rs = M.decode(st, st.find('Music/InHouse/Test/Slow.wav'), 60)
+    check(sf == hi and (chf, rf) == (2, rate), 'unequal-rate set: fast layer (2 frames per period) exact')
+    check(ss == sl and (chs, rs) == (2, lo), 'unequal-rate set: slow layer (1 frame per period) exact')
+    sst, _, _ = M.decode(st, st.find('Music/InHouse/Test/Slow.wav'), 1.0)
+    check(len(sst) == 2 * lo and sst == sl[:2 * lo], 'unequal-rate set: slow layer trim to 1 s exact')
+    # ADPCM
+    sa, cha, ra = M.decode(st, ad, 60)
+    check((cha, ra, len(sa)) == (1, rate, n) and sa == recon, 'mono IMA ADPCM decodes to the encoder reconstruction, sample-exact')
+    sat, _, _ = M.decode(st, ad, 0.7)
+    check(len(sat) == int(0.7 * rate) and sat == recon[:len(sat)], 'ADPCM trim exact')
+    # refusals
+    for nm, why in (('Music/InHouse/FA_Slash/FA_SlashMixPrison.wav', 'Vorbis is refused'), ('Music/InHouse/Test/StereoAdpcm.wav', 'stereo ADPCM is refused')):
+        try:
+            M.decode(st, st.find(nm), 60); check(False, why)
+        except M.NoClip as e:
+            check(True, why + ' (%s)' % e)
+    st.close()
+
+    # ---- fade + wav
+    s = array.array('h', [10000] * (2 * 6 * rate))
+    M.fade(s, 2, rate)
+    check(s[0] == 0 and s[1] == 0 and s[-1] == 0 and s[-2] == 0, 'fade: first and last frames are silent')
+    check(s[2 * int(1.5 * rate)] == 10000 and s[2 * int(2.5 * rate) + 1] == 10000, 'fade: the middle (between 1 s in and 3 s out) is untouched')
+    check(0 < s[2 * int(0.5 * rate)] < 10000 and 0 < s[-2 * int(1.5 * rate)] < 10000, 'fade: ramps are between 0 and full')
+    blob = M.wav_bytes(array.array('h', [1, -2, 3, -4]), 2, 32000)
+    check(blob[:4] == b'RIFF' and blob[8:12] == b'WAVE' and struct.unpack_from('<I', blob, 4)[0] == len(blob) - 8, 'wav_bytes: RIFF sizes')
+    check(struct.unpack_from('<HHIIHH', blob, 20) == (1, 2, 32000, 128000, 4, 16), 'wav_bytes: fmt chunk 16-bit PCM stereo 32 kHz')
+
+    # ---- extract (the CLI): default pick skips the Vorbis candidate and lands on the Retomoto bed
+    out = os.path.join(tmp, 'music', 'deadmen_launcher.wav')
+    lines = []
+    c = M.extract(path, out, None, 2.0, lines.append)
+    check(c.name == L2, 'default pick = %s (first candidate Vorbis -> skipped)' % L2.split('/')[-1])
+    check(any('skipped' in l and 'Vorbis' in l for l in lines), 'the log says why the FA theme was skipped')
+    ch, width, r, frames, s = read_wav(out)
+    check((ch, width, r, frames) == (2, 2, rate, 2 * rate), 'written .wav: stereo 16-bit, clip rate, 2.0 s')
+    check(s[0] == 0 and s[-1] == 0, 'written .wav is faded')
+    check(sorted(os.listdir(os.path.dirname(out))) == ['deadmen_launcher.wav'], 'nothing but the one .wav was written')
+    rc = M.main(['extract', '--dm', tmp, '--out', out, '--clip', 'Music/InHouse/Test/Solo.wav', '--seconds', '1.5'])
+    check(rc == 0, 'CLI extract --clip -> exit 0')
+    ch, width, r, frames, s = read_wav(out)
+    mid = 2 * (rate * 3 // 4)
+    check(frames == int(1.5 * rate) and ch == 2, 'CLI: trimmed to 1.5 s')
+    # with 1.5 s the fade-out covers 0.5 s (frames - n_in): the sample at 0.75 s is on the out ramp but not at the fade-in -> compare after undoing nothing: just check it is a scaled solo sample
+    check(abs(s[mid]) <= abs(solo[mid]), 'CLI: samples are the clip, faded')
+    rc = M.main(['extract', '--dm', tmp, '--out', out, '--clip', 'Music/InHouse/FA_Slash/FA_SlashMixPrison.wav'])
+    check(rc == 2, 'CLI: a Vorbis --clip -> exit 2')
+    rc = M.main(['extract', '--dm', tmp, '--out', out, '--clip', 'no/such/clip.wav'])
+    check(rc == 2, 'CLI: unknown --clip -> exit 2')
+    rc = M.main(['extract', '--dm', os.path.join(tmp, 'nowhere'), '--out', out])
+    check(rc == 2, 'CLI: no PC_Def.str -> exit 2')
+    empty = os.path.join(tmp, 'empty')
+    os.makedirs(empty)
+    with open(os.path.join(empty, 'PC_Def.str'), 'wb') as f:
+        f.write(b'IOISNDSTREAM' + b'\0' * 100)
+    rc = M.main(['extract', '--dm', empty, '--out', os.path.join(tmp, 'x', 'y.wav')])
+    check(rc == 2 and not os.path.exists(os.path.join(tmp, 'x', 'y.wav')), 'CLI: a broken stream file -> exit 2, nothing written')
+    with open(path, 'rb') as f:
+        trunc = f.read()[:-100]
+    tp = os.path.join(tmp, 'trunc')
+    os.makedirs(tp)
+    with open(os.path.join(tp, 'PC_Def.str'), 'wb') as f:
+        f.write(trunc)
+    check(M.main(['extract', '--dm', tp, '--out', out]) == 2, 'CLI: a truncated stream file -> exit 2')
+    nocand = Fake()
+    nocand.add(solo.tobytes(), [dict(name='Music/Other/Tune.wav', codec=M.PCM, samples=n, channels=2, rate=rate, bits=16, size=4 * n, layer=0, extra=pcm_extra)])
+    np_ = os.path.join(tmp, 'nocand'); os.makedirs(np_); nocand.write(os.path.join(np_, 'PC_Def.str'))
+    check(M.main(['extract', '--dm', np_, '--out', out]) == 2, 'CLI: no candidate in the file -> exit 2')
+    check(M.main(['extract', '--dm', np_, '--out', out, '--clip', 'Tune']) == 0, 'CLI: ... but --clip of a clip it has -> exit 0')
+    check(M.main(['extract', '--dm', tmp, '--out', out, '--seconds', '0']) == 1, 'CLI: --seconds 0 -> usage exit 1')
+    check(M.main([]) == 1, 'CLI: no command -> exit 1')
+    # list
+    import contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = M.main(['list', '--dm', tmp, 'Japan'])
+    txt = buf.getvalue()
+    check(rc == 0 and L1 in txt and L2 in txt and 'Solo' not in txt and '2 clips' in txt, 'CLI list with a filter')
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = M.main(['extract', '--dm', tmp, '--out', out, '--list'])
+    check(rc == 0 and 'FA_SlashMixPrison' in buf.getvalue() and 'vorbis' in buf.getvalue(), 'extract --list lists the Music/ clips with their codec')
+    # the candidate table names real Dead Men paths and each has a reason
+    check(all(nm.startswith('Music/') and nm.endswith('.wav') and why for nm, why in M.CANDIDATES), 'CANDIDATES are Music/...wav names with a reason each')
+    check('GUESS' in M.__doc__ and 'PROVEN' in M.__doc__, 'the module marks what is proven and what is guessed')
+
+    if fails:
+        print('RESULT: FAIL %d check(s): %s' % (len(fails), '; '.join(fails)[:400]))
+        return 1
+    print('RESULT: PASS (%d checks)' % NCHECK[0])
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
