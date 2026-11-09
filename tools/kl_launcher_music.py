@@ -13,9 +13,10 @@ Exit codes: 0 = the .wav was written; 2 = no usable clip (PC_Def.str missing / u
 Writes ONLY the one output file (a partial file is removed on failure).
 
 DEFAULT (no --clip, no --no-riff): the guitar riff of the tester's own Movies/Trailer.bik (RIFF_START..RIFF_END, Bink Audio,
-decoded by ffmpeg on the PATH, else kl_pybink.py beside this file) looped RIFF_REPEATS times, crossfaded into the whole
-MenuLoop_01, which fades out; ~106 s at 48 kHz stereo, ~20 MB. When the trailer or a Bink decoder is missing, the clip
-list below is used instead (log line 'riff loop skipped: ...').
+decoded by kl_pybink.py beside this file with its burst repair (the trailer's own overload pops removed), else ffmpeg on
+the PATH as decoded) looped RIFF_REPEATS times, crossfaded into the whole MenuLoop_01, which fades out; ~106 s at 48 kHz
+stereo, ~20 MB. --keep-pops: no repair, ffmpeg first. When the trailer or a Bink decoder is missing, the clip list below
+is used instead (log line 'riff loop skipped: ...').
 
 Output: standard RIFF/WAVE, 16-bit PCM. One clip: its own rate and channels, at most --seconds (default 90) with a
 1 s fade-in and a 3 s fade-out (so the launcher's loop seam is quiet).
@@ -93,6 +94,11 @@ RIFF_XFADE = 4.0                       # s, equal-power crossfade riff -> menu, 
 RIFF_MENU = CANDIDATES[0][0]
 MENU_PEAK = 30000                      # the menu is raised (at most x2) until its peak is this ...
 RIFF_OVER_MENU = 1.2                   # ... and the (much louder mastered) riff is lowered to this x the menu's RMS
+# MEASURED 11-09 on Trailer.bik: 9 Bink blocks (channel) in the window overload to 9e4..3.5e5 x full scale (also in ffmpeg's
+# decode) = 40-43 ms full-scale pops at 33.68..37.52 s. kl_pybink's burst_limit repairs exactly those blocks; elsewhere its
+# output = ffmpeg's (0-2 LSB). No sample-level rule for the ffmpeg path: the trailer is mastered hot and clips for real in
+# 42k frames of the window, so only the decoder's block magnitude tells a burst apart. 4.0 = 6b's value.
+RIFF_BURST_LIMIT = 4.0
 
 u32 = lambda b, o: struct.unpack_from('<I', b, o)[0]
 
@@ -502,12 +508,19 @@ def py_bink():
     return kl_pybink
 
 
-def trailer_riff(dm, log):
-    """-> (array('h'), channels, rate) of RIFF_START..RIFF_END of the trailer's audio. Raises NoClip."""
-    path = os.path.join(dm, *RIFF_BIK)
-    if not os.path.isfile(path):
-        raise NoClip('no %s in %s' % ('/'.join(RIFF_BIK), dm))
-    errs = []
+def bink_pybink(pyb, path, repair, log):
+    """kl_pybink's decode of the window; with repair, its burst repair on (see RIFF_BURST_LIMIT)."""
+    if not repair:
+        return pyb.bink_audio(path, 0, RIFF_START, RIFF_END)
+    rep = []
+    s, ch, rate = pyb.bink_audio(path, 0, RIFF_START, RIFF_END, burst_limit=RIFF_BURST_LIMIT, report=rep)
+    if rep:
+        log('  riff: %d overloaded Bink block(s) repaired (kl_pybink burst_limit %g; --keep-pops keeps them)' % (len(rep), RIFF_BURST_LIMIT))
+    return s, ch, rate
+
+
+def bink_ffmpeg(path, errs):
+    """-> (s, ch, rate, label) of the window from the first ffmpeg that works, or None (errors appended to errs)."""
     for label, argv in bink_decoders(path):
         try:
             r = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
@@ -518,18 +531,38 @@ def trailer_riff(dm, log):
         except (OSError, subprocess.SubprocessError, NoClip) as e:
             errs.append('%s: %s' % (label, e))
             continue
-        s = s[ch * int(RIFF_START * rate):ch * int(RIFF_END * rate)]
-        break
-    else:
-        pyb = py_bink()
-        if not pyb:
-            raise NoClip('%s: Bink Audio, and neither ffmpeg nor kl_pybink.py is here to decode it%s' % (
-                '/'.join(RIFF_BIK), ' (%s)' % '; '.join(errs) if errs else ''))
-        try:
-            s, ch, rate = pyb.bink_audio(path, 0, RIFF_START, RIFF_END)
-        except Exception as e:                                     # BinkError, or a bug on a file it never saw
-            raise NoClip('kl_pybink: %s%s' % (e, ' (%s)' % '; '.join(errs) if errs else ''))
-        label = 'kl_pybink'
+        return s[ch * int(RIFF_START * rate):ch * int(RIFF_END * rate)], ch, rate, label
+    return None
+
+
+def trailer_riff(dm, log, repair=True):
+    """-> (array('h'), channels, rate) of RIFF_START..RIFF_END of the trailer's audio. Raises NoClip.
+    repair (default): kl_pybink first, with its burst repair (the trailer's overload pops); ffmpeg only if it fails.
+    repair=False (--keep-pops): ffmpeg first, then kl_pybink, both as decoded."""
+    path = os.path.join(dm, *RIFF_BIK)
+    if not os.path.isfile(path):
+        raise NoClip('no %s in %s' % ('/'.join(RIFF_BIK), dm))
+    errs, got = [], None
+    pyb = py_bink()
+    order = ('pybink', 'ffmpeg') if repair else ('ffmpeg', 'pybink')
+    for how in order:
+        if how == 'ffmpeg':
+            got = bink_ffmpeg(path, errs)
+            if got and repair:
+                log('  riff: decoded by %s without the burst repair (kl_pybink %s): the overload pops stay' % (
+                    got[3], 'failed' if pyb else 'is missing'))
+        elif pyb:
+            try:
+                got = bink_pybink(pyb, path, repair, log) + ('kl_pybink',)
+            except Exception as e:                                 # BinkError, or a bug on a file it never saw
+                errs.append('kl_pybink: %s' % e)
+        if got:
+            break
+    if not got:
+        if not pyb and not bink_decoders(path):
+            raise NoClip('%s: Bink Audio, and neither ffmpeg nor kl_pybink.py is here to decode it' % '/'.join(RIFF_BIK))
+        raise NoClip('%s: no decoder worked (%s)' % ('/'.join(RIFF_BIK), '; '.join(errs)))
+    s, ch, rate, label = got
     want = int((RIFF_END - RIFF_START) * rate) * ch
     if ch not in (1, 2) or len(s) < want - ch * rate // 10:       # a short read = the trailer is not the one measured
         raise NoClip('%s: %d channels, %.1f of %.1f s decoded by %s' % (
@@ -607,9 +640,9 @@ def compose(riff, menu, ch, rate, repeats=RIFF_REPEATS, seam=RIFF_SEAM, xfade=RI
     return fade(out, ch, rate, 0.01, xfade)                        # 10 ms in: no click on the riff's first attack
 
 
-def riff_menu(dm, st, log):
+def riff_menu(dm, st, log, repair=True):
     """-> (array('h'), 2, rate): the owner's riff + MenuLoop_01 loop. Raises NoClip (the caller falls back to one clip)."""
-    riff, rch, rrate = trailer_riff(dm, log)                       # first: it is the part most likely to be missing
+    riff, rch, rrate = trailer_riff(dm, log, repair)                     # first: it is the part most likely to be missing
     c = st.find(RIFF_MENU)
     if c is None:
         raise NoClip('%s is not in the file' % RIFF_MENU)
@@ -688,7 +721,7 @@ def write_wav(out, blob):
         raise
 
 
-def extract(dm, out, clip=None, seconds=DEFAULT_SECONDS, log=print, riff=True):
+def extract(dm, out, clip=None, seconds=DEFAULT_SECONDS, log=print, riff=True, repair=True):
     """Decode the riff + menu loop (no clip named, riff on), else the clip (or the first decodable candidate) to `out`.
     -> the Clip (the menu clip for the riff loop); raises NoClip."""
     st = open_stream(dm, log)
@@ -696,7 +729,7 @@ def extract(dm, out, clip=None, seconds=DEFAULT_SECONDS, log=print, riff=True):
         if clip is None and riff:
             try:
                 log('  trying the trailer riff + %s loop (--no-riff: one clip)' % RIFF_MENU)
-                s, ch, rate = riff_menu(dm, st, log)
+                s, ch, rate = riff_menu(dm, st, log, repair)
             except NoClip as e:
                 log('  riff loop skipped: %s' % e)
             else:
@@ -751,6 +784,7 @@ def main(argv=None):
     e.add_argument('--seconds', type=float, default=DEFAULT_SECONDS, help='trim to at most this many seconds (default %g)' % DEFAULT_SECONDS)
     e.add_argument('--list', action='store_true', help='list the Music/ clips of the file instead of extracting')
     e.add_argument('--no-riff', action='store_true', help='skip the default trailer riff + menu loop, write one clip')
+    e.add_argument('--keep-pops', action='store_true', help="riff as decoded: no repair of the trailer's overload pops")
     l = sub.add_parser('list', help='list the clips of the file')
     l.add_argument('--dm', required=True)
     l.add_argument('text', nargs='?', default='')
@@ -769,7 +803,7 @@ def main(argv=None):
         if a.seconds <= 0 or a.seconds > MAX_SECONDS:
             print('--seconds must be in 0 < s <= %g' % MAX_SECONDS)
             return 1
-        extract(a.dm, a.out, a.clip or None, a.seconds, print, not a.no_riff)
+        extract(a.dm, a.out, a.clip or None, a.seconds, print, not a.no_riff, not a.keep_pops)
         return 0
     except NoClip as e:
         print('NO MUSIC: %s' % e)

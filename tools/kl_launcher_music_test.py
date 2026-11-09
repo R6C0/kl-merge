@@ -217,14 +217,46 @@ def riff_tests(d, out, py, menuwav, mrate):
         lines = []
         M.extract(d, out, None, 2.0, lines.append)
         check(any('neither ffmpeg nor kl_pybink' in l for l in lines), 'riff: no Bink decoder -> skipped, the log names ffmpeg and kl_pybink')
+        calls = []
         class PB(object):
+            fail = False
             @staticmethod
-            def bink_audio(path, track, a, b):
+            def bink_audio(path, track, a, b, burst_limit=None, report=None):
+                calls.append(burst_limit)
+                if PB.fail:
+                    raise ValueError('not a Bink file')
+                if report is not None:
+                    report.append((233, 0, 347269.7))
                 return src[2 * int(a * rr):2 * int(b * rr)], 2, rr
         M.py_bink = lambda: PB
         lines = []
         M.extract(d, out, None, 2.0, lines.append)
         check(read_wav(out)[2] == rr and any('(kl_pybink)' in l for l in lines), 'riff: no ffmpeg -> kl_pybink decodes the window')
+        check(calls == [M.RIFF_BURST_LIMIT] and any('1 overloaded Bink block(s) repaired' in l for l in lines),
+              'riff: kl_pybink is asked for the burst repair (limit %g) and the repair is logged' % M.RIFF_BURST_LIMIT)
+        M.bink_decoders = fake_bik(45)
+        del calls[:]; lines = []
+        M.extract(d, out, None, 2.0, lines.append)
+        check(calls == [M.RIFF_BURST_LIMIT] and any('(kl_pybink)' in l for l in lines) and not any('(fakebik)' in l for l in lines),
+              'riff: default = kl_pybink first (repaired) even when ffmpeg is there')
+        del calls[:]; lines = []
+        check(M.main(['extract', '--dm', d, '--out', out, '--keep-pops']) == 0 and read_wav(out)[2] == rr and calls == [],
+              'riff: --keep-pops -> ffmpeg first, kl_pybink not asked')
+        M.bink_decoders = lambda path: []
+        del calls[:]; lines = []
+        M.extract(d, out, None, 2.0, lines.append, True, False)
+        check(calls == [None] and not any('repaired' in l for l in lines), 'riff: keep-pops, no ffmpeg -> kl_pybink without burst_limit')
+        M.bink_decoders = fake_bik(45)
+        PB.fail = True
+        lines = []
+        M.extract(d, out, None, 2.0, lines.append)
+        check(read_wav(out)[2] == rr and any('(fakebik)' in l for l in lines) and any('without the burst repair' in l and 'failed' in l for l in lines),
+              'riff: kl_pybink fails -> ffmpeg decodes, the log says the pops stay')
+        M.bink_decoders = lambda path: []
+        lines = []
+        M.extract(d, out, None, 2.0, lines.append)
+        check(read_wav(out)[2] == mrate and any('no decoder worked' in l and 'not a Bink file' in l for l in lines),
+              'riff: kl_pybink fails, no ffmpeg -> MenuLoop_01 alone, the error named')
     finally:
         M.bink_decoders, M.py_bink = real_bd, real_pb
     up = M.regain(array.array('h', [0, 0, 100, -100, 200, -200]), 2, 4000, 8000, 1.0)
