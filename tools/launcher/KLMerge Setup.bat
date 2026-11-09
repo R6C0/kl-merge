@@ -37,19 +37,20 @@ set "PKG=%HERE%package"
 set "PYDIR=%HERE%python"
 set "ZIP=%DL%\KLMerge_package.zip"
 set "LOG=%HERE%KLMerge_Setup.log"
-set "PYCMD="
+set "PYEXE="
+set "PYARG="
 
 echo.
 echo  ===== KL MERGE SETUP =====
-echo  folder: %HERE%
-echo  (log: %LOG%)
+echo  folder: "%HERE%"
+echo  log:    "%LOG%"
 echo.
 echo [%date% %time%] setup started >> "%LOG%"
 
 if not exist "%DL%" mkdir "%DL%"
 
 rem ---- 0. is the URL still the placeholder? -------------------------------------------------
-echo %RELEASE_URL% | findstr /i /c:"example.invalid" >nul
+echo "%RELEASE_URL%" | findstr /i /c:"example.invalid" >nul
 if not errorlevel 1 (
     if exist "%PKG%\manifest.json" (
         echo  RELEASE_URL is not set: skipping the download, using the package already in .\package\
@@ -62,33 +63,54 @@ if not errorlevel 1 (
 
 rem ---- 1. download ---------------------------------------------------------------------------
 echo  Downloading the package ...
-echo      %RELEASE_URL%
+echo      "%RELEASE_URL%"
+rem the download lands in %ZIP%.part and replaces %ZIP% only when it finished: a broken connection never
+rem leaves a half zip that a later run's -z would treat as current
+set "PART=%ZIP%.part"
+rem no del anywhere in this file (Defender flags .bat files that delete): a stale .part is emptied instead
+type nul >"%PART%"
 where curl.exe >nul 2>nul
 if errorlevel 1 goto :dl_ps
-rem -z: only download when the server copy is newer than the file we already have (re-runs are cheap)
+rem -z: only download when the server copy is newer than the file we already have (re-runs are cheap;
+rem a 304 answer writes nothing, so the .part stays empty and the old zip stays)
 if exist "%ZIP%" (
-    curl.exe -L -f -# -z "%ZIP%" -o "%ZIP%" "%RELEASE_URL%"
+    curl.exe -L -f -# -z "%ZIP%" -o "%PART%" "%RELEASE_URL%"
 ) else (
-    curl.exe -L -f -# -o "%ZIP%" "%RELEASE_URL%"
+    curl.exe -L -f -# -o "%PART%" "%RELEASE_URL%"
 )
-if errorlevel 1 (
-    echo  ERROR: download failed ^(curl exit %errorlevel%^). Check the URL / your connection and run this file again.
-    echo [%date% %time%] download failed, curl exit %errorlevel% >> "%LOG%"
+set "RC=%errorlevel%"
+if not "%RC%"=="0" (
+    type nul >"%PART%"
+    echo  ERROR: download failed ^(curl exit %RC%^). Check the URL / your connection and run this file again.
+    echo [%date% %time%] download failed, curl exit %RC% >> "%LOG%"
     goto :fail
 )
-goto :dl_done
+goto :dl_move
 
 :dl_ps
-powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%RELEASE_URL%' -OutFile '%ZIP%' -UseBasicParsing"
+rem paths and URL reach PowerShell as environment variables: an apostrophe in a folder name cannot break the command
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri $env:RELEASE_URL -OutFile $env:PART -UseBasicParsing"
 if errorlevel 1 (
+    type nul >"%PART%"
     echo  ERROR: download failed ^(PowerShell^). Check the URL / your connection and run this file again.
     echo [%date% %time%] download failed, powershell >> "%LOG%"
     goto :fail
 )
 
-:dl_done
+:dl_move
+if not exist "%PART%" goto :dl_check
+set "PARTSIZE=0"
+for %%A in ("%PART%") do set "PARTSIZE=%%~zA"
+if "%PARTSIZE%"=="0" goto :dl_drop
+move /y "%PART%" "%ZIP%" >nul
+if errorlevel 1 (
+    echo  ERROR: could not replace "%ZIP%" ^(open in another program?^)
+    goto :fail
+)
+:dl_drop
+:dl_check
 if not exist "%ZIP%" (
-    echo  ERROR: no file arrived at %ZIP%
+    echo  ERROR: no file arrived at "%ZIP%"
     goto :fail
 )
 for %%A in ("%ZIP%") do set "ZIPSIZE=%%~zA"
@@ -105,7 +127,10 @@ if "%STAMP%"=="%NOWSTAMP%" (
         goto :launcher_files
     )
 )
-echo  Unpacking into %PKG% ...
+echo  Unpacking into "%PKG%" ...
+>"%DL%\unpacked.txt" echo none
+rem an old manifest.json would hide a failed unpack: it comes back only from this zip
+if exist "%PKG%\manifest.json" move /y "%PKG%\manifest.json" "%DL%\manifest.before-unpack.json" >nul
 if not exist "%PKG%" mkdir "%PKG%"
 where tar.exe >nul 2>nul
 if errorlevel 1 goto :unpack_ps
@@ -114,10 +139,11 @@ if errorlevel 1 goto :unpack_ps
 goto :unpacked
 
 :unpack_ps
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%ZIP%' -DestinationPath '%PKG%' -Force"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath $env:ZIP -DestinationPath $env:PKG -Force"
 if errorlevel 1 (
-    echo  ERROR: could not unpack %ZIP%
+    echo  ERROR: could not unpack "%ZIP%" ^(damaged download: it is set aside as .bad, run this file again^)
     echo [%date% %time%] unpack failed >> "%LOG%"
+    move /y "%ZIP%" "%ZIP%.bad" >nul 2>nul
     goto :fail
 )
 
@@ -126,7 +152,7 @@ rem a zip with one top-level folder: pull its contents up so that package\manife
 if not exist "%PKG%\manifest.json" (
     for /d %%D in ("%PKG%\*") do (
         if exist "%%D\manifest.json" (
-            echo  (package was inside folder %%~nxD: moving it up)
+            echo  ^(package was inside folder %%~nxD: moving it up^)
             rem /MOVE is a MOVE of the unpacked files one folder up (the emptied wrapper folder goes with it);
             rem it is the only thing in this file that takes a path away, and it only ever touches .\package\
             robocopy "%%D" "%PKG%" /E /MOVE /NFL /NDL /NJH /NJS /NP >nul
@@ -136,6 +162,7 @@ if not exist "%PKG%\manifest.json" (
 if not exist "%PKG%\manifest.json" (
     echo  ERROR: the package has no manifest.json ^(not a KL Merge release package^).
     echo [%date% %time%] no manifest.json after unpack >> "%LOG%"
+    move /y "%ZIP%" "%ZIP%.bad" >nul 2>nul
     goto :fail
 )
 echo %NOWSTAMP%>"%DL%\unpacked.txt"
@@ -173,69 +200,75 @@ if exist "%PKG%\KLMergeSetup.exe" (
     goto :start
 )
 echo  Looking for Python 3 ...
+rem PYEXE = the program (quoted on every call: a folder with spaces or '&' is fine), PYARG = '-3' for the py launcher
 if exist "%PYDIR%\python.exe" (
     "%PYDIR%\python.exe" -c "import sys; sys.exit(0 if sys.version_info[0]==3 else 1)" >nul 2>nul
-    if not errorlevel 1 set "PYCMD=%PYDIR%\python.exe"
+    if not errorlevel 1 set "PYEXE=%PYDIR%\python.exe"
 )
-if defined PYCMD goto :py_found
+if defined PYEXE goto :py_found
 py -3 -c "import sys; sys.exit(0 if sys.version_info[0]==3 else 1)" >nul 2>nul
-if not errorlevel 1 set "PYCMD=py -3"
-if defined PYCMD goto :py_found
+if errorlevel 1 goto :py_try_python
+set "PYEXE=py"
+set "PYARG=-3"
+goto :py_found
+:py_try_python
 rem (the Windows Store 'python' alias prints a message and exits non-zero: it does not pass this test)
 python -c "import sys; sys.exit(0 if sys.version_info[0]==3 else 1)" >nul 2>nul
-if not errorlevel 1 set "PYCMD=python"
-if defined PYCMD goto :py_found
+if not errorlevel 1 set "PYEXE=python"
+if defined PYEXE goto :py_found
 
-echo  No Python 3 found: fetching the embeddable Python into %PYDIR% ^(nothing is installed system-wide^) ...
+echo  No Python 3 found: fetching the embeddable Python into "%PYDIR%" ^(nothing is installed system-wide^) ...
 if not exist "%PYDIR%" mkdir "%PYDIR%"
-where curl.exe >nul 2>nul
+call :fetch "%PYTHON_EMBED_URL%" "%DL%\python_embed.zip"
 if errorlevel 1 (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%PYTHON_EMBED_URL%' -OutFile '%DL%\python_embed.zip' -UseBasicParsing; Invoke-WebRequest -Uri '%GETPIP_URL%' -OutFile '%DL%\get-pip.py' -UseBasicParsing"
-) else (
-    curl.exe -L -f -# -o "%DL%\python_embed.zip" "%PYTHON_EMBED_URL%"
-    curl.exe -L -f -s -o "%DL%\get-pip.py" "%GETPIP_URL%"
-)
-if not exist "%DL%\python_embed.zip" (
     echo  ERROR: could not download Python. Install Python 3 from python.org ^(tick "Add to PATH"^) and run this file again.
     goto :fail
 )
+set "PYZIP=%DL%\python_embed.zip"
 where tar.exe >nul 2>nul
 if errorlevel 1 (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%DL%\python_embed.zip' -DestinationPath '%PYDIR%' -Force"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath $env:PYZIP -DestinationPath $env:PYDIR -Force"
 ) else (
-    tar.exe -xf "%DL%\python_embed.zip" -C "%PYDIR%"
+    tar.exe -xf "%PYZIP%" -C "%PYDIR%"
 )
 if not exist "%PYDIR%\python.exe" (
     echo  ERROR: the Python zip did not unpack.
     goto :fail
 )
-rem the embeddable Python ignores site-packages until its ._pth file says 'import site'
-for %%F in ("%PYDIR%\python3*._pth") do (
-    findstr /b /c:"import site" "%%F" >nul || (
-        echo Lib\site-packages>>"%%F"
-        echo import site>>"%%F"
-    )
-)
-set "PYCMD=%PYDIR%\python.exe"
+set "PYEXE=%PYDIR%\python.exe"
 echo  installing pip + zstandard into the embedded Python ...
-"%PYDIR%\python.exe" "%DL%\get-pip.py" --no-warn-script-location >> "%LOG%" 2>&1
-"%PYDIR%\python.exe" -m pip install --no-warn-script-location zstandard >> "%LOG%" 2>&1
+call :embed_pip
 
 :py_found
-echo  python: %PYCMD%
-%PYCMD% -c "import zstandard" >nul 2>nul
-if errorlevel 1 (
+if defined PYARG (set "PYSHOW=%PYEXE% %PYARG%") else (set "PYSHOW=%PYEXE%")
+echo  python: "%PYSHOW%"
+"%PYEXE%" %PYARG% -c "import zstandard" >nul 2>nul
+if not errorlevel 1 goto :py_ok
+rem the embedded Python gets pip again (a first run stopped half-way leaves it without pip or zstandard);
+rem it has no user site, so no --user there
+if /i "%PYEXE%"=="%PYDIR%\python.exe" (
+    echo  installing pip + zstandard into the embedded Python ...
+    call :embed_pip
+) else (
     echo  installing the 'zstandard' module ^(pip, for your user only^) ...
-    %PYCMD% -m pip install --user --no-warn-script-location zstandard >> "%LOG%" 2>&1
-    %PYCMD% -c "import zstandard" >nul 2>nul
-    if errorlevel 1 (
-        echo  ERROR: 'import zstandard' still fails. Open %LOG% and send it to Josh, or install it by hand:
-        echo         %PYCMD% -m pip install zstandard
-        goto :fail
-    )
+    "%PYEXE%" %PYARG% -m pip install --user --no-warn-script-location zstandard >> "%LOG%" 2>&1
 )
-echo %PYCMD%>"%HERE%python_cmd.txt"
-echo [%date% %time%] python ok: %PYCMD% >> "%LOG%"
+"%PYEXE%" %PYARG% -c "import zstandard" >nul 2>nul
+if errorlevel 1 (
+    echo  ERROR: 'import zstandard' still fails. Open "%LOG%" and send it to Josh, or install it by hand:
+    echo         "%PYEXE%" %PYARG% -m pip install zstandard
+    goto :fail
+)
+:py_ok
+rem the launcher reads this: either "C:\...\python.exe" (quotes trimmed) or 'py -3'
+rem (no ( ) block here: a ')' in the folder name would close it even in the branch not taken)
+if defined PYARG goto :py_cmd_launcher
+>"%HERE%python_cmd.txt" echo "%PYEXE%"
+goto :py_cmd_done
+:py_cmd_launcher
+>"%HERE%python_cmd.txt" echo %PYEXE% %PYARG%
+:py_cmd_done
+echo [%date% %time%] python ok: "%PYSHOW%" >> "%LOG%"
 
 :start
 rem ---- 4. launcher ---------------------------------------------------------------------------
@@ -254,3 +287,51 @@ echo [%date% %time%] setup FAILED >> "%LOG%"
 pause
 endlocal
 exit /b 1
+
+rem ---- subroutines -----------------------------------------------------------------------------
+:fetch
+rem call :fetch <url> <file>: curl, else PowerShell (URL and path go in as environment variables); errorlevel 1 = failed
+set "FURL=%~1"
+set "FOUT=%~2"
+type nul >"%FOUT%"
+where curl.exe >nul 2>nul
+if errorlevel 1 (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri $env:FURL -OutFile $env:FOUT -UseBasicParsing"
+) else (
+    curl.exe -L -f -# -o "%FOUT%" "%FURL%"
+)
+if errorlevel 1 (
+    type nul >"%FOUT%"
+    exit /b 1
+)
+set "FSIZE=0"
+for %%A in ("%FOUT%") do set "FSIZE=%%~zA"
+if "%FSIZE%"=="0" exit /b 1
+exit /b 0
+
+:embed_pip
+rem pip + zstandard into .\python\ (embeddable). Safe to repeat. errorlevel 1 = failed (details in the log)
+rem the embeddable Python ignores site-packages until its ._pth file says 'import site'
+for %%F in ("%PYDIR%\python3*._pth") do (
+    findstr /b /c:"import site" "%%F" >nul || (
+        echo Lib\site-packages>>"%%F"
+        echo import site>>"%%F"
+    )
+)
+rem fetched every time: a failed fetch leaves an empty get-pip.py (this file never deletes)
+call :fetch "%GETPIP_URL%" "%DL%\get-pip.py"
+if errorlevel 1 (
+    echo [%date% %time%] get-pip.py download failed >> "%LOG%"
+    exit /b 1
+)
+"%PYDIR%\python.exe" "%DL%\get-pip.py" --no-warn-script-location >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo [%date% %time%] get-pip.py failed >> "%LOG%"
+    exit /b 1
+)
+"%PYDIR%\python.exe" -m pip install --no-warn-script-location zstandard >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo [%date% %time%] pip install zstandard failed >> "%LOG%"
+    exit /b 1
+)
+exit /b 0

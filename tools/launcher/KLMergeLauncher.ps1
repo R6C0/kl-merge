@@ -66,6 +66,14 @@ param([string]$Package = '')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms
 
+# Setup starts this script with -WindowStyle Hidden: an error that escapes would end it without a word. Last net: say it.
+trap {
+    $msg = 'The KL Merge launcher stopped: ' + $_.Exception.Message + ' (KLMergeLauncher.ps1 line ' + $_.InvocationInfo.ScriptLineNumber + ')'
+    try { Add-Content -LiteralPath (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'KLMergeLauncher.log') -Value $msg -Encoding UTF8 } catch { }
+    try { [void][System.Windows.MessageBox]::Show($msg + "`r`n`r`nPlease send KLMergeLauncher.log (beside the launcher) to Josh.", 'KL MERGE', 'OK', 'Error') } catch { }
+    exit 1
+}
+
 $script:Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:AppId = 28000                                  # Kane & Lynch 2: Dog Days on Steam (tools/kl_autotest.py APP = 28000)
 $script:HookName = 'dinput8.dll'
@@ -116,7 +124,7 @@ function Save-Settings {
         foreach ($k in $script:StringKeys) { $o | Add-Member NoteProperty $k $script:Settings[$k] }
         $o | Add-Member NoteProperty Muted ([bool]$script:Settings.Muted)
         $o | Add-Member NoteProperty Volume ([double]$script:Settings.Volume)
-        $o | ConvertTo-Json | Set-Content -LiteralPath $script:SettingsPath -Encoding ASCII
+        $o | ConvertTo-Json | Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8     # UTF8: a folder name with accents survives (ASCII wrote '?')
     } catch { }
 }
 
@@ -248,7 +256,8 @@ function Hook-Set([bool]$want) {
         if ($st -eq 'on') { return $true }
         if ($st -eq 'both') { Log 'both dinput8.dll and dinput8.dll.klmerge-off exist: dinput8.dll stays (the mod loads); the other file is left alone.'; return $true }
         if ($st -eq 'off') {
-            Rename-Item -LiteralPath $offp -NewName $script:HookName
+            try { Rename-Item -LiteralPath $offp -NewName $script:HookName }
+            catch { Log ('could not switch the hook ON: ' + $_.Exception.Message + ' (antivirus or another program holding the file? close it and try again)'); return $false }
             Log 'hook ON: dinput8.dll.klmerge-off -> dinput8.dll'
             return $true
         }
@@ -256,12 +265,14 @@ function Hook-Set([bool]$want) {
         return $false
     }
     if ($st -eq 'off' -or $st -eq 'none') { return $true }
-    if ($st -eq 'both') {
-        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-        Rename-Item -LiteralPath $offp -NewName ($script:HookOffName + '.old-' + $stamp)
-        Log ('an older dinput8.dll.klmerge-off was kept as ' + $script:HookOffName + '.old-' + $stamp + ' (nothing is deleted)')
-    }
-    Rename-Item -LiteralPath $dll -NewName $script:HookOffName
+    try {
+        if ($st -eq 'both') {
+            $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+            Rename-Item -LiteralPath $offp -NewName ($script:HookOffName + '.old-' + $stamp)
+            Log ('an older dinput8.dll.klmerge-off was kept as ' + $script:HookOffName + '.old-' + $stamp + ' (nothing is deleted)')
+        }
+        Rename-Item -LiteralPath $dll -NewName $script:HookOffName
+    } catch { Log ('could not switch the hook OFF: ' + $_.Exception.Message + ' (antivirus or another program holding the file? close it and try again)'); return $false }
     Log 'hook OFF: dinput8.dll -> dinput8.dll.klmerge-off (stock game; PLAY KL MERGE or HOOK ON switches it back)'
     return $true
 }
@@ -765,16 +776,25 @@ function Set-Val($tb, [string]$text, [string]$tone = 'plain') {
 # ------------------------------------------------------------------------------------------------ log pane
 function Log([string]$line) {
     $t = (Get-Date -Format 'HH:mm:ss') + '  ' + $line
-    try { Add-Content -LiteralPath $script:LogPath -Value $t -Encoding ASCII } catch { }
+    try { Add-Content -LiteralPath $script:LogPath -Value $t -Encoding UTF8 } catch { }
     $ui.TxtLog.AppendText($t + "`r`n")
     $ui.TxtLog.ScrollToEnd()
 }
 
 function Log-Raw([string]$text) {
     if (-not $text) { return }
-    try { Add-Content -LiteralPath $script:LogPath -Value $text.TrimEnd("`r", "`n") -Encoding ASCII } catch { }
+    try { Add-Content -LiteralPath $script:LogPath -Value $text.TrimEnd("`r", "`n") -Encoding UTF8 } catch { }
     $ui.TxtLog.AppendText($text.Replace("`r`n", "`n").Replace("`n", "`r`n"))
     $ui.TxtLog.ScrollToEnd()
+}
+
+# every button runs through Guard: an error is logged and shown, the window stays (an unhandled one would close it)
+function Guard([scriptblock]$body) {
+    try { & $body } catch {
+        $m = $_.Exception.Message + ' (line ' + $_.InvocationInfo.ScriptLineNumber + ')'
+        try { Log ('ERROR: ' + $m) } catch { }
+        try { [void][System.Windows.MessageBox]::Show($m + "`r`n`r`nThe launcher keeps running. COLLECT LOGS and send the zip to Josh if this repeats.", 'KL MERGE', 'OK', 'Warning') } catch { }
+    }
 }
 
 # ------------------------------------------------------------------------------------------------ status
@@ -857,7 +877,8 @@ function Read-New([string]$path, [ref]$pos) {
     } catch { return '' }
 }
 
-function Quote([string]$s) { return '"' + $s + '"' }
+# trailing backslashes are doubled: the C runtime's argv parser reads 'C:\Games\"' as an escaped quote
+function Quote([string]$s) { return '"' + ($s -replace '(\\+)$', '$1$1') + '"' }
 
 function Start-Tool([string]$verb, [string[]]$extra) {
     if ($script:Proc) { Log 'a job is still running - wait for it to finish.'; return }
@@ -885,12 +906,20 @@ function Start-Tool([string]$verb, [string[]]$extra) {
     $script:OutFile = Join-Path $env:TEMP ('klmerge_' + $verb + '_' + $stamp + '.out.txt')
     $script:ErrFile = Join-Path $env:TEMP ('klmerge_' + $verb + '_' + $stamp + '.err.txt')
     $script:OutPos = 0; $script:ErrPos = 0
+    # the hook is switched ON only now, after every refusal above: a refused job leaves it as it was
+    $flipped = $false
+    if ((Hook-State) -eq 'off') {
+        if (-not (Hook-Set $true)) { return }
+        $flipped = $true
+    }
     Log ('> ' + $file + ' ' + ($argv -join ' '))
     try {
         $script:Proc = Start-Process -FilePath $file -ArgumentList $argv -WorkingDirectory $script:PackageDir -RedirectStandardOutput $script:OutFile -RedirectStandardError $script:ErrFile -NoNewWindow -PassThru
         $null = $script:Proc.Handle   # keeps the process handle open, else .ExitCode reads empty after exit (Start-Process -PassThru quirk)
     } catch {
-        Log ('could not start: ' + $_.Exception.Message); $script:Proc = $null; return
+        Log ('could not start: ' + $_.Exception.Message); $script:Proc = $null
+        if ($flipped) { [void](Hook-Set $false) }
+        return
     }
     Set-Buttons $false
     $ui.BtnRefresh.IsEnabled = $false
@@ -901,19 +930,26 @@ $script:Timer.Interval = [TimeSpan]::FromMilliseconds(300)
 $script:Timer.Add_Tick({
     try { Music-Poll } catch { }
     if (-not $script:Proc) { return }
-    $o = Read-New $script:OutFile ([ref]$script:OutPos); if ($o) { Log-Raw $o }
-    $e = Read-New $script:ErrFile ([ref]$script:ErrPos); if ($e) { Log-Raw $e }
-    if ($script:Proc.HasExited) {
-        Start-Sleep -Milliseconds 150
+    try {
         $o = Read-New $script:OutFile ([ref]$script:OutPos); if ($o) { Log-Raw $o }
         $e = Read-New $script:ErrFile ([ref]$script:ErrPos); if ($e) { Log-Raw $e }
-        $code = $script:Proc.ExitCode
-        $script:Proc = $null
-        Log ('finished, exit code ' + $code + $(if ($code -eq 0) { ' (OK)' } else { ' (see the lines above; 2 = refused before anything was written)' }))
-        Set-Buttons $true
-        $ui.BtnRefresh.IsEnabled = $true
-        Refresh-Status
-        if ($code -eq 0 -and -not $script:MusicLoaded) { try { Music-Extract $true } catch { } }   # INSTALL done: the Dead Men folder is known now
+        if ($script:Proc.HasExited) {
+            Start-Sleep -Milliseconds 150
+            $o = Read-New $script:OutFile ([ref]$script:OutPos); if ($o) { Log-Raw $o }
+            $e = Read-New $script:ErrFile ([ref]$script:ErrPos); if ($e) { Log-Raw $e }
+            $code = $script:Proc.ExitCode
+            $script:Proc = $null
+            Log ('finished, exit code ' + $code + $(if ($code -eq 0) { ' (OK)' } else { ' (see the lines above; 2 = refused before anything was written)' }))
+            Set-Buttons $true
+            $ui.BtnRefresh.IsEnabled = $true
+            Refresh-Status
+            if ($code -eq 0 -and -not $script:MusicLoaded) { try { Music-Extract $true } catch { } }   # INSTALL done: the Dead Men folder is known now
+        }
+    } catch {
+        # logged once per distinct message (the timer ticks every 300 ms)
+        $m = 'timer: ' + $_.Exception.Message
+        if ($m -ne $script:TickErr) { $script:TickErr = $m; try { Log $m } catch { } }
+        if (-not $script:Proc) { Set-Buttons $true; $ui.BtnRefresh.IsEnabled = $true }
     }
 })
 $script:Timer.Start()
@@ -938,12 +974,30 @@ function Collect-Logs {
     if (Test-Path -LiteralPath $script:LogPath) { $files += $script:LogPath }
     $files = @($files | Select-Object -Unique)
     if ($files.Count -eq 0) { Log 'nothing to collect (no KLHook.log or dumps in the game folder)'; return }
-    $zip = Join-Path $script:Here ('KLMerge_logs_' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.zip')
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $zip = Join-Path $script:Here ('KLMerge_logs_' + $stamp + '.zip')
+    # copied first with FileShare ReadWrite: the running game keeps KLHook.log open and Compress-Archive refuses such a file
+    $tmp = Join-Path $env:TEMP ('klmerge_logs_' + $stamp)
     try {
-        Compress-Archive -LiteralPath $files -DestinationPath $zip -CompressionLevel Optimal
-        Log ('logs collected: ' + $zip + '  (' + $files.Count + ' files) - send this file to Josh')
+        [void](New-Item -ItemType Directory -Path $tmp -Force)
+        $copies = @()
+        foreach ($f in $files) {
+            try {
+                $dstp = Join-Path $tmp ([IO.Path]::GetFileName($f))
+                $src = [IO.File]::Open($f, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+                try {
+                    $dst = [IO.File]::Create($dstp)
+                    try { $src.CopyTo($dst) } finally { $dst.Close() }
+                } finally { $src.Close() }
+                $copies += $dstp
+            } catch { Log ('skipped ' + $f + ': ' + $_.Exception.Message) }
+        }
+        if ($copies.Count -eq 0) { Log 'could not read any of the log files'; return }
+        Compress-Archive -LiteralPath $copies -DestinationPath $zip -CompressionLevel Optimal
+        Log ('logs collected: ' + $zip + '  (' + $copies.Count + ' files) - send this file to Josh')
         Start-Process explorer.exe ('/select,"' + $zip + '"') | Out-Null
     } catch { Log ('could not zip the logs: ' + $_.Exception.Message) }
+    finally { try { [IO.Directory]::Delete($tmp, $true) } catch { } }    # the launcher's own temp copies only, never the game folder
 }
 
 # ------------------------------------------------------------------------------------------------ music
@@ -1099,69 +1153,60 @@ function Bg-Init {
 }
 
 # ------------------------------------------------------------------------------------------------ wiring
-$ui.BtnMute.Add_Click({
+$ui.BtnMute.Add_Click({ Guard {
     $script:Settings.Muted = -not [bool]$script:Settings.Muted
     Save-Settings
     Music-Apply
     if (-not $script:Settings.Muted -and -not $script:MusicLoaded) { Music-Extract $true }
-})
-$ui.BtnPlayMod.Add_Click({
+} })
+$ui.BtnPlayMod.Add_Click({ Guard {
     if ($script:Proc) { Log 'a job is still running'; return }
     if (Hook-Set $true) { Launch-Game }
     Refresh-Status
-})
-$ui.BtnPlayStock.Add_Click({
+} })
+$ui.BtnPlayStock.Add_Click({ Guard {
     if ($script:Proc) { Log 'a job is still running'; return }
     if (Hook-Set $false) {
         Launch-Game
         Log 'stock game started. The mod stays installed; PLAY KL MERGE puts the hook back.'
     }
     Refresh-Status
-})
-$ui.BtnInstall.Add_Click({
-    $st = Hook-State
-    if ($st -eq 'off') { if (-not (Hook-Set $true)) { return } }
-    Start-Tool 'install' @('--yes')
-})
-$ui.BtnVerify.Add_Click({
-    $st = Hook-State
-    if ($st -eq 'off') { if (-not (Hook-Set $true)) { return } }
-    Start-Tool 'verify' @()
-})
-$ui.BtnUninstall.Add_Click({
+} })
+# INSTALL / VERIFY / UNINSTALL: Start-Tool switches the hook ON itself, after its checks
+$ui.BtnInstall.Add_Click({ Guard { Start-Tool 'install' @('--yes') } })
+$ui.BtnVerify.Add_Click({ Guard { Start-Tool 'verify' @() } })
+$ui.BtnUninstall.Add_Click({ Guard {
     $r = [System.Windows.MessageBox]::Show('Remove the KL Merge files and put the stock Dog Days files back from KL_PortBackup?', 'KL MERGE - UNINSTALL', 'YesNo', 'Warning')
     if ($r -ne 'Yes') { Log 'uninstall cancelled'; return }
-    $st = Hook-State
-    if ($st -eq 'off') { if (-not (Hook-Set $true)) { return } }
     Start-Tool 'uninstall' @('--yes')
-})
-$ui.BtnHook.Add_Click({
+} })
+$ui.BtnHook.Add_Click({ Guard {
     if ($script:Proc) { Log 'a job is still running'; return }
     $st = Hook-State
     if ($st -eq 'off') { [void](Hook-Set $true) } elseif ($st -eq 'none') { Log 'no hook file (mod not installed)' } else { [void](Hook-Set $false) }
     Refresh-Status
-})
-$ui.BtnLogs.Add_Click({ Collect-Logs })
-$ui.BtnOpen.Add_Click({ if ($script:Settings.DD) { Start-Process explorer.exe (Quote $script:Settings.DD) | Out-Null } })
-$ui.BtnRefresh.Add_Click({ $script:Python = $null; Refresh-Status; Log 'status refreshed' })
-$ui.BtnPickDD.Add_Click({
+} })
+$ui.BtnLogs.Add_Click({ Guard { Collect-Logs } })
+$ui.BtnOpen.Add_Click({ Guard { if ($script:Settings.DD) { Start-Process explorer.exe (Quote $script:Settings.DD) | Out-Null } } })
+$ui.BtnRefresh.Add_Click({ Guard { $script:Python = $null; Refresh-Status; Log 'status refreshed' } })
+$ui.BtnPickDD.Add_Click({ Guard {
     $p = Pick-Folder 'Pick the Kane & Lynch 2 - Dog Days folder (the one with kl2.exe)' $script:Settings.DD
     if ($p) {
         if (Test-Path -LiteralPath (Join-Path $p 'kl2.exe')) { $script:Settings.DD = $p; Log ('Dog Days folder: ' + $p) } else { Log ('REFUSED: no kl2.exe in ' + $p) }
         Refresh-Status
     }
-})
-$ui.BtnPickDM.Add_Click({
+} })
+$ui.BtnPickDM.Add_Click({ Guard {
     $p = Pick-Folder 'Pick the Kane & Lynch: Dead Men folder (the one with kaneandlynch.exe)' $script:Settings.DM
     if ($p) {
         if (Test-Path -LiteralPath (Join-Path $p 'kaneandlynch.exe')) { $script:Settings.DM = $p; Log ('Dead Men folder: ' + $p) } else { Log ('REFUSED: no kaneandlynch.exe in ' + $p) }
         Refresh-Status
     }
-})
-$ui.BtnPickPD2.Add_Click({
+} })
+$ui.BtnPickPD2.Add_Click({ Guard {
     $p = Pick-Folder 'Pick the PAYDAY 2 folder (optional)' $script:Settings.PD2
     if ($p) { $script:Settings.PD2 = $p; Log ('Payday 2 folder: ' + $p); Refresh-Status }
-})
+} })
 $script:Win.Add_Closing({
     param($sender, $e)
     if ($script:Proc) { Log 'a job is still running: the window stays open until it ends'; $e.Cancel = $true }
