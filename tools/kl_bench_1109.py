@@ -27,16 +27,19 @@ import kl_bench_1106 as B
 KIT = 'C:/kl_build_1024/bench_1109'
 DD = B.DD
 MAPS = DD + '/KLExpansion/Maps'
-# live = f0's merged_1108g: SHIP d1145cbe (built from b5465f50), its TEST twin (build_auto.bat, klauto) 95de3af2; KLHook.ini f7f11dcc is still the one
-# merged_1108f wrote (1108g is dll only), so the base ini fallback stays on INI_KIT's install.py + backup.
+# live = merged_1108h (81 installs it after DM02_1109): SHIP 52b37716 (built from 8c4292b9), its TEST twin (build_auto.bat, klauto) fceb3c6d;
+# KLHook.ini 4a740f92 = merged_1108f's f7f11dcc + [VanBlow] ShieldCalled=1 + HealFloor=95 (checked: 1108h set_keys on f7f11dcc gives 4a740f92).
 # The live dinput8.dll can be a peer's TEST dll swapped in by a bench, so the kit takes the twin from the merged kit folder, never from the live file.
-MERGED = 'C:/kl_build_1024/merged_1108g'
-INI_KIT = 'C:/kl_build_1024/merged_1108f'
-SHIP_MD5 = 'd1145cbef96b405f4bbba13e7c555ed4'
-TEST_MD5 = '95de3af20ff3fab80526460de5c37bee'
-INI_MD5 = 'f7f11dccac532b7ffcb283526eb3ca73'
+MERGED = 'C:/kl_build_1024/merged_1108h'
+INI_KIT = MERGED
+INI_TAG = 'merged1108h'
+BUILT_FROM = '8c4292b9'
+SHIP_MD5 = '52b3771659650f89c22249b775777da9'
+TEST_MD5 = 'fceb3c6df5208b46e98f97d9f663d308'
+INI_MD5 = '4a740f9232e157b04b15ec6b4718302f'
 HOOK = (MERGED + '/dll_test/dinput8.dll', TEST_MD5)
-INI_KEYS = (('ShopPage', 'TidyPage2'), ('Hire', 'TidyPage'))      # fc's keys merged_1108f writes (=1)
+INI_KEYS = (('ShopPage', 'TidyPage2', '1'), ('Hire', 'TidyPage', '1'),      # fc's keys merged_1108f wrote
+            ('VanBlow', 'ShieldCalled', '1'), ('VanBlow', 'HealFloor', '95'))  # d0's keys merged_1108h writes
 BS = chr(92)
 
 # kit -> map, slot, live pins (md5 prefixes of the files the bench must find), shot windows (seconds since the launch, 'a-b:step', comma list)
@@ -119,9 +122,12 @@ def door_seg(d, lbl):
     # aim at the doorway's middle (half way between the two stand points), not the hinge: DM03_1109 run 1 walked at the hinge edge
     # 60 cm off-centre, stuck on the jamb with a 104 deg bearing error and pressed E at the wall. One-sided doors keep the hinge.
     c = ((a[0] + b[0]) / 2.0, (a[2] + b[2]) / 2.0) if b else (h[0], h[2])
-    s = ['tele %d %d %d' % (a[0], a[1] + 150, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
+    # at the leaf, face the far stand point (the walk direction), not c: DM02_1109 faced c from 77 cm and 60 cm sideways (bearing error 74, 4 s timeout)
+    f = (b[0], b[2]) if b else (h[0], h[2])
+    # waitstate 0x19 first: DM02_1109's first tele came 5 s after 'level loaded', before the round ran (session state not 0x19), and was refused
+    s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0], a[1] + 150, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
          'ents KL_Door 20', 'ents Door 200',
-         'face %d %d' % c, 'goto %d %d 70 6000' % c, 'face %d %d' % c, 'pos %s-at-leaf' % lbl,
+         'face %d %d' % c, 'goto %d %d 70 6000' % c, 'face %d %d' % f, 'pos %s-at-leaf' % lbl,
          'tap E 700', 'wait 600', 'tap E 700', 'wait 3500', 'log BENCH1109 %s door %s: kicked (E x2, GUESS key)' % (lbl, d['host']), 'pos %s-kicked' % lbl,
          'ents KL_Door 20', 'ents Door 200']
     if b:
@@ -264,24 +270,24 @@ def md5_of(b):
 
 
 def base_ini():
-    """-> (bytes, source). The live KLHook.ini when it is f0's merged_1108f one (f7f11dcc, read only); else (a bench is running and has swapped its own ini in)
-    the ini merged_1108f's install.py would write: its .before-merged1108f backup + the two Tidy keys, accepted only when that md5 is f7f11dcc."""
+    """-> (bytes, source). The live KLHook.ini when it is the INI_KIT one (INI_MD5, read only); else (a bench is running and has swapped its own ini in)
+    the ini INI_KIT's install.py would write: its .before-<INI_TAG> backup + its KEYS, accepted only when that md5 is INI_MD5."""
     live = open('%s/KLHook.ini' % DD, 'rb').read()
     if md5_of(live) == INI_MD5:
         return live, 'live KLHook.ini'
     import importlib.util
-    sp = importlib.util.spec_from_file_location('merged1108f_install', INI_KIT + '/install.py')
+    sp = importlib.util.spec_from_file_location(INI_TAG + '_install', INI_KIT + '/install.py')
     m = importlib.util.module_from_spec(sp)
     sp.loader.exec_module(m)
-    bak = '%s/KLHook.ini.before-merged1108f' % DD
+    bak = '%s/KLHook.ini.before-%s' % (DD, INI_TAG)
     out = m.set_keys(open(bak, 'rb').read().decode('latin1'), m.KEYS).encode('latin1')
     if md5_of(out) != INI_MD5:
-        raise SystemExit('gen: live KLHook.ini is %s (not %s) and %s + merged_1108f keys gives %s: no base ini, stop' % (md5_of(live)[:8], INI_MD5[:8], bak, md5_of(out)[:8]))
-    return out, 'merged_1108f install.py set_keys on KLHook.ini.before-merged1108f (live differed: %s)' % md5_of(live)[:8]
+        raise SystemExit('gen: live KLHook.ini is %s (not %s) and %s + %s keys gives %s: no base ini, stop' % (md5_of(live)[:8], INI_MD5[:8], bak, INI_TAG, md5_of(out)[:8]))
+    return out, '%s install.py set_keys on KLHook.ini.before-%s (live differed: %s)' % (INI_TAG, INI_TAG, md5_of(live)[:8])
 
 
 def stamp(k):
-    """Pin the kit to MERGED (merged_1108g): the TEST twin dll from its folder and the base ini; record both (and the SHIP they twin) in kit.json."""
+    """Pin the kit to MERGED: the TEST twin dll from its folder and the base ini; record both (and the SHIP they twin) in kit.json."""
     import shutil
     d = kd(k)
     src = MERGED + '/dll_test/dinput8.dll'
@@ -290,7 +296,7 @@ def stamp(k):
     shutil.copy2(src, '%s/hook_test/dinput8.dll' % d)
     ini, how = base_ini()
     open('%s/KLHook_base.ini' % d, 'wb').write(ini)
-    B.write('%s/kit.json' % d, json.dumps(dict(ship=SHIP_MD5, test=TEST_MD5, ini=md5_of(ini), ini_source=how, merged=MERGED, built_from='b5465f50'), indent=1))
+    B.write('%s/kit.json' % d, json.dumps(dict(ship=SHIP_MD5, test=TEST_MD5, ini=md5_of(ini), ini_source=how, merged=MERGED, built_from=BUILT_FROM), indent=1))
 
 
 def gen(which='all'):
@@ -365,15 +371,17 @@ def validate(which):
         bi = '%s/KLHook_base.ini' % d
         if os.path.isfile(bi):
             raw = open(bi, 'rb').read()
-            v.ok(md5_of(raw) == INI_MD5 and rec.get('ini') == INI_MD5, 'base ini md5 %s = recorded %s = merged_1108f live ini %s (%s)' % (md5_of(raw)[:8], str(rec.get('ini'))[:8], INI_MD5[:8], rec.get('ini_source', '?')))
+            v.ok(md5_of(raw) == INI_MD5 and rec.get('ini') == INI_MD5, 'base ini md5 %s = recorded %s = merged kit live ini %s (%s)' % (md5_of(raw)[:8], str(rec.get('ini'))[:8], INI_MD5[:8], rec.get('ini_source', '?')))
             sec, got = None, set()
             for l in raw.decode('latin1').splitlines():
                 m_ = re.match(r'\s*\[([^\]]+)\]', l)
                 if m_:
                     sec = m_.group(1).lower()
-                elif sec and re.match(r'\s*(\w+)\s*=\s*1\b', l) and (sec, re.match(r'\s*(\w+)', l).group(1).lower()) in {(s_.lower(), k_.lower()) for s_, k_ in INI_KEYS}:
-                    got.add((sec, re.match(r'\s*(\w+)', l).group(1).lower()))
-            v.ok(len(got) == len(INI_KEYS), 'base ini carries fc TidyPage2=1 under [ShopPage] and TidyPage=1 under [Hire] (%d of %d)' % (len(got), len(INI_KEYS)))
+                elif sec:
+                    kv = re.match(r'\s*(\w+)\s*=\s*(\w+)', l)
+                    if kv and (sec, kv.group(1).lower(), kv.group(2)) in {(s_.lower(), k_.lower(), v_) for s_, k_, v_ in INI_KEYS}:
+                        got.add((sec, kv.group(1).lower()))
+            v.ok(len(got) == len(INI_KEYS), 'base ini carries %s (%d of %d)' % (', '.join('[%s] %s=%s' % x for x in INI_KEYS), len(got), len(INI_KEYS)))
         if k == 'DM07_1109':
             cj = '%s/dm07.json' % d
             cc = json.load(open(cj)) if os.path.isfile(cj) else {}
@@ -616,7 +624,7 @@ def run(k):
 
 def order():
     t = ['bench_1109 RUN ORDER (written by tools/kl_bench_1109.py order). ONE bench at a time; each needs the game free.',
-         'Before EACH: tasklist | findstr /i kl2.exe  must show nothing (a zombie with 0 threads is fine). Peers (f0 merged_1108g, fc shop, d0) bench too:',
+         'Before EACH: tasklist | findstr /i kl2.exe  must show nothing (a zombie with 0 threads is fine). Peers (f0/81 merged kits, fc shop, d0) bench too:',
          'wait for their "done, game free". Nothing is installed by any of these; every kit pins the live md5s and compares the map folder after.',
          'Pre-flight for all (read only, no game launch):   cd C:\\kl-merge\\kl-merge ; python tools/kl_bench_1109.py validate all',
          'Disk: each run writes a few hundred MB of shots/logs under the solo work folder; keep C: above 2 GB free.',
