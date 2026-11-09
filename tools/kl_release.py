@@ -444,6 +444,7 @@ class Sources:
         self.resolve = resolve
         self.layouts = {}
         self.mm = {}
+        self.files = []
 
     def path(self, ref):
         return self.resolve(ref)
@@ -462,11 +463,25 @@ class Sources:
             if mm is None:
                 f = open(p, 'rb')
                 mm = self.mm[ref] = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                self.files.append(f)
             return mm
         for m in self.layout(ref).members:
             if m['name'] == member:
                 return member_bytes(p, m)
         raise KeyError('%s has no member %s' % (ref, member))
+
+    def close(self):
+        """Windows refuses to move a file that is still mapped: close every map before the install moves stock files away."""
+        import gc
+        gc.collect()                                 # drop the last Pool's memoryviews so mm.close() is allowed
+        for mm in self.mm.values():
+            try:
+                mm.close()
+            except BufferError:                      # a memoryview still points into it; dropped with the Sources
+                pass
+        for f in self.files:
+            f.close()
+        self.mm, self.files = {}, []
 
 
 
@@ -1199,47 +1214,67 @@ def cmd_install(a):
     built = {}
     t0 = time.time()
     n = 0
-    for e in todo:
-        n += 1
-        if e['sha1'] in built:
-            continue
-        tp = os.path.join(tmpd, '%s.part' % e['sha1'][:20])
-        say('[%d/%d] building %s (%s)' % (n, len(todo), e['rel'], fmt(e['size'])))
-        if os.path.exists(tp) and os.path.getsize(tp) == e['size'] and sha1_file(tp) == e['sha1']:
-            built[e['sha1']] = tp                  # left over from an interrupted run, verified
-            continue
-        hdr, block, f = read_klp(os.path.join(pkg, 'patches', e['patch']))
-        try:
-            sha = build_blob(hdr, block, sources, tp)
-        finally:
-            f.close()
-        if sha != e['sha1']:
-            raise Fail('internal check failed for %s (built %s, expected %s). Nothing has been installed.' % (e['rel'], sha, e['sha1']))
-        built[e['sha1']] = tp
+    try:
+        for e in todo:
+            n += 1
+            if e['sha1'] in built:
+                continue
+            tp = os.path.join(tmpd, '%s.part' % e['sha1'][:20])
+            say('[%d/%d] building %s (%s)' % (n, len(todo), e['rel'], fmt(e['size'])))
+            if os.path.exists(tp) and os.path.getsize(tp) == e['size'] and sha1_file(tp) == e['sha1']:
+                built[e['sha1']] = tp                  # left over from an interrupted run, verified
+                continue
+            hdr, block, f = read_klp(os.path.join(pkg, 'patches', e['patch']))
+            try:
+                sha = build_blob(hdr, block, sources, tp)
+            finally:
+                f.close()
+            if sha != e['sha1']:
+                raise Fail('internal check failed for %s (built %s, expected %s). Nothing has been installed.' % (e['rel'], sha, e['sha1']))
+            built[e['sha1']] = tp
+    finally:
+        sources.close()                            # stock sources (PC_Def.str, stock .wav) are moved below: no map may hold them
     say('all %d files built and verified in %.0f s. Installing ...' % (len(built), time.time() - t0))
     tag = now_tag()
     used = set()
     for e in todo:
         dest = os.path.join(dd, e['rel'])
         rec = dict(rel=e['rel'], sha1=e['sha1'], group=e['group'], size=e['size'])
+        prev = done.get(e['rel'])                  # journal of an earlier (maybe interrupted) install
+        prev_bk = prev and prev['action'] == 'replaced' and os.path.exists(os.path.join(dd, prev['backup']))
         if os.path.exists(dest):
             if e.get('keep_user'):
                 alt = dest + '.new-' + VERSION
                 rt(shutil.copyfile, built[e['sha1']], alt)
-                rec.update(action='kept', note='your existing file was kept; the packaged one is %s' % os.path.basename(alt), alt=nrm(os.path.relpath(alt, dd)))
+                note = 'your existing file was kept; the packaged one is %s' % os.path.basename(alt)
+                if prev and prev['action'] in ('new', 'replaced'):
+                    rec = dict(prev, note=note, alt=nrm(os.path.relpath(alt, dd)))   # still ours: uninstall removes it / brings the stock back
+                else:
+                    rec.update(action='kept', note=note, alt=nrm(os.path.relpath(alt, dd)))
                 say('  kept your %s (new default saved as %s)' % (e['rel'], os.path.basename(alt)))
                 j['entries'] = [x for x in j['entries'] if x['rel'] != e['rel']] + [rec]
                 save_journal(dd, j)
                 continue
-            if e.get('stock') and not os.path.exists(os.path.join(bk, e['rel'])):
-                bdest = os.path.join(bk, e['rel'])
+            if prev_bk:                            # the stock file is already in the backup: set this one aside, keep that record
+                ed = dest + '.edited-' + tag
+                rt(os.replace, dest, ed)
+                say('  %s was changed since the last install: kept as %s' % (e['rel'], os.path.basename(ed)))
+                rec.update(action='replaced', backup=prev['backup'])
+                j['entries'] = [x for x in j['entries'] if x['rel'] != e['rel']] + [rec]
+                save_journal(dd, j)
             else:
-                bdest = os.path.join(bk, '_klmerge_replaced', tag, e['rel'])
-            os.makedirs(os.path.dirname(bdest), exist_ok=True)
-            rec.update(action='replaced', backup=nrm(os.path.relpath(bdest, dd)))
-            j['entries'] = [x for x in j['entries'] if x['rel'] != e['rel']] + [rec]
-            save_journal(dd, j)                      # written BEFORE the move, so an interrupted run can be undone
-            rt(shutil.move, dest, bdest)
+                if e.get('stock') and not os.path.exists(os.path.join(bk, e['rel'])):
+                    bdest = os.path.join(bk, e['rel'])
+                else:
+                    bdest = os.path.join(bk, '_klmerge_replaced', tag, e['rel'])
+                os.makedirs(os.path.dirname(bdest), exist_ok=True)
+                rec.update(action='replaced', backup=nrm(os.path.relpath(bdest, dd)))
+                j['entries'] = [x for x in j['entries'] if x['rel'] != e['rel']] + [rec]
+                save_journal(dd, j)                      # written BEFORE the move; uninstall leaves dest alone while this backup is missing
+                rt(shutil.move, dest, bdest)
+        elif prev_bk:                              # interrupted after the move: the stock file is in the backup, never call it 'new'
+            rec.update(action='replaced', backup=prev['backup'])
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
         else:
             rec.update(action='new')
             make_parent(dest, j, dd)
@@ -1284,10 +1319,14 @@ def cmd_uninstall(a):
     for rec in reversed(j['entries']):
         dest = os.path.join(dd, rec['rel'])
         act = rec['action']
+        alt = os.path.join(dd, rec.get('alt', ''))
+        if rec.get('alt') and os.path.exists(alt):
+            rt(os.remove, alt)
         if act == 'kept':
-            alt = os.path.join(dd, rec.get('alt', ''))
-            if rec.get('alt') and os.path.exists(alt):
-                rt(os.remove, alt)
+            continue
+        if act == 'replaced' and not os.path.exists(os.path.join(dd, rec['backup'])):
+            left.append(rec)                     # interrupted before the move (dest is still the stock file) or the backup is gone: touch nothing
+            say('  WARNING: backup of %s is missing (%s); left as it is' % (rec['rel'], rec['backup']))
             continue
         if os.path.exists(dest):
             if sha1_file(dest) == rec['sha1']:
@@ -1297,13 +1336,9 @@ def cmd_uninstall(a):
                 rt(os.replace, dest, ed)
                 say('  you changed %s: kept as %s' % (rec['rel'], os.path.basename(ed)))
         if act == 'replaced':
-            b = os.path.join(dd, rec['backup'])
-            if os.path.exists(b):
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                rt(os.replace, b, dest)
-            else:
-                left.append(rec)
-                say('  WARNING: backup of %s is missing (%s)' % (rec['rel'], rec['backup']))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            rt(os.replace, os.path.join(dd, rec['backup']), dest)
+    shutil.rmtree(os.path.join(dd, TMPDIR), ignore_errors=True)   # .part files an interrupted install left for its resume
     for d in sorted(set(j['dirs']), key=len, reverse=True):
         try:
             os.rmdir(os.path.join(dd, d))
@@ -1328,9 +1363,14 @@ def cmd_uninstall(a):
 
 def cmd_verify(a):
     dd = a.dd or find_game('Kane & Lynch 2 - Dog Days')
+    if not dd or not os.path.isdir(dd):
+        raise Fail('Dog Days folder not found; pass it as the first argument')
+    pd2 = a.pd2 or find_game('PAYDAY 2')
     pkg = a.pkg or os.path.dirname(os.path.abspath(sys.argv[0]))
     man = load_manifest(pkg)
     ents = select_entries(man, a.only)
+    if not pd2:                                      # same rule as install: files built from Payday 2 are skipped without it
+        ents = [e for e in ents if not any(r.startswith('pd:') for r in e['refs'])]
     bad = 0
     for e in ents:
         dest = os.path.join(dd, e['rel'])

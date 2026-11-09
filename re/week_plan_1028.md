@@ -26,7 +26,15 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
-- 11-09 15:25 f0 (kl-merge-81) CLAIMED the rehearsal. Offline only (owner on the PC, "no more test runs"). Windows: launcher_test PASS, PS 5.1 parses KLMergeLauncher.ps1 +
+- 11-09 ~16:30 f0 (kl-merge-81): code review of kl_release + launcher (finders + verifiers), kl_release.py FIXED: install could not finish on Windows
+  (stock PC_Def.str / stock .wav sources stayed mmapped, then the move into KL_PortBackup hit WinError 32; Sources.close() after the build), resume after a stop
+  right after the backup move no longer records the file as 'new' (uninstall would lose the stock file), uninstall leaves dest alone while a 'replaced' backup is
+  missing (stop before the move), re-install keeps a new/replaced keep_user record, uninstall drops KLMergeTmp + .new-* files, verify skips pd: entries without PD2.
+  New tools/kl_release_test.py (fake folders, 24 checks; the old file fails it with WinError 32); kl_tests 127/0/5. Setup.bat + KLMergeLauncher.ps1 findings
+  handed to 06 (its files): %PYCMD% unquoted (space/& in path), curl -z partial download stuck, half embedded python trusted, PS 5.1 $null ExitCode (Proc.Handle).
+- 11-09 15:17 f0 (kl-merge-81): at 15:16 the live dinput8.dll became dinput8.dll.klmerge-off (= the launcher's PLAY DOG DAYS rename; not an agent) and kl2.exe started:
+  the owner is on stock Dog Days. Nobody installs into DD until it is back. `make --only core` on Windows works (4 files, 20 KB) but then has no dll to ship.
+- 11-09 15:15 f0 (kl-merge-81) CLAIMED the rehearsal. Offline only (owner on the PC, "no more test runs"). Windows: launcher_test PASS, PS 5.1 parses KLMergeLauncher.ps1 +
   pack_release.ps1 with 0 errors; tar/curl/robocopy present; zstandard was MISSING (pip --user installed 0.25.0). Live KLHook.ini 1ec9bea0: no [Auto]/[Bench]/[Script]/[Solo]
   sections, only Log= levels. D: has 111 MB free -> package goes to C:\kl_release\pkg_1110 (C: 37 GB), not D:. `make` waits until the owner frees the PC (it reads the live folder).
 - 11-09 16:20 cloud: tools/launcher/ written offline (Setup.bat bootstrap, WPF launcher, pack_release.ps1, READMEs; launcher_test PASS; UNTESTED on Windows).
