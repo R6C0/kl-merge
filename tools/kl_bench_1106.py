@@ -279,6 +279,8 @@ KITS = {
     # call ([rules+0x1e4] unreadable until escfix re-ran state 1, shield on 0.5 s later): hit BEFORE the call (GUESS: shown by the approach box, shot in state 0).
     # The second call came in 9600/9600. Same run + HealFloor=95 (in the dll since merged_1107, never fired): the first pass with a readable health object
     # in state <= 4 and nobody aboard writes max into +0x14 (GUESS), then the shield holds it. PASS = a 'HealFloor=95%: ... restored' line, first wait 9600/9600
+    # run 11-09 04:43 (install.py --test, undone): PASS, 0 faults: called at 3600/9600 (ShieldCalled ON at state 1), 'HealFloor=95%: 3600 of 9600 restored to 9600'
+    # at the first wait pass (state 3, 7.5 s later; it drives in damaged), held 53 s at 9600, drove out at 9600; 2nd call 9600. Shots black (world not drawn): fire unproven
     'dd10healed1109': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '1a0d94b0', 'KLJoin.ini': 'ebdf1472'},
                            vancall=((None, None, None), (8300, 50, 800)),
                            hook=('C:/kl_build_1024/merged_1108h/dll_test/dinput8.dll', 'fceb3c6df5208b46e98f97d9f663d308'),

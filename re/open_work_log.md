@@ -1,6 +1,7 @@
 2026-11-09 ~04:35 - [d0] [VanBlow] ShieldCalled (8c4292b9, default 0, shields state 1 = DD10's heister-call drive-in) in f0's merged_1108h (SHIP 52b37716 / TEST fceb3c6d), STAGED NOT installed.
 Bench dd10called1109 (install.py --test, undone): 0 faults, shield ON at state 1 both calls, 2nd van 9600/9600, but the 1st van was already 3600/9600 AT the call (hit in state 0, GUESS: shown by the approach box).
-Next: dd10healed1109 = + HealFloor=95 (in the dll, never fired); if PASS, f0 installs 1108h SHIP + ShieldCalled=1 + HealFloor=95.
+~04:45 dd10healed1109 (+ HealFloor=95) PASS 0 faults: 'restored 3600 -> 9600' at the wait (state 3; it still drives in damaged ~7 s), 9600 through wait + drive-out. Fire clearing unproven (black shots).
+Effect: with HealFloor + ShieldWhileWaiting no EMPTY vehicle on any non-stock map can be destroyed before boarding (VanBlow's blow-up only after drive-out). f0 installs 1108h SHIP + ShieldCalled=1 + HealFloor=95.
 2026-11-09 ~04:05 - [d0] DD10 dd10side1109 (live map, TEST 40d00164): a heister waiting in the exit box's SOUTH strip (8300, 750) lives through the van's drive-in + 53 s wait;
 the box centre (8300, 1100) is on the drive-in lane (gate -> stop 8642, z 1030) and died there 4 s in (no kill box; KILLED BY RED = own Char 13). Not changed: stock layout.
 Option for the owner: shrink otrExitLevel to the south strip. Open: the van reached its first wait at 3600/9600 (hit before state 3, no state 2 seen by ShieldDriveIn).
