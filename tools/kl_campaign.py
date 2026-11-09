@@ -162,10 +162,17 @@ def md5_file(p):
     return h.hexdigest()
 
 def game_running(exe='kl2.exe'):
-    """True while the game runs (Windows tasklist; elsewhere False). Zombie processes count: the owner checks by hand."""
+    """True while the game runs (Windows tasklist; elsewhere False). A kl2.exe with 0 threads (a zombie left by a crashed run: it
+    holds no file handles and cannot run) does not count; when the thread count cannot be read every listed process counts."""
     if os.name != 'nt': return False
     r = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq %s' % exe, '/NH'], capture_output=True, text=True)
-    return exe.lower() in r.stdout.lower()
+    if exe.lower() not in r.stdout.lower(): return False
+    ps = subprocess.run(['powershell', '-NoProfile', '-Command',
+                         '@(Get-Process %s -ErrorAction SilentlyContinue | ForEach-Object { $_.Threads.Count }) -join " "'
+                         % os.path.splitext(exe)[0]], capture_output=True, text=True)
+    counts = ps.stdout.split()
+    if ps.returncode != 0 or not counts or not all(c.isdigit() for c in counts): return True
+    return any(int(c) > 0 for c in counts)
 
 def layout(level_id, out, dd):
     """(source folder, target folder, main zip name) of one id"""
