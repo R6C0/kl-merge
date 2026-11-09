@@ -77,6 +77,7 @@ static int klbf_eo;      /* [BotFill] OnlineEscortOut (0 off, 1 on, 2 dry = log 
 #include "klstackhid_logic.h"      /* wk-lootmetric-1102: [BotFill] OnlineStackRecheckHid / OnlineStackRecheckHidS: a state 0 + hidden 1 stack is kept for the first S s of a round (klstackhid_test.c) */
 static int klbf_stack_recheck_hid, klbf_stack_recheck_hid_s = KSH_DEF_S;      /* [BotFill] OnlineStackRecheckHid (default 0, recommended off until benched) / OnlineStackRecheckHidS (8, 0..60) */
 static int klbf_stack_recheck;      /* [BotFill] OnlineStackRecheck (default 0, recommended off until benched) */
+#include "klvanrest_logic.h"      /* OnlineVanRest: a van node at the configured rest place counts as "not here" (klvanrest_test.c) */
 #include "klwaitvan_logic.h"      /* wk-vantime-1101: [BotFill] OnlineLegWaitVan / OnlineLegWaitIdx / OnlineLegWaitMaxS, the pure decision (klwaitvan_test.c) */
 #include "klvantime_logic.h"      /* wk-vantime-1101: [BotFill] OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold, the pure decisions (klvantime_test.c) */
 #include "klway_logic.h"      /* wk-rtroute-1101: [BotFill] OnlineWayPerMap / OnlineLegHopDy, the pure decisions (klway_test.c) */
@@ -143,6 +144,7 @@ static int klbf_vm_probe;    /* [BotFill] OnlineVanMoverProbe (default 0): log-o
 static int klbf_cf_on, klbf_cf_act, klbf_cf_marginS = 10;      /* [BotFill] OnlineVanCallFirst (default 0) / OnlineVanCallFirstMarginS; klbf_cf_act = on AND OnlineVanCrewHold (kvt_cf_active) */
 static int klbf_vtm_al, klbf_vtm_bo, klbf_vtm_far, klbf_vtm_farS = KVT_FAR_CAP_S;      /* [BotFill] OnlineVanAfterLegs, OnlineVanBoPos, OnlineVanFarHold (+S): klvantime_logic.h, all default 0 = today */
 static int klbf_way_pm, klbf_legs_van; static float klbf_hop_dy;      /* klbf_legs_van: [BotFill] OnlineLegsWithVan (klway_logic.h kwy_legs_left) */      /* [BotFill] OnlineWayPerMap (0/1/2), OnlineLegHopDy (cm): both default 0 = today (klway_logic.h) */
+static int klbf_vr_on; static float klbf_vr_p[3];      /* [BotFill] OnlineVanRest / [BotFillVanRest_<MAP>] Rest = "x y z" (recommended on for a map whose van group is moved, e.g. DM09 terminal; absent = old guard only): klvanrest_logic.h */
 static int klbf_ot_way;      /* OnlineWaypoints toggle (read in the init, used by klbf_way_load below) */
 /* wk-botpath (2026-10-28, static + log analysis of Q27_DD04R/DD05/DD08, BOS_DD08r; NOT run live). Every key defaults to today's behaviour (0). re/bots_path_1028.md.
    OnlineLegScale (0/1)   per-leg timeout = clamp(5 s + leg distance / OnlineLegSpeed, 15 s, OnlineLegMaxS) instead of a flat 15 s (DD08: legs of 40-60 m timed out at 15 s with 28-79 m left)
@@ -510,17 +512,17 @@ static int klbf_ob_called(DWORD actor)
 }
 /* [Brain] BoardStage: 1 = this bot's own hook boarding waits (the real Board tactic has it, at most 6 s per bot), 0 = board it now (counted as a fallback). Off = always 0. */
 static int klbf_bs_wait(int s) { return klbr_bs_gate(klbf_ob[s].actor, &klbf_ob[s].bsAt); }
-/* OnlineWaypoints (recommended on): [BotFillWay_<SLOT>] P1..P8 = "x y z" (floats, y = height). The phase-2 exit walk (the exit-trigger goal only, not van/box walks) goes through these in order.
+/* OnlineWaypoints (recommended on): [BotFillWay_<SLOT>] P1..P16 = "x y z" (floats, y = height). The phase-2 exit walk (the exit-trigger goal only, not van/box walks) goes through these in order.
    <SLOT> = the slot name from the engine's scene path (klh_scene -> klh_level_key: 'f02\f02_main' -> F02). That is what the hook reliably knows: a stock map installed through KLExpansion
    plays as its slot (DD02 as F02), so the key is the slot, not the map's own name. GUESS: two expansion maps sharing a slot share a section; the section is only used for the one that needs it. */
-#define KLBF_WAY_MAX 8
+#define KLBF_WAY_MAX 16      /* was 8; the arrays and loops below are sized by it only (the DM09 terminal route has 15 points); a section with <= 8 points reads and runs exactly as before */
 #define KLBF_WAY_NEAR 300.0f      /* horizontal units (3 m) within which a leg point counts as reached (owner spec) */
 #define KLBF_WAY_LEGMS 15000      /* ms per leg at most (owner spec) */
 static float klbf_way_p[KLBF_WAY_MAX][3]; static int klbf_way_n; static char klbf_way_sec[40];
 /* OnlineLegWaitCall: `called` as the legs see it (kwv_legs_called): a call made by the hook from the hold does not strip the remaining legs. Identical to klbf_ot_called with the keys at 0. */
 static int klbf_ot_called;      /* defined below with the other trigger state */
 static int klbf_lcall(int s) { return kwv_legs_called(klbf_ot_called, klbf_wv_hc, klbf_wv_on, klbf_ob[s].leg, klbf_way_n); }
-static int klbf_way_read(const char *sec)      /* P1..P8 of [sec] into klbf_way_p; the first missing / bad key ends the list; returns the count */
+static int klbf_way_read(const char *sec)      /* P1..P16 of [sec] into klbf_way_p; the first missing / bad key ends the list; returns the count */
 {
     char line[120], nm[8]; int i, n = 0;
     for (i = 1; i <= KLBF_WAY_MAX; i++) {
@@ -532,6 +534,21 @@ static int klbf_way_read(const char *sec)      /* P1..P8 of [sec] into klbf_way_
         klbf_way_p[n][0] = x; klbf_way_p[n][1] = y; klbf_way_p[n][2] = z; n++;
     }
     return n;
+}
+static void klbf_vr_load(void)      /* OnlineVanRest: [BotFillVanRest_<MAP folder>] Rest first (needs a redirected map), else [BotFill] OnlineVanRest; neither = off (old guard) */
+{
+    char v[120], fold[40], sec[60]; int i;
+    klbf_vr_on = 0; v[0] = 0; fold[0] = 0;
+    klmv_pm_folder(fold, sizeof fold);
+    if (fold[0]) {
+        strcpy(sec, "BotFillVanRest_");
+        for (i = 0; fold[i] && i < 24; i++) sec[15 + i] = (char)(fold[i] >= 'a' && fold[i] <= 'z' ? fold[i] - 32 : fold[i]);
+        sec[15 + i] = 0;
+        GetPrivateProfileStringA(sec, "Rest", "", v, sizeof v, klh_ini);
+        klbf_vr_on = kvr_parse(v, klbf_vr_p);
+    }
+    if (!klbf_vr_on) { v[0] = 0; GetPrivateProfileStringA("BotFill", "OnlineVanRest", "", v, sizeof v, klh_ini); klbf_vr_on = kvr_parse(v, klbf_vr_p); }
+    if (klbf_vr_on) klog("botfill: tactics: OnlineVanRest: a van node within %.0f cm of (%.0f, %.0f, %.0f) is 'not here' (map folder '%s')", KVR_NEAR_CM, klbf_vr_p[0], klbf_vr_p[1], klbf_vr_p[2], fold);
 }
 static void klbf_way_load(void)
 {
@@ -2276,7 +2293,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
         if (klbf_ot_kept()) klbf_ot_trig_looked = 1;      /* the last round's exit trigger and boxes still stand (same level load): no scan this round */
         else { klbf_ot_trig = klbf_ot_tvt = klbf_ot_vh = 0; klbf_ot_trig_looked = 0; klbf_ot_nbx = 0; klbf_ot_bxbest = -1; klbf_ot_keep_gen = -1; klbf_ot_nobox_gen = -1; }
         klbf_gm_logged = 0; klbf_gm_last = 0; klbf_ot_gat = klbf_ot_gcar = klbf_ot_gtold = 0; klbf_ot_gatAt = 0; memset(klbf_gts_told, 0, sizeof klbf_gts_told); klbf_cf_pend = 0; klbf_vgs_since = 0; klbf_vgs_defer = 0; klbf_bo_ok = 0; memset(&klbf_vh, 0, sizeof klbf_vh);
-        klbf_way_load(); klbf_ramp_load(); klbf_trig_load();
+        klbf_vr_load(); klbf_way_load(); klbf_ramp_load(); klbf_trig_load();
         if (klbf_sp) { if (klbf_sp_nown) klog("botfill: stackprobe: last round: %d call(s) of 0x4e3f40 by the hook itself (not logged)", klbf_sp_nown); klbf_sp_nl = klbf_sp_nd = klbf_sp_nown = 0; klbf_sp_install(); }      /* OnlineStackProbe: per-round caps; the detour (key 2) goes in on the first host round */
         klbf_unpl_at = now; memset(&klbf_dhs, 0, sizeof klbf_dhs);
         klog("botfill: tactics: round %d starts (Carry %d, Near %.0f, Take %d): the host orders the Ally bots itself", klbf_ot_rounds, klbf_ot_carry, klbf_ot_near, klbf_ot_take);
@@ -2293,7 +2310,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
             if (vt == KLE_VEH_VT) {
                 DWORD node = klh_rd32(o + 4);
                 nvan++;
-                if (!van && node && kle_node(node, vpos, 0) && (fabs(vpos[0]) > 1 || fabs(vpos[1]) > 1 || fabs(vpos[2]) > 1) && klbf_van_ok(vpos, 0)) van = o;      /* BO3: the van stood at (0,0,0) at the round start = not here / not called yet; wait for a real place */      /* GUESS: the vehicle object's node is where the van stands (its boarding place is 500 along x, klescort.c kle_boarding; not used) */
+                if (!van && node && kle_node(node, vpos, 0) && !kvr_not_here(vpos, klbf_vr_on, klbf_vr_p) && klbf_van_ok(vpos, 0)) van = o;      /* BO3: the van stood at (0,0,0) at the round start = not here / not called yet; wait for a real place */      /* GUESS: the vehicle object's node is where the van stands (its boarding place is 500 along x, klescort.c kle_boarding; not used) */
             } else if (klh_avt(o) == 0x00bb3bac) {
                 DWORD pr, team = 99, hp, snd; float hv[2] = { 0, 0 };
                 if (!(pr = klh_rd32(o + 0x54)) || !klh_rd(pr + 4, &team, 4)) continue;
@@ -2389,7 +2406,7 @@ static void klbf_ot_run(DWORD now, DWORD sm)
     }
     if (!van && rules) {   /* [rules+0x1e4] = the escape vehicle (0x70f0a0, PROVEN), 0 until the vehicle is called (0x71e180 -> 0x84f030 fills the list slot 89 reads) */
         struct kle_veh v; float vp[3];
-        if (kle_veh_read(rules, &v) == 1 && kle_node(klh_rd32(v.obj + 4), vp, 0) && (fabs(vp[0]) > 1 || fabs(vp[1]) > 1 || fabs(vp[2]) > 1) && klbf_van_ok(vp, 1)) { van = v.obj; memcpy(vpos, vp, 12); }
+        if (kle_veh_read(rules, &v) == 1 && kle_node(klh_rd32(v.obj + 4), vp, 0) && !kvr_not_here(vp, klbf_vr_on, klbf_vr_p) && klbf_van_ok(vp, 1)) { van = v.obj; memcpy(vpos, vp, 12); }
     }
     if (kvt_lookup_ok(klbf_vtm_al, van != 0) && klbf_ot_van && rules && !klbf_ot_trig_looked && !klbf_vaw.at && klbf_ot_looks < 6 &&(!klbf_ot_lookAt || now - klbf_ot_lookAt >= 20000)) {      /* the exit trigger: when the first bot carries money (a private-memory scan, klmove.c); a miss is retried every 20 s, 6 times a round */
         int q; for (q = 0; q < KLBF_OT_BOTS && !(klbf_ob[q].actor && klbf_ob[q].tally > 0); q++) ;

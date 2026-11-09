@@ -72,5 +72,16 @@ chk('lane_bad finds a wall', len(T.lane_bad(grid, cell, -1000.0, -980.0, 0, 200)
 grid[cell(-1000, 100)] = [(-940.0, 1, 5)]
 chk('lane_bad finds a step', len(T.lane_bad(grid, cell, -1000.0, -980.0, 0, 200)) == 1)
 
+# terminal walls: warn_rect grows toward the allowed side only, rects_overlap, in_corridor, the planned walls
+chk('warn_rect north', T.warn_rect(0, 10, 100, 120, (0.0, -1.0)) == (0, 10, -200.0, 120))
+chk('warn_rect west', T.warn_rect(0, 10, 100, 120, (1.0, 0.0)) == (0, 310.0, 100, 120))
+chk('rects_overlap', T.rects_overlap((0, 10, 0, 10), (5, 15, 5, 15)) and not T.rects_overlap((0, 10, 0, 10), (10, 20, 0, 10)))
+chk('in_corridor lane / stairs / hall', T.in_corridor(-25500, 8100) and T.in_corridor(-14000, 12000) and T.in_corridor(-20000, 10000))
+chk('in_corridor rejects the far hall', not T.in_corridor(-32000, 10000) and not T.in_corridor(-20000, 20000) and not T.in_corridor(-25500, 3000))
+chk('4 walls, 4 distinct trios', len(T.TERM_TRIOS) == 4 and len({t[0] for t in T.TERM_TRIOS}) == 4)
+chk('no wall touches CORRIDOR', not any(T.rects_overlap(t[2:6], r) for t in T.TERM_TRIOS for r in T.CORRIDOR))
+chk('walls span the lane van stop and wait', all(not T.rects_overlap(t[2:6], (-25500 - 1, -25500 + 1, 6000, 8100)) for t in T.TERM_TRIOS))
+chk('walls are 3 m or thicker', all(min(t[3] - t[2], t[5] - t[4]) >= 200 for t in T.TERM_TRIOS))
+
 print('RESULT: %s' % ('PASS' if ok else 'FAIL'))
 sys.exit(0 if ok else 1)

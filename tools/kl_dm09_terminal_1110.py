@@ -21,7 +21,10 @@ What changes (values of EXISTING entities only: no entity is added, so no slot i
      (read from the nav mesh: the corridor polygons that cross the slab and reach west of it, +/- GAP_PAD): the existing trio keeps the south part, the
      parked spare trio 030_LevelBound_StreetRight (at y -60000 in the cover stage) takes the north part.
   4. THE CAMPAIGN PEN: Enemies!040_Busterminal!LevelBound (5 boxes, Bound / Bound#01 / Bound#02 + Warn01 / Warn02, x -25212 +- 1000 around the campaign van) cut the lane
-     (x -25500, z 7900..10158): parked at (0, -60000, 0) like every unused trio (kl_fa_author.PARK).
+     (x -25500, z 7900..10158): Bound#01 / Bound#02 parked at (0, -60000, 0) like every unused trio (kl_fa_author.PARK); Bound + Warn01 + Warn02 are reused (item 5).
+  5. THE TERMINAL'S WALLS (TERM_TRIOS, CORRIDOR): with the slab open and the pen gone the collision flood from the street reached 837,528 cells west of the street (the whole hall,
+     x -35010..-13950, z -5410..29610). Four LevelBound walls (the three parked trios AlleyRight x2 / AlleyLeft + the pen trio, values only, no new entity) confine play to the street,
+     the overpass + stairs corridor (CORRIDOR C1 / C2) and the lane at the van (C3); the check floods again with the bounds as walls and counts cells outside (want 0).
   The campaign's own van (V_USA_GetawayVan_Chase_00, (-24630,-979,8958)) and EndOfLevel (-24400,-929,8986) stay (8.7 m east of the lane, outside its swath).
 
 NOT changed (listed in the report): the police ring squads / their trigger boxes stay on the street (they fight the crew on the way out); the cover exclusion belt
@@ -29,8 +32,8 @@ NOT changed (listed in the report): the police ring squads / their trigger boxes
 (OnlineVanPosSane, klescort exit walk, kl_fa_street lane nodes) are in README.txt as a plan.
 
 GUESSes (each also on its line below): LANE_X / STOP_Z, EXIT box size, RUN box place, GAP_PAD, the spare trio reuses the StreetLeft LevelBound controller values
-(AlleyRight / StreetRight are stock copies of the same trio), the terminal has no bound of its own once the pen is parked (the floor edge / railings are the
-campaign's geometry), the van's drive-in is not run over a waiting crew (stock layout: same as the street).
+(AlleyRight / StreetRight are stock copies of the same trio), the terminal walls' extent (CORRIDOR margins, BOUND_Y, 600 cm thick, Warn = Bound + 300) and that a LevelBound reused from AlleyRight / AlleyLeft / the pen keeps its own Warn
+references (stock trios), the van's drive-in is not run over a waiting crew (stock layout: same as the street).
 """
 import collections, hashlib, json, math, os, shutil, struct, subprocess, sys, tempfile, zipfile
 
@@ -69,6 +72,23 @@ ST_HALF_Y = 1500.0
 WEST = 'Specials!LevelBound!030_LevelBound_StreetLeft!'
 SPARE = 'Specials!LevelBound!030_LevelBound_StreetRight!'
 PEN = 'Enemies!040_Busterminal!LevelBound!'
+# The terminal's own bounds (measured by a collision flood, kl_escape.Walk, from the street mouth with the west slab open: 837k cells west of the street, the whole hall
+# x -35010..-13950, z -5410..29610). PLAY AREAS: the street (as before), the overpass + stairs corridor, the terminal lane. Rectangles (x0, x1, z0, z1) in cm:
+CORRIDOR = (
+    (-15500.0, -6400.0, 6400.0, 14200.0),    # C1 the whole overpass plateau (flood: x -14150..-6510, z 6650..13910) + the stairs head
+    (-26700.0, -13200.0, 6400.0, 14600.0),   # C2 the hall under the stairs to the lane (path z 7992..13723, hall floor z 6730..18310)
+    (-27000.0, -24000.0, 5400.0, 10100.0),   # C3 the lane at the van stop (-25500, 8100) and wait (-25497, 6000)
+)
+BOUND_Y = (-1500.0, 600.0)            # the hall floor is y -1000, the lane -980: 5 m below to 6 m above
+# The four walls of the hall, outside CORRIDOR. (trio, x0, x1, z0, z1, side of the allowed area the Warn boxes grow toward: (dx, dz))
+# The three parked LevelBound trios are reused, plus the pen trio (Bound / Warn01 / Warn02; the pen's Bound#01 / Bound#02 stay parked). No new entity, so no slot renumbering.
+TERM_TRIOS = (
+    ('Specials!LevelBound!020_LevelBound_AlleyRight!', 'north', -27400.0, -12700.0, 14600.0, 15200.0, (0.0, -1.0)),
+    ('Specials!LevelBound!040_LevelBound_AlleyRight!', 'west upper', -27400.0, -26700.0, 10100.0, 14600.0, (1.0, 0.0)),
+    ('Specials!LevelBound!040_LevelBound_AlleyLeft!', 'west lane', -27400.0, -27000.0, 5000.0, 10100.0, (1.0, 0.0)),
+    ('Enemies!040_Busterminal!LevelBound!', 'south', -27000.0, -23600.0, 5000.0, 5400.0, (0.0, 1.0)),
+)
+WARN_GROW = 300.0                      # stock: Warn = the Bound grown ~3 m toward the allowed side
 RUN_BOXES = ('Gameplay!RunToEscape!tbRunToEscape1Player', 'Gameplay!RunToEscape!tbRunToEscape')
 OLD_STOP = (-1853.236083984375, 2.0, 10800.0)    # kl_fa_street.van_pose of the cover stage (read again at build time; asserted equal)
 
@@ -99,6 +119,20 @@ def corridor_gap(boxes, nb, allowed, x0, x1, ylo, yhi, pad, zr=None):
     if not seen:
         return None
     return (min(boxes[i][2] for i in seen) - pad, max(boxes[i][3] for i in seen) + pad)
+
+
+def in_corridor(x, z, rects=CORRIDOR):
+    return any(a <= x <= b and c <= z <= d for a, b, c, d in rects)
+
+
+def warn_rect(x0, x1, z0, z1, side, grow=WARN_GROW):
+    """The Warn box of a wall: the wall grown by `grow` toward the allowed side (dx, dz)."""
+    dx, dz = side
+    return (x0 - (grow if dx < 0 else 0.0), x1 + (grow if dx > 0 else 0.0), z0 - (grow if dz < 0 else 0.0), z1 + (grow if dz > 0 else 0.0))
+
+
+def rects_overlap(a, b):
+    return a[0] < b[1] and b[0] < a[1] and a[2] < b[3] and b[2] < a[3]
 
 
 def slab_split(z0, z1, gap):
@@ -333,8 +367,17 @@ def plan_edit(B, nav, cen, log=print):
     pen = nodes_named(sc, PEN)
     if len(pen) != 5:
         raise ValueError('expected the 5 Busterminal bound boxes, found %d' % len(pen))
+    used = {t[0] + leaf for t in TERM_TRIOS for leaf in ('Bound', 'Warn01', 'Warn02')}
     for k in pen:
-        edits.append(('pen ' + sc.names[k].split('!')[-1], k, pos_half(B, k), (PARK, None), dict(pos=PARK)))
+        if sc.names[k] not in used:
+            edits.append(('pen ' + sc.names[k].split('!')[-1], k, pos_half(B, k), (PARK, None), dict(pos=PARK)))
+    # the terminal's walls (reused trios): Bound = the wall, Warn01 = Warn02 = the wall grown toward the allowed side
+    for trio, why, x0, x1, z0, z1, side in TERM_TRIOS:
+        for leaf in ('Bound', 'Warn01', 'Warn02'):
+            k = au.node_of(sc, trio + leaf)
+            r = (x0, x1, z0, z1) if leaf == 'Bound' else warn_rect(x0, x1, z0, z1, side)
+            c, h = to_box(r[0], r[1], BOUND_Y[0], BOUND_Y[1], r[2], r[3])
+            edits.append(('terminal wall %s (%s)' % (why, leaf), k, pos_half(B, k), (c, h), dict(pos=c, half=h, turn=S.IDENT)))
     # van children must all be inside the moved group (they carry the PathBlockerVan, boarding box, cameras)
     # nodes of the van's top entity that sit OUTSIDE the moved group would stay behind
     stray = [k for k in range(top, sc.end[top]) if k != top and not grp <= k < sc.end[grp] and not any(sc.p.key(nm) in ('Group',) for nm, _b in sc.nodes[k]['ctrls']) and k not in (grp,)]
@@ -466,7 +509,56 @@ def check_staged(zp, facts, log=print):
     lane_cells = [c for c, y in seen.items() if abs(w2.centre(c)[0] - LANE_X) < 200 and abs(w2.centre(c)[1] - facts['stop_new'][2]) < 300 and abs(y - FLOOR_Y) < 30]
     res['hvk_street_to_lane_cells'] = len(lane_cells)
     res['hvk_pocket_cells_in_exit'] = len(w2.inside(seen, (c, h)))
+    # the terminal's walls: flood from the street mouth over the whole hall window with every active bound as a wall; cells west of the street outside CORRIDOR must be 0
+    w3 = kl_escape.Walk(hvk, box=(-40000.0, 9000.0, -16000.0, 32000.0))
+    wall = collections.defaultdict(list)
+    for n, bc, bh, f in bounds:
+        if 'Bound' not in n.split('!')[-1]:
+            continue
+        r = max(bh[0], bh[2]) * 1.5
+        i0, j0 = w3.cell(bc[0] - r, bc[2] - r)
+        i1, j1 = w3.cell(bc[0] + r, bc[2] + r)
+        for cx in range(i0, i1 + 1):
+            for cz in range(j0, j1 + 1):
+                px, pz = w3.centre((cx, cz))
+                if in_box((px, bc[1], pz), bc, bh, f):
+                    wall[(cx, cz)].append((bc[1] - bh[1], bc[1] + bh[1]))
+    seen3 = flood_walls(w3, wall, (-5700.0, -45.0, 9000.0))
+    pts3 = [w3.centre(c) for c in seen3]
+    res['bounded_flood_cells'] = len(seen3)
+    res['bounded_cells_outside'] = sum(1 for x, z in pts3 if x < -7100.0 and not in_corridor(x, z))
+    res['bounded_x_range'] = (round(min(p[0] for p in pts3)), round(max(p[0] for p in pts3)))
+    res['bounded_lane_cells'] = sum(1 for c, y in seen3.items() if abs(w3.centre(c)[0] - LANE_X) < 200 and abs(w3.centre(c)[1] - facts['stop_new'][2]) < 300 and abs(y - FLOOR_Y) < 30)
+    res['bounded_exit_cells'] = len(w3.inside(seen3, (c, h)))
+    ex = (c[0] - h[0], c[0] + h[0], c[2] - h[2], c[2] + h[2])
+    res['walls_in_exit_box'] = [t[1] for t in TERM_TRIOS if rects_overlap(ex, t[2:6])]
+    res['nav_polys_outside_corridor'] = sum(1 for i in (path or []) if cen[i] and cen[i][0] < -6500.0 and not in_corridor(cen[i][0], cen[i][2]))
     return res
+
+
+def flood_walls(w, wall, start):
+    """kl_escape.Walk.flood (4-neighbour) with `wall` = {cell: [(ylo, yhi)]}: a cell whose floor y is inside one of its spans is not entered. -> {cell: floor y}."""
+    c0, y0 = w.floor(*start)
+    seen, q = {c0: y0}, collections.deque([c0])
+    while q:
+        c = q.popleft()
+        y = seen[c]
+        for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            n = (c[0] + d[0], c[1] + d[1])
+            g = w.grid.get(n)
+            if n in seen or not g:
+                continue
+            cand = [yy for yy, f, _r in g if f and -w.DOWN <= yy - y <= w.UP]
+            if not cand:
+                continue
+            ny = max(cand)
+            if any(ny + w.LO < yy < ny + w.HI for yy, _f, _r in g):
+                continue
+            if n in wall and any(a <= ny <= b for a, b in wall[n]):
+                continue
+            seen[n] = ny
+            q.append(n)
+    return seen
 
 
 # ------------------------------------------------------------------ stage
@@ -496,7 +588,7 @@ Files (DM09 only: F06_Main.zip, F06_Main.bots.zip, F06_Main.bots.base.md5)
 What moved (values of existing entities only, no slot id changes): see moved.txt (old -> new for every entity).
 
 [BotFillWay_DM09] (Dog Days KLHook.ini, peer-owned: NOT applied; fragment in ini_fragment.txt)
-  The hook reads at most 8 points (KLBF_WAY_MAX 8). The old route P1..P8 ends at the street stop; the fragment keeps P1..P6 and ends with the street mouth + the
+  The hook (work tree, uncommitted) now reads up to 16 points (KLBF_WAY_MAX 16; the DATA FALLBACK below also fits an older 8-point dll). The old route P1..P8 ends at the street stop; the fragment keeps P1..P6 and ends with the street mouth + the
   terminal lane. The engine paths between points over the mesh (GUESS: it takes the stairs on its own). A route with every corner needs KLBF_WAY_MAX raised (plan below).
 
 HOOK PLAN (klhook C code, NOT changed here)
@@ -508,7 +600,7 @@ bots: OnlineLegSpeed=100 + OnlineLegNear=600 + OnlineLegMaxS=60 (RT5 rows of the
 GUESS: the owner decides the lobby row; nothing here sets the clock.
 
 Not changed (limits): police ring squads + RunToEscape squads stay round the old street stop (they fight the crew on the street); NoCoverBox#19/#20 stay at the old stop;
-the terminal has no extra cops (see the owner's wish "SWAT dropped off by vans down there": a separate stage); no bound at the terminal's edges beyond the campaign geometry (GUESS).
+the terminal has no extra cops (see the owner's wish "SWAT dropped off by vans down there": a separate stage); the terminal is walled by 4 LevelBound boxes (street / overpass + stairs corridor / lane; reused parked trios, GUESS extents; going outside them = KILLED BY AN ACCIDENT after the Warn).
 '''
 
 
@@ -523,7 +615,7 @@ HOOK_PLAN = '''  1. klhook/klbotfill.c:516  KLBF_WAY_MAX 8 -> 16 (static float k
      (-23647, -980, -2700) before the van is called, not (0,0,0): the 'not here' guard (|coord| <= 1) passes and klbf_van_ok accepts it, so van_w is set and bots head for vpos (2640, 2807, 2537),
      87 m south of the wait point. Fix: a rest position the guard also treats as 'not here', e.g. new key [BotFill] OnlineVanRest=-23647 -980 -2700 (reject when within 100 cm of it), or accept the
      first-scan van only once the rules' vehicle slot ([rules+0x1e4], the 2392 path) is filled. Not done in data: moving node 25050's local position would shift the baked drive if the .ANM keys are relative (unproven).
-  7. Bounds west / north / south of the terminal: none in the zips (README 'Not changed'); needs new bound entities, i.e. an entity-adding stage.
+  7. Bounds west / north / south of the terminal: DONE in the zips (4 reused trios, README); the bots must stay inside CORRIDOR too (a bot outside a bound is killed).
   5. [BotFill] OnlineLegWaitIdx (klbotfill.c:349): the hold leg is P2 (index 1); P1..P6 keep their meaning with the fragment.'''
 
 
@@ -609,7 +701,7 @@ def stage(out, cover, game=GAME, rehearse=True, log=print):
         log('%s check: %s' % (key, json.dumps(checks[key], default=str)))
         c = checks[key]
         if not (c['stop_ok'] and c['exit_triggers'] == 1 and c['new_stop_in_exit'] and c['board_in_exit'] and not c['old_stop_in_exit'] and c['reachable']
-                and c['street_polys_in_exit'] == 0 and c['lane_bad'] == 0 and not c['bounds_hit'] and not c['barricade_placed'] and c['hvk_street_to_lane_cells'] > 0):
+                and c['street_polys_in_exit'] == 0 and c['lane_bad'] == 0 and c['bounded_cells_outside'] == 0 and c['bounded_lane_cells'] > 0 and c['bounded_exit_cells'] > 0 and not c['walls_in_exit_box'] and c['nav_polys_outside_corridor'] == 0 and not c['bounds_hit'] and not c['barricade_placed'] and c['hvk_street_to_lane_cells'] > 0):
             raise SystemExit('REFUSED: %s failed its staged checks: %s' % (name, json.dumps(c, default=str)))
     files = [(FILES[0], pins[FILES[0]], base), (FILES[1], pins[FILES[1]], md5(os.path.join(out, FILES[1]))), (FILES[2], pins[FILES[2]], md5(os.path.join(out, FILES[2])))]
     open(os.path.join(out, 'install.py'), 'w', newline='\n').write(render_install(files, game))
