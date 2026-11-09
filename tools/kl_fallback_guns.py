@@ -533,7 +533,7 @@ def out_problem(path):
     """Pure. None when `path` may be written, else the reason: it names KL_PortBackup, or lies inside the Dog Days / Dead Men game folder (the build scratch
     <DM>\\KL_PortTools\\build excepted)."""
     ap = _norm(path)
-    if 'kl_portbackup' in ap.split(os.sep):
+    if 'kl_portbackup' in [s.lower() for s in re.split(r'[\\/]+', ap)]:   # both separators + lower: the refusal holds on Linux too (normcase is a no-op there)
         return '%s is inside KL_PortBackup' % path
     if any(_under(ap, _norm(s)) for s in SCRATCH_OK):
         return None

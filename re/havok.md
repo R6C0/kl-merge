@@ -140,10 +140,44 @@ The 510 is `0x1fe` at kl2 0x620760 and kaneandlynch 0x59e56b. Types 2 to 5 have 
 Consequences:
 - A static placement's code depends only on that placement's world-space triangles. It can move
   inside the file with its placement. It is invalid if the placement's transform changes.
-- A list code addresses its children by position in the 510-block (ASSUMPTION: standard
-  hkListShape child index as MOPP terminal; the code was not interpreted). So the **sequence** of
-  static placements must not change, unless the list codes are rebuilt.
+- A list code addresses its children by position in the 510-block (PROVEN 2026-11-09 by reading
+  the byte code, see "MOPP byte code read" below: every full block's list code has exactly the
+  terminals 0..509, a padded block's exactly 0..n-1 for its n real children, and each real
+  child's world box lies inside the box of positions that reaches its terminal). So the
+  **sequence** of static placements must not change, unless the list codes are rebuilt.
 - A child that no list code returns is never tested. That is what makes padding possible.
+
+### MOPP byte code read (2026-11-09, `tools/kl_mopp.py`, checks `tools/kl_mopp_test.py`)
+
+The codes are Havok 4.x hkMoppCode byte code (opcode layout as the public niftools / PyNifly
+tables; the comparison rules below were FITTED to the real DM07 and DD10 files, not copied):
+`00` return; `01-04 x y z` SCALE n (coordinates become (c - xyz) * 2^n); `05-08` jump 1..4 bytes
+from the end of the instruction; `09 b` / `0a bb` add to the terminal base, `0b bbbb` set it;
+`10-1c a b j` SPLIT on an axis (10 x, 11 y, 12 z, 13 y+z, 14 y-z, 15 x+z, 16 x-z, 17 x+y, 18 x-y,
+19..1c three-axis sums): left child = next instruction when v <= a, right child = end + j when
+v >= b, both when the children overlap; `20-22 t j` single split (v <= t left, v >= t right);
+`23-25 a b jj jj` split with 16-bit jumps; `26-28 lo hi` cut (go on only when lo <= v <= hi);
+`29-2b` cut with 24-bit bounds; `30-4f` terminal base + (op - 0x30), `50-53` terminal base + 1..4
+bytes. Every multi-byte immediate is big-endian (the DD10 HERO plane's 24-bit x cut 0x00ba2e is
+exactly its 2 cm = two 0.01 margins). A query point p (metres) is c = (p - offset) * scale per
+axis, a 24-bit fixed-point number; v for a plain axis is the high byte floor(c / 65536) (0..254),
+for a diagonal axis floor((sum of the signed high bytes + 256 per minus term) / terms). The 24-bit
+cut compares the ROOT frame's c even under a SCALE (DM07 block 0 child 108 proved it). Fit: 100 %
+byte coverage and no unknown opcode on all 2777 + 5837 placement codes and 18 list codes of
+DM07 / DD10; 99.7 % of triangle centres reach their own terminal with `Code.query`.
+
+What it tells about the files: (1) a placement code's terminals are its triangle numbers in index
+order (degenerate triangles are dropped by the compiler: DD10 shape 851 keeps 12 of 44). (2) The
+graft's FILLER (one placement repeated: DM07 REF 20269 x 1760 = 2104 of 2777 statics, the whole
+systems part 1020..2776 and the 347 pads of block 1, plus 4 slots in block 0) IS returned by the
+systems blocks' list codes (510 terminals each): harmless, the filler's own code only answers
+near its real quad at (-800, 670, 8445) cm; the padded map block 1 returns only 0..166. (3) A
+static whose slot is reused (kl_dm07plane_1109) is tested only where the list code reaches the
+OLD child: DM07 slots 248 / 256 (the hidden gate panels, own boxes y 471..801, z 9993..10393 and
+10395..10795) are reached for x -4622..-4526, y 464..817, z 9989..10395 / 10384..10843, nothing
+else (`python tools/kl_mopp.py <F06_Main.HVK> 248 256`). Not read: the exact Havok AABB-query
+walk (the reader is a point / box-constraint walk; a query box that overlaps a reach box is
+assumed to return the child, which is how the compiler's own boxes work).
 
 ## What happens with a Dead Men file in Dog Days
 
@@ -430,8 +464,8 @@ Join, in memory only:
 ## Not established
 
 - Whether a grafted or Dead Men .HVK loads and collides correctly in the game (nothing was run).
-- MOPP terminals of list codes = child index in the 510-block (the padding and filler rules rest
-  on it).
+- ~~MOPP terminals of list codes = child index in the 510-block~~ PROVEN 2026-11-09 ("MOPP byte code
+  read" above); the padding and filler rules hold. Still open there: the game's exact AABB-query walk.
 - Surface index target and the Dead Men -> Dog Days surface mapping.
 - The placement flag dword and the convex sub-part count.
 - What widens the header box in 10 files.

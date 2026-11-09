@@ -22,6 +22,11 @@ EFFECTIVE COVERAGE (not the planes' size): the list code only returns slot 256 /
 z 9993..10393 / 10395..10795 - so what blocks is the plane INSIDE those volumes. The planes' overhang (z 9852..9993, 10795..10948, y 381..471, y 801..979) is reached only
 through a query that also touches the old volume; the gap ends z 9990..9993 and 10795..10800 lean on the neighbouring real fence panels. The bench must walk
 the gap at z 9995 / 10394 / 10790 and get the capsule BELOW y 471 (crawl / jump / mud edge) to prove the mud hole closed: plan() proves geometry, not list-code reach.
+MEASURED 2026-11-09 (tools/kl_mopp.py read the block-0 list code of the live F06_Main.HVK, re/havok.md "MOPP byte code read"): the list code returns slot 256
+for x -4622..-4526, y 464..817, z 9989..10395 and slot 248 for the same x / y, z 10384..10843 - the old boxes plus the 8-bit quantisation (one unit = 2.7 cm
+here). So the planes block everything whose query box touches y 464..817 over the WHOLE gap z 9989..10843 (the two windows overlap at 10384..10395, no seam):
+a player's capsule (feet on the mud at 460, top well over 464) is always tested; only a body that lies entirely below y 464 (4 cm over the mud top) or
+above 817 is never tested. The crawl / mud-edge bench steps are therefore not needed for players; the gate leak question is the sub flags (0x108 vs 0x72).
 
 REF (the research answer to "fresh REFs with real .gms entities?"): NOT needed here, so no entity is added (an added entity renumbers every SLOT id in .oct / .rmi / .rmc and
 the .prp / .gms / .buf, as kl_fa_cover.apply does; that is a 170 MB re-write and the largest risk of the pass). The planes take the REF of an existing, never-hidden collision

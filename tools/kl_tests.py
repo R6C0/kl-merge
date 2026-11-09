@@ -50,6 +50,12 @@ PY_NOT_TESTS = {
     'kl_solo_test.py': 'live two-seat bench driver (needs --hook and Dog Days)',
 }
 
+# python tests whose checks only hold as a non-root user: a read-only file (chmod) must make the write fail. root writes through it
+# (cloud sandboxes run as root), so the rollback checks fail there for no fault of the tool -> SKIP, with the reason.
+PY_NOT_ROOT = {
+    'kl_gunpunch_test.py': 'write-error rollback checks use a read-only file; root writes through chmod',
+}
+
 # C tests: 'logic' builds with the shim on any host, 'win' needs the real SDK (includes a whole module).
 C_TESTS = {
     'klcs_test.c': 'logic',            # klcopsquad_logic.h
@@ -84,6 +90,7 @@ C_TESTS = {
     'klwlabel_test.c': 'logic',        # klwlabel_logic.h (wardrobe group tags, "n/N  GROUP > Name" labels, group jumps, no windows.h)
     'klfit_test.c': 'logic',          # klfit_logic.h ([Keys] CaptionTidy / CaptionMax / RowFit: caption + row fitting, no windows.h)
     'klshopui_test.c': 'logic',        # klshopui_logic.h ([ShopPage] TidyPage2 / [Hire] TidyPage: page II + hire page wording, widths, stars/lock rules)
+    'klshopset_test.c': 'win',         # klshopset.h is pure, but the test reads a KLShopPage.ini with GetPrivateProfileInt/StringA (not in the shim)
     'klecho_test.c': 'logic',         # klecho_logic.h ([Echo] per room kind AL reverb parameter changes, no windows.h)
     'klechoprobe_test.c': 'logic',     # klechoprobe_logic.h ([Echo] Probe: which voices carry the aux send, names, summary, log budget)
     'klreverbbox_test.c': 'logic',     # klreverbbox_logic.h ([Echo] RoomBoxes table parse, oriented box, hysteresis, winner)
@@ -177,6 +184,9 @@ def py_tests(only):
             continue
         if name in PY_NOT_TESTS:
             yield Result(name, 'SKIP', 'not a self-test: ' + PY_NOT_TESTS[name])
+            continue
+        if name in PY_NOT_ROOT and hasattr(os, 'geteuid') and os.geteuid() == 0:
+            yield Result(name, 'SKIP', 'running as root: ' + PY_NOT_ROOT[name])
             continue
         missing = [f for f in PY_NEEDS.get(name, []) if not os.path.exists(f)]
         if missing:
