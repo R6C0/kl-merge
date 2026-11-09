@@ -12,7 +12,12 @@ Exit codes: 0 = the .wav was written; 2 = no usable clip (PC_Def.str missing / u
 (bin/kl_oggdec.exe, ffmpeg, kl_pyvorbis.py) is here, or an unknown codec, nothing of the candidate list is in the file) - the launcher then stays silent; 1 = usage.
 Writes ONLY the one output file (a partial file is removed on failure).
 
-Output: standard RIFF/WAVE, 16-bit PCM, the clip's own rate and channels, at most --seconds (default 90) with a
+DEFAULT (no --clip, no --no-riff): the guitar riff of the tester's own Movies/Trailer.bik (RIFF_START..RIFF_END, Bink Audio,
+decoded by ffmpeg on the PATH, else kl_pybink.py beside this file) looped RIFF_REPEATS times, crossfaded into the whole
+MenuLoop_01, which fades out; ~106 s at 48 kHz stereo, ~20 MB. When the trailer or a Bink decoder is missing, the clip
+list below is used instead (log line 'riff loop skipped: ...').
+
+Output: standard RIFF/WAVE, 16-bit PCM. One clip: its own rate and channels, at most --seconds (default 90) with a
 1 s fade-in and a 3 s fade-out (so the launcher's loop seam is quiet).
 
 STREAM FILE ('IOISNDSTREAM' version 9; the spec with the evidence is tools/kl_str.py's docstring, MEASURED
@@ -73,6 +78,21 @@ CANDIDATES = (
     ('Music/InHouse/Japan/M09_A/Rooftop_Layer2_TAmbient_Loop.wav',
      'Retomoto roof bed: layer 2 of the PCM set M09A_Rooftop (PCM set, 110.4 s)'),
 )
+
+# DEFAULT (owner 11-09, "movie trailer.wav just loop the guitar riff part ... make the menu music like fade in and out
+# with it"): the guitar riff of Dead Men's Movies/Trailer.bik (Bink Audio, 48000 Hz stereo, 51.3 s), looped RIFF_REPEATS
+# times, crossfaded into the whole MenuLoop_01 (CANDIDATES[0]), which fades out to silence; the file loops back to the riff.
+# Loop points MEASURED (log-band spectra, 10 ms frames, ffmpeg decode): the riff starts at 24.43 s and runs loud to the
+# 44.7 s hit; 24.43 -> 41.05 s is the start/end pair with the most alike 0.5 s around both points (cosine 0.92) that
+# starts ON the riff's first attack. Bar ~1.2 s, phrase ~10 s. GUESS: that it sounds seamless (owner's ear decides).
+RIFF_BIK = ('Movies', 'Trailer.bik')
+RIFF_START, RIFF_END = 24.43, 41.05
+RIFF_REPEATS = 2
+RIFF_SEAM = 0.03                       # s, linear crossfade where the riff jumps from RIFF_END back to RIFF_START
+RIFF_XFADE = 4.0                       # s, equal-power crossfade riff -> menu, and the menu's fade-out to silence
+RIFF_MENU = CANDIDATES[0][0]
+MENU_PEAK = 30000                      # the menu is raised (at most x2) until its peak is this ...
+RIFF_OVER_MENU = 1.2                   # ... and the (much louder mastered) riff is lowered to this x the menu's RMS
 
 u32 = lambda b, o: struct.unpack_from('<I', b, o)[0]
 
@@ -459,6 +479,154 @@ def fade(s, channels, rate, fade_in=FADE_IN, fade_out=FADE_OUT):
     return s
 
 
+# ------------------------------------------------------------------ riff + menu loop
+def bink_decoders(path):
+    """-> [(label, argv)] that print the .bik's first audio track as a WAV: ffmpeg on the PATH (never shipped)."""
+    ff = shutil.which('ffmpeg')
+    return [('ffmpeg', [ff, '-v', 'error', '-nostdin', '-i', path, '-vn', '-map', '0:a:0', '-f', 'wav', '-acodec', 'pcm_s16le', 'pipe:1'])] if ff else []
+
+
+def py_bink():
+    """-> the kl_pybink module beside this file (pure Python Bink Audio, by 6b), or None (not here / KL_NO_PYBINK=1)."""
+    if os.environ.get('KL_NO_PYBINK') == '1':
+        return None
+    here = os.path.dirname(os.path.abspath(__file__))
+    if not os.path.isfile(os.path.join(here, 'kl_pybink.py')):
+        return None
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        import kl_pybink
+    except ImportError:
+        return None
+    return kl_pybink
+
+
+def trailer_riff(dm, log):
+    """-> (array('h'), channels, rate) of RIFF_START..RIFF_END of the trailer's audio. Raises NoClip."""
+    path = os.path.join(dm, *RIFF_BIK)
+    if not os.path.isfile(path):
+        raise NoClip('no %s in %s' % ('/'.join(RIFF_BIK), dm))
+    errs = []
+    for label, argv in bink_decoders(path):
+        try:
+            r = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+            if r.returncode != 0 or not r.stdout:
+                errs.append('%s exit %s %s' % (label, r.returncode, r.stderr[:120].decode('latin1').strip()))
+                continue
+            s, ch, rate = parse_wav16(r.stdout)
+        except (OSError, subprocess.SubprocessError, NoClip) as e:
+            errs.append('%s: %s' % (label, e))
+            continue
+        s = s[ch * int(RIFF_START * rate):ch * int(RIFF_END * rate)]
+        break
+    else:
+        pyb = py_bink()
+        if not pyb:
+            raise NoClip('%s: Bink Audio, and neither ffmpeg nor kl_pybink.py is here to decode it%s' % (
+                '/'.join(RIFF_BIK), ' (%s)' % '; '.join(errs) if errs else ''))
+        try:
+            s, ch, rate = pyb.bink_audio(path, 0, RIFF_START, RIFF_END)
+        except Exception as e:                                     # BinkError, or a bug on a file it never saw
+            raise NoClip('kl_pybink: %s%s' % (e, ' (%s)' % '; '.join(errs) if errs else ''))
+        label = 'kl_pybink'
+    want = int((RIFF_END - RIFF_START) * rate) * ch
+    if ch not in (1, 2) or len(s) < want - ch * rate // 10:       # a short read = the trailer is not the one measured
+        raise NoClip('%s: %d channels, %.1f of %.1f s decoded by %s' % (
+            '/'.join(RIFF_BIK), ch, float(len(s)) / (ch * rate or 1), RIFF_END - RIFF_START, label))
+    log('  riff: %s %.2f..%.2f s, %d Hz %d ch (%s)' % ('/'.join(RIFF_BIK), RIFF_START, RIFF_END, rate, ch, label))
+    return s, ch, rate
+
+
+def to_stereo(s, ch):
+    if ch == 2:
+        return s
+    out = array.array('h', bytes(4 * len(s)))
+    out[0::2] = s
+    out[1::2] = s
+    return out
+
+
+def rms(s):
+    step = max(1, len(s) // 400000) | 1                          # an odd stride: both channels, ~400k samples
+    n = len(range(0, len(s), step))
+    return (sum(v * v for v in s[::step]) / float(n or 1)) ** 0.5
+
+
+def regain(s, ch, src, dst, g, chunk=1 << 16):
+    """Linear-interpolation resample src -> dst Hz and gain g (the caller keeps |result| <= 32767)."""
+    n = len(s) // ch
+    if src == dst:
+        out = array.array('h')
+        for i in range(0, len(s), chunk):
+            out.extend(array.array('h', [int(v * g) for v in s[i:i + chunk]]))
+        return out
+    m = int(n * float(dst) / src)
+    out = array.array('h', bytes(2 * m * ch))
+    step = float(src) / dst
+    for k in range(ch):
+        x = s[k::ch]
+        y = array.array('h')
+        for j0 in range(0, m, chunk):
+            part = []
+            for j in range(j0, min(m, j0 + chunk)):
+                p = j * step
+                i = int(p)
+                a = x[i]
+                b = x[i + 1] if i + 1 < n else a
+                part.append(int((a + (b - a) * (p - i)) * g))
+            y.extend(array.array('h', part))
+        out[k::ch] = y
+    return out
+
+
+def clamp16(v):
+    return -32768 if v < -32768 else 32767 if v > 32767 else int(v)
+
+
+def compose(riff, menu, ch, rate, repeats=RIFF_REPEATS, seam=RIFF_SEAM, xfade=RIFF_XFADE):
+    """riff x repeats (linear seam crossfades) -> equal-power xfade -> menu -> menu fades to 0. Both already at ch/rate."""
+    import math
+    n = int(seam * rate)
+    out = array.array('h', riff)
+    for _ in range(repeats - 1):
+        base = len(out) - n * ch
+        for i in range(n):
+            g = float(i) / n
+            for k in range(ch):
+                out[base + i * ch + k] = clamp16(out[base + i * ch + k] * (1 - g) + riff[i * ch + k] * g)
+        out.extend(riff[n * ch:])
+    x = min(int(xfade * rate), len(riff) // ch, len(menu) // (2 * ch))
+    base = len(out) - x * ch
+    for i in range(x):
+        t = (i + 0.5) / x * math.pi / 2
+        a, b = math.cos(t), math.sin(t)
+        for k in range(ch):
+            out[base + i * ch + k] = clamp16(out[base + i * ch + k] * a + menu[i * ch + k] * b)
+    out.extend(menu[x * ch:])
+    return fade(out, ch, rate, 0.01, xfade)                        # 10 ms in: no click on the riff's first attack
+
+
+def riff_menu(dm, st, log):
+    """-> (array('h'), 2, rate): the owner's riff + MenuLoop_01 loop. Raises NoClip (the caller falls back to one clip)."""
+    riff, rch, rrate = trailer_riff(dm, log)                       # first: it is the part most likely to be missing
+    c = st.find(RIFF_MENU)
+    if c is None:
+        raise NoClip('%s is not in the file' % RIFF_MENU)
+    menu, mch, mrate = decode(st, c, MAX_SECONDS)
+    if mch not in (1, 2) or len(menu) < mch * mrate * 2:
+        raise NoClip('%s: %d channels, %d samples' % (c.name, mch, len(menu)))
+    menu = to_stereo(menu, mch)
+    riff = to_stereo(riff, rch)
+    peak = max(1, max(menu), -min(menu))
+    gm = min(2.0, float(MENU_PEAK) / peak)
+    menu = regain(menu, 2, mrate, rrate, gm)
+    gr = min(1.0, rms(menu) * RIFF_OVER_MENU / max(1.0, rms(riff)))
+    riff = regain(riff, 2, rrate, rrate, gr)
+    log('  menu: %s, %d Hz -> %d Hz, gain %.2f; riff gain %.2f' % (c.name, mrate, rrate, gm, gr))
+    return compose(riff, menu, 2, rrate), 2, rrate
+
+
 def wav_bytes(s, channels, rate):
     """array('h') interleaved -> RIFF/WAVE 16-bit PCM bytes."""
     if sys.byteorder != 'little':
@@ -505,10 +673,38 @@ def candidates(st, clip, log):
     return cands
 
 
-def extract(dm, out, clip=None, seconds=DEFAULT_SECONDS, log=print):
-    """Decode the clip (or the first decodable candidate) to `out`. -> the Clip; raises NoClip."""
+def write_wav(out, blob):
+    d = os.path.dirname(os.path.abspath(out))
+    if d and not os.path.isdir(d):
+        os.makedirs(d)
+    try:
+        with open(out, 'wb') as f:
+            f.write(blob)
+    except Exception:
+        try:
+            os.remove(out)
+        except OSError:
+            pass
+        raise
+
+
+def extract(dm, out, clip=None, seconds=DEFAULT_SECONDS, log=print, riff=True):
+    """Decode the riff + menu loop (no clip named, riff on), else the clip (or the first decodable candidate) to `out`.
+    -> the Clip (the menu clip for the riff loop); raises NoClip."""
     st = open_stream(dm, log)
     try:
+        if clip is None and riff:
+            try:
+                log('  trying the trailer riff + %s loop (--no-riff: one clip)' % RIFF_MENU)
+                s, ch, rate = riff_menu(dm, st, log)
+            except NoClip as e:
+                log('  riff loop skipped: %s' % e)
+            else:
+                blob = wav_bytes(s, ch, rate)
+                write_wav(out, blob)
+                log('wrote %s: %s riff x%d + %s, %d Hz, %d ch, %.1f s, %d bytes' % (
+                    out, '/'.join(RIFF_BIK), RIFF_REPEATS, RIFF_MENU, rate, ch, float(len(s)) / (ch * rate), len(blob)))
+                return st.find(RIFF_MENU)
         cands = candidates(st, clip, log)
         last = None
         for c, why in cands:
@@ -525,18 +721,7 @@ def extract(dm, out, clip=None, seconds=DEFAULT_SECONDS, log=print):
                 continue
             fade(s, ch, rate)
             blob = wav_bytes(s, ch, rate)
-            d = os.path.dirname(os.path.abspath(out))
-            if d and not os.path.isdir(d):
-                os.makedirs(d)
-            try:
-                with open(out, 'wb') as f:
-                    f.write(blob)
-            except Exception:
-                try:
-                    os.remove(out)
-                except OSError:
-                    pass
-                raise
+            write_wav(out, blob)
             log('wrote %s: %s, %d Hz, %d ch, %.1f s, %d bytes' % (out, c.name, rate, ch, float(len(s)) / (ch * rate), len(blob)))
             return c
         raise last or NoClip('nothing decoded')
@@ -565,6 +750,7 @@ def main(argv=None):
     e.add_argument('--clip', default='', help='clip name (default: the first of the built-in candidates that decodes)')
     e.add_argument('--seconds', type=float, default=DEFAULT_SECONDS, help='trim to at most this many seconds (default %g)' % DEFAULT_SECONDS)
     e.add_argument('--list', action='store_true', help='list the Music/ clips of the file instead of extracting')
+    e.add_argument('--no-riff', action='store_true', help='skip the default trailer riff + menu loop, write one clip')
     l = sub.add_parser('list', help='list the clips of the file')
     l.add_argument('--dm', required=True)
     l.add_argument('text', nargs='?', default='')
@@ -583,7 +769,7 @@ def main(argv=None):
         if a.seconds <= 0 or a.seconds > MAX_SECONDS:
             print('--seconds must be in 0 < s <= %g' % MAX_SECONDS)
             return 1
-        extract(a.dm, a.out, a.clip or None, a.seconds, print)
+        extract(a.dm, a.out, a.clip or None, a.seconds, print, not a.no_riff)
         return 0
     except NoClip as e:
         print('NO MUSIC: %s' % e)

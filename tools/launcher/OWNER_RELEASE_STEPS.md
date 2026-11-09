@@ -18,7 +18,7 @@ verbs vs kl_release's argparse, XAML well-formed, bracket balance) and, on a PC 
   (kl_release.py header; re/release_size.md: delta estimate 560 to 640 MB.)
 - The tester needs Dead Men installed (the installer stops without it) and gets Payday 2 bits only when Payday 2 is there.
 - The launcher's MUSIC is not in the package either: `launcher\kl_launcher_music.py` (= `tools\kl_launcher_music.py`) runs on
-  the tester's PC and decodes one clip of THEIR Dead Men `PC_Def.str` into `music\deadmen_menu.wav` beside the launcher
+  the tester's PC and decodes one clip of THEIR Dead Men `PC_Def.str` into `music\deadmen_riff.wav` beside the launcher
   (first start with a known Dead Men folder, after INSTALL, or on UNMUTE). The default clip is Dead Men's MAIN MENU loop
   `SFX/UserInterface/MenuLoop_01.wav` (an Ogg Vorbis stream, 77 s), decoded by `launcher\bin\kl_oggdec.exe` (= `tools\launcher\bin\kl_oggdec.exe`,
   public-domain stb_vorbis pinned by sha256 in `tools\launcher\oggdec\stb_vorbis.sha256`; rebuild with `tools\launcher\oggdec\build.bat`,
@@ -79,7 +79,7 @@ grain and vignette on top so the text stays readable). No third-party art: your 
 `pack_release.ps1` copies `launcher\bg\*.jpg` into the package; Setup copies them up beside the launcher on the tester's PC.
 With one or both missing the launcher draws its fallback (grey film grain left, dark teal video blocks right) and logs one line.
 
-To hear the music on YOUR PC before packing: `python tools\kl_launcher_music.py extract --dm "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men" --out tools\launcher\music\deadmen_menu.wav`
+To hear the music on YOUR PC before packing: `python tools\kl_launcher_music.py extract --dm "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men" --out tools\launcher\music\deadmen_riff.wav`
 (exit 0 and a `wrote ...` line; exit 2 = no decodable clip, say so). `--list` prints the Music/ clips with their codec, `--clip NAME`
 picks another one; the default order is in the tool's `CANDIDATES` (Dead Men's main menu loop `MenuLoop_01` if a decoder is there, then the FA theme `FA_SlashMixPrison` if it is PCM, else the
 Retomoto tension bed `TakyoAction_Layer2_TAmbient_Loop`, then the bank break-in bed). A tester can set `MusicClip` in the settings file.

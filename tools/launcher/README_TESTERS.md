@@ -53,8 +53,10 @@ The launcher remembers your folders in `KLMergeLauncher.settings.json` beside it
 
 The launcher plays a Dead Men music clip quietly. **That clip is not part of the download**: when the launcher knows
 your Dead Men folder it reads one piece of music out of **your own** Dead Men files (`PC_Def.str`) once, into
-`music\deadmen_menu.wav` beside the launcher (about 10 MB, 77 seconds): Dead Men's main menu theme, decoded on your PC by
-`bin\kl_oggdec.exe` (a small public-domain Ogg Vorbis decoder that comes with the download; ffmpeg is the fallback). Until then, or when your Dead Men
+`music\deadmen_riff.wav` beside the launcher (about 20 MB, 106 seconds): the guitar riff of Dead Men's trailer
+(`Movies\Trailer.bik`) looped, fading into Dead Men's main menu theme and back. It is decoded on your PC by small
+decoders that come with the download (`bin\kl_oggdec.exe`, public-domain Ogg Vorbis; `kl_pybink.py` for the trailer; ffmpeg
+is used when you have it). Without the trailer you get the menu theme alone. Until then, or when your Dead Men
 install has no readable clip, it simply stays silent - nothing else depends on it.
 
 - **MUTE / UNMUTE** is in the top right, next to the `♪` state text (`♪ DEAD MEN 22%` playing, `♪ MUTED`, `♪ NO MUSIC`).

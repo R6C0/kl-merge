@@ -165,6 +165,74 @@ def fake_ogg(npages=3, bad_at=None):
     return out
 
 
+def riff_tests(d, out, py, menuwav, mrate):
+    """The default riff + menu loop: a fake Movies/Trailer.bik decoder (a script printing a known WAV), the menu from the
+    caller's working fake Vorbis decoder (4 s at mrate)."""
+    rr = 2000
+    a0, a1 = int(M.RIFF_START * rr), int(M.RIFF_END * rr)
+    src = stereo(tone(rr * 45, 50, rr, 20000), tone(rr * 45, 70, rr, 20000, 1.0))
+    def fake_bik(secs):
+        p = os.path.join(d, 'trailer%d.wav' % secs)
+        with open(p, 'wb') as f:
+            f.write(M.wav_bytes(src[:2 * rr * secs], 2, rr))
+        sp = os.path.join(d, 'fakebik%d.py' % secs)
+        with open(sp, 'w') as f:
+            f.write('import sys\nsys.stdout.buffer.write(open(%r, "rb").read())\n' % p)
+        return lambda path: [('fakebik', [py, sp])]
+    real_bd, real_pb = M.bink_decoders, M.py_bink
+    M.py_bink = lambda: None
+    try:
+        lines = []
+        M.bink_decoders = fake_bik(45)
+        c = M.extract(d, out, None, 2.0, lines.append)
+        check(c.name == 'SFX/UserInterface/MenuLoop_01.wav' and any('riff loop skipped' in l and 'Trailer.bik' in l for l in lines),
+              'riff: no Movies/Trailer.bik -> skipped with the reason, MenuLoop_01 alone')
+        mov = os.path.join(d, 'Movies'); os.makedirs(mov)
+        open(os.path.join(mov, 'Trailer.bik'), 'wb').close()
+        lines = []
+        c = M.extract(d, out, None, 2.0, lines.append)
+        ch, width, r, frames, s = read_wav(out)
+        R, n, mfr = a1 - a0, int(M.RIFF_SEAM * rr), 4 * rr
+        x = min(int(M.RIFF_XFADE * rr), R, mfr // 2)
+        check(c.name == 'SFX/UserInterface/MenuLoop_01.wav' and any(l.startswith('wrote') and 'riff x2' in l for l in lines),
+              'riff: Trailer.bik decodes -> the riff loop is written (default, no --clip)')
+        check((ch, width, r, frames) == (2, 2, rr, 2 * R - n + mfr - x),
+              'riff: stereo at the trailer rate, length = 2 riffs - seam + menu - crossfade (%d frames)' % frames)
+        check(s[0] == 0 and s[-1] == 0 and s[-2] == 0, 'riff: starts at 0 (10 ms fade-in) and ends faded to 0 (the loop seam)')
+        k = [j for j in range(40, R - n) if abs(src[2 * (a0 + j)]) > 15000][:5]
+        g = [float(s[2 * j]) / src[2 * (a0 + j)] for j in k]
+        check(len(g) == 5 and max(g) - min(g) < 0.002 and 0 < g[0] <= 1, 'riff: the riff is the trailer from RIFF_START, one gain (%.3f)' % g[0])
+        same = all(s[2 * (R - n + j) + q] == s[2 * j + q] for j in range(n, R - n - x, 97) for q in (0, 1))
+        check(same, 'riff: after the seam the 2nd riff repeats the 1st sample for sample')
+        check(M.main(['extract', '--dm', d, '--out', out, '--no-riff']) == 0 and read_wav(out)[2] == mrate,
+              'riff: --no-riff writes MenuLoop_01 alone (at its own rate)')
+        check(M.main(['extract', '--dm', d, '--out', out, '--clip', 'FA_SlashMixPrison']) == 0 and read_wav(out)[3] == 3 * mrate,
+              'riff: --clip names one clip -> that clip, no riff')
+        M.bink_decoders = fake_bik(30)
+        lines = []
+        c = M.extract(d, out, None, 2.0, lines.append)
+        check(read_wav(out)[2] == mrate and any('riff loop skipped' in l and 'decoded by fakebik' in l for l in lines),
+              'riff: a 30 s trailer (short read) is refused -> MenuLoop_01 alone')
+        M.bink_decoders = lambda path: []
+        lines = []
+        M.extract(d, out, None, 2.0, lines.append)
+        check(any('neither ffmpeg nor kl_pybink' in l for l in lines), 'riff: no Bink decoder -> skipped, the log names ffmpeg and kl_pybink')
+        class PB(object):
+            @staticmethod
+            def bink_audio(path, track, a, b):
+                return src[2 * int(a * rr):2 * int(b * rr)], 2, rr
+        M.py_bink = lambda: PB
+        lines = []
+        M.extract(d, out, None, 2.0, lines.append)
+        check(read_wav(out)[2] == rr and any('(kl_pybink)' in l for l in lines), 'riff: no ffmpeg -> kl_pybink decodes the window')
+    finally:
+        M.bink_decoders, M.py_bink = real_bd, real_pb
+    up = M.regain(array.array('h', [0, 0, 100, -100, 200, -200]), 2, 4000, 8000, 1.0)
+    check(list(up) == [0, 0, 50, -50, 100, -100, 150, -150, 200, -200, 200, -200], 'regain: 4 -> 8 kHz linear midpoints, per channel')
+    check(list(M.regain(array.array('h', [1000, -1000]), 2, 8000, 8000, 0.5)) == [500, -500], 'regain: same rate = gain only')
+    check(list(M.to_stereo(array.array('h', [1, 2]), 1)) == [1, 1, 2, 2], 'to_stereo doubles a mono clip')
+
+
 def ogg_tests(tmp, M):
     good = fake_ogg(3)
     check(M.ogg_check(good) == 3, 'ogg_check: 3 framed pages with good CRCs pass')
@@ -236,6 +304,7 @@ def ogg_tests(tmp, M):
         check(c.name == 'SFX/UserInterface/MenuLoop_01.wav', 'MenuLoop_01 is the default pick when it decodes')
         ch, width, r, frames, s = read_wav(out)
         check((ch, width, r, frames) == (2, 2, rate, 2 * rate) and s[0] == 0 and s[-1] == 0, 'extract of the Vorbis clip: 2.0 s, faded, clip rate')
+        riff_tests(d, out, py, wavpath, rate)
         # (e) no exe and no ffmpeg: kl_pyvorbis is tried last; on the junk payload it fails and the error is named
         M.vorbis_decoders = lambda: []
         M.py_vorbis = real_py

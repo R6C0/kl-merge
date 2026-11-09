@@ -22,7 +22,7 @@
 #   COLLECT LOGS      zips <DD>\KLHook.log, KLHook_*.dmp, kl2_490_crash_*.mdmp, KLMergeInstall.json and this launcher's
 #                     log into KLMerge_logs_<stamp>.zip beside the launcher - the file to send to Josh after a crash.
 #   MUSIC             a Dead Men music clip plays quietly (System.Windows.Media.MediaPlayer, volume 0.22, looped) from
-#                     <launcher folder>\music\deadmen_menu.wav. THAT FILE IS NEVER SHIPPED: the launcher makes it on the
+#                     <launcher folder>\music\deadmen_riff.wav. THAT FILE IS NEVER SHIPPED: the launcher makes it on the
 #                     tester's PC from the tester's OWN Dead Men PC_Def.str ("python kl_launcher_music.py extract", run once
 #                     when the Dead Men folder is known - at start, after INSTALL, or on UNMUTE). No Dead Men, no python, or
 #                     a clip that cannot be decoded (exit 2) = silence, never an error. MUTE / UNMUTE in the header; the
@@ -89,7 +89,7 @@ $script:OutFile = ''; $script:ErrFile = ''; $script:OutPos = 0; $script:ErrPos =
 $script:PackageDir = ''
 $script:Manifest = $null
 $script:Python = $null       # @{ Exe = 'py'; Pre = @('-3'); Version = '3.12.7' } or $null
-$script:MusicName = 'deadmen_menu.wav'          # was deadmen_launcher.wav (FA theme): a new name so an old file is not reused
+$script:MusicName = 'deadmen_riff.wav'          # was deadmen_menu.wav (menu loop alone), deadmen_launcher.wav (FA theme): a new name so an old file is not reused
 $script:MusicPath = Join-Path $Here ('music\' + $script:MusicName)
 $script:MusicToolName = 'kl_launcher_music.py'
 $script:Player = $null       # System.Windows.Media.MediaPlayer, or $null when audio is unavailable
@@ -1041,7 +1041,7 @@ function Music-Apply {
 }
 
 function Music-Load {
-    # opens music\deadmen_menu.wav when it exists; starts muted when it does not (nothing to play)
+    # opens music\deadmen_riff.wav when it exists; starts muted when it does not (nothing to play)
     $script:MusicLoaded = $false
     if (-not $script:Player) { Music-Label; return }
     if (-not (Test-Path -LiteralPath $script:MusicPath)) { Music-Label; return }
@@ -1067,7 +1067,7 @@ function Find-MusicTool {
 }
 
 function Music-Extract([bool]$again = $false) {
-    # makes music\deadmen_menu.wav from the tester's OWN Dead Men PC_Def.str in the background (python kl_launcher_music.py
+    # makes music\deadmen_riff.wav from the tester's OWN Dead Men PC_Def.str in the background (python kl_launcher_music.py
     # extract). Nothing of it ships. Silent when Dead Men / python / the tool are missing; exit 2 = no decodable clip.
     if ($script:MusicProc) { return }
     if ($script:MusicTried -and -not $again) { return }
@@ -1220,7 +1220,7 @@ if (-not $script:Settings.DD) { Log 'Dog Days was not found in any Steam library
 try { Bg-Init } catch { Log ('background: ' + $_.Exception.Message + ' - using the drawn fallback') }
 try {
     Music-Init
-    Music-Load                      # plays when music\deadmen_menu.wav exists and Muted is off
+    Music-Load                      # plays when music\deadmen_riff.wav exists and Muted is off
     if (-not $script:MusicLoaded) {
         # no file yet: silent (as good as muted) until the clip has been read from the tester's own Dead Men files
         Music-Label

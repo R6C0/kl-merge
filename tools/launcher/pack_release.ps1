@@ -42,6 +42,10 @@ foreach ($f in @('KLMergeLauncher.ps1', 'KLMerge.bat', 'README_TESTERS.md', 'KLM
 Copy-Item -LiteralPath (Join-Path $tools 'kl_launcher_music.py') -Destination (Join-Path $stage 'launcher')
 # its pure-Python Vorbis fallback (slow, ~7 s, but no exe): used when kl_oggdec.exe and ffmpeg are both missing or fail
 Copy-Item -LiteralPath (Join-Path $tools 'kl_pyvorbis.py') -Destination (Join-Path $stage 'launcher')
+# its pure-Python Bink Audio decoder (the default music = the riff of the tester's own Movies\Trailer.bik; testers have no ffmpeg)
+$pybink = Join-Path $tools 'kl_pybink.py'
+if (Test-Path -LiteralPath $pybink) { Copy-Item -LiteralPath $pybink -Destination (Join-Path $stage 'launcher') }
+else { Write-Host 'note: tools\kl_pybink.py is missing - without ffmpeg the launcher music is MenuLoop_01 alone (no trailer riff)' }
 # the Ogg Vorbis decoder the music tool uses (public-domain stb_vorbis; built by tools\launcher\oggdec\build.bat; no game data)
 $oggdec = Join-Path $here 'bin\kl_oggdec.exe'
 if (Test-Path -LiteralPath $oggdec) {
