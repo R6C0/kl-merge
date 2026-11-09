@@ -58,7 +58,7 @@ if not errorlevel 1 (
         goto :python
     )
     echo  ERROR: RELEASE_URL at the top of this file still points at the placeholder.
-    echo  Josh must set it to the real package URL before handing the file out.
+    echo  This copy has no download link yet: ask @r6c0 on Discord for the current Setup file.
     goto :fail
 )
 
