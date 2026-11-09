@@ -29,19 +29,20 @@ import kl_bench_1106 as B
 KIT = 'C:/kl_build_1024/bench_1109'
 DD = B.DD
 MAPS = DD + '/KLExpansion/Maps'
-# live = merged_1108h (81 installs it after DM02_1109): SHIP 52b37716 (built from 8c4292b9), its TEST twin (build_auto.bat, klauto) fceb3c6d;
+# live = merged_1109land (11-09 ~15:00, SHIP f016c36d / TEST a7f87dc2 / ini 1ec9bea0 = 4a740f92 + [KLHook] JoinLand=1); before it merged_1108h: SHIP 52b37716 (built from 8c4292b9), its TEST twin (build_auto.bat, klauto) fceb3c6d;
 # KLHook.ini 4a740f92 = merged_1108f's f7f11dcc + [VanBlow] ShieldCalled=1 + HealFloor=95 (checked: 1108h set_keys on f7f11dcc gives 4a740f92).
 # The live dinput8.dll can be a peer's TEST dll swapped in by a bench, so the kit takes the twin from the merged kit folder, never from the live file.
-MERGED = 'C:/kl_build_1024/merged_1108h'
+MERGED = 'C:/kl_build_1024/merged_1109land'
 INI_KIT = MERGED
-INI_TAG = 'merged1108h'
-BUILT_FROM = '8c4292b9'
-SHIP_MD5 = '52b3771659650f89c22249b775777da9'
-TEST_MD5 = 'fceb3c6df5208b46e98f97d9f663d308'
-INI_MD5 = '4a740f9232e157b04b15ec6b4718302f'
+INI_TAG = 'merged1109land'
+BUILT_FROM = '8c4292b9+JoinLand'  # d0's merged_1109land (build log names no commit)
+SHIP_MD5 = 'f016c36dd5db2b88c512542fc94dda8f'
+TEST_MD5 = 'a7f87dc2183050659a2538d5b2502a50'
+INI_MD5 = '1ec9bea0b6c363aad0d634a41365287d'
 HOOK = (MERGED + '/dll_test/dinput8.dll', TEST_MD5)
 INI_KEYS = (('ShopPage', 'TidyPage2', '1'), ('Hire', 'TidyPage', '1'),      # fc's keys merged_1108f wrote
-            ('VanBlow', 'ShieldCalled', '1'), ('VanBlow', 'HealFloor', '95'))  # d0's keys merged_1108h writes
+            ('VanBlow', 'ShieldCalled', '1'), ('VanBlow', 'HealFloor', '95'),  # d0's keys merged_1108h wrote
+            ('KLHook', 'JoinLand', '1'))                                       # d0's key merged_1109land writes
 BS = chr(92)
 
 # kit -> map, slot, live pins (md5 prefixes of the files the bench must find), shot windows (seconds since the launch, 'a-b:step', comma list)
@@ -86,10 +87,10 @@ K = {
     # `files` md5s are '' until the stage exists (existence only is checked; fill in the 8-char prefixes from the `stage` output). KeepAlive stays on (nothing here kills).
     'DM07PLANE_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-900:15',
                            stage='C:/kl_build_1024/dm07plane_1109', tag='.before-dm07plane1109',
-                           files={'F06_Main.zip': '', 'F06_Main.bots.zip': '', 'F06_Main.bots.base.md5': ''}),
+                           files={'F06_Main.zip': '92e6e356', 'F06_Main.bots.zip': '4bcc06c1', 'F06_Main.bots.base.md5': '8ebcdcb2'}),
     'DM07PLANE72_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-900:15',
                              stage='C:/kl_build_1024/dm07plane72_1109', tag='.before-dm07plane1109',
-                             files={'F06_Main.zip': '', 'F06_Main.bots.zip': '', 'F06_Main.bots.base.md5': ''}),
+                             files={'F06_Main.zip': 'b2f96032', 'F06_Main.bots.zip': '3dc34a3d', 'F06_Main.bots.base.md5': 'aeebd9a9'}),
     # LEAK TEST on the LIVE DD10 (nothing installed): BigFence_A_02 (REF 31255, x 7999..8014, z 845..1145) is hidden by kl_dd10_vanlane_1108.py with the same
     # 0x400 flag that the DM07 benches proved loses player collision; the collision-only ColiObj_HERO_Plane01 (x 8017, z 652..1349) should still block (GUESS).
     # The van is called first (the tele lands in otrExitLevel) and parks at x 8640 east of the gate, then three walks west through the pillar gap (z 848..1142).
