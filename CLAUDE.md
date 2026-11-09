@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~23:55 - [campaign] INSTALLED on owner "install all" (NOT benched): luvsics Dead Men campaign, all 16 levels + M07F funeral cutscene (Scenes\Locations\Mxx, own folders, 2.9 GB),
+dll 50d20cd1 -> campaign SHIP 4722b12a (out_campaign_1109), ini 4cb8faa0 -> ba4441c1 ([Campaign] Enable/Routing/Trigger + CampGuard/Squad/Give/Rappel/Revive, Grenade Release=1).
+Start: game at main menu -> <DD>\Dead Men Campaign.bat -> pick a level (writes KLCampaign_load.txt). Undo: C:\kl_build_1024\campaign_1109\UNDO.bat FIRST, then levelmusic_1109.
 2026-11-10 ~01:05 - [scheduled check-in, offline] kl_tests GREEN on Linux 137/0/17: klmenulook_test 0xC0000409 = the test's own out[260] vs cap 300 (fixed, 109 checks); 11 unlisted C tests
 listed (all PASS, ASan/UBSan clean); kl_campaign KL_PortBackup guard now case-folds on every host; kl_release_test SKIPs without zstandard. Owner: run `python tools\kl_tests.py --c` on Windows once;
 the DD / DM folders are not connected to the scheduled task (KLHook.log / dumps unread).
