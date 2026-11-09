@@ -83,9 +83,10 @@ Page II: rows 'PD2 PAR', desc line 1 'PD2 GUN: price + rank of the stock gun' (P
 rows 'Pierre  $45K' / HIRED / n/a, no stars without a rank gate, no gun lock. klshopui_logic.h + klshopui_test.c, kl_tests 112/0. SHIP 027cd72d / TEST 9eeedf81 in C:\kl_build_1024\shopui_1108. Needs a look bench (widths are GUESSes) when testing is allowed.
 2026-11-08 ~17:20 - [veh] DM01B street2 van from/to unseen pockets, staged NOT installed (zip 778b075c, bots dccc9250, base 6616525a; pinned live 74d37233 / 73583df1 / c3535e34): waits west (-8000,30500), leaves east (17400,30400).
 Seen by 0 of 385 reachable-floor viewers at both, 0 pierces, planter ground ok. Kit needs ~940 MB (--min-free-mb 300). re/vehicle_routes_1108.md. Not benched.
-2026-11-09 ~03:40 - [f0] MERGED 1108f LIVE (owner 11-09 "pc is all yours ... til 5pm"): dll 246c643d -> 729f7512, KLHook.ini 449e3c7a -> f7f11dcc (+ [ShopPage] TidyPage2=1, [Hire] TidyPage=1),
-DM09 KLJoin.ini 009fa8fa -> 2094d83a (FedRide=3). = db FedRide=3 + FoeNoSwapWhileFed + FedKeep + fc shop tidy, from e206e0aa. Bench M1108F_DD05 PASS (TEST 40d00164, 2 seats, round 2,
-0 asserts/faults/dumps, SHPH match, hire rows served tidy). Not covered: a fed (DM09 lift / police respawn), screenshots (0 KLShot files). Undo: merged_1108f\UNDO.bat FIRST, then 1108c, 1108b, 1108, vanwait_1108, 1107.
+2026-11-09 ~04:40 - [f0] MERGED 1108g LIVE: dll 729f7512 -> d1145cbe (from b5465f50 = 1108f + fc hire desc tidy), ini f7f11dcc + DM09 KLJoin 2094d83a unchanged.
+Bench M1108G_DD05 PASS (TEST 95de3af2, 2 seats, round 2, 0 asserts/faults/dumps, SHPH match, host hire desc 2 lines, no "no rank gate" line). Undo: merged_1108g\UNDO.bat FIRST, then 1108f, 1108c, 1108b, 1108, vanwait_1108, 1107.
+merged_1108h STAGED, NOT installed: from 8c4292b9 (+ d0 [VanBlow] ShieldCalled, state 1), SHIP 52b37716 / TEST fceb3c6d, ini f7f11dcc -> 6bd5a8de (+ ShieldCalled=1); live pin d1145cbe,
+kl_tests 116/0/5, scratch round trip + strip path ok. Waits for d0's dd10called1109 bench (pinned to fceb3c6d), then SHIP install.
 2026-11-08 ~18:00 - [veh] DM07 VAN RE-STAGED, NOT installed: C:/kl_build_1024/vehroutes_1108/DM07 (zip f35e4133, bots 1f514d51, base 08478b6e; pinned live e0a9e326 / 7e897565 / f6259849).
 Far start/end in the unreachable mud pocket (x -9300), gate = hidden fence panels (0x400 hides render only, static collision stays), reverse out, crash keys on the floor. Seen by 29 of 639 reachable-floor viewers (gate corridor only). Undo byte-exact in scratch; install needs ~1.4 GB free on C:.
 2026-11-08 ~18:30 - [d0] INSTALLED for owner testing ("install and tell me"), NOT benched: DM05A heli departure (lcdepart) + club music A rebased on it (stage C:/kl_build_1024/ondepart_1108/lcmusic_a_1108): zip 0c0980c4, bots 2f719e08, base 0344d4c9.

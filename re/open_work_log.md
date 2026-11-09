@@ -37,6 +37,15 @@ carexit guard fixed: J.check reports 0 misfits in-process (kl_map_ai.cars regist
 Cause of cops staying in cars PROVEN: 4 VehicleExitBehaviour nodes had no controller (restored from M03_FA_A; that DD then runs it is a GUESS). garage = 6 police, ramp = 5 police + 45 s Hunt into the garage (GUESS ramp = Ramp_01 beside the lot), frontcops = lot SWAT x3 + ArrivingCops_Squad_02 x2 -> police form. Census 33/27 -> 44/29.
 Undo rehearsed byte-exact in scratch; bench needs ClientBuild*/ClientRewrite/ClientRingSync/AssertSoft lines (bench_cover_lines.txt). Not benched (owner playing).
 2026-11-08 ~10:30 - [vehroutes] DM01B van drive-away went through the Donut Factory wall (x=-496; render check, old lane check was collision-only). STAGED NOT INSTALLED C:/kl_build_1024/vehroutes_1108/DM01B (zip edd349a1, bots a51181be, base b2f37f42; live pins 74d37233 / 73583df1 / c3535e34): van backs out along its arrival lane, crash keys clamped x>=-350. Audit + other maps: re/vehicle_routes_1108.md (DM07 needs a fix, DM03 traffic on the lane, report only). tools/kl_vehroutes_1108.py.
+## 2026-11-09 ~04:40 [f0] MERGED 1108g LIVE, 1108h staged (no crash involved)
+- fc asked for b5465f50 (hire desc tidy) in the next dll. merged_1108g = one dll from b5465f50 on 1108f: SHIP d1145cbe, TEST 95de3af2, dll only.
+- After 06's HASTA1109 (game free 04:15): install --test, bench M1108G_DD05 (C:\kl_build_1024\merged_1108g_bench, new check: no "needed (no rank gate)" in the log,
+  which the 1108f host log had): PASS, 2 seats, round 2, 0 asserts/faults/dumps, SHPH match 4555f77f, host desc "$45,000 - BUY twice to hire / Dog Days crew. Hired for one round."
+- Undo TEST, SHIP install: LIVE dll d1145cbe, ini f7f11dcc, DM09 KLJoin 2094d83a. 06 told (re-pins its 6 kits), d0 told.
+- merged_1108h (for d0): from 8c4292b9 = 1108g + [VanBlow] ShieldCalled (state 1 shielded: Flat Raid call goes 1 -> 3, no 2). SHIP 52b37716, TEST fceb3c6d,
+  writes ShieldCalled=1 (ini f7f11dcc -> 6bd5a8de, unpinned, undo strips the line). kl_tests 116/0/5 on the build tree; scratch: install x2, refusals, undo, strip path, dry.
+  NOT installed: waits for d0's dd10called1109 (TEST fceb3c6d).
+
 ## 2026-11-09 ~03:40 [f0] MERGED 1108f LIVE (no crash involved)
 - Owner 11-09 ~02:29: "continue all prompts til afternoon 5pm pc is all yours ... do testing". After d0's DD10 + DM05A benches: install --test, bench, undo, SHIP install.
 - Bench M1108F_DD05 (C:\kl_build_1024\merged_1108f_bench, TEST 40d00164): PASS, 2 seats, round 2, 0 asserts/faults/dumps, SHPH match 4555f77f both seats, files back.
