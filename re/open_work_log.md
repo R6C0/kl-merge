@@ -1,3 +1,6 @@
+2026-11-09 ~07:30 - [06] KICK DOORS WORK in the engine (benches, nothing installed): DOORS_1109_DM03A ALL PASS (door 6516, ctrl 4+5 1 -> 3); DOORS_1109_DM01R run c ALL PASS (2569 1st try, 957 2nd):
+fix was tele 70 cm behind the stand + goto it ('face' cannot turn a standing player; 957 had stood at bearing error 121). DM07SINK_1109 (13 slabs sunk, hard-link stage, undo byte-exact): z 10334 + 10420
+still THROUGH, 10700 + 10850 BLOCKED at x -4503 -> the slabs are not what blocks; workflow finding the real blocker + a fix. DM02_1109 + DM03_1109 door re-runs queued.
 2026-11-09 ~06:45 - [06] DM07UNHIDE_1109 (stage installed + undone byte-exact, 0 faults): with 4m_01 UN-hidden a live player still walks through (x -4009 -> -4751, y 400..405, z ~10420).
 So the hide flag is NOT the leak: 4m_01's player collision is missing or misplaced (run 1's visible 4m_02 control blocked). Control A of this run died (police). Fix = a blocker, being designed
 (workflow: HVK shapes on the fence line + bench survival via poke). Door kits: leaf peeks dropped (wrong slots), kick judged by controller 1 -> 3 with a 2nd try; DOORS_1109_DM01R (2569 first) queued.
