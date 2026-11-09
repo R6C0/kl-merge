@@ -114,6 +114,17 @@ def door_data(k):
     return out
 
 
+def kick_probe(lbl, when, n=4):
+    """Read-only peeks of the human kick registry (static RE 0x55e600/0x46b330, workflow wywe974am): count at [[0xdd265c]+0xaa4],
+    pointers from +0xaa8; per controller +0x58 character gate (-1 = never), +0x5c state (1 = kickable, 3 = kicked), +0x34, +0x60/+0x64 box nodes.
+    A grafted door missing from the registry (count 0) can never offer the kick prompt."""
+    s = ['peek 0xdd265c+0xaa4 %s-%s-kickreg-count' % (lbl, when)]
+    for i in range(n):
+        o = 0xaa8 + 4 * i
+        s += ['peek 0xdd265c+0x%x+0x%x %s-%s-ctrl%d-%s' % (o, f, lbl, when, i, nm) for f, nm in ((0x58, 'gate'), (0x5c, 'state'), (0x34, 'p34'), (0x60, 'box60'), (0x64, 'box64'))]
+    return s
+
+
 def door_seg(d, lbl):
     """Walk to the leaf from the mesh side, kick (2 taps of E, GUESS key), look at the leaf before/after, walk through when both sides are on the mesh."""
     h = d['hinge']
@@ -126,10 +137,10 @@ def door_seg(d, lbl):
     f = (b[0], b[2]) if b else (h[0], h[2])
     # waitstate 0x19 first: DM02_1109's first tele came 5 s after 'level loaded', before the round ran (session state not 0x19), and was refused
     s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0], a[1] + 150, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
-         'ents KL_Door 20', 'ents Door 200',
+         'ents KL_Door 20', 'ents Door 200'] + kick_probe(lbl, 'stand') + [
          'face %d %d' % c, 'goto %d %d 70 6000' % c, 'face %d %d' % f, 'pos %s-at-leaf' % lbl,
          'tap E 700', 'wait 600', 'tap E 700', 'wait 3500', 'log BENCH1109 %s door %s: kicked (E x2, GUESS key)' % (lbl, d['host']), 'pos %s-kicked' % lbl,
-         'ents KL_Door 20', 'ents Door 200']
+         'ents KL_Door 20', 'ents Door 200'] + kick_probe(lbl, 'kicked')
     if b:
         s += ['goto %d %d 70 9000' % (b[0], b[2]), 'pos %s-through' % lbl, 'log BENCH1109 %s door %s: through goto done' % (lbl, d['host'])]
     return s
@@ -145,13 +156,19 @@ def hasta_seg(who):
 
 
 def vans_seg(who, lead, lbl):
-    """Samples of the van entity every ~5 s from the load, state 3 (waiting), 7 (leaving), then every 3 s while it leaves."""
+    """Samples of the van entity every ~5 s from the load, at state 3 (waiting), every 1 s from state 5 (drives out), then after state 7.
+    DM01B_1109 run 1: state 3 -> 5 after 8 s, the van drove east (x 4436 -> 5729 in 1 s), and at state 7 (8 s later) it sat back at its start
+    pocket (-8000, 30500) for the rest of the run: the drive-out ends at 7 and the vehicle is reset (GUESS: stock, the pocket is unseen).
+    Samples after 7 alone can't show the drive, so the drive is sampled in state 5."""
     s = []
     for i in range(6):
         s += ['ents V_Van 3', 'wait 5000']
-    s += ['log BENCH1109 %s waiting for vehicle state 3' % lbl, 'waitvan 3 300000', 'ents V_Van 3', 'log BENCH1109 %s van at state 3' % lbl, 'wait 10000', 'ents V_Van 3',
-          'waitvan 7 150000', 'log BENCH1109 %s van at state 7 (leaving)' % lbl]
-    for i in range(10):
+    s += ['log BENCH1109 %s waiting for vehicle state 3' % lbl, 'waitvan 3 300000', 'ents V_Van 3', 'log BENCH1109 %s van at state 3' % lbl,
+          'waitvan 5 150000', 'log BENCH1109 %s van at state 5 (drives out)' % lbl]
+    for i in range(14):
+        s += ['ents V_Van 3', 'wait 1000']
+    s += ['waitvan 7 150000', 'log BENCH1109 %s van at state 7 (leaving)' % lbl]
+    for i in range(6):
         s += ['ents V_Van 3', 'wait 3000']
     s += ['log BENCH1109 %s van leave samples done' % lbl]
     return s
@@ -475,8 +492,10 @@ def item_checks(k, a, dd=(), ctrl=None):
         info.append('boom / camera shake / glare: not logged; LOOK at KLShot_inst1_*.jpg around the beat (timestamps of the hasta sample lines)')
         info += [l[:12] + ' ' + l[13:90] for l in a if 'BENCH1109 hasta sample' in l]
     if k in ('DM01B_1109', 'DM07_1109'):
-        van = ents(a, 'V_Van')
+        # the van body only: DM01B_1109 run 1 matched 'V_Van_Reflection' (a ZGROUP parked at y -60000) first and judged its position
+        van = [r for r in ents(a, 'V_Van') if 'reflection' not in r[1].lower() and r[3][1] > -50000]
         s3 = next((l for l in a if 'BENCH1109' in l and 'van at state 3' in l), None)
+        s5 = next((l for l in a if 'BENCH1109' in l and 'van at state 5' in l), None)
         s7 = next((l for l in a if 'BENCH1109' in l and 'van at state 7' in l), None)
         chk('van entity sampled', bool(van), '%d rows' % len(van))
         chk('vehicle state 3 reached (van waits)', s3 is not None, s3[:12] if s3 else 'waitvan 3 timed out (the van never waited within 300 s)')
@@ -484,25 +503,39 @@ def item_checks(k, a, dd=(), ctrl=None):
         t3 = secs_of(s3) if s3 else None
         t7 = secs_of(s7) if s7 else None
         at3 = sorted((v for v in van if t3 is not None and abs(secs_of(v[0]) - t3) < 4), key=lambda v: abs(secs_of(v[0]) - t3)) if van else []
-        late = [v for v in van if t7 is not None and secs_of(v[0]) > t7 + 15]
+        t5 = secs_of(s5) if s5 else None
+        chk('vehicle state 5 reached (van drives out)', s5 is not None, s5[:12] if s5 else 'waitvan 5 timed out')
+        # the drive: samples from state 5 up to state 7 (after 7 the vehicle is reset to its start pocket)
+        late = [v for v in van if t5 is not None and secs_of(v[0]) >= t5 and (t7 is None or secs_of(v[0]) <= t7)]
         chk('van sampled at state 3 (within 4 s)', bool(at3), '%d rows' % len(at3))
-        chk('van sampled 15+ s after state 7', bool(late), '%d rows' % len(late))
+        chk('van sampled while it drives out (state 5 .. 7, >= 3 rows)', len(late) >= 3, '%d rows' % len(late))
         if k == 'DM01B_1109':
             stop = STOP_DM01B
             n = at3[0] if at3 else None                                       # the sample nearest the state-3 line: x and z of the SAME row
             chk('van waits near the stop (4454, 31907)', n is not None and math.hypot(n[3][0] - stop[0], n[3][2] - stop[1]) < 2500,
                 'at state 3: %s' % (str(n[3]) if n else 'no sample'))
             chk('van starts west (x < stop - 3000) at the first sample', bool(van) and van[0][3][0] < stop[0] - 3000, 'first %s' % (str(van[0][3]) if van else 'no sample'))
-            chk('van left EAST of the stop', bool(late and at3) and late[-1][3][0] > at3[0][3][0] + 1000,
-                'stop x %s, last x %s' % ('%.0f' % at3[0][3][0] if at3 else '-', '%.0f' % late[-1][3][0] if late else '-'))
+            chk('van drives EAST of the stop (state 5 .. 7)', bool(late and at3) and max(v[3][0] for v in late) > at3[0][3][0] + 3000,
+                'stop x %s, farthest x %s' % ('%.0f' % at3[0][3][0] if at3 else '-', '%.0f' % max(v[3][0] for v in late) if late else '-'))
         else:
-            chk('van reversed out WEST (x decreasing after state 7)', bool(late and at3) and late[-1][3][0] < at3[0][3][0] - 500,
-                'stop x %s, last x %s' % ('%.0f' % at3[0][3][0] if at3 else '-', '%.0f' % late[-1][3][0] if late else '-'))
+            chk('van reverses out WEST (state 5 .. 7)', bool(late and at3) and min(v[3][0] for v in late) < at3[0][3][0] - 500,
+                'stop x %s, farthest x %s' % ('%.0f' % at3[0][3][0] if at3 else '-', '%.0f' % min(v[3][0] for v in late) if late else '-'))
         if s7:
-            seq = [v for v in van if secs_of(v[0]) > t7]
+            after = [v for v in van if secs_of(v[0]) > t7]
+            if after:
+                info.append('after state 7 the van is at %s (a reset to its start pocket is the drive-out end, GUESS stock)' % str(after[-1][3]))
+        if s5:
+            seq = late
             steps = [math.dist(x[3], y[3]) / max(0.1, secs_of(y[0]) - secs_of(x[0])) for x, y in zip(seq, seq[1:])]
             info.append('leave speeds (cm/s between samples, a pop would be one outlier): %s' % ' '.join('%.0f' % s for s in steps[:12]))
-        info.append('no-pop: 3 s samples cannot show a one-frame jump; LOOK at the shots around state 7 and the arrival')
+        if s3:
+            # a jump > 5000 cm between samples <= 6 s apart from state 3 on: DM01B_1109 run 1 drove east to x 5729, then at state 7 sat at the
+            # start pocket (-8000, 30500) for the rest of the run (13700 cm in 6.5 s, no drive)
+            seq = [v for v in van if secs_of(v[0]) >= t3 - 4 and (t7 is None or secs_of(v[0]) <= t7)]
+            pops = ['%s %s -> %s' % (y[0], tuple(round(c) for c in x[3]), tuple(round(c) for c in y[3])) for x, y in zip(seq, seq[1:])
+                    if secs_of(y[0]) - secs_of(x[0]) <= 6.5 and math.dist(x[3], y[3]) > 5000]
+            chk('van never jumps (> 50 m between samples <= 6.5 s apart) from state 3 to 7', not pops, '; '.join(pops[:3]) or '%d samples' % len(seq))
+        info.append('no-pop: 1 s samples cannot show a one-frame jump; LOOK at the shots around state 5 and the arrival')
     if k == 'DM07_1109':
         pan = [r for r in ents(a, 'Chainlink_Fence_4m') if r[1].endswith('4m_01') or r[1].endswith('4m_11')]
         names = {r[1][-5:] for r in pan}

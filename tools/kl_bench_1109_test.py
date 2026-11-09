@@ -76,6 +76,7 @@ def van(k, mut=None):
             g.ent(n, (-9000, 0, 10000), hidden=(n[-2:] != '05' and mut != 'fence'))
     first = (stop[0] - d * 8000 if mut != 'east' else stop[0] + 6000, 0, stop[1] if k == 'DM01B_1109' else 10000)
     for i in range(6):
+        g.ent('V_Van_Reflection', (-449, -60000, 0))                       # the map's reflection group: must be ignored
         g.ent('V_Van', first)
         g.wait(5)
     g.ent('V_Van', (stop[0], 0, stop[1]) if mut != 'mixrow' else (stop[0], 0, 0))
@@ -83,12 +84,17 @@ def van(k, mut=None):
         g.ent('V_Van', (stop[0] + 9000, 0, stop[1]), dt=0.02)
     if mut != 'nostate3':
         g.say('BENCH1109 van at state 3', 0.2)
-    g.wait(10)
-    g.say('BENCH1109 van at state 7 (leaving)')
+    g.wait(8)
+    if mut != 'nostate5':
+        g.say('BENCH1109 van at state 5 (drives out)')
     for i in range(10):
-        g.wait(3)
+        g.wait(1)
         if mut != 'nolate':
-            g.ent('V_Van', (stop[0] + d * (600 + 900 * i) if mut != 'stuck' else stop[0], 0, stop[1]))
+            g.ent('V_Van', (stop[0] + d * (600 + 900 * i) if mut not in ('stuck', 'pop') else stop[0] if mut == 'stuck' or i < 5 else -8000, 0, stop[1]))
+    g.say('BENCH1109 van at state 7 (leaving)')
+    for i in range(4):
+        g.wait(3)
+        g.ent('V_Van', (first[0], 0, first[2]))                             # reset to the start pocket after 7: not a pop
     if k == 'DM07_1109':
         g.say('goto (-1800, 10400) %s in 3000 ms: at (-2100, 550, 10400) heading 90' % ('reached' if mut != 'nocontrol' else 'NOT reached'))
         g.say('goto (-6000, 10400) %s in 15000 ms: at (-4300, 550, 10400) heading 270' % ('NOT reached' if mut != 'walkedout' else 'reached'))
@@ -152,7 +158,7 @@ def main():
         ok(len(r) >= 2 and not [x for x in r if x[0] == 'FAIL'], '%s: good synthetic log must have 0 FAIL, got %s' % (k, [x[1:] for x in r if x[0] == 'FAIL']))
         ok(M.item_checks(k, [], [], None)[0] and all(x[0] != 'PASS' or 'door' not in x[1] for x in M.item_checks(k, [], [], None)[0]), '%s: empty log, no door PASS' % k)
     muts = {'HASTA1109': ['barricade', 'broken', 'roadblock'],
-            'DM01B_1109': ['east', 'nostate3', 'nolate', 'stuck', 'mixrow'],
+            'DM01B_1109': ['east', 'nostate3', 'nostate5', 'nolate', 'stuck', 'mixrow', 'pop'],
             'DM07_1109': ['fence', 'nolate', 'nocontrol', 'walkedout', 'nopos', 'farpos', 'nostate3', 'stuck'],
             'DM03_1109': ['nohits', 'nopolice','noleaf', 'nokick', 'static', 'nogoto'],
             'DM02_1109': ['noleaf', 'nokick', 'nogoto'],
