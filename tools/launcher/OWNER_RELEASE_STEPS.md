@@ -116,17 +116,19 @@ launcher files (+ `launcher\kl_launcher_music.py` and your `launcher\bg\*.jpg`, 
 `_snap`, `parts`, `sha1cache.json`, never `launcher\music\`) and refuses if anything with a game extension slipped into
 the staging folder.
 
-Where to host - **decision for Josh**:
-- A PRIVATE GitHub repo's release assets need a token: `curl` from the tester's PC gets 404. So either make a
-  separate **public** repo (e.g. `klmerge-release`, no source needed, just Releases; the zip holds no game data and
-  no Dead Men / Dog Days bytes, only our code + patch recipes) and upload the zip as a release asset (GitHub's limit is
-  2 GB per asset), or use any plain https host (Dropbox link with `?dl=1`; avoid Google Drive: large files hit the
-  virus-scan page and `curl` gets HTML).
-- Copy the asset's download URL (`https://github.com/<user>/klmerge-release/releases/download/v<ver>/KLMerge_package_v<ver>.zip`)
-  into the ONE `set "RELEASE_URL=..."` line of `tools\launcher\KL Dead Men Rising Setup.bat`. Hand out that .bat (and the
-  README) only; everything else comes through the URL. Keep the .bat out of this private repo's Releases.
-- `curl -z` makes a re-run download only when the server copy is newer (GitHub assets send Last-Modified: GUESS that
-  the redirect target does too; if not, re-runs re-download - annoying, not harmful).
+Where it is hosted (DECIDED 2026-11-09): the PUBLIC repo **https://github.com/R6C0/dead-men-rising** - releases only, no source,
+no game data (README only; author R6C0 with the GitHub noreply address, NO Claude co-author line on anything there: owner's rule).
+A private repo's assets would need a token (`curl` gets 404), hence the separate public repo.
+The Setup bat's RELEASE_URL is fixed for good: `https://github.com/R6C0/dead-men-rising/releases/latest/download/KLMerge_package.zip`
+= the asset named exactly `KLMerge_package.zip` of the newest release. So every release uploads the zip under THAT name:
+
+```bat
+copy /y D:\kl_release\KLMerge_package_v<ver>.zip "%TEMP%\KLMerge_package.zip"
+gh release create v<ver> "%TEMP%\KLMerge_package.zip" D:\kl_release\KLMerge_package_v<ver>.zip.sha1 --repo R6C0/dead-men-rising --title "KL: Dead Men Rising v<ver>" --notes "Tester build. Run KL Dead Men Rising Setup.bat again to update."
+```
+(GitHub's limit is 2 GB per asset.) Hand out `KL Dead Men Rising Setup.bat` (and the README) on Discord; do not attach the
+.bat to the public release unless you want anyone to find it there. A re-run of Setup downloads only when the zip is newer
+(`curl -z`; GUESS that GitHub's redirect target sends Last-Modified - if not, re-runs re-download, annoying, not harmful).
 
 ## 5. Rehearsal on a clean PC (do this before Tuesday; all UNTESTED)
 

@@ -17,13 +17,13 @@ rem
 rem  The package holds ONLY the mod's own code and config plus binary patches; the game files are
 rem  rebuilt on your PC from YOUR OWN Dog Days / Dead Men / Payday 2 installs (see README_TESTERS.md).
 rem
-rem  NOTE FOR JOSH: a PRIVATE GitHub repo's release assets cannot be downloaded without a token, so
-rem  RELEASE_URL must point at a PUBLIC release (a separate public "release" repo is fine: it holds no
-rem  game data) or at any other plain https host. Set it below before handing this file out.
+rem  RELEASE_URL points at the newest release of the public repo github.com/R6C0/dead-men-rising
+rem  (releases only, no game data). Each release carries the package as an asset named exactly
+rem  KLMerge_package.zip, so this link never has to change.
 rem ===========================================================================================
 
 rem ---- the ONE line to edit -----------------------------------------------------------------
-set "RELEASE_URL=https://example.invalid/KLMerge/releases/download/v1.0.0/KLMerge_package.zip"
+set "RELEASE_URL=https://github.com/R6C0/dead-men-rising/releases/latest/download/KLMerge_package.zip"
 rem ---------------------------------------------------------------------------------------------
 
 rem GUESS: Python 3.12.7 embeddable (64-bit). Any 3.9+ embeddable works; zstandard ships wheels for it.

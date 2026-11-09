@@ -4,7 +4,7 @@ launcher_test.py - off-game self-test of tools/launcher/ (the tester bootstrap +
 
 Checks
   1. the files exist and are plain ASCII (cmd.exe and the ini-reading hook choke on smart quotes / UTF-8 BOMs)
-  2. KL Dead Men Rising Setup.bat (was KLMerge Setup.bat): RELEASE_URL is defined in ONE place at the top, the committed default is the placeholder, and
+  2. KL Dead Men Rising Setup.bat (was KLMerge Setup.bat): RELEASE_URL is defined in ONE place at the top, it is R6C0/dead-men-rising's latest release, and
      the script refuses to run with the placeholder (findstr example.invalid); every 'goto :label' has its label
   3. KLMergeLauncher.ps1: brace / bracket / parenthesis balance outside strings and comments; the XAML here-string is
      well-formed XML; every kl_release.py verb and option the launcher passes exists in kl_release.py's argparse;
@@ -164,7 +164,8 @@ def main():
     bat = read(BAT).decode('ascii', 'replace')
     urls = re.findall(r'^\s*set\s+"RELEASE_URL=([^"]*)"', bat, re.M)
     check(len(urls) == 1, 'RELEASE_URL is set in exactly one place (found %d)' % len(urls))
-    check(urls and 'example.invalid' in urls[0], 'the committed RELEASE_URL is the placeholder (Josh sets the real one)')
+    check(urls and urls[0] == 'https://github.com/R6C0/dead-men-rising/releases/latest/download/KLMerge_package.zip',
+          'RELEASE_URL = the public release repo\'s latest KLMerge_package.zip (a fixed asset name, so the link never changes)')
     check('findstr /i /c:"example.invalid"' in bat, 'the bat refuses to download from the placeholder URL')
     check('KLMergeLauncher.ps1' in bat and '-ExecutionPolicy Bypass -STA' in bat, 'the bat starts the launcher with -ExecutionPolicy Bypass -STA')
     check('zstandard' in bat and 'get-pip.py' in bat and '._pth' in bat, 'the bat installs zstandard into the embedded python (._pth + get-pip)')
