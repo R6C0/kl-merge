@@ -147,6 +147,15 @@ def door_data(k):
                 cand.append([round(x), round(P[1]), round(z)] if nav.at(x, P[1], z, dy=150.0) is not None else None)
             pair = [(cand[0], cand[1]), (cand[2], cand[3])]
             a, b = next(((x, y) for x, y in pair if x and y), (None, None))
+            # snap onto the group's own KickDoor_ArrowBack/Front entities (the doorway middle): door 1's leaf hangs from the hinge at its END
+            # (leaf z 2440..2560, hinge z 2560), so +-130 from the hinge sat on the jamb edge at z 2560, outside the kick box (z ~2419..2583
+            # GUESS orientation) at x -830/-800 and the prompt never showed (DM02_1109 runs b + c). Arrows: (-902, 2499) / (-1093, 2497).
+            grp = p[:-len('Door')]
+            arr = [[round(v) for v in B_.fr[B_.ents[j - 1]][1]] for j, q in enumerate(B_.sc.path)
+                   if q and q.startswith(grp) and re.search(r'KickDoor_Arrow(Back|Front)_\d+$', q)]
+            if a and b and len(arr) == 2:
+                d2 = lambda u, w: (u[0] - w[0]) ** 2 + (u[2] - w[2]) ** 2
+                a, b = (arr[0], arr[1]) if d2(a, arr[0]) + d2(b, arr[1]) <= d2(a, arr[1]) + d2(b, arr[0]) else (arr[1], arr[0])
             out.append(dict(host=int(mm.group(1)), name=p.split(BS, 1)[1][:34], hinge=[round(v) for v in P], front=a, back=b))
     return out
 
