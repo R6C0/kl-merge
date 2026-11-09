@@ -1,3 +1,7 @@
+2026-11-09 ~06:05 - [06] KICK DOORS WORK IN THE ENGINE: DOORS_1109_DM01 run 2 read all 9 kick registry slots: door 957's controller (slot 7, ptr 5264c9f0) went state 1 -> 3 on E x2
+(prompt 0x12 offered before, cleared after; player snapped 55 cm into the kick). So E is the kick key and the graft registers right; 'stayed shut' in run 1 = the walk left the kick box.
+Door 2 ran on a dead player (police kill 05:53:28, lives 3 -> 2): no verdict. Kits now kick from the stand. Open: does the leaf swing / collision clear at state 3 (look at shots).
+New kit DM07GATE_1109 (no van): crossings through visible 4m_02/4m_03 vs hidden 4m_01, stepped pos at the fence line -> decides un-hide vs re-route. Commits 18a8e863, b75ccbd4.
 2026-11-09 ~05:50 - [06] BENCH_1109 vans: DM01B_1109 PASS 11/0 (waits (5290,32027), drives EAST to (17365,31663), resets to the unseen start pocket). DM07_1109 run 2 online PASS 7/0, 0 faults: van parks,
 reverses WEST to -6000, gate panels 4m_01/_11 hidden. BUT the player walked from (-3909,10301) through the panel line x -4600 to (-5801,10383) alive: the hidden panels do NOT keep players out of the pocket
 (the 'render only, collision kept' static reading is contradicted live; KillBox -5832 = the van's nose box, not a bound). Workflow dm07-gate-leak researching cause + staged fix. Door kits now peek kick registry + prompt ids.
