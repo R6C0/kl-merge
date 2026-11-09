@@ -1,3 +1,6 @@
+2026-11-09 ~05:50 - [06] BENCH_1109 vans: DM01B_1109 PASS 11/0 (waits (5290,32027), drives EAST to (17365,31663), resets to the unseen start pocket). DM07_1109 run 2 online PASS 7/0, 0 faults: van parks,
+reverses WEST to -6000, gate panels 4m_01/_11 hidden. BUT the player walked from (-3909,10301) through the panel line x -4600 to (-5801,10383) alive: the hidden panels do NOT keep players out of the pocket
+(the 'render only, collision kept' static reading is contradicted live; KillBox -5832 = the van's nose box, not a bound). Workflow dm07-gate-leak researching cause + staged fix. Door kits now peek kick registry + prompt ids.
 2026-11-09 ~05:00 - [06] BENCH_1109 (owner-OK installs, tools/kl_bench_1109.py, kits C:\kl_build_1024\bench_1109, now pinned to merged_1108h 52b37716/fceb3c6d/4a740f92): HASTA1109 PASS (vault blast hides
 barricade + roadblock, broken shown; boom/shake/glare unseen, 0 shots). DM03_1109 + DM02_1109 online PASS 0 faults (DM03 census 44, cops hit bots) but the KICK DOORS stayed shut after E x2 and block the player
 (collision holds). Bench aim bugs fixed (doorway middle, face the far side, waitstate 0x19 before tele); E as kick key unproven (workflow researching the trigger). Queue: DM01B, DM07, DOORS DM01/DM03A, DM02+DM03 re-runs.
