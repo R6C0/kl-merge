@@ -35,6 +35,20 @@ never deleted, so UNINSTALL puts everything back exactly.
 
 The launcher remembers your folders in `KLMergeLauncher.settings.json` beside it, and everything it prints in `KLMergeLauncher.log`.
 
+## If Windows Defender / SmartScreen complains
+
+- **SmartScreen** ("Windows protected your PC") shows for any downloaded .bat or unsigned .exe: More info > Run anyway.
+- **Windows Defender** may flag `KLMerge Setup.bat` or `KLMerge.bat` with a heuristic name such as
+  `Trojan:Win32/Ceprolad.A`. That heuristic fires on the *shape* of the script (a batch file that starts PowerShell with
+  a lowered execution policy and downloads a file), not on anything it found inside. Both .bat files and
+  `KLMergeLauncher.ps1` are **plain text**: open them in Notepad and read what they do. They download the package from
+  the one URL at the top of the Setup file, unpack it, start the launcher, and never delete anything (the only move is
+  the unpacked package into `package\`).
+- If Defender quarantined a file: Windows Security > Virus & threat protection > Protection history > the entry >
+  Actions > Restore (or Allow). Then right-click the file > Properties > tick **Unblock** > OK, so the "downloaded from
+  the internet" mark is gone, and run it again.
+- A signed `KLMergeSetup.exe` that replaces the batch files is planned; until then the scripts stay readable on purpose.
+
 ## Music and the background
 
 The launcher plays a Dead Men music clip quietly. **That clip is not part of the download**: when the launcher knows

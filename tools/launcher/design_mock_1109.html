@@ -1,0 +1,110 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>KL Merge launcher - in-game look</title>
+<style>
+  @font-face{font-family:Anton;src:url(fonts/Anton.ttf) /* OFL font, not in the repo: Impact on Windows is the real face */}
+  html,body{margin:0;background:#000}
+  :root{--chalk:#F3F0EA;--coral:#F0475A;--ink:#0C0C0D;--amber:#E0962E;--green:#63A05B;--dead:#8C3138;--grey:#9A968F}
+  .win{position:relative;width:1180px;height:760px;overflow:hidden;background:var(--ink);color:var(--chalk);font:13px 'DejaVu Sans Condensed','Bahnschrift SemiCondensed',sans-serif}
+  .bgL,.bgR{position:absolute;inset:0}
+  .bgR{background:linear-gradient(160deg,#14262c 0%,#0b161b 55%,#07090c 100%)}
+  .bgR:after{content:"";position:absolute;inset:0;background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.04) 0 1px,transparent 1px 3px),repeating-linear-gradient(90deg,rgba(90,190,210,.05) 0 8px,transparent 8px 16px);mix-blend-mode:screen}
+  .bgL{background:linear-gradient(180deg,#3a3734 0%,#262422 45%,#121110 100%);-webkit-mask-image:linear-gradient(112deg,#000 0 42%,transparent 58% 100%);mask-image:linear-gradient(112deg,#000 0 42%,transparent 58% 100%)}
+  .grain{position:absolute;inset:0;opacity:.16!important;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");opacity:.22;mix-blend-mode:overlay}
+  .dim{position:absolute;inset:0;background:rgba(0,0,0,.28)}
+  .vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,rgba(0,0,0,0) 0%,rgba(0,0,0,.25) 55%,rgba(0,0,0,.9) 100%)}
+  .scratch{position:absolute;inset:0;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'><g stroke='white' stroke-opacity='.08' fill='none'><path d='M20 380 L 190 40'/><path d='M400 10 L 430 390' stroke-width='.6'/><path d='M560 60 L 520 330' stroke-width='.4'/><path d='M80 120 L 120 118' stroke-width='1.5'/></g></svg>");background-size:600px 400px;opacity:.6;mix-blend-mode:screen}
+  .ui{position:absolute;inset:0;padding:26px 30px 22px;box-sizing:border-box;display:grid;grid-template-rows:auto 1fr auto;gap:12px}
+  .chip{filter:url(#chip)}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:6px;position:relative}
+  .head .rule{position:absolute;left:0;right:0;bottom:-8px;height:8px}
+  .brand{display:flex;align-items:flex-end;gap:16px}
+  .h1{font:56px/0.9 Anton;letter-spacing:1px;color:var(--chalk);text-transform:uppercase;transform:rotate(-.6deg)}
+  .h1 b{color:var(--coral);font-weight:normal}
+  .sub{font:18px/1 Anton;letter-spacing:2.5px;color:var(--grey);margin-bottom:6px;text-transform:uppercase}
+  .right{display:flex;align-items:flex-end;gap:16px;margin-bottom:6px}
+  .ver,.note{font:15px/1 Anton;letter-spacing:1.5px;color:var(--grey);text-transform:uppercase}
+  .mute{font:16px/1 Anton;letter-spacing:2px;color:var(--chalk);padding:4px 10px 3px;position:relative}
+  .mute:after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:3px;background:var(--chalk);clip-path:polygon(0 0,38% 0,38% 100%,0 100%,0 0,45% 0,100% 0,100% 100%,45% 100%)}
+  .main{display:grid;grid-template-columns:420px 1fr;gap:26px;min-height:0;margin-top:6px}
+  .col{display:flex;flex-direction:column;gap:6px}
+  .btn{position:relative;font:30px/1 Anton;letter-spacing:2px;text-transform:uppercase;color:var(--chalk);padding:11px 0 9px 22px}
+  .btn .bar{position:absolute;left:0;top:8px;bottom:6px;width:7px;background:var(--chalk);clip-path:polygon(0 0,100% 0,100% 44%,20% 46%,20% 52%,100% 54%,100% 100%,0 100%)}
+  .btn.primary{color:var(--coral);font-size:38px}
+  .btn.primary .bar{background:var(--coral);width:9px}
+  .btn.hover{color:var(--coral)}
+  .btn.hover .bar{background:var(--coral)}
+  .btn.dim{font-size:24px;color:#CFCAC2}
+  .hint{font-size:11.5px;color:var(--grey);margin:2px 0 8px 22px;max-width:380px}
+  .small{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;margin:8px 0 0 22px}
+  .small .btn{font-size:18px;letter-spacing:1.5px;padding:7px 0 5px 14px;color:#CFCAC2}
+  .small .btn .bar{width:4px;top:6px;bottom:4px}
+  .plate{position:relative;padding:16px 22px 18px;align-self:start}
+  .plate svg.smear{position:absolute;inset:-10px -14px;width:calc(100% + 28px);height:calc(100% + 20px);z-index:0}
+  .plate .in{position:relative;z-index:1;display:grid;grid-template-columns:118px 1fr 40px;row-gap:9px;align-items:baseline}
+  .plate .t{grid-column:1/4;font:22px/1 Anton;letter-spacing:3px;color:var(--coral);margin-bottom:6px;text-transform:uppercase}
+  .k{font:16px/1 Anton;letter-spacing:2px;color:#B8B3AA;text-transform:uppercase;filter:url(#chip)}
+  .v{font-size:12.5px;color:var(--chalk);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .v.ok{color:var(--green)} .v.warn{color:var(--amber)}
+  .p{font:14px/1 Anton;color:var(--grey);text-align:center;letter-spacing:2px}
+  .log{position:relative;padding:10px 16px 12px}
+  .log svg.smear{position:absolute;inset:-6px -10px;width:calc(100% + 20px);height:calc(100% + 12px);z-index:0}
+  .log .t{position:relative;z-index:1;font:16px/1 Anton;letter-spacing:3px;color:var(--grey);margin-bottom:6px}
+  pre{position:relative;z-index:1;margin:0;height:128px;overflow:hidden;color:#CFCAC2;font:12px/1.5 'DejaVu Sans Mono',Consolas,monospace}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="chip" x="-2%" y="-2%" width="104%" height="104%">
+    <feTurbulence type="fractalNoise" baseFrequency=".055 .09" numOctaves="2" seed="7" result="t"/>
+    <feDisplacementMap in="SourceGraphic" in2="t" scale="1.4" xChannelSelector="R" yChannelSelector="G" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="3" result="s"/>
+    <feColorMatrix in="s" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  6 0 0 0 -3.9" result="holes"/>
+    <feComposite in="d" in2="holes" operator="out"/>
+  </filter>
+  <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency=".02 .4" numOctaves="2" seed="11" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="6" xChannelSelector="R" yChannelSelector="G"/></filter>
+</svg>
+<div class="win">
+  <div class="bgR"></div><div class="bgL"></div><div class="dim"></div><div class="grain"></div><div class="scratch"></div><div class="vig"></div>
+  <div class="ui">
+    <div class="head">
+      <div class="brand chip"><div class="h1">KL <b>MERGE</b></div><div class="sub">Dead Men inside Dog Days</div></div>
+      <div class="right"><span class="note">&#9834; Dead Men menu theme &nbsp;22%</span><span class="mute">MUTE</span><span class="ver">Tester build 1.0.0</span></div>
+      <svg class="rule" viewBox="0 0 1120 6" preserveAspectRatio="none"><g filter="url(#rough)"><path d="M0 3 H 300 M 318 3 H 690 M 700 3 H 1120" stroke="#F3F0EA" stroke-width="4" stroke-opacity=".95"/><path d="M0 3 H 1120" stroke="#F3F0EA" stroke-width="1" stroke-opacity=".35" stroke-dasharray="40 9 3 12"/></g></svg>
+    </div>
+    <div class="main">
+      <div class="col chip">
+        <div class="btn primary"><span class="bar"></span>Play KL Merge</div>
+        <div class="btn hover"><span class="bar"></span>Play Dog Days <span style="font-size:.55em;letter-spacing:1px;color:var(--grey)">&nbsp;STOCK</span></div>
+        <div class="hint">Stock = the hook is switched off for that launch (dinput8.dll renamed, never deleted). Both start the game through Steam.</div>
+        <div class="btn dim"><span class="bar"></span>Install / Update</div>
+        <div class="btn dim"><span class="bar"></span>Verify</div>
+        <div class="btn dim"><span class="bar"></span>Uninstall <span style="font-size:.6em;letter-spacing:1px;color:var(--grey)">&nbsp;RESTORE STOCK</span></div>
+        <div class="small"><div class="btn"><span class="bar"></span>Hook on / off</div><div class="btn"><span class="bar"></span>Collect logs</div><div class="btn"><span class="bar"></span>Game folder</div><div class="btn"><span class="bar"></span>Refresh</div></div>
+      </div>
+      <div class="plate">
+        <svg class="smear" viewBox="0 0 700 420" preserveAspectRatio="none"><path filter="url(#rough)" d="M6 14 Q 120 2 330 8 T 694 12 L 690 404 Q 520 418 300 410 T 8 406 Z" fill="#0A0A0B" fill-opacity=".86"/><path filter="url(#rough)" d="M14 18 H 690" stroke="#F3F0EA" stroke-opacity=".55" stroke-width="2" stroke-dasharray="220 14 90 30 300"/></svg>
+        <div class="in">
+          <div class="t">Status</div>
+          <div class="k">Dog Days</div><div class="v ok">C:\Steam\steamapps\common\Kane &amp; Lynch 2 - Dog Days</div><div class="p">...</div>
+          <div class="k">Dead Men</div><div class="v ok">G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men</div><div class="p">...</div>
+          <div class="k">Payday 2</div><div class="v warn">not found (optional: PD2 guns are skipped)</div><div class="p">...</div>
+          <div class="k">Mod</div><div class="v ok">installed - 61 files in the journal</div><div></div>
+          <div class="k">Hook</div><div class="v ok">ON - dinput8.dll 52b37716 = package hook</div><div></div>
+          <div class="k">Package</div><div class="v">KLMerge 1.0.0 - 20 maps, 612 MB of patches</div><div></div>
+          <div class="k">Python</div><div class="v">embedded 3.12.7 (launcher\python)</div><div></div>
+          <div class="k">Game</div><div class="v">not running</div><div></div>
+        </div>
+      </div>
+    </div>
+    <div class="log">
+      <svg class="smear" viewBox="0 0 1140 180" preserveAspectRatio="none"><path filter="url(#rough)" d="M4 10 Q 400 0 760 6 T 1136 8 L 1132 172 Q 700 180 380 174 T 6 170 Z" fill="#0A0A0B" fill-opacity=".82"/></svg>
+      <div class="t chip">LOG</div>
+<pre>14:31:02  launcher 1.0.0 started, settings read
+14:31:02  Dog Days found via Steam libraryfolders.vdf
+14:31:03  hook ON (dinput8.dll sha1 52b37716...) = package hook
+14:31:03  music: deadmen_launcher.wav present (menu theme, 90 s), volume 0.22, playing
+14:31:05  verify: 61/61 files match the journal - mod is healthy
+14:31:05  ready. PLAY KL MERGE starts Dog Days through Steam with the hook on.</pre>
+    </div>
+  </div>
+</div>
+</body></html>

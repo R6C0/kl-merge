@@ -12,7 +12,14 @@ Checks
   3b. music + background (2026-11-09): MediaPlayer with loop + MediaFailed handling, quiet default volume, the music file and
      tool names, Muted / Volume / MusicClip in the settings, the ASCII-escaped note sign, try/catch around audio and images,
      the two ImageBrush sides with an OpacityMask seam under dim / grain / vignette, the procedural fallback brushes, and that
-     the bat / pack_release.ps1 / READMEs carry the tool, bg\*.jpg and the music\ exclusion
+     the bat / pack_release.ps1 / READMEs carry the tool, bg\\*.jpg and the music\\ exclusion
+  3c. the in-game look (owner, 2026-11-09, tools/kl_hud.py --look deadmen): Impact first in the heading face, the kit's
+     palette (INK / CHALK / CORAL / AMBER / GREEN / DEAD), the old red fills gone, chip tiles (CombinedGeometry Exclude
+     in a tiled DrawingBrush used as OpacityMask) with ChipAmount / ChipSeed marked GUESS, brush bars with a break
+     instead of filled / bordered buttons, smear panels (Smear-Path), values and the log NOT chipped, a tracked title
+  3d. Defender (2026-11-09): no "-WindowStyle Hidden" in either .bat (the heuristic Trojan:Win32/Ceprolad.A fired on
+     that + Bypass), the launcher is started minimized, the Setup .bat deletes nothing (no del / rmdir / Remove-Item;
+     robocopy /MOVE is the one move and is commented), and README_TESTERS has the Defender / SmartScreen section
   4. when pwsh (PowerShell 7) is on the PATH, the script is parsed with System.Management.Automation.Language.Parser
      and must give 0 errors (else SKIPPED with a note, never a FAIL)
   5. README_TESTERS.md names the log / dump files a tester must send, and OWNER_RELEASE_STEPS.md has the make command
@@ -135,6 +142,16 @@ def main():
         pass  # (the bat does not touch the game folder itself; nothing to check here)
     wrap = read(WRAP).decode('ascii', 'replace')
     check('-ExecutionPolicy Bypass -STA' in wrap and 'KLMergeLauncher.ps1' in wrap, 'KLMerge.bat wraps the ps1 with -ExecutionPolicy Bypass -STA')
+    # 3d. Defender: the hidden-window form of the powershell start is the heuristic trigger; minimized is fine
+    for name, txt in (('KLMerge.bat', wrap), ('KLMerge Setup.bat', bat)):
+        code = '\n'.join(l for l in txt.splitlines() if not l.strip().lower().startswith('rem'))
+        check('-WindowStyle Hidden' not in code, name + ' does not start powershell with -WindowStyle Hidden (Defender heuristic)')
+        check(re.search(r'^start\s+"[^"]*"\s+/min\s+powershell', code, re.M | re.I) is not None, name + ' starts the launcher minimized (start /min)')
+    check('defender' in wrap.lower() and 'Ceprolad' in wrap, 'KLMerge.bat says why it is not hidden')
+    bat_code = '\n'.join(l for l in bat.splitlines() if not l.strip().lower().startswith('rem'))
+    check(re.search(r'(?im)^\s*(del|erase|rmdir|rd)\b', bat_code) is None and 'Remove-Item' not in bat_code and '-Recurse' not in bat_code,
+          'KLMerge Setup.bat has no del / erase / rmdir / Remove-Item')
+    check('/MOVE' in bat and re.search(r'rem .*?/MOVE is a MOVE', bat) is not None, 'the one robocopy /MOVE in the Setup .bat is commented as a move')
 
     # 3. the launcher script
     ps = read(PS1).decode('ascii', 'replace')
@@ -228,6 +245,54 @@ def main():
     check('tools/launcher/music/' in gi and 'tools/launcher/bg/*' in gi, '.gitignore keeps the decoded clip and the owner pictures out of the repo')
     check('kl_launcher_music.py' in bat and 'launcher\\bg\\*.jpg' in bat, 'the bat copies the music tool and bg\\*.jpg up beside the launcher')
 
+    # 3c. the in-game look (owner 2026-11-09: "follow the in-game UI theme ... a Dead Men feel"; tools/kl_hud.py --look deadmen)
+    if m:
+        res = xaml[xaml.find('<Window.Resources>'):xaml.find('</Window.Resources>')]
+        mf = re.search(r'<FontFamily x:Key="Head">([^<]*)</FontFamily>', res)
+        check(mf and mf.group(1).split(',')[0].strip() == 'Impact', 'look: the heading face is Impact first (%s)' % (mf and mf.group(1)))
+        check('FontFamily="Consolas"' in xaml[xaml.find('x:Name="TxtLog"') - 400:xaml.find('x:Name="TxtLog"') + 400], 'look: the log stays Consolas')
+        for col, what in (('#0C0C0D', 'INK background'), ('#F3F0EA', 'CHALK text'), ('#F0475A', 'CORAL accent'), ('#B8B3AA', 'muted keys'),
+                          ('#E0962E', 'AMBER warning'), ('#63A05B', 'GREEN ok'), ('#8C3138', 'DEAD red error'), ('#6E6A64', 'disabled grey')):
+            check(col in ps, 'look: palette has %s %s' % (what, col))
+        for old in ('#A3121A', '#7E0E14', '#6E0C11'):
+            check(old not in ps, 'look: the old red fill %s is gone' % old)
+        check('Background="#0C0C0D"' in xaml[:xaml.find('<Window.Resources>')], 'look: the window background is INK')
+        # chip tiles: an OpacityMask of white minus holes, tiled, on the Impact text (not on values / the log)
+        for key in ('Chip', 'ChipLight'):
+            blk = res[res.find('x:Key="%s"' % key):]
+            blk = blk[:blk.find('</DrawingBrush>')]
+            check('TileMode="Tile"' in blk and 'ViewportUnits="Absolute"' in blk and 'GeometryCombineMode="Exclude"' in blk and 'Brush="White"' in blk,
+                  'look: %s = tiled white DrawingBrush minus holes (CombinedGeometry Exclude)' % key)
+        check(re.search(r'\$script:ChipAmount = [0-9.]+\s+# GUESS', ps) is not None and '$script:ChipSeed = ' in ps, 'ps1: ChipAmount (GUESS) and ChipSeed are variables at the top of the window section')
+        check('function Chip-Nicks' in ps and 'System.Random $script:ChipSeed' in ps, 'ps1: the nicks come from a seeded RNG (Chip-Nicks)')
+        masked = re.findall(r'OpacityMask="\{StaticResource (Chip\w*)\}"', xaml) + re.findall(r'Property="OpacityMask" Value="\{StaticResource (Chip\w*)\}"', res)
+        check(len(masked) >= 8, 'look: the chip mask is used on the Impact text and buttons (%d uses: title, sub, music, version, STATUS, LOG + the button / Key styles)' % len(masked))
+        val_style = res[res.find('x:Key="Val"'):]
+        val_style = val_style[:val_style.find('</Style>')]
+        check('OpacityMask' not in val_style and 'OpacityMask' not in xaml[xaml.find('x:Name="TxtLog"'):xaml.find('x:Name="TxtLog"') + 500], 'look: values and the log are NOT chipped')
+        check('OpacityMask="{StaticResource Chip}"' in xaml[xaml.find('<!-- header'):xaml.find('<!-- body -->')] and '<Run Text="MERGE" Foreground="{StaticResource Coral}"/>' in xaml,
+              'look: the title KL MERGE is chipped, MERGE in CORAL')
+        check('RotateTransform Angle="-0.6"' in xaml, 'look: the title block leans -0.6 degrees')
+        # buttons: a brush bar with a break + the word; nothing filled, nothing bordered
+        tpl = res[res.find('x:Key="KLButton"'):]
+        tpl = tpl[:tpl.find('</Style>')]
+        check('x:Name="Bar"' in tpl and 'OpacityMask="{StaticResource BarBreak}"' in tpl, 'look: the button bar is a Border edge with the BarBreak mask (one gap)')
+        check('Background="Transparent"' in tpl and 'Background="{TemplateBinding Background}"' not in tpl and 'BorderThickness="1"' not in tpl, 'look: buttons paint no fill and no 1 px border')
+        check('Property="IsMouseOver"' in tpl and 'Property="IsPressed"' in tpl and 'Property="IsEnabled"' in tpl and '{StaticResource Off}' in tpl, 'look: hover / pressed / disabled triggers (disabled = #6E6A64)')
+        check('BorderThickness" Value="7,0,0,0"' in res and 'BorderThickness" Value="9,0,0,0"' in res and 'BorderThickness" Value="4,0,0,0"' in res, 'look: bar widths 7 / 9 (primary) / 4 (small)')
+        check('<Run Text="  (STOCK)"' in xaml and '<Run Text="  (RESTORE STOCK)"' in xaml, 'look: the secondary words are smaller grey Runs')
+        check('<Border ' not in xaml[xaml.find('<!-- body -->'):] or 'BorderThickness="1"' not in xaml[xaml.find('<!-- body -->'):], 'look: no hairline bordered Border panels in the body')
+        # smear panels + chalk rules
+        check('function Smear-Path' in ps and xaml.count('Geometry="@SMEAR_') == 2 and '@SMEAR_STATUS@' in ps and '@SMEAR_LOG@' in ps, 'look: status + log panels are Smear-Path backgrounds')
+        check('Brush="#DB0A0A0B"' in xaml and 'Brush="#D10A0A0B"' in xaml, 'look: smear fills #0A0A0B at ~86 % / ~82 %')
+        check(xaml.count('<Line X2="1" Stretch="Fill"') >= 4 and 'StrokeThickness="4"' in xaml and 'StrokeDashArray=' in xaml, 'look: chalk rules are dashed Lines (header 4 px with breaks, panel top, mute underline)')
+        check('<Path Stretch="Fill" Stroke="#14FFFFFF"' in xaml, 'look: faint diagonal scratches on the background')
+        check('x:Name="BgDim" Fill="#47000000"' in xaml and 'FromArgb(0x99, 0, 0, 0)' in ps, 'look: dim 0.28 over the fallback, 0.6 over photos')
+        check('function Track' in ps and '[char]0x200A' in ps and 'Track-Tree $script:Win' in ps, 'ps1: letter tracking by hair spaces (Track / Track-Tree), ASCII escape only')
+        check('function Set-Val' in ps and "Set-Val $ui.LblGame 'not running' 'ok'" in ps and "'bad'" in ps, 'ps1: value tones (ok / warn / bad / dim) via Set-Val')
+    if not os.path.exists(os.path.join(HERE, 'design_mock_1109.html')):
+        notes.append('design_mock_1109.html (the mock the owner judged) is not beside the launcher; the ps1 header refers to it')
+
     # 4. pwsh parse when available
     pwsh = shutil.which('pwsh') or shutil.which('powershell')
     if pwsh:
@@ -246,6 +311,9 @@ def main():
     rd = read(README).decode('utf-8', 'replace')
     for word in ('KLHook.log', 'kl2_490_crash_', 'KLHook_', '.dmp', 'KL_PortBackup', 'UNINSTALL', 'Dead Men', 'Payday 2', 'firewall'):
         check(word in rd, 'README_TESTERS mentions ' + word)
+    check('## If Windows Defender / SmartScreen complains' in rd, 'README_TESTERS has the Defender / SmartScreen section')
+    for word in ('Ceprolad', 'plain text', 'Unblock', 'Protection history', 'signed'):
+        check(word in rd[rd.find('## If Windows Defender'):], 'README_TESTERS Defender section mentions ' + word)
     ow = read(OWNER).decode('utf-8', 'replace')
     check('kl_release.py make' in ow and '--dd' in ow and '--dm' in ow, 'OWNER_RELEASE_STEPS has the make command')
     check('RELEASE_URL' in ow and 'PyInstaller' in ow, 'OWNER_RELEASE_STEPS covers RELEASE_URL and the frozen exe')

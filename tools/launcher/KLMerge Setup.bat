@@ -127,6 +127,8 @@ if not exist "%PKG%\manifest.json" (
     for /d %%D in ("%PKG%\*") do (
         if exist "%%D\manifest.json" (
             echo  (package was inside folder %%~nxD: moving it up)
+            rem /MOVE is a MOVE of the unpacked files one folder up (the emptied wrapper folder goes with it);
+            rem it is the only thing in this file that takes a path away, and it only ever touches .\package\
             robocopy "%%D" "%PKG%" /E /MOVE /NFL /NDL /NJH /NJS /NP >nul
         )
     )
@@ -240,7 +242,8 @@ rem ---- 4. launcher -----------------------------------------------------------
 echo.
 echo  Starting the launcher ...
 echo [%date% %time%] launcher started >> "%LOG%"
-start "" powershell -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "%HERE%KLMergeLauncher.ps1"
+rem minimized, not -WindowStyle Hidden: the hidden form trips Defender's heuristic (see KLMerge.bat)
+start "KL Merge" /min powershell -NoProfile -ExecutionPolicy Bypass -STA -File "%HERE%KLMergeLauncher.ps1"
 endlocal
 exit /b 0
 

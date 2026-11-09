@@ -34,6 +34,12 @@
 #                     the grain and the vignette. Missing images = a procedural fallback: left a desaturated grey film-grain
 #                     gradient (Dead Men's 2007 documentary grime), right a cooler dark teal with blocky 'compressed video'
 #                     noise and scan lines (Dog Days' camcorder look). No art, logos or characters are drawn by this script.
+#   LOOK (2026-11-09) the in-game Dead Men theme (tools/kl_hud.py --look deadmen; mock tools/launcher/design_mock_1109.html):
+#                     Impact capitals with light chipping (a tiled OpacityMask of white minus a few 1-2 px holes, Chip-Nicks),
+#                     buttons = a chalk brush bar with one break + the word (no fills, no borders), panels = a torn dark
+#                     smear (a jittered polygon as the panel's Background brush, Smear-Path) with a broken chalk stroke on
+#                     top, the kit's palette (INK / CHALK / CORAL / AMBER / GREEN / DEAD red). Values and the log stay plain.
+#                     ChipAmount / ChipSeed at the top of the window section; letter tracking = hair spaces (Track).
 #
 # Where things are
 #   package        <launcher folder>\package (manifest.json + patches\ + kl_release.py, optionally KLMergeSetup.exe),
@@ -49,7 +55,8 @@
 # Steam launch options of the player are NEVER read or written. (Josh: your own options -o DefaultScene=... AutoExit=120
 # are your test setup; with them this launcher would boot straight into F01 and quit after 120 s on YOUR PC only.)
 #
-# GUESS list (not run on a Windows PC when written): the WPF font fallback list, the Payday 2 folder name 'PAYDAY 2'
+# GUESS list (not run on a Windows PC when written): the WPF font fallback list, the hair-space tracking (width of U+200A in
+# the fallback face, see $script:Hair), the chip amount 4 % (ChipAmount), the Payday 2 folder name 'PAYDAY 2'
 # (same as kl_release.py), that PyInstaller's frozen exe flushes stdout line by line (python gets -u, the exe cannot);
 # music: volume 0.22 as 'slightly', that MediaPlayer.MediaEnded + Position = 0 loops a .wav without a gap, that the WPF
 # JPEG decoder takes the owner's screenshots as they are; the seam's gradient points (relative to the window, so the seam
@@ -265,47 +272,149 @@ function Launch-Game {
 }
 
 # ------------------------------------------------------------------------------------------------ the window
-$grainSeed = New-Object System.Random 1313
+# LOOK (owner, 2026-11-09): the in-game Dead Men theme of tools/kl_hud.py --look deadmen, not a 'launcher'. Impact
+# capitals with LIGHT chipping, brush-kit bars instead of boxes, a torn dark smear behind each panel, the kit's palette:
+# INK #0C0C0D, CHALK #F3F0EA, CORAL #F0475A, AMBER #E0962E, GREEN #63A05B, DEAD red #8C3138, muted keys #B8B3AA.
+# Mock the owner judged: tools/launcher/design_mock_1109.html (Anton stood in for Impact there).
+$script:ChipAmount = 0.04      # GUESS: share of the lettering eaten by nicks (kl_hud _chip keeps all nicks under 3 % of a glyph;
+                               #        here the holes also fall on the gaps between letters, so 4 % of the tile is about that;
+                               #        0 = no chipping at all)
+$script:ChipSeed = 1109        # the seed of every chip, bar break and smear edge: the same wear on every start
+$script:Hair = [string][char]0x200A   # GUESS: a hair space between letters stands in for letter tracking (WPF TextBlock has
+                                      #        no letter-spacing); Impact has no U+200A, the fallback face draws it ~1/10 em
+
+$wearSeed = New-Object System.Random $script:ChipSeed
+$inv = [System.Globalization.CultureInfo]::InvariantCulture
+function Num([double]$v) { return $v.ToString('0.##', $inv) }     # Path / Rect numbers always with a dot, whatever the locale
+
 function Grain-Rects([int]$n, [int]$size, [int]$dot = 1, [int]$snap = 1) {
     # $n random $dot x $dot squares in a $size x $size tile; $snap > 1 puts them on a grid (the 'macroblock' look)
     $sb = New-Object System.Text.StringBuilder
     for ($i = 0; $i -lt $n; $i++) {
-        $x = $grainSeed.Next(0, $size); $y = $grainSeed.Next(0, $size)
+        $x = $wearSeed.Next(0, $size); $y = $wearSeed.Next(0, $size)
         if ($snap -gt 1) { $x = $x - ($x % $snap); $y = $y - ($y % $snap) }
         [void]$sb.Append('<RectangleGeometry Rect="' + $x + ',' + $y + ',' + $dot + ',' + $dot + '"/>')
     }
     return $sb.ToString()
 }
-$grainLight = Grain-Rects 90 96
-$grainDark = Grain-Rects 70 96
+
+function Chip-Nicks([double]$amount, [int]$size, [bool]$big) {
+    # The nicks of one $size x $size chip tile: 1 x 1, 2 x 1 and 1 x 2 holes at fixed pseudo-random spots until about
+    # 70 % of $amount * area is taken, plus (when $big) two slightly larger elliptical bites. The tile is a WHITE square
+    # minus these holes (CombinedGeometry Exclude) and is used as an OpacityMask: where a hole lies the ink is gone,
+    # like kl_hud's _chip nicks bitten out of the glyph outline. Below ~16 px text gets the 'Light' tile (half amount,
+    # 1 px holes only), after kl_hud (no chips under 16 px: a nick eats a thin stem).
+    $sb = New-Object System.Text.StringBuilder
+    $area = $size * $size * $amount
+    $used = 0.0
+    $guard = 0
+    while ($used -lt $area * 0.7 -and $guard -lt 200) {
+        $guard++
+        $w = 1; $h = 1
+        if ($big) {
+            $r = $wearSeed.Next(0, 4)
+            if ($r -eq 0) { $w = 2 } elseif ($r -eq 1) { $h = 2 }
+        }
+        $x = $wearSeed.Next(0, $size - $w + 1); $y = $wearSeed.Next(0, $size - $h + 1)
+        [void]$sb.Append('<RectangleGeometry Rect="' + $x + ',' + $y + ',' + $w + ',' + $h + '"/>')
+        $used += $w * $h
+    }
+    if ($big) {
+        for ($i = 0; $i -lt 2; $i++) {
+            $cx = $wearSeed.Next(2, $size - 2); $cy = $wearSeed.Next(2, $size - 2)
+            $rx = 1.0 + $wearSeed.NextDouble() * 0.6; $ry = 0.7 + $wearSeed.NextDouble() * 0.4
+            [void]$sb.Append('<EllipseGeometry Center="' + (Num $cx) + ',' + (Num $cy) + '" RadiusX="' + (Num $rx) + '" RadiusY="' + (Num $ry) + '"/>')
+        }
+    }
+    return $sb.ToString()
+}
+
+function Smear-Path([int]$n, [double]$jx, [double]$jy) {
+    # A torn dark smear: a closed polygon on a 1000 x 1000 box with $n points per edge, each pulled in or out by up to
+    # $jx (sides) / $jy (top, bottom) units, used as the Geometry of the panel's Background DrawingBrush (Stretch=Fill, so
+    # it takes the panel's size and has no layout of its own). No two edges are straight, the corners are soft (not a
+    # box), like kl_hud _plate_pixels 'plate' (rows that wander by 0..4 px).
+    $pts = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -le $n; $i++) { $pts.Add((Num (1000.0 * $i / $n)) + ',' + (Num (($wearSeed.NextDouble() * 2 - 1) * $jy))) }
+    for ($i = 1; $i -le $n; $i++) { $pts.Add((Num (1000 + ($wearSeed.NextDouble() * 2 - 1) * $jx)) + ',' + (Num (1000.0 * $i / $n))) }
+    for ($i = $n - 1; $i -ge 0; $i--) { $pts.Add((Num (1000.0 * $i / $n)) + ',' + (Num (1000 + ($wearSeed.NextDouble() * 2 - 1) * $jy))) }
+    for ($i = $n - 1; $i -ge 1; $i--) { $pts.Add((Num (($wearSeed.NextDouble() * 2 - 1) * $jx)) + ',' + (Num (1000.0 * $i / $n))) }
+    return 'M ' + $pts[0] + ' L ' + (($pts | Select-Object -Skip 1) -join ' ') + ' Z'
+}
+
+$chipNicks = Chip-Nicks $script:ChipAmount 24 $true
+$chipLight = Chip-Nicks ($script:ChipAmount * 0.5) 24 $false
+$grainLight = Grain-Rects 170 96
+$grainDark = Grain-Rects 130 96
 $filmLight = Grain-Rects 60 64 2            # left fallback: coarse film grain (Dead Men's grime)
 $filmDark = Grain-Rects 80 64 2
 $blocksLight = Grain-Rects 22 128 8 8       # right fallback: 8 px macroblocks (Dog Days' compressed video)
 $blocksTint = Grain-Rects 14 128 8 8
 $blocksDark = Grain-Rects 26 128 8 8
+$smearStatus = Smear-Path 10 9 14           # status plate: 10 points per edge
+$smearLog = Smear-Path 12 6 22              # log plate: flatter, so its top and bottom wander more in box units
 
 $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="KL MERGE" Width="960" Height="680" MinWidth="820" MinHeight="560"
-        Background="#0A0A0A" Foreground="#CFCFCF" WindowStartupLocation="CenterScreen"
-        FontFamily="Segoe UI" FontSize="13" UseLayoutRounding="True" SnapsToDevicePixels="True">
+        Title="KL MERGE" Width="1040" Height="720" MinWidth="860" MinHeight="580"
+        Background="#0C0C0D" Foreground="#F3F0EA" WindowStartupLocation="CenterScreen"
+        FontFamily="Bahnschrift SemiCondensed, Segoe UI" FontSize="13" UseLayoutRounding="True" SnapsToDevicePixels="True">
   <Window.Resources>
-    <!-- GUESS: WPF resolves the first family it finds in this list; Bahnschrift Condensed may show as plain Bahnschrift -->
-    <FontFamily x:Key="Head">Bahnschrift Condensed, Bahnschrift, Impact, Segoe UI</FontFamily>
-    <SolidColorBrush x:Key="Red" Color="#A3121A"/>
-    <SolidColorBrush x:Key="RedDim" Color="#6E0C11"/>
-    <SolidColorBrush x:Key="Ink" Color="#D9D9D9"/>
-    <SolidColorBrush x:Key="Grey" Color="#8A8A8A"/>
-    <SolidColorBrush x:Key="Rule" Color="#2C2C2C"/>
-    <SolidColorBrush x:Key="Panel" Color="#121212"/>
-    <DrawingBrush x:Key="Grain" TileMode="Tile" Viewport="0,0,96,96" ViewportUnits="Absolute" Opacity="0.6">
+    <!-- the chip tiles: white 24 x 24 minus a handful of holes, tiled over the Impact lettering as an OpacityMask (see Chip-Nicks) -->
+    <DrawingBrush x:Key="Chip" TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute">
+      <DrawingBrush.Drawing>
+        <GeometryDrawing Brush="White">
+          <GeometryDrawing.Geometry>
+            <CombinedGeometry GeometryCombineMode="Exclude">
+              <CombinedGeometry.Geometry1><RectangleGeometry Rect="0,0,24,24"/></CombinedGeometry.Geometry1>
+              <CombinedGeometry.Geometry2><GeometryGroup>@CHIP_NICKS@</GeometryGroup></CombinedGeometry.Geometry2>
+            </CombinedGeometry>
+          </GeometryDrawing.Geometry>
+        </GeometryDrawing>
+      </DrawingBrush.Drawing>
+    </DrawingBrush>
+    <DrawingBrush x:Key="ChipLight" TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute">
+      <DrawingBrush.Drawing>
+        <GeometryDrawing Brush="White">
+          <GeometryDrawing.Geometry>
+            <CombinedGeometry GeometryCombineMode="Exclude">
+              <CombinedGeometry.Geometry1><RectangleGeometry Rect="0,0,24,24"/></CombinedGeometry.Geometry1>
+              <CombinedGeometry.Geometry2><GeometryGroup>@CHIP_LIGHT@</GeometryGroup></CombinedGeometry.Geometry2>
+            </CombinedGeometry>
+          </GeometryDrawing.Geometry>
+        </GeometryDrawing>
+      </DrawingBrush.Drawing>
+    </DrawingBrush>
+    <!-- the bar break: an alpha gradient with hard stops, a 1-2 px gap just under the middle of every brush bar (kl_hud stroke() gaps) -->
+    <LinearGradientBrush x:Key="BarBreak" StartPoint="0,0" EndPoint="0,1">
+      <GradientStop Color="#FF000000" Offset="0.0"/>
+      <GradientStop Color="#FF000000" Offset="0.46"/>
+      <GradientStop Color="#00000000" Offset="0.46"/>
+      <GradientStop Color="#00000000" Offset="0.51"/>
+      <GradientStop Color="#FF000000" Offset="0.51"/>
+      <GradientStop Color="#FF000000" Offset="1.0"/>
+    </LinearGradientBrush>
+    <!-- GUESS: WPF takes the first installed family of the list; Impact ships with Windows since 98 -->
+    <FontFamily x:Key="Head">Impact, Haettenschweiler, Arial Narrow</FontFamily>
+    <FontFamily x:Key="Body">Bahnschrift SemiCondensed, Segoe UI</FontFamily>
+    <SolidColorBrush x:Key="Chalk" Color="#F3F0EA"/>
+    <SolidColorBrush x:Key="ChalkDim" Color="#CFCAC2"/>
+    <SolidColorBrush x:Key="Coral" Color="#F0475A"/>
+    <SolidColorBrush x:Key="CoralHi" Color="#FF7384"/>
+    <SolidColorBrush x:Key="Key" Color="#B8B3AA"/>
+    <SolidColorBrush x:Key="Grey" Color="#9A968F"/>
+    <SolidColorBrush x:Key="Off" Color="#6E6A64"/>
+    <SolidColorBrush x:Key="Amber" Color="#E0962E"/>
+    <SolidColorBrush x:Key="Green" Color="#63A05B"/>
+    <SolidColorBrush x:Key="Dead" Color="#8C3138"/>
+    <DrawingBrush x:Key="Grain" TileMode="Tile" Viewport="0,0,96,96" ViewportUnits="Absolute" Opacity="0.8">
       <DrawingBrush.Drawing>
         <DrawingGroup>
-          <GeometryDrawing Brush="#16FFFFFF">
+          <GeometryDrawing Brush="#2CFFFFFF">
             <GeometryDrawing.Geometry><GeometryGroup><!--GRAIN_LIGHT--></GeometryGroup></GeometryDrawing.Geometry>
           </GeometryDrawing>
-          <GeometryDrawing Brush="#30000000">
+          <GeometryDrawing Brush="#4A000000">
             <GeometryDrawing.Geometry><GeometryGroup><!--GRAIN_DARK--></GeometryGroup></GeometryDrawing.Geometry>
           </GeometryDrawing>
         </DrawingGroup>
@@ -330,9 +439,9 @@ $xaml = @'
       </DrawingBrush.Drawing>
     </DrawingBrush>
     <LinearGradientBrush x:Key="VideoGrad" StartPoint="1,0" EndPoint="0,1">
-      <GradientStop Color="#FF10303A" Offset="0.0"/>
-      <GradientStop Color="#FF0B1C23" Offset="0.5"/>
-      <GradientStop Color="#FF070D12" Offset="1.0"/>
+      <GradientStop Color="#FF14262C" Offset="0.0"/>
+      <GradientStop Color="#FF0B161B" Offset="0.55"/>
+      <GradientStop Color="#FF07090C" Offset="1.0"/>
     </LinearGradientBrush>
     <DrawingBrush x:Key="VideoBlocks" TileMode="Tile" Viewport="0,0,128,128" ViewportUnits="Absolute" Opacity="0.8">
       <DrawingBrush.Drawing>
@@ -356,36 +465,44 @@ $xaml = @'
         </GeometryDrawing>
       </DrawingBrush.Drawing>
     </DrawingBrush>
+    <!-- BUTTONS: no filled rectangle, no 1 px border. A brush BAR on the left (a Border whose left edge is the bar, its
+         OpacityMask the break) + the Impact word. Foreground / BorderBrush = the resting colour of word / bar;
+         Background is NEVER painted: it is the HOVER colour (word and bar take it on mouse-over). Pressed dims, disabled greys. -->
     <Style x:Key="KLButton" TargetType="Button">
       <Setter Property="FontFamily" Value="{StaticResource Head}"/>
-      <Setter Property="FontSize" Value="17"/>
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
-      <Setter Property="Background" Value="#151515"/>
-      <Setter Property="BorderBrush" Value="#3A3A3A"/>
-      <Setter Property="Padding" Value="18,9"/>
-      <Setter Property="Margin" Value="0,0,0,10"/>
+      <Setter Property="FontSize" Value="27"/>
+      <Setter Property="Foreground" Value="{StaticResource Chalk}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Chalk}"/>
+      <Setter Property="Background" Value="{StaticResource Coral}"/>
+      <Setter Property="BorderThickness" Value="7,0,0,0"/>
+      <Setter Property="Padding" Value="15,8,0,7"/>
+      <Setter Property="Margin" Value="0,0,0,6"/>
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
       <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Tag" Value="track"/>
+      <Setter Property="OpacityMask" Value="{StaticResource Chip}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="B" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="{TemplateBinding Padding}">
-              <Grid>
-                <Rectangle x:Name="Bar" Width="3" HorizontalAlignment="Left" Margin="-18,-9,0,-9" Fill="{StaticResource Red}" Visibility="Collapsed"/>
-                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
-              </Grid>
-            </Border>
+            <Grid x:Name="Root" Background="Transparent">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Border x:Name="Bar" Grid.Column="0" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                      OpacityMask="{StaticResource BarBreak}" Margin="0,3,0,2"/>
+              <ContentPresenter x:Name="Txt" Grid.Column="1" Margin="{TemplateBinding Padding}" TextElement.Foreground="{TemplateBinding Foreground}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+            </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="B" Property="BorderBrush" Value="{StaticResource Red}"/>
-                <Setter TargetName="Bar" Property="Visibility" Value="Visible"/>
-                <Setter TargetName="B" Property="Background" Value="#1C1C1C"/>
+                <Setter TargetName="Txt" Property="TextElement.Foreground" Value="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}"/>
+                <Setter TargetName="Bar" Property="BorderBrush" Value="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}"/>
               </Trigger>
               <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="B" Property="Background" Value="#0E0E0E"/>
+                <Setter TargetName="Root" Property="Opacity" Value="0.72"/>
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Opacity" Value="0.35"/>
+                <Setter TargetName="Txt" Property="TextElement.Foreground" Value="{StaticResource Off}"/>
+                <Setter TargetName="Bar" Property="BorderBrush" Value="{StaticResource Off}"/>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -393,34 +510,55 @@ $xaml = @'
       </Setter>
     </Style>
     <Style x:Key="KLPrimary" TargetType="Button" BasedOn="{StaticResource KLButton}">
-      <Setter Property="Background" Value="#7E0E14"/>
-      <Setter Property="BorderBrush" Value="#A3121A"/>
-      <Setter Property="Foreground" Value="#F2F2F2"/>
-      <Setter Property="FontSize" Value="20"/>
-      <Setter Property="Padding" Value="18,12"/>
+      <Setter Property="Foreground" Value="{StaticResource Coral}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Coral}"/>
+      <Setter Property="Background" Value="{StaticResource CoralHi}"/>
+      <Setter Property="BorderThickness" Value="9,0,0,0"/>
+      <Setter Property="FontSize" Value="34"/>
+      <Setter Property="Padding" Value="16,8,0,7"/>
+    </Style>
+    <Style x:Key="KLDim" TargetType="Button" BasedOn="{StaticResource KLButton}">
+      <Setter Property="Foreground" Value="{StaticResource ChalkDim}"/>
+      <Setter Property="FontSize" Value="23"/>
+      <Setter Property="Padding" Value="15,7,0,6"/>
     </Style>
     <Style x:Key="KLSmall" TargetType="Button" BasedOn="{StaticResource KLButton}">
-      <Setter Property="FontSize" Value="13"/>
-      <Setter Property="Padding" Value="10,4"/>
-      <Setter Property="Margin" Value="0,0,8,0"/>
+      <Setter Property="Foreground" Value="{StaticResource ChalkDim}"/>
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="BorderThickness" Value="4,0,0,0"/>
+      <Setter Property="Padding" Value="10,5,0,4"/>
+      <Setter Property="Margin" Value="0,0,14,2"/>
+      <Setter Property="OpacityMask" Value="{StaticResource ChipLight}"/>
+    </Style>
+    <Style x:Key="KLMute" TargetType="Button" BasedOn="{StaticResource KLSmall}">
+      <Setter Property="Foreground" Value="{StaticResource Chalk}"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="6,2,6,1"/>
+      <Setter Property="Margin" Value="0"/>
     </Style>
     <Style x:Key="Pick" TargetType="Button" BasedOn="{StaticResource KLButton}">
-      <Setter Property="FontSize" Value="12"/>
-      <Setter Property="Padding" Value="7,1"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Foreground" Value="{StaticResource Grey}"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="8,0,0,0"/>
       <Setter Property="Margin" Value="8,0,0,0"/>
-      <Setter Property="FontFamily" Value="Segoe UI"/>
+      <Setter Property="Tag" Value="notrack"/>
+      <Setter Property="OpacityMask" Value="{x:Null}"/>
     </Style>
     <Style x:Key="Key" TargetType="TextBlock">
       <Setter Property="FontFamily" Value="{StaticResource Head}"/>
-      <Setter Property="FontSize" Value="13"/>
-      <Setter Property="Foreground" Value="{StaticResource Grey}"/>
-      <Setter Property="Margin" Value="0,0,12,4"/>
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="Foreground" Value="{StaticResource Key}"/>
+      <Setter Property="Margin" Value="0,0,14,6"/>
       <Setter Property="VerticalAlignment" Value="Top"/>
+      <Setter Property="Tag" Value="track"/>
+      <Setter Property="OpacityMask" Value="{StaticResource ChipLight}"/>
     </Style>
     <Style x:Key="Val" TargetType="TextBlock">
+      <Setter Property="FontFamily" Value="{StaticResource Body}"/>
       <Setter Property="FontSize" Value="12.5"/>
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
-      <Setter Property="Margin" Value="0,0,0,4"/>
+      <Setter Property="Foreground" Value="{StaticResource Chalk}"/>
+      <Setter Property="Margin" Value="0,1,0,6"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="VerticalAlignment" Value="Top"/>
     </Style>
@@ -448,14 +586,18 @@ $xaml = @'
       <Rectangle Fill="{StaticResource FilmGrain}"/>
       <Rectangle x:Name="BgLeftImg" Fill="Transparent"/>
     </Grid>
-    <Rectangle x:Name="BgDim" Fill="#55000000" IsHitTestVisible="False"/>
+    <!-- dim 0.28 over the drawn fallback (#47), 0.6 over photos (#99, set by Bg-Init) -->
+    <Rectangle x:Name="BgDim" Fill="#47000000" IsHitTestVisible="False"/>
     <Rectangle Fill="{StaticResource Grain}" IsHitTestVisible="False"/>
+    <!-- four faint diagonal scratches on the film, scaled with the window (Stretch=Fill), the stroke stays thin -->
+    <Path Stretch="Fill" Stroke="#14FFFFFF" StrokeThickness="0.9" IsHitTestVisible="False"
+          Data="M 30,950 L 320,100 M 660,20 L 712,980 M 930,150 L 866,830 M 130,300 L 200,296"/>
     <Rectangle IsHitTestVisible="False">
       <Rectangle.Fill>
-        <RadialGradientBrush Center="0.5,0.42" GradientOrigin="0.5,0.42" RadiusX="0.78" RadiusY="0.80">
+        <RadialGradientBrush Center="0.5,0.40" GradientOrigin="0.5,0.40" RadiusX="0.80" RadiusY="0.82">
           <GradientStop Color="#00000000" Offset="0.0"/>
-          <GradientStop Color="#2A000000" Offset="0.55"/>
-          <GradientStop Color="#D8000000" Offset="1.0"/>
+          <GradientStop Color="#40000000" Offset="0.55"/>
+          <GradientStop Color="#E6000000" Offset="1.0"/>
         </RadialGradientBrush>
       </Rectangle.Fill>
     </Rectangle>
@@ -464,50 +606,60 @@ $xaml = @'
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
-      <!-- header -->
+      <!-- header: the title block alone leans -0.6 degrees -->
       <Grid Grid.Row="0">
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
-          <Rectangle Width="10" Height="42" Fill="{StaticResource Red}" Margin="0,0,14,4"/>
-          <TextBlock Text="KL MERGE" FontFamily="{StaticResource Head}" FontSize="46" Foreground="#E8E8E8" VerticalAlignment="Bottom"/>
-          <TextBlock Text="DEAD MEN INSIDE DOG DAYS" FontFamily="{StaticResource Head}" FontSize="15" Foreground="{StaticResource Grey}" Margin="18,0,0,11" VerticalAlignment="Bottom"/>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" RenderTransformOrigin="0,1">
+          <StackPanel.RenderTransform><RotateTransform Angle="-0.6"/></StackPanel.RenderTransform>
+          <TextBlock FontFamily="{StaticResource Head}" FontSize="54" Foreground="{StaticResource Chalk}" VerticalAlignment="Bottom" Tag="notrack" OpacityMask="{StaticResource Chip}"><Run Text="KL "/><Run Text="MERGE" Foreground="{StaticResource Coral}"/></TextBlock>
+          <TextBlock Text="DEAD MEN INSIDE DOG DAYS" FontFamily="{StaticResource Head}" FontSize="17" Foreground="{StaticResource Grey}" Margin="18,0,0,8" VerticalAlignment="Bottom" Tag="track" OpacityMask="{StaticResource ChipLight}"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,8">
-          <TextBlock x:Name="LblMusic" Text="&#9834; MUSIC" FontFamily="{StaticResource Head}" FontSize="13" Foreground="{StaticResource Grey}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <Button x:Name="BtnMute" Style="{StaticResource Pick}" Content="MUTE" Margin="0,0,22,0" VerticalAlignment="Center" ToolTip="Mute / unmute the launcher music (a Dead Men clip read from your own Dead Men files)"/>
-          <TextBlock x:Name="LblVersion" Text="TESTER BUILD" FontFamily="{StaticResource Head}" FontSize="14" Foreground="{StaticResource Grey}" VerticalAlignment="Center" Margin="0,0,0,2"/>
+          <TextBlock x:Name="LblMusic" Text="&#9834; MUSIC" FontFamily="{StaticResource Head}" FontSize="14" Foreground="{StaticResource Grey}" VerticalAlignment="Center" Margin="0,0,12,0" Tag="track" OpacityMask="{StaticResource ChipLight}"/>
+          <StackPanel Margin="0,0,22,0" VerticalAlignment="Center">
+            <Button x:Name="BtnMute" Style="{StaticResource KLMute}" Content="MUTE" ToolTip="Mute / unmute the launcher music (a Dead Men clip read from your own Dead Men files)"/>
+            <!-- the chalk underline with one break (a dashed Line in units of its 3 px thickness) -->
+            <Line X2="1" Stretch="Fill" Stroke="{StaticResource Chalk}" StrokeThickness="3" StrokeDashArray="9 2.5 40 2" Margin="0,1,0,0" IsHitTestVisible="False"/>
+          </StackPanel>
+          <TextBlock x:Name="LblVersion" Text="TESTER BUILD" FontFamily="{StaticResource Head}" FontSize="14" Foreground="{StaticResource Grey}" VerticalAlignment="Center" Margin="0,0,0,1" Tag="track" OpacityMask="{StaticResource ChipLight}"/>
         </StackPanel>
       </Grid>
-      <Rectangle Grid.Row="1" Height="1" Fill="{StaticResource Rule}" Margin="0,10,0,14"/>
+      <!-- the rule under the header: a 4 px chalk stroke with two breaks and a faint 1 px dashed line under it -->
+      <Grid Grid.Row="1" Margin="0,8,0,14" Height="9">
+        <Line X2="1" Stretch="Fill" Stroke="{StaticResource Chalk}" StrokeThickness="4" StrokeDashArray="70 4.5 95 2.5 400 4" Opacity="0.95" VerticalAlignment="Top"/>
+        <Line X2="1" Stretch="Fill" Stroke="{StaticResource Chalk}" StrokeThickness="1" StrokeDashArray="40 9 3 12" Opacity="0.35" VerticalAlignment="Top" Margin="0,8,0,0"/>
+      </Grid>
       <!-- body -->
       <Grid Grid.Row="2">
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="300"/>
-          <ColumnDefinition Width="24"/>
+          <ColumnDefinition Width="380"/>
+          <ColumnDefinition Width="30"/>
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <!-- buttons -->
         <StackPanel Grid.Column="0">
           <Button x:Name="BtnPlayMod" Style="{StaticResource KLPrimary}" Content="PLAY KL MERGE"/>
-          <Button x:Name="BtnPlayStock" Style="{StaticResource KLButton}" Content="PLAY DOG DAYS  (STOCK)"/>
-          <TextBlock x:Name="LblHookNote" Text="" Foreground="{StaticResource Grey}" FontSize="11.5" Margin="0,-4,0,12" TextWrapping="Wrap"/>
-          <Rectangle Height="1" Fill="{StaticResource Rule}" Margin="0,0,0,12"/>
-          <Button x:Name="BtnInstall" Style="{StaticResource KLButton}" Content="INSTALL / UPDATE"/>
-          <Button x:Name="BtnVerify" Style="{StaticResource KLButton}" Content="VERIFY"/>
-          <Button x:Name="BtnUninstall" Style="{StaticResource KLButton}" Content="UNINSTALL  (RESTORE STOCK)"/>
-          <Rectangle Height="1" Fill="{StaticResource Rule}" Margin="0,2,0,12"/>
-          <WrapPanel>
+          <Button x:Name="BtnPlayStock" Style="{StaticResource KLButton}"><TextBlock Tag="track"><Run Text="PLAY DOG DAYS"/><Run Text="  (STOCK)" FontSize="14" Foreground="{StaticResource Grey}"/></TextBlock></Button>
+          <TextBlock x:Name="LblHookNote" Text="" Foreground="{StaticResource Grey}" FontSize="11.5" Margin="22,-2,0,10" TextWrapping="Wrap"/>
+          <Button x:Name="BtnInstall" Style="{StaticResource KLDim}" Content="INSTALL / UPDATE"/>
+          <Button x:Name="BtnVerify" Style="{StaticResource KLDim}" Content="VERIFY"/>
+          <Button x:Name="BtnUninstall" Style="{StaticResource KLDim}"><TextBlock Tag="track"><Run Text="UNINSTALL"/><Run Text="  (RESTORE STOCK)" FontSize="13" Foreground="{StaticResource Grey}"/></TextBlock></Button>
+          <UniformGrid Columns="2" Margin="22,10,0,0" HorizontalAlignment="Left">
             <Button x:Name="BtnHook" Style="{StaticResource KLSmall}" Content="HOOK ON / OFF"/>
             <Button x:Name="BtnLogs" Style="{StaticResource KLSmall}" Content="COLLECT LOGS"/>
             <Button x:Name="BtnOpen" Style="{StaticResource KLSmall}" Content="GAME FOLDER"/>
             <Button x:Name="BtnRefresh" Style="{StaticResource KLSmall}" Content="REFRESH"/>
-          </WrapPanel>
+          </UniformGrid>
         </StackPanel>
-        <!-- status -->
-        <Border Grid.Column="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Rule}" BorderThickness="1" Padding="16,12">
-          <Grid>
+        <!-- status: a torn dark smear (Smear-Path as the panel's Background brush, Stretch=Fill: no layout of its own, so an
+             Auto row cannot blow up) at 86 %, a chalk stroke along the top with two breaks, no sides, no bottom -->
+        <Grid Grid.Column="2" VerticalAlignment="Top">
+          <Grid.Background>
+            <DrawingBrush Stretch="Fill"><DrawingBrush.Drawing><GeometryDrawing Brush="#DB0A0A0B" Geometry="@SMEAR_STATUS@"/></DrawingBrush.Drawing></DrawingBrush>
+          </Grid.Background>
+          <Line X2="1" Stretch="Fill" Stroke="{StaticResource Chalk}" StrokeThickness="2" StrokeDashArray="110 7 45 15 150 4" Opacity="0.55" VerticalAlignment="Top" Margin="8,3,10,0" IsHitTestVisible="False"/>
+          <Grid Margin="22,18,22,18">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto"/>
               <ColumnDefinition Width="*"/>
@@ -518,7 +670,7 @@ $xaml = @'
               <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
               <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="STATUS" FontFamily="{StaticResource Head}" FontSize="15" Foreground="{StaticResource Red}" Margin="0,0,0,8"/>
+            <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="STATUS" FontFamily="{StaticResource Head}" FontSize="21" Foreground="{StaticResource Coral}" Margin="0,0,0,10" Tag="track" OpacityMask="{StaticResource Chip}"/>
             <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Key}" Text="DOG DAYS"/>
             <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Val}" x:Name="LblDD" Text="-"/>
             <Button    Grid.Row="1" Grid.Column="2" Style="{StaticResource Pick}" x:Name="BtnPickDD" Content="..."/>
@@ -539,20 +691,24 @@ $xaml = @'
             <TextBlock Grid.Row="8" Grid.Column="0" Style="{StaticResource Key}" Text="GAME"/>
             <TextBlock Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Val}" x:Name="LblGame" Text="-"/>
           </Grid>
-        </Border>
+        </Grid>
       </Grid>
-      <Rectangle Grid.Row="3" Height="1" Fill="{StaticResource Rule}" Margin="0,16,0,10"/>
-      <!-- log -->
-      <Grid Grid.Row="4">
+      <!-- log: the same smear, flatter, at 82 %, no stroke; the TextBox has no box of its own -->
+      <Grid Grid.Row="3" Margin="0,22,0,0">
+        <Grid.Background>
+          <DrawingBrush Stretch="Fill"><DrawingBrush.Drawing><GeometryDrawing Brush="#D10A0A0B" Geometry="@SMEAR_LOG@"/></DrawingBrush.Drawing></DrawingBrush>
+        </Grid.Background>
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-        <TextBlock Grid.Row="0" Text="LOG" FontFamily="{StaticResource Head}" FontSize="13" Foreground="{StaticResource Grey}" Margin="0,0,0,4"/>
-        <TextBox Grid.Row="1" x:Name="TxtLog" IsReadOnly="True" Background="#0D0D0D" Foreground="#BDBDBD" BorderBrush="{StaticResource Rule}" BorderThickness="1"
-                 FontFamily="Consolas" FontSize="12" Padding="8" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" AcceptsReturn="True"/>
+        <TextBlock Grid.Row="0" Text="LOG" FontFamily="{StaticResource Head}" FontSize="16" Foreground="{StaticResource Grey}" Margin="14,8,0,4" Tag="track" OpacityMask="{StaticResource ChipLight}"/>
+        <TextBox Grid.Row="1" x:Name="TxtLog" IsReadOnly="True" Background="Transparent" Foreground="#CFCAC2" BorderThickness="0" CaretBrush="#F3F0EA" SelectionBrush="#F0475A"
+                 FontFamily="Consolas" FontSize="12" Padding="12,2,12,8" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" AcceptsReturn="True"/>
       </Grid>
     </Grid>
   </Grid>
 </Window>
 '@
+$xaml = $xaml.Replace('@CHIP_NICKS@', $chipNicks).Replace('@CHIP_LIGHT@', $chipLight)
+$xaml = $xaml.Replace('@SMEAR_STATUS@', $smearStatus).Replace('@SMEAR_LOG@', $smearLog)
 $xaml = $xaml.Replace('<!--GRAIN_LIGHT-->', $grainLight).Replace('<!--GRAIN_DARK-->', $grainDark)
 $xaml = $xaml.Replace('<!--FILM_LIGHT-->', $filmLight).Replace('<!--FILM_DARK-->', $filmDark)
 $xaml = $xaml.Replace('<!--BLOCKS_LIGHT-->', $blocksLight).Replace('<!--BLOCKS_TINT-->', $blocksTint).Replace('<!--BLOCKS_DARK-->', $blocksDark)
@@ -563,6 +719,47 @@ foreach ($n in @('LblVersion', 'BtnPlayMod', 'BtnPlayStock', 'LblHookNote', 'Btn
                  'LblDD', 'BtnPickDD', 'LblDM', 'BtnPickDM', 'LblPD2', 'BtnPickPD2', 'LblMod', 'LblHook', 'LblPkg', 'LblPy', 'LblGame', 'TxtLog',
                  'LblMusic', 'BtnMute', 'BgLeft', 'BgRight', 'BgLeftImg', 'BgRightImg', 'BgDim')) {
     $ui[$n] = $script:Win.FindName($n)
+}
+
+# ------------------------------------------------------------------------------------------------ lettering helpers
+function Track([string]$s) {
+    # letter tracking for the Impact capitals: a hair space after every letter that is followed by a letter (see $script:Hair)
+    if (-not $s -or $s.Contains($script:Hair)) { return $s }
+    $sb = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt $s.Length; $i++) {
+        [void]$sb.Append($s[$i])
+        if ($i -lt $s.Length - 1 -and $s[$i] -ne ' ' -and $s[$i + 1] -ne ' ') { [void]$sb.Append($script:Hair) }
+    }
+    return $sb.ToString()
+}
+
+function Track-Tree($o) {
+    # applies Track to every TextBlock / Button with Tag 'track' (the styles set it on the Impact faces, 'notrack' on the title)
+    if ($o -is [System.Windows.Controls.TextBlock]) {
+        if ([string]$o.Tag -eq 'track') { foreach ($r in @($o.Inlines)) { if ($r -is [System.Windows.Documents.Run]) { $r.Text = Track $r.Text } } }
+        return
+    }
+    if ($o -is [System.Windows.Controls.Button] -and ($o.Content -is [string])) {
+        if ([string]$o.Tag -eq 'track') { $o.Content = Track ([string]$o.Content) }
+        return
+    }
+    if ($o -is [System.Windows.DependencyObject]) {
+        foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($o)) { Track-Tree $c }
+    }
+}
+try { Track-Tree $script:Win } catch { }
+
+# value tones: green = fine, amber = a warning, dead red = an error, key grey = unknown / optional, chalk = plain
+$script:Tones = @{}
+foreach ($kv in @(@('ok', '#63A05B'), @('warn', '#E0962E'), @('bad', '#8C3138'), @('dim', '#B8B3AA'), @('plain', '#F3F0EA'))) {
+    try {
+        $b = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString($kv[1]))
+        $b.Freeze(); $script:Tones[$kv[0]] = $b
+    } catch { }
+}
+function Set-Val($tb, [string]$text, [string]$tone = 'plain') {
+    $tb.Text = $text
+    try { if ($script:Tones.ContainsKey($tone)) { $tb.Foreground = $script:Tones[$tone] } } catch { }
 }
 
 # ------------------------------------------------------------------------------------------------ log pane
@@ -590,33 +787,35 @@ function Refresh-Status {
     if (-not $s.DD -or -not (Test-Path -LiteralPath (Join-Path $s.DD 'kl2.exe'))) { $s.DD = Find-Game 'Kane & Lynch 2 - Dog Days' 'kl2.exe' }
     if (-not $s.DM -or -not (Test-Path -LiteralPath $s.DM)) { $s.DM = Find-Game 'Kane and Lynch Dead Men' 'kaneandlynch.exe' }
     if (-not $s.PD2 -or -not (Test-Path -LiteralPath $s.PD2)) { $s.PD2 = Find-Game 'PAYDAY 2' '' }     # GUESS: Steam folder name, as in kl_release.py
-    $ui.LblDD.Text = $(if ($s.DD) { $s.DD } else { 'NOT FOUND - pick the folder that holds kl2.exe' })
-    $ui.LblDM.Text = $(if ($s.DM) { $s.DM } else { 'NOT FOUND - needed for INSTALL (the Dead Men maps are rebuilt from it)' })
-    $ui.LblPD2.Text = $(if ($s.PD2) { $s.PD2 } else { 'not found (optional: the Payday 2 masks / guns are skipped)' })
+    # value tones (Set-Val): green = fine, amber = a warning, dead red = an error that stops INSTALL, grey = unknown / optional
+    if ($s.DD) { Set-Val $ui.LblDD $s.DD 'ok' } else { Set-Val $ui.LblDD 'NOT FOUND - pick the folder that holds kl2.exe' 'bad' }
+    if ($s.DM) { Set-Val $ui.LblDM $s.DM 'ok' } else { Set-Val $ui.LblDM 'NOT FOUND - needed for INSTALL (the Dead Men maps are rebuilt from it)' 'bad' }
+    if ($s.PD2) { Set-Val $ui.LblPD2 $s.PD2 'ok' } else { Set-Val $ui.LblPD2 'not found (optional: the Payday 2 masks / guns are skipped)' 'warn' }
 
     $script:PackageDir = Find-Package
     Load-Manifest
     if ($script:Manifest) {
         $n = @($script:Manifest.entries).Count
-        $ui.LblPkg.Text = 'v' + $script:Manifest.version + ', ' + $n + ' files  -  ' + $script:PackageDir
-        $ui.LblVersion.Text = 'TESTER BUILD  v' + $script:Manifest.version
+        Set-Val $ui.LblPkg ('v' + $script:Manifest.version + ', ' + $n + ' files  -  ' + $script:PackageDir) 'plain'
+        $ui.LblVersion.Text = Track ('TESTER BUILD  v' + $script:Manifest.version)
     } else {
-        $ui.LblPkg.Text = 'NO PACKAGE: run "KLMerge Setup.bat" first (it downloads and unpacks it)'
-        $ui.LblVersion.Text = 'TESTER BUILD'
+        Set-Val $ui.LblPkg 'NO PACKAGE: run "KLMerge Setup.bat" first (it downloads and unpacks it)' 'bad'
+        $ui.LblVersion.Text = Track 'TESTER BUILD'
     }
 
     if ($script:PackageDir -and (Test-Path -LiteralPath (Join-Path $script:PackageDir 'KLMergeSetup.exe'))) {
-        $ui.LblPy.Text = 'not needed (package has KLMergeSetup.exe)'
+        Set-Val $ui.LblPy 'not needed (package has KLMergeSetup.exe)' 'plain'
     } else {
         if (-not $script:Python) { $script:Python = Find-Python }
-        $ui.LblPy.Text = $(if ($script:Python) { $script:Python.Version + '  (' + $script:Python.Cmd + ', zstandard ok)' } else { 'NOT FOUND - run "KLMerge Setup.bat" (it fetches an embedded Python 3 + zstandard)' })
+        if ($script:Python) { Set-Val $ui.LblPy ($script:Python.Version + '  (' + $script:Python.Cmd + ', zstandard ok)') 'plain' }
+        else { Set-Val $ui.LblPy 'NOT FOUND - run "KLMerge Setup.bat" (it fetches an embedded Python 3 + zstandard)' 'bad' }
     }
 
     if ($s.DD) {
         $jp = Join-Path $s.DD $script:Journal
         if (Test-Path -LiteralPath $jp) {
-            try { $j = Get-Content -LiteralPath $jp -Raw | ConvertFrom-Json; $ui.LblMod.Text = 'INSTALLED: ' + @($j.entries).Count + ' files (journal ' + $script:Journal + ', backups in KL_PortBackup)' } catch { $ui.LblMod.Text = 'installed (journal unreadable)' }
-        } else { $ui.LblMod.Text = 'not installed' }
+            try { $j = Get-Content -LiteralPath $jp -Raw | ConvertFrom-Json; Set-Val $ui.LblMod ('INSTALLED: ' + @($j.entries).Count + ' files (journal ' + $script:Journal + ', backups in KL_PortBackup)') 'ok' } catch { Set-Val $ui.LblMod 'installed (journal unreadable)' 'warn' }
+        } else { Set-Val $ui.LblMod 'not installed' 'dim' }
         $st = Hook-State
         $dll = Join-Path $s.DD $(if ($st -eq 'off') { $script:HookOffName } else { $script:HookName })
         $sha = ''
@@ -628,16 +827,17 @@ function Refresh-Status {
         }
         $cmp = ''
         if ($sha -and $pk) { $cmp = $(if ($sha -eq $pk) { ', = package hook' } else { ', DIFFERS from the package hook (run INSTALL / UPDATE)' }) }
+        $onTone = $(if ($sha -and $pk -and $sha -ne $pk) { 'warn' } else { 'ok' })
         switch ($st) {
-            'on'   { $ui.LblHook.Text = 'ON  (dinput8.dll, sha1 ' + (Short $sha) + $cmp + ')'; $ui.LblHookNote.Text = '' }
-            'off'  { $ui.LblHook.Text = 'OFF  (set aside as ' + $script:HookOffName + ', sha1 ' + (Short $sha) + $cmp + ')'; $ui.LblHookNote.Text = 'The hook is OFF: the game runs stock. PLAY KL MERGE or HOOK ON / OFF switches it back.' }
-            'both' { $ui.LblHook.Text = 'ON, plus a stray ' + $script:HookOffName + ' (left alone)'; $ui.LblHookNote.Text = '' }
-            default { $ui.LblHook.Text = 'no hook file (mod not installed)'; $ui.LblHookNote.Text = '' }
+            'on'   { Set-Val $ui.LblHook ('ON  (dinput8.dll, sha1 ' + (Short $sha) + $cmp + ')') $onTone; $ui.LblHookNote.Text = '' }
+            'off'  { Set-Val $ui.LblHook ('OFF  (set aside as ' + $script:HookOffName + ', sha1 ' + (Short $sha) + $cmp + ')') 'warn'; $ui.LblHookNote.Text = 'The hook is OFF: the game runs stock. PLAY KL MERGE or HOOK ON / OFF switches it back.' }
+            'both' { Set-Val $ui.LblHook ('ON, plus a stray ' + $script:HookOffName + ' (left alone)') 'warn'; $ui.LblHookNote.Text = '' }
+            default { Set-Val $ui.LblHook 'no hook file (mod not installed)' 'dim'; $ui.LblHookNote.Text = '' }
         }
     } else {
-        $ui.LblMod.Text = '-'; $ui.LblHook.Text = '-'; $ui.LblHookNote.Text = ''
+        Set-Val $ui.LblMod '-' 'dim'; Set-Val $ui.LblHook '-' 'dim'; $ui.LblHookNote.Text = ''
     }
-    $ui.LblGame.Text = $(if (Game-Running) { 'kl2.exe is RUNNING (close it before install / uninstall / hook switch)' } else { 'not running' })
+    if (Game-Running) { Set-Val $ui.LblGame 'kl2.exe is RUNNING (close it before install / uninstall / hook switch)' 'warn' } else { Set-Val $ui.LblGame 'not running' 'ok' }
     Save-Settings
 }
 
@@ -751,13 +951,13 @@ function Collect-Logs {
 function Music-Label {
     $n = $script:Note
     if ($script:Settings.Muted) {
-        $ui.LblMusic.Text = $n + ' MUTED'; $ui.BtnMute.Content = 'UNMUTE'
+        $ui.LblMusic.Text = Track ($n + ' MUTED'); $ui.BtnMute.Content = Track 'UNMUTE'
     } elseif ($script:MusicLoaded) {
-        $ui.LblMusic.Text = $n + ' DEAD MEN  ' + [int]([double]$script:Settings.Volume * 100) + '%'; $ui.BtnMute.Content = 'MUTE'
+        $ui.LblMusic.Text = Track ($n + ' DEAD MEN  ' + [int]([double]$script:Settings.Volume * 100) + '%'); $ui.BtnMute.Content = Track 'MUTE'
     } elseif ($script:MusicProc) {
-        $ui.LblMusic.Text = $n + ' READING YOUR DEAD MEN MUSIC ...'; $ui.BtnMute.Content = 'MUTE'
+        $ui.LblMusic.Text = Track ($n + ' READING YOUR DEAD MEN MUSIC ...'); $ui.BtnMute.Content = Track 'MUTE'
     } else {
-        $ui.LblMusic.Text = $n + ' NO MUSIC'; $ui.BtnMute.Content = 'MUTE'
+        $ui.LblMusic.Text = Track ($n + ' NO MUSIC'); $ui.BtnMute.Content = Track 'MUTE'
     }
 }
 
@@ -892,8 +1092,8 @@ function Bg-Init {
         }
     }
     try {
-        # with photos behind the text a stronger dim keeps it readable; the fallback is dark already
-        if ($got -gt 0) { $ui.BgDim.Fill = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromArgb(0x9E, 0, 0, 0)) }
+        # with photos behind the text a stronger dim keeps it readable (0.6 = 0x99); the fallback is dark already (0.28 = 0x47 in the XAML)
+        if ($got -gt 0) { $ui.BgDim.Fill = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromArgb(0x99, 0, 0, 0)) }
     } catch { }
     if ($got -eq 0) { Log 'background: no bg\dead_men.jpg / bg\dog_days.jpg beside the launcher - using the drawn fallback' }
 }

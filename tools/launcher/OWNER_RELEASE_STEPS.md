@@ -98,6 +98,10 @@ your PC: it must print the same `verify:` line as the python run). The launcher 
 `KLMerge Setup.bat` then fetches the embeddable Python 3.12 into `<launcher>\python\` and pip-installs `zstandard`
 (needs internet to python.org and pypi.org on the tester's PC; URLs are GUESS-marked in the .bat).
 SmartScreen will warn about an unsigned exe either way (the .bat too); the README tells testers to click through.
+Defender (2026-11-09): your helper .bat was flagged Trojan:Win32/Ceprolad.A (heuristic: powershell -WindowStyle Hidden +
+-ExecutionPolicy Bypass from a .bat). KLMerge.bat and the Setup now start the launcher MINIMIZED (`start /min`) instead of
+hidden, and README_TESTERS has a "If Windows Defender / SmartScreen complains" section (plain-text scripts, Protection
+history > Restore, Properties > Unblock, signed exe planned). Before the upload: scan the packed zip with Defender once.
 
 ## 4. Pack and upload (UNTESTED here)
 
