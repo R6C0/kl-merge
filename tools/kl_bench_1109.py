@@ -63,10 +63,13 @@ K = {
                                    'F06_Main.bots.base.md5': 'd1b973d815af69622dc5cbd37a213de2'}),
     'DOORS_1109_DM01': dict(map='DM01', slot='F01', live={'F01_Main.zip': '444a3ed6', 'F01_Main.bots.zip': 'f3ed6155', 'KLJoin.ini': 'db4516c6'}, shots='60-700:20',
                             doors=('DM01', 'F01', (957, 2569))),
+    # door 2569 first: runs 2 and 3 lost door 2 to a police kill ~19 s into the round (05:53:28, 06:22:36), always after door 1
+    'DOORS_1109_DM01R': dict(map='DM01', slot='F01', live={'F01_Main.zip': '444a3ed6', 'F01_Main.bots.zip': 'f3ed6155', 'KLJoin.ini': 'db4516c6'}, shots='60-700:20',
+                             doors=('DM01', 'F01', (2569, 957))),
     'DOORS_1109_DM03A': dict(map='DM03A', slot='F07', live={'F07_Main.zip': 'aa79d66d', 'F07_Main.bots.zip': 'd1a8dd0c', 'KLJoin.ini': '958c24b6'}, shots='60-700:20',
                              doors=('DM03A', 'F07', (6516,))),
 }
-ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A']
+ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A']
 for _k, _c in K.items():
     for _a, _b in dict(entry=0, stage=None, tag=None, hook=HOOK, solo_secs=600, parts=('online',)).items():
         _c.setdefault(_a, _b)
@@ -143,17 +146,10 @@ def kick_probe(lbl, when, n=10):
     return s
 
 
-# the leaf 'Door' (ZSTDOBJ, the donor's last kid, node 4189) of each grafted group. GUESS (kick-leaf-proof workflow): DM01 groups KL_Door_8/_9 sit at
-# slots 16703/16704 and their kids follow (boxes at 16710/16732 = start + 5), so the leaf is the last kid: 16726 / 16748. Three slots each so the one
-# that turns names the leaf; 'ents Door 600' prints the real slot in the same run (run 2's 'ents Door 200' stopped at slot 16375). Pinned DM01 stage only.
-LEAF_SLOTS = {957: (16724, 16725, 16726), 2569: (16746, 16747, 16748)}
-
-
-def leaf_probe(lbl, when, host):
-    # node = [obj+4] of entity slot S via the ents table [[[0xe0ff90]+0xc]+0xc] (klauto.c kla_ents): 3x3 rotation at node+0x00..0x20, m6 = +0x18 and
-    # m8 = +0x20 are the x axis (klescort.c kle_node). A 90 deg swing about y: m6 1 -> ~0, m8 0 -> ~+-1 (raw float bits, 3f800000 = 1.0)
-    return ['peek 0xe0ff90+0xc+0xc+0x%x+4+0x%x %s-%s-slot%d-%s' % (S * 0x80 + 0x60, f, lbl, when, S, nm)
-            for S in LEAF_SLOTS.get(host, ()) for f, nm in ((0x18, 'm6'), (0x20, 'm8'))]
+# no leaf-rotation peeks: DOORS_1109_DM01 run 3 read the guessed slots 16724..6 / 16746..8 as identity before AND after (that run also missed the
+# kick), and the runtime slot order is not the gms order (KL_Door_9 = slot 16704 at runtime, gms index 16726), so the leaf slot is unknown;
+# 'ents' (substring only, at most 200 rows shown) cannot reach a node named just 'Door' (351 matches, cut at slot 16375). The kick result is the
+# registry controller's state (1 -> 3), read before and after each attempt.
 
 
 def door_seg(d, lbl):
@@ -168,12 +164,16 @@ def door_seg(d, lbl):
     f = (b[0], b[2]) if b else (h[0], h[2])
     # waitstate 0x19 first: DM02_1109's first tele came 5 s after 'level loaded', before the round ran (session state not 0x19), and was refused
     s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0], a[1] + 150, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
-         'ents KL_Door 20', 'ents Door 600', 'ents KickDoor_Action 20'] + kick_probe(lbl, 'stand') + leaf_probe(lbl, 'stand', d['host']) + [
+         'ents KL_Door 20', 'ents KickDoor_Action 20'] + kick_probe(lbl, 'stand') + [
          # kick from the stand, no walk first: DOORS_1109_DM01 run 1 door 2 had the kick prompt (0x12) at the stand and lost it (0) after the goto to
          # the hinge (out of the box), so E did nothing; door 1 kept 0x12 at the leaf and E snapped the player 55 cm / 60 deg (kick animation, GUESS).
          'face %d %d' % c, 'wait 700', 'pos %s-at-leaf' % lbl] + kick_probe(lbl, 'atleaf') + [
          'tap E 700', 'wait 600', 'tap E 700', 'wait 3500', 'log BENCH1109 %s door %s: kicked (E x2)' % (lbl, d['host']), 'pos %s-kicked' % lbl,
-         'ents KL_Door 20', 'ents Door 600'] + kick_probe(lbl, 'kicked') + leaf_probe(lbl, 'kicked', d['host'])
+         'ents KL_Door 20'] + kick_probe(lbl, 'kicked') + [
+         # second attempt: run 3's door 1 kept the prompt (active 0x12, best 6) after a face that timed out (bearing error 123) and E did not kick;
+         # face again and press twice more (a kicked door ignores it: its controller stays 3)
+         'face %d %d' % c, 'wait 1000', 'tap E 700', 'wait 600', 'tap E 700', 'wait 3500',
+         'log BENCH1109 %s door %s: kicked again (E x2)' % (lbl, d['host']), 'pos %s-kicked2' % lbl] + kick_probe(lbl, 'kicked2')
     if b:
         s += ['goto %d %d 70 6000' % c, 'face %d %d' % f, 'goto %d %d 70 9000' % (b[0], b[2]), 'pos %s-through' % lbl, 'log BENCH1109 %s door %s: through goto done' % (lbl, d['host'])]
     return s
@@ -532,6 +532,16 @@ def pos_of(lines, label):
     return r[-1] if r else None
 
 
+def kick_states(a, lbl, when):
+    """{controller slot: state} from the kick_probe lines '<lbl>-<when>-ctrlN-state' (raw hex)."""
+    out = {}
+    for l in a:
+        m = re.search(r'= ([0-9a-f]{8}) \(at [0-9a-f]+\)\s+%s-%s-ctrl(\d+)-state' % (re.escape(lbl), re.escape(when)), l)
+        if m:
+            out[int(m.group(2))] = int(m.group(1), 16)
+    return out
+
+
 def door_lbl(k, i):
     return 'dm03door' if k == 'DM03_1109' else 'dm02door%d' % (i + 1) if k == 'DM02_1109' else 'door%d' % (i + 1)
 
@@ -684,7 +694,7 @@ def item_checks(k, a, dd=(), ctrl=None):
         for n in (() if unhide else ('gateS-1', 'gateS-2')):
             p = pos_of(a, n)
             info.append('%s (pocket south slope): %s' % (n, p and tuple(round(c) for c in p)))
-    if k in ('DM03_1109', 'DM02_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A'):
+    if k in ('DM03_1109', 'DM02_1109') or k.startswith('DOORS_1109'):
         use = list(dd)[:1] if k == 'DM03_1109' else list(dd)
         chk('doors.json lists the kit doors', bool(use), '%d doors' % len(use))
         tp = [l for l in a if 'tele' in l and ('REFUSED' in l or 'MISSED' in l or 'FAULTED' in l)]
@@ -696,6 +706,16 @@ def item_checks(k, a, dd=(), ctrl=None):
             bef = [r for r in leaf if kick is not None and r[5] < kick]
             aft = [r for r in leaf if kick is not None and r[5] > kick]
             chk('door %s: kick happened (log line)' % d['host'], kick is not None, 'no "%s door %s: kicked" line' % (lbl, d['host']) if kick is None else 'line %d' % kick)
+            # the engine's answer: a registry controller kickable (1) at the stand and kicked (3) after an attempt (run 2: slot 7 went 1 -> 3 for door 957)
+            st = {w: kick_states(a, lbl, w) for w in ('stand', 'kicked', 'kicked2')}
+            went = sorted(i_ for i_, v in st['stand'].items() if v == 1 and 3 in (st['kicked'].get(i_), st['kicked2'].get(i_)))
+            # a host death between the stand probe and the last attempt's probe voids the verdict (runs 2/3 lost door 2 to police that way)
+            pl = [l[:12] for l in a if re.search(r'  %s-(stand|kicked2)-ctrl\d+-state' % re.escape(lbl), l)]
+            dead = [l[:12] for l in a if pl and 'skulls state: row 0' in l and 'kind 3' in l and pl[0] <= l[:12] <= pl[-1]]
+            chk('door %s: a kick controller went 1 -> 3 (kicked in the engine)' % d['host'], bool(went),
+                'ctrl %s (%s)' % (went, 'first try' if any(st['kicked'].get(i_) == 3 for i_ in went) else 'second try') if went else
+                'states stand %s / kicked %s / kicked2 %s%s' % (st['stand'], st['kicked'], st['kicked2'], '; the host died at %s before it: no verdict' % dead[-1] if dead else ''),
+                warn=bool(dead))
             chk('door %s: leaf entity sampled near its hinge before AND after the kick' % d['host'], bool(bef) and bool(aft), '%d rows before, %d after' % (len(bef), len(aft)))
 
             def sig(rows):

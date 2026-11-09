@@ -171,8 +171,21 @@ def doors(k, mut=None):
         if mut != 'noleaf':
             g.ent('KL_Door_Leaf', (h[0] + 5, h[1] + 10, h[2] - 5))
         g.say('BENCH1109 %s door %s: before' % (lbl, d['host']))
+        ctrl = lambda when, v: g.raw('script 73: peek 00dd265c+ac4+5c = %08x (at 528f899c)  %s-%s-ctrl7-state' % (v, lbl, when))
+        ctrl('stand', 1)
         if mut != 'nokick':
             g.say('BENCH1109 %s door %s: kicked (E x2)' % (lbl, d['host']))
+        if mut in ('nostate', 'deadkick'):
+            if mut == 'deadkick':
+                g.raw("hud: ONLINE skulls state: row 0 'R5 J.C.' kind 3 deaths 1 -> lives 2 (drawn)")
+            ctrl('kicked', 1)
+            ctrl('kicked2', 1)
+        elif mut == 'second':
+            ctrl('kicked', 1)
+            ctrl('kicked2', 3)
+        else:
+            ctrl('kicked', 3)
+            ctrl('kicked2', 3)
         if mut != 'noleaf':
             g.ent('KL_Door_Leaf', (h[0] + 5, h[1] + 10, h[2] - 5) if mut == 'static' else (h[0] + 60, h[1] + 10, h[2] - 5))
         b = d['back'] if d['front'] and d['back'] else None
@@ -222,6 +235,11 @@ def main():
     # DM03A door is one-sided in the real kit: a hand-made one-sided door still needs the kick and the leaf samples
     # the 'changed' rule is FAIL on DM03 only: a static leaf on DM02 is a WARN
     ok(not fails('DM02_1109', 'static'), 'DM02: a static leaf is a WARN, not a FAIL')
+    # the engine's kick answer: controller 1 -> 3 on either attempt, FAIL when it stays 1, WARN when the host died first
+    for k in ('DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A'):
+        ok(any('1 -> 3' in x[1] for x in fails(k, 'nostate')), '%s: a controller that stays 1 FAILs' % k)
+        ok(not fails(k, 'second'), '%s: a kick on the second try passes' % k)
+        ok(not any('1 -> 3' in x[1] for x in fails(k, 'deadkick')), '%s: a host death before the kick is a WARN' % k)
     # cop actors are not in 'ents': unmoved squad/trigger rows are a WARN on DM03, the cop hits decide
     ok(not fails('DM03_1109', 'nomove'), 'DM03: unmoved ArrivingCops rows are a WARN, not a FAIL')
     # a control goto with the blocked goto missing (walk never ran) must FAIL
