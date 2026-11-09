@@ -1,3 +1,6 @@
+2026-11-09 ~17:45 - [d0, offline] DM09 TERMINAL ROUTE FEASIBLE: tools/kl_dm09_flood_1109.py on the LIVE DM09 mesh: road mouth (-5700, 9000) -> stairs -> campaign terminal van (-24630, 8958)
+is ONE mesh component, path 279 m, y -40 -> -1040, 0 broken steps. Blockers are authored only (west slab x -7500..-6500, exit boxes/van at z 10800). Plan for a toggle-able
+"terminal" variant + hook consumers: re/dm09_terminal_1109.md. Also from the research workflow: more cover + wreck cover boxes (kl_cover_1026) = safest first stage; SWAT drop-offs = parked vehicle + trigger only.
 2026-11-09 ~17:20 - OWNER (live): launcher music = Dead Men's MAIN MENU theme (not the FA theme). Clip name unknown in re/; local session finds it with kl_launcher_music.py list / Dead Men front-end banks (week plan T0). Launcher copied to C:\kl_build_1024\launcher_1109 for the owner's first Windows run.
 2026-11-09 ~17:30 - [cloud, offline] LAUNCHER MUSIC + BACKGROUND (owner: "Dead Men music to play slightly, mutable in the setup, a background for both games"),
 UNTESTED on Windows: tools/kl_launcher_music.py (standalone reader of the TESTER'S OWN Dead Men PC_Def.str, kl_str.py layout: PCM, interleaved PCM sets

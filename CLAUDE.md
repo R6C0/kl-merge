@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~17:45 - [d0, offline] DM09 TERMINAL ROUTE FEASIBLE: tools/kl_dm09_flood_1109.py on the LIVE DM09 mesh: road mouth (-5700, 9000) -> stairs -> campaign terminal van (-24630, 8958)
+is ONE mesh component, path 279 m, y -40 -> -1040, 0 broken steps. Blockers are authored only (west slab x -7500..-6500, exit boxes/van at z 10800). Plan for a toggle-able
+"terminal" variant + hook consumers: re/dm09_terminal_1109.md. Also from the research workflow: more cover + wreck cover boxes (kl_cover_1026) = safest first stage; SWAT drop-offs = parked vehicle + trigger only.
 2026-11-09 ~14:20 - OWNER (live) asks, details in re/week_plan_1028.md "Owner's words 11-09": DM03 Withdrawal = more SWAT at the BACK incl. the van spawn (front stays normal police),
 the double door before the garage as a BLOW-UP vault door with loot, more loot rooms + kick doors. DM09 Retomoto = escape down the steps to the van as in the campaign,
 SWAT dropped off by vans/cars down there, more cover, wrecks as cover after the explosion (owner CONFIRMED ~15:00), AI not colliding into vehicles, player-player collision. "Interactive, immersed."
