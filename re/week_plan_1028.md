@@ -25,6 +25,15 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 
 ## Tracks
 
+### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-09 16:20 cloud: tools/launcher/ written offline (Setup.bat bootstrap, WPF launcher, pack_release.ps1, READMEs; launcher_test PASS; UNTESTED on Windows).
+  LOCAL SESSIONS, in order, when the game is free: (1) free disk (owner) and review the live KLHook.ini for test keys ([Auto] [Bench] [Solo] Log=) - the package snapshots it;
+  (2) `python tools/kl_release.py make D:\klmerge_release --dd "<DD>" --dm "<DM>" --pd2 "<PD2>"` (OWNER_RELEASE_STEPS.md section 2), note the 'manifest:' size line;
+  (3) `kl_release.py verify` on the live folder; (4) `tools/launcher/pack_release.ps1` -> KLMerge_package_v1.0.0.zip (+ PyInstaller freeze if present); (5) run launcher_test.py
+  on Windows (PowerShell parser check), open KLMergeLauncher.ps1 once on the owner's PC with the game closed (status panel only; PLAY would hit his launch options);
+  (6) rehearse README_TESTERS.md on a clean Windows user or the second PC: Setup.bat -> INSTALL -> VERIFY -> PLAY KL MERGE -> UNINSTALL byte-exact. Fix what breaks, log it here.
+  Owner: pick the public release host (a private repo's release assets need a token) and set RELEASE_URL in "KLMerge Setup.bat"; tell testers Dead Men must be installed.
+
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
 - 11-02 18:50 scheduled: Q35 COMPLETE + CLEAN by the result files (21/21 maps, both seats PASS, 0 asserts/faults/soft, slots right, ShopPage 20 pairs on every seat; dll eb4c46d8). Gate in one command now: `python tools/kl_kit_summary.py --batch Q35_ C:/kl_build_1024/c9_1028/q35 --gate` (exit 1 unless every run is clean). Ship = c9.
 - 11-02 11:40 c9: SN2 PASS (next-ship candidate as a whole, ship_next ini + dll_0925 SHIP 56ac45c1; DM01/DM03/DD05 online, 0 asserts/soft/faults every seat; Carry 8 after DT1 PASS). DM03 coverdump DIVERGE = dump time skew (host dumped before its car #0 ring existed), SAFE. Candidate READY to ship.
