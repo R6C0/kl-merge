@@ -1,3 +1,6 @@
+2026-11-09 ~06:45 - [06] DM07UNHIDE_1109 (stage installed + undone byte-exact, 0 faults): with 4m_01 UN-hidden a live player still walks through (x -4009 -> -4751, y 400..405, z ~10420).
+So the hide flag is NOT the leak: 4m_01's player collision is missing or misplaced (run 1's visible 4m_02 control blocked). Control A of this run died (police). Fix = a blocker, being designed
+(workflow: HVK shapes on the fence line + bench survival via poke). Door kits: leaf peeks dropped (wrong slots), kick judged by controller 1 -> 3 with a 2nd try; DOORS_1109_DM01R (2569 first) queued.
 2026-11-09 ~06:25 - [06] DM07GATE_1109 run 2 (0 faults): the HIDDEN panel 4m_01 lets a LIVE player through at floor height (y 404..405, x -4564 -> -4722, z 10334); run 1: visible 4m_02 blocked at x -4549.
 A/B of run 2 void (south slope walk fell to y 2 at (-6897, 6593), death 06:13:10, corpse read BLOCKED: kit now voids + reads FROZEN). Earlier workflow: 0x400 is render-only in code, panel collision intact but floats
 58-70 cm over the mud under 4m_01 (29 under 4m_02). Toggle bench DM07UNHIDE_1109 (4m_01 un-hidden, staged + undone) being built: H blocked = un-hide fixes; H through = gap blocker needed.
