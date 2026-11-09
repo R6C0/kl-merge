@@ -1,3 +1,7 @@
+2026-11-09 ~09:25 - [d0] DD10 LEDGE ROUTE FIXED + LANDING LIVE: the vancall Target change (KLJoin ebdf1472) broke the balcony ride; ledgefix_1109 put Target back (600409d7), but the ride lands ON 06_Exit
+(8300,0,1100) = van lane, seat KILLED 3.6 s later (dd10ledgefix1109). New [Join] Land= (16e82f2b, kljoinland.c, [KLHook] JoinLand=1 recommended on, off online): moves the local player to Land after the jump.
+KLJoin 600409d7 -> 8f3034c0 (Land=8300 0 750, ledgeland_1109). Bench dd10land1109 PASS (TEST a7f87dc2): landed 313 ms after, van called/healed 9600, 0 deaths/faults. INSTALLED merged_1109land SHIP f016c36d, ini 4a740f92 -> 1ec9bea0.
+Undo: merged_1109land\UNDO.bat FIRST, then merged_1108h...; KLJoin: ledgeland_1109\UNDO.bat, then ledgefix_1109\UNDO.bat.
 2026-11-09 ~09:45 - [06] DM07PLANE tool 1da31ede (tools/kl_dm07plane_1109.py, self-test OK, reviewed): HVK slots 248/256 (hidden gate panels) -> 2 clones of DD10's HERO plane at x -4578, y 381..979, z 9852..10948; static count 2777 kept,
 REF 21320 reused (no new entities), --sub 0x108 or 0x72, panels stay hidden. GUESS: the list MOPP only reaches the old slot volumes (y 471..801), so the mud hole may stay. Bench kit DM07PLANE_1109 being written.
 BLOCKED BY DISK: C: 131 MB, D: 111 MB free (stage needs 426 MB); kl_tests fails 3 on ENOSPC. Owner: delete C:/kl_build_1024/dm07curtain_1109 + dm07unhide_1109 (~740 MB, stale) and the D: scratch dirs.
