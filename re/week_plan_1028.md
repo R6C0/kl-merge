@@ -1,5 +1,9 @@
 # Week plan 2026-10-28 .. ~11-04 (owner away, full access, never ask)
 
+Owner's words (11-09 ~14:00, live), DM03 Withdrawal: MORE SWAT (the 1108 pass swapped SWAT -> police: revisit). "Add more loot rooms. The door just before
+the garage is two doors in the original game, like a vault in the campaign FA: make that a door you can blow up, with a good bit of loot behind it. More doors you can
+kick down. It needs to feel interactive and make the player more immersed." Disk: owner deletes the stale set; sessions prune superseded 1105/1107 stages + dead pq_*/c9_* kits.
+
 Owner's words (11-09 ~13:30, live): "crack on really hard - I'm trying to get other players to test, either tomorrow for download then
 Wednesday for playing". DEADLINE: downloadable build Tue 11-10, tester play session Wed 11-11. Ship-readiness beats new features until then:
 a tester's install (fresh DD, no KL_PortTools/kl_build_1024/D: paths), online on stock + DM maps, undo, and a tester README; log blockers as "Owner:" lines.

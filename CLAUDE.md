@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~14:00 - OWNER (live): DM03 Withdrawal wants MORE SWAT (1108 pass went SWAT -> police: revisit), more loot rooms, the double door before the garage
+(campaign vault) as a BLOW-UP door with loot behind it, more kick doors; "interactive, immersed". Disk: sessions prune superseded 1105/1107 stages + dead pq_*/c9_* kits (C: 35 GB).
 2026-11-09 ~13:30 - OWNER (live): "crack on really hard". Testers: DOWNLOAD Tue 11-10, PLAY Wed 11-11. Until then ship-readiness first: a build a stranger
 can install on a fresh Dog Days (no paths from this PC), online on stock + DM maps, undo, tester README. Blockers as "Owner:" lines. Disk still full (C: 131 MB, D: 111 MB).
 2026-11-09 ~09:25 - [d0] DD10 LEDGE ROUTE FIXED + LANDING LIVE: the vancall Target change (KLJoin ebdf1472) broke the balcony ride; ledgefix_1109 put Target back (600409d7), but the ride lands ON 06_Exit
