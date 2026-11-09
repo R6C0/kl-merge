@@ -1,5 +1,9 @@
 # Week plan 2026-10-28 .. ~11-04 (owner away, full access, never ask)
 
+Owner's words (11-09 ~14:20, live), DM09 Retomoto: "extend it to the original mission where you gotta go down the steps to the van all the way down, if it's not
+too much of an issue; more SWAT down there with vans and cars dropping them off; more cover accessible all around; make sure you can go into cover from blown up vehicles
+[reading: wrecks as cover, confirm]; make sure the AI can't just collide into them; and collision so you can't go inside other people - player models have their own physics."
+
 Owner's words (11-09 ~14:00, live), DM03 Withdrawal: MORE SWAT (the 1108 pass swapped SWAT -> police: revisit). "Add more loot rooms. The door just before
 the garage is two doors in the original game, like a vault in the campaign FA: make that a door you can blow up, with a good bit of loot behind it. More doors you can
 kick down. It needs to feel interactive and make the player more immersed." Disk: owner deletes the stale set; sessions prune superseded 1105/1107 stages + dead pq_*/c9_* kits.

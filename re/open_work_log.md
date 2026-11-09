@@ -1,3 +1,10 @@
+2026-11-09 ~14:20 - OWNER ASKS (live, Claude app, via scheduled check-in), DM09 RETOMOTO, in his words: "if it isn't an issue extend it to the original mission where you
+gotta go down the steps to the van all the way down; more SWAT down there with vans and cars dropping them off; more cover accessible all around; make sure you can go into
+cover from blown up vehicles [my reading of 'go into car from blown up vehicles': wrecks usable as cover - CONFIRM with the owner]; make sure the AI can't just collide into them
+[vehicles], they do that sometimes; and something for collision: you can't go inside other people, player models get their own physics (player-player collision)."
+Status told to the owner: the escape bus arrives whole since ShieldDriveIn + HealFloor (merged_1108b, vanwait09h/m PASS), vehaudit says DM09 van 01 needs no route fix.
+Player-player collision and AI-vs-vehicle avoidance are hook/engine research items (re/ first, mark guesses); the longer street escape is an FA-layer change (kl_fa_author).
+Ship-readiness for Tue 11-10 / Wed 11-11 stays first; stage + bench these, install only with a PASS.
 2026-11-09 ~14:00 - OWNER ASKS (live, Claude app, via scheduled check-in). (1) DISK: C: 241 MB free, C:\kl_build_1024 = 35 GB. Owner deletes the stale set himself
 (dm07curtain_1109, dm07unhide_1109, doors2_verify, cover3_dm01, dm01spawns_plan, D:\scratch_bury_game, D:\kl_scratch_dm07sink_*). SESSIONS: prune the superseded stages
 yourselves, you know the UNDO ALL chain: dd10_slim_1105 3.3 GB, lastcall_fight/life/chain_1105 4.3 GB, arrival_1107 1.2 GB, vehroutes_1108 1.8 GB, the pq_1102*/1103*/1104*
