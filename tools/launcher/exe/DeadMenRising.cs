@@ -107,7 +107,7 @@ static class DeadMenRising
         string line = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] launcher exe: " + msg;
         try { File.AppendAllText(log, line + Environment.NewLine, Encoding.UTF8); } catch { }
         MessageBox.Show("The " + Title + " launcher could not start:\r\n\r\n" + msg +
-                        "\r\n\r\nPlease send KLMergeLauncher.log (beside the launcher) to Josh.",
+                        "\r\n\r\nPlease send KLMergeLauncher.log (beside the launcher) to @r6c0 on Discord.",
                         Title, MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 }

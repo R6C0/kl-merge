@@ -258,7 +258,7 @@ if /i "%PYEXE%"=="%PYDIR%\python.exe" (
 )
 "%PYEXE%" %PYARG% -c "import zstandard" >nul 2>nul
 if errorlevel 1 (
-    echo  ERROR: 'import zstandard' still fails. Open "%LOG%" and send it to Josh, or install it by hand:
+    echo  ERROR: 'import zstandard' still fails. Open "%LOG%" and send it to @r6c0 on Discord, or install it by hand:
     echo         "%PYEXE%" %PYARG% -m pip install zstandard
     goto :fail
 )

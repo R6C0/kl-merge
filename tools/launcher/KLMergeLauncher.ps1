@@ -22,7 +22,7 @@
 #   The hook is switched ON before each of the three so kl_release.py sees the real dinput8.dll (otherwise an install
 #   would write a second copy and leave the .klmerge-off one behind).
 #   COLLECT LOGS      zips <DD>\KLHook.log, KLHook_*.dmp, kl2_490_crash_*.mdmp, KLMergeInstall.json and this launcher's
-#                     log into DeadMenRising_logs_<stamp>.zip beside the launcher - the file to send to Josh after a crash.
+#                     log into DeadMenRising_logs_<stamp>.zip beside the launcher - the file to send to @r6c0 on Discord after a crash.
 #   MUSIC             a Dead Men music clip plays quietly (System.Windows.Media.MediaPlayer, volume 0.22, looped) from
 #                     <launcher folder>\music\deadmen_riff.wav. THAT FILE IS NEVER SHIPPED: the launcher makes it on the
 #                     tester's PC from the tester's OWN Dead Men PC_Def.str ("python kl_launcher_music.py extract", run once
@@ -72,7 +72,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 trap {
     $msg = 'The KL: Dead Men Rising launcher stopped: ' + $_.Exception.Message + ' (KLMergeLauncher.ps1 line ' + $_.InvocationInfo.ScriptLineNumber + ')'
     try { Add-Content -LiteralPath (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'KLMergeLauncher.log') -Value $msg -Encoding UTF8 } catch { }
-    try { [void][System.Windows.MessageBox]::Show($msg + "`r`n`r`nPlease send KLMergeLauncher.log (beside the launcher) to Josh.", 'KL: DEAD MEN RISING', 'OK', 'Error') } catch { }
+    try { [void][System.Windows.MessageBox]::Show($msg + "`r`n`r`nPlease send KLMergeLauncher.log (beside the launcher) to @r6c0 on Discord.", 'KL: DEAD MEN RISING', 'OK', 'Error') } catch { }
     exit 1
 }
 
@@ -328,7 +328,7 @@ function Game-Watch {
     $crash = @(Crash-Files $w.Since)
     $mins = [Math]::Round(((Get-Date) - $w.Since).TotalMinutes, 1)
     if ($crash.Count) {
-        Log ('the game CRASHED after ' + $mins + ' min (' + (($crash | ForEach-Object { $_.Name }) -join ', ') + '): COLLECT LOGS and send the zip to Josh')
+        Log ('the game CRASHED after ' + $mins + ' min (' + (($crash | ForEach-Object { $_.Name }) -join ', ') + '): COLLECT LOGS and send the zip to @r6c0 on Discord')
     } else {
         Log ('the game closed after ' + $mins + ' min')
     }
@@ -850,7 +850,7 @@ function Guard([scriptblock]$body) {
     try { & $body } catch {
         $m = $_.Exception.Message + ' (line ' + $_.InvocationInfo.ScriptLineNumber + ')'
         try { Log ('ERROR: ' + $m) } catch { }
-        try { [void][System.Windows.MessageBox]::Show($m + "`r`n`r`nThe launcher keeps running. COLLECT LOGS and send the zip to Josh if this repeats.", 'KL: DEAD MEN RISING', 'OK', 'Warning') } catch { }
+        try { [void][System.Windows.MessageBox]::Show($m + "`r`n`r`nThe launcher keeps running. COLLECT LOGS and send the zip to @r6c0 on Discord if this repeats.", 'KL: DEAD MEN RISING', 'OK', 'Warning') } catch { }
     }
 }
 
@@ -1059,7 +1059,7 @@ function Collect-Logs {
         }
         if ($copies.Count -eq 0) { Log 'could not read any of the log files'; return }
         Compress-Archive -LiteralPath $copies -DestinationPath $zip -CompressionLevel Optimal
-        Log ('logs collected: ' + $zip + '  (' + $copies.Count + ' files) - send this file to Josh')
+        Log ('logs collected: ' + $zip + '  (' + $copies.Count + ' files) - send this file to @r6c0 on Discord')
         Start-Process explorer.exe ('/select,"' + $zip + '"') | Out-Null
     } catch { Log ('could not zip the logs: ' + $_.Exception.Message) }
     finally { try { [IO.Directory]::Delete($tmp, $true) } catch { } }    # the launcher's own temp copies only, never the game folder

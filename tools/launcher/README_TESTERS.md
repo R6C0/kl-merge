@@ -128,10 +128,10 @@ Files to send (all in the Dog Days folder):
 - `KLMergeInstall.json` - what is installed (useful when the install itself misbehaves)
 
 The launcher's **COLLECT LOGS** button zips all of them (plus `KLMergeLauncher.log`) into `DeadMenRising_logs_<date>.zip`
-beside the launcher and opens the folder: send that file, with one line on what you were doing (map, mode, how many
+beside the launcher and opens the folder: send that file to **@r6c0 on Discord**, with one line on what you were doing (map, mode, how many
 players, what you pressed). If the game hangs instead of crashing, note the time and send the same files.
 
-If the INSTALL step refuses, send the LOG pane text (it is in `KLMergeLauncher.log` too).
+If the INSTALL step refuses, send the LOG pane text (it is in `KLMergeLauncher.log` too) to @r6c0 on Discord.
 
 ## Known limits of this tester build
 
