@@ -258,6 +258,16 @@ KITS = {
                          hook=('C:/kl_build_1024/merged_1108c/dll_test/dinput8.dll', '09a02a2cbcbeebb3eb3f01310c8b0cf8'),
                          ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'Log=1'], keepalive=True,
                          solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # 11-09: the call works, the centre spot is on the van's drive-in lane (gate x ~7975 -> stop 8642, lane z 1030, PathBlockerVan half 101 x 250); no kill box covers
+    # it (scratch dd10boxes.py: only escape/camera/audio boxes), 'KILLED BY RED' = Char 13 = the seat itself. Wait in the exit box's south strip (z 800, off the lane,
+    # inside AllyEscapeBox): the seat should live through the drive-in. Live hook = merged_1108f TEST 40d00164 (f0 11-09)
+    # run 11-09 03:59: 0 faults; the seat at (8300, 750) LIVED through the drive-in and the 53 s wait (van state 3 4.3 s after the call), so the centre death fits
+    # the run-over GUESS; first wait at health 3600/9600 (hit before state 3, ShieldDriveIn did not see a state 2), the next wait 9600. Round end unseen (script ends first)
+    'dd10side1109': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '1a0d94b0', 'KLJoin.ini': 'ebdf1472'},
+                         vancall=((None, None, None), (8300, 50, 800)),
+                         hook=('C:/kl_build_1024/merged_1108f/dll_test/dinput8.dll', '40d00164001576eea78bf8e5e9720e51'),
+                         ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'Log=1'], keepalive=True,
+                         solo_secs=600, parts=('solo',), shots='90-400:10'),
     # 11-09: the INSTALLED DM05A club music level B (0ff298a6, stage already in): load + faults + shots, nothing installed
     # run 11-09 03:03: 0 asserts/faults/dumps over 290 s of play, but the round had 78 s left when the script passed (0x1f/0x20 unseen): 480 -> 600
     'lcmusicblive1109': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': '0ff298a6', 'KLGuns.ini': '33432bb9'},
