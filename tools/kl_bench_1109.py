@@ -129,8 +129,22 @@ def kick_probe(lbl, when, n=10):
         # the pointer itself = the controller object, the same 'obj' 'ents KickDoor_Action' prints: ties a registry slot to a door.
         # DOORS_1109_DM01 run 1: 9 registered (all gate 2 state 1); only slots 0..3 were read, so the kicked door's slot was unseen.
         s += ['peek 0xdd265c+0x%x %s-%s-ctrl%d-ptr' % (o, lbl, when, i)]
-        s += ['peek 0xdd265c+0x%x+0x%x %s-%s-ctrl%d-%s' % (o, f, lbl, when, i, nm) for f, nm in ((0x58, 'gate'), (0x5c, 'state'), (0x34, 'p34'), (0x60, 'box60'), (0x64, 'box64'))]
+        # ptr + state only: gate/p34/box fields read 2/1/set on all 9 in runs 1 + 2, and 6 lines a slot crowd the 640-line script (klauto kla_cmd[640])
+        s += ['peek 0xdd265c+0x%x+0x5c %s-%s-ctrl%d-state' % (o, lbl, when, i)]
     return s
+
+
+# the leaf 'Door' (ZSTDOBJ, the donor's last kid, node 4189) of each grafted group. GUESS (kick-leaf-proof workflow): DM01 groups KL_Door_8/_9 sit at
+# slots 16703/16704 and their kids follow (boxes at 16710/16732 = start + 5), so the leaf is the last kid: 16726 / 16748. Three slots each so the one
+# that turns names the leaf; 'ents Door 600' prints the real slot in the same run (run 2's 'ents Door 200' stopped at slot 16375). Pinned DM01 stage only.
+LEAF_SLOTS = {957: (16724, 16725, 16726), 2569: (16746, 16747, 16748)}
+
+
+def leaf_probe(lbl, when, host):
+    # node = [obj+4] of entity slot S via the ents table [[[0xe0ff90]+0xc]+0xc] (klauto.c kla_ents): 3x3 rotation at node+0x00..0x20, m6 = +0x18 and
+    # m8 = +0x20 are the x axis (klescort.c kle_node). A 90 deg swing about y: m6 1 -> ~0, m8 0 -> ~+-1 (raw float bits, 3f800000 = 1.0)
+    return ['peek 0xe0ff90+0xc+0xc+0x%x+4+0x%x %s-%s-slot%d-%s' % (S * 0x80 + 0x60, f, lbl, when, S, nm)
+            for S in LEAF_SLOTS.get(host, ()) for f, nm in ((0x18, 'm6'), (0x20, 'm8'))]
 
 
 def door_seg(d, lbl):
@@ -145,12 +159,12 @@ def door_seg(d, lbl):
     f = (b[0], b[2]) if b else (h[0], h[2])
     # waitstate 0x19 first: DM02_1109's first tele came 5 s after 'level loaded', before the round ran (session state not 0x19), and was refused
     s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0], a[1] + 150, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
-         'ents KL_Door 20', 'ents Door 200', 'ents KickDoor_Action 20'] + kick_probe(lbl, 'stand') + [
+         'ents KL_Door 20', 'ents Door 600', 'ents KickDoor_Action 20'] + kick_probe(lbl, 'stand') + leaf_probe(lbl, 'stand', d['host']) + [
          # kick from the stand, no walk first: DOORS_1109_DM01 run 1 door 2 had the kick prompt (0x12) at the stand and lost it (0) after the goto to
          # the hinge (out of the box), so E did nothing; door 1 kept 0x12 at the leaf and E snapped the player 55 cm / 60 deg (kick animation, GUESS).
          'face %d %d' % c, 'wait 700', 'pos %s-at-leaf' % lbl] + kick_probe(lbl, 'atleaf') + [
          'tap E 700', 'wait 600', 'tap E 700', 'wait 3500', 'log BENCH1109 %s door %s: kicked (E x2)' % (lbl, d['host']), 'pos %s-kicked' % lbl,
-         'ents KL_Door 20', 'ents Door 200'] + kick_probe(lbl, 'kicked')
+         'ents KL_Door 20', 'ents Door 600'] + kick_probe(lbl, 'kicked') + leaf_probe(lbl, 'kicked', d['host'])
     if b:
         s += ['goto %d %d 70 6000' % c, 'face %d %d' % f, 'goto %d %d 70 9000' % (b[0], b[2]), 'pos %s-through' % lbl, 'log BENCH1109 %s door %s: through goto done' % (lbl, d['host'])]
     return s
