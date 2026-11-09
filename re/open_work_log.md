@@ -1,3 +1,7 @@
+2026-11-09 ~09:00 - [06] DM07 gap, hero-plane workflow verdict: options (1) un-hide and (2) bury are likely NO-GO. The panels' HVK boxes are y 471..801 over mud y 388..460, so an 11-83 cm hole stays under them
+either way (z ~10420 sits under 4m_11, still hidden in DM07UNHIDE; this explains its 'walked through' vs the 'blocked at z 10334' commits). DD10's ColiObj_HERO_Plane01 = HVK shape 1060 (static, 4 verts / 2 tris, sub (0,0x108,2);
+'0x108 = hero-only' is a GUESS). Recipe C: clone it twice into DM07 at x ~-4578, z 9990..10800, y 380..980, panels stay hidden; tools/kl_dm07plane_1109.py being written (workflow), 0x108 and 0x72 variants to bench.
+Staging blocked: C: 192 MB, D: 111 MB free. Stale single-link stages C:/kl_build_1024/dm07curtain_1109 (~340 MB) + dm07unhide_1109 (~400 MB) can go (owner).
 2026-11-09 ~08:50 - [06] DM02_1109 run d ALL PASS: kick door 1 kicked 1st try (ctrl 0 1 -> 3) + walk-through; stands now = each group's KickDoor_ArrowBack/Front (door 1's leaf hangs from its hinge END,
 hinge +-130 sat on the jamb edge 16-46 cm outside the kick box). Kick doors proven: DM01 x2, DM03, DM03A, DM02 x2. DD10GATE_1109 ALL PASS: 3 walks west stop at x 8059 = stock collision-only ColiObj_HERO_Plane01 (x 8017),
 so DD10's hidden gate does NOT leak. DM07CURTAIN_1109 FAIL: KillBox curtain inert (cur11b walked through alive); workflow: data identical to stock F08/F02 KillBoxes, no KillBox ever proven to kill -> drop KillBoxes.
