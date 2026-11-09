@@ -54,13 +54,14 @@ def hasta(mut=None):
     g = Log('HASTA1109')
     for i in range(14):
         late = i >= 7
-        g.ent('OYCHECK_BEFORE01', (0, 0, 0), hidden=late)
-        g.ent('BarricadeB_01', (1, 0, 0), hidden=late and mut != 'barricade')
-        g.ent('BarricadeB_02', (2, 0, 0), hidden=late)
-        g.ent('Roadblock_01', (3, 0, 0), hidden=late)
+        g.ent('OYCHECK_BEFORE01', (25991.7, 0, 14117.8), hidden=late)
+        g.ent('BarricadeB_01', (26409, 800, 14031), hidden=late and mut != 'barricade')
+        g.ent('BarricadeB_02', (26400, 800, 14000), hidden=late)
+        g.ent('Roadblock_01', (26560.7, 0, 13426.4), hidden=late and mut != 'roadblock')
+        g.ent('Roadblock_01', (13721.6, 1050, 4735.6), slot=2)      # the map's second Roadblock_01, far from the wall: never hides, must be ignored
         if mut != 'broken':
-            g.ent('Broken01', (4, 0, 0), hidden=not late)
-        g.ent('OYCHECK_AFTER01', (5, 0, 0), hidden=not late)
+            g.ent('Broken01', (26409, 800, 14031), hidden=not late)
+        g.ent('OYCHECK_AFTER01', (25937.3, 0, 14117.8), hidden=not late)
         g.say('BENCH1109 hasta sample %d' % i)
         g.wait(9)
     return g.done()
@@ -149,7 +150,7 @@ def main():
         r, _ = M.item_checks(k, a, dd, ctrl)
         ok(len(r) >= 2 and not [x for x in r if x[0] == 'FAIL'], '%s: good synthetic log must have 0 FAIL, got %s' % (k, [x[1:] for x in r if x[0] == 'FAIL']))
         ok(M.item_checks(k, [], [], None)[0] and all(x[0] != 'PASS' or 'door' not in x[1] for x in M.item_checks(k, [], [], None)[0]), '%s: empty log, no door PASS' % k)
-    muts = {'HASTA1109': ['barricade', 'broken'],
+    muts = {'HASTA1109': ['barricade', 'broken', 'roadblock'],
             'DM01B_1109': ['east', 'nostate3', 'nolate', 'stuck', 'mixrow'],
             'DM07_1109': ['fence', 'nolate', 'nocontrol', 'walkedout', 'nopos', 'farpos', 'nostate3', 'stuck'],
             'DM03_1109': ['nomove', 'nopolice', 'noleaf', 'nokick', 'static', 'nogoto'],

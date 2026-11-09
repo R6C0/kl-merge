@@ -401,6 +401,9 @@ def ents(lines, sub):
     return out
 
 
+HASTA_VAULT = (26200.0, 14000.0)                  # x, z of the DM11B loot wing wall (HASTA1109 log: barricade 26409/14031, roadblock 26560/13426)
+
+
 def by_entity(rows):
     """rows -> {(slot, full name): [rows in log order]}: one entry per entity, never per name fragment."""
     g = {}
@@ -447,7 +450,8 @@ def item_checks(k, a, dd=(), ctrl=None):
         '%d host log lines' % len(a))
     if k == 'HASTA1109':
         for pat, before in (('OYCHECK_BEFORE01', True), ('BarricadeB_01', True), ('Roadblock_01', True), ('Broken01', False), ('OYCHECK_AFTER01', False)):
-            g = by_entity(ents(a, pat))
+            # only the vault's own pieces: the map has a second ColiObj_Obj_Roadblock_01 at (13721, 4735) that the beat never touches
+            g = by_entity([r for r in ents(a, pat) if abs(r[3][0] - HASTA_VAULT[0]) < 3000 and abs(r[3][2] - HASTA_VAULT[1]) < 3000])
             bad = []
             for (slot, name), r in sorted(g.items()):
                 first, last = r[0][2], r[-1][2]
