@@ -304,6 +304,16 @@ KITS = {
                              solo_secs=600, parts=('solo',), shots='90-400:10'),
     # run 11-09 09:06 ALL PASS (0 faults): both rides fire (Jump05 (6488, 1188, 3123), then 06_Exit (8300, 0, 1100)), the van is called at the landing
     # (ShieldCalled ON, health 3600/9600), but the seat is KILLED BY RED 3.6 s after landing (van drive-in lane / parked-van body) -> [Join] Land= (kljoinland.c)
+    # 11-09: the same route with [Join.3] Land=8300 0 750 (KLJoin 8f3034c0, C:/kl_build_1024/ledgeland_1109) and the merged_1109land TEST dll
+    # (= merged_1108h source 8c4292b9 + 16e82f2b Land=). PASS = 'join: player 0 landed: ... to (8300, 10, 750)', the van is called and the seat lives
+    'dd10land1109': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '1a0d94b0', 'KLJoin.ini': '8f3034c0'},
+                         ledge=((6820, 1600, 3100), (6515, 2555)),
+                         hook=('C:/kl_build_1024/merged_1109land/dll_test/dinput8.dll', 'a7f87dc2183050659a2538d5b2502a50'),
+                         ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'], keepalive=True,
+                         solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # run 11-09 09:20 PASS on purpose (0 asserts/faults/dumps, 0 KILLED BY): 'landed: moved from (8300, 0, 1100) to (8300, 10, 750)' 313 ms after the
+    # request; van called at the landing (ShieldCalled ON, 3600 -> 9600 by HealFloor at state 3), waited, drove out empty, called again 9600/9600.
+    # Only FAIL: session 0x1f/0x20 unseen (the script passed before the round ended, as lcmusicblive1109). merged_1109land SHIP installed 09:25.
     # 11-09: the INSTALLED DM05A club music level B (0ff298a6, stage already in): load + faults + shots, nothing installed
     # run 11-09 03:03: 0 asserts/faults/dumps over 290 s of play, but the round had 78 s left when the script passed (0x1f/0x20 unseen): 480 -> 600
     'lcmusicblive1109': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': '0ff298a6', 'KLGuns.ini': '33432bb9'},
