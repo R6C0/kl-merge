@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~17:05 - [d0, offline] OWNER live: DM03 crash 0x4f8a8e at the police respawn (list record id 0; debug/notes/2026-11-09-dm03-fedrespawn-crash.md), DM03 kick doors 546/1255 one-sided (agent restaging on live c586d445),
+no music in round 2 (agent). DM09 terminal bounds + OnlineVanRest pushed 0a8edd21 (stage 7ac5c209, dll SHIP d9239eef, NOT installed).
 2026-11-09 ~19:40 - [06, offline] LAUNCHER RIFF POPS FIXED, pushed e07101e5: kl_pybink now decodes FIRST with burst_limit 4.0 (9 overloaded Bink blocks = the trailer's own
 40-43 ms full-scale pops at 33.68..37.52 s, in ffmpeg's decode too); ffmpeg = fallback as decoded (no sample rule possible: the trailer clips for real in 42k frames). --keep-pops = old way.
 Checked: pybink = ffmpeg 0-2 LSB outside those blocks; pop windows now at/below the music. 5.4 s to make. launcher_1109\music\deadmen_riff.wav regenerated (old in _before_1625), preview 14. Self-test 93, kl_tests --py 58/0/1.
