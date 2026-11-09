@@ -45,6 +45,12 @@ PY_NEEDS = {
     'kl_map_shift_test.py': [r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days\KLExpansion\Maps\DM11B\F04_Main.zip'],
 }
 
+# python tests that need a third-party module: (module name) -> else SKIP with the pip line (2026-11-09: kl_release_test died with
+# AttributeError 'NoneType'.ZstdCompressionParameters on a host without zstandard)
+PY_NEEDS_MODULE = {
+    'kl_release_test.py': 'zstandard',
+}
+
 # *_test.py files that are NOT self-tests (they drive the game): never run here
 PY_NOT_TESTS = {
     'kl_solo_test.py': 'live two-seat bench driver (needs --hook and Dog Days)',
@@ -122,6 +128,18 @@ C_TESTS = {
     'klua_test.c': 'logic',            # no windows.h
     'klucchide_test.c': 'logic',       # klucchide_logic.h
     'klud_test.c': 'logic',            # klucc_down_logic.h
+    # 2026-11-09 (scheduled check-in): the luvsic campaign merge + music / grenade / van-rest tests, all run here with gcc -m32 + ASan/UBSan clean
+    'kladpcm_test.c': 'logic',         # kladpcm.h (Dead Men ADPCM .str decode vs a spec reference decoder; 615 checks)
+    'klcampaign_test.c': 'logic',      # klcampaign_logic.h ([Campaign] Enable gate: scene key m<NN>[ab]\, idle on FA / Arcade / online)
+    'klcampgive_test.c': 'logic',      # klcampgive_logic.h ([CampGive] give / swap; includes windows.h via the shim)
+    'klcampguard_test.c': 'logic',     # klcampguard_logic.h ([CampGuard] exact-site byte checks against kl2.exe 0490's measured bytes)
+    'klcamprappel_test.c': 'logic',    # klcamprappel_logic.h (campaign rappel guards, missing-clip refusal)
+    'klcamprevive_test.c': 'logic',    # klcamprevive_logic.h (wounded-merc watch, observation only)
+    'klcampsquad_test.c': 'logic',     # klcampsquad_logic.h ([CampSquad] crew orders, pure numbers; includes windows.h via the shim)
+    'klcmpcore_test.c': 'logic',       # klcmpcore_logic.h (campaign core: scene-id routing, save redirect, progress ini)
+    'klgrenade_test.c': 'logic',       # klgrenade_logic.h ([Grenade] Release decision)
+    'kllevelmusic_test.c': 'logic',    # kllevelmusic_logic.h ([LevelMusic] Restart: round 2+ music replay decision)
+    'klvanrest_test.c': 'logic',       # klvanrest_logic.h ([BotFill] OnlineVanRest rest-position guard)
     'kladren_test.c': 'win',           # includes kladren.c
     'klambience_test.c': 'win',        # klambience.c
     'klbotdown_test.c': 'win',         # klbotdown.c
@@ -193,6 +211,10 @@ def py_tests(only):
         missing = [f for f in PY_NEEDS.get(name, []) if not os.path.exists(f)]
         if missing:
             yield Result(name, 'SKIP', 'needs ' + os.path.basename(missing[0]) + ' (game file, not here)')
+            continue
+        mod = PY_NEEDS_MODULE.get(name)
+        if mod and run([sys.executable, '-c', 'import ' + mod], HERE)[0] != 0:
+            yield Result(name, 'SKIP', 'needs the python module %s (pip install %s)' % (mod, mod))
             continue
         rc, out = run([sys.executable, path], HERE)
         yield Result(name, 'PASS' if rc == 0 else 'FAIL', ('exit %d: ' % rc if rc else '') + last_line(out), out)

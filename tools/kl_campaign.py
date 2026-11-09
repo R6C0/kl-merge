@@ -184,9 +184,9 @@ def _files(root):
     return sorted(r)
 
 def _guard_target(dst, dd):
-    n = os.path.normcase(os.path.abspath(dst))
+    n = os.path.normcase(os.path.abspath(dst)).lower()      # .lower(): normcase folds case on Windows only; the refusal must hold on any host (cloud tests)
     if 'kl_portbackup' in n: raise SystemExit('refusing: %s is in KL_PortBackup' % dst)
-    base = os.path.normcase(os.path.abspath(os.path.join(dd, 'Scenes')))
+    base = os.path.normcase(os.path.abspath(os.path.join(dd, 'Scenes'))).lower()
     if not n.startswith(base + os.sep): raise SystemExit('refusing: %s is not under %s' % (dst, base))
 
 def install_level(level_id, out, dd, work, running=game_running, force=False, log=print):

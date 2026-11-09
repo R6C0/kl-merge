@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~01:05 - [scheduled check-in, offline] kl_tests GREEN on Linux 137/0/17: klmenulook_test 0xC0000409 = the test's own out[260] vs cap 300 (fixed, 109 checks); 11 unlisted C tests
+listed (all PASS, ASan/UBSan clean); kl_campaign KL_PortBackup guard now case-folds on every host; kl_release_test SKIPs without zstandard. Owner: run `python tools\kl_tests.py --c` on Windows once;
+the DD / DM folders are not connected to the scheduled task (KLHook.log / dumps unread).
 2026-11-09 ~21:30 - [main, offline] LUVSIC CAMPAIGN MERGE (owner: "his campaign stuff ... maybe not the whole ui thing"): third_party/anp refreshed to his 32aa649 minus UI (dmhud/dmfont/anp_menu/anp_movie);
 tools/kl_campaign.py (setup/convert/status/install/undo, additive M01..M14 folders, md5 manifest; _test 50/0); klhook ports, ALL default 0 behind [Campaign] Enable: klcampaign.c (scene routing, load trigger, save redirect,
 ADPCM), klcampguard.c ([CampGuard] incl. ListUserFA = the DM03 0x4f8a8e respawn crash), [Grenade] Release, [CopSquad] HeldGuard, klcampsquad/klcampgive/klcamprappel, klcamprevive (observe only). FA down modules skip campaign levels.
