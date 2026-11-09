@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~00:10 - [campaign] MENU LOOK INSTALLED on owner "install this too" (NOT benched): toggle [MenuLook] DeadMen (DLL default 1, already in campaign SHIP 4722b12a, no ini line added).
+Stage 1 fonts+colours: KLExpansion\Overlay\Patch01_deadmen.zip ba1154de, Patch01_rows12_deadmen.zip 3a452a28, Scenes\kaneandlynch_deadmen.zip 31623dcc (worst row +16.3% wide).
+Stage 4 clicks: <DD>\Scenes\kaneandlynch_deadmen.WHD 52e4c167 / .WAV dc8effa7 (5 OSD records -> DM UserInterface Up_Down/Toggle/Slide/Back/Select; ambience + OpenWindow kept). Stage 2 (plates/bars) not written.
+Undo: C:\kl_build_1024\menulook_1109\stage1\UNDO menu look 1109.bat + sounds\stage\UNDO menu sounds 1109 (variant).bat; or DeadMen=0. Check "menulook:" lines in KLHook.log.
 2026-11-09 ~23:55 - [campaign] INSTALLED on owner "install all" (NOT benched): luvsics Dead Men campaign, all 16 levels + M07F funeral cutscene (Scenes\Locations\Mxx, own folders, 2.9 GB),
 dll 50d20cd1 -> campaign SHIP 4722b12a (out_campaign_1109), ini 4cb8faa0 -> ba4441c1 ([Campaign] Enable/Routing/Trigger + CampGuard/Squad/Give/Rappel/Revive, Grenade Release=1).
 Start: game at main menu -> <DD>\Dead Men Campaign.bat -> pick a level (writes KLCampaign_load.txt). Undo: C:\kl_build_1024\campaign_1109\UNDO.bat FIRST, then levelmusic_1109.
