@@ -67,6 +67,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~23:00 - [coop] DM02 CO-OP SHUTTERS staged, NOT installed: tools/kl_dm02coop_1109.py (+_test PASS, rehearsal PASS), stage C:\kl_build_1024\dm02coop_1109 (--variant timer DEFAULT 90 s | coop). The 3 Atrium_201a shutters (REF 24710/24711/24712) get F07-style KEYS (rise 300 cm, frames 0..82) + MatPosAnim, a type-4 HVK slab each, Open nodes -> MatPosAnimProxy; OpenNow keeps only the 2 frontages. Pins live zip bd119e9c, bots a5068fa0. timer zip 43c088c2 / bots bb8f04cb, coop zip 698fc59b / bots bd22461d. Proven offline: only prp/gms/buf/HVK members change, slots identical, static list + MOPP + order untouched, check.py 0 bad, check_passes PASS. GUESS: the keyed ZSTDOBJ still draws and its type-4 body follows it; needs the bench in the stage README.
 2026-11-09 ~18:30 - [main] KICK DOOR AUDIT (workflow, offline, adversarially verified) of every added door: DEAD (no room / sealed / bypassable) = DD10 19 of 21 (only 9 + 13 gate),
 DM01 957 + 2569, DM03A 6516 (+ older doors 1, 5), DM01B !1 D4 + !2 D2 (!1 D3 unclear). Real: DM01 1,2,4-7, DM02 all 6, DM05A both, DM01B !1 D2. DM06/06B/07/09/11B have none.
 Kits being staged (workflow wmwfodbbu): revert the dead ones to plain doors, DD10 + 14 two-sided candidates checked for replacements. Nothing installed. Details: scratchpad doors_audit + the workflow output.
