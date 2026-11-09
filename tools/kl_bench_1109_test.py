@@ -117,6 +117,8 @@ def gate(mut=None):
             if mut == 'nopos' and lbl == 'gateB' and i == 3:
                 continue
             g.say('pos %s-%d: me #0 (%d, 410, %d) heading 270' % (lbl, i, x, st[2]))
+            if mut == 'dead' and lbl == 'gateA' and i == 2:
+                g.raw("hud: ONLINE skulls state: row 0 'R5 J.C.' kind 3 deaths 1 -> lives 2 (drawn)")
     return g.done()
 
 
@@ -199,6 +201,9 @@ def main():
     # the gate verdict reads the crossings: visible panels blocked, the hidden one passed
     inf = M.item_checks('DM07GATE_1109', gate(), [], None)[1]
     ok(any('A (visible 4m_02) BLOCKED, B (visible 4m_03) BLOCKED, H (hidden 4m_01) THROUGH' in x for x in inf), 'DM07GATE: verdict line reads the crossings %s' % [x for x in inf if 'verdict' in x])
+    # a host death inside a crossing voids its BLOCKED (WARN, verdict DEAD)
+    r, inf = M.item_checks('DM07GATE_1109', gate('dead'), [], None)
+    ok(any('A (visible 4m_02) DEAD' in x for x in inf) and any(x[0] == 'WARN' and 'death' in x[1] for x in r), 'DM07GATE: a death in crossing A reads DEAD + WARN')
     # pos parsed by name: the label decides, not the position in the line
     ok(M.pos_of(['01:00:00.000 script 3: pos x-label: me #0 (-4300, 550, 10400) heading 12'], 'x-label') == (-4300, 550, 10400), 'pos_of parses the named x')
     ok(M.pos_of(['01:00:00.000 script 3: pos other: me #0 (1, 2, 3) heading 12'], 'x-label') is None, 'pos_of: other label is None')
