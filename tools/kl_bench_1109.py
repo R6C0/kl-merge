@@ -163,7 +163,9 @@ def door_seg(d, lbl):
     # at the leaf, face the far stand point (the walk direction), not c: DM02_1109 faced c from 77 cm and 60 cm sideways (bearing error 74, 4 s timeout)
     f = (b[0], b[2]) if b else (h[0], h[2])
     # waitstate 0x19 first: DM02_1109's first tele came 5 s after 'level loaded', before the round ran (session state not 0x19), and was refused
-    s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0], a[1] + 150, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
+    # tele 60 cm over the stand, not 150: DOORS_1109_DM01R door 957 landed 1.5 m up on shop furniture at (1969, 156, 22127) out of the kick box
+    # (prompt 0 all through), where run 3 from the same point slid to the floor at (2045, 8, 21973) and had the prompt
+    s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0], a[1] + 60, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
          'ents KL_Door 20', 'ents KickDoor_Action 20'] + kick_probe(lbl, 'stand') + [
          # kick from the stand, no walk first: DOORS_1109_DM01 run 1 door 2 had the kick prompt (0x12) at the stand and lost it (0) after the goto to
          # the hinge (out of the box), so E did nothing; door 1 kept 0x12 at the leaf and E snapped the player 55 cm / 60 deg (kick animation, GUESS).
@@ -172,8 +174,10 @@ def door_seg(d, lbl):
          'ents KL_Door 20'] + kick_probe(lbl, 'kicked') + [
          # second attempt: run 3's door 1 kept the prompt (active 0x12, best 6) after a face that timed out (bearing error 123) and E did not kick;
          # face again and press twice more (a kicked door ignores it: its controller stays 3)
-         'face %d %d' % c, 'wait 1000', 'tap E 700', 'wait 600', 'tap E 700', 'wait 3500',
-         'log BENCH1109 %s door %s: kicked again (E x2)' % (lbl, d['host']), 'pos %s-kicked2' % lbl] + kick_probe(lbl, 'kicked2')
+         # DM01R: door 2569 kicked only on this second pair (prompt 0x12 at the first pair too), so press four times here. 'face' cannot turn a
+         # standing player (the heading read is the body's; DM01R kept 129 / 86 through every 4 s face), so it stays a no-harm try
+         'face %d %d' % c, 'wait 1000', 'tap E 400', 'wait 900', 'tap E 400', 'wait 900', 'tap E 400', 'wait 900', 'tap E 400', 'wait 3000',
+         'log BENCH1109 %s door %s: kicked again (E x4)' % (lbl, d['host']), 'pos %s-kicked2' % lbl] + kick_probe(lbl, 'kicked2')
     if b:
         s += ['goto %d %d 70 6000' % c, 'face %d %d' % f, 'goto %d %d 70 9000' % (b[0], b[2]), 'pos %s-through' % lbl, 'log BENCH1109 %s door %s: through goto done' % (lbl, d['host'])]
     return s
