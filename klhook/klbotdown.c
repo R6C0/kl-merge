@@ -500,6 +500,7 @@ static void klbd_pass(struct klb_snap *snp, const char *why, int online);
 static void klbd_tick(int game_thread)
 {
     struct klb_snap sn; DWORD rules, state; int level, online = 0; char why[200];
+    if (klcmp_level_active()) return;                    /* campaign level (klcampaign_gate.h): the Dead Men revive/wounded port (klcamprevive.c) owns it; this FA part never acts there */
     if (!klbd.on || !game_thread || !klh_exe_ok) return;
     why[0] = 0;
     if (klbd.arc && klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLBD_ROUND && klb_read(&sn) && sn.state == KLBD_ROUND) online = 0;

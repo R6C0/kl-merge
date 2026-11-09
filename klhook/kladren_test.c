@@ -21,6 +21,7 @@ static BYTE mem[0x02000000 + 0x10000];
 static char logbuf[1 << 16]; static int nlog;
 static const char *klh_ini = "";
 static int klh_exe_ok = 1;
+static int klcmp_level_active(void) { return 0; }   /* klcampaign_gate.h stand-in: the campaign skip at the head of kad_tick is not taken */
 static void klog(const char *fmt, ...)
 {
     va_list ap; char t[1500]; va_start(ap, fmt); vsnprintf(t, sizeof t, fmt, ap); va_end(ap);

@@ -46,6 +46,7 @@
  *                             Progress/AchievementGuard/Adpcm; import slots + data only). OFF by default; NOT RUN IN THE GAME
  *   klcampsquad.c  x     x    campaign crew orders 1/2/3/Tab (luvsic's squad.inc, ported; [CampSquad], campaign levels only, OFF by default)
  *   klcampgive.c   x     x    campaign give/swap a gun (key 4) (luvsic's give.inc; [CampGive], OFF; equipassist.inc NOT ported)
+ *   klcamprappel.c x     x    campaign rappel guards (luvsic rappel.inc port, [CampRappel] Mode, off); klcamprevive.c: wounded-merc watch ([CampRevive], off)
  *   klfreeclimb.c  x     x    Dead Men's FREE climb, W + E at any ledge 25 .. 220 high (luvsic's ANP climb.inc, ported): a
  *                             ZFFActionVaultOver with a vtable copy of this DLL's own; data writes only, every call under
  *                             a fault guard ([Climb]). OFF by default; needs the climb clips in the level's .ANM. NOT RUN
@@ -847,9 +848,12 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klhop.c"
 #include "klmove.c"
 #include "klclimb.c"
+#include "klcampaign_gate.h"                           /* klcampaign_gate.h: klcmp_level_active() = [Campaign] Enable=1 AND a campaign scene; BEFORE klfreeclimb.c-after modules (klcamprappel.c, klcamprevive.c) and kldown.c / klbotdown.c / klcdying.c / kladren.c (their ticks skip campaign levels) */
 #include "klfreeclimb.c"                                 /* klfreeclimb.c: Dead Men's free climb, luvsic's port (off unless [Climb] Enable); AFTER klclimb.c (klq_slot) */
 #include "klunstick.c"                                  /* klunstick.c: [Unstick] put a player stuck in cover back to his last free place (default on, offline); AFTER klfreeclimb.c (klfc_guard, klfc_pose) */
 #include "klrappel.c"                                    /* klrappel.c: off unless [Rappel] Enable */
+#include "klcamprappel.c"                              /* klcamprappel.c: campaign rappel guards, [CampRappel] Mode (off); AFTER klfreeclimb.c (klfc_guard), klrappel.c (klrp, klrp_lv) */
+#include "klcamprevive.c"                              /* klcamprevive.c: campaign wounded-merc watch, [CampRevive] Enable (off, observation only); AFTER klfreeclimb.c */
 #include "klfallrescue.c"                              /* klfallrescue.c: [FallRescue] a player who leaves the level box is put back on his last safe place before the game kills him (default on); AFTER klrappel.c (klrp_r), klclimb.c (klq_r), klfreeclimb.c */
 #include "kljoinland.c"                                /* kljoinland.c: [Join] Land= - after a jump the local player is moved from the jump point to Land (offline); AFTER klfreeclimb.c, kljoin.c */
 #include "kltrait.c"                                      /* kltrait.c: [Traits] a small trait per wardrobe character (a table + getters; AFTER klcrew.c, BEFORE klbalance.c) */
@@ -1465,6 +1469,8 @@ static void klh_tick(int game_thread)
     KLPT(klfc_tick(game_thread));                           /* klfreeclimb.c: W + E at a ledge (OFF unless [Climb] Enable=1; gameplay call only) */
     KLPT(klq_tick(game_thread));                            /* klclimb.c: the player at the foot of a KLJoin.ini [Climb] edge climbs it (OFF unless [EdgeClimb] Enable=1) */
     KLPT(klrp_tick(game_thread));                           /* klrappel.c: the descent of the rappel cut */
+    KLPT(kcamr_tick(game_thread));                            /* klcamprappel.c: campaign rappel guards (OFF unless [CampRappel] Mode and a campaign level) */
+    KLPT(klcrv_tick(game_thread));                          /* klcamprevive.c: campaign wounded-merc watch (OFF unless [CampRevive] Enable and a campaign level) */
     KLPT(klc_tick(game_thread));
     KLPT(klw_tick(game_thread));                            /* after klc_tick: the player's own body goes first */
     KLPT(klk_tick(game_thread));                            /* after klw_tick: it reads who wears whom */
@@ -1927,6 +1933,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klfr_init();
     klq_init();
     klrp_init();
+    kcamr_init();
+    klcrv_init();
     klr_init();
     kly_init();
     klu_init();

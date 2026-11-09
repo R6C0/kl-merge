@@ -1063,6 +1063,7 @@ static void kad_forget(const char *why)
 static void kad_tick(int game_thread)
 {
     struct klb_snap sn; DWORD rules, state, now, tick = 0, clock, gd, pl = 0, D = 0, ds = 0; int level, act, i, j, hs = -1; char why[200];
+    if (klcmp_level_active()) return;                    /* campaign level (klcampaign_gate.h): the Dead Men revive/wounded port (klcamprevive.c) owns it; this FA part never acts there */
     BYTE police = 0, idx = 0xff;
     float pos[KLB_NREC][3]; int havepos[KLB_NREC]; BYTE dn[KLB_NREC]; DWORD dnd[KLB_NREC];
     if (!kad.on || !game_thread || !klh_exe_ok) return;

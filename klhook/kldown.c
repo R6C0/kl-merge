@@ -2888,6 +2888,7 @@ static void kld_tick_main(int game_thread)
 static void kld_tick(int game_thread)
 {
     DWORD pl, d, ds = 0, now;
+    if (game_thread && klcmp_level_active()) return;      /* campaign level (klcampaign_gate.h): the Dead Men revive port (klcamprevive.c) owns the wounded state; the fallback thread branch below still runs */
     if (!game_thread) {                        /* the fallback thread (no frame for 500 ms: a load, a stall). Track R8: klbalance.c may tick there and
                                                   asks kld_factor() - a factor must not outlive the passes that keep it (one int of this part's own) */
         /* review 8, S1: the switch first - with the factors and the cap dropped here, a first frame after the stall

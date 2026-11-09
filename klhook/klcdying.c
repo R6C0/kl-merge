@@ -101,6 +101,7 @@ static void kldy_human(DWORD tick)
 static void kldy_tick(int game_thread)
 {
     DWORD rules, state; int level; char why[200]; struct klb_snap sn;
+    if (klcmp_level_active()) return;                    /* campaign level (klcampaign_gate.h): the Dead Men revive/wounded port (klcamprevive.c) owns it; this FA part never acts there */
     if (!kldy.on || !game_thread || !klh_exe_ok) return;
     if (!(klr_arcade(&rules, &state, &level) && klb_level(why) && state == KLB_ROUND && klb_read(&sn) && sn.state == KLB_ROUND)) { if (kldy_s.rules) kldy_forget(); return; }
     if (sn.rules != kldy_s.rules) {

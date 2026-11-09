@@ -98,6 +98,7 @@ static int fake_cand_ok(DWORD o) { int i; g_ncand_calls++; if (o < 0x10000) retu
 #define KLBD_FRAME() g_frame
 #define KLBD_ONLINE_HOST(r, s) fake_host(r, s)
 #define KLBD_NOW() g_now
+static int klcmp_level_active(void) { return 0; }   /* klcampaign_gate.h stand-in: the campaign skip at the head of klbd_tick is not taken */
 #include "klbotdown.c"
 
 /* the fake game's own part of a down: slot 1 raises the health to 25 % and writes a lie of 1.5 s (2 s here); the script
