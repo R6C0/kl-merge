@@ -1,3 +1,6 @@
+2026-11-09 ~06:25 - [06] DM07GATE_1109 run 2 (0 faults): the HIDDEN panel 4m_01 lets a LIVE player through at floor height (y 404..405, x -4564 -> -4722, z 10334); run 1: visible 4m_02 blocked at x -4549.
+A/B of run 2 void (south slope walk fell to y 2 at (-6897, 6593), death 06:13:10, corpse read BLOCKED: kit now voids + reads FROZEN). Earlier workflow: 0x400 is render-only in code, panel collision intact but floats
+58-70 cm over the mud under 4m_01 (29 under 4m_02). Toggle bench DM07UNHIDE_1109 (4m_01 un-hidden, staged + undone) being built: H blocked = un-hide fixes; H through = gap blocker needed.
 2026-11-09 ~06:05 - [06] KICK DOORS WORK IN THE ENGINE: DOORS_1109_DM01 run 2 read all 9 kick registry slots: door 957's controller (slot 7, ptr 5264c9f0) went state 1 -> 3 on E x2
 (prompt 0x12 offered before, cleared after; player snapped 55 cm into the kick). So E is the kick key and the graft registers right; 'stayed shut' in run 1 = the walk left the kick box.
 Door 2 ran on a dead player (police kill 05:53:28, lives 3 -> 2): no verdict. Kits now kick from the stand. Open: does the leaf swing / collision clear at state 3 (look at shots).
