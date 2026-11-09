@@ -47,6 +47,9 @@
  *   klfreeclimb.c  x     x    Dead Men's FREE climb, W + E at any ledge 25 .. 220 high (luvsic's ANP climb.inc, ported): a
  *                             ZFFActionVaultOver with a vtable copy of this DLL's own; data writes only, every call under
  *                             a fault guard ([Climb]). OFF by default; needs the climb clips in the level's .ANM. NOT RUN
+ *   klcampguard.c  x     x    [CampGuard] luvsic's campaign crash guards (CListUser 0x4f8a8e, gfx 0x51f1a9, coll 0x927b4c, snd 0x44668b, null sound list
+ *                             0x900ff8, boneslights 0x577e08, heap int3 0x4665dc) as byte-checked exact-site branches of veh(): context/stack/heap/.data
+ *                             writes only, NO code byte. Campaign levels only ([Campaign] Enable) except ListUserFA. OFF by default; NOT RUN
  *   klhud.c        x     x    the expansion's FA / Arcade HUD, Version 1 ([HUD]): crew list + money box drawn with the game's
  *                             own ZCHAROBJ texts from a private copy of the OSD's vtable (slot 55 wrapped, as klchar.c
  *                             wraps the option object); calls 0x8ccde0, 0x598460, 0x817810 and ZCHAROBJ slots on the
@@ -604,6 +607,8 @@ static void log_context(CONTEXT *c)
     klog("%s", line);
 }
 
+static int klcg_any;                              /* klcampguard.c: [CampGuard] any exact-site guard switched on */
+static int klcg_veh(EXCEPTION_POINTERS *ep);       /* klcampguard.c: 1 = a byte-checked known fault site, context edited, resume */
 static void klbr_veh_restore(void);               /* klbrain.c (included below): [Brain] RealRun - a fault with the shadow rules swapped in puts the real ones back */
 static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
 {
@@ -619,6 +624,7 @@ static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
         if (!InterlockedExchange(&told, 1)) klog("Steam's probe at kl2.exe+68e3cb (a deliberate write to 0 before each scene load, resumed by the game's own handler): not a crash, not dumped; not logged again");
         return EXCEPTION_CONTINUE_SEARCH;
     }
+    if (klcg_any && klcg_veh(ep)) return EXCEPTION_CONTINUE_EXECUTION;       /* [CampGuard] (default off): exact-site resumes, before AssertSoft / the crash accounting */
     if (code == EXCEPTION_BREAKPOINT && klh_soft_n_sites && ((BYTE *)at)[0] == 0xCC) {       /* AssertSoft: step over, no dump, no ASSERT line */
         int k = kas_find(klh_soft_list, klh_soft_n_sites, at);      /* VAs (AS1: offsets never matched the ini's VAs) */
         if (k >= 0 && klh_soft_guard) {                 /* AssertSoftGuard: step over only a record inside the cover pool (re/assertsoft_safety_1101.md) */
@@ -901,6 +907,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klmusic.c"                                      /* klmusic.c: [Music] a winmm MCI jukebox for the FA round (off unless Enable=1); AFTER klmove.c / klbot.c */
 #include "klambience.c"                                  /* klambience.c: [Ambience] a looping bed + timed one-shots (radio, alarm, heli, distant) over winmm MCI (off unless Enable=1); AFTER klmusic.c */
 #include "kllevelmusic.c"                              /* kllevelmusic.c: [LevelMusic] Restart - the level music again in round 2+ (off unless Restart=1); AFTER klmusic.c */
+#include "klcampguard.c"                                 /* klcampguard.c: [CampGuard] luvsic's crash guards as exact-site branches of veh() (all off unless set; campaign levels only except ListUserFA); AFTER klh_scene */
 #include "klecho.c"                                      /* klecho.c: [Echo] room reverb follows the place (wraps the alEffectf data slot; off unless Enable=1); AFTER klambience.c */
 #include "klshop.c"
 #include "klshoppage.c"                           /* AFTER klshop.c: [ShopPage] page II of the weapon shop (key flips set A / B) */
@@ -1962,6 +1969,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klam_init();                                     /* klambience.c: [Ambience] (default off) */
     klcmpr_init();                                      /* klcampaign.c: [Campaign] (default off) */
     kllm_init();                                      /* kllevelmusic.c: [LevelMusic] (default off) */
+    klcg_init();                                      /* klcampguard.c: [CampGuard] (default off) */
     klecho_init();                                    /* klecho.c: [Echo] (default off) */
     klss_init();                                      /* klshot2d.c: [Sound] RemoteShot2D (default off) */
     klst_init();                                      /* klstinger.c: [Stinger] (default off) */
