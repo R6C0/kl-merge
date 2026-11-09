@@ -32,6 +32,11 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
   (3) `kl_release.py verify` on the live folder; (4) `tools/launcher/pack_release.ps1` -> KLMerge_package_v1.0.0.zip (+ PyInstaller freeze if present); (5) run launcher_test.py
   on Windows (PowerShell parser check), open KLMergeLauncher.ps1 once on the owner's PC with the game closed (status panel only; PLAY would hit his launch options);
   (6) rehearse README_TESTERS.md on a clean Windows user or the second PC: Setup.bat -> INSTALL -> VERIFY -> PLAY KL MERGE -> UNINSTALL byte-exact. Fix what breaks, log it here.
+  - 11-09 17:20 cloud: OWNER: the launcher music must be Dead Men's MAIN MENU theme, not the FA theme. No re/ note names that clip. LOCAL SESSION with the DM files:
+    (a) `python tools\kl_launcher_music.py list --dm "<DM>" Music` and look for the front-end / menu block (names with Menu, FrontEnd, Title, Theme, Credits, Jesper);
+    (b) if it is not in PC_Def.str, look in Dead Men's gamemenu.zip / front-end scene banks (.SND/.WHD/.WAV, kl_snd.bank) and extend kl_launcher_music.py to read a
+    bank-streamed or in-bank clip (keep the synthetic test green); (c) `extract --clip <name> --out C:\kl_build_1024\launcher_1109\music\deadmen_launcher.wav`, listen,
+    then make it CANDIDATES[0] in tools/kl_launcher_music.py and note the name here. Until then the launcher's `MusicClip` setting in KLMergeLauncher.settings.json picks it.
   Owner: pick the public release host (a private repo's release assets need a token) and set RELEASE_URL in "KLMerge Setup.bat"; tell testers Dead Men must be installed.
 
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")

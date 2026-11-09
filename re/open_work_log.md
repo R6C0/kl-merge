@@ -1,3 +1,4 @@
+2026-11-09 ~17:20 - OWNER (live): launcher music = Dead Men's MAIN MENU theme (not the FA theme). Clip name unknown in re/; local session finds it with kl_launcher_music.py list / Dead Men front-end banks (week plan T0). Launcher copied to C:\kl_build_1024\launcher_1109 for the owner's first Windows run.
 2026-11-09 ~17:30 - [cloud, offline] LAUNCHER MUSIC + BACKGROUND (owner: "Dead Men music to play slightly, mutable in the setup, a background for both games"),
 UNTESTED on Windows: tools/kl_launcher_music.py (standalone reader of the TESTER'S OWN Dead Men PC_Def.str, kl_str.py layout: PCM, interleaved PCM sets
 de-interleaved L1 R1 L2 R2, mono IMA ADPCM; Vorbis refused -> exit 2 = silence; trims to 90 s, 1 s / 3 s fades, 16-bit WAV) + kl_launcher_music_test.py (48 checks on a
