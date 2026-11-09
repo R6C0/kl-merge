@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~18:30 - [d0, offline] DM09 COVER STAGE built, NOT installed: tools/kl_cover_dm09_1110.py (+_test 24/0), stage C:\kl_build_1024\dm09cover_1110: +11 boxes (KL_CoverStreet!: 8 wall tiles, 2 static wreck copies
+on V_JPN_Civilian_B2_A_Group_00#08; 1 unreachable prop box pruned by a floornav re-check). Pins live afee8967/90e9046d/bdd4dc08 -> zip 3a981a70, bots 2ede91ed, base 0126d412; undo rehearsed byte-exact, 2-lens review.
+Finding: KL_CoverMore! already gave all 68 street vehicles static (explosion-proof) cover copies; only these 2 were missing. GUESS: the blast leaves static copies alone, NoCoverBox edge test. Needs a bench.
 2026-11-09 ~15:35 - [06, offline] LAUNCHER MUSIC = Dead Men MAIN MENU theme, pushed c012079b: SFX/UserInterface/MenuLoop_01 (Ogg Vorbis, 77.0 s 32 kHz stereo) is CANDIDATES[0];
 decoders bin\kl_oggdec.exe (stb_vorbis, pinned) -> ffmpeg on PATH -> tools/kl_pyvorbis.py (6b, 7 s). Real extract identical on both paths (max diff 1 LSB). File renamed music\deadmen_menu.wav
 (old deadmen_launcher.wav = FA theme was reused); .Handle fix so ExitCode is read. kl_tests --py 55/0/1. 81 owns the remaining Setup.bat/ps1 review fixes. Launcher not run live.
