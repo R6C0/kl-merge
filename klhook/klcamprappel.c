@@ -33,7 +33,7 @@ static int kcamr_dead;                     /* a fault in a wrapped stock routine
 static DWORD kcamr_vt[1 + KCAMR_SLOTS];      /* [0] = RTTI locator, [1..] = the slots; the object points at &kcamr_vt[1] */
 static DWORD kcamr_lastP, kcamr_lastMov;
 static DWORD kcamr_lastPress, kcamr_lastGate, kcamr_gate;
-static int kcamr_told_refuse, kcamr_told_live, kcamr_buildok = -1;
+static int kcamr_lastGo, kcamr_told_refuse, kcamr_told_live, kcamr_buildok = -1;
 static int kcamr_prev[3];                  /* dry-mode log of 0x1f64 / 0x1f6c / 0x1f6d */
 
 typedef BYTE  (__fastcall *kcamr_try_t)(DWORD self, DWORD edx, void *a1, void *a2, void *a3);
@@ -44,7 +44,9 @@ static int kcamr_fa_owns(void) { return klrp.on && klrp_lv.ok; }     /* the FA m
 
 static void kcamr_disable(const char *where)
 {
+    DWORD stock = (DWORD)(DWORD_PTR)KLH_VA(KCAMR_MOV_VT);
     kcamr_dead = 1;
+    if (kcamr_lastMov && klh_rd32(kcamr_lastMov) == (DWORD)(DWORD_PTR)&kcamr_vt[1]) klfc_put(kcamr_lastMov, &stock, 4, "camprappel vptr back (disable)");   /* the tick returns early when dead, so hand it back here */
     klog("camprappel: DISABLED for this session (fault in %s) - the stock vtable is handed back", where);
 }
 
@@ -61,6 +63,28 @@ static int kcamr_clips(DWORD mov, unsigned short ids[5])
     for (i = 0; i < 5; i++) { ids[i] = 0xFFFF; klh_rd(mov + 0x1fe4 + 2 * i, &ids[i], 2); }
     return kcamr_native_ok(ids);
 }
+/* READ rappel.inc 403-411 (rp_clips_body): every id must also resolve to a readable clip record through the player's
+ * clip lookup 0x59d550(player, id) - an id != 0xFFFF alone does not prove the clip exists (a NULL clip = crash 0x5a503a).
+ * The lookup draws one number of the game's anim RNG; called once per press only (the one-decision rule). */
+struct kcamr_look_a { DWORD P; unsigned short *ids; int ok; };
+static int kcamr_look_body(void *p)
+{
+    struct kcamr_look_a *a = (struct kcamr_look_a *)p; int i;
+    a->ok = 1;
+    for (i = 0; i < 5; i++) {
+        DWORD clip = a->ids[i] == 0xFFFF ? 0 : KLFC_CALL(DWORD (__fastcall *)(DWORD, DWORD, DWORD), 0x59d550)(a->P, 0, (DWORD)a->ids[i]);
+        if (!klfc_ok(clip, 0x68)) { a->ok = 0; return 0; }
+    }
+    return 0;
+}
+static int kcamr_clips_resolve(DWORD mov, unsigned short ids[5])
+{
+    struct kcamr_look_a a; DWORD P = klh_rd32(mov + 0x38);
+    if (!kcamr_clips(mov, ids)) return 0;
+    a.P = P; a.ids = ids; a.ok = 0;
+    if (klfc_guard("camprappel clip lookup", kcamr_look_body, &a) < 0) { kcamr_disable("clip lookup"); return 0; }
+    return a.ok;
+}
 
 static BYTE __fastcall kcamr_Try(DWORD self, DWORD edx, void *a1, void *a2, void *a3)
 {
@@ -72,16 +96,18 @@ static BYTE __fastcall kcamr_Try(DWORD self, DWORD edx, void *a1, void *a2, void
     t.self = self; t.a1 = a1; t.a2 = a2; t.a3 = a3; t.r = 0;
     if (klfc_guard("camprappel TryActivate", kcamr_try_body, &t) < 0) { kcamr_disable("TryActivate"); return 0; }
     if (!t.r) return 0;
+    klh_rd(self + 0x1f64, &act, 1);                                  /* READ rappel.inc 447: re-read after the stock call */
     if (act) return 1;                                              /* a native rappel already runs */
     now = GetTickCount();
-    if (kcamr_lastPress && now - kcamr_lastPress < 1000) { kcamr_lastPress = now; return 0; }   /* one decision per press (READ 448-451) */
+    if (kcamr_lastPress && now - kcamr_lastPress < 1000 && !kcamr_lastGo) { kcamr_lastPress = now; return 0; }   /* one decision per press; only a REFUSAL is repeated silently (READ 448-451 !g_rpLastPressR) */
     kcamr_lastPress = now;
     {
-        unsigned short ids[5]; int ok = kcamr_clips(self, ids), go = kcamr_decide(kcamr.mode, ok, 0);
+        unsigned short ids[5]; int ok = kcamr_clips_resolve(self, ids), go = kcamr_decide(kcamr.mode, ok, 0);
+        kcamr_lastGo = go;
         if (kcamr.mode == KCAMR_LIVE || kcamr.mode == KCAMR_AUTO) if (!kcamr_told_live++) klog("camprappel: Mode live/auto: the live descent is not ported - native only");
         if (kcamr.log) klog("camprappel: use pressed at a rappel point (mode %d, clips %d/5) -> %s", kcamr.mode, kcamr_clips_present(ids), go ? "native starts" : "REFUSED");
         if (!go && !ok && !kcamr_told_refuse++)
-            klog("camprappel: REFUSED - this level's .ANM lacks the /Movement/Rappelling clips (ids %04x %04x %04x %04x %04x); the stock rappel would crash at 0x5a503a", ids[0], ids[1], ids[2], ids[3], ids[4]);
+            klog("camprappel: REFUSED - this level's .ANM lacks the /Movement/Rappelling clips (ids %04x %04x %04x %04x %04x, or a clip does not resolve); the stock rappel would crash at 0x5a503a", ids[0], ids[1], ids[2], ids[3], ids[4]);
         return (BYTE)go;
     }
 }
