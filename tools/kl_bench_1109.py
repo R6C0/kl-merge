@@ -61,6 +61,13 @@ K = {
                             stage='C:/kl_build_1024/dm07unhide_1109', tag='.before-dm07unhide1109',
                             files={'F06_Main.zip': '92ad73451bd70151116d7367f1e7645c', 'F06_Main.bots.zip': '58203a1c52e8d2c788be4d51a932e561',
                                    'F06_Main.bots.base.md5': 'd1b973d815af69622dc5cbd37a213de2'}),
+    # FIX TEST (stage kit): the 13 fence-line slabs sunk to the mud (tools/kl_dm07sink_1109.py: .HVK placement y 4.715 -> 3.85, collision bottom 471.5 -> 385
+    # over mud 388..460; the 11-09 unhide run crossed at z ~10420 = under 4m_11, gap 72 cm). Four crossings that must all read BLOCKED (4m_01 z 10334, 4m_11 z 10420
+    # and 10700, 4m_10 z 10850, where sinking 4m_01 + 4m_11 alone moved the crossing in the walk model), then the van round (arrive, wait, reverse out). install.py hard-links (C: 271 MB free on 11-09)
+    'DM07SINK_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-900:15',
+                          stage='C:/kl_build_1024/dm07sink_1109', tag='.before-dm07sink1109',
+                          files={'F06_Main.zip': 'a98e1f7562f031c7c4d590106c07212e', 'F06_Main.bots.zip': '0a80cfef9ab72d0c4aeae39d152ec811',
+                                 'F06_Main.bots.base.md5': '0ee0ef216ecb3a16628ad291c7caa3b7'}),
     'DOORS_1109_DM01': dict(map='DM01', slot='F01', live={'F01_Main.zip': '444a3ed6', 'F01_Main.bots.zip': 'f3ed6155', 'KLJoin.ini': 'db4516c6'}, shots='60-700:20',
                             doors=('DM01', 'F01', (957, 2569))),
     # door 2569 first: runs 2 and 3 lost door 2 to a police kill ~19 s into the round (05:53:28, 06:22:36), always after door 1
@@ -69,7 +76,7 @@ K = {
     'DOORS_1109_DM03A': dict(map='DM03A', slot='F07', live={'F07_Main.zip': 'aa79d66d', 'F07_Main.bots.zip': 'd1a8dd0c', 'KLJoin.ini': '958c24b6'}, shots='60-700:20',
                              doors=('DM03A', 'F07', (6516,))),
 }
-ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A']
+ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A']
 for _k, _c in K.items():
     for _a, _b in dict(entry=0, stage=None, tag=None, hook=HOOK, solo_secs=600, parts=('online',)).items():
         _c.setdefault(_a, _b)
@@ -165,7 +172,13 @@ def door_seg(d, lbl):
     # waitstate 0x19 first: DM02_1109's first tele came 5 s after 'level loaded', before the round ran (session state not 0x19), and was refused
     # tele 60 cm over the stand, not 150: DOORS_1109_DM01R door 957 landed 1.5 m up on shop furniture at (1969, 156, 22127) out of the kick box
     # (prompt 0 all through), where run 3 from the same point slid to the floor at (2045, 8, 21973) and had the prompt
-    s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0], a[1] + 60, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
+    # tele 70 cm BEHIND the stand (away from c) and walk onto it: 'face' cannot turn a standing player, a goto does, so the body arrives facing c.
+    # DOORS_1109_DM01R door 957 stood at bearing error 121 the whole time with prompt 6 (never 0x12) and E did nothing; door 2569 at -59 kicked on
+    # the 2nd pair. GUESS: the back-off point is open floor (not checked on the mesh; the stand points are)
+    v = (a[0] - c[0], a[2] - c[1])
+    k = 70.0 / max(1.0, (v[0] ** 2 + v[1] ** 2) ** 0.5)
+    s = ['waitstate 0x19 90000', 'tele %d %d %d' % (a[0] + v[0] * k, a[1] + 60, a[2] + v[1] * k), 'wait 2500', 'goto %d %d 25 5000' % (a[0], a[2]), 'wait 500',
+         'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
          'ents KL_Door 20', 'ents KickDoor_Action 20'] + kick_probe(lbl, 'stand') + [
          # kick from the stand, no walk first: DOORS_1109_DM01 run 1 door 2 had the kick prompt (0x12) at the stand and lost it (0) after the goto to
          # the hinge (out of the box), so E did nothing; door 1 kept 0x12 at the leaf and E snapped the player 55 cm / 60 deg (kick animation, GUESS).
@@ -265,6 +278,7 @@ def dm07_seg(who):
 # (06:13:10) and A and B ran on the corpse.
 GATE_WALKS = (('gateH', (-4000, 550, 10334)), ('gateA', (-4000, 562, 9793)), ('gateB', (-4000, 560, 9393)))
 GATE_WALKS_UNHIDE = GATE_WALKS[:2]              # DM07UNHIDE_1109: H (4m_01, un-hidden there) first, then the A control (4m_02, visible)
+GATE_WALKS_SINK = (('sink01', (-4000, 550, 10334)), ('sink11a', (-4000, 550, 10420)), ('sink11b', (-4000, 550, 10700)), ('sink10', (-4000, 550, 10850)))
 GATE_XS = (-4400, -4520, -4620, -4750, -5000)   # goto steps: one pos per step, so the crossing is read without a mid-goto sample
 
 
@@ -325,6 +339,8 @@ def segment(k, who):
         return gate_seg(who)
     if k == 'DM07UNHIDE_1109':
         return gate_seg(who, GATE_WALKS_UNHIDE, south=False)
+    if k == 'DM07SINK_1109':
+        return gate_seg(who, GATE_WALKS_SINK, south=False) + vans_seg(who, 0, 'dm07')
     return doors_seg(who, doors, 'door')
 
 
@@ -348,7 +364,9 @@ def pair(k, who):
         if name == 'Script':
             continue
         if name == 'Auto':
-            kv = [(a, b) for a, b in kv if a not in ('CmdAdd', 'MaxRunMs')] + [('CmdAdd', '-o DisableSplashScreens -o AutoExit=%d' % total), ('MaxRunMs', str((total - 10) * 1000))]
+            # KeepAlive=1 (klauto.c kla_keep_alive, TEST rig only): refills the local player's health every poll. Police killed the host ~19 s
+            # into the round on DOORS_1109_DM01 runs 2/3, DM07GATE runs 1/2 and DM07UNHIDE (control A), voiding the verdicts; both seats
+            kv = [(a, b) for a, b in kv if a not in ('CmdAdd', 'MaxRunMs', 'KeepAlive')] + [('CmdAdd', '-o DisableSplashScreens -o AutoExit=%d' % total), ('MaxRunMs', str((total - 10) * 1000)), ('KeepAlive', '1')]
         t.append('[%s]' % name)
         t += ['%s=%s' % kv_ for kv_ in kv]
     t += probes(k) + ['[Script]'] + B.renumber(scr)
@@ -582,7 +600,7 @@ def item_checks(k, a, dd=(), ctrl=None):
                 bool(g) and not bad, '%d entities%s' % (len(g), ('; WRONG: ' + ' | '.join(bad)) if bad else ('' if g else ' (no ents row: not sampled)')))
         info.append('boom / camera shake / glare: not logged; LOOK at KLShot_inst1_*.jpg around the beat (timestamps of the hasta sample lines)')
         info += [l[:12] + ' ' + l[13:90] for l in a if 'BENCH1109 hasta sample' in l]
-    if k in ('DM01B_1109', 'DM07_1109'):
+    if k in ('DM01B_1109', 'DM07_1109', 'DM07SINK_1109'):
         # the van body only: DM01B_1109 run 1 matched 'V_Van_Reflection' (a ZGROUP parked at y -60000) first and judged its position
         van = [r for r in ents(a, 'V_Van') if 'reflection' not in r[1].lower() and r[3][1] > -50000]
         s3 = next((l for l in a if 'BENCH1109' in l and 'van at state 3' in l), None)
@@ -623,7 +641,7 @@ def item_checks(k, a, dd=(), ctrl=None):
             # a jump > 5000 cm between samples <= 6 s apart from state 3 on: DM01B_1109 run 1 drove east to x 5729, then at state 7 sat at the
             # start pocket (-8000, 30500) for the rest of the run (13700 cm in 6.5 s, no drive)
             seq = [v for v in van if secs_of(v[0]) >= t3 - 4 and (t7 is None or secs_of(v[0]) <= t7)]
-            st, en = POCKETS[k]
+            st, en = POCKETS['DM07_1109' if k == 'DM07SINK_1109' else k]
             jumps = [(x, y) for x, y in zip(seq, seq[1:]) if secs_of(y[0]) - secs_of(x[0]) <= 6.5 and math.dist(x[3], y[3]) > 5000]
             reset = [(x, y) for x, y in jumps if math.hypot(x[3][0] - en[0], x[3][2] - en[1]) < 2500 and math.hypot(y[3][0] - st[0], y[3][2] - st[1]) < 1000]
             for x, y in reset:
@@ -646,11 +664,14 @@ def item_checks(k, a, dd=(), ctrl=None):
         chk('walk-out goto ran', bool(g), g[0][g[0].find('goto'):][:110] if g else 'no goto line%s' % (' (tele refused: %s)' % tp[0][:100] if tp else ''))
         chk('player does NOT walk out through the gap (blocked, control walks)', bool(g) and 'NOT reached' in g[0] and xs is not None and xs > -4700 and reached(cg),
             'goto: %s | pos dm07-after-walk x=%s | control reached=%s' % (g[0][g[0].find('goto'):][:90] if g else 'none', xs, reached(cg)))
-    if k in ('DM07GATE_1109', 'DM07UNHIDE_1109'):
-        unhide = k == 'DM07UNHIDE_1109'
-        walks = GATE_WALKS_UNHIDE if unhide else GATE_WALKS
+    if k in ('DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109'):
+        unhide = k in ('DM07UNHIDE_1109', 'DM07SINK_1109')      # no south walk, own verdict line
+        sink = k == 'DM07SINK_1109'
+        walks = GATE_WALKS_SINK if sink else GATE_WALKS_UNHIDE if unhide else GATE_WALKS
         pan = [r for r in ents(a, 'Chainlink_Fence_4m') if r[1].endswith('4m_01') or r[1].endswith('4m_11')]
-        if unhide:
+        if sink:
+            pass                                                 # panels keep the live flags (4m_01 + 4m_11 hidden): only the .HVK changed
+        elif unhide:
             p1, p11 = [r for r in pan if r[1].endswith('4m_01')], [r for r in pan if r[1].endswith('4m_11')]
             chk('fence panel 4m_01 reads VISIBLE (un-hidden by the stage) and 4m_11 still hidden', bool(p1) and bool(p11) and not any(r[2] for r in p1) and all(r[2] for r in p11),
                 '4m_01 %d rows hidden=%s, 4m_11 %d rows hidden=%s' % (len(p1), sorted({r[2] for r in p1}), len(p11), sorted({r[2] for r in p11})))
@@ -684,7 +705,12 @@ def item_checks(k, a, dd=(), ctrl=None):
                     info.append('%s: never left x %d: frozen, not blocked' % (lbl, got[0][0]))
                 low = min((p[1] for p in got if -4700 < p[0] < -4450), default=None)
                 info.append('%s: %s, end x %d (z %d), lowest y near the fence line %s' % (lbl, verdict[lbl], end[0], end[2], low))
-        if unhide:
+        if sink:
+            info.append('sink verdict: %s. All BLOCKED (walked up to the slab, not frozen) = the pocket is sealed at the measured leak; any THROUGH = still open there'
+                        % ', '.join('%s %s' % (l_, verdict.get(l_, '?')) for l_, _ in walks))
+            for l_, _ in walks:
+                chk('%s: the sunk fence blocks the crossing' % l_, verdict.get(l_) in ('BLOCKED', 'DEAD', 'FROZEN'), verdict.get(l_, 'no samples'))
+        elif unhide:
             info.append('unhide verdict: H (4m_01 UN-hidden) %s, A (visible 4m_02) %s. H BLOCKED = the hide flag removes player collision at runtime (the static reading was '
                         'wrong; un-hide or re-route fixes it); H THROUGH = the gap under the panel is the leak (needs a blocker). A must read BLOCKED for either to count '
                         '(A THROUGH = this crossing method does not discriminate); DEAD / FROZEN = no verdict, rerun'

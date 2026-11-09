@@ -149,6 +149,21 @@ def unhide(mut=None):
     return g.done()
 
 
+def sink(mut=None):
+    """DM07SINK_1109: four crossings at the sunk slabs, then the DM07 van round. Default = all BLOCKED (walk up to x -4560), van fine.
+    mut: through11a (sink11a walks through), frozen10 (sink10 never leaves the tele point), novan (no van rows)"""
+    g = Log('DM07SINK_1109')
+    g.t -= 200                                                       # the crossings come before the van log below
+    for lbl, st in M.GATE_WALKS_SINK:
+        through = mut == 'through11a' and lbl == 'sink11a'
+        xs = [st[0]] + [x if through else max(x, -4560) for x in M.GATE_XS]
+        if mut == 'frozen10' and lbl == 'sink10':
+            xs = [st[0]] * len(xs)
+        for i, x in enumerate(xs):
+            g.say('pos %s-%d: me #0 (%d, 410, %d) heading 270' % (lbl, i, x, st[2]))
+    return g.lines + (van('DM07SINK_1109') if mut != 'novan' else [])
+
+
 def doors(k, mut=None):
     dd = [dict(host=176, name='x', hinge=[-3708, 300, -3217], front=[-3772, 300, -3125], back=[-3767, 300, -3316])]
     if k == 'DM02_1109':
@@ -203,6 +218,8 @@ def log_for(k, mut=None):
         return gate(mut), [], None
     if k == 'DM07UNHIDE_1109':
         return unhide(mut), [], None
+    if k == 'DM07SINK_1109':
+        return sink(mut), [], None
     a, dd = doors(k, mut)
     return a, dd, None
 
@@ -261,6 +278,11 @@ def main():
     r, inf = M.item_checks('DM07GATE_1109', gate('frozen'), [], None)
     ok(any('B (visible 4m_03) FROZEN' in x for x in inf) and any(x[0] == 'WARN' and 'freeze' in x[1] for x in r), 'DM07GATE: a frozen B reads FROZEN + WARN')
     # DM07UNHIDE_1109: both verdicts of the toggle test, a frozen and a dead H, a non-discriminating control
+    # the sink fix: any crossing THROUGH FAILs; a freeze is a WARN (no verdict), not a pass of the blocker check's spirit but not a FAIL
+    ok(any('sink11a' in x[1] for x in fails('DM07SINK_1109', 'through11a')), 'DM07SINK: a crossing that walks through FAILs')
+    ok(not fails('DM07SINK_1109', 'frozen10'), 'DM07SINK: a frozen crossing is a WARN, not a FAIL')
+    ok(any('van' in x[1] for x in fails('DM07SINK_1109', 'novan')), 'DM07SINK: no van rows FAIL')
+    ok(any('sink verdict' in i_ and 'sink11a BLOCKED' in i_ for i_ in M.item_checks('DM07SINK_1109', sink(), [], None)[1]), 'DM07SINK: the verdict line names every crossing')
     inf = M.item_checks('DM07UNHIDE_1109', unhide(), [], None)[1]
     ok(any('unhide verdict: H (4m_01 UN-hidden) THROUGH, A (visible 4m_02) BLOCKED' in x for x in inf), 'UNHIDE: H THROUGH reads the gap verdict %s' % [x for x in inf if 'verdict' in x])
     r, inf = M.item_checks('DM07UNHIDE_1109', unhide('hblock'), [], None)
