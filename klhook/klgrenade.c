@@ -242,12 +242,15 @@ static void klgr_spawn(DWORD P)
 static int klgr_rel_heads(void)               /* once: code heads and vtable slots this mode calls through (MEASURED in kl2.exe 2026-11-09) */
 {
     static const BYTE setrel[5] = { 0x51, 0x8b, 0x44, 0x24, 0x08 }, tryf[7] = { 0x83, 0xec, 0x0c, 0x53, 0x56, 0x8b, 0xf1 },
-                      pm[5] = { 0x55, 0x8b, 0x6c, 0x24, 0x0c }, hobj[6] = { 0x8b, 0x44, 0x24, 0x04, 0x8b, 0x0d };
+                      pm[5] = { 0x55, 0x8b, 0x6c, 0x24, 0x0c }, hobj[6] = { 0x8b, 0x44, 0x24, 0x04, 0x8b, 0x0d },
+                      shot[6] = { 0x81, 0xec, 0xa0, 0x01, 0x00, 0x00 }, pool[6] = { 0x8b, 0x81, 0xb0, 0x00, 0x00, 0x00 };   /* READ grenade.inc:154-155 (0x4cb7a0, 0x696f50) */
     if (klgr.relHeads) return klgr.relHeads > 0;
     klgr.relHeads = -1;
     if (!klb_same_code(KLGR_SETREL, setrel, 5) || !klb_same_code(KLGR_SETVEL, setrel, 5) || !klb_same_code(KLGR_TRYFIRE, tryf, 7)
-        || !klb_same_code(KLGR_PMRAISE, pm, 5) || !klb_same_code(KLGR_HOBJ, hobj, 6)) { klog("grenade release: a routine head is not the one this build knows: OFF"); return 0; }
-    if (klh_rd32((DWORD_PTR)KLH_VA(KLGR_WEAPON_VT + 0x2cc)) != KLGR_SETVEL || klh_rd32((DWORD_PTR)KLH_VA(KLGR_WEAPON_VT + 0x340)) != KLGR_SHOT) { klog("grenade release: weapon vtable slots +0x2cc / +0x340 are not 0x536dc0 / 0x4cb7a0: OFF"); return 0; }
+        || !klb_same_code(KLGR_PMRAISE, pm, 5) || !klb_same_code(KLGR_HOBJ, hobj, 6) || !klb_same_code(KLGR_SHOT, shot, 6) || !klb_same_code(0x00696f50u, pool, 6)) { klog("grenade release: a routine head is not the one this build knows: OFF"); return 0; }
+    if (klh_rd32((DWORD_PTR)KLH_VA(KLGR_WEAPON_VT + 0x2cc)) != KLGR_SETVEL || klh_rd32((DWORD_PTR)KLH_VA(KLGR_WEAPON_VT + 0x340)) != KLGR_SHOT
+        || klh_rd32((DWORD_PTR)KLH_VA(KLGR_WEAPON_VT + 0x300)) != 0x006f4f30u || klh_rd32((DWORD_PTR)KLH_VA(KLGR_WEAPON_VT + 0x308)) != 0x008be2c0u
+        || klh_rd32((DWORD_PTR)KLH_VA(KLGR_AMMOT_VT + 0x2bc)) != 0x00696f50u) {   /* READ grenade.inc:159-161 (clip / reserve setters, the pool pick) */ klog("grenade release: weapon vtable slots +0x2cc / +0x340 / +0x300 / +0x308 / ammo +0x2bc are not the known routines: OFF"); return 0; }
     klgr.relHeads = 1; return 1;
 }
 /* the player for the release: the Arcade player (klinv_player), else on a campaign level the selected local slot. Never online. */
@@ -285,8 +288,9 @@ static int klgr_rl_probe(void *arg)
     }
     if (!a->pValid) { a->why = "the projectile pool is empty (no clone of the projectile template)"; return 0; }
     if (a->pellets < 1) { a->why = "the ammo template launches 0 projectiles (+0x80)"; return 0; }
-    wt = klgr_hobj(klh_rd32(a->it + 0xc4));   /* GUESS: item+0xc4 is the weapon template handle (luvsic reads the launch box from it) */
-    if (!klfc_ok(wt, 0x1a8) || !klh_rd32(wt + 0x1a4)) { a->why = "the weapon template's launch box (+0x1a4) is null: the shot would skip the launch"; return 0; }
+    wt = klh_rd32(a->it + 0xc4);   /* READ grenade.inc:370 and gr_tmpl:268: item+0xc4 is the weapon template POINTER (not a handle; passing it to 0x8ccde0 was a bug) */
+    if (!klfc_ok(wt, 0x1b0) || (klh_rd32(wt + 0xac) != 11 && klh_rd32(wt + 0xac) != 12)) { a->why = "the item's template is not a grenade weapon type (template +0xac is not 11 / 12)"; return 0; }   /* READ gr_is_grenade */
+    if (!klh_rd32(wt + 0x1a4)) { a->why = "the weapon template's launch box (+0x1a4) is null: the shot would skip the launch"; return 0; }
     return 1;
 }
 /* THE RELEASE: SetReleasePos, SetThrowVelocity, TryFire (the shot 0x4cb7a0 runs inside TryFire) */
@@ -317,6 +321,7 @@ static DWORD klgr_rel_pick(DWORD P, int *clip, int *res)
     if (!klinv_inv(P, &inv, &arr, &cnt)) return 0;
     for (i = 0; i < cnt; i++) {
         if (!klinv_entry(arr, i, &obj, &bind, &item, &kind) || !obj || kind != 0 || klh_rd32(obj) != KLGR_WEAPON_VT) continue;
+        { DWORD t = klh_rd32(obj + 0xc4), w = klfc_ok(t, 0xb0) ? klh_rd32(t + 0xac) : 0; if (w != 11 && w != 12) continue; }   /* READ gr_is_grenade: template +0xac 11 / 12 */
         *clip = klgr_unxor(klh_rd32(obj + 0xdc)); *res = klgr_unxor(klh_rd32(obj + 0xe0));
         if (*clip + (*res > 0 ? *res : 0) > 0) return obj;
     }
@@ -329,6 +334,8 @@ static void klgr_release(DWORD P, DWORD now)
     if (!klgr_cool_over(klgr.relLast, now, klgr.relCoolMs)) return;
     if (!klgr_rel_heads()) { klgr.relDead = 1; return; }
     if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) { if (klgr.relN++ < 5) klog("grenade release: not the main loop's gameplay call: skipped"); return; }
+    if (klh_rd32(P + 0x6b0) != P + 0xdb0 || klh_rd32(P + 0xd50) || klh_rd32(P + 0xd44) || klfc_movid(P) == 0x10) { if (klgr.relN++ < 5) klog("grenade release: movement table (MiniScene) / seat or carrier / rappel: skipped (READ grenade.inc gr_precond)"); return; }
+    { BYTE lh = 0; if (!klh_rd(P + 0x2720, &lh, 1) || !(lh & 2)) { if (klgr.relN++ < 5) klog("grenade release: not the local human player: skipped"); return; } }
     if (klfc_cur_act(P) != 0) { if (klgr.relN++ < 5) klog("grenade release: an action is running (or unreadable): skipped"); return; }
     memset(&a, 0, sizeof a); a.P = P;
     if (!(a.it = klgr_rel_pick(P, &clip, &res))) { if (klgr.relN++ < 5) klog("grenade release: G pressed but no grenade with ammo in the inventory: nothing called"); return; }

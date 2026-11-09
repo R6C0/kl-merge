@@ -24,7 +24,7 @@
  * Nothing here is benched.
  *
  * KLHook.ini [CampGive]  (see klhook/ini_campaign_gameplayA.txt)
- *   Enable=0  Key=0x34  Target=selected|aim|nearest  Range=300  Swap=1  Types=6  Refuse=50,51,53,54  Drawn=1  Event=18  SwapClips=0  Dry=0  Log=1
+ *   Enable=0  Key=0x34  Target=selected|aim|nearest  Range=300  Swap=1  Types=6  Refuse=50,51,53,54  Drawn=1  Event=18  SwapClips=3  Dry=0  Log=1
  */
 #ifndef KLCAMPGIVE_C
 #define KLCAMPGIVE_C
@@ -75,7 +75,7 @@ static void klcampgive_init(void)
     klcgv.nrefuse = klcgv_parse_ids(v, klcgv.refuse, 16);
     klcgv.drawn = GetPrivateProfileIntA("CampGive", "Drawn", 1, klh_ini) != 0;
     klcgv.event = GetPrivateProfileIntA("CampGive", "Event", 18, klh_ini); if (klcgv.event < 0 || klcgv.event > 63) klcgv.event = 18;
-    klcgv.swapClips = GetPrivateProfileIntA("CampGive", "SwapClips", 0, klh_ini); if (klcgv.swapClips < 0 || klcgv.swapClips > 20) klcgv.swapClips = 0;
+    klcgv.swapClips = GetPrivateProfileIntA("CampGive", "SwapClips", 3, klh_ini); if (klcgv.swapClips < 0 || klcgv.swapClips > 20) klcgv.swapClips = 3;   /* READ give.inc swapres default 3: AddItem(old,-1,-1) leaves reserve 999 while the merc still owns the gun */
     klcgv.dry = GetPrivateProfileIntA("CampGive", "Dry", 0, klh_ini) != 0;
     klcgv.log = GetPrivateProfileIntA("CampGive", "Log", 1, klh_ini);
     { int j; for (j = 0; j < KK_N; j++) if (klcgv.vk && klkeys_vk(j) == klcgv.vk) { klog("campgive: key %#x is also KLHook's own key %d: give key OFF (rebind [CampGive] Key)", klcgv.vk, j); klcgv.vk = 0; break; } }
@@ -99,6 +99,8 @@ static int klcgv_heads(void)
     klcgv.heads = -1;
     for (i = 0; i < (int)(sizeof h / sizeof h[0]); i++) if (!klb_same_code(h[i].a, h[i].b, 6)) { klog("campgive: code head %#lx differs from the build give.inc knew: OFF", (unsigned long)h[i].a); return 0; }
     for (i = 0; i < 4; i++) if (klh_rd32((DWORD_PTR)KLH_VA(KLCGV_SLOTTAB) + 4 * i) != (DWORD)(DWORD_PTR)KLH_VA(tab[i])) { klog("campgive: type-to-slot table (0x49f288) differs: OFF"); return 0; }
+    { static const BYTE c0[5] = { 0xb8, 0x03, 0, 0, 0 }, c1[2] = { 0x33, 0xc0 }, c2[5] = { 0xb8, 0x01, 0, 0, 0 }, c3[5] = { 0xb8, 0x02, 0, 0, 0 };   /* READ gv_check_build: the case bodies */
+      if (!klb_same_code(0x0049f26bu, c0, 5) || !klb_same_code(0x0049f273u, c1, 2) || !klb_same_code(0x0049f278u, c2, 5) || !klb_same_code(0x0049f280u, c3, 5)) { klog("campgive: type-to-slot case bodies differ: OFF"); return 0; } }
     klcgv.heads = 1; return 1;
 }
 
@@ -266,6 +268,19 @@ static void klcgv_give(DWORD P)
     if (klcgv.log) klog("campgive: done: merc slot %d now %08lx (item handle %08lx)", slot, (unsigned long)klh_rd32(body + KLCGV_SLOT0 + 4 * slot), (unsigned long)j.hItem);
 }
 
+/* every game call of the resolve phase (0x727b40, vt+0x30 / +0x680, 0x7b3020, 0x6ece90, 0x47ded0, 0x539e30) runs under the fault guard too */
+static int klcgv_give_run(void *arg) { klcgv_give(*(DWORD *)arg); return 1; }
+/* READ give.inc gv_gate (reads only): movement table, movement Stand/BaseMove, use action, input block, seat/carrier, local human. The HUD-state,
+   climbing, 0x6a88f0 busy and "action running" vtable tests are NOT ported (the input-block gate P+0x2728/P+0x2760 stands in for them). */
+static int klcgv_gate(DWORD P)
+{
+    BYTE ua = 0, lh = 0; int id = (int)klfc_movid(P);
+    if (klh_rd32(P + 0x6b0) != P + 0xdb0 || (id != 2 && id != 3)) return 0;
+    if ((klh_rd(P + 0xd29, &ua, 1) && ua) || (klh_rd32(P + 0xed0) & 0x80) || klh_rd32(P + 0xd50) || klh_rd32(P + 0xd44)) return 0;
+    if (!klh_rd(P + 0x2720, &lh, 1) || !(lh & 2)) return 0;
+    return 1;
+}
+
 static void klcampgive_tick(int game_thread)
 {
     DWORD P, sc; int down;
@@ -276,7 +291,9 @@ static void klcampgive_tick(int game_thread)
     if (!klcgv.active || klcgv.P != P) { klcgv.active = 1; klcgv.P = P; klcgv.keyWas = 1; if (klcgv.log) klog("campgive: campaign level, player %08lx: give armed", (unsigned long)P); }
     down = klcgv_key();
     if (klcsq_blocked(P)) { klcgv.keyWas = down; return; }
-    if (down && !klcgv.keyWas && GetTickCount() - klcgv.lastGive >= 750) klcgv_give(P);   /* READ: 0.75 s after the last give */
+    if (down && !klcgv.keyWas && GetTickCount() - klcgv.lastGive >= 750 && klcgv_gate(P)) {   /* READ: 0.75 s after the last give */
+        if (klfc_guard("campgive resolve", klcgv_give_run, &P) < 0) { klcgv.dead = 1; klog("campgive: DISABLED (fault while resolving the target / item; restart the game)"); }
+    }
     klcgv.keyWas = down;
 }
 #endif /* KLCAMPGIVE_C */

@@ -74,8 +74,8 @@ Refuse=50,51,53,54
 Drawn=1
 ; Event: PlayerMonitor event raised after a give. (recommended 18)
 Event=18
-; SwapClips: reserve clips for the swapped-back gun when its stored reserve is not sane, 0 = engine value. (recommended 0)
-SwapClips=0
+; SwapClips: reserve clips for the swapped-back gun when its stored reserve is not sane (luvsic swapres=3), 0 = engine value (can show 999). (recommended 3)
+SwapClips=3
 ; Dry=1: log what would happen and change nothing. (recommended off)
 Dry=0
 ; Log: log every give. (recommended on)
