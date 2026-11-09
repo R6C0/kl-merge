@@ -91,6 +91,10 @@ def van(k, mut=None):
         g.wait(1)
         if mut != 'nolate':
             g.ent('V_Van', (stop[0] + d * (600 + 900 * i) if mut not in ('stuck', 'pop') else stop[0] if mut == 'stuck' or i < 5 else -8000, 0, stop[1]))
+    if k == 'DM01B_1109' and mut not in ('stuck', 'pop', 'nolate'):
+        g.ent('V_Van', (17365, 0, 31663))                                    # reaches the END pocket, then resets to START: not a pop
+        g.wait(1)
+        g.ent('V_Van', (M.POCKETS[k][0][0], 0, M.POCKETS[k][0][1]))
     g.say('BENCH1109 van at state 7 (leaving)')
     for i in range(4):
         g.wait(3)

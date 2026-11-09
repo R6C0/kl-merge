@@ -466,6 +466,10 @@ def door_lbl(k, i):
 
 
 STOP_DM01B = (4454, 31907)
+# x, z of each staged route's unseen START / END pocket (re/vehicle_routes_1108.md: DM01B waits (-8000, 30500), ends (17400, 30400), seen by 0
+# viewers at both; DM07 waits and ends in the floorless mud pocket (-9300, 10400)). A jump from the END pocket to the START pocket is the
+# vehicle's reset at the drive-out end (DM01B_1109 run 2: 17365, 31663 -> -8000, 30500 a second before state 7), not a pop on screen.
+POCKETS = {'DM01B_1109': ((-8000, 30500), (17400, 30400)), 'DM07_1109': ((-9300, 10400), (-9300, 10400))}
 
 
 def item_checks(k, a, dd=(), ctrl=None):
@@ -532,9 +536,13 @@ def item_checks(k, a, dd=(), ctrl=None):
             # a jump > 5000 cm between samples <= 6 s apart from state 3 on: DM01B_1109 run 1 drove east to x 5729, then at state 7 sat at the
             # start pocket (-8000, 30500) for the rest of the run (13700 cm in 6.5 s, no drive)
             seq = [v for v in van if secs_of(v[0]) >= t3 - 4 and (t7 is None or secs_of(v[0]) <= t7)]
-            pops = ['%s %s -> %s' % (y[0], tuple(round(c) for c in x[3]), tuple(round(c) for c in y[3])) for x, y in zip(seq, seq[1:])
-                    if secs_of(y[0]) - secs_of(x[0]) <= 6.5 and math.dist(x[3], y[3]) > 5000]
-            chk('van never jumps (> 50 m between samples <= 6.5 s apart) from state 3 to 7', not pops, '; '.join(pops[:3]) or '%d samples' % len(seq))
+            st, en = POCKETS[k]
+            jumps = [(x, y) for x, y in zip(seq, seq[1:]) if secs_of(y[0]) - secs_of(x[0]) <= 6.5 and math.dist(x[3], y[3]) > 5000]
+            reset = [(x, y) for x, y in jumps if math.hypot(x[3][0] - en[0], x[3][2] - en[1]) < 2500 and math.hypot(y[3][0] - st[0], y[3][2] - st[1]) < 1000]
+            for x, y in reset:
+                info.append('reset at the unseen END pocket %s -> START pocket %s at %s (the drive-out end, not a pop)' % (tuple(round(c) for c in x[3]), tuple(round(c) for c in y[3]), y[0]))
+            pops = ['%s %s -> %s' % (y[0], tuple(round(c) for c in x[3]), tuple(round(c) for c in y[3])) for x, y in jumps if (x, y) not in reset]
+            chk('van never jumps (> 50 m between samples <= 6.5 s apart) from state 3 to 7, except the END -> START pocket reset', not pops, '; '.join(pops[:3]) or '%d samples' % len(seq))
         info.append('no-pop: 1 s samples cannot show a one-frame jump; LOOK at the shots around state 5 and the arrival')
     if k == 'DM07_1109':
         pan = [r for r in ents(a, 'Chainlink_Fence_4m') if r[1].endswith('4m_01') or r[1].endswith('4m_11')]
