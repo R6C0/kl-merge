@@ -268,6 +268,13 @@ KITS = {
                          hook=('C:/kl_build_1024/merged_1108f/dll_test/dinput8.dll', '40d00164001576eea78bf8e5e9720e51'),
                          ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'Log=1'], keepalive=True,
                          solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # 11-09: dd10side1109 again with [VanBlow] ShieldCalled=1 (8c4292b9) on f0's merged_1108h TEST twin (SHIP 52b37716): the state-1 drive-in is shielded too,
+    # so PASS = 'vanblow: ShieldCalled=1' at start, 'ShieldCalled' shield on at state 1, first wait (state 3) at 9600/9600, the seat lives, 0 faults
+    'dd10called1109': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '1a0d94b0', 'KLJoin.ini': 'ebdf1472'},
+                           vancall=((None, None, None), (8300, 50, 800)),
+                           hook=('C:/kl_build_1024/merged_1108h/dll_test/dinput8.dll', 'fceb3c6df5208b46e98f97d9f663d308'),
+                           ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'Log=1'], keepalive=True,
+                           solo_secs=600, parts=('solo',), shots='90-400:10'),
     # 11-09: the INSTALLED DM05A club music level B (0ff298a6, stage already in): load + faults + shots, nothing installed
     # run 11-09 03:03: 0 asserts/faults/dumps over 290 s of play, but the round had 78 s left when the script passed (0x1f/0x20 unseen): 480 -> 600
     'lcmusicblive1109': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': '0ff298a6', 'KLGuns.ini': '33432bb9'},
