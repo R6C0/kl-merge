@@ -1,3 +1,19 @@
+2026-11-09 ~16:10 - [cloud, offline] DM03 WITHDRAWAL design + tools, nothing staged or run on the game: re/dm03_vault_swat_1109.md (SWAT form = DM03's own Dead Men
+SWAT body 59891 + ZSoldier of ArrivingCops_Squad_01/EscSquad men = the reverse of the proven frontcops swap; vault double door candidates A VaultLobby_01a SI0201_M03_DoorSteel_A_01/_02
+or B kick host 1076 + Garage_Wall_3xM_Door_02/_03; breach = own-leaf slabs without kick controller + KL_Vault!1 Arm TriggerBox -> 3 s Fuse -> Boom (Hasta blast clone) + proxies,
+240 s backstop; loot L1 moves 3 dock piles behind the door (7M kept) or L2 +1M). tools/kl_dm03cops_1108.py new part backswat (DEFAULT OFF, 1108 outputs byte-identical):
+garage + ramp squads -> SWAT, new KL_BackSwat!Van 4-man Defend squad on nav cells round the escape van stop; budget 44/29 -> 48/30. tools/kl_dm03_scan_1109.py = read-only
+scanner the local sessions run on the live F03_Main.zip (door pairs, HVK boxes, loot, van stops, SWAT template men) - its output decides door A vs B and fills the GUESSes.
+Tests kl_dm03cops_1108_test 27 PASS, kl_dm03_scan_1109_test 14 PASS, launcher_test PASS; kl_tests --py: 2 pre-existing FAILs (kl_gunpunch_test 3 checks, kl_fallback_guns_test BadZipFile).
+NEXT (local sessions): run the scanner, stage backswat on the doors_1108/DM03 chain, bench DM03_1109 style, install with a PASS; then the vault tool from the doc.
+2026-11-09 ~16:00 - [cloud, offline] TESTER DISTRIBUTION written, UNTESTED on Windows: tools/launcher/ = "KLMerge Setup.bat" (bootstrap: downloads the package zip
+from ONE RELEASE_URL line, unpacks to package\, fetches the python.org embeddable Python + zstandard when no Python 3 is there, starts the launcher), KLMergeLauncher.ps1 +
+KLMerge.bat (WPF window, near-black/grain/red accent: PLAY DOG DAYS / PLAY KL MERGE / INSTALL-UPDATE / VERIFY / UNINSTALL / HOOK ON-OFF / COLLECT LOGS, status + log pane;
+runs kl_release.py install|verify|uninstall <DD> --pkg --yes [--dm --pd2], or KLMergeSetup.exe when frozen; Steam launch steam://rungameid/28000), pack_release.ps1
+(make-output -> KLMerge_package_v<ver>.zip: manifest + patches + kl_release.py + launcher, no game data), README_TESTERS.md, OWNER_RELEASE_STEPS.md, launcher_test.py
+(PASS; wired into kl_tests.py via tools/launcher/*_test.py). Stock vs modded = RENAME dinput8.dll <-> dinput8.dll.klmerge-off (klhook.c DllMain has no global Enable key).
+DECISIONS FOR JOSH: public release host (a private repo's assets need a token), the package size (make's 'manifest:' line), freeze KLMergeSetup.exe or not, review the
+shipped live KLHook.ini, ReShade files not shipped. Clean-PC rehearsal checklist in OWNER_RELEASE_STEPS.md section 5.
 2026-11-09 ~14:20 - OWNER ASKS (live, Claude app, via scheduled check-in), DM09 RETOMOTO, in his words: "if it isn't an issue extend it to the original mission where you
 gotta go down the steps to the van all the way down; more SWAT down there with vans and cars dropping them off; more cover accessible all around; make sure you can go into
 cover from blown up vehicles [my reading of 'go into car from blown up vehicles': wrecks usable as cover - CONFIRM with the owner]; make sure the AI can't just collide into them

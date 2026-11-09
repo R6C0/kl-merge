@@ -71,8 +71,10 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 the double door before the garage as a BLOW-UP vault door with loot, more loot rooms + kick doors. DM09 Retomoto = escape down the steps to the van as in the campaign,
 SWAT dropped off by vans/cars down there, more cover, wrecks as cover (confirm), AI not colliding into vehicles, player-player collision. "Interactive, immersed."
 Disk: sessions prune superseded 1105/1107 stages + dead pq_*/c9_* kits (C:\kl_build_1024 = 35 GB, C: 241 MB free).
-2026-11-09 ~13:30 - OWNER (live): "crack on really hard". Testers: DOWNLOAD Tue 11-10, PLAY Wed 11-11. Until then ship-readiness first: a build a stranger
-can install on a fresh Dog Days (no paths from this PC), online on stock + DM maps, undo, tester README. Blockers as "Owner:" lines. Disk still full (C: 131 MB, D: 111 MB).
+2026-11-09 ~16:10 - [cloud] TESTERS download Tue 11-10, PLAY Wed 11-11 (owner, live): ship-readiness first. Written offline, UNTESTED on Windows: tools/launcher/
+(KLMerge Setup.bat bootstrap from ONE RELEASE_URL -> KLMergeLauncher.ps1 WPF, stock/modded by renaming dinput8.dll, kl_release.py install/verify/uninstall, README_TESTERS,
+OWNER_RELEASE_STEPS). DM03: re/dm03_vault_swat_1109.md + kl_dm03cops_1108 part backswat (default off) + kl_dm03_scan_1109.py (run on the live zip first).
+Owner decisions: public release host, package size, freeze KLMergeSetup.exe, review the shipped KLHook.ini. kl_tests --py: 2 pre-existing FAILs (gunpunch, fallback_guns).
 2026-11-09 ~11:20 - [sched] MOPP BYTE CODE READ (tools/kl_mopp.py + _test, 115 checks on the live DM07/DD10 .HVK): list terminal = child index PROVEN (re/havok.md), fillers never returned.
 DM07PLANE: slots 256 / 248 are reached for x -4622..-4526, y 464..817, z 9989..10395 / 10384..10843 -> the plane clones block any query box touching y 464..817 over the whole gap;
 only a body wholly under y 464 slips (4 cm over the mud): no crawl bench steps needed, bench the sub flags + the van. kl_tests cloud 48/0/79 (fallback_guns KL_PortBackup refusal on Linux fixed, gunpunch SKIP as root).
@@ -149,7 +151,6 @@ Kit C:\kl_build_1024\vanwait_1108 (install.py pins live dll+ini, scratch round t
 2026-11-08 ~06:10 - [d0] RETOMOTO VAN: cause = cops hit it in the DRIVE-IN (state 2). [VanBlow] ShieldDriveIn (6f3df179) bench vanwait09h_1108 PASS: bus 3000/3000, no fire.
 06:37 LIVE: merged_1108b SHIP dll 319aefc4 -> 3f8bc902, ini 2f67d4bc -> 6ddd03de (+ShieldDriveIn=1) after bench vanwait09m_1108 PASS (TEST 64701f02, installed line only, 3000/3000).
 Undo: C:\kl_build_1024\merged_1108b\UNDO.bat FIRST, then merged_1108, vanwait_1108, merged_1107. HealFloor unproven, not shipped. Untested: boarding a drive-in-shielded van.
-
 2026-11-08 ~04:30 - [sky] DM05A SKYLINE staged, NOT installed: Dead Men M05_A Buildings_MidRange (1 model, 156 tris, 5 mats, 6 tex) at (60000,1884,-4000) rot 0 east of the pad,
 held by Backdrop .rmi box 59 only (GUESS: may not draw). Stage C:\kl_build_1024\skyline_1108 (zip cdd98872, bots 464adc61, base fdb74c80, KLGuns 33432bb9), pinned to live 651a7492; CHECK PASS,
 route clearance 195 m (>= 98), outro-eye LOS 0 hits. tools/kl_skyline_1108.py; bench kit skyline1108 (validate OK, not run). Undo rehearsed byte-exact.

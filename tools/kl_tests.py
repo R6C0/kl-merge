@@ -6,7 +6,7 @@ usage: python tools/kl_tests.py [--list] [--py | --c] [--only NAME ...] [--keep 
   exit 0 = nothing failed (skips are fine), 1 = at least one FAIL, 2 = bad usage.
 
 What it runs
-  1. tools/*_test.py                 each with the repo's python, no arguments (their fixtures are hand-made unless the table
+  1. tools/*_test.py (+ tools/launcher/*_test.py)  each with the repo's python, no arguments (their fixtures are hand-made unless the table
                                      PY_NEEDS names a game file; absent file -> SKIP, never FAIL). PY_NOT_TESTS names the
                                      *_test.py that drive the game (kl_solo_test.py): always SKIP.
   2. klhook/*_test.c  (logic)        the tests that include only a *_logic.h / *.h header: built with
@@ -178,7 +178,8 @@ def run(cmd, cwd, shell=False):
 
 
 def py_tests(only):
-    for path in sorted(glob.glob(os.path.join(HERE, '*_test.py'))):
+    # tools/*_test.py plus the launcher's own test (tools/launcher/*_test.py, 2026-11-09: tester distribution scripts)
+    for path in sorted(glob.glob(os.path.join(HERE, '*_test.py')) + glob.glob(os.path.join(HERE, 'launcher', '*_test.py'))):
         name = os.path.basename(path)
         if name == os.path.basename(__file__) or (only and name not in only and name[:-3] not in only):
             continue
