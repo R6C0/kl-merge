@@ -44,6 +44,8 @@
  *                             switch, the proxy; no code). OFF by default. Wired 2026-10-11 after two reviews; NOT RUN IN THE GAME
  *   klcampaign.c   x     x    luvsic's Dead Men campaign runtime core, no UI ([Campaign] Routing/Trigger/AutoLoad/SaveRedirect/ProfileReload/
  *                             Progress/AchievementGuard/Adpcm; import slots + data only). OFF by default; NOT RUN IN THE GAME
+ *   klcampsquad.c  x     x    campaign crew orders 1/2/3/Tab (luvsic's squad.inc, ported; [CampSquad], campaign levels only, OFF by default)
+ *   klcampgive.c   x     x    campaign give/swap a gun (key 4) (luvsic's give.inc; [CampGive], OFF; equipassist.inc NOT ported)
  *   klfreeclimb.c  x     x    Dead Men's FREE climb, W + E at any ledge 25 .. 220 high (luvsic's ANP climb.inc, ported): a
  *                             ZFFActionVaultOver with a vtable copy of this DLL's own; data writes only, every call under
  *                             a fault guard ([Climb]). OFF by default; needs the climb clips in the level's .ANM. NOT RUN
@@ -894,7 +896,10 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kllobbyopt.c"                                   /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax - more choices on the FA lobby rows (off unless set); AFTER kllobby.c */
 #include "klbrain.c"                                      /* klbrain.c: [Brain] Probe / Build / Loot / PuppetOff - the Arcade AI tactics on the online FA host (all off unless set); AFTER kllobby.c, BEFORE klbotfill.c (which feeds it) */
 #include "klbotfill.c"                                    /* klbotfill.c: [Bots] OnlineFill plan + probe, read-only (off unless set); AFTER kllobby.c */
+#include "klcampaign_gate.h"                              /* klcampaign_gate.h: [Campaign] Enable + campaign scene = the one gate of every ported luvsic module; AFTER klh_scene, klh_level_key, klh_ini */
 #include "klcopsquad.c"                                   /* klcopsquad.c: [CopSquad] AI police under each human cop in Cops and Robbers (off unless Enable=1); AFTER klbotfill.c, klescort.c */
+#include "klcampsquad.c"                                  /* klcampsquad.c: [CampSquad] crew orders on the campaign levels (luvsic's squad.inc; off unless [Campaign] Enable=1 + [CampSquad] Enable=1); AFTER klcopsquad.c */
+#include "klcampgive.c"                                   /* klcampgive.c: [CampGive] give / swap a gun (key 4) (luvsic's give.inc, equipassist.inc; campaign only, default off); AFTER klcampsquad.c */
 #include "klsabotage.c"                                   /* klsabotage.c: [Sabotage] VanHold - the hosting UCC holds the escape van N s (off unless VanHold=1); AFTER klnet.c (KLNET_SESSION) */
 #include "klroundkeep.c"                                  /* klroundkeep.c: [Lobby] KeepRound + TEST round-end probe (the online rules' early cuts); AFTER klbotfill.c, kllobbyopt.c */
 #include "klqol.c"                                        /* klqol.c: [QoL] taskbar flash, background frame cap, mouse-clip release (off unless set); AFTER kllobby.c / klnet.c */
@@ -1517,7 +1522,9 @@ static void klh_tick(int game_thread)
     KLPT(klnetfix_tick(game_thread));                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
     KLPT(knl_tick(game_thread));                            /* klnetload.c: [NetLoad] (off unless set) */
     KLPT(klinv_tick(game_thread));                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
-    KLPT(klgrenade_tick(game_thread));                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
+    KLPT(klcampsquad_tick(game_thread));                    /* klcampsquad.c: [CampSquad] crew orders (campaign levels only, default off) */
+    KLPT(klcampgive_tick(game_thread));                     /* klcampgive.c: [CampGive] / [CampEquip] (campaign levels only, default off) */
+    KLPT(klgrenade_tick(game_thread));                    /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
     KLPT(klmu_tick(game_thread));                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
     KLPT(klam_tick(game_thread));                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
     KLPT(klcmpr_tick(game_thread));                           /* klcampaign.c: [Campaign] trigger / autoload / guards (off unless Enable=1) */
@@ -1961,7 +1968,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klnetfix_init();
     knl_init();                                       /* klnetload.c: reads [NetLoad] */
     klinv_init();
-    klgrenade_init();                                 /* klgrenade.c: after klinv_init (shares its user32 pointers) */
+    klcampsquad_init();                               /* klcampsquad.c: reads [CampSquad] (idle unless [Campaign] Enable=1) */
+    klcampgive_init();                                /* klcampgive.c: reads [CampGive] ([CampEquip] equip repair is NOT ported) */
+    klgrenade_init();                             /* klgrenade.c: after klinv_init (shares its user32 pointers) */
     klnetsmooth_init();
     klbk_init();                                      /* klbench_down.c: reads [Bench] SelfDownAt */
     klud_init();                                      /* klucc_down.c: reads [Ucc] DownOnly */

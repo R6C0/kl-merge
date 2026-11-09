@@ -30,9 +30,36 @@
  *   and must never be called on the player. Probe=2 decides whether the player's own Create(0x11)+Start can work.
  * KEYS: [Grenade] Probe=0 (1 = log only, 2 = also the throw-action fields; recommended off)  Throw=0 (1 = the G key throws; off until the owner's first run)
  *   Key=0x47 (VK 'G'; polled, not consumed)  HoldMs=3000 (100 .. 10000)  ActBit=1 (0 = never touch [P+0x818])  Log=8 (presses logged in full)
+ *
+ * [Grenade] Release=1 (2026-11-09, NEW, default 0 "(recommended off)"): luvsic's DIRECT RELEASE, ported from his a-newer-perspective
+ *   loader/grenade.inc @32aa649 (gr_try, gr_probe_body, gr_throw_body, gr_ammo_body; in contribution with luvsic). It does not play the dead
+ *   0x40 / 0x800 button bits. On the G press it calls, in order, under klfc_guard (this DLL's existing fault guard, no second handler):
+ *     0x477650 (item, &rel[3])   SetReleasePos          READ grenade.inc GR_F_SETREL
+ *     item vt+0x2cc = 0x536dc0 (item, &v[3])             SetThrowVelocity
+ *     0x659be0 (item)            TryFire -> vt+0x340 = 0x4cb7a0 (the shot) -> projectile pool 0x696f50
+ *   then consumes one grenade (vt+0x300 / vt+0x308) and raises PlayerMonitor event 30 (0x589600, cdecl) as he does. The velocity is his
+ *   NPC formula (klgrenade_logic.h). A shot counts only when item+0x138 moved AND the release point (item+0x140) was consumed AND the pool
+ *   cursor moved; otherwise nothing is consumed.
+ *   WHERE: offline only. Arcade rounds through klinv_player() (any map where you hold a kind-0 item) plus the campaign levels when
+ *   [Campaign] Enable=1 (klcmp_level_active, local player slot). NOT gated to the campaign.
+ *   ONLINE: whether Dog Days replicates a fired projectile to peers is a GUESS and was NOT tested, so the mode stays off online.
+ *   NOT BENCHED: the chain ran in luvsic's Dead Men loader, never in this DLL.
+ *   KEYS: Release=0  ReleaseRange=2000  ReleaseSpeed=1000  ReleaseVMax=1500  ReleaseUp=150  ReleaseFwd=70  ReleaseCoolMs=1000
+ *         ReleaseConsume=1  ReleaseRefill=1  ReleaseEvent=30 (0 = none). Release wins over Throw when both are 1.
  */
 #ifndef KLGRENADE_C
 #define KLGRENADE_C
+
+#include "klgrenade_logic.h"
+
+#define KLGR_WEAPON_VT 0x00bc042cu               /* ZFFItemWeapon (READ grenade.inc GR_WEAPON_VT) */
+#define KLGR_AMMOT_VT  0x00bbfbfcu               /* ZFFItemTemplateAmmo */
+#define KLGR_SETREL    0x00477650u               /* SetReleasePos(item, float[3]) */
+#define KLGR_TRYFIRE   0x00659be0u
+#define KLGR_SETVEL    0x00536dc0u               /* what item vt+0x2cc holds */
+#define KLGR_SHOT      0x004cb7a0u               /* what item vt+0x340 holds */
+#define KLGR_PMRAISE   0x00589600u               /* cdecl(P, event) */
+#define KLGR_HOBJ      0x008ccde0u               /* cdecl(handle) -> object */
 
 #define KLGR_O_BTN   0xb90                   /* replicated button state; bit 0x40 = grenade (READ 0x4aa410) */
 #define KLGR_O_ACT   0x818                   /* action word; bit 0x800 = grenade (READ 0x5447f9) */
@@ -42,6 +69,7 @@ static struct {
     DWORD hold_ms, press_at, last_sample, watch_until, last_btn, last_act, after_at, after_p;
     DWORD sp_at, sp_p, sp_obj; int sp_n;
     int samples, was, fgwarned, presses, nonade, ticks0x40, actwarned, holding, faults;
+    int rel, relConsume, relRefill, relEvent, relN, relHeads, relDead; DWORD relCoolMs, relLast; struct klgr_cfg rc;
 } klgr;
 
 static void klgr_deep(DWORD p);
@@ -210,6 +238,125 @@ static void klgr_spawn(DWORD P)
 }
 #endif
 
+/* ---- [Grenade] Release: luvsic's direct release (see the header) ---- */
+static int klgr_rel_heads(void)               /* once: code heads and vtable slots this mode calls through (MEASURED in kl2.exe 2026-11-09) */
+{
+    static const BYTE setrel[5] = { 0x51, 0x8b, 0x44, 0x24, 0x08 }, tryf[7] = { 0x83, 0xec, 0x0c, 0x53, 0x56, 0x8b, 0xf1 },
+                      pm[5] = { 0x55, 0x8b, 0x6c, 0x24, 0x0c }, hobj[6] = { 0x8b, 0x44, 0x24, 0x04, 0x8b, 0x0d };
+    if (klgr.relHeads) return klgr.relHeads > 0;
+    klgr.relHeads = -1;
+    if (!klb_same_code(KLGR_SETREL, setrel, 5) || !klb_same_code(KLGR_SETVEL, setrel, 5) || !klb_same_code(KLGR_TRYFIRE, tryf, 7)
+        || !klb_same_code(KLGR_PMRAISE, pm, 5) || !klb_same_code(KLGR_HOBJ, hobj, 6)) { klog("grenade release: a routine head is not the one this build knows: OFF"); return 0; }
+    if (klh_rd32((DWORD_PTR)KLH_VA(KLGR_WEAPON_VT + 0x2cc)) != KLGR_SETVEL || klh_rd32((DWORD_PTR)KLH_VA(KLGR_WEAPON_VT + 0x340)) != KLGR_SHOT) { klog("grenade release: weapon vtable slots +0x2cc / +0x340 are not 0x536dc0 / 0x4cb7a0: OFF"); return 0; }
+    klgr.relHeads = 1; return 1;
+}
+/* the player for the release: the Arcade player (klinv_player), else on a campaign level the selected local slot. Never online. */
+static DWORD klgr_rel_player(void)
+{
+    DWORD p = klinv_player(), gd; BYTE sel = 0xff;
+    if (p) return p;
+    if (kl_online() || !klcmp_level_active()) return 0;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &sel, 1) || sel > 3 || !(p = klh_rd32(gd + 0x828 + 4 * sel)) || klh_pvt(p) != KLINV_PLAYER_VT) return 0;
+    return p;
+}
+static DWORD klgr_hobj(DWORD h) { return h ? ((DWORD (__cdecl *)(DWORD))(DWORD_PTR)KLH_VA(KLGR_HOBJ))(h) : 0; }
+
+struct klgr_rl {
+    DWORD P, it, ammoT, proj; const char *why;
+    float rel[3], v[3], rel1[3];
+    int shots0, shots1, pCnt, pIdx, pNext, pValid, pellets, idx1;
+};
+/* what the shot needs to launch (reads and handle lookups only): READ grenade.inc gr_probe_body */
+static int klgr_rl_probe(void *arg)
+{
+    struct klgr_rl *a = (struct klgr_rl *)arg; DWORD ownerObj, ammoT, h[256], wt, k; int i;
+    a->why = 0; a->ammoT = a->proj = 0; a->pCnt = a->pValid = a->pellets = 0; a->pIdx = a->pNext = -1;
+    a->shots0 = (int)klh_rd32(a->it + 0x138);
+    ownerObj = klgr_hobj(klh_rd32(a->it + 0x5c));
+    if (ownerObj != a->P) { a->why = ownerObj ? "the item's owner (item+0x5c) is not the player" : "the item has no owner (item+0x5c)"; return 0; }
+    ammoT = klgr_hobj(klh_rd32(a->it + 0xd4));
+    if (!klfc_ok(ammoT, 0xc0) || klh_rd32(ammoT) != KLGR_AMMOT_VT) { a->why = "no ZFFItemTemplateAmmo at item+0xd4"; return 0; }
+    a->ammoT = ammoT; a->pellets = (int)klh_rd32(ammoT + 0x80);
+    a->pCnt = (int)klh_rd32(ammoT + 0xac); a->pIdx = (int)klh_rd32(ammoT + 0xb0); k = klh_rd32(ammoT + 0xa8);
+    if (!k || a->pCnt <= 0 || a->pCnt > 256 || a->pIdx < 0 || a->pIdx >= a->pCnt || !klh_rd(k, h, 4 * a->pCnt)) { a->why = "no projectile pool (ammo template +0xa8 / +0xac / +0xb0)"; return 0; }
+    for (i = 0; i < a->pCnt; i++) {
+        int j = (a->pIdx + i) % a->pCnt; DWORD o = klgr_hobj(h[j]);
+        if (o) { a->pValid++; if (a->pNext < 0) { a->pNext = j; a->proj = o; } }
+    }
+    if (!a->pValid) { a->why = "the projectile pool is empty (no clone of the projectile template)"; return 0; }
+    if (a->pellets < 1) { a->why = "the ammo template launches 0 projectiles (+0x80)"; return 0; }
+    wt = klgr_hobj(klh_rd32(a->it + 0xc4));   /* GUESS: item+0xc4 is the weapon template handle (luvsic reads the launch box from it) */
+    if (!klfc_ok(wt, 0x1a8) || !klh_rd32(wt + 0x1a4)) { a->why = "the weapon template's launch box (+0x1a4) is null: the shot would skip the launch"; return 0; }
+    return 1;
+}
+/* THE RELEASE: SetReleasePos, SetThrowVelocity, TryFire (the shot 0x4cb7a0 runs inside TryFire) */
+static int klgr_rl_throw(void *arg)
+{
+    struct klgr_rl *a = (struct klgr_rl *)arg;
+    ((void (__fastcall *)(DWORD, DWORD, float *))(DWORD_PTR)KLH_VA(KLGR_SETREL))(a->it, 0, a->rel);
+    KLFC_PTR(void (__fastcall *)(DWORD, DWORD, float *), klfc_vf(a->it, 0x2cc))(a->it, 0, a->v);
+    ((void (__fastcall *)(DWORD, DWORD))(DWORD_PTR)KLH_VA(KLGR_TRYFIRE))(a->it, 0);
+    a->shots1 = (int)klh_rd32(a->it + 0x138); a->idx1 = (int)klh_rd32(a->ammoT + 0xb0);
+    klh_rd(a->it + 0x140, a->rel1, 12);
+    return 1;
+}
+struct klgr_am { DWORD P, it; int clip, res, setClip, setRes, ev; };
+static int klgr_rl_ammo(void *arg)           /* READ grenade.inc gr_ammo_body: setters vt+0x300 (clip) / vt+0x308 (reserve), then the PlayerMonitor raise */
+{
+    struct klgr_am *m = (struct klgr_am *)arg;
+    if (m->setClip) KLFC_PTR(void (__fastcall *)(DWORD, DWORD, int), klfc_vf(m->it, 0x300))(m->it, 0, m->clip);
+    if (m->setRes) KLFC_PTR(void (__fastcall *)(DWORD, DWORD, int), klfc_vf(m->it, 0x308))(m->it, 0, m->res);
+    if (m->ev > 0) ((void (__cdecl *)(DWORD, int))(DWORD_PTR)KLH_VA(KLGR_PMRAISE))(m->P, m->ev);
+    return 1;
+}
+/* the first kind-0 inventory item with ammo. GUESS: binding kind 0 = Grenade (klinv.c's reading, as Throw uses it); luvsic picks by
+   eFF2ItemType (0x539e30) with SpecialEquipment as the second choice: not ported. */
+static DWORD klgr_rel_pick(DWORD P, int *clip, int *res)
+{
+    DWORD inv, arr, cnt, i, obj, bind, item, kind;
+    if (!klinv_inv(P, &inv, &arr, &cnt)) return 0;
+    for (i = 0; i < cnt; i++) {
+        if (!klinv_entry(arr, i, &obj, &bind, &item, &kind) || !obj || kind != 0 || klh_rd32(obj) != KLGR_WEAPON_VT) continue;
+        *clip = klgr_unxor(klh_rd32(obj + 0xdc)); *res = klgr_unxor(klh_rd32(obj + 0xe0));
+        if (*clip + (*res > 0 ? *res : 0) > 0) return obj;
+    }
+    return 0;
+}
+static void klgr_release(DWORD P, DWORD now)
+{
+    struct klgr_rl a; struct klgr_plan pl; struct klgr_am m; float feet[3], aim[3], rz[3]; int clip = 0, res = 0, ran, relUsed, launched, nc, nr, empty;
+    if (klgr.relDead) return;
+    if (!klgr_cool_over(klgr.relLast, now, klgr.relCoolMs)) return;
+    if (!klgr_rel_heads()) { klgr.relDead = 1; return; }
+    if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) { if (klgr.relN++ < 5) klog("grenade release: not the main loop's gameplay call: skipped"); return; }
+    if (klfc_cur_act(P) != 0) { if (klgr.relN++ < 5) klog("grenade release: an action is running (or unreadable): skipped"); return; }
+    memset(&a, 0, sizeof a); a.P = P;
+    if (!(a.it = klgr_rel_pick(P, &clip, &res))) { if (klgr.relN++ < 5) klog("grenade release: G pressed but no grenade with ammo in the inventory: nothing called"); return; }
+    if (!klh_rd(P + 0x460, feet, 12) || !klh_rd(P + 0x27b0, aim, 12) || !klgr_plan_throw(feet, aim, &klgr.rc, &pl)) { if (klgr.relN++ < 5) klog("grenade release: no usable feet / aim point: refused"); return; }
+    memcpy(a.rel, pl.rel, 12); memcpy(a.v, pl.v, 12);
+    if (klfc_guard("grenade release probe", klgr_rl_probe, &a) < 0) { klgr.relDead = 1; klog("grenade release: DISABLED (fault in the probe)"); return; }
+    klog("grenade release: item %08lx clip %d res %d rel=(%.1f,%.1f,%.1f) dist=%.0f t=%.2fs v=(%.1f,%.1f,%.1f)%s%s", a.it, clip, res,
+         pl.rel[0], pl.rel[1], pl.rel[2], (double)pl.dist, (double)pl.t, pl.v[0], pl.v[1], pl.v[2], a.why ? " REFUSED: " : "", a.why ? a.why : "");
+    if (a.why) return;
+    klgr.relLast = now ? now : 1;
+    if (a.pNext != a.pIdx) { DWORD c = (DWORD)a.pNext; klfc_put(a.ammoT + 0xb0, &c, 4, "grenade release: pool cursor"); klog("grenade release: pool entry %d empty: cursor moved to %d", a.pIdx, a.pNext); }
+    if (klfc_guard("grenade release", klgr_rl_throw, &a) < 0) { klgr.relDead = 1; klog("grenade release: DISABLED (fault in the throw; restart the game)"); return; }
+    memset(rz, 0, sizeof rz);
+    ran = a.shots1 != a.shots0; relUsed = !memcmp(a.rel1, rz, 12);                  /* the shot zeroes the release point once it used it (READ 0x4cb95a) */
+    launched = klgr_launched(a.shots0, a.shots1, relUsed, a.pNext, a.idx1, a.pCnt);
+    klog("grenade release: shot %s (item+0x138 %d -> %d), release point %s, pool cursor %d -> %d: %s", ran ? "RAN" : "did NOT run", a.shots0, a.shots1,
+         relUsed ? "used" : "NOT used", a.pNext, a.idx1, launched ? "LAUNCHED" : "no launch, no ammo used");
+    if (!launched) return;
+    klgr.presses++;
+    memset(&m, 0, sizeof m); m.P = P; m.it = a.it; m.ev = klgr.relEvent;
+    if (klgr.relConsume) {
+        empty = klgr_consume(clip, res, klgr.relRefill, &nc, &nr);
+        m.clip = nc; m.res = nr; m.setClip = nc != clip; m.setRes = nr != (res > 0 ? res : 0);
+        klog("grenade release: ammo clip %d -> %d, reserve %d -> %d%s", clip, nc, res, nr, empty ? " (empty; the item stays in the inventory)" : "");
+    }
+    if (klfc_guard("grenade release ammo", klgr_rl_ammo, &m) < 0) { klgr.relDead = 1; klog("grenade release: DISABLED (fault in the ammo / event step)"); return; }
+}
+
 static void klgrenade_tick(int game_thread)
 {
     DWORD now, p, pid = 0; int down, edge;
@@ -228,7 +375,7 @@ static void klgrenade_tick(int game_thread)
     }
 #endif
     if (!down && !klgr.was && !(klgr.watch_until && (int)(klgr.watch_until - now) > 0)) return;   /* idle: no player reads */
-    if (!(p = klinv_player())) { klgr.was = down; klgr.holding = 0; return; }   /* a held key never re-edges after a player gap */
+    if (!(p = klgr.rel ? klgr_rel_player() : klinv_player())) { klgr.was = down; klgr.holding = 0; return; }   /* a held key never re-edges after a player gap */
     if (klgr.watch_until && (int)(klgr.watch_until - now) > 0 && (klgr.probe || klgr.presses <= klgr.logn)) {   /* bit changes after a press */
         DWORD btn = 0, act = 0;
         if (klh_rd(p + KLGR_O_BTN, &btn, 4) && klh_rd(p + KLGR_O_ACT, &act, 4)) {   /* a failed read is skipped, not logged as a change */
@@ -245,6 +392,7 @@ static void klgrenade_tick(int game_thread)
         }
     }
     edge = down && !klgr.was;
+    if (klgr.rel) { if (edge) klgr_release(p, now); klgr.was = down; return; }     /* [Grenade] Release: the direct release, no button bits */
 #ifdef KLHOOK_TEST
     if (edge && klgr.spawn) __try { klgr_spawn(p); } __except (EXCEPTION_EXECUTE_HANDLER) { klog("grenade spawn: fault: spawn off"); klgr.spawn = 0; }
 #endif
@@ -274,7 +422,8 @@ static void klgrenade_init(void)
 #ifdef KLHOOK_TEST
     v = (int)GetPrivateProfileIntA("Grenade", "Spawn", 0, klh_ini); klgr.spawn = v < 0 ? 0 : v > 2 ? 2 : v;
 #endif
-    if (!klgr.probe && !klgr.thr && !klgr.spawn) return;
+    klgr.rel = GetPrivateProfileIntA("Grenade", "Release", 0, klh_ini) != 0;
+    if (!klgr.probe && !klgr.thr && !klgr.spawn && !klgr.rel) return;
     v = klkeys_vk(KK_GREN); klgr.key = v < 1 || v > 0xfe ? 0x47 : v;
     v = (int)GetPrivateProfileIntA("Grenade", "HoldMs", 3000, klh_ini); klgr.hold_ms = v < 100 ? 100 : v > 10000 ? 10000 : v;
     klgr.actbit = GetPrivateProfileIntA("Grenade", "ActBit", 1, klh_ini) != 0;
@@ -288,8 +437,19 @@ static void klgrenade_init(void)
         }
     }
     if (!klinv_key || !klinv_fg || !klinv_wtp) { klog("grenade: user32 functions not found: OFF"); return; }
+    if (klgr.rel) {
+        klgr.rc.range = (float)GetPrivateProfileIntA("Grenade", "ReleaseRange", 2000, klh_ini); klgr.rc.speed = (float)GetPrivateProfileIntA("Grenade", "ReleaseSpeed", 1000, klh_ini);
+        klgr.rc.vmax = (float)GetPrivateProfileIntA("Grenade", "ReleaseVMax", 1500, klh_ini); klgr.rc.up = (float)GetPrivateProfileIntA("Grenade", "ReleaseUp", 150, klh_ini);
+        klgr.rc.fwd = (float)GetPrivateProfileIntA("Grenade", "ReleaseFwd", 70, klh_ini); klgr_cfg_clamp(&klgr.rc);
+        v = (int)GetPrivateProfileIntA("Grenade", "ReleaseCoolMs", 1000, klh_ini); klgr.relCoolMs = v < 0 ? 0 : v > 60000 ? 60000 : v;
+        klgr.relConsume = GetPrivateProfileIntA("Grenade", "ReleaseConsume", 1, klh_ini) != 0; klgr.relRefill = GetPrivateProfileIntA("Grenade", "ReleaseRefill", 1, klh_ini) != 0;
+        v = (int)GetPrivateProfileIntA("Grenade", "ReleaseEvent", 30, klh_ini); klgr.relEvent = v < 0 ? 0 : v > 120 ? 120 : v;
+        klog("grenade release: ON (luvsic's direct release, NOT benched; offline only, online replication is a GUESS and untested): Key=0x%02x range %.0f speed %.0f vmax %.0f up %.0f fwd %.0f cool %lu ms consume %d event %d",
+             klgr.key, (double)klgr.rc.range, (double)klgr.rc.speed, (double)klgr.rc.vmax, (double)klgr.rc.up, (double)klgr.rc.fwd, klgr.relCoolMs, klgr.relConsume, klgr.relEvent);
+    }
     klgr.on = 1;
-    if (klgr.thr)
+    if (klgr.rel) {}
+    else if (klgr.thr)
         klog("grenade throw: on; Key=0x%02x HoldMs=%lu ActBit=%d Log=%d; offline Arcade, local player, only with a grenade in the inventory. re\\grenades_1025.md step 1",
              klgr.key, klgr.hold_ms, klgr.actbit, klgr.logn);
     else klog("grenade probe: on (log only, no writes); Key=0x%02x; offline Arcade, local player. re\\grenades_1025.md step 0", klgr.key);

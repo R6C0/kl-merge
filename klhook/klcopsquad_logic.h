@@ -68,6 +68,11 @@ static int klcq_order_of(int vk, int kFollow, int kHold, int kAttack)
     return 0;
 }
 
+/* [CopSquad] HeldGuard: a soldier whose squad pointer ([script+0x4f4]) is set and is NOT this cop's player squad belongs to another squad
+   (a level squad, or another cop's). 0x48c480 (AddMember) does not take him out of that squad, so the level squad re-captures him.
+   Found in luvsic's squad.inc (recruit=start, "leaves mercs held by level squads alone"). mine = the cop's own player squad. */
+static int klcq_held_by_other(unsigned long held, unsigned long mine) { return held != 0 && held != mine; }
+
 /* Clamp the ini numbers: per 1..KLCQ_PER_MAX, follow period 0 or 2..120 s, max distance 5..200 m (as squared units out). */
 static int klcq_clamp_per(int per) { return per < 1 ? 1 : per > KLCQ_PER_MAX ? KLCQ_PER_MAX : per; }
 static unsigned long klcq_clamp_follow_ms(int s) { if (s <= 0) return 0; if (s < 2) s = 2; if (s > 120) s = 120; return (unsigned long)s * 1000ul; }

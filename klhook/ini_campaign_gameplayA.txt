@@ -1,0 +1,82 @@
+; ---- ini fragment for KLHook.ini: luvsic merge, slice gameplayA (grenades, crew orders, give). Everything here is OFF by default and NOT benched.
+; [CampSquad] and [CampGive] run only on the Dead Men CAMPAIGN levels (they need [Campaign] Enable=1) and never online.
+
+[Grenade]
+; Release=1: the grenade is released as a real projectile with a throw arc (luvsic's grenade release). Offline only; online replication is a GUESS, so it stays off online. (recommended off until benched)
+Release=0
+; ReleaseRange: furthest throw in cm. (recommended 2000)
+ReleaseRange=2000
+; ReleaseSpeed: launch speed in cm/s. (recommended 1000)
+ReleaseSpeed=1000
+; ReleaseVMax: speed cap in cm/s. (recommended 1500)
+ReleaseVMax=1500
+; ReleaseUp: upward bias in cm/s. (recommended 150)
+ReleaseUp=150
+; ReleaseFwd: start offset in front of the player in cm. (recommended 70)
+ReleaseFwd=70
+; ReleaseCoolMs: pause between two throws in ms. (recommended 1000)
+ReleaseCoolMs=1000
+; ReleaseConsume: a thrown grenade is taken from the stack. (recommended on)
+ReleaseConsume=1
+; ReleaseRefill: the hand is refilled after a throw. (recommended on)
+ReleaseRefill=1
+; ReleaseEvent: PlayerMonitor event raised on a throw. (recommended 30)
+ReleaseEvent=30
+
+[CopSquad]
+; HeldGuard=1: a cop already held by another squad control is not recruited a second time. (recommended on)
+HeldGuard=0
+
+[CampSquad]
+; Enable=1: crew orders on the Dead Men campaign levels: 1 follow, 2 attack, 3 defend (tap = current mate, hold = all), Tab next mate. (recommended off until benched)
+Enable=0
+; Recruit: start = the level's free mercs join your squad control, always = every able merc, off = none. (recommended start)
+Recruit=start
+; RecruitAdopt=1: a merc held by a level squad with no owner is adopted. (recommended off)
+RecruitAdopt=0
+; RecruitSettle: seconds a merc must be in the same squad before he is recruited. (recommended 2)
+RecruitSettle=2
+; Critical=clear: clears the "critical" flag on the crew so orders do not fail. (recommended keep)
+Critical=keep
+; Refuse: auto = the crew refuses orders on M01 as in the campaign, 0 never, 1 always. (recommended auto)
+Refuse=auto
+; AttackT: seconds an attack order lasts. (recommended 5)
+AttackT=5
+; KeyFollow: virtual-key code of the follow order. (recommended 0x31, key 1)
+KeyFollow=0x31
+; KeyAttack: virtual-key code of the attack order. (recommended 0x32, key 2)
+KeyAttack=0x32
+; KeyDefend: virtual-key code of the defend order. (recommended 0x33, key 3)
+KeyDefend=0x33
+; KeyNext: virtual-key code of next crewmate, Shift = previous. (recommended 0x09, Tab)
+KeyNext=0x09
+; KeyPrev: virtual-key code of previous crewmate, 0 = Shift+KeyNext. (recommended 0)
+KeyPrev=0
+; Log: log every order. (recommended on)
+Log=1
+
+[CampGive]
+; Enable=1: key 4 gives the gun in your hand to a crewmate, or swaps it with the one he carries. Campaign levels only. (recommended off until benched)
+Enable=0
+; Key: virtual-key code. (recommended 0x34, key 4)
+Key=0x34
+; Target: selected = the crewmate you selected (else the nearest), aim = under the crosshair, nearest. (recommended selected)
+Target=selected
+; Range: furthest distance to the crewmate in cm. (recommended 300)
+Range=300
+; Swap=1: if he already carries that kind of gun, swap. (recommended on)
+Swap=1
+; Types: bit mask of item types that may be given (6 = the two gun types). (recommended 6)
+Types=6
+; Refuse: item ids he will not take (rocket and gas launchers). (recommended 50,51,53,54)
+Refuse=50,51,53,54
+; Drawn=1: the crewmate holds the given gun drawn. (recommended on)
+Drawn=1
+; Event: PlayerMonitor event raised after a give. (recommended 18)
+Event=18
+; SwapClips: reserve clips for the swapped-back gun when its stored reserve is not sane, 0 = engine value. (recommended 0)
+SwapClips=0
+; Dry=1: log what would happen and change nothing. (recommended off)
+Dry=0
+; Log: log every give. (recommended on)
+Log=1

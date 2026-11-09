@@ -54,6 +54,10 @@
  *   AttackT=5       the time argument of Attack (seconds, luvsic's default)
  *   KeyFollow=0x46 KeyHold=0x47 KeyAttack=0x48   virtual-key codes (0 = unbound)
  *   Log=1           0 quiet, 1 events, 2 + every refusal
+ *   HeldGuard=0     1 = never recruit a soldier whose squad pointer [script+0x4f4] is set and is not the cop's player squad (0x48c480 AddMember
+ *                   does not remove him from his old squad and the level squad re-captures him; from luvsic's squad.inc "recruit=start").
+ *                   GUESS: police that C&R spawns inside a level squad also have +0x4f4 set, so this can leave a cop with NO recruit; the log counts
+ *                   the skips (Log=2). Default 0 = behaviour unchanged. "(recommended on)" once a bench shows recruits still arrive.
  */
 #ifndef KLCOPSQUAD_C
 #define KLCOPSQUAD_C
@@ -72,7 +76,7 @@ struct klcq_cop { DWORD P, sc; int n, local; DWORD sold[KLCQ_PER_MAX]; DWORD fol
 static struct {
     int on, per, team, log, attackT, kF, kH, kA; unsigned long followMs; float maxd2;
     int inwin, toldGate, toldHead, nopick; DWORD passAt, roundAt; int ncop; struct klcq_cop cop[KLCQ_COPS_MAX];
-    struct klcq_key keyF, keyH, keyA; int calls, dead;
+    struct klcq_key keyF, keyH, keyA; int calls, dead, heldGuard, heldSkip;
     SHORT (WINAPI *aks)(int); HWND (WINAPI *fgw)(void); DWORD (WINAPI *wtp)(HWND, LPDWORD);
 } klcq;
 
@@ -87,7 +91,9 @@ static void klcq_init(void)
     klcq.attackT = GetPrivateProfileIntA("CopSquad", "AttackT", 5, klh_ini); if (klcq.attackT < 1) klcq.attackT = 1; if (klcq.attackT > 60) klcq.attackT = 60;
     klcq.kF = klkeys_vk(KK_COPF); klcq.kH = klkeys_vk(KK_COPH); klcq.kA = klkeys_vk(KK_COPA);        /* klkeys.c: F / G / H are the game's melee / grenade keys; [Keys] Map=1 = Num1 / Num2 / Num3 */
     klcq.log = GetPrivateProfileIntA("CopSquad", "Log", 1, klh_ini);
+    klcq.heldGuard = GetPrivateProfileIntA("CopSquad", "HeldGuard", 0, klh_ini) != 0;
     if (!klcq.on) return;
+    if (klcq.heldGuard) klog("copsquad: HeldGuard ON: a soldier already held by another squad ([script+0x4f4] set, not the player squad) is never recruited");
     if ((u = GetModuleHandleA("user32.dll")) != 0) { klcq.aks = (SHORT (WINAPI *)(int))GetProcAddress(u, "GetAsyncKeyState"); klcq.fgw = (HWND (WINAPI *)(void))GetProcAddress(u, "GetForegroundWindow"); klcq.wtp = (DWORD (WINAPI *)(HWND, LPDWORD))GetProcAddress(u, "GetWindowThreadProcessId"); }
     klog("copsquad: ON (NOT yet run live): per %d team %d follow %lu ms max %.0f m attackT %d keys F/H/A %#x/%#x/%#x%s", klcq.per, klcq.team, klcq.followMs, (double)sqrt((double)klcq.maxd2) / 100.0, klcq.attackT, klcq.kF, klcq.kH, klcq.kA, klcq.aks ? "" : " (no GetAsyncKeyState: keys off)");
 }
@@ -169,9 +175,11 @@ static void klcq_recruit(struct klcq_cop *c, DWORD now)
         for (j = 0; j < 64 && n < KLCQ_CAND_MAX; j++) {
             DWORD o = blk[j * 32 + 0x60 / 4]; float ap[3];
             if (o < 0x10000 || !klcq_soldier(o) || klcq_is_receiver(o) || !kle_node(klh_rd32(o + 4), ap, 0)) continue;
+            if (klcq.heldGuard && klcq_held_by_other(klh_rd32(klh_rd32(o + 0x77c) + 0x4f4), sq)) { klcq.heldSkip++; continue; }   /* [CopSquad] HeldGuard */
             cand[n].id = o; cand[n].taken = 0; cand[n].d2 = (ap[0] - cf[0]) * (ap[0] - cf[0]) + (ap[1] - cf[1]) * (ap[1] - cf[1]) + (ap[2] - cf[2]) * (ap[2] - cf[2]); n++;
         }
     }
+    if (klcq.heldGuard && klcq.heldSkip && klcq.log >= 2) klog("copsquad: HeldGuard skipped %d held soldiers so far", klcq.heldSkip);
     k = klcq_pick(cand, n, klcq.per, klcq.maxd2, out);
     if (!k) { if (c->staffed || klcq.log >= 2) klog("copsquad: cop %08lx: %d police soldiers seen, none free within range%s", (unsigned long)c->P, n, c->staffed ? ": no squad this round" : " (pass retried)"); return; }
     c->staffed = 1;

@@ -77,6 +77,9 @@ int main(void)
     CHECK(klcq_clamp_per(0) == 1); CHECK(klcq_clamp_per(4) == 4); CHECK(klcq_clamp_per(100) == KLCQ_PER_MAX);
     CHECK(klcq_clamp_follow_ms(0) == 0); CHECK(klcq_clamp_follow_ms(1) == 2000); CHECK(klcq_clamp_follow_ms(8) == 8000); CHECK(klcq_clamp_follow_ms(999) == 120000);
     CHECK(klcq_maxd2(40) == 4000.0f * 4000.0f); CHECK(klcq_maxd2(0) == 500.0f * 500.0f); CHECK(klcq_maxd2(1000) == 20000.0f * 20000.0f);
+    /* HeldGuard: a squad pointer that is set and not the cop's own = held by another squad */
+    CHECK(!klcq_held_by_other(0, 0x1000)); CHECK(!klcq_held_by_other(0x1000, 0x1000));
+    CHECK(klcq_held_by_other(0x2000, 0x1000)); CHECK(klcq_held_by_other(0x2000, 0));
     printf("%d checks, %d failed\n", checks, fails);
     printf(fails ? "FAIL\n" : "ALL PASS\n");
     return fails ? 1 : 0;
