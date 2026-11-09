@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~15:35 - [06, offline] LAUNCHER MUSIC = Dead Men MAIN MENU theme, pushed c012079b: SFX/UserInterface/MenuLoop_01 (Ogg Vorbis, 77.0 s 32 kHz stereo) is CANDIDATES[0];
+decoders bin\kl_oggdec.exe (stb_vorbis, pinned) -> ffmpeg on PATH -> tools/kl_pyvorbis.py (6b, 7 s). Real extract identical on both paths (max diff 1 LSB). File renamed music\deadmen_menu.wav
+(old deadmen_launcher.wav = FA theme was reused); .Handle fix so ExitCode is read. kl_tests --py 55/0/1. 81 owns the remaining Setup.bat/ps1 review fixes. Launcher not run live.
+DM07PLANE stages (0x108 + 0x72) exist (no longer blocked by disk); benches wait for test runs + the mod dll back on.
 2026-11-09 ~17:45 - [d0, offline] DM09 TERMINAL ROUTE FEASIBLE: tools/kl_dm09_flood_1109.py on the LIVE DM09 mesh: road mouth (-5700, 9000) -> stairs -> campaign terminal van (-24630, 8958)
 is ONE mesh component, path 279 m, y -40 -> -1040, 0 broken steps. Blockers are authored only (west slab x -7500..-6500, exit boxes/van at z 10800). Plan for a toggle-able
 "terminal" variant + hook consumers: re/dm09_terminal_1109.md. Also from the research workflow: more cover + wreck cover boxes (kl_cover_1026) = safest first stage; SWAT drop-offs = parked vehicle + trigger only.
