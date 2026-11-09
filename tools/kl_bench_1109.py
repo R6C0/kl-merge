@@ -14,7 +14,7 @@ A per-kit item segment is spliced into BOTH seats' scripts right after the first
     python tools/kl_bench_1109.py verify <kit>        re-read the logs of the last run (no game contact)
     python tools/kl_bench_1109.py order               (re)write C:/kl_build_1024/bench_1109/RUN_ORDER.txt
 
-Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DM07GATE_1109 DM07UNHIDE_1109 (stage kit) DM07SINK_1109 (stage kit) DM07CURTAIN_1109 (stage kit, KeepAlive off) DD10GATE_1109 (live DD10 gate leak) DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
+Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DM07GATE_1109 DM07UNHIDE_1109 (stage kit) DM07SINK_1109 (stage kit) DM07CURTAIN_1109 (stage kit, KeepAlive off) DM07PLANE_1109 + DM07PLANE72_1109 (stage kits, HERO-plane gate) DD10GATE_1109 (live DD10 gate leak) DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
 What the log CAN decide: faults/dumps, round 2 reached, 0x25 dwell, botgate, entity hidden flags and positions (`ents`), vehicle state
 (`waitvan`), goto reached / NOT reached. What it CANNOT: boom, camera shake, glare, kick sound, pop (a 1-frame jump), cover pillars: those
 need the screenshots (ReShade bridge D3dShotPost, KLShot_inst1_NN.jpg in the run folder) and an ear/eye.
@@ -79,6 +79,17 @@ K = {
                              files={'F06_Main.zip': '2529fb77e18a62e101a6bc544956b8e9', 'F06_Main.bots.zip': 'da69d8b3ad2ff9abf1b9925e9fdecbd6',
                                     'F06_Main.bots.base.md5': '8ee12031c0e0da6af2a94304892b8b6e'},
                              keepalive=0),
+    # FIX TEST (stage kit): the two hidden gate panels' HVK slots 248/256 replaced by two clones of DD10's collision-only ColiObj_HERO_Plane01 at x -4578
+    # (tools/kl_dm07plane_1109.py; DM07PLANE_1109 = --sub 0x108 hero-only flags, DM07PLANE72_1109 = --sub 0x72 plain world flags, separate stage dirs, same tag). The panels
+    # stay hidden (the van drives through them). Order: the van round FIRST (it must still reverse out through the gap, state 7), then the walks: controls (plA = visible 4m_02
+    # BLOCKED, plF = free path east, must PASS), 10 gate crossings z 9995..10850 that must read BLOCKED (z 10850 = visible 4m_10, so it is a control too), two crouched ones (GUESS: LCONTROL toggles the stance).
+    # `files` md5s are '' until the stage exists (existence only is checked; fill in the 8-char prefixes from the `stage` output). KeepAlive stays on (nothing here kills).
+    'DM07PLANE_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-900:15',
+                           stage='C:/kl_build_1024/dm07plane_1109', tag='.before-dm07plane1109',
+                           files={'F06_Main.zip': '', 'F06_Main.bots.zip': '', 'F06_Main.bots.base.md5': ''}),
+    'DM07PLANE72_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-900:15',
+                             stage='C:/kl_build_1024/dm07plane72_1109', tag='.before-dm07plane1109',
+                             files={'F06_Main.zip': '', 'F06_Main.bots.zip': '', 'F06_Main.bots.base.md5': ''}),
     # LEAK TEST on the LIVE DD10 (nothing installed): BigFence_A_02 (REF 31255, x 7999..8014, z 845..1145) is hidden by kl_dd10_vanlane_1108.py with the same
     # 0x400 flag that the DM07 benches proved loses player collision; the collision-only ColiObj_HERO_Plane01 (x 8017, z 652..1349) should still block (GUESS).
     # The van is called first (the tele lands in otrExitLevel) and parks at x 8640 east of the gate, then three walks west through the pillar gap (z 848..1142).
@@ -92,7 +103,7 @@ K = {
     'DOORS_1109_DM03A': dict(map='DM03A', slot='F07', live={'F07_Main.zip': 'aa79d66d', 'F07_Main.bots.zip': 'd1a8dd0c', 'KLJoin.ini': '958c24b6'}, shots='60-700:20',
                              doors=('DM03A', 'F07', (6516,))),
 }
-ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109', 'DM07CURTAIN_1109', 'DD10GATE_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A']
+ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DM07SINK_1109', 'DM07CURTAIN_1109', 'DM07PLANE_1109', 'DM07PLANE72_1109', 'DD10GATE_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM01R', 'DOORS_1109_DM03A']
 for _k, _c in K.items():
     for _a, _b in dict(entry=0, stage=None, tag=None, hook=HOOK, solo_secs=600, parts=('online',), keepalive=1).items():
         _c.setdefault(_a, _b)
@@ -320,6 +331,24 @@ CURTAIN_THROUGH = -4700     # alive west of this = through the gate
 CURTAIN_MOVED = 300         # a walk counts only when the player moved this far in total from the settle point, else VOID
 CURTAIN_RESPAWN_MS = 8000   # after a kill walk: wait (GUESS: a dead heister is back as police within that; else the next walks read DEAD-BEFORE = WARN)
 
+# DM07PLANE_1109 / DM07PLANE72_1109: (label, tele start, kind). kind CTRL = visible fence panel, must read BLOCKED (the method discriminates); FREE = open ground east of the
+# tele, must PASS (the player can move at all); GATE = a crossing of the hidden gate (panels z 9993..10393 / 10395..10795; z 10850 = visible 4m_10 past the gap) that must read
+# BLOCKED; CROUCH = a gate crossing with the stance toggled low. Crouch is GUESS work: klauto has no crouch op, only key down/up/tap; LCONTROL is the assumed toggle key and
+# the log (pos = actor origin) cannot show the stance, so the shots decide whether he really crouched. Coverage BELOW y 471 (the mud hole) is only reached by a capsule
+# that overlaps the panels' old volume (kl_dm07plane_1109 docstring): any walker on the mud (feet 388..460) does, so every GATE walk tests it; the crouch walk is the
+# lowest capsule this bench can make.
+PLANE_WALKS = (('plA', (-4000, 550, 9800), 'CTRL'), ('plF', (-4000, 550, 10334), 'FREE'),
+               ('pl9995', (-4000, 550, 9995), 'GATE'), ('pl10100', (-4000, 550, 10100), 'GATE'), ('pl10200', (-4000, 550, 10200), 'GATE'),
+               ('pl10334', (-4000, 550, 10334), 'GATE'), ('pl10394', (-4000, 550, 10394), 'GATE'), ('pl10420', (-4000, 550, 10420), 'GATE'),
+               ('pl10600', (-4000, 550, 10600), 'GATE'), ('pl10700', (-4000, 550, 10700), 'GATE'), ('pl10790', (-4000, 550, 10790), 'GATE'),
+               ('pl10850', (-4000, 550, 10850), 'GATE'), ('plC10394', (-4000, 550, 10394), 'CROUCH'), ('plC10790', (-4000, 550, 10790), 'CROUCH'))
+PLANE_FREE_XS = (-3800, -3600, -3400, -3200, -3000)    # the free walk goes EAST, away from the fence, along the same z
+PLANE_FREE_MOVED = 700      # the free walk must cover this much from the settle point, else VOID (stuck start)
+PLANE_THROUGH = -4600       # alive west of this = through the plane (x -4578; a blocked capsule stands east of ~ -4545: visible 4m_02 blocked at -4549 in the 11-09 runs)
+PLANE_MIN_VALID = 7         # of the 12 gate + crouch crossings at least this many must read BLOCKED (the rest VOID / DIED = WARN)
+PLANE_KITS = ('DM07PLANE_1109', 'DM07PLANE72_1109')
+PLANE_VOID = ('VOID', 'DIED', 'DEAD-BEFORE')
+
 # DD10GATE_1109: (label, tele start). Starts 135 cm east of the fence, south of the parked van's line (the van stops at z 1030, half width 110).
 DD10_GATE_WALKS = (('dg900', (8150, 60, 900)), ('dg1000', (8150, 60, 1000)), ('dg1100', (8150, 60, 1100)))
 DD10_GATE_XS = (8050, 7950, 7850, 7700, 7500)
@@ -380,6 +409,27 @@ def gate_seg(who, walks=None, south=True):
         return s
     # from the pocket (H gets through): does its south slope lead off the map? (static read: mud floor x -11000..-4600, outside every LevelBound)
     s += ['tele -4944 450 10333', 'wait 2000', 'goto -6900 8100 100 9000', 'pos gateS-1', 'goto -6900 6500 100 9000', 'pos gateS-2', 'log BENCH1109 gate south done']
+    return s
+
+
+def plane_seg(who):
+    """DM07PLANE*_1109 crossings, the curtain_seg pattern (tele, wait, pos -t, short settle goto east, pos -s, then the goto steps with a pos each); the FREE walk steps
+    east, a CROUCH walk taps LCONTROL after the tele (GUESS: toggle) and again at the end. Labels: <lbl>-t, <lbl>-s, <lbl>-1..5."""
+    s = ['ents Chainlink_Fence_4m_0 12', 'ents Chainlink_Fence_4m_11 2', 'log BENCH1109 plane fence panels read']
+    if who != 'host':
+        return s + ['wait 60000']
+    s += ['waitstate 0x19 90000']
+    for lbl, st, kind in PLANE_WALKS:
+        s += ['tele %d %d %d' % st, 'wait 2000', 'pos %s-t' % lbl]
+        if kind == 'CROUCH':
+            s += ['tap LCONTROL', 'wait 800']
+        s += ['goto %d %d 60 2500' % (st[0] + 150, st[2]), 'pos %s-s' % lbl, 'face %d %d' % ((-3000 if kind == 'FREE' else -5000), st[2])]
+        xs = PLANE_FREE_XS if kind == 'FREE' else GATE_XS
+        for i, x in enumerate(xs):
+            s += ['goto %d %d 60 %d' % (x, st[2], 3000 if i < len(xs) - 1 else 5000), 'pos %s-%d' % (lbl, i + 1)]
+        if kind == 'CROUCH':
+            s += ['tap LCONTROL', 'wait 800']
+        s += ['log BENCH1109 plane %s done' % lbl]
     return s
 
 
@@ -447,6 +497,9 @@ def segment(k, who):
         # van first: the walks + respawn waits take ~150 s and DM07_1109 saw state 3 at ~90 s; waitvan matches 3/4 only, so a van already at 5/7
         # after the walks would time out (300 s + 150 s). The walks then run in round 2 (curtain_seg starts with waitstate 0x19).
         return vans_seg(who, 0, 'dm07') + ['wait 15000'] + curtain_seg(who)
+    if k in PLANE_KITS:
+        # van first (as the curtain kit): the 14 walks take ~5 min and the van is called early in round 1; the walks then run in round 2
+        return vans_seg(who, 0, 'dm07') + ['wait 15000'] + plane_seg(who)
     return doors_seg(who, doors, 'door')
 
 
@@ -729,6 +782,43 @@ def curtain_walk(a, lbl, deaths, lives):
     return 'BLOCKED', 'end x %d, min x %d, moved %.0f; %s' % (walk[-1][0], minx, moved, path)
 
 
+def plane_walk(a, lbl, kind, deaths, lives):
+    """One DM07PLANE*_1109 crossing from the host log -> (verdict, note). Samples <lbl>-t (tele), -s (settled), -1..-5 (goto steps).
+    NOSAMPLE | DEAD-BEFORE (corpse at the tele) | DIED (a kind-3 row in the walk, never west of PLANE_THROUGH) | KILLED (a kind-3 row and a sample west of PLANE_THROUGH:
+    passed the plane first, then died) | FREE walks: PASSED (moved >= PLANE_FREE_MOVED) / VOID | other walks: THROUGH (alive west of PLANE_THROUGH) | VOID (moved <
+    CURTAIN_MOVED from the settle point) | BLOCKED (alive, stayed east of PLANE_THROUGH after a real walk)."""
+    names = ['t', 's'] + [str(i) for i in range(1, 6)]
+    ps = [pos_of(a, '%s-%s' % (lbl, n)) for n in names]
+    miss = [n for n, p in zip(names, ps) if p is None]
+    if miss:
+        return 'NOSAMPLE', 'no pos line for %s' % ', '.join('%s-%s' % (lbl, n) for n in miss)
+    walk = ps[1:]
+    moved = sum(math.hypot(p[0] - q[0], p[2] - q[2]) for p, q in zip(walk, walk[1:]))
+    t0 = next((secs_of(l) for l in a if 'pos %s-t:' % lbl in l), None)
+    t1 = next((secs_of(l) for l in a if 'pos %s-5:' % lbl in l), None)
+    if t0 is None or t1 is None:
+        return 'NOSAMPLE', 'no timestamps for %s' % lbl
+    before = [secs_of(l) for l in deaths if secs_of(l) <= t0]
+    if before and not any(before[-1] < secs_of(v) <= t0 for v in lives):
+        return 'DEAD-BEFORE', 'dead at %.1f s before the tele, no respawn row since' % (t0 - before[-1])
+    died = [l[:12] for l in deaths if t0 < secs_of(l) <= t1 + 2]
+    minx = min(p[0] for p in walk)
+    path = ' '.join('(%d,%d,%d)' % p for p in ps)
+    if died:
+        if kind != 'FREE' and minx < PLANE_THROUGH:
+            return 'KILLED', 'death row at %s but a sample at x %d is WEST of the plane (%d): passed it first; %s' % (died[0], minx, PLANE_THROUGH, path)
+        return 'DIED', 'death row at %s (min x %d): police or other, no verdict; %s' % (died[0], minx, path)
+    if kind == 'FREE':
+        if moved >= PLANE_FREE_MOVED:
+            return 'PASSED', 'moved %.0f cm east, end x %d; %s' % (moved, walk[-1][0], path)
+        return 'VOID', 'moved only %.0f cm (< %d): stuck start, the free path proves nothing; %s' % (moved, PLANE_FREE_MOVED, path)
+    if minx < PLANE_THROUGH:
+        return 'THROUGH', 'ALIVE at x %d (< %d); moved %.0f; %s' % (minx, PLANE_THROUGH, moved, path)
+    if moved < CURTAIN_MOVED:
+        return 'VOID', 'moved only %.0f cm from the settle point (< %d): stuck, no verdict; %s' % (moved, CURTAIN_MOVED, path)
+    return 'BLOCKED', 'end x %d, min x %d, moved %.0f; %s' % (walk[-1][0], minx, moved, path)
+
+
 def item_checks(k, a, dd=(), ctrl=None):
     """The map-specific checks over the host log `a` (list of lines). -> (checks, infos); a check is (status, name, detail), status PASS / FAIL / WARN.
     No vacuous PASS: an empty log, a missing sample or a missing row is a FAIL for every kit (tools/kl_bench_1109_test.py runs this on synthetic logs).
@@ -752,7 +842,7 @@ def item_checks(k, a, dd=(), ctrl=None):
                 bool(g) and not bad, '%d entities%s' % (len(g), ('; WRONG: ' + ' | '.join(bad)) if bad else ('' if g else ' (no ents row: not sampled)')))
         info.append('boom / camera shake / glare: not logged; LOOK at KLShot_inst1_*.jpg around the beat (timestamps of the hasta sample lines)')
         info += [l[:12] + ' ' + l[13:90] for l in a if 'BENCH1109 hasta sample' in l]
-    if k in ('DM01B_1109', 'DM07_1109', 'DM07SINK_1109', 'DM07CURTAIN_1109'):
+    if k in ('DM01B_1109', 'DM07_1109', 'DM07SINK_1109', 'DM07CURTAIN_1109') + PLANE_KITS:
         # the van body only: DM01B_1109 run 1 matched 'V_Van_Reflection' (a ZGROUP parked at y -60000) first and judged its position
         van = [r for r in ents(a, 'V_Van') if 'reflection' not in r[1].lower() and r[3][1] > -50000]
         s3 = next((l for l in a if 'BENCH1109' in l and 'van at state 3' in l), None)
@@ -793,7 +883,7 @@ def item_checks(k, a, dd=(), ctrl=None):
             # a jump > 5000 cm between samples <= 6 s apart from state 3 on: DM01B_1109 run 1 drove east to x 5729, then at state 7 sat at the
             # start pocket (-8000, 30500) for the rest of the run (13700 cm in 6.5 s, no drive)
             seq = [v for v in van if secs_of(v[0]) >= t3 - 4 and (t7 is None or secs_of(v[0]) <= t7)]
-            st, en = POCKETS['DM07_1109' if k in ('DM07SINK_1109', 'DM07CURTAIN_1109') else k]
+            st, en = POCKETS['DM07_1109' if k in ('DM07SINK_1109', 'DM07CURTAIN_1109') + PLANE_KITS else k]
             jumps = [(x, y) for x, y in zip(seq, seq[1:]) if secs_of(y[0]) - secs_of(x[0]) <= 6.5 and math.dist(x[3], y[3]) > 5000]
             reset = [(x, y) for x, y in jumps if math.hypot(x[3][0] - en[0], x[3][2] - en[1]) < 2500 and math.hypot(y[3][0] - st[0], y[3][2] - st[1]) < 1000]
             for x, y in reset:
@@ -839,6 +929,34 @@ def item_checks(k, a, dd=(), ctrl=None):
         info.append('curtain verdict: %s. KILLED = the KillBox kills a player in the gate; BLOCKED = something else stopped him (the curtain is then unproven); THROUGH / INSIDE = open'
                     % ', '.join('%s %s' % (l_, verdict.get(l_, '?')) for l_, _, _ in CURTAIN_WALKS))
         info.append('KeepAlive is OFF for this kit (K keepalive=0): a police kill east of the fence reads DIED-EAST (WARN, rerun)')
+    if k in PLANE_KITS:
+        s7p = next((l for l in a if 'BENCH1109' in l and 'van at state 7' in l), None)
+        chk('van reaches state 7 (leaves): the planes did not block the reverse-out through the gap (GUESS: a hero-only plane ignores a vehicle)', s7p is not None,
+            s7p[:12] if s7p else 'waitvan 7 timed out: suspect the planes block the van (try the other sub variant)')
+        pan = [r for r in ents(a, 'Chainlink_Fence_4m') if r[1].endswith('4m_01') or r[1].endswith('4m_11')]
+        chk('fence panels 4m_01 AND 4m_11 still hidden (the van drives through them)', {r[1][-5:] for r in pan} >= {'4m_01', '4m_11'} and all(r[2] for r in pan), '%d rows' % len(pan))
+        deaths = [l for l in a if 'skulls state: row 0' in l and 'kind 3' in l]
+        lives = [l for l in a if 'skulls state: row 0' in l and 'kind 1' in l]
+        verdict = {}
+        for lbl, st, kind in PLANE_WALKS:
+            v, note = plane_walk(a, lbl, kind, deaths, lives)
+            verdict[lbl] = v
+            info.append('%s (z %d, %s): %s - %s' % (lbl, st[2], kind, v, note))
+            if v == 'NOSAMPLE':
+                chk('%s: crossing sampled (tele, settle, 5 steps)' % lbl, False, note)
+            elif kind == 'CTRL':
+                chk('%s: control (visible fence) reads BLOCKED (the method discriminates)' % lbl, v == 'BLOCKED', '%s - %s' % (v, note), warn=v in PLANE_VOID)
+            elif kind == 'FREE':
+                chk('%s: the free path east PASSES (the player can move)' % lbl, v == 'PASSED', '%s - %s' % (v, note), warn=v in PLANE_VOID)
+            else:
+                chk('%s: the gate plane stops the %s (never alive west of x %d)' % (lbl, 'crouched player' if kind == 'CROUCH' else 'player', PLANE_THROUGH), v == 'BLOCKED', '%s - %s' % (v, note), warn=v in PLANE_VOID)
+        gw = [l_ for l_, _, kd_ in PLANE_WALKS if kd_ in ('GATE', 'CROUCH')]
+        chk('at least %d of the %d gate crossings gave a BLOCKED verdict (not VOID / DIED)' % (PLANE_MIN_VALID, len(gw)), sum(1 for l_ in gw if verdict.get(l_) == 'BLOCKED') >= PLANE_MIN_VALID,
+            ', '.join('%s %s' % (l_, verdict.get(l_, '?')) for l_ in gw))
+        info.append('plane verdict: %s. BLOCKED = the planes hold at that z; THROUGH / KILLED = open there (list-code reach: only the old panel volumes z 9993..10393 / 10395..10795 are looked at); '
+                    'VOID / DIED = no verdict, rerun' % ', '.join('%s %s' % (l_, verdict.get(l_, '?')) for l_, _, _ in PLANE_WALKS))
+        info.append('crouch (plC*): stance NOT logged (pos = actor origin), key LCONTROL is a GUESS: LOOK at the shots; coverage below y 471 is by the list-code rule above, not provable here')
+        info.append('variant: %s (sub flags %s)' % (k, '0x72 plain world' if k == 'DM07PLANE72_1109' else '0x108 donor hero-only, GUESS blocks players'))
     if k == 'DD10GATE_1109':
         pk = next((l for l in a if 'BENCH1109 dd10gate van parked' in l), None)
         info.append('van before the walks: %s' % (pk[:12] if pk else 'no parked line'))

@@ -207,6 +207,49 @@ def curtain(mut=None):
     return g.lines + (van('DM07CURTAIN_1109', 'nostate7' if mut == 'nostate7' else None) if mut != 'novan' else [])
 
 
+def plane(k='DM07PLANE_1109', mut=None):
+    """DM07PLANE*_1109: controls plA (BLOCKED at the visible fence, x -4549) and plF (free east), ten gate crossings and two crouched ones that stop at the plane (BLOCKED), then
+    the van round. mut: through (pl10334 walks out west), throughcrouch (plC10394 walks out), killed (pl10420 passes, then dies west), frozen (pl9995 never moves),
+    freestuck (plF never moves), controlthrough (plA walks through), diedeast (pl10600 dies at x -4300), allvoid (every gate walk frozen), deadbefore (corpse before pl9995),
+    nosample (pl10700-3 missing), unhidden (panel 4m_11 visible), novan, nostate7"""
+    g = Log(k)
+    g.t -= 500                                                       # the crossings come before the van log below
+    for n in ('Chainlink_Fence_4m_01', 'Chainlink_Fence_4m_11'):
+        g.ent(n, (-4579, 471, 10200), hidden=not (mut == 'unhidden' and n.endswith('11')))
+    kill = lambda: g.raw("hud: ONLINE skulls state: row 0 'R5 J.C.' kind 3 deaths 1 -> lives 2 (drawn)")
+    for lbl, st, kind in M.PLANE_WALKS:
+        if mut == 'deadbefore' and lbl == 'pl9995':
+            kill()
+        dies = None
+        if kind == 'FREE':
+            xs = [st[0] + 150 + 200 * (i + 1) for i in range(5)] if mut != 'freestuck' else [st[0] + 150] * 5
+        elif kind == 'CTRL':
+            xs = [max(x, -4549) for x in M.GATE_XS] if mut != 'controlthrough' else list(M.GATE_XS)
+        else:
+            xs = [max(x, -4545) for x in M.GATE_XS]                  # the capsule stops east of the plane (x -4578)
+            if (mut == 'through' and lbl == 'pl10334') or (mut == 'throughcrouch' and lbl == 'plC10394'):
+                xs = list(M.GATE_XS)
+            if mut == 'killed' and lbl == 'pl10420':
+                xs, dies = list(M.GATE_XS), 4
+            if (mut == 'frozen' and lbl == 'pl9995') or mut == 'allvoid':
+                xs = [st[0] + 150] * 5
+            if mut == 'diedeast' and lbl == 'pl10600':
+                xs, dies = [-4300] * 5, 1
+        g.say('pos %s-t: me #0 (%d, 410, %d) heading 270' % (lbl, st[0] + 60, st[2]))
+        g.say('pos %s-s: me #0 (%d, 410, %d) heading 90' % (lbl, st[0] + 150, st[2]))
+        for i, x in enumerate(xs):
+            if mut == 'nosample' and lbl == 'pl10700' and i == 2:
+                continue
+            g.say('pos %s-%d: me #0 (%d, 410, %d) heading 270' % (lbl, i + 1, x, st[2]))
+            if dies == i + 1:
+                kill()
+        g.say('BENCH1109 plane %s done' % lbl)
+        g.wait(4)
+        if dies:
+            g.raw("hud: ONLINE skulls state: row 0 'R5 J.C.' kind 1 deaths 1 -> lives 2 (drawn)", 6)
+    return g.lines + (van(k, 'nostate7' if mut == 'nostate7' else None) if mut != 'novan' else [])
+
+
 def doors(k, mut=None):
     dd = [dict(host=176, name='x', hinge=[-3708, 300, -3217], front=[-3772, 300, -3125], back=[-3767, 300, -3316])]
     if k == 'DM02_1109':
@@ -278,6 +321,8 @@ def log_for(k, mut=None):
         return sink(mut), [], None
     if k == 'DM07CURTAIN_1109':
         return curtain(mut), [], None
+    if k in M.PLANE_KITS:
+        return plane(k, mut), [], None
     if k == 'DD10GATE_1109':
         return dd10gate(mut), [], None
     a, dd = doors(k, mut)
@@ -303,6 +348,8 @@ def main():
             'DM07GATE_1109': ['fence', 'nopos'],
             'DM07UNHIDE_1109': ['hidden01', 'nopos'],
             'DM07CURTAIN_1109': ['through', 'inside', 'allvoid', 'latedeath', 'controlthrough', 'nosample', 'novan', 'nostate7'],
+            'DM07PLANE_1109': ['through', 'killed', 'nosample', 'novan', 'nostate7', 'unhidden'],
+            'DM07PLANE72_1109': ['through', 'nostate7'],
             'DD10GATE_1109': ['through', 'stuck'],
             'DM03_1109': ['nohits', 'nopolice','noleaf', 'nokick', 'static', 'nogoto'],
             'DM02_1109': ['noleaf', 'nokick', 'nogoto'],
@@ -380,6 +427,36 @@ def main():
        'CURTAIN script: each walk = tele, wait, pos, settle goto 150 east')
     ok(M.K['DM07CURTAIN_1109']['keepalive'] == 0 and M.K['DM07SINK_1109']['keepalive'] == 1 and M.K['DM07CURTAIN_1109']['tag'] == '.before-dm07curtain1109' and 'DM07CURTAIN_1109' in M.ORDER, 'CURTAIN kit: stage + tag + keepalive 0 only here, in ORDER')
     ok([c[0] for c in M.CURTAIN_WALKS][:2] == ['curA', 'curB'] and [c[1][2] for c in M.CURTAIN_WALKS] == [9800, 10850, 10334, 10420, 10600, 10700], 'CURTAIN walks: controls first, z 9800 10850 10334 10420 10600 10700')
+    # DM07PLANE*_1109: BLOCKED passes, alive west of the plane FAILs (also a crouched one, also dead-after-passing), VOID / DIED are WARN, the free path must PASS, van state 7 required
+    for pk_ in M.PLANE_KITS:
+        r, inf = M.item_checks(pk_, plane(pk_), [], None)
+        ok(not [x for x in r if x[0] != 'PASS'] and any('plane verdict: plA BLOCKED, plF PASSED, pl9995 BLOCKED' in i_ and 'plC10790 BLOCKED' in i_ for i_ in inf),
+           '%s: good log = all PASS, verdict line %s %s' % (pk_, [x for x in r if x[0] != 'PASS'], [i_ for i_ in inf if 'verdict' in i_]))
+    K_ = 'DM07PLANE_1109'
+    ok(any('pl10334' in x[1] for x in fails(K_, 'through')), 'PLANE: a gate crossing alive west of -4600 FAILs')
+    ok(any('plC10394' in x[1] and 'crouched' in x[1] for x in fails(K_, 'throughcrouch')), 'PLANE: a crouched crossing alive west FAILs')
+    r, inf = M.item_checks(K_, plane(K_, 'killed'), [], None)
+    ok(any(x[0] == 'FAIL' and 'pl10420' in x[1] for x in r) and any('pl10420 (z 10420, GATE): KILLED' in i_ for i_ in inf), 'PLANE: passed the plane then died = KILLED, FAIL')
+    r, inf = M.item_checks(K_, plane(K_, 'frozen'), [], None)
+    ok(not [x for x in r if x[0] == 'FAIL'] and any(x[0] == 'WARN' and 'pl9995' in x[1] for x in r) and any('pl9995 (z 9995, GATE): VOID' in i_ for i_ in inf), 'PLANE: a frozen walk is VOID = WARN, not FAIL')
+    r, inf = M.item_checks(K_, plane(K_, 'freestuck'), [], None)
+    ok(not [x for x in r if x[0] == 'FAIL'] and any(x[0] == 'WARN' and 'plF' in x[1] for x in r), 'PLANE: a stuck free path is VOID = WARN')
+    ok(any('plA' in x[1] for x in fails(K_, 'controlthrough')), 'PLANE: a control that walks through FAILs')
+    r, inf = M.item_checks(K_, plane(K_, 'diedeast'), [], None)
+    ok(not [x for x in r if x[0] == 'FAIL'] and any('pl10600 (z 10600, GATE): DIED' in i_ for i_ in inf), 'PLANE: a death east of the plane is DIED, WARN')
+    r, inf = M.item_checks(K_, plane(K_, 'deadbefore'), [], None)
+    ok(any('pl9995 (z 9995, GATE): DEAD-BEFORE' in i_ for i_ in inf), 'PLANE: a corpse at the tele is DEAD-BEFORE')
+    ok(any('at least' in x[1] for x in fails(K_, 'allvoid')), 'PLANE: every gate walk VOID FAILs (no vacuous PASS)')
+    ok(any('crossing sampled' in x[1] for x in fails(K_, 'nosample')), 'PLANE: a missing pos line FAILs')
+    ok(any('van reaches state 7' in x[1] for x in fails(K_, 'nostate7')) and any('van' in x[1] for x in fails(K_, 'novan')), 'PLANE: no van state 7 / no van rows FAIL')
+    ok(any('still hidden' in x[1] for x in fails(K_, 'unhidden')), 'PLANE: a visible panel FAILs (the van must drive through hidden ones)')
+    sc = M.plane_seg('host')
+    ok(sum(1 for l in sc if l.startswith('tele')) == len(M.PLANE_WALKS) == 14 and all(sc[i + 1] == 'wait 2000' and sc[i + 2].startswith('pos ') for i, l in enumerate(sc) if l.startswith('tele')),
+       'PLANE script: 14 walks, each = tele, wait, pos')
+    ok(sc.count('tap LCONTROL') == 4 and [x[1][2] for x in M.PLANE_WALKS if x[2] == 'GATE'] == [9995, 10100, 10200, 10334, 10394, 10420, 10600, 10700, 10790, 10850]
+       and [x[0] for x in M.PLANE_WALKS][:2] == ['plA', 'plF'], 'PLANE walks: controls first, the ten gate z values, 2 crouch walks (4 stance taps)')
+    ok(all(M.K[k_]['tag'] == '.before-dm07plane1109' and M.K[k_]['stage'] and k_ in M.ORDER and M.K[k_]['keepalive'] == 1 for k_ in M.PLANE_KITS)
+       and M.K['DM07PLANE_1109']['stage'] != M.K['DM07PLANE72_1109']['stage'], 'PLANE kits: two stage kits (separate stage dirs), same tag, in ORDER')
     # pos parsed by name: the label decides, not the position in the line
     ok(M.pos_of(['01:00:00.000 script 3: pos x-label: me #0 (-4300, 550, 10400) heading 12'], 'x-label') == (-4300, 550, 10400), 'pos_of parses the named x')
     ok(M.pos_of(['01:00:00.000 script 3: pos other: me #0 (1, 2, 3) heading 12'], 'x-label') is None, 'pos_of: other label is None')
