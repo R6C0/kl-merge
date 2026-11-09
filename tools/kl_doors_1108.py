@@ -11,7 +11,7 @@ GUESS (nothing here is run in the game): (1) a model-less keyed ZSTDOBJ moves it
 the pool-group-2 leaf is drawn; (3) the slab size (median host width x height over the map's hosts) fits each own leaf; (4) the DD kick sound plays with
 the own leaf; (5) the own leaf's hinge end is the one nearest its origin (door_hosts' rule).
 
-  python tools/kl_doors_1108.py stage [--maps DM01,DM03A,DM03] [--out <dir>] [--in-dir MAP=<dir>] [--no-own] [--hosts MAP=k,k,..] [--no-clear]
+  python tools/kl_doors_1108.py stage [--maps DM01,DM03A,DM03] [--out <dir>] [--in-dir MAP=<dir>] [--no-own] [--hosts MAP=k,k,..] [--no-clear] [--allow-one-sided]
 --no-own stages the same hosts with the white leaf (control). Per map: F0x_Main.zip, .bots.zip, .bots.base.md5, KLJoin.ini + KLGuns.ini (Entries= = new .prm
 chunk count), install.py (+ INSTALL / UNDO bats), bench_cover_lines.txt, build_report.json.
 DM03 sits ON TOP of the dm03cops_1108 stage (its zips are the input and their md5s the pins): INSTALL DM03 COPS FIRST, install.py refuses otherwise.
@@ -37,7 +37,7 @@ MAPS = {
     # DM03: input = the dm03cops stage (md5s of its F03_Main.zip / .bots.zip / .bots.base.md5), inis from the live DM03 folder
     'DM03': dict(slot='F03', dir=COPS, ini_dir=os.path.join(GAME, 'KLExpansion', 'Maps', 'DM03'), top='KL_Interact!1', base=0,
                  pins=('da7b36420dd353bdfb7741bd6cabf026', '0b90ab321c9b1d3504c9f9d0fe441719', 'fedcd656dcfe300e65e20da373f3a636'),
-                 hosts=[176, 64, 546, 1255]),
+                 hosts=[176, 64]),   # 546 / 1255 dropped 2026-11-09 (one main-part side: opened onto nothing); 84 = a two-sided candidate
 }
 # DM03 host 1076 (SecurityHall_01a DoorSteel_B_01) is NOT in the default set (review 2026-11-08, tools/kl_doors_clear_1108.py): swung -90 / -120 degrees its leaf cuts off 41..456
 # cells of the walk graph from every SpawnPoint_Dead_NN (a corridor), and the hinge stands 60 cm from Triggers!ExitBankTrigger_02. Still selectable: --hosts DM03=176,64,546,1076,1255
@@ -70,7 +70,13 @@ def patch_entries(path_in, n):
     return new.encode('latin-1'), c
 
 
-def safety(zp, hosts, log):
+def one_sided(rows):
+    """[(k, spawn, exit, main-part sides)] -> the hosts with fewer than 2 main-part sides. A kick door opens onto the walk mesh on BOTH sides or it opens onto nothing
+    (2026-11-09 owner: 'withdrawal had the door kick on one side and thats it no room nothing in there': DM03 hosts 546 / 1255 had sides 1)."""
+    return [r[0] for r in rows if r[3] < 2]
+
+
+def safety(zp, hosts, log, allow_one_sided=False):
     """Offline checks on the INPUT zip's hosts: distance of each door hinge from the REAL spawn points (ZSpawnPoint nodes; 2026-11-08 review: the first version also took
     Triggers!Respawn_Trigger and NoCover markers named '...spawn...' for spawns) and from the escape (a mapiconexit icon, else the escape boxes: otrExitLevel,
     OnlineExitLevelTrigger, BoardingTrigger, AllyEscapeBox, PathBlockerVan: the shut and swung leaf footprints must not touch one), and how many of its two sides lie on the
@@ -100,6 +106,9 @@ def safety(zp, hosts, log):
             for t in things:
                 if t[3] and DC.seg_hits_box(a, b, t[2], t[3], t[4]):
                     raise ValueError('door host %d: the leaf (%s) touches the escape box %s' % (k, lab, t[1]))
+    bad = one_sided(out)
+    if bad and not allow_one_sided:
+        raise ValueError('door host(s) %s have fewer than 2 main-part sides: the door would open onto nothing (--allow-one-sided to force)' % bad)
     return out
 
 
@@ -211,7 +220,7 @@ if __name__ == '__main__':
 '''
 
 
-def stage_map(name, out, in_dir=None, own=True, log=print, hosts=None, clear=True):
+def stage_map(name, out, in_dir=None, own=True, log=print, hosts=None, clear=True, allow_one_sided=False):
     cfg = dict(MAPS[name])
     if hosts:
         cfg['hosts'] = list(hosts)
@@ -231,7 +240,7 @@ def stage_map(name, out, in_dir=None, own=True, log=print, hosts=None, clear=Tru
     rep = {}
     try:
         log('== %s: safety' % name)
-        rep['safety'] = safety(os.path.join(src_dir, zn), cfg['hosts'], log)
+        rep['safety'] = safety(os.path.join(src_dir, zn), cfg['hosts'], log, allow_one_sided)
         res = {}
         for n in (zn, bn):
             log('== %s %s' % (name, n))
@@ -315,7 +324,7 @@ def main(a):
             k, v = a[i + 1].split('=', 1)
             hs[k] = [int(t) for t in v.split(',')]
     for m in maps:
-        for n, o, w in stage_map(m, opt('--out', OUT), ind.get(m), own='--no-own' not in a, hosts=hs.get(m), clear='--no-clear' not in a):
+        for n, o, w in stage_map(m, opt('--out', OUT), ind.get(m), own='--no-own' not in a, hosts=hs.get(m), clear='--no-clear' not in a, allow_one_sided='--allow-one-sided' in a):
             print('%-6s %-26s %s -> %s' % (m, n, o, w))
     return 0
 
