@@ -12,7 +12,7 @@ A per-kit item segment is spliced into BOTH seats' scripts right after the first
     python tools/kl_bench_1109.py verify <kit>        re-read the logs of the last run (no game contact)
     python tools/kl_bench_1109.py order               (re)write C:/kl_build_1024/bench_1109/RUN_ORDER.txt
 
-Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
+Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DM07GATE_1109 DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
 What the log CAN decide: faults/dumps, round 2 reached, 0x25 dwell, botgate, entity hidden flags and positions (`ents`), vehicle state
 (`waitvan`), goto reached / NOT reached. What it CANNOT: boom, camera shake, glare, kick sound, pop (a 1-frame jump), cover pillars: those
 need the screenshots (ReShade bridge D3dShotPost, KLShot_inst1_NN.jpg in the run folder) and an ear/eye.
@@ -51,12 +51,14 @@ K = {
                       doors2=(1, 2)),
     'DM01B_1109': dict(map='DM01B', slot='F03', live={'F03_Main.zip': '778b075c', 'F03_Main.bots.zip': 'dccc9250', 'KLJoin.ini': 'f28992a5'}, shots='60-900:15'),
     'DM07_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-900:15'),
+    # the gate leak alone (no van): crossings through two VISIBLE panels (controls) and the hidden 4m_01, sampled at the fence line x -4560..-4600
+    'DM07GATE_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-500:10'),
     'DOORS_1109_DM01': dict(map='DM01', slot='F01', live={'F01_Main.zip': '444a3ed6', 'F01_Main.bots.zip': 'f3ed6155', 'KLJoin.ini': 'db4516c6'}, shots='60-700:20',
                             doors=('DM01', 'F01', (957, 2569))),
     'DOORS_1109_DM03A': dict(map='DM03A', slot='F07', live={'F07_Main.zip': 'aa79d66d', 'F07_Main.bots.zip': 'd1a8dd0c', 'KLJoin.ini': '958c24b6'}, shots='60-700:20',
                              doors=('DM03A', 'F07', (6516,))),
 }
-ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A']
+ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A']
 for _k, _c in K.items():
     _c.update(entry=0, stage=None, tag=None, hook=HOOK, solo_secs=600, parts=('online',))
     if _k not in B.KITS:
@@ -228,6 +230,29 @@ def dm07_seg(who):
     return s
 
 
+# DM07GATE_1109 crossings: (label, tele start = floor + 150, goto z). From the static read of live f35e4133 (HVK): fence line x about -4560..-4600,
+# fence bottom y 471.5 over floor 393..413. A = 4m_02 (visible, 29 cm gap), B = 4m_03 (visible), H = 4m_01 (hidden, 58..79 cm gap; DM07_1109 run 2
+# walked through here). 4m_09 / 4m_10 skipped (Pillar_F_07, ConcetePipe_19 nearby). Floors are GUESSes from the static read (tele snaps to ground).
+GATE_WALKS = (('gateA', (-4000, 562, 9793)), ('gateB', (-4000, 560, 9393)), ('gateH', (-4000, 550, 10334)))
+GATE_XS = (-4400, -4520, -4620, -4750, -5000)   # goto steps: one pos per step, so the crossing is read without a mid-goto sample
+
+
+def gate_seg(who):
+    s = ['ents Chainlink_Fence_4m_0 12', 'ents Chainlink_Fence_4m_1 6', 'log BENCH1109 gate fence panels read']
+    if who != 'host':
+        return s + ['wait 60000']
+    # right after the round starts: DM07_1109 run 2's control walk ran late and a cop downed the player at (-2905, 10432)
+    s += ['waitstate 0x19 90000']
+    for lbl, st in GATE_WALKS:
+        s += ['tele %d %d %d' % st, 'wait 2000', 'face -5000 %d' % st[2], 'pos %s-0' % lbl]
+        for i, x in enumerate(GATE_XS):
+            s += ['goto %d %d 60 %d' % (x, st[2], 3000 if i < len(GATE_XS) - 1 else 5000), 'pos %s-%d' % (lbl, i + 1)]
+        s += ['log BENCH1109 gate %s done' % lbl]
+    # in the pocket (if H got through): does its south slope lead off the map? (static read: mud floor x -11000..-4600, outside every LevelBound)
+    s += ['goto -6900 8100 100 9000', 'pos gateS-1', 'goto -6900 6500 100 9000', 'pos gateS-2', 'log BENCH1109 gate south done']
+    return s
+
+
 def dm03_seg(who, doors):
     s = ['wait 4000', 'ents VehicleExit 12', 'ents ArrivingCops 40', 'ents Garage 30', 'ents Ramp 30', 'log BENCH1109 dm03 t0 census']
     for i in range(1, 6):
@@ -262,6 +287,8 @@ def segment(k, who):
         return vans_seg(who, 0, 'dm01b')
     if k == 'DM07_1109':
         return dm07_seg(who)
+    if k == 'DM07GATE_1109':
+        return gate_seg(who)
     return doors_seg(who, doors, 'door')
 
 
@@ -573,6 +600,26 @@ def item_checks(k, a, dd=(), ctrl=None):
         chk('walk-out goto ran', bool(g), g[0][g[0].find('goto'):][:110] if g else 'no goto line%s' % (' (tele refused: %s)' % tp[0][:100] if tp else ''))
         chk('player does NOT walk out through the gap (blocked, control walks)', bool(g) and 'NOT reached' in g[0] and xs is not None and xs > -4700 and reached(cg),
             'goto: %s | pos dm07-after-walk x=%s | control reached=%s' % (g[0][g[0].find('goto'):][:90] if g else 'none', xs, reached(cg)))
+    if k == 'DM07GATE_1109':
+        pan = [r for r in ents(a, 'Chainlink_Fence_4m') if r[1].endswith('4m_01') or r[1].endswith('4m_11')]
+        chk('fence panels 4m_01 AND 4m_11 read hidden (the live gate)', {r[1][-5:] for r in pan} >= {'4m_01', '4m_11'} and all(r[2] for r in pan), '%d rows' % len(pan))
+        verdict = {}
+        for lbl, st in GATE_WALKS:
+            ps = [pos_of(a, '%s-%d' % (lbl, i)) for i in range(len(GATE_XS) + 1)]
+            got = [p for p in ps if p]
+            chk('%s: crossing sampled (start + %d steps)' % (lbl, len(GATE_XS)), len(got) == len(ps) and abs(got[0][0] - st[0]) < 300,
+                ' '.join('(%d,%d,%d)' % tuple(round(c) for c in p) if p else '-' for p in ps))
+            if got:
+                end = got[-1]
+                verdict[lbl] = 'THROUGH' if end[0] < -4700 else 'BLOCKED' if end[0] > -4700 and abs(end[2] - st[2]) < 400 else 'OFF-LINE'
+                low = min((p[1] for p in got if -4700 < p[0] < -4450), default=None)
+                info.append('%s: %s, end x %d (z %d), lowest y near the fence line %s' % (lbl, verdict[lbl], end[0], end[2], low))
+        info.append('gate verdict: A (visible 4m_02) %s, B (visible 4m_03) %s, H (hidden 4m_01) %s. A/B BLOCKED + H THROUGH = the hidden panels pass players '
+                    '(un-hide fixes it, or the gap); all THROUGH = the fence never blocks players (filter or gap): re-route the van or add a blocker'
+                    % (verdict.get('gateA', '?'), verdict.get('gateB', '?'), verdict.get('gateH', '?')))
+        for n in ('gateS-1', 'gateS-2'):
+            p = pos_of(a, n)
+            info.append('%s (pocket south slope): %s' % (n, p and tuple(round(c) for c in p)))
     if k in ('DM03_1109', 'DM02_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A'):
         use = list(dd)[:1] if k == 'DM03_1109' else list(dd)
         chk('doors.json lists the kit doors', bool(use), '%d doors' % len(use))

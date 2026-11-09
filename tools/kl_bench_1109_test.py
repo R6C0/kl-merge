@@ -107,6 +107,19 @@ def van(k, mut=None):
     return g.done()
 
 
+def gate(mut=None):
+    g = Log('DM07GATE_1109')
+    for n in ('Chainlink_Fence_4m_01', 'Chainlink_Fence_4m_11', 'Chainlink_Fence_4m_02'):
+        g.ent(n, (-4580, 470, 10000), hidden=(n[-2:] != '02' and mut != 'fence'))
+    for lbl, st in M.GATE_WALKS:
+        xs = [st[0]] + [max(x, -4560) if lbl != 'gateH' else x for x in M.GATE_XS]
+        for i, x in enumerate(xs):
+            if mut == 'nopos' and lbl == 'gateB' and i == 3:
+                continue
+            g.say('pos %s-%d: me #0 (%d, 410, %d) heading 270' % (lbl, i, x, st[2]))
+    return g.done()
+
+
 def doors(k, mut=None):
     dd = [dict(host=176, name='x', hinge=[-3708, 300, -3217], front=[-3772, 300, -3125], back=[-3767, 300, -3316])]
     if k == 'DM02_1109':
@@ -144,6 +157,8 @@ def log_for(k, mut=None):
         return hasta(mut), [], None
     if k in ('DM01B_1109', 'DM07_1109'):
         return van(k, mut), [], dict(control=[-1800, 10400], length=2100.0)
+    if k == 'DM07GATE_1109':
+        return gate(mut), [], None
     a, dd = doors(k, mut)
     return a, dd, None
 
@@ -164,6 +179,7 @@ def main():
     muts = {'HASTA1109': ['barricade', 'broken', 'roadblock'],
             'DM01B_1109': ['east', 'nostate3', 'nostate5', 'nolate', 'stuck', 'mixrow', 'pop'],
             'DM07_1109': ['fence', 'nolate', 'nocontrol', 'walkedout', 'nopos', 'farpos', 'nostate3', 'stuck'],
+            'DM07GATE_1109': ['fence', 'nopos'],
             'DM03_1109': ['nohits', 'nopolice','noleaf', 'nokick', 'static', 'nogoto'],
             'DM02_1109': ['noleaf', 'nokick', 'nogoto'],
             'DOORS_1109_DM01': ['noleaf', 'nokick'],
@@ -180,6 +196,9 @@ def main():
     a, dd, ctrl = log_for('DM07_1109')
     a2 = [l for l in a if 'goto (-6000' not in l]
     ok([x for x in M.item_checks('DM07_1109', a2, dd, ctrl)[0] if x[0] == 'FAIL'], 'DM07: missing blocked goto must FAIL')
+    # the gate verdict reads the crossings: visible panels blocked, the hidden one passed
+    inf = M.item_checks('DM07GATE_1109', gate(), [], None)[1]
+    ok(any('A (visible 4m_02) BLOCKED, B (visible 4m_03) BLOCKED, H (hidden 4m_01) THROUGH' in x for x in inf), 'DM07GATE: verdict line reads the crossings %s' % [x for x in inf if 'verdict' in x])
     # pos parsed by name: the label decides, not the position in the line
     ok(M.pos_of(['01:00:00.000 script 3: pos x-label: me #0 (-4300, 550, 10400) heading 12'], 'x-label') == (-4300, 550, 10400), 'pos_of parses the named x')
     ok(M.pos_of(['01:00:00.000 script 3: pos other: me #0 (1, 2, 3) heading 12'], 'x-label') is None, 'pos_of: other label is None')
