@@ -42,6 +42,8 @@
  *   klclimb.c      x     x    the PLAYER climbs a wall edge of the level's KLJoin.ini with Dead Men's climb clip
  *                             ([EdgeClimb], was [Climb]; game routines called: the mini animation, AlignTo, the collision
  *                             switch, the proxy; no code). OFF by default. Wired 2026-10-11 after two reviews; NOT RUN IN THE GAME
+ *   klcampaign.c   x     x    luvsic's Dead Men campaign runtime core, no UI ([Campaign] Routing/Trigger/AutoLoad/SaveRedirect/ProfileReload/
+ *                             Progress/AchievementGuard/Adpcm; import slots + data only). OFF by default; NOT RUN IN THE GAME
  *   klfreeclimb.c  x     x    Dead Men's FREE climb, W + E at any ledge 25 .. 220 high (luvsic's ANP climb.inc, ported): a
  *                             ZFFActionVaultOver with a vtable copy of this DLL's own; data writes only, every call under
  *                             a fault guard ([Climb]). OFF by default; needs the climb clips in the level's .ANM. NOT RUN
@@ -917,6 +919,8 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klsteam.c"
 #include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
 #include "klslot.c"
+#include "klcampaign_gate.h"                              /* [Campaign] Enable gate (klcmp_enabled / klcmp_level_active) */
+#include "klcampaign.c"                                   /* klcampaign.c: luvsic's campaign runtime core, no UI (all [Campaign] toggles off); AFTER klslot.c */
 #include "klserver.c"                                    /* klserver.c: [Server] host a Quick Match / Ranked lobby unattended (off unless Enable=1); AFTER klslot.c / klchar.c / kllobby.c */
 #include "kllocname.c"                                    /* kllocname.c: [Names] an expansion map shows its own name in the FA lobby / lists (off unless Enable=1); AFTER klslot.c / klpm.c */
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
@@ -1509,6 +1513,7 @@ static void klh_tick(int game_thread)
     KLPT(klgrenade_tick(game_thread));                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
     KLPT(klmu_tick(game_thread));                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
     KLPT(klam_tick(game_thread));                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
+    KLPT(klcmpr_tick(game_thread));                           /* klcampaign.c: [Campaign] trigger / autoload / guards (off unless Enable=1) */
     KLPT(kllm_tick(game_thread));                           /* kllevelmusic.c: [LevelMusic] (off unless Restart=1) */
     KLPT(klecho_tick(game_thread));                         /* klecho.c: [Echo] wraps the reverb slot (data write; off unless Enable=1) */
     KLPT(klss_tick(game_thread));                           /* klshot2d.c: re-points the sound system at the private vtable (VTABLE route only) */
@@ -1955,6 +1960,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klud_init();                                      /* klucc_down.c: reads [Ucc] DownOnly */
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
     klam_init();                                     /* klambience.c: [Ambience] (default off) */
+    klcmpr_init();                                      /* klcampaign.c: [Campaign] (default off) */
     kllm_init();                                      /* kllevelmusic.c: [LevelMusic] (default off) */
     klecho_init();                                    /* klecho.c: [Echo] (default off) */
     klss_init();                                      /* klshot2d.c: [Sound] RemoteShot2D (default off) */
