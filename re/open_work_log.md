@@ -1,3 +1,6 @@
+2026-11-09 ~03:10 - [d0] BENCHES on the INSTALLED DD10 + DM05A (TEST 09a02a2c, nothing installed, undo byte-exact each): dd10live1109 PASS: 'last:' called the van (59.8 s left), ShieldDriveIn+ShieldWhileWaiting
+kept it 9600/9600 in, waiting and out (no fire). dd10call1109 ALL PASS: a heister in otrExitLevel with $0 calls it (state 3 after 4.4 s), but the seat at the box centre (8300,1100) died ~4 s in while the van
+parked on it (GUESS run over, KILLED BY RED); the box overlaps the van stop (8640,1030). lcmusicblive1109 (DM05A music B 0ff298a6): 290 s, 0 faults, round end unseen (kit 480 s too short -> 600). tools/kl_bench_1106.py.
 2026-11-08 ~18:30 - [d0] INSTALLED for owner testing ("install and tell me"), NOT benched: DM05A heli departure (lcdepart) + club music A rebased on it (stage C:/kl_build_1024/ondepart_1108/lcmusic_a_1108): zip 0c0980c4, bots 2f719e08, base 0344d4c9.
 DD10 van lane z 1030 + gate fence render hidden (collision kept): F07 5d76d91a, bots 069f4402, base 3dcfc1d3; thin margins (pillar 7 cm, dustbin ~1 cm), crash legs still clip. Undo: UNDO ALL 1105.bat steps 0v, 0m, 0e (top). Re-stage DM05A on 0c0980c4, DD10 on 5d76d91a.
 2026-11-08 ~17:40 - [shop] SHOP UI TIDY built, NOT installed (owner: page II + hire page 'still look somewhat bad to navigate'): [ShopPage] TidyPage2 + [Hire] TidyPage, both default 0, '(recommended on)'.
@@ -31,6 +34,13 @@ carexit guard fixed: J.check reports 0 misfits in-process (kl_map_ai.cars regist
 Cause of cops staying in cars PROVEN: 4 VehicleExitBehaviour nodes had no controller (restored from M03_FA_A; that DD then runs it is a GUESS). garage = 6 police, ramp = 5 police + 45 s Hunt into the garage (GUESS ramp = Ramp_01 beside the lot), frontcops = lot SWAT x3 + ArrivingCops_Squad_02 x2 -> police form. Census 33/27 -> 44/29.
 Undo rehearsed byte-exact in scratch; bench needs ClientBuild*/ClientRewrite/ClientRingSync/AssertSoft lines (bench_cover_lines.txt). Not benched (owner playing).
 2026-11-08 ~10:30 - [vehroutes] DM01B van drive-away went through the Donut Factory wall (x=-496; render check, old lane check was collision-only). STAGED NOT INSTALLED C:/kl_build_1024/vehroutes_1108/DM01B (zip edd349a1, bots a51181be, base b2f37f42; live pins 74d37233 / 73583df1 / c3535e34): van backs out along its arrival lane, crash keys clamped x>=-350. Audit + other maps: re/vehicle_routes_1108.md (DM07 needs a fix, DM03 traffic on the lane, report only). tools/kl_vehroutes_1108.py.
+## 2026-11-09 ~03:40 [f0] MERGED 1108f LIVE (no crash involved)
+- Owner 11-09 ~02:29: "continue all prompts til afternoon 5pm pc is all yours ... do testing". After d0's DD10 + DM05A benches: install --test, bench, undo, SHIP install.
+- Bench M1108F_DD05 (C:\kl_build_1024\merged_1108f_bench, TEST 40d00164): PASS, 2 seats, round 2, 0 asserts/faults/dumps, SHPH match 4555f77f both seats, files back.
+  Hire page served tidy rows ('J.C.  $45K', desc '$45,000 - BUY twice to hire'). 0 KLShot files (same ReShade-bridge gap as vanwait1108): no picture of page II.
+- LIVE: dll 729f7512, KLHook.ini f7f11dcc, DM09 KLJoin.ini 2094d83a. Not covered by the bench: a fed (FedRide=3 lift, FedKeep, FoeNoSwapWhileFed): offered to db.
+- Game handed to fc for the shop look bench (shoplook_1109).
+
 ## 2026-11-08 ~18:30 [f0] MERGED 1108f staged, not installed (no crash involved)
 - fc pushed the page II / hire page tidy (cb0b2e8a + 4a4c1ca7, e206e0aa). merged_1108f = one dll from e206e0aa: db FedRide=3 + FoeNoSwapWhileFed + FedKeep
   + fc TidyPage2 / Hire TidyPage. C:\kl_build_1024\merged_1108f: SHIP 729f7512, TEST 40d00164. Supersedes merged_1108e (never installed) and 1108d.

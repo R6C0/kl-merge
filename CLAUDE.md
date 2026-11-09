@@ -67,6 +67,11 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~03:10 - [d0] BENCHES on the INSTALLED DD10 + DM05A (TEST 09a02a2c, nothing installed, undo byte-exact each): dd10live1109 PASS: 'last:' called the van (59.8 s left), ShieldDriveIn+ShieldWhileWaiting
+kept it 9600/9600 in, waiting and out (no fire). dd10call1109 ALL PASS: a heister in otrExitLevel with $0 calls it (state 3 after 4.4 s), but the seat at the box centre (8300,1100) died ~4 s in while the van
+parked on it (GUESS run over, KILLED BY RED); the box overlaps the van stop (8640,1030). lcmusicblive1109 (DM05A music B 0ff298a6): 290 s, 0 faults, round end unseen (kit 480 s too short -> 600). tools/kl_bench_1106.py.
+2026-11-09 ~03:00 - [06] INSTALLED on owner OK (not benched): Hasta look/vault/blast (DM11B), dm03cops -> doors DM03 -> DM03_van (DM03 c586d445), doors DM01 + DM03A, DM01B street2 van (778b075c), DM07 van (f35e4133), dm02fix (vault glass now HVK-cut, coop OFF: static planes never open) -> dm02door (DM02 bd119e9c).
+Undo: UNDO ALL 1105.bat steps 0z1..0z9, 0za (top). C: freed by hard-linking stage copies equal to game files (tool in scratch linkdupes.py). Bench queue: after d0, f0, fc. Bench kits + DM01B wider corners being prepped (wewgiykat).
 2026-11-08 ~21:00 - [d0] INSTALLED for owner testing, NOT benched: DM05A club music level B (Ambient group 0.5, 2D pair b1 12, 3D 48/30; zip 0ff298a6, bots 72259e27, base 6cd71dd7);
 DD10 flatledge (KLJoin 481520e7) + dd10flats (3 loot stacks to y1600, 2 cans re-seated + 6 new, 21 kick doors; F07 13bc6388, bots 488872aa, base 2d73022b, KLJoin 30482fec).
 DD10 van: called ONLY by entering otrExitLevel (8300,200,1100); backstop only un-hides it, parked van unshielded. ~22:00 dd10vancall INSTALLED (approach box shows van, marker from alarm, Join.3 -> 8500 0 1180; no fallback call): F07 1a0d94b0, bots 27c9fae8, base 11a071b3, KLJoin ebdf1472. Undo: UNDO ALL 1105.bat steps 0y, 0x, 0l, 0w (top).
@@ -75,9 +80,9 @@ Page II: rows 'PD2 PAR', desc line 1 'PD2 GUN: price + rank of the stock gun' (P
 rows 'Pierre  $45K' / HIRED / n/a, no stars without a rank gate, no gun lock. klshopui_logic.h + klshopui_test.c, kl_tests 112/0. SHIP 027cd72d / TEST 9eeedf81 in C:\kl_build_1024\shopui_1108. Needs a look bench (widths are GUESSes) when testing is allowed.
 2026-11-08 ~17:20 - [veh] DM01B street2 van from/to unseen pockets, staged NOT installed (zip 778b075c, bots dccc9250, base 6616525a; pinned live 74d37233 / 73583df1 / c3535e34): waits west (-8000,30500), leaves east (17400,30400).
 Seen by 0 of 385 reachable-floor viewers at both, 0 pierces, planter ground ok. Kit needs ~940 MB (--min-free-mb 300). re/vehicle_routes_1108.md. Not benched.
-2026-11-08 ~18:30 - [f0] MERGED 1108f STAGED, NOT INSTALLED, NOT BENCHED (owner playing; waits for the owner's own word): C:\kl_build_1024\merged_1108f, one dll from e206e0aa
-= db FedRide=3 + FoeNoSwapWhileFed + FedKeep (fed respawn crash 0x538f02/0x538f47) + fc shop tidy ([ShopPage] TidyPage2=1, [Hire] TidyPage=1 written to KLHook.ini). SHIP 729f7512 / TEST 40d00164;
-dll 246c643d -> 729f7512, DM09 KLJoin.ini FedRide 2 -> 3 (009fa8fa -> 2094d83a). kl_tests 113/0, 26 scratch checks. Supersedes merged_1108e/d. Undo: its UNDO.bat first.
+2026-11-09 ~03:40 - [f0] MERGED 1108f LIVE (owner 11-09 "pc is all yours ... til 5pm"): dll 246c643d -> 729f7512, KLHook.ini 449e3c7a -> f7f11dcc (+ [ShopPage] TidyPage2=1, [Hire] TidyPage=1),
+DM09 KLJoin.ini 009fa8fa -> 2094d83a (FedRide=3). = db FedRide=3 + FoeNoSwapWhileFed + FedKeep + fc shop tidy, from e206e0aa. Bench M1108F_DD05 PASS (TEST 40d00164, 2 seats, round 2,
+0 asserts/faults/dumps, SHPH match, hire rows served tidy). Not covered: a fed (DM09 lift / police respawn), screenshots (0 KLShot files). Undo: merged_1108f\UNDO.bat FIRST, then 1108c, 1108b, 1108, vanwait_1108, 1107.
 2026-11-08 ~18:00 - [veh] DM07 VAN RE-STAGED, NOT installed: C:/kl_build_1024/vehroutes_1108/DM07 (zip f35e4133, bots 1f514d51, base 08478b6e; pinned live e0a9e326 / 7e897565 / f6259849).
 Far start/end in the unreachable mud pocket (x -9300), gate = hidden fence panels (0x400 hides render only, static collision stays), reverse out, crash keys on the floor. Seen by 29 of 639 reachable-floor viewers (gate corridor only). Undo byte-exact in scratch; install needs ~1.4 GB free on C:.
 2026-11-08 ~18:30 - [d0] INSTALLED for owner testing ("install and tell me"), NOT benched: DM05A heli departure (lcdepart) + club music A rebased on it (stage C:/kl_build_1024/ondepart_1108/lcmusic_a_1108): zip 0c0980c4, bots 2f719e08, base 0344d4c9.
