@@ -110,6 +110,7 @@ def doors(k, mut=None):
             g.ent('ArrivingCops_Car_01', (0 + 900 * i, 0, 0))
             if mut != 'nopolice':
                 g.ent('Police_Officer_01', (50, 0, 50))
+            g.raw('klbrain: cop->bot factor 5 s: %d cop hits on bots' % (0 if mut == 'nohits' else 3))
             g.wait(15)
         g.raw('botfill: round census: 44 ZFFActor')
     for i, d in enumerate(dd[:1] if k == 'DM03_1109' else dd):
@@ -153,7 +154,7 @@ def main():
     muts = {'HASTA1109': ['barricade', 'broken', 'roadblock'],
             'DM01B_1109': ['east', 'nostate3', 'nolate', 'stuck', 'mixrow'],
             'DM07_1109': ['fence', 'nolate', 'nocontrol', 'walkedout', 'nopos', 'farpos', 'nostate3', 'stuck'],
-            'DM03_1109': ['nomove', 'nopolice', 'noleaf', 'nokick', 'static', 'nogoto'],
+            'DM03_1109': ['nohits', 'nopolice','noleaf', 'nokick', 'static', 'nogoto'],
             'DM02_1109': ['noleaf', 'nokick', 'nogoto'],
             'DOORS_1109_DM01': ['noleaf', 'nokick'],
             'DOORS_1109_DM03A': ['noleaf', 'nokick', 'nogoto']}
@@ -163,6 +164,8 @@ def main():
     # DM03A door is one-sided in the real kit: a hand-made one-sided door still needs the kick and the leaf samples
     # the 'changed' rule is FAIL on DM03 only: a static leaf on DM02 is a WARN
     ok(not fails('DM02_1109', 'static'), 'DM02: a static leaf is a WARN, not a FAIL')
+    # cop actors are not in 'ents': unmoved squad/trigger rows are a WARN on DM03, the cop hits decide
+    ok(not fails('DM03_1109', 'nomove'), 'DM03: unmoved ArrivingCops rows are a WARN, not a FAIL')
     # a control goto with the blocked goto missing (walk never ran) must FAIL
     a, dd, ctrl = log_for('DM07_1109')
     a2 = [l for l in a if 'goto (-6000' not in l]

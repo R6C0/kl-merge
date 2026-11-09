@@ -116,9 +116,12 @@ def door_seg(d, lbl):
     h = d['hinge']
     a = d['front'] or d['back']
     b = d['back'] if d['front'] and d['back'] else None
+    # aim at the doorway's middle (half way between the two stand points), not the hinge: DM03_1109 run 1 walked at the hinge edge
+    # 60 cm off-centre, stuck on the jamb with a 104 deg bearing error and pressed E at the wall. One-sided doors keep the hinge.
+    c = ((a[0] + b[0]) / 2.0, (a[2] + b[2]) / 2.0) if b else (h[0], h[2])
     s = ['tele %d %d %d' % (a[0], a[1] + 150, a[2]), 'wait 2500', 'pos %s-stand' % lbl, 'log BENCH1109 %s door %s: before' % (lbl, d['host']),
          'ents KL_Door 20', 'ents Door 200',
-         'goto %d %d 70 6000' % (h[0], h[2]), 'pos %s-at-leaf' % lbl,
+         'face %d %d' % c, 'goto %d %d 70 6000' % c, 'face %d %d' % c, 'pos %s-at-leaf' % lbl,
          'tap E 700', 'wait 600', 'tap E 700', 'wait 3500', 'log BENCH1109 %s door %s: kicked (E x2, GUESS key)' % (lbl, d['host']), 'pos %s-kicked' % lbl,
          'ents KL_Door 20', 'ents Door 200']
     if b:
@@ -545,7 +548,12 @@ def item_checks(k, a, dd=(), ctrl=None):
                     continue
                 if len(r) >= 2 and max(math.dist(r[0][3], x[3]) for x in r[1:]) >= 300:
                     mv.append('%s moved %.0f' % (name[-30:], max(math.dist(r[0][3], x[3]) for x in r[1:])))
-        chk('a VehicleExit / ArrivingCops (non-car) entity left its first position (>= 300; GUESS: leaving the car moves it)', bool(mv), '; '.join(mv[:3]) or 'none moved (or no rows)')
+        # WARN only: 'ents' lists named scene nodes, and the ArrivingCops / VehicleExit rows are squad groups and trigger boxes that never move; the cop
+        # actors are not listed and their guns read (0,0,0). Proving 'out of the car' needs a hook-side enemy actor position dump (not in the TEST dll).
+        chk('a VehicleExit / ArrivingCops (non-car) entity left its first position (>= 300; GUESS: leaving the car moves it)', bool(mv),
+            '; '.join(mv[:3]) or 'none moved (or no rows): groups/triggers only, cop actors not listed', warn=True)
+        hits = sum(int(m.group(1)) for l in a for m in [re.search(r'cop->bot factor 5 s: (\d+) cop hits on bots', l)] if m)
+        chk('cops engage (cop hits on the Ally bots logged)', hits > 0, '%d cop hits on bots in all' % hits)
         pol = by_entity(ents(a, 'Police'))
         chk('police rows present', bool(pol), '%d police entities, e.g. %s' % (len(pol), sorted(n for _, n in pol)[:3]))
         for pat in ('ArrivingCops', 'Garage', 'Ramp', 'VehicleExit'):
