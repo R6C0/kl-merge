@@ -104,10 +104,11 @@ is ONE mesh component, path 279 m, y -40 -> -1040, 0 broken steps. Blockers are 
 the double door before the garage as a BLOW-UP vault door with loot, more loot rooms + kick doors. DM09 Retomoto = escape down the steps to the van as in the campaign,
 SWAT dropped off by vans/cars down there, more cover, wrecks as cover after the explosion (owner CONFIRMED ~15:00), AI not colliding into vehicles, player-player collision. "Interactive, immersed."
 Disk: sessions prune superseded 1105/1107 stages + dead pq_*/c9_* kits (C:\kl_build_1024 = 35 GB, C: 241 MB free).
-2026-11-09 ~16:10 - [cloud] TESTERS download Tue 11-10, PLAY Wed 11-11 (owner, live): ship-readiness first. Written offline, UNTESTED on Windows: tools/launcher/
-(KLMerge Setup.bat bootstrap from ONE RELEASE_URL -> KLMergeLauncher.ps1 WPF, stock/modded by renaming dinput8.dll, kl_release.py install/verify/uninstall, README_TESTERS,
-OWNER_RELEASE_STEPS). DM03: re/dm03_vault_swat_1109.md + kl_dm03cops_1108 part backswat (default off) + kl_dm03_scan_1109.py (run on the live zip first).
-Owner decisions: public release host, package size, freeze KLMergeSetup.exe, review the shipped KLHook.ini. kl_tests --py: 2 pre-existing FAILs (gunpunch, fallback_guns).
+2026-11-09 ~21:00 - [cloud] TESTERS download Tue 11-10, PLAY Wed 11-11 (owner, live): ship-readiness first. tools/launcher/ (Setup.bat, WPF launcher in the brush-kit look,
+kl_release install/verify/uninstall, READMEs) written offline, UNTESTED on Windows; copy for the owner in C:\kl_build_1024\launcher_1109. T9 MENU LOOK (owner "huge ask", default ON):
+re/menu_look_1109.md; stage 1 kl_menu_look_1109.py (fonts + colours), stage 4 kl_menu_sounds_1109.py (OSD clicks -> Dead Men), toggle [MenuLook] DeadMen in klslot.c
+(+logic/test, NOT BUILT) + Mod Options row. Hook owner builds/benches; local session runs probe/inventory on the live files first. Stage 2 (bars/plates) open.
+DM03: re/dm03_vault_swat_1109.md + kl_dm03cops_1108 part backswat (default off) + kl_dm03_scan_1109.py (run on the live zip first).
 2026-11-09 ~11:20 - [sched] MOPP BYTE CODE READ (tools/kl_mopp.py + _test, 115 checks on the live DM07/DD10 .HVK): list terminal = child index PROVEN (re/havok.md), fillers never returned.
 DM07PLANE: slots 256 / 248 are reached for x -4622..-4526, y 464..817, z 9989..10395 / 10384..10843 -> the plane clones block any query box touching y 464..817 over the whole gap;
 only a body wholly under y 464 slips (4 cm over the mud): no crawl bench steps needed, bench the sub flags + the van. kl_tests cloud 48/0/79 (fallback_guns KL_PortBackup refusal on Linux fixed, gunpunch SKIP as root).

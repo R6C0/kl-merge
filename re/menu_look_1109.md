@@ -168,7 +168,7 @@ after M1 has shown the bars. Map pictures `LevelPicture_*`, icons, the Dead Men 
 
 ### 3.3 The graft (stage 4a, data only, themed copy)
 
-`tools/kl_menu_sounds_11xx.py` (not written): read `<DD>\Scenes\kaneandlynch.WHD` + `.WAV` (`kl_whd.parse('dd')`), pick the OSD
+`tools/kl_menu_sounds_1109.py` (WRITTEN 11-09, section 9; the text below was its plan): read `<DD>\Scenes\kaneandlynch.WHD` + `.WAV` (`kl_whd.parse('dd')`), pick the OSD
 records by a NAME MAP `{'SFX/OSD/Up_Down.wav': '<DM navigate clip>', ...}` (NEEDS FILE to fill), decode the Dead Men clip (`kl_audio`
 PCM / IMA; a Vorbis one through kl_oggdec / kl_pyvorbis), resample to the DD record's rate / channels / 16-bit PCM, write a NEW `.WAV`
 (data appended in record order) and a `.WHD` rebuilt with `kl_whd.build` where ONLY `size` / `off` / `samples` of the swapped records
@@ -218,7 +218,7 @@ so the stage ships BOTH themed patches (the tool does).
   + the `;DeadMen=1 ; (recommended on)` line in a new `[MenuLook]` section of klhook/KLHook.ini (`--check-ini` / `--check-rec` must
   agree). Not added here: the row would claim a key no DLL reads yet.
 
-Toggle verdict: **install / UNDO until the klslot.c variant step exists; then `[MenuLook] DeadMen` (DLL default 1) + the folded Mod
+Toggle verdict (the klslot.c step now EXISTS as code, unbuilt: section 9): **install / UNDO until the klslot.c variant step is built and benched; then `[MenuLook] DeadMen` (DLL default 1) + the folded Mod
 settings row.** The stage tool already writes the `_deadmen` variant names beside the live names (`install.py --variant`) so the same
 stage serves both.
 
@@ -237,7 +237,7 @@ the live file instead and touches nothing else), `INSTALL ... .bat` / `UNDO ... 
 | 1b | the same pair through one Arcade round on a Dead Men map to round over, Ready, shop I / II (F6) / hire (F3) / MOD CONTROLS (F2), pause (Esc) | - | **ML2** (`tools/kl_bench_1106.py` kit as the 1108 benches, 480 s) | pause / shop / scoreboard coloured as before (level files unchanged), no fault; prices readable |
 | 2 | bars + lines of the menu scene (`--bars`) and the plate smears (2b, after the entity -> texture map) | stage tool `--bars`, then a painter | **ML3** = ML1 | chalk brush focus bars with ink text, dry-brush lines, torn dark panels; nothing glaring |
 | 3 | in-level colour sets (27 level archives: `kl_hud_menu.py level <zip> <out>`, pinned per map, hard-link aware; fonts NOT re-baked) | kl_hud_menu.py level + a per-map install.py | **ML4** one map (DM01) to round over + shop | 'BONUS' / 'PENALTY' ink on bars, money green, penalties coral, a LOCKED shop row readable (re/hud_menu.md 7 M3) |
-| 4 | sounds: 4a OSD record swap (themed `Scenes\kaneandlynch.WHD/.WAV` copies in the overlay), 4b level pairs if the global pair is not what plays in a level, 4c MenuLoop_01 as menu music (stream record) | `kl_menu_sounds_11xx.py` (3.3) | **ML5** = ML1 with the `[Echo]`-style voice probe log on (klechoprobe names the wave of every UI voice: 'SFX/OSD/Up_Down.wav' lines) | the probe names the OSD waves as before (same records), the owner hears Dead Men's clicks; no silence on navigate / confirm / back |
+| 4 | sounds: 4a OSD record swap (themed `Scenes\kaneandlynch.WHD/.WAV` copies in the overlay), 4b level pairs if the global pair is not what plays in a level, 4c MenuLoop_01 as menu music (stream record) | `kl_menu_sounds_1109.py` (3.3, 9) | **ML5** = ML1 with the `[Echo]`-style voice probe log on (klechoprobe names the wave of every UI voice: 'SFX/OSD/Up_Down.wav' lines) | the probe names the OSD waves as before (same records), the owner hears Dead Men's clicks; no silence on navigate / confirm / back |
 | 5 | toggle: klslot.c `_deadmen` variant step + `[MenuLook] DeadMen` (DLL default 1) + folded Mod settings row (`KLSTexLook`) + Tk row + ini line; `install.py --variant` | klhook (c9 / 81), mkoverlay.py, klset.c, kl_mod_options.py | **ML6**: ini `DeadMen=0` -> stock look (log 'menulook: ... variant not used'), `DeadMen=1` -> themed; flip the row in Mod settings, one round, back at the menu = flipped look (or at the next start) | both states clean; the row writes the key; `kl_tests --py` + `--check-rec` / `--check-ini` agree |
 
 Undo order when several stages are live: the LAST installed first (each install.py pins the file it found, so out of order refuses).
@@ -278,7 +278,7 @@ Undo order when several stages are live: the LAST installed first (each install.
 ## 7. Files
 
 - `re/menu_look_1109.md` (this), `tools/kl_menu_look_1109.py` (stage 1 + `inventory` + `check`), `tools/kl_menu_look_1109_test.py`
-  (synthetic data: 40+ checks), later `tools/kl_menu_sounds_11xx.py`, klslot.c / klset.c / mkoverlay.py / kl_mod_options.py edits (stage 5).
+  (synthetic data: 40+ checks), `tools/kl_menu_sounds_1109.py` + `_test.py` (stage 4, section 9; 104 checks), klslot.c / klset.c / mkoverlay.py / kl_mod_options.py edits (stage 5).
 
 ## 8. How to run + bench (local sessions, owner away)
 
@@ -304,4 +304,101 @@ python C:\kl_build_1024\menulook_1109\stage1\install.py                         
 ::    leaderboard columns. PASS = no fault, 'menu: table N' unchanged, no row over its column, headlines clear of lines.
 :: 4. bench ML2 (one Arcade round on DM01 to round over; kl_bench_1106 kit, 480 s): pause (Esc), shop page I, F6 page II, F3 hire,
 ::    F2 MOD CONTROLS, Ready, round 2. PASS = pages as before (level files untouched), prices readable, 0 faults.
+```
+
+## 9. Toggle implemented (2026-11-09, cloud, OFFLINE: not built, not run)
+
+Stage 5's hook side exists as code (track T9). Nothing was compiled with cl, no DLL was built, nothing ran in the game; the pure logic was
+syntax-checked with gcc (native) and run as a 64-bit host binary (107 checks, 0 fails); the repo's ILP32 path (`gcc -m32`, `kl_tests.py`)
+could not run in the cloud (no 32-bit libc). The in-game Mod settings row (the folded `KLSTexLook` option of 4.2: klset.c + mkoverlay.py +
+a regenerated overlay) is NOT part of this: it needs the overlay rebuilt and a table count, so it stays a later step; the Tk row is in.
+
+Files: `klhook/klmenulook_logic.h` (decision), `klhook/klmenulook_test.c` (kind 'logic' in `tools/kl_tests.py` C_TESTS), `klhook/klslot.c`
+(the step), `klhook/KLHook.ini` (`[MenuLook] DeadMen=1 (recommended on)`), `tools/kl_mod_options.py` (row `menulook`, G_GFX, recommended on;
+`kl_mod_options_test.py` 77/0, `--check-rec` / `--check-ini` / `--check-defaults` agree).
+
+Behaviour (`[MenuLook] DeadMen`, DLL default 1, read once in `kls_init` beside `[BotGate]`; needs `[Expansion] Enable=1` like every path step):
+in `kls_map`, after the path is final, the open of one of these NAMES (case-insensitive, any directory) is answered with `<dir>\<stem>_deadmen.<ext>`
+when that file exists, else with the path as it was:
+
+| The game opens | After alias / overlay (what the step sees) | Themed copy tried |
+|---|---|---|
+| `<DD>\Patch01.zip` | `Overlay\Patch01_rows12.zip` (Rows12 alias) or `Overlay\Patch01.zip` (overlay) or a MountFirst file `Patch01_<x>.zip` or the stock file | `<same dir>\<same stem>_deadmen.zip` |
+| `<DD>\Scenes\kaneandlynch.zip` | `Overlay\Scenes\kaneandlynch.zip` or the stock file | `kaneandlynch_deadmen.zip` beside it |
+| `<DD>\Scenes\kaneandlynch.WHD` / `.WAV` | overlay copy or stock | `kaneandlynch_deadmen.WHD` / `.WAV` beside it (each file decided alone; stage BOTH) |
+
+Decision table (klmenulook_logic.h `klml_variant`): off -> stock, nothing probed; not one of the names (also `*`/`?` patterns, no extension) ->
+stock, no probe (a tail compare only: risk 9 of 5.1); stem already `_deadmen` -> stock (no double suffix); sibling path would not fit MAX_PATH ->
+stock; sibling missing -> stock; else the sibling. Three call sites in `kls_map`: the MountFirst / Rows12 alias return, the overlay return, and the
+stock fall-through (`!wild`, before the Log=2 'open' note). Redirect targets (level files under `Scenes\Locations\`) never reach it.
+
+Log lines (one per distinct file AND outcome, 16-entry once-table under `kls_cs`; `klog`, prefix `menulook:`):
+- `menulook: on - the menu files ... open their <stem>_deadmen.<ext> copy ...` / `menulook: off ([MenuLook] DeadMen=0) - ...` at init
+- `menulook: CreateFileA <path> -> <sibling>` when swapped
+- `menulook: CreateFileA ON but no <sibling> beside <path> - stock look (tools/kl_menu_look_1109.py install.py --variant writes it)` when missing
+- `menulook: <api> <path>: variant path too long - stock look` (theoretical)
+
+GUESSES in the code: a key change applies at the next game start (the files are re-opened at each scene load, so maybe the next menu load; the
+.WHD/.WAV pair may be opened once per process); the `_deadmen` file must be a COMPLETE archive / pair as the overlay's is.
+
+Build + bench for the hook owner (ML6 of section 5):
+```
+:: 1. self-tests (Windows: cl path) - klmenulook_test.c must PASS, kl_mod_options_test.py PASS
+python tools\kl_tests.py
+:: 2. build SHIP + TEST twin (klhook\build.bat, klhook\build_auto.bat); pin md5s in the install kit as every 1108 kit did
+:: 3. one themed sibling beside the LIVE overlay pair (nothing live changes): stage 1's install.py --variant
+python C:\kl_build_1024\menulook_1109\stage1\install.py --variant --dry
+python C:\kl_build_1024\menulook_1109\stage1\install.py --variant        (writes Overlay\Patch01_deadmen.zip, Patch01_rows12_deadmen.zip, Scenes\kaneandlynch_deadmen.zip)
+:: 4. TEST hook, [MenuLook] DeadMen=1 (or the key absent): main menu -> Options -> Mod settings -> Arcade -> Dead Men maps -> back; shots every 2 s.
+::    PASS: KLHook.log 'menulook: CreateFileA ...Patch01_rows12.zip -> ...Patch01_rows12_deadmen.zip' + the kaneandlynch.zip line, no 'ON but no',
+::    'menu: table N' unchanged ([Menu] TableLog=1), capitals in rows, 0 faults; the .WHD/.WAV lines say 'ON but no' until stage 4 ships the pair (expected).
+:: 5. flip: DeadMen=0 (KL Mod Options row 'Dead Men menu look' off), restart -> stock look, NO 'menulook:' per-file line at all, 'menulook: off' at init.
+:: 6. undo: install.py --variant --undo (removes the copies, md5-checked); the DLL/ini undo of the kit.
+```
+
+## 9. Stage 4 tool: `tools/kl_menu_sounds_1109.py` (written offline 2026-11-09, test 104/0, NOT run on a game file)
+
+What it does (3.3 made concrete): a themed COPY `Scenes\kaneandlynch_deadmen.WHD` + `.WAV` of the global pair in which ONLY the
+mapped `SFX/OSD/*` records' sample data is Dead Men's (decoded -> channel fit -> windowed-sinc resample -> peak match -> the record's
+own codec: IMA ADPCM through `kl_gunsnd.ima_encode`, or 16-bit PCM). Names, record offsets and every other record stay byte for byte;
+the tool REFUSES when the untouched part is not byte-identical (proofs in its docstring; `kl_gunsnd.check_bank_preserved` agrees).
+Record fields are read through `kl_whd` (DD_F / DM_F); the Dead Men side opens every `.WHD` under `<DM>\Scenes` (front-end first,
+GUESS `KaneAndLynch.WHD`, then the level banks) and `PC_Def.str` (`kl_launcher_music.Stream` + its PCM / IMA / Vorbis chain).
+Length rule DEFAULT "grow" (the whole Dead Men clip; a longer one is appended to the `.WAV`, pcm / size / samples / off follow, as
+`kl_gunsnd.rebuild` did in the 42 live gun banks); `--keep-length` trims (5 ms fade) / pads to the stock frame count so the `.WHD`
+stays byte-identical (first fallback if a grown bank misbehaves). GUESSES: which record is which click (name pairs), the global pair
+plays in a level too, sinc parameters, peak match, `.SND` wave seconds stay stock.
+
+The toggle exists in the tree: klslot.c `[MenuLook] DeadMen=1` (DLL default 1, klmenulook_logic.h, NOT run live) opens
+`<stem>_deadmen.<ext>` beside `Scenes\kaneandlynch.WHD / .WAV` when it exists - exactly what `install.py` (variant) writes. When an
+OVERLAY copy `KLExpansion\Overlay\Scenes\kaneandlynch.WHD` exists the step looks for the sibling THERE (klslot.c 596):
+`install.py --overlay-variant`. `install.py --overlay` instead writes the STOCK names into the overlay folder (plays with
+`[Expansion] Overlay=1` and any DLL, no toggle). The stock pair is never written (asserted on every path); undo removes only files
+with the staged md5.
+
+```
+:: 1. probe (read-only): the OSD records of the live global pair + Dead Men's short UI-looking clips; writes probe.json / probe.txt /
+::    mapping.json (TEMPLATE: GUESS pairs by name, '_candidates' per record, null = leave stock) under C:\kl_build_1024\menusounds_1109
+python tools\kl_menu_sounds_1109.py probe --dd "C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days" --dm "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men"
+::    read probe.txt: how many SFX/OSD/* records (Up_Down, Menu*, confirm / back / error / slider?), their rate / ms; which Dead Men
+::    names are the clicks (SFX/UserInterface/*, < 3 s; MenuLoop_01 is the LONG theme, never a click); which .WHD held them (the
+::    "opened" list). Paste the OSD list + the Dead Men UI list into this doc (6. open question 2).
+:: 2. edit mapping.json: value = Dead Men clip name, or {"clip": name, "gain_db": -3, "level": "none"}; null keeps the record stock.
+:: 3. stage (first run on the PC: --accept-input pins the stock pair's md5s); --previews writes previews\<record>_{stock,deadmen}.wav
+::    for the owner's ear BEFORE anything is installed; --keep-length / --linear / --rail / --level none are the fallbacks
+python tools\kl_menu_sounds_1109.py stage --dd "<DD>" --dm "<DM>" --accept-input --previews
+python tools\kl_menu_sounds_1109.py check C:\kl_build_1024\menusounds_1109 --dd "<DD>"       (re-runs every proof: must say PASS)
+:: 4. rehearse on a scratch copy of <DD> (only Scenes\kaneandlynch.WHD/.WAV + KLExpansion\Overlay are needed in it), then live
+python C:\kl_build_1024\menusounds_1109\install.py --game D:\scratch\dd_copy --skip-run-check   (+ --undo: siblings gone, stock md5 unchanged)
+python C:\kl_build_1024\menusounds_1109\install.py --dry
+python C:\kl_build_1024\menusounds_1109\install.py            (variant siblings beside the stock pair; --overlay-variant when an overlay copy exists)
+:: 5. bench ML5 (TEST hook with the [MenuLook] step, [MenuLook] DeadMen=1, [Echo]-style voice probe on): main menu -> up / down x5 ->
+::    Options (confirm) -> back (Esc) -> a locked / refused action (error) -> Arcade -> back; then one Arcade round's pause (Esc) + shop.
+::    PASS: KLHook.log shows, once each, 'menulook: <api> <DD>\Scenes\kaneandlynch.WHD -> <DD>\Scenes\kaneandlynch_deadmen.WHD' and the
+::    same for .WAV (a 'menulook: ... ON but no ...kaneandlynch_deadmen.WHD beside ... - stock look' line = install.py did not run or ran
+::    into the wrong folder; 'menulook: off ([MenuLook] DeadMen=0)' at start = the key is off); the echo-probe lines still name the same
+::    waves ('SFX/OSD/Up_Down.wav' on navigate: same records, new data); the owner hears Dead Men's clicks, no silence, no chipmunk
+::    (a wrong rate would be one), no fault / assert; with DeadMen=0 the stock clicks are back. In a level (pause / shop) the clicks are
+::    Dead Men's too if GUESS 3.1 holds (the global pair stays loaded); if stock there, stage 4b (level pairs) is needed.
+:: undo: python C:\kl_build_1024\menusounds_1109\install.py --undo   (removes only the siblings it wrote, md5-checked)
 ```

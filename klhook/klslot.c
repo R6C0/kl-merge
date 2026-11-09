@@ -490,6 +490,40 @@ static int kls_bot_apply(char *path, const char *slot, const char *api)
     return 0;
 }
 
+/* MENU LOOK (2026-11-09, track T9, re/menu_look_1109.md 4.2; owner: the in-game menu in the Dead Men look, ON by default, with a switch).
+ * [MenuLook] DeadMen=1 (DLL default 1, "(recommended on)"): the look (menu fonts, colour sets, click sounds) is a set of THEMED COPIES named
+ * <stem>_deadmen.<ext> BESIDE the menu files the game opens (tools/kl_menu_look_1109.py install.py --variant writes them): Patch01*.zip (after
+ * the MountFirst / Rows12 alias: Patch01_rows12.zip -> Patch01_rows12_deadmen.zip), Scenes\kaneandlynch.zip, .WHD and .WAV. When the key is
+ * on and the copy exists, the open gets the copy - the BotGate .bots.zip pattern: a path change inside the existing wrappers, no code byte.
+ * Off, not a menu file, or no copy = the path as it was (stock look). Runs on every open that reaches it: the name test is a cheap tail compare
+ * (klmenulook_logic.h, klmenulook_test.c); only the five names cost a GetFileAttributesA. One log line per distinct file and outcome.
+ * GUESS: the scene loader re-opens Patch01.zip and the scene archive at every scene load (top comment, 0x7f5610 / 0x7f5827), so a key change
+ * applies at the next start (or next menu load), never mid-session; the .WHD/.WAV pair is opened once per process (not looked at). */
+static int kls_menulook_on = 1;
+#include "klmenulook_logic.h"
+
+static int kls_menulook(char *path, const char *api)
+{   /* path = the file the open is going to get (in/out, MAX_PATH); -> 1 when it was replaced by its _deadmen copy */
+    char var[MAX_PATH]; int why, i, dup = 0; DWORD h = 2166136261u; const char *p;
+    static DWORD seen[16]; static int nseen;             /* once per (candidate, outcome): the game probes and re-opens these files */
+    int used = klml_variant(path, kls_menulook_on, kls_isfile, var, sizeof var, &why);
+    if (why == KLML_OFF || why == KLML_NOT_MENU || why == KLML_ALREADY) return 0;
+    for (p = (why == KLML_TOO_LONG ? path : var); *p; p++) h = (h ^ (BYTE)(*p >= 'A' && *p <= 'Z' ? *p + 32 : *p)) * 16777619u;
+    h = (h ^ (BYTE)why) * 16777619u;
+    EnterCriticalSection(&kls_cs);
+    for (i = 0; i < nseen; i++) if (seen[i] == h) { dup = 1; break; }
+    if (!dup && nseen < 16) seen[nseen++] = h; else if (!dup) dup = 1;      /* table full: stay quiet */
+    LeaveCriticalSection(&kls_cs);
+    if (!dup) {
+        if (used) klog("menulook: %s %s -> %s", api, path, var);
+        else if (why == KLML_MISSING) klog("menulook: %s ON but no %s beside %s - stock look (tools/kl_menu_look_1109.py install.py --variant writes it)", api, var, path);
+        else klog("menulook: %s %s: %s - stock look", api, path, klml_why_text(why));
+    }
+    if (!used) return 0;
+    strcpy(path, var);
+    return 1;
+}
+
 static int kmp_pick(int s);                          /* klmappool.c (included after this file) */
 /* -> 1 and the new path in out[MAX_PATH] when the open must go somewhere else, 0 when it stays.
    Keeps GetLastError() as it found it when it returns 0. */
@@ -505,6 +539,7 @@ static int kls_map(const char *in, char *out, const char *api)
     if (kls_patch_alias[0] && !strcmp(low, kls_patch_low)) {
         strcpy(out, kls_patch_alias);
         if (kls_log) kls_note(api, "MountFirst", full, out);
+        kls_menulook(out, api);                       /* [MenuLook]: the alias's own _deadmen copy (Patch01_rows12_deadmen.zip), if there */
         SetLastError(err); return 1;
     }
     wild = strpbrk(full, "*?") != 0;
@@ -558,7 +593,11 @@ static int kls_map(const char *in, char *out, const char *api)
     if (kls_overlay_on && !wild && !strncmp(low, kls_game_low, kls_game_len) && low[kls_game_len] == '\\' &&
         strlen(kls_overlay) + strlen(full + kls_game_len) < MAX_PATH) {
         strcpy(out, kls_overlay); strcat(out, full + kls_game_len);
-        if (kls_isfile(out)) { if (kls_log) kls_note(api, "overlay", full, out); SetLastError(err); return 1; }
+        if (kls_isfile(out)) { if (kls_log) kls_note(api, "overlay", full, out); kls_menulook(out, api); SetLastError(err); return 1; }   /* [MenuLook]: the overlay copy's _deadmen sibling */
+    }
+    if (!wild && kls_menulook_on) {                       /* [MenuLook] on the stock path (no overlay copy): Scenes\kaneandlynch_deadmen.WHD beside the stock pair, say */
+        strcpy(out, full);
+        if (kls_menulook(out, api)) { SetLastError(err); return 1; }
     }
     if (kls_log >= 2) kls_note(api, "open", full, 0);
     SetLastError(err);
@@ -946,6 +985,8 @@ static void kls_init(HINSTANCE inst)
     kls_bg_on = GetPrivateProfileIntA("BotGate", "Enable", 1, klh_ini) != 0;       /* (recommended on) */
     if (kls_bg_on && !GetPrivateProfileIntA("Net", "OnlineSafe", 1, klh_ini)) klog("botgate: NOTE [Net] OnlineSafe=0 makes kl_online() false: the gate never acts");
     klog("botgate: %s - online with the host's [BotFill] OnlineHost=1 the level archive is swapped for Fxx_Main.bots.zip when one sits beside it; OnlineHost=0 = the plain archive; offline never", kls_bg_on ? "on" : "off ([BotGate] Enable=0)");
+    kls_menulook_on = GetPrivateProfileIntA("MenuLook", "DeadMen", 1, klh_ini) != 0;       /* (recommended on) */
+    klog("menulook: %s - the menu files Patch01*.zip, Scenes\\kaneandlynch.zip/.WHD/.WAV open their <stem>_deadmen.<ext> copy when one sits beside them (Dead Men menu look); a missing copy = stock look, logged once", kls_menulook_on ? "on" : "off ([MenuLook] DeadMen=0)");
     kls_keep_online = GetPrivateProfileIntA("Expansion", "KeepPageOnline", 0, klh_ini) != 0;
     kls_keep_clear = GetPrivateProfileIntA("Expansion", "KeepClear", 1, klh_ini) != 0;
     if (kls_online_set || kls_keep_online)

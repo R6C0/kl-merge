@@ -452,6 +452,10 @@ feat('camerafx', G_GFX, 'Camera FX (distortion with shots and hits)', 'on', 'sta
 feat('glare', G_GFX, 'Lens glare', 'on', 'start', 'also a live row in Mod settings', [('Graphics', 'Glare', 1, 0, 1)])
 feat('aa', G_GFX, 'Anti-aliasing (SMAA)', 'on', 'start', 'also a live row in Mod settings', [('Graphics', 'AA', 1, 0, 1)])
 feat('textures', G_GFX, 'Sharper textures (anisotropic x16)', 'on', 'start', 'about 1 % fps', [('Graphics', 'Textures', 1, 0, 1)])
+feat('menulook', G_GFX, 'Dead Men menu look: fonts, colours, menu sounds', 'on', 'start',
+     'T9 11-09 (re/menu_look_1109.md 4.2): klslot.c [MenuLook] opens the themed copies <stem>_deadmen.<ext> of the overlay menu pair (Patch01*.zip, Scenes\\kaneandlynch.zip) and the menu '
+     'sound pair (.WHD/.WAV) when they sit beside the live files (install.py --variant writes them); a missing copy = stock look, logged once; 0 = stock files exactly. Needs [Expansion] Enable=1. NOT run live',
+     [('MenuLook', 'DeadMen', 1, 0, 1)])
 feat('neural', G_GFX, 'Neural rendering (GITC Uplift DLSS / DLAA, F10)', 'off', 'start',
      'ini note: 188 fps with it set aside against 106 .. 178 with it; needs the add-on files', [('Graphics', 'Neural', 1, 0, 0)])
 feat('rigid', G_GFX, 'Camera turn filter (heavier, smoother turn)', 'off', 'start',
