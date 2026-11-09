@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~05:00 - [06] BENCH_1109 on the owner-OK installs (tools/kl_bench_1109.py, pinned merged_1108h): HASTA1109 PASS; DM03_1109 + DM02_1109 online PASS 0 faults (cops hit bots),
+but the KICK DOORS stayed shut after E x2 (collision holds). Bench aim fixed (doorway middle, face far side, waitstate 0x19); E as kick key unproven, trigger being researched. Queue: DM01B, DM07, DOORS DM01/DM03A, door re-runs.
 2026-11-09 ~04:35 - [d0] [VanBlow] ShieldCalled (8c4292b9, default 0, shields state 1 = DD10's heister-call drive-in) in f0's merged_1108h (SHIP 52b37716 / TEST fceb3c6d), STAGED NOT installed.
 Bench dd10called1109 (install.py --test, undone): 0 faults, shield ON at state 1 both calls, 2nd van 9600/9600, but the 1st van was already 3600/9600 AT the call (hit in state 0, GUESS: shown by the approach box).
 ~04:45 dd10healed1109 (+ HealFloor=95) PASS 0 faults: 'restored 3600 -> 9600' at the wait (state 3; it still drives in damaged ~7 s), 9600 through wait + drive-out. Fire clearing unproven (black shots).
