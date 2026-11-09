@@ -73,6 +73,11 @@ click / confirm / back sounds; an in-game Mod Options row "Dead Men menu look (r
 redirect rules; DEFAULT ON. Order: (1) research + design re/menu_look_1109.md, (2) stage-1 tool fonts + colours (reuse kl_hud build_font / kl_hud_menu), (3) plates/
 backgrounds, (4) sounds, (5) toggle. Ships AFTER the Wed tester build unless (2) is cheap and benched; never replaces stock files (themed copies + redirect).
 - 11-09 19:10 cloud: claimed research + design + stage-1 tool (offline, self-tests; nothing installed).
+- 11-09 19:50 cloud: DESIGN + STAGE-1 TOOL DONE (offline): re/menu_look_1109.md, tools/kl_menu_look_1109.py (inventory | stage | check; colour sets + 8 menu-scene fonts,
+  Patch01.zip AND Patch01_rows12.zip, pins via --accept-input, install.py/UNDO byte-exact), _test 105/0. LOCAL SESSION NEXT: `python tools\kl_menu_look_1109.py inventory`
+  on the live overlay, then `stage --accept-input`, read widths.txt (clipped rows), bench M1 (main menu / Arcade pages / Mod settings / lobby / pause shots) with the
+  stage installed + undone. Toggle needs ~25 lines in klslot.c (`<stem>_deadmen.<ext>` beside the 4 menu files, DLL default 1, [MenuLook] DeadMen=1): hook owner's job.
+  Sounds = stage 4 (themed copy of Scenes\kaneandlynch.WHD/.WAV with the SFX/OSD records swapped for DM front-end clicks; NEEDS the DM bank names).
 
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
 - 11-02 18:50 scheduled: Q35 COMPLETE + CLEAN by the result files (21/21 maps, both seats PASS, 0 asserts/faults/soft, slots right, ShopPage 20 pairs on every seat; dll eb4c46d8). Gate in one command now: `python tools/kl_kit_summary.py --batch Q35_ C:/kl_build_1024/c9_1028/q35 --gate` (exit 1 unless every run is clean). Ship = c9.
