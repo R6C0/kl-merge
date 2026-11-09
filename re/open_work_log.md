@@ -44,6 +44,14 @@ carexit guard fixed: J.check reports 0 misfits in-process (kl_map_ai.cars regist
 Cause of cops staying in cars PROVEN: 4 VehicleExitBehaviour nodes had no controller (restored from M03_FA_A; that DD then runs it is a GUESS). garage = 6 police, ramp = 5 police + 45 s Hunt into the garage (GUESS ramp = Ramp_01 beside the lot), frontcops = lot SWAT x3 + ArrivingCops_Squad_02 x2 -> police form. Census 33/27 -> 44/29.
 Undo rehearsed byte-exact in scratch; bench needs ClientBuild*/ClientRewrite/ClientRingSync/AssertSoft lines (bench_cover_lines.txt). Not benched (owner playing).
 2026-11-08 ~10:30 - [vehroutes] DM01B van drive-away went through the Donut Factory wall (x=-496; render check, old lane check was collision-only). STAGED NOT INSTALLED C:/kl_build_1024/vehroutes_1108/DM01B (zip edd349a1, bots a51181be, base b2f37f42; live pins 74d37233 / 73583df1 / c3535e34): van backs out along its arrival lane, crash keys clamped x>=-350. Audit + other maps: re/vehicle_routes_1108.md (DM07 needs a fix, DM03 traffic on the lane, report only). tools/kl_vehroutes_1108.py.
+## 2026-11-09 ~04:56 [f0] MERGED 1108h LIVE (no crash involved)
+- d0 after dd10healed1109 PASS: install 1108h SHIP with [VanBlow] ShieldCalled=1 + HealFloor=95. install.py KEYS got HealFloor (HealFloor code is in the dll since merged_1107, off until now).
+- Scratch from d1145cbe/f7f11dcc: SHIP + TEST install -> ini 4a740f92 (both lines right under [VanBlow]), second install refused, undo byte-exact, dry writes nothing,
+  game-rewritten ini -> undo strips exactly the 2 kit lines (old ini kept as .old), wrong live dll refused.
+- Waited for 06's DM02_1109_online bench (TEST 95de3af2 live 04:46-04:55), then SHIP install 04:56: dll d1145cbe -> 52b37716, KLHook.ini f7f11dcc -> 4a740f92 (lines 1055-1056).
+- Not benched as SHIP (d0 benched the TEST twin fceb3c6d). d0 + 06 told; 06 re-pins bench_1109 and runs DM01B_1109 next.
+- Undo: C:\kl_build_1024\merged_1108h\UNDO.bat FIRST, then merged_1108g, 1108f, 1108c, 1108b, 1108, vanwait_1108, 1107.
+
 ## 2026-11-09 ~04:40 [f0] MERGED 1108g LIVE, 1108h staged (no crash involved)
 - fc asked for b5465f50 (hire desc tidy) in the next dll. merged_1108g = one dll from b5465f50 on 1108f: SHIP d1145cbe, TEST 95de3af2, dll only.
 - After 06's HASTA1109 (game free 04:15): install --test, bench M1108G_DD05 (C:\kl_build_1024\merged_1108g_bench, new check: no "needed (no rank gate)" in the log,
