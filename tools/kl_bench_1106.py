@@ -275,6 +275,15 @@ KITS = {
                            hook=('C:/kl_build_1024/merged_1108h/dll_test/dinput8.dll', 'fceb3c6df5208b46e98f97d9f663d308'),
                            ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'Log=1'], keepalive=True,
                            solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # run 11-09 04:31 (install.py --test, undone): 0 faults; 'ShieldCalled: SHIELD ON' at state 1 on both calls, but the first van was ALREADY 3600/9600 at the
+    # call ([rules+0x1e4] unreadable until escfix re-ran state 1, shield on 0.5 s later): hit BEFORE the call (GUESS: shown by the approach box, shot in state 0).
+    # The second call came in 9600/9600. Same run + HealFloor=95 (in the dll since merged_1107, never fired): the first pass with a readable health object
+    # in state <= 4 and nobody aboard writes max into +0x14 (GUESS), then the shield holds it. PASS = a 'HealFloor=95%: ... restored' line, first wait 9600/9600
+    'dd10healed1109': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '1a0d94b0', 'KLJoin.ini': 'ebdf1472'},
+                           vancall=((None, None, None), (8300, 50, 800)),
+                           hook=('C:/kl_build_1024/merged_1108h/dll_test/dinput8.dll', 'fceb3c6df5208b46e98f97d9f663d308'),
+                           ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'], keepalive=True,
+                           solo_secs=600, parts=('solo',), shots='90-400:10'),
     # 11-09: the INSTALLED DM05A club music level B (0ff298a6, stage already in): load + faults + shots, nothing installed
     # run 11-09 03:03: 0 asserts/faults/dumps over 290 s of play, but the round had 78 s left when the script passed (0x1f/0x20 unseen): 480 -> 600
     'lcmusicblive1109': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': '0ff298a6', 'KLGuns.ini': '33432bb9'},

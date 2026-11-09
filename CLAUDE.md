@@ -67,6 +67,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~04:35 - [d0] [VanBlow] ShieldCalled (8c4292b9, default 0, shields state 1 = DD10's heister-call drive-in) in f0's merged_1108h (SHIP 52b37716 / TEST fceb3c6d), STAGED NOT installed.
+Bench dd10called1109 (install.py --test, undone): 0 faults, shield ON at state 1 both calls, 2nd van 9600/9600, but the 1st van was already 3600/9600 AT the call (hit in state 0, GUESS: shown by the approach box).
+Next: dd10healed1109 = + HealFloor=95 (in the dll, never fired); if PASS, f0 installs 1108h SHIP + ShieldCalled=1 + HealFloor=95.
+2026-11-09 ~04:05 - [d0] DD10 dd10side1109 (live map, TEST 40d00164): a heister waiting in the exit box's SOUTH strip (8300, 750) lives through the van's drive-in + 53 s wait;
+the box centre (8300, 1100) is on the drive-in lane (gate -> stop 8642, z 1030) and died there 4 s in (no kill box; KILLED BY RED = own Char 13). Not changed: stock layout.
+Option for the owner: shrink otrExitLevel to the south strip. Open: the van reached its first wait at 3600/9600 (hit before state 3, no state 2 seen by ShieldDriveIn).
 2026-11-09 ~05:30 - [shop] SHOP LOOK BENCH (live tidy, merged_1108f): C:\kl_build_1024\shoplook_1109 ON + OFF both PASS (TEST 40d00164, DD05, 2 seats, 0 asserts/faults), 130 shots each.
 ON vs OFF: hire rows 'JEAN  $90K' vs '$90,000'; hire desc 3 lines vs 6 (OFF ran into the stars); page II caption 'PD2 GUNS', rows 'PD2 PAR'. Still stock: tab names (no redraw, as guessed), dim star outlines (idx 99 = dim, not hidden), selected-row text under the bar (page I too).
 Fix b5465f50 (not in a dll yet, given to 81): TidyPage hire desc drops 'Price $X, rank N needed (no rank gate)'; with a gate 'Needs rank N (your rank R)'. Shots: <work>\build\klhook\solo\SHOPLOOK_{ON,OFF}_DD05 (inst1_44, inst1_263).
