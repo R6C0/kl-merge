@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~18:30 - [main] KICK DOOR AUDIT (workflow, offline, adversarially verified) of every added door: DEAD (no room / sealed / bypassable) = DD10 19 of 21 (only 9 + 13 gate),
+DM01 957 + 2569, DM03A 6516 (+ older doors 1, 5), DM01B !1 D4 + !2 D2 (!1 D3 unclear). Real: DM01 1,2,4-7, DM02 all 6, DM05A both, DM01B !1 D2. DM06/06B/07/09/11B have none.
+Kits being staged (workflow wmwfodbbu): revert the dead ones to plain doors, DD10 + 14 two-sided candidates checked for replacements. Nothing installed. Details: scratchpad doors_audit + the workflow output.
 2026-11-09 ~17:50 - [main] MUSIC KIT for the owner: C:/kl_build_1024/levelmusic_1109 (SHIP 50d20cd1, TEST 0830d057; from 935b6222, live dll f016c36d pinned)
 + [LevelMusic] Restart=1 line. Rehearsed in a scratch copy (install, 2nd refused, undo byte-exact); NOT benched. kl_doors_clear_1108_test expected the old DM03 hosts
 (546/1255) -> updated to [176, 64]; kl_tests 134/0/5. The repo KLHook.ini sample still lacks the [LevelMusic] block (peer-dirty file).
