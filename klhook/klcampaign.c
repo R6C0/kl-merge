@@ -214,7 +214,10 @@ static int klcmpr_read_cmd(const char *name, char *buf, int cap)
 
 /* ---------------------------------------------------------------- scene tracking, save redirect (CreateFileA) */
 static int klcmpr_in_campaign(void) { return klcmpr.in_campaign || klcmp_level_active(); }
-static int klcmpr_redirect_now(void) { return klcmpr.saves && (klcmpr_in_campaign() || klcmpr.sticky); }
+static int klcmpr_redirect_now(void)
+{   /* READ: his mode stays Dead Men until a profile was really re-read, so the redirect also holds while the reload is pending */
+    return klcmpr.saves && (klcmpr.sticky || klcmpr.reload_pending || klcmpr_in_campaign());
+}
 
 static void klcmpr_scene_arrived(const char *id)
 {   /* READ cmp_scene_arrived, reduced to the campaign / not-campaign split (see ADAPTATION above) */
@@ -227,6 +230,7 @@ static void klcmpr_scene_arrived(const char *id)
     if (fe) klcmpr.fe_tick = GetTickCount();
     done = fe && !klcmpr.quitreq && (!strcmp(klcmpr.prev, "M14") || !strcmp(klcmpr.prev, "M13B"));
     if (was && !now_c && klcmpr.reload && klcmpr.saves && !klcmpr.sticky) { klcmpr.reload_pending = 1; klcmpr.fe_tick = GetTickCount(); }
+    else if (was && !now_c && klcmpr.saves && !klcmpr.reload) klcmpr.sticky = 1;      /* READ cmp_scene_arrived: ProfileReload=0 keeps the campaign slot for the session, else Dog Days' save would be written with the campaign profile */
     else if (now_c) klcmpr.reload_pending = 0;
     LeaveCriticalSection(&klcmpr.cs);
     if (klcmpr.log) klog("campaign: scene '%s' loading (after '%s')%s", id, klcmpr.prev, now_c ? ", campaign level" : "");
@@ -253,7 +257,7 @@ static LPCSTR klcmpr_file(LPCSTR n, DWORD acc, DWORD disp)
     if (klcmpr.reload_probe && _stricmp(ext, ".kls") == 0 && klcmpc_is_kls(b) && !(acc & GENERIC_WRITE) && disp == OPEN_EXISTING &&
         GetFileAttributesA(n) != INVALID_FILE_ATTRIBUTES)
         InterlockedIncrement(&klcmpr.reload_opens);                 /* klcmpr_profile_reload: the reader reached the file */
-    if (klcmpr_redirect_now() && _stricmp(ext, ".kls") == 0 && klcmpc_is_kls(b) && _strnicmp(n, klcmpr.appdir, strlen(klcmpr.appdir)) != 0) {
+    if (_stricmp(ext, ".kls") == 0 && klcmpc_is_kls(b) && klcmpr_redirect_now() && _strnicmp(n, klcmpr.appdir, strlen(klcmpr.appdir)) != 0) {
         static char ring[4][MAX_PATH]; static volatile LONG ri;      /* returned to the caller: one per open */
         char *alt = ring[InterlockedIncrement(&ri) & 3], d[MAX_PATH]; int seeded = 0;
         snprintf(d, sizeof d, "%s\\saves\\Campaign", klcmpr.appdir);
