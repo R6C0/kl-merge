@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~09:45 - [06] DM07PLANE tool 1da31ede (tools/kl_dm07plane_1109.py, self-test OK, reviewed): HVK slots 248/256 (hidden gate panels) -> 2 clones of DD10's HERO plane at x -4578, y 381..979, z 9852..10948; static count 2777 kept,
+REF 21320 reused (no new entities), --sub 0x108 or 0x72, panels stay hidden. GUESS: the list MOPP only reaches the old slot volumes (y 471..801), so the mud hole may stay. Bench kit DM07PLANE_1109 being written.
+BLOCKED BY DISK: C: 131 MB, D: 111 MB free (stage needs 426 MB); kl_tests fails 3 on ENOSPC. Owner: delete C:/kl_build_1024/dm07curtain_1109 + dm07unhide_1109 (~740 MB, stale) and the D: scratch dirs.
 2026-11-09 ~08:50 - [06] KICK DOORS proven on DM01 x2, DM03, DM03A, DM02 x2 (DM02_1109 run d ALL PASS; stands = KickDoor_Arrow entities). DD10GATE_1109 ALL PASS: hidden gate
 does not leak (stock ColiObj_HERO_Plane01 blocks at x 8017). DM07: KillBox curtain inert (no KillBox ever proven) -> options un-hide panels (van clips, owner taste) /
 DM07BURY_1109 staged on D: (not benched: C: 336 MB) / clone a HERO plane (workflow). Owner: delete D:/scratch_bury_game + D:/kl_scratch_dm07sink_{rehearse,review2}.
