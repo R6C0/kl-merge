@@ -67,7 +67,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
-2026-11-09 ~14:20 - OWNER (live) asks, details in re/week_plan_1028.md "Owner's words 11-09": DM03 Withdrawal = MORE SWAT (1108 pass went SWAT -> police: revisit),
+2026-11-09 ~14:20 - OWNER (live) asks, details in re/week_plan_1028.md "Owner's words 11-09": DM03 Withdrawal = more SWAT at the BACK incl. the van spawn (front stays normal police),
 the double door before the garage as a BLOW-UP vault door with loot, more loot rooms + kick doors. DM09 Retomoto = escape down the steps to the van as in the campaign,
 SWAT dropped off by vans/cars down there, more cover, wrecks as cover (confirm), AI not colliding into vehicles, player-player collision. "Interactive, immersed."
 Disk: sessions prune superseded 1105/1107 stages + dead pq_*/c9_* kits (C:\kl_build_1024 = 35 GB, C: 241 MB free).

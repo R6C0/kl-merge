@@ -9,7 +9,7 @@ Ship-readiness for Tue 11-10 / Wed 11-11 stays first; stage + bench these, insta
 (dm07curtain_1109, dm07unhide_1109, doors2_verify, cover3_dm01, dm01spawns_plan, D:\scratch_bury_game, D:\kl_scratch_dm07sink_*). SESSIONS: prune the superseded stages
 yourselves, you know the UNDO ALL chain: dd10_slim_1105 3.3 GB, lastcall_fight/life/chain_1105 4.3 GB, arrival_1107 1.2 GB, vehroutes_1108 1.8 GB, the pq_1102*/1103*/1104*
 and c9_1104*/1105* test/ship/install kits; fix the UNDO chain where a step goes. pd2rebase_1107_backup (8.2 GB) is the owner's call, pending. New stages on D: or hard-linked.
-(2) DM03 WITHDRAWAL, owner wants MORE SWAT: the 1108 cops pass turned the lot SWAT x3 + ArrivingCops_Squad_02 into police form (fewer SWAT) - revisit: keep the SWAT, add SWAT.
+(2) DM03 WITHDRAWAL, owner (clarified 14:30): "more SWAT at the back, even where the van spawns". Front stays normal police (his 11-08 words; frontcops part stands). New part idea: backswat = SWAT form for the garage/ramp squads + a SWAT squad at the escape van spawn.
 (3) DM03 WITHDRAWAL, owner: "more loot rooms. The door just before the garage is two doors in the original game, like a vault in the campaign FA: make that a door you can
 BLOW UP (breach, like the Hasta vault blast) with a good bit of loot behind it. More doors you can kick down. It needs to feel interactive and make the player more immersed."
 kl_doors_1108 (5 DM03 kick doors, staged) + kl_hasta_blast_1108 are the building blocks. Stage, bench, then install (owner-OK given here); ship-readiness for Tue/Wed stays first.
