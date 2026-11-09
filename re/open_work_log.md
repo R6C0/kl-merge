@@ -2,6 +2,9 @@
 (pins 3a981a70/2ede91ed/0126d412 -> zip 17f981ed, bots 2293dec7): van group + otrExitLevel + run boxes moved to the terminal lane x -25500 (stop z 8100), west slab opened z 7088..11114, pen bounds parked,
 InvisibleBarricade REF 23098 cut from the .HVK (it sealed the pen; collision flood now reaches the lane). Open before a bench: NO bounds around the terminal (walkable 50 m+ west); online bots read the van node at the
 moved group (-23647,-2700) (klbotfill.c:2296/2392, needs a rest-position guard); KLBF_WAY_MAX 8 -> 16 for the full route (ini_fragment.txt); clock proposal 8 min / TimeMax 10.
+2026-11-09 ~19:40 - [06, offline] LAUNCHER RIFF POPS FIXED, pushed e07101e5: kl_pybink now decodes FIRST with burst_limit 4.0 (9 overloaded Bink blocks = the trailer's own
+40-43 ms full-scale pops at 33.68..37.52 s, in ffmpeg's decode too); ffmpeg = fallback as decoded (no sample rule possible: the trailer clips for real in 42k frames). --keep-pops = old way.
+Checked: pybink = ffmpeg 0-2 LSB outside those blocks; pop windows now at/below the music. 5.4 s to make. launcher_1109\music\deadmen_riff.wav regenerated (old in _before_1625), preview 14. Self-test 93, kl_tests --py 58/0/1.
 2026-11-09 ~19:30 - [6b, offline] KL_PYBINK pushed 4873a377 (tools/kl_pybink.py + _test 23/0): pure-Python Bink 1 audio, DCT bit-exact vs ffmpeg on Trailer.bik (2463360 frames) except
 11 SOURCE BURST blocks (33.68, 33.72, 34.36-34.44, 36.32, 36.64, 37.52, 44.68 s; peaks 9e4-3e5 x full scale, ffmpeg decodes them too = ~43 ms full-scale pops, 8 inside the riff window).
 Opt-in burst_limit=4.0 repairs them (previews 11 as-is / 12 repaired). No-ffmpeg launcher path PASS (5.3 s); ffmpeg vs pybink riff identical up to the first burst. Open: owner/06 decide repair on both paths.
