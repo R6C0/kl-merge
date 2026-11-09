@@ -115,6 +115,35 @@ def strip_ps(src):
     return ''.join(out)
 
 
+def xaml_parse_check(pwsh, ps):
+    """Windows only: run the launcher's own prelude (everything before '$script:Win = ...XamlReader]::Parse', minus the
+    trap, whose MessageBox would hang a test) in an STA PowerShell, then XamlReader.Parse the built $xaml. Shows nothing."""
+    cut = ps.find('$script:Win = [Windows.Markup.XamlReader]::Parse($xaml)')
+    t0 = ps.find('\ntrap {')
+    t1 = ps.find('\n}', t0 + 1)
+    if cut < 0 or t0 < 0 or t1 < 0 or not t0 < t1 < cut:
+        check(False, 'ps1: XamlReader.Parse line and the trap block are found (for the real XAML parse)')
+        return
+    pre = ps[:t0] + ps[t1 + 2:cut]
+    pre += ("\ntry { [void][Windows.Markup.XamlReader]::Parse($xaml); Write-Output 'XAML_PARSE_OK' }\n"
+            "catch { $x = $_.Exception; while ($x.InnerException) { $x = $x.InnerException }; Write-Output ('XAML_PARSE_FAIL ' + $x.Message) }\n")
+    import tempfile
+    d = tempfile.mkdtemp(prefix='kllaunch_xaml_')
+    p = os.path.join(d, 'KLMergeLauncher.ps1')
+    try:
+        with open(p, 'w', encoding='ascii', errors='replace', newline='\r\n') as f:
+            f.write(pre.replace('\r\n', '\n'))
+        exe = shutil.which('powershell') or pwsh                     # Windows PowerShell: STA + WPF always there
+        r = subprocess.run([exe, '-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', p],
+                           capture_output=True, text=True, timeout=180)
+        out = (r.stdout + r.stderr).strip()
+        check('XAML_PARSE_OK' in out, 'ps1: the built window XAML loads in WPF (XamlReader.Parse): %s' % out[-300:])
+    except Exception as e:
+        notes.append('real XAML parse skipped: %s' % e)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def main():
     print('launcher_test: ' + HERE)
     # 1. files + ascii
@@ -174,6 +203,23 @@ def main():
             check(wanted <= names, 'ps1: every $ui.<name> the script uses is an x:Name in the XAML (missing: %s)' % ', '.join(sorted(wanted - names)))
             findnames = set(re.findall(r"'(\w+)'", ps[ps.find("foreach ($n in @('LblVersion'"):ps.find("$ui[$n] = ")]))
             check(findnames <= names, 'ps1: every FindName() target exists in the XAML (missing: %s)' % ', '.join(sorted(findnames - names)))
+            # 11-09: the brush-kit restyle gave a SolidColorBrush and a Style both x:Key="Key" -> XamlReader threw
+            # 'Add value to dictionary of type ResourceDictionary' on the owner's first launch. Keys must be unique per dictionary.
+            xkey = '{http://schemas.microsoft.com/winfx/2006/xaml}Key'
+            dups, keys = [], set()
+            for el in root.iter():
+                seen = {}
+                for c in el:
+                    k = c.get(xkey)
+                    if k is None:
+                        continue
+                    keys.add(k)
+                    if k in seen:
+                        dups.append('%s (%s + %s)' % (k, seen[k].split('}')[-1], c.tag.split('}')[-1]))
+                    seen[k] = c.tag
+            check(not dups, 'ps1: no x:Key twice in one resource dictionary (dup: %s)' % ', '.join(dups))
+            refs = set(re.findall(r'\{StaticResource (\w+)\}', xaml))
+            check(refs <= keys, 'ps1: every {StaticResource X} names an x:Key of the XAML (missing: %s)' % ', '.join(sorted(refs - keys)))
         except ET.ParseError as e:
             check(False, 'ps1: XAML is well-formed XML (%s)' % e)
     # verbs / options against kl_release.py's argparse
@@ -304,6 +350,10 @@ def main():
                 check(r.returncode == 0, 'pwsh parse %s: %s' % (os.path.basename(p), (r.stdout + r.stderr).strip()[:300]))
             except Exception as e:
                 notes.append('pwsh parse skipped: %s' % e)
+        if os.name == 'nt':
+            xaml_parse_check(pwsh, ps)
+        else:
+            notes.append('not Windows: real XamlReader.Parse of the launcher window SKIPPED')
     else:
         notes.append('pwsh not on the PATH: PowerShell parser check SKIPPED (run this test once on Windows)')
 
