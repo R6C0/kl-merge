@@ -1,3 +1,7 @@
+2026-11-09 ~19:30 - [6b, offline] KL_PYBINK pushed 4873a377 (tools/kl_pybink.py + _test 23/0): pure-Python Bink 1 audio, DCT bit-exact vs ffmpeg on Trailer.bik (2463360 frames) except
+11 SOURCE BURST blocks (33.68, 33.72, 34.36-34.44, 36.32, 36.64, 37.52, 44.68 s; peaks 9e4-3e5 x full scale, ffmpeg decodes them too = ~43 ms full-scale pops, 8 inside the riff window).
+Opt-in burst_limit=4.0 repairs them (previews 11 as-is / 12 repaired). No-ffmpeg launcher path PASS (5.3 s); ffmpeg vs pybink riff identical up to the first burst. Open: owner/06 decide repair on both paths.
+launcher_1109 updated to repo (brush-kit look + 107f86ea + riff, music\deadmen_riff.wav made); old files in launcher_1109\_before_1625.
 2026-11-09 ~19:10 - [06, offline] LAUNCHER MUSIC = OWNER'S FINAL PICK pushed 941ef598: Trailer.bik guitar riff 24.43-41.05 s (measured: starts on the first attack, seam cosine 0.92) x2,
 4 s equal-power xfade into MenuLoop_01, fade to 0, loops -> music\deadmen_riff.wav (106 s 48 kHz, riff x0.34, menu x2.0, no clip; 3.4 s to make). Supersedes the 18:40 main-theme ask.
 Trailer decoded by ffmpeg, else tools/kl_pybink.py (6b writing it; packed + copied when present). Without both: MenuLoop_01 alone. Self-test 87, kl_tests --py 57/0/1.
