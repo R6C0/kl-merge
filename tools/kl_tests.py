@@ -101,6 +101,7 @@ C_TESTS = {
     'klbotvoice_test.c': 'logic',      # klbotvoice_logic.h
     'klnamesprobe_test.c': 'logic',    # klnamesprobe_logic.h ([BotFill] OnlineNamesProbe digest / list / cadence)
     'klht_test.c': 'logic',            # klhud_tags_dist.h
+    'klland_test.c': 'logic',          # klland_logic.h ([Join] Land= move timing + Land= range check)
     'klmappool_ov_test.c': 'logic',    # no windows.h
     'klhirepic_test.c': 'logic',       # no windows.h
     'klhirepick_test.c': 'logic',      # klhire_pick.h ([Hire] PickDefault)

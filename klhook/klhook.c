@@ -841,6 +841,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klunstick.c"                                  /* klunstick.c: [Unstick] put a player stuck in cover back to his last free place (default on, offline); AFTER klfreeclimb.c (klfc_guard, klfc_pose) */
 #include "klrappel.c"                                    /* klrappel.c: off unless [Rappel] Enable */
 #include "klfallrescue.c"                              /* klfallrescue.c: [FallRescue] a player who leaves the level box is put back on his last safe place before the game kills him (default on); AFTER klrappel.c (klrp_r), klclimb.c (klq_r), klfreeclimb.c */
+#include "kljoinland.c"                                /* kljoinland.c: [Join] Land= - after a jump the local player is moved from the jump point to Land (offline); AFTER klfreeclimb.c, kljoin.c */
 #include "kltrait.c"                                      /* kltrait.c: [Traits] a small trait per wardrobe character (a table + getters; AFTER klcrew.c, BEFORE klbalance.c) */
 #include "klbalance.c"
 #include "klgrudge.c"
@@ -1443,6 +1444,7 @@ static void klh_tick(int game_thread)
     KLPT(klv_tick(game_thread));                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
     KLPT(kus_tick(game_thread));                            /* klunstick.c: stuck in cover -> back to the last free place (default ON; offline only) */
     KLPT(klfr_tick(game_thread));                           /* klfallrescue.c: left the level box / fell -> back to the last safe place (default ON) */
+    KLPT(kljl_tick(game_thread));                           /* kljoinland.c: [Join] Land= move after a jump (idle unless a landing is armed) */
     KLPT(klfc_tick(game_thread));                           /* klfreeclimb.c: W + E at a ledge (OFF unless [Climb] Enable=1; gameplay call only) */
     KLPT(klq_tick(game_thread));                            /* klclimb.c: the player at the foot of a KLJoin.ini [Climb] edge climbs it (OFF unless [EdgeClimb] Enable=1) */
     KLPT(klrp_tick(game_thread));                           /* klrappel.c: the descent of the rappel cut */

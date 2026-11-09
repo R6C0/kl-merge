@@ -286,6 +286,24 @@ KITS = {
                            hook=('C:/kl_build_1024/merged_1108h/dll_test/dinput8.dll', 'fceb3c6df5208b46e98f97d9f663d308'),
                            ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'], keepalive=True,
                            solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # 11-09: the owner's Flat Raid ledge = a secret way to the van (kl_flatledge_1108, LIVE KLJoin ebdf1472): window sill -> [Join.2] -> ledge Jump05
+    # (6489, 1200, 3123) -> walk north -> [Join.3] -> landing (8500, 0, 1180). That landing is next to the van stop (8642, 1030) and on its lane (z 1030 +-250)
+    # where dd10call1109's seat died while the van drove in. PASS = both rides log, the seat lands, calls the van and lives; a death says move Join.3's Target
+    'dd10ledge1109': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '1a0d94b0', 'KLJoin.ini': 'ebdf1472'},
+                          ledge=((6820, 1600, 3100), (6515, 2555)),
+                          hook=('C:/kl_build_1024/merged_1108h/dll_test/dinput8.dll', 'fceb3c6df5208b46e98f97d9f663d308'),
+                          ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'], keepalive=True,
+                          solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # run 11-09 08:54 FAIL (0 faults): sill ride OK (landed (6488, 1188, 3123)), walk north OK, but 'join: box 11 NOT usable: entry 11 06_Exit is at (8300, 0, 1100),
+    # not at the target': Target= is only a CHECK in kljoin.c (the ride lands ON the jump point), vancall's 8500 0 1180 switched the ride off = the owner's 'stuck'.
+    # Fix C:/kl_build_1024/ledgefix_1109 (Target back to 8300 0 1100, KLJoin ebdf1472 -> 600409d7) INSTALLED; this re-runs the route on it
+    'dd10ledgefix1109': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '1a0d94b0', 'KLJoin.ini': '600409d7'},
+                             ledge=((6820, 1600, 3100), (6515, 2555)),
+                             hook=('C:/kl_build_1024/merged_1108h/dll_test/dinput8.dll', 'fceb3c6df5208b46e98f97d9f663d308'),
+                             ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'], keepalive=True,
+                             solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # run 11-09 09:06 ALL PASS (0 faults): both rides fire (Jump05 (6488, 1188, 3123), then 06_Exit (8300, 0, 1100)), the van is called at the landing
+    # (ShieldCalled ON, health 3600/9600), but the seat is KILLED BY RED 3.6 s after landing (van drive-in lane / parked-van body) -> [Join] Land= (kljoinland.c)
     # 11-09: the INSTALLED DM05A club music level B (0ff298a6, stage already in): load + faults + shots, nothing installed
     # run 11-09 03:03: 0 asserts/faults/dumps over 290 s of play, but the round had 78 s left when the script passed (0x1f/0x20 unseen): 480 -> 600
     'lcmusicblive1109': dict(map='DM05A', slot='F01', entry=0, stage=None, tag=None, live={'F01_Main.zip': '0ff298a6', 'KLGuns.ini': '33432bb9'},
@@ -415,6 +433,16 @@ def solo_script(k, secs_total):
         for d in (150, 300):
             s += ['goto %d %d 40 4000' % (bx + d * (lx - bx) / n, bz + d * (lz - bz) / n), 'log BENCH1106 facing look point (%d)' % d, 'wait 12000', 'pos look-%d' % d]
         s += ['wait 30000', 'pos look-end', 'log BENCH1106 look done', 'pass 1000']
+    elif c.get('ledge'):
+        # Flat Raid ledge route (11-09): TEST rig tele onto the flat's window sill (inside [Join.2]), let the ride drop the seat on the ledge, WALK the ledge
+        # north into [Join.3] (goto holds W), let that ride land it in the exit box; the log says whether the van came and the seat lived
+        (sx, sy, sz), (nx, nz) = c['ledge']
+        s += ['wait 10000', 'pos before-sill', 'tele %d %d %d' % (sx, sy, sz), 'wait 1000', 'pos on-sill', 'log BENCH1106 on the sill', 'wait 5000', 'pos after-ride2',
+              'goto %d %d 40 15000' % (nx, nz), 'pos ledge-north', 'log BENCH1106 at the ledge north end', 'wait 7000', 'pos after-ride3',
+              'log BENCH1106 after the ledge ride', 'waitvan 3 240000', 'pos van3']
+        for i in range(1, 7):
+            s += ['wait 15000', 'pos wait-%ds' % (15 * i)]
+        s += ['log BENCH1106 ledge done', 'pass 1000']
     elif c.get('vancall'):
         # DD10 van call (11-09, tools/kl_dd10_vancall_1108.py): the van is called ONLY by a heister in otrExitLevel. TEST rig tele first into the
         # approach box (node 22127, shows the van) outside the exit box, then into the exit box; the log says who called it ('last:' = the fallback, not this)
@@ -453,7 +481,7 @@ def probes(k):
     if k in LC:
         # lclive1106 (11-06 10:52): 0 KLShot files, d3count 0 frames: ReShade owns Present here, so shots go through its bridge (as MT3B 11-02)
         t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
-    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look') or KITS[k].get('vancall'):
+    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look') or KITS[k].get('vancall') or KITS[k].get('ledge'):
         # dm06btraffic1108 / vanwait1108 (11-08): 0 KLShot files, these kits had no ReShade bridge lines (only LC kits did)
         t = ['[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
     return t

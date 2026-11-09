@@ -147,6 +147,10 @@ def patch_zip(src, dst, parts, log=print):
 
 # ------------------------------------------------------------------ KLJoin.ini
 def patch_join(src_bytes):
+    # 2026-11-09 (bench dd10ledge1109): in kljoin.c Target= is only a CHECK of the jump point's place (within Tolerance); the ride always lands ON the
+    # jump point. 8500 0 1180 made the check fail ('box 11 NOT usable ... not at the target') and switched the ledge -> van ride off. The landing
+    # cannot be moved here: KLJoin.ini is left as it is (C:/kl_build_1024/ledgefix_1109 put the live file back to 8300 0 1100).
+    return src_bytes
     t = src_bytes.decode('latin1')
     m = re.search(r'(?ms)^\[Join\.3\]\r?\n(.*?)(?=^\[|\Z)', t)
     if not m or m.group(1).count('Target=' + OLD_TARGET) != 1 or 'Name=06_Exit' not in m.group(1):
@@ -313,7 +317,7 @@ def check(in_dir, out_root, parts, log=print, undo_rehearsal=True):
         old = open(os.path.join(in_dir, JOIN), 'rb').read().decode('latin1').splitlines()
         new = open(os.path.join(out, JOIN), 'rb').read().decode('latin1').splitlines()
         dl = [ln for ln in new if ln not in old]
-        need(len(new) == len(old) + 1 and len(dl) == 2 and 'Target=' + NEW_TARGET in dl, 'KLJoin.ini: one Target line changed + one comment added (%s)' % [d[:50] for d in dl])
+        need(new == old, 'KLJoin.ini unchanged (11-09: Target= is a check, not the landing; %s)' % [d[:50] for d in dl])
         ok, txt = landing_report(os.path.join(in_dir, ZIP))
         need(ok, txt)
         ent = lambda p: re.search(r'(?m)^Entries\s*=\s*(\d+)', open(p, encoding='latin1').read()).group(1)

@@ -73,6 +73,12 @@
  *                      car-box wait. 2 is recommended on for Retomoto (the fed was thrown to the street while the crew was upstairs).
  *                      3 (2026-11-08) = a fed always rides (no car-box wait) except within FedGraceMs=6000 of becoming police; a fed refused
  *                      by the grace must leave the box and come back (a respawn at the box edge never throws him to the street).
+ *   Land=8300 0 780        (2026-11-09) after the jump the player is moved from the entry to here (0x82cc40, the placement klfallrescue.c
+ *                      uses; kljoinland.c, game thread, local players, offline only). Must lie within 2500 of the entry. The move waits until
+ *                      his feet are within 300 of the entry (300 ms .. 3 s after the request), else it gives up and says why. For a jump point
+ *                      that is a bad place to stand: DD10's 06_Exit (8300, 0, 1100) is on the van's drive-in lane and inside the parked van
+ *                      (dd10ledgefix1109: KILLED BY RED 3.6 s after the jump). The AI crew still lands on the entry. [KLHook] JoinLand=1
+ *                      (recommended on) 0 = every Land= is ignored.
  *   Scene=F01              KLHook.ini only
  *   klhook\KLJoin.retomoto.ini is the file for Retomoto Tower (box = kl_fa_author.JOIN_BOX).
  *
@@ -111,6 +117,7 @@ static struct {
     int carstall_after_ms;                   /* CarStallAfterDoorMs= (2026-10-28, see klj_ride_step)  */
     int fedride; float fedy;                 /* FedRide= / FedCrewY= (2026-10-27, see klj_read) */
     int fedgrace_ms;                         /* FedGraceMs= (2026-11-08, FedRide=3) */
+    int has_land; float land[3];             /* Land= (2026-11-09): after the jump the player is moved here (kljoinland.c) */
 } klj_box[KLJ_NBOX];
 static DWORD klj_fed_pl[2], klj_fed_at[2];   /* FedRide=3: the player object each local slot was first seen as police, and when */
 static int klj_any, klj_tick_on = 1;
@@ -122,6 +129,9 @@ static volatile DWORD klj_door_at;
    ride never saw the feet in the car box. klauto.c's goto had the same lag on DM02 (kla_player_pos), so the scene node's place is read
    first, +0x460 only as a fallback. */
 static int klj_feet_node = 1;
+static int klj_land_on = 1;         /* [KLHook] JoinLand (2026-11-09, recommended on; 0 = every Land= is ignored, the player stays on the jump point) */
+/* a landing waiting for the player to arrive on the entry; moved by kljoinland.c on the game thread (klj_cs guards it) */
+static struct { int armed, player, box; DWORD at; float entry[3], land[3]; } klj_land;
 static int klj_join_online;         /* [KLHook] JoinOnline (default 0): lift rides/jumps also in a network session, LOCAL players only (each seat moves its own) */
 static int kle_node(DWORD node, float pos[3], float dir[3]);          /* klescort.c: a node's world place */
 static int klj_feet(DWORD pl, float feet[3])
@@ -138,6 +148,7 @@ static struct { int on, player, box, entry, told, sset; float sx, sz; DWORD at, 
 static int klj_settle_ms = 1500;              /* the jump list is filled entry by entry while the level loads: it is judged once its length has stood still this long */
 
 #include "klleaf_logic.h"
+#include "klland_logic.h"
 
 static int klj_vec(const char *sec, const char *key, const char *file, float v[3])
 {
@@ -192,6 +203,7 @@ static int klj_read(const char *file, int base, int from_map)
         { int fr = (int)GetPrivateProfileIntA(sec, "FedRide", 1, file); klj_box[base + i].fedride = fr < 0 || fr > 3 ? 1 : fr; }
         { int g = (int)GetPrivateProfileIntA(sec, "FedGraceMs", 6000, file); klj_box[base + i].fedgrace_ms = g < 0 || g > 60000 ? 6000 : g; }
         GetPrivateProfileStringA(sec, "FedCrewY", "10000", t, sizeof t, file); { double d = atof(t); klj_box[base + i].fedy = d > -100000 && d < 100000 ? (float)d : 10000.0f; }
+        klj_box[base + i].has_land = klj_vec(sec, "Land", file, klj_box[base + i].land);
         klj_box[base + i].carfall = GetPrivateProfileIntA(sec, "CarFallback", 1, file) != 0;      /* 1 (default): after CarWait the jump comes anyway, so a shut door cannot strand the player */
         { float ca[3], cb[3];
           if (klj_vec(sec, "CarMin", file, ca) && klj_vec(sec, "CarMax", file, cb)) {
@@ -203,6 +215,8 @@ static int klj_read(const char *file, int base, int from_map)
         klj_box[base + i].on = 1; n++;
         if (klj_box[base + i].delay_ms) klog("join: box %d rides: jump %d ms after the feet enter%s (slack %g)", base + i + 1, klj_box[base + i].delay_ms,
                                              klj_box[base + i].has_car ? ", with the feet inside its CarMin/CarMax box" : "", klj_box[base + i].slack);
+        if (klj_box[base + i].has_land) klog("join: box %d lands at (%g, %g, %g) after the jump (Land=)%s", base + i + 1, klj_box[base + i].land[0], klj_box[base + i].land[1],
+                                             klj_box[base + i].land[2], klj_land_on ? "" : " - but [KLHook] JoinLand=0: ignored");
         if (klj_box[base + i].fedride != 1) klog("join: box %d FedRide=%d (FedCrewY %g)", base + i + 1, klj_box[base + i].fedride, klj_box[base + i].fedy);
         klog("join: box %d: (%g, %g, %g) - (%g, %g, %g) -> entry %d, name '%s', target %s(%g, %g, %g)%s%s", base + i + 1,
              klj_box[base + i].lo[0], klj_box[base + i].lo[1], klj_box[base + i].lo[2], klj_box[base + i].hi[0], klj_box[base + i].hi[1], klj_box[base + i].hi[2],
@@ -285,6 +299,16 @@ static int klj_fire(int i, int b, int e, const char *name, const float feet[3], 
     if (klh_data((void *)(DWORD_PTR)(gd + 0x8d4), &e, 4, "jump-list entry") && klh_data(KLH_VA(KLJ_REQUEST), &req, 4, "debug jump request")) {
         klog("join: player %d %s box %d at (%.0f, %.0f, %.0f): jump to entry %d '%s' requested ([gamedata+0x8d4] = %d, [0x156b358] = 1)", i, how, b + 1, feet[0], feet[1], feet[2], e, name, e);
         klj_after.at = now; klj_after.player = i; klj_after.armed = 1;
+        klj_land.armed = 0;
+        if (klj_box[b].has_land && klj_land_on) {
+            DWORD lo = 0;
+            if (kl_online()) klog("join: box %d Land= skipped: a network session (the move is local only)", b + 1);
+            else if (!klh_rd(gd + 0x8c4, &lo, 4) || !lo || !klh_rd(lo + 32 * e + 4, klj_land.entry, 12)) klog("join: box %d Land= skipped: the entry's place cannot be read", b + 1);
+            else if (!klland_ok(klj_box[b].land, klj_land.entry))
+                klog("join: box %d Land= (%g, %g, %g) refused: not within %g of entry %d at (%g, %g, %g)", b + 1, klj_box[b].land[0], klj_box[b].land[1], klj_box[b].land[2],
+                     KLLAND_MAXSTEP, e, klj_land.entry[0], klj_land.entry[1], klj_land.entry[2]);
+            else { memcpy(klj_land.land, klj_box[b].land, 12); klj_land.player = i; klj_land.box = b; klj_land.at = now; klj_land.armed = 1; }
+        }
         return 1;
     }
     klog("join: player %d %s box %d but the request could NOT be written", i, how, b + 1);
@@ -465,6 +489,7 @@ static void klj_init(void)
     klj_tick_on = GetPrivateProfileIntA("KLHook", "Join", 1, klh_ini);
     klj_feet_node = GetPrivateProfileIntA("KLHook", "JoinFeetNode", 1, klh_ini) != 0;
     klj_join_online = GetPrivateProfileIntA("KLHook", "JoinOnline", 0, klh_ini) != 0;
+    klj_land_on = GetPrivateProfileIntA("KLHook", "JoinLand", 1, klh_ini) != 0;
     klog("join: [KLHook] JoinOnline=%d: %s", klj_join_online, klj_join_online ? "boxes also fire in a network session, for the LOCAL players only (never writes a remote player)" : "no ride or jump request in a network session ([Net] OnlineSafe)");
     klog("join: [KLHook] JoinFeetNode=%d: %s", klj_feet_node, klj_feet_node ? "the player's place is the scene node's, +0x460 only as a fallback" : "the player's place is +0x460 (old)");
     n = klj_read(klh_ini, 0, 0); klj_count();
