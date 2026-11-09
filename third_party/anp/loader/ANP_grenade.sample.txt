@@ -1,0 +1,14 @@
+# <DD>\ANP_grenade.txt - Dead Men player grenade throw (loader grenade.inc). No file = live (release default since 14 Oct; a file without a mode word is live too; an unknown mode word = dry but never undoes an explicit off; an unreadable file keeps the previous config). Re-read within 1 s of a save.
+# First word: off | dry | live     (dry: the throw is computed and logged, nothing is thrown)
+live
+# key=0x22            DIK code of the throw key (0x22 = G); 0 = commands only
+# input=dd            dd (Dog Days' keyboard device) | async (GetAsyncKeyState)
+# range=2000          cm, the target is pulled back to this distance
+# speed=1000 vmax=1500  cm/s, NPC throw formula
+# up=150 fwd=70       release point above / in front of the feet (cm)
+# pm=30               PlayerMonitor event(s) raised after a throw ('+' joins; 0 = none)
+# refill=1 cooldown=1.0 census=1
+# assist=auto         auto (level table: M02 Grenade_TearGas x5) | off | <Template>:<ammo>
+# Not while paused, in a cutscene / with the HUD hidden, climbing, seated or in an action.
+# Test commands: <DD>\ANP_grenade_cmd.txt, one per line: throw | inv | raise N | state | give <Template> [ammo]
+# Log lines start with "grenade:".

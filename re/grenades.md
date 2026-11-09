@@ -241,3 +241,8 @@ PROVEN (seen in exe disassembly or level data):
 GUESS / NOT RESOLVED: projectile spawn and velocity in 0x5fe810 (uses constants 0x938850, 0x93c20c, call 0x484f20); where the count is decremented; exact pickup count logic in 0x5e6e00; which function starts the DM ZGrenadeAttack goal; HUD count; DM binding fields [3,10]; grenade model/texture names (Ground ZLNKOBJ, Projectile_HK69_Grenade ZSTDOBJ).
 
 Hook proposal (text only, for e8; nothing built): give the player a grenade like DM by reusing DD's grenade template + binding (kind 0, no gun slot), fill the Ammo projectile slot, equip via the kl2.exe analog of 0x5f8d80, and rely on DD's own HoldGrenade chain.
+
+## luvsic 32aa649 (2026-11-09, in contribution with luvsic): CORRECTION - the player throw input is gone, the NPC release path works (READ, not run here)
+- His campaign work (docs/LUVSIC_CLAUDE.md, loader/grenade.inc in `third_party/anp`) finds that in Dog Days the player throw INPUT no longer exists: 0x4aa410 only clears the bit. The proposal above (reuse DD's HoldGrenade chain for the player) therefore has no input end to attach to.
+- What does work (PROVEN-BY-HIM in his runs, not re-run here): the NPC release path 0x477650 / 0x659be0 with monitor event 30 (eTHROW_THROWABLE), driven from a G-key hook. DD item types: Gas, Smoke and FlashBang are type 3; Frag and Incendiary are type 0.
+- Plan: port as `klhook/klgrenade.c` (other slice, gated by `[Campaign]`); his loader/grenade.inc is the reference. GUESS: the same path serves Fragile Alliance, untried. Overview: `re/campaign_merge.md`.

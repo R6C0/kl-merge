@@ -1,0 +1,16 @@
+# <DD>\ANP_give.txt - Dead Men weapon giving (loader give.inc). No file = live (release default since 14 Oct; a file without a mode word is live too; an unknown mode word = dry but never undoes an explicit off; an unreadable file keeps the previous config). Re-read within 1 s of a save.
+# First word: off | dry | live     (dry: key, gates, target and refusal rules are logged, nothing changes; live: gives)
+live
+# key=0x05            DIK code of the give key (0x05 = key 4, after the crew orders 1/2/3)
+# target=selected     selected (squad.inc's Tab receiver; none -> nearest) | aim | nearest
+# range=300           cm (Dead Men 0x941598)
+# swap=1              Dead Men swap when the merc already carries that weapon type (his gun comes back to you)
+# types=6             bit1 two-handed, bit2 one-handed
+# refuse=50,51,53,54  rocket launchers, gas / flare grenade launchers (Dead Men refuses these)
+# ack=0x24 deny=0x25 ack_on=swap
+# event=18            PlayerMonitor event raised after a live give (levels built with ANP_GIVE=1 listen for it)
+# drawn=1
+# ui=1               on-screen prompt '[4] Give Lynch your Remington 870' near a merc + a result line after a give (0 = off)
+# uitime=2500        ms the result line stays up
+# Test commands: <DD>\ANP_give_cmd.txt, one per line: give [selected|aim|nearest|node N] | state | wait S
+# Log lines start with "give:".

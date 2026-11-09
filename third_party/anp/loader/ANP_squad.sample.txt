@@ -1,0 +1,18 @@
+# <DD>\ANP_squad.txt - Dead Men crew orders (loader squad.inc). No file = on (release default since 14 Oct; a file
+# without a mode word is on too; an unknown mode word = dry but never undoes an explicit off; an unreadable file keeps the previous config). Re-read within 1 s of a save.
+# ANP levels only (scene ids M01..M14, M07F): in stock Dog Days levels, Arcade / Fragile Alliance maps and the front end
+# the module only logs 'SQUAD level <id>: ... (not an ANP level: module idle)' once per scene and does nothing else
+# (no key read, no command, no recruit, no write).
+# Keys: 1 Follow, 2 / middle mouse Fire at, 3 Defend, Tab / Shift+Tab next / previous merc.
+# Tap (< 0.25 s) = the selected merc, hold = every merc. In M01 every order is refused, as in Dead Men.
+# Mode: off | probe | dry | on     (probe: read only, logs; dry: keys and targets resolved, no order given; on: orders)
+on
+# input=dd            dd (Dog Days' keyboard device) | async (GetAsyncKeyState) | off
+# follow=0x02 attack=0x03 defend=0x04 next=0x0f prev=0 mouse_attack=2     DIK codes (prev=0: Shift+next)
+# attack_time=5.0     refuse=auto     markers=0     release=follow     stat=5
+# recruit=always      always (proven) | start (never pull a merc out of a level squad) | off
+# critical=keep       keep (default: a merc death fails the mission, as Dog Days) | clear (tests only)
+# dd_follow_voice=mute
+# Test commands: <DD>\ANP_squad_cmd.txt, one per line: follow|attack|defend tap|hold [aim|x y z|node N|nearest],
+#   next, prev, state, wait S
+# Log lines start with "SQUAD ".

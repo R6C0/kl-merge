@@ -28,6 +28,12 @@ CD = 0xcdcdcdcd
 SIZE_MASK = 0x3FFFFFFF
 REC_DD = 0x68
 MODE = os.environ.get('ANP_ANM_CLIPSND', 'name')
+# ANP_ANM_CLIPSND_BASE=1 (default; 15 Oct sound audit): in 'name' mode a donor record name missing from the level bank
+# falls back to the ONE level record with the same last path component, outside /movement/ (gait foley is timed to its
+# own clip, so sneak_run is never given walk foley).  Covers Dog Days' 'character/' vs Dead Men's 'characters/' close
+# combat foley, Lynch->Kane close combat sequences and Dog Days reload paths whose file Dead Men keeps under
+# weaponhandling/reloads.  0 = the old output byte for byte.
+BASE = os.environ.get('ANP_ANM_CLIPSND_BASE', '1') == '1'
 
 
 def snd_name(s, off):
@@ -78,10 +84,12 @@ def _clip_table(b):
     raise ValueError('ANM has no type-4 chunk')
 
 
-def fix_clip_sounds(merged, donor_anm, donor_snd, level_snd, rep=None, mode=None):
+def fix_clip_sounds(merged, donor_anm, donor_snd, level_snd, rep=None, mode=None, extra=None, unresolved=None):
     """merged: merged ANM bytes (donor clips first, Dead Men clips appended by anm_merge).
     level_snd: the level's .SND (Dead Men source or converted: record offsets are the same).
-    Returns patched bytes."""
+    extra: {donor .SND offset: level offset} of records imported from the donor bank (ANP_SND_IMPORT_DD, sndimport.py),
+    used for donor clips that name and file-name lookups leave cleared.  unresolved: a set that receives the donor offsets
+    left cleared (before extra).  Returns patched bytes."""
     mode = mode or MODE
     rep = rep if rep is not None else collections.Counter()
     if mode == 'off':
@@ -92,6 +100,10 @@ def fix_clip_sounds(merged, donor_anm, donor_snd, level_snd, rep=None, mode=None
     if n_base > n:
         raise ValueError('merged ANM has fewer clips than the donor')
     idx = snd_index(level_snd) if mode == 'name' else {}
+    tails = collections.defaultdict(list)
+    if BASE and mode == 'name':
+        for k in idx:
+            tails[k.rsplit(b'/', 1)[-1]].append(k)
     for i in range(n):
         q = p0 + i * REC_DD + 0x2c
         v = struct.unpack_from('<I', out, q)[0]
@@ -100,7 +112,16 @@ def fix_clip_sounds(merged, donor_anm, donor_snd, level_snd, rep=None, mode=None
         if i < n_base:
             nm = snd_name(donor_snd, v)
             nv = idx.get(nm, 0) if nm else 0
-            rep['ANM clip sound (donor) %s' % ('re-pointed by name' if nv else 'cleared')] += 1
+            how = 're-pointed by name'
+            if not nv and nm and tails and b'/movement/' not in nm:
+                c = tails.get(nm.rsplit(b'/', 1)[-1], [])
+                if len(c) == 1 and struct.unpack_from('<I', level_snd, idx[c[0]])[0] in (1, 2, 3):
+                    nv = idx[c[0]]; how = 're-pointed by file name'
+            if not nv and unresolved is not None:
+                unresolved.add(v)
+            if not nv and extra and v in extra:
+                nv = extra[v]; how = 're-pointed to a record imported from the donor bank'
+            rep['ANM clip sound (donor) %s' % (how if nv else 'cleared')] += 1
         else:
             nv = v if snd_name(level_snd, v) is not None else 0
             rep['ANM clip sound (Dead Men) %s' % ('kept' if nv else 'invalid -> cleared')] += 1
