@@ -26,12 +26,16 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-09 15:25 f0 (kl-merge-81) CLAIMED the rehearsal. Offline only (owner on the PC, "no more test runs"). Windows: launcher_test PASS, PS 5.1 parses KLMergeLauncher.ps1 +
+  pack_release.ps1 with 0 errors; tar/curl/robocopy present; zstandard was MISSING (pip --user installed 0.25.0). Live KLHook.ini 1ec9bea0: no [Auto]/[Bench]/[Script]/[Solo]
+  sections, only Log= levels. D: has 111 MB free -> package goes to C:\kl_release\pkg_1110 (C: 37 GB), not D:. `make` waits until the owner frees the PC (it reads the live folder).
 - 11-09 16:20 cloud: tools/launcher/ written offline (Setup.bat bootstrap, WPF launcher, pack_release.ps1, READMEs; launcher_test PASS; UNTESTED on Windows).
   LOCAL SESSIONS, in order, when the game is free: (1) free disk (owner) and review the live KLHook.ini for test keys ([Auto] [Bench] [Solo] Log=) - the package snapshots it;
   (2) `python tools/kl_release.py make D:\klmerge_release --dd "<DD>" --dm "<DM>" --pd2 "<PD2>"` (OWNER_RELEASE_STEPS.md section 2), note the 'manifest:' size line;
   (3) `kl_release.py verify` on the live folder; (4) `tools/launcher/pack_release.ps1` -> KLMerge_package_v1.0.0.zip (+ PyInstaller freeze if present); (5) run launcher_test.py
   on Windows (PowerShell parser check), open KLMergeLauncher.ps1 once on the owner's PC with the game closed (status panel only; PLAY would hit his launch options);
   (6) rehearse README_TESTERS.md on a clean Windows user or the second PC: Setup.bat -> INSTALL -> VERIFY -> PLAY KL MERGE -> UNINSTALL byte-exact. Fix what breaks, log it here.
+  - 11-09 15:35 06 CLAIMED the menu-theme clip (a)-(c), offline, read-only on DM.
   - 11-09 17:20 cloud: OWNER: the launcher music must be Dead Men's MAIN MENU theme, not the FA theme. No re/ note names that clip. LOCAL SESSION with the DM files:
     (a) `python tools\kl_launcher_music.py list --dm "<DM>" Music` and look for the front-end / menu block (names with Menu, FrontEnd, Title, Theme, Credits, Jesper);
     (b) if it is not in PC_Def.str, look in Dead Men's gamemenu.zip / front-end scene banks (.SND/.WHD/.WAV, kl_snd.bank) and extend kl_launcher_music.py to read a
