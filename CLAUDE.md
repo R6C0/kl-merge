@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~19:10 - [06, offline] LAUNCHER MUSIC = OWNER'S FINAL PICK pushed 941ef598: Trailer.bik guitar riff 24.43-41.05 s (measured: starts on the first attack, seam cosine 0.92) x2,
+4 s equal-power xfade into MenuLoop_01, fade to 0, loops -> music\deadmen_riff.wav (106 s 48 kHz, riff x0.34, menu x2.0, no clip; 3.4 s to make). Supersedes the 18:40 main-theme ask.
+Trailer decoded by ffmpeg, else tools/kl_pybink.py (6b writing it; packed + copied when present). Without both: MenuLoop_01 alone. Self-test 87, kl_tests --py 57/0/1.
+Owner preview: C:\kl_build_1024\launcher_1109\music\previews\13 deadmen_riff (tool output).wav. Open: kl_pybink check vs ffmpeg, then the launcher run live.
 2026-11-09 ~16:05 - [f0, offline] LAUNCHER REVIEW FIXES PUSHED 107f86ea (Setup.bat: quoted python path, .part download, PowerShell Stop, no del;
 launcher: Guard/trap, safe hook rename, log copy). Scratch e2e 7/7, launcher_test PASS. T0 next: kl_release make/verify/pack once the PC is free + dinput8.dll back.
 2026-11-09 ~18:30 - [d0, offline] DM09 COVER STAGE built, NOT installed: tools/kl_cover_dm09_1110.py (+_test 24/0), stage C:\kl_build_1024\dm09cover_1110: +11 boxes (KL_CoverStreet!: 8 wall tiles, 2 static wreck copies

@@ -1,3 +1,7 @@
+2026-11-09 ~19:10 - [06, offline] LAUNCHER MUSIC = OWNER'S FINAL PICK pushed 941ef598: Trailer.bik guitar riff 24.43-41.05 s (measured: starts on the first attack, seam cosine 0.92) x2,
+4 s equal-power xfade into MenuLoop_01, fade to 0, loops -> music\deadmen_riff.wav (106 s 48 kHz, riff x0.34, menu x2.0, no clip; 3.4 s to make). Supersedes the 18:40 main-theme ask.
+Trailer decoded by ffmpeg, else tools/kl_pybink.py (6b writing it; packed + copied when present). Without both: MenuLoop_01 alone. Self-test 87, kl_tests --py 57/0/1.
+Owner preview: C:\kl_build_1024\launcher_1109\music\previews\13 deadmen_riff (tool output).wav. Open: kl_pybink check vs ffmpeg, then the launcher run live.
 2026-11-09 ~16:05 - [f0, offline] LAUNCHER REVIEW FIXES PUSHED 107f86ea: Setup.bat (quoted python path, .part download, PowerShell Stop, damaged zip -> .bad,
 no del per the Defender rule) + KLMergeLauncher.ps1 (Guard/trap, safe hook rename, log copy with shared read, Quote). Scratch e2e 7/7, launcher_test PASS.
 Untested: embedded-python download, live window. Next for T0: kl_release make/verify/pack when the owner frees the PC and dinput8.dll is back.
