@@ -1,3 +1,7 @@
+2026-11-09 ~13:30 - OWNER ASK (live, Claude app, via scheduled check-in): "crack on really hard" - Josh is lining up OTHER PLAYERS to test: DOWNLOAD Tuesday 11-10,
+PLAY Wednesday 11-11. Every session: treat this as the deadline. Priority is a shippable, downloadable build that installs cleanly on a stranger's PC and runs online
+with the stock + DM maps (install/undo scripts, no dependence on this PC's paths, D:/ backups or kl_build_1024), over new features. Note what a tester needs
+(download size, install steps, firewall/port) in the queue so the cloud session can write the tester instructions. Disk block (C: 131 MB, D: 111 MB) still needs the owner.
 2026-11-09 ~09:25 - [d0] DD10 LEDGE ROUTE FIXED + LANDING LIVE: the vancall Target change (KLJoin ebdf1472) broke the balcony ride; ledgefix_1109 put Target back (600409d7), but the ride lands ON 06_Exit
 (8300,0,1100) = van lane, seat KILLED 3.6 s later (dd10ledgefix1109). New [Join] Land= (16e82f2b, kljoinland.c, [KLHook] JoinLand=1 recommended on, off online): moves the local player to Land after the jump.
 KLJoin 600409d7 -> 8f3034c0 (Land=8300 0 750, ledgeland_1109). Bench dd10land1109 PASS (TEST a7f87dc2): landed 313 ms after, van called/healed 9600, 0 deaths/faults. INSTALLED merged_1109land SHIP f016c36d, ini 4a740f92 -> 1ec9bea0.

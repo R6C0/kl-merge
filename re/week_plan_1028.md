@@ -1,5 +1,9 @@
 # Week plan 2026-10-28 .. ~11-04 (owner away, full access, never ask)
 
+Owner's words (11-09 ~13:30, live): "crack on really hard - I'm trying to get other players to test, either tomorrow for download then
+Wednesday for playing". DEADLINE: downloadable build Tue 11-10, tester play session Wed 11-11. Ship-readiness beats new features until then:
+a tester's install (fresh DD, no KL_PortTools/kl_build_1024/D: paths), online on stock + DM maps, undo, and a tester README; log blockers as "Owner:" lines.
+
 Owner's words (10-28 ~11:30): "implement those features of the gamemodes into reasonable keybinds and also shops / UIs so people
 can see what they can do so it isnt just a secret feature, make sure the maps all work on both sides and the ai heisters work on
 the respected maps and also make them the same as they are in arcade with behaviour and looting since they dont do much in online

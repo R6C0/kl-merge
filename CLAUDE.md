@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-09 ~13:30 - OWNER (live): "crack on really hard". Testers: DOWNLOAD Tue 11-10, PLAY Wed 11-11. Until then ship-readiness first: a build a stranger
+can install on a fresh Dog Days (no paths from this PC), online on stock + DM maps, undo, tester README. Blockers as "Owner:" lines. Disk still full (C: 131 MB, D: 111 MB).
 2026-11-09 ~09:25 - [d0] DD10 LEDGE ROUTE FIXED + LANDING LIVE: the vancall Target change (KLJoin ebdf1472) broke the balcony ride; ledgefix_1109 put Target back (600409d7), but the ride lands ON 06_Exit
 (8300,0,1100) = van lane, seat KILLED 3.6 s later (dd10ledgefix1109). New [Join] Land= (16e82f2b, kljoinland.c, [KLHook] JoinLand=1 recommended on, off online): moves the local player to Land after the jump.
 KLJoin 600409d7 -> 8f3034c0 (Land=8300 0 750, ledgeland_1109). Bench dd10land1109 PASS (TEST a7f87dc2): landed 313 ms after, van called/healed 9600, 0 deaths/faults. INSTALLED merged_1109land SHIP f016c36d, ini 4a740f92 -> 1ec9bea0.
