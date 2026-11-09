@@ -129,6 +129,26 @@ def gate(mut=None):
     return g.done()
 
 
+def unhide(mut=None):
+    """DM07UNHIDE_1109: 4m_01 un-hidden, 4m_11 hidden, 4m_02 visible; H then A. Default = H THROUGH (the gap is the leak), A BLOCKED.
+    mut: hblock (H stops at the fence), hfrozen (H never leaves the tele point), hdead (died in H), ahrough (A walks through), hidden01 (4m_01 still hidden), nopos"""
+    g = Log('DM07UNHIDE_1109')
+    for n in ('Chainlink_Fence_4m_01', 'Chainlink_Fence_4m_11', 'Chainlink_Fence_4m_02'):
+        g.ent(n, (-4580, 470, 10000), hidden=(n[-2:] == '11' or (n[-2:] == '01' and mut == 'hidden01')))
+    for lbl, st in M.GATE_WALKS_UNHIDE:
+        through = (lbl == 'gateH' and mut not in ('hblock', 'hdead')) or (lbl == 'gateA' and mut == 'athrough')
+        xs = [st[0]] + [x if through else max(x, -4560) for x in M.GATE_XS]
+        if mut == 'hfrozen' and lbl == 'gateH':
+            xs = [st[0]] * len(xs)
+        for i, x in enumerate(xs):
+            if mut == 'nopos' and lbl == 'gateA' and i == 3:
+                continue
+            g.say('pos %s-%d: me #0 (%d, 410, %d) heading 270' % (lbl, i, x, st[2]))
+            if mut == 'hdead' and lbl == 'gateH' and i == 2:
+                g.raw("hud: ONLINE skulls state: row 0 'R5 J.C.' kind 3 deaths 1 -> lives 2 (drawn)")
+    return g.done()
+
+
 def doors(k, mut=None):
     dd = [dict(host=176, name='x', hinge=[-3708, 300, -3217], front=[-3772, 300, -3125], back=[-3767, 300, -3316])]
     if k == 'DM02_1109':
@@ -168,6 +188,8 @@ def log_for(k, mut=None):
         return van(k, mut), [], dict(control=[-1800, 10400], length=2100.0)
     if k == 'DM07GATE_1109':
         return gate(mut), [], None
+    if k == 'DM07UNHIDE_1109':
+        return unhide(mut), [], None
     a, dd = doors(k, mut)
     return a, dd, None
 
@@ -189,6 +211,7 @@ def main():
             'DM01B_1109': ['east', 'nostate3', 'nostate5', 'nolate', 'stuck', 'mixrow', 'pop'],
             'DM07_1109': ['fence', 'nolate', 'nocontrol', 'walkedout', 'nopos', 'farpos', 'nostate3', 'stuck'],
             'DM07GATE_1109': ['fence', 'nopos'],
+            'DM07UNHIDE_1109': ['hidden01', 'nopos'],
             'DM03_1109': ['nohits', 'nopolice','noleaf', 'nokick', 'static', 'nogoto'],
             'DM02_1109': ['noleaf', 'nokick', 'nogoto'],
             'DOORS_1109_DM01': ['noleaf', 'nokick'],
@@ -219,6 +242,20 @@ def main():
     # never leaving the tele point is FROZEN, not BLOCKED
     r, inf = M.item_checks('DM07GATE_1109', gate('frozen'), [], None)
     ok(any('B (visible 4m_03) FROZEN' in x for x in inf) and any(x[0] == 'WARN' and 'freeze' in x[1] for x in r), 'DM07GATE: a frozen B reads FROZEN + WARN')
+    # DM07UNHIDE_1109: both verdicts of the toggle test, a frozen and a dead H, a non-discriminating control
+    inf = M.item_checks('DM07UNHIDE_1109', unhide(), [], None)[1]
+    ok(any('unhide verdict: H (4m_01 UN-hidden) THROUGH, A (visible 4m_02) BLOCKED' in x for x in inf), 'UNHIDE: H THROUGH reads the gap verdict %s' % [x for x in inf if 'verdict' in x])
+    r, inf = M.item_checks('DM07UNHIDE_1109', unhide('hblock'), [], None)
+    ok(any('unhide verdict: H (4m_01 UN-hidden) BLOCKED, A (visible 4m_02) BLOCKED' in x for x in inf) and not [x for x in r if x[0] != 'PASS'], 'UNHIDE: H BLOCKED reads the collision verdict, no WARN/FAIL %s' % [x for x in r if x[0] != 'PASS'])
+    r, inf = M.item_checks('DM07UNHIDE_1109', unhide('hfrozen'), [], None)
+    ok(any('H (4m_01 UN-hidden) FROZEN' in x for x in inf) and any(x[0] == 'WARN' and 'freeze' in x[1] for x in r), 'UNHIDE: a frozen H reads FROZEN + WARN, never BLOCKED')
+    r, inf = M.item_checks('DM07UNHIDE_1109', unhide('hdead'), [], None)
+    ok(any('H (4m_01 UN-hidden) DEAD' in x for x in inf) and any(x[0] == 'WARN' and 'death' in x[1] for x in r), 'UNHIDE: a death in H reads DEAD + WARN')
+    r, inf = M.item_checks('DM07UNHIDE_1109', unhide('athrough'), [], None)
+    ok(any(x[0] == 'WARN' and 'control A' in x[1] for x in r) and not [x for x in r if x[0] == 'FAIL'], 'UNHIDE: A THROUGH = WARN (control does not discriminate)')
+    ok(not any('gateS' in l or 'gateB' in l for l in M.gate_seg('host', M.GATE_WALKS_UNHIDE, south=False))
+       and any('gateH' in l for l in M.gate_seg('host', M.GATE_WALKS_UNHIDE, south=False)) and any('gateS' in l for l in M.gate_seg('host')), 'UNHIDE script: H + A only, no south walk; the GATE kit keeps all of it')
+    ok(M.K['DM07UNHIDE_1109']['stage'] and M.K['DM07UNHIDE_1109']['tag'] == '.before-dm07unhide1109' and M.K['DM07GATE_1109']['stage'] is None, 'UNHIDE is a stage kit (stage+tag kept by the defaults loop), GATE is not')
     # pos parsed by name: the label decides, not the position in the line
     ok(M.pos_of(['01:00:00.000 script 3: pos x-label: me #0 (-4300, 550, 10400) heading 12'], 'x-label') == (-4300, 550, 10400), 'pos_of parses the named x')
     ok(M.pos_of(['01:00:00.000 script 3: pos other: me #0 (1, 2, 3) heading 12'], 'x-label') is None, 'pos_of: other label is None')

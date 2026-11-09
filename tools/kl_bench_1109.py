@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-Bench kits for the maps INSTALLED on 2026-11-08/09 (nothing is staged: every kit runs on the live map folder as it is and pins its md5s).
+Bench kits for the maps INSTALLED on 2026-11-08/09. Every kit pins its md5s and runs on the live map folder as it is, EXCEPT the stage kits
+(K entry with stage= and tag=, today DM07UNHIDE_1109): `run` installs the stage with its own install.py (originals -> *<tag>, never overwritten),
+benches, and ALWAYS runs install.py --undo in a finally block, then compares every map-folder md5 with the pre-run snapshot.
 Built on tools/kl_bench_1106.py (imported; its KITS table is replaced in this process only). 2 seats, Q32 online pair, round 1 -> shop -> round 2.
 A per-kit item segment is spliced into BOTH seats' scripts right after the first `waitload`; only the host seat moves (tele / goto / tap E).
 
@@ -12,7 +14,7 @@ A per-kit item segment is spliced into BOTH seats' scripts right after the first
     python tools/kl_bench_1109.py verify <kit>        re-read the logs of the last run (no game contact)
     python tools/kl_bench_1109.py order               (re)write C:/kl_build_1024/bench_1109/RUN_ORDER.txt
 
-Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DM07GATE_1109 DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
+Kits: HASTA1109 (DM11B) DM03_1109 DM02_1109 DM01B_1109 DM07_1109 DM07GATE_1109 DM07UNHIDE_1109 (stage kit) DOORS_1109_DM01 DOORS_1109_DM03A (DOORS_1109 = the last two).
 What the log CAN decide: faults/dumps, round 2 reached, 0x25 dwell, botgate, entity hidden flags and positions (`ents`), vehicle state
 (`waitvan`), goto reached / NOT reached. What it CANNOT: boom, camera shake, glare, kick sound, pop (a 1-frame jump), cover pillars: those
 need the screenshots (ReShade bridge D3dShotPost, KLShot_inst1_NN.jpg in the run folder) and an ear/eye.
@@ -53,14 +55,21 @@ K = {
     'DM07_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-900:15'),
     # the gate leak alone (no van): crossings through two VISIBLE panels (controls) and the hidden 4m_01, sampled at the fence line x -4560..-4600
     'DM07GATE_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-500:10'),
+    # TOGGLE TEST (stage kit): the live DM07 with fence panel 4m_01 UN-hidden (tools/kl_dm07unhide_1109.py: gms flags 0x205e6 -> 0x201e6 in the plain AND the bots
+    # zip, the online bench plays the bots zip). Same walk as DM07GATE_1109 but only H (4m_01) and the A control (4m_02), no south walk. `live` = the pins before the install.
+    'DM07UNHIDE_1109': dict(map='DM07', slot='F06', live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51', 'KLJoin.ini': '73e113d9'}, shots='60-500:10',
+                            stage='C:/kl_build_1024/dm07unhide_1109', tag='.before-dm07unhide1109',
+                            files={'F06_Main.zip': '92ad73451bd70151116d7367f1e7645c', 'F06_Main.bots.zip': '58203a1c52e8d2c788be4d51a932e561',
+                                   'F06_Main.bots.base.md5': 'd1b973d815af69622dc5cbd37a213de2'}),
     'DOORS_1109_DM01': dict(map='DM01', slot='F01', live={'F01_Main.zip': '444a3ed6', 'F01_Main.bots.zip': 'f3ed6155', 'KLJoin.ini': 'db4516c6'}, shots='60-700:20',
                             doors=('DM01', 'F01', (957, 2569))),
     'DOORS_1109_DM03A': dict(map='DM03A', slot='F07', live={'F07_Main.zip': 'aa79d66d', 'F07_Main.bots.zip': 'd1a8dd0c', 'KLJoin.ini': '958c24b6'}, shots='60-700:20',
                              doors=('DM03A', 'F07', (6516,))),
 }
-ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A']
+ORDER = ['HASTA1109', 'DM03_1109', 'DM02_1109', 'DM01B_1109', 'DM07_1109', 'DM07GATE_1109', 'DM07UNHIDE_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A']
 for _k, _c in K.items():
-    _c.update(entry=0, stage=None, tag=None, hook=HOOK, solo_secs=600, parts=('online',))
+    for _a, _b in dict(entry=0, stage=None, tag=None, hook=HOOK, solo_secs=600, parts=('online',)).items():
+        _c.setdefault(_a, _b)
     if _k not in B.KITS:
         pass
 B.KITS.clear()
@@ -251,21 +260,24 @@ def dm07_seg(who):
 # DM07_1109 run 2 walked H first at round start and lived. The south walk goes LAST: in run 2 it ended at y 2 (-6897, 6593), the player died 4 s later
 # (06:13:10) and A and B ran on the corpse.
 GATE_WALKS = (('gateH', (-4000, 550, 10334)), ('gateA', (-4000, 562, 9793)), ('gateB', (-4000, 560, 9393)))
+GATE_WALKS_UNHIDE = GATE_WALKS[:2]              # DM07UNHIDE_1109: H (4m_01, un-hidden there) first, then the A control (4m_02, visible)
 GATE_XS = (-4400, -4520, -4620, -4750, -5000)   # goto steps: one pos per step, so the crossing is read without a mid-goto sample
 
 
-def gate_seg(who):
+def gate_seg(who, walks=None, south=True):
     # 4m_11 by its full name: run 1's 'ents Chainlink_Fence_4m_1 6' showed 6 of 8 (_19.._12) and missed it
     s = ['ents Chainlink_Fence_4m_0 12', 'ents Chainlink_Fence_4m_11 2', 'log BENCH1109 gate fence panels read']
     if who != 'host':
         return s + ['wait 60000']
     # right after the round starts: DM07_1109 run 2's control walk ran late and a cop downed the player at (-2905, 10432)
     s += ['waitstate 0x19 90000']
-    for lbl, st in GATE_WALKS:
+    for lbl, st in (walks or GATE_WALKS):
         s += ['tele %d %d %d' % st, 'wait 2000', 'face -5000 %d' % st[2], 'pos %s-0' % lbl]
         for i, x in enumerate(GATE_XS):
             s += ['goto %d %d 60 %d' % (x, st[2], 3000 if i < len(GATE_XS) - 1 else 5000), 'pos %s-%d' % (lbl, i + 1)]
         s += ['log BENCH1109 gate %s done' % lbl]
+    if not south:
+        return s
     # from the pocket (H gets through): does its south slope lead off the map? (static read: mud floor x -11000..-4600, outside every LevelBound)
     s += ['tele -4944 450 10333', 'wait 2000', 'goto -6900 8100 100 9000', 'pos gateS-1', 'goto -6900 6500 100 9000', 'pos gateS-2', 'log BENCH1109 gate south done']
     return s
@@ -307,6 +319,8 @@ def segment(k, who):
         return dm07_seg(who)
     if k == 'DM07GATE_1109':
         return gate_seg(who)
+    if k == 'DM07UNHIDE_1109':
+        return gate_seg(who, GATE_WALKS_UNHIDE, south=False)
     return doors_seg(who, doors, 'door')
 
 
@@ -618,15 +632,22 @@ def item_checks(k, a, dd=(), ctrl=None):
         chk('walk-out goto ran', bool(g), g[0][g[0].find('goto'):][:110] if g else 'no goto line%s' % (' (tele refused: %s)' % tp[0][:100] if tp else ''))
         chk('player does NOT walk out through the gap (blocked, control walks)', bool(g) and 'NOT reached' in g[0] and xs is not None and xs > -4700 and reached(cg),
             'goto: %s | pos dm07-after-walk x=%s | control reached=%s' % (g[0][g[0].find('goto'):][:90] if g else 'none', xs, reached(cg)))
-    if k == 'DM07GATE_1109':
+    if k in ('DM07GATE_1109', 'DM07UNHIDE_1109'):
+        unhide = k == 'DM07UNHIDE_1109'
+        walks = GATE_WALKS_UNHIDE if unhide else GATE_WALKS
         pan = [r for r in ents(a, 'Chainlink_Fence_4m') if r[1].endswith('4m_01') or r[1].endswith('4m_11')]
-        chk('fence panels 4m_01 AND 4m_11 read hidden (the live gate)', {r[1][-5:] for r in pan} >= {'4m_01', '4m_11'} and all(r[2] for r in pan), '%d rows' % len(pan))
+        if unhide:
+            p1, p11 = [r for r in pan if r[1].endswith('4m_01')], [r for r in pan if r[1].endswith('4m_11')]
+            chk('fence panel 4m_01 reads VISIBLE (un-hidden by the stage) and 4m_11 still hidden', bool(p1) and bool(p11) and not any(r[2] for r in p1) and all(r[2] for r in p11),
+                '4m_01 %d rows hidden=%s, 4m_11 %d rows hidden=%s' % (len(p1), sorted({r[2] for r in p1}), len(p11), sorted({r[2] for r in p11})))
+        else:
+            chk('fence panels 4m_01 AND 4m_11 read hidden (the live gate)', {r[1][-5:] for r in pan} >= {'4m_01', '4m_11'} and all(r[2] for r in pan), '%d rows' % len(pan))
         verdict = {}
         # the host's own seat: 'hud: ONLINE skulls state: row 0 ... kind 3 deaths N' (kind 3 = just died, run 1 at 06:03:06 with FA_DieFromPolice)
         deaths = [l for l in a if 'skulls state: row 0' in l and 'kind 3' in l]
         # kind 1 on row 0 = alive again (run 2: died 06:13:10, back at 06:16:41 = next round)
         lives = [l for l in a if 'skulls state: row 0' in l and 'kind 1' in l]
-        for lbl, st in GATE_WALKS:
+        for lbl, st in walks:
             ps = [pos_of(a, '%s-%d' % (lbl, i)) for i in range(len(GATE_XS) + 1)]
             got = [p for p in ps if p]
             chk('%s: crossing sampled (start + %d steps)' % (lbl, len(GATE_XS)), len(got) == len(ps) and abs(got[0][0] - st[0]) < 300,
@@ -649,11 +670,18 @@ def item_checks(k, a, dd=(), ctrl=None):
                     info.append('%s: never left x %d: frozen, not blocked' % (lbl, got[0][0]))
                 low = min((p[1] for p in got if -4700 < p[0] < -4450), default=None)
                 info.append('%s: %s, end x %d (z %d), lowest y near the fence line %s' % (lbl, verdict[lbl], end[0], end[2], low))
-        info.append('gate verdict: A (visible 4m_02) %s, B (visible 4m_03) %s, H (hidden 4m_01) %s. A/B BLOCKED + H THROUGH = the hidden panels pass players '
-                    '(un-hide fixes it, or the gap); all THROUGH = the fence never blocks players (filter or gap): re-route the van or add a blocker'
-                    % (verdict.get('gateA', '?'), verdict.get('gateB', '?'), verdict.get('gateH', '?')))
+        if unhide:
+            info.append('unhide verdict: H (4m_01 UN-hidden) %s, A (visible 4m_02) %s. H BLOCKED = the hide flag removes player collision at runtime (the static reading was '
+                        'wrong; un-hide or re-route fixes it); H THROUGH = the gap under the panel is the leak (needs a blocker). A must read BLOCKED for either to count '
+                        '(A THROUGH = this crossing method does not discriminate); DEAD / FROZEN = no verdict, rerun'
+                        % (verdict.get('gateH', '?'), verdict.get('gateA', '?')))
+            chk('control A (visible 4m_02) reads BLOCKED (else the crossing does not discriminate)', verdict.get('gateA') == 'BLOCKED', 'A %s, H %s' % (verdict.get('gateA', '?'), verdict.get('gateH', '?')), warn=True)
+        else:
+            info.append('gate verdict: A (visible 4m_02) %s, B (visible 4m_03) %s, H (hidden 4m_01) %s. A/B BLOCKED + H THROUGH = the hidden panels pass players '
+                        '(un-hide fixes it, or the gap); all THROUGH = the fence never blocks players (filter or gap): re-route the van or add a blocker'
+                        % (verdict.get('gateA', '?'), verdict.get('gateB', '?'), verdict.get('gateH', '?')))
         chk('no crossing voided by a host death or a freeze', not [v for v in verdict.values() if v in ('DEAD', 'FROZEN')], ', '.join('%s %s' % kv for kv in sorted(verdict.items())), warn=True)
-        for n in ('gateS-1', 'gateS-2'):
+        for n in (() if unhide else ('gateS-1', 'gateS-2')):
             p = pos_of(a, n)
             info.append('%s (pocket south slope): %s' % (n, p and tuple(round(c) for c in p)))
     if k in ('DM03_1109', 'DM02_1109', 'DOORS_1109_DM01', 'DOORS_1109_DM03A'):
@@ -743,18 +771,38 @@ def run(k):
     before = B.snap(md)
     tag = '%s_online' % k
     import shutil
-    for i in (1, 2):
-        os.makedirs('%s/%s/inst%d' % (B.SOLO, tag, i), exist_ok=True)
-        shutil.copy2('%s/KLShopPage.ini' % d, '%s/%s/inst%d/KLShopPage.ini' % (B.SOLO, tag, i))
-    cmd = [sys.executable, 'tools/kl_solo_test.py', '--hook', '%s/hook_test' % d, '--tag', tag, '--base', '%s/KLHook_base.ini' % d, '--owner-away',
-           '--n', '2', '--secs', '1900', '--gap', '45', '--relaunch', '2', '--ini1', '%s/online_host.ini' % d, '--ini2', '%s/online_join.ini' % d,
-           '--shots', c['shots'], '--d3shots']
-    with open('%s/online_run.txt' % d, 'w') as out:
-        print('  run %s (log %s/online_run.txt)' % (tag, d), flush=True)
-        rcb = subprocess.run(cmd, cwd=B.ROOT, stdout=out, stderr=subprocess.STDOUT).returncode
-    print('  bench exit %d' % rcb, flush=True)
-    rc = verify(k)
-    same = B.snap(md) == before
+    # stage kit (K entry with stage=): install.py before, --undo in the finally below (as kl_bench_1106.run); a zombie kl2.exe (working set < 1 MB, z non-empty
+    # here) gets --skip-run-check when that install.py knows the flag
+    inst = [sys.executable, '%s/install.py' % c['stage']] if c.get('stage') else None
+    if inst and z and '--skip-run-check' in open('%s/install.py' % c['stage'], encoding='utf-8', errors='replace').read():
+        print('  ignoring zombie kl2.exe (working set < 1 MB): %s' % z, flush=True)
+        inst.append('--skip-run-check')
+    if inst:
+        print('INSTALLING the stage into the LIVE game folder (undone at the end): %s' % md, flush=True)
+        if B.sh(inst):
+            print('RESULT: not started - install.py refused (nothing changed)'); return 1
+    rc = 1
+    try:
+        for i in (1, 2):
+            os.makedirs('%s/%s/inst%d' % (B.SOLO, tag, i), exist_ok=True)
+            shutil.copy2('%s/KLShopPage.ini' % d, '%s/%s/inst%d/KLShopPage.ini' % (B.SOLO, tag, i))
+        cmd = [sys.executable, 'tools/kl_solo_test.py', '--hook', '%s/hook_test' % d, '--tag', tag, '--base', '%s/KLHook_base.ini' % d, '--owner-away',
+               '--n', '2', '--secs', '1900', '--gap', '45', '--relaunch', '2', '--ini1', '%s/online_host.ini' % d, '--ini2', '%s/online_join.ini' % d,
+               '--shots', c['shots'], '--d3shots']
+        with open('%s/online_run.txt' % d, 'w') as out:
+            print('  run %s (log %s/online_run.txt)' % (tag, d), flush=True)
+            rcb = subprocess.run(cmd, cwd=B.ROOT, stdout=out, stderr=subprocess.STDOUT).returncode
+        print('  bench exit %d' % rcb, flush=True)
+        rc = verify(k)
+    finally:
+        r = 0
+        if inst:
+            print('UNDOING the stage (install.py --undo)', flush=True)
+            r = B.sh(inst + ['--undo'])
+    after = B.snap(md)
+    same = {n: m for n, m in after.items() if not (c.get('tag') and n.endswith(c['tag']))} == before
+    if inst and (r or not same):
+        print('UNDO FAILED - run by hand: python "%s/install.py" --undo ; then compare with the md5s above' % c['stage'])
     print('map folder unchanged: %s' % same)
     print('RESULT: %s run done, %s' % (k, 'ALL PASS' if not (rc or not same) else 'see FAIL lines'))
     return 1 if (rc or not same) else 0
@@ -763,7 +811,8 @@ def run(k):
 def order():
     t = ['bench_1109 RUN ORDER (written by tools/kl_bench_1109.py order). ONE bench at a time; each needs the game free.',
          'Before EACH: tasklist | findstr /i kl2.exe  must show nothing (a zombie with 0 threads is fine). Peers (f0/81 merged kits, fc shop, d0) bench too:',
-         'wait for their "done, game free". Nothing is installed by any of these; every kit pins the live md5s and compares the map folder after.',
+         'wait for their "done, game free". Nothing is installed by any of these except the stage kit; every kit pins the live md5s and compares the map folder after.',
+         'Stage kit DM07UNHIDE_1109: its run INSTALLS C:/kl_build_1024/dm07unhide_1109 into the live DM07 folder (install.py) and undoes it in a finally block.',
          'Pre-flight for all (read only, no game launch):   cd C:\\kl-merge\\kl-merge ; python tools/kl_bench_1109.py validate all',
          'Disk: each run writes a few hundred MB of shots/logs under the solo work folder; keep C: above 2 GB free.',
          '']
