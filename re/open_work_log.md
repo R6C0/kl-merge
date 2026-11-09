@@ -1,3 +1,6 @@
+2026-11-09 ~16:05 - [f0, offline] LAUNCHER REVIEW FIXES PUSHED 107f86ea: Setup.bat (quoted python path, .part download, PowerShell Stop, damaged zip -> .bad,
+no del per the Defender rule) + KLMergeLauncher.ps1 (Guard/trap, safe hook rename, log copy with shared read, Quote). Scratch e2e 7/7, launcher_test PASS.
+Untested: embedded-python download, live window. Next for T0: kl_release make/verify/pack when the owner frees the PC and dinput8.dll is back.
 2026-11-09 ~18:40 - OWNER (live): launcher music = the Kane & Lynch MAIN THEME (YouTube kFHP2_jG1Us 'Kane & Lynch theme EXTENDED'), not MenuLoop_01. Local session: find the clip (list Theme/Title/Credits/Intro names; may be in a .bik), make it CANDIDATES[0]. Week plan T0.
 2026-11-09 ~18:30 - [d0, offline] DM09 COVER STAGE built, NOT installed: tools/kl_cover_dm09_1110.py (+_test 24/0), stage C:\kl_build_1024\dm09cover_1110: +11 boxes (KL_CoverStreet!: 8 wall tiles, 2 static wreck copies
 on V_JPN_Civilian_B2_A_Group_00#08; 1 unreachable prop box pruned by a floornav re-check). Pins live afee8967/90e9046d/bdd4dc08 -> zip 3a981a70, bots 2ede91ed, base 0126d412; undo rehearsed byte-exact, 2-lens review.

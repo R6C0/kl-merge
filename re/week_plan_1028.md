@@ -26,6 +26,12 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-09 ~16:05 f0 (kl-merge-81): Setup.bat + KLMergeLauncher.ps1 review fixes PUSHED 107f86ea (06 handed them over). Setup.bat: python path quoted via gotos
+  (a folder with space/&/()/' broke it), download to .part (curl -z never keeps a half zip), all 4 PowerShell calls $ErrorActionPreference=Stop (a failed
+  Expand-Archive exited 0 and an old manifest.json hid it: damaged zip now -> .bad, old manifest moved aside), embedded python re-runs get-pip + zstandard,
+  NO del anywhere (7edaa2b0's Defender rule). Launcher: Guard on every handler + trap (an error closed the hidden window silently), Hook-Set rename in try,
+  hook only flipped ON after Start-Tool's refusals, Collect-Logs copies with shared read (the open KLHook.log was dropped), Quote keeps a trailing \, UTF8 logs.
+  Scratch e2e (folder "bat test & (x) o'k", file:// URL) 7/7, launcher_test PASS, PS 5.1 parse 0. UNTESTED: embedded python download, no-curl PS fallback, live window.
 - 11-09 ~16:30 f0 (kl-merge-81): code review of kl_release + launcher (finders + verifiers), kl_release.py FIXED: install could not finish on Windows
   (stock PC_Def.str / stock .wav sources stayed mmapped, then the move into KL_PortBackup hit WinError 32; Sources.close() after the build), resume after a stop
   right after the backup move no longer records the file as 'new' (uninstall would lose the stock file), uninstall leaves dest alone while a 'replaced' backup is
