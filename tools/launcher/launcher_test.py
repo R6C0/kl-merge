@@ -199,7 +199,7 @@ def main():
     check('/MOVE' in bat and re.search(r'rem .*?/MOVE is a MOVE', bat) is not None, 'the one robocopy /MOVE in the Setup .bat is commented as a move')
 
     # 3. the launcher script
-    ps = read(PS1).decode('ascii', 'replace')
+    ps = read(PS1).decode('ascii', 'replace').replace('\r\n', '\n')   # core.autocrlf checkouts (worktrees) are CRLF
     body = strip_ps(ps)
     check(body is not None, 'ps1: strings and here-strings close')
     if body is not None:

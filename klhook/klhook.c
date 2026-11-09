@@ -900,7 +900,6 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "kllobbyopt.c"                                   /* kllobbyopt.c: [Lobby] TimeMax / TimeMin / RoundsMax - more choices on the FA lobby rows (off unless set); AFTER kllobby.c */
 #include "klbrain.c"                                      /* klbrain.c: [Brain] Probe / Build / Loot / PuppetOff - the Arcade AI tactics on the online FA host (all off unless set); AFTER kllobby.c, BEFORE klbotfill.c (which feeds it) */
 #include "klbotfill.c"                                    /* klbotfill.c: [Bots] OnlineFill plan + probe, read-only (off unless set); AFTER kllobby.c */
-#include "klcampaign_gate.h"                              /* klcampaign_gate.h: [Campaign] Enable + campaign scene = the one gate of every ported luvsic module; AFTER klh_scene, klh_level_key, klh_ini */
 #include "klcopsquad.c"                                   /* klcopsquad.c: [CopSquad] AI police under each human cop in Cops and Robbers (off unless Enable=1); AFTER klbotfill.c, klescort.c */
 #include "klcampsquad.c"                                  /* klcampsquad.c: [CampSquad] crew orders on the campaign levels (luvsic's squad.inc; off unless [Campaign] Enable=1 + [CampSquad] Enable=1); AFTER klcopsquad.c */
 #include "klcampgive.c"                                   /* klcampgive.c: [CampGive] give / swap a gun (key 4) (luvsic's give.inc, equipassist.inc; campaign only, default off); AFTER klcampsquad.c */
@@ -935,7 +934,6 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klsteam.c"
 #include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
 #include "klslot.c"
-#include "klcampaign_gate.h"                              /* [Campaign] Enable gate (klcmp_enabled / klcmp_level_active) */
 #include "klcampaign.c"                                   /* klcampaign.c: luvsic's campaign runtime core, no UI (all [Campaign] toggles off); AFTER klslot.c */
 #include "klserver.c"                                    /* klserver.c: [Server] host a Quick Match / Ranked lobby unattended (off unless Enable=1); AFTER klslot.c / klchar.c / kllobby.c */
 #include "kllocname.c"                                    /* kllocname.c: [Names] an expansion map shows its own name in the FA lobby / lists (off unless Enable=1); AFTER klslot.c / klpm.c */
