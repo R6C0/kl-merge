@@ -65,6 +65,15 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
     a movie-only theme needs a Bink audio path (ffmpeg only, or a decoder) -> owner decides. Side fix bceab0fc: listed PCM lengths were double.
   Owner: pick the public release host (a private repo's release assets need a token) and set RELEASE_URL in "KLMerge Setup.bat"; tell testers Dead Men must be installed.
 
+### T9 IN-GAME MENU LOOK = DEAD MEN (owner 11-09 ~19:10, "huge ask", after liking the launcher theme) - cloud designs + stages offline, local benches
+Owner's words: "overhaul the whole in game menu UI to make it feel more like dead men too, even the menu button sounds; also in settings make a button for the mod
+so you can change it (make it however you desire) but I want the default to have this on". Reading: the launcher's brush-kit look (kl_hud --look deadmen: Impact chipped
+capitals, chalk / coral / ink, torn plates) applied to Dog Days' front-end + pause + lobby + shop menus (fonts, colour sets, plates, backgrounds) + Dead Men's menu
+click / confirm / back sounds; an in-game Mod Options row "Dead Men menu look (recommended on)" that switches the themed menu archive(s) + sound bank via the hook's
+redirect rules; DEFAULT ON. Order: (1) research + design re/menu_look_1109.md, (2) stage-1 tool fonts + colours (reuse kl_hud build_font / kl_hud_menu), (3) plates/
+backgrounds, (4) sounds, (5) toggle. Ships AFTER the Wed tester build unless (2) is cheap and benched; never replaces stock files (themed copies + redirect).
+- 11-09 19:10 cloud: claimed research + design + stage-1 tool (offline, self-tests; nothing installed).
+
 ### T1 Discoverability: keybinds + shop/UI pages (owner: "not a secret feature")
 - 11-02 18:50 scheduled: Q35 COMPLETE + CLEAN by the result files (21/21 maps, both seats PASS, 0 asserts/faults/soft, slots right, ShopPage 20 pairs on every seat; dll eb4c46d8). Gate in one command now: `python tools/kl_kit_summary.py --batch Q35_ C:/kl_build_1024/c9_1028/q35 --gate` (exit 1 unless every run is clean). Ship = c9.
 - 11-02 11:40 c9: SN2 PASS (next-ship candidate as a whole, ship_next ini + dll_0925 SHIP 56ac45c1; DM01/DM03/DD05 online, 0 asserts/soft/faults every seat; Carry 8 after DT1 PASS). DM03 coverdump DIVERGE = dump time skew (host dumped before its car #0 ring existed), SAFE. Candidate READY to ship.
