@@ -198,7 +198,8 @@ def main():
     check("Volume = 0.22" in ps, 'ps1: the settings default Volume is 0.22')
     check('MediaEnded' in ps and '[TimeSpan]::Zero' in ps, 'ps1: the clip loops (MediaEnded -> Position 0 -> Play)')
     check('MediaFailed' in ps, 'ps1: a playback failure is caught (MediaFailed handler)')
-    check("$script:MusicName = 'deadmen_launcher.wav'" in ps and "'music\\' + $script:MusicName" in ps, 'ps1: music file is <launcher>\\music\\deadmen_launcher.wav')
+    check("$script:MusicName = 'deadmen_menu.wav'" in ps and "'music\\' + $script:MusicName" in ps, 'ps1: music file is <launcher>\\music\\deadmen_menu.wav (new name: an old FA-theme deadmen_launcher.wav is not reused)')
+    check(ps.count('$null = $script:Proc.Handle') == 1 and ps.count('$null = $script:MusicProc.Handle') == 1, 'ps1: both Start-Process objects keep their Handle (else ExitCode reads empty)')
     check("$script:MusicToolName = 'kl_launcher_music.py'" in ps and "'extract', '--dm'" in ps and "'--out'" in ps, 'ps1: makes the clip with kl_launcher_music.py extract --dm --out')
     check("'--clip'" in ps and 'MusicClip' in ps, 'ps1: MusicClip setting -> --clip')
     for k in ('Muted', 'Volume', 'MusicClip'):
@@ -253,9 +254,19 @@ def main():
     check('manifest.json' in pk and 'patches' in pk and 'kl_release.py' in pk and 'launcher' in pk, 'pack_release.ps1 bundles manifest + patches + kl_release.py + launcher')
     check('_snap' in pk and 'sha1cache' in pk, 'pack_release.ps1 knows the maker-only folders it must leave out')
     check("'kl_launcher_music.py'" in pk, 'pack_release.ps1 packs launcher\\kl_launcher_music.py')
+    check("'kl_pyvorbis.py'" in pk and 'kl_pyvorbis.py' in bat and os.path.exists(os.path.join(TOOLS, 'kl_pyvorbis.py')), 'pack_release.ps1 packs kl_pyvorbis.py, the bat copies it up, and it exists')
+    check("'bin\\kl_oggdec.exe'" in pk and "'launcher\\bin'" in pk, 'pack_release.ps1 packs launcher\\bin\\kl_oggdec.exe')
+    check('bin\\kl_oggdec.exe' in bat and 'bin\\kl_oggdec.exe' in ow and 'kl_oggdec' in rd, 'the bat copies the decoder up; OWNER steps + README name it')
+    sha = os.path.join(HERE, 'oggdec', 'stb_vorbis.sha256')
+    check(os.path.exists(sha) and os.path.exists(os.path.join(HERE, 'oggdec', 'kl_oggdec.c')) and os.path.exists(os.path.join(HERE, 'oggdec', 'build.bat')), 'oggdec/: source, build.bat and the pinned stb_vorbis sha256 exist')
+    svc = os.path.join(HERE, 'oggdec', 'stb_vorbis.c')
+    if os.path.exists(svc):
+        import hashlib
+        check(hashlib.sha256(open(svc, 'rb').read()).hexdigest() == open(sha).read().split()[0], 'oggdec/stb_vorbis.c matches its pinned sha256')
+
     check("-Filter '*.jpg'" in pk and "'launcher\\bg'" in pk, 'pack_release.ps1 packs launcher\\bg\\*.jpg')
     check("'launcher\\music'" in pk and 'REFUSED' in pk[pk.find("'launcher\\music'") - 200:pk.find("'launcher\\music'") + 200] and '|wav|' in pk, 'pack_release.ps1 refuses launcher\\music\\ (and any .wav)')
-    for word in ('MUTE', 'own', 'PC_Def.str', 'deadmen_launcher.wav', 'bg\\dead_men.jpg'):
+    for word in ('MUTE', 'own', 'PC_Def.str', 'deadmen_menu.wav', 'bg\\dead_men.jpg'):
         check(word in rd, 'README_TESTERS mentions ' + word + ' (music from the tester\'s own Dead Men files, mute button, background)')
     for word in ('bg\\dead_men.jpg', 'bg\\dog_days.jpg', 'kl_launcher_music.py', 'launcher\\music\\', 'FA_SlashMixPrison', 'TakyoAction_Layer2_TAmbient_Loop'):
         check(word in ow, 'OWNER_RELEASE_STEPS mentions ' + word)

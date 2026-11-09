@@ -18,8 +18,11 @@ verbs vs kl_release's argparse, XAML well-formed, bracket balance) and, on a PC 
   (kl_release.py header; re/release_size.md: delta estimate 560 to 640 MB.)
 - The tester needs Dead Men installed (the installer stops without it) and gets Payday 2 bits only when Payday 2 is there.
 - The launcher's MUSIC is not in the package either: `launcher\kl_launcher_music.py` (= `tools\kl_launcher_music.py`) runs on
-  the tester's PC and decodes one clip of THEIR Dead Men `PC_Def.str` into `music\deadmen_launcher.wav` beside the launcher
-  (first start with a known Dead Men folder, after INSTALL, or on UNMUTE). Your own `tools\launcher\music\` is never
+  the tester's PC and decodes one clip of THEIR Dead Men `PC_Def.str` into `music\deadmen_menu.wav` beside the launcher
+  (first start with a known Dead Men folder, after INSTALL, or on UNMUTE). The default clip is Dead Men's MAIN MENU loop
+  `SFX/UserInterface/MenuLoop_01.wav` (an Ogg Vorbis stream, 77 s), decoded by `launcher\bin\kl_oggdec.exe` (= `tools\launcher\bin\kl_oggdec.exe`,
+  public-domain stb_vorbis pinned by sha256 in `tools\launcher\oggdec\stb_vorbis.sha256`; rebuild with `tools\launcher\oggdec\build.bat`,
+  32-bit, packed by `pack_release.ps1`, copied up by Setup); without the exe it tries ffmpeg on the PATH, then the next candidate. Your own `tools\launcher\music\` is never
   packed (`pack_release.ps1` refuses it; a `.wav` in the staging folder is refused by the extension check too).
 - The launcher's BACKGROUND pictures `launcher\bg\dead_men.jpg` and `bg\dog_days.jpg` ARE packed - they are yours (section 2b).
 
@@ -76,9 +79,9 @@ grain and vignette on top so the text stays readable). No third-party art: your 
 `pack_release.ps1` copies `launcher\bg\*.jpg` into the package; Setup copies them up beside the launcher on the tester's PC.
 With one or both missing the launcher draws its fallback (grey film grain left, dark teal video blocks right) and logs one line.
 
-To hear the music on YOUR PC before packing: `python tools\kl_launcher_music.py extract --dm "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men" --out tools\launcher\music\deadmen_launcher.wav`
+To hear the music on YOUR PC before packing: `python tools\kl_launcher_music.py extract --dm "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men" --out tools\launcher\music\deadmen_menu.wav`
 (exit 0 and a `wrote ...` line; exit 2 = no decodable clip, say so). `--list` prints the Music/ clips with their codec, `--clip NAME`
-picks another one; the default order is in the tool's `CANDIDATES` (Dead Men's FA theme `FA_SlashMixPrison` if it is PCM, else the
+picks another one; the default order is in the tool's `CANDIDATES` (Dead Men's main menu loop `MenuLoop_01` if a decoder is there, then the FA theme `FA_SlashMixPrison` if it is PCM, else the
 Retomoto tension bed `TakyoAction_Layer2_TAmbient_Loop`, then the bank break-in bed). A tester can set `MusicClip` in the settings file.
 The written `.wav` stays on your PC (`tools\launcher\music\` is git-ignored and never packed).
 
@@ -162,7 +165,7 @@ The launcher never reads or writes launch options.
 - Music: `System.Windows.Media.MediaPlayer` looping a .wav through MediaEnded + Position = 0 (a gap at the seam is possible; the
   clip is faded in and out so a gap is quiet), volume 0.22, `Start-Process` of the python tool from the window. The
   decoder itself (`tools/kl_launcher_music.py`) is proven on synthetic data only (`kl_launcher_music_test.py`, 48 checks: PCM,
-  2-layer interleaved PCM sets behind a LIP block, unequal-rate sets, mono IMA ADPCM, Vorbis refused); the Dead Men file
+  2-layer interleaved PCM sets behind a LIP block, unequal-rate sets, mono IMA ADPCM, Ogg Vorbis framing + CRC + decoder fallback); the Dead Men file
   layout it reads is the one `tools/kl_str.py` measured on the real file. The codec of `FA_SlashMixPrison` is unknown
-  (skipped if Vorbis); the Retomoto set `TokyoAction1` is PCM 2 x stereo 32 kHz (re/retomoto_audio.md 4.1).
+  (skipped if Vorbis and no decoder); the Retomoto set `TokyoAction1` is PCM 2 x stereo 32 kHz (re/retomoto_audio.md 4.1).
 - Background: WPF JPEG decode of your screenshots, `OpacityMask` on a Grid for the seam, the seam's angle (relative gradient points).

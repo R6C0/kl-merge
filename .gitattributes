@@ -3,3 +3,6 @@ re/melee_damage.patch -text
 # batch files must stay CRLF: cmd.exe mis-finds goto labels in LF files (seen: "cannot find the batch label" when a label straddles a 512-byte boundary)
 *.bat text eol=crlf
 *.cmd text eol=crlf
+# pinned by sha256 (oggdec/stb_vorbis.sha256) and a shipped binary: no line-ending conversion, or the pin fails on a CRLF checkout
+tools/launcher/oggdec/stb_vorbis.c -text
+tools/launcher/bin/kl_oggdec.exe -text

@@ -7,6 +7,7 @@
 # Adds:              tools\kl_release.py                    (the installer half; needs python + zstandard on the tester's PC)
 #                    tools\launcher\ (as launcher\)          KLMergeLauncher.ps1, KLMerge.bat, README_TESTERS.md, KLMerge Setup.bat
 #                    tools\kl_launcher_music.py (as launcher\)  reads the launcher's music clip from the TESTER'S OWN Dead Men file
+#                    tools\launcher\bin\kl_oggdec.exe (as launcher\bin\)  decodes the Ogg Vorbis menu loop (stb_vorbis, public domain)
 #                    tools\launcher\bg\*.jpg (as launcher\bg\)  Josh's two background screenshots (dead_men.jpg, dog_days.jpg)
 #                    -Exe <KLMergeSetup.exe>  (optional)     the frozen installer; with it the tester needs no Python at all
 # Leaves out (maker only): parts\, _snap\, sha1cache.json, *.tmp*.   Never any game file: the make output holds none,
@@ -39,6 +40,14 @@ foreach ($f in @('KLMergeLauncher.ps1', 'KLMerge.bat', 'README_TESTERS.md', 'KLM
 }
 # the launcher's music tool (reads the clip from the tester's own Dead Men PC_Def.str at run time; no audio travels)
 Copy-Item -LiteralPath (Join-Path $tools 'kl_launcher_music.py') -Destination (Join-Path $stage 'launcher')
+# its pure-Python Vorbis fallback (slow, ~7 s, but no exe): used when kl_oggdec.exe and ffmpeg are both missing or fail
+Copy-Item -LiteralPath (Join-Path $tools 'kl_pyvorbis.py') -Destination (Join-Path $stage 'launcher')
+# the Ogg Vorbis decoder the music tool uses (public-domain stb_vorbis; built by tools\launcher\oggdec\build.bat; no game data)
+$oggdec = Join-Path $here 'bin\kl_oggdec.exe'
+if (Test-Path -LiteralPath $oggdec) {
+    New-Item -ItemType Directory -Path (Join-Path $stage 'launcher\bin') | Out-Null
+    Copy-Item -LiteralPath $oggdec -Destination (Join-Path $stage 'launcher\bin')
+} else { Write-Host 'note: tools\launcher\bin\kl_oggdec.exe is missing (run tools\launcher\oggdec\build.bat) - the launcher music then falls back to ffmpeg or the slow kl_pyvorbis.py' }
 # the background pictures: only launcher\bg\*.jpg, nothing else of bg\
 $bg = Join-Path $here 'bg'
 $jpgs = @()

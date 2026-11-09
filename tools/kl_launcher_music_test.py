@@ -9,10 +9,10 @@ A fake Dead Men-layout 'IOISNDSTREAM' file is written into a temp folder with
   - a mono IMA ADPCM clip encoded here (the decoder must give the encoder's own reconstruction, sample-exact),
   - a Vorbis clip under the first candidate's name (must be SKIPPED by the default pick),
   - a stereo ADPCM clip (must be refused),
-and the module's read, de-interleave, decode, trim, fade and .wav output are checked against the known samples.
+and, for Ogg Vorbis (codec 4), framed Ogg pages with real CRCs plus fake and real decoders (ogg_tests), and the module's read, de-interleave, decode, trim, fade and .wav output are checked against the known samples.
 exit 0 = all pass, 1 = a FAIL. Discovered by tools/kl_tests.py.
 """
-import array, io, math, os, shutil, struct, sys, tempfile, wave
+import array, io, math, os, shutil, struct, subprocess, sys, tempfile, wave
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -145,6 +145,147 @@ def read_wav(path):
     return ch, width, rate, n, s
 
 
+def ogg_page(serial, seq, htype, payload, granule=0, bad_crc=False):
+    segs = []
+    n = len(payload)
+    while n >= 255:
+        segs.append(255); n -= 255
+    segs.append(n)
+    page = bytearray(b'OggS' + struct.pack('<BBqIII', 0, htype, granule, serial, seq, 0) + bytes([len(segs)]) + bytes(segs) + payload)
+    crc = M.ogg_crc(bytes(page))
+    struct.pack_into('<I', page, 22, (crc ^ 1) if bad_crc else crc)
+    return bytes(page)
+
+
+def fake_ogg(npages=3, bad_at=None):
+    """A framed Ogg stream: page 0 starts with a Vorbis id header, the rest is junk (decoders must fail on it)."""
+    out = ogg_page(7, 0, 2, b'\x01vorbis' + b'\0' * 23, bad_crc=(bad_at == 0))
+    for i in range(1, npages):
+        out += ogg_page(7, i, 0, bytes((j * 7 + i) & 255 for j in range(600)), bad_crc=(bad_at == i))
+    return out
+
+
+def ogg_tests(tmp, M):
+    good = fake_ogg(3)
+    check(M.ogg_check(good) == 3, 'ogg_check: 3 framed pages with good CRCs pass')
+    for what, blob in (('a bad CRC in the middle page', fake_ogg(3, bad_at=1)),
+                       ('a bad CRC in the first page', fake_ogg(3, bad_at=0)),
+                       ('a cut-off last page', good[:-10]),
+                       ('trailing junk after the last page', good + b'xx'),
+                       ('a non-Ogg record', b'RIFF' + b'\x55' * 3000),
+                       ('an empty record', b''),
+                       ('an Ogg stream that is not Vorbis', ogg_page(1, 0, 2, b'\x7fFLAC' + bytes(30)))):
+        try:
+            M.ogg_check(blob); check(False, 'ogg_check refuses ' + what)
+        except M.NoClip as e:
+            check(True, 'ogg_check refuses %s (%s)' % (what, e))
+    # a codec-4 clip in a stream file: framed Ogg + junk payload -> CRC ok but no decoder can decode it
+    rate = 32000
+    fk = Fake()
+    fk.add(good, [dict(name='SFX/UserInterface/MenuLoop_01.wav', codec=M.VORBIS, samples=rate * 154, channels=2, rate=rate, bits=0, size=len(good), layer=0)])
+    tone_n = rate * 3
+    t = stereo(tone(tone_n, 220, rate), tone(tone_n, 330, rate))
+    fk.add(t.tobytes(), [dict(name='Music/InHouse/FA_Slash/FA_SlashMixPrison.wav', codec=M.PCM, samples=tone_n, channels=2, rate=rate, bits=16, size=len(t) * 2, layer=0, extra=struct.pack('<I', 4))])
+    d = os.path.join(tmp, 'ogg'); os.makedirs(d)
+    strpath = os.path.join(d, 'PC_Def.str')
+    fk.write(strpath)
+    out = os.path.join(d, 'o.wav')
+    real, real_py = M.vorbis_decoders, M.py_vorbis
+    M.py_vorbis = lambda: None                                    # the external-decoder cases first; kl_pyvorbis below
+    st = M.Stream(strpath)
+    c0 = st.clips[0]
+    try:
+        # (a) neither decoder -> MenuLoop skipped with a clear reason, falls to the next candidate (the PCM one)
+        M.vorbis_decoders = lambda: []
+        lines = []
+        c = M.extract(d, out, None, 2.0, lines.append)
+        check(c.name.endswith('FA_SlashMixPrison.wav'), 'decoder missing: falls to the next candidate (%s)' % c.name)
+        check(any('neither' in l and 'kl_oggdec' in l and 'ffmpeg' in l for l in lines), 'decoder missing: the log names both decoders')
+        check(M.main(['extract', '--dm', d, '--out', out, '--clip', 'MenuLoop_01']) == 2, 'decoder missing: --clip of the Vorbis clip -> exit 2')
+        # (b) a bad CRC is refused BEFORE any decoder is looked for
+        ran = []
+        M.vorbis_decoders = lambda: ran.append(1) or []
+        try:
+            M.decode_vorbis(c0, fake_ogg(3, bad_at=2), 5); check(False, 'bad CRC refused')
+        except M.NoClip as e:
+            check('CRC' in str(e) and not ran, 'bad CRC refused before a decoder is looked for (%s)' % e)
+        # (c) a decoder that fails -> next decoder; the second one works -> its samples (trimmed) come back
+        pcm = stereo(tone(rate * 4, 440, rate), tone(rate * 4, 550, rate))
+        wav = M.wav_bytes(pcm, 2, rate)
+        py = sys.executable
+        script = os.path.join(d, 'fakedec.py')
+        with open(script, 'w') as f:
+            f.write('import sys\nsys.stdin.buffer.read()\nsys.stderr.write("boom")\nsys.exit(3)\n')
+        wavpath = os.path.join(d, 'pcm.wav')
+        with open(wavpath, 'wb') as f:
+            f.write(wav)
+        script2 = os.path.join(d, 'fakedec2.py')
+        with open(script2, 'w') as f:
+            f.write('import sys\nsys.stdin.buffer.read()\nsys.stdout.buffer.write(open(%r, "rb").read())\n' % wavpath)
+        M.vorbis_decoders = lambda: [('bad', [py, script], 'wav'), ('good', [py, script2], 'wav')]
+        s, ch, r = M.decode_vorbis(c0, good, 1.5)
+        check((ch, r, len(s)) == (2, rate, 2 * int(1.5 * rate)) and s == pcm[:len(s)], 'first decoder fails, second is used; trimmed to 1.5 s exact')
+        M.vorbis_decoders = lambda: [('bad', [py, script], 'wav')]
+        try:
+            M.decode_vorbis(c0, good, 1.5); check(False, 'all decoders failing is refused')
+        except M.NoClip as e:
+            check('boom' in str(e), 'all decoders failing -> NoClip with the decoder message')
+        # (d) the full extract path with a working fake decoder: MenuLoop is CANDIDATES[0] and wins
+        M.vorbis_decoders = lambda: [('good', [py, script2], 'wav')]
+        c = M.extract(d, out, None, 2.0, lambda l: None)
+        check(c.name == 'SFX/UserInterface/MenuLoop_01.wav', 'MenuLoop_01 is the default pick when it decodes')
+        ch, width, r, frames, s = read_wav(out)
+        check((ch, width, r, frames) == (2, 2, rate, 2 * rate) and s[0] == 0 and s[-1] == 0, 'extract of the Vorbis clip: 2.0 s, faded, clip rate')
+        # (e) no exe and no ffmpeg: kl_pyvorbis is tried last; on the junk payload it fails and the error is named
+        M.vorbis_decoders = lambda: []
+        M.py_vorbis = real_py
+        if real_py():
+            try:
+                M.decode_vorbis(c0, good, 1.5); check(False, 'junk Ogg refused by kl_pyvorbis')
+            except M.NoClip as e:
+                check('kl_pyvorbis' in str(e), 'no exe/ffmpeg: kl_pyvorbis is tried and its refusal named (%s)' % e)
+        else:
+            check(False, 'kl_pyvorbis.py is beside kl_launcher_music.py')
+    finally:
+        M.vorbis_decoders, M.py_vorbis = real, real_py
+    check(M.CANDIDATES[0][0] == 'SFX/UserInterface/MenuLoop_01.wav', 'CANDIDATES[0] = the Dead Men main menu loop')
+    check(len(M.CANDIDATES) >= 5 and M.CANDIDATES[1][0].endswith('FA_SlashMixPrison.wav'), 'the older candidates follow it')
+    # parse_wav16: streamed header (sizes 0xffffffff, as ffmpeg pipes write it)
+    blob = bytearray(wav); struct.pack_into('<I', blob, 40, 0xffffffff); struct.pack_into('<I', blob, 4, 0xffffffff)
+    s, ch, r = M.parse_wav16(bytes(blob))
+    check((ch, r, len(s)) == (2, rate, len(pcm)) and s == pcm, 'parse_wav16 accepts a streamed (size 0xffffffff) header')
+    # real decoders (only when this PC has them): encode a sine with ffmpeg/libvorbis, ogg_check it, decode with each decoder
+    ff = shutil.which('ffmpeg')
+    if ff:
+        ogg = os.path.join(d, 'sine.ogg')
+        rr = subprocess.run([ff, '-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3:sample_rate=32000', '-ac', '2', '-c:a', 'libvorbis', ogg], capture_output=True)
+        if rr.returncode == 0 and os.path.isfile(ogg):
+            blob = open(ogg, 'rb').read()
+            check(M.ogg_check(blob) >= 2, 'a real ffmpeg-made Ogg Vorbis file passes ogg_check (CRC of every page)')
+            decs = real()
+            check(len(decs) >= 1, 'a decoder is found on this PC (%s)' % ', '.join(x[0] for x in decs))
+            for label, argv, _ in decs:
+                M.vorbis_decoders = lambda a=argv, l=label: [(l, a, 'wav')]
+                try:
+                    s, ch, r2 = M.decode_vorbis(c0, blob, 10)
+                finally:
+                    M.vorbis_decoders = real
+                peak = max(abs(x) for x in s)
+                check(ch == 2 and r2 == 32000 and abs(len(s) // 2 - 96000) < 2400 and 1000 < peak < 32767, '%s decodes a real Ogg: 32 kHz stereo ~3 s, sane peak (%d)' % (label, peak))
+            # kl_pyvorbis on the same file vs ffmpeg's own decode: same frames, at most a few LSB apart
+            ref = subprocess.run([ff, '-v', 'error', '-nostdin', '-i', ogg, '-f', 'wav', '-acodec', 'pcm_s16le', 'pipe:1'], capture_output=True)
+            if ref.returncode == 0:
+                fs, fch, frate = M.parse_wav16(ref.stdout)
+                ps, pch, prate = real_py().vorbis_decode(blob, 10 ** 9)
+                diff = max(abs(x - y) for x, y in zip(ps, fs)) if len(ps) == len(fs) else -1
+                check((pch, prate, len(ps)) == (fch, frate, len(fs)) and 0 <= diff <= 2, 'kl_pyvorbis = ffmpeg on a real Ogg (%d vs %d samples, max diff %d)' % (len(ps), len(fs), diff))
+        else:
+            print('  note ffmpeg has no libvorbis here: real-Ogg checks skipped')
+    else:
+        print('  note no ffmpeg: real-Ogg checks skipped')
+    st.close()
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix='klmusic_test_')
     try:
@@ -245,6 +386,9 @@ def run(tmp):
             check(True, why + ' (%s)' % e)
     st.close()
 
+    # ---- Ogg Vorbis (codec 4)
+    ogg_tests(tmp, M)
+
     # ---- fade + wav
     s = array.array('h', [10000] * (2 * 6 * rate))
     M.fade(s, 2, rate)
@@ -260,7 +404,7 @@ def run(tmp):
     lines = []
     c = M.extract(path, out, None, 2.0, lines.append)
     check(c.name == L2, 'default pick = %s (first candidate Vorbis -> skipped)' % L2.split('/')[-1])
-    check(any('skipped' in l and 'Vorbis' in l for l in lines), 'the log says why the FA theme was skipped')
+    check(any('skipped' in l and 'Ogg' in l for l in lines), 'the log says why the (non-Ogg) FA theme was skipped')
     ch, width, r, frames, s = read_wav(out)
     check((ch, width, r, frames) == (2, 2, rate, 2 * rate), 'written .wav: stereo 16-bit, clip rate, 2.0 s')
     check(s[0] == 0 and s[-1] == 0, 'written .wav is faded')
@@ -310,7 +454,7 @@ def run(tmp):
         rc = M.main(['extract', '--dm', tmp, '--out', out, '--list'])
     check(rc == 0 and 'FA_SlashMixPrison' in buf.getvalue() and 'vorbis' in buf.getvalue(), 'extract --list lists the Music/ clips with their codec')
     # the candidate table names real Dead Men paths and each has a reason
-    check(all(nm.startswith('Music/') and nm.endswith('.wav') and why for nm, why in M.CANDIDATES), 'CANDIDATES are Music/...wav names with a reason each')
+    check(all(nm.startswith(('Music/', 'SFX/')) and nm.endswith('.wav') and why for nm, why in M.CANDIDATES), 'CANDIDATES are Music/...wav names with a reason each')
     check('GUESS' in M.__doc__ and 'PROVEN' in M.__doc__, 'the module marks what is proven and what is guessed')
 
     if fails:

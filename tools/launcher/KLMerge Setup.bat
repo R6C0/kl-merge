@@ -145,8 +145,14 @@ if exist "%PKG%\launcher\KLMergeLauncher.ps1" (
     copy /Y "%PKG%\launcher\KLMergeLauncher.ps1" "%HERE%" >nul
     if exist "%PKG%\launcher\KLMerge.bat" copy /Y "%PKG%\launcher\KLMerge.bat" "%HERE%" >nul
     if exist "%PKG%\launcher\README_TESTERS.md" copy /Y "%PKG%\launcher\README_TESTERS.md" "%HERE%" >nul
-    rem the launcher's music tool (makes music\deadmen_launcher.wav from YOUR Dead Men files; no audio is downloaded)
+    rem the launcher's music tool (makes music\deadmen_menu.wav from YOUR Dead Men files; no audio is downloaded)
     if exist "%PKG%\launcher\kl_launcher_music.py" copy /Y "%PKG%\launcher\kl_launcher_music.py" "%HERE%" >nul
+    if exist "%PKG%\launcher\kl_pyvorbis.py" copy /Y "%PKG%\launcher\kl_pyvorbis.py" "%HERE%" >nul
+    rem the Ogg Vorbis decoder of the music tool (bin\kl_oggdec.exe, public-domain stb_vorbis; without it the tool tries ffmpeg, then kl_pyvorbis.py)
+    if exist "%PKG%\launcher\bin\kl_oggdec.exe" (
+        if not exist "%HERE%bin" mkdir "%HERE%bin"
+        copy /Y "%PKG%\launcher\bin\kl_oggdec.exe" "%HERE%bin\" >nul
+    )
     rem the two background pictures (bg\dead_men.jpg, bg\dog_days.jpg); the launcher also looks in package\launcher\bg itself
     if exist "%PKG%\launcher\bg\*.jpg" (
         if not exist "%HERE%bg" mkdir "%HERE%bg"

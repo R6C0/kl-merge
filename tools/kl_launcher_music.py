@@ -8,8 +8,8 @@ hold no game audio; when the file cannot be read or no candidate clip decodes, t
     python kl_launcher_music.py list    --dm "<Dead Men folder>" [TEXT]          clips whose name holds TEXT
     python kl_launcher_music.py extract --dm ... --out ... --list                 the same listing (Music/ only)
 
-Exit codes: 0 = the .wav was written; 2 = no usable clip (PC_Def.str missing / unreadable, the clip is Vorbis or
-an unknown codec, nothing of the candidate list is in the file) - the launcher then stays silent; 1 = usage.
+Exit codes: 0 = the .wav was written; 2 = no usable clip (PC_Def.str missing / unreadable, the clip is Vorbis and no decoder
+(bin/kl_oggdec.exe, ffmpeg, kl_pyvorbis.py) is here, or an unknown codec, nothing of the candidate list is in the file) - the launcher then stays silent; 1 = usage.
 Writes ONLY the one output file (a partial file is removed on failure).
 
 Output: standard RIFF/WAVE, 16-bit PCM, the clip's own rate and channels, at most --seconds (default 90) with a
@@ -38,10 +38,17 @@ WHAT IS PROVEN / GUESSED
     stream file carries those blocks and the game plays them).
   - IMA ADPCM: mono blocks decoded as kl_audio.ima_to_pcm does (the same tables); a STEREO ADPCM clip is refused
     (GUESS: its block layout was never looked at; no music clip is ADPCM in the notes).
-  - Vorbis (codec 4) is refused: no decoder here (the Retomoto rappel clip and Retomoto_Ambient_V2_Loop are Vorbis).
+  - Vorbis (codec 4): the record's bytes are a PLAIN Ogg Vorbis stream (found by 06 on MenuLoop_01: starts 'OggS', 259 pages,
+    'vorbis' id header at 29). GUESS (from that one clip): every codec-4 record is a complete Ogg stream at block offset
+    (behind a LIP block if any), length = the index 'audio size'. It is accepted only when every page has the 'OggS'
+    capture pattern and a good Ogg page CRC and the pages end exactly at the record's end; anything else is refused.
+    Decoded by tools/launcher/bin/kl_oggdec.exe (stb_vorbis, public domain, built by tools/launcher/oggdec/build.bat),
+    else ffmpeg on the PATH, else kl_pyvorbis.py beside this file (pure Python, by 6b: MenuLoop_01 = ffmpeg's frames,
+    max diff 1 LSB, ~7 s); with none of them the clip is skipped (exit 2 if it was the only one).
+    Mono/stereo only. Trim + fade as for PCM. (Retomoto rappel clip and Retomoto_Ambient_V2_Loop are Vorbis too.)
   - The default candidate order (CANDIDATES) and the codec of the FA theme are GUESSES; the file decides at run time.
 """
-import array, os, struct, sys
+import array, os, shutil, struct, subprocess, sys
 
 MAGIC = b'IOISNDSTREAM'
 HEAD, REC, ALIGN, LIP = 0x38, 72, 0x100, 0x1000
@@ -55,6 +62,8 @@ MAX_SECONDS = 600.0
 # Tried in this order when --clip is not given; the first that is in the file AND decodes wins.
 # Names as the Dead Men index spells them (re/campaign_fa_prison.md, re/retomoto_audio.md 4.1, re/bank_campaign.md).
 CANDIDATES = (
+    ('SFX/UserInterface/MenuLoop_01.wav',
+     'Dead Men main menu loop, SFX/UserInterface, Vorbis; the index says 154 s but it decodes to 77.0 s (found by 06: codec 4, 32000 Hz stereo, a plain Ogg stream; the only long clip under SFX/UserInterface)'),
     ('Music/InHouse/FA_Slash/FA_SlashMixPrison.wav',
      "Dead Men's own Fragile Alliance theme (251.6 s, settings field 150 of every FA level). GUESS: its codec is not in the notes; a Vorbis clip is skipped"),
     ('Music/InHouse/Japan/M09_A/TakyoAction_Layer2_TAmbient_Loop.wav',
@@ -81,7 +90,10 @@ class Clip(object):
                                                                  self.seconds(), self.layer, self.offset, self.size, self.name)
 
     def seconds(self):
-        return float(self.samples) / self.rate if self.rate else 0.0
+        # GUESS (MEASURED on MenuLoop_01 only): for Vorbis the index 'samples' counts samples of ALL channels (4928626 for a
+        # clip that ffmpeg and kl_oggdec both decode to 2464313 frames = 77.0 s at 32 kHz stereo), so divide by channels.
+        n = float(self.samples) / (self.channels if self.codec == VORBIS and self.channels else 1)
+        return n / self.rate if self.rate else 0.0
 
 
 class Stream(object):
@@ -239,6 +251,145 @@ def deinterleave(data, layers, want, frames):
     return out, periods * (rate // low)
 
 
+# ------------------------------------------------------------------ Ogg Vorbis (codec 4)
+def _crc_table():
+    t = []
+    for i in range(256):
+        r = i << 24
+        for _ in range(8):
+            r = ((r << 1) ^ 0x04c11db7) if r & 0x80000000 else (r << 1)
+        t.append(r & 0xffffffff)
+    return t
+
+
+_CRC = _crc_table()
+
+
+def ogg_crc(page):
+    """Ogg page checksum (CRC-32, poly 0x04c11db7, not reflected, init 0) of `page` with its CRC field (bytes 22..25) zeroed."""
+    r = 0
+    for b in page[:22] + b'\0\0\0\0' + page[26:]:
+        r = ((r << 8) & 0xffffffff) ^ _CRC[(r >> 24) ^ b]
+    return r
+
+
+def ogg_check(data):
+    """-> number of pages when `data` is exactly a sequence of valid Ogg pages whose first packet is a Vorbis id header;
+    raises NoClip otherwise (capture pattern, version, size, CRC of every page, no trailing bytes)."""
+    pos, pages = 0, 0
+    n = len(data)
+    while pos < n:
+        if n - pos < 27 or data[pos:pos + 4] != b'OggS' or data[pos + 4] != 0:
+            raise NoClip('not an Ogg stream (no OggS page at byte %d)' % pos)
+        nseg = data[pos + 26]
+        hlen = 27 + nseg
+        if pos + hlen > n:
+            raise NoClip('Ogg page %d is cut off' % pages)
+        plen = hlen + sum(bytearray(data[pos + 27:pos + hlen]))
+        if pos + plen > n:
+            raise NoClip('Ogg page %d is cut off' % pages)
+        page = data[pos:pos + plen]
+        if ogg_crc(page) != u32(page, 22):
+            raise NoClip('Ogg page %d has a bad CRC' % pages)
+        if pages == 0 and page[hlen:hlen + 7] != b'\x01vorbis':
+            raise NoClip('Ogg stream is not Vorbis (no id header in the first page)')
+        pos += plen
+        pages += 1
+    if pages == 0:
+        raise NoClip('empty Ogg stream')
+    return pages
+
+
+def vorbis_decoders():
+    """-> [(label, argv, via_stdin)] to try in order: the bundled kl_oggdec.exe, then ffmpeg on the PATH."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    out = []
+    names = [os.environ.get('KL_OGGDEC', '')] + [os.path.join(here, *p) for p in
+             (('bin', 'kl_oggdec.exe'), ('launcher', 'bin', 'kl_oggdec.exe'), ('kl_oggdec.exe',))]
+    if sys.platform == 'win32':                                   # the bundled one is a Windows exe
+        for p in names:
+            if p and os.path.isfile(p):
+                out.append(('kl_oggdec', [p, '-'], 'wav'))
+                break
+    ff = shutil.which('ffmpeg')
+    if ff:
+        out.append(('ffmpeg', [ff, '-v', 'error', '-nostdin', '-i', 'pipe:0', '-f', 'wav', '-acodec', 'pcm_s16le', 'pipe:1'], 'wav'))
+    return out
+
+
+def parse_wav16(blob):
+    """RIFF/WAVE 16-bit PCM bytes (data size may be 0 / 0xffffffff when streamed) -> (array('h'), channels, rate)."""
+    if blob[:4] != b'RIFF' or blob[8:12] != b'WAVE':
+        raise NoClip('decoder output is not a WAV')
+    pos, ch, rate, bits = 12, 0, 0, 0
+    while pos + 8 <= len(blob):
+        tag, size = blob[pos:pos + 4], u32(blob, pos + 4)
+        if tag == b'fmt ':
+            fmt, ch, rate = struct.unpack_from('<HHI', blob, pos + 8)
+            bits = struct.unpack_from('<H', blob, pos + 22)[0]
+            if fmt != 1 or bits != 16:
+                raise NoClip('decoder output is not 16-bit PCM')
+        elif tag == b'data':
+            body = blob[pos + 8:] if size in (0, 0xffffffff) or pos + 8 + size > len(blob) else blob[pos + 8:pos + 8 + size]
+            if not ch or not rate:
+                raise NoClip('decoder output has no fmt chunk')
+            return pcm_samples(body[:len(body) - len(body) % (2 * ch)]), ch, rate
+        pos += 8 + size + (size & 1)
+    raise NoClip('decoder output has no data chunk')
+
+
+def decode_vorbis(c, data, seconds):
+    """Ogg Vorbis record -> (array('h'), channels, rate), at most `seconds`. Raises NoClip."""
+    ogg_check(data)
+    decs = vorbis_decoders()
+    pyv = py_vorbis()
+    if not decs and not pyv:
+        raise NoClip('%s: Ogg Vorbis, but neither tools/launcher/bin/kl_oggdec.exe nor ffmpeg nor kl_pyvorbis.py is here to decode it' % c.name)
+    errs = []
+    for label, argv, _ in decs:
+        try:
+            r = subprocess.run(argv, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+            if r.returncode != 0 or not r.stdout:
+                errs.append('%s exit %s %s' % (label, r.returncode, r.stderr[:120].decode('latin1').strip()))
+                continue
+            s, ch, rate = parse_wav16(r.stdout)
+        except (OSError, subprocess.SubprocessError, NoClip) as e:
+            errs.append('%s: %s' % (label, e))
+            continue
+        if ch not in (1, 2):
+            errs.append('%s: %d channels' % (label, ch))
+            continue
+        del s[ch * int(min(seconds, MAX_SECONDS) * rate):]
+        return s, ch, rate
+    if pyv:                                                        # last: slow (~7 s for 77 s) but needs no exe
+        try:
+            s, ch, rate = pyv.vorbis_decode(bytes(data), int(min(seconds, MAX_SECONDS) * c.rate))
+        except Exception as e:                                     # VorbisError, or a bug on a stream it never saw
+            errs.append('kl_pyvorbis: %s' % e)
+        else:
+            if ch in (1, 2) and len(s):
+                del s[ch * int(min(seconds, MAX_SECONDS) * rate):]
+                return s, ch, rate
+            errs.append('kl_pyvorbis: %d channels, %d samples' % (ch, len(s)))
+    raise NoClip('%s: no decoder could decode the Ogg Vorbis stream (%s)' % (c.name, '; '.join(errs)))
+
+
+def py_vorbis():
+    """-> the kl_pyvorbis module beside this file, or None (not shipped / KL_NO_PYVORBIS=1 in the self-test)."""
+    if os.environ.get('KL_NO_PYVORBIS') == '1':
+        return None
+    here = os.path.dirname(os.path.abspath(__file__))
+    if not os.path.isfile(os.path.join(here, 'kl_pyvorbis.py')):
+        return None
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        import kl_pyvorbis
+    except ImportError:
+        return None
+    return kl_pyvorbis
+
+
 def decode(st, c, seconds):
     """-> (array('h') interleaved samples, channels, rate) of at most `seconds` of clip c."""
     frames = int(min(seconds, MAX_SECONDS) * c.rate)
@@ -282,7 +433,9 @@ def decode(st, c, seconds):
         s = ima_mono_to_pcm(data, block, min(frames, c.samples))
         return s, 1, c.rate
     if c.codec == VORBIS:
-        raise NoClip('%s: Ogg Vorbis (no decoder in the launcher)' % c.name)
+        if st.layers(c) != [c]:
+            raise NoClip('%s: Vorbis inside an interleaved set' % c.name)
+        return decode_vorbis(c, st.block_audio(c.offset, c.size), seconds)
     raise NoClip('%s: codec %d not understood' % (c.name, c.codec))
 
 

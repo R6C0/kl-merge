@@ -22,3 +22,5 @@ klhook/out/
 tools/launcher/bg/*
 !tools/launcher/bg/README.txt
 tools/launcher/music/
+# the one executable of the launcher that is shipped: public-domain stb_vorbis decoder (tools/launcher/oggdec/build.bat)
+!tools/launcher/bin/kl_oggdec.exe
