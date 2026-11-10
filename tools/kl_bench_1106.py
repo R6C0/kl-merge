@@ -311,6 +311,24 @@ KITS = {
                          hook=('C:/kl_build_1024/merged_1109land/dll_test/dinput8.dll', 'a7f87dc2183050659a2538d5b2502a50'),
                          ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'], keepalive=True,
                          solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # 11-10: DD10 EXIT SOUTH (tools/kl_dd10_exitsouth_1110.py, stage C:/kl_build_1024/dd10exitsouth_1110): otrExitLevel shrunk to z 650..900 (the van lane
+    # z 920..1140 was inside the old z 650..1550 box). On the live map 6aeb8208 + KLJoin 8f3034c0 and the 1110f TEST twin (merged_1110f_kahp). No keepalive:
+    # a run-over must show. PASS = the seat at z 780 calls the van (state 3), lives through the drive-in + wait (0 KILLED BY / FA_DieFrom), 0 faults
+    'dd10south1110': dict(map='DD10', slot='F07', entry=5, stage='C:/kl_build_1024/dd10exitsouth_1110', tag='.before-dd10exitsouth1110',
+                          live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                          files={'F07_Main.zip': 'e152950e', 'F07_Main.bots.zip': '604a9d9e', 'F07_Main.bots.base.md5': '88f4be29'},
+                          vancall=((None, None, None), (8300, 50, 780)),
+                          hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                          ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                          solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # same stage, the ledge route: [Join.3] Land=8300 0 750 is inside the new strip, so the landed seat must still call the van and live
+    'dd10southledge1110': dict(map='DD10', slot='F07', entry=5, stage='C:/kl_build_1024/dd10exitsouth_1110', tag='.before-dd10exitsouth1110',
+                               live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                               files={'F07_Main.zip': 'e152950e', 'F07_Main.bots.zip': '604a9d9e', 'F07_Main.bots.base.md5': '88f4be29'},
+                               ledge=((6820, 1600, 3100), (6515, 2555)),
+                               hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                               ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                               solo_secs=600, parts=('solo',), shots='90-400:10'),
     # run 11-09 09:20 PASS on purpose (0 asserts/faults/dumps, 0 KILLED BY): 'landed: moved from (8300, 0, 1100) to (8300, 10, 750)' 313 ms after the
     # request; van called at the landing (ShieldCalled ON, 3600 -> 9600 by HealFloor at state 3), waited, drove out empty, called again 9600/9600.
     # Only FAIL: session 0x1f/0x20 unseen (the script passed before the round ended, as lcmusicblive1109). merged_1109land SHIP installed 09:25.
