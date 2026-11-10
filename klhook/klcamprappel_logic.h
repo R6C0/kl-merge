@@ -161,7 +161,7 @@ static int kcamr_cam_handfrom(int v) { return v < 0 ? 3 : (v > 4 ? 3 : v); }
 static int kcamr_cam_ours_now(int cam_mode, int rappelling, int state, int hand_from, long since_end_ms, long tail_ms)
 {
     if (cam_mode != KCAMR_CAM_OURS) return 0;
-    if (rappelling) return state >= hand_from && state <= 4;
+    if (rappelling) return state >= hand_from;          /* state 5 (done, the landing edge) stays ours so the tail runs from the real landing */
     return since_end_ms >= 0 && since_end_ms <= tail_ms;
 }
 /* edge of the takeover: +1 take, -1 hand back, 0 none */

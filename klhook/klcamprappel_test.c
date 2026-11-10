@@ -76,7 +76,7 @@ int main(void)
     CHECK(!kcamr_cam_ours_now(KCAMR_CAM_HIS, 1, 3, 3, -1, 1500));                      /* his: never ours */
     CHECK(!kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 0, 3, -1, 1500) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 1, 3, -1, 1500) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 2, 3, -1, 1500)); /* start animation stays his */
     CHECK(kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 3, 3, -1, 1500) && kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 4, 3, -1, 1500));       /* descent + Jump_End */
-    CHECK(!kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 5, 3, -1, 1500) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, -1, 3, -1, 1500));    /* state 5 / unknown while still rappelling: not ours */
+    CHECK(kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 5, 3, -1, 1500) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, -1, 3, -1, 1500));    /* state 5 (landing edge) stays ours, unknown state does not */
     CHECK(kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 3, 0, 1500) && kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 3, 1500, 1500));    /* tail after landing */
     CHECK(!kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 3, 1501, 1500) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 3, -1, 1500)); /* tail over / never rappelled */
     CHECK(kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 0, 0, -1, 0) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 0, 1, 0));            /* HandFrom 0, no tail */
