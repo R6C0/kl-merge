@@ -45,6 +45,30 @@ int main(void)
     CHECK(kcamr_idle(0, 0) == 1);
     CHECK(kcamr_idle(1, 1) == 1);
     CHECK(kcamr_idle(1, 0) == 0);
+    /* landing camera */
+    CHECK(kcamr_land_parse(0) == KCAMR_L_OFF && kcamr_land_parse("") == KCAMR_L_OFF);
+    CHECK(kcamr_land_parse("auto") == KCAMR_L_AUTO && kcamr_land_parse("AUTO") == KCAMR_L_AUTO && kcamr_land_parse("4") == KCAMR_L_AUTO);
+    CHECK(kcamr_land_parse("turn") == KCAMR_L_TURN && kcamr_land_parse("cam") == KCAMR_L_CAM && kcamr_land_parse("turncam") == KCAMR_L_TURNCAM);
+    CHECK(kcamr_land_parse("5") == KCAMR_L_OFF && kcamr_land_parse("camx") == KCAMR_L_OFF);
+    CHECK(kcamr_land_resolve(KCAMR_L_AUTO, 1, 1) == KCAMR_L_TURNCAM);   /* wall ahead (M02) */
+    CHECK(kcamr_land_resolve(KCAMR_L_AUTO, 1, 0) == KCAMR_L_CAM);       /* open (M09) */
+    CHECK(kcamr_land_resolve(KCAMR_L_AUTO, 0, 1) == KCAMR_L_CAM);       /* ray unavailable: cam only, never a blind flip */
+    CHECK(kcamr_land_resolve(KCAMR_L_TURN, 1, 1) == KCAMR_L_TURN);
+    CHECK(kcamr_land_resolve(KCAMR_L_OFF, 1, 1) == KCAMR_L_OFF);
+    CHECK(kcamr_landed(1, 0x10, 5, 1, 0) && !kcamr_landed(0, 0x10, 5, 1, 0));
+    CHECK(!kcamr_landed(1, 0x10, 4, 1, 0) && !kcamr_landed(1, 0x10, 5, 0x10, 0) && !kcamr_landed(1, 0x10, 5, 1, 1) && !kcamr_landed(1, 3, 5, 1, 0));
+    {
+        int yi; float M[9];
+        for (yi = 0; yi < 360; yi += 15) {
+            kcamr_yaw_matrix((float)yi, M);
+            CHECK(fabs(kcamr_yaw(M) - yi) < 0.05 || fabs(fabs(kcamr_yaw(M) - yi) - 360) < 0.05);
+        }
+        M[0] = 0; M[2] = 0; CHECK(kcamr_yaw(M) < 0);
+    }
+    CHECK(fabs(kcamr_land_yaw(100, KCAMR_L_TURN) - 280) < 1e-3 && fabs(kcamr_land_yaw(200, KCAMR_L_TURNCAM) - 20) < 1e-3);
+    CHECK(fabs(kcamr_land_yaw(200, KCAMR_L_CAM) - 200) < 1e-3);
+    CHECK(kcamr_land_cam(KCAMR_L_CAM) == 1 && kcamr_land_cam(KCAMR_L_TURNCAM) == 1 && kcamr_land_cam(KCAMR_L_TURN) == 0 && kcamr_land_cam(KCAMR_L_OFF) == 0);
+    CHECK(kcamr_camtune_idle(1, 1) && !kcamr_camtune_idle(0, 1) && !kcamr_camtune_idle(1, 0));
     printf("RESULT: %s (%d checks, %d failed)\n", fails ? "FAIL" : "PASS", checks, fails);
     return fails != 0;
 }

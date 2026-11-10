@@ -72,12 +72,12 @@
 typedef struct { char path[MAX_PATH]; klcmpc_ent *e; int n; HANDLE src; CRITICAL_SECTION cs; int lastEnt, lastBlk; short *blk; BYTE *srcbuf; DWORD tbl, cnt; } klcmpr_strfile;
 
 static struct {
-    int on, routing, trigger, saves, reload, progress, ach, adpcm, log;
+    int on, routing, trigger, saves, reload, progress, ach, adpcm, strredir, log;
     DWORD reload_delay, auto_delay, t0, t_slow, fe_tick;
     char auto_id[8]; int auto_mode, auto_done;
     char scene[8], prev[8]; volatile int in_campaign; int quitreq;
     char rid[8], rpath[64];
-    char appdir[MAX_PATH], inipath[MAX_PATH];
+    char appdir[MAX_PATH], inipath[MAX_PATH], dmdir[MAX_PATH];
     volatile int reload_pending, sticky, reload_probe; volatile LONG reload_opens;
     struct klcmpc_steady steady;
     CRITICAL_SECTION cs;
@@ -96,6 +96,45 @@ static void klcmpr_mkdirs(const char *d)
     snprintf(t, sizeof t, "%s", d);
     for (p = t + 3; *p; p++) if (*p == '\\') { *p = 0; CreateDirectoryA(t, NULL); *p = '\\'; }
     CreateDirectoryA(t, NULL);
+}
+
+static int klcmpr_isdir_with_def(const char *d)
+{
+    char f[MAX_PATH]; snprintf(f, sizeof f, "%s\\PC_Def.str", d);
+    return GetFileAttributesA(f) != INVALID_FILE_ATTRIBUTES;
+}
+
+static void klcmpr_find_dm(void)
+{   /* Dead Men's folder for the ".." stream names in the converted .SND files. [Campaign] DeadMenDir= wins; else DD\..\Kane and Lynch Dead Men (then no redirect is
+       needed: dmdir stays empty); else every library in <steamapps>\libraryfolders.vdf (<DD> = <steamapps>\common\<game>). MINE; leaves dmdir empty when not found. */
+    char cfg[MAX_PATH] = "", f[MAX_PATH], *txt; HANDLE h; DWORD got = 0, sz; int n, i;
+    klcmpr.dmdir[0] = 0;
+    GetPrivateProfileStringA("Campaign", "DeadMenDir", "", cfg, sizeof cfg, klh_ini);
+    if (cfg[0]) {
+        size_t L = strlen(cfg); while (L && (cfg[L - 1] == '\\' ||cfg[L - 1] == '/')) cfg[--L] = 0;
+        if (klcmpr_isdir_with_def(cfg)) { snprintf(klcmpr.dmdir, sizeof klcmpr.dmdir, "%s", cfg); return; }
+        klog("campaign: DeadMenDir '%s' has no PC_Def.str: searching the Steam libraries", cfg);
+    }
+    snprintf(f, sizeof f, "%s\\..\\Kane and Lynch Dead Men", dir);
+    if (klcmpr_isdir_with_def(f)) { klog("campaign: Dead Men stream folder is next to Dog Days: no redirect needed"); return; }
+    snprintf(f, sizeof f, "%s\\..\\..\\libraryfolders.vdf", dir);
+    h = CreateFileA(f, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) { klog("campaign: no Dead Men folder found (%s unreadable): its voice lines stay silent, set [Campaign] DeadMenDir=", f); return; }
+    sz = GetFileSize(h, NULL);
+    if (sz == INVALID_FILE_SIZE || sz > (1u << 20) || !(txt = (char *)malloc(sz + 1))) { CloseHandle(h); return; }
+    if (!ReadFile(h, txt, sz, &got, NULL)) got = 0;
+    CloseHandle(h); txt[got] = 0;
+    {   char (*lib)[MAX_PATH] = (char (*)[MAX_PATH])calloc(16, MAX_PATH);
+        n = lib ? klcmpc_vdf_paths(txt, &lib[0][0], MAX_PATH, 16) : 0;
+        for (i = 0; i < n && !klcmpr.dmdir[0]; i++) {
+            snprintf(f, sizeof f, "%s\\steamapps\\common\\Kane and Lynch Dead Men", lib[i]);
+            if (klcmpr_isdir_with_def(f)) snprintf(klcmpr.dmdir, sizeof klcmpr.dmdir, "%s", f);
+        }
+        free(lib);
+    }
+    free(txt);
+    if (klcmpr.dmdir[0]) klog("campaign: Dead Men folder %s (stream names '..\\Kane and Lynch Dead Men\\*.str' are redirected there)", klcmpr.dmdir);
+    else klog("campaign: no Dead Men folder found in the Steam libraries: its voice lines stay silent, set [Campaign] DeadMenDir=");
 }
 
 static void klcmpr_paths(void)
@@ -250,6 +289,16 @@ static LPCSTR klcmpr_file(LPCSTR n, DWORD acc, DWORD disp)
     b = klcmpc_base(n); bl = strlen(b);
     if (bl < 5) return n;
     ext = b + bl - 4;
+    if (klcmpr.strredir && klcmpr.dmdir[0] && _stricmp(ext, ".str") == 0 && !(acc & (GENERIC_WRITE | GENERIC_ALL))) {
+        static char sring[4][MAX_PATH]; static volatile LONG sri;     /* READ nothing: his two games share one steamapps\common, so his "..\Kane and Lynch Dead Men\" just opened; MINE */
+        char *alt = sring[InterlockedIncrement(&sri) & 3];
+        if (GetFileAttributesA(n) == INVALID_FILE_ATTRIBUTES && klcmpc_dm_str_target(n, klcmpr.dmdir, alt, MAX_PATH) &&
+            GetFileAttributesA(alt) != INVALID_FILE_ATTRIBUTES) {
+            static volatile LONG nlog;
+            if (klcmpr.log && InterlockedIncrement(&nlog) <= 12) klog("campaign: stream redirect: %s -> %s", n, alt);
+            return alt;
+        }
+    }
     if (_stricmp(ext, ".zip") == 0) {
         if (!(acc & (GENERIC_WRITE | GENERIC_ALL)) && klcmpc_scene_of_path(n, id)) klcmpr_scene_arrived(id);
         return n;
@@ -401,8 +450,8 @@ static void klcmpr_str_register(HANDLE h, const char *n)
         memset(sf, 0, sizeof *sf);
         snprintf(sf->path, sizeof sf->path, "%s", n);
         {   /* the index: cnt records of 72 bytes at tbl; the meta block of each (36 bytes) */
-            BYTE *t = (BYTE *)malloc((size_t)cnt * 72); DWORD g2 = 0;
-            ents = (klcmpc_ent *)malloc(sizeof(klcmpc_ent) * cnt);
+            BYTE *t = (BYTE *)malloc((size_t)cnt * 72 + 1); DWORD g2 = 0;       /* +1: an empty stream (PC_Eng.str, count 0) still registers */
+            ents = (klcmpc_ent *)malloc(sizeof(klcmpc_ent) * (cnt + 1));
             if (t && ents) {
                 SetFilePointer(r2, (LONG)tbl, NULL, FILE_BEGIN);
                 klcmpr_real_ReadFile(r2, t, cnt * 72, &g2, NULL);
@@ -503,6 +552,7 @@ static void klcmpr_init(void)
     klcmpr.progress = GetPrivateProfileIntA("Campaign", "Progress", 0, klh_ini) != 0;
     klcmpr.ach      = GetPrivateProfileIntA("Campaign", "AchievementGuard", 0, klh_ini) != 0;
     klcmpr.adpcm    = GetPrivateProfileIntA("Campaign", "Adpcm", 0, klh_ini) != 0;
+    klcmpr.strredir = GetPrivateProfileIntA("Campaign", "StreamRedirect", 1, klh_ini) != 0;
     klcmpr.log      = GetPrivateProfileIntA("Campaign", "Log", 1, klh_ini) != 0;
     klcmpr.reload_delay = (DWORD)GetPrivateProfileIntA("Campaign", "ReloadDelayMs", 2000, klh_ini);
     klcmpr.auto_delay = (DWORD)GetPrivateProfileIntA("Campaign", "AutoLoadDelayMs", 12000, klh_ini);
@@ -513,16 +563,17 @@ static void klcmpr_init(void)
     klcmpr.t0 = GetTickCount();
     InitializeCriticalSection(&klcmpr.cs); InitializeCriticalSection(&klcmpr_strcs);
     klcmpr_paths();
+    if (klcmpr.strredir) klcmpr_find_dm();
     if (klcmpr.routing) {
         n = klh_iat("MSVCR90.dll", "strncpy", (void *)klcmpr_strncpy, (void **)&klcmpr_real_strncpy);
         klog("campaign: Routing: strncpy import %s", n && klcmpr_real_strncpy ? "hooked" : "NOT hooked: campaign scene ids will not resolve");
         if (!klcmpr_real_strncpy) klcmpr.routing = 0;
     }
-    if (klcmpr.saves || klcmpr.progress || klcmpr.adpcm || klcmpr.ach || klcmpr.reload) {
+    if (klcmpr.saves || klcmpr.progress || klcmpr.adpcm || klcmpr.ach || klcmpr.reload || klcmpr.dmdir[0]) {
         /* scene tracking + save redirect + .str registration all ride on one CreateFileA wrapper, chained to whatever the slot held (klslot.c's) */
         n = klh_iat("KERNEL32.dll", "CreateFileA", (void *)klcmpr_CreateFileA, (void **)&klcmpr_real_CreateFileA);
         klog("campaign: CreateFileA import %s", n && klcmpr_real_CreateFileA ? "hooked" : "NOT hooked: no scene tracking / save redirect / ADPCM");
-        if (!klcmpr_real_CreateFileA) { klcmpr.saves = klcmpr.progress = klcmpr.adpcm = klcmpr.reload = 0; }
+        if (!klcmpr_real_CreateFileA) { klcmpr.saves = klcmpr.progress = klcmpr.adpcm = klcmpr.reload = 0; klcmpr.dmdir[0] = 0; }
     }
     if (klcmpr.adpcm) {
         n = klh_iat("KERNEL32.dll", "ReadFile", (void *)klcmpr_ReadFile, (void **)&klcmpr_real_ReadFile);
@@ -530,7 +581,8 @@ static void klcmpr_init(void)
         klog("campaign: Adpcm: ReadFile %s, CloseHandle %s", klcmpr_real_ReadFile ? "hooked" : "NOT hooked", klcmpr_real_CloseHandle ? "hooked" : "NOT hooked");
         if (!klcmpr_real_ReadFile || !klcmpr_real_CloseHandle) { klcmpr.adpcm = 0; klog("campaign: Adpcm off (a lone hook is never left in)"); }
     }
-    klcmpr.on = klcmpr.routing || klcmpr.trigger || klcmpr.saves || klcmpr.progress || klcmpr.ach || klcmpr.adpcm || klcmpr.auto_id[0];
+    klcmpr.on = klcmpr.routing || klcmpr.trigger || klcmpr.saves || klcmpr.progress || klcmpr.ach || klcmpr.adpcm || klcmpr.dmdir[0] || klcmpr.auto_id[0];
+    klog("campaign: Dead Men streams: redirect %s (dir '%s'), adpcm %d", klcmpr.strredir ? "on" : "off", klcmpr.dmdir, klcmpr.adpcm);
     klog("campaign: core %s (routing %d trigger %d autoload '%s' saves %d reload %d progress %d achievements %d adpcm %d) data %s",
          klcmpr.on ? "on" : "idle", klcmpr.routing, klcmpr.trigger, klcmpr.auto_id, klcmpr.saves, klcmpr.reload, klcmpr.progress, klcmpr.ach, klcmpr.adpcm, klcmpr.appdir);
 }

@@ -17,8 +17,13 @@ ReloadDelayMs=2000
 Progress=0
 ; Block Steam achievement awards while a campaign level is active. (recommended off)
 AchievementGuard=0
-; Decode Dead Men IMA-ADPCM .str sound streams at read time (needs the Dead Men .str files in the level). (recommended off)
-Adpcm=0
+; Decode Dead Men IMA-ADPCM .str sound streams at read time (needs the Dead Men .str files in the level). (recommended on)
+Adpcm=1
+; The converted .SND files open "..\Kane and Lynch Dead Men\PC_*.str" (relative to the Dog Days folder); with Dead Men on another drive that open fails
+; and every Dead Men voice line is silent. The hook redirects it to the real folder (next to Dog Days, else Steam libraryfolders.vdf). (recommended on)
+StreamRedirect=1
+; Force the Dead Men folder (the one holding PC_Def.str); empty = find it.
+DeadMenDir=
 ; Folder for saves and progress; empty = %LOCALAPPDATA%\A Newer Perspective. (recommended off)
 DataDir=
 ; Write campaign lines to KLHook.log. (recommended off)

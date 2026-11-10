@@ -131,6 +131,7 @@ struct klcam_cfg {
     int leangate, ufilter, ugate, utarget, logkeys, nandump, nanrepair;
     int uonline;      /* [Camera] UnstickOnline (default 0): the Unstick remedies write in a network session too (camera object only, see klcam_cw) */
     float blendscale, recoverspeed, fliptime, fliptimespecial, shakescale, fovstep;
+    int campoff;                                    /* [Camera] CampaignOff: idle on a Dead Men campaign level (1110) */
     BYTE shakekeep[41];
 };
 struct klcam_rest { DWORD at; float orig; };
@@ -1059,12 +1060,26 @@ static void klcam_nan(DWORD cam, const float *Pv, float rawdt, long frame, int b
     }
 }
 
+/* 1110 [Camera] CampaignOff: on a Dead Men campaign level (klcmp_level_active(), cached 1 s) the whole FA camera rework idles, so Dead Men's own
+   camera boxes, cutscene blends and shakes run unscaled. No write is made while idle; floats written EARLIER in the same process (an FA round
+   before the campaign) stay until the game restarts (GUESS: the usual path is the launcher straight into a campaign level). */
+static int klcam_campaign_idle(void)
+{
+    static DWORD t; static int v, told; DWORD now;
+    if (!kc.c.campoff) return 0;
+    now = GetTickCount();
+    if (!t || now - t > 1000) { t = now ? now : 1; v = klcmp_level_active() != 0; }
+    if (v && !told) { told = 1; klog("cam: CampaignOff: campaign level - the FA camera tuning idles"); }
+    return v;
+}
+
 static void klcam_tick(int game_thread)
 {
     DWORD gd, P, cam, sys; LARGE_INTEGER now; float dt = 0, rawdt = 0, E[3], feet[3], Pv[3], Pv2[3], node[3], cd = 0, blend = 0, sideb = 0, fov = 0; BYTE blocked = 0, side = 0, cs = 0;
     long frame; int stuck = 0, frozen = 0, alive = 0; DWORD gnow, rb; struct klcam_fr f; struct klcam_xs *x = &kc.x;
     if (!kc.c.enable || !klh_exe_ok || !game_thread) return;
     if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLCAM_RCB_RA)) return;
+    if (klcam_campaign_idle()) return;
     QueryPerformanceCounter(&now);
     if (!x->have0) { x->have0 = 1; x->t0 = now; x->qprev = now; }
     x->T = (double)(now.QuadPart - x->t0.QuadPart) / (double)kc.qf.QuadPart;
@@ -1213,6 +1228,7 @@ static void klcam_init(void)
     kc.dtavg = 0.016;
     c->enable = klcam_ini_i("Enable", 1) != 0;
     if (!c->enable) return;
+    c->campoff = klcam_ini_i("CampaignOff", 0) != 0;      /* (recommended on) */
     c->log = klcam_ini_i("Log", 0) != 0;
     c->logkeys = klcam_ini_i("LogKeys", 1) != 0;
     c->loghz = klcam_ini_i("LogHz", 20); if (c->loghz < 1) c->loghz = 1; if (c->loghz > 120) c->loghz = 120;

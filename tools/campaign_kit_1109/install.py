@@ -37,8 +37,11 @@ ReloadDelayMs=2000
 Progress=1
 ; no Steam achievements while a campaign level runs (recommended on)
 AchievementGuard=1
-; Dead Men IMA-ADPCM .str streams decoded at read time (recommended off until benched)
-Adpcm=0
+; Dead Men IMA-ADPCM .str streams decoded at read time (recommended on)
+Adpcm=1
+; level .SND files open "..\Kane and Lynch Dead Men\PC_*.str"; redirect to the real Dead Men folder (recommended on)
+StreamRedirect=1
+DeadMenDir=
 DataDir=
 Log=1
 [CampGuard]

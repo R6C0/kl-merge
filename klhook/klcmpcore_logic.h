@@ -134,7 +134,54 @@ static int klcmpc_parse_load(const char *line, char *id, int *mode)
 static int klcmpc_str_is_dm(const unsigned char *h38)
 {
     unsigned long cnt = (unsigned long)h38[0x1c] | ((unsigned long)h38[0x1d] << 8) | ((unsigned long)h38[0x1e] << 16) | ((unsigned long)h38[0x1f] << 24);
-    return memcmp(h38, "IOISNDSTREAM", 12) == 0 && cnt > 0 && cnt < 100000;
+    unsigned long w20 = (unsigned long)h38[0x20] | ((unsigned long)h38[0x21] << 8) | ((unsigned long)h38[0x22] << 16) | ((unsigned long)h38[0x23] << 24);
+    unsigned long w24 = (unsigned long)h38[0x24] | ((unsigned long)h38[0x25] << 8) | ((unsigned long)h38[0x26] << 16) | ((unsigned long)h38[0x27] << 24);
+    if (memcmp(h38, "IOISNDSTREAM", 12) != 0 || cnt >= 100000) return 0;
+    if (cnt > 0) return 1;
+    /* EMPTY Dead Men stream (PC_Eng.str, 56 bytes: tableOffset 256, count 0): the same two bytes-words tell it from Dog Days' empty one.
+       MEASURED on all 6 PC_*.str of Dead Men (+0x20 = 256, +0x24 = 0 every time) and Dog Days' PC_Def/PC_Eng (+0x24 = 256, +0x20 = its count).
+       Why it matters (READ anp_loader.c zerofill note): read raw, Dog Days takes +0x20 = 256 as the COUNT of a table that is not in the file
+       and parses stale buffer bytes as LIP / audio. The first port left it raw (cnt > 0 only). */
+    return w20 == 256 && w24 == 0;
+}
+
+/* The level .SND files name Dead Men's streams RELATIVE to the Dog Days folder: "..\Kane and Lynch Dead Men\PC_Def.str" (READ
+   third_party/anp/tools/port_level.py:99 DM_STREAM_DIR; luvsic's two games share one steamapps\common). When Dead Men is elsewhere (the owner's
+   is on G:) that open fails and every Dead Men voice line is silent. Maps such a name to <dmdir>\<base>. 1 = out filled. MINE. */
+static int klcmpc_dm_str_target(const char *n, const char *dmdir, char *out, int cap)
+{
+    static const char key[] = "kane and lynch dead men";
+    size_t L = n ? strlen(n) : 0, kl = sizeof key - 1, i, j; const char *b;
+    if (!dmdir || !dmdir[0] || L < 5 || !klcmpc_ieq(n + L - 4, ".str", 4)) return 0;
+    for (i = 0; i + kl <= L; i++) {
+        for (j = 0; j < kl; j++) { char c = n[i + j]; if (c >= 'A' && c <= 'Z') c = (char)(c + 32); if (c != key[j]) break; }
+        if (j == kl && (i == 0 || n[i - 1] == '\\' || n[i - 1] == '/') && (n[i + kl] == '\\' || n[i + kl] == '/')) break;
+    }
+    if (i + kl > L) return 0;
+    b = klcmpc_base(n);
+    if (!b[0] || (int)(strlen(dmdir) + strlen(b) + 2) > cap) return 0;
+    sprintf(out, "%s\\%s", dmdir, b);
+    return 1;
+}
+
+/* libraryfolders.vdf text -> its "path" values ("G:\\SteamLibrary" -> G:\SteamLibrary), at most max, each shorter than cap. Returns the count. */
+static int klcmpc_vdf_paths(const char *txt, char *out, int cap, int max)
+{
+    int n = 0; const char *p = txt;
+    while (p && (p = strstr(p, "\"path\"")) != NULL && n < max) {
+        const char *q = p + 6; int k = 0;
+        while (*q == ' ' || *q == '\t') q++;
+        p = q;
+        if (*q != '"') continue;
+        for (q++; *q && *q != '"' && k < cap - 1; q++) {
+            if (*q == '\\' && q[1] == '\\') q++;
+            out[n * cap + k++] = *q;
+        }
+        out[n * cap + k] = 0;
+        if (*q == '"' && k) n++;
+        p = q;
+    }
+    return n;
 }
 static unsigned long klcmpc_rd32(const unsigned char *p) { return (unsigned long)p[0] | ((unsigned long)p[1] << 8) | ((unsigned long)p[2] << 16) | ((unsigned long)p[3] << 24); }
 static void klcmpc_wr32(unsigned char *p, unsigned long v) { p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24); }

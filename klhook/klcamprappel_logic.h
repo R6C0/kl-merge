@@ -77,4 +77,62 @@ static int kcamr_idle(int campaign_active, int fa_rappel_on_level)
     return !campaign_active || fa_rappel_on_level;
 }
 
+/* ---- landing camera (READ rappel.inc 69-73, 273-282, 360-385; luvsic 15 Oct). After the native rappel the player faces
+ * the wall while the camera keeps the outward descent look. [CampRappel] Land: off | turn | cam | turncam | auto.
+ * turn = flip him 180 deg in place, cam = keep the facing and re-aim the camera behind him (force teleport), turncam =
+ * both, auto = a ray 150 cm ahead from chest height: wall -> turncam (M02), open -> cam (M09). */
+enum { KCAMR_L_OFF = 0, KCAMR_L_TURN, KCAMR_L_CAM, KCAMR_L_TURNCAM, KCAMR_L_AUTO };
+static int kcamr_land_parse(const char *s)
+{
+    static const char *nm[] = { "off", "turn", "cam", "turncam", "auto" };
+    int i;
+    if (!s || !*s) return KCAMR_L_OFF;
+    if (s[0] >= '0' && s[0] <= '4' && !s[1]) return s[0] - '0';
+    for (i = 0; i < 5; i++) {
+        const char *a = s, *b = nm[i];
+        while (*a && *b && ((*a | 0x20) == *b)) { a++; b++; }
+        if (!*a && !*b) return i;
+    }
+    return KCAMR_L_OFF;
+}
+/* the final landing action: auto resolves by the wall ray (hit > 0 = wall ahead), anything else is kept */
+static int kcamr_land_resolve(int land, int ray_ok, int ray_hit)
+{
+    if (land != KCAMR_L_AUTO) return land;
+    return (ray_ok && ray_hit > 0) ? KCAMR_L_TURNCAM : KCAMR_L_CAM;
+}
+/* a landing = the previous sample was the rappel movement (id 0x10) in state 5 and now it is another movement with the rappel inactive */
+static int kcamr_landed(int have_prev, int prev_movid, int prev_state, int movid, int active)
+{
+    return have_prev && prev_movid == 0x10 && prev_state == 5 && movid != 0x10 && !active;
+}
+/* the yaw (degrees 0..360) of the probe forward F = -row0 (fwd = 1, luvsic's default), -1 when the row is degenerate */
+static float kcamr_yaw(const float *M)
+{
+    float fx = -M[0], fz = -M[2], y;
+    if (fx * fx + fz * fz < 1e-6f) return -1.0f;
+    y = (float)atan2(fx, fz) * 57.2957795f;
+    return y < 0 ? y + 360.0f : y;
+}
+/* inverse of kcamr_yaw in the 0x857110 row layout: row0 = -F, row1 = up, row2 = (row0.z, 0, -row0.x) */
+static void kcamr_yaw_matrix(float yawDeg, float *M)
+{
+    float a = yawDeg * 0.0174532925f, ax = -(float)sin(a), az = -(float)cos(a);
+    M[0] = ax; M[1] = 0; M[2] = az;
+    M[3] = 0;  M[4] = 1; M[5] = 0;
+    M[6] = az; M[7] = 0; M[8] = -ax;
+}
+/* the yaw to teleport to: the current yaw, plus 180 for turn, wrapped to 0..360 */
+static float kcamr_land_yaw(float yaw, int land_final)
+{
+    float y = yaw + ((land_final & 1) ? 180.0f : 0.0f);
+    if (y >= 360.0f) y -= 360.0f;
+    return y;
+}
+/* does the final landing action re-aim the camera (force teleport)? */
+static int kcamr_land_cam(int land_final) { return (land_final >> 1) & 1; }
+
+/* [Camera] CampaignOff: our FA camera tuning (klcam.c) idles while a campaign level is loaded */
+static int kcamr_camtune_idle(int campaign_off_cfg, int campaign_level) { return campaign_off_cfg && campaign_level; }
+
 #endif

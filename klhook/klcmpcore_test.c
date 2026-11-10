@@ -63,6 +63,37 @@ int main(void)
     klcmpc_wr32(dm + 0x1c, 0); CHECK(!klcmpc_str_is_dm(dm));
     klcmpc_wr32(dm + 0x1c, 100000); CHECK(!klcmpc_str_is_dm(dm));
     memcpy(dm, "IOISNDSTREAX", 12); klcmpc_wr32(dm + 0x1c, 5); CHECK(!klcmpc_str_is_dm(dm));
+    /* the EMPTY Dead Men PC_Eng.str (MEASURED header words +0x18.. = 256, 0, 256, 0) is Dead Men's; Dog Days' empty one (256, 0, 0, 256) is not */
+    { unsigned char em[0x38], de[0x38];
+      memset(em, 0, sizeof em); memcpy(em, "IOISNDSTREAM", 12); klcmpc_wr32(em + 0x18, 256); klcmpc_wr32(em + 0x1c, 0); klcmpc_wr32(em + 0x20, 256); klcmpc_wr32(em + 0x24, 0);
+      memcpy(de, em, sizeof de); klcmpc_wr32(de + 0x20, 0); klcmpc_wr32(de + 0x24, 256);
+      CHECK(klcmpc_str_is_dm(em)); CHECK(!klcmpc_str_is_dm(de));
+      klcmpc_str_hdr_dd(em, dd);                                                                   /* converted: count 0 at +0x20, 256 at +0x24 = Dog Days' empty header */
+      CHECK(klcmpc_rd32(dd + 0x20) == 0 && klcmpc_rd32(dd + 0x24) == 256 && klcmpc_rd32(dd + 0x18) == 256 && klcmpc_rd32(dd + 0x1c) == 0);
+      /* Dog Days' real PC_Def header (1878609782, 0, 10239, 256) stays Dog Days' */
+      klcmpc_wr32(de + 0x18, 1878609782UL); klcmpc_wr32(de + 0x20, 10239); CHECK(!klcmpc_str_is_dm(de));
+      /* Dead Men's real PC_Def header (1376706931, 6739, 256, 0) */
+      klcmpc_wr32(em + 0x18, 1376706931UL); klcmpc_wr32(em + 0x1c, 6739); CHECK(klcmpc_str_is_dm(em));
+    }
+    /* the ".." stream names of the converted .SND files -> the Dead Men folder (the owner's is on G:, Dog Days on C:) */
+    { char o[260];
+      CHECK(klcmpc_dm_str_target("..\\Kane and Lynch Dead Men\\PC_Def.str", "G:\\SteamLibrary\\steamapps\\common\\Kane and Lynch Dead Men", o, sizeof o));
+      CHECK(strcmp(o, "G:\\SteamLibrary\\steamapps\\common\\Kane and Lynch Dead Men\\PC_Def.str") == 0);
+      CHECK(klcmpc_dm_str_target("C:\\x\\KANE AND LYNCH DEAD MEN/pc_ger.STR", "G:\\D", o, sizeof o) && strcmp(o, "G:\\D\\pc_ger.STR") == 0);
+      CHECK(!klcmpc_dm_str_target("PC_Def.str", "G:\\D", o, sizeof o));                              /* Dog Days' own stream: untouched */
+      CHECK(!klcmpc_dm_str_target("..\\Kane and Lynch Dead Men\\PC_Def.zip", "G:\\D", o, sizeof o));
+      CHECK(!klcmpc_dm_str_target("..\\Kane and Lynch Dead Mens\\PC_Def.str", "G:\\D", o, sizeof o));
+      CHECK(!klcmpc_dm_str_target("..\\Kane and Lynch Dead Men\\PC_Def.str", "", o, sizeof o));
+      CHECK(!klcmpc_dm_str_target("..\\Kane and Lynch Dead Men\\PC_Def.str", "G:\\D", o, 10));        /* does not fit */
+    }
+    /* libraryfolders.vdf */
+    { static const char vdf[] = "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"C:\\\\Steam\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"G:\\\\SteamLibrary\"\n\t}\n}\n";
+      char lib[4][64]; int n = klcmpc_vdf_paths(vdf, &lib[0][0], 64, 4);
+      CHECK(n == 2 && strcmp(lib[0], "C:\\Steam") == 0 && strcmp(lib[1], "G:\\SteamLibrary") == 0);
+      CHECK(klcmpc_vdf_paths(vdf, &lib[0][0], 64, 1) == 1);
+      CHECK(klcmpc_vdf_paths("nothing here", &lib[0][0], 64, 4) == 0);
+      CHECK(klcmpc_vdf_paths("\"path\" \"unterminated", &lib[0][0], 64, 4) == 0);
+    }
     /* entries, layout, virtual search, overlay */
     { unsigned char rec[72]; unsigned long meta[9] = {3, 1000, 2, 22050, 4, 0, 0, 1024, 1017}; klcmpc_ent e[3], x; int n = 0; long long end;
       memset(rec, 0, sizeof rec);

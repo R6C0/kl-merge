@@ -197,6 +197,7 @@ static void klcamsmooth_tick(int game_thread)
     klstancefix_tick(game_thread);                                  /* k39: mirrors a re-toggled crouch clip first (own ini switch, independent of CamSmooth) */
     klcampool_tick(game_thread);                                    /* klcampool.c: [CamPool] gives back a leaked pool camera (own ini switch) */
     if (!kcs.enable || !klh_exe_ok || !game_thread) return;
+    if (klcam_campaign_idle()) return;                              /* 1110 [Camera] CampaignOff: Dead Men's own camera on a campaign level */
     if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KCS_RCB_RA)) return;
     if (!(P = klcam_player(&gd))) { kcs_reset(); kcs.cam = 0; return; }
     if (!(cam = klh_rd32(P + 0xbd8)) || klh_rd32(klh_rd32(cam) - 4) != KLCAM_COL) { kcs_reset(); kcs.cam = 0; return; }

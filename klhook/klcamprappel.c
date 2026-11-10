@@ -9,15 +9,17 @@
  * five clips /Movement/Rappelling/* in the level's .ANM (ids u16 at movement +0x1fe4..+0x1fec, 0xFFFF = missing); a stock
  * start with a NULL clip crashes at 0x5a503a. So a press is REFUSED (once-per-level log line) when a clip is missing.
  *
- * NOT PORTED (see the slice report): the loader's LIVE descent (ray-planned scripted slide), the camera diag / camfix,
- * the land= re-aim, the ANP_rappel_cmd.txt test command. Modes live / auto are accepted but behave like native (a log
+ * 1110: the LANDING CAMERA (land=, rappel.inc 69-73, 360-385) and CamFix=nocoll (rappel.inc 284-345) are ported, see below.
+ * NOT PORTED (see the slice report): the loader's LIVE descent (ray-planned scripted slide), the camera diag,
+ * the ANP_rappel_cmd.txt test command. Modes live / auto are accepted but behave like native (a log
  * line says so once). klrappel.c (the FA mini-cutscene) is untouched; this module idles whenever it owns the level
  * (klrp.on && klrp_lv.ok) so the two never both act.
  *
  * SHIP policy: the only writes are the vptr word of the heap movement object (klh_data); the vtable copy lives in this
  * DLL's .data. No code byte is touched. No exception handler is added (klfc_guard is a local __try).
  *
- * ini: [CampRappel] Mode=0 (0 off, 1 dry, 2 native, 3 live, 4 auto) - see ini_campaign_gameplayB.txt.
+ * ini: [CampRappel] Land=off|turn|cam|turncam|auto (default off in code, the fragment sets auto, recommended on), CamFix=0|1 (recommended off).
+ * [CampRappel] Mode=0 (0 off, 1 dry, 2 native, 3 live, 4 auto) - see ini_campaign_gameplayB.txt.
  */
 #include "klcamprappel_logic.h"
 
@@ -28,7 +30,10 @@
 #define KCAMR_F_ACT    0x6db3b0
 #define KCAMR_F_UPD    0x825290
 
-static struct { int mode, log; } kcamr;
+static struct { int mode, log, land, camfix; } kcamr;
+static int kcamr_land_dead;                /* a fault in the landing code: only the landing re-aim and CamFix idle */
+static struct { int have, movid, st, active; } kcamr_ls;          /* previous sample for the landing edge */
+static struct { BYTE *rec; BYTE v; } kcamr_cs[16]; static int kcamr_cn; static DWORD kcamr_cp;   /* CamFix: profile records whose collision flag we cleared */
 static int kcamr_dead;                     /* a fault in a wrapped stock routine: the vtable goes back, the module idles */
 static DWORD kcamr_vt[1 + KCAMR_SLOTS];      /* [0] = RTTI locator, [1..] = the slots; the object points at &kcamr_vt[1] */
 static DWORD kcamr_lastP, kcamr_lastMov;
@@ -186,6 +191,85 @@ static void kcamr_vt_apply(DWORD mov, int want)
     }
 }
 
+
+/* ---- landing camera (READ rappel.inc 273-282, 360-385). All engine calls inside klfc_guard; a fault only idles the landing code. */
+struct kcamr_land_a { DWORD P; float M[9], f[3]; int ray_ok, ray_hit; };
+static int kcamr_land_ray_body(void *p)
+{   /* chest height (130 cm) 150 cm along his facing, mask 0x28 (hero-only walls block) */
+    struct kcamr_land_a *a = (struct kcamr_land_a *)p; float o[3], seg[3], pt[3], y = kcamr_yaw(a->M) * 0.0174532925f; struct klfc_ray ray; int h;
+    klfc_v3set(o, a->f[0], a->f[1] + 130.0f, a->f[2]); klfc_v3set(seg, (float)sin(y) * 150.0f, 0, (float)cos(y) * 150.0f);
+    h = klfc_cast(o, seg, 0x28, &ray, pt);
+    a->ray_ok = h >= 0; a->ray_hit = h;
+    return 0;
+}
+struct kcamr_tele_a { DWORD P; float M[9], f[3]; int cam; };
+static int kcamr_tele_body(void *p)
+{   /* 0x82cc40(player, M, P, resetVel, force, 0): force=1 re-aims the camera behind the player (0x8de300(1)) */
+    struct kcamr_tele_a *a = (struct kcamr_tele_a *)p;
+    KLFC_CALL(void (__fastcall *)(DWORD, DWORD, const float *, const float *, int, int, int), KLFC_TELE)(a->P, 0, a->M, a->f, a->cam, a->cam, 0);
+    return 0;
+}
+struct kcamr_pose_a { DWORD P; float M[9], f[3]; int ok; };
+static int kcamr_pose_body(void *p) { struct kcamr_pose_a *a = (struct kcamr_pose_a *)p; a->ok = klfc_pose(a->P, a->M, a->f); return 0; }
+
+static void kcamr_do_land(DWORD P)
+{
+    struct kcamr_pose_a pa; struct kcamr_land_a la; struct kcamr_tele_a ta; int fin, g; float yaw;
+    memset(&pa, 0, sizeof pa); pa.P = P;
+    if (klfc_guard("camprappel land pose", kcamr_pose_body, &pa) < 0 || !pa.ok) { if (kcamr.log) klog("camprappel: land: no player pose - skipped"); return; }
+    yaw = kcamr_yaw(pa.M);
+    if (yaw < 0) { if (kcamr.log) klog("camprappel: land: degenerate facing - skipped"); return; }
+    memset(&la, 0, sizeof la); la.P = P; memcpy(la.M, pa.M, sizeof la.M); memcpy(la.f, pa.f, sizeof la.f);
+    if (kcamr.land == KCAMR_L_AUTO && klfc_guard("camprappel land ray", kcamr_land_ray_body, &la) < 0) { kcamr_land_dead = 1; klog("camprappel: land DISABLED (fault in the wall ray)"); return; }
+    fin = kcamr_land_resolve(kcamr.land, la.ray_ok, la.ray_hit);
+    if (fin == KCAMR_L_OFF) return;
+    memset(&ta, 0, sizeof ta); ta.P = P; ta.cam = kcamr_land_cam(fin);
+    memcpy(ta.f, pa.f, sizeof ta.f); kcamr_yaw_matrix(kcamr_land_yaw(yaw, fin), ta.M);
+    g = klfc_guard("camprappel land teleport", kcamr_tele_body, &ta);
+    if (g < 0) { kcamr_land_dead = 1; klog("camprappel: land DISABLED (fault in the teleport)"); return; }
+    if (kcamr.log) klog("camprappel: land=%d (ray ok %d hit %d) -> action %d: yaw %.1f -> %.1f, camera re-aim %d, feet (%.1f,%.1f,%.1f)", kcamr.land, la.ray_ok, la.ray_hit, fin, yaw, kcamr_land_yaw(yaw, fin), ta.cam, pa.f[0], pa.f[1], pa.f[2]);
+}
+
+static void kcamr_land_watch(DWORD P, DWORD mov)
+{
+    BYTE act = 0; int movid, st, landed;
+    if (kcamr_land_dead || !kcamr.land) return;
+    klh_rd(mov + 0x1f64, &act, 1);
+    movid = klfc_movid(P);
+    st = (act || movid == 0x10) ? (int)klh_rd32(P + 0x25c0) : -1;
+    landed = kcamr_landed(kcamr_ls.have, kcamr_ls.movid, kcamr_ls.st, movid, act);
+    kcamr_ls.have = 1; kcamr_ls.movid = movid; kcamr_ls.st = st; kcamr_ls.active = act;
+    if (landed) kcamr_do_land(P);
+}
+
+/* ---- CamFix=nocoll (READ rappel.inc 284-345): clear the collision flag (+0x156) of every camera profile record that is active
+ * during a rappel, so the camera is not pulled in under the facade girders; put it back when the rappel ends. Heap writes via klh_data. */
+#define KCAMR_CAM_VT 0xbb76a4
+static void kcamr_cam_restore(DWORD P)
+{
+    int i;
+    for (i = 0; i < kcamr_cn; i++) if (P == kcamr_cp && klfc_ok((DWORD)(DWORD_PTR)kcamr_cs[i].rec, 0x198)) klfc_put((DWORD)(DWORD_PTR)kcamr_cs[i].rec + 0x156, &kcamr_cs[i].v, 1, "camprappel camfix restore");
+    if (kcamr_cn && kcamr.log) klog("camprappel: camfix: %d profile collision flag(s) %s", kcamr_cn, P == kcamr_cp ? "restored" : "dropped (player changed)");
+    kcamr_cn = 0; kcamr_cp = 0;
+}
+static void kcamr_cam_watch(DWORD P, DWORD mov)
+{
+    BYTE act = 0; int rap; DWORD cam, prof; BYTE fl = 0, z = 0; int k;
+    if (!kcamr.camfix && !kcamr_cn) return;
+    klh_rd(mov + 0x1f64, &act, 1);
+    rap = act || klfc_movid(P) == 0x10;
+    if (!rap || !kcamr.camfix) { if (kcamr_cn) kcamr_cam_restore(P); return; }
+    cam = klh_rd32(P + 0xbd8);
+    if (!klfc_ok(cam, 0xc00) || klh_rd32(cam) != KCAMR_CAM_VT) return;
+    prof = klh_rd32(cam + 0xb2c);
+    if (!klfc_ok(prof, 0x198)) return;
+    klh_rd(prof + 0x156, &fl, 1);
+    if (!fl) return;
+    for (k = 0; k < kcamr_cn && (DWORD)(DWORD_PTR)kcamr_cs[k].rec != prof; k++) ;
+    if (k == kcamr_cn && kcamr_cn < 16) { kcamr_cs[kcamr_cn].rec = (BYTE *)(DWORD_PTR)prof; kcamr_cs[kcamr_cn].v = fl; kcamr_cn++; kcamr_cp = P; }
+    klfc_put(prof + 0x156, &z, 1, "camprappel camfix nocoll");
+}
+
 static int kcamr_tick_body(void *unused)
 {
     DWORD gd, P, mov, now; signed char pi = -1; int want;
@@ -207,6 +291,7 @@ static int kcamr_tick_body(void *unused)
         if (kcamr_gate && kcamr.mode) { kcamr_clips(mov, ids); klog("camprappel: level: native rappel clips %d/5 (ids %04x %04x %04x %04x %04x)", kcamr_clips_present(ids), ids[0], ids[1], ids[2], ids[3], ids[4]); }
     }
     kcamr_vt_apply(mov, want);
+    if (kcamr_gate && !kcamr_fa_owns()) { kcamr_land_watch(P, mov); kcamr_cam_watch(P, mov); }
     if (kcamr.mode == KCAMR_DRY && kcamr_gate) {
         BYTE a = 0, p = 0, s = 0; klh_rd(mov + 0x1f64, &a, 1); klh_rd(mov + 0x1f6c, &p, 1); klh_rd(mov + 0x1f6d, &s, 1);
         if (a != kcamr_prev[0] || p != kcamr_prev[1] || s != kcamr_prev[2]) {
@@ -219,7 +304,7 @@ static int kcamr_tick_body(void *unused)
 
 static void kcamr_tick(int game_thread)
 {
-    if (!kcamr.mode || kcamr_dead || !game_thread || !klh_exe_ok) return;
+    if ((!kcamr.mode && !kcamr.land && !kcamr.camfix) || kcamr_dead || !game_thread || !klh_exe_ok) return;
     if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) return;        /* only the gameplay call (same filter as klfreeclimb.c) */
     if (kl_online()) return;                                          /* campaign levels are offline; never act in a session */
     if (kcamr_buildok < 0) kcamr_buildok = kcamr_build_ok();
@@ -235,4 +320,8 @@ static void kcamr_init(void)
     kcamr.mode = kcamr_mode_parse(s);
     kcamr.log = (int)GetPrivateProfileIntA("CampRappel", "Log", 1, klh_ini);
     if (kcamr.mode) klog("camprappel: Mode=%s (%d) - acts only on a campaign level ([Campaign] Enable=1)", s, kcamr.mode);
+    GetPrivateProfileStringA("CampRappel", "Land", "off", s, sizeof s, klh_ini);
+    kcamr.land = kcamr_land_parse(s);
+    kcamr.camfix = (int)GetPrivateProfileIntA("CampRappel", "CamFix", 0, klh_ini) != 0;
+    if (kcamr.land || kcamr.camfix) klog("camprappel: Land=%s (%d), CamFix=%d - acts only on a campaign level; GUESS (not run in kl2 yet)", s, kcamr.land, kcamr.camfix);
 }
