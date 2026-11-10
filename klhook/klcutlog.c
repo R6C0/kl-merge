@@ -165,7 +165,7 @@ static void kcut_poll_actors(DWORD P, const char *row)
 static void kcut_level_begin(const char *sc)
 {
     kcut_rl_level(&kcutS.rl);
-    kcutS.t0 = GetTickCount(); kcutS.nact = 0; kcutS.haveSig = 0; kcutS.seq = 0; kcutS.nExec = kcutS.nAct = 0;
+    kcutS.t0 = GetTickCount(); kcutS.nact = 0; kcutS.haveSig = 0; kcutS.seq = 0; kcutS.nExec = kcutS.nAct = 0; kcutS.lastSkipped = 0;     /* rl.skipped restarts at 0: a stale lastSkipped made the unsigned difference huge (one spurious line) */
     strncpy(kcutS.scene, sc, sizeof kcutS.scene - 1); kcutS.scene[sizeof kcutS.scene - 1] = 0;
     klog("cutlog: campaign level '%s': logging (max %u lines, %u per second; detours %s)", kcutS.scene, kcutS.rl.maxLines, kcutS.rl.perSec, kcutS.hooked ? "ON (TEST direct run)" : "not made: SIGNAL / ACTOR polls only");
 }
