@@ -1,3 +1,6 @@
+2026-11-10 ~10:35 - [vault] DM03VAULT_1110 RERUN on stage_m PASS (after d0's 10-map smoke, no reset seen in 20 seats): both seats RESULT PASS 0 faults/asserts, round 2 + shop reached;
+items 15/15: control walk stopped (54,241,-6768), armed at (23,240,-7220), blast, through to (0,241,-6633), no Backstop replay, late walk through (12,239,-6630). The 2 "dump files" FAILs
+were the stale 08:33:56 KLHook_1.dmp left in solo/DM03VAULT_1110_online/inst1+2 (new logs: 0 FAULT lines). Undo byte-exact (33361cd1). NOT installed: waits for the owner's OK; out of release pack.
 2026-11-10 ~10:25 - [d0] RELEASE ONLINE SMOKE 13/13 PASS (TEST 03840ed0, nothing installed): Q32 host+join pair, round 1 -> shop -> round 2 on DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B
 DM07 DM09 DM11B DD10 DD06(stock); every seat asserts 0 / faults 0 / dumps 0, no d3d9+0x5feeb device reset (fc's 08:33 reset = one-off system display event). DM06B client: 1 first-chance
 c0000005 at DINPUT8+0x10953e = kllistguard's __try scan reading a page freed meanwhile (caught); kl_bench_1106 faults() now skips first-chance DINPUT8 lines when the log's RESULT says faults 0.

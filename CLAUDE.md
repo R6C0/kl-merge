@@ -74,7 +74,9 @@ Run: python tools/kl_bench_1106.py run load_<MAP> online. Held stages still wait
 2026-11-10 ~10:40 - [vault] DM03 blow-up vault NOT installed (out of the release pack). DM03VAULTK on stage_k (--no-arm) PASS: all 6 lanes blocked BOTH ways, the per-leaf slabs hold
 (side rule refuted). The stage_slab "leak" = the host pressed on the DOCK side fired the Arm box (edge 44 cm off the hinge plane) THROUGH the shut leaf, fuse 3 s, swing.
 Fix: Arm box moved to z -7250 (edge 2.9 m off; kl_dm03vault_1110 --arm-z, refuses < 1.5 m). stage_m on live 33361cd1: zip c71dbd01 / bots fce3ac2a / base e23f6545.
-~08:35 bench DM03VAULT_1110 on stage_m: shut door blocked the dock walk, Arm at -7226 armed, blast, walked through = door logic PASS; run cut at 08:33:55 by a display
+10:34 RERUN DM03VAULT_1110 PASS (both seats 0 faults/asserts, round 2, 15/15 vault checks incl. the late Backstop walk; the dump FAIL = stale 08:33 .dmp files).
+READY TO INSTALL on the owner's OK: C:/kl_build_1024/dm03vault_1110/stage_m/install.py (pins live 33361cd1). shut door blocked the dock walk, Arm at -7226 armed, blast, walked through = door logic PASS; run cut at 08:33:55 by a display
+~08:35 on stage_m: shut door blocked the dock walk, Arm at -7226 armed, blast, walked through = door logic PASS; run cut at 08:33:55 by a display
 reset (both seats d3d9+0x5feeb, Display 4107 SetDisplayConfig; cause unknown, the "input" may be the bench's own keys) before the Backstop walk + round 2. Undo byte-exact. Rerun when the owner is away; not installed.
 2026-11-10 ~09:00 - [d0] RELEASE LOAD SWEEP 13/13 PASS on the live frozen-pack files (TEST 03840ed0, nothing installed): DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B DM07 DM09 DM11B DD10 + stock control
 each loaded under its own rule, reached 0x19, stood 60 s, 0 asserts/faults/dumps. Control = DD06 (page 0 entry 4; kit re-pinned f609e1d9). Offline: every type-7 .prm root of all 26 live zips hits a .oct record start.
