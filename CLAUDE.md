@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~06:35 - [f0, T0] PACKAGE RE-FROZEN, supersedes 9a60c535 (do NOT upload that): d0 found the live DM01B 5eab5ecc (dm01bdoorfix_1109, unbenched) crashes at round load 3/3
+(c0000005 junk address, caller 0x6ad1d9); A/B on 778b075c PASS -> d0 put 778b075c / bots dccc9250 back live. map:DM01B re-made: C:/kl_release/KLMerge_package.zip 2,026,178,709 bytes,
+sha1 504a398f1998f0f5987faa4b9f8cc8deab32fe3e. DM01B rehearsal from the unzipped package PASS (install 0, uninstall 0 differences). DM01B keeps its 2 dead kick doors (as 11-09).
 2026-11-10 ~06:20 - [d0] DD10 EXIT-SOUTH BENCH PASS, HELD for the next release (81's freeze, package 9a60c535 has DD10 6aeb8208): stage C:/kl_build_1024/dd10exitsouth_1110
 (zip e152950e / bots 604a9d9e / base 88f4be29). dd10south1110 + dd10southledge1110 (TEST 03840ed0): van called from z 750, HealFloor 3600->9600, shielded 53 s wait + drive-out,
 seat alive at (8300,750) wait 15/30/45 s, 0 faults/deaths; only the known round-end check FAILs. Undo byte-exact. Install when 81 says the owner uploaded.
