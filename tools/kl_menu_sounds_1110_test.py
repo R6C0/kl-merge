@@ -50,7 +50,7 @@ def make(root):
     for i, nm in enumerate(['Up_Down', 'Slide', 'Toggle', 'Back', 'Select']):
         dm_entries.append(T.pcm_entry('SFX/UserInterface/%s.wav' % nm, tone(3000 + 300 * i, 700 + 100 * i, 44100, 14000, ch=2), 44100))
     for nm in ('Menu', 'OpenWindow_03', 'OpenWindow_04', 'Options'):
-        dm_entries.append(T.pcm_entry('SFX/UserInterface/%s.wav' % nm, tone(32000 * 5, 300, 32000, 9000), 32000))     # 5 s: cut to 1.5 s
+        dm_entries.append(T.pcm_entry('SFX/UserInterface/%s.wav' % nm, tone(32000 * 5, 300, 32000, 9000), 32000))     # 5 s: kept at full length
     whd, wav = T.build_pair('dm', dm_entries)
     open(os.path.join(dm, 'Scenes', 'KaneAndLynch.WHD'), 'wb').write(whd)
     open(os.path.join(dm, 'Scenes', 'KaneAndLynch.WAV'), 'wb').write(wav)
@@ -111,7 +111,7 @@ def main():
         f1 = dict(zip(W.DD_F, [v for k, o, v in b.items if k == 'rec' and o == recs['Menu']][0]))
         r1 = M.Rec('dd', 'SFX/OSD/Menu.wav', recs['Menu'], f1, 0)
         a, rate = M.decode_record(b, r1)
-        check(rate == 22514 and 0 < len(a) <= int(22514 * 1.5) + 2 and int(np.abs(a).max()) > 1000, 'Menu=menu decodes: stock rate %d, %d frames (cut to 1.5 s), audible' % (rate, len(a)))
+        check(rate == 22514 and int(22514 * 4.9) <= len(a) <= int(22514 * 5.0) + 2 and int(np.abs(a).max()) > 1000, 'Menu=menu decodes: stock rate %d, %d frames (full 5 s), audible' % (rate, len(a)))
         whd = bytearray(whd0)
         S.apply_choice(whd, recs['Navigate'], fo, t['choices'][('navigate', 'off')])
         f2 = dict(zip(W.DD_F, [v for k, o, v in W.parse('dd', bytes(whd))[0] if k == 'rec' and o == recs['Navigate']][0]))

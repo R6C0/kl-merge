@@ -19,7 +19,7 @@ EVENTS (key = the [MenuSounds] key; record = the Dog Days SFX/OSD record it re-p
     Toggle    Toggle_01    dm = Toggle                       Slider   Slide        dm = Slide
     Menu      Menu         (no dm: stock until a clip is named)        Window   OpenWindow_04   (no dm)
 CLIP CHOICES (each event can take each): up_down slide toggle back select menu options openwindow_03 openwindow_04 (Dead Men
-SFX/UserInterface/*, Scenes\KaneAndLynch.WHD; a long one is cut to 1.5 s with a 60 ms fade) and 'off' (50 ms of silence). --clip NAME adds
+SFX/UserInterface/*, Scenes\KaneAndLynch.WHD; full length, never cut) and 'off' (50 ms of silence). --clip NAME adds
 another Dead Men clip (choice name = its file stem, lower case). The streamed Menu_BG_* ambience records and MenuLoop_01 (Vorbis) cannot be
 swapped (a streamed record has no data in the .WAV): menu ambience is NOT offered.
 
@@ -54,7 +54,7 @@ Refused = M.Refused
 STAGE = 'menusounds_1110'
 OUT_DEFAULT = r'C:\kl_build_1024\menulook_1109\sounds1110'
 UI_PREFIX = 'SFX/UserInterface/'
-MAX_CLIP_MS = 1500.0
+MAX_CLIP_MS = None    # owner 11-10: Dead Men clips play at full length (was 1500.0 = cut with a 60 ms fade)
 OFF_MS = 50.0
 # event key, Dog Days record, the Dead Men clip that is its 'dm' counterpart (None = no dm choice; the table default is dd)
 EVENTS = [('Navigate', 'SFX/OSD/Up_Down.wav', 'up_down'), ('Confirm', 'SFX/OSD/Select.wav', 'select'), ('Back', 'SFX/OSD/Back.wav', 'back'),
@@ -405,7 +405,7 @@ def list_clips(dm, log=print):
     log('%-44s %-7s %6s %2s %8s %s' % ('name', 'codec', 'rate', 'ch', 'ms', 'usable'))
     for r in seen:
         log('%-44s %-7s %6d %2d %8.1f %s' % (r.name, M.CODEC_NAME.get(r.codec, '%#x' % r.codec), r.f['rate'], r.f['ch'], r.ms(),
-                                           'streamed (the stream file, MenuLoop-like: ambience)' if r.streamed else ('yes (cut to %.1f s)' % (MAX_CLIP_MS / 1000.0) if r.ms() > MAX_CLIP_MS else 'yes')))
+                                           'streamed (the stream file, MenuLoop-like: ambience)' if r.streamed else ('yes (cut to %.1f s)' % (MAX_CLIP_MS / 1000.0) if MAX_CLIP_MS and r.ms() > MAX_CLIP_MS else 'yes')))
     for o in src.opened + ['FAILED ' + x for x in src.failed]:
         log('  ' + o)
     return seen
