@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~11:15 - [d0] LAUNCHER E2E PASS (for 81, C:kl_releasee2e_1110 + pkg_1110, no INSTALL/UNINSTALL): verify 823/0 before + after, dll 6711bc5f / ini 0da79eb8 unchanged, dinput8* list identical, no strays.
+PLAY DEAD MEN RISING -> hook loaded, clean close logged; PLAY DOG DAYS -> hook renamed .klmerge-off, no hook; PLAY DEAD MEN RISING put it back byte-exact. No new crash files.
+Steam options on the PC are "-dx10" only (no F01/AutoExit; 81 tells the owner). Oddities to 81: MOD "not installed" without a journal, letter-spaced button names for UIA, "..." buttons = dashes, hook stays off after a stock run (README hint 1e9be368).
 2026-11-10 ~11:00 - [scheduled, cloud] PALE PLATE TEXT FIXED (T9 "theme bug for the cloud"): the OnFocus colour set (text ON a light plate: lobby header, selected row, Heister values, Bonus/Penalty) was mapped to chalk; stock is ink.
 Table fixed in kl_menu_look_1109.py; repair kit for the live _deadmen files: tools/kl_menu_plates_1110.py -> C:/kl_build_1024/menuplates_1110 (install.py pins ba1154de/3a452a28/caf16a44, README). NOT installed (PC busy). Next: install (game closed) + ML1 lobby shot.
 2026-11-10 ~10:25 - [d0] RELEASE ONLINE SMOKE 13/13 PASS (TEST 03840ed0, nothing installed): Q32 host+join pair, round 1 -> shop -> round 2 on DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B
