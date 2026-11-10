@@ -92,6 +92,8 @@ Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $Zip -Compression
 $sha = (Get-FileHash -LiteralPath $Zip -Algorithm SHA1).Hash.ToLower()
 Set-Content -LiteralPath ($Zip + '.sha1') -Value ($sha + '  ' + (Split-Path -Leaf $Zip)) -Encoding ASCII
 Write-Host ('zip: {0:N1} MB, sha1 {1}' -f ((Get-Item -LiteralPath $Zip).Length / 1MB), $sha)
+# GitHub refuses a release asset of 2 GiB or more
+if ((Get-Item -LiteralPath $Zip).Length -ge 2147483648) { Write-Host 'WARNING: zip is 2 GiB or more - GitHub will refuse this release asset' }
 Remove-Item -LiteralPath $stage -Recurse -Force
 # the upload name: the Setup bat's RELEASE_URL is .../releases/latest/download/KLMerge_package.zip, so the release asset must
 # be called exactly that. Hard link beside the versioned zip (same bytes, no extra disk), a copy when linking fails.

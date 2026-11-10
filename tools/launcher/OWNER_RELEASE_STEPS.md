@@ -111,7 +111,7 @@ First build the launcher exe (after any change to `exe\DeadMenRising.cs` or the 
 ```bat
 powershell -ExecutionPolicy Bypass -File tools\launcher\pack_release.ps1 -Out C:\kl_release\pkg_1110 [-Exe dist\KLMergeSetup.exe]
 ```
--> `C:\kl_release\KLMerge_package_v<ver>.zip` + `.sha1`, plus the same bytes as `KLMerge_package.zip` (the upload name). It copies only manifest.json, patches\, kl_release.py, the
+-> `C:\kl_release\KLMerge_package_v<ver>.zip` + `.sha1`, plus the same bytes as `KLMerge_package.zip` (the upload name). It copies only manifest.json, the patches\ the manifest names (stale ones from earlier makes stay behind), kl_release.py, the
 launcher files (+ `launcher\kl_launcher_music.py` and your `launcher\bg\*.jpg`, section 2b) and the optional exe (never
 `_snap`, `parts`, `sha1cache.json`, never `launcher\music\`) and refuses if anything with a game extension slipped into
 the staging folder.
@@ -127,7 +127,7 @@ pack_release.ps1 already writes that name beside the versioned zip (`KLMerge_pac
 ```bat
 gh release create v<ver> C:\kl_release\KLMerge_package.zip C:\kl_release\KLMerge_package.zip.sha1 --repo R6C0/dead-men-rising --title "KL: Dead Men Rising v<ver>" --notes "Tester build. Run KL Dead Men Rising Setup.bat again to update."
 ```
-(GitHub's limit is 2 GB per asset.) Hand out `KL Dead Men Rising Setup.bat` (and the README) on Discord; do not attach the
+(GitHub's limit is 2 GiB = 2,147,483,648 bytes per asset; check the zip size before the upload. Bots zips are patched against their own main zip, which keeps the 11-10 package near 2 GB.) Hand out `KL Dead Men Rising Setup.bat` (and the README) on Discord; do not attach the
 .bat to the public release unless you want anyone to find it there. A re-run of Setup downloads only when the zip is newer
 (`curl -z`; GUESS that GitHub's redirect target sends Last-Modified - if not, re-runs re-download, annoying, not harmful).
 

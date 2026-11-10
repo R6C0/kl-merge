@@ -404,6 +404,7 @@ def main():
     pk = read(PACK).decode('ascii', 'replace')
     check('manifest.json' in pk and 'patches' in pk and 'kl_release.py' in pk and 'launcher' in pk, 'pack_release.ps1 bundles manifest + patches + kl_release.py + launcher')
     check('_snap' in pk and 'sha1cache' in pk, 'pack_release.ps1 knows the maker-only folders it must leave out')
+    check('2147483648' in pk, "pack_release.ps1 warns when the zip reaches GitHub's 2 GiB asset limit")
     check("'kl_launcher_music.py'" in pk, 'pack_release.ps1 packs launcher\\kl_launcher_music.py')
     check("'kl_pybink.py'" in pk and 'kl_pybink.py' in bat, 'pack_release.ps1 packs kl_pybink.py (when it exists) and the bat copies it up')
     check("'kl_pyvorbis.py'" in pk and 'kl_pyvorbis.py' in bat and os.path.exists(os.path.join(TOOLS, 'kl_pyvorbis.py')), 'pack_release.ps1 packs kl_pyvorbis.py, the bat copies it up, and it exists')
