@@ -105,7 +105,7 @@ dead by brightness, alpha kept; anything else - e.g. the bluish second `Default`
 | `Default` (all three; online.xml's FIRST) | white text, focus INK on the bar (a00c0c0d focus seen on the shop rows, 2026-10-23 note) | chalk / ink / dim | rows: chalk, ink on the chalk focus bar |
 | `White` | white / white | chalk / chalk / dim | data rows with faint bars (AlphaMax 64) |
 | `Header` | bright red d7373a | coral / coral / dead | headlines, penalties (restyle_data) |
-| `OnFocus` | focus ink | chalk / ink / dim | 'Bonus' / 'Penalty' headings sit on bars |
+| `OnFocus` | **ink / ink / grey** (READ 11-10: ff000000 / ff000000 / ff888888 in all three files) = text ON a light plate, always: `RecCSFocus="OnFocus"` receivers (the focused row), lobby column headers, Heister values, leaderboard titles, 'Bonus' / 'Penalty' | **ink / ink / dim** (FIXED 11-10; was chalk / ink / dim = PALE on the plate, unreadable: 02:55 lobby shots) | the plate is light; the stock role stands. Live files built before the fix: `tools/kl_menu_plates_1110.py` (kit `C:\kl_build_1024\menuplates_1110`) |
 | `Legend` (x2) | PC legend, focus d00000 | chalk / coral / dim | footer key legend |
 | `AssignKeys` | ink focus text | chalk / ink / dim | key assignment bar is chalk too |
 | `KLFocus` (mkoverlay, Mod settings rows) | white / headline red | chalk / coral / dim | the rows have NO focus bar: focus must stay a COLOUR change (mkoverlay.py 388) |

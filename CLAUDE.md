@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~11:00 - [scheduled, cloud] PALE PLATE TEXT FIXED (T9 "theme bug for the cloud"): the OnFocus colour set (text ON a light plate: lobby header, selected row, Heister values, Bonus/Penalty) was mapped to chalk; stock is ink.
+Table fixed in kl_menu_look_1109.py; repair kit for the live _deadmen files: tools/kl_menu_plates_1110.py -> C:/kl_build_1024/menuplates_1110 (install.py pins ba1154de/3a452a28/caf16a44, README). NOT installed (PC busy). Next: install (game closed) + ML1 lobby shot.
 2026-11-10 ~10:25 - [d0] RELEASE ONLINE SMOKE 13/13 PASS (TEST 03840ed0, nothing installed): Q32 host+join pair, round 1 -> shop -> round 2 on DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B
 DM07 DM09 DM11B DD10 DD06(stock); every seat asserts 0 / faults 0 / dumps 0, no d3d9+0x5feeb device reset (fc's 08:33 reset = one-off system display event). DM06B client: 1 first-chance
 c0000005 at DINPUT8+0x10953e = kllistguard's __try scan reading a page freed meanwhile (caught); kl_bench_1106 faults() now skips first-chance DINPUT8 lines when the log's RESULT says faults 0.
