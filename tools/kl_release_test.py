@@ -143,12 +143,18 @@ def main():
 
         # G: make picks up the hook's own files beside KLHook.ini (KLReverbBoxes.ini, KLGrenade\*.wav)
         gdd = os.path.join(base, 'gdd')
-        for d in ('KLGrenade', os.path.join('KLExpansion', 'Maps')):
+        for d in ('KLGrenade', 'Scenes', os.path.join('KLExpansion', 'Maps')):
             os.makedirs(os.path.join(gdd, d))
-        for rel in ('KLReverbBoxes.ini', 'KLGrenade/grenade_pin.wav', 'KLGrenade/grenade_throw.wav', 'KLGrenade/x.wav.before-1110'):
+        for rel in ('KLReverbBoxes.ini', 'KLGrenade/grenade_pin.wav', 'KLGrenade/grenade_throw.wav', 'KLGrenade/x.wav.before-1110',
+                    'Scenes/kaneandlynch.WAV', 'Scenes/kaneandlynch_deadmen.WAV', 'Scenes/kaneandlynch_deadmen.WAV.before-menusounds_1110',
+                    'Scenes/kaneandlynch_deadmen.klms', 'Scenes/other_deadmen.WHD'):
             open(os.path.join(gdd, rel), 'wb').write(b'x')
-        got = sorted(t['rel'] for t in R.enumerate_targets(type('M', (), dict(dd=gdd, pd2_skipped=[]))(), ['core']))
-        check(got == ['KLGrenade/grenade_pin.wav', 'KLGrenade/grenade_throw.wav', 'KLReverbBoxes.ini'], 'G make lists the hook files (got %s)' % got)
+        fake = type('M', (), dict(dd=gdd, pd2_skipped=[], stock_dd=lambda self, rel: os.path.join(gdd, rel)))()
+        T = {t['rel']: t for t in R.enumerate_targets(fake, ['core'])}
+        check(sorted(T) == ['KLGrenade/grenade_pin.wav', 'KLGrenade/grenade_throw.wav', 'KLReverbBoxes.ini', 'Scenes/kaneandlynch_deadmen.WAV',
+                            'Scenes/kaneandlynch_deadmen.klms', 'Scenes/other_deadmen.WHD'], 'G make lists the hook files (got %s)' % sorted(T))
+        check(T['Scenes/kaneandlynch_deadmen.WAV'].get('refs') == ['dd:Scenes/kaneandlynch.WAV'], 'G themed bank patched against its stock bank')
+        check(T['Scenes/other_deadmen.WHD']['kind'] == 'lit' and T['Scenes/kaneandlynch_deadmen.klms']['kind'] == 'lit', 'G no stock sibling -> literal')
 
         # F: a fresh install points the ini's game folders at this PC; verify, re-install and uninstall accept it as ours
         check_localize()

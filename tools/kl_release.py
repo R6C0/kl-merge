@@ -554,6 +554,7 @@ WIN_SLOTS = ['F%02d' % i for i in range(1, 10)] + ['L%02d' % i for i in range(0,
 OWN_ROOT = ['dinput8.dll', 'KLHook.ini', 'KLShopPage.ini', 'KL_MOD_SETTINGS.txt',
             'KLReverbBoxes.ini']                                    # [Echo] RoomBoxes (klecho.c)
 OWN_DIRS = ['KLGrenade']                                            # [Grenade] PinSound WAVs (klgrenadefx.c)
+SCENE_VARIANT_RE = re.compile(r'^(.+)(_deadmen)\.(whd|wav|klms)$', re.I)   # Scenes\<bank>_deadmen.* ([MenuSounds])
 KEEP_USER = ('KLHook.ini', 'KLShopPage.ini')                       # never overwritten when the player already has one
 
 
@@ -843,6 +844,20 @@ def enumerate_targets(mk, only):
         for sub in OWN_DIRS:                                       # folders the hook reads beside KLHook.ini
             for p in list_files(os.path.join(dd, sub)):
                 T.append(dict(group='core', rel=nrm(os.path.relpath(p, dd)), live=p, kind='lit'))
+        scenes = os.path.join(dd, 'Scenes')
+        for fn in sorted(os.listdir(scenes)) if os.path.isdir(scenes) else ():
+            m = SCENE_VARIANT_RE.match(fn)                         # [MenuSounds]: themed sibling of a stock bank (kl_menu_sounds_1109.py)
+            if not m:
+                continue
+            t = dict(group='core', rel='Scenes/' + fn, live=os.path.join(scenes, fn), kind='lit')
+            if m.group(3).lower() != 'klms':                       # bank pair: patch against the stock bank it themes
+                sib = [f for f in os.listdir(scenes) if f.lower() == (m.group(1) + '.' + m.group(3)).lower()]
+                try:
+                    mk.stock_dd('Scenes/' + sib[0])
+                    t.update(kind='file', refs=['dd:Scenes/' + sib[0]])
+                except (IndexError, RuntimeError):
+                    pass
+            T.append(t)
     if want('overlay'):
         base = os.path.join(dd, 'KLExpansion', 'Overlay')
         for p in list_files(base):
@@ -938,6 +953,12 @@ def cmd_make(a):
     # snapshot of the small own files (they change while other chats install hooks)
     snap = os.path.join(out, '_snap')
     for t in T:
+        if a.snap:                                     # --snap DIR: files taken out of the game folder earlier (a peer bench owns it now)
+            p = os.path.join(a.snap, t['rel'])
+            if os.path.exists(p):
+                t['live'] = p
+            elif t['group'] == 'core':
+                raise SystemExit('--snap: %s is not in %s' % (t['rel'], a.snap))
         if t['kind'] == 'lit' and os.path.getsize(t['live']) < (64 << 20):
             dst = os.path.join(snap, t['rel'])
             os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -1475,6 +1496,7 @@ def main(argv=None):
     sub = ap.add_subparsers(dest='cmd')
     m = sub.add_parser('make'); m.add_argument('outdir'); m.add_argument('--dd', required=True); m.add_argument('--dm', required=True)
     m.add_argument('--pd2'); m.add_argument('--only'); m.add_argument('--level', type=int, default=15)
+    m.add_argument('--snap', help='take the files found here (same relative paths) instead of the live game folder')
     c = sub.add_parser('checklive'); c.add_argument('outdir'); c.add_argument('--dd', required=True)
     for name in ('install', 'uninstall', 'verify'):
         s = sub.add_parser(name)
