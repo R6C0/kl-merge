@@ -231,6 +231,11 @@ static void kspg_c_desc(int f, char *o, size_t cap)
 }
 /* page ids for the cycle key: 0 stock / set A, 1 page II (set B), 2 hire, 3 controls, 4 bots and modes ([Keys] ModesTab=1: the controls page's second view) */
 static int kspg_cur(void) { return kspg.ctl ? 3 + (kspg.ctlMode != 0) : kspg.hire ? 2 : kspg.shownB ? 1 : 0; }
+/* SHOPCYCLE 11-10: the page a cycle press starts from = the page the caption names (klpagequeue_logic.h kpq_press_page): stale hire / controls flags with the list closed no longer count */
+static int kspg_cur_now(void)
+{
+    return kpq_press_page((int)klh_rd32((DWORD_PTR)KLH_VA(KSPG_MODE)), kspg.ctl, kspg.ctlMode, kspg.hire, kspg.active && kspg.shownB);
+}
 static int kspg_avail(int p)
 {
     if (p == 0) return 1;
@@ -1657,11 +1662,12 @@ static void kspg_pq_hold(DWORD now, int key, int target, const char *what)
     kspg.hPendAt = 0; kspg.pq2At = 0;
     if (target == 3) kspg.pq2At = now | 1; else { kspg.hPendAt = now | 1; kspg.hPendPg = target; }
     kspg.hQueued = key; kspg.fbLast = key; kspg.aoHinted = 0;
+    kspg.hire = 0; kspg.ctl = 0; kspg.hArm = 0;   /* SHOPCYCLE 11-10: the list opens on the stock page (or the queued target); a stale hire / controls flag from the last round no longer re-opens it */
     klog("pagequeue: %s pressed on the round-over page (state 0x%x), Buy Weapons is not open: queued, it shows when the list opens (held up to %u s)", what, kspg.st, KPQ_CAP_MS / 1000u);
 }
 static void kspg_cycle(DWORD now)
 {
-    int cur = kspg_cur(), nxt = kspg_next(cur);
+    int cur = kspg_cur_now(), nxt = kspg_next(cur);
     if (nxt == cur) { klog("controls: the cycle key: no other page is available here"); return; }
     if (nxt >= 2 && !kspg_h_selok()) {          /* as the hire key: the page opens once the scan has wrapped the selector (up to 3 s) */
         if (!kspg.hPendAt) { kspg.hPendAt = now | 1; kspg.hQueued = 0; kspg.hPendPg = kmt_pend_of(nxt); klog("controls: the cycle key came before the shop's selector is wrapped: %s opens once it is (up to 3 s)", kspg_pname[nxt]); }
@@ -1696,7 +1702,7 @@ static void kspg_cycle_key(SHORT (WINAPI *gaks)(int), HWND (WINAPI *fgw)(void), 
             int same = kspg.hQueued == 2 && (kspg.hPendAt != 0 || kspg.pq2At != 0);
             unsigned int qage = kpq_age(now, kspg.hPendAt ? kspg.hPendAt : kspg.pq2At);
             if (kpq_should_queue(kspg.queueOn, kspg.st, (int)mode, same)) {      /* PageQueue: the page this press would open now, held until the list is open */
-                int cur = kspg_cur(), nxt = kspg_next(cur);
+                int cur = kspg_cur_now(), nxt = kspg_next(cur);
                 if (nxt == cur || nxt == 0) klog("controls: the cycle key: no other page is available here");
                 else { char w[48]; snprintf(w, sizeof w, "the cycle key (%s page)", kspg_pname[nxt]); kspg_pq_hold(now, 2, nxt == 1 ? 3 : kmt_pend_of(nxt), w); }   /* pq1: 'Hire key pressed' read as the hire key */
             } else if (kpq_debounced(kspg.debounceOn, kspg.st, (int)mode, same, same, qage)) klog("pagequeue: the cycle key was pressed again %u ms after queuing: ignored (QueueDebounce), the queued press stays", qage);

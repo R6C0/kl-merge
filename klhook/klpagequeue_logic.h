@@ -249,4 +249,15 @@ static int kpq_log_due(unsigned int now, unsigned int lastAt, unsigned int gapMs
     return !lastAt || kpq_age(now, lastAt) >= gapMs;
 }
 
+
+/* SHOPCYCLE 11-10: the page a cycle-key press starts from = the page the caption NAMES. The hire / controls flags (kspg.hire / kspg.ctl) stay set after the weapon list closes (the shop's other
+   windows keep the gate open), so with the list closed (round-over page, category screens) the old kspg_cur() still said 'hire' or 'controls' while the caption said 'PAGE 1/4 STOCK': a queued
+   [F2] then went to the page AFTER that stale one (owner 11-10 20:02:23: hire left behind -> the press opened CONTROLS, not the page after stock). With the list closed the shop will open
+   on its first page, so only page II (shownB with the page II tick active) can be 'up'. ids = kspg_cur: 0 stock, 1 page II, 2 hire, 3 controls, 4 bots and modes. */
+static int kpq_press_page(int mode, int ctl, int ctlMode, int hire, int shownB)
+{
+    if (mode != KPQ_MODE_LIST) return shownB ? 1 : 0;
+    return ctl ? 3 + (ctlMode != 0) : hire ? 2 : shownB ? 1 : 0;
+}
+
 #endif /* KLPAGEQUEUE_LOGIC_H */

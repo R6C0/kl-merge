@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "klpagequeue_logic.h"
+#include "klmodestab_logic.h"
+#include "klfit_logic.h"
 
 static int fails, checks;
 #define CHECK(c, ...) do { checks++; if (!(c)) { fails++; printf("FAIL line %d: ", __LINE__); printf(__VA_ARGS__); printf("\n"); } } while (0)
@@ -170,6 +172,26 @@ int main(void)
     CHECK(kpq_log_due(1000, 0, 2000) == 1 && kpq_log_due(2999, 1001, 2000) == 0 && kpq_log_due(3001, 1001, 2000) == 1, "log at most once per 2 s");
     /* the 60 s timeout is still a lapse, and with a reason the caller can name (the hold's cap) */
     CHECK(kpq_step(1, 1, 0x20, 0, 0, 60001) == KPQ_LAPSE, "60 s: the queued press lapses (kspg_fb_show then asks kpq_hint_wanted)");
+
+    /* SHOPCYCLE 11-10: a cycle press starts from the page the caption names; stale hire / controls flags with the list closed do not count */
+    {
+        int av[5] = { 1, 0, 1, 1, 1 }, p, n, pos;   /* offline: stock, (no page II), hire, controls, modes = the owner's 'PAGE n/4' */
+        CHECK(kpq_press_page(2, 0, 0, 0, 0) == 0 && kpq_press_page(2, 0, 0, 1, 0) == 2 && kpq_press_page(2, 1, 0, 1, 0) == 3 && kpq_press_page(2, 1, 1, 0, 0) == 4 && kpq_press_page(2, 0, 0, 0, 1) == 1, "list open: the page that is up");
+        CHECK(kpq_press_page(0, 0, 0, 1, 0) == 0 && kpq_press_page(1, 1, 0, 0, 0) == 0 && kpq_press_page(0, 1, 1, 1, 0) == 0, "list closed (round-over page): stale hire / controls = stock");
+        CHECK(kpq_press_page(0, 0, 0, 1, 1) == 1, "list closed, page II up: page II");
+        /* owner log 20:02:23: hire left behind, press on the round-over page: next of stock is HIRE (2/4), never CONTROLS */
+        CHECK(kmt_next(kpq_press_page(0, 0, 0, 1, 0), av) == 2, "stale hire, list closed: the press opens the page after stock (hire), not controls");
+        CHECK(kmt_next(kpq_press_page(0, 1, 1, 0, 0), av) == 2, "stale bots-and-modes, list closed: hire, not stock / not the next of modes");
+        /* the caption's PAGE n/N and 'next: X' against the step: from every page one press = exactly the page named, N presses = round trip */
+        for (n = 0, p = 0; p < 5; p++) n += av[p];
+        for (p = 0, pos = 0; p < 5; p++) if (av[p]) {
+            char add[160]; int nx = kmt_next(p, av); pos++;
+            kfit_pieces(add, sizeof add, 0, p, pos, n, "", "F2", nx, "", "");
+            { char want[40], pg[24]; snprintf(want, sizeof want, "PAGE %d/%d", pos, n); snprintf(pg, sizeof pg, "next: %s", kfit_pname[nx]);
+              CHECK(strstr(add, want) && strstr(add, pg), "page %d caption '%s'", p, add); }
+        }
+        { int c = 0, k; for (k = 0; k < n; k++) c = kmt_next(c, av); CHECK(c == 0, "n presses from stock = back on stock"); }
+    }
 
     printf("klpagequeue_test: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
