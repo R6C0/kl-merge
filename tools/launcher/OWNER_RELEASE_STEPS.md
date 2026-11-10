@@ -8,7 +8,7 @@ verbs vs kl_release's argparse, XAML well-formed, bracket balance) and, on a PC 
 
 ## 0. What the tester receives, and why it carries no game data
 
-- `KL Dead Men Rising Setup.bat` (one file; RELEASE_URL inside it) -> downloads `KLMerge_package_v<ver>.zip` -> unpacks:
+- `KL Dead Men Rising Setup.bat` (one file; RELEASE_URL inside it) -> downloads the release asset `KLMerge_package.zip` -> unpacks:
   `manifest.json`, `patches\*.klp`, `kl_release.py`, optionally `KLMergeSetup.exe`, and `launcher\` (the .ps1,
   `KL Dead Men Rising.exe`, the tester README; Setup copies them up beside itself, so re-running Setup updates the launcher too).
 - `kl_release.py make` ships ONLY: our own files as literal bytes (`dinput8.dll`, `KLHook.ini`, `KLShopPage.ini`,
@@ -41,7 +41,7 @@ that differs from its `KL_PortBackup` copy (group `stockwav`), and `PC_Def.str` 
    unless a modified F01 file is meant to ship as `stockwav`.
 3. Stock proof: a file under `<DD>` with mtime after 2026-09-14 needs its stock copy in `KL_PortBackup` (or a
    `.before-1024gunsnd2` twin older than that), else `make` raises "no stock proof for DD file ..." for that source.
-4. Disk: C: is nearly full (CLAUDE.md: ~976 MB). Put the output on D: (6.7 GB free) or G:. The output is the package
+4. Disk (11-10 00:50): C: 37 GB free, D: 1.2 GB - put the output on C: (C:\kl_release). The output is the package
    (~0.6 GB est.) plus `_snap\` (copies of the small own files) plus `sha1cache.json`.
 5. Python on your PC with `numpy` and `zstandard` (`pip install numpy zstandard`).
 
@@ -49,7 +49,7 @@ that differs from its `KL_PortBackup` copy (group `stockwav`), and `PC_Def.str` 
 
 ```bat
 cd /d <this repo>
-python tools\kl_release.py make D:\kl_release\pkg_1110 --dd "C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days" --dm "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men" --pd2 "C:\Steam\steamapps\common\PAYDAY 2"
+python tools\kl_release.py make C:\kl_release\pkg_1110 --dd "C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days" --dm "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men" --pd2 "C:\Steam\steamapps\common\PAYDAY 2"
 ```
 
 - Paths are CLAUDE.md's (DD on C:, DM on G:, Payday 2 on C:). `--level 15` is the default zstd level; `--only core,DM03`
@@ -59,8 +59,8 @@ python tools\kl_release.py make D:\kl_release\pkg_1110 --dd "C:\Steam\steamapps\
   another session wrote into the game folder during make: re-run (patches already made are reused by sha1 name).
 - `NOT SHIPPED (Payday 2 audio): ...` lists the pd2 clips left out by design.
 - Then, with nothing else touching the folder:
-  `python tools\kl_release.py checklive D:\kl_release\pkg_1110 --dd "<DD>"` -> `0 changed/missing`, and
-  `python tools\kl_release.py verify "<DD>" --pkg D:\kl_release\pkg_1110` -> `0 problems` (the live folder equals the manifest).
+  `python tools\kl_release.py checklive C:\kl_release\pkg_1110 --dd "<DD>"` -> `0 changed/missing`, and
+  `python tools\kl_release.py verify "<DD>" --pkg C:\kl_release\pkg_1110` -> `0 problems` (the live folder equals the manifest).
 - Bump `VERSION = '1.0.0'` in `tools/kl_release.py` for every package you hand out (the launcher shows it; a tester's
   kept `KLHook.ini` gets the new default as `KLHook.ini.new-<VERSION>`; `--pkg` folders with different versions must
   not be mixed).
@@ -109,9 +109,9 @@ First build the launcher exe (after any change to `exe\DeadMenRising.cs` or the 
 -> `tools\launcher\KL Dead Men Rising.exe` (unsigned; pack_release prints a note when it is missing).
 
 ```bat
-powershell -ExecutionPolicy Bypass -File tools\launcher\pack_release.ps1 -Out D:\kl_release\pkg_1110 [-Exe dist\KLMergeSetup.exe]
+powershell -ExecutionPolicy Bypass -File tools\launcher\pack_release.ps1 -Out C:\kl_release\pkg_1110 [-Exe dist\KLMergeSetup.exe]
 ```
--> `D:\kl_release\KLMerge_package_v<ver>.zip` + `.sha1`. It copies only manifest.json, patches\, kl_release.py, the
+-> `C:\kl_release\KLMerge_package_v<ver>.zip` + `.sha1`, plus the same bytes as `KLMerge_package.zip` (the upload name). It copies only manifest.json, patches\, kl_release.py, the
 launcher files (+ `launcher\kl_launcher_music.py` and your `launcher\bg\*.jpg`, section 2b) and the optional exe (never
 `_snap`, `parts`, `sha1cache.json`, never `launcher\music\`) and refuses if anything with a game extension slipped into
 the staging folder.
@@ -122,9 +122,10 @@ A private repo's assets would need a token (`curl` gets 404), hence the separate
 The Setup bat's RELEASE_URL is fixed for good: `https://github.com/R6C0/dead-men-rising/releases/latest/download/KLMerge_package.zip`
 = the asset named exactly `KLMerge_package.zip` of the newest release. So every release uploads the zip under THAT name:
 
+pack_release.ps1 already writes that name beside the versioned zip (`KLMerge_package.zip` + `.sha1`, a hard link, no extra disk):
+
 ```bat
-copy /y D:\kl_release\KLMerge_package_v<ver>.zip "%TEMP%\KLMerge_package.zip"
-gh release create v<ver> "%TEMP%\KLMerge_package.zip" D:\kl_release\KLMerge_package_v<ver>.zip.sha1 --repo R6C0/dead-men-rising --title "KL: Dead Men Rising v<ver>" --notes "Tester build. Run KL Dead Men Rising Setup.bat again to update."
+gh release create v<ver> C:\kl_release\KLMerge_package.zip C:\kl_release\KLMerge_package.zip.sha1 --repo R6C0/dead-men-rising --title "KL: Dead Men Rising v<ver>" --notes "Tester build. Run KL Dead Men Rising Setup.bat again to update."
 ```
 (GitHub's limit is 2 GB per asset.) Hand out `KL Dead Men Rising Setup.bat` (and the README) on Discord; do not attach the
 .bat to the public release unless you want anyone to find it there. A re-run of Setup downloads only when the zip is newer

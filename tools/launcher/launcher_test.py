@@ -166,6 +166,9 @@ def main():
     check(len(urls) == 1, 'RELEASE_URL is set in exactly one place (found %d)' % len(urls))
     check(urls and urls[0] == 'https://github.com/R6C0/dead-men-rising/releases/latest/download/KLMerge_package.zip',
           'RELEASE_URL = the public release repo\'s latest KLMerge_package.zip (a fixed asset name, so the link never changes)')
+    asset = urls[0].rsplit('/', 1)[-1] if urls else '?'
+    check("'%s'" % asset in read(PACK).decode('ascii', 'replace'),
+          'pack_release.ps1 writes the upload file under the asset name RELEASE_URL downloads (%s)' % asset)
     check('findstr /i /c:"example.invalid"' in bat, 'the bat refuses to download from the placeholder URL')
     check('KLMergeLauncher.ps1' in bat and '-ExecutionPolicy Bypass -STA' in bat, 'the bat starts the launcher with -ExecutionPolicy Bypass -STA')
     check('zstandard' in bat and 'get-pip.py' in bat and '._pth' in bat, 'the bat installs zstandard into the embedded python (._pth + get-pip)')

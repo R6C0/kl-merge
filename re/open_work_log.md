@@ -1,3 +1,6 @@
+2026-11-10 ~00:55 - [06, offline] RELEASE ASSET NAME: Setup.bat downloads .../releases/latest/download/KLMerge_package.zip but pack_release.ps1 wrote only
+KLMerge_package_v<ver>.zip (+ a .sha1 naming that file); OWNER_RELEASE_STEPS had a manual copy step. pack_release now also writes KLMerge_package.zip (hard link) + its .sha1;
+steps say C:\kl_release (D: 1.2 GB free); launcher_test checks the name (fails on the old pack). Scratch pack x2 OK (11 files, 0 game files). Owner on the PC: no live run.
 2026-11-10 ~01:20 - [fc] CLEANUP on owner "yes delete anything old and unused" (11-09): repo 583 klhook/out_* dirs (>2 days, not named by tools) + stray root files; 37 clean old .claude/worktrees (branches kept; 61 with tracked edits kept: forced removal was refused); 36 kits/files in C:/kl_build_1024 from before 11-06 that no UNDO/kit/note names (pq_11xx, wt_pq5, lastcall_*_1105, pd2guns_chain_1105, perf_1105).
 DD *.before-* pruned to the newest 3 per file (owner rule 10-25): 278 files, 18.6 GB; C: 18 -> 37 GB free. KL_PortBackup untouched. EFFECT: undo steps deeper than 3 per file have no backup any more:
 dinput8.dll keeps before-campaign1109/campaign1110/levelmusic1109 only (merged_1109land..merged_1107 and vanwait UNDO.bat now refuse); KLHook.ini keeps campaign1109/campaign1110/driverarena1110. kl_release ignores .before- files: the tester make is unaffected.
