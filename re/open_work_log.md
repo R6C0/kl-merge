@@ -1,3 +1,11 @@
+2026-11-10 ~06:00 - [d0] DM02C INSTALLED after DM02C_1110 run 4 ALL PASS (TEST 03840ed0, online 7/0, items 37/0; stage undone byte-exact, then installed): DM02 43c088c2 -> b24fb05d,
+bots bb8f04cb -> dde7720a, base b86b606a -> 816ce4ad (C:/kl_build_1024/dm02shop_1110/combined_closed, variant_full; backups *.before-dm02combo1110; undo --dry OK).
+Run 3 -> 4 fixes in kl_bench_1110m (93fa7cab): shutter rows = the node-y-500 copy (slot 4447 rose 500 -> 800, the y-1000 copy never moves); door 3 walk waits 8 s
+(run 3's walk at t0+5 s never moved, GUESS round-start input lock); verdict = side of the door/pane line, not the distance. Run 4: door 3 186/241 cm, door 4 132/191 THROUGH;
+glass 1 + 2 BLOCKED before, Whole04 hidden + Remains04 drawn after the 60 s fallback, THROUGH after; sh1 + sh2 prompt best 0x6 / active 0x8 (Lift Door code a GUESS), rise +300.
+DD10 street death (dig agent, GUESS-level): the keyframed van runs over heisters in its drive-in lane z 1030 (+-110); otrExitLevel (8300,200,1100) half 450x300x450
+covers z 650..1550 = the lane; dd10call1109's seat at z 1100 died 1.2 s after entering, the van still in state 1 (FA_DieFromSelf / KILLED BY RED); dd10side1109's seat at z 750 lived.
+Not VanBlow / Join Land / AI. Fix being staged: tools/kl_dd10_exitsouth_1110.py shrinks otrExitLevel to z 650..900 "(recommended on)". Open: same audit on other van maps.
 2026-11-10 ~05:00 - [d0] INSTALLED after bench PASS (each undone byte-exact by the kit, then installed by its install.py, undo --dry OK):
 SMARTCOPS_DM01_1110: 0 faults, host alive, 1 KitchenBoy man ran 776 -> 191 cm to a cover stand and left it again; DM01 e091f0d8 / bots 957f20aa / base 6b7255e6.
 SMARTCOPS_DM03_1110 ALL PASS: 3 Garage men ran to cover, 6 left it, 8/11 move after 60 s; DM03 33361cd1 / 0bc8d138 / a4ad617a (on fc's back SWAT a81ede87).
