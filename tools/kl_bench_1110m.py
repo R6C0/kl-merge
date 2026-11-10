@@ -59,9 +59,11 @@ def lc_seg(who):
         # Run 1 (11-10 03:30): tele at floor + 60 right after GO, the walker never turned or moved (2nd tele stayed at y 414 for minutes: player not
         # simulated); so settle 8 s after GO, tele at floor + 8 and prove the walker with a warm-up goto between the pairs (open floor, kl_route).
         tele = 'tele %d %d %d' % (LC_MID[0], LC_MID[1] + 8, LC_MID[2])
-        s += ['waitstate 0x19 90000', 'wait 8000', tele, 'wait 1000', 'pos lcd-mid',
+        # Run 2 (KeepAliveHp, host alive): the walker runs ~220 cm/s but a 3 s shut try stopped 44 cm short of the shut pair, so the shut try
+        # gets 5 s (settle 4 s: the timer opens 20 s after GO; the ents right after it prove the pair was still shut).
+        s += ['waitstate 0x19 90000', 'wait 4000', tele, 'wait 1000', 'pos lcd-mid',
               'goto %d %d 60 3000' % LC_WARM, 'pos lcd-warm', 'log BENCH1110 lcd warm-up done',
-              'log BENCH1110 lcd shut try', 'goto %d %d 60 3000' % LC_WEST, 'pos lcd-shut', 'log BENCH1110 lcd shut try done'] + lc_ents() + [
+              'log BENCH1110 lcd shut try', 'goto %d %d 60 5000' % LC_WEST, 'pos lcd-shut', 'log BENCH1110 lcd shut try done'] + lc_ents() + [
               'wait 22000'] + lc_ents() + ['log BENCH1110 lcd after timer',
               tele, 'wait 1000', 'goto %d %d 60 3000' % LC_WARM2, 'pos lcd-warm2', 'goto %d %d 80 8000' % LC_WEST, 'pos lcd-west', 'log BENCH1110 lcd west done',
               tele, 'wait 1000', 'goto %d %d 80 8000' % LC_EAST, 'pos lcd-east', 'log BENCH1110 lcd east done',
@@ -81,18 +83,36 @@ def lc_checks(a, chk):
             mv = max(abs(r[-1][3][i] - r[0][3][i]) for i in (0, 2))
             chk('%s slid (moved >= 40 cm between the first and the last sample)' % n, mv >= 40, 'moved %.0f cm' % mv)
             chk('%s at floor height (y 300..450, not buried)' % n, all(300 <= x[3][1] <= 450 for x in r), 'y %s' % sorted({round(x[3][1]) for x in r}))
+    # verdicts by the door line, not by 'reached' (run 2: the walker crossed both open pairs and then stopped on lobby/office clutter 178 cm short)
+    def end_x(g):
+        m = re.search(r'at \((-?\d+), (-?\d+), (-?\d+)\)', g)
+        return int(m.group(1)) if m else None
     warm = M.goto_lines(a, *LC_WARM) + M.goto_lines(a, *LC_WARM2)
-    walks = bool(warm) and all('NOT reached' not in g for g in warm)
-    chk('walker moves (warm-up gotos between the pairs reached; else the walk checks are void)', walks,
-        '; '.join(g[13:120] for g in warm) if warm else 'no warm-up goto line')
+    mid = M.pos_of(a, 'lcd-mid')
+    wx = [end_x(g) for g in warm]
+    # run 3: the first warm-up goto right after the tele did not move (1900 -> 1900) while the shut try itself then walked 355 cm: any one
+    # goto in the room moving >= 50 cm proves the walker works
+    shut = M.pos_of(a, 'lcd-shut')
+    wx = wx + ([shut[0]] if shut is not None else [])
+    walks = mid is not None and any(x is not None and abs(x - mid[0]) >= 50 for x in wx)
+    chk('walker moves (a goto between the pairs, warm-up or the shut try, moved >= 50 cm; else the walk checks are void)', walks,
+        'from %s: %s' % (mid, '; '.join(g[13:110] for g in warm)) if warm else 'no warm-up goto line')
     if not walks:
         info.append('walk checks VOID: the player did not walk on open floor (see pos lcd-mid / lcd-warm)')
         return info
     shut = M.goto_lines(a, *LC_WEST)
-    chk('walk west during the timer is blocked (doors shut)', bool(shut) and 'NOT reached' in shut[0], shut[0][13:150] if shut else 'no goto line', warn=True)
-    chk('walk west after the timer reached (outer pair open)', len(shut) >= 2 and 'NOT reached' not in shut[1], shut[1][13:150] if len(shut) >= 2 else 'no 2nd goto line')
+    t_sd = next((M.secs_of(l) for l in a if 'BENCH1110 lcd shut try done' in l), None)
+    after = [r for r in rows['D04'] if t_sd is not None and M.secs_of(r[0]) >= t_sd]
+    still = bool(rows['D04']) and bool(after) and abs(after[0][3][2] - rows['D04'][0][3][2]) < 5
+    x0 = end_x(shut[0]) if shut else None
+    chk('walk west during the timer stops at the shut outer pair (end x >= 1520)', x0 is not None and x0 >= 1520, shut[0][13:150] if shut else 'no goto line')
+    chk('outer pair still shut right after the shut try (D04 not yet slid)', still, 'D04 z first %s, after the try %s' % (
+        rows['D04'][0][3][2] if rows['D04'] else '-', after[0][3][2] if after else '-'), warn=True)
+    x1 = end_x(shut[1]) if len(shut) >= 2 else None
+    chk('walk west after the timer crosses the outer pair (end x <= 1450)', x1 is not None and x1 <= 1450, shut[1][13:150] if len(shut) >= 2 else 'no 2nd goto line')
     east = M.goto_lines(a, *LC_EAST)
-    chk('walk east after the timer reached (inner pair open)', bool(east) and 'NOT reached' not in east[0], east[0][13:150] if east else 'no goto line')
+    x2 = end_x(east[0]) if east else None
+    chk('walk east after the timer crosses the inner pair (end x >= 2550)', x2 is not None and x2 >= 2550, east[0][13:150] if east else 'no goto line')
     info.append('LOOK at the shots near "lcd shut try" (doors drawn, closed) and "lcd after timer" (slid open); kick prompt must not show on them')
     return info
 
@@ -108,6 +128,10 @@ DM02C_DOORS = {   # doorway = (front stand, back stand) from the KickDoor_Arrow 
 }
 DM02C_GLASS = {23182: (-970, 524, 2566), 24258: (-1435, 519, 1670)}   # Whole04 REFs; both share the node name below
 DM02C_GLASS_NAME = 'SI0401_M02_FA_Door_Shatter_Glass_01!Whole04'
+# Walk lines that CROSS each glass pane's own collision footprint (staged .HVK type-1 statics, world cm, read by kl_hvk.py 11-10):
+# 1: (-970,2563)..(-910,2635), 2: (-1438,1671)..(-1365,1610); 94 cm wide, 2.7 cm thick, swung ~40-50 deg off the doorway line, so the
+# KL_Door stand-to-stand walk passes ~65 cm beside the pane and says nothing about the glass. Lines = pane midpoint +/- 60 cm along its normal.
+DM02C_GLASS_X = {1: ((-894, 2561), (-986, 2637)), 2: ((-1363, 1686), (-1439, 1594))}
 DM02C_SHOPS = {   # n: (tele start x, z, goto x, z, expected KLDress<n>_ props, a prop to look at)
     1: (-2350, 1350, -2400, 1350, 10),    # Corridore_201b: watchtable (-2763,500,1350), plaques (-2600..-2900,650,1060/1640)
     2: (2350, 1300, 2400, 1300, 20),      # Corridore_201d: shelves (2771..2951,500,1078), desk (2951,499,1460)
@@ -150,6 +174,7 @@ def dm02c_seg(who):
     # (3) glass BEFORE the break: Whole04 drawn + blocking at ~t0+15 s (the walk through door 1 / 2 must stop at the glass)
     s += ['ents Whole04 20', 'ents Remains04 20', 'log BENCH1110 dm02c g-pre sample']
     s += dm02c_walk('dm02c-g1pre', *DM02C_DOORS[1]) + dm02c_walk('dm02c-g2pre', *DM02C_DOORS[2])
+    s += dm02c_walk('dm02c-x1pre', *DM02C_GLASS_X[1]) + dm02c_walk('dm02c-x2pre', *DM02C_GLASS_X[2])
     # (1) shutter prompt: shutter 1 = tap E 700, shutter 2 = hold E 1500 (separate shutters: a 2nd press may replay frames 0..82)
     s += dm02c_shutter('sh1', DM02C_SH1, 'tap E 700') + dm02c_shutter('sh2', DM02C_SH2, 'tap E 1500')
     # (4) shop dressing: one stand point per shop room, 11 s each so the shot loop (every 5 s) takes >= 2 pictures per shop
@@ -159,6 +184,7 @@ def dm02c_seg(who):
     # (3) glass AFTER the 60 s fallback: well past t0+60 now (about t0+115 s). Sample first, then walk through.
     s += ['ents Whole04 20', 'ents Remains04 20', 'log BENCH1110 dm02c g-post sample']
     s += dm02c_walk('dm02c-g1post', *DM02C_DOORS[1]) + dm02c_walk('dm02c-g2post', *DM02C_DOORS[2])
+    s += dm02c_walk('dm02c-x1post', *DM02C_GLASS_X[1]) + dm02c_walk('dm02c-x2post', *DM02C_GLASS_X[2])
     s += ['ents Whole04 20', 'ents Remains04 20', 'ents RollerShutterA 12', 'log BENCH1110 dm02c host done']
     return s
 
@@ -221,6 +247,21 @@ def dm02c_checks(a, chk):
                 len(post), post[-1][2] if post else '-', len(rpost), rpost[-1][2] if rpost else '-', len(post_any)), warn=True)
         v, note = walk('dm02c-g%dpost' % door, *DM02C_DOORS[door])
         chk('glass %d walk-through after the break' % door, v == 'THROUGH', '%s: %s' % (v, note), warn=(v in ('VOID', 'NOSAMPLE') or not broke))
+        # across the pane itself (the doorway walk above passes beside it): BLOCKED before, THROUGH after = the glass collision is real and the shatter clears it
+        xb = math.hypot(DM02C_GLASS_X[door][0][0] - DM02C_GLASS_X[door][1][0], DM02C_GLASS_X[door][0][1] - DM02C_GLASS_X[door][1][1])
+        def xwalk(lbl):
+            pa, pb = M.pos_of(a, lbl + '-a'), M.pos_of(a, lbl + '-b')
+            f, bk = DM02C_GLASS_X[door]
+            if pa is None or pb is None:
+                return 'NOSAMPLE', 'no pos line for %s' % lbl
+            if math.hypot(pa[0] - f[0], pa[2] - f[1]) > 60:
+                return 'VOID', 'start %s is %.0f cm from %s' % (pa, math.hypot(pa[0] - f[0], pa[2] - f[1]), f)
+            e = math.hypot(pb[0] - bk[0], pb[2] - bk[1])
+            return ('THROUGH' if e <= 40 else 'BLOCKED'), 'start %s end %s, %.0f cm from the far side %s (line %.0f cm)' % (pa, pb, e, bk, xb)
+        v, note = xwalk('dm02c-x%dpre' % door)
+        chk('glass %d pane blocks a walk across it before the break' % door, v == 'BLOCKED', '%s: %s' % (v, note), warn=True)
+        v, note = xwalk('dm02c-x%dpost' % door)
+        chk('glass %d pane walkable across after the break' % door, v == 'THROUGH', '%s: %s' % (v, note), warn=True)
     info.append('glass: what the stock shatter does to Whole04 is unknown to me; if both Whole04 and Remains04 keep their pre-state, LOOK at the g-post shots and the walk verdict')
 
     # --- shutter prompt + rise ---------------------------------------------------------------------------------------------
