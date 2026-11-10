@@ -1,3 +1,4 @@
+2026-11-10 ~09:30 - [d0] RELEASE ONLINE SMOKE on the frozen live files (TEST 03840ed0, nothing installed): DM09, DM01, DM05A ALL PASS, 2 seats round 1 -> shop -> round 2, 0 faults/dumps both seats, 0x25 reset <= 0.2 s, host bots ON. Run: python tools/kl_bench_1106.py run load_<MAP> online (4fb9715b).
 2026-11-10 ~10:40 - [vault] DM03VAULTK_1110 on stage_k (--no-arm, zip 2638fabc, TEST 03840ed0, 0 faults, undo byte-exact): all 6 lanes BLOCKED, dock lanes stop at z -6768,
 lobby lanes at -6856 = the per-leaf 6 cm slabs hold both ways; the "side rule" (08:45 note below) is refuted. The stage_slab leak: the host pressed on the dock side (body z -6768)
 fired the Arm box (centre -7006, edge -6856, 44 cm off the hinge plane z -6812) THROUGH the shut leaf (GUESS: trigger tests a body volume wider than the capsule centre);
