@@ -49,7 +49,7 @@ ORDER = ['DM03BS_1110', 'DM03VAULT_1110', 'DM03VAULTB_1110']
 VAN_STOP = (3306, 2, 4)
 # from the vault stage's build report (GUESS-labelled there): Arm box centre (0, 340, -7006) half (150, 120, 150); doorway hinges x +-105 at z -6812;
 # the moved piles at (0, 241, -6620), (120, 241, -6540), (200, 241, -6660)
-VAULT_LOBBY = (0, 300, -7300)       # vestibule / lobby side, south of the Arm box (box z -7156..-6856); GUESS: open floor (lobby nav z -7500..-7000)
+VAULT_LOBBY = (0, 300, -7300)       # lobby side, south of the Arm box (box z -7156..-6856); checked on stage_sc nav: lobby, Arm, dock all over floor y 240, one part (122 cells within 3 m)
 VAULT_ARM = (0, -6980)
 VAULT_DOCK = (0, -6600)             # just past the doorway, dock side
 DOCK_Z = -6780                      # dock side of the doorway (hinges at z -6812)
