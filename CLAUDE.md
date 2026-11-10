@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~20:30 - [d0] Story Mode crash (menus_combined campui page, graphic used twice) -> 6b storyfix_1110 INSTALLED ([CampaignUI] Menu=0, row "Dead Men Rising"). Menu sounds uncut
+(Menu/Window had a 1.5 s cap): C:/kl_build_1024/menusounds_full_1110 INSTALLED (WAV 6f799fa3, klms 2752cbc3; undo its bat). Neither run in game yet.
 2026-11-10 ~19:55 - [6b] STORY MODE CRASH (owner, since menus_combined_1110): main menu -> Story Mode -> campguard "ZGraphic template int3 0x51f1a9 ... no campaign level" -> ASSERT -> c0000005 0x4be312 (read 0x40).
 Cause: the *_campui twins (served while [CampaignUI] Menu=1) put the pick row (Y288) AND the campui row (Y322) on CampaignMenu, both on FocusBar_short#04 + Line_Short_01#04 (used 2-3 x; stock uses each once). GUESS (strong, files only): a scene graphic binds once.
 FIX INSTALLED C:/kl_build_1024/storyfix_1110: ini 3df8a23b -> 7c8cec3d ([CampaignUI] Menu=0; the campui row needed the uninstalled levels half anyway) + owner rename: pick row + KLCampPick headline -> "Dead Men Rising" in the 4 overlay Patch01*.zip
