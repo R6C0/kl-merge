@@ -12,7 +12,7 @@ Door A = the lobby-to-dock doorway at (0, 240, -6806): an EMPTY doorway today (n
      so the map total stays exactly 7,000,000; --loot L2 is NOT built (refused: needs loot clones, no node-clone path for loot objects here).
 No actor or squad is added (census unchanged). Both zips (plain + bots) are rebuilt the same way; Entries= of KLJoin.ini / KLGuns.ini follows the new .prm chunk count.
 
-  python tools/kl_dm03vault_1110.py stage [--in-dir DIR] [--out DIR] [--accept-input] [--fuse S] [--backstop S] [--loot L1|L2] [--keep-kick (diagnostic)]
+  python tools/kl_dm03vault_1110.py stage [--in-dir DIR] [--out DIR] [--accept-input] [--fuse S] [--backstop S] [--loot L1|L2] [--keep-kick (diagnostic)] [--shared-slab (old build)]
 Default in-dir C:\kl_build_1024\dm03backswat_1110; restage on the live zip stage with --in-dir C:\kl_build_1024\dm03doorfix_1109 --accept-input (pins what it finds).
 """
 import collections, hashlib, json, math, os, re, shutil, statistics, struct, sys, tempfile
@@ -30,6 +30,9 @@ TAG = '.before-dm03vault_1110'
 # --keep-kick (DIAGNOSTIC stage only, never ship): keep the KickDoor controller + kick sound. Bench 11-10 DM03VAULTB_1110: the shut leaves did NOT block a
 # walk; every proven kick door keeps its controller, so this tests whether the stripped controller leaves the leaf (and its keyed slab) out of the shut pose
 KEEP_KICK = False
+# --shared-slab: the first build (one 2-instance 4 cm slab for both leaves; bench DM03VAULTK_1110 / DM03VAULTB_1110: walked through). Default now
+# one 6 cm single-instance slab per leaf, the build of the own-leaf doors that DO block (bench DM03SHUT_1110, live DM03 doors 176 / 64 / 84)
+SLAB_EACH = True
 FILES = ('F03_Main.zip', 'F03_Main.bots.zip', 'F03_Main.bots.base.md5')
 INIS = ('KLJoin.ini', 'KLGuns.ini')
 KNOWN_INPUTS = {('a81ede87c6798642ebf8261499762fd0', 'e8c06e13d5bc2182fe005a1bf2bae741'): 'dm03backswat_1110 output',
@@ -156,7 +159,7 @@ def pass1(src, dst, log):
     # monkeypatch: resolve_doors calls virtual_host(hinge, cx) with the default width 120; ours are LEAF_W wide, DOOR_H tall
     IG.virtual_host = lambda hinge, cx, width=LEAF_W, height=DOOR_H: orig(hinge, cx, LEAF_W, DOOR_H)
     try:
-        rep = IG.build(src, dst, ext=0, spots=[], doors=list(HOSTS), log=log, top=top, door_base=base, own_leaf=False)
+        rep = IG.build(src, dst, ext=0, spots=[], doors=list(HOSTS), log=log, top=top, door_base=base, own_leaf=False, slab_each=SLAB_EACH)
     finally:
         IG.virtual_host = orig
     return top, [base + 1, base + 2]
@@ -583,8 +586,9 @@ def main(a):
     if not a or a[0] != 'stage':
         print(__doc__); return 2
     opt = lambda k, d=None: a[a.index(k) + 1] if k in a else d
-    global KEEP_KICK
+    global KEEP_KICK, SLAB_EACH
     KEEP_KICK = '--keep-kick' in a
+    SLAB_EACH = '--shared-slab' not in a
     for n, o, w in stage(opt('--in-dir', IN_DIR), opt('--out', OUT), '--accept-input' in a, float(opt('--fuse', FUSE_S)), float(opt('--backstop', BACKSTOP_S)), opt('--loot', 'L1')):
         print('%-26s %s -> %s' % (n, o, w))
     return 0

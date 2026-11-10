@@ -43,16 +43,25 @@ K = {
 #   DM03VAULT_1110:  the host walks into KL_Vault!1\Arm -> 3 s Fuse -> Boom; doors sampled before/after, walk through the doorway, then
 #                    sampled again past 240 s (the Backstop TriggerDelay2 cannot be cancelled: does it replay the opening and snap the leaves?)
 #   DM03VAULTB_1110: nobody arms it; doors sampled at ~220 s and ~260 s from the round start: the Backstop alone opens them, quietly
-VAULT_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_sc'  # on d0's smartcops DM03 (33361cd1), itself on back-SWAT a81ede87
+VAULT_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_slab'  # on d0's smartcops DM03 (33361cd1); one 6 cm slab per leaf (stage_sc = the old shared slab, walked through)
 for _k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
     K[_k] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-900:20', stage=VAULT_STAGE, tag='.before-dm03vault_1110')  # = the stage install.py TAG
 # DM03VAULTK_1110 (DIAGNOSTIC, never installed for play): stage_diag = the same vault built with --keep-kick (KickDoor controller + kick sound kept).
 # Bench 11-10 DM03VAULTB_1110: the shut leaves did not stop a dock -> lobby walk. Three control lanes split the suspects: blocked at x -50/+50 but
 # not at 0 = the seam between the two slabs; blocked everywhere here but not on stage_sc = the stripped controller; open everywhere = neither
-VAULT_DIAG_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_diag'
+# 11-10 after DM03SHUT_1110 (live own-leaf doors block): the lanes now run on stage_slab (one single-instance 6 cm slab per leaf, the own-leaf build)
+VAULT_DIAG_STAGE = VAULT_STAGE
 K['DM03VAULTK_1110'] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-300:20', stage=VAULT_DIAG_STAGE, tag='.before-dm03vault_1110')
 VAULT_LANES = (-50, 0, 50)
-ORDER = ['DM03BS_1110', 'DM03VAULT_1110', 'DM03VAULTB_1110', 'DM03VAULTK_1110']
+# DM03SHUT_1110 (no install, live DM03 33361cd1): do the kick doors ALREADY live (dm03doorfix_1109: own-leaf hosts 176, 64, 84) stop a walk while shut?
+# The vault's added type-4 slab did not (DM03VAULTK_1110, every lane). Blocked here = the vault failure is its own (virtual host, shared 4 cm shape);
+# walked through here = no added kick door blocks on any map. Door 176 is then kicked (kl_bench_1109 door_seg) and walked again as the open control.
+# Stand points: kl_bench_1109.door_data on F03_Main.zip.before-doors_1108; the through axis is z for 176, x for 64 and 84.
+SHUT_DOORS = [dict(host=176, hinge=[-3708, 300, -3217], front=[-3772, 300, -3125], back=[-3767, 300, -3316], axis=2),
+              dict(host=64, hinge=[-4104, 300, -2979], front=[-4197, 300, -3042], back=[-4006, 300, -3039], axis=0),
+              dict(host=84, hinge=[-4504, 300, -3222], front=[-4411, 300, -3158], back=[-4602, 300, -3161], axis=0)]
+K['DM03SHUT_1110'] = dict(map='DM03', slot='F03', shots='60-400:20', live={'F03_Main.zip': '33361cd1', 'F03_Main.bots.zip': '0bc8d138', 'KLJoin.ini': '5c02ca99'}, files={})
+ORDER = ['DM03BS_1110', 'DM03VAULT_1110', 'DM03VAULTB_1110', 'DM03VAULTK_1110', 'DM03SHUT_1110']
 VAN_STOP = (3306, 2, 4)
 # from the vault stage's build report (GUESS-labelled there): Arm box centre (0, 340, -7006) half (150, 120, 150); doorway hinges x +-105 at z -6812;
 # the moved piles at (0, 241, -6620), (120, 241, -6540), (200, 241, -6660)
@@ -132,6 +141,19 @@ def lanes_seg(who):
     return s + vault_doors('after lanes')
 
 
+def shut_seg(who):
+    """DM03SHUT_1110: walk front -> back through each SHUT live kick door (no E), then kick 176 and walk it again."""
+    if who != 'host':
+        return ['wait 60000']
+    s = ['waitstate 0x19 90000', 'wait 15000']
+    for d in SHUT_DOORS:
+        a, b, h = d['front'], d['back'], d['host']
+        # floor + 8 (the vault lanes' tele height), the walk ends 10 cm from the far stand point or after 6 s
+        s += ['tele %d %d %d' % (a[0], a[1] + 8, a[2]), 'wait 2500', 'pos shut%d-0' % h, 'goto %d %d 10 6000' % (b[0], b[2]), 'wait 500',
+              'pos shut%d' % h, 'ents KickDoor_Action 10', 'log BENCH1110 shut door %d walk done' % h]
+    return s + M.door_seg(dict(SHUT_DOORS[0]), 'kick176')
+
+
 def md5_file(p):
     return M.md5_of(open(p, 'rb').read()) if os.path.isfile(p) else '-'
 
@@ -179,6 +201,8 @@ def segment(k, who):
         return vault_seg(who, k == 'DM03VAULT_1110')
     if k == 'DM03VAULTK_1110':
         return lanes_seg(who)
+    if k == 'DM03SHUT_1110':
+        return shut_seg(who)
     if k == 'DM03BS_1110':
         p = '%s/doors.json' % M.kd(k)
         return back_seg(who, json.load(open(p)) if os.path.isfile(p) else [])
@@ -290,11 +314,44 @@ def lanes_checks(k, a):
     return res, info
 
 
+def shut_checks(k, a):
+    res, info = [], []
+
+    def chk(name, cond, detail='', warn=False):
+        res.append(('PASS' if cond else ('WARN' if warn else 'FAIL'), name, detail))
+    chk('item segment ran on the host (level loaded ... segment done)', any('BENCH1109 %s host level loaded' % k in l for l in a)
+        and any('BENCH1109 %s host segment done' % k in l for l in a), '%d host log lines' % len(a))
+    blocked = {}
+    for d in SHUT_DOORS:
+        h, ax, pl = d['host'], d['axis'], d['hinge'][d['axis']]
+        sf = 1 if d['front'][ax] > pl else -1          # the front side's sign along the through axis
+        p0, p1 = M.pos_of(a, 'shut%d-0' % h), M.pos_of(a, 'shut%d' % h)
+        chk('door %d: tele landed on the front side' % h, bool(p0) and (p0[ax] - pl) * sf > 20, 'pos %s' % (p0,))
+        moved = bool(p0 and p1) and abs(p1[0] - p0[0]) + abs(p1[2] - p0[2]) >= 30
+        chk('door %d: the walker moved >= 30 cm (else the walk is INVALID, not a block)' % h, moved, '%s -> %s' % (p0, p1))
+        b = bool(p0 and p1) and (p1[ax] - pl) * sf > 0
+        if moved:
+            blocked[h] = b
+        chk('door %d: the SHUT door stopped the walk (stayed on the front side)' % h, b, '%s -> %s (door plane %s %d)' % (p0, p1, 'xyz'[ax], pl), warn=True)
+    d = SHUT_DOORS[0]
+    t = M.pos_of(a, 'kick176-through')
+    ax, pl = d['axis'], d['hinge'][d['axis']]
+    sf = 1 if d['front'][ax] > pl else -1
+    chk('door 176 after the kick: walked through (open control)', bool(t) and (t[ax] - pl) * sf < 0, 'pos %s' % (t,), warn=True)
+    info.append('VERDICT: ' + ('no valid walk (no door moved the walker)' if not blocked else
+                               'every live kick door blocks while shut: the vault slab (virtual host, shared 4 cm shape) is the odd one' if all(blocked.values()) else
+                               'NO live kick door blocks while shut: added kick doors are walk-through on every map' if not any(blocked.values()) else
+                               'mixed: %s' % blocked))
+    return res, info
+
+
 def item_checks(k, a, dd=(), ctrl=None):
     if k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
         return vault_checks(k, a)
     if k == 'DM03VAULTK_1110':
         return lanes_checks(k, a)
+    if k == 'DM03SHUT_1110':
+        return shut_checks(k, a)
     if k != 'DM03BS_1110':
         return _item_checks(k, a, dd, ctrl)
     res, info = _item_checks('DM03_1109', a, dd, ctrl)

@@ -762,7 +762,7 @@ def drop_names(M, grp, newp, dropped):
 
 # ------------------------------------------------------------------ build
 def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, extra_drop=(), spots_near=None, ext_doors=0, necks=0, ext_lift=0.0,
-          top=TOP, door_base=0, own_leaf=False):
+          top=TOP, door_base=0, own_leaf=False, slab_each=False):
     import statistics
     import kl_fa_bots as F, kl_fa_cover as CV, kl_fa_climb2 as C2, kl_graft, kl_light, kl_escape
     data = open(src_zip, 'rb').read()
@@ -1036,6 +1036,15 @@ def build(src_zip, dst_zip, ext=4, doors=(), pin=None, log=print, spots=None, ex
                     raise ValueError('slab vertex count %d != donor %d' % (len(vv), len(v)))
                 sh = ds.clone([di2], [])
                 sh.verts = struct.pack('<%df' % len(vv), *vv)
+                hvk.shapes.append(sh)
+        elif slab_each:
+            # DM03 vault 1110: the shared 2-instance 4 cm slab of two virtual hosts did not stop a walk while the own-leaf ones (one shape
+            # per door, 6 cm) do (bench DM03SHUT_1110). Same build as those: one single-instance shape per door, z +- 3 cm (GUESS: which of
+            # the two differences matters is not known)
+            v6 = [x * 1.5 if j % 3 == 2 else x for j, x in enumerate(v)]
+            for di2 in dnews:
+                sh = ds.clone([di2], [])
+                sh.verts = struct.pack('<%df' % len(v6), *v6)
                 hvk.shapes.append(sh)
         else:
             sh = ds.clone(dnews, [])
