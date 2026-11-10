@@ -1,3 +1,9 @@
+2026-11-10 ~08:40 - [vault] DM03VAULT_1110 on stage_m (TEST 03840ed0, undo byte-exact, map folder unchanged): control dock walk stopped at (-4,241,-6768) = shut door holds; host in the
+Arm box at (18,244,-7226), blast, walked through to (-2,242,-6633); no Backstop replay; host alive. NOT complete: at 08:33:55 both seats lost the D3D device (ReShade "device reset")
+and died at d3d9.dll+0x5feeb (KLHook_1.dmp each); System log Display 4107 SetDisplayConfig 08:33:59, last user input ~08:33:50 = the owner at the PC, not the map. Late Backstop walk +
+round 2 unproven. First try refused by install.py (WinError 5 renaming over F03_Main.zip right after d0's smoke; leftover .tmp removed, retry fine). Rerun when the PC is free.
+(The ~10:40 time below is a mis-stamp: written ~08:20.)
+2026-11-10 ~10:40 - [vault] DM03VAULTK_1110 on stage_k (--no-arm, zip 2638fabc, TEST 03840ed0, 0 faults, undo byte-exact): all 6 lanes BLOCKED, dock lanes stop at z -6768,
 2026-11-10 ~09:30 - [d0] RELEASE ONLINE SMOKE on the frozen live files (TEST 03840ed0, nothing installed): DM09, DM01, DM05A ALL PASS, 2 seats round 1 -> shop -> round 2, 0 faults/dumps both seats, 0x25 reset <= 0.2 s, host bots ON. Run: python tools/kl_bench_1106.py run load_<MAP> online (4fb9715b).
 2026-11-10 ~10:40 - [vault] DM03VAULTK_1110 on stage_k (--no-arm, zip 2638fabc, TEST 03840ed0, 0 faults, undo byte-exact): all 6 lanes BLOCKED, dock lanes stop at z -6768,
 lobby lanes at -6856 = the per-leaf 6 cm slabs hold both ways; the "side rule" (08:45 note below) is refuted. The stage_slab leak: the host pressed on the dock side (body z -6768)
