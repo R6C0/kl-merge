@@ -216,7 +216,7 @@ def level_ids(p, sks=None):
                 s = names[t5[i]].lower()
                 if i == FREE_ID and s != FREE_NAME:     # alias_free_bone(): a second id for an existing bone
                     continue
-                if bad is None and (ids.get(s, i) != i or owner.get(i, s) != s or t5[i] in seen):
+                if bad is None and (ids.get(s, i) != i or owner.get(i, s) != s or t5[i] in seen or dict(loc).get(s, i) != i):
                     bad = (i, s)
                 loc.append((s, i))
                 seen.add(t5[i])
