@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-11 ~00:15 - [d0] MERGED 1110h INSTALLED on owner "yes all good install all" (not benched): dll 6dcae9e6 -> 4485802e, ini 50fb6eac -> 13ff7f94 (CopToCrew 0.70, CrewHealth 1.00, TraitorReveal=1, Defend=0, [Difficulty] Ai=2 You=2 = Ctrl+Home / Ctrl+PgDn, ListUserGuard=2 for DM03 0x4f8a8e).
+Undo: C:/kl_build_1024/merged_1110h/kit/UNDO.bat FIRST, then merged_1110g. 81 told to re-pack. Open: bench m1110h_dm03 + DD10 first-spawn trace (dd10trace3a/3b) when the PC is free.
 2026-11-10 ~23:50 - [d0] MERGED 1110h STAGED, NOT installed (pack frozen; 81 re-packs after any install): branch d0-merged-1110h cb0a9885 = 1110g + difficulty + traitor + dm03skip0. SHIP 4485802e / TEST b43a109d, kit C:/kl_build_1024/merged_1110h/kit (pins live dll 6dcae9e6; ini 50fb6eac -> 13ff7f94; undo byte-exact in scratch; review PASS; kl_tests 173/0/5).
 Sponge cause: CopToCrew 0.01 = stock Arcade L1 + CrewHealth 1.25 -> 0.70 / 1.00, Ctrl+Home / Ctrl+PgDn steps. Early traitor = our TraitorFoe score-bit write (a7636fb0) -> [Bots] TraitorReveal=1 hides until first hostile act; Defend=0 until benched. DM03 0x4f8a8e: ListUserGuard=2 = C port of 0x630700 skipping key 0.
 Bench: kl_bench_1106.py run m1110h_dm03 solo. DD10 first-spawn death (FA_DieFromSelf at x ~9300 z ~936, 3/3) UNPROVEN: trace kits dd10trace3a..d (branch d0-dd10tracekit-1110), needs the owner's PC. Incident: a reviewer ran difficulty kit install.py --help = real install; undone byte-exact at once, kits now refuse unknown args.
