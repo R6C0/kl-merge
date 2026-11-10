@@ -26,6 +26,10 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-10 ~03:35 scheduled (cloud, offline): the "Owner: shipped-ini review" item has a tool: `python tools\kl_ini_shipcheck.py "<DD>\KLHook.ini" [--notes]` (sample = klhook/KLHook.ini; exit 1 on
+  ERROR/WARN). Live ini 02:19: 0 ERROR, 7 WARN (CarDown Dry=1 dry run on every tester; [Brain] RayAim/HolderSet/CombatFlag "TEST build only"; FireLine=2/DefendPull=2/OnlineBrainBoard=1 log modes),
+  73 FEAT (sample says off-until-benched; stale comments), 47 Log=1/probe keys incl. OnlineTagProbe + ReplicaProbe (both "recommended on" in the sample), [Campaign]+Camp* undocumented, 7 comment
+  lines naming C:\kl_build_1024 UNDO kits. debug/notes/2026-11-10-scheduled-shipcheck.md. f0: a one-line call in make/OWNER_RELEASE_STEPS is yours to add.
 - 11-10 ~01:30 f0 (kl-merge-81): FIXED ce681419: the shipped KLHook.ini holds the owner's absolute [Ambience]/[Stinger] Folder= (C:\Steam\...\Kane & Lynch 2 - Dog Days\KLExpansion\...)
   and [Music] Folder/FolderB (C:\Steam\...\PAYDAY 2\...); the hook uses them as-is, so ambience + stingers were silent on every tester not on C:\Steam. kl_release install now
   rewrites them to the tester's DD / PD2 folder (journal local_sha1; verify/re-install/uninstall accept it). kl_release_test PASS, kl_tests --py: gunpunch/fallback FAILs pre-existing.

@@ -1,3 +1,10 @@
+2026-11-10 ~03:35 - [scheduled check-in, cloud, offline] SHIPPED-INI REVIEW TOOL for T0: tools/kl_ini_shipcheck.py (+_test 44/0, in kl_tests --py) grades a KLHook.ini by the repo sample's own
+"(recommended on/off)" / "TEST build only" / "diagnostic" comments: ERROR owner paths in values, WARN diagnostics/TEST-only on + [Auto]/[Bench]/[Script]/[Solo] beyond the sample, FEAT off-until-benched
+features (listed, never fails), one 'logging on' line. Live ini (02:19 copy, bench_1110/DM03BS_1110/KLHook_base.ini): 0 ERROR, 7 WARN (CarDown Dry=1 dry run; [Brain] RayAim/HolderSet/CombatFlag
+TEST-only, FireLine=2/DefendPull=2/OnlineBrainBoard=1 log modes), 73 FEAT, 47 Log=1/probe keys, [Campaign]+Camp*/[Redirect.N]/[Page.N]/[Wardrobe] undocumented in the sample; 7 comment lines name
+C:\kl_build_1024 UNDO kits: debug/notes/2026-11-10-scheduled-shipcheck.md. kl_release_test PASS on Linux (ntpath for drive roots in localize; Windows install unchanged); kl_tests 150/0/18.
+PC busy (commits 02:42, kits 02:32): nothing launched or installed; DD/DM folders still not connected to the task (KLHook.log / dumps unread). Owner: decide CarDown Dry=1 and the 3 TEST-only
+[Brain] keys for the tester ini; f0 may call `python tools\kl_ini_shipcheck.py "<DD>\KLHook.ini"` in make (own call).
 2026-11-10 ~02:55 - [T9 local] MATCH PAGES SHOT (no crash involved): bench MENULOOK_MATCH PASS (TEST f4c8c3fd, deadmen + stock, live dll 38104558 / ini a08b6110 restored).
 All 16 pages per look now in C:/kl_build_1024/menulook_1109/shots/{deadmen,stock} (lobby, lobby_map, pause, roundover, shop_page1/2, shop_hire, shop_controls + the 8 menus).
 THEME BUG for the cloud (colour, not width): text ON the light plates (selected row, lobby column header) is dark in stock but PALE in deadmen = unreadable (lobby 'LOCATION: HOT COFFEE', 'NAME: / CRIMINAL ...').

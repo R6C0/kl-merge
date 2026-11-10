@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~03:35 - [scheduled check-in, offline] SHIPPED-INI REVIEW TOOL: tools/kl_ini_shipcheck.py (+_test) grades a KLHook.ini by the sample's own (recommended ...) / TEST-only / diagnostic comments;
+live ini 02:19: 0 ERROR (no owner path in a value), 7 WARN (CarDown Dry=1; [Brain] RayAim/HolderSet/CombatFlag TEST-only; FireLine/DefendPull/OnlineBrainBoard log modes), 73 FEAT, 47 Log=/probe keys,
+[Campaign]+Camp*/[Redirect.N]/[Page.N]/[Wardrobe] undocumented in the sample: debug/notes/2026-11-10-scheduled-shipcheck.md. kl_release_test PASS on Linux, kl_tests 150/0/18. Owner: Dry=1 + the 3 TEST-only keys for the tester ini.
 2026-11-10 ~02:55 - [T9 local] MATCH PAGES SHOT (no crash involved): bench MENULOOK_MATCH PASS (TEST f4c8c3fd, deadmen + stock, live dll 38104558 / ini a08b6110 restored).
 All 16 pages per look now in C:/kl_build_1024/menulook_1109/shots/{deadmen,stock} (lobby, lobby_map, pause, roundover, shop_page1/2, shop_hire, shop_controls + the 8 menus).
 THEME BUG for the cloud (colour, not width): text ON the light plates (selected row, lobby column header) is dark in stock but PALE in deadmen = unreadable (lobby 'LOCATION: HOT COFFEE', 'NAME: / CRIMINAL ...').
