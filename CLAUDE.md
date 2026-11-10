@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~06:20 - [d0] DD10 EXIT-SOUTH BENCH PASS, HELD for the next release (81's freeze, package 9a60c535 has DD10 6aeb8208): stage C:/kl_build_1024/dd10exitsouth_1110
+(zip e152950e / bots 604a9d9e / base 88f4be29). dd10south1110 + dd10southledge1110 (TEST 03840ed0): van called from z 750, HealFloor 3600->9600, shielded 53 s wait + drive-out,
+seat alive at (8300,750) wait 15/30/45 s, 0 faults/deaths; only the known round-end check FAILs. Undo byte-exact. Install when 81 says the owner uploaded.
 2026-11-10 ~06:00 - [d0] DM02C INSTALLED after bench run 4 ALL PASS (online 7/0, items 37/0): DM02 43c088c2 -> b24fb05d / bots dde7720a / base 816ce4ad (combined_closed, variant_full).
 Doors 3+4 walkable, both vault panes (closed pose) block then break at the 60 s fallback, both shutters prompt (6/8) + rise +300. Undo: C:/kl_build_1024/dm02shop_1110/combined_closed/install.py --undo.
 DD10 street death = the keyframed van runs over heisters in the north half of otrExitLevel (z 650..1550 covers the lane z ~920..1140; seat at z 1100 died, z 750 lived): exit-south stage (box z 650..900) being built.

@@ -1,3 +1,6 @@
+2026-11-10 ~06:20 - [d0] DD10 EXIT-SOUTH BENCH PASS, HELD for the next release (81's freeze, package 9a60c535 has DD10 6aeb8208): stage C:/kl_build_1024/dd10exitsouth_1110
+(zip e152950e / bots 604a9d9e / base 88f4be29). dd10south1110 + dd10southledge1110 (TEST 03840ed0): van called from z 750, HealFloor 3600->9600, shielded 53 s wait + drive-out,
+seat alive at (8300,750) wait 15/30/45 s, 0 faults/deaths; only the known round-end check FAILs. Undo byte-exact. Install when 81 says the owner uploaded.
 2026-11-10 ~06:00 - [d0] DM02C INSTALLED after DM02C_1110 run 4 ALL PASS (TEST 03840ed0, online 7/0, items 37/0; stage undone byte-exact, then installed): DM02 43c088c2 -> b24fb05d,
 bots bb8f04cb -> dde7720a, base b86b606a -> 816ce4ad (C:/kl_build_1024/dm02shop_1110/combined_closed, variant_full; backups *.before-dm02combo1110; undo --dry OK).
 Run 3 -> 4 fixes in kl_bench_1110m (93fa7cab): shutter rows = the node-y-500 copy (slot 4447 rose 500 -> 800, the y-1000 copy never moves); door 3 walk waits 8 s
