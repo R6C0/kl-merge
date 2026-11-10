@@ -6,6 +6,9 @@ glass 1 + 2 BLOCKED before, Whole04 hidden + Remains04 drawn after the 60 s fall
 DD10 street death (dig agent, GUESS-level): the keyframed van runs over heisters in its drive-in lane z 1030 (+-110); otrExitLevel (8300,200,1100) half 450x300x450
 covers z 650..1550 = the lane; dd10call1109's seat at z 1100 died 1.2 s after entering, the van still in state 1 (FA_DieFromSelf / KILLED BY RED); dd10side1109's seat at z 750 lived.
 Not VanBlow / Join Land / AI. Fix being staged: tools/kl_dd10_exitsouth_1110.py shrinks otrExitLevel to z 650..900 "(recommended on)". Open: same audit on other van maps.
+2026-11-10 ~05:55 - [f0, T0] RELEASE PACKAGE FROZEN 05:47, ready for the owner's upload: C:/kl_release/KLMerge_package.zip 2,026,193,651 bytes (< 2 GiB), sha1 9a60c535.
+Core 1110f 6711bc5f / ini 0da79eb8; maps per d0's MAPS DONE + DM02 combo b24fb05d. Two rehearsals from the unzipped package PASS (install 0, verify 0 in the set, uninstall byte-exact).
+Later landings (DD10 exit-south, DM03 vault) = next release. Details: re/week_plan_1028.md T0.
 2026-11-10 ~05:00 - [d0] INSTALLED after bench PASS (each undone byte-exact by the kit, then installed by its install.py, undo --dry OK):
 SMARTCOPS_DM01_1110: 0 faults, host alive, 1 KitchenBoy man ran 776 -> 191 cm to a cover stand and left it again; DM01 e091f0d8 / bots 957f20aa / base 6b7255e6.
 SMARTCOPS_DM03_1110 ALL PASS: 3 Garage men ran to cover, 6 left it, 8/11 move after 60 s; DM03 33361cd1 / 0bc8d138 / a4ad617a (on fc's back SWAT a81ede87).

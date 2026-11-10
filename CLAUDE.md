@@ -70,6 +70,8 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 2026-11-10 ~06:00 - [d0] DM02C INSTALLED after bench run 4 ALL PASS (online 7/0, items 37/0): DM02 43c088c2 -> b24fb05d / bots dde7720a / base 816ce4ad (combined_closed, variant_full).
 Doors 3+4 walkable, both vault panes (closed pose) block then break at the 60 s fallback, both shutters prompt (6/8) + rise +300. Undo: C:/kl_build_1024/dm02shop_1110/combined_closed/install.py --undo.
 DD10 street death = the keyframed van runs over heisters in the north half of otrExitLevel (z 650..1550 covers the lane z ~920..1140; seat at z 1100 died, z 750 lived): exit-south stage (box z 650..900) being built.
+2026-11-10 ~05:55 - [f0, T0] RELEASE PACKAGE FROZEN 05:47, ready for the owner's upload: C:/kl_release/KLMerge_package.zip 2,026,193,651 bytes (< 2 GiB), sha1 9a60c535
+(core 1110f 6711bc5f / ini 0da79eb8, DM02 combo b24fb05d in; two rehearsals from the unzipped package PASS). Later landings = next release. Owner: upload per OWNER_RELEASE_STEPS section 4.
 2026-11-10 ~05:00 - [d0] INSTALLED after bench PASS: SMART COPS DM01 (e091f0d8 / bots 957f20aa / base 6b7255e6) + DM03 (33361cd1 / 0bc8d138 / a4ad617a, on fc's back SWAT),
 DM05A LCDOORS timer (791eb9c3 / 912e08a5 / 501e1b79). Undo: C:/kl_build_1024/{smartcops_1110/DM01,smartcops_1110/DM03,lcdoors_1110}/UNDO.bat. DM02C (doors/glass/shutter/shop) NOT installed:
 host killed at the door 2 stand (AI posts; stands moved, 65d3543e), door 3 stand on a merc post, and both vault glass panes are SWUNG out of their doorways (block nothing): closed-pose stage being built.
