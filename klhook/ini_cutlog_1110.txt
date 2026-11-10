@@ -1,0 +1,3 @@
+; ini_cutlog_1110.txt - the line the cutlog kit adds to KLHook.ini ([Campaign] section; the kit creates it when missing).
+[Campaign]
+CutsceneLog=1
