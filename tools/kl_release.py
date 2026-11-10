@@ -1014,17 +1014,23 @@ def cmd_make(a):
         zips = {t['rel']: t['live'] for t in items if t['kind'] == 'zip'}
         items = sorted(items, key=lambda t: out_source(t['rel']) in zips)   # main zips before their bots (stable)
         made = {}                                      # rel -> (size, sha1) as made here, for the 'out:' refs
+        mstat = {}                                     # rel -> (size, mtime) when it was read
         for t in items:
             live = t['live']
             st0 = os.stat(live)
             sha = mk.sha(live, cache=False)
             made[t['rel']] = (st0.st_size, sha)
+            mstat[t['rel']] = (st0.st_size, int(st0.st_mtime))
             pname = '%s.klp' % sha[:20]
             pfile = os.path.join(out, 'patches', pname)
             orel = out_source(t['rel']) if t['kind'] == 'zip' else None
             if orel in made:                           # bots zip: against its main zip as built by the same install
                 mk.outs[orel] = zips[orel]
-                ofile = os.path.join(out, 'patches', '%s.out.klp' % sha[:20])
+                so = os.stat(zips[orel])
+                if (so.st_size, int(so.st_mtime)) != mstat[orel]:
+                    mk.warn.append('%s changed before its bots zip was made against it' % orel)
+                # keyed by BOTH zips: a cached out patch made against another main zip is never reused
+                ofile = os.path.join(out, 'patches', '%s.%s.out.klp' % (sha[:20], made[orel][1][:12]))
                 if not os.path.exists(ofile):
                     tt = time.time()
                     mk.log(' %s (%s) against out:%s' % (t['rel'], fmt(st0.st_size), orel))
@@ -1318,6 +1324,9 @@ def cmd_install(a):
         if any(r.startswith('pd:') for r in e['refs']) and not pd2:
             skipped.append(e['rel']); continue
         use.append(e)
+    for e in [e for e in use if any(r in skipped for r in out_refs(e))]:   # built from a skipped file: skipped too
+        use.remove(e)
+        skipped.append(e['rel'])
     if skipped:
         say('skipping %d files that need Payday 2' % len(skipped))
     env = Env(dd, dm, pd2)
@@ -1554,7 +1563,8 @@ def cmd_verify(a):
     man = load_manifest(pkg)
     ents = select_entries(man, a.only)
     if not pd2:                                      # same rule as install: files built from Payday 2 are skipped without it
-        ents = [e for e in ents if not any(r.startswith('pd:') for r in e['refs'])]
+        nopd = {e['rel'] for e in ents if any(r.startswith('pd:') for r in e['refs'])}
+        ents = [e for e in ents if e['rel'] not in nopd and not any(r in nopd for r in out_refs(e))]
     bad = 0
     done = {x['rel']: x for x in load_journal(dd)['entries']}
     for e in ents:

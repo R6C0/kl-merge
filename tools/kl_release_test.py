@@ -119,7 +119,8 @@ def check_out_refs(base):
           'O bots refs = out:<main> with its size + sha1 (got %s)' % b['refs'])
     check(b['patch'].endswith('.out.klp') and b['patch_size'] < b['size'] // 8, 'O bots patch small (%d of %d)' % (b['patch_size'], b['size']))
     zb = E['KLExpansion/Maps/DMZ/F98/F98_Main.bots.zip']
-    alt = [os.path.getsize(os.path.join(pkg, 'patches', zb['sha1'][:20] + x)) for x in ('.klp', '.out.klp')]
+    zm = E['KLExpansion/Maps/DMZ/F98/F98_Main.zip']
+    alt = [os.path.getsize(os.path.join(pkg, 'patches', zb['sha1'][:20] + x)) for x in ('.klp', '.%s.out.klp' % zm['sha1'][:12])]
     check(zb['patch_size'] == min(alt), 'O unrelated bots: the smaller of out: and old patch kept (%d of %s)' % (zb['patch_size'], alt))
     lives = {rel: open(os.path.join(dd, rel), 'rb').read() for rel in E}
     for rel in E:                                       # the player's Dog Days: no mod files yet
@@ -147,6 +148,21 @@ def check_out_refs(base):
     open(os.path.join(dd, main_rel), 'ab').write(b'x')
     check(run('install', dd, *args, '--only', 'DMX') == 2, 'O --only DMX refused when the installed main zip differs')
     check(run('uninstall', dd, '--yes') == 0, 'O uninstall after --only')
+    # a main zip skipped for a missing Payday 2 takes its bots zip along (not a refusal of the whole install)
+    for e in man['entries']:
+        if e['rel'] == main_rel:
+            e['refs']['pd:x.bin'] = [1, 'z']
+    json.dump(man, open(os.path.join(pkg, 'manifest.json'), 'w'))
+    fg, R.find_game = R.find_game, (lambda folder: None)
+    try:
+        before = tree(dd)
+        check(run('install', dd, *args, '--only', 'DMX,DMY') == 0, 'O no Payday 2: install goes on without the pair')
+        check(not os.path.exists(os.path.join(dd, bots_rel)) and not os.path.exists(os.path.join(dd, main_rel)), 'O no Payday 2: main + bots both skipped')
+        check(run('verify', dd, '--pkg', pkg, '--only', 'DMX,DMY') == 0, 'O no Payday 2: verify skips the pair')
+        run('uninstall', dd, '--yes')
+        check(tree(dd) == before, 'O no Payday 2: uninstall byte-exact')
+    finally:
+        R.find_game = fg
 
 
 def main():
