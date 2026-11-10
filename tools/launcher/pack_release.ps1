@@ -33,7 +33,13 @@ $stage = Join-Path $env:TEMP ('klmerge_pack_' + (Get-Date -Format 'yyyyMMdd-HHmm
 New-Item -ItemType Directory -Path $stage | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stage 'launcher') | Out-Null
 Copy-Item -LiteralPath (Join-Path $Out 'manifest.json') -Destination $stage
-Copy-Item -LiteralPath (Join-Path $Out 'patches') -Destination (Join-Path $stage 'patches') -Recurse
+# only the patches the manifest names: patches\ also keeps superseded ones (a bots zip re-made against its main zip, older makes)
+New-Item -ItemType Directory -Path (Join-Path $stage 'patches') | Out-Null
+foreach ($pn in @($man.entries | ForEach-Object { $_.patch } | Sort-Object -Unique)) {
+    $pp = Join-Path (Join-Path $Out 'patches') $pn
+    if (-not (Test-Path -LiteralPath $pp)) { Write-Host "REFUSED: manifest names $pn, not in $Out\patches"; Remove-Item -LiteralPath $stage -Recurse -Force; exit 1 }
+    Copy-Item -LiteralPath $pp -Destination (Join-Path $stage 'patches')
+}
 Copy-Item -LiteralPath (Join-Path $tools 'kl_release.py') -Destination $stage
 foreach ($f in @('KLMergeLauncher.ps1', 'KL Dead Men Rising.exe', 'README_TESTERS.md', 'KL Dead Men Rising Setup.bat')) {
     $p = Join-Path $here $f

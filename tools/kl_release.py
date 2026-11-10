@@ -16,6 +16,8 @@ source pool at offset X" operations plus the literal bytes that exist in no sour
 are patched, then deflated again with the zlib level that reproduces the live archive byte for byte (checked when the
 package is made; members that no level reproduces are stored as raw deflate streams in the patch).
 Everything is sha1-checked: sources before anything is written, every output before it replaces a file.
+A map's <slot>_Main.bots.zip differs from its <slot>_Main.zip in the .prp only, so it is patched against that zip as
+built by the same install (ref 'out:<rel>'): it is built after it, and its source sha1 is checked at build time.
 
 Stock files that the mod replaces are MOVED to <DD>\KL_PortBackup\ (never deleted, never overwritten). The journal
 <DD>\KLMergeInstall.json lets `uninstall` put everything back. Steam launch options are never touched.
@@ -562,6 +564,26 @@ def nrm(p):
     return p.replace('\\', '/')
 
 
+BOTS_RE = re.compile(r'^(.+)\.bots\.zip$', re.I)
+
+
+def out_source(rel):
+    """the main zip a <slot>_Main.bots.zip is patched against ('out:' ref), or None"""
+    m = BOTS_RE.match(rel)
+    return m.group(1) + '.zip' if m else None
+
+
+def out_refs(e):
+    return [r[4:] for r in e['refs'] if r.startswith('out:')]
+
+
+def out_order(ents):
+    """stable order in which every 'out:' source comes before the entries built from it"""
+    rels = {e['rel'] for e in ents}
+    first = [e for e in ents if not any(r in rels for r in out_refs(e))]
+    return first + [e for e in ents if any(r in rels for r in out_refs(e))]   # one level deep: a source has no out: refs
+
+
 # the hook reads [Ambience]/[Stinger]/[Music] Folder= as absolute paths, and make ships the owner's ini as-is:
 # at install the game-folder part of those paths is pointed at this PC's folders (else the clips are "not there - dropped")
 INI_LOCAL_RE = re.compile(rb'^([ \t]*(?:Folder|FolderB)[ \t]*=[ \t]*)([^\r\n]*)', re.M | re.I)
@@ -617,6 +639,7 @@ class Maker:
         self.warn = []
         self.pd2_skipped = []
         self.cand = None
+        self.outs = {}                             # rel -> path of targets an 'out:' ref may name
 
     # -- source resolution: the player's stock file for a reference
     def stock_dd(self, rel):
@@ -639,6 +662,8 @@ class Maker:
             return os.path.join(self.dm, rel)
         if k == 'pd':
             return os.path.join(self.pd2, rel)
+        if k == 'out' and rel in self.outs:
+            return self.outs[rel]                  # the main zip as this make read it (snapshot / live)
         raise ValueError(ref)
 
     def sha(self, path, cache=True):
@@ -712,8 +737,17 @@ class Maker:
         size = self._finish(hdr, ops, lits, None, outpath, refs)
         return size, copied, len(T) - copied
 
-    def make_zip(self, live, outpath, hints=()):
+    def make_zip(self, live, outpath, hints=(), out_rel=None):
+        """out_rel: also take members from that earlier target ('out:' ref, hinted first); other targets never see it"""
         self.scan()
+        if out_rel:
+            z = zipfile.ZipFile(self.outs[out_rel])
+            self.cand['out:' + out_rel] = [(i.filename, i.CRC, i.file_size) for i in z.infolist()]
+            z.close()
+            try:
+                return self.make_zip(live, outpath, ('out:' + out_rel,) + tuple(hints))
+            finally:
+                del self.cand['out:' + out_rel]
         L = ZipLayout(live)
         tkeys = {(m['crc'], m['usize']): m for m in L.members}
         score = []
@@ -976,12 +1010,34 @@ def cmd_make(a):
         entries = []
         t0 = time.time()
         mk.log('== %s: %d files' % (g, len(items)))
+        zips = {t['rel']: t['live'] for t in items if t['kind'] == 'zip'}
+        items = sorted(items, key=lambda t: out_source(t['rel']) in zips)   # main zips before their bots (stable)
+        made = {}                                      # rel -> (size, sha1) as made here, for the 'out:' refs
         for t in items:
             live = t['live']
             st0 = os.stat(live)
             sha = mk.sha(live, cache=False)
+            made[t['rel']] = (st0.st_size, sha)
             pname = '%s.klp' % sha[:20]
             pfile = os.path.join(out, 'patches', pname)
+            orel = out_source(t['rel']) if t['kind'] == 'zip' else None
+            if orel in made:                           # bots zip: against its main zip as built by the same install
+                mk.outs[orel] = zips[orel]
+                ofile = os.path.join(out, 'patches', '%s.out.klp' % sha[:20])
+                if not os.path.exists(ofile):
+                    tt = time.time()
+                    mk.log(' %s (%s) against out:%s' % (t['rel'], fmt(st0.st_size), orel))
+                    mk.make_zip(live, ofile, t.get('hints', ()), out_rel=orel)
+                    mk.log('   -> %s  (%.0fs)' % (fmt(os.path.getsize(ofile)), time.time() - tt))
+                osz = os.path.getsize(ofile)
+                if os.path.exists(pfile) or osz > st0.st_size // 8:   # else the old way (~60 % of the size) cannot be smaller
+                    if not os.path.exists(pfile):
+                        mk.log(' %s: out: patch is %s, making the old way too' % (t['rel'], fmt(osz)))
+                        mk.make_zip(live, pfile, t.get('hints', ()))
+                    if os.path.getsize(pfile) <= osz:
+                        ofile = None
+                if ofile:
+                    pname, pfile = os.path.basename(ofile), ofile
             ent = dict(group=g, rel=t['rel'], size=st0.st_size, sha1=sha, patch=pname)
             if t.get('stock'):
                 ent['stock'] = t['stock']
@@ -1002,7 +1058,8 @@ def cmd_make(a):
             hdr, block, f = read_klp(pfile)
             f.close()
             ent['patch_size'] = os.path.getsize(pfile)
-            ent['refs'] = {r: [os.path.getsize(mk.resolve(r)), mk.sha(mk.resolve(r))] for r in patch_refs(hdr)}
+            ent['refs'] = {r: list(made[r[4:]]) if r.startswith('out:') else [os.path.getsize(mk.resolve(r)), mk.sha(mk.resolve(r))]
+                           for r in patch_refs(hdr)}
             st1 = os.stat(live)
             if (st1.st_size, int(st1.st_mtime)) != (st0.st_size, int(st0.st_mtime)):
                 mk.warn.append('%s changed while it was read' % t['rel'])
@@ -1136,7 +1193,8 @@ def preflight(env, ents, log=say):
     need = {}
     for e in ents:
         for r, (sz, sh) in e['refs'].items():
-            need.setdefault(r, (sz, sh))
+            if not r.startswith('out:'):             # built by this install: checked at build time
+                need.setdefault(r, (sz, sh))
     problems = []
     bad_refs = set()
     for r, (sz, sh) in sorted(need.items()):
@@ -1265,6 +1323,18 @@ def cmd_install(a):
     if not todo:
         say('everything is already installed and identical.')
         return 0
+    todo = out_order(todo)
+    byrel = {e['rel']: e for e in man['entries']}
+    pending = {e['rel'] for e in todo}
+    for e in todo:                                 # an out: source is built in this run or already installed as packaged
+        for r in out_refs(e):
+            dest = os.path.join(dd, r)
+            if r in pending or (r in byrel and os.path.exists(dest) and env.sha(dest) == e['refs']['out:' + r][1]):
+                continue
+            say('')
+            say('CANNOT INSTALL %s: it is built from %s, which is not selected and not installed from this package.' % (e['rel'], r))
+            say('Install its map group as a whole (or drop --only). Nothing was written.')
+            return 2
     problems, bad = preflight(env, [e for e in todo if e['refs']])
     if problems:
         say('')
@@ -1287,8 +1357,8 @@ def cmd_install(a):
             return 1
     tmpd = os.path.join(dd, TMPDIR)
     os.makedirs(tmpd, exist_ok=True)
-    sources = Sources(lambda r: _resolve_build(env, r))
     built = {}
+    sources = Sources(lambda r: _resolve_build(env, r, built, byrel))
     t0 = time.time()
     n = 0
     try:
@@ -1301,6 +1371,10 @@ def cmd_install(a):
             if os.path.exists(tp) and os.path.getsize(tp) == e['size'] and sha1_file(tp) == e['sha1']:
                 built[e['sha1']] = tp                  # left over from an interrupted run, verified
                 continue
+            for r in out_refs(e):                  # the source sha1 check of an out: ref, now that it exists
+                p = _resolve_build(env, 'out:' + r, built, byrel)
+                if p not in built.values() and env.sha(p) != e['refs']['out:' + r][1]:
+                    raise Fail('%s does not match the file %s is built from (sha1 differs). Nothing has been installed.' % (p, e['rel']))
             hdr, block, f = read_klp(os.path.join(pkg, 'patches', e['patch']))
             try:
                 sha = build_blob(hdr, block, sources, tp)
@@ -1380,7 +1454,13 @@ def cmd_install(a):
     return 0
 
 
-def _resolve_build(env, ref):
+def _resolve_build(env, ref, built=None, byrel=None):
+    if ref.startswith('out:'):                     # built earlier in this run (.part, sha1 verified), else the installed file
+        rel = ref[4:]
+        e = (byrel or {}).get(rel)
+        if e and e['sha1'] in (built or {}):
+            return built[e['sha1']]
+        return os.path.join(env.dd, rel)
     p = env.resolve(ref)
     if ref.startswith('dd:') and not os.path.exists(p):
         p = os.path.join(env.dd, BACKUP, ref[3:])

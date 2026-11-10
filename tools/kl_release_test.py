@@ -1,7 +1,8 @@
 """Off-game self-test of kl_release.py install / uninstall / verify on fake folders (no game files, no network).
 Covers: a stock source that is mmapped while built and then moved into the backup (Windows refuses a mapped move),
 resume after a run stopped right after / right before the backup move, re-install over an edited keep_user ini,
-verify without Payday 2. Prints one RESULT: line; exit 1 on a FAIL."""
+verify without Payday 2, a bots zip made + installed against its main zip ('out:' ref, --only refusal).
+Prints one RESULT: line; exit 1 on a FAIL."""
 import os, sys, json, shutil, tempfile, hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -85,6 +86,67 @@ def setup(base):
 
 def run(*argv):
     return R.main(list(argv))
+
+
+def write_zip(path, members):
+    import zipfile
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
+        for n, d in members:
+            z.writestr(n, d)
+
+
+def check_out_refs(base):
+    """O: a bots zip is patched against its main zip as built by the same install ('out:' ref)"""
+    rnd = __import__('random').Random(11)
+    blob = lambda n: bytes(rnd.getrandbits(8) for _ in range(n // 2)) * 2
+    dd, dm, pkg = (os.path.join(base, x) for x in ('odd', 'odm', 'opkg'))
+    os.makedirs(dm)
+    open(os.path.join(os.makedirs(dd) or dd, 'kl2.exe'), 'wb').write(b'MZ' + blob(2000))
+    prp, tex, buf = blob(60000), blob(150000), blob(90000)
+    maps = os.path.join(dd, 'KLExpansion', 'Maps')
+    main_rel, bots_rel = 'KLExpansion/Maps/DMX/F99/F99_Main.zip', 'KLExpansion/Maps/DMX/F99/F99_Main.bots.zip'
+    write_zip(os.path.join(dd, main_rel), [('F99_Main.prp', prp), ('F99_Main.TEX', tex), ('F99_Main.buf', buf)])
+    write_zip(os.path.join(dd, bots_rel), [('F99_Main.prp', prp[:30000] + b'BOTS' + prp[30004:]), ('F99_Main.TEX', tex), ('F99_Main.buf', buf)])
+    write_zip(os.path.join(maps, 'DMZ', 'F98', 'F98_Main.zip'), [('F98_Main.prp', blob(40000))])        # nothing in common
+    write_zip(os.path.join(maps, 'DMZ', 'F98', 'F98_Main.bots.zip'), [('F98_Main.prp', blob(40000))])
+    check(R.main(['make', pkg, '--dd', dd, '--dm', dm, '--only', 'map:DMX,map:DMZ', '--level', '3']) == 0, 'O make')
+    man = json.load(open(os.path.join(pkg, 'manifest.json')))
+    man['kl2_sha1'] = sha(os.path.join(dd, 'kl2.exe'))
+    E = {e['rel']: e for e in man['entries']}
+    b = E[bots_rel]
+    check(list(b['refs']) == ['out:' + main_rel] and b['refs']['out:' + main_rel] == [E[main_rel]['size'], E[main_rel]['sha1']],
+          'O bots refs = out:<main> with its size + sha1 (got %s)' % b['refs'])
+    check(b['patch'].endswith('.out.klp') and b['patch_size'] < b['size'] // 8, 'O bots patch small (%d of %d)' % (b['patch_size'], b['size']))
+    zb = E['KLExpansion/Maps/DMZ/F98/F98_Main.bots.zip']
+    alt = [os.path.getsize(os.path.join(pkg, 'patches', zb['sha1'][:20] + x)) for x in ('.klp', '.out.klp')]
+    check(zb['patch_size'] == min(alt), 'O unrelated bots: the smaller of out: and old patch kept (%d of %s)' % (zb['patch_size'], alt))
+    lives = {rel: open(os.path.join(dd, rel), 'rb').read() for rel in E}
+    for rel in E:                                       # the player's Dog Days: no mod files yet
+        os.remove(os.path.join(dd, rel))
+    shutil.rmtree(maps)
+    man['entries'] = man['entries'][::-1]               # bots listed first: install must still build the main zip first
+    json.dump(man, open(os.path.join(pkg, 'manifest.json'), 'w'))
+    pristine = tree(dd)
+    args = ('--dm', dm, '--pkg', pkg, '--yes')
+    check(run('install', dd, *args) == 0, 'O install')
+    check(all(open(os.path.join(dd, rel), 'rb').read() == d for rel, d in lives.items()), 'O every zip byte-exact')
+    check(not os.path.exists(os.path.join(dd, R.TMPDIR)), 'O temp folder gone')
+    check(run('verify', dd, '--pkg', pkg) == 0, 'O verify clean')
+    check(run('uninstall', dd, '--yes') == 0 and tree(dd) == pristine, 'O uninstall byte-exact')
+    # --only: the main zip in another group, not installed -> refused before anything is written
+    for e in man['entries']:
+        if e['rel'] == main_rel:
+            e['group'] = 'map:DMY'
+    json.dump(man, open(os.path.join(pkg, 'manifest.json'), 'w'))
+    check(run('install', dd, *args, '--only', 'DMX') == 2 and tree(dd) == pristine, 'O --only without its source refused, nothing written')
+    check(run('install', dd, *args, '--only', 'DMY') == 0, 'O --only DMY (main zip alone)')
+    check(run('install', dd, *args, '--only', 'DMX') == 0, 'O --only DMX built from the installed main zip')
+    check(open(os.path.join(dd, bots_rel), 'rb').read() == lives[bots_rel], 'O bots zip byte-exact from the installed source')
+    open(os.path.join(dd, bots_rel), 'ab').write(b'x')               # something to do; the installed main is edited -> refused
+    open(os.path.join(dd, main_rel), 'ab').write(b'x')
+    check(run('install', dd, *args, '--only', 'DMX') == 2, 'O --only DMX refused when the installed main zip differs')
+    check(run('uninstall', dd, '--yes') == 0, 'O uninstall after --only')
 
 
 def main():
@@ -189,6 +251,8 @@ def main():
         R.find_game = lambda folder: None
         check(run('install', dd, *args) == 0, 'E install without Payday 2')
         check(run('verify', dd, '--pkg', pkg) == 0, 'E verify without Payday 2 skips pd: entries')
+
+        check_out_refs(base)
     finally:
         shutil.rmtree(base, ignore_errors=True)
     print('RESULT: %s (%d fails)' % ('FAIL' if FAILS else 'PASS', len(FAILS)))
