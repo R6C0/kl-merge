@@ -459,8 +459,8 @@ LOADSWEEP = [('DM01B', 'F03', 3, 2, '778b075c', 'dccc9250'), ('DM02', 'F02', 2, 
              ('DM03A', 'F07', 2, 5, '3371303d', '16ae8673'), ('DM05A', 'F01', 3, 0, '791eb9c3', '912e08a5'), ('DM06B', 'F02', 3, 1, '7cee043d', 'ec42c5e4'),
              ('DM07', 'F06', 3, 4, 'f35e4133', '1f514d51'), ('DM09', 'F06', 2, 4, 'afee8967', '90e9046d'), ('DM11B', 'F04', 3, 3, 'd98d60f7', '5968f07d'),
              ('DD10', 'F07', 3, 5, '6aeb8208', '5d552344'), ('DM01', 'F01', 2, 0, 'e091f0d8', '957f20aa'), ('DM06', 'F04', 2, 3, '74583362', '512aa1a9'),
-             # stock control map; page 0 entry 4 = DD05 is a GUESS (entries in slot order, DD01 = entry 0 per kl_n9_1106.py): the run log's scene line says which loaded
-             ('DD05', 'F05', 0, 4, '1d9c5e85', '1fe1a61d')]
+             # stock control map: page 0 entry 4 loads DD06 (F06), proven by the 11-10 sweep's LOAD line (the old DD05/F05 guess was wrong)
+             ('DD06', 'F06', 0, 4, '54c262b5', '00c3c10c')]
 for _m, _s, _p, _e, _z, _b in LOADSWEEP:
     KITS['load_' + _m] = dict(map=_m, slot=_s, page=_p, entry=_e, stage=None, tag=None, loadonly=True,
                               live={'%s_Main.zip' % _s: _z, '%s_Main.bots.zip' % _s: _b},
