@@ -935,6 +935,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
 #include "klslot.c"
 #include "klcampaign.c"                                   /* klcampaign.c: luvsic's campaign runtime core, no UI (all [Campaign] toggles off); AFTER klslot.c */
+#include "klcamppick.c"                                   /* klcamppick.c: [CampaignPick] in-menu campaign level list (idle unless [Campaign] on); AFTER klcampaign.c */
 #include "klserver.c"                                    /* klserver.c: [Server] host a Quick Match / Ranked lobby unattended (off unless Enable=1); AFTER klslot.c / klchar.c / kllobby.c */
 #include "kllocname.c"                                    /* kllocname.c: [Names] an expansion map shows its own name in the FA lobby / lists (off unless Enable=1); AFTER klslot.c / klpm.c */
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
@@ -1532,6 +1533,7 @@ static void klh_tick(int game_thread)
     KLPT(klmu_tick(game_thread));                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
     KLPT(klam_tick(game_thread));                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
     KLPT(klcmpr_tick(game_thread));                           /* klcampaign.c: [Campaign] trigger / autoload / guards (off unless Enable=1) */
+    KLPT(klcpk_tick(game_thread));                            /* klcamppick.c: [CampaignPick] go window -> start the level */
     KLPT(kllm_tick(game_thread));                           /* kllevelmusic.c: [LevelMusic] (off unless Restart=1) */
     KLPT(klecho_tick(game_thread));                         /* klecho.c: [Echo] wraps the reverb slot (data write; off unless Enable=1) */
     KLPT(klss_tick(game_thread));                           /* klshot2d.c: re-points the sound system at the private vtable (VTABLE route only) */
@@ -1983,6 +1985,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
     klam_init();                                     /* klambience.c: [Ambience] (default off) */
     klcmpr_init();                                      /* klcampaign.c: [Campaign] (default off) */
+    klcpk_init();                                       /* klcamppick.c: [CampaignPick] */
     kllm_init();                                      /* kllevelmusic.c: [LevelMusic] (default off) */
     klcg_init();                                      /* klcampguard.c: [CampGuard] (default off) */
     klecho_init();                                    /* klecho.c: [Echo] (default off) */

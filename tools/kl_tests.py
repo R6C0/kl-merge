@@ -131,6 +131,7 @@ C_TESTS = {
     # 2026-11-09 (scheduled check-in): the luvsic campaign merge + music / grenade / van-rest tests, all run here with gcc -m32 + ASan/UBSan clean
     'kladpcm_test.c': 'logic',         # kladpcm.h (Dead Men ADPCM .str decode vs a spec reference decoder; 615 checks)
     'klcampaign_test.c': 'logic',      # klcampaign_logic.h ([Campaign] Enable gate: scene key m<NN>[ab]\, idle on FA / Arcade / online)
+    'klcamppick_test.c': 'logic',      # klcamppick_logic.h ([CampaignPick] in-menu campaign level list: page split, go window, one-shot start)
     'klcampgive_test.c': 'logic',      # klcampgive_logic.h ([CampGive] give / swap; includes windows.h via the shim)
     'klcampguard_test.c': 'logic',     # klcampguard_logic.h ([CampGuard] exact-site byte checks against kl2.exe 0490's measured bytes)
     'klcamprappel_test.c': 'logic',    # klcamprappel_logic.h (campaign rappel guards, missing-clip refusal)
