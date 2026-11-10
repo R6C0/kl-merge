@@ -1,3 +1,7 @@
+2026-11-10 ~03:45 - [f0] DM03 BACK-SWAT INSTALLED (owner 11-09 ask) after bench DM03BS_1110 PASS (tools/kl_bench_1110.py, TEST f4c8c3fd, 2 seats, items 16/0, online 7/0, census 48, 427 cop hits, kick 176 ok, no screenshots so the SWAT look is unseen):
+DM03 8e23cbd3 -> a81ede87, bots e8c06e13, base afc6ca40, KLJoin 5c02ca99 untouched. Undo: python C:/kl_build_1024/dm03backswat_1110/install.py --undo --skip-run-check (backups *.before-dm03backswat_1109).
+DM03 chain agreed with d0: back-SWAT -> d0 smartcops re-staged on a81ede87 -> vault (tools/kl_dm03vault_1110.py cc3702a5, stage on a81ede87, NOT benched) re-staged on smartcops. Vault review: a detour via the security hall stays open (shortcut, not a gate: owner call); 240 s Backstop may replay the opening after an early blast (bench must check).
+
 2026-11-10 ~03:35 - [scheduled check-in, cloud, offline] SHIPPED-INI REVIEW TOOL for T0: tools/kl_ini_shipcheck.py (+_test 44/0, in kl_tests --py) grades a KLHook.ini by the repo sample's own
 "(recommended on/off)" / "TEST build only" / "diagnostic" comments: ERROR owner paths in values, WARN diagnostics/TEST-only on + [Auto]/[Bench]/[Script]/[Solo] beyond the sample, FEAT off-until-benched
 features (listed, never fails), one 'logging on' line. Live ini (02:19 copy, bench_1110/DM03BS_1110/KLHook_base.ini): 0 ERROR, 7 WARN (CarDown Dry=1 dry run; [Brain] RayAim/HolderSet/CombatFlag
