@@ -185,6 +185,7 @@ struct kly_bot {
     DWORD soldier, dblk; float aim0; int aset; float awrote;      /* aim: the block, what he had, ours is in (awrote = the number we wrote) */
     int marked;                               /* BackstabMark / GrudgeMark: bit 1 of his score dword is ours */
     int turned;                               /* he was held your enemy FOR GOOD at least once this round (GrudgeMark keeps its bit from then on) */
+    int cap_told;                             /* TurnMax: the 'waits' line was said once */
     int esc_told, aim_told;                   /* lines said once: an escort that is not turned, an accuracy block that is shared */
 };
 static struct {
@@ -668,6 +669,11 @@ static void kly_grudge(const struct klb_snap *s, const struct klb_rec *r, struct
     }
     if (b->angry_until && (int)(now - b->angry_until) >= 0) b->angry_until = 0;
     b->hostile = b->kind != KLY_TAKES && (b->good || b->angry_until);
+    if (b->hostile && !was && klb.turn_max > 0) {      /* [Bots] TurnMax: at most n bots your enemy at once (retried every pass; the anger timer keeps running). Not for a human traitor: live is 0 then */
+        int j, n = 0;
+        for (j = 0; j < KLB_NREC; j++) if (j != i && kly_r.b[j].hostile) n++;
+        if (!kltr_turn_ok(n, klb.turn_max)) { b->hostile = 0; if (kly.log >= 2 && !b->cap_told++) klog("grudge: record %d would turn on you but %d bot(s) already are (TurnMax=%d): it waits", i, n, klb.turn_max); }
+    }
     if (b->hostile && !kly_escort_free(i, now)) {      /* klescort.c holds him at your side and does not ask: he is not turned (review M2) */
         b->hostile = 0;
         if (!b->esc_told++ && kly.log >= 2) klog("grudge: record %d (%s): it is your escort and klescort.c does not ask klgrudge.c about it (the three lines of re\\bots_fight.md 4.4 are not in): it is NOT turned on you while it escorts you", i, kly_kind(b->kind));

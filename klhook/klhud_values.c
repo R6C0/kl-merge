@@ -482,6 +482,8 @@ static DWORD kluv_flags(const struct klb_snap *s, int i)
 {
     DWORD f = 0;
     if (!kluv_ok(s) || !kluv_idx(s, i) || !klh_rd(s->score + KLUV_S_FLAGS + 4 * i, &f, 4)) return 0;
+    /* [Bots] TraitorReveal (klbot.c 3 i): the traitor bit TraitorFoe wrote for a turned bot is hidden from every reader of this flag dword (list, tags, board) until his first hostile act */
+    f = kltr_mask_flags(f, klb_traitor_hidden(s->rules, i));
     return f;
 }
 

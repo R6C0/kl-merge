@@ -31,6 +31,8 @@ static int klb_online_session(void) { return 0; }    /* klbot.c: net role host /
 static int klb_read_hud(struct klb_snap *s)            /* klbot.c's: klb_read, else an online snapshot - the harness has no online session, so 'nothing' as klbot.c answers then */
 { if (klb_read(s)) return 1; memset(s, 0, sizeof *s); s->human = -1; return 0; }
 
+#include "kltraitor_logic.h"                           /* [Bots] TraitorReveal: klhud_values.c kluv_flags masks through kltr_mask_flags; the harness hides nothing */
+static int klb_traitor_hidden(DWORD rules, int i) { (void)rules; (void)i; return 0; }
 #include "klucchide_logic.h"                           /* [UccHide]'s pure part: klucc_hud_flags (klhud.c's online crew rows), as klhook.c includes it before klhud_values.c */
 #include "klonline_read.h"                            /* the pure part: structs and the small decisions, unchanged */
 

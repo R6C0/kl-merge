@@ -126,6 +126,7 @@ C_TESTS = {
     'kllistguard_test.c': 'win',       # kllistguard_logic.h + kllistguard_seh.h ([Crash] ListUserGuard: catch filter, vtable verify, real SEH wrapper)
     'klmemfree_test.c': 'win',         # includes klmem.c + klmemfree.c (Windows heap census)
     'klbotglass_test.c': 'logic',      # klbotglass_logic.h ([BotGlass] blocked-at-pane decision)
+    'kltraitor_test.c': 'logic',       # kltraitor_logic.h ([Bots] TraitorReveal / Defend / TurnMax pure part)
     'klgrenadefx_test.c': 'logic',     # klgrenadefx_logic.h ([Grenade] PinSound / ThrowAnim)
     'klcampaign_outfits_test.c': 'logic',  # klcampaign_outfits_logic.h ([Wardrobe] CampaignOutfits, KLChar 17..32)
     'klvanshield_test.c': 'logic',     # klvanshield_logic.h ([VanBlow] ShieldUntilBoarded / HealFloor / ShieldWhileWaiting)

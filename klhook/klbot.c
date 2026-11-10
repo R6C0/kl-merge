@@ -300,6 +300,7 @@
  */
 #ifndef KLBOT_C
 #define KLBOT_C
+#include "kltraitor_logic.h"                   /* [Bots] TraitorReveal / Defend / TurnMax: the pure rules (kltraitor_test.c) */
 
 #define KLB_SESSION   0x0168e598              /* +0x54, +0x5c = mode (4 = Arcade), +0x70 = state (0x19 = round runs) */
 #define KLB_SETTINGS  0x0168e9e4              /* +0x54 = the rules object */
@@ -328,6 +329,9 @@ static struct {
     int leave, lv_delay; float lv_dist;
     int van, van_chance, van_delay, van_left;
     int foe, foe_fed, foe_nofed, bs_crew; float bs_crew_near;     /* section 3 f / g: TraitorFoe, BackstabCrew, BackstabCrewNear */
+    int reveal; DWORD reveal_ms;                 /* 3 i: [Bots] TraitorReveal / TraitorRevealMs: a turned bot is shown only at his first hostile act */
+    int def, def_chance, def_max; DWORD def_ms;   /* 3 j: [Bots] Defend / DefendChance / DefendMax / DefendMs: a bot that shoots you is marked and the crew sometimes shoots him */
+    int turn_max;                                /* 3 k: [Bots] TurnMax: at most n bots your enemy by Grudge at once (klgrudge.c) */
 } klb;
 
 struct klb_rec { int used; DWORD at, actor, money; BYTE status, stage, flags; float hit; };
@@ -784,6 +788,10 @@ static struct {                               /* what TraitorFoe wrote, per reco
     int nofed_told;                               /* FoeNoSwapWhileFed: the once-per-round line was written */
     int fed_told;                                 /* FoeSkipWhileFed: the once-per-round line was written (cleared with the rest when the rules object changes) */
     int kills[KLB_NREC]; char spared[KLB_NREC];   /* section 3 h: crew deaths booked to a team-Enemy traitor; 1 = he is back on team Ally for good (this mask) */
+    /* section 3 i (TraitorReveal): hide[i] = his score bit is ours and not shown yet (HUD readers mask bit 1, kluv_flags); rev[i] = shown, latched until the mask goes */
+    volatile char hide[KLB_NREC]; char rev[KLB_NREC]; DWORD mask_at[KLB_NREC];
+    /* section 3 j (Defend): def_until[i] = a bot that shot you is held marked (score bit 1) until then; the swap (team Enemy) only if the roll won */
+    DWORD def_until[KLB_NREC]; float hp; DWORD hurt_at;
 } klb_f;
 
 /* [Bots] FoeSkipWhileFed (2026-10-19, owner run 13:23:18: the human was a fed and crew deaths near the game's own traitor
@@ -838,6 +846,34 @@ static int klb_foe_unturn_actor(DWORD actor, DWORD info, DWORD team0)
            klh_data((void *)(DWORD_PTR)(info + 4), &team0, 4, "a turned AI heister's team: his own back (TraitorFoe)");
 }
 
+/* section 3 i / j: the local human's health drop and the last attacker ([player+0x2778], a GUESS as klbalance.c's CopToYouFar: set at the bullet).
+   1 = he lost health within the last 1500 ms; *att = the attacker actor (0 = none). Reads only. */
+static int klb_human_hurt(DWORD now, DWORD *att)
+{
+    DWORD gd, pl, ho; BYTE idx = 0xff; float hp = 0; int hurt;
+    *att = 0;
+    if (!(gd = klh_rd32((DWORD_PTR)KLH_VA(KL2_GAMEDATA))) || !klh_rd(gd + 0x898, &idx, 1) || (signed char)idx < 0 || idx > 31 ||
+        !(pl = klh_rd32(gd + 0x828 + 4 * idx)) || !(ho = klh_rd32(pl + 0xa48)) || !klh_rd(ho + 4, &hp, 4) || !klb_finite(hp)) return 0;
+    if (kltr_hurt(klb_f.hp, hp)) klb_f.hurt_at = KLB_T(now);
+    klb_f.hp = hp;
+    hurt = klb_f.hurt_at && (DWORD)(now - klb_f.hurt_at) < 1500;
+    if (hurt) *att = klh_rd32(pl + 0x2778);
+    return hurt;
+}
+/* Defend only ever touches a crew-side actor: its team object reads 2 (Ally). A policeman or an unreadable actor is never marked (the mark is a score bit, written before the swap is tried) */
+static int klb_ally_team(DWORD actor)
+{
+    DWORD info = 0, t = 0;
+    return actor && (info = klh_rd32(actor + 0x54)) != 0 && klh_rd(info + 4, &t, 4) && t == 2;
+}
+static float klb_d3(const float a[3], const float b[3]) { return (float)sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2])); }
+
+/* [Bots] TraitorReveal: is record i's score bit 1 ours and not shown yet (klhud_values.c kluv_flags hides it); the HUD thread reads this */
+static int klb_traitor_hidden(DWORD rules, int i)
+{
+    return i >= 0 && i < KLB_NREC && (klb_f.hide[i] || klb_f.def_until[i]) && klb_f.marked[i] == 1 && klb_f.rules == rules;   /* a Defend-marked LOYAL bot is no traitor: his borrowed bit is never shown either */
+}
+
 static void klb_foe_swap(const struct klb_snap *s, int i)
 {
     DWORD info = 0, t = 0, oth[KLB_NREC]; BYTE fl, st; int j, n = s->n < KLB_NREC ? s->n : KLB_NREC; char why[100];
@@ -853,9 +889,57 @@ static void klb_foe_swap(const struct klb_snap *s, int i)
 static void klb_foe_tick(const struct klb_snap *s, int act)
 {
     int i, j, round = act && s->state == KLB_ROUND, fedany = (klb.foe_fed || klb.foe_nofed) && round && klb_human_fed(), fed = klb.foe_fed && fedany, nofed = klb.foe_nofed && fedany;
+    DWORD now = GetTickCount(), att = 0; int hurt, def_roll_ok = 0, def_active = 0; float vpos[KLB_NREC][3]; char vdead[KLB_NREC];
     if (s->rules != klb_f.rules) { memset(&klb_f, 0, sizeof klb_f); klb_f.rules = s->rules; memset(klb_f.st, 0xff, sizeof klb_f.st); }
+    hurt = (klb.reveal || klb.def) && round ? klb_human_hurt(now, &att) : 0;
+    memset(vdead, 0, sizeof vdead);
+    if (klb.reveal && round)              /* crew deaths of THIS pass (a loyal heister, any killer): TraitorReveal shows a masked bot standing near one */
+        for (j = 0; j < s->n && j < KLB_NREC; j++)
+            if (s->r[j].used && s->r[j].status == 7 && klb_f.st[j] == 0 && (s->r[j].flags & 1) && !(s->r[j].flags & 2) && s->r[j].actor && kle_node(klh_rd32(s->r[j].actor + 4), vpos[j], 0)) vdead[j] = 1;
+    if (klb.def && round && !klb_human_fed()) def_roll_ok = 1;
+    for (i = 0; i < s->n && i < KLB_NREC; i++) if (klb_f.def_until[i] && klb_f.swapped[i]) def_active++;
     for (i = 0; i < s->n && i < KLB_NREC; i++) {
         const struct klb_rec *r = &s->r[i]; DWORD fl = 0, at = s->score + KLB_SCORE_FL + 4 * i;
+        /* 3 j: Defend. A loyal bot in play that hurt you: marked (score bit 1) for DefendMs, so killing him makes YOU no traitor (0x8fb0d0 skips a victim with bit 1) - the
+           cause of 'three heisters shoot me' was that rule; and sometimes (DefendChance, once per incident, at most DefendMax at once) he goes team Enemy and the crew shoots him */
+        if (klb_f.def_until[i] && (kltr_expired(klb_f.def_until[i], now) || !round || !r->used || r->actor != klb_f.actor[i] || r->status != 0)) {
+            klog("bots: DEFEND: record %d: released (%s)", i, !round ? "the round is not running" : !r->used || r->actor != klb_f.actor[i] ? "the record changed" : r->status != 0 ? "he is out of play" : "DefendMs is over");
+            klb_f.def_until[i] = 0;
+            if (klb_f.swapped[i]) { klb_foe_back(s, i, "Defend is over"); def_active--; }
+        }
+        if (def_roll_ok && hurt && att && r->used && r->actor == att && i != s->human && kltr_attacker_ok(r->flags, r->status) && !(r->flags & 2) && klb_ally_team(r->actor) && !klb_f.rev[i] && !klb_f.refused[i]) {
+            int fresh = !klb_f.def_until[i];     /* a new incident: his last hit on you is older than DefendMs */
+            klb_f.def_until[i] = KLB_T(now + klb.def_ms); klb_f.was[i] = 1; klb_f.actor[i] = r->actor;
+            if (fresh) {
+                int roll = (int)(((klb_seed = klb_seed * 1103515245u + 12345u) >> 16) % 100u), won = kltr_defend(klb.def_chance, roll, def_active, klb.def_max);
+                klog("bots: DEFEND: record %d (actor %08lx) hurt you: marked for %lu ms; roll %d vs %d%% (%d of %d defended now): %s", i, r->actor, (unsigned long)klb.def_ms, roll, klb.def_chance, def_active, klb.def_max, won ? "THE CREW SHOOTS HIM" : "no");
+                if (won) {
+                    DWORD oth[KLB_NREC], info = 0, t = 0; int k, n = s->n < KLB_NREC ? s->n : KLB_NREC; char why[100];
+                    for (k = 0; k < n; k++) oth[k] = (k != i && s->r[k].used) ? s->r[k].actor : 0;
+                    if (klb_foe_turn_actor(r->actor, oth, n, 4, &info, &t, why, sizeof why)) { klb_f.swapped[i] = 1; klb_f.info[i] = info; klb_f.team0[i] = t; def_active++; }
+                    else klog("bots: DEFEND: record %d stays team Ally: %s - nothing written", i, why);
+                }
+            }
+        }
+        /* 3 i: a masked bot is shown at his first hostile act */
+        if (klb.reveal && klb.foe && round && !nofed && r->used && (r->flags & 3) == 3 && r->status == 0 && r->actor && !klb_f.refused[i] && !klb_f.rev[i] && !klb_f.swapped[i] && !klb_f.hide[i]) {
+            klb_f.hide[i] = 1; klb_f.mask_at[i] = KLB_T(now);
+            klog("bots: REVEAL: record %d is a traitor from now (record +0x79 bit 1) but is NOT shown yet and the crew does not shoot him: his first shot at you / a crew death near him / %lu ms shows him (TraitorReveal=1)", i, (unsigned long)klb.reveal_ms);
+        }
+        if (klb_f.hide[i]) {
+            int why = 0, near_death = 0; float tp[3];
+            if (!r->used || !(r->flags & 2) || r->status != 0 || !round) { klb_f.hide[i] = 0; klb_f.rev[i] = (r->used && (r->flags & 2)) ? 1 : 0; }
+            else {
+                if (r->actor && kle_node(klh_rd32(r->actor + 4), tp, 0))
+                    for (j = 0; j < s->n && j < KLB_NREC && !near_death; j++)
+                        if (vdead[j] && klb_finite(klb_d3(tp, vpos[j])) && klb_d3(tp, vpos[j]) <= klb.tr_kill_near) near_death = 1;
+                why = kltr_reveal(klb_f.mask_at[i], now, hurt && att && att == r->actor, near_death, klb.reveal_ms);
+                if (why) {
+                    klb_f.hide[i] = 0; klb_f.rev[i] = 1;
+                    klog("bots: REVEAL: record %d is shown as the traitor now (%s)", i, why == KLTR_REV_SHOT ? "his bullet hurt you" : why == KLTR_REV_KILL ? "a crew member died near him" : "TraitorRevealMs is over");
+                }
+            }
+        }
         /* evidence for K7: a death while a team-Enemy traitor is in play (who killed is not known to the hook) */
         if (fed && r->used && r->status == 7 && klb_f.st[i] == 0) {      /* FoeSkipWhileFed: no booking, no cap, while he is a policeman */
             if (!klb_f.fed_told) { klb_f.fed_told = 1; klog("bots: FOE: you are a fed: crew deaths are NOT booked to a turned bot and TraitorKillMax does not run while you are one (FoeSkipWhileFed=1; said once a round)"); }
@@ -885,18 +969,18 @@ static void klb_foe_tick(const struct klb_snap *s, int act)
             if (nofed) klb_foe_back(s, i, "you are a fed: team Enemy would paint him green on your crosshair (0x8e9e2c)");
             else if (!round) klb_foe_back(s, i, "the round is not running");
             else if (!r->used || r->actor != klb_f.actor[i]) klb_foe_back(s, i, "the record changed");
-            else if (!(r->flags & 2)) klb_foe_back(s, i, "the traitor flag is gone");
+            else if (!(r->flags & 2) && !klb_f.def_until[i]) klb_foe_back(s, i, "the traitor flag is gone");
             else if (r->status != 0) klb_foe_back(s, i, r->status == 7 ? "he is dead" : r->status == 4 ? "he is aboard" : "he is out of play");
-        } else if (klb.foe && round && r->used && (r->flags & 3) == 3 && r->status == 0 && r->actor && !klb_f.refused[i] && !nofed) klb_foe_swap(s, i);
+        } else if (klb.foe && round && r->used && (r->flags & 3) == 3 && r->status == 0 && r->actor && !klb_f.refused[i] && !nofed && !klb_f.hide[i]) klb_foe_swap(s, i);
         /* the score table's traitor bit: on from the swap until the mask goes (the kill bookkeeping, 3 f) */
-        if (!r->used || !(r->flags & 2)) {
-            klb_f.refused[i] = klb_f.was[i] = 0; klb_f.kills[i] = 0; klb_f.spared[i] = 0;
+        if ((!r->used || !(r->flags & 2)) && !klb_f.def_until[i]) {
+            klb_f.refused[i] = klb_f.was[i] = 0; klb_f.kills[i] = 0; klb_f.spared[i] = 0; klb_f.hide[i] = 0; klb_f.rev[i] = 0; klb_f.mask_at[i] = 0;
             if (klb_f.marked[i]) {
                 int ours = klb_f.marked[i] == 1;
                 klb_f.marked[i] = 0;
                 if (ours && r->used &&klh_rd(at, &fl, 4) && (fl & 1)) { fl &= ~1u; if (klh_data((void *)(DWORD_PTR)at, &fl, 4, "score table: the traitor bit TraitorFoe gave a bot, off")) klog("bots: FOE: record %d: score bit 1 off (%08lx): the mask is gone", i, fl); }
             }
-        } else if (klb_f.was[i] && !klb_f.marked[i] && act && klh_rd(at, &fl, 4)) {
+        } else if ((klb_f.was[i] || klb_f.hide[i]) && !klb_f.marked[i] && act && klh_rd(at, &fl, 4)) {
             if (fl & 1) klb_f.marked[i] = 2;  /* somebody's already (the game's, klgrudge.c's BackstabMark): not ours to take off */
             else { fl |= 1; if (klh_data((void *)(DWORD_PTR)at, &fl, 4, "score table: the traitor bit for a turned bot (TraitorFoe)")) { klb_f.marked[i] = 1; klog("bots: FOE: record %d: score bit 1 set (%08lx): his kills and his death make nobody else a traitor (0x8fb19c / 0x6709f4)", i, fl); } }
         }
@@ -1089,7 +1173,7 @@ static void klb_tick(int game_thread)
     klb_tune_tick(arcade, act, capped);
     if (!arcade) { klb_r.rules = 0; return; }
     if (klb.log) klb_log_tick(&s, now);
-    if (klb.foe && game_thread) klb_foe_tick(&s, act);      /* section 3 f: also when act is 0 - then it only puts back */
+    if ((klb.foe || klb.def) && game_thread) klb_foe_tick(&s, act);      /* section 3 f: also when act is 0 - then it only puts back */
     if (!(klb.backstab > 0 || klb.bribe > 0 || klb.leave > 0 || klb.van > 0 || klb.bs_crew > 0)) return;
     if (!act) { klb_r.rules = 0; return; }    /* what was remembered of the round goes with the permission */
     if (!game_thread) {                       /* the round's data is only changed between two frames of the game itself */
@@ -1143,6 +1227,14 @@ static void klb_init(void)
     klb.foe = GetPrivateProfileIntA("Bots", "TraitorFoe", 0, klh_ini) != 0;
     klb.foe_nofed = GetPrivateProfileIntA("Bots", "FoeNoSwapWhileFed", 1, klh_ini) != 0;   /* (recommended on) a human fed's crosshair paints team 1 green: keep a traitor team Ally while one plays */
     klb.foe_fed = GetPrivateProfileIntA("Bots", "FoeSkipWhileFed", 0, klh_ini) != 0;      /* opt-in: 0 = as before */
+    klb.reveal = GetPrivateProfileIntA("Bots", "TraitorReveal", 0, klh_ini) != 0;       /* (recommended on) the kit writes 1; code default 0 = the old early reveal */
+    klb.reveal_ms = (DWORD)klb_pos("TraitorRevealMs", 25000, 600000);
+    klb.def = GetPrivateProfileIntA("Bots", "Defend", 0, klh_ini) != 0;                 /* (recommended on) the kit writes 1 */
+    klb.def_chance = klb_pos("DefendChance", 35, 100);
+    klb.def_ms = (DWORD)klb_pos("DefendMs", 6000, 600000); klb.def_max = klb_pos("DefendMax", 2, 8);
+    klb.turn_max = klb_pos("TurnMax", 0, 8);                                              /* the kit writes 2; 0 = no cap */
+    if (klb.reveal || klb.def || klb.turn_max)
+        klog("bots: TraitorReveal=%d (%lu ms) Defend=%d (chance %d%%, %lu ms, max %d at once) TurnMax=%d", klb.reveal, (unsigned long)klb.reveal_ms, klb.def, klb.def_chance, (unsigned long)klb.def_ms, klb.def_max, klb.turn_max);
     klb.bs_crew = klb_pct("BackstabCrew");
     klb.bs_crew_near = klb_inif("BackstabCrewNear", "1500"); if (!klb_finite(klb.bs_crew_near) || klb.bs_crew_near <= 0) klb.bs_crew_near = 1500;
     if (klb.bs_crew > 0 && !klb.foe) { klog("bots: BackstabCrew=%d%% needs TraitorFoe=1 (a turned bot is no enemy of the crew without it): BackstabCrew is OFF", klb.bs_crew); klb.bs_crew = 0; }
