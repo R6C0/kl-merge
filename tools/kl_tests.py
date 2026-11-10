@@ -124,6 +124,7 @@ C_TESTS = {
     'klhirepick_test.c': 'logic',      # klhire_pick.h ([Hire] PickDefault)
     'klfresh_test.c': 'logic',         # klfresh_logic.h ([Memory] FreshRestart)
     'klmemfree_test.c': 'win',         # includes klmem.c + klmemfree.c (Windows heap census)
+    'klbotglass_test.c': 'logic',      # klbotglass_logic.h ([BotGlass] blocked-at-pane decision)
     'klgrenadefx_test.c': 'logic',     # klgrenadefx_logic.h ([Grenade] PinSound / ThrowAnim)
     'klcampaign_outfits_test.c': 'logic',  # klcampaign_outfits_logic.h ([Wardrobe] CampaignOutfits, KLChar 17..32)
     'klvanshield_test.c': 'logic',     # klvanshield_logic.h ([VanBlow] ShieldUntilBoarded / HealFloor / ShieldWhileWaiting)
