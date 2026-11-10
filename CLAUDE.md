@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~09:00 - [d0] RELEASE LOAD SWEEP 13/13 PASS on the live frozen-pack files (TEST 03840ed0, nothing installed): DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B DM07 DM09 DM11B DD10 + stock control
+each loaded under its own rule, reached 0x19, stood 60 s, 0 asserts/faults/dumps. Control = DD06 (page 0 entry 4; kit re-pinned f609e1d9). Offline: every type-7 .prm root of all 26 live zips hits a .oct record start.
+Run: python tools/kl_bench_1106.py run load_<MAP> solo. DM01B door fix (C:/kl_build_1024/dm01bdoorfix_1110) still held until 81 says upload done.
 2026-11-10 ~07:20 - [d0] DM01B LOAD CRASH ROOT CAUSE PROVEN + FIXED (ec59d918): kl_dm01b_undoor_1109 model_leg re-referenced the .prm roots against the EDITED .oct (room part -16 bytes), so 3640 type-7 roots
 pointed 16 bytes into the next record -> junk vtable at 0x6ad1d9 (ZCollisionBase slot 34). Now keyed on the live .oct; check() fails any root off a record start (flags the old 5eab5ecc: 3640). Siblings (kl_interact_graft, dm02doorglass) OK.
 Rebuilt C:/kl_build_1024/dm01bdoorfix_1110 (476aec5f / a056edbd / 4272c0eb, check + self-test PASS), bench kit dm01bdoorfix1110, NOT installed (freeze). Also: exitstrip DM06B + DM07 benches PASS (held).
