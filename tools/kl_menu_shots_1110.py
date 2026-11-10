@@ -19,6 +19,10 @@ DD = os.environ.get('KL_DD', 'C:/Steam/steamapps/common/Kane & Lynch 2 - Dog Day
 SOLO = os.environ.get('KL_SOLO_ROOT', 'G:/SteamLibrary/steamapps/common/Kane and Lynch Dead Men/KL_PortTools/build/klhook/solo')
 SOLO_TEST = os.environ.get('KL_SOLO_TEST', 'C:/kl-merge/kl-merge/tools/kl_solo_test.py')
 INV = os.environ.get('KL_MENU_INV', 'C:/kl-merge/kl-merge/re/menu_inventory_1110')
+if not os.path.isdir(INV):                                           # the main checkout can lag behind: fall back to this tool's own repo copy
+    _alt = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 're', 'menu_inventory_1110')
+    if os.path.isdir(_alt):
+        INV = _alt
 VARIANTS = ('deadmen', 'stock')
 RUNS = ('menus', 'match')
 # klauto.c script ops - validate refuses anything else
@@ -133,7 +137,10 @@ def menus_script():
     s.tap('DOWN', 1, 800)                                             # -> Dead Men campaign
     s('tapuntil RETURN HeistPlayMenu3 8000 2'); s('wait 1500')
     s.page('arcade_campaign_maps', 5)
-    s('tapuntil ESCAPE MainMenu 6000 4'); s('wait 2000')              # page 3 -> HeistModeMenu -> MainMenu
+    # two ESC steps, each waited for: 'tapuntil ESCAPE MainMenu' from page 3 stops with 'off route' (klauto.c C_TAPUNTIL: top = HeistModeMenu is
+    # neither the source nor the target page) and would drop the tour at 'bail' before Options / Mod settings
+    s('tap ESCAPE'); s('waitwin HeistModeMenu 8000'); s('wait 1500')
+    s('tap ESCAPE'); s('waitwin MainMenu 8000'); s('wait 2000')
     s.tap('DOWN', 3, 800)                                             # GUESS: MainMenu keeps Heist (row 1); +3 = Options (row 4), Achievements passed without RETURN
     s('tapuntil RETURN OptionsMenu 15000 2'); s('wait 1500')
     s.page('options', 5)
@@ -510,6 +517,11 @@ def cmd_run(a):
         for rel in ('Scenes/kaneandlynch_deadmen.WHD', 'Scenes/kaneandlynch_deadmen.WAV', 'KLExpansion/Overlay/Patch01_deadmen.zip'):
             if not os.path.isfile(DD + '/' + rel) and not a.dry:
                 raise SystemExit('REFUSED: %s is missing in the game folder - the deadmen variant would run the stock look (install the menu look first)' % rel)
+    out_root = os.path.join(os.path.dirname(os.path.abspath(kit.rstrip('/\\'))), 'shots')
+    if os.path.isdir(out_root) and os.listdir(out_root) and not a.dry:       # never overwrite an earlier result set: move it aside
+        keep = '%s_before_%s' % (out_root, time.strftime('%m%d_%H%M%S'))
+        os.rename(out_root, keep)
+        print('earlier shots moved to', keep, flush=True)
     rc_all = 0
     for v in variants:
         for run in runs:
@@ -527,6 +539,11 @@ def cmd_run(a):
             real, _ = kl2_processes()
             if real:
                 raise SystemExit('REFUSED: kl2.exe started meanwhile (pids %s)' % real)
+            for old_shot in glob.glob('%s/%s/KLShot_inst*_*.jpg' % (SOLO, tag)):   # stale shots of an earlier run of this tag would match by clock time
+                try:
+                    os.remove(old_shot)
+                except OSError:
+                    pass
             shutil.copy(DD + '/KLHook.ini', base)
             for i in range(1, n + 1):
                 d = '%s/%s/inst%d' % (SOLO, tag, i)
@@ -696,6 +713,9 @@ def cmd_post(a):
     out_root = a.out or os.path.join(os.path.dirname(os.path.abspath(kit.rstrip('/\\'))), 'shots')
     pages = json.load(open(os.path.join(kit, 'pages.json')))['pages']
     rc, ml5, ml1, got = 0, [], [], {}
+    if not glob.glob(INV + '/*.md'):
+        ml1.append('ML1 WARNING: no menu inventory under %s (set KL_MENU_INV) - every page below would read "no findings" for lack of data' % INV)
+        rc = 1
     for v in VARIANTS:
         for run in RUNS:
             tag = 'MENULOOK_%s_%s' % (v.upper(), run.upper())

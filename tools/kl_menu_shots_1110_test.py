@@ -28,6 +28,7 @@ def main():
         got = re.findall(r'^\d+=log MENULOOK (\w+)\s*$', text, re.M)
         check(got == [p[1] for p in K.PAGES if p[0] == run], 'labels of %s: %s' % (run, got))
     check('onwin ShowAchievements' in K.menus_script(), 'Achievements guard missing')
+    check('tapuntil ESCAPE' not in K.menus_script(), 'tapuntil ESCAPE across two pages stops off route (klauto C_TAPUNTIL)')
 
     tmp = tempfile.mkdtemp()
     try:
