@@ -217,6 +217,12 @@ def vault_checks(k, a):
     elif i_before is not None:
         ch = {e: vault_changed(r, i_before + 1, len(a)) for e, r in kids.items()}
         chk('a vault door child changed during the late samples (the Backstop opened the doors)', any(ch.values()), states(ch), warn=True)
+    # same rule as kl_bench_1110m (d0, LCDOORS/DM02C 11-10): police can down the host despite KeepAlive=1; every walk after a death is void
+    i0 = next((i for i, l in enumerate(a) if 'BENCH1109 %s host level loaded' % k in l), 0)
+    i1 = next((i for i, l in enumerate(a) if 'BENCH1109 %s host segment done' % k in l), len(a))
+    died = [l for l in a[i0:i1] if 'FA_DieFrom' in l or re.search(r'skulls state: row 0 .* deaths [1-9]', l)]
+    chk('host stayed alive through the segment (else later walks are void)', not died,
+        ('died %s: %s' % (died[0][:12], died[0][13:120])) if died else 'no FA_DieFrom / skulls death on row 0')
     late = M.pos_of(a, 'vault-dock-late')
     chk('late walk through the doorway (after the Backstop time) reached the dock side (z > %d)' % DOCK_Z, bool(late) and late[2] > DOCK_Z, 'pos %s' % (late,))
     return res, info
