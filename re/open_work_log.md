@@ -1,3 +1,7 @@
+2026-11-10 ~10:25 - [d0] RELEASE ONLINE SMOKE 13/13 PASS (TEST 03840ed0, nothing installed): Q32 host+join pair, round 1 -> shop -> round 2 on DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B
+DM07 DM09 DM11B DD10 DD06(stock); every seat asserts 0 / faults 0 / dumps 0, no d3d9+0x5feeb device reset (fc's 08:33 reset = one-off system display event). DM06B client: 1 first-chance
+c0000005 at DINPUT8+0x10953e = kllistguard's __try scan reading a page freed meanwhile (caught); kl_bench_1106 faults() now skips first-chance DINPUT8 lines when the log's RESULT says faults 0.
+Run: python tools/kl_bench_1106.py run load_<MAP> online. Held stages still wait for 81's upload-done.
 2026-11-10 ~08:40 - [vault] DM03VAULT_1110 on stage_m (TEST 03840ed0, undo byte-exact, map folder unchanged): control dock walk stopped at (-4,241,-6768) = shut door holds; host in the
 Arm box at (18,244,-7226), blast, walked through to (-2,242,-6633); no Backstop replay; host alive. NOT complete: at 08:33:55 both seats lost the D3D device (ReShade "device reset")
 and died at d3d9.dll+0x5feeb (KLHook_1.dmp each); System log Display 4107 SetDisplayConfig 08:33:59, cause UNKNOWN (d0: last input ~08:31 = the bench's own keys; 4107 may be the crashed game restoring the mode; a reset on both seats at once points at a system display event, not the map). Late Backstop walk +

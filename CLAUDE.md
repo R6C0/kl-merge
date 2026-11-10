@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~10:25 - [d0] RELEASE ONLINE SMOKE 13/13 PASS (TEST 03840ed0, nothing installed): Q32 host+join pair, round 1 -> shop -> round 2 on DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B
+DM07 DM09 DM11B DD10 DD06(stock); every seat asserts 0 / faults 0 / dumps 0, no d3d9+0x5feeb device reset (fc's 08:33 reset = one-off system display event). DM06B client: 1 first-chance
+c0000005 at DINPUT8+0x10953e = kllistguard's __try scan reading a page freed meanwhile (caught); kl_bench_1106 faults() now skips first-chance DINPUT8 lines when the log's RESULT says faults 0.
+Run: python tools/kl_bench_1106.py run load_<MAP> online. Held stages still wait for 81's upload-done.
 2026-11-10 ~10:40 - [vault] DM03 blow-up vault NOT installed (out of the release pack). DM03VAULTK on stage_k (--no-arm) PASS: all 6 lanes blocked BOTH ways, the per-leaf slabs hold
 (side rule refuted). The stage_slab "leak" = the host pressed on the DOCK side fired the Arm box (edge 44 cm off the hinge plane) THROUGH the shut leaf, fuse 3 s, swing.
 Fix: Arm box moved to z -7250 (edge 2.9 m off; kl_dm03vault_1110 --arm-z, refuses < 1.5 m). stage_m on live 33361cd1: zip c71dbd01 / bots fce3ac2a / base e23f6545.

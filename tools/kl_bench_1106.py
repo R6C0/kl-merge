@@ -803,7 +803,12 @@ def faults(lines):
     """Case-sensitive on purpose: 'EndOnFatal=1' / 'ContinueAsserts' lines are settings, not faults."""
     pat = re.compile(r'(EXCEPTION|FATAL|CRASH|ACCESS_VIOLATION)|access violation|memory fault|c0000005', re.I if False else 0)
     # our own 'listguard: ... catches only c0000005' settings line is not a fault
-    return [l for l in lines if pat.search(l) and 'listguard:' not in l]
+    hits = [l for l in lines if pat.search(l) and 'listguard:' not in l]
+    # a first-chance c0000005 inside our own dll is a guarded read (kllistguard's 10 s scan hit a page freed meanwhile, DM06B 11-10):
+    # not a fault when the hook's own closing line counts 'faults 0' (an unhandled one is counted there and dumped)
+    if any(re.search(r'RESULT .*\bfaults 0\b', l) for l in lines):
+        hits = [l for l in hits if not ('first chance' in l and 'DINPUT8.dll+' in l)]
+    return hits
 
 
 def dumps(tag, n):
