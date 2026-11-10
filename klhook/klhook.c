@@ -918,6 +918,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klucc_down.c"                                   /* klucc_down.c: [Ucc] DownOnly - a hidden UCC's hits only down a heister (off unless set); AFTER klroundkeep.c, klnetsmooth.c */
 #include "klmusic.c"                                      /* klmusic.c: [Music] a winmm MCI jukebox for the FA round (off unless Enable=1); AFTER klmove.c / klbot.c */
 #include "klambience.c"                                  /* klambience.c: [Ambience] a looping bed + timed one-shots (radio, alarm, heli, distant) over winmm MCI (off unless Enable=1); AFTER klmusic.c */
+#include "kldifficulty.c"                             /* kldifficulty.c: [Difficulty] keys step the damage balance in game (off unless Enable=1); AFTER klbalance.c / klannounce.c / klkeys.c */
 #include "kllevelmusic.c"                              /* kllevelmusic.c: [LevelMusic] Restart - the level music again in round 2+ (off unless Restart=1); AFTER klmusic.c */
 #include "klcampguard.c"                                 /* klcampguard.c: [CampGuard] luvsic's crash guards as exact-site branches of veh() (all off unless set; campaign levels only except ListUserFA); AFTER klh_scene */
 #include "klecho.c"                                      /* klecho.c: [Echo] room reverb follows the place (wraps the alEffectf data slot; off unless Enable=1); AFTER klambience.c */
@@ -1547,6 +1548,7 @@ static void klh_tick(int game_thread)
     KLPT(klam_tick(game_thread));                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
     KLPT(klcmpr_tick(game_thread));                           /* klcampaign.c: [Campaign] trigger / autoload / guards (off unless Enable=1) */
     KLPT(klcpk_tick(game_thread));                            /* klcamppick.c: [CampaignPick] go window -> start the level */
+    KLPT(kdf_tick(game_thread));                            /* kldifficulty.c: [Difficulty] (off unless Enable=1) */
     KLPT(kllm_tick(game_thread));                           /* kllevelmusic.c: [LevelMusic] (off unless Restart=1) */
     KLPT(klecho_tick(game_thread));                         /* klecho.c: [Echo] wraps the reverb slot (data write; off unless Enable=1) */
     KLPT(klss_tick(game_thread));                           /* klshot2d.c: re-points the sound system at the private vtable (VTABLE route only) */
@@ -2009,6 +2011,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klam_init();                                     /* klambience.c: [Ambience] (default off) */
     klcmpr_init();                                      /* klcampaign.c: [Campaign] (default off) */
     klcpk_init();                                       /* klcamppick.c: [CampaignPick] */
+    kdf_init();                                       /* kldifficulty.c: after klr_init (reads klr.f) */
     kllm_init();                                      /* kllevelmusic.c: [LevelMusic] (default off) */
     klcg_init();                                      /* klcampguard.c: [CampGuard] (default off) */
     klecho_init();                                    /* klecho.c: [Echo] (default off) */
