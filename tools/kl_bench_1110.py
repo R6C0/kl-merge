@@ -50,7 +50,10 @@ for _k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
 # Bench 11-10 DM03VAULTB_1110: the shut leaves did not stop a dock -> lobby walk. Three control lanes split the suspects: blocked at x -50/+50 but
 # not at 0 = the seam between the two slabs; blocked everywhere here but not on stage_sc = the stripped controller; open everywhere = neither
 # 11-10 after DM03SHUT_1110 (live own-leaf doors block): the lanes now run on stage_slab (one single-instance 6 cm slab per leaf, the own-leaf build)
-VAULT_DIAG_STAGE = VAULT_STAGE
+# 11-10 ~08:30: stage_slab lanes (dock -> lobby): x -50 blocked, 0 and +50 walked through = the left leaf (frame turned 180) blocks, the right (identity) not.
+# Every blocked walk so far came from the leaf's local -z side. stage_k = stage_slab's geometry built with --no-arm (Arm box parked 1 km down, diagnostic
+# only) so the lanes can ALSO walk lobby -> dock: predicted lobby x -50 walks through, +50 blocked (the side rule), else the rule is wrong.
+VAULT_DIAG_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_k'
 K['DM03VAULTK_1110'] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-300:20', stage=VAULT_DIAG_STAGE, tag='.before-dm03vault_1110')
 VAULT_LANES = (-50, 0, 50)
 # DM03SHUT_1110 (no install, live DM03 33361cd1): do the kick doors ALREADY live (dm03doorfix_1109: own-leaf hosts 176, 64, 84) stop a walk while shut?
@@ -138,6 +141,9 @@ def lanes_seg(who):
     for x in VAULT_LANES:
         s += ['tele %d %d %d' % (x, VAULT_LOBBY[1], VAULT_DOCK[1]), 'wait 2500', 'pos vault-lane%d-0' % x,
               'goto %d %d 10 5000' % (x, VAULT_SHUT[1]), 'pos vault-lane%d' % x, 'log BENCH1110 vault control lane x %d' % x]
+    for x in VAULT_LANES:      # the other way: lobby -> dock (stage_k has no armed box in the lobby)
+        s += ['tele %d %d %d' % (x, VAULT_LOBBY[1], VAULT_LOBBY[2]), 'wait 2500', 'pos vault-lobbylane%d-0' % x,
+              'goto %d %d 10 5000' % (x, VAULT_DOCK[1]), 'pos vault-lobbylane%d' % x, 'log BENCH1110 vault lobby lane x %d' % x]
     return s + vault_doors('after lanes')
 
 
@@ -306,6 +312,15 @@ def lanes_checks(k, a):
         # a lane result, not a pass/fail: WARN marks "walked through"
         chk('lane x %d: the shut doors stopped the walk (stayed z >= %d)' % (x, HINGE_Z), b, '%s -> %s' % (p0, p1), warn=True)
     v = dict(zip(VAULT_LANES, blocked))
+    lob = []
+    for x in VAULT_LANES:
+        p0, p1 = M.pos_of(a, 'vault-lobbylane%d-0' % x), M.pos_of(a, 'vault-lobbylane%d' % x)
+        chk('lobby lane x %d: tele landed on the lobby side (z < %d)' % (x, HINGE_Z - 300), bool(p0) and p0[2] < HINGE_Z - 300, 'pos %s' % (p0,))
+        b = bool(p0 and p1) and p0[2] < HINGE_Z - 300 and p1[2] <= HINGE_Z
+        lob.append(b)
+        chk('lobby lane x %d: the shut doors stopped the walk (stayed z <= %d)' % (x, HINGE_Z), b, '%s -> %s' % (p0, p1), warn=True)
+    if any(M.pos_of(a, 'vault-lobbylane%d' % x) for x in VAULT_LANES):
+        info.append('LOBBY LANES: %s (side rule predicts {-50: False, 0: ?, 50: True} on the jamb pair)' % dict(zip(VAULT_LANES, lob)))
     verdict = ('all lanes blocked: the controller (stripped on stage_sc) is what holds the shut slab' if all(blocked) else
                'only the seam lane x 0 walked through: the slabs leave a gap at x 0' if not v[0] and v[-50] and v[50] else
                'no lane blocked: neither the controller nor the seam; the slab body itself does not stop the capsule' if not any(blocked) else

@@ -12,7 +12,7 @@ Door A = the lobby-to-dock doorway at (0, 240, -6806): an EMPTY doorway today (n
      so the map total stays exactly 7,000,000; --loot L2 is NOT built (refused: needs loot clones, no node-clone path for loot objects here).
 No actor or squad is added (census unchanged). Both zips (plain + bots) are rebuilt the same way; Entries= of KLJoin.ini / KLGuns.ini follows the new .prm chunk count.
 
-  python tools/kl_dm03vault_1110.py stage [--in-dir DIR] [--out DIR] [--accept-input] [--fuse S] [--backstop S] [--loot L1|L2] [--keep-kick (diagnostic)] [--shared-slab (old build)]
+  python tools/kl_dm03vault_1110.py stage [--in-dir DIR] [--out DIR] [--accept-input] [--fuse S] [--backstop S] [--loot L1|L2] [--keep-kick (diagnostic)] [--no-arm (diagnostic)] [--shared-slab (old build)] [--seam-hinges (both leaves face the lobby)]
 Default in-dir C:\kl_build_1024\dm03backswat_1110; restage on the live zip stage with --in-dir C:\kl_build_1024\dm03doorfix_1109 --accept-input (pins what it finds).
 """
 import collections, hashlib, json, math, os, re, shutil, statistics, struct, sys, tempfile
@@ -46,8 +46,18 @@ HINGE_X = 105.0                  # half the 210 cm opening
 LEAF_W = 105.0                   # each of the two leaves
 DOOR_H = 240.0                   # GUESS: the virtual default; the opening height was not measured
 DOOR_STOCK_W = 120.0             # kl_interact_graft.DOOR_W
-# left hinge: the leaf lies along +x from it, so cx (free end -> hinge) = -x
-HOSTS = [('at', (-HINGE_X, DOOR_Y, HINGE_Z), (-1.0, 0.0, 0.0)), ('at', (HINGE_X, DOOR_Y, HINGE_Z), (1.0, 0.0, 0.0))]
+# jamb pair: left hinge: the leaf lies along +x from it, so cx (free end -> hinge) = -x
+# Bench DM03VAULTK_1110 (stage_slab, walk dock -> lobby): the left leaf (frame turned 180 degrees) blocked, the right (identity frame) did not. Every walk that WAS
+# blocked (live doors 176 / 64 / 84 in DM03SHUT_1110, left vault leaf) came from the leaf's local -z side; the slab box is closed and symmetric, so the side rule is
+# the kick-door entity's, not the triangles' (GUESS: a shut kick door gives way from its back; to be proven by --no-arm lanes from the lobby). --seam-hinges: both
+# leaves in the identity frame (local -z = world -z = the LOBBY, where the Arm box and the heisters are), the left one hinged at the seam x 0 (it then swings into the
+# middle of the doorway on the blast). Default still the mirrored jamb pair.
+HOSTS_JAMB = [('at', (-HINGE_X, DOOR_Y, HINGE_Z), (-1.0, 0.0, 0.0)), ('at', (HINGE_X, DOOR_Y, HINGE_Z), (1.0, 0.0, 0.0))]
+HOSTS_SEAM = [('at', (0.0, DOOR_Y, HINGE_Z), (1.0, 0.0, 0.0)), ('at', (HINGE_X, DOOR_Y, HINGE_Z), (1.0, 0.0, 0.0))]
+HOSTS = HOSTS_JAMB
+# --no-arm (DIAGNOSTIC stage only, never ship): the Arm box is parked 1 km under the map so a bench can walk lobby -> dock into the shut leaves
+NO_ARM = False
+ARM_PARK_DY = -100000.0
 DOOR_CHILD_FRONT = 'KickableDoor_Proxy_Variation01Front_A_01'
 DOOR_CHILD_PB = 'KickDoor_Pathblocker_01'
 DOOR_CHILD_ACTION = 'KickDoor_Action_01'
@@ -326,7 +336,7 @@ def make_vault_nodes(B):
     M.place(top, (0.0, 0.0, 0.0))
     form = node(R + 'Triggers!Respawn_Trigger')
     arm = top.add(FED.clone_built(M, B, form, 'Arm'))
-    M.place(arm, ARM_AT)
+    M.place(arm, (ARM_AT[0], ARM_AT[1] + ARM_PARK_DY, ARM_AT[2]) if NO_ARM else ARM_AT)
     M.set(arm, None, {'ZBoxPrimitive[%d]' % a: float(ARM_HALF[a]) for a in range(3)})
     boom = top.add(FED.clone_built(M, B, form, 'Boom'))
     boom.ctrls = []
@@ -586,8 +596,10 @@ def main(a):
     if not a or a[0] != 'stage':
         print(__doc__); return 2
     opt = lambda k, d=None: a[a.index(k) + 1] if k in a else d
-    global KEEP_KICK, SLAB_EACH
+    global KEEP_KICK, SLAB_EACH, HOSTS, NO_ARM
     KEEP_KICK = '--keep-kick' in a
+    HOSTS = HOSTS_SEAM if '--seam-hinges' in a else HOSTS_JAMB
+    NO_ARM = '--no-arm' in a
     SLAB_EACH = '--shared-slab' not in a
     for n, o, w in stage(opt('--in-dir', IN_DIR), opt('--out', OUT), '--accept-input' in a, float(opt('--fuse', FUSE_S)), float(opt('--backstop', BACKSTOP_S)), opt('--loot', 'L1')):
         print('%-26s %s -> %s' % (n, o, w))
