@@ -55,6 +55,10 @@ VAULT_ARM = (0, -6980)
 VAULT_DOCK = (0, -6600)             # just past the doorway, dock side
 VAULT_WARM = (150, -7300)           # warm-up walk, 1.5 m east of the lobby tele (same floor part)
 DOCK_Z = -6780                      # dock side of the doorway (hinges at z -6812)
+# closed-door control (run 1 11-10: the proxies/pathblockers never change in ents, so a walk-through alone cannot tell "opened" from "never blocked"):
+# from the dock side walk to just past the hinge plane, 10 cm radius so it stops short of the Arm box (z edge -6856) and never arms the fuse
+VAULT_SHUT = (0, -6845)
+HINGE_Z = -6812
 # ents matches the node's OWN name (klauto.c kla_ents): the KL_Door_N group nodes never move; the blast / Backstop act on their children
 # (kl_dm03vault_1110 DOOR_CHILD_FRONT / DOOR_CHILD_PB). Every DM03 kick door has children of these names, so rows are kept by position
 VAULT_KIDS = ('KickableDoor_Proxy_Variation01Front', 'KickDoor_Pathblocker')
@@ -89,7 +93,9 @@ def vault_seg(who, arm):
             s += ['wait 30000'] + vault_doors('client sample %d' % i)
         return s
     # 15 s after GO before the first tele, then a warm-up walk: a frozen local player shows as 'not simulated', not as a door FAIL
-    s += ['waitstate 0x19 90000', 'wait 15000', 'tele %d %d %d' % VAULT_LOBBY, 'wait 2500', 'pos vault-lobby',
+    s += ['waitstate 0x19 90000', 'wait 15000', 'tele %d %d %d' % (VAULT_DOCK[0], VAULT_LOBBY[1], VAULT_DOCK[1]), 'wait 2500', 'pos vault-shut0',
+          'goto %d %d 10 5000' % VAULT_SHUT, 'pos vault-shut', 'log BENCH1110 vault closed-door control']
+    s += ['tele %d %d %d' % VAULT_LOBBY, 'wait 2500', 'pos vault-lobby',
           'goto %d %d 40 6000' % VAULT_WARM, 'pos vault-warm', 'log BENCH1110 vault warm-up walk'] + vault_doors('before')
     if arm:
         s += ['goto %d %d 40 6000' % VAULT_ARM, 'pos vault-arm', 'log BENCH1110 vault host in the Arm box',
@@ -202,6 +208,11 @@ def vault_checks(k, a):
     chk('local player simulated: the warm-up walk moved the host >= 50 cm (else the bench is INVALID, not a door result)',
         bool(lb and wm) and abs(wm[0] - lb[0]) + abs(wm[2] - lb[2]) >= 50, 'lobby %s -> warm %s' % (lb, wm))
     chk('host reached the lobby (tele to %s)' % (VAULT_LOBBY,), bool(lb) and abs(lb[0] - VAULT_LOBBY[0]) <= 300 and abs(lb[2] - VAULT_LOBBY[2]) <= 300, 'pos %s' % (lb,))
+    s0, sh = M.pos_of(a, 'vault-shut0'), M.pos_of(a, 'vault-shut')
+    chk('control: tele to the dock side landed (z > %d)' % DOCK_Z, bool(s0) and s0[2] > DOCK_Z, 'pos %s' % (s0,))
+    # without this a walk-through after the blast proves nothing: doors that never block would pass it too
+    chk('control: the CLOSED doors stopped a dock -> lobby walk before the blast (host stayed z >= %d)' % HINGE_Z,
+        bool(s0 and sh) and s0[2] > DOCK_Z and sh[2] >= HINGE_Z, 'dock %s -> after the walk %s' % (s0, sh))
     i_before, i_after = at('before'), at('after')
     if arm:
         p = M.pos_of(a, 'vault-arm')
@@ -261,7 +272,9 @@ def stamp(k):
 
 
 def load_pins():
-    rec = next((recorded(k) for k in K if recorded(k)), {})
+    # the kit named on the command line first: another kit's older kit.json (e.g. DM03BS under 1110d) would pin the wrong SHIP
+    named = [a for a in sys.argv[1:] if a in K]
+    rec = next((recorded(k) for k in named + list(K) if recorded(k)), {})
     if rec.get('ship') in MERGED_KITS:
         pin(rec['ship'])
         M.INI_MD5 = rec.get('ini', M.INI_MD5)
