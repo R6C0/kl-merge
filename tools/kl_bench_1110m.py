@@ -121,10 +121,12 @@ def lc_checks(a, chk):
 DM02C_SH1 = dict(stand_from=(-1879, 1112), stand=(-1919, 1112), node=(-1990, 1032))   # KLCoop1!SoloLift box centre (-1919,624,1112); RollerShutterA_03 REF 24710
 DM02C_SH2 = dict(stand_from=(1879, 1580), stand=(1919, 1580), node=(1990, 1660))      # KLCoop2!SoloLift (1919,624,1580); RollerShutterA_02 REF 24711
 DM02C_DOORS = {   # doorway = (front stand, back stand) from the KickDoor_Arrow entities
-    3: ((900, 2497), (1091, 2499)),     # jewellers, KL_Door_3\Door REF 34449, hinge (993,500,2560)
+    # Front stands of 3 and 2 moved off the AI posts (DM02C runs 1+2: stuck at (900,2497) = merc Pos#01 16 cm + KickDoorBehaviour PosInfo
+    # 26 cm; killed 0.1-0.7 s after the tele to (-1503,1793) = KickDoorBehaviour PosInfo 26 cm + merc Pos#02 60 cm). New points on the walk mesh.
+    3: ((850, 2497), (1091, 2499)),     # jewellers, KL_Door_3\Door REF 34449, hinge (993,500,2560)
     4: ((1497, 1786), (1499, 1595)),    # jewellers, KL_Door_4\Door REF 34472, hinge (1560,500,1693)
     1: ((-902, 2499), (-1093, 2497)),   # vault glass doorway, KL_Door_1, hinge (-1000,500,2560)
-    2: ((-1503, 1793), (-1501, 1602)),  # vault glass doorway, KL_Door_2, hinge (-1440,500,1700)
+    2: ((-1400, 1793), (-1501, 1602)),  # vault glass doorway, KL_Door_2, hinge (-1440,500,1700); crosses z 1700 at x ~-1450
 }
 DM02C_GLASS = {23182: (-970, 524, 2566), 24258: (-1435, 519, 1670)}   # Whole04 REFs; both share the node name below
 DM02C_GLASS_NAME = 'SI0401_M02_FA_Door_Shatter_Glass_01!Whole04'
@@ -279,7 +281,9 @@ def dm02c_checks(a, chk):
         chk('%s: player stood at the SoloLift box' % tag, st is not None and math.hypot(st[0] - sh['stand'][0], st[2] - sh['stand'][1]) <= 120,
             'pos %s want %s' % (st, sh['stand']), warn=True)
         tt = T('%s tap' % tag)
-        rows = [r for r in M.ents(a, 'RollerShutterA') if near(r[3], sh['node'][0], sh['node'][1], 25)]
+        # the floor-500 shutter only: DM02C run 2 matched copies stacked at node y 0 / 500 / 1000 on the same x,z and 'rose +1000'.
+        # Node y 1000 (top of the leaf over floor 500) is the copy the stage keyed (flags 0x09.. vs 0x08..); rise up to +300 -> y 900..1400
+        rows = [r for r in M.ents(a, 'RollerShutterA') if near(r[3], sh['node'][0], sh['node'][1], 25) and 900 <= r[3][1] <= 1400]
         before = [r for r in rows if tt is not None and M.secs_of(r[0]) <= tt + 0.2]
         after = [r for r in rows if tt is not None and M.secs_of(r[0]) > tt + 0.2]
         if not before or not after:
@@ -400,10 +404,11 @@ def smartcops_checks(a, chk, mapname):
     boxes = {(s, n): rs for (s, n), rs in M.by_entity(M.ents(a, '_KC_')).items() if re.match(r'CoverBox[HM]_KC_\d+$', n)}
     plan = {c[0]: c for c in D['cover']}
     ok = [n for (s, n), rs in boxes.items() if n in plan and d2(rs[-1][3], plan[n][1], plan[n][2]) <= 150]
-    chk('KL_CoverSmart! boxes present at their planned spots (%d expected)' % D['nbox'], len(set(ok)) >= D['nbox'],
-        '%d entities named CoverBox?_KC_nn, %d within 150 cm of the plan: %s' % (len(boxes), len(set(ok)), sorted(set(ok))[:4]))
+    # Cover boxes are data nodes read into the FFCoverList: SMARTCOPS_DM01 run 1 ents '_KC_' = 0 of 19910 and no older bench log has ever
+    # listed a CoverBox through ents, so a miss here is the probe's blind spot, not a missing box -> info only.
     hid = [n for (s, n), rs in boxes.items() if rs[-1][2]]
-    chk('boxes are hidden (flag 0x400)', len(hid) == len(boxes) and bool(boxes), '%d of %d hidden' % (len(hid), len(boxes)), warn=True)
+    info.append('KL_CoverSmart! boxes in the ents table: %d (cover boxes are normally NOT entities), %d within 150 cm of the plan, %d hidden'
+                % (len(boxes), len(set(ok)), len(hid)))
 
     # ---- cover points (xz): box centre + its stand point
     cps = []
@@ -430,8 +435,9 @@ def smartcops_checks(a, chk, mapname):
                 continue
             tracks[(slot, name)] = (m, rows)
     n_plan = len(D['members'])
+    # warn only: wave members are listed as ZGROUP nodes and many spawn late or share a name (DM01 run 1: 9 of 42 tracked)
     chk('planned squad members found visible in the ents rows (>= 60%%) (%d planned)' % n_plan, len(tracks) >= 0.6 * n_plan,
-        '%d tracks' % len(tracks))
+        '%d tracks' % len(tracks), warn=True)
 
     sq = {}
     strict, loose, moved_early, moved_late, left = [], [], [], [], []
@@ -445,7 +451,7 @@ def smartcops_checks(a, chk, mapname):
         if d0 > 250 and any(t <= 90 for t, _ in hit):
             strict.append((m[1], round(d0), round(min(d for _, d in hit))))
             sqd['cov'] += 1
-        if max(d2(p, rows[0][2][0], rows[0][2][2]) for _, t, p in rows if t <= 90) >= 150:
+        if max((d2(p, rows[0][2][0], rows[0][2][2]) for _, t, p in rows if t <= 90), default=0) >= 150:   # late spawns have no rows <= 90 s
             moved_early.append(key)
         ps = [(t, p) for _, t, p in rows]
         if any(t2 > 60 and d2(p2, p1[0], p1[2]) > 100 for (t1, p1), (t2, p2) in zip(ps, ps[1:])):
