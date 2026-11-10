@@ -349,6 +349,22 @@ KITS = {
                              files={'F02_Main.zip': '7cee043dda5d62eeb6c48329b40fcda8', 'F02_Main.bots.zip': 'ec42c5e4', 'F02_Main.bots.base.md5': '171f7443', 'KLGuns.ini': '483f7450'},
                              hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
                              solo_secs=600, parts=('solo',), shots='60-200:3'),
+    # 11-10 DD10 street death (owner: 'it always blows up if u try and run outside', 'its the first spwan that does it'): the LIVE DD10 (F07 6aeb8208 =
+    # dd10doorfix_1109, nothing installed) on the merged_1110e TEST dll with [DeathTrace] (TEST only, needs SessionSafe=0: its detour sites are hashed).
+    # The seat RUNS (goto sprint) from the first spawn out the front to (10200, 950) and stands there; then a TEST rig tele to the same place in case the
+    # walk was stuck. Cops hurt it 0.001 x (as every kit): a death that still comes is not the cops. 'off' = the same with [FallRescue] Enable=0.
+    'dd10trace1110on': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                            runout=((10200, 950), (10200, 50, 950)),
+                            hook=('C:/kl_build_1024/merged_1110e/test/dinput8.dll', '3f46b67af0f4f5f52a3bfee5ea9748c2'),
+                            ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=1500', 'MaxEvents=60',
+                                 '[FallRescue]', 'Enable=1'], keepalive=True,
+                            solo_secs=420, parts=('solo',), shots='60-300:5'),
+    'dd10trace1110off': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                             runout=((10200, 950), (10200, 50, 950)),
+                             hook=('C:/kl_build_1024/merged_1110e/test/dinput8.dll', '3f46b67af0f4f5f52a3bfee5ea9748c2'),
+                             ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=1500', 'MaxEvents=60',
+                                  '[FallRescue]', 'Enable=0'], keepalive=True,
+                             solo_secs=420, parts=('solo',), shots='60-300:5'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
       'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108', 'skyline1108')
@@ -453,6 +469,17 @@ def solo_script(k, secs_total):
         for i in range(1, 7):
             s += ['wait 15000', 'pos wait-%ds' % (15 * i)]
         s += ['log BENCH1106 ledge done', 'pass 1000']
+    elif c.get('runout'):
+        # DD10 street death (11-10): run from the first spawn out the front (goto holds W + sprint), stand; then the TEST rig tele to the same place.
+        # [DeathTrace] logs damage, the killer and 100 ms samples until a death; PosLogMs logs the place every 5 s
+        (gx, gz), (tx, ty, tz) = c['runout']
+        s += ['log BENCH1106 run out the front', 'goto %d %d 150 45000 sprint' % (gx, gz), 'pos after-run', 'log BENCH1106 out front (run)']
+        for i in range(1, 5):
+            s += ['wait 10000', 'pos run-%ds' % (10 * i)]
+        s += ['tele %d %d %d' % (tx, ty, tz), 'wait 1000', 'pos after-tele', 'log BENCH1106 out front (tele)']
+        for i in range(1, 5):
+            s += ['wait 10000', 'pos tele-%ds' % (10 * i)]
+        s += ['log BENCH1106 runout done', 'pass 1000']
     elif c.get('vancall'):
         # DD10 van call (11-09, tools/kl_dd10_vancall_1108.py): the van is called ONLY by a heister in otrExitLevel. TEST rig tele first into the
         # approach box (node 22127, shows the van) outside the exit box, then into the exit box; the log says who called it ('last:' = the fallback, not this)
@@ -491,7 +518,7 @@ def probes(k):
     if k in LC:
         # lclive1106 (11-06 10:52): 0 KLShot files, d3count 0 frames: ReShade owns Present here, so shots go through its bridge (as MT3B 11-02)
         t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
-    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look') or KITS[k].get('vancall') or KITS[k].get('ledge'):
+    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look') or KITS[k].get('vancall') or KITS[k].get('ledge') or KITS[k].get('runout'):
         # dm06btraffic1108 / vanwait1108 (11-08): 0 KLShot files, these kits had no ReShade bridge lines (only LC kits did)
         t = ['[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
     return t
