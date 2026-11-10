@@ -179,6 +179,19 @@ HEISTER = 'KLHeister'
 CHARACTERS = ['Game default', 'J.C.', 'Tommy', 'Pierre', 'Liam', 'Jean', 'Elwood', 'Bud', 'Mitchel',
               'Kane', 'Lynch', 'Ashkanan (Dead Men)', 'Meldal (Dead Men)', 'Red (Dead Men)', 'Parker (Dead Men)',
               'Standen (Dead Men)', 'Hutchison (Dead Men)']                                   # klchar.c KLChar 0..16
+# 2026-11-10: KLChar 17..32 = the 16 Dead Men campaign outfits (tools\kl_outfits_1110.py SPECS menu names, same order; klwlabel_logic.h kwl_chars is the twin).
+# klchar.c's klc_upper[0] is KLC_NCHAR (32) while [Wardrobe] CampaignOutfits=1, so the row needs 33 entries; a map with fewer campaign characters falls back
+# to the game's own body (kco_clamp / the map's Characters= count, klcampaign_outfits_logic.h).
+# The old 17-entry page: set CAMPAIGN = False below (and klchar.c CampaignOutfits=0 / KLC_NCHAR 16).
+CAMPAIGN_CHARS = ['Kane - window cleaner (Retomoto)', 'Lynch - window cleaner (Retomoto)', 'Vaultbreaker',
+                  'Shelly - window cleaner', 'Rific - window cleaner', 'Thapa - window cleaner',
+                  'Carlos', 'Lion (Elder Brother)', 'Flame (Little Brother)',
+                  'Mute (the Doctor)', 'Fuentes', 'Kane - bust-out',
+                  'Lynch - bust-out', 'Kane - bank', 'Lynch - bank',
+                  'Retomoto boss']
+CAMPAIGN = True
+if CAMPAIGN:
+    CHARACTERS = CHARACTERS + CAMPAIGN_CHARS
 # The masks have no names in the game (one material, Merc_Masks, one shared picture): named here by what
 # tools\kl_view.py masks shows (research\v_wardrobe\masks.png), with the heister who wears each in the stock game.
 MASK_LOOKS = ['Moustache', 'Black beard', 'Red opera', 'Orange face', 'Skull', 'Porcelain doll', 'Red and white opera', 'Blue opera']
@@ -194,7 +207,8 @@ HEISTER_ROWS = (('KLH_Char', 'Character', 'KLChar', CHARACTERS), ('KLH_Mask', 'M
 # picture rows: (row name, option, entity of entry k or a blank, X, Y) - tools\kl_portraits.py NAMES
 # Y: the character picture (304 high) ends level with the mask picture (84 + 256 = 340); at Y=60 its legs ran ~16 units into the
 # Character focus bar (run PV1, 2026-10-09 23:55, picture research\shots\PV1_62s.png).
-HEISTER_PICS = (('KLH_Char', 'KLChar', ['KLPic_None1'] + ['KLPic_Char%02d' % n for n in range(1, 17)], -117, 36),
+# the 16 campaign entries (17..32) show the BLANK picture: a ToggleImages child may repeat KLPic_None1 (no new element, so no new menu-table entry; the table is near its budget)
+HEISTER_PICS = (('KLH_Char', 'KLChar', ['KLPic_None1'] + ['KLPic_Char%02d' % n for n in range(1, 17)] + ['KLPic_None1'] * (len(CHARACTERS) - 17), -117, 36),
                 ('KLH_Mask', 'KLMask', ['KLPic_None2', 'KLPic_None3'] + ['KLPic_Mask%d' % n for n in range(1, len(MASKS) - 1)], 157, 84))
 # --labels (patch "wardrobe", owner 11-07: 'label the outfit categories more clearly bc if they want to find dead men its not too obvious on how to get there'):
 # the Heister page entries get a counter and a group tag, the rows a caption that says who the row is for, and the side note the real keys. Default OFF: without
@@ -203,14 +217,14 @@ HEISTER_PICS = (('KLH_Char', 'KLChar', ['KLPic_None1'] + ['KLPic_Char%02d' % n f
 # GUESS: how a longer text fits between the arrows is NOT SEEN (the longest outfit entry is ~62 characters, the stock ones 43); re\wardrobe.md 117.
 LABELS = False
 ROW_CAPTIONS = {'KLChar': 'Character', 'KLMask': 'Mask (Dog Days / Payday 2)', 'KLOutfit': 'Outfit (Dead Men heisters only)'}
-LABEL_NOTE = ('Dead Men heisters start at 10/17 (Kane). Online matches: F9 next heister, F11 mask, Ctrl+F11 outfit (group jumps and Shift back: Mod Options). '
+LABEL_NOTE = ('Dead Men heisters start at 10/%d (Kane); the campaign outfits (Retomoto window cleaners, the Squad of 7 ...) are the last 16 entries.' % len(CHARACTERS) + ' Online matches: F9 next heister, F11 mask, Ctrl+F11 outfit (group jumps and Shift back: Mod Options). '
               'With hire on, hire Dead Men heisters with F3 in the shop. Outfits are for Dead Men bodies only.')
 
 
 def wardrobe_labels():
     """{option: [text of entry k]} - 'n/N  GROUP: Name' as klwlabel_logic.h kwl_label (the DEFAULT group has no tag)."""
     chars = [c.replace(' (Dead Men)', '') for c in CHARACTERS]
-    cg = ['DEFAULT'] + ['DOG DAYS'] * 8 + ['DEAD MEN'] * 8                                # KLChar 0 | 1..8 | 9..16 (Kane and Lynch are Dead Men bodies)
+    cg = ['DEFAULT'] + ['DOG DAYS'] * 8 + ['DEAD MEN'] * 8 + ['CAMPAIGN'] * (len(chars) - 17)     # KLChar 0 | 1..8 | 9..16 (Kane and Lynch are Dead Men bodies) | 17..32
     masks = ['Game option', 'No mask'] + ['%s (%s)' % (m, c) for m, c in zip(MASK_LOOKS, chars[1:9])] + [m.replace(' (Payday 2)', '') for m in PD2_MASKS]
     mg = ['DEFAULT'] * 2 + ['DOG DAYS'] * 8 + ['PAYDAY 2'] * 4                           # KLMask 0..1 | 2..9 | 10..13
     og = ['DEAD MEN'] * len(OUTFITS)
@@ -253,10 +267,13 @@ def heister_window(nl, pictures=False):
             if len(ents) != len(dict((r[0], r[3]) for r in rows)[name]):
                 raise SystemExit('%s: %d pictures for %d entries' % (name, len(ents), len(dict((r[0], r[3]) for r in rows)[name])))
             L.append('      <GuiElement Type="GUIGroup" Template="LevelPictureGroup_T">')
-            L += ['        <GuiElement Type="Graphic" Name="%sPic%02d" Template="LevelPicture_T" X="%d" Y="%d" Graphic="%s" />' % (name, k, x, y, e) for k, e in enumerate(ents)]
+            first = {}                                # picture -> the first entry that uses it: a repeated picture (the blank one of the campaign entries) is NOT a new element (menu table budget)
+            for k, e in enumerate(ents):
+                first.setdefault(e, k)
+            L += ['        <GuiElement Type="Graphic" Name="%sPic%02d" Template="LevelPicture_T" X="%d" Y="%d" Graphic="%s" />' % (name, k, x, y, e) for k, e in enumerate(ents) if first[e] == k]
             L.append('      </GuiElement>')
             L.append('      <GuiElement Type="ToggleImages" Text="" Name="%sPics" Option="%s" ActivateButtonUp="NoActivation" ActivateButtonDown="NoActivation" X="0" Y="0" ShowDebug="True" Link="False">' % (name, opt))
-            L += ['        <Graphic Graphic="%sPic%02d" />' % (name, k) for k in range(len(ents))]
+            L += ['        <Graphic Graphic="%sPic%02d" />' % (name, first[ents[k]]) for k in range(len(ents))]
             L.append('      </GuiElement>')
         L.append('      <GuiElement Type="GUIGroup" ShowDebug="True" Name="KLH_CenterBox" AlignH="Right" X="-100" Y="-80" W="384" H="576">')
     ys = (358, 392, 425)                              # PlayMenu's two rows are at 392 and 425

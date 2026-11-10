@@ -14,15 +14,22 @@
 #include <string.h>
 
 enum { KWL_CHAR = 0, KWL_MASK = 1, KWL_OUTFIT = 2 };           /* the same numbers as klchar.c klc_value[] / klc_keys[] */
-enum { KWL_G_DEFAULT = 0, KWL_G_DOGDAYS, KWL_G_DEADMEN, KWL_G_PD2 };
-#define KWL_NCHAR   17     /* klchar.c KLC_NCHAR + 1 */
+enum { KWL_G_DEFAULT = 0, KWL_G_DOGDAYS, KWL_G_DEADMEN, KWL_G_PD2, KWL_G_CAMPAIGN };
+#define KWL_NCHAR   33     /* klchar.c KLC_NCHAR + 1 (1110: 16 -> 32 with the 16 campaign outfits, tools\kl_outfits_1110.py SPECS) */
 #define KWL_NMASK   14     /* KLC_MASKS + 2 */
 #define KWL_NOUTFIT 24     /* KLC_OUTFITS */
 
-static const char *const kwl_gname[4] = { "DEFAULT", "DOG DAYS", "DEAD MEN", "PAYDAY 2" };
+static const char *const kwl_gname[5] = { "DEFAULT", "DOG DAYS", "DEAD MEN", "PAYDAY 2", "CAMPAIGN" };
 
 static const char *const kwl_chars[KWL_NCHAR] = { "Game default", "J.C.", "Tommy", "Pierre", "Liam", "Jean", "Elwood", "Bud", "Mitchel",
-                                                  "Kane", "Lynch", "Ashkanan", "Meldal", "Red", "Parker", "Standen", "Hutchison" };
+                                                  "Kane", "Lynch", "Ashkanan", "Meldal", "Red", "Parker", "Standen", "Hutchison",
+                                                  /* 17..32: tools\kl_outfits_1110.py SPECS menu names, in order (mkoverlay.py CAMPAIGN_CHARS is the twin) */
+                                                  "Kane - window cleaner (Retomoto)", "Lynch - window cleaner (Retomoto)", "Vaultbreaker",
+                                                  "Shelly - window cleaner", "Rific - window cleaner", "Thapa - window cleaner",
+                                                  "Carlos", "Lion (Elder Brother)", "Flame (Little Brother)",
+                                                  "Mute (the Doctor)", "Fuentes", "Kane - bust-out",
+                                                  "Lynch - bust-out", "Kane - bank", "Lynch - bank",
+                                                  "Retomoto boss" };
 static const char *const kwl_mask_look[8] = { "Moustache", "Black beard", "Red opera", "Orange face", "Skull", "Porcelain doll", "Red and white opera", "Blue opera" };
 static const char *const kwl_pd2_mask[4] = { "Wolf", "Dallas", "Chains", "Hoxton" };
 static const char *const kwl_armour[4] = { "Plain clothes", "Light vest", "Tactical vest", "Heavy armour" };
@@ -42,7 +49,7 @@ static int kwl_wrap(int v, int step, int span)
 static int kwl_group(int which, int idx)
 {
     if (idx < 0 || idx >= kwl_span(which)) return KWL_G_DEFAULT;
-    if (which == KWL_CHAR) return idx == 0 ? KWL_G_DEFAULT : idx <= 8 ? KWL_G_DOGDAYS : KWL_G_DEADMEN;     /* 9 Kane and 10 Lynch are Dead Men bodies too */
+    if (which == KWL_CHAR) return idx == 0 ? KWL_G_DEFAULT : idx <= 8 ? KWL_G_DOGDAYS : idx <= 16 ? KWL_G_DEADMEN : KWL_G_CAMPAIGN;     /* 9 Kane and 10 Lynch are Dead Men bodies too */
     if (which == KWL_MASK) return idx <= 1 ? KWL_G_DEFAULT : idx <= 9 ? KWL_G_DOGDAYS : KWL_G_PD2;         /* 0 Game option, 1 No mask | 2..9 the 8 stock looks | 10..13 Payday 2 */
     return KWL_G_DEADMEN;                                                                                   /* outfits: Dead Men bodies only */
 }
