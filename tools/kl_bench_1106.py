@@ -667,7 +667,8 @@ def logs(tag):
 def faults(lines):
     """Case-sensitive on purpose: 'EndOnFatal=1' / 'ContinueAsserts' lines are settings, not faults."""
     pat = re.compile(r'(EXCEPTION|FATAL|CRASH|ACCESS_VIOLATION)|access violation|memory fault|c0000005', re.I if False else 0)
-    return [l for l in lines if pat.search(l)]
+    # our own 'listguard: ... catches only c0000005' settings line is not a fault
+    return [l for l in lines if pat.search(l) and 'listguard:' not in l]
 
 
 def dumps(tag, n):
