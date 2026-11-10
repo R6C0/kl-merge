@@ -79,6 +79,12 @@ click / confirm / back sounds; an in-game Mod Options row "Dead Men menu look (r
 redirect rules; DEFAULT ON. Order: (1) research + design re/menu_look_1109.md, (2) stage-1 tool fonts + colours (reuse kl_hud build_font / kl_hud_menu), (3) plates/
 backgrounds, (4) sounds, (5) toggle. Ships AFTER the Wed tester build unless (2) is cheap and benched; never replaces stock files (themed copies + redirect).
 - 11-09 19:10 cloud: claimed research + design + stage-1 tool (offline, self-tests; nothing installed).
+- 11-10 ~03:00 local (no crash involved): SHOTS DONE, bench MENULOOK_MENUS2 PASS (TEST f4c8c3fd = 1110d, deadmen + stock menus, 0 asserts/faults; live dll 38104558 / ini a08b6110
+  restored). 8 pages per look in C:\kl_build_1024\menulook_1109\shots\{deadmen,stock}\ (main_menu, options, mod_settings, heister, heist_mode, arcade_maps, arcade_deadmen_maps,
+  arcade_campaign_maps) + shots\ml1.txt, ml5.txt. ML5 PASS again. ML1 [all GUESS boxes]: deadmen rows wider than stock (Options GameSetting +61 px, Mouse +42; KLGuns KLS_Look +114,
+  KLS_Adren +72 ...; KLHeister +21) + declared overlaps that stock has too. Pictures checked by eye: NO real clipping from the theme (capitals widen, labels end well before
+  the arrows); the Heister Outfit value runs into its arrows and the selected-row value is unreadable under the bar IN STOCK TOO (layout/stock issue for the cloud's layout
+  tool, not a font width). MENU_FONTS unchanged. Match pages (lobby/pause/shop, --runs match) still to shoot. Waiting for kl_menu_layout_1110.py (pin overlay 9de0f526).
 - 11-10 02:20 local (no crash involved): MENU SOUND PICKER INSTALLED on 1110c SHIP 6e3ca2ad (C:\kl_build_1024\menupick_1110\install_1110c.py, undo --undo):
   Scenes\KaneAndLynch_deadmen.WHD 5ba73f5e / .WAV fffb4841 / .klms 5ae473c1, ini f67f94bc -> a08b6110 (+[MenuSounds] Enable=1, 5 events dm, Menu=menu, Window=openwindow_04).
   Bench MENULOOK_DEADMEN_MENUS (TEST fdaeaf10, shots_kit) tour PASS 0 asserts/faults, every page reached; ML5 PASS (WHD+WAV redirect, 7 records re-pointed,
