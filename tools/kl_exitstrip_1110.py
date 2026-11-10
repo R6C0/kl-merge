@@ -48,8 +48,10 @@ STEP = 10                # grid cell, cm
 #   DM01B: lane z 31907 +-150 = 31757..32057 (x 3668..4568 of the box all on it); north strip z 32070..32350 (the south one z 31460..31740 does not touch the AllyEscapeBox z 32002..32702)
 #   DM07 : lane z 10400 +-150 = 10250..10550; south strip z 9950..10230 (AllyEscapeBox z 9615..10315); the north strip 10560..10850 misses it
 #   DM06B: diagonal lane NW->SE: the free ground is the south-west corner; best (ally overlap) x -3020..-2400, z -8380..-8170 (AllyEscapeBox x -3082..-2382, z -8684..-7984, its centre -2732/-8334 is inside it)
+#   DM01B pins = the OUTPUT of C:/kl_build_1024/dm01bdoorfix_1110 (install that first): live went back to 778b075c (dm01bdoorfix_1109 5eab5ecc undone, 11-10 .prm root crash class),
+#   the door fix replaces it; the lane re-measured on the door fix output is unchanged (11-10 ~11:40)
 MAPS = {
-    'DM01B': dict(slot='F03', live={'F03_Main.zip': '5eab5eccdda1c9d945bcf767db05271d', 'F03_Main.bots.zip': 'cadfb74e6e62408fbd43540938406b79', 'F03_Main.bots.base.md5': '4db9726f51dd4eaefc9642c03caa8c17'},
+    'DM01B': dict(slot='F03', live={'F03_Main.zip': '476aec5fbd5056189b1c7f9bba4cae2b', 'F03_Main.bots.zip': 'a056edbda19b699604e236d3288a2774', 'F03_Main.bots.base.md5': '4272c0eb3e95cd82388a0692e1f06994'},
                   old_at=[4118.0, 185.0, 31907.0], old_half=[450.0, 300.0, 450.0], new_at=[4118.0, 185.0, 32210.0], new_half=[450.0, 300.0, 140.0]),
     'DM06B': dict(slot='F02', live={'F02_Main.zip': '7cee043dda5d62eeb6c48329b40fcda8', 'F02_Main.bots.zip': 'ec42c5e4ec454196380292286ca7e081', 'F02_Main.bots.base.md5': '171f7443261ec0f3bc9d5a049702994e'},
                   old_at=[-2573.800048828125, 2704.0, -7939.0], old_half=[450.0, 300.0, 450.0], new_at=[-2710.0, 2704.0, -8275.0], new_half=[310.0, 300.0, 105.0]),

@@ -1,3 +1,6 @@
+2026-11-10 ~11:40 - [d0, offline] HELD STAGES dry-run on the live files: dm01bdoorfix_1110, exitstrip DM06B + DM07, dd10exitsouth_1110 all still pin live. exitstrip_1110/DM01B was STALE (pinned 5eab5ecc; live is 778b075c and the door fix replaces it):
+RE-STAGED on the door fix output -> C:/kl_build_1024/exitstrip_ondoorfix/exitstrip_1110/DM01B (pins 476aec5f/a056edbd/4272c0eb -> zip bef32b16, bots 02480065, base b1b8d3cf); lane re-measured unchanged, check PASS (undo byte-exact), prm roots 3642/0 stale.
+DM01B order after 81's "upload done": dm01bdoorfix_1110 FIRST, then this strip. Old stage marked STALE.txt. Not benched (the box edit alone, .prp only).
 2026-11-10 ~11:15 - [d0] LAUNCHER E2E PASS (for 81, C:\kl_release\e2e_1110 + pkg_1110, no INSTALL/UNINSTALL): verify 823/0 before + after, dll 6711bc5f / ini 0da79eb8 unchanged, dinput8* list identical, no strays.
 PLAY DEAD MEN RISING -> hook loaded, clean close logged; PLAY DOG DAYS -> hook renamed .klmerge-off, no hook; PLAY DEAD MEN RISING put it back byte-exact. No new crash files.
 Steam options on the PC are "-dx10" only (no F01/AutoExit; 81 tells the owner). Oddities to 81: MOD "not installed" without a journal, letter-spaced button names for UIA, "..." buttons = dashes, hook stays off after a stock run (README hint 1e9be368).
