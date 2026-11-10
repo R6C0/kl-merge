@@ -1,3 +1,7 @@
+2026-11-10 ~02:55 - [T9 local] MATCH PAGES SHOT (no crash involved): bench MENULOOK_MATCH PASS (TEST f4c8c3fd, deadmen + stock, live dll 38104558 / ini a08b6110 restored).
+All 16 pages per look now in C:/kl_build_1024/menulook_1109/shots/{deadmen,stock} (lobby, lobby_map, pause, roundover, shop_page1/2, shop_hire, shop_controls + the 8 menus).
+THEME BUG for the cloud (colour, not width): text ON the light plates (selected row, lobby column header) is dark in stock but PALE in deadmen = unreadable (lobby 'LOCATION: HOT COFFEE', 'NAME: / CRIMINAL ...').
+Shop pages identical in both looks (not themed): 'ASSAULT RIFLES' spills below the category box, the left arrow overlaps 'SW MP45' = stock/hook layout, for kl_menu_layout_1110. Pause + roundover fine.
 2026-11-10 ~03:00 - [T9 local] MENU SHOTS + PICKER LIVE (no crash involved): menu sound picker INSTALLED (install_1110c.py, ini f67f94bc -> a08b6110, sounds _deadmen.WHD 5ba73f5e/.WAV fffb4841/.klms 5ae473c1; undo C:/kl_build_1024/menupick_1110/install_1110c.py --undo; dll is d0's 1110d, accepted). Bench MENULOOK_MENUS2 PASS:
 8 pages per look shot (C:/kl_build_1024/menulook_1109/shots/{deadmen,stock}), ML5 PASS, ML1 = wider rows only, no real clipping by eye; Heister Outfit row hits its arrows in STOCK too.
 Shots fix 6428ca18 (kit ini D3dShotPost=1 + Bridge=1). Next: match pages, then the cloud's kl_menu_layout_1110.py on overlay 9de0f526.
