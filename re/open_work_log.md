@@ -1,3 +1,7 @@
+2026-11-10 ~07:20 - [d0] DM01B LOAD CRASH ROOT CAUSE PROVEN + FIXED (ec59d918): kl_dm01b_undoor_1109 model_leg re-referenced the .prm roots against the EDITED .oct (room part -16 bytes), so 3640 type-7 roots
+pointed 16 bytes into the next record -> junk vtable at 0x6ad1d9 (ZCollisionBase slot 34). Now keyed on the live .oct; check() fails any root off a record start (flags the old 5eab5ecc: 3640). Siblings (kl_interact_graft, dm02doorglass) OK.
+Rebuilt C:/kl_build_1024/dm01bdoorfix_1110 (476aec5f / a056edbd / 4272c0eb, check + self-test PASS), bench kit dm01bdoorfix1110, NOT installed (freeze). Also: exitstrip DM06B + DM07 benches PASS (held).
+Release load sweep kits load_<MAP> (13 maps incl. DM01, DM06, DD05 control; af75c29c) run after fc's vault benches; verdicts go to 81.
 2026-11-10 ~06:35 - [f0, T0] PACKAGE RE-FROZEN, supersedes 9a60c535 (do NOT upload that): d0 found the live DM01B 5eab5ecc (dm01bdoorfix_1109, unbenched) crashes at round load 3/3
 (c0000005 junk address, caller 0x6ad1d9); A/B on 778b075c PASS -> d0 put 778b075c / bots dccc9250 back live. map:DM01B re-made: C:/kl_release/KLMerge_package.zip 2,026,178,709 bytes,
 sha1 504a398f1998f0f5987faa4b9f8cc8deab32fe3e. DM01B rehearsal from the unzipped package PASS (install 0, uninstall 0 differences). DM01B keeps its 2 dead kick doors (as 11-09).
