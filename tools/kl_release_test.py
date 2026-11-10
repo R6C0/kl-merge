@@ -141,6 +141,15 @@ def main():
         check(not os.path.exists(os.path.join(dd, 'KLHook.ini.new-' + R.VERSION)), 'D .new ini removed')
         check(not os.path.exists(os.path.join(dd, 'KLHook.ini')), 'D mod ini not left as live ini')
 
+        # G: make picks up the hook's own files beside KLHook.ini (KLReverbBoxes.ini, KLGrenade\*.wav)
+        gdd = os.path.join(base, 'gdd')
+        for d in ('KLGrenade', os.path.join('KLExpansion', 'Maps')):
+            os.makedirs(os.path.join(gdd, d))
+        for rel in ('KLReverbBoxes.ini', 'KLGrenade/grenade_pin.wav', 'KLGrenade/grenade_throw.wav', 'KLGrenade/x.wav.before-1110'):
+            open(os.path.join(gdd, rel), 'wb').write(b'x')
+        got = sorted(t['rel'] for t in R.enumerate_targets(type('M', (), dict(dd=gdd, pd2_skipped=[]))(), ['core']))
+        check(got == ['KLGrenade/grenade_pin.wav', 'KLGrenade/grenade_throw.wav', 'KLReverbBoxes.ini'], 'G make lists the hook files (got %s)' % got)
+
         # F: a fresh install points the ini's game folders at this PC; verify, re-install and uninstall accept it as ours
         check_localize()
         pd2 = os.path.join(base, 'p1', 'PAYDAY 2'); os.makedirs(pd2)

@@ -551,7 +551,9 @@ def mm_file(path):
 EXCLUDE_RE = re.compile(r'(\.before-|\.absent$|\.delays-|\.state\.json$|_journal\.json$|\.of-test-build|\.locked_)')
 STOCK_MTIME = time.mktime((2026, 9, 14, 0, 0, 0, 0, 0, -1))      # the Steam install was 2026-09-13
 WIN_SLOTS = ['F%02d' % i for i in range(1, 10)] + ['L%02d' % i for i in range(0, 12)]
-OWN_ROOT = ['dinput8.dll', 'KLHook.ini', 'KLShopPage.ini', 'KL_MOD_SETTINGS.txt']
+OWN_ROOT = ['dinput8.dll', 'KLHook.ini', 'KLShopPage.ini', 'KL_MOD_SETTINGS.txt',
+            'KLReverbBoxes.ini']                                    # [Echo] RoomBoxes (klecho.c)
+OWN_DIRS = ['KLGrenade']                                            # [Grenade] PinSound WAVs (klgrenadefx.c)
 KEEP_USER = ('KLHook.ini', 'KLShopPage.ini')                       # never overwritten when the player already has one
 
 
@@ -838,6 +840,9 @@ def enumerate_targets(mk, only):
         p = os.path.join(dd, 'KLExpansion', 'KLHook.expansion.ini')
         if os.path.exists(p):
             T.append(dict(group='core', rel='KLExpansion/KLHook.expansion.ini', live=p, kind='lit'))
+        for sub in OWN_DIRS:                                       # folders the hook reads beside KLHook.ini
+            for p in list_files(os.path.join(dd, sub)):
+                T.append(dict(group='core', rel=nrm(os.path.relpath(p, dd)), live=p, kind='lit'))
     if want('overlay'):
         base = os.path.join(dd, 'KLExpansion', 'Overlay')
         for p in list_files(base):
