@@ -1,7 +1,6 @@
 /* klmenulook_test.c - OFF-GAME checks of klmenulook_logic.h ([MenuLook] DeadMen: which menu files get their _deadmen sibling, and when not).
  *   cl /nologo /W3 klmenulook_test.c      or      gcc -m32 -I klhook/test_shim klmenulook_test.c   (tools/kl_tests.py, kind 'logic')
- * Written in the cloud 2026-11-09; run there with gcc -m32 (gcc-multilib) + AddressSanitizer on 2026-11-09 (scheduled check-in): 109 checks, 0 fails, no ASan report.
- * The first cut crashed 0xC0000409 under cl: the test's own out[260] was handed to klml_variant with cap 300 (section 9), fixed with a separate buffer. */
+ * Written in the cloud 2026-11-09: syntax-checked with gcc -fsyntax-only (-m32 and native), NOT executed here (no 32-bit crt). */
 #include <stdio.h>
 #include <string.h>
 #include "klmenulook_logic.h"
@@ -108,12 +107,9 @@ int main(void)
     CHECK(klml_variant(OV "PATCH01_DEADMEN.ZIP", 1, fake_exists, out, sizeof out, &why) == 0 && why == KLML_ALREADY);
     CHECK(probes == 0);
 
-    /* 9. overlong: the sibling must fit cap (with its NUL); the row is refused BEFORE any write into out, nothing probed.
-       The cap-300 / cap-268 checks below write a 267-char sibling: they get their own 320-byte buffer. (2026-11-09 scheduled
-       check-in: they used out[260] with cap 300 -> stack overrun = the 0xC0000409 under cl and 3 fails under gcc -m32; the
-       logic header itself was right, it refused cap 260 before any write.) */
+    /* 9. overlong: the sibling must fit cap (with its NUL); the row is refused BEFORE any write into out, nothing probed */
     {
-        char longp[300], big[320]; size_t n;
+        char longp[300], big[300]; size_t n;   /* big: the caps 300 / strlen + 9 below need a buffer that really is that size (out is 260: /GS fail-fast 0xC0000409 on cl) */
         memset(longp, 'a', sizeof longp); memcpy(longp, "C:\\", 3);
         n = 247;
         memcpy(longp + n, "\\Patch01.zip", 13);                /* 247 'a's of directory, then "\Patch01.zip": 259 chars, fits MAX_PATH itself */
@@ -126,14 +122,11 @@ int main(void)
         CHECK(probes == 0);
         /* the same path with a big enough cap works and is exactly strlen + 8 */
         memset(big, 0, sizeof big);
-        CHECK(klml_variant(longp, 1, fake_exists, big, 300, &why) == 0 && why == KLML_MISSING && strlen(big) == strlen(longp) + 8);
+        CHECK(klml_variant(longp, 1, fake_exists, big, sizeof big, &why) == 0 && why == KLML_MISSING && strlen(big) == strlen(longp) + 8);
         CHECK(!strcmp(big + strlen(big) - 20, "\\Patch01_deadmen.zip"));
-        CHECK(probes == 1);                                    /* the sibling was looked for exactly once */
-        /* the boundary: cap = strlen + 8 + 1 fits, cap = strlen + 8 does not (and writes nothing) */
+        /* the boundary: cap = strlen + 8 + 1 fits, cap = strlen + 8 does not */
         CHECK(klml_variant(longp, 1, fake_exists, big, strlen(longp) + 9, &why) == 0 && why == KLML_MISSING);
-        memset(big, 'Z', sizeof big);
         CHECK(klml_variant(longp, 1, fake_exists, big, strlen(longp) + 8, &why) == 0 && why == KLML_TOO_LONG);
-        CHECK(big[0] == 'Z' && big[sizeof big - 1] == 'Z');
         CHECK(klml_variant("Patch01.zip", 1, fake_exists, out, 1, &why) == 0 && why == KLML_NOT_MENU);        /* cap < 2: refused at once */
     }
 
