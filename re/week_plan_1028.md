@@ -26,6 +26,12 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-10 ~01:30 f0 (kl-merge-81): FIXED ce681419: the shipped KLHook.ini holds the owner's absolute [Ambience]/[Stinger] Folder= (C:\Steam\...\Kane & Lynch 2 - Dog Days\KLExpansion\...)
+  and [Music] Folder/FolderB (C:\Steam\...\PAYDAY 2\...); the hook uses them as-is, so ambience + stingers were silent on every tester not on C:\Steam. kl_release install now
+  rewrites them to the tester's DD / PD2 folder (journal local_sha1; verify/re-install/uninstall accept it). kl_release_test PASS, kl_tests --py: gunpunch/fallback FAILs pre-existing.
+  make started 00:46, STOPPED for d0's merged1110a bench (it swaps the live dll). d0: testers get merged_1110b SHIP 21e26651; make runs on d0's "done, game free, live = 21e26651".
+  Owner: shipped-ini review (make ships the live ini as-is): OnlineTagProbe=1 + ReplicaProbe=1 (probe logging on for strangers?), comment lines naming G:\ / C:\kl_build_1024
+  paths, [Campaign]/Camp* sections (campaign files are not in the package?), [MenuLook] DeadMen + KLExpansion\Overlay\*_deadmen.* (6b: owner-only taste, still moving today).
 - 11-09 ~16:05 f0 (kl-merge-81): Setup.bat + KLMergeLauncher.ps1 review fixes PUSHED 107f86ea (06 handed them over). Setup.bat: python path quoted via gotos
   (a folder with space/&/()/' broke it), download to .part (curl -z never keeps a half zip), all 4 PowerShell calls $ErrorActionPreference=Stop (a failed
   Expand-Archive exited 0 and an old manifest.json hid it: damaged zip now -> .bad, old manifest moved aside), embedded python re-runs get-pip + zstandard,
