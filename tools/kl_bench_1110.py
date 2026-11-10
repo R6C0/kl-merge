@@ -49,9 +49,10 @@ ORDER = ['DM03BS_1110', 'DM03VAULT_1110', 'DM03VAULTB_1110']
 VAN_STOP = (3306, 2, 4)
 # from the vault stage's build report (GUESS-labelled there): Arm box centre (0, 340, -7006) half (150, 120, 150); doorway hinges x +-105 at z -6812;
 # the moved piles at (0, 241, -6620), (120, 241, -6540), (200, 241, -6660)
-VAULT_LOBBY = (0, 300, -7300)       # lobby side, south of the Arm box (box z -7156..-6856); checked on stage_sc nav: lobby, Arm, dock all over floor y 240, one part (122 cells within 3 m)
+VAULT_LOBBY = (0, 248, -7300)       # floor + 8 (d0, LCDOORS 11-10: a +60 tele and a tele right after GO preceded a frozen walker); lobby side, south of the Arm box (box z -7156..-6856); checked on stage_sc nav: lobby, Arm, dock all over floor y 240, one part (122 cells within 3 m)
 VAULT_ARM = (0, -6980)
 VAULT_DOCK = (0, -6600)             # just past the doorway, dock side
+VAULT_WARM = (150, -7300)           # warm-up walk, 1.5 m east of the lobby tele (same floor part)
 DOCK_Z = -6780                      # dock side of the doorway (hinges at z -6812)
 # ents matches the node's OWN name (klauto.c kla_ents): the KL_Door_N group nodes never move; the blast / Backstop act on their children
 # (kl_dm03vault_1110 DOOR_CHILD_FRONT / DOOR_CHILD_PB). Every DM03 kick door has children of these names, so rows are kept by position
@@ -86,16 +87,18 @@ def vault_seg(who, arm):
         for i in range(1, 9):
             s += ['wait 30000'] + vault_doors('client sample %d' % i)
         return s
-    s += ['waitstate 0x19 90000', 'tele %d %d %d' % VAULT_LOBBY, 'wait 2500', 'pos vault-lobby'] + vault_doors('before')
+    # 15 s after GO before the first tele, then a warm-up walk: a frozen local player shows as 'not simulated', not as a door FAIL
+    s += ['waitstate 0x19 90000', 'wait 15000', 'tele %d %d %d' % VAULT_LOBBY, 'wait 2500', 'pos vault-lobby',
+          'goto %d %d 40 6000' % VAULT_WARM, 'pos vault-warm', 'log BENCH1110 vault warm-up walk'] + vault_doors('before')
     if arm:
         s += ['goto %d %d 40 6000' % VAULT_ARM, 'pos vault-arm', 'log BENCH1110 vault host in the Arm box',
               'wait 1500', 'ents KL_Vault 10', 'log BENCH1110 vault fuse running', 'wait 4000'] + vault_doors('after')
         s += ['goto %d %d 40 8000' % VAULT_DOCK, 'pos vault-dock', 'log BENCH1110 vault walked through the doorway',
               'goto %d %d 40 6000' % (VAULT_LOBBY[0], VAULT_LOBBY[2])]
-        # the Backstop fires 240 s after the AIMonitor start; ~20 s of the above + 190 s -> samples ~210..290 s after GO (0x19)
-        s += ['wait 190000']
+        # the Backstop fires 240 s after the AIMonitor start; ~45 s of the above + 175 s -> samples ~220..300 s after GO (0x19)
+        s += ['wait 175000']
     else:
-        s += ['wait 180000']   # samples ~185..265 s after GO: straddle 240 s
+        s += ['wait 170000']   # ~25 s + 170 s -> samples ~195..275 s after GO: straddle 240 s
     for i in range(1, 10):
         s += vault_doors('late sample %d' % i)[:-1] + ['pos vault-late%d' % i, 'log BENCH1110 vault late sample %d' % i, 'wait 10000']
     s += ['goto %d %d 40 8000' % VAULT_DOCK, 'pos vault-dock-late', 'log BENCH1110 vault late walk through']
@@ -194,7 +197,9 @@ def vault_checks(k, a):
     kids = vault_kid_states(a)
     chk('vault doorway children sampled (2 leaf proxies + 2 pathblockers in the doorway box)', len(kids) >= 4,
         '%d: %s' % (len(kids), sorted('%s#%d' % (n, s) for s, n in kids)))
-    lb = M.pos_of(a, 'vault-lobby')
+    lb, wm = M.pos_of(a, 'vault-lobby'), M.pos_of(a, 'vault-warm')
+    chk('local player simulated: the warm-up walk moved the host >= 50 cm (else the bench is INVALID, not a door result)',
+        bool(lb and wm) and abs(wm[0] - lb[0]) + abs(wm[2] - lb[2]) >= 50, 'lobby %s -> warm %s' % (lb, wm))
     chk('host reached the lobby (tele to %s)' % (VAULT_LOBBY,), bool(lb) and abs(lb[0] - VAULT_LOBBY[0]) <= 300 and abs(lb[2] - VAULT_LOBBY[2]) <= 300, 'pos %s' % (lb,))
     i_before, i_after = at('before'), at('after')
     if arm:
