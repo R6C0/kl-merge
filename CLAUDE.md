@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~02:25 - [d0] 1110d INSTALLED (dll 6e3ca2ad -> 38104558, ini a08b6110 untouched) after bench M1110D_D1 PASS (DM01, TEST f4c8c3fd, 0 faults): GRENADE PROVEN (walk-in pickup, pin sound,
+Stand_Overhand throw clip, launch, throw sound, ammo 4->3->2); Char=17 on a 16-char map = game's body, no crash. Undo: merged_1110d/kit/UNDO.bat FIRST, then merged_1110c. 6b's outfits maps wait for 81 "make done".
 2026-11-10 ~02:15 - [d0] MERGED 1110c INSTALLED (SHIP 6e3ca2ad, ini f67f94bc = + [Grenade] PinSound=1 ThrowAnim=1, <DD>/KLGrenade 2 WAVs). Bench B4 DM01 PASS 0 faults, but the throw is UNPROVEN: the bot never picked a grenade up
 ("no grenade with ammo"). B5 (walk-in + hold E on 3 pickups) staged in merged_1110c/bench. Undo: merged_1110c/kit/UNDO.bat FIRST, then driverarena_1110, campaign_1110.
 1110d = 1110c + 6b's campaign outfits (SHIP 38104558 / TEST f4c8c3fd, kit C:/kl_build_1024/merged_1110d/kit, dll only, scratch undo byte-exact), pushed bc4c5f64, NOT benched/installed; install it BEFORE outfits_1110.

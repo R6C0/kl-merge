@@ -1,3 +1,8 @@
+2026-11-10 ~02:25 - [d0] 1110d INSTALLED: dll 6e3ca2ad -> SHIP 38104558 (ini a08b6110 = 6b's MENUPICK ini, untouched). Bench M1110D_D1 (DM01, TEST f4c8c3fd, solo, B5 script + [Character] Char=17) PASS,
+0 faults/asserts. GRENADE THROW PROVEN (owner: 'just a red light no throw'): Grenade_Frag_02 taken by walking in (en? 1 -> 0, no key needed), G (external SendInput) -> 'pin sound played', adren 'Throw_Grenade/Stand_Overhand
+id 366 (47 frames)', 'shot RAN ... LAUNCHED', 'throw sound played', ammo 4 -> 3 -> 2; 3rd press 'not the main loop's gameplay call: skipped'. Char=17 vs DM01's 16-char wardrobe: hire 'pick out of range' -> random default body, no crash.
+Undo: merged_1110d/kit/UNDO.bat FIRST, then merged_1110c/kit/UNDO.bat. Logs: <work>/build/klhook/solo/M1110D_D1, console C:/kl_build_1024/merged_1110d/bench/load.
+
 2026-11-10 ~02:15 - [d0] MERGED 1110c INSTALLED (SHIP 6e3ca2ad, ini f67f94bc = + [Grenade] PinSound=1 ThrowAnim=1, <DD>/KLGrenade 2 WAVs). Bench B4 DM01 (TEST fdaeaf10) PASS 0 faults/asserts,
 hook 'grenadefx: ON PinSound=1 (pin found, throw found) ThrowAnim=1'; G presses (external SendInput presser: klauto 'tap G' is a DirectInput scancode the GetAsyncKeyState release never sees)
 logged 'no grenade with ammo in the inventory': the bot's pickup failed, so the throw/pin cue is still UNPROVEN. B5 (walk into each of 3 Grenade_Frag pickups + hold E) staged: merged_1110c/bench/mk_b5.py, pressg_b5.py.
