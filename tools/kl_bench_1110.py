@@ -34,7 +34,7 @@ K = {
     # + KL_BackSwat!Van: 4 SWAT around the van stop (3306, 2, 4), Defend, started by KL_BackSwat!Clock\Go. Census 44/29 -> 48/30. Front stays police.
     # The host goes to the van stop after the census samples (tele + shots) so the screenshots show the back; GUESS: (3306, 152, 4) is open floor.
     'DM03BS_1110': dict(map='DM03', slot='F03', live={'F03_Main.zip': '8e23cbd3', 'F03_Main.bots.zip': '2528e8f0', 'KLJoin.ini': '5c02ca99'}, shots='60-900:20',
-                        stage='C:/kl_build_1024/dm03backswat_1110', tag='.before-dm03backswat1109',
+                        stage='C:/kl_build_1024/dm03backswat_1110', tag='.before-dm03backswat_1109',
                         files={'F03_Main.zip': 'a81ede87', 'F03_Main.bots.zip': 'e8c06e13', 'F03_Main.bots.base.md5': 'afc6ca40'}),
 }
 # VAULT kits (tools/kl_dm03vault_1110.py): live + files are filled from the final chain (back-SWAT a81ede87 -> d0 smartcops -> vault) by vault_pins()
@@ -44,7 +44,7 @@ K = {
 #   DM03VAULTB_1110: nobody arms it; doors sampled at ~220 s and ~260 s from the round start: the Backstop alone opens them, quietly
 VAULT_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_sc'  # on d0's smartcops DM03 (33361cd1), itself on back-SWAT a81ede87
 for _k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
-    K[_k] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-900:20', stage=VAULT_STAGE, tag='.before-dm03vault1110')
+    K[_k] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-900:20', stage=VAULT_STAGE, tag='.before-dm03vault_1110')  # = the stage install.py TAG
 ORDER = ['DM03BS_1110', 'DM03VAULT_1110', 'DM03VAULTB_1110']
 VAN_STOP = (3306, 2, 4)
 # from the vault stage's build report (GUESS-labelled there): Arm box centre (0, 340, -7006) half (150, 120, 150); doorway hinges x +-105 at z -6812;
@@ -52,6 +52,11 @@ VAN_STOP = (3306, 2, 4)
 VAULT_LOBBY = (0, 300, -7300)       # vestibule / lobby side, south of the Arm box (box z -7156..-6856); GUESS: open floor (lobby nav z -7500..-7000)
 VAULT_ARM = (0, -6980)
 VAULT_DOCK = (0, -6600)             # just past the doorway, dock side
+DOCK_Z = -6780                      # dock side of the doorway (hinges at z -6812)
+# ents matches the node's OWN name (klauto.c kla_ents): the KL_Door_N group nodes never move; the blast / Backstop act on their children
+# (kl_dm03vault_1110 DOOR_CHILD_FRONT / DOOR_CHILD_PB). Every DM03 kick door has children of these names, so rows are kept by position
+VAULT_KIDS = ('KickableDoor_Proxy_Variation01Front', 'KickDoor_Pathblocker')
+VAULT_DOORWAY = (-400, 400, -7100, -6500)   # x0, x1, z0, z1 around the doorway
 
 
 def vault_pins():
@@ -71,26 +76,28 @@ def vault_pins():
     return True
 
 
+def vault_doors(tag):
+    return ['ents KL_Vault 10', 'ents KL_Door_4 10', 'ents KL_Door_5 10'] + ['ents %s 40' % c for c in VAULT_KIDS] + ['log BENCH1110 vault %s' % tag]
+
+
 def vault_seg(who, arm):
-    s = ['wait 3000', 'ents KL_Vault 10', 'ents KL_Door_4 10', 'ents KL_Door_5 10', 'log BENCH1110 vault t0']
+    s = ['wait 3000'] + vault_doors('t0')
     if who != 'host':
         for i in range(1, 9):
-            s += ['wait 30000', 'ents KL_Vault 10', 'ents KL_Door_4 10', 'ents KL_Door_5 10', 'log BENCH1110 vault client sample %d' % i]
+            s += ['wait 30000'] + vault_doors('client sample %d' % i)
         return s
-    s += ['waitstate 0x19 90000', 'tele %d %d %d' % VAULT_LOBBY, 'wait 2500', 'pos vault-lobby',
-          'ents KL_Door_4 10', 'ents KL_Door_5 10', 'log BENCH1110 vault doors shut (before)']
+    s += ['waitstate 0x19 90000', 'tele %d %d %d' % VAULT_LOBBY, 'wait 2500', 'pos vault-lobby'] + vault_doors('before')
     if arm:
         s += ['goto %d %d 40 6000' % VAULT_ARM, 'pos vault-arm', 'log BENCH1110 vault host in the Arm box',
-              'wait 1500', 'ents KL_Vault 10', 'log BENCH1110 vault fuse running', 'wait 4000',
-              'ents KL_Vault 10', 'ents KL_Door_4 10', 'ents KL_Door_5 10', 'log BENCH1110 vault after the blast',
-              'goto %d %d 40 8000' % VAULT_DOCK, 'pos vault-dock', 'log BENCH1110 vault walked through the doorway',
+              'wait 1500', 'ents KL_Vault 10', 'log BENCH1110 vault fuse running', 'wait 4000'] + vault_doors('after')
+        s += ['goto %d %d 40 8000' % VAULT_DOCK, 'pos vault-dock', 'log BENCH1110 vault walked through the doorway',
               'goto %d %d 40 6000' % (VAULT_LOBBY[0], VAULT_LOBBY[2])]
-        # the Backstop fires 240 s after the AIMonitor start: sample from ~200 s to ~290 s after this point (the arm happens well inside the first minute)
-        s += ['wait 150000']
+        # the Backstop fires 240 s after the AIMonitor start; ~20 s of the above + 190 s -> samples ~210..290 s after GO (0x19)
+        s += ['wait 190000']
     else:
-        s += ['wait 180000']
+        s += ['wait 180000']   # samples ~185..265 s after GO: straddle 240 s
     for i in range(1, 10):
-        s += ['ents KL_Vault 10', 'ents KL_Door_4 10', 'ents KL_Door_5 10', 'pos vault-late%d' % i, 'log BENCH1110 vault late sample %d' % i, 'wait 10000']
+        s += vault_doors('late sample %d' % i)[:-1] + ['pos vault-late%d' % i, 'log BENCH1110 vault late sample %d' % i, 'wait 10000']
     s += ['goto %d %d 40 8000' % VAULT_DOCK, 'pos vault-dock-late', 'log BENCH1110 vault late walk through']
     return s
 
@@ -146,30 +153,67 @@ def segment(k, who):
     return _segment(k, who)
 
 
+def vault_kid_states(a):
+    """{(slot, name): [(log index, hidden, (x, y, z))]} for the vault doorway's door children (the leaf proxies + pathblockers)."""
+    x0, x1, z0, z1 = VAULT_DOORWAY
+    g = {}
+    for c in VAULT_KIDS:
+        for r in M.ents(a, c):
+            if x0 <= r[3][0] <= x1 and z0 <= r[3][2] <= z1:
+                g.setdefault((r[4], r[1]), []).append((r[5], r[2], r[3]))
+    return g
+
+
+def vault_changed(rows, i0, i1):
+    """Did any row with log index in [i0, i1) differ (hidden bit, or > 5 cm) from the last row before i0?"""
+    pre = [r for r in rows if r[0] < i0]
+    if not pre:
+        return False
+    h, p = pre[-1][1], pre[-1][2]
+    return any(r[1] != h or max(abs(u - v) for u, v in zip(r[2], p)) > 5 for r in rows if i0 <= r[0] < i1)
+
+
 def vault_checks(k, a):
     res, info = [], []
+    arm = k == 'DM03VAULT_1110'
 
     def chk(name, cond, detail='', warn=False):
         res.append(('PASS' if cond else ('WARN' if warn else 'FAIL'), name, detail))
+
+    def at(label):
+        return next((i for i, l in enumerate(a) if 'BENCH1110 vault %s' % label in l), None)
+
+    def states(ch):
+        return ', '.join('%s#%d %s' % (n, s, 'changed' if v else 'same') for (s, n), v in sorted(ch.items())) or 'no rows'
     chk('item segment ran on the host (level loaded ... segment done)', any('BENCH1109 %s host level loaded' % k in l for l in a)
         and any('BENCH1109 %s host segment done' % k in l for l in a), '%d host log lines' % len(a))
     g = M.by_entity(M.ents(a, 'KL_Vault'))
     chk('KL_Vault rows present (the vault stage is the one loaded)', len(g) >= 1, '%d entities, e.g. %s' % (len(g), sorted(x for _, x in g)[:5]))
     for d in ('KL_Door_4', 'KL_Door_5'):
-        chk('%s rows present (vault leaf)' % d, len(M.by_entity(M.ents(a, d))) >= 1)
-    lobby = [l for l in a if 'pos vault-lobby' in l]
-    chk('host reached the lobby (tele)', bool(lobby), lobby[0][lobby[0].find('pos '):][:100] if lobby else 'no pos line', warn=True)
-    if k == 'DM03VAULT_1110':
-        arm = [l for l in a if 'pos vault-arm' in l]
-        chk('host stood in the Arm box', bool(arm), arm[0][arm[0].find('pos '):][:100] if arm else 'no pos line', warn=True)
-        dock = [l for l in a if 'pos vault-dock:' in l or 'pos vault-dock ' in l]
-        # through = the body ended up dock side of the doorway (z > -6780) after the blast
-        zs = [float(m.group(1)) for l in dock for m in [re.search(r'\(\s*-?[\d.]+,\s*-?[\d.]+,\s*(-?[\d.]+)\)', l)] if m]
-        chk('walked through the doorway after the blast (z > -6780)', any(z > -6780 for z in zs), 'z %s' % zs, warn=True)
+        chk('%s rows present (vault door group)' % d, len(M.by_entity(M.ents(a, d))) >= 1)
+    kids = vault_kid_states(a)
+    chk('vault doorway children sampled (2 leaf proxies + 2 pathblockers in the doorway box)', len(kids) >= 4,
+        '%d: %s' % (len(kids), sorted('%s#%d' % (n, s) for s, n in kids)))
+    lb = M.pos_of(a, 'vault-lobby')
+    chk('host reached the lobby (tele to %s)' % (VAULT_LOBBY,), bool(lb) and abs(lb[0] - VAULT_LOBBY[0]) <= 300 and abs(lb[2] - VAULT_LOBBY[2]) <= 300, 'pos %s' % (lb,))
+    i_before, i_after = at('before'), at('after')
+    if arm:
+        p = M.pos_of(a, 'vault-arm')
+        chk('host stood in the Arm box (|x| <= 150, z -7156..-6856)', bool(p) and abs(p[0]) <= 150 and -7156 <= p[2] <= -6856, 'pos %s' % (p,))
+        ok = i_before is not None and i_after is not None
+        ch = {e: vault_changed(r, i_before + 1, i_after + 1) for e, r in kids.items()} if ok else {}
+        # GUESS: the MatPosAnimProxy swing moves the proxy node and/or the pathblocker gets hidden; if neither shows, the shots + the walk decide
+        chk('a vault door child changed between "before" and "after" (the blast opened the doors)', any(ch.values()), states(ch), warn=True)
+        d = M.pos_of(a, 'vault-dock')
+        chk('walked through the doorway after the blast (z > %d)' % DOCK_Z, bool(d) and d[2] > DOCK_Z, 'pos %s' % (d,))
+        rp = {e: vault_changed(r, i_after + 1, len(a)) for e, r in kids.items()} if i_after is not None else {}
+        chk('no door child changed again after the blast (no Backstop replay)', not any(rp.values()), states(rp), warn=True)
         info.append('blast: LOOK/listen at the shots right after "vault host in the Arm box" (+3 s): fire, shake, rocket sound 407600')
-    late = [float(m.group(1)) for l in a if 'pos vault-dock-late' in l for m in [re.search(r'\(\s*-?[\d.]+,\s*-?[\d.]+,\s*(-?[\d.]+)\)', l)] if m]
-    chk('late walk through the doorway (after the Backstop time) reached the dock side', any(z > -6780 for z in late), 'z %s' % late, warn=True)
-    info.append('Backstop replay: compare the KL_Door_4/5 rows across "vault late sample 1..9" (a position or hidden-flag change after the blast = replay)')
+    elif i_before is not None:
+        ch = {e: vault_changed(r, i_before + 1, len(a)) for e, r in kids.items()}
+        chk('a vault door child changed during the late samples (the Backstop opened the doors)', any(ch.values()), states(ch), warn=True)
+    late = M.pos_of(a, 'vault-dock-late')
+    chk('late walk through the doorway (after the Backstop time) reached the dock side (z > %d)' % DOCK_Z, bool(late) and late[2] > DOCK_Z, 'pos %s' % (late,))
     return res, info
 
 
