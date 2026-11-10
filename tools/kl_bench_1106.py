@@ -365,6 +365,20 @@ KITS = {
                              ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=1500', 'MaxEvents=60',
                                   '[FallRescue]', 'Enable=0'], keepalive=True,
                              solo_secs=420, parts=('solo',), shots='60-300:5'),
+    # dd10trace1110on showed no death: cops at 0.001 x, the goto stuck at the spawn, MaxEvents 60 spent by 02:55:42. These two use the game's own
+    # cop damage (no [Balance] lines), tele at once to the front and stand 3 min; FallRescue on vs off tells if the rescue's put-back is the killer.
+    'dd10real1110on': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                           runout=((10200, 950), (10200, 50, 950)), teleonly=True, telewait=18, copsreal=True,
+                           hook=('C:/kl_build_1024/merged_1110e/test/dinput8.dll', '3f46b67af0f4f5f52a3bfee5ea9748c2'),
+                           ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=4000', 'MaxEvents=600',
+                                '[FallRescue]', 'Enable=1'], keepalive=True,
+                           solo_secs=420, parts=('solo',), shots='40-300:4'),
+    'dd10real1110off': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                            runout=((10200, 950), (10200, 50, 950)), teleonly=True, telewait=18, copsreal=True,
+                            hook=('C:/kl_build_1024/merged_1110e/test/dinput8.dll', '3f46b67af0f4f5f52a3bfee5ea9748c2'),
+                            ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=4000', 'MaxEvents=600',
+                                 '[FallRescue]', 'Enable=0'], keepalive=True,
+                            solo_secs=420, parts=('solo',), shots='40-300:4'),
     # [Crash] ListUserGuard on the live DM03 (11-09 owner crash 0x4f8a8e after a fed respawn): proves the CListUser object is found and repointed
     # every round and the wrapper is harmless over 2 rounds; a catch needs the released-record race, so 'key-0 record skipped' is a bonus, not a gate.
     'dm03guard1110': dict(map='DM03', slot='F03', page=2, entry=2, stage=None, tag=None, live={'F03_Main.zip': '8e23cbd3', 'KLJoin.ini': '5c02ca99'},
@@ -479,11 +493,12 @@ def solo_script(k, secs_total):
         # DD10 street death (11-10): run from the first spawn out the front (goto holds W + sprint), stand; then the TEST rig tele to the same place.
         # [DeathTrace] logs damage, the killer and 100 ms samples until a death; PosLogMs logs the place every 5 s
         (gx, gz), (tx, ty, tz) = c['runout']
-        s += ['log BENCH1106 run out the front', 'goto %d %d 150 45000 sprint' % (gx, gz), 'pos after-run', 'log BENCH1106 out front (run)']
-        for i in range(1, 5):
-            s += ['wait 10000', 'pos run-%ds' % (10 * i)]
+        if not c.get('teleonly'):      # dd10trace1110on: the goto never left the spawn (stuck 25 m short), so the real-damage kits tele at once
+            s += ['log BENCH1106 run out the front', 'goto %d %d 150 45000 sprint' % (gx, gz), 'pos after-run', 'log BENCH1106 out front (run)']
+            for i in range(1, 5):
+                s += ['wait 10000', 'pos run-%ds' % (10 * i)]
         s += ['tele %d %d %d' % (tx, ty, tz), 'wait 1000', 'pos after-tele', 'log BENCH1106 out front (tele)']
-        for i in range(1, 5):
+        for i in range(1, c.get('telewait', 4) + 1):
             s += ['wait 10000', 'pos tele-%ds' % (10 * i)]
         s += ['log BENCH1106 runout done', 'pass 1000']
     elif c.get('vancall'):
@@ -590,7 +605,7 @@ def gen(which='all'):
         shutil.copy2('%s/KLShopPage.ini' % DD, '%s/KLShopPage.ini' % d)
         t = ['; bench_1106 %s solo: OFFLINE Arcade, 1 seat, %s slot %s page 3 entry %d' % (k, c['map'], c['slot'], c['entry']),
              '; the seat stands still; cops hurt it 0.001 x so its death does not end the round (as ARC1)',
-             '[Balance]', 'CopToYou=0.001', 'PointBlankToYou=0.0'] + probes(k)
+             ] + ([] if c.get('copsreal') else ['[Balance]', 'CopToYou=0.001', 'PointBlankToYou=0.0']) + probes(k)
         n = c['solo_secs']
         if k in LEAD60:
             t += ['[Bots]', 'LastVehicleLead=600']
