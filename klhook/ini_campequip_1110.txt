@@ -1,0 +1,9 @@
+[CampEquip]
+; Kane's start rifle on the Dead Men CAMPAIGN levels (idle unless [Campaign] Enable=1; never on FA / Arcade / online). NOT benched.
+Enable=0        ; (recommended off until benched) 1 = on
+Mode=dm         ; log = report only | dm = Dead Men gun per level (M04..M08 MP5=UMP item 20, M09+ SG552=Zastava item 29: GUESS) | mine = item 29 everywhere
+Item=0          ; >0 overrides the item (dm / mine), e.g. 30 = FN SCAR
+PistolRow=0     ; shop row of the pistol the loadout call also gives (0 = M-77B)
+SkipScripted=1  ; (recommended on) M01..M03 have a scripted equip of their own
+Delay=3000      ; ms after the player appears
+Log=1           ; (recommended on)
