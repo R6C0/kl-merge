@@ -67,6 +67,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~02:15 - [d0] MERGED 1110c INSTALLED (SHIP 6e3ca2ad, ini f67f94bc = + [Grenade] PinSound=1 ThrowAnim=1, <DD>/KLGrenade 2 WAVs). Bench B4 DM01 PASS 0 faults, but the throw is UNPROVEN: the bot never picked a grenade up
+("no grenade with ammo"). B5 (walk-in + hold E on 3 pickups) staged in merged_1110c/bench. Undo: merged_1110c/kit/UNDO.bat FIRST, then driverarena_1110, campaign_1110.
+1110d = 1110c + 6b's campaign outfits (SHIP 38104558 / TEST f4c8c3fd, kit C:/kl_build_1024/merged_1110d/kit, dll only, scratch undo byte-exact), pushed bc4c5f64, NOT benched/installed; install it BEFORE outfits_1110.
+2026-11-10 ~02:30 - [d0] GRAY SCREEN: [Memory] DriverArena=1 INSTALLED (C:/kl_build_1024/driverarena_1110, ini c62045c9 -> d217832b; undo it BEFORE campaign_1110\UNDO.bat). Address space is cut up after 1 level (443 MB NT heap segments keep their peak); HeapCompact gives nothing back (measured).
+MERGED 1110a built on campaign_1110 (worktree .claude/worktrees/d0merge, branch d0-merged-1110 9eec1914): picker skips Kane/Lynch in the travel direction (stuck 12/17 fixed), [Memory] FreshRestart (off), klmemfree census, [Grenade] PinSound+ThrowAnim. SHIP 30e3ffa8 / TEST 9d67cf1e, bench running (workflow wkym3e7kv), NOT installed.
+DD10 street death = FA_DieFromSelf (own char), not the van KillBox; dig running. Smart cops: cover/flank recipe authored only in DM09 + DM03A, no regression; port to DM01/DM03 running. DM02 prompt + door/glass staged in C:/kl_build_1024/dm02shop_1110, combined stage + klbotglass.c being built.
 2026-11-10 ~00:55 - [06, offline] RELEASE ASSET NAME: Setup.bat downloads .../releases/latest/download/KLMerge_package.zip but pack_release.ps1 wrote only
 KLMerge_package_v<ver>.zip (+ a .sha1 naming that file); OWNER_RELEASE_STEPS had a manual copy step. pack_release now also writes KLMerge_package.zip (hard link) + its .sha1;
 steps say C:\kl_release (D: 1.2 GB free); launcher_test checks the name (fails on the old pack). Scratch pack x2 OK (11 files, 0 game files). Owner on the PC: no live run.
