@@ -43,10 +43,20 @@ def sgd_stale(src):
                 print('   %-18s REF %-6d %8s  %s  (%s)'%(name,ref,'no REF' if d is None else '%.0f'%d,ename[:40],top[:30]))
     except Exception as e:
         print('sgd audit skipped: %r'%e)
+def prm_roots(src):
+    """Type-7 .prm roots whose +0x1c is not a record start of the same zip's .oct (2026-11-10 DM01B load crash; tools/kl_prmroot_check.py)."""
+    if not src.lower().endswith('.zip'): return
+    try:
+        import kl_prmroot_check as PR
+        st,roots,stale=PR.check_zip(src)
+        print('%s: %d model roots, %d stale%s'%(os.path.basename(src),roots,stale,' - STALE .oct offsets: kl2 crashes at load (c0000005 0x6ad1d9)' if stale else ''))
+    except Exception as e:
+        print('prm root check skipped: %r'%e)
 if __name__=='__main__':
     src=sys.argv[1] if len(sys.argv)>1 else os.path.join(kl.DD,'Scenes','Locations','F01','F01_Main.zip')
     loc_sizes(src)
     sgd_stale(src)
+    prm_roots(src)
     for label,rd in locate.sources(src):
         if not rd('gms'): sys.exit(label+': no .gms beside it - the classes come from there')
         bad,n=problems(rd); rows=sorted(bad.items(),key=lambda x:x[1][1])
