@@ -2,6 +2,10 @@
 Overlay Patch01_deadmen ba1154de -> 76499363, Patch01_rows12_deadmen 3a452a28 -> 355a4b30, Scenes/kaneandlynch_deadmen 9de0f526 -> b2b494ab (only the OnFocus colour set = ink; 6b re-bases its menu kit on these).
 dm07plane_1110 (sub 0x108; re-staged on d0 exitstrip then 6b outfits): KLExpansion DM07 F06 f774dc97 -> da0e0431, bots ea470c0f -> 0fd216da, base a3ff31ad -> 54dec058. Both rehearsed byte-exact.
 Undo: dm07plane_1110\install.py --undo BEFORE outfits_1110; menuplates_1110\install.py --undo. Bench later: DM07 gate (planes block heisters, van passes), ML1 plate text dark.
+2026-11-10 ~19:00 - [d0] OWNER "install all from all prompts": INSTALLED, NOT benched except DM01B load PASS (owner then said "stop tests"; bench killed, TEST dll left -> SHIP 6711bc5f restored):
+d0 dm01bdoorfix_1110 + exitstrip DM01B, exitstrip DM06B + DM07, dd10exitsouth_1110, dm03vault stage_m, dm09cover_1110; 6b outfits_1110 on all 21 maps (re-pins every map, see 6b's list); 06 menuplates_1110
++ dm07plane_1110 (F06 da0e0431). Undo order: dm07plane, outfits, then the d0 kits (each install.py --undo). HELD: dm09terminal_1110 (needs the unmerged dm09term dll, no west bounds). Stale stages deleted for C: space
+(dm01bprev, exitstrip DM01B old, dm03vault stage_k/sc/slab, dm03backswat with fc's OK). NEXT when the owner frees the PC: 13-map load sweep + online smoke on the live files (LOADSWEEP pins need re-pinning to the outfits md5s).
 2026-11-10 ~12:40 - [cloud, offline] T9 STAGE F LAYOUT TOOL written, NOT run on the game: tools/kl_menu_layout_1110.py plan|stage|check (+_test 82/0). Re-flows the EXISTING
 widgets of MainMenu (logo top-left, six entries x 150 y 300.. pitch 44, Kane/Lynch portraits right via the re-pointed Icon_Campaign/Icon_Heist, other icons -> KLPic_None1),
 HeistPlayMenu/2/3 (picture left, selector under it, briefing right, HeaderSplat behind titles), KLHeister/KLGuns (label column, rows rule), FALobby (picture left, FABag plate);
