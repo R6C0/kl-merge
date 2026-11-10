@@ -30,6 +30,29 @@ def tree(root):
     return out
 
 
+OWNER_INI = (b'; backup in G:\\x\\Kane & Lynch 2 - Dog Days\\old\r\n[KLHook]\r\nLog=2\r\n[Ambience]\r\n'
+             b'Folder=C:\\Steam\\steamapps\\common\\Kane & Lynch 2 - Dog Days\\KLExpansion\\Ambience\r\n'
+             b'[Music]\r\nEnable=0\r\nFolder = C:/Steam/steamapps/common/PAYDAY 2/assets\r\n'
+             b'FolderB=C:\\Steam\\steamapps\\common\\PAYDAY 2 extra\\b\r\n[Stinger]\r\n'
+             b'Folder=C:\\Steam\\steamapps\\common\\Kane & Lynch 2 - Dog Days\r\nName=Kane & Lynch 2 - Dog Days\\x\r\n')
+
+
+def check_localize():
+    """the owner's absolute game folders become this PC's; comments, other keys and look-alike folders stay"""
+    src = OWNER_INI.split(b'\r\n')
+    out = R.localize_ini_bytes(OWNER_INI, dict(dd='E:\\Games\\Kane & Lynch 2 - Dog Days\\', pd2='F:\\P D\\PAYDAY 2'))
+    lines = out.split(b'\r\n')
+    check(out.count(b'\r\n') == OWNER_INI.count(b'\r\n') and b'\n' not in out.replace(b'\r\n', b''), 'L CRLF kept')
+    check(lines[0] == src[0], 'L comment line untouched')
+    check(lines[4] == b'Folder=E:\\Games\\Kane & Lynch 2 - Dog Days\\KLExpansion\\Ambience', 'L ambience folder moved (%r)' % lines[4])
+    check(lines[7] == b'Folder = F:\\P D\\PAYDAY 2/assets', 'L PD2 folder moved, key spacing kept (%r)' % lines[7])
+    check(lines[8] == src[8], 'L "PAYDAY 2 extra" untouched')
+    check(lines[10] == b'Folder=E:\\Games\\Kane & Lynch 2 - Dog Days', 'L bare game folder moved (%r)' % lines[10])
+    check(lines[11] == src[11], 'L other keys untouched')
+    nopd = R.localize_ini_bytes(OWNER_INI, dict(dd='E:\\DD\\Kane & Lynch 2 - Dog Days', pd2=None))
+    check(nopd.split(b'\r\n')[7] == src[7], 'L no Payday 2: its folder left as it was')
+
+
 def setup(base):
     dd, dm, pkg = (os.path.join(base, x) for x in ('dd', 'dm', 'pkg'))
     for d in (dd, dm, os.path.join(pkg, 'patches')):
@@ -44,7 +67,7 @@ def setup(base):
     mod = stock[:100000] + b'MOD' * 1000 + stock[150000:]
     open(os.path.join(live, 'Big.str'), 'wb').write(mod)
     open(os.path.join(live, 'New.txt'), 'wb').write(b'new file\n')
-    open(os.path.join(live, 'KLHook.ini'), 'wb').write(b'[KLHook]\nLog=2\n')
+    open(os.path.join(live, 'KLHook.ini'), 'wb').write(OWNER_INI)
     mk = R.Maker(dd, dm, None, pkg, level=3, log=lambda *a: None)
     ents = []
     for rel, refs, extra in (('Big.str', ['dd:Big.str'], dict(stock=True)), ('New.txt', [], {}), ('KLHook.ini', [], dict(keep_user=True))):
@@ -117,6 +140,25 @@ def main():
         check(run('uninstall', dd, '--yes') == 0, 'D uninstall')
         check(not os.path.exists(os.path.join(dd, 'KLHook.ini.new-' + R.VERSION)), 'D .new ini removed')
         check(not os.path.exists(os.path.join(dd, 'KLHook.ini')), 'D mod ini not left as live ini')
+
+        # F: a fresh install points the ini's game folders at this PC; verify, re-install and uninstall accept it as ours
+        check_localize()
+        pd2 = os.path.join(base, 'pd2'); os.makedirs(pd2)
+        fargs = ('--dm', dm, '--pd2', pd2, '--pkg', pkg, '--yes')
+        edited = [f for f in os.listdir(dd) if '.edited-' in f]
+        check(run('install', dd, *fargs) == 0, 'F install without a user ini')
+        ini = open(os.path.join(dd, 'KLHook.ini'), 'rb').read()
+        check(('Folder=%s\\KLExpansion\\Ambience' % os.path.abspath(dd)).encode() in ini, 'F ambience folder is this PC\'s')
+        check(('Folder = %s/assets' % os.path.abspath(pd2)).encode() in ini, 'F PD2 folder is this PC\'s')
+        j = json.load(open(R.journal_path(dd)))
+        rec = [x for x in j['entries'] if x['rel'] == 'KLHook.ini'][0]
+        check(rec.get('local_sha1') == sha(os.path.join(dd, 'KLHook.ini')), 'F journal holds the localized sha1')
+        check(run('verify', dd, '--pkg', pkg, '--pd2', pd2) == 0, 'F verify clean on the localized ini')
+        before = tree(dd)
+        check(run('install', dd, *fargs) == 0 and tree(dd) == before, 'F second install changes nothing')
+        check(run('uninstall', dd, '--yes') == 0, 'F uninstall')
+        check(not os.path.exists(os.path.join(dd, 'KLHook.ini')), 'F localized ini removed, not kept as edited')
+        check([f for f in os.listdir(dd) if '.edited-' in f] == edited, 'F no new .edited copy')
 
         # E: verify skips Payday 2 entries when Payday 2 is absent
         man = json.load(open(os.path.join(pkg, 'manifest.json')))

@@ -559,6 +559,43 @@ def nrm(p):
     return p.replace('\\', '/')
 
 
+# the hook reads [Ambience]/[Stinger]/[Music] Folder= as absolute paths, and make ships the owner's ini as-is:
+# at install the game-folder part of those paths is pointed at this PC's folders (else the clips are "not there - dropped")
+INI_LOCAL_RE = re.compile(rb'^([ \t]*(?:Folder|FolderB)[ \t]*=[ \t]*)([^\r\n]*)', re.M | re.I)
+INI_GAMES = ((b'kane & lynch 2 - dog days', 'dd'), (b'payday 2', 'pd2'))
+LOCALIZE = ('KLHook.ini',)
+
+
+def localize_ini_bytes(data, roots):
+    """roots: {'dd': path, 'pd2': path or None}; returns the rewritten bytes (unchanged when nothing applies)"""
+    def fix(m):
+        val = m.group(2)
+        low = val.lower().replace(b'/', b'\\')
+        for name, key in INI_GAMES:
+            i = low.find(b'\\' + name)
+            if i < 0 or not roots.get(key):
+                continue
+            end = i + 1 + len(name)
+            if end < len(low) and low[end:end + 1] != b'\\':
+                continue                                    # 'PAYDAY 2 extra' is another folder
+            new = os.path.abspath(roots[key]).rstrip('\\/').encode('mbcs' if os.name == 'nt' else 'utf-8', 'replace')
+            return m.group(1) + new + val[end:]
+        return m.group(0)
+    return INI_LOCAL_RE.sub(fix, data)
+
+
+def localize_ini(path, roots):
+    """rewrite path in place (temp file + replace); returns the new sha1, or None when nothing changed"""
+    data = open(path, 'rb').read()
+    new = localize_ini_bytes(data, roots)
+    if new == data:
+        return None
+    tmp = path + '.localize'
+    open(tmp, 'wb').write(new)
+    rt(os.replace, tmp, path)
+    return hashlib.sha1(new).hexdigest()
+
+
 class Maker:
     def __init__(self, dd, dm, pd2, out, level=15, log=print):
         self.dd, self.dm, self.pd2, self.out = dd, dm, pd2, out
@@ -1184,6 +1221,9 @@ def cmd_install(a):
         dest = os.path.join(dd, e['rel'])
         if os.path.exists(dest) and os.path.getsize(dest) == e['size'] and env.sha(dest) == e['sha1']:
             continue
+        loc = done.get(e['rel'], {}).get('local_sha1')
+        if loc and os.path.exists(dest) and env.sha(dest) == loc and done[e['rel']]['sha1'] == e['sha1']:
+            continue                                   # our ini with this PC's paths (localize_ini)
         todo.append(e)
     if not todo:
         say('everything is already installed and identical.')
@@ -1237,6 +1277,7 @@ def cmd_install(a):
     say('all %d files built and verified in %.0f s. Installing ...' % (len(built), time.time() - t0))
     tag = now_tag()
     used = set()
+    roots = dict(dd=dd, pd2=pd2)
     for e in todo:
         dest = os.path.join(dd, e['rel'])
         rec = dict(rel=e['rel'], sha1=e['sha1'], group=e['group'], size=e['size'])
@@ -1246,6 +1287,8 @@ def cmd_install(a):
             if e.get('keep_user'):
                 alt = dest + '.new-' + VERSION
                 rt(shutil.copyfile, built[e['sha1']], alt)
+                if e['rel'] in LOCALIZE:
+                    localize_ini(alt, roots)
                 note = 'your existing file was kept; the packaged one is %s' % os.path.basename(alt)
                 if prev and prev['action'] in ('new', 'replaced'):
                     rec = dict(prev, note=note, alt=nrm(os.path.relpath(alt, dd)))   # still ours: uninstall removes it / brings the stock back
@@ -1287,6 +1330,11 @@ def cmd_install(a):
         else:
             rt(os.replace, src, dest)
             used.add(e['sha1'])
+        if e['rel'] in LOCALIZE:
+            loc = localize_ini(dest, roots)
+            if loc:
+                rec['local_sha1'] = loc                  # uninstall and verify accept this one as ours
+                say('  %s: game folders set to this PC' % e['rel'])
         j['entries'] = [x for x in j['entries'] if x['rel'] != e['rel']] + [rec]
         save_journal(dd, j)
     shutil.rmtree(tmpd, ignore_errors=True)
@@ -1329,7 +1377,7 @@ def cmd_uninstall(a):
             say('  WARNING: backup of %s is missing (%s); left as it is' % (rec['rel'], rec['backup']))
             continue
         if os.path.exists(dest):
-            if sha1_file(dest) == rec['sha1']:
+            if sha1_file(dest) in (rec['sha1'], rec.get('local_sha1')):
                 rt(os.remove, dest)
             else:
                 ed = dest + '.edited-' + tag
@@ -1372,11 +1420,15 @@ def cmd_verify(a):
     if not pd2:                                      # same rule as install: files built from Payday 2 are skipped without it
         ents = [e for e in ents if not any(r.startswith('pd:') for r in e['refs'])]
     bad = 0
+    done = {x['rel']: x for x in load_journal(dd)['entries']}
     for e in ents:
         dest = os.path.join(dd, e['rel'])
         if not os.path.exists(dest):
             say('MISSING  ' + e['rel']); bad += 1; continue
         if os.path.getsize(dest) != e['size'] or sha1_file(dest) != e['sha1']:
+            rec = done.get(e['rel'], {})
+            if rec.get('local_sha1') and rec.get('sha1') == e['sha1'] and sha1_file(dest) == rec['local_sha1']:
+                continue                                 # the packaged ini with this PC's game folders
             if e.get('keep_user'):
                 say('edited   %s (yours)' % e['rel'])
             else:
