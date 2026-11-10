@@ -365,6 +365,12 @@ KITS = {
                              ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=1500', 'MaxEvents=60',
                                   '[FallRescue]', 'Enable=0'], keepalive=True,
                              solo_secs=420, parts=('solo',), shots='60-300:5'),
+    # [Crash] ListUserGuard on the live DM03 (11-09 owner crash 0x4f8a8e after a fed respawn): proves the CListUser object is found and repointed
+    # every round and the wrapper is harmless over 2 rounds; a catch needs the released-record race, so 'key-0 record skipped' is a bonus, not a gate.
+    'dm03guard1110': dict(map='DM03', slot='F03', page=2, entry=2, stage=None, tag=None, live={'F03_Main.zip': '8e23cbd3', 'KLJoin.ini': '5c02ca99'},
+                          hook=('C:/kl_build_1024/merged_1110f/test/dinput8.dll', 'ddf81d7f63a80169180dc307281eafb5'),
+                          ini=['[Crash]', 'ListUserGuard=1', 'Log=1'], keepalive=True,
+                          solo_secs=900, parts=('solo',), shots='60-840:30'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
       'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108', 'skyline1108')
