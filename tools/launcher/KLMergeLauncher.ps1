@@ -323,7 +323,15 @@ function Game-Watch {
         }
         return
     }
-    if (Game-Running) { return }
+    if (Game-Running) { $w.Gone = $null; return }
+    # [Memory] FreshRestart (klhook/klfresh.c) ends kl2.exe at the menu and starts a new one; it writes <DD>\KLFresh.go first.
+    # With FreshVia=1 (Steam starts it) there is a gap of a few seconds with no kl2.exe: stay hidden up to 60 s for it.
+    $go = $null
+    try { if ($script:Settings.DD) { $go = Get-Item -LiteralPath (Join-Path $script:Settings.DD 'KLFresh.go') -ErrorAction SilentlyContinue } } catch { }
+    if ($go -and ((Get-Date) - $go.LastWriteTime).TotalSeconds -lt 90) {
+        if (-not $w.Gone) { $w.Gone = Get-Date; Log 'the game is restarting itself to free memory (FreshRestart): waiting for it' }
+        if (((Get-Date) - $w.Gone).TotalSeconds -lt 60) { return }
+    }
     $script:GameWatch = $null
     $crash = @(Crash-Files $w.Since)
     $mins = [Math]::Round(((Get-Date) - $w.Since).TotalMinutes, 1)
