@@ -81,6 +81,9 @@ beside `kl2.exe`; without it the game is stock. The hook has no on/off switch in
   starting Kane & Lynch 2 from Steam then gives the stock game too, until you press PLAY DEAD MEN RISING or HOOK ON.
 - **PLAY DEAD MEN RISING** renames it back and starts the game.
 - **HOOK ON / OFF** does the rename without starting anything.
+- **RESHADE ON / OFF** (only if you have ReShade's `ReShade32.dll` in the Dog Days folder; the package does not ship it) sets
+  `[Graphics] Look` in `KLHook.ini`: OFF = ReShade not loaded (full frame rate), ON = your previous look back. It applies the
+  next time the game starts. The button shows `RESHADE: NONE` when ReShade is not there.
 
 Both refuse while `kl2.exe` is running - close the game first. One honesty note: the package may also replace a few
 stock sound files and the stream file `PC_Def.str` inside the Dog Days folder (groups "stockwav" / "pcdef"); those stay
