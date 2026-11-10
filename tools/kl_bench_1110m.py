@@ -38,10 +38,10 @@ K = {
     'SMARTCOPS_DM01_1110': dict(map='DM01', slot='F01', live={'F01_Main.zip': '9ce9f34d', 'F01_Main.bots.zip': '975ad3c3', 'KLJoin.ini': '8201642d'},
                                 shots='60-900:20', stage='C:/kl_build_1024/smartcops_1110/DM01', tag='.before-smartcops1110',
                                 files={'F01_Main.zip': 'e091f0d8', 'F01_Main.bots.zip': '957f20aa', 'F01_Main.bots.base.md5': '6b7255e6'}),
-    # DM03 pins = the stage on 8e23cbd3; re-pin after fc's back-SWAT (a81ede87) goes live and smartcops DM03 is re-staged on it
-    'SMARTCOPS_DM03_1110': dict(map='DM03', slot='F03', live={'F03_Main.zip': '8e23cbd3', 'F03_Main.bots.zip': '2528e8f0', 'KLJoin.ini': '5c02ca99'},
+    # DM03 pins = the stage re-made on fc's back-SWAT live a81ede87 (11-10 ~04:00)
+    'SMARTCOPS_DM03_1110': dict(map='DM03', slot='F03', live={'F03_Main.zip': 'a81ede87', 'F03_Main.bots.zip': 'e8c06e13', 'KLJoin.ini': '5c02ca99'},
                                 shots='60-900:20', stage='C:/kl_build_1024/smartcops_1110/DM03', tag='.before-smartcops1110',
-                                files={'F03_Main.zip': '8d9e3d16', 'F03_Main.bots.zip': 'd26bdc96', 'F03_Main.bots.base.md5': 'f5962b71'}),
+                                files={'F03_Main.zip': '33361cd1', 'F03_Main.bots.zip': '0bc8d138', 'F03_Main.bots.base.md5': 'a4ad617a'}),
 }
 ORDER = ['LCDOORS_1110', 'DM02C_1110', 'SMARTCOPS_DM01_1110', 'SMARTCOPS_DM03_1110']
 
