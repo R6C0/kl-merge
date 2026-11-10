@@ -385,6 +385,15 @@ KITS = {
                           hook=('C:/kl_build_1024/merged_1110f/test/dinput8.dll', 'ddf81d7f63a80169180dc307281eafb5'),
                           ini=['[Crash]', 'ListUserGuard=1', 'Log=1'], keepalive=True,
                           solo_secs=900, parts=('solo',), shots='60-840:30'),
+    # MERGED 1110h (difficulty + traitor + ListUserGuard=2 port) on the live DM03 (page 2 entry 2, Arcade solo, 2 rounds: the round-2 police respawn is where 0x4f8a8e struck).
+    # Nothing installed by the kit: TEST dll + ini lines only (the kit's ini, install.py --test --root <scratch> proved them). Verify rows m1110h_* below.
+    # The live F03 zip / KLJoin pins are the md5s seen 11-10 (682201a6 / e36d9f99); restage them if the live map changed.
+    'm1110h_dm03': dict(map='DM03', slot='F03', page=2, entry=2, stage=None, tag=None, live={'F03_Main.zip': '682201a6', 'KLJoin.ini': 'e36d9f99'},
+                        hook=('C:/kl_build_1024/merged_1110h/kit/dll_test/dinput8.dll', 'b43a109d450425888830c290f5d098fe'),
+                        ini=['[Crash]', 'ListUserGuard=2', 'Log=1', '[Balance]', 'Enable=1', 'CopToCrew=0.70', 'CrewToCop=1.00',
+                             '[Bots]', 'CrewHealth=1.00', 'TraitorReveal=1', 'TraitorRevealMs=25000', 'Defend=1', 'DefendChance=35', 'DefendMs=6000', 'DefendMax=2', 'TurnMax=2',
+                             '[Difficulty]', 'Enable=1', 'Ai=2', 'You=2', 'Log=1'],
+                        keepalive=True, solo_secs=1200, parts=('solo',), shots='60-1100:40'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
       'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108', 'skyline1108')
@@ -800,6 +809,15 @@ def verify(k, part, tagbase=None):
             chk('largest free block logged', False, 'no "memory: every 10 s" lines ([Memory] Log=1)')
         sn = [l[:150] for l in a if re.search(r'wav|whd|sound bank|SND', l, re.I) and re.search(r'fail|bad|error|missing|refus', l, re.I)]
         chk('no sound/WAV load error lines', not sn, sn[0] if sn else '(audio itself: owner ear check, the bench is silent by design)')
+        if k.startswith('m1110h'):          # merged 1110h init lines (the three branches really are in the dll and read their ini keys)
+            for name, pat in (('difficulty module on', r'difficulty: on; AI HEISTERS'), ('traitor/defend keys read', r'bots: TraitorReveal=1 \(25000 ms\) Defend=1'),
+                              ('ListUserGuard=2 port installed', r'listguard: ListUserGuard=2 on .*C port of 0x630700')):
+                hit = [l for l in a if re.search(pat, l)]
+                chk('m1110h: ' + name, bool(hit), hit[0][:150] if hit else 'no log line matching /%s/' % pat)
+            ol = [l[:150] for l in a if 'listguard: CListUser object' in l]
+            chk('m1110h: CListUser object repointed (owner chain)', bool(ol), ol[0] if ol else 'no "CListUser object ... guarded vtable" line (kllg_log)')
+            sk = [l[:150] for l in a if 'listguard: key-0 record skipped' in l]
+            print('  INFO m1110h: key-0 skips (a bonus, needs the released-record race): %d %s' % (len(sk), sk[0] if sk else ''))
     if part in ('online', 'long'):
         for n, lines in L.items():
             st = [m.group(1) for l in lines for m in [re.search(r'session: state \S+ -> (0x[0-9a-f]+)', l)] if m]
