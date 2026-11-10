@@ -349,6 +349,32 @@ KITS = {
                              files={'F02_Main.zip': '7cee043dda5d62eeb6c48329b40fcda8', 'F02_Main.bots.zip': 'ec42c5e4', 'F02_Main.bots.base.md5': '171f7443', 'KLGuns.ini': '483f7450'},
                              hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
                              solo_secs=600, parts=('solo',), shots='60-200:3'),
+    # 11-10 DD10 DEATH TRACE kit (README C:/kl_build_1024/dd10trace_1110, branch d0-dd10trace-1110, TEST dll 91f5bd6d with [DeathTrace], needs SessionSafe=0:
+    # its detour sites 0x7e1700/0x458880/0x500670 are integrity-hashed). Solo Arcade DD10 Flat Raid on the LIVE map (F07 e822d75d = live 11-10 17:25 after outfits_1110, KLJoin 8f3034c0, nothing staged),
+    # the game's OWN cop damage (no [Balance] lines), 3 rounds: each round the seat WALKS (goto sprint) from the first spawn (12409,0,-242) out the front west to
+    # (10200,950), on to (9000,936), stands 40 s ('pos' every 10 s), then waits for the shop (0x20) and the next round (0x19). Variant A = [FallRescue] live (Enable=1),
+    # B = [FallRescue] Enable=0 (else the level-box kill never happens: the rescue puts the player back first). C/D = same with a TEST-rig tele instead of the walk
+    # (if the goto sticks at the spawn, as dd10trace1110on did). Reader: python tools/kl_deathtrace_read.py
+    'dd10trace3a': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': 'e822d75d', 'KLJoin.ini': '8f3034c0'},
+                        runout=((10200, 950), (9000, 936)), rounds=3, stand=40, copsreal=True,
+                        hook=('C:/kl_build_1024/dd10trace_1110/test/dinput8.dll', '91f5bd6d6cdc23250f65eb4959bffc9d'),
+                        ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=4000', 'MaxEvents=600',
+                             '[FallRescue]', 'Enable=1'], keepalive=True, solo_secs=1500, parts=('solo',), shots='40-300:5'),
+    'dd10trace3b': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': 'e822d75d', 'KLJoin.ini': '8f3034c0'},
+                        runout=((10200, 950), (9000, 936)), rounds=3, stand=40, copsreal=True,
+                        hook=('C:/kl_build_1024/dd10trace_1110/test/dinput8.dll', '91f5bd6d6cdc23250f65eb4959bffc9d'),
+                        ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=4000', 'MaxEvents=600',
+                             '[FallRescue]', 'Enable=0'], keepalive=True, solo_secs=1500, parts=('solo',), shots='40-300:5'),
+    'dd10trace3c': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': 'e822d75d', 'KLJoin.ini': '8f3034c0'},
+                        runout=((10200, 950), (9000, 50, 936)), teleonly=True, rounds=3, stand=40, copsreal=True,
+                        hook=('C:/kl_build_1024/dd10trace_1110/test/dinput8.dll', '91f5bd6d6cdc23250f65eb4959bffc9d'),
+                        ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=4000', 'MaxEvents=600',
+                             '[FallRescue]', 'Enable=1'], keepalive=True, solo_secs=1500, parts=('solo',), shots='40-300:5'),
+    'dd10trace3d': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': 'e822d75d', 'KLJoin.ini': '8f3034c0'},
+                        runout=((10200, 950), (9000, 50, 936)), teleonly=True, rounds=3, stand=40, copsreal=True,
+                        hook=('C:/kl_build_1024/dd10trace_1110/test/dinput8.dll', '91f5bd6d6cdc23250f65eb4959bffc9d'),
+                        ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=4000', 'MaxEvents=600',
+                             '[FallRescue]', 'Enable=0'], keepalive=True, solo_secs=1500, parts=('solo',), shots='40-300:5'),
 }
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
       'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108', 'skyline1108')
@@ -453,6 +479,24 @@ def solo_script(k, secs_total):
         for i in range(1, 7):
             s += ['wait 15000', 'pos wait-%ds' % (15 * i)]
         s += ['log BENCH1106 ledge done', 'pass 1000']
+    elif c.get('runout'):
+        # DD10 death trace (11-10): per round WALK from the first spawn out the front (goto holds W, 'sprint'), on to the stand point, stand c['stand'] s, then
+        # (rounds > 1) wait for the shop and the next round. teleonly = TEST rig tele instead of the walk. A death ends the round early: the waits still go on at their timeout.
+        (gx, gz), dest = c['runout']
+        for r in range(1, c.get('rounds', 1) + 1):
+            if r > 1:
+                s += ['log BENCH1106 waiting for round %d' % r, 'waitstate 0x19 300000', 'wait 5000']
+            s += ['log BENCH1106 ROUND %d start (walk out the front)' % r, 'pos r%d-spawn' % r]
+            if c.get('teleonly'):
+                s += ['tele %d %d %d' % dest, 'wait 1000']
+            else:
+                s += ['goto %d %d 150 30000 sprint' % (gx, gz), 'pos r%d-door' % r, 'goto %d %d 100 20000 sprint' % (dest[0], dest[1]), 'pos r%d-stand' % r]
+            s += ['log BENCH1106 ROUND %d at the stand point' % r]
+            for i in range(1, c.get('stand', 40) // 10 + 1):
+                s += ['wait 10000', 'pos r%d-%ds' % (r, 10 * i)]
+            if r < c.get('rounds', 1):
+                s += ['log BENCH1106 ROUND %d stood, waiting for the shop' % r, 'waitstate 0x20 400000']
+        s += ['log BENCH1106 runout done', 'pass 1000']
     elif c.get('vancall'):
         # DD10 van call (11-09, tools/kl_dd10_vancall_1108.py): the van is called ONLY by a heister in otrExitLevel. TEST rig tele first into the
         # approach box (node 22127, shows the van) outside the exit box, then into the exit box; the log says who called it ('last:' = the fallback, not this)
@@ -491,7 +535,7 @@ def probes(k):
     if k in LC:
         # lclive1106 (11-06 10:52): 0 KLShot files, d3count 0 frames: ReShade owns Present here, so shots go through its bridge (as MT3B 11-02)
         t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
-    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look') or KITS[k].get('vancall') or KITS[k].get('ledge'):
+    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look') or KITS[k].get('vancall') or KITS[k].get('ledge') or KITS[k].get('runout'):
         # dm06btraffic1108 / vanwait1108 (11-08): 0 KLShot files, these kits had no ReShade bridge lines (only LC kits did)
         t = ['[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
     return t
@@ -557,7 +601,7 @@ def gen(which='all'):
         shutil.copy2('%s/KLShopPage.ini' % DD, '%s/KLShopPage.ini' % d)
         t = ['; bench_1106 %s solo: OFFLINE Arcade, 1 seat, %s slot %s page 3 entry %d' % (k, c['map'], c['slot'], c['entry']),
              '; the seat stands still; cops hurt it 0.001 x so its death does not end the round (as ARC1)',
-             '[Balance]', 'CopToYou=0.001', 'PointBlankToYou=0.0'] + probes(k)
+             ] + ([] if c.get('copsreal') else ['[Balance]', 'CopToYou=0.001', 'PointBlankToYou=0.0']) + probes(k)
         n = c['solo_secs']
         if k in LEAD60:
             t += ['[Bots]', 'LastVehicleLead=600']
