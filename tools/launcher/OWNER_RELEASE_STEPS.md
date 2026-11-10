@@ -60,7 +60,9 @@ python tools\kl_release.py make C:\kl_release\pkg_1110 --dd "C:\Steam\steamapps\
 - `NOT SHIPPED (Payday 2 audio): ...` lists the pd2 clips left out by design.
 - Then, with nothing else touching the folder:
   `python tools\kl_release.py checklive C:\kl_release\pkg_1110 --dd "<DD>"` -> `0 changed/missing`, and
-  `python tools\kl_release.py verify "<DD>" --pkg C:\kl_release\pkg_1110` -> `0 problems` (the live folder equals the manifest).
+  `python tools\kl_release.py verify "<DD>" --pkg C:\kl_release\pkg_1110` -> `0 problems` (the live folder equals the manifest), and
+  `python tools\kl_prmroot_check.py --live` -> `RESULT: PASS` (every installed map's .prm model roots exist in its .oct;
+  a stale root crashed DM01B 5eab5ecc at load).
 - Bump `VERSION = '1.0.0'` in `tools/kl_release.py` for every package you hand out (the launcher shows it; a tester's
   kept `KLHook.ini` gets the new default as `KLHook.ini.new-<VERSION>`; `--pkg` folders with different versions must
   not be mixed).
