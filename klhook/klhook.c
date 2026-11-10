@@ -924,6 +924,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klshoppage.c"                           /* AFTER klshop.c: [ShopPage] page II of the weapon shop (key flips set A / B) */
 #include "klfed.c"
 #include "klfedkit.c"
+#include "klcampequip.c"                                 /* klcampequip.c: [CampEquip] Kane start rifle on campaign levels (off unless Enable=1); AFTER klfedkit.c and klcampgive.c */
 #include "klbench_down.c"                                 /* klbench_down.c: [Bench] SelfDownAt - the local body takes one hit through the game's slot 422 (bench only, off unless set); AFTER klucc_down.c, klhook.c's klh_slot_player_mine */
 #include "kldown.c"
 #include "klbotdown.c"                                    /* klbotdown.c: AI heisters down, not dead (off unless [BotDown] Enable) */
@@ -1537,6 +1538,7 @@ static void klh_tick(int game_thread)
     KLPT(knl_tick(game_thread));                            /* klnetload.c: [NetLoad] (off unless set) */
     KLPT(klinv_tick(game_thread));                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
     KLPT(klcampsquad_tick(game_thread));                    /* klcampsquad.c: [CampSquad] crew orders (campaign levels only, default off) */
+    KLPT(klcampequip_tick(game_thread));                    /* klcampequip.c: [CampEquip] (campaign levels only, default off) */
     KLPT(klcampgive_tick(game_thread));                     /* klcampgive.c: [CampGive] / [CampEquip] (campaign levels only, default off) */
     KLPT(klgrenade_tick(game_thread));                    /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
     KLPT(klmu_tick(game_thread));                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
@@ -1995,6 +1997,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klinv_init();
     klcampsquad_init();                               /* klcampsquad.c: reads [CampSquad] (idle unless [Campaign] Enable=1) */
     klcampgive_init();                                /* klcampgive.c: reads [CampGive] ([CampEquip] equip repair is NOT ported) */
+    klcampequip_init();                               /* klcampequip.c: reads [CampEquip] (idle unless [Campaign] Enable=1) */
     klgrenade_init();                             /* klgrenade.c: after klinv_init (shares its user32 pointers) */
     klnetsmooth_init();
     klbk_init();                                      /* klbench_down.c: reads [Bench] SelfDownAt */
