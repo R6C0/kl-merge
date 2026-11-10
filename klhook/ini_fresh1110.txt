@@ -1,0 +1,20 @@
+; add under [Memory] in KLHook.ini (from klhook/out_fresh1110, 1110)
+; FreshRestart: when the game sits idle at the main menu after enough matches, restart kl2.exe by itself (new process = 1.9 GB free
+; address space, no gray 1.4 fps screen on the next map). Never online, never mid-match, never in scripted runs. (recommended on)
+FreshRestart=1
+; restart once this many levels were loaded in this process (0 = not by count). The 3rd map is where it goes gray. (recommended 2)
+FreshLevels=2
+; or when the largest free piece is under this many MB (0 = off). (recommended off)
+FreshMinPieceMB=0
+; or when total free address space is under this many MB (0 = off). (recommended 200)
+FreshMinFreeMB=200
+; the menu must look the same this long before a restart; shown "Refreshing memory..." this long first
+FreshStableMs=2500
+FreshToastMs=2500
+FreshMinUpMs=60000
+; at most this many restarts in a row (-1 = no limit)
+FreshMax=8
+; 0 = start kl2.exe directly (recommended on), 1 = ask Steam (steam://rungameid/28000) if direct start is refused
+FreshVia=0
+FreshWindows=MainMenu,CampaignMenu,HeistModeMenu,HeistPlayMenu
+FreshLog=1

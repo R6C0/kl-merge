@@ -416,6 +416,7 @@ static struct {
     DWORD act, P, clip, anim, anim0, dnd, soldier; int animId; float from, to;
     float M[9], Pf[3], Final[3]; const char *endReason; DWORD ended_at;
 } kad_an;
+static int kad_gx_cap;                 /* klgrenadefx.c: a throw clip may hold the player at most this many ms (0 = no cap, the heal clip) */
 static DWORD kad_an_vt[13];
 static BYTE kad_an_edge[0x80];
 
@@ -512,6 +513,7 @@ static int kad_an_update_body(void *arg)
     cur = kad_an_cur(); T = klfc_T();
     if (cur < 0) { kad_an.endReason = "channel lost"; return 0; }
     if (kad_ao.inject && !kad_an.injected && cur >= (float)kad_ao.injectf) kad_an.injected = 1;           /* the tick applies it (1 = due) */
+    if (kad_gx_cap && T - kad_an.startT > kad_gx_cap) { kad_an.endReason = "throw cap"; return 0; }
     if (T - kad_an.startT > kad_an.frames * 1024 / 25 + 1024) { kad_an.endReason = "timeout"; return 0; }
     if (cur >= kad_an.to - 0.5f) { kad_an.endReason = "clip end"; return 0; }
     return r;

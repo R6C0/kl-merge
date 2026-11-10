@@ -830,6 +830,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #ifdef KLHOOK_TEST
 #include "kld3.c"                                       /* kld3.c: [Memory] D3dCount / D3dFlushEvery - Direct3D 9 call counts per vtable slot + a GPU flush experiment (TEST only, default 0); AFTER klarena.c, BEFORE klfps.c */
 #endif
+#include "klmemfree.c"                                   /* klmemfree.c: [Memory] Release / Census - compact the heaps once the level is gone, census of who holds the address space (default on); AFTER klmem.c, klarena.c */
 #include "klquad.c"                                       /* klquad.c: [Memory] QuadRing - a buffer ring for the 4 screen-quad VBs (DM05A driver pile; off unless set); BEFORE klfps.c */
 #include "klnudge.c"
 #include "klfix.c"
@@ -929,6 +930,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klcdying.c"                                   /* klcdying.c: almost dead = the revivable floor for you; heisters hold fire ([Dying]); AFTER klcardown.c */
 #include "kladren.c"                                      /* kladren.c: adrenaline (off unless [Adrenaline] Enable); its tick runs BEFORE kld_tick */
 #include "klshot2d.c"                                   /* klshot2d.c: [Sound] RemoteShot2D - a near remote shooter's gunshot plays 2D online (off unless set; ONLINE only); AFTER klescort.c (kle_node), kl_online */
+#include "klgrenadefx.c"                                 /* klgrenadefx.c: [Grenade] PinSound / ThrowAnim for the Release mode; AFTER kladren.c (its clip machinery) and klgrenade.c */
 #include "klstinger.c"                                  /* klstinger.c: [Stinger] event-driven one-shot cues over winmm MCI (off unless Enable=1); AFTER kladren.c / klbotdown.c / kldown.c */
 #include "klreshade.c"                                    /* klreshade.c: the ReShade bridge - live looks from the menu, KL_* uniforms (off unless [ReShade] Bridge=1) */
 #include "klsteam.c"
@@ -936,6 +938,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klslot.c"
 #include "klcampaign.c"                                   /* klcampaign.c: luvsic's campaign runtime core, no UI (all [Campaign] toggles off); AFTER klslot.c */
 #include "klcamppick.c"                                   /* klcamppick.c: [CampaignPick] in-menu campaign level list (idle unless [Campaign] on); AFTER klcampaign.c */
+#include "klfresh.c"                                    /* klfresh.c: [Memory] FreshRestart - a clean restart at the menu before the address space is too cut up (off unless set); AFTER klslot.c (menu reads), klmem.c (klm_free_space) */
 #include "klserver.c"                                    /* klserver.c: [Server] host a Quick Match / Ranked lobby unattended (off unless Enable=1); AFTER klslot.c / klchar.c / kllobby.c */
 #include "kllocname.c"                                    /* kllocname.c: [Names] an expansion map shows its own name in the FA lobby / lists (off unless Enable=1); AFTER klslot.c / klpm.c */
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
@@ -1563,6 +1566,8 @@ static void klh_tick(int game_thread)
 #endif
     KLPT(klg_tick());
     KLPT(klm_tick());
+    KLPT(klfh_tick(game_thread));                           /* klfresh.c: [Memory] FreshRestart - the clean restart at the menu (off unless set) */
+    KLPT(klmr_tick());                                      /* klmemfree.c: level gone -> heap compaction on a worker thread */
     KLPT(klvh_tick());                                      /* klhigh.c: the 10 s census of the listed modules' reservations (off unless [Memory] High) */
 #ifdef KLHOOK_TEST
     KLPT(klva_tick());                                      /* klvalog.c: the per-caller table every 10 s (off unless [Memory] VaLog=1) */
@@ -1820,6 +1825,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     }
 #endif
     snprintf(klh_ini, sizeof klh_ini, "%s\\KLHook.ini", klh_out);
+    klfh_boot();                                   /* klfresh.c: a child of a FreshRestart waits for the old process BEFORE any log line or Steam call */
     continue_asserts = GetPrivateProfileIntA("KLHook", "ContinueAsserts", 1, klh_ini);
     max_dumps = GetPrivateProfileIntA("KLHook", "MaxDumps", 4, klh_ini);
     max_asserts = GetPrivateProfileIntA("KLHook", "MaxAsserts", 200, klh_ini);
@@ -1902,8 +1908,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
 #endif
     klfps_init();                                  /* klfps.c: LAST of the Direct3DCreate9 wrappers (outermost); [FrameLimit] */
     klm_init();
+    klfh_init();                                   /* klfresh.c: [Memory] FreshRestart (default off); AFTER klm_init */
     klvh_init();                                   /* klhigh.c: AFTER klm_init (the reserve is taken first, low); wraps the listed modules' import slots, with High=2 takes the high half */
 #ifdef KLHOOK_TEST
+    klmr_init();                                   /* klmemfree.c: [Memory] Release / Census */
     klva_init();                                   /* klvalog.c: AFTER klm_init (its reserve is not counted); off unless [Memory] VaLog=1 */
 #endif
     klarena_init();                                /* klarena.c: AFTER klva_init; off unless [Memory] DriverArena=1 */

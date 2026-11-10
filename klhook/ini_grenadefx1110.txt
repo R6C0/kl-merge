@@ -1,0 +1,10 @@
+[Grenade]
+; (needs Release=1) pin-pull cue at the G press, throw cue at the release; WAVs from tools\kl_grenadefx_1110.py in <Dog Days>\KLGrenade\  (recommended on; NOT benched; the pin clip is a GUESS)
+PinSound=1
+PinFile=grenade_pin.wav
+ThrowFile=grenade_throw.wav
+; the local player plays a Throw_Grenade clip at the press, the grenade leaves ThrowDelayMs later  (recommended on; NOT benched; locks him for the clip, at most ThrowAnimMs)
+ThrowAnim=1
+ThrowSlots=Stand_Overhand;Stand_Underhand;UB_Underhand
+ThrowDelayMs=350
+ThrowAnimMs=1200

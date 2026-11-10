@@ -92,6 +92,7 @@ static int klm_aligned;                                 /* _aligned_malloc and _
 static volatile LONG klm_nulls, klm_full_told;          /* small requests the heap refused; the table-full line was written */
 static void *klm_reserve;                               /* set once in klm_init, never released */
 static volatile LONG klm_served, klm_threads, klm_kept;
+static volatile unsigned klm_prm_freed;                 /* GetTickCount()|1 when the game freed a block of BigMB or more from the reserve (= the level's .prm: the level is gone); klmemfree.c */
 static int klm_other_kb; static SIZE_T klm_exe_reserve;   /* OtherStackKB; the header's old reserve once lowered */
 static struct { SIZE_T off, len, asked; } klm_blk[KLM_BLOCKS];   /* the blocks in the reserve, by offset; len = asked rounded up to 64 KB */
 static int klm_n;                                       /* how many */
@@ -272,6 +273,7 @@ static BOOL WINAPI klm_HeapFree(HANDLE heap, DWORD flags, LPVOID p)
     SIZE_T asked = 0; int n = 0; double used = 0;
     if (!p || !klm_inside(p)) return klm_real_HeapFree(heap, flags, p);
     if (!klm_release(p, &asked, &n, &used)) { klog("memory: HeapFree of %p, which is inside the reserve but no block of it - refused", p); SetLastError(ERROR_INVALID_PARAMETER); return FALSE; }
+    if (asked >= ((SIZE_T)klm_big_mb << 20)) klm_prm_freed = GetTickCount() | 1;
     if (klm_log && asked >= (1u << 20)) klog("memory: the block of %.1f MB in the reserve was freed by the game (it holds %d block(s), %.1f MB now)", asked / 1048576.0, n, used);
     return TRUE;
 }

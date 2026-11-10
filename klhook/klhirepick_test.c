@@ -37,6 +37,15 @@ int main(void)
     CHECK(klhp_online_zero(0, 1, 0, 13) == 0);                                /* hire off: never */
     CHECK(klhp_online_zero(1, 0, 0, 13) == 0);                                /* OnlineIgnoreChar=0: never */
     CHECK(klhp_online_zero(1, 1, 0, 0) == 0);                                 /* nothing to zero */
+    /* 11-10 spinner stuck at 12/17 (Char 11): back must skip Lynch/Kane to 8, forward from 8 to 11 */
+    CHECK(klhp_skip_hireonly(1, 11, 10) == 8);                                /* the owner's case: back from 12/17 */
+    CHECK(klhp_skip_hireonly(1, 8, 9) == 11);                                 /* forward from 8 */
+    CHECK(klhp_skip_hireonly(1, 12, 9) == 8);                                 /* jump down */
+    CHECK(klhp_skip_hireonly(1, 3, 10) == 11);                                /* jump up */
+    CHECK(klhp_skip_hireonly(0, 11, 10) == 10);                               /* PickDefault off: Kane / Lynch pickable */
+    CHECK(klhp_skip_hireonly(2, 8, 8) == 8 && klhp_skip_hireonly(1, 5, 6) == 6 && klhp_skip_hireonly(1, 11, 12) == 12);
+    { int c = 16, n = 0; while (c > 0 && n++ < 40) { int w = c - 1; c = klhp_skip_hireonly(1, c, w); CHECK(c != 9 && c != 10); } CHECK(c == 0); }   /* walk back from 17/17 to 1/17 */
+    { int c = 0, n = 0; while (c < 16 && n++ < 40) { int w = c + 1; c = klhp_skip_hireonly(1, c, w); CHECK(c != 9 && c != 10); } CHECK(c == 16); }  /* and forward */
     printf("klhirepick_test: %d checks, %d failed\n", checks, fails);
     return fails != 0;
 }

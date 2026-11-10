@@ -152,7 +152,11 @@ static void __fastcall klc_set(void *self, void *edx, const char *name, int valu
         if (value < 0) value = 0;
         if (value > klc_upper[i]) value = klc_upper[i];
         /* [Hire] PickDefault (klhire_pick.h): the pick is now worn (Arcade + online), so Kane / Lynch stay hire-only by refusing them here (review 11-07: online read klc_char directly) */
-        if (i == 0 && klhr_on && klhr_pickdef && (value == 9 || value == 10)) { if (klc_log) klog("character: menu pick %d refused: Kane / Lynch are hire-only ([Hire] PickDefault=%d); Char stays %ld", value, klhr_pickdef, (long)klc_char); return; }
+        if (i == 0 && klhr_on && klhr_pickdef && (value == 9 || value == 10)) {   /* 11-10: SKIP them in the travel direction (was: refuse = the spinner stuck at 12/17 going back, at 8 going forward) */
+            int to = klhp_skip_hireonly(klhr_pickdef, (int)klc_char, value);
+            if (klc_log) klog("character: menu pick %d skipped: Kane / Lynch are hire-only ([Hire] PickDefault=%d); Char %ld -> %d", value, klhr_pickdef, (long)klc_char, to);
+            value = to;
+        }
         if (InterlockedExchange(klc_value[i], value) != value) {
             snprintf(v, sizeof v, "%d", value); WritePrivateProfileStringA("Character", klc_keys[i], v, klh_ini);
             if (klc_log) klog("character: menu set %s = %d", klc_names[i], value);

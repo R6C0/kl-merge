@@ -41,4 +41,15 @@ static int klhp_online_zero(int hire_on, int ignore_char, int mode, int pick)
     return pick == 9 || pick == 10;
 }
 
+/* klchar.c klc_set, KLChar menu spinner. Owner 11-10: "ai heisters screen ... only lets me go to 12/17 and onwards not backwards". With PickDefault on, Kane (9)
+ * / Lynch (10) were REFUSED outright, so the spinner (Char value 11 = counter 12/17) stepping back to 10 was dropped and the value stuck at 11 (and stepping
+ * forward from 8 stuck at 8). Fix: skip them in the direction of travel. cur = the value now, want = the value the menu asks for (already clamped 0..16);
+ * returns the value to store. Not a hire-only pair (pickdef off / not 9,10) -> want unchanged. Going down from 10/9 lands on 8 (never below 0 : 8 >= 0);
+ * a jump from below up lands on 11; a jump from above down lands on 8. */
+static int klhp_skip_hireonly(int pickdef, int cur, int want)
+{
+    if (!pickdef || (want != 9 && want != 10)) return want;
+    return want > cur ? 11 : 8;
+}
+
 #endif /* KLHIRE_PICK_H */

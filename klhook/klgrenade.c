@@ -51,6 +51,7 @@
 #define KLGRENADE_C
 
 #include "klgrenade_logic.h"
+#include "klgrenadefx_logic.h"
 
 #define KLGR_WEAPON_VT 0x00bc042cu               /* ZFFItemWeapon (READ grenade.inc GR_WEAPON_VT) */
 #define KLGR_AMMOT_VT  0x00bbfbfcu               /* ZFFItemTemplateAmmo */
@@ -69,7 +70,7 @@ static struct {
     DWORD hold_ms, press_at, last_sample, watch_until, last_btn, last_act, after_at, after_p;
     DWORD sp_at, sp_p, sp_obj; int sp_n;
     int samples, was, fgwarned, presses, nonade, ticks0x40, actwarned, holding, faults;
-    int rel, relConsume, relRefill, relEvent, relN, relHeads, relDead; DWORD relCoolMs, relLast; struct klgr_cfg rc;
+    int rel, relConsume, relRefill, relEvent, relN, relHeads, relDead; DWORD relCoolMs, relLast, fxDue, fxP; struct klgr_cfg rc;
 } klgr;
 
 static void klgr_deep(DWORD p);
@@ -327,41 +328,51 @@ static DWORD klgr_rel_pick(DWORD P, int *clip, int *res)
     }
     return 0;
 }
-static void klgr_release(DWORD P, DWORD now)
+static DWORD klgx_press(DWORD P, DWORD now);             /* klgrenadefx.c (included after kladren.c): PinSound / ThrowAnim */
+static void klgx_launched(void);
+static int klgx_own_act(DWORD act);
+static void klgx_poll(void);
+static void klgx_init(void);
+/* fromGo=0: the G press; fromGo=1: the release that klgx_press delayed. Returns 0 only for "not now, try again" (a delayed release outside the gameplay call). */
+static int klgr_release(DWORD P, DWORD now, int fromGo)
 {
     struct klgr_rl a; struct klgr_plan pl; struct klgr_am m; float feet[3], aim[3], rz[3]; int clip = 0, res = 0, ran, relUsed, launched, nc, nr, empty;
-    if (klgr.relDead) return;
-    if (!klgr_cool_over(klgr.relLast, now, klgr.relCoolMs)) return;
-    if (!klgr_rel_heads()) { klgr.relDead = 1; return; }
-    if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) { if (klgr.relN++ < 5) klog("grenade release: not the main loop's gameplay call: skipped"); return; }
-    if (klh_rd32(P + 0x6b0) != P + 0xdb0 || klh_rd32(P + 0xd50) || klh_rd32(P + 0xd44) || klfc_movid(P) == 0x10) { if (klgr.relN++ < 5) klog("grenade release: movement table (MiniScene) / seat or carrier / rappel: skipped (READ grenade.inc gr_precond)"); return; }
-    { BYTE lh = 0; if (!klh_rd(P + 0x2720, &lh, 1) || !(lh & 2)) { if (klgr.relN++ < 5) klog("grenade release: not the local human player: skipped"); return; } }
-    if (klfc_cur_act(P) != 0) { if (klgr.relN++ < 5) klog("grenade release: an action is running (or unreadable): skipped"); return; }
+    if (klgr.relDead) return 1;
+    if (!fromGo && klgr.fxDue) return 1;                                    /* a release is pending: this press is the same throw */
+    if (!klgr_cool_over(klgr.relLast, now, klgr.relCoolMs)) return 1;
+    if (!klgr_rel_heads()) { klgr.relDead = 1; return 1; }
+    if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) { if (fromGo) return 0; if (klgr.relN++ < 5) klog("grenade release: not the main loop's gameplay call: skipped"); return 1; }
+    if (klh_rd32(P + 0x6b0) != P + 0xdb0 || klh_rd32(P + 0xd50) || klh_rd32(P + 0xd44) || klfc_movid(P) == 0x10) { if (klgr.relN++ < 5) klog("grenade release: movement table (MiniScene) / seat or carrier / rappel: skipped (READ grenade.inc gr_precond)"); return 1; }
+    { BYTE lh = 0; if (!klh_rd(P + 0x2720, &lh, 1) || !(lh & 2)) { if (klgr.relN++ < 5) klog("grenade release: not the local human player: skipped"); return 1; } }
+    { DWORD act = klfc_cur_act(P); if (act != 0 && !(fromGo && klgx_own_act(act))) { if (klgr.relN++ < 5) klog("grenade release: an action is running (or unreadable): skipped"); return 1; } }
     memset(&a, 0, sizeof a); a.P = P;
-    if (!(a.it = klgr_rel_pick(P, &clip, &res))) { if (klgr.relN++ < 5) klog("grenade release: G pressed but no grenade with ammo in the inventory: nothing called"); return; }
-    if (!klh_rd(P + 0x460, feet, 12) || !klh_rd(P + 0x27b0, aim, 12) || !klgr_plan_throw(feet, aim, &klgr.rc, &pl)) { if (klgr.relN++ < 5) klog("grenade release: no usable feet / aim point: refused"); return; }
+    if (!(a.it = klgr_rel_pick(P, &clip, &res))) { if (klgr.relN++ < 5) klog("grenade release: G pressed but no grenade with ammo in the inventory: nothing called"); return 1; }
+    if (!fromGo) { DWORD due = klgx_press(P, now); if (due) { klgr.fxDue = due; klgr.fxP = P; return 1; } }      /* pin sound / throw clip first, the release follows ThrowDelayMs later */
+    if (!klh_rd(P + 0x460, feet, 12) || !klh_rd(P + 0x27b0, aim, 12) || !klgr_plan_throw(feet, aim, &klgr.rc, &pl)) { if (klgr.relN++ < 5) klog("grenade release: no usable feet / aim point: refused"); return 1; }
     memcpy(a.rel, pl.rel, 12); memcpy(a.v, pl.v, 12);
-    if (klfc_guard("grenade release probe", klgr_rl_probe, &a) < 0) { klgr.relDead = 1; klog("grenade release: DISABLED (fault in the probe)"); return; }
+    if (klfc_guard("grenade release probe", klgr_rl_probe, &a) < 0) { klgr.relDead = 1; klog("grenade release: DISABLED (fault in the probe)"); return 1; }
     klog("grenade release: item %08lx clip %d res %d rel=(%.1f,%.1f,%.1f) dist=%.0f t=%.2fs v=(%.1f,%.1f,%.1f)%s%s", a.it, clip, res,
          pl.rel[0], pl.rel[1], pl.rel[2], (double)pl.dist, (double)pl.t, pl.v[0], pl.v[1], pl.v[2], a.why ? " REFUSED: " : "", a.why ? a.why : "");
-    if (a.why) return;
+    if (a.why) return 1;
     klgr.relLast = now ? now : 1;
     if (a.pNext != a.pIdx) { DWORD c = (DWORD)a.pNext; klfc_put(a.ammoT + 0xb0, &c, 4, "grenade release: pool cursor"); klog("grenade release: pool entry %d empty: cursor moved to %d", a.pIdx, a.pNext); }
-    if (klfc_guard("grenade release", klgr_rl_throw, &a) < 0) { klgr.relDead = 1; klog("grenade release: DISABLED (fault in the throw; restart the game)"); return; }
+    if (klfc_guard("grenade release", klgr_rl_throw, &a) < 0) { klgr.relDead = 1; klog("grenade release: DISABLED (fault in the throw; restart the game)"); return 1; }
     memset(rz, 0, sizeof rz);
     ran = a.shots1 != a.shots0; relUsed = !memcmp(a.rel1, rz, 12);                  /* the shot zeroes the release point once it used it (READ 0x4cb95a) */
     launched = klgr_launched(a.shots0, a.shots1, relUsed, a.pNext, a.idx1, a.pCnt);
     klog("grenade release: shot %s (item+0x138 %d -> %d), release point %s, pool cursor %d -> %d: %s", ran ? "RAN" : "did NOT run", a.shots0, a.shots1,
          relUsed ? "used" : "NOT used", a.pNext, a.idx1, launched ? "LAUNCHED" : "no launch, no ammo used");
-    if (!launched) return;
+    if (!launched) return 1;
     klgr.presses++;
+    klgx_launched();
     memset(&m, 0, sizeof m); m.P = P; m.it = a.it; m.ev = klgr.relEvent;
     if (klgr.relConsume) {
         empty = klgr_consume(clip, res, klgr.relRefill, &nc, &nr);
         m.clip = nc; m.res = nr; m.setClip = nc != clip; m.setRes = nr != (res > 0 ? res : 0);
         klog("grenade release: ammo clip %d -> %d, reserve %d -> %d%s", clip, nc, res, nr, empty ? " (empty; the item stays in the inventory)" : "");
     }
-    if (klfc_guard("grenade release ammo", klgr_rl_ammo, &m) < 0) { klgr.relDead = 1; klog("grenade release: DISABLED (fault in the ammo / event step)"); return; }
+    if (klfc_guard("grenade release ammo", klgr_rl_ammo, &m) < 0) { klgr.relDead = 1; klog("grenade release: DISABLED (fault in the ammo / event step)"); return 1; }
+    return 1;
 }
 
 static void klgrenade_tick(int game_thread)
@@ -369,6 +380,12 @@ static void klgrenade_tick(int game_thread)
     DWORD now, p, pid = 0; int down, edge;
     if (!klgr.on || !klh_exe_ok || !game_thread) return;
     now = GetTickCount();
+    klgx_poll();
+    if (klgr.fxDue && klgx_is_due(now, klgr.fxDue)) {                       /* the delayed release (klgrenadefx.c) */
+        DWORD fp = klgr_rel_player();
+        if (!fp || fp != klgr.fxP) klgr.fxDue = 0;
+        else if (klgr_release(fp, now, 1) || klgx_expired(now, klgr.fxDue, 1500)) klgr.fxDue = 0;
+    }
     down = (klinv_key(klgr.key) & 0x8000) != 0;
     if (klgr.after_at && (int)(now - klgr.after_at) >= 0) {                 /* 1.5 s after a logged release: what is left */
         klgr.after_at = 0;
@@ -399,7 +416,7 @@ static void klgrenade_tick(int game_thread)
         }
     }
     edge = down && !klgr.was;
-    if (klgr.rel) { if (edge) klgr_release(p, now); klgr.was = down; return; }     /* [Grenade] Release: the direct release, no button bits */
+    if (klgr.rel) { if (edge) klgr_release(p, now, 0); klgr.was = down; return; }     /* [Grenade] Release: the direct release, no button bits */
 #ifdef KLHOOK_TEST
     if (edge && klgr.spawn) __try { klgr_spawn(p); } __except (EXCEPTION_EXECUTE_HANDLER) { klog("grenade spawn: fault: spawn off"); klgr.spawn = 0; }
 #endif
@@ -455,6 +472,7 @@ static void klgrenade_init(void)
              klgr.key, (double)klgr.rc.range, (double)klgr.rc.speed, (double)klgr.rc.vmax, (double)klgr.rc.up, (double)klgr.rc.fwd, klgr.relCoolMs, klgr.relConsume, klgr.relEvent);
     }
     klgr.on = 1;
+    if (klgr.rel) klgx_init();
     if (klgr.rel) {}
     else if (klgr.thr)
         klog("grenade throw: on; Key=0x%02x HoldMs=%lu ActBit=%d Log=%d; offline Arcade, local player, only with a grenade in the inventory. re\\grenades_1025.md step 1",
