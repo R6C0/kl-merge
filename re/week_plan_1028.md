@@ -26,6 +26,8 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-10 ~09:40 f0: more proof on the frozen pack, upload still cleared: d0 ONLINE SMOKE DM09 + DM01 + DM05A PASS (2 seats host+join, TEST 03840ed0, round 1 -> shop -> round 2,
+  0 faults/dumps, map folders md5-identical after); kl_prmroot_check --live 42 zips PASS (now a pre-pack step, cd56a8eb). DM01B doorfix_1110 benched (no load crash) but held.
 - 11-10 ~07:30 f0: UPLOAD CLEARED: d0 LOAD SWEEP 13/13 PASS on the live frozen-pack files (11 DM maps + DD10 + DD06 control, TEST 03840ed0, 60 s stand, 0 asserts/faults/dumps),
   .prm-root vs .oct pre-check 26/26 PASS; checklive 823 files 0 changed. Owner: upload KLMerge_package.zip sha1 504a398f (OWNER_RELEASE_STEPS section 4).
 - 11-10 ~06:35 f0: RE-FROZEN after d0's DM01B crash find (5eab5ecc crashes at load, 778b075c PASS, back live): zip 2,026,178,709 bytes, sha1 504a398f (supersedes 9a60c535); DM01B rehearsal PASS.
