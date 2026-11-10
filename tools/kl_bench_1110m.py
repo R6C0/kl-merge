@@ -175,7 +175,9 @@ def dm02c_seg(who):
           'ents KL_Door_3 4', 'ents KL_Door_4 4', 'log BENCH1110 dm02c census t0']
     s += ['wait 2500', 'ents Door 200', 'log BENCH1110 dm02c door sample 2s']
     # (2) jewellers doors 3 and 4 (open + hidden by 1.5 s): walk THROUGH the doorway 4..8 s after the round starts; an invisible blocker would stop the goto
-    s += ['wait 1000'] + dm02c_walk('dm02c-d3', *DM02C_DOORS[3]) + dm02c_walk('dm02c-d4', *DM02C_DOORS[4])
+    # wait 8 s first: run 3's door 3 walk at t0+5 s never moved (same heading 5 s, side steps nothing, no collision near the stand in the
+    # HVK) while the round-start phase still ran ('talk: nothing for start' at t0+9 s); door 4 at t0+11 s walked (GUESS: input locked early)
+    s += ['wait 8000'] + dm02c_walk('dm02c-d3', *DM02C_DOORS[3]) + dm02c_walk('dm02c-d4', *DM02C_DOORS[4])
     # (3) glass BEFORE the break: Whole04 drawn + blocking at ~t0+15 s (the walk through door 1 / 2 must stop at the glass)
     s += ['ents Whole04 20', 'ents Remains04 20', 'log BENCH1110 dm02c g-pre sample']
     s += dm02c_walk('dm02c-g1pre', *DM02C_DOORS[1]) + dm02c_walk('dm02c-g2pre', *DM02C_DOORS[2])
@@ -285,14 +287,14 @@ def dm02c_checks(a, chk):
     for tag, sh, hard in (('sh1', DM02C_SH1, True), ('sh2', DM02C_SH2, False)):
         pb, pa_ = peek('dm02c-%s-prompt-best' % tag), peek('dm02c-%s-prompt-active' % tag)
         chk('%s: a use prompt is offered at the stand (prompt best/active nonzero)' % tag, bool(pb) or bool(pa_),
-            'best %s active %s (0x12 = kick/use prompt; the Lift Door code is a GUESS)' % (pb if pb is None else hex(pb), pa_ if pa_ is None else hex(pa_)), warn=True)
+            'best %s active %s (0x12 = kick/use prompt; run 3 showed 6/8 at the SoloLift and E worked, so 6/8 = Lift Door is a GUESS)' % (pb if pb is None else hex(pb), pa_ if pa_ is None else hex(pa_)), warn=True)
         st = M.pos_of(a, 'dm02c-%s-stand' % tag)
         chk('%s: player stood at the SoloLift box' % tag, st is not None and math.hypot(st[0] - sh['stand'][0], st[2] - sh['stand'][1]) <= 120,
             'pos %s want %s' % (st, sh['stand']), warn=True)
         tt = T('%s tap' % tag)
-        # the floor-500 shutter only: DM02C run 2 matched copies stacked at node y 0 / 500 / 1000 on the same x,z and 'rose +1000'.
-        # Node y 1000 (top of the leaf over floor 500) is the copy the stage keyed (flags 0x09.. vs 0x08..); rise up to +300 -> y 900..1400
-        rows = [r for r in M.ents(a, 'RollerShutterA') if near(r[3], sh['node'][0], sh['node'][1], 25) and 900 <= r[3][1] <= 1400]
+        # the floor-500 shutter only: copies are stacked at node y 0 / 500 / 1000 on the same x,z. DM02C run 3 proved the keyed one is the
+        # node-y-500 copy (slot 4447: 500 -> 564 -> 694 -> 791 -> 800, flags 08.. -> 2b..); the y-1000 copy never moves. Rise +300 -> y 450..850
+        rows = [r for r in M.ents(a, 'RollerShutterA') if near(r[3], sh['node'][0], sh['node'][1], 25) and 450 <= r[3][1] <= 850]
         before = [r for r in rows if tt is not None and M.secs_of(r[0]) <= tt + 0.2]
         after = [r for r in rows if tt is not None and M.secs_of(r[0]) > tt + 0.2]
         if not before or not after:
