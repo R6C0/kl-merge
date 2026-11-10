@@ -970,6 +970,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
 #include "klprobe.c"                                      /* klprobe.c: [Probe] DoorProxy - escape-lift door chain log; TEST only, off unless DoorProxy=1 */
 #include "klclubdiag.c"                                  /* klclubdiag.c: [Probe] ClubMusic - read-only log of the SoundLimiterFade objects + listener room (Last Call club music); TEST only, off unless ClubMusic=1 */
+#include "kldeathtrace.c"                              /* kldeathtrace.c: [DeathTrace] local player death tracer (damage entry, kill text, 100 ms samples); TEST only, off unless Enable=1; AFTER klfallrescue.c, klprobe.c */
 #endif
 
 /* ---------------------------------------------------------------- the tick
@@ -1463,6 +1464,7 @@ static void klh_tick(int game_thread)
 #ifdef KLHOOK_TEST
     KLPT(klcm_tick());                                      /* klclubdiag.c: [Probe] ClubMusic (reads only; one compare when off) */
     KLPT(klpr_tick());                                      /* klprobe.c: [Probe] DoorLeaves samples (reads only; idle unless a door proxy was accepted) */
+    KLPT(kdt_tick(game_thread));                            /* kldeathtrace.c: [DeathTrace] (reads only; one compare when off) */
 #endif
     KLPT(klt_tick(game_thread));                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
     KLPT(klv_tick(game_thread));                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
@@ -2035,6 +2037,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kla_init(inst);
     klcm_init();                                  /* klclubdiag.c: reads [Probe] ClubMusic, installs nothing */
     klpr_init_all();                              /* klprobe.c: reads [Probe] DoorProxy, installs nothing when 0 */
+    kdt_init();                                   /* kldeathtrace.c: reads [DeathTrace] Enable; the detours go in at the first game tick */
     klh_uef_on = !kla_on;                         /* with [Auto] Enable=1 the test rig's own filter gives the verdict */
 #else
     klh_uef_on = 1;

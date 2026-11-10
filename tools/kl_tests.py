@@ -90,6 +90,7 @@ C_TESTS = {
     'klstackhid_test.c': 'logic',      # klstackhid_logic.h ([BotFill] OnlineStackRecheckHid grace for state 0 + hidden 1 stacks, no windows.h)
     'klvantime_test.c': 'logic',      # klvantime_logic.h (OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold pure part, no windows.h)
     'klassoft_test.c': 'logic',        # klassoft_logic.h (AssertSoft list parse, no windows.h)
+    'kldeathtrace_test.c': 'logic',    # kldeathtrace_logic.h (line cap, sample ring, call-return stack scan; no windows.h)
     'klhud_boardbots_test.c': 'logic', # klhud_boardbots_logic.h ([HUD] OnlineBoardBots: AI heister rows of the online round-over card)
     'klperf_test.c': 'logic',          # klperf_logic.h ([Perf] OsdBackoff / OnlineCache / FastRead pure parts)
     'klhud_codeguard_test.c': 'logic', # klhud_codeguard_logic.h ([HUD] ProbeJmp: the code-bytes guard accepts a forwarding jmp)
