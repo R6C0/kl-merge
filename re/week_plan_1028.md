@@ -26,6 +26,8 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-10 ~07:30 f0: UPLOAD CLEARED: d0 LOAD SWEEP 13/13 PASS on the live frozen-pack files (11 DM maps + DD10 + DD06 control, TEST 03840ed0, 60 s stand, 0 asserts/faults/dumps),
+  .prm-root vs .oct pre-check 26/26 PASS; checklive 823 files 0 changed. Owner: upload KLMerge_package.zip sha1 504a398f (OWNER_RELEASE_STEPS section 4).
 - 11-10 ~06:35 f0: RE-FROZEN after d0's DM01B crash find (5eab5ecc crashes at load, 778b075c PASS, back live): zip 2,026,178,709 bytes, sha1 504a398f (supersedes 9a60c535); DM01B rehearsal PASS.
 - 11-10 ~05:55 f0 (kl-merge-81): PACKAGE FROZEN 05:47, READY FOR THE OWNER'S UPLOAD: C:\kl_release\KLMerge_package.zip 2,026,193,651 bytes (< 2 GiB cap), sha1 9a60c535
   (9a60c5359e0da17e98437f4e8505a1cd3faf88c1). 823 files, 635 patches (bots zips patched against their main zip: out: refs, 23 x ~3.5 KB; was 3.68 GB). Core = 1110f SHIP 6711bc5f / ini 0da79eb8
