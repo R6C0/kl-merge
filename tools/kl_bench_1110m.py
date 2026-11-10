@@ -35,8 +35,10 @@ K = {
                          shots='40-700:10', stage='C:/kl_build_1024/lcdoors_1110', tag='.before-lcdoors1110',
                          files={'variant_timer/F01_Main.zip': '791eb9c3', 'variant_timer/F01_Main.bots.zip': '912e08a5'}),
     'DM02C_1110': dict(map='DM02', slot='F02', live={'F02_Main.zip': '43c088c2', 'F02_Main.bots.zip': 'bb8f04cb', 'KLJoin.ini': '843b1c50'},
-                       shots='60-420:5', stage='C:/kl_build_1024/dm02shop_1110/combined', tag='.before-dm02combo1110',
-                       files={'variant_full/F02_Main.zip': '8baefac2', 'variant_full/F02_Main.bots.zip': '6293350c', 'variant_full/F02_Main.bots.base.md5': '791ffab0'}),
+                       # combined_closed = the vault panes in the CLOSED pose (kl_dm02doorglass_1110 --glass-pose closed, 8bf2b88b);
+                       # the first stage 'combined' kept Dead Men's own 140-deg-ajar pose, which blocks nothing
+                       shots='60-420:5', stage='C:/kl_build_1024/dm02shop_1110/combined_closed', tag='.before-dm02combo1110',
+                       files={'variant_full/F02_Main.zip': 'b24fb05d', 'variant_full/F02_Main.bots.zip': 'dde7720a', 'variant_full/F02_Main.bots.base.md5': '816ce4ad'}),
     'SMARTCOPS_DM01_1110': dict(map='DM01', slot='F01', live={'F01_Main.zip': '9ce9f34d', 'F01_Main.bots.zip': '975ad3c3', 'KLJoin.ini': '8201642d'},
                                 shots='60-900:20', stage='C:/kl_build_1024/smartcops_1110/DM01', tag='.before-smartcops1110',
                                 files={'F01_Main.zip': 'e091f0d8', 'F01_Main.bots.zip': '957f20aa', 'F01_Main.bots.base.md5': '6b7255e6'}),
@@ -130,10 +132,11 @@ DM02C_DOORS = {   # doorway = (front stand, back stand) from the KickDoor_Arrow 
 }
 DM02C_GLASS = {23182: (-970, 524, 2566), 24258: (-1435, 519, 1670)}   # Whole04 REFs; both share the node name below
 DM02C_GLASS_NAME = 'SI0401_M02_FA_Door_Shatter_Glass_01!Whole04'
-# Walk lines that CROSS each glass pane's own collision footprint (staged .HVK type-1 statics, world cm, read by kl_hvk.py 11-10):
-# 1: (-970,2563)..(-910,2635), 2: (-1438,1671)..(-1365,1610); 94 cm wide, 2.7 cm thick, swung ~40-50 deg off the doorway line, so the
-# KL_Door stand-to-stand walk passes ~65 cm beside the pane and says nothing about the glass. Lines = pane midpoint +/- 60 cm along its normal.
-DM02C_GLASS_X = {1: ((-894, 2561), (-986, 2637)), 2: ((-1363, 1686), (-1439, 1594))}
+# Walk lines that CROSS each glass pane (closed pose, kl_dm02doorglass_1110 8bf2b88b): 1 on x=-1000, z 2468..2562; 2 on z=1700, x -1534..-1440
+# (94 cm pane in a 120 cm opening; the ~26 cm gap is at the far jamb). Lines cross the pane middle, 60 cm each side. Glass 2 starts on the
+# VAULT side (-1487,1640): the hall side near (-1503,1793) is where the host died after a tele in DM02C runs 1+2 (AI posts).
+# (The stock Dead Men pose was 140 deg ajar: (-970,2563)..(-910,2635) / (-1438,1671)..(-1365,1610), beside the doorway.)
+DM02C_GLASS_X = {1: ((-940, 2515), (-1060, 2515)), 2: ((-1487, 1640), (-1487, 1760))}
 DM02C_SHOPS = {   # n: (tele start x, z, goto x, z, expected KLDress<n>_ props, a prop to look at)
     1: (-2350, 1350, -2400, 1350, 10),    # Corridore_201b: watchtable (-2763,500,1350), plaques (-2600..-2900,650,1060/1640)
     2: (2350, 1300, 2400, 1300, 20),      # Corridore_201d: shelves (2771..2951,500,1078), desk (2951,499,1460)
@@ -144,7 +147,7 @@ DM02C_SHOPS = {   # n: (tele start x, z, goto x, z, expected KLDress<n>_ props, 
 
 def dm02c_walk(lbl, front, back):
     """tele on the front stand (floor 500 + 60), settle, pos -a, walk to the back stand, pos -b."""
-    return ['tele %d 560 %d' % front, 'wait 1500', 'goto %d %d 25 3000' % front, 'pos %s-a' % lbl,
+    return ['tele %d 560 %d' % front, 'wait 2500', 'goto %d %d 25 3000' % front, 'wait 500', 'pos %s-a' % lbl,
             'goto %d %d 60 5000' % back, 'pos %s-b' % lbl, 'log BENCH1110 dm02c %s walked' % lbl]
 
 
@@ -200,14 +203,20 @@ def dm02c_checks(a, chk):
     chk('dm02c segment ran on the host (t0 ... host done)', T('host t0 round running') is not None and T('host done') is not None, '%d host log lines' % len(a))
 
     # --- walk-through verdicts -----------------------------------------------------------------------------------------
+    # THROUGH = the end point is >= 25 cm past the middle of the front->back line (the door / pane sits there). Run 3 stopped ~40 cm
+    # short of the pane and a 150 cm 'near the back stand' radius called that THROUGH.
+    def along(front, back, p):
+        L = math.hypot(back[0] - front[0], back[1] - front[1])
+        return ((p[0] - front[0]) * (back[0] - front[0]) + (p[2] - front[1]) * (back[1] - front[1])) / L, L
+
     def walk(lbl, front, back):
         pa, pb = M.pos_of(a, lbl + '-a'), M.pos_of(a, lbl + '-b')
         if pa is None or pb is None:
             return 'NOSAMPLE', 'no pos line for %s-a / %s-b' % (lbl, lbl)
         if math.hypot(pa[0] - front[0], pa[2] - front[1]) > 150:
             return 'VOID', 'tele/settle ended %.0f cm from the front stand %s (pos %s): no verdict' % (math.hypot(pa[0] - front[0], pa[2] - front[1]), front, pa)
-        e = math.hypot(pb[0] - back[0], pb[2] - back[1])
-        return ('THROUGH' if e <= 150 else 'BLOCKED'), 'start %s end %s, %.0f cm from the back stand %s' % (pa, pb, e, back)
+        t, L = along(front, back, pb)
+        return ('THROUGH' if t >= L / 2 + 25 else 'BLOCKED'), 'start %s end %s, %.0f of %.0f cm along (door/pane line at the middle)' % (pa, pb, t, L)
 
     for n in (3, 4):
         v, note = walk('dm02c-d%d' % n, *DM02C_DOORS[n])
@@ -258,8 +267,8 @@ def dm02c_checks(a, chk):
                 return 'NOSAMPLE', 'no pos line for %s' % lbl
             if math.hypot(pa[0] - f[0], pa[2] - f[1]) > 60:
                 return 'VOID', 'start %s is %.0f cm from %s' % (pa, math.hypot(pa[0] - f[0], pa[2] - f[1]), f)
-            e = math.hypot(pb[0] - bk[0], pb[2] - bk[1])
-            return ('THROUGH' if e <= 40 else 'BLOCKED'), 'start %s end %s, %.0f cm from the far side %s (line %.0f cm)' % (pa, pb, e, bk, xb)
+            t, _ = along(f, bk, pb)
+            return ('THROUGH' if t >= xb / 2 + 25 else 'BLOCKED'), 'start %s end %s, %.0f of %.0f cm along (pane at the middle)' % (pa, pb, t, xb)
         v, note = xwalk('dm02c-x%dpre' % door)
         chk('glass %d pane blocks a walk across it before the break' % door, v == 'BLOCKED', '%s: %s' % (v, note), warn=True)
         v, note = xwalk('dm02c-x%dpost' % door)
