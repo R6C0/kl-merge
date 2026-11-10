@@ -1,0 +1,3 @@
+; [BotFill] OnlineExitOffset - add to KLHook.ini under [BotFill] (not applied: KLHook.ini is peer-dirty)
+OnlineExitOffset=0       ; 1 = online BotFill orders AI heisters to a point beside the exit-box centre, off the escape van's lane (recommended on online for DD01, DD10, DM01B, DM06B, DM07; not benched)
+OnlineExitOffsetCm=400   ; sideways distance in cm (min 250: van half width 110 + capsule 40 + lane up to ~180 off the centre); a box too narrow for it keeps the centre
