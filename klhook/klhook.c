@@ -925,6 +925,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klbench_down.c"                                 /* klbench_down.c: [Bench] SelfDownAt - the local body takes one hit through the game's slot 422 (bench only, off unless set); AFTER klucc_down.c, klhook.c's klh_slot_player_mine */
 #include "kldown.c"
 #include "klbotdown.c"                                    /* klbotdown.c: AI heisters down, not dead (off unless [BotDown] Enable) */
+#include "klbotglass.c"                                   /* klbotglass.c: [BotGlass] AI heisters break the glass pane that blocks them (off unless Enable=1); AFTER klbotdown.c (klbd_online_view), klescort.c (kle_node) */
 #include "klcardown.c"                                   /* klcardown.c: a car blast floors the AI and you, revivable ([CarDown], on in Arcade on non-stock levels) */
 #include "klshield.c"                                    /* klshield.c: the human shield covers you and floors the hostage ([Shield], on in Arcade rounds) */
 #include "klcdying.c"                                   /* klcdying.c: almost dead = the revivable floor for you; heisters hold fire ([Dying]); AFTER klcardown.c */
@@ -1553,6 +1554,7 @@ static void klh_tick(int game_thread)
     KLPT(klp_tick(game_thread));                            /* klfed.c: come back as a fed (data writes only) */
     KLPT(klfk_tick(game_thread));                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
     KLPT(klbd_tick(game_thread));                           /* klbotdown.c: before kladren, which reads its down state */
+    KLPT(klbg_tick(game_thread));                           /* klbotglass.c: [BotGlass] a bot standing at an intact glass pane breaks it (off unless Enable=1) */
     KLPT(klcd_tick(game_thread));                           /* klcardown.c: a car blast floors the AI and you */
     KLPT(klsh_tick(game_thread));                           /* klshield.c: the human shield covers you, the hostage goes down */
     KLPT(kldy_tick(game_thread));                           /* klcdying.c: almost dead = the game's revivable down (you) */
@@ -2009,6 +2011,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kld_init();
     kldm_init();                                      /* kldown_mirror.c: [Down] OnlineFlopMirror* (after kld_init: reads its Online* keys; asks for the message channel) */
     klbd_init();
+    klbg_init();                                     /* klbotglass.c: reads [BotGlass] (off unless Enable=1) */
     klcd_init();
     klsh_init();
     kldy_init();                                      /* klcdying.c: reads [Dying]; after klbd_init (sets its NoFire) */
