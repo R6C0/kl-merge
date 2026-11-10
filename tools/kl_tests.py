@@ -124,6 +124,7 @@ C_TESTS = {
     'klfresh_test.c': 'logic',         # klfresh_logic.h ([Memory] FreshRestart)
     'klmemfree_test.c': 'win',         # includes klmem.c + klmemfree.c (Windows heap census)
     'klgrenadefx_test.c': 'logic',     # klgrenadefx_logic.h ([Grenade] PinSound / ThrowAnim)
+    'klcampaign_outfits_test.c': 'logic',  # klcampaign_outfits_logic.h ([Wardrobe] CampaignOutfits, KLChar 17..32)
     'klvanshield_test.c': 'logic',     # klvanshield_logic.h ([VanBlow] ShieldUntilBoarded / HealFloor / ShieldWhileWaiting)
     'klcrackfx_test.c': 'logic',       # klcrackfx_logic.h (lens crack heal fade + KL_CrackFX age)
     'klnc_test.c': 'logic',            # klnetchan_logic.h + klucc_logic.h
