@@ -223,7 +223,7 @@ def check_relist(plain, base, log=print):
 
 
 # ---------------------------------------------------------------- build / stage
-def build_variant(live, outdir, variant, glass_delay, door_delay, hide, log=print):
+def build_variant(live, outdir, variant, glass_delay, door_delay, hide, log=print, pose=DG.DEFAULT_POSE):
     """prompt -> doorglass (-> relist). -> report. outdir gets F02_Main.zip / .bots.zip / .bots.base.md5."""
     if variant not in VARIANTS:
         raise ValueError('variant %s' % variant)
@@ -237,9 +237,9 @@ def build_variant(live, outdir, variant, glass_delay, door_delay, hide, log=prin
             raise ValueError('prompt check: %s' % bad)
         p1z = os.path.join(p1, 'F02_Main.zip')
         p2 = os.path.join(work, 'p2')
-        rep['doorglass'] = DG.build(p1z, p2, 'shop', glass_delay, door_delay, DG.DEFAULT_OPEN, hide, log=log)
+        rep['doorglass'] = DG.build(p1z, p2, 'shop', glass_delay, door_delay, DG.DEFAULT_OPEN, hide, log=log, pose=pose)
         p2z = os.path.join(p2, 'F02_Main.zip')
-        bad = DG.check(p2z, p1z, 'shop', DG.DEFAULT_OPEN, hide, log=log)
+        bad = DG.check(p2z, p1z, 'shop', DG.DEFAULT_OPEN, hide, log=log, pose=pose)
         if bad:
             raise ValueError('doorglass check: %s' % bad)
         rep['doorglass']['check'] = 'ok'
@@ -261,7 +261,7 @@ def build_variant(live, outdir, variant, glass_delay, door_delay, hide, log=prin
             if a.namelist() != b.namelist():
                 raise ValueError('member list changed against live')
             rep['members_changed'] = sorted(n.rsplit('/', 1)[-1] for n in a.namelist() if a.read(n) != b.read(n))
-        want = {'F02_Main.prp', 'F02_Main.gms', 'F02_Main.HVK'} | ({'F02_Main.oct', 'F02_Main.prm'} if variant == 'full' else set())
+        want = {'F02_Main.prp', 'F02_Main.gms', 'F02_Main.HVK'} | ({'F02_Main.oct', 'F02_Main.prm'} if variant == 'full' or pose == 'closed' else set())     # the closed pane re-boxes the .oct items
         if set(rep['members_changed']) != want:
             raise ValueError('members changed against live %s, wanted %s' % (rep['members_changed'], sorted(want)))
         rep['out_md5'] = md5(final)
@@ -429,7 +429,7 @@ blocking, breaks at %(gdelay)s s (or by bots with the hook on), walk through. 4.
 '''
 
 
-def stage(live_dir, out, glass_delay=DEFAULT_GLASS_DELAY, door_delay=DEFAULT_DOOR_DELAY, hide=DEFAULT_HIDE, log=print):
+def stage(live_dir, out, glass_delay=DEFAULT_GLASS_DELAY, door_delay=DEFAULT_DOOR_DELAY, hide=DEFAULT_HIDE, log=print, pose=DG.DEFAULT_POSE):
     live = os.path.join(live_dir, 'F02_Main.zip')
     bots = os.path.join(live_dir, 'F02_Main.bots.zip')
     if md5(live) != LIVE_PIN or md5(bots) != LIVE_BOTS_PIN:
@@ -443,7 +443,7 @@ def stage(live_dir, out, glass_delay=DEFAULT_GLASS_DELAY, door_delay=DEFAULT_DOO
     reps, staged = {}, {}
     for v in VARIANTS:
         d = os.path.join(out, 'variant_' + v)
-        reps[v] = build_variant(live, d, v, glass_delay, door_delay, hide, log=log)
+        reps[v] = build_variant(live, d, v, glass_delay, door_delay, hide, log=log, pose=pose)
         staged[v] = {n: md5(os.path.join(d, n)) for n in ('F02_Main.zip', 'F02_Main.bots.zip', 'F02_Main.bots.base.md5')}
     with open(os.path.join(out, 'install.py'), 'w', newline='\n') as fh:
         fh.write(make_install_py(staged))
@@ -465,7 +465,7 @@ def main(a):
     opt = lambda k, d: a[a.index(k) + 1] if k in a else d
     if a and a[0] == 'stage':
         hide = tuple(int(x) for x in opt('--hide-doors', ','.join(map(str, DEFAULT_HIDE))).split(',') if x)
-        stage(opt('--live', MAPDIR), opt('--out', OUT), float(opt('--glass-delay', DEFAULT_GLASS_DELAY)), float(opt('--door-delay', DEFAULT_DOOR_DELAY)), hide)
+        stage(opt('--live', MAPDIR), opt('--out', OUT), float(opt('--glass-delay', DEFAULT_GLASS_DELAY)), float(opt('--door-delay', DEFAULT_DOOR_DELAY)), hide, pose=opt('--glass-pose', DG.DEFAULT_POSE))
         return 0
     if len(a) >= 2 and a[0] == 'check' and '--base' in a:
         bad = check_relist(a[1], opt('--base', None))

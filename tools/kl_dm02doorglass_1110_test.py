@@ -1,6 +1,6 @@
 """Off-game self-test of kl_dm02doorglass_1110 (light; no live files needed).
 Heavy proof: python kl_dm02doorglass_1110.py stage ; python kl_dm02doorglass_1110_test.py --rehearse <stage dir> [--tmp <scratch dir>]"""
-import ast, hashlib, os, shutil, subprocess, sys, tempfile
+import ast, hashlib, os, shutil, struct, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -20,6 +20,21 @@ def main(a):
     ok(set(G.DEFAULT_OPEN) <= set(G.DOOR_REFS) and set(G.DEFAULT_HIDE) <= set(G.DEFAULT_OPEN), 'door sets')
     ok(G.GLASS_FLAGS | G.HIDE == 0x2205e6 and G.TAG != '.before-dm02shop1110', 'flags / own backup tag (the prompt pass uses .before-dm02shop1110)')
     ok(G.FORCE_MSG == 'ForceTriggerShotActivate' and G.DEFAULT_GLASS_DELAY > 1 and G.DEFAULT_DOOR_DELAY > 0, 'constants')
+    ok(G.POSES == ('closed', 'stock') and G.DEFAULT_POSE == 'closed', 'poses')
+    for r in G.GLASS:                                                 # closed pane geometry: unit rotation, tip inside the opening, a gap under the 40 cm capsule
+        M, T = G.closed_pose(type('B', (), dict(fr={'e': (None, (0, 523.67, 0))}, ents=['e']))(), 1, r)
+        det = M[0][0] * M[2][2] - M[0][2] * M[2][0]
+        ok(abs(det - 1.0) < 1e-6 and M[1] == [0.0, 1.0, 0.0], 'closed_pose rotation %d' % r)
+        ax, a0, a1 = G.OPENING[r]
+        tip = G.GLASS[r][0 if ax == 0 else 1] + (M[0 if ax == 0 else 2][0] * 94.2)
+        ok(a0 - 3 <= tip <= a1 + 3 and (a1 - a0) - 94.2 <= 40, 'closed pane inside opening %d (tip %.1f)' % (r, tip))
+    # pane_code / wrap_list on synthetic data: a 2-box code is walked clean and returns the right terminals
+    import kl_mopp
+    off = struct.pack('<4f', 0.0, 0.0, 0.0, 254.0 * 65536.0 / 10.02)
+    base = bytes([0x26, 0, 254, 0x27, 0, 254, 0x28, 0, 254, 0x30])    # one terminal 0 over the whole domain
+    lst = G.wrap_list((off, base), [(3, ([1.0, 1.0, 1.0], [2.0, 2.0, 2.0]))])
+    c = kl_mopp.Code(*lst)
+    ok(3 in c.query([1.5, 1.5, 1.5]) and 0 in c.query([5.0, 5.0, 5.0]) and 3 not in c.query([5.0, 5.0, 5.0]), 'wrap_list returns the new child only inside its box')
     src = G.make_install_py({'shop': {}, 'doors': {}})
     ast.parse(src)
     ok("TAG = '.before-dm02door1110'" in src and '--undo' in src and 'never overwritten' in src and '--dry' in src and '--skip-run-check' in src and 'shop|doors' in src,
