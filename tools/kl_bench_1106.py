@@ -465,7 +465,8 @@ for _m, _s, _p, _e, _z, _b in LOADSWEEP:
     KITS['load_' + _m] = dict(map=_m, slot=_s, page=_p, entry=_e, stage=None, tag=None, loadonly=True,
                               live={'%s_Main.zip' % _s: _z, '%s_Main.bots.zip' % _s: _b},
                               hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
-                              ini=['[VanBlow]', 'Log=1'], solo_secs=1000 if _m == 'DM09' else 600, parts=('solo',), shots='60-160:20')
+                              ini=['[VanBlow]', 'Log=1'], solo_secs=1000 if _m == 'DM09' else 600, parts=('solo', 'online'), shots='60-160:20')
+# 'online' = the map's Q32 host/join pair (round 1 -> shop -> round 2, 2 seats) on the same live files: release smoke for online play
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
       'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108', 'skyline1108')
 EYE_OF = {'lcchain2e1106d': (7400, 2500, 2800), 'lcchain2f1106d': (7400, 2500, 2800), 'lclive2f1106': (7400, 2500, 2800), 'lcarr2h1108': (7400, 2500, 2800), 'skyline1108': (7400, 2500, 2800)}          # kits whose outro eye is not the 2c CamPos01 eye (7093,2181,2727)
