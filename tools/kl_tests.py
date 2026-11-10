@@ -150,6 +150,7 @@ C_TESTS = {
     'klgrenade_test.c': 'logic',       # klgrenade_logic.h ([Grenade] Release decision)
     'kllevelmusic_test.c': 'logic',    # kllevelmusic_logic.h ([LevelMusic] Restart: round 2+ music replay decision)
     'klvanrest_test.c': 'logic',       # klvanrest_logic.h ([BotFill] OnlineVanRest rest-position guard)
+    'klexitoff_test.c': 'logic',       # klexitoff_logic.h ([BotFill] OnlineExitOffset: exit-box target off the van lane)
     'kladren_test.c': 'win',           # includes kladren.c
     'klambience_test.c': 'win',        # klambience.c
     'klbotdown_test.c': 'win',         # klbotdown.c
