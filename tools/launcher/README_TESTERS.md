@@ -77,7 +77,8 @@ beside `kl2.exe`; without it the game is stock. The hook has no on/off switch in
 **renaming** (never deleting):
 
 - **PLAY DOG DAYS** renames `dinput8.dll` to `dinput8.dll.klmerge-off`, then starts the game: stock game, stock menus.
-  The mod's map folders stay on disk but nothing loads them.
+  The mod's map folders stay on disk but nothing loads them. The hook **stays off** after that game closes:
+  starting Kane & Lynch 2 from Steam then gives the stock game too, until you press PLAY DEAD MEN RISING or HOOK ON.
 - **PLAY DEAD MEN RISING** renames it back and starts the game.
 - **HOOK ON / OFF** does the rename without starting anything.
 
