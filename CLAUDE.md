@@ -70,6 +70,9 @@ Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/wee
 2026-11-10 ~00:55 - [06, offline] RELEASE ASSET NAME: Setup.bat downloads .../releases/latest/download/KLMerge_package.zip but pack_release.ps1 wrote only
 KLMerge_package_v<ver>.zip (+ a .sha1 naming that file); OWNER_RELEASE_STEPS had a manual copy step. pack_release now also writes KLMerge_package.zip (hard link) + its .sha1;
 steps say C:\kl_release (D: 1.2 GB free); launcher_test checks the name (fails on the old pack). Scratch pack x2 OK (11 files, 0 game files). Owner on the PC: no live run.
+01:10: launcher PROVEN LIVE by the owner's own use 23:53-00:35 (riff plays, PLAY x4, hide/reappear each time, 0 errors in launcher_1109\KLMergeLauncher.log).
+Setup.bat e2e after the rename (file:// URL, folder "setup e2e & (x) o'k"): download/unpack/py -3/copy-up OK, launcher opened, riff made from the DM install in 10 s = md5 c9a762a1 = owner's repaired file.
+GitHub R6C0/dead-men-rising: public, NO release yet (latest/download 404) -> waits for make + upload.
 2026-11-10 ~01:00 - [campaign] INSTALLED on owner "install all" (NOT benched): campaign_1110 voices + rappel camera, dll 4722b12a -> 258daf8e, ini ba4441c1 -> c62045c9 (Adpcm=1, StreamRedirect=1: converted SND name ..\Kane and Lynch Dead Men\PC_Def.str, DM is on G:, so .str opens are redirected; empty PC_Eng.str now recognised;
 SndDiv=1, [CampRappel] Land=auto = luvsic landing re-aim, CamFix=0, [Camera] CampaignOff=0 = owner keeps OUR camera on campaign). Undo: C:\kl_build_1024\campaign_1110\UNDO.bat BEFORE campaign_1109. Bench: M07F voices, M09 roof rappel ("camprappel: land=").
 Menu: sounds stage2 (all 7 OSD records, RMS-matched, appended) + redesign stage A (DM backgrounds, overlay kaneandlynch_deadmen.zip caf16a44; undo redesign\UNDO menu redesign A 1110.bat) installed. Picker / campaign UI / lighting / outfits / arcade-style campaign pages still staging.
