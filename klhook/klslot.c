@@ -502,7 +502,7 @@ static int kls_bot_apply(char *path, const char *slot, const char *api)
 static int kls_menulook_on = 1;
 #include "klmenulook_logic.h"
 
-static int kls_menulook(char *path, const char *api)
+static int kls_menulook0(char *path, const char *api)
 {   /* path = the file the open is going to get (in/out, MAX_PATH); -> 1 when it was replaced by its _deadmen copy */
     char var[MAX_PATH]; int why, i, dup = 0; DWORD h = 2166136261u; const char *p;
     static DWORD seen[16]; static int nseen;             /* once per (candidate, outcome): the game probes and re-opens these files */
@@ -522,6 +522,40 @@ static int kls_menulook(char *path, const char *api)
     if (!used) return 0;
     strcpy(path, var);
     return 1;
+}
+
+/* [CampaignUI] Menu=1 (with [Campaign] Enable=1): luvsic's Dead Men campaign pages as one extra CampaignMenu row. The game opens the patch archive's
+   <stem>_campui.zip copy (tools/kl_campui_menu.py) instead of the archive itself; chained AFTER [MenuLook] (Patch01_deadmen.zip -> Patch01_deadmen_campui.zip).
+   Off (the default) or no copy beside the file = the path as it was. klcampui_logic.h, klcampui_test.c. GUESS: re-opened at every menu load like the MenuLook files. */
+static int kls_campui_on = 0;
+#include "klcampui_logic.h"
+
+static int kls_campui(char *path, const char *api)
+{
+    char var[MAX_PATH]; int why, i, dup = 0; DWORD h = 2166136261u; const char *p;
+    static DWORD seen[8]; static int nseen;
+    int used = klcu_variant(path, kls_campui_on, kls_isfile, var, sizeof var, &why);
+    if (why == KLCU_OFF || why == KLCU_NOT_MENU || why == KLCU_ALREADY) return 0;
+    for (p = (why == KLCU_TOO_LONG ? path : var); *p; p++) h = (h ^ (BYTE)(*p >= 'A' && *p <= 'Z' ? *p + 32 : *p)) * 16777619u;
+    h = (h ^ (BYTE)why) * 16777619u;
+    EnterCriticalSection(&kls_cs);
+    for (i = 0; i < nseen; i++) if (seen[i] == h) { dup = 1; break; }
+    if (!dup && nseen < 8) seen[nseen++] = h; else if (!dup) dup = 1;
+    LeaveCriticalSection(&kls_cs);
+    if (!dup) {
+        if (used) klog("campui: %s %s -> %s", api, path, var);
+        else klog("campui: %s ON but %s: %s - stock menu (tools/kl_campui_menu.py writes the copy)", api, path, klcu_why_text(why));
+    }
+    if (!used) return 0;
+    strcpy(path, var);
+    return 1;
+}
+
+static int kls_menulook(char *path, const char *api)
+{   /* [MenuLook] first, then [CampaignUI] on whatever that left; -> 1 when either replaced the path */
+    int a = kls_menulook0(path, api);
+    int b = kls_campui(path, api);
+    return a || b;
 }
 
 static int kmp_pick(int s);                          /* klmappool.c (included after this file) */
@@ -595,7 +629,7 @@ static int kls_map(const char *in, char *out, const char *api)
         strcpy(out, kls_overlay); strcat(out, full + kls_game_len);
         if (kls_isfile(out)) { if (kls_log) kls_note(api, "overlay", full, out); kls_menulook(out, api); SetLastError(err); return 1; }   /* [MenuLook]: the overlay copy's _deadmen sibling */
     }
-    if (!wild && kls_menulook_on) {                       /* [MenuLook] on the stock path (no overlay copy): Scenes\kaneandlynch_deadmen.WHD beside the stock pair, say */
+    if (!wild && (kls_menulook_on || kls_campui_on)) {                       /* [MenuLook] on the stock path (no overlay copy): Scenes\kaneandlynch_deadmen.WHD beside the stock pair, say */
         strcpy(out, full);
         if (kls_menulook(out, api)) { SetLastError(err); return 1; }
     }
@@ -987,6 +1021,8 @@ static void kls_init(HINSTANCE inst)
     klog("botgate: %s - online with the host's [BotFill] OnlineHost=1 the level archive is swapped for Fxx_Main.bots.zip when one sits beside it; OnlineHost=0 = the plain archive; offline never", kls_bg_on ? "on" : "off ([BotGate] Enable=0)");
     kls_menulook_on = GetPrivateProfileIntA("MenuLook", "DeadMen", 1, klh_ini) != 0;       /* (recommended on) */
     klog("menulook: %s - the menu files Patch01*.zip, Scenes\\kaneandlynch.zip/.WHD/.WAV open their <stem>_deadmen.<ext> copy when one sits beside them (Dead Men menu look); a missing copy = stock look, logged once", kls_menulook_on ? "on" : "off ([MenuLook] DeadMen=0)");
+    kls_campui_on = klcu_gate(GetPrivateProfileIntA("CampaignUI", "Menu", 0, klh_ini) != 0, GetPrivateProfileIntA("Campaign", "Enable", 0, klh_ini) != 0);       /* (recommended on, with the campaign) */
+    if (GetPrivateProfileIntA("CampaignUI", "Menu", 0, klh_ini)) klog("campui: %s - the patch archives Patch01*.zip open their <stem>_campui.zip copy (Dead Men Campaign row in Play) when one sits beside them", kls_campui_on ? "on" : "off ([Campaign] Enable=0)");
     kls_keep_online = GetPrivateProfileIntA("Expansion", "KeepPageOnline", 0, klh_ini) != 0;
     kls_keep_clear = GetPrivateProfileIntA("Expansion", "KeepClear", 1, klh_ini) != 0;
     if (kls_online_set || kls_keep_online)

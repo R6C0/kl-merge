@@ -63,13 +63,26 @@ def run(tmp):
     n = K.stage_runtree(work); rt = K.runtree(work)
     check('runtree: files copied', n > 50 and os.path.isfile(os.path.join(rt, 'tools', 'port_level.py')))
     for ui in ('dmhud.py', 'dmfont.py', 'anp_menu.py', 'anp_movie.py'):
-        check('runtree: no ' + ui, not os.path.exists(os.path.join(rt, 'tools', ui)) and not os.path.exists(os.path.join(K.VENDOR, 'tools', ui)))
+        check('runtree: no ' + ui + ' (default, no --ui)', not os.path.exists(os.path.join(rt, 'tools', ui)))
     write(os.path.join(rt, 'fxc', 'union.pkl'), b'u')
     check('runtree: 2nd stage writes nothing', K.stage_runtree(work) == 0)
     check('runtree: union.pkl kept', os.path.exists(os.path.join(rt, 'fxc', 'union.pkl')))
     r = subprocess.run([sys.executable, '-I', '-c', 'import sys; sys.path.insert(0, sys.argv[1]); import dmhud; print(dmhud.xhair_props())',
                         os.path.join(rt, 'shim')], capture_output=True, text=True)
     check('shim: xhair_props() is None', r.stdout.strip() == 'None', r.stderr)
+    # ---- --ui: the real UI modules in the run tree, no shim, HUD + fonts on; a plain stage afterwards removes them again
+    work2 = os.path.join(tmp, 'work_ui'); rt2 = K.runtree(work2)
+    P2 = dict(P, work=work2, ui=True)
+    env3, n3 = K.converter_env(P2, base={'PATH': 'p'})
+    check('ui env: HUD + fonts on, no shim', env3['ANP_DM_HUD'] == '1' and env3['ANP_DM_FONTS'] == '1' and 'PYTHONPATH' not in env3)
+    check('ui env: DD menu/OSD graft still on', env3['ANP_GRAFT_MENU'] == '1' and env3['ANP_GRAFT_OSD'] == '1')
+    K.stage_runtree(work2, ui=True)
+    for u in ('dmhud.py', 'dmfont.py', 'anp_menu.py', 'anp_movie.py'):
+        check('ui runtree: has ' + u, os.path.isfile(os.path.join(rt2, 'tools', u)))
+    check('ui runtree: no shim file', not os.path.exists(os.path.join(rt2, 'shim', 'dmhud.py')))
+    check('ui runtree: 2nd stage writes nothing', K.stage_runtree(work2, ui=True) == 0)
+    K.stage_runtree(work2)
+    check('plain stage after ui removes the UI modules, shim back', not os.path.exists(os.path.join(rt2, 'tools', 'dmhud.py')) and os.path.isfile(os.path.join(rt2, 'shim', 'dmhud.py')))
     check('no game data vendored', not [f for d, _, fs in os.walk(K.VENDOR) for f in fs
                                         if f.lower().endswith(('.zip', '.str', '.bik', '.pkl', '.pyc', '.dll', '.exe', '.tex', '.prm'))])
     check('no vendored file over 1 MB', all(os.path.getsize(os.path.join(d, f)) < (1 << 20) for d, _, fs in os.walk(K.VENDOR) for f in fs))

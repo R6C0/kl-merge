@@ -51,6 +51,11 @@ LEVELS = {
 SPECIAL = {'M07F': dict(dm_folder='CutScenes\\M07', dm_name='M07_A_Funeral', rel='CutScenes/M07', stem='M07_A_Funeral')}
 ALL_IDS = list(LEVELS) + list(SPECIAL)
 
+# --ui (or KL_CAMPAIGN_UI=1): luvsic's UI pieces that live INSIDE a level archive are converted too (Dead Men HUD art, Dead Men
+# typefaces: tools/dmhud.py, tools/dmfont.py). They only ever touch the converted M* level zips (campaign levels), never an F0x
+# slot. The front-end menu (anp_menu.py) and the intro movie (anp_movie.py) are not level parts: tools/kl_campui_menu.py.
+UI_FILES = tuple(os.path.join('tools', f) for f in ('dmhud.py', 'dmfont.py', 'anp_menu.py', 'anp_movie.py'))
+
 # the modules the vendored converter imports that were left out on purpose (UI) -> shim
 DMHUD_SHIM = '''"""kl-merge shim for luvsic's tools/dmhud.py (Dead Men HUD art conversion, left out: owner does not want his UI).
 prpconv imports it only for xhair_props() (Dead Men's whole-crosshair art fields). None = "unknown shape, Dog Days
@@ -89,7 +94,7 @@ def resolve(work=None, out=None, dd=None, dm=None):
     work = work or os.environ.get('ANP_WORK') or os.path.join(wd, 'anp_work')
     out = out or os.environ.get('ANP_OUT') or os.path.join(wd, 'anp_out')
     return dict(wd=wd, work=os.path.abspath(work), out=os.path.abspath(out),
-                dd=dd or find_game('dd'), dm=dm or find_game('dm'))
+                dd=dd or find_game('dd'), dm=dm or find_game('dm'), ui=os.environ.get('KL_CAMPAIGN_UI', '') == '1')
 
 def runtree(work): return os.path.join(work, 'runtree')
 
@@ -106,20 +111,22 @@ def converter_env(P, base=None):
     if P.get('dd'): dflt('ANP_DD_GAME', P['dd'], 'found (kl_port_check)')
     if P.get('dm'): dflt('ANP_DM_GAME', P['dm'], 'found (kl_port_check); read only')
     dflt('ANP_KLMERGE', REPO, 'this repo (schemas @%s, kl_hvk)' % SCHEMA_COMMIT)
-    dflt('ANP_DM_HUD', '0', "Dead Men's HUD art off (UI left out)")
-    dflt('ANP_DM_FONTS', '0', "Dead Men's typefaces off (UI left out)")
+    ui = bool(P.get('ui'))
+    dflt('ANP_DM_HUD', '1' if ui else '0', "Dead Men's HUD art ON (--ui: baked into the campaign level zips only)" if ui else "Dead Men's HUD art off (UI left out)")
+    dflt('ANP_DM_FONTS', '1' if ui else '0', "Dead Men's typefaces ON (--ui: campaign level zips only)" if ui else "Dead Men's typefaces off (UI left out)")
     dflt('ANP_GRAFT_MENU', '1', "ON: grafts Dog Days' OWN menu/pause subtrees")
     dflt('ANP_GRAFT_OSD', '1', "ON: grafts Dog Days' OWN HUD (OSD) subtrees")
     dflt('ANP_SMB_FIX', '0', 'off: tools/dd_enums_extra.json missing in luvsic repo')
-    shim = os.path.join(runtree(P['work']), 'shim')
-    env['PYTHONPATH'] = shim + (os.pathsep + env['PYTHONPATH'] if env.get('PYTHONPATH') else '')
+    if not ui:      # --ui: the real tools/dmhud.py is in the run tree, no shim
+        shim = os.path.join(runtree(P['work']), 'shim')
+        env['PYTHONPATH'] = shim + (os.pathsep + env['PYTHONPATH'] if env.get('PYTHONPATH') else '')
     env['PYTHONDONTWRITEBYTECODE'] = '1'
     env['PYTHONIOENCODING'] = 'utf-8'
     return env, notes
 
 
 # ------------------------------------------------------------------ run tree + schemas
-def stage_runtree(work):
+def stage_runtree(work, ui=False):
     """copy third_party/anp/{tools,fxc,scripts} to <work>/runtree and write the shim; never deletes union.pkl.
     Returns the number of files written."""
     rt = runtree(work); n = 0
@@ -128,11 +135,18 @@ def stage_runtree(work):
             dirs[:] = [d for d in dirs if d != '__pycache__']
             for f in files:
                 s = os.path.join(root, f)
-                d = os.path.join(rt, os.path.relpath(s, VENDOR))
+                rel = os.path.relpath(s, VENDOR)
+                d = os.path.join(rt, rel)
+                if rel in UI_FILES and not ui:      # the UI modules stay out of a normal run tree (the shim stands in for dmhud.py)
+                    if os.path.exists(d): os.remove(d); n += 1
+                    continue
                 if os.path.exists(d) and md5_file(d) == md5_file(s): continue
                 os.makedirs(os.path.dirname(d), exist_ok=True); shutil.copyfile(s, d); n += 1
     sd = os.path.join(rt, 'shim'); os.makedirs(sd, exist_ok=True)
     p = os.path.join(sd, 'dmhud.py')
+    if ui:
+        if os.path.exists(p): os.remove(p); n += 1
+        return n
     if not os.path.exists(p) or open(p, encoding='utf-8').read() != DMHUD_SHIM:
         open(p, 'w', encoding='utf-8', newline='\n').write(DMHUD_SHIM); n += 1
     return n
@@ -344,22 +358,24 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--work'); ap.add_argument('--out'); ap.add_argument('--dd'); ap.add_argument('--dm')
     sub = ap.add_subparsers(dest='cmd', required=True)
+    ap.add_argument('--ui', action='store_true', help="also convert luvsic's per-level UI (Dead Men HUD art + typefaces) into the campaign level zips")
     sub.add_parser('env'); sub.add_parser('status')
     s = sub.add_parser('setup'); s.add_argument('--schemas-only', action='store_true')
     for c in ('convert', 'install', 'undo'):
         x = sub.add_parser(c); x.add_argument('ids'); x.add_argument('--force', action='store_true') if c == 'install' else None
     a = ap.parse_args(argv)
     P = resolve(a.work, a.out, a.dd, a.dm)
+    if a.ui: P['ui'] = True
     if a.cmd == 'env':
         env, notes = converter_env(P)
         for k in sorted(notes): print('%s=%s    [%s]' % (k, env[k], notes[k]))
-        print('PYTHONPATH=%s    [shim for the left-out dmhud.py]' % env['PYTHONPATH'])
+        print('PYTHONPATH=%s    [shim for the left-out dmhud.py]' % env.get('PYTHONPATH', '(none: --ui uses the real dmhud.py)'))
         print('run tree=%s (from %s)' % (runtree(P['work']), VENDOR))
         return 0
     if a.cmd == 'status':
         cmd_status(P); return 0
     if a.cmd == 'setup':
-        n = stage_runtree(P['work']); print('run tree: %d file(s) written to %s' % (n, runtree(P['work'])))
+        n = stage_runtree(P['work'], P.get('ui')); print('run tree: %d file(s) written to %s' % (n, runtree(P['work'])))
         for name, sz in install_schemas(P['work']): print('schema %s %d bytes (kl-merge %s)' % (name, sz, SCHEMA_COMMIT))
         if a.schemas_only: return 0
         if not P['dd'] or not P['dm']: raise SystemExit('both game folders are needed (ANP_DD_GAME / ANP_DM_GAME or --dd/--dm)')
@@ -373,7 +389,7 @@ def main(argv=None):
         return subprocess.run([sys.executable, '-u', '-c', code], env=env, cwd=runtree(P['work'])).returncode
     ids = pick_ids(a.ids)
     if a.cmd == 'convert':
-        stage_runtree(P['work']); rc = 0
+        stage_runtree(P['work'], P.get('ui')); rc = 0
         for i in ids: rc = run_convert(i, P) or rc
         return rc
     if not P['dd']: raise SystemExit('Dog Days folder not found: --dd or ANP_DD_GAME')

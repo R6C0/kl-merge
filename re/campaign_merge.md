@@ -69,3 +69,6 @@ neutralised (teleport fallbacks only). Pause menu draw unverified.
 - Where an M-folder meets the F01 test slot: they do not collide; installing M01..M14 never changes F0x.
 - The klhook runtime modules are separate slices; until they exist the campaign levels have no crew orders, give, grenade, rappel, revive.
 - Disk: a full `all` build is several GB (C: has been tight; the work folder is on the DM drive, G:).
+
+## UI inside the campaign only (campaign-ui, 2026-11-10)
+luvsic's dmhud.py / dmfont.py run through `kl_campaign.py --ui` (per level archive, no ini key). His anp_menu.py is NOT used as a global menu replacement: `tools/kl_campui_menu.py` adds one Play-page row and two pages to a copy `<stem>_campui.zip`; klslot.c serves it only with `[CampaignUI] Menu=1` and `[Campaign] Enable=1`. anp_movie (intro .bik) and the Continue / Dead Dogs pages need his loader and are not ported. Kit: tools/campaign_ui_kit_1110 (stage.py, install.py, rehearse.py).

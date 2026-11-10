@@ -1,0 +1,12 @@
+; klcampui_logic.h + klslot.c (kls_campui) - luvsic's Dead Men UI, scoped to the campaign (branch campaign-ui, 2026-11-10).
+; Appended to KLHook.ini by tools/campaign_ui_kit_1110/install.py (its BLOCK is this text). NOT in klhook/KLHook.ini.
+; The per-level UI (Dead Men HUD art + typefaces) has NO key: it is baked into the converted M01..M14 level archives
+; (tools/kl_campaign.py --ui) and only ever loads with those levels.
+[CampaignUI]
+; Menu=1: the Play page (Main menu -> Play, where Resume / Single player / Online are) gets a fourth row "Dead Men Campaign"
+; -> New game / Chapters / Difficulty, luvsic's pages. The game opens Patch01*_campui.zip (tools/kl_campui_menu.py) instead of
+; Patch01*.zip. Needs [Campaign] Enable=1 (and Routing=1 so New game / Chapters start the converted level); with Enable=0 or no
+; _campui copy beside the archive the stock menu is used and one log line says so. Takes effect at the next game start
+; (the menu archive is re-opened at each menu load: GUESS). Every other menu, Arcade, FA and online are untouched.
+; (recommended on with the campaign installed)
+Menu=0

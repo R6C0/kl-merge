@@ -61,3 +61,5 @@ The runtime half is NOT built from here: KLHook ports each piece (other slices w
 
 `CLAUDE.md` rule for the legacy code patches in his loader (`0x6d100f`, `0x71166d` ...): NOT ported. KLHook SHIP builds write
 only import slots and data, never hashed code ranges.
+
+UI modules (tools/dmhud.py, dmfont.py, anp_menu.py, anp_movie.py) are vendored unchanged for `tools/kl_campaign.py --ui` and tools/kl_campui_menu.py only; the stock build still uses the shim (no UI).
