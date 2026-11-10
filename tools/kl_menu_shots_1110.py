@@ -308,6 +308,9 @@ def override_ini(variant, run, res):
     if run == 'match':
         s += 'Page=0\n'
     s += '[Echo]\nProbe=1\n[Menu]\nTableLog=1\n'
+    # 11-10 MENULOOK_DEADMEN_MENUS: 0 KLShot files - the device Present wrap counted 0 frames all run (ReShade owns Present);
+    # the d0 benches that got shots take them from ReShade's present (D3dShotPost=1, needs Bridge=1)
+    s += '[Memory]\nD3dShotPost=1\n[ReShade]\nBridge=1\n'
     s += '[Solo]\nW=%d\nH=%d\n' % (w, h)
     if run == 'match':
         s += '[Lobby]\nRows12=1\nMinPlayers=2\nPlayersMax=12\nPlayersAuto=1\nExtraSeats=1\nMaxPlayers=12\n'
