@@ -1996,8 +1996,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     knl_init();                                       /* klnetload.c: reads [NetLoad] */
     klinv_init();
     klcampsquad_init();                               /* klcampsquad.c: reads [CampSquad] (idle unless [Campaign] Enable=1) */
-    klcampgive_init();
-    klcampequip_init();                               /* klcampequip.c: reads [CampEquip] (idle unless [Campaign] Enable=1) */                                /* klcampgive.c: reads [CampGive] ([CampEquip] equip repair is NOT ported) */
+    klcampgive_init();                                /* klcampgive.c: reads [CampGive] ([CampEquip] equip repair is NOT ported) */
+    klcampequip_init();                               /* klcampequip.c: reads [CampEquip] (idle unless [Campaign] Enable=1) */
     klgrenade_init();                             /* klgrenade.c: after klinv_init (shares its user32 pointers) */
     klnetsmooth_init();
     klbk_init();                                      /* klbench_down.c: reads [Bench] SelfDownAt */
