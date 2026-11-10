@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~10:40 - [vault] DM03 blow-up vault NOT installed (out of the release pack). DM03VAULTK on stage_k (--no-arm) PASS: all 6 lanes blocked BOTH ways, the per-leaf slabs hold
+(side rule refuted). The stage_slab "leak" = the host pressed on the DOCK side fired the Arm box (edge 44 cm off the hinge plane) THROUGH the shut leaf, fuse 3 s, swing.
+Fix: Arm box moved to z -7250 (edge 2.9 m off; kl_dm03vault_1110 --arm-z, refuses < 1.5 m). stage_m on live 33361cd1: zip c71dbd01 / bots fce3ac2a / base e23f6545.
+Bench DM03VAULT_1110 (stage_m) waits for d0's release smoke ("game free").
 2026-11-10 ~09:00 - [d0] RELEASE LOAD SWEEP 13/13 PASS on the live frozen-pack files (TEST 03840ed0, nothing installed): DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B DM07 DM09 DM11B DD10 + stock control
 each loaded under its own rule, reached 0x19, stood 60 s, 0 asserts/faults/dumps. Control = DD06 (page 0 entry 4; kit re-pinned f609e1d9). Offline: every type-7 .prm root of all 26 live zips hits a .oct record start.
 Run: python tools/kl_bench_1106.py run load_<MAP> solo. DM01B door fix (C:/kl_build_1024/dm01bdoorfix_1110) still held until 81 says upload done.

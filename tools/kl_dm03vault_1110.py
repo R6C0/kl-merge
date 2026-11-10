@@ -12,7 +12,7 @@ Door A = the lobby-to-dock doorway at (0, 240, -6806): an EMPTY doorway today (n
      so the map total stays exactly 7,000,000; --loot L2 is NOT built (refused: needs loot clones, no node-clone path for loot objects here).
 No actor or squad is added (census unchanged). Both zips (plain + bots) are rebuilt the same way; Entries= of KLJoin.ini / KLGuns.ini follows the new .prm chunk count.
 
-  python tools/kl_dm03vault_1110.py stage [--in-dir DIR] [--out DIR] [--accept-input] [--fuse S] [--backstop S] [--loot L1|L2] [--keep-kick (diagnostic)] [--no-arm (diagnostic)] [--shared-slab (old build)] [--seam-hinges (both leaves face the lobby)]
+  python tools/kl_dm03vault_1110.py stage [--in-dir DIR] [--out DIR] [--accept-input] [--fuse S] [--backstop S] [--loot L1|L2] [--keep-kick (diagnostic)] [--no-arm (diagnostic)] [--arm-z Z (default -7250)] [--shared-slab (old build)] [--seam-hinges (both leaves face the lobby)]
 Default in-dir C:\kl_build_1024\dm03backswat_1110; restage on the live zip stage with --in-dir C:\kl_build_1024\dm03doorfix_1109 --accept-input (pins what it finds).
 """
 import collections, hashlib, json, math, os, re, shutil, statistics, struct, sys, tempfile
@@ -47,11 +47,10 @@ LEAF_W = 105.0                   # each of the two leaves
 DOOR_H = 240.0                   # GUESS: the virtual default; the opening height was not measured
 DOOR_STOCK_W = 120.0             # kl_interact_graft.DOOR_W
 # jamb pair: left hinge: the leaf lies along +x from it, so cx (free end -> hinge) = -x
-# Bench DM03VAULTK_1110 (stage_slab, walk dock -> lobby): the left leaf (frame turned 180 degrees) blocked, the right (identity frame) did not. Every walk that WAS
-# blocked (live doors 176 / 64 / 84 in DM03SHUT_1110, left vault leaf) came from the leaf's local -z side; the slab box is closed and symmetric, so the side rule is
-# the kick-door entity's, not the triangles' (GUESS: a shut kick door gives way from its back; to be proven by --no-arm lanes from the lobby). --seam-hinges: both
-# leaves in the identity frame (local -z = world -z = the LOBBY, where the Arm box and the heisters are), the left one hinged at the seam x 0 (it then swings into the
-# middle of the doorway on the blast). Default still the mirrored jamb pair.
+# Benches 11-10: the shut slabs HOLD both ways. stage_k (--no-arm) blocked all 6 lanes (dock lanes stop at z -6768, lobby lanes at -6856). On the armed stage_slab
+# (Arm centre z -7006, edge -6856) lane -50 stood at the leaf ~4 s and then went through, lanes 0 / 50 walked straight on: a heister pressed against the DOCK side of
+# the shut leaf fired the Arm box through the door (GUESS: the trigger tests a body volume wider than the capsule centre), Fuse 3 s, swing. The old "one leaf blocks,
+# the other not" reading was that. --seam-hinges: both leaves in the identity frame, the left one hinged at the seam x 0. Default the mirrored jamb pair.
 HOSTS_JAMB = [('at', (-HINGE_X, DOOR_Y, HINGE_Z), (-1.0, 0.0, 0.0)), ('at', (HINGE_X, DOOR_Y, HINGE_Z), (1.0, 0.0, 0.0))]
 HOSTS_SEAM = [('at', (0.0, DOOR_Y, HINGE_Z), (1.0, 0.0, 0.0)), ('at', (HINGE_X, DOOR_Y, HINGE_Z), (1.0, 0.0, 0.0))]
 HOSTS = HOSTS_JAMB
@@ -63,7 +62,7 @@ DOOR_CHILD_PB = 'KickDoor_Pathblocker_01'
 DOOR_CHILD_ACTION = 'KickDoor_Action_01'
 VAULT = 'KL_Vault!1'
 FUSE_S, BACKSTOP_S = 3.0, 240.0  # GUESS: 3 s of "something is about to go" after the Arm box, a 4 min backstop
-ARM_AT = (0.0, 340.0, -7006.0)   # lobby, 2 m in front of the door; GUESS: a nav cell
+ARM_AT = (0.0, 340.0, -7250.0)   # lobby, box edge 2.9 m in front of the hinge plane (was -7006: edge 44 cm off it, fired from the dock side); --arm-z overrides
 ARM_HALF = (150.0, 120.0, 150.0)
 # TriggerBox f10 (re-arm): -1 = fires ONCE, 0 = every enter edge (re/triggerbox.md). The clone of Respawn_Trigger already carries -1; it is pinned here on purpose (review 11-10):
 # every-edge would re-send the Fuse (a 2nd bang + the proxies/pathblockers again) each time a heister re-enters the box. GUESS: a spent one-shot box does not fire in round 2 (the Backstop
@@ -596,8 +595,11 @@ def main(a):
     if not a or a[0] != 'stage':
         print(__doc__); return 2
     opt = lambda k, d=None: a[a.index(k) + 1] if k in a else d
-    global KEEP_KICK, SLAB_EACH, HOSTS, NO_ARM
+    global KEEP_KICK, SLAB_EACH, HOSTS, NO_ARM, ARM_AT
     KEEP_KICK = '--keep-kick' in a
+    ARM_AT = (ARM_AT[0], ARM_AT[1], float(opt('--arm-z', ARM_AT[2])))
+    if ARM_AT[2] + ARM_HALF[2] > HINGE_Z - 150.0:
+        raise ValueError('--arm-z %s: the Arm box would reach within 1.5 m of the door (it fires through the shut leaf)' % ARM_AT[2])
     HOSTS = HOSTS_SEAM if '--seam-hinges' in a else HOSTS_JAMB
     NO_ARM = '--no-arm' in a
     SLAB_EACH = '--shared-slab' not in a

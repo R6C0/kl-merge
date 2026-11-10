@@ -43,7 +43,7 @@ K = {
 #   DM03VAULT_1110:  the host walks into KL_Vault!1\Arm -> 3 s Fuse -> Boom; doors sampled before/after, walk through the doorway, then
 #                    sampled again past 240 s (the Backstop TriggerDelay2 cannot be cancelled: does it replay the opening and snap the leaves?)
 #   DM03VAULTB_1110: nobody arms it; doors sampled at ~220 s and ~260 s from the round start: the Backstop alone opens them, quietly
-VAULT_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_slab'  # on d0's smartcops DM03 (33361cd1); one 6 cm slab per leaf (stage_sc = the old shared slab, walked through)
+VAULT_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_m'  # on d0's smartcops DM03 (33361cd1); stage_slab geometry, Arm box moved to z -7250 (11-10 ~10:30: at -7006 it fired through the shut leaf)
 for _k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
     K[_k] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-900:20', stage=VAULT_STAGE, tag='.before-dm03vault_1110')  # = the stage install.py TAG
 # DM03VAULTK_1110 (DIAGNOSTIC, never installed for play): stage_diag = the same vault built with --keep-kick (KickDoor controller + kick sound kept).
@@ -56,6 +56,12 @@ for _k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
 VAULT_DIAG_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_k'
 K['DM03VAULTK_1110'] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-300:20', stage=VAULT_DIAG_STAGE, tag='.before-dm03vault_1110')
 VAULT_LANES = (-50, 0, 50)
+# 11-10 stage_k (no Arm box) result: all 6 lanes blocked, both ways: the side rule is WRONG, the slab per leaf holds. The stage_slab leak at x 0/+50
+# was the host itself: pressed against the dock side of the shut leaf (body z -6768) it fired the Arm box (edge -6856) THROUGH the door, lane -50
+# stood ~4 s then went through (fuse 3 s), lanes 0/50 walked an open door. Not the bots (refuted), and the doorway children never move with a
+# MatPosAnimProxy swing, so "children unchanged" proves nothing. DM03VAULTL_1110 = that armed stage_slab, kept for the record; stage_m moves the Arm.
+VAULT_ARMED_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_slab'
+K['DM03VAULTL_1110'] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-300:20', stage=VAULT_ARMED_STAGE, tag='.before-dm03vault_1110')
 # DM03SHUT_1110 (no install, live DM03 33361cd1): do the kick doors ALREADY live (dm03doorfix_1109: own-leaf hosts 176, 64, 84) stop a walk while shut?
 # The vault's added type-4 slab did not (DM03VAULTK_1110, every lane). Blocked here = the vault failure is its own (virtual host, shared 4 cm shape);
 # walked through here = no added kick door blocks on any map. Door 176 is then kicked (kl_bench_1109 door_seg) and walked again as the open control.
@@ -64,17 +70,17 @@ SHUT_DOORS = [dict(host=176, hinge=[-3708, 300, -3217], front=[-3772, 300, -3125
               dict(host=64, hinge=[-4104, 300, -2979], front=[-4197, 300, -3042], back=[-4006, 300, -3039], axis=0),
               dict(host=84, hinge=[-4504, 300, -3222], front=[-4411, 300, -3158], back=[-4602, 300, -3161], axis=0)]
 K['DM03SHUT_1110'] = dict(map='DM03', slot='F03', shots='60-400:20', live={'F03_Main.zip': '33361cd1', 'F03_Main.bots.zip': '0bc8d138', 'KLJoin.ini': '5c02ca99'}, files={})
-ORDER = ['DM03BS_1110', 'DM03VAULT_1110', 'DM03VAULTB_1110', 'DM03VAULTK_1110', 'DM03SHUT_1110']
+ORDER = ['DM03BS_1110', 'DM03VAULT_1110', 'DM03VAULTB_1110', 'DM03VAULTK_1110', 'DM03SHUT_1110', 'DM03VAULTL_1110']
 VAN_STOP = (3306, 2, 4)
-# from the vault stage's build report (GUESS-labelled there): Arm box centre (0, 340, -7006) half (150, 120, 150); doorway hinges x +-105 at z -6812;
+# from the vault stage's build report (GUESS-labelled there): Arm box centre (0, 340, -7250) half (150, 120, 150) on stage_m (-7006 on stage_slab / stage_k); doorway hinges x +-105 at z -6812;
 # the moved piles at (0, 241, -6620), (120, 241, -6540), (200, 241, -6660)
-VAULT_LOBBY = (0, 248, -7300)       # floor + 8 (d0, LCDOORS 11-10: a +60 tele and a tele right after GO preceded a frozen walker); lobby side, south of the Arm box (box z -7156..-6856); checked on stage_sc nav: lobby, Arm, dock all over floor y 240, one part (122 cells within 3 m)
-VAULT_ARM = (0, -6980)
+VAULT_LOBBY = (0, 248, -6960)       # between the door and stage_m's Arm box (z -7400..-7100; a body 88 cm off a box edge fired it on stage_slab); floor + 8 (d0, LCDOORS 11-10: a +60 tele and a tele right after GO preceded a frozen walker); the stage_sc nav check (lobby, Arm, dock over floor y 240, one part) was at the old points: GUESS still floor
+VAULT_ARM = (0, -7250)
 VAULT_DOCK = (0, -6600)             # just past the doorway, dock side
-VAULT_WARM = (150, -7300)           # warm-up walk, 1.5 m east of the lobby tele (same floor part)
+VAULT_WARM = (150, -6960)           # warm-up walk, 1.5 m east of the lobby tele (same floor part)
 DOCK_Z = -6780                      # dock side of the doorway (hinges at z -6812)
 # closed-door control (run 1 11-10: the proxies/pathblockers never change in ents, so a walk-through alone cannot tell "opened" from "never blocked"):
-# from the dock side walk to just past the hinge plane, 10 cm radius so it stops short of the Arm box (z edge -6856) and never arms the fuse
+# from the dock side walk to just past the hinge plane, 10 cm radius (stage_slab: pressed against the leaf there the host DID arm the fuse through the door)
 VAULT_SHUT = (0, -6845)
 HINGE_Z = -6812
 # ents matches the node's OWN name (klauto.c kla_ents): the KL_Door_N group nodes never move; the blast / Backstop act on their children
@@ -87,7 +93,7 @@ def vault_pins():
     """Fill the two vault kits' live/files pins from the stage's install.py (its pinned input md5s -> output md5s) so `gen` and `run` check them.
     -> True when the stage exists and pins were read."""
     got = False
-    for k in ('DM03VAULT_1110', 'DM03VAULTB_1110', 'DM03VAULTK_1110'):
+    for k in ('DM03VAULT_1110', 'DM03VAULTB_1110', 'DM03VAULTK_1110', 'DM03VAULTL_1110'):
         p = '%s/install.py' % K[k]['stage']
         if not os.path.isfile(p):
             continue
@@ -131,16 +137,23 @@ def vault_seg(who, arm):
     return s
 
 
-def lanes_seg(who):
-    """DM03VAULTK_1110: the closed-door control walk in three lanes, nothing armed (the Backstop is 240 s away)."""
+def lanes_seg(who, lobby=True):
+    """DM03VAULTK_1110: the closed-door control walk in three lanes, nothing armed (the Backstop is 240 s away).
+    lobby=False (DM03VAULTL_1110, armed stage): dock lanes only, the doorway children sampled before and after each lane."""
     s = ['wait 3000'] + vault_doors('t0')
     if who != 'host':
         return s + ['wait 60000'] + vault_doors('client sample')
     s += ['waitstate 0x19 90000', 'wait 15000', 'tele %d %d %d' % (VAULT_WARM[0], VAULT_LOBBY[1], VAULT_DOCK[1]), 'wait 2500', 'pos vault-lobby',
           'goto %d %d 40 6000' % (VAULT_WARM[0] - 150, VAULT_DOCK[1]), 'pos vault-warm', 'log BENCH1110 vault warm-up walk (dock side)']
+    if not lobby:
+        s += vault_doors('before lanes')
     for x in VAULT_LANES:
         s += ['tele %d %d %d' % (x, VAULT_LOBBY[1], VAULT_DOCK[1]), 'wait 2500', 'pos vault-lane%d-0' % x,
               'goto %d %d 10 5000' % (x, VAULT_SHUT[1]), 'pos vault-lane%d' % x, 'log BENCH1110 vault control lane x %d' % x]
+        if not lobby:
+            s += vault_doors('after lane %d' % x)
+    if not lobby:
+        return s + ['wait 20000'] + vault_doors('after lanes')
     for x in VAULT_LANES:      # the other way: lobby -> dock (stage_k has no armed box in the lobby)
         s += ['tele %d %d %d' % (x, VAULT_LOBBY[1], VAULT_LOBBY[2]), 'wait 2500', 'pos vault-lobbylane%d-0' % x,
               'goto %d %d 10 5000' % (x, VAULT_DOCK[1]), 'pos vault-lobbylane%d' % x, 'log BENCH1110 vault lobby lane x %d' % x]
@@ -207,6 +220,8 @@ def segment(k, who):
         return vault_seg(who, k == 'DM03VAULT_1110')
     if k == 'DM03VAULTK_1110':
         return lanes_seg(who)
+    if k == 'DM03VAULTL_1110':
+        return lanes_seg(who, lobby=False)
     if k == 'DM03SHUT_1110':
         return shut_seg(who)
     if k == 'DM03BS_1110':
@@ -268,7 +283,7 @@ def vault_checks(k, a):
     i_before, i_after = at('before'), at('after')
     if arm:
         p = M.pos_of(a, 'vault-arm')
-        chk('host stood in the Arm box (|x| <= 150, z -7156..-6856)', bool(p) and abs(p[0]) <= 150 and -7156 <= p[2] <= -6856, 'pos %s' % (p,))
+        chk('host stood in the Arm box (|x| <= 150, z -7400..-7100)', bool(p) and abs(p[0]) <= 150 and -7400 <= p[2] <= -7100, 'pos %s' % (p,))
         ok = i_before is not None and i_after is not None
         ch = {e: vault_changed(r, i_before + 1, i_after + 1) for e, r in kids.items()} if ok else {}
         # GUESS: the MatPosAnimProxy swing moves the proxy node and/or the pathblocker gets hidden; if neither shows, the shots + the walk decide
@@ -313,15 +328,35 @@ def lanes_checks(k, a):
         chk('lane x %d: the shut doors stopped the walk (stayed z >= %d)' % (x, HINGE_Z), b, '%s -> %s' % (p0, p1), warn=True)
     v = dict(zip(VAULT_LANES, blocked))
     lob = []
-    for x in VAULT_LANES:
+    for x in (VAULT_LANES if k == 'DM03VAULTK_1110' else ()):
         p0, p1 = M.pos_of(a, 'vault-lobbylane%d-0' % x), M.pos_of(a, 'vault-lobbylane%d' % x)
         chk('lobby lane x %d: tele landed on the lobby side (z < %d)' % (x, HINGE_Z - 300), bool(p0) and p0[2] < HINGE_Z - 300, 'pos %s' % (p0,))
         b = bool(p0 and p1) and p0[2] < HINGE_Z - 300 and p1[2] <= HINGE_Z
         lob.append(b)
         chk('lobby lane x %d: the shut doors stopped the walk (stayed z <= %d)' % (x, HINGE_Z), b, '%s -> %s' % (p0, p1), warn=True)
     if any(M.pos_of(a, 'vault-lobbylane%d' % x) for x in VAULT_LANES):
-        info.append('LOBBY LANES: %s (side rule predicts {-50: False, 0: ?, 50: True} on the jamb pair)' % dict(zip(VAULT_LANES, lob)))
-    verdict = ('all lanes blocked: the controller (stripped on stage_sc) is what holds the shut slab' if all(blocked) else
+        info.append('LOBBY LANES: %s (all True on stage_k 11-10)' % dict(zip(VAULT_LANES, lob)))
+    if k == 'DM03VAULTL_1110':
+        def at(label):
+            return next((i for i, l in enumerate(a) if 'BENCH1110 vault %s' % label in l), None)
+        kids = vault_kid_states(a)
+        chk('vault doorway children sampled (2 leaf proxies + 2 pathblockers in the doorway box)', len(kids) >= 4, '%d' % len(kids))
+        i_b, leak, blown = at('before lanes'), [], []
+        for x, b in zip(VAULT_LANES, blocked):
+            i_a = at('after lane %d' % x)
+            ch = any(vault_changed(r, i_b + 1, i_a + 1) for r in kids.values()) if i_b is not None and i_a is not None else None
+            # changed by the end of this lane = the doors were opened (Arm box, i.e. a bot in the lobby, or the Backstop) before/while it walked
+            chk('lane x %d: the doorway children were still shut when it ended' % x, ch is False, 'changed' if ch else 'same' if ch is False else 'no rows', warn=True)
+            (blown if ch else leak if not b else []).append(x)
+        late = any(vault_changed(r, i_b + 1, len(a)) for r in kids.values()) if i_b is not None else False
+        arms = [l[:12] for l in a if 'FIRE box' in l]
+        info.append('ARMED LANES: through with the doors shut (a REAL leak) %s; with the doors already changed (blown first) %s; changed by the end %s; '
+                    'botfill FIRE box lines at %s' % (leak, blown, late, arms))
+        info.append('VERDICT: ' + ('the slab leaks while shut on lanes %s' % leak if leak else
+                                   'the slab holds; the vault was blown before lanes %s (who armed it: the bots, see the FIRE lines / shots)' % blown if blown else
+                                   'the slab holds on every lane, nothing blew'))
+        return res, info
+    verdict = ('all lanes blocked: the shut slabs hold both ways' if all(blocked) else
                'only the seam lane x 0 walked through: the slabs leave a gap at x 0' if not v[0] and v[-50] and v[50] else
                'no lane blocked: neither the controller nor the seam; the slab body itself does not stop the capsule' if not any(blocked) else
                'mixed: %s' % v)
@@ -363,7 +398,7 @@ def shut_checks(k, a):
 def item_checks(k, a, dd=(), ctrl=None):
     if k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
         return vault_checks(k, a)
-    if k == 'DM03VAULTK_1110':
+    if k in ('DM03VAULTK_1110', 'DM03VAULTL_1110'):
         return lanes_checks(k, a)
     if k == 'DM03SHUT_1110':
         return shut_checks(k, a)

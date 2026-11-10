@@ -1,3 +1,10 @@
+2026-11-10 ~10:40 - [vault] DM03VAULTK_1110 on stage_k (--no-arm, zip 2638fabc, TEST 03840ed0, 0 faults, undo byte-exact): all 6 lanes BLOCKED, dock lanes stop at z -6768,
+lobby lanes at -6856 = the per-leaf 6 cm slabs hold both ways; the "side rule" (08:45 note below) is refuted. The stage_slab leak: the host pressed on the dock side (body z -6768)
+fired the Arm box (centre -7006, edge -6856, 44 cm off the hinge plane z -6812) THROUGH the shut leaf (GUESS: trigger tests a body volume wider than the capsule centre);
+lane -50 goto took 4953 ms (held, fuse 3 s, swing, through), lanes 0/50 ~700 ms (already open). Bot-armed theory refuted; MatPosAnimProxy swings never move the "ents" kid
+positions, so "children unchanged" proves nothing. FIX: ARM_AT z -7250 (box z -7400..-7100, edge 2.9 m off), --arm-z overrides, refused within 1.5 m of the door.
+stage_m (C:/kl_build_1024/dm03vault_1110/stage_m, input live smartcops_1110/DM03 33361cd1): zip c71dbd01 / bots fce3ac2a / base e23f6545 / KLJoin e36d9f99 / KLGuns df4ee663;
+vs stage_slab only .gms/.oct/.prp differ (oct: slot 239 z only). Bench points re-set (lobby (0,248,-6960), arm (0,-7250)), all on nav. NOT installed; DM03VAULT_1110 waits for d0's smoke.
 2026-11-10 ~09:20 - [d0] DM01B DOOR FIX BENCH dm01bdoorfix1110: stage 476aec5f / a056edbd LOADS + plays on TEST 03840ed0 (0 faults/asserts/dumps, van called, script done; only the kit round-end 0x1f/0x20 check unmet = timing); undo byte-exact, live 778b075c kept. HELD for the next release (81 freeze). tools/kl_prmroot_check.py (cc1e8741) --live: 42 zips PASS.
 2026-11-10 ~09:00 - [d0] RELEASE LOAD SWEEP 13/13 PASS on the live frozen-pack files (TEST 03840ed0, nothing installed): DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B DM07 DM09 DM11B DD10 + stock control
 each loaded under its own rule, reached 0x19, stood 60 s, 0 asserts/faults/dumps. Control = DD06 (page 0 entry 4; kit re-pinned f609e1d9). Offline: every type-7 .prm root of all 26 live zips hits a .oct record start.
