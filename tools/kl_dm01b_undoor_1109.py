@@ -209,7 +209,12 @@ def model_leg(B, R, made, mat_octj, rep):
     dry, cmap = G.append(pS, pr, roots, mmap, None, tmap)
     pS.free = stubs[::-1]
     unref = lambda v: (v & ~1) - 4
-    held = mat_octj.record_refs()
+    # the live .prm roots hold the LIVE .oct's record offsets (octx), not mat_octj's: the room-tree edit (remap_ids + join_trees) moved every
+    # record by -16 bytes, and keying on mat_octj made this an identity map (oct_rerefs=0) -> 3640 stale roots, kl2 call through a junk vtable
+    # at 0x6ad1d9 on every DM01B load (dm01bdoorfix_1109, 11-10)
+    held = O.Oct.parse(B['.oct']).record_refs()
+    if len(held) != len(mat_octj.record_refs()):
+        raise ValueError('live .oct has %d records, the edited one %d: the record lists must match one to one' % (len(held), len(mat_octj.record_refs())))
     rec_d = {v: n for n, v in enumerate(octR.record_refs())}
     keep = sorted({rec_d[pr.u32(i, 0x1c)] for i, k in kinds.items() if k == 'root' and pr.u32(i, 0x1c)})
     octk, _same, refs_b = O.append_records(mat_octj, octR, cmap, keep)
@@ -224,6 +229,8 @@ def model_leg(B, R, made, mat_octj, rep):
             v = refs_a[struct.unpack_from('<I', c, 0x1c)[0]]
             if v != struct.unpack_from('<I', c, 0x1c)[0]:
                 pnew.chunks[i] = c[:0x1c] + struct.pack('<I', v) + c[0x20:]; moved += 1
+    if moved == 0 and held != octk.record_refs()[:len(held)]:
+        raise ValueError('the .oct records moved but no .prm root was re-referenced')
     pb = G.write(pnew)
     mat.refs = T.material_refs(pb, mat.ninst)
     rep['model'] = dict(roots=roots, closure=len(kinds), stubs_free=len(stubs), chunks_before=n0, chunks_after=len(pnew.chunks), oct_records=len(keep),
@@ -572,10 +579,23 @@ def check(out, live_dir=LIVE_DIR, ref_zip=REF_ZIP, hosts=DEFAULT, log=print):
         bad.append('a placement of a removed group REF is left in the .HVK')
     # 5. prm: the restored closure equals the pre-door one byte for byte (chunk numbers aside), nothing else changed
     pl, pn_, pr = G.read(L['.prm'], 'dd'), G.read(N['.prm'], 'dd'), G.read(R['.prm'], 'dd')
+    # type-7 model roots (+0x1c) must point at record starts of the NEW .oct (the 11-10 load crash: 3640 stale roots after the room-tree edit)
+    ol_, on_ = O.Oct.parse(L['.oct']).record_refs(), O.Oct.parse(N['.oct']).record_refs()
+    is_root = lambda c: c is not None and len(c) == 64 and c[:4] == b'\0\1\7\0'
+    r1c = lambda c: struct.unpack_from('<I', c, 0x1c)[0]
+    on_set = set(on_)
+    stale = sum(1 for c in pn_.chunks if is_root(c) and r1c(c) and r1c(c) not in on_set)
+    if stale:
+        bad.append('%d type-7 .prm roots point at no record start of the new .oct (stale refs: crash at 0x6ad1d9)' % stale)
+    rebase = dict(zip(ol_, on_))
     ch = [i for i in range(min(len(pl.chunks), len(pn_.chunks))) if pl.chunks[i] != pn_.chunks[i]]
     stub = [i for i in ch if pl.chunks[i] == bytes(16)]
-    if len(ch) != len(stub):
-        bad.append('%d chunks of the live .prm changed that were not stubs' % (len(ch) - len(stub)))
+    # a root whose only change is +0x1c moved to the same record in the new .oct is the expected re-reference
+    reref = [i for i in ch if is_root(pl.chunks[i]) and is_root(pn_.chunks[i]) and pl.chunks[i][:0x1c] == pn_.chunks[i][:0x1c]
+             and pl.chunks[i][0x20:] == pn_.chunks[i][0x20:] and rebase.get(r1c(pl.chunks[i])) == r1c(pn_.chunks[i])]
+    log('prm: %d stub chunks reused, %d roots re-referenced to the new .oct' % (len(stub), len(reref)))
+    if len(ch) != len(stub) + len(reref):
+        bad.append('%d chunks of the live .prm changed that were not stubs or root re-references' % (len(ch) - len(stub) - len(reref)))
     for n in hosts:
         rm_, nm_ = R.ents[HOSTS[n]['k'] - 1].model, nmodel[n]
         kr, _a = G.walk(pr, [rm_])

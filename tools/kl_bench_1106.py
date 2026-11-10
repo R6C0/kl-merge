@@ -355,6 +355,14 @@ KITS = {
                           solo_secs=600, parts=('solo',), shots='90-400:10'),
     # A/B 11-10 ~06:45: dm01blive1110 FAULT (5eab5ecc), dm01bprev1110 loaded and played (only the no-round-end 0x1f check failed) -> the doorfix map
     # is the crash; it was undone live (DM01B = 778b075c / dccc9250 / 6616525a again), so both pins above are stale now
+    # the doorfix rebuilt with the model_leg fix (held = the LIVE .oct's record refs: 3640 roots re-referenced, check() now proves every root hits a record start)
+    'dm01bdoorfix1110': dict(map='DM01B', slot='F03', page=3, entry=2, stage='C:/kl_build_1024/dm01bdoorfix_1110', tag='.before-dm01bdoorfix1110',
+                             live={'F03_Main.zip': '778b075c', 'F03_Main.bots.zip': 'dccc9250'},
+                             files={'F03_Main.zip': '476aec5f', 'F03_Main.bots.zip': 'a056edbd', 'F03_Main.bots.base.md5': '4272c0eb'},
+                             vancall=((None, None, None), (4118, 85, 32260)),
+                             hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                             ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                             solo_secs=600, parts=('solo',), shots='90-400:10'),
     'exitstrip_dm07': dict(map='DM07', slot='F06', page=3, entry=4, stage='C:/kl_build_1024/exitstrip_1110/DM07', tag='.before-exitstrip1110',
                            live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51'},
                            files={'F06_Main.zip': '852bda37', 'F06_Main.bots.zip': '9ac8b388', 'F06_Main.bots.base.md5': '52c1ee4e'},
