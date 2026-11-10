@@ -67,6 +67,12 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~00:55 - [06, offline] RELEASE ASSET NAME: Setup.bat downloads .../releases/latest/download/KLMerge_package.zip but pack_release.ps1 wrote only
+KLMerge_package_v<ver>.zip (+ a .sha1 naming that file); OWNER_RELEASE_STEPS had a manual copy step. pack_release now also writes KLMerge_package.zip (hard link) + its .sha1;
+steps say C:\kl_release (D: 1.2 GB free); launcher_test checks the name (fails on the old pack). Scratch pack x2 OK (11 files, 0 game files). Owner on the PC: no live run.
+2026-11-09 ~23:30 - [main] INSTALLED on owner "install all" (NOT benched; kl2 zombies 0 threads -> --skip-run-check): levelmusic_1109 (dll f016c36d -> 50d20cd1, ini 3513f01f -> 4cb8faa0),
+dm02coop_1109 timer (F02 43c088c2), dm03doorfix_1109 (F03 c586d445 -> 8e23cbd3), doors_revert_1109 (DM01 + DM03A), dm01bdoorfix_1109 (F03 5eab5ecc), dd10doorfix_1109 (F07 6aeb8208).
+Undo: UNDO ALL 1105.bat new step 0zb (maps) + levelmusic_1109\UNDO.bat (dll, FIRST before merged_1109land). Every kit's --undo --dry checked OK after install.
 2026-11-09 ~23:00 - [coop] DM02 CO-OP SHUTTERS staged, NOT installed: tools/kl_dm02coop_1109.py (+_test PASS, rehearsal PASS), stage C:\kl_build_1024\dm02coop_1109 (--variant timer DEFAULT 90 s | coop). The 3 Atrium_201a shutters (REF 24710/24711/24712) get F07-style KEYS (rise 300 cm, frames 0..82) + MatPosAnim, a type-4 HVK slab each, Open nodes -> MatPosAnimProxy; OpenNow keeps only the 2 frontages. Pins live zip bd119e9c, bots a5068fa0. timer zip 43c088c2 / bots bb8f04cb, coop zip 698fc59b / bots bd22461d. Proven offline: only prp/gms/buf/HVK members change, slots identical, static list + MOPP + order untouched, check.py 0 bad, check_passes PASS. GUESS: the keyed ZSTDOBJ still draws and its type-4 body follows it; needs the bench in the stage README.
 2026-11-09 ~18:30 - [main] KICK DOOR AUDIT (workflow, offline, adversarially verified) of every added door: DEAD (no room / sealed / bypassable) = DD10 19 of 21 (only 9 + 13 gate),
 DM01 957 + 2569, DM03A 6516 (+ older doors 1, 5), DM01B !1 D4 + !2 D2 (!1 D3 unclear). Real: DM01 1,2,4-7, DM02 all 6, DM05A both, DM01B !1 D2. DM06/06B/07/09/11B have none.

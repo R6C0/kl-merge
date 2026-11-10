@@ -63,7 +63,7 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
     and pick from C:\kl_build_1024\launcher_1109\theme_candidates: M01_Loading_Kane_Family_Theme, M14_Kill_Start, M14_End, M13B_Kane_Drive_Loop,
     FA_SlashMixPrison (str clips) + movie_M00_Intro / movie_Trailer / movie_Attract01 (Bink audio, ffmpeg-decoded). A str clip -> CANDIDATES[0];
     a movie-only theme needs a Bink audio path (ffmpeg only, or a decoder) -> owner decides. Side fix bceab0fc: listed PCM lengths were double.
-  Owner: pick the public release host (a private repo's release assets need a token) and set RELEASE_URL in "KLMerge Setup.bat"; tell testers Dead Men must be installed.
+  Owner: release host DECIDED 11-09 (public releases-only repo R6C0/dead-men-rising; RELEASE_URL in "KL Dead Men Rising Setup.bat" is final); tell testers Dead Men must be installed.
 
 ### T9 IN-GAME MENU LOOK = DEAD MEN (owner 11-09 ~19:10, "huge ask", after liking the launcher theme) - cloud designs + stages offline, local benches
 Owner's words: "overhaul the whole in game menu UI to make it feel more like dead men too, even the menu button sounds; also in settings make a button for the mod

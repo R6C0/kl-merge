@@ -87,4 +87,14 @@ $sha = (Get-FileHash -LiteralPath $Zip -Algorithm SHA1).Hash.ToLower()
 Set-Content -LiteralPath ($Zip + '.sha1') -Value ($sha + '  ' + (Split-Path -Leaf $Zip)) -Encoding ASCII
 Write-Host ('zip: {0:N1} MB, sha1 {1}' -f ((Get-Item -LiteralPath $Zip).Length / 1MB), $sha)
 Remove-Item -LiteralPath $stage -Recurse -Force
-Write-Host 'Upload the zip, set RELEASE_URL in "KL Dead Men Rising Setup.bat" to its download link, and hand out that .bat only.'
+# the upload name: the Setup bat's RELEASE_URL is .../releases/latest/download/KLMerge_package.zip, so the release asset must
+# be called exactly that. Hard link beside the versioned zip (same bytes, no extra disk), a copy when linking fails.
+$upload = Join-Path (Split-Path -Parent $Zip) 'KLMerge_package.zip'
+if ($upload -ne $Zip) {
+    if (Test-Path -LiteralPath $upload) { Remove-Item -LiteralPath $upload }
+    try { New-Item -ItemType HardLink -Path $upload -Target $Zip -ErrorAction Stop | Out-Null }
+    catch { Copy-Item -LiteralPath $Zip -Destination $upload }
+    Set-Content -LiteralPath ($upload + '.sha1') -Value ($sha + '  KLMerge_package.zip') -Encoding ASCII
+}
+Write-Host ('upload: ' + $upload + ' (+ .sha1) - the release asset name RELEASE_URL asks for (OWNER_RELEASE_STEPS.md section 4)')
+Write-Host 'Hand out "KL Dead Men Rising Setup.bat" only; its RELEASE_URL never changes.'

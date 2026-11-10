@@ -1,3 +1,6 @@
+2026-11-10 ~00:55 - [06, offline] RELEASE ASSET NAME: Setup.bat downloads .../releases/latest/download/KLMerge_package.zip but pack_release.ps1 wrote only
+KLMerge_package_v<ver>.zip (+ a .sha1 naming that file); OWNER_RELEASE_STEPS had a manual copy step. pack_release now also writes KLMerge_package.zip (hard link) + its .sha1;
+steps say C:\kl_release (D: 1.2 GB free); launcher_test checks the name (fails on the old pack). Scratch pack x2 OK (11 files, 0 game files). Owner on the PC: no live run.
 2026-11-09 ~19:00 - [doors] DD10 DOOR FIX staged, NOT installed: tools/kl_dd10_doorfix_1109.py (+_test PASS), kit C:/kl_build_1024/dd10doorfix_1109/kit (zip 1a0d94b0 -> 6aeb8208, bots 27c9fae8 -> 5d552344, base 11a071b3 -> 73609d8c; KLJoin untouched).
 19 dead kick doors (live 1-8,10-12,14-21) are the plain stock door again (19/19 leaves byte-equal to the pre-doors map); kept 9 (1854, back room has no nav) + 13 (6996); NEW 1941 (gates 990/1678 cells) + 6989 (215/1058).
 Dropped: 2601 (3 cells lost at SpawnPoint_Dead_01 only together with the kept pair), 2633/3042/3105/5526/5777/5778/5780 clearance, 3102 spawn, 7749/7753 gate nothing, 10942 named by a controller. Scratch install/2nd refused/undo byte-exact OK. Not benched.
