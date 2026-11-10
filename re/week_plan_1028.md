@@ -73,6 +73,14 @@ click / confirm / back sounds; an in-game Mod Options row "Dead Men menu look (r
 redirect rules; DEFAULT ON. Order: (1) research + design re/menu_look_1109.md, (2) stage-1 tool fonts + colours (reuse kl_hud build_font / kl_hud_menu), (3) plates/
 backgrounds, (4) sounds, (5) toggle. Ships AFTER the Wed tester build unless (2) is cheap and benched; never replaces stock files (themed copies + redirect).
 - 11-09 19:10 cloud: claimed research + design + stage-1 tool (offline, self-tests; nothing installed).
+- 11-10 00:20 cloud CLAIM: FULL REDESIGN = T9 stages 2+3 (owner 00:05: "did you not do a full redesign?"): re-flow of the EXISTING widgets (X Y W H / alignment, no new
+  table entries) to the launcher's layout + themed pictures (brush bars, torn-smear plates, grainy backgrounds, dirty photo frames for the map pictures) baked into a themed
+  copy of the menu scene, behind the same [MenuLook] toggle. Order: mocks of main menu / Arcade page / lobby / pause / shop for the owner's OK -> tools/kl_menu_layout_1110.py
+  (stage, pins, undo) -> local bench. NEEDS from ONE local session (prompt given to the owner): (a) re/menu_look_inventory_1110.md = every Window + GuiElement of
+  frontend.xml / ingame.xml / online.xml (name, Type, X Y W H, AlignH/V, Font, ColorSet, picture/entity refs) from the LIVE overlay + the menu scene's ZWINPIC/ZWINGROUP
+  picture entities with texture sizes (kl_menu_look_1109.py inventory + kl_hud_menu / kl_scene), (b) screenshots of the stock and the installed stage-1 menus
+  (main, Arcade pages, Heister, Guns, Mod settings, Options, lobby, pause, shop I/II/hire, MOD CONTROLS) into C:\kl_build_1024\menulook_1109\shots\, (c) the ML1/ML5 bench
+  of what is installed (00:10). Nobody else re-layouts the menus meanwhile; width/clipping fixes to stage 1 are fine.
 - 11-09 19:50 cloud: DESIGN + STAGE-1 TOOL DONE (offline): re/menu_look_1109.md, tools/kl_menu_look_1109.py (inventory | stage | check; colour sets + 8 menu-scene fonts,
   Patch01.zip AND Patch01_rows12.zip, pins via --accept-input, install.py/UNDO byte-exact), _test 105/0. LOCAL SESSION NEXT: `python tools\kl_menu_look_1109.py inventory`
   on the live overlay, then `stage --accept-input`, read widths.txt (clipped rows), bench M1 (main menu / Arcade pages / Mod settings / lobby / pause shots) with the
