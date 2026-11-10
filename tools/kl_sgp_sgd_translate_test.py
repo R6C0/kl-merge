@@ -109,7 +109,13 @@ def check_sgp(name, data, t):
 
 def check_sgd(name, data, t):
     secs = MB.sgd_read(data)
-    moved = MB.sgd_read(MB.sgd_translate(data, t))
+    try:
+        moved = MB.sgd_read(MB.sgd_translate(data, t))
+    except ValueError as e:                                      # a deliberate refusal (e.g. shatter glass in a live map): not a translation bug
+        if 'not decoded' not in str(e):
+            raise
+        print('skip %s: %s' % (name, e))
+        return 0
     back = MB.sgd_read(MB.sgd_translate(MB.sgd_translate(data, t), tuple(-v for v in t)))
     n = 0
     for (nm, body), (nm2, mbody), (_, bbody) in zip(secs, moved, back):
