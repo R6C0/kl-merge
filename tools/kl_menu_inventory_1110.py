@@ -44,6 +44,11 @@ def parse(xml):
             if n in templates:
                 dupes += 1
             templates[n] = a
+            # a tag with a DUPLICATE Name attribute (online.xml: Name="ScreenBaseSize" Name="ScreenBaseSize(SafeFrame)") is
+            # registered under every value; which one the exe keeps is a GUESS (dict() alone kept only the last).
+            for k, v in t.attrs:
+                if k == 'Name' and v != n:
+                    templates.setdefault(v, a)
 
     def effective(own):
         chain, seen, cur = [], set(), own.get('Template')

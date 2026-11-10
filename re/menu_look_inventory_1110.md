@@ -42,7 +42,7 @@ The hook log (DD `KLHook.log`, 00:33) shows `menulook:` redirect lines (Patch01 
 | frontend.xml, Patch01_rows12 | 131 | 3625 | 53 | 471 | 331 (14) |
 | frontend.xml, Patch01 | 131 | 3615 | 53 | 471 | 331 (14) |
 | ingame.xml (both zips) | 55 | 1281 | 28 | 232 | 145 (15) |
-| online.xml (scene) | 40 | 1402 | 39 | 424 | 171 (3) |
+| online.xml (scene) | 40 | 1402 | 39 | 424 | 173 (3) |
 
 frontend rows12 vs Patch01 differ in 3 windows: FALobby 297 vs 277 elements (rows-12 lobby), KLGuns 50 vs 58, HeistPlayMenu3 25 vs 27.
 Raw `<GuiElement>` open tags: frontend 4096 (= 3625 + 471), ingame 1514, online 1826.
@@ -102,3 +102,10 @@ on the game folder. Open for the PC session.
 5. The 7 empty pictures are DD stubs; drawing them needs sprite chunks.
 6. `GameLogoFA` differing from the un-themed scene is a re-encode.
 7. The static table count 4793 is an estimate; no live TableLog run exists.
+
+## 8. Verification pass (2026-11-10, adversarial, offline, no crash involved)
+
+Re-counted from the live zips with an independent regex (comments stripped): 131 / 55 / 40 Windows and 4096 / 1514 / 1826 GuiElement open tags; the per-window element count of EVERY window matches the headings (0 mismatches in all three tables).
+Spot-checked against the raw XML + Template tags: CoopOnline, IngameQuit, DifficultyScreen, QuickPlayerMatch, FAGTDieRespawnTip, ExitMenu, FAWaitForPlayers (X Y W H, Align, Font, ColorSet, Priority all equal). Texture records 732, 733, 440, 441, 376, 373: w x h x bytes/px + 41-byte header = entry length (ABGR 4, DXT3 1, DXT5 1), as listed.
+ERROR FOUND AND FIXED: online.xml defines `<Template Name="ScreenBaseSize" Name="ScreenBaseSize(SafeFrame)" ...>` (duplicate Name attribute). The first tool run kept only the last Name, so all 40 ScreenBaseSize groups of `online.md` showed blank X/Y/W/H/Align. The tool now registers the template under every Name value; `online.md` regenerated (42 lines changed). WHICH name the exe keeps is a GUESS; the other files carry one Name and are unaffected.
+Note (not an error): the `WindowDialog` template has ScaleToViewPort=False, so dialog windows are not stretched by the 1280x720 rule in section 5; `WindowDefault` has True. The 1920x1080 factor stays a GUESS.
