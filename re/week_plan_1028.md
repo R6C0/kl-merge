@@ -26,6 +26,12 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-10 ~03:15 f0 (kl-merge-81): steps 1-4 + 6 DONE on the current live set, step 5 (Setup e2e from the real URL) waits for the upload. make -> C:\kl_release\pkg_1110 (core re-made from
+  core_snap_0215 with the SHIP dll 38104558; the live dll was a peer's TEST twin at the first try). checklive: only dinput8.dll differs (a bench's TEST dll in place). pack: 650 files, zip 3.68 GB.
+  Scratch-DD rehearsal (C:\kl_release\rehearse_dd, stock refs hard-linked/copied; 8 groups, 387 files incl. PC_Def.str 1.8 GB): install exit 0 (409 s), verify 0 problems, uninstall byte-exact.
+  BLOCKER: 3.68 GB > GitHub's 2 GiB per asset. Fix in progress (06): patch each <map>.bots.zip against the just-built main zip (ref kind out:, ~0.4 MB each instead of ~75 MB) -> ~1.89 GiB, one asset,
+  Setup.bat unchanged. Then: re-make map groups (d0's lcdoors/DM02 combo/smart cops/1110f if live by ~10:00), checklive, repack, rehearse again, upload (owner), Setup e2e.
+  make now runs kl_ini_shipcheck on the shipped KLHook.ini (WARN lines, never stops). Owner decisions: the 7 WARN keys; menu look files in/out; literal stock bytes in a PUBLIC release (06's point).
 - 11-10 ~03:35 scheduled (cloud, offline): the "Owner: shipped-ini review" item has a tool: `python tools\kl_ini_shipcheck.py "<DD>\KLHook.ini" [--notes]` (sample = klhook/KLHook.ini; exit 1 on
   ERROR/WARN). Live ini 02:19: 0 ERROR, 7 WARN (CarDown Dry=1 dry run on every tester; [Brain] RayAim/HolderSet/CombatFlag "TEST build only"; FireLine=2/DefendPull=2/OnlineBrainBoard=1 log modes),
   73 FEAT (sample says off-until-benched; stale comments), 47 Log=1/probe keys incl. OnlineTagProbe + ReplicaProbe (both "recommended on" in the sample), [Campaign]+Camp* undocumented, 7 comment

@@ -1002,6 +1002,7 @@ def cmd_make(a):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(t['live'], dst)
             t['live'] = dst
+    shipcheck_ini(mk, T)
     groups = {}
     for t in T:
         groups.setdefault(t['group'], []).append(t)
@@ -1072,6 +1073,25 @@ def cmd_make(a):
     if mk.pd2_skipped:
         print('NOT SHIPPED (Payday 2 audio):', ', '.join(mk.pd2_skipped))
         json.dump(mk.pd2_skipped, open(os.path.join(out, 'parts', '_pd2_skipped.txt'), 'w'))
+
+
+def shipcheck_ini(mk, T):
+    """make only: grade the KLHook.ini about to ship with tools/kl_ini_shipcheck.py (ERROR/WARN -> mk.warn, never stops
+    the make: what ships is the owner's call). The installer half travels without that tool, hence the guarded import."""
+    t = next((t for t in T if t['rel'] == 'KLHook.ini'), None)
+    if t is None:
+        return
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import kl_ini_shipcheck as sc
+        live = open(t['live'], encoding='latin1').read()            # same reading as kl_ini_shipcheck.main
+        sample = open(sc.SAMPLE, encoding='latin1').read()
+    except (ImportError, OSError) as ex:
+        mk.warn.append('KLHook.ini shipcheck skipped (%s)' % ex)
+        return
+    for lvl, sec, key, val, n, why in sc.check(live, sample):
+        if lvl in ('ERROR', 'WARN'):
+            mk.warn.append('KLHook.ini shipcheck %s line %d [%s] %s=%s: %s' % (lvl, n, sec, key, val.strip(), why))
 
 
 def cmd_checklive(a):

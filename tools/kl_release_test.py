@@ -218,6 +218,25 @@ def main():
         check(T['Scenes/kaneandlynch_deadmen.WAV'].get('refs') == ['dd:Scenes/kaneandlynch.WAV'], 'G themed bank patched against its stock bank')
         check(T['Scenes/other_deadmen.WHD']['kind'] == 'lit' and T['Scenes/kaneandlynch_deadmen.klms']['kind'] == 'lit', 'G no stock sibling -> literal')
 
+        # H: make grades the KLHook.ini it ships (warnings only), and a missing shipcheck tool never stops it
+        hini = os.path.join(base, 'h_KLHook.ini')
+        open(hini, 'wb').write(b'[CarDown]\r\nDry=1\r\n')
+        hm = type('M', (), dict(warn=[]))()
+        R.shipcheck_ini(hm, [dict(rel='KLHook.ini', live=hini)])
+        check(any('[CarDown] Dry=1' in w for w in hm.warn), 'H shipcheck WARN on Dry=1 (got %s)' % hm.warn)
+        hm.warn = []
+        R.shipcheck_ini(hm, [dict(rel='Other.ini', live=hini)])
+        check(hm.warn == [], 'H no KLHook.ini in the make: nothing graded')
+        saved = sys.modules.pop('kl_ini_shipcheck', None)
+        sys.modules['kl_ini_shipcheck'] = None                       # import now raises ImportError (tool not packed)
+        try:
+            R.shipcheck_ini(hm, [dict(rel='KLHook.ini', live=hini)])
+        finally:
+            del sys.modules['kl_ini_shipcheck']
+            if saved:
+                sys.modules['kl_ini_shipcheck'] = saved
+        check(len(hm.warn) == 1 and 'skipped' in hm.warn[0], 'H tool missing -> one "skipped" warning, no stop')
+
         # F: a fresh install points the ini's game folders at this PC; verify, re-install and uninstall accept it as ours
         check_localize()
         pd2 = os.path.join(base, 'p1', 'PAYDAY 2'); os.makedirs(pd2)

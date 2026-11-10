@@ -2,6 +2,10 @@
 DM03 8e23cbd3 -> a81ede87, bots e8c06e13, base afc6ca40, KLJoin 5c02ca99 untouched. Undo: python C:/kl_build_1024/dm03backswat_1110/install.py --undo --skip-run-check (backups *.before-dm03backswat_1109).
 DM03 chain agreed with d0: back-SWAT -> d0 smartcops re-staged on a81ede87 -> vault (tools/kl_dm03vault_1110.py cc3702a5, stage on a81ede87, NOT benched) re-staged on smartcops. Vault review: a detour via the security hall stays open (shortcut, not a gate: owner call); 240 s Backstop may replay the opening after an early blast (bench must check).
 
+2026-11-10 ~03:15 - [f0, T0] PACKAGE MADE + REHEARSED, NOT uploaded: C:/kl_release/pkg_1110 (823 files, 635 patches, installs 13.13 GB; core = SHIP 38104558 + ini a08b6110), packed
+KLMerge_package_v1.0.0.zip 3.68 GB sha1 dd8cc7df (+ KLMerge_package.zip link). Scratch-DD rehearsal (core,audio,overlay,pcdef,stockwav,DD01,DM07,DM09 = 387 files): install exit 0 in 409 s, verify 0 problems, uninstall byte-exact (4 empty KL_PortBackup dirs remain).
+BLOCKER: GitHub caps an asset at 2 GiB. 06 is writing bots.zip-vs-main-zip patches ('out:' refs, ~1.89 GiB total) -> re-make map groups + repack. d0 map stages (lcdoors, DM02 combo, smart cops, dll 1110f) ride it if installed by ~10:00.
+make now prints kl_ini_shipcheck ERROR/WARN (never stops). Owner: 7 WARN ini keys, menu look in/out, literal stock bytes in a PUBLIC release (06).
 2026-11-10 ~03:35 - [scheduled check-in, cloud, offline] SHIPPED-INI REVIEW TOOL for T0: tools/kl_ini_shipcheck.py (+_test 44/0, in kl_tests --py) grades a KLHook.ini by the repo sample's own
 "(recommended on/off)" / "TEST build only" / "diagnostic" comments: ERROR owner paths in values, WARN diagnostics/TEST-only on + [Auto]/[Bench]/[Script]/[Solo] beyond the sample, FEAT off-until-benched
 features (listed, never fails), one 'logging on' line. Live ini (02:19 copy, bench_1110/DM03BS_1110/KLHook_base.ini): 0 ERROR, 7 WARN (CarDown Dry=1 dry run; [Brain] RayAim/HolderSet/CombatFlag
