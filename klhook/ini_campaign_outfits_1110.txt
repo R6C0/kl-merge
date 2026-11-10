@@ -1,0 +1,11 @@
+; ini_campaign_outfits_1110.txt - the [Wardrobe] CampaignOutfits key for klhook\KLHook.ini (peer-dirty: paste it under the existing [Wardrobe] keys, or let tools\kl_mod_options.py write the row; check-ini reads this file as a companion)
+; (hook: klhook/klchar.c + klcampaign_outfits_logic.h, 1110)
+; CampaignOutfits: the Dead Men campaign outfits (KLWardrobe.ini characters 17 .. : Retomoto window-cleaner Kane / Lynch, Vaultbreaker, the Squad of 7 ...)
+; are usable: KLHook.ini [Character] Char=17..32 and the random crew draw (klcrew). 0 = the table is cut to the first 16 characters. (recommended on)
+; Heister page: with CampaignOutfits=1 the Character row has 33 entries (0..32; overlay_stage of C:\kl_build_1024\outfits_1110 extends the plain AND the _deadmen Patch01 menus); 0 = the page still lists the 33
+; entries but the hook stops the spinner at entry 17 (0..16) and F9 cycles 0..16. A pick above a map's own character count is the game's own body (logged once as 'fewer characters than that').
+; NEEDS THE NEW DLL FIRST: an old dll refuses a KLWardrobe.ini with more than 16 characters (stock looks), so install the map stage only after the dll.
+; A map's KLWardrobe.ini lists exactly the outfits that fit in that map's .prm (tools/kl_outfits_1110.py), so the numbers differ per map; a Char= the map lacks is the game's own.
+
+[Wardrobe]
+CampaignOutfits=1   ; (recommended on) 1 = campaign outfits 17..32 usable; 0 = first 16 characters only

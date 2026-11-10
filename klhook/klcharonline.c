@@ -351,7 +351,7 @@ static void klco_keys(DWORD now)
             if (klcow.groupKeys && alt && !ctrl) grp = 1;                             /* [CharOnline] GroupKeys: Alt+F11 = next mask group */
         }
         if (which >= 0) {
-            int span = which == 0 ? KLC_NCHAR + 1 : which == 1 ? KLC_MASKS + 2 : KLC_OUTFITS;
+            int span = which == 0 ? klc_upper_of(0) + 1 : which == 1 ? KLC_MASKS + 2 : KLC_OUTFITS;
             int v = grp ? kwl_next_group(which, (int)*klc_value[which], step) : (int)*klc_value[which] + step; char s[16];
             if (which == 0 && klco.ignoreChar) { static int told; if (!told++ || klco.log) klog("charonline: hire on: F9 (heister) ignored, as in Arcade; the body is the game's own or the hired one (F11 mask / Ctrl+F11 outfit still work)"); dC = c; dM = m; return; }
             v = ((v % span) + span) % span;

@@ -39,16 +39,20 @@ static const char *const want_outfit[24] = {
 int main(void)
 {
     int i, g, w; char b[100], big[16];
-    CHECK(kwl_span(KWL_CHAR) == 17); CHECK(kwl_span(KWL_MASK) == 14); CHECK(kwl_span(KWL_OUTFIT) == 24); CHECK(kwl_span(5) == 0);
+    CHECK(kwl_span(KWL_CHAR) == 33); CHECK(kwl_span(KWL_MASK) == 14); CHECK(kwl_span(KWL_OUTFIT) == 24); CHECK(kwl_span(5) == 0);
     /* outfit names == kl_chars.outfit_name */
     for (i = 0; i < 24; i++) { kwl_name(KWL_OUTFIT, i, b, sizeof b); CHECK(!strcmp(b, want_outfit[i])); }
-    /* characters: every one is tagged; Kane / Lynch are DEAD MEN (index 9, 10 -> counter 10/17, 11/17) */
-    SEQ(l, KWL_CHAR, 0, "1/17  Game default");
-    SEQ(l, KWL_CHAR, 1, "2/17  DOG DAYS: J.C.");
-    SEQ(l, KWL_CHAR, 8, "9/17  DOG DAYS: Mitchel");
-    SEQ(l, KWL_CHAR, 9, "10/17  DEAD MEN: Kane");
-    SEQ(l, KWL_CHAR, 10, "11/17  DEAD MEN: Lynch");
-    SEQ(l, KWL_CHAR, 16, "17/17  DEAD MEN: Hutchison");
+    /* characters: every one is tagged; Kane / Lynch are DEAD MEN (index 9, 10 -> counter 10/33, 11/33) */
+    SEQ(l, KWL_CHAR, 0, "1/33  Game default");
+    SEQ(l, KWL_CHAR, 1, "2/33  DOG DAYS: J.C.");
+    SEQ(l, KWL_CHAR, 8, "9/33  DOG DAYS: Mitchel");
+    SEQ(l, KWL_CHAR, 9, "10/33  DEAD MEN: Kane");
+    SEQ(l, KWL_CHAR, 10, "11/33  DEAD MEN: Lynch");
+    SEQ(l, KWL_CHAR, 16, "17/33  DEAD MEN: Hutchison");
+    SEQ(l, KWL_CHAR, 17, "18/33  CAMPAIGN: Kane - window cleaner (Retomoto)"); SEQ(l, KWL_CHAR, 32, "33/33  CAMPAIGN: Retomoto boss");
+    for (i = 17; i <= 32; i++) CHECK(kwl_group(KWL_CHAR, i) == KWL_G_CAMPAIGN);
+    CHECK(kwl_group(KWL_CHAR, 33) == KWL_G_DEFAULT);       /* past the table: no group, never an index past kwl_chars */
+    kwl_name(KWL_CHAR, 33, b, sizeof b); CHECK(!strcmp(b, "?"));
     for (i = 1; i <= 8; i++) CHECK(kwl_group(KWL_CHAR, i) == KWL_G_DOGDAYS);
     for (i = 9; i <= 16; i++) CHECK(kwl_group(KWL_CHAR, i) == KWL_G_DEADMEN);
     /* masks */
@@ -62,22 +66,22 @@ int main(void)
     SEQ(l, KWL_OUTFIT, 0, "1/24  DEAD MEN: Plain clothes");
     SEQ(l, KWL_OUTFIT, 23, "24/24  DEAD MEN: Heavy armour, black shirt, black balaclava");
     /* out of range never overruns and says so */
-    SEQ(l, KWL_CHAR, -1, "?/17  ?"); SEQ(l, KWL_MASK, 14, "?/14  ?"); SEQ(l, KWL_OUTFIT, 99, "?/24  ?");
+    SEQ(l, KWL_CHAR, -1, "?/33  ?"); SEQ(l, KWL_MASK, 14, "?/14  ?"); SEQ(l, KWL_OUTFIT, 99, "?/24  ?");
     kwl_label(KWL_OUTFIT, 23, big, sizeof big); CHECK(strlen(big) == 15);   /* truncated, terminated */
     kwl_label(KWL_OUTFIT, 23, big, 0);                                      /* cap 0: no write, no crash */
     /* every label fits the 96-character HUD buffer of klcharonline.c, with the hint */
     for (w = 0; w < 3; w++) for (i = 0; i < kwl_span(w); i++) { kwl_hud(w, i, b, sizeof b); CHECK(strlen(b) < 96); CHECK(strstr(b, "/") != NULL); }
-    kwl_hud(KWL_CHAR, 9, b, sizeof b); CHECK(!strcmp(b, "HEISTER 10/17  DEAD MEN: Kane"));
+    kwl_hud(KWL_CHAR, 9, b, sizeof b); CHECK(!strcmp(b, "HEISTER 10/33  DEAD MEN: Kane"));
     kwl_hud(KWL_MASK, 10, b, sizeof b); CHECK(!strcmp(b, "MASK 11/14  PAYDAY 2: Wolf  (Ctrl+key: outfit)"));
     kwl_hud(KWL_OUTFIT, 4, b, sizeof b); CHECK(!strcmp(b, "OUTFIT 5/24  DEAD MEN: Plain clothes, black shirt  (key: mask)"));
     /* Shift: 22 steps back from 0 = 23; back from 0 wraps to the last */
-    CHECK(kwl_wrap(0, -1, 24) == 23); CHECK(kwl_wrap(23, 1, 24) == 0); CHECK(kwl_wrap(0, -1, 17) == 16); CHECK(kwl_wrap(5, -1, 14) == 4);
+    CHECK(kwl_wrap(0, -1, 24) == 23); CHECK(kwl_wrap(23, 1, 24) == 0); CHECK(kwl_wrap(0, -1, 33) == 32); CHECK(kwl_wrap(5, -1, 14) == 4);
     { int v = 0; for (i = 0; i < 22; i++) v = kwl_wrap(v, -1, 24); CHECK(v == 2); for (i = 0; i < 24; i++) v = kwl_wrap(v, -1, 24); CHECK(v == 2); }
     CHECK(kwl_wrap(0, -1, 0) == 0);
-    /* group jumps, characters: DEFAULT(0) -> DOG DAYS(1) -> DEAD MEN(9) -> DEFAULT(0), and back */
+    /* group jumps, characters: DEFAULT(0) -> DOG DAYS(1) -> DEAD MEN(9) -> CAMPAIGN(17) -> DEFAULT(0), and back */
     CHECK(kwl_next_group(KWL_CHAR, 0, 1) == 1); CHECK(kwl_next_group(KWL_CHAR, 1, 1) == 9); CHECK(kwl_next_group(KWL_CHAR, 5, 1) == 9);
-    CHECK(kwl_next_group(KWL_CHAR, 9, 1) == 0); CHECK(kwl_next_group(KWL_CHAR, 16, 1) == 0);
-    CHECK(kwl_next_group(KWL_CHAR, 0, -1) == 9); CHECK(kwl_next_group(KWL_CHAR, 9, -1) == 1); CHECK(kwl_next_group(KWL_CHAR, 12, -1) == 1);
+    CHECK(kwl_next_group(KWL_CHAR, 9, 1) == 17); CHECK(kwl_next_group(KWL_CHAR, 16, 1) == 17); CHECK(kwl_next_group(KWL_CHAR, 17, 1) == 0); CHECK(kwl_next_group(KWL_CHAR, 32, 1) == 0);
+    CHECK(kwl_next_group(KWL_CHAR, 0, -1) == 17); CHECK(kwl_next_group(KWL_CHAR, 17, -1) == 9); CHECK(kwl_next_group(KWL_CHAR, 25, -1) == 9); CHECK(kwl_next_group(KWL_CHAR, 9, -1) == 1); CHECK(kwl_next_group(KWL_CHAR, 12, -1) == 1);
     CHECK(kwl_next_group(KWL_CHAR, 1, -1) == 0); CHECK(kwl_next_group(KWL_CHAR, 8, -1) == 0);
     /* masks: DEFAULT(0..1) -> DOG DAYS(2) -> PAYDAY 2(10) -> 0 */
     CHECK(kwl_next_group(KWL_MASK, 0, 1) == 2); CHECK(kwl_next_group(KWL_MASK, 1, 1) == 2); CHECK(kwl_next_group(KWL_MASK, 2, 1) == 10);
@@ -86,7 +90,7 @@ int main(void)
     CHECK(kwl_next_group(KWL_OUTFIT, 7, 1) == 7); CHECK(kwl_next_group(KWL_OUTFIT, 7, -1) == 7);
     CHECK(kwl_next_group(KWL_CHAR, -5, 1) == 1); CHECK(kwl_next_group(7, 0, 1) == 0);
     /* a full forward lap of group jumps visits each group once and returns */
-    for (w = 0; w < 2; w++) { int v = 0, n = 0; do { v = kwl_next_group(w, v, 1); n++; } while (v != 0 && n < 10); CHECK(v == 0); CHECK(n == 3); }
+    for (w = 0; w < 2; w++) { int v = 0, n = 0; do { v = kwl_next_group(w, v, 1); n++; } while (v != 0 && n < 10); CHECK(v == 0); CHECK(n == (w == 0 ? 4 : 3)); }
     (void)g;
     printf("%d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;

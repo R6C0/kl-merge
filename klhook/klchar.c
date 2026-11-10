@@ -25,7 +25,7 @@
  *    refresh rate ...). The first version of this file wrapped slot 10 and returned 1: slot 6 knows no KL name,
  *    leaves the string empty, and the Heister page showed nothing between the arrows (run W2). With the stock
  *    answer 0 the widget's range is 0 .. <number of Text children> - 1 (0x694500) and child [value] is shown
- *    ('%literal' as written, 0x671375). So the XML's entry counts ARE the ranges: klc_upper below must agree
+ *    ('%literal' as written, 0x671375). So the XML's entry counts ARE the ranges: klc_upper_of below must agree
  *    with mkoverlay.py (it prints the numbers; a value above the XML's count shows no text).
  *        KLChar    0 = whoever the game gives (stock), 1..8 = J.C. Tommy Pierre Liam Jean Elwood Bud Mitchel,
  *                  9..16 = Kane, Lynch, Ashkanan, Meldal, Red, Parker, Standen, Hutchison (Dead Men's FA ranks)
@@ -102,11 +102,12 @@
 #define KLC_RULES_VT    0x00bd3514            /* ZGameRulesHeist */
 #define KLC_ATTACH      0x008f5e90            /* its slot 137 */
 #define KLC_SETVARIANT  0x0088c810
-#define KLC_NCHAR       16
+#define KLC_NCHAR       32                    /* 16 + the 16 campaign outfits (tools\kl_outfits_1110.py, klcampaign_outfits_logic.h); [Wardrobe] CampaignOutfits=0 cuts the table back to 16 */
 #define KLC_MASKS       12                    /* 8 Dog Days heisters' masks + 4 Payday 2 plates (tools\kl_pd2mask.py); a build may have fewer (Masks=) */
 #define KLC_OUTFITS     24                    /* KLOutfit 0..23; mkoverlay.py's Outfit row has as many entries */
 
-static int klc_on = 1, klc_log = 1, klc_settle = 300, klc_tries = 3;
+#include "klcampaign_outfits_logic.h"
+static int klc_on = 1, klc_log = 1, klc_settle = 300, klc_tries = 3, klc_campaign = 1;     /* klc_campaign: [Wardrobe] CampaignOutfits (default 1, recommended on) */
 static volatile LONG klc_char, klc_mask, klc_outfit;
 static DWORD klc_vt[KLC_NSLOT + 1];           /* [0] RTTI locator, [1..] the slots */
 static int klc_vt_ready;
@@ -119,7 +120,9 @@ static int klc_same_code(DWORD va, const BYTE *bytes, int n);
 /* ---------------------------------------------------------------- the three options */
 
 static const char *const klc_names[3] = { "KLChar", "KLMask", "KLOutfit" };
-static const int klc_upper[3] = { KLC_NCHAR, KLC_MASKS + 1, KLC_OUTFITS - 1 };
+/* the Heister page's ranges. KLChar: kco_upper() = KLC_NCHAR (32) while [Wardrobe] CampaignOutfits=1, else 16 (the page then has the 17 old entries only). klwlabel_logic.h and
+   mkoverlay.py (CHARACTERS has 33 entries = 0..32) must agree; a menu pick above a map's own character count is the game's own body (kco_clamp in klc_level_tick, the map's Characters=). */
+static int klc_upper_of(int i) { return i == 0 ? kco_upper(klc_campaign, KLC_NCHAR) : i == 1 ? KLC_MASKS + 1 : KLC_OUTFITS - 1; }
 static volatile LONG *const klc_value[3] = { &klc_char, &klc_mask, &klc_outfit };
 static const char *const klc_keys[3] = { "Char", "Mask", "Outfit" };
 
@@ -150,7 +153,7 @@ static void __fastcall klc_set(void *self, void *edx, const char *name, int valu
     if (i >= 0) {
         char v[16];
         if (value < 0) value = 0;
-        if (value > klc_upper[i]) value = klc_upper[i];
+        if (value > klc_upper_of(i)) value = klc_upper_of(i);
         /* [Hire] PickDefault (klhire_pick.h): the pick is now worn (Arcade + online), so Kane / Lynch stay hire-only by refusing them here (review 11-07: online read klc_char directly) */
         if (i == 0 && klhr_on && klhr_pickdef && (value == 9 || value == 10)) {   /* 11-10: SKIP them in the travel direction (was: refuse = the spinner stuck at 12/17 going back, at 8 going forward) */
             int to = klhp_skip_hireonly(klhr_pickdef, (int)klc_char, value);
@@ -224,6 +227,7 @@ static void klc_level_open(const char *key, const char *opened)
         klc_w.version = ver;
         klc_w.step = (int)GetPrivateProfileIntA("Wardrobe", "OutfitStep", 10, file);
         klc_w.masks = (int)GetPrivateProfileIntA("Wardrobe", "Masks", KLC_MASKS, file);
+    n = kco_chars(n, klc_campaign, KLC_NCHAR) < 0 ? n : kco_chars(n, klc_campaign, KLC_NCHAR);     /* CampaignOutfits=0: characters 17.. of the ini are ignored */
         klc_w.headbase = (int)GetPrivateProfileIntA("Wardrobe", "HeadBase", 0, file);
         ok = klc_w.masks >= 1 && klc_w.masks <= KLC_MASKS && klc_w.step >= klc_w.masks + 2;    /* an 8-mask build still works: its last four choices fall back */
         for (i = 0; i < n; i++) {
@@ -339,7 +343,7 @@ static void klc_level_tick(int game_thread)
     static const BYTE attach_code[9] = { 0x80, 0x7c, 0x24, 0x04, 0xff, 0x53, 0x55, 0x56, 0x57 };        /* 0x8f5e90 cmp byte [esp+4],0xff ; push ebx.. */
     static const BYTE variant_code[10] = { 0x8b, 0x44, 0x24, 0x04, 0x56, 0x8b, 0xf1, 0x89, 0x46, 0x50 };  /* 0x88c810 .. mov [esi+0x50],eax */
     DWORD sm, gs, rules, gd, player, node, model, hero[8], sig, now = GetTickCount(), cur = 0, want_root = 0; BYTE b = 0xff, idx = 0, type = 0, busy = 0;
-    int ch = (int)klc_char, mask = (int)klc_mask, outfit = (int)klc_outfit, i, slot = -1, wardrobe, v;
+    int ch = kco_clamp((int)klc_char, klc_campaign, KLC_NCHAR), mask = (int)klc_mask, outfit = (int)klc_outfit, i, slot = -1, wardrobe, v;
     char key[64], scene[160];
     { static LONG gen0; LONG g = klhr_gen; if (g != gen0) { gen0 = g; tries = 0; lastv = lastbody = -1; } }     /* klhire.c: a new round drew a new body */
     if (klhr_on) { static int toldwish; ch = (int)klhr_body; if (klc_char && !klhr_pickdef && !toldwish++) klog("hire: [Hire] Enable=1: the Heister page's Char=%ld is ignored (the body is the random default or the hired one)", klc_char); }
@@ -374,7 +378,7 @@ static void klc_level_tick(int game_thread)
     if (ch >= 1 && ch <= 8) { slot = ch - 1; want_root = wardrobe ? klc_w.c[slot].root : hero[slot]; }
     else if (ch > 8 && ch <= KLC_NCHAR) {
         if (wardrobe && ch <= klc_w.n && !klc_w.c[ch - 1].stock) { slot = klc_w.c[ch - 1].slot; want_root = klc_w.c[ch - 1].root; }
-        else if (!toldnodm++) klog("character: KLChar=%d is a Dead Men body and level %s has no wardrobe: the game's own choice stays", ch, key);
+        else if (!toldnodm++) klog("character: KLChar=%d is a Dead Men body and level %s has %s: the game's own choice stays (kco_pick %d)", ch, key, wardrobe ? "fewer characters than that" : "no wardrobe", kco_pick(ch, klc_campaign, KLC_NCHAR, wardrobe ? klc_w.n : 0));
     }
     if (slot >= 0) {
         if (hero[slot] != want_root && klh_data((void *)(DWORD_PTR)(rules + 0x208 + 4 * slot), &want_root, 4, "heister model table")) {
@@ -431,7 +435,8 @@ static void klc_init(void)
     klc_settle = GetPrivateProfileIntA("Character", "Settle", 300, klh_ini);
     klc_tries = GetPrivateProfileIntA("Character", "Tries", 3, klh_ini);
     klc_dmvoice = GetPrivateProfileIntA("Wardrobe", "DMVoice", 1, klh_ini);
-    klc_char = (LONG)GetPrivateProfileIntA("Character", "Char", 0, klh_ini); if (klc_char < 0 || klc_char > KLC_NCHAR) klc_char = 0;
+    klc_campaign = GetPrivateProfileIntA("Wardrobe", "CampaignOutfits", 1, klh_ini) != 0;
+    klc_char = (LONG)GetPrivateProfileIntA("Character", "Char", 0, klh_ini); klc_char = kco_clamp((int)klc_char, klc_campaign, KLC_NCHAR);
     klc_mask = (LONG)GetPrivateProfileIntA("Character", "Mask", 0, klh_ini); if (klc_mask < 0 || klc_mask > KLC_MASKS + 1) klc_mask = 0;
     klc_outfit = (LONG)GetPrivateProfileIntA("Character", "Outfit", 0, klh_ini); if (klc_outfit < 0 || klc_outfit >= KLC_OUTFITS) klc_outfit = 0;
     klhr_init();
