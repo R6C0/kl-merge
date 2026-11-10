@@ -73,13 +73,27 @@ def level_dirs(i):
     return src, dst
 
 
+def campaign_keys(ini):
+    """[Campaign] Enable=1 and Routing=1 must be set: the menu row's New game / Chapters are LoadScene M01.. which only start a converted
+    level through Routing=1; with Enable=0 the hook leaves the stock menu, with Routing=0 the row would load an unknown scene."""
+    sec, kv = None, {}
+    for ln in open(ini, 'rb').read().decode('ascii', 'replace').splitlines():
+        t = ln.strip()
+        if t.startswith('[') and t.endswith(']'): sec = t[1:-1].lower(); continue
+        if sec == 'campaign' and '=' in t and not t.startswith(';'):
+            k, v = t.split('=', 1); kv[k.strip().lower()] = v.strip()
+    if sec is None or not any(l.strip().lower() == '[campaign]' for l in open(ini, 'rb').read().decode('ascii', 'replace').splitlines()):
+        return ['KLHook.ini has no [Campaign] block: the campaign_1110 install is not there']
+    return ['KLHook.ini [Campaign] %s=1 is required (found %r)' % (k, kv.get(k.lower())) for k in ('Enable', 'Routing') if kv.get(k.lower()) != '1']
+
+
 def preflight(undo):
     errs = []
     if K.game_running(): errs.append('kl2.exe is running (a thread count above 0): close the game first')
     dll, ini = os.path.join(DD, 'dinput8.dll'), os.path.join(DD, 'KLHook.ini')
     if not undo:
         if md5(dll) != LIVE_DLL: errs.append('live dinput8.dll %s is not the pinned %s' % (md5(dll), LIVE_DLL))
-        if '[campaign]' not in open(ini, 'rb').read().decode('ascii', 'replace').lower(): errs.append('KLHook.ini has no [Campaign] block: the campaign_1110 install is not there')
+        errs.extend(campaign_keys(ini))
         for p in (dll + TAG, ini + TAG):
             if os.path.exists(p): errs.append('%s exists: already installed? (run --undo first)' % p)
         if os.path.exists(STATE): errs.append('%s exists: already installed' % STATE)
