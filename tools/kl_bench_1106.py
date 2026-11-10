@@ -997,6 +997,11 @@ def run(k, part):
                 if k in LC:
                     args += ['--shots', '60-%d:60' % (secs - 60), '--d3shots']
             cmd = [sys.executable, 'tools/kl_solo_test.py', '--hook', '%s/hook_test' % d, '--tag', tag, '--base', '%s/KLHook_base.ini' % d, '--owner-away'] + args
+            # dumps of an earlier run of the same tag would fail this run's dump check: renamed aside (fc 11-10, stale 08:33 KLHook_1.dmp)
+            for i in (1, 2):
+                for f in dumps(tag, i):
+                    o = '%s/%s/inst%d/%s' % (SOLO, tag, i, f)
+                    os.replace(o, o + '.prev')
             with open('%s/%s_run.txt' % (d, p), 'w') as out:
                 print('  run %s (log %s/%s_run.txt)' % (tag, d, p), flush=True)
                 rc = subprocess.run(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT).returncode
