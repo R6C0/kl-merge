@@ -26,6 +26,7 @@ KIT = 'C:/kl_build_1024/bench_1110'
 MERGED_KITS = {
     '6e3ca2add3c138b962815fe103a31e63': ('C:/kl_build_1024/merged_1110c/kit', 'fdaeaf10dad4775f218478a22478824e'),
     '38104558ca96a9a2a4cbec8b967b486a': ('C:/kl_build_1024/merged_1110d/kit', 'f4c8c3fdf1a8a0accc565d28b7dd3f02'),
+    '6711bc5f5d9c6cbec06072f856ffe7f9': ('C:/kl_build_1024/merged_1110f/kit', 'ddf81d7f63a80169180dc307281eafb5'),  # 1110d + [Crash] ListUserGuard
 }
 
 K = {
