@@ -47,20 +47,26 @@
 #define KLDEATHTRACE_C
 #include "kldeathtrace_logic.h"
 
-#define KDT_DMG   0x0069f900u        /* actor vtable[0x694]: damage / kill entry (thiscall, arg1 = record) */
+/* REVIEW FIX 11-10: 0x69f900 is vtable[0x694] of ZFFActor (0xbb3bac, the AI heisters) ONLY. The local player is a ZFFPlayer (0xbb45f4), whose slot 0x694 is
+   0x664e70 (a zero-vector getter): a 0x69f900 hook with this == the local player never fires. The player's hit path is the router slot 0x698 = 0x7e1700
+   (entry bytes identical to 0x69f900's, [esp+4] = record) and the apply slot 0x69c = 0x458880 (9 bytes 83 ec 34 56 8b f1 8b 46 54; [esp+4] = record). Both read
+   from kl2.exe with capstone; both hashed like the old site. */
+#define KDT_DMG   0x007e1700u        /* ZFFPlayer vtable[0x698]: hit router (thiscall, arg1 = record) */
+#define KDT_APPLY 0x00458880u        /* ZFFPlayer vtable[0x69c]: damage apply (thiscall, arg1 = record) */
 #define KDT_TXT   0x00500670u        /* kill text builder */
 #define KDT_LOOK  0x008ccde0u        /* handle -> entity lookup (cdecl), called at 0x50084f */
 #define KDT_LOOK_RA 0x0050084fu
 #define KDT_IMG_LO 0x00400000u
 #define KDT_IMG_HI 0x00c00000u       /* GUESS */
 
-static struct { int on, log, period, installed, state[3]; long maxlines, maxevents, lines, events, text_seen, dmg_seen; DWORD t0, last, round_on, dead, gms0; int busy; kdt_ring ring; } kdt;
+static struct { int on, log, period, installed, state[4]; long maxlines, maxevents, lines, events, text_seen, dmg_seen; DWORD t0, last, round_on, dead, gms0; int busy; kdt_ring ring; } kdt;
 static BYTE *kdt_stub;
 static DWORD kdt_look_arg, kdt_look_res;
-static const struct { DWORD va; int len; BYTE b[10]; const char *what; } kdt_sites[3] = {
-    { KDT_DMG,  9,  { 0x57, 0x8b, 0xf9, 0x8b, 0x0d, 0x98, 0xe5, 0x68, 0x01, 0 },       "0x69f900 (actor damage / kill entry)" },
+static const struct { DWORD va; int len; BYTE b[10]; const char *what; } kdt_sites[4] = {
+    { KDT_DMG,  9,  { 0x57, 0x8b, 0xf9, 0x8b, 0x0d, 0x98, 0xe5, 0x68, 0x01, 0 },       "0x7e1700 (ZFFPlayer hit router, vtable 0xbb45f4 slot 0x698)" },
     { KDT_TXT,  7,  { 0x6a, 0xff, 0x68, 0x09, 0xab, 0xad, 0x00, 0, 0, 0 },             "0x500670 (kill text)" },
-    { KDT_LOOK, 10, { 0x8b, 0x44, 0x24, 0x04, 0x8b, 0x0d, 0x90, 0xff, 0xe0, 0x00 },    "0x8ccde0 (handle lookup, fallback for the text)" }
+    { KDT_LOOK, 10, { 0x8b, 0x44, 0x24, 0x04, 0x8b, 0x0d, 0x90, 0xff, 0xe0, 0x00 },    "0x8ccde0 (handle lookup, fallback for the text)" },
+    { KDT_APPLY, 9, { 0x83, 0xec, 0x34, 0x56, 0x8b, 0xf1, 0x8b, 0x46, 0x54, 0 },       "0x458880 (ZFFPlayer damage apply, vtable slot 0x69c)" }
 };
 
 static DWORD kdt_rel(DWORD va) { return va ? va - (DWORD)klh_delta : 0; }      /* an address as the exe's own (the disassembly's) */
@@ -129,7 +135,7 @@ static void __cdecl kdt_hit(int id, KLBR_F3REGS *r)      /* called by the stub o
     if (!kdt.on || !r || kdt.busy) return;
     esp = r->esp; ra = klh_rd32(esp);
     kdt.busy = 1;
-    if (id == 0) {                                          /* 0x69f900: damage / kill entry of an actor (ecx = the actor) */
+    if (id == 0 || id == 3) {                               /* 0x7e1700 router / 0x458880 apply: damage / kill entry of an actor (ecx = the actor) */
         char cls[64], nm[96], st[120]; DWORD rec, att; float amount = 0.0f; DWORD kind; kdt_samp s;
         P = klh_slot_player_mine();
         if (!P || r->ecx != P) { kdt.busy = 0; return; }   /* the local player only */
@@ -139,8 +145,8 @@ static void __cdecl kdt_hit(int id, KLBR_F3REGS *r)      /* called by the stub o
         if (rec) klh_rd(rec + 0x28, &amount, 4);
         kdt_who(att, cls, sizeof cls, nm, sizeof nm);
         kdt_stack(esp, st, sizeof st);
-        klog("deathtrace: dmg #%ld t=%lu amount=%.1f kind=%lu attacker=%08lx class=%s name='%s' ret=%08lx rec=%08lx stack=[%s]",
-             kdt.dmg_seen, kdt.t0 ? (unsigned long)(GetTickCount() - kdt.t0) : 0ul, (double)amount, (unsigned long)kind, (unsigned long)att, cls, nm, (unsigned long)kdt_rel(ra), (unsigned long)rec, st);
+        klog("deathtrace: dmg(%s) #%ld t=%lu amount=%.1f kind=%lu attacker=%08lx class=%s name='%s' ret=%08lx rec=%08lx stack=[%s]",
+             id == 0 ? "router" : "apply", kdt.dmg_seen, kdt.t0 ? (unsigned long)(GetTickCount() - kdt.t0) : 0ul, (double)amount, (unsigned long)kind, (unsigned long)att, cls, nm, (unsigned long)kdt_rel(ra), (unsigned long)rec, st);
         if (kdt_sample(P, &s)) kdt_line("dmg-at", P, &s, kdt.t0);
     } else {                                                /* id 1 = 0x500670 entry; id 2 = 0x8ccde0 entry (only the call at 0x50084f counts) */
         char cls[64], nm[96]; DWORD handle, ent, a1, a2, a3;
@@ -165,7 +171,7 @@ static void kdt_install(void)
 {
     int i;
     if (!kdt_stub && !(kdt_stub = (BYTE *)VirtualAlloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) { klog("deathtrace: no memory for the stubs: off"); kdt.on = 0; return; }
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 4; i++) {
         BYTE *at, jmp[10]; DWORD stub;
         if (i == 2 && kdt.state[1] == 1) continue;           /* the unhashed twin only when the 0x500670 detour was refused */
         kdt.state[i] = -1;
