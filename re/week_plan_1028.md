@@ -30,7 +30,7 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
   (9a60c5359e0da17e98437f4e8505a1cd3faf88c1). 823 files, 635 patches (bots zips patched against their main zip: out: refs, 23 x ~3.5 KB; was 3.68 GB). Core = 1110f SHIP 6711bc5f / ini 0da79eb8
   (snapshot C:\kl_release\core_snap_1110f), maps from d0's MAPS DONE: DM01 e091f0d8, DM02 b24fb05d (DM02C combo landed 05:4x), DM03 33361cd1, DM05A 791eb9c3; DD10 = 6aeb8208.
   Rehearsals from the UNZIPPED package into scratch DDs: (a) core+audio+overlay+stockwav+DD05+DM03+DM05A 381 files install 0, verify 0 problems in the set, uninstall byte-exact (4 empty
-  KL_PortBackup dirs); (b) core+overlay+DM02+DD05 install 0, uninstall 0 differences. checklive: only the dll + DM03 differ = fc's temporary DM03VAULTK bench (vault NOT in this release).
+  KL_PortBackup dirs); (b) core+overlay+DM02+DD05 install 0, uninstall 0 differences. checklive 06:03 (after fc's vault + d0's DD10 benches undid themselves): 823 files, 0 changed.
   Anything landing after the freeze (d0 DD10 exit-south, fc vault) = next release. Small: a crashed install leaves an empty KLMergeTmp\. Owner: upload (OWNER_RELEASE_STEPS section 4), then f0 runs the
   Setup e2e from the real URL. Decisions still open: 7 WARN ini keys, menu-look files, no launcher bg jpgs, literal stock bytes in a public release.
 - 11-10 ~03:15 f0 (kl-merge-81): steps 1-4 + 6 DONE on the current live set, step 5 (Setup e2e from the real URL) waits for the upload. make -> C:\kl_release\pkg_1110 (core re-made from
