@@ -23,7 +23,7 @@ Stock files that the mod replaces are MOVED to <DD>\KL_PortBackup\ (never delete
 The installer half uses only the standard library + zstandard (frozen into KLMergeSetup.exe). The maker half also
 needs numpy.
 """
-import os, sys, io, json, struct, zlib, hashlib, time, shutil, zipfile, mmap, re, bisect, ctypes, traceback, argparse
+import os, sys, io, json, struct, zlib, hashlib, time, shutil, zipfile, mmap, re, bisect, ctypes, traceback, argparse, ntpath
 
 try:
     import zstandard as zstd
@@ -581,7 +581,11 @@ def localize_ini_bytes(data, roots):
             end = i + 1 + len(name)
             if end < len(low) and low[end:end + 1] != b'\\':
                 continue                                    # 'PAYDAY 2 extra' is another folder
-            new = os.path.abspath(roots[key]).rstrip('\\/').encode('mbcs' if os.name == 'nt' else 'utf-8', 'replace')
+            root = roots[key]
+            # a Windows root ('E:\Games\...') keeps its drive on every host: posixpath.abspath would prepend the Linux
+            # cwd (kl_release_test on the cloud check-in); on Windows ntpath IS os.path, so the install is unchanged
+            ap = ntpath if (re.match(r'^[A-Za-z]:[\\/]', root) or root.startswith('\\\\')) else os.path
+            new = ap.abspath(root).rstrip('\\/').encode('mbcs' if os.name == 'nt' else 'utf-8', 'replace')
             return m.group(1) + new + val[end:]
         return m.group(0)
     return INI_LOCAL_RE.sub(fix, data)
