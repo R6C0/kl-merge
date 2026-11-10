@@ -7,6 +7,7 @@
 #ifndef KLLISTGUARD_SEH_H
 #define KLLISTGUARD_SEH_H
 #include "kllistguard_logic.h"
+#include "kllistguard_port.h"
 
 typedef void (__fastcall *KLLG_FN)(void *self, void *edx, unsigned n, void *rec);
 static KLLG_FN kllg_orig;                      /* 0x630700 */
@@ -16,6 +17,10 @@ static volatile LONG kllg_calls;               /* wrapper calls (the test proves
 static volatile LONG kllg_in;                  /* > 0 while the guarded call runs: veh() only stays quiet then (an unguarded fault keeps its CRASH line + dump) */
 static unsigned kllg_last_log;
 static int kllg_log;
+static int kllg_mode = 1;                      /* [Crash] ListUserGuard: 1 = run the original 0x630700 under a catch, 2 = the C port kllg_port (key-0 skip, no half-done update) */
+static KLLG_HELPERS kllg_helpers;              /* mode 2: the exe's helper functions (set by kllg_init, or by the test) */
+static volatile LONG kllg_skips;               /* mode 2: key-0 records skipped, all rounds */
+static unsigned kllg_last_skiplog;
 
 static int kllg_filter(EXCEPTION_POINTERS *ep)
 {
@@ -33,6 +38,16 @@ static void kllg_caught(void *self, unsigned n)
     }
 }
 
+static void kllg_onskip(unsigned site, unsigned idx, unsigned key)    /* mode 2: a key-0 record was not given to the hash helpers */
+{
+    LONG h = InterlockedIncrement(&kllg_skips); DWORD now = GetTickCount();
+    (void)key;
+    if (kllg_log && kllg_log_due((int)h, now, kllg_last_skiplog, 10000)) {
+        kllg_last_skiplog = now;
+        klog("listguard: key-0 record skipped idx %u (site %u, %ld skipped so far)", idx, site, (long)h);
+    }
+}
+
 static int kllg_on;
 static int kllg_veh_skip(EXCEPTION_POINTERS *ep)   /* veh(): 1 = this is the guarded fault, let the wrapper's __except have it, no CRASH line, no dump */
 {
@@ -45,7 +60,7 @@ static void __fastcall kllg_wrap(void *self, void *edx, unsigned n, void *rec)
     InterlockedIncrement(&kllg_calls);
     InterlockedIncrement(&kllg_in);
     __try {
-        __try { kllg_orig(self, edx, n, rec); }
+        __try { if (kllg_mode == 2) kllg_port(&kllg_helpers, self, n, rec); else kllg_orig(self, edx, n, rec); }
         __except (kllg_filter(GetExceptionInformation())) { kllg_caught(self, n); }
     } __finally { InterlockedDecrement(&kllg_in); }       /* also when a fault we do not catch unwinds through */
 }
