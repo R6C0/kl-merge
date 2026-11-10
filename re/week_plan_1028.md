@@ -26,6 +26,9 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-10 ~10:55 f0: SETUP E2E ON THE REAL ZIP PASS (C:\kl_release\e2e_1110, packaged Setup.bat byte-identical to the repo, only RELEASE_URL -> file:// of KLMerge_package.zip):
+  curl 2,026,178,709 bytes -> tar unpack (zip has backslash entry names; tar OK) -> 645/645 entries CRC-match -> py -3 + zstandard -> launcher started, DM found, riff made + played.
+  Launcher live window + VERIFY + PLAY round trip handed to d0 (game free), no INSTALL/UNINSTALL.
 - 11-10 ~10:00 f0: d0 ONLINE SMOKE COMPLETE 13/13 PASS (all 11 DM maps + DD10 + DD06 stock; host+join, round 1 -> shop -> round 2, 0 asserts/faults/dumps both seats).
   DM06B client: 1 first-chance c0000005 at DINPUT8+0x10953e = kllistguard __try heap scan reading a freed page, caught (hook's own count 0); not a blocker.
 - 11-10 ~09:40 f0: more proof on the frozen pack, upload still cleared: d0 ONLINE SMOKE DM09 + DM01 + DM05A PASS (2 seats host+join, TEST 03840ed0, round 1 -> shop -> round 2,
