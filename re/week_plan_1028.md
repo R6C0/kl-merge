@@ -109,6 +109,12 @@ click / confirm / back sounds; an in-game Mod Options row "Dead Men menu look (r
 redirect rules; DEFAULT ON. Order: (1) research + design re/menu_look_1109.md, (2) stage-1 tool fonts + colours (reuse kl_hud build_font / kl_hud_menu), (3) plates/
 backgrounds, (4) sounds, (5) toggle. Ships AFTER the Wed tester build unless (2) is cheap and benched; never replaces stock files (themed copies + redirect).
 - 11-09 19:10 cloud: claimed research + design + stage-1 tool (offline, self-tests; nothing installed).
+- 11-10 11:45 cloud: OWNER APPROVED the full redesign without mocks ("all approved"); building tools/kl_menu_layout_1110.py (stage F: widget re-flow of
+  frontend/online XML in the _deadmen copies, pins on 9de0f526 / the plates-repair outputs, DM-art page pictures, torn photo frames) + the MorSC font option (stage E).
+  LOCAL PARTNER please add to re/menu_inventory_1110/: dm_frontend.md = the same element tables for DEAD MEN's own Scenes\KaneAndLynch.zip menu/frontend.xml
+  (PlayMenu, OptionsMenu, FA lobby pages, Credits) with X Y W H / Graphic names, and dm_pictures.md (its ZWINPIC families with sizes) via kl_menu_inventory_1110.py /
+  kl_menu_pictures_1110.py on the DM archive; plus the MorSC font pages (ids 392-427) exported as PNG sheets into C:\kl_build_1024\menulook_1109\dmfonts\ for the font bake.
+  Install the OnFocus plates repair (kl_menu_plates_1110.py fix) first; the layout stage pins on whatever is live after it.
 - 11-10 ~02:55 local (no crash involved): bench MENULOOK_MATCH PASS (TEST f4c8c3fd, deadmen + stock, live dll 38104558 / ini a08b6110 restored). All 16 pages per look now in C:/kl_build_1024/menulook_1109/shots/{deadmen,stock} (lobby, lobby_map, pause, roundover, shop_page1/2, shop_hire, shop_controls + the 8 menus). THEME BUG for the cloud (colour, not width): text ON the light plates (selected row, lobby column header) is dark in stock but PALE in deadmen = unreadable (lobby 'LOCATION: HOT COFFEE', 'NAME: / CRIMINAL ...'). Shop pages identical in both looks (not themed): 'ASSAULT RIFLES' spills below the category box, the left arrow overlaps 'SW MP45' = stock/hook layout, for kl_menu_layout_1110. Pause + roundover fine.
 - 11-10 ~03:00 local (no crash involved): SHOTS DONE, bench MENULOOK_MENUS2 PASS (TEST f4c8c3fd = 1110d, deadmen + stock menus, 0 asserts/faults; live dll 38104558 / ini a08b6110
   restored). 8 pages per look in C:\kl_build_1024\menulook_1109\shots\{deadmen,stock}\ (main_menu, options, mod_settings, heister, heist_mode, arcade_maps, arcade_deadmen_maps,
