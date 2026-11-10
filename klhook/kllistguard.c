@@ -59,7 +59,8 @@ static DWORD WINAPI kllg_scan_thread(LPVOID unused)
 static void kllg_init(void)
 {
     DWORD slot0, *tab; int len, i; DWORD tl = 0x401000, th = 0x00b11000;   /* .text = 0x401000..0xb11000 */
-    kllg_on = GetPrivateProfileIntA("Crash", "ListUserGuard", 0, klh_ini) != 0;
+    kllg_mode = kllg_mode_of((int)GetPrivateProfileIntA("Crash", "ListUserGuard", 0, klh_ini)); kllg_on = kllg_mode != 0;
+    if (kllg_mode == 0) kllg_mode = 1;
     kllg_log = GetPrivateProfileIntA("Crash", "Log", 1, klh_ini);
     if (!kllg_on) return;
     if (!klh_exe_ok || klh_delta) { klog("listguard: ListUserGuard=1 but this is not kl2.exe build 0490 at 0x400000: off"); kllg_on = 0; return; }
@@ -70,16 +71,37 @@ static void kllg_init(void)
     for (i = 0; i < KLLG_VT_MAX; i++) tab[i] = klh_rd32((DWORD_PTR)KLH_VA(KLLG_VT) + 4 * i);
     len = kllg_vt_len(tab, KLLG_VT_MAX, tl, th);
     if (len < 1) { klog("listguard: vtable copy empty: off"); kllg_on = 0; return; }
+    if (kllg_mode == 2) {      /* the C port needs the six helpers to be the known functions; else the old catch (mode 1) */
+        int k, okh = 1;
+        for (k = 0; k < 7; k++) if (klh_rd32((DWORD_PTR)KLH_VA(kllg_helper_ids[k].va)) != kllg_helper_ids[k].dw) { okh = 0; klog("listguard: helper 0x%08x holds 0x%08x (expected 0x%08x): ListUserGuard=2 falls back to 1", kllg_helper_ids[k].va, klh_rd32((DWORD_PTR)KLH_VA(kllg_helper_ids[k].va)), kllg_helper_ids[k].dw); }
+        if (okh) {
+            kllg_helpers.sort  = (void (*)(unsigned *, unsigned, unsigned))(DWORD_PTR)KLH_VA(0x4e2b90);
+            kllg_helpers.range = (unsigned (KLLG_FC *)(void *, void *, unsigned *, unsigned))(DWORD_PTR)KLH_VA(0x8176f0);
+            kllg_helpers.merge = (void (*)(unsigned *, unsigned *, unsigned, unsigned *, unsigned))(DWORD_PTR)KLH_VA(0x881ef0);
+            kllg_helpers.add   = (unsigned (KLLG_FC *)(void *, void *, unsigned, unsigned *, unsigned))(DWORD_PTR)KLH_VA(0x5a4ad0);
+            kllg_helpers.rem   = (unsigned (KLLG_FC *)(void *, void *, unsigned, void *, unsigned))(DWORD_PTR)KLH_VA(0x4f8a60);
+            kllg_helpers.rem2  = (unsigned (KLLG_FC *)(void *, void *, unsigned, void *, unsigned))(DWORD_PTR)KLH_VA(0x6986b0);
+            kllg_helpers.onskip = kllg_onskip;
+        } else kllg_mode = 1;
+    }
     kllg_orig = (KLLG_FN)(DWORD_PTR)slot0;
     tab[0] = (DWORD)(DWORD_PTR)kllg_wrap;
     kllg_vt = tab;
-    klog("listguard: ListUserGuard on (private vtable of %d slots, slot 0 0x%08x -> wrapper, catches only c0000005 inside 0x%08x..0x%08x)", len, slot0, kllg_lo, kllg_hi);
+    klog("listguard: ListUserGuard=%d on (private vtable of %d slots, slot 0 0x%08x -> %s, catches only c0000005 inside 0x%08x..0x%08x)", kllg_mode, len, slot0,
+         kllg_mode == 2 ? "C port of 0x630700 (key 0 skipped, the walk continues)" : "catch wrapper", kllg_lo, kllg_hi);
 }
 
 static void kllg_tick(int game_thread)
 {
     static DWORD last; DWORD now = GetTickCount(); char scene[160]; int i;
     if (!kllg_on || !game_thread) return;
+    {   /* the object by its owner chain (no scan): repoint a new CListUser the first tick after the loader made it */
+        DWORD root = klh_rd32((DWORD_PTR)KLH_VA(KLLG_G_ROOT)), sc = root ? klh_rd32(root + KLLG_O_SCENE) : 0, obj = sc ? klh_rd32(sc + KLLG_O_LISTUSR) : 0, nv = (DWORD)(DWORD_PTR)kllg_vt;
+        if (obj && klh_rd32(obj) == KLLG_VT && klh_rd32(obj + 0x20) && klh_data((void *)(DWORD_PTR)obj, &nv, 4, "listguard: CListUser vptr (private vtable, owner chain)")) {
+            kllg_patched++;
+            if (kllg_log) klog("listguard: CListUser object at 0x%08x (owner chain) now uses the guarded vtable (%d patched)", obj, kllg_patched);
+        }
+    }
     if (now - last < 250) return;
     last = now;
     if (InterlockedCompareExchange(&kllg_done, 0, 1) == 1) {                 /* results of a scan: repoint what still has the original vptr */

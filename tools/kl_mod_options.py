@@ -554,9 +554,9 @@ feat('clientringsync', G_STAB, 'Online Dead Men maps with parked cars: the host 
 feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', 'start',
      'avoids the 2 GB heap NULL crash on large .prm files', [('Memory', 'Enable', 1, 0, 1)])
 feat('listguard', G_STAB, 'Do not crash when a police player respawns (Withdrawal round 2 crash) (recommended on)', 'on', 'start',
-     'kllistguard.c [Crash] ListUserGuard: the per-frame CListUser update runs through a private vtable copy whose wrapper swallows only an access '
+     'kllistguard.c [Crash] ListUserGuard=2 (C port of 0x630700 that skips the key-0 record and goes on; 1 = old catch-and-drop): the per-frame CListUser update runs through a private vtable copy whose wrapper swallows only an access '
      'violation inside 0x4f8a60..0x4f8b49 (the key-0 record of the owner\'s DM03 11-09 crash 0x4f8a8e) and drops that one list update; no code byte patched',
-     [('Crash', 'ListUserGuard', 1, 0, 0)])
+     [('Crash', 'ListUserGuard', 2, 0, 0)])
 feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call runs out of memory without it)', 'on', 'start',
      'klquad.c: the 4 post-process quad buffers get 128 buffers each; the NVIDIA driver no longer piles a block per frame pass (K50H: 1696 -> 18 MB '
      'in 70 s; K50F2/I: flat at 120 fps, same picture); needs the frame limiter (its Reset wrapper); the DLL default is 0 = off, the live ini carries 128',

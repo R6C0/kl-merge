@@ -60,4 +60,20 @@ static unsigned kllg_next_delay(int step)
     return step >= 0 && step < 4 ? d[step] : 10000u;     /* 10 s: a new object per round / respawn (no round signal known) is guarded within 10 s */
 }
 
+
+/* ListUserGuard=2 calls six helper functions of the exe from the C port; each one's first dword is checked before the port is used (any other build: mode 1) */
+typedef struct { unsigned va, dw; } KLLG_HELPER_ID;
+static const KLLG_HELPER_ID kllg_helper_ids[7] = {
+    { 0x004e2b90u, 0x0c24448bu }, { 0x008176f0u, 0x8b20498bu }, { 0x00881ef0u, 0x08244c8bu }, { 0x005a4ad0u, 0x20418b51u },
+    { 0x004f8a60u, 0x24548b51u }, { 0x006986b0u, 0x0424548bu }, { 0x00630700u, 0x0424448bu } };
+
+/* the mode value of [Crash] ListUserGuard: 0 off, 1 catch (old), 2 port (anything above 2 reads as 2, negative as off) */
+static int kllg_mode_of(int ini) { return ini <= 0 ? 0 : ini == 1 ? 1 : 2; }
+
+/* the CListUser object is [[[0xdd2640] + 0xac] + 0x86d4] (read by the update's caller at 0x5bf72c..0x5bf732): found without a heap scan, in a few reads,
+   so a new object (a new level / round) is repointed on the very next tick */
+#define KLLG_G_ROOT    0x00dd2640u
+#define KLLG_O_SCENE   0xacu
+#define KLLG_O_LISTUSR 0x86d4u
+
 #endif

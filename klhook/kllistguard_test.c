@@ -29,6 +29,53 @@ __declspec(noinline) static void __fastcall fake_inside(void *self, void *edx, u
 }
 __declspec(noinline) static void __fastcall fake_end(void) { }                    /* marks an address after fake_inside */
 
+/* ---- a fake world for the C port (kllistguard_port.h): records are 0x80-byte blobs in one array (address order = index order), the "table" is a
+   list of (key, rec) pairs, and every helper that gets key 0 counts a FAULT (the real ones fault at 0x4f8a8e / 0x5a4b06) ---- */
+static unsigned char pool[16][0x80];
+static unsigned fw_tkey[64], fw_trec[64]; static int fw_n;
+static unsigned fw_A[16], fw_B[32], fw_C[32]; static unsigned char fw_self[0x60];
+static int fw_fault, fw_add_cap, fw_rem_calls, fw_rem2_calls; static unsigned fw_remlog[64][2]; static int fw_nremlog;
+static unsigned fw_skip_site[16], fw_skip_idx[16]; static int fw_nskip;
+#define RECP(i) ((unsigned)(DWORD_PTR)pool[i])
+#define SETKEY(i, k) (*(unsigned *)(pool[i] + 0x54) = ((k) & 0xffffffu) | 0xab000000u)     /* the top byte is not part of the key */
+#define FLAGGED(i) ((*(unsigned *)(pool[i] + 0x3c) & 0x1000000u) != 0)
+static int fw_has(unsigned k, unsigned r) { int i; for (i = 0; i < fw_n; i++) if (fw_tkey[i] == k && fw_trec[i] == r) return 1; return 0; }
+static void fw_put(unsigned k, unsigned r) { fw_tkey[fw_n] = k; fw_trec[fw_n] = r; fw_n++; }
+static void fw_sort(unsigned *a, unsigned lo, unsigned hi) { unsigned i, j, t; for (i = lo + 1; i <= hi; i++) for (j = i; j > lo && a[j - 1] > a[j]; j--) { t = a[j]; a[j] = a[j - 1]; a[j - 1] = t; } }
+static unsigned __fastcall fw_range(void *self, void *edx, unsigned *out, unsigned key)
+{   /* all recs of key: first half ascending, second half DESCENDING (the port has to sort it); returns (cnt << 16) | start like 0x8176f0 */
+    int i, m = 0, start, a, b; unsigned t; (void)self; (void)edx;
+    if (key == 0) fw_fault++;
+    for (i = 0; i < fw_n; i++) if (fw_tkey[i] == key) out[m++] = fw_trec[i];
+    start = m / 2; if (start > 1) fw_sort(out, 0, start - 1);
+    fw_sort(out, start, m ? m - 1 : 0); a = start; b = m - 1; while (a < b) { t = out[a]; out[a] = out[b]; out[b] = t; a++; b--; }
+    return ((unsigned)(m - start) << 16) | (unsigned)start;
+}
+static void fw_merge(unsigned *dst, unsigned *a, unsigned na, unsigned *b, unsigned nb)
+{ unsigned i = 0, j = 0, k = 0; while (i < na || j < nb) dst[k++] = (j >= nb || (i < na && a[i] <= b[j])) ? a[i++] : b[j++]; }
+static unsigned __fastcall fw_add(void *self, void *edx, unsigned key, unsigned *recs, unsigned count)
+{ unsigned i; (void)self; (void)edx; if (key == 0) { fw_fault++; return 0; } for (i = 0; i < count && (int)i < fw_add_cap; i++) fw_put(key, recs[i]); return i; }
+static unsigned __fastcall fw_rem(void *self, void *edx, unsigned key, void *rec, unsigned one)
+{
+    int i; (void)self; (void)edx; (void)one; fw_rem_calls++;
+    if (key == 0) { fw_fault++; return 0; }
+    if (fw_nremlog < 64) { fw_remlog[fw_nremlog][0] = key; fw_remlog[fw_nremlog][1] = (unsigned)(DWORD_PTR)rec; fw_nremlog++; }
+    for (i = 0; i < fw_n; i++) if (fw_tkey[i] == key && fw_trec[i] == (unsigned)(DWORD_PTR)rec) { fw_tkey[i] = fw_tkey[fw_n - 1]; fw_trec[i] = fw_trec[fw_n - 1]; fw_n--; return 1; }
+    return 0;
+}
+static unsigned __fastcall fw_rem2(void *self, void *edx, unsigned key, void *rec, unsigned one) { (void)self; (void)edx; (void)rec; (void)one; if (key == 0) fw_fault++; fw_rem2_calls++; return 1; }
+static void fw_onskip(unsigned site, unsigned idx, unsigned key) { kllg_onskip(site, idx, key); if (fw_nskip < 16) { fw_skip_site[fw_nskip] = site; fw_skip_idx[fw_nskip] = idx; } fw_nskip++; }
+static int fw_removed(unsigned k, int ri) { int i; for (i = 0; i < fw_nremlog; i++) if (fw_remlog[i][0] == k && fw_remlog[i][1] == RECP(ri)) return 1; return 0; }
+static void fw_reset(int cap)
+{
+    int i; memset(pool, 0, sizeof pool); fw_n = 0; fw_fault = fw_rem_calls = fw_rem2_calls = fw_nremlog = fw_nskip = 0; fw_add_cap = cap;
+    memset(fw_self, 0, sizeof fw_self); memset(fw_A, 0, sizeof fw_A);
+    *(unsigned **)(fw_self + KLLG_O_A) = fw_A; *(unsigned **)(fw_self + KLLG_O_B) = fw_B; *(unsigned **)(fw_self + KLLG_O_C) = fw_C;
+    for (i = 0; i < 16; i++) SETKEY(i, 100 + i);                                      /* every record: key 100 + index, unless a test sets it */
+    kllg_helpers.sort = fw_sort; kllg_helpers.range = fw_range; kllg_helpers.merge = fw_merge; kllg_helpers.add = fw_add;
+    kllg_helpers.rem = fw_rem; kllg_helpers.rem2 = fw_rem2; kllg_helpers.onskip = fw_onskip;
+}
+
 int main(void)
 {
     unsigned vt[8] = { 0x630700, 0x5a9b70, 0x805740, 0xb2e000, 0xb11000, 0x1, 0, 0 }; int r;
@@ -77,6 +124,61 @@ int main(void)
     kllg_on = 1; { EXCEPTION_RECORD er = {0}; EXCEPTION_POINTERS ep = {&er, 0}; er.ExceptionCode = KLLG_AV; er.ExceptionAddress = (void *)(DWORD_PTR)kllg_lo;
         CHECK(!kllg_veh_skip(&ep), "veh() must not stay quiet for an in-range AV outside the wrapper (unguarded crash keeps its log + dump)");
         kllg_in = 1; CHECK(kllg_veh_skip(&ep), "inside the wrapper the in-range AV is skipped"); kllg_in = 0; }
+
+    /* ---- the C port (ListUserGuard=2) ---- */
+    CHECK(kllg_mode_of(0) == 0 && kllg_mode_of(1) == 1 && kllg_mode_of(2) == 2 && kllg_mode_of(7) == 2 && kllg_mode_of(-1) == 0, "mode values");
+    for (r = 0; r < 7; r++) CHECK(kllg_helper_ids[r].va >= 0x401000 && kllg_helper_ids[r].va < 0xb11000 && kllg_helper_ids[r].dw != 0, "helper id table entry %d", r);
+    {   /* scenario 1: a normal update, no dead record. argrec R0 (key 5), old list under key 5 = R1 R3 R4, new set A = R6 R3 (R6 new, R1 R4 left) */
+        fw_reset(99); SETKEY(0, 5);
+        fw_put(5, RECP(1)); fw_put(5, RECP(3)); fw_put(5, RECP(4)); fw_A[0] = RECP(6); fw_A[1] = RECP(3);                  /* A unsorted on purpose */
+        kllg_mode = 2; kllg_skips = 0; kllg_wrap(fw_self, 0, 2, pool[0]);
+        CHECK(fw_fault == 0, "scenario 1: no helper gets key 0");
+        CHECK(fw_removed(101, 0) && fw_removed(5, 1) && fw_removed(104, 0) && fw_removed(5, 4), "scenario 1: R1 and R4 left the set (both directions removed)");
+        CHECK(!fw_removed(103, 0) && !fw_removed(5, 3), "scenario 1: R3 stays");
+        CHECK(fw_has(5, RECP(3)) && fw_has(5, RECP(6)) && !fw_has(5, RECP(1)) && !fw_has(5, RECP(4)) && fw_has(106, RECP(0)) && fw_n == 3, "scenario 1: final table = {5:R3, 5:R6, 106:R0} (n %d)", fw_n);
+        CHECK(FLAGGED(0) && FLAGGED(6) && FLAGGED(1), "scenario 1: flags set on argrec, a new record and a C record");
+        CHECK(fw_nskip == 0 && kllg_skips == 0, "scenario 1: nothing skipped");
+    }
+    {   /* scenario 2 (the crash): a key-0 record in the MIDDLE of the old list; later records must still be processed */
+        fw_reset(99); SETKEY(0, 5); SETKEY(2, 0);                           /* R2 = released, key 0 */
+        fw_put(5, RECP(1)); fw_put(5, RECP(2)); fw_put(5, RECP(3)); fw_put(5, RECP(4)); fw_A[0] = RECP(3); fw_A[1] = RECP(5);
+        kllg_mode = 2; kllg_skips = 0; kllg_wrap(fw_self, 0, 2, pool[0]);
+        CHECK(fw_fault == 0, "scenario 2: no helper got key 0 (it would have faulted) - %d faults", fw_fault);
+        CHECK(fw_nskip == 1 && fw_skip_site[0] == KLLG_SITE_LOOP1 && fw_skip_idx[0] == 1 && kllg_skips == 1, "scenario 2: exactly the key-0 record skipped, at C index 1 (skips %d idx %u)", fw_nskip, fw_skip_idx[0]);
+        CHECK(fw_removed(101, 0) && fw_removed(5, 1), "scenario 2: the record BEFORE the dead one is processed");
+        CHECK(fw_removed(5, 2), "scenario 2: the dead record is still dropped from the list of argkey (stale entry cleaned)");
+        CHECK(fw_removed(104, 0) && fw_removed(5, 4), "scenario 2: the record AFTER the dead one is still processed (later records not left unprocessed)");
+        CHECK(fw_has(5, RECP(3)) && fw_has(5, RECP(5)) && fw_n == 3 && fw_has(105, RECP(0)), "scenario 2: final table = {5:R3, 5:R5, 105:R0} (n %d)", fw_n);
+        CHECK(FLAGGED(4) && FLAGGED(0) && FLAGGED(3), "scenario 2: flags set after the dead record too");
+    }
+    {   /* scenario 2b: key-0 records first and last in address order, empty A */
+        fw_reset(99); SETKEY(0, 5); SETKEY(1, 0); SETKEY(9, 0);
+        fw_put(5, RECP(1)); fw_put(5, RECP(9)); kllg_mode = 2; kllg_wrap(fw_self, 0, 0, pool[0]);
+        CHECK(fw_fault == 0 && fw_nskip == 2 && fw_n == 0, "scenario 2b: two dead records skipped, both stale entries dropped, no fault (skips %d, table %d)", fw_nskip, fw_n);
+    }
+    {   /* scenario 3: the fake really flags a key-0 call (the test is not vacuous) */
+        fw_reset(99); fw_rem(0, 0, 0, pool[1], 1); CHECK(fw_fault == 1, "the fake helper counts a key-0 call as a fault");
+    }
+    {   /* scenario 4: 0x5a4ad0 takes only part of the batch -> roll back what went in, no loop 3 */
+        fw_reset(1); SETKEY(0, 5); fw_A[0] = RECP(5); fw_A[1] = RECP(6);
+        kllg_mode = 2; kllg_wrap(fw_self, 0, 2, pool[0]);
+        CHECK(fw_n == 0 && fw_fault == 0, "scenario 4: the one record that fitted was rolled back (table %d)", fw_n);
+        CHECK(fw_removed(5, 5), "scenario 4: rollback removed A[0] from argkey");
+    }
+    {   /* scenario 5: the update's own record is dead (key 0): no table helper runs, flag set, no fault */
+        fw_reset(99); SETKEY(0, 0); fw_A[0] = RECP(3); fw_put(103, RECP(0));
+        kllg_mode = 2; kllg_wrap(fw_self, 0, 1, pool[0]);
+        CHECK(fw_fault == 0 && fw_rem_calls == 0 && fw_n == 1 && fw_nskip == 1 && fw_skip_site[0] == KLLG_SITE_SELF, "scenario 5: dead argrec -> only the self skip (faults %d, rem %d)", fw_fault, fw_rem_calls);
+        CHECK(FLAGGED(0), "scenario 5: flag(rec) still set");
+    }
+    {   /* scenario 6: a NEW record with key 0 in A (the caller filters these, but the port must not fault on one) */
+        fw_reset(99); SETKEY(0, 5); SETKEY(6, 0); fw_A[0] = RECP(5); fw_A[1] = RECP(6);
+        kllg_mode = 2; kllg_wrap(fw_self, 0, 2, pool[0]);
+        CHECK(fw_fault == 0 && fw_nskip == 1 && fw_skip_site[0] == KLLG_SITE_LOOP3, "scenario 6: key-0 new record skipped without a fault (faults %d, skips %d)", fw_fault, fw_nskip);
+        CHECK(fw_has(105, RECP(0)), "scenario 6: the live new record R5 still got its entry");
+    }
+    CHECK(kllg_in == 0, "inside count back to 0 after port calls (%ld)", (long)kllg_in);
+    kllg_mode = 1;
 
     printf(bad ? "kllistguard_test: %d FAIL\n" : "kllistguard_test: all passed\n", bad);
     return bad ? 1 : 0;
