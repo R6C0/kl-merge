@@ -210,15 +210,24 @@ def level_ids(p, sks=None):
     ids, owner = {}, {}
     for sk in (skeletons(p) if sks is None else sks):
         names, t5 = bone_names(p, sk), p.chunks[p.u32(sk, 0x14)]
-        seen = set()
+        seen, loc, bad = set(), [], None
         for i in range(256):
             if t5[i] != 0xff:
                 s = names[t5[i]].lower()
                 if i == FREE_ID and s != FREE_NAME:     # alias_free_bone(): a second id for an existing bone
                     continue
-                if ids.setdefault(s, i) != i or owner.setdefault(i, s) != s or t5[i] in seen:
-                    raise ValueError('skeleton %d: bone id %d (%s) disagrees with another skeleton of the level' % (sk, i, s))
+                if bad is None and (ids.get(s, i) != i or owner.get(i, s) != s or t5[i] in seen):
+                    bad = (i, s)
+                loc.append((s, i))
                 seen.add(t5[i])
+        if bad:
+            # a prop / vehicle skeleton (no pelvis; DM06B's traffic cars number "body" 5, stock vehicles 128) is no
+            # character: its ids never reach a human model, so it is skipped instead of failing the level
+            if 'pelvis' in [n.lower() for n in names]:
+                raise ValueError('skeleton %d: bone id %d (%s) disagrees with another skeleton of the level' % (sk, bad[0], bad[1]))
+            continue
+        for s, i in loc:
+            ids[s], owner[i] = i, s
         if len(seen) != len(names):
             raise ValueError('skeleton %d: %d bones without an id' % (sk, len(names) - len(seen)))
     return ids
