@@ -106,6 +106,7 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
   Owner: release host DECIDED 11-09 (public releases-only repo R6C0/dead-men-rising; RELEASE_URL in "KL Dead Men Rising Setup.bat" is final); tell testers Dead Men must be installed.
 
 ### T9 IN-GAME MENU LOOK = DEAD MEN (owner 11-09 ~19:10, "huge ask", after liking the launcher theme) - cloud designs + stages offline, local benches
+- 2026-11-10 ~18:30 [6b local] kl_menu_layout_1110 staged + rehearsed on the live set incl. the _campui twins (kit C:/kl_build_1024/menulayout_1110/kit), NOT installed: bars cross the portraits, Heister splat over the char picture (contact sheet); cloud to decide, then install + shots bench.
 - 2026-11-10 ~17:45 [6b local] menus_combined_1110 INSTALLED (pick + outfits Heister row + campui row on 06 plates 76499363/355a4b30, OnFocus ink kept in all 8 zips); keyboard-only: static count gamepad 5129 > 5000 (fault risk 0x8618b9), keyboard 4938; live count unmeasured ([Menu] TableLog=1 at next start). kl_menu_layout_1110.py from the cloud still awaited. no crash involved
 Owner's words: "overhaul the whole in game menu UI to make it feel more like dead men too, even the menu button sounds; also in settings make a button for the mod
 so you can change it (make it however you desire) but I want the default to have this on". Reading: the launcher's brush-kit look (kl_hud --look deadmen: Impact chipped

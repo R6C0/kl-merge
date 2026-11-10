@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~18:30 - [6b, offline] MENU LAYOUT (cloud tools/kl_menu_layout_1110.py) STAGED + REHEARSED, NOT installed (tests stopped, testers download today, a broken main menu = no game). No crash involved.
+Kit C:/kl_build_1024/menulayout_1110/kit: plan 0 problems + check PASS on the live set, Dead Men art filled into the 6 scene stubs (entity delta 0), AND the same layout on the _campui twins (they shadow _deadmen while [CampaignUI] Menu=1;
+without them the XML part would not show). Pins live 57f2cb22 / 0bd4379a / 1fb7d82e / f0d82c48 / scene b2b494ab; scratch rehearsal install / 2nd refused / undo byte-exact. Undo it BEFORE menus_combined_1110.
+Contact sheet (kit/contact_layout*.png): main-menu focus bars MMfb (1024 wide) run across the Kane/Lynch portraits, Heister splat overlaps KLH_CharPic: design call for the cloud before an install + screenshot bench.
 2026-11-10 ~17:45 - [6b] INSTALLED on owner "install all" (no game run: owner stopped tests), no crash involved. OUTFITS maps on all 21 maps (C:/kl_build_1024/outfits_1110, 75 files md5-verified, backups = hard links, map zips e.g. DM01 b3b5bee8, DM07 f774dc97 -> 06's dm07plane da0e0431 on top).
 MENUS COMBINED (C:/kl_build_1024/menus_combined_1110/kit, --keyboard-only): campaign pick + 33-entry Heister row + campui row (Y322) on 06's plates; 4 overlay zips + 5 *_campui.zip, ini 0da79eb8 -> 3df8a23b ([CampaignPick] Enable=1, [CampaignUI] Menu=1), dll 6711bc5f untouched.
 RISK: static menu count (kl_menu_count) keyboard 4938 / GAMEPAD 5129 of 5000 -> gamepad can fault 0x8618b9 (DefaultFocus); live count UNMEASURED: next game start add [Menu] TableLog=1 and read 'menu: table N'. campui LEVELS half not installed (needs 3.2 GB, C: 2.5 GB).
