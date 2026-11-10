@@ -26,6 +26,9 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-10 ~11:20 f0: d0 LAUNCHER LIVE E2E PASS (from e2e_1110; no INSTALL/UNINSTALL): window finds DD/DM, VERIFY 0 problems, PLAY DMR -> main menu -> clean close, PLAY DOG DAYS -> hook renamed off,
+  PLAY DMR -> hook back (md5 6711bc5f), verify 823/0 after, no stray dinput8.* files, no crash files. Steam launch options on the PC are now "-dx10" only (no DefaultScene/AutoExit; not ours to change).
+  Next release (not in v1.0.0): README says the hook stays off after PLAY DOG DAYS (1e9be368); UIA names of the letter-spaced buttons; "..." folder buttons draw as tiny dashes; MOD line "not installed" on kit-installed PCs (no journal).
 - 11-10 ~10:55 f0: SETUP E2E ON THE REAL ZIP PASS (C:\kl_release\e2e_1110, packaged Setup.bat byte-identical to the repo, only RELEASE_URL -> file:// of KLMerge_package.zip):
   curl 2,026,178,709 bytes -> tar unpack (zip has backslash entry names; tar OK) -> 645/645 entries CRC-match -> py -3 + zstandard -> launcher started, DM found, riff made + played.
   Launcher live window + VERIFY + PLAY round trip handed to d0 (game free), no INSTALL/UNINSTALL.
