@@ -123,6 +123,7 @@ C_TESTS = {
     'klhirepic_test.c': 'logic',       # no windows.h
     'klhirepick_test.c': 'logic',      # klhire_pick.h ([Hire] PickDefault)
     'klfresh_test.c': 'logic',         # klfresh_logic.h ([Memory] FreshRestart)
+    'kllistguard_test.c': 'win',       # kllistguard_logic.h + kllistguard_seh.h ([Crash] ListUserGuard: catch filter, vtable verify, real SEH wrapper)
     'klmemfree_test.c': 'win',         # includes klmem.c + klmemfree.c (Windows heap census)
     'klbotglass_test.c': 'logic',      # klbotglass_logic.h ([BotGlass] blocked-at-pane decision)
     'klgrenadefx_test.c': 'logic',     # klgrenadefx_logic.h ([Grenade] PinSound / ThrowAnim)

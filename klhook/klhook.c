@@ -939,6 +939,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klslot.c"
 #include "klcampaign.c"                                   /* klcampaign.c: luvsic's campaign runtime core, no UI (all [Campaign] toggles off); AFTER klslot.c */
 #include "klfresh.c"                                    /* klfresh.c: [Memory] FreshRestart - a clean restart at the menu before the address space is too cut up (off unless set); AFTER klslot.c (menu reads), klmem.c (klm_free_space) */
+#include "kllistguard.c"                               /* kllistguard.c: [Crash] ListUserGuard - swallows the CListUser 0x4f8a8e fault (fed respawn, DM03) through a private vtable copy (off unless set); AFTER klh_scene, klh_data */
 #include "klcamppick.c"                                   /* klcamppick.c: [CampaignPick] in-menu campaign level list (idle unless [Campaign] on); AFTER klcampaign.c */
 #include "klserver.c"                                    /* klserver.c: [Server] host a Quick Match / Ranked lobby unattended (off unless Enable=1); AFTER klslot.c / klchar.c / kllobby.c */
 #include "kllocname.c"                                    /* kllocname.c: [Names] an expansion map shows its own name in the FA lobby / lists (off unless Enable=1); AFTER klslot.c / klpm.c */
@@ -1571,6 +1572,7 @@ static void klh_tick(int game_thread)
     KLPT(klg_tick());
     KLPT(klm_tick());
     KLPT(klfh_tick(game_thread));                           /* klfresh.c: [Memory] FreshRestart - the clean restart at the menu (off unless set) */
+    KLPT(kllg_tick(game_thread));                           /* kllistguard.c: [Crash] ListUserGuard - repoints the CListUser object(s) after a heap scan */
     KLPT(klmr_tick());                                      /* klmemfree.c: level gone -> heap compaction on a worker thread */
     KLPT(klvh_tick());                                      /* klhigh.c: the 10 s census of the listed modules' reservations (off unless [Memory] High) */
 #ifdef KLHOOK_TEST
@@ -1913,6 +1915,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klfps_init();                                  /* klfps.c: LAST of the Direct3DCreate9 wrappers (outermost); [FrameLimit] */
     klm_init();
     klfh_init();                                   /* klfresh.c: [Memory] FreshRestart (default off); AFTER klm_init */
+    kllg_init();                                   /* kllistguard.c: [Crash] ListUserGuard (default off); AFTER klm_init, klh_exe_ok */
     klvh_init();                                   /* klhigh.c: AFTER klm_init (the reserve is taken first, low); wraps the listed modules' import slots, with High=2 takes the high half */
 #ifdef KLHOOK_TEST
     klmr_init();                                   /* klmemfree.c: [Memory] Release / Census */
