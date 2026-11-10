@@ -937,8 +937,8 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
 #include "klslot.c"
 #include "klcampaign.c"                                   /* klcampaign.c: luvsic's campaign runtime core, no UI (all [Campaign] toggles off); AFTER klslot.c */
-#include "klcamppick.c"                                   /* klcamppick.c: [CampaignPick] in-menu campaign level list (idle unless [Campaign] on); AFTER klcampaign.c */
 #include "klfresh.c"                                    /* klfresh.c: [Memory] FreshRestart - a clean restart at the menu before the address space is too cut up (off unless set); AFTER klslot.c (menu reads), klmem.c (klm_free_space) */
+#include "klcamppick.c"                                   /* klcamppick.c: [CampaignPick] in-menu campaign level list (idle unless [Campaign] on); AFTER klcampaign.c */
 #include "klserver.c"                                    /* klserver.c: [Server] host a Quick Match / Ranked lobby unattended (off unless Enable=1); AFTER klslot.c / klchar.c / kllobby.c */
 #include "kllocname.c"                                    /* kllocname.c: [Names] an expansion map shows its own name in the FA lobby / lists (off unless Enable=1); AFTER klslot.c / klpm.c */
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
