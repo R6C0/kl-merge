@@ -1,6 +1,6 @@
 2026-11-10 ~08:40 - [vault] DM03VAULT_1110 on stage_m (TEST 03840ed0, undo byte-exact, map folder unchanged): control dock walk stopped at (-4,241,-6768) = shut door holds; host in the
 Arm box at (18,244,-7226), blast, walked through to (-2,242,-6633); no Backstop replay; host alive. NOT complete: at 08:33:55 both seats lost the D3D device (ReShade "device reset")
-and died at d3d9.dll+0x5feeb (KLHook_1.dmp each); System log Display 4107 SetDisplayConfig 08:33:59, last user input ~08:33:50 = the owner at the PC, not the map. Late Backstop walk +
+and died at d3d9.dll+0x5feeb (KLHook_1.dmp each); System log Display 4107 SetDisplayConfig 08:33:59, cause UNKNOWN (d0: last input ~08:31 = the bench's own keys; 4107 may be the crashed game restoring the mode; a reset on both seats at once points at a system display event, not the map). Late Backstop walk +
 round 2 unproven. First try refused by install.py (WinError 5 renaming over F03_Main.zip right after d0's smoke; leftover .tmp removed, retry fine). Rerun when the PC is free.
 (The ~10:40 time below is a mis-stamp: written ~08:20.)
 2026-11-10 ~10:40 - [vault] DM03VAULTK_1110 on stage_k (--no-arm, zip 2638fabc, TEST 03840ed0, 0 faults, undo byte-exact): all 6 lanes BLOCKED, dock lanes stop at z -6768,
