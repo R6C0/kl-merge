@@ -860,12 +860,18 @@ static int klb_human_hurt(DWORD now, DWORD *att)
     if (hurt) *att = klh_rd32(pl + 0x2778);
     return hurt;
 }
+/* Defend only ever touches a crew-side actor: its team object reads 2 (Ally). A policeman or an unreadable actor is never marked (the mark is a score bit, written before the swap is tried) */
+static int klb_ally_team(DWORD actor)
+{
+    DWORD info = 0, t = 0;
+    return actor && (info = klh_rd32(actor + 0x54)) != 0 && klh_rd(info + 4, &t, 4) && t == 2;
+}
 static float klb_d3(const float a[3], const float b[3]) { return (float)sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2])); }
 
 /* [Bots] TraitorReveal: is record i's score bit 1 ours and not shown yet (klhud_values.c kluv_flags hides it); the HUD thread reads this */
 static int klb_traitor_hidden(DWORD rules, int i)
 {
-    return i >= 0 && i < KLB_NREC && klb_f.hide[i] && klb_f.marked[i] == 1 && klb_f.rules == rules;
+    return i >= 0 && i < KLB_NREC && (klb_f.hide[i] || klb_f.def_until[i]) && klb_f.marked[i] == 1 && klb_f.rules == rules;   /* a Defend-marked LOYAL bot is no traitor: his borrowed bit is never shown either */
 }
 
 static void klb_foe_swap(const struct klb_snap *s, int i)
@@ -901,7 +907,7 @@ static void klb_foe_tick(const struct klb_snap *s, int act)
             klb_f.def_until[i] = 0;
             if (klb_f.swapped[i]) { klb_foe_back(s, i, "Defend is over"); def_active--; }
         }
-        if (def_roll_ok && hurt && att && r->used && r->actor == att && i != s->human && kltr_attacker_ok(r->flags, r->status) && !(r->flags & 2) && !klb_f.rev[i] && !klb_f.refused[i]) {
+        if (def_roll_ok && hurt && att && r->used && r->actor == att && i != s->human && kltr_attacker_ok(r->flags, r->status) && !(r->flags & 2) && klb_ally_team(r->actor) && !klb_f.rev[i] && !klb_f.refused[i]) {
             int fresh = !klb_f.def_until[i];     /* a new incident: his last hit on you is older than DefendMs */
             klb_f.def_until[i] = KLB_T(now + klb.def_ms); klb_f.was[i] = 1; klb_f.actor[i] = r->actor;
             if (fresh) {
