@@ -46,7 +46,13 @@ K = {
 VAULT_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_sc'  # on d0's smartcops DM03 (33361cd1), itself on back-SWAT a81ede87
 for _k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
     K[_k] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-900:20', stage=VAULT_STAGE, tag='.before-dm03vault_1110')  # = the stage install.py TAG
-ORDER = ['DM03BS_1110', 'DM03VAULT_1110', 'DM03VAULTB_1110']
+# DM03VAULTK_1110 (DIAGNOSTIC, never installed for play): stage_diag = the same vault built with --keep-kick (KickDoor controller + kick sound kept).
+# Bench 11-10 DM03VAULTB_1110: the shut leaves did not stop a dock -> lobby walk. Three control lanes split the suspects: blocked at x -50/+50 but
+# not at 0 = the seam between the two slabs; blocked everywhere here but not on stage_sc = the stripped controller; open everywhere = neither
+VAULT_DIAG_STAGE = 'C:/kl_build_1024/dm03vault_1110/stage_diag'
+K['DM03VAULTK_1110'] = dict(map='DM03', slot='F03', live={}, files={}, shots='60-300:20', stage=VAULT_DIAG_STAGE, tag='.before-dm03vault_1110')
+VAULT_LANES = (-50, 0, 50)
+ORDER = ['DM03BS_1110', 'DM03VAULT_1110', 'DM03VAULTB_1110', 'DM03VAULTK_1110']
 VAN_STOP = (3306, 2, 4)
 # from the vault stage's build report (GUESS-labelled there): Arm box centre (0, 340, -7006) half (150, 120, 150); doorway hinges x +-105 at z -6812;
 # the moved piles at (0, 241, -6620), (120, 241, -6540), (200, 241, -6660)
@@ -68,18 +74,19 @@ VAULT_DOORWAY = (-400, 400, -7100, -6500)   # x0, x1, z0, z1 around the doorway
 def vault_pins():
     """Fill the two vault kits' live/files pins from the stage's install.py (its pinned input md5s -> output md5s) so `gen` and `run` check them.
     -> True when the stage exists and pins were read."""
-    p = '%s/install.py' % VAULT_STAGE
-    if not os.path.isfile(p):
-        return False
-    t = open(p, encoding='utf-8', errors='replace').read()
-    # install.py: FILES = [('F03_Main.zip', '<input md5>', '<output md5>'), ...]
-    pairs = re.findall(r"\('([\w.]+)',\s*'([0-9a-f]{32})',\s*'([0-9a-f]{32})'\)", t)
-    if not pairs:
-        return False
-    for k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
-        K[k]['live'] = {n: a[:8] for n, a, _ in pairs}
-        K[k]['files'] = {n: b[:8] for n, _, b in pairs}
-    return True
+    got = False
+    for k in ('DM03VAULT_1110', 'DM03VAULTB_1110', 'DM03VAULTK_1110'):
+        p = '%s/install.py' % K[k]['stage']
+        if not os.path.isfile(p):
+            continue
+        t = open(p, encoding='utf-8', errors='replace').read()
+        # install.py: FILES = [('F03_Main.zip', '<input md5>', '<output md5>'), ...]
+        pairs = re.findall(r"\('([\w.]+)',\s*'([0-9a-f]{32})',\s*'([0-9a-f]{32})'\)", t)
+        if pairs:
+            K[k]['live'] = {n: a[:8] for n, a, _ in pairs}
+            K[k]['files'] = {n: b[:8] for n, _, b in pairs}
+            got = True
+    return got
 
 
 def vault_doors(tag):
@@ -110,6 +117,19 @@ def vault_seg(who, arm):
         s += vault_doors('late sample %d' % i)[:-1] + ['pos vault-late%d' % i, 'log BENCH1110 vault late sample %d' % i, 'wait 10000']
     s += ['goto %d %d 40 8000' % VAULT_DOCK, 'pos vault-dock-late', 'log BENCH1110 vault late walk through']
     return s
+
+
+def lanes_seg(who):
+    """DM03VAULTK_1110: the closed-door control walk in three lanes, nothing armed (the Backstop is 240 s away)."""
+    s = ['wait 3000'] + vault_doors('t0')
+    if who != 'host':
+        return s + ['wait 60000'] + vault_doors('client sample')
+    s += ['waitstate 0x19 90000', 'wait 15000', 'tele %d %d %d' % (VAULT_WARM[0], VAULT_LOBBY[1], VAULT_DOCK[1]), 'wait 2500', 'pos vault-lobby',
+          'goto %d %d 40 6000' % (VAULT_WARM[0] - 150, VAULT_DOCK[1]), 'pos vault-warm', 'log BENCH1110 vault warm-up walk (dock side)']
+    for x in VAULT_LANES:
+        s += ['tele %d %d %d' % (x, VAULT_LOBBY[1], VAULT_DOCK[1]), 'wait 2500', 'pos vault-lane%d-0' % x,
+              'goto %d %d 10 5000' % (x, VAULT_SHUT[1]), 'pos vault-lane%d' % x, 'log BENCH1110 vault control lane x %d' % x]
+    return s + vault_doors('after lanes')
 
 
 def md5_file(p):
@@ -157,6 +177,8 @@ _segment, _item_checks = M.segment, M.item_checks
 def segment(k, who):
     if k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
         return vault_seg(who, k == 'DM03VAULT_1110')
+    if k == 'DM03VAULTK_1110':
+        return lanes_seg(who)
     if k == 'DM03BS_1110':
         p = '%s/doors.json' % M.kd(k)
         return back_seg(who, json.load(open(p)) if os.path.isfile(p) else [])
@@ -240,9 +262,39 @@ def vault_checks(k, a):
     return res, info
 
 
+def lanes_checks(k, a):
+    res, info = [], []
+
+    def chk(name, cond, detail='', warn=False):
+        res.append(('PASS' if cond else ('WARN' if warn else 'FAIL'), name, detail))
+    chk('item segment ran on the host (level loaded ... segment done)', any('BENCH1109 %s host level loaded' % k in l for l in a)
+        and any('BENCH1109 %s host segment done' % k in l for l in a), '%d host log lines' % len(a))
+    chk('KL_Vault rows present (the diag stage is the one loaded)', len(M.by_entity(M.ents(a, 'KL_Vault'))) >= 1)
+    lb, wm = M.pos_of(a, 'vault-lobby'), M.pos_of(a, 'vault-warm')
+    chk('local player simulated: the warm-up walk moved the host >= 50 cm (else the bench is INVALID)',
+        bool(lb and wm) and abs(wm[0] - lb[0]) + abs(wm[2] - lb[2]) >= 50, '%s -> %s' % (lb, wm))
+    blocked = []
+    for x in VAULT_LANES:
+        p0, p1 = M.pos_of(a, 'vault-lane%d-0' % x), M.pos_of(a, 'vault-lane%d' % x)
+        chk('lane x %d: tele landed on the dock side (z > %d)' % (x, DOCK_Z), bool(p0) and p0[2] > DOCK_Z, 'pos %s' % (p0,))
+        b = bool(p0 and p1) and p0[2] > DOCK_Z and p1[2] >= HINGE_Z
+        blocked.append(b)
+        # a lane result, not a pass/fail: WARN marks "walked through"
+        chk('lane x %d: the shut doors stopped the walk (stayed z >= %d)' % (x, HINGE_Z), b, '%s -> %s' % (p0, p1), warn=True)
+    v = dict(zip(VAULT_LANES, blocked))
+    verdict = ('all lanes blocked: the controller (stripped on stage_sc) is what holds the shut slab' if all(blocked) else
+               'only the seam lane x 0 walked through: the slabs leave a gap at x 0' if not v[0] and v[-50] and v[50] else
+               'no lane blocked: neither the controller nor the seam; the slab body itself does not stop the capsule' if not any(blocked) else
+               'mixed: %s' % v)
+    info.append('VERDICT: ' + verdict)
+    return res, info
+
+
 def item_checks(k, a, dd=(), ctrl=None):
     if k in ('DM03VAULT_1110', 'DM03VAULTB_1110'):
         return vault_checks(k, a)
+    if k == 'DM03VAULTK_1110':
+        return lanes_checks(k, a)
     if k != 'DM03BS_1110':
         return _item_checks(k, a, dd, ctrl)
     res, info = _item_checks('DM03_1109', a, dd, ctrl)

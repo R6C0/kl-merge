@@ -12,7 +12,7 @@ Door A = the lobby-to-dock doorway at (0, 240, -6806): an EMPTY doorway today (n
      so the map total stays exactly 7,000,000; --loot L2 is NOT built (refused: needs loot clones, no node-clone path for loot objects here).
 No actor or squad is added (census unchanged). Both zips (plain + bots) are rebuilt the same way; Entries= of KLJoin.ini / KLGuns.ini follows the new .prm chunk count.
 
-  python tools/kl_dm03vault_1110.py stage [--in-dir DIR] [--out DIR] [--accept-input] [--fuse S] [--backstop S] [--loot L1|L2]
+  python tools/kl_dm03vault_1110.py stage [--in-dir DIR] [--out DIR] [--accept-input] [--fuse S] [--backstop S] [--loot L1|L2] [--keep-kick (diagnostic)]
 Default in-dir C:\kl_build_1024\dm03backswat_1110; restage on the live zip stage with --in-dir C:\kl_build_1024\dm03doorfix_1109 --accept-input (pins what it finds).
 """
 import collections, hashlib, json, math, os, re, shutil, statistics, struct, sys, tempfile
@@ -27,6 +27,9 @@ MAPDIR = os.path.join(GAME, 'KLExpansion', 'Maps', 'DM03')
 IN_DIR = r'C:\kl_build_1024\dm03backswat_1110'
 OUT = r'C:\kl_build_1024\dm03vault_1110\stage'
 TAG = '.before-dm03vault_1110'
+# --keep-kick (DIAGNOSTIC stage only, never ship): keep the KickDoor controller + kick sound. Bench 11-10 DM03VAULTB_1110: the shut leaves did NOT block a
+# walk; every proven kick door keeps its controller, so this tests whether the stripped controller leaves the leaf (and its keyed slab) out of the shut pose
+KEEP_KICK = False
 FILES = ('F03_Main.zip', 'F03_Main.bots.zip', 'F03_Main.bots.base.md5')
 INIS = ('KLJoin.ini', 'KLGuns.ini')
 KNOWN_INPUTS = {('a81ede87c6798642ebf8261499762fd0', 'e8c06e13d5bc2182fe005a1bf2bae741'): 'dm03backswat_1110 output',
@@ -398,9 +401,9 @@ def rebuild(src, dst, top, nums, fuse, backstop, log):
     kl_fa.edit(Jn, ka, ci, fa)
     kb = one(Jn, R + VAULT + BS + 'Boom')
     HBL.dress(Jn, kb, 'AITrigger', log=log)
-    for kk in tg['action']:                              # nobody kicks the vault open
+    for kk in tg['action'] if not KEEP_KICK else ():     # nobody kicks the vault open
         Jn.nodes[kk]['ctrls'] = [(nm, b) for nm, b in Jn.nodes[kk]['ctrls'] if Jn.p.key(nm) != 'KickDoor']
-    for kk in tg['front']:                               # no kick sound at the swing: the blast is the sound
+    for kk in tg['front'] if not KEEP_KICK else ():      # no kick sound at the swing: the blast is the sound
         cs = Jn.nodes[kk]['ctrls']
         keep = [(nm, b) for nm, b in cs if Jn.p.key(nm) != 'Audio_PlaySound']
         if [Jn.p.key(nm) for nm, _b in keep] != ['MatPosAnimProxy']:
@@ -580,6 +583,8 @@ def main(a):
     if not a or a[0] != 'stage':
         print(__doc__); return 2
     opt = lambda k, d=None: a[a.index(k) + 1] if k in a else d
+    global KEEP_KICK
+    KEEP_KICK = '--keep-kick' in a
     for n, o, w in stage(opt('--in-dir', IN_DIR), opt('--out', OUT), '--accept-input' in a, float(opt('--fuse', FUSE_S)), float(opt('--backstop', BACKSTOP_S)), opt('--loot', 'L1')):
         print('%-26s %s -> %s' % (n, o, w))
     return 0
