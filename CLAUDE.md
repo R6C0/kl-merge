@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~05:00 - [d0] INSTALLED after bench PASS: SMART COPS DM01 (e091f0d8 / bots 957f20aa / base 6b7255e6) + DM03 (33361cd1 / 0bc8d138 / a4ad617a, on fc's back SWAT),
+DM05A LCDOORS timer (791eb9c3 / 912e08a5 / 501e1b79). Undo: C:/kl_build_1024/{smartcops_1110/DM01,smartcops_1110/DM03,lcdoors_1110}/UNDO.bat. DM02C (doors/glass/shutter/shop) NOT installed:
+host killed at the door 2 stand (AI posts; stands moved, 65d3543e), door 3 stand on a merc post, and both vault glass panes are SWUNG out of their doorways (block nothing): closed-pose stage being built.
 2026-11-10 ~03:45 - [f0] DM03 BACK-SWAT INSTALLED (owner 11-09 ask) after bench DM03BS_1110 PASS (tools/kl_bench_1110.py, TEST f4c8c3fd, 2 seats, items 16/0, online 7/0, census 48, 427 cop hits, kick 176 ok, no screenshots so the SWAT look is unseen):
 DM03 8e23cbd3 -> a81ede87, bots e8c06e13, base afc6ca40, KLJoin 5c02ca99 untouched. Undo: python C:/kl_build_1024/dm03backswat_1110/install.py --undo --skip-run-check (backups *.before-dm03backswat_1109).
 DM03 chain agreed with d0: back-SWAT -> d0 smartcops re-staged on a81ede87 -> vault (tools/kl_dm03vault_1110.py cc3702a5, stage on a81ede87, NOT benched) re-staged on smartcops. Vault review: a detour via the security hall stays open (shortcut, not a gate: owner call); 240 s Backstop may replay the opening after an early blast (bench must check).

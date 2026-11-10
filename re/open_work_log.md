@@ -1,3 +1,11 @@
+2026-11-10 ~05:00 - [d0] INSTALLED after bench PASS (each undone byte-exact by the kit, then installed by its install.py, undo --dry OK):
+SMARTCOPS_DM01_1110: 0 faults, host alive, 1 KitchenBoy man ran 776 -> 191 cm to a cover stand and left it again; DM01 e091f0d8 / bots 957f20aa / base 6b7255e6.
+SMARTCOPS_DM03_1110 ALL PASS: 3 Garage men ran to cover, 6 left it, 8/11 move after 60 s; DM03 33361cd1 / 0bc8d138 / a4ad617a (on fc's back SWAT a81ede87).
+LCDOORS_1110 run 3: doors slide 100 cm, shut try stopped at x 1545, both walks through after the timer; DM05A 791eb9c3 / 912e08a5 / 501e1b79.
+Bench probe facts: cover boxes are NOT in the entity table (ents '_KC_' 0 of 19910); wave members show as ZGROUP rows. Checks relaxed accordingly (65d3543e).
+DM02C runs 1+2 VOID after a host death 0.1-0.7 s after the tele to (-1503,1793): no kill entity anywhere; KickDoorBehaviour PosInfo 26 cm + merc Defend Pos#02 60 cm (GUESS: a merc).
+Door 3 front (900,2497) traps the player: merc Defend Pos#01 16 cm away. Both Whole04 vault panes (REF 23182 yaw -50, REF 24258 yaw +40) are swung OUT of their
+openings (door 1 x=-1000 z 2440..2560, door 2 z=1700 x -1560..-1440) in render AND HVK: a player walks past the drawn glass. Closed-pose stage being built (combined_closed).
 2026-11-10 ~03:45 - [f0] DM03 BACK-SWAT INSTALLED (owner 11-09 ask) after bench DM03BS_1110 PASS (tools/kl_bench_1110.py, TEST f4c8c3fd, 2 seats, items 16/0, online 7/0, census 48, 427 cop hits, kick 176 ok, no screenshots so the SWAT look is unseen):
 DM03 8e23cbd3 -> a81ede87, bots e8c06e13, base afc6ca40, KLJoin 5c02ca99 untouched. Undo: python C:/kl_build_1024/dm03backswat_1110/install.py --undo --skip-run-check (backups *.before-dm03backswat_1109).
 DM03 chain agreed with d0: back-SWAT -> d0 smartcops re-staged on a81ede87 -> vault (tools/kl_dm03vault_1110.py cc3702a5, stage on a81ede87, NOT benched) re-staged on smartcops. Vault review: a detour via the security hall stays open (shortcut, not a gate: owner call); 240 s Backstop may replay the opening after an early blast (bench must check).
