@@ -29,12 +29,6 @@
 #include "kllistguard_logic.h"
 #include "kllistguard_seh.h"
 
-static int kllg_on;
-static int kllg_veh_skip(EXCEPTION_POINTERS *ep)   /* veh(): 1 = this is the guarded fault, let the wrapper's __except have it, no CRASH line, no dump */
-{
-    EXCEPTION_RECORD *r = ep->ExceptionRecord;
-    return kllg_on && kllg_catch((unsigned)r->ExceptionCode, (unsigned)(DWORD_PTR)r->ExceptionAddress, kllg_lo, kllg_hi);
-}
 static DWORD *kllg_vt;                         /* the private vtable (VirtualAlloc'd, never freed) */
 static volatile LONG kllg_busy, kllg_done;     /* scanner thread: running / results ready */
 static DWORD kllg_cand[16]; static volatile LONG kllg_ncand;

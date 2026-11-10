@@ -13,6 +13,7 @@ static KLLG_FN kllg_orig;                      /* 0x630700 */
 static unsigned kllg_lo = KLLG_FN_LO, kllg_hi = KLLG_FN_HI;   /* the test narrows these to its fake function */
 static volatile LONG kllg_hits;                /* faults swallowed, all rounds */
 static volatile LONG kllg_calls;               /* wrapper calls (the test proves the wrapper really ran) */
+static volatile LONG kllg_in;                  /* > 0 while the guarded call runs: veh() only stays quiet then (an unguarded fault keeps its CRASH line + dump) */
 static unsigned kllg_last_log;
 static int kllg_log;
 
@@ -32,10 +33,20 @@ static void kllg_caught(void *self, unsigned n)
     }
 }
 
+static int kllg_on;
+static int kllg_veh_skip(EXCEPTION_POINTERS *ep)   /* veh(): 1 = this is the guarded fault, let the wrapper's __except have it, no CRASH line, no dump */
+{
+    EXCEPTION_RECORD *r = ep->ExceptionRecord;
+    return kllg_on && kllg_in > 0 && kllg_catch((unsigned)r->ExceptionCode, (unsigned)(DWORD_PTR)r->ExceptionAddress, kllg_lo, kllg_hi);
+}
+
 static void __fastcall kllg_wrap(void *self, void *edx, unsigned n, void *rec)
 {
     InterlockedIncrement(&kllg_calls);
-    __try { kllg_orig(self, edx, n, rec); }
-    __except (kllg_filter(GetExceptionInformation())) { kllg_caught(self, n); }
+    InterlockedIncrement(&kllg_in);
+    __try {
+        __try { kllg_orig(self, edx, n, rec); }
+        __except (kllg_filter(GetExceptionInformation())) { kllg_caught(self, n); }
+    } __finally { InterlockedDecrement(&kllg_in); }       /* also when a fault we do not catch unwinds through */
 }
 #endif

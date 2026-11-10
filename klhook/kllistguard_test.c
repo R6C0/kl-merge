@@ -73,6 +73,10 @@ int main(void)
     kllg_lo = (unsigned)(DWORD_PTR)fake_inside; kllg_hi = kllg_lo + 0x200; mode = 2; r = 0;
     __try { kllg_wrap((void *)1, 0, 1, (void *)1); } __except (EXCEPTION_EXECUTE_HANDLER) { r = 1; }
     CHECK(r == 1 && kllg_hits == 2, "a non-AV must reach the outer handler");
+    CHECK(kllg_in == 0, "the inside-wrapper count is back to 0 after clean, caught and passed-through calls (%ld)", (long)kllg_in);
+    kllg_on = 1; { EXCEPTION_RECORD er = {0}; EXCEPTION_POINTERS ep = {&er, 0}; er.ExceptionCode = KLLG_AV; er.ExceptionAddress = (void *)(DWORD_PTR)kllg_lo;
+        CHECK(!kllg_veh_skip(&ep), "veh() must not stay quiet for an in-range AV outside the wrapper (unguarded crash keeps its log + dump)");
+        kllg_in = 1; CHECK(kllg_veh_skip(&ep), "inside the wrapper the in-range AV is skipped"); kllg_in = 0; }
 
     printf(bad ? "kllistguard_test: %d FAIL\n" : "kllistguard_test: all passed\n", bad);
     return bad ? 1 : 0;
