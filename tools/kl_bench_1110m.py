@@ -26,6 +26,8 @@ M, B = T.M, T.B
 LC_LEAVES = ('D04', 'D05', 'D1', 'D2')
 LC_MID = (1900, 354, 3313)          # between the pairs: the LootArea spawn points (1900..2100, 354, 3300..3400) of the clearance report
 LC_WEST = (1000, 3313)              # lobby side of the outer pair (trigger box x 900..2500)
+LC_WARM = (2300, 3313)              # warm-up goto targets between the pairs (on the nav mesh, reached in kl_route on the staged zip)
+LC_WARM2 = (1700, 3313)
 LC_EAST = (3000, 3313)              # far side of the inner pair (GUESS: open floor; the clearance walk reached 26527 more cells with the doors open)
 
 K = {
@@ -53,12 +55,16 @@ def lc_ents():
 def lc_seg(who):
     s = ['wait 1000'] + lc_ents() + ['log BENCH1110 lcd t0 leaves']
     if who == 'host':
-        # within the 20 s timer: from between the pairs try to walk out west (shut = NOT reached), then after the timer walk out both ways
-        s += ['waitstate 0x19 90000', 'tele %d %d %d' % (LC_MID[0], LC_MID[1] + 60, LC_MID[2]), 'wait 1500', 'pos lcd-mid',
-              'log BENCH1110 lcd shut try', 'goto %d %d 60 4000' % LC_WEST, 'pos lcd-shut', 'log BENCH1110 lcd shut try done'] + lc_ents() + [
-              'wait 25000'] + lc_ents() + ['log BENCH1110 lcd after timer',
-              'tele %d %d %d' % (LC_MID[0], LC_MID[1] + 60, LC_MID[2]), 'wait 1500', 'goto %d %d 80 8000' % LC_WEST, 'pos lcd-west', 'log BENCH1110 lcd west done',
-              'tele %d %d %d' % (LC_MID[0], LC_MID[1] + 60, LC_MID[2]), 'wait 1500', 'goto %d %d 80 8000' % LC_EAST, 'pos lcd-east', 'log BENCH1110 lcd east done',
+        # within the 20 s timer: from between the pairs try to walk out west (shut = NOT reached), then after the timer walk out both ways.
+        # Run 1 (11-10 03:30): tele at floor + 60 right after GO, the walker never turned or moved (2nd tele stayed at y 414 for minutes: player not
+        # simulated); so settle 8 s after GO, tele at floor + 8 and prove the walker with a warm-up goto between the pairs (open floor, kl_route).
+        tele = 'tele %d %d %d' % (LC_MID[0], LC_MID[1] + 8, LC_MID[2])
+        s += ['waitstate 0x19 90000', 'wait 8000', tele, 'wait 1000', 'pos lcd-mid',
+              'goto %d %d 60 3000' % LC_WARM, 'pos lcd-warm', 'log BENCH1110 lcd warm-up done',
+              'log BENCH1110 lcd shut try', 'goto %d %d 60 3000' % LC_WEST, 'pos lcd-shut', 'log BENCH1110 lcd shut try done'] + lc_ents() + [
+              'wait 22000'] + lc_ents() + ['log BENCH1110 lcd after timer',
+              tele, 'wait 1000', 'goto %d %d 60 3000' % LC_WARM2, 'pos lcd-warm2', 'goto %d %d 80 8000' % LC_WEST, 'pos lcd-west', 'log BENCH1110 lcd west done',
+              tele, 'wait 1000', 'goto %d %d 80 8000' % LC_EAST, 'pos lcd-east', 'log BENCH1110 lcd east done',
               'wait 60000'] + lc_ents() + ['log BENCH1110 lcd still open']
     else:
         s += ['wait 40000'] + lc_ents() + ['log BENCH1110 lcd join after timer']
@@ -75,6 +81,13 @@ def lc_checks(a, chk):
             mv = max(abs(r[-1][3][i] - r[0][3][i]) for i in (0, 2))
             chk('%s slid (moved >= 40 cm between the first and the last sample)' % n, mv >= 40, 'moved %.0f cm' % mv)
             chk('%s at floor height (y 300..450, not buried)' % n, all(300 <= x[3][1] <= 450 for x in r), 'y %s' % sorted({round(x[3][1]) for x in r}))
+    warm = M.goto_lines(a, *LC_WARM) + M.goto_lines(a, *LC_WARM2)
+    walks = bool(warm) and all('NOT reached' not in g for g in warm)
+    chk('walker moves (warm-up gotos between the pairs reached; else the walk checks are void)', walks,
+        '; '.join(g[13:120] for g in warm) if warm else 'no warm-up goto line')
+    if not walks:
+        info.append('walk checks VOID: the player did not walk on open floor (see pos lcd-mid / lcd-warm)')
+        return info
     shut = M.goto_lines(a, *LC_WEST)
     chk('walk west during the timer is blocked (doors shut)', bool(shut) and 'NOT reached' in shut[0], shut[0][13:150] if shut else 'no goto line', warn=True)
     chk('walk west after the timer reached (outer pair open)', len(shut) >= 2 and 'NOT reached' not in shut[1], shut[1][13:150] if len(shut) >= 2 else 'no 2nd goto line')
@@ -451,6 +464,13 @@ def item_checks(k, a, dd=(), ctrl=None):
         info += dm02c_checks(a, chk)
     elif k.startswith('SMARTCOPS_'):
         info += smartcops_checks(a, chk, K[k]['map'])
+    # LCDOORS/DM02C run 1 (11-10): police downed the host despite KeepAlive=1 and every walk after it stood still at the tele point.
+    # A death inside the segment voids the walk verdicts that follow it, so it is a FAIL of its own (rerun) and named with its time.
+    i0 = next((i for i, l in enumerate(a) if 'BENCH1109 %s host level loaded' % k in l), 0)
+    i1 = next((i for i, l in enumerate(a) if 'BENCH1109 %s host segment done' % k in l), len(a))
+    died = [l for l in a[i0:i1] if 'FA_DieFrom' in l or re.search(r'skulls state: row 0 .* deaths [1-9]', l)]
+    chk('host stayed alive through the segment (else later walks are void)', not died,
+        ('died %s: %s' % (died[0][:12], died[0][13:120])) if died else 'no FA_DieFrom / skulls death on row 0')
     return res, info
 
 
