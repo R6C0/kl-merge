@@ -50,7 +50,7 @@ int main(void)
     CHECK(!kllg_cand_ok(0x2000000, 0x1234, 0x3000000), "wrong vptr is not");
     CHECK(kllg_log_due(1, 100, 0, 10000) && !kllg_log_due(2, 5000, 100, 10000) && kllg_log_due(2, 10200, 100, 10000), "log rate limit");
     CHECK(kllg_log_due(2, 5, 4294967000u, 10000) == 0, "tick wrap: now 5, last 4294967000 is a 301 ms gap, not due");
-    CHECK(kllg_next_delay(0) == 2000 && kllg_next_delay(3) == 15000 && kllg_next_delay(4) == 60000u && kllg_next_delay(-1) == 60000u, "scan schedule");
+    CHECK(kllg_next_delay(0) == 2000 && kllg_next_delay(3) == 15000 && kllg_next_delay(4) == 10000u && kllg_next_delay(-1) == 10000u, "scan schedule");
 
     /* ---- the real wrapper ---- */
     kllg_orig = (KLLG_FN)fake_inside; kllg_log = 1;

@@ -15,7 +15,7 @@
  * FINDING THE OBJECT: nothing in the exe lists it (one is made per level by the loader at 0x8adfa6, stored in an owner at +0x86d4). A
  * low-priority thread scans committed private read-write memory for a 4-aligned dword 0xb5a1d4 whose +0x20 pointer is set (kllg_cand_ok),
  * each hit is repointed by the game thread (klh_data, re-checking the dword first). Scans: +2, +6, +15, +30 s after a scene change, then
- * every 60 s. Every scan reads in __try, so a page freed meanwhile only ends that region.
+ * every 10 s (a round-2 object without a scene change is caught within 10 s). Every scan reads in __try, so a page freed meanwhile only ends that region.
  *
  * ON A CATCH: only an access violation whose address lies in 0x4f8a60..0x4f8b49 is swallowed; the half-done update of that one list is
  * dropped (GUESS: harmless, the next frame redoes it; the record with key 0 was dead anyway). Anything else goes on to the game's handler.
@@ -30,6 +30,11 @@
 #include "kllistguard_seh.h"
 
 static int kllg_on;
+static int kllg_veh_skip(EXCEPTION_POINTERS *ep)   /* veh(): 1 = this is the guarded fault, let the wrapper's __except have it, no CRASH line, no dump */
+{
+    EXCEPTION_RECORD *r = ep->ExceptionRecord;
+    return kllg_on && kllg_catch((unsigned)r->ExceptionCode, (unsigned)(DWORD_PTR)r->ExceptionAddress, kllg_lo, kllg_hi);
+}
 static DWORD *kllg_vt;                         /* the private vtable (VirtualAlloc'd, never freed) */
 static volatile LONG kllg_busy, kllg_done;     /* scanner thread: running / results ready */
 static DWORD kllg_cand[16]; static volatile LONG kllg_ncand;
@@ -86,7 +91,7 @@ static void kllg_tick(int game_thread)
     if (InterlockedCompareExchange(&kllg_done, 0, 1) == 1) {                 /* results of a scan: repoint what still has the original vptr */
         for (i = 0; i < kllg_ncand; i++) {
             DWORD at = kllg_cand[i], nv = (DWORD)(DWORD_PTR)kllg_vt;
-            if (klh_rd32(at) != KLLG_VT) continue;
+            if (klh_rd32(at) != KLLG_VT || !klh_rd32(at + 0x20)) continue;      /* re-check the layout at write time (block freed/reused since the scan) */
             if (klh_data((void *)(DWORD_PTR)at, &nv, 4, "listguard: CListUser vptr (private vtable)")) {
                 kllg_patched++;
                 if (kllg_log) klog("listguard: CListUser object at 0x%08x now uses the guarded vtable (%d patched, scan %d)", at, kllg_patched, kllg_scans);

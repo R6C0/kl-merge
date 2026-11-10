@@ -52,12 +52,12 @@ static int kllg_log_due(int hits, unsigned now, unsigned last_log, unsigned gap_
     return hits <= 1 || (unsigned)(now - last_log) >= gap_ms;
 }
 
-/* when to scan the heap for the object(s): after a scene change at +2, +6, +15, +30 s, then every 60 s while the guard has a scene.
+/* when to scan the heap for the object(s): after a scene change at +2, +6, +15, +30 s, then every 10 s while the guard has a scene.
    step = how many of the four timed scans already ran for this scene; returns the delay in ms until the next one. */
 static unsigned kllg_next_delay(int step)
 {
     static const unsigned d[4] = { 2000, 4000, 9000, 15000 };      /* gaps between scans: 2, 6, 15, 30 s after the change */
-    return step >= 0 && step < 4 ? d[step] : 60000u;
+    return step >= 0 && step < 4 ? d[step] : 10000u;     /* 10 s: a new object per round / respawn (no round signal known) is guarded within 10 s */
 }
 
 #endif

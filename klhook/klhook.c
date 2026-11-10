@@ -612,6 +612,7 @@ static void log_context(CONTEXT *c)
 
 static int klcg_any;                              /* klcampguard.c: [CampGuard] any exact-site guard switched on */
 static int klcg_veh(EXCEPTION_POINTERS *ep);       /* klcampguard.c: 1 = a byte-checked known fault site, context edited, resume */
+static int kllg_veh_skip(EXCEPTION_POINTERS *ep);  /* kllistguard.c: 1 = the ListUserGuard fault (swallowed by its wrapper: not a crash) */
 static void klbr_veh_restore(void);               /* klbrain.c (included below): [Brain] RealRun - a fault with the shadow rules swapped in puts the real ones back */
 static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
 {
@@ -628,6 +629,7 @@ static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
         return EXCEPTION_CONTINUE_SEARCH;
     }
     if (klcg_any && klcg_veh(ep)) return EXCEPTION_CONTINUE_EXECUTION;       /* [CampGuard] (default off): exact-site resumes, before AssertSoft / the crash accounting */
+    if (kllg_veh_skip(ep)) return EXCEPTION_CONTINUE_SEARCH;                  /* [Crash] ListUserGuard: the wrapper swallows it; no CRASH line, no minidump */
     if (code == EXCEPTION_BREAKPOINT && klh_soft_n_sites && ((BYTE *)at)[0] == 0xCC) {       /* AssertSoft: step over, no dump, no ASSERT line */
         int k = kas_find(klh_soft_list, klh_soft_n_sites, at);      /* VAs (AS1: offsets never matched the ini's VAs) */
         if (k >= 0 && klh_soft_guard) {                 /* AssertSoftGuard: step over only a record inside the cover pool (re/assertsoft_safety_1101.md) */
