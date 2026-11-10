@@ -143,7 +143,7 @@ def main():
 
         # F: a fresh install points the ini's game folders at this PC; verify, re-install and uninstall accept it as ours
         check_localize()
-        pd2 = os.path.join(base, 'pd2'); os.makedirs(pd2)
+        pd2 = os.path.join(base, 'p1', 'PAYDAY 2'); os.makedirs(pd2)
         fargs = ('--dm', dm, '--pd2', pd2, '--pkg', pkg, '--yes')
         edited = [f for f in os.listdir(dd) if '.edited-' in f]
         check(run('install', dd, *fargs) == 0, 'F install without a user ini')
@@ -156,6 +156,13 @@ def main():
         check(run('verify', dd, '--pkg', pkg, '--pd2', pd2) == 0, 'F verify clean on the localized ini')
         before = tree(dd)
         check(run('install', dd, *fargs) == 0 and tree(dd) == before, 'F second install changes nothing')
+        pd2b = os.path.join(base, 'p2', 'PAYDAY 2'); os.makedirs(pd2b)
+        check(run('install', dd, '--dm', dm, '--pd2', pd2b, '--pkg', pkg, '--yes') == 0, 'F install after Payday 2 moved')
+        ini = open(os.path.join(dd, 'KLHook.ini'), 'rb').read()
+        check(('Folder = %s/assets' % os.path.abspath(pd2b)).encode() in ini, 'F unedited ini re-pointed at the new Payday 2 folder')
+        j = json.load(open(R.journal_path(dd)))
+        rec = [x for x in j['entries'] if x['rel'] == 'KLHook.ini'][0]
+        check(rec.get('local_sha1') == sha(os.path.join(dd, 'KLHook.ini')), 'F journal follows the re-pointed ini')
         check(run('uninstall', dd, '--yes') == 0, 'F uninstall')
         check(not os.path.exists(os.path.join(dd, 'KLHook.ini')), 'F localized ini removed, not kept as edited')
         check([f for f in os.listdir(dd) if '.edited-' in f] == edited, 'F no new .edited copy')

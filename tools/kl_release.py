@@ -1217,13 +1217,20 @@ def cmd_install(a):
     done = {x['rel']: x for x in j['entries']}
     say('checking the stock source files ...')
     todo = []
+    roots = dict(dd=dd, pd2=pd2)
     for e in use:
         dest = os.path.join(dd, e['rel'])
+        rec = done.get(e['rel'])
+        if (e['rel'] in LOCALIZE and rec and rec['action'] in ('new', 'replaced') and rec['sha1'] == e['sha1']
+                and os.path.exists(dest) and env.sha(dest) in (e['sha1'], rec.get('local_sha1'))):
+            loc = localize_ini(dest, roots)            # our unedited ini: re-pointed every run (Payday 2 found since, an interrupted run)
+            if loc:
+                rec['local_sha1'] = loc
+                save_journal(dd, j)
+                say('  %s: game folders set to this PC' % e['rel'])
+            continue
         if os.path.exists(dest) and os.path.getsize(dest) == e['size'] and env.sha(dest) == e['sha1']:
             continue
-        loc = done.get(e['rel'], {}).get('local_sha1')
-        if loc and os.path.exists(dest) and env.sha(dest) == loc and done[e['rel']]['sha1'] == e['sha1']:
-            continue                                   # our ini with this PC's paths (localize_ini)
         todo.append(e)
     if not todo:
         say('everything is already installed and identical.')
@@ -1277,7 +1284,6 @@ def cmd_install(a):
     say('all %d files built and verified in %.0f s. Installing ...' % (len(built), time.time() - t0))
     tag = now_tag()
     used = set()
-    roots = dict(dd=dd, pd2=pd2)
     for e in todo:
         dest = os.path.join(dd, e['rel'])
         rec = dict(rel=e['rel'], sha1=e['sha1'], group=e['group'], size=e['size'])
