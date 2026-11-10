@@ -1329,6 +1329,12 @@ def cmd_install(a):
         skipped.append(e['rel'])
     if skipped:
         say('skipping %d files that need Payday 2' % len(skipped))
+    # the package ships as 2 zips (GitHub's 2 GiB asset limit): a half-unpacked package refuses here, before any write
+    missing = sorted({e['patch'] for e in use if e.get('patch')
+                      and not os.path.exists(os.path.join(pkg, 'patches', e['patch']))})
+    if missing:
+        raise Fail('the package is incomplete: %d patch files missing (e.g. %s). Run KL Dead Men Rising Setup.bat again '
+                   '(it downloads both package parts). Nothing has been installed.' % (len(missing), missing[0]))
     env = Env(dd, dm, pd2)
     j = load_journal(dd)
     done = {x['rel']: x for x in j['entries']}

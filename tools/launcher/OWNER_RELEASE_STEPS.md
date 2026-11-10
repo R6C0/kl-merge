@@ -8,7 +8,7 @@ verbs vs kl_release's argparse, XAML well-formed, bracket balance) and, on a PC 
 
 ## 0. What the tester receives, and why it carries no game data
 
-- `KL Dead Men Rising Setup.bat` (one file; RELEASE_URL inside it) -> downloads the release asset `KLMerge_package.zip` -> unpacks:
+- `KL Dead Men Rising Setup.bat` (one file; RELEASE_URL inside it) -> downloads the release assets `KLMerge_package.zip` + `KLMerge_package_2.zip` -> unpacks both:
   `manifest.json`, `patches\*.klp`, `kl_release.py`, optionally `KLMergeSetup.exe`, and `launcher\` (the .ps1,
   `KL Dead Men Rising.exe`, the tester README; Setup copies them up beside itself, so re-running Setup updates the launcher too).
 - `kl_release.py make` ships ONLY: our own files as literal bytes (`dinput8.dll`, `KLHook.ini`, `KLShopPage.ini`,
@@ -113,7 +113,7 @@ First build the launcher exe (after any change to `exe\DeadMenRising.cs` or the 
 ```bat
 powershell -ExecutionPolicy Bypass -File tools\launcher\pack_release.ps1 -Out C:\kl_release\pkg_1110 [-Exe dist\KLMergeSetup.exe]
 ```
--> `C:\kl_release\KLMerge_package_v<ver>.zip` + `.sha1`, plus the same bytes as `KLMerge_package.zip` (the upload name). It copies only manifest.json, the patches\ the manifest names (stale ones from earlier makes stay behind), kl_release.py, the
+-> TWO zips (GitHub refuses one asset of 2 GiB or more): `C:\kl_release\KLMerge_package_v<ver>.zip` (manifest, launcher, kl_release.py, first half of the patches) and `KLMerge_package_v<ver>_2.zip` (the other half + `package_part2.txt`), each + `.sha1`, plus the same bytes as `KLMerge_package.zip` / `KLMerge_package_2.zip` (the upload names). It refuses when either part is 2 GiB or more. It copies only manifest.json, the patches\ the manifest names (stale ones from earlier makes stay behind), kl_release.py, the
 launcher files (+ `launcher\kl_launcher_music.py` and your `launcher\bg\*.jpg`, section 2b) and the optional exe (never
 `_snap`, `parts`, `sha1cache.json`, never `launcher\music\`) and refuses if anything with a game extension slipped into
 the staging folder.
@@ -122,14 +122,14 @@ Where it is hosted (DECIDED 2026-11-09): the PUBLIC repo **https://github.com/R6
 no game data (README only; author R6C0 with the GitHub noreply address, NO Claude co-author line on anything there: owner's rule).
 A private repo's assets would need a token (`curl` gets 404), hence the separate public repo.
 The Setup bat's RELEASE_URL is fixed for good: `https://github.com/R6C0/dead-men-rising/releases/latest/download/KLMerge_package.zip`
-= the asset named exactly `KLMerge_package.zip` of the newest release. So every release uploads the zip under THAT name:
+= the asset named exactly `KLMerge_package.zip` of the newest release; part 2 is the same link with `_2.zip`. So every release uploads BOTH under THOSE names:
 
-pack_release.ps1 already writes that name beside the versioned zip (`KLMerge_package.zip` + `.sha1`, a hard link, no extra disk):
+pack_release.ps1 already writes those names beside the versioned zips (hard links, no extra disk):
 
 ```bat
-gh release create v<ver> C:\kl_release\KLMerge_package.zip C:\kl_release\KLMerge_package.zip.sha1 --repo R6C0/dead-men-rising --title "KL: Dead Men Rising v<ver>" --notes "Tester build. Run KL Dead Men Rising Setup.bat again to update."
+gh release create v<ver> C:\kl_release\KLMerge_package.zip C:\kl_release\KLMerge_package.zip.sha1 C:\kl_release\KLMerge_package_2.zip C:\kl_release\KLMerge_package_2.zip.sha1 --repo R6C0/dead-men-rising --title "KL: Dead Men Rising v<ver>" --notes "Tester build. Run KL Dead Men Rising Setup.bat again to update."
 ```
-(GitHub's limit is 2 GiB = 2,147,483,648 bytes per asset; check the zip size before the upload. Bots zips are patched against their own main zip, which keeps the 11-10 package near 2 GB.) Hand out `KL Dead Men Rising Setup.bat` (and the README) on Discord; do not attach the
+(GitHub's limit is 2 GiB = 2,147,483,648 bytes per asset; the 11-10 package is ~2.3 GB, hence the 2 parts. Setup downloads both into the same package\ folder; kl_release install refuses before writing anything when a patch file is missing.) Hand out `KL Dead Men Rising Setup.bat` (and the README) on Discord; do not attach the
 .bat to the public release unless you want anyone to find it there. A re-run of Setup downloads only when the zip is newer
 (`curl -z`; GUESS that GitHub's redirect target sends Last-Modified - if not, re-runs re-download, annoying, not harmful).
 

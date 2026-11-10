@@ -169,6 +169,18 @@ def main():
     asset = urls[0].rsplit('/', 1)[-1] if urls else '?'
     check("'%s'" % asset in read(PACK).decode('ascii', 'replace'),
           'pack_release.ps1 writes the upload file under the asset name RELEASE_URL downloads (%s)' % asset)
+    # part 2 (GitHub's 2 GiB asset limit): the same link with _2.zip, marker package_part2.txt written by pack_release
+    check('set "RELEASE_URL2=%RELEASE_URL:.zip=_2.zip%"' in bat, 'RELEASE_URL2 = RELEASE_URL with .zip -> _2.zip')
+    pack = read(PACK).decode('ascii', 'replace')
+    check("'KLMerge_package_2.zip'" in pack, 'pack_release.ps1 writes part 2 as KLMerge_package_2.zip')
+    check('package_part2.txt' in pack and '"package_part2.txt"' in bat, 'part 2 marker package_part2.txt: written by pack_release, checked by the bat')
+    check('2147483648' in pack and 'REFUSED' in pack, 'pack_release refuses a part of 2 GiB or more')
+    check('call :getpart "%RELEASE_URL2%"' in bat and 'call :unpackpart "%ZIP2%"' in bat, 'the bat downloads and unpacks part 2')
+    blabels = set(re.findall(r'^:(\w+)\s*$', bat, re.M))
+    calls = set(re.findall(r'call\s+:(\w+)', bat))
+    check(calls <= blabels, 'every call has its label (missing: %s)' % ', '.join(sorted(calls - blabels)))
+    check(b'the package is incomplete' in read(os.path.join(TOOLS, 'kl_release.py')),
+          'kl_release install refuses a package with patch files missing')
     check('findstr /i /c:"example.invalid"' in bat, 'the bat refuses to download from the placeholder URL')
     check('KLMergeLauncher.ps1' in bat and '-ExecutionPolicy Bypass -STA' in bat, 'the bat starts the launcher with -ExecutionPolicy Bypass -STA')
     check('zstandard' in bat and 'get-pip.py' in bat and '._pth' in bat, 'the bat installs zstandard into the embedded python (._pth + get-pip)')
