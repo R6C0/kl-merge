@@ -74,6 +74,8 @@ feat('hud', G_CORE, 'Mod HUD (kill feed, scoreboard, trackers, names)', 'on', 's
      'the owner plays with it', [('HUD', 'Enable', 1, 0, 0)])
 feat('balance', G_CORE, 'One damage scale for you, police and crew (Dead Men maps)', 'on', 'start',
      'v71 balance: the owner found the stock numbers too tanky', [('Balance', 'Enable', 1, 0, 0)])
+feat('difficulty', G_CORE, 'Difficulty keys: Ctrl+Home steps the AI heisters (STOCK / TOUGH / FAIR / FRAGILE), Ctrl+PageDown steps your damage taken (STOCK .. BRUTAL), Shift = back (recommended on)', 'on', 'start',
+     'kldifficulty.c [Difficulty] Enable + Ai= / You= (steps) -> [Balance] CopToCrew / CrewToCop / CopToYou / CrewToYou; live at once on a non-stock Arcade map when [Balance] Enable=1, stock maps and online keep their own table; keys Ctrl+Home / Ctrl+PageDown are a GUESS (free in klkeys.c); NOT run live', [('Difficulty', 'Enable', 1, 0, 0)])
 feat('climb', G_CORE, 'Free climb (hold W + E at a ledge)', 'on', 'start',
      "Dead Men's climb (luvsic's), only on maps with the climb clips", [('Climb', 'Enable', 1, 0, 0)])
 feat('liftdoors', G_CORE, 'Retomoto escape lift: the doors slide shut again 8 s after they opened (recommended on)', 'on', 'start',

@@ -150,6 +150,7 @@ C_TESTS = {
     'klcutlog_test.c': 'logic',        # klcutlog_logic.h ([Campaign] CutsceneLog: rate limit, signal edges, EXEC/ACT/ACTOR line text; no windows.h)
     'klcmpcore_test.c': 'logic',       # klcmpcore_logic.h (campaign core: scene-id routing, save redirect, progress ini)
     'klgrenade_test.c': 'logic',       # klgrenade_logic.h ([Grenade] Release decision)
+    'kldifficulty_test.c': 'logic',    # kldifficulty_logic.h ([Difficulty] AI heister / your-damage steps, stock step, defaults parity)
     'kllevelmusic_test.c': 'logic',    # kllevelmusic_logic.h ([LevelMusic] Restart: round 2+ music replay decision)
     'klvanrest_test.c': 'logic',       # klvanrest_logic.h ([BotFill] OnlineVanRest rest-position guard)
     'kladren_test.c': 'win',           # includes kladren.c
