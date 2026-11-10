@@ -125,6 +125,16 @@ def main():
     nd = M.describe_writes(lines, [('Input', 'PumpNoBlock', 0)])
     check(nd[0] == ('[Input] PumpNoBlock = 0  (new key; the DLL default was 0)', False), 'describe_writes: a new key written to its own DLL default is no change: %s' % nd)
 
+    # the [MenuSounds] word rows (2026-11-10): on = the key holds the row's word, absent key = the DLL default word, off writes dd
+    ms = M.BY_ID['menusnd_confirm']; mm = M.BY_ID['menusnd_menu']
+    ml = M.split_lines('[MenuSounds]\nEnable=1\nConfirm=DM\nMenu=menu\n')
+    check(M.state(ml, ms)[0] and M.state(ml, mm)[0], 'streq row: the word (any case) is on')
+    ml2 = M.split_lines('[MenuSounds]\nConfirm=off\n')
+    check(not M.state(ml2, ms)[0] and not M.state(ml2, mm)[0], 'streq row: another word (off) is off')
+    check(M.state(M.split_lines('[X]\n'), ms)[0] and not M.state(M.split_lines('[X]\n'), mm)[0], 'streq row: absent key = the DLL default word (dm on / Menu dd off)')
+    check(M.plan(ml, {'menusnd_confirm': False}) == [('MenuSounds', 'Confirm', 'dd')] and M.plan(ml2, {'menusnd_confirm': True}) == [('MenuSounds', 'Confirm', 'dm')], 'streq row: off writes dd, on writes dm')
+    check(M.describe_writes(ml, [('MenuSounds', 'Confirm', 'dd')])[0][0] == '[MenuSounds] Confirm = dd  (was DM)', 'describe_writes: a word key shows the old word')
+
     # a key the ini only carries commented out still gives its marker (2026-10-27: ';PumpNoBlock=0 ... (recommended off until benched)')
     lines3 = M.split_lines(INI + '\n[Input]\n; the pump\n;MouseMoveMs=0\n;PumpNoBlock=0   ; never waits (recommended off until benched: C27_PNB1)\n')
     check(M.find_commented_key(lines3, 'Input', 'PumpNoBlock') is not None, 'find_commented_key finds ;PumpNoBlock=0')
@@ -261,7 +271,7 @@ def main():
         check(not clashes, 'repo klhook/KLHook.ini: no row is on together with a key it must not be combined with (%s)' % clashes)
         again = twice(M.read_ini(repo))
         check(again == [], 'Recommended pressed twice on the repo ini writes nothing the second time: %s' % again)
-    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 71 + 6 * os.path.isfile(repo), len(FAILS)))
+    print('RESULT: %s (%d checks, %d failed)' % ('PASS' if not FAILS else 'FAIL', 76 + 6 * os.path.isfile(repo), len(FAILS)))
     return 1 if FAILS else 0
 
 

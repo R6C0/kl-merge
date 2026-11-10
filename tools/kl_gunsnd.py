@@ -328,7 +328,7 @@ def check_bank_preserved(whd0, wav0, whd1, wav1, changed=(), rebased=None):
     return n
 
 
-def rebuild(whd, wav, repl, snd=None, log=print, keep_geometry=False):
+def rebuild(whd, wav, repl, snd=None, log=print, keep_geometry=False, force_append=False):
     """repl: {record offset: (data bytes, samples, pcm bytes, seconds)} -> new (whd, wav, snd).
     keep_geometry: a clip that fits its old span is written there, zero-padded (zero ADPCM blocks decode to silence), and the record
     keeps its OLD size / samples / pcm and the .SND keeps its old seconds: only the audio bytes change, every other thing the engine
@@ -340,7 +340,7 @@ def rebuild(whd, wav, repl, snd=None, log=print, keep_geometry=False):
     for ro, (data, samples, pcmb, sec) in sorted(repl.items()):
         w = ws[ro]; old_off, old_size = w.get('off'), w.get('size')
         assert not w.streamed, w.name
-        if len(data) <= old_size:
+        if len(data) <= old_size and not force_append:   # force_append: never touch a span that records may share
             wav[old_off:old_off + old_size] = data + bytes(old_size - len(data)); new_off = old_off; how = 'in place'
         else:
             wav += bytes(-len(wav) % 16); new_off = len(wav); wav += data; how = 'appended'

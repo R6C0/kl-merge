@@ -67,6 +67,7 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~01:30 - [6b] MENU SOUND PICKER on the campaign build: klslot.c kls_menusounds + klmenusounds_logic.h (45 checks), [MenuSounds] Enable/Navigate/Confirm/Back/Toggle/Slider/Menu/Window = dd|dm|off|<clip>, Mod Options rows, tools/kl_menu_sounds_1110.py (+_test). Checked against the REAL banks (dd/dm/off/clip/bogus; installed 1109 bank refused by hash). Fix found: the table must not carry a 'dm' C line (parser reserves it). SHIP 68c6ee55 / TEST fc00acb8 (klhook/out_menupick1110*), kit C:/kl_build_1024/menupick_1110 (pins 258daf8e, NOT installed, NOT benched: queued after 81's T0).
 2026-11-10 ~00:55 - [06, offline] RELEASE ASSET NAME: Setup.bat downloads .../releases/latest/download/KLMerge_package.zip but pack_release.ps1 wrote only
 KLMerge_package_v<ver>.zip (+ a .sha1 naming that file); OWNER_RELEASE_STEPS had a manual copy step. pack_release now also writes KLMerge_package.zip (hard link) + its .sha1;
 steps say C:\kl_release (D: 1.2 GB free); launcher_test checks the name (fails on the old pack). Scratch pack x2 OK (11 files, 0 game files). Owner on the PC: no live run.

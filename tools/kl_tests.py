@@ -117,6 +117,7 @@ C_TESTS = {
     'klland_test.c': 'logic',          # klland_logic.h ([Join] Land= move timing + Land= range check)
     'klmenulook_test.c': 'logic',      # klmenulook_logic.h ([MenuLook] DeadMen: which menu files get their _deadmen sibling, no windows.h)
     'klcampui_test.c': 'logic',      # klcampui_logic.h ([CampaignUI] Menu: which patch archives get their _campui sibling, no windows.h)
+    'klmenusounds_test.c': 'logic',    # klmenusounds_logic.h ([MenuSounds] per-event menu sound picker table, resolve, apply)
     'klmappool_ov_test.c': 'logic',    # no windows.h
     'klhirepic_test.c': 'logic',       # no windows.h
     'klhirepick_test.c': 'logic',      # klhire_pick.h ([Hire] PickDefault)
