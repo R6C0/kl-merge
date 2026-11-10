@@ -1,3 +1,4 @@
+2026-11-10 ~09:20 - [d0] DM01B DOOR FIX BENCH dm01bdoorfix1110: stage 476aec5f / a056edbd LOADS + plays on TEST 03840ed0 (0 faults/asserts/dumps, van called, script done; only the kit round-end 0x1f/0x20 check unmet = timing); undo byte-exact, live 778b075c kept. HELD for the next release (81 freeze). tools/kl_prmroot_check.py (cc1e8741) --live: 42 zips PASS.
 2026-11-10 ~09:00 - [d0] RELEASE LOAD SWEEP 13/13 PASS on the live frozen-pack files (TEST 03840ed0, nothing installed): DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B DM07 DM09 DM11B DD10 + stock control
 each loaded under its own rule, reached 0x19, stood 60 s, 0 asserts/faults/dumps. Control = DD06 (page 0 entry 4; kit re-pinned f609e1d9). Offline: every type-7 .prm root of all 26 live zips hits a .oct record start.
 Run: python tools/kl_bench_1106.py run load_<MAP> solo. DM01B door fix (C:/kl_build_1024/dm01bdoorfix_1110) still held until 81 says upload done.
