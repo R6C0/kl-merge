@@ -28,7 +28,8 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
 - 11-10 ~18:30 f0: OWNER "install all" (via d0): live NO LONGER = v1.0.0 pack (pack itself untouched, sha1 504a398f). Next release maps (d0, md5 zip/bots/base): DM01B F03 bef32b16/02480065/b1b8d3cf,
   DM03 c71dbd01/fce3ac2a/e23f6545 (+KLJoin e36d9f99, KLGuns df4ee663), DM06B F02 4ce7ebc7/3d0f5a7f/c7ad563c, DM07 F06 852bda37/9ac8b388/52c1ee4e, DD10 F07 e152950e/604a9d9e/88f4be29,
-  DM09 F06 3a981a70/2ede91ed/0126d412. Held: dm09terminal_1110 (needs unmerged dll+ini, no west bounds). outfits_1110 (6b) pins pre-install md5s -> re-stage. Load benches by d0 running.
+  DM09 F06 3a981a70/2ede91ed/0126d412. Held: dm09terminal_1110 (needs unmerged dll+ini, no west bounds). outfits_1110 (6b) pins pre-install md5s -> re-stage. OWNER STOPPED TESTS: only DM01B load PASS; DM03/DM06B/DM07/DM09/DD10 installed UNTESTED
+  (load-bench each before the next pack). Live dll 6711bc5f / ini 0da79eb8 checked by f0 after d0 put SHIP back over a killed bench's TEST dll.
 - 11-10 ~11:20 f0: d0 LAUNCHER LIVE E2E PASS (from e2e_1110; no INSTALL/UNINSTALL): window finds DD/DM, VERIFY 0 problems, PLAY DMR -> main menu -> clean close, PLAY DOG DAYS -> hook renamed off,
   PLAY DMR -> hook back (md5 6711bc5f), verify 823/0 after, no stray dinput8.* files, no crash files. Steam launch options on the PC are now "-dx10" only (no DefaultScene/AutoExit; not ours to change).
   Next release (not in v1.0.0): README says the hook stays off after PLAY DOG DAYS (1e9be368); UIA names of the letter-spaced buttons; "..." folder buttons draw as tiny dashes; MOD line "not installed" on kit-installed PCs (no journal).
