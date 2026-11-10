@@ -6,7 +6,7 @@
 ;   [CampGuard] SndDiv=1          ; luvsic's divide guard on the sound path (recommended on; cheap extra, not a proven cause)
 ; CAMERA:
 [CampRappel]
-Cam=ours        ; who drives the camera while rappelling: ours = the free third-person look-around (like Fragile Alliance) from the descent (state CamHandFrom) to the landing + CamTailMs; his = the level's fixed RappelCB_* shots. luvsic's start animation stays either way (recommended on) GUESS: not run in kl2
+Cam=ours        ; (recommended on; code default his, the kit writes ours) who drives the camera while rappelling: ours = the free third-person look-around (like Fragile Alliance) from the descent (state CamHandFrom) to the landing + CamTailMs; his = the level's fixed RappelCB_* shots. luvsic's start animation stays either way (recommended on) GUESS: not run in kl2
 CamHandFrom=3   ; rappel sub-state where ours takes over: 3 = Jump_Loop (the descent), 2 = already on the wall, 1 = after the jump start
 CamTailMs=1500   ; keep the free camera this long after the landing so the Leave box cannot snap the outward shot back
 Land=auto       ; rappel landing camera (rappel.inc land=): off | turn | cam | turncam | auto (wall within 150 cm ahead -> turncam, else cam) (recommended on) GUESS: not run in kl2

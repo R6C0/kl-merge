@@ -147,6 +147,7 @@ C_TESTS = {
     'klcamprappel_test.c': 'logic',    # klcamprappel_logic.h (campaign rappel guards, missing-clip refusal)
     'klcamprevive_test.c': 'logic',    # klcamprevive_logic.h (wounded-merc watch, observation only)
     'klcampsquad_test.c': 'logic',     # klcampsquad_logic.h ([CampSquad] crew orders, pure numbers; includes windows.h via the shim)
+    'klcutlog_test.c': 'logic',        # klcutlog_logic.h ([Campaign] CutsceneLog: rate limit, signal edges, EXEC/ACT/ACTOR line text; no windows.h)
     'klcmpcore_test.c': 'logic',       # klcmpcore_logic.h (campaign core: scene-id routing, save redirect, progress ini)
     'klgrenade_test.c': 'logic',       # klgrenade_logic.h ([Grenade] Release decision)
     'kllevelmusic_test.c': 'logic',    # kllevelmusic_logic.h ([LevelMusic] Restart: round 2+ music replay decision)

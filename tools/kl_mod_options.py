@@ -225,6 +225,8 @@ feat('hudrows12', G_CORE, 'HUD crew list and round-end scoreboard: up to 12 play
      'klhud.c / klhud_board2.c [HUD] Rows12 (KLU_ROWS 12, KLSB_NROW 12; 9+ scoreboard rows use a tighter pitch, GUESS); NOT run live', [('HUD', 'Rows12', 1, 0, 1)])
 feat('hidekilledby', G_CORE, 'Hide the stock death panel own "Killed by" text so only the HUD KILLED BY line shows, Arcade and online (recommended on)', 'on', 'start',
      'kllocname.c HideKilledBy: LOC lookups from 0x500670 and the key KilledBy answer an empty string; needs [HUD] Enable=1 and KilledBy=1; NOT run live', [('HUD', 'HideKilledBy', 1, 0, 1)])
+feat('campequip', G_EXP, 'Dead Men campaign levels: Kane starts with the Dead Men rifle (MP5 / SG552 as our gun items); needs [Campaign] Enable=1 (recommended on)', 'on', 'start',
+     'klcampequip.c [CampEquip] Enable (Mode=dm, SkipScripted=1); never on FA / Arcade / online; NOT run live', [('CampEquip', 'Enable', 1, 0, 0)])
 feat('hidevan', G_EXP, 'Hide the van escape timer until the van is there', 'on', 'start',
      'klhud.c van card; needs [HUD] Enable=1', [('HUD', 'HideIdleEscape', 1, 0, 1)])
 feat('vanblow', G_EXP, 'Escape vehicle can blow up when nobody is aboard', 'on', 'start',
