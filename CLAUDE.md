@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-10 ~17:45 - [06] INSTALLED on owner "install all" (NOT benched, tests stopped): menuplates_1110 RE-STAGED on the live overlay (scene zip had moved caf16a44 -> 9de0f526):
+Overlay Patch01_deadmen ba1154de -> 76499363, Patch01_rows12_deadmen 3a452a28 -> 355a4b30, Scenes/kaneandlynch_deadmen 9de0f526 -> b2b494ab (only the OnFocus colour set = ink; 6b re-bases its menu kit on these).
+dm07plane_1110 (sub 0x108; re-staged on d0 exitstrip then 6b outfits): KLExpansion DM07 F06 f774dc97 -> da0e0431, bots ea470c0f -> 0fd216da, base a3ff31ad -> 54dec058. Both rehearsed byte-exact.
+Undo: dm07plane_1110\install.py --undo BEFORE outfits_1110; menuplates_1110\install.py --undo. Bench later: DM07 gate (planes block heisters, van passes), ML1 plate text dark.
 2026-11-10 ~11:40 - [d0, offline] HELD STAGES re-checked (dry-run on live): all pin live except exitstrip DM01B (stale 5eab5ecc). Re-staged on the door fix output:
 C:/kl_build_1024/exitstrip_ondoorfix/exitstrip_1110/DM01B (check PASS, lane unchanged, prm roots 0 stale). DM01B order after "upload done": dm01bdoorfix_1110 FIRST, then the strip.
 2026-11-10 ~11:15 - [d0] LAUNCHER E2E PASS (for 81, C:\kl_release\e2e_1110 + pkg_1110, no INSTALL/UNINSTALL): verify 823/0 before + after, dll 6711bc5f / ini 0da79eb8 unchanged, dinput8* list identical, no strays.
