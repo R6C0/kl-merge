@@ -132,6 +132,43 @@ static float kcamr_land_yaw(float yaw, int land_final)
 /* does the final landing action re-aim the camera (force teleport)? */
 static int kcamr_land_cam(int land_final) { return (land_final >> 1) & 1; }
 
+/* ---- 1110 [CampRappel] Cam=ours|his: WHO DRIVES THE CAMERA DURING THE DESCENT.
+ * Why (READ kl2.exe, disassembled): the campaign levels carry ~12 CCameraBox "RappelCB_*" boxes. A box hands its profile record to the camera
+ * (0x700830 -> cam+0x7fc) and 0x78bbc0 re-applies it every frame; while cam+0x7fc is non-null the camera ORIENTATION code (0x447240 ..) reads
+ * record+0x180 (EFMMode 3 LookFromPos / 1 LookAtPos) and aims the camera from the box's PosObject at the player: the view is a fixed shot,
+ * the player cannot look left / right. Our (Fragile Alliance) camera is the stock free third-person follow camera (profile selection 0x778f50 ->
+ * default profile 0x154a820 etc., tuned by klcam.c / klcamsmooth.c), mouse looks around the player. 0x778f50 runs that selection only
+ * when 0x78bbc0 returns 0, i.e. when cam+0x7fc is NULL. So "ours" = clear cam+0x7fc while the descent runs. His = leave the boxes alone (stock).
+ * The start animation stays his: the takeover begins at rappel sub-state HandFrom (READ 0x825290: 0 Start clip, 1 Jump_Start, 2 Wait_On_Wall,
+ * 3 Jump_Loop = the descent, 4 Jump_End, 5 done) and ends at the landing edge plus TailMs (the Leave box would otherwise snap the outward shot back). */
+enum { KCAMR_CAM_HIS = 0, KCAMR_CAM_OURS };
+static int kcamr_cam_parse(const char *s)
+{
+    static const char *yes[] = { "ours", "on", "1" };
+    int i;
+    if (!s || !*s) return KCAMR_CAM_HIS;
+    for (i = 0; i < 3; i++) {
+        const char *a = s, *b = yes[i];
+        while (*a && *b && ((*a | 0x20) == *b)) { a++; b++; }
+        if (!*a && !*b) return KCAMR_CAM_OURS;
+    }
+    return KCAMR_CAM_HIS;                                      /* his, off, 0 and anything unknown = stock boxes */
+}
+/* HandFrom clamps to 0..4 (default 3) */
+static int kcamr_cam_handfrom(int v) { return v < 0 ? 3 : (v > 4 ? 3 : v); }
+/* is the camera ours at this instant? rappelling = the movement is active or movement id 0x10; state = player+0x25c0 (-1 when unknown);
+ * since_end_ms = ms since the rappel ended (-1 while it runs or never ran), tail_ms = the hold after the end */
+static int kcamr_cam_ours_now(int cam_mode, int rappelling, int state, int hand_from, long since_end_ms, long tail_ms)
+{
+    if (cam_mode != KCAMR_CAM_OURS) return 0;
+    if (rappelling) return state >= hand_from;          /* state 5 (done, the landing edge) stays ours so the tail runs from the real landing */
+    return since_end_ms >= 0 && since_end_ms <= tail_ms;
+}
+/* edge of the takeover: +1 take, -1 hand back, 0 none */
+static int kcamr_cam_edge(int was, int now) { return now && !was ? 1 : (!now && was ? -1 : 0); }
+/* the write decision for one frame while the camera is ours: clear only a non-null, readable box pointer */
+static int kcamr_cam_must_clear(int ours, unsigned long box_ptr) { return ours && box_ptr != 0; }
+
 /* [Camera] CampaignOff: our FA camera tuning (klcam.c) idles while a campaign level is loaded */
 static int kcamr_camtune_idle(int campaign_off_cfg, int campaign_level) { return campaign_off_cfg && campaign_level; }
 

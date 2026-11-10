@@ -18,7 +18,7 @@
  * SHIP policy: the only writes are the vptr word of the heap movement object (klh_data); the vtable copy lives in this
  * DLL's .data. No code byte is touched. No exception handler is added (klfc_guard is a local __try).
  *
- * ini: [CampRappel] Land=off|turn|cam|turncam|auto (default off in code, the fragment sets auto, recommended on), CamFix=0|1 (recommended off).
+ * ini: [CampRappel] Cam=his|ours (default his in code, the fragment sets ours, recommended on; CamHandFrom=3, CamTailMs=1500), Land=off|turn|cam|turncam|auto (default off in code, the fragment sets auto, recommended on), CamFix=0|1 (recommended off).
  * [CampRappel] Mode=0 (0 off, 1 dry, 2 native, 3 live, 4 auto) - see ini_campaign_gameplayB.txt.
  */
 #include "klcamprappel_logic.h"
@@ -30,7 +30,7 @@
 #define KCAMR_F_ACT    0x6db3b0
 #define KCAMR_F_UPD    0x825290
 
-static struct { int mode, log, land, camfix; } kcamr;
+static struct { int mode, log, land, camfix, cam, handfrom, tailms; } kcamr;
 static int kcamr_land_dead;                /* a fault in the landing code: only the landing re-aim and CamFix idle */
 static struct { int have, movid, st, active; } kcamr_ls;          /* previous sample for the landing edge */
 static struct { BYTE *rec; BYTE v; } kcamr_cs[16]; static int kcamr_cn; static DWORD kcamr_cp;   /* CamFix: profile records whose collision flag we cleared */
@@ -270,6 +270,50 @@ static void kcamr_cam_watch(DWORD P, DWORD mov)
     klfc_put(prof + 0x156, &z, 1, "camprappel camfix nocoll");
 }
 
+
+/* ---- Cam=ours (1110, owner: "the start animation is cool from his but when you are actually rappelling, looking left and right should be my version").
+ * While the descent runs (sub-state >= HandFrom, until the landing + TailMs) the camera's box-profile pointer cam+0x7fc is cleared every frame, so the
+ * stock free third-person follow camera (the one our klcam.c / klcamsmooth.c tune) takes over from the RappelCB_* fixed shots (see klcamprappel_logic.h).
+ * One heap word, through klfc_put (klh_data refuses a non-writable page). Nothing is restored: a box that triggers later sets the pointer itself (0x700830).
+ * GUESS: 0x7fc is the only switch (0x447240 / 0x78bbc0 READ); the volume list at gamedata+0x8e8 is not touched (a camera that still looks fixed is logged). */
+#define KCAMR_CAM_BOX 0x7fc
+static struct { int own, frames, clears, warned; DWORD last_own, cam_seen; DWORD ended; int had_end; } kcamr_co;
+static void kcamr_cam_ours_watch(DWORD P, DWORD mov)
+{
+    BYTE act = 0; int rap, st = -1, ours, edge; DWORD cam, box, now = GetTickCount(); long since = -1;
+    if (kcamr.cam != KCAMR_CAM_OURS && !kcamr_co.own) return;
+    klh_rd(mov + 0x1f64, &act, 1);
+    rap = act || klfc_movid(P) == 0x10;
+    if (rap) st = (int)klh_rd32(P + 0x25c0);
+    if (rap) { kcamr_co.had_end = 0; kcamr_co.last_own = 0; }
+    else if (kcamr_co.own || kcamr_co.had_end) { if (!kcamr_co.had_end) { kcamr_co.had_end = 1; kcamr_co.ended = now; } since = (long)(now - kcamr_co.ended); }
+    ours = kcamr_cam_ours_now(kcamr.cam, rap, st, kcamr.handfrom, since, kcamr.tailms);
+    edge = kcamr_cam_edge(kcamr_co.own, ours);
+    if (edge < 0) {
+        if (kcamr.log) klog("camprappel: Cam=ours: camera handed back to the level (%d frame(s), box pointer cleared %d time(s), tail %d ms)", kcamr_co.frames, kcamr_co.clears, kcamr.tailms);
+        memset(&kcamr_co, 0, sizeof kcamr_co); return;
+    }
+    if (!ours) return;
+    cam = klh_rd32(P + 0xbd8);
+    if (!klfc_ok(cam, 0xc00) || klh_rd32(cam) != KCAMR_CAM_VT) return;
+    box = klh_rd32(cam + KCAMR_CAM_BOX);
+    if (edge > 0) {
+        DWORD cur = klh_rd32(cam + 0xb2c), efm = klfc_ok(box, 0x190) ? klh_rd32(box + 0x180) : 0;
+        kcamr_co.own = 1; kcamr_co.frames = kcamr_co.clears = kcamr_co.warned = 0;
+        if (kcamr.log) klog("camprappel: Cam=ours: TAKEN at rappel state %d (HandFrom %d): box profile %08lx (EFMMode %lu), current profile %08lx - the free follow camera takes over", st, kcamr.handfrom, box, efm, cur);
+    }
+    kcamr_co.frames++;
+    if (kcamr_cam_must_clear(ours, box)) {
+        DWORD z = 0;
+        klfc_put(cam + KCAMR_CAM_BOX, &z, 4, "camprappel cam=ours box profile");
+        if (!kcamr_co.clears++ && kcamr.log && edge <= 0) klog("camprappel: Cam=ours: a box set its profile again (%08lx) - cleared", box);
+    }
+    if (kcamr_co.frames == 90 && !kcamr_co.warned) {          /* 1.5 s at 60 fps: is the camera still on a fixed-shot profile? */
+        DWORD cur = klh_rd32(cam + 0xb2c);
+        if (klfc_ok(cur, 0x190) && (klh_rd32(cur + 0x180) == 1 || klh_rd32(cur + 0x180) == 3)) { kcamr_co.warned = 1; klog("camprappel: Cam=ours: the current profile %08lx still has EFMMode %lu after 90 frames (a camera volume, not a box pointer?) - GUESS: needs another switch", cur, klh_rd32(cur + 0x180)); }
+    }
+}
+
 static int kcamr_tick_body(void *unused)
 {
     DWORD gd, P, mov, now; signed char pi = -1; int want;
@@ -291,7 +335,7 @@ static int kcamr_tick_body(void *unused)
         if (kcamr_gate && kcamr.mode) { kcamr_clips(mov, ids); klog("camprappel: level: native rappel clips %d/5 (ids %04x %04x %04x %04x %04x)", kcamr_clips_present(ids), ids[0], ids[1], ids[2], ids[3], ids[4]); }
     }
     kcamr_vt_apply(mov, want);
-    if (kcamr_gate && !kcamr_fa_owns()) { kcamr_land_watch(P, mov); kcamr_cam_watch(P, mov); }
+    if (kcamr_gate && !kcamr_fa_owns()) { kcamr_land_watch(P, mov); kcamr_cam_watch(P, mov); kcamr_cam_ours_watch(P, mov); }
     if (kcamr.mode == KCAMR_DRY && kcamr_gate) {
         BYTE a = 0, p = 0, s = 0; klh_rd(mov + 0x1f64, &a, 1); klh_rd(mov + 0x1f6c, &p, 1); klh_rd(mov + 0x1f6d, &s, 1);
         if (a != kcamr_prev[0] || p != kcamr_prev[1] || s != kcamr_prev[2]) {
@@ -304,7 +348,7 @@ static int kcamr_tick_body(void *unused)
 
 static void kcamr_tick(int game_thread)
 {
-    if ((!kcamr.mode && !kcamr.land && !kcamr.camfix) || kcamr_dead || !game_thread || !klh_exe_ok) return;
+    if ((!kcamr.mode && !kcamr.land && !kcamr.camfix && !kcamr.cam) || kcamr_dead || !game_thread || !klh_exe_ok) return;
     if (klh_rcb_ra != (DWORD_PTR)KLH_VA(KLFC_RCB_RA)) return;        /* only the gameplay call (same filter as klfreeclimb.c) */
     if (kl_online()) return;                                          /* campaign levels are offline; never act in a session */
     if (kcamr_buildok < 0) kcamr_buildok = kcamr_build_ok();
@@ -323,5 +367,12 @@ static void kcamr_init(void)
     GetPrivateProfileStringA("CampRappel", "Land", "off", s, sizeof s, klh_ini);
     kcamr.land = kcamr_land_parse(s);
     kcamr.camfix = (int)GetPrivateProfileIntA("CampRappel", "CamFix", 0, klh_ini) != 0;
+    GetPrivateProfileStringA("CampRappel", "Cam", "his", s, sizeof s, klh_ini);
+    kcamr.cam = kcamr_cam_parse(s);
+    kcamr.handfrom = kcamr_cam_handfrom((int)GetPrivateProfileIntA("CampRappel", "CamHandFrom", 3, klh_ini));
+    kcamr.tailms = (int)GetPrivateProfileIntA("CampRappel", "CamTailMs", 1500, klh_ini);
+    if (kcamr.tailms < 0) kcamr.tailms = 0;
+    if (kcamr.tailms > 10000) kcamr.tailms = 10000;
+    if (kcamr.cam) klog("camprappel: Cam=ours (HandFrom %d, TailMs %d) - acts only on a campaign level; GUESS (not run in kl2 yet)", kcamr.handfrom, kcamr.tailms);
     if (kcamr.land || kcamr.camfix) klog("camprappel: Land=%s (%d), CamFix=%d - acts only on a campaign level; GUESS (not run in kl2 yet)", s, kcamr.land, kcamr.camfix);
 }

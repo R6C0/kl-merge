@@ -69,6 +69,19 @@ int main(void)
     CHECK(fabs(kcamr_land_yaw(200, KCAMR_L_CAM) - 200) < 1e-3);
     CHECK(kcamr_land_cam(KCAMR_L_CAM) == 1 && kcamr_land_cam(KCAMR_L_TURNCAM) == 1 && kcamr_land_cam(KCAMR_L_TURN) == 0 && kcamr_land_cam(KCAMR_L_OFF) == 0);
     CHECK(kcamr_camtune_idle(1, 1) && !kcamr_camtune_idle(0, 1) && !kcamr_camtune_idle(1, 0));
+    /* Cam=ours|his */
+    CHECK(kcamr_cam_parse("ours") == KCAMR_CAM_OURS && kcamr_cam_parse("OURS") == KCAMR_CAM_OURS && kcamr_cam_parse("on") == KCAMR_CAM_OURS && kcamr_cam_parse("1") == KCAMR_CAM_OURS);
+    CHECK(kcamr_cam_parse("his") == KCAMR_CAM_HIS && kcamr_cam_parse("0") == KCAMR_CAM_HIS && kcamr_cam_parse("") == KCAMR_CAM_HIS && kcamr_cam_parse(0) == KCAMR_CAM_HIS && kcamr_cam_parse("ourss") == KCAMR_CAM_HIS);
+    CHECK(kcamr_cam_handfrom(3) == 3 && kcamr_cam_handfrom(0) == 0 && kcamr_cam_handfrom(4) == 4 && kcamr_cam_handfrom(-1) == 3 && kcamr_cam_handfrom(9) == 3);
+    CHECK(!kcamr_cam_ours_now(KCAMR_CAM_HIS, 1, 3, 3, -1, 1500));                      /* his: never ours */
+    CHECK(!kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 0, 3, -1, 1500) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 1, 3, -1, 1500) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 2, 3, -1, 1500)); /* start animation stays his */
+    CHECK(kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 3, 3, -1, 1500) && kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 4, 3, -1, 1500));       /* descent + Jump_End */
+    CHECK(kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 5, 3, -1, 1500) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, -1, 3, -1, 1500));    /* state 5 (landing edge) stays ours, unknown state does not */
+    CHECK(kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 3, 0, 1500) && kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 3, 1500, 1500));    /* tail after landing */
+    CHECK(!kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 3, 1501, 1500) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 3, -1, 1500)); /* tail over / never rappelled */
+    CHECK(kcamr_cam_ours_now(KCAMR_CAM_OURS, 1, 0, 0, -1, 0) && !kcamr_cam_ours_now(KCAMR_CAM_OURS, 0, -1, 0, 1, 0));            /* HandFrom 0, no tail */
+    CHECK(kcamr_cam_edge(0, 1) == 1 && kcamr_cam_edge(1, 0) == -1 && kcamr_cam_edge(1, 1) == 0 && kcamr_cam_edge(0, 0) == 0);
+    CHECK(kcamr_cam_must_clear(1, 0x1234) && !kcamr_cam_must_clear(1, 0) && !kcamr_cam_must_clear(0, 0x1234));
     printf("RESULT: %s (%d checks, %d failed)\n", fails ? "FAIL" : "PASS", checks, fails);
     return fails != 0;
 }
