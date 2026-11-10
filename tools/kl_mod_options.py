@@ -662,6 +662,15 @@ feat('grudge', G_EXP, 'AI heisters you shoot turn on you in proportion (three te
 feat('backstabmark', G_EXP, 'A traitor bot gets the game traitor bit, so killing it is free (changes the payout: a marked bot that escapes is out of the split; recommended off until benched)', 'off', 'start',
      'klgrudge.c [Bots] BackstabMark (also GrudgeMark); an assumption, see re/bots_fight.md 3.4; no bench PASS in the log',
      [('Bots', 'BackstabMark', 1, 0, 0), ('Bots', 'Backstab', 20, None, 0)])
+feat('traitorreveal', G_EXP, 'A masked traitor bot stays hidden on the HUD until its first hostile act (shot at you, crew death nearby, or timeout) like stock (recommended on)', 'on', 'start',
+     'klbot.c/kltraitor_logic.h [Bots] TraitorReveal (+ TraitorRevealMs 25000); score bit 1 hidden from HUD readers; no bench PASS in the log',
+     [('Bots', 'TraitorReveal', 1, 0, 0), ('Bots', 'TraitorFoe', 1, None, 0)])
+feat('defend', G_EXP, 'When an AI heister shoots you, other heisters sometimes shoot back at it for a few seconds; killing it does not make you the traitor (recommended on)', 'on', 'start',
+     'klbot.c [Bots] Defend (+ DefendChance 35, DefendMs 6000, DefendMax 2); Arcade only; all-or-none crew swap; no bench PASS in the log',
+     [('Bots', 'Defend', 1, 0, 0)])
+feat('turnmax', G_EXP, 'Cap on how many AI heisters are hostile to you at once under Grudge (recommended on)', 'on', 'start',
+     'klgrudge.c [Bots] TurnMax; only caps the Grudge path (Grudge off = dormant); no bench PASS in the log',
+     [('Bots', 'TurnMax', 2, 0, 0)])
 feat('foeskipfed', G_EXP, 'No traitor booking or cap while a human heister is a policeman (recommended off until benched)', 'off', 'start',
      'klbot.c [Bots] FoeSkipWhileFed, opt-in; no bench PASS in the log',
      [('Bots', 'FoeSkipWhileFed', 1, 0, 0), ('Bots', 'TraitorFoe', 1, None, 0)])
