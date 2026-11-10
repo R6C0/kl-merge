@@ -30,6 +30,9 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
   DM03 c71dbd01/fce3ac2a/e23f6545 (+KLJoin e36d9f99, KLGuns df4ee663), DM06B F02 4ce7ebc7/3d0f5a7f/c7ad563c, DM07 F06 852bda37/9ac8b388/52c1ee4e, DD10 F07 e152950e/604a9d9e/88f4be29,
   DM09 F06 3a981a70/2ede91ed/0126d412. Held: dm09terminal_1110 (needs unmerged dll+ini, no west bounds). outfits_1110 (6b) pins pre-install md5s -> re-stage. OWNER STOPPED TESTS: only DM01B load PASS; DM03/DM06B/DM07/DM09/DD10 installed UNTESTED
   (load-bench each before the next pack). Live dll 6711bc5f / ini 0da79eb8 checked by f0 after d0 put SHIP back over a killed bench's TEST dll.
+- 11-10 ~20:20 f0: owner "keep going, no crashes from playing too long, a refresh when the game ends": [Memory] FreshRestart=1 (FreshLevels=2, MinFreeMB=200, Via=0) put in the
+  LIVE ini (0da79eb8 -> 1d0688aa, backup KLHook.ini.before-fresh1110; live dll 6711bc5f already has klfresh). klfresh_test + klmemfree_test PASS. Launcher watch waits 60 s on a fresh
+  KLFresh.go (6549e0c4). UNPROVEN: the direct child start under Steam (GUESS) -> proven by the owner's next 2-match session (KLHook.log 'fresh'); if the game just closes, FreshVia=1.
 - 11-10 ~11:20 f0: d0 LAUNCHER LIVE E2E PASS (from e2e_1110; no INSTALL/UNINSTALL): window finds DD/DM, VERIFY 0 problems, PLAY DMR -> main menu -> clean close, PLAY DOG DAYS -> hook renamed off,
   PLAY DMR -> hook back (md5 6711bc5f), verify 823/0 after, no stray dinput8.* files, no crash files. Steam launch options on the PC are now "-dx10" only (no DefaultScene/AutoExit; not ours to change).
   Next release (not in v1.0.0): README says the hook stays off after PLAY DOG DAYS (1e9be368); UIA names of the letter-spaced buttons; "..." folder buttons draw as tiny dashes; MOD line "not installed" on kit-installed PCs (no journal).
