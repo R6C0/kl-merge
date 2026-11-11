@@ -1,3 +1,7 @@
+2026-11-11 ~23:00 - [f0] kl2.exe SECTION CHECK on v1.0.1 (owner 'upload all'): both testers' Steam kl2.exe (4eaeae9b, a4d6b1e4) = same size/PE time/flags, other whole-file sha1. kl_release install now accepts when
+.text/.rdata/.data/.tls match stock (KL2_CODE_SECTIONS), else names the differing section (wt_1110 c826b93c; scratch test: stock ok, signature byte ok, .text byte refused). Re-packed + uploaded --clobber:
+update 07ee1a07, full d6d46eb6 / b2d4753f (served .sha1 checked). Next: v1.0.2 draft from d0's lobbyset_1111 (dll 3135fe2c, ini 4dd1fe56, 8 overlays), online lobby not checked live.
+
 2026-11-11 ~22:30 - [f0] Setup.bat ZSTANDARD FALLBACK uploaded to v1.0.1 on the owner's OK (sha1 00d0a95e, served copy checked; wt_1110 ba12ba58): a Windows tester's Python 3.15 has no zstandard wheel
 (pip wants MSVC) -> Setup now falls back to the private embeddable Python 3.12 instead of stopping. Tested with a broken zstandard on PYTHONPATH: fallback + exit 0. v1.0.2 held for d0's lobbyset_1111.
 
