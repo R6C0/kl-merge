@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-11 ~12:00 - [d0] DD10 BALCONY LANDING WAS BEHIND THE STREET WALL (owner: 'so much missing outside', 'invisible barrier' to the van). MEASURED (kl_map_escape.Ground, live F07 b8c95d37):
+the street is a walled box x 8000..9600, SideWall_01..08 at z 800 / 1200 (0..400 high, roof y 400); [Join.3] Land 8300 0 750 sat 50 cm OUTSIDE SideWall_06 = the unbuilt back of the set.
+INSTALLED ledgeland2_1111 (KLJoin.ini 8f3034c0 -> febb1368, Land=8300 0 860: floor y 0, 60 cm off the wall, clear lines to the van stop/rear and street east). Undo: C:/kl_build_1024/ledgeland2_1111/UNDO.bat.
+Normal route: collision flood from the lobby start reaches the street + van stop (no static blocker). Boarding from either route still UNPROVEN (needs a bench).
 2026-11-11 ~04:00 - [d0] INSTALLED DD10 LEDGE LOOT (owner: 'the balcony better lead to loot and that road'): MoneyStack_097 (node 22128) from the top corridor to the window ledge
 (6515, 1189.5, 2850), between the Jump05 landing and the ride box to the street; total loot unchanged. tools/kl_dd10_ledgeloot_1111.py CHECK PASS (only that node + its .gms record).
 F07 c392528f -> b8c95d37, bots 7bda7220; bench load_DD10 solo PASS (0 faults/dumps). GUESS: stack draws/picks up on the ledge (no shot). Undo: dd10ledgeloot_1111/UNDO.bat FIRST, then vanshow.
