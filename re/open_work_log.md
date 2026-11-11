@@ -1,3 +1,7 @@
+2026-11-11 ~20:15 - [d0] NODIG INSTALLED (owner: 'no dig especially in online'): LobbyRand_F06 redrawn = stock F06 + Retomoto + RANDOM bar (scenes kaneandlynch 630d451d -> b1234e96,
+_deadmen 132fad15 -> 9c81dfa5, TEX pixels only); dll 6c8ef0cf -> e7e83d06 (klslot: online never draws DM07 whatever the Arcade row says; RandomExclude ';' comment cut). Branch d0-revivecut-1111.
+Kit C:/kl_build_1024/lobbypic_1111 install_nodig.py (UNDO.bat undoes both parts). Not run in the game yet.
+
 2026-11-11 ~19:50 - [d0] LOBBYPIC_1111 INSTALLED (owner: online lobby 'Last Call' with the Hot Coffee icon). Cause: OnlineSet=9 draws per slot; the name follows the draw
 (kllocname random peek) but LobbyPictureF0k was fixed to the page-2 picture. Now the 6 pooled slots -> LobbyRand_F0k collage (stock + page 2 + page 3 + RANDOM). Also arcmap_1111 had
 patched only the plain Patch01*.zip, but the game opens Patch01_rows12_deadmen_campui.zip: the map pool row is now in all 8. Kit C:/kl_build_1024/lobbypic_1111 (8 zips, menu count 3353 kept,
