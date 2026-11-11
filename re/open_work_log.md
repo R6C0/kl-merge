@@ -1,3 +1,7 @@
+2026-11-11 ~21:45 - [f0] LINUX INSTALL FIX re-packed, NOT uploaded (waits for the owner's OK): Linux tester's Python 3.14.10 zlib-ng (newer than the package's 2.2.4) was refused by zcheck. wt_1110 4c4e7c8f: build_blob re-lays a map zip when this Python's deflate differs (local header csize, central dir csize + offsets, EOCD), check_relaid (names/sizes/CRCs + testzip),
+journal local_sha1 accepted by install/verify/uninstall/out: sources; Setup.bat + .sh no longer refuse. Test Z (ZSKEW) PASS, real DM05A main + bots rebuilt skewed: members OK. GUESS: the game reads any valid deflate.
+Packs: full 2d3c6339 / c6c1a075, update 9c55c053; upload copies C:/kl_release/up_assets (Setup.bat CRLF, .sh).
+
 2026-11-11 ~21:05 - [f0] v1.0.1 RE-PACKED + UPLOADED ~21:20 (owner 'push it'; served .sha1 + sizes match, Setup.bat + .sh replaced): DarkAvali 'internal check failed DD01 F01_Main.zip' = his private Python 3.12.7 has classic zlib, the package needs
 zlib-ng 2.2.4 (Python 3.14.7) to re-deflate byte-exact (zip skeleton holds the maker's csizes). wt_1110 4da52463/5dd4a24b: kl_release zcheck + install/make refuse; Setup.bat fetches 3.14.7, drops a stale private Python
 (scratch run 3.12 -> 3.14 OK). Linux: no Python matches (distro, standalone 'deflate 1.4', pip zlib-ng 2.2.5/2.3.3), .sh stops early. + d0 4dec3b46 (b38c940e): 9 before-wardrobe entries out, 818 left.
