@@ -1,3 +1,7 @@
+2026-11-11 ~22:00 - [f0] SMALL UPDATE UPLOADED on the owner's OK to the published v1.0.1 (--clobber): KLMerge_update.zip sha1 e311be6d (15.3 MB, carries the kl2.exe mismatch details, wt_1110 5395d981)
++ .sha1, Setup.bat, .sh, README_TESTERS; release notes start with 'Coming from v1.0.0'. Full zips on GitHub unchanged (66fbfe27 / 05b2f9e3). Linux tester kl2.exe: sha1 4eaeae9b, same PE time 0x4c80f728 + flags 0x103
+as stock 9d99e01d (10504344 B, overlay 11416 = signature) -> same build, bytes differ; per-section hash script sent to find where.
+
 2026-11-11 ~21:10 - [d0] PMIN INSTALLED (owner: lobby min 'says 4-12 still'): [Lobby] PlayersMin=2 (kllobbyopt.c 51194f57, 0 = stock 4). dll abdeaf06 -> SHIP d0da666e (TEST 212fb70f),
 ini 602167e6 -> 467915dc. Kit C:/kl_build_1024/pmin_1111 (scratch install/2nd refused/undo byte-exact). Undo pmin_1111 FIRST, then onlmap_1111, lobbypic_1111. Not run in game. For v1.0.2 with onlmap.
 
