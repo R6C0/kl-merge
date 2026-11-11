@@ -45,6 +45,9 @@ static volatile LONG kset_v[KLS_N] = { 1, 1, 1, 1, 1, 1, 1, 0 };
 #define KLS_LENS (KLS_N + 4)                              /* 1106 'Lens glare / cracks' in ONE row (value = Glare | LensCrack << 1; same table cost as the old Glare row) */
 static volatile LONG kset_crack = 1;                     /* [Graphics] LensCrack (klreshade.c reads the ini at start: a change here is kept for the NEXT start) */
 #define KLS_HOPT (KLS_N + 3)                              /* 1025 klhostopt.c: bit 0 AI heisters, bit 1 Solo start, bit 2 PD2 guns (next start) */
+#define KLS_ARCMAP (KLS_N + 5)                            /* arcmap-1111 klslot.c: 'Arcade map pool' 0 Off / 1 Random / 2 Random + The Dig */
+static int kls_arcmap_get(void);                         /* klslot.c */
+static void kls_arcmap_put(int value);
 static int klho_get(int which);                          /* klhostopt.c */
 static void klho_put(int which, int value);
 #define KLS_ADREN KLS_N                                  /* the one row 'Adrenaline' = rows 2 (Prompt, bit 0) and 3 (NeedUse, bit 1) */
@@ -62,6 +65,7 @@ static int kset_which(const char *name)
     if (!strcmp(n, "KLSHMap")) return KLS_HMAP;
     if (!strcmp(n, "KLSHOpt")) return KLS_HOPT;
     if (!strcmp(n, "KLSLens")) return KLS_LENS;
+    if (!strcmp(n, "KLSArcMap")) return KLS_ARCMAP;
     return -1;
 }
 
@@ -69,6 +73,7 @@ static int kset_get(int i)
 {
     if (i == KLS_NEXT) return (kset_v[1] ? 1 : 0) | (kset_v[7] ? 2 : 0);
     if (i == KLS_LENS) return (kset_v[5] ? 1 : 0) | (kset_crack ? 2 : 0);
+    if (i == KLS_ARCMAP) return kls_arcmap_get();
     if (i == KLS_HMAP) return klho_get(0);
     if (i == KLS_HOPT) return klho_get(1);
     if (i == KLS_ADREN) return (kset_v[2] ? 1 : 0) | (kset_v[3] ? 2 : 0);
@@ -89,6 +94,7 @@ static void kset_put(int i, int value)
         }
         return;
     }
+    if (i == KLS_ARCMAP) { kls_arcmap_put(value); return; }
     if (i == KLS_HMAP) { klho_put(0, value); return; }
     if (i == KLS_HOPT) { klho_put(1, value); return; }
     if (i == KLS_ADREN) {                               /* the combined row: each half through its own row (its own ini key and log line) */

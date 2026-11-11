@@ -364,6 +364,35 @@ static int kls_rnd_excluded(const char *map)
     return 0;
 }
 
+/* arcmap-1111 (owner: the map pool must be in the game's Mod settings): the row 'Arcade map pool' (klset.c KLS_ARCMAP, option
+   KLSArcMap) = 0 Off (ArcadeRandom=0) / 1 Random (ArcadeRandom=1, DM07 in RandomExclude) / 2 Random + The Dig (DM07 taken out).
+   Live at once: kls_map reads kls_arc_on per load, kls_rand_cands reads the list per draw. Other names in the list are kept. */
+static int kls_arcmap_get(void)
+{
+    return !kls_arc_on ? 0 : kls_rnd_excluded("DM07") ? 1 : 2;
+}
+
+static void kls_arcmap_put(int value)
+{
+    char buf[160], out[160], *t, *ctx = 0; int len = 0;
+    if (value < 0) value = 0;
+    if (value > 2) value = 2;
+    kls_arc_on = value != 0;
+    WritePrivateProfileStringA("Expansion", "ArcadeRandom", value ? "1" : "0", klh_ini);
+    if (value == 1 && !kls_rnd_excluded("DM07")) {
+        snprintf(out, sizeof out, "%s%sDM07", kls_rnd_excl, kls_rnd_excl[0] ? "," : "");
+        snprintf(kls_rnd_excl, sizeof kls_rnd_excl, "%s", out);
+        WritePrivateProfileStringA("Expansion", "RandomExclude", kls_rnd_excl, klh_ini);
+    } else if (value == 2 && kls_rnd_excluded("DM07")) {
+        snprintf(buf, sizeof buf, "%s", kls_rnd_excl); out[0] = 0;
+        for (t = strtok_s(buf, ", ;", &ctx); t; t = strtok_s(0, ", ;", &ctx))
+            if (_stricmp(t, "DM07")) len += snprintf(out + len, sizeof out - len, "%s%s", len ? "," : "", t);
+        snprintf(kls_rnd_excl, sizeof kls_rnd_excl, "%s", out);
+        WritePrivateProfileStringA("Expansion", "RandomExclude", kls_rnd_excl, klh_ini);
+    }
+    klog("settings: menu set KLSArcMap = %d ([Expansion] ArcadeRandom=%d RandomExclude=%s in KLHook.ini; at once)", value, kls_arc_on, kls_rnd_excl);
+}
+
 static int kls_rand_cands(int s, int *cand)
 {   /* the candidate pages of slot s: 0 = stock first, then every page 2..8 that has a rule for the slot and is not excluded -> count */
     int n = 0, p, r;
