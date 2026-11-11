@@ -1,3 +1,125 @@
+2026-11-11 ~19:50 - [d0] LOBBYPIC_1111 INSTALLED (owner: online lobby 'Last Call' with the Hot Coffee icon). Cause: OnlineSet=9 draws per slot; the name follows the draw
+(kllocname random peek) but LobbyPictureF0k was fixed to the page-2 picture. Now the 6 pooled slots -> LobbyRand_F0k collage (stock + page 2 + page 3 + RANDOM). Also arcmap_1111 had
+patched only the plain Patch01*.zip, but the game opens Patch01_rows12_deadmen_campui.zip: the map pool row is now in all 8. Kit C:/kl_build_1024/lobbypic_1111 (8 zips, menu count 3353 kept,
+scratch install/refuse/undo byte-exact). Undo BEFORE arcmap_1111. Not seen in the game yet. Left: the F06 collage shows The Dig (excluded by default); kls_arcmap_put keeps RandomExclude's inline comment (harmless).
+
+2026-11-11 ~15:00 - [f0] v1.0.0 PUBLISHED on owner "go" (latest): .../releases/latest/download/KLMerge_package{,_2}.zip answer 200 with the right sizes, .sha1 = fca9782b. Fixes from now on = v1.0.1.
+2026-11-11 ~14:40 - [f0] v1.0.0 DRAFT RELEASE uploaded to R6C0/dead-men-rising (not published; Setup.bat needs it published = "latest"): KLMerge_package.zip fca9782b + _2.zip e63a705b + .sha1s,
+sizes match local. Pack = randpool build (dll fdf6813f), d0 sweep 13/13 PASS on it, verify 827 files 0 problems. Owner publishes (Edit -> Publish) or says "go". Any shipped-file change now = re-make, re-pack, replace assets.
+2026-11-11 ~15:30 - [d0] v1.0.1 CANDIDATE arcmap_1111 (owner: map pool missing from the in-game Mod settings), NOT installed (game open): kit C:/kl_build_1024/arcmap_1111
+(INSTALL.bat / UNDO.bat; dll fdf6813f -> SHIP 6c8ef0cf, TEST be5792db, 65954647; 4 overlay zips). Textures + Neural rows -> one KLSNext row, freed row = 'Arcade map pool' (KLSArcMap: Off / Random / Random + The Dig),
+table count 3341 before and after; scratch install/undo byte-exact. Needs a look in the game, then 81 re-packs v1.0.1.
+2026-11-11 ~14:30 - [d0] RELEASE LOAD SWEEP 13/13 PASS on the live randpool build (dll fdf6813f via TEST 4e2a1b46, ini 1c729b8f; kit snapshots set ArcadeRandom=0 so each map loads under its own rule):
+DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B DM07 DM09 DM11B DD10 + stock DD06, each reached 0x19 and stood 60 s, 0 faults/asserts/dumps, undo md5 OK. Nothing installed.
+kl_bench_1106.py pins updated to the live zips (uncommitted, file is peer-dirty). Arcade random draw itself still unproven in the game ('arcade random:' line in klslot rnd log).
+2026-11-11 ~12:00 - [d0] 'install all': CAMPAIGN LIGHTING INSTALLED on all 16 campaign levels (kits C:/kl_build_1024/campaign_light_1110/<ID>, not run in the game; M09/M09B restaged on live 8007da0b/cae54aac first).
+M01 c79914bd ... M09 f1bebf68, M09B c321ec24 (full list sent to 81). Stage zips hard-linked to the live files (C: unchanged at 2.1 GB). Undo = <ID>/UNDO.bat. Every other staged kit was already live (dry-run sweep).
+2026-11-11 ~11:30 - [d0] RANDPOOL INSTALLED (owner: no Dig in the pool + random for Arcade): dll 9fbd2bd5 -> fdf6813f (40e44832, TEST 4e2a1b46), ini 668d5b42 -> 1c729b8f
+([Expansion] ArcadeRandom=1: an offline load draws stock or a Dead Men map of the chosen slot, new draw per load; RandomExclude=DM07 drops The Dig from every random draw). Kit C:/kl_build_1024/randpool_1111, undo BEFORE randkeep_1111. Not run live.
+2026-11-11 ~10:40 - [d0] RANDOM MAP FIXED + DD10 LEDGE UP, both INSTALLED, neither run in the game yet. Cause: every random load logged "seed lobby 0 (NOT readable) round 1", because the Steam lobby id (+0x35e) is already 0 at the load,
+so each slot always loaded the same map. [Expansion] RandomKeepLobby=1 keeps the id read in the lobby (randkeep_1111: dll 4d84dfb9 -> 9fbd2bd5, ini dc13f4df -> 668d5b42, commit 43295418). DD10: owner rides cancelled (Delay 3 s, stepped out);
+KLJoin febb1368 -> fff852ce: Delay 1.0, Slack 300/400, NEW [Join.4] street west end (x 8060..8190, z 940..1100) -> ledge Jump05 (dd10ledgeup_1111). Undo: each kit UNDO.bat (randkeep BEFORE revivecut).
+2026-11-11 ~11:00 - [81] RE-PACKED with d0's randpool_1111 (dll fdf6813f, ini 1c729b8f -> snapshot = live + Char=12/Outfit=0); core re-made, snapshot swept (0 other diffs).
+Upload set: KLMerge_package.zip fca9782b5dd511e17a1b31a75a876cd497f882c9, KLMerge_package_2.zip e63a705b118d43add615e7ca753198726dbe19f6; 652 members, 0 CRC mismatches. fcddc66a/b12a8144 deleted. Not uploaded.
+2026-11-11 ~10:45 - [81] RE-PACKED with d0's randkeep_1111 (dll 9fbd2bd5, ini 668d5b42 -> snapshot = live + Char=12/Outfit=0) + dd10ledgeup_1111 (DD10 KLJoin fff852ce); core + map:DD10 re-made, snapshot swept vs live (0 other diffs).
+Upload set: KLMerge_package.zip fcddc66a0936eb0f32ad30fe7fd6dabc9d1cdc37, KLMerge_package_2.zip b12a8144af85a5404927ac02d7a4cab16cdd596d; 652 members, 0 CRC mismatches. dec84d2c/6fec4c1f deleted (stale). Not uploaded.
+2026-11-11 ~10:30 - [81] RE-PACKED with ReviveCut (snapshot dll 4d84dfb9, ini = live + Char=12/Outfit=0 -> 0076f8c6; core re-made, only entries 290/291 changed, checklive 1 = KLHook.ini by design).
+Upload set C:\kl_release: KLMerge_package.zip dec84d2c89698b60e26d8b791a1639a82ca72987, KLMerge_package_2.zip 6fec4c1f564765f5ad70ea5669f0598d4a202ea3; 652 members, 0 CRC mismatches. Old 925ad71e/0dc205e5 deleted (stale).
+Pack failed twice for disk (C: 3.6 GB): pack_release.ps1 now hard-links the staged patches (wt_1110 7d2504ad). Not uploaded; full e2e still not run (C: 2.3 GB).
+2026-11-11 ~10:10 - [d0] REVIVE CUT INSTALLED (owner 'install all'): branch d0-revivecut-1111 = 81's dd706968 + 88152212 (cherry-pick of 48603351), kl_tests --c 100/0/4.
+SHIP 4d84dfb9 / TEST 5eeffd02; live dll 1bade4a6 -> 4d84dfb9, ini 7b5e8af4 -> dc13f4df (ReviveCut=1 after KillCash). Kit C:/kl_build_1024/revivecut_merged_1111: scratch install / 2nd refused / undo byte-exact.
+Undo: its UNDO.bat FIRST, then killcash_merged_1111. Every other staged kit was already live; DM03 F03 682201a6 = outfits_1110 on top of dm03vault. Not run in the game.
+2026-11-11 ~07:00 - [d0] REVIVE CUT VISIBLE (owner: 'see the cut you either lost or gained from reviving'), pushed 48603351, NOT installed, not run in the game: [HUD] ReviveCut (default 0, recommended on).
+Arcade adrenaline share (kladren.c kad_pay) -> kill line 'YOU GOT JEAN UP  +$3,000' / 'JEAN GOT YOU UP  -$3,000', scoreboard 'REVIVE +$X' under REWARDS (slot 67), shop caption tail '  REVIVE +$X', prompts name the amount.
+Round net cleared on the new rules object. Online revives move no money: nothing shown. SHIP 79e626c1 / TEST 205ab589 (C:/kl_build_1024/revivecut_1111, on 27b6e320 only); 81 to merge on dd706968 + add ReviveCut=1.
+2026-11-11 ~06:10 - [f0] KILLCASH INSTALLED (owner ask 'no +$0'), not run in the game: d0's 27b6e320 cherry-picked on eeb4b61c (branch f0-merged-1111kc dd706968), SHIP 1bade4a6 / TEST ffae5055, kl_tests --c 100/0/4.
+dll 196cb366 -> 1bade4a6, ini a3d9a7ea -> 7b5e8af4 (+ KillCash=1 under [HUD]). Kit C:/kl_build_1024/killcash_merged_1111 (scratch install/2nd refused/undo byte-exact); UNDO.bat FIRST, then pd2toggle_1111.
+Re-packed: part 1 925ad71ef5eeafbca703ea1305959d38f7a822d1, part 2 0dc205e5e87990fc1067b564648daeab7e7368b4 (652 CRC ok, checklive clean).
+2026-11-11 ~05:30 - [f0] RELEASE RE-PACKED for d0's flatraidname_1111 (4 Overlay Patch01_rows12*.zip: Flat Raid name + DM07/DD10 page-3 pictures): part 1 4da07e29529d8a4684ee6b620348fe25e59a039a, part 2 9b19dd7eb26b6f8e3cec2551aea01a8bfefa6e8e.
+652 members CRC = pkg_1110, checklive clean. Supersedes the 05:00 pack. Full e2e NOT run. Nothing on GitHub yet (no release on R6C0/dead-men-rising).
+2026-11-11 ~05:00 - [f0] RELEASE RE-PACKED for d0's DD10 KLJoin febb1368 (Land 8300 0 860): part 1 eaa358ff3bf7e9668f88ef4a80abfa346af6406d, part 2 3b849722f3e3e5db877167df72610973a95f799a.
+652 members CRC = pkg_1110, checklive clean. Supersedes 04:10 and the failed 04:40 pack. Full e2e still NOT run (C: 3.0 GB).
+2026-11-11 ~04:40 - [f0] RE-PACK FAILED (disk): d0's DD10 KLJoin febb1368 (Land 8300 0 860) is MADE into pkg_1110 (checklive clean, snap KLJoin updated), but pack_release ran out of C: (1.8 GB free).
+Zips on disk = the 04:10 pack 3f4e6bdd/5008ae29 (old Land 750), intact. Needs ~3 GB free on C:, or the owner's OK to drop the old zips first; then pack_release.ps1 -Out C:\kl_release\pkg_1110.
+2026-11-11 ~04:10 - [f0] RELEASE RE-PACKED for d0's DD10 ledge loot (F07 b8c95d37 / bots 7bda7220): part 1 3f4e6bdddf8598c89aed24709b81c0601b46711e, part 2 5008ae29e5804b4340104f79f8b637f8fcc7243f.
+652 members CRC = pkg_1110, checklive 827 (only the pack ini differs, by design). Supersedes the 03:40 pack. Full e2e still NOT run (C: space).
+2026-11-11 ~03:40 - [f0] RELEASE RE-PACKED with [Payday2] Enable: d0's dll 196cb366 + ini a3d9a7ea (pack ini d22b72ab, Char=12/Outfit=0); release worktree wt_1110 844532eb = eeb4b61c cherry-picked (installer sets the switch from PD2 detection), kl_release_test PASS.
+Pack: part 1 8de1a3de0face64214e0535a5fa75c1f8cb8f3c3, part 2 b8fb6e9fd67b7293c58a79c7e72a1f9e0f34b47e; 652 members CRC = pkg_1110, testzip OK. Full e2e NOT run (C: 2.4 GB). Enable=0 paths not benched in game.
+2026-11-11 ~03:05 - [f0] RELEASE RE-PACKED: d0's dll 026792ed + ini a8f1ef54 (pack ini 1d1278736 = Char=12/Outfit=0), DD10 c392528f, DM01 nogren 5f366e0b, DM07 WAV ff230641. make 827 files, same 7 shipcheck WARNs.
+Pack: part 1 ee903530705a9e5be5062c7964fd5dc4be23f315, part 2 e8d78b906c928d34ad84b992337f9550b4b511b6. Both zips testzip OK + 652 members CRC = pkg_1110. Full e2e NOT run (C: 2.4 GB < 4.6 GB needed).
+PD2 toggle: branch f0-pd2-toggle eeb4b61c (kl_tests 174/0/5) handed to d0 for merge+bench; needs one more re-pack (dll + kl_release.py set_payday2_switch). Gap: baked PD2 shop rows in map zips are not hidden.
+2026-11-11 ~00:50 - [f0] DM07 LOUD SOUND, INSTALLED (owner 'dig audio still has that loud ass thing'), not benched: kit C:/kl_build_1024/dm07loud_1111 --variant impacts (commit 7583b23d).
+Cause measured: the 1026sndon pass raised impact records up to +17 dB over Dead Men and clipped them; crane creaks (Metal_Squeak) loudest (rms -2.6..-6.6, DM -11..-14). GUESS: that is the sound.
+25 records (creaks, Concrete_Burst, Metal_Fence_RigidBody, Metal_Throw, Wood_Break_Big) back to DM level: F06_Main.WAV 1553a169 -> ff230641 (.WHD same). Undo: kit's UNDO bat.
+2026-11-11 ~00:30 - [f0] DM01 GRENADE PICKUPS REMOVED, INSTALLED on owner ask ('fix hot coffee so the grenades arent there'), not benched: kit C:/kl_build_1024/dm01nogren_1111 (commits 0fc35fca/2e2dd240),
+Special!Pickups!Grenade_Frag_01..03 dropped (16762 -> 16759 entities, slots renumbered, room sets equal). F01 b3b5bee8 -> 5f366e0b, bots 8e160707 -> bb64efa4, base -> c5217449. Undo: its UNDO.bat (top for DM01). Release pack needs a map:DM01 re-make.
+2026-11-10 ~23:50 - [f0] RELEASE RE-PACKED for d0's merged_1110h (dll 4485802e, ini 13ff7f94 minus wardrobe Char=16/Outfit=12 -> pack 0b85673d Char=12/Outfit=0).
+Manifest diff = exactly dinput8.dll + KLHook.ini; shipcheck WARNs same 7 as before. Pack: part 1 162b8c9a2e7d2b8e355a3138ddbaf66a3041f7d7, part 2 1aefc7ff94d556d00226c46ee82ec7d4f4f5ef3b.
+e2e Setup.bat from file:// OK, package verify vs live 827 files 0 problems. Owner must re-upload BOTH zips + .sha1 (C:\kl_release). 1110h itself not benched yet (m1110h_dm03 waits).
+
+2026-11-10 ~23:30 - [f0] INSTALLED (game closed) RISING logo + full-length menu sounds: overlay scene b2b494ab -> 132fad15, .klms 2752cbc3 -> ac7535bb (md5 checked; undo: menurising_1110/"UNDO rising logo + full sounds.bat").
+RELEASE RE-PACKED: core (from snap C:/kl_release/snap_rising = pack snap + new .klms) + overlay re-made; manifest diff = exactly those 2 entries. checklive: only KLHook.ini (owner wardrobe Char 12->16 / Outfit 0->12 at 22:45, keep_user; pack keeps 6d0b69b5).
+Setup.bat e2e (file:// URLs) download + unpack OK; package verify vs live 827 files 0 problems. New sha1 1e83e481 (part 1) / 508f1872 (part 2): upload BOTH again. Old manifest: C:/kl_release/manifest_1110_before_rising.json.
+2026-11-10 ~23:00 - [f0] OWNER: "DEAD MEN should have RISING too" + "Dead Men sounds full length". SOUNDS: the full-length swap (19:47) never played: its .klms 2752cbc3 kept 'dm' C lines,
+the hook refuses the whole table ("choice name dm is reserved", KLHook.log 19:48/20:39/22:06) -> baked bank = old cut clips. Fixed table ac7535bb (WAV/WHD unchanged), checked with the hook's own klms_parse.
+LOGO: kl_menu_redesign_1110 stageb --parts rising -> GameLogo/GameLogo_big/MainLogo say DEAD MEN RISING (overlay b2b494ab -> 132fad15, checkb PASS). Pushed 7deb1044. NOT installed (game running):
+C:/kl_build_1024/menurising_1110/"INSTALL rising logo + full sounds.bat" (UNDO bat beside it). The release pack (KLMerge_package*.zip) has the OLD table + logo: re-make + re-pack + e2e after the install.
+2026-11-10 ~22:05 - [f0] RELEASE PACK DONE from LIVE (dll 6dcae9e6, ini 6d0b69b5; checklive + verify + prmroot PASS), no crash involved. 2.42 GB > GitHub 2 GiB -> TWO assets (75c7b739):
+C:\kl_release\KLMerge_package.zip 1,051,713,136 sha1 279f4dea + KLMerge_package_2.zip 1,369,890,807 sha1 d079660c (+ .sha1 each). Setup.bat fetches both (RELEASE_URL .zip -> _2.zip), kl_release refuses a half package before writing.
+Local e2e C:\kl_release\e2e_1110b (file:// URL): first run, re-run (skip), forced re-unpack, update path all OK; 641/641 patches byte-equal, verify 827 files 0 problems. Not uploaded: owner's gh command in OWNER_RELEASE_STEPS.md section 4.
+
+2026-11-10 ~17:45 - [6b] INSTALLED on owner "install all" (no game run: owner stopped tests), no crash involved. OUTFITS maps on all 21 maps (C:/kl_build_1024/outfits_1110, 75 files md5-verified, backups = hard links, map zips e.g. DM01 b3b5bee8, DM07 f774dc97 -> 06's dm07plane da0e0431 on top).
+MENUS COMBINED (C:/kl_build_1024/menus_combined_1110/kit, --keyboard-only): campaign pick + 33-entry Heister row + campui row (Y322) on 06's plates; 4 overlay zips + 5 *_campui.zip, ini 0da79eb8 -> 3df8a23b ([CampaignPick] Enable=1, [CampaignUI] Menu=1), dll 6711bc5f untouched.
+RISK: static menu count (kl_menu_count) keyboard 4938 / GAMEPAD 5129 of 5000 -> gamepad can fault 0x8618b9 (DefaultFocus); live count UNMEASURED: next game start add [Menu] TableLog=1 and read 'menu: table N'. campui LEVELS half not installed (needs 3.2 GB, C: 2.5 GB).
+Undo: menus_combined_1110/kit/UNDO.bat; maps: dm07plane_1110 install.py --undo FIRST, then outfits_1110 install.py --undo --skip-run-check --ignore-dll.
+
+2026-11-10 ~09:30 - [d0] RELEASE ONLINE SMOKE on the frozen live files (TEST 03840ed0, nothing installed): DM09, DM01, DM05A ALL PASS, 2 seats round 1 -> shop -> round 2, 0 faults/dumps both seats, 0x25 reset <= 0.2 s, host bots ON. Run: python tools/kl_bench_1106.py run load_<MAP> online (4fb9715b).
+2026-11-10 ~10:35 - [vault] DM03VAULT_1110 RERUN on stage_m PASS (after d0's 10-map smoke, no reset seen in 20 seats): both seats RESULT PASS 0 faults/asserts, round 2 + shop reached;
+items 15/15: control walk stopped (54,241,-6768), armed at (23,240,-7220), blast, through to (0,241,-6633), no Backstop replay, late walk through (12,239,-6630). The 2 "dump files" FAILs
+were the stale 08:33:56 KLHook_1.dmp left in solo/DM03VAULT_1110_online/inst1+2 (new logs: 0 FAULT lines). Undo byte-exact (33361cd1). NOT installed: waits for the owner's OK; out of release pack.
+2026-11-10 ~08:40 - [vault] DM03VAULT_1110 on stage_m (TEST 03840ed0, undo byte-exact, map folder unchanged): control dock walk stopped at (-4,241,-6768) = shut door holds; host in the
+Arm box at (18,244,-7226), blast, walked through to (-2,242,-6633); no Backstop replay; host alive. NOT complete: at 08:33:55 both seats lost the D3D device (ReShade "device reset")
+and died at d3d9.dll+0x5feeb (KLHook_1.dmp each); System log Display 4107 SetDisplayConfig 08:33:59, cause UNKNOWN (d0: last input ~08:31 = the bench's own keys; 4107 may be the crashed game restoring the mode; a reset on both seats at once points at a system display event, not the map). Late Backstop walk +
+round 2 unproven. First try refused by install.py (WinError 5 renaming over F03_Main.zip right after d0's smoke; leftover .tmp removed, retry fine). Rerun when the PC is free.
+(The ~10:40 time below is a mis-stamp: written ~08:20.)
+2026-11-10 ~10:40 - [vault] DM03VAULTK_1110 on stage_k (--no-arm, zip 2638fabc, TEST 03840ed0, 0 faults, undo byte-exact): all 6 lanes BLOCKED, dock lanes stop at z -6768,
+lobby lanes at -6856 = the per-leaf 6 cm slabs hold both ways; the "side rule" (08:45 note below) is refuted. The stage_slab leak: the host pressed on the dock side (body z -6768)
+fired the Arm box (centre -7006, edge -6856, 44 cm off the hinge plane z -6812) THROUGH the shut leaf (GUESS: trigger tests a body volume wider than the capsule centre);
+lane -50 goto took 4953 ms (held, fuse 3 s, swing, through), lanes 0/50 ~700 ms (already open). Bot-armed theory refuted; MatPosAnimProxy swings never move the "ents" kid
+positions, so "children unchanged" proves nothing. FIX: ARM_AT z -7250 (box z -7400..-7100, edge 2.9 m off), --arm-z overrides, refused within 1.5 m of the door.
+stage_m (C:/kl_build_1024/dm03vault_1110/stage_m, input live smartcops_1110/DM03 33361cd1): zip c71dbd01 / bots fce3ac2a / base e23f6545 / KLJoin e36d9f99 / KLGuns df4ee663;
+vs stage_slab only .gms/.oct/.prp differ (oct: slot 239 z only). Bench points re-set (lobby (0,248,-6960), arm (0,-7250)), all on nav. NOT installed; DM03VAULT_1110 waits for d0's smoke.
+2026-11-10 ~09:20 - [d0] DM01B DOOR FIX BENCH dm01bdoorfix1110: stage 476aec5f / a056edbd LOADS + plays on TEST 03840ed0 (0 faults/asserts/dumps, van called, script done; only the kit round-end 0x1f/0x20 check unmet = timing); undo byte-exact, live 778b075c kept. HELD for the next release (81 freeze). tools/kl_prmroot_check.py (cc1e8741) --live: 42 zips PASS.
+2026-11-10 ~09:00 - [d0] RELEASE LOAD SWEEP 13/13 PASS on the live frozen-pack files (TEST 03840ed0, nothing installed): DM01 DM01B DM02 DM03 DM03A DM05A DM06 DM06B DM07 DM09 DM11B DD10 + stock control
+each loaded under its own rule, reached 0x19, stood 60 s, 0 asserts/faults/dumps. Control = DD06 (page 0 entry 4; kit re-pinned f609e1d9). Offline: every type-7 .prm root of all 26 live zips hits a .oct record start.
+Run: python tools/kl_bench_1106.py run load_<MAP> solo. DM01B door fix (C:/kl_build_1024/dm01bdoorfix_1110) still held until 81 says upload done.
+2026-11-10 ~08:45 - [vault] DM03VAULTK_1110 on stage_slab (zip aba42d93, TEST 03840ed0, nothing installed, map folder unchanged, 0 faults, ALL PASS otherwise): lanes walk dock -> lobby;
+x -50 blocked ((-58,249,-6612) -> (-44,252,-6766)), x 0 -> (-7,243,-6841) and x +50 -> (46,252,-6836) walked through. Offline: both slabs have identical verts (x -1.05..0, y 0..2.4,
+z +-0.03), consistent outward winding, instance = the leaf's world frame (KL_Door_4 -I = 180 yaw at x -105, KL_Door_5 identity at x +105); not 'last HVK shape dropped' (live last 3278 blocks).
+Side rule found: every walk that was blocked (live 176/64/84 in DM03SHUT, left vault leaf) came from the leaf's LOCAL -z side; the right leaf was walked from its +z side. The box is
+closed and symmetric, so GUESS the kick-door entity lets a shut door give way from its back (owner 11-09 also saw a 'one-sided kick door' on DM03). 9775ceef: kl_dm03vault_1110
+--no-arm (diag: Arm box parked 1 km down) + --seam-hinges (both leaves identity frame = local -z faces the LOBBY; left leaf hinged at the seam, it then swings into the doorway
+middle on the blast); DM03VAULTK_1110 now on stage_k (jamb pair, --no-arm; zip 2638fabc, bots 32d6e29d, base 03b01b45) and also walks lobby -> dock: predicted -50 through, +50 blocked.
+Bench waits for f0's release load sweep (~65 min from ~08:15).
+
+2026-11-10 ~07:30 - [vault] DM03SHUT_1110 (live DM03 33361cd1, nothing installed, TEST 03840ed0) ALL PASS, 0 faults: walks into the SHUT live own-leaf kick doors stopped short of
+the door plane (176: (-3772,-3125) -> (-3755,-3174), plane z -3217; 64: stopped x -4148, plane -4104; 84: stopped x -4461, plane -4504); 176 kicked, then walked through to (-3781,-3251).
+So added kick doors block; the vault's failure is its own build. Offline: vault leaf entity world rotation = HVK instance rotation (same leaf local pose as door 1), slab geometry/place right;
+the differences left are the shared 2-instance shape and 4 cm vs 6 cm. f42c638c: kl_interact_graft.build(slab_each=True) = one single-instance slab per door, z +-3 cm (GUESS which
+difference matters); kl_dm03vault_1110 default (--shared-slab = the old build). Stage C:/kl_build_1024/dm03vault_1110/stage_slab (zip aba42d93, bots 9827689d, base 126ab052,
+KLJoin e36d9f99, KLGuns df4ee663; pinned live 33361cd1/0bc8d138); stage_diag deleted. Bench kits DM03VAULT/B/K now point at stage_slab. Not benched (d0 on the game).
+2026-11-10 ~06:00 - [vault] DM03 VAULT DOORS DO NOT BLOCK (NOT installed, kept out of the release pack, told 81): bench DM03VAULTB_1110 added a closed-door control (2af0eae7): host walked dock -> lobby through the shut leaves.
+Diagnostic DM03VAULTK_1110 (f3b45f52, stage C:/kl_build_1024/dm03vault_1110/stage_diag = --keep-kick, controller kept): no lane blocked at x -50 / 0 / +50 (z -6614 -> -6839..-6846), 0 faults, DM03 restored 33361cd1/0bc8d138.
+So the cause is neither the stripped KickDoor controller nor the x 0 seam: the shared 2-instance 4 cm type-4 slab (own_leaf=False) does not stop the player capsule. The earlier DM03VAULT_1110 "PASS" walk-through proves nothing.
+Fix research workflow wwwq3t0yq running (kick door own_leaf=True vs False HVK, d0's proven DM02 closed glass, removable blockers).
+2026-11-10 ~05:00 - [d0] INSTALLED after bench PASS (each undone byte-exact by the kit, then installed by its install.py, undo --dry OK):
+SMARTCOPS_DM01_1110: 0 faults, host alive, 1 KitchenBoy man ran 776 -> 191 cm to a cover stand and left it again; DM01 e091f0d8 / bots 957f20aa / base 6b7255e6.
+SMARTCOPS_DM03_1110 ALL PASS: 3 Garage men ran to cover, 6 left it, 8/11 move after 60 s; DM03 33361cd1 / 0bc8d138 / a4ad617a (on fc's back SWAT a81ede87).
+LCDOORS_1110 run 3: doors slide 100 cm, shut try stopped at x 1545, both walks through after the timer; DM05A 791eb9c3 / 912e08a5 / 501e1b79.
+Bench probe facts: cover boxes are NOT in the entity table (ents '_KC_' 0 of 19910); wave members show as ZGROUP rows. Checks relaxed accordingly (65d3543e).
+DM02C runs 1+2 VOID after a host death 0.1-0.7 s after the tele to (-1503,1793): no kill entity anywhere; KickDoorBehaviour PosInfo 26 cm + merc Defend Pos#02 60 cm (GUESS: a merc).
+Door 3 front (900,2497) traps the player: merc Defend Pos#01 16 cm away. Both Whole04 vault panes (REF 23182 yaw -50, REF 24258 yaw +40) are swung OUT of their
+openings (door 1 x=-1000 z 2440..2560, door 2 z=1700 x -1560..-1440) in render AND HVK: a player walks past the drawn glass. Closed-pose stage being built (combined_closed).
 2026-11-10 ~02:25 - [d0] 1110d INSTALLED: dll 6e3ca2ad -> SHIP 38104558 (ini a08b6110 = 6b's MENUPICK ini, untouched). Bench M1110D_D1 (DM01, TEST f4c8c3fd, solo, B5 script + [Character] Char=17) PASS,
 0 faults/asserts. GRENADE THROW PROVEN (owner: 'just a red light no throw'): Grenade_Frag_02 taken by walking in (en? 1 -> 0, no key needed), G (external SendInput) -> 'pin sound played', adren 'Throw_Grenade/Stand_Overhand
 id 366 (47 frames)', 'shot RAN ... LAUNCHED', 'throw sound played', ammo 4 -> 3 -> 2; 3rd press 'not the main loop's gameplay call: skipped'. Char=17 vs DM01's 16-char wardrobe: hire 'pick out of range' -> random default body, no crash.
