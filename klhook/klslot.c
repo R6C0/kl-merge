@@ -732,6 +732,10 @@ static int kls_map(const char *in, char *out, const char *api)
             if (page == KLS_RANDOM) page = kls_rand_pick(s);      /* OnlineSet=9 */
             else if (kls_arc_on && !kl_online()) page = kls_arc_pick(s);      /* [Expansion] ArcadeRandom=1 */
             if (kl_online() && (r = kmp_pick(s)) >= 0) page = r;      /* klmappool.c: [MapPool] the pool's no-repeat draw for this slot (online only) */
+            if (kl_online() && page && (r = kls_find_rule(s, page)) >= 0 && !_stricmp(kls_rule[r].map, "DM07")) {      /* owner 11-11: never The Dig online (OnlineSet=3 'DLC' puts it on F06): stock level */
+                klog("expansion: online load of %s page %d = The Dig (DM07) refused: no Dig online -> stock level", kls_slot[s].name, page);
+                page = 0;
+            }
             if (kl_online() && page && kls_i16_on) {      /* [Int16Guard] (2026-10-27 G8): online positions travel as int16 (0x5a0ff0, 0x404e60, 0x8413b0), a map with gameplay at |x| or |z| > 32767 wraps */
                 int g = kls_find_rule(s, page);
                 if (g >= 0 && kls_i16_listed(kls_rule[g].map) && !kls_i16_marked(kls_rule[g].to, kls_slot[s].name)) {

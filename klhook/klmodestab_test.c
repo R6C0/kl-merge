@@ -104,9 +104,10 @@ int main(void)
         on[0] = on[1] = on[2] = on[3] = 1; CHECK(kmt_hint_build(k, w, on, 5, o, 30) == 2 && !strcmp(o, "F2 shop pages  E+W climb") && strlen(o) < 30);   /* cut at a whole entry */
         CHECK(kmt_hint_build(k, w, on, 5, o, 0) == 0);
     }
-    kmt_host_text(0, 0, o, sizeof o); CHECK(!strcmp(o, "MAP SET: Dog Days"));
+    kmt_host_text(0, 0, o, sizeof o); CHECK(!strcmp(o, "MAP SET: Classic"));
     kmt_host_text(0, 1, o, sizeof o); CHECK(!strcmp(o, "MAP SET: Dead Men"));
-    kmt_host_text(0, 2, o, sizeof o); CHECK(!strcmp(o, "MAP SET: Both"));
+    kmt_host_text(0, 2, o, sizeof o); CHECK(!strcmp(o, "MAP SET: DLC"));
+    kmt_host_text(0, 3, o, sizeof o); CHECK(!strcmp(o, "MAP SET: Random"));
     kmt_host_text(1, 1, o, sizeof o); CHECK(!strcmp(o, "AI HEISTERS: ON"));
     kmt_host_text(1, 2, o, sizeof o); CHECK(!strcmp(o, "AI HEISTERS: OFF"));        /* bit 0 only: the Solo bit does not make it ON */
     kmt_host_text(1, 3, o, sizeof o); CHECK(!strcmp(o, "AI HEISTERS: ON"));

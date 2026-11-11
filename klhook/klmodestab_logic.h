@@ -127,7 +127,7 @@ static int kmt_pend_ctl_mode(int pend) { return pend == 2; }
 static void kmt_host_text(int which, int value, char *o, size_t cap)
 {
     static const char *const pool[4] = { "OFF", "Dead Men", "Dog Days", "Mix" };
-    if (which == 0) snprintf(o, cap, "MAP SET: %s", value == 0 ? "Dog Days" : value == 1 ? "Dead Men" : "Both");
+    if (which == 0) snprintf(o, cap, "MAP SET: %s", value == 0 ? "Classic" : value == 1 ? "Dead Men" : value == 2 ? "DLC" : "Random");
     else if (which == 1) snprintf(o, cap, "AI HEISTERS: %s", (value & 1) ? "ON" : "OFF");
     else snprintf(o, cap, "MAP POOL: %s", pool[value & 3]);
 }

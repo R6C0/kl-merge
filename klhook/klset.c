@@ -41,7 +41,7 @@ static const char *const kset_key[KLS_N] = { "Look", "Textures", "Prompt", "Need
 static const int kset_def[KLS_N] = { 1, 1, 1, 1, 1, 1, 1, 0 };
 static volatile LONG kset_v[KLS_N] = { 1, 1, 1, 1, 1, 1, 1, 0 };
 #define KLS_NEXT (KLS_N + 1)                              /* 1025: 'Textures / Neural (next start)' in ONE row (value = Textures | Neural << 1): pays for the host rows' table entries */
-#define KLS_HMAP (KLS_N + 2)                              /* 1025 klhostopt.c: host map set (0 Dog Days / 1 Dead Men / 2 mixed random) */
+#define KLS_HMAP (KLS_N + 2)                              /* 1025 klhostopt.c: host map set = Mod settings 'Online maps' (0 Classic / 1 Dead Men / 2 DLC / 3 Random -> OnlineSet 0/2/3/9) */
 #define KLS_LENS (KLS_N + 4)                              /* 1106 'Lens glare / cracks' in ONE row (value = Glare | LensCrack << 1; same table cost as the old Glare row) */
 static volatile LONG kset_crack = 1;                     /* [Graphics] LensCrack (klreshade.c reads the ini at start: a change here is kept for the NEXT start) */
 #define KLS_HOPT (KLS_N + 3)                              /* 1025 klhostopt.c: bit 0 AI heisters, bit 1 Solo start, bit 2 PD2 guns (next start) */

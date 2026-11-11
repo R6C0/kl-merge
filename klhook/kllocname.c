@@ -211,6 +211,7 @@ static const char *kllnm_name_now2(int n, const char *stock)
         return nm;
     }
     r = kls_find_rule(s, page); if (r < 0 && page) r = kls_find_rule(s, 0);
+    if (kl_online() && page && r >= 0 && !_stricmp(kls_rule[r].map, "DM07")) return 0;      /* klslot.c loads the stock level instead of The Dig online: stock name */
     if (!kllnm_pool && kl_online() && kls_online_set && page) {          /* fixed online set: one line per change, and a nameless DM map gets '<stock> / Dead Men' */
         nm = r >= 0 && kllnm_rname[r][0] ? kllnm_rname[r] : (r >= 0 && kls_rule[r].page == page ? kllnm_label(s, n, stock, 0) : 0);
         kllnm_note(n, nm ? nm : "(stock)", page, r >= 0 && kls_rule[r].page == page ? "fixed" : "fixed, no rule: stock");

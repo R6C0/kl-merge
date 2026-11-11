@@ -51,7 +51,7 @@ static const struct klkeys_def {
     { "Sabotage",  "HOLD THE VAN",     "Sabotage",  "Key",        0x4a, 0x4a, 0, 0, "Online, host cop",         "Undercover cop (the host): hold the escape van for a few seconds." },
     { "Reveal",    "REVEAL (UCC)",     "Ucc",       "RevealKey",  0x2d, 0x2d, 0, 0, "Arcade and online",        "Undercover cop: show yourself as police (hidden cop mode)." },
     { "Grenade",   "GRENADE THROW",    "Grenade",   "Key",        0x47, 0x47, 0, 1, "Arcade",                   "Throw a Dead Men grenade you carry (the stock grenade key)." },
-    { "HostMap",   "HOST: MAP SET",    "HostOpts",  "KeyMap",     0x76, 0x72, 1, 0, "Online host",              "Cycle the map set: Dog Days, Dead Men, both." },
+    { "HostMap",   "HOST: MAP SET",    "HostOpts",  "KeyMap",     0x76, 0x72, 1, 0, "Online host",              "Cycle the online maps: Classic, Dead Men, DLC, Random." },
     { "HostAI",    "HOST: AI HEISTERS","HostOpts",  "KeyAI",      0x77, 0x73, 1, 0, "Online host",              "AI heisters fill the empty seats: on or off." },
     { "HostPool",  "HOST: MAP POOL",   "HostOpts",  "KeyPool",    0x2e, 0x2e, 1, 0, "Online host",              "Cycle the random map pool (needs the map pool on)." },
     { "Char",      "HEISTER SELECT",   "CharOnline","KeyChar",    0x78, 0x78, 0, 0, "Online",                   "Pick your heister, seen on every peer. Shift = previous." },

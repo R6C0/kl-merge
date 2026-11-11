@@ -39,13 +39,13 @@ static struct {
     int lastRole;
 } klho;
 
-static const int klho_maps[3] = { 0, 2, 9 };
+static const int klho_maps[4] = { 0, 2, 3, 9 };      /* 1111 'Online maps' row: Classic / Dead Men (page 2) / DLC (page 3) / Random */
 
 static int klho_get(int which)
 {   /* which 0 = map row (index 0..2), 1 = options row (bit 0 AI, bit 1 Solo, bit 2 PD2), 2 = map pool (0 off, 1 Full Dead Men, 2 Full Dog Days, 3 Mix) */
     int i;
     if (which == 2) return klho.pool;
-    if (which == 0) { for (i = 0; i < 3; i++) if (klho_maps[i] == klho.map) return i; return klho.map ? 1 : 0; }
+    if (which == 0) { int cur = klho.on ? klho.map : kls_online_set; for (i = 0; i < 4; i++) if (klho_maps[i] == cur) return i; return cur ? 1 : 0; }
     return (klho.ai ? 1 : 0) | (klho.solo ? 2 : 0) | (klho.pd2 ? 4 : 0);
 }
 
@@ -71,17 +71,17 @@ static void klho_live(void)
 static void klho_put(int which, int value)
 {
     char v[16];
-    if (!klho.on) return;                              /* 1102: the Mod settings rows (klset.c) reach here even with [HostOpts] Enable=0 */
+    if (!klho.on && which != 0) return;                /* 1102: the Mod settings rows (klset.c) reach here even with [HostOpts] Enable=0; 1111: the map set ('Online maps') works without it (own ini, not sent) */
     if (which == 2) {
         if (value < 0 || value > 3 || value == klho.pool) return;
         klho.pool = value; snprintf(v, sizeof v, "%d", value);
         WritePrivateProfileStringA("MapPool", "Pool", v, klh_ini);
         klog("hostopts: set map pool = %d (%s) - [MapPool] Pool=%d%s", value, kmp_pool_name(value), value, kmp.on ? "" : " (but [MapPool] Enable=0: nothing happens)");
     } else if (which == 0) {
-        int m = klho_maps[value < 0 ? 0 : value > 2 ? 2 : value];
-        if (m == klho.map) return;
+        int m = klho_maps[value < 0 ? 0 : value > 3 ? 3 : value];
+        if (m == (klho.on ? klho.map : kls_online_set)) return;
         klho.map = m; kls_online_set = m; klho.applied = -1; snprintf(v, sizeof v, "%d", m); WritePrivateProfileStringA("Expansion", "OnlineSet", v, klh_ini);
-        klog("hostopts: set map set = %d (%s) - [Expansion] OnlineSet=%d", value, value == 0 ? "Dog Days" : value == 1 ? "Dead Men" : "mixed random", m);
+        klog("hostopts: set map set = %d (%s) - [Expansion] OnlineSet=%d", value, value == 0 ? "Classic" : value == 1 ? "Dead Men" : value == 2 ? "DLC" : "random", m);
     } else {
         int ai = value & 1, so = (value >> 1) & 1, pd = (value >> 2) & 1;
         if (ai == klho.ai && so == klho.solo && pd == klho.pd2) return;
@@ -186,7 +186,7 @@ static void klho_tick(int game_thread)
             m = km && (!klho.ctlMap || ctl); a = ka && (!klho.ctlAI || ctl); pl = kmp.on && kp && (!klho.ctlPool || ctl);
             if (f) wtp(f, &pid);
             if (scripted || pid == GetCurrentProcessId()) {
-                if (m && !dMap) { klho_put(0, (klho_get(0) + 1) % 3); if (bp) bp(660 + 220 * klho_get(0), 40); klho_say(0, klho_get(0)); }
+                if (m && !dMap) { klho_put(0, (klho_get(0) + 1) % 4); if (bp) bp(660 + 220 * klho_get(0), 40); klho_say(0, klho_get(0)); }
                 if (a && !dAI) { klho_put(1, klho_get(1) ^ 1); if (bp) bp(klho.ai ? 880 : 440, 40); klho_say(1, klho_get(1)); }
                 if (pl && !dPool) { klho_put(2, (klho.pool + 1) % 4); if (bp) bp(500 + 150 * klho.pool, 40); klho_say(2, klho.pool); }
             }
