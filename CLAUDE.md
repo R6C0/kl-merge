@@ -67,6 +67,8 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-11 ~01:30 - [d0, offline] DD10 VAN FIX STAGED, NOT installed/benched (owner: 'van spawns in and blows up, supposed to be a cutscene drive'): tools/kl_dd10_vanfix_1111.py (2a86e8c6), kit C:/kl_build_1024/dd10vanfix_1111 (pins live e822d75d/f16b4bc1/0a1c00d0 -> zip 0dc61bdf, bots 67753c78, base 4da0052a).
+KillBox 21957 (only FA_DieFromSelf source in F07) shrunk + sunk 4 m, 3 RelayAnimatedVehicleHit (21943/21960/21961) cut = no crash legs/explosion. First-spawn death cause (approach box east edge x 9100) still a GUESS. CHECK PASS, undo byte-exact. Waits for owner 'install van' or 'go' (bench: first spawn x3, later spawn, round 2, call+board). After install: 81 re-packs.
 2026-11-11 ~00:15 - [d0] MERGED 1110h INSTALLED on owner "yes all good install all" (not benched): dll 6dcae9e6 -> 4485802e, ini 50fb6eac -> 13ff7f94 (CopToCrew 0.70, CrewHealth 1.00, TraitorReveal=1, Defend=0, [Difficulty] Ai=2 You=2 = Ctrl+Home / Ctrl+PgDn, ListUserGuard=2 for DM03 0x4f8a8e).
 Undo: C:/kl_build_1024/merged_1110h/kit/UNDO.bat FIRST, then merged_1110g. 81 told to re-pack. Open: bench m1110h_dm03 + DD10 first-spawn trace (dd10trace3a/3b) when the PC is free.
 2026-11-10 ~23:50 - [d0] MERGED 1110h STAGED, NOT installed (pack frozen; 81 re-packs after any install): branch d0-merged-1110h cb0a9885 = 1110g + difficulty + traitor + dm03skip0. SHIP 4485802e / TEST b43a109d, kit C:/kl_build_1024/merged_1110h/kit (pins live dll 6dcae9e6; ini 50fb6eac -> 13ff7f94; undo byte-exact in scratch; review PASS; kl_tests 173/0/5).
