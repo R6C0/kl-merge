@@ -1,4 +1,4 @@
-2026-11-11 ~21:45 - [f0] LINUX INSTALL FIX re-packed, NOT uploaded (waits for the owner's OK): Linux tester's Python 3.14.10 zlib-ng (newer than the package's 2.2.4) was refused by zcheck. wt_1110 4c4e7c8f: build_blob re-lays a map zip when this Python's deflate differs (local header csize, central dir csize + offsets, EOCD), check_relaid (names/sizes/CRCs + testzip),
+2026-11-11 ~21:45 - [f0] LINUX INSTALL FIX re-packed + UPLOADED ~22:00 (owner 'push'; served .sha1 + sizes + Setup.bat 106618a7 checked): Linux tester's Python 3.14.10 zlib-ng (newer than the package's 2.2.4) was refused by zcheck. wt_1110 4c4e7c8f: build_blob re-lays a map zip when this Python's deflate differs (local header csize, central dir csize + offsets, EOCD), check_relaid (names/sizes/CRCs + testzip),
 journal local_sha1 accepted by install/verify/uninstall/out: sources; Setup.bat + .sh no longer refuse. Test Z (ZSKEW) PASS, real DM05A main + bots rebuilt skewed: members OK. GUESS: the game reads any valid deflate.
 Packs: full 2d3c6339 / c6c1a075, update 9c55c053; upload copies C:/kl_release/up_assets (Setup.bat CRLF, .sh).
 
