@@ -204,6 +204,10 @@ static void klho_tick(int game_thread)
     {   /* the Steam lobby id (service +0x35c exists, +0x35e id) */
         DWORD svc = klh_rd32(sm + 0x17c), lob[2] = { 0, 0 }; BYTE ex = 0;
         if (svc && klh_rd(svc + 0x35c, &ex, 1) && ex && klh_rd(svc + 0x35e, lob, 8)) klho.lobby = (unsigned __int64)lob[1] << 32 | lob[0]; else klho.lobby = 0;
+        if (klho.lobby && (lob[0] != kls_lob_keep[0] || lob[1] != kls_lob_keep[1])) {     /* randkeep-1111 (klslot.c): the random map's seed at the load */
+            kls_lob_keep[0] = lob[0]; kls_lob_keep[1] = lob[1];
+            klog("hostopts: lobby id %08lx%08lx kept for the random map draw ([Expansion] RandomKeepLobby=%d)", (unsigned long)lob[1], (unsigned long)lob[0], kls_rnd_keep_on);
+        }
     }
     if (klho.udp) klho_open();
     if (host) {

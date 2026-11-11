@@ -338,6 +338,12 @@ etsmooth_solo.md H3); its CreateSession / JoinSession
 static char kls_rnd_txt[300];                        /* the last draw, for the LOAD line */
 static int kls_rnd_round_on;                         /* [Expansion] OnlineRandomRound=1: the round number joins the seed */
 static unsigned kls_rnd_round, kls_rnd_last, kls_rnd_lobby[2];
+/* randkeep-1111: the owner's random map set always loaded the same map per slot: every load logged 'seed lobby 0 (NOT readable) ... round 1',
+   service vt 0xbd5ad4 exists 1 but the id at +0x35e already 0 when the level opens (left the Steam lobby), while klhostopt.c read it in the lobby
+   (01860000bf968089, 11-10 20:40). So the last id read in the lobby (here or by klhostopt.c's tick) is KEPT and seeds the load.
+   [Expansion] RandomKeepLobby=1 (recommended on); 0 = the old rule (no id at the load = a fixed pick per slot). */
+static int kls_rnd_keep_on = 1;
+static DWORD kls_lob_keep[2];
 
 /* names-lobby-1102: the seed, the choice and the round rule live in klslot_rand_logic.h so the lobby's title lookup (kls_rand_peek, used by
    kllocname.c) computes EXACTLY what the pick will. */
@@ -359,6 +365,8 @@ static int kls_rand_lobby(DWORD *svc_o, DWORD *svt_o, BYTE *ex_o, DWORD lob[2])
     if (klh_exe_ok && (sm = klh_rd32((DWORD_PTR)KLH_VA(KLS_SESSION))) != 0 && (svc = klh_rd32(sm + 0x17c)) != 0 &&
         ((svt = klh_rd32(svc)) == KLS_SVC_VT || svt == KLS_SVC_VT2) && klh_rd(svc + 0x35c, &ex, 1) && ex && klh_rd(svc + 0x35e, lob, 8) && (lob[0] || lob[1])) src = 1;
     else { if (svc) { klh_rd(svc + 0x35c, &ex, 1); klh_rd(svc + 0x35e, lob, 8); } else lob[0] = lob[1] = 0; }   /* kept only for the log line */
+    if (src) { kls_lob_keep[0] = lob[0]; kls_lob_keep[1] = lob[1]; }                         /* randkeep-1111: the only write, the id itself */
+    else if (kls_rnd_keep_on && (kls_lob_keep[0] || kls_lob_keep[1])) { lob[0] = kls_lob_keep[0]; lob[1] = kls_lob_keep[1]; src = 2; }   /* 2 = the id kept from the lobby */
     *svc_o = svc; *svt_o = svt; *ex_o = ex;
     return src;
 }
@@ -377,7 +385,7 @@ static int kls_rand_pick(int s)
     x = kls_rand_mix(lob[0], lob[1], num, kls_rnd_round, kls_rnd_round_on || !src);
     k = kls_rand_index(x, n);
     len = snprintf(kls_rnd_txt, sizeof kls_rnd_txt, "random: seed lobby %08lx%08lx (%s; service %08lx vt %08lx exists %u) round %lu%s slot %d, %d choices [stock", (unsigned long)lob[1], (unsigned long)lob[0],
-                   src ? "lobby id" : "NOT readable: fixed pick", (unsigned long)svc, (unsigned long)svt, (unsigned)ex, (unsigned long)kls_rnd_round, (kls_rnd_round_on || !src) ? (src ? " (in the seed)" : " (in the seed: no lobby id, System Link)") : " (not in the seed)", num, n);
+                   src == 2 ? "lobby id kept from the lobby" : src ? "lobby id" : "NOT readable: fixed pick", (unsigned long)svc, (unsigned long)svt, (unsigned)ex, (unsigned long)kls_rnd_round, (kls_rnd_round_on || !src) ? (src ? " (in the seed)" : " (in the seed: no lobby id, System Link)") : " (not in the seed)", num, n);
     for (p = 1; p < n && len < (int)sizeof kls_rnd_txt - 40; p++) len += snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, " p%d=%s", cand[p], kls_rule[kls_find_rule(s, cand[p])].map);
     snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, "] -> choice %d (page %d)", k, cand[k]);
     return cand[k];
@@ -1088,6 +1096,7 @@ static void kls_init(HINSTANCE inst)
     kls_online_set = (int)GetPrivateProfileIntA("Expansion", "OnlineSet", 0, klh_ini);
     if (kls_online_set < 0 || kls_online_set >= KLS_PAGES) { klog("expansion: OnlineSet=%d is not a page (0, 2..8, 9 = random): ignored", kls_online_set); kls_online_set = 0; }
     kls_rnd_round_on = GetPrivateProfileIntA("Expansion", "OnlineRandomRound", 0, klh_ini) != 0;
+    kls_rnd_keep_on = GetPrivateProfileIntA("Expansion", "RandomKeepLobby", 1, klh_ini) != 0;       /* (recommended on) randkeep-1111 */
     kls_i16_on = GetPrivateProfileIntA("Int16Guard", "Enable", 1, klh_ini) != 0;       /* (recommended on) */
     kls_i16_marker_on = GetPrivateProfileIntA("Int16Guard", "Marker", 1, klh_ini) != 0;     /* (recommended on) */
     GetPrivateProfileStringA("Int16Guard", "OnlineSkip", "DM11B", kls_i16_list, sizeof kls_i16_list, klh_ini);
