@@ -1,3 +1,7 @@
+2026-11-11 ~23:40 - [f0] .rdata/.rsrc NO LONGER REQUIRED on v1.0.1 (owner 'go push it'): both testers were refused on .rdata (each a different hash; .text/.data/.tls stock, GUESS Steam CEG per-account bytes).
+A SHIP KLHook writes no .rdata and the dll gates only on PE time + SizeOfImage (klh_exe_ok), so install now needs .text/.data/.tls + that gate (wt_1110 e89e92db; test: rdata/rsrc byte ok, text byte + PE time refused; kl_release_test PASS).
+Also ships launcher drive-root fix 68f7e799. Uploaded --clobber: update dcbc334e, full d219963b / 6f63fe90 (served .sha1 + sizes checked). Testers: re-run Setup.bat.
+
 2026-11-11 ~23:00 - [f0] kl2.exe SECTION CHECK on v1.0.1 (owner 'upload all'): both testers' Steam kl2.exe (4eaeae9b, a4d6b1e4) = same size/PE time/flags, other whole-file sha1. kl_release install now accepts when
 .text/.rdata/.data/.tls match stock (KL2_CODE_SECTIONS), else names the differing section (wt_1110 c826b93c; scratch test: stock ok, signature byte ok, .text byte refused). Re-packed + uploaded --clobber:
 update 07ee1a07, full d6d46eb6 / b2d4753f (served .sha1 checked). Next: v1.0.2 draft from d0's lobbyset_1111 (dll 3135fe2c, ini 4dd1fe56, 8 overlays), online lobby not checked live.
