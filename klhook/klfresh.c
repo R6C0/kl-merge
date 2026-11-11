@@ -57,6 +57,12 @@
  *   FreshMax=8           at most this many restarts in a row (chain of children)
  *   FreshVia=0           0 = start the exe directly (inherits Steam's environment), 1 = ask Steam (steam://rungameid/28000) from a hidden cmd.exe
  *   FreshWindows=MainMenu,CampaignMenu,HeistModeMenu,HeistPlayMenu    top windows (name prefix) a restart may happen on
+ *   FreshOnExit=0        1 = restart AS THE MATCH EXITS (recommended on; owner 2026-11-11: "needs to happen like once the exit happens, seamless, not when
+ *                        they're already in the menu"): the first readable frontend frame after a level, ANY top window (FreshWindows ignored), stable
+ *                        FreshExitStableMs instead of FreshStableMs, no wait behind the toast (it stays up while the game closes).
+ *                        GUESS: the match's profile save (money / rank) is done before the level scene unloads; if a post-match page in the frontend
+ *                        saved it, this would cut it. Bench: rank/money after the restart = before it.
+ *   FreshExitStableMs=500
  *   FreshLog=1
  */
 #ifndef KLFRESH_C
@@ -69,7 +75,7 @@
 #endif
 
 static struct klfh_cfg klfh_c = { 0, 2, 0, 200, 2500, 60000, 8 };
-static int klfh_toast_ms = 2500, klfh_via, klfh_log = 1, klfh_off;
+static int klfh_toast_ms = 2500, klfh_via, klfh_log = 1, klfh_off, klfh_on_exit;
 static char klfh_win[256] = "MainMenu,CampaignMenu,HeistModeMenu,HeistPlayMenu";
 static int klfh_chain, klfh_test, klfh_child_toast;
 static char klfh_go[MAX_PATH];
@@ -255,6 +261,8 @@ static void klfh_init(void)
     klfh_toast_ms = (int)GetPrivateProfileIntA("Memory", "FreshToastMs", 2500, klh_ini); if (klfh_toast_ms < 0) klfh_toast_ms = 0;
     klfh_via = (int)GetPrivateProfileIntA("Memory", "FreshVia", 0, klh_ini);
     GetPrivateProfileStringA("Memory", "FreshWindows", klfh_win, v, sizeof v, klh_ini); if (v[0]) snprintf(klfh_win, sizeof klfh_win, "%s", v);
+    klfh_on_exit = GetPrivateProfileIntA("Memory", "FreshOnExit", 0, klh_ini) != 0;
+    if (klfh_on_exit) { klfh_c.stable_ms = (unsigned)GetPrivateProfileIntA("Memory", "FreshExitStableMs", 500, klh_ini); snprintf(klfh_win, sizeof klfh_win, "(any: FreshOnExit)"); }
     snprintf(cmd, sizeof cmd, "%s", GetCommandLineA());
     klfh_test = klfh_cmd_is_test(cmd) || GetPrivateProfileIntA("Auto", "Enable", 0, klh_ini) != 0;
     klog("fresh: FreshRestart on (levels %d, min piece %d MB, min free %d MB, stable %u ms, toast %d ms, via %s, chain %d)%s; windows %s",
@@ -281,12 +289,12 @@ static void klfh_tick(int game_thread)
     else { klfh_menu_sig = 0; klfh_menu_since = now; top[0] = 0; }
     if (klh_rd((DWORD_PTR)KLH_VA(KLS_STARTPEND), &pb, 1)) pend = pb != 0;
     memset(&in, 0, sizeof in);
-    in.test_run = klfh_test; in.online = kl_online(); in.at_menu = menu && klfh_top_allowed(top); in.start_pending = pend;
+    in.test_run = klfh_test; in.online = kl_online(); in.at_menu = menu && (klfh_on_exit || klfh_top_allowed(top)); in.start_pending = pend;
     in.menu_ms = now - klfh_menu_since; in.up_ms = now - klfh_t_start; in.levels = klfh_levels; in.chain = klfh_chain;
     in.largest_mb = klfh_largest; in.free_mb = klfh_free;
     if (klfh_state == 1) {                                           /* the note is up: still safe? then go */
         if (!klfh_gate(&klfh_c, &in)) { klfh_toast_stop = 1; klfh_state = 0; klog("fresh: restart cancelled (the player moved on: top '%s', pending %d)", top, pend); return; }
-        if (now - klfh_step_at < (DWORD)klfh_toast_ms) return;
+        if (!klfh_on_exit && now - klfh_step_at < (DWORD)klfh_toast_ms) return;
         if (!klfh_launch()) { klfh_off = 1; klfh_toast_stop = 1; return; }
         if (klfh_via == 0) klfh_write_go();
         klfh_quit_byte(); klfh_quit_at = now; klfh_state = 2;
