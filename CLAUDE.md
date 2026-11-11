@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-11 ~12:00 - [d0] FLAT RAID MENU NAME FIXED + INSTALLED (owner: 'back to the vault, no preview'): with [Lobby] Rows12=1 the game mounts Overlay\Patch01_rows12*.zip, built before the 11-05 fix,
+so page 3 entry 7 read stock Title07 'The Vault' and entries 6/7 had the H05 placeholder picture. Only those 3 spots patched in all 4 rows12 zips (+2 elements each; L06 Dig, L05 Flat Raid).
+Kit C:/kl_build_1024/flatraidname_1111 (tools/kl_flatraidname_1111.py), scratch install/2nd refused/undo byte-exact. Not seen live. Rebuilding rows12 with kl_lobby12.py must start from the current Patch01*.zip.
 2026-11-11 ~12:00 - [d0] DD10 BALCONY LANDING WAS BEHIND THE STREET WALL (owner: 'so much missing outside', 'invisible barrier' to the van). MEASURED (kl_map_escape.Ground, live F07 b8c95d37):
 the street is a walled box x 8000..9600, SideWall_01..08 at z 800 / 1200 (0..400 high, roof y 400); [Join.3] Land 8300 0 750 sat 50 cm OUTSIDE SideWall_06 = the unbuilt back of the set.
 INSTALLED ledgeland2_1111 (KLJoin.ini 8f3034c0 -> febb1368, Land=8300 0 860: floor y 0, 60 cm off the wall, clear lines to the van stop/rear and street east). Undo: C:/kl_build_1024/ledgeland2_1111/UNDO.bat.
