@@ -348,6 +348,32 @@ static void kllnm_tick(int game_thread)
         klog("names: LOC object %08lx (stock vtable %08lx, %d slots, slot 0 = %08lx) now answers through the private vtable; Override=%d Log=%d", loc, vt, kllnm_tab[t].n, kllnm_tab[t].orig, kllnm_override, kllnm_log);
 }
 
+/* lobbyset-1111 [Names] LobbyPicture (recommended on): the FA lobby picture (ToggleImages Option="KLSLobPic", klchar.c klc_get) follows the map the slot will load, as
+   kllnm_name_now2 does for the name. sel = the stock MP_SelectedLevel (child 0..8 = F01 F02 F03 F04 F06 F07 F05 F08 F09, the stock pictures); the overlay
+   (C:/kl_build_1024/lobbyset_1111) adds children 9..20 = the maps' own pictures in KLLNM_PICMAP order and 21..26 = the Random collage of F01 F02 F03 F04 F06 F07.
+   Off, offline, a stock page, The Dig online or an unknown map: the stock child. The widget reads it by name on every refresh (0x81ad20 -> option Get). */
+static int kllnm_lobpic_on;
+static const char *const kllnm_picmap[12] = { "DD10", "DM01", "DM01B", "DM02", "DM03", "DM03A", "DM05A", "DM06", "DM06B", "DM07", "DM09", "DM11B" };
+static int kllnm_lobpic(int sel)
+{
+    static const int slotof[9] = { 1, 2, 3, 4, 6, 7, 5, 8, 9 }, randof[10] = { -1, 21, 22, 23, 24, -1, 25, 26, -1, -1 };
+    int s, r, i, n, page, how = 0, rnd; char slot[4];
+    if (!kllnm_lobpic_on || !kls_on || sel < 0 || sel > 8 || !kl_online()) return sel;
+    n = slotof[sel]; rnd = randof[n] >= 0 ? randof[n] : sel;
+    snprintf(slot, sizeof slot, "F%02d", n);
+    for (s = 0; s < kls_nslots && _stricmp(kls_slot[s].name, slot); s++) ;
+    if (s == kls_nslots) return sel;
+    page = kls_page_now();
+    if (kllnm_pool) { int o = kmp_peek(s); if (o >= 0) page = o; }
+    if (page == KLS_RANDOM) { page = kls_rand_peek(s, kllnm_peekround, &how); if (!how) return rnd; }     /* not knowable yet: the collage */
+    if (!page) return sel;
+    r = kls_find_rule(s, page); if (r < 0) r = kls_find_rule(s, 0);
+    if (r < 0 || !_stricmp(kls_rule[r].map, "DM07")) return sel;           /* The Dig online loads the stock level (klslot.c) */
+    if (r >= 0 && kls_rule[r].page == 0) return sel;
+    for (i = 0; i < 12; i++) if (!_stricmp(kls_rule[r].map, kllnm_picmap[i])) return 9 + i;
+    return rnd;
+}
+
 static void kllnm_init(void)
 {
     char val[KLLNM_NAME + 8]; int r, nn = 0, en, fb;
@@ -358,7 +384,9 @@ static void kllnm_init(void)
     en = GetPrivateProfileIntA("Names", "Enable", 0, klh_ini) != 0;
     fb = GetPrivateProfileIntA("HUD", "Enable", 0, klh_ini) != 0 && GetPrivateProfileIntA("HUD", "OnlineIntroMapName", 1, klh_ini) != 0;      /* [HUD] OnlineIntroMapName (recommended on): the names are read for the online intro card even with [Names] off; nothing is wrapped then */
     kllnm_peekround = GetPrivateProfileIntA("Names", "LobbyPeekRound", 0, klh_ini) != 0;                 /* (recommended off) */
-    if (!en && GetPrivateProfileIntA("Names", "OnlineLobby", 0, klh_ini) && kls_on && kls_online_set) {  /* (recommended on once proven live) */
+    kllnm_lobpic_on = kls_on && GetPrivateProfileIntA("Names", "LobbyPicture", 0, klh_ini) != 0;     /* (recommended on) needs the lobbyset_1111 overlay (KLSLobPic) */
+    if (kllnm_lobpic_on) klog("names: LobbyPicture=1: the FA lobby picture follows the map each slot will load online (OnlineSet=%d, changeable in Mod settings)", kls_online_set);
+    if (!en && GetPrivateProfileIntA("Names", "OnlineLobby", 0, klh_ini) && kls_on) {  /* (recommended on) lobbyset-1111: also with OnlineSet=0 at start, so a later switch in Mod settings ('Online maps') is followed */
         en = 1; kllnm_onlineonly = 1;
         klog("names: OnlineLobby=1 with OnlineSet=%d: Enable/Override implied, the lobby names answer only inside a network session", kls_online_set);
     }

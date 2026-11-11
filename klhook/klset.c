@@ -46,6 +46,8 @@ static volatile LONG kset_v[KLS_N] = { 1, 1, 1, 1, 1, 1, 1, 0 };
 static volatile LONG kset_crack = 1;                     /* [Graphics] LensCrack (klreshade.c reads the ini at start: a change here is kept for the NEXT start) */
 #define KLS_HOPT (KLS_N + 3)                              /* 1025 klhostopt.c: bit 0 AI heisters, bit 1 Solo start, bit 2 PD2 guns (next start) */
 #define KLS_ARCMAP (KLS_N + 5)                            /* arcmap-1111 klslot.c: 'Arcade map pool' 0 Off / 1 Random / 2 Random + The Dig */
+#define KLS_LOBPIC (KLS_N + 6)                            /* lobbyset-1111 kllocname.c: the FA lobby picture (ToggleImages Option="KLSLobPic"), read-only; klc_get answers it */
+static int kllnm_lobpic(int sel);                        /* kllocname.c */
 static int kls_arcmap_get(void);                         /* klslot.c */
 static void kls_arcmap_put(int value);
 static int klho_get(int which);                          /* klhostopt.c */
@@ -66,6 +68,7 @@ static int kset_which(const char *name)
     if (!strcmp(n, "KLSHOpt")) return KLS_HOPT;
     if (!strcmp(n, "KLSLens")) return KLS_LENS;
     if (!strcmp(n, "KLSArcMap")) return KLS_ARCMAP;
+    if (!strcmp(n, "KLSLobPic")) return KLS_LOBPIC;
     return -1;
 }
 
@@ -74,6 +77,7 @@ static int kset_get(int i)
     if (i == KLS_NEXT) return (kset_v[1] ? 1 : 0) | (kset_v[7] ? 2 : 0);
     if (i == KLS_LENS) return (kset_v[5] ? 1 : 0) | (kset_crack ? 2 : 0);
     if (i == KLS_ARCMAP) return kls_arcmap_get();
+    if (i == KLS_LOBPIC) return 0;                      /* klc_get answers it (needs the stock MP_SelectedLevel) */
     if (i == KLS_HMAP) return klho_get(0);
     if (i == KLS_HOPT) return klho_get(1);
     if (i == KLS_ADREN) return (kset_v[2] ? 1 : 0) | (kset_v[3] ? 2 : 0);
@@ -95,6 +99,7 @@ static void kset_put(int i, int value)
         return;
     }
     if (i == KLS_ARCMAP) { kls_arcmap_put(value); return; }
+    if (i == KLS_LOBPIC) return;                        /* read-only */
     if (i == KLS_HMAP) { klho_put(0, value); return; }
     if (i == KLS_HOPT) { klho_put(1, value); return; }
     if (i == KLS_ADREN) {                               /* the combined row: each half through its own row (its own ini key and log line) */

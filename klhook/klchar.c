@@ -143,7 +143,9 @@ static int __fastcall klc_get(void *self, void *edx, const char *name, int playe
     if (i >= 0) return (int)*klc_value[i];
     if (i < 0) { int hr = klhr_row(name); if (hr > 0) return klhr_get(hr); }        /* klhire.c: KLHire1..16 */
     if ((i = klg_which(name)) >= 0) return klg_get(i);      /* klgun.c: KLGunStart, KLGunSet */
-    if ((i = kset_which(name)) >= 0) return kset_get(i);      /* klset.c: the Mod settings rows */
+    if ((i = kset_which(name)) == KLS_LOBPIC)                /* lobbyset-1111: the lobby picture = the stock MP_SelectedLevel child, or the expansion map's own picture */
+        return kllnm_lobpic(((int (__fastcall *)(void *, void *, const char *, int))(DWORD_PTR)KLH_VA(0x504b40))(self, 0, "MP_SelectedLevel", player));
+    if (i >= 0) return kset_get(i);                          /* klset.c: the Mod settings rows */
     if ((i = kpm_which(name)) >= 0) return kpm_get(i);        /* klpm.c: private-match options (off unless [Match] Enable) */
     return ((int (__fastcall *)(void *, void *, const char *, int))(DWORD_PTR)KLH_VA(0x504b40))(self, 0, name, player);
 }
