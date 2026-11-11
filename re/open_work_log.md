@@ -1,3 +1,5 @@
+2026-11-11 ~21:10 - [f0] v1.0.1 PUBLISHED on the owner's 'go' (now Latest): API tag v1.0.1, latest/download sha1s = 66fbfe27 / 05b2f9e3, Setup.bat 16921 B served.
+
 2026-11-11 ~21:00 - [f0] RELEASE v1.0.1 uploaded as a DRAFT (not public; v1.0.0 stays latest): release worktree commit c3963d9c. The launcher checks GitHub's latest tag on start; if a newer one exists, the header says
 'UPDATE vX AVAILABLE' and INSTALL becomes 'UPDATE TO vX' (Setup re-download + auto-install via update_pending.txt). The Linux .sh 'verify' says the same. v1.0.0 testers re-run Setup once.
 Package = live dll e7e83d06 + lobbypic/nodig zips, ini v1.0.0's fa94b89f (owner's Char/Outfit picks not shipped). verify 827/0, CRC 652/0, sha1 66fbfe27 / 05b2f9e3. NOT in it: d0's onlmap_1111 (abdeaf06).
