@@ -20,7 +20,7 @@ def main():
     bad = 0
     names = ['Special!Pickups!Grenade_Frag_0%d' % i for i in (1, 2, 3)]
     bad += check(all(D.is_pickup(n) for n in names), 'the three pickup names match')
-    bad += check(not any(D.is_pickup(n) for n in ('Special!Pickups!Grenade_Frag_04', 'Special!Pickups!Grenade_Frag_011', 'KL_Door_1', 'Weapon\Grenade_Fragmentation')),
+    bad += check(not any(D.is_pickup(n) for n in ('Special!Pickups!Grenade_Frag_04', 'Special!Pickups!Grenade_Frag_011', 'KL_Door_1', 'Weapon_Grenade_Fragmentation')),
                  'other names (4th pickup, longer suffix, templates, doors) do not match')
     bad += check(all(len(v) == 32 for v in D.PINS.values()) and set(D.PINS) == set(D.FILES[:2]), 'pins are full md5s of the two zips')
     tmp = tempfile.mkdtemp()
