@@ -67,6 +67,9 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-11 ~03:15 - [d0] INSTALLED: 81's [Payday2] Enable master switch (eeb4b61c): dll 026792ed -> 196cb366 (TEST b39d1354), ini + '[Payday2] Enable=1' block (a3d9a7ea).
+kl_tests 174/0/5, scratch install/2nd refused/undo byte-exact, smoke autotest clean exit 128 s. Enable=0 paths NOT benched. Undo: pd2toggle_1111/UNDO.bat FIRST, then freshexit_1111.
+DD10 vanshow confirmed live in KLExpansion/Maps/DD10 (F07 c392528f, bots efdc5acd); owner told: van waits x 6280 past the gate, shown+called by the south exit strip. Next: DD10 balcony loot.
 2026-11-11 ~03:30 - [d0] INSTALLED on owner "install all" (not benched): DD10 van: v1 (KillBox) did NOT stop the first-spawn death (bench: 11000 area blast at the approach box edge);
 vanfix2 (both van Explodes reach 1 cm, Relay_VanExplotion cut; owner: "i dont die to the car") + vanshow (approach box = exit strip: van shown only when called, drives in past the gate): F07 c392528f / bots efdc5acd / base 46e8dbdf.
 [Memory] FreshOnExit=1 (dll 4485802e -> 026792ed = 1110h + klfresh on-exit, branch d0-merged-1110h 0fadffcb; ini -> a8f1ef54): restart on the first frontend frame after a match. GUESS: profile saved before unload.
