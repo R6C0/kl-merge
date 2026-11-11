@@ -349,12 +349,40 @@ static DWORD kls_lob_keep[2];
    kllocname.c) computes EXACTLY what the pick will. */
 #include "klslot_rand_logic.h"
 
+/* randpool-1111 (owner: 'i dont want dig in the map pool ... and also make a randomised map pool for arcade'):
+   [Expansion] RandomExclude=DM07 = rule map names kept out of every random draw (online, lobby names and Arcade alike; '' = none);
+   [Expansion] ArcadeRandom=1 (recommended on) = an offline load of a slot draws from the same candidates, a new draw per load. */
+static char kls_rnd_excl[160] = "DM07";
+static int kls_arc_on;
+static unsigned kls_arc_t[KLS_SLOTS], kls_arc_n;
+static int kls_arc_page[KLS_SLOTS];
+
+static int kls_rnd_excluded(const char *map)
+{
+    char buf[160], *t, *ctx = 0; snprintf(buf, sizeof buf, "%s", kls_rnd_excl);
+    for (t = strtok_s(buf, ", ;", &ctx); t; t = strtok_s(0, ", ;", &ctx)) if (!_stricmp(t, map)) return 1;
+    return 0;
+}
+
 static int kls_rand_cands(int s, int *cand)
-{   /* the candidate pages of slot s: 0 = stock first, then every page 2..8 that has a rule for the slot -> count */
-    int n = 0, p;
+{   /* the candidate pages of slot s: 0 = stock first, then every page 2..8 that has a rule for the slot and is not excluded -> count */
+    int n = 0, p, r;
     cand[n++] = 0;
-    for (p = 2; p < KLS_RANDOM; p++) if (kls_find_rule(s, p) >= 0) cand[n++] = p;
+    for (p = 2; p < KLS_RANDOM; p++) if ((r = kls_find_rule(s, p)) >= 0 && !kls_rnd_excluded(kls_rule[r].map)) cand[n++] = p;
     return n;
+}
+
+static int kls_arc_pick(int s)
+{   /* offline: the page for this load of slot s. The probes of one load come within seconds, so a draw is kept 60 s (as kls_rnd_advance) */
+    int cand[KLS_PAGES], n, k, len, p; unsigned now = GetTickCount();
+    n = kls_rand_cands(s, cand);
+    if (kls_arc_t[s] && now - kls_arc_t[s] < 60000) { kls_arc_t[s] = now; return kls_arc_page[s]; }
+    k = kls_rand_index(kls_rand_mix(now, (unsigned)GetCurrentProcessId() ^ ++kls_arc_n, atoi(kls_slot[s].name + 1), kls_arc_n, 1), n);
+    kls_arc_t[s] = now; kls_arc_page[s] = cand[k];
+    len = snprintf(kls_rnd_txt, sizeof kls_rnd_txt, "arcade random: slot %s, %d choices [stock", kls_slot[s].name, n);
+    for (p = 1; p < n && len < (int)sizeof kls_rnd_txt - 40; p++) len += snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, " p%d=%s", cand[p], kls_rule[kls_find_rule(s, cand[p])].map);
+    snprintf(kls_rnd_txt + len, sizeof kls_rnd_txt - len, "] -> page %d (excluded: %s)", cand[k], kls_rnd_excl[0] ? kls_rnd_excl : "none");
+    return cand[k];
 }
 
 static int kls_rand_lobby(DWORD *svc_o, DWORD *svt_o, BYTE *ex_o, DWORD lob[2])
@@ -672,6 +700,7 @@ static int kls_map(const char *in, char *out, const char *api)
             page = kls_page_now();
             kls_rnd_txt[0] = 0;
             if (page == KLS_RANDOM) page = kls_rand_pick(s);      /* OnlineSet=9 */
+            else if (kls_arc_on && !kl_online()) page = kls_arc_pick(s);      /* [Expansion] ArcadeRandom=1 */
             if (kl_online() && (r = kmp_pick(s)) >= 0) page = r;      /* klmappool.c: [MapPool] the pool's no-repeat draw for this slot (online only) */
             if (kl_online() && page && kls_i16_on) {      /* [Int16Guard] (2026-10-27 G8): online positions travel as int16 (0x5a0ff0, 0x404e60, 0x8413b0), a map with gameplay at |x| or |z| > 32767 wraps */
                 int g = kls_find_rule(s, page);
@@ -1097,6 +1126,10 @@ static void kls_init(HINSTANCE inst)
     if (kls_online_set < 0 || kls_online_set >= KLS_PAGES) { klog("expansion: OnlineSet=%d is not a page (0, 2..8, 9 = random): ignored", kls_online_set); kls_online_set = 0; }
     kls_rnd_round_on = GetPrivateProfileIntA("Expansion", "OnlineRandomRound", 0, klh_ini) != 0;
     kls_rnd_keep_on = GetPrivateProfileIntA("Expansion", "RandomKeepLobby", 1, klh_ini) != 0;       /* (recommended on) randkeep-1111 */
+    kls_arc_on = GetPrivateProfileIntA("Expansion", "ArcadeRandom", 0, klh_ini) != 0;       /* (recommended on) randpool-1111 */
+    GetPrivateProfileStringA("Expansion", "RandomExclude", "DM07", kls_rnd_excl, sizeof kls_rnd_excl, klh_ini);
+    klog("expansion: random pool excludes [%s] ([Expansion] RandomExclude); ArcadeRandom=%d - %s", kls_rnd_excl, kls_arc_on,
+         kls_arc_on ? "an Arcade load draws stock or a Dead Men map of the chosen slot at random (new draw per load; NOT run live)" : "Arcade loads the menu's page");
     kls_i16_on = GetPrivateProfileIntA("Int16Guard", "Enable", 1, klh_ini) != 0;       /* (recommended on) */
     kls_i16_marker_on = GetPrivateProfileIntA("Int16Guard", "Marker", 1, klh_ini) != 0;     /* (recommended on) */
     GetPrivateProfileStringA("Int16Guard", "OnlineSkip", "DM11B", kls_i16_list, sizeof kls_i16_list, klh_ini);

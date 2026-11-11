@@ -106,6 +106,8 @@ feat('onlinerandom', G_EXP, 'Private match / System Link: random map (Dead Men a
 F[-1]['exact'] = True; F[-1]['excl'] = 'onlineset'
 feat('onlinerandround', G_EXP, 'Random online map: a new draw every round (only with the random map row; everyone must be in the lobby from the start)', 'off', 'start',
      "klslot.c OnlineRandomRound=1: the round number (loads more than 60 s apart, counted by each machine) joins the seed; a player who joins after a round was played counts differently and gets another map; NOT run live", [('Expansion', 'OnlineRandomRound', 1, 0, 0)])
+feat('arcaderandom', G_EXP, 'Arcade: random map (the map you pick loads as Dog Days or a Dead Men map at random; The Dig left out) (recommended on)', 'on', 'start',
+     'klslot.c [Expansion] ArcadeRandom=1 (randpool-1111): offline only, per slot the stock map or any Dead Men page with a rule for it, a new draw per load; [Expansion] RandomExclude (default DM07) keeps maps out of every random draw; NOT run live', [('Expansion', 'ArcadeRandom', 1, 0, 0)])
 feat('lobbysolo', G_EXP, 'System Link / Private Match: play a round by yourself as host (no "all players left" window; for testing custom matches)', 'off', 'start',
      'kllobby.c [Lobby] Solo=1 (implies MinPlayers=1): the session error word is cleared while you host with 1 human; private vtable copy of the session manager (heap data); live in the owner\'s ini since 1025solo (hosting a bot round alone); Q28/Q29 set 0 for the 2-human runs', [('Lobby', 'Solo', 1, 0, 0)],
      keep='how the owner hosts (alone with AI heisters or not) is his call')
