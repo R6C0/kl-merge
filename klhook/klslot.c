@@ -397,7 +397,8 @@ static int kls_rand_cands(int s, int *cand)
 {   /* the candidate pages of slot s: 0 = stock first, then every page 2..8 that has a rule for the slot and is not excluded -> count */
     int n = 0, p, r;
     cand[n++] = 0;
-    for (p = 2; p < KLS_RANDOM; p++) if ((r = kls_find_rule(s, p)) >= 0 && !kls_rnd_excluded(kls_rule[r].map)) cand[n++] = p;
+    for (p = 2; p < KLS_RANDOM; p++) if ((r = kls_find_rule(s, p)) >= 0 && !kls_rnd_excluded(kls_rule[r].map)
+                                         && !(kl_online() && !_stricmp(kls_rule[r].map, "DM07"))) cand[n++] = p;   /* owner 11-11: never The Dig online, whatever the Arcade row says */
     return n;
 }
 
@@ -1157,6 +1158,7 @@ static void kls_init(HINSTANCE inst)
     kls_rnd_keep_on = GetPrivateProfileIntA("Expansion", "RandomKeepLobby", 1, klh_ini) != 0;       /* (recommended on) randkeep-1111 */
     kls_arc_on = GetPrivateProfileIntA("Expansion", "ArcadeRandom", 0, klh_ini) != 0;       /* (recommended on) randpool-1111 */
     GetPrivateProfileStringA("Expansion", "RandomExclude", "DM07", kls_rnd_excl, sizeof kls_rnd_excl, klh_ini);
+    { char *c = strchr(kls_rnd_excl, ';'); size_t l; if (c) *c = 0; l = strlen(kls_rnd_excl); while (l && (kls_rnd_excl[l - 1] == ' ' || kls_rnd_excl[l - 1] == '\t')) kls_rnd_excl[--l] = 0; }   /* the ini's inline comment is not the list */
     klog("expansion: random pool excludes [%s] ([Expansion] RandomExclude); ArcadeRandom=%d - %s", kls_rnd_excl, kls_arc_on,
          kls_arc_on ? "an Arcade load draws stock or a Dead Men map of the chosen slot at random (new draw per load; NOT run live)" : "Arcade loads the menu's page");
     kls_i16_on = GetPrivateProfileIntA("Int16Guard", "Enable", 1, klh_ini) != 0;       /* (recommended on) */
