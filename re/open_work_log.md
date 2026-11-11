@@ -1,3 +1,12 @@
+2026-11-11 ~21:10 - [d0] PMIN INSTALLED (owner: lobby min 'says 4-12 still'): [Lobby] PlayersMin=2 (kllobbyopt.c 51194f57, 0 = stock 4). dll abdeaf06 -> SHIP d0da666e (TEST 212fb70f),
+ini 602167e6 -> 467915dc. Kit C:/kl_build_1024/pmin_1111 (scratch install/2nd refused/undo byte-exact). Undo pmin_1111 FIRST, then onlmap_1111, lobbypic_1111. Not run in game. For v1.0.2 with onlmap.
+
+2026-11-11 ~20:50 - [d0] ONLMAP_1111 (owner: 'another tab in mod settings for online maps: classic / dlc / dead men / random'): Mod settings row 'Online maps' = Classic / Dead Men / DLC / Random
+-> [Expansion] OnlineSet 0/2/3/9, live + ini, also with [HostOpts] Enable=0 (klhostopt.c KLSHMap 4 values; F7 cycles 4). DLC's F06 = The Dig -> online loads STOCK F06 (klslot + kllocname).
+dll e7e83d06 -> SHIP abdeaf06 / TEST 27995a43 (163023aa). 8 zips: plain relabel 'Host: map set'; rows12 new row, window respaced 34 -> 30 px; menu +4 (static 4944 kbd / 5135 pad, pad was over already).
+Kit C:/kl_build_1024/onlmap_1111 (scratch install / 2nd refused / undo byte-exact). UNDO onlmap FIRST, then lobbypic_1111.
+
+
 2026-11-10 ~20:40 - [d0] OWNER "PAGE 1/4 goes to 2/4, F2 mod menu": shop F2 pressed with the weapon list closed (round-over / category) started from the page the last shop left (stale kspg.hire/ctl), not the caption's stock page -> opened CONTROLS / BOTS AND MODES. Fix branch shop-cycle-1110 947ccb8a (kpq_press_page, test 123/0, kl_tests 169/0), reviewed. INSTALLED dll 6711bc5f -> b330ffb6 (TEST 4f827cb9), kit C:/kl_build_1024/shopcycle_1110/kit; undo it FIRST, then merged_1110f. NEXT dll merges must base on shop-cycle-1110. Disk: pruned dd10_slim_1105, vans_1107, 5 uninstalled lcchain variants (C: 0.2 -> 5.5 GB). Cutscene gun waving: give code + script holster refuted, likely DM gesture clips with a gun in hand, unproven; read-only [Campaign] CutsceneLog being built.
 2026-11-11 ~12:00 - [d0] FLAT RAID MENU NAME FIXED + INSTALLED (owner: 'back to the vault, no preview'): with [Lobby] Rows12=1 the game mounts Overlay\Patch01_rows12*.zip, built before the 11-05 fix,
 so page 3 entry 7 read stock Title07 'The Vault' and entries 6/7 had the H05 placeholder picture. Only those 3 spots patched in all 4 rows12 zips (+2 elements each; L06 Dig, L05 Flat Raid).
