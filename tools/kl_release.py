@@ -549,6 +549,7 @@ def mm_file(path):
 
 
 EXCLUDE_RE = re.compile(r'(\.before-|\.absent$|\.delays-|\.state\.json$|_journal\.json$|\.of-test-build|\.locked_)')
+EXCLUDE_DIR_RE = re.compile(r'(before[-_]|_?backup|scratch)', re.I)
 STOCK_MTIME = time.mktime((2026, 9, 14, 0, 0, 0, 0, 0, -1))      # the Steam install was 2026-09-13
 WIN_SLOTS = ['F%02d' % i for i in range(1, 10)] + ['L%02d' % i for i in range(0, 12)]
 OWN_ROOT = ['dinput8.dll', 'KLHook.ini', 'KLShopPage.ini', 'KL_MOD_SETTINGS.txt']
@@ -778,6 +779,7 @@ def hint_levels(mapid):
 def list_files(root, skip=EXCLUDE_RE):
     out = []
     for r, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if not EXCLUDE_DIR_RE.match(d))   # backup folders (Maps/DD10/before-wardrobe) are not the mod
         for fn in files:
             if skip.search(fn):
                 continue
