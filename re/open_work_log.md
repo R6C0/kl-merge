@@ -1,3 +1,13 @@
+2026-11-11 ~21:00 - [f0] RELEASE v1.0.1 uploaded as a DRAFT (not public; v1.0.0 stays latest): release worktree commit c3963d9c. The launcher checks GitHub's latest tag on start; if a newer one exists, the header says
+'UPDATE vX AVAILABLE' and INSTALL becomes 'UPDATE TO vX' (Setup re-download + auto-install via update_pending.txt). The Linux .sh 'verify' says the same. v1.0.0 testers re-run Setup once.
+Package = live dll e7e83d06 + lobbypic/nodig zips, ini v1.0.0's fa94b89f (owner's Char/Outfit picks not shipped). verify 827/0, CRC 652/0, sha1 66fbfe27 / 05b2f9e3. NOT in it: d0's onlmap_1111 (abdeaf06).
+Publish on the owner's 'go': gh release edit v1.0.1 --repo R6C0/dead-men-rising --draft=false --latest.
+
+2026-11-11 ~20:50 - [d0] ONLMAP_1111 (owner: 'another tab in mod settings for online maps: classic / dlc / dead men / random'): Mod settings row 'Online maps' = Classic / Dead Men / DLC / Random
+-> [Expansion] OnlineSet 0/2/3/9, live + ini, also with [HostOpts] Enable=0 (klhostopt.c KLSHMap 4 values; F7 cycles 4). DLC's F06 = The Dig -> online loads STOCK F06 (klslot + kllocname).
+dll e7e83d06 -> SHIP abdeaf06 / TEST 27995a43 (163023aa). 8 zips: plain relabel 'Host: map set'; rows12 new row, window respaced 34 -> 30 px; menu +4 (static 4944 kbd / 5135 pad, pad was over already).
+Kit C:/kl_build_1024/onlmap_1111 (scratch install / 2nd refused / undo byte-exact). UNDO onlmap FIRST, then lobbypic_1111.
+
 2026-11-11 ~20:15 - [d0] NODIG INSTALLED (owner: 'no dig especially in online'): LobbyRand_F06 redrawn = stock F06 + Retomoto + RANDOM bar (scenes kaneandlynch 630d451d -> b1234e96,
 _deadmen 132fad15 -> 9c81dfa5, TEX pixels only); dll 6c8ef0cf -> e7e83d06 (klslot: online never draws DM07 whatever the Arcade row says; RandomExclude ';' comment cut). Branch d0-revivecut-1111.
 Kit C:/kl_build_1024/lobbypic_1111 install_nodig.py (UNDO.bat undoes both parts). Not run in the game yet.
