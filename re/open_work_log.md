@@ -1,6 +1,10 @@
 2026-11-11 ~21:10 - [d0] PMIN INSTALLED (owner: lobby min 'says 4-12 still'): [Lobby] PlayersMin=2 (kllobbyopt.c 51194f57, 0 = stock 4). dll abdeaf06 -> SHIP d0da666e (TEST 212fb70f),
 ini 602167e6 -> 467915dc. Kit C:/kl_build_1024/pmin_1111 (scratch install/2nd refused/undo byte-exact). Undo pmin_1111 FIRST, then onlmap_1111, lobbypic_1111. Not run in game. For v1.0.2 with onlmap.
 
+2026-11-11 ~21:40 - [f0] SMALL UPDATE built + tested, NOT uploaded (the public upload needs the owner's OK): wt_1110 78f24244. KLMerge_update.zip = only the files new since v1.0.0 (tools/launcher/update_base.json),
+made by pack_release (make_update.py). Setup.bat and the Linux .sh use it when package\ exists and fall back to the full download when a manifest patch is still missing. v1.0.0 -> v1.0.1 = 15.3 MB (sha1 399ed789).
+Tested against a local server with a fake v1.0.0 folder: .bat update + fallback, .sh update + re-run + fallback. Staged C:/kl_release/up_v101b (update zip + sha1, Setup.bat, .sh, README). d0's v1.0.2 inputs (d0da666e, PlayersMin=2, 8 overlays) are queued.
+
 2026-11-11 ~21:10 - [f0] v1.0.1 PUBLISHED on the owner's 'go' (now Latest): API tag v1.0.1, latest/download sha1s = 66fbfe27 / 05b2f9e3, Setup.bat 16921 B served.
 
 2026-11-11 ~21:00 - [f0] RELEASE v1.0.1 uploaded as a DRAFT (not public; v1.0.0 stays latest): release worktree commit c3963d9c. The launcher checks GitHub's latest tag on start; if a newer one exists, the header says
