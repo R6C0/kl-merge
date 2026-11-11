@@ -218,6 +218,24 @@ static int kad_carried(const struct klb_snap *s, int i, int *v)
 
 static int kad_put32(DWORD at, int v, const char *what) { return klh_data((void *)(DWORD_PTR)at, &v, 4, what); }
 
+/* [HUD] ReviveCut (klhud_kill.c): a share the local player got (x > 0) or gave (x < 0) -> the kill line under REWARDS ('YOU GOT JEAN UP  +$3,000')
+   and the round's net (klu_rev_net: the scoreboard + the shop caption). other = the record on the other end */
+static long kad_last_cut;                 /* the local player's cut of the last kad_pay (+ got, - gave), for the prompts */
+static void kad_cut_show(int other, long x)
+{
+    char nm[32];
+    kad_last_cut = x;
+    if (!klu_revcut || !x) return;
+    kad_name(other, nm, sizeof nm);
+    EnterCriticalSection(&klu_cs);
+    klkc_revive(nm, x > 0, x > 0 ? x : -x, klu_kf_txt, sizeof klu_kf_txt);
+    klu_kf_col = x > 0 ? KLU_C_GREEN : KLU_C_CORAL;
+    klu_kf_at = (LONG)GetTickCount() | 1;
+    klu_rev_net += x;
+    LeaveCriticalSection(&klu_cs);
+    klog("adren: revive cut %+ld shown ('%s'), round net %+ld", x, klu_kf_txt, klu_rev_net);
+}
+
 /* pay helper h for having helped record i up */
 static void kad_pay(const struct klb_snap *s, int i, int h, DWORD ms)
 {
@@ -233,14 +251,17 @@ static void kad_pay(const struct klb_snap *s, int i, int h, DWORD ms)
     if (h == s->human && kad.bank) {
         if (!klh_rd(s->score + 0x38, &tot, 4) || !kad_put32(s->score + 0x38, tot + x, "score: the banked total (the adrenaline share)")) return;
         klog("adren: SHARE - record %d (you) gets $%d (Share %.2f of the $%d record %d carries; helped %lu ms), banked: [score+0x38] %d -> %d", h, x, kad.share, have, i, (unsigned long)ms, tot, tot + x);
+        kad_cut_show(i, x);
     } else {
         if (!kad_carried(s, h, &hv) || !kad_put32(s->score + 0x150 + 4 * h, hv + x, "score: the helper's carried money (the adrenaline share)")) return;
         klog("adren: SHARE - record %d (%s) gets $%d (Share %.2f of the $%d record %d carries; helped %lu ms), carried: $%d -> $%d", h, who, x, kad.share, have, i, (unsigned long)ms, hv, hv + x);
+        if (h == s->human) kad_cut_show(i, x);                  /* Bank=0: your share went into your carried money */
     }
     /* review 5: the share must not make money - with Take=1 it comes out of the helped man's carried money, a human's too */
-    if (kad.take && kad_put32(s->score + 0x150 + 4 * i, have - x, "score: the helped man's carried money (the adrenaline share is his cut)"))
+    if (kad.take && kad_put32(s->score + 0x150 + 4 * i, have - x, "score: the helped man's carried money (the adrenaline share is his cut)")) {
         klog("adren: record %d (%s) carries $%d now (was $%d: the share is out of his cut)", i, i == s->human ? "you" : "bot", have - x, have);
-    else if (!kad.take) klog("adren: Take=0 - the share of $%d is NEW money (nobody is debited)", x);
+        if (i == s->human) kad_cut_show(h, -(long)x);
+    } else if (!kad.take) klog("adren: Take=0 - the share of $%d is NEW money (nobody is debited)", x);
 }
 
 /* ---------------------------------------------------------------- the traitor mark */
@@ -1075,6 +1096,7 @@ static void kad_tick(int game_thread)
     if (sn.rules != kad_g.rules) {            /* a new round / rules object: a mark left over from the last round is taken off, nothing else is carried */
         for (i = 0; i < KLB_NREC; i++) if (kad_m[i].on && !kad_m[i].keep && !kad.dry) { DWORD fl = 0; if (klh_rd(sn.score + 0x1d4 + 4 * i, &fl, 4) && (fl & 1)) { fl &= ~1u; klh_data((void *)(DWORD_PTR)(sn.score + 0x1d4 + 4 * i), &fl, 4, "client flags: a mark of last round (adrenaline)"); } }
         kad_forget("new rules object"); kad_g.rules = sn.rules;
+        EnterCriticalSection(&klu_cs); klu_rev_net = 0; LeaveCriticalSection(&klu_cs);     /* [HUD] ReviveCut: the scoreboard / shop show this round's net only */
         kad_g.hint_at = now + 9000;          /* the round's first prompt: once the countdown is over, what the key is for */
         klog("adren: a round runs (Arcade, not the stock level: %s); %d crew record(s); Range %.1f m, BotRange %.1f m, Rate %.1f, Meter %.1f, Share %.2f, Mark %d%s", why, sn.n, kad.range, kad.brange, kad.rate, kad.meter, kad.share, kad.mark, kad.dry ? " - Dry: nothing is written" : "");
     }
@@ -1152,9 +1174,10 @@ static void kad_tick(int game_thread)
             if (k->fast && pl) { BYTE z = 0; klh_data((void *)(DWORD_PTR)(D + 0x29), &z, 1, "player: the fast get-up byte back (adrenaline)"); }
             k->fast = 0;
             if (best >= 0 && bm >= (DWORD)(kad.minhelp * 1000.0f)) {
+                kad_last_cut = 0;
                 if (kad.share > 0) { if (k->paid) klog("adren: record %d was helped up before this round: no second share (once per man per round)", i); else { k->paid = 1; kad_pay(&sn, i, best, bm); } }
-                if (kad.prompt && i == sn.human && best >= 0 && best != sn.human) { char nm[48], msg[160]; kad_name(best, nm, sizeof nm); snprintf(msg, sizeof msg, "ADRENALINE: %s got you up - he takes a cut of your money", nm); kad_say(320 + best, 0, msg, 3.5f); }
-                if (kad.prompt && best == sn.human && i != sn.human) { char nm[48], msg[160]; kad_name(i, nm, sizeof nm); snprintf(msg, sizeof msg, "%s is back up - you get a cut of his money", nm); kad_say(500 + i, 0, msg, 3.0f); }
+                if (kad.prompt && i == sn.human && best >= 0 && best != sn.human) { char nm[48], msg[160], am[24] = "a cut"; kad_name(best, nm, sizeof nm); if (klu_revcut && kad_last_cut < 0) { am[0] = '$'; klkc_num(-kad_last_cut, am + 1, sizeof am - 1); } snprintf(msg, sizeof msg, "ADRENALINE: %s got you up - he takes %s of your money", nm, am); kad_say(320 + best, 0, msg, 3.5f); }
+                if (kad.prompt && best == sn.human && i != sn.human) { char nm[48], msg[160], am[24] = "a cut"; kad_name(i, nm, sizeof nm); if (klu_revcut && kad_last_cut > 0) { am[0] = '$'; klkc_num(kad_last_cut, am + 1, sizeof am - 1); } snprintf(msg, sizeof msg, "%s is back up - you get %s of his money", nm, am); kad_say(500 + i, 0, msg, 3.0f); }
                 if (k->by >= 0 && k->by == best) kad_mark_off(&sn, k->by, i, "he helped him up");
                 else if (k->by >= 0 && k->mkn) klog("adren: record %d (who put record %d down) did not help him up: his mark stays", k->by, i);
             } else if (k->by >= 0 && k->mkn) klog("adren: record %d got up without enough help (%lu ms of %.0f): the mark of record %d stays", i, (unsigned long)bm, kad.minhelp * 1000.0f, k->by);

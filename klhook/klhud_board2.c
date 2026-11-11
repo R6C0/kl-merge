@@ -52,9 +52,9 @@
 #endif
 #define KLSB_O_FOUTRO    0x10b0               /* osd: the element (re\hud.md line 155, size 0xdc) */
 #define KLSB_NTEXT_BASE  52                   /* the pool before [Grades]: with Grades off (or Letter and RankUp off) no more text objects are made than before (inert when off) */
-#define KLSB_NT()        (klsb.nexthint || klgrd_pool_extra() ? KLSB_NTEXT : KLSB_NTEXT_BASE)      /* [HUD] ScoreboardNextHint needs the last slot, so the pool is whole then */
+#define KLSB_NT()        (klsb.nexthint || klu_revcut || klgrd_pool_extra() ? KLSB_NTEXT : KLSB_NTEXT_BASE)      /* [HUD] ScoreboardNextHint / ReviveCut need the last slots, so the pool is whole then */
 #define KLSB_NSLOT       16
-#define KLSB_NTEXT       67                   /* was 40: 4 more rows of 3 texts (2026-10-26); 52 -> 66: [Grades] GRADE head, RANK UP line, 12 letters (2026-10-27); 67: the NEXT hint line (2026-11-02) */
+#define KLSB_NTEXT       68                   /* was 40: 4 more rows of 3 texts (2026-10-26); 52 -> 66: [Grades] GRADE head, RANK UP line, 12 letters (2026-10-27); 67: the NEXT hint line (2026-11-02); 68: the REVIVE line (2026-11-11) */
 #define KLSB_NPIC        112
 #define KLSB_NROW        12                   /* was 8 (online FA is up to 12). More than 8 rows: the pitch shrinks so the plate and summary stay put (klsb_compose, GUESS) */
 #define KLSB_NROW_OLD    8
@@ -112,7 +112,9 @@
 #define KLSB_T_RANKUP    53                   /* [Grades] RankUp: the 'RANK UP: <rank>' line */
 #define KLSB_T_GRADE(i)  (54 + (i))           /* [Grades] Letter: the row's letter, 12 rows */
 #define KLSB_T_NEXT      66                   /* [HUD] ScoreboardNextHint: 'NEXT: BUY WEAPONS, THEN [F2] ...', centred under the plate */
-#define KLSB_Y_NEXT      14.0f                /* plate y + PH + 14 = 536: below the plate's bottom edge (522), so nothing of the card is overlapped; the screen is 1280 wide, the line (about 55 label glyphs, GUESS ~680 px) fits */
+#define KLSB_T_REVIVE    67                   /* [HUD] ReviveCut: 'REVIVE +$3,000' under the REWARDS value (the round's adrenaline shares, kladren.c) */
+#define KLSB_Y_SREV      361.0f               /* 511: under the values (343), above the plate's bottom (372); left of the ring (x 560) */
+#define KLSB_Y_NEXT      14.0f               /* plate y + PH + 14 = 536: below the plate's bottom edge (522), so nothing of the card is overlapped; the screen is 1280 wide, the line (about 55 label glyphs, GUESS ~680 px) fits */
 #define KLSB_COLG        400.0f               /* [Grades] the GRADE column: plate x + 400 (between FATE and PAYOUT; GUESS: free at every row count) */
 
 #define KLSB_ALIGN_L 0
@@ -138,7 +140,8 @@ static const struct { signed char fnt, align; } klsb_role[KLSB_NTEXT] = {
     { KLU_FNT_LABEL, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_R },
     { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L },
     { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L }, { KLU_FNT_NAME, KLSB_ALIGN_L },
-    { KLU_FNT_LABEL, KLSB_ALIGN_C } };
+    { KLU_FNT_LABEL, KLSB_ALIGN_C },
+    { KLU_FNT_LABEL, KLSB_ALIGN_L } };
 
 static const BYTE klsb_code[8] = { 0x83, 0xec, 0x3c, 0x56, 0x8b, 0xf1, 0x8b, 0x0d };     /* 0x577e70 sub esp,0x3c; push esi; mov esi,ecx; mov ecx,[..] */
 
@@ -614,6 +617,12 @@ static int klsb_compose(const struct klb_snap *s, DWORD end_bits, LONG frame)
         klsb_put(KLSB_T_RWL, px + KLSB_X_S2, klu_cen(py + KLSB_Y_SLAB, KLU_FNT_LABEL), "REWARDS", KLU_C_CORAL);
         klu_dollars(num, sizeof num, m.rewards);
         klsb_put(KLSB_T_RWV, px + KLSB_X_S2, klu_cen(py + KLSB_Y_SVAL, KLU_FNT_NAME), num, m.rewards < 0 ? KLU_C_CORAL : KLU_C_GREEN);
+        if (klu_revcut) {                                   /* the cut you got / gave reviving this round (Arcade: kladren.c kad_pay) */
+            long rv; char rt[32];
+            EnterCriticalSection(&klu_cs); rv = klu_rev_net; LeaveCriticalSection(&klu_cs);
+            klkc_revive_tag(rv, rt, sizeof rt);
+            if (rt[0]) klsb_put(KLSB_T_REVIVE, px + KLSB_X_S2, klu_cen(py + KLSB_Y_SREV, KLU_FNT_LABEL), rt, rv < 0 ? KLU_C_CORAL : KLU_C_GREEN);
+        }
         klsb_put(KLSB_T_TOTL, px + KLSB_X_S3, klu_cen(py + KLSB_Y_SLAB, KLU_FNT_LABEL), "TOTAL SCORE", KLU_C_CORAL);
         klu_dollars(num, sizeof num, tot);
         klsb_put(KLSB_T_TOTV, px + KLSB_X_S3, klu_cen(py + KLSB_Y_STOT, KLU_FNT_BIG), num, KLU_C_GREENHI);

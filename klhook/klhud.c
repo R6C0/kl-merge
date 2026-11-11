@@ -334,6 +334,8 @@ static CRITICAL_SECTION klu_cs;
 static char klu_kill_txt[64];                 /* klhud_kill.c hands the points pop-up's line here (under klu_cs) ... */
 static LONG klu_kill_at, klu_kill_ms = 3500;
 static int klu_killcash;                       /* [HUD] KillCash (klhud_kill.c reads it): the stock line's amount -> the money that really moved (klkillcash_logic.h) */
+static int klu_revcut;                         /* [HUD] ReviveCut (klhud_kill.c reads it): an adrenaline share you got / gave shows on the kill line, the scoreboard and the shop caption */
+static long klu_rev_net;                       /* ... the local player's net share of the round (kladren.c kad_pay writes it under klu_cs, its new round clears it; Arcade only) */
 /* 2026-10-26 (the online port's open items 'stock kill popup still swallowed online' / 'stock van panel still blanked'): a stock element
    is taken off the screen ONLY while this compose draws its replacement. klu_compose publishes, once per compose (no 0 window between
    a reset and a set: the render thread reads these), KLU_KEEP_KILL when the kill line under REWARDS is live (klu_kill_line with on) and
