@@ -115,7 +115,8 @@ static void klkf_init(void)
     klkf.on = klu_inii("KillLine", klu.draft, 0, 1);
     klkf.secs = klu_inif("KillSeconds", "3.5"); if (!(klkf.secs >= 0.5f && klkf.secs <= 20.0f)) klkf.secs = 3.5f;
     klu_kill_ms = (LONG)(klkf.secs * 1000.0f);
-    if (klkf.on) klog("hud: kill: on; the points pop-up's line goes under REWARDS for %.1f s (KillLine=1); only while the HUD stands; NOT RUN IN THE GAME", klkf.secs);
+    klu_killcash = klu_inii("KillCash", 0, 0, 1);       /* (recommended on) 2026-11-11: 'KILLED POLICE  +$1,500' with the money that really moved, never '$0'; 0 = the stock text */
+    if (klkf.on) klog("hud: kill: on; the points pop-up's line goes under REWARDS for %.1f s (KillLine=1, KillCash=%d); only while the HUD stands", klkf.secs, klu_killcash);
 }
 
 #endif /* KLHUD_KILL_C */

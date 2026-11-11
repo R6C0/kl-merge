@@ -65,6 +65,7 @@ PY_NOT_ROOT = {
 # C tests: 'logic' builds with the shim on any host, 'win' needs the real SDK (includes a whole module).
 C_TESTS = {
     'klcs_test.c': 'logic',            # klcopsquad_logic.h
+    'klkillcash_test.c': 'logic',      # klkillcash_logic.h ([HUD] KillCash)
     'klshield_test.c': 'logic',        # klshield_logic.h ([Shield] arithmetic + Online world gate, no windows.h)
     'klmodestab_test.c': 'logic',      # klmodestab_logic.h ([Keys] ModesTab rows + RoundHints text, no windows.h)
     'klcv_test.c': 'logic',            # klchar_voice.h
