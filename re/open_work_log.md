@@ -1,3 +1,7 @@
+2026-11-11 ~19:55 - [d0] LOBBYSET INSTALLED (owner: lobby naming must match Classic / Dead Men / DLC / Random): names fix = [Names] OnlineLobby no longer needs OnlineSet != 0 at start
+(a Classic start + Mod settings switch kept stock names); picture = [Names] LobbyPicture=1 + LobbyImageToggler Option="KLSLobPic" (stock child, 12 LobbyMap_* or 6 LobbyRand_* collage children). dll d0da666e -> 3135fe2c, ini 467915dc -> 4dd1fe56,
+8 Patch01*.zip (C:/kl_build_1024/lobbyset_1111/stage/pins.txt). Menu count keyboard worst 4962/5000. kl_tests 175/0, scratch undo byte-exact; NOT run live. Undo: lobbyset_1111/UNDO.bat BEFORE pmin_1111. 81 holds v1.0.2 for these md5s.
+
 2026-11-11 ~21:10 - [d0] PMIN INSTALLED (owner: lobby min 'says 4-12 still'): [Lobby] PlayersMin=2 (kllobbyopt.c 51194f57, 0 = stock 4). dll abdeaf06 -> SHIP d0da666e (TEST 212fb70f),
 ini 602167e6 -> 467915dc. Kit C:/kl_build_1024/pmin_1111 (scratch install/2nd refused/undo byte-exact). Undo pmin_1111 FIRST, then onlmap_1111, lobbypic_1111. Not run in game. For v1.0.2 with onlmap.
 
