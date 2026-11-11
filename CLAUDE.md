@@ -67,6 +67,10 @@ a launch goes straight into the F01 slot and quits after 120 s.
 
 ## Open work
 Full dated log: `re/open_work_log.md` (newest first). Shared week queue: `re/week_plan_1028.md`.
+2026-11-11 ~03:30 - [d0] INSTALLED on owner "install all" (not benched): DD10 van: v1 (KillBox) did NOT stop the first-spawn death (bench: 11000 area blast at the approach box edge);
+vanfix2 (both van Explodes reach 1 cm, Relay_VanExplotion cut; owner: "i dont die to the car") + vanshow (approach box = exit strip: van shown only when called, drives in past the gate): F07 c392528f / bots efdc5acd / base 46e8dbdf.
+[Memory] FreshOnExit=1 (dll 4485802e -> 026792ed = 1110h + klfresh on-exit, branch d0-merged-1110h 0fadffcb; ini -> a8f1ef54): restart on the first frontend frame after a match. GUESS: profile saved before unload.
+Undo: freshexit_1111/UNDO.bat; dd10vanshow_1111 -> dd10vanfix2_1111 -> dd10vanfix_1111 UNDO.bat. Open: balcony route loot (owner). 81 re-packed.
 2026-11-11 ~01:30 - [d0, offline] DD10 VAN FIX STAGED, NOT installed/benched (owner: 'van spawns in and blows up, supposed to be a cutscene drive'): tools/kl_dd10_vanfix_1111.py (2a86e8c6), kit C:/kl_build_1024/dd10vanfix_1111 (pins live e822d75d/f16b4bc1/0a1c00d0 -> zip 0dc61bdf, bots 67753c78, base 4da0052a).
 KillBox 21957 (only FA_DieFromSelf source in F07) shrunk + sunk 4 m, 3 RelayAnimatedVehicleHit (21943/21960/21961) cut = no crash legs/explosion. First-spawn death cause (approach box east edge x 9100) still a GUESS. CHECK PASS, undo byte-exact. Waits for owner 'install van' or 'go' (bench: first spawn x3, later spawn, round 2, call+board). After install: 81 re-packs.
 2026-11-11 ~00:15 - [d0] MERGED 1110h INSTALLED on owner "yes all good install all" (not benched): dll 6dcae9e6 -> 4485802e, ini 50fb6eac -> 13ff7f94 (CopToCrew 0.70, CrewHealth 1.00, TraitorReveal=1, Defend=0, [Difficulty] Ai=2 You=2 = Ctrl+Home / Ctrl+PgDn, ListUserGuard=2 for DM03 0x4f8a8e).
