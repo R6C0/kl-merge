@@ -27,6 +27,15 @@ int main(void)
     klkc_num(1000, b, sizeof b); CHECK(!strcmp(b, "1,000"));
     klkc_num(-1000, b, sizeof b); CHECK(!strcmp(b, "1,000"));
     { char t[8]; klkc_format("POLICE +$0", 123456, t, sizeof t); CHECK(strlen(t) == 7); }   /* truncates, never overruns */
+    { char t[64];
+      klkc_revive("Jean", 1, 3000, t, sizeof t); CHECK(!strcmp(t, "YOU GOT JEAN UP  +$3,000"));
+      klkc_revive("Jean", 0, 3000, t, sizeof t); CHECK(!strcmp(t, "JEAN GOT YOU UP  -$3,000"));
+      klkc_revive("your crewmate", 1, 0, t, sizeof t); CHECK(!strcmp(t, "YOU GOT YOUR CREWMATE UP"));
+      klkc_revive("", 0, 12500, t, sizeof t); CHECK(!strcmp(t, "CREWMATE GOT YOU UP  -$12,500"));
+      klkc_revive_tag(3000, t, sizeof t); CHECK(!strcmp(t, "REVIVE +$3,000"));
+      klkc_revive_tag(-1250, t, sizeof t); CHECK(!strcmp(t, "REVIVE -$1,250"));
+      klkc_revive_tag(0, t, sizeof t); CHECK(t[0] == 0); }
+    { char t[10]; klkc_revive("Jean", 1, 3000, t, sizeof t); CHECK(strlen(t) == 9); }   /* truncates, never overruns */
     printf("klkillcash_test: %d checks, %d failed\n", checks, fails);
     return fails != 0;
 }

@@ -278,7 +278,14 @@ static void kspg_cap_build(char *o, size_t cap, const char *base, int page)
         for (i = 0; i < KSPG_ROWS; i++) cnt += kspg.p[i].ok != 0;
         ksu_p2_tag(tag, sizeof tag, cnt);
     }
-    kfit_caption(o, cap, base, page, pos, n, tag, cyc, kspg.ctlOn ? kspg_next(page) : -1, p2, hk, kfit_budget(kspg.capMax, strlen(base)));
+    {   /* [HUD] ReviveCut: the round's adrenaline cut, '  REVIVE +$3,000', after the hints; the hints' budget shrinks by its length so the line keeps its width */
+        char rv[32]; size_t b = kfit_budget(kspg.capMax, strlen(base)), l;
+        rv[0] = 0;
+        if (klu_revcut) klkc_revive_tag(klu_rev_net, rv, sizeof rv);      /* one aligned 32-bit read: no lock on the text callback */
+        l = rv[0] ? strlen(rv) + 2 : 0;
+        kfit_caption(o, cap, base, page, pos, n, tag, cyc, kspg.ctlOn ? kspg_next(page) : -1, p2, hk, b > l + 8 ? b - l : 8);
+        if (rv[0] && strlen(o) + l < cap) snprintf(o + strlen(o), cap - strlen(o), "  %s", rv);
+    }
 }
 
 /* my FA rank through klhire.c's reader. REVIEW 1027: klhr_rank calls game routines, so it is refreshed only from kspg_hire_tick (game thread, every 2 s while the page is up);
