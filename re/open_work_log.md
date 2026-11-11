@@ -1,4 +1,4 @@
-2026-11-11 ~21:05 - [f0] v1.0.1 RE-PACKED, NOT uploaded (waits owner OK): DarkAvali 'internal check failed DD01 F01_Main.zip' = his private Python 3.12.7 has classic zlib, the package needs
+2026-11-11 ~21:05 - [f0] v1.0.1 RE-PACKED + UPLOADED ~21:20 (owner 'push it'; served .sha1 + sizes match, Setup.bat + .sh replaced): DarkAvali 'internal check failed DD01 F01_Main.zip' = his private Python 3.12.7 has classic zlib, the package needs
 zlib-ng 2.2.4 (Python 3.14.7) to re-deflate byte-exact (zip skeleton holds the maker's csizes). wt_1110 4da52463/5dd4a24b: kl_release zcheck + install/make refuse; Setup.bat fetches 3.14.7, drops a stale private Python
 (scratch run 3.12 -> 3.14 OK). Linux: no Python matches (distro, standalone 'deflate 1.4', pip zlib-ng 2.2.5/2.3.3), .sh stops early. + d0 4dec3b46 (b38c940e): 9 before-wardrobe entries out, 818 left.
 Packs: full 26468148 / 1c137d81, update e7405b6d; also upload Setup.bat (0929f16c) + .sh (31f074c6). Linux fix idea: install-time zip re-layout (csize/offsets) + journal local_sha1.
