@@ -43,7 +43,7 @@ def check_localize():
     src = OWNER_INI.split(b'\r\n')
     out = R.localize_ini_bytes(OWNER_INI, dict(dd='E:\\Games\\Kane & Lynch 2 - Dog Days\\', pd2='F:\\P D\\PAYDAY 2'))
     lines = out.split(b'\r\n')
-    check(out.count(b'\r\n') == OWNER_INI.count(b'\r\n') and b'\n' not in out.replace(b'\r\n', b''), 'L CRLF kept')
+    check(out.count(b'\r\n') == OWNER_INI.count(b'\r\n') + 2 and b'\n' not in out.replace(b'\r\n', b''), 'L CRLF kept (the appended [Payday2] section is CRLF too)')
     check(lines[0] == src[0], 'L comment line untouched')
     check(lines[4] == b'Folder=E:\\Games\\Kane & Lynch 2 - Dog Days\\KLExpansion\\Ambience', 'L ambience folder moved (%r)' % lines[4])
     check(lines[7] == b'Folder = F:\\P D\\PAYDAY 2/assets', 'L PD2 folder moved, key spacing kept (%r)' % lines[7])
@@ -52,6 +52,17 @@ def check_localize():
     check(lines[11] == src[11], 'L other keys untouched')
     nopd = R.localize_ini_bytes(OWNER_INI, dict(dd='E:\\DD\\Kane & Lynch 2 - Dog Days', pd2=None))
     check(nopd.split(b'\r\n')[7] == src[7], 'L no Payday 2: its folder left as it was')
+    # [Payday2] Enable: 1 when Payday 2 was found, else 0; appended when the section is missing, replaced in place when there
+    check(out.endswith(b'[Payday2]\r\nEnable=1\r\n') and nopd.endswith(b'[Payday2]\r\nEnable=0\r\n'), 'P2 section appended: found=1, not found=0')
+    ddr = 'E:\\DD\\Kane & Lynch 2 - Dog Days'
+    have = OWNER_INI + b'[Payday2]\r\n; note\r\nEnable=1   ; (recommended on when Payday 2 is installed)\r\n[Last]\r\nEnable=1\r\n'
+    off = R.localize_ini_bytes(have, dict(dd=ddr, pd2=None))
+    check(b'[Payday2]\r\n; note\r\nEnable=0   ; (recommended' in off and off.endswith(b'[Last]\r\nEnable=1\r\n'), 'P2 existing key set to 0, the next section untouched')
+    on = R.localize_ini_bytes(off, dict(dd=ddr, pd2='F:\\PAYDAY 2'))
+    check(b'Enable=1   ; (recommended' in on and on.count(b'[Payday2]') == 1, 'P2 re-run with Payday 2 found since: back to 1, no second section')
+    nokey = R.localize_ini_bytes(b'[Payday2]\nFoo=1\n[X]\nEnable=7\n', dict(dd='E:\\DD', pd2=None))
+    check(nokey == b'[Payday2]\nEnable=0\nFoo=1\n[X]\nEnable=7\n', 'P2 section without the key: key inserted, LF kept (%r)' % nokey)
+    check(R.localize_ini_bytes(OWNER_INI, {'dd': 'E:\\DD'}).count(b'[Payday2]') == 0, 'P2 no pd2 key in roots: ini untouched')
 
 
 def setup(base):

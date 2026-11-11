@@ -355,6 +355,7 @@ static void klco_keys(DWORD now)
             int v = grp ? kwl_next_group(which, (int)*klc_value[which], step) : (int)*klc_value[which] + step; char s[16];
             if (which == 0 && klco.ignoreChar) { static int told; if (!told++ || klco.log) klog("charonline: hire on: F9 (heister) ignored, as in Arcade; the body is the game's own or the hired one (F11 mask / Ctrl+F11 outfit still work)"); dC = c; dM = m; return; }
             v = ((v % span) + span) % span;
+            if (which == 1) v = kp2_mask_key(v, step, span, kp2_on);                  /* [Payday2] Enable=0: F11 skips the Payday 2 plates */
             InterlockedExchange(klc_value[which], v);
             snprintf(s, sizeof s, "%d", v); WritePrivateProfileStringA("Character", klc_keys[which], s, klh_ini);
             klog("charonline: I chose %s = %d (key press; written to [Character] %s=%d)", klc_names[which], v, klc_keys[which], v);

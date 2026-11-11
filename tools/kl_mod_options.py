@@ -58,6 +58,8 @@ feat('allmaps', G_CORE, 'Mod features on the nine stock Fragile Alliance maps', 
      'owner: every feature also on the stock maps; their Steam stats stay blocked', [('KLHook', 'AllMaps', 1, 0, 0)])
 feat('expansion', G_CORE, 'Dead Men maps in the Arcade menu', 'on', 'start',
      'the expansion itself: the Dead Men map pages and their redirects', [('Expansion', 'Enable', 1, 0, 0)])
+feat('payday2', G_CORE, 'Payday 2 content: the 4 Payday 2 masks, shop page II (PD2 guns) and the PD2 jukebox (recommended on when Payday 2 is installed)', 'on', 'start',
+     'klpd2_logic.h / klchar.c / klshoppage.c / klmusic.c: master switch, missing = on; the files ship to everyone, the switch only hides the choices; the jukebox also needs Payday 2', [('Payday2', 'Enable', 1, 0, 1)])
 feat('character', G_CORE, 'Heister, mask and outfit select', 'on', 'start',
      'the Heister page in Arcade (Dead Men and Payday 2 masks)', [('Character', 'Enable', 1, 0, 1)])
 feat('guns', G_CORE, 'Dead Men gun looks and start rifle (Mod settings rows)', 'on', 'start',

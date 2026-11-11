@@ -96,6 +96,7 @@ C_TESTS = {
     'klhud_codeguard_test.c': 'logic', # klhud_codeguard_logic.h ([HUD] ProbeJmp: the code-bytes guard accepts a forwarding jmp)
     'klwlabel_test.c': 'logic',        # klwlabel_logic.h (wardrobe group tags, "n/N  GROUP > Name" labels, group jumps, no windows.h)
     'klfit_test.c': 'logic',          # klfit_logic.h ([Keys] CaptionTidy / CaptionMax / RowFit: caption + row fitting, no windows.h)
+    'klpd2_test.c': 'logic',           # klpd2_logic.h ([Payday2] Enable master switch)
     'klshopui_test.c': 'logic',        # klshopui_logic.h ([ShopPage] TidyPage2 / [Hire] TidyPage: page II + hire page wording, widths, stars/lock rules)
     'klshopset_test.c': 'win',         # klshopset.h is pure, but the test reads a KLShopPage.ini with GetPrivateProfileInt/StringA (not in the shim)
     'klecho_test.c': 'logic',         # klecho_logic.h ([Echo] per room kind AL reverb parameter changes, no windows.h)

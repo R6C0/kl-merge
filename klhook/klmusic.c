@@ -467,7 +467,7 @@ static void klmu_tick(int game_thread)
 static void klmu_init(void)
 {
     char b[40];
-    klmu.on = GetPrivateProfileIntA("Music", "Enable", 0, klh_ini) != 0;
+    klmu.on = kp2_music_on(GetPrivateProfileIntA("Music", "Enable", 0, klh_ini) != 0, kp2_on);     /* [Payday2] Enable=0 keeps the PD2 jukebox off */
     klmu.online = GetPrivateProfileIntA("Music", "Online", 0, klh_ini) != 0;      /* klonline.c: the jukebox in a network FA round (CALM / ACTION by timer or money / END only) */
     if (!klmu.on) return;
     klmu_log = GetPrivateProfileIntA("Music", "Log", 1, klh_ini) != 0;

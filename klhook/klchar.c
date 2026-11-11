@@ -97,6 +97,7 @@
 #define KLC_OPTIONS     0x0154d5f4            /* ZMercsOptionsInterface * */
 #define KLC_OPTIONS_VT  0x00bb7dec
 #define KLC_NSLOT       15
+#include "klpd2_logic.h"                         /* [Payday2] Enable: the pure decisions (klpd2_test.c) */
 #define KLC_SESSION     0x0168e598            /* +0x5c = mode, 4 = Arcade (Heist) */
 #define KLC_SETTINGS    0x0168e9e4            /* +0x54 = the rules object */
 #define KLC_RULES_VT    0x00bd3514            /* ZGameRulesHeist */
@@ -109,6 +110,7 @@
 #include "klcampaign_outfits_logic.h"
 static int klc_on = 1, klc_log = 1, klc_settle = 300, klc_tries = 3, klc_campaign = 1;     /* klc_campaign: [Wardrobe] CampaignOutfits (default 1, recommended on) */
 static volatile LONG klc_char, klc_mask, klc_outfit;
+static int kp2_on = 1;                        /* [Payday2] Enable (klpd2_logic.h; missing = 1): 0 hides the PD2 masks 10..13, shop page II and the jukebox; read in klc_init */
 static DWORD klc_vt[KLC_NSLOT + 1];           /* [0] RTTI locator, [1..] the slots */
 static int klc_vt_ready;
 static CRITICAL_SECTION klc_cs;
@@ -154,6 +156,7 @@ static void __fastcall klc_set(void *self, void *edx, const char *name, int valu
         char v[16];
         if (value < 0) value = 0;
         if (value > klc_upper_of(i)) value = klc_upper_of(i);
+        if (i == 1) value = kp2_mask_menu((int)klc_mask, value, kp2_on);     /* [Payday2] Enable=0: the spinner never rests on a Payday 2 plate */
         /* [Hire] PickDefault (klhire_pick.h): the pick is now worn (Arcade + online), so Kane / Lynch stay hire-only by refusing them here (review 11-07: online read klc_char directly) */
         if (i == 0 && klhr_on && klhr_pickdef && (value == 9 || value == 10)) {   /* 11-10: SKIP them in the travel direction (was: refuse = the spinner stuck at 12/17 going back, at 8 going forward) */
             int to = klhp_skip_hireonly(klhr_pickdef, (int)klc_char, value);
@@ -438,6 +441,8 @@ static void klc_init(void)
     klc_campaign = GetPrivateProfileIntA("Wardrobe", "CampaignOutfits", 1, klh_ini) != 0;
     klc_char = (LONG)GetPrivateProfileIntA("Character", "Char", 0, klh_ini); klc_char = kco_clamp((int)klc_char, klc_campaign, KLC_NCHAR);
     klc_mask = (LONG)GetPrivateProfileIntA("Character", "Mask", 0, klh_ini); if (klc_mask < 0 || klc_mask > KLC_MASKS + 1) klc_mask = 0;
+    kp2_on = kp2_enabled((int)GetPrivateProfileIntA("Payday2", "Enable", (UINT)-1, klh_ini));
+    if (!kp2_on) { if (kp2_is_mask((int)klc_mask)) klog("payday2: [Payday2] Enable=0: the saved Mask=%ld acts as 0 (the game's own mask option); the ini keeps it", (long)klc_mask); klc_mask = kp2_mask_eff((int)klc_mask, 0); klog("payday2: off: no PD2 masks, no shop page II, no jukebox"); }
     klc_outfit = (LONG)GetPrivateProfileIntA("Character", "Outfit", 0, klh_ini); if (klc_outfit < 0 || klc_outfit >= KLC_OUTFITS) klc_outfit = 0;
     klhr_init();
     if (klc_on) klog("character: on; choice Char=%ld Mask=%ld Outfit=%ld (0 = the game's own); Settle=%d Tries=%d", klc_char, klc_mask, klc_outfit, klc_settle, klc_tries);

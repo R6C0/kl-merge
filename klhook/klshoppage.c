@@ -1502,6 +1502,9 @@ static void kspg_init(void)
     kspg.bakedHire = GetPrivateProfileIntA("Hire", "BakedPics", 0, klh_ini) != 0;       /* (recommended off until benched) the hire page's baked heister cards */
     if (kspg.ownPics || kspg.bakedHire) klog("ownpic: on (OwnPics %d, BakedPics %d): the maps need tools/kl_shop_pics.py baked zips, else the stock pictures stay (NOT RUN IN THE GAME)", kspg.ownPics, kspg.bakedHire);
     kspg.have = kspg_load();
+    if (kspg.have && !kp2_page2_on(1, kp2_on, kspo.rawName)) {          /* [Payday2] Enable=0: the page II set is the PD2 guns: not offered (same state as no pairs; SHPH is not announced, see klpd2_logic.h) */
+        klog("payday2: [Payday2] Enable=0: shop page II (%d PD2 gun rows) is not offered", kspg.have); kspg.have = 0; kspg.on = 0; kspo.scOn = kspo.scStrict = 0; memset(kspg.p, 0, sizeof kspg.p); return;
+    }
     if (!kspg.have) {
         klog("shopPage: on, but KLShopPage.ini has no pairs: nothing is done"); kspg.on = 0;
         if (kls.on && kls.osw && !kspg.swapArm) klog("osw: OnlineSwap=%d but KLShopPage.ini has no pairs, so the early-make hook is NOT armed: online the swap does nothing (set [Shop] OnlineSwapArm=1)", kls.osw);

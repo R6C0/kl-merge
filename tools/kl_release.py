@@ -610,7 +610,34 @@ def localize_ini_bytes(data, roots):
             new = ap.abspath(root).rstrip('\\/').encode('mbcs' if os.name == 'nt' else 'utf-8', 'replace')
             return m.group(1) + new + val[end:]
         return m.group(0)
-    return INI_LOCAL_RE.sub(fix, data)
+    data = INI_LOCAL_RE.sub(fix, data)
+    if 'pd2' in roots:
+        data = set_payday2_switch(data, 1 if roots.get('pd2') else 0)
+    return data
+
+
+PD2_SECTION_RE = re.compile(rb'^\[Payday2\][^\r\n]*(\r?\n)', re.M | re.I)
+PD2_ENABLE_RE = re.compile(rb'^([ \t]*Enable[ \t]*=[ \t]*)[0-9]+', re.M | re.I)
+
+
+def set_payday2_switch(data, on):
+    """[Payday2] Enable (klhook/klpd2_logic.h, the in-game master switch of all Payday 2 content) = 1 when Payday 2 was found, else 0.
+    Only ever applied to a file that is ours and unedited (the callers: a fresh install, the .new- copy, the re-point of an unedited ini).
+    No section yet (an older package ini): one is appended."""
+    val = b'1' if on else b'0'
+    m = PD2_SECTION_RE.search(data)
+    if not m:
+        eol = b'\r\n' if b'\r\n' in data else b'\n'
+        tail = b'' if (not data or data.endswith(b'\n')) else eol
+        return data + tail + b'[Payday2]' + eol + b'Enable=' + val + eol
+    nxt = re.compile(rb'^\[', re.M).search(data, m.end())
+    end = nxt.start() if nxt else len(data)
+    body = data[m.end():end]
+    if PD2_ENABLE_RE.search(body):
+        body = PD2_ENABLE_RE.sub(lambda k: k.group(1) + val, body, count=1)
+    else:
+        body = b'Enable=' + val + m.group(1) + body
+    return data[:m.end()] + body + data[end:]
 
 
 def localize_ini(path, roots):
