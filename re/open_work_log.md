@@ -1,3 +1,7 @@
+2026-11-12 ~01:30 - [f0] LAUNCHER MOD OPTIONS (owner 'make all these options visible in the launcher'; tester stutter on 7600X/6800 XT): wt_1110 e4727c29 adds a MOD OPTIONS button ->
+non-modal window, 15 tick boxes (camera: CamSmooth Enable / DtFix / StanceMs, StanceFix, Rigid; Perf FastRead; HUD, Climb, Censor, Crew Random; Voice, Ambience, Stinger, Echo, PD2 Music), RECOMMENDED / SAVE / CANCEL.
+Save edits only changed numbers in place (Latin-1, byte-identical otherwise; PS 5.1 test on the shipped ini: 3 lines changed, re-save 0), refuses while kl2.exe runs, keeps KLHook.ini.before-launcher once.
+In-game rows NOT added (menu table at its slot limit, gamepad 0x8618b9 risk). Re-packed: full 3d99fbf3 / part 2 3fd2f6bb / update 9ca8b185; UPLOAD to v1.0.1 WAITS on the owner's OK (classifier refused). no crash involved
 2026-11-12 ~00:30 - [f0] PERF HOTFIX UPLOADED to v1.0.1, served .sha1 + sizes checked (owner 'add the fixes ... install the hotfix'; tester: 'performance is pretty bad'): shipped KLHook.ini 08b0b09a -> 0f79ed9a = [Perf] FastRead 0 -> 1 only
 (benched pf1106 on cda03a57, NOT benched on the shipped dll da685711). wt_1110 c2dd3af0: install now REPLACES a KLHook.ini that is our unedited packaged one (journal new/replaced + sha1 = packaged/localized); edited stays kept + .new-1.0.1. Test U, kl_release_test PASS.
 Packed: full 2fc35695 / part 2 d05a3ceb / update a6decf1a; Setup.bat + .sh unchanged. Logging was NOT the cost (one WriteFile per line). Tester's symptom still unknown (fps? hitches? which map?).
