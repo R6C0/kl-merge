@@ -1,3 +1,8 @@
+2026-11-12 ~03:00 - [f0] CAMPAIGN BUTTON HANG (tester Glazer: 'the KL1 campaign when i go to it in KL2 just hangs the game'): the release ships the Campaign-mode
+'Dead Men Rising' row (CoopModeSelector PC block -> KLCampPick -> KLCampGo<NN> = empty BackgroundTemplate window) but NO campaign levels: klcamppick.c finds no
+Scenes/Locations/<id>/<id>_Main.zip, logs 'nothing started', the player sits on a blank window. Fix (package only, live game untouched): the added PC block (button + Icon_Heist
++ line + focus bar #04) cut from all 8 packaged overlays (= live .before-onlmap1111), stock DD has no such block; patches round-trip byte-exact. KLHook.ini NOT changed
+([Campaign] Enable also drives the stream redirect, unbenched). Re-packed: full c8999167 / part 2 3e0b9728 / update 21200185. NOT benched, NOT uploaded: waits on the owner's OK.
 2026-11-12 ~01:30 - [f0] LAUNCHER MOD OPTIONS (owner 'make all these options visible in the launcher'; tester stutter on 7600X/6800 XT): wt_1110 e4727c29 adds a MOD OPTIONS button ->
 non-modal window, 15 tick boxes (camera: CamSmooth Enable / DtFix / StanceMs, StanceFix, Rigid; Perf FastRead; HUD, Climb, Censor, Crew Random; Voice, Ambience, Stinger, Echo, PD2 Music), RECOMMENDED / SAVE / CANCEL.
 Save edits only changed numbers in place (Latin-1, byte-identical otherwise; PS 5.1 test on the shipped ini: 3 lines changed, re-save 0), refuses while kl2.exe runs, keeps KLHook.ini.before-launcher once.
