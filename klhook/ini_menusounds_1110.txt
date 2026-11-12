@@ -1,0 +1,28 @@
+; ini_menusounds_1110.txt - the [MenuSounds] block for klhook\KLHook.ini (2026-11-10, T9 stage 4b). NOT merged into KLHook.ini yet
+; (that file is peer-dirty): paste the block below under [MenuLook], or let tools\kl_mod_options.py write the rows (it creates the keys it
+; changes). tools\kl_mod_options.py --check-ini reads this file as a companion of KLHook.ini, so the rows' keys count as documented.
+
+[MenuSounds]                        ; klslot.c kls_menusounds + klmenusounds_logic.h (2026-11-10, owner: 'no click when you press into something and you can hear the Dog Days version'). Needs [MenuLook] DeadMen=1 and the stage of tools\kl_menu_sounds_1110.py (install.py).
+; THE BANK IS READ AT GAME START: every key below applies at the NEXT START of the game (the sound bank Scenes\kaneandlynch.WHD is opened once, the hook builds the
+;   picked variant in %TEMP%\klms_<hash>.WHD and points the open there). Changing a line while the game runs does nothing until you restart it.
+; Enable (recommended on; DLL default 1): 1 = the per-event picks below are applied to the themed bank; 0 = the themed bank exactly as the stage baked it
+;   (kaneandlynch_deadmen.WHD = the STOCK Dog Days records, so 0 = the Dog Days sounds). A missing table / mismatching .WHD = themed bank as it is, one 'menusounds:' line in KLHook.log.
+Enable=1
+; Each event key takes one of:  dd (the Dog Days sound, stock record) | dm (the Dead Men counterpart of this event) | off (silence) | a Dead Men clip name from the list below.
+;   Absent key = dm. Events without a 'dm' counterpart (Menu, Window) stay Dog Days until you name a clip. An unknown word keeps the Dog Days sound and logs a WARNING.
+;   Clips (long ones are cut to 1.5 s with a fade): up_down slide toggle back select menu options openwindow_03 openwindow_04
+;   (= Scenes\KaneAndLynch.WHD SFX/UserInterface/* of Dead Men; the exact list this stage carries is in <stage>\build_report.json).
+; Navigate (recommended on = dm): moving the selection up / down (Dog Days record SFX/OSD/Up_Down).
+Navigate=dm
+; Confirm (recommended on = dm): pressing into something (Dog Days record SFX/OSD/Select). GUESS: if you still hear no click, the game uses another record for it: try Menu=select / Window=select.
+Confirm=dm
+; Back (recommended on = dm): going back (Dog Days record SFX/OSD/Back).
+Back=dm
+; Toggle (recommended on = dm): ticking a box / changing a choice (Dog Days record SFX/OSD/Toggle_01).
+Toggle=dm
+; Slider (recommended on = dm): moving a slider (Dog Days record SFX/OSD/Slide).
+Slider=dm
+; Menu (recommended off; absent = dd): Dog Days record SFX/OSD/Menu, a long menu sound (GUESS what plays it). Name a clip (e.g. Menu=menu) to replace it.
+;Menu=dd
+; Window (recommended off; absent = dd): Dog Days record SFX/OSD/OpenWindow_04, a window opening (GUESS what plays it). Name a clip (e.g. Window=openwindow_04) to replace it.
+;Window=dd

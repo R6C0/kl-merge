@@ -42,9 +42,17 @@
  *   klclimb.c      x     x    the PLAYER climbs a wall edge of the level's KLJoin.ini with Dead Men's climb clip
  *                             ([EdgeClimb], was [Climb]; game routines called: the mini animation, AlignTo, the collision
  *                             switch, the proxy; no code). OFF by default. Wired 2026-10-11 after two reviews; NOT RUN IN THE GAME
+ *   klcampaign.c   x     x    luvsic's Dead Men campaign runtime core, no UI ([Campaign] Routing/Trigger/AutoLoad/SaveRedirect/ProfileReload/
+ *                             Progress/AchievementGuard/Adpcm; import slots + data only). OFF by default; NOT RUN IN THE GAME
+ *   klcampsquad.c  x     x    campaign crew orders 1/2/3/Tab (luvsic's squad.inc, ported; [CampSquad], campaign levels only, OFF by default)
+ *   klcampgive.c   x     x    campaign give/swap a gun (key 4) (luvsic's give.inc; [CampGive], OFF; equipassist.inc NOT ported)
+ *   klcamprappel.c x     x    campaign rappel guards (luvsic rappel.inc port, [CampRappel] Mode, off); klcamprevive.c: wounded-merc watch ([CampRevive], off)
  *   klfreeclimb.c  x     x    Dead Men's FREE climb, W + E at any ledge 25 .. 220 high (luvsic's ANP climb.inc, ported): a
  *                             ZFFActionVaultOver with a vtable copy of this DLL's own; data writes only, every call under
  *                             a fault guard ([Climb]). OFF by default; needs the climb clips in the level's .ANM. NOT RUN
+ *   klcampguard.c  x     x    [CampGuard] luvsic's campaign crash guards (CListUser 0x4f8a8e, gfx 0x51f1a9, coll 0x927b4c, snd 0x44668b, null sound list
+ *                             0x900ff8, boneslights 0x577e08, heap int3 0x4665dc) as byte-checked exact-site branches of veh(): context/stack/heap/.data
+ *                             writes only, NO code byte. Campaign levels only ([Campaign] Enable) except ListUserFA. OFF by default; NOT RUN
  *   klhud.c        x     x    the expansion's FA / Arcade HUD, Version 1 ([HUD]): crew list + money box drawn with the game's
  *                             own ZCHAROBJ texts from a private copy of the OSD's vtable (slot 55 wrapped, as klchar.c
  *                             wraps the option object); calls 0x8ccde0, 0x598460, 0x817810 and ZCHAROBJ slots on the
@@ -602,6 +610,9 @@ static void log_context(CONTEXT *c)
     klog("%s", line);
 }
 
+static int klcg_any;                              /* klcampguard.c: [CampGuard] any exact-site guard switched on */
+static int klcg_veh(EXCEPTION_POINTERS *ep);       /* klcampguard.c: 1 = a byte-checked known fault site, context edited, resume */
+static int kllg_veh_skip(EXCEPTION_POINTERS *ep);  /* kllistguard.c: 1 = the ListUserGuard fault (swallowed by its wrapper: not a crash) */
 static void klbr_veh_restore(void);               /* klbrain.c (included below): [Brain] RealRun - a fault with the shadow rules swapped in puts the real ones back */
 static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
 {
@@ -617,6 +628,8 @@ static LONG CALLBACK veh(EXCEPTION_POINTERS *ep)
         if (!InterlockedExchange(&told, 1)) klog("Steam's probe at kl2.exe+68e3cb (a deliberate write to 0 before each scene load, resumed by the game's own handler): not a crash, not dumped; not logged again");
         return EXCEPTION_CONTINUE_SEARCH;
     }
+    if (klcg_any && klcg_veh(ep)) return EXCEPTION_CONTINUE_EXECUTION;       /* [CampGuard] (default off): exact-site resumes, before AssertSoft / the crash accounting */
+    if (kllg_veh_skip(ep)) return EXCEPTION_CONTINUE_SEARCH;                  /* [Crash] ListUserGuard: the wrapper swallows it; no CRASH line, no minidump */
     if (code == EXCEPTION_BREAKPOINT && klh_soft_n_sites && ((BYTE *)at)[0] == 0xCC) {       /* AssertSoft: step over, no dump, no ASSERT line */
         int k = kas_find(klh_soft_list, klh_soft_n_sites, at);      /* VAs (AS1: offsets never matched the ini's VAs) */
         if (k >= 0 && klh_soft_guard) {                 /* AssertSoftGuard: step over only a record inside the cover pool (re/assertsoft_safety_1101.md) */
@@ -819,6 +832,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #ifdef KLHOOK_TEST
 #include "kld3.c"                                       /* kld3.c: [Memory] D3dCount / D3dFlushEvery - Direct3D 9 call counts per vtable slot + a GPU flush experiment (TEST only, default 0); AFTER klarena.c, BEFORE klfps.c */
 #endif
+#include "klmemfree.c"                                   /* klmemfree.c: [Memory] Release / Census - compact the heaps once the level is gone, census of who holds the address space (default on); AFTER klmem.c, klarena.c */
 #include "klquad.c"                                       /* klquad.c: [Memory] QuadRing - a buffer ring for the 4 screen-quad VBs (DM05A driver pile; off unless set); BEFORE klfps.c */
 #include "klnudge.c"
 #include "klfix.c"
@@ -837,9 +851,12 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klhop.c"
 #include "klmove.c"
 #include "klclimb.c"
+#include "klcampaign_gate.h"                           /* klcampaign_gate.h: klcmp_level_active() = [Campaign] Enable=1 AND a campaign scene; BEFORE klfreeclimb.c-after modules (klcamprappel.c, klcamprevive.c) and kldown.c / klbotdown.c / klcdying.c / kladren.c (their ticks skip campaign levels) */
 #include "klfreeclimb.c"                                 /* klfreeclimb.c: Dead Men's free climb, luvsic's port (off unless [Climb] Enable); AFTER klclimb.c (klq_slot) */
 #include "klunstick.c"                                  /* klunstick.c: [Unstick] put a player stuck in cover back to his last free place (default on, offline); AFTER klfreeclimb.c (klfc_guard, klfc_pose) */
 #include "klrappel.c"                                    /* klrappel.c: off unless [Rappel] Enable */
+#include "klcamprappel.c"                              /* klcamprappel.c: campaign rappel guards, [CampRappel] Mode (off); AFTER klfreeclimb.c (klfc_guard), klrappel.c (klrp, klrp_lv) */
+#include "klcamprevive.c"                              /* klcamprevive.c: campaign wounded-merc watch, [CampRevive] Enable (off, observation only); AFTER klfreeclimb.c */
 #include "klfallrescue.c"                              /* klfallrescue.c: [FallRescue] a player who leaves the level box is put back on his last safe place before the game kills him (default on); AFTER klrappel.c (klrp_r), klclimb.c (klq_r), klfreeclimb.c */
 #include "kljoinland.c"                                /* kljoinland.c: [Join] Land= - after a jump the local player is moved from the jump point to Land (offline); AFTER klfreeclimb.c, kljoin.c */
 #include "kltrait.c"                                      /* kltrait.c: [Traits] a small trait per wardrobe character (a table + getters; AFTER klcrew.c, BEFORE klbalance.c) */
@@ -887,6 +904,8 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klbrain.c"                                      /* klbrain.c: [Brain] Probe / Build / Loot / PuppetOff - the Arcade AI tactics on the online FA host (all off unless set); AFTER kllobby.c, BEFORE klbotfill.c (which feeds it) */
 #include "klbotfill.c"                                    /* klbotfill.c: [Bots] OnlineFill plan + probe, read-only (off unless set); AFTER kllobby.c */
 #include "klcopsquad.c"                                   /* klcopsquad.c: [CopSquad] AI police under each human cop in Cops and Robbers (off unless Enable=1); AFTER klbotfill.c, klescort.c */
+#include "klcampsquad.c"                                  /* klcampsquad.c: [CampSquad] crew orders on the campaign levels (luvsic's squad.inc; off unless [Campaign] Enable=1 + [CampSquad] Enable=1); AFTER klcopsquad.c */
+#include "klcampgive.c"                                   /* klcampgive.c: [CampGive] give / swap a gun (key 4) (luvsic's give.inc, equipassist.inc; campaign only, default off); AFTER klcampsquad.c */
 #include "klsabotage.c"                                   /* klsabotage.c: [Sabotage] VanHold - the hosting UCC holds the escape van N s (off unless VanHold=1); AFTER klnet.c (KLNET_SESSION) */
 #include "klroundkeep.c"                                  /* klroundkeep.c: [Lobby] KeepRound + TEST round-end probe (the online rules' early cuts); AFTER klbotfill.c, kllobbyopt.c */
 #include "klqol.c"                                        /* klqol.c: [QoL] taskbar flash, background frame cap, mouse-clip release (off unless set); AFTER kllobby.c / klnet.c */
@@ -899,6 +918,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klmusic.c"                                      /* klmusic.c: [Music] a winmm MCI jukebox for the FA round (off unless Enable=1); AFTER klmove.c / klbot.c */
 #include "klambience.c"                                  /* klambience.c: [Ambience] a looping bed + timed one-shots (radio, alarm, heli, distant) over winmm MCI (off unless Enable=1); AFTER klmusic.c */
 #include "kllevelmusic.c"                              /* kllevelmusic.c: [LevelMusic] Restart - the level music again in round 2+ (off unless Restart=1); AFTER klmusic.c */
+#include "klcampguard.c"                                 /* klcampguard.c: [CampGuard] luvsic's crash guards as exact-site branches of veh() (all off unless set; campaign levels only except ListUserFA); AFTER klh_scene */
 #include "klecho.c"                                      /* klecho.c: [Echo] room reverb follows the place (wraps the alEffectf data slot; off unless Enable=1); AFTER klambience.c */
 #include "klshop.c"
 #include "klshoppage.c"                           /* AFTER klshop.c: [ShopPage] page II of the weapon shop (key flips set A / B) */
@@ -907,16 +927,22 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klbench_down.c"                                 /* klbench_down.c: [Bench] SelfDownAt - the local body takes one hit through the game's slot 422 (bench only, off unless set); AFTER klucc_down.c, klhook.c's klh_slot_player_mine */
 #include "kldown.c"
 #include "klbotdown.c"                                    /* klbotdown.c: AI heisters down, not dead (off unless [BotDown] Enable) */
+#include "klbotglass.c"                                   /* klbotglass.c: [BotGlass] AI heisters break the glass pane that blocks them (off unless Enable=1); AFTER klbotdown.c (klbd_online_view), klescort.c (kle_node) */
 #include "klcardown.c"                                   /* klcardown.c: a car blast floors the AI and you, revivable ([CarDown], on in Arcade on non-stock levels) */
 #include "klshield.c"                                    /* klshield.c: the human shield covers you and floors the hostage ([Shield], on in Arcade rounds) */
 #include "klcdying.c"                                   /* klcdying.c: almost dead = the revivable floor for you; heisters hold fire ([Dying]); AFTER klcardown.c */
 #include "kladren.c"                                      /* kladren.c: adrenaline (off unless [Adrenaline] Enable); its tick runs BEFORE kld_tick */
 #include "klshot2d.c"                                   /* klshot2d.c: [Sound] RemoteShot2D - a near remote shooter's gunshot plays 2D online (off unless set; ONLINE only); AFTER klescort.c (kle_node), kl_online */
+#include "klgrenadefx.c"                                 /* klgrenadefx.c: [Grenade] PinSound / ThrowAnim for the Release mode; AFTER kladren.c (its clip machinery) and klgrenade.c */
 #include "klstinger.c"                                  /* klstinger.c: [Stinger] event-driven one-shot cues over winmm MCI (off unless Enable=1); AFTER kladren.c / klbotdown.c / kldown.c */
 #include "klreshade.c"                                    /* klreshade.c: the ReShade bridge - live looks from the menu, KL_* uniforms (off unless [ReShade] Bridge=1) */
 #include "klsteam.c"
 #include "klmm.c"                                          /* klmm.c: [Net] PrivateLobby / BuildKey - an ISteamMatchmaking proxy, only when a key is set */
 #include "klslot.c"
+#include "klcampaign.c"                                   /* klcampaign.c: luvsic's campaign runtime core, no UI (all [Campaign] toggles off); AFTER klslot.c */
+#include "klfresh.c"                                    /* klfresh.c: [Memory] FreshRestart - a clean restart at the menu before the address space is too cut up (off unless set); AFTER klslot.c (menu reads), klmem.c (klm_free_space) */
+#include "kllistguard.c"                               /* kllistguard.c: [Crash] ListUserGuard - swallows the CListUser 0x4f8a8e fault (fed respawn, DM03) through a private vtable copy (off unless set); AFTER klh_scene, klh_data */
+#include "klcamppick.c"                                   /* klcamppick.c: [CampaignPick] in-menu campaign level list (idle unless [Campaign] on); AFTER klcampaign.c */
 #include "klserver.c"                                    /* klserver.c: [Server] host a Quick Match / Ranked lobby unattended (off unless Enable=1); AFTER klslot.c / klchar.c / kllobby.c */
 #include "kllocname.c"                                    /* kllocname.c: [Names] an expansion map shows its own name in the FA lobby / lists (off unless Enable=1); AFTER klslot.c / klpm.c */
 #include "klpm_gun.c"                                      /* klpm_gun.c: KLMGun equips the round-start gun (off unless [Match] Enable)  */
@@ -947,6 +973,7 @@ static DWORD_PTR klh_rcb_ra;                          /* the return address of t
 #include "klsolo.c"                                       /* klsolo.c: [Solo] two kl2.exe on one PC (mutex, windowed, focus); TEST only, off unless Enable=1 */
 #include "klprobe.c"                                      /* klprobe.c: [Probe] DoorProxy - escape-lift door chain log; TEST only, off unless DoorProxy=1 */
 #include "klclubdiag.c"                                  /* klclubdiag.c: [Probe] ClubMusic - read-only log of the SoundLimiterFade objects + listener room (Last Call club music); TEST only, off unless ClubMusic=1 */
+#include "kldeathtrace.c"                              /* kldeathtrace.c: [DeathTrace] local player death tracer (damage entry, kill text, 100 ms samples); TEST only, off unless Enable=1; AFTER klfallrescue.c, klprobe.c */
 #endif
 
 /* ---------------------------------------------------------------- the tick
@@ -1440,6 +1467,7 @@ static void klh_tick(int game_thread)
 #ifdef KLHOOK_TEST
     KLPT(klcm_tick());                                      /* klclubdiag.c: [Probe] ClubMusic (reads only; one compare when off) */
     KLPT(klpr_tick());                                      /* klprobe.c: [Probe] DoorLeaves samples (reads only; idle unless a door proxy was accepted) */
+    KLPT(kdt_tick(game_thread));                            /* kldeathtrace.c: [DeathTrace] (reads only; one compare when off) */
 #endif
     KLPT(klt_tick(game_thread));                            /* DIRECTLY after klj_tick: it must see kljoin.c's request while it is pending (klcrew_rt.c, EARLY) */
     KLPT(klv_tick(game_thread));                            /* klhop.c: an AI heister that stands at a [CrewHop] place is put beyond it (one game call a tick) */
@@ -1449,6 +1477,8 @@ static void klh_tick(int game_thread)
     KLPT(klfc_tick(game_thread));                           /* klfreeclimb.c: W + E at a ledge (OFF unless [Climb] Enable=1; gameplay call only) */
     KLPT(klq_tick(game_thread));                            /* klclimb.c: the player at the foot of a KLJoin.ini [Climb] edge climbs it (OFF unless [EdgeClimb] Enable=1) */
     KLPT(klrp_tick(game_thread));                           /* klrappel.c: the descent of the rappel cut */
+    KLPT(kcamr_tick(game_thread));                            /* klcamprappel.c: campaign rappel guards (OFF unless [CampRappel] Mode and a campaign level) */
+    KLPT(klcrv_tick(game_thread));                          /* klcamprevive.c: campaign wounded-merc watch (OFF unless [CampRevive] Enable and a campaign level) */
     KLPT(klc_tick(game_thread));
     KLPT(klw_tick(game_thread));                            /* after klc_tick: the player's own body goes first */
     KLPT(klk_tick(game_thread));                            /* after klw_tick: it reads who wears whom */
@@ -1506,9 +1536,13 @@ static void klh_tick(int game_thread)
     KLPT(klnetfix_tick(game_thread));                       /* klnetfix.c: [Net] Hold* receiver hold times (off unless set) */
     KLPT(knl_tick(game_thread));                            /* klnetload.c: [NetLoad] (off unless set) */
     KLPT(klinv_tick(game_thread));                          /* klinv.c: [Inv] gun shelf, Arcade only (off unless Enable=1) */
-    KLPT(klgrenade_tick(game_thread));                      /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
+    KLPT(klcampsquad_tick(game_thread));                    /* klcampsquad.c: [CampSquad] crew orders (campaign levels only, default off) */
+    KLPT(klcampgive_tick(game_thread));                     /* klcampgive.c: [CampGive] / [CampEquip] (campaign levels only, default off) */
+    KLPT(klgrenade_tick(game_thread));                    /* klgrenade.c: [Grenade] Probe, log only (off unless Probe=1) */
     KLPT(klmu_tick(game_thread));                           /* klmusic.c: the jukebox cue (reads only; off unless [Music] Enable=1) */
     KLPT(klam_tick(game_thread));                           /* klambience.c: the ambience bed + one-shots (reads only; off unless [Ambience] Enable=1) */
+    KLPT(klcmpr_tick(game_thread));                           /* klcampaign.c: [Campaign] trigger / autoload / guards (off unless Enable=1) */
+    KLPT(klcpk_tick(game_thread));                            /* klcamppick.c: [CampaignPick] go window -> start the level */
     KLPT(kllm_tick(game_thread));                           /* kllevelmusic.c: [LevelMusic] (off unless Restart=1) */
     KLPT(klecho_tick(game_thread));                         /* klecho.c: [Echo] wraps the reverb slot (data write; off unless Enable=1) */
     KLPT(klss_tick(game_thread));                           /* klshot2d.c: re-points the sound system at the private vtable (VTABLE route only) */
@@ -1525,6 +1559,7 @@ static void klh_tick(int game_thread)
     KLPT(klp_tick(game_thread));                            /* klfed.c: come back as a fed (data writes only) */
     KLPT(klfk_tick(game_thread));                           /* klfedkit.c: the fed can hunt, body, AK (with [Fed] Player=1; Kit=0 = off) */
     KLPT(klbd_tick(game_thread));                           /* klbotdown.c: before kladren, which reads its down state */
+    KLPT(klbg_tick(game_thread));                           /* klbotglass.c: [BotGlass] a bot standing at an intact glass pane breaks it (off unless Enable=1) */
     KLPT(klcd_tick(game_thread));                           /* klcardown.c: a car blast floors the AI and you */
     KLPT(klsh_tick(game_thread));                           /* klshield.c: the human shield covers you, the hostage goes down */
     KLPT(kldy_tick(game_thread));                           /* klcdying.c: almost dead = the game's revivable down (you) */
@@ -1538,6 +1573,9 @@ static void klh_tick(int game_thread)
 #endif
     KLPT(klg_tick());
     KLPT(klm_tick());
+    KLPT(klfh_tick(game_thread));                           /* klfresh.c: [Memory] FreshRestart - the clean restart at the menu (off unless set) */
+    KLPT(kllg_tick(game_thread));                           /* kllistguard.c: [Crash] ListUserGuard - repoints the CListUser object(s) after a heap scan */
+    KLPT(klmr_tick());                                      /* klmemfree.c: level gone -> heap compaction on a worker thread */
     KLPT(klvh_tick());                                      /* klhigh.c: the 10 s census of the listed modules' reservations (off unless [Memory] High) */
 #ifdef KLHOOK_TEST
     KLPT(klva_tick());                                      /* klvalog.c: the per-caller table every 10 s (off unless [Memory] VaLog=1) */
@@ -1795,6 +1833,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     }
 #endif
     snprintf(klh_ini, sizeof klh_ini, "%s\\KLHook.ini", klh_out);
+    klfh_boot();                                   /* klfresh.c: a child of a FreshRestart waits for the old process BEFORE any log line or Steam call */
     continue_asserts = GetPrivateProfileIntA("KLHook", "ContinueAsserts", 1, klh_ini);
     max_dumps = GetPrivateProfileIntA("KLHook", "MaxDumps", 4, klh_ini);
     max_asserts = GetPrivateProfileIntA("KLHook", "MaxAsserts", 200, klh_ini);
@@ -1877,8 +1916,11 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
 #endif
     klfps_init();                                  /* klfps.c: LAST of the Direct3DCreate9 wrappers (outermost); [FrameLimit] */
     klm_init();
+    klfh_init();                                   /* klfresh.c: [Memory] FreshRestart (default off); AFTER klm_init */
+    kllg_init();                                   /* kllistguard.c: [Crash] ListUserGuard (default off); AFTER klm_init, klh_exe_ok */
     klvh_init();                                   /* klhigh.c: AFTER klm_init (the reserve is taken first, low); wraps the listed modules' import slots, with High=2 takes the high half */
 #ifdef KLHOOK_TEST
+    klmr_init();                                   /* klmemfree.c: [Memory] Release / Census */
     klva_init();                                   /* klvalog.c: AFTER klm_init (its reserve is not counted); off unless [Memory] VaLog=1 */
 #endif
     klarena_init();                                /* klarena.c: AFTER klva_init; off unless [Memory] DriverArena=1 */
@@ -1908,6 +1950,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klfr_init();
     klq_init();
     klrp_init();
+    kcamr_init();
+    klcrv_init();
     klr_init();
     kly_init();
     klu_init();
@@ -1949,13 +1993,18 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     klnetfix_init();
     knl_init();                                       /* klnetload.c: reads [NetLoad] */
     klinv_init();
-    klgrenade_init();                                 /* klgrenade.c: after klinv_init (shares its user32 pointers) */
+    klcampsquad_init();                               /* klcampsquad.c: reads [CampSquad] (idle unless [Campaign] Enable=1) */
+    klcampgive_init();                                /* klcampgive.c: reads [CampGive] ([CampEquip] equip repair is NOT ported) */
+    klgrenade_init();                             /* klgrenade.c: after klinv_init (shares its user32 pointers) */
     klnetsmooth_init();
     klbk_init();                                      /* klbench_down.c: reads [Bench] SelfDownAt */
     klud_init();                                      /* klucc_down.c: reads [Ucc] DownOnly */
     klmu_init();                                      /* klmusic.c: [Music] (default off) */
     klam_init();                                     /* klambience.c: [Ambience] (default off) */
+    klcmpr_init();                                      /* klcampaign.c: [Campaign] (default off) */
+    klcpk_init();                                       /* klcamppick.c: [CampaignPick] */
     kllm_init();                                      /* kllevelmusic.c: [LevelMusic] (default off) */
+    klcg_init();                                      /* klcampguard.c: [CampGuard] (default off) */
     klecho_init();                                    /* klecho.c: [Echo] (default off) */
     klss_init();                                      /* klshot2d.c: [Sound] RemoteShot2D (default off) */
     klst_init();                                      /* klstinger.c: [Stinger] (default off) */
@@ -1969,6 +2018,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kld_init();
     kldm_init();                                      /* kldown_mirror.c: [Down] OnlineFlopMirror* (after kld_init: reads its Online* keys; asks for the message channel) */
     klbd_init();
+    klbg_init();                                     /* klbotglass.c: reads [BotGlass] (off unless Enable=1) */
     klcd_init();
     klsh_init();
     kldy_init();                                      /* klcdying.c: reads [Dying]; after klbd_init (sets its NoFire) */
@@ -1992,6 +2042,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res)
     kla_init(inst);
     klcm_init();                                  /* klclubdiag.c: reads [Probe] ClubMusic, installs nothing */
     klpr_init_all();                              /* klprobe.c: reads [Probe] DoorProxy, installs nothing when 0 */
+    kdt_init();                                   /* kldeathtrace.c: reads [DeathTrace] Enable; the detours go in at the first game tick */
     klh_uef_on = !kla_on;                         /* with [Auto] Enable=1 the test rig's own filter gives the verdict */
 #else
     klh_uef_on = 1;

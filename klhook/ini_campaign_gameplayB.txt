@@ -1,0 +1,10 @@
+; ini_campaign_gameplayB.txt - KLHook.ini lines for klcamprappel.c / klcamprevive.c (ports of luvsic's rappel.inc / revive.inc).
+; Both act ONLY on a campaign level: [Campaign] Enable=1 AND the scene is m<NN>[ab]. Nothing on FA / Arcade / online.
+[CampRappel]
+Mode=0       ; 0 off, 1 dry (log the native rappel states only), 2 native (fault-guarded vtable copy; a press is REFUSED when the level .ANM lacks the Rappelling clips), 3 live / 4 auto (live descent NOT ported: behave like native) (recommended off)
+Log=1        ; log each use press at a rappel point and the clip check (recommended off)
+[CampRevive]
+Enable=0     ; Dead Men wounded mercs: watch only (census, down/dead state changes, bleed time) on a campaign level; the FA down modules skip such levels (recommended off)
+Live=0       ; 1 = would drive DownNotDead / heal / bleed-out; NOT ported, refused with a log line (recommended off)
+Log=1        ; log merc state changes (recommended off)
+Difficulty=1 ; 0..3 selects the bleed time 60/45/30/30 s in the log; GUESS: stands in for the game's difficulty (recommended off)

@@ -45,6 +45,12 @@ PY_NEEDS = {
     'kl_map_shift_test.py': [r'C:\Steam\steamapps\common\Kane & Lynch 2 - Dog Days\KLExpansion\Maps\DM11B\F04_Main.zip'],
 }
 
+# python tests that need a third-party module: (module name) -> else SKIP with the pip line (2026-11-09: kl_release_test died with
+# AttributeError 'NoneType'.ZstdCompressionParameters on a host without zstandard)
+PY_NEEDS_MODULE = {
+    'kl_release_test.py': 'zstandard',
+}
+
 # *_test.py files that are NOT self-tests (they drive the game): never run here
 PY_NOT_TESTS = {
     'kl_solo_test.py': 'live two-seat bench driver (needs --hook and Dog Days)',
@@ -59,6 +65,7 @@ PY_NOT_ROOT = {
 # C tests: 'logic' builds with the shim on any host, 'win' needs the real SDK (includes a whole module).
 C_TESTS = {
     'klcs_test.c': 'logic',            # klcopsquad_logic.h
+    'klkillcash_test.c': 'logic',      # klkillcash_logic.h ([HUD] KillCash)
     'klshield_test.c': 'logic',        # klshield_logic.h ([Shield] arithmetic + Online world gate, no windows.h)
     'klmodestab_test.c': 'logic',      # klmodestab_logic.h ([Keys] ModesTab rows + RoundHints text, no windows.h)
     'klcv_test.c': 'logic',            # klchar_voice.h
@@ -84,6 +91,7 @@ C_TESTS = {
     'klstackhid_test.c': 'logic',      # klstackhid_logic.h ([BotFill] OnlineStackRecheckHid grace for state 0 + hidden 1 stacks, no windows.h)
     'klvantime_test.c': 'logic',      # klvantime_logic.h (OnlineVanAfterLegs / OnlineVanBoPos / OnlineVanFarHold pure part, no windows.h)
     'klassoft_test.c': 'logic',        # klassoft_logic.h (AssertSoft list parse, no windows.h)
+    'kldeathtrace_test.c': 'logic',    # kldeathtrace_logic.h (line cap, sample ring, call-return stack scan; no windows.h)
     'klhud_boardbots_test.c': 'logic', # klhud_boardbots_logic.h ([HUD] OnlineBoardBots: AI heister rows of the online round-over card)
     'klperf_test.c': 'logic',          # klperf_logic.h ([Perf] OsdBackoff / OnlineCache / FastRead pure parts)
     'klhud_codeguard_test.c': 'logic', # klhud_codeguard_logic.h ([HUD] ProbeJmp: the code-bytes guard accepts a forwarding jmp)
@@ -110,9 +118,17 @@ C_TESTS = {
     'klht_test.c': 'logic',            # klhud_tags_dist.h
     'klland_test.c': 'logic',          # klland_logic.h ([Join] Land= move timing + Land= range check)
     'klmenulook_test.c': 'logic',      # klmenulook_logic.h ([MenuLook] DeadMen: which menu files get their _deadmen sibling, no windows.h)
+    'klcampui_test.c': 'logic',      # klcampui_logic.h ([CampaignUI] Menu: which patch archives get their _campui sibling, no windows.h)
+    'klmenusounds_test.c': 'logic',    # klmenusounds_logic.h ([MenuSounds] per-event menu sound picker table, resolve, apply)
     'klmappool_ov_test.c': 'logic',    # no windows.h
     'klhirepic_test.c': 'logic',       # no windows.h
     'klhirepick_test.c': 'logic',      # klhire_pick.h ([Hire] PickDefault)
+    'klfresh_test.c': 'logic',         # klfresh_logic.h ([Memory] FreshRestart)
+    'kllistguard_test.c': 'win',       # kllistguard_logic.h + kllistguard_seh.h ([Crash] ListUserGuard: catch filter, vtable verify, real SEH wrapper)
+    'klmemfree_test.c': 'win',         # includes klmem.c + klmemfree.c (Windows heap census)
+    'klbotglass_test.c': 'logic',      # klbotglass_logic.h ([BotGlass] blocked-at-pane decision)
+    'klgrenadefx_test.c': 'logic',     # klgrenadefx_logic.h ([Grenade] PinSound / ThrowAnim)
+    'klcampaign_outfits_test.c': 'logic',  # klcampaign_outfits_logic.h ([Wardrobe] CampaignOutfits, KLChar 17..32)
     'klvanshield_test.c': 'logic',     # klvanshield_logic.h ([VanBlow] ShieldUntilBoarded / HealFloor / ShieldWhileWaiting)
     'klcrackfx_test.c': 'logic',       # klcrackfx_logic.h (lens crack heal fade + KL_CrackFX age)
     'klnc_test.c': 'logic',            # klnetchan_logic.h + klucc_logic.h
@@ -122,6 +138,20 @@ C_TESTS = {
     'klua_test.c': 'logic',            # no windows.h
     'klucchide_test.c': 'logic',       # klucchide_logic.h
     'klud_test.c': 'logic',            # klucc_down_logic.h
+    # 2026-11-09 (scheduled check-in): the luvsic campaign merge + music / grenade / van-rest tests, all run here with gcc -m32 + ASan/UBSan clean
+    'kladpcm_test.c': 'logic',         # kladpcm.h (Dead Men ADPCM .str decode vs a spec reference decoder; 615 checks)
+    'klcampaign_test.c': 'logic',      # klcampaign_logic.h ([Campaign] Enable gate: scene key m<NN>[ab]\, idle on FA / Arcade / online)
+    'klcamppick_test.c': 'logic',      # klcamppick_logic.h ([CampaignPick] in-menu campaign level list: page split, go window, one-shot start)
+    'klcampgive_test.c': 'logic',      # klcampgive_logic.h ([CampGive] give / swap; includes windows.h via the shim)
+    'klcampguard_test.c': 'logic',     # klcampguard_logic.h ([CampGuard] exact-site byte checks against kl2.exe 0490's measured bytes)
+    'klcamprappel_test.c': 'logic',    # klcamprappel_logic.h (campaign rappel guards, missing-clip refusal)
+    'klcamprevive_test.c': 'logic',    # klcamprevive_logic.h (wounded-merc watch, observation only)
+    'klcampsquad_test.c': 'logic',     # klcampsquad_logic.h ([CampSquad] crew orders, pure numbers; includes windows.h via the shim)
+    'klcmpcore_test.c': 'logic',       # klcmpcore_logic.h (campaign core: scene-id routing, save redirect, progress ini)
+    'klgrenade_test.c': 'logic',       # klgrenade_logic.h ([Grenade] Release decision)
+    'kllevelmusic_test.c': 'logic',    # kllevelmusic_logic.h ([LevelMusic] Restart: round 2+ music replay decision)
+    'klvanrest_test.c': 'logic',       # klvanrest_logic.h ([BotFill] OnlineVanRest rest-position guard)
+    'klexitoff_test.c': 'logic',       # klexitoff_logic.h ([BotFill] OnlineExitOffset: exit-box target off the van lane)
     'kladren_test.c': 'win',           # includes kladren.c
     'klambience_test.c': 'win',        # klambience.c
     'klbotdown_test.c': 'win',         # klbotdown.c
@@ -193,6 +223,10 @@ def py_tests(only):
         missing = [f for f in PY_NEEDS.get(name, []) if not os.path.exists(f)]
         if missing:
             yield Result(name, 'SKIP', 'needs ' + os.path.basename(missing[0]) + ' (game file, not here)')
+            continue
+        mod = PY_NEEDS_MODULE.get(name)
+        if mod and run([sys.executable, '-c', 'import ' + mod], HERE)[0] != 0:
+            yield Result(name, 'SKIP', 'needs the python module %s (pip install %s)' % (mod, mod))
             continue
         rc, out = run([sys.executable, path], HERE)
         yield Result(name, 'PASS' if rc == 0 else 'FAIL', ('exit %d: ' % rc if rc else '') + last_line(out), out)

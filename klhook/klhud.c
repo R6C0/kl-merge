@@ -333,6 +333,9 @@ static struct { float stock[14], ours[14], pic[14]; LONG nstock, nours, npic; } 
 static CRITICAL_SECTION klu_cs;
 static char klu_kill_txt[64];                 /* klhud_kill.c hands the points pop-up's line here (under klu_cs) ... */
 static LONG klu_kill_at, klu_kill_ms = 3500;
+static int klu_killcash;                       /* [HUD] KillCash (klhud_kill.c reads it): the stock line's amount -> the money that really moved (klkillcash_logic.h) */
+static int klu_revcut;                         /* [HUD] ReviveCut (klhud_kill.c reads it): an adrenaline share you got / gave shows on the kill line, the scoreboard and the shop caption */
+static long klu_rev_net;                       /* ... the local player's net share of the round (kladren.c kad_pay writes it under klu_cs, its new round clears it; Arcade only) */
 /* 2026-10-26 (the online port's open items 'stock kill popup still swallowed online' / 'stock van panel still blanked'): a stock element
    is taken off the screen ONLY while this compose draws its replacement. klu_compose publishes, once per compose (no 0 window between
    a reset and a set: the render thread reads these), KLU_KEEP_KILL when the kill line under REWARDS is live (klu_kill_line with on) and
@@ -369,6 +372,7 @@ typedef void (__fastcall *klu_draw_t)(void *, void *, void *, void *, const floa
 typedef char (__fastcall *klu_render_t)(void *, void *, void *, void *);
 
 #include "klhud_codeguard_logic.h"      /* [HUD] ProbeJmp: the pure guard decision (klhud_codeguard_test.c) */
+#include "klkillcash_logic.h"            /* [HUD] KillCash: the kill line's name + real amount (klkillcash_test.c) */
 static int klu_probejmp;                /* [HUD] ProbeJmp (default 0) */
 
 static int klu_same_code(DWORD va, const BYTE *bytes, int n)
@@ -1234,14 +1238,35 @@ static void klu_round_text(int rn, int rm, int lives)
     snprintf(klu_r.t[KLU_T_ROUND].want, KLU_TEXTLEN, "ROUND %d%s%s", rn, of, lv);
 }
 
-/* the kill / reward line under REWARDS, shared: the newer of the stock pop-up's text (klhud_kill.c) and the online feed's. on = klu.money as Arcade */
-static void klu_kill_line(int on)
+/* the kill / reward line under REWARDS, shared: the newer of the stock pop-up's text (klhud_kill.c) and the online feed's. on = klu.money as Arcade.
+   rew / tot = the local player's REWARDS and TOTAL this compose: with [HUD] KillCash the stock line's amount ('POLICE +$0') is replaced by what they
+   moved since the compose before the line came in (REWARDS first; TOTAL when REWARDS did not move. GUESS: a kill's cash lands in REWARDS within the
+   line's 3.5 s; a loot pick-up in that time shows in the TOTAL fallback only when REWARDS stayed put) */
+static void klu_kill_line(int on, long rew, long tot)
 {
-    DWORD now = GetTickCount(); const char *txt = klu_kill_txt; LONG at = klu_kill_at; DWORD col = 0;
+    static struct { DWORD t; long rew, tot; } hist[16]; static int hn, hi;     /* the money every ~100 ms: the base is read ~0.5 s BEFORE the line (the cash may land a frame ahead of the pop-up) */
+    static long base_rew, base_tot; static LONG base_at, prev_at;
+    DWORD now = GetTickCount(); const char *txt = klu_kill_txt; LONG at = klu_kill_at; DWORD col = 0; int stock = 1, i; char cash[64];
     if (on) klu_keep_now |= KLU_KEEP_KILL;                      /* the pop-up's text has a place on the screen this compose: klhud_kill.c may keep the stock line */
-    if (klu_kf_at && (!klu_kill_at || (LONG)((DWORD)klu_kf_at - (DWORD)klu_kill_at) > 0)) { txt = klu_kf_txt; at = klu_kf_at; col = klu_kf_col; }
+    if (klu_kf_at && (!klu_kill_at || (LONG)((DWORD)klu_kf_at - (DWORD)klu_kill_at) > 0)) { txt = klu_kf_txt; at = klu_kf_at; col = klu_kf_col; stock = 0; }
+    if (klu_kill_at && klu_kill_at != base_at) {                /* a new stock line: the newest sample >= 0.5 s older than it, never one before the previous line */
+        prev_at = base_at; base_at = klu_kill_at; base_rew = rew; base_tot = tot;
+        for (i = 0; i < hn; i++) {
+            int k = (hi - 1 - i + 16) % 16;
+            if (prev_at && (LONG)(hist[k].t - (DWORD)prev_at) < 0) break;
+            base_rew = hist[k].rew; base_tot = hist[k].tot;
+            if ((LONG)((DWORD)klu_kill_at - hist[k].t) >= 500) break;
+        }
+    }
+    if (!hn || now - hist[(hi + 15) % 16].t >= 100) { hist[hi].t = now; hist[hi].rew = rew; hist[hi].tot = tot; hi = (hi + 1) % 16; if (hn < 16) hn++; }
     if (at && (LONG)(now - (DWORD)at) < klu_kill_ms) {
         const char *d = strchr(txt, '$');
+        if (stock && klu_killcash) {
+            klkc_format(txt, rew != base_rew ? rew - base_rew : tot - base_tot, cash, sizeof cash);
+            if (!cash[0]) return;                               /* no name, no money: nothing to say (was '+$0') */
+            txt = cash; d = 0;
+            if (rew < base_rew || (rew == base_rew && tot < base_tot)) col = KLU_C_CORAL;
+        }
         snprintf(klu_r.t[KLU_T_KILL].want, KLU_TEXTLEN, "%s", txt);
         klu_r.t[KLU_T_KILL].want_colour = col ? col : d && d > txt && d[-1] == '-' ? KLU_C_CORAL : KLU_C_GREEN;
         klu_r.t[KLU_T_KILL].on = on;
@@ -1455,7 +1480,7 @@ static int klu_compose_in(int *state_ok)
                     klu_kf_col = or_.ev[k].victim == (int)loc ? KLU_C_CORAL : or_.ev[k].killer == (int)loc ? KLU_C_GREEN : KLU_C_CHALK;
                     klu_kf_at = (LONG)GetTickCount() | 1;
                 }
-                klu_kill_line(klu.money);
+                klu_kill_line(klu.money, lrew, tot);
             }
             if (klu.killed && (locst == KLUV_K_DEAD)) {       /* the same KILLED BY line as offline: the killer's name; the police when no seat did it (Arcade's own fallback); YOURSELF for a suicide / fall onto oneself (review #2) */
                 char kn[40]; kn[0] = 0;
@@ -1566,7 +1591,7 @@ static int klu_compose_in(int *state_ok)
             strcpy(klu_r.t[KLU_T_MLABEL(i)].want, label[i]); klu_r.t[KLU_T_MLABEL(i)].on = klu.money;
             klu_dollars(klu_r.t[KLU_T_MVALUE(i)].want, KLU_TEXTLEN, v[i]); klu_r.t[KLU_T_MVALUE(i)].on = klu.money;
         }
-        klu_kill_line(klu.money);                             /* klhud_kill.c: the latest kill / reward line, under REWARDS */
+        klu_kill_line(klu.money, rewards, total);             /* klhud_kill.c: the latest kill / reward line, under REWARDS */
         klu_round_text(rn, rm, lives);
         klu_r.t[KLU_T_ROUND].on = klu.round;
         if (klu.plates && klu.money) {                        /* the framed bar under TOTAL (re\hud_layout.md): what the crew holds of the level's loot ([rules+0xdd0], klhud_values.c d); a level that registered no loot: how much of your total you carry */

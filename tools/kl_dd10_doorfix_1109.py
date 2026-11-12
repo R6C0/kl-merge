@@ -53,7 +53,7 @@ def make_install(out, stage_md5, template_text=None):
     t, k = re.subn(r'^r?"""Installs / undoes[^\n]*\n', 'r"""Installs / undoes DD10 DOOR FIX 1109 on the live DD10 files (live = flats + vancall + ledge/land): 19 dead kick doors are plain again, 2 kept, 2 new (tools/kl_dd10_doorfix_1109.py).\n', t, count=1, flags=re.M)
     if k != 1:
         raise SystemExit('REFUSED: template has no docstring head')
-    t = t.replace('F03_Main', 'F07_Main')
+    t = t.replace('F03_Main', 'F07_Main').replace('before-dm03doorfix1109', TAG.lstrip('.'))
     return t
 
 

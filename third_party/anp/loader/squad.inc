@@ -32,6 +32,13 @@
                                       story mode (no session) its soldier init 0x615c90 gives the buddy (merc 1) only the follow
                                       call, so Lynch is never in the player's control. squad.inc does the recruit itself.
                                       recruit_detach=1 only: 0x5230c0 ZSquad::RemoveMember(oldSquad, script) ret 4 first.
+                                      Static RE (13 Oct, see the recruitment block below): 0x908040 = sc+0xcc = 1; slot 108
+                                      SetOwner (+0x69c = P, follow object +0x63c -> P via 0x656d00, slot 80 FOLLOW order
+                                      0x4be760, 0x50ddb0); receivers append (no dup check); 0x7b3490 -> ZSquad::AddMember
+                                      0x48c480(playerSquad, script, 1): +0x4f4 = player squad, +0x8c++. AddMember does NOT
+                                      remove him from his old squad's member array: a recruit out of a level squad leaves him
+                                      listed there with +0x4f4 pointing elsewhere, and the slot-80 Follow overrides whatever
+                                      the level had him doing. Hence recruit=start never recruits out of a squad (opt-in: default is always, review 13 Oct - M02 Lynch sits in a level squad DD never releases).
                                       Merc list: [0x1548fd8] count, 0x1548fdc[16] scripts (filled by 0x615c90 for merc != 0).
    Objects: P = local ZFFPlayer, sc = *(P+0xcd0) (sc+4 == P), squad = *(sc+0xa4) (+0xc0 count, +0xc4[12] members),
      receivers sc+0x18 count / sc+0x1c[], current sc+0x10, refusal flag sc+0xa0, order counter sc+8.
@@ -39,11 +46,14 @@
      buddy = DM Lynch); body: +4 node (+0x6c name), +0x54 -> +4 relation (crosshair: 0/2 friendly), +0x576 able,
      +0x77c script. Aim: P+0x27b0 = aim point (written every frame by 0x4677c0), [P+0xbd4]+0x2ac = aim target handle.
 
-   Config: <DD>\ANP_squad.txt (polled once a second; absent = probe). Tokens, space or line separated; a bare first
-   token may be the mode:
-     mode=off|probe|dry|on   probe (default): read only, logs probe/stat/key/cmd lines, dispatches nothing
+   Config: <DD>\ANP_squad.txt (polled once a second; absent = on, the release default since 14 Oct; a file without a
+   mode word is on too; an unknown mode word = dry but never undoes an explicit off; an unreadable file keeps the previous config). Tokens, space or line separated; a bare token is the mode.
+   Only ANP levels (scene id "M<digit>...") ever act: elsewhere (stock L00..L11, F01..F09 / Arcade, front end) the tick
+   reads the player / squad control, logs one 'SQUAD level <id>: ... (not an ANP level: module idle)' line per scene and
+   returns before any engine call, key read, command, recruit or write.
+     mode=off|probe|dry|on   probe: read only (except critical=clear), logs probe/stat/key/cmd lines, dispatches nothing
                              dry: input + command machine, gates, receivers, aim and targets resolved; no order is given
-                             on: orders are given through the engine functions above
+                             on (default): orders are given through the engine functions above
      input=dd|async|off      key source: DD's own DirectInput device state (default; falls back to GetAsyncKeyState)
      follow=0x02 attack=0x03 defend=0x04 next=0x0f prev=0 (0 = Shift+next) mouse_attack=2 (-1 = none)   DIK codes
      attack_time=5.0         slot 83 time argument (seconds)
@@ -71,11 +81,24 @@
      markers=0|1             post world markers (attack: type 0xa on the target, defend: type 7 over each merc)
      release=follow|moveto   moveto: a merc still holding 2 s after Follow gets MoveTo(player) + Follow(all)
      stat=5                  'SQUAD stat' interval in seconds (0 = off)
-     recruit=1               mode on: every living merc soldier (EIsMercenary 1..13; DM Merc_xx, buddy 'Kane' = Lynch = 1)
-                             not yet in the player's squad control is recruited with 0x908040 (1 s after the player /
-                             squad control appears, outside cutscenes; again after a respawn or reload). dry: logged only
-     recruit_detach=0        1: remove the merc from his level squad (0x5230c0) before the recruit (DD's own path keeps it)
-     critical=keep|clear     keep (default): untouched. clear (any mode but off, ANP levels, build check ok): a friendly merc's
+     recruit=start|always|off  (default always; numeric: 0 = off, 1 = always, 2 = start)  mode on; dry: logged only. Mercs = living merc soldiers
+                             (EIsMercenary 1..13; DM Merc_xx, buddy 'Kane' = Lynch = 1) that are not receivers of the
+                             player's squad control.
+                             start (safe): a merc held by a LEVEL squad (+0x4f4 set, not the player squad) is
+                               never recruited, ordered or moved; with recruit_adopt=1 and owner +0x69c == 0 (DD's story
+                               init never set it: the buddy) only +0x69c = P is written, the state DD's own init leaves
+                               every other merc in, so the level's own release (0x707860 / 0x504880 -> 0x6213b0) returns
+                               him to the player squad and the receivers natively. A FREE merc (+0x4f4 == 0, e.g. released
+                               by the level with no owner) is recruited with 0x908040 once his squad has not changed for
+                               recruit_settle seconds, outside cutscenes / blocked input / climbing. A merc already in the
+                               player squad but not a receiver is added to the receivers by data write (0x6213b0's tail,
+                               no Follow). Unless the player squad's current behaviour (+0x154) is a ZMiniCutscene.
+                             always: the old behaviour (recruits out of level squads too; test only)
+     recruit_adopt=1         start only: 0 = never write +0x69c (a released ownerless merc is then recruited as FREE)
+     recruit_settle=2.0      start only: seconds a merc's +0x4f4 must stay unchanged before a recruit (0..30)
+     recruit_detach=0        always only. 1: remove the merc from his level squad (0x5230c0) before the recruit
+     critical=keep|clear     keep (default): untouched. clear (any mode but off, ANP levels, its own byte check of the kl2 code
+                             it relies on, sq_crit_check_build, read only): a friendly merc's
                              death no longer fails the mission. DD's soldier init 0x615c90 calls ZSoldier@CPPScript slot 57
                              (vt+0xe4 = 0x725b20, which writes byte +0x513 unless body+0x54 -> +4 relation == 1) with 1 and sets
                              +0x512 = 1 for every merc (+0x6e8 != 0) before it appends him to the merc list (0x7175a0 on
@@ -85,6 +108,7 @@
                              every listed merc script (+0x512 left alone) after each scene load (level reset: new player, new
                              scene, clock back), after each change of the game-state counter [0xe0e644] (inc by 0x65a4fd /
                              0x5d5de7), and when the once-a-second check finds a listed merc with +0x513 set (late spawns).
+                             One 'SQUAD critical cleared' line per pass (a recheck that clears nothing: at most every 30 s).
                              Data writes only (heap); no code byte. The stat line's crit= counts listed mercs with +0x513 set.
    Test commands: <DD>\ANP_squad_cmd.txt, consumed (renamed to ANP_squad_cmd.done) on the main thread, one line per frame:
      follow tap|hold | attack tap|hold [aim | x y z | node N | nearest] | defend tap|hold [aim | x y z]
@@ -125,6 +149,9 @@
 #define SQ_TEAM0_VT2   0xb53f70
 #define SQ_DD_FOLLOW_VOICE 0x31    /* pushed by 0x4c3900 at 0x4c3af5 */
 #define SQ_VOICE_NONE  0xff        /* >= 0x3f: the team's has(id) fails, nothing is spoken */
+#define SQ_MC_VT       0xbce05c    /* ZMiniCutscene@CPPScript: squad+0x154 (current behaviour) while a mini-cutscene runs */
+enum { SQ_REC_OFF, SQ_REC_START, SQ_REC_ALWAYS };
+static const char *const SQ_RECM[] = {"off", "start", "always"};
 
 enum { SQ_OFF, SQ_PROBE, SQ_DRY, SQ_ON };
 static const char *const SQ_MODE[] = {"off", "probe", "dry", "on"};
@@ -140,10 +167,11 @@ typedef struct {
     int recruit, detach;
     int ackF, refF, ddFollowVoice;                    /* ddFollowVoice: 0 mute DD's 0x31 during Follow, 1 keep */
     int critClear;                                    /* critical=: 0 keep, 1 clear script+0x513 on listed mercs */
+    int adopt, settleMs;                              /* recruit=start: write owner +0x69c on held ownerless mercs; settle */
 } SqCfg;
 /* voices: Dead Men's ids (see the header): acks attack 0x23 defend 0x21 follow 0x22, refusals attack 0x2f defend 0x2e
    follow 0x30, defend no-LOS 0x2e */
-#define SQ_CFG_DEFAULT {SQ_PROBE, 1, 0, -1, 5, 0, 5.0f, 0x02, 0x03, 0x04, 0x0F, 0, 2, 0x23, 0x21, 0x2f, 0x2e, 0x2e, 1, 0, 0x22, 0x30, 0, 0}
+#define SQ_CFG_DEFAULT {SQ_ON, 1, 0, -1, 5, 0, 5.0f, 0x02, 0x03, 0x04, 0x0F, 0, 2, 0x23, 0x21, 0x2f, 0x2e, 0x2e, SQ_REC_ALWAYS, 0, 0x22, 0x30, 0, 0, 1, 2000}
 static SqCfg g_sqc = SQ_CFG_DEFAULT;
 static int g_sqcPresent = -1; static FILETIME g_sqcTime; static DWORD g_sqcPoll;
 
@@ -156,7 +184,8 @@ static struct {
     DWORD recPoll, recWaitLog; int recScans, recWalked; /* recruitment scan state (per level / player) */
     const char *critWhy; DWORD critGs, critPoll; int critGsSeen; /* critical=clear: pending pass reason, last [0xe0e644] */
 } g_sq;
-typedef struct { BYTE *s; int tries, fails, dryLogged, unsafeLogged; DWORD lastT; } SqRec;
+typedef struct { BYTE *s; int tries, fails, dryLogged, unsafeLogged; DWORD lastT;
+                 int seen, waitLogged; DWORD q, qSince, heldQ; } SqRec;   /* q: last +0x4f4 seen, qSince: when it last changed */
 static SqRec g_sqRec[16];                             /* per merc script, reset with the level */
 static BYTE *g_sqWalk[16]; static int g_sqWalkN;      /* mercs found by the one-off node walk (not in DD's merc list) */
 static DWORD g_sqPlSq[8]; static int g_sqPlSqN;       /* player squads seen this session (old ones may be freed) */
@@ -271,12 +300,19 @@ static void sq_cfg_poll(void) {
     g_sqcPresent = present;
     if (present) g_sqcTime = fa.ftLastWriteTime;
     SqCfg c = SQ_CFG_DEFAULT;
-    char buf[1024] = ""; const char *note = present ? "" : " (no ANP_squad.txt: probe)";
+    char buf[1024] = ""; const char *note = present ? "" : " (no ANP_squad.txt: on, ANP levels only)";
     if (present) {
+        static int unreadLogged;
         FILE *f = fopen(fn, "r");
-        if (f) { size_t n = fread(buf, 1, sizeof buf - 1, f); buf[n] = 0; fclose(f); }
-        else note = " (ANP_squad.txt unreadable)";
+        if (!f) {                                     /* held by an editor / the helper: keep the previous config, retry next poll */
+            memset(&g_sqcTime, 0, sizeof g_sqcTime);
+            if (!unreadLogged) { unreadLogged = 1; anp_log("SQUAD ANP_squad.txt unreadable - previous config kept, retry"); }
+            return;
+        }
+        unreadLogged = 0;
+        size_t n = fread(buf, 1, sizeof buf - 1, f); buf[n] = 0; fclose(f);
         for (char *p = buf; (p = strchr(p, '#')); ) while (*p && *p != '\n') *p++ = ' ';   /* comments */
+        int known = 0;                                /* an explicit known mode word was seen */
         for (char *t = strtok(buf, " \t\r\n,;"); t; t = strtok(NULL, " \t\r\n,;")) {
             char *eq = strchr(t, '=');
             const char *k = t, *v = "";
@@ -284,7 +320,8 @@ static void sq_cfg_poll(void) {
             else { v = t; k = "mode"; }               /* a bare token is the mode */
             if (!_stricmp(k, "mode")) {
                 int m = -1; for (int i = 0; i < 4; i++) if (!_stricmp(v, SQ_MODE[i])) m = i;
-                if (m < 0) anp_log("SQUAD config mode '%s' unknown (kept %s)", v, SQ_MODE[c.mode]); else c.mode = m;
+                if (m < 0) { c.mode = (known && c.mode == SQ_OFF) ? SQ_OFF : SQ_DRY; anp_log("SQUAD config mode '%s' unknown (unknown mode word: %s)", v, c.mode == SQ_OFF ? "off kept" : "dry"); }
+                else { c.mode = m; known = 1; }
             }
             else if (!_stricmp(k, "input")) c.input = !_stricmp(v, "off") ? 0 : !_stricmp(v, "async") ? 2 : 1;
             else if (!_stricmp(k, "markers")) c.markers = sq_num(v) != 0;
@@ -306,7 +343,15 @@ static void sq_cfg_poll(void) {
             else if (!_stricmp(k, "ref_defend")) c.refD = sq_num(v) & 0xff;
             else if (!_stricmp(k, "nolos_voice")) c.nolos = sq_num(v) & 0xff;
             else if (!_stricmp(k, "dd_follow_voice")) c.ddFollowVoice = !_stricmp(v, "keep") || (v[0] >= '1' && v[0] <= '9');
-            else if (!_stricmp(k, "recruit")) c.recruit = sq_num(v) != 0;
+            else if (!_stricmp(k, "recruit")) {
+                if (!_stricmp(v, "off")) c.recruit = SQ_REC_OFF;
+                else if (!_stricmp(v, "start")) c.recruit = SQ_REC_START;
+                else if (!_stricmp(v, "always")) c.recruit = SQ_REC_ALWAYS;
+                else if (v[0] >= '0' && v[0] <= '9') { int r = sq_num(v); c.recruit = r <= 0 ? SQ_REC_OFF : r == 1 ? SQ_REC_ALWAYS : SQ_REC_START; }   /* 0 = off, 1 = always (the old, proven behaviour), 2+ = start */
+                else anp_log("SQUAD config recruit '%s' unknown (start|always|off; kept %s)", v, SQ_RECM[c.recruit]);
+            }
+            else if (!_stricmp(k, "recruit_adopt")) c.adopt = sq_num(v) != 0;
+            else if (!_stricmp(k, "recruit_settle")) { float f = (float)atof(v); c.settleMs = (f >= 0.0f && f <= 30.0f) ? (int)(f * 1000.0f) : 2000; }
             else if (!_stricmp(k, "recruit_detach")) c.detach = sq_num(v) != 0;
             else if (!_stricmp(k, "critical")) {
                 if (!_stricmp(v, "clear")) c.critClear = 1;
@@ -320,10 +365,10 @@ static void sq_cfg_poll(void) {
     g_sqc = c;
     static const char *in[] = {"off", "dd", "async"};
     anp_log("SQUAD config mode=%s input=%s keys follow=%02x attack=%02x defend=%02x next=%02x prev=%s%02x mouse_attack=%d attack_time=%.1f "
-            "refuse=%s markers=%d release=%s stat=%d ack(f/a/d)=%x/%x/%x ref(f/a/d)=%x/%x/%x nolos=%x dd_follow_voice=%s recruit=%d recruit_detach=%d critical=%s%s",
+            "refuse=%s markers=%d release=%s stat=%d ack(f/a/d)=%x/%x/%x ref(f/a/d)=%x/%x/%x nolos=%x dd_follow_voice=%s recruit=%s recruit_adopt=%d recruit_settle=%.1f recruit_detach=%d critical=%s%s",
             SQ_MODE[c.mode], in[c.input], c.kFollow, c.kAttack, c.kDefend, c.kNext, c.kPrev ? "" : "shift+", c.kPrev ? c.kPrev : c.kNext,
             c.mAttack, (double)c.attackT, c.refuse < 0 ? "auto" : c.refuse ? "1" : "0", c.markers, c.release ? "moveto" : "follow", c.stat,
-            c.ackF, c.ackA, c.ackD, c.refF, c.refA, c.refD, c.nolos, c.ddFollowVoice ? "keep" : "mute", c.recruit, c.detach,
+            c.ackF, c.ackA, c.ackD, c.refF, c.refA, c.refD, c.nolos, c.ddFollowVoice ? "keep" : "mute", SQ_RECM[c.recruit], c.adopt, c.settleMs / 1000.0, c.detach,
             c.critClear ? "clear" : "keep", note);
 }
 
@@ -367,6 +412,7 @@ static int sq_body_pos(BYTE *body, float *out) {     /* world point of the body 
 static int sq_player_pos(BYTE *P, float *out) { float M[9]; out[0] = out[1] = out[2] = 0; return cl_pose(P, M, out); }
 static int sq_canrecv(BYTE *sc, BYTE *s, int live) {
     if (!sq_script(s)) return 0;
+    if (revive_is_down(sq_bodyof(s))) return 0;      /* revive.inc: no order to a downed merc (it would end his DND task) */
     if (live) return (int)(sq_call1("can receive", SQ_F_CANRECV, sc, (DWORD)s) & 0xff);
     BYTE *b = sq_bodyof(s);                          /* 0x6c8510 without the dead check (vt+0x680) */
     return rd32(s + 0x4f4) == rd32(sc + 0xa4) && rd8(s + 0x6a4) && rd8(b + 0x576) == 1;
@@ -442,6 +488,27 @@ static void sq_record(BYTE *s, int kind, int T, const float *pt, BYTE *tgt) {
 #define SQ_CRIT_OFF    0x513
 #define SQ_GS_COUNTER  0xe0e644                       /* game-state counter (cutdiag's n644) */
 static BYTE *sq_merc_body(BYTE *s);
+static int g_sqCritBuild = -1;                        /* critical=clear's own build check (data only; orders' check not needed) */
+static DWORD g_sqCritLogT;                            /* rate limit for 'recheck' passes that clear nothing */
+/* static RE of kl2.exe (capstone, 12 Oct): slot 57 0x725b20 writes +0x513 unless relation == 1, slot 58 0x8f44a0 is
+   'mov al,[ecx+0x513]; ret', 0x615e38/0x615e42 set +0x512 = 1 and append to the merc list 0x1548fd8 (0x7175a0, max 16),
+   0x65a4fd / 0x5d5de7 'inc dword [0xe0e644]', 0x5bf577 restores +0x513 from a checkpoint (0x4e951b saves it) */
+static int sq_crit_check_build(void) {
+    static const struct { DWORD a; BYTE n, b[7]; } t[] = {
+        {0x8f44a0, 7, {0x8a, 0x81, 0x13, 0x05, 0x00, 0x00, 0xc3}},
+        {0x725b32, 6, {0x88, 0x81, 0x13, 0x05, 0x00, 0x00}},
+        {0x615e42, 5, {0xb9, 0xd8, 0x8f, 0x54, 0x01}},
+        {0x65a4fd, 6, {0xff, 0x05, 0x44, 0xe6, 0xe0, 0x00}},
+        {0x5d5de7, 6, {0xff, 0x05, 0x44, 0xe6, 0xe0, 0x00}},
+    };
+    for (unsigned i = 0; i < sizeof t / sizeof t[0]; i++)
+        if (!readable((void*)t[i].a, t[i].n) || memcmp((void*)t[i].a, t[i].b, t[i].n)) { anp_log("SQUAD critical: kl2 build mismatch at %08lx - critical=clear off", t[i].a); return 0; }
+    if (!readable((void*)(SQ_SCRIPT_VT + 0xe8), 4) || *(DWORD*)(SQ_SCRIPT_VT + 0xe4) != 0x725b20 || *(DWORD*)(SQ_SCRIPT_VT + 0xe8) != 0x8f44a0) {
+        anp_log("SQUAD critical: ZSoldier@CPPScript vtable slots 57/58 differ - critical=clear off"); return 0;
+    }
+    anp_log("SQUAD critical: build check ok (slot 58 0x8f44a0 reads +0x513, merc list 0x1548fd8, state counter 0xe0e644)");
+    return 1;
+}
 /* listed mercs (DD's merc list, i < 16, null skipped) that pass sq_merc_body (live soldier script, body in the node table) */
 static int sq_crit_list(BYTE **out) {
     int nl = (int)rd32((void*)SQ_MERC_LIST), n = 0; if (nl < 0) nl = 0; if (nl > 16) nl = 16;
@@ -463,11 +530,15 @@ static void sq_crit_pass(const char *why) {
         cleared++;
         sq_cat(ids, sizeof ids, &k, "%s%d", k ? "," : " mercs=", sq_merc(l[i]));
     }
+    /* a recheck that cleared nothing (only unwritable entries) would repeat every second: log it at most every 30 s */
+    if (!cleared && !strcmp(why, "recheck") && !sq_rate(&g_sqCritLogT, 30000)) return;
     sq_log("critical cleared n=%d (%s) listed=%d valid=%d%s%s gs=%lu", cleared, why, nl, n, ids, ro ? " (some not writable)" : "",
            rd32((void*)SQ_GS_COUNTER));
 }
 static void sq_crit_tick(void) {
-    if (!g_sqc.critClear || g_sqBuild != 1) return;
+    if (!g_sqc.critClear) return;
+    if (g_sqCritBuild < 0) g_sqCritBuild = sq_crit_check_build();
+    if (g_sqCritBuild != 1) return;
     DWORD gs = rd32((void*)SQ_GS_COUNTER);
     if (!g_sq.critGsSeen) { g_sq.critGsSeen = 1; g_sq.critGs = gs; }
     else if (gs != g_sq.critGs) { g_sq.critGs = gs; if (!g_sq.critWhy) g_sq.critWhy = "state change"; }
@@ -996,7 +1067,40 @@ static void sq_cmd_exec(const char *line, BYTE *P, BYTE *sc, int T) {
    So: every 0.5 s, 1 s after the player / squad control appears, outside cutscenes, every living merc of DD's merc list
    (plus any merc the one-off node walk finds outside it) that is not yet a receiver of this squad control is recruited with
    0x908040, exactly as DD's hosted path does. 0x908040 has no duplicate check, so the guard below is mandatory. Once
-   recruited, DD's own ZSquadControl::Update (0x523d10, every frame) parks / re-recruits him when his node is disabled. */
+   recruited, DD's own ZSquadControl::Update (0x523d10, every frame) parks / re-recruits him when his node is disabled.
+
+   recruit=start (opt-in, per level after testing; the default is recruit=always, the paragraph above). Static RE of kl2.exe, capstone:
+   - 0x908040 (see the header) issues a slot-80 Follow and moves +0x4f4 to the player squad via AddMember 0x48c480,
+     which never removes him from his previous squad (0x48c480 only fills an empty slot / appends, +0x8c++, writes +0x4f4).
+     The M09 runs (work\smoke\rel3_m09rap_1013_162731, long_M09_1012_012358) show recruit=always doing exactly that: 3 s
+     after the level put mercs 6/7/8 into its own squad (+0x4f4 41440990) they were recruited back mid-script.
+   - DD returns mercs itself: a level squad's release (0x707860 on squad+0x1a4, 0x504880 on squad+0x1a0, reached from
+     0x707045 / 0x5e2d33) calls RemoveMember 0x5230c0 and then, for a friendly merc (relation 0) with an owner +0x69c,
+     0x6213b0 on [owner+0xcd0] = AddMember(player squad) + receivers append WITH a dup check + sc+0xcc = 1; with no owner
+     it adds him nowhere (+0x4f4 stays 0: what M09 shows for Lynch at 16:28:21 / 16:31:28).
+   - DD's story init 0x615c90 gives the buddy (merc 1) only slot 80 (0x615f8f: follow target = P) and no owner; every
+     other merc gets 0x908040 at spawn (0x615fcb), i.e. owner = P, and is later held by level squads with owner = P.
+   - Receivers: ZSquadControl's one-slot vtable 0xb798dc = 0x6cefa0 rebuilds sc+0x18/+0x1c from the player squad's
+     members (a squad listener; when it runs is inferred from the logs: receivers drop when the level takes mercs).
+   - Orders: DD CanReceive 0x6c8510 and DM 0x611ee0 both require script squad (DD +0x4f4 / DM +0xe8) == the player
+     squad, and DD Follow 0x4c3900 goes through 0x6c8510 (0x4c39f5, 0x4c3a82). A merc held by a level squad takes no
+     orders in either game, so orders stay limited to sq_canrecv() and +0x4f4 is never rewritten for an order.
+   So start: held mercs are left alone (owner written only when 0: the same state DD's spawn recruit gives the others,
+   so the level's own release brings him back); free mercs (+0x4f4 0) are recruited after a settle time; mercs listed
+   in the player squad but not receivers get 0x6213b0's receiver append (data only, no Follow). */
+static void sq_squad_busy(DWORD q, DWORD *beh, int *busy, int *mc) {
+    *beh = 0; *busy = 0; *mc = 0;
+    if (!q || !sq_rd((void*)q, 0x158)) return;
+    *beh = rd32((BYTE*)q + 0x154); *busy = rd8((BYTE*)q + 0xbc);
+    *mc = *beh && rd32((void*)*beh) == SQ_MC_VT;
+}
+/* owner +0x69c = P (data write) when DD left it 0. 1 written, 0 not needed, -1 not writable */
+static int sq_adopt(BYTE *P, BYTE *s) {
+    if (rd32(s + 0x69c)) return 0;
+    if (!god_writable(s + 0x69c, 4)) return -1;
+    *(DWORD*)(s + 0x69c) = (DWORD)P;
+    return 1;
+}
 static int sq_in_list(BYTE *sc, int cntOff, int arrOff, BYTE *s) {
     int n = (int)rd32(sc + cntOff); if (n < 0) n = 0; if (n > 16) n = 16;
     for (int i = 0; i < n; i++) if (rd32(sc + arrOff + 4 * i) == (DWORD)s) return 1;
@@ -1081,6 +1185,83 @@ static void sq_recruit_one(BYTE *P, BYTE *sc, BYTE *s, BYTE *body, int live, DWO
            o1 == (DWORD)P ? "(P)" : "", sq_canrecv(sc, s, 0), rd8(s + 0x6a4), rd8(body + 0x576), sq_cur_idx(sc), r->tries,
            in ? "" : " FAILED: not a receiver after the call");
 }
+/* 0x6213b0's tail (0x6213c6..0x6213ec) as data: receivers append with a dup check, sc+0xcc = 1. 1 ok, 0 full / read only */
+static int sq_add_receiver(BYTE *sc, BYTE *s) {
+    if (sq_in_list(sc, 0x18, 0x1c, s)) return 1;
+    int n = (int)rd32(sc + 0x18);
+    if (n < 0 || n >= 16 || !god_writable(sc + 0x18, 4) || !god_writable(sc + 0x1c + 4 * n, 4) || !god_writable(sc + 0xcc, 1)) return 0;
+    *(DWORD*)(sc + 0x1c + 4 * n) = (DWORD)s;
+    *(DWORD*)(sc + 0x18) = (DWORD)(n + 1);
+    *(sc + 0xcc) = 1;
+    return 1;
+}
+/* recruit=start for one merc that is neither a receiver nor parked (see the block above). gate: sq_recruit_gate() */
+static void sq_recruit_start(BYTE *P, BYTE *sc, BYTE *sq, BYTE *s, BYTE *body, const char *gate, int live, DWORD now) {
+    SqRec *r = sq_rec(s); if (!r) return;
+    DWORD q = rd32(s + 0x4f4), own = rd32(s + 0x69c);
+    if (!r->seen || r->q != q) { r->seen = 1; r->q = q; r->qSince = now; r->waitLogged = 0; }
+    if (rd8(body + 0x576) != 1) return;               /* not able (dead / disabled) */
+    if (rd32((BYTE*)rd32(body + 4) + 0x3c) & 0x400) return;   /* node bit 10: disabled; 0x523d10's rule */
+    char nm[40]; sq_name(body, nm, sizeof nm);
+    DWORD beh; int busy, mc;
+    if (q && q != (DWORD)sq) {                        /* held by a level squad: the level's merc, never recruited */
+        sq_squad_busy(q, &beh, &busy, &mc);
+        if (!own && g_sqc.adopt) {
+            if (!live) {
+                if (r->heldQ != q) { r->heldQ = q; sq_log("recruit dry: would adopt merc=%d '%s' s=%p (owner 69c 0 -> P) held by level squad %08lx beh154=%08lx%s busy=%d",
+                                                          sq_merc(s), nm, s, q, beh, mc ? "(minicut)" : "", busy); }
+                return;
+            }
+            int a = sq_adopt(P, s);
+            if (a > 0) {
+                r->heldQ = q;
+                sq_log("recruit adopt merc=%d '%s' s=%p node=%ld held by level squad %08lx beh154=%08lx%s busy=%d: owner 69c 0 -> P %p "
+                       "(data write only; squad 4f4, orders and receivers untouched; the level's release 0x707860/0x504880 -> 0x6213b0 returns him)",
+                       sq_merc(s), nm, s, sq_node_idx(body), q, beh, mc ? "(minicut)" : "", busy, P);
+            } else if (a < 0 && !r->unsafeLogged) { r->unsafeLogged = 1; sq_log("recruit adopt merc=%d '%s' s=%p: +0x69c not writable - left alone", sq_merc(s), nm, s); }
+            return;
+        }
+        if (r->heldQ != q) {
+            r->heldQ = q;
+            sq_log("recruit hold merc=%d '%s' s=%p held by level squad %08lx beh154=%08lx%s busy=%d own=%s: left to the level (recruit=start)",
+                   sq_merc(s), nm, s, q, beh, mc ? "(minicut)" : "", busy, own == (DWORD)P ? "P" : own ? "other" : "0");
+        }
+        return;
+    }
+    if (r->heldQ) {                                   /* back from a level squad without DD returning him (no owner) */
+        sq_log("recruit free merc=%d '%s' s=%p released by level squad %08lx: sq4f4=%08lx%s own=%s (recruit after %.1f s settle)",
+               sq_merc(s), nm, s, r->heldQ, q, q ? "(player)" : "", own == (DWORD)P ? "P" : own ? "other" : "0", g_sqc.settleMs / 1000.0);
+        r->heldQ = 0;
+    }
+    if (now - r->qSince < (DWORD)g_sqc.settleMs) return;   /* +0x4f4 must be stable (a hand-over between squads takes frames) */
+    if (gate) {
+        if (!g_sq.recWaitLog || now - g_sq.recWaitLog >= 5000) { g_sq.recWaitLog = now; sq_log("recruit waiting: %s (merc=%d s=%p free, not yet a receiver)", gate, sq_merc(s), s); }
+        return;
+    }
+    if (q == (DWORD)sq) {
+        sq_squad_busy(q, &beh, &busy, &mc);
+        if (mc) {
+            if (!r->waitLogged) { r->waitLogged = 1; sq_log("recruit merc=%d '%s' waiting: the player squad runs a mini-cutscene (beh154=%08lx)", sq_merc(s), nm, beh); }
+            return;
+        }
+    }
+    const char *why = sq_recruit_unsafe(s, body);
+    if (why) { if (!r->unsafeLogged) { r->unsafeLogged = 1; sq_log("recruit merc=%d s=%p skipped: %s", sq_merc(s), s, why); } return; }
+    if (live && !sq_alive(body, 1)) return;           /* body vt+0x680 (dead) */
+    if (g_sqDead) return;
+    if (q == (DWORD)sq) {                             /* a player-squad member that is no receiver: 0x6213b0's receiver half */
+        if (!live) { if (!r->dryLogged) { r->dryLogged = 1; sq_log("recruit dry: would add merc=%d '%s' s=%p (player squad member) to the receivers", sq_merc(s), nm, s); } return; }
+        if (r->tries >= 8) { if (r->tries++ == 8) sq_log("recruit merc=%d '%s' s=%p: gave up after 8 tries this level", sq_merc(s), nm, s); return; }
+        if (r->lastT && now - r->lastT < 3000) return;
+        r->lastT = now; r->tries++;
+        int nr0 = sq_nrecv(sc), ad = sq_adopt(P, s), ok = sq_add_receiver(sc, s);
+        sq_log("recruit merc=%d '%s' s=%p in the player squad but not a receiver -> %s (data, as 0x6213b0; no Follow, 4f4 untouched)%s recv %d->%d elig=%d try=%d",
+               sq_merc(s), nm, s, ok ? "added to the receivers" : "NOT added (list full / not writable)", ad > 0 ? " owner 0 -> P" : "",
+               nr0, sq_nrecv(sc), sq_canrecv(sc, s, 0), r->tries);
+        return;
+    }
+    sq_recruit_one(P, sc, s, body, live, now);        /* +0x4f4 == 0: in no squad, nothing of the level's to break */
+}
 static void sq_recruit_scan(BYTE *P, BYTE *sc, int T, int live, DWORD now) {
     if (!g_sqc.recruit || g_sqc.mode < SQ_DRY) return;
     if (now - g_sq.t0 < 1000 || (g_sq.recPoll && now - g_sq.recPoll < 500)) return;
@@ -1101,9 +1282,9 @@ static void sq_recruit_scan(BYTE *P, BYTE *sc, int T, int live, DWORD now) {
             if (!dup) g_sqWalk[g_sqWalkN++] = sol[i].s;
         }
         BYTE *N = (BYTE*)rd32((void*)SQ_NET_MGR);
-        sq_log("recruit scan scene=%s mode=%s merc list n=%d, node walk soldiers=%d extra mercs=%d net=%p session(+5c)=%ld host(+54)=%ld "
+        sq_log("recruit scan scene=%s mode=%s policy=%s adopt=%d settle=%.1f merc list n=%d, node walk soldiers=%d extra mercs=%d net=%p session(+5c)=%ld host(+54)=%ld "
                "(DD recruits itself only when +5c==2 and +54<=1) sc+cc=%d inactive=%d",
-               g_sqScene, live ? "on" : "dry", nl, ns, g_sqWalkN, N, (long)(sq_rd(N + 0x5c, 4) ? (long)*(DWORD*)(N + 0x5c) : -1L),
+               g_sqScene, live ? "on" : "dry", SQ_RECM[g_sqc.recruit], g_sqc.adopt, g_sqc.settleMs / 1000.0, nl, ns, g_sqWalkN, N, (long)(sq_rd(N + 0x5c, 4) ? (long)*(DWORD*)(N + 0x5c) : -1L),
                (long)(sq_rd(N + 0x54, 4) ? (long)*(DWORD*)(N + 0x54) : -1L), rd8(sc + 0xcc), (int)rd32(sc + 0x5c));
     }
     for (int i = 0; i < g_sqWalkN && nc < 32; i++) { int dup = 0; for (int j = 0; j < nc; j++) dup |= cand[j] == g_sqWalk[i]; if (!dup) cand[nc++] = g_sqWalk[i]; }
@@ -1113,7 +1294,16 @@ static void sq_recruit_scan(BYTE *P, BYTE *sc, int T, int live, DWORD now) {
     for (int i = 0; i < nc && !g_sqDead; i++) {
         BYTE *s = cand[i], *body = sq_merc_body(s);
         if (!body) continue;                          /* stale / not a merc */
-        if (sq_in_list(sc, 0x18, 0x1c, s) || sq_in_list(sc, 0x5c, 0x60, s)) continue;   /* receiver or parked by 0x523d10 */
+        if (sq_in_list(sc, 0x18, 0x1c, s) || sq_in_list(sc, 0x5c, 0x60, s)) {   /* receiver or parked by 0x523d10 */
+            for (int j = 0; j < 16; j++) if (g_sqRec[j].s == s && g_sqRec[j].heldQ) {   /* DD returned him itself */
+                char nm[40]; sq_name(body, nm, sizeof nm);
+                sq_log("recruit back merc=%d '%s' s=%p: returned by Dog Days from level squad %08lx (sq4f4=%08lx own=%s) - no call needed",
+                       sq_merc(s), nm, s, g_sqRec[j].heldQ, rd32(s + 0x4f4), rd32(s + 0x69c) == (DWORD)P ? "P" : "other");
+                g_sqRec[j].heldQ = 0;
+            }
+            continue;
+        }
+        if (g_sqc.recruit == SQ_REC_START) { sq_recruit_start(P, sc, sq, s, body, gate, live, now); continue; }
         if (rd32(s + 0x4f4) == (DWORD)sq && rd32(s + 0x69c) == (DWORD)P) continue;
         if (rd8(body + 0x576) != 1) continue;         /* not able (dead / disabled) */
         if (rd32((BYTE*)rd32(body + 4) + 0x3c) & 0x400) continue;   /* node bit 10: disabled; 0x523d10's rule */

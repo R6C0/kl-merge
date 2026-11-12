@@ -33,7 +33,31 @@ $stage = Join-Path $env:TEMP ('klmerge_pack_' + (Get-Date -Format 'yyyyMMdd-HHmm
 New-Item -ItemType Directory -Path $stage | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stage 'launcher') | Out-Null
 Copy-Item -LiteralPath (Join-Path $Out 'manifest.json') -Destination $stage
-Copy-Item -LiteralPath (Join-Path $Out 'patches') -Destination (Join-Path $stage 'patches') -Recurse
+# TWO zips (GitHub refuses one release asset of 2 GiB or more): part 1 = everything but the second half of the patches,
+# part 2 = those patches + package_part2.txt (the Setup bat checks for it). Both unpack into the same package\ folder.
+$stage2 = $stage + '_2'
+# every refuse below and any error remove BOTH staging folders (each holds ~1 GB of patches in %TEMP%)
+$cleanup = { foreach ($d in @($stage, $stage2)) { if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force } } }
+trap { & $cleanup; Write-Host ('FAILED: ' + $_); exit 1 }
+New-Item -ItemType Directory -Path (Join-Path $stage2 'patches') -Force | Out-Null
+# only the patches the manifest names: patches\ also keeps superseded ones (a bots zip re-made against its main zip, older makes)
+New-Item -ItemType Directory -Path (Join-Path $stage 'patches') | Out-Null
+$pnames = @($man.entries | ForEach-Object { $_.patch } | Sort-Object -Unique)
+$psize = @{}
+foreach ($pn in $pnames) {
+    $pp = Join-Path (Join-Path $Out 'patches') $pn
+    if (-not (Test-Path -LiteralPath $pp)) { Write-Host "REFUSED: manifest names $pn, not in $Out\patches"; & $cleanup; exit 1 }
+    $psize[$pn] = (Get-Item -LiteralPath $pp).Length
+}
+# part 2 takes patches from the end of the sorted list until it holds half of the patch bytes
+$half = (($psize.Values | Measure-Object -Sum).Sum) / 2
+$two = @{}; $acc = 0
+for ($i = $pnames.Count - 1; $i -ge 0 -and $acc -lt $half; $i--) { $two[$pnames[$i]] = $true; $acc += $psize[$pnames[$i]] }
+foreach ($pn in $pnames) {
+    $dst = if ($two.ContainsKey($pn)) { Join-Path $stage2 'patches' } else { Join-Path $stage 'patches' }
+    Copy-Item -LiteralPath (Join-Path (Join-Path $Out 'patches') $pn) -Destination $dst
+}
+Set-Content -LiteralPath (Join-Path $stage2 'package_part2.txt') -Value ('KL: Dead Men Rising package v' + $man.version + ', part 2 of 2: ' + $two.Count + ' patches (unpack beside part 1)') -Encoding ASCII
 Copy-Item -LiteralPath (Join-Path $tools 'kl_release.py') -Destination $stage
 foreach ($f in @('KLMergeLauncher.ps1', 'KL Dead Men Rising.exe', 'README_TESTERS.md', 'KL Dead Men Rising Setup.bat')) {
     $p = Join-Path $here $f
@@ -68,33 +92,47 @@ if ($jpgs.Count -gt 0) {
     Write-Host 'note: no tools\launcher\bg\*.jpg - the launcher draws its procedural background (OWNER_RELEASE_STEPS.md section 2b)'
 }
 # launcher\music\ is NEVER staged (a decoded game clip); the extension check below would refuse a .wav anyway
-if (Test-Path -LiteralPath (Join-Path $stage 'launcher\music')) { Write-Host 'REFUSED: launcher\music\ in the staging folder'; exit 1 }
+if (Test-Path -LiteralPath (Join-Path $stage 'launcher\music')) { Write-Host 'REFUSED: launcher\music\ in the staging folder'; & $cleanup; exit 1 }
 if ($Exe) {
-    if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "REFUSED: $Exe not found"; exit 1 }
+    if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "REFUSED: $Exe not found"; & $cleanup; exit 1 }
     Copy-Item -LiteralPath $Exe -Destination (Join-Path $stage 'KLMergeSetup.exe')
 }
 
 # belt and braces: nothing with a game extension may be in the zip (the patches are .klp, our code .py/.ps1/.bat/.md/.json/.exe)
-$bad = @(Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.Extension -match '^\.(zip|prp|gms|tex|prm|mat|fxc|str|wav|whd|snd|loc|anm|buf|oct|hvk|sgd|rmi|rmc|sgp|hrd|zgf|sup|mdmp|dmp|dll|ini)$' })
-if ($bad.Count -gt 0) { Write-Host 'REFUSED: game-like files in the staging folder:'; $bad | ForEach-Object { Write-Host ('  ' + $_.FullName) }; exit 1 }
+$bad = @(Get-ChildItem -LiteralPath $stage, $stage2 -Recurse -File | Where-Object { $_.Extension -match '^\.(zip|prp|gms|tex|prm|mat|fxc|str|wav|whd|snd|loc|anm|buf|oct|hvk|sgd|rmi|rmc|sgp|hrd|zgf|sup|mdmp|dmp|dll|ini)$' })
+if ($bad.Count -gt 0) { Write-Host 'REFUSED: game-like files in the staging folder:'; $bad | ForEach-Object { Write-Host ('  ' + $_.FullName) }; & $cleanup; exit 1 }
 
-$count = @(Get-ChildItem -LiteralPath $stage -Recurse -File).Count
-$bytes = (Get-ChildItem -LiteralPath $stage -Recurse -File | Measure-Object -Property Length -Sum).Sum
-Write-Host ('staging: {0} files, {1:N1} MB -> {2}' -f $count, ($bytes / 1MB), $Zip)
-if (Test-Path -LiteralPath $Zip) { Remove-Item -LiteralPath $Zip }
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $Zip -CompressionLevel Optimal
-$sha = (Get-FileHash -LiteralPath $Zip -Algorithm SHA1).Hash.ToLower()
-Set-Content -LiteralPath ($Zip + '.sha1') -Value ($sha + '  ' + (Split-Path -Leaf $Zip)) -Encoding ASCII
-Write-Host ('zip: {0:N1} MB, sha1 {1}' -f ((Get-Item -LiteralPath $Zip).Length / 1MB), $sha)
-Remove-Item -LiteralPath $stage -Recurse -Force
-# the upload name: the Setup bat's RELEASE_URL is .../releases/latest/download/KLMerge_package.zip, so the release asset must
-# be called exactly that. Hard link beside the versioned zip (same bytes, no extra disk), a copy when linking fails.
-$upload = Join-Path (Split-Path -Parent $Zip) 'KLMerge_package.zip'
-if ($upload -ne $Zip) {
-    if (Test-Path -LiteralPath $upload) { Remove-Item -LiteralPath $upload }
-    try { New-Item -ItemType HardLink -Path $upload -Target $Zip -ErrorAction Stop | Out-Null }
-    catch { Copy-Item -LiteralPath $Zip -Destination $upload }
-    Set-Content -LiteralPath ($upload + '.sha1') -Value ($sha + '  KLMerge_package.zip') -Encoding ASCII
+# part n: <Zip> and <Zip minus .zip>_2.zip; upload names KLMerge_package.zip and KLMerge_package_2.zip (the Setup bat's
+# RELEASE_URL is .../releases/latest/download/KLMerge_package.zip, part 2 the same link with _2.zip)
+$Zip2 = $Zip -replace '\.zip$', '_2.zip'
+$uploads = @()
+# no file of an earlier pack may survive a refused one: a stale part beside a new part would be a mixed release
+foreach ($old in @($Zip, $Zip2, (Join-Path (Split-Path -Parent $Zip) 'KLMerge_package.zip'), (Join-Path (Split-Path -Parent $Zip) 'KLMerge_package_2.zip'))) {
+    foreach ($o in @($old, ($old + '.sha1'))) { if (Test-Path -LiteralPath $o) { Remove-Item -LiteralPath $o } }
 }
-Write-Host ('upload: ' + $upload + ' (+ .sha1) - the release asset name RELEASE_URL asks for (OWNER_RELEASE_STEPS.md section 4)')
+foreach ($p in @(@{ S = $stage; Z = $Zip; U = 'KLMerge_package.zip' }, @{ S = $stage2; Z = $Zip2; U = 'KLMerge_package_2.zip' })) {
+    $count = @(Get-ChildItem -LiteralPath $p.S -Recurse -File).Count
+    $bytes = (Get-ChildItem -LiteralPath $p.S -Recurse -File | Measure-Object -Property Length -Sum).Sum
+    Write-Host ('staging: {0} files, {1:N1} MB -> {2}' -f $count, ($bytes / 1MB), $p.Z)
+    if (Test-Path -LiteralPath $p.Z) { Remove-Item -LiteralPath $p.Z }
+    Compress-Archive -Path (Join-Path $p.S '*') -DestinationPath $p.Z -CompressionLevel Optimal
+    $sha = (Get-FileHash -LiteralPath $p.Z -Algorithm SHA1).Hash.ToLower()
+    Set-Content -LiteralPath ($p.Z + '.sha1') -Value ($sha + '  ' + (Split-Path -Leaf $p.Z)) -Encoding ASCII
+    $len = (Get-Item -LiteralPath $p.Z).Length
+    Write-Host ('zip: {0:N1} MB, sha1 {1}' -f ($len / 1MB), $sha)
+    # GitHub refuses a release asset of 2 GiB or more
+    if ($len -ge 2147483648) { Write-Host ('REFUSED: ' + $p.Z + ' is 2 GiB or more - GitHub would refuse this release asset'); & $cleanup; exit 1 }
+    # the upload name: hard link beside the versioned zip (same bytes, no extra disk), a copy when linking fails
+    $upload = Join-Path (Split-Path -Parent $p.Z) $p.U
+    if ($upload -ne $p.Z) {
+        if (Test-Path -LiteralPath $upload) { Remove-Item -LiteralPath $upload }
+        try { New-Item -ItemType HardLink -Path $upload -Target $p.Z -ErrorAction Stop | Out-Null }
+        catch { Copy-Item -LiteralPath $p.Z -Destination $upload }
+        Set-Content -LiteralPath ($upload + '.sha1') -Value ($sha + '  ' + $p.U) -Encoding ASCII
+    }
+    $uploads += $upload
+}
+& $cleanup
+foreach ($u in $uploads) { Write-Host ('upload: ' + $u + ' (+ .sha1)') }
+Write-Host 'Upload BOTH files (+ their .sha1) to the same release (OWNER_RELEASE_STEPS.md section 4).'
 Write-Host 'Hand out "KL Dead Men Rising Setup.bat" only; its RELEASE_URL never changes.'

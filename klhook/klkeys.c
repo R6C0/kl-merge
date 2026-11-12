@@ -163,7 +163,7 @@ static int klkeys_on_ini(int id)
     case KK_COPF: case KK_COPH: case KK_COPA: return KKE("CopSquad", "Enable", 0);
     case KK_SAB:     return KKE("Sabotage", "VanHold", 0);
     case KK_REVEAL:  return KKE("Ucc", "Hide", 0);
-    case KK_GREN:    return KKE("Grenade", "Throw", 0);
+    case KK_GREN:    return KKE("Grenade", "Throw", 0) || KKE("Grenade", "Release", 0);
     case KK_HMAP: case KK_HAI: return KKE("HostOpts", "Enable", 0) && KKE("HostOpts", "Keys", 1);
     case KK_HPOOL:   return KKE("HostOpts", "Enable", 0) && KKE("HostOpts", "Keys", 1) && KKE("MapPool", "Enable", 0);
     case KK_CHAR: case KK_MASK: return KKE("CharOnline", "Enable", 0);

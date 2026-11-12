@@ -240,6 +240,7 @@ SND_T1=os.environ.get('ANP_SND_T1','dd')
 SND_T1_B0=os.environ.get('ANP_SND_T1_B0','keep')
 SND_REVERB=os.environ.get('ANP_SND_REVERB','dd')
 SND_LS=os.environ.get('ANP_SND_LS','dd')
+SND_SEQREF=os.environ.get('ANP_SND_SEQREF','1')=='1'
 
 def _is_dm_t1(w):
     """w = 12+ words of a type-1 record in Dead Men layout"""
@@ -345,6 +346,18 @@ def snd_fix_records(snd, nl=10):
                 p=W[r//4+5]; n=W[r//4+6]&0xffff
                 if p and p%4==0 and p+4*n<=h0:
                     for k in range(n): sref.setdefault(W[p//4+k],[]).append(p+4*k)
+            # ANP_SND_SEQREF (15 Oct): type-3 sequences hold 12-byte items [kind, time ms, record], not a u32 array
+            # (checked on DD L01: 1,655 items, kinds 2/4/5 always name a record start).  The u32-array walk above
+            # only met the first n words, so sequence steps (reload clicks, foley, explosion layers, breaths) kept the
+            # in-place record whose +0x30.. tail is the next item's bytes: loop count 97 ('a'), bools set, ...
+            if SND_SEQREF and t==3 and r+0x1c<=h0 and W[r//4]==3:
+                p=W[r//4+5]; n=W[r//4+6]&0xffff
+                if p and p%4==0 and p+12*n<=h0:
+                    for k in range(n):
+                        q=p+12*k
+                        if W[q//4] in (2,4,5):
+                            lst=sref.setdefault(W[q//4+2],[])
+                            if q+8 not in lst: lst.append(q+8)
         allref={}
         S=set(stuck)
         for i,v in enumerate(W):

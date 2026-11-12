@@ -12,7 +12,7 @@ changes (so the entity table, the menu manager's slot count and every id stay): 
     python kl_menu_redesign_1110.py plan                      print the picture mapping (DD picture <- DM picture) and the fit class
     python kl_menu_redesign_1110.py stage [--src ZIP] [--dd DIR] [--dm DIR] [--out DIR] [--only a,b]   build the themed scene archive
     python kl_menu_redesign_1110.py check STAGE_DIR           re-prove the staged archive against its source
-    python kl_menu_redesign_1110.py stageb --src LIVE.zip --out DIR [--parts bars,plates,logos,lobby]   stages B/C/F on the live overlay copy
+    python kl_menu_redesign_1110.py stageb --src LIVE.zip --out DIR [--parts bars,plates,logos,lobby,rising]   stages B/C/F (+ RISING on the logos) on the live overlay copy
     python kl_menu_redesign_1110.py checkb DIR                re-prove stage B/C/F (only listed .TEX records differ, ids/sizes/names kept)
 
 Reads only. The default output is C:\\kl_build_1024\\menulook_1109\\redesign\\ (never a game folder: --out inside a
@@ -381,7 +381,7 @@ def cmd_sheet(a):
 
 
 # ================================================================ stages B (bars, plates), C (logos), F (lobby picture)
-PARTS_B = ['bars', 'plates', 'logos', 'lobby']
+PARTS_B = ['bars', 'plates', 'logos', 'lobby', 'rising']
 PLATES = ['LobbyBackground', 'BackgroundWeaponShop', 'ChapterBackground', 'DoubleBackground', 'BlackBandBackground',
           'BlackBandErrorBackground', 'BlackBandErrorBackground2']
 LOGOS = [('GameLogo', 'GameLogo'), ('GameLogo_big', 'GameLogo_big')]       # (DD family, DM family): recut, left-aligned
@@ -447,6 +447,102 @@ def part_logos(dd, dm, log):
         canvas = _opaque_rgb(canvas)
         ids = _cut_to_tiles(canvas, dp, dd)
         log('  logo %s <- DM %s: %dx%d into %dx%d, textures %s' % (ddf, dmf, src.width, src.height, W, H, ids))
+        changed += ids
+    return changed
+
+
+RISING = ['GameLogo', 'GameLogo_big', 'MainLogo']          # owner 11-10: the big DEAD MEN title also says RISING (mod name), every logo
+
+
+def _title_line(a):
+    """-> (mask, y0, y1, x0, x1, tm) of the bottom title line 'DEAD MEN' of a composed logo (RGBA array): the red pixels on the
+    coloured logos, else the last row block after an empty band (white title logo). tm = a trailing column run under 45% of the
+    line height (the TM mark), else None."""
+    np = _np()
+    al = a[..., 3] > 40
+    red = al & (a[..., 0].astype(int) > 1.6 * a[..., 1].astype(int) + 20)
+    if red.sum() > 500:
+        mask = red
+    else:
+        rows = al.sum(1) > 0
+        y = len(rows) - 1
+        while y > 0 and not rows[y]:
+            y -= 1
+        yb = y
+        while y > 0 and rows[y]:
+            y -= 1
+        mask = np.zeros_like(al)
+        mask[y + 1:yb + 1] = al[y + 1:yb + 1]
+    ys = np.where(mask.any(1))[0]
+    y0, y1 = int(ys.min()), int(ys.max())
+    cols = np.where(mask[y0:y1 + 1].any(0))[0]
+    runs, s = [], cols[0]
+    for i in range(1, len(cols)):
+        if cols[i] != cols[i - 1] + 1:
+            runs.append((int(s), int(cols[i - 1])))
+            s = cols[i]
+    runs.append((int(s), int(cols[-1])))
+    tm = None
+    lh = np.where(mask[y0:y1 + 1, runs[-1][0]:runs[-1][1] + 1].any(1))[0]
+    if len(runs) > 1 and lh.max() - lh.min() + 1 < 0.45 * (y1 - y0 + 1):
+        tm, runs = runs[-1], runs[:-1]
+    return mask, y0, y1, runs[0][0], runs[-1][1], tm
+
+
+def add_rising(img, centre=False, word='RISING'):
+    """DEAD MEN -> DEAD MEN RISING on a composed logo (PIL RGBA, same size out): the DEAD MEN line is cut out and put back
+    left-aligned with the logo (centred on the white title logo), RISING follows it in Impact at the line's cap height, condensed
+    to DEAD MEN's letter width, in DEAD MEN's median colour with its grain at half contrast + ~7% speckle holes (GUESS taste:
+    the look was checked on PNGs, not in the game). The TM mark is dropped."""
+    np = _np()
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    a = np.asarray(img.convert('RGBA')).copy()
+    mask, y0, y1, x0, x1, tm = _title_line(a)
+    if tm:
+        sub = a[y0:y1 + 1, tm[0]:tm[1] + 1]
+        sub[mask[y0:y1 + 1, tm[0]:tm[1] + 1]] = 0
+    lm = mask[y0:y1 + 1, x0:x1 + 1].copy()
+    line = a[y0:y1 + 1, x0:x1 + 1].copy()
+    line[~lm] = 0
+    a[y0:y1 + 1, x0:x1 + 1][lm] = 0
+    h, wl = y1 - y0 + 1, x1 - x0 + 1
+    f = ImageFont.truetype(os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Fonts', 'impact.ttf'), int(h * 1.38))
+    tmp = Image.new('L', (h * 10, h * 3), 0)
+    ImageDraw.Draw(tmp).text((h, 0), word, font=f, fill=255)
+    cell = wl / 8.0                                               # 'DEAD MEN' = 7 letters + 1 space
+    gw = int(round(cell * len(word) * 0.98))
+    ga = np.asarray(tmp.crop(tmp.getbbox()).resize((gw, h), Image.LANCZOS)).astype(np.float32) / 255.0
+    gap = int(round(cell * 0.55))
+    total = wl + gap + gw
+    W = a.shape[1]
+    ab = np.where((a[..., 3] > 40).any(0))[0]
+    left = (W - total) // 2 if centre else (int(ab.min()) if len(ab) else 0)
+    left = max(0, min(left, W - total - 2))
+    med = np.median(line[lm][:, :3], 0)
+    lum = np.where(lm, line[..., :3].astype(np.float32).mean(2), float(med.mean()))
+    tile = np.tile(lum, (1, gw // wl + 2))[:, :gw]
+    k = (1.0 + 0.45 * (tile / max(1.0, float(med.mean())) - 1.0))[..., None]
+    rng = np.random.default_rng(1110)
+    nz = np.asarray(Image.fromarray((rng.random((h, gw)) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2))).astype(np.float32)
+    ga = ga * np.where(nz < np.percentile(nz, 7), 0.15, 1.0)
+    rg = np.zeros((h, gw, 4), np.uint8)
+    rg[..., :3] = np.clip(med[None, None, :] * k, 0, 255).astype(np.uint8)
+    rg[..., 3] = (ga * 255).astype(np.uint8)
+    out = Image.fromarray(a, 'RGBA')
+    out.alpha_composite(Image.fromarray(line, 'RGBA'), (left, y0))
+    out.alpha_composite(Image.fromarray(rg, 'RGBA'), (left + wl + gap, y0))
+    return out, dict(line=(x0, y0, x1, y1), tm=tm, left=left, rising_w=gw)
+
+
+def part_rising(dd, dm, log):
+    """RISING after DEAD MEN on the logos AS THEY ARE in the source scene (run after 'logos' or on the live overlay)."""
+    changed = []
+    for fam in RISING:
+        name = dd.family()[fam][0]
+        dp = dd.pics[name][0]
+        img, info = add_rising(dd.compose(name), centre=(fam == 'MainLogo'))
+        ids = _cut_to_tiles(_opaque_rgb(img), dp, dd)
+        log('  rising %s: DEAD MEN line %s, TM %s, left %d, RISING %d px wide, textures %s' % (fam, info['line'], info['tm'], info['left'], info['rising_w'], ids))
         changed += ids
     return changed
 
@@ -548,6 +644,8 @@ def cmd_stageb(a):
             changed[p] = part_logos(dd, dm, log)
         elif p == 'lobby':
             changed[p] = part_lobby(dd, dm, log)
+        elif p == 'rising':
+            changed[p] = part_rising(dd, dm, log)
         else:
             raise SystemExit('unknown part ' + p)
     dst = os.path.join(a.out, 'stage', 'Scenes')

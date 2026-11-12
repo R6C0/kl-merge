@@ -1,0 +1,12 @@
+; ini_campaign_1110.txt - lines the 1110 campaign kit (C:\kl_build_1024\campaign_1110) puts into KLHook.ini. Not part of KLHook.ini in the repo.
+; VOICE (cutscene + in-level Dead Men lines), see klcampaign.c / klcmpcore_logic.h:
+;   [Campaign] Adpcm=1            ; IMA decode + virtual PCM serving for the converted WHD/SND streams (recommended on; Adpcm=0 = the lines are silent) PROVEN cause
+;   [Campaign] StreamRedirect=1   ; a missing '..\Kane and Lynch Dead Men\PC_*.str' open goes to the real Dead Men folder (recommended on)
+;   [Campaign] DeadMenDir=        ; empty = auto-find (<DD>\..\Kane and Lynch Dead Men, then libraryfolders.vdf); else the full folder
+;   [CampGuard] SndDiv=1          ; luvsic's divide guard on the sound path (recommended on; cheap extra, not a proven cause)
+; CAMERA:
+[CampRappel]
+Land=auto       ; rappel landing camera (rappel.inc land=): off | turn | cam | turncam | auto (wall within 150 cm ahead -> turncam, else cam) (recommended on) GUESS: not run in kl2
+CamFix=0        ; 1 = drop the camera collision flag during a rappel so facade girders do not pull the camera in (nocoll) (recommended off)
+[Camera]
+CampaignOff=1   ; the FA camera rework (Blend, CineAim, ShakeScale, FovStep, FlipTime, Unstick..) and [CamSmooth] idle on a Dead Men campaign level (recommended on)

@@ -6,10 +6,15 @@
    - probe: DM's ledge rays through DD's ZCollisionWintel raycast (0x7daa80), DM order and outcomes.
    - live: a real ZFFActionVaultOver (type 0x2B) with its vptr pointed at a loader-owned copy of the vtable
      (slots 2 Start, 4 Update, 5 End, 10 AnimEnd replaced), playing /Movement/Climb/Up/<class>.
-   Config: <DD>\ANP_climb.txt, first token off | dry | live (absent = dry), then key=value options:
-     warp=end|dm  vehicle=action|snap  needblock=0|1  fwd=1|-1  cam=0|1  snap=0|1  trace=0|1
-     (trace=1 also logs 'climb: pos: x y z yaw' once a second, in any mode.)
-   Test teleport: <DD>\ANP_tp.txt "x y z yawDeg [full]" moves the player once (see climb_tp_body), in any mode.
+   Config: <DD>\ANP_climb.txt, a bare word off | dry | live (absent = live, the release default since 14 Oct; a file
+   without a mode word is live too; an unknown bare word = dry), then key=value options (# starts a comment):
+     warp=end|dm  vehicle=action|snap  needblock=0|1  fwd=1|-1  cam=0|1  snap=0|1  trace=0|1  minin=30  tpany=0|1
+     (trace=1 also logs 'climb: pos: x y z yaw' once a second, in any mode and any scene: log lines only.)
+   ANP levels only: climb_precond refuses outside campaign.inc's scene ids "M<digit>..." (stock Dog Days L00..L11,
+   F01..F09 / Arcade, the front end "FE"): E stays Dog Days' own there. One 'climb: scene '<id>': ...' line per scene
+   (first gameplay tick with a player) says whether the gate is open.
+   Test teleport: <DD>\ANP_tp.txt "x y z yawDeg [full]" moves the player once (see climb_tp_body), in any mode, in ANP
+   levels only (tpany=1: any scene; outside, the file is consumed and refused with a log line).
    Every engine call runs under climb_guarded(): a fault on the main thread is caught by the VEH,
    execution resumes after the guarded call with -1, and climbing is disabled for the session.
    Log lines start with "climb:". */
@@ -91,9 +96,10 @@ typedef unsigned char (__attribute__((thiscall)) *cl_Char_t)(void *o);
 
 /* ---------- config: ANP_climb.txt ---------- */
 enum { CL_OFF, CL_DRY, CL_LIVE };
-typedef struct { int mode, warpDm, vehSnap, needblock, fwd, cam, snap, trace, minIn; } ClCfg;
+typedef struct { int mode, warpDm, vehSnap, needblock, fwd, cam, snap, trace, minIn, tpAny; } ClCfg;
 #define CL_MININ_DEF 30          /* cm: Final must stand at least this far past the wall face (0 = off, DM-exact) */
-static ClCfg g_ccfg = {CL_DRY, 0, 0, 0, 1, 1, 1, 0, CL_MININ_DEF};
+#define CL_CFG_DEFAULT {CL_LIVE, 0, 0, 0, 1, 1, 1, 0, CL_MININ_DEF, 0}   /* release default (14 Oct): live, ANP levels only */
+static ClCfg g_ccfg = CL_CFG_DEFAULT;
 static int g_ccfgPresent = -1; static FILETIME g_ccfgTime; static DWORD g_ccfgPoll;
 static void climb_cfg_poll(void) {
     DWORD now = GetTickCount();
@@ -105,19 +111,33 @@ static void climb_cfg_poll(void) {
     if (present == g_ccfgPresent && (!present || CompareFileTime(&fa.ftLastWriteTime, &g_ccfgTime) == 0)) return;
     g_ccfgPresent = present;
     if (present) g_ccfgTime = fa.ftLastWriteTime;
-    ClCfg c = {CL_DRY, 0, 0, 0, 1, 1, 1, 0, CL_MININ_DEF};
-    char buf[512] = ""; const char *note = present ? "" : " (no ANP_climb.txt)";
+    ClCfg c = CL_CFG_DEFAULT;                         /* no file / no mode word: live (ANP levels only, see climb_precond) */
+    char buf[512] = ""; const char *note = present ? "" : " (no ANP_climb.txt: live)";
     if (present) {
+        static int unreadLogged;
         FILE *f = fopen(fn, "r");
-        if (f) { size_t n = fread(buf, 1, sizeof buf - 1, f); buf[n] = 0; fclose(f); }
-        else note = " (ANP_climb.txt unreadable)";
-        int first = 1;
-        for (char *t = strtok(buf, " \t\r\n,;"); t; t = strtok(NULL, " \t\r\n,;"), first = 0) {
-            if (first && !_stricmp(t, "off")) { c.mode = CL_OFF; continue; }
-            if (first && !_stricmp(t, "dry")) { c.mode = CL_DRY; continue; }
-            if (first && !_stricmp(t, "live")) { c.mode = CL_LIVE; continue; }
-            char *eq = strchr(t, '='); if (!eq) { anp_log("climb: config token '%s' ignored", t); continue; }
-            *eq = 0; const char *v = eq + 1; int iv = atoi(v);
+        if (!f) {                                     /* held by an editor / the helper: keep the previous config, retry next poll */
+            memset(&g_ccfgTime, 0, sizeof g_ccfgTime);
+            if (!unreadLogged) { unreadLogged = 1; anp_log("climb: ANP_climb.txt unreadable - previous config kept, retry"); }
+            return;
+        }
+        unreadLogged = 0;
+        size_t n = fread(buf, 1, sizeof buf - 1, f); buf[n] = 0; fclose(f);
+        for (char *p = buf; (p = strchr(p, '#')); ) while (*p && *p != '\n') *p++ = ' ';   /* comments */
+        int known = 0;                                /* an explicit known mode word was seen */
+        for (char *t = strtok(buf, " \t\r\n,;"); t; t = strtok(NULL, " \t\r\n,;")) {
+            char *eq = strchr(t, '=');
+            if (eq) *eq = 0;
+            if (!eq || !_stricmp(t, "mode")) {        /* a bare word (or mode=...) is the mode; an unknown word = dry, never live,
+                                                         and never undoes an explicit 'off' */
+                const char *m = eq ? eq + 1 : t;
+                if (!_stricmp(m, "off")) { c.mode = CL_OFF; known = 1; }
+                else if (!_stricmp(m, "dry")) { c.mode = CL_DRY; known = 1; }
+                else if (!_stricmp(m, "live")) { c.mode = CL_LIVE; known = 1; }
+                else { c.mode = (known && c.mode == CL_OFF) ? CL_OFF : CL_DRY; anp_log("climb: config mode '%s' unknown (unknown mode word: %s)", m, c.mode == CL_OFF ? "off kept" : "dry"); }
+                continue;
+            }
+            const char *v = eq + 1; int iv = atoi(v);
             if (!_stricmp(t, "warp")) c.warpDm = !_stricmp(v, "dm");
             else if (!_stricmp(t, "vehicle")) c.vehSnap = !_stricmp(v, "snap");
             else if (!_stricmp(t, "needblock")) c.needblock = iv != 0;
@@ -126,13 +146,20 @@ static void climb_cfg_poll(void) {
             else if (!_stricmp(t, "snap")) c.snap = iv != 0;
             else if (!_stricmp(t, "trace")) c.trace = iv != 0;
             else if (!_stricmp(t, "minin")) c.minIn = iv < 0 ? 0 : iv > 100 ? 100 : iv;
+            else if (!_stricmp(t, "tpany")) c.tpAny = iv != 0;
             else anp_log("climb: config key '%s' unknown", t);
         }
     }
     g_ccfg = c;
     static const char *mn[] = {"off", "dry", "live"};
-    anp_log("climb: config mode=%s warp=%s vehicle=%s needblock=%d fwd=%d cam=%d snap=%d trace=%d minin=%d%s", mn[c.mode],
-            c.warpDm ? "dm" : "end", c.vehSnap ? "snap" : "action", c.needblock, c.fwd, c.cam, c.snap, c.trace, c.minIn, note);
+    anp_log("climb: config mode=%s warp=%s vehicle=%s needblock=%d fwd=%d cam=%d snap=%d trace=%d minin=%d tpany=%d (ANP levels only)%s", mn[c.mode],
+            c.warpDm ? "dm" : "end", c.vehSnap ? "snap" : "action", c.needblock, c.fwd, c.cam, c.snap, c.trace, c.minIn, c.tpAny, note);
+}
+/* campaign.inc's scene id, read as give.inc / grenade.inc read it (g_cscene under g_cmpCs): 1 = an ANP level "M<digit>..." */
+static int cl_anp_level(char sc[8]) {
+    EnterCriticalSection(&g_cmpCs); memcpy(sc, g_cscene, 8); LeaveCriticalSection(&g_cmpCs);
+    sc[7] = 0;
+    return sc[0] == 'M' && sc[1] >= '0' && sc[1] <= '9';
 }
 
 /* ---------- small vector helpers ---------- */
@@ -558,6 +585,9 @@ static int climb_tp_body(void *arg) {
         anp_log("climb: tp: cannot rename or delete ANP_tp.txt (error %lu) - tp off for this session", GetLastError());
         return 0;
     }
+    {   char sc[8];                                   /* ANP levels only (consumed, so it never fires later in an M level) */
+        if (!cl_anp_level(sc) && !g_ccfg.tpAny) { anp_log("climb: tp: refused in scene '%s' (not an ANP level; tpany=1 in ANP_climb.txt allows it)", sc); return 0; }
+    }
     float x, y, z, yaw; char mode[16] = "";
     if (sscanf(buf, "%f %f %f %f %15s", &x, &y, &z, &yaw, mode) < 4) {
         anp_log("climb: tp: bad ANP_tp.txt '%.60s' (want 'x y z yawDeg [full]')", buf);
@@ -584,10 +614,16 @@ static int climb_tp_body(void *arg) {
 /* ---------- per-frame tick ---------- */
 static int g_clLastT = -0x7fffffff, g_clPrevE, g_clArmed;
 static DWORD g_clLastPress, g_clLastTrace, g_clLastPos;
+static char g_clGateScene[8] = "\x01";               /* scene of the last 'climb: scene' gate line (one per scene) */
+static const char CL_NOT_ANP[] = "not an ANP level";
 static const char *climb_precond(BYTE *P, int T) {
     if (g_ccfg.mode == CL_OFF) return "mode off";
+    {   char sc[8];                                   /* ANP levels only (the gate give.inc / grenade.inc use) */
+        if (!cl_anp_level(sc)) return CL_NOT_ANP;
+    }
     if (g_climbDead) return "disabled after fault";
     if (g_cl.active) return "climbing";
+    if (revive_prompt_up()) return "revive prompt";   /* revive.inc: E heals the downed merc, no climb on the same press */
     if (*(BYTE**)(P + 0x6b0) != P + 0xdb0) return "movement table (MiniScene?)";
     BYTE *mov = *(BYTE**)(P + 0x6b4);
     if (!readable(mov + 0x44, 4)) return "no movement";
@@ -598,6 +634,14 @@ static const char *climb_precond(BYTE *P, int T) {
     if (P[0xd29]) return "use action running";
     if (*(DWORD*)(P + 0xed0) & 0x80) return "input blocked";
     if (*(DWORD*)(P + 0xd50) || *(DWORD*)(P + 0xd44)) return "seat/carrier";
+    {   /* rappel.inc: ZFFPlayerMovementRappel at P+0xdf0 (+0x38 = the player, +0x1f68 = the point entry while the player
+           stands in an enabled rappel box): E there belongs to the rappel, not to a climb (same reads as rp_mov) */
+        BYTE *rm = readable(P + 0xdf0, 4) ? *(BYTE**)(P + 0xdf0) : 0;
+        /* only while kl2's rappel prompt is up (+0x1f6c set at 0x673b51, cleared on leaving and by Deactivate): +0x1f68
+           alone goes stale after a rappel (Deactivate 0x6165f0 never clears it) and would block climbing for the level */
+        if (readable(rm, 0x1f70) && *(BYTE**)(rm + 0x38) == P && rm[0x1f6c] && !rm[0x1f6d] && *(BYTE**)(rm + 0x1f68))
+            return "inside a rappel point";
+    }
     if (!(P[0x2720] & 2)) return "not local human";
     if (*(DWORD*)(P + 0x2d60) & 0x10) return "stock vault available";
     if (!*(void**)(P + 0x2810)) return "P+0x2810 null";
@@ -620,10 +664,23 @@ static int climb_tick(void *unused) {
     int T = *(int*)(sys + 0x48);
     if (T == g_clLastT) return 0;                     /* paused */
     g_clLastT = T;
+    {   char sc[8]; int anp = cl_anp_level(sc);       /* one line per scene: is the climb gate open here */
+        if (strcmp(sc, g_clGateScene)) {
+            static const char *mn[] = {"off", "dry", "live"};
+            memcpy(g_clGateScene, sc, 8);
+            anp_log("climb: scene '%s': %s (mode %s)", sc, anp ? "ANP level, climb gate open" : "not an ANP level - climb inactive, E left to Dog Days", mn[g_ccfg.mode]);
+        }
+    }
     if (g_ccfg.trace && GetTickCount() - g_clLastPos >= 1000) {     /* 1 Hz position line (any mode) */
         g_clLastPos = GetTickCount();
         float M[9], f[3] = {0, 0, 0};
-        if (cl_pose(P, M, f)) anp_log("climb: pos: %.1f %.1f %.1f %.1f mov=%d T=%d%s", f[0], f[1], f[2], cl_yaw(M), cl_movid(P), T, g_cl.active ? " climbing" : "");
+        /* cover state (ANP_COVERS tests): P+0xb50 = cover index the player is in, P+0x2954 = cover side, the cover
+           list [[0xdd265c]+0x15a0] holds 0xa8-byte records at +0x70, count at +0x74 (P is readable for 0x2e00) */
+        BYTE *cvl = readable(gd + 0x15a0, 4) ? *(BYTE**)(gd + 0x15a0) : 0;
+        int ncov = readable(cvl + 0x70, 8) ? *(int*)(cvl + 0x74) : -1;
+        if (cl_pose(P, M, f)) anp_log("climb: pos: %.1f %.1f %.1f %.1f mov=%d T=%d%s cover=%d side=%d covers=%d", f[0], f[1], f[2],
+                                      cl_yaw(M), cl_movid(P), T, g_cl.active ? " climbing" : "", *(int*)(P + 0xb50),
+                                      (int)*(signed char*)(P + 0x2954), ncov);
     }
     if (!g_tpDead && !g_cl.active && climb_guarded("climb tp", climb_tp_body, P) < 0) {
         g_tpDead = 1;                                 /* the tick itself goes on; only tp is switched off */
@@ -687,8 +744,9 @@ static int climb_tick(void *unused) {
         if (now - g_clLastPress < 300) return 0;
         g_clLastPress = now;
         const char *why = climb_precond(P, T);
+        if (why == CL_NOT_ANP) return 0;              /* stock Dog Days / Arcade: E is Dog Days' use key (logged once per scene above) */
         if (why) {
-            if (strcmp(why, "stock vault available") && strcmp(why, "action running") && strcmp(why, "use action running"))
+            if (strcmp(why, "stock vault available") && strcmp(why, "action running") && strcmp(why, "use action running") && strcmp(why, "inside a rappel point"))
                 anp_log("climb: press ignored (%s)", why);
             else anp_log("climb: press ignored (%s) - left to Dog Days", why);
             return 0;
@@ -728,7 +786,7 @@ static void climb_frame(void) {
     }
 }
 __attribute__((used, force_align_arg_pointer)) void __cdecl anp_rcb_pre(DWORD ra) {
-    if (ra == CL_RCB_RA) { climb_frame(); squad_frame(); }   /* squad.inc: crew orders */
+    if (ra == CL_RCB_RA) { climb_frame(); squad_frame(); give_frame(); grenade_frame(); rappel_frame(); failwatch_frame(); equipassist_frame(); revive_frame(); }   /* squad.inc: crew orders; give.inc: weapon giving; grenade.inc: G throw; rappel.inc */
 }
 __attribute__((naked)) void anp_rcb_stub(void) {
     __asm__ volatile(

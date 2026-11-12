@@ -502,7 +502,85 @@ static int kls_bot_apply(char *path, const char *slot, const char *api)
 static int kls_menulook_on = 1;
 #include "klmenulook_logic.h"
 
-static int kls_menulook(char *path, const char *api)
+/* MENU SOUNDS (2026-11-10, track T9 stage 4b, klmenusounds_logic.h): [MenuSounds] Enable=1 (DLL default 1, "(recommended on)") plus one key per
+ * menu event (Navigate, Confirm, Back, Toggle, Slider, Menu, Window; the names come from the table, so a new event needs no code) =
+ * dd | dm | off | <clip name>. The themed Scenes\kaneandlynch_deadmen.WHD that tools/kl_menu_sounds_1110.py stages is the STOCK .WHD; the
+ * table kaneandlynch_deadmen.klms beside it lists, per event, the record and the five fields of each choice (the clips sit appended to the
+ * themed .WAV). Here the .WHD is read, the chosen fields are written into the copy in memory, the copy goes to %TEMP%\klms_<hash>.WHD and
+ * the open is pointed there. A table / .WHD that does not match, or any error, leaves the themed .WHD as it is (= the Dog Days sounds).
+ * Once per process (the bank is opened once; a changed ini applies at the next game start). GUESS: the engine reads the .WHD from the path it
+ * is handed and does not need it to sit next to the .WAV (the .WAV is opened by its own, separately redirected, name). */
+static int kls_menusounds_on = 1;
+#include "klmenusounds_logic.h"
+
+static int kls_ms_readfile(const char *p, unsigned char *buf, DWORD cap, DWORD *got)
+{
+    HANDLE h = CreateFileA(p, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    DWORD sz; int ok = 0;
+    *got = 0;
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    sz = GetFileSize(h, NULL);
+    if (sz != INVALID_FILE_SIZE && sz <= cap && ReadFile(h, buf, sz, got, NULL) && *got == sz) ok = 1;
+    CloseHandle(h);
+    return ok;
+}
+
+static void kls_menusounds(char *path)
+{   /* path = the themed .WHD about to be opened (in/out, MAX_PATH) */
+    static char done_in[MAX_PATH], done_out[MAX_PATH];
+    static klms_tab tab; static char side[65536];
+    char sc[MAX_PATH], tmp[MAX_PATH], tmp2[MAX_PATH], err[160], pick[KLMS_MAXEV][64]; const char *pp[KLMS_MAXEV]; int ch[KLMS_MAXEV];
+    size_t l = strlen(path), i; DWORD got, wsz; unsigned char *whd = 0; int ev, n;
+    if (!kls_menusounds_on || l < 5 || _stricmp(path + l - 4, ".whd") || !strstr(path, KLML_SUFFIX) && !strstr(path, "_DEADMEN")) return;
+    EnterCriticalSection(&kls_cs);
+    if (!_stricmp(path, done_in)) { strcpy(path, done_out); LeaveCriticalSection(&kls_cs); return; }
+    strcpy(done_in, path); strcpy(done_out, path);                        /* any failure below: the themed .WHD as it is */
+    memcpy(sc, path, l - 4); strcpy(sc + l - 4, ".klms");
+    if (!kls_isfile(sc)) { klog("menusounds: no table %s beside the themed .WHD - its sounds stay as the stage baked them (tools/kl_menu_sounds_1110.py)", sc); goto out; }
+    if (!kls_ms_readfile(sc, (unsigned char *)side, sizeof side - 1, &got)) { klog("menusounds: cannot read %s - themed .WHD as it is", sc); goto out; }
+    if (!klms_parse(side, got, &tab, err, sizeof err)) { klog("menusounds: %s is not a valid table (%s) - themed .WHD as it is", sc, err); goto out; }
+    wsz = 0;
+    { HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+      if (h != INVALID_HANDLE_VALUE) { wsz = GetFileSize(h, NULL); CloseHandle(h); } }
+    if (!wsz || wsz == INVALID_FILE_SIZE || wsz != tab.whdlen) { klog("menusounds: %s is %lu bytes, the table says %lu - themed .WHD as it is", path, (unsigned long)wsz, tab.whdlen); goto out; }
+    whd = (unsigned char *)HeapAlloc(GetProcessHeap(), 0, wsz);
+    if (!whd || !kls_ms_readfile(path, whd, wsz, &got) || got != wsz) { klog("menusounds: cannot read %s - themed .WHD as it is", path); goto out; }
+    for (ev = 0; ev < tab.nev; ev++) {
+        GetPrivateProfileStringA("MenuSounds", tab.e[ev].name, tab.e[ev].dflt[0] ? tab.e[ev].dflt : "dm", pick[ev], sizeof pick[ev], klh_ini);
+        pp[ev] = pick[ev];
+    }
+    n = klms_apply(whd, wsz, &tab, pp, ch, err, sizeof err);
+    if (n < 0) { klog("menusounds: %s - themed .WHD as it is", err); goto out; }
+    for (ev = 0; ev < tab.nev; ev++) {
+        int why; klms_resolve(&tab, ev, pp[ev], &why);
+        klog("menusounds: %s=%s -> %s%s", tab.e[ev].name, pick[ev][0] ? pick[ev] : "dd",
+             ch[ev] >= 0 ? tab.c[ch[ev]].name : "Dog Days (stock record)", why == KLMS_UNKNOWN ? "  (WARNING: no such choice for this event, stock kept)" : "");
+    }
+    if (n == 0) goto out;                                                  /* every event stock: the themed .WHD is the stock bytes already */
+    GetTempPathA(sizeof tmp, tmp);
+    l = strlen(tmp);
+    if (l + 24 >= sizeof tmp) goto out;
+    { unsigned long hh = klms_choice_hash(&tab, ch); snprintf(tmp + l, sizeof tmp - l, "klms_%08lx.WHD", hh); }
+    { HANDLE h = CreateFileA(tmp, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+      DWORD ex = INVALID_FILE_SIZE; if (h != INVALID_HANDLE_VALUE) { ex = GetFileSize(h, NULL); CloseHandle(h); }
+      if (ex != wsz) {                                                     /* not there (or a torn one): write beside, then move over */
+          HANDLE w; DWORD wr = 0;
+          snprintf(tmp2, sizeof tmp2, "%s.%lu.tmp", tmp, (unsigned long)GetCurrentProcessId());
+          w = CreateFileA(tmp2, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+          if (w == INVALID_HANDLE_VALUE) { klog("menusounds: cannot write %s - themed .WHD as it is", tmp2); goto out; }
+          if (!WriteFile(w, whd, wsz, &wr, NULL) || wr != wsz) { CloseHandle(w); DeleteFileA(tmp2); klog("menusounds: short write to %s - themed .WHD as it is", tmp2); goto out; }
+          CloseHandle(w);
+          if (!MoveFileExA(tmp2, tmp, MOVEFILE_REPLACE_EXISTING)) { DeleteFileA(tmp2); klog("menusounds: cannot move into %s - themed .WHD as it is", tmp); goto out; }
+      } }
+    klog("menusounds: %d record(s) re-pointed; %s -> %s", n, path, tmp);
+    strcpy(done_out, tmp); strcpy(path, tmp);
+out:
+    if (whd) HeapFree(GetProcessHeap(), 0, whd);
+    LeaveCriticalSection(&kls_cs);
+    (void)i;
+}
+
+static int kls_menulook0(char *path, const char *api)
 {   /* path = the file the open is going to get (in/out, MAX_PATH); -> 1 when it was replaced by its _deadmen copy */
     char var[MAX_PATH]; int why, i, dup = 0; DWORD h = 2166136261u; const char *p;
     static DWORD seen[16]; static int nseen;             /* once per (candidate, outcome): the game probes and re-opens these files */
@@ -521,7 +599,42 @@ static int kls_menulook(char *path, const char *api)
     }
     if (!used) return 0;
     strcpy(path, var);
+    kls_menusounds(path);                                /* the themed bank: re-point the per-event sound records (own log lines) */
     return 1;
+}
+
+/* [CampaignUI] Menu=1 (with [Campaign] Enable=1): luvsic's Dead Men campaign pages as one extra CampaignMenu row. The game opens the patch archive's
+   <stem>_campui.zip copy (tools/kl_campui_menu.py) instead of the archive itself; chained AFTER [MenuLook] (Patch01_deadmen.zip -> Patch01_deadmen_campui.zip).
+   Off (the default) or no copy beside the file = the path as it was. klcampui_logic.h, klcampui_test.c. GUESS: re-opened at every menu load like the MenuLook files. */
+static int kls_campui_on = 0;
+#include "klcampui_logic.h"
+
+static int kls_campui(char *path, const char *api)
+{
+    char var[MAX_PATH]; int why, i, dup = 0; DWORD h = 2166136261u; const char *p;
+    static DWORD seen[8]; static int nseen;
+    int used = klcu_variant(path, kls_campui_on, kls_isfile, var, sizeof var, &why);
+    if (why == KLCU_OFF || why == KLCU_NOT_MENU || why == KLCU_ALREADY) return 0;
+    for (p = (why == KLCU_TOO_LONG ? path : var); *p; p++) h = (h ^ (BYTE)(*p >= 'A' && *p <= 'Z' ? *p + 32 : *p)) * 16777619u;
+    h = (h ^ (BYTE)why) * 16777619u;
+    EnterCriticalSection(&kls_cs);
+    for (i = 0; i < nseen; i++) if (seen[i] == h) { dup = 1; break; }
+    if (!dup && nseen < 8) seen[nseen++] = h; else if (!dup) dup = 1;
+    LeaveCriticalSection(&kls_cs);
+    if (!dup) {
+        if (used) klog("campui: %s %s -> %s", api, path, var);
+        else klog("campui: %s ON but %s: %s - stock menu (tools/kl_campui_menu.py writes the copy)", api, path, klcu_why_text(why));
+    }
+    if (!used) return 0;
+    strcpy(path, var);
+    return 1;
+}
+
+static int kls_menulook(char *path, const char *api)
+{   /* [MenuLook] first, then [CampaignUI] on whatever that left; -> 1 when either replaced the path */
+    int a = kls_menulook0(path, api);
+    int b = kls_campui(path, api);
+    return a || b;
 }
 
 static int kmp_pick(int s);                          /* klmappool.c (included after this file) */
@@ -595,7 +708,7 @@ static int kls_map(const char *in, char *out, const char *api)
         strcpy(out, kls_overlay); strcat(out, full + kls_game_len);
         if (kls_isfile(out)) { if (kls_log) kls_note(api, "overlay", full, out); kls_menulook(out, api); SetLastError(err); return 1; }   /* [MenuLook]: the overlay copy's _deadmen sibling */
     }
-    if (!wild && kls_menulook_on) {                       /* [MenuLook] on the stock path (no overlay copy): Scenes\kaneandlynch_deadmen.WHD beside the stock pair, say */
+    if (!wild && (kls_menulook_on || kls_campui_on)) {                       /* [MenuLook] on the stock path (no overlay copy): Scenes\kaneandlynch_deadmen.WHD beside the stock pair, say */
         strcpy(out, full);
         if (kls_menulook(out, api)) { SetLastError(err); return 1; }
     }
@@ -986,7 +1099,10 @@ static void kls_init(HINSTANCE inst)
     if (kls_bg_on && !GetPrivateProfileIntA("Net", "OnlineSafe", 1, klh_ini)) klog("botgate: NOTE [Net] OnlineSafe=0 makes kl_online() false: the gate never acts");
     klog("botgate: %s - online with the host's [BotFill] OnlineHost=1 the level archive is swapped for Fxx_Main.bots.zip when one sits beside it; OnlineHost=0 = the plain archive; offline never", kls_bg_on ? "on" : "off ([BotGate] Enable=0)");
     kls_menulook_on = GetPrivateProfileIntA("MenuLook", "DeadMen", 1, klh_ini) != 0;       /* (recommended on) */
+    kls_menusounds_on = GetPrivateProfileIntA("MenuSounds", "Enable", 1, klh_ini) != 0;    /* (recommended on) applies at the next game start */
     klog("menulook: %s - the menu files Patch01*.zip, Scenes\\kaneandlynch.zip/.WHD/.WAV open their <stem>_deadmen.<ext> copy when one sits beside them (Dead Men menu look); a missing copy = stock look, logged once", kls_menulook_on ? "on" : "off ([MenuLook] DeadMen=0)");
+    kls_campui_on = klcu_gate(GetPrivateProfileIntA("CampaignUI", "Menu", 0, klh_ini) != 0, GetPrivateProfileIntA("Campaign", "Enable", 0, klh_ini) != 0);       /* (recommended on, with the campaign) */
+    if (GetPrivateProfileIntA("CampaignUI", "Menu", 0, klh_ini)) klog("campui: %s - the patch archives Patch01*.zip open their <stem>_campui.zip copy (Dead Men Campaign row in Play) when one sits beside them", kls_campui_on ? "on" : "off ([Campaign] Enable=0)");
     kls_keep_online = GetPrivateProfileIntA("Expansion", "KeepPageOnline", 0, klh_ini) != 0;
     kls_keep_clear = GetPrivateProfileIntA("Expansion", "KeepClear", 1, klh_ini) != 0;
     if (kls_online_set || kls_keep_online)

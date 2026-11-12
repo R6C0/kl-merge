@@ -18,13 +18,16 @@ rem  The package holds ONLY the mod's own code and config plus binary patches; t
 rem  rebuilt on your PC from YOUR OWN Dog Days / Dead Men / Payday 2 installs (see README_TESTERS.md).
 rem
 rem  RELEASE_URL points at the newest release of the public repo github.com/R6C0/dead-men-rising
-rem  (releases only, no game data). Each release carries the package as an asset named exactly
-rem  KLMerge_package.zip, so this link never has to change.
+rem  (releases only, no game data). Each release carries the package as TWO assets named exactly
+rem  KLMerge_package.zip (manifest, launcher, first half of the patches) and KLMerge_package_2.zip (the other
+rem  patches): GitHub refuses one release file of 2 GiB or more. So this link never has to change.
 rem ===========================================================================================
 
 rem ---- the ONE line to edit -----------------------------------------------------------------
 set "RELEASE_URL=https://github.com/R6C0/dead-men-rising/releases/latest/download/KLMerge_package.zip"
 rem ---------------------------------------------------------------------------------------------
+rem part 2 sits beside part 1 in the same release: the same link with .zip -> _2.zip
+set "RELEASE_URL2=%RELEASE_URL:.zip=_2.zip%"
 
 rem GUESS: Python 3.12.7 embeddable (64-bit). Any 3.9+ embeddable works; zstandard ships wheels for it.
 set "PYTHON_EMBED_URL=https://www.python.org/ftp/python/3.12.7/python-3.12.7-embed-amd64.zip"
@@ -37,6 +40,8 @@ set "DL=%HERE%download"
 set "PKG=%HERE%package"
 set "PYDIR=%HERE%python"
 set "ZIP=%DL%\KLMerge_package.zip"
+set "ZIP2=%DL%\KLMerge_package_2.zip"
+set "WINTAR=%SystemRoot%\System32\tar.exe"
 set "LOG=%HERE%KLMerge_Setup.log"
 set "PYEXE="
 set "PYARG="
@@ -62,112 +67,19 @@ if not errorlevel 1 (
     goto :fail
 )
 
-rem ---- 1. download ---------------------------------------------------------------------------
-echo  Downloading the package ...
-echo      "%RELEASE_URL%"
-rem the download lands in %ZIP%.part and replaces %ZIP% only when it finished: a broken connection never
-rem leaves a half zip that a later run's -z would treat as current
-set "PART=%ZIP%.part"
-rem no del anywhere in this file (Defender flags .bat files that delete): a stale .part is emptied instead
-type nul >"%PART%"
-where curl.exe >nul 2>nul
-if errorlevel 1 goto :dl_ps
-rem -z: only download when the server copy is newer than the file we already have (re-runs are cheap;
-rem a 304 answer writes nothing, so the .part stays empty and the old zip stays)
-if exist "%ZIP%" (
-    curl.exe -L -f -# -z "%ZIP%" -o "%PART%" "%RELEASE_URL%"
-) else (
-    curl.exe -L -f -# -o "%PART%" "%RELEASE_URL%"
-)
-set "RC=%errorlevel%"
-if not "%RC%"=="0" (
-    type nul >"%PART%"
-    echo  ERROR: download failed ^(curl exit %RC%^). Check the URL / your connection and run this file again.
-    echo [%date% %time%] download failed, curl exit %RC% >> "%LOG%"
-    goto :fail
-)
-goto :dl_move
+rem ---- 1. download (both parts first, so a broken connection never leaves part 1 new and part 2 old unpacked) ----
+echo  Downloading the package ^(2 parts^) ...
+call :getpart "%RELEASE_URL%" "%ZIP%"
+if errorlevel 1 goto :fail
+call :getpart "%RELEASE_URL2%" "%ZIP2%"
+if errorlevel 1 goto :fail
 
-:dl_ps
-rem paths and URL reach PowerShell as environment variables: an apostrophe in a folder name cannot break the command
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri $env:RELEASE_URL -OutFile $env:PART -UseBasicParsing"
-if errorlevel 1 (
-    type nul >"%PART%"
-    echo  ERROR: download failed ^(PowerShell^). Check the URL / your connection and run this file again.
-    echo [%date% %time%] download failed, powershell >> "%LOG%"
-    goto :fail
-)
-
-:dl_move
-if not exist "%PART%" goto :dl_check
-set "PARTSIZE=0"
-for %%A in ("%PART%") do set "PARTSIZE=%%~zA"
-if "%PARTSIZE%"=="0" goto :dl_drop
-move /y "%PART%" "%ZIP%" >nul
-if errorlevel 1 (
-    echo  ERROR: could not replace "%ZIP%" ^(open in another program?^)
-    goto :fail
-)
-:dl_drop
-:dl_check
-if not exist "%ZIP%" (
-    echo  ERROR: no file arrived at "%ZIP%"
-    goto :fail
-)
-for %%A in ("%ZIP%") do set "ZIPSIZE=%%~zA"
-echo  downloaded: %ZIPSIZE% bytes
-echo [%date% %time%] downloaded %ZIPSIZE% bytes >> "%LOG%"
-
-rem ---- 2. unpack (skipped when this exact zip was already unpacked) --------------------------
-set "STAMP="
-if exist "%DL%\unpacked.txt" set /p STAMP=<"%DL%\unpacked.txt"
-for %%A in ("%ZIP%") do set "NOWSTAMP=%%~zA_%%~tA"
-if "%STAMP%"=="%NOWSTAMP%" (
-    if exist "%PKG%\manifest.json" (
-        echo  package already unpacked ^(same download^).
-        goto :launcher_files
-    )
-)
-echo  Unpacking into "%PKG%" ...
->"%DL%\unpacked.txt" echo none
-rem an old manifest.json would hide a failed unpack: it comes back only from this zip
-if exist "%PKG%\manifest.json" move /y "%PKG%\manifest.json" "%DL%\manifest.before-unpack.json" >nul
-if not exist "%PKG%" mkdir "%PKG%"
-where tar.exe >nul 2>nul
-if errorlevel 1 goto :unpack_ps
-tar.exe -xf "%ZIP%" -C "%PKG%"
-if errorlevel 1 goto :unpack_ps
-goto :unpacked
-
-:unpack_ps
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath $env:ZIP -DestinationPath $env:PKG -Force"
-if errorlevel 1 (
-    echo  ERROR: could not unpack "%ZIP%" ^(damaged download: it is set aside as .bad, run this file again^)
-    echo [%date% %time%] unpack failed >> "%LOG%"
-    move /y "%ZIP%" "%ZIP%.bad" >nul 2>nul
-    goto :fail
-)
-
-:unpacked
-rem a zip with one top-level folder: pull its contents up so that package\manifest.json exists
-if not exist "%PKG%\manifest.json" (
-    for /d %%D in ("%PKG%\*") do (
-        if exist "%%D\manifest.json" (
-            echo  ^(package was inside folder %%~nxD: moving it up^)
-            rem /MOVE is a MOVE of the unpacked files one folder up (the emptied wrapper folder goes with it);
-            rem it is the only thing in this file that takes a path away, and it only ever touches .\package\
-            robocopy "%%D" "%PKG%" /E /MOVE /NFL /NDL /NJH /NJS /NP >nul
-        )
-    )
-)
-if not exist "%PKG%\manifest.json" (
-    echo  ERROR: the package has no manifest.json ^(not a Dead Men Rising release package^).
-    echo [%date% %time%] no manifest.json after unpack >> "%LOG%"
-    move /y "%ZIP%" "%ZIP%.bad" >nul 2>nul
-    goto :fail
-)
-echo %NOWSTAMP%>"%DL%\unpacked.txt"
-echo [%date% %time%] unpacked >> "%LOG%"
+rem ---- 2. unpack both parts into .\package\ (each skipped when that exact zip was already unpacked) ----
+rem part 1 brings manifest.json, part 2 brings package_part2.txt: each part's file proves that part is in .\package\
+call :unpackpart "%ZIP%" "%DL%\unpacked.txt" "manifest.json"
+if errorlevel 1 goto :fail
+call :unpackpart "%ZIP2%" "%DL%\unpacked_2.txt" "package_part2.txt"
+if errorlevel 1 goto :fail
 
 :launcher_files
 rem ---- 2b. the launcher files travel inside the package (launcher\) so that re-running updates them too
@@ -228,12 +140,10 @@ if errorlevel 1 (
     goto :fail
 )
 set "PYZIP=%DL%\python_embed.zip"
-where tar.exe >nul 2>nul
-if errorlevel 1 (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath $env:PYZIP -DestinationPath $env:PYDIR -Force"
-) else (
-    tar.exe -xf "%PYZIP%" -C "%PYDIR%"
-)
+rem Windows' own tar (System32): a tar.exe found on the PATH may be Git's GNU tar, which reads C: as a remote host
+set "PYTAROK=0"
+if exist "%WINTAR%" "%WINTAR%" -xf "%PYZIP%" -C "%PYDIR%" && set "PYTAROK=1"
+if "%PYTAROK%"=="0" powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath $env:PYZIP -DestinationPath $env:PYDIR -Force"
 if not exist "%PYDIR%\python.exe" (
     echo  ERROR: the Python zip did not unpack.
     goto :fail
@@ -299,6 +209,114 @@ endlocal
 exit /b 1
 
 rem ---- subroutines -----------------------------------------------------------------------------
+:getpart
+rem call :getpart <url> <zip>: errorlevel 1 = failed (the message is already printed)
+rem the download lands in <zip>.part and replaces <zip> only when it finished: a broken connection never
+rem leaves a half zip that a later run's -z would treat as current
+set "GURL=%~1"
+set "GZIP=%~2"
+set "GPART=%~2.part"
+echo      "%GURL%"
+rem no del anywhere in this file (Defender flags .bat files that delete): a stale .part is emptied instead
+type nul >"%GPART%"
+where curl.exe >nul 2>nul
+if errorlevel 1 goto :gp_ps
+rem -z: only download when the server copy is newer than the file we already have (re-runs are cheap;
+rem a 304 answer writes nothing, so the .part stays empty and the old zip stays)
+rem -R: the zip keeps the server's Last-Modified time, so -z compares server time with server time (both parts stay in step)
+if exist "%GZIP%" (
+    curl.exe -L -f -R -# -z "%GZIP%" -o "%GPART%" "%GURL%"
+) else (
+    curl.exe -L -f -R -# -o "%GPART%" "%GURL%"
+)
+set "RC=%errorlevel%"
+if not "%RC%"=="0" (
+    type nul >"%GPART%"
+    echo  ERROR: download failed ^(curl exit %RC%^). Check the URL / your connection and run this file again.
+    echo [%date% %time%] download failed, curl exit %RC%, "%GURL%" >> "%LOG%"
+    exit /b 1
+)
+goto :gp_move
+:gp_ps
+rem paths and URL reach PowerShell as environment variables: an apostrophe in a folder name cannot break the command
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri $env:GURL -OutFile $env:GPART -UseBasicParsing"
+if errorlevel 1 (
+    type nul >"%GPART%"
+    echo  ERROR: download failed ^(PowerShell^). Check the URL / your connection and run this file again.
+    echo [%date% %time%] download failed, powershell, "%GURL%" >> "%LOG%"
+    exit /b 1
+)
+:gp_move
+set "PARTSIZE=0"
+for %%A in ("%GPART%") do set "PARTSIZE=%%~zA"
+if "%PARTSIZE%"=="0" goto :gp_check
+move /y "%GPART%" "%GZIP%" >nul
+if errorlevel 1 (
+    echo  ERROR: could not replace "%GZIP%" ^(open in another program?^)
+    exit /b 1
+)
+:gp_check
+if not exist "%GZIP%" (
+    echo  ERROR: no file arrived at "%GZIP%"
+    exit /b 1
+)
+for %%A in ("%GZIP%") do set "ZIPSIZE=%%~zA"
+echo  downloaded: %ZIPSIZE% bytes
+echo [%date% %time%] downloaded %ZIPSIZE% bytes, "%GZIP%" >> "%LOG%"
+exit /b 0
+
+:unpackpart
+rem call :unpackpart <zip> <stamp file> <file this part puts into .\package\>: errorlevel 1 = failed
+set "UZIP=%~1"
+set "USTAMPF=%~2"
+set "UMARK=%~3"
+set "STAMP="
+if exist "%USTAMPF%" set /p STAMP=<"%USTAMPF%"
+for %%A in ("%UZIP%") do set "NOWSTAMP=%%~zA_%%~tA"
+if not "%STAMP%"=="%NOWSTAMP%" goto :up_go
+if not exist "%PKG%\%UMARK%" goto :up_go
+echo  %~nx1 already unpacked ^(same download^).
+exit /b 0
+:up_go
+echo  Unpacking %~nx1 into "%PKG%" ...
+>"%USTAMPF%" echo none
+rem an old marker would hide a failed unpack: it comes back only from this zip
+if exist "%PKG%\%UMARK%" move /y "%PKG%\%UMARK%" "%DL%\%UMARK%.before-unpack" >nul
+if not exist "%PKG%" mkdir "%PKG%"
+if not exist "%WINTAR%" goto :up_ps
+"%WINTAR%" -xf "%UZIP%" -C "%PKG%"
+if errorlevel 1 goto :up_ps
+goto :up_done
+:up_ps
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath $env:UZIP -DestinationPath $env:PKG -Force"
+if errorlevel 1 (
+    echo  ERROR: could not unpack "%UZIP%" ^(damaged download: it is set aside as .bad, run this file again^)
+    echo [%date% %time%] unpack failed, "%UZIP%" >> "%LOG%"
+    move /y "%UZIP%" "%UZIP%.bad" >nul 2>nul
+    exit /b 1
+)
+:up_done
+rem a zip with one top-level folder: pull its contents up so that the marker sits in .\package\
+if not exist "%PKG%\%UMARK%" (
+    for /d %%D in ("%PKG%\*") do (
+        if exist "%%D\%UMARK%" (
+            echo  ^(package was inside folder %%~nxD: moving it up^)
+            rem /MOVE is a MOVE of the unpacked files one folder up (the emptied wrapper folder goes with it);
+            rem it is the only thing in this file that takes a path away, and it only ever touches .\package\
+            robocopy "%%D" "%PKG%" /E /MOVE /NFL /NDL /NJH /NJS /NP >nul
+        )
+    )
+)
+if not exist "%PKG%\%UMARK%" (
+    echo  ERROR: "%UZIP%" has no %UMARK% ^(not a Dead Men Rising release package part^).
+    echo [%date% %time%] no %UMARK% after unpack >> "%LOG%"
+    move /y "%UZIP%" "%UZIP%.bad" >nul 2>nul
+    exit /b 1
+)
+>"%USTAMPF%" echo %NOWSTAMP%
+echo [%date% %time%] unpacked "%UZIP%" >> "%LOG%"
+exit /b 0
+
 :fetch
 rem call :fetch <url> <file>: curl, else PowerShell (URL and path go in as environment variables); errorlevel 1 = failed
 set "FURL=%~1"

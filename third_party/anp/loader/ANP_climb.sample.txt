@@ -1,0 +1,15 @@
+# <DD>\ANP_climb.txt - Dead Men free climb, W + E into a ledge (loader climb.inc). No file = live (release default since
+# 14 Oct; a file without a mode word is live too; an unknown mode word = dry but never undoes an explicit off; an unreadable file keeps the previous config). Re-read within 1 s of a save.
+# ANP levels only (scene ids M01..M14, M07F): in stock Dog Days levels, Arcade / Fragile Alliance maps and the front end
+# the climb never probes or acts and E stays Dog Days' own; the log says 'climb: scene '<id>': not an ANP level ...'.
+# First word: off | dry | live     (dry: the ledge probe runs and logs RESULT lines, nothing moves; live: climbs)
+live
+# warp=end            end (default: warp to the final pose over the clip) | dm (Dead Men's two-step warp at events 5/6)
+# vehicle=action      action (play the climb clip) | snap (teleport to the final pose, test only)
+# needblock=0         1: also require the player to be blocked (Dead Men's speed < 75% rule)
+# minin=30            cm the final pose must stand past the wall face (0 = Dead Men exact)
+# cam=1 snap=1 fwd=1
+# trace=0             1: 'climb: pos/state' lines once a second (log only, any scene)
+# tpany=0             1: ANP_tp.txt teleports also outside ANP levels (tests only)
+# Test teleport: <DD>\ANP_tp.txt "x y z yawDeg [full]", consumed once (ANP levels only unless tpany=1).
+# Log lines start with "climb:".

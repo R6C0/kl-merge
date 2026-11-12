@@ -79,3 +79,62 @@ the Dead Men `PC_Def.str`. So a `_deadmen` copy of the .WHD/.WAV cannot carry it
 to the .WAV needs the record's fmt changed 0x801000 -> 0x11 (IMA, 77 s x 32 kHz stereo = 2.5 MB) and the hook's klms table (`klmenusounds_logic.h`) writes only pcm/size/samples/off/offhi, not fmt/block/spb,
 so the hook needs a field extension (peer-owned, untracked); (c) which of the four BG records is the menu's is not known offline. Verdict: not done; the smallest real route is (b) + a probe that logs the
 record the menu opens.
+
+## Stage F layout tool: `tools/kl_menu_layout_1110.py` (2026-11-10, cloud, OFFLINE: no game file, nothing run in the game)
+
+Owner approved the full redesign without mocks; stage F = the page LAYOUT. Test `tools/kl_menu_layout_1110_test.py` (82 checks, synthetic set shaped
+like the live windows; `kl_tests.py --py --only kl_menu_layout_1110_test.py` PASS). A dry run of `plan` on the live WINDOW STRUCTURE (rebuilt from
+`re/menu_inventory_1110/frontend_rows12.md`) says OK, 0 problems; the real files were never opened here.
+
+What it lays out (DATA at the top of the tool: `LAYOUT` per window, `rows` rules, `ART`; every number a GUESS):
+- MainMenu: Dead Men's arrangement. Logo (template body GameLogoTemplatePCMain, used by MainMenu only) to the top-left (64, 40); the six entries
+  at x 150, y 300.. pitch 44 with their brush bars 10 px left / 9 px up (stock offsets); Kane (474 x 720) at x 560 and Lynch (410 x 720) at x 870,
+  full height, drawn by the two re-pointed decorative icon elements (Icon_Campaign / Icon_Heist -> Background_Kane / _Lynch); the other four icons
+  re-pointed at the 8 x 8 blank KLPic_None1. Ticker, band plate, bottom legend: left alone.
+- HeistPlayMenu / 2 / 3 (Arcade, Dead Men maps, Dead Men campaign): picture at (120, 130), the level selector (its title in the display face) right
+  under it at y 448 with its bar, briefing at (700, 130), the headline icon -> Background_HeaderSplat behind the page title.
+- KLHeister: label column at x 120, pitch 36 (label, bar, value cell, both arrows re-pitched together by the `rows` rule); splat behind the title.
+  KLGuns (Mod settings): the same rule at the STOCK pitch 34 (Patch01's 11 rows must end above the legend band) - labels move to x 120 only.
+- FALobby: picture at (120, 130); settings rows and the player table stay (the rows-12 lobby has no room); the lobby plate element (template body
+  LobbyBackgroundTemplate, FALobby only) -> Background_FABag (1280 x 720, Dead Men's own lobby backdrop) at the screen origin.
+- OptionsMenu: listed, NOT moved (rows flow-positioned by the game: only the first button carries a Y; the right column is the sub-pages' body).
+- NOT here: shop pages I / II / hire, pause, round-over, respawn = `online.xml` / `ingame.xml` of each LEVEL archive (stage G, per level, 27 maps).
+  ingame.xml of Patch01 is untouched. No element, template or ColorSet is added or removed (table untouched; `check` proves signature + element identity).
+
+How the Dead Men art gets in (`stage --dm <DM>\Scenes\KaneAndLynch.zip`): the DD scene already holds the six Dead Men picture ENTITIES as EMPTY
+stubs (Background_Kane / _Lynch / _KaneOptions / _LynchOptions / _FABag / _HeaderSplat: ZWINPIC with W = H = chunk = 0, PROVEN by the local partner).
+The tool composes each DM picture (kl_menu_redesign_1110.Scene.compose), cuts it into <= 512 x 512 power-of-two ABGR tiles (the stock Background's
+layout), appends the records to the .TEX (ids after the last stock id), writes sprite + picture chunks to the .prm (kl_prmgraph.new_chunk, the
+kl_portraits.py record shapes PROVEN in the game for KLPic_*) and sets the stub's three ints in its .prp node. Entity count delta 0, no slot id moves,
+.gms/.buf/.oct/.rmi/.rmc untouched (`check` proves: stock .TEX records and .prm chunks byte-identical, entity list identical). GUESS: a filled stub
+draws like any other picture. Without --dm the scene is copied unchanged, the art step logs SKIPPED, and the art-dependent re-points (portraits, splat,
+FABag) are NOT written (an empty stub draws nothing; the stock icons / plate stay).
+
+GUESS list (plan prints it): every X / Y / pitch; the coordinate model (1280 x 720 virtual, ScreenBaseSize at (256, 72) PROVEN, nested groups ADD
+their X / Y, Right = right edge at group right - X, Center = centre + X); an own X / Y wins over the Template's; Graphic= resolved by name at window
+open (re/menus.md 2.7 untraced); the stub fill; KLPic_None1 hides an icon; the re-pointed icons keep no Priority (may draw under the Priority-1 band
+plate); the MercsGraphic Line_* separators (X=0 Y=0, placed by code) follow the entries - stray lines at the old column in a shot = they do not (fix:
+re-point them at the blank, a LAYOUT line); text widths (themed advance tables when the scene is readable, else 0.55 x px per character; .LOC keys on
+the key tail); the FABag replaces the lobby plate wholesale.
+
+Run + bench recipe (local partner; install order: plates repair (kl_menu_plates_1110) -> redesign B -> THIS):
+```
+:: 0. read-only plan on the live _deadmen set (Overlay\Patch01_deadmen.zip, Patch01_rows12_deadmen.zip, Scenes\kaneandlynch_deadmen.zip 9de0f526 or later)
+python tools\kl_menu_layout_1110.py plan --dm "G:\SteamLibrary\steamapps\common\Kane and Lynch Dead Men\Scenes\KaneAndLynch.zip"
+::    (adds --dm-inventory re\menu_inventory_1110\dm_frontend.md by itself once that file exists: DM_MAP entries take the Dead Men X / Y)
+:: 1. stage (first run pins the three inputs); C:\kl_build_1024\menulook_1109\layout\ gets the three files, pins.json, install.py, bats, plan.txt,
+::    build_report.json, contact_layout.png (BEFORE | AFTER boxes per window: coral = moved, amber = Dead Men art, grey = pictures)
+python tools\kl_menu_layout_1110.py stage --accept-input --dm "<DM>\Scenes\KaneAndLynch.zip"
+python tools\kl_menu_layout_1110.py check C:\kl_build_1024\menulook_1109\layout          (must say PASS; entity delta 0, 6 stubs filled)
+:: 2. rehearse on a scratch copy, then live (game closed); backups <name>.before-menulayout_1110; undo = install.py --undo (byte-exact)
+python C:\kl_build_1024\menulook_1109\layout\install.py --game D:\scratch\dd_copy --skip-run-check   (+ --undo)
+python C:\kl_build_1024\menulook_1109\layout\install.py --dry
+python C:\kl_build_1024\menulook_1109\layout\install.py
+:: 3. bench (TEST hook, [MenuLook] DeadMen=1, shots every 2 s): main menu (portraits, column, logo) -> Arcade -> Dead Men maps -> Dead Men campaign
+::    -> Heister -> Options -> Mod settings -> Online -> LAN lobby (12 rows) -> back; then DeadMen=0 for the stock shots of the same pages.
+::    PASS: 0 faults / asserts, 'menu: table N' unchanged, no row over its column, nothing clipped; shots of both looks to C:\kl_build_1024\menulook_1109\shots\.
+::    What to compare against: contact_layout.png (the planned boxes). Stray separator lines at the old main-menu column = the Line GUESS failed.
+```
+What the Dead Men inventory (`re/menu_inventory_1110/dm_frontend.md`, same table format) will refine: `DM_MAP` maps DD elements to DM PlayMenu
+elements; every mapped element takes the DM X / Y (plan says so per element). Extend DM_MAP (and LAYOUT) from the DM tables: the column x / pitch,
+where Kane / Lynch really stand (the DM 'Kane' / 'Lynch' templates: AlignH Left / Right, Priority 4), the options page's portrait variants.

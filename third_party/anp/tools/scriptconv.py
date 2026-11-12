@@ -58,6 +58,19 @@ def _restore():
     v=os.environ.get('ANP_SCRIPT_RESTORE')
     if v is None: return set(RESTORABLE)
     return set(x.strip() for x in v.split(',') if x.strip())
+# ANP_CAMPROFILE_SWAP (default 1; 0 = old output byte for byte): the camprofile 'coopfilter' names are numbered the
+# other way round. Dead Men's parser (kaneandlynch 0x6fdbaa) stores ONLY_KANE -> +0x1ac = 0 (player one, the single
+# player), ONLY_LYNCH -> 1; Dog Days' (kl2 0x5fd7de) stores ONLY_KANE -> +0x1bc = 1, ONLY_LYNCH -> 0, and the apply
+# paths (kl2 0x649eb0 / 0x6cac70 / 0x6e5080) give value 1 to gameMgr+0x82c (co-op player two) only and value 0 to
+# gameMgr+0x828 (player one) only. Kept as is, every Dead Men "Kane" camera move (M02 10, M03 2, M06 6, M07 1) is
+# never applied in single player and the co-op "Lynch" ones (M02 2: the start-of-level look-from-pos shots) are
+# applied to the player instead. The swap restores Dead Men's player numbering. BOTH_PLAYERS is unchanged.
+CAMPROFILE_SWAP=os.environ.get('ANP_CAMPROFILE_SWAP','1')=='1'
+_CPF_SWAP={'ONLY_KANE':'ONLY_LYNCH','ONLY_LYNCH':'ONLY_KANE'}
+def _camprofile_swap(ps, stats):
+    kv=_get(ps,'coopfilter')
+    if kv and len(kv)>1 and kv[1] in _CPF_SWAP:
+        stats['camprofile coopfilter %s -> %s'%(kv[1],_CPF_SWAP[kv[1]])]+=1; kv[1]=_CPF_SWAP[kv[1]]
 MERC_ACTOR=re.compile(r'Merc_0\d')
 SQUAD_EVENTS=('ZMercSquad','ZFusionSquad','ZSquadScript')
 def squad_merc_values(ops, names, proxy=True, groups=True):
@@ -412,6 +425,7 @@ def convert(s, stats, digit=None, squad_vals=None, name_map=None, buddy=None, se
                 if name=='playermode': stats['opt playermode kept']+=1
                 out.append(cmd); continue
             if name in RESTORABLE and name in keep:
+                if name=='camprofile' and CAMPROFILE_SWAP: _camprofile_swap(ps, stats)
                 out.append(cmd); stats['%s kept'%name]+=1; continue
             if sec[0]=='Camera' and name in ('camprofile','camfade'):
                 out.append(_delay(dep)); stats['cam %s->delay'%name]+=1; continue

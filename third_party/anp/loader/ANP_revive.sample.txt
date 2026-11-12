@@ -1,0 +1,26 @@
+# <DD>\ANP_revive.txt - Dead Men wounded mercs + revive (loader revive.inc). NO FILE = dry. Re-read within 1 s of a save.
+# First word: off | dry | live
+#   dry : everything is read and logged ("would ..."), nothing is written (no +0x124, no mask, no hold, no prompt)
+#   live: a merc at <= floor HP (or hit lethally) goes down (DD's own DownNotDead), is held down and cannot be hurt,
+#         and bleeds out after bleed= seconds unless the player heals him (prompt within range, use key)
+dry
+# buddy=dd           dd: Lynch stays stock Dog Days (refused down keeps him at HP 1). dm: Lynch goes down / bleeds out too
+#                    (refused, logged, when DD's DND cfg +0x60 HP-1 rule is off)
+# exclude=M14:Merc_01  mercs left stock per level (Dead Men NotHealable): Lvl:Merc_NN | Lvl:Kane | Lvl:<id>; none = empty list
+# floor=0.25         HP fraction that downs a merc
+# bleed=60,45,30,30  bleed-out seconds per difficulty Easy, Normal, Hard, Extreme (Dead Men 60 / 45 / 30)
+# heal=dm            dm: HP = max at 2.0 s (Dead Men); dd: Dog Days' 0.44 s
+# clip=dm            dm: Kane plays Dead Men's /Special_moves/Heal_wounded; dd: Dog Days' Heal_Down_not_dead
+# range=200 maxdy=50 heal distance / height difference in cm (0 = any height: DD then heals instantly)
+# m01=0              1: allow healing in M01 (Dead Men forbids it there)
+# godpause=1         the god switch (ANP_god.txt) pauses the bleed-out; set 0 to test a bleed-out under god mode
+# use=both           flag (DD's use input, P+0x818 bit 5) | key (key= on DD's keyboard device) | both
+# key=0x12           DIK of the fallback use key (E)
+# pend=3000          ms the floor waits for DD's DownNotDead before giving up (the merc is invulnerable meanwhile);
+#                    then WSTAND. A refusal by the room test / vehicle / gate 6 / no task / 0x688190 = 0 makes the merc
+#                    WSTAND (wounded standing: no HP loss, HP >= 1, no regen, bleed timer, healable, DND retried every 2 s).
+#                    Dying / already down: no mask, the floor backs off 10 s, doubling to 160 s
+# trace=0            1: one line a second per downed (DOWN / WSTAND) merc
+# Test commands: <DD>\ANP_revive_cmd.txt, one per line:
+#   down <merc|buddy|nearest|all> | wstand <merc|nearest|all> | heal [merc|nearest] | bleed <merc|all> | state | wait S
+# Log lines start with "revive:".

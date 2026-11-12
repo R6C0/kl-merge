@@ -297,11 +297,16 @@ def graft(donor, subtree_name, wrapper_name, out, g, buf, prm_cnt, tex_used, rep
         osd_hook([osd_ops[q:q + 200] for q in range(0, len(osd_ops), 200)], new_tex, dict(tex_extra))
     rep['graft fonts %d (%d glyphs), HUD texture ids %d' % (len(font_idx), nglyph, sum(1 for o in osd_ops if o[2]))] += 1
     if os.environ.get('ANP_GRAFT_HOST', 'tail').lower() not in ('old', 'legacy'):
-        r = _graft_tail(D, out, g, buf, rep, wrapper_name, wrap_src, wrap_props, sub, rel, len(roots), sub_ops, new_prefix)
+        r = _graft_tail(D, out, g, buf, rep, wrapper_name, wrap_src, wrap_props, sub, rel, len(roots), sub_ops, new_prefix,
+                        new_chunk=new_chunk, prm_next=lambda: prm_cnt + len(prm_extra))
         rep['graft %s entities' % '+'.join(names)] += r['nnew']
         rep['graft sprites'] += len(sprite_ids); rep['graft textures'] += len(tex_extra)
         rep['graft path strings rewritten'] += npath
         return dict(prm_extra=prm_extra, tex_extra=tex_extra, heads=heads, **r)
+    import coverconv
+    if coverconv.enabled():
+        rep['covers: WARNING ANP_COVERS=%s does nothing with ANP_GRAFT_HOST=old (the new boxes need the ANP_Tail host)'
+            % coverconv.mode()] += 1
     # ---------- where to hang the wrapper (ANP_GRAFT_HOST=old) ----------
     # Static handles baked into the level (collision octree records, overlap lists ...) are runtime node-table
     # indices, and nodes are allocated block-major (see clusters.node_order).  A node added to any block but the
@@ -516,7 +521,8 @@ def _alloc_tail(ops, s0, pe):
     assert [o[1] & 0x7f for o in t] == [8, 12, 6, 12] and ops[pe - 1][1] & 0x7f == 0x7e, ('ZAllocMany props', t)
     return pe - 5
 
-def _graft_tail(D, out, g, buf, rep, wrapper_name, wrap_src, wrap_props, sub, rel, nroots, sub_ops, new_prefix):
+def _graft_tail(D, out, g, buf, rep, wrapper_name, wrap_src, wrap_props, sub, rel, nroots, sub_ops, new_prefix,
+                new_chunk=None, prm_next=None):
     from clusters import read_ents, node_order
     G = D.G
     g0 = bytes(g)
@@ -665,7 +671,14 @@ def _graft_tail(D, out, g, buf, rep, wrapper_name, wrap_src, wrap_props, sub, re
     # first child, built in this pass so all its nodes are new; off -> nothing changes
     import dnd
     dres = dnd.graft_hook(out, spans, names, rep)
-    new_ops = list(gprops) + [(0, 4, 0), (0, 4, (2 if T else 1) + (1 if dres else 0))]
+    # ANP_COVERS (tools/coverconv.py, default box): ANP_Covers = new Dog Days cover boxes for the Dead Men cover boxes
+    # Dog Days' cover list cannot take, as ANP_Tail's LAST child (after the wrapper), all nodes new; off -> nothing
+    import coverconv
+    cres = None; prm_refs = {}
+    if new_chunk is not None and coverconv.enabled():
+        cres = coverconv.graft_hook(out, spans, names, g, roff, par, typ, rep, new_chunk,
+                                    coverconv.world(g, roff, par, gl), prm_next())
+    new_ops = list(gprops) + [(0, 4, 0), (0, 4, (2 if T else 1) + (1 if dres else 0) + (1 if cres else 0))]
     if dres:
         drecs, dops, _, _ = dres
         for tpl, nm_, rd_, kd_, pr_ in drecs:
@@ -714,6 +727,12 @@ def _graft_tail(D, out, g, buf, rep, wrapper_name, wrap_src, wrap_props, sub, re
         e = G.ents[i]
         add_rec(G.g[e['off']:e['off'] + 64], add_name(rn or e['name']), rec_transform(e['off']), wdep + 1 + rel[i],
                 bool(e['decl'] & 0x1000000))
+    if cres:
+        crecs, cops, prm_refs = cres
+        grp_rec('ANP_Covers', d0 + 1, 0)
+        for rec_, nm_, tf_ in crecs: add_rec(rec_, add_name(nm_), tf_, d0 + 2, False)
+        new_ops += list(gprops) + [(0, 4, 0), (0, 4, len(crecs))] + list(cops)
+        rep['covers: ANP_Covers under %s, %d entities' % (tail_path[-50:], 1 + len(crecs))] += 1
     nobj += sum(1 for x in new_ops if x[1] & 0x7f == 2)
     # ---------- PRP: edits, then ANP_Tail as gl's last child ----------
     s0, pe = props_rng(gl); j = pe + 1
@@ -762,7 +781,7 @@ def _graft_tail(D, out, g, buf, rep, wrapper_name, wrap_src, wrap_props, sub, re
     assert newn == list(range(n + 1, n + 1 + nn)), 'new nodes not at the tail'
     rep['graft tail host ent %d (%s), new entities %d at nodes %d..%d, existing nodes moved 0' % (
         gl, names[gl][-40:], nn, newn[0], newn[-1])] += 1
-    return dict(nobj=nobj, prefix=real_prefix, end=end, nnew=nn)
+    return dict(nobj=nobj, prefix=real_prefix, end=end, nnew=nn, prm_refs=prm_refs)
 
 def _anc(i, par):
     """i and its ancestors, nearest first"""

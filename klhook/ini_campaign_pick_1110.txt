@@ -1,0 +1,10 @@
+; --- [CampaignPick] (klcamppick.c; kit C:\kl_build_1024\campaign_pick_1110) ---
+; Campaign menu -> "Dead Men levels" -> a list of the 16 story levels; a click starts the level the campaign way (like KLCampaign_load.txt "Mxx 1").
+; Needs [Campaign] Enable=1 + Routing=1. Off here leaves the menu button inert (the overlay stays); the kit's UNDO removes the button too.
+[CampaignPick]
+; (recommended on)
+Enable=1
+Log=1
+; OPTIONAL, NOT part of the kit and NOT applied: [Page.3] is titled "Dead Men campaign" but holds Fragile Alliance maps (Last Call, Hasta la Vista ...).
+; To avoid two "Dead Men campaign" entries, change that one line to:   Title=Dead Men FA maps 2
+; (the kit leaves the owner's title untouched; the new list window's headline reads "Dead Men campaign", the button "Dead Men levels")

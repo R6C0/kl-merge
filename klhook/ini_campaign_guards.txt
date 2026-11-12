@@ -1,0 +1,12 @@
+[CampGuard]
+; ported from luvsic's a-newer-perspective loader/anp_loader.c @32aa649 (in contribution with luvsic). Exact-site VEH branches, no kl2.exe code byte changed.
+; Every key except ListUserFA only acts while a converted Dead Men story level is loaded ([Campaign] Enable=1 + scene m01..m14).
+ListUser=0 ; CListUser bucket-walk fault 0x4f8a8e/92/97/9e + slot read 0x4f8a6e resume at the function's not-found return, campaign levels (recommended off)
+ListUserFA=0 ; the SAME CListUser guard on EVERY map incl. Dog Days FA / Arcade / online: hides the DM03 police-respawn crash 0x4f8a8e (recommended off until benched)
+Gfx=0 ; ZGraphic template-missing int3 0x51f1a9: emulate the fail return (recommended off)
+Coll=0 ; collision octree callback null handle 0x927b4c/4e and the call 0x927b59 (recommended off)
+Snd=0 ; sound stream sample rate 0 at 0x44668b -> 22050 (recommended off)
+SndDiv=0 ; other divide-by-zero in 0x446600..0x4b3000, divisor -> 1 (recommended off)
+NullList=0 ; null sound list at 0x900ff8, returns 0 (recommended off)
+BonesLights=0 ; v4BonesLights null light block at 0x577e08, points it at a zero block (recommended off)
+Heap=0 ; heap block unlink int3 at 0x4665dc, skips the free and leaks that block (recommended off)

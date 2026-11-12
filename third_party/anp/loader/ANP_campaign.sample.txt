@@ -1,0 +1,32 @@
+# ANP campaigns: copy to <Dog Days folder>\ANP_campaign.txt to change a switch (no file = these defaults).
+# Read once at game start by ANP_Loader.asi (loader/campaign.inc). 1 = on, 0 = off.
+
+# Scene ids through the MSVCR90 strncpy import: Dead Men ids, the menu's DMCN / DGNW / DGCN, campaign mode.
+Routing=1
+# Old jmp patch at 0x6d100f (CEG-hashed code). Fallback only; switched on by itself if strncpy can't be hooked.
+LegacyResolver=0
+# Serve <DD>\ANP\ANP_Patch01.zip (tools/anp_menu.py) in place of Patch01.zip / KL2FixPatch01.zip.
+Menu=1
+# With Menu=1: menu/frontend.xml itself is served from <DD>\ANP\menu\frontend.xml (tools/anp_menu.py) through the
+# file system object's vtable, whatever archive is mounted; the log says which copy the menu got.
+MenuXml=1
+# Dead Men / Dead Dogs saves go to %LOCALAPPDATA%\A Newer Perspective\saves\<DeadMen|DeadDogs>\.
+SaveRedirect=1
+# Back at the front end: Dog Days' profile is re-read from its own save (0 = keep the redirect for the session).
+# If the re-read does not reach the save file, the redirect stays on for the session (Dog Days' save is protected).
+ProfileReload=1
+# Wait after the front end's last scene-zip open (plus 1 s of steady frames) before that re-read.
+ReloadDelayMs=2000
+# No Steam achievements while a Dead Men scene runs.
+AchievementGuard=1
+# %LOCALAPPDATA%\A Newer Perspective\ANP_progress.ini (Dead Men Continue, Dead Dogs saga position).
+Progress=1
+# Dead Dogs: after Dead Men's ending, start Dog Days (L00) in the same campaign.
+DeadDogsHandover=1
+# Log ExitProcess calls (0x8000dead = Valve CEG code-integrity check).
+ExitTripwire=1
+# New game / New saga play Dead Men's intro (<DD>\Movies\ANP\M00_Intro.bik, tools/anp_movie.py); when it ends or is
+# skipped the loader starts M01 / the saga (BinkOpen/BinkClose import hooks). 0 = the page's fallback button only.
+IntroMovie=1
+# Wait after the movie closes before starting the scene.
+IntroDelayMs=200

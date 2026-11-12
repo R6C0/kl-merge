@@ -187,6 +187,7 @@
  *   [Auto] TapSettle=N    every tap / tapuntil / tapfocus first waits for N quiet polls (as 'settle'), at most 30 s;
  *      TapSettleMs=100    0 = off (default). The gap that counts as not quiet.
  *   [Auto] KeepAlive=1    (default 0) every keyboard poll refills the LOCAL player's current health to its maximum. TEST rig only.
+ *   [Auto] KeepAliveHp=N  (default 0) with KeepAlive: maximum and current health become N (< 100000), so one burst cannot down the host.
  *   [Auto] PosLogMs=2000 logs 'pos tick' that often once a level runs; PosOff / DirOff / TurnDeg override the
  *   offsets and the mouse gain below. A script may have 640 lines.
  *
@@ -1088,6 +1089,7 @@ static DWORD kla_poslog_ms, kla_poslog_t;         /* [Auto] PosLogMs: log the mo
 static DWORD kla_go_t, kla_go_stuck_t, kla_go_side_t; static float kla_go_from[3]; static int kla_go_w, kla_go_side, kla_go_shift, kla_go_n, kla_go_fin;
 static float kla_pl_first[32][3]; static float kla_pl_path[32], kla_pl_prev[32][3];
 
+static int kla_keepalive_hp;                       /* [Auto] KeepAliveHp=N (default 0 = keep the game's maximum): with KeepAlive, maximum + current become N */
 static int kla_keepalive;                          /* [Auto] KeepAlive=1 (default 0, TEST rig only): the local player's health is refilled to its maximum every keyboard poll */
 static void kla_keep_alive(void)
 {   /* Scripted ONLINE benches: klbalance.c applies its player factors in Arcade only, so a joiner is shot down by host-AI cops (A1LIFTNET1F 10-28).
@@ -1098,6 +1100,15 @@ static void kla_keep_alive(void)
     if (!(gd = kla_rd32((DWORD_PTR)KLH_VA(0x00dd265c))) || !kla_rd(gd + 0x898, &idx, 1) || idx > 31 ||
         !(pl = kla_rd32(gd + 0x828 + 4 * idx)) || kla_rd32(pl) != KLA_VT_FFPLAYER || !(h = kla_rd32(pl + 0xa48)) ||
         !kla_rd(h, raw, sizeof raw) || ((DWORD *)raw)[0x24 / 4] != pl) return;
+    if (kla_keepalive_hp > 0 && raw[2] >= 1 && raw[2] < 100000 && raw[1] > 0 && raw[2] < kla_keepalive_hp - 0.5f) {
+        /* DM02C/LCDOORS 11-10: a 550 hp host was knocked to 0 between two polls (FA_DieFromPolice) and the refill skips a downed
+           body; with KeepAliveHp the maximum and the current health both become N once, so no burst takes the bench host down. */
+        float hp[2]; hp[0] = hp[1] = (float)kla_keepalive_hp;
+        if (klh_data((void *)(DWORD_PTR)(h + 4), hp, 8, "KeepAliveHp: the local player's health + maximum raised (TEST rig)")) {
+            kla_out(1, "keepalive: health %.1f / %.1f -> %d / %d (KeepAliveHp)", raw[1], raw[2], kla_keepalive_hp, kla_keepalive_hp);
+            raw[1] = raw[2] = hp[0];
+        }
+    }
     if (!(raw[2] >= 1 && raw[2] < 100000 && raw[1] > 0 && raw[1] < raw[2] - 0.5f)) return;      /* not alive (0) or already whole: leave it */
     if (klh_data((void *)(DWORD_PTR)(h + 4), &raw[2], 4, "KeepAlive: the local player's health, refilled (TEST rig)")) {
         n++;
@@ -2484,6 +2495,8 @@ static void kla_init(HINSTANCE inst)
       GetPrivateProfileStringA("Auto", "TurnDeg", "0.17", t, sizeof t, kla_ini); kla_turn_deg = (float)atof(t); if (kla_turn_deg == 0) kla_turn_deg = 0.17f;
       kla_poslog_ms = GetPrivateProfileIntA("Auto", "PosLogMs", 0, kla_ini);
       kla_keepalive = GetPrivateProfileIntA("Auto", "KeepAlive", 0, kla_ini);
+      kla_keepalive_hp = GetPrivateProfileIntA("Auto", "KeepAliveHp", 0, kla_ini);
+      if (kla_keepalive_hp < 0 || kla_keepalive_hp >= 100000) kla_keepalive_hp = 0;
       kla_pos_node = GetPrivateProfileIntA("Auto", "PosNode", 1, kla_ini); }
     kla_t0 = kla_beat = GetTickCount();
     kla_exe_ok = img_lo == 0x400000 && nt->FileHeader.TimeDateStamp == KL2_TIMESTAMP && nt->OptionalHeader.SizeOfImage == KL2_IMAGESIZE;

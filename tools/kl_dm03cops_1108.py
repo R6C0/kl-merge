@@ -100,7 +100,10 @@ GARAGE_CELLS = [(480, 240, -6640), (480, 240, -6400), (480, 224, -6160), (660, 2
 RAMP_CELLS = [(-3260, 220, -2260), (-3200, 220, -2140), (-3560, 220, -2020), (-3200, 220, -2020), (-3080, 220, -2020)]
 DOCK_BOX = ((0.0, 200.0, -5600.0), (500.0, 200.0, 700.0))     # the Hunt SearchBox: centre, size (the loading dock / garage floor)
 POLICE_MEN = (7120, 7122, 6808, 7029)            # live node ids of the BankMain police actors (SMG_Type79, M9, SigSauer226, SMG_Type79): the clone templates
-POLICE_TMPL = 7029                               # ZFFActor + ZSoldier values copied onto the SWAT men (SMG_Type79)
+# the same four actors by path: backswat runs on later stages (doors / doorfix / vehroutes) where node ids shift (doorfix_1109: 7120 -> 7117, 7120 = a civilian)
+POLICE_PATHS = ('AI_Enemies!BankMainSquad_02\\Guard_01\\Ground', 'AI_Enemies!BankMainSquad_02\\Guard_02\\Ground',
+                'AI_Enemies!BankMainSquad_03\\Guard_04\\Ground', 'AI_Enemies!BankMainSquad_01\\Guard_03\\Ground')
+POLICE_TMPL = 7029                              # ZFFActor + ZSoldier values copied onto the SWAT men (SMG_Type79)
 FRONT_MEN = {7036: 'SMG', 7038: 'SMG', 7045: 'SHOTGUN', 6953: 'SMG', 6955: 'SHOTGUN'}      # lot SWAT x3, ArrivingCops_Squad_02 x2
 SHOTGUN_TMPL = 7113                              # LoadingDock guard (model 60016): only its weapon path is used
 FACE = (0.0, 1.0)
@@ -428,8 +431,9 @@ def make_van_nodes(B, cells, tk, weapons, anchor):
         refs.append(me + BS + '10_Defend' + BS + 'Pos#%02d' % (j + 1))
     M.set(d, 'DefendBehaviourRout', {0: '', 1: refs, 2: 1, 3: 0, 4: 'eDMS_NotSet', 5: 'eDF_NotSet', 6: '', 7: [], 8: 1, 9: 0})
     ws = weapon_cycle(weapons, len(cells))
+    police = [one(sc, p) for p in POLICE_PATHS]
     for j, (cell, w) in enumerate(zip(cells, ws)):
-        a = POLICE_MEN[j % len(POLICE_MEN)]
+        a = police[j % len(police)]
         gr = top.add(FED.clone_built(M, B, sc.parent[a], 'M_Van_%02d' % (j + 1)))
         face = FACE if math.hypot(anchor[0] - cell[0], anchor[2] - cell[2]) < 1.0 else (anchor[0] - cell[0], anchor[2] - cell[2])
         M.place(gr, cell, KB.rot9(*face))

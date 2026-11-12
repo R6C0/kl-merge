@@ -70,7 +70,10 @@ COLORSETS = {
     'Default':            dict(colors=('CHALK', 'INK', 'DIM'), alpha='keep', occurrence=1),   # the FIRST definition only (online.xml defines it twice)
     'White':              dict(colors=('CHALK', 'CHALK', 'DIM'), alpha='keep'),
     'Header':             dict(colors=('CORAL', 'CORAL', 'DEAD'), alpha='keep'),
-    'OnFocus':            dict(colors=('CHALK', 'INK', 'DIM'), alpha='keep'),
+    'OnFocus':            dict(colors=('INK', 'INK', 'DIM'), alpha='keep'),                # text ON a light plate, always (stock ff000000 x2 / ff888888;
+                                                                                          # RecCSFocus receivers, lobby headers, Bonus / Penalty). 11-10 02:55
+                                                                                          # shots: the earlier CHALK normal was PALE on the plate = unreadable.
+                                                                                          # Live files built before this fix: tools/kl_menu_plates_1110.py.
     'Legend':             dict(colors=('CHALK', 'CORAL', 'DIM'), alpha='keep'),
     'AssignKeys':         dict(colors=('CHALK', 'INK', 'DIM'), alpha='keep'),
     'KLFocus':            dict(colors=('CHALK', 'CORAL', 'DIM'), alpha='keep'),              # mkoverlay.py: the Mod settings rows show focus by COLOUR (no bar)

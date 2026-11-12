@@ -26,6 +26,49 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
 ## Tracks
 
 ### T0 SHIP FOR TESTERS (owner deadline: download Tue 11-10, play Wed 11-11) - claim it
+- 11-10 ~18:30 f0: OWNER "install all" (via d0): live NO LONGER = v1.0.0 pack (pack itself untouched, sha1 504a398f). Next release maps (d0, md5 zip/bots/base): DM01B F03 bef32b16/02480065/b1b8d3cf,
+  DM03 c71dbd01/fce3ac2a/e23f6545 (+KLJoin e36d9f99, KLGuns df4ee663), DM06B F02 4ce7ebc7/3d0f5a7f/c7ad563c, DM07 F06 852bda37/9ac8b388/52c1ee4e, DD10 F07 e152950e/604a9d9e/88f4be29,
+  DM09 F06 3a981a70/2ede91ed/0126d412. Held: dm09terminal_1110 (needs unmerged dll+ini, no west bounds). outfits_1110 (6b) pins pre-install md5s -> re-stage. OWNER STOPPED TESTS: only DM01B load PASS; DM03/DM06B/DM07/DM09/DD10 installed UNTESTED
+  (load-bench each before the next pack). Live dll 6711bc5f / ini 0da79eb8 checked by f0 after d0 put SHIP back over a killed bench's TEST dll.
+- 11-10 ~20:20 f0: owner "keep going, no crashes from playing too long, a refresh when the game ends": [Memory] FreshRestart=1 (FreshLevels=2, MinFreeMB=200, Via=0) put in the
+  LIVE ini (0da79eb8 -> 1d0688aa, backup KLHook.ini.before-fresh1110; live dll 6711bc5f already has klfresh). klfresh_test + klmemfree_test PASS. Launcher watch waits 60 s on a fresh
+  KLFresh.go (6549e0c4). UNPROVEN: the direct child start under Steam (GUESS) -> proven by the owner's next 2-match session (KLHook.log 'fresh'); if the game just closes, FreshVia=1.
+- 11-10 ~11:20 f0: d0 LAUNCHER LIVE E2E PASS (from e2e_1110; no INSTALL/UNINSTALL): window finds DD/DM, VERIFY 0 problems, PLAY DMR -> main menu -> clean close, PLAY DOG DAYS -> hook renamed off,
+  PLAY DMR -> hook back (md5 6711bc5f), verify 823/0 after, no stray dinput8.* files, no crash files. Steam launch options on the PC are now "-dx10" only (no DefaultScene/AutoExit; not ours to change).
+  Next release (not in v1.0.0): README says the hook stays off after PLAY DOG DAYS (1e9be368); UIA names of the letter-spaced buttons; "..." folder buttons draw as tiny dashes; MOD line "not installed" on kit-installed PCs (no journal).
+- 11-10 ~10:55 f0: SETUP E2E ON THE REAL ZIP PASS (C:\kl_release\e2e_1110, packaged Setup.bat byte-identical to the repo, only RELEASE_URL -> file:// of KLMerge_package.zip):
+  curl 2,026,178,709 bytes -> tar unpack (zip has backslash entry names; tar OK) -> 645/645 entries CRC-match -> py -3 + zstandard -> launcher started, DM found, riff made + played.
+  Launcher live window + VERIFY + PLAY round trip handed to d0 (game free), no INSTALL/UNINSTALL.
+- 11-10 ~10:00 f0: d0 ONLINE SMOKE COMPLETE 13/13 PASS (all 11 DM maps + DD10 + DD06 stock; host+join, round 1 -> shop -> round 2, 0 asserts/faults/dumps both seats).
+  DM06B client: 1 first-chance c0000005 at DINPUT8+0x10953e = kllistguard __try heap scan reading a freed page, caught (hook's own count 0); not a blocker.
+- 11-10 ~09:40 f0: more proof on the frozen pack, upload still cleared: d0 ONLINE SMOKE DM09 + DM01 + DM05A PASS (2 seats host+join, TEST 03840ed0, round 1 -> shop -> round 2,
+  0 faults/dumps, map folders md5-identical after); kl_prmroot_check --live 42 zips PASS (now a pre-pack step, cd56a8eb). DM01B doorfix_1110 benched (no load crash) but held.
+- 11-10 ~07:30 f0: UPLOAD CLEARED: d0 LOAD SWEEP 13/13 PASS on the live frozen-pack files (11 DM maps + DD10 + DD06 control, TEST 03840ed0, 60 s stand, 0 asserts/faults/dumps),
+  .prm-root vs .oct pre-check 26/26 PASS; checklive 823 files 0 changed. Owner: upload KLMerge_package.zip sha1 504a398f (OWNER_RELEASE_STEPS section 4).
+- 11-10 ~06:35 f0: RE-FROZEN after d0's DM01B crash find (5eab5ecc crashes at load, 778b075c PASS, back live): zip 2,026,178,709 bytes, sha1 504a398f (supersedes 9a60c535); DM01B rehearsal PASS.
+- 11-10 ~05:55 f0 (kl-merge-81): PACKAGE FROZEN 05:47, READY FOR THE OWNER'S UPLOAD: C:\kl_release\KLMerge_package.zip 2,026,193,651 bytes (< 2 GiB cap), sha1 9a60c535
+  (9a60c5359e0da17e98437f4e8505a1cd3faf88c1). 823 files, 635 patches (bots zips patched against their main zip: out: refs, 23 x ~3.5 KB; was 3.68 GB). Core = 1110f SHIP 6711bc5f / ini 0da79eb8
+  (snapshot C:\kl_release\core_snap_1110f), maps from d0's MAPS DONE: DM01 e091f0d8, DM02 b24fb05d (DM02C combo landed 05:4x), DM03 33361cd1, DM05A 791eb9c3; DD10 = 6aeb8208.
+  Rehearsals from the UNZIPPED package into scratch DDs: (a) core+audio+overlay+stockwav+DD05+DM03+DM05A 381 files install 0, verify 0 problems in the set, uninstall byte-exact (4 empty
+  KL_PortBackup dirs); (b) core+overlay+DM02+DD05 install 0, uninstall 0 differences. checklive 06:03 (after fc's vault + d0's DD10 benches undid themselves): 823 files, 0 changed.
+  Anything landing after the freeze (d0 DD10 exit-south, fc vault) = next release. Small: a crashed install leaves an empty KLMergeTmp\. Owner: upload (OWNER_RELEASE_STEPS section 4), then f0 runs the
+  Setup e2e from the real URL. Decisions still open: 7 WARN ini keys, menu-look files, no launcher bg jpgs, literal stock bytes in a public release.
+- 11-10 ~03:15 f0 (kl-merge-81): steps 1-4 + 6 DONE on the current live set, step 5 (Setup e2e from the real URL) waits for the upload. make -> C:\kl_release\pkg_1110 (core re-made from
+  core_snap_0215 with the SHIP dll 38104558; the live dll was a peer's TEST twin at the first try). checklive: only dinput8.dll differs (a bench's TEST dll in place). pack: 650 files, zip 3.68 GB.
+  Scratch-DD rehearsal (C:\kl_release\rehearse_dd, stock refs hard-linked/copied; 8 groups, 387 files incl. PC_Def.str 1.8 GB): install exit 0 (409 s), verify 0 problems, uninstall byte-exact.
+  BLOCKER: 3.68 GB > GitHub's 2 GiB per asset. Fix in progress (06): patch each <map>.bots.zip against the just-built main zip (ref kind out:, ~0.4 MB each instead of ~75 MB) -> ~1.89 GiB, one asset,
+  Setup.bat unchanged. Then: re-make map groups (d0's lcdoors/DM02 combo/smart cops/1110f if live by ~10:00), checklive, repack, rehearse again, upload (owner), Setup e2e.
+  make now runs kl_ini_shipcheck on the shipped KLHook.ini (WARN lines, never stops). Owner decisions: the 7 WARN keys; menu look files in/out; literal stock bytes in a PUBLIC release (06's point).
+- 11-10 ~03:35 scheduled (cloud, offline): the "Owner: shipped-ini review" item has a tool: `python tools\kl_ini_shipcheck.py "<DD>\KLHook.ini" [--notes]` (sample = klhook/KLHook.ini; exit 1 on
+  ERROR/WARN). Live ini 02:19: 0 ERROR, 7 WARN (CarDown Dry=1 dry run on every tester; [Brain] RayAim/HolderSet/CombatFlag "TEST build only"; FireLine=2/DefendPull=2/OnlineBrainBoard=1 log modes),
+  73 FEAT (sample says off-until-benched; stale comments), 47 Log=1/probe keys incl. OnlineTagProbe + ReplicaProbe (both "recommended on" in the sample), [Campaign]+Camp* undocumented, 7 comment
+  lines naming C:\kl_build_1024 UNDO kits. debug/notes/2026-11-10-scheduled-shipcheck.md. f0: a one-line call in make/OWNER_RELEASE_STEPS is yours to add.
+- 11-10 ~01:30 f0 (kl-merge-81): FIXED ce681419: the shipped KLHook.ini holds the owner's absolute [Ambience]/[Stinger] Folder= (C:\Steam\...\Kane & Lynch 2 - Dog Days\KLExpansion\...)
+  and [Music] Folder/FolderB (C:\Steam\...\PAYDAY 2\...); the hook uses them as-is, so ambience + stingers were silent on every tester not on C:\Steam. kl_release install now
+  rewrites them to the tester's DD / PD2 folder (journal local_sha1; verify/re-install/uninstall accept it). kl_release_test PASS, kl_tests --py: gunpunch/fallback FAILs pre-existing.
+  make started 00:46, STOPPED for d0's merged1110a bench (it swaps the live dll). d0: testers get merged_1110b SHIP 21e26651; make runs on d0's "done, game free, live = 21e26651".
+  Owner: shipped-ini review (make ships the live ini as-is): OnlineTagProbe=1 + ReplicaProbe=1 (probe logging on for strangers?), comment lines naming G:\ / C:\kl_build_1024
+  paths, [Campaign]/Camp* sections (campaign files are not in the package?), [MenuLook] DeadMen + KLExpansion\Overlay\*_deadmen.* (6b: owner-only taste, still moving today).
 - 11-09 ~16:05 f0 (kl-merge-81): Setup.bat + KLMergeLauncher.ps1 review fixes PUSHED 107f86ea (06 handed them over). Setup.bat: python path quoted via gotos
   (a folder with space/&/()/' broke it), download to .part (curl -z never keeps a half zip), all 4 PowerShell calls $ErrorActionPreference=Stop (a failed
   Expand-Archive exited 0 and an old manifest.json hid it: damaged zip now -> .bad, old manifest moved aside), embedded python re-runs get-pip + zstandard,
@@ -66,6 +109,9 @@ next to it; write the result (commit, bench tag, PASS/FAIL) under it. Newest sta
   Owner: release host DECIDED 11-09 (public releases-only repo R6C0/dead-men-rising; RELEASE_URL in "KL Dead Men Rising Setup.bat" is final); tell testers Dead Men must be installed.
 
 ### T9 IN-GAME MENU LOOK = DEAD MEN (owner 11-09 ~19:10, "huge ask", after liking the launcher theme) - cloud designs + stages offline, local benches
+- 11-10 19:55 local: STORY MODE CRASH from menus_combined (_campui twins reuse FocusBar_short#04/Line_Short_01#04 on CampaignMenu) -> storyfix_1110 INSTALLED: [CampaignUI] Menu=0 + "Dead Men Rising" label. Not run in game. Any future row on CampaignMenu needs its OWN #05+ graphics.
+- 2026-11-10 ~18:30 [6b local] kl_menu_layout_1110 staged + rehearsed on the live set incl. the _campui twins (kit C:/kl_build_1024/menulayout_1110/kit), NOT installed: bars cross the portraits, Heister splat over the char picture (contact sheet); cloud to decide, then install + shots bench.
+- 2026-11-10 ~17:45 [6b local] menus_combined_1110 INSTALLED (pick + outfits Heister row + campui row on 06 plates 76499363/355a4b30, OnFocus ink kept in all 8 zips); keyboard-only: static count gamepad 5129 > 5000 (fault risk 0x8618b9), keyboard 4938; live count unmeasured ([Menu] TableLog=1 at next start). kl_menu_layout_1110.py from the cloud still awaited. no crash involved
 Owner's words: "overhaul the whole in game menu UI to make it feel more like dead men too, even the menu button sounds; also in settings make a button for the mod
 so you can change it (make it however you desire) but I want the default to have this on". Reading: the launcher's brush-kit look (kl_hud --look deadmen: Impact chipped
 capitals, chalk / coral / ink, torn plates) applied to Dog Days' front-end + pause + lobby + shop menus (fonts, colour sets, plates, backgrounds) + Dead Men's menu
@@ -73,6 +119,34 @@ click / confirm / back sounds; an in-game Mod Options row "Dead Men menu look (r
 redirect rules; DEFAULT ON. Order: (1) research + design re/menu_look_1109.md, (2) stage-1 tool fonts + colours (reuse kl_hud build_font / kl_hud_menu), (3) plates/
 backgrounds, (4) sounds, (5) toggle. Ships AFTER the Wed tester build unless (2) is cheap and benched; never replaces stock files (themed copies + redirect).
 - 11-09 19:10 cloud: claimed research + design + stage-1 tool (offline, self-tests; nothing installed).
+- 11-10 11:45 cloud: OWNER APPROVED the full redesign without mocks ("all approved"); building tools/kl_menu_layout_1110.py (stage F: widget re-flow of
+  frontend/online XML in the _deadmen copies, pins on 9de0f526 / the plates-repair outputs, DM-art page pictures, torn photo frames) + the MorSC font option (stage E).
+  LOCAL PARTNER please add to re/menu_inventory_1110/: dm_frontend.md = the same element tables for DEAD MEN's own Scenes\KaneAndLynch.zip menu/frontend.xml
+  (PlayMenu, OptionsMenu, FA lobby pages, Credits) with X Y W H / Graphic names, and dm_pictures.md (its ZWINPIC families with sizes) via kl_menu_inventory_1110.py /
+  kl_menu_pictures_1110.py on the DM archive; plus the MorSC font pages (ids 392-427) exported as PNG sheets into C:\kl_build_1024\menulook_1109\dmfonts\ for the font bake.
+  Install the OnFocus plates repair (kl_menu_plates_1110.py fix) first; the layout stage pins on whatever is live after it.
+- 11-10 ~02:55 local (no crash involved): bench MENULOOK_MATCH PASS (TEST f4c8c3fd, deadmen + stock, live dll 38104558 / ini a08b6110 restored). All 16 pages per look now in C:/kl_build_1024/menulook_1109/shots/{deadmen,stock} (lobby, lobby_map, pause, roundover, shop_page1/2, shop_hire, shop_controls + the 8 menus). THEME BUG for the cloud (colour, not width): text ON the light plates (selected row, lobby column header) is dark in stock but PALE in deadmen = unreadable (lobby 'LOCATION: HOT COFFEE', 'NAME: / CRIMINAL ...'). Shop pages identical in both looks (not themed): 'ASSAULT RIFLES' spills below the category box, the left arrow overlaps 'SW MP45' = stock/hook layout, for kl_menu_layout_1110. Pause + roundover fine.
+- 11-10 ~03:00 local (no crash involved): SHOTS DONE, bench MENULOOK_MENUS2 PASS (TEST f4c8c3fd = 1110d, deadmen + stock menus, 0 asserts/faults; live dll 38104558 / ini a08b6110
+  restored). 8 pages per look in C:\kl_build_1024\menulook_1109\shots\{deadmen,stock}\ (main_menu, options, mod_settings, heister, heist_mode, arcade_maps, arcade_deadmen_maps,
+  arcade_campaign_maps) + shots\ml1.txt, ml5.txt. ML5 PASS again. ML1 [all GUESS boxes]: deadmen rows wider than stock (Options GameSetting +61 px, Mouse +42; KLGuns KLS_Look +114,
+  KLS_Adren +72 ...; KLHeister +21) + declared overlaps that stock has too. Pictures checked by eye: NO real clipping from the theme (capitals widen, labels end well before
+  the arrows); the Heister Outfit value runs into its arrows and the selected-row value is unreadable under the bar IN STOCK TOO (layout/stock issue for the cloud's layout
+  tool, not a font width). MENU_FONTS unchanged. Match pages (lobby/pause/shop, --runs match) still to shoot. Waiting for kl_menu_layout_1110.py (pin overlay 9de0f526).
+- 11-10 02:20 local (no crash involved): MENU SOUND PICKER INSTALLED on 1110c SHIP 6e3ca2ad (C:\kl_build_1024\menupick_1110\install_1110c.py, undo --undo):
+  Scenes\KaneAndLynch_deadmen.WHD 5ba73f5e / .WAV fffb4841 / .klms 5ae473c1, ini f67f94bc -> a08b6110 (+[MenuSounds] Enable=1, 5 events dm, Menu=menu, Window=openwindow_04).
+  Bench MENULOOK_DEADMEN_MENUS (TEST fdaeaf10, shots_kit) tour PASS 0 asserts/faults, every page reached; ML5 PASS (WHD+WAV redirect, 7 records re-pointed,
+  probe heard SFX/OSD/Menu, OpenWindow_04, Up_Down). Redesign B/C/F (kaneandlynch_deadmen.zip 9de0f526) was live during it. ML1 + pictures: NONE - 0 KLShot files
+  (device Present wrap saw 0 frames; ReShade owns Present). Fix 6428ca18: kit inis add [Memory] D3dShotPost=1 + [ReShade] Bridge=1 (as d0's benches with shots); kit patched,
+  re-run (deadmen + stock, menus + match, ~55 min, KL_MENU_INV=<repo>\re\menu_inventory_1110) when the game is free again.
+- 11-10 01:20 local (offline, no crash involved): INVENTORY PUSHED = re/menu_look_inventory_1110.md + re/menu_inventory_1110/{frontend_rows12,ingame,online,pictures}.md (tools/kl_menu_inventory_1110.py, kl_menu_pictures_1110.py, test PASS). 131/55/40 windows, 3625/1281/1402 elements (+471/232/424 in template bodies); 977 ZWINPIC in 247 families, 7 ZWINPIC EMPTY (need sprite chunks); menu = 1280x720 virtual, ScreenBaseSize 768x576 centred. 6b already installed texture-only stages A/B/C/F (backgrounds, chalk bars, grunge plates, GameLogo, DM07 lobby picture) in the overlay scene copy 9de0f526; undo is C:\kl_build_1024\menulook_1109\redesign_b\UNDO menu redesign B 1110.bat, then redesign\UNDO menu redesign A 1110.bat; no widget positions changed; the cloud's layout tool must pin on 9de0f526. Screenshots + ML1/ML5 benches NOT done (offline step), PC session open.
+- 11-10 00:20 cloud CLAIM: FULL REDESIGN = T9 stages 2+3 (owner 00:05: "did you not do a full redesign?"): re-flow of the EXISTING widgets (X Y W H / alignment, no new
+  table entries) to the launcher's layout + themed pictures (brush bars, torn-smear plates, grainy backgrounds, dirty photo frames for the map pictures) baked into a themed
+  copy of the menu scene, behind the same [MenuLook] toggle. Order: mocks of main menu / Arcade page / lobby / pause / shop for the owner's OK -> tools/kl_menu_layout_1110.py
+  (stage, pins, undo) -> local bench. NEEDS from ONE local session (prompt given to the owner): (a) re/menu_look_inventory_1110.md = every Window + GuiElement of
+  frontend.xml / ingame.xml / online.xml (name, Type, X Y W H, AlignH/V, Font, ColorSet, picture/entity refs) from the LIVE overlay + the menu scene's ZWINPIC/ZWINGROUP
+  picture entities with texture sizes (kl_menu_look_1109.py inventory + kl_hud_menu / kl_scene), (b) screenshots of the stock and the installed stage-1 menus
+  (main, Arcade pages, Heister, Guns, Mod settings, Options, lobby, pause, shop I/II/hire, MOD CONTROLS) into C:\kl_build_1024\menulook_1109\shots\, (c) the ML1/ML5 bench
+  of what is installed (00:10). Nobody else re-layouts the menus meanwhile; width/clipping fixes to stage 1 are fine.
 - 11-09 19:50 cloud: DESIGN + STAGE-1 TOOL DONE (offline): re/menu_look_1109.md, tools/kl_menu_look_1109.py (inventory | stage | check; colour sets + 8 menu-scene fonts,
   Patch01.zip AND Patch01_rows12.zip, pins via --accept-input, install.py/UNDO byte-exact), _test 105/0. LOCAL SESSION NEXT: `python tools\kl_menu_look_1109.py inventory`
   on the live overlay, then `stage --accept-input`, read widths.txt (clipped rows), bench M1 (main menu / Arcade pages / Mod settings / lobby / pause shots) with the

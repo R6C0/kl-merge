@@ -1,0 +1,30 @@
+; klcampaign.c (luvsic's campaign runtime core, ported; in contribution with luvsic). ALL need [Campaign] Enable=1 (the master key, defined by klcampaign_gate.h).
+[Campaign]
+; Scene ids: a request for M01..M14 / M03B / M07F starts that converted level as its own scene (scene-table entry 12, strncpy import). (recommended off)
+Routing=0
+; <DD>\KLCampaign_load.txt = "M01 1" starts a campaign level once and is deleted. (recommended off)
+Trigger=0
+; Start this scene id once after boot (empty = none), AutoLoadMode is the mode word (1). (recommended off)
+AutoLoad=
+AutoLoadDelayMs=12000
+AutoLoadMode=1
+; Campaign profile opens (n.kls) go to <DataDir>\saves\Campaign so Dog Days' save is not written. (recommended off)
+SaveRedirect=0
+; After leaving the campaign re-read Dog Days' own profile (needs SaveRedirect), ReloadDelayMs after the front end loads. (recommended off)
+ProfileReload=0
+ReloadDelayMs=2000
+; <DataDir>\ANP_progress.ini [DeadMen] last / reached / done. (recommended off)
+Progress=0
+; Block Steam achievement awards while a campaign level is active. (recommended off)
+AchievementGuard=0
+; Decode Dead Men IMA-ADPCM .str sound streams at read time (needs the Dead Men .str files in the level). (recommended on)
+Adpcm=1
+; The converted .SND files open "..\Kane and Lynch Dead Men\PC_*.str" (relative to the Dog Days folder); with Dead Men on another drive that open fails
+; and every Dead Men voice line is silent. The hook redirects it to the real folder (next to Dog Days, else Steam libraryfolders.vdf). (recommended on)
+StreamRedirect=1
+; Force the Dead Men folder (the one holding PC_Def.str); empty = find it.
+DeadMenDir=
+; Folder for saves and progress; empty = %LOCALAPPDATA%\A Newer Perspective. (recommended off)
+DataDir=
+; Write campaign lines to KLHook.log. (recommended off)
+Log=1

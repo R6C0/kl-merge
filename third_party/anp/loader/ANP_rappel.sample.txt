@@ -1,0 +1,16 @@
+# <DD>\ANP_rappel.txt - Dead Men rappelling (loader rappel.inc). No file = native. Re-read within 1 s of a save.
+# Mode word (any bare word):
+#   off     nothing (stock Dog Days move)
+#   dry     log only: rappel points of the level and every change of the native rappel state
+#   native  Dog Days' own rappel move behind guards (default). A start is refused when the player's animation DB lacks
+#           /Movement/Rappelling/* (level built before tools/rappel.py); a fault puts the player back to Stand
+#   live    the loader's own descent at every rappel point (native start always refused)
+#   auto    native when it can run, else live
+native
+# trace=0             1 = 1 Hz position + per-frame descent trace
+# live/auto only: speed=300 minh=150 maxedge=200 landoff=40 cb=1 snap=1 efallback=1
+# land=auto (default): wall within 150 cm ahead at landing -> turncam, else cam. Also off|turn|cam|turncam.
+# camdiag=1 (default) logs the camera profile/state during a rappel; camfix=nocoll (default off) disables camera collision while rappelling.
+# Key: E (use) inside an enabled rappel box. Climbing (W+E) is refused there.
+# Test command: <DD>\ANP_rappel_cmd.txt = "enable all" | "enable N" (switches a rappel point on without the level's gates)
+# Log lines start with "rappel:".

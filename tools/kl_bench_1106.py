@@ -311,6 +311,73 @@ KITS = {
                          hook=('C:/kl_build_1024/merged_1109land/dll_test/dinput8.dll', 'a7f87dc2183050659a2538d5b2502a50'),
                          ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'], keepalive=True,
                          solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # 11-10: DD10 EXIT SOUTH (tools/kl_dd10_exitsouth_1110.py, stage C:/kl_build_1024/dd10exitsouth_1110): otrExitLevel shrunk to z 650..900 (the van lane
+    # z 920..1140 was inside the old z 650..1550 box). On the live map 6aeb8208 + KLJoin 8f3034c0 and the 1110f TEST twin (merged_1110f_kahp). No keepalive:
+    # a run-over must show. PASS = the seat at z 780 calls the van (state 3), lives through the drive-in + wait (0 KILLED BY / FA_DieFrom), 0 faults
+    'dd10south1110': dict(map='DD10', slot='F07', entry=5, stage='C:/kl_build_1024/dd10exitsouth_1110', tag='.before-dd10exitsouth1110',
+                          live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                          files={'F07_Main.zip': 'e152950e', 'F07_Main.bots.zip': '604a9d9e', 'F07_Main.bots.base.md5': '88f4be29'},
+                          vancall=((None, None, None), (8300, 50, 780)),
+                          hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                          ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                          solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # 11-10: EXIT STRIPS (tools/kl_exitstrip_1110.py, stage C:/kl_build_1024/exitstrip_1110/<MAP>): otrExitLevel shrunk to a strip off the van's swept lane
+    # (re/van_lane_audit_1110.md). Seat tele'd ~1 m above the strip floor (box centre y - 100) at the strip's off-lane side; no keepalive. PASS as dd10south1110.
+    'exitstrip_dm01b': dict(map='DM01B', slot='F03', page=3, entry=2, stage='C:/kl_build_1024/exitstrip_1110/DM01B', tag='.before-exitstrip1110',
+                            live={'F03_Main.zip': '5eab5ecc', 'F03_Main.bots.zip': 'cadfb74e'},
+                            files={'F03_Main.zip': 'b5196d80', 'F03_Main.bots.zip': 'be27cc91', 'F03_Main.bots.base.md5': 'ad790474'},
+                            vancall=((None, None, None), (4118, 85, 32260)),
+                            hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                            ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                            solo_secs=600, parts=('solo',), shots='90-400:10'),
+    'exitstrip_dm06b': dict(map='DM06B', slot='F02', page=3, entry=1, stage='C:/kl_build_1024/exitstrip_1110/DM06B', tag='.before-exitstrip1110',
+                            live={'F02_Main.zip': '7cee043d', 'F02_Main.bots.zip': 'ec42c5e4'},
+                            files={'F02_Main.zip': '4ce7ebc7', 'F02_Main.bots.zip': '3d0f5a7f', 'F02_Main.bots.base.md5': 'c7ad563c'},
+                            vancall=((None, None, None), (-2732, 2604, -8300)),
+                            hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                            ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                            solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # 11-10 06:20: exitstrip_dm01b faulted at the level load twice (bf293c24, then a null call from 0x6ad1d9, state 0x12 only);
+    # baseline on the LIVE DM01B (dm01bdoorfix_1109, installed unbenched 11-09 23:30), nothing staged, same seat/script
+    'dm01blive1110': dict(map='DM01B', slot='F03', page=3, entry=2, stage=None, tag=None,
+                          live={'F03_Main.zip': '5eab5ecc', 'F03_Main.bots.zip': 'cadfb74e'},
+                          vancall=((None, None, None), (4118, 85, 32260)),
+                          hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                          ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                          solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # run 06:38: the live 5eab5ecc faults the same way (c0000005 at bf7fc0c0, caller 0x6ad1d9, level_loaded=0, exit 22) -> A/B on the pre-doorfix 778b075c
+    'dm01bprev1110': dict(map='DM01B', slot='F03', page=3, entry=2, stage='C:/kl_build_1024/dm01bprev_1110', tag='.before-dm01bprev1110',
+                          live={'F03_Main.zip': '5eab5ecc', 'F03_Main.bots.zip': 'cadfb74e'},
+                          files={'F03_Main.zip': '778b075c', 'F03_Main.bots.zip': 'dccc9250', 'F03_Main.bots.base.md5': '6616525a'},
+                          vancall=((None, None, None), (4118, 85, 32260)),
+                          hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                          ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                          solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # A/B 11-10 ~06:45: dm01blive1110 FAULT (5eab5ecc), dm01bprev1110 loaded and played (only the no-round-end 0x1f check failed) -> the doorfix map
+    # is the crash; it was undone live (DM01B = 778b075c / dccc9250 / 6616525a again), so both pins above are stale now
+    # the doorfix rebuilt with the model_leg fix (held = the LIVE .oct's record refs: 3640 roots re-referenced, check() now proves every root hits a record start)
+    'dm01bdoorfix1110': dict(map='DM01B', slot='F03', page=3, entry=2, stage='C:/kl_build_1024/dm01bdoorfix_1110', tag='.before-dm01bdoorfix1110',
+                             live={'F03_Main.zip': '778b075c', 'F03_Main.bots.zip': 'dccc9250'},
+                             files={'F03_Main.zip': '476aec5f', 'F03_Main.bots.zip': 'a056edbd', 'F03_Main.bots.base.md5': '4272c0eb'},
+                             vancall=((None, None, None), (4118, 85, 32260)),
+                             hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                             ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                             solo_secs=600, parts=('solo',), shots='90-400:10'),
+    'exitstrip_dm07': dict(map='DM07', slot='F06', page=3, entry=4, stage='C:/kl_build_1024/exitstrip_1110/DM07', tag='.before-exitstrip1110',
+                           live={'F06_Main.zip': 'f35e4133', 'F06_Main.bots.zip': '1f514d51'},
+                           files={'F06_Main.zip': '852bda37', 'F06_Main.bots.zip': '9ac8b388', 'F06_Main.bots.base.md5': '52c1ee4e'},
+                           vancall=((None, None, None), (-2937, 502, 10040)),
+                           hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                           ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                           solo_secs=600, parts=('solo',), shots='90-400:10'),
+    # same stage, the ledge route: [Join.3] Land=8300 0 750 is inside the new strip, so the landed seat must still call the van and live
+    'dd10southledge1110': dict(map='DD10', slot='F07', entry=5, stage='C:/kl_build_1024/dd10exitsouth_1110', tag='.before-dd10exitsouth1110',
+                               live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                               files={'F07_Main.zip': 'e152950e', 'F07_Main.bots.zip': '604a9d9e', 'F07_Main.bots.base.md5': '88f4be29'},
+                               ledge=((6820, 1600, 3100), (6515, 2555)),
+                               hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                               ini=['[VanBlow]', 'ShieldWhileWaiting=1', 'ShieldDriveIn=1', 'ShieldCalled=1', 'HealFloor=95', 'Log=1'],
+                               solo_secs=600, parts=('solo',), shots='90-400:10'),
     # run 11-09 09:20 PASS on purpose (0 asserts/faults/dumps, 0 KILLED BY): 'landed: moved from (8300, 0, 1100) to (8300, 10, 750)' 313 ms after the
     # request; van called at the landing (ShieldCalled ON, 3600 -> 9600 by HealFloor at state 3), waited, drove out empty, called again 9600/9600.
     # Only FAIL: session 0x1f/0x20 unseen (the script passed before the round ended, as lcmusicblive1109). merged_1109land SHIP installed 09:25.
@@ -349,7 +416,57 @@ KITS = {
                              files={'F02_Main.zip': '7cee043dda5d62eeb6c48329b40fcda8', 'F02_Main.bots.zip': 'ec42c5e4', 'F02_Main.bots.base.md5': '171f7443', 'KLGuns.ini': '483f7450'},
                              hook=('C:/kl_build_1024/merged_1107/dll_test/dinput8.dll', '39e790110ccf917d007cdc28231618fb'),
                              solo_secs=600, parts=('solo',), shots='60-200:3'),
+    # 11-10 DD10 street death (owner: 'it always blows up if u try and run outside', 'its the first spwan that does it'): the LIVE DD10 (F07 6aeb8208 =
+    # dd10doorfix_1109, nothing installed) on the merged_1110e TEST dll with [DeathTrace] (TEST only, needs SessionSafe=0: its detour sites are hashed).
+    # The seat RUNS (goto sprint) from the first spawn out the front to (10200, 950) and stands there; then a TEST rig tele to the same place in case the
+    # walk was stuck. Cops hurt it 0.001 x (as every kit): a death that still comes is not the cops. 'off' = the same with [FallRescue] Enable=0.
+    'dd10trace1110on': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                            runout=((10200, 950), (10200, 50, 950)),
+                            hook=('C:/kl_build_1024/merged_1110e/test/dinput8.dll', '3f46b67af0f4f5f52a3bfee5ea9748c2'),
+                            ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=1500', 'MaxEvents=60',
+                                 '[FallRescue]', 'Enable=1'], keepalive=True,
+                            solo_secs=420, parts=('solo',), shots='60-300:5'),
+    'dd10trace1110off': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                             runout=((10200, 950), (10200, 50, 950)),
+                             hook=('C:/kl_build_1024/merged_1110e/test/dinput8.dll', '3f46b67af0f4f5f52a3bfee5ea9748c2'),
+                             ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=1500', 'MaxEvents=60',
+                                  '[FallRescue]', 'Enable=0'], keepalive=True,
+                             solo_secs=420, parts=('solo',), shots='60-300:5'),
+    # dd10trace1110on showed no death: cops at 0.001 x, the goto stuck at the spawn, MaxEvents 60 spent by 02:55:42. These two use the game's own
+    # cop damage (no [Balance] lines), tele at once to the front and stand 3 min; FallRescue on vs off tells if the rescue's put-back is the killer.
+    'dd10real1110on': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                           runout=((10200, 950), (10200, 50, 950)), teleonly=True, telewait=18, copsreal=True,
+                           hook=('C:/kl_build_1024/merged_1110e/test/dinput8.dll', '3f46b67af0f4f5f52a3bfee5ea9748c2'),
+                           ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=4000', 'MaxEvents=600',
+                                '[FallRescue]', 'Enable=1'], keepalive=True,
+                           solo_secs=420, parts=('solo',), shots='40-300:4'),
+    'dd10real1110off': dict(map='DD10', slot='F07', entry=5, stage=None, tag=None, live={'F07_Main.zip': '6aeb8208', 'KLJoin.ini': '8f3034c0'},
+                            runout=((10200, 950), (10200, 50, 950)), teleonly=True, telewait=18, copsreal=True,
+                            hook=('C:/kl_build_1024/merged_1110e/test/dinput8.dll', '3f46b67af0f4f5f52a3bfee5ea9748c2'),
+                            ini=['[KLHook]', 'SessionSafe=0', '[DeathTrace]', 'Enable=1', 'Log=1', 'PeriodMs=100', 'MaxLines=4000', 'MaxEvents=600',
+                                 '[FallRescue]', 'Enable=0'], keepalive=True,
+                            solo_secs=420, parts=('solo',), shots='40-300:4'),
+    # [Crash] ListUserGuard on the live DM03 (11-09 owner crash 0x4f8a8e after a fed respawn): proves the CListUser object is found and repointed
+    # every round and the wrapper is harmless over 2 rounds; a catch needs the released-record race, so 'key-0 record skipped' is a bonus, not a gate.
+    'dm03guard1110': dict(map='DM03', slot='F03', page=2, entry=2, stage=None, tag=None, live={'F03_Main.zip': '8e23cbd3', 'KLJoin.ini': '5c02ca99'},
+                          hook=('C:/kl_build_1024/merged_1110f/test/dinput8.dll', 'ddf81d7f63a80169180dc307281eafb5'),
+                          ini=['[Crash]', 'ListUserGuard=1', 'Log=1'], keepalive=True,
+                          solo_secs=900, parts=('solo',), shots='60-840:30'),
 }
+# 11-10 release load sweep: the DM01B doorfix (installed unbenched 11-09) crashed every load (0x6ad1d9) and nothing caught it; each expansion
+# map is loaded once on the LIVE files (nothing staged), stood on ~60 s and judged on faults/asserts only. Pins = live md5s at 11-10 07:20.
+LOADSWEEP = [('DM01B', 'F03', 3, 2, '778b075c', 'dccc9250'), ('DM02', 'F02', 2, 1, 'b24fb05d', 'dde7720a'), ('DM03', 'F03', 2, 2, '33361cd1', '0bc8d138'),
+             ('DM03A', 'F07', 2, 5, '3371303d', '16ae8673'), ('DM05A', 'F01', 3, 0, '791eb9c3', '912e08a5'), ('DM06B', 'F02', 3, 1, '7cee043d', 'ec42c5e4'),
+             ('DM07', 'F06', 3, 4, 'f35e4133', '1f514d51'), ('DM09', 'F06', 2, 4, 'afee8967', '90e9046d'), ('DM11B', 'F04', 3, 3, 'd98d60f7', '5968f07d'),
+             ('DD10', 'F07', 3, 5, 'b8c95d37', '7bda7220'), ('DM01', 'F01', 2, 0, 'e091f0d8', '957f20aa'), ('DM06', 'F04', 2, 3, '74583362', '512aa1a9'),
+             # stock control map: page 0 entry 4 loads DD06 (F06), proven by the 11-10 sweep's LOAD line (the old DD05/F05 guess was wrong)
+             ('DD06', 'F06', 0, 4, '54c262b5', '00c3c10c')]
+for _m, _s, _p, _e, _z, _b in LOADSWEEP:
+    KITS['load_' + _m] = dict(map=_m, slot=_s, page=_p, entry=_e, stage=None, tag=None, loadonly=True,
+                              live={'%s_Main.zip' % _s: _z, '%s_Main.bots.zip' % _s: _b},
+                              hook=('C:/kl_build_1024/merged_1110f_kahp/kit/dll_test/dinput8.dll', '03840ed00268983d16d4233546807408'),
+                              ini=['[VanBlow]', 'Log=1'], solo_secs=1000 if _m == 'DM09' else 600, parts=('solo', 'online'), shots='60-160:20')
+# 'online' = the map's Q32 host/join pair (round 1 -> shop -> round 2, 2 seats) on the same live files: release smoke for online play
 LC = ('lc1106', 'lcglass1106', 'lclive1106', 'lcdoors1106', 'lcspawn2f1106', 'lcoutro1106', 'lcoutcam1106', 'lcoutcam2a1106', 'lcoutcam2b1106', 'lcchain2a1106', 'lcchain2a1106s', 'lcchain2a1106b', 'lcchain2a1106d',
       'lcchain2a1106n', 'lcchain2c1106d', 'lcchain2d1106d', 'lcchain2e1106d', 'lcchain2f1106d', 'lclive2f1106', 'lcarr2h1108', 'skyline1108')
 EYE_OF = {'lcchain2e1106d': (7400, 2500, 2800), 'lcchain2f1106d': (7400, 2500, 2800), 'lclive2f1106': (7400, 2500, 2800), 'lcarr2h1108': (7400, 2500, 2800), 'skyline1108': (7400, 2500, 2800)}          # kits whose outro eye is not the 2c CamPos01 eye (7093,2181,2727)
@@ -395,11 +512,12 @@ def solo_script(k, secs_total):
     s = ['waitwin CampaignMenu 180000', 'settle 15 150 60000', 'tapuntil ESCAPE MainMenu 10000 3', 'settle 8 150 30000', 'wait 1500', 'tap DOWN', 'wait 1200',
          'tapuntil RETURN HeistModeMenu 15000 2', 'settle 8 150 30000', 'wait 3000', 'windows']
     pg = c.get('page', 3)          # page 2 = 6 x DOWN on HeistModeMenu, page 3 = 7 x DOWN (kl_arc2_kit.py, verified live_1026 smoke inis)
-    for _ in range({2: 6, 3: 7}[pg]):
+    for _ in range({0: 0, 2: 6, 3: 7}[pg]):
         s += ['tap DOWN', 'wait 500']
-    s += ['wait 2500', 'windows', 'tap RETURN', 'waitwin HeistPlayMenu%d 8000' % pg, 'wait 3000', 'windows',
-          'sel HeistLevel_P%d 0xceceec %d' % (pg, c['entry']), 'wait 2500', 'expect 0xceceec %d' % c['entry'],
-          'log BENCH1106 %s entry %d page %d slot %s' % (c['map'], c['entry'], pg, c['slot']), 'msg HeistLevel_P%d StartGame' % pg, 'waitload 300000',
+    sfx = '_P%d' % pg if pg else ''    # page 0 = the stock DD maps: HeistPlayMenu / HeistLevel (kl_n9_1106.py arc_ini)
+    s += ['wait 2500', 'windows', 'tap RETURN', 'waitwin HeistPlayMenu%s 8000' % (pg or ''), 'wait 3000', 'windows',
+          'sel HeistLevel%s 0xceceec %d' % (sfx, c['entry']), 'wait 2500', 'expect 0xceceec %d' % c['entry'],
+          'log BENCH1106 %s entry %d page %d slot %s' % (c['map'], c['entry'], pg, c['slot']), 'msg HeistLevel%s StartGame' % sfx, 'waitload 300000',
           'log BENCH1106 level loaded: %s' % c['map'], 'wait 23000', 'peek 0x168e598+0x70 session-state-must-be-0x19', 'pos spawn']
     if k in LC:
         # Escape: the vehicle state machine is open-loop timers (re/lastcall_heli_1105.md). Wait for state 3 (van/chopper at the pad),
@@ -423,6 +541,11 @@ def solo_script(k, secs_total):
               'tap E 3000', 'wait 1000', 'pos try1', 'tap E 3000', 'wait 1000', 'pos try2', 'tap E 4000', 'wait 1000', 'pos boarded',
               'waitvan 5 120000', 'pos van5',
               'wait 8000', 'pos after5', 'waitstate 0x1f 240000', 'pos s1f', 'wait 12000', 'waitstate 0x20 120000', 'log BENCH1106 LC solo done', 'wait 3000', 'pass 1000']
+    elif c.get('loadonly'):
+        # load sweep: stand 4 x 15 s after the spawn; the run is judged on faults/asserts/dumps, no round end needed
+        for i in range(1, 5):
+            s += ['wait 15000', 'pos load-%ds' % (15 * i)]
+        s += ['log BENCH1106 %s load done' % c['map'], 'pass 1000']
     elif c.get('cars'):
         # one station per car: 1200 upstream (against the spline heading) and 150 up (the road climbs ~0.06/unit upstream, +40 could land under it), then
         # WALK toward the car (goto holds W: 'face' does not turn a standing player, klauto.c) and stop 1000 short (500 hid the car behind the body, 11-08 shots); 'tele' is TEST-rig only, the guard may refuse (the log says)
@@ -453,6 +576,18 @@ def solo_script(k, secs_total):
         for i in range(1, 7):
             s += ['wait 15000', 'pos wait-%ds' % (15 * i)]
         s += ['log BENCH1106 ledge done', 'pass 1000']
+    elif c.get('runout'):
+        # DD10 street death (11-10): run from the first spawn out the front (goto holds W + sprint), stand; then the TEST rig tele to the same place.
+        # [DeathTrace] logs damage, the killer and 100 ms samples until a death; PosLogMs logs the place every 5 s
+        (gx, gz), (tx, ty, tz) = c['runout']
+        if not c.get('teleonly'):      # dd10trace1110on: the goto never left the spawn (stuck 25 m short), so the real-damage kits tele at once
+            s += ['log BENCH1106 run out the front', 'goto %d %d 150 45000 sprint' % (gx, gz), 'pos after-run', 'log BENCH1106 out front (run)']
+            for i in range(1, 5):
+                s += ['wait 10000', 'pos run-%ds' % (10 * i)]
+        s += ['tele %d %d %d' % (tx, ty, tz), 'wait 1000', 'pos after-tele', 'log BENCH1106 out front (tele)']
+        for i in range(1, c.get('telewait', 4) + 1):
+            s += ['wait 10000', 'pos tele-%ds' % (10 * i)]
+        s += ['log BENCH1106 runout done', 'pass 1000']
     elif c.get('vancall'):
         # DD10 van call (11-09, tools/kl_dd10_vancall_1108.py): the van is called ONLY by a heister in otrExitLevel. TEST rig tele first into the
         # approach box (node 22127, shows the van) outside the exit box, then into the exit box; the log says who called it ('last:' = the fallback, not this)
@@ -491,7 +626,7 @@ def probes(k):
     if k in LC:
         # lclive1106 (11-06 10:52): 0 KLShot files, d3count 0 frames: ReShade owns Present here, so shots go through its bridge (as MT3B 11-02)
         t = ['[Heli]', 'Probe=2', '[Camera]', 'Log=1', '[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
-    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look') or KITS[k].get('vancall') or KITS[k].get('ledge'):
+    elif KITS[k].get('cars') or KITS[k].get('van') or KITS[k].get('look') or KITS[k].get('vancall') or KITS[k].get('ledge') or KITS[k].get('runout') or KITS[k].get('loadonly'):
         # dm06btraffic1108 / vanwait1108 (11-08): 0 KLShot files, these kits had no ReShade bridge lines (only LC kits did)
         t = ['[Memory]', 'Log=1', 'D3dShotPost=1', '[ReShade]', 'Bridge=1']
     return t
@@ -557,7 +692,7 @@ def gen(which='all'):
         shutil.copy2('%s/KLShopPage.ini' % DD, '%s/KLShopPage.ini' % d)
         t = ['; bench_1106 %s solo: OFFLINE Arcade, 1 seat, %s slot %s page 3 entry %d' % (k, c['map'], c['slot'], c['entry']),
              '; the seat stands still; cops hurt it 0.001 x so its death does not end the round (as ARC1)',
-             '[Balance]', 'CopToYou=0.001', 'PointBlankToYou=0.0'] + probes(k)
+             ] + ([] if c.get('copsreal') else ['[Balance]', 'CopToYou=0.001', 'PointBlankToYou=0.0']) + probes(k)
         n = c['solo_secs']
         if k in LEAD60:
             t += ['[Bots]', 'LastVehicleLead=600']
@@ -668,7 +803,12 @@ def faults(lines):
     """Case-sensitive on purpose: 'EndOnFatal=1' / 'ContinueAsserts' lines are settings, not faults."""
     pat = re.compile(r'(EXCEPTION|FATAL|CRASH|ACCESS_VIOLATION)|access violation|memory fault|c0000005', re.I if False else 0)
     # our own 'listguard: ... catches only c0000005' settings line is not a fault
-    return [l for l in lines if pat.search(l) and 'listguard:' not in l]
+    hits = [l for l in lines if pat.search(l) and 'listguard:' not in l]
+    # a first-chance c0000005 inside our own dll is a guarded read (kllistguard's 10 s scan hit a page freed meanwhile, DM06B 11-10):
+    # not a fault when the hook's own closing line counts 'faults 0' (an unhandled one is counted there and dumped)
+    if any(re.search(r'RESULT .*\bfaults 0\b', l) for l in lines):
+        hits = [l for l in hits if not ('first chance' in l and 'DINPUT8.dll+' in l)]
+    return hits
 
 
 def dumps(tag, n):
@@ -726,7 +866,9 @@ def verify(k, part, tagbase=None):
             else:   # includes lcchain2c1106d / lcchain2d1106d: the eye is FIXED at CamPos01 (2d: the box node itself), so it is still checked
               chk('escape camera eye about (%d,%d,%d) in the outro' % eye, bool(hit), '%d outro cam eyes, %s' % (len(eyes), ('e.g. (%.0f,%.0f,%.0f)' % hit[0]) if hit else ('last (%.0f,%.0f,%.0f)' % eyes[-1]) if eyes else 'none'))
         st = [m.group(1) for l in a for m in [re.search(r'session: state \S+ -> (0x[0-9a-f]+)', l)] if m]
-        if not KITS[k].get('cars'):
+        if KITS[k].get('loadonly'):
+          chk('level loaded, stood 60 s (BENCH1106 load done)', any('load done' in l for l in a), 'states seen: %s' % ' '.join(st[-8:]))
+        elif not KITS[k].get('cars'):
           chk('session reaches 0x1f then 0x20', '0x1f' in st and '0x20' in st[st.index('0x1f'):] if '0x1f' in st else False, 'states seen: %s' % ' '.join(st[-8:]))
         van = [l[:140] for l in a if 'van card' in l or 'vehicle state' in l]
         print('  info vehicle lines: %d, last: %s' % (len(van), van[-1] if van else '-'))
@@ -855,6 +997,11 @@ def run(k, part):
                 if k in LC:
                     args += ['--shots', '60-%d:60' % (secs - 60), '--d3shots']
             cmd = [sys.executable, 'tools/kl_solo_test.py', '--hook', '%s/hook_test' % d, '--tag', tag, '--base', '%s/KLHook_base.ini' % d, '--owner-away'] + args
+            # dumps of an earlier run of the same tag would fail this run's dump check: renamed aside (fc 11-10, stale 08:33 KLHook_1.dmp)
+            for i in (1, 2):
+                for f in dumps(tag, i):
+                    o = '%s/%s/inst%d/%s' % (SOLO, tag, i, f)
+                    os.replace(o, o + '.prev')
             with open('%s/%s_run.txt' % (d, p), 'w') as out:
                 print('  run %s (log %s/%s_run.txt)' % (tag, d, p), flush=True)
                 rc = subprocess.run(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT).returncode

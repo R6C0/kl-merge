@@ -1,0 +1,9 @@
+; add as a new section in KLHook.ini (from klhook/kllistguard.c, 1110)
+; ListUserGuard: kl2.exe crashed at 0x4f8a8e (DM03 round 2, right after a police respawn): the per-frame CListUser update met a released
+; record with key 0 and walked the hash table's header word as a node. With this on, exactly that access violation (and no other) is
+; swallowed and the one list update is dropped. No code or .rdata byte is changed: the CListUser object gets a private copy of its vtable.
+; (recommended on)
+[Crash]
+ListUserGuard=1
+; one log line per object found and per catch (first catch, then at most one per 10 s)
+Log=1

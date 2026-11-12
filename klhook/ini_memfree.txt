@@ -1,0 +1,12 @@
+; append to the [Memory] section of KLHook.ini (build memfree1110). Not applied: the repo KLHook.ini is another session's dirty file.
+; Release / Compact / Optimize: decommit free heap memory once the level is gone. MEASURED: this does NOT give address space back
+; (the NT heap keeps its segments), so the gain is committed memory only; the census lines 'memfree:' are the useful part.
+Release=0          ; (recommended off) gain is commit only, and HeapCompact on a worker thread races any HEAP_NO_SERIALIZE heap of the game (unproven safe)
+Compact=1          ; (only used with Release=1)
+Optimize=1         ; (only used with Release=1)
+Census=1           ; (recommended on) 'memfree:' lines in KLHook.log: who holds the private address space
+SettleMS=3000
+CooldownMS=20000
+; The actual prevention of the gray screen: keep the driver's burst of small blocks off the process heap (klarena.c).
+; Benched good on DM05A (K49H2, K49I): 0 refusals, flat free address space. The owner's ini lacks it.
+DriverArena=1      ; (recommended on)

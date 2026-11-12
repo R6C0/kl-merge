@@ -1,0 +1,13 @@
+# ANP_guards.txt (copy into the Dog Days folder; a missing file = these defaults). key=value tokens, # comments.
+# Default: no kl2.exe code byte is changed (Valve CEG hashes ~85% of .text; a changed hashed byte ends a real
+# Arcade / Fragile Alliance session with ExitProcess(0x8000dead)). "legacy" brings an old code patch back: tests only.
+cl=veh      # CListUser bad-bucket guard: veh | off | legacy (0x4f8a60)
+fx=off      # runtime FX alias: off (aliases built offline from fxc\miss_<ID>.txt) | legacy (0x71166d, logs FXMISS)
+gfx=veh     # missing ZGraphic template int3: veh | off | legacy (0x51f1a5)
+wrap=watch  # word-wrap stall: watch (log) | rescue (watchdog ends the loop) | off | legacy (0x8a40fe)
+coll=veh    # collision callback bad handle: veh | off | legacy (0x927b44)
+snd=veh     # streamed sound rate 0: veh | off | legacy (0x446673); also ANP_sound.txt sndpatch=1/0/legacy
+heap=veh    # actor teardown heap-header assert int3 0x4665dc (ZLNKOBJ+0x88 free): veh (log, leak the block, go on) | off
+herowatch=on  # diagnostic: ZLNKOBJ+0x88 header of player/buddy/mercs at 1 Hz + node walk at scene requests | off
+reset=on    # D3D device reset (0x456bf0): drop the pre-reset render command lists | all (also 0x8bba00 recreate) | off
+# legacy=all  # every guard as before 11 Oct

@@ -421,9 +421,33 @@ def swappable(r):
         raise Refused('%s: codec %#x bits %d cannot be encoded (only 16-bit PCM and IMA ADPCM)' % (r.name, r.codec, r.f['bits']))
 
 
-def fit_clip(a, rate, r, stock_peak=None, keep_length=False, linear=False, level='peak', gain_db=0.0, rail=False):
+def lead_trim(x, rate, thr=0.01, keep_ms=3.0):
+    """Drops the silence before the first sample over thr (x float [-1,1]), keeping keep_ms; returns (x, ms dropped)."""
+    m = np.abs(x).max(axis=1) if len(x) else np.zeros(0)
+    hit = np.nonzero(m > thr)[0]
+    if not len(hit):
+        return x, 0.0
+    n = max(0, int(hit[0]) - int(rate * keep_ms / 1000.0))
+    return x[n:], 1000.0 * n / rate
+
+
+def limit(x, ceil=0.89):
+    """Soft limiter: tanh knee above 0.6 so a loudness-raised clip never hard-clips (peak <= ceil)."""
+    k = 0.6
+    ax = np.abs(x)
+    over = ax > k
+    y = x.copy()
+    y[over] = np.sign(x[over]) * (k + (ceil - k) * np.tanh((ax[over] - k) / (ceil - k)))
+    return y
+
+
+def fit_clip(a, rate, r, stock_peak=None, keep_length=False, linear=False, level='peak', gain_db=0.0, rail=False,
+             stock_rms=None, trim_lead=False, max_clip_ms=None):
     """Dead Men clip (int16 [frames, ch] at rate) -> (data bytes, samples field, pcm field, seconds, notes) in record r's format.
-    level 'peak': scale so the peak equals stock_peak (the record's own decoded peak; GUESS). gain_db on top. 16-bit clip at the end."""
+    level 'peak': scale so the peak equals stock_peak (the record's own decoded peak; GUESS). gain_db on top. 16-bit clip at the end.
+    level 'rms': scale so the RMS of the sounding part equals stock_rms (loudness, GUESS), then a soft limiter (the Dead Men UI clips are
+    heavily compressed: a peak match left them 10-13 dB louder than the Dog Days clicks). trim_lead drops leading silence; max_clip_ms
+    cuts a long clip (the 5.6 s Menu / OpenWindow clips) with a 60 ms fade."""
     notes = []
     swappable(r)
     x = a.astype(np.float64) / 32768.0
@@ -434,6 +458,13 @@ def fit_clip(a, rate, r, stock_peak=None, keep_length=False, linear=False, level
     if rate != r.f['rate']:
         x = G.resample(x, rate, r.f['rate']) if linear else resample_sinc(x, rate, r.f['rate'])
         notes.append('resampled %d -> %d Hz (%s)' % (rate, r.f['rate'], 'linear np.interp' if linear else 'windowed sinc'))
+    if trim_lead:
+        x, dropped = lead_trim(x, r.f['rate'])
+        if dropped >= 1.0:
+            notes.append('lead-in silence trimmed %.0f ms' % dropped)
+    if max_clip_ms and len(x) > int(r.f['rate'] * max_clip_ms / 1000.0):
+        x = fade_edges(x[:int(r.f['rate'] * max_clip_ms / 1000.0)].copy(), r.f['rate'], ms=60)
+        notes.append('cut to %d ms (60 ms fade, GUESS taste)' % max_clip_ms)
     if keep_length:
         want = r.frames()
         if len(x) > want:
@@ -447,7 +478,15 @@ def fit_clip(a, rate, r, stock_peak=None, keep_length=False, linear=False, level
         notes.append('level: peak %.3f -> stock peak %.3f (x%.3f, GUESS)' % (peak, stock_peak / 32768.0, g))
     if gain_db:
         g *= 10.0 ** (gain_db / 20.0); notes.append('gain %+.1f dB' % gain_db)
+    if level == 'rms' and stock_rms and len(x):
+        on = x[np.abs(x).max(axis=1) > 0.02]
+        rms = float(np.sqrt(np.mean(on ** 2))) if len(on) else 0.0
+        if rms > 0:
+            g = (stock_rms / 32768.0) / rms * (10.0 ** (gain_db / 20.0))
+            notes.append('level: rms %.4f -> stock rms %.4f (x%.3f, GUESS)' % (rms, stock_rms / 32768.0, g))
     x = x * g
+    if level == 'rms':
+        x = limit(x); notes.append('soft limiter (peak %.2f)' % np.abs(x).max())
     if np.abs(x).max() > 1.0:
         notes.append('clipped at 0 dBFS (%.2f)' % np.abs(x).max())
     pcm16 = G.to_i16(np.clip(x, -1.0, 1.0))
@@ -471,10 +510,10 @@ def ima_blocks_ok(data, block, ch):
 
 
 # ------------------------------------------------------------------ build + proofs
-def build_pair(whd0, wav0, repl, keep_length, log=print):
+def build_pair(whd0, wav0, repl, keep_length, log=print, append_all=False):
     """repl: {rec_off: (data, samples, pcm, seconds)} -> (whd1, wav1) through kl_gunsnd.rebuild (keep_geometry = keep_length)."""
     try:
-        whd1, wav1, _ = G.rebuild(whd0, wav0, repl, None, log=log, keep_geometry=keep_length)
+        whd1, wav1, _ = G.rebuild(whd0, wav0, repl, None, log=log, keep_geometry=keep_length, force_append=append_all)
     except AssertionError as e:
         raise Refused('kl_gunsnd.rebuild / check_bank_preserved: %s' % e)
     return whd1, wav1
@@ -881,7 +920,8 @@ def probe(dd, dm=None, out_dir=OUT_DEFAULT, max_ms=MAX_MS_DEFAULT, levels=True, 
 
 
 def stage(dd, dm, mapping, out_dir=OUT_DEFAULT, accept=False, keep_length=False, linear=False, rail=False, level='peak',
-          previews=False, levels=True, log=print, game_for_install=None):
+          previews=False, levels=True, log=print, game_for_install=None,
+          append_all=False, trim_lead=False, max_clip_ms=None):
     """-> build report dict. Raises Refused (nothing written then, except pins.json with --accept-input)."""
     if np is None:
         raise Refused('numpy is needed for stage (kl_gunsnd uses it)')
@@ -912,7 +952,9 @@ def stage(dd, dm, mapping, out_dir=OUT_DEFAULT, accept=False, keep_length=False,
         swappable(r)
         stock, _ = decode_record(bank, r)
         stock_peak = int(np.abs(stock.astype(np.int32)).max()) if len(stock) else 0
-        data, samples, pcm, seconds, notes = fit_clip(a, rate, r, stock_peak, keep_length, linear, lv or level, gain_db, rail)
+        stock_rms = float(np.sqrt(np.mean(stock.astype(np.float64) ** 2))) if len(stock) else 0.0
+        data, samples, pcm, seconds, notes = fit_clip(a, rate, r, stock_peak, keep_length, linear, lv or level, gain_db, rail,
+                                                      stock_rms, trim_lead, max_clip_ms)
         repl[r.rec_off] = (data, samples, pcm, seconds)
         row = collections.OrderedDict([('dd', r.name), ('rec_off', '%#x' % r.rec_off), ('whd_ref', '%#x' % r.whd_ref), ('dd_codec', CODEC_NAME.get(r.codec)),
                                        ('dd_rate', r.f['rate']), ('dd_ch', r.f['ch']), ('stock_ms', round(r.ms(), 1)), ('stock_size', r.f['size']),
@@ -922,7 +964,7 @@ def stage(dd, dm, mapping, out_dir=OUT_DEFAULT, accept=False, keep_length=False,
         rows.append(row)
         log('  %-40s <- %-50s %6.0f ms -> %6.0f ms %s' % (r.name[-40:], dm_name[-50:], r.ms(), 1000.0 * seconds, '; '.join(notes)))
     log('rebuilding (%s):' % ('keep length, .WHD byte-identical' if keep_length else 'grow: in place when it fits, else appended'))
-    whd1, wav1 = build_pair(bank.whd, bank.wav, repl, keep_length, log)
+    whd1, wav1 = build_pair(bank.whd, bank.wav, repl, keep_length, log, append_all)
     recs1 = {o: dict(zip(W.DD_F, v)) for k, o, v in W.parse('dd', whd1)[0] if k == 'rec'}
     by_off = {r.rec_off: r for r in bank.records}
     for row in rows:
@@ -1013,7 +1055,9 @@ def main(argv=None):
     p.add_argument('--max-ms', type=float, default=MAX_MS_DEFAULT); p.add_argument('--no-levels', action='store_true')
     s = sub.add_parser('stage'); s.add_argument('--dd', required=True); s.add_argument('--dm', required=True); s.add_argument('--map')
     s.add_argument('--out', default=OUT_DEFAULT); s.add_argument('--accept-input', action='store_true'); s.add_argument('--keep-length', action='store_true')
-    s.add_argument('--linear', action='store_true'); s.add_argument('--rail', action='store_true'); s.add_argument('--level', choices=('peak', 'none'), default='peak')
+    s.add_argument('--linear', action='store_true'); s.add_argument('--rail', action='store_true'); s.add_argument('--level', choices=('peak', 'rms', 'none'), default='rms')
+    s.add_argument('--in-place', action='store_true', help='old behaviour: a clip that fits is written over the old span (spans can be shared by records)')
+    s.add_argument('--no-trim', action='store_true'); s.add_argument('--max-clip-ms', type=float, default=1500.0)
     s.add_argument('--previews', action='store_true'); s.add_argument('--no-levels', action='store_true')
     c = sub.add_parser('check'); c.add_argument('stage_dir'); c.add_argument('--dd', required=True)
     a = ap.parse_args(argv)
@@ -1025,7 +1069,8 @@ def main(argv=None):
             mp = a.map or os.path.join(a.out, 'mapping.json')
             if not os.path.isfile(mp):
                 raise Refused('no mapping file %s (run probe first, then edit mapping.json)' % mp)
-            stage(a.dd, a.dm, json.load(open(mp)), a.out, a.accept_input, a.keep_length, a.linear, a.rail, a.level, a.previews, not a.no_levels)
+            stage(a.dd, a.dm, json.load(open(mp)), a.out, a.accept_input, a.keep_length, a.linear, a.rail, a.level, a.previews, not a.no_levels,
+                  append_all=not a.in_place and not a.keep_length, trim_lead=not a.no_trim, max_clip_ms=a.max_clip_ms)
             return 0
         if a.cmd == 'check':
             return 1 if check(a.stage_dir, a.dd) else 0

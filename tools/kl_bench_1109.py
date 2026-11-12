@@ -527,8 +527,10 @@ def pair(k, who):
             # KeepAlive=1 (klauto.c kla_keep_alive, TEST rig only): refills the local player's health every poll. Police killed the host ~19 s
             # into the round on DOORS_1109_DM01 runs 2/3, DM07GATE runs 1/2 and DM07UNHIDE (control A), voiding the verdicts; both seats
             # K[k]['keepalive'] = 0 (DM07CURTAIN_1109 only): written as KeepAlive=0 so a KillBox death cannot be refilled
-            kv = [(a, b) for a, b in kv if a not in ('CmdAdd', 'MaxRunMs', 'KeepAlive')] + [('CmdAdd', '-o DisableSplashScreens -o AutoExit=%d' % total), ('MaxRunMs', str((total - 10) * 1000)),
-                                                                                           ('KeepAlive', '1' if K[k]['keepalive'] else '0')]
+            # KeepAliveHp=20000 (TEST dlls from 03840ed0 on; older ones ignore it): LCDOORS/DM02C 11-10 hosts (550 hp) were downed between two
+            # polls by police (FA_DieFromPolice) and a downed body is not refilled, so the maximum is raised too.
+            kv = [(a, b) for a, b in kv if a not in ('CmdAdd', 'MaxRunMs', 'KeepAlive', 'KeepAliveHp')] + [('CmdAdd', '-o DisableSplashScreens -o AutoExit=%d' % total), ('MaxRunMs', str((total - 10) * 1000)),
+                                                                                           ('KeepAlive', '1' if K[k]['keepalive'] else '0')] + ([('KeepAliveHp', '20000')] if K[k]['keepalive'] else [])
         t.append('[%s]' % name)
         t += ['%s=%s' % kv_ for kv_ in kv]
     t += probes(k) + ['[Script]'] + B.renumber(scr)

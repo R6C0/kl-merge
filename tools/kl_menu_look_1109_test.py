@@ -38,6 +38,7 @@ FRONT = '''<Windows>
   <ColorSet Name="Legend" NormalColor="0xffffffff" FocusColor="0xffd00000" DisableColor="0xff808080"/>
   <ColorSet Name="Debug" NormalColor="0x80c0c0c0" FocusColor="0x80c0c0c0" DisableColor="0x80808080"/>
   <ColorSet Name="KLFocus" NormalColor="0xffffffff" FocusColor="0xffd7373a" DisableColor="0xff808080"/>
+  <ColorSet Name="OnFocus" NormalColor="0xff000000" FocusColor="0xff000000" DisableColor="0xff888888"/>
   <ColorSet Name="Odd" NormalColor="0xff829ec1" FocusColor="0xffffffff" DisableColor="bogus"/>
   <ColorSet Name="Legend" NormalColor="0xffffffff" FocusColor="0xffd00000" DisableColor="0xff808080"/>
   <Template Name="HelpText_GT" Font="Text" X="1"/>
@@ -133,6 +134,7 @@ def main():
     check('Normal=0xfff0475a Focus=0xfff0475a Disable=0xff8c3138' == d[('Header', 1)], 'Header = coral / coral / dead')
     check(d[('Legend', 2)] == d[('Legend', 1)] == 'Normal=0xfff3f0ea Focus=0xfff0475a Disable=0xff8d8982', 'both Legend definitions mapped alike')
     check('Normal=0xff63a65b Focus=0xff63a65b Disable=0xff4f8f49' == d[('Debug', 1)], 'Debug = green, alpha ff')
+    check('Normal=0xff0c0c0d Focus=0xff0c0c0d Disable=0xff8d8982' == d[('OnFocus', 1)], 'OnFocus = ink / ink / dim (text ON a light plate; 11-10 pale-plate bug): %s' % d[('OnFocus', 1)])
     check(d[('Odd', 1)] == 'Normal=0xff829ec1 Focus=0xfff3f0ea Disable=bogus', 'Odd: bluish kept, white -> chalk, bogus kept: %s' % d[('Odd', 1)])
     hows = {r[5] for r in rows}
     check(hows == {'name', 'role', 'kept', 'malformed'}, 'every how occurs once at least: %s' % sorted(hows))

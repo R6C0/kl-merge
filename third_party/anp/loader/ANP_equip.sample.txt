@@ -1,0 +1,15 @@
+# ANP_equip.txt (copy to the DD folder as ANP_equip.txt). No file = live levels=M02 (release default since 14 Oct;
+# a file without a mode word is live too; an unknown mode word = dry but never undoes an explicit off; an unreadable file keeps the previous config). Re-read within 1 s of a save.
+# Dead Men's mini-cutscene 'equip' for the player: a new gun replaces the same-type gun; grenades are always added.
+# Needed for M02's 020_GettingGuns chain (P90, Taurus, USP) and the 023 tear-gas grenades. See loader\equipassist.inc.
+# First word: off | dry | live     (dry: scan and log what would be done, nothing changes)
+# levels=M02          comma list of scene ids, or all (ANP M levels only)
+# pre=1 post=1        drop the same-type gun at the cutscene start / repair a refused equip after it ran
+# select=1            select the new gun when the replaced one was in hand (pullwpn 0)
+# drop=remove         remove (default: the replaced gun leaves the inventory) | world (Dead Men's drop; DD then shows
+#                     a world pickup prompt that can hide the level's own prompts)
+# wpnhdl=1            Dead Men's unlockplayer weaponhdl UnholsterPrim/UnholsterSec after an equip: select the first gun
+#                     of that TYPE (DD picks by inventory slot order: M02 021 ended with the P90 instead of the Taurus)
+# scanmb=24           MB of heap scanned per frame when a listed level loads
+# Log lines start with "equip:".
+live levels=M02 pre=1 post=1 select=1 wpnhdl=1 scanmb=24

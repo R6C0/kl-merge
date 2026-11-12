@@ -16,6 +16,8 @@ source pool at offset X" operations plus the literal bytes that exist in no sour
 are patched, then deflated again with the zlib level that reproduces the live archive byte for byte (checked when the
 package is made; members that no level reproduces are stored as raw deflate streams in the patch).
 Everything is sha1-checked: sources before anything is written, every output before it replaces a file.
+A map's <slot>_Main.bots.zip differs from its <slot>_Main.zip in the .prp only, so it is patched against that zip as
+built by the same install (ref 'out:<rel>'): it is built after it, and its source sha1 is checked at build time.
 
 Stock files that the mod replaces are MOVED to <DD>\KL_PortBackup\ (never deleted, never overwritten). The journal
 <DD>\KLMergeInstall.json lets `uninstall` put everything back. Steam launch options are never touched.
@@ -23,7 +25,7 @@ Stock files that the mod replaces are MOVED to <DD>\KL_PortBackup\ (never delete
 The installer half uses only the standard library + zstandard (frozen into KLMergeSetup.exe). The maker half also
 needs numpy.
 """
-import os, sys, io, json, struct, zlib, hashlib, time, shutil, zipfile, mmap, re, bisect, ctypes, traceback, argparse
+import os, sys, io, json, struct, zlib, hashlib, time, shutil, zipfile, mmap, re, bisect, ctypes, traceback, argparse, ntpath
 
 try:
     import zstandard as zstd
@@ -552,12 +554,76 @@ EXCLUDE_RE = re.compile(r'(\.before-|\.absent$|\.delays-|\.state\.json$|_journal
 EXCLUDE_DIR_RE = re.compile(r'(before[-_]|_?backup|scratch)', re.I)
 STOCK_MTIME = time.mktime((2026, 9, 14, 0, 0, 0, 0, 0, -1))      # the Steam install was 2026-09-13
 WIN_SLOTS = ['F%02d' % i for i in range(1, 10)] + ['L%02d' % i for i in range(0, 12)]
-OWN_ROOT = ['dinput8.dll', 'KLHook.ini', 'KLShopPage.ini', 'KL_MOD_SETTINGS.txt']
+OWN_ROOT = ['dinput8.dll', 'KLHook.ini', 'KLShopPage.ini', 'KL_MOD_SETTINGS.txt',
+            'KLReverbBoxes.ini']                                    # [Echo] RoomBoxes (klecho.c)
+OWN_DIRS = ['KLGrenade']                                            # [Grenade] PinSound WAVs (klgrenadefx.c)
+SCENE_VARIANT_RE = re.compile(r'^(.+)(_deadmen)\.(whd|wav|klms)$', re.I)   # Scenes\<bank>_deadmen.* ([MenuSounds])
 KEEP_USER = ('KLHook.ini', 'KLShopPage.ini')                       # never overwritten when the player already has one
 
 
 def nrm(p):
     return p.replace('\\', '/')
+
+
+BOTS_RE = re.compile(r'^(.+)\.bots\.zip$', re.I)
+
+
+def out_source(rel):
+    """the main zip a <slot>_Main.bots.zip is patched against ('out:' ref), or None"""
+    m = BOTS_RE.match(rel)
+    return m.group(1) + '.zip' if m else None
+
+
+def out_refs(e):
+    return [r[4:] for r in e['refs'] if r.startswith('out:')]
+
+
+def out_order(ents):
+    """stable order in which every 'out:' source comes before the entries built from it"""
+    rels = {e['rel'] for e in ents}
+    first = [e for e in ents if not any(r in rels for r in out_refs(e))]
+    return first + [e for e in ents if any(r in rels for r in out_refs(e))]   # one level deep: a source has no out: refs
+
+
+# the hook reads [Ambience]/[Stinger]/[Music] Folder= as absolute paths, and make ships the owner's ini as-is:
+# at install the game-folder part of those paths is pointed at this PC's folders (else the clips are "not there - dropped")
+INI_LOCAL_RE = re.compile(rb'^([ \t]*(?:Folder|FolderB)[ \t]*=[ \t]*)([^\r\n]*)', re.M | re.I)
+INI_GAMES = ((b'kane & lynch 2 - dog days', 'dd'), (b'payday 2', 'pd2'))
+LOCALIZE = ('KLHook.ini',)
+
+
+def localize_ini_bytes(data, roots):
+    """roots: {'dd': path, 'pd2': path or None}; returns the rewritten bytes (unchanged when nothing applies)"""
+    def fix(m):
+        val = m.group(2)
+        low = val.lower().replace(b'/', b'\\')
+        for name, key in INI_GAMES:
+            i = low.find(b'\\' + name)
+            if i < 0 or not roots.get(key):
+                continue
+            end = i + 1 + len(name)
+            if end < len(low) and low[end:end + 1] != b'\\':
+                continue                                    # 'PAYDAY 2 extra' is another folder
+            root = roots[key]
+            # a Windows root ('E:\Games\...') keeps its drive on every host: posixpath.abspath would prepend the Linux
+            # cwd (kl_release_test on the cloud check-in); on Windows ntpath IS os.path, so the install is unchanged
+            ap = ntpath if (re.match(r'^[A-Za-z]:[\\/]', root) or root.startswith('\\\\')) else os.path
+            new = ap.abspath(root).rstrip('\\/').encode('mbcs' if os.name == 'nt' else 'utf-8', 'replace')
+            return m.group(1) + new + val[end:]
+        return m.group(0)
+    return INI_LOCAL_RE.sub(fix, data)
+
+
+def localize_ini(path, roots):
+    """rewrite path in place (temp file + replace); returns the new sha1, or None when nothing changed"""
+    data = open(path, 'rb').read()
+    new = localize_ini_bytes(data, roots)
+    if new == data:
+        return None
+    tmp = path + '.localize'
+    open(tmp, 'wb').write(new)
+    rt(os.replace, tmp, path)
+    return hashlib.sha1(new).hexdigest()
 
 
 class Maker:
@@ -574,6 +640,7 @@ class Maker:
         self.warn = []
         self.pd2_skipped = []
         self.cand = None
+        self.outs = {}                             # rel -> path of targets an 'out:' ref may name
 
     # -- source resolution: the player's stock file for a reference
     def stock_dd(self, rel):
@@ -596,6 +663,8 @@ class Maker:
             return os.path.join(self.dm, rel)
         if k == 'pd':
             return os.path.join(self.pd2, rel)
+        if k == 'out' and rel in self.outs:
+            return self.outs[rel]                  # the main zip as this make read it (snapshot / live)
         raise ValueError(ref)
 
     def sha(self, path, cache=True):
@@ -669,8 +738,17 @@ class Maker:
         size = self._finish(hdr, ops, lits, None, outpath, refs)
         return size, copied, len(T) - copied
 
-    def make_zip(self, live, outpath, hints=()):
+    def make_zip(self, live, outpath, hints=(), out_rel=None):
+        """out_rel: also take members from that earlier target ('out:' ref, hinted first); other targets never see it"""
         self.scan()
+        if out_rel:
+            z = zipfile.ZipFile(self.outs[out_rel])
+            self.cand['out:' + out_rel] = [(i.filename, i.CRC, i.file_size) for i in z.infolist()]
+            z.close()
+            try:
+                return self.make_zip(live, outpath, ('out:' + out_rel,) + tuple(hints))
+            finally:
+                del self.cand['out:' + out_rel]
         L = ZipLayout(live)
         tkeys = {(m['crc'], m['usize']): m for m in L.members}
         score = []
@@ -803,6 +881,23 @@ def enumerate_targets(mk, only):
         p = os.path.join(dd, 'KLExpansion', 'KLHook.expansion.ini')
         if os.path.exists(p):
             T.append(dict(group='core', rel='KLExpansion/KLHook.expansion.ini', live=p, kind='lit'))
+        for sub in OWN_DIRS:                                       # folders the hook reads beside KLHook.ini
+            for p in list_files(os.path.join(dd, sub)):
+                T.append(dict(group='core', rel=nrm(os.path.relpath(p, dd)), live=p, kind='lit'))
+        scenes = os.path.join(dd, 'Scenes')
+        for fn in sorted(os.listdir(scenes)) if os.path.isdir(scenes) else ():
+            m = SCENE_VARIANT_RE.match(fn)                         # [MenuSounds]: themed sibling of a stock bank (kl_menu_sounds_1109.py)
+            if not m:
+                continue
+            t = dict(group='core', rel='Scenes/' + fn, live=os.path.join(scenes, fn), kind='lit')
+            if m.group(3).lower() != 'klms':                       # bank pair: patch against the stock bank it themes
+                sib = [f for f in os.listdir(scenes) if f.lower() == (m.group(1) + '.' + m.group(3)).lower()]
+                try:
+                    mk.stock_dd('Scenes/' + sib[0])
+                    t.update(kind='file', refs=['dd:Scenes/' + sib[0]])
+                except (IndexError, RuntimeError):
+                    pass
+            T.append(t)
     if want('overlay'):
         base = os.path.join(dd, 'KLExpansion', 'Overlay')
         for p in list_files(base):
@@ -898,11 +993,18 @@ def cmd_make(a):
     # snapshot of the small own files (they change while other chats install hooks)
     snap = os.path.join(out, '_snap')
     for t in T:
+        if a.snap:                                     # --snap DIR: files taken out of the game folder earlier (a peer bench owns it now)
+            p = os.path.join(a.snap, t['rel'])
+            if os.path.exists(p):
+                t['live'] = p
+            elif t['group'] == 'core':
+                raise SystemExit('--snap: %s is not in %s' % (t['rel'], a.snap))
         if t['kind'] == 'lit' and os.path.getsize(t['live']) < (64 << 20):
             dst = os.path.join(snap, t['rel'])
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(t['live'], dst)
             t['live'] = dst
+    shipcheck_ini(mk, T)
     groups = {}
     for t in T:
         groups.setdefault(t['group'], []).append(t)
@@ -911,12 +1013,40 @@ def cmd_make(a):
         entries = []
         t0 = time.time()
         mk.log('== %s: %d files' % (g, len(items)))
+        zips = {t['rel']: t['live'] for t in items if t['kind'] == 'zip'}
+        items = sorted(items, key=lambda t: out_source(t['rel']) in zips)   # main zips before their bots (stable)
+        made = {}                                      # rel -> (size, sha1) as made here, for the 'out:' refs
+        mstat = {}                                     # rel -> (size, mtime) when it was read
         for t in items:
             live = t['live']
             st0 = os.stat(live)
             sha = mk.sha(live, cache=False)
+            made[t['rel']] = (st0.st_size, sha)
+            mstat[t['rel']] = (st0.st_size, int(st0.st_mtime))
             pname = '%s.klp' % sha[:20]
             pfile = os.path.join(out, 'patches', pname)
+            orel = out_source(t['rel']) if t['kind'] == 'zip' else None
+            if orel in made:                           # bots zip: against its main zip as built by the same install
+                mk.outs[orel] = zips[orel]
+                so = os.stat(zips[orel])
+                if (so.st_size, int(so.st_mtime)) != mstat[orel]:
+                    mk.warn.append('%s changed before its bots zip was made against it' % orel)
+                # keyed by BOTH zips: a cached out patch made against another main zip is never reused
+                ofile = os.path.join(out, 'patches', '%s.%s.out.klp' % (sha[:20], made[orel][1][:12]))
+                if not os.path.exists(ofile):
+                    tt = time.time()
+                    mk.log(' %s (%s) against out:%s' % (t['rel'], fmt(st0.st_size), orel))
+                    mk.make_zip(live, ofile, t.get('hints', ()), out_rel=orel)
+                    mk.log('   -> %s  (%.0fs)' % (fmt(os.path.getsize(ofile)), time.time() - tt))
+                osz = os.path.getsize(ofile)
+                if os.path.exists(pfile) or osz > st0.st_size // 8:   # else the old way (~60 % of the size) cannot be smaller
+                    if not os.path.exists(pfile):
+                        mk.log(' %s: out: patch is %s, making the old way too' % (t['rel'], fmt(osz)))
+                        mk.make_zip(live, pfile, t.get('hints', ()))
+                    if os.path.getsize(pfile) <= osz:
+                        ofile = None
+                if ofile:
+                    pname, pfile = os.path.basename(ofile), ofile
             ent = dict(group=g, rel=t['rel'], size=st0.st_size, sha1=sha, patch=pname)
             if t.get('stock'):
                 ent['stock'] = t['stock']
@@ -937,7 +1067,8 @@ def cmd_make(a):
             hdr, block, f = read_klp(pfile)
             f.close()
             ent['patch_size'] = os.path.getsize(pfile)
-            ent['refs'] = {r: [os.path.getsize(mk.resolve(r)), mk.sha(mk.resolve(r))] for r in patch_refs(hdr)}
+            ent['refs'] = {r: list(made[r[4:]]) if r.startswith('out:') else [os.path.getsize(mk.resolve(r)), mk.sha(mk.resolve(r))]
+                           for r in patch_refs(hdr)}
             st1 = os.stat(live)
             if (st1.st_size, int(st1.st_mtime)) != (st0.st_size, int(st0.st_mtime)):
                 mk.warn.append('%s changed while it was read' % t['rel'])
@@ -950,6 +1081,25 @@ def cmd_make(a):
     if mk.pd2_skipped:
         print('NOT SHIPPED (Payday 2 audio):', ', '.join(mk.pd2_skipped))
         json.dump(mk.pd2_skipped, open(os.path.join(out, 'parts', '_pd2_skipped.txt'), 'w'))
+
+
+def shipcheck_ini(mk, T):
+    """make only: grade the KLHook.ini about to ship with tools/kl_ini_shipcheck.py (ERROR/WARN -> mk.warn, never stops
+    the make: what ships is the owner's call). The installer half travels without that tool, hence the guarded import."""
+    t = next((t for t in T if t['rel'] == 'KLHook.ini'), None)
+    if t is None:
+        return
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import kl_ini_shipcheck as sc
+        live = open(t['live'], encoding='latin1').read()            # same reading as kl_ini_shipcheck.main
+        sample = open(sc.SAMPLE, encoding='latin1').read()
+    except (ImportError, OSError) as ex:
+        mk.warn.append('KLHook.ini shipcheck skipped (%s)' % ex)
+        return
+    for lvl, sec, key, val, n, why in sc.check(live, sample):
+        if lvl in ('ERROR', 'WARN'):
+            mk.warn.append('KLHook.ini shipcheck %s line %d [%s] %s=%s: %s' % (lvl, n, sec, key, val.strip(), why))
 
 
 def cmd_checklive(a):
@@ -1071,7 +1221,8 @@ def preflight(env, ents, log=say):
     need = {}
     for e in ents:
         for r, (sz, sh) in e['refs'].items():
-            need.setdefault(r, (sz, sh))
+            if not r.startswith('out:'):             # built by this install: checked at build time
+                need.setdefault(r, (sz, sh))
     problems = []
     bad_refs = set()
     for r, (sz, sh) in sorted(need.items()):
@@ -1175,21 +1326,52 @@ def cmd_install(a):
         if any(r.startswith('pd:') for r in e['refs']) and not pd2:
             skipped.append(e['rel']); continue
         use.append(e)
+    for e in [e for e in use if any(r in skipped for r in out_refs(e))]:   # built from a skipped file: skipped too
+        use.remove(e)
+        skipped.append(e['rel'])
     if skipped:
         say('skipping %d files that need Payday 2' % len(skipped))
+    # the package ships as 2 zips (GitHub's 2 GiB asset limit): a half-unpacked package refuses here, before any write
+    missing = sorted({e['patch'] for e in use if e.get('patch')
+                      and not os.path.exists(os.path.join(pkg, 'patches', e['patch']))})
+    if missing:
+        raise Fail('the package is incomplete: %d patch files missing (e.g. %s). Run KL Dead Men Rising Setup.bat again '
+                   '(it downloads both package parts). Nothing has been installed.' % (len(missing), missing[0]))
     env = Env(dd, dm, pd2)
     j = load_journal(dd)
     done = {x['rel']: x for x in j['entries']}
     say('checking the stock source files ...')
     todo = []
+    roots = dict(dd=dd, pd2=pd2)
     for e in use:
         dest = os.path.join(dd, e['rel'])
+        rec = done.get(e['rel'])
+        if (e['rel'] in LOCALIZE and rec and rec['action'] in ('new', 'replaced') and rec['sha1'] == e['sha1']
+                and os.path.exists(dest) and env.sha(dest) in (e['sha1'], rec.get('local_sha1'))):
+            loc = localize_ini(dest, roots)            # our unedited ini: re-pointed every run (Payday 2 found since, an interrupted run)
+            if loc:
+                rec['local_sha1'] = loc
+                save_journal(dd, j)
+                say('  %s: game folders set to this PC' % e['rel'])
+            continue
         if os.path.exists(dest) and os.path.getsize(dest) == e['size'] and env.sha(dest) == e['sha1']:
             continue
         todo.append(e)
     if not todo:
         say('everything is already installed and identical.')
         return 0
+    todo = out_order(todo)
+    byrel = {e['rel']: e for e in man['entries']}
+    pending = {e['rel'] for e in todo}
+    for e in todo:                                 # an out: source is built in this run or already installed as packaged
+        for r in out_refs(e):
+            dest = os.path.join(dd, r)
+            if r in pending or (r in byrel and os.path.exists(dest) and env.sha(dest) == e['refs']['out:' + r][1]):
+                continue
+            say('')
+            say('CANNOT INSTALL %s: it is built from %s, which is not selected and not installed from this package.' % (e['rel'], r))
+            say('Install its map group as a whole (or drop --only). Nothing was written.')
+            return 2
     problems, bad = preflight(env, [e for e in todo if e['refs']])
     if problems:
         say('')
@@ -1212,8 +1394,8 @@ def cmd_install(a):
             return 1
     tmpd = os.path.join(dd, TMPDIR)
     os.makedirs(tmpd, exist_ok=True)
-    sources = Sources(lambda r: _resolve_build(env, r))
     built = {}
+    sources = Sources(lambda r: _resolve_build(env, r, built, byrel))
     t0 = time.time()
     n = 0
     try:
@@ -1226,6 +1408,10 @@ def cmd_install(a):
             if os.path.exists(tp) and os.path.getsize(tp) == e['size'] and sha1_file(tp) == e['sha1']:
                 built[e['sha1']] = tp                  # left over from an interrupted run, verified
                 continue
+            for r in out_refs(e):                  # the source sha1 check of an out: ref, now that it exists
+                p = _resolve_build(env, 'out:' + r, built, byrel)
+                if p not in built.values() and env.sha(p) != e['refs']['out:' + r][1]:
+                    raise Fail('%s does not match the file %s is built from (sha1 differs). Nothing has been installed.' % (p, e['rel']))
             hdr, block, f = read_klp(os.path.join(pkg, 'patches', e['patch']))
             try:
                 sha = build_blob(hdr, block, sources, tp)
@@ -1248,6 +1434,8 @@ def cmd_install(a):
             if e.get('keep_user'):
                 alt = dest + '.new-' + VERSION
                 rt(shutil.copyfile, built[e['sha1']], alt)
+                if e['rel'] in LOCALIZE:
+                    localize_ini(alt, roots)
                 note = 'your existing file was kept; the packaged one is %s' % os.path.basename(alt)
                 if prev and prev['action'] in ('new', 'replaced'):
                     rec = dict(prev, note=note, alt=nrm(os.path.relpath(alt, dd)))   # still ours: uninstall removes it / brings the stock back
@@ -1289,6 +1477,11 @@ def cmd_install(a):
         else:
             rt(os.replace, src, dest)
             used.add(e['sha1'])
+        if e['rel'] in LOCALIZE:
+            loc = localize_ini(dest, roots)
+            if loc:
+                rec['local_sha1'] = loc                  # uninstall and verify accept this one as ours
+                say('  %s: game folders set to this PC' % e['rel'])
         j['entries'] = [x for x in j['entries'] if x['rel'] != e['rel']] + [rec]
         save_journal(dd, j)
     shutil.rmtree(tmpd, ignore_errors=True)
@@ -1298,7 +1491,13 @@ def cmd_install(a):
     return 0
 
 
-def _resolve_build(env, ref):
+def _resolve_build(env, ref, built=None, byrel=None):
+    if ref.startswith('out:'):                     # built earlier in this run (.part, sha1 verified), else the installed file
+        rel = ref[4:]
+        e = (byrel or {}).get(rel)
+        if e and e['sha1'] in (built or {}):
+            return built[e['sha1']]
+        return os.path.join(env.dd, rel)
     p = env.resolve(ref)
     if ref.startswith('dd:') and not os.path.exists(p):
         p = os.path.join(env.dd, BACKUP, ref[3:])
@@ -1331,7 +1530,7 @@ def cmd_uninstall(a):
             say('  WARNING: backup of %s is missing (%s); left as it is' % (rec['rel'], rec['backup']))
             continue
         if os.path.exists(dest):
-            if sha1_file(dest) == rec['sha1']:
+            if sha1_file(dest) in (rec['sha1'], rec.get('local_sha1')):
                 rt(os.remove, dest)
             else:
                 ed = dest + '.edited-' + tag
@@ -1372,13 +1571,18 @@ def cmd_verify(a):
     man = load_manifest(pkg)
     ents = select_entries(man, a.only)
     if not pd2:                                      # same rule as install: files built from Payday 2 are skipped without it
-        ents = [e for e in ents if not any(r.startswith('pd:') for r in e['refs'])]
+        nopd = {e['rel'] for e in ents if any(r.startswith('pd:') for r in e['refs'])}
+        ents = [e for e in ents if e['rel'] not in nopd and not any(r in nopd for r in out_refs(e))]
     bad = 0
+    done = {x['rel']: x for x in load_journal(dd)['entries']}
     for e in ents:
         dest = os.path.join(dd, e['rel'])
         if not os.path.exists(dest):
             say('MISSING  ' + e['rel']); bad += 1; continue
         if os.path.getsize(dest) != e['size'] or sha1_file(dest) != e['sha1']:
+            rec = done.get(e['rel'], {})
+            if rec.get('local_sha1') and rec.get('sha1') == e['sha1'] and sha1_file(dest) == rec['local_sha1']:
+                continue                                 # the packaged ini with this PC's game folders
             if e.get('keep_user'):
                 say('edited   %s (yours)' % e['rel'])
             else:
@@ -1414,6 +1618,7 @@ def main(argv=None):
     sub = ap.add_subparsers(dest='cmd')
     m = sub.add_parser('make'); m.add_argument('outdir'); m.add_argument('--dd', required=True); m.add_argument('--dm', required=True)
     m.add_argument('--pd2'); m.add_argument('--only'); m.add_argument('--level', type=int, default=15)
+    m.add_argument('--snap', help='take the files found here (same relative paths) instead of the live game folder')
     c = sub.add_parser('checklive'); c.add_argument('outdir'); c.add_argument('--dd', required=True)
     for name in ('install', 'uninstall', 'verify'):
         s = sub.add_parser(name)

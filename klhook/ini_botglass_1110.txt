@@ -1,0 +1,15 @@
+; [BotGlass] - AI heisters break intact glass panes that block them (klbotglass.c + klbotglass_logic.h). BUILT, NOT RUN IN THE GAME.
+; The break is the pane's own 'Activate' routine (kl2 0x8d1b60, read from the code), not a fired bullet: no bot has a "shoot at this" order.
+; Needs the glass restored on the map (tools/kl_dm02doorglass_1110.py); with that stage's timed relay on, the pane breaks by itself and this hook is moot.
+[BotGlass]
+Enable=0              ; 1 = a bot standing at an intact pane breaks it (recommended on once benched)
+OnlyHeist=1           ; 1 = only AI heisters (recommended on); 0 = police too (adds an 8 MB table walk every 5 s)
+Reach=250             ; cm from the pane's place within which a bot counts as at the glass (recommended 250)
+Still=30              ; cm/s below which a bot counts as blocked (recommended 30)
+DwellMs=1500          ; ms blocked near the pane before it breaks (recommended 1500)
+Vert=300              ; cm of height difference allowed between bot and pane (recommended 300)
+Facing=0              ; 1 = the bot must also face the pane (recommended off: the node x axis as heading is a GUESS)
+FacingCos=0.3         ; with Facing=1: cosine of the largest angle off the pane
+Online=0              ; 1 = also on the host of an online round (recommended off until the client side of the break is benched)
+Dry=0                 ; 1 = log what would break, call nothing (recommended off; use for the first bench)
+Log=1                 ; one log line per broken pane, 2 = every scan (recommended on)

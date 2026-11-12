@@ -17,7 +17,7 @@ never deleted, so UNINSTALL puts everything back exactly.
 | **Kane & Lynch: Dead Men** on Steam | **required.** The Dead Men maps, models and voices are rebuilt from YOUR Dead Men files. Without it the installer stops with "Dead Men was not found" and writes nothing |
 | Payday 2 on Steam | optional. The Payday 2 guns / masks pieces are skipped when it is not installed (the installer says how many files it skipped); everything else works |
 | Disk space on the Dog Days drive | roughly 6 to 8 GB for the rebuilt map folders (GUESS from the owner's folder; the installer prints the exact total and refuses with a clear message when the drive is short - it wants that total plus 1 GB headroom) |
-| Download | the package zip: about 0.6 GB (estimate from the owner's size study; the real figure is in the release post). If you have no Python 3, Setup also fetches a 12 MB embedded Python from python.org plus one module from PyPI |
+| Download | the package: about 2.3 GB in 2 zips (Setup downloads and unpacks both by itself). If you have no Python 3, Setup also fetches a 12 MB embedded Python from python.org plus one module from PyPI |
 | Time | the install rebuilds and sha1-checks every file: allow 10 to 30 minutes on a normal PC (GUESS: not timed on a tester PC yet). Re-runs are fast: files that are already right are skipped |
 
 ## Install
@@ -77,9 +77,13 @@ beside `kl2.exe`; without it the game is stock. The hook has no on/off switch in
 **renaming** (never deleting):
 
 - **PLAY DOG DAYS** renames `dinput8.dll` to `dinput8.dll.klmerge-off`, then starts the game: stock game, stock menus.
-  The mod's map folders stay on disk but nothing loads them.
+  The mod's map folders stay on disk but nothing loads them. The hook **stays off** after that game closes:
+  starting Kane & Lynch 2 from Steam then gives the stock game too, until you press PLAY DEAD MEN RISING or HOOK ON.
 - **PLAY DEAD MEN RISING** renames it back and starts the game.
 - **HOOK ON / OFF** does the rename without starting anything.
+- **RESHADE ON / OFF** (only if you have ReShade's `ReShade32.dll` in the Dog Days folder; the package does not ship it) sets
+  `[Graphics] Look` in `KLHook.ini`: OFF = ReShade not loaded (full frame rate), ON = your previous look back. It applies the
+  next time the game starts. The button shows `RESHADE: NONE` when ReShade is not there.
 
 Both refuse while `kl2.exe` is running - close the game first. One honesty note: the package may also replace a few
 stock sound files and the stream file `PC_Def.str` inside the Dog Days folder (groups "stockwav" / "pcdef"); those stay

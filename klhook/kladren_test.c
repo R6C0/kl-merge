@@ -21,6 +21,7 @@ static BYTE mem[0x02000000 + 0x10000];
 static char logbuf[1 << 16]; static int nlog;
 static const char *klh_ini = "";
 static int klh_exe_ok = 1;
+static int klcmp_level_active(void) { return 0; }   /* klcampaign_gate.h stand-in: the campaign skip at the head of kad_tick is not taken */
 static void klog(const char *fmt, ...)
 {
     va_list ap; char t[1500]; va_start(ap, fmt); vsnprintf(t, sizeof t, fmt, ap); va_end(ap);
@@ -85,6 +86,13 @@ static int klan_say_el(DWORD el, const char *t, float s, int slot) { (void)el; (
 
 #define KAD_TEST_NOANIM                 /* the Anim part (klfreeclimb.c's engine calls) is not in this harness */
 enum { KLTT_REVIVE = 4, KLTT_ADREN = 5 }; static float kltt_get(int r, int k) { (void)r; (void)k; return 1.0f; }   /* kltrait.c: no traits in this harness */
+/* klhud.c exports for [HUD] ReviveCut (2026-11-11): the kill line's feed slot + the round's net */
+#include "klkillcash_logic.h"
+#define KLU_C_GREEN 0xff00ff00u
+#define KLU_C_CORAL 0xffff7f50u
+static CRITICAL_SECTION klu_cs;                               /* initialised at the top of main */
+static int klu_revcut = 1; static long klu_rev_net;
+static char klu_kf_txt[64]; static LONG klu_kf_at; static DWORD klu_kf_col;
 #include "kladren.c"
 
 /* ---------------------------------------------------------------- the fake world */
@@ -131,6 +139,7 @@ static int fails;
 int main(void)
 {
     DWORD cur, done; int i;
+    InitializeCriticalSection(&klu_cs);
     /* ---- pure arithmetic */
     { float d[4] = { 300, -1, 120, 90 }, l[4] = { 250, 250, 250, 80 };
       CHECK(kad_pick(d, l, 4) == 2, "kad_pick: nearest within its own limit (3 is nearer but over its limit)");
@@ -160,6 +169,8 @@ int main(void)
     CHECK(R32(SCORE + 0x38) == 1000 + 25000, "share banked: 1000 -> 26000 (25 % of the $100000 bot 1 carried)");
     CHECK(R32(SCORE + 0x150 + 4) == 75000, "Take: the bot lost the share out of his cut");
     CHECK(!(R32(SCORE + 0x1d4) & 1) && !kad_m[0].on, "the mark is taken off again: he revived him");
+    CHECK(klu_kf_at && !strncmp(klu_kf_txt, "YOU GOT ", 8) && strstr(klu_kf_txt, "UP  +$25,000") && klu_kf_col == KLU_C_GREEN, "ReviveCut: the kill line says the share you got");
+    CHECK(klu_rev_net == 25000 && kad_last_cut == 25000, "ReviveCut: the round's net = +25000");
 
     /* ---- 2: he is NOT helped: the mark stays */
     printf("--- scenario 2\n"); world();

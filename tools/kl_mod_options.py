@@ -456,6 +456,24 @@ feat('menulook', G_GFX, 'Dead Men menu look: fonts, colours, menu sounds', 'on',
      'T9 11-09 (re/menu_look_1109.md 4.2): klslot.c [MenuLook] opens the themed copies <stem>_deadmen.<ext> of the overlay menu pair (Patch01*.zip, Scenes\\kaneandlynch.zip) and the menu '
      'sound pair (.WHD/.WAV) when they sit beside the live files (install.py --variant writes them); a missing copy = stock look, logged once; 0 = stock files exactly. Needs [Expansion] Enable=1. NOT run live',
      [('MenuLook', 'DeadMen', 1, 0, 1)])
+# T9 stage 4b (2026-11-10, owner: 'no click when you press into something and you can hear the Dog Days version'): a Dead Men / Dog Days choice per
+# menu sound. klslot.c kls_menusounds (klmenusounds_logic.h, ini fragment klhook\ini_menusounds_1110.txt). The sound bank is opened ONCE at game start, so
+# every row applies at the NEXT START of the game (the labels say so). Each event is one key holding a WORD (dd / dm / off / a clip name): a row is
+# ON when the key holds this row's word ('streq'); off writes dd (the Dog Days sound). Other words (off, a clip) are set by hand in the ini.
+feat('menusounds', G_AV, 'Menu sounds: the per-event picks below are applied to the Dead Men menu look sound bank; changes apply at the next game start', 'on', 'start',
+     'klslot.c [MenuSounds] Enable: 0 = the themed bank as the stage baked it (= the Dog Days sounds); needs the Dead Men menu look row and tools/kl_menu_sounds_1110.py install.py; NOT run live', [('MenuSounds', 'Enable', 1, 0, 1)])
+for _id, _ev, _on, _rec, _txt in (
+        ('menusnd_navigate', 'Navigate', 'dm', 'on', 'moving the selection up and down (Dog Days record Up_Down)'),
+        ('menusnd_confirm', 'Confirm', 'dm', 'on', 'pressing into something (Dog Days record Select; GUESS it is the one the game plays)'),
+        ('menusnd_back', 'Back', 'dm', 'on', 'going back (Dog Days record Back)'),
+        ('menusnd_toggle', 'Toggle', 'dm', 'on', 'ticking a box or changing a choice (Dog Days record Toggle_01)'),
+        ('menusnd_slider', 'Slider', 'dm', 'on', 'moving a slider (Dog Days record Slide)'),
+        ('menusnd_menu', 'Menu', 'menu', 'off', 'the long menu sound (Dog Days record Menu; GUESS what plays it; the clip is cut to 1.5 s)'),
+        ('menusnd_window', 'Window', 'openwindow_04', 'off', 'a window opening (Dog Days record OpenWindow_04; GUESS what plays it; the clip is cut to 1.5 s)')):
+    feat(_id, G_AV, 'Menu sound %s: Dead Men instead of Dog Days, %s; applies at the next game start' % (_ev, _txt), _rec, 'start',
+         'klslot.c [MenuSounds] %s = %s (on) / dd (off); other words (off, another clip name) are set in KLHook.ini by hand (see klhook\\ini_menusounds_1110.txt); needs the Menu sounds row on; NOT run live' % (_ev, _on),
+         [('MenuSounds', _ev, _on, 'dd', _on if _rec == 'on' else 'dd')])
+    F[-1]['streq'] = 1
 feat('neural', G_GFX, 'Neural rendering (GITC Uplift DLSS / DLAA, F10)', 'off', 'start',
      'ini note: 188 fps with it set aside against 106 .. 178 with it; needs the add-on files', [('Graphics', 'Neural', 1, 0, 0)])
 feat('rigid', G_GFX, 'Camera turn filter (heavier, smoother turn)', 'off', 'start',
@@ -531,6 +549,10 @@ feat('clientringsync', G_STAB, 'Online Dead Men maps with parked cars: the host 
      'klcoverring_sync.c [CoverRing] ClientRingSync (CR8): host sends each car 8 cover points (KLSYR, UDP 27415), client copies a point only where the host point is usable and its own is a spare; CR9 11-02 DM03 client 7/8 -> 8/8, CR10 A+B PASS (0 asserts, no-op when the seats agree)', [('CoverRing', 'ClientRingSync', 1, 0, 0)])
 feat('memory', G_STAB, 'Room for the big Dead Men maps (address space)', 'on', 'start',
      'avoids the 2 GB heap NULL crash on large .prm files', [('Memory', 'Enable', 1, 0, 1)])
+feat('listguard', G_STAB, 'Do not crash when a police player respawns (Withdrawal round 2 crash) (recommended on)', 'on', 'start',
+     'kllistguard.c [Crash] ListUserGuard: the per-frame CListUser update runs through a private vtable copy whose wrapper swallows only an access '
+     'violation inside 0x4f8a60..0x4f8b49 (the key-0 record of the owner\'s DM03 11-09 crash 0x4f8a8e) and drops that one list update; no code byte patched',
+     [('Crash', 'ListUserGuard', 1, 0, 0)])
 feat('quadring', G_STAB, 'Memory: buffer ring for the screen effects (Last Call runs out of memory without it)', 'on', 'start',
      'klquad.c: the 4 post-process quad buffers get 128 buffers each; the NVIDIA driver no longer piles a block per frame pass (K50H: 1696 -> 18 MB '
      'in 70 s; K50F2/I: flat at 120 fps, same picture); needs the frame limiter (its Reset wrapper); the DLL default is 0 = off, the live ini carries 128',
@@ -966,6 +988,8 @@ def state(lines, f):
     sec, key, onv, offv, dflt = f['keys'][0]
     if f.get('str'):                                        # a text key (MapCap): on = not empty
         return get_str(lines, sec, key, dflt) != '', None
+    if f.get('streq'):                                      # a WORD key (the [MenuSounds] events): on = the key holds this row's word
+        return get_str(lines, sec, key, dflt).strip().lower() == str(onv).lower(), None
     v = get_int(lines, sec, key, dflt)
     if f.get('exact'):                                      # one value of a multi-value key (the look): on only when it IS this value
         return v == onv, None
@@ -1029,7 +1053,7 @@ def describe_writes(lines, writes):
             how = 'new key; the DLL default was %s' % ('?' if d is None else d)
             changes = d is None or d != val
         else:
-            cur = get_int(lines, sec, key, None)
+            cur = get_str(lines, sec, key, None) if isinstance(val, str) else get_int(lines, sec, key, None)
             how = ('already %s' % cur) if cur == val else ('was %s' % cur)
             changes = cur != val
         out.append(('[%s] %s = %s  (%s)' % (sec, key, val, how), changes))
@@ -1360,6 +1384,9 @@ def check_ini(srcdir, inipath):
     (P%d, Thr%d, F%02d) and per-map sections (Ambience.DM01), so every try at it listed live keys as stale."""
     seen, where = scan_keys(srcdir)
     lines = split_lines(open(inipath, encoding='latin1').read())
+    import glob
+    for frag in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(inipath)), 'ini_*.txt'))):
+        lines += [''] + split_lines(open(frag, encoding='latin1').read())      # 2026-11-10: a block waiting to be merged into the (peer-dirty) ini documents its keys too
     rowkeys = {(s, k): f['id'] for f in F for s, k, *_ in f['keys']}
     rowless, unmentioned = [], []
     for (sec, key), files in sorted(where.items(), key=lambda kv: (kv[0][0].lower(), kv[0][1].lower())):
@@ -1378,6 +1405,8 @@ def check_defaults(srcdir):
     seen, _ = scan_keys(srcdir)
     bad = []
     for f in F:
+        if f.get('streq'):                                  # a word key read through GetPrivateProfileString by a variable name: no literal default to compare
+            continue
         for sec, key, onv, offv, dflt in f['keys']:
             d = seen.get((sec, key))
             if d is None:

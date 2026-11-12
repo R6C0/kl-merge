@@ -26,6 +26,8 @@ M, B = T.M, T.B
 LC_LEAVES = ('D04', 'D05', 'D1', 'D2')
 LC_MID = (1900, 354, 3313)          # between the pairs: the LootArea spawn points (1900..2100, 354, 3300..3400) of the clearance report
 LC_WEST = (1000, 3313)              # lobby side of the outer pair (trigger box x 900..2500)
+LC_WARM = (2300, 3313)              # warm-up goto targets between the pairs (on the nav mesh, reached in kl_route on the staged zip)
+LC_WARM2 = (1700, 3313)
 LC_EAST = (3000, 3313)              # far side of the inner pair (GUESS: open floor; the clearance walk reached 26527 more cells with the doors open)
 
 K = {
@@ -33,8 +35,10 @@ K = {
                          shots='40-700:10', stage='C:/kl_build_1024/lcdoors_1110', tag='.before-lcdoors1110',
                          files={'variant_timer/F01_Main.zip': '791eb9c3', 'variant_timer/F01_Main.bots.zip': '912e08a5'}),
     'DM02C_1110': dict(map='DM02', slot='F02', live={'F02_Main.zip': '43c088c2', 'F02_Main.bots.zip': 'bb8f04cb', 'KLJoin.ini': '843b1c50'},
-                       shots='60-420:5', stage='C:/kl_build_1024/dm02shop_1110/combined', tag='.before-dm02combo1110',
-                       files={'variant_full/F02_Main.zip': '8baefac2', 'variant_full/F02_Main.bots.zip': '6293350c', 'variant_full/F02_Main.bots.base.md5': '791ffab0'}),
+                       # combined_closed = the vault panes in the CLOSED pose (kl_dm02doorglass_1110 --glass-pose closed, 8bf2b88b);
+                       # the first stage 'combined' kept Dead Men's own 140-deg-ajar pose, which blocks nothing
+                       shots='60-420:5', stage='C:/kl_build_1024/dm02shop_1110/combined_closed', tag='.before-dm02combo1110',
+                       files={'variant_full/F02_Main.zip': 'b24fb05d', 'variant_full/F02_Main.bots.zip': 'dde7720a', 'variant_full/F02_Main.bots.base.md5': '816ce4ad'}),
     'SMARTCOPS_DM01_1110': dict(map='DM01', slot='F01', live={'F01_Main.zip': '9ce9f34d', 'F01_Main.bots.zip': '975ad3c3', 'KLJoin.ini': '8201642d'},
                                 shots='60-900:20', stage='C:/kl_build_1024/smartcops_1110/DM01', tag='.before-smartcops1110',
                                 files={'F01_Main.zip': 'e091f0d8', 'F01_Main.bots.zip': '957f20aa', 'F01_Main.bots.base.md5': '6b7255e6'}),
@@ -53,12 +57,18 @@ def lc_ents():
 def lc_seg(who):
     s = ['wait 1000'] + lc_ents() + ['log BENCH1110 lcd t0 leaves']
     if who == 'host':
-        # within the 20 s timer: from between the pairs try to walk out west (shut = NOT reached), then after the timer walk out both ways
-        s += ['waitstate 0x19 90000', 'tele %d %d %d' % (LC_MID[0], LC_MID[1] + 60, LC_MID[2]), 'wait 1500', 'pos lcd-mid',
-              'log BENCH1110 lcd shut try', 'goto %d %d 60 4000' % LC_WEST, 'pos lcd-shut', 'log BENCH1110 lcd shut try done'] + lc_ents() + [
-              'wait 25000'] + lc_ents() + ['log BENCH1110 lcd after timer',
-              'tele %d %d %d' % (LC_MID[0], LC_MID[1] + 60, LC_MID[2]), 'wait 1500', 'goto %d %d 80 8000' % LC_WEST, 'pos lcd-west', 'log BENCH1110 lcd west done',
-              'tele %d %d %d' % (LC_MID[0], LC_MID[1] + 60, LC_MID[2]), 'wait 1500', 'goto %d %d 80 8000' % LC_EAST, 'pos lcd-east', 'log BENCH1110 lcd east done',
+        # within the 20 s timer: from between the pairs try to walk out west (shut = NOT reached), then after the timer walk out both ways.
+        # Run 1 (11-10 03:30): tele at floor + 60 right after GO, the walker never turned or moved (2nd tele stayed at y 414 for minutes: player not
+        # simulated); so settle 8 s after GO, tele at floor + 8 and prove the walker with a warm-up goto between the pairs (open floor, kl_route).
+        tele = 'tele %d %d %d' % (LC_MID[0], LC_MID[1] + 8, LC_MID[2])
+        # Run 2 (KeepAliveHp, host alive): the walker runs ~220 cm/s but a 3 s shut try stopped 44 cm short of the shut pair, so the shut try
+        # gets 5 s (settle 4 s: the timer opens 20 s after GO; the ents right after it prove the pair was still shut).
+        s += ['waitstate 0x19 90000', 'wait 4000', tele, 'wait 1000', 'pos lcd-mid',
+              'goto %d %d 60 3000' % LC_WARM, 'pos lcd-warm', 'log BENCH1110 lcd warm-up done',
+              'log BENCH1110 lcd shut try', 'goto %d %d 60 5000' % LC_WEST, 'pos lcd-shut', 'log BENCH1110 lcd shut try done'] + lc_ents() + [
+              'wait 22000'] + lc_ents() + ['log BENCH1110 lcd after timer',
+              tele, 'wait 1000', 'goto %d %d 60 3000' % LC_WARM2, 'pos lcd-warm2', 'goto %d %d 80 8000' % LC_WEST, 'pos lcd-west', 'log BENCH1110 lcd west done',
+              tele, 'wait 1000', 'goto %d %d 80 8000' % LC_EAST, 'pos lcd-east', 'log BENCH1110 lcd east done',
               'wait 60000'] + lc_ents() + ['log BENCH1110 lcd still open']
     else:
         s += ['wait 40000'] + lc_ents() + ['log BENCH1110 lcd join after timer']
@@ -75,11 +85,36 @@ def lc_checks(a, chk):
             mv = max(abs(r[-1][3][i] - r[0][3][i]) for i in (0, 2))
             chk('%s slid (moved >= 40 cm between the first and the last sample)' % n, mv >= 40, 'moved %.0f cm' % mv)
             chk('%s at floor height (y 300..450, not buried)' % n, all(300 <= x[3][1] <= 450 for x in r), 'y %s' % sorted({round(x[3][1]) for x in r}))
+    # verdicts by the door line, not by 'reached' (run 2: the walker crossed both open pairs and then stopped on lobby/office clutter 178 cm short)
+    def end_x(g):
+        m = re.search(r'at \((-?\d+), (-?\d+), (-?\d+)\)', g)
+        return int(m.group(1)) if m else None
+    warm = M.goto_lines(a, *LC_WARM) + M.goto_lines(a, *LC_WARM2)
+    mid = M.pos_of(a, 'lcd-mid')
+    wx = [end_x(g) for g in warm]
+    # run 3: the first warm-up goto right after the tele did not move (1900 -> 1900) while the shut try itself then walked 355 cm: any one
+    # goto in the room moving >= 50 cm proves the walker works
+    shut = M.pos_of(a, 'lcd-shut')
+    wx = wx + ([shut[0]] if shut is not None else [])
+    walks = mid is not None and any(x is not None and abs(x - mid[0]) >= 50 for x in wx)
+    chk('walker moves (a goto between the pairs, warm-up or the shut try, moved >= 50 cm; else the walk checks are void)', walks,
+        'from %s: %s' % (mid, '; '.join(g[13:110] for g in warm)) if warm else 'no warm-up goto line')
+    if not walks:
+        info.append('walk checks VOID: the player did not walk on open floor (see pos lcd-mid / lcd-warm)')
+        return info
     shut = M.goto_lines(a, *LC_WEST)
-    chk('walk west during the timer is blocked (doors shut)', bool(shut) and 'NOT reached' in shut[0], shut[0][13:150] if shut else 'no goto line', warn=True)
-    chk('walk west after the timer reached (outer pair open)', len(shut) >= 2 and 'NOT reached' not in shut[1], shut[1][13:150] if len(shut) >= 2 else 'no 2nd goto line')
+    t_sd = next((M.secs_of(l) for l in a if 'BENCH1110 lcd shut try done' in l), None)
+    after = [r for r in rows['D04'] if t_sd is not None and M.secs_of(r[0]) >= t_sd]
+    still = bool(rows['D04']) and bool(after) and abs(after[0][3][2] - rows['D04'][0][3][2]) < 5
+    x0 = end_x(shut[0]) if shut else None
+    chk('walk west during the timer stops at the shut outer pair (end x >= 1520)', x0 is not None and x0 >= 1520, shut[0][13:150] if shut else 'no goto line')
+    chk('outer pair still shut right after the shut try (D04 not yet slid)', still, 'D04 z first %s, after the try %s' % (
+        rows['D04'][0][3][2] if rows['D04'] else '-', after[0][3][2] if after else '-'), warn=True)
+    x1 = end_x(shut[1]) if len(shut) >= 2 else None
+    chk('walk west after the timer crosses the outer pair (end x <= 1450)', x1 is not None and x1 <= 1450, shut[1][13:150] if len(shut) >= 2 else 'no 2nd goto line')
     east = M.goto_lines(a, *LC_EAST)
-    chk('walk east after the timer reached (inner pair open)', bool(east) and 'NOT reached' not in east[0], east[0][13:150] if east else 'no goto line')
+    x2 = end_x(east[0]) if east else None
+    chk('walk east after the timer crosses the inner pair (end x >= 2550)', x2 is not None and x2 >= 2550, east[0][13:150] if east else 'no goto line')
     info.append('LOOK at the shots near "lcd shut try" (doors drawn, closed) and "lcd after timer" (slid open); kick prompt must not show on them')
     return info
 
@@ -88,13 +123,20 @@ def lc_checks(a, chk):
 DM02C_SH1 = dict(stand_from=(-1879, 1112), stand=(-1919, 1112), node=(-1990, 1032))   # KLCoop1!SoloLift box centre (-1919,624,1112); RollerShutterA_03 REF 24710
 DM02C_SH2 = dict(stand_from=(1879, 1580), stand=(1919, 1580), node=(1990, 1660))      # KLCoop2!SoloLift (1919,624,1580); RollerShutterA_02 REF 24711
 DM02C_DOORS = {   # doorway = (front stand, back stand) from the KickDoor_Arrow entities
-    3: ((900, 2497), (1091, 2499)),     # jewellers, KL_Door_3\Door REF 34449, hinge (993,500,2560)
+    # Front stands of 3 and 2 moved off the AI posts (DM02C runs 1+2: stuck at (900,2497) = merc Pos#01 16 cm + KickDoorBehaviour PosInfo
+    # 26 cm; killed 0.1-0.7 s after the tele to (-1503,1793) = KickDoorBehaviour PosInfo 26 cm + merc Pos#02 60 cm). New points on the walk mesh.
+    3: ((850, 2497), (1091, 2499)),     # jewellers, KL_Door_3\Door REF 34449, hinge (993,500,2560)
     4: ((1497, 1786), (1499, 1595)),    # jewellers, KL_Door_4\Door REF 34472, hinge (1560,500,1693)
     1: ((-902, 2499), (-1093, 2497)),   # vault glass doorway, KL_Door_1, hinge (-1000,500,2560)
-    2: ((-1503, 1793), (-1501, 1602)),  # vault glass doorway, KL_Door_2, hinge (-1440,500,1700)
+    2: ((-1400, 1793), (-1501, 1602)),  # vault glass doorway, KL_Door_2, hinge (-1440,500,1700); crosses z 1700 at x ~-1450
 }
 DM02C_GLASS = {23182: (-970, 524, 2566), 24258: (-1435, 519, 1670)}   # Whole04 REFs; both share the node name below
 DM02C_GLASS_NAME = 'SI0401_M02_FA_Door_Shatter_Glass_01!Whole04'
+# Walk lines that CROSS each glass pane (closed pose, kl_dm02doorglass_1110 8bf2b88b): 1 on x=-1000, z 2468..2562; 2 on z=1700, x -1534..-1440
+# (94 cm pane in a 120 cm opening; the ~26 cm gap is at the far jamb). Lines cross the pane middle, 60 cm each side. Glass 2 starts on the
+# VAULT side (-1487,1640): the hall side near (-1503,1793) is where the host died after a tele in DM02C runs 1+2 (AI posts).
+# (The stock Dead Men pose was 140 deg ajar: (-970,2563)..(-910,2635) / (-1438,1671)..(-1365,1610), beside the doorway.)
+DM02C_GLASS_X = {1: ((-940, 2515), (-1060, 2515)), 2: ((-1487, 1640), (-1487, 1760))}
 DM02C_SHOPS = {   # n: (tele start x, z, goto x, z, expected KLDress<n>_ props, a prop to look at)
     1: (-2350, 1350, -2400, 1350, 10),    # Corridore_201b: watchtable (-2763,500,1350), plaques (-2600..-2900,650,1060/1640)
     2: (2350, 1300, 2400, 1300, 20),      # Corridore_201d: shelves (2771..2951,500,1078), desk (2951,499,1460)
@@ -105,7 +147,7 @@ DM02C_SHOPS = {   # n: (tele start x, z, goto x, z, expected KLDress<n>_ props, 
 
 def dm02c_walk(lbl, front, back):
     """tele on the front stand (floor 500 + 60), settle, pos -a, walk to the back stand, pos -b."""
-    return ['tele %d 560 %d' % front, 'wait 1500', 'goto %d %d 25 3000' % front, 'pos %s-a' % lbl,
+    return ['tele %d 560 %d' % front, 'wait 2500', 'goto %d %d 25 3000' % front, 'wait 500', 'pos %s-a' % lbl,
             'goto %d %d 60 5000' % back, 'pos %s-b' % lbl, 'log BENCH1110 dm02c %s walked' % lbl]
 
 
@@ -133,10 +175,13 @@ def dm02c_seg(who):
           'ents KL_Door_3 4', 'ents KL_Door_4 4', 'log BENCH1110 dm02c census t0']
     s += ['wait 2500', 'ents Door 200', 'log BENCH1110 dm02c door sample 2s']
     # (2) jewellers doors 3 and 4 (open + hidden by 1.5 s): walk THROUGH the doorway 4..8 s after the round starts; an invisible blocker would stop the goto
-    s += ['wait 1000'] + dm02c_walk('dm02c-d3', *DM02C_DOORS[3]) + dm02c_walk('dm02c-d4', *DM02C_DOORS[4])
+    # wait 8 s first: run 3's door 3 walk at t0+5 s never moved (same heading 5 s, side steps nothing, no collision near the stand in the
+    # HVK) while the round-start phase still ran ('talk: nothing for start' at t0+9 s); door 4 at t0+11 s walked (GUESS: input locked early)
+    s += ['wait 8000'] + dm02c_walk('dm02c-d3', *DM02C_DOORS[3]) + dm02c_walk('dm02c-d4', *DM02C_DOORS[4])
     # (3) glass BEFORE the break: Whole04 drawn + blocking at ~t0+15 s (the walk through door 1 / 2 must stop at the glass)
     s += ['ents Whole04 20', 'ents Remains04 20', 'log BENCH1110 dm02c g-pre sample']
     s += dm02c_walk('dm02c-g1pre', *DM02C_DOORS[1]) + dm02c_walk('dm02c-g2pre', *DM02C_DOORS[2])
+    s += dm02c_walk('dm02c-x1pre', *DM02C_GLASS_X[1]) + dm02c_walk('dm02c-x2pre', *DM02C_GLASS_X[2])
     # (1) shutter prompt: shutter 1 = tap E 700, shutter 2 = hold E 1500 (separate shutters: a 2nd press may replay frames 0..82)
     s += dm02c_shutter('sh1', DM02C_SH1, 'tap E 700') + dm02c_shutter('sh2', DM02C_SH2, 'tap E 1500')
     # (4) shop dressing: one stand point per shop room, 11 s each so the shot loop (every 5 s) takes >= 2 pictures per shop
@@ -146,6 +191,7 @@ def dm02c_seg(who):
     # (3) glass AFTER the 60 s fallback: well past t0+60 now (about t0+115 s). Sample first, then walk through.
     s += ['ents Whole04 20', 'ents Remains04 20', 'log BENCH1110 dm02c g-post sample']
     s += dm02c_walk('dm02c-g1post', *DM02C_DOORS[1]) + dm02c_walk('dm02c-g2post', *DM02C_DOORS[2])
+    s += dm02c_walk('dm02c-x1post', *DM02C_GLASS_X[1]) + dm02c_walk('dm02c-x2post', *DM02C_GLASS_X[2])
     s += ['ents Whole04 20', 'ents Remains04 20', 'ents RollerShutterA 12', 'log BENCH1110 dm02c host done']
     return s
 
@@ -159,14 +205,20 @@ def dm02c_checks(a, chk):
     chk('dm02c segment ran on the host (t0 ... host done)', T('host t0 round running') is not None and T('host done') is not None, '%d host log lines' % len(a))
 
     # --- walk-through verdicts -----------------------------------------------------------------------------------------
+    # THROUGH = the end point is >= 25 cm past the middle of the front->back line (the door / pane sits there). Run 3 stopped ~40 cm
+    # short of the pane and a 150 cm 'near the back stand' radius called that THROUGH.
+    def along(front, back, p):
+        L = math.hypot(back[0] - front[0], back[1] - front[1])
+        return ((p[0] - front[0]) * (back[0] - front[0]) + (p[2] - front[1]) * (back[1] - front[1])) / L, L
+
     def walk(lbl, front, back):
         pa, pb = M.pos_of(a, lbl + '-a'), M.pos_of(a, lbl + '-b')
         if pa is None or pb is None:
             return 'NOSAMPLE', 'no pos line for %s-a / %s-b' % (lbl, lbl)
         if math.hypot(pa[0] - front[0], pa[2] - front[1]) > 150:
             return 'VOID', 'tele/settle ended %.0f cm from the front stand %s (pos %s): no verdict' % (math.hypot(pa[0] - front[0], pa[2] - front[1]), front, pa)
-        e = math.hypot(pb[0] - back[0], pb[2] - back[1])
-        return ('THROUGH' if e <= 150 else 'BLOCKED'), 'start %s end %s, %.0f cm from the back stand %s' % (pa, pb, e, back)
+        t, L = along(front, back, pb)
+        return ('THROUGH' if t >= L / 2 + 25 else 'BLOCKED'), 'start %s end %s, %.0f of %.0f cm along (door/pane line at the middle)' % (pa, pb, t, L)
 
     for n in (3, 4):
         v, note = walk('dm02c-d%d' % n, *DM02C_DOORS[n])
@@ -208,6 +260,21 @@ def dm02c_checks(a, chk):
                 len(post), post[-1][2] if post else '-', len(rpost), rpost[-1][2] if rpost else '-', len(post_any)), warn=True)
         v, note = walk('dm02c-g%dpost' % door, *DM02C_DOORS[door])
         chk('glass %d walk-through after the break' % door, v == 'THROUGH', '%s: %s' % (v, note), warn=(v in ('VOID', 'NOSAMPLE') or not broke))
+        # across the pane itself (the doorway walk above passes beside it): BLOCKED before, THROUGH after = the glass collision is real and the shatter clears it
+        xb = math.hypot(DM02C_GLASS_X[door][0][0] - DM02C_GLASS_X[door][1][0], DM02C_GLASS_X[door][0][1] - DM02C_GLASS_X[door][1][1])
+        def xwalk(lbl):
+            pa, pb = M.pos_of(a, lbl + '-a'), M.pos_of(a, lbl + '-b')
+            f, bk = DM02C_GLASS_X[door]
+            if pa is None or pb is None:
+                return 'NOSAMPLE', 'no pos line for %s' % lbl
+            if math.hypot(pa[0] - f[0], pa[2] - f[1]) > 60:
+                return 'VOID', 'start %s is %.0f cm from %s' % (pa, math.hypot(pa[0] - f[0], pa[2] - f[1]), f)
+            t, _ = along(f, bk, pb)
+            return ('THROUGH' if t >= xb / 2 + 25 else 'BLOCKED'), 'start %s end %s, %.0f of %.0f cm along (pane at the middle)' % (pa, pb, t, xb)
+        v, note = xwalk('dm02c-x%dpre' % door)
+        chk('glass %d pane blocks a walk across it before the break' % door, v == 'BLOCKED', '%s: %s' % (v, note), warn=True)
+        v, note = xwalk('dm02c-x%dpost' % door)
+        chk('glass %d pane walkable across after the break' % door, v == 'THROUGH', '%s: %s' % (v, note), warn=True)
     info.append('glass: what the stock shatter does to Whole04 is unknown to me; if both Whole04 and Remains04 keep their pre-state, LOOK at the g-post shots and the walk verdict')
 
     # --- shutter prompt + rise ---------------------------------------------------------------------------------------------
@@ -220,12 +287,14 @@ def dm02c_checks(a, chk):
     for tag, sh, hard in (('sh1', DM02C_SH1, True), ('sh2', DM02C_SH2, False)):
         pb, pa_ = peek('dm02c-%s-prompt-best' % tag), peek('dm02c-%s-prompt-active' % tag)
         chk('%s: a use prompt is offered at the stand (prompt best/active nonzero)' % tag, bool(pb) or bool(pa_),
-            'best %s active %s (0x12 = kick/use prompt; the Lift Door code is a GUESS)' % (pb if pb is None else hex(pb), pa_ if pa_ is None else hex(pa_)), warn=True)
+            'best %s active %s (0x12 = kick/use prompt; run 3 showed 6/8 at the SoloLift and E worked, so 6/8 = Lift Door is a GUESS)' % (pb if pb is None else hex(pb), pa_ if pa_ is None else hex(pa_)), warn=True)
         st = M.pos_of(a, 'dm02c-%s-stand' % tag)
         chk('%s: player stood at the SoloLift box' % tag, st is not None and math.hypot(st[0] - sh['stand'][0], st[2] - sh['stand'][1]) <= 120,
             'pos %s want %s' % (st, sh['stand']), warn=True)
         tt = T('%s tap' % tag)
-        rows = [r for r in M.ents(a, 'RollerShutterA') if near(r[3], sh['node'][0], sh['node'][1], 25)]
+        # the floor-500 shutter only: copies are stacked at node y 0 / 500 / 1000 on the same x,z. DM02C run 3 proved the keyed one is the
+        # node-y-500 copy (slot 4447: 500 -> 564 -> 694 -> 791 -> 800, flags 08.. -> 2b..); the y-1000 copy never moves. Rise +300 -> y 450..850
+        rows = [r for r in M.ents(a, 'RollerShutterA') if near(r[3], sh['node'][0], sh['node'][1], 25) and 450 <= r[3][1] <= 850]
         before = [r for r in rows if tt is not None and M.secs_of(r[0]) <= tt + 0.2]
         after = [r for r in rows if tt is not None and M.secs_of(r[0]) > tt + 0.2]
         if not before or not after:
@@ -346,10 +415,11 @@ def smartcops_checks(a, chk, mapname):
     boxes = {(s, n): rs for (s, n), rs in M.by_entity(M.ents(a, '_KC_')).items() if re.match(r'CoverBox[HM]_KC_\d+$', n)}
     plan = {c[0]: c for c in D['cover']}
     ok = [n for (s, n), rs in boxes.items() if n in plan and d2(rs[-1][3], plan[n][1], plan[n][2]) <= 150]
-    chk('KL_CoverSmart! boxes present at their planned spots (%d expected)' % D['nbox'], len(set(ok)) >= D['nbox'],
-        '%d entities named CoverBox?_KC_nn, %d within 150 cm of the plan: %s' % (len(boxes), len(set(ok)), sorted(set(ok))[:4]))
+    # Cover boxes are data nodes read into the FFCoverList: SMARTCOPS_DM01 run 1 ents '_KC_' = 0 of 19910 and no older bench log has ever
+    # listed a CoverBox through ents, so a miss here is the probe's blind spot, not a missing box -> info only.
     hid = [n for (s, n), rs in boxes.items() if rs[-1][2]]
-    chk('boxes are hidden (flag 0x400)', len(hid) == len(boxes) and bool(boxes), '%d of %d hidden' % (len(hid), len(boxes)), warn=True)
+    info.append('KL_CoverSmart! boxes in the ents table: %d (cover boxes are normally NOT entities), %d within 150 cm of the plan, %d hidden'
+                % (len(boxes), len(set(ok)), len(hid)))
 
     # ---- cover points (xz): box centre + its stand point
     cps = []
@@ -376,8 +446,9 @@ def smartcops_checks(a, chk, mapname):
                 continue
             tracks[(slot, name)] = (m, rows)
     n_plan = len(D['members'])
+    # warn only: wave members are listed as ZGROUP nodes and many spawn late or share a name (DM01 run 1: 9 of 42 tracked)
     chk('planned squad members found visible in the ents rows (>= 60%%) (%d planned)' % n_plan, len(tracks) >= 0.6 * n_plan,
-        '%d tracks' % len(tracks))
+        '%d tracks' % len(tracks), warn=True)
 
     sq = {}
     strict, loose, moved_early, moved_late, left = [], [], [], [], []
@@ -391,7 +462,7 @@ def smartcops_checks(a, chk, mapname):
         if d0 > 250 and any(t <= 90 for t, _ in hit):
             strict.append((m[1], round(d0), round(min(d for _, d in hit))))
             sqd['cov'] += 1
-        if max(d2(p, rows[0][2][0], rows[0][2][2]) for _, t, p in rows if t <= 90) >= 150:
+        if max((d2(p, rows[0][2][0], rows[0][2][2]) for _, t, p in rows if t <= 90), default=0) >= 150:   # late spawns have no rows <= 90 s
             moved_early.append(key)
         ps = [(t, p) for _, t, p in rows]
         if any(t2 > 60 and d2(p2, p1[0], p1[2]) > 100 for (t1, p1), (t2, p2) in zip(ps, ps[1:])):
@@ -451,6 +522,13 @@ def item_checks(k, a, dd=(), ctrl=None):
         info += dm02c_checks(a, chk)
     elif k.startswith('SMARTCOPS_'):
         info += smartcops_checks(a, chk, K[k]['map'])
+    # LCDOORS/DM02C run 1 (11-10): police downed the host despite KeepAlive=1 and every walk after it stood still at the tele point.
+    # A death inside the segment voids the walk verdicts that follow it, so it is a FAIL of its own (rerun) and named with its time.
+    i0 = next((i for i, l in enumerate(a) if 'BENCH1109 %s host level loaded' % k in l), 0)
+    i1 = next((i for i, l in enumerate(a) if 'BENCH1109 %s host segment done' % k in l), len(a))
+    died = [l for l in a[i0:i1] if 'FA_DieFrom' in l or re.search(r'skulls state: row 0 .* deaths [1-9]', l)]
+    chk('host stayed alive through the segment (else later walks are void)', not died,
+        ('died %s: %s' % (died[0][:12], died[0][13:120])) if died else 'no FA_DieFrom / skulls death on row 0')
     return res, info
 
 

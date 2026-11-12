@@ -83,8 +83,8 @@ $script:HookOffName = 'dinput8.dll.klmerge-off'
 $script:Journal = 'KLMergeInstall.json'
 $script:SettingsPath = Join-Path $Here 'KLMergeLauncher.settings.json'
 $script:LogPath = Join-Path $Here 'KLMergeLauncher.log'
-$script:Settings = @{ DD = ''; DM = ''; PD2 = ''; Python = ''; Package = ''; MusicClip = ''; Muted = $false; Volume = 0.22 }
-$script:StringKeys = @('DD', 'DM', 'PD2', 'Python', 'Package', 'MusicClip')
+$script:Settings = @{ DD = ''; DM = ''; PD2 = ''; Python = ''; Package = ''; MusicClip = ''; Muted = $false; Volume = 0.22; ReShadeLook = '' }
+$script:StringKeys = @('DD', 'DM', 'PD2', 'Python', 'Package', 'MusicClip', 'ReShadeLook')   # ReShadeLook: the [Graphics] Look a RESHADE ON puts back
 $script:DefaultVolume = 0.22                           # GUESS: 'slightly' (0 .. 1, MediaPlayer.Volume)
 $script:Proc = $null
 $script:OutFile = ''; $script:ErrFile = ''; $script:OutPos = 0; $script:ErrPos = 0
@@ -246,6 +246,43 @@ function Hook-State {
     return 'none'
 }
 
+# RESHADE ON / OFF (owner 2026-11-10): the hook loads ReShade32.dll itself when <DD>\KLHook.ini [Graphics] Look is not 0
+# (klhook.c / klreshade.c: 0 = ReShade not loaded, full frame rate; 1 = KL look; 2 = LiveLeak camcorder look). The button
+# edits only that one number in place (rest of the file byte-identical); OFF remembers the old look for the next ON.
+# Takes effect the next time the game starts.
+function ReShade-Ini { if ($script:Settings.DD) { return (Join-Path $script:Settings.DD 'KLHook.ini') } return $null }
+function ReShade-Look {
+    # -> @{ Text = <whole ini>; At = <index of the digits>; Len; Look = <int> } or $null (no ini / no [Graphics] Look line)
+    $ini = ReShade-Ini
+    if (-not $ini -or -not (Test-Path -LiteralPath $ini)) { return $null }
+    $t = [IO.File]::ReadAllText($ini)
+    $sec = [regex]::Match($t, '(?im)^\[Graphics\][ \t]*\r?$')
+    if (-not $sec.Success) { return $null }
+    $end = [regex]::Match($t.Substring($sec.Index + $sec.Length), '(?m)^\[')
+    $len = $(if ($end.Success) { $end.Index } else { $t.Length - $sec.Index - $sec.Length })
+    $m = [regex]::Match($t.Substring($sec.Index + $sec.Length, $len), '(?im)^[ \t]*Look[ \t]*=[ \t]*(\d+)')
+    if (-not $m.Success) { return $null }
+    return @{ Text = $t; At = $sec.Index + $sec.Length + $m.Groups[1].Index; Len = $m.Groups[1].Length; Look = [int]$m.Groups[1].Value }
+}
+function ReShade-Present { return ($script:Settings.DD -and (Test-Path -LiteralPath (Join-Path $script:Settings.DD 'ReShade32.dll'))) }
+function ReShade-Toggle {
+    if (-not (ReShade-Present)) { Log 'ReShade is not installed in the Dog Days folder (no ReShade32.dll): nothing to switch'; return }
+    $r = ReShade-Look
+    if (-not $r) { Log 'REFUSED: KLHook.ini has no [Graphics] Look line (run INSTALL / UPDATE first)'; return }
+    if ($r.Look -ne 0) { $script:Settings.ReShadeLook = [string]$r.Look; $new = 0 }
+    else { $new = 1; if ($script:Settings.ReShadeLook -match '^[12]$') { $new = [int]$script:Settings.ReShadeLook } }
+    $t = $r.Text.Substring(0, $r.At) + [string]$new + $r.Text.Substring($r.At + $r.Len)
+    [IO.File]::WriteAllText((ReShade-Ini), $t)
+    Log ('ReShade ' + $(if ($new) { 'ON (look ' + $new + ')' } else { 'OFF (not loaded, full frame rate)' }) + ': [Graphics] Look=' + $new + ' in KLHook.ini' + $(if (Game-Running) { ' - restart the game to see it' } else { '' }))
+    Save-Settings
+}
+function ReShade-Label {
+    if (-not (ReShade-Present)) { return 'RESHADE: NONE' }
+    $r = ReShade-Look
+    if (-not $r) { return 'RESHADE: -' }
+    if ($r.Look -eq 0) { return 'RESHADE: OFF' } else { return 'RESHADE: ON' }
+}
+
 function Hook-Set([bool]$want) {
     # returns $true when the wanted state holds afterwards. Renames only; nothing is ever deleted.
     $dd = $script:Settings.DD
@@ -323,7 +360,15 @@ function Game-Watch {
         }
         return
     }
-    if (Game-Running) { return }
+    if (Game-Running) { $w.Gone = $null; return }
+    # [Memory] FreshRestart (klhook/klfresh.c) ends kl2.exe at the menu and starts a new one; it writes <DD>\KLFresh.go first.
+    # With FreshVia=1 (Steam starts it) there is a gap of a few seconds with no kl2.exe: stay hidden up to 60 s for it.
+    $go = $null
+    try { if ($script:Settings.DD) { $go = Get-Item -LiteralPath (Join-Path $script:Settings.DD 'KLFresh.go') -ErrorAction SilentlyContinue } } catch { }
+    if ($go -and ((Get-Date) - $go.LastWriteTime).TotalSeconds -lt 90) {
+        if (-not $w.Gone) { $w.Gone = Get-Date; Log 'the game is restarting itself to free memory (FreshRestart): waiting for it' }
+        if (((Get-Date) - $w.Gone).TotalSeconds -lt 60) { return }
+    }
     $script:GameWatch = $null
     $crash = @(Crash-Files $w.Since)
     $mins = [Math]::Round(((Get-Date) - $w.Since).TotalMinutes, 1)
@@ -718,6 +763,7 @@ $xaml = @'
             <Button x:Name="BtnLogs" Style="{StaticResource KLSmall}" Content="COLLECT LOGS"/>
             <Button x:Name="BtnOpen" Style="{StaticResource KLSmall}" Content="GAME FOLDER"/>
             <Button x:Name="BtnRefresh" Style="{StaticResource KLSmall}" Content="REFRESH"/>
+            <Button x:Name="BtnReShade" Style="{StaticResource KLSmall}" Content="RESHADE ON / OFF" ToolTip="ReShade on or off (KLHook.ini [Graphics] Look). Off = full frame rate. Applies the next time the game starts."/>
           </UniformGrid>
         </StackPanel>
         <!-- status: a torn dark smear (Smear-Path as the panel's Background brush, Stretch=Fill: no layout of its own, so an
@@ -783,7 +829,7 @@ $xaml = $xaml.Replace('<!--BLOCKS_LIGHT-->', $blocksLight).Replace('<!--BLOCKS_T
 
 $script:Win = [Windows.Markup.XamlReader]::Parse($xaml)
 $ui = @{}
-foreach ($n in @('LblVersion', 'BtnPlayMod', 'BtnPlayStock', 'LblHookNote', 'BtnInstall', 'BtnVerify', 'BtnUninstall', 'BtnHook', 'BtnLogs', 'BtnOpen', 'BtnRefresh',
+foreach ($n in @('LblVersion', 'BtnPlayMod', 'BtnPlayStock', 'LblHookNote', 'BtnInstall', 'BtnVerify', 'BtnUninstall', 'BtnHook', 'BtnLogs', 'BtnOpen', 'BtnRefresh', 'BtnReShade',
                  'LblDD', 'BtnPickDD', 'LblDM', 'BtnPickDM', 'LblPD2', 'BtnPickPD2', 'LblMod', 'LblHook', 'LblPkg', 'LblPy', 'LblGame', 'TxtLog',
                  'LblMusic', 'BtnMute', 'BgLeft', 'BgRight', 'BgLeftImg', 'BgRightImg', 'BgDim')) {
     $ui[$n] = $script:Win.FindName($n)
@@ -856,7 +902,7 @@ function Guard([scriptblock]$body) {
 
 # ------------------------------------------------------------------------------------------------ status
 function Set-Buttons([bool]$on) {
-    foreach ($n in @('BtnPlayMod', 'BtnPlayStock', 'BtnInstall', 'BtnVerify', 'BtnUninstall', 'BtnHook', 'BtnLogs', 'BtnPickDD', 'BtnPickDM', 'BtnPickPD2')) { $ui[$n].IsEnabled = $on }
+    foreach ($n in @('BtnPlayMod', 'BtnPlayStock', 'BtnInstall', 'BtnVerify', 'BtnUninstall', 'BtnHook', 'BtnReShade', 'BtnLogs', 'BtnPickDD', 'BtnPickDM', 'BtnPickPD2')) { $ui[$n].IsEnabled = $on }
 }
 
 function Refresh-Status {
@@ -915,6 +961,7 @@ function Refresh-Status {
         Set-Val $ui.LblMod '-' 'dim'; Set-Val $ui.LblHook '-' 'dim'; $ui.LblHookNote.Text = ''
     }
     if (Game-Running) { Set-Val $ui.LblGame 'kl2.exe is RUNNING (close it before install / uninstall / hook switch)' 'warn' } else { Set-Val $ui.LblGame 'not running' 'ok' }
+    try { $ui.BtnReShade.Content = ReShade-Label } catch { }
     Save-Settings
 }
 
@@ -1251,6 +1298,11 @@ $ui.BtnHook.Add_Click({ Guard {
     if ($script:Proc) { Log 'a job is still running'; return }
     $st = Hook-State
     if ($st -eq 'off') { [void](Hook-Set $true) } elseif ($st -eq 'none') { Log 'no hook file (mod not installed)' } else { [void](Hook-Set $false) }
+    Refresh-Status
+} })
+$ui.BtnReShade.Add_Click({ Guard {
+    if ($script:Proc) { Log 'a job is still running'; return }
+    ReShade-Toggle
     Refresh-Status
 } })
 $ui.BtnLogs.Add_Click({ Guard { Collect-Logs } })

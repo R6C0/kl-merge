@@ -169,6 +169,18 @@ def main():
     asset = urls[0].rsplit('/', 1)[-1] if urls else '?'
     check("'%s'" % asset in read(PACK).decode('ascii', 'replace'),
           'pack_release.ps1 writes the upload file under the asset name RELEASE_URL downloads (%s)' % asset)
+    # part 2 (GitHub's 2 GiB asset limit): the same link with _2.zip, marker package_part2.txt written by pack_release
+    check('set "RELEASE_URL2=%RELEASE_URL:.zip=_2.zip%"' in bat, 'RELEASE_URL2 = RELEASE_URL with .zip -> _2.zip')
+    pack = read(PACK).decode('ascii', 'replace')
+    check("'KLMerge_package_2.zip'" in pack, 'pack_release.ps1 writes part 2 as KLMerge_package_2.zip')
+    check('package_part2.txt' in pack and '"package_part2.txt"' in bat, 'part 2 marker package_part2.txt: written by pack_release, checked by the bat')
+    check('2147483648' in pack and 'REFUSED' in pack, 'pack_release refuses a part of 2 GiB or more')
+    check('call :getpart "%RELEASE_URL2%"' in bat and 'call :unpackpart "%ZIP2%"' in bat, 'the bat downloads and unpacks part 2')
+    blabels = set(re.findall(r'^:(\w+)\s*$', bat, re.M))
+    calls = set(re.findall(r'call\s+:(\w+)', bat))
+    check(calls <= blabels, 'every call has its label (missing: %s)' % ', '.join(sorted(calls - blabels)))
+    check(b'the package is incomplete' in read(os.path.join(TOOLS, 'kl_release.py')),
+          'kl_release install refuses a package with patch files missing')
     check('findstr /i /c:"example.invalid"' in bat, 'the bat refuses to download from the placeholder URL')
     check('KLMergeLauncher.ps1' in bat and '-ExecutionPolicy Bypass -STA' in bat, 'the bat starts the launcher with -ExecutionPolicy Bypass -STA')
     check('zstandard' in bat and 'get-pip.py' in bat and '._pth' in bat, 'the bat installs zstandard into the embedded python (._pth + get-pip)')
@@ -202,7 +214,7 @@ def main():
     check('/MOVE' in bat and re.search(r'rem .*?/MOVE is a MOVE', bat) is not None, 'the one robocopy /MOVE in the Setup .bat is commented as a move')
 
     # 3. the launcher script
-    ps = read(PS1).decode('ascii', 'replace')
+    ps = read(PS1).decode('ascii', 'replace').replace('\r\n', '\n')   # core.autocrlf checkouts (worktrees) are CRLF
     body = strip_ps(ps)
     check(body is not None, 'ps1: strings and here-strings close')
     if body is not None:
@@ -404,6 +416,7 @@ def main():
     pk = read(PACK).decode('ascii', 'replace')
     check('manifest.json' in pk and 'patches' in pk and 'kl_release.py' in pk and 'launcher' in pk, 'pack_release.ps1 bundles manifest + patches + kl_release.py + launcher')
     check('_snap' in pk and 'sha1cache' in pk, 'pack_release.ps1 knows the maker-only folders it must leave out')
+    check('2147483648' in pk, "pack_release.ps1 warns when the zip reaches GitHub's 2 GiB asset limit")
     check("'kl_launcher_music.py'" in pk, 'pack_release.ps1 packs launcher\\kl_launcher_music.py')
     check("'kl_pybink.py'" in pk and 'kl_pybink.py' in bat, 'pack_release.ps1 packs kl_pybink.py (when it exists) and the bat copies it up')
     check("'kl_pyvorbis.py'" in pk and 'kl_pyvorbis.py' in bat and os.path.exists(os.path.join(TOOLS, 'kl_pyvorbis.py')), 'pack_release.ps1 packs kl_pyvorbis.py, the bat copies it up, and it exists')
